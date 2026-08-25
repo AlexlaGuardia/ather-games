@@ -282,7 +282,51 @@ Both halves are built and **neither is wired; nothing persists across the seam.*
 - ✅ **No chord support needed** — the `Binding` chord extension play scoped is required by four-casts-one-free-button, and **not** by two.
 - ✅ Pad budget measured off `DEFAULTS`, not by eye: 15 of 16 standard buttons spent, `R3` the only free one. `RT`/`LT` are `world.mine`/`world.place` and are not available.
 
-## 🌱 Shimmer — **THE PASSIVE IS INNATE, AND THE BIRTH RUNE IS WHAT YOU ARE** (RULED 2026-08-23, Alex) · *Not yet built* · ⚠ **CONTESTED BY CANON 2026-08-25 — DO NOT BUILD**
+## 🌱 Shimmer — **THE BIRTH RUNE'S INNATE THING IS A LEAN, NOT A PASSIVE** (RULED 2026-08-23, amended + closed 2026-08-25, Alex + /magii) · ✅ **SHIPPED — it already was**
+
+> ✅ **RULED 2026-08-25 and it cost nothing, because the feature already existed.** Alex: *"i think it
+> would be fine as a background mechanic for now maybe we can work it into the rune tab in the inventory
+> menu later."* The always-on thing a birth rune grants is the **affinity LEAN** — canon at
+> `shimmer-birth-rune.md:27`, shipped in `play3d/birth-affinity.ts`, read every frame through
+> `engine/vitals.ts`, covering all 20 runes. **Canon unchanged**: the learned/elite/held passive band
+> stands exactly as written. **The only thing wrong was the WORD** — the build said *"the innate
+> passive"*, which reads as a passive MOVE. Corrected in `65a447d`.
+> - ⚠ **Why the word mattered.** A passive in canon is a learned, advanced, **elite** move
+>   (`runes.md:253-257`), it occupies one of three innate sockets, and **holding it pauses mana
+>   recovery** — the double edge. The lean is none of those: permanent, free, socketless, costless to
+>   recovery. Reading the phrase the other way meant authoring **up to 13 new passive moves** (only 4 of
+>   17 birthable runes have a passive in that rune alone; 8 have none at all) and then choosing between
+>   taxing every keeper's regen from birth or deleting the double edge.
+> - ⚠ **The two verbatim Alex quotes in `cast.ts` and `rune-inventory.ts` were left UNCHANGED.** A
+>   record of what was said is not something a later ruling rewrites; the clarification sits beneath the
+>   quote saying what those words meant.
+> - ✅ **The equip gate is `runes owned` (birth ∪ developed)** — a reading of settled canon
+>   (`moves.md:221`, *"the rune is the filter on the scroll"*), which the build already does.
+>   **Zero build change**, and it is already the shipped behaviour: nothing in the game grants a second
+>   rune (`rune-inventory.ts`; both `grantRune` call sites are owner-gated), so `owned == {birth}` for
+>   every real player and *"it restricts the possibilities"* is true today.
+> - **Full ruling + what was rejected:** `/root/athernyx/CANON/CANON_GAPS.md`, the birth-rune equip-gate
+>   entry, flipped to `[RULED]`.
+
+### ⏭ Next (Jin's, handed over by the ruling — neither is canon)
+1. **Surface the lean in the inventory's RUNE TAB.** Alex's *"maybe we can work it into the rune tab
+   later"*. The lean is a **number a player currently cannot read** — that is the honest cost of keeping
+   it a background mechanic, and this is the fix when it is worth doing. Data is all there:
+   `birth-affinity.ts` exports the category + magnitudes (`hpBonus`/`shieldBonus`/`speedMult`/
+   `gatherMult`/`manaBonus`), and the ruled 20-row essence→lean table is `shimmer-birth-rune.md:46-69`.
+   ⚠ The **category** per rune is canon; the **magnitudes** are Jin's — do not render a tuned number as
+   though canon fixed it.
+2. **The 1 tactical + 1 signature slot count is JIN'S, not canon** — it left the canon queue on the
+   ruling. Canon fixes only **passives ≤ 3** (`runes.md:256`) and states no cap on the other two bands,
+   and its own cast contradicts a 1-tactical ceiling: Veyra runs *"Firewall · Flame Infusion"*
+   (`veyra.md:174`), Samantha *"Mend · Ice Dart"* (`samantha.md:112`). So **1+1 is a legitimate STARTING
+   loadout, tunable at will** — it is not a rule anyone has to defend to canon. Samantha also runs *"no
+   ultimate, by choice"* (`samantha.md:106`), so an **empty signature slot is canon-legal**, which
+   `cast.ts` already gets right.
+3. ⚠ **Correct `cast.ts:381-382`.** It cites `moves.md:365-366`'s *"one passive, two tacticals, and one
+   ultimate"* as the SLOT shape. That line is an **authoring target for the registry** — how many moves
+   must EXIST per rune — not an equip-slot count. **The slot count was never canon.**
+
 
 > ⚠⚠ **STOP: THIS BLOCK'S HEADLINE IS A BUILD RULING THAT CANON CONTRADICTS IN TWO PLACES, AND THE GAP IS FILED.**
 > Raised in the play lane 2026-08-25 after Alex re-stated it live ("a passive should be innate/always-on
