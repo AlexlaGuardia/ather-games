@@ -203,8 +203,8 @@ export const ZONES: Zone[] = [
       // ✅ The temporary ownerOnly hold came OFF 2026-08-05 — Alex placed Greg's gate, so the town
       // has a way out again and the oracle's dead-end check passes. Landing moved to (12-13,28),
       // the open ground directly north of where he put that gate.
-      { fromX: 14, fromY: 1, toZone: 'rune-hold', toX: 12, toY: 28, direction: 'up' },
-      { fromX: 15, fromY: 1, toZone: 'rune-hold', toX: 13, toY: 28, direction: 'up' },
+      { fromX: 14, fromY: 1, toZone: 'rune-hold', toX: 24, toY: 49, direction: 'up' }, // beside the re-sited Spirit Corner (22,48), plaza side
+      { fromX: 15, fromY: 1, toZone: 'rune-hold', toX: 25, toY: 49, direction: 'up' },
       // LEFT door (0,11-12, placed in the editor) → Route 1 (leads to Mycelial Path)
       { fromX: 0, fromY: 11, toZone: 'route-garden-mycelial', toX: 58, toY: 7, direction: 'left' }, // arrive at Route 1's E door
       { fromX: 0, fromY: 12, toZone: 'route-garden-mycelial', toX: 58, toY: 8, direction: 'left' },
@@ -484,7 +484,7 @@ export const ZONES: Zone[] = [
     grid: RUNE_HOLD,
     realm: 'outside',
     peaceful: true,
-    playerStart: { tileX: 7, tileY: 9 },
+    playerStart: { tileX: 49, tileY: 58 },
     // ── THE TOWN'S DOORS ────────────────────────────────────────────────────────────────────
     // Empty ON PURPOSE (2026-08-05). Alex erased both gates' tiles in the editor to reposition
     // them, and gate DATA follows the map: a door he deleted must not keep firing just because a
@@ -507,7 +507,7 @@ export const ZONES: Zone[] = [
         // come from now, so the door names its real destination and the shim is dead weight on
         // this path. Garden was absorbed by the Home Plot canvas at +59/+59 — the old (14,2),
         // one south of the Home Plot's gate, is (73,61) here.
-        x: 12, y: 29, toZone: 'r-home-plot', toX: 73, toY: 61, direction: 'down',
+        x: 22, y: 48, toZone: 'r-home-plot', toX: 73, toY: 61, direction: 'down',
         label: 'THE SPIRIT CORNER',
       },
       {
@@ -515,7 +515,7 @@ export const ZONES: Zone[] = [
         // Canon: `world/rune-hold.md` § The Passage. Alex cut this through the long wall that
         // runs down the map's east side, which is the mountain the tunnels run through — so the
         // door is on the right feature, not just a convenient gap.
-        x: 79, y: 16, toZone: 'the-passage', toX: 6, toY: 9, direction: 'right',
+        x: 83, y: 48, toZone: 'the-passage', toX: 6, toY: 9, direction: 'right',
         label: 'THE PASSAGE',
       },
       {
@@ -539,7 +539,7 @@ export const ZONES: Zone[] = [
         // practice range lives with it, which is why the east door opens on the firing range.
         // ★ A code comment goes stale silently, and the better written it is the longer it is
         // believed. Verify a claim about canon against `CANON/`, not against the comment.
-        x: 49, y: 81, toZone: 'travelers-station', toX: 4, toY: 7, direction: 'up',
+        x: 48, y: 86, toZone: 'travelers-station', toX: 4, toY: 7, direction: 'up',
         label: 'TRAVELERS STATION',
       },
     ],
@@ -563,7 +563,7 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 6, tileY: 9 },
     gates: [
       // back up into the town, landing on the town side of the mountain wall
-      { x: 1, y: 9, toZone: 'rune-hold', toX: 78, toY: 16, direction: 'left', label: 'RUNE HOLD' },
+      { x: 1, y: 9, toZone: 'rune-hold', toX: 82, toY: 49, direction: 'left', label: 'RUNE HOLD' }, // beside re-sited Passage (83,48), plaza side
     ],
     warps: [],
   },
@@ -583,7 +583,7 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: 4, tileY: 7 },
     gates: [
       // west door — back out to the town, landing north of the station gate's footprint
-      { x: 1, y: 7, toZone: 'rune-hold', toX: 49, toY: 80, direction: 'down', label: 'RUNE HOLD' },
+      { x: 1, y: 7, toZone: 'rune-hold', toX: 48, toY: 85, direction: 'down', label: 'RUNE HOLD' }, // beside re-sited Travelers Station (48,86), plaza side
       // east door — out to the practice range
       { x: 21, y: 7, toZone: 'firing-range', toX: 7, toY: 13, direction: 'up', label: 'FIRING RANGE' },
       // south door — the Crucible itself. `ownerOnly` for a BUILD reason: the tournament map is a
@@ -669,7 +669,7 @@ export const ZONES: Zone[] = [
       // Spirit Corner is no longer a separate room to be stranded behind — it is the north-west
       // corner of the Rune Hold map. A player walks: Home Plot → Greg's gate → the town.
       { fromX: 10, fromY: 7, toZone: 'firing-range', toX: 7, toY: 13, direction: 'up', ownerOnly: true },
-      { fromX: 16, fromY: 7, toZone: 'rune-hold', toX: 7, toY: 9, direction: 'up', ownerOnly: true },
+      { fromX: 16, fromY: 7, toZone: 'rune-hold', toX: 49, toY: 58, direction: 'up', ownerOnly: true }, // owner shortcut → the square spawn
     ],
   },
   {
