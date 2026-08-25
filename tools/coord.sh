@@ -19,6 +19,10 @@
 #
 # Usage:
 #   coord claim <lane> [note]   register this window as owner of a lane
+#     ★ Make the note FALSIFIABLE, not a self-description. "solo jin session" reads fresh (its
+#       timestamp keeps updating) while its content rots, and a peer reasoning correctly from it
+#       force-took a live lane (2026-08-25). Write something a reader can check in one command:
+#       "live hub — HEAD=<sha>, tree clean 0 unpushed (verify: git status)".
 #   coord status                show all claims + build-lock state
 #   coord build [msg]           acquire build lock -> build -> pm2 restart -> release
 #   coord release [lane]        drop your claim
@@ -130,12 +134,20 @@ acquire_lock() {
   local waited=0
   while true; do
     if mkdir "$LOCKDIR" 2>/dev/null; then
-      printf 'owner=%s\nts=%s\npid=%s\n' "$WIN" "$(now_epoch)" "$$" > "$LOCKDIR/info"
+      # ★ session= stamped on the LOCK, not just owner=. owner is the lane name ("hub"), which is
+      # byte-identical across two windows that both call themselves hub — so it cannot tell a slow
+      # build of MINE from a live PEER's. session can. (Hardened 2026-08-25; diagnosis by 164b5211.)
+      printf 'owner=%s\nsession=%s\nts=%s\npid=%s\n' "$WIN" "$SESSION" "$(now_epoch)" "$$" > "$LOCKDIR/info"
       return 0
     fi
-    # lock exists — steal if stale
-    local age; age=$(lock_age)
-    if [ "$age" -gt "$STALE_LOCK_SECS" ]; then
+    # lock exists. Steal ONLY a stale lock we can positively attribute to NOBODY (empty session) or
+    # to OURSELVES. A stale lock stamped with a different, non-empty session may be a peer's slow
+    # build — rm -rf would corrupt it while every line of output still says the lane name. That one
+    # case needs an explicit COORD_FORCE=1, the same asymmetry claim/release already encode.
+    local age held; age=$(lock_age); held=$(sed -n 's/^session=//p' "$LOCKDIR/info" 2>/dev/null)
+    local attributed_to_peer=0
+    [ -n "$held" ] && [ -n "$SESSION" ] && [ "$held" != "$SESSION" ] && [ "${COORD_FORCE:-}" != "1" ] && attributed_to_peer=1
+    if [ "$age" -gt "$STALE_LOCK_SECS" ] && [ "$attributed_to_peer" = "0" ]; then
       echo "build lock stale (${age}s, held by: $(lock_owner_info | tr '\n' ' ')) — stealing"
       rm -rf "$LOCKDIR"
       continue
@@ -143,9 +155,10 @@ acquire_lock() {
     if [ "$waited" -ge "$WAIT_SECS" ]; then
       echo "could not acquire build lock after ${WAIT_SECS}s. Held by:"
       lock_owner_info | sed 's/^/  /'
+      [ "$attributed_to_peer" = "1" ] && echo "  ⚠ stale (${age}s) but attributed to live session ${held:0:8}, not yours — NOT auto-stolen. If that window is truly gone: COORD_FORCE=1 ... coord build"
       return 1
     fi
-    echo "build lock held by $(sed -n 's/^owner=//p' "$LOCKDIR/info" 2>/dev/null) — waiting... (${waited}s)"
+    echo "build lock held by $(sed -n 's/^owner=//p' "$LOCKDIR/info" 2>/dev/null)${held:+ (session ${held:0:8})} — waiting... (${waited}s)"
     sleep 6; waited=$((waited+6))
   done
 }
