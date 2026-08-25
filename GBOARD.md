@@ -31,10 +31,17 @@ Wiring a crossing to either goes red.
 - **`engine/crossing-join.test.ts`** (hub) — the join neither suite covered.
 
 ### Next
-1. **★ ALEX PAINTS `THE LANDING`** in the Rune Hold square (press **B**, map editor, 1×2 warp tiles).
-   It is the ONE thing in the way — #731, one brush stroke. The doors oracle already prints it as the
-   single pending door and flips to asserts when painted.
-2. Hub reads the anchor tile off the map and hands it over; world wires `depart()` to the centre socket.
+1. **★ ALEX RULED 2026-08-24 EVE: THE LANDING IS NOT A PAINT JOB.** *"i dont think im ready to do any
+   painting or atleast not in the way id like to.. if anything when the time comes id like to add 3d
+   assets but i think this is good for now."* So the unblock is **not** one brush stroke and the board
+   must stop saying it is — a row asserting a next-action its owner has declined is the stale-row trap
+   this file spent the day removing. ⏸️ **PARKED, not blocked:** the landing arrives as **3D assets**,
+   on Alex's clock, and the tile-editor route is retired as the way in.
+   ⚠ Nothing about the mechanism changes: readiness asks the MAP for a gate labelled `THE LANDING`, so
+   whatever eventually puts one there — brush, asset pass, or hand-authored gate data — turns the door
+   on with nothing rewired. That is the whole reason it was built against the map instead of a flag.
+2. When a landing exists by whatever route: read the anchor tile off the map, hand it over, wire
+   `depart()` to the centre socket. Procedure is written down here and in #730/#731, not in anyone's head.
 3. Alex rules the LOOK of the hard cut — canon calls it *"the gate closes on blocks and opens on real
    ground… worth staging deliberately"*, so the presentation is his, the mechanism is built.
 
