@@ -1126,10 +1126,11 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
               see bucketsRect. Same silhouette, a sixth of the triangles, no shadow pass. */}
           <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#e3e9f4" paint={paint} editing={editing} />
           <WallTops cells={wallTops} y={1.2} color="#e3e9f4" />
-          {/* brown building blocks — the mortal side's masonry. Taller than a cloud wall (1.8 vs
-              1.3) so a town has a skyline instead of a hedge maze. */}
-          <Tiles cells={buildings} size={[1, 1.8, 1]} y={0.8} color="#8a5a2b" paint={paint} editing={editing} />
-          <WallTops cells={buildingTops} y={1.7} color="#9c6733" />
+          {/* brown building blocks — the mortal side's masonry. Bumped to 3.2 (2026-08-25) so a
+              storefront clears a ~1.7 keeper by a full head and a town reads as a skyline, not a
+              hedge maze. y = h/2 - 0.1 keeps the base seated ~0.1 into the ground; tops ride the top. */}
+          <Tiles cells={buildings} size={[1, 3.2, 1]} y={1.5} color="#8a5a2b" paint={paint} editing={editing} />
+          <WallTops cells={buildingTops} y={3.1} color="#9c6733" />
           <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color="#3aa0d6" opacity={0.85} paint={paint} editing={editing} />
           {/* cloud mist = walkable encounter areas: land + a wispy translucent overlay */}
           <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
