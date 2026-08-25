@@ -11,7 +11,19 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🐛 Shimmer — **BUG-HUNT: three confirmed logic bugs fixed in untested engine systems** (2026-08-25, hub) · *Last touched 2026-08-25 (hub) — shipped `eb5b977`, deployed, pushed*
+## 🐛 Shimmer — **BUG-HUNT: five confirmed logic bugs fixed across untested engine systems + a coord build-lock hardening** (2026-08-25, hub) · *Last touched 2026-08-25 (hub) — shipped `eb5b977` + `8228084` + `842fb27`, deployed, pushed*
+
+### Round 2 (`8228084`) — spawn-board, both mutation-verified
+- **`spawn-board.ts withEntryGuarantee` (MAJOR, live).** The entry-tier guarantee picked its slot by hash and PUSHED unconditionally — when that slot was one `rawDeal` already filled with a higher tier, the deal carried TWO nodes on one tile (duplicate `slotKey`, mismatched leaving/arriving). **Mutation-measured at 115/300 windows in mycelial-path alone (~38%).** Now overrides the tile — one node per tile, and the nicer outcome (entry node here, higher node on the other slot).
+- **`spawn-board.ts currentWindow` isTimePinned branch (MAJOR, dev-only).** Hand-rolled `idx*WINDOW_MS` for start/end (decades pre-epoch), so every leaving node read a negative remainder and rendered at alpha 0 under `?hour=`. Now delegates to `windowAt`, the seam that fixed the identical `pinnedWindow` bug. +2 tests.
+- **`player.ts` and `collar-foes.ts` came back CLEAN** (thoroughly traced, no confirmed bugs).
+- **⚠ `puppet.ts` (MINOR, visual) — flagged, not fixed.** A non-loop animation with `keyframes[0].tick > 0` interpolates across the wrap boundary before its first keyframe (holds a blended pose instead of identity during startup). Low priority.
+
+### Round 2 also — `tools/coord.sh` build-lock hardening (`842fb27`, diagnosis by Jin 2 / session 164b5211)
+The build lock stamped `owner=$WIN` (the lane name "hub"), byte-identical across two hub windows, and the stale-steal branch `rm -rf`'d on age alone — so a second hub could eat a peer's in-flight build while every output line said "hub". Now the lock carries `session=`; a stale lock is stolen only when attributed to nobody (empty session) or to yourself; a peer's live stale lock needs an explicit `COORD_FORCE=1`. Unattributed-steal preserved so a no-`COORD_SESSION` window never leaves an unstealable lock. All 4 cases tested. Claim usage now demands a falsifiable note.
+
+### Round 1 (`eb5b977`) — three confirmed, all traced end-to-end and mutation-tested
+Alex picked "bug-hunt a game system" (eye-free). Fanned three sonnet finders over the untested engine (`battle`/`moves`/`party-battle`/`battle-ai`, `exchange`/`inventory`/`held-items`/`harvesting`, `pathfinder`/`encounters`/`alchemy`/`quests`), then **adversarially verified every candidate** before touching code — several finder claims were withdrawn on trace. Three confirmed, all traced end-to-end, fixed, and **mutation-tested** (restore the bug → the new guard goes red):
 
 ### Left off — SHIPPED `eb5b977`, deployed + pushed, tree clean
 Alex picked "bug-hunt a game system" (eye-free). Fanned three sonnet finders over the untested engine (`battle`/`moves`/`party-battle`/`battle-ai`, `exchange`/`inventory`/`held-items`/`harvesting`, `pathfinder`/`encounters`/`alchemy`/`quests`), then **adversarially verified every candidate** before touching code — several finder claims were withdrawn on trace. Three confirmed, all traced end-to-end, fixed, and **mutation-tested** (restore the bug → the new guard goes red):
