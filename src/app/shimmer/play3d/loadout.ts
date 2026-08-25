@@ -9,7 +9,7 @@
 // It stores choices only. Every rule about what may go in a slot stays in `cast.ts` (`canSlot`),
 // so there is one definition of legality and this file cannot drift from it.
 
-import { CAST_SLOTS, canSlot, defaultLoadout } from './cast'
+import { ALL_BANDS, canSlot, defaultLoadout } from './cast'
 import type { Book } from './scroll-market'
 import { keeperKey } from '@/lib/keeper-local'
 
@@ -44,9 +44,22 @@ export const LEGACY_CAST_SLOTS: readonly string[] = ['passive', 'tactical', 'tac
  * moves, and it agrees with itself while it does. Reading both lists and matching kinds means the
  * day someone adds a second tactical back, this function is already correct.
  *
- * The passive entry is DROPPED rather than rehomed, and that is the ruling rather than data loss:
- * the passive becomes innate and always-on, so the move is not taken away from the keeper, it
- * stops needing a slot to live in.
+ * ── ⚠ CORRECTED 2026-08-25: THE PASSIVE IS RE-SEATED, NOT DROPPED ─────────────────────────────
+ * This paragraph used to read "The passive entry is DROPPED rather than rehomed, and that is the
+ * ruling rather than data loss: the passive becomes innate and always-on, so the move is not taken
+ * away from the keeper, it stops needing a slot to live in." **Every clause of that was false by the
+ * time the collapse landed.** It rested on GBOARD step 6, which cited a block that was AMENDED the
+ * same week: the always-on thing a birth rune grants is the affinity LEAN, and canon's learned/elite
+ * /held passive band stands exactly as written. Nothing makes a learned passive always-on, so
+ * dropping the id would not have freed a move from needing a slot — it would have taken the move
+ * away, which is the definition of the data loss the paragraph was denying.
+ *
+ * Alex ruled the held passive into its own STANCE SOCKET (`cast.ts` › `STANCE_SLOTS`), so `target`
+ * now spans both bands and the old passive id lands in the socket. **This function needed no change
+ * to do that** — it matches by KIND, and the socket's kind is `passive`. That is exactly the payoff
+ * its own note below predicts: a hand-written index map (`new[0] = old[1]; new[1] = old[3]`) would
+ * have silently discarded the passive here, because a map cannot re-seat into a band it was written
+ * before.
  *
  * `target` is REQUIRED. An `= CAST_SLOTS` default would let every un-updated call site keep the
  * old answer silently, which is the exact trap `cast.ts` documents on `eligibleMoves`' book
@@ -69,10 +82,16 @@ export function migrateLegacyLoadout(saved: (string | null)[], target: readonly 
  * `saveLoadout` slices to exactly `CAST_SLOTS.length` on every write, so a save is always exactly
  * as long as the slot list of the day it was written. Four means the four-slot era.
  *
- * ⚠ While `CAST_SLOTS` is still four this returns true for CURRENT saves too — deliberately. The
- * migration is identity in that case (four kinds re-seated into the same four kinds), so this
- * lands as a no-op today and becomes load-bearing the moment the collapse ships. A safety net that
- * arrives with the fall is a safety net nobody got to test.
+ * ⚠ THIS IS LIVE NOW. It was inert by construction until 2026-08-25 (four kinds re-seated into the
+ * same four kinds is identity); the collapse shipped that day and every pre-collapse save on a real
+ * keeper's machine now takes this path for real. The net was landed first and exercised against the
+ * shape it would meet, deliberately — a safety net that arrives with the fall is a net nobody tested.
+ *
+ * ⚠ AND IT MUST KEEP COMPARING AGAINST `LEGACY_CAST_SLOTS.length`, NEVER `ALL_BANDS.length`. They
+ * are 4 and 3 today and both are free to move; the day someone "tidies" this into a comparison
+ * against the current band list, every current save starts reading as legacy and gets re-seated a
+ * second time — which is not a no-op, because re-seating a 3-array through a 4-kind pool matches by
+ * position-of-kind and silently reshuffles live binds.
  */
 export function isLegacyLoadout(saved: unknown[]): boolean {
   return saved.length === LEGACY_CAST_SLOTS.length
@@ -118,10 +137,10 @@ export function loadLoadout(owned: string[], book: Book): Loadout {
   // the migration would then be handed an already-emptied array and faithfully preserve nothing.
   // The order is the whole fix.
   const seated: (string | null)[] = isLegacyLoadout(saved)
-    ? migrateLegacyLoadout(saved.map((id) => (typeof id === 'string' ? id : null)), CAST_SLOTS)
+    ? migrateLegacyLoadout(saved.map((id) => (typeof id === 'string' ? id : null)), ALL_BANDS)
     : saved.map((id) => (typeof id === 'string' ? id : null))
 
-  return CAST_SLOTS.map((_, i) => {
+  return ALL_BANDS.map((_, i) => {
     const id = seated[i]
     if (typeof id !== 'string') return null
     return canSlot(owned, i, id, book) ? id : null
@@ -134,12 +153,17 @@ export function loadLoadout(owned: string[], book: Book): Loadout {
  * it, because validating a bind now requires a book and the book is what we are building.
  *
  * ⚠⚠ THIS DELIBERATELY DOES **NOT** MIGRATE, AND THE NEXT PERSON TO NOTICE WILL WANT TO "FIX" IT.
- * `loadLoadout` re-seats a legacy save because it is answering "what is bound NOW", and under the
- * two-slot ruling a passive is not bound to anything. `keeperBook` is asking a different question
- * — "what has this keeper LEARNED" — and a passive they had equipped is something they learned.
- * Dropping it here would not tidy a stale slot; it would silently revoke a move from their book,
- * on a path with no UI and no error. Same array, two questions, and only one of them wants the
- * migration.
+ * `loadLoadout` re-seats and VALIDATES because it answers "what is bound NOW". `keeperBook` asks a
+ * different question — "what has this keeper LEARNED" — and every id ever stored here is something
+ * they learned, whatever band it sits in today. Same array, two questions, and only one of them
+ * wants the migration.
+ *
+ * ⚠ NOTE THE REASON CHANGED ON 2026-08-25 EVEN THOUGH THE CODE DID NOT. This used to argue "under
+ * the two-slot ruling a passive is not bound to anything", which stopped being true when the stance
+ * socket landed — the passive IS bound now. The function is still right, for a *different* reason:
+ * it is the VALIDATION it must skip, not the migration's drop. `loadLoadout` nulls any id that is
+ * illegal today (a retired move, a revoked rune), and a book seeded from a validated array would
+ * quietly forget every move a keeper learned and later un-equipped.
  */
 export function rawLoadout(): (string | null)[] {
   try {
@@ -151,7 +175,7 @@ export function rawLoadout(): (string | null)[] {
 
 export function saveLoadout(slots: Loadout): void {
   try {
-    localStorage.setItem(keeperKey(LOADOUT_KEY), JSON.stringify(slots.slice(0, CAST_SLOTS.length)))
+    localStorage.setItem(keeperKey(LOADOUT_KEY), JSON.stringify(slots.slice(0, ALL_BANDS.length)))
   } catch { /* private mode */ }
 }
 
@@ -165,9 +189,9 @@ export function saveLoadout(slots: Loadout): void {
  * allowing them here would make hand-picking worse than the automatic kit.
  */
 export function setSlot(owned: string[], slots: Loadout, slot: number, moveId: string | null, book: Book): Loadout {
-  if (slot < 0 || slot >= CAST_SLOTS.length) return slots
+  if (slot < 0 || slot >= ALL_BANDS.length) return slots
   if (moveId !== null && !canSlot(owned, slot, moveId, book)) return slots
-  const next = CAST_SLOTS.map((_, i) => (i === slot ? moveId : (slots[i] ?? null)))
+  const next = ALL_BANDS.map((_, i) => (i === slot ? moveId : (slots[i] ?? null)))
   if (moveId !== null) {
     for (let i = 0; i < next.length; i++) if (i !== slot && next[i] === moveId) next[i] = null
   }

@@ -6,7 +6,7 @@
 // look wrong on the HUD, and all of them read to a player as "casting is broken" rather than as a
 // loadout that lied. So the asserts are about what a STORED loadout is allowed to become.
 
-import { CAST_SLOTS, defaultLoadout, eligibleMoves } from './cast'
+import { ALL_BANDS, CAST_SLOTS, STANCE_SLOTS, defaultLoadout, eligibleMoves } from './cast'
 import { KEEPER_MOVES } from './keeper-moves'
 import type { Book } from './scroll-market'
 
@@ -49,14 +49,14 @@ const reset = () => store.clear()
 {
   reset()
   const fresh = loadLoadout(OWNED, ALL)
-  ok(fresh.length === CAST_SLOTS.length, 'a loadout always has exactly one entry per slot')
+  ok(fresh.length === ALL_BANDS.length, 'a loadout always has exactly one entry per band slot')
   ok(JSON.stringify(fresh) === JSON.stringify(defaultLoadout(OWNED, ALL)),
      'a keeper who never chose gets the starting kit')
 }
 {
   // ★ THE ONE THAT MATTERS. An emptied slot must survive a reload.
   reset()
-  const emptied: Loadout = CAST_SLOTS.map(() => null)
+  const emptied: Loadout = ALL_BANDS.map(() => null)
   saveLoadout(emptied)
   const back = loadLoadout(OWNED, ALL)
   ok(back.every((s) => s === null),
@@ -81,7 +81,7 @@ const reset = () => store.clear()
     saveLoadout(legal)
     const back = loadLoadout([], ALL)   // keeper now holds no runes at all
     ok(back[bound] === null, '★ losing the rune unbinds the move it justified')
-    ok(back.length === CAST_SLOTS.length, 'and the loadout keeps its shape')
+    ok(back.length === ALL_BANDS.length, 'and the loadout keeps its shape')
   } else {
     ok(false, 'fixture problem: default loadout bound nothing for OWNED')
     ok(false, 'fixture problem (2)')
@@ -103,7 +103,7 @@ const reset = () => store.clear()
   reset()
   store.set(LOADOUT_KEY, JSON.stringify(['barrier']))   // short save, e.g. from fewer slots
   const back = loadLoadout(OWNED, ALL)
-  ok(back.length === CAST_SLOTS.length, 'a short save is padded to the full slot count')
+  ok(back.length === ALL_BANDS.length, 'a short save is padded to the full slot count')
   ok(back.slice(1).every((s) => s === null), 'and the missing entries read as empty')
 }
 
@@ -133,23 +133,46 @@ const reset = () => store.clear()
 // second passive slot and passed itself through an `else`. It survived a mutation that deleted the
 // rule outright. An assert that cannot fail is worse than no assert: it reports coverage it does
 // not have.
+//
+// ── ⚠ REWRITTEN 2026-08-25: THE CONTEST BECAME UNREACHABLE, AND THAT IS SAID OUT LOUD ──────────
+// The block above describes a version of this test that could not fail. What replaced it could —
+// until the cast bar collapsed to one tactical + one signature, at which point NO TWO BANDS SHARE A
+// KIND, a move has exactly one tier, and `setSlot`'s dedup branch stopped being reachable by any
+// legal bind. GBOARD called this correctly in advance.
+//
+// The wrong move here is to keep the old asserts limping (they would need an illegal bind to set
+// up, which tests nothing about a keeper) or to delete them (silently retiring a real rule). So the
+// test now asserts THE PREMISE that makes the branch unreachable, and says so. The day a band gains
+// a second slot of some kind, this goes red and names it — which is the signal to restore a real
+// contest, not to widen the exemption. An exemption that cannot expire is a promise nobody kept.
 {
-  const a = CAST_SLOTS.indexOf('tactical')
-  const b = CAST_SLOTS.indexOf('tactical', a + 1)
-  ok(a >= 0 && b > a, 'fixture: there are two tactical slots to contest')
+  const dupes = ALL_BANDS.filter((k, i) => ALL_BANDS.indexOf(k) !== i)
+  ok(dupes.length === 0,
+     `no two band slots share a kind, so a legal move fits exactly one${dupes.length ? ` — DUPLICATED: ${[...new Set(dupes)].join(', ')}, restore the contest test` : ''}`)
 
+  // The rule is still exercised end-to-end at the only strength the current shape allows: a legal
+  // bind lands where it was asked for, and lands in exactly one place.
   const tacticals = eligibleMoves(OWNED, 'tactical', ALL)
   ok(tacticals.length > 0, 'fixture: this keeper knows at least one tactical')
+  const t = ALL_BANDS.indexOf('tactical')
+  ok(t >= 0, 'fixture: the bar still has a tactical slot to bind into')
 
   const move = tacticals[0].id
-  const empty: Loadout = CAST_SLOTS.map(() => null)
-  const held = setSlot(OWNED, empty, a, move, ALL)
-  ok(held[a] === move, 'the tactical binds to the first tactical slot')
+  const empty: Loadout = ALL_BANDS.map(() => null)
+  const held = setSlot(OWNED, empty, t, move, ALL)
+  ok(held[t] === move, 'the tactical binds to the tactical slot')
+  ok(held.filter((s) => s === move).length === 1, '★ exactly one slot holds it')
 
-  const moved = setSlot(OWNED, held, b, move, ALL)
-  ok(moved[b] === move, '★ re-binding it to the other tactical slot puts it there')
-  ok(moved[a] === null, '★ and VACATES the first — it moves, it does not duplicate')
-  ok(moved.filter((s) => s === move).length === 1, '★ exactly one slot holds it')
+  // ★ AND THE STANCE SOCKET IS A REAL, SEPARATELY BINDABLE BAND — not decoration beside the bar.
+  // This is the assert the whole 08-25 ruling exists to make true: a held passive still has a home.
+  const st = ALL_BANDS.indexOf('passive')
+  ok(st >= 0 && st >= CAST_SLOTS.length, 'the passive band sits AFTER the cast bar, not on it')
+  const passives = eligibleMoves(OWNED, 'passive', ALL)
+  ok(passives.length > 0, 'fixture: this keeper knows at least one passive to hold')
+  const withStance = setSlot(OWNED, held, st, passives[0].id, ALL)
+  ok(withStance[st] === passives[0].id, '★ a passive binds into the stance socket')
+  ok(withStance[t] === move, '★ ...without disturbing the cast bar beside it')
+  ok(STANCE_SLOTS.length > 0, '★ the stance band is non-empty — the collapse did not orphan it')
 }
 
 // ── the absent-localStorage path (the shape this runs in outside a browser) ───────────────────

@@ -27,7 +27,7 @@ import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave } from '@/lib/cloud-sync'
 import { saveKey, saveOwner } from '@/lib/save-slot'
 import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
-import { castForMove, isBuilt, CAST_SLOTS, SLOT_KEYS, type CastSpec } from './cast'
+import { castForMove, isBuilt, CAST_SLOTS, ALL_BANDS, BAND_KEYS, isStanceSlot, type CastSpec } from './cast'
 import { loadLoadout } from './loadout'
 import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
 import { fillRoster, ROSTER_SIZE } from './crucible-bots'
@@ -2857,20 +2857,26 @@ function CastBar({ slots, stance, cdRef }: {
   }, [cdRef])
   return (
     <div style={{ position: 'fixed', left: 18, bottom: 16, zIndex: 35, pointerEvents: 'none', display: 'flex', gap: 6 }}>
-      {CAST_SLOTS.map((kind, i) => {
+      {ALL_BANDS.map((kind, i) => {
         const moveId = slots[i]
         const spec = castForMove(moveId)
         const held = !!moveId && stance === moveId
         const built = !!moveId && spec.archetype !== 'unbuilt'
         const tint = held ? '#ffd98a' : built ? '#aef2ff' : '#ffffff55'
+        // ★ The stance socket is SET APART from the cast bar, because the ruling is a statement about
+        // what a button does: the two cast slots throw, the socket HOLDS. Asked via `isStanceSlot`
+        // rather than `i >= 2` or `kind === 'passive'` — the literal goes stale the moment either band
+        // is resized, and the kind test would call a passive bound anywhere a stance.
+        const isStance = isStanceSlot(i)
         return (
           <div key={i} ref={(el) => { cells.current[i] = el }} style={{
             minWidth: 92, padding: '6px 9px', borderRadius: 8,
+            marginLeft: isStance && i === CAST_SLOTS.length ? 14 : 0,
             background: held ? 'rgba(60,44,12,0.88)' : 'rgba(10,14,22,0.78)',
-            border: `1px solid ${held ? '#ffd98a88' : '#ffffff22'}`,
+            border: `1px solid ${held ? '#ffd98a88' : isStance ? '#ffd98a33' : '#ffffff22'}`,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
-              <span style={{ font: '800 10px ui-monospace, monospace', color: tint, letterSpacing: '0.14em' }}>{SLOT_KEYS[i].toUpperCase()}</span>
+              <span style={{ font: '800 10px ui-monospace, monospace', color: tint, letterSpacing: '0.14em' }}>{BAND_KEYS[i].toUpperCase()}</span>
               <span style={{ font: '700 8px ui-monospace, monospace', color: '#ffffff4d', letterSpacing: '0.12em' }}>{kind.toUpperCase()}</span>
             </div>
             <div style={{
@@ -5262,8 +5268,8 @@ export default function Shimmer3D() {
   // moveset. So the rune only decides which moves your book contains; the loadout decides what your
   // hands do. Slots are typed by canon tier (1 passive · 2 tacticals · 1 ultimate) and bound G/Z/X/C.
   const runeInvRef = useRef<RuneInventory>(EMPTY_INVENTORY)
-  const castLoadoutRef = useRef<(string | null)[]>(CAST_SLOTS.map(() => null))  // move id per slot
-  const castCdRef = useRef<number[]>(CAST_SLOTS.map(() => 0))   // per-slot ready-at wall clock (ms)
+  const castLoadoutRef = useRef<(string | null)[]>(ALL_BANDS.map(() => null))  // move id per band slot
+  const castCdRef = useRef<number[]>(ALL_BANDS.map(() => 0))   // per-slot ready-at wall clock (ms)
   const pendingCastRef = useRef<CastSpec | null>(null)  // a projectile waiting for FiringRange to spawn it
   // the HELD stance (slot 0). Its effects are read live by the sim; holding it pauses mana recovery.
   const stanceRef = useRef<CastSpec | null>(null)
@@ -5277,7 +5283,7 @@ export default function Shimmer3D() {
   const fieldsRef = useRef<Field[]>([])          // SYSTEM 1 — persistent area entities
   const conjuredRef = useRef<Conjured[]>([])     // SYSTEM 2 — runtime terrain
   const statusRef = useRef<StatusBag>(emptyBag())  // SYSTEM 3 — options removed from enemies
-  const [castHud, setCastHud] = useState<{ slots: (string | null)[]; stance: string | null }>({ slots: CAST_SLOTS.map(() => null), stance: null })
+  const [castHud, setCastHud] = useState<{ slots: (string | null)[]; stance: string | null }>({ slots: ALL_BANDS.map(() => null), stance: null })
 
   // The walker is public; the terrain editor is owner-only. ather.games has no cloud auth, so owner
   // status comes from the httpOnly `ather_owner` cookie via /api/owner (set it at /owner?key=OWNER_KEY).
@@ -5329,7 +5335,7 @@ export default function Shimmer3D() {
     // scroll bought in the Passage between two rune changes must be in hand by the next resolve.
     bookRef.current = keeperBook(runeInvRef.current.owned)
     castLoadoutRef.current = loadLoadout(runeInvRef.current.owned, bookRef.current)
-    castCdRef.current = CAST_SLOTS.map(() => 0)
+    castCdRef.current = ALL_BANDS.map(() => 0)
     stanceRef.current = null; resistRef.current = 0; castMultRef.current = 1; stanceMoveRef.current = 1
     surgeRef.current = { until: 0, mult: 1 }; infusionRef.current = { until: 0, mult: 1 }
     fieldsRef.current = []; conjuredRef.current = []; statusRef.current = emptyBag()
@@ -5738,7 +5744,7 @@ export default function Shimmer3D() {
   // `cast.test.ts` prints the live pair on every run, which is the number to believe.
   const castSlot = useCallback((slot: number) => {
     const moveId = castLoadoutRef.current[slot]
-    if (!moveId) { setHarvestToast(`No ${CAST_SLOTS[slot]} bound — your book has none for your runes`); return }
+    if (!moveId) { setHarvestToast(`No ${ALL_BANDS[slot]} bound — your book has none for your runes`); return }
     const spec = castForMove(moveId)
     if (spec.archetype === 'unbuilt') { setHarvestToast(`${spec.label} — not built yet (${spec.why})`); return }
 
@@ -5900,14 +5906,17 @@ export default function Shimmer3D() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [swapWeapon, toggleHolster])
-  // ── the cast binds: G holds the stance · Z/X throw the tacticals · C is the signature ─────────
-  // One key per loadout slot, in canon-tier order (SLOT_KEYS). Digits are NOT usable here — the
+  // ── the binds: Z throws the tactical · C is the signature · G holds the stance ────────────────
+  // One key per band slot, cast bar first then the stance sockets (BAND_KEYS). ★ Read BAND_KEYS, not
+  // SLOT_KEYS: SLOT_KEYS covers the CAST BAR ONLY, so indexing with it silently makes G unbindable
+  // and the held stance unreachable — the exact orphaning the stance band exists to prevent.
+  // Digits are NOT usable here — the
   // HotBar owns 1-6 for item quick-slots and its listener is global. Same input-ownership guard as
   // the weapon keys. Holstered is fine: casting is your magic, not the weapon.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!weaponDrawnRef.current || editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current || openMenuRef.current || placingRef.current || benchOpenRef.current || bagOpenRef.current) return
-      const slot = SLOT_KEYS.indexOf(e.key.toLowerCase())
+      const slot = BAND_KEYS.indexOf(e.key.toLowerCase())
       if (slot < 0) return
       e.preventDefault(); castSlot(slot)
     }

@@ -237,16 +237,37 @@ import { emptyNet, plant as plantMark, pull as pullMark, destination as markDest
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 
 /**
- * ★ THE CAST BINDS FOR THIS WORLD, AND WHY THEY ARE NOT `SLOT_KEYS`.
- * `cast.ts` rules g/z/x/c — but **C is `craft` here**, bound long before casting arrived, and the
- * Loadout panel reads this same array to LABEL each slot. One constant so the label and the key can
- * never disagree: a panel that says C while the world listens on B is worse than either choice.
+ * ★ THE BAND BINDS FOR THIS WORLD, AND WHY THEY ARE NOT `BAND_KEYS`.
+ * `cast.ts` rules z/c for the cast bar — but **C is `craft` here**, bound long before casting
+ * arrived, so this world signs the signature to **B**. The Loadout panel reads this same source to
+ * LABEL each slot: one definition so the label and the key can never disagree, because a panel that
+ * says C while the world listens on B is worse than either choice.
+ *
+ * ── ★★ KEYED BY KIND AND ORDERED BY `ALL_BANDS`, NEVER HAND-ORDERED (2026-08-25) ────────────────
+ * This used to be a positional literal, `['g','z','x','b']`, parallel to a four-entry `CAST_SLOTS`.
+ * Two hand-ordered lists that must agree by index are the mirror this repo keeps filing bugs about:
+ * they agree with each other right up until one moves, and nothing checks. The collapse moved one.
+ *
+ * So the keys are declared **by kind** and the ORDER is derived from `ALL_BANDS` itself — reorder or
+ * resize the bands in `cast.ts` and this follows, with no edit here and no chance of a slot whose
+ * label and keypress disagree. ⚠ And it is typed `Record<SlotKind, string>` deliberately: that makes
+ * a new canon tier a **COMPILE ERROR** in this file rather than an `undefined` key that renders blank
+ * and quietly cannot be pressed. The exhaustiveness check is the guard; the comment is just why.
+ *
+ * ⚠ One known limit, stated rather than left to be discovered: if a band ever holds two slots of the
+ * SAME kind (it does not today — `loadout.test.ts` asserts that and says so by name), both would draw
+ * the same key. That test going red is the signal to give this a per-slot shape again.
  */
-const CAST_KEYS: readonly string[] = ['g', 'z', 'x', 'b']
+const WORLD_KEY_BY_KIND: Record<SlotKind, string> = {
+  tactical: 'z',   // throw
+  ultimate: 'b',   // the signature — B here, not C, because C is craft in this world
+  passive:  'g',   // HOLD — the stance socket keeps the key it always had
+}
+const CAST_KEYS: readonly string[] = ALL_BANDS.map(k => WORLD_KEY_BY_KIND[k])
 const CAST_CODES: readonly string[] = CAST_KEYS.map(k => `Key${k.toUpperCase()}`)
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
-import { CAST_SLOTS, eligibleMoves, isBuilt, castForMove } from '../play3d/cast'
+import { CAST_SLOTS, ALL_BANDS, isStanceSlot, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
 import { loadLoadout, saveLoadout, setSlot, type Loadout } from '../play3d/loadout'
 import { keeperBook } from '../play3d/book'
 import { VoxelMap, VoxelMiniMap, MAP_W, MAP_H, toLocal } from './VoxelMap'
@@ -2633,7 +2654,7 @@ function ToolsTab({ tools, skills }: {
 }
 
 /**
- * The LOADOUT tab — which of your known moves sit on G / Z / X / C.
+ * The LOADOUT tab — which of your known moves sit on the cast bar (Z / B) and in the stance socket (G).
  *
  * ── WHAT WAS ACTUALLY MISSING (2026-08-12) ────────────────────────────────────────────────────
  * Not the chain. `cast.ts` has mapped LOADOUT SLOT → MOVE → ARCHETYPE since 2026-08-03 (63 asserts):
@@ -2641,9 +2662,20 @@ function ToolsTab({ tools, skills }: {
  * nothing ever stored a CHOICE — `Shimmer3D` recomputed `defaultLoadout(owned)` on every load, so a
  * keeper received a loadout and could never pick one. `loadout.ts` is that half; this is its face.
  *
- * ★ SLOTS ARE TYPED, NOT FOUR HOLES. `CAST_SLOTS` is passive / tactical / tactical / ultimate,
- * mirroring the authoring target of one passive + two tacticals + one ultimate per rune. A held
- * stance behaves nothing like a signature, so a slot only offers moves of its own tier.
+ * ★ SLOTS ARE TYPED, NOT INTERCHANGEABLE HOLES. A slot only offers moves of its own tier, because a
+ * held stance behaves nothing like a signature.
+ *
+ * ── ⚠ UPDATED 2026-08-25: TWO BANDS, AND THE PANEL SAYS WHICH IS WHICH ─────────────────────────
+ * This block used to read "`CAST_SLOTS` is passive / tactical / tactical / ultimate, mirroring the
+ * authoring target of one passive + two tacticals + one ultimate per rune." Both halves are now
+ * wrong. The bar collapsed to **tactical + signature** (`moves.md:85` makes Signature the Ultimate
+ * band, and passives are not cast), and the passive moved to its own **stance socket** — canon gives
+ * every mage up to 3 (`runes.md:256`), and v1 opens one. The "authoring target" clause was also a
+ * miscitation: that number is how many moves each RUNE should have written for it, never how many a
+ * keeper may EQUIP. See `cast.ts` › The loadout.
+ *
+ * So this renders `ALL_BANDS`, not `CAST_SLOTS`, and sets the socket apart — a player has to be able
+ * to see that G holds while Z and B throw, or the ruling is invisible where it matters most.
  *
  * ★ AN UNBUILT MOVE IS SHOWN AND SAYS SO. `cast.ts`'s honesty rule: a canon move the sim cannot run
  * is archetype 'unbuilt' WITH a reason, never a silent no-op. Hiding those would make the book look
@@ -2672,13 +2704,23 @@ function LoadoutTab() {
 
   return (
     <div className="flex flex-col gap-1.5">
-      {CAST_SLOTS.map((kind, i) => {
+      {ALL_BANDS.map((kind, i) => {
         const bound = slots[i] ?? null
         const spec = bound ? castForMove(bound) : null
         const open = picking === i
         const options = eligibleMoves(owned, kind, book)
+        // ★ Asked, never computed from a literal — see `isStanceSlot` in cast.ts.
+        const isStance = isStanceSlot(i)
         return (
-          <div key={i} className="rounded border border-white/10 bg-white/[0.03]">
+          <div key={i}>
+          {isStance && i === CAST_SLOTS.length && (
+            <div className="mb-1 mt-2 flex items-center gap-2">
+              <span className="text-[9px] uppercase tracking-[0.16em] text-amber-200/40">Held</span>
+              <span className="h-px flex-1 bg-amber-200/10" />
+              <span className="text-[9px] text-white/25">pauses mana recovery</span>
+            </div>
+          )}
+          <div className={`rounded border bg-white/[0.03] ${isStance ? 'border-amber-200/20' : 'border-white/10'}`}>
             <button type="button" onPointerDown={() => setPicking(open ? null : i)}
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border
@@ -2728,6 +2770,7 @@ function LoadoutTab() {
                 )}
               </div>
             )}
+          </div>
           </div>
         )
       })}
@@ -5208,7 +5251,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // ── ★ THE CAST LAYER REACHES THIS WORLD (2026-08-12, #294) ──────────────────────────────────
   // The rules are in `engine/cast-dispatch.ts` and are SHARED with play3d. This is only the host
   // half: what this world can land, and where the outcome goes.
-  const castCd = useRef<number[]>([0, 0, 0, 0])
+  // ⚠ Sized from the bands, not a literal. This was `[0, 0, 0, 0]` against a four-slot bar; the
+  // collapse made it a four-entry array serving three slots, which is harmless RIGHT UP UNTIL a band
+  // grows past four and slot N silently reads `undefined` as its cooldown — i.e. permanently ready.
+  const castCd = useRef<number[]>(ALL_BANDS.map(() => 0))
   /** Slot pressed this frame, consumed by the frame loop. -1 = nothing. */
   const pendingCast = useRef<number>(-1)
   const stance = useRef<CastSpec | null>(null)

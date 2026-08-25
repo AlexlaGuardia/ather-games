@@ -414,9 +414,68 @@ export function isBuilt(moveId: string | null | undefined): boolean {
 // 'combo' is not a slot kind: canon requires a second mage in sync, so it can never be a solo bind.
 
 export type SlotKind = Exclude<MoveTier, 'combo'>
-export const CAST_SLOTS: readonly SlotKind[] = ['passive', 'tactical', 'tactical', 'ultimate'] as const
-/** keyboard bind per slot, in slot order. G holds the stance; Z/X throw tacticals; C is the signature. */
-export const SLOT_KEYS: readonly string[] = ['g', 'z', 'x', 'c'] as const
+
+/**
+ * ── THE CAST BAR — what a button press throws (RULED 2026-08-23, collapsed 2026-08-25) ─────────
+ *
+ * Exactly Tactical + Signature. `moves.md:85` makes *Signature* the Ultimate band, so the mage's four
+ * bands are Passives / Tactical / Ultimates / Combos — **passives are not cast and combos are
+ * pair-casting, which leaves precisely these two.** The build's original four slots were the drift.
+ *
+ * ⚠ THIS LIST IS LOAD-BEARING FAR BEYOND THE HUD. `resolveCast()` in `engine/cast-dispatch.ts` is the
+ * ONLY writer of `stanceChange` in the build, and a move's only route into the game is a band whose
+ * kind matches its tier. So REMOVING A KIND FROM A BAND REMOVES THE MOVES — silently, with no error
+ * and no fallback. Collapsing to two without `STANCE_SLOTS` below would have orphaned all 12
+ * passive-tier moves, 8 of them fully built, together with `pausesRecovery` and the held-stance mana
+ * double edge. `cast.test.ts` guards this by name; see the orphan assert there before editing either
+ * band.
+ */
+export const CAST_SLOTS: readonly SlotKind[] = ['tactical', 'ultimate'] as const
+/** keyboard bind per cast slot, in slot order. Z throws the tactical; C is the signature. */
+export const SLOT_KEYS: readonly string[] = ['z', 'c'] as const
+
+/**
+ * ── THE STANCE SOCKETS — what you HOLD, and it is not on the cast bar (RULED 2026-08-25, Alex) ──
+ *
+ * A held passive is not cast, so it does not belong on a bar whose premise is that it is. It gets its
+ * own band, keeping **G** — the key it already had, so nothing a player's hands know changes.
+ *
+ * ★ WHY THIS BAND EXISTS AT ALL, because the reason is easy to lose. GBOARD step 6 authorised the
+ * collapse with *"the passive becomes INNATE, always-on, no key"*, citing the birth-rune block. That
+ * block was AMENDED on 2026-08-25: the always-on thing a birth rune grants is the affinity LEAN
+ * (`birth-affinity.ts`), and canon's learned/elite/**held** passive band stands exactly as written
+ * (`runes.md:253-257`). Nothing in the build makes a learned passive always-on. Dropping its slot
+ * would not have made it innate — it would have made it unreachable.
+ *
+ * ⚠ SIZED 1, AND THE 1 IS JIN'S WHILE THE CEILING IS CANON'S. `runes.md:256` fixes **passives ≤ 3**,
+ * the only equip cap canon states anywhere. One socket is a starting number, tunable at will; three is
+ * the wall. Widen this array and the HUD, the binds, the migration and the oracles all follow it,
+ * because every one of them reads its length rather than assuming it.
+ */
+export const STANCE_SLOTS: readonly SlotKind[] = ['passive'] as const
+/** keyboard bind per stance socket. G holds the stance — re-pressing it drops it, free and instant. */
+export const STANCE_KEYS: readonly string[] = ['g'] as const
+
+/**
+ * Every band a move can be bound into, in the order the HUD lays them out. Consumers that ask "can
+ * this move be bound anywhere at all?" must read THIS, never `CAST_SLOTS` alone — that assumption is
+ * what made the collapse look safe.
+ */
+export const ALL_BANDS: readonly SlotKind[] = [...CAST_SLOTS, ...STANCE_SLOTS] as const
+
+/** The key for a slot number, across both bands — cast keys first, then the stance keys. */
+export const BAND_KEYS: readonly string[] = [...SLOT_KEYS, ...STANCE_KEYS] as const
+
+/**
+ * Is this slot number a stance socket rather than a cast-bar slot?
+ *
+ * ★ ASK THIS, never `slot >= 2` or `kind === 'passive'`. The literal goes stale the moment either
+ * band is resized, and the kind test quietly answers a different question — it would call a passive
+ * bound *anywhere* a stance, which is exactly how the two bands would drift back into one.
+ */
+export function isStanceSlot(slot: number): boolean {
+  return slot >= CAST_SLOTS.length && slot < ALL_BANDS.length
+}
 
 /**
  * Moves the keeper can run right now that fit a slot kind. Built ones first — the rest are honest
@@ -444,16 +503,22 @@ export function eligibleMoves(owned: string[], kind: SlotKind, book: Book): Keep
  */
 export function defaultLoadout(owned: string[], book: Book): (string | null)[] {
   const used = new Set<string>()
-  return CAST_SLOTS.map((kind) => {
+  return ALL_BANDS.map((kind) => {
     const pick = eligibleMoves(owned, kind, book).find((m) => !used.has(m.id))
     if (pick) used.add(pick.id)
     return pick?.id ?? null
   })
 }
 
-/** Legal in this slot? The tier must match, you must own its runes, AND you must have learned it. */
+/**
+ * Legal in this slot? The tier must match, you must own its runes, AND you must have learned it.
+ *
+ * ⚠ Indexed over `ALL_BANDS`, not `CAST_SLOTS` — a stored loadout spans the cast bar AND the stance
+ * sockets in one positional array, so a slot number past the cast bar is a stance socket, not an
+ * out-of-range read. Narrowing this back to `CAST_SLOTS` silently makes every stance bind illegal.
+ */
 export function canSlot(owned: string[], slot: number, moveId: string, book: Book): boolean {
-  const kind = CAST_SLOTS[slot]
+  const kind = ALL_BANDS[slot]
   if (!kind) return false
   return eligibleMoves(owned, kind, book).some((m) => m.id === moveId)
 }

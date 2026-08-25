@@ -15,7 +15,8 @@
 //       rather than stack, and a death clears its target
 //   7. the birth rune is rune #1 of an inventory and can never be revoked
 
-import { castForMove, isBuilt, defaultLoadout, eligibleMoves, canSlot, CAST_SLOTS, SLOT_KEYS, NO_CAST } from './cast'
+import { castForMove, isBuilt, defaultLoadout, eligibleMoves, canSlot, CAST_SLOTS, SLOT_KEYS,
+         STANCE_SLOTS, STANCE_KEYS, ALL_BANDS, BAND_KEYS, isStanceSlot, NO_CAST } from './cast'
 import { KEEPER_MOVES } from './keeper-moves'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 
@@ -204,7 +205,8 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
 
 // 5. the loadout is typed by canon tier
 {
-  chk('one distinct key per slot', SLOT_KEYS.length === CAST_SLOTS.length && new Set(SLOT_KEYS).size === SLOT_KEYS.length)
+  chk('one distinct key per band slot, across both bands',
+    BAND_KEYS.length === ALL_BANDS.length && new Set(BAND_KEYS).size === BAND_KEYS.length)
 
   // ── ★★★ NO BUILT MOVE MAY BE ORPHANED BY THE SHAPE OF THE BAR (added 2026-08-25, play lane) ───
   //
@@ -240,15 +242,15 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   // cheapest lie that makes a red count green is to change the number.
   {
     const orphaned = KEEPER_MOVES
-      .filter((m) => isBuilt(m.id) && m.tier !== 'combo' && !CAST_SLOTS.includes(m.tier as never))
+      .filter((m) => isBuilt(m.id) && m.tier !== 'combo' && !ALL_BANDS.includes(m.tier as never))
       .map((m) => `${m.name} (${m.tier})`)
-    chk(`every BUILT move has a slot kind that can hold it${orphaned.length ? ` — ORPHANED: ${orphaned.join(', ')}` : ''}`,
+    chk(`every BUILT move has a band that can hold it${orphaned.length ? ` — ORPHANED: ${orphaned.join(', ')}` : ''}`,
       orphaned.length === 0)
   }
 
   // The bar's kinds must stay a subset of canon's non-combo tiers, and hold no duplicates it cannot
   // justify. This constrains the shape WITHOUT restating it, so the ruled collapse passes untouched.
-  chk('every slot kind is a real canon tier', CAST_SLOTS.every((k) => KEEPER_MOVES.some((m) => m.tier === k)))
+  chk('every band kind is a real canon tier', ALL_BANDS.every((k) => KEEPER_MOVES.some((m) => m.tier === k)))
 
   // ── ★ SLOT INDICES ARE DERIVED, NEVER LITERAL (2026-08-25, play lane) ─────────────────────────
   // Every assert below used to name its slot by number — `life[0]`, `life[3]`, `canSlot(…, 1, …)`,
@@ -258,7 +260,7 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   // a suite stops testing behaviour and starts testing its own transcription — and it would happen on
   // exactly the commit that most needs a suite testing behaviour.
   // Derived indices survive any ruled shape and go red only if the RULE changed.
-  const slotOf = (k: string) => CAST_SLOTS.indexOf(k as never)
+  const slotOf = (k: string) => ALL_BANDS.indexOf(k as never)
   const TACTICAL = slotOf('tactical')
   const ULTIMATE = slotOf('ultimate')
   // ⚠ Assert the fixture FOUND what it needs. A derived index that silently comes back -1 turns every
@@ -273,14 +275,14 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   // Stated as a property over the bar rather than a fixed index, so it holds whatever the shape
   // becomes: Life registers no passive, so no passive slot the bar has can be filled from it.
   chk('...and has nothing to hold in a passive slot (Life registers none)',
-    CAST_SLOTS.every((k, i) => k !== 'passive' || life[i] === null))
+    ALL_BANDS.every((k, i) => k !== 'passive' || life[i] === null))
 
   const lo = defaultLoadout(['barrier'], ALL).filter(Boolean)
   chk('never slots the same move twice', new Set(lo).size === lo.length)
   {
     const none = defaultLoadout([], ALL)
     chk('an empty book yields an empty loadout, not a crash',
-      none.length === CAST_SLOTS.length && none.every((x) => x === null))
+      none.length === ALL_BANDS.length && none.every((x) => x === null))
   }
 
   // Star owns Firewall + Flame Infusion (both unbuilt); adding Freeze must surface Ice Dart first
@@ -291,9 +293,9 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     // Any slot that is not a tactical must refuse Mend, which is tactical. Derived so the assert
     // keeps meaning the same thing after the collapse — and it names the case it could not find
     // rather than passing vacuously if the bar ever becomes tacticals only.
-    const offTier = CAST_SLOTS.findIndex((k) => k !== 'tactical')
+    const offTier = ALL_BANDS.findIndex((k) => k !== 'tactical')
     chk('the bar still has a non-tactical slot to test the tier gate with', offTier >= 0)
-    chk(`rejects a tier/slot mismatch (Mend is tactical, slot ${offTier} is the ${CAST_SLOTS[offTier]})`,
+    chk(`rejects a tier/slot mismatch (Mend is tactical, slot ${offTier} is the ${ALL_BANDS[offTier]})`,
       !canSlot(['life'], offTier, 'mend', ALL))
   }
   chk('accepts a legal bind', canSlot(['life'], TACTICAL, 'mend', ALL))
@@ -309,7 +311,7 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   {
     const kit = defaultLoadout(['life', 'barrier'], EMPTY_BOOK)
     chk('★ and a keeper with an empty book gets an empty starting kit',
-      kit.length === CAST_SLOTS.length && kit.every((x) => x === null))
+      kit.length === ALL_BANDS.length && kit.every((x) => x === null))
   }
   chk('★ learning just that one move opens exactly it',
     canSlot(['life'], TACTICAL, 'mend', { learned: ['mend'] }) &&
