@@ -133,6 +133,22 @@ budget biased small** — a third of ruins are one lonely room, 4% are a nine-ro
 (§4 re-aimed — it asserted the old 11×11 perimeter, a location that expired) · `scripts/ruin-sweep.mts`
 · `scripts/ruin-shot.mts` (reads a ruin out of the generator in world coords)
 
+## 🏙 Shimmer — **RUNE HOLD RE-PROPORTIONED: A REAL CROSSROADS TOWN** (2026-08-25, hub) · *Last touched 2026-08-25 (hub) — shipped `12012a7`, deployed, pushed*
+
+### Left off — SHIPPED `12012a7`, deployed + pushed, tree clean
+Alex: *"fix the size of runehold its basically all smashed together and not proportioned correctly."* The **tile map** (`tilemap.ts` › `RUNE_HOLD`, the one the player actually walks — `Shimmer3D` builds walls from `grid` via `chunkBuckets`; `play3d/rune-hold.ts`'s `runeHold()` is the owner dev-viewer, imported only by `dev/runehold/page.tsx`) was thin 1-tile wall outlines scattered on an 88%-grass field with **no square**. Re-authored programmatically:
+- **Central 24×24 plaza** with **THE LANDING reserved** at its heart (framed-gate asset is #733) and **spawn moved into the square** (49,58) — canon's 08-13 "keeper wakes on the crossroads square."
+- **Winding 5-wide streets** (Alex's call — not the orthogonal cross) out to the three wired doors; **filled building masses** fronting the plaza (Bookstore, Mug, two shops) instead of hollow loops. East **mountain ridge** with the Passage cut through it.
+- **Doors re-sited to face the square** — Spirit Corner W, Passage E, Travelers S — with every position that names them moved in lockstep: grid warp tiles, `rune-hold` gate `x/y`, the three **return** gates' `toX/toY` in `r-home-plot`/`the-passage`/`travelers-station`, and the owner warp.
+
+### Decisions
+- **Gate look was NOT a gap — canon ruled it 08-24** (`world/gates.md` › *What a gate LOOKS like*): bare spiral = untuned/temporary, **framed doorway = tuned/kept**, and the table names *"the Rune Hold square's public landing"* as framed. Boundary hands **geometry/art/particle work to Jin**. So the #733 asset splits along the art-medium law: **the frame = dead stone → Meshy/GLB** (the town already loads 8 such props via `useGLTF`), **the spiral inside = live shader**, never pre-rendered.
+- **Verified with the right instruments:** reachability BFS from spawn (every door + arrival + landing pad reachable), `rune-hold-doors` oracle **12/0/1-pending** (THE LANDING still correctly pending), canon gate 11 CLEAN.
+
+### Next
+- **#733 — the framed gate asset at THE LANDING** (Alex's clock, 3D assets). Center of the plaza is reserved and the crossing-out door turns on the moment a gate labelled `THE LANDING` appears on the map — nothing to rewire.
+- **⚠ `runeHold()` instrument (play3d/rune-hold.ts) now DIFFERS from the tile town** — its terraced masses/roster describe the old layout. It is the owner dev-viewer only (not the live world), so no bug today, but a future 3D-storefront pass must reconcile the two.
+
 ## 🏔 Shimmer — **RUNE HOLD: THE TOWN GOT ITS HILLSIDE, THEN ITS ROSTER, THEN ITS DOORS** (2026-08-24, hub) · *Last touched 2026-08-24 (hub, late) — shipped, deployed, pushed*
 
 ### Left off — SHIPPED `853f615` + `d140299` + `7fc6b9a`, all deployed and pushed, tree clean
