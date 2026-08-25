@@ -11,6 +11,19 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🐛 Shimmer — **BUG-HUNT: three confirmed logic bugs fixed in untested engine systems** (2026-08-25, hub) · *Last touched 2026-08-25 (hub) — shipped `eb5b977`, deployed, pushed*
+
+### Left off — SHIPPED `eb5b977`, deployed + pushed, tree clean
+Alex picked "bug-hunt a game system" (eye-free). Fanned three sonnet finders over the untested engine (`battle`/`moves`/`party-battle`/`battle-ai`, `exchange`/`inventory`/`held-items`/`harvesting`, `pathfinder`/`encounters`/`alchemy`/`quests`), then **adversarially verified every candidate** before touching code — several finder claims were withdrawn on trace. Three confirmed, all traced end-to-end, fixed, and **mutation-tested** (restore the bug → the new guard goes red):
+- **`exchange.ts buyFromGE` (CRITICAL, live).** Discarded `addItems`' leftover and always returned `success` with the full cost → buy into a full bag, pay marks, receive nothing (the caller's `if (!res.success)` guard never fired). Now charges only for what the bag takes, refuses when nothing fits, returns `received`. + `exchange.test.ts` (17).
+- **`battle.ts endOfTurn` (MAJOR, live).** Emitted KO for any `hp<=0` unconditionally, re-emitting for a combatant already move-killed this turn → double "fainted!" + double ~1.1s KO delay. Now snapshots alive-at-entry; only a status-tick death emits. + `battle.test.ts` (3).
+- **`battle-ai.ts` (MAJOR, live).** Anti-overkill compared the kill-BOOSTED score to `hp*1.5`, so nearly every confirmed kill tripped the penalty and scored *below* a near-miss → the AI stopped taking kills. Now judges the RAW estimate. ⚠ changes AI feel (goes for kills now) — worth Alex's eye at some point, but the old behaviour was objectively wrong.
+
+### Flagged, NOT auto-fixed (verified real but design- or wiring-dependent — for Alex / a follow-up)
+- **`quests.ts` 'brew' objective reads `brewed_<potionId>` that nothing writes** → any brew quest is uncompletable. BUT `tickQuestProgress` is **never called** — the quest-progress loop isn't wired into the game, so this is latent, not a live softlock. When wiring quests: set the flag on a successful brew (BOTH brew paths — tile `alchemy.brewPotion` AND voxel `brew.ts`), or count held potions. Same pass must fix the **'gather' objective** (`countItem` regresses if you spend gathered items before the tick fires).
+- **`party-battle.ts` crystallize not cleared on hit** (MAJOR, medium-confidence) — the 1v1 engine shatters it on the first hit; party mode leaves the +25%-damage window open its full 3 rounds. Possibly a deliberate divergence — needs a combat-design call before fixing.
+- **`inventory.ts` INVENTORY_SLOTS=24 vs a 20-slot UI/hotbar** — `addItems` can place items in slots 20–23 that `InventoryGrid` never renders (reachable only via the chest panel). Real, but the fix is a design call: is it a 20- or 24-slot, 5- or 6-wide grid? Alex's.
+
 ## 🌉 Shimmer — **THE CROSSING OUT: BOTH HALVES BUILT, NOTHING WIRED** (2026-08-24, world + hub) · *Last touched 2026-08-24 (world) — committed + pushed, deliberately unwired*
 
 ### Left off — `a2d5948` + `8050e43` (world) with `c93beae` + `5675c51` (hub)
