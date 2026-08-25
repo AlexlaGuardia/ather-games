@@ -127,14 +127,19 @@ function scoreMove(
   // ── Damage Moves ──
   if (move.power > 0) {
     score = estimateDamage(attacker, defender, move)
+    // ★ RAW estimate, captured before the kill bonus. Anti-overkill must judge the move's own
+    // damage, not the boosted score — else every confirmed kill (raw ≥ hp → ×1.5 → > hp*1.5)
+    // trips the penalty and a guaranteed KO scores BELOW a near-miss, so the AI stops taking kills.
+    // (Fixed 2026-08-25.) Overkill is now genuine: raw damage more than 1.5× the target's HP.
+    const raw = score
 
     // Kill-range bonus (both tiers)
-    if (score >= defender.hp) {
+    if (raw >= defender.hp) {
       score *= 1.5
     }
 
-    // Anti-overkill: don't waste big moves on low HP targets
-    if (score > defender.hp * 1.5) {
+    // Anti-overkill: don't waste a big nuke on a low-HP target a smaller move would finish
+    if (raw > defender.hp * 1.5) {
       score *= 0.6
     }
 

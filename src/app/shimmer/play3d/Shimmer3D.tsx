@@ -4610,7 +4610,7 @@ export default function Shimmer3D() {
     if (!res.success) { setTradeToast(res.error ?? 'Trade failed'); return }
     wallet.spend(res.totalMarks)
     setInvSlots([...invRef.current.slots])
-    setTradeToast(`Bought ${qty}× ${prettyItem(itemId)} for ${res.totalMarks} marks`)
+    setTradeToast(`Bought ${res.received ?? qty}× ${prettyItem(itemId)} for ${res.totalMarks} marks`)
     persist()
   }, [wallet, persist])
   const tradeSell = useCallback((itemId: string, qty: number) => {

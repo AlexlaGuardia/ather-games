@@ -588,6 +588,12 @@ function inflictStatus(state: BattleState, target: 'player' | 'enemy', status: S
 export function endOfTurn(state: BattleState): void {
   state.phase = 'end_of_turn'
 
+  // ★ Snapshot who was standing BEFORE the status tick. A combatant already KO'd by a move this
+  // turn had its KO event emitted in executeAction/executeStruggle; re-emitting it below (the tick
+  // never touched it — line `continue`) double-printed "fainted!" and doubled the ~1.1s KO delay.
+  // Only a death caused BY the tick belongs to this phase. (Fixed 2026-08-25.)
+  const aliveAtEntry = { player: state.player.hp > 0, enemy: state.enemy.hp > 0 }
+
   for (const side of ['player', 'enemy'] as const) {
     const combatant = state[side]
     if (combatant.hp <= 0) continue
@@ -606,9 +612,9 @@ export function endOfTurn(state: BattleState): void {
     }
   }
 
-  // Check KO from status damage
-  if (state.player.hp <= 0) state.events.push({ type: 'KO', target: 'player' })
-  if (state.enemy.hp <= 0) state.events.push({ type: 'KO', target: 'enemy' })
+  // Check KO from status damage — only for a combatant that was alive at entry and died in the tick.
+  if (aliveAtEntry.player && state.player.hp <= 0) state.events.push({ type: 'KO', target: 'player' })
+  if (aliveAtEntry.enemy && state.enemy.hp <= 0) state.events.push({ type: 'KO', target: 'enemy' })
 
   // Reach-encounter: the collar resists — it yanks the leash and drains some Reach each turn,
   // so you can't free a spirit with one calm move; you have to keep reaching while you weather it.

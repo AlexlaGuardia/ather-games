@@ -95,6 +95,7 @@ export interface GETradeResult {
   totalMarks: number      // marks spent (buy) or earned after tax (sell)
   tax: number             // tax deducted (sell only)
   newPrice: number        // price after trade
+  received?: number       // items actually delivered on a buy — may be < qty when the bag filled
   error?: string
 }
 
@@ -119,11 +120,20 @@ export function buyFromGE(
     return { success: false, totalMarks: totalCost, tax: 0, newPrice: price, error: 'Not enough marks' }
   }
 
-  // Add items to inventory
-  addItems(inv, itemId, qty)
+  // Add items to inventory. ★ CAPTURE THE LEFTOVER: addItems returns what could NOT fit, and a
+  // full bag must never be charged for phantom items. Before 2026-08-25 this return was discarded
+  // and the caller spent the full totalCost regardless — buy 5 into a full bag, pay for 5, receive
+  // 0. Charge only for what actually lands; refuse the trade outright if nothing fits (so the
+  // caller's `if (!res.success)` guard fires and no marks leave the wallet).
+  const leftover = addItems(inv, itemId, qty)
+  const received = qty - leftover
+  if (received <= 0) {
+    return { success: false, totalMarks: 0, tax: 0, newPrice: price, received: 0, error: 'Bag is full' }
+  }
+  const actualCost = Math.ceil(price * received)
 
-  // Price rises after buy — more demand
-  const priceShift = 1 + (0.02 * qty * cfg.volatility)
+  // Price rises after buy — more demand (by the amount ACTUALLY bought, not the amount asked for)
+  const priceShift = 1 + (0.02 * received * cfg.volatility)
   state.prices[itemId] = Math.min(cfg.maxPrice, Math.round(price * priceShift))
 
   // Record to sparkline history
@@ -131,7 +141,7 @@ export function buyFromGE(
   state.history[itemId].push(state.prices[itemId])
   if (state.history[itemId].length > 20) state.history[itemId].shift()
 
-  return { success: true, totalMarks: totalCost, tax: 0, newPrice: state.prices[itemId] }
+  return { success: true, totalMarks: actualCost, tax: 0, newPrice: state.prices[itemId], received }
 }
 
 /**
