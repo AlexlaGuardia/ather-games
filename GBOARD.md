@@ -236,7 +236,7 @@ Both halves are built and **neither is wired; nothing persists across the seam.*
 ### Files
 `src/app/shimmer/play3d/rune-hold.ts` (+ `.test.ts`, 70 asserts both mannequins) · `src/app/shimmer/dev/runehold/page.tsx` · `scripts/town-plan.mts` · reads `play3d/metrics.ts`
 
-## 🔮 Shimmer — **THE CAST BAR IS TWO SLOTS: TACTICAL + SIGNATURE** (RULED 2026-08-23, Alex + jin-cc hub) · *Not yet built* · ⛔ **step 1 BLOCKED 2026-08-25 — see banner*
+## 🔮 Shimmer — **THE CAST BAR IS TWO SLOTS: TACTICAL + SIGNATURE** (RULED 2026-08-23, Alex + jin-cc hub) · *Not yet built* · ✅ **step 1 SHIPPED 2026-08-25 as THREE bands — see banner*
 
 **Alex's ruling, in full, and it is canon-aligned rather than a scope cut.** `game/moves.md:85` — *"## Ultimates — **Signature**, high pool cost."* So *signature* IS the Ultimate band. The mage's four bands are Passives / Tactical / Ultimates / Combos; **passives are not cast and combos are pair-casting, so the button-castable set is exactly Tactical + Signature.** The build's four slots were the drift, not the baseline.
 
@@ -271,7 +271,17 @@ Both halves are built and **neither is wired; nothing persists across the seam.*
   move has exactly one tier, so `setSlot`'s dedup branch becomes **unreachable by legal binds**. Rewrite it
   as an honest statement that the case is unreachable; do not let it quietly pass.
 
-> ## ⛔ **BLOCKED 2026-08-25 (play lane, `b68e6b9`) — STEP 1 AS WRITTEN SILENTLY RETIRES EIGHT BUILT MOVES. DO NOT LAND IT UNTIL ALEX RULES THE PASSIVE'S HOME.**
+> ## ✅ **SHIPPED 2026-08-25 (play lane) — RULED, THEN LANDED AS THREE BANDS. The block below is kept as the record of why it is three and not two.**
+>
+> **Alex ruled the stance socket, and Alex + Magii ruled the same thing independently in canon `c9b1bbd`.** `CAST_SLOTS` = `['tactical','ultimate']` (Z/C in play3d, Z/B in voxel3d) + `STANCE_SLOTS` = `['passive']` (G), concatenated into **`ALL_BANDS`**. `runes.md:256` gives every mage **up to 3 innate sockets** and says *most run 0-1*; **v1 opens one, and the count is Jin's to tune.** The migration **re-seats** the old passive into the socket and **needed zero code change** to do it — it matches by KIND, exactly what its derived-not-tabulated design promised. Verified on a real save shape: `[barrier, ice-dart, mend, chain-lightning]` → `[ice-dart, chain-lightning, barrier]`.
+> · **In `VoxelWorld.tsx` the mirror was killed, not updated:** `CAST_KEYS` is keyed **by kind** and ordered **by `ALL_BANDS`**, typed `Record<SlotKind, string>` so a new canon tier is a **compile error** rather than a blank unpressable key.
+> · ⏭ **NOT DEPLOYED, NOT SEEN IN A BROWSER** (deploy is hub's). The one check localStorage alone can prove: a keeper with a **pre-collapse 4-entry save** must load with their old passive in the G socket, not an empty bar.
+> · ⏭ **Lane Law scoping is NOT in this** — tactical pool → element lane, signature → state lane, per-rune lists derived from `moves.md` tier+rune tags. Separate piece of work, re-derives `eligibleMoves`.
+> · ⏭ **`[OPEN]` canon gap filed:** Flame Manipulation + Moisture Gathering are `tier:'passive'`, rune-gated, `pausesRecovery` in the build, but `runes.md:261-271` lists **both** under *"Traits (Separate from Runes)"*. Decides what may legally occupy a socket. Blocks nothing built.
+>
+> <details><summary>The original BLOCKED banner — kept, because the reasoning is the reason the socket exists</summary>
+>
+> ## ⛔ **BLOCKED 2026-08-25 (play lane, `b68e6b9`) — STEP 1 AS WRITTEN SILENTLY RETIRES EIGHT BUILT MOVES.**
 >
 > `resolveCast()` in `engine/cast-dispatch.ts` is the **ONLY writer of `stanceChange` anywhere in the
 > build** — swept, there is no second entry point. So a move's only route into the game is a slot in
@@ -303,9 +313,11 @@ Both halves are built and **neither is wired; nothing persists across the seam.*
 > canon at once and keeps the eight moves alive. `migrateLegacyLoadout` would then **re-seat** the old
 > passive id into that socket rather than dropping it — its current "dropped, and that is the ruling
 > rather than data loss" comment rests on the same expired premise and would need correcting with it.
+>
+> </details>
 
 **Next — the whole job:**
-1. ⛔ `CAST_SLOTS` → `['tactical','ultimate']`. Drop the passive slot and one tactical. **See the BLOCKED banner above — not until the passive has somewhere to live.**
+1. ✅ **SHIPPED** `CAST_SLOTS` → `['tactical','ultimate']` + `STANCE_SLOTS` → `['passive']`. Dropped one tactical; the passive **moved bands rather than dying**.
 2. Cast keys move onto the action layer (`lib/input`), same conversion as `525ad15`. `hintsFor` then gives the tutorial the right glyph for free.
 3. **Pad: `LB` = tactical, `RB` = signature.** Both fire ON PRESS. ⚠ **No chord.** A button that is both an action and a modifier cannot fire instantly — `LB` alone + `LB+RB` forces either release-latency on every tactical or a wasted tactical before every signature, and it costs exactly in the combat moment. Alex's first instinct was `LB` / `LB+RB`; he took the single-press version.
 4. **Weapon verb consolidates onto `Y` (Triangle):** tap = draw when stowed, tap = cycle when drawn, **hold = stow.** This frees `RB` and leaves `R3` genuinely unused. ⚠ Tap/hold latency is FINE here and NOT here-vs-casting inconsistency: stowing and cycling are not combat-critical, casting is. Cycle fires on release under the hold threshold.
