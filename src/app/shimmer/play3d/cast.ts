@@ -395,10 +395,21 @@ export function isBuilt(moveId: string | null | undefined): boolean {
 
 // ── The loadout ────────────────────────────────────────────────────────────────
 //
-// Shape mirrors the authoring target the canon pass is aimed at: each keeper-reachable rune should
-// own 1 passive + 2 tacticals + 1 ultimate. So the slots ARE those tiers — the loadout is typed, not
-// four interchangeable holes, and the input maps to canon's own vocabulary (a held stance behaves
-// nothing like a signature).
+// The slots ARE canon's tiers — the loadout is typed, not N interchangeable holes, and the input maps
+// to canon's own vocabulary (a held stance behaves nothing like a signature).
+//
+// ── ⚠ CORRECTED 2026-08-25 (play lane): THIS BLOCK CITED THE WRONG KIND OF NUMBER ──────────────
+// It used to read "Shape mirrors the authoring target the canon pass is aimed at: each keeper-reachable
+// rune should own 1 passive + 2 tacticals + 1 ultimate. So the slots ARE those tiers." That sentence
+// took `moves.md`'s **REGISTRY AUTHORING TARGET** — how many moves each rune should HAVE WRITTEN FOR IT —
+// and read it as a **LOADOUT SLOT COUNT**: how many a keeper may EQUIP. They are different questions and
+// canon only answers the first. Canon fixes exactly one equip cap, `runes.md:256` **passives ≤ 3**, and
+// states no cap on the other two bands; its own cast contradicts a 1-tactical ceiling (Veyra runs
+// "Firewall · Flame Infusion", `veyra.md:174`; Samantha "Mend · Ice Dart", `samantha.md:112`) and
+// Samantha runs "no ultimate, by choice" (`samantha.md:106`), which is why an empty slot is legal here.
+// ★ The correction matters in the direction of FREEDOM: the slot count is JIN'S, tunable at will, and
+// nobody has to defend it to canon. The old sentence made a build number look like a canon obligation —
+// the same lying-provenance shape this repo keeps filing, one step upstream of a value being wrong.
 //
 // 'combo' is not a slot kind: canon requires a second mage in sync, so it can never be a solo bind.
 

@@ -204,9 +204,51 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
 
 // 5. the loadout is typed by canon tier
 {
-  chk('slots are 1 passive + 2 tacticals + 1 ultimate (the authoring target)',
-    JSON.stringify(CAST_SLOTS) === JSON.stringify(['passive', 'tactical', 'tactical', 'ultimate']))
   chk('one distinct key per slot', SLOT_KEYS.length === CAST_SLOTS.length && new Set(SLOT_KEYS).size === SLOT_KEYS.length)
+
+  // ── ★★★ NO BUILT MOVE MAY BE ORPHANED BY THE SHAPE OF THE BAR (added 2026-08-25, play lane) ───
+  //
+  // This replaces an assert that pinned `CAST_SLOTS` to the literal `['passive','tactical','tactical',
+  // 'ultimate']` and labelled it "the authoring target". That assert was a MIRROR — it restated the
+  // constant instead of constraining it, so it could only ever fail by being edited, and its label
+  // repeated the registry-target/slot-count conflation `cast.ts` now documents as a miscitation. Worse,
+  // the one edit it was guarding against is the one edit that is COMING: the ruled 4→2 collapse would
+  // have made this line red for the correct reason and been "fixed" by pasting the new literal in.
+  //
+  // ⚠⚠ THE DEFECT IT EXISTS TO CATCH, FOUND WHILE SCOPING THAT COLLAPSE. `resolveCast(slot, …)` in
+  // `engine/cast-dispatch.ts` is the ONLY writer of `stanceChange` anywhere in the build — verified by
+  // sweep, there is no second entry point. So a move's ONLY route into the game is a slot in this list
+  // whose kind matches its tier. Collapse `CAST_SLOTS` to `['tactical','ultimate']` as GBOARD step 1
+  // says, and every `passive`-tier move stops being reachable: 12 registered, 8 of them with a fully
+  // BUILT stance archetype (resist / castMult / manaPerSec / moveMult / pausesRecovery — Barrier,
+  // Bulwark, Flame Manipulation, Moisture Gathering, Iron Skin, Molten Shell, Storm Cloak, Ice Armor).
+  // Eight working moves and the whole held-stance mana double-edge — the cost canon's economy rests
+  // on — retire in silence, with nothing in the build that looks like an error.
+  // (The count is READ, not remembered: this comment first said nine, from eyeballing the archetype
+  // table where the `| 'stance'` type line sits among the entries. The guard below names them, which
+  // is the point — it is the only statement of this set that cannot go stale.)
+  //
+  // ★ AND THE STEP THAT AUTHORISED IT HAD ALREADY EXPIRED. GBOARD step 6 reads "the passive becomes
+  // INNATE, always-on, no key. See the block below." The block below was AMENDED on 2026-08-25: the
+  // always-on thing a birth rune grants is the affinity LEAN, and canon's learned/elite/held passive
+  // band "stands exactly as written". Nothing makes a learned passive always-on. Dropping its slot does
+  // not make it innate — it makes it unreachable. The step read perfectly sensibly on its own and its
+  // premise died two days later, in an amendment to the very block it cites.
+  //
+  // So the guard asks the question the literal could not: is every move the sim can RUN still bindable?
+  // It NAMES the orphans rather than counting them — a count goes red without saying why, and the
+  // cheapest lie that makes a red count green is to change the number.
+  {
+    const orphaned = KEEPER_MOVES
+      .filter((m) => isBuilt(m.id) && m.tier !== 'combo' && !CAST_SLOTS.includes(m.tier as never))
+      .map((m) => `${m.name} (${m.tier})`)
+    chk(`every BUILT move has a slot kind that can hold it${orphaned.length ? ` — ORPHANED: ${orphaned.join(', ')}` : ''}`,
+      orphaned.length === 0)
+  }
+
+  // The bar's kinds must stay a subset of canon's non-combo tiers, and hold no duplicates it cannot
+  // justify. This constrains the shape WITHOUT restating it, so the ruled collapse passes untouched.
+  chk('every slot kind is a real canon tier', CAST_SLOTS.every((k) => KEEPER_MOVES.some((m) => m.tier === k)))
 
   const life = defaultLoadout(['life'], ALL)
   chk('a Life-born keeper slots Mend', life.includes('mend'))
