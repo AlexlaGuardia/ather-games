@@ -390,5 +390,47 @@ console.log('\nper-map spawn dials (ZoneSpawnConfig)')
   check('4x turns over mid-global-window', w4b === w4a + 1)
 }
 
+console.log('the entry guarantee never stacks a second node on a slot rawDeal already filled')
+{
+  // withEntryGuarantee picked its slot by hash and PUSHED unconditionally. When that slot was one
+  // rawDeal had already filled with a higher tier, the deal carried TWO nodes on one tile — same
+  // slotKey, mismatched leaving/arriving. Over the real authored zones this fires whenever a zone
+  // comes up short on its entry tier with its slots otherwise occupied. One tile → one node, always.
+  let dupTileWindows = 0, dupKeyWindows = 0, example = ''
+  for (const [zoneId, placements] of zonesWithNodes) {
+    for (let w = 0; w < WINDOWS; w++) {
+      const nodes = dealZone(zoneId, placements, w, WORLD_SEED)
+      const tiles = new Set<string>(), keys = new Set<string>()
+      let dupTile = false, dupKey = false
+      for (const n of nodes) {
+        const tk = `${n.tileX},${n.tileY}`
+        if (tiles.has(tk)) dupTile = true; else tiles.add(tk)
+        if (keys.has(n.key)) dupKey = true; else keys.add(n.key)
+      }
+      if (dupTile) { dupTileWindows++; if (!example) example = `${zoneId} w${w}` }
+      if (dupKey) dupKeyWindows++
+    }
+  }
+  check('no window deals two nodes on one tile', dupTileWindows === 0, `${dupTileWindows} bad windows (e.g. ${example})`)
+  check('no window deals a duplicate slotKey', dupKeyWindows === 0, `${dupKeyWindows} bad windows`)
+}
+
+console.log('the pinned-hour window anchors the fade to the wall clock, not the epoch')
+{
+  // currentWindow's isTimePinned branch hand-rolled idx*WINDOW_MS for start/end — decades in the
+  // past (idx is 0 or 1) — so every leaving node read a negative remainder and rendered at alpha 0,
+  // invisible in the one `?hour=` mode built to look at them. The fix delegates to windowAt with the
+  // pinned index, so it inherits windowAt's live anchoring. This locks that inherited property (the
+  // branch itself needs a URL pin to enter, which a unit test can't set — but the delegate is the
+  // whole behaviour, and a regression would have to break it here first).
+  const t = 5_000 * WINDOW_MS + 12_345   // an arbitrary "now", far from the epoch
+  const w = windowAt(t, 0)               // index forced to 0, exactly what the pinned branch passes
+  check('windowAt(now, idx) brackets NOW, not 1970', w.startMs <= t && t < w.endMs, `start ${w.startMs} vs now ${t}`)
+  check('the window carries the pinned index', w.index === 0)
+  check('the window is one window long', w.endMs - w.startMs === WINDOW_MS)
+  // a leaving node mid-window stays visible — the epoch-anchored bug forced it to alpha 0
+  check('a leaving node mid-window is not force-faded to 0', nodeAlpha({ leaving: true }, t, w) > 0, `alpha ${nodeAlpha({ leaving: true }, t, w)}`)
+}
+
 console.log(`\n${failures === 0 ? 'PASS' : `FAIL — ${failures} failing`}\n`)
 process.exit(failures === 0 ? 0 : 1)

@@ -192,7 +192,12 @@ export function currentWindow(nowMs: number = Date.now()): DealWindow {
     // The pinned hour's own window, held still: floor(progress * RESETS_PER_DAY) is which half of
     // the frozen day we are standing in.
     const idx = Math.floor(dayProgress(nowMs) * RESETS_PER_DAY)
-    return { index: idx, startMs: idx * WINDOW_MS, endMs: (idx + 1) * WINDOW_MS }
+    // ★ Delegate to windowAt so start/end are WALL-CLOCK relative, not epoch-anchored. Returning
+    // idx*WINDOW_MS put the boundary decades in the past (idx is 0 or 1), so every leaving node
+    // computed a negative remainder and rendered at alpha 0 — invisible, in the exact `?hour=` mode
+    // built for looking at them. Same bug windowAt was carved out to fix for the pinnedWindow path;
+    // this branch was never updated with it. (Fixed 2026-08-25.)
+    return windowAt(nowMs, idx)
   }
   const index = Math.floor(nowMs / WINDOW_MS)
   return { index, startMs: index * WINDOW_MS, endMs: (index + 1) * WINDOW_MS }
@@ -335,7 +340,14 @@ function withEntryGuarantee(
       const r = hash01(`guarantee|${rollKey(seed, windowIndex, zoneId, p)}`)
       if (r > bestRoll) { bestRoll = r; best = p }
     }
-    out.push({ ...best, type: entryType })
+    // ★ best's slot may ALREADY carry a node this window — rawDeal can have filled it with a higher
+    // tier. Pushing unconditionally stacked a SECOND node on the same tile (two overlapping nodes
+    // sharing one slotKey, ~1 deal in 4 for a 2-slot 2-tier zone). Override the tile instead, which
+    // also gives the nicer outcome: the entry node here, the higher node on the OTHER slot.
+    // (Fixed 2026-08-25.)
+    const bi = out.findIndex(p => p.tileX === best.tileX && p.tileY === best.tileY)
+    if (bi >= 0) out[bi] = { ...best, type: entryType }
+    else out.push({ ...best, type: entryType })
   }
   return out
 }
