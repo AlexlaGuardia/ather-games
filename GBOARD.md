@@ -236,7 +236,7 @@ Both halves are built and **neither is wired; nothing persists across the seam.*
 ### Files
 `src/app/shimmer/play3d/rune-hold.ts` (+ `.test.ts`, 70 asserts both mannequins) · `src/app/shimmer/dev/runehold/page.tsx` · `scripts/town-plan.mts` · reads `play3d/metrics.ts`
 
-## 🔮 Shimmer — **THE CAST BAR IS TWO SLOTS: TACTICAL + SIGNATURE** (RULED 2026-08-23, Alex + jin-cc hub) · *Not yet built*
+## 🔮 Shimmer — **THE CAST BAR IS TWO SLOTS: TACTICAL + SIGNATURE** (RULED 2026-08-23, Alex + jin-cc hub) · *Not yet built* · ⛔ **step 1 BLOCKED 2026-08-25 — see banner*
 
 **Alex's ruling, in full, and it is canon-aligned rather than a scope cut.** `game/moves.md:85` — *"## Ultimates — **Signature**, high pool cost."* So *signature* IS the Ultimate band. The mage's four bands are Passives / Tactical / Ultimates / Combos; **passives are not cast and combos are pair-casting, so the button-castable set is exactly Tactical + Signature.** The build's four slots were the drift, not the baseline.
 
@@ -271,13 +271,46 @@ Both halves are built and **neither is wired; nothing persists across the seam.*
   move has exactly one tier, so `setSlot`'s dedup branch becomes **unreachable by legal binds**. Rewrite it
   as an honest statement that the case is unreachable; do not let it quietly pass.
 
+> ## ⛔ **BLOCKED 2026-08-25 (play lane, `b68e6b9`) — STEP 1 AS WRITTEN SILENTLY RETIRES EIGHT BUILT MOVES. DO NOT LAND IT UNTIL ALEX RULES THE PASSIVE'S HOME.**
+>
+> `resolveCast()` in `engine/cast-dispatch.ts` is the **ONLY writer of `stanceChange` anywhere in the
+> build** — swept, there is no second entry point. So a move's only route into the game is a slot in
+> `CAST_SLOTS` whose kind matches its tier. Collapse the list to `['tactical','ultimate']` and all **12
+> passive-tier moves stop being reachable**, **8 of them fully BUILT** stance archetypes — Barrier,
+> Bulwark, Flame Manipulation, Moisture Gathering, Iron Skin, Molten Shell, Storm Cloak, Ice Armor —
+> together with `pausesRecovery`, the held-stance **mana double-edge canon's economy rests on**. No
+> error, no fallback, nothing that looks wrong. The board's own note two blocks down calls that double
+> edge *"where we are already right (do not touch)"*.
+>
+> **★ AND THE STEP THAT AUTHORISED IT HAD ALREADY EXPIRED WHEN IT WAS READ.** Step 6 below says *"The
+> passive becomes INNATE, always-on, no key. **See the block below.**"* The block below was **AMENDED
+> 2026-08-25**: the always-on thing a birth rune grants is the affinity **LEAN**, and canon's
+> learned/elite/**held** passive band *"stands exactly as written"*. **Nothing in the build makes a
+> learned passive always-on.** Dropping its slot does not make it innate — it makes it unreachable.
+> Step 6 read perfectly sensibly on its own and its premise died two days later, inside an amendment to
+> the very block it cites. Same shape as #709: a row outliving its premise while still parsing fine.
+>
+> **The guard is landed so this cannot be forgotten** (`play3d/cast.test.ts`): it asks whether every
+> BUILT move still has a slot kind that can hold it and **NAMES the orphans**, mutation-verified red
+> against the collapse applied verbatim. It replaced an assert that merely pinned `CAST_SLOTS` to its
+> literal — a mirror that could only fail by being edited, and would have gone red for the right reason
+> and been "fixed" by pasting the new literal in.
+>
+> **⏭ THE ONE QUESTION FOR ALEX** (the cast bar itself is not in doubt — Tactical + Signature is ruled
+> and canon-backed): **where does a held passive live once it is off the bar?** Jin's recommendation is
+> a separate **stance socket** — off the cast bar exactly as ruled, keeping `G` (the key it already
+> has), sized 1 for now against canon's `passives ≤ 3` (`runes.md:256`). That satisfies the ruling and
+> canon at once and keeps the eight moves alive. `migrateLegacyLoadout` would then **re-seat** the old
+> passive id into that socket rather than dropping it — its current "dropped, and that is the ruling
+> rather than data loss" comment rests on the same expired premise and would need correcting with it.
+
 **Next — the whole job:**
-1. `CAST_SLOTS` → `['tactical','ultimate']`. Drop the passive slot and one tactical.
+1. ⛔ `CAST_SLOTS` → `['tactical','ultimate']`. Drop the passive slot and one tactical. **See the BLOCKED banner above — not until the passive has somewhere to live.**
 2. Cast keys move onto the action layer (`lib/input`), same conversion as `525ad15`. `hintsFor` then gives the tutorial the right glyph for free.
 3. **Pad: `LB` = tactical, `RB` = signature.** Both fire ON PRESS. ⚠ **No chord.** A button that is both an action and a modifier cannot fire instantly — `LB` alone + `LB+RB` forces either release-latency on every tactical or a wasted tactical before every signature, and it costs exactly in the combat moment. Alex's first instinct was `LB` / `LB+RB`; he took the single-press version.
 4. **Weapon verb consolidates onto `Y` (Triangle):** tap = draw when stowed, tap = cycle when drawn, **hold = stow.** This frees `RB` and leaves `R3` genuinely unused. ⚠ Tap/hold latency is FINE here and NOT here-vs-casting inconsistency: stowing and cycling are not combat-critical, casting is. Cycle fires on release under the hold threshold.
 5. `LB`'s `build.rotate` context-shares with build mode — a mode the player can SEE, which is the only kind that is safe to overload.
-6. **The passive becomes INNATE, always-on, no key.** See the block below.
+6. ⛔ ~~**The passive becomes INNATE, always-on, no key.** See the block below.~~ **PREMISE EXPIRED 2026-08-25** — the block below was amended: the innate thing is the affinity LEAN, and canon's learned/elite/held passive band stands as written. Nothing makes a learned passive always-on. See the BLOCKED banner above.
 7. ⚠ **MIGRATION, and it is the risk item.** Saved loadouts are a positional 4-array matched by index to `CAST_SLOTS` (`loadout.ts:78` slices to length). Collapsing to 2 shifts every index — position 0 stops meaning *passive* and starts meaning *tactical*. It will probably fail `canSlot` and fall back to a default rather than hand someone the wrong move, **and "probably" is not good enough for a keeper's cast bar.** Needs a real migration and a test, not an assumption.
 
 **Decisions (do not relitigate):**
