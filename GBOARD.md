@@ -11,7 +11,13 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🐛 Shimmer — **BUG-HUNT: five confirmed logic bugs fixed across untested engine systems + a coord build-lock hardening** (2026-08-25, hub) · *Last touched 2026-08-25 (hub) — shipped `eb5b977` + `8228084` + `842fb27`, deployed, pushed*
+## 🐛 Shimmer — **BUG-HUNT: six confirmed logic bugs fixed across untested engine systems + a coord build-lock hardening** (2026-08-25, hub) · *Last touched 2026-08-25 (hub) — shipped `eb5b977` + `8228084` + `842fb27` + `0a49f40`, deployed, pushed*
+
+### Round 3 (`0a49f40`) — arena, mutation-verified; yield thinning
+- **`arena.ts moveToward` (MAJOR, live).** The defend-stance advance hard-coded raw `f.speed` while every other movement branch gates through `effSpeed` — so an **anchored fighter (meant rooted, effSpeed 0) slid forward at full speed** and a fortified one moved 43% too fast. Now routes through `effSpeed`. Exported `effSpeed`/`moveToward`, extended the existing arena oracle; mutation-verified.
+- **Correctly triaged, NOT fixed** (this is the discipline paying off): `tools.ts useTool` was a **false positive** (the agent assumed the return gates the harvest — it doesn't; the harvest happens first, the return only triggers break-fallback, and returning false at 0 uses is correct) · tool `tier` basic=1-vs-0 is **cosmetic** (basics are filtered before the only numeric tier sort) · `engine/multiplayer.ts` ghost-player finding is **moot** (dead file; the live mp is `play3d/multiplayer.ts` with `STALE_MS`).
+- **⚠ Flagged:** `dialogue-runtime.ts:268` — a condition node whose branches all fail with an empty/missing `fallbackNodeId` (typed non-optional, but JSON doesn't enforce) silently ends the conversation. Medium-confidence, needs bad graph data; dialogue is live + sensitive, so flagged not fixed.
+- **Yield is diminishing** (r1=3, r2=2, r3=1). Next bug-hunt should either pause or pivot to the higher-value voxel3d gameplay systems (brew chain, save/persistence, crossings) rather than more engine/ finder rounds.
 
 ### Round 2 (`8228084`) — spawn-board, both mutation-verified
 - **`spawn-board.ts withEntryGuarantee` (MAJOR, live).** The entry-tier guarantee picked its slot by hash and PUSHED unconditionally — when that slot was one `rawDeal` already filled with a higher tier, the deal carried TWO nodes on one tile (duplicate `slotKey`, mismatched leaving/arriving). **Mutation-measured at 115/300 windows in mycelial-path alone (~38%).** Now overrides the tile — one node per tile, and the nicer outcome (entry node here, higher node on the other slot).
