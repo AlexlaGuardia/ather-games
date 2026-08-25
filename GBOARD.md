@@ -13,6 +13,9 @@ the Arcade frame.
 
 ## 🐛 Shimmer — **BUG-HUNT: six confirmed logic bugs fixed across untested engine systems + a coord build-lock hardening** (2026-08-25, hub) · *Last touched 2026-08-25 (hub) — shipped `eb5b977` + `8228084` + `842fb27` + `0a49f40`, deployed, pushed*
 
+### Round 4 — voxel3d-LIVE data layer: CLEAN, bug-hunt CLOSED
+Audited the live voxel data/material/crop/encounter cluster (`registry.ts`, `attrs.ts`, `crops.ts`, `mist-encounter.ts`) — the systems the *current* game actually runs. A thorough finder trace (against `depth.ts`/`farming`/`meadow-seed`/mist rosters) found **no bugs**, ruling out 7 suspicious-looking items with real reasoning. The current game's core voxel data is sound. `bench.ts` skipped (dead orphan, 0 importers). **Yield across the hunt: 3 → 2 → 1 → 0 — closed.** Remaining untested surface is legacy play3d or rendering/mesh (needs eyes). Don't reflexively reopen; if reopening, chase a specific reported symptom.
+
 ### Round 3 (`0a49f40`) — arena, mutation-verified; yield thinning
 - **`arena.ts moveToward` (MAJOR, live).** The defend-stance advance hard-coded raw `f.speed` while every other movement branch gates through `effSpeed` — so an **anchored fighter (meant rooted, effSpeed 0) slid forward at full speed** and a fortified one moved 43% too fast. Now routes through `effSpeed`. Exported `effSpeed`/`moveToward`, extended the existing arena oracle; mutation-verified.
 - **Correctly triaged, NOT fixed** (this is the discipline paying off): `tools.ts useTool` was a **false positive** (the agent assumed the return gates the harvest — it doesn't; the harvest happens first, the return only triggers break-fallback, and returning false at 0 uses is correct) · tool `tier` basic=1-vs-0 is **cosmetic** (basics are filtered before the only numeric tier sort) · `engine/multiplayer.ts` ghost-player finding is **moot** (dead file; the live mp is `play3d/multiplayer.ts` with `STALE_MS`).
