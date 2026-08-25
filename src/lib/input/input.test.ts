@@ -91,6 +91,24 @@ ok(c.some(x => x.input === 'KeyQ' && x.actions.includes('item.drop') && x.action
 const clash = rebind(base, 'ui.map', 'key', ['KeyC'])
 ok(conflicts(clash).some(x => x.input === 'KeyC' && x.actions.length === 2), 'a newly created clash was not detected')
 
+// ── ★ LB CARRIES BOTH ROTATE AND CAST TACTICAL, AND THAT IS THE RULING ────────────────────────
+// Alex, 2026-08-23: "LB's build.rotate context-shares with build mode — a mode the player can SEE,
+// which is the only kind that is safe to overload." Asserted here for the same reason the KeyQ
+// overlap above is: an unexplained entry in a conflict report is something a future reader deletes.
+ok(conflicts(base).some(x => x.input === 'LB' && x.actions.includes('build.rotate') && x.actions.includes('cast.tactical')),
+   'the intentional LB rotate/cast overlap stopped being reported')
+
+// ── ★★ THE SIGNATURE PAD GAP, WRITTEN SO IT EXPIRES ───────────────────────────────────────────
+// `cast.signature` has no pad binding because the ruling puts it on RB and RB is still item.cycle
+// until the weapon verb consolidates onto Y. That is an exemption, and an exemption with no expiry
+// is the thing still sitting there a month after its premise died — this repo has the scars.
+// So assert the PREMISE, not the gap: the day RB stops being item.cycle, this goes red and tells
+// the next person to finish the job, instead of shrugging.
+ok(base['item.cycle'].pad.includes('RB'),
+   '★ RB is free now — bind cast.signature to it and delete this assert (the weapon verb moved to Y)')
+ok(base['cast.signature'].pad.length === 0,
+   'cast.signature has a pad binding but RB is still double-booked — check nothing double-fires')
+
 // ── 8. controller coverage is visible, not silently absent ─────────────────────────────────────
 const gaps = padGaps(base)
 ok(gaps.length > 0 && gaps.every(id => ALL_ACTIONS.includes(id)), 'padGaps returned nonsense')
@@ -149,7 +167,18 @@ ok(matches(rebind(base, 'item.draw', 'key', ['KeyG']), 'KeyG', 'item.draw'), 'ma
 // this must hand back both rather than invent a winner.
 const q = actionsFor(base, 'KeyQ')
 ok(q.includes('item.drop') && q.includes('item.cycle'), 'actionsFor collapsed the real KeyQ ambiguity')
-ok(actionsFor(base, 'KeyZ').length === 0, 'actionsFor invented an action for an unbound key')
+// ⚠ DERIVED, NOT NAMED. This assert used the literal `'KeyZ'`, which was unbound on the day it was
+// written and stopped being unbound the day the cast bar moved onto this layer — so a CORRECT
+// change to actions.ts turned a good assert red for a reason that had nothing to do with what it
+// tests. A fixture that names a specific free resource is a standing claim about the whole binding
+// table, and nothing keeps it true. Ask the table instead.
+const BOUND_KEYS = new Set(ALL_ACTIONS.flatMap((id) => base[id].keys))
+const spare = ['KeyJ', 'KeyK', 'KeyL', 'KeyN', 'KeyP', 'KeyU', 'KeyY', 'KeyH', 'KeyZ', 'KeyX']
+  .find((k) => !BOUND_KEYS.has(k))
+// ★ and the premise is asserted rather than assumed: if every candidate ever gets bound, this must
+// go RED and be given a new one, not quietly skip and report coverage it no longer has.
+ok(spare !== undefined, 'fixture: no unbound key left to test actionsFor against — add one')
+ok(actionsFor(base, spare ?? '').length === 0, 'actionsFor invented an action for an unbound key')
 
 // ★ THE DEVICES UNION — a pad in hand must not switch the keyboard off.
 const padSample = { down: new Set(['A'] as never[]), pressed: new Set(['A'] as never[]), lx: 0, ly: 0, rx: 0, ry: 0, kind: 'xbox' as const }

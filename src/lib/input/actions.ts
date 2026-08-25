@@ -29,6 +29,7 @@ export type ActionId =
   | 'item.draw' | 'item.drop' | 'item.cycle'
   | 'ui.craft' | 'ui.build' | 'ui.map' | 'ui.inventory' | 'ui.chat' | 'ui.close' | 'ui.settings'
   | 'build.rotate' | 'build.tierUp' | 'build.tierDown'
+  | 'cast.tactical' | 'cast.signature'
   | 'owner.fly'
 
 /** Held actions are sampled per frame; pressed actions fire once on the edge. */
@@ -97,6 +98,24 @@ export const DEFAULTS: Record<ActionId, Binding> = {
   'build.rotate':   { keys: ['KeyR'],                      pad: ['LB'] },
   'build.tierUp':   { keys: ['BracketRight'],              pad: [] },
   'build.tierDown': { keys: ['BracketLeft'],               pad: [] },
+  // ── ★ THE CAST BAR, AND BOTH KEYS ARE DERIVED RATHER THAN CHOSEN ────────────────────────────
+  // Alex ruled the castable set is exactly Tactical + Signature (2026-08-23; `moves.md:85` makes
+  // Signature the Ultimate band, passives are not cast, combos are pair-casting). This layer is
+  // consumed ONLY by voxel3d — VoxelWorld, BindingsPanel and tutorial.ts are its three importers —
+  // so the keys come off THAT world's own list rather than being picked fresh:
+  // `CAST_KEYS = ['g','z','x','b']` against `['passive','tactical','tactical','ultimate']`, so the
+  // tactical was always Z and the ultimate was always B. Both surviving slots keep the key they
+  // already had, which is the difference between a collapse and a silent remap of someone's hands.
+  // ⚠ Not `c`: that is play3d's list, and `KeyC` is `ui.craft` in the fold. The two worlds
+  // disagreeing here is deliberate and documented, not drift.
+  'cast.tactical':  { keys: ['KeyZ'],                      pad: ['LB'] },
+  // ⚠ NO PAD BINDING YET, AND THE EMPTY ARRAY IS THE HONEST ANSWER RATHER THAN A TODO.
+  // The ruling puts Signature on RB, but RB is `item.cycle` until the weapon verb consolidates
+  // onto Y (tap draws / tap cycles / hold stows) — and that lives in VoxelWorld.tsx, unbuilt.
+  // Binding RB now would double-fire: unlike the KeyQ drop/cycle overlap, which the drawn-weapon
+  // state resolves, nothing resolves RB, so both actions would run on one press. Left empty so
+  // `padGaps()` lists it as a real controller gap, which is exactly what that worklist is for.
+  'cast.signature': { keys: ['KeyB'],                      pad: [] },
   'owner.fly':      { keys: ['KeyV'],                      pad: [] },
 }
 
@@ -112,6 +131,7 @@ export const LABEL: Record<ActionId, string> = {
   'ui.craft': 'Craft', 'ui.build': 'Build mode', 'ui.map': 'Map', 'ui.inventory': 'Inventory',
   'ui.chat': 'Chat', 'ui.close': 'Close', 'ui.settings': 'Settings',
   'build.rotate': 'Rotate piece', 'build.tierUp': 'Next tier', 'build.tierDown': 'Previous tier',
+  'cast.tactical': 'Cast tactical', 'cast.signature': 'Cast signature',
   'owner.fly': 'Fly (keeper only)',
 }
 
@@ -149,6 +169,7 @@ export const GROUPS: readonly { title: string; actions: readonly ActionId[] }[] 
   { title: 'World',    actions: ['world.mine', 'world.place', 'world.interact'] },
   { title: 'Items',    actions: ['item.draw', 'item.drop', 'item.cycle'] },
   { title: 'Building', actions: ['ui.build', 'build.rotate', 'build.tierUp', 'build.tierDown'] },
+  { title: 'Casting',  actions: ['cast.tactical', 'cast.signature'] },
   { title: 'Menus',    actions: ['ui.craft', 'ui.map', 'ui.inventory', 'ui.chat', 'ui.close', 'ui.settings'] },
   { title: 'Keeper',   actions: ['owner.fly'] },
 ] as const
