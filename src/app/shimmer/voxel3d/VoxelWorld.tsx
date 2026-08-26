@@ -2799,8 +2799,19 @@ function LoadoutTab() {
               )}
             </div>
             <div className="text-[10px] leading-snug text-white/40">{passive.effect}</div>
+            {/* ⚠ DERIVED FROM THE SPEC, NEVER A CONSTANT SENTENCE. This read "it needs no slot and
+                costs nothing to hold" — true of every passive until 2026-08-26 put the mana cost on
+                the individual MOVE, and false for Barrier/Bulwark the moment that landed. A keeper
+                wearing a drain would have been told, in the panel whose whole job is to explain the
+                trait, that it was free. Reading `regenMult` means the copy cannot drift from the sim:
+                retune the number and the sentence follows. */}
             <div className="mt-1 text-[9px] leading-snug text-white/25">
-              Innate to your runes — it needs no slot and costs nothing to hold.
+              {(() => {
+                const mult = castForMove(passive.id).regenMult
+                if (mult < 1) return 'Innate to your runes — it needs no slot, but wearing it slows how fast your mana comes back.'
+                if (mult > 1) return 'Innate to your runes — it needs no slot, and it gathers mana for you while you wear it.'
+                return 'Innate to your runes — it needs no slot and costs nothing to hold.'
+              })()}
             </div>
           </div>
         </div>
