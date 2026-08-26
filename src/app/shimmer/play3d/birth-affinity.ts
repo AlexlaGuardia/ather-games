@@ -177,9 +177,17 @@ export const SELF_ATTUNEMENT_RESIST = 0.25
  * less than it costs you"*, never *"this cannot touch me"* — Veyra shapes fire barehanded and is
  * still a woman who can burn.
  */
-export function attunementResist(birth: string | null | undefined, sourceRune: string | null | undefined): number {
-  if (!birth || !sourceRune) return 0
-  return birth === sourceRune ? SELF_ATTUNEMENT_RESIST : 0
+export function attunementResist(
+  birth: string | null | undefined,
+  source: string | readonly string[] | null | undefined,
+): number {
+  if (!birth || !source) return 0
+  // ⚠ TAKES A RUNEWORD, NOT JUST A RUNE, AND MEMBERSHIP IS THE RIGHT TEST. A move naming two runes
+  // is made of BOTH substances — Firestorm is Star and Tempest — so a Star-born keeper meeting one
+  // is meeting something partly made of what they are. Asking `=== source[0]` would have made the
+  // answer depend on the order somebody happened to type the runes in.
+  const runes = typeof source === 'string' ? [source] : source
+  return runes.includes(birth) ? SELF_ATTUNEMENT_RESIST : 0
 }
 
 /**

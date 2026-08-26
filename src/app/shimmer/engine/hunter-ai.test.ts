@@ -29,7 +29,8 @@ const ctx = (over: Partial<HunterCtx> = {}): HunterCtx => ({
 })
 /** a hunter already alive and standing `d` tiles out on +x */
 const alive = (d: number): HunterState => ({
-  x: d, z: 0, hp: RANGE_HUNTER.hp, alive: true, respawn: 0, fireCd: 99, strafe: 0,
+  // fireCd/castCd at 99 = both weapons parked, so a test that wants one asks for it explicitly.
+  x: d, z: 0, hp: RANGE_HUNTER.hp, alive: true, respawn: 0, fireCd: 99, castCd: 99, strafe: 0,
 })
 const DT = 1 / 60
 

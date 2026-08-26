@@ -28,6 +28,7 @@ import { pushCloudSave } from '@/lib/cloud-sync'
 import { saveKey, saveOwner } from '@/lib/save-slot'
 import { birthAffinity, NEUTRAL_AFFINITY, attunementResist, combineResist, type Affinity } from './birth-affinity'
 import { castForMove, isBuilt, CAST_SLOTS, ALL_BANDS, BAND_KEYS, derivePassive, type CastSpec } from './cast'
+import { moveById } from './keeper-moves'
 import { loadLoadout } from './loadout'
 import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
 import { fillRoster, ROSTER_SIZE } from './crucible-bots'
@@ -1967,7 +1968,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // `x`/`z` are the hunter's truth (they are what `engine/hunter-ai.ts` steps); `pos` is the
   // render/hit-test mirror, written one-way from them once per frame. Everything else in this file
   // reads `pos` and nothing outside the hunter block writes it, so the two cannot drift.
-  const hunter = useRef({ pos: new THREE.Vector3(), x: 0, z: 0, hp: 0, alive: false, respawn: 0, fireCd: 0, strafe: 0 })
+  // ⚠ `castCd` is present but the range hunter never casts: it is handed no `castBands`, so
+  // `stepHunter` returns `castBand: null` for it every tick. The range keeps exactly the feel
+  // Alex tuned — the field exists because a Crucible challenger and a range hunter share one brain.
+  const hunter = useRef({ pos: new THREE.Vector3(), x: 0, z: 0, hp: 0, alive: false, respawn: 0, fireCd: 0, castCd: 0, strafe: 0 })
   /** frame clock the hunter's `blocked` probe needs for conjured terrain — set each frame */
   const hunterNow = useRef(0)
   /**
@@ -2070,8 +2074,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // CASTS (focus row 294) the resistance lands here for free instead of being rediscovered. An
   // omitted source resists nothing, which is the fail-open direction and the correct one — an
   // untyped hit must not be silently treated as the keeper's own attunement.
-  const hurtPlayer = useCallback((raw: number, sourceRune?: string | null) => {
-    const resist = combineResist(resistRef.current ?? 0, attunementResist(birthRuneRef.current, sourceRune))
+  const hurtPlayer = useCallback((raw: number, sourceRunes?: string | readonly string[] | null) => {
+    const resist = combineResist(resistRef.current ?? 0, attunementResist(birthRuneRef.current, sourceRunes))
     const dmg = raw * (1 - resist)
     const sh = shieldRef.current
     shieldRef.current = Math.max(0, sh - dmg)
@@ -2428,6 +2432,27 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         bc.fallbackX = targets[0].ax; bc.fallbackZ = targets[0].az
         const results = stepFleet(fleet, bodies, bc, dt, RANGE_HUNTER)
         for (const r of results) {
+          // ── ★★★ A CHALLENGER'S CAST (row 294) — the first rune-tagged damage in the game ──────
+          // This is the whole point of the row: a bot casts from its PREMADE LOADOUT, the move is a
+          // real registered keeper move, and the hit carries the move's runes. That is what makes
+          // "runes ARE the combat" true rather than aspirational, and it is what finally gives
+          // attunement resistance an input — a Star-born player meeting a Star-born challenger's
+          // Firewall takes less from it, through `hurtPlayer`'s own fold.
+          //
+          // ⚠ ONLY CASTS AIMED AT THE PLAYER LAND, for exactly the reason the orb budget note below
+          // gives: bot-on-bot casting resolves as nothing so sixty challengers cannot spend the
+          // frame on each other.
+          if (r.intent.castBand !== null && r.target.index === -1) {
+            const moveId = r.member.loadout[r.intent.castBand]
+            const cs = moveId ? castForMove(moveId) : null
+            const mv = moveId ? moveById(moveId) : undefined
+            // ⚠ DAMAGING CASTS ONLY, AND THE GAP IS NAMED RATHER THAN HIDDEN. A challenger whose
+            // band holds a wall, a field or a stance has nothing the host can stage against the
+            // player yet — bot-conjured terrain and bot-owned fields are not built. Skipping is the
+            // honest half; pretending it hit would be worse. It reads as that challenger casting
+            // less often, and when those archetypes can be staged this branch grows, it does not move.
+            if (cs && mv && cs.damage > 0) hurtPlayer(cs.damage, mv.runes)
+          }
           if (!r.intent.fire) continue
           // ⚠ ONLY shots aimed at the PLAYER get an orb. Sixty bots trading fire would drain the
           // pool in a frame and the player would face an arena that never shoots back — the pool is

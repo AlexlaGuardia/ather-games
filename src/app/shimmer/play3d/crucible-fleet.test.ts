@@ -11,7 +11,9 @@
 // Both are asserted, and both are mutation-verified.
 
 import { fillRoster, type HumanEntry } from './crucible-bots'
-import { createFleet, stepFleet, pickTarget, aliveCount, type FleetTarget } from './crucible-fleet'
+import { createFleet, stepFleet, pickTarget, aliveCount, botRunes, type FleetTarget } from './crucible-fleet'
+import { canSlot, isBuilt, laneRunes, ALL_BANDS } from './cast'
+import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { type HunterCtx } from '../engine/hunter-ai'
 
 let pass = 0
@@ -122,6 +124,75 @@ const DT = 1 / 60
   const before = lone.state.strafe
   for (let t = 0; t < 30; t++) stepFleet({ members: [lone], seed: 7 }, [], c, DT)
   ok(lone.state.strafe > before, 'a bot with nobody to fight keeps its clocks running rather than hanging')
+}
+
+// ── ★★★ PREMADE LOADOUTS (row 294) ─────────────────────────────────────────────────────────────
+{
+  const fleet = createFleet(fillRoster([{ id: 'you', name: 'You' }], 7), 7)
+
+  // ★ LEGAL BY CONSTRUCTION, ASSERTED THROUGH THE PLAYER'S OWN GATE. A bot's kit is only worth
+  // anything if it is a kit a keeper could hold — otherwise the Crucible quietly becomes a second
+  // rules engine. This asks `canSlot`, the same function the loadout menu asks, so the Lane Law and
+  // the birth-exclusive band both bind a challenger exactly as they bind the player.
+  const illegal: string[] = []
+  for (const m of fleet.members) {
+    m.loadout.forEach((id) => {
+      const kind = moveById(id)?.tier
+      const band = ALL_BANDS.indexOf(kind as never)
+      if (band < 0 || !canSlot(botRunes(m.birth), m.birth, band, id, { learned: KEEPER_MOVES.map((k) => k.id) })) {
+        illegal.push(`${m.challenger.name} (${m.birth}) → ${id}`)
+      }
+    })
+  }
+  ok(illegal.length === 0, `every bot kit is legal for a PLAYER of that birth rune — ILLEGAL: ${illegal.slice(0, 3).join(', ')}`)
+
+  // ⚠⚠ BUILT MOVES ONLY. An unbuilt move in a player's bag is the honesty rule working — it is
+  // labelled in the HUD. In a bot's hands it is a challenger that winds up and does nothing, which
+  // reads as a broken fight. Measured before the filter existed: 15 of 59 held one.
+  const dead = fleet.members.flatMap((m) => m.loadout.filter((id) => !isBuilt(id)))
+  ok(dead.length === 0, `no challenger holds an UNBUILT move — would cast into a no-op: ${dead.slice(0, 3).join(', ')}`)
+
+  // ★ DETERMINISM IS THIS FILE'S WHOLE CONTRACT and the kit is now part of it — a roster that
+  // rebuilt with different runes per client is the desync `crucible-bots.ts` was written to avoid.
+  const kit = (seed: number) => createFleet(fillRoster([{ id: 'you', name: 'You' }], seed), seed)
+    .members.map((m) => `${m.birth}:${m.loadout.join(',')}`).join('|')
+  ok(kit(7) === kit(7), 'same seed ⇒ same runes and same kits, every client')
+  ok(kit(7) !== kit(8), 'a different seed ⇒ a different field (or the seed is not reaching the kit)')
+
+  // A second rune is DEVELOPED ALONG A LANE — canon's ordinary path, never off-lane, which canon
+  // says must be DRIVEN and is nobody's default.
+  const offLane = fleet.members.filter((m) => {
+    const lanes = new Set([...laneRunes(m.birth, 'element'), ...laneRunes(m.birth, 'state')])
+    return botRunes(m.birth).some((r) => r !== m.birth && !lanes.has(r))
+  })
+  ok(offLane.length === 0, `no challenger developed OFF-lane — canon says that must be driven: ${offLane.length}`)
+  ok(fleet.members.some((m) => botRunes(m.birth).length === 1), 'not every challenger developed a 2nd rune (canon: "not everyone")')
+  ok(fleet.members.some((m) => botRunes(m.birth).length === 2), '...and some did, or the draw is dead')
+
+  // ⚠ THE COVERAGE DEBT, PRINTED. Some birth runes have no BUILT castable move at all, so those
+  // challengers fight with the gun alone. That is the authoring gap showing up as a real fight
+  // rather than a number in a test nobody reads — it is not a regression (every bot was gun-only
+  // before today) and it closes itself as moves get built. It PRINTS; it does not fail.
+  const mute = [...new Set(fleet.members.filter((m) => m.loadout.length === 0).map((m) => m.birth))]
+  console.log(`  · birth runes with NO castable kit: ${mute.length ? mute.join(', ') : 'none'}`)
+  ok(fleet.members.some((m) => m.loadout.length > 0), '★ at least some challengers can cast at all — else row 294 shipped nothing')
+
+  // The brain asks for a band it actually has. `castBands` is a COUNT, so an index past the end is
+  // the exact bug that shape invites.
+  const c: HunterCtx = {
+    targetX: 0, targetZ: 0, blocked: () => false, rng: Math.random,
+    fallbackX: 0, fallbackZ: 0,
+  }
+  let casts = 0, outOfRange = 0
+  for (let t = 0; t < 60 * 60; t++) {
+    for (const r of stepFleet(fleet, [{ x: 0, z: 0, squad: -1, alive: true, index: -1 }], c, DT)) {
+      if (r.intent.castBand === null) continue
+      casts++
+      if (r.intent.castBand < 0 || r.intent.castBand >= r.member.loadout.length) outOfRange++
+    }
+  }
+  ok(casts > 0, '★ challengers actually cast over a minute of match time — else the wiring is inert')
+  ok(outOfRange === 0, `a requested band is always one the challenger holds — OUT OF RANGE: ${outOfRange}`)
 }
 
 console.log(`\ncrucible-fleet: ${pass} passed, ${fails.length} failed`)

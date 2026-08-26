@@ -356,6 +356,14 @@ export const KEEPER_MOVES: KeeperMove[] = [
 
 const RUNE_BY_ID = new Map<RuneId, Rune>(RUNES.map((r) => [r.id, r]))
 
+/**
+ * A move by id. ⚠ A MAP, NOT A `.find`, because the Crucible host resolves a challenger's cast
+ * inside the frame loop — sixty challengers scanning a 68-entry array is exactly the shape
+ * `render-audit` exists to catch, and it would only show up once the roster was full.
+ */
+const MOVE_BY_ID = new Map<string, KeeperMove>(KEEPER_MOVES.map((m) => [m.id, m]))
+export function moveById(id: string): KeeperMove | undefined { return MOVE_BY_ID.get(id) }
+
 /** Every registered move that names this rune. THE BOOK PAGE. Derived by inversion. */
 export function movesForRune(runeId: RuneId): KeeperMove[] {
   return KEEPER_MOVES.filter((m) => m.runes.includes(runeId))

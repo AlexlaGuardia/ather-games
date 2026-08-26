@@ -94,6 +94,14 @@ const chk = (label: string, ok: boolean) => { ok ? pass++ : (fail++, console.log
   // unlabelled hit must never be mistaken for the keeper's own attunement.
   chk('an untyped hit resists nothing', attunementResist('star', undefined) === 0 && attunementResist('star', null) === 0)
   chk('a keeper with no birth rune resists nothing', attunementResist(null, 'star') === 0)
+  // ★ A RUNEWORD IS MADE OF BOTH SUBSTANCES. Firestorm is star + tempest, so it is partly what a
+  // Star-born keeper IS, and partly what a Tempest-born one is. Order must not decide the answer.
+  chk('a runeword resists for EITHER of its runes',
+    attunementResist('star', ['star', 'tempest']) === R && attunementResist('tempest', ['star', 'tempest']) === R)
+  chk('...and not for a rune it does not name', attunementResist('life', ['star', 'tempest']) === 0)
+  chk('...regardless of the order they were written in',
+    attunementResist('tempest', ['tempest', 'star']) === attunementResist('tempest', ['star', 'tempest']))
+  chk('an empty runeword resists nothing', attunementResist('star', []) === 0)
 
   // ★ THE CEILING IS ARITHMETIC, NOT A COMMENT. Bulwark + attunement added would be 0.80 and a
   // third source would cross 1.0 into healing-from-damage; folded, it approaches 1 and only reaches
