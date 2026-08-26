@@ -33,12 +33,21 @@
  * the world's own visual language and it needs no art to exist. A species you do not know is the
  * same cube unlit.
  *
- * ── ★ WHAT THIS CANNOT KNOW YET, STATED RATHER THAN FAKED ────────────────────────────────────
- * There is no persisted `SpiritIndex` in this world. `engine/spirit-index.ts` has the whole thing
- * ready — createSpiritIndex, markSeen, markStudied, indexToSave/indexFromSave — and NOTHING in
- * voxel3d instantiates it, so "seen but never held" is not recorded anywhere. Knowledge here is
- * therefore DERIVED from the spirits you hold, which is a strictly smaller claim: a spirit you met
- * in the mist and walked away from leaves no trace.
+ * ── ★ WHAT THIS KNOWS, AND WHERE IT COMES FROM ───────────────────────────────────────────────
+ * ⚠ THIS BLOCK SAID THE OPPOSITE UNTIL 2026-08-26 AND WAS WRONG WHEN IT SAID IT. It read "there is
+ * no persisted SpiritIndex in this world… NOTHING in voxel3d instantiates it." VoxelWorld DOES:
+ * it creates one (`:999`), calls `markSeen` on every discovery (`:1899`) and restores it from the
+ * save (`:4039`). The index was real, persisted, and simply never handed to this panel — so the
+ * comment named the wrong cause, and a reader acting on it would have gone off to build a thing
+ * that already existed. Same shape as the Hollows' "locked look is owed a brief" line: accurate-
+ * sounding prose that stops work rather than misinforming it.
+ *
+ * Knowledge is now the UNION of two sources, and they answer different questions:
+ *   · the INDEX — species you have SEEN in the world, whether or not you ever held one.
+ *   · the PARTY — what you hold, which is the only thing that can evidence a SECOND FORM, since
+ *     the index records a species and not the element it grew into.
+ * A spirit met in the mist and walked away from now leaves a trace, which is what this panel's
+ * own header always said it wanted.
  *
  * And awakened forms cannot be derived at all: `Spirit` carries species, element and level, but no
  * `branch`, so the 160 awakened entries have no field to match against. They are shown as a count
@@ -51,7 +60,7 @@ import {
   SPECIES_NAMES, SECOND_FORM_NAMES, ELEMENTS, ELEMENT_COLORS,
   speciesDisplayName, formStage, xpForLevel,
 } from '../spirits/spirit'
-import { ALL_SPECIES } from '../engine/spirit-index'
+import { ALL_SPECIES, type SpiritIndex } from '../engine/spirit-index'
 import { Portrait, Cube } from './spirit-portrait'
 import { AWAKENED_FORM_NAMES, INFUSION_CAPS } from '../spirits/evolution-config'
 import { infusionTotal, dominantInfusion } from '../spirits/spirit'
@@ -73,9 +82,21 @@ const ELEMENT_POUR = ['mana', 'storm', 'earth', 'water'] as const
  * reached second stage. That is the honest ceiling of what party data can establish — see the
  * header on why awakened forms are excluded rather than guessed.
  */
-function derivedKnowledge(party: Spirit[]) {
+function derivedKnowledge(party: Spirit[], index?: SpiritIndex | null) {
   const species = new Set<Species>()
   const second = new Set<string>()   // `${species}:${element}`
+  // ★ SEEN COUNTS, not just held. The index is the only record of a species you met and did not
+  // take, and it is deliberately folded in BEFORE the party so the party can only ever ADD.
+  // ⚠ Second forms are NOT taken from here: `IndexStatus` records that a species was seen or
+  // studied, never which element it grew into, so an index entry cannot evidence a `species:element`
+  // pair. Reading one out of it would be inventing knowledge the player never earned.
+  if (index) {
+    for (const [sp, e] of Object.entries(index.entries ?? {})) {
+      if ((e as { status?: string })?.status && (e as { status?: string }).status !== 'unseen') {
+        species.add(sp as Species)
+      }
+    }
+  }
   for (const s of party) {
     species.add(s.species)
     const stage = formStage(s.level)
@@ -266,8 +287,8 @@ function YoursFace({ party, inv, onChange }: {
   )
 }
 
-function SpeciesFace({ party }: { party: Spirit[] }) {
-  const known = derivedKnowledge(party)
+function SpeciesFace({ party, index }: { party: Spirit[]; index?: SpiritIndex | null }) {
+  const known = derivedKnowledge(party, index)
   const [open, setOpen] = useState<Species | null>(null)
 
   const awakenedTotal = ALL_SPECIES.reduce((n, sp) => {
@@ -339,10 +360,12 @@ function SpeciesFace({ party }: { party: Spirit[] }) {
   )
 }
 
-export function GrimoireTab({ party, inv, onChange }: {
+export function GrimoireTab({ party, inv, onChange, spiritIndex }: {
   party: React.RefObject<Spirit[]>
   inv?: React.RefObject<Inventory> | null
   onChange?: () => void
+  /** Species SEEN in the world. Optional so the panel still renders standalone (dev/portraits). */
+  spiritIndex?: React.RefObject<SpiritIndex> | null
 }) {
   const [face, setFace] = useState<Face>('yours')
   // Read once per open. The party is a ref mutated by the world, and this panel is a modal over a
@@ -364,7 +387,7 @@ export function GrimoireTab({ party, inv, onChange }: {
       </div>
       {face === 'yours'
         ? <YoursFace party={spirits} inv={inv ?? null} onChange={onChange ?? (() => {})} />
-        : <SpeciesFace party={spirits} />}
+        : <SpeciesFace party={spirits} index={spiritIndex?.current ?? null} />}
     </div>
   )
 }

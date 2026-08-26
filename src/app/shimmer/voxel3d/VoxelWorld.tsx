@@ -1961,7 +1961,7 @@ export default function VoxelWorld() {
                       onClose={() => { setOpenStation(null); closeCursorUI() }} />
       )}
       {(bagOpen || openChest) && (
-        <BagPanel inv={inv} chest={openChest} tick={craftTick} sel={sel}
+        <BagPanel inv={inv} spiritIndex={spiritIndex} chest={openChest} tick={craftTick} sel={sel}
                   dragFrom={dragFrom} setDragFrom={setDragFrom}
                   onMove={(f, t) => { moveRef(f, t); setCraftTick(v => v + 1) }}
                   onSplit={(f, t, m) => { splitRef(f, t, m); setCraftTick(v => v + 1) }}
@@ -2843,8 +2843,10 @@ function LoadoutTab() {
 }
 
 function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSplit, onQuick, onClose,
-                   tools, skills, party, onParty }: {
+                   tools, skills, party, onParty, spiritIndex }: {
   inv: React.RefObject<Inventory>
+  /** Species SEEN in the world — the grimoire lights a portrait for a spirit you met but never held. */
+  spiritIndex: React.RefObject<SpiritIndex>
   chest: OpenChest | null
   tick: number
   sel: number
@@ -3119,7 +3121,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
                  hint={tab === 'satchel' ? hint : undefined}>
       {tab === 'satchel' && satchel}
       {tab === 'runes' && <RunesTab />}
-      {tab === 'grimoire' && <GrimoireTab party={party} inv={inv} onChange={onParty} />}
+      {tab === 'grimoire' && <GrimoireTab party={party} inv={inv} onChange={onParty} spiritIndex={spiritIndex} />}
       {tab === 'tools' && <ToolsTab tools={tools} skills={skills} />}
       {tab === 'loadout' && <LoadoutTab />}
     </KeeperFrame>
