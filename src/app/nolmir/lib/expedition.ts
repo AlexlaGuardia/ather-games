@@ -152,6 +152,41 @@ export function validAnchor(x: number, y: number): boolean {
 
 export type TideKind = 'drift' | 'swift' | 'bulk' | 'behemoth'
 
+/**
+ * ── ★★★ EACH KIND BRINGS A HABIT, NOT A STAT LINE (2026-08-26, Alex) ──────────────────────────
+ * Until now the four kinds differed ONLY in hp, speed and mass — every one of them flowed to the
+ * core and struck whatever it touched, and `atk` was literally identical across all four. That is
+ * one enemy with four healthbars, which is the exact failure the Hollows' own form table warns
+ * about: *"three enemies that differ only in HP are one enemy with three healthbars. Each form
+ * must break a different habit."* The flood had the same shape and nobody had said so.
+ *
+ * ★ LAYERED ONTO THE MERGE SYSTEM, NEVER BESIDE IT (Alex's call). The design doc calls pooling
+ * *"the variety engine — no scheduled boss clock"*, so nothing here exempts a kind from merging.
+ * A habit travels WITH the mass: a swift you failed to intercept pools into a bulk and stops
+ * running the core — it turns and starts breaking your posts instead. The leak you ignored becomes
+ * the battering ram, which is the merge system telling a story it could not tell before.
+ *
+ * ⚠ CANON-BOUNDED. `world/nolmir.md` rules WHAT the flood is — the gardeners transformed, a host
+ * spending a planet's core to raise an army, *"the minions are the tide's body"* — and rules that
+ * what transformed them is never shown or named. None of that is decided here; these are the jobs
+ * a body's parts do, which is Jin's. The tide itself stays unnamed, as it always has.
+ */
+export type TideHabit =
+  | 'press'   // drift: the mass. Flows to the core, strikes what it touches. The control.
+  | 'runner'  // swift: ignores posts AND the bulwark taunt, races the core. Punishes gaps.
+  | 'siege'   // bulk: hunts the POSTS, not the core. Punishes an unsupported trinity.
+  | 'accrete' // behemoth: eats nearby flood wherever it stands, and is too massive to shove.
+
+export const TIDE_HABIT: Record<TideKind, TideHabit> = {
+  drift: 'press',
+  swift: 'runner',
+  bulk: 'siege',
+  behemoth: 'accrete',
+}
+
+/** How far a behemoth reaches to fold a smaller body into itself, in tiles. */
+export const ACCRETE_R = 2.2
+
 export interface TideUnit {
   id: number
   kind: TideKind
@@ -729,13 +764,36 @@ export function stepRun(s: ExpedState) {
   // so blocked DPS matches the old "u.atk every (1/speed) ticks" cadence.
   for (const u of s.tide) {
     if (!u.alive) continue
-    if (u.stunUntil > s.tick) continue // shoved — reeling, can't act
+    const habit = TIDE_HABIT[u.kind]
+    // ★ TOO MASSIVE TO SHOVE. A pulse that reels a drift barely rocks a behemoth — and this is the
+    // only immunity in the sim on purpose: it makes the merge system a THREAT rather than just a
+    // bigger healthbar, so letting leaks pool costs you your best answer to them.
+    if (u.stunUntil > s.tick && habit !== 'accrete') continue // shoved — reeling, can't act
     const ux = Math.round(u.x)
     const uy = Math.round(u.y)
+    // ★ THE BEHEMOTH EATS WHERE IT STANDS. `mergePass` only pools near the core ring; this one
+    // reaches wherever it is, so a behemoth that formed on the rim keeps growing on the walk in.
+    // Deterministic (id order, no rng) like every other fold in this file.
+    if (habit === 'accrete' && u.mass < MAX_MERGE_HP) {
+      for (const o of s.tide) {
+        if (o === u || !o.alive || o.mass >= u.mass) continue
+        if (Math.hypot(o.x - u.x, o.y - u.y) > ACCRETE_R) continue
+        u.hp += o.hp
+        u.maxHp += o.maxHp
+        u.mass = Math.min(MAX_MERGE_HP, u.mass + o.mass)
+        o.alive = false
+        s.feed.unshift('it takes the smaller ones into itself')
+        s.feed = s.feed.slice(0, 5)
+        break
+      }
+    }
     // adjacent post? wear it down (this is the flood's teeth)
+    // ⚠ THE RUNNER DOES NOT STOP. A swift slips past a post without striking it — it is not here
+    // for your line, it is here for the core. That is what makes it an INTERCEPTION problem rather
+    // than an attrition one, and it is the only thing in the sim a bulwark cannot hold.
     let struck = false
     for (const g of s.guards) {
-      if (!g.alive) continue
+      if (!g.alive || habit === 'runner') break
       if (Math.hypot(g.x - u.x, g.y - u.y) <= 1.3) {
         g.hp -= u.atk * u.speed
         if (g.hp <= 0) {
@@ -755,10 +813,13 @@ export function stepRun(s: ExpedState) {
       continue
     }
     // a bulwark in range taunts — the tide piles onto the wall, not the core
+    // ⚠ EXCEPT THE RUNNER, which is the whole of its identity: a taunt is an offer to fight, and a
+    // swift is not fighting. If a bulwark could hold it too, the form would be a fast drift.
+    // ★ AND THE SIEGE PIECE NEEDS NO TAUNT — it is already coming for the posts (below).
     let tauntG: ExpedGuard | null = null
     let tauntD = Infinity
     for (const g of s.guards) {
-      if (!g.alive || g.role !== 'bulwark') continue
+      if (!g.alive || g.role !== 'bulwark' || habit === 'runner') continue
       const d = Math.hypot(g.x - u.x, g.y - u.y)
       if (d <= g.range && d < tauntD) {
         tauntD = d
@@ -767,7 +828,27 @@ export function stepRun(s: ExpedState) {
     }
     let tx: number
     let ty: number
-    if (tauntG) {
+    // ★ THE SIEGE PIECE HUNTS THE LINE, NOT THE CORE. A bulk walks at the nearest living post and
+    // breaks it. It is the answer to a trinity left unsupported — and unlike the taunt above, this
+    // is the unit CHOOSING the post, so it comes for a post that never offered.
+    let siegeG: ExpedGuard | null = null
+    if (habit === 'siege') {
+      let bestD = Infinity
+      for (const g of s.guards) {
+        if (!g.alive) continue
+        const d = Math.hypot(g.x - u.x, g.y - u.y)
+        // ⚠ Ties broken by NAME, not by array order, so a roster reorder cannot change a run.
+        // Determinism is this module's contract: (tier, seed, loadout) -> identical run.
+        if (d < bestD - 1e-9 || (Math.abs(d - bestD) <= 1e-9 && siegeG && g.name < siegeG.name)) {
+          bestD = d
+          siegeG = g
+        }
+      }
+    }
+    if (siegeG) {
+      tx = siegeG.x
+      ty = siegeG.y
+    } else if (tauntG) {
       tx = tauntG.x
       ty = tauntG.y
     } else {
