@@ -26,6 +26,20 @@
 // encounter — the player walks past a hold and nothing happens, which looks exactly like a hold that
 // has already been freed. A slightly sloped fight is a worse fight; no fight is a missing feature.
 // Callers that want to know may read `ok`; nothing is obliged to.
+//
+// ── ⚠⚠ `columnHeight` IS THE WORLD AS FIRST IMAGINED, NOT THE WORLD UNDERFOOT ─────────────────────
+// It is a PURE GENERATOR QUERY and knows nothing about mining, building, or anything a player has
+// ever done — `VoxelWorld.tsx` says so at `groundTopNear`, which exists because the Hollows' probe
+// was `columnHeight` and so **no wall had ever stopped a Hollow**, conjured or hand-built. That is
+// the same trap one layer down: measured on the generator alone, a spot the keeper dug out last
+// night still reads as level, and a patrol spawns standing in a hole they made.
+//
+// So `heightAt` is the seam, and it is deliberately the SAME shape as `collar-foes.ts`'s `blocked?`
+// — *"the one thing that cannot travel between worlds"*. Omit it and this is a pure generator read,
+// which is correct for a generation-time question (`sites.ts`, `mist.ts` both ask exactly that) and
+// keeps this module testable with no host. Pass the host's live probe and it measures the ground
+// that is actually there, which is the right question for a RUNTIME spawn. ⚠ A caller placing a
+// living body should pass it; a caller deciding where the generator puts something must not.
 
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
 
@@ -55,13 +69,15 @@ export const DEFAULT_FOOTING: FootingCfg = { radius: 3, maxSpan: 2, search: 3 }
 export function footingSpan(
   x: number, z: number, seed: number,
   radius: number, hcfg: HeightConfig = DEFAULT_HEIGHT,
+  heightAt?: (x: number, z: number) => number,
 ): number {
   const r = Math.max(0, Math.floor(radius))
   let mn = Infinity, mx = -Infinity
   for (let dz = -r; dz <= r; dz++) {
     for (let dx = -r; dx <= r; dx++) {
       if (dx * dx + dz * dz > r * r) continue        // a round floor, not a square one
-      const h = columnHeight(Math.floor(x) + dx, Math.floor(z) + dz, seed, hcfg)
+      const px = Math.floor(x) + dx, pz = Math.floor(z) + dz
+      const h = heightAt ? heightAt(px, pz) : columnHeight(px, pz, seed, hcfg)
       if (h < mn) mn = h
       if (h > mx) mx = h
     }
@@ -92,8 +108,9 @@ export interface Footing {
 export function flatFightSpot(
   x: number, z: number, seed: number,
   cfg: FootingCfg = DEFAULT_FOOTING, hcfg: HeightConfig = DEFAULT_HEIGHT,
+  heightAt?: (x: number, z: number) => number,
 ): Footing {
-  const here = footingSpan(x, z, seed, cfg.radius, hcfg)
+  const here = footingSpan(x, z, seed, cfg.radius, hcfg, heightAt)
   if (here <= cfg.maxSpan) return { x, z, span: here, ok: true, moved: 0 }
 
   const s = Math.max(0, Math.floor(cfg.search))
@@ -104,7 +121,7 @@ export function flatFightSpot(
         // The ring's edge only — inner cells were covered by an earlier, nearer ring.
         if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue
         const cx = x + dx, cz = z + dz
-        const span = footingSpan(cx, cz, seed, cfg.radius, hcfg)
+        const span = footingSpan(cx, cz, seed, cfg.radius, hcfg, heightAt)
         if (span > cfg.maxSpan) continue
         const moved = Math.hypot(dx, dz)
         // Ties break on true distance, then on a fixed order, so the result is deterministic.

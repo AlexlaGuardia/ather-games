@@ -107,6 +107,30 @@ ok(footingSpan(500, -500, SEED, 0) === 0, 'a zero-radius footprint should span 0
   ok(same, 'flatFightSpot is not deterministic — the same request gave two answers')
 }
 
+// ── 7b. ★ THE LIVE PROBE IS ACTUALLY HONOURED — and this is the assert the module needs most ─────
+// The cheapest wrong implementation of `heightAt` is to accept it and quietly keep reading
+// `columnHeight`. EVERY other assert in this file passes under that bug, because they all use the
+// generator. So these two are the only thing standing between the seam and a decorative parameter.
+{
+  // A constant probe means perfectly level ground everywhere, whatever the generator thinks.
+  const flatEverywhere = () => 7
+  let allZero = true
+  for (let i = 0; i < 300; i++) {
+    if (footingSpan(i * 61, i * 83, SEED, CFG.radius, undefined, flatEverywhere) !== 0) allZero = false
+  }
+  ok(allZero, 'footingSpan ignored `heightAt` — a constant probe must span 0 everywhere')
+
+  // And the probe must reach the SEARCH RING, not just the first read. A half-wired version that
+  // probes the origin and then scans the ring with columnHeight is a real and easy bug.
+  const originLumpy = (hx: number, hz: number) => (hx === 1000 && hz === 500 ? 0 : (hx === 1002 && hz === 500 ? 40 : 0))
+  // Ground is level (0) everywhere except a spike at 1002,500 — so a ring centred on 1000,500 that
+  // includes the spike is lumpy, and stepping AWAY from it is the only cure.
+  const f = flatFightSpot(1000, 500, SEED, { radius: 3, maxSpan: 2, search: 3 }, undefined, originLumpy)
+  ok(f.ok, 'a probe-defined world with a clear escape should be rescued')
+  ok(f.moved > 0, 'origin ring contains a 40-block spike; it must move')
+  ok(footingSpan(f.x, f.z, SEED, 3, undefined, originLumpy) <= 2, 'moved to a spot the PROBE still calls lumpy — the ring is not using the probe')
+}
+
 // ── 8. ★ THE SURVEY: does this fire on the ground patrols ACTUALLY meet you on? ───────────────────
 // PATROL_MEET is 22 blocks outside the curtain wall (`VoxelWorld.tsx`), and a patrol spawns on a ring
 // at that reach, angled toward the keeper. Walk the whole ring of each real hold and measure.
