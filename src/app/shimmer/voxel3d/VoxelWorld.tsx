@@ -2461,7 +2461,15 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           className="absolute bottom-4 right-4 pointer-events-none"
           style={{ '--tool-arc-r': 'clamp(44px, 11vw, 74px)' } as React.CSSProperties}
         >
-          <div style={{ marginRight: 'calc(var(--tool-arc-r) - 38px)' }}>
+          {/* ⚠ THE SOCKET'S OWN WIDTH IS PART OF THE REACH, and leaving it out is why the first
+              fix still clipped. `ToolSocket` sets `left`, which places its TOP-LEFT corner, so the
+              rightmost socket extends a full 56px (w-14) beyond the point the arch puts it at.
+              Rightmost socket is at θ=150° ⇒ left = r(1−cos150°) = 1.866r, and the container origin
+              is crown−r, so its right edge sits at crown + 0.866r + 56. Reserving that (minus the
+              38px half-gauge already between the crown and the container edge) is what actually
+              clears the viewport. Derived, not nudged — a hand-tuned pixel here goes stale the
+              moment the radius or the socket size changes. */}
+          <div style={{ marginRight: 'calc(var(--tool-arc-r) * 0.87 + 20px)' }}>
             <ManaGauge mana={mana} />
             <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
           </div>
