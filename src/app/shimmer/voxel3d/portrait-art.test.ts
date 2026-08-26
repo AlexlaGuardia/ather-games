@@ -16,7 +16,7 @@
 import { readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import sharp from 'sharp'
-import { PORTRAIT_OF, hasPortrait } from './spirit-portrait-body'
+import { PORTRAIT_OF, FOLK_PORTRAIT, hasPortrait } from './spirit-portrait-body'
 import { ALL_SPECIES } from '../engine/spirit-index'
 
 const DIR = join(process.cwd(), 'public/spirits/world')
@@ -36,7 +36,8 @@ const extra = Object.keys(PORTRAIT_OF).filter(k => !(ALL_SPECIES as string[]).in
 ok(extra.length === 0, `portrait(s) for species that do not exist: ${extra.join(', ')}`)
 
 // ── 2. every path resolves, and nothing points outside the world art dir ──────────────────────
-for (const [sp, path] of Object.entries(PORTRAIT_OF)) {
+const EVERY = { ...PORTRAIT_OF, ...FOLK_PORTRAIT }
+for (const [sp, path] of Object.entries(EVERY)) {
   ok(path.startsWith('/spirits/world/'), `${sp} points outside the world portrait dir: ${path}`)
   ok(existsSync(join(process.cwd(), 'public', path)), `${sp}: ${path} is referenced but not on disk — run scripts/spirit-cutout.py`)
 }
@@ -47,7 +48,7 @@ for (const [sp, path] of Object.entries(PORTRAIT_OF)) {
 // guard that cannot start looks exactly like a guard with nothing to say.
 const LOW = 0.10, HIGH = 0.92
 async function main() {
-for (const [sp, path] of Object.entries(PORTRAIT_OF)) {
+for (const [sp, path] of Object.entries(EVERY)) {
   const file = join(process.cwd(), 'public', path)
   if (!existsSync(file)) continue
   const img = sharp(file)
@@ -68,11 +69,11 @@ for (const [sp, path] of Object.entries(PORTRAIT_OF)) {
 
 // ── 4. no stray files, so a rename cannot leave an orphan the world still requests ────────────
 const onDisk = readdirSync(DIR).filter(f => f.endsWith('.webp'))
-const named = new Set(Object.values(PORTRAIT_OF).map(p => p.split('/').pop()))
+const named = new Set(Object.values(EVERY).map(p => p.split('/').pop()))
 const orphans = onDisk.filter(f => !named.has(f))
 ok(orphans.length === 0, `${orphans.length} portrait file(s) nothing references: ${orphans.join(', ')}`)
 
-console.log(`\nportrait-art — ${Object.keys(PORTRAIT_OF).length} world portraits over ${ALL_SPECIES.length} species`)
+console.log(`\nportrait-art — ${Object.keys(PORTRAIT_OF).length} species + ${Object.keys(FOLK_PORTRAIT).length} folk portraits`)
 if (fails.length) {
   console.log(`\n❌ ${pass} passed, ${fails.length} FAILED\n`)
   fails.forEach(f => console.log('  · ' + f))

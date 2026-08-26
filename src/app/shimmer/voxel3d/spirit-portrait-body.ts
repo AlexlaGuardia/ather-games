@@ -39,7 +39,29 @@ export const PORTRAIT_OF: Readonly<Record<string, string>> = Object.freeze({
   hummingbird: '/spirits/world/hummingbird.webp',
 })
 
-export const hasPortrait = (species: string): boolean => species in PORTRAIT_OF
+/**
+ * ── ★ THE FOLK, AND WHY THEY ARE A SEPARATE TABLE ─────────────────────────────────────────────
+ * `PORTRAIT_OF` is asserted to cover EXACTLY the live species list, which is what stops a species
+ * quietly losing its art. Folding Moglins into it would have bought three entries at the cost of
+ * that assert — the roster check would have had to loosen to "at least", and an "at least" check
+ * cannot notice a missing owl. Two tables, two exact claims.
+ *
+ * ⚠ THE MOGLIN ART IS THE WRONG READ AND SHIPS ANYWAY, ON PURPOSE. `moglin-canon.png` is the shy,
+ * content, arms-folded BASE — which canon makes the DEFLATED state, the payoff after you free his
+ * spirit. The Thornlord swagger a patrol should actually wear is "sub-type renders in progress"
+ * and has no locked ref, so every patrol currently looks already-defeated, inverting the beat the
+ * cozy line is built on. Alex ruled a placeholder beats the brown box it replaces. Named here so
+ * the next reader finds the gap instead of assuming the look was chosen.
+ */
+export const FOLK_PORTRAIT: Readonly<Record<string, string>> = Object.freeze({
+  moglin: '/spirits/world/moglin.webp',
+  jimbo: '/spirits/world/jimbo.webp',
+  hemlock: '/spirits/world/hemlock.webp',
+})
+
+const ALL_PORTRAITS: Readonly<Record<string, string>> = { ...PORTRAIT_OF, ...FOLK_PORTRAIT }
+
+export const hasPortrait = (key: string): boolean => key in ALL_PORTRAITS
 
 /**
  * ★ ONE TEXTURE AND ONE MATERIAL PER SPECIES, SHARED BY EVERY BODY — and unlike the atlas path this
@@ -54,7 +76,7 @@ const SHEETS = new Map<string, { tex: THREE.Texture; mat: THREE.SpriteMaterial; 
 function sheetFor(species: string): { tex: THREE.Texture; mat: THREE.SpriteMaterial; aspect: { v: number } } {
   const hit = SHEETS.get(species)
   if (hit) return hit
-  const url = PORTRAIT_OF[species]
+  const url = ALL_PORTRAITS[species]
   const aspect = { v: 1 }
   // ⚠ THE ASPECT IS NOT KNOWN UNTIL THE IMAGE LANDS, and these are not square — Dewbear is 256×178.
   // Guessing square would squash every one of them, so the scale is applied in the load callback

@@ -70,6 +70,22 @@ def cut(path: Path, tol: int):
             if comp[y * w + x] != best[1]: px[x, y] = (0, 0, 0, 0)
     return im, best[0] / (w * h)
 
+# ── ★ THE FOLK, AS PLACEHOLDERS (Alex, 2026-08-26) ────────────────────────────────────────────
+# A patrol Moglin is a brown box today. These are 🔒 LOCKED canon refs, so a locked painting beats
+# a pill even when it is not the RIGHT read yet.
+# ⚠ AND THE MOGLIN ONE IS NOT THE RIGHT READ, WHICH IS WORTH WRITING DOWN RATHER THAN QUIETLY
+# SHIPPING: `moglin-canon.png` is the shy, content, arms-folded BASE — which in canon is the
+# DEFLATED state, the payoff after you free his spirit. The Thornlord swagger a patrol should wear
+# is "sub-type renders in progress" and has no locked ref. So every patrol currently looks
+# already-defeated, which inverts the beat the whole line is built on. Placeholder, on purpose,
+# with the gap named. `folk-portraits.md` in GBOARD carries the ask.
+FOLK = {
+    'moglin':   'moglin-canon.png',       # base/deflated read — NOT the swagger a patrol wants
+    'jimbo':    'jimbo-canon.png',        # the free Moglin — fits the reformed-Moglin NPCs exactly
+    'hemlock':  'hemlock-canon.png',      # the collector-baron, for when he appears
+}
+FOLK_DIR = ATHERNYX / 'assets/folk-refs'
+
 manifest = json.loads((ATHERNYX / 'CANON/design-briefs/spirits.json').read_text())
 ref_dir = Path(manifest['_meta']['ref_dir'])
 SPECIES = {'Vulnyx':'fox','Athowl':'owl','Shellmere':'turtle','Manalotl':'axolotl','Noctyx':'bat',
@@ -117,9 +133,32 @@ for s in manifest['spirits']:
     rows.append((s['name'], code, im))
     print(f'  {s["name"]:<10} {code:<12} tol={tol}  subject={frac:.1%}  {im.size[0]}x{im.size[1]}')
 
+for code, fname in FOLK.items():
+    src = FOLK_DIR / fname
+    if not src.exists():
+        print(f'✗ {code}: {src} is missing — canon ref moved?'); continue
+    RETAIN = 0.90
+    ladder = {tol: cut(src, tol) for tol in (3, 4, 5, 6, 7, 8)}
+    tols = sorted(ladder, reverse=True)
+    chosen = None
+    for t in tols[:-1]:
+        if ladder[t][1] >= ladder[t - 1][1] * RETAIN: chosen = (t,) + ladder[t]; break
+    if chosen is None:
+        lo = tols[-1]; chosen = (lo,) + ladder[lo]
+    tol, im, frac = chosen
+    if frac < AREA_FLOOR:
+        print(f'✗ {code}: best subject is only {frac:.1%} — hand-cut this one'); continue
+    im = im.crop(im.getbbox())
+    r = EDGE / max(im.size)
+    im = im.resize((max(1, round(im.size[0] * r)), max(1, round(im.size[1] * r))), Image.LANCZOS)
+    im.save(OUT / f'{code}.webp', quality=88, method=6)
+    rows.append((code, code, im))
+    print(f'  {code:<10} {"(folk)":<12} tol={tol}  subject={frac:.1%}  {im.size[0]}x{im.size[1]}')
+
 if '--sheet' in sys.argv:
     pad, cw = 12, EDGE
-    sheet = Image.new('RGBA', (cw * 5 + pad * 6, (EDGE + 30) * 2 + pad * 3), (26, 28, 34, 255))
+    cols = 5; rowsN = (len(rows) + cols - 1) // cols
+    sheet = Image.new('RGBA', (cw * cols + pad * (cols + 1), (EDGE + 30) * rowsN + pad * (rowsN + 1)), (26, 28, 34, 255))
     for i, (name, code, im) in enumerate(rows):
         cx = pad + (i % 5) * (cw + pad); cy = pad + (i // 5) * (EDGE + 30 + pad)
         sheet.alpha_composite(im, (cx + (cw - im.size[0]) // 2, cy + (EDGE - im.size[1])))
