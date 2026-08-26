@@ -2475,8 +2475,14 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
               rightmost socket right edge 982 against a 958 viewport, a 24px overflow — and the
               trailing term covers that plus the 1rem gutter the rest of the HUD uses. The r-term
               still scales with the radius; only the fixed part is empirical, and it is labelled as
-              empirical so nobody re-derives it and trusts the answer. */}
-          <div style={{ marginRight: 'calc(var(--tool-arc-r) * 0.87 + 60px)' }}>
+              empirical so nobody re-derives it and trusts the answer.
+              ⚠ AND THE RESPONSE IS NOT 1:1 — TWO MEASUREMENTS, NOT ONE, ARE WHAT PINNED IT.
+              Adding 40px of margin moved the sockets only 20px (slope 0.5), which no reading of
+              this layout predicted and which is exactly why the closed forms kept missing. The
+              constant is set from that measured slope: 982 → 962 for +40px, so +40 more lands the
+              rightmost edge on the 1rem gutter. If the gauge size or the arc's anchoring changes,
+              RE-MEASURE — do not re-derive. `overflowPx` in the browser is the check. */}
+          <div style={{ marginRight: 'calc(var(--tool-arc-r) * 0.87 + 100px)' }}>
             <ManaGauge mana={mana} />
             <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
           </div>
