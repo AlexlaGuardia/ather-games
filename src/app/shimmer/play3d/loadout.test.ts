@@ -6,7 +6,7 @@
 // look wrong on the HUD, and all of them read to a player as "casting is broken" rather than as a
 // loadout that lied. So the asserts are about what a STORED loadout is allowed to become.
 
-import { ALL_BANDS, CAST_SLOTS, STANCE_SLOTS, defaultLoadout, eligibleMoves } from './cast'
+import { ALL_BANDS, CAST_SLOTS, derivePassive, defaultLoadout, eligibleMoves } from './cast'
 import { KEEPER_MOVES } from './keeper-moves'
 import type { Book } from './scroll-market'
 
@@ -68,7 +68,11 @@ const reset = () => store.clear()
 // ── a save is validated, never trusted ────────────────────────────────────────────────────────
 {
   reset()
-  store.set(LOADOUT_KEY, JSON.stringify(['no-such-move', null, null, null]))
+  // ⚠ A CURRENT-SHAPE (2-entry) save on purpose. A 4-entry save is now LEGACY and would be MIGRATED,
+  // so `no-such-move` would drop as the old passive slot before it ever reached `canSlot` — the test
+  // would pass while testing migration, not the unknown-move rejection it names. Two entries routes
+  // it through the validate path this assert is about.
+  store.set(LOADOUT_KEY, JSON.stringify(['no-such-move', null]))
   const back = loadLoadout(OWNED, ALL)
   ok(back[0] === null, '★ a move that no longer exists fails to EMPTY, not to a dead bind')
 }
@@ -163,16 +167,16 @@ const reset = () => store.clear()
   ok(held[t] === move, 'the tactical binds to the tactical slot')
   ok(held.filter((s) => s === move).length === 1, '★ exactly one slot holds it')
 
-  // ★ AND THE STANCE SOCKET IS A REAL, SEPARATELY BINDABLE BAND — not decoration beside the bar.
-  // This is the assert the whole 08-25 ruling exists to make true: a held passive still has a home.
-  const st = ALL_BANDS.indexOf('passive')
-  ok(st >= 0 && st >= CAST_SLOTS.length, 'the passive band sits AFTER the cast bar, not on it')
-  const passives = eligibleMoves(OWNED, 'passive', ALL)
-  ok(passives.length > 0, 'fixture: this keeper knows at least one passive to hold')
-  const withStance = setSlot(OWNED, held, st, passives[0].id, ALL)
-  ok(withStance[st] === passives[0].id, '★ a passive binds into the stance socket')
-  ok(withStance[t] === move, '★ ...without disturbing the cast bar beside it')
-  ok(STANCE_SLOTS.length > 0, '★ the stance band is non-empty — the collapse did not orphan it')
+  // ★ AND THE PASSIVE HAS A HOME OFF THE BAR — DERIVED, NOT BOUND (RULED 2026-08-26, Alex).
+  // The 08-25 stance socket was reverted the next day: the passive is not a bindable band any more,
+  // it is the ONE always-on passive `derivePassive` surfaces from the keeper's runes. So the band
+  // list must NOT contain 'passive' — a passive band would put it back into the stored loadout array,
+  // which is exactly what the ruling removed — and the keeper must still HAVE a passive, just not a slot.
+  ok(ALL_BANDS.indexOf('passive') === -1, '★ there is no passive band — the passive left the loadout array')
+  const passive = derivePassive(OWNED, ALL)
+  ok(passive !== null, '★ ...but the keeper still has a passive, derived from their runes')
+  ok(passive === null || eligibleMoves(OWNED, 'passive', ALL).some((x) => x.id === passive.id),
+     '★ and the derived passive is one their runes actually make eligible')
 }
 
 // ── the absent-localStorage path (the shape this runs in outside a browser) ───────────────────

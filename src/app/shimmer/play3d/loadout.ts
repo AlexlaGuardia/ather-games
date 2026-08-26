@@ -44,22 +44,20 @@ export const LEGACY_CAST_SLOTS: readonly string[] = ['passive', 'tactical', 'tac
  * moves, and it agrees with itself while it does. Reading both lists and matching kinds means the
  * day someone adds a second tactical back, this function is already correct.
  *
- * ── ⚠ CORRECTED 2026-08-25: THE PASSIVE IS RE-SEATED, NOT DROPPED ─────────────────────────────
- * This paragraph used to read "The passive entry is DROPPED rather than rehomed, and that is the
- * ruling rather than data loss: the passive becomes innate and always-on, so the move is not taken
- * away from the keeper, it stops needing a slot to live in." **Every clause of that was false by the
- * time the collapse landed.** It rested on GBOARD step 6, which cited a block that was AMENDED the
- * same week: the always-on thing a birth rune grants is the affinity LEAN, and canon's learned/elite
- * /held passive band stands exactly as written. Nothing makes a learned passive always-on, so
- * dropping the id would not have freed a move from needing a slot — it would have taken the move
- * away, which is the definition of the data loss the paragraph was denying.
+ * ── ⚠ THE PASSIVE IS DROPPED HERE, AND THAT IS CORRECT NOW (RULED 2026-08-26, Alex) ────────────
+ * This block has said three different things, so read the current one carefully. `target` is the
+ * BOUND bands (`ALL_BANDS` = tactical + ultimate); it has no `passive` kind, so the pool's passive
+ * entry matches nothing and the old passive id is dropped from the loadout array. That is NOT data
+ * loss: since the 2026-08-26 ruling the passive is not stored, equipped or chosen — it is DERIVED
+ * from the keeper's runes and always-on (`cast.ts` › `derivePassive`). The stored id was redundant
+ * with that derivation, so dropping it takes nothing away; the keeper still runs their passive, it
+ * just no longer lives in this array.
  *
- * Alex ruled the held passive into its own STANCE SOCKET (`cast.ts` › `STANCE_SLOTS`), so `target`
- * now spans both bands and the old passive id lands in the socket. **This function needed no change
- * to do that** — it matches by KIND, and the socket's kind is `passive`. That is exactly the payoff
- * its own note below predicts: a hand-written index map (`new[0] = old[1]; new[1] = old[3]`) would
- * have silently discarded the passive here, because a map cannot re-seat into a band it was written
- * before.
+ * (History, because the reversals matter: v1 dropped it calling it "innate"; the 2026-08-25 stance
+ * socket briefly RE-SEATED it into a `passive` band; the 2026-08-26 ruling removed that band, so it
+ * is dropped again — for the derivation reason above, not the innate one. The match-by-KIND design
+ * is why none of these three needed a code change: give `target` a passive band and the id re-seats;
+ * take the band away and it drops. A hand-written index map would have been wrong in all three.)
  *
  * `target` is REQUIRED. An `= CAST_SLOTS` default would let every un-updated call site keep the
  * old answer silently, which is the exact trap `cast.ts` documents on `eligibleMoves`' book
@@ -88,9 +86,9 @@ export function migrateLegacyLoadout(saved: (string | null)[], target: readonly 
  * shape it would meet, deliberately — a safety net that arrives with the fall is a net nobody tested.
  *
  * ⚠ AND IT MUST KEEP COMPARING AGAINST `LEGACY_CAST_SLOTS.length`, NEVER `ALL_BANDS.length`. They
- * are 4 and 3 today and both are free to move; the day someone "tidies" this into a comparison
+ * are 4 and 2 today and both are free to move; the day someone "tidies" this into a comparison
  * against the current band list, every current save starts reading as legacy and gets re-seated a
- * second time — which is not a no-op, because re-seating a 3-array through a 4-kind pool matches by
+ * second time — which is not a no-op, because re-seating a 2-array through a 4-kind pool matches by
  * position-of-kind and silently reshuffles live binds.
  */
 export function isLegacyLoadout(saved: unknown[]): boolean {

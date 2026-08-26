@@ -52,7 +52,7 @@ import type { StatusKind } from '../engine/statuses'
 export type CastArchetype =
   | 'projectile'  // a travelling bolt: damage on contact (chains if `chain` > 0)
   | 'restore'     // instant self-heal
-  | 'stance'      // a HELD passive — toggled on, pauses mana recovery while up (runes.md economy)
+  | 'stance'      // a passive — always-on and DERIVED since 2026-08-26 (derivePassive), no key, no cost
   | 'surge'       // a short self-buff burst (speed / evasion)
   | 'field'       // SYSTEM 1 — a persistent area entity placed at the aim point (field-effects.ts)
   | 'terrain'     // SYSTEM 2 — runtime terrain raised at the aim point (conjured-terrain.ts)
@@ -87,9 +87,12 @@ export interface CastSpec {
   moveMult: number
   /** cast damage multiplier while held (Flame Manipulation shapes fire by instinct) */
   castMult: number
-  /** mana per second the stance itself produces — the one thing that survives the recovery pause */
+  /** mana per second the stance itself produces (Moisture Gathering). ⚠ Only READ where a stance
+   *  pauses recovery — moot since 2026-08-26 made passives free/always-on; kept for a future cost model. */
   manaPerSec: number
-  /** canon: holding a passive PAUSES mana recovery. The double edge that makes it a stance. */
+  /** ⚠ DORMANT since 2026-08-26. Was "holding a passive PAUSES mana recovery" — the double edge of a
+   *  HELD stance. Alex ruled the passive always-on and free, so no move sets this now (BASE = false);
+   *  the runtime still honours it, so re-introducing a costed stance only needs this flag set true. */
   pausesRecovery: boolean
   // surge / infusion — both are a timed multiplier on the caster
   /** seconds the surge (or weapon infusion) lasts */
@@ -155,14 +158,14 @@ type Build = Partial<CastSpec> & { archetype: CastArchetype }
 
 const BUILDS: Record<string, Build> = {
   // ── Passives → stances. Held; each pauses mana recovery (runes.md's mana economy). ────────────
-  barrier:   { archetype: 'stance', resist: 0.35, pausesRecovery: true, cooldownMs: 500 },
-  bulwark:   { archetype: 'stance', resist: 0.55, moveMult: 0.9, pausesRecovery: true, cooldownMs: 500 },
-  'flame-manipulation': { archetype: 'stance', castMult: 1.3, pausesRecovery: true, cooldownMs: 500 },
+  barrier:   { archetype: 'stance', resist: 0.35, cooldownMs: 500 },
+  bulwark:   { archetype: 'stance', resist: 0.55, moveMult: 0.9, cooldownMs: 500 },
+  'flame-manipulation': { archetype: 'stance', castMult: 1.3, cooldownMs: 500 },
   // The one stance that FEEDS you: canon has it drawing water from the air over time. It still pauses
   // ordinary recovery (it is a passive) but produces its own slower trickle — held, you gain less than
   // standing idle would give you, which is the honest reading of both lines at once.
-  'moisture-gathering': { archetype: 'stance', manaPerSec: 0.8, pausesRecovery: true, cooldownMs: 500 },
-  'iron-skin': { archetype: 'stance', resist: 0.45, moveMult: 0.85, pausesRecovery: true, cooldownMs: 500 },
+  'moisture-gathering': { archetype: 'stance', manaPerSec: 0.8, cooldownMs: 500 },
+  'iron-skin': { archetype: 'stance', resist: 0.45, moveMult: 0.85, cooldownMs: 500 },
   'bind-mastery': { archetype: 'unbuilt', why: 'gatecraft + manatech — no runtime system yet' },
   'herbal-knowledge': { archetype: 'unbuilt', why: 'out-of-combat medicine; no combat behaviour' },
 
@@ -178,9 +181,9 @@ const BUILDS: Record<string, Build> = {
   // ⚠ ONE hook (damage-taken → damage the attacker) finishes all four at once. Until then these three
   // are deliberately incomplete rather than deliberately absent, and they differ on the axes that DO
   // exist: Molten Shell is the heaviest and slowest, Storm Cloak the lightest, Ice Armor the middle.
-  'molten-shell': { archetype: 'stance', resist: 0.5, moveMult: 0.8, pausesRecovery: true, cooldownMs: 500 },
-  'storm-cloak': { archetype: 'stance', resist: 0.3, pausesRecovery: true, cooldownMs: 500 },
-  'ice-armor': { archetype: 'stance', resist: 0.42, moveMult: 0.95, pausesRecovery: true, cooldownMs: 500 },
+  'molten-shell': { archetype: 'stance', resist: 0.5, moveMult: 0.8, cooldownMs: 500 },
+  'storm-cloak': { archetype: 'stance', resist: 0.3, cooldownMs: 500 },
+  'ice-armor': { archetype: 'stance', resist: 0.42, moveMult: 0.95, cooldownMs: 500 },
   'flame-cloak': { archetype: 'unbuilt', why: 'needs a contact-retaliation hook — it is aura only, with no shell to fall back on' },
   'tremor-sense': { archetype: 'unbuilt', why: 'needs a perception layer — enemy positions surfaced to the HUD' },
 
@@ -423,12 +426,12 @@ export type SlotKind = Exclude<MoveTier, 'combo'>
  * pair-casting, which leaves precisely these two.** The build's original four slots were the drift.
  *
  * ⚠ THIS LIST IS LOAD-BEARING FAR BEYOND THE HUD. `resolveCast()` in `engine/cast-dispatch.ts` is the
- * ONLY writer of `stanceChange` in the build, and a move's only route into the game is a band whose
- * kind matches its tier. So REMOVING A KIND FROM A BAND REMOVES THE MOVES — silently, with no error
- * and no fallback. Collapsing to two without `STANCE_SLOTS` below would have orphaned all 12
- * passive-tier moves, 8 of them fully built, together with `pausesRecovery` and the held-stance mana
- * double edge. `cast.test.ts` guards this by name; see the orphan assert there before editing either
- * band.
+ * ONLY writer of `stanceChange` in the build, and a CAST move's only route into the game is a band
+ * whose kind matches its tier. So REMOVING A KIND FROM A BAND REMOVES THOSE MOVES — silently, with
+ * no error and no fallback. That is why passives are NOT a band: they would have been orphaned by the
+ * collapse, so they reach the game a different way — `derivePassive` surfaces the one always-on
+ * passive, off the bar entirely. `cast.test.ts` guards both halves by name (no built CAST move is
+ * bandless; every built passive is reachable via `derivePassive`); read those asserts before editing.
  */
 export const CAST_SLOTS: readonly SlotKind[] = ['tactical', 'ultimate'] as const
 /** keyboard bind per cast slot, in slot order. Z throws the tactical; C is the signature. */
@@ -452,30 +455,24 @@ export const SLOT_KEYS: readonly string[] = ['z', 'c'] as const
  * the wall. Widen this array and the HUD, the binds, the migration and the oracles all follow it,
  * because every one of them reads its length rather than assuming it.
  */
-export const STANCE_SLOTS: readonly SlotKind[] = ['passive'] as const
-/** keyboard bind per stance socket. G holds the stance — re-pressing it drops it, free and instant. */
-export const STANCE_KEYS: readonly string[] = ['g'] as const
-
 /**
- * Every band a move can be bound into, in the order the HUD lays them out. Consumers that ask "can
- * this move be bound anywhere at all?" must read THIS, never `CAST_SLOTS` alone — that assumption is
- * what made the collapse look safe.
- */
-export const ALL_BANDS: readonly SlotKind[] = [...CAST_SLOTS, ...STANCE_SLOTS] as const
-
-/** The key for a slot number, across both bands — cast keys first, then the stance keys. */
-export const BAND_KEYS: readonly string[] = [...SLOT_KEYS, ...STANCE_KEYS] as const
-
-/**
- * Is this slot number a stance socket rather than a cast-bar slot?
+ * ── THE PASSIVE IS DERIVED AND ALWAYS-ON, NOT A BOUND SLOT (RULED 2026-08-26, Alex) ────────────
  *
- * ★ ASK THIS, never `slot >= 2` or `kind === 'passive'`. The literal goes stale the moment either
- * band is resized, and the kind test quietly answers a different question — it would call a passive
- * bound *anywhere* a stance, which is exactly how the two bands would drift back into one.
+ * A held stance socket shipped 2026-08-25 (G, one slot, `pausesRecovery`). Alex reversed it the next
+ * day: the passive is not something you equip, toggle or key — it is a TRAIT the loadout menu shows
+ * and explains, always on, capped at one. So there is no passive BAND any more: `ALL_BANDS` is the
+ * cast bar alone, and `derivePassive` (below, beside `eligibleMoves`) is how the passive reaches the
+ * game instead of a slot. Nothing here is keyed to it — `BAND_KEYS` is the cast keys, full stop.
+ *
+ * ⚠ `ALL_BANDS` STILL EXISTS AND STILL EQUALS `CAST_SLOTS` ON PURPOSE. Every loadout-positional
+ * consumer (the migration, `canSlot`, `setSlot`, `saveLoadout`, both HUDs) reads `ALL_BANDS` for
+ * "the bound bands". Keeping the name means those call sites did not have to learn that the passive
+ * left; it simply has one fewer entry. The day a second bound band returns, they follow it for free.
  */
-export function isStanceSlot(slot: number): boolean {
-  return slot >= CAST_SLOTS.length && slot < ALL_BANDS.length
-}
+export const ALL_BANDS: readonly SlotKind[] = CAST_SLOTS
+
+/** The key for a slot number. Only the cast bar is keyed — the passive is always-on and holds no key. */
+export const BAND_KEYS: readonly string[] = SLOT_KEYS
 
 /**
  * Moves the keeper can run right now that fit a slot kind. Built ones first — the rest are honest
@@ -494,6 +491,23 @@ export function isStanceSlot(slot: number): boolean {
 export function eligibleMoves(owned: string[], kind: SlotKind, book: Book): KeeperMove[] {
   const known = knownMoves(owned).filter((m) => m.tier === kind && hasLearned(book, m.id))
   return [...known].sort((a, b) => Number(isBuilt(b.id)) - Number(isBuilt(a.id)))
+}
+
+/**
+ * The one passive a keeper runs, always-on — or null if their runes have taught them none.
+ *
+ * ★ DERIVED, CAPPED AT ONE, NEVER CHOSEN (RULED 2026-08-26, Alex). The passive is not a bound slot;
+ * it is a trait the loadout menu surfaces and explains. This is where it comes from: the first
+ * passive the keeper's runes make eligible, built ones first — the exact ordering `eligibleMoves`
+ * already gives, so a built passive wins over an honest-but-dead one, and the pick is stable.
+ *
+ * Canon (`runes.md:256`, "most run 0-1") makes one the common case. The `[0]` is the cap; widen it
+ * to `.slice(0, N)` if canon's ≤3 ceiling ever opens, and the menu readout follows because it reads
+ * this, not a literal. Requires the book for the same reason `eligibleMoves` does — a rune is
+ * identity, a move is learned.
+ */
+export function derivePassive(owned: string[], book: Book): KeeperMove | null {
+  return eligibleMoves(owned, 'passive', book)[0] ?? null
 }
 
 /**

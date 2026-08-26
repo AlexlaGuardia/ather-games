@@ -27,7 +27,7 @@ import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave } from '@/lib/cloud-sync'
 import { saveKey, saveOwner } from '@/lib/save-slot'
 import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
-import { castForMove, isBuilt, CAST_SLOTS, ALL_BANDS, BAND_KEYS, isStanceSlot, type CastSpec } from './cast'
+import { castForMove, isBuilt, CAST_SLOTS, ALL_BANDS, BAND_KEYS, derivePassive, type CastSpec } from './cast'
 import { loadLoadout } from './loadout'
 import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
 import { fillRoster, ROSTER_SIZE } from './crucible-bots'
@@ -2863,17 +2863,13 @@ function CastBar({ slots, stance, cdRef }: {
         const held = !!moveId && stance === moveId
         const built = !!moveId && spec.archetype !== 'unbuilt'
         const tint = held ? '#ffd98a' : built ? '#aef2ff' : '#ffffff55'
-        // ★ The stance socket is SET APART from the cast bar, because the ruling is a statement about
-        // what a button does: the two cast slots throw, the socket HOLDS. Asked via `isStanceSlot`
-        // rather than `i >= 2` or `kind === 'passive'` — the literal goes stale the moment either band
-        // is resized, and the kind test would call a passive bound anywhere a stance.
-        const isStance = isStanceSlot(i)
+        // Since 2026-08-26 the bar is the cast bands alone (Z/C) — the passive left the bar to become
+        // an always-on derived trait shown in the loadout menu, so there is no stance cell to set apart.
         return (
           <div key={i} ref={(el) => { cells.current[i] = el }} style={{
             minWidth: 92, padding: '6px 9px', borderRadius: 8,
-            marginLeft: isStance && i === CAST_SLOTS.length ? 14 : 0,
             background: held ? 'rgba(60,44,12,0.88)' : 'rgba(10,14,22,0.78)',
-            border: `1px solid ${held ? '#ffd98a88' : isStance ? '#ffd98a33' : '#ffffff22'}`,
+            border: `1px solid ${held ? '#ffd98a88' : '#ffffff22'}`,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
               <span style={{ font: '800 10px ui-monospace, monospace', color: tint, letterSpacing: '0.14em' }}>{BAND_KEYS[i].toUpperCase()}</span>
@@ -5336,10 +5332,14 @@ export default function Shimmer3D() {
     bookRef.current = keeperBook(runeInvRef.current.owned)
     castLoadoutRef.current = loadLoadout(runeInvRef.current.owned, bookRef.current)
     castCdRef.current = ALL_BANDS.map(() => 0)
-    stanceRef.current = null; resistRef.current = 0; castMultRef.current = 1; stanceMoveRef.current = 1
+    // The passive is always-on and DERIVED (capped at one), never cast — since Alex's 2026-08-26
+    // ruling it holds no key, so it is applied HERE from the runes rather than set by a keypress. Its
+    // resist / castMult / moveMult live from load; a null passive leaves the neutral refs.
+    const pspec = (() => { const p = derivePassive(runeInvRef.current.owned, bookRef.current); return p ? castForMove(p.id) : null })()
+    stanceRef.current = pspec; resistRef.current = pspec?.resist ?? 0; castMultRef.current = pspec?.castMult ?? 1; stanceMoveRef.current = pspec?.moveMult ?? 1
     surgeRef.current = { until: 0, mult: 1 }; infusionRef.current = { until: 0, mult: 1 }
     fieldsRef.current = []; conjuredRef.current = []; statusRef.current = emptyBag()
-    setCastHud({ slots: castLoadoutRef.current, stance: null })
+    setCastHud({ slots: castLoadoutRef.current, stance: pspec?.moveId ?? null })
   }, [])
   useEffect(() => {
     const inv = loadRuneInventory()
@@ -5360,7 +5360,7 @@ export default function Shimmer3D() {
         // Half the carousel currently opens a book with no move the sim can run — that is the real
         // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
         const bound = loadLoadout(inv.owned, bookRef.current).filter((m) => m && isBuilt(m)).length
-        const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (G/Z/X/C)` : ''
+        const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (Z/C)` : ''
         setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
       }
     } catch { /* private mode — no greeting, but the keeper still plays */ }
@@ -6778,7 +6778,7 @@ export default function Shimmer3D() {
             // Half the carousel currently opens a book with no move the sim can run — that is the real
             // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
             const bound = loadLoadout(inv.owned, keeperBook(inv.owned)).filter((m) => m && isBuilt(m)).length
-            const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (G/Z/X/C)` : ''
+            const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (Z/C)` : ''
             setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
           }}
           onCancel={birthCancelable ? () => setBirthOpen(false) : undefined}

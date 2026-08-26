@@ -15,8 +15,8 @@
 //       rather than stack, and a death clears its target
 //   7. the birth rune is rune #1 of an inventory and can never be revoked
 
-import { castForMove, isBuilt, defaultLoadout, eligibleMoves, canSlot, CAST_SLOTS, SLOT_KEYS,
-         STANCE_SLOTS, STANCE_KEYS, ALL_BANDS, BAND_KEYS, isStanceSlot, NO_CAST } from './cast'
+import { castForMove, isBuilt, defaultLoadout, eligibleMoves, canSlot, derivePassive, CAST_SLOTS, SLOT_KEYS,
+         ALL_BANDS, BAND_KEYS, NO_CAST } from './cast'
 import { KEEPER_MOVES } from './keeper-moves'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 
@@ -72,8 +72,12 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     if (s.archetype === 'projectile' && !(s.damage > 0 && s.projSpeed > 0 && s.projLife > 0)) wrong.push(m.id)
     if (s.archetype === 'restore' && !(s.heal > 0)) wrong.push(m.id)
     if (s.archetype === 'surge' && !(s.surgeSecs > 0 && s.surgeMult > 1)) wrong.push(m.id)
-    // canon: holding a passive pauses mana recovery — a stance that doesn't is a free permanent buff
-    if (s.archetype === 'stance' && !s.pausesRecovery) wrong.push(m.id)
+    // ⚠ INVERTED 2026-08-26 (Alex's ruling). This used to flag a stance that does NOT pause recovery
+    // as "a free permanent buff". That is now exactly what the passive IS: always-on, off the bar, no
+    // toggle, no cost. So the guard is the other way round — a stance that pauses recovery would pause
+    // it FOREVER now that it is always-on (the broken-economy bug the ruling exists to avoid). No
+    // passive may set `pausesRecovery`.
+    if (s.archetype === 'stance' && s.pausesRecovery) wrong.push(m.id)
   }
   chk('built specs carry their archetype numbers', wrong.length === 0, wrong.join())
   chk('Chain Lightning chains (canon: arcs between every target in range)', castForMove('chain-lightning').chain > 0)
@@ -208,43 +212,36 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   chk('one distinct key per band slot, across both bands',
     BAND_KEYS.length === ALL_BANDS.length && new Set(BAND_KEYS).size === BAND_KEYS.length)
 
-  // ── ★★★ NO BUILT MOVE MAY BE ORPHANED BY THE SHAPE OF THE BAR (added 2026-08-25, play lane) ───
+  // ── ★★★ NO BUILT MOVE MAY BE ORPHANED (added 2026-08-25; REWRITTEN 2026-08-26 for the passive ruling) ───
   //
-  // This replaces an assert that pinned `CAST_SLOTS` to the literal `['passive','tactical','tactical',
-  // 'ultimate']` and labelled it "the authoring target". That assert was a MIRROR — it restated the
-  // constant instead of constraining it, so it could only ever fail by being edited, and its label
-  // repeated the registry-target/slot-count conflation `cast.ts` now documents as a miscitation. Worse,
-  // the one edit it was guarding against is the one edit that is COMING: the ruled 4→2 collapse would
-  // have made this line red for the correct reason and been "fixed" by pasting the new literal in.
+  // The defect this exists to catch: `resolveCast(slot, …)` in `engine/cast-dispatch.ts` is the ONLY
+  // writer of `stanceChange`, and a CAST move's only route into the game is a band whose kind matches
+  // its tier. So removing a kind from a band silently retires every move of that tier, with nothing
+  // that looks like an error. This guard asks: is every move the sim can RUN still reachable?
   //
-  // ⚠⚠ THE DEFECT IT EXISTS TO CATCH, FOUND WHILE SCOPING THAT COLLAPSE. `resolveCast(slot, …)` in
-  // `engine/cast-dispatch.ts` is the ONLY writer of `stanceChange` anywhere in the build — verified by
-  // sweep, there is no second entry point. So a move's ONLY route into the game is a slot in this list
-  // whose kind matches its tier. Collapse `CAST_SLOTS` to `['tactical','ultimate']` as GBOARD step 1
-  // says, and every `passive`-tier move stops being reachable: 12 registered, 8 of them with a fully
-  // BUILT stance archetype (resist / castMult / manaPerSec / moveMult / pausesRecovery — Barrier,
-  // Bulwark, Flame Manipulation, Moisture Gathering, Iron Skin, Molten Shell, Storm Cloak, Ice Armor).
-  // Eight working moves and the whole held-stance mana double-edge — the cost canon's economy rests
-  // on — retire in silence, with nothing in the build that looks like an error.
-  // (The count is READ, not remembered: this comment first said nine, from eyeballing the archetype
-  // table where the `| 'stance'` type line sits among the entries. The guard below names them, which
-  // is the point — it is the only statement of this set that cannot go stale.)
+  // ⚠ TWO ROUTES NOW, NOT ONE — the passive left the bar (RULED 2026-08-26, Alex). A CAST move
+  // (tactical/ultimate) is reachable iff its tier is a band. A PASSIVE reaches the game a DIFFERENT
+  // way: `derivePassive` surfaces the one always-on passive, off the bar entirely. So a built passive
+  // is not orphaned by having no band — it is orphaned only if no keeper who owns its runes could ever
+  // have it in the derive pool. (Capped-at-one may still not PICK a passive that shares a rune with a
+  // higher-sorted one — Bulwark under Barrier — but that is RANKING, not orphaning: it remains a
+  // candidate, and the guard tests candidacy, not the winner. If it tested the winner it would demand
+  // every passive be reachable, which capped-at-one deliberately does not promise.)
   //
-  // ★ AND THE STEP THAT AUTHORISED IT HAD ALREADY EXPIRED. GBOARD step 6 reads "the passive becomes
-  // INNATE, always-on, no key. See the block below." The block below was AMENDED on 2026-08-25: the
-  // always-on thing a birth rune grants is the affinity LEAN, and canon's learned/elite/held passive
-  // band "stands exactly as written". Nothing makes a learned passive always-on. Dropping its slot does
-  // not make it innate — it makes it unreachable. The step read perfectly sensibly on its own and its
-  // premise died two days later, in an amendment to the very block it cites.
-  //
-  // So the guard asks the question the literal could not: is every move the sim can RUN still bindable?
   // It NAMES the orphans rather than counting them — a count goes red without saying why, and the
   // cheapest lie that makes a red count green is to change the number.
   {
     const orphaned = KEEPER_MOVES
-      .filter((m) => isBuilt(m.id) && m.tier !== 'combo' && !ALL_BANDS.includes(m.tier as never))
+      .filter((m) => {
+        if (!isBuilt(m.id) || m.tier === 'combo') return false
+        if (m.tier === 'passive') {
+          // reachable = the derive pool for a keeper owning exactly its runes surfaces this passive.
+          return !eligibleMoves([...m.runes], 'passive', ALL).some((x) => x.id === m.id)
+        }
+        return !ALL_BANDS.includes(m.tier as never)
+      })
       .map((m) => `${m.name} (${m.tier})`)
-    chk(`every BUILT move has a band that can hold it${orphaned.length ? ` — ORPHANED: ${orphaned.join(', ')}` : ''}`,
+    chk(`every BUILT move is reachable — via a band (cast) or derivePassive (passive)${orphaned.length ? ` — ORPHANED: ${orphaned.join(', ')}` : ''}`,
       orphaned.length === 0)
   }
 
@@ -272,10 +269,10 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   const life = defaultLoadout(['life'], ALL)
   chk('a Life-born keeper slots Mend', life.includes('mend'))
   chk('...and no ultimate (Healing Grove also needs Barrier)', life[ULTIMATE] === null)
-  // Stated as a property over the bar rather than a fixed index, so it holds whatever the shape
-  // becomes: Life registers no passive, so no passive slot the bar has can be filled from it.
-  chk('...and has nothing to hold in a passive slot (Life registers none)',
-    ALL_BANDS.every((k, i) => k !== 'passive' || life[i] === null))
+  // (The old "nothing to hold in a passive slot" assert retired 2026-08-26: there is no passive band
+  //  to hold anything, so that check became vacuous — an assert that cannot fire. The passive path is
+  //  covered by its own section below.)
+  chk('the bar has no passive slot — the passive is off the bar', !ALL_BANDS.includes('passive' as never))
 
   const lo = defaultLoadout(['barrier'], ALL).filter(Boolean)
   chk('never slots the same move twice', new Set(lo).size === lo.length)
@@ -322,6 +319,32 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
 {
   chk('Life alone does not reach Healing Grove', !defaultLoadout(['life'], ALL).includes('healing-grove'))
   chk('Life + Barrier does', defaultLoadout(['life', 'barrier'], ALL).includes('healing-grove'))
+}
+
+// 6b. the passive is DERIVED, always-on, capped at one (RULED 2026-08-26, Alex)
+{
+  // capped at one is guaranteed by the return type (KeeperMove | null) — these assert the DERIVATION.
+  const bp = derivePassive(['barrier'], ALL)
+  chk('a barrier keeper derives a passive', bp !== null)
+  chk('...and it is a BUILT one, not the always-eligible unbuilt Herbal Knowledge (built sorts first)',
+    !!bp && isBuilt(bp.id))
+  chk('...and it is one the keeper\'s runes actually make eligible',
+    !!bp && eligibleMoves(['barrier'], 'passive', ALL).some((x) => x.id === bp.id))
+  chk('a keeper who has learned nothing derives no passive (empty book → null)',
+    derivePassive(['barrier'], EMPTY_BOOK) === null)
+  // ⚠ built-first is the whole ranking, and it only BITES when the pool is MIXED — a barrier keeper's
+  // passives are all built, so order cannot surface an unbuilt one there (a reverse mutation slips
+  // past). star+static is the discriminating fixture: Flame Manipulation (star) is BUILT, Flame Cloak
+  // (star+static) is UNBUILT, both eligible — so built-first must return the built one, and reversing
+  // the sort makes this assert red.
+  {
+    const mixed = eligibleMoves(['star', 'static'], 'passive', ALL)
+    chk('fixture: star+static has BOTH a built and an unbuilt passive eligible (or the assert is vacuous)',
+      mixed.some((x) => isBuilt(x.id)) && mixed.some((x) => !isBuilt(x.id)))
+    const p = derivePassive(['star', 'static'], ALL)
+    chk('built-first: the derived passive is the BUILT one when the pool mixes built and unbuilt',
+      !!p && isBuilt(p.id))
+  }
 }
 
 // 7. the rune inventory

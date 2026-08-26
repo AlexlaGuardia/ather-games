@@ -56,7 +56,7 @@ const LEGACY = ['iron-skin', 'stonewall', 'shackle', 'cordon']
   ok(out.length === 2, 'a migrated bar has exactly one entry per target slot')
   ok(out[0] === 'stonewall', '★ the tactical slot keeps the keeper\'s FIRST tactical')
   ok(out[1] === 'cordon', '★ the signature slot keeps the keeper\'s ultimate')
-  ok(!out.includes('iron-skin'), 'the passive is dropped — it became innate, it did not need a slot')
+  ok(!out.includes('iron-skin'), 'the passive is dropped — it is DERIVED and always-on now (cast.ts › derivePassive), so the stored id was redundant, not lost')
   ok(!out.includes('shackle'), 'the second tactical has nowhere to go and is not smuggled into the signature slot')
 }
 

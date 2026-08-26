@@ -250,24 +250,27 @@ import type { CastSpec, CastArchetype } from '../play3d/cast'
  *
  * So the keys are declared **by kind** and the ORDER is derived from `ALL_BANDS` itself — reorder or
  * resize the bands in `cast.ts` and this follows, with no edit here and no chance of a slot whose
- * label and keypress disagree. ⚠ And it is typed `Record<SlotKind, string>` deliberately: that makes
- * a new canon tier a **COMPILE ERROR** in this file rather than an `undefined` key that renders blank
- * and quietly cannot be pressed. The exhaustiveness check is the guard; the comment is just why.
+ * label and keypress disagree. ⚠ It is typed `Record<Exclude<SlotKind, 'passive'>, string>`: a new
+ * canon CAST tier is a **COMPILE ERROR** here rather than an `undefined` key that renders blank, while
+ * `passive` is deliberately excluded — since 2026-08-26 the passive is always-on and DERIVED
+ * (`cast.ts` › `derivePassive`), off the bar entirely, so it holds no key and belongs in no band.
  *
  * ⚠ One known limit, stated rather than left to be discovered: if a band ever holds two slots of the
  * SAME kind (it does not today — `loadout.test.ts` asserts that and says so by name), both would draw
  * the same key. That test going red is the signal to give this a per-slot shape again.
  */
-const WORLD_KEY_BY_KIND: Record<SlotKind, string> = {
+const WORLD_KEY_BY_KIND: Record<Exclude<SlotKind, 'passive'>, string> = {
   tactical: 'z',   // throw
   ultimate: 'b',   // the signature — B here, not C, because C is craft in this world
-  passive:  'g',   // HOLD — the stance socket keeps the key it always had
 }
-const CAST_KEYS: readonly string[] = ALL_BANDS.map(k => WORLD_KEY_BY_KIND[k])
+// `ALL_BANDS` is typed `SlotKind[]` but holds only bound CAST kinds (never `passive`, which left the
+// bar on 2026-08-26), so the narrow is safe — and `WORLD_KEY_BY_KIND` being keyed without `passive`
+// still makes a NEW cast tier a compile error (a missing key), which is the guard worth keeping.
+const CAST_KEYS: readonly string[] = ALL_BANDS.map(k => WORLD_KEY_BY_KIND[k as Exclude<SlotKind, 'passive'>])
 const CAST_CODES: readonly string[] = CAST_KEYS.map(k => `Key${k.toUpperCase()}`)
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
-import { CAST_SLOTS, ALL_BANDS, isStanceSlot, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
+import { CAST_SLOTS, ALL_BANDS, derivePassive, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
 import { loadLoadout, saveLoadout, setSlot, type Loadout } from '../play3d/loadout'
 import { keeperBook } from '../play3d/book'
 import { VoxelMap, VoxelMiniMap, MAP_W, MAP_H, toLocal } from './VoxelMap'
@@ -2654,33 +2657,29 @@ function ToolsTab({ tools, skills }: {
 }
 
 /**
- * The LOADOUT tab — which of your known moves sit on the cast bar (Z / B) and in the stance socket (G).
+ * The LOADOUT tab — which of your known moves sit on the cast bar (Z / B), plus the one passive you
+ * run always-on.
  *
  * ── WHAT WAS ACTUALLY MISSING (2026-08-12) ────────────────────────────────────────────────────
- * Not the chain. `cast.ts` has mapped LOADOUT SLOT → MOVE → ARCHETYPE since 2026-08-03 (63 asserts):
- * CAST_SLOTS, SLOT_KEYS, eligibleMoves, canSlot, castForMove, isBuilt. What was missing is that
- * nothing ever stored a CHOICE — `Shimmer3D` recomputed `defaultLoadout(owned)` on every load, so a
- * keeper received a loadout and could never pick one. `loadout.ts` is that half; this is its face.
+ * Not the chain. `cast.ts` has mapped LOADOUT SLOT → MOVE → ARCHETYPE since 2026-08-03: CAST_SLOTS,
+ * SLOT_KEYS, eligibleMoves, canSlot, castForMove, isBuilt. What was missing is that nothing ever
+ * stored a CHOICE — `Shimmer3D` recomputed `defaultLoadout(owned)` on every load, so a keeper
+ * received a loadout and could never pick one. `loadout.ts` is that half; this is its face.
  *
- * ★ SLOTS ARE TYPED, NOT INTERCHANGEABLE HOLES. A slot only offers moves of its own tier, because a
- * held stance behaves nothing like a signature.
+ * ★ SLOTS ARE TYPED, NOT INTERCHANGEABLE HOLES. A cast slot only offers moves of its own tier.
  *
- * ── ⚠ UPDATED 2026-08-25: TWO BANDS, AND THE PANEL SAYS WHICH IS WHICH ─────────────────────────
- * This block used to read "`CAST_SLOTS` is passive / tactical / tactical / ultimate, mirroring the
- * authoring target of one passive + two tacticals + one ultimate per rune." Both halves are now
- * wrong. The bar collapsed to **tactical + signature** (`moves.md:85` makes Signature the Ultimate
- * band, and passives are not cast), and the passive moved to its own **stance socket** — canon gives
- * every mage up to 3 (`runes.md:256`), and v1 opens one. The "authoring target" clause was also a
- * miscitation: that number is how many moves each RUNE should have written for it, never how many a
- * keeper may EQUIP. See `cast.ts` › The loadout.
- *
- * So this renders `ALL_BANDS`, not `CAST_SLOTS`, and sets the socket apart — a player has to be able
- * to see that G holds while Z and B throw, or the ruling is invisible where it matters most.
+ * ── ⚠ UPDATED 2026-08-26: THE PASSIVE IS A READOUT, NOT A SLOT (RULED, Alex) ───────────────────
+ * A held stance socket shipped on 2026-08-25 (G, pickable, `pausesRecovery`). Alex reversed it the
+ * next day: the passive is not equipped, toggled or keyed — it is a TRAIT you INSPECT. So the bound
+ * bands are the cast bar alone (`ALL_BANDS` = Z tactical + B signature), and the passive is shown
+ * BELOW them as a derived, always-on readout from `derivePassive` — capped at one, no picker, no key.
+ * The map renders `ALL_BANDS`; the passive section stands apart because it is not one of them.
  *
  * ★ AN UNBUILT MOVE IS SHOWN AND SAYS SO. `cast.ts`'s honesty rule: a canon move the sim cannot run
  * is archetype 'unbuilt' WITH a reason, never a silent no-op. Hiding those would make the book look
  * smaller than canon; binding one without a word would read as "casting is broken". So they are
- * listed, dimmed, bindable, and carry their reason.
+ * listed, dimmed, bindable, and carry their reason — and the passive readout says 'unbuilt' the same
+ * way when its effect has no runtime yet.
  */
 function LoadoutTab() {
   const [owned] = useState(() => loadRuneInventory().owned)
@@ -2690,6 +2689,10 @@ function LoadoutTab() {
   const [book] = useState(() => keeperBook(owned))
   const [slots, setSlots] = useState<Loadout>(() => loadLoadout(owned, book))
   const [picking, setPicking] = useState<number | null>(null)
+  // The one always-on passive — derived, capped at one, never chosen. Null if the keeper's runes
+  // have taught them none, in which case the section renders nothing (an empty frame would assert a
+  // trait that is not there).
+  const passive = derivePassive(owned, book)
 
   const bind = (slot: number, moveId: string | null) => {
     const next = setSlot(owned, slots, slot, moveId, book)
@@ -2709,18 +2712,9 @@ function LoadoutTab() {
         const spec = bound ? castForMove(bound) : null
         const open = picking === i
         const options = eligibleMoves(owned, kind, book)
-        // ★ Asked, never computed from a literal — see `isStanceSlot` in cast.ts.
-        const isStance = isStanceSlot(i)
         return (
           <div key={i}>
-          {isStance && i === CAST_SLOTS.length && (
-            <div className="mb-1 mt-2 flex items-center gap-2">
-              <span className="text-[9px] uppercase tracking-[0.16em] text-amber-200/40">Held</span>
-              <span className="h-px flex-1 bg-amber-200/10" />
-              <span className="text-[9px] text-white/25">pauses mana recovery</span>
-            </div>
-          )}
-          <div className={`rounded border bg-white/[0.03] ${isStance ? 'border-amber-200/20' : 'border-white/10'}`}>
+          <div className="rounded border border-white/10 bg-white/[0.03]">
             <button type="button" onPointerDown={() => setPicking(open ? null : i)}
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border
@@ -2774,13 +2768,36 @@ function LoadoutTab() {
           </div>
         )
       })}
-      {/* ★ SAY WHERE THIS TAKES EFFECT. Casting runs in play3d, not in this world — `castForMove` is
-          imported by exactly one component and it is not this one. A chooser that silently governs
-          nothing here is the unwired dial this repo keeps paying for, so the panel states its own
-          reach rather than letting a keeper infer it from a fight that never casts. */}
+      {/* ── THE PASSIVE — always on, derived, capped at one. Not a slot: no key, no pick, no toggle.
+          It stands apart from the cast bar above because it is not one of `ALL_BANDS`; the keeper
+          INSPECTS what their runes grant rather than choosing it. Null (no passive learned) renders
+          nothing rather than an empty frame that would assert a trait that is not there. */}
+      {passive && (
+        <div className="mt-2">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="text-[9px] uppercase tracking-[0.16em] text-amber-200/40">Passive</span>
+            <span className="h-px flex-1 bg-amber-200/10" />
+            <span className="text-[9px] text-white/25">always on</span>
+          </div>
+          <div className="rounded border border-amber-200/20 bg-amber-100/[0.03] px-3 py-2">
+            <div className="flex items-baseline gap-2">
+              <span className={`text-[12px] ${isBuilt(passive.id) ? 'text-amber-200/90' : 'text-white/40'}`}>{passive.name}</span>
+              {!isBuilt(passive.id) && (
+                <span className="text-[9px] uppercase tracking-[0.14em] text-amber-200/40">unbuilt</span>
+              )}
+            </div>
+            <div className="text-[10px] leading-snug text-white/40">{passive.effect}</div>
+            <div className="mt-1 text-[9px] leading-snug text-white/25">
+              Innate to your runes — it needs no slot and costs nothing to hold.
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ★ SAY WHERE THIS TAKES EFFECT. A chooser that silently governs nothing is the unwired dial
+          this repo keeps paying for, so the panel states its own reach rather than letting a keeper
+          infer it from a fight. */}
       <div className="mt-1 text-[10px] leading-relaxed text-white/25">
-        Saved to your keeper. Casting itself does not run in this world yet — these binds take effect
-        where the cast layer lives, until it is ported here (#294).
+        Saved to your keeper. The cast bar and this passive take effect where the cast layer runs.
       </div>
     </div>
   )
@@ -5257,7 +5274,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const castCd = useRef<number[]>(ALL_BANDS.map(() => 0))
   /** Slot pressed this frame, consumed by the frame loop. -1 = nothing. */
   const pendingCast = useRef<number>(-1)
-  const stance = useRef<CastSpec | null>(null)
+  // The one always-on passive as a runtime spec — DERIVED (capped at one), never cast. Since Alex's
+  // 2026-08-26 ruling the passive holds no key and is not a slot, so it is SEEDED here and refreshed
+  // with the loadout on any rune change, rather than being set by a `stanceChange` from a keypress.
+  const derivePassiveSpec = (): CastSpec | null => {
+    const owned = loadRuneInventory().owned
+    const p = derivePassive(owned, keeperBook(owned))
+    return p ? castForMove(p.id) : null
+  }
+  const stance = useRef<CastSpec | null>(derivePassiveSpec())
   const surge = useRef<{ until: number; mult: number } | null>(null)
   const infusion = useRef<{ until: number; mult: number } | null>(null)
   const loadout = useRef<(string | null)[]>(loadLoadout(loadRuneInventory().owned, keeperBook(loadRuneInventory().owned)))
@@ -5272,6 +5297,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     if (runeTickSeen.current === runeTick) return
     runeTickSeen.current = runeTick
     loadout.current = loadLoadout(loadRuneInventory().owned, keeperBook(loadRuneInventory().owned))
+    // The passive is derived from the same runes, so a rune change can open, close or swap it — keep
+    // the always-on stance in step with the loadout it is derived alongside.
+    stance.current = derivePassiveSpec()
   }, [runeTick])
   /**
    * ★ WHAT THIS WORLD CAN ACTUALLY LAND, DECLARED RATHER THAN IMPLIED.
@@ -5549,10 +5577,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // stowing to use — gating it behind the weapon would make the cast layer an accessory to the
       // thing canon says cannot answer half the world.
       if (pendingCast.current >= 0) { const slot = pendingCast.current; pendingCast.current = -1; castSlot(slot, g) }
-      // Mana regen, and a held stance PAUSES it — canon's own cost for a passive (runes.md economy).
+      // Mana regen. ⚠ Gated on `pausesRecovery`, NOT on `stance.current` being set — since the
+      // 2026-08-26 ruling the always-on passive is a free trait (no passive sets `pausesRecovery`),
+      // so it is present every frame and must NOT pause regen. Gating on presence would pause regen
+      // forever. If a costed stance ever returns, its spec flips this flag and the gate already works.
       {
         const m = mana.current
-        if (m && !stance.current) m.cur = Math.min(m.max, m.cur + m.regen * dt)
+        if (m && !stance.current?.pausesRecovery) m.cur = Math.min(m.max, m.cur + m.regen * dt)
         const nowMs = performance.now()
         if (surge.current && nowMs >= surge.current.until) surge.current = null
         if (infusion.current && nowMs >= infusion.current.until) infusion.current = null
