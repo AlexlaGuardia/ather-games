@@ -47,10 +47,17 @@ const BAND_LABEL: Record<string, string> = { tactical: 'TACTICAL', ultimate: 'SI
  * drawing every time canon registers a move, and there are 68 of them with more coming; keying on
  * archetype covers every move that will ever exist by construction.
  */
-function MoveGlyph({ archetype }: { archetype: CastArchetype }) {
+function MoveGlyph({ archetype, chains }: { archetype: CastArchetype; chains?: boolean }) {
   switch (archetype) {
-    case 'projectile': // a thrown bolt, travelling
-      return <><path d="M3 18 L15 6" /><path d="M15 6 L20 4 L18 9 Z" fill="currentColor" stroke="none" /></>
+    case 'projectile':
+      // ⚠ ONE MODIFIER, AND IT EARNS ITS KEEP. Archetype alone drew Ice Dart and Chain Lightning
+      // identically — the two most likely bindings in the game, side by side, indistinguishable.
+      // `chain > 0` is a build field, not a rune, so branching on it stays clear of the colour law,
+      // and CHAINING is exactly what differs between those two moves. A bolt that forks.
+      return chains
+        ? <><path d="M3 18 L13 8" /><path d="M13 8 L19 5 L17 10 Z" fill="currentColor" stroke="none" />
+             <path d="M13 8 L18 13" /><path d="M13 8 L9 3" /></>
+        : <><path d="M3 18 L15 6" /><path d="M15 6 L20 4 L18 9 Z" fill="currentColor" stroke="none" /></>
     case 'restore':    // mending — a cross, no cup, nothing medical
       return <><path d="M12 5v14" /><path d="M5 12h14" /></>
     case 'stance':     // a held shell
@@ -113,7 +120,7 @@ export function CastGauges({ cast }: { cast: React.RefObject<CastHud | null> }) 
         // interval would be re-implementing the renderer inside a timer.
         const g = glyphs.current[i]
         if (g) {
-          const want = spec?.archetype ?? 'none'
+          const want = spec ? `${spec.archetype}${spec.chain > 0 ? ':chain' : ''}` : 'none'
           if (g.dataset.arch !== want) { g.dataset.arch = want; setArch(a => (a[i] === want ? a : Object.assign([...a], { [i]: want }))) }
         }
       })
@@ -138,7 +145,10 @@ export function CastGauges({ cast }: { cast: React.RefObject<CastHud | null> }) 
           <svg viewBox="0 0 24 24" ref={el => { glyphs.current[i] = el }}
                className="h-7 w-7 text-amber-100/85" fill="none" stroke="currentColor"
                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            {arch[i] && arch[i] !== 'none' && <MoveGlyph archetype={arch[i] as CastArchetype} />}
+            {arch[i] && arch[i] !== 'none' && (
+              <MoveGlyph archetype={(arch[i] as string).split(':')[0] as CastArchetype}
+                         chains={(arch[i] as string).endsWith(':chain')} />
+            )}
           </svg>
           {/* Key in the corner while ready; the COUNTDOWN takes its place while cooling, because the
               key is the thing you are about to press and it is where the eye already is. */}
