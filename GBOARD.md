@@ -11,6 +11,65 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🛠 Shimmer — **THE ASEPRITE IMPORT GOES HEADLESS, BY SHARING THE EDITOR'S MAPPING INSTEAD OF COPYING IT** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `b811662`, pushed, not yet deployed*
+
+### Left off — Alex asked what tooling would make sprite work easier, and mentioned Meshy
+Answer: **the tool was already here, and Meshy is the wrong medium for it.**
+
+### Decisions
+- **★★ MESHY / RENDER-TO-SPRITE IS WRONG FOR SHIMMER ICONS, and not only because of the art-medium
+  law.** The mechanical reason is the format: these icons are **16×16 authored, quantised to 8
+  palette slots**. A mesh render pushed through that becomes mud. What makes an icon read at 48px is
+  SILHOUETTE — *widest-at-the-shoulder* is the single property that separated the spade from an urn
+  in the placeholder pass — and silhouette-at-16px is exactly what a render cannot hand you. It would
+  also be a **second source of truth** for what a deadfall looks like, which `item-icon.ts`'s founding
+  header refuses. Keep picaso/Blender on the arcade and dead-grey props, per the existing ruling.
+- **⏭️ THE LAST TWO ITEMS NEED NO EXTERNAL TOOL AT ALL.** `deadwood` and `mushroom_cap` already have
+  geometry — `flora-mesh.ts` builds both. The parked **3D-rendered-icon** idea (render the shipped
+  mesh offscreen, as `rasterIcon` already does for cubes) closes them for free, derived from the
+  world so it cannot drift, and zero credits. **That is the next build here.**
+- **★★★ THE IMPORT WAS ALREADY BUILT AND HALF OF IT COULD NOT LEAVE THE BROWSER.**
+  `components/PngImportUtils.ts` has done Aseprite-PNG → palette indices since the March
+  editor-becomes-integration-hub change. It is browser-only for **exactly one reason**:
+  `pngToImageData` reaches for `Image`/`canvas`. Its header says *"pure functions, no React
+  dependencies"* and it meant it. So `scripts/png2sprite.mts` is **`sharp` standing in for the
+  canvas, then the SAME four functions the editor calls** — not a second importer. ⚠ A headless
+  importer that re-implemented the mapping would let a sprite imported at the terminal and the same
+  sprite imported in the editor disagree about their own colours. One mapping, two front ends.
+- **EMIT-ONLY.** `/shimmer/save-sprite` already owns mutating `items.ts` by regex and its upsert rules
+  (one line per key, trailing commas) should live in one place.
+- **★ TWO SILENT THINGS MADE LOUD.** `nearestPaletteColor` **never says "no match"** — it opens at
+  `bestIdx = 1` and always returns something. Correct for an editor showing a human a mapping table;
+  wrong at a terminal where nobody is looking, so far colours are reported per-colour and **refused
+  past `--max-dist` (default 40)** unless `--force`. And importing an item with **no `ITEM_PALETTES`
+  entry warns up front**, because slot 0 of the default palette is the `#d544c8` sentinel — art can be
+  mapped straight INTO the magenta that means nobody chose colours. That is how the 20 got there.
+
+### ⚠ What the round trip found
+- **`mana_seed`'s palette repeats `#d4a843` at indices 1 and 7**, so 36 of its pixels cannot
+  round-trip — both indices paint one colour and the import can only return one. Cause:
+  `seedPal(body, core)` hardcodes slot 0 as `#d4a843` and `mana_seed` passes that same value as its
+  body. It is the deliberately un-speciated placeholder the file already marks *"⚠ Alex's to
+  re-colour"*, so it is a real property, not a mapping fault. **Reported, not failed** (item-art's
+  precedent: failing a build on art only a human can supply puts the repo permanently red and the
+  check permanently unread). ★ The exemption is **derived from the collision**, so it expires the day
+  Alex gives the seed its own body colour — a hand-listed `['mana_seed']` would silently stop testing
+  it forever.
+- **⚠⚠ AND THE SWEEP CAUGHT ITS OWN AUTHOR AGAIN: the transparency assert could not fail.** It gave
+  the half-transparent pixel a colour nothing else used, so breaking the alpha threshold on purpose
+  STILL returned 0 — via `extractColors`' own alpha test and `applyColorMap`'s `?? 0` lookup miss,
+  not via transparency. **It was passing on a second mechanism and would have shipped a broken
+  threshold.** Both pixels now share one colour so the lookup is guaranteed to succeed and only the
+  alpha test can answer. Second time in one session that a mutation sweep found a guard that was
+  decoration; both times the guard looked completely reasonable.
+- **A writer that reported success and wrote nowhere** — the usage line offered `-o` and the flag
+  parser only understood `--o`, so the file silently went to stdout. Found by a round trip that then
+  had no file to diff. Accepts both spellings now.
+
+### Files
+`scripts/png2sprite.mts` (new) · `src/app/shimmer/components/png-import.test.ts` (new, 95 sprites
+round-tripped) · reads `components/PngImportUtils.ts` unchanged — the point is that it is unchanged.
+
 ## 🎨 Shimmer — **A LOG WEARS ITS BARK, THE CHECKLIST LEARNS TO SEE, AND SIX BLANK TOOLS GET PLACEHOLDERS** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `47e0b77` + `9d6c157`, pushed, not yet deployed (hub owns the lock)*
 
 ### Left off — Alex's art queue went 12 → 8 → **2**, and only 2 were ever really art
