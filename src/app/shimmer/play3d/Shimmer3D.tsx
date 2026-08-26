@@ -26,7 +26,7 @@ import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/part
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave } from '@/lib/cloud-sync'
 import { saveKey, saveOwner } from '@/lib/save-slot'
-import { birthAffinity, NEUTRAL_AFFINITY, type Affinity } from './birth-affinity'
+import { birthAffinity, NEUTRAL_AFFINITY, attunementResist, combineResist, type Affinity } from './birth-affinity'
 import { castForMove, isBuilt, CAST_SLOTS, ALL_BANDS, BAND_KEYS, derivePassive, type CastSpec } from './cast'
 import { loadLoadout } from './loadout'
 import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
@@ -1908,7 +1908,7 @@ function GunBenches() {
     </>
   )
 }
-function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -1932,6 +1932,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   pendingCastRef: React.MutableRefObject<CastSpec | null>
   castMultRef: React.RefObject<number>   // held-stance multiplier on cast damage (Flame Manipulation)
   resistRef: React.RefObject<number>     // held-stance fraction of incoming damage absorbed (Barrier/Iron Skin)
+  birthRuneRef: React.RefObject<string | null>  // what the keeper IS — for attunement resistance (canon v3)
   infusionRef: React.RefObject<{ until: number; mult: number }>  // Flame Infusion — a WEAPON-damage window
   fieldsRef: React.MutableRefObject<Field[]>       // SYSTEM 1 — area entities (this sim ticks them)
   conjuredRef: React.MutableRefObject<Conjured[]>  // SYSTEM 2 — runtime terrain (blocks everything)
@@ -2058,15 +2059,27 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // then the spill hits HP. Both damage sources (drone/guard orbs, Wren's returned hit) route here so
   // the stance can never apply to one and not the other. Side effect of unifying them: Wren's counter
   // now triggers the down/reset like every other hit — it used to leave HP at 0 with the run still live.
-  const hurtPlayer = useCallback((raw: number) => {
-    const dmg = raw * (1 - (resistRef.current ?? 0))
+  // ── ★ THE SOURCE'S RUNE — the wiring point for attunement resistance (canon v3, 2026-08-26) ──
+  // `sourceRune` is what the hit IS. Attunement resistance folds in beside the held stance, and it
+  // folds MULTIPLICATIVELY (`combineResist`) so the pair can approach total immunity and never reach
+  // it — canon's "modest, never immunity" as arithmetic rather than as a comment.
+  //
+  // ⚠⚠ EVERY CALLER PASSES NOTHING TODAY, AND THAT IS ACCURATE, NOT AN OVERSIGHT. Nothing in the
+  // shipped game deals elemental damage: the two sources below are a firing-range training drone and
+  // Wren's reflected shot, and neither has a rune. This parameter exists so the day a world enemy
+  // CASTS (focus row 294) the resistance lands here for free instead of being rediscovered. An
+  // omitted source resists nothing, which is the fail-open direction and the correct one — an
+  // untyped hit must not be silently treated as the keeper's own attunement.
+  const hurtPlayer = useCallback((raw: number, sourceRune?: string | null) => {
+    const resist = combineResist(resistRef.current ?? 0, attunementResist(birthRuneRef.current, sourceRune))
+    const dmg = raw * (1 - resist)
     const sh = shieldRef.current
     shieldRef.current = Math.max(0, sh - dmg)
     const spill = dmg - (sh - shieldRef.current)
     if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
     if (hpRef.current <= 0) { hpRef.current = hpMaxRef.current ?? MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD; onPlayerDown() }
     else onPlayerDamage()
-  }, [resistRef, shieldRef, hpRef, hpMaxRef, shieldMaxRef, onPlayerDamage, onPlayerDown])
+  }, [resistRef, birthRuneRef, shieldRef, hpRef, hpMaxRef, shieldMaxRef, onPlayerDamage, onPlayerDown])
   useFrame((state, dt) => {
     const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // live weapon — stats + tracer look
     const nowFrame = performance.now()  // ONE clock per frame — fields, terrain and statuses all read it
@@ -2276,7 +2289,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           guardSim.current.enc = r.state
           p.life = 0; onHit(crit)
           // Wren turning a hit back is real damage to the shooter, not a miss.
-          if (r.returned > 0) hurtPlayer(r.returned)
+          if (r.returned > 0) hurtPlayer(r.returned)  // Wren's reflect — carries no rune
           break
         }
       }
@@ -2511,7 +2524,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         if (blocksShotAt(fieldsRef.current, o.pos.x, o.pos.z)) { o.life = 0; continue }
         if (o.pos.distanceToSquared(pEye) < PLAYER_HIT_R2) {
           o.life = 0
-          hurtPlayer(DRONE_DMG)
+          hurtPlayer(DRONE_DMG)  // a training drone — carries no rune
         }
       }
     }
@@ -3169,6 +3182,7 @@ const Scene = memo(function Scene(props: {
   pendingCastRef: React.MutableRefObject<CastSpec | null>
   castMultRef: React.RefObject<number>
   resistRef: React.RefObject<number>
+  birthRuneRef: React.RefObject<string | null>
   infusionRef: React.RefObject<{ until: number; mult: number }>
   fieldsRef: React.MutableRefObject<Field[]>
   conjuredRef: React.MutableRefObject<Conjured[]>
@@ -3275,7 +3289,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
@@ -6390,6 +6404,7 @@ export default function Shimmer3D() {
           atmosZone={districtZone}
           isOwner={isOwner}
           firingRef={firingRef}
+          birthRuneRef={birthRuneRef}
           onRangeHit={onRangeHit}
           onRangeShot={onRangeShot}
           adsRef={adsRef}

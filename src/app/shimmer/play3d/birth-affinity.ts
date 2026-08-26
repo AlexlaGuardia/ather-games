@@ -125,3 +125,73 @@ export function leanEffects(aff: Affinity): string[] {
   if (aff.gatherMult !== n.gatherMult) out.push(`${sign(aff.gatherMult - n.gatherMult)}${Math.round((aff.gatherMult / n.gatherMult - 1) * 100)}% harvest yield`)
   return out
 }
+
+// ── ★★★ FACET 4 — ATTUNEMENT RESISTANCE (canon `shimmer-birth-rune.md` § v3, 2026-08-26) ─────────
+//
+// *"A thing is not readily unmade by the substance it is made of."* A keeper carries a modest
+// standing resistance to what they are born of — Star-born are hard to burn, Freeze-born hard to
+// chill, Stone-born hard to crush.
+//
+// ⚠⚠ **THIS CANNOT FIRE YET, AND THAT IS WHY IT IS WRITTEN THIS WAY.** Measured 2026-08-26 before
+// building: **no damage source in the shipped game declares an element or a rune.** play3d's
+// `hurtPlayer` takes a bare number from a firing-range drone and from Wren's reflected shot; the
+// voxel world routes moglin posture through `pressure()`, which never wounds by design; no foe
+// module carries an `element` field; and `vitals.damage()` has no production caller at all. The
+// input this rule consumes does not exist until real-time world enemies CAST (focus row 294 — written
+// WITHOUT a leading hash on purpose: `tokens.test.ts` finds colour-bearing files by scanning for a
+// hash followed by three to eight hex characters, and a three-digit row number written that way IS
+// a valid short hex colour — so the citation alone files a pure logic module as colour-bearing and
+// fails that guard. ⚠ This note is deliberately phrased with no such token in it either: the first
+// draft explained the trap by quoting it, which re-armed it one line below the fix. Documenting a
+// marker creates a marker.)
+// It is built as a pure rule with the wiring point in place so the first casting foe lights it up,
+// and it is said out loud here rather than left for someone to discover it never ran.
+//
+// ⛔ **NO WEAKNESS MATRIX. NO COUNTER-WHEEL.** Canon is emphatic: there is no element a birth rune
+// is vulnerable to, the system is Element × State and not a type chart, and a wheel would be a real
+// invention. This function returns a resistance or zero. It never returns a penalty, and the guard
+// asserts that it cannot.
+
+/**
+ * ⚠ **KEYED ON THE RUNE, NOT THE ELEMENT AXIS — flagged to Magii, deliberately not guessed silently.**
+ *
+ * The canon prose says *"their own birth **element**"*, but all three of its own worked examples name
+ * the RUNE's substance: Star is `mana`/Ignite, and "hard to burn" does not follow from the mana
+ * element (which also holds Life and Barrier) — it follows from Star being the fire rune. Freeze
+ * (`water`/Solid) → chill and Stone (`earth`/Solid) → crush read the same way, and the three name
+ * three different elements. Canon's four Elements are Mana/Storm/Earth/Water, so "birth element"
+ * there is the everyday sense of the word, not this build's `element` axis.
+ *
+ * Keying on the rune satisfies every example and is the NARROWER reading, which is the safe
+ * direction for a resistance: it under-applies rather than over-applies. Sent to Magii to rule.
+ * If they rule the element axis instead, this is a one-line change — and it costs nothing today,
+ * because nothing can fire it (see above).
+ */
+export const SELF_ATTUNEMENT_RESIST = 0.25
+
+/**
+ * The fraction of an incoming hit a keeper shrugs off because it is their own attunement.
+ * `0` for everything else — including an untyped source, which today is every source.
+ *
+ * Magnitude is Jin's (canon fixes only that it exists and is self-only). 0.25 is *"this costs me
+ * less than it costs you"*, never *"this cannot touch me"* — Veyra shapes fire barehanded and is
+ * still a woman who can burn.
+ */
+export function attunementResist(birth: string | null | undefined, sourceRune: string | null | undefined): number {
+  if (!birth || !sourceRune) return 0
+  return birth === sourceRune ? SELF_ATTUNEMENT_RESIST : 0
+}
+
+/**
+ * Fold two 0..1 resistances into one.
+ *
+ * ★ MULTIPLICATIVE, AND THAT IS THE RULE CARRYING CANON'S "NEVER IMMUNITY" RATHER THAN A COMMENT
+ * ASKING FOR IT. Added, Bulwark (0.55) plus attunement (0.25) is 0.80 and a third source would
+ * cross 1.0 into healing-from-damage. Folded as `1 - (1-a)(1-b)` the result approaches 1 and can
+ * only REACH it if one input is already a total immunity — so canon's ceiling is a property of the
+ * arithmetic, not something every future call site has to remember to clamp.
+ */
+export function combineResist(a: number, b: number): number {
+  const clamp = (x: number) => Math.min(1, Math.max(0, x))
+  return 1 - (1 - clamp(a)) * (1 - clamp(b))
+}

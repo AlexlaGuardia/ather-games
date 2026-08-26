@@ -15,7 +15,7 @@
 // shorter string rather than an error. Neither failure looks like a failure.
 
 import { RUNES } from './birth/runes.data'
-import { birthAffinity, essenceOf, leanEffects, NEUTRAL_AFFINITY, type AffinityLean } from './birth-affinity'
+import { birthAffinity, essenceOf, leanEffects, NEUTRAL_AFFINITY, type AffinityLean, attunementResist, combineResist, SELF_ATTUNEMENT_RESIST } from './birth-affinity'
 
 let pass = 0, fail = 0
 const chk = (label: string, ok: boolean) => { ok ? pass++ : (fail++, console.log(`  FAIL: ${label}`)) }
@@ -75,6 +75,41 @@ const chk = (label: string, ok: boolean) => { ok ? pass++ : (fail++, console.log
   chk('★ neutral lists no effects, so the panel refuses to draw a lean nobody has',
     leanEffects(NEUTRAL_AFFINITY).length === 0)
   chk('★ and neutral has no essence line to show either', essenceOf(NEUTRAL_AFFINITY) === '')
+}
+
+// ── 5. FACET 4 — attunement resistance (canon v3, 2026-08-26) ──────────────────────────────────
+{
+  const R = SELF_ATTUNEMENT_RESIST
+  chk('your own attunement resists', attunementResist('star', 'star') === R)
+  chk('★ and NOTHING else does — canon opens no weakness matrix',
+    RUNES.every((a) => RUNES.every((b) => a.id === b.id || attunementResist(a.id, b.id) === 0)))
+  // ⛔ The counter-wheel canon explicitly refuses. A wheel would show up as a NEGATIVE return — a
+  // hit that costs MORE because of who you are. This asserts the return is a resistance or nothing,
+  // across the whole 20x20 grid, so a wheel cannot be added here without going red.
+  chk('⛔ no pairing ever returns a PENALTY — a counter-wheel cannot hide in this function',
+    RUNES.every((a) => RUNES.every((b) => attunementResist(a.id, b.id) >= 0)))
+  chk('modest, never immunity (canon: Veyra can still burn)', R > 0 && R < 1)
+
+  // The untyped source, which today is EVERY source. Fail-open is the correct direction: an
+  // unlabelled hit must never be mistaken for the keeper's own attunement.
+  chk('an untyped hit resists nothing', attunementResist('star', undefined) === 0 && attunementResist('star', null) === 0)
+  chk('a keeper with no birth rune resists nothing', attunementResist(null, 'star') === 0)
+
+  // ★ THE CEILING IS ARITHMETIC, NOT A COMMENT. Bulwark + attunement added would be 0.80 and a
+  // third source would cross 1.0 into healing-from-damage; folded, it approaches 1 and only reaches
+  // it if something is already a total immunity.
+  chk('two resistances fold below total immunity', combineResist(0.55, R) < 1 && combineResist(0.55, R) > 0.55)
+  chk('...and stay below it however many stack',
+    [0.55, R, 0.45, 0.35, 0.6].reduce(combineResist, 0) < 1)
+  chk('...while a genuine 1.0 is still allowed through', combineResist(1, 0) === 1)
+  chk('folding is order-independent', combineResist(0.3, 0.7) === combineResist(0.7, 0.3))
+
+  // ⚠ THE STATE OF THE WORLD, PRINTED RATHER THAN ASSUMED. Nothing in the shipped game deals
+  // elemental damage, so every assert above is about a rule that CANNOT FIRE in play yet. Saying so
+  // here is what stops "attunement resistance: done" from being read as "keepers resist their
+  // element in game". It lights up when world enemies cast (focus row #294).
+  console.log('  ⚠ attunement resistance is UNREACHABLE IN PLAY: no damage source declares a rune yet')
+  console.log('    (play3d hurtPlayer = drone + Wren reflect, both untyped · voxel = pressure(), never wounds)')
 }
 
 console.log(`\nbirth-affinity oracle: ${pass} passed, ${fail} failed`)
