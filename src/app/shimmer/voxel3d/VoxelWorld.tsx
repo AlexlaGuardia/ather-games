@@ -224,6 +224,7 @@ import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneI
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
+import { ManaGauge } from './mana-gauge'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
 import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVolume,
@@ -1921,7 +1922,7 @@ export default function VoxelWorld() {
            bindings={bindings.current} padKind={padRef.current?.kind ?? 'generic'}
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
            nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty}
-           sparLedger={sparLedger} vitals={vitals} />
+           sparLedger={sparLedger} vitals={vitals} mana={mana} />
       {settings.showFps && prof && <ProfilePanel p={prof.profile} copiedAt={profCopied} />}
       {showSettings && <SettingsPanel s={settings} update={update}
         onControls={() => { setShowSettings(false); setShowBindings(true) }}
@@ -2095,7 +2096,7 @@ function ResourceBars({ vitals }: { vitals: React.RefObject<Vitals> }) {
   )
 }
 
-function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals }: {
+function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
@@ -2142,6 +2143,8 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
   sparLedger: string[] | null
   /** The keeper's health + shields. A ref: the bars poll it, nothing re-renders. */
   vitals: React.RefObject<Vitals>
+  /** The mana pool, for the vessel in the bottom-right corner. Same ref the sim ticks. */
+  mana: React.RefObject<{ cur: number; max: number; regen: number } | null>
   /** Within reach of a placed crafting table — drives the "E — craft" prompt. */
   nearTable: boolean
   craftOpen: boolean
@@ -2423,7 +2426,6 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
               </div>
             )
           })}
-          <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
         </div>
       </div>}
       {/* The one piece of state the dimmed row cannot show by itself. */}
@@ -2439,6 +2441,21 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
         spike tier {tier}
       </div>}
       {!build && <ResourceBars vitals={vitals} />}
+      {/* ── ★★ THE MANA VESSEL, AND THE FIRST TIME MANA HAS BEEN DRAWN AT ALL (2026-08-26) ──────
+          `brewPotion` has subtracted `manaCost` and `engine/mana.ts` has derived the pool and its
+          regen for as long as either has existed, and the keeper has been spending a resource with
+          NO WAY TO SEE IT. This is its first display, not a restyle.
+          ⚠ AND IT STOPPED BEING COSMETIC THE SAME DAY. The Hollow caster's attack SAPS MANA
+          (`hollows.ts`, ruled this morning) — an enemy whose whole form exists to drain a bar that
+          was never on screen. The player would have felt their casts stop working and had nothing
+          to read it on. The gauge is what makes that attack legible.
+          Health and shields stay bottom-LEFT, deliberately (Alex) — this is its own corner. */}
+      {!build && (
+        <div className="absolute bottom-4 right-4 pointer-events-none">
+          <ManaGauge mana={mana} />
+          <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
+        </div>
+      )}
     </>
   )
 }
@@ -3126,13 +3143,26 @@ function ToolArc({ activeTool, tools, skills }: {
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
 }) {
-  // Degrees off the horizontal. Alex's taste pass 2026-08-07: arc MIRRORED (fan opens up-and-
-  // RIGHT, away from the bar, instead of curling back over it), gaps widened, whole cluster +25%.
-  const ANGLES = [6, 34, 62, 90]
+  // ── ★ THE ARC BECAME AN ARCH (2026-08-26, Alex: "tools in a half arch floating above it like
+  // satellites") ─────────────────────────────────────────────────────────────────────────────
+  // It used to hang off the hotbar's right edge as a quarter fan — [6, 34, 62, 90], the 08-07 taste
+  // pass. It now vaults OVER the mana gauge, so the angles span the full half-circle instead of a
+  // quadrant. ⚠ NO TRANSFORM CHANGED: `ToolSocket` already places by `left: r·(1−cos θ)` and
+  // `bottom: r·sin θ`, which for θ ∈ 0..180 is exactly a semicircle with its feet at 0 and 2r and
+  // its apex at (r, r). The arch was already expressible; only the numbers were a quadrant.
+  //
+  // Symmetric on purpose — two low on the shoulders, two high at the crown — so the cluster reads
+  // as an arch over the vessel rather than a fan leaning off it.
+  const ANGLES = [30, 70, 110, 150]
   return (
     <div
-      className="absolute left-full bottom-0 ml-3 h-0 w-0 pointer-events-none"
-      style={{ '--tool-arc-r': 'clamp(60px, 16vw, 105px)' } as React.CSSProperties}
+      // The container's origin is the arch's LEFT FOOT, and the arch is 2r wide, so it is shifted
+      // left by r to centre the crown over the gauge below it.
+      className="absolute left-1/2 bottom-full h-0 w-0 pointer-events-none"
+      style={{
+        '--tool-arc-r': 'clamp(60px, 16vw, 105px)',
+        transform: 'translateX(calc(var(--tool-arc-r) * -1))',
+      } as React.CSSProperties}
     >
       {TOOL_FAMILIES.map((family, i) => (
         <ToolSocket key={family} family={family} angleDeg={ANGLES[i]}
