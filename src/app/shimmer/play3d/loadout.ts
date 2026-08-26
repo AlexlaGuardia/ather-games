@@ -113,22 +113,22 @@ export function isLegacyLoadout(saved: unknown[]): boolean {
  * does nothing, which is precisely the "cast is broken" report `cast.ts`'s honesty rule was written
  * to prevent.
  */
-export function loadLoadout(owned: string[], book: Book): Loadout {
+export function loadLoadout(owned: string[], birth: string | null, book: Book): Loadout {
   let raw: string | null = null
   try {
     raw = localStorage.getItem(keeperKey(LOADOUT_KEY))
   } catch {
-    return defaultLoadout(owned, book)  // private mode — a keeper who cannot save still gets a kit
+    return defaultLoadout(owned, birth, book)  // private mode — a keeper who cannot save still gets a kit
   }
-  if (!raw) return defaultLoadout(owned, book)
+  if (!raw) return defaultLoadout(owned, birth, book)
 
   let saved: unknown
   try {
     saved = JSON.parse(raw)
   } catch {
-    return defaultLoadout(owned, book)  // corrupt JSON reads as "never chosen", not as an empty loadout
+    return defaultLoadout(owned, birth, book)  // corrupt JSON reads as "never chosen", not as an empty loadout
   }
-  if (!Array.isArray(saved)) return defaultLoadout(owned, book)
+  if (!Array.isArray(saved)) return defaultLoadout(owned, birth, book)
 
   // ★ RE-SEAT BEFORE VALIDATING, NEVER AFTER. `canSlot` asks whether a move is legal in a slot
   // NUMBER, so validating first would judge every legacy id against the wrong slot and null it —
@@ -141,7 +141,7 @@ export function loadLoadout(owned: string[], book: Book): Loadout {
   return ALL_BANDS.map((_, i) => {
     const id = seated[i]
     if (typeof id !== 'string') return null
-    return canSlot(owned, i, id, book) ? id : null
+    return canSlot(owned, birth, i, id, book) ? id : null
   })
 }
 
@@ -186,9 +186,9 @@ export function saveLoadout(slots: Loadout): void {
  * that are secretly one. `defaultLoadout` already refuses duplicates for the same reason, so
  * allowing them here would make hand-picking worse than the automatic kit.
  */
-export function setSlot(owned: string[], slots: Loadout, slot: number, moveId: string | null, book: Book): Loadout {
+export function setSlot(owned: string[], birth: string | null, slots: Loadout, slot: number, moveId: string | null, book: Book): Loadout {
   if (slot < 0 || slot >= ALL_BANDS.length) return slots
-  if (moveId !== null && !canSlot(owned, slot, moveId, book)) return slots
+  if (moveId !== null && !canSlot(owned, birth, slot, moveId, book)) return slots
   const next = ALL_BANDS.map((_, i) => (i === slot ? moveId : (slots[i] ?? null)))
   if (moveId !== null) {
     for (let i = 0; i < next.length; i++) if (i !== slot && next[i] === moveId) next[i] = null

@@ -34,7 +34,15 @@ import type { CollarDelivery } from '../engine/collar-foes'
 import { RUNES, type Rune } from './birth/runes.data'
 
 export type RuneId = string
-export type MoveTier = 'passive' | 'tactical' | 'ultimate' | 'combo'
+/**
+ * ★ `'trait'` IS NOT A WEAKER PASSIVE — IT IS THE OTHER SIDE OF CANON'S ONE TEST (RULED 2026-08-26).
+ * `runes.md` § *Traits*: **no rune → Trait. A rune → Passive.** The test is a derivation over the
+ * move's OWN source, never a hand-kept list, so no build tuning can void it — which is exactly why
+ * the earlier definition (always-on / no socket / never pauses recovery) had to be struck: the
+ * 08-26 passive redesign gave a passive that same shape, so it defined nothing.
+ * A trait moves no mana: always on, no socket, no rune gate, never a recovery cost.
+ */
+export type MoveTier = 'passive' | 'trait' | 'tactical' | 'ultimate' | 'combo'
 
 export interface KeeperMove {
   /** build-side id, stable. Canon owns the name, not this. */
@@ -44,6 +52,24 @@ export interface KeeperMove {
   tier: MoveTier
   /** every rune the move requires — you need ALL of them to run it */
   runes: RuneId[]
+  /**
+   * ── THE BIRTH-EXCLUSIVE BAND (RULED 2026-08-26, Alex + /magii) ────────────────────────────────
+   * The birth rune you must have been BORN with to hold this move at all. Owning the rune is not
+   * enough and never becomes enough — it cannot be bought at the Passage or taught by a master.
+   * This is canon's answer to *"can't be taught quickly, earned through living"*: the trait section
+   * was right about HOW these are gotten and wrong about WHAT they are.
+   *
+   * ⚠ ORTHOGONAL TO SLOTS AND COSTS ON PURPOSE. This asks WHO MAY HOLD a move; `drainsWhileWorn`
+   * asks WHAT IT COSTS to hold. The 08-26 passive redesign moved the cost and did not touch this,
+   * which is the test that the two really are separate axes.
+   *
+   * ⚠ AND IT IS NOT A PASSIVE-ONLY FIELD. Alex ruled the band carries *"unique hidden tacticals and
+   * or signatures that other birthrunes cant use"* — only two members are written today, both
+   * passives. It is gated in `eligibleMoves`, the one filter EVERY band goes through, so a tactical
+   * joining the band needs no new gate. Authoring debt is declared: 2 of 17 exist, and the other 15
+   * get derived from each rune's essence when a character or chapter needs one — never bulk-invented.
+   */
+  birthExclusive?: RuneId
   /** short effect line, condensed from the registry entry */
   effect: string
   /**
@@ -86,30 +112,64 @@ export interface KeeperMove {
    */
   collar?: CollarDelivery
   /**
-   * Held passives PAUSE MANA RECOVERY while active (runes.md, the mana economy) — the double
-   * edge that makes a passive a stance, not a permanent state.
+   * ── THE COST MOVED FROM THE BAND ONTO THE MOVE (RULED 2026-08-26, Alex) ───────────────────────
+   * The blanket law *"holding any passive pauses recovery"* is **RETIRED, world-wide** — a passive
+   * is a layer you wear, not a switch you feed. The double edge did NOT vanish; it stopped being a
+   * property of the TIER and became a property of the individual move.
+   *
+   * **Most passives set nothing here.** The ones that do, canon had already written:
+   *   · **Barrier / Bulwark** — drain while held. On the page in the novel at Ch04, Ch07, Ch15 and
+   *     Ch18 (*"the slow ebb, the turtle running out of air"*); Ch04's whole premise is the enemy
+   *     declining to break the shell and using up the man inside it instead. Reading Barrier as one
+   *     of the costed few retcons zero shipped prose, which is why it kept its cost.
+   *   · **Iron Skin** — pays in FOOTING, not mana (`moveMult`), so it leaves this false.
+   *
+   * ⚠ A trait may never set this. A trait moves no mana — see `MoveTier`.
+   *
+   * ⚠ THIS IS THE CANON FACT ONLY — *"wearing this costs mana"*. HOW MUCH is Jin's, and lives in
+   * `cast.ts` › `CastSpec.regenMult`. It is deliberately not a number here: canon writes a drain on
+   * the page, never a rate, and a rate transcribed into the canon registry would be build tuning
+   * wearing canon's authority.
    */
-  pausesRecovery?: boolean
+  drainsWhileWorn?: boolean
+  /**
+   * Canon says wearing this PRODUCES mana. Moisture Gathering only, today: *"draws water from the
+   * air's moisture over time, refilling mana-rich vials."*
+   *
+   * ⚠ THE FACT, NEVER THE RATE — same boundary as `drainsWhileWorn`. It exists so the oracle can
+   * assert that a move canon calls a source actually feeds you in the build, WITHOUT restating the
+   * number: a test pinned to `1.6` would be a mirror of the constant and could only fail by being
+   * edited. Pinned to this flag, it fails when the BEHAVIOUR stops matching canon, which is the event.
+   */
+  feedsWhileWorn?: boolean
 }
 
 // ── The registry (keeper moves from CANON/game/moves.md) ───────────────────────
 // Order mirrors the canon file so a diff against it stays readable.
 
 export const KEEPER_MOVES: KeeperMove[] = [
-  // Passives — held or innate. Holding one pauses mana recovery.
-  { id: 'barrier', name: 'Barrier', tier: 'passive', runes: ['barrier'],
+  // Passives — worn, always-on. Most cost nothing; the costed few say so on their own row.
+  { id: 'barrier', name: 'Barrier', tier: 'passive', runes: ['barrier'], drainsWhileWorn: true,
     effect: 'A held defensive shell that disperses impact — the answer to manalic weapons.' },
-  { id: 'bulwark', name: 'Bulwark', tier: 'passive', runes: ['barrier'],
+  { id: 'bulwark', name: 'Bulwark', tier: 'passive', runes: ['barrier'], drainsWhileWorn: true,
     effect: 'The mastered tier of the shell — a full standing wall, held as sustained defense.' },
+  // ⊕ BIRTH-EXCLUSIVE — Veyra is Star-born, Samantha is Fluid-born, and no keeper of another birth
+  // rune may hold either at any price. Owning Star is NOT enough; you had to be born holding it.
   { id: 'flame-manipulation', name: 'Flame Manipulation', tier: 'passive', runes: ['star'],
+    birthExclusive: 'star',
     effect: 'Innate fire-shaping — bends, holds and splits flame by instinct.' },
   { id: 'moisture-gathering', name: 'Moisture Gathering', tier: 'passive', runes: ['fluid'],
+    birthExclusive: 'fluid', feedsWhileWorn: true,
     effect: "Draws water from the air's moisture over time, refilling mana-rich vials." },
   { id: 'iron-skin', name: 'Iron Skin', tier: 'passive', runes: ['metalergy'],
     effect: 'Metal bound over the body — armor you ARE. Refuses to move under a hit.' },
   { id: 'bind-mastery', name: 'Bind Mastery', tier: 'passive', runes: ['enchant', 'metalergy', 'illuminate'],
     effect: "Command of all three Bind runes — the foundation of gatecraft and manatech. A scholar's mastery." },
-  { id: 'herbal-knowledge', name: 'Herbal Knowledge', tier: 'passive', runes: [],
+  // ★ A TRAIT, NOT A PASSIVE, AND THE `runes: []` IS WHAT SAYS SO. Canon's test reads the move's own
+  // source: no rune → Trait. The empty rune list was right all along; `tier: 'passive'` was the wrong
+  // half, and it put a runeless craft in the one band a rune is supposed to gate. Helga's, and
+  // Kael's Network alongside it, now sit on `runes.md`'s trait shelf — the runeless shelf, nothing else.
+  { id: 'herbal-knowledge', name: 'Herbal Knowledge', tier: 'trait', runes: [],
     effect: 'Decades of practical medicine — mends, sets bone, purges infection without a drop of mana.',
     needs: 'no rune — a craft, not magic' },
   { id: 'flame-cloak', name: 'Flame Cloak', tier: 'passive', runes: ['star', 'static'],

@@ -220,7 +220,7 @@ import { POTION_IDS, POTION_DEFS } from '../engine/alchemy'
 import { MAX_INFUSIONS_PER_ELEMENT } from '../spirits/spirit'
 import { BrewPanel } from './brew-panel'
 import { brewBlocker } from './brew'
-import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune } from '../play3d/rune-inventory'
+import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneInventory } from '../play3d/rune-inventory'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, pressure, heal, type Vitals } from '../engine/vitals'
@@ -250,23 +250,26 @@ import type { CastSpec, CastArchetype } from '../play3d/cast'
  *
  * So the keys are declared **by kind** and the ORDER is derived from `ALL_BANDS` itself — reorder or
  * resize the bands in `cast.ts` and this follows, with no edit here and no chance of a slot whose
- * label and keypress disagree. ⚠ It is typed `Record<Exclude<SlotKind, 'passive'>, string>`: a new
- * canon CAST tier is a **COMPILE ERROR** here rather than an `undefined` key that renders blank, while
- * `passive` is deliberately excluded — since 2026-08-26 the passive is always-on and DERIVED
- * (`cast.ts` › `derivePassive`), off the bar entirely, so it holds no key and belongs in no band.
+ * label and keypress disagree. ⚠ It is typed `Record<Exclude<SlotKind, 'passive' | 'trait'>, string>`:
+ * a new canon CAST tier is a **COMPILE ERROR** here rather than an `undefined` key that renders blank.
+ * Two kinds are deliberately excluded, both because they are never BOUND:
+ *   · `passive` — since 2026-08-26 always-on and DERIVED (`cast.ts` › `derivePassive`), off the bar.
+ *   · `trait`   — runeless and innate (`keeper-moves.ts` › `MoveTier`); there is nothing to equip.
+ * ★ This guard EARNED ITS KEEP on 2026-08-26: adding the `trait` tier failed the build here, in the
+ * one place that would otherwise have rendered a silent blank key, before it could reach a player.
  *
  * ⚠ One known limit, stated rather than left to be discovered: if a band ever holds two slots of the
  * SAME kind (it does not today — `loadout.test.ts` asserts that and says so by name), both would draw
  * the same key. That test going red is the signal to give this a per-slot shape again.
  */
-const WORLD_KEY_BY_KIND: Record<Exclude<SlotKind, 'passive'>, string> = {
+const WORLD_KEY_BY_KIND: Record<Exclude<SlotKind, 'passive' | 'trait'>, string> = {
   tactical: 'z',   // throw
   ultimate: 'b',   // the signature — B here, not C, because C is craft in this world
 }
 // `ALL_BANDS` is typed `SlotKind[]` but holds only bound CAST kinds (never `passive`, which left the
-// bar on 2026-08-26), so the narrow is safe — and `WORLD_KEY_BY_KIND` being keyed without `passive`
-// still makes a NEW cast tier a compile error (a missing key), which is the guard worth keeping.
-const CAST_KEYS: readonly string[] = ALL_BANDS.map(k => WORLD_KEY_BY_KIND[k as Exclude<SlotKind, 'passive'>])
+// bar on 2026-08-26, and never `trait`, which was never on it), so the narrow is safe — and
+// `WORLD_KEY_BY_KIND` being keyed without them still makes a NEW cast tier a compile error.
+const CAST_KEYS: readonly string[] = ALL_BANDS.map(k => WORLD_KEY_BY_KIND[k as Exclude<SlotKind, 'passive' | 'trait'>])
 const CAST_CODES: readonly string[] = CAST_KEYS.map(k => `Key${k.toUpperCase()}`)
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
@@ -1334,16 +1337,22 @@ export default function VoxelWorld() {
       // The readout, and the reason the bare form is view-grade: it names the gap instead of
       // leaving four dead keys. `bound` counts SLOTS FILLED, not moves owned — a keeper can know a
       // move the loadout cannot seat (wrong slot kind), and that difference is the whole confusion.
-      const report = (held: string[], lead: string) => {
-        const names = held.map(id => RUNES.find(r => r.id === id)?.name ?? id)
-        const moves = knownMoves(held)
-        const bound = loadLoadout(held, keeperBook(held)).filter(Boolean).length
+      // ⚠ Takes the whole INVENTORY, not a bare rune list. The birth-exclusive band (2026-08-26)
+      // makes the answer depend on which rune you were BORN with, not only which you hold, so a
+      // readout handed `owned` alone would quietly report a different keeper than the one asking.
+      const report = (rv: RuneInventory, lead: string) => {
+        const names = rv.owned.map(id => RUNES.find(r => r.id === id)?.name ?? id)
+        const moves = knownMoves(rv.owned)
+        const bound = loadLoadout(rv.owned, rv.birth, keeperBook(rv.owned)).filter(Boolean).length
+        // ⚠ Sized from the band list, never a literal. This read `/4` until 2026-08-26 — a number
+        // left over from the four-slot bar, still parsing perfectly while overstating the denominator
+        // by half on every dev readout that quoted it.
         const tail = moves.length === 0
           ? 'no move answers to it yet — the Schools have not written one'
-          : `${moves.length} move${moves.length === 1 ? '' : 's'} known · ${bound}/4 cast slot${bound === 1 ? '' : 's'} bound`
+          : `${moves.length} move${moves.length === 1 ? '' : 's'} known · ${bound}/${ALL_BANDS.length} cast slot${bound === 1 ? '' : 's'} bound`
         return `${lead}${names.join(', ') || 'nothing'} — ${tail}`
       }
-      if (!arg) return report(inv.owned, inv.owned.length === 1 ? 'born of ' : 'you hold ')
+      if (!arg) return report(inv, inv.owned.length === 1 ? 'born of ' : 'you hold ')
       if (!isOwner) return 'a rune is trained, not typed — bare /rune reads your hand'
       const id = arg.toLowerCase()
       if (!RUNES.some(r => r.id === id)) return `no such rune: ${arg}`
@@ -1352,7 +1361,7 @@ export default function VoxelWorld() {
       if (next === inv) return 'the birth rune cannot be dropped — you cannot un-be born'
       saveRuneInventory(next)
       setRuneTick(t => t + 1)
-      return report(next.owned, `⟳ dev · ${held ? 'dropped' : 'developed'} ${RUNES.find(r => r.id === id)!.name} · `)
+      return report(next, `⟳ dev · ${held ? 'dropped' : 'developed'} ${RUNES.find(r => r.id === id)!.name} · `)
     },
   }), [isOwner, settings.viewRadius, update, refreshHotbar, partyOps])
   const submitLine = useCallback((raw: string) => {
@@ -2683,19 +2692,22 @@ function ToolsTab({ tools, skills }: {
  */
 function LoadoutTab() {
   const [owned] = useState(() => loadRuneInventory().owned)
+  // Read with the runes and pinned for the same reason: the birth-exclusive band decides which
+  // passives this keeper may hold at all, and it can never change while the panel is open.
+  const [birth] = useState(() => loadRuneInventory().birth)
   // The book is read ONCE per mount alongside the runes: both are the keeper's identity as of the
   // moment this panel opened, and a slot list that re-derived mid-interaction would change its
   // options under the cursor.
   const [book] = useState(() => keeperBook(owned))
-  const [slots, setSlots] = useState<Loadout>(() => loadLoadout(owned, book))
+  const [slots, setSlots] = useState<Loadout>(() => loadLoadout(owned, birth, book))
   const [picking, setPicking] = useState<number | null>(null)
   // The one always-on passive — derived, capped at one, never chosen. Null if the keeper's runes
   // have taught them none, in which case the section renders nothing (an empty frame would assert a
   // trait that is not there).
-  const passive = derivePassive(owned, book)
+  const passive = derivePassive(owned, birth, book)
 
   const bind = (slot: number, moveId: string | null) => {
-    const next = setSlot(owned, slots, slot, moveId, book)
+    const next = setSlot(owned, birth, slots, slot, moveId, book)
     setSlots(next)
     saveLoadout(next)
     setPicking(null)
@@ -2711,7 +2723,7 @@ function LoadoutTab() {
         const bound = slots[i] ?? null
         const spec = bound ? castForMove(bound) : null
         const open = picking === i
-        const options = eligibleMoves(owned, kind, book)
+        const options = eligibleMoves(owned, birth, kind, book)
         return (
           <div key={i}>
           <div className="rounded border border-white/10 bg-white/[0.03]">
@@ -5278,14 +5290,21 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // 2026-08-26 ruling the passive holds no key and is not a slot, so it is SEEDED here and refreshed
   // with the loadout on any rune change, rather than being set by a `stanceChange` from a keypress.
   const derivePassiveSpec = (): CastSpec | null => {
-    const owned = loadRuneInventory().owned
-    const p = derivePassive(owned, keeperBook(owned))
+    // ⚠ ONE inventory read, so `owned` and `birth` cannot disagree. The birth-exclusive band
+    // (2026-08-26) means a keeper who OWNS Star but was not BORN Star must not derive Flame
+    // Manipulation — reading the two from separate calls would be two observations of a mutable
+    // store pretending to be one.
+    const inv = loadRuneInventory()
+    const p = derivePassive(inv.owned, inv.birth, keeperBook(inv.owned))
     return p ? castForMove(p.id) : null
   }
   const stance = useRef<CastSpec | null>(derivePassiveSpec())
   const surge = useRef<{ until: number; mult: number } | null>(null)
   const infusion = useRef<{ until: number; mult: number } | null>(null)
-  const loadout = useRef<(string | null)[]>(loadLoadout(loadRuneInventory().owned, keeperBook(loadRuneInventory().owned)))
+  const loadout = useRef<(string | null)[]>((() => {
+    const inv = loadRuneInventory()
+    return loadLoadout(inv.owned, inv.birth, keeperBook(inv.owned))
+  })())
   /**
    * The rune inventory changed (today only `/rune`; tomorrow the Passage). Re-resolve rather than
    * patch: `loadLoadout` re-validates every bind against what is now owned, so a dropped rune takes
@@ -5296,7 +5315,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   useEffect(() => {
     if (runeTickSeen.current === runeTick) return
     runeTickSeen.current = runeTick
-    loadout.current = loadLoadout(loadRuneInventory().owned, keeperBook(loadRuneInventory().owned))
+    {
+      const inv = loadRuneInventory()
+      loadout.current = loadLoadout(inv.owned, inv.birth, keeperBook(inv.owned))
+    }
     // The passive is derived from the same runes, so a rune change can open, close or swap it — keep
     // the always-on stance in step with the loadout it is derived alongside.
     stance.current = derivePassiveSpec()
@@ -5577,13 +5599,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // stowing to use — gating it behind the weapon would make the cast layer an accessory to the
       // thing canon says cannot answer half the world.
       if (pendingCast.current >= 0) { const slot = pendingCast.current; pendingCast.current = -1; castSlot(slot, g) }
-      // Mana regen. ⚠ Gated on `pausesRecovery`, NOT on `stance.current` being set — since the
-      // 2026-08-26 ruling the always-on passive is a free trait (no passive sets `pausesRecovery`),
-      // so it is present every frame and must NOT pause regen. Gating on presence would pause regen
-      // forever. If a costed stance ever returns, its spec flips this flag and the gate already works.
+      // Mana regen. ⚠ SCALES the world's own rate, NEVER gates on `stance.current` being set — the
+      // passive is always-on, so it is present every frame and a presence gate would pause regen
+      // forever. The cost is per-MOVE now (Barrier/Bulwark drain, RULED 2026-08-26) and expressed as
+      // a multiplier so one number means the same thing here and in play3d, whose base rate is 60×
+      // smaller. Free passives leave it at 1 and this line is a no-op for them.
       {
         const m = mana.current
-        if (m && !stance.current?.pausesRecovery) m.cur = Math.min(m.max, m.cur + m.regen * dt)
+        if (m) m.cur = Math.min(m.max, m.cur + m.regen * (stance.current?.regenMult ?? 1) * dt)
         const nowMs = performance.now()
         if (surge.current && nowMs >= surge.current.until) surge.current = null
         if (infusion.current && nowMs >= infusion.current.until) infusion.current = null

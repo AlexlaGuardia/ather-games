@@ -66,6 +66,9 @@ const STATES = ['Solid', 'Compact', 'Expanding', 'Ignite', 'Flow', 'Scatter', 'B
 
 const TIER: Record<MoveTier, { label: string; tint: string }> = {
   passive:  { label: 'PASSIVE',  tint: '#8fb4d9' },
+  // A trait is runeless and always on — no socket, no gate, nothing to equip. Warm/earthy on purpose:
+  // it reads as something the keeper simply HAS, next to the cool blue of a passive they run.
+  trait:    { label: 'TRAIT',    tint: '#c9a87c' },
   tactical: { label: 'TACTICAL', tint: '#7fe3c8' },
   ultimate: { label: 'SIGNATURE', tint: '#e8c46a' },
   combo:    { label: 'COMBO',    tint: '#d79ae0' },

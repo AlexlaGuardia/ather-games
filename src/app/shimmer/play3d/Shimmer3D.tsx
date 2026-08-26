@@ -4152,14 +4152,16 @@ export default function Shimmer3D() {
       const now = Date.now()
       const max = (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus)
       if (manaRef.current.current < max) {
-        // ★ A HELD STANCE PAUSES MANA RECOVERY (runes.md, the mana economy) — the double edge that
-        // makes a passive a stance rather than a free permanent buff. Moisture Gathering is the one
-        // exception canon writes: it draws water from the air, so it produces its own slower trickle
-        // instead of the normal regen. Both lines are true at once, and it is still a net downgrade.
+        // ★ THE COST IS PER-MOVE, NOT PER-TIER (RULED 2026-08-26, Alex — world-wide). The blanket law
+        // "holding any passive pauses recovery" is retired; a passive is a layer you wear. Only the
+        // shell pair (Barrier/Bulwark) drains, because canon writes that drain on the page.
+        //
+        // ⚠ ONE MULTIPLIER, NOT AN ABSOLUTE. This was a ternary over an absolute `manaPerSec` that
+        // stood IN for normal regen, so once nothing paused, Moisture Gathering's trickle became
+        // unreachable — a number that shipped, read correctly, and could never apply. It was also
+        // 60× mis-scaled between the two worlds the moment it did apply. See `CastSpec.regenMult`.
         const stance = stanceRef.current
-        const perSec = stance?.pausesRecovery
-          ? stance.manaPerSec
-          : MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now)
+        const perSec = MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now) * (stance?.regenMult ?? 1)
         if (perSec > 0) {
           manaRef.current.current = Math.min(max, manaRef.current.current + perSec * 0.5)  // 0.5s tick
           setManaFrac(manaRef.current.current / max)
@@ -5330,12 +5332,12 @@ export default function Shimmer3D() {
     // The book is re-read here rather than held from mount: this runs on every rune change, and a
     // scroll bought in the Passage between two rune changes must be in hand by the next resolve.
     bookRef.current = keeperBook(runeInvRef.current.owned)
-    castLoadoutRef.current = loadLoadout(runeInvRef.current.owned, bookRef.current)
+    castLoadoutRef.current = loadLoadout(runeInvRef.current.owned, runeInvRef.current.birth, bookRef.current)
     castCdRef.current = ALL_BANDS.map(() => 0)
     // The passive is always-on and DERIVED (capped at one), never cast — since Alex's 2026-08-26
     // ruling it holds no key, so it is applied HERE from the runes rather than set by a keypress. Its
     // resist / castMult / moveMult live from load; a null passive leaves the neutral refs.
-    const pspec = (() => { const p = derivePassive(runeInvRef.current.owned, bookRef.current); return p ? castForMove(p.id) : null })()
+    const pspec = (() => { const p = derivePassive(runeInvRef.current.owned, runeInvRef.current.birth, bookRef.current); return p ? castForMove(p.id) : null })()
     stanceRef.current = pspec; resistRef.current = pspec?.resist ?? 0; castMultRef.current = pspec?.castMult ?? 1; stanceMoveRef.current = pspec?.moveMult ?? 1
     surgeRef.current = { until: 0, mult: 1 }; infusionRef.current = { until: 0, mult: 1 }
     fieldsRef.current = []; conjuredRef.current = []; statusRef.current = emptyBag()
@@ -5359,7 +5361,7 @@ export default function Shimmer3D() {
         const rn = RUNES.find(r => r.id === bornWith)?.name ?? 'your rune'
         // Half the carousel currently opens a book with no move the sim can run — that is the real
         // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
-        const bound = loadLoadout(inv.owned, bookRef.current).filter((m) => m && isBuilt(m)).length
+        const bound = loadLoadout(inv.owned, inv.birth, bookRef.current).filter((m) => m && isBuilt(m)).length
         const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (Z/C)` : ''
         setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
       }
@@ -6777,7 +6779,7 @@ export default function Shimmer3D() {
             const rn = RUNES.find(r => r.id === id)?.name ?? 'your rune'
             // Half the carousel currently opens a book with no move the sim can run — that is the real
             // authoring gap (moves.md), so the banner tells the truth instead of promising a cast.
-            const bound = loadLoadout(inv.owned, keeperBook(inv.owned)).filter((m) => m && isBuilt(m)).length
+            const bound = loadLoadout(inv.owned, inv.birth, keeperBook(inv.owned)).filter((m) => m && isBuilt(m)).length
             const castHint = bound > 0 ? ` · ${bound} move${bound > 1 ? 's' : ''} in hand (Z/C)` : ''
             setBanner(`Born of ${rn} — ${affinityRef.current.label || 'find Gregory in the glade'}${castHint}`)
           }}

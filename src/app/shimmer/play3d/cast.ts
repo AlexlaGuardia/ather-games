@@ -52,7 +52,7 @@ import type { StatusKind } from '../engine/statuses'
 export type CastArchetype =
   | 'projectile'  // a travelling bolt: damage on contact (chains if `chain` > 0)
   | 'restore'     // instant self-heal
-  | 'stance'      // a passive — always-on and DERIVED since 2026-08-26 (derivePassive), no key, no cost
+  | 'stance'      // a passive — always-on and DERIVED since 2026-08-26 (derivePassive), no key; MOST cost nothing
   | 'surge'       // a short self-buff burst (speed / evasion)
   | 'field'       // SYSTEM 1 — a persistent area entity placed at the aim point (field-effects.ts)
   | 'terrain'     // SYSTEM 2 — runtime terrain raised at the aim point (conjured-terrain.ts)
@@ -83,17 +83,39 @@ export interface CastSpec {
   // stance
   /** fraction of incoming damage the held stance absorbs (0–1) */
   resist: number
-  /** movement multiplier while held (Iron Skin refuses to move under a hit) */
+  /**
+   * Movement multiplier while held (Iron Skin refuses to move under a hit).
+   * ★ For Iron Skin this IS its double edge — canon's *"binds your footing"*, the cost that replaced
+   * the retired blanket recovery pause. A cost you cannot feel is a cost that was deleted, so this
+   * is tuned to be legible in the hand, not decorative.
+   */
   moveMult: number
   /** cast damage multiplier while held (Flame Manipulation shapes fire by instinct) */
   castMult: number
-  /** mana per second the stance itself produces (Moisture Gathering). ⚠ Only READ where a stance
-   *  pauses recovery — moot since 2026-08-26 made passives free/always-on; kept for a future cost model. */
-  manaPerSec: number
-  /** ⚠ DORMANT since 2026-08-26. Was "holding a passive PAUSES mana recovery" — the double edge of a
-   *  HELD stance. Alex ruled the passive always-on and free, so no move sets this now (BASE = false);
-   *  the runtime still honours it, so re-introducing a costed stance only needs this flag set true. */
-  pausesRecovery: boolean
+  /**
+   * ── THE ONE MANA-ECONOMY AXIS OF A WORN PASSIVE (2026-08-26) ──────────────────────────────────
+   * A MULTIPLIER on whatever the world's own base mana regen is, while this passive is worn.
+   *   `1` = free (the overwhelming majority) · `<1` = a drain · `>1` = it feeds you · `0` = the old
+   *   full pause, still expressible and still honoured.
+   *
+   * ★ IT REPLACED AN ABSOLUTE `manaPerSec` + A `pausesRecovery` FLAG, AND THE REASON IS A MEASURED
+   * BUG, NOT TIDINESS. The two hosts do not share a mana scale: play3d regenerates **1/60 per sec**
+   * (`MANA_REGEN_PER_SEC` — "1 mana per minute by design", mana is a real budget) and the voxel world
+   * **1 per sec**. That is a **60× difference**, so one absolute number cannot mean the same thing in
+   * both: Moisture Gathering's 0.8/s was ~0.8× base in the voxel world and ~48× base in play3d, which
+   * is not a trickle, it is infinite mana. It never showed up because the value was unreachable until
+   * today (it was only ever read where a passive PAUSED, and nothing paused). A multiplier is scale-free
+   * and lands correctly in both.
+   *
+   * ⚠ AND A HARD PAUSE CANNOT SURVIVE THE 08-26 REDESIGN AS-WRITTEN. Canon keeps the drain on
+   * Barrier/Bulwark, but a passive is now ALWAYS-ON, derived and undroppable — so "pauses recovery"
+   * would mean a Barrier keeper never regenerates mana again, with no way to take it off. Canon's own
+   * word is **drain**, not stop (novel Ch04/07/15/18: *"the slow ebb, the turtle running out of air"*),
+   * and Ch04's premise is the enemy USING UP the man inside the shell over time — which is a keeper
+   * who still recovers, just far too slowly to outlast the pressure. A value below 1 says exactly
+   * that; a 0 would say something canon does not. Magnitudes are Jin's (ruled), the drain is canon's.
+   */
+  regenMult: number
   // surge / infusion — both are a timed multiplier on the caster
   /** seconds the surge (or weapon infusion) lasts */
   surgeSecs: number
@@ -145,7 +167,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   manaCost: 0, cooldownMs: 0,
   damage: 0, projSpeed: 0, projLife: 0, chain: 0, chainRange: 0,
   heal: 0,
-  resist: 0, moveMult: 1, castMult: 1, manaPerSec: 0, pausesRecovery: false,
+  resist: 0, moveMult: 1, castMult: 1, regenMult: 1,
   surgeSecs: 0, surgeMult: 1,
   castRange: 0, areaSize: 0, areaSecs: 0,
   fieldDps: 0, fieldHps: 0, fieldStopsShots: false,
@@ -157,15 +179,22 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
 type Build = Partial<CastSpec> & { archetype: CastArchetype }
 
 const BUILDS: Record<string, Build> = {
-  // ── Passives → stances. Held; each pauses mana recovery (runes.md's mana economy). ────────────
-  barrier:   { archetype: 'stance', resist: 0.35, cooldownMs: 500 },
-  bulwark:   { archetype: 'stance', resist: 0.55, moveMult: 0.9, cooldownMs: 500 },
+  // ── Passives → stances. Worn, always-on. The COST is per-move now, not per-tier (2026-08-26). ──
+  // The shell pair is where canon put the drain, so they are the two that pay in mana.
+  // The shell pair is where canon put the drain. Worn and undroppable, so these are sized as a slow
+  // ebb rather than a stop: you still recover, too slowly to outlast sustained pressure. That IS Ch04.
+  barrier:   { archetype: 'stance', resist: 0.35, cooldownMs: 500, regenMult: 0.4 },
+  bulwark:   { archetype: 'stance', resist: 0.55, moveMult: 0.9, cooldownMs: 500, regenMult: 0.15 },
+  // ⊕ birth-exclusive (Star-born). Free — Veyra shapes fire by instinct; instinct costs nothing.
   'flame-manipulation': { archetype: 'stance', castMult: 1.3, cooldownMs: 500 },
-  // The one stance that FEEDS you: canon has it drawing water from the air over time. It still pauses
-  // ordinary recovery (it is a passive) but produces its own slower trickle — held, you gain less than
-  // standing idle would give you, which is the honest reading of both lines at once.
-  'moisture-gathering': { archetype: 'stance', manaPerSec: 0.8, cooldownMs: 500 },
-  'iron-skin': { archetype: 'stance', resist: 0.45, moveMult: 0.85, cooldownMs: 500 },
+  // ⊕ birth-exclusive (Fluid-born). The one passive that FEEDS you: canon has it drawing water from
+  // the air over time. Free AND always-on since 08-26, so it now LIFTS ordinary regen instead of
+  // replacing it — the first time this number has ever reached the game (see `regenMult`).
+  'moisture-gathering': { archetype: 'stance', regenMult: 1.6, cooldownMs: 500 },
+  // Pays in FOOTING, not mana — canon's "binds your footing", and Alex named it one of the one or two
+  // passives that change how the player moves. Deepened 0.85 → 0.7 the day it became the whole cost:
+  // at 0.85 the drawback was inside the noise floor of ordinary movement, so it was a cost on paper only.
+  'iron-skin': { archetype: 'stance', resist: 0.45, moveMult: 0.7, cooldownMs: 500 },
   'bind-mastery': { archetype: 'unbuilt', why: 'gatecraft + manatech — no runtime system yet' },
   'herbal-knowledge': { archetype: 'unbuilt', why: 'out-of-combat medicine; no combat behaviour' },
 
@@ -487,9 +516,25 @@ export const BAND_KEYS: readonly string[] = SLOT_KEYS
  * The parameter is NOT optional. An optional book would default every un-updated call site back to
  * the old, wrong answer — silently, and only in the places nobody remembered to change. Required
  * means the compiler walks the call sites for me, which is the whole reason to take the churn.
+ *
+ * ── ★ AND `birth` IS REQUIRED FOR EXACTLY THE SAME REASON (2026-08-26) ────────────────────────
+ * The BIRTH-EXCLUSIVE BAND gates who may hold a move (`KeeperMove.birthExclusive`). It is enforced
+ * HERE, in the one filter every band passes through, rather than in `derivePassive` — today both
+ * members are passives and `derivePassive` would cover them, but Alex ruled the band also carries
+ * *"unique hidden tacticals and or signatures"*, and a gate placed where only today's members live
+ * is a guard that cannot see its own next member.
+ *
+ * ⚠ IT IS DELIBERATELY NOT DERIVED FROM `owned[0]`. `rune-inventory.ts` does guarantee
+ * `owned[0] === birth`, so reading position would work — and would make an ORDERING contract
+ * load-bearing inside a function that otherwise treats `owned` as a SET. Every hand-built array in
+ * a test and every call site that filters or concats runes would silently start deciding
+ * birth-exclusivity by accident. An explicit null is a keeper with no birth rune, which is a real
+ * state (the ritual is unfinished) and correctly holds nothing in the band.
  */
-export function eligibleMoves(owned: string[], kind: SlotKind, book: Book): KeeperMove[] {
-  const known = knownMoves(owned).filter((m) => m.tier === kind && hasLearned(book, m.id))
+export function eligibleMoves(owned: string[], birth: string | null, kind: SlotKind, book: Book): KeeperMove[] {
+  const known = knownMoves(owned).filter(
+    (m) => m.tier === kind && hasLearned(book, m.id) && (!m.birthExclusive || m.birthExclusive === birth),
+  )
   return [...known].sort((a, b) => Number(isBuilt(b.id)) - Number(isBuilt(a.id)))
 }
 
@@ -506,8 +551,8 @@ export function eligibleMoves(owned: string[], kind: SlotKind, book: Book): Keep
  * this, not a literal. Requires the book for the same reason `eligibleMoves` does — a rune is
  * identity, a move is learned.
  */
-export function derivePassive(owned: string[], book: Book): KeeperMove | null {
-  return eligibleMoves(owned, 'passive', book)[0] ?? null
+export function derivePassive(owned: string[], birth: string | null, book: Book): KeeperMove | null {
+  return eligibleMoves(owned, birth, 'passive', book)[0] ?? null
 }
 
 /**
@@ -515,10 +560,10 @@ export function derivePassive(owned: string[], book: Book): KeeperMove | null {
  * actually run, and never the same move twice. Slots with nothing to put in them stay null — an
  * empty ultimate slot is the coverage gap rendered, not a bug.
  */
-export function defaultLoadout(owned: string[], book: Book): (string | null)[] {
+export function defaultLoadout(owned: string[], birth: string | null, book: Book): (string | null)[] {
   const used = new Set<string>()
   return ALL_BANDS.map((kind) => {
-    const pick = eligibleMoves(owned, kind, book).find((m) => !used.has(m.id))
+    const pick = eligibleMoves(owned, birth, kind, book).find((m) => !used.has(m.id))
     if (pick) used.add(pick.id)
     return pick?.id ?? null
   })
@@ -531,8 +576,8 @@ export function defaultLoadout(owned: string[], book: Book): (string | null)[] {
  * sockets in one positional array, so a slot number past the cast bar is a stance socket, not an
  * out-of-range read. Narrowing this back to `CAST_SLOTS` silently makes every stance bind illegal.
  */
-export function canSlot(owned: string[], slot: number, moveId: string, book: Book): boolean {
+export function canSlot(owned: string[], birth: string | null, slot: number, moveId: string, book: Book): boolean {
   const kind = ALL_BANDS[slot]
   if (!kind) return false
-  return eligibleMoves(owned, kind, book).some((m) => m.id === moveId)
+  return eligibleMoves(owned, birth, kind, book).some((m) => m.id === moveId)
 }

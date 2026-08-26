@@ -18,6 +18,7 @@
 import { castForMove, isBuilt, defaultLoadout, eligibleMoves, canSlot, derivePassive, CAST_SLOTS, SLOT_KEYS,
          ALL_BANDS, BAND_KEYS, NO_CAST } from './cast'
 import { KEEPER_MOVES } from './keeper-moves'
+import { RUNES } from './birth/runes.data'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 
 // A keeper who has learned everything. These asserts are about the RUNE→slot chain, so the book is
@@ -25,6 +26,24 @@ import { EMPTY_BOOK, type Book } from './scroll-market'
 // scroll-market.test.ts. ⚠ Do not "simplify" this into cast.ts as a default: an optional book is
 // how the old, wrong answer (runes alone grant moves) would creep back in.
 const ALL: Book = { learned: KEEPER_MOVES.map((m) => m.id) }
+
+// ── Test keepers are described by their rune list, BIRTH RUNE FIRST ────────────────────────────
+// These wrappers supply the `birth` argument the cast layer gained on 2026-08-26 (the birth-exclusive
+// band) from the head of the rune list — the same invariant `rune-inventory.ts` › `normalize()`
+// enforces for a real keeper (`owned[0] === birth`).
+//
+// ⚠ THE WRAPPER IS A TEST CONVENIENCE AND `cast.ts` DELIBERATELY DOES NOT DO THIS. Production takes
+// `birth` explicitly, because making an ORDERING contract load-bearing inside functions that treat
+// `owned` as a SET would let any filter/concat of runes silently re-decide birth-exclusivity. Here
+// the list IS the description of a keeper, so reading the head is honest rather than incidental.
+const bornOf = (owned: string[]): string | null => owned[0] ?? null
+const eligibleFor = (owned: string[], kind: Parameters<typeof eligibleMoves>[2], book: Book) =>
+  eligibleMoves(owned, bornOf(owned), kind, book)
+const defaultFor = (owned: string[], book: Book) => defaultLoadout(owned, bornOf(owned), book)
+const passiveFor = (owned: string[], book: Book) => derivePassive(owned, bornOf(owned), book)
+const canSlotFor = (owned: string[], slot: number, id: string, book: Book) =>
+  canSlot(owned, bornOf(owned), slot, id, book)
+
 import { grantRune, revokeRune, setBirthRune, EMPTY_INVENTORY } from './rune-inventory'
 import { spawnField, tickFields, expireFields, contains, containsVolume, blocksShotAt, blocksShotAtVolume,
          resetFieldIds, MAX_FIELDS, FIELD_HEIGHT, FIELD_UNDERBITE, type Field } from '../engine/field-effects'
@@ -72,12 +91,26 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     if (s.archetype === 'projectile' && !(s.damage > 0 && s.projSpeed > 0 && s.projLife > 0)) wrong.push(m.id)
     if (s.archetype === 'restore' && !(s.heal > 0)) wrong.push(m.id)
     if (s.archetype === 'surge' && !(s.surgeSecs > 0 && s.surgeMult > 1)) wrong.push(m.id)
-    // ⚠ INVERTED 2026-08-26 (Alex's ruling). This used to flag a stance that does NOT pause recovery
-    // as "a free permanent buff". That is now exactly what the passive IS: always-on, off the bar, no
-    // toggle, no cost. So the guard is the other way round — a stance that pauses recovery would pause
-    // it FOREVER now that it is always-on (the broken-economy bug the ruling exists to avoid). No
-    // passive may set `pausesRecovery`.
-    if (s.archetype === 'stance' && s.pausesRecovery) wrong.push(m.id)
+    // ── ★ RE-SCOPED 2026-08-26 (the SECOND ruling): the cost is per-MOVE, not per-tier ───────────
+    // This assert has now been written three ways in two days, and the shape it settled on is the
+    // only one that is a claim about the WORLD rather than about the current design:
+    //   v1 "a stance that does not pause recovery is a free permanent buff"  → wrong once passives
+    //      became always-on and free, which is what most of them now are.
+    //   v2 "NO stance may pause recovery"                                     → wrong once canon kept
+    //      the drain on Barrier/Bulwark. It would have gone red on correct code.
+    //   v3 (here) a worn passive may not ZERO recovery, whatever it costs.
+    // v3 survives both rulings because it does not encode which moves are costed — it encodes the
+    // thing that is broken either way: the passive is ALWAYS-ON and UNDROPPABLE, so a `regenMult` of
+    // 0 is not a trade a player can decline, it is a keeper who never regenerates mana again.
+    // A drain (0 < mult < 1) is canon's "slow ebb" and passes; a stop does not.
+    if (s.archetype === 'stance' && s.regenMult <= 0) wrong.push(m.id)
+    // ★ AND A CANON COST/BENEFIT MUST ACTUALLY REACH THE GAME. `drainsWhileWorn` / `feedsWhileWorn`
+    // are the canon FACTS (keeper-moves.ts); the rate is Jin's. Asserting the fact against the
+    // DIRECTION of the number — never against the number — catches a spec that silently drifts back
+    // to free without being a mirror of the constant, which could only ever fail by being edited.
+    // Moisture Gathering's feed was unreachable for weeks precisely because nothing checked this.
+    if (m.drainsWhileWorn && !(s.regenMult < 1)) wrong.push(`${m.id} (canon says it drains, spec does not)`)
+    if (m.feedsWhileWorn && !(s.regenMult > 1)) wrong.push(`${m.id} (canon says it feeds, spec does not)`)
   }
   chk('built specs carry their archetype numbers', wrong.length === 0, wrong.join())
   chk('Chain Lightning chains (canon: arcs between every target in range)', castForMove('chain-lightning').chain > 0)
@@ -236,8 +269,19 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
         if (!isBuilt(m.id) || m.tier === 'combo') return false
         if (m.tier === 'passive') {
           // reachable = the derive pool for a keeper owning exactly its runes surfaces this passive.
-          return !eligibleMoves([...m.runes], 'passive', ALL).some((x) => x.id === m.id)
+          // ⚠ The keeper must be BORN with the right rune for a birth-exclusive (2026-08-26), so the
+          // hypothetical keeper is born holding the move's own gate where it has one. Passing a null
+          // birth here would report both band members as orphans — a guard failing on correct code.
+          const born = m.birthExclusive ?? m.runes[0] ?? null
+          // ⚠ The hypothetical keeper must OWN the rune they were born with — `normalize()` puts the
+          // birth rune in `owned` for every real keeper, and a fixture that skips it is describing a
+          // person who cannot exist. Same family as an oracle calling past the gate the game uses.
+          const owns = born && !m.runes.includes(born as never) ? [born, ...m.runes] : [...m.runes]
+          return !eligibleMoves(owns, born, 'passive', ALL).some((x) => x.id === m.id)
         }
+        // A trait is reachable by EXISTING — runeless, always on, nothing to bind. It is not
+        // orphaned by having no band; having no band is what a trait IS.
+        if (m.tier === 'trait') return false
         return !ALL_BANDS.includes(m.tier as never)
       })
       .map((m) => `${m.name} (${m.tier})`)
@@ -245,12 +289,76 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
       orphaned.length === 0)
   }
 
+  // ── ★ THE BIRTH-EXCLUSIVE BAND, BOTH DIRECTIONS (RULED 2026-08-26) ────────────────────────────
+  // The structural guards above ask whether the band is well-FORMED. This asks whether it BITES,
+  // and the negative is the whole point: canon's claim is that Flame Manipulation cannot be bought
+  // or taught, so OWNING Star must not be enough. A test that only checked the positive would pass
+  // against a build with no gate at all.
+  {
+    const STAR_BORN = ['star']
+    const LIFE_BORN_WITH_STAR = ['life', 'star']   // head = birth rune, per `bornOf`
+    chk('a Star-born keeper derives Flame Manipulation',
+      derivePassive(STAR_BORN, 'star', ALL)?.id === 'flame-manipulation')
+    chk('★ a keeper who OWNS Star but was not BORN Star cannot hold it — not at any price',
+      !eligibleMoves(LIFE_BORN_WITH_STAR, 'life', 'passive', ALL).some((m) => m.id === 'flame-manipulation'))
+    chk('same for Moisture Gathering — Fluid-born only',
+      derivePassive(['fluid'], 'fluid', ALL)?.id === 'moisture-gathering' &&
+      !eligibleMoves(['life', 'fluid'], 'life', 'passive', ALL).some((m) => m.id === 'moisture-gathering'))
+    // A keeper with no birth rune (the ritual unfinished) is a real state, not a crash, and holds
+    // nothing in the band — `null` must read as "born of nothing", never as a wildcard that matches.
+    chk('a keeper with no birth rune holds no band member',
+      !eligibleMoves(['star', 'fluid'], null, 'passive', ALL).some((m) => m.birthExclusive))
+    // ── ★ CANON'S NO-RUNE TEST, ENCODED AS THE BIDIRECTIONAL DERIVATION IT IS ──────────────────
+    // `runes.md`: **no rune → Trait. A rune → Passive.** Both directions, because the bug that
+    // actually shipped ran one way (Herbal Knowledge: runeless, tiered `passive`) and the tempting
+    // repair runs the other (tier something `trait` to get it out of a pool).
+    //
+    // ⚠ WRITTEN THIS WAY AFTER THE FIRST VERSION FAILED ITS OWN MUTATION TEST. That one asserted
+    // Herbal Knowledge never enters the passive derive pool — and `knownMoves()` already drops every
+    // runeless move, so it was TRUE no matter what tier the row carried. Reverting the fix left it
+    // green. An assert that cannot fail is decoration; this one names offenders and fails both ways.
+    {
+      const misfiled = KEEPER_MOVES
+        .filter((m) => (m.runes.length === 0) !== (m.tier === 'trait'))
+        .map((m) => `${m.name} (${m.runes.length === 0 ? 'runeless' : `${m.runes.length} rune(s)`}, tier ${m.tier})`)
+      chk(`no rune → Trait, a rune → Passive${misfiled.length ? ` — MISFILED: ${misfiled.join(', ')}` : ''}`,
+        misfiled.length === 0)
+    }
+  }
+
+  // ── ★ A BIRTH-EXCLUSIVE MUST NAME A RUNE A KEEPER CAN ACTUALLY BE BORN WITH (2026-08-26) ──────
+  // The orphan guard above CANNOT catch this, and that is why this is separate rather than folded in:
+  // it builds its hypothetical keeper from the move's own gate, so a birth-exclusive is reachable by
+  // construction and the assert is satisfied no matter which rune the gate names. It is a guard that
+  // can fail, does discriminate, and simply does not constrain the axis that matters here.
+  //
+  // The axis that matters: `runes.data.ts` marks some runes `lostState` — real runes a character can
+  // hold (Kael is Static-born) but which are deliberately NOT offered on the birth carousel. A move
+  // gated on one is unreachable by every player who will ever exist, and nothing else in the suite
+  // would say so. It NAMES the offender; a count would invite the cheapest green.
+  {
+    const unreachable = KEEPER_MOVES
+      .filter((m) => m.birthExclusive)
+      .filter((m) => {
+        const r = RUNES.find((x) => x.id === m.birthExclusive)
+        return !r || r.lostState === true
+      })
+      .map((m) => `${m.name} → ${m.birthExclusive}`)
+    chk(`every birth-exclusive names a birthable rune${unreachable.length ? ` — UNREACHABLE: ${unreachable.join(', ')}` : ''}`,
+      unreachable.length === 0)
+    // And the band must not have silently swallowed the registry: exactly the two canon wrote.
+    // ⚠ This one is a COUNT on purpose and it is the declared authoring debt (2 of 17), so it is the
+    // row that goes red the day a 3rd is authored — which is the moment canon wants a human to look.
+    chk('the birth-exclusive band holds the 2 members canon has written',
+      KEEPER_MOVES.filter((m) => m.birthExclusive).length === 2)
+  }
+
   // The bar's kinds must stay a subset of canon's non-combo tiers, and hold no duplicates it cannot
   // justify. This constrains the shape WITHOUT restating it, so the ruled collapse passes untouched.
   chk('every band kind is a real canon tier', ALL_BANDS.every((k) => KEEPER_MOVES.some((m) => m.tier === k)))
 
   // ── ★ SLOT INDICES ARE DERIVED, NEVER LITERAL (2026-08-25, play lane) ─────────────────────────
-  // Every assert below used to name its slot by number — `life[0]`, `life[3]`, `canSlot(…, 1, …)`,
+  // Every assert below used to name its slot by number — `life[0]`, `life[3]`, `canSlotFor(…, 1, …)`,
   // and a `[null,null,null,null]` shape literal. Those are mirrors of a list that is ABOUT TO MOVE:
   // the ruled 4→2 collapse makes all of them red at once, every one for a CORRECT reason, and the
   // cheapest way to make a wall of red green again is to paste the new numbers in. That is the moment
@@ -266,7 +374,7 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   chk('the bar keeps a tactical slot and a signature slot (the two the ruling keeps)',
     TACTICAL >= 0 && ULTIMATE >= 0)
 
-  const life = defaultLoadout(['life'], ALL)
+  const life = defaultFor(['life'], ALL)
   chk('a Life-born keeper slots Mend', life.includes('mend'))
   chk('...and no ultimate (Healing Grove also needs Barrier)', life[ULTIMATE] === null)
   // (The old "nothing to hold in a passive slot" assert retired 2026-08-26: there is no passive band
@@ -274,18 +382,18 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   //  covered by its own section below.)
   chk('the bar has no passive slot — the passive is off the bar', !ALL_BANDS.includes('passive' as never))
 
-  const lo = defaultLoadout(['barrier'], ALL).filter(Boolean)
+  const lo = defaultFor(['barrier'], ALL).filter(Boolean)
   chk('never slots the same move twice', new Set(lo).size === lo.length)
   {
-    const none = defaultLoadout([], ALL)
+    const none = defaultFor([], ALL)
     chk('an empty book yields an empty loadout, not a crash',
       none.length === ALL_BANDS.length && none.every((x) => x === null))
   }
 
   // Star owns Firewall + Flame Infusion (both unbuilt); adding Freeze must surface Ice Dart first
-  chk('prefers a move the sim can actually run', isBuilt(eligibleMoves(['star', 'freeze'], 'tactical', ALL)[0].id))
+  chk('prefers a move the sim can actually run', isBuilt(eligibleFor(['star', 'freeze'], 'tactical', ALL)[0].id))
 
-  chk('rejects a move whose runes you do not own', !canSlot(['life'], TACTICAL, 'ice-dart', ALL))
+  chk('rejects a move whose runes you do not own', !canSlotFor(['life'], TACTICAL, 'ice-dart', ALL))
   {
     // Any slot that is not a tactical must refuse Mend, which is tactical. Derived so the assert
     // keeps meaning the same thing after the collapse — and it names the case it could not find
@@ -293,55 +401,55 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     const offTier = ALL_BANDS.findIndex((k) => k !== 'tactical')
     chk('the bar still has a non-tactical slot to test the tier gate with', offTier >= 0)
     chk(`rejects a tier/slot mismatch (Mend is tactical, slot ${offTier} is the ${ALL_BANDS[offTier]})`,
-      !canSlot(['life'], offTier, 'mend', ALL))
+      !canSlotFor(['life'], offTier, 'mend', ALL))
   }
-  chk('accepts a legal bind', canSlot(['life'], TACTICAL, 'mend', ALL))
+  chk('accepts a legal bind', canSlotFor(['life'], TACTICAL, 'mend', ALL))
 
   // ── ★ THE BOOK GATES THE SLOT (2026-08-13) ───────────────────────────────────────────────────
   // Carrying the rune is no longer enough — canon rules a move is OBTAINED, and the rune is the
   // filter on the scroll rather than the source of the move. If this pair ever disagrees, the
   // Passage has nothing to sell and the whole scroll economy is decoration.
   chk('★ a move you have not learned cannot be bound, even holding its rune',
-    !canSlot(['life'], TACTICAL, 'mend', EMPTY_BOOK))
+    !canSlotFor(['life'], TACTICAL, 'mend', EMPTY_BOOK))
   chk('★ an unlearned move is not eligible for its slot either',
-    eligibleMoves(['life'], 'tactical', EMPTY_BOOK).length === 0)
+    eligibleFor(['life'], 'tactical', EMPTY_BOOK).length === 0)
   {
-    const kit = defaultLoadout(['life', 'barrier'], EMPTY_BOOK)
+    const kit = defaultFor(['life', 'barrier'], EMPTY_BOOK)
     chk('★ and a keeper with an empty book gets an empty starting kit',
       kit.length === ALL_BANDS.length && kit.every((x) => x === null))
   }
   chk('★ learning just that one move opens exactly it',
-    canSlot(['life'], TACTICAL, 'mend', { learned: ['mend'] }) &&
-    eligibleMoves(['life'], 'tactical', { learned: ['mend'] }).length === 1)
+    canSlotFor(['life'], TACTICAL, 'mend', { learned: ['mend'] }) &&
+    eligibleFor(['life'], 'tactical', { learned: ['mend'] }).length === 1)
 }
 
 // 6. a 2nd rune opens the cross-hatch
 {
-  chk('Life alone does not reach Healing Grove', !defaultLoadout(['life'], ALL).includes('healing-grove'))
-  chk('Life + Barrier does', defaultLoadout(['life', 'barrier'], ALL).includes('healing-grove'))
+  chk('Life alone does not reach Healing Grove', !defaultFor(['life'], ALL).includes('healing-grove'))
+  chk('Life + Barrier does', defaultFor(['life', 'barrier'], ALL).includes('healing-grove'))
 }
 
 // 6b. the passive is DERIVED, always-on, capped at one (RULED 2026-08-26, Alex)
 {
   // capped at one is guaranteed by the return type (KeeperMove | null) — these assert the DERIVATION.
-  const bp = derivePassive(['barrier'], ALL)
+  const bp = passiveFor(['barrier'], ALL)
   chk('a barrier keeper derives a passive', bp !== null)
   chk('...and it is a BUILT one, not the always-eligible unbuilt Herbal Knowledge (built sorts first)',
     !!bp && isBuilt(bp.id))
   chk('...and it is one the keeper\'s runes actually make eligible',
-    !!bp && eligibleMoves(['barrier'], 'passive', ALL).some((x) => x.id === bp.id))
+    !!bp && eligibleFor(['barrier'], 'passive', ALL).some((x) => x.id === bp.id))
   chk('a keeper who has learned nothing derives no passive (empty book → null)',
-    derivePassive(['barrier'], EMPTY_BOOK) === null)
+    passiveFor(['barrier'], EMPTY_BOOK) === null)
   // ⚠ built-first is the whole ranking, and it only BITES when the pool is MIXED — a barrier keeper's
   // passives are all built, so order cannot surface an unbuilt one there (a reverse mutation slips
   // past). star+static is the discriminating fixture: Flame Manipulation (star) is BUILT, Flame Cloak
   // (star+static) is UNBUILT, both eligible — so built-first must return the built one, and reversing
   // the sort makes this assert red.
   {
-    const mixed = eligibleMoves(['star', 'static'], 'passive', ALL)
+    const mixed = eligibleFor(['star', 'static'], 'passive', ALL)
     chk('fixture: star+static has BOTH a built and an unbuilt passive eligible (or the assert is vacuous)',
       mixed.some((x) => isBuilt(x.id)) && mixed.some((x) => !isBuilt(x.id)))
-    const p = derivePassive(['star', 'static'], ALL)
+    const p = passiveFor(['star', 'static'], ALL)
     chk('built-first: the derived passive is the BUILT one when the pool mixes built and unbuilt',
       !!p && isBuilt(p.id))
   }

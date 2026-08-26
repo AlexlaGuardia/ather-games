@@ -12,6 +12,22 @@ import type { Book } from './scroll-market'
 
 /** This file is about STORED CHOICE, so the book is held open — see cast.test.ts for its gate. */
 const ALL: Book = { learned: KEEPER_MOVES.map((m) => m.id) }
+
+// ── Test keepers are described by their rune list, BIRTH RUNE FIRST ────────────────────────────
+// These wrappers supply the `birth` argument the cast layer gained on 2026-08-26 (the birth-exclusive
+// band) from the head of the rune list — the same invariant `rune-inventory.ts` › `normalize()`
+// enforces for a real keeper (`owned[0] === birth`).
+//
+// ⚠ THE WRAPPER IS A TEST CONVENIENCE AND `cast.ts` DELIBERATELY DOES NOT DO THIS. Production takes
+// `birth` explicitly, because making an ORDERING contract load-bearing inside functions that treat
+// `owned` as a SET would let any filter/concat of runes silently re-decide birth-exclusivity. Here
+// the list IS the description of a keeper, so reading the head is honest rather than incidental.
+const bornOf = (owned: string[]): string | null => owned[0] ?? null
+const eligibleFor = (owned: string[], kind: Parameters<typeof eligibleMoves>[2], book: Book) =>
+  eligibleMoves(owned, bornOf(owned), kind, book)
+const defaultFor = (owned: string[], book: Book) => defaultLoadout(owned, bornOf(owned), book)
+const passiveFor = (owned: string[], book: Book) => derivePassive(owned, bornOf(owned), book)
+
 import { LOADOUT_KEY, loadLoadout, saveLoadout, setSlot, type Loadout } from './loadout'
 
 let pass = 0
@@ -43,14 +59,16 @@ const store = new Map<string, string>()
  * two-slots-of-one-kind case below testable at all.
  */
 const OWNED = ['barrier', 'star', 'life']
+/** OWNED's head, per the inventory invariant — see the `bornOf` note above. */
+const BIRTH = bornOf(OWNED)
 const reset = () => store.clear()
 
 // ── never chosen vs chosen ────────────────────────────────────────────────────────────────────
 {
   reset()
-  const fresh = loadLoadout(OWNED, ALL)
+  const fresh = loadLoadout(OWNED, BIRTH, ALL)
   ok(fresh.length === ALL_BANDS.length, 'a loadout always has exactly one entry per band slot')
-  ok(JSON.stringify(fresh) === JSON.stringify(defaultLoadout(OWNED, ALL)),
+  ok(JSON.stringify(fresh) === JSON.stringify(defaultFor(OWNED, ALL)),
      'a keeper who never chose gets the starting kit')
 }
 {
@@ -58,10 +76,10 @@ const reset = () => store.clear()
   reset()
   const emptied: Loadout = ALL_BANDS.map(() => null)
   saveLoadout(emptied)
-  const back = loadLoadout(OWNED, ALL)
+  const back = loadLoadout(OWNED, BIRTH, ALL)
   ok(back.every((s) => s === null),
      '★ a saved empty loadout stays empty — clearing a slot is a choice, not a hole to refill')
-  ok(JSON.stringify(back) !== JSON.stringify(defaultLoadout(OWNED, ALL)),
+  ok(JSON.stringify(back) !== JSON.stringify(defaultFor(OWNED, ALL)),
      '★ and is not silently replaced by the default kit')
 }
 
@@ -73,17 +91,17 @@ const reset = () => store.clear()
   // would pass while testing migration, not the unknown-move rejection it names. Two entries routes
   // it through the validate path this assert is about.
   store.set(LOADOUT_KEY, JSON.stringify(['no-such-move', null]))
-  const back = loadLoadout(OWNED, ALL)
+  const back = loadLoadout(OWNED, BIRTH, ALL)
   ok(back[0] === null, '★ a move that no longer exists fails to EMPTY, not to a dead bind')
 }
 {
   reset()
   // A legal loadout, then the runes that made it legal go away.
-  const legal = defaultLoadout(OWNED, ALL)
+  const legal = defaultFor(OWNED, ALL)
   const bound = legal.findIndex((m) => m !== null)
   if (bound >= 0) {
     saveLoadout(legal)
-    const back = loadLoadout([], ALL)   // keeper now holds no runes at all
+    const back = loadLoadout([], null, ALL)   // keeper now holds no runes at all, so no birth rune either
     ok(back[bound] === null, '★ losing the rune unbinds the move it justified')
     ok(back.length === ALL_BANDS.length, 'and the loadout keeps its shape')
   } else {
@@ -94,19 +112,19 @@ const reset = () => store.clear()
 {
   reset()
   store.set(LOADOUT_KEY, '{not json')
-  ok(JSON.stringify(loadLoadout(OWNED, ALL)) === JSON.stringify(defaultLoadout(OWNED, ALL)),
+  ok(JSON.stringify(loadLoadout(OWNED, BIRTH, ALL)) === JSON.stringify(defaultFor(OWNED, ALL)),
      'corrupt JSON reads as never-chosen, not as an empty loadout')
 }
 {
   reset()
   store.set(LOADOUT_KEY, JSON.stringify({ passive: 'barrier' }))   // an older/other shape
-  ok(JSON.stringify(loadLoadout(OWNED, ALL)) === JSON.stringify(defaultLoadout(OWNED, ALL)),
+  ok(JSON.stringify(loadLoadout(OWNED, BIRTH, ALL)) === JSON.stringify(defaultFor(OWNED, ALL)),
      'a non-array save is refused rather than indexed into')
 }
 {
   reset()
   store.set(LOADOUT_KEY, JSON.stringify(['barrier']))   // short save, e.g. from fewer slots
-  const back = loadLoadout(OWNED, ALL)
+  const back = loadLoadout(OWNED, BIRTH, ALL)
   ok(back.length === ALL_BANDS.length, 'a short save is padded to the full slot count')
   ok(back.slice(1).every((s) => s === null), 'and the missing entries read as empty')
 }
@@ -115,18 +133,18 @@ const reset = () => store.clear()
 {
   reset()
   const empty: Loadout = CAST_SLOTS.map(() => null)
-  const kit = defaultLoadout(OWNED, ALL)
+  const kit = defaultFor(OWNED, ALL)
   const move = kit.find((m) => m !== null)!
   const slot = kit.indexOf(move)
 
-  ok(setSlot(OWNED, empty, slot, move, ALL)[slot] === move, 'a legal bind lands in its slot')
-  ok(setSlot(OWNED, empty, slot, 'no-such-move', ALL)[slot] === null,
+  ok(setSlot(OWNED, BIRTH, empty, slot, move, ALL)[slot] === move, 'a legal bind lands in its slot')
+  ok(setSlot(OWNED, BIRTH, empty, slot, 'no-such-move', ALL)[slot] === null,
      'an illegal bind is refused — the caller cannot produce an invalid loadout')
-  ok(setSlot(OWNED, empty, 99, move, ALL).every((s) => s === null), 'an out-of-range slot changes nothing')
-  ok(setSlot(OWNED, empty, -1, move, ALL).every((s) => s === null), 'and so does a negative one')
+  ok(setSlot(OWNED, BIRTH, empty, 99, move, ALL).every((s) => s === null), 'an out-of-range slot changes nothing')
+  ok(setSlot(OWNED, BIRTH, empty, -1, move, ALL).every((s) => s === null), 'and so does a negative one')
 
-  const held = setSlot(OWNED, empty, slot, move, ALL)
-  ok(setSlot(OWNED, held, slot, null, ALL)[slot] === null, 'a slot can be cleared')
+  const held = setSlot(OWNED, BIRTH, empty, slot, move, ALL)
+  ok(setSlot(OWNED, BIRTH, held, slot, null, ALL)[slot] === null, 'a slot can be cleared')
 
 }
 
@@ -156,14 +174,14 @@ const reset = () => store.clear()
 
   // The rule is still exercised end-to-end at the only strength the current shape allows: a legal
   // bind lands where it was asked for, and lands in exactly one place.
-  const tacticals = eligibleMoves(OWNED, 'tactical', ALL)
+  const tacticals = eligibleFor(OWNED, 'tactical', ALL)
   ok(tacticals.length > 0, 'fixture: this keeper knows at least one tactical')
   const t = ALL_BANDS.indexOf('tactical')
   ok(t >= 0, 'fixture: the bar still has a tactical slot to bind into')
 
   const move = tacticals[0].id
   const empty: Loadout = ALL_BANDS.map(() => null)
-  const held = setSlot(OWNED, empty, t, move, ALL)
+  const held = setSlot(OWNED, BIRTH, empty, t, move, ALL)
   ok(held[t] === move, 'the tactical binds to the tactical slot')
   ok(held.filter((s) => s === move).length === 1, '★ exactly one slot holds it')
 
@@ -173,9 +191,9 @@ const reset = () => store.clear()
   // list must NOT contain 'passive' — a passive band would put it back into the stored loadout array,
   // which is exactly what the ruling removed — and the keeper must still HAVE a passive, just not a slot.
   ok(ALL_BANDS.indexOf('passive') === -1, '★ there is no passive band — the passive left the loadout array')
-  const passive = derivePassive(OWNED, ALL)
+  const passive = passiveFor(OWNED, ALL)
   ok(passive !== null, '★ ...but the keeper still has a passive, derived from their runes')
-  ok(passive === null || eligibleMoves(OWNED, 'passive', ALL).some((x) => x.id === passive.id),
+  ok(passive === null || eligibleFor(OWNED, 'passive', ALL).some((x) => x.id === passive.id),
      '★ and the derived passive is one their runes actually make eligible')
 }
 
@@ -185,9 +203,9 @@ const reset = () => store.clear()
   delete (globalThis as unknown as { localStorage?: unknown }).localStorage
   let threw = false
   let kit: Loadout = []
-  try { kit = loadLoadout(OWNED, ALL) } catch { threw = true }
+  try { kit = loadLoadout(OWNED, BIRTH, ALL) } catch { threw = true }
   ok(!threw, '★ no localStorage must not throw — private mode is a keeper, not a crash')
-  ok(JSON.stringify(kit) === JSON.stringify(defaultLoadout(OWNED, ALL)), 'and they still get a kit')
+  ok(JSON.stringify(kit) === JSON.stringify(defaultFor(OWNED, ALL)), 'and they still get a kit')
   let saveThrew = false
   try { saveLoadout(kit) } catch { saveThrew = true }
   ok(!saveThrew, 'saving without a store is a no-op, not a throw')
