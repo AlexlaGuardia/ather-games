@@ -11,6 +11,69 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🐾 Shimmer voxel — **DIRECTION: THE GARDEN SHOULD BE INHABITED, AND CANON RULED THAT A MONTH AGO** (2026-08-26, world lane) · *Last touched 2026-08-26 (world) — direction + canon gap filed, no code*
+
+### Left off — Alex called the shape after looking at Palworld; research says he is asking for canon, not for a departure
+*"the old battle system and even mist might need archived… this game captures the way the creatures should
+spawn, look and battle in the ather, not limited as we have done it so far."*
+
+### Decisions
+- **★★★ THE FEELING HE IS DESCRIBING IS ALREADY LAW AND THE BUILD NEVER SHIPPED IT.**
+  `CANON/game/shimmer-geography.md` › *Where a keeper's spirits live* (RULED 2026-07-30) puts the Home Plot
+  ring **"visible, wandering, underfoot — this is the ring the player *feels*, and it is why the garden reads
+  as inhabited rather than as a menu"**, and elsewhere **"off in the meadow, down at the water, out of sight
+  and entirely real. Not stored. Not asleep. Just not here."** The 08-09 roster ruling doubles it: spirits have
+  **no home regions**, as a positive fact — *"any spirit may be written anywhere in the garden, in any line,
+  forever."* ⚠ **So the mist-patch model is the departure, not the proposal.** 2-3 discrete patches per region
+  is a 2D encounter table wearing a 3D coat, and "reads as a menu" is the exact phrase canon used against it.
+- **★★ WHAT TRAVELS FROM PALWORLD, AND THE ONE THING THAT MUST NOT.** Travels: creatures **roam the visible
+  world** (you see them and walk up, nothing fires at you), a **weighted pool per biome** so rarity is felt
+  rather than announced, and **real-time combat in the world** with the creature fighting beside you. ⛔ Does
+  NOT travel: **capture.** Palworld's loop is *beat it, then own it*. Canon: *"the Grimoire's way is to KNOW a
+  spirit; the collar's way is to OWN one"* — a container word *"would put the keeper on the wrong side of the
+  one line the whole franchise turns on."* **Capture IS the collar.** Flagged loudly because the resemblance is
+  precisely where a build drifts into it by accident, while every other borrowed mechanic is safe.
+- **★ ARCHIVE THE TURN-BASED STACK — AGREED, AND IT IS ALREADY DEAD.** `components/BattleScene.tsx`,
+  `BattleSceneV2.tsx`, `PixiBattle`, `engine/party-battle.ts`, `engine/battle.ts`. Canon replaced turn-based at
+  the mechanics level on 2026-07-04; play3d retired its own path (`Shimmer3D.tsx:7247`) when the freed-vs-forced
+  beat was ruled non-canon. Live references today: the dev `BattleTester` and the 2D `/play` route. **Nothing in
+  voxel3d touches them.** Clean archive, nothing at risk.
+- **★★ DO NOT ARCHIVE MIST — DEMOTE IT, and the distinction is worth the paragraph.** The mist system is four
+  weeks of *ruled* design: ten rosters, the **ground-not-species** doctrine, absolute regional difficulty bands,
+  the per-patch withdrawal ledger, a spar that takes nothing. Under a roaming world it stops being *how you meet
+  a spirit* and becomes what canon actually called it — **where one manifests to spar**. Roaming is the living
+  world; mist is the formal bout. ⚠ Deleting it would throw away a Magii ruling and its build to solve a problem
+  that **demotion** solves, and canon pre-empted the only real objection: *"a Manalotl crossing the Spirit
+  Meadows is not trespassing and is not rare; it simply does not answer meadow-mist."* Roaming and roster
+  exclusivity compose without a new ruling, because the roster keys to the **ground**.
+- **★ THE ONE THING THAT IS NOT OURS, filed 2026-08-26 as `[OPEN]` in `CANON/CANON_GAPS.md` (`309db4c`):** what
+  a **meeting** is. A patch is ruled — manifests to spar, retreats rather than faints, takes nothing. A spirit
+  met **on the road** has no ruled behaviour, and whether it greets, ignores, flees or offers a bout is a fact
+  about what spirits are *like*, on the same axis as the anti-collar thesis. **Not hard-blocked:** placement,
+  density, wander AI, draw budget and despawn radius are Jin's and proceed; only the interaction is parked.
+- **★ PERF IS A DESIGN CONSTRAINT HERE, NOT A LATER PROBLEM.** Alex's profile on the UHD 630: **44 fps, GPU
+  19.4 of 22.9 ms = 84% GPU-bound**, 298 draws, 738k tris, while *every* instrumented game zone totals ~0.5 ms.
+  A populated garden lives or dies on **draw calls**, not on CPU. That is a real argument for billboards over
+  models and for instancing them — and it means "how many spirits can be underfoot" is a rendering budget
+  question before it is a design one. ⚠ `mist.tick` and `seam.tick` are **not** wrapped as profiler zones, so
+  anything added there is invisible; wrap them before tuning a populated world.
+- **★ TODAY'S ART WORK IS THE PREREQUISITE FOR THIS, NOT A CASUALTY OF IT.** The per-species sheet cache, the
+  registry and the billboard were built for *many* creatures — one upload per species, shared across every body
+  — which is exactly what a roaming world needs and what two spirits in a fog patch never justified. The
+  `collar-foes` walker (2D `moveTo` + a host `blocked` probe, plus today's `footing.ts` live-ground seam) is the
+  roaming AI, already written and already terrain-aware.
+
+### Next
+1. **Wait on the `[OPEN]` for the interaction.** Everything below is unblocked meanwhile.
+2. **Three rings, ring 2 first:** wandering spirits about the Home Plot — the ring canon says the player *feels*.
+3. **Wrap `mist` + `seam` as profiler zones** (`VoxelWorld.tsx`, hub's file) so a populated world can be measured.
+4. **Archive the turn-based stack** once `/play` and `BattleTester` are accounted for.
+
+### Files
+Read-only this session. `CANON/game/shimmer-geography.md` (227-250, the three rings; 784-860, the rosters) ·
+`CANON/CANON_GAPS.md` (new `[OPEN]`, athernyx `309db4c`) · `engine/collar-foes.ts` · `voxel3d/mist-pass.ts` ·
+`voxel3d/creature-billboard.ts` · `sprites/registry.ts`
+
 ## 🖼 Shimmer voxel3d — **THE PAINTED SPIRITS GET A BILLBOARD, AND IT IS BUILT TO BE THROWN AWAY** (2026-08-26, world lane) · *Last touched 2026-08-26 (world) — `creature-atlas.ts` + oracle shipped, NOT wired, NOT seen in a browser*
 
 ### Left off — the pure half is in and verified; the THREE wrapper and the wiring are not written
