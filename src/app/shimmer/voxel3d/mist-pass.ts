@@ -44,6 +44,7 @@ import { mistAt, mistPatchesNear, DEFAULT_MIST, type MistPatch } from '../voxel/
 import { zoneAt } from '../voxel/zones'
 import { residentAt, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
 import { createCreatureBody, type CreatureBody } from './creature-billboard'
+import { createPortraitBody, hasPortrait } from './spirit-portrait-body'
 import { speciesArt } from '../sprites/registry'
 import { bodyBox, rayBox } from './aim'
 import { ELEMENT_COLORS } from '../spirits/spirit'
@@ -398,10 +399,19 @@ void main() {
           // and this respects that: an unregistered species keeps the neutral halo instead of
           // wearing some other animal's frames. A wrong creature is worse than a vague one, because
           // only one of the two looks like a bug.
+          // ★ THE CANON PORTRAIT FIRST, THE PIXEL SPRITE AS FALLBACK (2026-08-26, Alex ruled).
+          // The 32×32 sprites were never finished — they are concept, and they render wrong on top
+          // of it (16×16 art in a 32×32 buffer, read at 32). The ten canon base forms ARE finished
+          // and locked, so between an unfinished placeholder that draws as a smear and a locked
+          // painting, the painting wins. `spirit-portrait-body.ts` carries the full reasoning.
+          // The sprite arm stays: it is what a species with no cutout still gets, and it keeps the
+          // "no stand-in when the art is missing" rule above intact for anything neither path has.
           const art = speciesArt(w.form.species)
-          const body = art
-            ? createCreatureBody(w.form.species, { anims: art.anims, palette: art.palette }, { height: PRESENCE_TALL })
-            : null
+          const body = hasPortrait(w.form.species)
+            ? createPortraitBody(w.form.species, { height: PRESENCE_TALL })
+            : art
+              ? createCreatureBody(w.form.species, { anims: art.anims, palette: art.palette }, { height: PRESENCE_TALL })
+              : null
           if (body) {
             body.object.position.set(m.position.x, standAt(w.r.patch) + PRESENCE_TALL / 2, m.position.z)
             // Draws after the halo so the spirit reads as standing IN the glow, not behind it.

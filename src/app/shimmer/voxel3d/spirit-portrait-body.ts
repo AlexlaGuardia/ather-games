@@ -1,0 +1,114 @@
+// ── A wild spirit, wearing its canon portrait ─────────────────────────────────────────────────
+//
+// Implements `CreatureBody` and nothing else, which is the whole point: Alex ruled billboards are
+// placeholders for a future 3D model and that `CreatureBody` is the entire contract, so nothing may
+// branch on what is behind it. This is a second implementation of that interface, not a new kind of
+// thing — the modelled version replaces either of us without a caller noticing.
+//
+// ★ WHY THE PAINTING AND NOT THE PIXEL SPRITE. The 32×32 creature sprites were never finished — they
+// are concept, and they currently render wrong on top of that (16×16 art in a 32×32 buffer, read at
+// 32; see `scripts/sprite-edge-shot.mts`). The canon base forms ARE finished, locked, and canon-
+// approved. Between an unfinished placeholder that draws as a smear and a locked painting, the
+// painting is the better placeholder.
+//
+// ★ A CUTOUT, NOT THE GRIMOIRE'S OVAL, AND THE FRAME IS THE WHOLE DIFFERENCE. In a panel a framed
+// oval reads as a portrait card, which is right. In the world a frame reads as a menu element
+// standing in the grass, and `shimmer-geography.md` rules the ring "visible, wandering, underfoot —
+// why the garden reads as inhabited rather than as a menu". Same art, opposite treatment.
+//
+// ★ AND A CAMERA-FACING QUAD ONLY EVER SHOWS THE FRONT, which is exactly what a portrait is. The
+// pixel sprites' three facings are what a TOP-DOWN game needs; a billboard turns to you by
+// construction, so the front view is not a compromise here. What IS lost is the back view, so the
+// body flips on the horizontal to at least face its own direction of travel.
+
+import * as THREE from 'three'
+import type { CreatureBody } from './creature-billboard'
+import type { Pose } from './creature-atlas'
+
+/** Portrait paths, by species code. Absent = this species has no cutout and the caller falls back. */
+export const PORTRAIT_OF: Readonly<Record<string, string>> = Object.freeze({
+  fox: '/spirits/world/fox.webp',
+  owl: '/spirits/world/owl.webp',
+  turtle: '/spirits/world/turtle.webp',
+  axolotl: '/spirits/world/axolotl.webp',
+  bat: '/spirits/world/bat.webp',
+  firefly: '/spirits/world/firefly.webp',
+  frog: '/spirits/world/frog.webp',
+  rabbit: '/spirits/world/rabbit.webp',
+  'water-bear': '/spirits/world/water-bear.webp',
+  hummingbird: '/spirits/world/hummingbird.webp',
+})
+
+export const hasPortrait = (species: string): boolean => species in PORTRAIT_OF
+
+/**
+ * ★ ONE TEXTURE AND ONE MATERIAL PER SPECIES, SHARED BY EVERY BODY — and unlike the atlas path this
+ * can genuinely share, which is a fix rather than a shortcut. `createCreatureBody` must clone its
+ * texture per body because each body needs its own UV WINDOW into the sheet; a portrait is a single
+ * image with no window, so every resident of a species can point at the same material. That removes
+ * a SpriteMaterial per resident on a world Alex profiled at 84% GPU-bound.
+ * ⚠ Which is also why `dispose()` here does NOT free them: they outlive any one body on purpose.
+ */
+const SHEETS = new Map<string, { tex: THREE.Texture; mat: THREE.SpriteMaterial; aspect: { v: number } }>()
+
+function sheetFor(species: string): { tex: THREE.Texture; mat: THREE.SpriteMaterial; aspect: { v: number } } {
+  const hit = SHEETS.get(species)
+  if (hit) return hit
+  const url = PORTRAIT_OF[species]
+  const aspect = { v: 1 }
+  // ⚠ THE ASPECT IS NOT KNOWN UNTIL THE IMAGE LANDS, and these are not square — Dewbear is 256×178.
+  // Guessing square would squash every one of them, so the scale is applied in the load callback
+  // and the box carries the value so bodies created before the load still correct themselves.
+  const tex = new THREE.TextureLoader().load(url, t => {
+    aspect.v = (t.image?.width ?? 1) / (t.image?.height ?? 1)
+  })
+  tex.magFilter = THREE.LinearFilter
+  tex.minFilter = THREE.LinearMipmapLinearFilter
+  tex.colorSpace = THREE.SRGBColorSpace
+  const mat = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    // ⚠ An alpha TEST as well as transparency, for the reason `createCreatureBody` gives: a purely
+    // transparent sprite sorts against every other transparent thing in the scene, and mist IS
+    // transparent, so a spirit disappears behind its own fog at some angles. The cutout's edge is
+    // soft, so this sits low enough to keep the antialiased rim.
+    alphaTest: 0.28,
+    depthWrite: true,
+  })
+  const made = { tex, mat, aspect }
+  SHEETS.set(species, made)
+  return made
+}
+
+/**
+ * A spirit standing in the world wearing its canon portrait.
+ * `height` is in world units and is the creature's TALLNESS; width follows the art's own aspect.
+ */
+export function createPortraitBody(species: string, opts: { height?: number } = {}): CreatureBody {
+  const { mat, aspect } = sheetFor(species)
+  const sprite = new THREE.Sprite(mat)
+  const h = opts.height ?? 1.2
+  let facing = 1
+  const applyScale = () => sprite.scale.set(h * aspect.v * facing, h, 1)
+  applyScale()
+
+  const update = (_nowMs: number, bodyYaw: number, camX: number, camZ: number, _pose: Pose): void => {
+    // Which side of the creature the viewer is on. A portrait has no back, so the most it can
+    // honestly say is which way it is heading — flip so it walks the way it looks.
+    const viewerYaw = Math.atan2(camZ - sprite.position.z, camX - sprite.position.x)
+    let d = bodyYaw - viewerYaw
+    while (d > Math.PI) d -= Math.PI * 2
+    while (d < -Math.PI) d += Math.PI * 2
+    const want = d < 0 ? 1 : -1
+    if (want !== facing) { facing = want; applyScale() }
+    else if (sprite.scale.y !== h) applyScale()   // the image landed and the aspect changed
+  }
+
+  return {
+    object: sprite,
+    update,
+    // ⚠ Deliberately does not free the texture or material — they are shared by every body of this
+    // species and cached for the page's life. Freeing them here would blank every other resident.
+    dispose: () => { sprite.removeFromParent() },
+  }
+}
