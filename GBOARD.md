@@ -11,6 +11,31 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⚔ Shimmer + Nolmir — **ENEMIES THAT CAST, ENEMIES THAT AMBUSH, AND A FLOOD WITH FOUR HABITS** (2026-08-26, hub lane) · *Last touched 2026-08-26 (hub) — `dfc5e4b` `0022db1` `505f432` `94e8687` `92c42c3` `a9e8017` `d178a39`, all pushed, DEPLOYED*
+
+**Left off:** row 294 is largely answered — the game now has enemies that use the cast system, and three venues that each fight differently.
+- **Crucible** — challengers run **premade loadouts derived through the player's own `defaultLoadout`**, so the Lane Law and the birth-exclusive band bind a bot exactly as they bind a keeper. First rune-tagged damage in the game.
+- **The Wilds** — Hollows got three attacks instead of one shared drain: warden **presses** (HP), stalker **ambushes from your blind spot** and withdraws while watched, caster **saps MANA** from range and never wounds.
+- **Expeditions** — the flood got four habits: drift presses · swift **runs the core**, ignoring posts and taunts · bulk **sieges the posts** · behemoth **accretes and cannot be shoved**. Layered onto merging, so the swift you fail to intercept becomes the battering ram.
+- **The birth rune now does four things** — lean, lane scope, the birth-exclusive band, and attunement resistance.
+- **Mana is drawn on the HUD for the first time**, which the Hollow caster made urgent rather than cosmetic.
+
+**Next:**
+- ⚠ **`/shimmer/voxel3d` worldgen is DOWN on prod** — world's lane. Reproduced on a **real GPU**; `play3d` renders fine, worker loads and constructs with no error. It is the **handshake or an upstream gate**, not delivery and not the environment.
+- **The tool arch composition is Alex's look call** — it fits (16px gutter) but the clearance margin left the gauge at the arch's lower-LEFT, not under its crown. Alternative: a corner-hugging quarter arch (angles 0..90, same transform).
+- Surface the birth-exclusive band at character-select?
+
+**Parked / waiting on canon (8 queued to Magii):** the **cozy-vs-peril ruling** Alex made today (the Ather can wound and DOWN a keeper) currently exists **only in a source comment and a dbr** — P1 · Compact + Bind have no built signature · attunement axis (rune vs element) · does "never coordinates" bind the minions or only the hosts · does the bulk *choosing* a post over-state the flood's intent · what off-lane development grants · `EXPEDITIONS_DESIGN.md` predates its own canon by two months.
+
+**Decisions (do not relitigate):**
+- **`every()`, not `some()`, for a runeword's lane membership** — measured before choosing; `some()` starves nobody and gets there by handing out combinations canon says must be DRIVEN.
+- **A bot's kit is DERIVED, never authored** — and **built moves only**, which is correctness: an unbuilt move in a player's bag is the honesty rule working, in a bot's hands it is a challenger that winds up and nothing happens.
+- **The blind-spot rule lives in `hollowStrike`, not the host**, so a second host cannot forget it. Seen-ness is latched with hysteresis (100° to notice, 130° to dare again).
+- **Starved lanes and mute runes PRINT rather than fail** — a debt nobody can see is a debt nobody pays; the assert reds only if a third appears.
+- **The arch's fixed clearance term is MEASURED, not derived**, and labelled so. Re-measure, do not re-derive; `overflowPx` in the browser is the check.
+
+**Files:** `play3d/cast.ts` · `play3d/keeper-moves.ts` · `play3d/loadout.ts` · `play3d/birth-affinity.ts` · `play3d/crucible-fleet.ts` · `engine/hunter-ai.ts` · `voxel3d/hollows.ts` · `voxel3d/VoxelWorld.tsx` · `nolmir/lib/expedition.ts` (+ oracles for each)
+
 ## 🐾 Shimmer voxel — **DIRECTION: THE GARDEN SHOULD BE INHABITED, AND CANON RULED THAT A MONTH AGO** (2026-08-26, world lane) · *Last touched 2026-08-26 (world) — direction + canon gap filed, no code*
 
 ### Left off — Alex called the shape after looking at Palworld; research says he is asking for canon, not for a departure
