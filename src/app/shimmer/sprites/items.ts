@@ -391,10 +391,30 @@ export const ITEMS: ItemDef[] = [
   { id: 'endurance_charm', name: 'Endurance Charm', type: 'consumable', rarity: 'rare', description: 'Doubles chance to endure a lethal hit.', stackable: true, maxStack: 5, sellPrice: 75, buyPrice: 150, tradeable: true },
   { id: 'focus_charm', name: 'Focus Charm', type: 'consumable', rarity: 'rare', description: 'Increases move accuracy by 10 in battle.', stackable: true, maxStack: 5, sellPrice: 75, buyPrice: 150, tradeable: true },
   // --- Starter Bag key items (granted by Greg at intro; drive the core tutorial loop) ---
-  // mana_pot: the spirit-bloom vessel — place on ather_soil to plant a Mana Seed (bloom → spirit joins)
-  { id: 'mana_pot', name: 'Mana Pot', type: 'key', rarity: 'uncommon', description: 'A warm clay pot from Greg. Place it on a patch of ather soil and plant your Mana Seed inside.', stackable: false, maxStack: 1 },
-  // spirit_grimoire: the field guide — auto-fills as you study wild spirits
-  { id: 'spirit_grimoire', name: 'Spirit Grimoire', type: 'key', rarity: 'uncommon', description: 'A leather-bound grimoire from Greg. It records every spirit you encounter. Press G to open it.', stackable: false, maxStack: 1 },
+  // ── ★ THE `type: 'key'` COHORT IS DELIBERATELY EMPTY (2026-08-26, closing #385 and its sibling) ──
+  // It held exactly two entries, `mana_pot` and `spirit_grimoire`, and both were orphans: two
+  // references each in the whole tree, and both of them were the definition and its own comment.
+  // Residue from a parked starter-bag step, not a convention to join.
+  //
+  // `spirit_grimoire` — RULED UI, NOT AN ITEM. Every other 'grimoire' string in the live tree is a
+  // panel tab id, G already opens it with no item check, and it auto-fills as you study spirits: it
+  // is a RECORD, a view over encounter state, not a carryable object. Making it an item would make
+  // it droppable, chest-storable and losable, gating the spirit record behind a thing that can be
+  // lost. ⚠ This does not contradict canon. Greg gifts a leather-bound book in
+  // `shimmer-quests-mainmap.md` — that rules the FICTION; an inventory slot is a build choice, the
+  // same way Kael carrying a sword in the books does not oblige a droppable item. The gift unlocks
+  // the tab. If Alex ever wants the book physically held, that is a new decision.
+  //
+  // `mana_pot` — FOLDED INTO `clay_pot`, and the reason is that its own description had already
+  // shipped. "Place it on a patch of ather soil and plant your Mana Seed inside" is exactly what
+  // POT → POT_SEEDED → POT_BLOOM do in `voxel/registry.ts`, using `clay_pot`, which has a real hand
+  // recipe (`voxel/recipes.ts`) and ten references against this one's two. Keeping a second vessel
+  // item would have been a duplicate NAME for a live object — the worst kind of orphan, because it
+  // reads as a missing feature rather than as residue.
+  //
+  // The editor skips categories with no items (`ItemEditor.tsx`, `if (count === 0) return null`), so
+  // an empty cohort renders nothing. Left in `CATEGORY_ORDER` on purpose: if a real key item ever
+  // lands it sorts correctly, and nothing here has to be remembered.
 ]
 
 /** Check if an item is giftable to NPCs. Tools, keys, and furniture are not giftable. */
