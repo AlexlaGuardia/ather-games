@@ -85,7 +85,7 @@ export function CastGauges({ cast }: { cast: React.RefObject<CastHud | null> }) 
   const [arch, setArch] = useState<(string | null)[]>(() => ALL_BANDS.map(() => null))
   const keys = useRef<(HTMLSpanElement | null)[]>([])
   const glyphs = useRef<(SVGSVGElement | null)[]>([])
-  const wraps = useRef<(HTMLDivElement | null)[]>([])
+  const contents = useRef<(HTMLDivElement | null)[]>([])
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -105,7 +105,14 @@ export function CastGauges({ cast }: { cast: React.RefObject<CastHud | null> }) 
         // ★ THE BUTTON *IS* THE READOUT (Alex, 2026-08-26). A sweep meter was furniture: Ice Dart
         // cools in 650ms, which is over before anyone reads a bar. Darken on use, count down, light
         // back up. Three states and no geometry.
-        const w = wraps.current[i]
+        // ⚠⚠ THE DIM GOES ON THE CONTENT, NEVER ON THE PLATE — and this file had the bug that
+        // `ToolSocket`'s own comment was written about, four metres away in the same corner:
+        // "bg-black/45 × 0.4 is an 18% film, so over a lit grass field the plate disappeared and
+        // four faint rings were left floating on the world." Measured on the `sky` backdrop, a
+        // wrapper-dimmed glyph came out at 2.10 contrast against its own plate — under the 3.0 a
+        // graphic needs, on the one state the button spends most of its time in.
+        // The plate stays opaque and the CONTENT carries the state.
+        const w = contents.current[i]
         if (w) w.style.opacity = moveId ? (left > 0 ? '0.42' : '1') : '0.25'
         // The KEY square carries the countdown, because the key is the thing you are about to press.
         // Tenths under ten seconds — a 0.6s cooldown shown as "1" then "0" is a lie twice over.
@@ -136,10 +143,11 @@ export function CastGauges({ cast }: { cast: React.RefObject<CastHud | null> }) 
     // belongs. Simplify as much as possible was the ask, and the name was the thing to cut.
     <div className="flex gap-1.5 font-mono pointer-events-none">
       {ALL_BANDS.map((kind, i) => (
-        <div key={kind} ref={el => { wraps.current[i] = el }}
-             title={BAND_LABEL[kind] ?? kind}
-             className="relative h-[52px] w-[52px] rounded bg-black/45 ring-1 ring-white/10
-                        flex items-center justify-center transition-opacity duration-150">
+        <div key={kind} title={BAND_LABEL[kind] ?? kind}
+             className="relative h-[52px] w-[52px] rounded bg-black/60 ring-1 ring-white/15
+                        flex items-center justify-center">
+          <div ref={el => { contents.current[i] = el }}
+               className="absolute inset-0 flex items-center justify-center transition-opacity duration-150">
           {/* The glyph is the button. `text-current` so the wrapper's opacity carries the state and
               nothing here has to know what "cooling" looks like. */}
           <svg viewBox="0 0 24 24" ref={el => { glyphs.current[i] = el }}
@@ -152,10 +160,11 @@ export function CastGauges({ cast }: { cast: React.RefObject<CastHud | null> }) 
           </svg>
           {/* Key in the corner while ready; the COUNTDOWN takes its place while cooling, because the
               key is the thing you are about to press and it is where the eye already is. */}
-          <span ref={el => { keys.current[i] = el }}
-                className="absolute bottom-0.5 right-1 text-[9px] font-bold tabular-nums text-white/70">
-            {(BAND_KEYS[i] ?? '?').toUpperCase()}
-          </span>
+            <span ref={el => { keys.current[i] = el }}
+                  className="absolute bottom-0.5 right-1 text-[9px] font-bold tabular-nums text-white/70">
+              {(BAND_KEYS[i] ?? '?').toUpperCase()}
+            </span>
+          </div>
         </div>
       ))}
     </div>

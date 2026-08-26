@@ -47,7 +47,7 @@ export function ResourceBars({ vitals }: { vitals: React.RefObject<Vitals> }) {
   return (
     // ⚠ NO LONGER SELF-POSITIONED — the corner is one column and a component that pins itself
     // cannot be stacked. The corner belongs to whoever owns the corner.
-    <div className="w-52 rounded bg-black/45 p-2 ring-1 ring-white/10
+    <div className="w-52 rounded bg-black/60 p-2 ring-1 ring-white/15
                     flex flex-col gap-1 pointer-events-none font-mono">
       <div className="flex items-baseline gap-2">
         <span className="gx-label text-[8px] tracking-[0.18em] text-rose-200/50">HEALTH</span>
