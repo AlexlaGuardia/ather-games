@@ -22,7 +22,21 @@ models."** So the design goal is not good billboards — it is billboards that a
   mist rosters name are already painted at 32×32 with palettes (`sprites/*.ts`) — and already
   DIRECTIONAL. The format exists because a top-down 2D overworld needed it; it is exactly what a
   camera-facing quad needs. Three afternoons of "the art is blocking us" were about **showing** 2D art
-  in a 3D world, never about painting it. ⚠ Moglin art is the real gap and is untouched here.
+  in a 3D world, never about painting it.
+- **⚠ AND THE MOGLIN GAP IS PRODUCTION, NOT CANON — I asserted the opposite twice and Alex corrected
+  it.** `CANON/design-briefs/moglins.md` line 4 reads **🔒 BASE LOCKED (Alex, 2026-06-24)**, and the
+  refs are real files, not a citation: `moglin-canon.png` (891KB), **`collared-spirit-canon.png`
+  (1.7MB — the other body in a patrol)**, `hemlock-canon.png`, `jimbo-canon.png`, 26 refs in all.
+  The brief carries the whole spec (~3ft, fur/whiskers/paws/rounded ears, drab-warm earth tones and
+  explicitly **never "grey"**, timid-sweet default) and the sub-type ladder was ruled 08-12. **No
+  Magii gate. Nobody has drawn a 32×32 Moglin, and that is the entire blocker.**
+  - **★★ The brief and `collar-foes.ts` already agree without ever having met.** Brief: *"the swagger
+    drains the moment the spirit is freed."* Code: *"there is no wounded state and no second phase…
+    he is simply the sweet creature again."* Two states to paint — swagger and deflated — and the
+    encounter already pays them off.
+  - ⚠ **I claimed a canon block without opening `design-briefs/`**, in a session whose whole lesson is
+    that the answer is usually already on disk. Sixth stale claim of the day and the only self-minted
+    one. **Check the brief before filing a gap; a locked look does not announce itself from the code.**
 - **★ THE INTERFACE IS THE DELIVERABLE.** Callers touch `CreatureBody` only; a modelled implementation
   satisfies the same members and the swap is one factory with no call site moved. **Nothing outside
   that interface may learn a spirit is a flat quad** — the day something branches on `isSprite`, the
