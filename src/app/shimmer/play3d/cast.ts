@@ -44,6 +44,7 @@
 // asserts full coverage, so a newly authored canon move cannot slip through unclassified.
 
 import { KEEPER_MOVES, type KeeperMove, type MoveTier, knownMoves } from './keeper-moves'
+import { RUNES } from './birth/runes.data'
 import { hasLearned, type Book } from './scroll-market'
 import type { ConjureShape } from '../engine/conjured-terrain'
 import type { StatusKind } from '../engine/statuses'
@@ -503,6 +504,68 @@ export const ALL_BANDS: readonly SlotKind[] = CAST_SLOTS
 /** The key for a slot number. Only the cast bar is keyed — the passive is always-on and holds no key. */
 export const BAND_KEYS: readonly string[] = SLOT_KEYS
 
+
+/**
+ * ── ★★★ THE LANE LAW — WHICH MOVES YOUR BIRTH RUNE LETS YOU EQUIP (canon 2026-08-03, built 08-26) ──
+ *
+ * `runes.md` § *What "compatible" MEANS*: a rune is **Element × State**, and a birth rune opens two
+ * natural lanes — the same substance behaving differently, and the same behaviour in a different
+ * substance. Canon assigns each band to one of them, and Alex CONFIRMED the assignment on review
+ * (he floated the reverse in the design pass, then kept canon's):
+ *
+ *   · **tactical → your ELEMENT lane** — breadth. Storm is 5 runes wide.
+ *   · **signature → your STATE lane**  — scarcity, canon's word. 2–3 runes.
+ *   · **passive → NO LANE.** Ruled explicitly: passives are reached by TRAINED rune, not birth lane
+ *     (`CANON_GAPS.md`, the birth-rune equip-gate entry). A lane filter here would be invention.
+ *
+ * ⚠ CANON'S OWN TWO FILES DISAGREE ON THE WORDS "ROW" AND "COLUMN" — `runes.md` says *element row /
+ * state column* while the gap entry says *"the storm column"* for the same grouping, because the
+ * matrix is drawn with elements as headers. The MEANING never wavers (Eyuun walks all three **Bind**
+ * runes; Kael goes Static → Lightning across **Storm**), so this code says `element` / `state` and
+ * never `row` / `column`. Naming the axis instead of its picture is what stops the two docs' argument
+ * from reaching the build.
+ */
+type Lane = 'element' | 'state'
+
+/**
+ * ⚠ EXHAUSTIVE OVER `MoveTier`, so a new canon tier is a COMPILE ERROR here rather than silently
+ * defaulting to unscoped. `null` means "this band has no lane", which is a DECISION for passive and
+ * a non-question for trait/combo — and it must stay a stated null, never an absent key.
+ */
+const LANE_FOR_KIND: Record<MoveTier, Lane | null> = {
+  tactical: 'element',
+  ultimate: 'state',
+  passive: null,
+  trait: null,
+  combo: null,
+}
+
+/** The runes on one of a birth rune's two lanes. Empty when the keeper has no birth rune. */
+export function laneRunes(birth: string | null, lane: Lane): Set<string> {
+  const b = RUNES.find((r) => r.id === birth)
+  if (!b) return new Set()
+  const axis = lane === 'element' ? 'element' : 'state'
+  return new Set(RUNES.filter((r) => r[axis] === b[axis]).map((r) => r.id))
+}
+
+/**
+ * Is this move on the lane its band draws from?
+ *
+ * ── ★★ EVERY RUNE, NOT ANY RUNE, AND THE DIFFERENCE IS CANON'S OFF-LANE RULE ──────────────────
+ * A runeword names more than one rune. `some()` would put **Fog Bank** — mist (water/Expanding) +
+ * breeze (storm/Flow), which holds NEITHER axis constant — on a Mist-born keeper's natural lane,
+ * while `runes.md` calls exactly that combination **off-lane: "possible, costly, and it must be
+ * DRIVEN."** `every()` is the reading that agrees with the paragraph two sections down from the one
+ * being implemented. Measured before choosing, not after: `some()` leaves no birth rune short of a
+ * signature, which is the comfortable answer, and it gets there by handing out combinations canon
+ * says have to be earned.
+ *
+ * ⚠ A move with NO runes is a trait and never reaches a band; `knownMoves` drops it first.
+ */
+function onLane(m: KeeperMove, lane: Set<string>): boolean {
+  return m.runes.length > 0 && m.runes.every((r) => lane.has(r))
+}
+
 /**
  * Moves the keeper can run right now that fit a slot kind. Built ones first — the rest are honest
  * but dead.
@@ -532,8 +595,16 @@ export const BAND_KEYS: readonly string[] = SLOT_KEYS
  * state (the ritual is unfinished) and correctly holds nothing in the band.
  */
 export function eligibleMoves(owned: string[], birth: string | null, kind: SlotKind, book: Book): KeeperMove[] {
+  const lane = LANE_FOR_KIND[kind]
+  // ⚠ Built ONCE per call, never inside the filter — `laneRunes` walks all 20 runes, and a keeper
+  // with a wide book would pay that per move for an answer that cannot change mid-filter.
+  const onIt = lane ? laneRunes(birth, lane) : null
   const known = knownMoves(owned).filter(
-    (m) => m.tier === kind && hasLearned(book, m.id) && (!m.birthExclusive || m.birthExclusive === birth),
+    (m) =>
+      m.tier === kind &&
+      hasLearned(book, m.id) &&
+      (!m.birthExclusive || m.birthExclusive === birth) &&
+      (!onIt || onLane(m, onIt)),
   )
   return [...known].sort((a, b) => Number(isBuilt(b.id)) - Number(isBuilt(a.id)))
 }

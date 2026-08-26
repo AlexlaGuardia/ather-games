@@ -16,8 +16,10 @@
 //   7. the birth rune is rune #1 of an inventory and can never be revoked
 
 import { castForMove, isBuilt, defaultLoadout, eligibleMoves, canSlot, derivePassive, CAST_SLOTS, SLOT_KEYS,
-         ALL_BANDS, BAND_KEYS, NO_CAST } from './cast'
-import { KEEPER_MOVES } from './keeper-moves'
+         ALL_BANDS, BAND_KEYS, NO_CAST, laneRunes } from './cast'
+/** the same every-rune rule `cast.ts` › `onLane` applies, restated here so a divergence shows. */
+const onLaneTest = (runes: string[], lane: Set<string>) => runes.length > 0 && runes.every((r) => lane.has(r))
+import { KEEPER_MOVES, knownMoves } from './keeper-moves'
 import { RUNES } from './birth/runes.data'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 
@@ -326,6 +328,65 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     }
   }
 
+  // ── ★★★ THE LANE LAW (canon 2026-08-03, built 08-26) ─────────────────────────────────────────
+  // tacticals ← your ELEMENT lane (breadth) · signature ← your STATE lane (scarcity) · passive ← no
+  // lane. Asserted against canon's own worked examples, which is the only way to know the axes are
+  // not silently transposed: `runes.md` draws the matrix with elements as COLUMN HEADERS but its
+  // prose calls the element grouping a ROW, so a build that read the picture instead of the meaning
+  // would swap the two bands and still look plausible everywhere.
+  {
+    const bandOf = (k: string) => ALL_BANDS.indexOf(k as never)
+    const el = (b: string) => laneRunes(b, 'element')
+    const st = (b: string) => laneRunes(b, 'state')
+    chk('the fixture found the bands it seats into', bandOf('tactical') >= 0 && bandOf('ultimate') >= 0)
+    // Canon's three developed mages. Each one pins an axis by NAME, so a transposition fails here.
+    chk("Eyuun's Trick is a STATE lane — Enchant, Illuminate, Metalergy are all Bind",
+      st('enchant').has('illuminate') && st('enchant').has('metalergy') && !el('enchant').has('illuminate'))
+    chk('Kael Static → Lightning is an ELEMENT lane — both Storm',
+      el('static').has('lightning') && !st('static').has('lightning'))
+    chk('Samantha demonstrates both — Fluid → Life is Flow (state), Fluid → Freeze is Water (element)',
+      st('fluid').has('life') && el('fluid').has('freeze'))
+    // Canon's own sizing claim: element = breadth, state = scarcity (2-3). If these ever invert, the
+    // bands are transposed even if every membership assert above still happens to hold.
+    chk('the element lane is the wide one and the state lane is the scarce one (canon: 2-3)',
+      el('breeze').size === 5 && st('breeze').size === 3 && st('breeze').size <= 3)
+    // A move must be on the lane with EVERY rune, not any — canon's off-lane rule. Fog Bank holds
+    // neither axis constant, so it is the exact combination canon says must be DRIVEN.
+    chk('★ a runeword holding NEITHER axis is off-lane — Fog Bank is not a Mist-born tactical',
+      !canSlotFor(['mist', 'breeze'], bandOf('tactical'), 'fog-bank', ALL))
+    chk('...while one holding the element axis IS — Flash Freeze is all-Water',
+      canSlotFor(['fluid', 'freeze'], bandOf('tactical'), 'flash-freeze', ALL))
+    // The passive band is deliberately unscoped (ruled: reached by TRAINED rune, not birth lane).
+    // Barrier is mana/Compact; a Stone-born keeper shares neither axis and must still derive it.
+    chk('the passive band takes NO lane — a Stone-born keeper still derives Barrier',
+      derivePassive(['stone', 'barrier'], 'stone', ALL)?.id === 'barrier')
+  }
+
+  // ── ⚠ THE COVERAGE DEBT, MEASURED AND NAMED RATHER THAN DISCOVERED BY A PLAYER ────────────────
+  // The Lane Law is canon and correct, and applying it leaves whole STATE lanes with no built
+  // signature — a keeper born on one has a permanently empty B slot. `defaultLoadout` already calls
+  // an empty slot "the coverage gap rendered, not a bug", and canon's ruling says the thin runes ARE
+  // the declared authoring debt ("derive, don't author"). So this does not fail; it PRINTS, because
+  // a debt nobody can see is a debt nobody pays. It goes red only if the debt GROWS.
+  {
+    const states = [...new Set(RUNES.filter((r) => !r.lostState).map((r) => r.state))]
+    const starved = states.filter((st) => {
+      const lane = new Set(RUNES.filter((r) => r.state === st).map((r) => r.id))
+      return !KEEPER_MOVES.some((m) => m.tier === 'ultimate' && isBuilt(m.id) && m.runes.length > 0
+        && m.runes.every((r) => lane.has(r)))
+    })
+    console.log(`  · state lanes with NO built signature: ${starved.length ? starved.join(', ') : 'none'}`)
+    chk(`no MORE than the 2 known-starved state lanes (Compact, Bind) — currently: ${starved.join(', ') || 'none'}`,
+      starved.length <= 2)
+    // Every birthable rune must at least reach a TACTICAL, or that keeper has no cast at all.
+    const noTactical = RUNES.filter((r) => !r.lostState).filter((b) => {
+      const lane = laneRunes(b.id, 'element')
+      return !KEEPER_MOVES.some((m) => m.tier === 'tactical' && isBuilt(m.id) && onLaneTest(m.runes, lane))
+    }).map((r) => r.name)
+    chk(`every birthable rune reaches at least one built tactical${noTactical.length ? ` — STARVED: ${noTactical.join(', ')}` : ''}`,
+      noTactical.length === 0)
+  }
+
   // ── ★ A BIRTH-EXCLUSIVE MUST NAME A RUNE A KEEPER CAN ACTUALLY BE BORN WITH (2026-08-26) ──────
   // The orphan guard above CANNOT catch this, and that is why this is separate rather than folded in:
   // it builds its hypothetical keeper from the move's own gate, so a birth-exclusive is reachable by
@@ -425,8 +486,37 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
 
 // 6. a 2nd rune opens the cross-hatch
 {
-  chk('Life alone does not reach Healing Grove', !defaultFor(['life'], ALL).includes('healing-grove'))
-  chk('Life + Barrier does', defaultFor(['life', 'barrier'], ALL).includes('healing-grove'))
+  // ── ★★ REWRITTEN 2026-08-26 WHEN THE LANE LAW LANDED, AND NOT BY PASTING A NEW EXPECTATION ────
+  // The old pair asserted `defaultLoadout(['life','barrier'])` CONTAINS healing-grove, and the Lane
+  // Law turned that red. The red was correct and the test was not wrong about anything it MEANT:
+  // its subject is the cross-hatch — a 2nd rune unlocking a runeword neither rune reaches alone —
+  // which lives in `knownMoves` and the Lane Law does not touch at all. What it happened to MEASURE
+  // was seating, and seating is exactly what changed.
+  //
+  // So the claim is asserted where it actually lives, and the seating consequence is stated in both
+  // directions rather than deleted. ⚠ Flipping this to `!includes(...)` would have been the cheap
+  // green: same one-line edit, and it would have quietly retired the cross-hatch from the suite —
+  // the mechanic would then have had NO coverage while the file still listed it as item 6.
+  // Same derivation as the block above, and the same reason: an index literal here would be a mirror
+  // of `ALL_BANDS`. The -1 guard travels with it, or a missing band would turn both seating asserts
+  // into compares against `undefined` and read exactly like a pass.
+  const bandOf = (k: string) => ALL_BANDS.indexOf(k as never)
+  const TAC = bandOf('tactical'), ULT = bandOf('ultimate')
+  chk('the fixture found both bands it seats into', TAC >= 0 && ULT >= 0)
+  chk('Life alone does not reach Healing Grove', !knownMoves(['life']).some((m) => m.id === 'healing-grove'))
+  chk('★ the cross-hatch still opens: Life + Barrier makes Healing Grove KNOWN',
+    knownMoves(['life', 'barrier']).some((m) => m.id === 'healing-grove'))
+  // And what the Lane Law then decides about it. Life is mana/Flow, so:
+  //   · signature ← the Flow STATE lane {life, breeze, fluid}. Healing Grove needs Barrier (Compact),
+  //     so a Life-born keeper cannot SEAT it — canon's scarcity, working.
+  //   · tactical ← the mana ELEMENT lane {manalic, barrier, star, life, enchant}. Living Architecture
+  //     is life + barrier, both mana, so the SAME second rune does open a seat — in the other band.
+  // Asserting only the refusal would read as "the cross-hatch gives you nothing", which is false.
+  chk('a Life-born keeper cannot seat Healing Grove — signature comes from the STATE lane',
+    !defaultFor(['life', 'barrier'], ALL).includes('healing-grove') &&
+    !canSlotFor(['life', 'barrier'], ULT, 'healing-grove', ALL))
+  chk('★ but the same 2nd rune DOES open a tactical — Living Architecture is all-mana',
+    canSlotFor(['life', 'barrier'], TAC, 'living-architecture', ALL))
 }
 
 // 6b. the passive is DERIVED, always-on, capped at one (RULED 2026-08-26, Alex)
