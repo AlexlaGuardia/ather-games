@@ -2462,28 +2462,21 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           className="absolute bottom-4 right-4 pointer-events-none"
           style={{ '--tool-arc-r': 'clamp(44px, 11vw, 74px)' } as React.CSSProperties}
         >
-          {/* ⚠ THE SOCKET'S OWN WIDTH IS PART OF THE REACH, and leaving it out is why the first
-              fix still clipped. `ToolSocket` sets `left`, which places its TOP-LEFT corner, so the
-              rightmost socket extends a full 56px (w-14) beyond the point the arch puts it at.
-              Rightmost socket is at θ=150° ⇒ left = r(1−cos150°) = 1.866r, and the container origin
-              is crown−r, so its right edge sits at crown + 0.866r + 56. Reserving that (minus the
-              38px half-gauge already between the crown and the container edge) is roughly what has
-              to be cleared.
-              ⚠⚠ AND THE CONSTANT IS MEASURED, NOT DERIVED, BECAUSE THE DERIVATION KEPT BEING WRONG.
-              Two closed-form attempts both still clipped: `left-1/2` resolves against the inner
-              div, the translate is applied after, and the socket is placed by its corner, so the
-              crown does not land where the arithmetic says. Read off the live DOM instead —
-              rightmost socket right edge 982 against a 958 viewport, a 24px overflow — and the
-              trailing term covers that plus the 1rem gutter the rest of the HUD uses. The r-term
-              still scales with the radius; only the fixed part is empirical, and it is labelled as
-              empirical so nobody re-derives it and trusts the answer.
-              ⚠ AND THE RESPONSE IS NOT 1:1 — TWO MEASUREMENTS, NOT ONE, ARE WHAT PINNED IT.
-              Adding 40px of margin moved the sockets only 20px (slope 0.5), which no reading of
-              this layout predicted and which is exactly why the closed forms kept missing. The
-              constant is set from that measured slope: 982 → 962 for +40px, so +40 more lands the
-              rightmost edge on the 1rem gutter. If the gauge size or the arc's anchoring changes,
-              RE-MEASURE — do not re-derive. `overflowPx` in the browser is the check. */}
-          <div style={{ marginRight: 'calc(var(--tool-arc-r) * 0.87 + 100px)' }}>
+          {/* ── ★★★ THE ROOT CAUSE, AND IT EXPLAINS EVERY FAILED FIX BEFORE IT ─────────────────
+              This wrapper was NOT `relative`. `ToolArc` is absolutely positioned with `left-1/2`,
+              which resolves against the nearest POSITIONED ancestor — so it was anchoring to the
+              OUTER container (whose width includes this margin), never to the gauge. The arch
+              therefore sat wherever the margin put the outer box while the gauge slid left inside
+              it: Alex's read, exactly — "the gauge took the arch's place instead."
+              ⚠ AND IT IS WHY THE MARGIN RESPONDED AT HALF RATE. Widening the margin moved the outer
+              box's left edge AND the gauge, in opposite proportions, so the sockets shifted ~0.5px
+              per 1px — a number I measured, believed, and built a constant on top of, when it was
+              the SYMPTOM of anchoring to the wrong element. A measurement can be perfectly accurate
+              and still be measuring a bug. `relative` is the whole fix; the clearance is now the
+              plain derivation it always should have been: the rightmost socket sits at
+              gaugeCentre + 0.866r, plus its own 56px width, less the half-gauge already inside
+              this box. */}
+          <div className="relative" style={{ marginRight: 'calc(var(--tool-arc-r) * 0.87 + 56px - 76px)' }}>
             <ManaGauge mana={mana} />
             <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
           </div>

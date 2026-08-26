@@ -27,8 +27,13 @@ import React, { useEffect, useRef } from 'react'
  * neither can drift toward the other's idea of the colour because only one of them chose.
  */
 
-const D = 76                    // gauge diameter, px
-const INNER = 32                // liquid radius — inside the rim
+// ── ★ DOUBLED 2026-08-26 (Alex) ────────────────────────────────────────────────────────────────
+// ⚠ `INNER` DOUBLES WITH IT, and that is not bookkeeping — every other measurement in this file is
+// DERIVED from the pair (`TOP`, `RUN`, the wave path, the drift keyframe all read D or INNER), so
+// scaling D alone would keep a 32px puddle inside a 152px vessel and the liquid would stop reaching
+// the rim. The two are one size expressed twice; move them together or neither.
+const D = 152                   // gauge diameter, px
+const INNER = 64                // liquid radius — inside the rim
 const TOP = D / 2 - INNER       // y of a full vessel
 const RUN = INNER * 2           // travel from full to empty
 
@@ -110,14 +115,14 @@ export function ManaGauge({ mana }: { mana: React.RefObject<{ cur: number; max: 
           </g>
         </g>
 
-        <circle cx={D / 2} cy={D / 2} r={INNER} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" />
+        <circle cx={D / 2} cy={D / 2} r={INNER} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="2.5" />
       </svg>
 
       {/* The readout sits ON the vessel, centre, tabular so the digits do not dance as it drains. */}
       <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-        <div ref={value} className="gx-value font-mono tabular-nums text-[15px] text-white/95"
+        <div ref={value} className="gx-value font-mono tabular-nums text-[30px] text-white/95"
              style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>0</div>
-        <div className="gx-label font-mono text-[8px] mt-0.5 text-white/55" style={{ letterSpacing: '0.18em' }}>MANA</div>
+        <div className="gx-label font-mono text-[11px] mt-1 text-white/55" style={{ letterSpacing: '0.18em' }}>MANA</div>
       </div>
 
       {/* Scoped keyframes. NOT in `gameui.css`: that file is the shared house layer every other game
