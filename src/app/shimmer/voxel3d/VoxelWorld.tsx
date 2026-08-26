@@ -2476,7 +2476,9 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
               plain derivation it always should have been: the rightmost socket sits at
               gaugeCentre + 0.866r, plus its own 56px width, less the half-gauge already inside
               this box. */}
-          <div className="relative" style={{ marginRight: 'calc(var(--tool-arc-r) * 0.87 + 56px - 76px)' }}>
+          <div className="relative" // ⚠ Clearance drops to almost nothing because the arch now leans LEFT — the rightmost socket
+              // pulled ~0.9r off the edge, so the vessel goes back to the corner where it belongs.
+              style={{ marginRight: '4px' }}>
             <ManaGauge mana={mana} />
             <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
           </div>
@@ -3197,7 +3199,11 @@ function ToolArc({ activeTool, tools, skills }: {
       // the same number the container reserves its right margin from, and two declarations is the
       // mirror problem: they would agree until someone retuned one of them.
       className="absolute left-1/2 bottom-full h-0 w-0 pointer-events-none"
-      style={{ transform: 'translateX(calc(var(--tool-arc-r) * -1))' } as React.CSSProperties}
+      // ⚠ −1.9r, NOT −1r. −1r centres the arch's crown on the gauge; the extra ~0.9r is the LEAN Alex
+      // asked for. Angles alone could not get there — the swing is bounded below by θ=0, past which a
+      // socket drops under the gauge's top edge and overlaps the vessel. So the tilt comes from the
+      // angles and the OFFSET comes from here, which also keeps the two adjustable independently.
+      style={{ transform: 'translateX(calc(var(--tool-arc-r) * -1.9))' } as React.CSSProperties}
     >
       {TOOL_FAMILIES.map((family, i) => (
         <ToolSocket key={family} family={family} angleDeg={ANGLES[i]}
