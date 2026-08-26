@@ -11,8 +11,9 @@ Items reachable in voxel3d: **128**
 | 🟦 derived | 39 | wears its own block's faces. Never needs hand art. |
 | 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
+| 🧊 mesh | 2 | rendered from the scatter geometry the world instances. Never needs hand art. |
 | 🟩 painted | 74 | hand-painted flat sprite in `sprites/items.ts`. |
-| ⬜ missing | 2 | **needs art** — draws the plain chip today. |
+| ⬜ missing | 0 | **needs art** — draws the plain chip today. |
 | 🟥 blank | 2 | wired to an all-zero frame. Reads as done, renders nothing. |
 
 ## 🟥 Wired but blank — needs art, and the wiring says otherwise
@@ -29,8 +30,6 @@ bag is honest and only the editor is not. Draw them like anything on the list be
 Paint at `/shimmer/dev?mode=item` (32×32, palette-indexed). Each is one flat sprite; there is no
 view-angle call to make — these are held objects, not world props.
 
-- [ ] `deadwood` — drop: Deadfall, in world
-- [ ] `mushroom_cap` — drop: Mushroom, in world
 
 ## 🌱 Drawn by the flora generator — nothing to draw
 

@@ -28,6 +28,7 @@
 // of truth the header above refuses for blocks. One art table, two games.
 
 import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
+import { meshIcon, hasMeshIcon } from './mesh-icon'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
 import { leafPixels, bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
@@ -422,7 +423,7 @@ export function iconPixels(material: number, size = ICON, tile = TILE): Uint8Arr
  * ★ BLOCK FACES ALWAYS WIN. An item with a real block behind it must wear that block's texture even
  * if other art exists, or the two drift and the icon starts describing last month's stone.
  */
-export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'painted' | null {
+export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'painted' | 'mesh' | null {
   const mat = materialForItem(itemId)
   // ★ THE CROSS ARM SITS ABOVE THE BLOCK ARM, and the order is the fix. Block-faces-always-win is
   // still true for everything the world builds out of faces; a cross has none to win with. See
@@ -439,6 +440,11 @@ export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'pa
   // exactly this position and keep their sprites. See `blockWornBy` for why the map is separate.
   const worn = blockWornBy(itemId)
   if (worn !== undefined) return drawnAsCross(worn) ? 'cross' : 'block'
+  // ★ LAST BEFORE THE CHIP: the things the world builds out of GEOMETRY rather than faces. A
+  // deadfall log and a mushroom have no tile texture for any arm above to sample, so their icons are
+  // rendered from the very geometry `flora-mesh.ts` instances into the world. Ranked here for the
+  // same reason the drop arm is: it can only ever replace the honest chip, never displace art.
+  if (hasMeshIcon(materialForItem(itemId))) return 'mesh'
   return null
 }
 
@@ -451,6 +457,7 @@ export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
       return cut && crossIcon(cut, size)
     }
     case 'flora': return floraIcon(itemId, size)
+    case 'mesh': return meshIcon(materialForItem(itemId), size)
     case 'painted': return flatIcon(itemId, size)
     default: return null
   }

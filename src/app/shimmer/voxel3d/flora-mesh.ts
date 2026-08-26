@@ -55,6 +55,46 @@ const SHROOM_STEM_COLOR = 0xe0d6bd
 const SHROOM_CAPS = [0xa8503c, 0xc08a45, 0x8f6f9e, 0xb8ab86] as const
 
 /**
+ * ── ★ THE SCATTER GEOMETRY, EXPORTED SO THE ICON WEARS THE SAME SHAPE (2026-08-26) ─────────────
+ * These four were locals inside the builder below, which was correct while the world was the only
+ * thing that drew them. `voxel3d/tex/mesh-icon.ts` now draws them too — a deadfall log and a
+ * mushroom have no tile texture to derive a cube from, so their inventory icons are rendered from
+ * this geometry instead of hand-painted.
+ *
+ * ⚠ THEY ARE FACTORIES, AND THE POST-CONSTRUCTION CALLS ARE THE POINT. `logGeo.rotateZ` is what
+ * makes a log LIE DOWN and `translate` is what stacks a cap on its stalk — a second consumer that
+ * restated `new CylinderGeometry(0.15, 0.13, 1.0, 6)` would get a standing log and be internally
+ * consistent about the wrong shape. That is the mirror bug this repo has paid for repeatedly: a copy
+ * and its original agreeing perfectly and both being wrong. One definition, two consumers.
+ *
+ * Factories rather than shared instances because `BufferGeometry` is mutable and disposable — the
+ * world disposes its copies on unmount, and an icon must not be holding a freed buffer.
+ */
+export const floraLogGeo = (): THREE.BufferGeometry => {
+  const g = new THREE.CylinderGeometry(0.15, 0.13, 1.0, 6)
+  g.rotateZ(Math.PI / 2)          // lying along +X — a felled trunk, not a post
+  return g
+}
+export const floraShroomStemGeo = (): THREE.BufferGeometry => {
+  const g = new THREE.CylinderGeometry(0.05, 0.07, 0.24, 5)
+  g.translate(0, 0.12, 0)
+  return g
+}
+export const floraShroomCapGeo = (): THREE.BufferGeometry => {
+  const g = new THREE.ConeGeometry(0.17, 0.15, 8)
+  g.translate(0, 0.30, 0)         // rides the top of the stalk
+  return g
+}
+export const floraRockGeo = (): THREE.BufferGeometry => new THREE.IcosahedronGeometry(0.21, 0)
+
+/** The scatter's own colours, exported for the same reason the geometry is. */
+export const FLORA_COLORS = {
+  deadfall: DEADFALL_COLOR,
+  shroomStem: SHROOM_STEM_COLOR,
+  shroomCaps: SHROOM_CAPS,
+} as const
+
+/**
  * Instance caps.
  *
  * ⚠⚠⚠ ONE WORST CASE WAS PICKED FOR EIGHT POOLS AND IT IS THE WRONG ONE FOR THE HERBS.
@@ -345,19 +385,16 @@ export function createFloraRenderer(): FloraRenderer {
   // A stone: low, angular, wider than tall so it reads as lying ON the ground rather than set INTO
   // it. Flattened on Y by the instance scale below rather than in the geometry, so one buffer
   // serves every size.
-  const rockGeo = new THREE.IcosahedronGeometry(0.21, 0)
+  const rockGeo = floraRockGeo()
   // A log: EXACTLY ONE CELL LONG (1.0) so consecutive cells of a run butt against each other into a
   // continuous trunk with no gap and no overlap. Six-sided rather than smooth — this world's
   // vocabulary is faceted, and a 6-gon costs 12 triangles. Built lying along +X; the instance
   // quaternion turns it a quarter turn for a Z-axis log (see `alongX`).
-  const logGeo = new THREE.CylinderGeometry(0.15, 0.13, 1.0, 6)
-  logGeo.rotateZ(Math.PI / 2)
+  const logGeo = floraLogGeo()
   // A mushroom in two parts, for the same reason a herb is body-plus-tip: the cap carries the
   // colour and the silhouette, the stalk just holds it up.
-  const shroomStemGeo = new THREE.CylinderGeometry(0.05, 0.07, 0.24, 5)
-  shroomStemGeo.translate(0, 0.12, 0)
-  const shroomCapGeo = new THREE.ConeGeometry(0.17, 0.15, 8)
-  shroomCapGeo.translate(0, 0.30, 0)
+  const shroomStemGeo = floraShroomStemGeo()
+  const shroomCapGeo = floraShroomCapGeo()
 
   const rockMat = solidMaterial()
   const logMat = solidMaterial()
