@@ -226,6 +226,7 @@ import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
 import { HudCorner } from './hud-corner'
+import { ResourceBars } from './resource-bars'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
 import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVolume,
@@ -2066,36 +2067,6 @@ function Clock() {
  * pattern the ammo readout and the clock already use here: read on an interval, write the DOM width
  * directly, and leave the component tree alone. 10 Hz is well under a frame and well over the eye.
  */
-function ResourceBars({ vitals }: { vitals: React.RefObject<Vitals> }) {
-  const hpEl = useRef<HTMLDivElement>(null)
-  const shEl = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const id = setInterval(() => {
-      const v = vitals.current
-      if (!v) return
-      if (hpEl.current) hpEl.current.style.width = `${Math.max(0, (v.hp / (v.hpMax || 1)) * 100)}%`
-      if (shEl.current) shEl.current.style.width = `${Math.max(0, (v.shield / (v.shieldMax || 1)) * 100)}%`
-    }, 100)
-    return () => clearInterval(id)
-  }, [vitals])
-  return (
-    // ★ A PLATE, NOT BARE BARS. The first cut drew these straight onto the canvas and the health bar
-    // was EMERALD — a green bar on a green world, which vanished into the grass in the very first
-    // screenshot. The style guide's rule is not decoration: text and readouts never sit raw on a
-    // scene, because the scene is the one thing whose colour you do not control. Dark plate, and
-    // health goes warm so the two bars can never be confused with each other or with the ground.
-    <div className="absolute bottom-4 left-4 w-44 rounded bg-black/45 p-1.5 ring-1 ring-white/10
-                    flex flex-col gap-1 pointer-events-none font-mono">
-      {/* Shield above health, in the order a fight actually spends them. */}
-      <div className="h-[6px] rounded-sm bg-black/60 overflow-hidden">
-        <div ref={shEl} className="h-full bg-sky-300 transition-[width] duration-100" style={{ width: '100%' }} />
-      </div>
-      <div className="h-[6px] rounded-sm bg-black/60 overflow-hidden">
-        <div ref={hpEl} className="h-full bg-rose-400 transition-[width] duration-100" style={{ width: '100%' }} />
-      </div>
-    </div>
-  )
-}
 
 function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana }: {
   stats: string; pos: string

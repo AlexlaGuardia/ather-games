@@ -22,6 +22,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { HudCorner } from '../../voxel3d/hud-corner'
+import { ResourceBars } from '../../voxel3d/resource-bars'
+import { freshVitals, damage, type Vitals } from '../../engine/vitals'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
 
@@ -45,6 +47,12 @@ export default function HudDevPage() {
   const mana = useRef<{ cur: number; max: number; regen: number } | null>({ cur: 120, max: 200, regen: 1 })
   const tools = useRef<EquippedTools>(ensureBasicTools({} as EquippedTools))
   const skills = useRef<SkillSet>(createSkillSet())
+  // ⚠ REAL `Vitals`, driven through the REAL `damage()` — the same function the Hollows call. A
+  // harness that just set two percentages would preview a pair of divs; this previews the thing the
+  // fight actually produces, including the shield-soaks-first-then-spills order that makes the two
+  // bars mean different things.
+  const vitals = useRef<Vitals>(freshVitals())
+  const [, bump] = useState(0)
 
   useEffect(() => {
     if (mana.current) { mana.current.max = 200; mana.current.cur = Math.round(200 * pct) }
@@ -79,6 +87,12 @@ export default function HudDevPage() {
                  onChange={e => setPct(Number(e.target.value))} />
           <span className="tabular-nums w-10">{Math.round(pct * 100)}%</span>
         </label>
+        <button type="button"
+          onClick={() => { vitals.current = damage(vitals.current, 22).vitals; bump(n => n + 1) }}
+          className="px-2 py-1 rounded border border-white/20 text-white/60">take a hit</button>
+        <button type="button"
+          onClick={() => { vitals.current = freshVitals(); bump(n => n + 1) }}
+          className="px-2 py-1 rounded border border-white/20 text-white/60">heal</button>
         <button type="button" onClick={() => setLive(v => !v)}
           className={`px-2 py-1 rounded border ${live ? 'border-amber-300 text-amber-200' : 'border-white/20 text-white/60'}`}>
           {live ? 'draining' : 'drain'}
@@ -100,6 +114,7 @@ export default function HudDevPage() {
           resolves exactly as it does over the world. A stage that shrink-wrapped would move the
           corner and the preview would be lying about the only thing it is here to show. */}
       <div className="relative w-full" style={{ height: 'calc(100vh - 49px)', background: bg }}>
+        <ResourceBars vitals={vitals} />
         <HudCorner mana={mana} activeTool={active} tools={tools} skills={skills} />
       </div>
     </div>
