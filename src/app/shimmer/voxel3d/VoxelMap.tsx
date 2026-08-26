@@ -587,10 +587,25 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
         <canvas ref={base} data-map="base" style={{ maxWidth: '94vw', maxHeight: '82vh', width: 'auto', height: 'auto', imageRendering: 'pixelated', borderRadius: 10, border: '1px solid #ffe9b033', display: 'block' }} />
         <canvas ref={marks} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
       </div>
-      <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', color: '#cfc7ae', font: '700 12px ui-monospace, monospace', textAlign: 'center' }}>
-        {inFold
-          ? '✦ your fold · the ring is your threshold · M or click to close'
-          : `✦ ${pct.toFixed(1)}% walked · the ring is the passage to your fold · M or click to close`}
+      {/* ── ★ THE CAPTION JOINS THE HOUSE LAYER (2026-08-26) ────────────────────────────────────
+          It was one flat tone — `#cfc7ae` at `700 12px mono` — carrying three different roles at
+          one weight: a ticking stat, a line of prose, and a key hint. That is the exact "hierarchy
+          carried entirely by one colour" read `gameui.css` exists to end.
+
+          ⚠ THE PROSE DOES NOT GET `.gx-label`. That class uppercases and tracks at 0.22em, which is
+          correct for a short role word and actively wrong for a sentence — the house rule is caps
+          and tracking on SHORT strings only, body stays sentence case. So the stat takes `.gx-value`
+          (bright, and `tabular-nums` because it ticks as you walk), the key hint takes `.gx-label`
+          because it IS a short role string, and the sentence between them stays quiet prose. */}
+      <div className="gx-chrome fixed bottom-6 left-1/2 -translate-x-1/2 text-center text-[12px] text-white/45">
+        {inFold ? (
+          <>✦ your fold · the ring is your threshold · <span className="gx-label">M · close</span></>
+        ) : (
+          <>
+            ✦ <span className="gx-value tabular-nums text-white/85">{pct.toFixed(1)}%</span> walked
+            {' · '}the ring is the passage to your fold · <span className="gx-label">M · close</span>
+          </>
+        )}
       </div>
     </div>
   )

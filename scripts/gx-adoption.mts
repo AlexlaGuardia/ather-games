@@ -37,7 +37,14 @@ const CSS = readFileSync(join(ROOT, 'src/app/gameui.css'), 'utf8')
 const FLOORS: Record<string, number> = {
   vault: 37, rekindle: 22, driftling: 18, squall: 18, dewdrop: 17, ward: 17,
   seedfall: 16, voranyx: 14, atherdash: 12, updraft: 11, manana: 8,
-  shimmer: 23,         // c378800 the fold HUD (8), then the input pass: bindings panel + resolved tutorial hints
+  // ⚠ 64, NOT THE 100 THIS REPORTED BEFORE THE COMMENT FIX ABOVE. Roughly a third of shimmer's
+  // score was its own prose explaining which role takes which class — shimmer is where the layer
+  // work happened, so it is also where the layer is discussed, and it was the only surface whose
+  // count moved when comments stopped counting. Banking 100 would have written that inflation into
+  // a floor that only travels one way: every later run red, unfixable except by writing more
+  // commentary about gx. 23 -> 64 is the honest climb (the fold HUD, brew + keeper panels, the
+  // grimoire portraits, the map caption).
+  shimmer: 64,
   lucernyx: 7, nolmir: 3,
 }
 
@@ -70,7 +77,19 @@ function countGx(dir: string): { hits: number; files: number } {
       // inflated adoption; writing a THOROUGH one would have inflated it more.
       if (/\.test\.tsx?$/.test(e)) continue
       files++
-      hits += (readFileSync(p, 'utf8').match(/\bgx-[a-z]+/g) ?? []).length
+      // ★★ AND THE SAME BUG, ONE STEP FURTHER IN: A SOURCE FILE'S OWN COMMENTS (2026-08-26).
+      // Excluding test files fixed the case where a GUARD names the layer. It does not fix the
+      // case where a SURFACE explains itself — `VoxelMap.tsx` gained a comment saying which role
+      // takes `.gx-label` and which takes `.gx-value`, and those three mentions scored as three
+      // adoptions of a layer the prose merely discusses. The better the comment, the higher the
+      // score: exactly the inversion the note above warns about, and it was still live one line
+      // below the warning. Same shape as the header that quoted its own marker on 08-22 —
+      // documenting a thing created an instance of it.
+      // ⚠ This is a RATCHET with a floor, so an inflated count does not merely mislead: banking
+      // the floor writes the inflation in permanently, and the floor only travels one way.
+      const raw = readFileSync(p, 'utf8')
+      const src = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+      hits += (src.match(/\bgx-[a-z]+/g) ?? []).length
     }
   }
   walk(dir)
