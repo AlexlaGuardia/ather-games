@@ -3179,7 +3179,16 @@ function ToolArc({ activeTool, tools, skills }: {
   //
   // Symmetric on purpose — two low on the shoulders, two high at the crown — so the cluster reads
   // as an arch over the vessel rather than a fan leaning off it.
-  const ANGLES = [30, 70, 110, 150]
+  // ⚠ COUNTER-CLOCKWISE IS *LOWER* ANGLES HERE, WHICH IS WORTH SAYING BEFORE SOMEONE "FIXES" IT.
+  // `ToolSocket` places by `left = r(1−cos θ)`, so rising θ walks LEFT → TOP → RIGHT, i.e. clockwise
+  // on screen. Rotating the cluster counter-clockwise therefore means subtracting from every angle,
+  // not adding. (The `1−cos` mirror is the 08-07 taste pass and is why this is back-to-front.)
+  //
+  // Alex 2026-08-26: spread wider, rotate CCW so the cluster sits left of the vessel's crown.
+  // Was [30, 70, 110, 150] — 120° wide, symmetric about the top. Now 144° wide and swung ~23° CCW,
+  // so the leftmost socket comes down to the gauge's shoulder and the whole set leans off-centre
+  // to the left instead of sitting squarely on top.
+  const ANGLES = [0, 48, 96, 144]
   return (
     <div
       // The container's origin is the arch's LEFT FOOT, and the arch is 2r wide, so it is shifted
