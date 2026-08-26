@@ -11,6 +11,29 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⚡ Shimmer — **THE BIRTH RUNE NOW SCOPES THE LOADOUT: THE BAND, THE TRAIT SPLIT, AND THE LANE LAW** (2026-08-26, hub lane) · *Last touched 2026-08-26 (hub) — shipped `dfc5e4b` + `6896f94` + `0022db1`, pushed, DEPLOYED + browser-verified*
+
+**Left off:** Magii's trait/passive ruling and Alex's world-wide retirement of *"holding any passive pauses recovery"* are both built and live.
+- **The birth-exclusive band** — `KeeperMove.birthExclusive` gates WHO MAY HOLD a move on the rune you were BORN with (Flame Manipulation → Star-born, Moisture Gathering → Fluid-born). Owning the rune is never enough. Gated in `eligibleMoves`, the one filter every band passes through, so the tacticals/signatures Alex ruled into the band later need no new gate. **Browser-verified both ways on prod:** same book, same learned move, only the birth rune differs — Life-born-holding-Star gets no passive section, Star-born gets Flame Manipulation.
+- **The trait tier** — canon's test is a derivation over the move's own source (*no rune → Trait, a rune → Passive*), so no build tuning can void it. `herbal-knowledge` was runeless and tiered `passive`.
+- **One mana axis** — `manaPerSec` + `pausesRecovery` → **`regenMult`**, a multiplier on each world's own base regen. Two measured reasons: the hosts differ **60×** (play3d 1/60 per sec, voxel 1/s), so Moisture Gathering's absolute `0.8` was ~0.8× base in one world and ~48× in the other; and the passive is always-on and UNDROPPABLE, so a hard pause meant a keeper who never regenerates again. Barrier 0.4 · Bulwark 0.15 · Moisture 1.6 · Iron Skin pays in footing (0.85 → 0.7).
+- **The Lane Law** — tacticals ← your ELEMENT lane (breadth) · signature ← your STATE lane (scarcity) · passive ← **no lane** (ruled: reached by trained rune, not birth lane).
+
+**Next:**
+- **Self-element resistance + the curve** (birth rune v3). Magnitudes are Jin's; ⛔ resistance is to your OWN element only — no weakness matrix, no counter-wheel.
+- Whether the birth-exclusive band is surfaced at character-select.
+- Copy nit: the loadout footer says *"the cast bar and this passive take effect"* even for a keeper with no passive.
+
+**Parked / waiting on canon:** two `[OPEN]`s sent to Magii — (1) **Compact and Bind state lanes have NO built signature**, so 6 of 17 birthable runes have a permanently empty B slot (canon's declared coverage debt, at a specific address; notably Bind is where Eyuun's Trick lives); (2) **what does off-lane development actually grant?** — a rune off BOTH lanes has its moves seatable in neither band. Does not bite today (every shipped keeper has exactly one rune, which is trivially on both its own lanes) — it bites the day the Passage grants a 2nd.
+
+**Decisions (do not relitigate):**
+- **`every()`, not `some()`, for a runeword's lane membership.** Measured before choosing: `some()` starves nobody, and gets there by handing out Fog Bank (mist + breeze, holding NEITHER axis) as a natural pick — precisely what `runes.md` calls off-lane, *"possible, costly, and it must be DRIVEN."*
+- **Axes are named, never drawn.** `runes.md` renders elements as COLUMN HEADERS while its prose says *"element row"*, and the gap entry says *"the storm column"* for that same grouping. The docs disagree about the picture, never the meaning — so the code says element/state, never row/column, and the guards pin the axes to canon's three developed mages by name.
+- **The starved lanes PRINT rather than fail.** A debt nobody can see is a debt nobody pays; the assert goes red only if a third lane joins them.
+- **`birth` is a REQUIRED param** on `eligibleMoves`/`derivePassive`/`defaultLoadout`/`canSlot`/`loadLoadout`/`setSlot`, and deliberately NOT read off `owned[0]` — that would make an ordering contract load-bearing inside functions that treat `owned` as a set.
+
+**Files:** `play3d/cast.ts` · `play3d/keeper-moves.ts` · `play3d/loadout.ts` · `play3d/MoveBook.tsx` · `play3d/Shimmer3D.tsx` · `voxel3d/VoxelWorld.tsx` · `play3d/cast.test.ts` · `play3d/loadout.test.ts`
+
 ## 🛠 Shimmer — **THE ASEPRITE IMPORT GOES HEADLESS, BY SHARING THE EDITOR'S MAPPING INSTEAD OF COPYING IT** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `b811662`, pushed, not yet deployed*
 
 ### Left off — Alex asked what tooling would make sprite work easier, and mentioned Meshy
