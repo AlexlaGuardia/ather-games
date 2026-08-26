@@ -72,8 +72,8 @@ export default function HudDevPage() {
   }, [live])
 
   return (
-    <div className="min-h-screen w-full bg-[#0b0d14] text-white/80 font-mono text-[12px]">
-      <div className="flex flex-wrap items-center gap-3 p-3 border-b border-white/10">
+    <div className="h-screen w-full flex flex-col overflow-hidden bg-[#0b0d14] text-white/80 font-mono text-[12px]">
+      <div className="shrink-0 flex flex-wrap items-center gap-3 p-3 border-b border-white/10">
         <span className="text-white/50">HUD CORNER · no world, no GPU</span>
         {BACKDROPS.map(b => (
           <button key={b.id} type="button" onClick={() => setBg(b.css)}
@@ -113,7 +113,11 @@ export default function HudDevPage() {
       {/* The stage is `relative` and viewport-tall, so `absolute bottom-4 right-4` inside HudCorner
           resolves exactly as it does over the world. A stage that shrink-wrapped would move the
           corner and the preview would be lying about the only thing it is here to show. */}
-      <div className="relative w-full" style={{ height: 'calc(100vh - 49px)', background: bg }}>
+      {/* ⚠ `flex-1`, NOT `calc(100vh - 49px)`. The first version hardcoded the toolbar's height, and
+          the moment two more buttons made it wrap to a second row the stage overflowed and pushed
+          the bottom-left bars off screen — a harness lying about the exact corner it exists to show.
+          A measurement of another element's height is a mirror of that element. */}
+      <div className="relative w-full flex-1 min-h-0" style={{ background: bg }}>
         <ResourceBars vitals={vitals} />
         <HudCorner mana={mana} activeTool={active} tools={tools} skills={skills} />
       </div>
