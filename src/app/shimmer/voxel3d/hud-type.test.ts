@@ -113,7 +113,11 @@ if (handRolled.length !== HAND_ROLLED_BASELINE) {
 }
 ok(handRolled.length === HAND_ROLLED_BASELINE,
    handRolled.length > HAND_ROLLED_BASELINE
-     ? `${handRolled.length - HAND_ROLLED_BASELINE} NEW hand-rolled label role(s) (${handRolled.length} vs ${HAND_ROLLED_BASELINE}) at line(s) ${roles.map(r => r.lineNo).join(', ')} — ask for .gx-label instead of restating uppercase+tracking. Listed above; do not raise the baseline.`
+     // ⚠ It says how many MORE there are than the ratchet allows, and does NOT claim to know
+     // WHICH arrived last — it has no per-role baseline to diff against, only a count. Listing all
+     // 33 line numbers behind the words "4 NEW" would assert something this check cannot see.
+     // `git diff <the commit that set the baseline> -- VoxelWorld.tsx` is what names the newcomers.
+     ? `${handRolled.length - HAND_ROLLED_BASELINE} more hand-rolled label role(s) than the ratchet allows (${handRolled.length} vs ${HAND_ROLLED_BASELINE}) — ask for .gx-label instead of restating uppercase+tracking. All ${handRolled.length} are listed above with line numbers; this check cannot tell which are new, so diff VoxelWorld.tsx against the commit that set the baseline. Do NOT raise the baseline.`
      : `${HAND_ROLLED_BASELINE - handRolled.length} label role(s) converted — lower HAND_ROLLED_BASELINE to ${handRolled.length} to bank it`)
 
 // ── 5. the instruments are left alone, deliberately ───────────────────────────────────────────
