@@ -116,7 +116,47 @@ const PRESENCE_TALL = 2.1
 const PRESENCE_R = 0.49
 const PAIR_OFF = 1.4
 
-export function createMistPass(seed: number, ledger0: MistLedger = {}): MistPass {
+/**
+ * ★★ WHERE A PRESENCE'S FEET GO — ONE EXPRESSION, THREE CONSUMERS.
+ *
+ * `patch.floor` is the MINIMUM column across the whole floor radius (`voxel/mist.ts` step 5), not the
+ * ground at the heart. `padSpan` allows a 2-block span inside that radius, so `floor + 1` can sit
+ * BELOW the dirt the spirit is standing on — and it did: Alex found a pair buried in the ground on
+ * 2026-08-26. ⚠ `VoxelWorld.tsx` already carries the warning for the other body type — *"a patrol
+ * placed by `columnHeight` starts buried in it"* — and this pass was doing the very thing that
+ * comment warns against, one level worse, because a minimum is lower than a column.
+ *
+ * ⚠⚠ IT IS ONE FUNCTION BECAUSE THREE THINGS READ IT: the halo mesh, the billboard, and `aimed()`'s
+ * hit box. Those must never disagree — a spirit you can see at one height and aim at at another is
+ * the worst of both, and it is exactly the two-consumers-one-source drift this repo keeps paying for.
+ *
+ * `groundAt` is the host's LIVE probe (`groundTopNear`), same seam `collar-foes` uses for `blocked?`
+ * and `voxel/footing.ts` uses for `heightAt`. Without it this reads the generator, which is correct
+ * for generated ground and blind to anything a keeper has dug or built; with it, a spirit stands on
+ * the world as it actually is.
+ */
+function standYFor(
+  patch: MistPatch, seed: number,
+  groundAt?: (x: number, z: number, hint: number) => number,
+): number {
+  const x = Math.round(patch.x), z = Math.round(patch.z)
+  const gen = columnHeight(x, z, seed)
+  return (groundAt ? groundAt(x, z, gen + 2) : gen) + 1
+}
+
+export function createMistPass(
+  seed: number,
+  ledger0: MistLedger = {},
+  groundAt?: (x: number, z: number, hint: number) => number,
+): MistPass {
+  /** Memo per patch — `aimed()` runs every frame and must not re-probe the world each time. */
+  const standY = new Map<string, number>()
+  const standAt = (p: MistPatch): number => {
+    const k = `${p.x},${p.z}`
+    let v = standY.get(k)
+    if (v === undefined) { v = standYFor(p, seed, groundAt); standY.set(k, v) }
+    return v
+  }
   // ── the lying mist ────────────────────────────────────────────────────────────────────────────
   const pos = new Float32Array(COUNT * 3)
   const aT = new Float32Array(COUNT)
@@ -287,8 +327,8 @@ void main() {
         // Same expression as the mesh placement above: heart, stepped aside only when paired.
         const offs = r.second ? [-PAIR_OFF, PAIR_OFF] : [0]
         for (const off of offs) {
-          const box = bodyBox(r.patch.x + off, r.patch.z, r.patch.floor + 1,
-            r.patch.floor + 1 + PRESENCE_TALL, PRESENCE_R)
+          const y0 = standAt(r.patch)
+          const box = bodyBox(r.patch.x + off, r.patch.z, y0, y0 + PRESENCE_TALL, PRESENCE_R)
           const t = rayBox(ox, oy, oz, dx, dy, dz, box, maxDist)
           if (t !== null && t <= blockDist && t < bestT) { bestT = t; best = r }
         }
@@ -349,7 +389,7 @@ void main() {
           const m = new THREE.Mesh(residentGeo, residentMats[w.form.element])
           // Stands ON the spar floor, at the heart — the patch's own reference point. A pair steps
           // apart across it so neither is hidden inside the other.
-          m.position.set(w.r.patch.x + w.off, w.r.patch.floor + 1, w.r.patch.z)
+          m.position.set(w.r.patch.x + w.off, standAt(w.r.patch), w.r.patch.z)
           m.frustumCulled = false
           residents.add(m)
 
@@ -363,7 +403,7 @@ void main() {
             ? createCreatureBody(w.form.species, { anims: art.anims, palette: art.palette }, { height: PRESENCE_TALL })
             : null
           if (body) {
-            body.object.position.set(m.position.x, w.r.patch.floor + 1 + PRESENCE_TALL / 2, m.position.z)
+            body.object.position.set(m.position.x, standAt(w.r.patch) + PRESENCE_TALL / 2, m.position.z)
             // Draws after the halo so the spirit reads as standing IN the glow, not behind it.
             body.object.renderOrder = 1
             body.object.frustumCulled = false
