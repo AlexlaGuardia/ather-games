@@ -96,6 +96,19 @@ export interface HollowState {
   gutter: number
   /** Per-hollow phase so a pack never pulses in sync. */
   phase: number
+  /**
+   * Seconds until this body may strike again. Per-BODY, not per-form: four stalkers must each be
+   * on their own clock or a pack lands one synchronised hit and then nothing, which reads as a
+   * single big enemy rather than as four.
+   */
+  strikeCd?: number
+  /**
+   * ★ THE STALKER'S MEMORY OF BEING SEEN (2026-08-26, Alex). Latched rather than recomputed raw
+   * every frame so the flee has HYSTERESIS: a pure "is it in the view cone" test flickers on and
+   * off at the boundary, and a body that stutters between advancing and fleeing on alternate
+   * frames reads as a physics bug, not as a thing that fears being watched.
+   */
+  seen?: boolean
 }
 
 /**
@@ -120,6 +133,28 @@ export interface HollowState {
  */
 export type HollowForm = 'warden' | 'stalker' | 'caster'
 
+/**
+ * ── ★★★ WHAT EACH FORM DOES TO YOU (2026-08-26, Alex's call) ──────────────────────────────────
+ * The three forms were a triangle of MOVEMENT with one shared verb: every one of them drained, and
+ * they differed only in reach and duration. Three well-drawn identities, one attack. Alex split
+ * them, and each split follows the form's own description rather than adding a new idea:
+ *
+ *   · `press`  — the WARDEN walks in and hits you. It is the wall; the cost of being in its way.
+ *   · `ambush` — the STALKER strikes only from your BLIND SPOT, and flees while you look at it.
+ *                ★ This is not a new instinct: canon already spawns Hollows out of your sight
+ *                (`PLAYER_EXCLUSION` — "it forms out of sight, never in your lap"). The stalker
+ *                carries that same nature into the fight. It punishes standing still by making
+ *                *where you are not looking* the dangerous place.
+ *   · `sap`    — the CASTER reaches from across the clearing and takes MANA, never health.
+ *                ★ Canon-exact, and the reason this one needed no ruling: `shimmer-geography.md`
+ *                says what absence does on contact is TAKE FREQUENCY, and mana IS frequency. The
+ *                caster is the only form whose attack is literally the thing a Hollow is.
+ *
+ * ⚠ ONLY THE CASTER IS RANGED. The other two must arrive, which is what keeps a wall meaningful to
+ * seven of every nine Hollows and keeps the caster the one that punishes walling up.
+ */
+export type HollowAttack = 'press' | 'ambush' | 'sap'
+
 export interface HollowFormDef {
   /** Dispersal pool. */
   hp: number
@@ -143,8 +178,24 @@ export interface HollowFormDef {
    * floater or a walking smear are both coherent, and inferring would silently weld them together.
    */
   hover: number
-  /** Seconds of drain a touch lays on the keeper. */
+  /**
+   * Seconds of drain a touch lays on the keeper — the slow.
+   *
+   * ⚠ NOW THE WARDEN'S ALONE, and that is a narrowing, not a deletion. It used to be every form's
+   * only attack. The stalker and the caster were given their own (health from the blind spot; mana
+   * from range), so leaving them a slow as well would hand the two forms that got something new an
+   * extra effect nobody asked for. The warden keeps it because "you must go around me" IS its
+   * identity, and slowing the keeper who does not is that sentence as a number.
+   */
   drain: number
+  /** What this form does when it reaches you. */
+  attack: HollowAttack
+  /** HP a strike takes. `sap` forms leave this 0 — a caster never wounds. */
+  damage: number
+  /** Mana a strike takes. Only `sap` uses it; absence taking frequency. */
+  sap: number
+  /** Seconds between strikes from this form. */
+  strikeCd: number
   /** How far out it stops closing. The caster holds this line; the melee forms come all the way. */
   standoff: number
   /** Relative spawn frequency within a pack. */
@@ -176,14 +227,19 @@ export const HOLLOW_STEP_UP = 1
 export const HOLLOW_FORMS: Record<HollowForm, HollowFormDef> = {
   // The wall. Slow enough to walk around, solid enough that you must, and the heaviest drain —
   // so going THROUGH it is a real cost rather than a formality.
-  warden:  { hp: 60, speed: 2.0, radius: 1.15, reach: 1.25, body: 0.85, hover: 0, drain: 3.4, standoff: 0,   weight: 3 },
+  warden:  { hp: 60, speed: 2.0, radius: 1.15, reach: 1.25, body: 0.85, hover: 0, drain: 3.4, standoff: 0,   weight: 3,
+             attack: 'press',  damage: 9, sap: 0,  strikeCd: 1.6 },
   // The pressure. Frail, fast, small. It is the reason you cannot stand still and mine while a
   // pack is out, which is the habit the night is supposed to break.
-  stalker: { hp: 18, speed: 3.9, radius: 0.62, reach: 0.80, body: 0.34, hover: 0, drain: 1.8, standoff: 0,   weight: 4 },
+  // ★ The heaviest single hit in the game, and it is not a balance whim: a strike you can ALWAYS
+  // deny by turning around has to be worth denying. A gentle ambush teaches nobody to look behind.
+  stalker: { hp: 18, speed: 3.9, radius: 0.62, reach: 0.80, body: 0.34, hover: 0, drain: 0,   standoff: 0,   weight: 4,
+             attack: 'ambush', damage: 14, sap: 0,  strikeCd: 2.2 },
   // The reason to move. It never closes and it barely has a body — it drains from across the
   // clearing, so a keeper who solves the other two by backing away has solved nothing.
   // ★ The ONLY form that floats — and the only one a wall cannot answer. That pairing is the point.
-  caster:  { hp: 14, speed: 1.5, radius: 0.70, reach: 7.5,  body: 0,    hover: HOLLOW_HOVER, drain: 2.2, standoff: 6.5, weight: 2 },
+  caster:  { hp: 14, speed: 1.5, radius: 0.70, reach: 7.5,  body: 0,    hover: HOLLOW_HOVER, drain: 0,   standoff: 6.5, weight: 2,
+             attack: 'sap',    damage: 0,  sap: 11, strikeCd: 2.8 },
 }
 
 export const formOf = (h: HollowState): HollowFormDef => HOLLOW_FORMS[h.form]
@@ -306,6 +362,12 @@ export function hollowStep(
   h: HollowState, dt: number, px: number, pz: number,
   groundAt: (x: number, z: number) => number, time: number,
   imp: Impair,
+  /**
+   * The keeper's forward vector, for the stalker's flee (2026-08-26). OPTIONAL, and the default is
+   * "not being looked at" — a host that has not been updated gets the old behaviour (it advances)
+   * rather than a stalker that cowers forever because a missing argument read as a stare.
+   */
+  fx = 0, fz = 0,
 ): void {
   const f = formOf(h)
   // ★ ROOTED STOPS THE DRIFT AND NOTHING ELSE. It still guttes, still bobs, still reads as alive —
@@ -335,6 +397,29 @@ export function hollowStep(
   // movement function rather than a melee one and a ranged one that drift apart.
   const stop = Math.max(0.5, f.standoff)
   let mx = 0, mz = 0
+
+  // ── ★★ THE STALKER BREAKS OFF WHILE YOU LOOK AT IT (2026-08-26, Alex) ───────────────────────
+  // It is the only form that answers to being seen. `seen` is LATCHED on the state so the flee has
+  // hysteresis (see `keeperLooking`), and a blinded stalker is deliberately NOT let off: something
+  // that cannot see you cannot know you are looking, so it keeps coming — which is the one moment
+  // this form is easy, and it is a cast that bought it.
+  if (f.attack === 'ambush' && !imp.blinded) {
+    h.seen = keeperLooking(h, px, pz, fx, fz)
+  } else {
+    h.seen = false
+  }
+  if (h.seen && !imp.rooted && d > 1e-4) {
+    // Backing off along the line you are looking down — it does not sprint, it withdraws. Slower
+    // than its approach on purpose: a stalker that fled at full speed would be unkillable by anyone
+    // who saw it, and the form is supposed to punish NOT looking, never to punish looking.
+    const flee = f.speed * 0.75 * (1 - h.gutter)
+    h.x -= (dx / d) * flee * dt
+    h.z -= (dz / d) * flee * dt
+    const wantY = groundAt(h.x, h.z) + 1 + f.hover
+    h.y += (wantY - h.y) * Math.min(1, dt * 3)
+    return
+  }
+
   if (imp.rooted) {
     // Clamped: no translation this frame. Everything below the movement block still runs.
   } else if (d > stop) {
@@ -468,4 +553,68 @@ export function segmentDist(
   const t = Math.max(0, Math.min(len, (px - ax) * dx + (py - ay) * dy + (pz - az) * dz))
   const qx = ax + dx * t, qy = ay + dy * t, qz = az + dz * t
   return Math.hypot(px - qx, py - qy, pz - qz)
+}
+
+/**
+ * ── ★★ IS THE KEEPER LOOKING AT IT? (2026-08-26) ──────────────────────────────────────────────
+ * A dot product against the keeper's forward vector, with HYSTERESIS: a body already fleeing keeps
+ * fleeing until it is well outside the cone, and one advancing does not turn until it is well
+ * inside. Without the gap a stalker sitting exactly on the boundary flips state every frame and
+ * jitters in place, which reads as a broken body rather than a wary one.
+ *
+ * ⚠ TAKES A FORWARD VECTOR, NOT A YAW. The host has the camera's direction already; converting it
+ * to an angle here and back to a vector inside would be two trig calls per body per frame to
+ * express the thing the caller was already holding.
+ */
+export const SEEN_ENTER = Math.cos((100 * Math.PI / 180) / 2)  // inside a ~100° cone: it knows
+export const SEEN_EXIT  = Math.cos((130 * Math.PI / 180) / 2)  // outside ~130°: it dares again
+
+export function keeperLooking(h: HollowState, px: number, pz: number, fx: number, fz: number): boolean {
+  let dx = h.x - px, dz = h.z - pz
+  const d = Math.hypot(dx, dz)
+  if (d < 1e-4) return true          // standing inside you counts as seen; nothing to sneak behind
+  dx /= d; dz /= d
+  const fl = Math.hypot(fx, fz)
+  if (fl < 1e-4) return h.seen ?? false   // no facing supplied — hold the last answer, never flip
+  const dot = dx * (fx / fl) + dz * (fz / fl)
+  // Hysteresis: the threshold to BECOME seen is tighter than the one to stop being seen.
+  return h.seen ? dot > SEEN_EXIT : dot > SEEN_ENTER
+}
+
+/** What a strike took. `null` = it did not strike this tick. */
+export interface HollowHit {
+  /** HP taken — `press` and `ambush` only. */
+  hp: number
+  /** Mana taken — `sap` only. */
+  mana: number
+  /** Seconds of slow laid on the keeper (the warden's, now). */
+  drain: number
+  form: HollowForm
+}
+
+/**
+ * Can this body strike the keeper right now, and what does it take?
+ *
+ * ⚠ THE AMBUSH GATE LIVES HERE, NOT IN THE HOST. A stalker may only land a blow from OUTSIDE the
+ * keeper's view — that is the whole of Alex's design, and putting it in the host would mean any
+ * second host (the play3d side, a future arena) could reach the same body and forget it. The rule
+ * travels with the creature.
+ *
+ * ⚠ AND THE COOLDOWN TICKS EVEN WHEN IT CANNOT REACH. A stalker that banked its cooldown while you
+ * faced it would hit the instant you turned, every time, which is a punish for turning around — the
+ * opposite of what a blind-spot attacker should teach.
+ */
+export function hollowStrike(
+  h: HollowState, dt: number, px: number, pz: number, imp: Impair, looking: boolean,
+): HollowHit | null {
+  const f = formOf(h)
+  h.strikeCd = Math.max(0, (h.strikeCd ?? 0) - dt)
+  if (imp.disarmed) return null
+  if (h.strikeCd > 0) return null
+  if (!hollowTouching(h, px, pz, imp)) return null
+  // The stalker is the only form that asks. A warden does not care that you can see it — being
+  // seen and coming anyway is what a wall IS.
+  if (f.attack === 'ambush' && looking) return null
+  h.strikeCd = f.strikeCd
+  return { hp: f.damage, mana: f.sap, drain: f.drain, form: h.form }
 }

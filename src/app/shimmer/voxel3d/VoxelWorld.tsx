@@ -169,7 +169,7 @@ import { dayProgress, getPhase, getDisplayTime, isTimePinned, setTimePin } from 
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
-         HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies } from './hollows'
+         HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike } from './hollows'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
 import { computeLight, dayFactor, type LightField } from '../voxel/light'
@@ -223,7 +223,7 @@ import { brewBlocker } from './brew'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneInventory } from '../play3d/rune-inventory'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
-import { freshVitals, pressure, heal, type Vitals } from '../engine/vitals'
+import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
 import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVolume,
@@ -5096,6 +5096,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const hollows = useRef<{ st: HollowState; mesh: THREE.Mesh }[]>([])
   const hollowClock = useRef(0)
   /**
+   * The keeper's facing, refreshed ONCE per frame and read by every Hollow — the stalker's flee
+   * needs it. A `getWorldDirection` per body would be sixty matrix reads for one answer that cannot
+   * change inside a frame; that is the shape `render-audit` exists to catch.
+   */
+  const hollowFwd = useRef(new THREE.Vector3(0, 0, -1))
+  /**
    * ── ★ STATUSES (2026-08-15) — the last dark archetype ────────────────────────────────────────
    * `target id → kind → expiry`. The bag is the ONLY thing in this world that knows both what a
    * status is and what a Hollow is; `engine/statuses.ts` keys on opaque strings and `hollows.ts`
@@ -5933,6 +5939,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     {
       const now = state.clock.elapsedTime
       const day = dayFactor(dayProgress())
+      camera.getWorldDirection(hollowFwd.current)
       hollowClock.current -= dt
       const cap = hollowCap(cols.current.size)
       const spawnHollow = (sx: number, sh: number, sz: number) => {
@@ -6274,20 +6281,70 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           blinded: hasStatus(statusBag.current, st.id, 'blinded', nowMs),
           disarmed: hasStatus(statusBag.current, st.id, 'disarmed', nowMs),
         }
-        hollowStep(st, dt, p.x, p.z, (x, z) => groundTopNear(x, z, st.y), now, imp)
+        // ⚠ The keeper's FACING reaches the step now — the stalker breaks off while it is being
+        // looked at. `hollowFwd` is filled once per frame from the camera, above the body loop; a
+        // getWorldDirection per Hollow would be sixty matrix reads for one unchanging answer.
+        hollowStep(st, dt, p.x, p.z, (x, z) => groundTopNear(x, z, st.y), now, imp, hollowFwd.current.x, hollowFwd.current.z)
         // ── ★ THE TOUCH LANDS (2026-08-11) — before this, a Hollow that caught you glided
         // THROUGH you and nothing happened. Every system upstream (the two-channel light field,
         // the spawn cycle, the pack walk, the lantern's safe room) exists to make the dark cost
         // something, and the cost was never wired. Refreshed, never stacked: four in a pack must
         // read as one sustained drain, not a timer you can never outlive.
-        if (hollowTouching(st, p.x, p.z, imp)) {
-          // `loco.current`, not `lc` — the frame callback's `lc` alias is declared further down,
-          // in the movement block. Same ref either way.
-          const keeper = loco.current
-          const first = keeper.drainT <= 0
-          // The form sets how long its drain holds — the warden is the one you cannot shrug off.
-          keeper.drainT = Math.max(keeper.drainT, formOf(st).drain)
-          if (first) onSay('the grey takes hold — you are slowed')
+        // ── ★★★ THE STRIKE (2026-08-26, Alex ruled the three attack families) ────────────────
+        // Each form now takes something different, and the rule about WHO may strike lives in
+        // `hollowStrike` rather than here, so a second host cannot forget the stalker's blind-spot
+        // condition. This block only applies consequences.
+        const hit = hollowStrike(st, dt, p.x, p.z, imp, st.seen ?? false)
+        if (hit) {
+          if (hit.drain > 0) {
+            // `loco.current`, not `lc` — the frame callback's `lc` alias is declared further down,
+            // in the movement block. Same ref either way.
+            const keeper = loco.current
+            const first = keeper.drainT <= 0
+            keeper.drainT = Math.max(keeper.drainT, hit.drain)
+            if (first) onSay('the grey takes hold — you are slowed')
+          }
+          if (hit.mana > 0) {
+            // ★ THE CASTER TAKES FREQUENCY, WHICH IS WHAT A HOLLOW IS. Floored at zero and never
+            // spilling into health: a sap that wounded once your pool was empty would quietly make
+            // the caster a third melee form, and its whole job is to be answered differently.
+            const m = mana.current
+            if (m) {
+              const before = m.cur
+              m.cur = Math.max(0, m.cur - hit.mana)
+              if (before > 0 && m.cur <= 0) onSay('it has drunk you dry — nothing left to cast with')
+              else if (before > 0) onSay('the reach finds you — your mana thins')
+            }
+          }
+          if (hit.hp > 0) {
+            // ★★ THE FIRST THING IN THE ATHER THAT WOUNDS A KEEPER (Alex ruled 2026-08-26, closing
+            // the cozy-vs-peril gap `hollows.ts` deliberately left open). It routes through
+            // `vitals.damage()` — the wounding path that has existed, tested, with NO caller since
+            // it was written — so the stance resist folds in exactly as it does everywhere else.
+            const res = damage(vitals.current, hit.hp, stance.current?.resist ?? 0)
+            vitals.current = res.vitals
+            lastPressed.current = state.clock.elapsedTime
+            if (res.downed && !dispossessed.current) {
+              // ⚠ THE SAME SEND-BACK THE COLLAR USES, DELIBERATELY. Being downed by a Hollow and
+              // being dispossessed by a Moglin end the same way — you wake at the glade — because
+              // the Ather has one answer to losing and it is never a death screen. What differs is
+              // the line said, and that difference is the whole moral distinction: the collar is
+              // still on HIM; the Hollow was only ever absence, and it is simply gone.
+              dispossessed.current = true
+              const lc = loco.current
+              lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
+              lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+              lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
+              camera.position.set(lc.px, eyeY(lc), lc.pz)
+              settled.current = false
+              const v0 = vitals.current
+              vitals.current = heal(v0, v0.hpMax, v0.shieldMax * Math.max(0, Math.min(1, sendback.current.wake)))
+              lastPressed.current = -999
+              onSay('the grey takes you under — you wake at the glade, and it did not follow')
+            } else {
+              onSay(hit.form === 'stalker' ? 'something struck from behind you' : 'it presses in — you are hurt')
+            }
+          }
         }
         const s = Math.max(0.01, (1 - st.gutter))
         const pulse = 1 + Math.sin(now * 2.3 + st.phase) * 0.07

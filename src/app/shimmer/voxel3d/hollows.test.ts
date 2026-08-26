@@ -8,7 +8,8 @@
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          HOLLOW_SPEED, HOLLOW_HOVER, HOLLOW_STEP_UP, PACK_MAX, PACK_STEP, NIGHT_SKY_MAX, GUTTER_SKY,
          HOLLOW_FORMS, FORM_ORDER, pickForm, pushOutOfBodies, hollowTouching,
-         type HollowState, type HollowForm , UNIMPAIRED, type Impair } from './hollows'
+         type HollowState, type HollowForm , UNIMPAIRED, type Impair,
+         hollowStrike, keeperLooking, SEEN_ENTER } from './hollows'
 import { greyness } from '../voxel/biome'
 import { columnHeight } from '../voxel/height'
 import { packLight } from '../voxel/light'
@@ -331,5 +332,138 @@ process.on('exit', () => {
     const dying = at('warden', 0.3); dying.gutter = 1
     ok(!hollowTouching(dying, 0, 0, UNIMPAIRED), 'a guttered body drains nothing, status or not')
   }
+}
+
+// ── ★★★ 9. THE THREE ATTACK FAMILIES (2026-08-26, Alex) ────────────────────────────────────────
+// The forms were a triangle of MOVEMENT with one shared verb — every one of them drained, and they
+// differed only in reach and duration. These asserts are what stop them collapsing back into that.
+{
+  const mk = (form: HollowForm, x = 0, z = 0): HollowState =>
+    ({ id: 'h', x, y: 10, z, form, hp: HOLLOW_FORMS[form].hp, gutter: 0, phase: 0 })
+  const FWD_X = 1, FWD_Z = 0            // the keeper faces +x
+  const flat = () => 9
+
+  // ── the triangle is a TRIANGLE, on the attack axis too ──
+  {
+    const kinds = new Set(FORM_ORDER.map(f => HOLLOW_FORMS[f].attack))
+    ok(kinds.size === FORM_ORDER.length, `each form attacks differently — kinds: ${[...kinds].join(', ')}`)
+    // ⚠ Named, not counted. A count going red says "something converged" and invites raising it.
+    const wounders = FORM_ORDER.filter(f => HOLLOW_FORMS[f].damage > 0)
+    const sappers = FORM_ORDER.filter(f => HOLLOW_FORMS[f].sap > 0)
+    ok(sappers.join() === 'caster', `ONLY the caster saps mana — sappers: ${sappers.join(', ') || 'none'}`)
+    ok(!wounders.includes('caster'), `the caster NEVER wounds — wounders: ${wounders.join(', ')}`)
+    ok(wounders.length > 0, 'something wounds, or Alex\'s ruling did not reach the table')
+    // ⛔ Only the caster is ranged. This is the pairing that keeps a wall meaningful to the walkers.
+    const ranged = FORM_ORDER.filter(f => HOLLOW_FORMS[f].standoff > 0 || HOLLOW_FORMS[f].reach > 2)
+    ok(ranged.join() === 'caster', `ONLY the caster reaches from range — ranged: ${ranged.join(', ')}`)
+  }
+
+  // ── ★★ THE BLIND SPOT: the whole of the stalker's design ──
+  {
+    // Behind the keeper (keeper faces +x, body sits at -x) → it may strike.
+    // ⚠ INSIDE `reach` (stalker 0.80). At -1 it was simply out of range and the assert was
+    // measuring the fixture, not the blind spot — the empty-window trap in miniature.
+    const behind = mk('stalker', -0.5, 0)
+    ok(!keeperLooking(behind, 0, 0, FWD_X, FWD_Z), 'a body behind you is not seen')
+    const hit = hollowStrike(behind, 1, 0, 0, UNIMPAIRED, false)
+    ok(!!hit && hit.hp > 0, '★ a stalker in your blind spot strikes, and it wounds')
+
+    // In front → it must not, however long it waits.
+    const front = mk('stalker', 0.6, 0)
+    ok(keeperLooking(front, 0, 0, FWD_X, FWD_Z), 'a body in front of you IS seen')
+    let landed = 0
+    for (let i = 0; i < 600; i++) if (hollowStrike(front, 1 / 60, 0, 0, UNIMPAIRED, true)) landed++
+    ok(landed === 0, `★★ a stalker CANNOT strike while you look at it — landed ${landed} over 10s`)
+
+    // ⚠⚠ AND IT MUST NOT BANK THE COOLDOWN — A STRIKE MUST BE LOADED FIRST OR THIS PROVES NOTHING.
+    // The first version of this assert ran the stare on a FRESH body, whose cooldown had never been
+    // set: it could not distinguish "the clock ran down while it waited" from "there was never a
+    // clock", so moving the decrement behind the blind-spot gate left it GREEN. Mutation-caught.
+    // Now: land one strike to load the clock, hold a stare for LONGER than the cooldown, and the
+    // clock must have run to zero in that time.
+    const banked = mk('stalker', -0.5, 0)
+    ok(!!hollowStrike(banked, 1 / 60, 0, 0, UNIMPAIRED, false), 'fixture: the first strike lands and loads the clock')
+    ok((banked.strikeCd ?? 0) > 0, 'fixture: ...and the clock is genuinely loaded, or the test below is vacuous')
+    const stareFor = HOLLOW_FORMS.stalker.strikeCd + 0.5
+    for (let i = 0; i < Math.ceil(stareFor * 60); i++) hollowStrike(banked, 1 / 60, 0, 0, UNIMPAIRED, true)
+    ok((banked.strikeCd ?? 1) === 0, '★★ the cooldown runs DOWN while it waits out of sight — it cannot bank a punish for turning around')
+  }
+
+  // ── the stalker BREAKS OFF while watched, and closes when not ──
+  {
+    // ⚠ BOTH START AT 6 AND RUN 10 FRAMES, so neither clamps. The first version ran a full second
+    // from 3 and compared distances TRAVELLED — but the advance stops on arrival at `stop`, so it
+    // was measuring "how far until it got there" against "how far it ran", and reported the flee as
+    // faster when it is not. Measure the thing the claim is about: the per-frame speed.
+    const seenBody = mk('stalker', 6, 0)
+    const d0 = Math.hypot(seenBody.x, seenBody.z)
+    for (let i = 0; i < 10; i++) hollowStep(seenBody, 1 / 60, 0, 0, flat, i / 60, UNIMPAIRED, FWD_X, FWD_Z)
+    const fled = Math.hypot(seenBody.x, seenBody.z) - d0
+    ok(fled > 0, '★ a watched stalker withdraws')
+
+    const unseen = mk('stalker', -6, 0)
+    const u0 = Math.hypot(unseen.x, unseen.z)
+    for (let i = 0; i < 10; i++) hollowStep(unseen, 1 / 60, 0, 0, flat, i / 60, UNIMPAIRED, FWD_X, FWD_Z)
+    const chased = u0 - Math.hypot(unseen.x, unseen.z)
+    ok(chased > 0, '...and an unwatched one closes')
+
+    // ⚠ IT FLEES SLOWER THAN IT CHASES. A stalker that withdrew at full speed would be unkillable by
+    // anyone who saw it; the form punishes NOT looking and must never punish looking.
+    ok(fled < chased, `withdrawal is slower than the advance (${fled.toFixed(3)} vs ${chased.toFixed(3)})`)
+  }
+
+  // ── the OTHER two do not care that you can see them ──
+  {
+    for (const f of ['warden', 'caster'] as const) {
+      const body = mk(f, f === 'caster' ? 5 : 0.8, 0)
+      const d0 = Math.hypot(body.x, body.z)
+      for (let i = 0; i < 60; i++) hollowStep(body, 1 / 60, 0, 0, flat, i / 60, UNIMPAIRED, FWD_X, FWD_Z)
+      const moved = Math.hypot(body.x, body.z)
+      ok(moved <= d0 + 0.05, `a ${f} does not flee from being looked at (${d0.toFixed(2)} → ${moved.toFixed(2)})`)
+      ok(!!hollowStrike(mk(f, f === 'caster' ? 5 : 0.8, 0), 9, 0, 0, UNIMPAIRED, true),
+        `...and a ${f} strikes you while you watch it`)
+    }
+  }
+
+  // ── ★ A BLINDED STALKER KEEPS COMING — it cannot know it is being watched ──
+  {
+    // ⚠ THE CLAIM IS THAT IT CANNOT KNOW, NOT THAT IT CLOSES. A blinded body already has its heading
+    // rotated by a fixed per-body angle (the existing blinded tell — "sends it the wrong way rather
+    // than nowhere"), so asserting it closes on the keeper tests the BLIND behaviour and would go
+    // red for a completely correct reason. What must hold is that it never enters the flee state:
+    // something that cannot see you cannot know it is being watched, so the stare stops working.
+    const blind = mk('stalker', 3, 0)
+    for (let i = 0; i < 60; i++) {
+      hollowStep(blind, 1 / 60, 0, 0, flat, i / 60, { rooted: false, blinded: true, disarmed: false }, FWD_X, FWD_Z)
+      if (blind.seen) break
+    }
+    ok(blind.seen === false, '★ a BLINDED stalker never enters the flee state — it cannot know you are looking')
+    // And the sighted control, so the assert above is not vacuous: unblinded, in the cone, it flees.
+    const sighted = mk('stalker', 3, 0)
+    hollowStep(sighted, 1 / 60, 0, 0, flat, 0, UNIMPAIRED, FWD_X, FWD_Z)
+    ok(sighted.seen === true, '...while a sighted one in the same spot knows perfectly well')
+  }
+
+  // ── hysteresis: no flicker on the cone boundary ──
+  {
+    // A body parked exactly on the enter threshold, nudged by a hair each frame, must not flip
+    // every frame — a stalker that stutters between advancing and withdrawing reads as a bug.
+    const ang = Math.acos(SEEN_ENTER)
+    let flips = 0, prev: boolean | undefined
+    const body = mk('stalker')
+    for (let i = 0; i < 200; i++) {
+      const a = ang + Math.sin(i) * 0.004        // jitter across the boundary
+      body.x = Math.cos(a) * 4; body.z = Math.sin(a) * 4
+      const now = keeperLooking(body, 0, 0, FWD_X, FWD_Z)
+      body.seen = now
+      if (prev !== undefined && now !== prev) flips++
+      prev = now
+    }
+    ok(flips <= 2, `★ the seen/unseen latch does not flicker on the boundary — ${flips} flips over 200 frames`)
+  }
+
+  // ── disarmed stops a strike, per the status port's own rule ──
+  ok(!hollowStrike(mk('warden', 0.8, 0), 9, 0, 0, { rooted: false, blinded: false, disarmed: true }, false),
+    'a disarmed body cannot strike — the status removes the OPTION')
 }
 
