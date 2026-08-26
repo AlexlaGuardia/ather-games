@@ -227,6 +227,7 @@ import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
 import { HudCorner } from './hud-corner'
 import { ResourceBars } from './resource-bars'
+import { CastGauges, type CastHud } from './cast-gauges'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
 import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVolume,
@@ -998,6 +999,8 @@ export default function VoxelWorld() {
    * read by the dialogue; state here would re-render the world on an encounter.
    */
   const spiritIndex = useRef<SpiritIndex>(createSpiritIndex())
+  /** Bound casts + cooldown deadlines, written by `World` and read by the HUD. See `CastGauges`. */
+  const castOut = useRef<CastHud | null>(null)
   /**
    * How wide Greg has folded this garden — an INDEX into `PLOT_TIERS`, mirrored from the save.
    *
@@ -1898,7 +1901,7 @@ export default function VoxelWorld() {
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
-          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} snapOut={playerSnapRef} space={space} lookOut={lookOut}
+          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
@@ -1924,7 +1927,7 @@ export default function VoxelWorld() {
            bindings={bindings.current} padKind={padRef.current?.kind ?? 'generic'}
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
            nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty}
-           sparLedger={sparLedger} vitals={vitals} mana={mana} />
+           sparLedger={sparLedger} vitals={vitals} mana={mana} cast={castOut} />
       {settings.showFps && prof && <ProfilePanel p={prof.profile} copiedAt={profCopied} />}
       {showSettings && <SettingsPanel s={settings} update={update}
         onControls={() => { setShowSettings(false); setShowBindings(true) }}
@@ -2068,7 +2071,7 @@ function Clock() {
  * directly, and leave the component tree alone. 10 Hz is well under a frame and well over the eye.
  */
 
-function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana }: {
+function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
@@ -2117,6 +2120,8 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
   vitals: React.RefObject<Vitals>
   /** The mana pool, for the vessel in the bottom-right corner. Same ref the sim ticks. */
   mana: React.RefObject<{ cur: number; max: number; regen: number } | null>
+  /** Bound casts + their cooldown deadlines, published by `World`. */
+  cast: React.RefObject<CastHud | null>
   /** Within reach of a placed crafting table — drives the "E — craft" prompt. */
   nearTable: boolean
   craftOpen: boolean
@@ -2412,7 +2417,16 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
       {!build && <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
         spike tier {tier}
       </div>}
-      {!build && <ResourceBars vitals={vitals} />}
+      {/* ── the bottom-left column: what you can do, over what you have left ─────────────────────
+          Cast gauges ABOVE the bars deliberately. The bars are the readout you glance at while
+          something is hitting you and belong closest to the corner; the cooldowns are the thing you
+          are waiting on, and sit where a rising eye finds them. */}
+      {!build && (
+        <div className="absolute bottom-4 left-4 flex flex-col gap-1.5 pointer-events-none">
+          <CastGauges cast={cast} />
+          <ResourceBars vitals={vitals} />
+        </div>
+      )}
       {/* ── ★★ THE MANA VESSEL, AND THE FIRST TIME MANA HAS BEEN DRAWN AT ALL (2026-08-26) ──────
           `brewPotion` has subtracted `manaCost` and `engine/mana.ts` has derived the pool and its
           regen for as long as either has existed, and the keeper has been spending a resource with
@@ -3108,7 +3122,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut, castOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3229,6 +3243,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   foesOut: React.RefObject<null | (() => { posture: string; dist: number; collar: number }[])>
   pressOut: React.RefObject<null | ((key?: string, value?: number) => string)>
   waterOut: React.RefObject<null | ((x: number, y: number, z: number) => number | null)>
+  /** Written by this component, read by the HUD — see `CastGauges`. */
+  castOut: React.RefObject<CastHud | null>
   /** The keeper's two bars. Written here, polled by the HUD. */
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
@@ -5166,6 +5182,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // collapse made it a four-entry array serving three slots, which is harmless RIGHT UP UNTIL a band
   // grows past four and slot N silently reads `undefined` as its cooldown — i.e. permanently ready.
   const castCd = useRef<number[]>(ALL_BANDS.map(() => 0))
+  // ⚠ PUBLISHED UPWARD, because the HUD is a SIBLING of this component and not a child. Same idiom
+  // the file already uses for `foesOut` / `pressOut` / `waterOut`: the world owns the state and
+  // writes a read-only view into a ref the HUD holds. Copying the arrays would be a mirror; this
+  // writes the live ones, so the gauge cannot disagree with the dispatcher that refuses the cast.
+  useEffect(() => {
+    castOut.current = { ids: loadout.current, until: castCd.current }
+  })
   /** Slot pressed this frame, consumed by the frame loop. -1 = nothing. */
   const pendingCast = useRef<number>(-1)
   // The one always-on passive as a runtime spec — DERIVED (capped at one), never cast. Since Alex's

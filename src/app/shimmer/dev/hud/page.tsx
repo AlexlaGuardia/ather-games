@@ -23,6 +23,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { HudCorner } from '../../voxel3d/hud-corner'
 import { ResourceBars } from '../../voxel3d/resource-bars'
+import { CastGauges, type CastHud } from '../../voxel3d/cast-gauges'
+import { ALL_BANDS } from '../../play3d/cast'
 import { freshVitals, damage, type Vitals } from '../../engine/vitals'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
@@ -52,6 +54,9 @@ export default function HudDevPage() {
   // fight actually produces, including the shield-soaks-first-then-spills order that makes the two
   // bars mean different things.
   const vitals = useRef<Vitals>(freshVitals())
+  // A keeper with something bound in both bands. `until` is a live performance.now() deadline, so
+  // "fire" below puts a REAL cooldown on the gauge rather than animating a fake one.
+  const cast = useRef<CastHud | null>({ ids: ['ice-dart', 'chain-lightning'], until: ALL_BANDS.map(() => 0) })
   const [, bump] = useState(0)
 
   useEffect(() => {
@@ -93,6 +98,11 @@ export default function HudDevPage() {
         <button type="button"
           onClick={() => { vitals.current = freshVitals(); bump(n => n + 1) }}
           className="px-2 py-1 rounded border border-white/20 text-white/60">heal</button>
+        {ALL_BANDS.map((k, i) => (
+          <button key={k} type="button"
+            onClick={() => { const c = cast.current; if (c) c.until[i] = performance.now() + 4000 }}
+            className="px-2 py-1 rounded border border-white/20 text-white/60">fire {k}</button>
+        ))}
         <button type="button" onClick={() => setLive(v => !v)}
           className={`px-2 py-1 rounded border ${live ? 'border-amber-300 text-amber-200' : 'border-white/20 text-white/60'}`}>
           {live ? 'draining' : 'drain'}
@@ -118,7 +128,10 @@ export default function HudDevPage() {
           the bottom-left bars off screen — a harness lying about the exact corner it exists to show.
           A measurement of another element's height is a mirror of that element. */}
       <div className="relative w-full flex-1 min-h-0" style={{ background: bg }}>
-        <ResourceBars vitals={vitals} />
+        <div className="absolute bottom-4 left-4 flex flex-col gap-1.5 pointer-events-none">
+          <CastGauges cast={cast} />
+          <ResourceBars vitals={vitals} />
+        </div>
         <HudCorner mana={mana} activeTool={active} tools={tools} skills={skills} />
       </div>
     </div>
