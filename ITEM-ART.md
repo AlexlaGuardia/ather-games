@@ -11,8 +11,8 @@ Items reachable in voxel3d: **111**
 | 🟦 derived | 39 | wears its own block's faces. Never needs hand art. |
 | 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
-| 🟩 painted | 51 | hand-painted flat sprite in `sprites/items.ts`. |
-| ⬜ missing | 8 | **needs art** — draws the plain chip today. |
+| 🟩 painted | 57 | hand-painted flat sprite in `sprites/items.ts`. |
+| ⬜ missing | 2 | **needs art** — draws the plain chip today. |
 | 🟥 blank | 2 | wired to an all-zero frame. Reads as done, renders nothing. |
 
 ## 🟥 Wired but blank — needs art, and the wiring says otherwise
@@ -30,13 +30,7 @@ Paint at `/shimmer/dev?mode=item` (32×32, palette-indexed). Each is one flat sp
 view-angle call to make — these are held objects, not world props.
 
 - [ ] `deadwood` — drop: Deadfall, in world
-- [ ] `goldwood_spade` — tool: farming t1
 - [ ] `mushroom_cap` — drop: Mushroom, in world
-- [ ] `shimmeroak_spade` — tool: farming t2
-- [ ] `starwillow_spade` — tool: farming t3
-- [ ] `worn_blade` — tool: forestry t1
-- [ ] `worn_rinstick` — tool: rinning t1
-- [ ] `worn_spike` — tool: prospecting t1
 
 ## 🌱 Drawn by the flora generator — nothing to draw
 
@@ -67,6 +61,7 @@ source of truth for what a tuft looks like.
 - [x] `glowroot_bulb`
 - [x] `goldwood_bark`
 - [x] `goldwood_blade`
+- [x] `goldwood_spade`
 - [x] `mana_spike`
 - [x] `moonkoi`
 - [x] `moonvine_leaf`
@@ -88,12 +83,14 @@ source of truth for what a tuft looks like.
 - [x] `shimmer_dust`
 - [x] `shimmerbloom_petal`
 - [x] `shimmeroak_blade`
+- [x] `shimmeroak_spade`
 - [x] `shimmerscale`
 - [x] `shimmerwheat_grain`
 - [x] `starbean_pod`
 - [x] `starwillow_blade`
 - [x] `starwillow_branch`
 - [x] `starwillow_sap`
+- [x] `starwillow_spade`
 - [x] `storm_crystal`
 - [x] `stormgrass_blade`
 - [x] `sunpetal_bloom`
@@ -101,6 +98,9 @@ source of truth for what a tuft looks like.
 - [x] `violet_crystal`
 - [x] `violetbloom_petal`
 - [x] `water_crystal`
+- [x] `worn_blade`
+- [x] `worn_rinstick`
+- [x] `worn_spike`
 
 ## 🟦 Derived from block art — nothing to draw
 
