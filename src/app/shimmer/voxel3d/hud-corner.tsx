@@ -71,35 +71,21 @@ function ToolArc({ activeTool, tools, skills }: {
   //
   // Symmetric on purpose — two low on the shoulders, two high at the crown — so the cluster reads
   // as an arch over the vessel rather than a fan leaning off it.
-  // ── ★★ THE ARCH IS A HALO ROUND THE VESSEL, AND THE ROTATION LIVES IN THE ANGLES ─────────────
-  // Measured in `dev/hud` rather than reasoned about, and the measurement corrected me: with the
-  // container translated by exactly −r, a socket's offset from the GAUGE CENTRE is
-  //     dx = −r·cos θ ,  dy = r·sin θ
-  // so every socket sits at the SAME radius r and its screen-polar angle is simply **180° − θ**.
-  // That is a true halo. Any other translate breaks it: at −1.9r the sockets measured 148..182px
-  // from the vessel across a 55° smear instead of a clean arc, which is what "not lined up" was.
+  // ── ★★ A HALO ROUND THE VESSEL, IN PLAIN POLAR BEARINGS ─────────────────────────────────────
+  // 0° = right, 90° = straight up, 180° = left. Every socket sits at the SAME radius from the GAUGE
+  // CENTRE, so this is a real arc — `dev/hud` reports the radius spread and shows a smear the moment
+  // one of these stops being a bearing.
   //
-  // So the offset Alex asked for is a ROTATION, not a shift. Rotating the halo counter-clockwise
-  // means RAISING screen-polar, which means LOWERING θ (they are 180° complements). These angles
-  // put the four sockets at polar 180 / 137 / 93 / 50 — an even 130° sweep whose midpoint is ~115°,
-  // i.e. up-and-LEFT of the crown rather than squarely on top.
-  //
-  // ⚠ Widen or rotate by editing THESE; do not touch the translate. The translate is what makes it
-  // a circle at all, and `dev/hud` will show a smear the moment it stops being −1r.
-  const ANGLES = [0, 43, 87, 130]
+  // Alex: spread it out, rotate counter-clockwise so it sits off to the left. Counter-clockwise is
+  // now simply LARGER bearings, which is the way round a person expects. These sweep 130° with the
+  // midpoint at 115° — up and to the LEFT of the crown rather than squarely on top.
+  const ANGLES = [180, 137, 93, 50]
   return (
     <div
-      // The container's origin is the arch's LEFT FOOT, and the arch is 2r wide, so it is shifted
-      // left by r to centre the crown over the gauge below it.
-      // ⚠ `--tool-arc-r` is INHERITED from the cluster container, not declared here. It has to be
-      // the same number the container reserves its right margin from, and two declarations is the
-      // mirror problem: they would agree until someone retuned one of them.
-      className="absolute left-1/2 bottom-full h-0 w-0 pointer-events-none"
-      // ⚠ −1.9r, NOT −1r. −1r centres the arch's crown on the gauge; the extra ~0.9r is the LEAN Alex
-      // asked for. Angles alone could not get there — the swing is bounded below by θ=0, past which a
-      // socket drops under the gauge's top edge and overlaps the vessel. So the tilt comes from the
-      // angles and the OFFSET comes from here, which also keeps the two adjustable independently.
-      style={{ transform: 'translateX(calc(var(--tool-arc-r) * -1))' } as React.CSSProperties}
+      // ⚠ `top-1/2 left-1/2` — THE ORIGIN IS THE GAUGE'S CENTRE. It was `bottom-full`, the gauge's
+      // TOP EDGE, which placed the arc's centre ~76px above the vessel and is half of why the radii
+      // never came out equal. There is no translate any more: the bearings do all the work.
+      className="absolute left-1/2 top-1/2 h-0 w-0 pointer-events-none"
     >
       {TOOL_FAMILIES.map((family, i) => (
         <ToolSocket key={family} family={family} angleDeg={ANGLES[i]}
@@ -128,10 +114,17 @@ function ToolSocket({ family, angleDeg, active, tools, skills }: {
   const basic = def?.basic ?? false
   const sk = skills.current![family]
   const xpPct = Math.min(1, sk.xp / Math.max(1, xpForSkillLevel(sk.level)))
+  // ── ★★★ TRUE POLAR, MEASURED INTO EXISTENCE (2026-08-26) ────────────────────────────────────
+  // `angleDeg` is a SCREEN-POLAR bearing around the container origin: 0° right, 90° up, 180° left.
+  // The socket's CENTRE lands on that bearing at radius `--tool-arc-r`.
+  //
+  // ⚠ THE OLD FORM `left: r(1−cos θ), bottom: r·sin θ` WAS NEVER A HALO ROUND THE VESSEL, and two
+  // constant offsets hid inside it until `dev/hud` measured them out: the container was anchored to
+  // the gauge's TOP EDGE rather than its centre, and `left`/`bottom` place a socket's CORNER rather
+  // than its middle. Radii round the vessel came out 114..180 instead of constant. Three attempts
+  // to fix the look by sliding the whole cluster sideways were treating that symptom.
   const rad = (angleDeg * Math.PI) / 180
-  // Mirrored sweep: x = r·(1 − cos θ), so the fan steps RIGHT as it rises instead of curling
-  // back over the bar (Alex taste pass 2026-08-07).
-  const cosm = (1 - Math.cos(rad)).toFixed(4)
+  const cos = Math.cos(rad).toFixed(4)
   const sin = Math.sin(rad).toFixed(4)
   const RING_R = 21
   const RING_C = 2 * Math.PI * RING_R
@@ -139,8 +132,11 @@ function ToolSocket({ family, angleDeg, active, tools, skills }: {
     <div
       className="absolute w-14 h-14 max-[639px]:w-[48px] max-[639px]:h-[48px] transition-opacity"
       style={{
-        left: `calc(var(--tool-arc-r) * ${cosm})`,
-        bottom: `calc(var(--tool-arc-r) * ${sin})`,
+        // ⚠ `translate(-50%, -50%)` makes this a CENTRE and not a corner. Without it every socket
+        // is offset by half its own size and the arc stops being an arc.
+        left: `calc(var(--tool-arc-r) * ${cos})`,
+        top: `calc(var(--tool-arc-r) * ${(-Number(sin)).toFixed(4)})`,
+        transform: 'translate(-50%, -50%)',
       }}
     >
       {/* ★ THE DIM GOES ON THE CONTENT, NEVER ON THE PLATE (2026-08-11). This was one
