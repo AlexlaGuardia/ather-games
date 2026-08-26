@@ -41,6 +41,144 @@ const GPU_RESOURCE = /new\s+THREE\.(\w*(?:Geometry|Material|Texture|RenderTarget
 /** Cheap CPU objects — fine to construct, but not in a per-frame loop. */
 const CPU_CHURN = /new\s+THREE\.(Vector2|Vector3|Vector4|Quaternion|Matrix4|Color|Box3|Ray)\b/g
 
+/**
+ * ── ★★ CONTAINMENT, ONE LEVEL UP (2026-08-26) ──────────────────────────────────────────────────
+ * `insideMemo` below was rewritten on 08-12 to stop measuring DISTANCE and start asking *am I
+ * inside it*. The factory check kept BOTH of the habits that fix removed, one level up: it asked
+ * whether the enclosing thing is SPELLED `function`, and whether it is NAMED with one of four
+ * verbs. `flora-mesh.ts` exports four geometry factories as arrow consts — floraLogGeo,
+ * floraShroomStemGeo, floraShroomCapGeo, floraRockGeo — so both answers were no, and this audit
+ * spent four days reporting four deliberate, documented, caller-disposed factories as the
+ * context-loss bug.
+ *
+ * ⚠ A FALSE POSITIVE IS THE EXPENSIVE DIRECTION HERE, and this file's own header is the reason it
+ * is: it tells the next reader not to widen the allowlist when this fails. Noise spends the only
+ * thing a lint has — being believed — and the next real finding arrives wearing the same costume.
+ *
+ * ⚠ THE OLD SCAN ALSO HAD NO END BOUNDARY. `lastIndexOf('\nfunction ')` credits a construction to
+ * the nearest function DECLARED before it, closed or not, so anything at module level after a
+ * factory inherits its name and passes. Nothing in the tree exploited that when this was written
+ * (31 credited constructions, every one genuinely enclosed — checked, not assumed), but it is the
+ * cheapest wrong answer that still satisfies the guard, which is the question to ask of any guard.
+ */
+
+/** The scopes enclosing `at`, innermost first — the offset of each unmatched `{`. */
+function* enclosingScopes(src: string, at: number): Generator<number> {
+  let depth = 0
+  for (let i = at - 1; i >= 0; i--) {
+    const c = src[i]
+    if (c === '}') depth++
+    else if (c === '{') { if (depth === 0) yield i; else depth-- }
+  }
+}
+
+const LOOP_WORDS = ['for', 'while', 'do']
+const BRANCH_WORDS = ['if', 'switch', 'catch', 'else', 'try']
+
+/**
+ * What kind of scope does the `{` at `open` open, and what is it called?
+ * Read backwards: `=>` is an arrow body. Otherwise step over an optional return-type annotation to
+ * the parameter list's `)`, paren-match it, and take the word in front — which is the function's
+ * name, or `for`/`if`/`while`, which open scopes without being functions.
+ *
+ * ⚠ THE NAME IS LOAD-BEARING, not decoration: it is what lets § 1b find the call sites. A resource
+ * built inside an anonymous inline arrow has no call site anyone can look up, so it earns no
+ * factory credit and must justify itself as a memo or a cache instead.
+ */
+function scopeAt(src: string, open: number): { kind: 'fn' | 'loop' | 'block'; name: string } {
+  const block = { kind: 'block' as const, name: '' }
+  let j = open - 1
+  while (j >= 0 && /\s/.test(src[j])) j--
+  if (j >= 1 && src[j] === '>' && src[j - 1] === '=') {
+    const head = src.slice(Math.max(0, j - 300), j - 1)
+    const m = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=]+?)?\s*$/.exec(head)
+    return { kind: 'fn', name: m?.[1] ?? '' }
+  }
+  if (src[j] !== ')') {
+    // a return-type annotation can sit between the parameters and the body: `): Foo {`
+    const close = src.lastIndexOf(')', j)
+    const colon = src.lastIndexOf(':', j)
+    if (close < 0 || colon < close) return block   // an object literal, or a bare block
+    j = close
+  }
+  let d = 0
+  for (; j >= 0; j--) {
+    if (src[j] === ')') d++
+    else if (src[j] === '(') { d--; if (d === 0) break }
+  }
+  if (j < 0) return block
+  const word = /([A-Za-z_$][\w$]*)\s*$/.exec(src.slice(Math.max(0, j - 200), j))?.[1] ?? ''
+  if (!word) return block
+  if (LOOP_WORDS.includes(word)) return { kind: 'loop', name: word }
+  if (BRANCH_WORDS.includes(word) || word === 'return') return block
+  return { kind: 'fn', name: word }
+}
+
+/**
+ * The named function enclosing `at`, walking OUT through branches and loops — a `for` inside a
+ * one-shot factory is fine, and `mist-pass` builds its instance buffers exactly that way.
+ * `null` means module level; `''` means a function with no name to look up.
+ */
+/**
+ * ⚠ A REACT COMPONENT IS A NAMED FUNCTION AND IT IS NOT A FACTORY — it runs on every render, and
+ * `World` in `VoxelWorld.tsx` encloses two dozen constructions. The reason to exclude it is not
+ * taste: the whole point of factory credit is that the rule MOVES to the call sites, and a
+ * component's call site is JSX, which § 1b cannot read. A credit whose deferral goes nowhere is a
+ * waiver wearing a factory's clothes. React requires components be capitalised, so this is a
+ * language rule rather than a naming guess — and everything caught by it here is inside a `useMemo`
+ * and passes on that instead, which is what the credit would have been standing in for.
+ */
+const isComponent = (name: string): boolean => /^[A-Z]/.test(name)
+
+function enclosingFunction(src: string, at: number): string | null {
+  // A concise arrow body has no braces to match: `const floraRockGeo = (): T => new THREE.X(...)`.
+  const lead = src.slice(Math.max(0, at - 300), at)
+  if (/=>\s*$/.test(lead)) {
+    const m = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=]+?)?\s*=>\s*$/.exec(lead)
+    return m?.[1] ?? ''
+  }
+  for (const open of enclosingScopes(src, at)) {
+    const sc = scopeAt(src, open)
+    if (sc.kind === 'fn') return isComponent(sc.name) ? null : sc.name
+  }
+  return null
+}
+
+/**
+ * Does this call site run more than once per owner? This asks the thing actually feared —
+ * *is it called PER OBJECT* — instead of a proxy for it. A loop between the call and its enclosing
+ * function is literally per-iteration; an anonymous callback that is not a memo initialiser is the
+ * `.map(...)`/`.forEach(...)` shape, which is the same thing wearing a different hat.
+ */
+function isRepeatedCall(src: string, at: number): boolean {
+  // ⚠ A CONCISE ARROW BODY HAS NO BRACES, so the scope walk below cannot see it and walks straight
+  // past to whatever named function holds it. `[8, 16].map(s => toTexture(...))` read as one-shot
+  // for exactly that reason — caught by mutation, not by review.
+  const lead = src.slice(Math.max(0, at - 300), at)
+  if (/=>\s*$/.test(lead)) {
+    const named = /(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*(?::[^=]+)?\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=]+?)?\s*=>\s*$/.test(lead)
+    // a named arrow is a factory and the question moves to ITS call sites; an anonymous one is a
+    // callback, which is the per-object shape — unless it is a memo initialiser, which runs once.
+    return named ? false : !/useMemo\(\s*\(\s*\)\s*=>\s*$/.test(lead)
+  }
+  for (const open of enclosingScopes(src, at)) {
+    const sc = scopeAt(src, open)
+    if (sc.kind === 'loop') return true
+    if (sc.kind === 'fn') return sc.name === '' && !/useMemo\(\s*\(\s*\)\s*=>\s*$/.test(src.slice(Math.max(0, open - 40), open))
+  }
+  return false
+}
+
+/**
+ * ★ THE REGISTRY IS WHAT MAKES § 1b A DERIVATION RATHER THAN A SECOND VOCABULARY.
+ * § 1b used to match call sites by name shape — `(create|make|build)\w*(Material|Texture|Array)` —
+ * a hand-kept list running parallel to § 1's own. Two lists that must agree about which functions
+ * are factories, with nothing checking that they do: the mirror shape this repo has paid for
+ * repeatedly. § 1 now records what it credited, and § 1b judges exactly that set, so the two halves
+ * of the doctrine cannot drift apart — one is derived from the other.
+ */
+const factories = new Map<string, Set<string>>()
+
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -104,36 +242,19 @@ for (const file of files) {
     // matters is that a factory is not CALLED per object. So: allow the construction here, and
     // separately assert every call site is one-shot (see § 1b).
     //
-    // ⚠ Find the ENCLOSING function rather than scanning a fixed window. The first version looked
-    // back 600 characters, which flagged `createPieceRenderer`'s ghost material simply because that
-    // factory is long. Widening the window would have been guessing; taking the nearest preceding
-    // `export function` is actually asking which function we are inside. `make`/`create`/`build`/`to`
-    // are all the same shape — the verb is not the point.
     // Export is NOT part of what makes something a factory — a local helper that builds and returns
     // a resource is if anything MORE bounded than an exported one. What matters is the shape: a
-    // function whose job is to construct and hand back.
-    const before = src.slice(0, idx)
-    const lastFn = Math.max(before.lastIndexOf('\nexport function '), before.lastIndexOf('\nfunction '))
-    const enclosing = lastFn < 0 ? '' : before.slice(lastFn, lastFn + 120)
-    const inFactory = /function\s+(create|make|build|to)[A-Z]/.test(enclosing)
+    // function whose job is to construct and hand back. `enclosingFunction` above carries why this
+    // asks containment rather than spelling, and what the two earlier versions each got wrong.
+    const owner = enclosingFunction(src, idx)
+    const inFactory = !!owner
+    if (owner) factories.set(owner, (factories.get(owner) ?? new Set()).add(m[1]))
 
     ok(memoised || cached || inFactory,
       `${file}:${lineNo} constructs THREE.${m[1]} outside a useMemo/cache/factory — a GPU resource per object is the context-loss bug (${line.trim().slice(0, 80)})`)
   }
 
-  // ── 1b. a MATERIAL factory must never be called per object ─────────────────────────────────
-  // Geometry factories are called per mesh by necessity (each chunk has its own vertices, and the
-  // caller disposes them). Material factories must not be: a material is a shader program, and one
-  // per object is precisely what got the page blocked from WebGL.
-  // Materials AND textures: both are expensive GPU objects whose factories must be called once.
-  // (Geometry factories are exempt — each chunk genuinely owns its vertices and the caller disposes.)
-  for (const m of src.matchAll(/\b((?:create|make|build)\w*(?:Material|Texture|Array))\s*\(/g)) {
-    const lineNo = src.slice(0, m.index ?? 0).split('\n').length
-    const context = lines.slice(Math.max(0, lineNo - 3), lineNo).join('\n')
-    const near = lines.slice(Math.max(0, lineNo - 6), lineNo + 1).join('\n')
-    const oneShot = /useMemo\(/.test(near) || /^\s*(export\s+)?(const|function)\s/.test(lines[lineNo - 1] ?? '')
-    ok(oneShot, `${file}:${lineNo} calls ${m[1]}() outside a useMemo — one shader program per object is the context-loss bug`)
-  }
+  // (§ 1b now runs after this loop — it needs the whole registry before it can judge.)
 
   // ── 2. no CPU churn inside a useFrame body ─────────────────────────────────────────────────
   // Not fatal, but 240 throwaway Vector3 per second is the exact GC pressure the mesher and carver
@@ -148,6 +269,61 @@ for (const file of files) {
     }
     pass++
   }
+}
+
+// ── 1b. an expensive factory must never be called per object ──────────────────────────────────
+// Geometry factories are called per mesh by necessity (each chunk has its own vertices, and the
+// caller disposes them). Material/texture factories must not be: a material is a shader program,
+// and one per object is precisely what got the page blocked from WebGL.
+//
+// ★ THE NAMES ARE DERIVED FROM § 1 (see `factories`), not restated here.
+//
+// ⚠ AND THE ONE-SHOT TEST USED TO BE PROXIMITY — the same bug § 1 just lost, in the other half of
+// the same doctrine. It asked whether the PREVIOUS LINE looks like a declaration, so
+// `makeBladeTexture` — an arrow const whose body wraps onto the next line — read as a per-object
+// call of `toTexture()`. It asks containment now, and it asks the question actually feared: is
+// there a LOOP between this call and the function that holds it.
+{
+  const EXPENSIVE = /(?:Material|Texture|RenderTarget)$/
+  const sources = new Map(files.map(f => {
+    const raw = readFileSync(join(DIR, f), 'utf-8')
+    const blank = (m: string) => m.replace(/[^\n]/g, ' ')
+    return [f, raw.replace(/\/\*[\s\S]*?\*\//g, blank).replace(/\/\/[^\n]*/g, blank)] as const
+  }))
+
+  // ── ⚠ THE BOUND ON THIS CHECK, STATED RATHER THAN LEFT SILENT ────────────────────────────────
+  // § 1b judges functions that construct a resource DIRECTLY. A named one-line delegate that only
+  // forwards to a factory is not registered, so calling the DELEGATE per object is not caught.
+  // I built the fixpoint that closes it and threw it away: propagating registration through call
+  // sites promoted a helper named `tick`, and a bare-name search for `tick(` then matched
+  // `waterMaterial.tick(...)`, `steam.tick(...)` and three more unrelated methods — five false
+  // positives, in a guard whose header tells the next reader not to widen the allowlist when it
+  // fails. A cheap generic name is enough to turn that closure into noise, and noise here costs
+  // more than the hole does. Named and left open on purpose; close it with a call GRAPH if it ever
+  // bites, not with a name match.
+  const judged = [...factories].filter(([, kinds]) => [...kinds].some(k => EXPENSIVE.test(k))).map(([n]) => n)
+
+  // The count guard, for the reason `tiles.ts` above has one: if this ever parses to a handful, the
+  // registry has collapsed and every assert below is auditing a subset it silently chose for itself.
+  ok(judged.length >= 10,
+     `only ${judged.length} material/texture factories were registered by § 1 — the registry has collapsed and § 1b is auditing a subset`)
+
+  for (const name of judged) {
+    for (const [file, src] of sources) {
+      const lines = src.split('\n')
+      // ⚠ NOT `\b${name}\(` — that matches `someObject.${name}(`, a different function that merely
+      // shares a name. The propagation experiment above died of exactly this.
+      for (const c of src.matchAll(new RegExp(`(?<![.\\w$])${name}\\s*\\(`, 'g'))) {
+        const idx = c.index ?? 0
+        const lineNo = src.slice(0, idx).split('\n').length
+        // the declaration itself is not a call site
+        if (new RegExp(`(?:function|const|let|var)\\s+${name}\\b`).test(lines[lineNo - 1] ?? '')) continue
+        ok(!isRepeatedCall(src, idx),
+           `${file}:${lineNo} calls ${name}() inside a loop — that is one ${[...(factories.get(name) ?? [])].join('/')} per object, the context-loss bug (${(lines[lineNo - 1] ?? '').trim().slice(0, 80)})`)
+      }
+    }
+  }
+  console.log(`render-audit § 1b judged ${judged.length} material/texture factories, derived from § 1: ${judged.join(', ')}`)
 }
 
 // ── 3. the shared-resource contract is stated where it can be read ────────────────────────────

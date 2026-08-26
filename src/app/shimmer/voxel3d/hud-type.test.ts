@@ -84,12 +84,36 @@ for (const [i, m] of pairs.entries()) {
 // so the number is recorded and RATCHETED instead. It is an EXACT match on purpose: add a 30th and
 // this goes red, convert one and it goes red until you lower the number. The count can only travel
 // downwards, and it cannot rot into a silent exemption the way a "known issues" list does.
+//
+// ── ★★ AND IT MUST NAME THEM, NOT COUNT THEM (2026-08-26) ─────────────────────────────────────
+// This reported `33 vs 29` and stopped. A red count that names nothing invites the cheapest green
+// there is — edit the 29 to a 33 — and that edit is indistinguishable from banking a conversion,
+// which is the one direction this ratchet exists to forbid. It went red on 08-26 and sat red for
+// nineteen hours with three commits landing on top, which is what an unactionable alarm earns: a
+// reader who cannot see what to do discounts it, and the next red is discounted faster.
+// So the ratchet stays exactly as designed and the REPORT changes: every offender is printed with
+// its line number and the tracking value it hand-rolls, and the spellings are tallied, because
+// "one role spelled nine ways" is the actual defect and a bare total cannot show it.
 const HAND_ROLLED_BASELINE = 29
+const hudLines = HUD.split('\n')
 const handRolled = [...block.matchAll(/className="[^"]*\buppercase\b[^"]*"/g)]
   .filter(m => !m[0].includes('gx-label'))
+const roleAt = (m: RegExpMatchArray) => {
+  const lineNo = HUD.slice(0, m.index ?? 0).split('\n').length
+  const track = /tracking-\[([^\]]+)\]|tracking-(wider|widest)/.exec(m[0])
+  return { lineNo, track: track ? (track[1] ?? track[2]) : '(none)', text: (hudLines[lineNo - 1] ?? '').trim() }
+}
+const roles = handRolled.map(roleAt)
+if (handRolled.length !== HAND_ROLLED_BASELINE) {
+  const spellings = [...new Set(roles.map(r => r.track))].sort()
+  console.log(`\n  hand-rolled label roles, all ${roles.length} of them, in ${'VoxelWorld.tsx'}:`)
+  for (const r of roles) console.log(`    ${r.lineNo}  tracking ${r.track}  ${r.text.slice(0, 96)}`)
+  console.log(`  ${spellings.length} spellings of ONE role: ${spellings.join(' ')}`)
+  console.log(`  ⚠ the fix is .gx-label on these lines — NOT a new number on HAND_ROLLED_BASELINE.\n`)
+}
 ok(handRolled.length === HAND_ROLLED_BASELINE,
    handRolled.length > HAND_ROLLED_BASELINE
-     ? `a NEW hand-rolled label role appeared (${handRolled.length} vs ${HAND_ROLLED_BASELINE}) — ask for .gx-label instead of restating uppercase+tracking`
+     ? `${handRolled.length - HAND_ROLLED_BASELINE} NEW hand-rolled label role(s) (${handRolled.length} vs ${HAND_ROLLED_BASELINE}) at line(s) ${roles.map(r => r.lineNo).join(', ')} — ask for .gx-label instead of restating uppercase+tracking. Listed above; do not raise the baseline.`
      : `${HAND_ROLLED_BASELINE - handRolled.length} label role(s) converted — lower HAND_ROLLED_BASELINE to ${handRolled.length} to bank it`)
 
 // ── 5. the instruments are left alone, deliberately ───────────────────────────────────────────
