@@ -11,6 +11,53 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🌫 Shimmer voxel — **THE MIST SPAR WAS NEVER BLOCKED: TWO COMMENTS SAID [OPEN] FOR 17 DAYS AFTER IT WAS RULED** (2026-08-26, world lane) · *Last touched 2026-08-26 (world) — `mist.ts` + `mist-pass.ts`, comments only, no behaviour change*
+
+### Left off — comments corrected, oracles green, nothing else touched
+Asked to "land the mist rosters". ★ **They were landed 2026-08-09, the same day canon ruled them** (`bfb884b`),
+and so was everything around them. What was actually broken was the *documentation of their own status*, in the
+two files a person reads first when they go looking.
+
+### Decisions
+- **★★ THE FEATURE IS COMPLETE AND THE COMMENTS SAID IT WAS PARKED.** Live and verified this session:
+  `mist-roster.ts` (all ten species across five regions + the Mycelial corridor mirror; **oracle 22/22**),
+  `mist-encounter.ts` (per-patch ledger, `WITHDRAW_MS`, a win path that records a **withdrawal** and has no
+  capture step by design), `mist-difficulty.ts` (absolute regional bands, never party-average), wired through
+  `VoxelWorld.tsx` (:196 :942 :1460 :1528 :6987) with the spar aimed and range-gated, and the prompt has NAMED
+  the resident since 08-09 — *"A ${spar.name} answers the mist"*. The 08-18 grimoire seeker-half pays on the
+  meeting. `mist.test.ts` 25/25, canon gate 2 NOTE · 11 CLEAN, unchanged.
+- **★★★ SO THE ONLY GENERIC THING IS THE SILHOUETTE, AND IT IS WAITING ON ART, NOT ON CANON.** `mist-pass.ts`
+  draws a faceless lathe with an element-tinted rim for all ten species. Its comment blamed an `[OPEN]` canon
+  gap. **Those are different queues with different owners** — canon's was closed on 08-09; the real one is
+  *"what does a Shimmer spirit look like as a 3D form"*, which is **character art and Alex's call**, exactly the
+  rule `greg.ts` states for Gregory's stacked boxes and `piece-mesh.ts` for the six building pieces.
+  ⚠ **Mislabelling an art queue as a canon queue parks work on a seat that was never asked** — Magii could not
+  have unblocked this at any point in those 17 days, because Magii had already done it.
+- **★ THE SILHOUETTE IS NOT A HEDGE AND SHOULD NOT BE "FIXED" BY GUESSING.** The presence being legible from
+  outside the patch is the **consent design** (`mist-pass.ts` — you approach a spar, you do not trip over one),
+  and being *named* in the prompt already carries the species. So the placeholder costs the player information
+  they do not actually lack. It is a look, not a gap.
+- **★ WHAT THE CORRECTED COMMENTS NOW DO DIFFERENTLY, because "update the comment" is not the lesson.** Both
+  now cite **the ruling** (`shimmer-geography.md` › *The rosters — ruled*), never the queue entry. A ruling file
+  changes only when the fact changes; a gap file's entire job is to **stop describing** the thing. Citing the
+  queue guarantees the note rots at the exact moment the answer arrives, which is the worst possible timing.
+- **★ AND THE UNRULED-ZONE HOLE IS ALREADY GUARDED, which I only found by running the oracle instead of
+  reasoning about it.** `garden` and `moonwell-glade` carry `mist: 1` — the densest setting — and canon ruled
+  no roster for either. That should be a faceless resident in the two mistiest zones in the game. It is not:
+  `mist-roster.test.ts` asserts *no patch the generator currently produces lands in a zone canon was never
+  asked about*, and its own header names the failure mode it exists to catch (*"a faceless resident nobody
+  notices for a month"*). Green. **The trap I went looking for had a guard on it written before I arrived.**
+
+### Next
+1. **Per-species 3D forms for the ten mist residents — ALEX'S ART CALL, and the one real open item here.**
+   Precedent to match is `greg.ts` (placeholder now, character art later), not a code decision.
+2. Nothing else. The encounter is playable end to end.
+
+### Files
+`src/app/shimmer/voxel/mist.ts` (25-40, comment) · `src/app/shimmer/voxel3d/mist-pass.ts` (17-32, comment) ·
+read-only: `mist-roster.ts` · `mist-encounter.ts` · `mist-difficulty.ts` · `mist-roster.test.ts` (22) ·
+`mist.test.ts` (25) · `CANON/game/shimmer-geography.md` (784-860, the ruling)
+
 ## ⚖️ Shimmer — **TWO AGED RULINGS CLOSED: THE GRIMOIRE IS UI, AND THE MIST TAIL STAYS EMPTY** (2026-08-26, world lane) · *Last touched 2026-08-26 (world) — rulings only, deliberately no code change*
 
 ### Left off — #385 (19d) and #413 (16d) ruled and closed; both were mine the whole time
@@ -61,16 +108,26 @@ substrate window's #347 (answered elsewhere, never walked back); this is the sam
 - **★ A STALE CITATION FOUND WHILE RULING, and it is the #347 shape in a code comment.** `voxel/mist.ts:31`
   still reads *"Which species spar in which garden region is **[OPEN]** in CANON_GAPS (2026-08-07)"*. It is
   **`[RULED]`** (CANON_GAPS:1355, ruled 08-09) with all ten rosters landed in `game/shimmer-geography.md`.
-  The comment was accurate when written and has been wrong for 17 days, and it is load-bearing: it is the
-  reason the resident is still a neutral luminous form. **A code comment citing a queue inherits that
-  queue's shelf life and nothing links them.** Not fixed here — `mist.ts` is not this lane's file.
+  The comment was accurate when written and has been wrong for 17 days. **A code comment citing a queue
+  inherits that queue's shelf life and nothing links them.**
+  - **⚠⚠ CORRECTED SAME SESSION — THE SENTENCE THAT FOLLOWED THIS WAS WRONG, AND IT IS THE BEST THING
+    THIS BLOCK CONTAINS.** It read *"it is the reason the resident is still neutral"*, and from that I told
+    Alex the spar encounter had *"been parked 17 days on a question answered two days after it was filed."*
+    **False.** The rosters landed **2026-08-09, the same day canon ruled them** (`bfb884b`), and the whole
+    encounter shipped with them — `mist-roster.ts` (ten rosters, exclusivity oracle 22/22), `mist-encounter.ts`
+    (ledger, withdrawal, no capture step), `mist-difficulty.ts`, wired through `VoxelWorld.tsx`, and the spar
+    prompt has NAMED the species since 08-09 (*"A ${spar.name} answers the mist"*). Nothing was parked.
+    ★ **I made an absence claim from a single stale comment and was most of the way to rebuilding a shipped
+    feature** — the exact failure the 08-23 PATTERNS entry names (*a negative result needs a second instrument
+    before it becomes a sentence*), committed by someone who had cited that entry twice the same hour. The
+    second instrument here cost one `ls`. See the block above for what was actually left.
 
 ### Next
 1. **Delete the orphan `spirit_grimoire` `ItemDef`** (`sprites/items.ts:397`) — **sprites lane**, one line.
 2. **Rule `mana_pot` the same way or fold it into `clay_pot`** (`sprites/items.ts:395`) — same cohort, same
    orphan test, but a different item, so it gets its own decision rather than riding this one.
-3. **Refresh `voxel/mist.ts:31` to cite the RULING, not the gap**, and land the ten ruled rosters — the
-   resident can stop being neutral. **Not world lane's call alone**; it is the encounter build.
+3. ~~Refresh `voxel/mist.ts:31` and land the ten ruled rosters~~ — **half done, half never needed.** The
+   comment is fixed (`mist.ts` + `mist-pass.ts`); the rosters have been live since 08-09. See the block above.
 
 ### Files
 Read-only this session. `src/app/shimmer/sprites/items.ts` (395, 397) · `src/app/shimmer/voxel/mist.ts` (25-35) ·

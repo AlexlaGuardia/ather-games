@@ -28,11 +28,20 @@
 // own cell only. mist.test.ts asserts the inequality, so a retune that breaks it fails loudly
 // instead of quietly slicing patches in half at cell seams (the failure would look like terrain).
 //
-// ⚠ WHAT MANIFESTS HERE IS NOT SETTLED. Which species spar in which garden region is [OPEN] in
-// CANON_GAPS (2026-08-07) — a species-truth question, Magii's. Nothing in this file names, implies
-// or rosters a species; it answers only WHERE the mist lies. The renderer's resident is a neutral
-// luminous form for the same reason the ruin is a neutral blockout: a guess that ships becomes
-// accidental canon. Placement and look do not change when the ruling lands.
+// ⚠ THIS FILE STILL ANSWERS ONLY *WHERE* — and that has not changed, but the reason has. Which
+// species spar in which garden region was RULED 2026-08-09 (`CANON/game/shimmer-geography.md` ›
+// *The rosters — ruled*; CANON_GAPS:1355). The ten rosters are live in `voxel3d/mist-roster.ts` and
+// `mist-roster.test.ts` proves exclusivity holds. Nothing in this file names, implies or rosters a
+// species anyway — that separation is deliberate and permanent: `voxel/` is worldgen and may not
+// import three, so WHERE and WHO stay in different modules.
+//
+// ⚠⚠ THIS COMMENT SAID "[OPEN] in CANON_GAPS" UNTIL 2026-08-26 — SEVENTEEN DAYS AFTER IT WAS RULED,
+// and it cost a session. A jin window read it, believed the feature was parked on canon, and was
+// most of the way to rebuilding a roster that had shipped the same day the ruling landed. It was
+// accurate when written; accuracy is not the property that saves you. ★ A CODE COMMENT CITING A
+// QUEUE INHERITS THAT QUEUE'S SHELF LIFE, AND NOTHING LINKS THEM — cite the RULING (a file that
+// only changes when the fact does), never the QUEUE ENTRY (a file whose whole job is to stop
+// describing it).
 
 import { value2, hash2, mixSeed } from './noise'
 import { columnHeight, poolDepthAt, type HeightConfig, DEFAULT_HEIGHT } from './height'

@@ -14,12 +14,23 @@
 // bright over a small hot surface; mist's are many, large and faint, because a fog layer is made of
 // overlap — twenty soft sprites at 0.13 alpha read as depth, four at 0.6 read as four sprites.
 //
-// ⚠ THE RESIDENT CLAIMS NO SPECIES, DELIBERATELY. Which spirit spars in which garden region is
-// [OPEN] in CANON_GAPS — Magii's to rule. So this draws a LUMINOUS PRESENCE: a silhouette with a
-// bright rim and no face, no limbs, no colour identity beyond the mist's own gold. That is the same
-// precedent as the neutral ruin blockout, and it is load-bearing rather than lazy — a guess that
-// ships becomes accidental canon and then contradicts a book. Swapping in real forms when the
-// ruling lands touches this file only.
+// ⚠ THE RESIDENT CLAIMS NO SPECIES *VISUALLY*, AND THE REASON CHANGED ON 2026-08-09 — READ THIS
+// BEFORE "UNBLOCKING" IT. The roster was RULED that day (`CANON/game/shimmer-geography.md` › *The
+// rosters — ruled*) and the build followed the same day: `mist-roster.ts` knows exactly which of the
+// ten species stands in this patch, `mist-encounter.ts` resolves it, and the spar prompt NAMES it
+// before you commit (`VoxelWorld.tsx` › `A ${spar.name} answers the mist`). So the species is not
+// unknown and is not hidden — it is spoken, and only the SILHOUETTE is generic.
+//
+// ★ WHAT REMAINS IS AN ART DECISION, NOT A CANON ONE — and it is ALEX'S, the same rule `greg.ts`
+// states for Gregory's stacked-box placeholder and `piece-mesh.ts` for the building pieces. A
+// per-species 3D form for a Shimmer spirit is character art; this file should not invent one. The
+// lathe silhouette + element-tinted rim is a deliberate placeholder that reads as "someone is
+// standing in there", not a canon hedge. When the forms exist, swapping them touches this file only.
+//
+// ⚠⚠ THIS COMMENT SAID "[OPEN] in CANON_GAPS — Magii's to rule" UNTIL 2026-08-26, seventeen days
+// after it was ruled, and it read as a CANON block on a feature that was actually waiting on art.
+// Those are different queues with different owners, and mislabelling one as the other parks work on
+// a seat that was never asked. ★ Say WHICH queue a thing waits in, and name the owner.
 //
 // ★ THE PRESENCE IS VISIBLE FROM OUTSIDE, AND THAT IS THE WHOLE CONSENT DESIGN. A 2D tall-grass
 // encounter rolls dice on your footsteps; ported to first person that becomes an ambush you cannot
