@@ -80,22 +80,39 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
           guess which div is the panel, and both guesses are wrong in a way that still looks green:
           the outermost match drags the chat log in with it, the innermost is the title line alone. */}
       <div data-panel="brew"
-           className="w-[460px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
+           /* ── ★ THE HOUSE PLATE (2026-08-26). `gx-card` brings the framed background, the accent
+              border and the inset shadows; `gx-scan` lays the CRT texture over it; `gx-chrome`
+              kills the browser tells (tap highlight, text selection, the focus ring) inside game
+              chrome. ⚠ `rounded-lg` is gone deliberately — `GAME_UI_LAYER.md` names a 12px radius
+              as THE web-card tell, and `gx-card` sets its own near-sharp 3px.
+              ⚠ `overflow-y-auto` is kept AFTER the layer classes and is load-bearing: `gx-card`
+              sets `overflow: hidden`, and a 460px plate holding the full cauldron menu scrolls. */
+           className="gx-card gx-scan gx-chrome w-[460px] max-h-[80vh] overflow-y-auto p-4 font-mono text-[11px]"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between mb-1">
-          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Brewing
-            <span className="ml-2 text-amber-200/70 normal-case tracking-normal font-normal">at the cauldron</span>
+          {/* ★ `gx-label`, not a hand-rolled `uppercase tracking-[.18em]`. The layer already owns
+              "short string, caps, wide tracking, squared face" — restating it is how one role ends
+              up spelled nine different ways, which is exactly what `hud-type.test.ts` found in the
+              fold HUD. The subtitle stays sentence-case and untracked: the rule is caps on SHORT
+              strings only, and "at the cauldron" is prose. */}
+          <span className="gx-label text-[13px] font-semibold text-white/95">Brewing
+            <span className="ml-2 font-mono text-[11px] text-amber-200/70 normal-case tracking-normal font-normal">at the cauldron</span>
           </span>
-          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
+          <button onClick={onClose} className="gx-btn px-2 py-0.5 text-[10px]">esc</button>
         </div>
 
         {/* Mana and level on one line, because they are the two numbers every row is measured
             against. `tabular-nums` so the pool does not jitter the layout as it regenerates. */}
-        <div className="mb-3 text-white/40 tabular-nums">
-          alchemy <span className="text-white/80">{alch}</span>
-          <span className="text-white/20"> · </span>
-          mana <span className={pool.cur < 25 ? 'text-rose-300/70' : 'text-sky-200/80'}>{Math.floor(pool.cur)}</span>
-          <span className="text-white/25">/{pool.max}</span>
+        {/* Dim label, bright value — the game signature, now asked for by name rather than spelled
+            out in opacities. `gx-value` carries the tabular figures so the pool cannot jitter the
+            line as it regenerates. */}
+        <div className="mb-3 flex items-baseline gap-1.5">
+          <span className="gx-label text-[9px] text-white/40">alchemy</span>
+          <span className="gx-value text-white/85">{alch}</span>
+          <span className="text-white/20 mx-1">·</span>
+          <span className="gx-label text-[9px] text-white/40">mana</span>
+          <span className={`gx-value ${pool.cur < 25 ? 'text-rose-300/80' : 'text-sky-200/85'}`}>{Math.floor(pool.cur)}</span>
+          <span className="gx-value text-white/25">/{pool.max}</span>
         </div>
 
         {rows.length === 0 && <div className="text-white/35 mb-3">nothing you can read yet — the cauldron waits</div>}
