@@ -150,6 +150,31 @@ function enclosingFunction(src: string, at: number): string | null {
  * function is literally per-iteration; an anonymous callback that is not a memo initialiser is the
  * `.map(...)`/`.forEach(...)` shape, which is the same thing wearing a different hat.
  */
+/**
+ * ── ★★ A LOOP OVER A CACHE DIFF IS NOT A PER-OBJECT ALLOCATION (2026-08-26) ────────────────────
+ * The first version of § 1b flagged `mist-pass.ts:403` — `createCreatureBody()` inside
+ * `for (const [k, w] of want)` — and I reported it as a P1 against the 84%-GPU-bound profile
+ * before measuring it. Then I measured it, twice, with instruments of different shapes (sample
+ * player positions vs enumerate the cell grid directly, which cannot alias against the spacing
+ * lattice). Both said the same thing: at REACH=150 at most **2** patches are ever in range, so the
+ * ceiling is **4** bodies, built once on arrival and disposed on departure.
+ *
+ * ⚠ THE SHAPE WAS REAL AND THE SEVERITY WAS INVENTED. A construction in a loop is what the bug
+ * looks like; it is not what the bug IS. What makes it a per-object allocation is running once per
+ * OBJECT, and a loop whose body begins `if (live.has(k)) continue` runs once per ARRIVAL — the
+ * loop iterates a diff, not a population. § 1 already understands this and calls it `cached`; § 1b
+ * did not, so the two halves of one doctrine disagreed about the same word.
+ *
+ * ⚠ AND THE EXEMPTION IS WRITTEN TO EXPIRE, not to silence: it requires the cache probe AND a
+ * `.dispose()` in the file. Delete either — stop skipping what is already live, or stop releasing
+ * what left — and this goes red again, which is exactly when it should.
+ */
+function isCacheGuardedLoop(src: string, loopOpen: number, at: number): boolean {
+  const body = src.slice(loopOpen, at)
+  const probes = /\.\s*has\s*\([^)]*\)\s*\)\s*(?:continue|return)|if\s*\([^)]*\.\s*get\s*\([^)]*\)[^)]*\)\s*(?:continue|return)/
+  return probes.test(body) && /\.dispose\s*\(/.test(src)
+}
+
 function isRepeatedCall(src: string, at: number): boolean {
   // ⚠ A CONCISE ARROW BODY HAS NO BRACES, so the scope walk below cannot see it and walks straight
   // past to whatever named function holds it. `[8, 16].map(s => toTexture(...))` read as one-shot
@@ -163,7 +188,7 @@ function isRepeatedCall(src: string, at: number): boolean {
   }
   for (const open of enclosingScopes(src, at)) {
     const sc = scopeAt(src, open)
-    if (sc.kind === 'loop') return true
+    if (sc.kind === 'loop') return !isCacheGuardedLoop(src, open, at)
     if (sc.kind === 'fn') return sc.name === '' && !/useMemo\(\s*\(\s*\)\s*=>\s*$/.test(src.slice(Math.max(0, open - 40), open))
   }
   return false
