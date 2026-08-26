@@ -34,9 +34,18 @@ export function HudCorner({ mana, activeTool, tools, skills }: {
   return (
     <div
       className="absolute bottom-4 right-4 pointer-events-none"
-      style={{ '--tool-arc-r': 'clamp(44px, 11vw, 74px)' } as React.CSSProperties}
+      // ⚠ THE RADIUS MUST CLEAR THE VESSEL, AND THE VESSEL DOES NOT SCALE. The gauge is a fixed
+      // 152px (radius 76) and a socket is 56px (48 under 640px), so a socket centre inside ~104px
+      // overlaps the glass no matter what the viewport does. That is why the floor is 108 and not a
+      // fraction: a `clamp` whose minimum still overlaps is a clamp that fails exactly on the
+      // screens nobody tests on. Ceiling 122 keeps the cluster off the right edge.
+      style={{ '--tool-arc-r': 'clamp(108px, 16vw, 122px)' } as React.CSSProperties}
     >
-      <div className="relative" style={{ marginRight: '4px' }}>
+      {/* ⚠ Reserves room for the socket that leans furthest RIGHT (bearing 50°): its outer edge sits
+          at r·cos50° + half a socket beyond the gauge centre, and the gauge's own half-width is
+          already inside this box. Derived so a radius change carries the margin with it — measured
+          in `dev/hud` afterwards regardless, because that is the habit that finally worked. */}
+      <div className="relative" style={{ marginRight: 'calc(var(--tool-arc-r) * 0.643 - 46px)' }}>
         <ManaGauge mana={mana} />
         <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
       </div>
