@@ -2451,9 +2451,20 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           to read it on. The gauge is what makes that attack legible.
           Health and shields stay bottom-LEFT, deliberately (Alex) — this is its own corner. */}
       {!build && (
-        <div className="absolute bottom-4 right-4 pointer-events-none">
-          <ManaGauge mana={mana} />
-          <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
+        // ⚠ THE ARCH IS 2r WIDE AND THE GAUGE IS 76px, SO THE CLUSTER MUST SIT r FROM THE EDGE.
+        // First version anchored at `right-4` and the arch's right foot went OFF SCREEN — caught in
+        // a browser, not by a test, because nothing here can measure a viewport. `--tool-arc-r` is
+        // declared on THIS container so the offset and the arc read one number and cannot drift:
+        // the margin is `r − 38px` (38 = half the gauge), which puts the arch's right foot exactly
+        // on the same 1rem gutter the rest of the HUD uses.
+        <div
+          className="absolute bottom-4 right-4 pointer-events-none"
+          style={{ '--tool-arc-r': 'clamp(44px, 11vw, 74px)' } as React.CSSProperties}
+        >
+          <div style={{ marginRight: 'calc(var(--tool-arc-r) - 38px)' }}>
+            <ManaGauge mana={mana} />
+            <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
+          </div>
         </div>
       )}
     </>
@@ -3158,11 +3169,11 @@ function ToolArc({ activeTool, tools, skills }: {
     <div
       // The container's origin is the arch's LEFT FOOT, and the arch is 2r wide, so it is shifted
       // left by r to centre the crown over the gauge below it.
+      // ⚠ `--tool-arc-r` is INHERITED from the cluster container, not declared here. It has to be
+      // the same number the container reserves its right margin from, and two declarations is the
+      // mirror problem: they would agree until someone retuned one of them.
       className="absolute left-1/2 bottom-full h-0 w-0 pointer-events-none"
-      style={{
-        '--tool-arc-r': 'clamp(60px, 16vw, 105px)',
-        transform: 'translateX(calc(var(--tool-arc-r) * -1))',
-      } as React.CSSProperties}
+      style={{ transform: 'translateX(calc(var(--tool-arc-r) * -1))' } as React.CSSProperties}
     >
       {TOOL_FAMILIES.map((family, i) => (
         <ToolSocket key={family} family={family} angleDeg={ANGLES[i]}
