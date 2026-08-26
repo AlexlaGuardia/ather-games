@@ -11,6 +11,53 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🖼 Shimmer voxel3d — **THE PAINTED SPIRITS GET A BILLBOARD, AND IT IS BUILT TO BE THROWN AWAY** (2026-08-26, world lane) · *Last touched 2026-08-26 (world) — `creature-atlas.ts` + oracle shipped, NOT wired, NOT seen in a browser*
+
+### Left off — the pure half is in and verified; the THREE wrapper and the wiring are not written
+**★ ALEX RULED (2026-08-26): billboard them, "but these will only be placeholders for the future 3D
+models."** So the design goal is not good billboards — it is billboards that are **cheap to delete**.
+
+### Decisions
+- **★★ THE ART DEBT FOR SPIRITS WAS ALWAYS ZERO, AND THAT IS THE FINDING.** All ten species canon's
+  mist rosters name are already painted at 32×32 with palettes (`sprites/*.ts`) — and already
+  DIRECTIONAL. The format exists because a top-down 2D overworld needed it; it is exactly what a
+  camera-facing quad needs. Three afternoons of "the art is blocking us" were about **showing** 2D art
+  in a 3D world, never about painting it. ⚠ Moglin art is the real gap and is untouched here.
+- **★ THE INTERFACE IS THE DELIVERABLE.** Callers touch `CreatureBody` only; a modelled implementation
+  satisfies the same members and the swap is one factory with no call site moved. **Nothing outside
+  that interface may learn a spirit is a flat quad** — the day something branches on `isSprite`, the
+  placeholder has grown roots and Alex's "for now" has quietly become forever.
+- **Four sectors, not eight, and it is written down as a cost.** `down`/`up`/`right` + mirror. Circling
+  a spirit at close range will POP between quadrants; Doom painted eight for exactly this reason.
+  `facingFor` derives its sectors from the boundary list so raising `DIRS` is a one-place change, but
+  the extra angles are **real painting and Alex's call**.
+- **One sheet per species, built once** — not one texture per body. Same reason `mist-pass.ts` builds
+  four element materials once, and it matters more here: Alex's UHD 630 stalls the MAIN THREAD on a
+  texture upload, so a three-Moglin patrol plus a mist resident must not be four uploads of one rabbit.
+- **No mirrored cells are baked.** The flank flip happens at draw time; a baked copy doubles every
+  sheet to say nothing new.
+- **The key contract is `${dir}_${pose}`, read off `sprites/derive.ts`, not assumed.** ⚠ The first
+  version looked for a bare `down`, and **every atlas came back empty and silent** — an invisible
+  animal, which on screen reads as an encounter bug, not a wiring bug. A guard now asserts all ten
+  species by name resolve every `dir×pose` key and render non-blank, so a species that ever stops
+  going through `deriveSprites` fails here instead of vanishing in the fog.
+
+### ⚠ What this session did NOT do
+- **No THREE wrapper, no wiring, nothing seen in a browser.** `creature-atlas.ts` is arithmetic and is
+  proven as arithmetic — 60 asserts, four mutations. That is a different claim from *"a rabbit appears
+  in the mist"* and must not be read as one.
+- The mist resident's element fresnel should become the **manifestation halo around** the billboard
+  rather than being deleted: canon wants a luminous manifestation, not a creature standing there.
+
+### Next
+1. `voxel3d/creature-billboard.ts` — the THREE shell over the atlas, exposing `CreatureBody`.
+2. Wire the mist resident (`mist-pass.ts`) and the collared spirit (`VoxelWorld.tsx`, hub's file).
+3. Then LOOK at it. Deploy is hub's.
+
+### Files
+`src/app/shimmer/voxel3d/creature-atlas.ts` · `creature-atlas.test.ts` (60 asserts, 4 mutations) ·
+read-only: `sprites/derive.ts` · `sprites/palette.ts` · the ten species files
+
 ## ⚡ Shimmer — **THE BIRTH RUNE NOW SCOPES THE LOADOUT: THE BAND, THE TRAIT SPLIT, AND THE LANE LAW** (2026-08-26, hub lane) · *Last touched 2026-08-26 (hub) — shipped `dfc5e4b` + `6896f94` + `0022db1`, pushed, DEPLOYED + browser-verified*
 
 **Left off:** Magii's trait/passive ruling and Alex's world-wide retirement of *"holding any passive pauses recovery"* are both built and live.
