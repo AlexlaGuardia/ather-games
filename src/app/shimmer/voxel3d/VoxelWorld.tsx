@@ -2466,10 +2466,17 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
               rightmost socket extends a full 56px (w-14) beyond the point the arch puts it at.
               Rightmost socket is at θ=150° ⇒ left = r(1−cos150°) = 1.866r, and the container origin
               is crown−r, so its right edge sits at crown + 0.866r + 56. Reserving that (minus the
-              38px half-gauge already between the crown and the container edge) is what actually
-              clears the viewport. Derived, not nudged — a hand-tuned pixel here goes stale the
-              moment the radius or the socket size changes. */}
-          <div style={{ marginRight: 'calc(var(--tool-arc-r) * 0.87 + 20px)' }}>
+              38px half-gauge already between the crown and the container edge) is roughly what has
+              to be cleared.
+              ⚠⚠ AND THE CONSTANT IS MEASURED, NOT DERIVED, BECAUSE THE DERIVATION KEPT BEING WRONG.
+              Two closed-form attempts both still clipped: `left-1/2` resolves against the inner
+              div, the translate is applied after, and the socket is placed by its corner, so the
+              crown does not land where the arithmetic says. Read off the live DOM instead —
+              rightmost socket right edge 982 against a 958 viewport, a 24px overflow — and the
+              trailing term covers that plus the 1rem gutter the rest of the HUD uses. The r-term
+              still scales with the radius; only the fixed part is empirical, and it is labelled as
+              empirical so nobody re-derives it and trusts the answer. */}
+          <div style={{ marginRight: 'calc(var(--tool-arc-r) * 0.87 + 60px)' }}>
             <ManaGauge mana={mana} />
             <ToolArc activeTool={activeTool} tools={tools} skills={skills} />
           </div>
