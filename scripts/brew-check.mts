@@ -82,6 +82,18 @@ try {
   await sleep(700)
   const opened = await panelText()
   ok(opened.length > 0, 'the cauldron panel opens')
+  // ── ★ NO PANEL MAY RENDER SOURCE-COMMENT SYNTAX (added 2026-08-26, after it shipped) ─────────
+  // A bare `/* */` in JSX CHILDREN position is not a comment, it is TEXT. The keeper frame rendered
+  // a paragraph of its own commentary across the game and BOTH automated checks called it green:
+  // tsc, because valid JSX text is valid; and this harness, twice, because the panel still worked
+  // perfectly. Only a screenshot saw it.
+  // ⚠ A STATIC GREP CANNOT DECIDE THIS — `/* */` between a tag's attributes is a legitimate JS
+  // comment and looks identical to the broken one. Only the RENDERED text distinguishes them, which
+  // is why the assert lives here, in the harness that already has the panel open, rather than in a
+  // linter. Checked on every `[data-panel]` on the page, not just the cauldron's.
+  ok(!(await page.evaluate(() => Array.from(document.querySelectorAll('[data-panel]'))
+        .some(n => /\*\/|\/\*/.test(n.textContent ?? '')))),
+     'no panel is rendering source-comment syntax as visible text')
   ok(/alchemy\s*1/.test(opened), `a fresh keeper is alchemy 1 — ${/alchemy\s*\d+/.exec(opened)?.[0]}`)
 
   // ── 2. ★ THE FLAGSHIP ROW TELLS THE TRUTH ───────────────────────────────────────────────────
