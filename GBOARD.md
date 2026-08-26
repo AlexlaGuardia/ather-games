@@ -11,6 +11,71 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⚖️ Shimmer — **TWO AGED RULINGS CLOSED: THE GRIMOIRE IS UI, AND THE MIST TAIL STAYS EMPTY** (2026-08-26, world lane) · *Last touched 2026-08-26 (world) — rulings only, deliberately no code change*
+
+### Left off — #385 (19d) and #413 (16d) ruled and closed; both were mine the whole time
+Surfaced by `cortex/scripts/focus_triage.py`'s new AGED RULINGS block (substrate window, 08-26). Neither
+row was waiting on Alex and neither was waiting on Magii. ★ **The row class is the finding: a ruling
+addressed to the wrong seat is invisible to the seat that could answer it, and age cannot reveal that** —
+a ruling nobody made and a ruling nobody was *asked* for read identically from the board. Sibling of the
+substrate window's #347 (answered elsewhere, never walked back); this is the same rot from the other end.
+
+### Decisions
+- **★ #385 — THE GRIMOIRE IS UI, NOT AN INVENTORY ITEM. The orphan `ItemDef` is deleted, not wired.**
+  Four things decided it, and the first is that the row's own text was wrong. It said the grimoire *"only
+  exists as `/grimoire` + PartyPanel"*; in fact `sprites/items.ts:397` carries a real `spirit_grimoire`
+  `ItemDef` added **2026-06-24, six weeks BEFORE the row was filed** — so the row was arguing against a
+  state that had already changed. (1) In the live tree every other `'grimoire'` string is a **panel tab
+  id** (`keeper-panel.tsx:35,46`, `dev/page.tsx:42,91`, `VoxelWorld.tsx:3095`) — the shipped design is a
+  tab, and G already opens it with **no item check**. (2) It *auto-fills as you study spirits*: it is a
+  **record**, a view over encounter state, not a carryable object. (3) Making it an item makes it
+  droppable, chest-storable and losable — gating the spirit record behind an object, for no gain, with a
+  save hazard attached. (4) ★ The `type: 'key'` cohort is **exactly two entries and both are orphans**
+  (zero references outside their own definition), and one of them is provably dead: `mana_pot` duplicates
+  the **live** `clay_pot` (5 refs, real hand recipe in `voxel/recipes.ts:310`). That cohort is not a
+  convention to join, it is **residue from a parked starter-bag step**.
+  - **This does not contradict canon, and the distinction is the reusable part.** Canon has Greg gift the
+    grimoire in the starter bag (`shimmer-quests-mainmap.md`, echoed at `Shimmer3D.tsx:301`). That rules
+    the **fiction** — a leather-bound book changes hands. It does not rule the **representation**; an
+    inventory slot is a build choice, the same way Kael carrying a sword in the books does not oblige a
+    droppable item. Greg's gift moment **unlocks the tab**. If Alex ever wants the book physically held,
+    that is a new decision and this entry is where to reverse it.
+- **★ #413 — NO RARE OFF-ROSTER WANDERER. The tail stays EMPTY; variety comes from the two valves canon already built.**
+  Canon ruled the roster question on **2026-08-09** and closed by naming this half as mine: *"Jin's,
+  unchanged: … and whether a rare off-roster wanderer ever answers — the common roster is exclusive, the
+  tail is tuning."* So canon permits a tail and declines to spend it. I am declining too:
+  (1) **Exclusivity is the feature Alex asked for** (*"Alex wants each zone's spar roster exclusive to
+  that zone"*) and a rarity tail dilutes precisely the one property he specified. (2) Canon's mechanism
+  says a patch **rings with the character of the ground** and the spirits whose frequency answers it
+  manifest — *"a Manalotl crossing the Meadows is neither rare nor trespassing; it just does not answer
+  meadow-mist."* An off-roster wanderer needs a **reason**, and any reason I invent is a claim about how
+  mist and mana work, which is drift wearing a tuning hat. (3) ★ Canon has already **built on top of**
+  this exclusivity: the 08-18 herb ruling cites it by name (*"preserves the same exclusivity the mist
+  rosters gave the build"*). Undercutting it now would quietly weaken a ruling downstream of it.
+  (4) **The variety valves already exist and are structured, not random:** the Mycelial Path carries **no
+  roster of its own and calls from both neighbours**, and the Outfields thin to *only the enduring*
+  (Dewbear + Shellmere). Canon handed the build two shaped answers to "same four every time"; a rarity
+  roll would add noise on top of design.
+  - **What this leaves as mine and still open:** density, difficulty, rewards, and resident selection
+    *within* a region's roster. Those are tuning and not blocked.
+- **★ A STALE CITATION FOUND WHILE RULING, and it is the #347 shape in a code comment.** `voxel/mist.ts:31`
+  still reads *"Which species spar in which garden region is **[OPEN]** in CANON_GAPS (2026-08-07)"*. It is
+  **`[RULED]`** (CANON_GAPS:1355, ruled 08-09) with all ten rosters landed in `game/shimmer-geography.md`.
+  The comment was accurate when written and has been wrong for 17 days, and it is load-bearing: it is the
+  reason the resident is still a neutral luminous form. **A code comment citing a queue inherits that
+  queue's shelf life and nothing links them.** Not fixed here — `mist.ts` is not this lane's file.
+
+### Next
+1. **Delete the orphan `spirit_grimoire` `ItemDef`** (`sprites/items.ts:397`) — **sprites lane**, one line.
+2. **Rule `mana_pot` the same way or fold it into `clay_pot`** (`sprites/items.ts:395`) — same cohort, same
+   orphan test, but a different item, so it gets its own decision rather than riding this one.
+3. **Refresh `voxel/mist.ts:31` to cite the RULING, not the gap**, and land the ten ruled rosters — the
+   resident can stop being neutral. **Not world lane's call alone**; it is the encounter build.
+
+### Files
+Read-only this session. `src/app/shimmer/sprites/items.ts` (395, 397) · `src/app/shimmer/voxel/mist.ts` (25-35) ·
+`src/app/shimmer/voxel/recipes.ts` (310) · `/root/athernyx/CANON/CANON_GAPS.md` (1355-1372, the mist-roster ruling)
+
 ## 🐛 Shimmer — **BUG-HUNT: six confirmed logic bugs fixed across untested engine systems + a coord build-lock hardening** (2026-08-25, hub) · *Last touched 2026-08-25 (hub) — shipped `eb5b977` + `8228084` + `842fb27` + `0a49f40`, deployed, pushed*
 
 ### Round 4 — voxel3d-LIVE data layer: CLEAN, bug-hunt CLOSED
