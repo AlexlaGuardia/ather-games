@@ -35,7 +35,7 @@ export interface CastHud {
 const BAND_LABEL: Record<string, string> = { tactical: 'TACTICAL', ultimate: 'SIGNATURE' }
 
 export function CastGauges({ cast }: { cast: React.RefObject<CastHud | null> }) {
-  const fills = useRef<(HTMLDivElement | null)[]>([])
+  const keys = useRef<(HTMLSpanElement | null)[]>([])
   const names = useRef<(HTMLDivElement | null)[]>([])
   const wraps = useRef<(HTMLDivElement | null)[]>([])
 
@@ -53,10 +53,20 @@ export function CastGauges({ cast }: { cast: React.RefObject<CastHud | null> }) 
         // with total 0 is NaN, and NaN width silently renders as nothing — a permanently empty gauge
         // on the one move that is never unavailable.
         const pct = total > 0 ? Math.max(0, Math.min(1, 1 - left / total)) : 1
-        const f = fills.current[i]
-        if (f) f.style.width = `${pct * 100}%`
+        void pct
+        // ★ THE BUTTON *IS* THE READOUT (Alex, 2026-08-26). A sweep meter was furniture: Ice Dart
+        // cools in 650ms, which is over before anyone reads a bar. Darken on use, count down, light
+        // back up. Three states and no geometry.
         const w = wraps.current[i]
-        if (w) w.style.opacity = moveId ? (left > 0 ? '0.55' : '1') : '0.3'
+        if (w) w.style.opacity = moveId ? (left > 0 ? '0.42' : '1') : '0.25'
+        // The KEY square carries the countdown, because the key is the thing you are about to press.
+        // Tenths under ten seconds — a 0.6s cooldown shown as "1" then "0" is a lie twice over.
+        const k = keys.current[i]
+        if (k) {
+          const t = left > 0 ? (left >= 10000 ? `${Math.ceil(left / 1000)}` : (left / 1000).toFixed(1)) : (BAND_KEYS[i] ?? '?').toUpperCase()
+          if (k.textContent !== t) k.textContent = t
+          k.style.fontSize = left > 0 ? '8px' : ''
+        }
         const n = names.current[i]
         if (n) {
           const label = moveId ? (moveById(moveId)?.name ?? moveId) : '— empty —'
@@ -71,21 +81,17 @@ export function CastGauges({ cast }: { cast: React.RefObject<CastHud | null> }) 
     <div className="flex flex-col gap-1.5 font-mono pointer-events-none">
       {ALL_BANDS.map((kind, i) => (
         <div key={kind} ref={el => { wraps.current[i] = el }}
-             className="w-52 rounded bg-black/45 ring-1 ring-white/10 px-2 py-1.5 transition-opacity duration-150">
-          <div className="flex items-baseline gap-2">
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border
-                             border-white/25 text-[9px] font-bold text-white/70">
-              {(BAND_KEYS[i] ?? '?').toUpperCase()}
-            </span>
-            <span className="gx-label text-[8px] tracking-[0.18em] text-white/35">{BAND_LABEL[kind] ?? kind.toUpperCase()}</span>
-            <div ref={el => { names.current[i] = el }} className="gx-value ml-auto truncate text-[10px] text-amber-100/80" />
-          </div>
-          {/* The sweep. Fills as the cooldown runs down, so FULL means ready — a gauge that emptied
-              toward ready would read as "running out" at the exact moment it becomes usable. */}
-          <div className="mt-1 h-[7px] rounded-sm bg-black/60 overflow-hidden">
-            <div ref={el => { fills.current[i] = el }}
-                 className="h-full bg-amber-300/80" style={{ width: '100%' }} />
-          </div>
+             className="w-52 rounded bg-black/45 ring-1 ring-white/10 px-2 py-1.5 flex items-center gap-2
+                        transition-opacity duration-150">
+          {/* The key square doubles as the timer. Fixed size so the row never reflows as the digits
+              change — a countdown that nudges its neighbours is worse than no countdown. */}
+          <span ref={el => { keys.current[i] = el }}
+                className="flex h-5 w-6 shrink-0 items-center justify-center rounded border
+                           border-white/25 text-[10px] font-bold tabular-nums text-white/75">
+            {(BAND_KEYS[i] ?? '?').toUpperCase()}
+          </span>
+          <span className="gx-label text-[8px] tracking-[0.18em] text-white/35">{BAND_LABEL[kind] ?? kind.toUpperCase()}</span>
+          <div ref={el => { names.current[i] = el }} className="gx-value ml-auto truncate text-[10px] text-amber-100/80" />
         </div>
       ))}
     </div>
