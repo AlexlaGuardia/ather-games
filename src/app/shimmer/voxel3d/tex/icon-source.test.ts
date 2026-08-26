@@ -198,6 +198,24 @@ for (const id of reachable) {
   } else pass++
 }
 
+// ── ⑩ NO ITEM MAY BE WIRED TO AN ALL-ZERO FRAME ───────────────────────────────────────────────
+// A blank frame in `ITEM_ICONS` is the worst of the three states: the item editor lists the item as
+// DRAWN, `flatIcon` refuses the empty frame so the game shows the plain chip, and the two disagree
+// with nobody to notice. `pure_spike` and `moonkoi_rinstick` — the top of the prospecting and
+// rinning ladders — sat like that long enough for `item-art` to grow a warning for them.
+//
+// ★ THIS IS A RATCHET WITH NO TOLERATED BASELINE, which is the only kind worth writing. The count is
+// zero as of 2026-08-26, and zero is the natural floor rather than a number somebody chose — so
+// there is no accepted-baseline exemption here to go stale, and no threshold anyone can nudge to
+// turn a red back to green. Wiring a new blank frame fails immediately.
+for (const id of Object.keys(ITEM_ICONS)) {
+  const frames = ITEM_ICONS[id]?.frames ?? []
+  if (!frames.length) { fails.push(`${id} has an ITEM_ICONS entry with no frames at all`); continue }
+  if (frames[0].some(v => v !== 0)) { pass++; continue }
+  fails.push(`${id} is wired to an all-zero frame — the editor calls it drawn and the bag draws the `
+    + `plain chip. Draw it, or remove the ITEM_ICONS entry so the chip is the honest answer.`)
+}
+
 console.log(`\nicon-source audit: ${pass} checks passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) {

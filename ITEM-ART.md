@@ -12,18 +12,9 @@ Items reachable in voxel3d: **128**
 | 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
 | 🧊 mesh | 2 | rendered from the scatter geometry the world instances. Never needs hand art. |
-| 🟩 painted | 74 | hand-painted flat sprite in `sprites/items.ts`. |
+| 🟩 painted | 76 | hand-painted flat sprite in `sprites/items.ts`. |
 | ⬜ missing | 0 | **needs art** — draws the plain chip today. |
-| 🟥 blank | 2 | wired to an all-zero frame. Reads as done, renders nothing. |
-
-## 🟥 Wired but blank — needs art, and the wiring says otherwise
-
-These have an entry in `ITEM_ICONS` pointing at an all-zero frame, so the item editor lists them
-as drawn. In game they fall through to the plain chip (`flatIcon` refuses a blank frame), so the
-bag is honest and only the editor is not. Draw them like anything on the list below.
-
-- [ ] `moonkoi_rinstick` — tool: rinning t3
-- [ ] `pure_spike` — tool: prospecting t3
+| 🟥 blank | 0 | wired to an all-zero frame. Reads as done, renders nothing. |
 
 ## ⬜ Needs art (Alex)
 
@@ -74,10 +65,12 @@ source of truth for what a tuft looks like.
 - [x] `mana_infusion`
 - [x] `mana_spike`
 - [x] `moonkoi`
+- [x] `moonkoi_rinstick`
 - [x] `moonvine_leaf`
 - [x] `moonvine_tonic`
 - [x] `pearlshell`
 - [x] `pure_mana_core`
+- [x] `pure_spike`
 - [x] `raw_mana_shard`
 - [x] `ribboneel`
 - [x] `rootvine_coil`
