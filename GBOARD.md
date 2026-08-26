@@ -34,6 +34,55 @@ the Arcade frame.
 
 **Files:** `play3d/cast.ts` · `play3d/keeper-moves.ts` · `play3d/loadout.ts` · `play3d/MoveBook.tsx` · `play3d/Shimmer3D.tsx` · `voxel3d/VoxelWorld.tsx` · `play3d/cast.test.ts` · `play3d/loadout.test.ts`
 
+## 🧊 Shimmer — **THE BAG DRAWS THE SAME LOG AND MUSHROOM THE GROUND DOES — ART QUEUE CLOSES AT 0** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `c6b4b53`, pushed, not yet deployed*
+
+### Left off — `item-art` missing: **2 → 0**
+`deadwood` and `mushroom_cap` were the last two, and neither was ever really an art problem. The
+world draws both as **instanced 3D geometry with a flat tint and no tile texture**, so there was no
+`paintFor` case for any arm of the chain to sample and both fell to the honest chip. `flora-mesh.ts`
+has had the geometry the whole time.
+
+### Decisions
+- **★★★ THE GEOMETRY IS IMPORTED, NOT REBUILT, AND THE POST-CONSTRUCTION CALLS ARE WHY.**
+  `logGeo.rotateZ(π/2)` is what makes a log **lie down**; `translate` is what stacks a cap on its
+  stalk. A module that restated `new CylinderGeometry(0.15, 0.13, 1.0, 6)` would draw a **standing
+  post** and be perfectly self-consistent about the wrong object — the mirror bug, where a copy and
+  its original agree and are both wrong. The four factories + the scatter colours are now **exported**
+  from `flora-mesh.ts` and the world builder calls them: **one definition, two consumers.**
+- **PURE, for the same reason `rasterIcon` is pure.** A software z-buffer over the real vertices — no
+  canvas, no GL context — so a headless script and a test render *exactly* what the bag renders.
+  `three` is imported for **geometry math only**. Same isometric angle as the cube icons, so a hotbar
+  holding both reads as one game.
+- **★ WIDENING THE UNION UPDATED EVERY CONSUMER IN THE SAME COMMIT.** When `'cross'` joined this
+  chain it left `item-art` stale and quiet, and four saplings fell past every branch into `missing` —
+  the report calling for hand art that **already shipped**. Same door, walked through on purpose.
+- **⏭️ IF ALEX DISLIKES THE LOOK, THE FIX IS IN THE WORLD, NOT THE ICON** — and that is the feature.
+  The mushroom cap is wide and low because `ConeGeometry(0.17, 0.15, 8)` is wide and low. Change it
+  in `flora-mesh.ts` and the ground and the bag move together, which is the entire argument.
+
+### Guards — each mutation-tested with the bug it catches
+- **A felled trunk must be WIDER THAN TALL.** Drop the `rotateZ` and it reports *"16x54 — so it is
+  standing up"*. ★ Both versions render a perfectly fine picture; **only the aspect ratio can tell
+  them apart**, which is what makes this the assert that earns its keep.
+- **The mushroom keeps its two parts**, asserted against the world's own stalk and cap colours rather
+  than a colour COUNT — ⚠ a count is satisfied by shading alone and would pass with the cap deleted.
+- **The facets survive**, asked of the **LOG** because it is one part in one tint, so every distinct
+  colour in it is a face catching the light. Shading off → *"1 distinct colour, the facets are gone"*.
+- **Nothing on the mesh arm may acquire tile art**, or the block arm above it silently takes over and
+  draws a cube — **the 2026-08-23 sapling bug, pre-empted from the other side.**
+
+### What is left, and it is all Alex's
+- **24 items wear the `#d544c8` no-palette sentinel** — `shimmerwheat_grain` 100%, `sunpetal_bloom`
+  75%, `glowroot_bulb` 47%, four brews, ten seeds. Colour calls, one `ITEM_PALETTES` entry each.
+- **`moonkoi_rinstick` + `pure_spike`** wired to all-zero frames — draw or unwire.
+- **`mana_seed`** needs its own body colour (its palette collides with `seedPal`'s slot 0).
+- **6 tool placeholders** are wired into `ITEM_FRAME_MAP` whenever he wants to repaint them.
+
+### Files
+`voxel3d/tex/mesh-icon.ts` (new) · `voxel3d/tex/mesh-icon.test.ts` (new) · `voxel3d/flora-mesh.ts`
+(factories + colours exported, builder calls them) · `voxel3d/tex/item-icon.ts` (the `mesh` arm) ·
+`scripts/item-art.mts` (the `mesh` status)
+
 ## 🛠 Shimmer — **THE ASEPRITE IMPORT GOES HEADLESS, BY SHARING THE EDITOR'S MAPPING INSTEAD OF COPYING IT** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `b811662`, pushed, not yet deployed*
 
 ### Left off — Alex asked what tooling would make sprite work easier, and mentioned Meshy
