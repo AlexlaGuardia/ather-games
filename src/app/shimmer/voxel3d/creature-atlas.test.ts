@@ -5,17 +5,7 @@
 // transparent atlas, which is the empty-measurement-window trap this repo keeps re-learning.
 
 import { facingFor, buildCreatureAtlas, frameAt, animFor, animKey, cellUV, DIRS, POSES, type CreatureArt, type Dir } from './creature-atlas'
-import { PALETTES } from '../sprites/palette'
-import { RABBIT_SPRITES } from '../sprites/rabbit'
-import { OWL_SPRITES } from '../sprites/owl'
-import { FROG_SPRITES } from '../sprites/frog'
-import { AXOLOTL_SPRITES } from '../sprites/axolotl'
-import { TURTLE_SPRITES } from '../sprites/turtle'
-import { WATER_BEAR_SPRITES } from '../sprites/water-bear'
-import { FOX_SPRITES } from '../sprites/fox'
-import { BAT_SPRITES } from '../sprites/bat'
-import { FIREFLY_SPRITES } from '../sprites/firefly'
-import { HUMMINGBIRD_SPRITES } from '../sprites/hummingbird'
+import { SPECIES_ART, SPECIES_IDS, speciesArt } from '../sprites/registry'
 
 let pass = 0
 const fails: string[] = []
@@ -111,7 +101,9 @@ const art = (keys: Record<string, number[]>, palette = ['#ff0000', '#00ff00']): 
 // ── 7. ★★ THE REAL ART — can the instrument see its subject? ─────────────────────────────────────
 // Everything above passes on an all-transparent atlas. This is the block that would notice.
 {
-  const rabbit: CreatureArt = { anims: RABBIT_SPRITES, palette: PALETTES.rabbit.base }
+  const r = speciesArt('rabbit')
+  ok(!!r, 'the registry has no rabbit — the real-art block below cannot see its subject')
+  const rabbit: CreatureArt = { anims: r?.anims ?? {}, palette: r?.palette ?? [] }
   const a = buildCreatureAtlas(rabbit, 32)
   let opaque = 0
   for (let i = 3; i < a.pixels.length; i += 4) if (a.pixels[i] === 255) opaque++
@@ -126,34 +118,34 @@ const art = (keys: Record<string, number[]>, palette = ['#ff0000', '#00ff00']): 
   console.log(`   real art · rabbit ${a.cols} frames x ${a.rows} slots, ${a.width}x${a.height}px, ${(cover * 100).toFixed(1)}% covered`)
 }
 
-// ── 8. ★★★ ALL TEN ROSTER SPECIES HONOUR THE KEY CONTRACT ────────────────────────────────────────
+// ── 8. ★★★ EVERY REGISTERED SPECIES HONOURS THE KEY CONTRACT ────────────────────────────────────
 // This is the guard for the bug that actually happened while writing this module: the first version
-// looked for `down` and every atlas came back empty and SILENT. One species quietly dropping
+// looked for a bare `down` and every atlas came back empty and SILENT. One species quietly dropping
 // `deriveSprites` would do the same thing to one animal, and nothing on screen says "wrong key" —
 // it says "no creature", which reads as an encounter bug.
+//
+// ★ DRIVEN BY `sprites/registry.ts`, NOT BY A LIST HERE. This file used to import all ten species and
+// build its own map — the fifth copy of a map four other files already kept by hand. The registry's
+// own oracle proves the map covers every painted species; this one proves each entry DRAWS. Two
+// questions, two files, neither restating the other.
 {
-  const TEN: [string, Record<string, any>, string][] = [
-    ['rabbit', RABBIT_SPRITES, 'rabbit'], ['owl', OWL_SPRITES, 'owl'], ['frog', FROG_SPRITES, 'frog'],
-    ['axolotl', AXOLOTL_SPRITES, 'axolotl'], ['turtle', TURTLE_SPRITES, 'turtle'],
-    ['water-bear', WATER_BEAR_SPRITES, 'water-bear'], ['fox', FOX_SPRITES, 'fox'],
-    ['bat', BAT_SPRITES, 'bat'], ['firefly', FIREFLY_SPRITES, 'firefly'],
-    ['hummingbird', HUMMINGBIRD_SPRITES, 'hummingbird'],
-  ]
   const thin: string[] = []
-  for (const [name, anims, palKey] of TEN) {
-    const missing = DIRS.flatMap(d => POSES.map(p => animKey(d, p))).filter(k => !anims[k]?.frames?.length)
-    ok(missing.length === 0, `${name} is missing painted keys: ${missing.join(', ')} — it may not use deriveSprites`)
-    const pal = (PALETTES as any)[palKey]?.base
-    ok(Array.isArray(pal) && pal.length > 0, `${name}: no palette under PALETTES.${palKey}`)
-    if (!pal) continue
-    const at = buildCreatureAtlas({ anims, palette: pal }, 32)
+  ok(SPECIES_IDS.length > 0, 'the registry is empty — this block cannot fail, so it proves nothing')
+  for (const id of SPECIES_IDS) {
+    const art = speciesArt(id)
+    ok(!!art, `${id}: registered but speciesArt returned null`)
+    if (!art) continue
+    const missing = DIRS.flatMap(d => POSES.map(p => animKey(d, p))).filter(k => !art.anims[k]?.frames?.length)
+    ok(missing.length === 0, `${id} is missing painted keys: ${missing.join(', ')} — it may not use deriveSprites`)
+    ok(art.palette.length > 0, `${id}: no palette`)
+    const at = buildCreatureAtlas({ anims: art.anims, palette: art.palette }, 32)
     let op = 0
     for (let i = 3; i < at.pixels.length; i += 4) if (at.pixels[i] === 255) op++
     const cov = op / Math.max(1, at.cells.length * 32 * 32)
-    ok(cov > 0.03, `${name} atlas is ${(cov * 100).toFixed(1)}% covered — effectively blank`)
-    if (cov < 0.10) thin.push(`${name} ${(cov * 100).toFixed(1)}%`)
+    ok(cov > 0.03, `${id} atlas is ${(cov * 100).toFixed(1)}% covered — effectively blank`)
+    if (cov < 0.10) thin.push(`${id} ${(cov * 100).toFixed(1)}%`)
   }
-  console.log(`   ten species · all keyed \`\${dir}_\${pose}\`${thin.length ? ` · thin: ${thin.join(', ')}` : ''}`)
+  console.log(`   ${SPECIES_IDS.length} registered species · all keyed dir_pose${thin.length ? ` · thin: ${thin.join(', ')}` : ''}`)
 }
 
 // ── 9. cellUV — the arithmetic the wrapper trusts blindly ────────────────────────────────────────
