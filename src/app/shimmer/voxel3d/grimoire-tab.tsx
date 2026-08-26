@@ -52,6 +52,7 @@ import {
   speciesDisplayName, formStage, xpForLevel,
 } from '../spirits/spirit'
 import { ALL_SPECIES } from '../engine/spirit-index'
+import { Portrait, Cube } from './spirit-portrait'
 import { AWAKENED_FORM_NAMES, INFUSION_CAPS } from '../spirits/evolution-config'
 import { infusionTotal, dominantInfusion } from '../spirits/spirit'
 import { evolveSpirit, evolutionBlocker } from '../spirits/evolution'
@@ -64,24 +65,6 @@ type Face = 'yours' | 'species'
 /** The four pourable elements, in canon's own order. `ELEMENTS` includes 'base', which is not one. */
 const ELEMENT_POUR = ['mana', 'storm', 'earth', 'water'] as const
 
-/** A lit cube face. Unknown entries pass `lit={false}` and read as the same cube in shadow. */
-function Cube({ color, lit, size = 18 }: { color: string; lit: boolean; size?: number }) {
-  return (
-    <span
-      aria-hidden
-      style={{
-        width: size, height: size, background: color,
-        opacity: lit ? 1 : 0.13,
-        // The world's own lighting read: a bright top-left and a darkened bottom-right is what the
-        // mesher's AO does to a block corner, so a flat swatch borrows the same depth for free.
-        boxShadow: lit
-          ? 'inset 2px 2px 0 rgba(255,255,255,0.28), inset -2px -2px 0 rgba(0,0,0,0.34)'
-          : 'inset 2px 2px 0 rgba(255,255,255,0.06)',
-      }}
-      className="inline-block shrink-0 rounded-[2px]"
-    />
-  )
-}
 
 /**
  * What the keeper's own spirits prove they know.
@@ -295,7 +278,7 @@ function SpeciesFace({ party }: { party: Spirit[] }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-[10px] tabular-nums text-white/30">
+      <div className="gx-label text-[10px] tabular-nums text-white/30">
         {known.species.size} of {ALL_SPECIES.length} species · {known.second.size} of{' '}
         {ALL_SPECIES.length * ELEMENTS.length} second forms
       </div>
@@ -308,8 +291,8 @@ function SpeciesFace({ party }: { party: Spirit[] }) {
           <div key={sp} className="rounded border border-white/10 bg-white/[0.03]">
             <button type="button" onPointerDown={() => setOpen(isOpen ? null : sp)}
                     className="flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left">
-              <Cube color={ELEMENT_COLORS.base} lit={met} />
-              <span className={`text-[12px] ${met ? 'text-white/80' : 'text-white/25'}`}>
+              <Portrait artKey={sp} color={ELEMENT_COLORS.base} lit={met} size={40} />
+              <span className={`gx-value text-[12px] ${met ? 'text-white/85' : 'text-white/25'}`}>
                 {met ? (SPECIES_NAMES[sp] ?? sp) : '—'}
               </span>
               {/* The four element chips double as this species' progress: lit ones are second forms
@@ -329,11 +312,11 @@ function SpeciesFace({ party }: { party: Spirit[] }) {
                     const has = known.second.has(`${sp}:${el}`)
                     return (
                       <div key={el} className="flex items-center gap-2">
-                        <Cube color={ELEMENT_COLORS[el]} lit={has} size={12} />
-                        <span className={`text-[11px] ${has ? 'text-white/70' : 'text-white/25'}`}>
+                        <Portrait artKey={`${sp}:${el}`} color={ELEMENT_COLORS[el]} lit={has} size={30} />
+                        <span className={`gx-value text-[11px] ${has ? 'text-white/75' : 'text-white/25'}`}>
                           {has ? (name ?? el) : '— unknown —'}
                         </span>
-                        <span className="ml-auto text-[9px] uppercase tracking-[0.14em] text-white/20">{el}</span>
+                        <span className="gx-label ml-auto text-[9px] text-white/20">{el}</span>
                       </div>
                     )
                   })}
