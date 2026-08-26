@@ -95,7 +95,7 @@ read-only: `sprites/derive.ts` · `sprites/palette.ts` · the ten species files
 
 **Files:** `play3d/cast.ts` · `play3d/keeper-moves.ts` · `play3d/loadout.ts` · `play3d/MoveBook.tsx` · `play3d/Shimmer3D.tsx` · `voxel3d/VoxelWorld.tsx` · `play3d/cast.test.ts` · `play3d/loadout.test.ts`
 
-## 🧊 Shimmer — **THE BAG DRAWS THE SAME LOG AND MUSHROOM THE GROUND DOES — ART QUEUE CLOSES AT 0** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `c6b4b53`, pushed, not yet deployed*
+## 🧊 Shimmer — **THE BAG DRAWS THE SAME LOG AND MUSHROOM THE GROUND DOES — ART QUEUE CLOSES AT 0** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `c6b4b53`, pushed, **LIVE** (hub deployed from HEAD 15:37:33)*
 
 ### Left off — `item-art` missing: **2 → 0**
 `deadwood` and `mushroom_cap` were the last two, and neither was ever really an art problem. The
@@ -144,7 +144,7 @@ has had the geometry the whole time.
 (factories + colours exported, builder calls them) · `voxel3d/tex/item-icon.ts` (the `mesh` arm) ·
 `scripts/item-art.mts` (the `mesh` status)
 
-## 🛠 Shimmer — **THE ASEPRITE IMPORT GOES HEADLESS, BY SHARING THE EDITOR'S MAPPING INSTEAD OF COPYING IT** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `b811662`, pushed, not yet deployed*
+## 🛠 Shimmer — **THE ASEPRITE IMPORT GOES HEADLESS, BY SHARING THE EDITOR'S MAPPING INSTEAD OF COPYING IT** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `b811662`, pushed, **LIVE** (hub deployed from HEAD 15:37:33)*
 
 ### Left off — Alex asked what tooling would make sprite work easier, and mentioned Meshy
 Answer: **the tool was already here, and Meshy is the wrong medium for it.**
@@ -227,7 +227,7 @@ Alex asked *"so next the ores and craftables?"*. **Ores are done** — all seven
 `scripts/png2sprite.mts` (new) · `src/app/shimmer/components/png-import.test.ts` (new, 95 sprites
 round-tripped) · reads `components/PngImportUtils.ts` unchanged — the point is that it is unchanged.
 
-## 🎨 Shimmer — **A LOG WEARS ITS BARK, THE CHECKLIST LEARNS TO SEE, AND SIX BLANK TOOLS GET PLACEHOLDERS** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `47e0b77` + `9d6c157`, pushed, not yet deployed (hub owns the lock)*
+## 🎨 Shimmer — **A LOG WEARS ITS BARK, THE CHECKLIST LEARNS TO SEE, AND SIX BLANK TOOLS GET PLACEHOLDERS** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `47e0b77` + `9d6c157`, pushed, **LIVE** (hub deployed from HEAD 15:37:33)*
 
 ### Left off — Alex's art queue went 12 → 8 → **2**, and only 2 were ever really art
 Asked *"what still needs an icon"*. `scripts/item-art.mts` answered 12. Four were the four species
