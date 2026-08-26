@@ -24,7 +24,7 @@ import { useEffect, useRef, useState } from 'react'
 import { HudCorner } from '../../voxel3d/hud-corner'
 import { ResourceBars } from '../../voxel3d/resource-bars'
 import { CastGauges, type CastHud } from '../../voxel3d/cast-gauges'
-import { ALL_BANDS } from '../../play3d/cast'
+import { ALL_BANDS, castForMove } from '../../play3d/cast'
 import { freshVitals, damage, type Vitals } from '../../engine/vitals'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
 import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
@@ -100,7 +100,17 @@ export default function HudDevPage() {
           className="px-2 py-1 rounded border border-white/20 text-white/60">heal</button>
         {ALL_BANDS.map((k, i) => (
           <button key={k} type="button"
-            onClick={() => { const c = cast.current; if (c) c.until[i] = performance.now() + 4000 }}
+            // ⚠ THE REAL cooldownMs, NOT A ROUND NUMBER. The first version set a flat 4000ms for
+            // both bands while Ice Dart cools in 650 and Chain Lightning in 9000 — so `left/total`
+            // exceeded 1, clamped to empty for the whole wait, and the gauge SNAPPED 100→0→100
+            // instead of sweeping. The component was correct and the harness was lying about its
+            // input, which is the one thing an instrument may not do. Caught by measuring the fill
+            // over time; a screenshot showed a plausible bar and would have shipped it.
+            onClick={() => {
+              const c = cast.current
+              const id = c?.ids[i]
+              if (c && id) c.until[i] = performance.now() + (castForMove(id).cooldownMs || 800)
+            }}
             className="px-2 py-1 rounded border border-white/20 text-white/60">fire {k}</button>
         ))}
         <button type="button" onClick={() => setLive(v => !v)}
