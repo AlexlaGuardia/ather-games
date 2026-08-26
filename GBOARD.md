@@ -95,6 +95,61 @@ read-only: `sprites/derive.ts` · `sprites/palette.ts` · the ten species files
 
 **Files:** `play3d/cast.ts` · `play3d/keeper-moves.ts` · `play3d/loadout.ts` · `play3d/MoveBook.tsx` · `play3d/Shimmer3D.tsx` · `voxel3d/VoxelWorld.tsx` · `play3d/cast.test.ts` · `play3d/loadout.test.ts`
 
+## 🖼 Shimmer — **THE MENUS ASK THE HOUSE LAYER, AND TWO GREEN CHECKS MISSED A PARAGRAPH ON SCREEN** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — brew-panel, keeper-panel, mana-gauge + a harness guard, all pushed*
+
+### Left off — gx adoption 23 → 57, highest of the sixteen games
+Alex asked what could be done for in-game menus, health bars and icons. Measured before answering:
+the June note saying *"Shimmer was at ZERO"* was **stale** — it was at 23. But those 23 sat in **3
+files** using **5 of 9** classes, never `gx-card` and never the `gx-active`/`gx-inactive` pair. Of 8
+voxel3d UI surfaces, **2** adopted. The other five had been untouched 6–11 days with zero `gx-*`.
+
+### Decisions
+- **`brew-panel` — the information design was ALREADY right** (dim label, bright value, dim refusals,
+  a real reason sentence per row instead of a grey button). What was missing was the **frame**:
+  `rounded-lg` is the exact 12px web-card tell `GAME_UI_LAYER.md` names. Converted the plate, title,
+  stat labels and esc; **rows stay mono on purpose** — they are data, and caps-with-tracking is for
+  SHORT strings only.
+- **`keeper-panel` is the SHARED frame**, so bag/grimoire/tools/loadout inherit in one edit. It also
+  spelled **one role two ways** (`.18em` title vs `.16em` tabs) — the fold-HUD pathology in miniature.
+- **★ "NEVER DIM THE PLATE" DELIBERATELY DOES NOT APPLY TO THESE TABS.** That was learned on the tool
+  sockets, which float over the **lit world** — dimming their backing left four faint rings on grass.
+  These sit on `gx-card`'s dark plate, a background we control. **Chrome over the scene and chrome
+  inside a panel are different problems**, and the exemption is stated rather than assumed.
+- **`ManaGauge` — mana had NEVER been drawn.** `brewPotion` subtracts `def.manaCost` and
+  `engine/mana.ts` derives pool+regen; the keeper spent a resource they could not see. A **liquid
+  LEVEL, not an arc**, because the tool sockets orbiting directly above already use radial sweeps for
+  XP. Colours read off the shipped `raw_mana_shard` icon. **Unmounted — the mount is `VoxelWorld.tsx`,
+  hub's live file; hub has the ten-line diff (Alex's call to hand it off).**
+
+### ⚠⚠ What this cost, and both were GREEN everywhere that counts
+- **★★★ A BARE `/* */` IN JSX CHILDREN POSITION IS NOT A COMMENT, IT IS TEXT.** A paragraph of the
+  keeper frame's own commentary rendered across the game. **`tsc` passed** (valid JSX text is valid)
+  and **`brew-check` passed TWICE** (the panel functioned perfectly). I was about to commit on those
+  two greens. **Only a screenshot saw it.**
+- **★★★ THE FIX BROKE IT WORSE AND THE METRIC SAID IT IMPROVED.** `{/* */}` is right in children
+  position and a **syntax error inside a ternary branch**. `tsc` then reported **6 against a baseline
+  of 7 — BELOW baseline, which reads as progress.** It is not: a syntax error makes tsc drop semantic
+  checking project-wide, so all seven real errors vanished and six parse errors replaced them.
+  ⚠ **A FALLING ERROR COUNT IS WHAT A BROKEN PARSE LOOKS LIKE.** Caught by reading WHICH errors
+  rather than how many — the same rule already written into this repo's counters. The correct form
+  was `//`, which **the sibling ternary branch was already using**: reading the neighbouring code
+  would have been faster than either mistake.
+- **The guard is RUNTIME and had to be.** A static grep cannot decide it — `/* */` between a tag's
+  attributes is legitimate and looks identical in source; the brew-panel conversion has one of each.
+  Only rendered text separates them. Lives in `brew-check.mts`, covers every `[data-panel]`,
+  mutation-tested red.
+
+### ⏭️ Alex's, and the tools that would help
+- **Meshy is the wrong medium for icons** and it is mechanical, not taste: icons are 16×16 quantised
+  to 8 palette slots, a mesh render through that is mud, and **silhouette-at-16px is what a render
+  cannot give**. The Aseprite import already existed; it is now headless (`scripts/png2sprite.mts`).
+- **24 items wear the `#d544c8` no-palette sentinel** — `basic_rinstick` and `glowfin_rinstick` are
+  the two visible in the hotbar right now.
+
+### Files
+`voxel3d/brew-panel.tsx` · `voxel3d/keeper-panel.tsx` · `voxel3d/mana-gauge.tsx` + `.test.ts` (new,
+unmounted) · `scripts/brew-check.mts` (the rendered-comment guard)
+
 ## 🧊 Shimmer — **THE BAG DRAWS THE SAME LOG AND MUSHROOM THE GROUND DOES — ART QUEUE CLOSES AT 0** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `c6b4b53`, pushed, **LIVE** (hub deployed from HEAD 15:37:33)*
 
 ### Left off — `item-art` missing: **2 → 0**
