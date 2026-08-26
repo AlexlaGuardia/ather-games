@@ -207,3 +207,28 @@ export function frameAt(art: CreatureArt, dir: Dir, pose: Pose, nowMs: number): 
   const hold = Math.max(1, anim.rate) * TICK_MS
   return { dir: use, frame: Math.floor(((nowMs % (hold * n)) + hold * n) % (hold * n) / hold) % n }
 }
+
+/** Texture offset/repeat for one cell — the numbers a THREE texture wants, computed where they can be tested. */
+export interface CellUV { offsetX: number; offsetY: number; repeatX: number; repeatY: number }
+
+/**
+ * Where cell `(dir, pose, frame)` sits in UV space, mirrored or not.
+ *
+ * ★ ASSUMES `flipY = false` ON THE TEXTURE, and the wrapper must keep it that way. `buildCreatureAtlas`
+ * lays row 0 at the TOP of the buffer; with `flipY = false` a texture's v = 0 is that same first row,
+ * so the mapping is `row / rows` with no inversion. Flip it and every creature wears the animation of
+ * the slot mirrored about the sheet's middle — legible, plausible, and wrong, which is the worst kind.
+ *
+ * ★ MIRRORING IS A NEGATIVE REPEAT, not a second set of pixels. `offsetX` moves to the cell's RIGHT
+ * edge and the repeat walks back left across it.
+ */
+export function cellUV(atlas: CreatureAtlas, dir: Dir, pose: Pose, frame: number, mirror: boolean): CellUV | null {
+  const i = atlas.index(dir, pose, frame)
+  if (i < 0) return null
+  const c = atlas.cells[i]
+  const col = c.x / atlas.edge, row = c.y / atlas.edge
+  const rx = 1 / atlas.cols, ry = 1 / atlas.rows
+  return mirror
+    ? { offsetX: (col + 1) * rx, offsetY: row * ry, repeatX: -rx, repeatY: ry }
+    : { offsetX: col * rx, offsetY: row * ry, repeatX: rx, repeatY: ry }
+}

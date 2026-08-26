@@ -4,7 +4,7 @@
 // the sheet is not blank. Every arithmetic assert above it would pass just as happily on an all-
 // transparent atlas, which is the empty-measurement-window trap this repo keeps re-learning.
 
-import { facingFor, buildCreatureAtlas, frameAt, animFor, animKey, DIRS, POSES, type CreatureArt, type Dir } from './creature-atlas'
+import { facingFor, buildCreatureAtlas, frameAt, animFor, animKey, cellUV, DIRS, POSES, type CreatureArt, type Dir } from './creature-atlas'
 import { PALETTES } from '../sprites/palette'
 import { RABBIT_SPRITES } from '../sprites/rabbit'
 import { OWL_SPRITES } from '../sprites/owl'
@@ -154,6 +154,37 @@ const art = (keys: Record<string, number[]>, palette = ['#ff0000', '#00ff00']): 
     if (cov < 0.10) thin.push(`${name} ${(cov * 100).toFixed(1)}%`)
   }
   console.log(`   ten species · all keyed \`\${dir}_\${pose}\`${thin.length ? ` · thin: ${thin.join(', ')}` : ''}`)
+}
+
+// ── 9. cellUV — the arithmetic the wrapper trusts blindly ────────────────────────────────────────
+{
+  const a = buildCreatureAtlas(art({ down_idle: [1, 2], right_walk: [1, 2] }), 8)
+  const u = cellUV(a, 'down', 'idle', 1, false)
+  ok(!!u, 'cellUV found no cell for a painted frame')
+  if (u) {
+    ok(Math.abs(u.repeatX - 1 / a.cols) < 1e-9 && Math.abs(u.repeatY - 1 / a.rows) < 1e-9, 'repeat must be exactly one cell')
+    ok(Math.abs(u.offsetX - 1 / a.cols) < 1e-9, 'frame 1 should sit one column in')
+    ok(u.offsetY === 0, 'down_idle is the first slot, so offsetY must be 0 (flipY=false, row 0 on top)')
+  }
+  // ★ A mirrored cell must cover the SAME span, walked backwards — not a shifted window.
+  const m = cellUV(a, 'down', 'idle', 1, true)
+  ok(!!m, 'cellUV refused a mirrored lookup')
+  if (u && m) {
+    ok(m.repeatX === -u.repeatX, 'mirror must negate repeatX')
+    ok(Math.abs((m.offsetX + m.repeatX) - u.offsetX) < 1e-9, 'a mirrored cell must land on the same left edge')
+    ok(m.offsetY === u.offsetY && m.repeatY === u.repeatY, 'mirroring must not touch the vertical')
+  }
+  // Every painted cell must stay inside [0,1] in both directions, mirrored or not.
+  let outside: string | null = null
+  for (const c of a.cells) for (const mir of [false, true]) {
+    const v = cellUV(a, c.dir, c.pose, c.frame, mir)
+    if (!v) { outside = `${c.dir}/${c.pose}/${c.frame} has no UV`; continue }
+    const l = Math.min(v.offsetX, v.offsetX + v.repeatX), r = Math.max(v.offsetX, v.offsetX + v.repeatX)
+    if (l < -1e-9 || r > 1 + 1e-9 || v.offsetY < -1e-9 || v.offsetY + v.repeatY > 1 + 1e-9)
+      outside = `${c.dir}/${c.pose}/${c.frame}${mir ? ' mirrored' : ''} spills outside [0,1]`
+  }
+  ok(outside === null, `cellUV out of range: ${outside}`)
+  ok(cellUV(a, 'up', 'walk', 0, false) === null, 'cellUV must return null for a slot with no cells')
 }
 
 if (fails.length) { console.error(`❌ ${fails.length} failed:`); for (const f of fails) console.error('   · ' + f); process.exit(1) }
