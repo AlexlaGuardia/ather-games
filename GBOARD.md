@@ -11,11 +11,43 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🎨 Shimmer — **A LOG WEARS ITS BARK, AND THE ART CHECKLIST LEARNS TO SEE TWO THINGS IT COULD NOT** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `47e0b77`, pushed, not yet deployed (hub owns the lock)*
+## 🎨 Shimmer — **A LOG WEARS ITS BARK, THE CHECKLIST LEARNS TO SEE, AND SIX BLANK TOOLS GET PLACEHOLDERS** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `47e0b77` + `9d6c157`, pushed, not yet deployed (hub owns the lock)*
 
-### Left off — Alex's art queue went 12 → 8, and the 4 that left were never art
-Asked *"what still needs an icon"*. `scripts/item-art.mts` answered 12. Four of them were the four
-species **logs**, and the bark texture they needed had been in `tiles.ts` the whole time.
+### Left off — Alex's art queue went 12 → 8 → **2**, and only 2 were ever really art
+Asked *"what still needs an icon"*. `scripts/item-art.mts` answered 12. Four were the four species
+**logs**, whose bark texture had been in `tiles.ts` the whole time (wiring, not art). Six more were
+tools with no sprite at all, and Alex called for placeholders on those — shipped in `9d6c157`.
+**What is left is `deadwood` and `mushroom_cap`**, which have no texture anywhere to derive from
+(instanced geometry, flat tint) and want real art or the parked 3D-rendered-icon idea.
+
+### Decisions — the placeholder pass
+- **★ THE HOLE HAD A SHAPE WORTH NAMING: it was the FIRST tool in three separate skills.**
+  `worn_blade` (forestry) · `worn_spike` (prospecting) · `worn_rinstick` (rinning) are the `basic:
+  true` starter tools every keeper is handed, and all three drew the plain chip while **every tier
+  above them was painted**. The three spades had no art at all. A missing icon at tier 3 is a gap; a
+  missing icon at tier 1 is the first thing a new player looks at.
+- **WIRED INTO `ITEM_FRAME_MAP`, NOT JUST `ITEM_ICONS`** — that map is what opens a sprite in the
+  item editor, so these can be painted over without touching code. ⚠ A placeholder you cannot open
+  is just a different kind of blank.
+- **★★ EACH SHIPS WITH ITS `ITEM_PALETTES` ENTRY, AND THAT IS THE LOAD-BEARING HALF.** Index 1 maps
+  to `palette[0]` and the default's slot 0 is the `#d544c8` sentinel — so a new sprite using index 1
+  without its own entry joins the 20 silently, the same way all 20 got there. **Sentinel count after
+  the pass: still 20, none of them mine.** The palette ships with the art or the art ships broken.
+- **Colours derived, not invented** — spades read `MATERIAL_COLOR[WOOD.*_LOG]` (goldwood `#8a6a34`,
+  shimmeroak `#6f5a3f`, starwillow `#b3a690`), so a goldwood spade is the goldwood the world draws.
+  Worn tools are dull grey on purpose: they are the ones you should want to replace.
+- **⚠ FOUR PASSES, AND THE FIRST THREE WERE BAD IN WAYS ONLY LOOKING COULD CATCH.** The spade read
+  as a **potion bottle** twice (long thin neck over a round belly — and the second attempt bulged at
+  the middle, which is an urn); the axe read as a **magnifying glass**, because the notch meant to
+  say *worn* cut a hole clean through the head. Fixed by deriving each outline from the fill mask
+  instead of hand-placing it, and by making the spade blade **widest at the shoulder with a strict
+  monotone taper** — that single property is what separates a spade from an urn. ★ Every pass was
+  re-rendered and looked at; no amount of reading the grid would have found any of it.
+- **★ VERIFIED THROUGH THE SHIPPED CHAIN, NOT THE PREVIEW THAT DREW THEM.** The builder re-derived
+  the palette mapping to draw its own contact sheet, which is exactly the *"a preview that
+  re-derives can be correct while the game is wrong"* trap this repo keeps re-learning. Final check
+  rendered all six through `iconPixelsFor` and compared. The generator was then **deleted** — a
+  procedural source that is not the source of truth is a second source of truth.
 
 ### Decisions
 - **★★ "WHICH BLOCK'S FACES DOES THIS WEAR?" IS NOT "CAN THIS BE PLACED?"** `materialForItem` is the
