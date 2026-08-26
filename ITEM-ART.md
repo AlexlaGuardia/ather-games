@@ -4,14 +4,14 @@
 > registry, the recipe table and the tool table, and it classifies each item by calling the same
 > icon path the game calls. A hand-kept version of this file would be wrong within a week.
 
-Items reachable in voxel3d: **111**
+Items reachable in voxel3d: **128**
 
 | status | count | meaning |
 |---|---|---|
 | 🟦 derived | 39 | wears its own block's faces. Never needs hand art. |
 | 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
-| 🟩 painted | 57 | hand-painted flat sprite in `sprites/items.ts`. |
+| 🟩 painted | 74 | hand-painted flat sprite in `sprites/items.ts`. |
 | ⬜ missing | 2 | **needs art** — draws the plain chip today. |
 | 🟥 blank | 2 | wired to an all-zero frame. Reads as done, renders nothing. |
 
@@ -46,25 +46,37 @@ source of truth for what a tuft looks like.
 
 - [x] `amber_sap`
 - [x] `ather_crystal`
+- [x] `ather_infusion`
 - [x] `atherwheat_grain`
 - [x] `basic_rinstick`
+- [x] `bond_philter`
 - [x] `clickclaw`
+- [x] `crystal_elixir`
 - [x] `crystal_rinn`
 - [x] `crystal_spike`
 - [x] `crystalcap_spore`
 - [x] `crystallized_sap`
+- [x] `dawn_cordial`
 - [x] `dawncap_spore`
+- [x] `deep_essence`
+- [x] `dreamroot_elixir`
 - [x] `dreamroot_essence`
 - [x] `earth_crystal`
+- [x] `earth_infusion`
 - [x] `glowfin`
+- [x] `glowfin_brew`
 - [x] `glowfin_rinstick`
 - [x] `glowroot_bulb`
 - [x] `goldwood_bark`
 - [x] `goldwood_blade`
 - [x] `goldwood_spade`
+- [x] `harvest_brew`
+- [x] `mana_draught`
+- [x] `mana_infusion`
 - [x] `mana_spike`
 - [x] `moonkoi`
 - [x] `moonvine_leaf`
+- [x] `moonvine_tonic`
 - [x] `pearlshell`
 - [x] `pure_mana_core`
 - [x] `raw_mana_shard`
@@ -80,24 +92,29 @@ source of truth for what a tuft looks like.
 - [x] `seed_shimmerwheat`
 - [x] `seed_starbean`
 - [x] `seed_sunpetal`
+- [x] `shard_tonic`
 - [x] `shimmer_dust`
+- [x] `shimmer_salve`
 - [x] `shimmerbloom_petal`
 - [x] `shimmeroak_blade`
 - [x] `shimmeroak_spade`
 - [x] `shimmerscale`
 - [x] `shimmerwheat_grain`
 - [x] `starbean_pod`
+- [x] `starlight_tincture`
 - [x] `starwillow_blade`
 - [x] `starwillow_branch`
 - [x] `starwillow_sap`
 - [x] `starwillow_spade`
 - [x] `storm_crystal`
+- [x] `storm_infusion`
 - [x] `stormgrass_blade`
 - [x] `sunpetal_bloom`
 - [x] `tidepetal_bloom`
 - [x] `violet_crystal`
 - [x] `violetbloom_petal`
 - [x] `water_crystal`
+- [x] `water_infusion`
 - [x] `worn_blade`
 - [x] `worn_rinstick`
 - [x] `worn_spike`
@@ -154,22 +171,32 @@ These render through the shared 8-colour `ITEM_PALETTE` because they have no ent
 entry to give one its own colours.
 
 - [ ] `ather_crystal`
+- [ ] `ather_infusion`
 - [ ] `atherwheat_grain`
 - [ ] `basic_rinstick`
+- [ ] `bond_philter`
+- [ ] `crystal_elixir`
 - [ ] `crystal_rinn`
 - [ ] `crystal_spike`
 - [ ] `crystalcap_spore`
 - [ ] `crystallized_sap`
+- [ ] `dawn_cordial`
 - [ ] `dawncap_spore`
+- [ ] `deep_essence`
+- [ ] `dreamroot_elixir`
 - [ ] `dreamroot_essence`
 - [ ] `earth_crystal`
 - [ ] `glowfin`
+- [ ] `glowfin_brew`
 - [ ] `glowfin_rinstick`
 - [ ] `glowroot_bulb`
 - [ ] `goldwood_blade`
+- [ ] `harvest_brew`
+- [ ] `mana_draught`
 - [ ] `mana_spike`
 - [ ] `moonkoi`
 - [ ] `moonvine_leaf`
+- [ ] `moonvine_tonic`
 - [ ] `pearlshell`
 - [ ] `pure_mana_core`
 - [ ] `ribboneel`
@@ -183,10 +210,13 @@ entry to give one its own colours.
 - [ ] `seed_shimmerwheat`
 - [ ] `seed_starbean`
 - [ ] `seed_sunpetal`
+- [ ] `shard_tonic`
+- [ ] `shimmer_salve`
 - [ ] `shimmerbloom_petal`
 - [ ] `shimmeroak_blade`
 - [ ] `shimmerwheat_grain`
 - [ ] `starbean_pod`
+- [ ] `starlight_tincture`
 - [ ] `starwillow_blade`
 - [ ] `starwillow_branch`
 - [ ] `starwillow_sap`

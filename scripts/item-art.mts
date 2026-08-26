@@ -35,6 +35,7 @@ import { TOOL_DEFS } from '../src/app/shimmer/engine/tools'
 import { ITEM_ICONS, ITEM_PALETTES, SEED_PALETTES, PALETTE_COLLISIONS } from '../src/app/shimmer/sprites/items'
 import { iconSourceFor, iconPixelsFor, flatIcon } from '../src/app/shimmer/voxel3d/tex/item-icon'
 import { WORLD_ITEMS, FROM_FARMING, FROM_RINNING, FROM_FELLING } from '../src/app/shimmer/voxel3d/obtainable'
+import { POTION_DEFS } from '../src/app/shimmer/engine/alchemy'
 
 type Status = 'derived' | 'cross' | 'flora' | 'painted' | 'missing' | 'blank'
 interface Row { id: string; status: Status; from: string[] }
@@ -112,6 +113,28 @@ for (const id of FROM_FARMING) note(id, 'crop yield')
 for (const id of FROM_RINNING) note(id, 'rinning catch')
 for (const id of FROM_FELLING) note(id, 'felling drop')
 for (const id of WORLD_ITEMS) note(id, 'in world')
+
+// ── ★★ AND THE SEVENTH INSTANCE, FOUND THE DAY AFTER THE SIXTH (2026-08-26) ────────────────────
+// `WORLD_ITEMS` answers *what can the WORLD put in a keeper's hands* — blocks, farming, rinning,
+// felling. A brew is not put in your hands by the world; it comes off the cauldron, and
+// `engine/alchemy.ts`'s `POTION_DEFS` is a table neither this file nor `obtainable.ts` had joined.
+// So **all 17 potions were outside the universe**, and with them four more items wearing the
+// no-palette sentinel — `shard_tonic` 44%, `harvest_brew` 44%, `ather_infusion` 34%, `dawn_cordial`
+// 33%. The report said 20 and the true number was 24.
+//
+// ⚠ NOTED HERE AND DELIBERATELY *NOT* IN `obtainable.ts`. That file is the cauldron's honesty gate;
+// its question is whether you can get the INGREDIENTS. Adding brew OUTPUTS to `WORLD_ITEMS` would
+// answer a different question with the same set and could make a recipe wanting a brew read as
+// craftable. Same trap as `materialForItem`: two questions, one map. Give the second one its own.
+for (const id of Object.keys(POTION_DEFS)) note(id, 'brewed')
+
+// ⚠ AND THE OPPOSITE ERROR IS REAL: this universe is "reachable IN VOXEL3D", so joining a table the
+// live surface does not use would INFLATE it and invent art debt for items nobody can hold. Five
+// other engine tables define item outputs — crafting, quests, exchange, harvesting, world-items —
+// and all five belong to the archived 2D game. The discriminator is not a judgement call, it is a
+// grep: `grep -rl "engine/<name>'" src/app/shimmer/voxel3d/`. Alchemy answers with four files
+// (brew.ts, brew-panel.tsx, VoxelWorld.tsx, and its own oracle); the other five answer with ZERO.
+// Re-run that before adding a table here, and before concluding one is missing.
 
 // ── Classify by calling the shipped path, never by restating its rules ─────────────────────────
 const rows: Row[] = [...sources.entries()]
@@ -239,6 +262,11 @@ if (PALETTE_COLLISIONS.length) {
 lines.push('')
 writeFileSync(new URL('../ITEM-ART.md', import.meta.url), lines.join('\n'))
 
+// ★ NAME THE TABLES THIS UNIVERSE IS JOINED FROM. Seven times now a new way to obtain something
+// has shipped without telling this file, and every time the report simply got quietly smaller. An
+// implicit source list cannot be audited by a reader; a printed one can, and the next person adding
+// a table sees immediately whether theirs is on it.
+console.log(`\nuniverse joined from: blocks · recipes · tools · farming · rinning · felling · WORLD_ITEMS · potions`)
 console.log(`\nitem art — ${rows.length} reachable items`)
 console.log(`  🟦 derived ${bar(of('derived').length)}   (block faces, nothing to draw)`)
 console.log(`  🌿 cross   ${bar(of('cross').length)}   (crossed quads, nothing to draw)`)
