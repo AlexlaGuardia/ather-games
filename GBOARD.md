@@ -89,6 +89,30 @@ Answer: **the tool was already here, and Meshy is the wrong medium for it.**
   parser only understood `--o`, so the file silently went to stdout. Found by a round trip that then
   had no file to diff. Accepts both spellings now.
 
+### ★★ THE SEVENTH INSTANCE, FOUND THE NEXT HOUR — the cauldron was outside the universe
+Alex asked *"so next the ores and craftables?"*. **Ores are done** — all seven crystals plus
+`crystallized_sap` are painted at **0% sentinel**; nothing was owed there. Craftables were not.
+- `WORLD_ITEMS` answers *what can the WORLD put in a keeper's hands* (blocks, farming, rinning,
+  felling). **A brew is not one of those** — it comes off the cauldron, and `engine/alchemy.ts`'s
+  `POTION_DEFS` was a table neither `item-art` nor `obtainable.ts` had joined. **All 17 potions sat
+  outside the report**, and with them four more sentinel items: `shard_tonic` 44% · `harvest_brew`
+  44% · `ather_infusion` 34% · `dawn_cordial` 33%. **The report said 20 and the truth was 24.**
+- **⚠ JOINED IN `item-art`, DELIBERATELY NOT IN `obtainable.ts`.** That file is the cauldron's
+  honesty gate and its question is whether you can get the INGREDIENTS. Putting brew OUTPUTS into
+  `WORLD_ITEMS` answers a different question with the same set and could make a recipe wanting a brew
+  read as craftable. **Same trap as `materialForItem` this morning: two questions, one map.**
+- **The universe is now PRINTED, not implicit** (`universe joined from: blocks · recipes · tools ·
+  farming · rinning · felling · WORLD_ITEMS · potions`). Seven times a new way to obtain something has
+  shipped without telling this file and every time the report just got quietly smaller. A source list
+  nobody can see is a source list nobody audits.
+- **★ AND THE OPPOSITE ERROR IS GUARDED, because this universe is "reachable IN VOXEL3D".** Joining a
+  table the live surface does not use would **invent art debt for items nobody can hold**. Five other
+  engine tables define outputs — `crafting`, `quests`, `exchange`, `harvesting`, `world-items` — and
+  the discriminator is a grep rather than taste: `grep -rl "engine/<name>'" src/app/shimmer/voxel3d/`
+  answers **four** for alchemy and **zero** for all five. 2D-game archive, correctly excluded; the
+  command is in the comment so the next reader can re-run it instead of judging.
+- Universe **111 → 128** items. Missing still **2**.
+
 ### Files
 `scripts/png2sprite.mts` (new) · `src/app/shimmer/components/png-import.test.ts` (new, 95 sprites
 round-tripped) · reads `components/PngImportUtils.ts` unchanged — the point is that it is unchanged.
