@@ -100,11 +100,27 @@ export function KeeperFrame({ tab, setTab, title, tall, hint, onClose, children 
     // menu opened by a near-miss on a slot covers the grid and swallows the click that follows.
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55"
          onClick={onClose} onContextMenu={e => e.preventDefault()}>
-      <div className={`${FRAME.box} rounded-lg border border-white/15 bg-neutral-950/95 p-5 shadow-2xl`}
+      {/* ── ★ THE HOUSE PLATE (2026-08-26). This is the SHARED keeper frame, so every panel built on
+         it inherits the frame in one edit — bag, grimoire, and the rest. `rounded-lg` goes because
+         GAME_UI_LAYER.md names a 12px radius as the web-card tell; `gx-card` supplies the framed
+         background, the accent border and the inset shadows, and `gx-chrome` kills the browser
+         tells inside game chrome. `shadow-2xl` goes with it: the layer's inset shadow is the
+         weight, and a web drop-shadow on top reads as a modal, not a plate. */}
+      <div className={`${FRAME.box} gx-card gx-scan gx-chrome p-5`}
            onClick={e => e.stopPropagation()}>
         <div className="mb-3 flex items-center gap-4">
           {title ? (
-            <h2 className="font-medium uppercase tracking-[0.18em] text-amber-200/90 text-sm">{title}</h2>
+            // `gx-label`, not `uppercase tracking-[0.18em]`. This file spelled ONE role two ways —
+            // .18em here and .16em on the tabs below — which is the pathology `hud-type.test.ts`
+            // found in the fold HUD (one role, nine tracking values) appearing here in miniature.
+            // ⚠ `//` and NOT `{/* */}`: this is a ternary BRANCH, a parenthesised expression, not
+            // JSX children — a brace comment here is a syntax error. The sibling branch below was
+            // already written this way and I should have read it before reaching for braces.
+            // And a bare `/* */` is worse than either: in CHILDREN position JSX renders it as
+            // visible TEXT. That shipped for one screenshot — tsc passed (valid JSX text) and
+            // brew-check passed twice (the panel still worked), and a paragraph of this comment was
+            // painted across the game. Only looking at the picture caught it.
+            <h2 className="gx-label font-medium text-amber-200/90 text-sm">{title}</h2>
           ) : (
             // The rail scrolls sideways rather than wrapping: a wrapped rail changes the frame's
             // HEIGHT on a narrow screen, which is the same flinch one axis over. Phone is a primary
@@ -116,10 +132,17 @@ export function KeeperFrame({ tab, setTab, title, tall, hint, onClose, children 
                 return (
                   <button key={t.id} type="button" onPointerDown={() => setTab(t.id)}
                           aria-current={live ? 'page' : undefined}
-                          className={`shrink-0 rounded px-2.5 py-1 text-[11px] uppercase tracking-[0.16em]
-                                      transition-colors ${live
-                            ? 'bg-amber-300/15 text-amber-200/90'
-                            : 'text-white/35 hover:text-white/70'}`}>
+                          /* ★ BRUTAL STATE CONTRAST, asked for by name. `gx-btn` is the layer's
+                             HUD switch (squared face, caps, tracking, accent border, physical
+                             press); `gx-active`/`gx-inactive` carry the on/off.
+                             ⚠ THE "NEVER DIM THE PLATE" LESSON DOES NOT APPLY HERE, and the
+                             difference is worth stating rather than assuming. That rule was learned
+                             on the tool sockets, which float over the LIT WORLD: dimming their
+                             backing left four faint rings on grass. These tabs sit on `gx-card`'s
+                             dark plate — a background we control — so dimming the whole control is
+                             safe and is what the layer intends. Chrome over the scene, and chrome
+                             inside a panel, are different problems. */
+                          className={`gx-btn shrink-0 px-2.5 py-1 text-[11px] ${live ? 'gx-active' : 'gx-inactive'}`}>
                     {t.label}
                   </button>
                 )
@@ -133,9 +156,7 @@ export function KeeperFrame({ tab, setTab, title, tall, hint, onClose, children 
               acts on the way down, and a close that waited for the release would feel heavier than
               the thing it closes. */}
           <button type="button" onPointerDown={onClose} title="close (I or Esc)"
-                  className="ml-auto -mt-1 -mr-1 h-6 w-6 shrink-0 rounded border border-white/15
-                             text-white/40 leading-none transition-colors
-                             hover:border-white/40 hover:text-white/80">×</button>
+                  className="gx-btn ml-auto -mt-1 -mr-1 h-6 w-6 shrink-0 leading-none">×</button>
         </div>
         <div className={`${tall ? FRAME.tallBody : FRAME.body} overflow-y-auto overflow-x-hidden`}>{children}</div>
         {/* The hint sits BELOW the body, outside the scroll, so it is always readable and can never
