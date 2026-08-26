@@ -71,16 +71,22 @@ function ToolArc({ activeTool, tools, skills }: {
   //
   // Symmetric on purpose — two low on the shoulders, two high at the crown — so the cluster reads
   // as an arch over the vessel rather than a fan leaning off it.
-  // ⚠ COUNTER-CLOCKWISE IS *LOWER* ANGLES HERE, WHICH IS WORTH SAYING BEFORE SOMEONE "FIXES" IT.
-  // `ToolSocket` places by `left = r(1−cos θ)`, so rising θ walks LEFT → TOP → RIGHT, i.e. clockwise
-  // on screen. Rotating the cluster counter-clockwise therefore means subtracting from every angle,
-  // not adding. (The `1−cos` mirror is the 08-07 taste pass and is why this is back-to-front.)
+  // ── ★★ THE ARCH IS A HALO ROUND THE VESSEL, AND THE ROTATION LIVES IN THE ANGLES ─────────────
+  // Measured in `dev/hud` rather than reasoned about, and the measurement corrected me: with the
+  // container translated by exactly −r, a socket's offset from the GAUGE CENTRE is
+  //     dx = −r·cos θ ,  dy = r·sin θ
+  // so every socket sits at the SAME radius r and its screen-polar angle is simply **180° − θ**.
+  // That is a true halo. Any other translate breaks it: at −1.9r the sockets measured 148..182px
+  // from the vessel across a 55° smear instead of a clean arc, which is what "not lined up" was.
   //
-  // Alex 2026-08-26: spread wider, rotate CCW so the cluster sits left of the vessel's crown.
-  // Was [30, 70, 110, 150] — 120° wide, symmetric about the top. Now 144° wide and swung ~23° CCW,
-  // so the leftmost socket comes down to the gauge's shoulder and the whole set leans off-centre
-  // to the left instead of sitting squarely on top.
-  const ANGLES = [0, 48, 96, 144]
+  // So the offset Alex asked for is a ROTATION, not a shift. Rotating the halo counter-clockwise
+  // means RAISING screen-polar, which means LOWERING θ (they are 180° complements). These angles
+  // put the four sockets at polar 180 / 137 / 93 / 50 — an even 130° sweep whose midpoint is ~115°,
+  // i.e. up-and-LEFT of the crown rather than squarely on top.
+  //
+  // ⚠ Widen or rotate by editing THESE; do not touch the translate. The translate is what makes it
+  // a circle at all, and `dev/hud` will show a smear the moment it stops being −1r.
+  const ANGLES = [0, 43, 87, 130]
   return (
     <div
       // The container's origin is the arch's LEFT FOOT, and the arch is 2r wide, so it is shifted
@@ -93,7 +99,7 @@ function ToolArc({ activeTool, tools, skills }: {
       // asked for. Angles alone could not get there — the swing is bounded below by θ=0, past which a
       // socket drops under the gauge's top edge and overlaps the vessel. So the tilt comes from the
       // angles and the OFFSET comes from here, which also keeps the two adjustable independently.
-      style={{ transform: 'translateX(calc(var(--tool-arc-r) * -1.9))' } as React.CSSProperties}
+      style={{ transform: 'translateX(calc(var(--tool-arc-r) * -1))' } as React.CSSProperties}
     >
       {TOOL_FAMILIES.map((family, i) => (
         <ToolSocket key={family} family={family} angleDeg={ANGLES[i]}
