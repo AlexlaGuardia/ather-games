@@ -42,7 +42,9 @@ import * as THREE from 'three'
 import { columnHeight } from '../voxel/height'
 import { mistAt, mistPatchesNear, DEFAULT_MIST, type MistPatch } from '../voxel/mist'
 import { zoneAt } from '../voxel/zones'
-import { residentAt, type MistLedger, type Resident } from './mist-encounter'
+import { residentAt, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
+import { createCreatureBody, type CreatureBody } from './creature-billboard'
+import { speciesArt } from '../sprites/registry'
 import { bodyBox, rayBox } from './aim'
 import { ELEMENT_COLORS } from '../spirits/spirit'
 
@@ -247,7 +249,14 @@ void main() {
   }
 
   const residents = new THREE.Group()
-  const live = new Map<string, THREE.Mesh>()
+  /**
+   * ★ TWO OBJECTS PER PRESENCE NOW: the painted billboard, and the element spindle kept BEHIND it as
+   * a manifestation halo. The spindle is not leftover scaffolding — canon asks for a *luminous
+   * manifestation*, not a creature standing in a field, and the fresnel rim is what says the spirit
+   * is being made of mist rather than walking around in it. `body` is null only when a species has
+   * no registered art, and then the halo alone stands, which is exactly today's behaviour.
+   */
+  const live = new Map<string, { halo: THREE.Mesh; body: CreatureBody | null }>()
   const keyOf = (p: MistPatch) => `${p.x},${p.z}`
 
   let rescan = 0
@@ -324,14 +333,15 @@ void main() {
         // that disagreed with it would undo the consent design at the only moment it matters —
         // you would walk up to one shape and find two in the arena. Keyed `<patch>` and `<patch>:2`
         // so the second is added and dropped by exactly the same diff as the first.
-        const want = new Map<string, { r: Resident; form: { element: Resident['element'] }; off: number }>()
+        const want = new Map<string, { r: Resident; form: ResidentForm; off: number }>()
         for (const r of present) {
           want.set(keyOf(r.patch), { r, form: r, off: r.second ? -PAIR_OFF : 0 })
           if (r.second) want.set(`${keyOf(r.patch)}:2`, { r, form: r.second, off: PAIR_OFF })
         }
-        for (const [k, m] of live) {
+        for (const [k, e] of live) {
           if (want.has(k)) continue
-          residents.remove(m)
+          residents.remove(e.halo)
+          if (e.body) { residents.remove(e.body.object); e.body.dispose() }
           live.delete(k)
         }
         for (const [k, w] of want) {
@@ -342,8 +352,39 @@ void main() {
           m.position.set(w.r.patch.x + w.off, w.r.patch.floor + 1, w.r.patch.z)
           m.frustumCulled = false
           residents.add(m)
-          live.set(k, m)
+
+          // ── the painted spirit ────────────────────────────────────────────────────────────────
+          // ⚠ NO STAND-IN WHEN THE ART IS MISSING. `speciesArt` returns null rather than inventing,
+          // and this respects that: an unregistered species keeps the neutral halo instead of
+          // wearing some other animal's frames. A wrong creature is worse than a vague one, because
+          // only one of the two looks like a bug.
+          const art = speciesArt(w.form.species)
+          const body = art
+            ? createCreatureBody(w.form.species, { anims: art.anims, palette: art.palette }, { height: PRESENCE_TALL })
+            : null
+          if (body) {
+            body.object.position.set(m.position.x, w.r.patch.floor + 1 + PRESENCE_TALL / 2, m.position.z)
+            // Draws after the halo so the spirit reads as standing IN the glow, not behind it.
+            body.object.renderOrder = 1
+            body.object.frustumCulled = false
+            residents.add(body.object)
+          }
+          live.set(k, { halo: m, body })
         }
+      }
+
+      // ── the painted spirits, every frame ──────────────────────────────────────────────────────
+      // ★ FACING IS DETERMINISTIC AND DOES NOT TRACK YOU. A resident stands where the ground called
+      // it, facing whatever way it happens to face, so walking around a patch shows you its flank and
+      // its back — which is the only reason the directional art exists. A billboard that always
+      // turned to face the camera would look attentive and would render three of every four painted
+      // frames unreachable. Derived from the patch seed so it is stable across rescans and reloads.
+      // ⚠ It therefore never notices you. Turning to meet an aimed keeper is a deliberate LATER step,
+      // not an oversight — it wants Alex's eye on the moment, not a guess in this file.
+      for (const [, e] of live) {
+        if (!e.body) continue
+        const yaw = ((e.halo.position.x * 73856093) ^ (e.halo.position.z * 19349663)) % 628 / 100
+        e.body.update(elapsed * 1000, yaw, px, pz, 'idle')
       }
 
       // Nearest presence within spar range — recomputed every frame off the rescanned list, so the
@@ -361,8 +402,9 @@ void main() {
       thick = mistAt(px, pz, seed)
 
       // A gentle turn, so the presence is alive without acting. Rotation only — no position churn,
-      // no allocation.
-      for (const m of live.values()) m.rotation.y = elapsed * 0.16 + m.position.x * 0.01
+      // no allocation. ⚠ THE HALO ONLY. The billboard must never be rotated: a THREE.Sprite already
+      // faces the camera, and spinning it would roll the painted spirit on its side.
+      for (const e of live.values()) e.halo.rotation.y = elapsed * 0.16 + e.halo.position.x * 0.01
 
       const active = current !== null
       points.visible = active
@@ -408,6 +450,8 @@ void main() {
       mat.dispose()
       residentGeo.dispose()
       for (const e of ELEMENTS) residentMats[e].dispose()
+      for (const [, e] of live) e.body?.dispose()
+      live.clear()
       residents.clear()
       live.clear()
     },
