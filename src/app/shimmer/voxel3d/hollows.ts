@@ -8,7 +8,16 @@
 // darkness is the CONDITION, never the CAUSE. A Hollow appearing on healthy ground is the
 // 2026-06-16 failure returning; the eligibility gate below is that sentence as code.
 //
-// ⚠ BLOCKOUT. The locked look is owed a design-briefs + /picaso pass; this fixes behaviour only.
+// ⚠ BLOCKOUT BODIES. The LOOK is ruled — `CANON/design-briefs/hollows.md` (2026-08-15): one
+// material at three densities, dead-flat unlit diffuse with a high specular BORROWED from the
+// scene (so a Hollow goes glossy beside a tended plot and near-matte in a greyfield — a danger read
+// the player learns by looking), no face, always visibly losing itself. The MODELS have not caught
+// up to it yet; that is a /picaso pass, not a canon gap.
+// ⚠ THIS LINE READ "the locked look is owed a design-briefs pass" FOR ELEVEN DAYS AFTER THAT BRIEF
+// LANDED. It was accurate when written and it went on telling every reader the art direction did
+// not exist — which is the kind of stale claim that stops work rather than misinforming it. If you
+// are about to act on a comment here that says something is missing, check whether it still is.
+// This file fixes BEHAVIOUR only, as it always has.
 // Everything else — counts, tiers, drops, difficulty, whether they linger in deep-greyed pockets
 // by day — is build tuning and is Jin's (the ruling says so explicitly).
 //
