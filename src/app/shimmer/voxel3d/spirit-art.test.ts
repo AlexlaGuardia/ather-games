@@ -84,6 +84,44 @@ for (const [key, path] of Object.entries(SPIRIT_ART)) {
   ok(!/concept|akatskii/i.test(path), `${key} resolves into concept art, which is non-commercial and must never ship: ${path}`)
 }
 
+// ── 5. ★★ THE OTHER MIRROR — public/grimoire/spirits.json ─────────────────────────────────────
+// The build keeps its OWN copy of the ten spirits (the public /grimoire book page reads it, and it
+// carries entry copy canon does not have). Two files stating the same ten facts, in two repos, with
+// nothing checking they agree: the shape this codebase has paid for repeatedly.
+//
+// ⚠ IT COMPARES ONLY WHAT IS THE SAME CLAIM. My first version diffed every shared field and
+// reported 41 of 50 "drifted" — which was the instrument, not the data. `palette` is PROSE in canon
+// and HEX in the build (a deliberate translation, not a copy), `element` differs only in case, and
+// the quirk/signature lines are legitimately reworded for the page. Comparing a translation against
+// its source and calling every difference drift is crying wolf, and this file's whole argument is
+// that a guard which cries wolf stops being read. So: id, name, and element case-insensitively —
+// the fields where the two files genuinely assert the same thing.
+{
+  const buildManifest = join(PUBLIC, 'grimoire/spirits.json')
+  if (!existsSync(buildManifest)) {
+    fails.push(`BLIND: public/grimoire/spirits.json is gone — the /grimoire page reads it and this cross-check cannot look`)
+  } else {
+    const mine = JSON.parse(readFileSync(buildManifest, 'utf8')).spirits as Record<string, string>[]
+    ok(mine.length === base.spirits.length, `the build's grimoire manifest has ${mine.length} spirits, canon has ${base.spirits.length}`)
+    const byName = new Map(mine.map(s => [s.name, s]))
+    for (const c of base.spirits) {
+      const b = byName.get(c.name)
+      if (!b) { fails.push(`canon spirit ${c.name} is absent from the build's grimoire manifest`); continue }
+      ok(b.id === c.id, `${c.name}.id disagrees: build '${b.id}' vs canon '${c.id}'`)
+      ok(String(b.element).toLowerCase() === String(c.element).toLowerCase(),
+         `${c.name}.element disagrees: build '${b.element}' vs canon '${c.element}'`)
+    }
+    // ⚠ `analog` IS DELIBERATELY NOT ASSERTED, and the reason is a live finding rather than an
+    // exemption. It is `waterbear` in the build manifest, `tardigrade` in canon, and `water-bear`
+    // in the build's own species code — three spellings of one animal across three files, which is
+    // why `speciesOf` above joins on SPECIES_NAMES and never on analog. Asserting agreement would
+    // go red on a disagreement nobody intends to resolve; what matters is that no CODE depends on
+    // it. That is what this asserts instead.
+    const usesAnalog = readFileSync(join(process.cwd(), 'scripts/spirit-art.mts'), 'utf8')
+    ok(!/\.analog\b/.test(usesAnalog), 'the portrait generator reads `analog` — it must join on SPECIES_NAMES, the three spellings do not agree')
+  }
+}
+
 console.log(`\nspirit-art — ${have.size} portraits, re-derived from ${base.spirits.length} base + ${st2.locks.length} second + ${st3.locks.length} awakened locks`)
 if (fails.length) {
   console.log(`\n❌ ${pass} passed, ${fails.length} FAILED\n`)
