@@ -95,6 +95,43 @@ read-only: `sprites/derive.ts` · `sprites/palette.ts` · the ten species files
 
 **Files:** `play3d/cast.ts` · `play3d/keeper-moves.ts` · `play3d/loadout.ts` · `play3d/MoveBook.tsx` · `play3d/Shimmer3D.tsx` · `voxel3d/VoxelWorld.tsx` · `play3d/cast.test.ts` · `play3d/loadout.test.ts`
 
+## 🔍 Shimmer — **`/shimmer/dev/icons` — EVERY ICON IN ONE PLACE, DRAWN THE WAY THE BAG DRAWS IT** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — pushed*
+
+### Left off — Alex asked for somewhere to see all the icons at once
+**`http://ather.games/shimmer/dev/icons`** (or `tools/devwin.sh sprites` → `:3202/shimmer/dev/icons`).
+
+### Decisions
+- **★ OWNER-GATED FOR FREE, and it did not need building.** `proxy.ts` already blocks
+  `/shimmer/dev/*` without the owner cookie — *"source-mutating / dev tooling, never reachable
+  without the owner cookie"*. A plain request answers **403**, which is how I found out. No new auth
+  surface, and `dev/` is the established home for this kind of page (`seam`, `runehold`, `dialogue`).
+- **IT CALLS THE SHIPPED CHAIN** — `itemIcon()`, the same function the hotbar and satchel call, and
+  `iconSourceFor()` for which arm answered. Nothing on the page knows how an icon is made.
+  `icon-sheet.mts` states the rule and `dev/seam` already follows it: *a preview that re-derives can
+  be perfectly correct while the game is wrong.*
+- **★★ THE ITEM LIST IS SHARED, NOT COPIED.** The reachable-universe derivation moved out of
+  `scripts/item-art.mts` into **`voxel3d/item-universe.ts`**, and both import it. A page that rebuilt
+  it would be a hand-kept mirror of the script — agreeing with each other while drifting from the
+  game — and that derivation's own comments already count **seven** instances of exactly that. An
+  eighth way to obtain an item now goes in one file and both consumers hear about it in one edit.
+- **⚠ THE GROUND SWITCH IS LOAD-BEARING** (night / meadow / stone / sky). This HUD has twice shipped
+  art invisible against what was behind it — the emerald health bar that vanished into grass, and the
+  tool sockets that read as *"translucent green shapes"*. **An icon judged only on near-black is
+  judged against the one background a player rarely sees it on.**
+- **The `no palette` filter is not a render arm.** It lists every item wearing the `#d544c8` sentinel
+  with its percentage — the 24-item queue, sorted, worst first. ★ The colour is **read from
+  `ITEM_PALETTE[0]`**, never restated, so the detector cannot drift from the palette it detects.
+
+### ⚠ Near-miss worth keeping
+I read `basic_rinstick` as **0%** off the full-page screenshot and nearly filed a disagreement
+between the page and the script. Cropped it: **6%**, matching exactly. **A low-resolution contact
+sheet is not a measurement** — the 08-19 *misread specks* lesson, arriving again and caught only by
+zooming before concluding.
+
+### Files
+`dev/icons/page.tsx` (new) · `voxel3d/item-universe.ts` (new, shared) · `scripts/item-art.mts`
+(now imports the universe instead of deriving it)
+
 ## 🖼 Shimmer — **THE MENUS ASK THE HOUSE LAYER, AND TWO GREEN CHECKS MISSED A PARAGRAPH ON SCREEN** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — brew-panel, keeper-panel, mana-gauge + a harness guard, all pushed*
 
 ### Left off — gx adoption 23 → 57, highest of the sixteen games
