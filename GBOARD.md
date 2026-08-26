@@ -11,6 +11,70 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🎨 Shimmer — **A LOG WEARS ITS BARK, AND THE ART CHECKLIST LEARNS TO SEE TWO THINGS IT COULD NOT** (2026-08-26, sprites lane) · *Last touched 2026-08-26 (sprites) — shipped `47e0b77`, pushed, not yet deployed (hub owns the lock)*
+
+### Left off — Alex's art queue went 12 → 8, and the 4 that left were never art
+Asked *"what still needs an icon"*. `scripts/item-art.mts` answered 12. Four of them were the four
+species **logs**, and the bark texture they needed had been in `tiles.ts` the whole time.
+
+### Decisions
+- **★★ "WHICH BLOCK'S FACES DOES THIS WEAR?" IS NOT "CAN THIS BE PLACED?"** `materialForItem` is the
+  PLACEMENT map — the registry's own comment says it is derived from `placeable && drops[0]`, which is
+  what makes a sapling item place a sapling block. The icon asks a different question, and for most of
+  the world the two answers coincide, which is what kept the conflation invisible. A felled trunk is
+  `placeable: false` (lumber, not a build swatch), so nothing mapped the logs and the chain fell past
+  the block arm to the chip — **asking for art that already existed one derivation away.**
+- **A SECOND DERIVATION (`blockWornBy`), NOT A WIDER PLACEMENT MAP.** Widening `materialForItem` would
+  make logs placeable: a real behaviour change smuggled in to fix a picture, which is this file's own
+  sapling scar exactly (a fix in one renderer turning a blank into a lie in another).
+- **★ THE DROP ARM RANKS BELOW `painted`, AND THE RANK IS THE ENTIRE SAFETY ARGUMENT.** Block-faces-
+  always-win is a claim about an item that IS its block; a drop only says it came OFF one, which is
+  weaker and sometimes false — `raw_mana_shard` is a fragment of a seam, not a cube of crystal in host
+  rock. **Seven crystals sit in exactly the position the drop arm answers for.** Ranked above
+  `painted`, all seven silently trade Alex's hand art for host rock. Ranked below, the arm can only
+  ever replace the honest chip. Ambiguity falls through rather than guessing (four blocks drop
+  `rubble`; picking one invents a fact about which stone a pebble remembers).
+- **⚠ A GUARD CAUGHT ITS OWN AUTHOR ONE EDIT LATER.** The first version asked only *is there a block
+  behind this item*, and **Deadfall and Mushroom answered yes** — they ARE placeable — while the world
+  draws both as instanced geometry with no tile texture at all. `iconSourceFor` said `cross`,
+  `iconPixelsFor` came back empty, nothing threw, nothing rendered. ★ **And the report would have
+  re-filed both from *needs Alex* to *nothing to draw* — a checklist quietly shrinking his queue by two
+  items nobody has drawn.** So the assert is the general form: whatever arm the chain names, the pixels
+  for that arm must exist. All three guards mutation-tested with the bug they exist to catch.
+
+### ⏭️ ALEX'S EYE — the 8 that are genuinely undrawn, plus 20 that are lying green
+- **★★ 20 items `item-art` called "flat sprite shipping" render the `#d544c8` NO-PALETTE SENTINEL** —
+  slot 0 of the default `ITEM_PALETTE`, a deliberate screaming pink meaning *nobody chose colours*.
+  `flatIconPixels` maps pixel index 1 → `palette[0]`, so any sprite using index 1 with no
+  `ITEM_PALETTES` entry paints it magenta and ships. **`shimmerwheat_grain` is 171 of 171 pixels of
+  it — a solid magenta blob in the bag**, and it is provably obtainable (`crops.ts` yields it,
+  `obtainable.test.ts` asserts it by name). Worst first: `shimmerwheat_grain` 100% · `sunpetal_bloom`
+  75% · `glowroot_bulb` 47% · ten `seed_*` at 33% · `shimmerscale` 31% · `dawncap_spore` 28%.
+  **This is the SECOND COHORT of the 2026-08-12 magenta-smear bug** — that round fixed 13 items which
+  HAD a hand-tuned palette and were not reading it, by routing every surface through `paletteForItem`.
+  It could not fix, and never looked for, items with **no palette to read**. ⏭️ One `ITEM_PALETTES`
+  entry each; the colours are yours and the sweep does not guess at them.
+- **6 tier-1 tools undrawn** — `worn_blade` (forestry) · `worn_spike` (prospecting) · `worn_rinstick`
+  (rinning) · `goldwood`/`shimmeroak`/`starwillow_spade` (farming t1–t3). ⚠ Note the shape: the
+  **first tool a keeper picks up in three separate skills** draws a plain chip, while higher tiers are
+  painted. That is the sharpest player-facing hole on the list.
+- **`deadwood` + `mushroom_cap`** — no texture anywhere to derive from (instanced geometry, flat tint).
+  Hand art, or the parked 3D-rendered-icon idea.
+- **`moonkoi_rinstick` + `pure_spike`** wired to all-zero frames — the editor lists them as drawn.
+
+### Parked
+- **★★★ `item-art.mts`'s reachable universe was three HAND-ENUMERATED tables** (blocks, recipes,
+  tools) — **the sixth instance of the shape `voxel3d/obtainable.ts` exists to end**, and its header
+  numbers the five before it. Farming, rinning and felling all shipped afterwards and none of them
+  told the checklist. ⚠ **So the worst-looking item in the game was the one item the report was blind
+  to.** Now unions `WORLD_ITEMS` (99 → 111 items), provenance buckets preserved because *"where does
+  this even come from"* is the first question asked about anything on the missing list. **Worth a
+  sweep: any other file still hand-listing how an item is obtained.**
+
+### Files
+`voxel3d/tex/item-icon.ts` (`blockWornBy`, `DROPPED_BY`, the chain) · `voxel3d/tex/icon-source.test.ts`
+(⑦⑧⑨) · `scripts/item-art.mts` (sentinel sweep + `WORLD_ITEMS`) · `ITEM-ART.md` (regenerated)
+
 ## 🌫 Shimmer voxel — **THE MIST SPAR WAS NEVER BLOCKED: TWO COMMENTS SAID [OPEN] FOR 17 DAYS AFTER IT WAS RULED** (2026-08-26, world lane) · *Last touched 2026-08-26 (world) — `mist.ts` + `mist-pass.ts`, comments only, no behaviour change*
 
 ### Left off — comments corrected, oracles green, nothing else touched
