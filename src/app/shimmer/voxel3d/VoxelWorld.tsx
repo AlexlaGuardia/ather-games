@@ -26,6 +26,7 @@ import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refresh
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
+import { flatFightSpot } from '../voxel/footing'
 import { slumpMask } from '../voxel/slump'
 import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { bridgeGenPiecesForCol } from '../voxel/bridges'
@@ -3554,7 +3555,23 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const seam = useMemo(() => createSeamShimmer(SEED, WILDS_BUBBLE), [])
   // Mist patches (2026-08-09) — the lying mist plus the presence standing in it; see mist-pass.ts.
   // Sleeps everywhere but inside a patch's reach, the same way steam sleeps outside the Springs.
-  const mist = useMemo(() => createMistPass(SEED, mistLedger.current), [mistLedger])
+  // ⚠ THE THIRD ARG IS A CLOSURE, NOT `groundTopNear` ITSELF, AND THAT IS A TEMPORAL-DEAD-ZONE
+  // FIX RATHER THAN A STYLE ONE. `groundTopNear` is a `useCallback` declared ~800 lines BELOW this
+  // `useMemo`, so naming it here evaluates during render before its `const` is initialised. Wrapping
+  // it defers the read to CALL time — `mist-pass` only reaches `standAt` from `tick`/`aimed`, never
+  // during construction, so by the time this runs the binding exists. (Same class as the
+  // `HOLLOW_HOVER`-below-its-consumer note in `hollows.ts`: it took the module down on first run.)
+  //
+  // WHAT IT BUYS (world lane, handed over on release): mist residents stand on player-EDITED ground,
+  // not just generated. Without it `standYFor` falls back to `columnHeight`, which is correct for
+  // untouched terrain and blind to anything dug or built — a resident on a dug-out patch stood in
+  // the air, and one under a raised floor stood inside it.
+  const mist = useMemo(
+    () => createMistPass(SEED, mistLedger.current, (x, z, hint) => groundTopNear(x, z, hint, 12)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- groundTopNear is a stable useCallback;
+    // adding it would rebuild the whole mist pass (and its ledger) on any of ITS dep changes.
+    [mistLedger],
+  )
   const lastNearMist = useRef<string | null>(null)
   /** The ledger the pass currently holds. `recordWithdrawal` returns a NEW object, so an identity
    *  compare is enough to notice a spar ended and hand the pass the updated one — without which
@@ -6124,9 +6141,22 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           const posture = slot.posture
           // Placed between the keeper and the hold, spread across the road — they came OUT of it.
           const ang = Math.atan2(p.z - hold.z, p.x - hold.x) + slot.spread
-          const fx = hold.x + Math.cos(ang) * slot.rad, fz = hold.z + Math.sin(ang) * slot.rad
+          const wantX = hold.x + Math.cos(ang) * slot.rad, wantZ = hold.z + Math.sin(ang) * slot.rad
+          // ── ★ THE PATROL LANDS ON GROUND YOU CAN ACTUALLY FIGHT ON (world lane, handed over) ────
+          // The meet ring is a circle drawn on whatever terrain happens to be there, and 37.8% of it
+          // around the three holds is too broken to fight on — a slope or a step where the encounter
+          // canon rules ("met on the ROAD, approaching") reads as two bodies stuck in a hillside.
+          // `flatFightSpot` nudges to the nearest point whose round footprint clears `maxSpan`,
+          // rescuing about 74% of that. ⚠ It moves at most `search` (3) blocks, so the patrol still
+          // arrives where the ANGLE put it — this fixes footing, it does not re-site the encounter.
+          const spot = flatFightSpot(wantX, wantZ, SEED)
+          const fx = spot.x, fz = spot.z
           // ⚠ Spawn on the LIVE surface for the same reason the walk probes it — a hold's pad stands
           // above the continent rule, and a patrol placed by `columnHeight` starts buried in it.
+          // ★ AND THIS STILL RUNS AFTER THE NUDGE, NOT INSTEAD OF IT. `flatFightSpot` reads the
+          // GENERATOR (it is a pure function of the seed); the keeper may have dug the spot it
+          // picked. Footing first, live surface second — swapping them would hand the nudge a
+          // generated height for a place that no longer has one.
           const fy = groundTopNear(fx, fz, columnHeight(Math.floor(fx), Math.floor(fz), SEED) + 2, 12) + 1
           // ★ TWO BODIES AND A LEASH BETWEEN THEM. Canon's own picture of this encounter is *"a
           // Moglin up on his tiptoes, a dimmed, grey-guttered spirit dragging behind him on a
