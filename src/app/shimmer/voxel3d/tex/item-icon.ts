@@ -27,7 +27,7 @@
 // only alternative was a second copy of the same art keyed for this game — the exact second source
 // of truth the header above refuses for blocks. One art table, two games.
 
-import { materialForItem } from '../../voxel/registry'
+import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
 import { leafPixels, bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
@@ -130,6 +130,62 @@ const drawnAsCross = (material: number): boolean => {
 
 /** Does a real painter own this material, or would it fall to the ore artist's default? */
 export const hasTileArt = (material: number): boolean => TILE_MATERIALS.includes(material & 0xFF)
+
+/**
+ * ── ★ "WHICH BLOCK'S FACES DOES THIS WEAR?" IS NOT "CAN THIS BE PLACED?" (2026-08-26) ───────────
+ * `materialForItem` is the PLACEMENT map and the registry says so in its own comment: it is derived
+ * from `placeable && drops[0]`, which is what makes a sapling item place a sapling block. The icon
+ * is asking a different question — which block did this come off — and for most of the world the two
+ * answers coincide, which is what kept the conflation invisible.
+ *
+ * It stopped being invisible on the four species logs. You cannot re-place a log (`placeable: false`
+ * — a felled trunk is lumber, not a swatch for the build palette), so nothing mapped them, so the
+ * chain fell past the block arm to the honest chip, while `tiles.ts` has carried a real painted bark
+ * texture for each of them the whole time. `scripts/item-art.mts` duly filed all four as *needs
+ * Alex*, and the art it was asking for already existed one derivation away.
+ *
+ * ★ A SECOND DERIVATION, NOT A WIDER PLACEMENT MAP. Widening `materialForItem` would make logs
+ * placeable — a real behaviour change smuggled in to fix a picture, which is this file's own sapling
+ * scar exactly (a fix in one renderer turning a blank into a lie in another). Placement keeps its
+ * map; the icon gets its own, and neither can move the other.
+ *
+ * ⚠ AMBIGUITY FALLS THROUGH RATHER THAN GUESSING. Four blocks drop `rubble` and six drop
+ * `block_topsoil`; picking one would invent a fact about which stone a pebble remembers. Those
+ * already resolve through the placeable map and must keep resolving there, so this answers only when
+ * EXACTLY ONE block drops the item. The guard discriminates rather than decorating: every
+ * multi-dropper in the tree is excluded by it today.
+ */
+const DROPPED_BY: ReadonlyMap<string, number | null> = (() => {
+  const seen = new Map<string, number | null>()   // null = more than one block drops it, so no answer
+  for (const b of ALL_BLOCKS) {
+    const id = b.drops?.[0]?.itemId
+    if (!id) continue
+    seen.set(id, seen.has(id) ? null : b.material)
+  }
+  return seen
+})()
+
+/**
+ * The material whose faces this item wears — the block it places, else the one block it came off.
+ *
+ * ⚠ CALLERS MUST ASK `iconSourceFor` FIRST, never this alone. A drop is WEAKER evidence than a
+ * placement: `raw_mana_shard` comes off a seam and is not a cube of seam, which is why the shard arm
+ * sits BELOW hand-painted art in the chain and why this returns a material for it regardless. Read
+ * on its own it would put crystal-in-host-rock where Alex drew a shard.
+ */
+export const blockWornBy = (itemId: string): number | undefined => {
+  // ⚠ BOTH PATHS CHECK `hasTileArt`, and the placement path needs it just as much — caught by the
+  // probe, one edit after this function was written. Deadfall and Mushroom ARE placeable, so the
+  // placed branch answered for them, but the world draws both as instanced geometry with no tile
+  // texture at all: the chain reported `cross` while `iconPixelsFor` came back empty. A source that
+  // names an arm the pixels cannot fill is the same lie as a chip over art that exists, pointed the
+  // other way — and `item-art.mts` would have counted them as *nothing to draw* rather than *needs
+  // Alex*, quietly shrinking his queue by two items nobody had drawn.
+  const placed = materialForItem(itemId)
+  if (placed !== undefined) return hasTileArt(placed) ? placed : undefined
+  const dropped = DROPPED_BY.get(itemId)
+  return dropped != null && hasTileArt(dropped) ? dropped : undefined
+}
 
 /** `#rrggbb` → three bytes. Returns null on anything it does not understand, never a guessed colour. */
 function hexRGB(hex: string): [number, number, number] | null {
@@ -374,15 +430,24 @@ export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'pa
   if (mat !== undefined && hasTileArt(mat) && drawnAsCross(mat)) return 'cross'
   if (mat !== undefined && hasTileArt(mat)) return 'block'
   if (itemId in FLORA) return 'flora'
-  return ITEM_ICONS[itemId] && flatIcon(itemId) ? 'painted' : null
+  if (ITEM_ICONS[itemId] && flatIcon(itemId)) return 'painted'
+  // ★ THE DROP ARM IS LAST, AND ITS RANK IS THE WHOLE SAFETY ARGUMENT. Block-faces-always-win is a
+  // claim about an item that IS its block; a drop only says the item came OFF one, which is weaker
+  // and sometimes false — `raw_mana_shard` is a fragment of a seam, not a cube of crystal in host
+  // rock, and Alex's hand-painted shard is the truer picture. Ranking this below `painted` means the
+  // arm can only ever replace the honest chip, never displace existing art: seven crystals sit in
+  // exactly this position and keep their sprites. See `blockWornBy` for why the map is separate.
+  const worn = blockWornBy(itemId)
+  if (worn !== undefined) return drawnAsCross(worn) ? 'cross' : 'block'
+  return null
 }
 
 /** The icon pixels for an item, from whichever source owns it. */
 export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
   switch (iconSourceFor(itemId)) {
-    case 'block': return iconPixels(materialForItem(itemId)!, size)
+    case 'block': return iconPixels(blockWornBy(itemId)!, size)
     case 'cross': {
-      const cut = leafCutout(materialForItem(itemId)!)
+      const cut = leafCutout(blockWornBy(itemId)!)
       return cut && crossIcon(cut, size)
     }
     case 'flora': return floraIcon(itemId, size)
@@ -404,7 +469,6 @@ export function itemIcon(itemId: string): string | null {
   if (hit !== undefined) return hit
   if (typeof document === 'undefined') return null
 
-  const mat = materialForItem(itemId)
   // ★ THE ORDER IS THE BLOCK FIRST, ALWAYS. An item with a block behind it must wear that block's
   // real faces even if a flat sprite also exists, or the two drift and the icon starts describing
   // last month's texture — the whole argument at the top of this file. Flat art only ever answers

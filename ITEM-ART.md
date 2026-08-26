@@ -4,15 +4,15 @@
 > registry, the recipe table and the tool table, and it classifies each item by calling the same
 > icon path the game calls. A hand-kept version of this file would be wrong within a week.
 
-Items reachable in voxel3d: **99**
+Items reachable in voxel3d: **111**
 
 | status | count | meaning |
 |---|---|---|
-| 🟦 derived | 35 | wears its own block's faces. Never needs hand art. |
+| 🟦 derived | 39 | wears its own block's faces. Never needs hand art. |
 | 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
-| 🟩 painted | 39 | hand-painted flat sprite in `sprites/items.ts`. |
-| ⬜ missing | 12 | **needs art** — draws the plain chip today. |
+| 🟩 painted | 51 | hand-painted flat sprite in `sprites/items.ts`. |
+| ⬜ missing | 8 | **needs art** — draws the plain chip today. |
 | 🟥 blank | 2 | wired to an all-zero frame. Reads as done, renders nothing. |
 
 ## 🟥 Wired but blank — needs art, and the wiring says otherwise
@@ -29,14 +29,10 @@ bag is honest and only the editor is not. Draw them like anything on the list be
 Paint at `/shimmer/dev?mode=item` (32×32, palette-indexed). Each is one flat sprite; there is no
 view-angle call to make — these are held objects, not world props.
 
-- [ ] `dawnwood_log` — drop: Dawnwood, ingredient
-- [ ] `deadwood` — drop: Deadfall
-- [ ] `goldwood_log` — drop: Goldwood, ingredient
+- [ ] `deadwood` — drop: Deadfall, in world
 - [ ] `goldwood_spade` — tool: farming t1
-- [ ] `mushroom_cap` — drop: Mushroom
-- [ ] `shimmeroak_log` — drop: Shimmeroak, ingredient
+- [ ] `mushroom_cap` — drop: Mushroom, in world
 - [ ] `shimmeroak_spade` — tool: farming t2
-- [ ] `starwillow_log` — drop: Starwillow, ingredient
 - [ ] `starwillow_spade` — tool: farming t3
 - [ ] `worn_blade` — tool: forestry t1
 - [ ] `worn_rinstick` — tool: rinning t1
@@ -58,18 +54,26 @@ source of truth for what a tuft looks like.
 - [x] `ather_crystal`
 - [x] `atherwheat_grain`
 - [x] `basic_rinstick`
+- [x] `clickclaw`
+- [x] `crystal_rinn`
 - [x] `crystal_spike`
 - [x] `crystalcap_spore`
+- [x] `crystallized_sap`
 - [x] `dawncap_spore`
 - [x] `dreamroot_essence`
 - [x] `earth_crystal`
+- [x] `glowfin`
 - [x] `glowfin_rinstick`
+- [x] `glowroot_bulb`
 - [x] `goldwood_bark`
 - [x] `goldwood_blade`
 - [x] `mana_spike`
+- [x] `moonkoi`
 - [x] `moonvine_leaf`
+- [x] `pearlshell`
 - [x] `pure_mana_core`
 - [x] `raw_mana_shard`
+- [x] `ribboneel`
 - [x] `rootvine_coil`
 - [x] `seed_atherwheat`
 - [x] `seed_crystalcap`
@@ -81,14 +85,18 @@ source of truth for what a tuft looks like.
 - [x] `seed_shimmerwheat`
 - [x] `seed_starbean`
 - [x] `seed_sunpetal`
+- [x] `shimmer_dust`
 - [x] `shimmerbloom_petal`
 - [x] `shimmeroak_blade`
+- [x] `shimmerscale`
+- [x] `shimmerwheat_grain`
 - [x] `starbean_pod`
 - [x] `starwillow_blade`
 - [x] `starwillow_branch`
 - [x] `starwillow_sap`
 - [x] `storm_crystal`
 - [x] `stormgrass_blade`
+- [x] `sunpetal_bloom`
 - [x] `tidepetal_bloom`
 - [x] `violet_crystal`
 - [x] `violetbloom_petal`
@@ -113,11 +121,13 @@ source of truth for what that block looks like, and the two drift the first time
 - `crafting_table`
 - `cut_stone`
 - `cut_stone_slab`
+- `dawnwood_log`
 - `dawnwood_plank`
 - `dawnwood_plank_slab`
 - `garden_bed_dawnwood`
 - `garden_bed_goldwood`
 - `garden_bed_shimmeroak`
+- `goldwood_log`
 - `goldwood_plank`
 - `goldwood_plank_slab`
 - `mana_lantern`
@@ -128,8 +138,10 @@ source of truth for what that block looks like, and the two drift the first time
 - `sandstone`
 - `sandstone_slab`
 - `sawmill`
+- `shimmeroak_log`
 - `shimmeroak_plank`
 - `shimmeroak_plank_slab`
+- `starwillow_log`
 - `stone_brick`
 - `stone_brick_slab`
 - `stonecutter`
@@ -144,16 +156,23 @@ entry to give one its own colours.
 - [ ] `ather_crystal`
 - [ ] `atherwheat_grain`
 - [ ] `basic_rinstick`
+- [ ] `crystal_rinn`
 - [ ] `crystal_spike`
 - [ ] `crystalcap_spore`
+- [ ] `crystallized_sap`
 - [ ] `dawncap_spore`
 - [ ] `dreamroot_essence`
 - [ ] `earth_crystal`
+- [ ] `glowfin`
 - [ ] `glowfin_rinstick`
+- [ ] `glowroot_bulb`
 - [ ] `goldwood_blade`
 - [ ] `mana_spike`
+- [ ] `moonkoi`
 - [ ] `moonvine_leaf`
+- [ ] `pearlshell`
 - [ ] `pure_mana_core`
+- [ ] `ribboneel`
 - [ ] `seed_atherwheat`
 - [ ] `seed_crystalcap`
 - [ ] `seed_dawncap`
@@ -166,11 +185,13 @@ entry to give one its own colours.
 - [ ] `seed_sunpetal`
 - [ ] `shimmerbloom_petal`
 - [ ] `shimmeroak_blade`
+- [ ] `shimmerwheat_grain`
 - [ ] `starbean_pod`
 - [ ] `starwillow_blade`
 - [ ] `starwillow_branch`
 - [ ] `starwillow_sap`
 - [ ] `storm_crystal`
+- [ ] `sunpetal_bloom`
 - [ ] `violet_crystal`
 - [ ] `water_crystal`
 

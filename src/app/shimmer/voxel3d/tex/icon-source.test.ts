@@ -26,7 +26,8 @@
 import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
 import { isPlant, isSapling } from '../../voxel/depth'
 import { isLeafMat } from '../../voxel/trees'
-import { iconSourceFor, iconPixelsFor, iconPixels, hasTileArt, crossIcon, leafCutout } from './item-icon'
+import { iconSourceFor, iconPixelsFor, iconPixels, hasTileArt, crossIcon, leafCutout, blockWornBy, flatIcon } from './item-icon'
+import { ITEM_ICONS } from '../../sprites/items'
 
 const fails: string[] = []
 let pass = 0
@@ -132,6 +133,68 @@ for (const id of ['goldwood_sapling', 'shimmeroak_sapling', 'starwillow_sapling'
     fails.push(`${id}: forcing the source opaque covers ${filled}px against the shipped ${real}px — `
       + `the cutout is not reaching the picture, so the icon is a solid block of colour. This is the `
       + `green-rectangle bug of 2026-08-23.`)
+  } else pass++
+}
+
+// The item set these last three sweep. Every id a block drops, plus every id with hand art —
+// between them that is every item the chain can be asked about without importing the recipe and
+// tool tables. Derived, so a new block or a new sprite joins the sweep on its own.
+const reachable: string[] = [...new Set([
+  ...ALL_BLOCKS.flatMap(b => (b.drops ?? []).map(d => d.itemId)),
+  ...Object.keys(ITEM_ICONS),
+])]
+
+// ── ⑦ A NAMED SOURCE MUST BE ABLE TO FILL ITSELF ──────────────────────────────────────────────
+// ★ THIS CAUGHT ITS OWN AUTHOR, ONE EDIT AFTER THE ARM IT GUARDS WAS WRITTEN (2026-08-26).
+// The drop arm below was added so the four species logs stop drawing a chip over a bark texture that
+// already exists. The first version asked only "is there a block behind this item", and Deadfall and
+// Mushroom answered yes — they are placeable — while the world draws both as INSTANCED GEOMETRY with
+// no tile texture at all. `iconSourceFor` said `cross`; `iconPixelsFor` came back empty. Nothing
+// threw, nothing rendered, and `item-art.mts` would have re-filed both from *needs Alex* to *nothing
+// to draw*, shrinking his art queue by two items nobody has drawn. A checklist that reports a
+// shorter queue is the direction of this failure that gets believed.
+//
+// So the assert is the general form rather than a case for those two: whatever arm the chain names,
+// the pixels for that arm must exist. There is no item for which "I know what this is" and "I can
+// draw it" are allowed to disagree.
+for (const id of reachable) {
+  const src = iconSourceFor(id)
+  if (src === null) continue
+  const px = iconPixelsFor(id)
+  if (!px || px.every((v, i) => i % 4 !== 3 || v === 0)) {
+    fails.push(`${id} names source '${src}' and renders nothing — the chain claims an arm it cannot fill`)
+  } else pass++
+}
+
+// ── ⑧ NO CHIP OVER ART THAT ALREADY SHIPS ─────────────────────────────────────────────────────
+// The defect the drop arm was written for, asserted so a refactor cannot quietly undo it. An item
+// dropped by exactly one block, where that block has a real painted texture, must not fall to the
+// plain chip — the world drew that surface, and the chip means *nobody drew this yet*.
+// ⚠ Derived from `blockWornBy`, never a list of the four logs: the day a fifth species lands, or a
+// new non-placeable block starts dropping something, this covers it without anyone remembering to.
+for (const id of reachable) {
+  const worn = blockWornBy(id)
+  if (worn === undefined || !hasTileArt(worn)) continue
+  if (iconSourceFor(id) === null) {
+    fails.push(`${id} draws the plain chip while its block (${worn}) has a painted texture — `
+      + `the chip asserts nobody drew this, and somebody did`)
+  } else pass++
+}
+
+// ── ⑨ A DROP MAY NEVER DISPLACE A HAND-PAINTED SPRITE ─────────────────────────────────────────
+// ★ THE RANK OF THE DROP ARM IS THE SAFETY ARGUMENT, SO THE RANK IS WHAT GETS ASSERTED.
+// Block-faces-always-win is a claim about an item that IS its block. A drop only says the item came
+// OFF one, which is weaker and sometimes plain false: `raw_mana_shard` is a fragment of a seam, not
+// a cube of crystal in host rock. Seven crystals sit in exactly the position the drop arm answers
+// for — no placement mapping, a tile-arted seam behind them, and a hand-painted sprite Alex drew for
+// the 2D game. Rank the arm above `painted` and all seven silently trade his art for host rock.
+for (const id of reachable) {
+  if (!(ITEM_ICONS[id] && flatIcon(id))) continue          // no hand art to protect
+  if (materialForItem(id) !== undefined) continue          // a real placement outranks art, by design
+  const src = iconSourceFor(id)
+  if (src !== 'painted') {
+    fails.push(`${id} has a hand-painted sprite but resolves as '${src}' — a DROP outranked Alex's `
+      + `art. The drop arm belongs below 'painted' in the chain.`)
   } else pass++
 }
 

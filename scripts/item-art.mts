@@ -34,6 +34,7 @@ import { RECIPES } from '../src/app/shimmer/voxel/recipes'
 import { TOOL_DEFS } from '../src/app/shimmer/engine/tools'
 import { ITEM_ICONS, ITEM_PALETTES, SEED_PALETTES, PALETTE_COLLISIONS } from '../src/app/shimmer/sprites/items'
 import { iconSourceFor, iconPixelsFor, flatIcon } from '../src/app/shimmer/voxel3d/tex/item-icon'
+import { WORLD_ITEMS, FROM_FARMING, FROM_RINNING, FROM_FELLING } from '../src/app/shimmer/voxel3d/obtainable'
 
 type Status = 'derived' | 'cross' | 'flora' | 'painted' | 'missing' | 'blank'
 interface Row { id: string; status: Status; from: string[] }
@@ -89,6 +90,28 @@ for (const r of RECIPES) {
   for (const i of r.input) note(i.itemId, 'ingredient')
 }
 for (const t of Object.values(TOOL_DEFS)) note(t.id, `tool: ${t.skillId} t${t.tier}`)
+
+// ── ★★★ AND THE THREE TABLES ABOVE ARE A HAND-ENUMERATED SOURCE LIST (2026-08-26) ──────────────
+// Which is the exact shape `voxel3d/obtainable.ts` was written to end, and its header numbers five
+// prior instances. This is the sixth, and it is the funniest one: the checklist whose entire purpose
+// is to stop a stale hand-kept list asserting what art exists was keeping a stale hand-kept list of
+// what a keeper can hold. Blocks, recipes and tools were the ways to obtain something on the day
+// this file was written; FARMING, RINNING and FELLING all shipped afterwards and none of them told
+// it. `WORLD_ITEMS` is the one derivation that hears about all of them.
+//
+// ⚠ THE MISS WAS NOT COSMETIC. `shimmerwheat_grain` renders as a SOLID MAGENTA BLOB — 171 of 171
+// pixels the no-palette sentinel — and it is provably obtainable: `crops.ts` yields it and
+// `obtainable.test.ts` asserts it by name. It was outside this file's universe, so the sweep below
+// could not see it, so the worst-looking item in the game was the one item the report was blind to.
+// An instrument that cannot see its subject reports nothing wrong.
+//
+// Union, never replacement: the loops above carry PROVENANCE ("drop: Deadfall", "tool: farming t1")
+// that `WORLD_ITEMS` flattens away, and "where does this even come from" is the first question asked
+// about anything on the missing list. So the buckets answer first and the set backstops them.
+for (const id of FROM_FARMING) note(id, 'crop yield')
+for (const id of FROM_RINNING) note(id, 'rinning catch')
+for (const id of FROM_FELLING) note(id, 'felling drop')
+for (const id of WORLD_ITEMS) note(id, 'in world')
 
 // ── Classify by calling the shipped path, never by restating its rules ─────────────────────────
 const rows: Row[] = [...sources.entries()]
@@ -255,6 +278,50 @@ if (process.argv.includes('--sheet')) {
   const out = new URL('../item-art.png', import.meta.url).pathname
   await sharp(sheet, { raw: { width: W, height: H, channels: 4 } }).png().toFile(out)
   console.log(`wrote ${out} (${drawn.length} icons)`)
+}
+
+// ── ★ THE SENTINEL SWEEP — "PAINTED" IS NOT THE SAME CLAIM AS "LOOKS LIKE ANYTHING" (2026-08-26) ─
+// Everything above classifies by asking which ARM of the chain answers for an item. That is the
+// right question for *is there art* and it is silent about *is the art wearing real colours*, so 28
+// items sat in the 🟩 painted column — "flat sprite shipping" — while `shimmerwheat_grain` rendered
+// as a SOLID MAGENTA BLOB, 171 of 171 pixels.
+//
+// `#d544c8` is slot 0 of the default `ITEM_PALETTE`: a deliberate screaming pink meaning *no palette
+// was ever chosen for this item*. `flatIconPixels` maps pixel index 1 → `palette[0]`, so any sprite
+// that uses index 1 without its own `ITEM_PALETTES` entry paints that index in the sentinel and
+// ships. This is the SECOND COHORT of the bug `sprites/items.ts` records under 2026-08-12 — that
+// round fixed 13 items which HAD a hand-tuned palette and were not reading it, by routing every
+// surface through `paletteForItem`. It could not fix, and did not look for, items with no palette to
+// read. Those kept shipping, and nothing ever said so out loud.
+//
+// ⚠ THE REPORT IS WHY IT SURVIVED. A checklist calling all 28 "shipping" is an instrument failing
+// toward *nothing to see here* — the cheap direction, the one nobody investigates. The colours
+// themselves are Alex's call and this does not guess at them; it only refuses to keep calling them
+// done. Derived by rendering the SHIPPED pixels and looking for the sentinel, never a list of ids,
+// so an item recoloured tomorrow leaves this list without anyone editing it.
+const SENTINEL = [0xd5, 0x44, 0xc8] as const
+const screaming = of('painted')
+  .map(r => {
+    const px = iconPixelsFor(r.id)
+    if (!px) return null
+    let cov = 0, hit = 0
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i + 3] === 0) continue
+      cov++
+      if (px[i] === SENTINEL[0] && px[i + 1] === SENTINEL[1] && px[i + 2] === SENTINEL[2]) hit++
+    }
+    return hit > 0 ? { id: r.id, hit, cov, pct: Math.round((100 * hit) / cov) } : null
+  })
+  .filter((v): v is { id: string; hit: number; cov: number; pct: number } => v !== null)
+  .sort((a, b) => b.pct - a.pct)
+
+if (screaming.length) {
+  console.log(`\n⚠ ${screaming.length} "painted" item(s) render the #d544c8 no-palette sentinel:`)
+  for (const r of screaming) {
+    console.log(`    ${String(r.pct).padStart(3)}%  ${r.id.padEnd(22)} ${r.hit}/${r.cov}px`)
+  }
+  console.log('  These are listed as shipping and are wearing the default palette\'s slot 0 — the')
+  console.log('  magenta that means nobody chose colours. Give each an ITEM_PALETTES entry (Alex).')
 }
 
 if (blank.length) {
