@@ -104,6 +104,7 @@ import {
   type CollarFoe, type CollarDelivery, type FoePosture,
 } from '../engine/collar-foes'
 import { KEEPER_MOVES } from '../play3d/keeper-moves'
+import { collarPrompt, collarPromptText, type PromptSlot } from './collar-prompt'
 import { mulberry32 } from '../engine/arena'
 import type { Space } from './save'
 
@@ -457,6 +458,18 @@ const SPIRIT_TRAIL = 1.5
 /** How far a freed Moglin walks before he is gone. Far enough to read as leaving, not as vanishing. */
 const FREED_FAREWELL = 26
 /**
+ * How far OUTSIDE a foe's own reach the "what to press" prompt appears, in blocks.
+ *
+ * ★ ADDED TO HIS REACH RATHER THAN BEING A RADIUS OF ITS OWN. A channeler reaches 8 and a
+ * skirmisher 0.85, so one flat radius would put the line on screen long before a channeler matters
+ * and only after a skirmisher already has you. Derived from the posture, the lead is the same in
+ * FELT time for all three: a couple of seconds of approach.
+ *
+ * ⚠ A FEEL NUMBER, AND SO IT IS MINE TO PICK — but the thing it is added to is not. If postures are
+ * ever retuned this follows them with no edit here.
+ */
+const COLLAR_PROMPT_LEAD = 6
+/**
  * How a move answers a collar, read off the move where it was authored (`keeper-moves.ts`).
  *
  * ⚠ RETURNS `undefined` FOR AN UNKNOWN MOVE ON PURPOSE — `answerCollar` refuses that, so a move that
@@ -466,6 +479,10 @@ const FREED_FAREWELL = 26
 const COLLAR_CLASS = new Map<string, CollarDelivery>(
   KEEPER_MOVES.filter(m => m.collar).map(m => [m.id, m.collar as CollarDelivery]))
 const collarClassOf = (moveId: string): CollarDelivery | undefined => COLLAR_CLASS.get(moveId)
+/** ★ Both halves of the prompt come off the SAME table the rule does — never a second list. */
+const MOVE_NAME = new Map(KEEPER_MOVES.map(m => [m.id, m.name]))
+const opensCollar = (moveId: string): boolean => collarClassOf(moveId) === 'opens'
+const moveNameOf = (moveId: string): string => MOVE_NAME.get(moveId) ?? moveId
 /**
  * How long the settle gate will hold physics after the player's own column has generated, in
  * seconds of frame time. Past this, the ground is not late — it is absent. See the gate.
@@ -863,6 +880,8 @@ export default function VoxelWorld() {
   const pieceId = (variants[matIdx] ?? variants[0] ?? PIECES[pieceIdx]).id
   const [rot, setRot] = useState<Rotation>(0)
   const [look, setLook] = useState<{ name: string; progress: number; refused: boolean } | null>(null)
+  /** A still-collared Moglin is on you. Drives the "what to press" line — see `collar-prompt.ts`. */
+  const [collarNear, setCollarNear] = useState(false)
   const [settings, setSettings] = useState<VoxelSettings>(() => loadSettings())
   const [showSettings, setShowSettings] = useState(false)
   const update = useCallback((patch: Partial<VoxelSettings>) => {
@@ -1964,7 +1983,7 @@ export default function VoxelWorld() {
             mapHeading.current = yaw
             setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)
           }}
-          onLook={setLook} onInvChange={refreshHotbar}
+          onLook={setLook} onInvChange={refreshHotbar} onCollarNear={setCollarNear}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
           build={build} pieceId={pieceId} rot={rot}
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
@@ -1990,7 +2009,7 @@ export default function VoxelWorld() {
         <PointerLockControls selector="#voxel3d-no-autolock" />
       </Canvas>
       <Hud stats={stats} diagnostics={settings.showFps} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
-           build={build} pieceId={pieceId} rot={rot} inv={inv}
+           build={build} pieceId={pieceId} rot={rot} inv={inv} collarNear={collarNear}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
@@ -2141,7 +2160,7 @@ function Clock() {
  * directly, and leave the component tree alone. 10 Hz is well under a frame and well over the eye.
  */
 
-function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceId, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast }: {
+function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceId, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast, collarNear }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
@@ -2192,6 +2211,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
   mana: React.RefObject<{ cur: number; max: number; regen: number } | null>
   /** Bound casts + their cooldown deadlines, published by `World`. */
   cast: React.RefObject<CastHud | null>
+  collarNear: boolean
   /** Within reach of a placed crafting table — drives the "E — craft" prompt. */
   nearTable: boolean
   craftOpen: boolean
@@ -2414,6 +2434,38 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
       )}
 
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/80 pointer-events-none" />
+
+      {/* ★★★ THE COLLAR PROMPT — the sentence BEFORE the mistake (2026-08-27).
+          Alex, playing: "the moglin enemies chased me down with no way to interact." Every part of
+          the encounter was already built — casting, `answerCollar`, a spoken reason for each
+          refusal — and none of it was reachable, because the only way to learn the verb was to get
+          it wrong first. This is the missing half.
+
+          ⚠ IT SITS UNDER THE CROSSHAIR, NOT IN THE CORNER. A keeper being chased is looking at the
+          middle of the screen, and a line they have to go and find is a line that is not there.
+
+          ⚠⚠ AND THE TEXT IS DERIVED FROM THE LIVE LOADOUT, NEVER TYPED. A prompt that says "press
+          B" to someone whose Signature slot is empty — or seated with a move canon REFUSES — is
+          worse than silence: it sends them to press a key that cannot work and the game takes the
+          blame. `collarPrompt` has three answers and only one of them is a key. */}
+      {collarNear && (() => {
+        const slots: PromptSlot[] = ALL_BANDS.map((_, i) => ({
+          key: CAST_KEYS[i],
+          moveId: cast.current?.ids[i] ?? null,
+        }))
+        const p = collarPrompt(slots, opensCollar, moveNameOf)
+        return (
+          <div className="absolute left-1/2 top-[calc(50%+2.2rem)] -translate-x-1/2 text-center pointer-events-none">
+            <div className="text-[10px] font-mono uppercase tracking-[.22em] text-white/45">he is still collared</div>
+            {/* Amber when there is something to press, dim when the answer is "not with these" —
+                a keeper should be able to tell the two apart without reading the sentence. */}
+            <div className={`mt-0.5 text-[12px] font-mono tracking-wide [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]
+              ${p.kind === 'ready' ? 'text-amber-200' : 'text-white/60'}`}>
+              {collarPromptText(p)}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ★ The build palette REPLACES the hotbar rather than sitting beside it. One bar, whose meaning
           follows the mode, so there is never a question about which row a number key is talking to. */}
@@ -3222,7 +3274,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut, castOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut, castOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3341,6 +3393,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   owner: React.RefObject<boolean>
   /** Filled by the World so the owner-only `/foes` can read the live patrol. See its ctx entry. */
   foesOut: React.RefObject<null | (() => { posture: string; dist: number; collar: number }[])>
+  /** True while a still-collared Moglin is close enough that the keeper needs to know the verb. */
+  onCollarNear: (near: boolean) => void
   pressOut: React.RefObject<null | ((key?: string, value?: number) => string)>
   waterOut: React.RefObject<null | ((x: number, y: number, z: number) => number | null)>
   /** Written by this component, read by the HUD — see `CastGauges`. */
@@ -3510,6 +3564,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     try { saplingClock.current = JSON.parse(localStorage.getItem(SAPLING_KEY) ?? '{}') } catch { saplingClock.current = {} }
   }, [SAPLING_KEY])
   const lastNearGreg = useRef(false)
+  /** Edge latch for the collar prompt — see the emitter in the foe loop. */
+  const lastCollarNear = useRef(false)
   const lastNearTable = useRef(false)
   // The gate: built (sealed or open, matching whatever `tutorial.current.stage` says at the moment
   // its columns arrive) exactly once, then opened exactly once more if the quest completes later.
@@ -6168,6 +6224,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (!foes.current.some(o => o.hold === e.hold)) foeOut.current.delete(e.hold)
       }
       prof.current.mark('world:foes')
+      // ⚠ RESET EVERY FRAME AND SET BY THE LOOP — never carried, or a foe that despawns leaves the
+      // prompt on screen with nobody in front of you.
+      let pressedByCollar = false
       for (let i = foes.current.length - 1; i >= 0; i--) {
         const e = foes.current[i]
         // Despawn on the load edge, exactly as the Hollows do — a body outside the streamed world is
@@ -6249,6 +6308,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (!hostile(e.f) && Math.hypot(e.f.x - p.x, e.f.z - p.z) > FREED_FAREWELL) {
           dropFoe(i); continue
         }
+        // ★★★ THE AFFORDANCE (2026-08-27, Alex: "chased me down with no way to interact"). The
+        // encounter's verb has never been on screen — the rule was only ever explained by getting
+        // it wrong, which reads as a game with no verb for this. Collected here rather than in a
+        // second pass because the distance and the posture are already in hand, and a second scan
+        // would be a second derivation of "is he on me".
+        if (hostile(e.f) && Math.hypot(e.f.x - p.x, e.f.z - p.z) <= foeDef(e.f.posture).reach + COLLAR_PROMPT_LEAD)
+          pressedByCollar = true
         if (intent.pressing && vitals.current) {
           // ★★ `pressure`, NEVER `damage`, AND THAT IS RULE 3 IN CODE. Canon: *"the game gets the
           // warmth and the lesson, not the wound."* `vitals.pressure` wears the guard down and
@@ -6292,6 +6358,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // the kind of reference that rots invisibly the moment the scene graph is rearranged.
         const collarMesh = e.spirit?.children[0] as THREE.Mesh | undefined
         if (collarMesh) collarMesh.scale.setScalar(Math.max(0.05, collarFrac(e.f)))
+      }
+
+      // Emitted on the EDGE only. A per-frame setState here would re-render the whole HUD sixty
+      // times a second for a boolean that changes twice a minute — same reason `onNearGreg` and
+      // `onNearMist` are edge-triggered.
+      if (pressedByCollar !== lastCollarNear.current) {
+        lastCollarNear.current = pressedByCollar
+        onCollarNear(pressedByCollar)
       }
 
       prof.current.mark('world:guard')
