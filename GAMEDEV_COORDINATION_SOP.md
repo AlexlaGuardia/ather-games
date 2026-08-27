@@ -154,6 +154,32 @@ Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COO
 - ★ The guard builds to a temp path on purpose. One that regenerated the real artifact would CREATE
   the dirty tree it exists to detect, and would report "fresh" every time by construction.
 
+### ★★★ A MUTATION SWEEP MAKES A TRACKED FILE DELIBERATELY WRONG, AND NOTHING ON THE BOARD SAYS SO (2026-08-27)
+> Every dirty-tree entry above is about work that is INCOMPLETE — a half-written module, a mid-JSX
+> editor, an edit saved inside the build window. This is the other kind, and it is worse: a file that
+> is **finished, tested, and periodically restored to a state you already know is broken.**
+- **What happened:** `sprites` mutation-swept `voxel3d/spirit-portrait-body.ts` five times — writing
+  the original bug back in, running the guard, restoring — to prove a new guard could actually fail.
+  Minutes later `hub` took the lock, saw that file listed dirty by `coord build`'s pre-flight, and
+  built anyway. It landed clean: the chunk was built at 14:34:02, 119s after the commit at 14:32:03,
+  and carries all three markers of the committed version. **That was timing, not process.**
+- **⚠ A BUILD THAT READS THE FILE MID-SWEEP SHIPS A KNOWN-BAD VERSION, AND EVERY ORACLE STAYS GREEN**
+  — because a sweep restores the file before the suite runs. The tree is correct seconds before and
+  seconds after; only the bundler's read window is wrong. This is the 08-20 half-edit trap with the
+  odds inverted: an unsaved edit is *probably* harmless and *might* be broken, while a mutation
+  window is **guaranteed** broken for exactly as long as it is open.
+- **★ THE DIRTY FLAG UNDERSTATES IT.** `coord build` names the file, and a reader reasonably thinks
+  "someone is typing". Nothing distinguishes *"mid-thought"* from *"currently, intentionally wrong"*,
+  so the warning that fires is the mild-sounding one.
+- **The rule, and it costs one command:** before a mutation sweep on a TRACKED file, re-claim your
+  lane saying so — `coord.sh claim <lane> "mutation-sweeping <file>, do not build"` — and **commit
+  before you hand the tree back.** The claim is the only channel that reaches a window deciding
+  whether to take the lock. ⚠ And prefer the working-tree backup + `trap` restore over `git
+  checkout --`, which destroys uncommitted work on a dirty file (PATTERNS, 08-22).
+- **For the hub taking the lock:** a dirty file you cannot attribute is a question, not a warning.
+  Ask before overriding — the cost of asking is one message, and the cost of being wrong is a
+  known-bad file on prod that every test calls green.
+
 ### ⚠⚠ A RELAY TO A WINDOW THAT DIES IS LOST SILENTLY, AND THE BOARD KEEPS SHOWING IT ALIVE
 > A travel-layer ruling was relayed to the window holding `world`. That window was killed mid-turn
 > seconds later; the message died with it, and **`coord.sh status` still listed the lane as claimed by
