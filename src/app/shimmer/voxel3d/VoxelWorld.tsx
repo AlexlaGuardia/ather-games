@@ -226,6 +226,7 @@ import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
 import { hpRegenTick, focusTick } from '../engine/recovery'
+import { tickRecovery } from '../engine/spirit-health'
 import { HudCorner } from './hud-corner'
 import { ResourceBars } from './resource-bars'
 import { CastGauges, type CastHud } from './cast-gauges'
@@ -1061,6 +1062,30 @@ export default function VoxelWorld() {
       localStorage.setItem(saveKey(), JSON.stringify({ ...prev, spirits: spiritsToSave(party.current) }))
     } catch { /* private mode: the change still holds for this session, it just does not persist */ }
   }, [])
+
+  /**
+   * ── ★ SPIRITS KNIT TOO, and the system for it was already written and already tested ──────────
+   * `tickRecovery` has existed in `engine/spirit-health.ts` with its own oracle — 2% of a bar per
+   * minute out of combat, tripled for a spirit resting at home rather than walking a zone with you,
+   * and it refuses a DOWNED spirit exactly as the keeper's rule refuses a downed keeper. play3d has
+   * called it since it was written. **THE VOXEL WORLD NEVER DID** — and the voxel world is where the
+   * mist encounters happen, so the spirits that actually take damage were the ones that never
+   * recovered from it. Found by going to build the feature and discovering it built.
+   *
+   * ⚠ AN INTERVAL, NOT THE FRAME LOOP. It walks every spirit you own and writes the save, for a
+   * value that moves 0.02 per MINUTE; at 60fps that is sixty party walks and sixty writes a second
+   * to no purpose. play3d ticks it at 0.5s and this matches deliberately, so the two worlds recover
+   * at one rate rather than at whatever their frame budgets happen to be.
+   * ⚠ AND NOT DURING A FIGHT — knitting mid-battle would undo the damage the battle is doing.
+   */
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (spar || !party.current.length) return
+      tickRecovery(party.current, 0.5)
+      writeParty()
+    }, 500)
+    return () => clearInterval(id)
+  }, [spar, writeParty])
 
   /**
    * The console's view of the garden. `lend` draws EVENLY SPACED species out of the launched list
