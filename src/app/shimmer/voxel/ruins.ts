@@ -35,6 +35,7 @@
 // assembler is the plumbing; the dressing swaps when Magii rules, and the plumbing does not change.
 
 import { hash2 } from './noise'
+import { assemble, type JigsawPiece, type Dir } from './jigsaw'
 import { columnHeight, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { MAT } from './depth'
 import { Section } from './section'
@@ -52,10 +53,11 @@ import type { Site } from './sites'
 // caller re-make the mistake silently, and the whole point of a required parameter is that the
 // compiler asks the question at every call site.
 
-/** Which way a socket faces. 0 = +x, 1 = -x, 2 = +z, 3 = -z. Same order as holds.ts's gates. */
-export type Dir = 0 | 1 | 2 | 3
+// ⚠ RE-EXPORTED, NOT REDECLARED. `Dir` moved to `jigsaw.ts` with the assembler; consumers that
+// imported it from here keep working, and there is exactly one definition of it.
+export type { Dir }
 
-export interface RuinPieceDef {
+export interface RuinPieceDef extends JigsawPiece {
   id: string
   /** Extents in blocks. BOTH ODD — a piece has to have a centre column for its sockets to sit on. */
   w: number
@@ -152,15 +154,6 @@ export interface RuinPart {
 
 interface Socket { x: number; z: number; dir: Dir; depth: number }
 
-/** Weighted pick from a pool by a roll in [0,1). */
-function pick(pool: RuinPieceDef[], r: number): RuinPieceDef {
-  let total = 0
-  for (const p of pool) total += p.weight
-  let t = r * total
-  for (const p of pool) { t -= p.weight; if (t < 0) return p }
-  return pool[pool.length - 1]
-}
-
 /** The lowest and highest generated surface under a footprint. The pad test, per piece. */
 function groundSpan(
   x0: number, x1: number, z0: number, z1: number, seed: number, hcfg: HeightConfig,
@@ -176,33 +169,6 @@ function groundSpan(
   return { mn, mx }
 }
 
-/** Interiors, not boxes — two rooms SHARING a wall are legal, two rooms overlapping are not. */
-function interiorsOverlap(a: RuinPart, b: { x0: number; x1: number; z0: number; z1: number }): boolean {
-  return a.x0 + 1 <= b.x1 - 1 && b.x0 + 1 <= a.x1 - 1 && a.z0 + 1 <= b.z1 - 1 && b.z0 + 1 <= a.z1 - 1
-}
-
-/** The four edge-midpoint sockets of a placed part, minus the one it was entered through. */
-function socketsOf(p: RuinPart, entry: Dir | -1, depth: number): Socket[] {
-  const cx = (p.x0 + p.x1) >> 1, cz = (p.z0 + p.z1) >> 1
-  const all: Socket[] = [
-    { x: p.x1, z: cz, dir: 0, depth },
-    { x: p.x0, z: cz, dir: 1, depth },
-    { x: cx, z: p.z1, dir: 2, depth },
-    { x: cx, z: p.z0, dir: 3, depth },
-  ]
-  // The entry side faces back at the parent; re-opening it would roll a piece straight into it.
-  const back: Record<number, Dir> = { 0: 1, 1: 0, 2: 3, 3: 2 }
-  return entry === -1 ? all : all.filter(s => s.dir !== back[entry])
-}
-
-/** Where a piece of these extents lands if it hangs off `s`, SHARING the wall it connects through. */
-function boxAt(s: Socket, def: RuinPieceDef) {
-  if (s.dir === 0) { const z0 = s.z - (def.d >> 1); return { x0: s.x, x1: s.x + def.w - 1, z0, z1: z0 + def.d - 1 } }
-  if (s.dir === 1) { const z0 = s.z - (def.d >> 1); return { x0: s.x - def.w + 1, x1: s.x, z0, z1: z0 + def.d - 1 } }
-  if (s.dir === 2) { const x0 = s.x - (def.w >> 1); return { x0, x1: x0 + def.w - 1, z0: s.z, z1: s.z + def.d - 1 } }
-  const x0 = s.x - (def.w >> 1); return { x0, x1: x0 + def.w - 1, z0: s.z - def.d + 1, z1: s.z }
-}
-
 /**
  * ── ★ THE ASSEMBLY ───────────────────────────────────────────────────────────────────────────
  * Breadth-first from a start piece at the site centre. Every roll is keyed on `(site.seed, the
@@ -216,69 +182,19 @@ function boxAt(s: Socket, def: RuinPieceDef) {
 export function ruinPlan(
   site: Site, worldSeed: number, cfg: RuinConfig = DEFAULT_RUINS, hcfg: HeightConfig = DEFAULT_HEIGHT,
 ): RuinPart[] {
-  const ext = RUIN_PIECES.filter(p => !p.terminal)
-  const term = RUIN_PIECES.filter(p => p.terminal)
-
-  // ★ THE START PIECE IS ROLLED, NOT FIXED, and the oracle is why. With a hardcoded start every
-  // one-piece ruin was the identical 9×7 hall — and after the size budget landed, one-piece ruins
-  // are a THIRD of all of them. So the exact bug this file was written to kill (every ruin is the
-  // same ruin) had quietly survived inside the most common case, in a build whose variety assert
-  // otherwise read 45%. A pool the assembler already has is the whole fix.
-  const start = pick(ext, hash2(site.z, site.x, site.seed ^ 0x57a7))
-  const parts: RuinPart[] = [{
-    def: start,
-    x0: site.x - (start.w >> 1), x1: site.x + (start.w >> 1),
-    z0: site.z - (start.d >> 1), z1: site.z + (start.d >> 1),
-    floor: site.floor,
-    doors: [],
-  }]
-
-  // This ruin's own size, rolled once. Biased small — see `sizeBias`.
-  const budget = 1 + Math.floor(hash2(site.x, site.z, site.seed ^ 0x51e5) ** cfg.sizeBias * cfg.maxPieces)
-
-  // ★★ A DOORWAY IS A PROPERTY OF THE CELL, NOT OF THE PAIR THAT MADE IT. Kept as one list and
-  // handed to every piece that covers it at the end — because a piece placed LATER can share the
-  // wall an older door sits in without being its parent, and a piece that does not know about a
-  // door draws its wall straight back over the opening. Punching it into the two pieces present
-  // at the time left **10 doorways bricked up** across a 681-ruin sweep, and every one of them
-  // looked like an ordinary wall.
-  const doors: { x: number; z: number }[] = []
-
-  const queue: Socket[] = socketsOf(parts[0], -1, 1)
-  while (queue.length && parts.length < budget) {
-    const s = queue.shift()!
-    // Does this way even continue? Rolled before anything is spent, and keyed on the socket's own
-    // world position so it answers the same from every column.
-    if (hash2(s.x + 7, s.z + 13, site.seed ^ 0x5f1a) >= cfg.sprawl) continue
-    const pool = s.depth >= cfg.maxDepth ? term : ext
-    let placed: RuinPart | null = null
-
-    for (let a = 0; a < cfg.tries && !placed; a++) {
-      // Two independent draws: WHICH piece, and (at the last attempt) whether to give up and cap.
-      const r = hash2(s.x * 3 + a, s.z * 5 + s.dir, site.seed ^ 0x2c0de)
-      const def = pick(a === cfg.tries - 1 && pool !== term ? term : pool, r)
-      const box = boxAt(s, def)
-
-      // 1. the envelope — a correctness bound, checked before anything expensive
-      if (box.x0 < site.x - cfg.envelope || box.x1 > site.x + cfg.envelope) continue
-      if (box.z0 < site.z - cfg.envelope || box.z1 > site.z + cfg.envelope) continue
-      // 2. AABB-reject, on interiors so a shared wall stays legal
-      if (parts.some(p => interiorsOverlap(p, box))) continue
-      // 3. the ground has the last word. A branch DIES where the country stops being buildable,
-      //    which reads as a ruin that grew along the flat and crumbled at the slope.
+  // ★ THE GROUND HAS THE LAST WORD, and for a ruin that word is "flat enough". A branch DIES where
+  // the country stops being buildable, which reads as a ruin that grew along the flat and crumbled
+  // at the slope. This predicate is the only ruin-specific thing left in the assembly.
+  return assemble<RuinPieceDef>(
+    { x: site.x, z: site.z, seed: site.seed, floor: site.floor },
+    RUIN_PIECES, cfg,
+    (box) => {
       const g = groundSpan(box.x0, box.x1, box.z0, box.z1, worldSeed, hcfg)
-      if (g.mx - g.mn > cfg.pieceSpan) continue
-
-      placed = { def, ...box, floor: g.mn, doors: [] }
-    }
-
-    if (!placed) continue
-    doors.push({ x: s.x, z: s.z })
-    parts.push(placed)
-    if (placed.def.h > 0) for (const ns of socketsOf(placed, s.dir, s.depth + 1)) queue.push(ns)
-  }
-  for (const p of parts) p.doors = doors.filter(d => p.x0 <= d.x && d.x <= p.x1 && p.z0 <= d.z && d.z <= p.z1)
-  return parts
+      return g.mx - g.mn > cfg.pieceSpan ? null : g.mn
+    },
+    // A rubble heap has no walls, so nothing can hang a door on it.
+    def => def.h > 0,
+  )
 }
 
 /** The wall height this cell wants, 0 = crumbled through. Keyed on WORLD position, so a shared
