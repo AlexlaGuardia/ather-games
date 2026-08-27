@@ -11,9 +11,40 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🐞 Shimmer voxel — **BUG (Alex, reported 2026-08-27): THE FOLD GREW AND ITS DOOR DID NOT** · *not reproduced yet, not fixed*
+## ✅ Shimmer voxel — **BUG (Alex, 2026-08-27): THE FOLD GREW AND ITS DOOR DID NOT** · *FIXED + deployed `c520dbe`, hub*
 
 **What Alex saw, verbatim:** *"when i got the first upgrade from greg to extend the fold.. the outer wall expanded and moved but the passage to the wilds stayed in the same spot and is unusable."*
+
+**FOUND, MEASURED AND FIXED (2026-08-27, hub) — and the scoping note above was right about the SHAPE
+and wrong about the FILE.** It is two sources for one radius, exactly as boarded. It is not in
+`plot.ts`, which is faultless here: every function takes a config and honours it, and the wall, the
+ground, the cloud cave and the crossing trigger all read `plotCfg.current` live. It is one dropped
+argument in `voxel3d/seam.ts` — `const plotA = plotSeamAnchor(seed)`, **no config**, so it silently
+took `DEFAULT_PLOT`'s r300, and the mesh was positioned **once at construction**. Only the thing the
+keeper can SEE stayed behind. Measured: the drawn seam lands **90 blocks** inland of the live
+threshold at tier 1 and **180** at tier 2, against a `PLOT_TRIGGER_RADIUS` of **3**.
+
+⚠ **The board's own suspects would not have found it.** `capRadius`, `PLOT_SHUT` and the cave
+placement are all correct and all derived; the door is placed live per frame. The question *"is it
+captured at fold CREATION?"* was the right question asked of the wrong object — not the door's
+geometry, the door's **mesh**.
+
+**Fixed:** `createSeamShimmer` now takes a **required accessor** (`() => PlotConfig`), not a config
+value — a value passed once is a snapshot, and the fold's size changes mid-session — and re-derives
+on config identity, once per widening rather than per frame. `VoxelMap`'s fold-plate cache already
+carried this exact invariant in writing; the seam was the sibling nobody applied it to.
+
+⚠ **`seam.test.ts` was GREEN throughout and its header says *"the shimmer must never promise a door
+the trigger will not open"*.** Section 5 compared `plotSeamAnchor(seed)` against
+`plotThreshold(seed, DEFAULT_PLOT)` — two derivations of one number asked with the **same argument**.
+They agreed perfectly and were both about a fold the keeper had outgrown. New section 5b asserts
+**through the shipped mesh's position** across every tier, plus a widening under a live pass, plus a
+negative half so a door that never moves cannot satisfy it. Mutation-tested from both doors (drop
+the argument / freeze the sync): 3 red each way. 64 → 72 asserts. `dev/seam` gained a TIER control,
+because a preview pinned to the same default agreed with the bug perfectly.
+
+⚠ **NOT PLAY-VERIFIED.** Deploy answers 200 and the oracle asserts the geometry; nobody has taken
+Greg's upgrade and walked to the door. That is the check still owed.
 
 **Why this is almost certainly TWO SOURCES FOR ONE RADIUS** — the shape every other defect this week had:
 - `voxel/plot.ts` › `PLOT_TIERS = [300, 400, 500]`, and `plotForTier()` returns `capRadius` off the tier. Greg's first upgrade moves the wall **300 → 400**.
