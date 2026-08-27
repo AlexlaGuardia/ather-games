@@ -16,7 +16,7 @@
 // fails the build on it, but it should never be written.
 
 import * as THREE from 'three'
-import { PIECES, basePieceId, type PieceDef } from '../voxel/pieces'
+import { PIECES, basePieceId, pieceDef, visualRotation, type PieceDef, type Placement } from '../voxel/pieces'
 
 /** Provisional colours — wood-toned so a shed reads as a shed. Not a look call. */
 const TINT: Record<string, number> = {
@@ -210,7 +210,18 @@ function buildMergedGeometry(parts: THREE.BufferGeometry[]): THREE.BufferGeometr
 export interface PieceRenderer {
   group: THREE.Group
   /** Rebuild instances from the current placement list. Cheap enough to call on every edit. */
-  sync: (placements: { pieceId: string; x: number; y: number; z: number; rot: number }[]) => void
+  /**
+   * ⚠ TAKES `Placement`, NOT A RESTATEMENT OF IT (fixed 2026-08-27). This read
+   * `{ pieceId, x, y, z, rot }` — a structural copy of a type it does not own, which is the
+   * hand-kept mirror from PATTERNS applied to a TYPE rather than to data. It agreed with
+   * `Placement` for as long as `Placement` did not change, and the moment `open?` was added the
+   * renderer's signature silently DROPPED it: an open door would have arrived here as a closed one
+   * with no error anywhere, because a narrower structural type is a legal argument.
+   *
+   * The compiler only spoke up because `visualRotation` demanded the real thing. Had the door been
+   * wired without that call, this would have been a shipped bug found by looking at a door.
+   */
+  sync: (placements: Placement[]) => void
   ghost: THREE.Mesh
   setGhost: (pieceId: string, x: number, y: number, z: number, rot: number, ok: boolean) => void
   hideGhost: () => void
@@ -274,7 +285,13 @@ export function createPieceRenderer(): PieceRenderer {
       if (!inst) continue
       const i = counts.get(p.pieceId) ?? 0
       if (i >= MAX_PER_TYPE) continue
-      q.setFromAxisAngle(Y, -(p.rot * Math.PI) / 2)
+      // ★ THE VISUAL ROTATION, NOT THE STORED ONE (2026-08-27, the door pass). An open door swings
+      // 90° inside its own cell — that turn is the entire visual payload of the feature, and it is
+      // the ONLY place the two rotations may differ. `cellsOf` deliberately uses `p.rot` instead,
+      // because the footprint must NOT move; see `PieceDef.openable`. Reading `p.rot` here is what
+      // makes an opened door look shut, and reading `visualRotation` in `cellsOf` is what makes it
+      // swing its collision into rock. They are opposite mistakes on the same pair of values.
+      q.setFromAxisAngle(Y, -(visualRotation(p, pieceDef(p.pieceId)!) * Math.PI) / 2)
       v.set(p.x, p.y, p.z)
       inst.setMatrixAt(i, m4.compose(v, q, one))
       counts.set(p.pieceId, i + 1)
