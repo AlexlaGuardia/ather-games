@@ -30,6 +30,22 @@
  * footstep can never arrive late because a download did. A shared bus is not permission to start
  * shipping samples.
  *
+ * ⚠⚠ ONE MODULE IS NOT ONE CONTEXT PER TAB, AND THE SOURCE INVARIANT CANNOT SEE THE DIFFERENCE.
+ * `audio-bus.test.ts` proves there is one bus MODULE. Webpack then emits a copy of it into every
+ * route bundle that imports it, and module state (`ac` below) is per COPY — measured after the
+ * first deploy: `/shimmer/voxel3d`, `/shimmer/play3d` and `/shimmer/dev/creep` each ship their own.
+ * That is harmless as long as those are separate PAGE LOADS, which routes are, and it is why the
+ * invariant is written at the source level.
+ * ★ WHERE IT WOULD BITE: two game surfaces co-mounted in ONE page, or one route dynamically
+ * importing another's fx module. Then there are two contexts again, the second one suspended and
+ * silent, and nothing in the source would look wrong. If a page ever mounts two worlds, this file
+ * has to move to a provider or the window — do not assume the module is enough.
+ * ⚠ AND THE MEASUREMENT ITSELF HAS A TRAP: grepping the bundle for `new AudioContext` finds NOTHING
+ * because the minifier renames the constructor to a single letter — it reads as a clean result and
+ * it is a blind one. Count `window.AudioContext||window.webkitAudioContext` and the `new <alias>`
+ * that follows it, or read `.next/server/app/**/react-loadable-manifest.json`, which names the
+ * route each chunk belongs to and settles the question outright.
+ *
  * ★ NO SETTINGS LIVE HERE. The master level is a number this module holds; persisting it is the
  * caller's job. Same reasoning as `hollow-sfx`'s original note — a rule that lives inside a
  * `localStorage` call is a rule nothing can test.
