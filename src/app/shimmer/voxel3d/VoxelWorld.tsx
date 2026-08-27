@@ -3378,9 +3378,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   }, [])
   // Hot-spring steam (2026-08-08) — sleeps everywhere but the Springs; see steam.ts.
   const steam = useMemo(() => createSteamPoints(SEED), [])
-  // The keeper's front door, drawn. ⚠ Takes the LIVE config — `createSeamShimmer` requires it with
-  // no default on purpose, so no call site can quietly draw the seam at the default's bearing 0.
-  const seam = useMemo(() => createSeamShimmer(SEED, WILDS_BUBBLE), [])
+  // The keeper's front door, drawn.
+  //
+  // ⚠ THE THIRD ARG IS AN ACCESSOR, NOT A CONFIG, AND THAT IS THE 2026-08-27 FOLD-DOOR FIX. Both
+  // configs are required with no default so no call site can quietly draw a seam at the default's
+  // bearing 0 — but the WILDS bubble never changes and the PLOT's does, every time Greg widens the
+  // fold. Handing `plotCfg.current` here would have re-frozen the same bug one argument later: the
+  // memo runs once, the fold grows at tier 1, and the drawn door stays 90 blocks inland of the
+  // trigger. The closure reads the ref, so the seam re-derives itself on the tick after a widening.
+  const seam = useMemo(() => createSeamShimmer(SEED, WILDS_BUBBLE, () => plotCfg.current), [])
   // Mist patches (2026-08-09) — the lying mist plus the presence standing in it; see mist-pass.ts.
   // Sleeps everywhere but inside a patch's reach, the same way steam sleeps outside the Springs.
   // ⚠ THE THIRD ARG IS A CLOSURE, NOT `groundTopNear` ITSELF, AND THAT IS A TEMPORAL-DEAD-ZONE

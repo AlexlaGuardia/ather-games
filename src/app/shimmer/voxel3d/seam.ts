@@ -264,7 +264,9 @@ export interface SeamPass {
  * write in `tick` is unambiguous. If a third seam ever appears in the SAME space as another, this
  * becomes wrong and each needs its own material instance.
  */
-export function createSeamShimmer(seed: number, cfg: BubbleConfig): SeamPass {
+export function createSeamShimmer(
+  seed: number, cfg: BubbleConfig, plotCfgOf: () => PlotConfig,
+): SeamPass {
   // The Wilds ribbon: a curved terrain-following strip, built once from the pure ribbon math so the
   // thing that ships is the thing the oracle asserted. World coordinates, so the mesh sits at origin.
   const ribs = wildsSeamRibbon(seed, cfg)
@@ -356,7 +358,6 @@ void main() {
   })
 
   const wildsA = wildsSeamAnchor(seed, cfg)
-  const plotA = plotSeamAnchor(seed)
 
   // ★ NO TRANSFORM. The ribbon's vertices are already world coordinates, because they had to be:
   // each one was placed against its own column's shell radius and its own ground. Scaling or
@@ -366,10 +367,43 @@ void main() {
   wilds.renderOrder = 2
 
   const plot = new THREE.Mesh(geo, mat)
-  plot.scale.set(plotA.halfWidth * 2, plotA.height, 1)
-  plot.position.set(plotA.x, plotA.y + plotA.height / 2, plotA.z)
   plot.visible = false
   plot.renderOrder = 2
+
+  /**
+   * ── ⚠⚠ THE PLOT SEAM IS RE-DERIVED WHEN THE FOLD GROWS, AND IT USED TO BE FROZEN AT BIRTH ─────
+   * Alex, 2026-08-27: *"when i got the first upgrade from greg to extend the fold.. the outer wall
+   * expanded and moved but the passage to the wilds stayed in the same spot and is unusable."*
+   *
+   * **What it was:** `const plotA = plotSeamAnchor(seed)` — no config, so it silently took
+   * `DEFAULT_PLOT`'s r300, and the mesh was positioned ONCE at construction. Every other consumer
+   * of the fold's size reads `plotCfg.current` live, so the ground, the wall, the cloud cave and
+   * the crossing trigger all moved out with the tier and only the thing the keeper can SEE stayed
+   * behind. Measured: the drawn seam lands **90 blocks** inland of the live threshold at tier 1 and
+   * **180** at tier 2, against a `PLOT_TRIGGER_RADIUS` of 3. So the door you walk to does nothing,
+   * and the door that works is unmarked.
+   *
+   * ★ THE FILE ALREADY STATED THE RULE IT BROKE (`plotSeamAnchor`, and `plotThreshold` before it):
+   * *derived from the shell, never stored.* A default parameter is how "derived" turns into
+   * "stored" without anyone writing a store — which is why `plotCfgOf` is a REQUIRED accessor with
+   * no default rather than a `PlotConfig` value. A value passed once is a snapshot; the fold's size
+   * is a fact that changes mid-session, so the seam has to be able to ask again.
+   *
+   * ⚠ KEYED ON CONFIG IDENTITY, NOT RECOMPUTED PER FRAME. `plotForTier` mints one object per
+   * widening and the host holds it in a ref, so a `!==` is exact and the re-derivation runs once
+   * per tier change rather than 60 times a second.
+   */
+  let plotFrom: PlotConfig | null = null
+  let plotA = plotSeamAnchor(seed, plotCfgOf())
+  const syncPlot = () => {
+    const c = plotCfgOf()
+    if (c === plotFrom) return
+    plotFrom = c
+    plotA = plotSeamAnchor(seed, c)
+    plot.scale.set(plotA.halfWidth * 2, plotA.height, 1)
+    plot.position.set(plotA.x, plotA.y + plotA.height / 2, plotA.z)
+  }
+  syncPlot()
 
   const group = new THREE.Group()
   group.add(wilds, plot)
@@ -380,6 +414,9 @@ void main() {
       mat.uniforms.uTime.value = elapsed
       if (space === 'plot') {
         wilds.visible = false
+        // ⚠ BEFORE THE DISTANCE, NOT AFTER — a widening that landed between two ticks would
+        // otherwise measure this frame's keeper against last tier's door.
+        syncPlot()
         const dist = Math.hypot(px - plotA.x, pz - plotA.z)
         plot.visible = dist < PLOT_DRAW
         if (plot.visible) {

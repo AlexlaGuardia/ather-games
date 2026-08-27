@@ -10,10 +10,10 @@
 // REAL predicates (`inPassageVolume`, `plotThreshold`) rather than against copies of their numbers,
 // which is what makes a future retune of `passageWidth` show up here instead of in a playtest.
 
-import { wildsSeamAnchor, wildsSeamRibbon, plotSeamAnchor, seamNearness, PLOT_TRIGGER_RADIUS } from './seam'
+import { wildsSeamAnchor, wildsSeamRibbon, plotSeamAnchor, seamNearness, PLOT_TRIGGER_RADIUS, createSeamShimmer } from './seam'
 import { DEFAULT_BUBBLE, inPassage, inPassageVolume, shellRadiusAt, distFromAxis, bubbleCaveAt } from '../voxel/bubble'
 import { WILDS_BUBBLE } from '../voxel/column'
-import { DEFAULT_PLOT, plotThreshold } from '../voxel/plot'
+import { DEFAULT_PLOT, plotThreshold, plotForTier, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
 import { columnHeight } from '../voxel/height'
 
 let pass = 0
@@ -158,6 +158,73 @@ function quadPoints(a: { x: number; z: number; y: number; bearing: number; halfW
   }
   ok(plotSeamAnchor(SEED).halfWidth < wildsSeamAnchor(SEED, WILDS_BUBBLE).halfWidth,
     '★ the two seams are different widths, because the two triggers are')
+}
+
+// ── 5b. ★★★ AND IT MUST HOLD AT EVERY TIER, ASSERTED THROUGH THE MESH THE WORLD ACTUALLY DRAWS ──
+// Alex, 2026-08-27: *"when i got the first upgrade from greg to extend the fold.. the outer wall
+// expanded and moved but the passage to the wilds stayed in the same spot and is unusable."*
+//
+// ⚠⚠ SECTION 5 ABOVE WAS GREEN THROUGHOUT, AND IT IS WORTH BEING PRECISE ABOUT WHY, BECAUSE THE
+// SHAPE REPEATS. It compares `plotSeamAnchor(seed)` — default config — against
+// `plotThreshold(seed, DEFAULT_PLOT)` — the same default config. Two derivations of ONE number,
+// asked with the same argument: they agreed perfectly and were both about a fold the keeper had
+// already outgrown. The assert was not wrong and it was not weak; it simply **did not constrain the
+// tier axis**, and no amount of running it could have said so. Ask of any passing guard: what is
+// the cheapest wrong answer that still satisfies it? Here it was *"freeze the door at r300."*
+//
+// ★★ AND IT ASSERTS THROUGH `createSeamShimmer`, NOT THROUGH `plotSeamAnchor`. The pure function
+// was never broken — it takes a config and honours it. The defect was one dropped argument in the
+// THREE shell (`plotSeamAnchor(seed)` with no cfg, positioned once at construction), so a test that
+// stopped at the pure layer would have been testing a world that does not exist. What ships is a
+// mesh with a `position`, so that is what gets read.
+{
+  const drift = (cfg: PlotConfig, mesh: { x: number; z: number }) => {
+    const t = plotThreshold(SEED, cfg)
+    return Math.hypot(mesh.x - (t.x + 0.5), mesh.z - (t.z + 0.5))
+  }
+  let tier = 0
+  const pass = createSeamShimmer(SEED, WILDS_BUBBLE, () => plotForTier(tier))
+  // The plot mesh is the second child; the Wilds ribbon carries no transform and sits at origin.
+  const plotMesh = pass.group.children[1] as { position: { x: number; y: number; z: number } }
+
+  for (let t = 0; t < PLOT_TIERS.length; t++) {
+    tier = t
+    const cfg = plotForTier(t)
+    const th = plotThreshold(SEED, cfg)
+    // Stand the keeper AT their own threshold, in the plot, and let the pass do what it does in the
+    // world. A widening only ever reaches the mesh through `tick`.
+    pass.tick(th.x + 0.5, th.y, th.z + 0.5, 1 / 60, 0, 'plot')
+    const off = drift(cfg, plotMesh.position)
+    ok(off < PLOT_TRIGGER_RADIUS,
+      `★★ tier ${t} (r${PLOT_TIERS[t]}): the drawn door sits ${off.toFixed(1)} blocks from the ` +
+      `threshold the host tests — the keeper walks to the shimmer and the crossing does not fire`)
+    ok(plotMesh.position.y > 0,
+      `tier ${t}: the plot seam mesh has been positioned at all`)
+  }
+
+  // ★ AND IT MUST TRACK A WIDENING THAT HAPPENS MID-SESSION, WHICH IS THE ONLY WAY IT EVER HAPPENS.
+  // Greg widens the fold while the pass is already built and already ticking; a fix that only reads
+  // the config at construction passes every assert above (each tier gets a fresh pass in a loop) and
+  // still ships the bug. So: walk it back down and up again on the SAME pass.
+  tier = 0
+  pass.tick(0, 100, 0, 1 / 60, 0, 'plot')
+  const backAtHome = drift(plotForTier(0), plotMesh.position)
+  tier = PLOT_TIERS.length - 1
+  pass.tick(0, 100, 0, 1 / 60, 0, 'plot')
+  const afterWidening = drift(plotForTier(PLOT_TIERS.length - 1), plotMesh.position)
+  ok(backAtHome < PLOT_TRIGGER_RADIUS && afterWidening < PLOT_TRIGGER_RADIUS,
+    `★★ the door follows a fold that grows UNDER a live pass (r${PLOT_TIERS[0]}: ${backAtHome.toFixed(1)}, ` +
+    `r${PLOT_TIERS[PLOT_TIERS.length - 1]}: ${afterWidening.toFixed(1)}) — the widening arrives mid-session or not at all`)
+
+  // ⚠ THE NEGATIVE HALF, so the assert above cannot be satisfied by a door that never moves at ALL.
+  // The tiers are 100 blocks apart; a mesh pinned anywhere fixed fails one of them by ~90.
+  ok(Math.hypot(
+    plotThreshold(SEED, plotForTier(0)).x - plotThreshold(SEED, plotForTier(PLOT_TIERS.length - 1)).x,
+    plotThreshold(SEED, plotForTier(0)).z - plotThreshold(SEED, plotForTier(PLOT_TIERS.length - 1)).z,
+  ) > PLOT_TRIGGER_RADIUS * 10,
+    'the tiers put the threshold far enough apart that one fixed position cannot satisfy both')
+
+  pass.dispose()
 }
 
 // ── 6. THE PARTING ANSWERS THE KEEPER ──────────────────────────────────────────────────────────
