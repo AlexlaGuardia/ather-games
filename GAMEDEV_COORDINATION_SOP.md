@@ -61,7 +61,24 @@ Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COO
 4. Work your lane only. **Satellites edit + commit their lane; they do NOT `coord build`.** The hub ships.
 
 ## Git discipline (trunk-based)
+- **★★★ SCOPE THE COMMIT, NOT JUST THE ADD: `git commit -m msg -- <your paths>`.** The old rule here
+  said "stage by pathspec, never `git add -A`", and that rule is correct, incomplete, and was
+  followed to the letter on 2026-08-27 while six of another window's files went to `origin` anyway.
+  **`git add <path>` scopes the ADD. `git commit` then takes whatever is in the INDEX** — including
+  files a *different window* staged and had not yet committed. `hub` ran
+  `git add …/recoil.ts && git commit -m "recoil: …"` and shipped world's `gate-collapse.ts`,
+  `tilemap-source.ts`, `MapEditor.tsx` and `save-map/route.ts` under a message about camera recoil.
+  ⚠ **THE INDEX IS THE WORSE HALF OF A SHARED TREE, AND IT IS THE HALF NOTHING SHOWS YOU.** A dirty
+  file is at least visible in your own `git status` and in `coord build`'s pre-flight listing. A file
+  another window has STAGED is indistinguishable from one you staged, and `git commit` cannot tell
+  them apart. The build lock protects you from another window's DEPLOY; **nothing protects you from
+  another window's INDEX except naming your paths on the commit itself.**
+  ★ It was luck, not discipline, that it cost nothing: world's six files were finished, green and
+  tsc-clean, one command from being committed by their own author. Ninety seconds earlier it would
+  have been a half-written module and a mid-JSX editor, pushed to `master` — **and every test would
+  still have passed, because the suite runs against the TREE.**
 - **Stage by pathspec, never `git add -A`.** `git add src/app/shimmer/world/...` — only your lane.
+  Still true, and still not sufficient on its own; see the line above.
 - **Pull before push. Commit small and often.** Disjoint lanes ⇒ conflicts are rare and section-local.
 - **No feature branches.** The live site builds from the working tree, not a branch — branches buy nothing here and cost merge overhead.
 - Shared surface (`engine/`, `components/`, `lib/`, `data/`) is committed **only by the hub**.
@@ -200,6 +217,8 @@ coord build "what changed"     # acquire lock -> npm run build -> pm2 restart ->
 
 ## Anti-patterns
 - ❌ `git add -A` — sweeps another window's uncommitted lane into your commit.
+- ❌ `git commit -m msg` with no pathspec — sweeps another window's **staged** lane, which is worse,
+  because nothing on your screen shows you their index. Name the paths: `git commit -m msg -- <paths>`.
 - ❌ Direct `npm run build` / `pm2 restart` — the `.next`-corruption + OOM footgun the lock exists to kill.
 - ❌ Two windows editing the shared engine — that's the hub's job; ask it.
 - ❌ Editing the `/root/akatskii-web` fossil — live games are here in `ather-games` (:3200).
