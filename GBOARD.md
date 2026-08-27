@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🧱 Shimmer — **THE BUILDING VOCABULARY: ONE SHAPE IN EVERY MATERIAL, AND STONE THAT LOOKS OLD** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — 6 commits pushed, tsc 7 (baseline), NOT yet deployed (hub owns the lock)*
+## 🧱 Shimmer — **THE BUILDING VOCABULARY, THE THINGS THAT OPEN, AND A MEASURED CAMERA BUG** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — 11 commits pushed, tsc 7 (baseline), 0 unpushed. Partly deployed: hub shipped the masonry + dev page at 02:08; everything after is NOT live.*
 
 ### Left off — Alex asked to build the holds, then asked the better question
 *"lets start building those strongholds.. but this kinda makes me wonder maybe we should design more
@@ -61,6 +61,15 @@ beat slabs for detail *because they are thinner*) · **small palettes**, 3-5 blo
   `piece-mesh.ts` switched on `def.id`, so all 72 variants fell to the default arm and drew the
   beam's little post — the sapling-icon bug exactly. `render-audit` now asserts **both** the cases
   and the KEY, because a complete set of cases keyed on the wrong thing is still completely broken.
+
+### Also shipped tonight, after the block above was written
+- **★★ DOORS — the first thing in the build with STATE.** A `Placement` was `{pieceId,x,y,z,rot}`, so nothing could be in two conditions; the existing `doorway` is a frame with a hole. Now `openable` + `open?` (optional, so every save reads back CLOSED), `door` / `gate` / a `shutter` that SHUTS (it is also the trapdoor). **14 shapes, 98 buildable, 21 openable.** The swing is free because `rot` already existed. **Walls we already had** — `fence` derives arms per connected side, so `fence_stonebrick` is a cobblestone wall.
+- **★★ The assert that mattered could not fail when written.** Every openable piece is 1×1, and rotating a 1×1 about its origin cannot move it — so the mutation making `cellsOf` use the VISUAL rotation (a door swinging its collision into rock) **passed all 63 checks.** Fixed with a synthetic 3-wide def.
+- **★★ `PieceRenderer.sync` restated `Placement` structurally and silently DROPPED `open?`.** A narrower structural type is a legal argument and nothing errors. The hand-kept mirror applied to a TYPE rather than to data.
+- **GATES IN THE HOLD GAPS (Alex ruled it), born OPEN** — the gap is where the story road crosses the wall, so a closed one is a shut door on the quest spine. The load-bearing assert asks `cellsOf` whether any cell blocks, not the flag.
+- **★★★ ALEX BUG, MEASURED: the screen tilt is HIS OWN FIRING, not the damage.** `camera.rotation` is written in one place (the recoil drain); nothing on the damage path touches camera orientation. Look composes `'YXZ'`, `rotation.order` is never set so it is default `XYZ`, and the round trip injects roll. **One drain 1.46° · a 13-frame burst 19.04° · control `order='YXZ'` 0.0000°.** One line, routed to hub.
+- **"No way to interact" is a missing AFFORDANCE.** Casting is wired and canon forbids guns against a collared Moglin outright. The rule is only explained by a line that fires when a shot CONNECTS, ≤once/6s. ⚠ He may have had an empty B slot, which would make it genuinely unanswerable.
+- **CANON GAP FILED** (athernyx `aa39bde`): does the no-metal substance law govern BUILDINGS? Gates a materials pass — **there is no transparent material at all**, so `window` is a frame around nothing.
 
 ### Next
 1. **Alex rules the moss green** on `/shimmer/dev/building` — the mechanism is right, the exact hue
