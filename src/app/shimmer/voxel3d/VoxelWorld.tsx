@@ -235,7 +235,7 @@ import {
 import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
-import { normalizeRoster, activeSpirits, restingSpirits, MAX_PARTY } from '../engine/spirit-health'
+import { normalizeRoster, activeSpirits, MAX_PARTY } from '../engine/spirit-health'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { Species } from '../spirits/spirit'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
@@ -5774,10 +5774,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       ring.tick(
         { x: p.x, z: p.z, yaw: Math.atan2(hollowFwd.current.z, hollowFwd.current.x) },
         performance.now(), dt, plotCfg.current,
-        // ⚠ RING 2 IS THE SPIRITS **NOT** IN THE PARTY. A keeper holding four or fewer sees an
-        // empty yard, and that is the design rather than a fault — `restingSpirits` is
-        // `inParty === false`, and `normalizeRoster` only sets that past `MAX_PARTY`.
-        restingSpirits(party.current).map(sp => sp.id),
+        // ── ★★★ ALEX RULED 2026-08-27: RING 2 DRAWS THE WHOLE ROSTER, PARTY INCLUDED ──────────
+        // It was `restingSpirits(party.current)` for one deploy — `inParty === false`, which
+        // `normalizeRoster` only sets past `MAX_PARTY`. Measured consequence: a keeper holding
+        // four or fewer saw an EMPTY FOLD, and four is the common case. Canon
+        // (`shimmer-geography.md`, ruled 07-30) says a keeper's spirits are *"visible, wandering,
+        // underfoot"* about the Home Plot and does not qualify that with a roster band; the
+        // resting/party split is a COMBAT distinction and it had no business deciding who is at
+        // home. Your fighters live here too.
+        //
+        // ★ THE CAP IS STILL THE PASS'S, not this list's — `ringCap` is `capRadius / 50`, derived
+        // from the fold, so handing it a long roster costs nothing and a big fold shows more of
+        // them. Passing everyone is a statement about who EXISTS here, not about how many draw.
+        party.current.map(sp => sp.id),
         id => party.current.find(sp => sp.id === id)?.species ?? null,
         (x, z) => withinCap(x, z, SEED, plotCfg.current),
         (x, z, hint) => groundTopNear(x, z, hint, 12),

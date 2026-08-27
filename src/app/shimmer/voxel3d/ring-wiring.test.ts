@@ -16,7 +16,8 @@
 
 import { readFileSync } from 'node:fs'
 import * as THREE from 'three'
-import { inView, DEFAULT_RING, type Keeper } from './plot-ring'
+import { inView, ringCap, DEFAULT_RING, type Keeper } from './plot-ring'
+import { DEFAULT_PLOT } from '../voxel/plot'
 import { restingSpirits, normalizeRoster, MAX_PARTY } from '../engine/spirit-health'
 import type { Spirit } from '../spirits/spirit'
 
@@ -64,21 +65,38 @@ function keeperFrom(yawDeg: number, x = 0, z = 0): { fwd: THREE.Vector3; k: Keep
      '★ with the euler-y mistake the SAME spot reads as OUT of view — so residents would be placed where the keeper is looking')
 }
 
-// ── 3. ★★ RING 2 IS THE SPIRITS **NOT** IN THE PARTY, AND THAT MEANS AN EMPTY YARD AT FOUR ──────
-// Measured, because it is the first thing anyone will read as a broken wiring. `restingSpirits` is
-// `inParty === false`, and nothing sets that until `normalizeRoster` trims past `MAX_PARTY`.
+// ── 3. ★★★ RING 2 DRAWS THE WHOLE ROSTER — ALEX RULED IT 2026-08-27 ─────────────────────────────
+// ⚠⚠ THIS SECTION USED TO ASSERT THE OPPOSITE, AND THE FLIP IS THE POINT RATHER THAN AN EDIT.
+// It shipped for one deploy reading `restingSpirits` (`inParty === false`), which `normalizeRoster`
+// only sets past `MAX_PARTY` — so a keeper holding FOUR OR FEWER saw an empty fold, and four is the
+// common case. Canon (`shimmer-geography.md`, ruled 07-30) says a keeper's spirits are "visible,
+// wandering, underfoot" and does not qualify that with a roster band; resting-vs-party is a COMBAT
+// distinction that had no business deciding who is at home.
+//
+// ★ The old asserts were CORRECT about the old rule and are kept here as the numbers that made the
+// case, not deleted — a test that quietly changes its mind teaches nobody why.
 {
   const mk = (n: number): Spirit[] =>
     Array.from({ length: n }, (_, i) => ({ id: `s${i}`, species: 'sp', hpFrac: 1 } as unknown as Spirit))
-  const drawn = (n: number) => { const o = mk(n); normalizeRoster(o, MAX_PARTY); return restingSpirits(o).length }
+  const resting = (n: number) => { const o = mk(n); normalizeRoster(o, MAX_PARTY); return restingSpirits(o).length }
+  const drawn = (n: number) => { const o = mk(n); normalizeRoster(o, MAX_PARTY); return o.length }
 
-  ok(MAX_PARTY === 4, `MAX_PARTY is 4 (${MAX_PARTY}) — the number the emptiness turns on`)
-  ok(drawn(0) === 0, 'no spirits: nothing to draw')
-  ok(drawn(4) === 0, '★ FOUR spirits: still nothing — a full party has nobody resting, and this is the design, not a fault')
-  ok(drawn(5) === 1, 'five: one rests, and the fold has a body in it')
-  ok(drawn(7) === 3, 'seven: three rest')
-  // ⚠ The cheapest wrong "fix" if someone sees an empty yard and reaches for the whole roster.
-  ok(drawn(4) !== 4, 'the party is NOT ring 2 — pointing it at the roster would put your fighters in the yard')
+  ok(MAX_PARTY === 4, `MAX_PARTY is 4 (${MAX_PARTY}) — the number the old emptiness turned on`)
+  ok(resting(4) === 0, 'the retired rule: four spirits leaves NOBODY resting — which is why the fold was empty')
+  ok(resting(5) === 1 && resting(7) === 3, 'and only a fifth spirit ever put a body in the yard')
+
+  ok(drawn(0) === 0, 'no spirits: nothing to draw, which is the one empty fold that is honest')
+  ok(drawn(1) === 1, '★ one spirit stands in the fold — a keeper is never alone at home again')
+  ok(drawn(4) === 4, '★★ FOUR spirits all stand there: the case the retired rule drew as empty')
+  ok(drawn(7) === 7, 'and a long roster is handed over whole')
+
+  // ⚠ THE REGRESSION THIS EXISTS TO CATCH IS NOW THE REVERSE OF THE OLD ONE. "Only the resting
+  // ones" reads like a tidy optimisation and empties the yard for the commonest keeper there is.
+  ok(drawn(4) !== resting(4), 'the party IS part of ring 2 — narrowing to restingSpirits would empty the fold at four')
+
+  // ★ The population ceiling is the PASS's and stays derived from the fold, so handing over a long
+  // roster is a statement about who exists here, not about how many bodies draw.
+  ok(ringCap({ ...DEFAULT_PLOT }) >= 1, 'the pass caps how many draw, from the fold radius, not from this list')
 }
 
 // ── 4. ★★ AND THE WORLD HAS TO MOUNT, TICK AND DROP IT ──────────────────────────────────────────
@@ -103,7 +121,17 @@ function keeperFrom(yawDeg: number, x = 0, z = 0): { fwd: THREE.Vector3; k: Keep
   // then read a window around it.
   const at = src.indexOf('ring.tick(')
   ok(at > 0, 'the ring is ticked somewhere')
-  const tick = at > 0 ? src.slice(at, src.indexOf('\n      )', at) + 8) : ''
+  const tickRaw = at > 0 ? src.slice(at, src.indexOf('\n      )', at) + 8) : ''
+  /**
+   * ⚠⚠ COMMENTS STRIPPED BEFORE ANY *NEGATIVE* ASSERT, AND THIS BIT ME ON THIS VERY BLOCK.
+   * The call carries a comment explaining that it USED to read `restingSpirits`, so
+   * `!/restingSpirits\(/` went red against correct code — a guard failing because the code
+   * documented its own history. Third time today: the audio-bus counter, the `.destination` scan,
+   * and now this. **A source guard that searches for the absence of a token must not be able to
+   * see prose about that token.**
+   */
+  const tick = tickRaw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+  ok(tickRaw.includes('//'), 'the block does carry prose — so the stripper above is load-bearing, not decorative')
   // The gate is read from the 200 characters BEFORE the call, which is where an `if` guarding it
   // has to live. Anchored, because `space.current === 'plot'` appears several times in this file
   // and a bare match is satisfied by being anywhere — the trap that got past me this morning.
@@ -113,8 +141,9 @@ function keeperFrom(yawDeg: number, x = 0, z = 0): { fwd: THREE.Vector3; k: Keep
   ok(/yaw: Math\.atan2\(hollowFwd\.current\.z, hollowFwd\.current\.x\)/.test(tick),
      'the keeper yaw is atan2(forward.z, forward.x), matching plot-ring.ts')
   ok(!/yaw: camera\.rotation\.y/.test(tick), 'and never the camera euler')
-  ok(/restingSpirits\(party\.current\)\.map/.test(tick), 'the roster is restingSpirits, not the whole party')
-  ok(!/activeSpirits\(/.test(tick), 'and not activeSpirits, which is the other half of the same split')
+  ok(/party\.current\.map\(sp => sp\.id\)/.test(tick), 'the roster handed over is the WHOLE party, per Alex\'s ruling')
+  ok(!/restingSpirits\(/.test(tick), 'and not restingSpirits, which drew an empty fold for a keeper with four')
+  ok(!/activeSpirits\(/.test(tick), 'and not activeSpirits, which is the other half of the same combat split')
   ok(/withinCap\(x, z, SEED, plotCfg\.current\)/.test(tick), 'ground acceptance asks the LIVE plot config, not a default')
   ok(/groundTopNear\(x, z, hint, 12\)/.test(tick),
      'and the ground probe is the live one, so a resident stands on dug and built ground')
