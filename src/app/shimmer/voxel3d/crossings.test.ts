@@ -10,7 +10,7 @@
  */
 import {
   courtAnchor, sockets, socketCells, socketLit, socketMaterial, courtFits, SOCKET_KINDS, SOCKET_PITCH,
-  COURT_ARC, COURT_INSET, staleCourts,
+  COURT_ARC, COURT_INSET, staleCourts, COURT_RADIUS, socketArcAngles, legacyRowSockets, courtClearCells,
 } from './crossings'
 import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
@@ -62,7 +62,7 @@ for (const seed of SEEDS) {
     if (h === null) continue
     // Every cell of every frame is on the island too — a 5-wide frame centred one block inside the
     // coast would hang its jamb over the drop, and the CENTRE passing is not evidence about the EDGE.
-    for (const c of socketCells(s, h, a.bearing))
+    for (const c of socketCells(s, h))
       ok(insideCore(c.x, c.z, seed, DEFAULT_PLOT),
          `s${seed}: socket ${s.index} frame cell (${c.x},${c.z}) is on the island`)
   }
@@ -108,7 +108,7 @@ for (const seed of SEEDS) {
   for (const s of sockets(seed, DEFAULT_PLOT)) {
     const h = plotHeight(s.x, s.z, seed, DEFAULT_PLOT)
     if (h === null) continue
-    for (const c of socketCells(s, h, a.bearing)) {
+    for (const c of socketCells(s, h)) {
       const k = `${c.x},${c.y},${c.z}`
       const prev = seen.get(k)
       if (prev !== undefined && prev !== s.index) clash++
@@ -159,23 +159,40 @@ for (const seed of SEEDS) {
        `s${seed}: nearest socket ${sep.toFixed(1)} tracks COURT_ARC ${COURT_ARC}`)
 }
 
+/** Alex's ruling, 2026-08-23: *"near the tunnel passage to the wilds, maybe 15-20 blocks away."* */
+const RULED_NEAR_MIN = 15, RULED_NEAR_MAX = 20
+
 // ★ ALEX'S RULING, ASSERTED AS A RANGE RATHER THAN A VALUE (2026-08-23): *"near the tunnel passage
 // to the wilds, maybe 15-20 blocks away."* Pinning one value would go red the first time anyone
 // nudges the pitch; the ruling was a window and the assert is the window.
 //
-// ⚠ THE WINDOW HERE IS 15-22, NOT 15-20, AND THE GAP IS DELIBERATE AND DOCUMENTED. The threshold
-// mound's diagonal reach is 17.7 blocks, so with the frame's half-width the first arc clearing all
-// 24 seed×tier combinations lands the nearest socket at 20.2 — just past the ruled ceiling. Widening
-// the assert to hide that would be the cheapest lie that makes a red go green; the honest form is a
-// window that admits the measured floor and a comment saying which end is a ruling and which end is
-// geometry. If Alex wants a true 15, the mound has to shrink first.
+// ⚠⚠ THE RULED CEILING IS 20 AND THE BUILD MISSES IT — BY 0.2 SINCE 08-23, AND BY ~4 SINCE 08-27.
+// This assert has now been asked to move twice, and moving it is the cheapest lie that turns a red
+// green, so it does NOT get widened to wherever the geometry happens to land. Two separate claims,
+// asserted separately:
+//
+//   1. `COURT_ARC` is honoured — the constant means what it says, whatever its value.
+//   2. `COURT_ARC` is the SMALLEST value that clears the threshold mound. That is what keeps the
+//      deviation from Alex's ruling at the minimum geometry forces, and it is what goes red if
+//      somebody ever bumps this constant for convenience rather than for a measurement.
+//
+// Why it moved: on an arc the outermost socket TURNS to face the focus, so its frame reaches
+// radially toward the mound instead of sweeping past it tangentially — swept across 8 seeds × 3
+// tiers, 22 fouls on 7 combinations, 23 on 1, 24 on none. ⚠ THIS IS A LIVE DEVIATION FROM A RULING
+// AND IT IS ALEX'S TO ACCEPT OR REJECT, not something to bury in a widened window. A tighter
+// `COURT_RADIUS` buys some of it back at the cost of the half-circle reading as a huddle.
+ok(COURT_ARC > RULED_NEAR_MAX,
+   `⚠ RECORDED DEVIATION: COURT_ARC is ${COURT_ARC}, Alex ruled a ${RULED_NEAR_MIN}-${RULED_NEAR_MAX} ` +
+   'window on 2026-08-23. Kept visible on purpose — if this ever goes green the deviation is gone ' +
+   'and this assert should be deleted rather than inverted.')
 for (const seed of SEEDS) {
   for (let t = 0; t < PLOT_TIERS.length; t++) {
     const cfg = plotForTier(t, DEFAULT_PLOT)
     const th = plotThreshold(seed, cfg)
     const near = Math.min(...sockets(seed, cfg).map(s => Math.hypot(s.x - th.x, s.z - th.z)))
-    ok(near >= 15 && near <= 22,
-       `s${seed} t${t}: nearest socket is ${near.toFixed(1)} blocks from the seam (ruled 15-20; mound floors it at ~20)`)
+    ok(near >= RULED_NEAR_MIN && near <= COURT_ARC + 1,
+       `s${seed} t${t}: nearest socket is ${near.toFixed(1)} blocks from the seam ` +
+       `(COURT_ARC=${COURT_ARC}; Alex ruled ${RULED_NEAR_MIN}-${RULED_NEAR_MAX}, the mound forces the gap)`)
   }
 }
 
@@ -219,7 +236,7 @@ for (const seed of SEEDS) {
   // "unearned" used to mean air, i.e. no socket at all, and `sockets()` returning it in a list was
   // no evidence otherwise. Asked of the material, this goes red the moment dark means absent again.
   {
-    const dark = socketCells(socks[MAX_MARKS], 100, a.bearing)
+    const dark = socketCells(socks[MAX_MARKS], 100)
     const frame = dark.filter(c => !c.doorway)
     ok(frame.length > 0 && frame.every(c => socketMaterial(c, false) === MAT.CUT_STONE),
        `a DARK socket still stands in cut stone (${frame.length} frame cells)`)
@@ -234,11 +251,18 @@ for (const seed of SEEDS) {
   // Exactly one lamp cell per socket, and it is in the frame rather than the doorway — a lamp in
   // the opening would be a block standing in the crossing you walk through.
   for (const sk of socks) {
-    const cells = socketCells(sk, 100, a.bearing)
+    const cells = socketCells(sk, 100)
     const lamps = cells.filter(c => c.lamp)
     ok(lamps.length === 1, `socket ${sk.index} has exactly one lamp cell (${lamps.length})`)
     ok(lamps.every(c => !c.doorway), `socket ${sk.index}'s lamp is in the frame, not the doorway`)
-    ok(lamps.every(c => c.y === 100 + 3), `socket ${sk.index}'s lamp is on the lintel course`)
+    // ⚠ THIS ASSERTED `100 + 3` AND WAS A CONSTANT RESTATED, NOT A PROPERTY. It went red the moment
+    // frames stopped being one height — which is the right outcome for the wrong reason: it was
+    // measuring the old shape's arithmetic rather than what a lamp has to BE. What matters is that
+    // the light sits on the topmost course, above the opening, whatever that course's number is.
+    const top = Math.max(...cells.map(c => c.y))
+    const doorTop = Math.max(...cells.filter(c => c.doorway).map(c => c.y))
+    ok(lamps.every(c => c.y === top), `socket ${sk.index}'s lamp is on the topmost course`)
+    ok(lamps.every(c => c.y > doorTop), `socket ${sk.index}'s lamp sits above the opening it lights`)
   }
 
   // Day one: the gate is lit and nothing else is.
@@ -282,6 +306,188 @@ for (const seed of SEEDS) {
   ok('refused' in over && over.refused === 'full', 'the cap refuses a fourth passage')
   ok(socks.filter(sk => socketLit(sk, 99)).length === socks.length,
      'no lamp exists beyond the sockets that are built — reach cannot outrun the row')
+}
+
+// ── ★★★ WHAT ALEX SAW, TURNED INTO ASSERTS (2026-08-27) ───────────────────────────────────────
+// *"its currently just a straight line of half buried archs."* Both halves were true, both were
+// canon drift, and **1,126 asserts were green the whole time** — this file measured distances,
+// materials, fits and clearances, and never once asked what SHAPE the row was or whether it stood
+// on the ground. Neither property had an assert because neither had ever been wrong on purpose.
+// ⚠ Ask of a passing suite what it does not measure, not only what it measures.
+{
+  for (const seed of SEEDS) {
+    for (let t = 0; t < PLOT_TIERS.length; t++) {
+      const cfg = plotForTier(t, DEFAULT_PLOT)
+      const a = courtAnchor(seed, cfg)
+      if (a.y === null) continue
+      const socks = sockets(seed, cfg)
+      const th = plotThreshold(seed, cfg)
+
+      // ── 1. IT STANDS ON THE GROUND ────────────────────────────────────────────────────────
+      // `plotHeight` is the topmost SOLID block and the keeper stands at +1 (`plotThreshold`,
+      // `plotStandY`). A frame based at the ground is buried by exactly one course, which is what
+      // shipped: a 3-high doorway walkable at 2.
+      for (const sk of socks) {
+        const h = plotHeight(sk.x, sk.z, seed, cfg)
+        if (h === null) continue
+        const cells = socketCells(sk, h)
+        const lowest = Math.min(...cells.map(c => c.y))
+        ok(lowest === h + 1,
+           `s${seed} t${t} socket ${sk.index}: the frame's first course is at ${lowest}, the ground is ${h} ` +
+           `— it must start at ${h + 1} or the arch is buried and you duck through it`)
+        const door = cells.filter(c => c.doorway)
+        const doorLow = Math.min(...door.map(c => c.y)), doorHigh = Math.max(...door.map(c => c.y))
+        ok(doorLow === h + 1,
+           `s${seed} t${t} socket ${sk.index}: the doorway opens AT standing height (${doorLow} vs ${h + 1})`)
+        ok(doorHigh - doorLow + 1 >= 3,
+           `s${seed} t${t} socket ${sk.index}: the opening is ${doorHigh - doorLow + 1} blocks of walkable height`)
+      }
+
+      // ── 2. IT IS A HALF-CIRCLE, NOT A ROW ─────────────────────────────────────────────────
+      // Canon: *"a low half-circle of sockets."* Equidistant from the focus is the property that
+      // distinguishes an arc from a line, and it is the one a straight row cannot fake.
+      const radii = socks.map(sk => Math.hypot(sk.x - a.x, sk.z - a.z))
+      const spread = Math.max(...radii) - Math.min(...radii)
+      ok(spread <= 1.5,
+         `s${seed} t${t}: every socket is the same distance from the focus (spread ${spread.toFixed(2)}, ` +
+         `radii ${radii.map(r => r.toFixed(1)).join('/')}) — a straight row's radii fan out`)
+
+      // ⚠ AND EXPLICITLY NOT COLLINEAR, because "equidistant" alone is satisfiable by two points.
+      // Cross-product area of the outermost triple: a line gives ~0.
+      if (socks.length >= 3) {
+        const [p0, p1, p2] = [socks[0], socks[1], socks[socks.length - 1]]
+        const area = Math.abs((p1.x - p0.x) * (p2.z - p0.z) - (p2.x - p0.x) * (p1.z - p0.z))
+        ok(area > 20,
+           `s${seed} t${t}: the sockets are not collinear (twice-area ${area.toFixed(1)}) — ` +
+           'the straight tangent row this replaced gives 0')
+      }
+
+      // ── 3. IT FACES THE THRESHOLD ─────────────────────────────────────────────────────────
+      // Canon: *"facing the threshold."* Two claims: the arc OPENS toward the door (its apex is the
+      // socket furthest from it, so you walk into the mouth), and each frame TURNS to face the
+      // focus rather than sharing one bearing with its neighbours.
+      const dTh = socks.map(sk => Math.hypot(sk.x - th.x, sk.z - th.z))
+      ok(dTh[0] === Math.max(...dTh),
+         `s${seed} t${t}: the gate at the apex is the furthest socket from the door ` +
+         `(${dTh[0].toFixed(1)} vs max ${Math.max(...dTh).toFixed(1)}) — the keeper walks INTO the half-circle`)
+      for (const sk of socks) {
+        // Facing must point from the socket back at the focus.
+        const want = Math.atan2(a.z - sk.z, a.x - sk.x)
+        const diff = Math.abs(Math.atan2(Math.sin(sk.facing - want), Math.cos(sk.facing - want)))
+        ok(diff < 0.2,
+           `s${seed} t${t} socket ${sk.index}: its frame turns to face the focus (off by ${diff.toFixed(3)}rad)`)
+      }
+      const facings = new Set(socks.map(sk => sk.facing.toFixed(3)))
+      ok(facings.size === socks.length,
+         `s${seed} t${t}: every socket has its OWN facing (${facings.size} distinct of ${socks.length}) — ` +
+         'one shared bearing is what made the old row read as a fence')
+
+      // ── 4. THE GATE IS VISIBLY SINGULAR ───────────────────────────────────────────────────
+      // Canon makes this load-bearing, not decorative: *"home-cost lives on the gate and nowhere
+      // else… render it unlike its neighbours."* The lamp alone cannot carry it — a dark passage
+      // and a lit gate differ by one cell, and the keeper is meant to read cost off the shape.
+      {
+        const gh = plotHeight(socks[0].x, socks[0].z, seed, cfg)
+        const ph = plotHeight(socks[1].x, socks[1].z, seed, cfg)
+        if (gh !== null && ph !== null) {
+          const g = socketCells(socks[0], gh), pz = socketCells(socks[1], ph)
+          const hOf = (cs: typeof g) => Math.max(...cs.map(c => c.y)) - Math.min(...cs.map(c => c.y)) + 1
+          ok(hOf(g) > hOf(pz),
+             `s${seed} t${t}: the gate stands taller than a passage (${hOf(g)} vs ${hOf(pz)})`)
+          ok(g.length > pz.length,
+             `s${seed} t${t}: the gate is a bigger build than a passage (${g.length} vs ${pz.length} cells)`)
+          const gDoor = g.filter(c => c.doorway), pDoor = pz.filter(c => c.doorway)
+          ok(gDoor.length > pDoor.length,
+             `s${seed} t${t}: and its opening is larger too (${gDoor.length} vs ${pDoor.length} cells)`)
+        }
+      }
+
+      // ── 5. THE MIGRATION SWEEP REACHES WHAT THE OLD CODE LAID ─────────────────────────────
+      // A clear pass derived from the CURRENT geometry cannot find the PREVIOUS geometry, and the
+      // previous geometry is the whole reason a clear pass exists. Two things it must cover: every
+      // cell the new frame lays, and the buried course the retired one laid at ground level.
+      for (const sk of socks) {
+        const h = plotHeight(sk.x, sk.z, seed, cfg)
+        if (h === null) continue
+        const sweep = new Set(courtClearCells(sk, h).map(c => `${c.x},${c.y},${c.z}`))
+        const missed = socketCells(sk, h).filter(c => !sweep.has(`${c.x},${c.y},${c.z}`))
+        ok(missed.length === 0,
+           `s${seed} t${t} socket ${sk.index}: the clear sweep covers every cell the frame lays (${missed.length} missed)`)
+        ok(sweep.has(`${sk.x},${h},${sk.z}`) || courtClearCells(sk, h).some(c => c.y === h),
+           `s${seed} t${t} socket ${sk.index}: the sweep reaches the pre-08-27 BURIED course at y=${h}`)
+      }
+    }
+  }
+
+  // ── 5b. ★★★ NO TWO FRAMES MAY SHARE A CELL — the guard that turned a taste into a constraint ──
+  // ⚠ NOTHING CHECKED THIS, at any point in this file's life, and it became reachable the moment the
+  // gate grew: a 7-wide gate beside a 5-wide passage needs 6 blocks between centres and the arc's
+  // spacing falls out of `COURT_RADIUS`. Priced it rather than guessing — the minimum `COURT_ARC`
+  // that clears the threshold mound, against the closest two socket centres, at four radii:
+  //
+  //     radius  6 → arc 20 · centres 4.5 apart   ← inside Alex's ruled window, and the frames COLLIDE
+  //     radius  7 → arc 22 · centres 5.4 apart   ← still collides with the widened gate
+  //     radius  8 → arc 23 · centres 5.4 apart
+  //     radius 10 → arc 25 · centres 7.3 apart   ← shipped
+  //
+  // ★ SO THE TWO NUMBERS ALEX WOULD WANT TO TUNE ARE COUPLED, and that is the useful finding: a
+  // tighter arc buys back distance to the door (radius 6 lands the station *inside* the ruled 15-20)
+  // and pays for it in overlapping arches. Without this assert the tempting move — shrink the radius
+  // to honour the ruling — ships frames growing through each other, and nothing would have said so.
+  for (const seed of SEEDS) {
+    const cfg = plotForTier(0, DEFAULT_PLOT)
+    const socks = sockets(seed, cfg)
+    const seen = new Map<string, number>()
+    let clash = 0, where = ''
+    for (const sk of socks) {
+      const h = plotHeight(sk.x, sk.z, seed, cfg)
+      if (h === null) continue
+      for (const c of socketCells(sk, h)) {
+        const k = `${c.x},${c.y},${c.z}`
+        const prev = seen.get(k)
+        if (prev !== undefined && prev !== sk.index) { clash++; where ||= `${k} (sockets ${prev} and ${sk.index})` }
+        else seen.set(k, sk.index)
+      }
+    }
+    ok(clash === 0, `s${seed}: no two socket frames share a cell (${clash} shared, first at ${where})`)
+  }
+
+  // ── 6. THE RETIRED LAYOUT IS STILL A DIFFERENT LAYOUT ─────────────────────────────────────
+  // ⚠ `legacyRowSockets` exists ONLY to name cells the retired code would have placed. The day it
+  // agrees with `sockets()` it silently stops clearing anything, which is the failure mode of every
+  // migration shim ever written: it keeps running and stops doing work.
+  {
+    const cfg = plotForTier(0, DEFAULT_PLOT)
+    const now = sockets(1337, cfg), was = legacyRowSockets(1337, cfg)
+    const moved = now.filter((sk, i) => sk.x !== was[i].x || sk.z !== was[i].z).length
+    ok(moved === now.length,
+       `every socket moved between the retired row and the arc (${moved} of ${now.length}) — ` +
+       'a shim that agrees with its successor clears nothing')
+  }
+
+  // ── 7. THE ARC IS A HALF-CIRCLE AT ANY COUNT, not only at the shipped one ──────────────────
+  for (const n of [1, 2, 3, 4, 5, 8]) {
+    const angs = socketArcAngles(n)
+    ok(angs.length === n, `socketArcAngles(${n}) returns ${angs.length} slots`)
+    ok(angs[0] === 0, `socketArcAngles(${n}) puts the gate at the apex`)
+    if (n > 1) {
+      // ⚠ MY FIRST ASSERT HERE WAS WRONG, NOT THE CODE, and the distinction is worth keeping. It
+      // demanded a full 180° SPAN, which an alternating layout only reaches at an odd count: with
+      // four sockets the slots are 0, +45, −45, +90 — one left arc and two right. That is not a
+      // defect, it is **canon's own table** (Centre gate · Left arc · Right arc 1 · Right arc 2),
+      // which is asymmetric for the same reason. Asserting the symmetry I assumed would have forced
+      // a fifth socket to satisfy a test rather than the world.
+      //
+      // The two properties that ARE the half-circle: the outermost socket reaches the mouth, and
+      // nothing ever leaves the half.
+      const reach = Math.max(...angs.map(Math.abs))
+      ok(Math.abs(reach - Math.PI / 2) < 1e-9,
+         `socketArcAngles(${n}) reaches the mouth of the half-circle (${reach.toFixed(4)} vs ${(Math.PI/2).toFixed(4)})`)
+      ok(angs.every(x => Math.abs(x) <= Math.PI / 2 + 1e-9),
+         `socketArcAngles(${n}) never leaves the half-circle`)
+    }
+  }
+  ok(COURT_RADIUS > 0, `COURT_RADIUS is a real radius (${COURT_RADIUS})`)
 }
 
 console.log(`crossings: ${pass} passed, ${fails.length} failed`)

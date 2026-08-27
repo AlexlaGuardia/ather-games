@@ -187,7 +187,9 @@ import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
 import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, STAGE_ACTIONS, type TutorialStage, type TutorialState } from './tutorial'
 import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
-import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts } from './crossings'
+import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
+         legacyRowSockets, courtClearCells, COURT_REV } from './crossings'
+import { crossingReady, LANDING_LABEL } from './crossing-out'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
@@ -3471,6 +3473,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    *  ⚠ NOT A BOOLEAN, because the court MOVES when Greg widens the fold. A `courtBuilt`
    *  flag would build once and leave the old cut stone stranded inland forever. */
   const courtTier = useRef(-1)
+  /**
+   * The court SHAPE the standing stone was laid with. Rebuild when either this or the tier moves.
+   *
+   * ⚠ THE TIER ALONE WAS NOT ENOUGH, and the gap only opened once the shape changed. A keeper at
+   * their final tier never widens again, so keying on the tier alone would leave the pre-08-27
+   * straight buried row standing forever — the derivation moved and the stone did not, which is
+   * exactly the argument `staleCourts` already makes about growth, finishing its sentence.
+   */
+  const courtRev = useRef(-1)
   /** Waymarks held when the court's lamps were last set — the lit/dark pass keys on this. */
   const courtMarks = useRef(-1)
   /** Which socket the keeper is currently standing in, so the arch speaks once rather than per frame. */
@@ -6756,6 +6767,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     if (!gateBuilt.current && GATE_COLS.every(ck => cols.current.has(ck))) {
       const baseY = columnHeight(GATE_X, GATE_Z, SEED)
       const done = tutorial.current.stage === 'done'
+      // ⚠ THE RETIRED BURIED COURSE, PUT BACK (2026-08-27). The arch used to lay its first course
+      // AT `columnHeight` rather than one above it, so a world built before today has cut stone
+      // sitting in the topsoil where grass belongs — a 5-block grey line through the glade that
+      // would read as a new bug rather than an old one. Restoring the GENERATED voxel is the only
+      // correct undo: setting it to air would leave a trench, and setting it to grass would guess
+      // at what the terrain wanted there.
+      for (let h = -2; h <= 2; h++) {
+        const rx = GATE_SPANS_X ? GATE_X + h : GATE_X
+        const rz = GATE_SPANS_X ? GATE_Z : GATE_Z + h
+        if (voxel(rx, baseY, rz) === MAT.STONE) {
+          const c = cols.current.get(colOf(rx, rz))
+          if (c) setVoxel(rx, baseY, rz, generatedVoxel(c, ((rx % SECTION) + SECTION) % SECTION, baseY, ((rz % SECTION) + SECTION) % SECTION, SEED))
+        }
+      }
       for (const c of gateCells(baseY)) {
         const mat = c.doorway ? (done ? AIR : MAT.STONE) : MAT.STONE
         if (voxel(c.x, c.y, c.z) !== mat) setVoxel(c.x, c.y, c.z, mat)
@@ -6783,7 +6808,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // and clearing every older site is what stops a tier-2 keeper owning two abandoned courts ~88
     // blocks apart. `staleCourts` derives those sites from the tier alone, so a save written before
     // any of this existed self-heals on the next widen.
-    if (space.current === 'plot' && courtTier.current !== plotTier.current) {
+    if (space.current === 'plot' && (courtTier.current !== plotTier.current || courtRev.current !== COURT_REV)) {
       const cfg = plotCfg.current
       const fit = courtFits(SEED, cfg)
       const socks = courtSockets(SEED, cfg)
@@ -6795,16 +6820,29 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       if (fit.ok && ready) {
         // Clear first: an older court's stone may stand where the new one goes, and laying the new
         // court before clearing would then delete cells it had just placed.
-        for (const { tier: oldTier, anchor: oldA } of staleCourts(SEED, plotTier.current)) {
-          const oldCfg = plotForTier(oldTier)
-          if (oldA.y === null) continue
-          for (const sk of courtSockets(SEED, oldCfg)) {
-            const h = plotHeight(sk.x, sk.z, SEED, oldCfg)
-            if (h === null) continue
-            for (const c of socketCells(sk, h, oldA.bearing))
-              if (voxel(c.x, c.y, c.z) === MAT.CUT_STONE) setVoxel(c.x, c.y, c.z, AIR)
+        //
+        // ⚠⚠ THREE SITES GET SWEPT, NOT ONE, AND EACH IS A DIFFERENT KIND OF STALE. A clear pass
+        // built from the CURRENT geometry can only find courts the current geometry would have
+        // built — which is precisely the set that does not need clearing. `courtClearCells` sweeps
+        // a column range wide and tall enough for any frame this station has ever laid, starting at
+        // the ground itself so the pre-08-27 BURIED course is included, and it only ever removes
+        // cut stone and lamp — a keeper's own build in that volume is another material.
+        const clearSite = (sk: ReturnType<typeof courtSockets>[number], cfg2: typeof cfg) => {
+          const h = plotHeight(sk.x, sk.z, SEED, cfg2)
+          if (h === null) return
+          for (const c of courtClearCells(sk, h)) {
+            const m = voxel(c.x, c.y, c.z)
+            if (m === MAT.CUT_STONE || m === MAT.MANA_LANTERN) setVoxel(c.x, c.y, c.z, AIR)
           }
         }
+        // 1 + 2. Every smaller fold's court, in BOTH shapes it may have been laid in.
+        for (const { tier: oldTier } of staleCourts(SEED, plotTier.current)) {
+          const oldCfg = plotForTier(oldTier)
+          for (const sk of courtSockets(SEED, oldCfg)) clearSite(sk, oldCfg)
+          for (const sk of legacyRowSockets(SEED, oldCfg)) clearSite(sk, oldCfg)
+        }
+        // 3. And THIS fold's retired straight row, which no tier change would ever have reached.
+        for (const sk of legacyRowSockets(SEED, cfg)) clearSite(sk, cfg)
         // ★★ EVERY SOCKET STANDS, EARNED OR NOT — canon 08-24: Greg PRE-PLACES them, one lit and
         // the rest dark, and *"the station grants nothing — it displays reach the keeper has
         // already earned."* This used to lay a socket's stone only once its waymark was held, so
@@ -6816,12 +6854,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           const h = plotHeight(sk.x, sk.z, SEED, cfg)
           if (h === null) continue
           const lit = socketLit(sk, held)
-          for (const c of socketCells(sk, h, a.bearing)) {
+          for (const c of socketCells(sk, h)) {
             const want = socketMaterial(c, lit)
             if (voxel(c.x, c.y, c.z) !== want) setVoxel(c.x, c.y, c.z, want)
           }
         }
         courtTier.current = plotTier.current
+        courtRev.current = COURT_REV
         courtMarks.current = held
       }
     }
@@ -6831,7 +6870,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // changes, because cut stone does not move with a widening fold — but planting a waymark
     // changes which sockets are LIT without moving anything. Folding this into the tier pass is
     // what left the old behaviour unable to light a socket until the fold next grew.
-    if (space.current === 'plot' && courtTier.current === plotTier.current
+    if (space.current === 'plot' && courtTier.current === plotTier.current && courtRev.current === COURT_REV
         && courtMarks.current !== waymarks.current.marks.length) {
       const cfg = plotCfg.current
       const a = courtAnchor(SEED, cfg)
@@ -6841,7 +6880,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           const h = plotHeight(sk.x, sk.z, SEED, cfg)
           if (h === null) continue
           const lit = socketLit(sk, held)
-          for (const c of socketCells(sk, h, a.bearing))
+          for (const c of socketCells(sk, h))
             if (c.lamp && voxel(c.x, c.y, c.z) !== socketMaterial(c, lit))
               setVoxel(c.x, c.y, c.z, socketMaterial(c, lit))
         }
@@ -6872,15 +6911,43 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       }
       if (standing !== inSocket.current) {
         inSocket.current = standing
-        if (standing === 0) onSay('the Rune Hold gate — the crossing to the town is not built yet')
-        else if (standing !== null) {
+        // ── ★★★ AND NOW THEY CROSS. Alex asked twice (2026-08-27: *"if we can fix these so they
+        // actually lead somewhere"*), and the second ask is the one that matters: the FIRST fix
+        // gave the arch a sentence, which stopped it reading as broken and left it doing nothing.
+        // An affordance that only ever explains itself is a sign, not a door.
+        //
+        // ★ NO PANEL, AND THAT IS THE ARCHITECTURE PAYING OFF. One socket is one destination, so
+        // walking into the one you want IS the choice — which is the whole reason `crossings.ts`
+        // argued the picker belongs here rather than at the fold-seam, *"the one spot in the world
+        // canon insists stays unbuilt."* The seam keeps being the way back out to the Wilds.
+        const marks = waymarks.current.marks
+        if (standing === 0) {
+          // ⚠ THE GATE'S BLOCKER IS NAMED, AND IT IS ASKED OF THE MAP RATHER THAN OF A CONSTANT.
+          // `crossing-out.ts` exists precisely so nobody keeps a `LANDING_BUILT` flag by hand: it
+          // reads the shipped zone map for a gate labelled THE LANDING, so the day Alex paints one
+          // this sentence changes by itself and the day it is unpainted the refusal comes back.
+          // Both ends of that crossing are still unwired (`consumeArrival` has no caller in play3d)
+          // — so this reports the FIRST thing standing in the way, honestly, and does not pretend
+          // the rest is done.
+          onSay(crossingReady()
+            ? 'the Rune Hold gate — the landing is painted; the crossing itself is not wired yet'
+            : `the Rune Hold gate — nobody has painted ${LANDING_LABEL} on the town square yet`)
+        } else if (standing !== null) {
           // ⚠ DARK AND UNBUILT ARE DIFFERENT STATES AND MUST NOT SHARE A SENTENCE — the whole point
           // of a dark socket is that it says a way exists here that you have not earned. Reporting
           // both as "nothing bound to it" would put the station back to granting no information.
           const sk = courtSockets(SEED, cfg)[standing]
-          onSay(socketLit(sk, waymarks.current.marks.length)
-            ? 'a passage socket — its waymark is planted, the crossing is not built yet'
-            : 'a dark passage socket — no waymark planted for it yet')
+          // ★ SOCKET i HOLDS MARK i-1, WHICH IS `socketLit`'s RULE READ FORWARDS. That predicate
+          // says socket i lights at `marksHeld >= i`; the mark that lit it is therefore the one at
+          // index i-1. Deriving the binding from the same rule that draws the lamp is what stops
+          // the lit socket and the crossed socket ever being different sockets.
+          const mark = marks[standing - 1]
+          if (socketLit(sk, marks.length) && mark) {
+            onSay(`stepping through to ${mark.name}`)
+            travelTo(null, mark.id)
+          } else {
+            onSay('a dark passage socket — plant a waymark out in the Wilds and it lights here')
+          }
         }
       }
     }

@@ -74,7 +74,21 @@ for (const seed of SEEDS) {
   const cells = gateCells(baseY)
   ok(cells.length === 20, `s${seed}: 5 wide x 4 high = 20 cells (${cells.length})`)
   ok(cells.filter(c => c.doorway).length === 9, `s${seed}: a 3x3 doorway (${cells.filter(c => c.doorway).length})`)
-  ok(cells.every(c => c.y >= baseY && c.y < baseY + 4), `s${seed}: every cell sits in the 4-high band`)
+  // ── ⚠⚠ THIS ASSERT WAS THE BURIAL, WRITTEN DOWN (corrected 2026-08-27) ──────────────────────
+  // Its own section is headed *"it stands on ground"* and it read `c.y >= baseY` — where `baseY` is
+  // `columnHeight`, the topmost SOLID block. So it required the first course to be IN the ground and
+  // called that standing on it. It passed for as long as the bug existed, and it would have gone red
+  // if anyone had fixed the bug without touching the test: **a guard that enforces the defect.**
+  //
+  // The keeper stands at `columnHeight + 1` (`plotStandY`, `plotThreshold`, and every spawn in the
+  // sweep). So that is the floor, and it is asserted as the property rather than as an offset.
+  const stand = baseY + 1
+  ok(cells.every(c => c.y >= stand && c.y < stand + 4),
+     `s${seed}: every cell sits in the 4-high band ABOVE the ground (${Math.min(...cells.map(c => c.y))}..${Math.max(...cells.map(c => c.y))}, ground ${baseY})`)
+  ok(Math.min(...cells.map(c => c.y)) === stand,
+     `s${seed}: the arch's first course rests ON the ground rather than one block inside it`)
+  ok(cells.filter(c => c.doorway).every(c => c.y >= stand),
+     `s${seed}: the whole opening is walkable — none of it is below standing height`)
   // the frame is one block thick on the axis it does not span
   const thin = GATE_SPANS_X ? new Set(cells.map(c => c.z)) : new Set(cells.map(c => c.x))
   ok(thin.size === 1, `s${seed}: the frame is one block thick across its facing`)

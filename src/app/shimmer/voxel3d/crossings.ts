@@ -97,10 +97,29 @@ export type SocketKind = 'gate' | 'passage'
  * reason, one file apart — and the file that already held the answer is the one this module derives
  * its own position from.
  *
+ * ── ⚠⚠ 21 → 25 ON 2026-08-27, AND THE RULED WINDOW IS NOW MISSED BY FIVE ─────────────────────
+ * Alex ruled 15-20. The tangent row could not get under 20.2 (the mound's own floor, recorded
+ * below); the half-circle cannot get under 25. Swept across **15 seeds × 3 tiers**: 22 fouls the
+ * threshold mound on 7 combinations, 23 on 1, and 24 on 1. The reason is geometric rather than a
+ * matter of distance — on an arc the outermost socket TURNS to face the focus, so its frame reaches
+ * radially toward the mound instead of sweeping past it tangentially, and the corner arrives about
+ * three blocks sooner than the centre column suggests.
+ *
+ * ⚠ AND 24 IS THE NUMBER I NEARLY SHIPPED. It cleared all 8 seeds in my first sweep and failed on
+ * the ninth — the oracle uses a different seed set from the one I had reached for, and it caught it
+ * in one run. A constant tuned against a sample is tuned against that sample; say how many you
+ * swept, and sweep the set the guard will actually use.
+ *
+ * ★ RECORDED, NOT ROUNDED, for the same reason the 20.2 note below was: *"he said 15-20 and I
+ * shipped 24" is a thing he should be able to find later.* It is also a real trade he may want to
+ * reverse — a tighter `COURT_RADIUS` would buy some of it back, at the cost of the station reading
+ * as a huddle rather than a half-circle. The measurement is here so the argument can be had with
+ * numbers instead of impressions.
+ *
  * ⚠ ALEX'S DIAL. Placement in the fold is his call; this is derived so it follows the threshold if
  * the threshold ever moves, and it is one constant so he can slide it without touching geometry.
  */
-export const COURT_ARC: number = 21
+export const COURT_ARC: number = 25
 
 /** How far inside the coast the court's centre stands, in blocks. Clear of the wall, not inland. */
 export const COURT_INSET: number = 16
@@ -111,6 +130,59 @@ export const SOCKET_PITCH: number = 8
 /** Sockets: one gate (Rune Hold, always up) plus one per waymark the keeper may hold. */
 export const SOCKET_KINDS: SocketKind[] =
   ['gate', ...Array.from({ length: MAX_MARKS }, () => 'passage' as const)]
+
+/**
+ * ── ★★★ THE ROW IS A HALF-CIRCLE FACING THE THRESHOLD, WHICH IS WHAT CANON SAID ALL ALONG ──────
+ * Alex, 2026-08-27, standing in his own garden: *"its currently just a straight line of half buried
+ * archs."* Both halves of that sentence were literally true and both were canon drift.
+ *
+ * `game/shimmer-geography.md` › THE GATE STATION (ruled 08-24): **"Gregory pre-places a low
+ * half-circle of sockets on the keeper's plot, facing the threshold."** The build laid them along
+ * the coast TANGENT — a straight row, every frame facing back down one shared bearing. Measured on
+ * seed 1337: the nearest socket sat 21.2 blocks from the threshold and the far one 42.5, so the row
+ * was not merely un-curved, it receded. A keeper walking up from their door met the first arch
+ * side-on and the last one twice as far away. That is a fence, not a station.
+ *
+ * ★ AN ARC ANSWERS BOTH WORDS AT ONCE. Sockets sit on a circle around a FOCUS — the spot the keeper
+ * stands to read them — so every one is the same distance away and every one turns to face that
+ * spot. "Facing the threshold" then falls out of where the arc OPENS: its mouth points back down
+ * the walk from the door, so you arrive into the half-circle rather than alongside it.
+ *
+ * ⚠ THE GATE TAKES THE APEX, and canon is explicit that this is load-bearing rather than tidy:
+ * *"home-cost lives on the gate and nowhere else… the 08-15 watch item is served by the centre
+ * socket being visibly singular; render it unlike its neighbours."* So it is the one you walk
+ * toward, and `socketCells` builds it larger. Passages fill outward from it, alternating sides —
+ * which reproduces canon's own asymmetry (one left arc, two right) without hard-coding a table of
+ * destinations this build does not have yet. ⚠ The Chord and Lingston routes in canon's table are
+ * NOT built; every passage here runs to a keeper-planted waymark. That gap is canon's to fill, not
+ * mine to invent.
+ *
+ * ⚠ ALEX'S DIAL, like `COURT_ARC`. A half-circle is the ruling; how wide the half-circle is, is a
+ * look. 10 blocks puts a 5-wide frame's edges ~2 blocks from its neighbour's at four sockets.
+ */
+export const COURT_RADIUS: number = 10
+
+/**
+ * Where each socket sits on the arc, in radians from the apex. Index 0 (the gate) is the apex.
+ *
+ * ★ ALTERNATING OUTWARD, so adding a socket never walks the existing ones sideways — the same
+ * property the old centred row had and the reason it was written that way. `Math.PI / 2` is the
+ * half-circle's own half-span, so the outermost socket sits exactly at the mouth however many there
+ * are, and the arc is a half-circle at any count rather than only at the shipped one.
+ */
+export function socketArcAngles(count: number = SOCKET_KINDS.length): number[] {
+  if (count <= 1) return [0]
+  // Slots either side of the apex; with `count` sockets there are `count - 1` gaps to place.
+  const perSide = Math.ceil((count - 1) / 2)
+  const step = (Math.PI / 2) / perSide
+  const out = [0]
+  for (let i = 1; i < count; i++) {
+    const rank = Math.ceil(i / 2)              // 1,1,2,2,3,3…
+    const side = i % 2 === 1 ? 1 : -1          // right, left, right, left…
+    out.push(side * rank * step)
+  }
+  return out
+}
 
 /**
  * ── ★★ IS THIS SOCKET LIT? — the station DISPLAYS reach, it does not GRANT it ─────────────────
@@ -183,18 +255,37 @@ function layoutAt(offset: number, seed: number, cfg: PlotConfig): CourtAnchor {
   return { x, z, y: plotHeight(x, z, seed, cfg), bearing }
 }
 
-/** Distance from the threshold to the closest socket of the row `offset` would produce. */
+/**
+ * The half-circle, placed — the ONE derivation of where a socket stands.
+ *
+ * ⚠⚠ IT IS A SHARED FUNCTION BECAUSE THE ALTERNATIVE ALREADY BIT ME, IN THIS FILE, TODAY. The arc
+ * landed while `nearestSocketAt` still measured a tangent ROW, so `courtAnchor` bisected an offset
+ * that solved a layout nothing built any more: the ruled "nearest socket 15-20 blocks from the
+ * seam" came out at **31-33 across every seed and tier**, and the constant still read 21. Two
+ * derivations of one placement, agreeing right up until one of them changed — the hand-kept-mirror
+ * shape this repo keeps paying for, and the oracle caught it in the first run.
+ */
+function placeArc(a: CourtAnchor, t: { x: number; z: number }): Socket[] {
+  const toDoor = Math.atan2(t.z - a.z, t.x - a.x)
+  const angles = socketArcAngles(SOCKET_KINDS.length)
+  return SOCKET_KINDS.map((kind, index) => {
+    // Apex sits directly opposite the door, so the keeper faces it walking in.
+    const th = toDoor + Math.PI + angles[index]
+    return {
+      index, kind,
+      x: Math.round(a.x + Math.cos(th) * COURT_RADIUS),
+      z: Math.round(a.z + Math.sin(th) * COURT_RADIUS),
+      facing: th + Math.PI,        // face the focus: the outward radial, reversed
+    }
+  })
+}
+
+/** Distance from the threshold to the closest socket of the arc `offset` would produce. */
 function nearestSocketAt(offset: number, seed: number, cfg: PlotConfig): number {
   const a = layoutAt(offset, seed, cfg)
   const t = plotThreshold(seed, cfg)
-  const tx = -Math.sin(a.bearing), tz = Math.cos(a.bearing)
-  const mid = (SOCKET_KINDS.length - 1) / 2
   let best = Infinity
-  for (let i = 0; i < SOCKET_KINDS.length; i++) {
-    const off = (i - mid) * SOCKET_PITCH
-    const sx = Math.round(a.x + tx * off), sz = Math.round(a.z + tz * off)
-    best = Math.min(best, Math.hypot(sx - t.x, sz - t.z))
-  }
+  for (const s of placeArc(a, t)) best = Math.min(best, Math.hypot(s.x - t.x, s.z - t.z))
   return best
 }
 
@@ -236,51 +327,122 @@ export interface Socket {
   kind: SocketKind
   /** Centre column of this socket's frame. */
   x: number; z: number
+  /**
+   * Which way THIS socket faces, in radians — toward the court's focus.
+   *
+   * ⚠ PER SOCKET, NOT SHARED. The straight row gave every frame the anchor's one bearing, which is
+   * exactly what made it read as a fence: four arches all square-on to the same direction. On an
+   * arc each frame turns to face the spot the keeper stands, so the station addresses the keeper
+   * instead of the coast. Anything laying cells must ask the SOCKET, never the anchor.
+   */
+  facing: number
 }
 
 /**
- * The row of sockets, laid along the coast tangent so every frame faces the same way — back down
- * the bearing, toward the garden. Centred on the anchor, so adding a socket grows the row from the
- * middle rather than walking the whole court sideways.
+ * The half-circle of sockets, standing around a focus and turned to face it.
+ *
+ * The anchor is the FOCUS — the spot the keeper stands to read the station — and the arc opens back
+ * toward the threshold, so the walk from the door arrives into its mouth. See `socketArcAngles`
+ * for why the gate takes the apex and for what canon asked for.
  */
 export function sockets(seed: number, cfg: PlotConfig = DEFAULT_PLOT): Socket[] {
+  // ★ THE ARC OPENS TOWARD THE DOOR, ASKED OF THE DOOR ITSELF. `a.bearing` is the direction from the
+  // plot's CENTRE out to the court, which is not the direction the keeper walks in from — the court
+  // is offset around the coast from the threshold, so the two differ by exactly the arc the whole
+  // `COURT_ARC` bisection exists to place. Facing by the anchor's bearing would turn the station out
+  // to sea on every seed, correctly and uselessly.
+  return placeArc(courtAnchor(seed, cfg), plotThreshold(seed, cfg))
+}
+
+/**
+ * ── ⚠ MIGRATION ONLY: the straight tangent row this replaced on 2026-08-27 ────────────────────
+ * Cut stone the host has already laid does not move when the derivation does. `staleCourts` makes
+ * exactly this argument for a fold that GROWS; a change of shape is the same event with the same
+ * consequence, and without this a keeper who never widens their fold again keeps the old fence
+ * standing beside the new arc forever.
+ *
+ * ⚠ IT REPRODUCES THE OLD MATH EXACTLY AND MUST NOT BE "TIDIED" TO MATCH THE NEW ONE. Its entire
+ * job is to name cells the retired code would have placed, so that the clear pass can find them.
+ * The day it agrees with `sockets()` it stops clearing anything and starts doing nothing quietly.
+ * Delete it only when no save can still be carrying a tangent row — not before.
+ */
+export function legacyRowSockets(seed: number, cfg: PlotConfig = DEFAULT_PLOT): Socket[] {
   const a = courtAnchor(seed, cfg)
-  // Tangent to the bearing: the row runs across the direction the keeper faces, not along it.
   const tx = -Math.sin(a.bearing), tz = Math.cos(a.bearing)
   const mid = (SOCKET_KINDS.length - 1) / 2
   return SOCKET_KINDS.map((kind, index) => {
     const off = (index - mid) * SOCKET_PITCH
-    return { index, kind, x: Math.round(a.x + tx * off), z: Math.round(a.z + tz * off) }
+    return {
+      index, kind, facing: a.bearing,
+      x: Math.round(a.x + tx * off), z: Math.round(a.z + tz * off),
+    }
   })
 }
 
-/** Half-width of a socket frame, in blocks (5 wide ⇒ jamb, 3 doorway, jamb). */
-const SOCKET_HALF = 2
-/** Frame height, in blocks (3 of doorway plus a lintel course). */
-const SOCKET_HEIGHT = 4
+/**
+ * A frame's shape, by kind.
+ *
+ * ── ★★ THE GATE IS BUILT UNLIKE ITS NEIGHBOURS, AND CANON ASKS FOR THAT IN SO MANY WORDS ───────
+ * `shimmer-geography.md` › THE GATE STATION: *"home-cost lives on the gate and nowhere else.
+ * Calling the left arc 'gates' would quietly put a price on the free half of the travel layer — or,
+ * worse, take it off the expensive one. The 08-15 watch item (a keeper who commutes to Rune Hold
+ * freely spends it) is **served by the centre socket being visibly singular; render it unlike its
+ * neighbours**."* The build gave every socket one frame and let the LAMP carry the whole
+ * difference — so the one crossing that costs looked exactly like the three that are free.
+ *
+ * ⚠ NOT A DIFFERENT GRAMMAR, A BIGGER ONE. Canon also rules *"framed = tuned and kept by someone…
+ * every socket on the station"*, so the gate may not be a bare spiral or anything else in kind —
+ * it is the same arch, built taller and wider. A player reads *"that one is the important one"*
+ * without being told, which is the whole point of the watch item.
+ */
+const FRAME: Record<SocketKind, { half: number; height: number; doorHalf: number; doorHeight: number }> = {
+  gate:    { half: 3, height: 6, doorHalf: 1, doorHeight: 4 },
+  passage: { half: 2, height: 4, doorHalf: 1, doorHeight: 3 },
+}
+
+/** The tallest frame on the station — what a footprint check has to leave room for. */
+export const SOCKET_MAX_HEIGHT = Math.max(...Object.values(FRAME).map(f => f.height))
+/** The widest half-span on the station. */
+const SOCKET_HALF = Math.max(...Object.values(FRAME).map(f => f.half))
 
 /**
- * Every cell one socket occupies: a 5-wide × 4-high frame one block thick, with a 3×3 doorway.
+ * Every cell one socket occupies: a frame one block thick with a walk-through doorway.
  *
- * Same proportions as the Moonwell Glade arch on purpose — a crossing should read as the same kind
- * of built thing wherever the keeper meets one. `baseY` is the ground at that socket's own column,
- * asked per socket rather than shared, so a row crossing a roll in the ground still sits on it.
+ * Same grammar as the Moonwell Glade arch on purpose — a crossing should read as the same kind of
+ * built thing wherever the keeper meets one.
+ *
+ * ── ★★★ IT STANDS ON THE GROUND NOW. IT USED TO STAND ONE COURSE INSIDE IT (2026-08-27) ────────
+ * Alex: *"a straight line of **half buried** archs."* `groundY` is `plotHeight`, which is the
+ * topmost SOLID block — the keeper stands at `groundY + 1`, which is what `plotThreshold` returns
+ * and what `plotStandY` clamps to. Laying the frame's first course at `groundY` therefore buried it
+ * by exactly one block on every socket, on every seed, at every tier: **measured 1 course buried
+ * and a 3-high doorway walkable at 2.** An arch you duck through is not an arch.
+ *
+ * ⚠ `gate.ts` HAS THE SAME OFF-BY-ONE and it is fixed in the same pass. This is not a coincidence:
+ * `gateCells` is where this frame's proportions were copied FROM, so the bug was inherited with the
+ * shape. Whenever a derivation is copied, its defects are copied first — they are the part nobody
+ * re-reads.
+ *
+ * ⚠ AND IT TAKES THE SOCKET'S OWN `facing`, not a shared bearing. On an arc every frame turns to
+ * face the focus; a shared bearing is what made the old row a fence.
  */
-export function socketCells(s: Socket, baseY: number, bearing: number): SocketCell[] {
-  const tx = -Math.sin(bearing), tz = Math.cos(bearing)
+export function socketCells(s: Socket, groundY: number): SocketCell[] {
+  const f = FRAME[s.kind]
+  const tx = -Math.sin(s.facing), tz = Math.cos(s.facing)
+  const baseY = groundY + 1
   const cells: SocketCell[] = []
-  for (let h = -SOCKET_HALF; h <= SOCKET_HALF; h++) {
-    for (let y = 0; y < SOCKET_HEIGHT; y++) {
+  for (let h = -f.half; h <= f.half; h++) {
+    for (let y = 0; y < f.height; y++) {
       cells.push({
         x: Math.round(s.x + tx * h),
         y: baseY + y,
         z: Math.round(s.z + tz * h),
-        doorway: h >= -1 && h <= 1 && y <= 2,
+        doorway: h >= -f.doorHalf && h <= f.doorHalf && y < f.doorHeight,
         // ★ ONE CELL CARRIES THE LIGHT: the middle of the lintel course. Lit and dark sockets are
         // the SAME frame — canon rules every socket on the station framed, because *"a frame is
         // the tuning made physical"* and Greg means to keep all of them. So the difference a
         // keeper reads across the plot is the lamp, not the architecture.
-        lamp: h === 0 && y === SOCKET_HEIGHT - 1,
+        lamp: h === 0 && y === f.height - 1,
       })
     }
   }
@@ -304,6 +466,50 @@ export function socketMaterial(c: SocketCell, lit: boolean): number {
   if (c.lamp) return lit ? MAT.MANA_LANTERN : MAT.CUT_STONE
   return MAT.CUT_STONE                   // the frame stands whether the way is earned or not
 }
+
+/**
+ * Every cell a clear pass must sweep for ONE socket site — deliberately wider than what
+ * `socketCells` lays.
+ *
+ * ── ⚠⚠ A CLEAR PASS THAT ASKS THE CURRENT GEOMETRY CANNOT FIND THE PREVIOUS GEOMETRY ───────────
+ * That is the trap this exists to close, and it is the mirror of the hand-kept-mirror bug: here the
+ * two derivations MUST disagree. Stone already in the world was laid by the code that has just been
+ * replaced — the 08-27 pass moved every frame off the tangent onto an arc AND lifted its base one
+ * course out of the ground, so a sweep built from the new `socketCells` misses the old buried
+ * course entirely and leaves a ring of half-sunk stone behind the new station.
+ *
+ * ★ SO IT SWEEPS A COLUMN RANGE, NOT A SHAPE: from the ground itself (where the buried course sat)
+ * up past the tallest frame on the station, across the widest half-span. Bounded, and safe because
+ * the host only ever clears CUT_STONE and MANA_LANTERN — a keeper's own build in that volume is
+ * some other material and is left alone. ⚠ A keeper who built with cut stone inside a retired
+ * court's footprint loses it; that is a real cost, accepted because the alternative is abandoned
+ * architecture nobody can remove, and recorded here rather than discovered later.
+ */
+export function courtClearCells(s: Socket, groundY: number): { x: number; y: number; z: number }[] {
+  const tx = -Math.sin(s.facing), tz = Math.cos(s.facing)
+  const out: { x: number; y: number; z: number }[] = []
+  for (let h = -SOCKET_HALF; h <= SOCKET_HALF; h++) {
+    // From `groundY` (the pre-08-27 buried course) through the tallest frame's lintel.
+    for (let y = 0; y <= SOCKET_MAX_HEIGHT; y++) {
+      out.push({ x: Math.round(s.x + tx * h), y: groundY + y, z: Math.round(s.z + tz * h) })
+    }
+  }
+  return out
+}
+
+/**
+ * Bumped whenever the court's SHAPE changes, so placed stone is rebuilt without waiting for a fold
+ * to widen.
+ *
+ * ★★ THE HOST KEYED ITS REBUILD ON THE TIER ALONE, and that was right for the only event that used
+ * to move the court. A geometry change is the same event — the derivation moved, the stone did not
+ * — and without this a keeper at their final tier would keep the straight buried row forever,
+ * because the tier never changes again. `staleCourts`' own header makes this argument for growth;
+ * this is that argument finishing its sentence.
+ *
+ * 1 = the tangent row (pre-2026-08-27). 2 = the half-circle, un-buried, gate at the apex.
+ */
+export const COURT_REV = 2
 
 /** Why the court could not stand where it was derived. Every one is a placement bug, not a refusal. */
 export type CourtMisfit =
@@ -337,7 +543,7 @@ export function courtFits(
       return { ok: false, why: 'fouls-seam', socket: s.index }
     // Clear of the threshold mound: cloud there would swallow the frame exactly as the fold
     // swallowed the Glade arch, and the bore would cut a hole through it.
-    for (const c of socketCells(s, h, a.bearing))
+    for (const c of socketCells(s, h))
       if (caveAt(c.x, c.y, c.z, seed, cfg) !== null)
         return { ok: false, why: 'fouls-cave', socket: s.index }
   }

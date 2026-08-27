@@ -90,7 +90,21 @@ export interface GateCell {
  * Every cell the arch occupies: a 5-wide × 4-high frame, one block thick, with a 3×3 doorway hole
  * centred in it (leaves a 1-block jamb on each side and a 1-block lintel on top).
  */
-export function gateCells(baseY: number): GateCell[] {
+/**
+ * ── ★★★ IT STANDS ON THE GROUND. IT USED TO STAND ONE COURSE INSIDE IT (2026-08-27) ────────────
+ * `groundY` is `columnHeight` — the topmost SOLID block — and the keeper stands at `groundY + 1`.
+ * Laying the first course AT the ground therefore buried it by exactly one block and left the
+ * 3-high opening walkable at 2. Alex found it on the crossing court (*"a straight line of half
+ * buried archs"*); this is the same defect in the file the court's proportions were COPIED FROM,
+ * which is why they had it: **when a derivation is copied its defects go first, because they are
+ * the part nobody re-reads.** Fixed in the same pass so one arch is not left wrong to match.
+ *
+ * ⚠ ONE REMNANT ON EXISTING WORLDS, STATED SO IT IS NOT MISTAKEN FOR A NEW BUG: a world that
+ * already stood this arch has cut stone at the old buried course. The host clears that course back
+ * to generated terrain when it rebuilds — see the build pass in `VoxelWorld.tsx`.
+ */
+export function gateCells(groundY: number): GateCell[] {
+  const baseY = groundY + 1
   const cells: GateCell[] = []
   for (let h = -2; h <= 2; h++) {          // span offset across the 5-wide axis
     for (let y = 0; y <= 3; y++) {         // 0..3 = 4 high
