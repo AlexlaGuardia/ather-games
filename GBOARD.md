@@ -114,6 +114,62 @@ beat slabs for detail *because they are thinner*) · **small palettes**, 3-5 blo
 `holds.test.ts` · `voxel/registry.ts` · `voxel/depth.ts` · `voxel3d/tex/tiles.ts` · `voxel3d/attrs.ts` ·
 `voxel3d/piece-mesh.ts` · `voxel3d/render-audit.test.ts` · `dev/building/page.tsx` (new)
 
+## 🏛 Shimmer voxel3d — **THE GATE STATION: A HALF-CIRCLE THAT STANDS ON THE GROUND AND CROSSES** (2026-08-27, hub) · *Last touched 2026-08-27 (hub) — `5fbdf93` + worker `ecc155dbbd`, pushed, DEPLOYED, not play-verified*
+
+**Alex, walking his own garden:** *"its currently just a straight line of half buried archs.. if we
+can fix these so they actually lead somewhere then we can get back to working on runehold."* All
+three complaints were literally true, and **1,126 asserts were green throughout** — the oracle
+measured distances, materials, fits and clearances and never asked what SHAPE the row was, whether
+it stood on the ground, or whether anything used it. ⚠ Ask of a passing suite what it does NOT measure.
+
+**Left off**
+- **Un-buried.** `plotHeight` is the topmost SOLID block and the keeper stands at +1, so a frame
+  based at the ground buried one course on every socket, seed and tier — a 3-high doorway walkable
+  at 2. `gate.ts` had the identical off-by-one because it is where these proportions were COPIED
+  from. ★★ `gate.test.ts`'s own section headed *"it stands on ground"* asserted `c.y >= columnHeight`
+  — it **required** the first course to be in the ground. A guard that enforced the defect.
+- **A half-circle facing the threshold** (canon 08-24), replacing the coast-tangent row. Equidistant
+  from a focus, each frame turned to face it, mouth opening down the walk from the door. The gate
+  takes the apex and is **built larger** — canon makes that load-bearing, not decorative.
+- **They cross.** Stepping into a lit passage crosses to its waymark (socket *i* holds mark *i−1*,
+  derived from `socketLit`'s own rule). No panel: one socket is one destination.
+
+**Next**
+- **Alex walks it** — the half-circle's shape, the arch heights, and whether ~26 blocks from the
+  door is too far. `COURT_RADIUS` is the lever and it is not free (see Decisions).
+- **Paint `THE LANDING`** on the Rune Hold square (map editor, press B). This is the bridge INTO the
+  Rune Hold work, not a chore before it.
+- **Wire `consumeArrival` in play3d** — the arriving side of the Rune Hold crossing has no caller.
+
+**Parked**
+- Canon's route table (Chord plot, Lingston landing) is **not built**; every passage here runs to a
+  keeper-planted waymark. That gap is canon's to fill, not the build's to invent.
+
+**Decisions**
+- ⚠ **`COURT_ARC` 21 → 25, a recorded deviation from Alex's ruling.** He ruled 15-20; the nearest
+  socket now sits ~26. On an arc the outer socket turns to face the focus, so its frame reaches
+  radially at the threshold mound instead of sweeping past it. Swept 15 seeds × 3 tiers: 22 fouls on
+  7, 23 on 1, 24 on 1. Kept as its own **visible assert** rather than widening a window to hide it.
+- ★★ **The two dials are coupled, and that is the useful half.** Priced: radius 6 → arc 20 (*inside*
+  the ruled window) but socket centres 4.5 apart and **the frames collide**; 7 → 22, still collides;
+  10 → 25, centres 7.3 apart. **Nothing had ever checked frame overlap**, so the tempting fix —
+  shrink the radius to honour the ruling — ships arches growing through each other. Guard added; red
+  at radius 6.
+- **`COURT_REV` joins the rebuild key.** Placed stone does not move when a derivation does.
+  `staleCourts` makes that argument for a fold that GROWS; a change of SHAPE is the same event, and
+  a keeper at their final tier never widens again — they would have kept the fence forever.
+- **`legacyRowSockets` is retained ONLY to name cells the retired code laid**, and must never be
+  "tidied" to agree with `sockets()`. `courtClearCells` sweeps a column range starting at the ground
+  so the buried course is reached: **a sweep built from the new geometry cannot find the old.**
+
+**Gate status: BLOCKED ON ALEX'S BRUSH.** `crossingReady()` is `false` — nobody has painted
+`THE LANDING` — and `consumeArrival` has no caller in play3d, so both ends are unwired. The socket
+names that blocker by asking the shipped map rather than a hand-kept flag, so it self-heals the day
+the gate is painted.
+
+**Files:** `voxel3d/crossings.ts` · `voxel3d/crossings.test.ts` (1126 → 1903 asserts, mutation-tested
+from **seven** doors) · `voxel3d/gate.ts` · `voxel3d/gate.test.ts` · `voxel3d/VoxelWorld.tsx`
+
 ## ✅ Shimmer voxel — **BUG (Alex, 2026-08-27): THE FOLD GREW AND ITS DOOR DID NOT** · *FIXED + deployed `c520dbe`, hub*
 
 **What Alex saw, verbatim:** *"when i got the first upgrade from greg to extend the fold.. the outer wall expanded and moved but the passage to the wilds stayed in the same spot and is unusable."*
