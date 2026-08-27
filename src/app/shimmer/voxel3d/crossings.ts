@@ -395,10 +395,42 @@ export function legacyRowSockets(seed: number, cfg: PlotConfig = DEFAULT_PLOT): 
  * it is the same arch, built taller and wider. A player reads *"that one is the important one"*
  * without being told, which is the whole point of the watch item.
  */
-const FRAME: Record<SocketKind, { half: number; height: number; doorHalf: number; doorHeight: number }> = {
-  gate:    { half: 3, height: 6, doorHalf: 1, doorHeight: 4 },
-  passage: { half: 2, height: 4, doorHalf: 1, doorHeight: 3 },
+/**
+ * ── ★★★ DEPTH IS WHY A TRILITHON READ AS A WALL WITH A HOLE IN IT (2026-08-27, Alex) ───────────
+ * *"i was thinking more of a stone hedge look"* — and in PLAN this frame already was one: two
+ * jamb columns carrying a lintel course, which is a trilithon. What it was missing is that it was
+ * **one block thick**. A sheet of stone with a rectangle cut out of it reads as masonry however
+ * you proportion it; a standing stone reads as a standing stone because you can see it has a SIDE.
+ *
+ * ★ AND DEPTH IS THE ONE AXIS THAT IS FREE. `SOCKET_PITCH` 8 with centres ~7.3 apart leaves about
+ * one clear block beside the 7-wide gate frame, so WIDTH is spoken for and `COURT_RADIUS` /
+ * `COURT_ARC` are Alex's ruled dials. Depth runs along the facing normal — perpendicular to the
+ * arc — where a neighbour cannot be. So the henge is bought on the axis nothing else wants.
+ *
+ * `lintelDepth` overhangs the uprights for the same reason: a lintel proud of its posts is the
+ * silhouette, and proud-in-depth costs nothing while proud-in-width costs the clearance we do not
+ * have.
+ *
+ * ⚠ THE GATE KEEPS ITS +2 OVER A PASSAGE. `shimmer-geography.md` makes the centre socket's
+ * singularity load-bearing (*"render it unlike its neighbours"*, serving the 08-15 home-cost watch
+ * item), so every dial here moves BOTH kinds together and the gap is preserved on purpose. Canon's
+ * own words: not a different grammar, a bigger one.
+ *
+ * ⚠ ALEX'S DIALS. Heights and depths are look, not law — turn them.
+ */
+const FRAME: Record<SocketKind, {
+  half: number; height: number; doorHalf: number; doorHeight: number
+  /** Blocks thick along the facing normal. 1 = the pre-08-27 sheet. */
+  depth: number
+  /** Thickness of the lintel course, which may overhang the uprights. >= depth. */
+  lintelDepth: number
+}> = {
+  gate:    { half: 3, height: 7, doorHalf: 1, doorHeight: 4, depth: 2, lintelDepth: 3 },
+  passage: { half: 2, height: 5, doorHalf: 1, doorHeight: 3, depth: 2, lintelDepth: 3 },
 }
+
+/** The deepest any frame reaches along its normal — what a clear pass and a fit check must cover. */
+export const SOCKET_DEPTH = Math.max(...Object.values(FRAME).map(f => Math.max(f.depth, f.lintelDepth)))
 
 /** The tallest frame on the station — what a footprint check has to leave room for. */
 export const SOCKET_MAX_HEIGHT = Math.max(...Object.values(FRAME).map(f => f.height))
@@ -408,8 +440,14 @@ const SOCKET_HALF = Math.max(...Object.values(FRAME).map(f => f.half))
 /**
  * Every cell one socket occupies: a frame one block thick with a walk-through doorway.
  *
- * Same grammar as the Moonwell Glade arch on purpose — a crossing should read as the same kind of
- * built thing wherever the keeper meets one.
+ * ⚠ THIS USED TO SAY "same grammar as the Moonwell Glade arch on purpose — a crossing should read
+ * as the same kind of built thing wherever the keeper meets one", and the 08-27 henge pass made
+ * that FALSE: the station's frames are now thick with a proud lintel, and `gate.ts` is still the
+ * one-block sheet both were copied from. Left divergent deliberately — Alex asked for the henge on
+ * the STATION and the Glade arch is a different beat in a different place — but recorded here
+ * rather than left as an accurate-sounding sentence that has stopped being true, which is the
+ * failure mode this repo keeps paying for. If the Glade arch should follow, `gateCells` is the
+ * same shape and the change is the same three lines.
  *
  * ── ★★★ IT STANDS ON THE GROUND NOW. IT USED TO STAND ONE COURSE INSIDE IT (2026-08-27) ────────
  * Alex: *"a straight line of **half buried** archs."* `groundY` is `plotHeight`, which is the
@@ -429,21 +467,56 @@ const SOCKET_HALF = Math.max(...Object.values(FRAME).map(f => f.half))
 export function socketCells(s: Socket, groundY: number): SocketCell[] {
   const f = FRAME[s.kind]
   const tx = -Math.sin(s.facing), tz = Math.cos(s.facing)
+  // ── ★★ THE NORMAL POINTS AT THE KEEPER, SO DEPTH IS LAID BACKWARDS FROM IT ─────────────────
+  // Measured, not assumed — my first version claimed the opposite in a comment and was wrong:
+  // stepping 2 along `(cos, sin)` moves a socket from 10.0 to 8.0 blocks from the focus, so the
+  // normal points INWARD, at the spot the keeper stands to read the arc.
+  // ⚠ THAT MATTERS FOR MORE THAN A COMMENT. Extruding along +n would have grown every stone two
+  // blocks INTO the walk, quietly turning `COURT_RADIUS` 10 into an 8-block court while its
+  // docstring still said 10 — a dial that silently stops meaning what it measures, which is the
+  // same defect `COURT_ARC` was fixed for on this very file. So `d` runs from -(depth-1) to 0:
+  // **d = 0 is the face the keeper meets**, the radius keeps its meaning, and the stone thickens
+  // away behind it.
+  const nx = Math.cos(s.facing), nz = Math.sin(s.facing)
   const baseY = groundY + 1
   const cells: SocketCell[] = []
+  // ⚠ DEDUPED BY CELL, NOT TRUSTED TO BE DISTINCT. `Math.round` on two different (h, d) pairs can
+  // land on ONE voxel — the frame is turned to an arbitrary bearing, so its lattice does not line
+  // up with the world's. A duplicate would be harmless to the host (it writes the same block twice)
+  // and is NOT harmless to a count-based assert, which is exactly the shape this repo has been
+  // caught by: a number that adds up for the wrong reason.
+  const seen = new Set<string>()
   for (let h = -f.half; h <= f.half; h++) {
     for (let y = 0; y < f.height; y++) {
-      cells.push({
-        x: Math.round(s.x + tx * h),
-        y: baseY + y,
-        z: Math.round(s.z + tz * h),
-        doorway: h >= -f.doorHalf && h <= f.doorHalf && y < f.doorHeight,
-        // ★ ONE CELL CARRIES THE LIGHT: the middle of the lintel course. Lit and dark sockets are
-        // the SAME frame — canon rules every socket on the station framed, because *"a frame is
-        // the tuning made physical"* and Greg means to keep all of them. So the difference a
-        // keeper reads across the plot is the lamp, not the architecture.
-        lamp: h === 0 && y === f.height - 1,
-      })
+      const lintel = y >= f.doorHeight
+      // ★ THE LINTEL'S EXTRA THICKNESS GOES ON THE FACE YOU CAN SEE. Uprights run [-(depth-1), 0];
+      // the lintel keeps that back edge and reaches PAST d = 0 by whatever `lintelDepth` adds, so
+      // it juts out over a keeper walking up to it. A lintel proud of its posts is the whole
+      // silhouette of a trilithon, and proud-in-depth is free where proud-in-width is not.
+      const back = -(f.depth - 1)
+      const front = lintel ? f.lintelDepth - f.depth : 0
+      for (let d = back; d <= front; d++) {
+        const x = Math.round(s.x + tx * h + nx * d)
+        const z = Math.round(s.z + tz * h + nz * d)
+        const key = `${x},${baseY + y},${z}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        cells.push({
+          x, y: baseY + y, z,
+          // ⚠ THE DOORWAY IS AIR THROUGH THE WHOLE DEPTH. Flagging only the front face would leave
+          // the stone behind it solid and turn a two-block-thick arch into a two-block-thick WALL
+          // — the keeper walks into the opening and stops. Depth is the whole change here, so this
+          // is the line that change could most easily get wrong.
+          doorway: h >= -f.doorHalf && h <= f.doorHalf && y < f.doorHeight,
+          // ★ ONE CELL CARRIES THE LIGHT: the middle of the lintel course, on the face the keeper
+          // reads it from (d === 0). Lit and dark sockets are the SAME frame — canon rules every
+          // socket on the station framed, because *"a frame is the tuning made physical"* and Greg
+          // means to keep all of them. So the difference a keeper reads across the plot is the
+          // lamp, not the architecture. ⚠ It must stay exactly ONE cell: `socketLit` drives it and
+          // the host re-checks `c.lamp` per cell, so a lamp per depth layer would be N lanterns.
+          lamp: h === 0 && y === f.height - 1 && d === 0,
+        })
+      }
     }
   }
   return cells
@@ -487,11 +560,26 @@ export function socketMaterial(c: SocketCell, lit: boolean): number {
  */
 export function courtClearCells(s: Socket, groundY: number): { x: number; y: number; z: number }[] {
   const tx = -Math.sin(s.facing), tz = Math.cos(s.facing)
+  const nx = Math.cos(s.facing), nz = Math.sin(s.facing)
   const out: { x: number; y: number; z: number }[] = []
+  const seen = new Set<string>()
   for (let h = -SOCKET_HALF; h <= SOCKET_HALF; h++) {
     // From `groundY` (the pre-08-27 buried course) through the tallest frame's lintel.
     for (let y = 0; y <= SOCKET_MAX_HEIGHT; y++) {
-      out.push({ x: Math.round(s.x + tx * h), y: groundY + y, z: Math.round(s.z + tz * h) })
+      // ⚠⚠ AND ACROSS THE FULL DEPTH, INCLUDING d = -1. The 08-27 henge pass made frames thick
+      // along the normal; a sweep built for the old SHEET would leave every layer behind the front
+      // face standing, which is the abandoned-architecture failure this function's header exists to
+      // prevent, one axis over. The extra course BEHIND the origin costs nothing and covers a frame
+      // laid by any future derivation that straddles instead of extruding forward — the same
+      // reasoning as starting at `groundY` to catch the buried course.
+      for (let d = -1; d <= SOCKET_DEPTH; d++) {
+        const x = Math.round(s.x + tx * h + nx * d)
+        const z = Math.round(s.z + tz * h + nz * d)
+        const key = `${x},${groundY + y},${z}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({ x, y: groundY + y, z })
+      }
     }
   }
   return out
@@ -508,8 +596,12 @@ export function courtClearCells(s: Socket, groundY: number): { x: number; y: num
  * this is that argument finishing its sentence.
  *
  * 1 = the tangent row (pre-2026-08-27). 2 = the half-circle, un-buried, gate at the apex.
+ * 3 = the henge (2026-08-27): frames thick along the normal, a lintel proud of its posts, both
+ *     kinds a course taller. A keeper who already stood a rev-2 court has SHEET frames in the
+ *     world; without this bump they would keep them forever, since the tier never changes again
+ *     once they are at their final fold.
  */
-export const COURT_REV = 2
+export const COURT_REV = 3
 
 /** Why the court could not stand where it was derived. Every one is a placement bug, not a refusal. */
 export type CourtMisfit =

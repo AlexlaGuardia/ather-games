@@ -396,9 +396,31 @@ for (const seed of SEEDS) {
              `s${seed} t${t}: the gate stands taller than a passage (${hOf(g)} vs ${hOf(pz)})`)
           ok(g.length > pz.length,
              `s${seed} t${t}: the gate is a bigger build than a passage (${g.length} vs ${pz.length} cells)`)
-          const gDoor = g.filter(c => c.doorway), pDoor = pz.filter(c => c.doorway)
-          ok(gDoor.length > pDoor.length,
-             `s${seed} t${t}: and its opening is larger too (${gDoor.length} vs ${pDoor.length} cells)`)
+          // ── ⚠⚠ MEASURE THE OPENING'S HEIGHT, NOT ITS VOXEL COUNT (corrected 2026-08-27) ────
+          // This compared `gDoor.length > pDoor.length` and it went red on s555 t2 (16 vs 18) the
+          // moment frames gained DEPTH — while the gate's opening was still structurally the
+          // larger one (4 courses tall against a passage's 3). A frame is turned to an arbitrary
+          // bearing, so `Math.round` collapses a different number of cells onto one voxel at every
+          // heading; once a frame is 2-3 deep that noise is bigger than the difference being
+          // asserted. **The count was a proxy for the shape and stopped tracking it.**
+          // ★ So compare the thing canon actually cares about — how tall the way through is — and
+          // compare it as a DERIVATION of the cells rather than as a tally of them. Verified
+          // separately that the opening stays walkable at every bearing: the narrowest gate mouth
+          // across 60 seeds x 3 tiers is 4 floor columns of 6 nominal, nowhere near a pinch.
+          const doorHeightOf = (cs: typeof g) => {
+            const d = cs.filter(c => c.doorway)
+            return d.length === 0 ? 0 : Math.max(...d.map(c => c.y)) - Math.min(...d.map(c => c.y)) + 1
+          }
+          ok(doorHeightOf(g) > doorHeightOf(pz),
+             `s${seed} t${t}: and you walk through a taller opening (${doorHeightOf(g)} vs ${doorHeightOf(pz)} courses)`)
+          // ⚠ AND THE OPENING MUST STILL BE AN OPENING. A depth change is exactly what could seal a
+          // doorway into a two-block-thick wall, and a keeper meets that as "the arch does nothing".
+          const floorCols = (cs: typeof g) => {
+            const base = Math.min(...cs.map(c => c.y))
+            return new Set(cs.filter(c => c.doorway && c.y === base).map(c => `${c.x},${c.z}`)).size
+          }
+          ok(floorCols(g) >= 2 && floorCols(pz) >= 2,
+             `s${seed} t${t}: both mouths are walkable at floor level (gate ${floorCols(g)}, passage ${floorCols(pz)} columns)`)
         }
       }
 
@@ -419,7 +441,87 @@ for (const seed of SEEDS) {
     }
   }
 
-  // ── 5b. ★★★ NO TWO FRAMES MAY SHARE A CELL — the guard that turned a taste into a constraint ──
+  // ── 5c. ★★★ THE HENGE — a frame has a SIDE, and you can still walk through it ────────────────
+// Alex, 2026-08-27: *"i was thinking more of a stone hedge look."* In plan the frame already was a
+// trilithon — two jamb columns carrying a lintel course — and it read as masonry because it was ONE
+// BLOCK THICK. Depth is the change; these are the asserts that keep it.
+//
+// ⚠ EVERY ONE OF THESE MEASURES A PROPERTY, NOT A TALLY. `Math.round` collapses a bearing-dependent
+// number of cells onto one voxel, so a cell COUNT is noise at this scale — that is exactly what put
+// the gate's opening assert one seed from red when depth landed (16 vs 18, on a gate whose opening
+// is structurally the taller one). Count-based asserts on rotated geometry go stale by arithmetic.
+{
+  const cfg = plotForTier(2)
+  for (const seed of [1337, 555, 1000, 42, 90210]) {
+    for (const sk of sockets(seed, cfg)) {
+      const h = plotHeight(sk.x, sk.z, seed, cfg)
+      if (h === null) continue
+      const cells = socketCells(sk, h)
+
+      // ── it has a side ──────────────────────────────────────────────────────────────────────
+      // Measured as DISTINCT COLUMNS PER footprint position: a sheet occupies one (x,z) per point
+      // across its span, a thick stone occupies more. Asked of the solid frame only — the doorway
+      // is air and would answer for the hole rather than the stone.
+      const solid = cells.filter(c => !c.doorway)
+      const cols = new Set(solid.map(c => `${c.x},${c.z}`)).size
+      const span = new Set(solid.map(c => `${c.x},${c.y},${c.z}`)).size
+      ok(cols > new Set(solid.map(c => c.y)).size,
+         `s${seed} socket ${sk.index}: the frame is thicker than a sheet (${cols} ground columns, ${span} cells)`)
+
+      // ── ⚠⚠ AND IT IS STILL A DOORWAY, NOT A WALL ──────────────────────────────────────────
+      // The single most likely way a depth change goes wrong: flag the front face as doorway and
+      // leave the stone behind it solid. The keeper walks into the opening and stops, and every
+      // other assert here stays green. So walk the opening back-to-front and require air the whole
+      // way at the course a keeper's feet occupy.
+      // ⚠⚠ MEASURED ALONG THE NORMAL, AND THE FIRST VERSION OF THIS WAS DECORATION. It asked "is
+      // any cell both doorway and stone" and "are there >= 2 mouth columns" — and a mutation that
+      // flagged only the FRONT face as doorway (leaving the stone behind it solid: the exact wall
+      // bug) passed BOTH, because an unflagged cell is not a contradiction and a 3-wide mouth one
+      // layer deep still has 3 columns. **A guard that survives the bug it was written for is the
+      // shape this repo keeps paying for.** So compare the two DEPTHS: the way through must run as
+      // deep as the stone is thick, or it is a wall with a niche in it.
+      // ⚠ AND IT IS MEASURED DOWN THE CENTRE LINE, not by comparing projected layer COUNTS. My
+      // second attempt did the latter and went red on the real gate: projecting a 7-wide frame onto
+      // its normal spreads across more rounded layers than a 3-wide door does, so WIDTH confounded
+      // a measurement that was supposed to be about DEPTH. Walking the centre column is immune to
+      // that — it is one line of voxels, and it is literally the path the keeper takes.
+      const footY = h + 1
+      const nx = Math.cos(sk.facing), nz = Math.sin(sk.facing)
+      const solidKeys = new Set(solid.map(c => `${c.x},${c.y},${c.z}`))
+      const doorKeys = new Set(cells.filter(c => c.doorway).map(c => `${c.x},${c.y},${c.z}`))
+      let openDepth = 0, sealedAt: number | null = null
+      for (let d = 0; d > -8; d--) {
+        const x = Math.round(sk.x + nx * d), z = Math.round(sk.z + nz * d)
+        const key = `${x},${footY},${z}`
+        if (!doorKeys.has(key) && !solidKeys.has(key)) break   // past the back of the frame
+        if (solidKeys.has(key)) { sealedAt = d; break }
+        openDepth++
+      }
+      ok(sealedAt === null,
+         `s${seed} socket ${sk.index}: the centre line is open front to back — stone at depth ${sealedAt} would make it a wall`)
+      ok(openDepth >= 2,
+         `s${seed} socket ${sk.index}: and the way through is as deep as the stone (${openDepth} courses)`)
+      const mouth = new Set(cells.filter(c => c.doorway && c.y === footY).map(c => `${c.x},${c.z}`))
+      ok(mouth.size >= 2,
+         `s${seed} socket ${sk.index}: the mouth is more than a one-cell slot (${mouth.size} columns)`)
+
+      // ── exactly one lamp, whatever the depth ─────────────────────────────────────────────
+      // ⚠ A lamp per depth layer would be N lanterns in one lintel, and `socketLit` drives them all
+      // — so this would not read as a bug, it would read as a brighter socket.
+      ok(cells.filter(c => c.lamp).length === 1,
+         `s${seed} socket ${sk.index}: exactly one cell carries the light (${cells.filter(c => c.lamp).length})`)
+
+      // ── no cell is laid twice ────────────────────────────────────────────────────────────
+      // Harmless to the host, which writes the same block twice. NOT harmless to any assert that
+      // counts, which is most of this file.
+      const keys = new Set(cells.map(c => `${c.x},${c.y},${c.z}`))
+      ok(keys.size === cells.length,
+         `s${seed} socket ${sk.index}: no duplicate cells (${cells.length - keys.size} dupes)`)
+    }
+  }
+}
+
+// ── 5b. ★★★ NO TWO FRAMES MAY SHARE A CELL — the guard that turned a taste into a constraint ──
   // ⚠ NOTHING CHECKED THIS, at any point in this file's life, and it became reachable the moment the
   // gate grew: a 7-wide gate beside a 5-wide passage needs 6 blocks between centres and the arc's
   // spacing falls out of `COURT_RADIUS`. Priced it rather than guessing — the minimum `COURT_ARC`
