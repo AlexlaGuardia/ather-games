@@ -2456,7 +2456,11 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
         const p = collarPrompt(slots, opensCollar, moveNameOf)
         return (
           <div className="absolute left-1/2 top-[calc(50%+2.2rem)] -translate-x-1/2 text-center pointer-events-none">
-            <div className="text-[10px] font-mono uppercase tracking-[.22em] text-white/45">he is still collared</div>
+            {/* ⚠ `.gx-label`, not a hand-rolled uppercase+tracking — `hud-type.test.ts` ratchets the
+                count of restated label roles and my first version of this line pushed it 29 -> 30.
+                The class already IS uppercase at .22em; restating it was writing the same rule a
+                tenth time in a different dialect. Caught by the ratchet, in another window. */}
+            <div className="gx-label text-[10px] text-white/45">he is still collared</div>
             {/* Amber when there is something to press, dim when the answer is "not with these" —
                 a keeper should be able to tell the two apart without reading the sentence. */}
             <div className={`mt-0.5 text-[12px] font-mono tracking-wide [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]
