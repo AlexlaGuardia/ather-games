@@ -169,6 +169,34 @@ const FILES = walk(SHIMMER).filter(f => !/\.test\.tsx?$/.test(f))
   ok(/masterGain\.connect\(out\)/.test(chat), 'and its layer gain feeds the bus rather than the destination')
 }
 
+// ── 8. ★★ AND THE SLIDER HAS TO REACH THE MASTER ────────────────────────────────────────────────
+// A bus with no tap is plumbing. The whole argument for this refactor was "a volume slider becomes
+// a one-line change" — so the slider is part of the claim, and sections 1-7 are all green without
+// one existing.
+{
+  const settings = readFileSync(join(SHIMMER, 'voxel3d/settings.ts'), 'utf8')
+  const world = readFileSync(join(SHIMMER, 'voxel3d/VoxelWorld.tsx'), 'utf8')
+
+  ok(/\bvolume: number/.test(settings), 'volume is a persisted setting')
+  ok(/volume: 0\.9/.test(settings), 'with a default that matches the bus\'s own starting level')
+
+  // ⚠ OUTSIDE PRESETS, or flipping natural↔cartoon silently changes how loud the game is — a bug
+  // nobody would think to attribute to a look toggle. Same reasoning `showFps` already carries.
+  const omit = settings.match(/Omit<VoxelSettings,[^>]*>/)?.[0] ?? ''
+  ok(/'volume'/.test(omit), `volume is excluded from PRESETS, so a style flip cannot change it (${omit})`)
+
+  // ⚠⚠ A NaN GAIN IS NOT LOUD OR QUIET, IT IS SILENT FOREVER — on every load, with the slider
+  // showing whatever it likes. The defaults-merge defends a MISSING field and does nothing about a
+  // stored null or a hand-edited string.
+  ok(/Number\.isFinite\(v\) \? Math\.max\(0, Math\.min\(1, v\)\)/.test(settings),
+     'and a stored garbage value is refused at the door rather than becoming a NaN gain')
+
+  ok(/setMasterVolume\(settings\.volume\)/.test(world), 'the world applies the saved volume to the bus')
+  ok(/useEffect\(\(\) => \{ setMasterVolume\(settings\.volume\) \}, \[settings\.volume\]\)/.test(world),
+     '★ from an EFFECT, so it runs on MOUNT too — inside `update` it would only fire when someone moves the slider, and a saved 20% would read as 90% until touched')
+  ok(/update\(\{ volume: Number\(e\.target\.value\) \}\)/.test(world), 'and the slider writes it back')
+}
+
 console.log(`audio-bus: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  FAIL ' + f)
 process.exit(fails.length ? 1 : 0)

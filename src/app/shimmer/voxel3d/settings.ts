@@ -38,6 +38,18 @@ export interface VoxelSettings {
    * mid-measurement would corrupt the exact A/B this exists to serve.
    */
   showFps: boolean
+  /**
+   * 0..1, the whole game's sound. Applied to `audio/bus.ts`'s single master gain.
+   *
+   * ⚠ OUTSIDE `PRESETS`, for the same reason `showFps` is (see the Omit below): volume is not a
+   * look, and a style flip that silently changed how loud the game is would be a bug nobody would
+   * think to attribute to the cartoon toggle.
+   *
+   * ★ THIS SETTING COULD NOT EXIST BEFORE 2026-08-27. Four modules each held their own
+   * `AudioContext` and their own gain, so there was nothing for one number to mean. The bus is
+   * what made a slider a slider rather than a four-module negotiation.
+   */
+  volume: number
 }
 
 export const VIEW_RADIUS_MIN = 4
@@ -52,7 +64,7 @@ export const VIEW_RADIUS_MAX = 12
  * listed gets overwritten by it. `showFps` is omitted because an instrument that a look-toggle can
  * switch off is worse than no instrument.
  */
-export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize' | 'viewRadius' | 'showFps'>> = {
+export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize' | 'viewRadius' | 'showFps' | 'volume'>> = {
   natural: { toon: 0, outline: 0, faceShading: 0.35, shadowLift: 0.15 },
   cartoon: { toon: 0.85, outline: 0.6, faceShading: 0.9, shadowLift: 0.5 },
 }
@@ -65,6 +77,9 @@ export const DEFAULT_SETTINGS: VoxelSettings = {
   tileSize: 64,
   viewRadius: 6,
   showFps: false,
+  // Matches `audio/bus.ts`'s own starting level, so a keeper who never opens settings hears the
+  // game at the level it was mixed at.
+  volume: 0.9,
 }
 
 const KEY = 'shimmer.voxel.settings.v1'
@@ -80,6 +95,13 @@ export function loadSettings(): VoxelSettings {
     // viewRadius drives loop bounds and eviction, not a uniform — a stored garbage value here is
     // an infinite want-ring, so it clamps on the way in rather than trusting the merge.
     s.viewRadius = Math.max(VIEW_RADIUS_MIN, Math.min(VIEW_RADIUS_MAX, Math.round(Number(s.viewRadius) || DEFAULT_SETTINGS.viewRadius)))
+    // ⚠ CLAMPED ON THE WAY IN FOR THE SAME REASON `viewRadius` IS, and the failure is worse here.
+    // The merge above defends a MISSING field; it does nothing about a stored `null` or a hand-
+    // edited string, and `Number(null)` is 0 while `Number('x')` is NaN. A NaN gain is not loud or
+    // quiet — it is silent forever, on every load, with the slider showing whatever it likes. A
+    // setting that can silence the game permanently has to refuse bad input at the door.
+    const v = Number(s.volume)
+    s.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : DEFAULT_SETTINGS.volume
     return s
   } catch {
     return { ...DEFAULT_SETTINGS }

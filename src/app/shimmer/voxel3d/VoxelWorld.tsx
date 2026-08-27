@@ -180,6 +180,7 @@ import { dayProgress, getPhase, getDisplayTime, isTimePinned, setTimePin } from 
 // VOXEL WORLD was, specifically and completely.
 import { stepVoices, newVoiceClock, type Voice, type VoiceClock } from './hollow-voice'
 import { playEmissions, unlockHollowSfx } from './hollow-sfx'
+import { setMasterVolume } from '../audio/bus'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
@@ -896,6 +897,20 @@ export default function VoxelWorld() {
   const update = useCallback((patch: Partial<VoxelSettings>) => {
     setSettings(prev => { const next = { ...prev, ...patch }; saveSettings(next); return next })
   }, [])
+
+  /**
+   * The saved volume reaches the audio bus.
+   *
+   * ⚠⚠ AN EFFECT ON `settings.volume`, NOT A LINE INSIDE `update`. Doing it in the setter covers
+   * only the case where someone MOVES the slider — the load path would leave a keeper who set 20%
+   * last session hearing the game at 90% until they touched the control, which is the setting
+   * appearing not to persist while `localStorage` holds it perfectly. This runs on mount too, so
+   * the stored value is applied before the first sound.
+   *
+   * ★ Safe before any gesture: with no context yet `setMasterVolume` just records the level, and
+   * `bus()` applies it to the gain the moment one exists.
+   */
+  useEffect(() => { setMasterVolume(settings.volume) }, [settings.volume])
 
   /**
    * P copies the frame profile — and SAYS SOMETHING when there is nothing to copy.
@@ -9067,6 +9082,24 @@ function SettingsPanel({ s, update, onClose, onControls }: {
           Everything above is a look or a budget; this is an instrument. Keeping it out of Render
           also keeps it out of PRESETS, so flipping natural↔cartoon mid-measurement cannot switch
           off the meter you are measuring with. */}
+      {/* ── SOUND ───────────────────────────────────────────────────────────────────────────
+          ★ ITS OWN SECTION, ABOVE DEBUG, FOR THE REASON THE CONTROLS ROW IS: volume is a PLAYER
+          setting. Buried under a debug heading it reads as developer tooling, and the players who
+          most need it are the ones least likely to open that section.
+          ⚠ The value drives `audio/bus.ts`'s single master gain — which is what makes this one
+          slider mean the whole game rather than one module's sounds. Before the bus there were
+          four AudioContexts and nothing a single number could have applied to. */}
+      <div className="gx-label pt-1 text-[9px] text-white/40">Sound</div>
+      <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
+        <span className="w-20 shrink-0">volume</span>
+        <input
+          type="range" min={0} max={1} step={0.05} value={s.volume}
+          onChange={e => update({ volume: Number(e.target.value) })}
+          className="flex-1 accent-amber-300"
+        />
+        <span className="w-14 text-right tabular-nums text-white/50">{Math.round(s.volume * 100)}%</span>
+      </label>
+
       {/* ── CONTROLS ────────────────────────────────────────────────────────────────────────
           Above Debug on purpose: rebinding is a PLAYER setting and the frame meter is an
           instrument. A controls row buried under a debug heading reads as developer tooling and
