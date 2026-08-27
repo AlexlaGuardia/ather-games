@@ -684,3 +684,159 @@ export function staleCourts(
   }
   return out
 }
+
+// ═══ THE PLATFORM ════════════════════════════════════════════════════════════════════════════
+//
+// ── ★★★ ALEX: *"on my screen its just a mess of stone blocks"* (2026-08-27) ───────────────────
+// He was looking at the pre-henge station, and the complaint was exact. **Measured, not guessed:
+// the ground the court stands on is `MAT.STONE` in 6760 of 6760 sampled columns**, and the frames
+// are `MAT.CUT_STONE`. Grey worked stone standing on grey raw stone gives the eye no edge to find,
+// so four arches read as a spill of blocks rather than as a building.
+//
+// ⚠ AND THE FIRST EXPLANATION I OFFERED HIM WAS WRONG, recorded because it is the more tempting
+// one: I said the bases were ragged because the terrain under the arc is uneven. It is not — the
+// socket-ground spread across 20 seeds x 3 tiers is **0 to 1 blocks**. The court was already
+// standing on a flat shelf. The defect was never the ground's SHAPE, it was its COLOUR, and those
+// two want completely different fixes. A plausible cause that costs a day is the expensive kind.
+//
+// ★ SO THE PLATFORM IS NOT DECORATION AND IT IS NOT A LEVELLING DEVICE. It is the CONTRAST — a
+// deliberate floor in a third material, with an edge, that separates the structure from what it
+// stands on. That it also gives every stone one shared base is a bonus the flat shelf had mostly
+// already provided.
+//
+// ── CANON: THIS STAYS VOXEL, AND THAT IS NOT A LIMITATION ────────────────────────────────────
+// Alex asked whether the platform could be "a standalone object" — a modelled prop. `game/
+// two-lines-two-games.md` (ruled 08-12) makes the answer canon rather than taste: *"The Ather is
+// quantized. Athernyx is continuous."* The grid is **diegetic** — the Ather reads as blocks
+// because a constructed resonance quantizes. Measured against the build: there are **zero** GLB /
+// `useGLTF` props anywhere in `voxel3d`; every mesh prop in the game lives in `play3d`, the mortal
+// side. A mesh dais in the keeper's own garden would put a continuous-side object on the quantized
+// side at the one place the player spends the most time. That is a ruling to ask for, not a look
+// change to ship.
+
+/**
+ * The stone the dais is laid in — and the ONE dial that answers Alex's complaint.
+ *
+ * ⚠ ALEX'S CALL, NOT MINE. Material is a look, and looks are his. `STONE_BRICK` is a default that
+ * argues for itself: it is unmistakably WORKED where the ground is raw, which is the same sentence
+ * canon has the frame making (*"a frame is the tuning made physical… nobody frames a gate they do
+ * not intend to keep"*). `SANDSTONE` is the higher-contrast option if grey-on-grey still reads flat
+ * at distance; `MOSSY_CUT_STONE` if it should look older than the keeper.
+ */
+export const PLATFORM_MAT: number = MAT.STONE_BRICK
+
+/** How far the dais reaches past the ring of stones, in blocks. Its apron — where the keeper walks. */
+export const PLATFORM_MARGIN: number = 3
+
+/** How far the dais stands proud of the highest ground under the court. 0 would be a floor, not a platform. */
+export const PLATFORM_RISE: number = 1
+
+/**
+ * The one Y every stone on this court stands on.
+ *
+ * ★★ SHARED, AND THAT IS THE WHOLE POINT OF HAVING IT. Today the host asks `plotHeight` per socket
+ * and each frame stands on its own column. On a flat shelf that is indistinguishable from a level
+ * station — the spread is 0-1 — so the defect it hides is invisible **until the day the court is
+ * derived onto ground that is not flat**, and then one stone stands a course low and nothing
+ * reports it. Deriving the level once, from every socket, means the platform and the stones cannot
+ * disagree about where the floor is.
+ *
+ * Returns null when any socket has no ground under it — the same refusal `courtFits` makes, for the
+ * same reason: a court that cannot stand should not be half-built.
+ */
+export function courtLevel(seed: number, cfg: PlotConfig = DEFAULT_PLOT): number | null {
+  let top = -Infinity
+  for (const s of sockets(seed, cfg)) {
+    const h = plotHeight(s.x, s.z, seed, cfg)
+    if (h === null) return null
+    if (h > top) top = h
+  }
+  return top === -Infinity ? null : top + PLATFORM_RISE
+}
+
+/**
+ * Every cell of the dais: a half-disc under the arc, filled from each column's own terrain up to
+ * the shared level.
+ *
+ * ★ A SECTOR, NOT A RING. Alex asked for the stones to stand *on* a platform, so the keeper has to
+ * be able to stand on it too — the focus is where they read the arc from, and a band under the
+ * stones alone would leave them off it. The sector runs from the focus out past the stones by
+ * `PLATFORM_MARGIN`, across the arc's own angular span plus the same margin in arc length, so the
+ * mouth the keeper walks in through is floored rather than stopping at their feet.
+ *
+ * ⚠ FILLED PER COLUMN, DOWN TO WHAT IS ALREADY THERE. Laying a flat slab at one Y would float over
+ * any dip and bury any rise. Each column runs from its own ground up to `level`, so the dais meets
+ * the terrain wherever the terrain happens to be — which is also what makes it survive being
+ * derived onto ground less obliging than the shelf it sits on today.
+ */
+export function courtPlatformCells(
+  seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): { x: number; y: number; z: number }[] {
+  const level = courtLevel(seed, cfg)
+  if (level === null) return []
+  const a = courtAnchor(seed, cfg)
+  if (a.y === null) return []
+
+  // ── ★★ THE APEX IS ASKED OF THE SOCKETS, NEVER RE-DERIVED ───────────────────────────────────
+  // The obvious move is to recompute "which way does the arc open" from the anchor and threshold,
+  // the way `placeArc` does. That would be a SECOND derivation of one fact, and the day the two
+  // disagree the platform sits somewhere the stones are not — silently, because each half is
+  // internally consistent. This repo has paid for that exact shape more than once. Socket 0 takes
+  // the apex by construction, so the platform reads its direction off the thing it must agree with.
+  const gate = sockets(seed, cfg)[0]
+  if (!gate) return []
+  const apex = Math.atan2(gate.z - a.z, gate.x - a.x)
+
+  const reach = COURT_RADIUS + PLATFORM_MARGIN
+  // The arc's own half-span, widened by the margin expressed as an angle at the stones' radius, so
+  // the apron is as generous at the mouth as it is in front.
+  const halfSpan = Math.PI / 2 + PLATFORM_MARGIN / COURT_RADIUS
+  const out: { x: number; y: number; z: number }[] = []
+  const seen = new Set<string>()
+
+  for (let dx = -reach; dx <= reach; dx++) {
+    for (let dz = -reach; dz <= reach; dz++) {
+      const r = Math.hypot(dx, dz)
+      if (r > reach) continue
+      // Which way this column lies relative to the arc's apex. `a.facing` points from the focus at
+      // the apex, so the sector is everything within `halfSpan` of it — the same half-circle the
+      // sockets sit on, not an arbitrary compass box.
+      if (r > 0.5) {
+        const ang = Math.atan2(dz, dx)
+        let d = ang - apex
+        while (d > Math.PI) d -= 2 * Math.PI
+        while (d < -Math.PI) d += 2 * Math.PI
+        if (Math.abs(d) > halfSpan) continue
+      }
+      const x = a.x + dx, z = a.z + dz
+      const g = plotHeight(x, z, seed, cfg)
+      if (g === null) continue          // off the island — the dais stops at the coast, not over it
+      for (let y = g + 1; y <= level; y++) {
+        const key = `${x},${y},${z}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({ x, y, z })
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * Is this block one the court laid, and therefore one the host may sweep when the court moves?
+ *
+ * ── ⚠⚠ THIS EXISTS BECAUSE THE ANSWER WAS TWO LITERALS INSIDE A RENDER FILE ──────────────────
+ * `VoxelWorld.tsx` clears a retired court with `m === MAT.CUT_STONE || m === MAT.MANA_LANTERN`,
+ * written when those were the only two materials a court could contain. The dais adds a third, and
+ * a sweep that does not know about it leaves **the entire platform standing** every time the fold
+ * grows — the abandoned-architecture failure `courtClearCells` names in its own header, except
+ * worse, because a platform is far larger than a frame.
+ *
+ * ★ AND THE LIST MUST STAY SHORT FOR A REASON THAT IS NOT TIDINESS. The host clears these
+ * unconditionally inside the court's footprint, so every material added here is one a keeper can
+ * lose by building with it near their own station. Cut stone, lantern and the dais are the three
+ * the court itself lays; nothing else belongs.
+ */
+export function isCourtMaterial(m: number): boolean {
+  return m === MAT.CUT_STONE || m === MAT.MANA_LANTERN || m === PLATFORM_MAT
+}

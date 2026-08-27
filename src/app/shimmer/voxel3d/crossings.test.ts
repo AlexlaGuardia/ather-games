@@ -11,6 +11,7 @@
 import {
   courtAnchor, sockets, socketCells, socketLit, socketMaterial, courtFits, SOCKET_KINDS, SOCKET_PITCH,
   COURT_ARC, COURT_INSET, staleCourts, COURT_RADIUS, socketArcAngles, legacyRowSockets, courtClearCells,
+  courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT,
 } from './crossings'
 import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
@@ -441,7 +442,89 @@ for (const seed of SEEDS) {
     }
   }
 
-  // ── 5c. ★★★ THE HENGE — a frame has a SIDE, and you can still walk through it ────────────────
+  // ── 5d. ★★★ THE PLATFORM — the stones stand ON it, and the host has to be told the level ─────
+// Alex: *"just a mess of stone blocks"*, then *"how can we do this so that the platform is a
+// standalone object"*. The cause is measured, not guessed: the court's ground is `MAT.STONE` in
+// 6760 of 6760 sampled columns and the frames are `MAT.CUT_STONE`, so grey stands on grey and the
+// eye finds no edge. The dais is a third material with a footprint — the contrast IS the fix.
+{
+  for (const t of [1, 2, 3]) {
+    const cfg = plotForTier(t)
+    for (const seed of [1337, 555, 1000, 42]) {
+      const level = courtLevel(seed, cfg)
+      const socks = sockets(seed, cfg)
+      if (level === null) continue
+      const plat = courtPlatformCells(seed, cfg)
+      const platKeys = new Set(plat.map(c => `${c.x},${c.y},${c.z}`))
+      const platCols = new Set(plat.map(c => `${c.x},${c.z}`))
+
+      // ── it is RAISED, or it is a floor and not a platform ───────────────────────────────────
+      for (const sk of socks) {
+        const g = plotHeight(sk.x, sk.z, seed, cfg)
+        if (g === null) continue
+        // ⚠ STRICTLY ABOVE, AND NOT `>= g + PLATFORM_RISE`. That was my first version and it is a
+        // MIRROR of the constant it is checking: set `PLATFORM_RISE` to 0 and the assert happily
+        // agrees that a platform level with the ground is proud of it. Mutation caught it only
+        // because a *different* assert (stones off the edge) went red. Assert the property — a
+        // platform a keeper cannot see a step up onto is a floor.
+        ok(level > g,
+           `s${seed} t${t}: the dais stands proud of socket ${sk.index}'s ground (level ${level} vs ground ${g})`)
+      }
+
+      // ── every stone stands ON it, not beside it ─────────────────────────────────────────────
+      for (const sk of socks) {
+        ok(platCols.has(`${sk.x},${sk.z}`),
+           `s${seed} t${t}: socket ${sk.index} stands on the dais, not off its edge`)
+      }
+
+      // ── ★★★ AND THE HOST MUST PASS `courtLevel`, NOT PER-SOCKET GROUND ────────────────────
+      // This is the whole wiring contract, and it is asserted rather than written in a comment
+      // because getting it wrong is INVISIBLE: with today's per-socket call the frame's first
+      // course lands ON the dais's top course instead of above it, so the stone is embedded in the
+      // floor by one block. Measured on s1337 t2: **42 cells of stone occupying platform cells.**
+      // Nothing errors, nothing renders empty, and a keeper just sees stones sunk into the plinth —
+      // the same family as the half-buried arch Alex reported on 08-27, one level up.
+      for (const sk of socks) {
+        const right = socketCells(sk, level)
+        const clash = right.filter(c => platKeys.has(`${c.x},${c.y},${c.z}`))
+        ok(clash.length === 0,
+           `s${seed} t${t}: socket ${sk.index} laid at courtLevel sits ON the dais, not in it (${clash.length} cells embedded)`)
+        ok(Math.min(...right.map(c => c.y)) === level + 1,
+           `s${seed} t${t}: socket ${sk.index}'s first course is the one above the dais surface`)
+      }
+
+      // ── the dais floors what it claims to floor ─────────────────────────────────────────────
+      // ⚠ A SECTOR WITH HOLES IN IT IS NOT A FLOOR. Columns are filled from their own terrain up,
+      // so a column that skipped would be a pit the keeper walks into — and at one course thick on
+      // a flat shelf, "skipped" and "already at grade" look identical unless asked directly.
+      const topCourse = plat.filter(c => c.y === level).length
+      ok(topCourse === platCols.size,
+         `s${seed} t${t}: every column of the dais reaches the surface (${topCourse} of ${platCols.size})`)
+
+      // ── ⚠ IT MUST NOT PAVE THE FOLD DOOR ───────────────────────────────────────────────────
+      // The seam is the one spot canon insists stays unbuilt, and the dais is much wider than a
+      // frame — `courtFits` checks SOCKETS against the trigger and knew nothing about an apron.
+      const thr = plotThreshold(seed, cfg)
+      const nearest = Math.min(...plat.map(c => Math.hypot(c.x - thr.x, c.z - thr.z)))
+      ok(nearest > PLOT_TRIGGER_RADIUS,
+         `s${seed} t${t}: the dais clears the crossing trigger (${nearest.toFixed(1)} blocks out)`)
+
+      // ── everything the court lays is something the host may sweep ───────────────────────────
+      // ★ THE LOOP THAT ABANDONED ARCHITECTURE COMES THROUGH. A material the sweep does not
+      // recognise is a structure that stands forever once the fold grows and the court moves.
+      ok(isCourtMaterial(PLATFORM_MAT),
+         `the dais material is one the court sweep will remove`)
+      for (const sk of socks) {
+        const mats = new Set(socketCells(sk, level).filter(c => !c.doorway).map(c => socketMaterial(c, true)))
+        const stray = [...mats].filter(m => !isCourtMaterial(m))
+        ok(stray.length === 0,
+           `s${seed} t${t}: socket ${sk.index} lays only sweepable materials (${stray.join(',') || 'none stray'})`)
+      }
+    }
+  }
+}
+
+// ── 5c. ★★★ THE HENGE — a frame has a SIDE, and you can still walk through it ────────────────
 // Alex, 2026-08-27: *"i was thinking more of a stone hedge look."* In plan the frame already was a
 // trilithon — two jamb columns carrying a lintel course — and it read as masonry because it was ONE
 // BLOCK THICK. Depth is the change; these are the asserts that keep it.
