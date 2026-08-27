@@ -28,9 +28,13 @@
 // `AudioBufferSourceNode` is per-sound, which is what the API requires.
 
 import type { Emission } from './hollow-voice'
+// ★ THE DEVICE IS THE BUS'S NOW (2026-08-27). This file made its own `AudioContext` and its own
+// noise buffer; it was one of four inside Shimmer, and four contexts cannot share an unlock or a
+// volume. What stays here is what was always this module's own: the per-form voices and the node
+// graph that shapes a footfall. See `audio/bus.ts` for why that split is load-bearing.
+import { audioCtx, bus, noiseBuffer, unlockAudio, audioState, disposeAudio } from '../audio/bus'
 
-let ac: AudioContext | null = null
-let noise: AudioBuffer | null = null
+/** This LAYER's level, under the master. Lets footsteps be quieted without muting the game. */
 let master = 0.9
 
 /** The per-form voice. Band centre and length are what make a warden and a stalker different. */
@@ -45,44 +49,15 @@ const VOICE: Record<Emission['form'], { hz: number; q: number; ms: number; gain:
   caster:  { hz: 2600, q: 3.5, ms: 70, gain: 0.5 },
 }
 
-function ctx(): AudioContext | null {
-  try {
-    if (ac) return ac
-    const AC = window.AudioContext
-      || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    if (!AC) return null
-    ac = new AC()
-    return ac
-  } catch { return null }
-}
-
-/** A quarter-second of white noise, shared by every sound this module will ever make. */
-function noiseBuffer(a: AudioContext): AudioBuffer {
-  if (noise) return noise
-  const frames = Math.floor(a.sampleRate * 0.25)
-  const buf = a.createBuffer(1, frames, a.sampleRate)
-  const d = buf.getChannelData(0)
-  for (let i = 0; i < frames; i++) d[i] = Math.random() * 2 - 1
-  noise = buf
-  return buf
-}
-
 /**
- * Start the audio context. MUST be called from a real user gesture — a click or a keypress.
- * Returns whether audio is running, so a caller can show the truth rather than assume it.
+ * ⚠ THESE TWO ARE NOW THIN FORWARDS, KEPT ON PURPOSE RATHER THAN DELETED.
+ * They were this module's public surface before the bus existed, and the world calls
+ * `unlockHollowSfx` from its canvas click. Forwarding means the rename is not a flag day and there
+ * is exactly one implementation — what must never come back is a SECOND context behind them.
+ * `audio-bus.test.ts` asserts that by counting `new AudioContext` across the whole Shimmer tree.
  */
-export function unlockHollowSfx(): boolean {
-  const a = ctx()
-  if (!a) return false
-  try { void a.resume() } catch { /* refused — stays suspended */ }
-  return a.state === 'running'
-}
-
-/** 'off' = no context could be made · 'suspended' = never unlocked · 'running' = audible. */
-export function hollowSfxState(): 'off' | 'suspended' | 'running' {
-  if (!ac) return 'off'
-  return ac.state === 'running' ? 'running' : 'suspended'
-}
+export const unlockHollowSfx = (): boolean => unlockAudio()
+export const hollowSfxState = (): 'off' | 'suspended' | 'running' => audioState()
 
 /** 0..1. Persisted by the caller if it wants to be; this module keeps no settings. */
 export function setHollowVolume(v: number): void {
@@ -97,10 +72,12 @@ export function setHollowVolume(v: number): void {
  */
 export function playEmissions(ems: readonly Emission[]): void {
   if (ems.length === 0) return
-  const a = ctx()
-  if (!a || a.state !== 'running') return
+  const a = audioCtx()
+  const out = bus()
+  if (!a || !out || a.state !== 'running') return
   try {
-    const buf = noiseBuffer(a)
+    const buf = noiseBuffer()
+    if (!buf) return
     const t0 = a.currentTime
     for (const e of ems) {
       const v = VOICE[e.form]
@@ -127,16 +104,22 @@ export function playEmissions(ems: readonly Emission[]): void {
       g.gain.setValueAtTime(0.0001, t0)
       g.gain.exponentialRampToValueAtTime(Math.max(0.0002, e.gain * v.gain * master), t0 + 0.008)
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
-      src.connect(band); band.connect(dark); dark.connect(pan); pan.connect(g); g.connect(a.destination)
+      // ⚠ `out`, NEVER `a.destination`. Connecting to the destination silently opts this sound out
+      // of the master gain, and the way anyone finds out is a player turning the volume down and
+      // the footsteps staying loud.
+      src.connect(band); band.connect(dark); dark.connect(pan); pan.connect(g); g.connect(out)
       src.start(t0, off, dur)
       src.stop(t0 + dur)
     }
   } catch { /* audio blocked mid-frame — the world keeps running */ }
 }
 
-/** Drop the context. Call on unmount so a page that is gone is not holding an audio device. */
-export function disposeHollowSfx(): void {
-  try { void ac?.close() } catch { /* already gone */ }
-  ac = null
-  noise = null
-}
+/**
+ * Drop the audio device. Call on unmount so a page that is gone is not holding one.
+ *
+ * ⚠ THIS NOW CLOSES THE WHOLE GAME'S AUDIO, NOT JUST THIS MODULE'S, because there is one device.
+ * Correct for the only caller — VoxelWorld's unmount, which is the page going away — and wrong for
+ * anything that merely wanted footsteps to stop. Use `setHollowVolume(0)` for that; the names are
+ * close and the acts are not.
+ */
+export const disposeHollowSfx = (): void => disposeAudio()

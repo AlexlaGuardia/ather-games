@@ -12,7 +12,6 @@ export interface VoiceInstance {
 
 // ── Module state ──
 
-let ctx: AudioContext | null = null
 let masterGain: GainNode | null = null
 let masterVolume = 0.15
 let muted = false
@@ -20,17 +19,32 @@ let speaking = false
 let stopRequested = false
 let activeTimeouts: ReturnType<typeof setTimeout>[] = []
 
-// ── Audio context (lazy, needs user gesture to resume) ──
+// ── Audio context ──
+//
+// ★ THE DEVICE COMES FROM `audio/bus.ts` NOW (2026-08-27). This module used to call
+// `new AudioContext()` itself — one of four inside Shimmer, and four contexts cannot share an
+// unlock or a volume slider.
+//
+// ⚠ ITS OWN `masterGain` STAYS, AND THAT IS NOT REDUNDANCY. `stopSpeaking` ramps this node to zero
+// to kill in-flight oscillators mid-line; that is a real feature and it must NOT reach across the
+// rest of the game's sound. So it is a LAYER gain, feeding the bus's master — chatter has a volume,
+// the game has a volume, and they compose. The one thing that would break it is connecting to
+// `.destination`, which is what this change removes.
+import { audioCtx, bus, unlockAudio } from '../audio/bus'
 
 function getCtx(): AudioContext {
-  if (!ctx) {
-    ctx = new AudioContext()
-    masterGain = ctx.createGain()
+  const a = audioCtx()
+  // Preserves the old contract exactly: `new AudioContext()` threw on an unsupported browser and
+  // no caller here guarded it. `audioCtx()` returns null in precisely those cases.
+  if (!a) throw new Error('chatterbox: no AudioContext')
+  const out = bus()
+  if (!masterGain && out) {
+    masterGain = a.createGain()
     masterGain.gain.value = masterVolume
-    masterGain.connect(ctx.destination)
+    masterGain.connect(out)
   }
-  if (ctx.state === 'suspended') ctx.resume()
-  return ctx
+  if (a.state === 'suspended') void a.resume()
+  return a
 }
 
 function getMasterGain(): GainNode {
@@ -258,11 +272,12 @@ export function stopSpeaking(): void {
   for (const t of activeTimeouts) clearTimeout(t)
   activeTimeouts = []
   // Ramp master gain to zero to kill any in-flight oscillators
-  if (masterGain && ctx) {
-    masterGain.gain.cancelScheduledValues(ctx.currentTime)
-    masterGain.gain.setValueAtTime(0, ctx.currentTime)
+  const a = audioCtx()
+  if (masterGain && a) {
+    masterGain.gain.cancelScheduledValues(a.currentTime)
+    masterGain.gain.setValueAtTime(0, a.currentTime)
     // Restore after a beat so next speakLine works
-    masterGain.gain.setValueAtTime(masterVolume, ctx.currentTime + 0.05)
+    masterGain.gain.setValueAtTime(masterVolume, a.currentTime + 0.05)
   }
 }
 
@@ -273,10 +288,14 @@ export function isSpeaking(): boolean {
 
 // ── Volume controls ──
 
-/** Unlock audio context (call on first user gesture) */
-export function unlockChatter(): void {
-  if (ctx && ctx.state === 'suspended') ctx.resume()
-}
+/**
+ * Unlock audio (call on first user gesture).
+ *
+ * ⚠ IT UNLOCKS THE WHOLE GAME NOW, because there is one device — and that is the point of the bus,
+ * not a side effect. Kept as a forward rather than deleted: it is the name three callers already
+ * use, and a rename is a flag day for no gain.
+ */
+export function unlockChatter(): void { unlockAudio() }
 
 export function setChatterVolume(vol: number): void {
   masterVolume = Math.max(0, Math.min(1, vol))
