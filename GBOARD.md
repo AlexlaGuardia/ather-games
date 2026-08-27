@@ -227,6 +227,77 @@ Greg's upgrade and walked to the door. That is the check still owed.
 
 **Files:** `play3d/cast.ts` · `play3d/keeper-moves.ts` · `play3d/loadout.ts` · `play3d/birth-affinity.ts` · `play3d/crucible-fleet.ts` · `engine/hunter-ai.ts` · `voxel3d/hollows.ts` · `voxel3d/VoxelWorld.tsx` · `nolmir/lib/expedition.ts` (+ oracles for each)
 
+## 🔊 Shimmer voxel3d — **THE NIGHT HAS A SOUND NOW, AND IT TELLS YOU WHICH WAY TO TURN** (2026-08-27, world lane) · *Last touched 2026-08-27 (world) — pure + shell + bench shipped `d9b562d` `4c1791d`, NOT wired*
+
+### Left off — Alex reported being attacked by something he never saw; this is the fix he ruled
+**What he said:** *"i was just testing the passage and got attacked by invisible enemies"*, then
+*"as long as the enemy is visible and slowly creeps up behind the player its fine once we add sound
+and give the stalker footsteps or a distinct movement sound it wont feel so bad."*
+
+### Decisions
+- **★★★ IT WAS THE STALKER, WORKING EXACTLY AS RULED, AND THE RULING HAS A HOLE.** Night, and the
+  message was *"something struck from behind you"*. The stalker approaches only from the blind spot,
+  is a `ConeGeometry(0.38, 1.5, 6)` in a grey the code itself calls *"darker than any ground grey"*,
+  and **withdraws while watched** — and voxel3d had **no audio path at all**, so the first signal of
+  a 14-damage hit (**the heaviest in the game**) arrived AFTER it landed. `HOLLOW_FORMS` prices that
+  damage explicitly on *"a strike you can ALWAYS deny by turning around"* — but nothing told him to
+  turn. **The counterplay the damage is priced against was unusable.**
+- **⚠ AND IT IS SELF-CONCEALING IN A WAY THAT DEFEATS PLAYTESTING:** the one action that would
+  reveal it — turning to look — is the action that makes it retreat. Nobody finds this by playing
+  more carefully.
+- **★★ RULED OUT BY MEASURING, so nobody re-chases them:** buried spawns (`spawnHollow` places by
+  `columnHeight`, the trap this repo keeps hitting — but at the plot threshold the real ground is
+  **4 to 36 blocks BELOW** it, so a body there floats rather than sinks); Hollows near the passage
+  at all (`greyness >= 0.5` on **0 of 318** sampled cells); a body stuck at spawn scale; a missing
+  Moglin patrol body (still the brown box).
+- **★★ DIRECTION IS THE DELIVERABLE, NOT ATMOSPHERE.** A footstep that does not say WHICH WAY is a
+  jump-scare with extra steps. ⚠ **Stereo pan cannot carry it** — a thing at your 4 o'clock and one
+  at your 8 o'clock pan identically, and behind is the entire point. So `muffle` rises toward the
+  rear and rolls 18k down to ~1.8k, and the oracle asserts it is **monotonic** from ahead to behind:
+  a cue you cannot learn is noise.
+- **Synthesised, asset-free**, matching `gather-fx`/`rin-fx`/`nolmir/sfx-lab` — no licence, no 404,
+  and a footstep can never arrive late because a download did. A footfall is **broadband**, so it is
+  a shaped noise burst; an oscillator version reads as a beep, which in a dark wood sounds like UI.
+  The FORM moves the band, so you can tell a warden from a stalker without turning — which matters,
+  because they want opposite responses (walk around a warden, turn on a stalker).
+- **`range` 26 is sized off `PLAYER_EXCLUSION` 24**, so the first footfall lands before the body is
+  inside the zone it spawned outside of. **A body that is not walking is silent** — a footfall from
+  something standing still is the cue lying about what it is doing.
+- **⚠⚠ FOUR OF MY OWN BUGS, EVERY ONE FOUND BY THE ORACLE OR THE SWEEP, AND TWO LOOKED RIGHT.**
+  (1) A per-FRAME budget cannot express 7/second — `round(7/60)` floors to 1, so the ceiling admitted
+  **60**: arithmetically incapable of ever binding. (2) ★★ The nearest-body exemption written as
+  *"first to fire this frame"* granted one free sound **per frame** — 60/s — so twelve bodies got
+  **92 of the 96** the ceiling exists to cut: **a guard defeated by the exemption written to protect
+  it.** (3) Ranking the close body first did NOT keep it heard; a pack drains the bucket while it
+  steps twice a second, so it lost 3 of 8 footfalls. (4) I nearly asserted a full pack is never
+  throttled — measured, four stalkers want ~8/s against 7, so a legal pack loses a quarter.
+  **Deleted the claim rather than raise the ceiling to satisfy it.**
+- **⚠ AND MY MUTATION SWEEP LIED ONCE:** on a mutation that failed to apply it skipped WITHOUT
+  restoring, leaving the previous mutation in the file, so a genuinely-caught bug reported as
+  SURVIVED. It also restored from a backup taken before two of my edits and **silently reverted
+  them** — the 08-22 PATTERNS entry, hit exactly. The trap and the restore must agree on the baseline.
+- **`/shimmer/dev/creep`** is the bench, and it exists because **audio is the one thing a screenshot
+  cannot verify**. It pairs the sound with a top-down plot of the true position: headphones on, look
+  away, say where it is, then check. The disagreement IS the measurement.
+
+### ⚠ Still open, and both are Alex's call on hub's numbers
+- **The stalker is `speed: 3.9`, the FASTEST of the three forms** (warden 2.0, caster 1.5). That is
+  not the *"slowly creeps up behind"* Alex described.
+- **The break-off-when-seen is his own 2026-08-26 ruling** (`hollows.ts:410`) and is the specific
+  reason it is never visible. Sound says where to turn; under these two numbers he will turn and
+  watch it withdraw rather than see it creep.
+
+### Next
+1. **Hub wires it** — `stepVoices` + `playEmissions` in the Hollow body loop, `unlockHollowSfx()`
+   from any existing input handler. ⚠ The `speed` field must be what the body ACTUALLY moved, not
+   `HOLLOW_FORMS[form].speed`, or a withdrawing stalker keeps making footsteps.
+2. **Alex rules the two numbers above.**
+3. **Then listen in the world** — the bench proves the cue, not the encounter.
+
+### Files
+`voxel3d/hollow-voice.ts` · `hollow-voice.test.ts` (26 asserts, 12 mutations) · `hollow-sfx.ts` ·
+`dev/creep/page.tsx` · read-only: `voxel3d/hollows.ts`
+
 ## 🐾 Shimmer voxel — **DIRECTION: THE GARDEN SHOULD BE INHABITED, AND CANON RULED THAT A MONTH AGO** (2026-08-26, world lane) · *Last touched 2026-08-27 (world) — RING 2 BUILT: pure + oracle + THREE shell + a harness, pushed, NOT yet wired into the world*
 
 ### 2026-08-27 — ring 2 exists, and the reason it could never have worked was in the hub's files
