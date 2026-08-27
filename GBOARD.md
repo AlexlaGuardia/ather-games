@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 📏 Shimmer sprites — **A FIREFLY WAS STANDING EYE-TO-EYE WITH THE KEEPER** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — `a4fa76f` pushed, 0 unpushed, tsc 7 (baseline), render-audit 129/0, sweep 188/188. NOT deployed — hub owns the lock.*
+## 📏 Shimmer sprites — **A FIREFLY WAS STANDING EYE-TO-EYE WITH THE KEEPER** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — `a4fa76f` `ab4fbad` `6519c21` `7de1705` `2a7fc88`, all pushed, 0 unpushed, tsc 7 (baseline), canon **12 CLEAN** (gate 13 live), sweep 190 suites / 189 pass / 1 FAIL (not mine — `hollow-look.ts`, `cf92cd1`). **DEPLOYED** `BqsB_uC-QJvGmIu-p4qei` — verified in the served chunk over HTTP, not on the build's word.*
 
 ### Left off — Alex ruled it, and canon had already answered most of it
 
@@ -33,7 +33,8 @@ the Arcade frame.
 - **★★ GATE 13 IS THE DURABLE HALF.** The table is now a **transcription** of canon, and a copy agrees with its original right up until it silently stops — at which point it reads as corroboration. `npm run canon` diffs canon's `Size (young base form)` lines against `SIZES` and reports **BLIND, never CLEAN**, when it cannot read a side. Mutation-swept six doors. ⚠ **It caught a green-that-overstates in itself** — it printed *"all 10 ... match"* beneath a note saying one had drifted.
 
 ### Next
-- **Alex stands in the mist and looks at a spirit** — numbers, tests and a canon ruling, and still no picture. The look calls are one number each: `PRESENCE_TALL` 1.32, or a row in `SIZES` (which now needs a re-ruling, not an edit).
+- **★ DEPLOYED AND WAITING ON A PAIR OF EYES** — `ather.games/shimmer/voxel3d`. **The serving layer and the data are verified end to end** (served chunk fetched over HTTP, the ten heights read out of the bytes the browser gets: `.04 .09 .12 .15 .24 .28 .30 .30 .35 .50`, Manalotl `.15` and not the `1.00` that shipped this morning). ⚠ **Nobody has looked at a spirit.** Those are different claims and collapsing them is how *deployed* starts meaning *works*.
+- **Alex stands in the mist and looks at a spirit.** The look calls are one number each: `PRESENCE_TALL` 1.32, or a row in `SIZES` (which now needs a re-ruling, not an edit).
 - **⚠ `PRESENCE_TALL` 1.32 is now 2.6× the tallest spirit (0.5m).** It was sized when the Manalotl was 1.00; that justification thinned when the row was corrected. Alex's look call.
 - **`dev/ring` needs a way to look AT the residents** — its rule never places one where the keeper is looking and its camera rides the keeper's eyes, so it cannot photograph its own subject.
 - **Moglin patrols are still an unsized `BoxGeometry` blockout** (`VoxelWorld.tsx:4963`, hub's). `moglins.md:10` **rules** them at three feet, so that one needs no gap — just the number. ⚠ `spirit-tales-bible.md:149` still says four; two canon files disagree in writing and reconciling them is Magii's.
