@@ -11,6 +11,30 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⚖ Shimmer — **CANON QUEUE ANSWERED: TWO BUILD BUGS AND A FORK FOR ALEX** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — drafts in hand, NOT yet actioned*
+
+**Left off:** seven canon questions went to Magii; the drafts are back and saved at
+`/root/cortex/drafts/2026-08-27-canon-answers-for-jin.md`. **Four of the seven were already RULED on 2026-08-26 — the Jin seat was quoting stale canon files.** Cheap guard before quoting canon: `grep -n 'RULED 2026-08' <file>`.
+
+**Next — three things, two of them defects in this repo:**
+
+1. **⚠ P1 · `Gate` REGISTRY FIX — Bind was never starved.** `Gate` requires **all three Bind runes**, not Enchant alone; one summary cell reads `Gate | Enchant` and the build reads the cell. The one-rune reading *"makes canon's flagship gate-mage illegal"* (Eyuun is Enchant-born; *"nobody's signature is their birth rune"*). Compact **was** genuinely starved and canon has filled it: **`Overpressure` = Barrier + Gem + Hydro**, name approved by Alex 2026-08-26.
+   → widen `Gate`'s runes · register `Overpressure` · re-run the starved-lane oracle **expecting 0**.
+   ⚠ Widening `Gate` REMOVES it from an Enchant-only keeper's book — named and accepted inside the ruling.
+
+2. **⚠⚠ P1 · VOCABULARY PASS — the cozy-vs-peril ruling bans words this build ships.** ⛔ *wounded / hurt / injured / damage taken*, blood, blows landing on a person. **One word breaks Rule 3 with the mechanic completely unchanged.** Live violation: the Hollow strike say-line `'it presses in — you are hurt'`.
+   Canon's register: *"a keeper CANNOT DIE"* · *"what a Hollow empties is not your body, it is how much of you is still lit"* · *"being downed is going OUT, not going down"*.
+   ⚠ Also load-bearing: **a person may not injure you; an absence may empty you** — Hollows get a health bar, collared Moglins keep `integrity`/pressure, and *"a build that ever hands a Moglin damage has crossed the line this ruling exists to draw."*
+
+3. **FORK FOR ALEX · is FOCUS a mana top-up, or a shell?** Canon is **silent**, and the nearest citations cut against a free shell — nobody in canon has a defensive layer without the Barrier rune, and the one runeless ward is spirits-only. The quantity-vs-multiplier split is mechanically sound but answers the wrong question. **Narrowest fix is a NOUN, not a mechanic:** Focus tops up mana-readiness and is never named or drawn as shield/shell/barrier. If Alex wants it to *be* a shell, **Barrier needs a compensating grant** or it becomes a tax-free duplicate.
+
+**No action needed (recorded so nobody re-opens them):**
+- **Attunement resistance** — ruled keyed on the **RUNE**, exactly as built; canon credits the flag. ⚠ Do not tidy the word `element` where it sits inside Alex's quoted words.
+- **"Never coordinates"** — binds **node to node**; minions are the named exception. The line is minions *conferring* (regrouping, feinting, retreating to reform), not concentrating.
+- **Off-lane development** — ruled that it grants what on-lane grants, **but ⛔ ALEX RULED HOLD**: the build KEEPS `0022db1`'s narrower scoping as a deliberate recorded divergence. ⚠ **`npm run canon` will surface this and it must NOT be closed as drift without Alex** — *"the drift gate cannot tell a held decision from an accident."*
+
+**For Magii, not us:** `game/nolmir.md` § Mode 3 still calls the expedition enemy *"the tide"* — the one name Guardrail 1 forbids showing. A stale June line that would carry the forbidden name into a tooltip.
+
 ## 🩸 Shimmer — **THE HUD CORNER GOT A HARNESS, AND RECOVERY WAS INVERTED** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — deployed, tree clean*
 
 **Left off:** the bottom corners are finished work, and the resource economy changed shape.
