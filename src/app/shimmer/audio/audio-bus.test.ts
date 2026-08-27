@@ -15,6 +15,7 @@
 // exactly what it exists to measure against.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { codeOnly } from '../testing/guard'
 import { join } from 'node:path'
 import {
   audioCtx, bus, audioState, unlockAudio, setMasterVolume, masterVolume,
@@ -38,18 +39,11 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 /**
- * Strip block comments, line comments and string literals.
- *
- * ⚠ ORDER MATTERS AND SO DOES THE STRING PASS. Without it, a file containing the LITERAL
- * `'new AudioContext'` inside an error message would count as a context. Crude but honest for the
- * one question asked here: does this file DO the thing, or merely talk about it.
+ * ★ THE LOCAL STRIPPER IS GONE — it was one of SIX in this tree and they had already drifted into
+ * four different behaviours. `testing/guard.ts` is the single implementation, and it is a scanner
+ * rather than a regex because "is this slash-slash inside a string?" needs state. Its own oracle
+ * runs the exact inputs the hand-rolled versions got wrong.
  */
-const codeOnly = (src: string) => src
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ')
-  .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
-  .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
-  .replace(/`(?:[^`\\]|\\.)*`/g, '``')
 
 /**
  * ⚠⚠ TEST FILES ARE EXCLUDED, AND THIS FILE IS WHY — IT CAUGHT ITS OWN AUTHOR ON THE FIRST RUN.

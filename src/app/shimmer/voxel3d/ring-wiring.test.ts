@@ -15,6 +15,7 @@
 //      into view instead of arriving behind you, and the rule reads as broken rather than mis-aimed.
 
 import { readFileSync } from 'node:fs'
+import { blockAt, justBefore } from '../testing/guard'
 import * as THREE from 'three'
 import { inView, ringCap, DEFAULT_RING, type Keeper } from './plot-ring'
 import { DEFAULT_PLOT } from '../voxel/plot'
@@ -119,23 +120,13 @@ function keeperFrom(yawDeg: number, x = 0, z = 0): { fwd: THREE.Vector3; k: Keep
   // five asserts went red against correct code, which is the worst direction for a guard to fail
   // in. A regex that must span a multi-line call is a parser wearing a disguise; find the anchor,
   // then read a window around it.
-  const at = src.indexOf('ring.tick(')
+  const { at, raw: tickRaw, code: tick } = blockAt(src, 'ring.tick(', '\n      )')
   ok(at > 0, 'the ring is ticked somewhere')
-  const tickRaw = at > 0 ? src.slice(at, src.indexOf('\n      )', at) + 8) : ''
-  /**
-   * ⚠⚠ COMMENTS STRIPPED BEFORE ANY *NEGATIVE* ASSERT, AND THIS BIT ME ON THIS VERY BLOCK.
-   * The call carries a comment explaining that it USED to read `restingSpirits`, so
-   * `!/restingSpirits\(/` went red against correct code — a guard failing because the code
-   * documented its own history. Third time today: the audio-bus counter, the `.destination` scan,
-   * and now this. **A source guard that searches for the absence of a token must not be able to
-   * see prose about that token.**
-   */
-  const tick = tickRaw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
   ok(tickRaw.includes('//'), 'the block does carry prose — so the stripper above is load-bearing, not decorative')
   // The gate is read from the 200 characters BEFORE the call, which is where an `if` guarding it
   // has to live. Anchored, because `space.current === 'plot'` appears several times in this file
   // and a bare match is satisfied by being anywhere — the trap that got past me this morning.
-  const before = at > 0 ? src.slice(Math.max(0, at - 200), at) : ''
+  const before = justBefore(src, at)
   ok(/if \(space\.current === 'plot'\) \{\s*$/.test(before),
      'and the statement immediately guarding it is the plot-space gate')
   ok(/yaw: Math\.atan2\(hollowFwd\.current\.z, hollowFwd\.current\.x\)/.test(tick),
