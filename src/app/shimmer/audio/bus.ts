@@ -43,7 +43,7 @@
  * ⚠ AND THE MEASUREMENT ITSELF HAS A TRAP: grepping the bundle for `new AudioContext` finds NOTHING
  * because the minifier renames the constructor to a single letter — it reads as a clean result and
  * it is a blind one. Count `window.AudioContext||window.webkitAudioContext` and the `new <alias>`
- * that follows it, or read `.next/server/app/**/react-loadable-manifest.json`, which names the
+ * that follows it, or read the per-route `react-loadable-manifest.json` under .next/server/app, which names the
  * route each chunk belongs to and settles the question outright.
  *
  * ★ NO SETTINGS LIVE HERE. The master level is a number this module holds; persisting it is the
