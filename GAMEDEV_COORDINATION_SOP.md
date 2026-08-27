@@ -18,10 +18,45 @@ One window is the **hub** (integration + deploy owner). The rest are **satellite
 | **hub** | `engine/` · `lib/` · `systems/` · `components/` · `data/` + root config | Shared surface. ONLY the hub edits these. Owns green-ness. |
 | **world** | `world/` · `arena/` · `save-map/` · `save-structure/` | Map, collision, pathing, verticality. |
 | **sprites** | `sprites/` · `beasts/` · `spirits/` · `dev/` (editors) · `save-sprite/` · `save-durations/` · `save-heights/` · `save-movement-style/` | Art wiring + editors. `pixel`'s domain. |
-| **play** | `play/` · `play3d/` · `audio/` · `save-battle-bg/` · `save-dialogue/` · `save-npc/` · `doctor/` | Battle, UI, dialogue, doctor. |
+| **play** | `play/` · `play3d/` · `save-battle-bg/` · `save-dialogue/` · `save-npc/` · `doctor/` | Battle, UI, dialogue, doctor. |
+| **sound** | `audio/` · every `*-sfx.ts` / `*-fx.ts` · `dev/creep` · `dev/sfx-*` | ★ NEW 2026-08-27. Dev server on **3206**. See below. |
 
 Lanes are a starting cut, not law — repartition per session, but keep them **file-disjoint** and
 the **hub the sole owner of the shared surface**. A satellite that needs an engine change asks the hub.
+
+### ★ The `sound` lane (added 2026-08-27, Alex: *"i think we should have a whole lane for sound"*)
+**The reason it needs a lane and not just a ticket: the audio files are spread across THREE lanes,
+so nobody could own the layer, and it shows.** Audited the day the lane was cut:
+
+- **Six independent `AudioContext`s**, each with its own private `let _ac` and its own private gain:
+  `play3d/gather-fx.ts`, `play3d/rin-fx.ts`, `voxel3d/hollow-sfx.ts`, `engine/chatterbox.ts`,
+  `magii/lib/audio.ts`, `nolmir/sfx-lab`. `gather-fx` and `rin-fx` hold **two copies of the same
+  `tone()`** — a hand-kept mirror, in the layer least likely to be tested.
+- **⚠ SO "UNLOCK THE AUDIO" IS NOT ONE ACT.** A context resumes only on a user gesture, and each
+  module has its own. `unlockHollowSfx()` on the canvas click unlocks **hollow-sfx's** context and
+  no other; `gather-fx` makes its own lazily on the first tone, from whatever gesture happens to be
+  live. So a player can be in a world where some sounds work and others never do, with nothing on
+  screen to say which — and the failure is silence, which reads as "no sound was written yet".
+- **⚠ AND THERE IS NO MASTER VOLUME OR MUTE ANYWHERE IN THE GAME.** `setHollowVolume` exists and has
+  **no caller**. Six contexts cannot share one setting, so the setting cannot be built until they do.
+- Browsers cap concurrent `AudioContext`s (historically ~6 a page). Not hit yet; it is a ceiling that
+  rises by one with every new sound, which is the wrong direction for a lane about adding sounds.
+- `rin-fx.ts` line 1 has said *"the walker has no shared sfx module"* since it was written. The
+  codebase already knew.
+
+**First job, and everything else is cheap after it: ONE shared bus.** A single context, one master
+gain, one unlock, one volume setting, and the five existing modules pointed at it. The invariant is
+testable in a line — *exactly one `new AudioContext` in the tree* — which is the kind of guard that
+cannot go quietly stale.
+
+⚠ **The one boundary that needs stating:** `engine/` is hub-only by the rule above, and
+`engine/music.ts` + `engine/chatterbox.ts` live there. Move them to `audio/` in a single hub-executed
+commit rather than carving an exception into the shared surface — an exception is what the lane
+exists to stop. Until that move lands, a sound window asks the hub for those two files.
+
+★ **House style, inherited and worth keeping:** every sound in the game is SYNTHESISED — no files, so
+no download, no licence, no 404. `hollow-sfx.ts`'s header says *"Keep it that way"*, and the arcade
+games agree. A sound lane is not an excuse to start shipping samples.
 
 ## Per-window boot ritual
 > **Identity is inlined per call — do NOT rely on `export`.** CC tool calls run a fresh shell each

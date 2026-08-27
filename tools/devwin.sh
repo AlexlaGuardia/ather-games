@@ -57,6 +57,10 @@ if [ -z "$PORT" ]; then
     sprites) PORT=3202 ;;
     play)    PORT=3203 ;;
     assets)  PORT=3204 ;;
+    # The sound lane (2026-08-27, Alex: "i think we should have a whole lane for sound"). It gets a
+    # named port for the same reason the others do: the catch-all 3205 is shared, so two unnamed
+    # lanes silently fight over it and the loser's preview shows the winner's build.
+    sound)   PORT=3206 ;;
     *)       PORT=3205 ;;
   esac
 fi
