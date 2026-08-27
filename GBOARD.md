@@ -1462,7 +1462,25 @@ The greybox read as *"a blank space with a bunch of abstract shapes"* and neithe
 ### Next
 - Build the four doors themselves — the enterable layer is scope now, not canon. The Mug's basement is the one still unruled by Magii.
 - The **gate-rune** is settled canon and wholly UNBUILT — a field item, the door you make where there is none. A feature to schedule, not a gap to file.
-- **The practice range at the Travelers Station is fully ruled and unbuilt** (*"at the Station, not in the town… practice is free and open to anyone"*) — buildable today, waits on nothing.
+- ~~**The practice range at the Travelers Station is fully ruled and unbuilt** — buildable today,
+  waits on nothing.~~ ⭐ **CORRECTED 2026-08-27 (world): IT IS BUILT, AND THIS ROW SENT ME TO BUILD
+  IT AGAIN.** Alex approved the work off this line; I measured before starting and found the whole
+  mechanic already shipped — `FiringRange` + `GunBenches` in `Shimmer3D.tsx`, mounted by
+  `realm: 'outside' && !peaceful`, with 8 `RANGE_TARGETS`, three-layer target boards, three benches
+  on real GLB props opening the loadout editor, weapons, ADS, recoil, ammo, reload, hit scoring and
+  the hunter/bot fleet. Verified placement too, not just existence: every target sits over open
+  floor and all three benches have 21 walkable tiles inside `BENCH_NEAR_R`. Reachable
+  Rune Hold → Travelers Station → FIRING RANGE, and the return warp lands in the concourse.
+  ⚠ **WHAT IS ACTUALLY LEFT IS ALEX'S, NOT THE BUILD'S**: `FIRING_RANGE` is a 50×50 room holding
+  **two distinct tiles** (346 solid, 2154 walkable) — a functional shell, and
+  `TODO(station-layout)` in `tilemap.ts` says in as many words that the layout is Alex's to author
+  in the 2D MapEditor. So the row was wrong twice over: wrong that it was unbuilt, and wrong that
+  it waited on nothing.
+  ★★ **THE LESSON IS THE ROW, NOT THE RANGE.** *"Fully ruled and unbuilt"* was true when written
+  and the build caught up without anyone editing it. This is the third of these in a week — a row
+  saying saplings render as a cube nine days after they did not, a row calling a shipped crop
+  visual missing, and now this. **A board row is a claim, not a state; verify it against the code
+  before building on it.** I recommended this work to Alex on the strength of a sentence.
 - Open the enterable layer once the ruling lands. Greybox art untouched.
 
 ### Later the same day — the doors, and the instruments that check them
