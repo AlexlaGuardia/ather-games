@@ -11,6 +11,30 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🩸 Shimmer — **THE HUD CORNER GOT A HARNESS, AND RECOVERY WAS INVERTED** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — deployed, tree clean*
+
+**Left off:** the bottom corners are finished work, and the resource economy changed shape.
+- **`dev/hud`** (`/shimmer/dev/hud`, owner-gated) — the HUD without the world. **Mounts the real components**, never copies: `hud-corner.tsx` · `resource-bars.tsx` · `cast-gauges.tsx` are shared imports. Five backdrops, a real `damage()` button, real cooldown deadlines.
+- **Mana vessel** doubled to 152px with the tool **halo** leaning up-left · **one** vitals bar (shield overlaid on health, both scaled to `hpMax`) · **cast tiles** side-by-side, darkening with a countdown on the key.
+- **Recovery inverted** — health knits (6s calm, 1.5%/s), shields are **bought** by focusing (R/LB, 1.2 mana per point). `engine/recovery.ts`, pure + tested.
+- **Mana unified** across both worlds, closing a **60×** split.
+
+**Next:**
+- **Focus has no animation.** The `focusing` ref exists for the renderer; the render does not.
+- **Recovery numbers are first-pass** — 6s / 1.5%/s / 25 shield/s @ 1.2 mana. Feel pass is Alex's.
+- Left column is `w-52` against a much wider vessel cluster — the corners are not weight-matched.
+
+**Parked / waiting on canon:** 7 questions with Magii (drafts in progress). **P1 = the cozy-vs-peril ruling exists only in a source comment.** Plus Focus-vs-Barrier: does a universal shield-charge undermine the rune whose job that is?
+
+**Decisions (do not relitigate):**
+- **The arc is polar around the gauge CENTRE.** Any other translate stops it being a circle — measured 114/156/180/178 before, 74/74/74/75 after. Widen or rotate by editing `ANGLES`; do not touch the transform.
+- **Contrast numbers are SOLVED, not chosen** — swept across all five backdrops. Plate 0.70, ring 0.85. Re-measure, do not re-derive.
+- **Move icons key on ARCHETYPE, never the rune** — canon: *"colour is never part of a move."* The chain fork is a modifier, not a precedent for per-move art.
+- **The dim goes on the CONTENT, never the plate.** Reproduced that bug once already; it is documented in `ToolSocket`.
+- **Shield never returns on its own.** That is the inversion, and it is what makes mana the survival resource.
+
+**Files:** `voxel3d/hud-corner.tsx` · `voxel3d/resource-bars.tsx` · `voxel3d/cast-gauges.tsx` · `voxel3d/VoxelWorld.tsx` · `engine/recovery.ts` · `dev/hud/page.tsx` · `lib/input/actions.ts`
+
 ## ⚔ Shimmer + Nolmir — **ENEMIES THAT CAST, ENEMIES THAT AMBUSH, AND A FLOOD WITH FOUR HABITS** (2026-08-26, hub lane) · *Last touched 2026-08-26 (hub) — `dfc5e4b` `0022db1` `505f432` `94e8687` `92c42c3` `a9e8017` `d178a39`, all pushed, DEPLOYED*
 
 **Left off:** row 294 is largely answered — the game now has enemies that use the cast system, and three venues that each fight differently.
