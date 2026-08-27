@@ -11,6 +11,111 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🎯 Shimmer voxel3d — **THREE OF ALEX'S OWN BUG REPORTS, AND EVERY ONE WAS A THING THAT WAS ALREADY BUILT** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — `b83de66` `3eb8a54` `f152870` `f40e612`, all pushed, **NOT DEPLOYED** (world's tree dirty, lock held free on purpose)*
+
+### Left off — nothing was missing; three things were unreachable
+Alex played and filed three complaints. None of them was a missing system. In each case the code
+existed, was tested, and could not be reached from inside the game — which is a distinction that
+matters, because "build it" and "expose it" are different days of work and only one of them was needed.
+
+- **★★★ "as they damaged my player it tilted the screen view" — HIS OWN FIRING, AND HIS ATTRIBUTION
+  IS WRONG IN A WAY THAT COSTS A DAY.** Nothing on the damage path touches camera orientation. Send
+  anyone to the pressure code and they find nothing. `camera.rotation` is written in exactly ONE
+  place in `VoxelWorld` — the recoil drain — and the kick is stamped by `fire()`.
+  **The cause is a property nobody set.** `look()` authors orientation on the QUATERNION as a YXZ
+  euler (pitch about the camera's right axis — the FPS convention, and the only one that cannot
+  roll). `camera.rotation` is a separate euler three keeps in sync, and it decomposes under ITS OWN
+  `.order`, which was never set, so it was three's default `XYZ`. Adding to `.x` on an XYZ euler
+  pitches about the **world** x axis. After a yaw those are different axes, and the difference IS roll.
+  **Measured, 4s of held trigger, spitter, pitch −40°:**
+
+  | yaw | 0° | 45° | 90° | 135° | 180° | 225° | 270° |
+  |---|---|---|---|---|---|---|---|
+  | lean | 0.30 | 12.01 | **19.09** | 16.00 | 0.47 | −16.29 | −19.00 |
+
+  ⚠ **ZERO AT THE WORLD-AXIS-ALIGNED HEADINGS, WHICH IS WHY IT SHIPPED.** Fire from the default spawn
+  facing and the feature reports itself working. A regression test written the obvious way — one
+  burst, one heading — would have been green over a broken camera for as long as anyone cared to run it.
+  ⚠⚠ **AND THE FIX IS NOT A ONE-LINE DECLARATION.** Setting `Euler.order` fires three's change
+  callback, which recomputes the QUATERNION from the euler's existing components **reinterpreted
+  under the new order** — on an already-aimed camera that is a silent teleport of the view. So
+  `prepareLookCamera` saves the quaternion, sets the order, and puts it back.
+  **★ play3d is immune, checked not assumed:** its `CameraRig` drains into `lookPitch`/`yaw` scalars
+  and rebuilds with `cam.lookAt`, which is always up-aligned. The two worlds differ on purpose.
+
+- **★★ "the 98 building variants are unreachable" — 84 PIECES EXISTED AND NOTHING WAS RED.** The
+  palette rendered `PIECES`, which is the 14 shapes, against a catalogue that became 14 × 7 = 98
+  overnight. The 84 had renderers, real costs, and a green oracle. **A piece is not shipped because
+  it is in the array; it is shipped when a player can hold it.**
+  Two axes now — shape on the bottom row, material on a strip above it. The tile shows the cost of
+  the piece you would **actually place**, so the number under `Stair` changes as you walk the strip;
+  a tile costed at its base material quietly lied for six of the seven.
+
+- **★★ "chased me down with no way to interact" — A MISSING AFFORDANCE, NOT A MISSING SYSTEM.**
+  Casting is wired, `answerCollar` is the canon half and is oracle-tested, and every refusal already
+  speaks its own reason. **All of it fires AFTER you have already reached for the wrong verb.** The
+  rule could only be learned by breaking it, which reads exactly like a game with no verb for this.
+  Now a line under the crosshair — under it, because someone being chased is looking at the middle
+  of the screen — naming the key and the move that would open the collar.
+
+### Decisions
+- **The material keys are `]` and `[`, which were `build.tierUp` / `build.tierDown`, AND THOSE TWO
+  DID NOTHING.** Tool tier came off the equipped tool from 2026-08-08; their only consumer was an
+  empty branch whose own comment said the lever was gone. The settings panel went on offering "Next
+  tier" / "Previous tier" as rebindable rows, so a player could configure air. Same keys, so nobody's
+  hands move, and `merge()` drops retired ids so no one lands unbound. **A dead binding is not
+  inert — it occupies a key and it lies in a menu.**
+- **The selected piece is resolved ONCE in the parent** and handed to the HUD and the world; both
+  palette rows highlight off that id, not off the two indices. Two derivations of "what is selected"
+  agree until they do not.
+- **The collar prompt has three answers and only one is a key.** Telling a keeper to press B when
+  their Signature slot is empty — or seated with a move canon REFUSES — is **worse than silence**:
+  they press it, nothing happens, and the game takes the blame for a rule it never explained.
+- **Prompt range is the posture's own `reach` plus a lead, never a flat radius.** A channeler reaches
+  8 and a skirmisher 0.85; one radius fires long before a channeler matters and only after a
+  skirmisher already has you. The lead is a feel number and mine; the thing it is added to is not.
+- **Nothing in any of this restates canon.** Which moves open a collar is authored on the move
+  (`keeper-moves.ts` › `collar`); the keys come off the live bindings; the seated moves off the live
+  loadout. A reclassified move, a rebind or a reseat all move the prompt with no edit here.
+
+### ⚠ Traps banked this session
+- **★★★ A GUARD OF MINE FAILED TO FAIL, AND IT IS THE "SATISFIABLE BY BEING ANYWHERE" SHAPE.**
+  `/hostile\(e\.f\)/` tested against the whole source file is green no matter what, because the
+  freed-Moglin farewell check and the shot resolver both contain it. Deleting the guard from the
+  prompt's own condition changed nothing. **The assert could discriminate; it simply did not
+  constrain the line I cared about.** Fixed by matching the collection line first and testing inside
+  it. Found by mutation, not by reading it back.
+- **⚠ AN ABSENCE AT ONE SAMPLE POINT IS NOT AN ABSENCE.** The camera roll is genuinely 0 at yaw 0 and
+  180. Both readings are correct and both mean nothing about the other six headings. The oracle
+  asserts the invisibility explicitly, so nobody later "simplifies" it to one heading.
+- **⚠ THE DIRTY TREE, AGAIN, AND FROM THE OTHER SIDE.** I read `git status` at boot, saw one dirty
+  file and a 1d11h stale `play` claim, and wrote "solo" on my lane note. A `world` window booted 11
+  minutes later. My note was the board's most legible and most wrong signal for ten minutes — the
+  08-20 entry exactly. Corrected the moment their edits appeared in `git status`.
+- **⚠ AND ONE READING THAT EXPIRED WHILE I HELD IT.** `tsc` showed 10 errors (3 in world's in-flight
+  `gate-collapse.test.ts`), then 7 twenty minutes later, with no action of mine. I had been one step
+  from filing "the build would fail" as a finding. **A clean reading of someone else's tree has a
+  shelf life measured in seconds.**
+
+### Next
+- **DEPLOY IS THE ONLY THING BLOCKING**, and it is held deliberately: `coord build` bundles the
+  WORKING TREE, world has `MapEditor.tsx` + `save-map/route.ts` dirty, and the suite runs against the
+  tree rather than against what the bundler grabbed — so a green suite could not tell us either way.
+  Asked world for an explicit go/no-go twice.
+- **Alex fires a burst facing 90°** and confirms the horizon stays level. Facing 0° proves nothing.
+- **Alex walks the build bar**, presses `]` and `[`, and calls whether material-on-a-strip is the
+  right shape or whether it wants to be a submenu.
+- **Alex meets a collared Moglin** and says whether the crosshair line actually teaches the verb.
+- **Not mine, filed not built:** nothing in the build sizes creatures. Mist residents are all
+  `PRESENCE_TALL = 2.1`, which `mist-pass.ts:112` says is the HALO's lathe-profile height — a glow
+  shape, not a creature. A Luminara firefly and a Dewbear tardigrade are both human-scale. Sizing is
+  Alex's and Magii's call.
+
+### Files
+`voxel3d/recoil.ts` + `recoil.test.ts` (112 asserts, 4 mutations) · `voxel3d/collar-prompt.ts` +
+`collar-prompt.test.ts` (69 asserts, 6 mutations) · `voxel3d/palette.test.ts` (416 asserts, 4
+mutations) · `voxel3d/VoxelWorld.tsx` · `voxel/pieces.ts` (`pieceVariants`) · `lib/input/actions.ts`
+
 ## 🧱 Shimmer — **THE BUILDING VOCABULARY, THE THINGS THAT OPEN, AND A MEASURED CAMERA BUG** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — 11 commits pushed, tsc 7 (baseline), 0 unpushed. Partly deployed: hub shipped the masonry + dev page at 02:08; everything after is NOT live.*
 
 ### Left off — Alex asked to build the holds, then asked the better question
