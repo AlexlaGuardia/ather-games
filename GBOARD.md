@@ -146,6 +146,57 @@ matters, because "build it" and "expose it" are different days of work and only 
 `collar-prompt.test.ts` (69 asserts, 6 mutations) · `voxel3d/palette.test.ts` (416 asserts, 4
 mutations) · `voxel3d/VoxelWorld.tsx` · `voxel/pieces.ts` (`pieceVariants`) · `lib/input/actions.ts`
 
+## 🗺 Shimmer sprites — **THE ASK WAS ALREADY BUILT, AND THE NOTE SAYING OTHERWISE WAS A DAY STALE** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — `f8be655` `c88f50c` `dd72800`, pushed, 0 unpushed, tsc 7 (baseline). NOT deployed — hub owns the lock.*
+
+### Left off — asked for the spirit atlas billboard map; it had shipped the day before
+Two dbr notes read *"the atlas + THREE shell are in and tested, and this map is the LAST THING
+between that and a painted spirit standing in the mist."* World asked for it at 16:57 on 08-26 and
+**built it itself at 17:04** (`098b790`). `plot-ring-pass` and `mist-pass` already consume it;
+creature-atlas 82 green and registry 48 green before anything was touched.
+
+- **★★★ BUILDING FROM THAT SENTENCE WOULD HAVE PRODUCED A SECOND SPECIES MAP** — precisely what the
+  file exists to prevent, created by reading the note that announced it. Same class as the three
+  stale claims in PATTERNS 08-23: accurate when written, and *the better written they are the longer
+  they are believed*. Caught only by checking the code before the note. **A dbr note is a claim, not
+  a state.**
+- **WHAT WAS ACTUALLY LEFT, and is now done: the last three copies.** `SpriteEditor`, `PuppetEditor`
+  and `BattleTester` each rebuilt the id→art map by hand from ten imports, and each spelled
+  `PALETTES['water-bear']` against `WATER_BEAR_SPRITES` — the drift that motivated the registry.
+  Four lists down to one.
+- **★ BEHAVIOUR UNCHANGED, MEASURED NOT ASSUMED.** An equivalence run compared every derived list to
+  the literal it replaced: same order, same labels, and the same **object identity** on every `anims`
+  and `palette`. `SPRITE_MAP`'s key order does change — unobservable, every read is a key lookup,
+  including `BattleScene`'s.
+- **★★ AN ORDER LIST INSIDE THE FILE THAT EXISTS TO KILL HAND-KEPT LISTS**, and why it is not a
+  mirror: what a stale entry COSTS. It is consulted for position only, every id is looked up before
+  it is shown, and registered-but-unlisted is **APPENDED, not dropped** — so an eleventh species
+  appears in all three editors the day it is painted with nobody editing it. The one rot it *can*
+  carry is a dead name, which is silent, so `ORDER_ORPHANS` asserts that and nothing else. ⚠
+  Asserting *"the order covers every species"* would be **decoration** — true by construction, no
+  input makes it fire. Mutation-swept all four doors; registry **48 → 63** asserts.
+- **`tokens.test.ts` false-positive class, `c88f50c`.** The scope filter was the one read in that
+  file taking RAW source while every other check stripped comments first, so prose scanned as code —
+  `#` plus three hex-ish chars is a valid colour and this repo cites focus rows exactly that way. ⚠
+  **It had already cost two:** `collar-raid.ts` and `multiplayer.ts`, pure logic with no colour at
+  all, were in PENDING (*"still holding raw literals"*) as permanent lies. **Delimiting does not fix
+  it** — `(#294)` is cleanly delimited and still a valid hex.
+
+### Next
+- Hub deploys `f8be655` + `c88f50c` + `dd72800`. Nothing in flight on this lane.
+- `dev?mode=sprites` has **no page-level oracle** — `SPIRITS` reaches a child via `allSpiritsData`
+  and is never mapped at top level, so a browser probe sees zero species there. Pre-existing.
+- `dev?mode=battle` throws **one pre-existing hydration error** (verified by reverting to HEAD and
+  re-measuring — identical): the `Math.random` spirit roller at `BattleTester:272-322`.
+
+### Decisions
+- **Order is Alex's, not alphabetical.** Fox first because that is the one he reaches for;
+  `SPECIES_IDS` stays sorted for when something needs a stable key order instead of a familiar one.
+- **Labels derived** (`water-bear` → `Water Bear`) so no editor hand-types them — each of the four
+  copies carried its own typed label, and a typo there is a typo on screen.
+
+### Files
+`sprites/registry.ts` · `sprites/registry.test.ts` · `dev/editors/{SpriteEditor,PuppetEditor,BattleTester}.tsx` · `play3d/tokens.test.ts` · `ITEM-ART.md`
+
 ## 🧱 Shimmer — **THE BUILDING VOCABULARY, THE THINGS THAT OPEN, AND A MEASURED CAMERA BUG** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — 11 commits pushed, tsc 7 (baseline), 0 unpushed. Partly deployed: hub shipped the masonry + dev page at 02:08; everything after is NOT live.*
 
 ### Left off — Alex asked to build the holds, then asked the better question
