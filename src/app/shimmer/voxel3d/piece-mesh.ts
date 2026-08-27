@@ -99,10 +99,29 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
     }
     // ── the sub-cube detail, added 2026-08-27 ───────────────────────────────────────────────
     case 'shutter': {
-      // A thin panel held off the face. Thinner than a slab on purpose — that thinness IS the
-      // reason builders reach for a trapdoor over a slab, and a "thin" panel drawn at 0.5 would
-      // just be a slab standing up.
+      // A thin panel on the face. Thinner than a slab on purpose — that thinness IS the reason
+      // builders reach for a trapdoor over a slab, and a "thin" panel drawn at 0.5 is a slab
+      // standing up. ⚠ It SHUTS as of the door pass, so this is the closed leaf; the open state is
+      // the same geometry swung by `visualRotation`, never a second model.
       box(0.9, 0.9, 0.12, 0, 0.5, -0.44)
+      break
+    }
+    case 'door': {
+      // A leaf hung against one edge of its cell. ★ THE HINGE SIDE IS OFF-CENTRE ON PURPOSE — a
+      // panel modelled through the middle of the cell rotates about its own centre and reads as a
+      // slab spinning in place. Hung at the edge, the same 90° turn reads as a door swinging, and
+      // that difference is the entire visual payload of the feature.
+      box(0.94, 2, 0.14, 0, 1, -0.43)
+      box(0.10, 0.10, 0.10, 0.32, 1.05, -0.32)   // the pull
+      break
+    }
+    case 'gate': {
+      // The fence's door: the same rail language as `fence` so a run of fence and its gate read as
+      // one thing, hung at the edge like the door so it swings rather than spins.
+      box(0.9, 0.14, 0.12, 0, 0.78, -0.43)
+      box(0.9, 0.14, 0.12, 0, 0.42, -0.43)
+      box(0.14, 0.86, 0.12, -0.38, 0.6, -0.43)
+      box(0.14, 0.86, 0.12, 0.38, 0.6, -0.43)
       break
     }
     case 'arch': {

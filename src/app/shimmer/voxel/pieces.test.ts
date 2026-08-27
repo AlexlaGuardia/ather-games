@@ -9,7 +9,8 @@ import { MAT } from './depth'
 import {
   PIECES, ALL_PIECES, PIECE_MATERIALS, basePieceId, pieceMaterial,
   STRUCTURE, pieceDef, rotatedSize, rotateCell, cellsOf, canPlace, canAfford, placementAt,
-  type Placement, type Rotation,
+  visualRotation, toggleOpen,
+  type Placement, type Rotation, type PieceDef,
 } from './pieces'
 import { blockDef, materialForItem, ALL_BLOCKS } from './registry'
 import { RECIPE_OUTPUTS } from './recipes'
@@ -27,10 +28,11 @@ const solid = () => MAT.STONE
   // pass), eight with the half slab (same day — it shipped WITH its fractional collision, never
   // before it). The count stays asserted so catalogue growth is always a DECISION that edits
   // this line, never a drift.
-  // Twelve since 2026-08-27 — the sub-cube detail pass (shutter, arch, bracket, hook). Alex
+  // Fourteen since 2026-08-27 — the sub-cube detail pass (shutter, arch, bracket, hook) and the
+  // door pass (door, gate; the shutter became openable rather than gaining a `trapdoor` twin). Alex
   // reopened STRUCTURE-LAYER §9's "six and stop" now the loop is proven. The count stays asserted
   // so growth is always a DECISION that edits this line, never a drift.
-  ok(PIECES.length === 12, `the catalogue is twelve pieces, deliberately (${PIECES.length})`)
+  ok(PIECES.length === 14, `the catalogue is fourteen pieces, deliberately (${PIECES.length})`)
   const ids = PIECES.map(p => p.id)
   ok(!ids.includes('wall') && !ids.includes('floor'),
      '★ walls and floors are BLOCKS, not pieces — that split is the whole design')
@@ -117,6 +119,77 @@ const solid = () => MAT.STONE
   const used = new Set(ALL_PIECES.map(p => pieceMaterial(p.id)?.key).filter(Boolean))
   const unreachable = PIECE_MATERIALS.filter(m => !used.has(m.key))
   ok(unreachable.length === 0, `every building material is reachable (${unreachable.map(m => m.key).join(',')})`)
+}
+
+// ── 2c. ★★ THE THINGS THAT OPEN (2026-08-27, the door pass) ─────────────────────────────────
+// The first state any piece has ever had. A placement used to be the same object forever, which is
+// the real reason there were no doors — not that nobody modelled one.
+{
+  const openable = ALL_PIECES.filter(p => p.openable)
+  ok(openable.length > 0, 'some pieces open')
+  // Base shapes only, so this reads as "three things open" rather than a variant count.
+  const bases = PIECES.filter(p => p.openable).map(p => p.id).sort()
+  ok(bases.join(',') === 'door,gate,shutter', `door, gate and shutter open (${bases.join(',')})`)
+
+  // ★ THE ONE INVARIANT THAT KEEPS `canPlace` HONEST. `canPlace` runs against the CLOSED footprint,
+  // once, at placement time. If opening moved the cells, a door could later swing into terrain that
+  // was never checked — and nothing downstream would ever look again. So the cell SET must be
+  // identical in both states and only SOLIDITY may differ.
+  //
+  // ⚠⚠ AND IT IS TESTED AGAINST A SYNTHETIC WIDE PIECE, NOT ONLY THE SHIPPED ONES — because every
+  // openable piece today has a 1x1 FOOTPRINT, and rotating a 1x1 about its own origin cannot move
+  // it. Written against the catalogue alone this assert was **incapable of failing**: the mutation
+  // that makes `cellsOf` use the VISUAL rotation (i.e. the door swings its collision into whatever
+  // is beside it) passed all 63 checks. It is the dominated-assert shape from PATTERNS, and asking
+  // "is there an input that makes this fire?" is what found it. `WIDE` is that input, and it also
+  // guards the future: the day a double gate or a portcullis is added, this is already watching.
+  const WIDE: PieceDef = { id: 'test_wide_gate', name: 'Test', w: 3, h: 2, d: 1,
+                           cost: [{ itemId: 'goldwood_plank', count: 1 }], openable: true }
+  let moved = 0, notFreed = 0, notSolid = 0
+  for (const def of [...openable, WIDE]) {
+    for (const rot of [0, 1, 2, 3] as Rotation[]) {
+      const shut: Placement = { pieceId: def.id, x: 5, y: 9, z: -3, rot }
+      const ajar: Placement = { ...shut, open: true }
+      const key = (c: { x: number; y: number; z: number }) => `${c.x},${c.y},${c.z}`
+      const a = cellsOf(shut, def).map(key).sort().join('|')
+      const b = cellsOf(ajar, def).map(key).sort().join('|')
+      if (a !== b) moved++
+      // Open: nothing blocks. Closed: something must, or it is not a door.
+      if (cellsOf(ajar, def).some(c => c.solid)) notFreed++
+      if (!cellsOf(shut, def).some(c => c.solid)) notSolid++
+    }
+  }
+  ok(moved === 0, `★★ opening never moves a piece's cells, only their solidity (${moved} moved)`)
+  ok(notFreed === 0, `an open piece blocks nothing (${notFreed} still blocking)`)
+  ok(notSolid === 0, `★ a CLOSED piece blocks something — otherwise it is a doorway, not a door (${notSolid} inert)`)
+
+  // The swing is a rotation and it must come back. Four toggles of the visual is not the test;
+  // the test is that open differs from closed and closed is the stored rot.
+  const d = pieceDef('door')!
+  const shut: Placement = { pieceId: 'door', x: 0, y: 0, z: 0, rot: 0 }
+  ok(visualRotation(shut, d) === 0, 'a closed door is drawn at its stored rotation')
+  ok(visualRotation({ ...shut, open: true }, d) === 1, 'an open door is drawn swung 90°')
+
+  // ⚠ A STRAY `open` ON SOMETHING THAT DOES NOT OPEN MUST DO NOTHING. Saves are edited by hand, and
+  // a future bug could set the flag anywhere; a fence that silently became passable because of a key
+  // it does not understand is a hole in a yard nobody can see.
+  const f = pieceDef('fence')!
+  ok(visualRotation({ pieceId: 'fence', x: 0, y: 0, z: 0, rot: 2, open: true }, f) === 2,
+     '★ a stray `open` does not rotate a piece that cannot open')
+  ok(cellsOf({ pieceId: 'fence', x: 0, y: 0, z: 0, rot: 0, open: true }, f).every(c => c.solid),
+     '★★ a stray `open` does not make a solid piece passable')
+  ok(toggleOpen({ pieceId: 'fence', x: 0, y: 0, z: 0, rot: 0 }, f).open === undefined,
+     'toggling something that does not open changes nothing')
+
+  // Save compatibility: every placement ever written lacks the key, and must read as CLOSED.
+  ok(cellsOf(shut, d).some(c => c.solid), '★ a placement with no `open` key reads as closed')
+  ok(toggleOpen(shut, d).open === true && toggleOpen(toggleOpen(shut, d), d).open === false,
+     'toggle round-trips')
+
+  // ★ THE VARIANTS INHERIT IT. `door_stonebrick` is a door; if `openable` were dropped by the
+  // derivation the stone doors would be permanent walls and only the goldwood one would work.
+  const stoneDoor = pieceDef('door_stonebrick')
+  ok(!!stoneDoor?.openable, 'a material variant of a door still opens')
 }
 
 // ── 3. ★ rotation must not drift the origin ──────────────────────────────────────────────────

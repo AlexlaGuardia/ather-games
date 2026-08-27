@@ -79,6 +79,24 @@ export interface PieceDef {
    * with no stopping rule manufactures nonsense (see `BlockDef.noSlab` and the Grass Tuft Slab).
    */
   variants?: PieceFamily[]
+  /**
+   * ── ★★ THIS PIECE HAS TWO STATES (2026-08-27, the door pass) ─────────────────────────────────
+   * Closed it occupies its cells solidly; open it lets you through. **It is the first thing in the
+   * build with state at all** — until now a placement was `{pieceId, x, y, z, rot}` and a piece was
+   * the same object forever, which is why there were no doors, no gates and no shutters that shut.
+   *
+   * ★ THE SWING IS FREE BECAUSE `rot` ALREADY EXISTS. A door in Minecraft does not move cells when
+   * it opens, it rotates within its own — so "open" is a 90° turn plus a solidity flip, and neither
+   * needs a new coordinate. Modelling a door as two placements, or as a piece that moves, would
+   * have needed collision to migrate between cells and is how this feature usually gets expensive.
+   *
+   * ⚠⚠ OPENING MUST NEVER CHANGE WHICH CELLS A PIECE OCCUPIES — only whether they are solid. If the
+   * footprint moved, a door could open INTO terrain it was never placed against, and `canPlace`
+   * checked the closed position. `pieces.test.ts` asserts the cell SET is identical in both states
+   * for exactly this reason; it is the one invariant that keeps `canPlace` honest about a piece
+   * that can change after it is placed.
+   */
+  openable?: boolean
   chop?: {
     skill: BlockSkill
     minTier: 0 | 1 | 2 | 3
@@ -194,9 +212,15 @@ export const PIECES: PieceDef[] = [
   // depth against a flat wall precisely because it does not fill its cell. Full-cell occupancy
   // would make a decorative panel an invisible wall, so it is PASSABLE: you can stand where a
   // shutter is, exactly as you can walk under a roof overhang.
+  // ⚠ THE SHUTTER SHUTS, AS OF THE DOOR PASS — it is no longer a decorative panel. Closed it is
+  // SOLID, which is what makes it a shutter rather than a picture of one; open it swings aside.
+  // ★ AND IT IS ALSO THE TRAPDOOR. Laid flat it is a hatch you stand on and drop through; upright
+  // it closes a window. Minecraft ships exactly one block for both and the second is a PLACEMENT,
+  // not a piece — adding a separate `trapdoor` here would be two ids for one object, which is the
+  // duplicate-shape problem the material variants were built to avoid.
   { id: 'shutter', name: 'Shutter', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 2 }],
-    passable: [{ x: 0, y: 0, z: 0 }], variants: ['wood', 'stone'] },
+    openable: true, variants: ['wood', 'stone'] },
 
   // ★ THE ARCH — the burrow's whole reason for existing in this list. Canon has Moglin burrows
   // UNDERGROUND, dug into a bank (`dens.ts` already calls a den "the mouth dug into a bank"), and
@@ -226,6 +250,28 @@ export const PIECES: PieceDef[] = [
   { id: 'hook', name: 'Hook', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 1 }],
     passable: [{ x: 0, y: 0, z: 0 }], variants: ['wood', 'stone'] },
+
+  // ── ★★ THIRTEEN AND FOURTEEN: THE THINGS THAT OPEN (2026-08-27) ─────────────────────────────
+  // The catalogue had a `doorway` from the first pass and it is a FRAME WITH A HOLE — permanently
+  // walk-through, which is a doorway and has never been a door. Nothing in the build could be in
+  // two states, so a house could be shaped and never shut.
+
+  // ★ THE DOOR fills the doorway's hole. Two tall, because that is a person; one wide, because a
+  // double door is two of these and should not be its own id.
+  { id: 'door', name: 'Door', w: 1, h: 2, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 6 }],
+    openable: true, variants: ['wood', 'stone'] },
+
+  // ★ THE GATE is the fence's door and it is why the holds needed this pass. `holds.ts` punches its
+  // gate as a GAP — a hole in a curtain wall, permanently open, which is a breach rather than a
+  // gate and reads as one from the road. A gate is also the yard's answer: a fence you can walk
+  // through without deconstructing it.
+  //
+  // ⚠ Cheap like the fence it belongs to (a yard takes several), and deliberately NOT the door's
+  // price — a gate is a rail that swings, not a slab of joinery.
+  { id: 'gate', name: 'Gate', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 2 }],
+    openable: true, variants: ['wood', 'stone'] },
 ]
 
 /**
@@ -298,7 +344,24 @@ export interface Placement {
   /** World position of the piece's origin cell. */
   x: number; y: number; z: number
   rot: Rotation
+  /**
+   * Open, for a piece that declares `openable`. Absent = CLOSED.
+   *
+   * ★ OPTIONAL ON PURPOSE, AND THAT IS THE SAVE-COMPAT STORY. Every placement written before today
+   * has no `open` key, and `undefined` is falsy, so every existing door-less save reads back exactly
+   * as it was written. A required field, or a default of `true`, would have rewritten the meaning of
+   * stored data — the same reasoning as `GENERATOR_VERSION` not being bumped for a rename.
+   */
+  open?: boolean
 }
+
+/** The rotation a piece is DRAWN at — an open door swings 90° inside its own cell. */
+export const visualRotation = (p: Placement, def: PieceDef): Rotation =>
+  def.openable && p.open ? (((p.rot + 1) % 4) as Rotation) : p.rot
+
+/** Flip a placement's state. Returns a new object; the host owns where it is stored. */
+export const toggleOpen = (p: Placement, def: PieceDef): Placement =>
+  def.openable ? { ...p, open: !p.open } : p
 
 /** Footprint extent after rotation. 90° swaps width and depth; height never rotates. */
 export function rotatedSize(def: PieceDef, rot: Rotation): { w: number; h: number; d: number } {
@@ -319,13 +382,18 @@ export function rotateCell(x: number, z: number, def: PieceDef, rot: Rotation): 
 export function cellsOf(p: Placement, def: PieceDef): { x: number; y: number; z: number; solid: boolean }[] {
   const out: { x: number; y: number; z: number; solid: boolean }[] = []
   const passable = new Set((def.passable ?? []).map(c => `${c.x},${c.y},${c.z}`))
+  const open = !!def.openable && !!p.open
   for (let ly = 0; ly < def.h; ly++) {
     for (let lz = 0; lz < def.d; lz++) {
       for (let lx = 0; lx < def.w; lx++) {
+        // ⚠ THE CELL IS ROTATED BY `p.rot`, NOT BY `visualRotation`. An open door SWINGS in the
+        // renderer and occupies the identical cells — see `PieceDef.openable`. Using the visual
+        // rotation here would migrate the footprint on every open and let a door swing into rock.
         const r = rotateCell(lx, lz, def, p.rot)
         out.push({
           x: p.x + r.x, y: p.y + ly, z: p.z + r.z,
-          solid: !passable.has(`${lx},${ly},${lz}`),
+          // An open piece is passable everywhere; a closed one falls back to its `passable` list.
+          solid: open ? false : !passable.has(`${lx},${ly},${lz}`),
         })
       }
     }
