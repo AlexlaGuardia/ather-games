@@ -521,6 +521,33 @@ export const MAT = {
   SHIMMERBLOOM: 80,
   ATHERWHEAT: 81,
   DAWNCAP: 82,
+
+  /**
+   * ── ★ THE WEATHERED MASONRY (2026-08-27, the building-vocabulary pass) ───────────────────────
+   * Alex: *"i wonder if we could benifit from researching experienced minecraft builders."* The
+   * answer that came back most consistently, across every source, was not a technique — it was
+   * **texture-mixing inside one hue**. Not more colours: cracked and mossy variants of the SAME
+   * stone, mixed into a wall so it stops reading as one flat plane. The holds are blocked out in
+   * clean `CUT_STONE` and read exactly as new as the day they were generated, which is the wrong
+   * thing for a Moglin hold that canon has standing long enough to be RETREATED INTO.
+   *
+   * ★ THESE ARE EXPLICIT IDS, NOT DERIVED ONES, AND THAT IS DELIBERATE. Slabs get away with
+   * derivation because `HALF_BIT` makes their id a stable function of the base. A weathering bit
+   * would have to be invented, and every id here is PERSISTED IN SAVES — an id that moves when
+   * someone reorders a table rewrites the world. Explicit is the only safe shape for a stored id.
+   *
+   * ⚠ 83+ IS PAST `CROP_MAX` (82) ON PURPOSE — verified, not assumed. `isCrop` is `>= CROP_MIN &&
+   * <= CROP_MAX` and `isPlant` derives from that span, so these are cubes and the mesher treats
+   * them as cubes. Appending inside the crop range would have made a wall block a cross-quad and
+   * passable, silently.
+   *
+   * ⚠ AND THEY DROP THEMSELVES, which makes RUINS A SOURCE. Old stone is salvaged, not
+   * manufactured — you take the weathered courses off something that already fell down and build
+   * with them. That is the reason the ruins are worth walking to.
+   */
+  MOSSY_STONE_BRICK: 83,
+  CRACKED_STONE_BRICK: 84,
+  MOSSY_CUT_STONE: 85,
 } as const
 
 /**

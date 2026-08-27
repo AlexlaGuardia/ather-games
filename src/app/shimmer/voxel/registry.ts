@@ -148,6 +148,25 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.PALE_BRICK, name: 'Pale Bricks', hardness: 1.3, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'pale_brick', count: 1 }], placeable: true },
   { material: MAT.SANDSTONE, name: 'Sandstone', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'sandstone', count: 1 }], fastSkill: 'prospecting', placeable: true },
 
+  // ── ★ THE WEATHERED MASONRY (2026-08-27) ────────────────────────────────────────────────────
+  // Texture-mixing inside one hue is the most consistently-cited fix for a flat wall, and the
+  // build had no way to do it: every built stone shipped exactly one, clean, brand-new face. These
+  // three are the same stone older, and they exist to be MIXED into a wall rather than to floor it.
+  //
+  // ★ SOFTER THAN THEIR CLEAN SIBLINGS, which is not flavour. Cracked brick is brick that has
+  // already failed once; moss holds damp in the course. Stone Bricks are 1.5 and these sit under
+  // that, so salvaging an old wall is quicker than quarrying a new one — the mechanical half of
+  // "ruins are where old stone comes from".
+  //
+  // ⚠ THEY DROP THEMSELVES rather than degrading to the clean block. Dropping `stone_brick` would
+  // mean weathered stone is unobtainable — you could break it forever and never hold one — which is
+  // the uncraftable-piece bug wearing the other face: a material that exists in the world and can
+  // never enter a hand. `materialForItem` is derived from `placeable && drops[0]`, so self-drop is
+  // also what makes them placeable back down.
+  { material: MAT.MOSSY_STONE_BRICK, name: 'Mossy Stone Bricks', hardness: 1.4, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'mossy_stone_brick', count: 1 }], placeable: true },
+  { material: MAT.CRACKED_STONE_BRICK, name: 'Cracked Stone Bricks', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'cracked_stone_brick', count: 1 }], placeable: true },
+  { material: MAT.MOSSY_CUT_STONE, name: 'Mossy Cut Stone', hardness: 1.4, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'mossy_cut_stone', count: 1 }], placeable: true },
+
   // ── ★ SAPLINGS — placeable, and that is the whole plumbing ──────────────────────────────────
   // `materialForItem` is DERIVED from `placeable && drops[0]` (see BY_ITEM below), so declaring
   // these four rows is what makes a sapling item place a sapling block. No item->block table to

@@ -90,6 +90,19 @@ export const TILE_MATERIALS: number[] = [
   // depth.ts says a temporary wall HAS to look temporary or it reads as a bug every time; it was
   // reading as the magenta checker instead, which reads as a bug even harder.
   MAT.CONJURED,
+  // ── ★ APPENDED 2026-08-27, AND THE POSITION IS THE POINT ────────────────────────────────────
+  // The weathered masonry — the same three stones older, for texture-mixing inside one hue.
+  //
+  // ⚠ I FIRST PUT THESE BESIDE THEIR CLEAN SIBLINGS IN THE MASONRY LINE, which reads better and is
+  // wrong: this array is APPEND ONLY because an entry's INDEX is its texture-array slot. Inserting
+  // mid-array shifts every material after it onto a different layer. Nothing persists a slot, so it
+  // is self-consistent within one process and would very likely have looked fine — which is exactly
+  // why the rule is written at the top of the array rather than left to a reader's judgement.
+  // Grouping is what comments are for; ordering here is load-bearing.
+  //
+  // ⚠ Each has a `paintFor` case below. Appending here without one ships a magenta ore block — the
+  // failure the rubble note above records happening twice.
+  MAT.MOSSY_STONE_BRICK, MAT.CRACKED_STONE_BRICK, MAT.MOSSY_CUT_STONE,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -571,6 +584,65 @@ function paintAshlar(
 }
 
 /**
+ * ── ★ WEATHERING IS AN OVERLAY, NOT A PAINTER (2026-08-27) ───────────────────────────────────
+ * A mossy brick is a brick. If weathering were its own painter it would restate the whole ashlar
+ * course layout, and the day the courses change the clean and weathered walls would stop lining up
+ * — two derivations of one pattern, agreeing until they quietly do not. So the base painter runs
+ * FIRST and these walk over the result. The courses can only ever match, because they are the
+ * same courses.
+ *
+ * ⚠ SIZED AGAINST THE TILE, NOT THE AUTHORING VIEW. A tile ships at 16px, where a 1px hairline
+ * averages to grey and disappears — the same failure that made the collar badge a smudge at 34px
+ * after reading perfectly at 256. Both overlays here work in whole texels and cover real area.
+ */
+function overlayMoss(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const moss = shade(base, -18)
+  const lit = shade(base, -4)
+  for (let y = 0; y < size; y++) {
+    // Damp collects low and runs down from the courses, so moss is weighted toward the bottom of
+    // the face. A uniform sprinkle reads as noise; a gradient reads as water having been here.
+    const depth = y / (size - 1)
+    for (let x = 0; x < size; x++) {
+      // Two octaves of value noise, quantised to texels — blobs, not speckle.
+      const n = h2(x >> 1, y >> 1, seed) * 0.65 + h2(x >> 2, y >> 2, seed + 11) * 0.35
+      if (n + depth * 0.45 < 0.78) continue
+      const o = (y * size + x) * 4
+      // Blend toward moss rather than replacing, so the course pattern still shows THROUGH it.
+      const c = n > 0.95 ? lit : moss
+      dst[o] = (dst[o] + c[0] * 2) / 3
+      dst[o + 1] = (dst[o + 1] + c[1] * 2) / 3
+      dst[o + 2] = (dst[o + 2] + c[2] * 2) / 3
+    }
+  }
+}
+
+/**
+ * Fracture lines. Two or three, walking the face, biased downward.
+ *
+ * ★ A CRACK IS DARK AND IT IS CONTINUOUS. Scattered dark pixels read as dirt; what says "this has
+ * failed" is an unbroken line crossing a course. So this walks rather than samples, and it darkens
+ * hard — a crack at -46 survives being seen across a room, which is where a wall is actually read.
+ */
+function overlayCracks(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const dark = shade(base, -46)
+  const n = 2 + Math.floor(h2(0, 0, seed) * 2)
+  for (let i = 0; i < n; i++) {
+    let x = Math.floor(h2(i, 1, seed) * size)
+    const len = Math.floor(size * (0.5 + h2(i, 2, seed) * 0.5))
+    const from = Math.floor(h2(i, 3, seed) * (size - len))
+    for (let k = 0; k < len; k++) {
+      const y = from + k
+      if (y < 0 || y >= size) break
+      put(dst, size, ((x % size) + size) % size, y, dark)
+      // A fracture wanders one texel at a time; a straight line reads as a drawn seam, not a break.
+      const step = h2(i, y + 7, seed)
+      if (step > 0.72) x += 1
+      else if (step < 0.28) x -= 1
+    }
+  }
+}
+
+/**
  * Sedimentary banding — sandstone, and the reason it is not just tinted ashlar.
  *
  * ★ A DIFFERENT IDIOM, NOT A DIFFERENT PALETTE. Three masonry blocks all wearing courses would put
@@ -1045,6 +1117,20 @@ export function paintFor(material: number, face: number, size: number): Layer {
     // the two greys are separated by pattern and the other two by mineral.
     case MAT.STONE_BRICK:
     case MAT.PALE_BRICK: paintAshlar(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, 8, 4); break
+    // ★ THE WEATHERED THREE — base painter first, then the overlay. Same courses as their clean
+    // siblings by construction, which is the whole point: mixed into one wall they must line up.
+    case MAT.MOSSY_STONE_BRICK: {
+      const c = rgbOf(MATERIAL_COLOR[material])
+      paintAshlar(dst, size, c, seed, 8, 4); overlayMoss(dst, size, c, seed); break
+    }
+    case MAT.CRACKED_STONE_BRICK: {
+      const c = rgbOf(MATERIAL_COLOR[material])
+      paintAshlar(dst, size, c, seed, 8, 4); overlayCracks(dst, size, c, seed); break
+    }
+    case MAT.MOSSY_CUT_STONE: {
+      const c = rgbOf(MATERIAL_COLOR[material])
+      paintAshlar(dst, size, c, seed); overlayMoss(dst, size, c, seed); break
+    }
     case MAT.SANDSTONE: paintBanded(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.WAYMARK: paintWaymark(dst, size, seed, face); break
     case MAT.CLOUD_WALL: paintCloudWall(dst, size, seed); break

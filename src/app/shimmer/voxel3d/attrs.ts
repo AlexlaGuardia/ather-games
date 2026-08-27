@@ -98,6 +98,19 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // adding a colour lost. Iron-pink is what real sandstone does anyway, it still reads as descended
   // from the sand it was bound out of, and nothing else in the world is in that hue.
   [MAT.SANDSTONE]: 0xc9977a,
+
+  // ── ★ THE WEATHERED MASONRY (2026-08-27) ────────────────────────────────────────────────────
+  // ⚠ THESE MUST NOT BE NEW HUES. The entire reason they exist is texture-mixing INSIDE one hue —
+  // a mossy brick that reads as a different-coloured block is a second colour in the palette, which
+  // is the thing every building source warns against. So each sits within a few points of its
+  // clean sibling and the WEATHERING is carried by the tile, exactly the way stone brick and cut
+  // stone are separated by pattern rather than colour.
+  //
+  // Moss pulls green and slightly darker (damp holds light badly); cracking pulls grey and lighter,
+  // because a broken face shows unweathered stone under the patina.
+  [MAT.MOSSY_STONE_BRICK]: 0x7e8c78,
+  [MAT.CRACKED_STONE_BRICK]: 0x93989b,
+  [MAT.MOSSY_CUT_STONE]: 0x86917c,
   [ORE.RAW_MANA]: 0x7fd4ff,
   // Mana in the shape of a wall. Deliberately the palest, coolest thing in the table and NOT in
   // stone's family — a cast wall must never be mistaken for one you could have built.
