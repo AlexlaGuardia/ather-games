@@ -196,6 +196,31 @@ cmd_build() {
   # every log line still saying it succeeded. The production build dir is not negotiable.
   unset NEXT_DIST_DIR
   if npm run build && pm2 restart ather-games >/dev/null; then
+    # ── ★★★ THE ARTIFACT HAS TO BE WHOLE, AND `npm run build` EXITING 0 DOES NOT PROVE IT ──────
+    # 2026-08-27: a build was KILLED MID-WRITE by a harness timeout (the caller passed
+    # `timeout 900`; the tool's own 2-minute ceiling won). The trap released the lock cleanly, so
+    # the board read FREE, and **prod kept answering 200 for forty minutes** — because the running
+    # pm2 process had started from the PREVIOUS good build and was serving what it already had.
+    # `.next` had no BUILD_ID. The next restart, from anyone — another window, the mem-watcher,
+    # a reboot — would have brought the site up against a half-written artifact.
+    #
+    # ⚠⚠ SO `prod answers 200` IS NOT EVIDENCE `.next` IS COMPLETE, and neither is a clean lock.
+    # The one cheap question that IS evidence: does the build id exist, and are there chunks under
+    # it. Asked here, on the success path, because a build that dies must not be able to leave the
+    # board saying "free" and the tree saying "fine".
+    if [ ! -f "$REPO/.next/BUILD_ID" ]; then
+      echo ">> ⚠⚠ INCOMPLETE ARTIFACT — .next has no BUILD_ID after a build that reported success."
+      echo ">>   prod may still answer 200 from the OLD build the running process started with."
+      echo ">>   DO NOT restart ather-games. Re-run this build to completion first."
+      exit 1
+    fi
+    _chunks=$(ls "$REPO"/.next/static/chunks/*.js 2>/dev/null | wc -l)
+    if [ "$_chunks" -lt 20 ]; then
+      echo ">> ⚠⚠ INCOMPLETE ARTIFACT — BUILD_ID exists but only $_chunks chunk(s) under .next/static."
+      echo ">>   Re-run this build to completion before anything restarts."
+      exit 1
+    fi
+    echo ">> artifact OK — BUILD_ID $(cat "$REPO/.next/BUILD_ID"), $_chunks chunks"
     echo ">> build + restart OK"
     # Breadcrumb for the health monitor. The lock dies on the next line, but the
     # process we just restarted needs ~5min to look stable — without a marker that
