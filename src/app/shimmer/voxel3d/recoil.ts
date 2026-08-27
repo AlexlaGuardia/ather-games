@@ -24,6 +24,12 @@
  *
  * Face north, empty a clip, see nothing. Turn 90° and the horizon leans 15–19°. A test that fires
  * from the default facing reports the feature working.
+ *
+ * ★ PLAY3D DOES NOT HAVE THIS BUG, CHECKED RATHER THAN ASSUMED. `Shimmer3D`'s `CameraRig` drains
+ * the same kick into `lookPitch` / `yaw` SCALARS and rebuilds the orientation with `cam.lookAt`,
+ * which is always up-aligned — there is no euler to decompose and nothing to reinterpret. The two
+ * worlds differ here on purpose and it is not drift. Do not "unify" them by pointing play3d at
+ * this drain without giving it the order first.
  */
 
 /** How fast the stamped kick bleeds into the camera, per second. Higher = snappier, less smear. */

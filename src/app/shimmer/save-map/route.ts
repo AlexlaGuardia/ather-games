@@ -4,6 +4,8 @@ import { join } from 'path'
 import { safeWriteFile as writeFile } from '../lib/backup'
 import { BadRequest, safeId, safeIdOpt, safeInt, safeNum, safeText, safeColors, escText, gridMax, lookup } from '../lib/safe'
 import { encodeRows, decodeRows } from '../world/region-codec'
+import { collapseGates, footprintFields } from '../world/gate-collapse'
+import { parseZoneGrid, zoneConstName } from '../world/tilemap-source'
 
 /** Map a guard failure to 400, anything else to 500. */
 function errorResponse(e: unknown) {
@@ -101,36 +103,13 @@ function sub(
 }
 
 /** Derive TypeScript const name from zone ID: 'mycelial-path' → 'MYCELIAL_PATH' */
-function zoneConstName(id: string): string {
-  return id.replace(/-/g, '_').toUpperCase()
-}
-
-/** Parse a zone grid from tilemap.ts source (works for plain number[][] declarations) */
+/**
+ * Read a zone grid off DISK. The parsing lives in `world/tilemap-source.ts` so it can be tested
+ * against the module's own export — it was wrong twice while it was inline here, both times
+ * returning a well-formed wrong answer. See that file's header.
+ */
 async function parseZoneGridFromSource(constName: string): Promise<number[][] | null> {
-  const content = await readFile(TILEMAP_FILE, 'utf-8')
-  // Match: export const NAME: number[][] = [ ... ] or export const NAME = [ ... ]
-  const declStart = content.indexOf(`export const ${constName}`)
-  if (declStart === -1) return null
-  const bracketStart = content.indexOf('[', declStart)
-  if (bracketStart === -1) return null
-  // Check if this is a createStubMap call (not a plain array)
-  const between = content.substring(declStart, bracketStart)
-  if (between.includes('createStubMap')) return null // can't parse stub maps from source
-
-  // Find matching closing bracket
-  let depth = 0, pos = bracketStart
-  while (pos < content.length) {
-    if (content[pos] === '[') depth++
-    else if (content[pos] === ']') { depth--; if (depth === 0) break }
-    pos++
-  }
-  const arrayStr = content.substring(bracketStart, pos + 1)
-  const rows = arrayStr.match(/\[([^\]]+)\]/g)
-  if (!rows || rows.length < 2) return null // first match is outer bracket
-  // Skip first match (outer bracket) — actually the regex matches inner brackets too
-  return rows.slice(1).map(row =>
-    row.replace(/[\[\]]/g, '').split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n))
-  )
+  return parseZoneGrid(await readFile(TILEMAP_FILE, 'utf-8'), constName)
 }
 
 /** Generate a stub grid (bordered with grass interior) */
@@ -327,6 +306,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const saved: string[] = []
+    // Things the save deliberately did NOT do, surfaced to whoever pressed the button.
+    const notices: string[] = []
 
     // ── Region maps (`r-<id>`, the 2026-07-31 world pivot): grid/nodes/spawners/warps live
     // in ONE JSON per region, not in the legacy source files — intercept those payload parts
@@ -972,10 +953,16 @@ export async function POST(req: NextRequest) {
           const warpsEnd = pos // position after the closing ]
 
           // ── Regroup gate tiles back into `gates:` ────────────────────────────────────────
-          // The editor paints a gate as N*N warp tiles that all carry the same label. Writing
-          // them out as loose warps would work but would DEMOTE the door: the label is lost, the
-          // 3D world falls back to N green EXIT signs, and the next editor session sees no gate.
-          // So tiles sharing a label + destination collapse back into one Gate record.
+          // The editor paints a gate as a block of warp tiles that all carry the same label.
+          // Writing them out as loose warps would work but would DEMOTE the door: the label is
+          // lost, the 3D world falls back to green EXIT signs, and the next editor session sees no
+          // gate. So tiles sharing a label + destination collapse back into one Gate record.
+          //
+          // ★ THE COLLAPSE ITSELF LIVES IN `world/gate-collapse.ts` AND IS TESTED THERE. It used
+          // to be inline here, and that is exactly why its three-day-old non-square bug went
+          // unnoticed: `expandGate` runs on every module load and its inverse ran only when
+          // somebody hit save. This file now decides one thing — how a footprint is SPELLED —
+          // and `footprintFields` keeps that answer next to the rule it inverts.
           //
           // ★ `ownerOnly` is written out now (it never used to be). This route rewrites a zone's
           // whole warps array from the editor payload, so any field it doesn't serialise is
@@ -983,33 +970,16 @@ export async function POST(req: NextRequest) {
           // Rune Hold or Greg's home would silently have opened the owner-gated Crucible doors to
           // every player. A serializer that round-trips fewer fields than the type has is a data
           // loss bug wearing a formatting bug's clothes.
-          const gateGroups = new Map<string, typeof warps>()
-          const looseWarps: typeof warps = []
-          for (const w of warps) {
-            if (!w.gate) { looseWarps.push(w); continue }
-            const key = `${w.gate}|${w.toZone}|${w.toX}|${w.toY}|${w.direction ?? ''}|${w.requiredFlag ?? ''}|${w.ownerOnly}`
-            const g = gateGroups.get(key)
-            if (g) g.push(w); else gateGroups.set(key, [w])
-          }
+          const { gates: collapsed, loose: looseWarps, demoted } = collapseGates(warps)
 
           const gateLines: string[] = []
-          for (const tiles of gateGroups.values()) {
-            const x = Math.min(...tiles.map(t => t.fromX))
-            const y = Math.min(...tiles.map(t => t.fromY))
-            const w = Math.max(...tiles.map(t => t.fromX)) - x + 1
-            const h = Math.max(...tiles.map(t => t.fromY)) - y + 1
-            // A Gate is square by definition. If the painted tiles aren't (someone erased a
-            // corner, or two doors share a name), keep every tile as a loose warp rather than
-            // writing a gate whose footprint lies about which tiles actually warp.
-            if (w !== h || tiles.length !== w * h) { looseWarps.push(...tiles); continue }
-            const t = tiles[0]
-            const parts = [`x: ${x}`, `y: ${y}`]
-            if (w !== 2) parts.push(`size: ${w}`)
-            parts.push(`toZone: '${t.toZone}'`, `toX: ${t.toX}`, `toY: ${t.toY}`)
-            if (t.direction) parts.push(`direction: '${t.direction}'`)
-            parts.push(`label: '${t.gate}'`)
-            if (t.requiredFlag) parts.push(`requiredFlag: '${t.requiredFlag}'`)
-            if (t.ownerOnly) parts.push('ownerOnly: true')
+          for (const g of collapsed) {
+            const parts = [`x: ${g.x}`, `y: ${g.y}`, ...footprintFields(g)]
+            parts.push(`toZone: '${g.toZone}'`, `toX: ${g.toX}`, `toY: ${g.toY}`)
+            if (g.direction) parts.push(`direction: '${g.direction}'`)
+            parts.push(`label: '${g.label}'`)
+            if (g.requiredFlag) parts.push(`requiredFlag: '${g.requiredFlag}'`)
+            if (g.ownerOnly) parts.push('ownerOnly: true')
             gateLines.push(`      { ${parts.join(', ')} },`)
           }
 
@@ -1049,6 +1019,12 @@ export async function POST(req: NextRequest) {
 
           await writeFile(ZONES_FILE, updated, 'utf-8')
           saved.push(gateLines.length > 0 ? 'warps+gates' : 'warps')
+          // ⚠ A DEMOTION IS REPORTED, NEVER SILENT. A group that cannot be a `Gate` still SAVES —
+          // its tiles warp — but it loses its nametag, and the whole reason this collapse was worth
+          // rewriting is that it used to do exactly that without telling anyone. Same precedent as
+          // `dayCycle:skipped(...)` above: the work that did NOT happen rides back with the work
+          // that did.
+          for (const d of demoted) notices.push(`gate demoted to loose warps: ${d}`)
         }
       }
     }
@@ -2338,7 +2314,7 @@ export async function POST(req: NextRequest) {
       saved.push('intGrid')
     }
 
-    return NextResponse.json({ success: true, saved })
+    return NextResponse.json({ success: true, saved, notices })
   } catch (e: unknown) {
     return errorResponse(e)
   }

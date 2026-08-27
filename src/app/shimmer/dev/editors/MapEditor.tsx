@@ -1044,6 +1044,13 @@ export default function MapEditor() {
   const [editingTileIdx, setEditingTileIdx] = useState<number | null>(null)
   const [cloneSourceIdx, setCloneSourceIdx] = useState<number | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'building' | 'saved' | 'error' | 'stale'>('idle')
+  // ── ★★ WHAT THE SAVE DID NOT DO ────────────────────────────────────────────────────────────
+  // `saveStatus` clears itself after 4s and only ever says saved / failed. The save route can also
+  // succeed while declining part of the payload — a gate whose tiles do not form a filled rectangle
+  // is written as loose warps and LOSES ITS LABEL. That used to happen behind a green tick, which
+  // is how a 1x2 landing could be painted, saved, and simply not exist. Notices outlive the tick on
+  // purpose and are dismissed by hand: an amber line you have to close is the point.
+  const [saveNotices, setSaveNotices] = useState<string[]>([])
   // Region optimistic-concurrency: the rev this editor loaded; sent with region saves so a
   // stale tab 409s instead of silently overwriting fresh sculpt work (the 07-31 race).
   const regionRevRef = useRef(0)
@@ -1144,14 +1151,23 @@ export default function MapEditor() {
   })
   // ── GATE MODE (2026-08-05) ─────────────────────────────────────────────────────────────
   // With warp mode on, painting a tile attaches a ONE-TILE warp. Gate mode makes the same
-  // click lay a whole named door: a `gateSize` x `gateSize` block of warp tiles, all sharing
-  // one destination and one label, anchored at the tile you clicked (its top-left).
+  // click lay a whole named door: a `gateW` x `gateH` block of warp tiles, all sharing one
+  // destination and one label, anchored at the tile you clicked (its top-left).
   //
   // It writes the same `warpPlacements` the single-tile path does — a gate is not a second
   // kind of record, it is a stamp that lays several. `gateLabel` rides along on each tile so
   // the save route can group them back into one `Gate` in zones.ts.
+  //
+  // ── ★★ TWO AXES, NOT ONE (2026-08-27) ──────────────────────────────────────────────────
+  // This was a single `gateSize` and stamped `size` x `size`. `Gate` grew `w`/`h` on 08-24 for
+  // one named reason — Alex's 1x2 landing on the Rune Hold square — and this stamp was one of
+  // two WRITE-path consumers that did not move with it, so the door canon requires could not be
+  // painted at all. ⚠ The other was the save route's collapse, which refused a non-square group
+  // and dropped its LABEL on the way out, returning 200. Between them the task read as "go press
+  // B" and could not have worked. **Widening a type leaves its writers stale and quiet.**
   const [gateEnabled, setGateEnabled] = useSessionState('map:gateEnabled', false)
-  const [gateSize, setGateSize] = useSessionState('map:gateSize', 2)
+  const [gateW, setGateW] = useSessionState('map:gateW', 2)
+  const [gateH, setGateH] = useSessionState('map:gateH', 2)
   const [gateLabel, setGateLabel] = useState('')
   const [gateOwnerOnly, setGateOwnerOnly] = useState(false)
 
@@ -1600,13 +1616,14 @@ export default function MapEditor() {
         return next
       })
       if (warpEnabled) {
-        // Gate mode stamps a size x size footprint from the clicked tile; plain warp mode is the
-        // same code with a 1x1 footprint, so there is one path and no drift between them.
-        const span = gateEnabled ? Math.max(1, gateSize) : 1
+        // Gate mode stamps a w x h footprint from the clicked tile; plain warp mode is the same
+        // code with a 1x1 footprint, so there is one path and no drift between them.
+        const spanW = gateEnabled ? Math.max(1, gateW) : 1
+        const spanH = gateEnabled ? Math.max(1, gateH) : 1
         const label = gateEnabled ? (gateLabel.trim() || 'GATE') : undefined
         const cells: Array<[number, number]> = []
-        for (let dy = 0; dy < span; dy++) for (let dx = 0; dx < span; dx++) cells.push([tx + dx, ty + dy])
-        if (span > 1) {
+        for (let dy = 0; dy < spanH; dy++) for (let dx = 0; dx < spanW; dx++) cells.push([tx + dx, ty + dy])
+        if (cells.length > 1) {
           // The footprint's other tiles need painting too — the click only painted the anchor.
           setGrid(prev => {
             const next = prev.map(r => [...r])
@@ -1633,7 +1650,7 @@ export default function MapEditor() {
         })
       }
     }
-  }, [brush, rotation, brushType, brushItemId, brushNodeType, brushGate, brushStructureId, brushChestType, brushChestClaimable, structures, warpEnabled, warpConfig, gateEnabled, gateSize, gateLabel, gateOwnerOnly, activeStampId, randomVariant, stamps, showIntGrid, paintIntGrid, activeMap])
+  }, [brush, rotation, brushType, brushItemId, brushNodeType, brushGate, brushStructureId, brushChestType, brushChestClaimable, structures, warpEnabled, warpConfig, gateEnabled, gateW, gateH, gateLabel, gateOwnerOnly, activeStampId, randomVariant, stamps, showIntGrid, paintIntGrid, activeMap])
 
   const resize = useCallback((newCols: number, newRows: number) => {
     pushMapSnapshot()
@@ -2008,6 +2025,7 @@ export default function MapEditor() {
 
   const saveToSource = useCallback(async () => {
     setSaveStatus('saving')
+    setSaveNotices([])
     try {
       const tileSaveData = tiles.map(et => {
         const frameArrays = et.tile.frames && et.tile.frames.length > 1 ? et.tile.frames : [et.tile.pixels]
@@ -2069,6 +2087,7 @@ export default function MapEditor() {
       // Saved to source (your "branch"). NO auto-build: Serberus/Jin builds + verifies
       // before it goes live, so a save can never break the game blind.
       setSaveStatus('saved')
+      setSaveNotices(Array.isArray(data.notices) ? data.notices : [])
       setGridDirty(false)
       // Drop the local cache so the editor reflects saved source after the next build.
       Promise.all([
@@ -2690,6 +2709,25 @@ export default function MapEditor() {
         )}
       </div>
 
+      {/* ── What the save declined to do. Amber, and it does not time out. ──────────────────── */}
+      {saveNotices.length > 0 && (
+        <div className="mb-3 px-3 py-2 rounded border border-amber-400/30 bg-amber-500/10">
+          <div className="flex items-start gap-2">
+            <span className="text-[11px] font-display text-amber-300">Saved, with exceptions</span>
+            <button
+              onClick={() => setSaveNotices([])}
+              className="ml-auto text-[10px] text-amber-300/60 hover:text-amber-200"
+            >dismiss</button>
+          </div>
+          {saveNotices.map((n, i) => (
+            <p key={i} className="text-[10px] font-mono text-amber-200/80 mt-1">⚠ {n}</p>
+          ))}
+          <p className="text-[9px] text-amber-200/50 mt-1.5">
+            A door&apos;s tiles must fill a solid rectangle to stay a door. A demoted group still warps, but loses its nametag.
+          </p>
+        </div>
+      )}
+
       {/* Band readout — the zone's rollable rarity ceiling, live as you paint */}
       <EditorBandReadout zoneId={activeMap} placements={nodePlacements} dials={regionIdOf(activeMap) ? spawnDials : undefined} />
 
@@ -3034,15 +3072,24 @@ export default function MapEditor() {
               </label>
               {gateEnabled && (
                 <>
-                  <select
-                    value={gateSize}
-                    onChange={e => setGateSize(Number(e.target.value))}
-                    className="bg-[#1a1a2e] border border-white/10 rounded px-1.5 py-1 text-[11px] text-white focus:outline-none focus:border-emerald-500/40"
-                  >
-                    <option value={2}>2x2</option>
-                    <option value={3}>3x3</option>
-                    <option value={4}>4x4</option>
-                  </select>
+                  {/* ⚠ TWO AXES. A door is not always square — THE LANDING is 1x2 (canon, 08-24). */}
+                  <div className="flex items-center gap-1" title="Door footprint in tiles, width x height. THE LANDING is 1x2.">
+                    <select
+                      value={gateW}
+                      onChange={e => setGateW(Number(e.target.value))}
+                      className="bg-[#1a1a2e] border border-white/10 rounded px-1.5 py-1 text-[11px] text-white focus:outline-none focus:border-emerald-500/40"
+                    >
+                      {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                    <span className="text-[10px] text-text-faint">x</span>
+                    <select
+                      value={gateH}
+                      onChange={e => setGateH(Number(e.target.value))}
+                      className="bg-[#1a1a2e] border border-white/10 rounded px-1.5 py-1 text-[11px] text-white focus:outline-none focus:border-emerald-500/40"
+                    >
+                      {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
                   <input
                     type="text"
                     value={gateLabel}
@@ -3064,7 +3111,7 @@ export default function MapEditor() {
               )}
               <span className="text-[9px] text-amber-400/60 ml-auto">
                 {gateEnabled
-                  ? `click lays a ${gateSize}x${gateSize} door (${warpPlacements.length} warp tiles)`
+                  ? `click lays a ${gateW}x${gateH} door (${warpPlacements.length} warp tiles)`
                   : `paint tiles to attach warps (${warpPlacements.length})`}
               </span>
             </>
