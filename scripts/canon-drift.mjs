@@ -886,16 +886,31 @@ function gameCropNames() {
 //   · it matches ONE exact finding message, never an area. Holding all of `keeper-moves` would
 //     silence every future rune drift in the file — the exemption that outlives its reason, wearing
 //     a ruling as a badge.
-const CANON_HOLDS = [
-  {
-    area: 'keeper-moves',
-    // Narrow on purpose: this exact divergence, not this gate and not this area.
-    message: "'Gate' rune requirement differs — build [enchant] vs canon [enchant+illuminate+metalergy]",
-    citeFile: 'game/runes.md',
-    cite: 'ALEX RULED *HOLD*',
-    why: 'Alex ruled HOLD 2026-08-26: the BUILD keeps 0022db1 scoping (tacticals <- element lane, signature <- state lane). Canon is unchanged and stands. Revisit when the equip layer is next opened.',
-  },
-]
+// ── ⚠⚠ RETIRED 2026-08-27, AND THE REASON MATTERS MORE THAN THE ENTRY DID ──────────────────────
+// There was one hold here, anchored to the message
+//   "'Gate' rune requirement differs — build [enchant] vs canon [enchant+illuminate+metalergy]"
+// and its `why` recorded Alex's 2026-08-26 HOLD on the BUILD's `eligibleMoves` scoping (tacticals
+// <- element lane, signature <- state lane).
+//
+// ★★ THOSE ARE TWO DIFFERENT DECISIONS AND THE HOLD ANCHORED TO A PROXY. Alex held the equip
+// FILTER; the message it matched was about a MOVE'S RUNE LIST. On 2026-08-27 canon ruled the rune
+// list separately (`moves.md` § THE TWO STARVED STATE LANES — Gate is the whole Bind trifecta,
+// "corrected on proof, not on preference", because the one-rune reading makes canon's flagship
+// gate-mage illegal), Alex asked for that fix by name, and the build now matches. So the anchor
+// resolved by a route that has nothing to do with what was held, and the hold went stale.
+//
+// ⚠ AND THE SCOPING HOLD ITSELF STILL STANDS. `runes.md:287`: *"This is a deliberate, known
+// divergence between canon and the build… the drift gate cannot tell a held decision from an
+// accident… it must NOT be 'fixed' without Alex. Revisit when the equip layer is next opened."*
+// It is recorded here rather than deleted with the entry, because canon says that divergence is a
+// legal place for a build to stand **as long as it is written down** — and the entry was the only
+// machine-readable copy. Deleting it as "a dead exemption" would have deleted the record.
+//
+// ★ THERE IS NOTHING TO RE-ANCHOR IT TO: the gate produces no finding about `eligibleMoves`
+// scoping at all (checked). A hold with no finding is reported stale by design, so re-adding one
+// pointed at nothing would just re-create this note as noise every run. If the gate ever learns to
+// diff the equip filter, the hold comes back with its own message.
+const CANON_HOLDS = []
 
 function applyCanonHolds() {
   let healthy = 0

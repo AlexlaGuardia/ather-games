@@ -376,6 +376,19 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
         && m.runes.every((r) => lane.has(r)))
     })
     console.log(`  · state lanes with NO built signature: ${starved.length ? starved.join(', ') : 'none'}`)
+    // ── ⚠⚠ THE REGISTRY HALF IS FIXED; THIS COUNTS THE BUILD HALF, AND THEY ARE DIFFERENT DEBTS ──
+    // Canon RULED both lanes on 2026-08-26 and the registry caught up on 08-27: `Gate` widened to
+    // all three Bind runes (the build was reading a summary cell that made canon's flagship
+    // gate-mage illegal), and `Overpressure` (Barrier+Gem+Hydro) registered as Compact's signature.
+    //
+    // ★ AND THE COUNT DID NOT MOVE, WHICH IS CORRECT AND WORTH SAYING OUT LOUD. A canon-agent's
+    // note predicted this would go to 0. It cannot: this filter requires `isBuilt`, and both of
+    // those ultimates are deliberately `unbuilt` — Gate needs a two-point bind on a placed anchor,
+    // Overpressure needs a damage-to-shield bank. **So both lanes now HAVE a canon signature and
+    // neither has one you can cast.** Believe the code, not the note, including a canon note.
+    //
+    // ⚠ THE CEILING STAYS 2 RATHER THAN BEING TIGHTENED, because the debt is still real. It drops
+    // the day either cast is built, and THAT is when this number should follow it down.
     chk(`no MORE than the 2 known-starved state lanes (Compact, Bind) — currently: ${starved.join(', ') || 'none'}`,
       starved.length <= 2)
     // Every birthable rune must at least reach a TACTICAL, or that keeper has no cast at all.

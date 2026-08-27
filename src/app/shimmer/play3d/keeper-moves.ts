@@ -302,7 +302,30 @@ export const KEEPER_MOVES: KeeperMove[] = [
     effect: 'Arcs between every target and conductor in range, jumping through groups.', collar: 'opens' },
   { id: 'flame-barrage', name: 'Flame Barrage', tier: 'ultimate', runes: ['star', 'breeze'],
     effect: 'A volley of fire that independently tracks and curves mid-flight — a flock of burning birds.' },
-  { id: 'gate', name: 'Gate', tier: 'ultimate', runes: ['enchant'],
+  // ── ★★★ ALL THREE BIND RUNES, CORRECTED ON PROOF 2026-08-27 (canon RULED 08-26) ──────────────
+  // This read `runes: ['enchant']` because one summary cell in `moves.md` read `Gate | Enchant`.
+  // Canon says the trifecta FOUR separate times — `runes.md:211` (the lane law's own worked
+  // example), `:679` (Eyuun's loadout table), `:684` (*"all three Bind runes combine to create
+  // gates into the Ather"*), and moves.md's own prose four sections below that table. **The cell
+  // was the outlier, and the build read the cell.**
+  //
+  // ★ AND IT IS NOT A JUDGEMENT CALL, because the one-rune reading MAKES CANON'S FLAGSHIP
+  // GATE-MAGE ILLEGAL. Eyuun is Enchant-born and Gate is his Ultimate; if Gate were Enchant alone
+  // his signature would be his birth rune, which `moves.md` forbids in as many words — *"Nobody's
+  // signature is their birth rune."* The trifecta is the only reading under which the character
+  // the law was derived from obeys it.
+  //
+  // ⚠ BUILD CONSEQUENCE, NAMED IN THE RULING RATHER THAN BURIED: widening this REMOVES Gate from
+  // an Enchant-only keeper's book. That population is small by construction — ultimates are won at
+  // the Crucible, never bought — and a lone Enchant keeper still holds Waymark, which is the craft
+  // Greg's whole passage business runs on. Alex can overturn it in one line if the cost is worse
+  // than it looks from here.
+  //
+  // ⚠ DELIBERATELY NOT THE SAME CALL AS `Iron Skin`, which canon leaves OPEN on the sound ground
+  // that changing a registered move's requirements retroactively removes it from every keeper's
+  // book. That reasoning stands; there is simply nothing FORCING Iron Skin and something forcing
+  // this one.
+  { id: 'gate', name: 'Gate', tier: 'ultimate', runes: ['enchant', 'illuminate', 'metalergy'],
     effect: 'Bind two points into one and step through. Utility, not damage — the founded craft.' },
   { id: 'healing-grove', name: 'Healing Grove', tier: 'ultimate', runes: ['life', 'barrier'],
     effect: 'A living sanctuary grown and tended — everyone within is steadily restored.', collar: 'no-contest' },
@@ -339,6 +362,19 @@ export const KEEPER_MOVES: KeeperMove[] = [
     effect: 'Stone walls on a bonded metal frame, humming with protective mana. Not a shield, A BUILDING, and good against siege.',
     // A building. It shelters; it never enters the contest — the same standing as a heal, and a
     // legitimate part of winning rather than the thing that opens a collar.
+    collar: 'no-contest' },
+  // ── ★★ THE COMPACT COLUMN'S SIGNATURE, REGISTERED 2026-08-27 (canon `moves.md:101`, name
+  // approved by Alex 2026-08-26) ────────────────────────────────────────────────────────────────
+  // Compact (Barrier/Gem/Hydro) was GENUINELY starved — canon measured it two ways and found no
+  // file pairing two Compact runes anywhere, and every registered technique naming Barrier, Gem or
+  // Hydro reaching OFF the column. This is the only technique that walks it.
+  //
+  // ★ `no-contest` FOR THE SAME REASON `living-fortress` IS: it shelters, it never enters the
+  // contest. Canon calls it "a defence funded by the attack on it" — the third face of Barrier's
+  // triad beside Grey Arena and Healing Grove — and a collar is out-contested, never sheltered
+  // against.
+  { id: 'overpressure', name: 'Overpressure', tier: 'ultimate', runes: ['barrier', 'gem', 'hydro'],
+    effect: 'A shell over the keeper and everyone near them that mends itself out of what it stops — impact is banked into the crystalline layer and paid back out as shell. Its cost is Gem\'s own law: one flaw and it shatters.',
     collar: 'no-contest' },
   { id: 'monsoon-veil', name: 'Monsoon Veil', tier: 'ultimate', runes: ['mist', 'vapor', 'life'],
     effect: 'Expanding fog saturated with moisture and carrying Life — wounds close, fatigue lifts, poison purges. A battlefield hospital.', collar: 'no-contest' },

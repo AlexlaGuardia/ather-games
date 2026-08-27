@@ -379,6 +379,12 @@ const BUILDS: Record<string, Build> = {
   // single sentence, so the dispatcher applies a terrain cast's `statuses` too when it carries any.
   cordon:    { archetype: 'terrain', manaCost: 45, cooldownMs: 25000, castRange: 10, areaSize: 4, areaSecs: 8, shape: 'ring', shapeHeight: 3, statuses: ['disarmed'] },
   'grey-arena': { archetype: 'unbuilt', why: 'canon requires manatech (a drain-engine) the player has no access to' },
+  // ⚠ UNBUILT ON PURPOSE, AND NOT FOR WANT OF EFFORT. Canon's mechanic is a shell that BANKS what
+  // it stops and pays it back out as more shell — "a defence funded by the attack on it". None of
+  // the ten archetypes expresses absorb-and-convert: a 'field' that stops shots would be a plain
+  // bubble, which is precisely the "shipped it as a blink with extra words" mistake the `gate` note
+  // above warns about. Registered, labelled, never a silent no-op.
+  overpressure: { archetype: 'unbuilt', why: 'needs a damage-to-shield bank: the layer must mend itself out of what it stops' },
 
   // ── The Great Registration's ultimates (2026-08-13) ──────────────────────────────────────────
   // "Samantha's signature" — the biggest heal in the book, and the first ultimate a Water keeper can
