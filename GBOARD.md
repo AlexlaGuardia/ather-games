@@ -11,6 +11,100 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🧱 Shimmer — **THE BUILDING VOCABULARY: ONE SHAPE IN EVERY MATERIAL, AND STONE THAT LOOKS OLD** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — 6 commits pushed, tsc 7 (baseline), NOT yet deployed (hub owns the lock)*
+
+### Left off — Alex asked to build the holds, then asked the better question
+*"lets start building those strongholds.. but this kinda makes me wonder maybe we should design more
+building blocks .. i wonder if we could benifit from researching experienced minecraft builders."*
+
+Researched it. Four techniques recur across every source and they are specific, not vague: **break
+the wall plane** (recess windows, outcrop corners) · **texture-mix INSIDE one hue** (cracked and
+mossy variants of the same stone, not more colours) · **sub-cube geometry** (builders say trapdoors
+beat slabs for detail *because they are thinner*) · **small palettes**, 3-5 blocks sharing a tone.
+
+- **★★ THE ASSEMBLY MACHINE ALREADY EXISTED AND WAS POINTED AT ONE POOL.** `ruins.ts` is Minecraft's
+  village jigsaw — start piece, weighted pools, breadth-first, AABB-reject, terminator pool at max
+  depth — tuned by sweep and asserted over a 681-ruin oracle, and typed to `RuinPieceDef` with
+  `RUIN_PIECES` reached for from inside the function. Extracted to `voxel/jigsaw.ts` with the pool as
+  a parameter; holds, hamlets and burrow warrens can each bring their own. **The only ruin-specific
+  thing left in the assembly is the terrain predicate** — a ruin dies where the country stops being
+  flat, a burrow will want the opposite (it needs a bank), and that is one function.
+- **★★ PROVEN AN EXTRACTION, NOT A REWRITE:** `ruinPlan` hashed over 641 sites is
+  `dc703495d76c5250eaf1` before and after, byte-identical; ruins oracle 726/726. ⚠ **The size
+  histogram was IDENTICAL across a deliberately corrupted salt that changed every ruin in the world**
+  — a summary statistic that survives the change it exists to detect. The hash carries the claim.
+- **PIECE MATERIAL VARIANTS — 8 shapes → 12, and 56 → 84 buildable.** The catalogue pinned ONE
+  material per piece, so it could not express a stone doorway *at all*. Count derives off the base
+  cost so a variant cannot disagree with its base about price; base and material come from a table,
+  never from splitting the id (`half_slab` contains an underscore).
+- **FOUR SUB-CUBE PIECES: shutter, arch, bracket, hook.** The shutter is the trapdoor. The arch is
+  the burrow's rounded mouth (canon: burrows are underground, dug into a bank; a square hole reads as
+  a mineshaft). The bracket is the outcropped corner — recessing was always free, protruding was
+  impossible. **Hook, not chain: a chain is metal and this world has no metal item**, and inventing
+  an ore to justify a decoration is the tail wagging the dog.
+- **WEATHERED MASONRY — mossy/cracked stone brick + mossy cut stone (MAT 83-85).** Explicit ids, not
+  derived: every id here is persisted in saves. **They drop themselves, so ruins are where old stone
+  comes from.** ⚠ 83-85 is past `CROP_MAX` — inside the crop span they would silently have been
+  cross-quads and passable.
+- **THE HOLDS WERE `MAT.STONE` — the same material as the hillside under them**, so the largest built
+  thing in the world read as a rock formation. Now dressed ashlar with the two weathered courses
+  mixed in at ~20% each, keyed on world position (a counter would seam the masonry across columns,
+  on one side only). Parapets were `fence`, which costs **goldwood** — a wooden railing on a masonry
+  curtain wall, at every gate. The keep roof stays timber deliberately: that is what actually gets
+  built, and it is one warm rim on a grey mass.
+- **★★ `dev/building` — THE HARNESS, AND IT FOUND TWO BAD TILES WITHIN A MINUTE OF EXISTING.** Moss
+  read as lichen splotches because it ignored the mortar; it now **reads the already-painted tile**
+  and treats darker-than-mean as recess, so it cannot disagree with the courses because it is looking
+  at them (re-deriving the ashlar layout would have been the hand-kept mirror, and it works over any
+  base painter for free). Cracks at -46 vanished at wall scale.
+- **⚠ THE RENDERER WAS ALREADY WRONG FOR THE VARIANTS AND NOTHING WOULD HAVE THROWN.**
+  `piece-mesh.ts` switched on `def.id`, so all 72 variants fell to the default arm and drew the
+  beam's little post — the sapling-icon bug exactly. `render-audit` now asserts **both** the cases
+  and the KEY, because a complete set of cases keyed on the wrong thing is still completely broken.
+
+### Next
+1. **Alex rules the moss green** on `/shimmer/dev/building` — the mechanism is right, the exact hue
+   is his call and this page is where it gets made.
+2. **Burrows into voxel3d** — canon says UNDERGROUND, mouth dug into a bank. The jigsaw is ready and
+   the arch is the mouth; the terrain predicate wants a BANK rather than flat ground.
+3. **A hamlet pool** — the same assembler, cottage shapes, following the story road.
+4. **Hub deploys** — 6 commits pushed, not yet live.
+5. **The 84 variants are not reachable from the build menu.** `VoxelWorld.tsx` reads `PIECES` (the
+   12 hand-written) on purpose — it is another lane's file. Opting it in to `ALL_PIECES` is a one
+   line change *and the renderer fix above is what makes that safe*.
+
+### Decisions
+- **Stairs stay a PIECE, not a block, and the finding holds either way.** A `STAIR_BIT` fits — the
+  encoding is `Uint16`, base id is 8 bits at 82/255, `HALF` 0x0100 + `TOP` 0x0200 used, **0x0400 to
+  0x8000 free** — but it forces stair geometry into `greedy.ts`, the meshing hot path. Pieces already
+  write STRUCTURE into the voxel grid so collision is free, and they render as InstancedMesh.
+- **There are THREE building woods, not four, and that is canon.** Starwillow is a ruled TOOL wood —
+  `resources.ts` drops `starwillow_branch` + `starwillow_sap`. Adding a plank to "complete the set"
+  would contradict canon. Checked before assuming.
+- **`PIECES` still means the hand-written shapes; `ALL_PIECES` is everything.** Adding a name rather
+  than widening one means nothing in another lane changes meaning until its owner opts in, and the
+  count assert stays load-bearing instead of a number someone bumps on every addition.
+
+### ⚠ Traps banked this session
+- **`.gitignore:5` is a bare `build`, which git matches AT ANY DEPTH.** `dev/build/` was silently
+  unaddable — the page would have worked all session and existed in no history anywhere. Renamed
+  `dev/building`. `git add` complaining is the only thing that caught it.
+- **`TILE_MATERIALS` is APPEND ONLY** (index = texture slot). Inserting beside the clean siblings
+  reads better and shifts every later material onto a different layer.
+- **A stale board/session row sent me to redo finished work.** SHIMMER_SESSION said "`holds.ts:1`
+  rename" — already shipped in `85705ec`. Compounding it, the `.replace()` that would have
+  duplicated the note **silently no-op'd**, which is what saved it. Luck, not discipline: assert on
+  every replace.
+- **Backticks in `git commit -m` run as shell substitution** — recorded on 08-26, walked into again
+  on 08-27, ate two words. Use `-F <file>`.
+- **`git checkout --` to restore a mutated file destroyed an uncommitted refactor of my own.** The
+  documented trap. Mutation sweeps restore from a WORKING-TREE backup.
+
+### Files
+`voxel/jigsaw.ts` (new) · `voxel/pieces.ts` + `pieces.test.ts` · `voxel/ruins.ts` · `voxel/holds.ts` +
+`holds.test.ts` · `voxel/registry.ts` · `voxel/depth.ts` · `voxel3d/tex/tiles.ts` · `voxel3d/attrs.ts` ·
+`voxel3d/piece-mesh.ts` · `voxel3d/render-audit.test.ts` · `dev/building/page.tsx` (new)
+
 ## ✅ Shimmer voxel — **BUG (Alex, 2026-08-27): THE FOLD GREW AND ITS DOOR DID NOT** · *FIXED + deployed `c520dbe`, hub*
 
 **What Alex saw, verbatim:** *"when i got the first upgrade from greg to extend the fold.. the outer wall expanded and moved but the passage to the wilds stayed in the same spot and is unusable."*
