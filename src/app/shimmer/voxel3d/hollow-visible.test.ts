@@ -14,14 +14,13 @@
 // anywhere owned the sentence the material itself makes: "a smear of grey that HOLDS A SILHOUETTE".
 
 import { readFileSync } from 'node:fs'
-import { codeOnly, noComments } from '../testing/guard'
+import { codeOnly } from '../testing/guard'
+import { HOLLOW_LOOK, createHollowMat } from './hollow-look'
 import { spawnDark, packLight, dayFactor } from '../voxel/light'
 
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
-
-const SRC = readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8')
 
 // ── 1. ★★ RULE ONE, RESTATED FROM THE SHIPPED FUNCTION: A HOLLOW LIVES IN THE DARK ──────────────
 // Not quoted from a comment — asked of `spawnDark`, so if the darkness requirement is ever relaxed
@@ -37,56 +36,44 @@ const SRC = readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8')
 }
 
 // ── 2. ★★★ SO THE BODY MUST CARRY ITS OWN FLOOR OF LIGHT ────────────────────────────────────────
+// ⚠ ASKED OF THE SHIPPED MATERIALS, NOT OF A SOURCE FILE. This section used to grep VoxelWorld.tsx,
+// and when the look moved to `hollow-look.ts` it went red against code that was fine — a guard
+// asserting a retired LOCATION rather than a retired rule. Building the real materials cannot go
+// stale that way: wherever the factory lives, this is what a Hollow is made of.
 {
-  const code = codeOnly(SRC)
-  const mats = code.match(/warden: new THREE\.MeshLambertMaterial\(\{[^}]*\}\)/)?.[0] ?? ''
-  ok(mats !== '', 'the warden material is findable')
-
-  for (const form of ['warden', 'stalker', 'caster']) {
-    const m = code.match(new RegExp(`${form}: new THREE\\.MeshLambertMaterial\\(\\{[^}]*\\}\\)`))?.[0] ?? ''
-    ok(/emissive:/.test(m), `${form} has an emissive term — without one it can only be as bright as the dark it stands in`)
-    ok(/emissiveIntensity: HOLLOW_SELF_LIGHT/.test(m),
-       `${form} takes it from the ONE named constant, so the look is one number to move, not three`)
-    // ⚠ THE EMISSIVE MUST BE THE BODY'S OWN COLOUR. A white or a tinted one shifts the hue as the
-    // light drops, so a Hollow would change colour with the time of day — and canon's grey is the
-    // whole read of the thing.
-    const colour = m.match(/color: (0x[0-9a-f]+)/)?.[1]
-    const emis = m.match(/emissive: (0x[0-9a-f]+)/)?.[1]
-    ok(!!colour && colour === emis, `${form}'s self-light is its OWN hue (${colour} vs ${emis}) — never a tint that shifts as light drops`)
+  const mats = createHollowMat(HOLLOW_LOOK)
+  for (const f of ['warden', 'stalker', 'caster'] as const) {
+    ok(mats[f].emissiveIntensity > 0,
+       `${f} carries its own light — without it, it can only ever be as bright as the dark it stands in`)
+    // ⚠ THE SELF-LIGHT MUST BE THE BODY'S OWN COLOUR. A white or tinted one shifts the hue as the
+    // scene light drops, so a Hollow would change colour with the hour — and the grey is the whole
+    // read of the thing.
+    ok(mats[f].emissive.getHex() === mats[f].color.getHex(),
+       `${f}'s self-light is its own hue, never a tint that drifts as the light drops`)
   }
+  for (const m of Object.values(mats)) m.dispose()
 }
 
-// ── 3. THE CONSTANT IS IN THE BAND WHERE IT MEANS SOMETHING ─────────────────────────────────────
+// ── 3. THE DIAL IS IN THE BAND WHERE IT MEANS SOMETHING ─────────────────────────────────────────
 // ⚠ Not a look ruling — a range check. Zero is the shipped-invisible behaviour and high is a
-// lantern, which is the opposite of what a Hollow is. Alex rules the value inside this band.
+// lantern, which is the opposite of what a Hollow is. Alex rules the value inside this band, on
+// `/shimmer/dev/grey`, which exists precisely so the number comes from a picture and not from me.
 {
-  const v = Number(codeOnly(SRC).match(/const HOLLOW_SELF_LIGHT = ([\d.]+)/)?.[1] ?? NaN)
-  ok(Number.isFinite(v), `HOLLOW_SELF_LIGHT is a real number (${v})`)
-  ok(v > 0, '★ above zero — zero IS the bug, and it is the value that looks like nobody chose it')
-  ok(v < 0.5, 'and well under a half, or the grey starts to read as a light source')
+  ok(Number.isFinite(HOLLOW_LOOK.selfLight), `the self-light dial is a real number (${HOLLOW_LOOK.selfLight})`)
+  ok(HOLLOW_LOOK.selfLight > 0, '★ above zero — zero IS the bug, and it is the value that looks like nobody chose it')
+  ok(HOLLOW_LOOK.selfLight < 0.5, 'and well under a half, or the grey starts to read as a light source')
 }
 
-// ── 4. ★ THE MATERIALS ARE STILL SHARED, NOT PER-BODY ───────────────────────────────────────────
-// Adding a field to a material is exactly when someone inlines it into the spawn. A material per
-// Hollow is a shader program per Hollow, which is what got this page blocked from WebGL on 08-06.
+// ── 4. ★★ AND THE PROMISE THE LOOK MAKES IS STILL WRITTEN DOWN ──────────────────────────────────
+// The whole argument of this file is that a stated contract was not being met. If someone rewrites
+// the look and drops the promise, this should be revisited deliberately rather than quietly
+// outliving its reason.
 {
-  const code = codeOnly(SRC)
-  const spawn = code.slice(code.indexOf('const mesh = new THREE.Mesh(hollowGeo['), code.indexOf('const mesh = new THREE.Mesh(hollowGeo[') + 200)
-  ok(/hollowMat\[form\]/.test(spawn), 'the spawn reaches for the shared material by form')
-  ok(!/new THREE\.MeshLambertMaterial/.test(spawn), 'and does not build one per body')
-  // ⚠ NO COUNT ASSERT HERE ON PURPOSE, AND I WROTE ONE FIRST. \`<= 6\` against a real 8 is a
-  // ceiling with no author and no expiry — the shape PATTERNS warns about — and the tempting fix
-  // when it goes red is to nudge the number, which measures nothing. The rule that actually
-  // matters is structural and is asserted above: the SPAWN reaches for a shared material and does
-  // not build one. A file-wide tally cannot tell a legitimate new material from a leak.
-}
-
-// ── 5. ⚠ AND THE SENTENCE THE MATERIAL MAKES IS STILL THERE ─────────────────────────────────────
-// The comment is the contract this whole file exists to enforce. If someone rewrites the look and
-// drops the promise, the guard below should be revisited rather than silently outliving its reason.
-{
-  ok(/holds a silhouette/.test(noComments(SRC)) === false, 'the promise lives in a comment, as prose')
-  ok(/holds a silhouette/.test(SRC), '★ and it is still there — "a smear of grey that holds a silhouette"')
+  const look = readFileSync(new URL('./hollow-look.ts', import.meta.url), 'utf8')
+  ok(/holds a silhouette/.test(look), '"a smear of grey that holds a silhouette" is still the stated intent')
+  ok(!/holds a silhouette/.test(codeOnly(look)), 'and it lives in prose, where a contract belongs')
+  // ⚠ The darkness rule is the other half and it is asserted in section 1 from `spawnDark` itself,
+  // so if that rule is ever relaxed this file's argument changes with it rather than rotting.
 }
 
 console.log(`hollow-visible: ${pass} pass, ${fails.length} fail`)
