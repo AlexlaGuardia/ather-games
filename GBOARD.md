@@ -111,7 +111,37 @@ matters, because "build it" and "expose it" are different days of work and only 
   shape, not a creature. A Luminara firefly and a Dewbear tardigrade are both human-scale. Sizing is
   Alex's and Magii's call.
 
+### 2026-08-27 (later, hub) — the crossing's arriving half is wired; the departing half is one question from Alex
+- **★★ `engine/crossing.ts` HAD THE CONTRACT, `consumeArrival`, `arrivalFor` AND A FULL ORACLE SINCE
+  08-24 WITH NO CALLER ON EITHER SIDE — and nothing was red.** A contract with no callers is
+  perfectly self-consistent. Same shape as the 98 unreachable pieces this morning: built, tested,
+  green, unreachable. `Shimmer3D.tsx` now consumes the one-shot on load and stands the keeper up,
+  **after** the save branches (staged beats saved) and **outside** the `data.spirits` block, because
+  those branches never run for a save with no party and an arrival cannot depend on owning a spirit.
+- **⚠ THE PLAIN-ZONE BRANCH IS MEASURED.** `isStitched('rune-hold')` is false and
+  `migrateLegacyPosition` returns null at every tile tried, so `setZoneId` + a direct tile set is
+  right. Routing through `toWorld` would return null, **eat the arrival silently**, and leave the
+  keeper where their save put them — a crossing that looks like it did nothing. Section 2 of the
+  oracle rather than a comment: if rune-hold is ever absorbed, that goes red instead of the
+  placement going quietly wrong while the zone resolves and the numbers stay finite.
+- **★★★ THE DEPARTING HALF STAYS REFUSED BECAUSE THE OBVIOUS DERIVATION IS WRONG, AND I ALMOST
+  SHIPPED IT.** `depart()` needs an anchor tile, and the gate already carries `toX/toY` — *"where you
+  land"*. **It is the wrong number:** `toX/toY` is where that gate SENDS you, a tile in `toZone`, and
+  THE LANDING is the door *out of* rune-hold, so it points at the far side. Anchoring on it puts the
+  keeper somewhere legal-looking and meaningless, which is what the contract bans (0,0) by name for.
+  `crossing-out.ts` refused to derive this and hub refused it once before; both were right.
+- **⏭ ONE QUESTION, AND IT IS ALEX'S:** when he paints THE LANDING, **which tile does the keeper
+  stand up on?** Beside the door, never on any gate — `arrivalBlockedBy` checks every gate in the
+  square, because a gate tile is what a warp fires on and an arrival on one is an instant re-warp.
+  Suggested to world that `MapEditor` could capture it at paint time, which closes the crossing with
+  no constant anyone must remember; their file, their call.
+- **⚠ THE COMMIT-FORM RULE NEEDED AMENDING TWICE IN AN HOUR.** `git commit -- <paths>` **cannot
+  commit an untracked file** — it aborts. Complete form: `git add <paths> && git commit -- <paths>`.
+  It aborted rather than sweeping, and the abort left world's dirty `tokens.test.ts` untouched, so
+  the guard held on its first live test.
+
 ### Files
+`play3d/Shimmer3D.tsx` + `play3d/crossing-in.test.ts` (32 asserts, 4 mutations) ·
 `voxel3d/recoil.ts` + `recoil.test.ts` (112 asserts, 4 mutations) · `voxel3d/collar-prompt.ts` +
 `collar-prompt.test.ts` (69 asserts, 6 mutations) · `voxel3d/palette.test.ts` (416 asserts, 4
 mutations) · `voxel3d/VoxelWorld.tsx` · `voxel/pieces.ts` (`pieceVariants`) · `lib/input/actions.ts`
