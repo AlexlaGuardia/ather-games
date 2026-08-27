@@ -90,6 +90,17 @@ export interface GenPiece {
   pieceId: string
   x: number; y: number; z: number
   rot: 0 | 1 | 2 | 3
+  /**
+   * Generated OPEN, for a piece that opens. Absent = closed, same as `Placement.open`.
+   *
+   * ⚠⚠ THE HOLD GATES MUST BE BORN OPEN AND THIS IS A TRAVERSAL FACT, NOT A GARNISH. The gate gap
+   * is where the STORY ROAD crosses the curtain wall — the quest spine physically runs through it.
+   * A gate generated closed puts a shut door across the main path of the game, on three holds, for
+   * every keeper, before anyone has been given a reason to open one. `cellsOf` writes no solid
+   * cells for an open piece, so an open gate occupies nothing and the road is exactly as passable
+   * as it was before this existed.
+   */
+  open?: boolean
 }
 
 const WALL_TOP = WALL_H       // parapet feet sit ON the wall (y = pad + WALL_H + 1)
@@ -123,6 +134,32 @@ export function holdGenPieces(i: number, pad: number): GenPiece[] {
       // than on the piece id is what makes that free.
       out.push({ gen: `${s.id}:p:${wx},${wz}`, pieceId: 'fence_stonebrick', x: wx, y: pad + WALL_TOP + 1, z: wz,
                  rot: wall <= 1 ? 1 : 0 })   // rails run ALONG the wall, not across it
+    }
+  }
+
+  // ── ★ THE GATES (2026-08-27, Alex ruled it) ─────────────────────────────────────────────────
+  // Until now `holdVoxelAt` punched the gate as a HOLE — three blocks of nothing where the road
+  // crosses the wall. That is a breach, not a gate, and it reads as one from the road: a hold that
+  // cannot close is not holding anything. The piece existed the same day the doors did; what was
+  // missing was the ruling on whether a closable thing may sit on the quest spine at all.
+  //
+  // ★ BORN OPEN. See `GenPiece.open` — an open gate occupies no solid cells, so the road is
+  // untouched until a keeper chooses otherwise. The affordance arrives; the obstacle does not.
+  //
+  // ★ TIMBER ON STONE, DELIBERATELY, AND IT IS THE SAME ARGUMENT AS THE KEEP ROOF RATHER THAN THE
+  // PARAPET. The parapet was wrong because it ran warm timber the whole length of a cold grey mass;
+  // a gate is a small accent AT A THRESHOLD, which is exactly where the gate lanterns already put
+  // the eye. ⚠ And no metal — `shimmer-alchemy-vessels.md` rules the Ather's craft has none of it,
+  // so a wrought-iron portcullis is the one gate this may never be. (Whether that law governs
+  // architecture at all is filed `[OPEN]` in CANON_GAPS; timber is inside it either way.)
+  for (const gt of s.gates) {
+    const along = gt.at
+    for (let o = -GATE_HALF; o <= GATE_HALF; o++) {
+      // The leaf lies IN the wall plane, same rule the parapet rails use.
+      const rot: 0 | 1 | 2 | 3 = gt.wall <= 1 ? 1 : 0
+      const wx = gt.wall === 0 ? s.x + s.half : gt.wall === 1 ? s.x - s.half : s.x + along + o
+      const wz = gt.wall === 0 ? s.z + along + o : gt.wall === 1 ? s.z + along + o : gt.wall === 2 ? s.z + s.half : s.z - s.half
+      out.push({ gen: `${s.id}:g:${wx},${wz}`, pieceId: 'gate', x: wx, y: pad + 1, z: wz, rot, open: true })
     }
   }
 

@@ -3,7 +3,7 @@
 // Run: npx tsx src/app/shimmer/voxel/holds.test.ts
 
 import { HOLDS, holdIndexAt, holdCourtyardAt, holdVoxelAt, holdGenPieces, holdGenPiecesForCol } from './holds'
-import { basePieceId, pieceMaterial } from './pieces'
+import { basePieceId, pieceMaterial, cellsOf, pieceDef } from './pieces'
 import { columnHeight, holdPadLevel } from './height'
 import { materialAt, MAT } from './depth'
 import { STORY_NODES, roadAt } from './story-path'
@@ -81,6 +81,22 @@ for (const [i, s] of HOLDS.entries()) {
   const parapets = dressing.filter(g => basePieceId(g.pieceId) === 'fence')
   const roof = dressing.filter(g => g.pieceId.startsWith('roof_'))
   check(`${s.id}: parapets exist`, parapets.length > 10)
+
+  // ── ★★ THE GATES, AND THE ASSERT THAT MATTERS IS THE ROAD (2026-08-27) ──────────────────────
+  // Alex ruled gates into the gate gaps. The gap is where the STORY ROAD crosses the curtain wall,
+  // so the ONLY way this feature can be a disaster is by being born closed — a shut door across the
+  // quest spine, on three holds, before any keeper has a reason to open one. That is not a cosmetic
+  // regression and it would not show up in any other check here, so it gets its own.
+  const gates = dressing.filter(g => basePieceId(g.pieceId) === 'gate')
+  check(`${s.id}: gates stand in the gate gaps`, gates.length === s.gates.length * 3)
+  check(`${s.id}: ★ every hold gate is born OPEN`, gates.length > 0 && gates.every(g => g.open === true))
+  // ★★ AND THE STRONGER FORM: ask `cellsOf` — the function the world actually writes occupancy
+  // from — whether any gate cell blocks. Asserting `open === true` alone would still pass if the
+  // OPEN state stopped meaning passable; this asks the thing a walker actually meets.
+  const blocking = gates.flatMap(g => cellsOf(g, pieceDef(g.pieceId)!)).filter(c => c.solid)
+  check(`${s.id}: ★★ no gate cell blocks the road (${blocking.length} blocking)`, blocking.length === 0)
+  // Deterministic ids, or a tombstone cannot find its piece again after a reload.
+  check(`${s.id}: gate ids are unique`, new Set(gates.map(g => g.gen)).size === gates.length)
   check(`${s.id}: ★ the parapet is stone, not timber`,
         parapets.length > 0 && parapets.every(g => pieceMaterial(g.pieceId)?.family === 'stone'))
   check(`${s.id}: every parapet stands ON the wall top`, parapets.every(g =>
