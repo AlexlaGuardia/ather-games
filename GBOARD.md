@@ -270,9 +270,20 @@ success.
 - **The stub-map exemption derives itself.** Two grids are `createStubMap(...)` and `null` is the
   correct answer for them; the test asks the SOURCE rather than naming the two consts, so the day
   one becomes a literal it stops being exempt on its own.
-- ⚠ **`f40e612` is hub's commit and carries all six of my files** — they ran a `-A` commit while my
-  work sat staged. Code is fine and pushed; the message names only recoil. Recorded so the next
-  reader is not sent to a recoil commit looking for the gate work.
+- ★★★ **`f40e612` is hub's commit and carries all six of my files — AND THE MECHANISM IS NOT THE
+  ONE THE SOP WARNS ABOUT.** I called it a `-A` commit; **hub checked and that was wrong.** They ran
+  `git add <one path> && git commit -m ...` — a pathspec add, exactly as the SOP says — and it swept
+  six files of mine anyway, because **`git add` scopes the ADD and a bare `git commit` then takes
+  whatever is in the INDEX.** The SOP's rule (*"pathspec commits, never `-A`"*) describes the add and
+  is silent about the commit, so following it to the letter still lets this happen. The form that
+  actually scopes is **`git commit -m msg -- <paths>`**. Fixed in the SOP at `7c16ea8`.
+- ★★ **AND THE INDEX IS THE WORSE HALF OF `git status`.** A dirty file at least appears in your own
+  pre-build listing; **nothing shows you another window's INDEX**, and a staged file of theirs is
+  indistinguishable from a staged file of yours. Hub spent forty minutes refusing to build because
+  my tree was dirty, and committed my work through a door neither of us was watching. ⚠ The
+  near-miss is the finding: ninety seconds earlier it would have been a half-written
+  `gate-collapse.ts` and a mid-JSX `MapEditor` pushed under a message about recoil — **and every
+  test would still have passed, because the suite runs against the TREE.**
 
 ### Files
 `world/gate-collapse.ts` + `.test.ts` (new, 52 asserts) · `world/tilemap-source.ts` + `.test.ts`
