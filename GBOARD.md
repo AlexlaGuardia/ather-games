@@ -11,6 +11,38 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 📏 Shimmer sprites — **A FIREFLY WAS STANDING EYE-TO-EYE WITH THE KEEPER** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — `a4fa76f` pushed, 0 unpushed, tsc 7 (baseline), render-audit 129/0, sweep 188/188. NOT deployed — hub owns the lock.*
+
+### Left off — Alex ruled it, and canon had already answered most of it
+
+**THE ASK:** *"size the creatures — firefly shouldn't be human-scale."*
+
+- **★★★ ONE NUMBER WAS EVERY CREATURE'S HEIGHT IN BOTH WORLDS, AND IT WAS THE HALO'S.** `PRESENCE_TALL = 2.1` is the mist spindle's lathe height. `mist-pass` used it for bodies, `plot-ring-pass` imported it *only* to use it for bodies. 1 block = 1 metre (`EYE_STAND` 1.62 is a human eye), so canon's *"mote of living green light"* and a *"thumb-sized"* Hovari both stood at head height. ⚠ The constant's own doc said it was known-wrong, shared on purpose, and asked that nobody fix it in one caller — **so the fix was always going to be all-callers-at-once, and that comment is the reason it stayed cheap.**
+- **★★ THE BOOKS HAD ALREADY RULED 8 OF THE 10 AND NOBODY HAD READ THEM ACROSS.** `sprites/creature-size.ts` holds a height per species with **the quote and the book cite on every entry**. The oracle refuses an entry that cites no source or quotes nothing, so the table cannot decay into numbers somebody chose — which is precisely what the canon boundary bars. **`CANON_GAPS` stays `[OPEN]`**; the build is not claiming the ruling, it is showing its working so the ruling is a diff rather than a design session.
+- **★★★ THE GUARD ASSERTS CANON'S RELATIONS, NOT MY NUMBERS — and canon handed one over.** Three spirits are measured against the **same human body**: a Dewbear *"bumped against her shins"*, a Vulnyx *"hit her at the knees"*, a Manalotl's head *"under her chin"* as she knelt. That is a strict ordering canon states itself, in one measuring stick. `Dewbear < Vulnyx < Manalotl` is what the test asserts, so it still means something after Magii moves every value — a ruling that breaks it contradicts the prose. **A test that said `fox === 0.5` would be the hand-kept mirror wearing a test's name.**
+- **★★ TWO OF MY OWN GUARDS WERE BLIND ON THE FIRST SWEEP, AND ONE OF THEM CAUGHT A LIE IN MY COMMENT.** The citation check was `length > 20` **plus "contains a parenthesis"** — so a quote stripped to `"—— knees ... (bk11:71)"` sailed through; it was testing for **punctuation**. And the `__proto__` section claimed the null prototype protected `creatureHeight` — **it does not**: that function's `?.height ?? fallback` chain swallows `Object.prototype` on the way past, so removing the prototype changed nothing and the test called that a pass. **It was measuring the wrong subject.** The prototype protects every reader that indexes `SIZES` **directly**, which is the normal way to read a table and is what the oracle itself does twice. ⚠ **The comment was corrected rather than the test loosened.**
+- **PRESENCE_TALL 2.1 → 1.32**, derived as `BASE_FORM_MAX * 1.1`. It is now **only** the halo's height and explicitly nobody's body. ★ **It stays uniform across species on purpose: a constant beside a varying thing is a ruler.** The new sizes are legible *because* the bloom does not change between a mote and a Manalotl. ⚠ At 2.1 the bloom itself read as a person standing in the mist — the same human-scale lie the bodies were telling.
+- **⚠ THE CROSSHAIR STILL TARGETS THE HALO, NOT THE BODY, AND THAT IS LOAD-BEARING.** A 4cm Luminara is about **a tenth of a degree** wide at `SPAR_RANGE` 6 — honest and unusable. A uniform bloom keeps every species equally approachable. **The drawn size must never be nudged up to make aiming work**; that quietly turns a canon reading into a gameplay dial, and there is a warning in the file saying so.
+- **`BOB` 0.06 → `BOB_FRAC` 0.12**, which is 0.06 divided by the fox it was tuned against — so the fox breathes **exactly** as it did today and a 4cm firefly stops sinking through the ground on every breath. Bodies now sit at **feet + their own height/2**; against a shared constant a small spirit is buried and a large one floats, **and neither reports anything**.
+- **⚠ NOT VERIFIED ON SCREEN, AND THE HARNESS CANNOT DO IT.** Two shots of `/shimmer/dev/ring` came back as empty grass — explained by its own HUD (`on screen 0 · nearest 64`), because world's placement rule **never puts a resident where the keeper is looking** and the harness camera rides the keeper's eyes. That is the rule working, not a regression, but it means **the ring harness cannot photograph its own residents** and a sizing change has no picture behind it yet.
+
+### Next
+- **Alex stands in the mist and looks at a spirit** — this is a LOOK change and it has numbers, tests and no picture. The two calls to overturn are both one number: `PRESENCE_TALL` 1.32 (how tall the bloom reads) and any single row in `SIZES`.
+- **⚠ Challenge the Manalotl first.** At 1.00m it is the giant of the roster, twice the mascot, and its magnitude rests on how you picture *"under her chin"* while kneeling. The ORDERING it sits in is safe; only the size is arguable, and the source string shows the working so the argument is with the derivation.
+- **Magii rules the two pending rows** — Noctyx (*"no bigger than Momo"*, and Momo is double-booked cat-sized vs a curled fist) and Shellmere (the only size in the books is the **ancient evolved** one). Flipping either `pending` flag turns the oracle red on purpose until the guard is updated deliberately.
+- **Moglin patrols are still an unsized `BoxGeometry` blockout** (`VoxelWorld.tsx:4963`, hub's). `moglins.md:10` **rules** them at three feet, so that one needs no gap — just the number. ⚠ `spirit-tales-bible.md:149` still says four; two canon files disagree in writing and reconciling them is Magii's.
+- **`dev/ring` needs a way to look AT the residents** (a free camera, or a shot mode that faces the nearest one) or the next look-change lands unphotographed too.
+
+### Decisions
+- **The table is a canon READING, not a design.** Size is named in neither column of `SHIMMER-CANON-BOUNDARY.md:22` — Magii gets anatomy, Jin gets rendering — so shipping quotes with cites is the honest middle: closer to canon than the halo constant, and reversible in one line per row when the ruling lands.
+- **Waiting was not the neutral option.** The build was already shipping an answer (2.1 for all ten). A gap left open does not stop the world asserting something; it only stops anyone checking what.
+- **The halo is a ruler, not a costume.** Uniform on purpose. If it ever scales per species, the sizes stop reading, because nothing constant is left to read them against.
+
+### Files
+- `src/app/shimmer/sprites/creature-size.ts` (new) · `creature-size.test.ts` (new, 111 asserts, 8 mutation doors)
+- `src/app/shimmer/voxel3d/mist-pass.ts` (hub/world's — 14h cold, dbr'd both) · `plot-ring-pass.ts` (hub's — same)
+- `/root/athernyx/CANON/CANON_GAPS.md` — the size gap, still `[OPEN]`, now with the shipped table to ratify against
+
 ## 🎯 Shimmer voxel3d — **THREE OF ALEX'S OWN BUG REPORTS, AND EVERY ONE WAS A THING THAT WAS ALREADY BUILT** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — `b83de66` `3eb8a54` `f152870` `f40e612`, all pushed, **NOT DEPLOYED** (world's tree dirty, lock held free on purpose)*
 
 ### Left off — nothing was missing; three things were unreachable
