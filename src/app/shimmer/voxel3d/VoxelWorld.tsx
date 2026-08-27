@@ -6600,7 +6600,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
               lastPressed.current = -999
               onSay('the grey takes you under — you wake at the glade, and it did not follow')
             } else {
-              onSay(hit.form === 'stalker' ? 'something struck from behind you' : 'it presses in — you are hurt')
+              // ⚠⚠ CANON VOCABULARY, NOT FLAVOUR. `shimmer-geography.md:752` (RULED 2026-08-26):
+              // *"A PERSON MAY NOT INJURE YOU. AN ABSENCE MAY EMPTY YOU… only the greying reaches a
+              // keeper's own light, and even then it DRAINS rather than wounds."* The ruling bans
+              // wounded / hurt / injured outright — **one word breaks Rule 3 with the mechanic
+              // completely unchanged** — and this line said *"you are hurt"* from 2026-08-26 until
+              // today. The stalker's line was always fine: something STRIKING is not something
+              // injuring you.
+              // ★ The replacement is built from the ruling's own words (empty, grey, still lit)
+              // rather than invented, because the vocabulary is canon's and the pen is Magii's.
+              onSay(hit.form === 'stalker' ? 'something struck from behind you' : 'it presses in — you feel less of yourself lit')
             }
           }
         }
