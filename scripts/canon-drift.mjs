@@ -963,6 +963,84 @@ function toMarkdown(counts) {
   return md
 }
 
+// ── GATE 13: CREATURE SIZES ─────────────────────────────────────────────────
+// ★★★ THIS IS THE GATE THAT STOPS A TRANSCRIPTION BECOMING A HAND-KEPT MIRROR.
+// `sprites/creature-size.ts` carries a height per species. Until 2026-08-27 those were the build
+// reading the books for itself; Magii + Alex then RULED the sizes, so the build's table is now a
+// COPY of `design-briefs/base-forms.md`'s `Size (young base form)` lines. A copy and its original
+// agree perfectly right up until they silently stop, and then the copy reads as corroboration —
+// which is the exact shape PATTERNS warns is worse than an omission, because a stale mirror
+// manufactures a green at the moment somebody goes looking.
+//
+// ⚠ THE METRE FIGURE IS THE LOOSER HALF AND CANON SAYS SO. Canon's fact is the COMPARISON ("shin-high",
+// "thumb-sized"); the number exists so the build has something to draw. So a mismatch here is a NOTE
+// worth a human's eye when it is small, and a CONFLICT when the two disagree about the creature.
+// The threshold is 20% — under that is rounding, over it is a different animal.
+function canonCreatureSizes() {
+  const txt = read(join(CANON, 'design-briefs', 'base-forms.md'))
+  const out = new Map()
+  let code = null
+  for (const line of txt.split('\n')) {
+    // "## 9. Dewbear (water-bear / tardigrade) — Earth affinity" -> code 'water-bear'
+    const h = line.match(/^##\s*\d+\.\s*\w+\s*\(([^)]+)\)/)
+    if (h) { code = h[1].split('/')[0].trim(); continue }
+    const m = line.match(/^-\s*\*\*Size \(young base form\):\*\*.*?\(~([\d.]+)m\)/)
+    if (m && code) { out.set(code, Number(m[1])); code = null }
+  }
+  return out
+}
+function gameCreatureSizes() {
+  const txt = read('/root/ather-games/src/app/shimmer/sprites/creature-size.ts')
+  // Only the SIZES literal, so a metre figure quoted inside a comment or a source string cannot
+  // enter the table. (The file's own header quotes numbers; a whole-file scan would read them.)
+  const body = txt.split('export const SIZES')[1]?.split('export const BASE_FORM_MAX')[0] ?? ''
+  const out = new Map()
+  for (const m of body.matchAll(/^\s*'?([a-z-]+)'?:\s*\{\s*height:\s*([\d.]+)/gm)) out.set(m[1], Number(m[2]))
+  return out
+}
+{
+  const canonSz = canonCreatureSizes()
+  const buildSz = gameCreatureSizes()
+  if (!canonSz.size || !buildSz.size) {
+    add('BLIND', 'creature-sizes', `could not read one side (canon ${canonSz.size}, build ${buildSz.size}) — THE CHECK DID NOT RUN`,
+      'A gate that cannot read its subject proves nothing. One side MOVED: find the Size lines in base-forms.md or the SIZES literal in sprites/creature-size.ts and point this reader at it. Do not widen the reader until it matches something.')
+  } else {
+    let szDrift = 0
+    // ⚠ COUNTED SEPARATELY FROM `szDrift`, because a rounding NOTE must not fail the gate AND must
+    // not be papered over by a CLEAN line claiming everything matches. The first cut of this printed
+    // "all 10 ruled creature sizes match the build" directly beneath a note saying two had drifted —
+    // a green that overstates, which is the exact failure this gate exists to catch, committed by
+    // the gate itself. Caught by mutation, not by reading it back.
+    let szSoft = 0
+    for (const [code, want] of canonSz) {
+      if (!buildSz.has(code)) {
+        szDrift++
+        add('GAP', 'creature-sizes', `canon rules a size for '${code}' (~${want}m) that the build does not carry`,
+          'Add it to SIZES in sprites/creature-size.ts — an unsized species falls to UNSIZED_FALLBACK and draws at a height nobody chose.')
+        continue
+      }
+      const got = buildSz.get(code)
+      const off = Math.abs(got - want) / want
+      if (off > 0.2) {
+        szDrift++
+        add('CONFLICT', 'creature-sizes', `'${code}' is ${got}m in the build and ~${want}m in canon (${Math.round(off * 100)}% off)`,
+          'Canon owns the comparison (base-forms.md › Size (young base form)). Re-transcribe the build, or get it re-ruled first — do not split the difference.')
+      } else if (off > 0.001) {
+        szSoft++
+        add('NOTE', 'creature-sizes', `'${code}' is ${got}m against canon's ~${want}m — within rounding, but they have drifted apart`)
+      }
+    }
+    for (const code of buildSz.keys()) {
+      if (canonSz.has(code)) continue
+      szDrift++
+      add('COLLISION', 'creature-sizes', `the build sizes '${code}', which has no ruled Size line in canon`,
+        'A size nobody ruled is accidental canon — every spirit a player meets is drawn at it. Rule it in base-forms.md, or drop the row.')
+    }
+    if (!szDrift && !szSoft) add('CLEAN', 'creature-sizes', `all ${canonSz.size} ruled creature sizes match the build`)
+    else if (!szDrift) add('NOTE', 'creature-sizes', `${canonSz.size - szSoft} of ${canonSz.size} sizes match canon exactly; ${szSoft} drifted within rounding — no conflict, but nothing here is claiming they all match`)
+  }
+}
+
 // ── REGISTRY SYNC (best-effort) ────────────────────────
 // Keep canon_registry mirrored to CANON/ on every gate run, so the index
 // never silently drifts (it once fell to 63/131). Best-effort: a sync
@@ -1031,8 +1109,8 @@ console.log('canon-drift: ' + ORDER.filter((s) => counts[s]).map((s) => `${count
 // matching line UP out of the "does not check" list. Never delete a line to quiet the output.
 const LIVE_AREAS = [...new Set(findings.map((f) => f.area))].sort()
 const PINNED_AREAS = [
-  'base-species', 'birth-affinity', 'canon-holds', 'canon-vs-canon', 'element-herbs', 'infusions',
-  'keeper-moves', 'mist-rosters', 'npcs', 'retired-vocab', 'second-forms', 'zones',
+  'base-species', 'birth-affinity', 'canon-holds', 'canon-vs-canon', 'creature-sizes', 'element-herbs',
+  'infusions', 'keeper-moves', 'mist-rosters', 'npcs', 'retired-vocab', 'second-forms', 'zones',
 ].sort()
 
 if (!QUIET) {
@@ -1041,6 +1119,9 @@ if (!QUIET) {
   for (const line of [
     'item MODELS — whether a shipped item is a thing canon still has (the mana_seed case)',
     'mechanics, rates, costs, curves — Jin\'s by the boundary, so deliberately unchecked',
+    'creature sizes are now COVERED (gate 13) — but only the metre figure. Canon\'s actual fact is the',
+    '  COMPARISON ("shin-high", "thumb-sized"), and no gate reads prose. A green creature-sizes means',
+    '  the numbers agree, NOT that the build draws what canon describes.',
     'design-brief HOLDS — a brief still holding art that a later ruling released',
     'whether a ruled fact reached the BUILD at all — a ruling nothing implements reads clean here',
     'prose claims inside canon files — only the tabled/rostered facts are diffed',

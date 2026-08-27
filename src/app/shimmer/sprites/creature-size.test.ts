@@ -101,7 +101,10 @@ const h = (id: string) => SIZES[id]?.height ?? NaN
 // author has to come and delete the row deliberately. A bare count would let a THIRD pending entry
 // slip in behind a ruling. (PATTERNS: write the exemption so it expires.)
 {
-  const EXPECTED_PENDING = ['bat', 'turtle']
+  // ⚠ EMPTY SINCE THE 2026-08-27 RULING, AND THE ASSERT IS NOT NOW DECORATION. It still has an input
+  // that makes it fire: a new species, or a re-opened row, marked pending without anyone updating
+  // this list. That is the case it was written for — the exemption expires by itself either way.
+  const EXPECTED_PENDING: string[] = []
   ok(PENDING_SIZES.length === EXPECTED_PENDING.length && EXPECTED_PENDING.every(id => PENDING_SIZES.includes(id)),
     `pending set is [${PENDING_SIZES}], expected [${EXPECTED_PENDING}] — if canon ruled one, delete it from BOTH`)
   for (const id of PENDING_SIZES) {

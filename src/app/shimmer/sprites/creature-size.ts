@@ -7,17 +7,29 @@
 // green light"* — stood eye-to-eye with the keeper, and so did a thumb-sized Hovari. Alex ruled it
 // 2026-08-27: *"size the creatures — firefly shouldn't be human-scale."*
 //
-// ── ★★★ THESE NUMBERS ARE READ OFF CANON, NOT CHOSEN ─────────────────────────────────────────────
-// Every entry carries the quote it came from. That is not decoration: the boundary
-// (`SHIMMER-CANON-BOUNDARY.md`) gives Magii a creature's anatomy and gives Jin rendering, and SIZE
-// is named in neither column — so this table is Jin building against what canon has already said,
-// not Jin deciding. `CANON_GAPS.md` › *"How big is a spirit?"* is `[OPEN]` and asks Magii for a
-// `Size:` line per lock card, mirroring Momo's *"Size: Cat-sized at rest"* (`spirit-tales-bible.md:63`).
+// ── ★★★ RULED CANON AS OF 2026-08-27 — THIS TABLE IS A TRANSCRIPTION, NOT A DERIVATION ───────────
+// It began as the build reading the books itself, because the build was already shipping an answer
+// (2.1 for all ten) and waiting is not the neutral option. Magii + Alex RULED it the same day, and
+// the authority is now:
+//     CANON/world/spirits-species.md   › `Spirit Scale`  (the ruling, the table, the boundary)
+//     CANON/design-briefs/base-forms.md › `Size (young base form)` on each of the ten cards
+// ⚠ DO NOT RE-DERIVE A ROW FROM THE BOOKS HERE. Canon owns the comparison; a quote in a `source`
+// below shows which line canon read, it does not license a fresh reading. If a number looks wrong,
+// the fix is a ruling, not an edit.
 //
-// ⚠ SO WHY SHIP BEFORE THE RULING? Because the build is ALREADY shipping an answer and it is 2.1 for
-// everything. Waiting is not the neutral option — it is the option that keeps a thumb standing at
-// head height. A number quoted from the books is strictly closer to canon than the halo constant,
-// and when the ruling lands it is one edit per row here rather than a hunt through three files.
+// ★★ AND IT IS CHECKED, WHICH IS THE WHOLE DIFFERENCE FROM A HAND-KEPT MIRROR. `npm run canon` reads
+// the `Size (young base form)` lines straight out of `base-forms.md` and diffs them against `SIZES`.
+// A mirror agrees with its original right up until it silently stops; this one goes red the day the
+// two disagree, and reports BLIND rather than CLEAN if it cannot read either side.
+//
+// ── ★★ THE RULING, IN ONE PARAGRAPH, because it decides what these numbers MEAN ──────────────────
+// Size runs on TWO axes. AGE within a form: a base form is a YOUNG spirit — the lock library already
+// said "read a base render as a YOUNG first-evolution kit, not a full adult", and already named Blue
+// the MATURED ELDER Dewbear against the "childlike" meadow swarm. TIER across evolutions: every
+// evolution grows a spirit, so an awakened form's vastness is accumulation, not a final magic step.
+// ⚠ THEREFORE EVERY NUMBER BELOW IS A YOUNG, STAGE-ONE SPIRIT — exactly what this build draws (wild
+// spirits in the mist, a keeper's starting roster). A second form or an elder is BIGGER, and nothing
+// here models either yet. Do not reuse these for an evolved body.
 //
 // ── ★ THE ONE COMPARISON CANON MAKES ITSELF, AND IT IS THE GUARD WORTH HAVING ─────────────────────
 // Three of Bonn's spirits are measured against HER OWN BODY, at three unambiguous contact points: a
@@ -101,18 +113,17 @@ export const SIZES: Readonly<Record<string, CreatureSize>> = Object.freeze(
     firefly: { height: 0.04, pending: false,
       source: 'Luminara — "a mote of living green light" (otto-2:303); brightened against one finger (tess-2:45)' },
 
-    // ── ⚠ THE TWO CANON HAS NOT SETTLED ───────────────────────────────────────────────────────────
-    // Both are `[OPEN]` in CANON_GAPS.md › "How big is a spirit?". They are placeholders that SAY so,
-    // which is the whole difference between this and the 2.1 they replace.
-    bat: { height: 0.24, pending: true,
-      source: 'Noctyx — "no bigger than Momo" (bk6:215, bk5:327), and Momo is double-booked: "Size: Cat-sized at rest" '
-        + '(spirit-tales-bible.md:63) vs "no bigger than a curled fist" at first sight (bk1:255). ⚠ Echo\'s own '
-        + 'behaviour reads SMALL — "folded herself small against Bonn\'s neck", "light as a held breath" (bk11:71, '
-        + 'bk11:121) — which favours the fist. PENDING: which Momo is the anchor, and whether Momo simply GREW.' },
-    turtle: { height: 0.35, pending: true,
-      source: 'Shellmere — the only size in the books is "broad across as a cart" (bk4:139) and that one is ANCIENT and '
-        + 'EVOLVED (bible:203, 207 — Bramble\'s evolved Earth champion), so it is not evidence about a base form. '
-        + 'Placeholder read off the analog (turtle) and "tank build" (spirits-species.md). PENDING: a base-form size.' },
+    // ── ★ THE TWO THAT WERE PENDING, AND WHAT SETTLED THEM (ruled 2026-08-27) ─────────────────────
+    // Neither needed a new fact. Both fell out of the young-base-form frame the ruling supplied.
+    bat: { height: 0.24, pending: false,
+      source: 'Noctyx — "folded herself small against Bonn\'s neck", "light as a held breath" (bk11:71, bk11:121). '
+        + '★ MOMO IS NOT DOUBLE-BOOKED, HE GREW: "no bigger than a curled fist" is FIRST SIGHT (bk1:255), "a warm '
+        + 'round weight in the crook of her arm" is bk1:559, "Cat-sized at rest" is the settled card (bible:63). '
+        + 'So "no bigger than Momo" (bk6:215) DATES ITSELF and is read at the moment it is said.' },
+    turtle: { height: 0.30, pending: false,
+      source: 'Shellmere — "a shell you could carry in both arms" (spirits-species.md, Spirit Scale). No base-form '
+        + 'line exists in the books; ruled off the young-kit rule. The "broad across as a cart" Shellmere (bk4:139) '
+        + 'is ANCIENT AND EVOLVED (bible:203, 207) — the top of the ladder, not the bottom.' },
   }),
 )
 
