@@ -156,13 +156,28 @@ function ToolSocket({ family, angleDeg, active, tools, skills }: {
           green shapes with number labels." The inactive state still has to read as inactive, but
           "text never sits raw on a scene" outranks it: the plate stays opaque and the CONTENT
           carries the state contrast. */}
+      {/* ⚠ PLATE 70%, NOT 60%, AND THE NUMBER IS SOLVED RATHER THAN CHOSEN (2026-08-27). Measured
+          across the five backdrops `dev/hud` offers, a 60% plate separated from GRASS at only 2.80
+          — under the 3.0 a graphic needs, on the single most common backdrop in a garden game. It
+          passed on sky, dusk and stone, which is exactly how it survived: the one that failed is the
+          one you stand on. 70% is the smallest value that clears every lit backdrop (worst case
+          3.24). Night measures 1.05 and that is fine and expected — a dark plate on a dark world is
+          separated by its ring, not by its fill. */}
       <div className={`relative w-full h-full rounded-full border
-        ${active ? 'border-amber-300/80 bg-black/70 shadow-[0_0_8px_2px_rgba(252,211,77,0.4)]' : 'border-white/25 bg-black/60'}`}>
+        ${active ? 'border-amber-300/80 bg-black/75 shadow-[0_0_8px_2px_rgba(252,211,77,0.4)]' : 'border-white/25 bg-black/70'}`}>
         <div className={`absolute inset-0 transition-opacity ${active ? '' : 'opacity-65'}`}>
         {/* XP ring, rotated so 0% starts at 12 o'clock */}
         <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full -rotate-90">
           <circle cx="24" cy="24" r={RING_R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
-          <circle cx="24" cy="24" r={RING_R} fill="none" stroke={active ? '#6ee7b7' : 'rgba(110,231,183,0.55)'}
+          {/* ⚠⚠ THE XP RING WAS INVISIBLE ON EVERY BACKDROP WHEN INACTIVE, INCLUDING NIGHT. At 0.55
+              alpha inside a 0.65-opacity content layer the effective alpha is 0.36, and it measured
+              1.99–2.46 against its own plate across all five — under 3.0 everywhere. Three of the
+              four sockets are inactive at any moment, so tool progress was unreadable most of the
+              time on all of them. 0.85 clears it (worst case 3.39).
+              ★ This is the one the socket's own 08-11 fix did NOT cover: that fix moved the DIM off
+              the plate, correctly, and this ring then dimmed itself a second time on top of it. Two
+              correct-looking decisions multiplying into an invisible one. */}
+          <circle cx="24" cy="24" r={RING_R} fill="none" stroke={active ? '#6ee7b7' : 'rgba(110,231,183,0.85)'}
             strokeWidth="2" strokeLinecap="round" strokeDasharray={RING_C}
             strokeDashoffset={RING_C * (1 - xpPct)} />
         </svg>
