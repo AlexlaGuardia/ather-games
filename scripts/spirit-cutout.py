@@ -70,6 +70,65 @@ def cut(path: Path, tol: int):
             if comp[y * w + x] != best[1]: px[x, y] = (0, 0, 0, 0)
     return im, best[0] / (w * h)
 
+# ── ★ THE VULNYX'S PAINTED GROUND-SHADOW (Alex flagged 2026-08-27) ────────────────────────────
+# `cut()` keeps the largest connected blob to drop free-floating light-motes, and the Vulnyx source
+# paints its contact shadow TOUCHING the paws with no gap — so the shadow is the same blob as the
+# fox and survives every tolerance in the ladder. Confirmed NOT a tolerance problem: walking the
+# ladder to 20 barely dents it (43.8%→42.8% subject) and 24 blows through the TAIL instead (24.6%,
+# same cliff shape as the Athowl/Lepara failures this file's header warns about) — the shadow's own
+# outer edge resists the fill almost as hard as the fox's, so there is no tolerance that clears one
+# without breaking the other.
+# ★ THE FIX IS GEOMETRIC, NOT COLOR. Per-row opaque-pixel WIDTH is flat (even falling, as legs
+# taper toward the paws) right up until the shadow starts — then it flares outward for good, wider
+# than any real limb gets. That knee is sharp and reproducible: find the row with the smallest
+# width seen so far, then look for a sustained (not one noisy row) jump past it. Below that row,
+# anything OUTSIDE the reference row's own x-span is shadow spilling sideways — including all of
+# the far right, which is how the shadow reaches past the tail. FEATHER tapers the cut alpha near
+# the window's edges instead of a hard vertical wall, so what is left reads as a soft contact
+# shadow under the paws rather than a rectangle bitten out of a blob.
+# ⚠ SCOPED TO fox ALONE. Moglin and jimbo show the same flare (checked while building this) but
+# nobody asked for those yet and a shared knob is a shared risk — touch them in their own pass.
+def trim_contact_shadow(im: Image.Image, flare_ratio: float = 1.12, persist: int = 3, pad: int = 10, feather: int = 10) -> Image.Image:
+    w, h = im.size
+    px = im.load()
+    def row_extent(y: int):
+        minx = maxx = None
+        for x in range(w):
+            if px[x, y][3] > 0:
+                if minx is None: minx = x
+                maxx = x
+        return minx, maxx
+    start = h * 3 // 5   # the shadow is a ground-contact feature — only look near the bottom
+    widths = {y: row_extent(y) for y in range(start, h)}
+    min_w, ref_y = None, None
+    for y in range(start, h):
+        mn, mx = widths[y]
+        if mn is None: continue
+        wd = mx - mn + 1
+        if min_w is None or wd < min_w:
+            min_w, ref_y = wd, y
+            continue
+        if wd > min_w * flare_ratio:
+            hit = 0
+            for k in range(persist):
+                mn2, mx2 = widths.get(y + k, (None, None))
+                if mn2 is not None and (mx2 - mn2 + 1) > min_w * flare_ratio: hit += 1
+            if hit == persist:
+                break   # ref_y stays at the row that set min_w — that is the pre-flare reference
+    else:
+        return im   # scanned the whole bottom with no sustained flare — nothing to trim
+    lo, hi = widths[ref_y]
+    lo, hi = max(0, lo - pad), min(w - 1, hi + pad)
+    out = im.copy(); opx = out.load()
+    for y in range(ref_y + 1, h):
+        for x in range(w):
+            r, g, b, a = opx[x, y]
+            if a == 0: continue
+            d = lo - x if x < lo else (x - hi if x > hi else 0)
+            if d > 0:
+                opx[x, y] = (r, g, b, int(a * max(0.0, 1 - d / feather)))
+    return out
+
 # ── ★ THE FOLK, AS PLACEHOLDERS (Alex, 2026-08-26) ────────────────────────────────────────────
 # A patrol Moglin is a brown box today. These are 🔒 LOCKED canon refs, so a locked painting beats
 # a pill even when it is not the RIGHT read yet.
@@ -126,6 +185,8 @@ for s in manifest['spirits']:
     if frac < AREA_FLOOR:
         print(f'✗ {s["name"]}: best subject is only {frac:.1%} — hand-cut this one'); continue
     im = im.crop(im.getbbox())
+    if code == 'fox':
+        im = trim_contact_shadow(im).crop(im.getbbox())
     r = EDGE / max(im.size)
     im = im.resize((max(1, round(im.size[0] * r)), max(1, round(im.size[1] * r))), Image.LANCZOS)
     im.save(OUT / f'{code}.webp', quality=88, method=6)
