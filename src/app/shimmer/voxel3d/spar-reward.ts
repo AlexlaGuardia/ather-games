@@ -4,7 +4,7 @@
 // takes nothing.** `mist-encounter.ts` holds the half of that sentence about the other spirit — no
 // capture, no roster addition, ever. This file holds the other half: nothing leaves the GROUND
 // either. No marks, no materials, no drop. play3d already rules that a wild spirit carries no purse
-// (marks come from the liberation holds, a stronghold's spoils); mist is weather, not a container,
+// (marks come from the liberation holds, a broken hold's spoils); mist is weather, not a container,
 // so a patch that paid out loot would be a chest that happens to fight back — and the fog wall, the
 // consent design and the withdrawal would all be dressing on a farm.
 //

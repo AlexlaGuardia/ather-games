@@ -97,4 +97,4 @@ for (const [i, s] of HOLDS.entries()) {
 
 console.log(`\nholds: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log(`  ✗ ${f}`); process.exit(1) }
-console.log('✅ the strongholds stand')
+console.log('✅ the holds stand')

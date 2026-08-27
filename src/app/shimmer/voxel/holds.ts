@@ -1,4 +1,12 @@
-// The Moglin holds — story-node strongholds, blocked out in stone.
+// The Moglin holds — the three story-node HOLDS, blocked out in stone.
+//
+// ⚠ NOT "strongholds", AND THE WORD IS LOCKED RATHER THAN PREFERRED. `game/shimmer-storyline.md:23`
+// (ruled 2026-06-03): *"the v1 main-map three are **holds / camps**; the word **stronghold** is
+// reserved for the Wilds."* Thistle, Vetch and Brack are garden-plot-scale land grabs — canon's
+// *"the gardens were practice"* — and the Wilds' eight are the *"strongholds are real"* half. This
+// header said the reserved word for eighteen days. ⚠ `npm run canon` CANNOT CATCH THIS: the drift
+// gate judges names and rosters, and reports vocabulary only for nouns canon has listed as fully
+// retired. "Stronghold" is not retired, it is RESERVED TO ANOTHER SCALE, which no gate here reads.
 //
 // ★ PURE CORE, GEOMETRY ONLY. Imports story-path (the node positions) and nothing else — heights
 // are resolved by the CALLERS (height.ts owns the pad level, depth.ts asks with it in hand), so

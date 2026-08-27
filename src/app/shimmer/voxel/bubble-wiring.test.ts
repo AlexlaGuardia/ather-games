@@ -250,7 +250,7 @@ const onShell = (bearing: number) => {
   // thing they will do constantly. So it has to hold on more than the one seed this file fixes.
   //
   // ⚠ THE HEADROOM HALF IS THE POINT, AND IT COMES FROM THE HUB'S PATROL BUG THE SAME DAY. Their
-  // walk probe asked `columnHeight` about ground a stronghold's PAD had since raised, so it sampled
+  // walk probe asked `columnHeight` about ground a hold's PAD had since raised, so it sampled
   // a cell inside the terrain and every step read as blocked — *a position taken from the
   // generator's idea of the surface, used where the generator has since overridden it.* That is the
   // third appearance of that shape in one day (`/goto garden` was the first). The door's landing

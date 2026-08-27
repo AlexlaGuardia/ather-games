@@ -6,7 +6,11 @@
 // ── ★ THE MAP GENERATES FROM THE STORY (Alex's ruling, live, 2026-08-08) ─────────────────────
 // "The first POI is Moonwell Glade, then 500 blocks from there is Gloview Village where the three
 // Moglins test the player… after those two the path to the strongholds begins, each of them being
-// about 750–1200 blocks away." That sentence is this file. The spine is a polyline of story nodes;
+// about 750–1200 blocks away." That sentence is this file.
+// ⚠ QUOTED VERBATIM, INCLUDING "strongholds", WHICH CANON LATER RESERVED FOR THE WILDS
+// (`shimmer-storyline.md:23`: the v1 main-map three are **holds / camps**). Alex's words are left
+// exactly as spoken — correcting a quotation to match a later ruling falsifies the record of what
+// was actually asked for, which is worse than the drift. Everything downstream says "hold". The spine is a polyline of story nodes;
 // worldgen derives from it: a worn ROAD wears the surface along it (the world itself says "the
 // story went this way" — no quest marker needed), WAYSTONES with lantern caps light it every so
 // often (the road is TENDED ground — safe to walk at night, because block light vetoes the Hollow
@@ -43,7 +47,7 @@ export const STORY_NODES: StoryNode[] = [
   // mid-river-channel (its courtyard was a lake) and Vetch on a band edge. These spots were
   // scanned river-free across the whole build zone (|riverField| > 0.11 at centre, corners and
   // gate aprons) while holding Alex's hop ruling: 750 / 1003 / 1098.
-  { id: 'thistle-hold', x: -630, z: -1780 },      // ~750 — the stronghold chain begins
+  { id: 'thistle-hold', x: -630, z: -1780 },      // ~750 — the hold chain begins
   { id: 'vetch-hold', x: -1570, z: -2130 },       // ~1000
   { id: 'brack-hold', x: -2269, z: -2977 },       // ~1100
   { id: 'ather-winds-gate', x: -2437, z: -3341 }, // the sealed door out of act 4
