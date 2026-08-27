@@ -146,6 +146,46 @@ matters, because "build it" and "expose it" are different days of work and only 
 `collar-prompt.test.ts` (69 asserts, 6 mutations) · `voxel3d/palette.test.ts` (416 asserts, 4
 mutations) · `voxel3d/VoxelWorld.tsx` · `voxel/pieces.ts` (`pieceVariants`) · `lib/input/actions.ts`
 
+## 🧰 Shimmer sprites — **THE TOOLS THAT SAY WHICH KIND OF NOT-PASSING** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — `66586c8` `85cafcd` `113a27c` `e2b5c11`, pushed, 0 unpushed. Sweep 185/185, canon gate exit 0.*
+
+### Left off — three guards that could not fail, and a gate that was red forever
+- **`portraits`: the collar rule was written down three times and enforced zero.** `collaredUrl` read
+  `ALL_PORTRAITS`, which includes the folk, so a collared moglin resolved to a file that never
+  existed — and because a string is not `undefined`, the `??` fallback **could not fire**. It reads
+  as defensive and can never help any species with a base portrait, which is every species.
+  ⚠ `portrait-art.test.ts` was green throughout and **right to be**: it asserts the ASSET LAYOUT,
+  and its `collaredName` RESTATES the suffix rule instead of calling it, so it verifies the files its
+  own copy names. Layout right, request wrong. New `portrait-assets.test.ts` asserts through the
+  shipped `portraitUrl`. Found two more on its first run: `hasPortrait('__proto__')` was **true**
+  (plain literal, and species ids come from localStorage — the defect `registry.ts` already
+  documents), and an absent key handed `undefined` to `TextureLoader.load`.
+- **`sweep.mts`: 185 suites and no runner.** Every window hand-rolled one and two failed opposite
+  ways on 08-22. Reports **PASS / FAIL / KILLED** as three states — `timeout`'s exit 124 is the only
+  reason that distinction exists at all. ★ It earned itself immediately: `plot.test.ts` ran **148s**
+  today against a 106s idle / 134s loaded history, so a 120s ceiling would have called it red.
+- **`canon-drift`: the gate was permanently red BY DESIGN.** Alex's 08-26 HOLD on `eligibleMoves`,
+  which canon says "will report this difference forever" and "must not be closed by anyone but
+  Alex" — so the gate could never be green, which is how a red stops being read. Alex ruled the
+  shape: **HELD** is its own severity, printed and cited every run, not counted toward the exit code.
+  ★ The exemption **expires by itself**: it cites the canon text that creates it and re-reads canon
+  every run, so lifting the ruling makes it VOID and the gate red again. Mutation-verified four doors.
+
+### Next
+- Moglin portrait swap is hub's — lines sent. It is **not two lines**: `createPortraitBody` returns a
+  `CreatureBody`, not a `Mesh`, and `foes.current` holds a mesh it positions per frame. Height 0.95
+  is already canon-correct (3ft vs `EYE_STAND` 1.62) and must not change.
+- Moglin **sprites** remain the real art gap and are **Alex's** — pixel art is not a downscale of a
+  painted illustration. `design-briefs/moglins.md` is BASE LOCKED with four refs on disk.
+
+### Decisions
+- **HELD does not fail the gate; nothing is closed.** `canon-holds` prints a CLEAN line naming the
+  hold even when healthy, so the divergence is on the page every run.
+- **Sweep ceiling is 600s, sized for a loaded box**, and elapsed prints beside every verdict so a
+  reader can tell whether the code moved or the load did.
+
+### Files
+`voxel3d/spirit-portrait-body.ts` · `voxel3d/portrait-assets.test.ts` · `voxel3d/portrait-art.test.ts` · `scripts/sweep.mts` · `scripts/canon-drift.mjs` · `GAMEDEV_COORDINATION_SOP.md`
+
 ## 🗺 Shimmer sprites — **THE ASK WAS ALREADY BUILT, AND THE NOTE SAYING OTHERWISE WAS A DAY STALE** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — `f8be655` `c88f50c` `dd72800`, pushed, 0 unpushed, tsc 7 (baseline). NOT deployed — hub owns the lock.*
 
 ### Left off — asked for the spirit atlas billboard map; it had shipped the day before
