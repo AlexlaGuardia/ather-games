@@ -14,6 +14,7 @@
 //   C. no token VALUE is re-spelled as a literal inside a converted file
 //   D. a converted file uses only the radius ladder
 //   E. the sweep actually read the files it claims to have read
+//   F. the scope filter tells a colour literal from a row citation in prose
 //
 // ⚠ B IS THE ONE THAT MATTERS AND IT IS WHY THIS IS NOT AN EXEMPTION LIST. An exemption is a silent
 // promise that somebody is watching that corner, and it outlives the reason it was written. PENDING
@@ -38,7 +39,7 @@ const CONVERTED = ['ui.tsx']
  * Delete a name from here the moment its file is clean.
  */
 const PENDING = [
-  'collar-raid.ts', 'GfxPanel.tsx', 'HotBar.tsx', 'MoveBook.tsx', 'multiplayer.ts',
+  'GfxPanel.tsx', 'HotBar.tsx', 'MoveBook.tsx',
   'npcs3d.ts', 'page.tsx', 'PartyPanel.tsx', 'PassageRack.tsx', 'RemotePlayers.tsx',
   'Shimmer3D.tsx', 'StationMenus.tsx', 'WorldMap.tsx',
 ]
@@ -75,16 +76,45 @@ const fails: string[] = []
 const ok = (cond: boolean, msg: string) => { if (cond) pass++; else fails.push(msg) }
 
 // ── the source list, straight off disk ─────────────────────────────────────────────────────────
+/**
+ * What puts a file in scope at all. ONE definition, used by the sweep below AND by the self-test in
+ * F — never restated, because a hand-kept second copy of a derivation agrees with its original right
+ * up until it doesn't, and then it manufactures a green.
+ *
+ * ⚠ IT READS THE STRIPPED SOURCE, AND THAT IS THE WHOLE POINT. Until 2026-08-27 this one filter read
+ * the RAW file while every other check in here stripped first, so prose was scanned as if it were
+ * code. `#` plus three hex-ish characters IS a valid short colour, and this repo cites focus rows
+ * exactly that way — so `collar-raid.ts (#294)` and `multiplayer.ts (#692)`, two pure-logic modules
+ * with no colour anywhere in them, were pulled into scope by their own header and then had to be
+ * listed in PENDING to keep assert B quiet. PENDING says "still holding raw literals". For those two
+ * it was simply false, and it would have stayed false forever: nobody can convert a file that has
+ * nothing to convert. An exemption at least reads as an exemption; this read as WORK.
+ *
+ * ⚠ AND DELIMITING THE MATCH DOES NOT FIX IT — the tempting cheap version of this repair. `(#294)`
+ * is preceded by `(` and followed by `)`: cleanly delimited, and still a valid three-digit hex. The
+ * only property that separates a citation from a colour is which side of a comment marker it is on.
+ */
+const COLOUR_BEARING = /#[0-9a-fA-F]{3,8}|StationShell|style=\{\{/
+const bearsColour = (src: string) => COLOUR_BEARING.test(stripComments(src))
+
 const onDisk = readdirSync(DIR)
   .filter(f => (f.endsWith('.tsx') || f.endsWith('.ts')))
   .filter(f => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'))
   .filter(f => f !== 'tokens.ts')
-  .filter(f => {
-    // data/logic modules carry no colour; only files that render are in scope.
-    const s = readFileSync(join(DIR, f), 'utf8')
-    return /#[0-9a-fA-F]{3,8}|StationShell|style=\{\{/.test(s)
-  })
+  // data/logic modules carry no colour; only files that render are in scope.
+  .filter(f => bearsColour(readFileSync(join(DIR, f), 'utf8')))
   .sort()
+
+// ── F. the scope filter itself, both directions ────────────────────────────────────────────────
+// A guard nobody has watched fail is a guard nobody has tested, and this one's failure mode is
+// silent over-collection rather than a red light. Both asserts have an input that makes them fire:
+// break the stripping and the first goes red, break the detector and the second does.
+ok(!bearsColour('// raiders for the Ather regions (#294).\nexport const n = 1\n'),
+  'F: a row citation in a line comment classifies a pure-logic file as colour-bearing')
+ok(!bearsColour('/* ★ PER-KEEPER, NOT PER-BROWSER (#692 follow-on). */\nexport const n = 1\n'),
+  'F: a row citation in a block comment classifies a pure-logic file as colour-bearing')
+ok(bearsColour("const bg = '#ff8800'\n"),
+  'F: the detector stopped seeing a real colour literal in code')
 
 // ── E. the sweep read something ────────────────────────────────────────────────────────────────
 // A scan that silently matched nothing returns "no drift found", which is the same shape as "I
