@@ -13,6 +13,8 @@
 // Round-tripping through the save contract is checked too, since a dropped field reads as a free
 // full heal — the exact failure that would make this whole feature look like it never shipped.
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { createSpirit, type Spirit } from '../spirits/spirit'
 import { createArena, battleResult } from './arena'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
@@ -20,7 +22,7 @@ import {
   hpFracOf, currentHpOf, maxHpOf, isDowned, canFight, fieldableSpirits, partyAllDowned,
   applyFightResult, healSpirit, healSpiritFrac, reviveSpirit, restoreParty, pickMendTarget,
   tickRecovery, REGEN_FRAC_PER_MIN, WIPE_REVIVE_FRAC_PER_MIN, REVIVE_FRAC, REST_REGEN_MULT,
-  activeSpirits, restingSpirits, setSpiritActive, normalizeRoster,
+  activeSpirits, restingSpirits, setSpiritActive, normalizeRoster, MAX_PARTY,
 } from './spirit-health'
 
 let failures = 0
@@ -365,6 +367,47 @@ console.log('\narena integration')
   check('an unspecified bag is unlimited (harness/oracles unaffected)', st.keeper.bagCharges === Infinity)
   const st3 = createArena({ allies: [mk('A')], enemies: [mk('B')], seed: 3, bagCharges: 2 })
   check('a real satchel is finite', st3.keeper.bagCharges === 2 && st3.keeper.bagUsed === 0)
+}
+
+// ── ★★★ ONE CAP, AND EVERY WORLD THAT GROWS A PARTY MUST LAND IN A LEGAL SHAPE ────────────────
+// Structural, and it reads SOURCE, because the defect it exists to catch is an ABSENCE and no
+// amount of exercising the helpers can see one. Measured by the world lane 2026-08-27: `MAX_PARTY`
+// appeared nowhere in `voxel3d`, `potOps.gain` appended to the party unbounded, and `inParty` was
+// never written there at all — so `restingSpirits()` returned `[]` forever, the grimoire's whole
+// "in garden" section was permanently empty beneath a header quoting the ruling it could not show,
+// and the Home Plot spirit ring had no population to draw. Every helper below it was written,
+// tested, and had zero callers in that world. **The functions were finished and stopped one call
+// short**, which is the fifth instance of that shape in this codebase in a week.
+//
+// ⚠ WHAT THE CHEAPEST WRONG ANSWER WOULD BE, since that is the question to ask of any guard: a
+// grep for the token `MAX_PARTY` is satisfied by a COMMENT mentioning it. So this asserts the
+// declaration is unique in the tree (no world may re-privatise its own copy — that is exactly how
+// the number got stranded in `Shimmer3D.tsx`), and that each world both imports it and calls
+// `normalizeRoster`. A party-sized literal is checked separately because `slice(0, 4)` in
+// `voxel3d`'s spar roster was a third copy of the same fact wearing no name at all.
+{
+  const src = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
+  const WORLDS = ['voxel3d/VoxelWorld.tsx', 'play3d/Shimmer3D.tsx']
+
+  const decl = WORLDS.map(src).concat(src('engine/spirit-health.ts'))
+    .join('\n').match(/^\s*(?:export\s+)?const MAX_PARTY\b/gm) ?? []
+  check(`MAX_PARTY is declared exactly once across the engine and both worlds (found ${decl.length})`,
+    decl.length === 1, decl.join(' | '))
+
+  for (const f of WORLDS) {
+    const t = src(f)
+    check(`${f} imports MAX_PARTY from the engine rather than restating it`,
+      /import\s*\{[^}]*\bMAX_PARTY\b[^}]*\}\s*from\s*['"][^'"]*spirit-health['"]/.test(t))
+    check(`${f} normalises its roster — a world that grows a party without this has no cap at all`,
+      /\bnormalizeRoster\s*\(/.test(t))
+    // A bare party-sized literal is the shape the name exists to retire. Narrow on purpose: only
+    // slices/caps taken against a party, not every 4 in a nine-thousand-line file.
+    const bare = t.match(/\b(?:party|owned|roster|spirits)[^\n]{0,60}\.slice\(\s*0\s*,\s*\d+\s*\)/g) ?? []
+    check(`${f} caps a party by name, not by a literal (${bare.length} bare)`, bare.length === 0, bare.join(' | '))
+  }
+
+  // And the value itself still has to be a value the helpers can honour.
+  check('MAX_PARTY is a positive whole number', Number.isInteger(MAX_PARTY) && MAX_PARTY > 0, `${MAX_PARTY}`)
 }
 
 console.log(`\n${failures === 0 ? 'PASS' : `FAIL — ${failures} failing`}\n`)

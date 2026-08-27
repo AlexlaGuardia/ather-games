@@ -140,6 +140,22 @@ export function pickMendTarget(party: Spirit[]): Spirit | null {
 
 // ── roster moves ────────────────────────────────────────────────────────────
 /**
+ * How many spirits a keeper may field at once.
+ *
+ * ── ⚠⚠ IT LIVES HERE BECAUSE IT WAS ABOUT TO BE COPIED A THIRD TIME (2026-08-27) ───────────────
+ * It was a PRIVATE const in `play3d/Shimmer3D.tsx` and a bare literal `4` in `voxel3d`'s spar
+ * roster, and the voxel world was about to grow a third copy the day anything wired the cap there.
+ * Two worlds, one rule. Every helper below already takes `maxParty` as a parameter — the number had
+ * a home shaped for it and no number in it.
+ *
+ * ★ AND A CONST IN A WORLD COMPONENT IS INVISIBLE TO THE OTHER WORLD BY CONSTRUCTION, which is how
+ * `voxel3d` ended up with no cap at all: `potOps.gain` appended to the party unbounded, so blooming
+ * ten spirits fielded ten. Same shape as the seam that froze at `DEFAULT_PLOT` the same night — a
+ * fact one consumer owns privately while another consumer needs it.
+ */
+export const MAX_PARTY = 4
+
+/**
  * Send a spirit to rest at the Home Plot, or call one back into the active party.
  * Returns null on success, or a reason string the caller can surface.
  *

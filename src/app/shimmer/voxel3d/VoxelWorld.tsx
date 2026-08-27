@@ -212,6 +212,7 @@ import {
 import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
+import { normalizeRoster, activeSpirits, MAX_PARTY } from '../engine/spirit-health'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { Species } from '../spirits/spirit'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
@@ -1106,7 +1107,22 @@ export default function VoxelWorld() {
   const potOps = useMemo(() => ({
     clock: () => potClock.current,
     save: savePotClock,
-    gain: (s: Spirit) => { party.current = [...party.current, s]; writeParty() },
+    /**
+     * ⚠ NORMALISED ON THE WAY IN, AND WITHOUT IT THERE WAS NO CAP IN THIS WORLD AT ALL (2026-08-27).
+     * `MAX_PARTY` did not appear anywhere in `voxel3d`: this appended unbounded, so blooming ten
+     * spirits fielded ten. Worse than a cosmetic slip — `Spirit.inParty` was never WRITTEN here, so
+     * `restingSpirits()` returned `[]` forever, the grimoire's whole "in garden" section was
+     * permanently empty under a header quoting the ruling it could not show, and the Home Plot
+     * spirit ring had nothing to populate it. Measured by the world lane, not inferred.
+     *
+     * ★ THE HELPER WAS WRITTEN, TESTED, AND HAD NO CALLER HERE — the fifth instance of that shape
+     * this week. Look for it before building anything.
+     */
+    gain: (s: Spirit) => {
+      party.current = [...party.current, s]
+      normalizeRoster(party.current, MAX_PARTY)
+      writeParty()
+    },
   }), [savePotClock, writeParty])
 
   const partyOps = useMemo(() => ({
@@ -1125,6 +1141,9 @@ export default function VoxelWorld() {
         s.level = level
         return s
       })
+      // The dev command mints a roster wholesale and can be asked for more than the cap; it lands
+      // in a legal shape like every other write, or it is a way to reach a state the game cannot.
+      normalizeRoster(party.current, MAX_PARTY)
       writeParty()
       return `lent ${count} spirits at level ${level} — ${party.current.map(s => s.name).join(', ')}`
     },
@@ -1495,6 +1514,9 @@ export default function VoxelWorld() {
       const data = raw ? JSON.parse(raw) as { spirits?: unknown[] } : null
       if (data?.spirits?.length) {
         party.current = spiritsFromSave(data.spirits as never)
+        // ⚠ SAVES PREDATE THE ACTIVE/RESTING SPLIT — everyone loaded active, however many. This is
+        // the helper's own stated job (`normalizeRoster`), and this world had never called it.
+        normalizeRoster(party.current, MAX_PARTY)
         setHasParty(party.current.length > 0)
       }
     } catch { /* unreadable save = no party; the prompt handles it */ }
@@ -1509,7 +1531,11 @@ export default function VoxelWorld() {
    * decided by `residentAt`, so the fight that mounts is the exact fight the prompt described.
    */
   const startSpar = useCallback((r: Resident) => {
-    const roster = party.current.filter(s => (s.hpFrac ?? 1) > 0).slice(0, 4)
+    // ⚠ ACTIVE SPIRITS, AND `MAX_PARTY` RATHER THAN A LITERAL 4. Both halves were wrong in the same
+    // way: it fielded whoever came first in the owned list regardless of whether the keeper had sent
+    // them home, and it restated the cap as a bare number in a third place. `setSpiritActive`'s own
+    // header names this exact line as where the cap used to be enforced and why that was not enough.
+    const roster = activeSpirits(party.current).filter(s => (s.hpFrac ?? 1) > 0).slice(0, MAX_PARTY)
     if (!roster.length) return
     const manifest = (f: ResidentForm) => {
       const wild = createSpirit(f.species, f.name, 0, 0)

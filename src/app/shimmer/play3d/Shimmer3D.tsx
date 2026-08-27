@@ -44,7 +44,7 @@ import { type BattleResult } from '../engine/arena'
 import {
   applyFightResult, tickRecovery, fieldableSpirits, partyAllDowned,
   isDowned, hpFracOf, currentHpOf, maxHpOf, healSpirit, reviveSpirit, pickMendTarget,
-  activeSpirits, restingSpirits, setSpiritActive, normalizeRoster, canFight,
+  activeSpirits, restingSpirits, setSpiritActive, normalizeRoster, canFight, MAX_PARTY,
 } from '../engine/spirit-health'
 import { getMovesForSpirit } from '../engine/moves'
 import { createSpirit, addXP, xpForLevel, speciesDisplayName, ELEMENT_COLORS, type Spirit, type Species, type Element } from '../spirits/spirit'
@@ -161,7 +161,6 @@ const BUILDING_ID = 103
 // ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
 // 888-mist zone isn't wall-to-wall battles.
 const ENCOUNTER_GRACE = 1.3 // seconds after a battle / zone-entry before mist can roll again
-const MAX_PARTY = 4         // active party size (matches the 2D game)
 const VOID = -1 // empty cell — renders nothing, not walkable (draw land onto an empty grid)
 const STEP = 1.0
 const MAX_TIER = 8
