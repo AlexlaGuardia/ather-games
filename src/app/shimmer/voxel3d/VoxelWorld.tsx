@@ -2569,8 +2569,8 @@ function BirthLean({ birth }: { birth: string | null }) {
   return (
     <div className="mb-4 rounded border border-amber-200/15 bg-amber-100/[0.03] px-2.5 py-2">
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <span className="text-[10px] uppercase tracking-[0.16em] text-amber-200/50">Birth lean</span>
-        <span className="text-[9px] uppercase tracking-[0.14em] text-white/25">{aff.lean}</span>
+        <span className="gx-label text-[10px] text-amber-200/50">Birth lean</span>
+        <span className="gx-label text-[9px] text-white/25">{aff.lean}</span>
       </div>
       <div className="text-[11px] leading-snug text-white/70">{essence}</div>
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
@@ -2814,7 +2814,7 @@ function LoadoutTab() {
       {passive && (
         <div className="mt-2">
           <div className="mb-1 flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-[0.16em] text-amber-200/40">Passive</span>
+            <span className="gx-label text-[9px] text-amber-200/40">Passive</span>
             <span className="h-px flex-1 bg-amber-200/10" />
             <span className="text-[9px] text-white/25">always on</span>
           </div>
@@ -2822,7 +2822,7 @@ function LoadoutTab() {
             <div className="flex items-baseline gap-2">
               <span className={`text-[12px] ${isBuilt(passive.id) ? 'text-amber-200/90' : 'text-white/40'}`}>{passive.name}</span>
               {!isBuilt(passive.id) && (
-                <span className="text-[9px] uppercase tracking-[0.14em] text-amber-200/40">unbuilt</span>
+                <span className="gx-label text-[9px] text-amber-200/40">unbuilt</span>
               )}
             </div>
             <div className="text-[10px] leading-snug text-white/40">{passive.effect}</div>
