@@ -59,7 +59,21 @@ export const FOLK_PORTRAIT: Readonly<Record<string, string>> = Object.freeze({
   hemlock: '/spirits/world/hemlock.webp',
 })
 
-const ALL_PORTRAITS: Readonly<Record<string, string>> = { ...PORTRAIT_OF, ...FOLK_PORTRAIT }
+/**
+ * ⚠⚠ NULL PROTOTYPE, AND IT IS LOAD-BEARING — the same defect `sprites/registry.ts` documents on
+ * `SPECIES_ART`, in a file that had not carried the lesson across. Species ids reach `hasPortrait`
+ * from SAVED DATA (the mist ledger and keeper saves are localStorage, which a player can edit). On
+ * an ordinary object literal `ALL_PORTRAITS['__proto__']` walks the chain and returns
+ * `Object.prototype` — TRUTHY — so `hasPortrait('__proto__')` answered **true**, the gate both
+ * callers use let it through, and `portraitUrl` then handed an OBJECT to `TextureLoader.load`.
+ * `constructor` and `toString` do the same. Caught by `portrait-assets.test.ts` on its first run.
+ *
+ * The two source tables are spread into a fresh null-prototype object rather than being rebuilt,
+ * so they stay exactly the two exact claims the header above describes.
+ */
+const ALL_PORTRAITS: Readonly<Record<string, string>> = Object.freeze(
+  Object.assign(Object.create(null) as Record<string, string>, PORTRAIT_OF, FOLK_PORTRAIT),
+)
 
 export const hasPortrait = (key: string): boolean => key in ALL_PORTRAITS
 
@@ -74,9 +88,38 @@ export const hasPortrait = (key: string): boolean => key in ALL_PORTRAITS
  * ⚠ THE BADGE IS BAKED INTO ITS OWN TEXTURE, so a collared body costs one shared sheet rather than a
  * second draw call per resident on an 84%-GPU-bound world. `scripts/collar-badge.py` stamps them.
  */
+/**
+ * ⚠⚠ `PORTRAIT_OF`, NOT `ALL_PORTRAITS`, AND THAT IS THE WHOLE GUARANTEE. Folk are never collared —
+ * they are the ones doing the collaring — and until 2026-08-27 that rule lived only in this file's
+ * prose, in the commit message that added the badge (*"and no Moglin ever does"*), and in
+ * `scripts/collar-badge.py`'s own species list. **The runtime enforced none of it.** Reading
+ * `ALL_PORTRAITS` here happily produced `/spirits/world/moglin-collared.webp`, which has never
+ * existed, and — because a string is not `undefined` — `sheetFor`'s `?? ALL_PORTRAITS[species]`
+ * could not fall back. A collared folk would have loaded a 404 into a texture and drawn NOTHING,
+ * silently, on a path whose fallback reads as if it handles exactly that.
+ *
+ * ★ It was latent, not live: no caller passes `collared` for a folk today. It is one step away —
+ * the Moglin portrait swap is the step — and the two tables above already say why they are split.
+ * This makes the code say it too.
+ */
 const collaredUrl = (species: string): string | undefined => {
-  const base = ALL_PORTRAITS[species]
+  // ⚠ `hasOwnProperty`, not a bare index: `PORTRAIT_OF` is a plain literal, so `PORTRAIT_OF['__proto__']`
+  // returns `Object.prototype` and `.replace` on it throws. Same chain walk as `ALL_PORTRAITS` above.
+  const base = Object.prototype.hasOwnProperty.call(PORTRAIT_OF, species) ? PORTRAIT_OF[species] : undefined
   return base ? base.replace(/\.webp$/, '-collared.webp') : undefined
+}
+
+/**
+ * The texture URL a body will actually load. EXPORTED so `portrait-assets.test.ts` can assert
+ * against the shipped resolution instead of restating it.
+ *
+ * ⚠ A TEST THAT REBUILT THIS RULE WOULD PROVE NOTHING ABOUT THE GAME. The bug this file just fixed
+ * lived precisely in the gap between what the prose said and what the resolution did, and a copy of
+ * the rule in a test file would have been written from the prose. `sheetFor` calls this; so does the
+ * oracle; there is one path.
+ */
+export function portraitUrl(species: string, collared = false): string | undefined {
+  return (collared ? collaredUrl(species) : undefined) ?? ALL_PORTRAITS[species]
 }
 
 /**
@@ -97,7 +140,14 @@ function sheetFor(species: string, collared = false): { tex: THREE.Texture; mat:
   const key = collared ? `${species}:collared` : species
   const hit = SHEETS.get(key)
   if (hit) return hit
-  const url = (collared ? collaredUrl(species) : undefined) ?? ALL_PORTRAITS[species]
+  // ⚠ THE PRECONDITION, MADE LOUD. Both callers gate on `hasPortrait` first, so this cannot fire in
+  // the shipped paths — but `createPortraitBody` is exported, and indexing a `Record<string, string>`
+  // hands back `string` for a key that is not there, so TypeScript has never been able to say this.
+  // Before `portraitUrl` was extracted, an unknown species passed `undefined` straight to
+  // `TextureLoader.load` and drew an invisible sprite. Refusing loudly matches what this file already
+  // does elsewhere: an unrecognised id must be visible, not papered over.
+  const url = portraitUrl(species, collared)
+  if (!url) throw new Error(`spirit-portrait-body: no portrait for '${species}' — gate on hasPortrait() first`)
   const aspect = { v: 1 }
   // ⚠ THE ASPECT IS NOT KNOWN UNTIL THE IMAGE LANDS, and these are not square — Dewbear is 256×178.
   // Guessing square would squash every one of them, so the scale is applied in the load callback

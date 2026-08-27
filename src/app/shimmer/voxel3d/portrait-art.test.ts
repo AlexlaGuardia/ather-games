@@ -71,6 +71,12 @@ for (const [sp, path] of Object.entries(EVERY)) {
 // `spirit-portrait-body.ts` derives a collared URL by suffix rather than listing them, so nothing
 // in the tables names these files — they still have to BE there or a dragged spirit 404s.
 //
+// ⚠ THIS CHECKS THE ASSET LAYOUT, NOT WHAT THE RUNTIME REQUESTS, and the difference is not academic:
+// `collaredName` below RESTATES the suffix rule rather than calling it, so these asserts verify the
+// files that THIS file's copy of the derivation names. On 2026-08-27 the shipped resolver was asking
+// for `moglin-collared.webp` while every assert here stayed green and correct. `portrait-assets.test.ts`
+// covers the other side by calling `portraitUrl` itself. Keep both; neither subsumes the other.
+//
 // ⚠⚠ AND NO MOGLIN MAY HAVE ONE. `moglins.md:75` pins it: "The collar's power is SPIRIT-ONLY — it
 // does not bite on a Mana'mal or an Alkin, and a Moglin is not a spirit"; every canon instance has
 // the Moglin HOLDING the leash. Canon says the ambiguity in "collar-Moglin" already "cost real build
