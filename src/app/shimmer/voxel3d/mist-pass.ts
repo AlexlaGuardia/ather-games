@@ -113,7 +113,15 @@ export const SPAR_RANGE = 6
 // the profile below). `PAIR_OFF` is how far a pair steps apart across the patch heart. All three
 // were inline literals; they are up here because the crosshair test and the mesh must agree, and
 // two copies of a number are two numbers.
-const PRESENCE_TALL = 2.1
+/**
+ * ⚠ EXPORTED 2026-08-27 SO THE HOME PLOT'S RING CAN STAND ITS RESIDENTS AT THE SAME HEIGHT.
+ * ★ AND IT IS A KNOWN-WRONG NUMBER SHARED ON PURPOSE. It is the HALO's lathe height, not a
+ * creature's, and how big a spirit actually is is `[OPEN]` in `CANON/CANON_GAPS.md` (filed
+ * 2026-08-26 as a ratification, with the prose quotes). One wrong number that every resident wears
+ * is a one-line fix on the day Magii rules; two wrong numbers is a hunt. Do not "improve" this in
+ * one caller.
+ */
+export const PRESENCE_TALL = 2.1
 const PRESENCE_R = 0.49
 const PAIR_OFF = 1.4
 

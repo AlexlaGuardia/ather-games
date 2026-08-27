@@ -32,8 +32,22 @@ const browser = await puppeteer.launch({
 })
 const page = await browser.newPage()
 await page.setViewport({ width: Number(flag('--width', '1500')), height: Number(flag('--height', '1000')) })
-await page.goto(`http://localhost:${port}/owner?key=${key}`, { waitUntil: 'networkidle2' })
-const res = await page.goto(`http://localhost:${port}${path}`, { waitUntil: 'networkidle2' })
+// ⚠ `domcontentloaded`, NEVER `networkidle2`, ON THIS HOP — /owner answers 307 with the cookie in
+// the response headers and a `location` of **https://ather.games/room**, an absolute PRODUCTION
+// url. On a lane dev server that walks the browser straight off localhost onto the live site, which
+// never idles, so the shot died in a 30s navigation timeout before reaching the page it was asked
+// for — an owner-gate failure wearing the costume of a slow page. The cookie is already set by the
+// time the redirect is received; nothing here needs the destination to finish loading.
+// (world lane, 2026-08-27.)
+await page.goto(`http://localhost:${port}/owner?key=${key}`, { waitUntil: 'domcontentloaded' })
+// ⚠ `load` + the explicit `--wait`, NOT `networkidle2` — AND THE TOOL COULD NOT DO THE JOB ITS OWN
+// HEADER DESCRIBES UNTIL THIS CHANGED. A Next DEV server holds an HMR websocket open forever, so
+// the idle condition never fires and every shot against a lane dev server died in a navigation
+// timeout, while the same call against the built prod server (no HMR socket) worked fine. So the
+// one surface this script exists for — `tools/devwin.sh <lane>` previews of /shimmer/dev/* — was
+// the one it could not photograph. `--wait` is what actually covers the settling the header is
+// worried about; idle never was, on this server. (world lane, 2026-08-27.)
+const res = await page.goto(`http://localhost:${port}${path}`, { waitUntil: 'load' })
 if (!res || res.status() !== 200) {
   console.error(`✗ ${path} answered ${res?.status()} — refusing to photograph it (403 = the owner gate, and a shot of it looks like an empty page)`)
   await browser.close(); process.exit(1)

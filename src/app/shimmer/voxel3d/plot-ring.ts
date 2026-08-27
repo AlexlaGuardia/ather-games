@@ -67,6 +67,17 @@ export interface RingSlot {
   hz: number
   /** Bumped on every re-home. Part of the patrol key, so a new corner means a genuinely new walk. */
   gen: number
+  /**
+   * How far the keeper was from this corner when it was chosen.
+   *
+   * ★★ WITHOUT IT, A FADE-IN PLACED BEHIND THE KEEPER IS RECYCLED ON THE VERY NEXT TICK — it is
+   * past `farOut` the instant it exists, and "behind" is true for half of every circle, so half the
+   * far band churned once a second and the cast reshuffled while the keeper stood perfectly still.
+   * Caught by the quiet-tick assert, which is the whole reason that assert is worth having.
+   * Recycling asks whether the keeper has LEFT this resident, and that is a comparison against
+   * where they were when it appeared, not against a fixed radius.
+   */
+  d0: number
 }
 
 /**
@@ -78,25 +89,50 @@ export interface RingSlot {
  * buys a spirit blinking out of a corner of the eye, which reads as a bug and cannot be un-seen.
  */
 export interface RingDials {
-  /** Nearest and furthest a fresh home may be placed from the keeper. */
+  /** The UNDERFOOT band: near enough to walk up to, and the placement tried first. */
   nearMin: number
   nearMax: number
-  /** Past this, a resident is far enough behind to be recycled — if it is also unseen. */
+  /** The FADE-IN band: at and past the fog, where an appearance cannot be seen at all. */
+  farMin: number
+  farMax: number
+  /** A resident must be at least this far off before being left behind. Stops churn up close. */
   farOut: number
+  /** ...and the keeper must have opened up at least this much ground since it appeared. */
+  leave: number
   /** Half-angle of the forward cone treated as "the keeper can see this". */
   cone: number
-  /** How far the keeper is assumed to be able to make out a resident at all. */
+  /** How far the keeper can make out a resident at all — the world's own fog answers this. */
   sight: number
 }
 
 /**
- * ⚠ `nearMin` 14 IS A COMFORT NUMBER, NOT A CLEARANCE ONE. Closer than that and a resident arrives
- * inside the keeper's personal space; `sight`/`cone` already stop it arriving in view at any range.
- * `farOut` 90 sits deliberately past `sight` 120 being *comfortable* — a resident is recycled only
- * when it is both far AND behind, so the two conditions overlap rather than race.
+ * ── ★★★ TWO DOORS TO "UNWITNESSED", AND THE FIRST VERSION HAD ONLY ONE ──────────────────────────
+ * The rule started as *never place a resident where the keeper is looking*, which is correct and,
+ * on its own, produces an EMPTY GARDEN for anyone walking in a straight line: every placement lands
+ * beside or behind a keeper who is about to leave it there, and the view ahead is never filled.
+ * Caught in the `dev/ring` harness at `walk=1` — ten bodies alive, `drawn 10 / cap 10`, and nothing
+ * on screen. A picture caught what 35 green asserts could not, because every assert was about the
+ * rule and the rule was the thing that was wrong.
+ *
+ * So a placement is unwitnessed if EITHER holds:
+ *  · it is outside the forward cone — the underfoot band, for a keeper milling about their yard; or
+ *  · it is at or past the FOG, where an appearance is not a pop because nothing is drawn there yet.
+ *
+ * ★ `sight` 200 IS MEASURED, NOT CHOSEN: `day-night.tsx` runs `THREE.Fog(bg, 80, 200)` by day and
+ * `55 → 165` at night, so 200 is the day figure and the night is stricter still — a resident that
+ * appears at 200 is invisible at both hours and fades in as the keeper closes. Same doctrine
+ * `mist-pass` states for its patch reach: *comfortably past the fog so a presence fades in, never
+ * pops.* ⚠ IF THE FOG IS RETUNED, THIS NUMBER IS WRONG AND NOTHING WILL SAY SO.
+ *
+ * ★ AND RECYCLING ASKS A DIFFERENT QUESTION FROM PLACEMENT — *is this BEHIND me* — because you
+ * leave a resident behind, you do not leave one you are walking toward. Keying both ends to one
+ * radius is impossible: a fade-in band must sit past the fog, and anything past the fog would be
+ * instantly recyclable by a distance rule, which is a body flickering in and out once a second.
  */
 export const DEFAULT_RING: RingDials = {
-  nearMin: 14, nearMax: 42, farOut: 90, cone: Math.PI * 0.45, sight: 120,
+  nearMin: 20, nearMax: 90,
+  farMin: 200, farMax: 240,
+  farOut: 120, leave: 25, cone: Math.PI * 0.45, sight: 200,
 }
 
 /** Where the keeper is and which way they are looking. `yaw` is the heading in world radians. */
@@ -120,6 +156,27 @@ export function inView(k: Keeper, x: number, z: number, d: RingDials = DEFAULT_R
   while (off > Math.PI) off -= Math.PI * 2
   while (off < -Math.PI) off += Math.PI * 2
   return Math.abs(off) <= d.cone
+}
+
+/** Signed bearing of (x, z) relative to the way the keeper is facing, in (-pi, pi]. */
+function offAxis(k: Keeper, x: number, z: number): number {
+  let off = Math.atan2(z - k.z, x - k.x) - k.yaw
+  while (off > Math.PI) off -= Math.PI * 2
+  while (off < -Math.PI) off += Math.PI * 2
+  return off
+}
+
+/**
+ * Is (x, z) behind the keeper — more than a right angle off the way they are facing?
+ *
+ * ★ THIS IS THE RECYCLE TEST, AND IT IS DELIBERATELY NOT A DISTANCE. A quarter turn is comfortably
+ * outside the camera's own frustum (fov 75 vertical is roughly ±53° horizontal at this aspect), so
+ * "behind" means off-screen at ANY range — which is what makes it safe to move a resident that is
+ * still well inside the fog. A resident you are walking toward is never behind you, so a fade-in
+ * placed ahead survives until you have passed it.
+ */
+export function behind(k: Keeper, x: number, z: number): boolean {
+  return Math.abs(offAxis(k, x, z)) > Math.PI / 2
 }
 
 /** A small deterministic stream, so a given (seed, nonce) always proposes the same corners. */
@@ -154,10 +211,26 @@ export function pickHome(
   d: RingDials = DEFAULT_RING,
 ): { x: number; z: number } | null {
   const rnd = stream(seed, nonce)
+  /** Which band this call opens with. Drawn once so the alternation does not always start near. */
+  const coin = rnd() < 0.5 ? 0 : 1
   for (let i = 0; i < TRIES; i++) {
+    // ★★ THE TWO BANDS ALTERNATE, AND "NEAR FIRST, FAR AS FALLBACK" WAS MEASURABLY WRONG. A
+    // fallback band is only reached when the first band FAILS, and the near band succeeds on more
+    // than half of its attempts against any permissive ground — so the far band was tried
+    // essentially never, and the walking keeper's road stayed empty exactly as before. The oracle
+    // put it at 4 ticks in 200 with somebody ahead. Alternating gives each band about half the
+    // cast, which is what the two of them are for: the near half is who you find when you stand in
+    // your garden and turn round, the far half is who you meet when you cross it.
+    //
+    // ⚠ DO NOT "OPTIMISE" THIS BACK INTO A PREFERENCE ORDER. Drawing one radius across the whole
+    // span is the other trap — area grows with r², so a ring out at the fog is many times the area
+    // of the yard and would swallow the underfoot half instead.
+    const far = ((i + coin) % 2) === 0
+    const lo = far ? d.farMin : d.nearMin
+    const hi = far ? d.farMax : d.nearMax
     const a = rnd() * Math.PI * 2
     // sqrt so corners spread by AREA rather than crowding the inner edge of the band.
-    const r = Math.sqrt(d.nearMin * d.nearMin + rnd() * (d.nearMax * d.nearMax - d.nearMin * d.nearMin))
+    const r = Math.sqrt(lo * lo + rnd() * (hi * hi - lo * lo))
     const x = k.x + Math.cos(a) * r
     const z = k.z + Math.sin(a) * r
     if (!fresh && inView(k, x, z, d)) continue
@@ -178,9 +251,11 @@ export function pickHome(
  *     ring 2, and the keeper who just called it to their side is not surprised to see it leave.
  *  2. **Trim to the cap** — a fold can only shrink by a save being edited, but a cap that binds
  *     must bind, and dropping the LAST slots keeps the cast stable rather than reshuffling it.
- *  3. **Recycle the far and unseen** — a resident behind you and past `farOut` gives up its corner
+ *  3. **Recycle the LEFT-BEHIND** — far, behind, and further off than when it appeared — gives up its corner
  *     so the cast can follow you around a fold that is 600 blocks across. Nothing is despawned in
- *     the fiction: it wandered off, and someone else wandered into view.
+ *     the fiction: it wandered off, and someone else wandered into view. ⚠ Behind, not merely
+ *     unseen: a resident standing in the road AHEAD of you is out of view only because the fog has
+ *     it, and recycling that one is how a fade-in becomes a flicker.
  *  4. **Fill spare slots** from resting spirits not already standing somewhere.
  *
  * ⚠ STEPS 3 AND 4 ARE THE SAME MOTION AND MUST STAY IN THIS ORDER — recycling first is what frees
@@ -204,8 +279,9 @@ export function reflowRing(
   const kept: RingSlot[] = []
   const freed: RingSlot[] = []
   for (const s of out) {
-    const far = Math.hypot(s.hx - k.x, s.hz - k.z) > d.farOut
-    if (far && !inView(k, s.hx, s.hz, d)) freed.push(s)
+    const dist = Math.hypot(s.hx - k.x, s.hz - k.z)
+    const left = dist > d.farOut && dist > s.d0 + d.leave
+    if (left && behind(k, s.hx, s.hz)) freed.push(s)
     else kept.push(s)
   }
 
@@ -223,7 +299,11 @@ export function reflowRing(
     const home = pickHome(k, seed, nonce + tried * 7919, accept, fresh, d)
     tried += 1
     if (!home) break   // the world refused every corner this tick; try again next tick.
-    kept.push({ id, hx: home.x, hz: home.z, gen: (genOf.get(id) ?? 0) + 1 })
+    kept.push({
+      id, hx: home.x, hz: home.z,
+      gen: (genOf.get(id) ?? 0) + 1,
+      d0: Math.hypot(home.x - k.x, home.z - k.z),
+    })
   }
   return kept
 }

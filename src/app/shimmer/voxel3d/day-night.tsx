@@ -86,7 +86,10 @@ const SKY = {
 // Moonwell blue (this is untended country and darkness is about to mean something), but with a
 // real floor — hemisphere and ambient never reach zero, because "you can't see" is a fail state
 // the SPAWN layer is allowed to threaten and the renderer is not.
-const DAY = {
+/** ⚠ EXPORTED 2026-08-27 so `dev/ring` can hang the SHIPPED fog in its preview, and so the ring's
+ *  fade-in distance is read off the real fog rather than copied beside it. A preview lit by
+ *  different numbers than the world is the "preview that re-derives" trap `dev/seam` warns about. */
+export const DAY = {
   bg: '#8fb7d9', fogNear: 80, fogFar: 200,
   hemiSky: '#cfe6ff', hemiGround: '#3b3a4a', hemiIntensity: 1.5,
   sun: '#ffffff', sunIntensity: 1.5,
