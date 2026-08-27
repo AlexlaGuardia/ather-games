@@ -45,6 +45,7 @@ import { zoneAt } from '../voxel/zones'
 import { residentAt, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
 import { createCreatureBody, type CreatureBody } from './creature-billboard'
 import { createPortraitBody, hasPortrait } from './spirit-portrait-body'
+import { creatureHeight, BASE_FORM_MAX } from '../sprites/creature-size'
 import { speciesArt } from '../sprites/registry'
 import { bodyBox, rayBox } from './aim'
 import { ELEMENT_COLORS } from '../spirits/spirit'
@@ -114,14 +115,27 @@ export const SPAR_RANGE = 6
 // were inline literals; they are up here because the crosshair test and the mesh must agree, and
 // two copies of a number are two numbers.
 /**
- * ⚠ EXPORTED 2026-08-27 SO THE HOME PLOT'S RING CAN STAND ITS RESIDENTS AT THE SAME HEIGHT.
- * ★ AND IT IS A KNOWN-WRONG NUMBER SHARED ON PURPOSE. It is the HALO's lathe height, not a
- * creature's, and how big a spirit actually is is `[OPEN]` in `CANON/CANON_GAPS.md` (filed
- * 2026-08-26 as a ratification, with the prose quotes). One wrong number that every resident wears
- * is a one-line fix on the day Magii rules; two wrong numbers is a hunt. Do not "improve" this in
- * one caller.
+ * ── ★★★ THE HALO IS A RULER NOW, AND IT IS NO LONGER ANYBODY'S HEIGHT ────────────────────────────
+ * This was 2.1 and it was the ONLY height in the world: every wild spirit was built at it, in both
+ * worlds, because it was the one number to hand. That is the bug Alex named on 2026-08-27 — *"size
+ * the creatures, firefly shouldn't be human-scale"* — and it is fixed by `sprites/creature-size.ts`,
+ * which reads a per-species height off canon's own prose. Bodies no longer touch this constant, and
+ * `plot-ring-pass.ts` no longer imports it.
+ *
+ * ★ WHAT IT STILL IS: the spindle's lathe height — the mana bloom that says a presence lives in this
+ * patch. It stays the SAME for every resident on purpose, and that is what makes the new sizes read.
+ * A constant beside a varying thing is a ruler; scale is only legible against something that does not
+ * move. A Luminara is a mote inside the bloom and a Manalotl nearly fills it, and you can see the
+ * difference precisely because the bloom did not change between them.
+ *
+ * ★ AND IT IS DERIVED, NOT PICKED. It stands a tenth over the tallest a base form may be, so the
+ * bloom always contains its occupant no matter what Magii rules — the day a size grows, this follows.
+ * ⚠ AT 2.1 IT READ AS A PERSON STANDING IN THE MIST (a keeper's eye is 1.62), which is the same
+ * human-scale lie the bodies were telling. Waist-high on a keeper is a glow; head-high is a figure.
+ * ⚠ THIS IS A JIN CALL, NOT A CANON ONE, and it is the one number to move if Alex wants the mist
+ * read differently — nothing else needs to change with it.
  */
-export const PRESENCE_TALL = 2.1
+export const PRESENCE_TALL = Number((BASE_FORM_MAX * 1.1).toFixed(2))
 const PRESENCE_R = 0.49
 const PAIR_OFF = 1.4
 
@@ -334,6 +348,12 @@ void main() {
       let bestT = Infinity
       for (const r of present) {
         // Same expression as the mesh placement above: heart, stepped aside only when paired.
+        // ★ YOU AIM AT THE BLOOM, NOT AT THE BODY, AND THAT IS DELIBERATE. Now that a Luminara is
+        // drawn at 4cm, a box cut to the body would be a target roughly a tenth of a degree wide at
+        // spar range — honest and unusable. The halo is uniform, visible, and the thing a player
+        // actually points at, so the crosshair keeps reading it and every species stays equally
+        // approachable. ⚠ The drawn size must NOT be nudged up to make aiming work; that would turn
+        // the canon table into a gameplay dial and lose the reading it exists to carry.
         const offs = r.second ? [-PAIR_OFF, PAIR_OFF] : [0]
         for (const off of offs) {
           const y0 = standAt(r.patch)
@@ -416,12 +436,17 @@ void main() {
           // "no stand-in when the art is missing" rule above intact for anything neither path has.
           const art = speciesArt(w.form.species)
           const body = hasPortrait(w.form.species)
-            ? createPortraitBody(w.form.species, { height: PRESENCE_TALL })
+            // ★ ITS OWN HEIGHT, READ OFF CANON — see `sprites/creature-size.ts` for the quote behind
+            // each number and for the two species Magii has not ruled yet.
+            ? createPortraitBody(w.form.species, { height: creatureHeight(w.form.species) })
             : art
-              ? createCreatureBody(w.form.species, { anims: art.anims, palette: art.palette }, { height: PRESENCE_TALL })
+              ? createCreatureBody(w.form.species, { anims: art.anims, palette: art.palette }, { height: creatureHeight(w.form.species) })
               : null
           if (body) {
-            body.object.position.set(m.position.x, standAt(w.r.patch) + PRESENCE_TALL / 2, m.position.z)
+            // ⚠ HALF ITS OWN HEIGHT, NOT HALF THE HALO'S. A sprite's origin is its centre, so this is
+            // the line that puts the feet on the ground; against a shared constant a small spirit is
+            // buried and a large one floats, and neither reports anything.
+            body.object.position.set(m.position.x, standAt(w.r.patch) + creatureHeight(w.form.species) / 2, m.position.z)
             // Draws after the halo so the spirit reads as standing IN the glow, not behind it.
             body.object.renderOrder = 1
             body.object.frustumCulled = false

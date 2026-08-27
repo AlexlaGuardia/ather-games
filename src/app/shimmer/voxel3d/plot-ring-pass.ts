@@ -36,7 +36,7 @@ import type { DealWindow } from '../engine/spawn-board'
 import { createCreatureBody, type CreatureBody } from './creature-billboard'
 import { createPortraitBody, hasPortrait } from './spirit-portrait-body'
 import { speciesArt } from '../sprites/registry'
-import { PRESENCE_TALL } from './mist-pass'
+import { creatureHeight } from '../sprites/creature-size'
 import { reflowRing, ringCap, DEFAULT_RING, type RingSlot, type Keeper } from './plot-ring'
 import type { PlotConfig } from '../voxel/plot'
 
@@ -58,8 +58,15 @@ const ALWAYS: DealWindow = { index: 0, startMs: 0, endMs: Number.MAX_SAFE_INTEGE
  *  reflow that finds nothing to do is cheap — but placement probes the world, so it is not free. */
 const REFLOW_S = 1.1
 
-/** Blocks the body rises and falls as it breathes. Small enough to read as alive, not as hovering. */
-const BOB = 0.06
+/**
+ * How far the body rises and falls as it breathes, as a FRACTION of its own height.
+ *
+ * ★ IT WAS A FLAT 0.06 BLOCKS, WHICH WAS FINE WHILE EVERY RESIDENT WAS THE SAME SIZE AND IS NOT NOW.
+ * A Luminara is 4cm tall (`sprites/creature-size.ts`), so an absolute 6cm bob sinks a firefly through
+ * the ground and back out on every breath. 0.12 is the old number divided by the Vulnyx it was tuned
+ * against (0.06 / 0.5), so the fox breathes exactly as it did today and everything else is in scale.
+ */
+const BOB_FRAC = 0.12
 
 export interface PlotRing {
   /** Add this one object to the scene. Empty until the host hands over a roster. */
@@ -96,18 +103,23 @@ interface Live {
   body: CreatureBody
   /** Ground height at the wander centre, probed once per home rather than per frame. */
   gy: number
+  /** This species' drawn height, in blocks. Read once at build so the body and its lift agree. */
+  h: number
 }
 
 /**
  * Build a body for a species, portrait first. Returns null when a species has neither — which is a
  * real answer, not a failure: nothing is drawn, and no stand-in is invented. `mist-pass` makes the
  * same choice for the same reason, and an invented placeholder is how unfinished art ships.
+ *
+ * ★ `h` IS PASSED IN RATHER THAN LOOKED UP HERE, so the body's height and the height the walk lifts
+ * it by are the SAME number and cannot drift. Two reads of one table are still two numbers.
  */
-function bodyFor(species: string): CreatureBody | null {
-  if (hasPortrait(species)) return createPortraitBody(species, { height: PRESENCE_TALL })
+function bodyFor(species: string, h: number): CreatureBody | null {
+  if (hasPortrait(species)) return createPortraitBody(species, { height: h })
   const art = speciesArt(species)
   if (!art) return null
-  return createCreatureBody(species, { anims: art.anims, palette: art.palette }, { height: PRESENCE_TALL })
+  return createCreatureBody(species, { anims: art.anims, palette: art.palette }, { height: h })
 }
 
 export function createPlotRing(seed: number): PlotRing {
@@ -147,7 +159,8 @@ export function createPlotRing(seed: number): PlotRing {
           const had = live.get(slot.id)
           if (had && had.slot.gen === slot.gen) continue   // same corner, same walk, nothing to do
           const species = speciesOf(slot.id)
-          const body = had?.body ?? (species ? bodyFor(species) : null)
+          const h = had?.h ?? creatureHeight(species)   // null species -> the modest fallback, never NaN
+          const body = had?.body ?? (species ? bodyFor(species, h) : null)
           if (!body) { if (had) drop(slot.id); continue }
           if (!had) group.add(body.object)
           // ⚠ THE PATROL KEY CARRIES THE GENERATION. Without it a spirit that re-homes rebuilds the
@@ -160,15 +173,18 @@ export function createPlotRing(seed: number): PlotRing {
             PLOT_DIALS,
           )
           const gy = groundAt(Math.round(slot.hx), Math.round(slot.hz), Math.round(cfg.baseY))
-          live.set(slot.id, { slot, loop, body, gy })
+          live.set(slot.id, { slot, loop, body, gy, h })
         }
       }
 
       for (const l of live.values()) {
         const pose = patrolPose(l.loop, l.slot.hx, l.slot.hz, nowMs, ALWAYS)
-        const bob = Math.sin(nowMs / 1000 * 1.6 + l.loop.phaseS) * BOB
+        const bob = Math.sin(nowMs / 1000 * 1.6 + l.loop.phaseS) * (l.h * BOB_FRAC)
         // `pose.y` is the walk's second GROUND axis (the engine is 2D and calls it y); here it is z.
-        l.body.object.position.set(pose.x, l.gy + PRESENCE_TALL / 2 + bob, pose.y)
+        // ⚠ HALF THE BODY'S OWN HEIGHT, NOT HALF A SHARED CONSTANT. A sprite's origin is its centre,
+        // so this is what puts its FEET on the ground — get it wrong and a small spirit is buried and
+        // a large one floats, both silently.
+        l.body.object.position.set(pose.x, l.gy + l.h / 2 + bob, pose.y)
         l.body.update(nowMs, pose.facing, keeper.x, keeper.z, pose.paused ? 'idle' : 'walk')
       }
     },
