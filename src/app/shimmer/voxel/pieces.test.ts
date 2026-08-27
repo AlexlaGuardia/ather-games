@@ -7,10 +7,11 @@
 import { AIR } from './section'
 import { MAT } from './depth'
 import {
-  PIECES, STRUCTURE, pieceDef, rotatedSize, rotateCell, cellsOf, canPlace, canAfford, placementAt,
+  PIECES, ALL_PIECES, PIECE_MATERIALS, basePieceId, pieceMaterial,
+  STRUCTURE, pieceDef, rotatedSize, rotateCell, cellsOf, canPlace, canAfford, placementAt,
   type Placement, type Rotation,
 } from './pieces'
-import { blockDef, materialForItem } from './registry'
+import { blockDef, materialForItem, ALL_BLOCKS } from './registry'
 import { RECIPE_OUTPUTS } from './recipes'
 
 let pass = 0
@@ -44,12 +45,75 @@ const solid = () => MAT.STONE
 // it to "obtainable" rather than deleting it keeps the invariant that matters. The same sweep lives
 // in recipes.test.ts and covers the tool ladder too.
 {
+  // ⚠⚠ THIS SWEEP USED TO READ `[...Array(64).keys()].map(blockDef)` AND WAS ALREADY HALF-BLIND
+  // (fixed 2026-08-27). Materials run past 64 — `dawnwood_plank` is MAT 75, i.e. the guard could
+  // not see the block whose drop it was checking for. It passed anyway, because planks are also
+  // RECIPE_OUTPUTS, so the blindness was masked by the OTHER half of the union and nothing looked
+  // wrong. A hardcoded ceiling over a table that grows is the instrument-cannot-see-its-subject
+  // shape from PATTERNS; `ALL_BLOCKS` is exported precisely so an audit reads the real table.
   const droppable = new Set<string>()
-  for (const b of [...Array(64).keys()].map(blockDef).filter(Boolean))
-    for (const d of b!.drops) droppable.add(d.itemId)
+  for (const b of ALL_BLOCKS) for (const d of b.drops) droppable.add(d.itemId)
   const obtainable = new Set([...droppable, ...RECIPE_OUTPUTS])
-  const missing = PIECES.flatMap(p => p.cost.map(c => c.itemId)).filter(i => !obtainable.has(i))
+  // ★ OVER `ALL_PIECES`, NOT `PIECES` — the derived material variants must face the same guard as
+  // the hand-written eight. A derivation that mints 48 new costs and skips the check that exists to
+  // catch an uncraftable piece is the guard-that-exempts shape, and it would have exempted exactly
+  // the rows nobody hand-reviewed.
+  const missing = ALL_PIECES.flatMap(p => p.cost.map(c => c.itemId)).filter(i => !obtainable.has(i))
   ok(missing.length === 0, `every piece cost is obtainable (missing: ${[...new Set(missing)].join(',')})`)
+}
+
+// ── 2b. ★ THE MATERIAL VARIANTS (2026-08-27, the building-vocabulary pass) ───────────────────
+// One shape in many materials is Minecraft's entire detailing vocabulary, and the catalogue could
+// not express it: every hand-written piece pinned ONE material, so a stone hold dressed itself in
+// wooden parapets. These asserts are about the DERIVATION, not the values it happens to produce —
+// an assert that recomputes the derivation and compares would agree with itself forever.
+{
+  // A variant must wear a real material, and one its base actually accepts. The cheapest wrong
+  // answer that still satisfies "it has a material" is a material from the OTHER family, so the
+  // family membership is the half worth asserting.
+  let badFamily = 0, badCost = 0, badGeom = 0, orphan = 0
+  for (const p of ALL_PIECES) {
+    const m = pieceMaterial(p.id)
+    if (!m) { if (PIECES.some(b => b.id === p.id)) continue; orphan++; continue }
+    const base = PIECES.find(b => b.id === basePieceId(p.id))
+    if (!base) { orphan++; continue }
+    if (!base.variants?.includes(m.family)) badFamily++
+    // The cost must BE the material's item, at the base's count. Two ways to get this wrong and
+    // both ship a piece that looks right in a menu: the wrong item, or a drifted count.
+    if (p.cost[0]?.itemId !== m.itemId || p.cost[0]?.count !== base.cost[0].count) badCost++
+    // ★ GEOMETRY MUST SURVIVE THE COPY. A variant is the same SHAPE in a different material — if
+    // w/h/d or the walkable cells drift, a stone doorway stops being walk-through-able and the
+    // failure shows up as a player stuck in a gatehouse, nowhere near this file.
+    if (p.w !== base.w || p.h !== base.h || p.d !== base.d) badGeom++
+    if ((p.passable?.length ?? 0) !== (base.passable?.length ?? 0)) badGeom++
+    if (!!p.halfHeight !== !!base.halfHeight) badGeom++
+  }
+  ok(orphan === 0, `every piece resolves to a hand-written base (${orphan} orphaned)`)
+  ok(badFamily === 0, `every variant's material is in a family its base accepts (${badFamily} bad)`)
+  ok(badCost === 0, `every variant costs its own material at the base's count (${badCost} bad)`)
+  ok(badGeom === 0, `★ a variant is the same shape in another material (${badGeom} drifted)`)
+
+  // ★ THE BASE IS NOT DUPLICATED. `stair` already costs cut_stone, so `stair_cutstone` must not
+  // exist beside it — two ids for one object is a save-format problem the day someone places one.
+  const dupes = ALL_PIECES.filter(p => {
+    const m = pieceMaterial(p.id); const base = PIECES.find(b => b.id === basePieceId(p.id))
+    return m && base && p.id !== base.id && m.itemId === base.cost[0]?.itemId
+  })
+  ok(dupes.length === 0, `no variant duplicates its base's own material (${dupes.map(d => d.id).join(',')})`)
+
+  // ★ NAMED REGRESSION: THE UNDERSCORE TRAP. `half_slab` and `roof_slope` contain underscores, so
+  // any reader that recovers a base by splitting the id on `_` reads `half_slab` as the `half`
+  // piece in a `slab` material — a confident wrong answer, silently. VARIANT_OF is built from the
+  // table for this reason; this assert is what fails if someone "simplifies" it back to a split.
+  ok(basePieceId('half_slab') === 'half_slab', '★ half_slab is a base, not `half` in `slab`')
+  ok(basePieceId('roof_slope') === 'roof_slope', '★ roof_slope is a base, not `roof` in `slope`')
+  ok(basePieceId('half_slab_palebrick') === 'half_slab', '★ an underscored base still resolves under a variant')
+  ok(pieceMaterial('half_slab_palebrick')?.key === 'palebrick', 'the variant knows its own material')
+
+  // Every material is reachable by something, or it is a row nobody can build with.
+  const used = new Set(ALL_PIECES.map(p => pieceMaterial(p.id)?.key).filter(Boolean))
+  const unreachable = PIECE_MATERIALS.filter(m => !used.has(m.key))
+  ok(unreachable.length === 0, `every building material is reachable (${unreachable.map(m => m.key).join(',')})`)
 }
 
 // ── 3. ★ rotation must not drift the origin ──────────────────────────────────────────────────

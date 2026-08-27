@@ -63,6 +63,22 @@ export interface PieceDef {
    * — skill gates the family, `minTier` refuses rather than slows, hardness sets the time — so a
    * blade cuts a trunk under the identical rules that make a blade cut a log today.
    */
+  /**
+   * ── ★ WHICH MATERIALS THIS PIECE MAY BE RE-MADE IN (2026-08-27, the vocabulary pass) ─────────
+   * Every hand-written piece below pins ONE material in its cost — a doorway is goldwood, a stair
+   * is cut stone, a fence is goldwood. That is the hand-kept-mirror shape from PATTERNS wearing a
+   * different hat: it is not that the values disagree, it is that **the catalogue cannot express a
+   * stone doorway at all**, so a stone hold dresses itself in wooden parapets and the palette
+   * clashes at every gate. Minecraft's whole detailing vocabulary is one shape in many materials.
+   *
+   * ★ THE COUNT IS NOT DECLARED HERE, IT IS READ OFF `cost[0].count`. A second `units` field would
+   * be a value that must agree with the base cost and has nothing checking it — the exact defect
+   * this field exists to remove. Derive, never mirror.
+   *
+   * Absent = no variants. Some shapes genuinely only make sense in one material, and a derivation
+   * with no stopping rule manufactures nonsense (see `BlockDef.noSlab` and the Grass Tuft Slab).
+   */
+  variants?: PieceFamily[]
   chop?: {
     skill: BlockSkill
     minTier: 0 | 1 | 2 | 3
@@ -71,6 +87,43 @@ export interface PieceDef {
     drops: { itemId: string; count: number }[]
   }
 }
+
+/**
+ * ── ★ THE BUILDING MATERIALS A PIECE CAN WEAR ────────────────────────────────────────────────
+ * Two families, because they behave differently in a build: wood frames and roofs, stone walls
+ * and foundations. A piece names the families it accepts; the concrete variants derive from here.
+ *
+ * ⚠ EVERY `itemId` BELOW IS ALREADY DROPPED OR MILLED BY THE EXISTING ECONOMY — verified against
+ * the registry's drop table, not assumed. The `stair` piece's own comment records what happens
+ * otherwise: it shipped costing `block_stone`, which nothing yields, i.e. an uncraftable piece
+ * that looked perfectly fine in the catalogue. `pieces.test.ts` asserts this over ALL_PIECES so a
+ * variant cannot dodge the guard the base pieces pass.
+ *
+ * ⚠ THERE ARE THREE BUILDING WOODS, NOT FOUR, AND THAT IS CANON NOT AN OMISSION. Starwillow is a
+ * ruled TOOL wood — `world/resources.ts` drops `starwillow_branch` + `starwillow_sap` and there
+ * has never been a `starwillow_plank`. Adding one to "complete the set" would contradict canon.
+ */
+export type PieceFamily = 'wood' | 'stone'
+
+export interface PieceMaterial {
+  /** Suffix on the derived id — `stair` + `stonebrick` -> `stair_stonebrick`. */
+  key: string
+  /** Display prefix — 'Stone Brick' -> 'Stone Brick Stair'. */
+  name: string
+  /** What one unit of this piece is paid in. Must be obtainable; the test enforces it. */
+  itemId: string
+  family: PieceFamily
+}
+
+export const PIECE_MATERIALS: PieceMaterial[] = [
+  { key: 'goldwood',   name: 'Goldwood',    itemId: 'goldwood_plank',   family: 'wood' },
+  { key: 'shimmeroak', name: 'Shimmeroak',  itemId: 'shimmeroak_plank', family: 'wood' },
+  { key: 'dawnwood',   name: 'Dawnwood',    itemId: 'dawnwood_plank',   family: 'wood' },
+  { key: 'cutstone',   name: 'Cut Stone',   itemId: 'cut_stone',        family: 'stone' },
+  { key: 'stonebrick', name: 'Stone Brick', itemId: 'stone_brick',      family: 'stone' },
+  { key: 'palebrick',  name: 'Pale Brick',  itemId: 'pale_brick',       family: 'stone' },
+  { key: 'sandstone',  name: 'Sandstone',   itemId: 'sandstone',        family: 'stone' },
+]
 
 /**
  * The v1 catalogue. Six, deliberately.
@@ -89,16 +142,17 @@ export const PIECES: PieceDef[] = [
   // opening is not. This is the clearest case of footprint ≠ visual bounds in the whole catalogue.
   { id: 'doorway', name: 'Doorway', w: 1, h: 3, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 6 }],
-    passable: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }] },
+    passable: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }],
+    variants: ['wood', 'stone'] },
 
   { id: 'window', name: 'Window', w: 1, h: 2, d: 1,
-    cost: [{ itemId: 'goldwood_plank', count: 4 }] },
+    cost: [{ itemId: 'goldwood_plank', count: 4 }], variants: ['wood', 'stone'] },
 
   { id: 'roof_slope', name: 'Roof Slope', w: 1, h: 1, d: 1,
-    cost: [{ itemId: 'shimmeroak_plank', count: 3 }] },
+    cost: [{ itemId: 'shimmeroak_plank', count: 3 }], variants: ['wood', 'stone'] },
 
   { id: 'roof_cap', name: 'Roof Cap', w: 1, h: 1, d: 1,
-    cost: [{ itemId: 'shimmeroak_plank', count: 4 }] },
+    cost: [{ itemId: 'shimmeroak_plank', count: 4 }], variants: ['wood', 'stone'] },
 
   // Stairs are walkable by design — you stand ON them, so the occupied cell must not block you.
   // ⚠ RE-PRICED 2026-08-13 with the building ruling: `block_stone` is no longer obtainable — raw
@@ -106,26 +160,85 @@ export const PIECES: PieceDef[] = [
   // nothing yields, i.e. an uncraftable piece. Cut stone is the same idea one refine further along.
   { id: 'stair', name: 'Stair', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'cut_stone', count: 3 }],
-    passable: [{ x: 0, y: 0, z: 0 }] },
+    passable: [{ x: 0, y: 0, z: 0 }], variants: ['wood', 'stone'] },
 
   { id: 'beam', name: 'Beam', w: 1, h: 1, d: 1,
-    cost: [{ itemId: 'goldwood_plank', count: 2 }] },
+    cost: [{ itemId: 'goldwood_plank', count: 2 }], variants: ['wood', 'stone'] },
 
   // Seventh, added 2026-08-08 with the pieces pass (v1's "six, deliberately" earned its keep —
   // the loop is proven, the catalogue may grow). A fence occupies its full cell ON PURPOSE: its
   // job is to stop things; the thin look is the model's business. Cheap because a yard takes
   // dozens. Also the holds' parapet — the first GENERATED piece.
   { id: 'fence', name: 'Fence', w: 1, h: 1, d: 1,
-    cost: [{ itemId: 'goldwood_plank', count: 1 }] },
+    cost: [{ itemId: 'goldwood_plank', count: 1 }], variants: ['wood', 'stone'] },
 
   // Eighth, 2026-08-08 (same pass as the probe's CELL_HALF — the piece and its physics shipped
   // together). Stand at half height, walk up half-rises without a vault: floors that step, low
   // tables, roof edges. The first fractional-collision piece.
   { id: 'half_slab', name: 'Half Slab', w: 1, h: 1, d: 1,
-    cost: [{ itemId: 'goldwood_plank', count: 1 }], halfHeight: true },
+    cost: [{ itemId: 'goldwood_plank', count: 1 }], halfHeight: true, variants: ['wood', 'stone'] },
 ]
 
-const BY_ID = new Map(PIECES.map(p => [p.id, p]))
+/**
+ * ── ★ THE DERIVED VARIANTS — one shape, every material it accepts ────────────────────────────
+ *
+ * ★ THE BASE PIECE IS ITSELF ONE OF THE VARIANTS AND IS NOT DUPLICATED. `stair` already costs
+ * `cut_stone`, so the cut-stone stair IS `stair` and no `stair_cutstone` is minted beside it.
+ * Filtering on the cost item rather than on a hand-kept "skip this one" list means the day a base
+ * piece is re-priced into a different material, the derivation follows it instead of shipping two
+ * ids for the same object.
+ *
+ * ★ AND THE COUNT COMES OFF THE BASE COST, so a variant can never disagree with its own base
+ * about price. There is no second number to keep in sync because there is no second number.
+ *
+ * ⚠ `PIECES` DELIBERATELY STILL MEANS THE EIGHT HAND-WRITTEN SHAPES. `voxel3d/VoxelWorld.tsx`
+ * (the build menu) and `voxel3d/piece-mesh.ts` (the renderer) both read it, and both live in
+ * another window's lane. Adding a name rather than widening an existing one means nothing over
+ * there changes meaning until its owner opts in — and `pieces.test.ts`'s `PIECES.length === 8`
+ * stays a true, load-bearing assert instead of becoming a number someone bumps on every addition.
+ */
+const VARIANT_DEFS: PieceDef[] = PIECES.flatMap(base => {
+  const fams = base.variants
+  if (!fams) return []
+  return PIECE_MATERIALS
+    .filter(m => fams.includes(m.family))
+    .filter(m => m.itemId !== base.cost[0]?.itemId)
+    .map(m => ({
+      ...base,
+      id: `${base.id}_${m.key}`,
+      name: `${m.name} ${base.name}`,
+      cost: [{ itemId: m.itemId, count: base.cost[0].count }],
+    }))
+})
+
+/** Every piece that exists at runtime — the eight hand-written shapes plus their material variants. */
+export const ALL_PIECES: PieceDef[] = [...PIECES, ...VARIANT_DEFS]
+
+/**
+ * A variant's base shape and the material it wears.
+ *
+ * ⚠ BUILT FROM THE TABLE, NEVER BY SPLITTING THE ID ON `_`. `half_slab` and `roof_slope` already
+ * contain underscores, so string surgery would read `half_slab` as the `half` piece in a `slab`
+ * material and confidently return nonsense. PATTERNS calls this out by name: a hand-written
+ * textual reader is a standing claim about a file it does not own, and it fails silently.
+ */
+const VARIANT_OF = new Map<string, { base: PieceDef; material: PieceMaterial }>()
+for (const base of PIECES) {
+  const fams = base.variants
+  if (!fams) continue
+  for (const m of PIECE_MATERIALS) {
+    if (!fams.includes(m.family)) continue
+    if (m.itemId === base.cost[0]?.itemId) { VARIANT_OF.set(base.id, { base, material: m }); continue }
+    VARIANT_OF.set(`${base.id}_${m.key}`, { base, material: m })
+  }
+}
+
+/** The hand-written shape a piece renders as — `stair_stonebrick` -> `stair`. Identity for a base. */
+export const basePieceId = (id: string): string => VARIANT_OF.get(id)?.base.id ?? id
+/** Which material a piece is built from, if it is part of the variant system. */
+export const pieceMaterial = (id: string): PieceMaterial | undefined => VARIANT_OF.get(id)?.material
+
+const BY_ID = new Map(ALL_PIECES.map(p => [p.id, p]))
 export const pieceDef = (id: string): PieceDef | undefined => BY_ID.get(id)
 
 export interface Placement {
