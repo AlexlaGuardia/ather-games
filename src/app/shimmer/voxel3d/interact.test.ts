@@ -9,6 +9,7 @@
 // The first assert below is the bug. The rest are the neighbours it was hiding among.
 
 import { rightClickIntent } from './interact'
+import { STRUCTURE } from '../voxel/pieces'
 import { MAT } from '../voxel/depth'
 import { STATION_MAT } from '../voxel/workshop'
 
@@ -172,6 +173,27 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // A bed with something already growing must stay silent rather than ask for a seed it cannot take.
   ok(rightClickIntent(BED, null, false, false, true, false) !== 'needs-seed',
     '★ a bed that is already planted does not ask for a seed')
+}
+
+// ── ★★ THE DOOR PASS (2026-08-27): a piece that opens answers BEFORE the hand ────────────────
+// The dead-click this file exists to prevent, in its newest costume. A keeper walks to their door
+// carrying the planks they are building with; if `place` wins, the click stacks a plank onto the
+// door's face and the door never opens. A door is the block you are MOST likely to be carrying
+// building material past, so it has to be answered first, exactly like the chest and the bench.
+{
+  // Empty hand, and holding a stack — both must swing.
+  ok(rightClickIntent(STRUCTURE, null, false, false, false, false, true) === 'swing',
+     'a door with an empty hand swings')
+  ok(rightClickIntent(STRUCTURE, 'goldwood_plank', false, false, false, false, true) === 'swing',
+     '★ a door swings even with a stack of its own material in hand — not a place')
+  // ⚠ AND IT MUST NOT FIRE ON EVERY PIECE. `STRUCTURE` is written by all fourteen shapes, so if the
+  // host ever resolved this flag from the MATERIAL instead of from the placement, every beam and
+  // fence in the world would become clickable. This asserts the flag is what decides, not the id.
+  ok(rightClickIntent(STRUCTURE, null, false, false, false, false, false) !== 'swing',
+     '★★ a piece that does NOT open never swings — the flag decides, not the STRUCTURE material')
+  // The pre-existing answers must be undisturbed: `openablePiece` defaults false everywhere.
+  ok(rightClickIntent(MAT.CHEST, null, false) === 'open', 'the chest still opens')
+  ok(rightClickIntent(MAT.CAULDRON, null, false) === 'brew', 'the cauldron still brews')
 }
 
 console.log(fails.length ? `interact: ${pass} pass, ${fails.length} FAIL` : `interact oracle ${pass} CLEAN`)

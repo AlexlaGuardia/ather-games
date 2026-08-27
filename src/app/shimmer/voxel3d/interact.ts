@@ -28,6 +28,13 @@ import { isGardenBed } from './garden'
  * visible and undoable.
  */
 export type Intent =
+  /**
+   * ── ★ SWING A DOOR, A GATE OR A SHUTTER (2026-08-27, the door pass) ─────────────────────────
+   * Distinct from `'open'`, which raises a PANEL. This one changes the world: the placement flips
+   * state and its cells stop blocking. Sharing the word would have made "open" mean two unrelated
+   * things at one call site, which is how the chest/bench trap below got written in the first place.
+   */
+  | 'swing'
   /** A container: hand it upward and open the panel. */
   | 'open'
   /**
@@ -113,8 +120,19 @@ export type Intent =
  */
 export function rightClickIntent(
   aimed: number, selItem: string | null, holdsSeed: boolean, hasRinstick = false,
-  bedPlanted = false, bedReady = false,
+  bedPlanted = false, bedReady = false, openablePiece = false,
 ): Intent {
+  // ── ★★ A PIECE THAT OPENS, ANSWERED BEFORE EVERYTHING ───────────────────────────────────────
+  // ⚠ IT CANNOT BE DECIDED FROM `aimed` AND THAT IS WHY IT IS A PARAMETER. Every piece writes the
+  // same `STRUCTURE` id into the grid, so the material says "a piece is here" and never WHICH piece
+  // — resolving that needs `placementAt`, which is host state. Same shape as `holdsSeed` and
+  // `bedPlanted` above: the host answers the question, this file stays pure and testable.
+  //
+  // ★ FIRST, for the identical reason the chest is: a keeper standing at their door holding a
+  // stack of planks must SWING it, not place a plank onto its face. That is the exact dead-click
+  // this function exists to prevent, and a door is the block you are most likely to be carrying
+  // building material past.
+  if (openablePiece) return 'swing'
   // USE is answered FIRST, always. A block you use must not have the block in your hand dropped
   // onto it by the same click that uses it.
   if (aimed === MAT.CHEST) return 'open'
