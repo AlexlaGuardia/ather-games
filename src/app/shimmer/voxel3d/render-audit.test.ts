@@ -15,6 +15,7 @@
 import { readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative } from 'path'
 import { ALL_BLOCKS } from '../voxel/registry'
+import { PIECES } from '../voxel/pieces'
 import { layerOf, FALLBACK_LAYER, TOP, SIDE, BOTTOM } from './tex/tiles'
 import { FLORA_MATERIALS, FLORA_KIND_COUNT, SCATTER_SLOTS_SHARED } from '../voxel/flora'
 
@@ -427,6 +428,41 @@ for (const file of files) {
     if (orphans.length) {
       fails.push(`in TILE_MATERIALS but NO case in paintFor — ships as a magenta ore block: ${orphans.join(', ')}`)
     } else pass++
+  }
+}
+
+// ── ★★ THE SAME DOOR, ON THE PIECE RENDERER (2026-08-27) ────────────────────────────────────
+//
+// `buildGeometry` is a switch over piece ids whose default arm draws a BEAM — a small post. So a
+// piece added to the catalogue without a `case` does not fail, it silently renders as a little
+// post, which is exactly the shape of the magenta-ore bug above with a quieter costume: at least
+// magenta announces itself.
+//
+// ★ AND IT ALREADY HAD A SECOND, WORSE DOOR. Pieces now come in seven materials, so `stair` is
+// also `stair_stonebrick` — 72 ids whose shape must be recovered with `basePieceId`. A switch on
+// the raw `def.id` sends every variant to that default arm. Nothing throws; both halves stay
+// internally consistent about different things. So this asserts the KEY as well as the cases,
+// because a complete set of cases keyed on the wrong thing is still completely broken.
+{
+  const src = readFileSync(join(process.cwd(), 'src/app/shimmer/voxel3d/piece-mesh.ts'), 'utf8')
+  const at = src.indexOf('function buildGeometry')
+  if (at < 0) {
+    fails.push('render-audit cannot find buildGeometry — this check has gone blind, fix it')
+  } else {
+    const body = src.slice(at)
+    // ⚠ THE KEY. `basePieceId(def.id)` is the only correct discriminant; `def.id` is the bug.
+    if (/switch\s*\(\s*basePieceId\(\s*def\.id\s*\)\s*\)/.test(body)) pass++
+    else fails.push('★ buildGeometry must switch on basePieceId(def.id) — on def.id every material variant falls to the default arm and renders as a beam')
+
+    const cased = new Set([...body.matchAll(/case '([a-z_]+)':/g)].map(m => m[1]))
+    // Count guard: if this parse collapses, every assert below is auditing a subset it chose itself.
+    if (cased.size < 6) fails.push(`buildGeometry parsed as only ${cased.size} cases — the regex has drifted and this check is no longer auditing the renderer`)
+    else pass++
+
+    // `beam` is the documented default and legitimately has no case of its own.
+    const missing = PIECES.map(p => p.id).filter(id => id !== 'beam' && !cased.has(id))
+    if (missing.length) fails.push(`piece in the catalogue with NO case in buildGeometry — renders as a beam post: ${missing.join(', ')}`)
+    else pass++
   }
 }
 

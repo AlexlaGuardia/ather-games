@@ -16,7 +16,7 @@
 // fails the build on it, but it should never be written.
 
 import * as THREE from 'three'
-import { PIECES, type PieceDef } from '../voxel/pieces'
+import { PIECES, basePieceId, type PieceDef } from '../voxel/pieces'
 
 /** Provisional colours — wood-toned so a shed reads as a shed. Not a look call. */
 const TINT: Record<string, number> = {
@@ -43,7 +43,15 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
     parts.push(g)
   }
 
-  switch (def.id) {
+  // ⚠⚠ KEYED ON THE BASE SHAPE, NOT ON `def.id` (2026-08-27). A piece now comes in seven
+  // materials, so `stair_stonebrick` is a real id that must draw a STAIR — switching on the raw id
+  // sends all 72 variants to the default arm, where they render as the beam's little post. Nothing
+  // would have thrown: it is the sapling-icon bug exactly, where widening a union left a consumer
+  // stale and quiet, and both halves stayed internally consistent about different things.
+  //
+  // `basePieceId` is the shipped answer to "what shape is this", built from the piece table rather
+  // than by splitting the id (`half_slab` contains an underscore). Never re-derive it here.
+  switch (basePieceId(def.id)) {
     case 'doorway': {
       // Two jambs and a lintel — a frame with a hole, so the walkable cells are visibly walkable.
       box(0.18, 3, 0.9, -0.41, 1.5, 0)
@@ -87,6 +95,39 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
       // Exactly the collision it claims: the cell's lower half, and nothing else. The one piece
       // whose placeholder MUST be dimensionally honest, because its mechanic IS its shape.
       box(1, 0.5, 1, 0, 0.25, 0)
+      break
+    }
+    // ── the sub-cube detail, added 2026-08-27 ───────────────────────────────────────────────
+    case 'shutter': {
+      // A thin panel held off the face. Thinner than a slab on purpose — that thinness IS the
+      // reason builders reach for a trapdoor over a slab, and a "thin" panel drawn at 0.5 would
+      // just be a slab standing up.
+      box(0.9, 0.9, 0.12, 0, 0.5, -0.44)
+      break
+    }
+    case 'arch': {
+      // Two springings and a stepped head. The steps are what read as a curve at block scale —
+      // a true arc modelled at this size averages to a smudge, the same reason the collar badge
+      // had to be redrawn to a small-size budget.
+      box(0.9, 3, 0.9, -1, 1.5, 0)
+      box(0.9, 3, 0.9, 1, 1.5, 0)
+      box(0.9, 0.5, 0.9, 0, 2.75, 0)
+      box(0.5, 0.4, 0.9, -0.62, 2.3, 0)
+      box(0.5, 0.4, 0.9, 0.62, 2.3, 0)
+      break
+    }
+    case 'bracket': {
+      // A corbel: proud of the wall, tapering out. It exists to catch a highlight on its top face
+      // and throw a shadow under itself, which is the entire mechanism of "outcrop the corner".
+      box(0.34, 0.22, 0.7, 0, 0.72, -0.2)
+      box(0.34, 0.3, 0.34, 0, 0.4, -0.38)
+      break
+    }
+    case 'hook': {
+      // An arm off the wall with a drop at its end — what a lantern hangs from. Slender, because
+      // its whole job is to put the light SOURCE away from the masonry.
+      box(0.12, 0.12, 0.62, 0, 0.86, -0.24)
+      box(0.12, 0.34, 0.12, 0, 0.7, -0.5)
       break
     }
     default: {   // beam

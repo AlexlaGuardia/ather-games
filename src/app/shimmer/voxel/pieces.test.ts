@@ -27,7 +27,10 @@ const solid = () => MAT.STONE
   // pass), eight with the half slab (same day — it shipped WITH its fractional collision, never
   // before it). The count stays asserted so catalogue growth is always a DECISION that edits
   // this line, never a drift.
-  ok(PIECES.length === 8, `the catalogue is eight pieces, deliberately (${PIECES.length})`)
+  // Twelve since 2026-08-27 — the sub-cube detail pass (shutter, arch, bracket, hook). Alex
+  // reopened STRUCTURE-LAYER §9's "six and stop" now the loop is proven. The count stays asserted
+  // so growth is always a DECISION that edits this line, never a drift.
+  ok(PIECES.length === 12, `the catalogue is twelve pieces, deliberately (${PIECES.length})`)
   const ids = PIECES.map(p => p.id)
   ok(!ids.includes('wall') && !ids.includes('floor'),
      '★ walls and floors are BLOCKS, not pieces — that split is the whole design')

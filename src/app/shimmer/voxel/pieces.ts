@@ -177,6 +177,55 @@ export const PIECES: PieceDef[] = [
   // tables, roof edges. The first fractional-collision piece.
   { id: 'half_slab', name: 'Half Slab', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 1 }], halfHeight: true, variants: ['wood', 'stone'] },
+
+  // ── ★ NINE THROUGH TWELVE: THE SUB-CUBE DETAIL (2026-08-27) ─────────────────────────────────
+  // The catalogue could build a shape and could not DETAIL one. Every building source says the
+  // same thing about what separates a block shed from a building, and it is not more block types:
+  // it is geometry thinner than a cube. Builders name trapdoors specifically, and specifically say
+  // they beat slabs for detail *because they are thinner* — which is a statement about the SHAPE
+  // vocabulary, not the material one, and no amount of new stone would have supplied it.
+  //
+  // Four, not forty. §9 of STRUCTURE-LAYER reserved this call for Alex and its recommendation was
+  // six-and-stop-there until the loop proved out; he reopened it on 08-27 with the loop proven.
+  // Each of these earns a place by answering a technique the research names, and nothing here is
+  // a shape we merely thought would be nice.
+
+  // ★ THE SHUTTER IS THE TRAPDOOR — the single most-cited detail element. Thin, and it reads as
+  // depth against a flat wall precisely because it does not fill its cell. Full-cell occupancy
+  // would make a decorative panel an invisible wall, so it is PASSABLE: you can stand where a
+  // shutter is, exactly as you can walk under a roof overhang.
+  { id: 'shutter', name: 'Shutter', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 2 }],
+    passable: [{ x: 0, y: 0, z: 0 }], variants: ['wood', 'stone'] },
+
+  // ★ THE ARCH — the burrow's whole reason for existing in this list. Canon has Moglin burrows
+  // UNDERGROUND, dug into a bank (`dens.ts` already calls a den "the mouth dug into a bank"), and
+  // every hobbit-hole build guide says the same thing: the entrance is ROUNDED, and rounding is
+  // what blends a dug hole into a hillside. A square hole in a bank reads as a mineshaft.
+  // Three wide so it has springings to stand on; the opening is the middle column.
+  { id: 'arch', name: 'Arch', w: 3, h: 3, d: 1,
+    cost: [{ itemId: 'cut_stone', count: 5 }],
+    passable: [{ x: 1, y: 0, z: 0 }, { x: 1, y: 1, z: 0 }], variants: ['wood', 'stone'] },
+
+  // ★ THE BRACKET IS THE OUTCROPPED CORNER, which is the other half of "break the wall plane".
+  // Recessing is free (leave a cell out); PROTRUDING was impossible, because a block that sticks
+  // out of a wall is a block, and a wall of blocks with blocks stuck on it reads as lumpy rather
+  // than as a pilaster. A bracket is smaller than its cell and sits proud of the face.
+  { id: 'bracket', name: 'Bracket', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'cut_stone', count: 1 }],
+    passable: [{ x: 0, y: 0, z: 0 }], variants: ['wood', 'stone'] },
+
+  // ★ THE HOOK carries the lantern OFF the wall, which is the lighting half of the same argument —
+  // "text never sits raw on a scene" has a physical cousin, and it is that a light source flat
+  // against masonry throws no shadow and reads as a glowing tile.
+  //
+  // ⚠ IT IS A HOOK AND NOT A CHAIN, AND THAT IS A MATERIALS FACT RATHER THAN A PREFERENCE. A chain
+  // is metal and this world has no metal item — the economy drops stone, wood, crystal and plant.
+  // Naming a piece for a material the player cannot obtain is the uncraftable-piece bug with extra
+  // steps, and inventing an ore to justify a decoration is the tail wagging the dog.
+  { id: 'hook', name: 'Hook', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 1 }],
+    passable: [{ x: 0, y: 0, z: 0 }], variants: ['wood', 'stone'] },
 ]
 
 /**
