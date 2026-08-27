@@ -91,3 +91,44 @@ export const SPECIES_IDS: readonly string[] = Object.freeze(Object.keys(SPECIES_
 export function speciesArt(id: string): SpeciesArt | null {
   return SPECIES_ART[id] ?? null
 }
+
+/**
+ * The order the dev editors show species in, and a human label for each.
+ *
+ * ★ WHY AN ORDER LIST IS NOT THE MIRROR THIS FILE EXISTS TO KILL. The distinction is what a stale
+ * entry COSTS. A hand-kept art map can be WRONG — pair `water-bear` with the fox's palette and the
+ * editor paints a lie. This list cannot be wrong about anything: it is consulted only for position,
+ * every id is looked up in `SPECIES_ART` before it is shown, and anything registered but unlisted is
+ * APPENDED rather than dropped. So the eleventh species appears in all three editors on the day it
+ * is painted, at the end, without anyone editing this — the failure mode is "in a slightly odd
+ * place", not "invisible".
+ *
+ * ⚠ The one thing that CAN rot is a name here that no longer exists (a rename, a removal), and that
+ * is silent — filtering it out is exactly what hides it. `registry.test.ts` asserts every ORDER id
+ * is registered, so that one goes red.
+ *
+ * The order is Alex's, from `SpriteEditor`'s original literal — fox first because that is the one he
+ * reaches for. It is not alphabetical on purpose; `SPECIES_IDS` is, when something needs a stable key
+ * order rather than a familiar one.
+ */
+const ORDER: readonly string[] = [
+  'fox', 'axolotl', 'water-bear', 'turtle', 'owl',
+  'frog', 'firefly', 'rabbit', 'hummingbird', 'bat',
+]
+
+/** Every registered species, in editor display order. Registered-but-unlisted ids come last. */
+export const SPECIES_IN_ORDER: readonly string[] = Object.freeze([
+  ...ORDER.filter(id => id in SPECIES_ART),
+  ...SPECIES_IDS.filter(id => !ORDER.includes(id)),
+])
+
+/** Ids that `ORDER` names but the registry does not have. Non-empty means a rename went unfollowed. */
+export const ORDER_ORPHANS: readonly string[] = Object.freeze(ORDER.filter(id => !(id in SPECIES_ART)))
+
+/**
+ * `water-bear` -> `Water Bear`. Derived, so a new species needs no label entry anywhere — the four
+ * copies of this map each carried their own hand-typed label, and a typo there is a typo on screen.
+ */
+export function speciesLabel(id: string): string {
+  return id.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}

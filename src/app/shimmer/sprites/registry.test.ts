@@ -6,7 +6,7 @@
 
 import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
-import { SPECIES_ART, SPECIES_IDS, speciesArt } from './registry'
+import { SPECIES_ART, SPECIES_IDS, speciesArt, SPECIES_IN_ORDER, ORDER_ORPHANS, speciesLabel } from './registry'
 import { PALETTES } from './palette'
 import { MIST_ROSTERS, MIST_CORRIDORS } from '../voxel3d/mist-roster'
 
@@ -70,6 +70,28 @@ for (const id of SPECIES_IDS) {
   const undrawable = [...rostered].filter(s => !speciesArt(s))
   ok(undrawable.length === 0, `★ the mist can call species with no art: ${undrawable.join(', ')}`)
   console.log(`   mist · ${rostered.size} rostered species, all drawable`)
+}
+
+// ── 5. The editor display order, which is the one list here that CAN quietly rot ─────────────────
+// `SPECIES_IN_ORDER` cannot lose a species — anything registered but unlisted is appended, by
+// construction — so asserting that it covers `SPECIES_IDS` would be an assert with no input that
+// makes it fire. The failure this list actually has is the opposite one: a name that no longer
+// exists, left behind by a rename, silently filtered out and never seen again.
+{
+  ok(ORDER_ORPHANS.length === 0,
+    `the display order names species the registry does not have (a rename went unfollowed): ${ORDER_ORPHANS.join(', ')}`)
+  ok(SPECIES_IN_ORDER.length === SPECIES_IDS.length,
+    `display order holds ${SPECIES_IN_ORDER.length} of ${SPECIES_IDS.length} species`)
+  for (const id of SPECIES_IN_ORDER) ok(id in SPECIES_ART, `${id}: shown by the editors but not registered`)
+
+  // The three dev editors read this and nothing else. A duplicate would render one species twice.
+  ok(new Set(SPECIES_IN_ORDER).size === SPECIES_IN_ORDER.length, 'the display order repeats a species')
+
+  // Labels are derived, so the hyphenated id is the only interesting case — it is also the exact
+  // pair that drifted before the registry existed (`water-bear` vs `WATER_BEAR_SPRITES`).
+  ok(speciesLabel('water-bear') === 'Water Bear', `speciesLabel('water-bear') = ${speciesLabel('water-bear')}`)
+  ok(speciesLabel('fox') === 'Fox', `speciesLabel('fox') = ${speciesLabel('fox')}`)
+  console.log(`   editors · ${SPECIES_IN_ORDER.length} species shown, ${SPECIES_IN_ORDER[0]} first`)
 }
 
 if (fails.length) { console.error(`❌ ${fails.length} failed:`); for (const f of fails) console.error('   · ' + f); process.exit(1) }

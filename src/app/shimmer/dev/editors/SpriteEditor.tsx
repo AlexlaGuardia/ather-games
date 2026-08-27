@@ -1,17 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { FOX_SPRITES } from '../../sprites/fox'
-import { AXOLOTL_SPRITES } from '../../sprites/axolotl'
-import { WATER_BEAR_SPRITES } from '../../sprites/water-bear'
-import { TURTLE_SPRITES } from '../../sprites/turtle'
-import { OWL_SPRITES } from '../../sprites/owl'
-import { FROG_SPRITES } from '../../sprites/frog'
-import { FIREFLY_SPRITES } from '../../sprites/firefly'
-import { RABBIT_SPRITES } from '../../sprites/rabbit'
-import { HUMMINGBIRD_SPRITES } from '../../sprites/hummingbird'
-import { BAT_SPRITES } from '../../sprites/bat'
 import { PALETTES } from '../../sprites/palette'
+import { SPECIES_ART, SPECIES_IN_ORDER, speciesLabel } from '../../sprites/registry'
 import { SpriteAnim } from '../../sprites/sprite-data'
 import { VARIANT_CONFIG, VARIANT_CLASSES, VARIANT_CLASS_DEFS, RARITY_COLORS, RARITIES, type Rarity, type VariantConfig, type VariantClass } from '../../sprites/variants'
 import { ELEMENTS, ELEMENT_COLORS, type Species } from '../../spirits/spirit'
@@ -27,23 +18,20 @@ import GrimoireSelector from './GrimoireSelector'
 import SpiritConfig from './SpiritConfig'
 import { getEntry } from '../../spirits/grimoire'
 
+// Derived from `sprites/registry.ts`, not restated. This was one of the four hand-kept copies of the
+// species map the registry exists to replace — and the one that had to spell `PALETTES['water-bear']`
+// differently from `WATER_BEAR_SPRITES`, which is the drift that motivated it.
 const SPIRITS: {
   id: string
   label: string
   sprites: Record<string, SpriteAnim>
   palettes: Record<string, readonly string[]>
-}[] = [
-  { id: 'fox', label: 'Fox', sprites: FOX_SPRITES, palettes: PALETTES.fox },
-  { id: 'axolotl', label: 'Axolotl', sprites: AXOLOTL_SPRITES, palettes: PALETTES.axolotl },
-  { id: 'water-bear', label: 'Water Bear', sprites: WATER_BEAR_SPRITES, palettes: PALETTES['water-bear'] },
-  { id: 'turtle', label: 'Turtle', sprites: TURTLE_SPRITES, palettes: PALETTES.turtle },
-  { id: 'owl', label: 'Owl', sprites: OWL_SPRITES, palettes: PALETTES.owl },
-  { id: 'frog', label: 'Frog', sprites: FROG_SPRITES, palettes: PALETTES.frog },
-  { id: 'firefly', label: 'Firefly', sprites: FIREFLY_SPRITES, palettes: PALETTES.firefly },
-  { id: 'rabbit', label: 'Rabbit', sprites: RABBIT_SPRITES, palettes: PALETTES.rabbit },
-  { id: 'hummingbird', label: 'Hummingbird', sprites: HUMMINGBIRD_SPRITES, palettes: PALETTES.hummingbird },
-  { id: 'bat', label: 'Bat', sprites: BAT_SPRITES, palettes: PALETTES.bat },
-]
+}[] = SPECIES_IN_ORDER.map(id => ({
+  id,
+  label: speciesLabel(id),
+  sprites: SPECIES_ART[id].anims,
+  palettes: SPECIES_ART[id].variants as Record<string, readonly string[]>,
+}))
 
 const FRAME_CONST_MAP: Record<string, string[]> = {
   icon:         ['BATTLE_FRONT_0', 'BATTLE_FRONT_1'],

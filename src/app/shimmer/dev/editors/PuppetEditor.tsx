@@ -1,17 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { FOX_SPRITES } from '../../sprites/fox'
-import { AXOLOTL_SPRITES } from '../../sprites/axolotl'
-import { WATER_BEAR_SPRITES } from '../../sprites/water-bear'
-import { TURTLE_SPRITES } from '../../sprites/turtle'
-import { OWL_SPRITES } from '../../sprites/owl'
-import { FROG_SPRITES } from '../../sprites/frog'
-import { FIREFLY_SPRITES } from '../../sprites/firefly'
-import { RABBIT_SPRITES } from '../../sprites/rabbit'
-import { HUMMINGBIRD_SPRITES } from '../../sprites/hummingbird'
-import { BAT_SPRITES } from '../../sprites/bat'
-import { PALETTES } from '../../sprites/palette'
+import { SPECIES_ART, SPECIES_IN_ORDER, speciesLabel } from '../../sprites/registry'
 import { PLAYER_SPRITES, PLAYER_PALETTE } from '../../sprites/player'
 import { SpriteAnim } from '../../sprites/sprite-data'
 import EditorShell from '../templates/EditorShell'
@@ -31,18 +21,15 @@ interface SpriteSource {
   palette: readonly string[]
 }
 
-const SPIRIT_SOURCES: SpriteSource[] = [
-  { id: 'fox', label: 'Fox', anims: FOX_SPRITES, palette: PALETTES.fox.base },
-  { id: 'axolotl', label: 'Axolotl', anims: AXOLOTL_SPRITES, palette: PALETTES.axolotl.base },
-  { id: 'water-bear', label: 'Water Bear', anims: WATER_BEAR_SPRITES, palette: PALETTES['water-bear'].base },
-  { id: 'turtle', label: 'Turtle', anims: TURTLE_SPRITES, palette: PALETTES.turtle.base },
-  { id: 'owl', label: 'Owl', anims: OWL_SPRITES, palette: PALETTES.owl.base },
-  { id: 'frog', label: 'Frog', anims: FROG_SPRITES, palette: PALETTES.frog.base },
-  { id: 'firefly', label: 'Firefly', anims: FIREFLY_SPRITES, palette: PALETTES.firefly.base },
-  { id: 'rabbit', label: 'Rabbit', anims: RABBIT_SPRITES, palette: PALETTES.rabbit.base },
-  { id: 'hummingbird', label: 'Hummingbird', anims: HUMMINGBIRD_SPRITES, palette: PALETTES.hummingbird.base },
-  { id: 'bat', label: 'Bat', anims: BAT_SPRITES, palette: PALETTES.bat.base },
-]
+// Derived from `sprites/registry.ts`, not restated. `PLAYER_SOURCE` below stays hand-written on
+// purpose: the player is not a species, has no `PALETTES` entry, and is deliberately outside the
+// registry's derivation (see its header on why people fall out through the palette half).
+const SPIRIT_SOURCES: SpriteSource[] = SPECIES_IN_ORDER.map(id => ({
+  id,
+  label: speciesLabel(id),
+  anims: SPECIES_ART[id].anims,
+  palette: SPECIES_ART[id].palette,
+}))
 
 const PLAYER_SOURCE: SpriteSource = {
   id: 'player', label: 'Player',
