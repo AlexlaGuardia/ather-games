@@ -79,6 +79,13 @@ Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COO
   still have passed, because the suite runs against the TREE.**
 - **Stage by pathspec, never `git add -A`.** `git add src/app/shimmer/world/...` — only your lane.
   Still true, and still not sufficient on its own; see the line above.
+- ⚠ **THE COMPLETE FORM IS BOTH: `git add <paths> && git commit -m msg -- <paths>`.** A pathspec
+  commit **cannot commit an untracked file** — it aborts with *"pathspec … did not match any file(s)
+  known to git"*. So a new file still needs the `add`; the pathspec on the commit is what keeps
+  another window's staged work out of it. Found within the hour of writing the rule above, by
+  hitting it. ★ It **aborted rather than sweeping**, which is the right direction for this to fail
+  in — and the abort left the peer's dirty `tokens.test.ts` untouched, so the guard held on its
+  first live test.
 - **Pull before push. Commit small and often.** Disjoint lanes ⇒ conflicts are rare and section-local.
 - **No feature branches.** The live site builds from the working tree, not a branch — branches buy nothing here and cost merge overhead.
 - Shared surface (`engine/`, `components/`, `lib/`, `data/`) is committed **only by the hub**.
