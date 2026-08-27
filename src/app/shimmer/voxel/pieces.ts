@@ -197,22 +197,34 @@ export const PIECES: PieceDef[] = [
  * there changes meaning until its owner opts in — and `pieces.test.ts`'s `PIECES.length === 8`
  * stays a true, load-bearing assert instead of becoming a number someone bumps on every addition.
  */
-const VARIANT_DEFS: PieceDef[] = PIECES.flatMap(base => {
-  const fams = base.variants
-  if (!fams) return []
-  return PIECE_MATERIALS
-    .filter(m => fams.includes(m.family))
-    .filter(m => m.itemId !== base.cost[0]?.itemId)
-    .map(m => ({
-      ...base,
-      id: `${base.id}_${m.key}`,
-      name: `${m.name} ${base.name}`,
-      cost: [{ itemId: m.itemId, count: base.cost[0].count }],
+/**
+ * ★ ONE DERIVATION, READ TWICE. An earlier draft built the variant LIST and the variant LOOKUP in
+ * two separate loops that each re-stated the "the base already wears this material, do not
+ * duplicate it" rule. They agreed — and that is exactly the hand-kept-mirror shape PATTERNS warns
+ * about: two copies of one rule with nothing checking they still match. Mutation-testing found it:
+ * removing the rule from one copy produced ids the other could not resolve, and it surfaced as
+ * "8 orphaned pieces", a symptom three steps from the cause. With one derivation the same mutation
+ * names the eight duplicate ids directly.
+ *
+ * So the rule lives once, here, and both the array and the map are projections of this list.
+ */
+const VARIANTS: { def: PieceDef; base: PieceDef; material: PieceMaterial }[] = PIECES.flatMap(base =>
+  !base.variants ? [] : PIECE_MATERIALS
+    .filter(m => base.variants!.includes(m.family))
+    .map(m => {
+      // The base already wears this material — `stair` IS the cut-stone stair. Same object, base id.
+      const isBase = m.itemId === base.cost[0]?.itemId
+      const def: PieceDef = isBase ? base : {
+        ...base,
+        id: `${base.id}_${m.key}`,
+        name: `${m.name} ${base.name}`,
+        cost: [{ itemId: m.itemId, count: base.cost[0].count }],
+      }
+      return { def, base, material: m }
     }))
-})
 
 /** Every piece that exists at runtime — the eight hand-written shapes plus their material variants. */
-export const ALL_PIECES: PieceDef[] = [...PIECES, ...VARIANT_DEFS]
+export const ALL_PIECES: PieceDef[] = [...PIECES, ...VARIANTS.filter(v => v.def !== v.base).map(v => v.def)]
 
 /**
  * A variant's base shape and the material it wears.
@@ -222,16 +234,7 @@ export const ALL_PIECES: PieceDef[] = [...PIECES, ...VARIANT_DEFS]
  * material and confidently return nonsense. PATTERNS calls this out by name: a hand-written
  * textual reader is a standing claim about a file it does not own, and it fails silently.
  */
-const VARIANT_OF = new Map<string, { base: PieceDef; material: PieceMaterial }>()
-for (const base of PIECES) {
-  const fams = base.variants
-  if (!fams) continue
-  for (const m of PIECE_MATERIALS) {
-    if (!fams.includes(m.family)) continue
-    if (m.itemId === base.cost[0]?.itemId) { VARIANT_OF.set(base.id, { base, material: m }); continue }
-    VARIANT_OF.set(`${base.id}_${m.key}`, { base, material: m })
-  }
-}
+const VARIANT_OF = new Map(VARIANTS.map(v => [v.def.id, { base: v.base, material: v.material }]))
 
 /** The hand-written shape a piece renders as — `stair_stonebrick` -> `stair`. Identity for a base. */
 export const basePieceId = (id: string): string => VARIANT_OF.get(id)?.base.id ?? id
