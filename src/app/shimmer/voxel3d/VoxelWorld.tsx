@@ -209,6 +209,13 @@ import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSeamShimmer, PLOT_TRIGGER_RADIUS } from './seam'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
+// ── ★★★ RING 2, THE KEEPER'S OWN SPIRITS ABOUT THE HOME PLOT (wired 2026-08-27) ───────────────
+// Canon RULED 2026-07-30 that a keeper's spirits are *"visible, wandering, underfoot"* around the
+// plot. `plot-ring-pass.ts` and its oracle shipped 08-27 and `createPlotRing` appeared in exactly
+// ONE file — its own dev page — so the fold has been empty the whole time. Same shape as the 98
+// unreachable build pieces and the collar prompt: built, tested, green, unreachable.
+import { createPlotRing } from './plot-ring-pass'
+import { withinCap } from '../voxel/plot'
 import { mistAt, mistPatchesNear, type MistPatch } from '../voxel/mist'
 import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinutes, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
 import { applySparPayout, sparLedgerLines } from './spar-reward'
@@ -228,7 +235,7 @@ import {
 import { itemIcon } from './tex/item-icon'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
-import { normalizeRoster, activeSpirits, MAX_PARTY } from '../engine/spirit-health'
+import { normalizeRoster, activeSpirits, restingSpirits, MAX_PARTY } from '../engine/spirit-health'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { Species } from '../spirits/spirit'
 import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
@@ -2021,7 +2028,7 @@ export default function VoxelWorld() {
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
-          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut}
+          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
@@ -3309,7 +3316,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut, castOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut, castOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3430,6 +3437,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   foesOut: React.RefObject<null | (() => { posture: string; dist: number; collar: number }[])>
   /** True while a still-collared Moglin is close enough that the keeper needs to know the verb. */
   onCollarNear: (near: boolean) => void
+  /** The keeper's spirits. A REF, like `plotCfg` and `spiritIndex` — ring 2 reads it every frame
+   *  and a state prop would re-render the world on every roster change. */
+  party: React.RefObject<Spirit[]>
   pressOut: React.RefObject<null | ((key?: string, value?: number) => string)>
   waterOut: React.RefObject<null | ((x: number, y: number, z: number) => number | null)>
   /** Written by this component, read by the HUD — see `CastGauges`. */
@@ -3569,6 +3579,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // adding it would rebuild the whole mist pass (and its ledger) on any of ITS dep changes.
     [mistLedger],
   )
+  /**
+   * Ring 2. One object in the scene; empty until the host hands it a roster.
+   *
+   * ⚠ `[]` DEPS AND THAT IS DELIBERATE — the pass owns THREE resources (bodies, geometries), so a
+   * rebuild leaks the previous set. `SEED` is a module constant, not state.
+   */
+  const ring = useMemo(() => createPlotRing(SEED), [])
   const lastNearMist = useRef<string | null>(null)
   /** The ledger the pass currently holds. `recordWithdrawal` returns a NEW object, so an identity
    *  compare is enough to notice a spar ended and hand the pass the updated one — without which
@@ -4279,6 +4296,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     steam.dispose()
     seam.dispose()
     mist.dispose()
+    ring.dispose()
     flora.dispose()
   }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, seam, mist, flora])
 
@@ -5737,6 +5755,34 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     seam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime, space.current)
     if (ledgerSeen.current !== mistLedger.current) { ledgerSeen.current = mistLedger.current; mist.setLedger(mistLedger.current) }
     mist.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
+    // ── ★★★ RING 2 — the keeper's resting spirits, wandering the fold ──────────────────────────
+    // ⚠ PLOT SPACE ONLY. These are the spirits at HOME; ticking them in the Wilds would scatter the
+    // keeper's own party across country they have never been to. The pass has no opinion about
+    // space — that is this line's job, and it is the same shape as `seam.tick`'s space argument
+    // three lines up, which the comment there says to suspect before the shader.
+    //
+    // ⚠⚠ THE YAW IS `atan2(forward.z, forward.x)`, WHICH IS `plot-ring.ts`'s CONVENTION, NOT THE
+    // CAMERA'S EULER. `inView` computes `atan2(z - k.z, x - k.x) - k.yaw`, so a body dead ahead
+    // must come out at 0 — identical to `hollow-voice`'s ear, verified this session at four
+    // headings. Get it wrong and the pass does not fall over: it places residents a quarter turn
+    // off from where the keeper is looking, so bodies pop into view instead of appearing behind
+    // you, and the rule reads as broken rather than as mis-aimed.
+    // ★ `hollowFwd` is filled UNCONDITIONALLY once per frame (a bare block, not the night branch —
+    // checked, because a stale forward vector here would be invisible), so this reuses the one
+    // answer to "which way is the keeper looking" rather than deriving a second.
+    if (space.current === 'plot') {
+      ring.tick(
+        { x: p.x, z: p.z, yaw: Math.atan2(hollowFwd.current.z, hollowFwd.current.x) },
+        performance.now(), dt, plotCfg.current,
+        // ⚠ RING 2 IS THE SPIRITS **NOT** IN THE PARTY. A keeper holding four or fewer sees an
+        // empty yard, and that is the design rather than a fault — `restingSpirits` is
+        // `inParty === false`, and `normalizeRoster` only sets that past `MAX_PARTY`.
+        restingSpirits(party.current).map(sp => sp.id),
+        id => party.current.find(sp => sp.id === id)?.species ?? null,
+        (x, z) => withinCap(x, z, SEED, plotCfg.current),
+        (x, z, hint) => groundTopNear(x, z, hint, 12),
+      )
+    }
     // ⚠ The presence PROMPT is not decided here any more — it needs this frame's aim, which does
     // not exist until the reticle raycast below. See "the three aimed verbs".
     flora.tick(state.clock.elapsedTime)
@@ -8301,6 +8347,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       <primitive object={seam.group} />
       <primitive object={mist.points} />
       <primitive object={mist.residents} />
+      {/* Ring 2 sits beside the mist residents on purpose: same kind of thing (a body standing in
+          the world), same lifetime, and the pass keeps its own visibility. */}
+      <primitive object={ring.group} />
       <primitive object={flora.group} />
       {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
           React render and leaks the previous one — same family as the per-drop material that got
