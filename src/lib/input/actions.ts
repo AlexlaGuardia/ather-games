@@ -29,13 +29,17 @@ export type ActionId =
   | 'item.draw' | 'item.drop' | 'item.cycle'
   | 'ui.craft' | 'ui.build' | 'ui.map' | 'ui.inventory' | 'ui.chat' | 'ui.close' | 'ui.settings'
   | 'build.rotate' | 'build.tierUp' | 'build.tierDown'
-  | 'cast.tactical' | 'cast.signature'
+  | 'cast.tactical' | 'cast.signature' | 'cast.focus'
   | 'owner.fly'
 
 /** Held actions are sampled per frame; pressed actions fire once on the edge. */
 export const HELD: readonly ActionId[] = [
   'move.forward', 'move.back', 'move.left', 'move.right', 'move.jump', 'move.slide',
   'world.mine', 'world.place',
+  // ⚠ HELD, not pressed. Focusing is a thing you DO for as long as you hold it — a tap that charged
+  // a fixed lump would make it a cooldown ability, which is the opposite of the design: it is meant
+  // to cost you standing still.
+  'cast.focus',
 ] as const
 
 /**
@@ -115,6 +119,7 @@ export const DEFAULTS: Record<ActionId, Binding> = {
   // Binding RB now would double-fire: unlike the KeyQ drop/cycle overlap, which the drawn-weapon
   // state resolves, nothing resolves RB, so both actions would run on one press. Left empty so
   // `padGaps()` lists it as a real controller gap, which is exactly what that worklist is for.
+  'cast.focus':     { keys: ['KeyR'],                      pad: ['LB'] },
   'cast.signature': { keys: ['KeyB'],                      pad: [] },
   'owner.fly':      { keys: ['KeyV'],                      pad: [] },
 }
@@ -131,7 +136,7 @@ export const LABEL: Record<ActionId, string> = {
   'ui.craft': 'Craft', 'ui.build': 'Build mode', 'ui.map': 'Map', 'ui.inventory': 'Inventory',
   'ui.chat': 'Chat', 'ui.close': 'Close', 'ui.settings': 'Settings',
   'build.rotate': 'Rotate piece', 'build.tierUp': 'Next tier', 'build.tierDown': 'Previous tier',
-  'cast.tactical': 'Cast tactical', 'cast.signature': 'Cast signature',
+  'cast.tactical': 'Cast tactical', 'cast.signature': 'Cast signature', 'cast.focus': 'Focus (raise shield)',
   'owner.fly': 'Fly (keeper only)',
 }
 
@@ -169,7 +174,7 @@ export const GROUPS: readonly { title: string; actions: readonly ActionId[] }[] 
   { title: 'World',    actions: ['world.mine', 'world.place', 'world.interact'] },
   { title: 'Items',    actions: ['item.draw', 'item.drop', 'item.cycle'] },
   { title: 'Building', actions: ['ui.build', 'build.rotate', 'build.tierUp', 'build.tierDown'] },
-  { title: 'Casting',  actions: ['cast.tactical', 'cast.signature'] },
+  { title: 'Casting',  actions: ['cast.tactical', 'cast.signature', 'cast.focus'] },
   { title: 'Menus',    actions: ['ui.craft', 'ui.map', 'ui.inventory', 'ui.chat', 'ui.close', 'ui.settings'] },
   { title: 'Keeper',   actions: ['owner.fly'] },
 ] as const

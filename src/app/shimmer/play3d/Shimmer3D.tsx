@@ -28,6 +28,7 @@ import { pushCloudSave } from '@/lib/cloud-sync'
 import { saveKey, saveOwner } from '@/lib/save-slot'
 import { birthAffinity, NEUTRAL_AFFINITY, attunementResist, combineResist, type Affinity } from './birth-affinity'
 import { castForMove, isBuilt, CAST_SLOTS, ALL_BANDS, BAND_KEYS, derivePassive, type CastSpec } from './cast'
+import { getRegenRate } from '../engine/mana'
 import { moveById } from './keeper-moves'
 import { loadLoadout } from './loadout'
 import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
@@ -263,7 +264,17 @@ const placeIconBtn = (accent: string): React.CSSProperties => ({ width: 60, heig
 // Pure feel — tune here. goldwood(1): 6 mana / 2s · shimmeroak(4): 12 / 2.9s · dawnwood(10): 24 / 4.7s.
 const nodeManaCost = (type: NodeType) => 6 + (NODE_DEFS[type].minLevel - 1) * 2
 const nodeChannelSec = (type: NodeType) => 2 + (NODE_DEFS[type].minLevel - 1) * 0.3
-const MANA_REGEN_PER_SEC = 1 / 60   // 1 mana per minute by design — the real refill is Alchemy-brewed potions
+// ── ★ RAISED AND UNIFIED 2026-08-27 (Alex) ────────────────────────────────────────────────────
+// This read `1 / 60` with the note "1 mana per minute by design — the real refill is Alchemy-brewed
+// potions". That was a real decision and it is being reversed deliberately, not overwritten: mana
+// is no longer only a casting budget, it is what BUYS YOUR SHIELD (`engine/recovery.ts`), so a rate
+// tuned for "potions are the refill" now sets how survivable the game is.
+//
+// ⚠ AND IT CLOSES A 60× SPLIT BETWEEN THE TWO WORLDS. The voxel world has always regenerated 1.0–2.0
+// per second off the mana skill (`engine/mana.ts` › `getRegenRate`); play3d ran 1/60. The same
+// number meant sixty times more in one world than the other, which is why Moisture Gathering's
+// absolute trickle was ~48× overtuned here and ~0.8× there. Both worlds now read the same curve.
+const MANA_REGEN_PER_SEC = getRegenRate(1)   // the skill-1 floor; the curve owns the rest
 // Drink effects (restore amounts, timed buffs, effect lines) live in engine/potion-effects.ts —
 // one file owns what every bottle does; this walker just applies them at its hook points.
 // Placeable stations — double-tap in the hotbar to enter placement mode, then confirm to build.

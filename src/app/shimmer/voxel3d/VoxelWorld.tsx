@@ -225,6 +225,7 @@ import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneI
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
+import { hpRegenTick, focusTick } from '../engine/recovery'
 import { HudCorner } from './hud-corner'
 import { ResourceBars } from './resource-bars'
 import { CastGauges, type CastHud } from './cast-gauges'
@@ -4914,6 +4915,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const dispossessed = useRef(false)
   /** When the keeper was last inside someone's reach. The guard only comes back out of contact. */
   const lastPressed = useRef(-999)
+  /** True while the keeper is actively pouring mana into their guard — the renderer reads it. */
+  const focusing = useRef(false)
+  /** One say-line per attempt, not one per frame. */
+  const focusSaid = useRef(false)
   // ⚠ THE POSTURE SHAPES ARE THE SPIRIT'S, NOT THE MOGLIN'S. `collar-foes.ts` has said so in its
   // header since it was written — bulwark/channeler/skirmisher describe how the COLLARED SPIRIT
   // fights. The Moglin is the same small fellow in every encounter; what changes is what he is
@@ -6146,11 +6151,26 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // standing still a strategy and pressure a stalemate; recovering only once you are out of
       // reach makes DISENGAGING the answer the canon already wants — you can always walk away, and
       // the cost of walking away is that the collar stays on.
-      if (vitals.current && state.clock.elapsedTime - lastPressed.current > sendback.current.calm) {
+      // ── ★★★ THE INVERSION (Alex, 2026-08-27) ────────────────────────────────────────────────
+      // This block used to regenerate SHIELD at 17/sec once you had been out of contact for `calm`,
+      // and nothing anywhere healed HP. Now health knits and the shield must be BOUGHT — see
+      // `engine/recovery.ts` for why the three rules only make sense together.
+      //
+      // ★ THE "OUT OF CONTACT, NOT OVER TIME" REASONING IS PRESERVED, and it was the good half of
+      // the old block: recovering only once you are out of reach makes DISENGAGING the answer the
+      // collar ruling already wants. What changed is WHAT disengaging buys you — health, not armour.
+      if (vitals.current) {
         const v = vitals.current
-        if (v.shield < v.shieldMax) vitals.current = heal(v, 0, sendback.current.regen * dt)
-        if (vitals.current.shield > 0) dispossessed.current = false
+        const since = state.clock.elapsedTime - lastPressed.current
+        const back = hpRegenTick(v.hp, v.hpMax, since, dt)
+        if (back > 0) vitals.current = heal(v, back, 0)
+        // ⚠ `dispossessed` clears on HEALTH now, not on shield. It gated on shield because shield
+        // was the thing that came back; a keeper whose shield can no longer return on its own would
+        // have stayed flagged as dispossessed forever.
+        if (vitals.current.hp > 0) dispossessed.current = false
       }
+
+
 
       // ⚠ `performance.now()`, NOT `state.clock.elapsedTime`. The bag's expiries were written by the
       // cast handler off `performance.now()`, and the two clocks share no origin — mixing them makes
@@ -6787,6 +6807,31 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // some moment (a resting stick beating a held key, an idle pad killing the keyboard), and
     // unioning has no such moment.
     const heldNow = heldActions(bindings.current, Object.keys(k).filter(c => k[c]), pad.current)
+
+    // ── FOCUS: mana into the shield, for as long as you hold it ─────────────────────────────
+    // ⚠ INTERRUPTED BY BEING HIT, using the SAME `lastPressed` stamp the health rule reads. One
+    // contact clock for both, so "you are under pressure" cannot be true for one rule and false
+    // for the other — two clocks would drift and the pair would disagree about the same moment.
+    if (heldNow.has('cast.focus') && vitals.current && mana.current) {
+      const v = vitals.current, m = mana.current
+      const under = state.clock.elapsedTime - lastPressed.current < sendback.current.calm
+      if (under) {
+        if (!focusSaid.current) { focusSaid.current = true; onSay('not while something is on you') }
+      } else {
+        const f = focusTick(v.shield, v.shieldMax, m.cur, dt)
+        if (f.shield > 0) {
+          vitals.current = heal(v, 0, f.shield)
+          m.cur = Math.max(0, m.cur - f.mana)
+          focusing.current = true
+        } else if (!focusSaid.current) {
+          focusSaid.current = true
+          onSay(f.refused === 'full' ? 'your guard is already whole' : 'nothing left to draw on')
+        }
+      }
+    } else {
+      focusing.current = false
+      focusSaid.current = false
+    }
     const stick = stickMove(pad.current)
     let wf = 0, wr = 0
     if (heldNow.has('move.forward')) wf += 1
