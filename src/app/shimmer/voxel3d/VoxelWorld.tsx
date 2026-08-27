@@ -472,6 +472,17 @@ const FOE_HEIGHT: Record<'bulwark' | 'channeler' | 'skirmisher', number> = {
 }
 /** How far behind the Moglin the collared spirit drags, in blocks. It is hauled, never leading. */
 const SPIRIT_TRAIL = 1.5
+/**
+ * A Hollow's floor of self-light, so the dark it is required to stand in cannot swallow it.
+ *
+ * ⚠ ALEX'S NUMBER TO RULE. Sized from an ESTIMATE against the night rig, not from a photograph:
+ * enough to lift the body clear of the range a display crushes to black, small enough that it stays
+ * darker than the ground it stands on and never reads as a glow. Zero is the shipped-2026-08-27
+ * behaviour, which is invisible; anything past ~0.4 starts to look like a lantern, which is the
+ * opposite of what a Hollow is.
+ */
+const HOLLOW_SELF_LIGHT = 0.15
+
 /** How far a freed Moglin walks before he is gone. Far enough to read as leaving, not as vanishing. */
 const FREED_FAREWELL = 26
 /**
@@ -5419,9 +5430,38 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const hollowMat = useMemo(() => ({
     // A smear of grey that holds a silhouette: darker than any ground grey, never a face. The
     // caster reads a shade colder so the thing draining you from range is findable.
-    warden: new THREE.MeshLambertMaterial({ color: 0x3f423d, transparent: true, opacity: 0.9 }),
-    stalker: new THREE.MeshLambertMaterial({ color: 0x4a4d47, transparent: true, opacity: 0.82 }),
-    caster: new THREE.MeshLambertMaterial({ color: 0x474f58, transparent: true, opacity: 0.78 }),
+    //
+    // ── ★★★ ALEX, TWICE: "attacked by invisible enemies", then "the hollows are still invisible" ──
+    // The first report was answered with SOUND, which was the right fix for a stalker behind you
+    // and no fix at all for one in front. This is the other half, and it is a bug against the
+    // sentence directly above rather than a look change: the material promises a SILHOUETTE and
+    // could not deliver one.
+    //
+    // ⚠⚠ TWO RULES THAT ARE EACH CORRECT COMPOSE INTO INVISIBLE BY CONSTRUCTION.
+    //   1. `spawnDark` (voxel/light.ts) refuses ANY block light — `blockOf(packed) > 0` returns
+    //      false outright — and requires `skyOf * day` at night levels. So a Hollow exists ONLY
+    //      where the game is at its darkest. That is the ruling *"tended light holds grey off"*
+    //      and it is right.
+    //   2. `MeshLambertMaterial` with NO `emissive` has no light of its own, so its brightness is
+    //      bounded entirely by what is lighting it — which rule 1 guarantees is almost nothing.
+    // Neither is wrong. Together they mean the body can never be brighter than the dark it was
+    // required to stand in. Estimated against the night rig (`day-night.tsx`: hemi 0.55, amb 0.15):
+    // a Hollow renders at luma ~24-29 of 255 against ground at ~40 — both inside the range a
+    // display crushes to black. "Darker than any ground grey" only reads as a silhouette when
+    // there is enough light to see the ground.
+    //
+    // ★ THE FIX IS A FLOOR, NOT A GLOW. A small emissive in the body's OWN hue means a Hollow is
+    // never darker than the dark; it keeps its colour, keeps no face, and stays darker than lit
+    // ground because the term is small. The house already has this exact pattern — a dropped item
+    // uses `emissive: colour, emissiveIntensity: 0.25`.
+    //
+    // ⚠ THE NUMBER IS A STARTING POINT FROM AN ESTIMATE, NOT A MEASUREMENT, AND IT IS ALEX'S TO
+    // RULE. 0.15 is sized to lift the body about ten luma — clear of the crush floor, still under
+    // the ground it stands on. How unnerving a Hollow should be is a look call and this is one
+    // constant to move.
+    warden: new THREE.MeshLambertMaterial({ color: 0x3f423d, emissive: 0x3f423d, emissiveIntensity: HOLLOW_SELF_LIGHT, transparent: true, opacity: 0.9 }),
+    stalker: new THREE.MeshLambertMaterial({ color: 0x4a4d47, emissive: 0x4a4d47, emissiveIntensity: HOLLOW_SELF_LIGHT, transparent: true, opacity: 0.82 }),
+    caster: new THREE.MeshLambertMaterial({ color: 0x474f58, emissive: 0x474f58, emissiveIntensity: HOLLOW_SELF_LIGHT, transparent: true, opacity: 0.78 }),
   }), [])
   const lastShot = useRef(0)
   const bloom = useRef(0)
