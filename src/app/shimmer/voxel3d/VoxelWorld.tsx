@@ -45,7 +45,7 @@ import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GEN
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
 import { createProfiler, snapshotText, shortRowLabel, type FrameProfile, gpuTrusted } from './profile'
-import { stopScan, SPAWN_SCAN_MAX } from './spawn-budget'
+import { stopScan, mayStartColdField, SPAWN_SCAN_MAX } from './spawn-budget'
 // ── the input layer (lib/input) ───────────────────────────────────────────────────────────────
 // Keys used to be decided inline, 25 times, across three listeners in this file — so the meaning of
 // a key could not be tested and could not be rebound. The meaning lives in lib/input now and this
@@ -5182,6 +5182,29 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     const y0 = Math.max(0, lo - 10)
     const bounds = { x0: cx * SECTION - SECTION, y0, z0: cz * SECTION - SECTION,
                      sx: SECTION * 3, sy: Math.min(H, hi + 16) - y0, sz: SECTION * 3 }
+    // ── ★★★ THE SKY SEED'S HEIGHT IS TABULATED, NOT REGENERATED PER CELL (2026-08-27) ──────────
+    // This was `openToSky: (x, z, y) => y > columnHeight(x, z, SEED)`, and `columnHeight` is
+    // GENERATED terrain — multi-octave noise, not a lookup. The sky seed walks x,z,y and asks it
+    // once per cell, so a field paid tens of thousands of terrain generations to answer 2,304
+    // distinct questions. **Measured, holding everything else identical: 113.16ms live against
+    // 12.98ms from a precomputed 48×48 map — 8.7× the whole rest of the flood, in one predicate.**
+    // The table costs 2,304 calls, paid once, and it is the SAME `columnHeight` answering: this is
+    // memoisation, not an approximation, and the field it produces is byte-identical.
+    //
+    // ★ WHY IT HID FOR SO LONG: it is one short arrow function that reads like a comparison. The
+    // cost is not in this file, it is in what `columnHeight` does, and nothing at the call site
+    // says so. The 08-23 header below already warns about benching a component and concluding
+    // about the loop — this is the same mistake standing one level up, inside the loop's own body.
+    //
+    // ⚠ THE APRON IS 3×3 COLUMNS AND THE TABLE MUST COVER ALL OF IT, not just the centre column —
+    // the box is `SECTION * 3` on both horizontal axes and the seed walks every cell of it.
+    const hmN = SECTION * 3
+    const skyH = new Uint16Array(hmN * hmN)
+    for (let hz = 0; hz < hmN; hz++) {
+      for (let hx = 0; hx < hmN; hx++) {
+        skyH[hz * hmN + hx] = columnHeight(bounds.x0 + hx, bounds.z0 + hz, SEED)
+      }
+    }
     const field = computeLight(bounds, {
       // Air, water and foliage pass light; everything else stops it. Matches light.ts's contract.
       opaque: (x, y, z) => {
@@ -5193,7 +5216,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // the sky. That only mis-lights covered ground DURING THE DAY (at night the sky channel is
       // worth 0 regardless), and surface Hollows only body at night — so the approximation is
       // free until daytime interior spawning exists.
-      openToSky: (x, z, y) => y > columnHeight(x, z, SEED),
+      //
+      // ⚠ IN-BOUNDS BY CONSTRUCTION, NOT BY LUCK: `computeLight` only ever asks about cells inside
+      // `bounds`, and the table is exactly `bounds`' horizontal footprint. A clamp here would turn
+      // a future bounds change into silently wrong lighting at the apron instead of a crash.
+      openToSky: (x, z, y) => y > skyH[(z - bounds.z0) * hmN + (x - bounds.x0)],
     })
     lightCache.current.set(k, field)
     return field
@@ -5917,10 +5944,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       if (hollowNight(day) && hollows.current.length < cap && hollowClock.current <= 0) {
         hollowClock.current = SPAWN_CYCLE_S
         const keys = [...cols.current.keys()]
-        // Light fields are computed lazily, at most 2 per sweep — a column whose field is not
-        // ready yet is SKIPPED, not guessed at (no-spawn is the safe direction; the lantern's
-        // veto must never be bypassed by a cache miss). The whole load fills within seconds.
-        let lightBudget = 2
+        // ── ★★★ COLD LIGHT FIELDS ARE ADMITTED, NOT WANDERED INTO (2026-08-27) ─────────────────
+        // A column whose field is not ready is SKIPPED, not guessed at — no-spawn is the safe
+        // direction and the lantern's veto must never be bypassed by a cache miss. That rule was
+        // already right. What was wrong is that computing a cold field was the ONE unbounded call
+        // in a loop whose budget is checked at the TOP of the iteration: `world:spawn/light` came
+        // back at 118.60ms of a 123.4ms frame in Alex's profile while the GPU sat at 8%.
+        // `mayStartColdField` asks the clock immediately before the expensive call — the last
+        // moment a single thread can still decide anything — and `spawn-budget.ts` now states the
+        // resulting ceiling instead of promising one it could not keep.
+        let coldFields = 0
         // Random start offset so the same early-loaded columns do not win every night.
         const start = Math.floor(Math.random() * Math.max(1, keys.length))
         // ── ★★★ THE SWEEP IS BUDGETED — it owned 137.5ms of a 163ms frame before this ───────────
@@ -5937,7 +5970,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // A column entirely beyond despawn range would breed instant despawns — skip it.
           if (Math.hypot(ccx - p.x, ccz - p.z) > despawn + SECTION / 2) continue
           const kk = key(scx, scz)
-          if (!lightCache.current.has(kk)) { if (lightBudget <= 0) continue; lightBudget-- }
+          if (!lightCache.current.has(kk)) {
+            if (!mayStartColdField(coldFields, performance.now() - scanAt)) continue
+            coldFields++
+          }
           examined++
           // ★ The one call anybody had already suspected, given its own row so the next capture can
           // confirm or clear it rather than leaving it the default answer.
