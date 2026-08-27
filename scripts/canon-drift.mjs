@@ -861,8 +861,81 @@ function gameCropNames() {
 //
 // ⚠ AN ABSENCE CLAIM NEEDS A STRONGER MEASUREMENT THAN A PRESENCE CLAIM. "I found no drift" and "I
 // could not look" are different sentences and must not share an exit code. BLIND counts as drift.
-const ICON = { CLEAN: '🟢', GAP: '🔴', CONFLICT: '🟡', COLLISION: '⚠', BLIND: '🙈', NOTE: 'ℹ' }
-const ORDER = ['CONFLICT', 'COLLISION', 'GAP', 'BLIND', 'NOTE', 'CLEAN']
+// ── ⛔ HELD: A DIVERGENCE ALEX HAS RULED, WHICH IS NOT DRIFT ───────────────────────────────────
+//
+// ── ★★★ WHY THIS SEVERITY EXISTS ──────────────────────────────────────────────────────────────
+// `CANON/game/runes.md` records a HOLD on `eligibleMoves` and says, in canon's own words, that the
+// gate "will report this difference forever" and that it "must not be closed as drift by anyone but
+// Alex". Both halves were true, and together they made this gate PERMANENTLY RED — which is the
+// worst state a gate can be in. A red that everyone knows is expected is a red nobody reads, and
+// the next genuine drift arrives into a report that already said 1 CONFLICT yesterday.
+//
+// So a held divergence is reported as its own thing: printed loudly, named, cited, and NOT counted
+// toward the exit code. Nothing is closed — the difference is still on the page every single run.
+// What changes is that the gate can go green again, so a NEW conflict is the only thing that turns
+// it red. (Alex ruled this shape on 2026-08-27.)
+//
+// ── ⚠⚠ THE EXEMPTION IS WRITTEN SO THAT IT EXPIRES, WHICH IS THE ONLY REASON IT IS SAFE ────────
+// A hand-kept exemption list is the thing still sitting there a month after its reason died — this
+// repo has the scars. So a hold does not merely assert itself:
+//   · it CITES the canon text that creates it, and that text is re-read from canon on every run.
+//     If Magii deletes or rewrites the ruling, the citation stops matching, the hold goes VOID, and
+//     the divergence returns to CONFLICT by itself. Nobody has to remember.
+//   · it must MATCH something. A hold that excuses nothing is reported as stale, so a fixed build
+//     cannot leave a dead exemption behind quietly excusing a future bug.
+//   · it matches ONE exact finding message, never an area. Holding all of `keeper-moves` would
+//     silence every future rune drift in the file — the exemption that outlives its reason, wearing
+//     a ruling as a badge.
+const CANON_HOLDS = [
+  {
+    area: 'keeper-moves',
+    // Narrow on purpose: this exact divergence, not this gate and not this area.
+    message: "'Gate' rune requirement differs — build [enchant] vs canon [enchant+illuminate+metalergy]",
+    citeFile: 'game/runes.md',
+    cite: 'ALEX RULED *HOLD*',
+    why: 'Alex ruled HOLD 2026-08-26: the BUILD keeps 0022db1 scoping (tacticals <- element lane, signature <- state lane). Canon is unchanged and stands. Revisit when the equip layer is next opened.',
+  },
+]
+
+function applyCanonHolds() {
+  let healthy = 0
+  for (const h of CANON_HOLDS) {
+    // ⚠ RE-READ FROM CANON EVERY RUN. This is the whole expiry mechanism; a hold that trusted its
+    // own `why` string would be a note about a ruling rather than a check on one.
+    let canonTxt = ''
+    try { canonTxt = read(join(CANON, h.citeFile)) } catch { canonTxt = '' }
+    if (!canonTxt) {
+      add('BLIND', 'canon-holds', `could not read ${h.citeFile} to verify the hold on ${h.area} — THE HOLD WAS NOT VERIFIED`,
+        'A hold that cannot check its own premise must not silence anything. The divergence stays CONFLICT.')
+      continue
+    }
+    if (!canonTxt.includes(h.cite)) {
+      add('CONFLICT', 'canon-holds', `the hold on ${h.area} cites ${h.citeFile} text that is no longer there — the hold is VOID`,
+        `Looked for "${h.cite}". The ruling was rewritten or lifted, so the divergence below is drift again. Remove this entry from CANON_HOLDS once the build matches canon.`)
+      continue
+    }
+    const hit = findings.filter((f) => f.severity === 'CONFLICT' && f.area === h.area && f.msg === h.message)
+    if (hit.length === 0) {
+      // The ORDER_ORPHANS shape: an exemption excusing nothing is an exemption nobody will remove.
+      add('NOTE', 'canon-holds', `the hold on ${h.area} matched no finding — the divergence it excuses is gone`,
+        `Delete it from CANON_HOLDS. A hold left behind quietly excuses whatever next produces that exact message.`)
+      continue
+    }
+    for (const f of hit) { f.severity = 'HELD'; f.detail = `${h.why}  [held by ${h.citeFile}: "${h.cite}"]` }
+    healthy++
+  }
+  // ⚠ ALWAYS EMIT SOMETHING FOR THIS AREA, even when every hold is healthy. Two reasons, and the
+  // second is the one that bites: (1) a held divergence must stay VISIBLE every run — Alex's ruling
+  // is that nothing is closed, only reclassified; (2) `PINNED_AREAS` is compared to the live area
+  // set by EXACT EQUALITY, so an area that appears only when something is wrong makes the scope
+  // self-check fail — with exit 3 and a message about the banner — precisely when the gate has
+  // something real to say. An area that blinks in and out is worse than one that is always there.
+  add('CLEAN', 'canon-holds', CANON_HOLDS.length === 0
+    ? 'no held divergences'
+    : `${healthy} of ${CANON_HOLDS.length} ruled hold(s) verified against canon and reported as HELD, not drift`)
+}
+const ICON = { CLEAN: '🟢', GAP: '🔴', CONFLICT: '🟡', COLLISION: '⚠', BLIND: '🙈', HELD: '⛔', NOTE: 'ℹ' }
+const ORDER = ['CONFLICT', 'COLLISION', 'GAP', 'BLIND', 'HELD', 'NOTE', 'CLEAN']
 
 function summarize() {
   const counts = {}
@@ -910,7 +983,15 @@ try {
   process.exit(2)
 }
 
+// ⚠ AFTER `run()`, NEVER BEFORE IT. The first version of this call sat above the severity table and
+// silently matched nothing, because the checks that produce the findings had not executed yet — and
+// its "this hold matched no finding" branch then reported the hold as STALE. An exemption pass that
+// runs too early does not fail: it quietly excuses nothing and blames the exemption.
+applyCanonHolds()
+
 const counts = summarize()
+// ⚠ HELD is deliberately absent: a ruled divergence is reported every run but does not fail the
+// gate, so a NEW conflict is the only thing that turns it red. See CANON_HOLDS for why that is safe.
 const driftCount = (counts.CONFLICT ?? 0) + (counts.COLLISION ?? 0) + (counts.GAP ?? 0) + (counts.BLIND ?? 0)
 
 if (!QUIET) {
@@ -950,7 +1031,7 @@ console.log('canon-drift: ' + ORDER.filter((s) => counts[s]).map((s) => `${count
 // matching line UP out of the "does not check" list. Never delete a line to quiet the output.
 const LIVE_AREAS = [...new Set(findings.map((f) => f.area))].sort()
 const PINNED_AREAS = [
-  'base-species', 'birth-affinity', 'canon-vs-canon', 'element-herbs', 'infusions',
+  'base-species', 'birth-affinity', 'canon-holds', 'canon-vs-canon', 'element-herbs', 'infusions',
   'keeper-moves', 'mist-rosters', 'npcs', 'retired-vocab', 'second-forms', 'zones',
 ].sort()
 
