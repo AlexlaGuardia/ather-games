@@ -114,6 +114,65 @@ beat slabs for detail *because they are thinner*) · **small palettes**, 3-5 blo
 `holds.test.ts` · `voxel/registry.ts` · `voxel/depth.ts` · `voxel3d/tex/tiles.ts` · `voxel3d/attrs.ts` ·
 `voxel3d/piece-mesh.ts` · `voxel3d/render-audit.test.ts` · `dev/building/page.tsx` (new)
 
+## 🚪 Shimmer world — **A DOOR IS NOT ALWAYS SQUARE, AND TWO LOADERS WERE LYING ABOUT IT** (2026-08-27, world) · *Last touched 2026-08-27 (world) — code in `f40e612`, pushed, NOT yet deployed*
+
+**Alex:** *"lets work on runehold.. where did we leave off at?"* The answer on the board was *"Alex
+paints the 1x2 THE LANDING on the square, press B — the bridge INTO the Rune Hold work."* **That
+task could not have been done.** Three defects sat on that one path and every one of them returned
+success.
+
+**Left off**
+- **The stamp only laid a square.** `Gate` grew `w`/`h` on 08-24 for this exact landing and the READ
+  path moved with it; `MapEditor.tsx` kept a single `gateSize` and stamped `size x size`. Two axes
+  now, 1-4 each. ★ Widening a type leaves its WRITERS stale and quiet — an optional field means the
+  compiler cannot tell you.
+- **★★★ THE SAVE ROUTE DESTROYED THE LABEL, WHICH IS THE ONLY FIELD THE CROSSING READS.** The
+  collapse refused a non-square group (*"A Gate is square by definition"*) and pushed its tiles to
+  the loose pile — and **the loose-warp serializer writes no `gate` field at all.** So painting the
+  landing, saving, and getting HTTP 200 left `landingGate()` finding nothing and `crossingReady()`
+  false, with nothing on screen to say why. Now any FILLED RECTANGLE collapses; ragged groups still
+  refuse, but the refusal is **named** and shown in the editor as an amber bar that does not time
+  out. ⚠ *The operation reported success because the operation it performed did succeed. It was not
+  the one anyone asked for.*
+- **★★ AND A SECOND, OLDER ONE ON THE SAME PATH: `parseZoneGridFromSource` HAD NEVER WORKED.** It
+  anchored on the first `[` after the const NAME — which is the one inside `number[][]` — so the
+  bracket matcher opened and closed on the same pair and returned `[]`. **A valid, parseable, EMPTY
+  grid, for all 23 zone maps, always.** The editor's `if (data.grid?.length)` read that as
+  *nothing saved* and fell back to the grid baked into the client bundle — which is the
+  resurrect-stale-edits hazard the region branch of the same file refuses BY NAME.
+- **⚠⚠ AND THE HALF-FIX WAS WORSE THAN THE BUG.** Anchoring on `=` exposed a second defect: the row
+  split's `/\[([^\]]+)\]/g` lets `[` through, so its first match *is* row 0 wearing the outer
+  bracket, and a `.slice(1)` meant to skip the outer bracket **threw the top row away and shifted
+  every map up one.** An empty grid is ignored; a 99-row grid is loaded and saved back. Caught only
+  by comparing against the module's own export — **a map is a wall of digits, and being off by a
+  row looks exactly like a map.**
+
+**Next**
+- **Alex paints `THE LANDING`** — press **B**, warp on, Gate on, footprint **1 x 2**, label
+  `THE LANDING`, destination `rune-hold`. The tile is HIS: `crossing-out.ts` refuses to derive it,
+  and it is right to (*"a derived landing is a wall or a rooftop with a green test beside it"*).
+- Then `depart()` needs its caller in `VoxelWorld.tsx` (socket 0 currently prints a sentence) and
+  `consumeArrival()` needs one in play3d. Both buildable the moment the brush lands. Focus **#731**.
+
+**Decisions**
+- **The collapse lives in `world/gate-collapse.ts`, not in the route.** A rule inside a route handler
+  is a rule no oracle can reach — `expandGate` runs on every module load and its inverse ran only
+  when somebody pressed save, which is exactly why nothing noticed.
+- **The acceptance test is membership, not a count.** `tiles.length === w * h` is satisfied by a
+  payload holding one tile twice, which writes a gate claiming cells that do not warp. Mutation
+  proved it: my FIRST mutation of this stayed green because I had written the same check twice and
+  mutated the redundant copy. **A pair of equivalent checks hides which one is load-bearing.**
+- **The stub-map exemption derives itself.** Two grids are `createStubMap(...)` and `null` is the
+  correct answer for them; the test asks the SOURCE rather than naming the two consts, so the day
+  one becomes a literal it stops being exempt on its own.
+- ⚠ **`f40e612` is hub's commit and carries all six of my files** — they ran a `-A` commit while my
+  work sat staged. Code is fine and pushed; the message names only recoil. Recorded so the next
+  reader is not sent to a recoil commit looking for the gate work.
+
+### Files
+`world/gate-collapse.ts` + `.test.ts` (new, 52 asserts) · `world/tilemap-source.ts` + `.test.ts`
+(new, 85 asserts) · `save-map/route.ts` · `dev/editors/MapEditor.tsx`
+
 ## 🏛 Shimmer voxel3d — **THE GATE STATION: A HALF-CIRCLE THAT STANDS ON THE GROUND AND CROSSES** (2026-08-27, hub) · *Last touched 2026-08-27 (hub) — `5fbdf93` + worker `ecc155dbbd`, pushed, DEPLOYED, not play-verified*
 
 **Alex, walking his own garden:** *"its currently just a straight line of half buried archs.. if we
