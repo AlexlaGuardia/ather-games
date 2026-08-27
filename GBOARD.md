@@ -11,6 +11,24 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🐞 Shimmer voxel — **BUG (Alex, reported 2026-08-27): THE FOLD GREW AND ITS DOOR DID NOT** · *not reproduced yet, not fixed*
+
+**What Alex saw, verbatim:** *"when i got the first upgrade from greg to extend the fold.. the outer wall expanded and moved but the passage to the wilds stayed in the same spot and is unusable."*
+
+**Why this is almost certainly TWO SOURCES FOR ONE RADIUS** — the shape every other defect this week had:
+- `voxel/plot.ts` › `PLOT_TIERS = [300, 400, 500]`, and `plotForTier()` returns `capRadius` off the tier. Greg's first upgrade moves the wall **300 → 400**.
+- The wall has a **front door** — the cloud-cave passage (`plot.ts` ~:114-127, `PLOT_SHUT`, *"the mound of cloud the front door sits in; undefined = a bare gap in a flat wall"*).
+- ⚠ **`plot.ts:205` states the invariant that looks violated:** *"**The only way to size a fold** — nothing else may reach for `capRadius` and add to it."* A door drawn from a REMEMBERED or DEFAULT radius while the wall is drawn from the LIVE one produces exactly this symptom, and produces it silently.
+
+**Where to look first (unverified — this is a scoping note, not a diagnosis):**
+- `voxel/plot.ts` — `plotForTier`, `capRadius`, `PLOT_SHUT`, the door/cloud-cave placement.
+- `voxel3d/fold-ledger.ts` — `TIER_NEED` / what fires on the upgrade, and whether anything re-derives the door when the tier changes rather than only the wall.
+- ⚠ Check whether the door is placed from a stored config captured at fold CREATION vs read live per frame. If it is stored, the upgrade path has to re-place it, and that is the fix.
+
+**Why it matters more than a cosmetic misplacement:** the passage is **the only way into the Wilds**. If it is unusable after the first upgrade then the Hollows, the patrols and everything built for the night are unreachable for any keeper who took the upgrade — which is every keeper, since it is the first thing Greg gives you.
+
+**⚠ NOT REPRODUCED. Do not fix from this note alone** — take the upgrade in a browser, watch the wall move, and confirm the door's position before changing a number. `/shimmer/dev/hud` will not help here; this one needs the world.
+
 ## ⚖ Shimmer — **CANON QUEUE ANSWERED: TWO BUILD BUGS AND A FORK FOR ALEX** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — drafts in hand, NOT yet actioned*
 
 **Left off:** seven canon questions went to Magii; the drafts are back and saved at
