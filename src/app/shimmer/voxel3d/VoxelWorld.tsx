@@ -161,6 +161,9 @@ import { RECIPES, RECIPE_OUTPUTS, canCraft as canCraftRecipe, craftPlan, type Re
 // exact than what the tile version could do.
 import { WEAPONS, weaponAt, ADS_FOV, spreadDeg, bloomAfterShot, bloomAfterRest,
          canFire, coneDirection, recoilKick, type WeaponDef } from '../engine/weapons'
+// The camera climb, and the euler order that keeps it from rolling the horizon. Extracted from
+// this file 2026-08-27 so the drain arithmetic has an oracle instead of a hand-kept copy.
+import { drainRecoil, prepareLookCamera } from './recoil'
 // ── PORT STEP 4 — the clock (2026-08-07). `engine/day-cycle.ts` is pure wall-time maths, imported
 // unchanged; the rig in day-night.tsx turns it into sky. This was the last shipped system reading
 // as permanent noon: the light field's `dayFactor` finally has a day to factor.
@@ -4064,7 +4067,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     }
   }, [])
 
-  useEffect(() => { camera.position.set(SPAWN_X + 0.5, columnHeight(SPAWN_X, SPAWN_Z, SEED) + 2.6, SPAWN_Z + 0.5) }, [camera])
+  // ★★ THE CAMERA IS A YXZ CAMERA AND SAYING SO IS LOAD-BEARING. `look()` already authors the
+  // quaternion as a YXZ euler, but `camera.rotation` decomposes under its OWN order, and three's
+  // default is XYZ — so the recoil drain, the only writer of `camera.rotation` in this file, was
+  // pitching about the world x axis and leaning the horizon up to 19deg mid-burst. This is the
+  // line that was missing; see `recoil.ts` for the measurement and why it is invisible from spawn.
+  useEffect(() => {
+    prepareLookCamera(camera)
+    camera.position.set(SPAWN_X + 0.5, columnHeight(SPAWN_X, SPAWN_Z, SEED) + 2.6, SPAWN_Z + 0.5)
+  }, [camera])
 
   /** What is actually there. Unloaded reads as AIR — used for the raycast, so you can never target
    *  or mine a block that has not been generated. */
@@ -5640,13 +5651,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       }
 
       // Recoil is DRAINED into the camera here rather than written at fire time, so a burst climbs
-      // smoothly instead of snapping once per round.
-      if (recoil.current.p !== 0 || recoil.current.y !== 0) {
-        camera.rotation.x += recoil.current.p * Math.min(1, dt * 18)
-        camera.rotation.y += recoil.current.y * Math.min(1, dt * 18)
-        const k = 1 - Math.min(1, dt * 18)
-        recoil.current.p *= k; recoil.current.y *= k
-      }
+      // smoothly instead of snapping once per round. ⚠ This is the ONLY writer of camera.rotation
+      // in the file, which is why the missing euler order surfaced as "damage tilts the screen".
+      drainRecoil(camera.rotation, recoil.current, dt)
 
       // ── cast TERRAIN: hand the blocks back when the wall's time is up ───────────────────────
       // Cheap when nothing is up (the common case), and the revert is driven by the RECORD rather
