@@ -658,7 +658,16 @@ export function materialAt(
     {
       const hi = holdIndexAt(x, z)
       if (hi >= 0) {
-        const m = holdVoxelAt(x, y, z, hi, holdPadLevel(hi, seed, hcfg), MAT.STONE, MAT.MANA_LANTERN)
+        // ★ CUT STONE, NOT RAW STONE, AND MIXED (2026-08-27). A hold built from `MAT.STONE` is the
+        // same material as the hillside it stands on, so the largest built thing in the world read
+        // as a rock formation rather than as masonry — the one place "it looks flat" was actually
+        // "it looks unbuilt". Cut stone is the dressed-ashlar face and says a hand laid it; the two
+        // weathered courses mixed in say the hand was a long time ago, which is what canon asks for
+        // in something the Moglins RETREAT INTO rather than something they just put up.
+        const m = holdVoxelAt(
+          x, y, z, hi, holdPadLevel(hi, seed, hcfg), MAT.CUT_STONE, MAT.MANA_LANTERN,
+          MAT.MOSSY_CUT_STONE, MAT.CRACKED_STONE_BRICK,
+        )
         if (m !== 0) return m
       }
     }

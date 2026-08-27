@@ -111,7 +111,17 @@ export function holdGenPieces(i: number, pad: number): GenPiece[] {
     ]
     for (const [wx, wz, wall] of spots) {
       if (gateSpan(wall, t)) continue
-      out.push({ gen: `${s.id}:p:${wx},${wz}`, pieceId: 'fence', x: wx, y: pad + WALL_TOP + 1, z: wz,
+      // ★ A STONE PARAPET ON A STONE WALL (2026-08-27). This was `fence` — the base piece, which
+      // costs goldwood — so every hold wore a WOODEN railing along a masonry curtain wall. Nothing
+      // was broken and it read wrong at every gate: mixing a warm timber into a cold grey mass is
+      // the palette clash the building sources warn about, and it happened here purely because the
+      // catalogue could not express a stone fence until the material variants landed.
+      //
+      // ⚠ THE `gen` KEY IS UNCHANGED ON PURPOSE. It is the TOMBSTONE key — what persists is a
+      // piece's ABSENCE — so a keeper who knocked a parapet off last week keeps it knocked off.
+      // Changing the material must not resurrect removed dressing, and keying on position rather
+      // than on the piece id is what makes that free.
+      out.push({ gen: `${s.id}:p:${wx},${wz}`, pieceId: 'fence_stonebrick', x: wx, y: pad + WALL_TOP + 1, z: wz,
                  rot: wall <= 1 ? 1 : 0 })   // rails run ALONG the wall, not across it
     }
   }
@@ -127,6 +137,10 @@ export function holdGenPieces(i: number, pad: number): GenPiece[] {
       const rot: 0 | 1 | 2 | 3 = !edge ? 0
         : Math.abs(kx) === s.keepHalf ? (kx > 0 ? 3 : 1)
         : (kz > 0 ? 0 : 2)
+      // ⚠ THE KEEP ROOF STAYS TIMBER, AND THAT IS A CHOICE RATHER THAN AN OVERSIGHT. A stone wall
+      // carrying a timber roof is what actually gets built — the roof is the part you can afford to
+      // replace — and it puts one warm line along the top of a grey mass, which is the accent the
+      // same sources call for. The parapet was wrong because it ran the whole wall; this is a rim.
       out.push({ gen: `${s.id}:r:${wx},${wz}`, pieceId: edge ? 'roof_slope' : 'roof_cap', x: wx, y: ky, z: wz, rot })
     }
   }
@@ -184,9 +198,31 @@ export function holdCourtyardAt(x: number, z: number): boolean {
  * The structure voxel at (x, y, z) given the hold's pad surface level — 0 for "nothing here".
  * Callers pass materials in (stone, lantern) so this file imports no material table.
  */
+/**
+ * ── ★ THE WALL IS MIXED, NOT ONE STONE (2026-08-27) ──────────────────────────────────────────
+ * Texture-mixing inside one hue is the most consistently cited fix for a wall that reads flat, and
+ * a hold was the worst case in the build: one material, every cell, at the largest scale anything
+ * is built at here. `worn` and `cracked` are mixed in at roughly a fifth of cells each.
+ *
+ * ★ KEYED ON WORLD POSITION, never on a counter or on draw order, for the same reason every other
+ * roll in the generator is: a hold spans many columns and each one re-derives its own slice with no
+ * knowledge of the others. A counter would make the mix disagree across a chunk seam — visible as a
+ * seam in the masonry, on one side only.
+ *
+ * ⚠ AND THE MATERIALS ARE STILL INJECTED. This file has never imported MAT and must not start: the
+ * geometry is Jin's and what a stone IS belongs to the registry. Two more parameters is the whole
+ * cost of keeping that true.
+ */
+function mixed(x: number, y: number, z: number, stone: number, worn: number, cracked: number): number {
+  let h = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(z | 0, 2246822519)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  const r = ((h ^ (h >>> 16)) >>> 0) / 4294967296
+  return r < 0.20 ? worn : r < 0.36 ? cracked : stone
+}
+
 export function holdVoxelAt(
   x: number, y: number, z: number, i: number, pad: number,
-  stone: number, lantern: number,
+  stone: number, lantern: number, worn = stone, cracked = stone,
 ): number {
   const s = HOLDS[i]
   const lx = x - s.x, lz = z - s.z
@@ -204,7 +240,7 @@ export function holdVoxelAt(
       const inDoor = dy <= 2 && (
         (doorWallZ !== null && kz === doorWallZ && Math.abs(kx) <= 1) ||
         (doorWallX !== null && kx === doorWallX && Math.abs(kz) <= 1))
-      return inDoor ? 0 : stone
+      return inDoor ? 0 : mixed(x, y, z, stone, worn, cracked)
     }
     // Lanterns on the keep's roof corners — the courtyard is TENDED ground.
     if (dy === KEEP_H + 1 && Math.abs(kx) === s.keepHalf && Math.abs(kz) === s.keepHalf) return lantern
@@ -224,7 +260,7 @@ export function holdVoxelAt(
     if (Math.abs(along - g.at) <= GATE_HALF && dy <= GATE_H) return 0          // the gap
     if (along === g.at && dy === WALL_H + 1) return lantern                    // the gate light
   }
-  if (dy <= WALL_H) return stone
+  if (dy <= WALL_H) return mixed(x, y, z, stone, worn, cracked)
   // Corner posts rise two blocks above the wall line.
   if (alx === s.half && alz === s.half && dy <= WALL_H + 2) return stone
   return 0

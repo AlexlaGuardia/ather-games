@@ -3,6 +3,7 @@
 // Run: npx tsx src/app/shimmer/voxel/holds.test.ts
 
 import { HOLDS, holdIndexAt, holdCourtyardAt, holdVoxelAt, holdGenPieces, holdGenPiecesForCol } from './holds'
+import { basePieceId, pieceMaterial } from './pieces'
 import { columnHeight, holdPadLevel } from './height'
 import { materialAt, MAT } from './depth'
 import { STORY_NODES, roadAt } from './story-path'
@@ -27,7 +28,14 @@ for (const [i, s] of HOLDS.entries()) {
   check(`${s.id}: the pad is flat at the pad level`, flat)
 
   // Wall stands on the wall line; courtyard surface is worn path.
-  check(`${s.id}: wall stone above the pad`, materialAt(s.x + s.half, pad + 2, s.z, SEED, columnHeight(s.x + s.half, s.z, SEED)) === MAT.STONE)
+  // ⚠ THE WALL IS MIXED MASONRY SINCE 2026-08-27, so this asserts MEMBERSHIP OF THE COURSE SET
+  // rather than one id. It deliberately does NOT accept MAT.STONE: raw stone is what the hillside
+  // is made of, and the whole change was that a hold must not be the same material as the ground it
+  // stands on. Widening this to "any solid" would make it a guard that cannot fail — it has to
+  // still go red if the wall reverts to bare rock, which is the regression that matters.
+  const COURSE = new Set<number>([MAT.CUT_STONE, MAT.MOSSY_CUT_STONE, MAT.CRACKED_STONE_BRICK])
+  check(`${s.id}: wall is dressed masonry above the pad`,
+        COURSE.has(materialAt(s.x + s.half, pad + 2, s.z, SEED, columnHeight(s.x + s.half, s.z, SEED))))
   const hc = columnHeight(s.x + 2, s.z + 2, SEED)
   check(`${s.id}: courtyard surface is worn path`, materialAt(s.x + 2, hc, s.z + 2, SEED, hc) === MAT.PATH)
   check(`${s.id}: courtyard membership agrees`, holdCourtyardAt(s.x, s.z) && !holdCourtyardAt(s.x + s.half + 30, s.z))
@@ -66,9 +74,15 @@ check('holdIndexAt rejects open country', holdIndexAt(0, 0) === -1 && holdIndexA
 for (const [i, s] of HOLDS.entries()) {
   const pad = holdPadLevel(i, SEED)
   const dressing = holdGenPieces(i, pad)
-  const parapets = dressing.filter(g => g.pieceId === 'fence')
+  // ★ THE PARAPET IS A STONE FENCE VARIANT SINCE 2026-08-27 (`fence_stonebrick`), so this matches
+  // the SHAPE via basePieceId rather than the exact id — a wooden railing on a masonry wall was the
+  // palette clash being fixed. ⚠ The material is asserted separately below; matching the base alone
+  // would let the timber fence come straight back without a word.
+  const parapets = dressing.filter(g => basePieceId(g.pieceId) === 'fence')
   const roof = dressing.filter(g => g.pieceId.startsWith('roof_'))
   check(`${s.id}: parapets exist`, parapets.length > 10)
+  check(`${s.id}: ★ the parapet is stone, not timber`,
+        parapets.length > 0 && parapets.every(g => pieceMaterial(g.pieceId)?.family === 'stone'))
   check(`${s.id}: every parapet stands ON the wall top`, parapets.every(g =>
     g.y === pad + 5 && (Math.abs(g.x - s.x) === s.half || Math.abs(g.z - s.z) === s.half)))
   check(`${s.id}: no parapet in a gate span`, parapets.every(g => {
