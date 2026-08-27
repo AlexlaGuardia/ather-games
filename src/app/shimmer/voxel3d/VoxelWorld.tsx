@@ -122,7 +122,7 @@ import { keeperKey } from '@/lib/keeper-local'
 const POT_BASE = 'voxel3d:pots:'
 const SAPLING_BASE = 'voxel3d:saplings:'
 const DECAY_BASE = 'voxel3d:leafdecay:'
-import { PIECES, STRUCTURE, STRUCTURE_HALF, pieceDef, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
+import { PIECES, PIECE_MATERIALS, STRUCTURE, STRUCTURE_HALF, pieceDef, pieceVariants, pieceMaterial, basePieceId, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
 import { layerOf } from './tex/tiles'
@@ -851,6 +851,16 @@ export default function VoxelWorld() {
   // which verb the mouse means, so the two halves never fight over a click.
   const [build, setBuild] = useState(false)
   const [pieceIdx, setPieceIdx] = useState(0)
+  // ★★ THE PALETTE IS TWO AXES, NOT ONE LIST (2026-08-27). 14 shapes x 7 materials is 98 pieces;
+  // 84 of them had no way to be selected at all because the bar read `PIECES`. Shape and material
+  // are separate rows and separate keys, and THE SELECTED PIECE IS RESOLVED HERE, ONCE — the HUD
+  // and the world are both handed the resolved id rather than the pair, so they cannot end up
+  // disagreeing about which piece is in your hand while both look internally consistent.
+  const [matIdx, setMatIdx] = useState(0)
+  const variants = pieceVariants(PIECES[pieceIdx].id)
+  // ⚠ Clamped, not asserted: a shape with fewer materials than the current index must fall back to
+  // one that exists rather than resolve to `undefined` and take the ghost down with it.
+  const pieceId = (variants[matIdx] ?? variants[0] ?? PIECES[pieceIdx]).id
   const [rot, setRot] = useState<Rotation>(0)
   const [look, setLook] = useState<{ name: string; progress: number; refused: boolean } | null>(null)
   const [settings, setSettings] = useState<VoxelSettings>(() => loadSettings())
@@ -1867,7 +1877,10 @@ export default function VoxelWorld() {
       if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
       if (matches(bindings.current, e.code, 'ui.build')) { e.preventDefault(); setBuild(v => !v) }
       if (matches(bindings.current, e.code, 'build.rotate')) setRot(r => ((r + 1) % 4) as Rotation)
-      if (matches(bindings.current, e.code, 'build.tierDown') || matches(bindings.current, e.code, 'build.tierUp')) { /* spike tier, handled below */ }
+      // ] and [ walk the material axis. Gated on `build` because outside the palette they would be
+      // keys that silently change something with nothing on screen to show it.
+      if (build && matches(bindings.current, e.code, 'build.materialNext')) setMatIdx(v => (v + 1) % PIECE_MATERIALS.length)
+      if (build && matches(bindings.current, e.code, 'build.materialPrev')) setMatIdx(v => (v - 1 + PIECE_MATERIALS.length) % PIECE_MATERIALS.length)
       // Tool tier is a debug lever so the tier GATE can be felt in ten seconds: a tier-1 spike
       // REFUSES pure core, and that should be provable without crafting your way up first.
       // ★ THE TIER LEVER IS GONE. Tier comes from the equipped tool now, and a better tool is
@@ -1953,7 +1966,7 @@ export default function VoxelWorld() {
           }}
           onLook={setLook} onInvChange={refreshHotbar}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
-          build={build} pieceIdx={pieceIdx} rot={rot}
+          build={build} pieceId={pieceId} rot={rot}
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
@@ -1977,7 +1990,7 @@ export default function VoxelWorld() {
         <PointerLockControls selector="#voxel3d-no-autolock" />
       </Canvas>
       <Hud stats={stats} diagnostics={settings.showFps} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
-           build={build} pieceIdx={pieceIdx} rot={rot} inv={inv}
+           build={build} pieceId={pieceId} rot={rot} inv={inv}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
@@ -2128,14 +2141,14 @@ function Clock() {
  * directly, and leave the component tree alone. 10 Hz is well under a frame and well over the eye.
  */
 
-function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceIdx, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast }: {
+function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceId, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
   look: { name: string; progress: number; refused: boolean } | null
   hotbar: (HotbarEntry | null)[]; sel: number; tier: number
   held: { text: string; out: boolean } | null
-  build: boolean; pieceIdx: number; rot: Rotation
+  build: boolean; pieceId: string; rot: Rotation
   /** Latest frame-meter window, or null when the meter is off — the gate lives at the CALL site so
    *  this component never has to know a setting exists. */
   perf: PerfSample | null
@@ -2404,26 +2417,56 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
 
       {/* ★ The build palette REPLACES the hotbar rather than sitting beside it. One bar, whose meaning
           follows the mode, so there is never a question about which row a number key is talking to. */}
+      {/* ★★ TWO ROWS, TWO AXES. Shape on the bottom (number keys and the wheel, as before), material
+          on the strip above it (the ] and [ keys). 14 x 7 = 98 pieces; as one row this was 14 tiles
+          and 84 pieces you could not reach.
+          ⚠ BOTH ROWS HIGHLIGHT OFF `pieceId`, THE SAME VALUE THE WORLD PLACES — never off the two
+          indices. Highlighting from the pair would be a second derivation of "what is selected",
+          and the failure mode of a second derivation is that it agrees until it doesn't. */}
       {build && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
-          {PIECES.map((pc, i) => {
-            const affordable = pc.cost.every(c => countItem(inv.current!, c.itemId) >= c.count)
-            return (
-              <div key={pc.id} className={`w-20 h-14 rounded border-2 px-1 flex flex-col items-center justify-center text-[9px] font-mono
-                ${i === pieceIdx ? 'border-amber-300 bg-black/70' : 'border-white/20 bg-black/45'}`}>
-                <div className={i === pieceIdx ? 'text-amber-200' : 'text-white/70'}>{pc.name}</div>
-                <div className={affordable ? 'text-white/45' : 'text-red-300/80'}>
-                  {pc.cost.map(c => `${c.count}×${c.itemId.replace(/^block_|_plank$/g, '')}`).join(' ')}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pointer-events-none">
+          <div className="flex gap-1">
+            {PIECE_MATERIALS.map(m => {
+              const on = pieceMaterial(pieceId)?.key === m.key
+              // A material you cannot pay for still shows: the palette is a catalogue of what the
+              // world HAS, and greying an unaffordable one out is what tells you to go get it.
+              const stock = countItem(inv.current!, m.itemId)
+              return (
+                <div key={m.key} className={`px-2 h-6 rounded border flex items-center gap-1.5 text-[9px] font-mono
+                  ${on ? 'border-amber-300 bg-black/70 text-amber-200' : 'border-white/15 bg-black/40 text-white/55'}`}>
+                  <span>{m.name}</span>
+                  <span className={stock > 0 ? 'text-white/40' : 'text-red-300/70'}>{stock}</span>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
+          <div className="flex gap-1.5">
+            {PIECES.map(pc => {
+              // The tile shows the cost of the piece you would actually place — the SHAPE in the
+              // CURRENT material — so the number under `Stair` changes when you walk the strip
+              // above. A tile costed at its base material would quietly lie for six of the seven.
+              const inThisMaterial = pieceVariants(pc.id).find(v => pieceMaterial(v.id)?.key === pieceMaterial(pieceId)?.key) ?? pc
+              const on = basePieceId(pieceId) === pc.id
+              const affordable = inThisMaterial.cost.every(c => countItem(inv.current!, c.itemId) >= c.count)
+              return (
+                <div key={pc.id} className={`w-20 h-14 rounded border-2 px-1 flex flex-col items-center justify-center text-[9px] font-mono
+                  ${on ? 'border-amber-300 bg-black/70' : 'border-white/20 bg-black/45'}`}>
+                  <div className={on ? 'text-amber-200' : 'text-white/70'}>{pc.name}</div>
+                  <div className={affordable ? 'text-white/45' : 'text-red-300/80'}>
+                    {inThisMaterial.cost.map(c => `${c.count}×${c.itemId.replace(/^block_|_plank$/g, '')}`).join(' ')}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
       {build && (
-        <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
-          {/* Pieces face where you look; this is the R key's manual quarter-turn on top of that. */}
-          {rot === 0 ? 'facing you · R to turn' : `R turn +${rot * 90}°`}
+        <div className="absolute bottom-[6.4rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
+          {/* Pieces face where you look; this is the R key's manual quarter-turn on top of that.
+              The material hint rides along because a key with no on-screen mention is a key nobody
+              presses — the two it replaced sat in the settings panel doing nothing for weeks. */}
+          {(rot === 0 ? 'facing you · R to turn' : `R turn +${rot * 90}°`) + ' · [ ] material'}
         </div>
       )}
 
@@ -3179,7 +3222,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceIdx, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut, castOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut, castOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3215,7 +3258,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   inflight: React.RefObject<number>
   settings: VoxelSettings
   build: boolean
-  pieceIdx: number
+  pieceId: string
   rot: Rotation
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
@@ -7186,7 +7229,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     prof.current.mark('interact')
     // ── build mode: ghost, place, deconstruct ────────────────────────────────────────────────
     if (build) {
-      const def = pieceDef(PIECES[pieceIdx].id)!
+      const def = pieceDef(pieceId)!
       // ★ AUTO-FACING (2026-08-08, Alex's ask): pieces orient from where you LOOK, live — turn to
       // face a different wall and the ghost turns with you. `rot` (the R key) is a persistent
       // manual quarter-turn ON TOP of that, not the whole job. The mapping is anchored to the

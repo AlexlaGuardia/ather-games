@@ -336,6 +336,25 @@ export const basePieceId = (id: string): string => VARIANT_OF.get(id)?.base.id ?
 /** Which material a piece is built from, if it is part of the variant system. */
 export const pieceMaterial = (id: string): PieceMaterial | undefined => VARIANT_OF.get(id)?.material
 
+/**
+ * Every material a shape can be built in, in `PIECE_MATERIALS` order — the woods, then the stones.
+ *
+ * ★ THIS IS THE BUILD MENU'S SECOND AXIS. 14 shapes x 7 materials is 98 pieces, and a 98-tile bar
+ * is not a bar. Two axes make it two short rows, and the ordering has to be STABLE for that to be
+ * usable by muscle memory: `ALL_PIECES` puts each base first (a `stair` IS the cut-stone one), so
+ * reading the order off that array would put a different material in slot 0 for different shapes.
+ * Reading it off `PIECE_MATERIALS` means Goldwood is always leftmost, everywhere.
+ *
+ * ⚠ Derived from the same `VARIANTS` table `pieceDef` resolves against, never rebuilt by pasting
+ * ids together — see `VARIANT_OF`'s note on why string surgery on these ids returns nonsense.
+ */
+export function pieceVariants(baseId: string): PieceDef[] {
+  const mine = VARIANTS.filter(v => v.base.id === baseId)
+  return PIECE_MATERIALS
+    .map(m => mine.find(v => v.material.key === m.key)?.def)
+    .filter((d): d is PieceDef => d !== undefined)
+}
+
 const BY_ID = new Map(ALL_PIECES.map(p => [p.id, p]))
 export const pieceDef = (id: string): PieceDef | undefined => BY_ID.get(id)
 
