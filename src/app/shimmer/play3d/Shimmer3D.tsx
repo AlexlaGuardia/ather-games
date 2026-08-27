@@ -14,6 +14,9 @@ import { SOLID } from '../world/tiles'
 import { getZone, checkWarp, type Zone, type Warp, type Gate } from '../world/zones'
 import { CHUNK, DEFAULT_RADIUS, chunkOf, sameChunk, chunkVisible, viewFar, fogNear, type ChunkCoord } from '../world/chunk-stream'
 import { ALL_ZONES } from '../world/all-zones'
+// The far end of the Ather crossing. `engine/crossing.ts` holds the contract and the reasoning;
+// this file is the half that receives. See the boot effect for why the read lives where it does.
+import { consumeArrival } from '../engine/crossing'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
@@ -4153,6 +4156,42 @@ export default function Shimmer3D() {
           if (wp) posRef.current!.set(wp.x, posRef.current!.y, wp.y)
           setZoneId(WORLD_ZONE_ID); landed = WORLD_ZONE_ID
         } else if (data.zoneId && getZone(ALL_ZONES, data.zoneId)) { setZoneId(data.zoneId); landed = data.zoneId }
+      }
+
+      // ── ★★★ THE ATHER CROSSING ARRIVES HERE (2026-08-27) ──────────────────────────────────
+      // `engine/crossing.ts` has had `consumeArrival` and a full oracle since 08-24 and NO caller
+      // on either side, so a keeper stepping into the Rune Hold gate had nowhere to arrive. This is
+      // the receiving half. The departing half is still refused — see `voxel3d/crossing-out.ts`;
+      // it needs a landing painted AND an anchor tile, and the anchor is Alex's map knowledge, not
+      // something to derive. Until then nothing stages anything, `consumeArrival` returns null on
+      // every load, and this block is inert. That is the intended dormant state, not a gap.
+      //
+      // ⚠⚠ IT RUNS AFTER THE SAVE BRANCHES AND OVERRIDES THEM, WHICH IS THE PRECEDENCE THE
+      // CONTRACT NAMES: staged beats saved beats landing. It also sits OUTSIDE the `data.spirits`
+      // block above on purpose — those branches never run for a save with no spirits, and an
+      // arrival must not depend on whether the keeper happens to own one.
+      //
+      // ⚠ AND IT IS THE PLAIN-ZONE BRANCH, MEASURED NOT ASSUMED. `rune-hold` is neither stitched
+      // (`isStitched('rune-hold')` is false — it is not in SURFACE_ZONES) nor legacy-migrated
+      // (`migrateLegacyPosition('rune-hold', …)` returns null at every tile tried). Routing an
+      // arrival through `toWorld` would return null and the arrival would be silently eaten while
+      // the keeper stood wherever their save left them — a crossing that looks like it did nothing.
+      //
+      // ★ `arrivalFor` is deliberately NOT used here even though it models exactly this precedence.
+      // Its `saved` argument is a `TilePos`, and this file's saved position is not one — it resolves
+      // through three branches (legacy migration, the stitched composed world, a plain zone). Making
+      // it fit would mean restating that resolution, which is the hand-kept mirror this repo keeps
+      // paying for. The helper stays honest about the simpler world it models; the precedence is
+      // expressed by running last.
+      const staged = consumeArrival(localStorage)
+      if (staged) {
+        // A staged zone that no longer exists is a dropped arrival, never a crash and never (0,0)
+        // — the contract bans that coordinate by name because it is legal and meaningless.
+        if (getZone(ALL_ZONES, staged.zone)) {
+          posRef.current!.set(staged.x, posRef.current!.y, staged.y)
+          setZoneId(staged.zone)
+          landed = staged.zone
+        }
       }
       // ★ THE LOAD-PATH STARTER GRANT IS GONE, ON PURPOSE. It used to backfill stations and mats
       // into any save missing the flag. That made sense when the kit was a pile of materials; it
