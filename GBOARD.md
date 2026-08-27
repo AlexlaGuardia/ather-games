@@ -133,7 +133,49 @@ Greg's upgrade and walked to the door. That is the check still owed.
 
 **Files:** `play3d/cast.ts` · `play3d/keeper-moves.ts` · `play3d/loadout.ts` · `play3d/birth-affinity.ts` · `play3d/crucible-fleet.ts` · `engine/hunter-ai.ts` · `voxel3d/hollows.ts` · `voxel3d/VoxelWorld.tsx` · `nolmir/lib/expedition.ts` (+ oracles for each)
 
-## 🐾 Shimmer voxel — **DIRECTION: THE GARDEN SHOULD BE INHABITED, AND CANON RULED THAT A MONTH AGO** (2026-08-26, world lane) · *Last touched 2026-08-26 (world) — direction + canon gap filed, no code*
+## 🐾 Shimmer voxel — **DIRECTION: THE GARDEN SHOULD BE INHABITED, AND CANON RULED THAT A MONTH AGO** (2026-08-26, world lane) · *Last touched 2026-08-27 (world) — RING 2 BUILT: pure + oracle + THREE shell + a harness, pushed, NOT yet wired into the world*
+
+### 2026-08-27 — ring 2 exists, and the reason it could never have worked was in the hub's files
+- **★★★ THE RING'S POPULATION WAS STRUCTURALLY EMPTY AND NOBODY HAD NOTICED.** Ring 2 is
+  `restingSpirits()`, which already existed. But nothing in voxel3d ever wrote `Spirit.inParty`,
+  `MAX_PARTY` appeared **nowhere** in voxel3d, and `potOps.gain` appended unbounded — so
+  `restingSpirits()` returned `[]` forever, the grimoire's whole *"in garden"* panel was permanently
+  empty **beneath a header quoting the ruling it could not show**, and `normalizeRoster` /
+  `setSpiritActive` were written, tested and had zero callers. Finished, and one call short — the
+  fifth instance of that shape this week. Measured with two searches of different shape, handed to
+  hub, and **hub shipped it the same hour** (`4672b13`), which also moved `MAX_PARTY` out of a
+  private const in `play3d/Shimmer3D.tsx` into `engine/spirit-health.ts`.
+- **★★★ THE HARNESS PAID FOR ITSELF ON ITS FIRST RUN, AND 35 GREEN ASSERTS DID NOT.** The first rule
+  was *never place a resident where the keeper is looking* — correct about witnessing, and it leaves
+  a walking keeper's yard **completely empty**, because every placement lands beside or behind
+  someone who is leaving it. `drawn 10 / cap 10` and nothing on screen. **Every assert was about the
+  rule, and the rule was the thing that was wrong**, so only a picture could catch it.
+- **★★ THE FIX IS TWO DOORS TO "UNWITNESSED", AND ONE OF THEM IS MEASURED.** A placement is unseen
+  if it is outside the forward cone **or** at the fog — and `sight` 200 is read off `day-night.tsx`'s
+  own `THREE.Fog(bg, 80, 200)`, not chosen. ⚠ If the fog is ever retuned this number is wrong and
+  nothing will say so. **Recycling asks a different question — BEHIND, not far** — because you leave
+  a resident behind and you never leave one you are walking toward; a single radius for both ends is
+  impossible and produces a body that flickers once a second.
+- **★★ AND THE ORACLE THEN CAUGHT TWO MORE THAT LOOKED LIKE GOOD IDEAS.** *"Near band first, far as
+  fallback"* **starves the far band completely** — a fallback is only reached when the first band
+  FAILS, and the near band succeeds most of the time, so a walking keeper had company ahead on **4
+  ticks in 200**. And a fade-in placed behind is past `farOut` the instant it exists, so half the
+  cast churned while the keeper stood perfectly still. Slots now carry the distance they were placed
+  at, and recycling asks whether the keeper has opened up ground since.
+- **The cap is `capRadius / 50` = 6 / 8 / 10** across the tiers, the way `chestCap` is derived, so
+  the yard and the crowd standing in it cannot disagree. Canon ties the ring's size to how much
+  garden you have won back and calls that diegetic.
+- **`/shimmer/dev/ring`** (world lane, owner-gated) mounts the REAL pass with the SHIPPED fog and
+  reports `drawn / cap / on screen / nearest` — the readout exists so a picture can DISAGREE with
+  the model, which is the only way to tell a placement bug from a rendering one. `?tier=&resting=
+  &yaw=&walk=1`.
+- **⚠ `scripts/page-shot.mts` COULD NOT PHOTOGRAPH THE ONE SURFACE IT EXISTS FOR.** Its owner hop
+  follows a 307 to an **absolute production url**, and a Next dev server holds an HMR socket open
+  forever so `networkidle2` never fires. It worked against prod, which is why it was never reported.
+  Both waits fixed.
+- **⏭ NOT WIRED.** `VoxelWorld.tsx` is hub's; the four-line patch went over by `dbr`. **Plot space
+  only** — wild zones still never show overworld spirits — and the **yaw argument is load-bearing**:
+  both placement and recycling key on where the keeper is looking.
 
 ### Left off — Alex called the shape after looking at Palworld; research says he is asking for canon, not for a departure
 *"the old battle system and even mist might need archived… this game captures the way the creatures should
@@ -187,9 +229,15 @@ spawn, look and battle in the ather, not limited as we have done it so far."*
 
 ### Next
 1. **Wait on the `[OPEN]` for the interaction.** Everything below is unblocked meanwhile.
-2. **Three rings, ring 2 first:** wandering spirits about the Home Plot — the ring canon says the player *feels*.
-3. **Wrap `mist` + `seam` as profiler zones** (`VoxelWorld.tsx`, hub's file) so a populated world can be measured.
-4. **Archive the turn-based stack** once `/play` and `BattleTester` are accounted for.
+2. ~~Three rings, ring 2 first~~ — **BUILT 2026-08-27**, awaiting the hub's four-line wiring. Then
+   LOOK at it in the world: the harness has flat ground, so **footing on a slope is the one question
+   it cannot answer**.
+3. **Ring 1 and ring 3 are still unbuilt.** Ring 1 (the four who travel with you) has no visible
+   presence in the voxel world either; ring 3 is by definition not drawn.
+4. **Wrap `mist` + `seam` as profiler zones** (`VoxelWorld.tsx`, hub's file) so a populated world can be measured.
+5. **Archive the turn-based stack** once `/play` and `BattleTester` are accounted for.
+6. **A feel pass on the dials once it is in the world** — `DEFAULT_RING` is the only place to tune,
+   and one resident on screen while crossing the fold may read as thin.
 
 ### Files
 Read-only this session. `CANON/game/shimmer-geography.md` (227-250, the three rings; 784-860, the rosters) ·

@@ -596,22 +596,40 @@ function paintAshlar(
  * after reading perfectly at 256. Both overlays here work in whole texels and cover real area.
  */
 function overlayMoss(dst: Layer, size: number, base: [number, number, number], seed: number) {
-  const moss = shade(base, -18)
-  const lit = shade(base, -4)
+  const moss = shade(base, -14)
+  const lit = shade(base, -2)
+
+  // ★★ THE MOSS READS THE COURSES INSTEAD OF RESTATING THEM. Damp sits in the JOINTS, so moss that
+  // ignores the mortar reads as lichen splotches pasted onto a wall — which is exactly what the
+  // first version looked like on `dev/build`, and the harness is the only reason I saw it before it
+  // shipped. The obvious fix is to re-derive the ashlar layout here and target the joints, and that
+  // is the hand-kept-mirror trap: two copies of one course layout, drifting the day either moves.
+  //
+  // So this reads the ALREADY-PAINTED tile and treats "darker than this tile's mean" as recess.
+  // It cannot disagree with the courses because it is looking at them, and it works unchanged over
+  // any base painter — banded sandstone gets moss in its strata for free.
+  let mean = 0
+  for (let i = 0; i < size * size; i++) mean += dst[i * 4] + dst[i * 4 + 1] + dst[i * 4 + 2]
+  mean /= size * size * 3
+
   for (let y = 0; y < size; y++) {
-    // Damp collects low and runs down from the courses, so moss is weighted toward the bottom of
-    // the face. A uniform sprinkle reads as noise; a gradient reads as water having been here.
+    // Damp runs down, so weight toward the bottom of the face.
     const depth = y / (size - 1)
     for (let x = 0; x < size; x++) {
-      // Two octaves of value noise, quantised to texels — blobs, not speckle.
-      const n = h2(x >> 1, y >> 1, seed) * 0.65 + h2(x >> 2, y >> 2, seed + 11) * 0.35
-      if (n + depth * 0.45 < 0.78) continue
       const o = (y * size + x) * 4
-      // Blend toward moss rather than replacing, so the course pattern still shows THROUGH it.
-      const c = n > 0.95 ? lit : moss
-      dst[o] = (dst[o] + c[0] * 2) / 3
-      dst[o + 1] = (dst[o + 1] + c[1] * 2) / 3
-      dst[o + 2] = (dst[o + 2] + c[2] * 2) / 3
+      const lum = (dst[o] + dst[o + 1] + dst[o + 2]) / 3
+      const recess = Math.max(0, Math.min(1, (mean - lum) / Math.max(1, mean * 0.22)))
+      // Finer than the first version (>>1 quantised to 8x8 blobs on a 16px tile — chunky enough to
+      // read as blotches rather than growth).
+      const n = h2(x, y, seed) * 0.45 + h2(x >> 1, y >> 1, seed + 11) * 0.55
+      if (n * 0.55 + recess * 0.34 + depth * 0.24 < 0.62) continue
+      // ⚠ A LIGHT HAND. The first blend was (dst + c*2)/3 — two thirds moss — which buried the
+      // course pattern and turned the block into a green cube. The whole point of a weathered
+      // variant is that it still reads as THE SAME STONE, so the stone has to win the blend.
+      const c = n > 0.93 ? lit : moss
+      dst[o] = (dst[o] * 2 + c[0]) / 3
+      dst[o + 1] = (dst[o + 1] * 2 + c[1]) / 3
+      dst[o + 2] = (dst[o + 2] * 2 + c[2]) / 3
     }
   }
 }
@@ -624,7 +642,11 @@ function overlayMoss(dst: Layer, size: number, base: [number, number, number], s
  * hard — a crack at -46 survives being seen across a room, which is where a wall is actually read.
  */
 function overlayCracks(dst: Layer, size: number, base: [number, number, number], seed: number) {
-  const dark = shade(base, -46)
+  // ⚠ -46 WAS TOO POLITE AND `dev/build` SAID SO — at 3x the fractures were faint scratches that
+  // vanished entirely in the mixed wall. A crack is a hole; it reads as the darkest thing on the
+  // face or it is decoration. The lip is the other half: real breaks catch light on one side.
+  const dark = shade(base, -66)
+  const lip = shade(base, +16)
   const n = 2 + Math.floor(h2(0, 0, seed) * 2)
   for (let i = 0; i < n; i++) {
     let x = Math.floor(h2(i, 1, seed) * size)
@@ -633,7 +655,10 @@ function overlayCracks(dst: Layer, size: number, base: [number, number, number],
     for (let k = 0; k < len; k++) {
       const y = from + k
       if (y < 0 || y >= size) break
-      put(dst, size, ((x % size) + size) % size, y, dark)
+      const cx = ((x % size) + size) % size
+      put(dst, size, cx, y, dark)
+      // Every other texel gets a bright lip beside it — a break in stone is not a drawn line.
+      if ((y & 1) === 0) put(dst, size, (cx + 1) % size, y, lip)
       // A fracture wanders one texel at a time; a straight line reads as a drawn seam, not a break.
       const step = h2(i, y + 7, seed)
       if (step > 0.72) x += 1

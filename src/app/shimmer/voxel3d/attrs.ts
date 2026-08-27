@@ -108,9 +108,14 @@ export const MATERIAL_COLOR: Record<number, number> = {
   //
   // Moss pulls green and slightly darker (damp holds light badly); cracking pulls grey and lighter,
   // because a broken face shows unweathered stone under the patina.
-  [MAT.MOSSY_STONE_BRICK]: 0x7e8c78,
+  // ⚠ THE FIRST GREENS WERE TOO FAR AND THE HARNESS CAUGHT IT — 0x7e8c78 against stone brick's
+  // 0x8a9095 is a genuine hue change, not a weathering of it, so a mixed wall read as two
+  // materials rather than one material of two ages. These are pulled roughly 40% back toward their
+  // clean siblings: enough green to say damp, not enough to become a second colour in the palette.
+  // ⛔ THE EXACT GREEN IS ALEX'S CALL, not mine — `/shimmer/dev/build` is where it gets judged.
+  [MAT.MOSSY_STONE_BRICK]: 0x848e83,
   [MAT.CRACKED_STONE_BRICK]: 0x93989b,
-  [MAT.MOSSY_CUT_STONE]: 0x86917c,
+  [MAT.MOSSY_CUT_STONE]: 0x8a9184,
   [ORE.RAW_MANA]: 0x7fd4ff,
   // Mana in the shape of a wall. Deliberately the palest, coolest thing in the table and NOT in
   // stone's family — a cast wall must never be mistaken for one you could have built.
