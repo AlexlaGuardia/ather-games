@@ -171,6 +171,15 @@ import { drainRecoil, prepareLookCamera } from './recoil'
 import { VoxelDayNight } from './day-night'
 import { submersion, type Cell } from './underwater'
 import { dayProgress, getPhase, getDisplayTime, isTimePinned, setTimePin } from '../engine/day-cycle'
+// ── ★★★ THE FIRST SOUND IN THE VOXEL WORLD (wired 2026-08-27) ────────────────────────────────
+// `hollow-voice.ts` is the pure half (what should be heard) and `hollow-sfx.ts` is the shell (make
+// it). Both shipped 08-27 with a 26-assert oracle, 12 mutations, and NO caller outside their dev
+// page — so Alex met the stalker in silence and reported being *"attacked by invisible enemies"*.
+// ⚠ THIS FILE HAD 138 IMPORTS AND NOT ONE OF THEM WAS AUDIO. play3d has had `gather-fx`/`rin-fx`
+// for months and fourteen other surfaces use `engine/music`, so the site was never silent — the
+// VOXEL WORLD was, specifically and completely.
+import { stepVoices, newVoiceClock, type Voice, type VoiceClock } from './hollow-voice'
+import { playEmissions, unlockHollowSfx } from './hollow-sfx'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
@@ -1940,6 +1949,13 @@ export default function VoxelWorld() {
                 // matches nothing); this one is the replacement, gated on the handoff.
                 gl.domElement.addEventListener('click', () => {
                   if (cursorUIOpenRef.current) return
+                  // ★ THE AUDIO CONTEXT IS UNLOCKED HERE AND ONLY HERE, because this is a REAL user
+                  // gesture and a browser grants an AudioContext nowhere else. Riding the same
+                  // click as pointer lock means sound arrives at the exact moment the player takes
+                  // control of the world — there is no separate "enable audio" step to forget, and
+                  // no silent world for anyone who never found a button. Idempotent and never
+                  // throws; a refusal simply leaves the context suspended.
+                  unlockHollowSfx()
                   try { const r = gl.domElement.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}) } catch { /* cooldown */ }
                 })
               }}>
@@ -5169,6 +5185,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * change inside a frame; that is the shape `render-audit` exists to catch.
    */
   const hollowFwd = useRef(new THREE.Vector3(0, 0, -1))
+  /** Stride phase per body, carried across frames. `stepVoices` mutates it; the host owns it. */
+  const voiceClock = useRef<VoiceClock>(newVoiceClock())
+  /** Filled during the Hollow loop, drained straight after it — never held between frames. */
+  const voices = useRef<Voice[]>([])
   /**
    * ── ★ STATUSES (2026-08-15) — the last dark archetype ────────────────────────────────────────
    * `target id → kind → expiry`. The bag is the ONLY thing in this world that knows both what a
@@ -6413,6 +6433,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // never churns garbage at 60fps.
       statusBag.current = pruneStatuses(statusBag.current, nowMs)
       prof.current.mark('world:hollows')
+      // Rebuilt every frame from the bodies that are actually here. A body that despawns must
+      // stop making footsteps on the SAME frame it leaves, and carrying the list would keep it
+      // walking — the exact class of lie this feature exists to remove.
+      voices.current.length = 0
       for (let i = hollows.current.length - 1; i >= 0; i--) {
         const hw = hollows.current[i]
         const st = hw.st
@@ -6437,7 +6461,22 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // ⚠ The keeper's FACING reaches the step now — the stalker breaks off while it is being
         // looked at. `hollowFwd` is filled once per frame from the camera, above the body loop; a
         // getWorldDirection per Hollow would be sixty matrix reads for one unchanging answer.
+        // ⚠⚠ THE SPEED HANDED TO THE VOICE IS WHAT THE BODY ACTUALLY MOVED, MEASURED ACROSS THIS
+        // CALL — never `HOLLOW_FORMS[st.form].speed`. That constant is the form's TOP speed, a
+        // property of what it is, not of what it is doing. The stalker withdraws while you watch
+        // it and a warden is stopped dead by a wall it cannot climb; either one reading its
+        // form's number would keep making footfalls while standing perfectly still. A cue that
+        // lies about what a body is doing is worse than no cue, which is the whole argument for
+        // this feature — see `stepVoices`' `moveFloor`, which is the pure half of the same rule.
+        const vx0 = st.x, vz0 = st.z
         hollowStep(st, dt, p.x, p.z, (x, z) => groundTopNear(x, z, st.y), now, imp, hollowFwd.current.x, hollowFwd.current.z)
+        // Guttering bodies are excluded: a Hollow dispersing at dawn is leaving, not walking.
+        if (st.gutter <= 0) {
+          voices.current.push({
+            id: st.id, x: st.x, z: st.z, form: st.form,
+            speed: dt > 0 ? Math.hypot(st.x - vx0, st.z - vz0) / dt : 0,
+          })
+        }
         // ── ★ THE TOUCH LANDS (2026-08-11) — before this, a Hollow that caught you glided
         // THROUGH you and nothing happened. Every system upstream (the two-channel light field,
         // the spawn cycle, the pack walk, the lantern's safe room) exists to make the dark cost
@@ -6514,6 +6553,28 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           statusBag.current = clearTarget(statusBag.current, st.id)
           g.remove(hw.mesh); hollows.current.splice(i, 1)
         }
+      }
+
+      // ── ★★★ AND THE NIGHT MAKES A SOUND (2026-08-27) ──────────────────────────────────────
+      // Drained here, inside the same block as the loop, so a frame with no Hollow pass makes no
+      // noise rather than replaying the last list it saw.
+      //
+      // ⚠⚠ THE EAR'S YAW IS MEASURED THE WAY `offAxis` READS IT — `atan2(forward.z, forward.x)`,
+      // NOT the camera's Euler y. `stepVoices` computes `atan2(z - ear.z, x - ear.x) - yaw`, so a
+      // body straight ahead must come out at 0; with this convention it does, exactly. Any other
+      // convention is off by a quarter turn or mirrored, and the failure is not silence — it is a
+      // cue that confidently points the wrong way, which is worse than the bug it replaces.
+      //
+      // ★ `hollowFwd` is the SAME vector the stalker's break-off condition reads, filled once per
+      // frame from the camera. Deriving the ear separately would be a second answer to "which way
+      // is the keeper looking", and the two could disagree while both looked right.
+      if (voices.current.length > 0) {
+        playEmissions(stepVoices(
+          voiceClock.current,
+          voices.current,
+          { x: p.x, z: p.z, yaw: Math.atan2(hollowFwd.current.z, hollowFwd.current.x) },
+          dt,
+        ))
       }
     }
 
