@@ -64,6 +64,22 @@ const ALL_PORTRAITS: Readonly<Record<string, string>> = { ...PORTRAIT_OF, ...FOL
 export const hasPortrait = (key: string): boolean => key in ALL_PORTRAITS
 
 /**
+ * ── ★ THE COLLAR BADGE (Alex, 2026-08-27) ─────────────────────────────────────────────────────
+ * A spirit a Moglin is dragging wears an iron-band-and-lock mark in the corner of its portrait.
+ * Placeholder for canon's full treatment (`moglins.md:88` locks the collared read as glow
+ * extinguished, body drained, eyes downcast, and calls it reusable for any spirit by re-running the
+ * edit on a new source). The badge gets the SIGNAL on screen now — canon calls the collar "the
+ * villain signal in any frame", and the alternative on screen today is a purple box.
+ *
+ * ⚠ THE BADGE IS BAKED INTO ITS OWN TEXTURE, so a collared body costs one shared sheet rather than a
+ * second draw call per resident on an 84%-GPU-bound world. `scripts/collar-badge.py` stamps them.
+ */
+const collaredUrl = (species: string): string | undefined => {
+  const base = ALL_PORTRAITS[species]
+  return base ? base.replace(/\.webp$/, '-collared.webp') : undefined
+}
+
+/**
  * ★ ONE TEXTURE AND ONE MATERIAL PER SPECIES, SHARED BY EVERY BODY — and unlike the atlas path this
  * can genuinely share, which is a fix rather than a shortcut. `createCreatureBody` must clone its
  * texture per body because each body needs its own UV WINDOW into the sheet; a portrait is a single
@@ -73,10 +89,15 @@ export const hasPortrait = (key: string): boolean => key in ALL_PORTRAITS
  */
 const SHEETS = new Map<string, { tex: THREE.Texture; mat: THREE.SpriteMaterial; aspect: { v: number } }>()
 
-function sheetFor(species: string): { tex: THREE.Texture; mat: THREE.SpriteMaterial; aspect: { v: number } } {
-  const hit = SHEETS.get(species)
+function sheetFor(species: string, collared = false): { tex: THREE.Texture; mat: THREE.SpriteMaterial; aspect: { v: number } } {
+  // ⚠ THE CACHE KEY CARRIES THE COLLAR. Keyed on species alone, the first resident of a species to
+  // be built would decide whether every later one wears a collar — a free Vulnyx and a dragged one
+  // would share a sheet, and which look you got would depend on spawn order. That is the kind of
+  // bug that reproduces only sometimes and reads as a data problem.
+  const key = collared ? `${species}:collared` : species
+  const hit = SHEETS.get(key)
   if (hit) return hit
-  const url = ALL_PORTRAITS[species]
+  const url = (collared ? collaredUrl(species) : undefined) ?? ALL_PORTRAITS[species]
   const aspect = { v: 1 }
   // ⚠ THE ASPECT IS NOT KNOWN UNTIL THE IMAGE LANDS, and these are not square — Dewbear is 256×178.
   // Guessing square would squash every one of them, so the scale is applied in the load callback
@@ -98,7 +119,7 @@ function sheetFor(species: string): { tex: THREE.Texture; mat: THREE.SpriteMater
     depthWrite: true,
   })
   const made = { tex, mat, aspect }
-  SHEETS.set(species, made)
+  SHEETS.set(key, made)
   return made
 }
 
@@ -106,8 +127,8 @@ function sheetFor(species: string): { tex: THREE.Texture; mat: THREE.SpriteMater
  * A spirit standing in the world wearing its canon portrait.
  * `height` is in world units and is the creature's TALLNESS; width follows the art's own aspect.
  */
-export function createPortraitBody(species: string, opts: { height?: number } = {}): CreatureBody {
-  const { mat, aspect } = sheetFor(species)
+export function createPortraitBody(species: string, opts: { height?: number; collared?: boolean } = {}): CreatureBody {
+  const { mat, aspect } = sheetFor(species, opts.collared === true)
   const sprite = new THREE.Sprite(mat)
   const h = opts.height ?? 1.2
   let facing = 1

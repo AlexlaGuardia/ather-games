@@ -67,9 +67,32 @@ for (const [sp, path] of Object.entries(EVERY)) {
   ok(cover < HIGH, `${sp}: ${(cover * 100).toFixed(1)}% opaque — nothing was removed, so it will stand in the world inside its own painted backdrop`)
 }
 
-// ── 4. no stray files, so a rename cannot leave an orphan the world still requests ────────────
+// ── 4a. ★ THE COLLARED VARIANTS, AND THE ONE CANON RULE ABOUT WHO MAY WEAR ONE ───────────────
+// `spirit-portrait-body.ts` derives a collared URL by suffix rather than listing them, so nothing
+// in the tables names these files — they still have to BE there or a dragged spirit 404s.
+//
+// ⚠⚠ AND NO MOGLIN MAY HAVE ONE. `moglins.md:75` pins it: "The collar's power is SPIRIT-ONLY — it
+// does not bite on a Mana'mal or an Alkin, and a Moglin is not a spirit"; every canon instance has
+// the Moglin HOLDING the leash. Canon says the ambiguity in "collar-Moglin" already "cost real build
+// work" once, when the Shimmer build read it the other way and shipped collared Moglins as foes. So
+// this asserts the absence, not just the presence: a folk portrait acquiring a collar badge is that
+// same mistake coming back, and it would look perfectly reasonable on a contact sheet.
+const collaredName = (path: string) => path.split('/').pop()!.replace(/\.webp$/, '-collared.webp')
+for (const [sp, path] of Object.entries(PORTRAIT_OF)) {
+  ok(existsSync(join(DIR, collaredName(path))),
+     `${sp} has no collared variant — a spirit on a Moglin's leash would request it and 404. Run scripts/collar-badge.py`)
+}
+for (const [folk, path] of Object.entries(FOLK_PORTRAIT)) {
+  ok(!existsSync(join(DIR, collaredName(path))),
+     `${folk} has a COLLARED portrait — canon: the collar is spirit-only and a Moglin is not a spirit. He holds the leash; he never wears it.`)
+}
+
+// ── 4b. no stray files, so a rename cannot leave an orphan the world still requests ────────────
 const onDisk = readdirSync(DIR).filter(f => f.endsWith('.webp'))
-const named = new Set(Object.values(EVERY).map(p => p.split('/').pop()))
+const named = new Set([
+  ...Object.values(EVERY).map(p => p.split('/').pop()!),
+  ...Object.values(PORTRAIT_OF).map(collaredName),
+])
 const orphans = onDisk.filter(f => !named.has(f))
 ok(orphans.length === 0, `${orphans.length} portrait file(s) nothing references: ${orphans.join(', ')}`)
 
