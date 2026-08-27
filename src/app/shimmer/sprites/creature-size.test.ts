@@ -31,12 +31,19 @@ const h = (id: string) => SIZES[id]?.height ?? NaN
 }
 
 // ── 2. ★★★ CANON'S OWN MEASURING STICK ──────────────────────────────────────────────────────────
-// Three spirits are measured against ONE human body in the books: a Dewbear at her shins, a Vulnyx
-// at her knees, a Manalotl's head under her chin as she kneels. That is a strict ordering canon
-// asserts directly, and it is the single strongest claim in this file.
+// Three of Bonn's spirits are measured against HER OWN BODY at three unambiguous contact points: a
+// Manalotl at her heel, a Dewbear at her shins, a Vulnyx at her knees. A strict ordering canon
+// asserts directly, in one measuring stick — the single strongest claim in this file.
+//
+// ⚠⚠ THIS ASSERT USED TO RUN THE OTHER WAY AND IT WAS GREEN THE WHOLE TIME. It read `fox < axolotl`,
+// from a misreading of "a cool damp head under her chin" as a standing height, and it PASSED —
+// because the table and the guard were derived from the same bad reading of the same single quote.
+// A copy agreeing with its original is not evidence about either. It could not have failed for the
+// right reason, and it would have made anyone who checked more confident. Only a SECOND quote of a
+// different shape ("Brook flowed quiet at Bonn's heel") could break the tie, and it did.
 {
+  ok(h('axolotl') < h('water-bear'), `Manalotl (heel, ${h('axolotl')}) must be shorter than Dewbear (shins, ${h('water-bear')})`)
   ok(h('water-bear') < h('fox'), `Dewbear (shins, ${h('water-bear')}) must be shorter than Vulnyx (knees, ${h('fox')})`)
-  ok(h('fox') < h('axolotl'), `Vulnyx (knees, ${h('fox')}) must be shorter than Manalotl (kneeling chin, ${h('axolotl')})`)
 }
 
 // ── 3. THE SMALL END, likewise from the prose, not from my arithmetic ────────────────────────────
@@ -46,6 +53,10 @@ const h = (id: string) => SIZES[id]?.height ?? NaN
   ok(h('firefly') < h('hummingbird'), `Luminara (a mote, ${h('firefly')}) must be smaller than Hovari (a thumb, ${h('hummingbird')})`)
   ok(h('hummingbird') < h('frog'), `Hovari (a thumb, ${h('hummingbird')}) must be smaller than Croakling (a knuckle, ${h('frog')})`)
   ok(h('frog') < h('rabbit'), `Croakling (${h('frog')}) must be smaller than Lepara, who works latches (${h('rabbit')})`)
+  // ★ A SECOND SHIN-BUMPER. "Ember bumped his shins" puts the Lepara at the same contact point as the
+  // Dewbear, so canon constrains them to each other and not just to the ordering above.
+  ok(Math.abs(h('rabbit') - h('water-bear')) < 0.15,
+    `Lepara (${h('rabbit')}) and Dewbear (${h('water-bear')}) both bump shins and must not be a size class apart`)
 }
 
 // ── 4. ★★ ALEX'S ACTUAL ASK, AS A GUARD ─────────────────────────────────────────────────────────

@@ -20,11 +20,21 @@
 // and when the ruling lands it is one edit per row here rather than a hunt through three files.
 //
 // ── ★ THE ONE COMPARISON CANON MAKES ITSELF, AND IT IS THE GUARD WORTH HAVING ─────────────────────
-// Three spirits are measured against the SAME human body in the books — a Dewbear *"bumped against
-// her shins"*, a Vulnyx *"hit her at the knees"*, a Manalotl pressed *"a cool damp head under her
-// chin"* while she knelt. Shins < knees < kneeling-chin is canon's own ordering, stated in one
-// measuring stick, and `creature-size.test.ts` asserts THAT rather than my three numbers. A future
-// re-ruling may move every value; the relation has to survive it or the ruling contradicts the prose.
+// Three of Bonn's spirits are measured against HER OWN BODY, at three unambiguous contact points: a
+// Manalotl *"flowed quiet at Bonn's heel"*, a Dewbear *"bumped against her shins"*, a Vulnyx *"hit
+// her at the knees"*. Heel < shins < knees is canon's own ordering, stated with one measuring stick,
+// and `creature-size.test.ts` asserts THAT rather than my three numbers. A future re-ruling may move
+// every value; the relation has to survive it or the ruling contradicts the prose.
+//
+// ⚠⚠ AND THE FIRST VERSION OF THIS PARAGRAPH GOT THE MANALOTL BACKWARDS — worth keeping, because the
+// failure is instructive and it was MINE. I read *"pressing a cool damp head under her chin"* as a
+// standing height and derived 1.00m from a kneeling chin, which made the Manalotl the giant of the
+// roster at twice the mascot. The sentence continues: Bonn had already *"went down into the grass"*
+// and Brook was *"flowing UP ALONG Bonn's other side"* — that is a low creature climbing a person who
+// is lying in the grass, and it says nothing about how tall it stands. One page over, the same book
+// gives the plain reading: *"Brook flowed quiet at Bonn's heel."* ⚠ THE QUOTE WAS ACCURATE AND THE
+// INFERENCE WAS NOT, which is the failure a citation cannot catch — only a SECOND quote of a
+// different shape can. Every row below now carries two where the books offer two.
 //
 // ⚠ WHAT THIS FILE IS NOT. It is not an aim volume and not a halo height. A firefly drawn honestly at
 // 4cm is a firefly you cannot click, and the fix for that is a floor on the INTERACTION box, kept
@@ -63,28 +73,31 @@ export interface CreatureSize {
 export const SIZES: Readonly<Record<string, CreatureSize>> = Object.freeze(
   Object.assign(Object.create(null) as Record<string, CreatureSize>, {
     // ── measured against one human body, in canon's own words ────────────────────────────────────
-    // ⚠ THE ONE READING MOST SENSITIVE TO HOW YOU PICTURE THE POSTURE, and it makes the Manalotl the
-    // giant of the roster at twice the mascot — so it is the first number to challenge. A person sat
-    // back on their heels has their chin near 1.05m; upright on their knees, nearer 1.2m; leaning
-    // down, much lower. The ORDERING it sits in is safe (see the measuring-stick note in the header)
-    // and only the magnitude rests on the posture. Named here so the next reader argues with the
-    // derivation instead of quietly re-picking the number.
-    axolotl: { height: 1.00, pending: false,
-      source: 'Manalotl — "pressing a cool damp head under her chin" while kneeling (bk11:71); a kneeling chin is ~1.05m' },
     fox: { height: 0.50, pending: false,
       source: 'Vulnyx — "hit her at the knees ... arms full of warm spirit" (bk11:71); leans its weight on a leg (bk4:229)' },
+    // ⚠ A WILD DEWBEAR, DELIBERATELY. Gregory\'s bonded Blue has a "broad head" an old man leans on to
+    // rise (bk1) — far bigger, and Gregory is a lifelong keeper, so Blue is very likely a grown or
+    // second form. That is Q2 of the open gap, not evidence about a base. The meadow Dewbears are.
     'water-bear': { height: 0.35, pending: false,
-      source: 'Dewbear — "bumped against her shins" (bk1:607); "in her lap" (bk1:507)' },
+      source: 'Dewbear — wild ones "bumped against her shins" (bk1:607, bk2:157); "in her lap" (bk1:507)' },
+    // ★ THE ROW THAT WAS WRONG, AND THE ONE THE SECOND QUOTE FIXED. See the header note.
+    axolotl: { height: 0.15, pending: false,
+      source: 'Manalotl — "Brook flowed quiet at Bonn\'s heel" (bk11:121); "went and lay along the dry ground" to damp '
+        + 'it (bk11:183); "flowed warm against her side" (bk8:159). ⚠ NOT the chin (bk11:71) — Bonn had "went down '
+        + 'into the grass" and Brook was "flowing up along" her, which is a climb, not a standing height.' },
 
     // ── measured against a hand, a wrist, a knuckle ───────────────────────────────────────────────
     owl: { height: 0.30, pending: false,
-      source: 'Athowl — "sat on Benji\'s wrist ... up to his shoulder" (bk11:303, benji-1:69); a wrist-perching bird' },
+      source: 'Athowl — "sat on Benji\'s wrist ... up to his shoulder" (bk11:303, benji-1:69); Strixen "slipping ahead '
+        + 'through the arrow-slits" (benji-1:313), which is a narrow slot and bounds it from the other side' },
     rabbit: { height: 0.28, pending: false,
-      source: 'Lepara — "worked the latches a boy\'s hands were too slow for" (otto-1:439); hand-scale and dexterous' },
+      source: 'Lepara — "Ember bumped his shins" (benji-1); "climbed halfway into his arms"; "worked the latches a '
+        + 'boy\'s hands were too slow for" (otto-1:439)' },
     frog: { height: 0.12, pending: false,
       source: 'Croakling — "one cold cheerful kiss on her knuckle" (bk3:435); sits on the well-lip (benji-5:191)' },
     hummingbird: { height: 0.09, pending: false,
-      source: 'Hovari — "a jewel-bright thing the size of a thumb" (otto-2:447); default pose is hovering' },
+      source: 'Hovari — "a jewel-bright thing the size of a thumb" (otto-2:447); Flint "rode his shoulder ... wings '
+        + 'folded close" and holds a chip of stone "under one claw" (benji-1)' },
     firefly: { height: 0.04, pending: false,
       source: 'Luminara — "a mote of living green light" (otto-2:303); brightened against one finger (tess-2:45)' },
 
@@ -93,8 +106,9 @@ export const SIZES: Readonly<Record<string, CreatureSize>> = Object.freeze(
     // which is the whole difference between this and the 2.1 they replace.
     bat: { height: 0.24, pending: true,
       source: 'Noctyx — "no bigger than Momo" (bk6:215, bk5:327), and Momo is double-booked: "Size: Cat-sized at rest" '
-        + '(spirit-tales-bible.md:63, momo-duskpuff.md:17) vs "no bigger than a curled fist" (bk1:255). Taken at the '
-        + 'explicit Size: field, tempered by the shoulder-perch (bk11:71, bk10:359). PENDING: which Momo is the anchor.' },
+        + '(spirit-tales-bible.md:63) vs "no bigger than a curled fist" at first sight (bk1:255). ⚠ Echo\'s own '
+        + 'behaviour reads SMALL — "folded herself small against Bonn\'s neck", "light as a held breath" (bk11:71, '
+        + 'bk11:121) — which favours the fist. PENDING: which Momo is the anchor, and whether Momo simply GREW.' },
     turtle: { height: 0.35, pending: true,
       source: 'Shellmere — the only size in the books is "broad across as a cart" (bk4:139) and that one is ANCIENT and '
         + 'EVOLVED (bible:203, 207 — Bramble\'s evolved Earth champion), so it is not evidence about a base form. '
