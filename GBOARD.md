@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🪓 Shimmer voxel3d — **BLOCK-BREAK PARTICLES: P0 IS IN, AND PROD IS SERVING A DRAFT OF IT** (2026-08-28, play lane) · *Last touched 2026-08-28 (play) — `4aa2cf6` pushed, tsc 7 (baseline), spec 29 + pass 26 green, render-audit 129 pass (its 3 fails are `hollow-look.ts`, not mine). ⚠ **4aa2cf6 is NOT deployed** and prod holds a mid-edit snapshot — see below.*
+## 🪓 Shimmer voxel3d — **BLOCK-BREAK PARTICLES: P0 IS IN AND LIVE** (2026-08-28, play lane) · *Last touched 2026-08-28 (play, morning) — `4aa2cf6` pushed, tsc 7 (baseline), spec 29 + pass 26 green, render-audit 129 pass (its 3 fails are `hollow-look.ts`, not mine). ✅ **DEPLOYED** — see the correction below; the line that stood here said the opposite and was ten minutes stale.*
 
 ### Left off — the spike is built; the live copy is three minutes too early
 
@@ -42,9 +42,23 @@ buckets breaking on one clock, demo blocks taken from the registry rather than n
   rejected — and every test was green for both versions, because what was wrong is what no test
   sees. The pre-flight dirty-file listing should be read as *"someone may be mid-thought in these"*,
   not only *"these might not ship"*.
-- **⏭ NEXT:** hub folds `4aa2cf6` into any next build → Alex judges motion per bucket on
-  `/shimmer/dev/break` · then P1 (per-bucket tuning from his call, the burst through the `setVoxel`
-  funnel) · the mana bucket stays falling like stone until Magii rules it.
+- **★★ CORRECTION (08-28 11:30, play) — THE WARNING ABOVE EXPIRED TEN MINUTES AFTER IT WAS
+  WRITTEN, AND THE BOARD WENT ON ASSERTING IT FOR EIGHT HOURS.** The hazard above is real and the
+  account of it is accurate: at **02:40:30** prod was serving these files mid-edit. But hub built
+  again at **03:18:16** (`BUILD_ID toOoCiTPwsZwySMeI7WN3`, pm2 restarted 03:18:18) from a tree that
+  contained `4aa2cf6` (02:43) and `0948c1d` (03:06) — **only `GBOARD.md` changed after that build.**
+  So the corrected chips have been live since 03:18. ⚠ Verified from the SERVED chunk rather than
+  the clock, because the clock is what got this wrong the first time:
+  `.next/static/chunks/533017e3bf03a4bb.js` carries
+  `gl_PointSize = max(1.0, aSize * uPixelScale / max(0.1, -mv.z))` — the blocks-with-viewport-
+  conversion form, not the pixel-count draft. **The note was written at 03:08 and was true then**;
+  nothing re-took the measurement, and a *"prod is serving a bad draft"* line is exactly the kind a
+  reader acts on. Same family as the 08-20 shelf-life entry, one floor down: not a reading that
+  expired between measurement and act, but one that expired between the act and the NEXT READER.
+- **⏭ NEXT:** ~~hub folds `4aa2cf6` into any next build~~ done (03:18) → **Alex judges motion per
+  bucket on `/shimmer/dev/break`** — it is live, sign in, the whole `/shimmer/dev` tree is
+  owner-gated · then P1 (per-bucket tuning from his call, the burst through the `setVoxel` funnel) ·
+  the mana bucket stays falling like stone until Magii rules it.
 
 ### Files
 `voxel3d/break-fx.ts` · `voxel3d/break-fx-spec.ts` · both `.test.ts` · `dev/break/page.tsx`
