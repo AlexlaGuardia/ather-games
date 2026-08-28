@@ -209,6 +209,86 @@ screen.** So the far side of the door is real, not merely green.
 `play3d/Shimmer3D.tsx` · `play3d/crossing-in.test.ts` (36 asserts) · read-only:
 `engine/crossing.ts`, `voxel3d/crossing-out.ts`, `src/proxy.ts`
 
+## 🧱 Shimmer voxel3d — **THE COURT WAS PILING, AND ALEX FOUND IT BY STANDING IN IT** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — `ee2431f` `fc885d9` `0948c1d`, pushed, **DEPLOYED** `ObqzRtyCWYbio4bL5JbS7`, prod 200, tsc 7 (baseline), crossings 3954 + court-wiring 31 green.*
+
+### Left off — Alex, twice, then a third time that turned out to be a bug report
+*"just a mess of stone blocks"* → *"a bunch of stone with no real form .. kinda looks garbled"* →
+*"each pass is adding more stone brick blocks ontop of the previous attempt."* PATTERNS says a
+repeated complaint after a fix means the fix missed. **All three were different defects**, and the
+first two of my diagnoses were wrong before the measurements landed.
+
+- **★★★ THE PILE WAS MINE, AND IT MEASURED 38-42%.** `courtClearCells` sweeps a box around ONE
+  SOCKET — the entire footprint back when a court was four frames. The dais (rev 4) and hub (rev 5)
+  span a sector far wider, so **262 of 695 cells on t0** sat outside anything the court could
+  remove, and every rev laid a floor the next could not take back. I extended the STALE-TIER sweep
+  when the dais landed and never the **same-site REV path**, which is the case that fires on every
+  ship. `courtFloorClearCells` sweeps a full **disc** (not the sector — a sweep derived from current
+  geometry only finds courts current geometry would build) from each column's ground past the hub
+  course. `COURT_REV` 6.
+- **★★ VERIFIED BY REPLAYING THE ACTUAL HISTORY, not by reasoning.** Rev 3/4/5 geometry pulled out
+  of git into temp modules, laid sets computed against rev 6's sweep: **713-771 cells of history, 0
+  survive, 0 leftover, all three tiers.** `courtRev` is `useRef(-1)` and never persisted, so every
+  page load rebuilds and the next reload cleans it — which is also *why* it piled: re-laying is
+  idempotent only while the geometry does not change, and three deploys changed it three times.
+- **★★★ THE GUARD SHAPE IS THE WHOLE LESSON.** *Is the set of cells LAID a subset of the set that
+  can be REMOVED* catches it. *Does a clear run* would have been *green for the entire time this was
+  broken*. And the subset guard's laid-list is **hand-kept** — the mirror trap, and precisely how the
+  hole opened — so the host's court block now **counts its `setVoxel` writes** (4: sweep + deck + hub
+  + frames) and a fifth goes red, sending its author to the subset guard.
+
+### The garble, measured — and it is NOT fixed
+- Sockets sit on an arc, so each frame is rotated and `Math.round`ed onto the grid. Near an axis
+  that is a solid 2×2 post; at 40° it is a **three-cell diagonal staircase**. `arch-CLEAN-near-axis.png`
+  vs `arch-GARBLED-diagonal.png` in `shots/` is the A/B, same court, same session.
+- **52% of every court's passages voxelise off-axis** (kind controlled — passages only). Not a seed.
+- ⚠ Footprint loss is only **6-8%**, so cells are not vanishing; the SILHOUETTE is broken. My first
+  theory said 40% and was wrong.
+- **The fix is Alex's call and unbuilt:** snap socket facings to 8 compass directions (every frame
+  then voxelises like the clean one; a stone points ≤22.5° off the keeper), or thicken frames so a
+  staircase carries mass. `COURT_ARC`/`COURT_RADIUS` are his ruled dials and this is the same family.
+
+### The hub and wedges (Alex's design call, shipped)
+Hub at the focus, a wedge out to each socket, **rasterised by distance-to-segment, never by stepping
+a line** — that is why they read and the frames do not. ⚠ **Canon: "centre" is TAKEN** —
+`shimmer-geography.md:1131` rules it as the middle SOCKET, the one home-gate that pays home-cost. The
+stone at the focus is the **hub**, with no meaning attached; an altar or hearth is Magii's to rule.
+The gate's wedge is wider, which pays canon's standing ask that the home-gate *"render it unlike its
+neighbours."* Only the component **4-connected to the focus** survives (exclusions were stranding up
+to 22 cells as rafts). Floor membership asks *is this column FLOOR*, not *did a block get laid* — the
+focus is bare on **3.2% of 600 courts** because `courtLevel` derives from the SOCKETS.
+
+### ⚠ Traps banked
+- **★★★ MY HARNESS COULD NOT HAVE CAUGHT THE PILE.** `world-shot.mts` drives a **fresh profile**, so
+  it builds the court once, correctly, every time. The bug lives entirely in the **transition between
+  revs**. Photographs proved the shape and could never prove the history.
+- **⚠⚠ I DEPLOYED OVER A LIVE WINDOW AND MISSED BY 50 SECONDS** — and destroyed the instrument that
+  exists for it by piping `coord build` through `tail -30`, throwing away the pre-flight dirty list.
+  Also read the coord board once, at boot; **a board read has a shelf life of minutes.**
+- **⚠ A DISC IS NOT A SECTOR.** First hole count said *22% of courts*; the dais is a ~214° sector, so
+  grass outside it was counted as a defect. Re-asked as *enclosed on all four sides*: **1 in 600**.
+- **⚠ SLACK WAS DECORATION UNTIL MUTATION SAID SO.** `FLOOR_CLEAR_SLACK` → 0 left everything green;
+  the subset assert only asks about *today's* apron. Now asserts the sweep reaches past what it clears.
+- **⚠ NEGATIVE PITCH LOOKS UP.** Four shots of sky and one of the sun before I read the header I had
+  already been given. And **`/tp` onto the court lands you inside the stone** — terrain height is
+  blind to what the court laid on top, so the focus cannot be photographed from the ground.
+- **⚠ EDGE DROP IS AN AFFORDANCE, NOT MEMBERSHIP.** 408 boundary columns drop **2** blocks and 4 drop
+  **3**; `JUMP_V0` apex is **1.24**. A keeper who steps off there cannot climb back at that spot.
+
+### Next
+- **Alex reloads and says whether the pile is gone.** If not, the residue is at a site the sweep
+  radius does not reach and I need his **x/z off the HUD**.
+- **Alex rules `PLATFORM_MAT`** (STONE_BRICK default · SANDSTONE for contrast · MOSSY_CUT_STONE for
+  age) **and whether the CUT_STONE hub separates from the STONE_BRICK deck** or just reads as grey.
+- **The garbled frames are unbuilt and need his ruling** (snap facings vs thicken).
+- **The 2-block dais edge** — skirt of steps, or leave it.
+- `depart()` still unwired, still waiting on Alex naming the anchor tile.
+
+### Files
+`voxel3d/crossings.ts` (dais wire, `courtHubCells`, `courtFloorClearCells`, `COURT_REV` 3→6) ·
+`voxel3d/VoxelWorld.tsx` (the host wire) · `voxel3d/crossings.test.ts` (3954) ·
+`voxel3d/court-wiring.test.ts` (**new**, 31, reads the HOST) · `scripts/world-shot.mts` (`;` chaining) ·
+`shots/arch-{CLEAN,GARBLED}-*.png`, `shots/hub-{BEFORE,AFTER}-overview.png`
+
 ## 🏛 Shimmer voxel3d — **THE DAIS WAS BUILT, TESTED, GREEN AND NOT IN THE WORLD** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — tsc 7 (baseline), crossings 3786 + court-wiring 26 green, dais measured live.*
 
 ### Left off — Alex: *"take the platform wire"*
