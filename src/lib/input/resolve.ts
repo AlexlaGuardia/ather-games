@@ -12,7 +12,7 @@
 // transcription slip. A mechanical swap against a tested matcher is reviewable; 25 bespoke edits
 // are not.
 
-import { ALL_ACTIONS, STICK_DRIVEN, type ActionId } from './actions'
+import { ALL_ACTIONS, STICK_DRIVEN, type ActionId, type Binding, type PadButton } from './actions'
 import type { BindingMap } from './bindings'
 import type { PadSample } from './gamepad'
 
@@ -52,11 +52,50 @@ export function heldActions(map: BindingMap, downCodes: Iterable<string>, pad: P
   return out
 }
 
-/** Actions whose controller button went down THIS frame — the pad's edge-triggered half. */
+/**
+ * A binding's chord, normalised. `padChord` is optional so ~30 default entries need not spell an
+ * empty array, but nothing downstream should ever have to think about `undefined`.
+ */
+export const chordOf = (b: Binding): PadButton[] => b.padChord ?? []
+
+/**
+ * Actions whose controller input went down THIS frame — the pad's edge-triggered half.
+ *
+ * ── ★★★ CHORDS FIRE, AND THEY SUPPRESS THE TRIGGER'S OWN SINGLE-BUTTON ACTION ────────────────
+ * A chord is `[modifier, …, trigger]` (see `Binding.padChord`). It fires on the frame the trigger
+ * goes down while every modifier is already held. On that frame the trigger's plain binding is
+ * suppressed — otherwise holding RB and tapping LB would cast the signature AND the tactical from
+ * one press, which is the whole reason the naive version of this is a bug rather than a feature.
+ *
+ * ⚠ SUPPRESSION IS SCOPED TO THE BUTTONS THE CHORD USED, NOT TO EVERY ACTION. Killing the whole
+ * frame's edge set would mean a chord silently ate an unrelated simultaneous press — the kind of
+ * dropped input that reads as the pad being flaky rather than as a rule.
+ *
+ * ⚠ AND A MODIFIER'S OWN ACTION IS *NOT* SUPPRESSED, deliberately. `RB` is `cast.focus`, a HOLD:
+ * the shield goes on charging while you fire the signature out of it, which is the behaviour the
+ * ruling describes. Only the EDGE that would double-fire is removed.
+ */
 export function padPressed(map: BindingMap, pad: PadSample | null): Set<ActionId> {
   const out = new Set<ActionId>()
   if (!pad) return out
-  for (const id of ALL_ACTIONS) if (map[id].pad.some(b => pad.pressed.has(b))) out.add(id)
+
+  // Pass 1: chords. `every(down)` is the chord being satisfied; the trigger — the LAST button —
+  // being in `pressed` is what makes this an EDGE rather than a state that re-fires every frame
+  // for as long as both buttons are held.
+  const eaten = new Set<PadButton>()
+  for (const id of ALL_ACTIONS) {
+    const ch = chordOf(map[id])
+    if (ch.length < 2) continue
+    if (!ch.every(b => pad.down.has(b))) continue
+    if (!pad.pressed.has(ch[ch.length - 1])) continue
+    out.add(id)
+    eaten.add(ch[ch.length - 1])
+  }
+
+  // Pass 2: plain buttons, minus any button a chord just consumed.
+  for (const id of ALL_ACTIONS) {
+    if (map[id].pad.some(b => pad.pressed.has(b) && !eaten.has(b))) out.add(id)
+  }
   return out
 }
 

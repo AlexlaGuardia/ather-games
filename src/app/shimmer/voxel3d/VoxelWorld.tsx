@@ -52,7 +52,8 @@ import { stopScan, mayStartColdField, SPAWN_SCAN_MAX } from './spawn-budget'
 // file holds the wiring. `matches()` reads the PLAYER'S map, so every one of these follows a rebind
 // for free, and the on-screen hints resolve from the same map instead of being typed out.
 import { load as loadBindings, type BindingMap } from '@/lib/input/bindings'
-import { matches, heldActions, stickMove } from '@/lib/input/resolve'
+import { matches, heldActions, padPressed, stickMove } from '@/lib/input/resolve'
+import type { ActionId } from '@/lib/input/actions'
 import { poll as pollPad, resetEdges, type PadSample, type PadKind } from '@/lib/input/gamepad'
 import BindingsPanel from './BindingsPanel'
 import { hintsFor } from '@/lib/input/hints'
@@ -305,6 +306,21 @@ const WORLD_KEY_BY_KIND: Record<Exclude<SlotKind, 'passive' | 'trait'>, string> 
 // `WORLD_KEY_BY_KIND` being keyed without them still makes a NEW cast tier a compile error.
 const CAST_KEYS: readonly string[] = ALL_BANDS.map(k => WORLD_KEY_BY_KIND[k as Exclude<SlotKind, 'passive' | 'trait'>])
 const CAST_CODES: readonly string[] = CAST_KEYS.map(k => `Key${k.toUpperCase()}`)
+/**
+ * The cast bar's ACTION per slot, positionally matching `CAST_KEYS`.
+ *
+ * ★ SAME SHAPE AS `WORLD_KEY_BY_KIND` AND FOR THE SAME REASON: a new cast tier must be a compile
+ * error here rather than a slot that quietly has no controller binding. ⚠ The band is `ultimate`
+ * and the action is `cast.signature` — canon's word and the input layer's word for one thing —
+ * which is exactly the sort of pair a positional literal gets wrong once and nobody notices,
+ * because the wrong entry still type-checks as a string.
+ */
+const CAST_ACTION_BY_KIND: Record<Exclude<SlotKind, 'passive' | 'trait'>, ActionId> = {
+  tactical: 'cast.tactical',
+  ultimate: 'cast.signature',
+}
+const CAST_ACTIONS: readonly ActionId[] =
+  ALL_BANDS.map(k => CAST_ACTION_BY_KIND[k as Exclude<SlotKind, 'passive' | 'trait'>])
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
 import { CAST_SLOTS, ALL_BANDS, derivePassive, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
@@ -5491,6 +5507,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   })
   /** Slot pressed this frame, consumed by the frame loop. -1 = nothing. */
   const pendingCast = useRef<number>(-1)
+  /**
+   * Last frame's trigger state, so RT/LT can be turned into mouse-button EDGES rather than a
+   * per-frame re-arm. Two refs rather than one object: they are written independently and a
+   * shared object would make a stale read of one look like a change in the other.
+   */
+  const padMinePrev = useRef(false)
+  const padPlacePrev = useRef(false)
   // The one always-on passive as a runtime spec — DERIVED (capped at one), never cast. Since Alex's
   // 2026-08-26 ruling the passive holds no key and is not a slot, so it is SEEDED here and refreshed
   // with the loadout on any rune change, rather than being set by a `stanceChange` from a keypress.
@@ -7332,6 +7355,43 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // some moment (a resting stick beating a held key, an idle pad killing the keyboard), and
     // unioning has no such moment.
     const heldNow = heldActions(bindings.current, Object.keys(k).filter(c => k[c]), pad.current)
+
+    // ── ★★★ THE PAD'S EDGE HALF, WHICH THIS COMPONENT HAD NEVER READ (2026-08-28) ──────────────
+    // `padPressed` has existed and been tested since the input layer landed, and was imported by
+    // NOTHING. The pad reached the world through exactly two doors — `heldActions` and
+    // `stickMove` — so every EDGE-triggered action was unreachable from a controller by
+    // construction. Measured before writing this: of eighteen button verbs, ONE (`cast.focus`,
+    // the shield charge, a hold) was reachable. The map itself was complete and correct the whole
+    // time; nobody had plugged it in.
+    //
+    // ⚠ THIS BLOCK IS THE CAST + WORLD-VERB TRANCHE, NOT ALL SEVENTEEN. The UI verbs (craft,
+    // build, map, satchel, draw, drop, close) live inside the keydown listener above, wrapped in
+    // priority rules — cursor-surface gating, the draw lock — that are encoded as early `return`s.
+    // Reaching them from here means lifting that chain into a function both callers share, which
+    // is a real refactor of an 8500-line component and belongs in its own commit. Doing half of it
+    // by duplicating the conditions here is how the two paths start disagreeing about what E does.
+    const padNow = padPressed(bindings.current, pad.current)
+
+    // The cast bar. ⚠ ONE FRAME LATE BY CONSTRUCTION and that is fine: `pendingCast` is consumed
+    // near the top of this same loop, and `pad.current` is not sampled until below it, so a pad
+    // cast lands on the next frame (~16ms). The keyboard path has no such ordering only because a
+    // keydown can arrive at any moment. Not worth reordering the poll to fix a frame nobody feels.
+    for (let i = 0; i < CAST_ACTIONS.length; i++) if (padNow.has(CAST_ACTIONS[i])) pendingCast.current = i
+
+    // ── world.mine / world.place: the triggers MIRROR THE MOUSE AT ITS SOURCE ────────────────
+    // ⚠ `mouse.current.left/right` are not "is the button down". They are latched, CONSUMABLE —
+    // twenty-odd sites write `mouse.current.right = false` meaning *"I handled this click"*. So
+    // the pad must not OR into the read sites (a held trigger would re-arm every frame and turn
+    // one press into a firehose); it has to reproduce the button's own edges. Setting on the down
+    // transition and clearing on the up transition gives a trigger exactly the mouse's semantics:
+    // consumers can spend it, holding keeps a hold verb going, releasing ends it.
+    const padMine = heldNow.has('world.mine'), padPlace = heldNow.has('world.place')
+    if (padMine !== padMinePrev.current) { padMinePrev.current = padMine; mouse.current.left = padMine }
+    if (padPlace !== padPlacePrev.current) {
+      padPlacePrev.current = padPlace
+      mouse.current.right = padPlace
+      if (padPlace) rightPress.current = true   // the same one-shot the real right button sets
+    }
 
     // ── FOCUS: mana into the shield, for as long as you hold it ─────────────────────────────
     // ⚠ INTERRUPTED BY BEING HIT, using the SAME `lastPressed` stamp the health rule reads. One

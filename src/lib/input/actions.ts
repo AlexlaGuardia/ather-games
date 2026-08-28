@@ -61,6 +61,28 @@ export type PadButton = keyof typeof PAD
 export interface Binding {
   /** `KeyboardEvent.code` values. Several may drive one action (Enter and KeyT both open chat). */
   keys: string[]
+  /**
+   * A pad CHORD — every button must be down at once. `[]`/absent means the action has no chord.
+   *
+   * ── ★★★ AND vs OR, AND WHY THIS COULD NOT REUSE `pad` ────────────────────────────────────
+   * `pad` is an OR list: any one of its buttons fires the action. A chord is the other operator,
+   * so it needs its own field rather than a flag — there is no way to spell "LB and RB" in a list
+   * whose semantics are "LB or RB", and overloading it would silently turn every existing
+   * two-button binding into a chord.
+   *
+   * ── ★★ THE ORDER IS LOAD-BEARING: [modifier, …, trigger] ─────────────────────────────────
+   * The LAST button is the TRIGGER — the one whose press fires the chord. Everything before it
+   * must already be held. This is not a style choice, it is forced by what the buttons already do:
+   * a human never presses two buttons on the same frame, so a chord built out of two EDGE verbs
+   * needs a timing window to see whether the second is coming, and that window is latency on a
+   * combat verb. `RB` is `cast.focus`, which is a HOLD (charge the shield) and has no edge action
+   * to race. So `['RB','LB']` reads "while charging, tap the tactical button" — zero latency, no
+   * window, and the only thing that needs suppressing is the tactical's own edge on that press.
+   * ⚠ Reversing it to `['LB','RB']` would NOT work: LB's edge fires the tactical the moment it
+   * goes down, long before RB arrives, so the chord could only ever fire after the thing it is
+   * supposed to replace.
+   */
+  padChord?: PadButton[]
   /** Standard-mapping buttons. Empty means "no pad binding yet", which the guard treats as a gap. */
   pad: PadButton[]
 }
@@ -91,7 +113,11 @@ export const DEFAULTS: Record<ActionId, Binding> = {
   'world.interact': { keys: ['KeyE'],                      pad: ['X'] },
   'item.draw':      { keys: ['KeyF'],                      pad: ['Y'] },
   'item.drop':      { keys: ['KeyQ'],                      pad: ['DDOWN'] },
-  'item.cycle':     { keys: ['KeyQ'],                      pad: ['RB'] },
+  // ⚠ PAD MOVED RB -> Y (2026-08-28, Alex's ruling put the shield on RB). Y is `item.draw`, and
+  // the two resolve the same way KeyQ's drop/cycle overlap already does: drawn = cycle, stowed =
+  // draw. That is the "weapon verb consolidates onto Y" consolidation the old comment below was
+  // waiting for; it is here because the ruling needed RB, not because the weapon work happened.
+  'item.cycle':     { keys: ['KeyQ'],                      pad: ['Y'] },
   'ui.craft':       { keys: ['KeyC'],                      pad: ['DLEFT'] },
   'ui.build':       { keys: ['Tab'],                       pad: ['DRIGHT'] },
   'ui.map':         { keys: ['KeyM'],                      pad: ['SELECT'] },
@@ -120,14 +146,16 @@ export const DEFAULTS: Record<ActionId, Binding> = {
   // ⚠ Not `c`: that is play3d's list, and `KeyC` is `ui.craft` in the fold. The two worlds
   // disagreeing here is deliberate and documented, not drift.
   'cast.tactical':  { keys: ['KeyZ'],                      pad: ['LB'] },
-  // ⚠ NO PAD BINDING YET, AND THE EMPTY ARRAY IS THE HONEST ANSWER RATHER THAN A TODO.
-  // The ruling puts Signature on RB, but RB is `item.cycle` until the weapon verb consolidates
-  // onto Y (tap draws / tap cycles / hold stows) — and that lives in VoxelWorld.tsx, unbuilt.
-  // Binding RB now would double-fire: unlike the KeyQ drop/cycle overlap, which the drawn-weapon
-  // state resolves, nothing resolves RB, so both actions would run on one press. Left empty so
-  // `padGaps()` lists it as a real controller gap, which is exactly what that worklist is for.
-  'cast.focus':     { keys: ['KeyR'],                      pad: ['LB'] },
-  'cast.signature': { keys: ['KeyB'],                      pad: [] },
+  // ── ★ ALEX'S CONTROLLER RULING, 2026-08-28 ──────────────────────────────────────────────────
+  // *"RB should be hold to charge the shield .. the signature on controller can be lb+rb .. on
+  // keyboard we can just give it its own hotkey."* All three land here:
+  //   · `cast.focus` moves LB -> RB. The MECHANIC already existed — VoxelWorld reads this action
+  //     as HELD and drains mana into the shield for as long as it is down — so this is a rebind,
+  //     not new physics. It also un-stacks LB, which was carrying three actions.
+  //   · `cast.signature` gets the chord. See `padChord` above for why RB is the modifier.
+  //   · the keyboard hotkey was already its own: `KeyB`, and it is the only user of that code.
+  'cast.focus':     { keys: ['KeyR'],                      pad: ['RB'] },
+  'cast.signature': { keys: ['KeyB'],                      pad: [], padChord: ['RB', 'LB'] },
   'owner.fly':      { keys: ['KeyV'],                      pad: [] },
 }
 

@@ -6,6 +6,7 @@
 // and `orphans` are all data-in/data-out, so `input.test.ts` runs the REAL ones headless.
 
 import { DEFAULTS, ALL_ACTIONS, STICK_DRIVEN, type ActionId, type Binding, type PadButton } from './actions'
+import { chordOf } from './resolve'
 
 /**
  * ⚠ DEVICE-SCOPED, NOT KEEPER-SCOPED, AND THAT IS A DELIBERATE CALL AGAINST THE HOUSE HABIT.
@@ -42,9 +43,24 @@ export function merge(stored: Partial<BindingMap> | null): BindingMap {
   const out = {} as BindingMap
   for (const id of ALL_ACTIONS) {
     const s = stored?.[id]
+    /**
+     * ⚠⚠ `padChord` FALLS BACK TO THE DEFAULT WHEN A STORED ENTRY DOES NOT CARRY IT, and that is
+     * the difference between the chord shipping and the chord shipping for new players only.
+     * Every returning keeper has a `BindingMap` in localStorage written BEFORE chords existed —
+     * it has `keys` and `pad`, so the branch above accepts it and, without this, hands back an
+     * entry with no chord at all. `cast.signature` would then be unreachable on a pad for
+     * precisely the players who have played before, silently, with the defaults looking correct
+     * to anyone reading the source. An explicitly stored `[]` is a player who CLEARED the chord
+     * and is preserved as such — `Array.isArray` distinguishes that from absent, which is why
+     * this reads the field rather than testing truthiness.
+     */
     out[id] = s && Array.isArray(s.keys) && Array.isArray(s.pad)
-      ? { keys: [...s.keys], pad: [...s.pad] }
-      : { keys: [...DEFAULTS[id].keys], pad: [...DEFAULTS[id].pad] }
+      ? {
+          keys: [...s.keys],
+          pad: [...s.pad],
+          padChord: Array.isArray(s.padChord) ? [...s.padChord] : [...(DEFAULTS[id].padChord ?? [])],
+        }
+      : { keys: [...DEFAULTS[id].keys], pad: [...DEFAULTS[id].pad], padChord: [...(DEFAULTS[id].padChord ?? [])] }
   }
   return out
 }
@@ -70,7 +86,11 @@ export function orphans(map: BindingMap): ActionId[] {
  * reported 8 gaps when 4 were real — burying the true ones in noise. See `STICK_DRIVEN`.
  */
 export function padGaps(map: BindingMap): ActionId[] {
-  return ALL_ACTIONS.filter(id => map[id].pad.length === 0 && !STICK_DRIVEN.includes(id))
+  // ⚠ A CHORD IS A BINDING. Without this clause `cast.signature` — bound to RB+LB — would be
+  // reported as a controller gap forever, and a worklist that names a solved item is the same
+  // failure the stick-driven correction above fixed: it teaches people to stop reading it.
+  return ALL_ACTIONS.filter(id =>
+    map[id].pad.length === 0 && chordOf(map[id]).length === 0 && !STICK_DRIVEN.includes(id))
 }
 
 export interface Conflict { input: string; device: 'key' | 'pad'; actions: ActionId[] }

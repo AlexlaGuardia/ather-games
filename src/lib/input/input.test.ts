@@ -5,7 +5,7 @@ import { DEFAULTS, ALL_ACTIONS, LABEL, PAD, HELD, OWNER_ONLY, STICK_DRIVEN, GROU
 import { merge, rebind, conflicts, orphans, padGaps, resetAll, BINDINGS_KEY, type BindingMap } from './bindings'
 import { deadzone, kindOf } from './gamepad'
 import { hintFor, hintsFor, keyName, padName } from './hints'
-import { matches, actionsFor, heldActions, padPressed, stickMove } from './resolve'
+import { matches, actionsFor, heldActions, padPressed, stickMove, chordOf } from './resolve'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -98,16 +98,123 @@ ok(conflicts(clash).some(x => x.input === 'KeyC' && x.actions.length === 2), 'a 
 ok(conflicts(base).some(x => x.input === 'LB' && x.actions.includes('build.rotate') && x.actions.includes('cast.tactical')),
    'the intentional LB rotate/cast overlap stopped being reported')
 
-// ── ★★ THE SIGNATURE PAD GAP, WRITTEN SO IT EXPIRES ───────────────────────────────────────────
-// `cast.signature` has no pad binding because the ruling puts it on RB and RB is still item.cycle
-// until the weapon verb consolidates onto Y. That is an exemption, and an exemption with no expiry
-// is the thing still sitting there a month after its premise died — this repo has the scars.
-// So assert the PREMISE, not the gap: the day RB stops being item.cycle, this goes red and tells
-// the next person to finish the job, instead of shrugging.
-ok(base['item.cycle'].pad.includes('RB'),
-   '★ RB is free now — bind cast.signature to it and delete this assert (the weapon verb moved to Y)')
-ok(base['cast.signature'].pad.length === 0,
-   'cast.signature has a pad binding but RB is still double-booked — check nothing double-fires')
+// ── ★★★ THE SIGNATURE GAP CLOSED, AND THE EXPIRING EXEMPTION IS WHY ──────────────────────────
+// What stood here asserted the PREMISE of a gap rather than the gap: *"RB is still item.cycle"*,
+// with a failure message telling the next person to finish the job. On 2026-08-28 it went red on
+// its own, unprompted, the moment `item.cycle` left RB — and named the work. **That is the whole
+// argument for writing an exemption so it expires**, and it is the only reason this section is
+// being rewritten by someone who was not looking for it. The replacement asserts the RULING.
+//
+// Alex, 2026-08-28: *"RB should be hold to charge the shield .. the signature on controller can be
+// lb+rb .. on keyboard we can just give it its own hotkey."*
+ok(base['cast.focus'].pad.includes('RB') && !base['cast.focus'].pad.includes('LB'),
+   'the shield charge is on RB — the ruling moved it off LB')
+ok(!base['item.cycle'].pad.includes('RB'),
+   'item.cycle is back on RB, which double-books the shield charge')
+ok(base['item.cycle'].pad.includes('Y') && base['item.draw'].pad.includes('Y'),
+   'cycle and draw share Y, resolved by the drawn state the same way KeyQ resolves drop/cycle')
+
+// ── ★★ THE CHORD, AND THE ORDER INSIDE IT ────────────────────────────────────────────────────
+// `[modifier, …, trigger]`. ⚠ The order is not cosmetic and reversing it produces a chord that can
+// only fire AFTER the action it replaces: LB is an edge (the tactical fires the instant it goes
+// down), RB is a hold (the shield charge has no edge to race). Assert the ORDER, not the set —
+// a `.includes()` pair here would pass on the broken arrangement.
+const chord = chordOf(base['cast.signature'])
+ok(chord.length === 2 && chord[0] === 'RB' && chord[1] === 'LB',
+   `the signature chord must be [RB, LB] — modifier first, trigger last (got ${chord.join('+') || 'none'})`)
+ok(base['cast.signature'].keys.includes('KeyB'),
+   'the keyboard signature keeps its own hotkey')
+ok(ALL_ACTIONS.filter(id => base[id].keys.includes('KeyB')).length === 1,
+   'KeyB drives more than one action — the signature no longer has its own hotkey')
+
+// ── ★★★ THE CHORD SUPPRESSES ITS TRIGGER'S OWN ACTION, AND NOTHING ELSE ──────────────────────
+// The bug this exists to catch is one press casting BOTH — the naive reason a chord on top of an
+// edge-triggered binding does not work. ⚠ And the over-correction is just as real: suppressing the
+// whole frame would make a chord silently eat an unrelated simultaneous press.
+const padOf = (down: string[], pressed: string[]) =>
+  ({ down: new Set(down), pressed: new Set(pressed), lx: 0, ly: 0, rx: 0, ry: 0 }) as never
+{
+  // RB already held, LB taps: signature fires, tactical is eaten.
+  const both = padPressed(base, padOf(['RB', 'LB'], ['LB']))
+  ok(both.has('cast.signature'), 'the chord did not fire with RB held and LB pressed')
+  ok(!both.has('cast.tactical'), '★ ONE PRESS CAST BOTH — the chord did not suppress its trigger')
+
+  // LB alone: the ordinary tactical, no chord, no latency.
+  const solo = padPressed(base, padOf(['LB'], ['LB']))
+  ok(solo.has('cast.tactical'), 'LB alone stopped casting the tactical')
+  ok(!solo.has('cast.signature'), 'the signature fired without its modifier')
+
+  // ⚠ REVERSED: LB held, RB taps. The chord must NOT fire — RB is the modifier, and firing here
+  // would mean the signature goes off every time a keeper raises their shield mid-tactical.
+  const rev = padPressed(base, padOf(['LB', 'RB'], ['RB']))
+  ok(!rev.has('cast.signature'), 'the chord fired on the reversed order — the trigger is LB, not RB')
+
+  // Both held, neither newly pressed: nothing re-fires. A chord is an edge, not a state.
+  const held = padPressed(base, padOf(['RB', 'LB'], []))
+  ok(!held.has('cast.signature'), 'the chord re-fired every frame both buttons were held')
+
+  // ⚠ AND AN UNRELATED PRESS ON THE SAME FRAME SURVIVES — the over-correction check.
+  const alongside = padPressed(base, padOf(['RB', 'LB', 'A'], ['LB', 'A']))
+  ok(alongside.has('cast.signature') && alongside.has('move.jump'),
+     'the chord ate an unrelated simultaneous press')
+}
+
+// ── ⚠ A STORED MAP FROM BEFORE CHORDS EXISTED MUST STILL GET THE CHORD ───────────────────────
+// Every returning keeper has a BindingMap in localStorage with `keys` and `pad` and no `padChord`.
+// `merge` accepts it — so without a default fallback the signature is unreachable on a pad for
+// exactly the players who have played before, silently, with the source looking correct.
+{
+  const legacy = merge({ 'cast.signature': { keys: ['KeyB'], pad: [] } } as never)
+  ok(chordOf(legacy['cast.signature']).join('+') === 'RB+LB',
+     '★ a pre-chord stored binding lost the chord — returning players cannot cast the signature')
+  // But a player who deliberately CLEARED it keeps it cleared. `Array.isArray` is what tells the
+  // two apart, which is why merge reads the field rather than testing it for truthiness.
+  const cleared = merge({ 'cast.signature': { keys: ['KeyB'], pad: [], padChord: [] } } as never)
+  ok(chordOf(cleared['cast.signature']).length === 0, 'a deliberately cleared chord was resurrected')
+}
+
+// ── ★★ THE HINT CAN SEE A CHORD ──────────────────────────────────────────────────────────────
+// `hintFor` returns null when an action has no binding on the device, and callers OMIT a null
+// hint. Before the chord was rendered, the signature answered null on a pad — so the one screen
+// whose job is to say what a button does told a controller player the signature has none.
+ok(hintFor(base, 'cast.signature', 'pad') !== null,
+   '★ the signature reads as unbound on a controller — a chord is a binding')
+ok(hintFor(base, 'cast.signature', 'pad', 'xbox') === 'RB + LB',
+   `the chord hint must read in performance order, modifier first (got ${hintFor(base, 'cast.signature', 'pad', 'xbox')})`)
+ok(hintFor(base, 'ui.chat', 'pad') === null,
+   'a genuinely unbound action stopped answering null — every hint would now print something')
+
+// ── ★★★ THE CONSUMER ACTUALLY READS THE EDGE HALF ────────────────────────────────────────────
+// **This is the assert that would have caught the bug that started all of this, and it did not
+// exist.** `padPressed` shipped with the input layer, was unit-tested here, and was imported by
+// NOTHING in the app for weeks. Every assert in this file was green over a world where a
+// controller could move, look and charge a shield and do nothing else — because a resolver is
+// only a claim about what the game COULD read, and this file tested the resolver.
+//
+// ⚠ Same family as the 08-22 bridge and the break-fx wiring guard: a module and its consumer,
+// each internally consistent about different things. Asking `does padPressed behave correctly`
+// cannot see `does anyone call it`.
+{
+  const world = readFileSync(join(process.cwd(), 'src/app/shimmer/voxel3d/VoxelWorld.tsx'), 'utf8')
+  ok(world.length > 10_000, `VoxelWorld.tsx read (${world.length} bytes)`)
+  // ⚠ THE IMPORT IS NOT ENOUGH — an unused import type-checks and lints away to nothing. The
+  // CALL is the claim. Both, because they fail differently: no import is a build error someone
+  // notices, an import with no call is exactly the silence this catches.
+  ok(/import \{[^}]*\bpadPressed\b[^}]*\} from '@\/lib\/input\/resolve'/.test(world),
+     'VoxelWorld does not import padPressed — the pad has no edge path into the world')
+  ok(/padPressed\(bindings\.current, pad\.current\)/.test(world),
+     '★ padPressed is imported but never called — every edge-triggered pad action is dead')
+  // And the casts specifically reach it, which is the verb Alex asked about.
+  ok(/padNow\.has\(CAST_ACTIONS\[i\]\)/.test(world),
+     'the cast bar is not driven from the pad edge set')
+  // ⚠ The triggers must mirror the mouse at its SOURCE, not OR into its read sites: those
+  // booleans are latched and CONSUMABLE (twenty-odd `= false` writes meaning "I handled this"),
+  // so a per-frame re-arm turns one trigger pull into a firehose.
+  ok(/padMinePrev\.current = padMine; mouse\.current\.left = padMine/.test(world),
+     'world.mine no longer mirrors the mouse button on the trigger EDGE')
+  ok(!/mouse\.current\.left \|\| heldNow\.has\('world\.mine'\)/.test(world),
+     'the trigger was OR-ed into a read site — that re-arms a consumed click every frame')
+}
 
 // ── 8. controller coverage is visible, not silently absent ─────────────────────────────────────
 const gaps = padGaps(base)

@@ -83,6 +83,72 @@ the freed light rises outward and fades, and the word is `breath`.**
 ### Files
 `voxel3d/break-fx-spec.ts` · `voxel3d/break-fx.ts` · `voxel3d/break-fx-spec.test.ts`
 
+## 🎮 Shimmer voxel3d — **THE CONTROLLER WAS FULLY DESIGNED AND ENTIRELY UNPLUGGED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, afternoon) — tsc 7 (baseline), canon 0 CONFLICT / 13 CLEAN, input 217 asserts (was 194), 10/10 mutations caught.*
+
+### Left off — one missing import was the whole controller
+
+Alex ruled the pad layout: **RB = hold to charge the shield · signature = LB+RB · keyboard signature
+keeps its own hotkey.** Measuring before building turned a rebinding job into a much larger finding.
+
+- **★★★ ONE BUTTON VERB OUT OF EIGHTEEN WORKED, AND THE ROW SAID OTHERWISE.** Focus row #708 read
+  *"a keeper can walk/jump/interact from a pad and CANNOT CAST"*. Measured against the code: pad-
+  reachable was **move + look (sticks) and `cast.focus`** — the shield charge, the only action the
+  world asks `heldActions` about. Dead on a pad: jump, mine, place, interact, draw, drop, cycle,
+  craft, build, map, inventory, close, settings, rotate, materialNext, and the tactical cast.
+- **THE CAUSE IS ONE MISSING IMPORT.** `VoxelWorld.tsx` pulled `matches`, `heldActions`,
+  `stickMove` from the resolver and **not `padPressed`**. `padPressed` existed, was unit-tested,
+  and was called by **nothing in the app**. The pad reached the world through two doors, both of
+  them *held*-state, so every EDGE-triggered action was unreachable by construction. `world.mine`
+  is worse: `mouse.current.left` off a `MouseEvent`, so a pad could not mine at all.
+- **⚠ AND THE MAP WAS ALREADY COMPLETE AND CORRECT** — A jump, RT mine, LT place, X interact, Y
+  draw, d-pad for the panels, SELECT map, START settings, L3 slide, LB tactical. Designed, tested,
+  never read. `VoxelWorld.tsx:2320` already carried the tell: a hint string that *"was never true
+  for a controller."*
+- **★★★ THE ASSERT THAT WOULD HAVE CAUGHT IT DID NOT EXIST, AND NOW DOES.** Every assert in
+  `input.test.ts` was green over a world where a controller could do almost nothing, because **a
+  resolver is a claim about what the game COULD read and that file tested the resolver.** Same
+  family as the 08-22 bridge and this morning's break-fx wiring guard. The new one asserts the
+  import *and* the call — they fail differently: no import is a build error someone notices, an
+  import with no call is exactly the silence that shipped.
+- **★★ THE RULING'S CHORD SHAPE IS FORCED, NOT CHOSEN — AND THAT IS WHY IT COSTS NO LATENCY.**
+  `pad` is a `PadButton[]` with OR semantics; a chord is the other operator, so `padChord` is its
+  own field (overloading `pad` would silently turn every two-button binding into a chord). Order is
+  load-bearing: `[modifier, …, trigger]` = `['RB','LB']`. A human never presses two buttons on one
+  frame, so a chord built from two EDGE verbs needs a timing window — latency on a combat verb.
+  **RB's verb is a HOLD** (charge the shield, no edge to race), so "while charging, tap the
+  tactical button" fires instantly. ⚠ Reversed, the chord could only ever fire AFTER the thing it
+  replaces, because LB's edge casts the tactical the moment it goes down.
+- **⚠ SUPPRESSION IS SCOPED TO THE TRIGGER'S BUTTON, AND BOTH DIRECTIONS ARE ASSERTED.** Without
+  it, one press casts signature *and* tactical — the naive bug. Over-correct and a chord silently
+  eats an unrelated simultaneous press. The modifier's own action is deliberately **not**
+  suppressed: the shield keeps charging while the signature fires out of it, which is the ruling.
+- **★★ THE SILENT ONE: `merge()` WOULD HAVE SHIPPED THE CHORD TO NEW PLAYERS ONLY.** Every
+  returning keeper has a `BindingMap` in localStorage written before chords existed — `keys` and
+  `pad`, no `padChord`. `merge` accepts that shape, so without a default fallback the signature is
+  unreachable on a pad **for exactly the players who have played before**, with the source looking
+  correct to anyone reading it. An explicitly stored `[]` is a player who CLEARED the chord and is
+  preserved as such; `Array.isArray` is what tells those apart.
+- **★ AND A HINT THAT CANNOT SEE A CHORD LIES ABOUT IT.** `hintFor` returns null when an action has
+  no binding on the device, and callers OMIT a null hint — so the signature told controller players
+  it had no binding, on the one screen whose job is to answer that. Renders `RB + LB` in chord
+  order, which is performance order.
+- **★ THE OLD GUARD FIRED ON ITS OWN AND NAMED THE WORK.** `input.test.ts` asserted the PREMISE of
+  the signature's gap (*"RB is still item.cycle"*) rather than the gap. It went red unprompted the
+  moment `item.cycle` moved to Y, with a message telling the next person to finish the job. **That
+  is the whole argument for writing an exemption so it expires**, and it is the only reason the
+  section got rewritten by someone who was not looking for it.
+- **⏭ NEXT:** **Alex plays it on a pad** — RT to mine, hold RB to charge, RB+LB for the signature ·
+  then the **UI-verb tranche**: craft/build/map/satchel/draw/drop/close still live inside the
+  keydown listener behind priority rules encoded as early `return`s (cursor-surface gating, the
+  draw lock). Reaching them means lifting that chain into a function both callers share — a real
+  refactor of an 8500-line component, its own commit. ⚠ **Doing half of it by duplicating the
+  conditions in the frame loop is how the two paths start disagreeing about what E does.**
+
+### Files
+`lib/input/actions.ts` (`padChord`, the ruling) · `lib/input/resolve.ts` (chord resolution +
+`chordOf`) · `lib/input/bindings.ts` (merge fallback, padGaps) · `lib/input/hints.ts` (chord
+rendering) · `lib/input/input.test.ts` (194 → 217) · `voxel3d/VoxelWorld.tsx` (the edge half)
+
 ## 🪓 Shimmer voxel3d — **BREAK-FX IS IN THE WORLD, AND THE FUNNEL THAT ASKED FOR IT WAS REFUSED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, morning) — `6849803` pushed, 0 unpushed, tsc 7 (baseline), canon 0 CONFLICT / 3 NOTE / 13 CLEAN, break-fx 26 + spec 29 + **wiring 40 (new)** green, 8/8 mutations caught, sweep 195 suites / 194 pass / 0 KILLED (the 1 FAIL is `hollow-look.ts`, not this). ✅ **DEPLOYED** `BUILD_ID iSOkQgkIvRYFmfYiKd47_`, 157 chunks, pm2 restarted, prod 200 — built backgrounded from a clean tree, no dirty-file warning.*
 
 > **⚠ AND SAY WHICH HALF WAS CHECKED.** Verified: the build ran from a clean tree at `6849803`,

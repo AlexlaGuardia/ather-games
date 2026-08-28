@@ -19,6 +19,7 @@
 import { LABEL, type ActionId, type PadButton } from './actions'
 import type { BindingMap } from './bindings'
 import type { PadKind } from './gamepad'
+import { chordOf } from './resolve'
 
 /** `KeyboardEvent.code` → what a human calls that key. */
 const KEY_NAME: Record<string, string> = {
@@ -62,7 +63,21 @@ export function padName(b: PadButton, kind: PadKind): string {
  */
 export function hintFor(map: BindingMap, id: ActionId, device: 'key' | 'pad', kind: PadKind = 'generic'): string | null {
   const b = map[id]
-  if (device === 'pad') return b.pad.length ? padName(b.pad[0], kind) : null
+  if (device === 'pad') {
+    if (b.pad.length) return padName(b.pad[0], kind)
+    /**
+     * ── ★★ A CHORD IS A BINDING, AND A HINT THAT CANNOT SEE ONE LIES ABOUT IT ────────────────
+     * `cast.signature` is bound to RB+LB and has no single-button `pad` entry, so the old
+     * one-line version above returned `null` for it — and `null` here means the caller OMITS the
+     * hint. A controller player would be told the signature has no controller binding, on the
+     * one screen whose whole job is to answer that. Silent, and it looks like a design decision.
+     *
+     * ⚠ RENDERED IN CHORD ORDER, WHICH IS PERFORMANCE ORDER: `[modifier, …, trigger]` reads
+     * "RB + LB" = hold RB, tap LB. Sorting or reversing it for looks would teach the wrong hand.
+     */
+    const ch = chordOf(b)
+    return ch.length ? ch.map(x => padName(x, kind)).join(' + ') : null
+  }
   return b.keys.length ? keyName(b.keys[0]) : null
 }
 
