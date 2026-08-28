@@ -65,6 +65,26 @@ different things, 371 asserts green over a world missing 44% of its deck.
   so the lift genuinely varies and `PLATFORM_RISE` cannot stand in for it. The guard now demands
   that spread rather than restating the constant.
 
+### ⚠⚠ TRAP BANKED — I DEPLOYED OVER A LIVE WINDOW AND MISSED IT BY 50 SECONDS
+Deployed `f6ec6e2` at 01:03:33 UTC. `play3d/Shimmer3D.tsx` was dirty with **another window's
+uncommitted 22-line fix** (session `d6f20fea`, play lane, claimed 16m before the deploy).
+- **Their work did NOT ship — measured, not inferred from the clock.** Read the SERVED chunk
+  (`34abb3978790a1c6.js`, disk BUILD_ID == served): the position restore is still INSIDE the
+  `spirits.length` branch, which is the pre-fix shape their block moves it out of. `next build`
+  compiled at **01:02:50**; their file's mtime is **01:03:40**. Fifty seconds.
+- **★★★ AND THE INSTRUMENT THAT EXISTS FOR EXACTLY THIS WAS DESTROYED BY MY OWN PIPE.** `coord
+  build` prints the dirty-file list AT BUILD START — the 08-20 backstop, written because *"run
+  `git status` before the build" is satisfied by a check from an hour ago*. I ran it through
+  `tail -30` and threw that listing away. **The fix was in the tool; I piped past it.** Same family
+  as `find … | wc -l` eating the exit status: *a pipeline silently answers a question about the
+  process upstream of it.* Never pipe `coord build` through `tail`; read the whole output.
+- **⚠ AND I READ THE BOARD ONCE, AT BOOT.** At 00:33 the only play claim was 2 days stale, so I
+  correctly concluded I was alone — and then deployed 30 minutes later on that reading. **A board
+  read has a shelf life measured in minutes on a shared tree**; the claim that mattered was made 14
+  minutes after I looked. Re-read the board AT the deploy, not at the session start.
+- **Nothing of theirs was touched, staged or committed.** dbr sent naming what shipped and what did
+  not, with a discard header, and offering to hold the next build.
+
 ### Next
 - **Alex walks the henge and picks `PLATFORM_MAT`** — `STONE_BRICK` default (unmistakably WORKED
   where the ground is raw), `SANDSTONE` if grey-on-grey still reads flat at distance,
