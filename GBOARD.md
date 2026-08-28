@@ -11,6 +11,63 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🌬 Shimmer voxel3d — **THE BREATH: A GAP FILED, RULED AND BUILT INSIDE ONE DAY** (2026-08-28, play lane) · *Last touched 2026-08-28 (play) — `da28e42` pushed, spec oracle **47 pass / 0 fail**, 8 mutation doors red, tsc 7 (baseline). NOT deployed — hub owns the lock.*
+
+### Left off — the two mana breaks are built and waiting on Alex's eye
+
+Canon ruled it at `2ca6c9e` (`world/mother.md` › *What a broken mana block does* +
+`design-briefs/shimmer-resources.md` › *the light law now covers the BREAK*): **the substance falls,
+the freed light rises outward and fades, and the word is `breath`.**
+
+- **★★★ THE LATTICE SPLITS THE PROSPECTING LADDER, AND THAT IS THE WHOLE RULE.** Crystal shards are
+  *still* lattice so they still hold — they fall **lit from within**, and only what the new fracture
+  faces can no longer hold lifts off as a thin breath. Raw mana never had a lattice, so opened it has
+  nothing keeping it: it breathes out **almost entirely** and what falls is **dull spent stone**. Two
+  visibly different breaks off one ruling, and neither is a number anyone chose.
+- **⚠⚠ THE BRANCH ORDER IS A SILENT TRAP AND NOW HAS ITS OWN ASSERT.** `isOre` spans the whole ladder
+  `RAW_MANA..ATHER_CRYSTAL`, so testing `rawmana` *after* it makes **every seam in the game read as
+  crystal** — no error, nothing unbucketed, no red anywhere, just the wrong break forever.
+  Mutation-verified: move the branch and the oracle goes red.
+- **★ THE ORACLE ASSERTS CANON'S RELATIONS, NEVER MY DECIMALS.** `crystal.burst === 4` would be the
+  hand-kept mirror wearing a test's name — it would agree with the table perfectly, prove nothing,
+  and go red the first time Alex tunes the feel, **which is his call by the ruling's own boundary**.
+  So it asserts what a *ruling* would have to change: the breath RISES (negative gravity), it fades,
+  raw mana breathes **more** than crystal, lit is brighter than spent, and ordinary matter neither
+  breathes nor glows.
+- **⚠ THE BREATH IS EMITTED BEFORE THE CHIPS, AND THAT ORDER IS LOAD-BEARING.** The frame ceiling
+  drops overflow. Reversed, a big burst spends the budget on rubble and silently drops the one thing
+  canon rules — the chips are the part a player can lose without noticing.
+- **⚠ ONLY MANA-BEARING BLOCKS BREATHE, AND I DID NOT WIDEN THAT.** The older half of the light law
+  says mana lives in *living* matter and working it releases the mana, which reads as though a felled
+  tree should breathe too. **The 08-28 ruling is scoped to a mana BLOCK**, so extending it to timber
+  would be authoring rather than building. Raised with Alex; not decided here.
+- **★★ THE NOUN GUARD HAD TO STOP TRIPPING ON ITS OWN DOCUMENTATION.** `motes` is ruled (07-21, the
+  Anemonyx's wind-borne seeds) and banned here. But both modules EXPLAIN that ban in prose, so a
+  plain search finds its own warning and reports it as the violation — this repo's *documenting a
+  marker created a marker* bug exactly. My first draft answered it by whitelisting the sentences I
+  had just written, which would rot the moment anyone reworded them. **The ban is on what the CODE
+  names the thing**, so it reads `testing/guard.ts` › `codeOnly()`, plus a **vacuity check** that
+  goes red if the stripper ever stops removing that prose — otherwise the guard tests nothing.
+- **★ AND IT WAS BUILT ONLY ONCE THE RULING WAS IN GIT.** The `[RULED]` text sat in an uncommitted
+  working tree for ~50 minutes; building then would have been building against a draft, which is how
+  a guess becomes accidental canon. Verified at `HEAD:CANON/CANON_GAPS.md` before a line was written.
+  **The build shipped the fail-quiet version and waited, so the ruling landed as a diff.**
+
+### Decisions
+- **A rock that behaves like a rock invents nothing.** Shipping the honest placeholder and filing the
+  gap is why this cost one diff instead of an un-shipping.
+- **Feel stays Alex's.** Count, speed, brightness and ramp are the build's by the ruling's own
+  boundary, and the oracle is written so tuning them never goes red.
+
+### Next
+- **Alex judges the two mana breaks at `/shimmer/dev/break`** — **seven buckets now**, and the page
+  derives from `ALL_BUCKETS` so both appeared without anyone editing it. ⚠ The breath rides
+  `burst()`, so watch the **completed** break, not the swing.
+- **Does a felled tree breathe?** A canon question, not a tuning one. Unfiled, pending Alex.
+
+### Files
+`voxel3d/break-fx-spec.ts` · `voxel3d/break-fx.ts` · `voxel3d/break-fx-spec.test.ts`
+
 ## 🪓 Shimmer voxel3d — **BREAK-FX IS IN THE WORLD, AND THE FUNNEL THAT ASKED FOR IT WAS REFUSED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, morning) — `6849803` pushed, 0 unpushed, tsc 7 (baseline), canon 0 CONFLICT / 3 NOTE / 13 CLEAN, break-fx 26 + spec 29 + **wiring 40 (new)** green, 8/8 mutations caught, sweep 195 suites / 194 pass / 0 KILLED (the 1 FAIL is `hollow-look.ts`, not this). ✅ **DEPLOYED** `BUILD_ID iSOkQgkIvRYFmfYiKd47_`, 157 chunks, pm2 restarted, prod 200 — built backgrounded from a clean tree, no dirty-file warning.*
 
 > **⚠ AND SAY WHICH HALF WAS CHECKED.** Verified: the build ran from a clean tree at `6849803`,
