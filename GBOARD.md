@@ -59,6 +59,34 @@ the freed light rises outward and fades, and the word is `breath`.**
 - **Feel stays Alex's.** Count, speed, brightness and ramp are the build's by the ruling's own
   boundary, and the oracle is written so tuning them never goes red.
 
+### ★★★ AND THE PRE-DEPLOY CHECK CAUGHT A CANON VIOLATION WITH A GREEN SUITE (`66f8b05`)
+
+Asked before shipping: *has anyone actually LOOKED at this?* Nobody had. So I flew the particle
+instead of reading the recipe, and the numbers were wrong in the one way the oracle could not see.
+
+- **★★★ A NEGATIVE GRAVITY DOES NOT MAKE A THING FLOAT — IT ACCELERATES IT UPWARD FOREVER**, toward
+  a terminal rise of `-gravity / -ln(drag)`. The dials I was about to deploy were a **3.6 blocks/sec**
+  terminal climb: a raw mana breath rose **2.7 blocks typically and 4.0 at the tail** — a plume
+  taller than the keeper standing next to it. **That is a mana-well**, and canon rules in the same
+  breath that *"the mana-well is the fountain, a break is a leak — keep them different on sight."*
+- **⚠⚠ AND EVERY ASSERT WAS GREEN.** § 8 checked `gravity < 0` and `life < 4`: **membership claims.**
+  They answer WHICH WAY and HOW LONG and never **HOW FAR**, which is the only property canon actually
+  constrains here. *Assert the affordance, not the membership* — I wrote that lesson into this repo's
+  patterns and then shipped its exact shape twelve hours later.
+- **★★ THE ORACLE NOW FLIES THE WORLD'S OWN INTEGRATOR.** `stepVelocity` moved down into the spec
+  module and `tick()` calls it for all three axes. Re-typing the physics into the test would have
+  been the hand-kept mirror — a copy that proves a trajectory **nothing in the game flies**. § 8c
+  therefore asserts the world still *uses* it and keeps no inline drag maths, because otherwise the
+  oracle goes quietly blind while both halves stay internally consistent about different things.
+- **Retuned to a small lift against heavy drag:** the breath leaves the block, **stalls, and fades
+  where it stalled.** crystal 0.20–0.31 blocks, rawmana 0.38–0.57, and § 8b asserts the two are
+  *still tellable apart* afterwards — bounding them must not flatten canon's distinction into one
+  effect wearing two names. 55 asserts, 12 mutation doors red in total.
+- **⚠ IT IS STILL UNPHOTOGRAPHED, AND THAT IS THE HONEST STATUS.** A simulation says how far it goes;
+  it says nothing about whether it READS as a breath. This same file already has one instance of
+  green-and-wrong that only a picture caught (the P0 chips rendered as big as the blocks they came
+  off). **Alex's eye is the instrument this is waiting on.**
+
 ### Next
 - **Alex judges the two mana breaks at `/shimmer/dev/break`** — **seven buckets now**, and the page
   derives from `ALL_BUCKETS` so both appeared without anyone editing it. ⚠ The breath rides
