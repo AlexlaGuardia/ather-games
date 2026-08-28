@@ -171,6 +171,16 @@ const RECIPES: Record<BreakBucket, ChipRecipe> = {
  * exactly that generalisation when I handed the question back, and canon refused it: **the true
  * rule is narrower, not broader.** Nothing breathes but mana. A guard that says so is finished.
  *
+ * ── ⚠⚠ THE DIALS ARE HEAVY DRAG AND A NEARLY-FLAT LIFT, AND THAT IS NOT A TASTE ─────────────
+ * A negative gravity does not make a thing "float", it makes it ACCELERATE UPWARD FOREVER, toward a
+ * terminal rise of `-gravity / -ln(drag)`. My first pass shipped -1.5 against drag 0.66, which is a
+ * **3.6 blocks/sec** terminal climb: a raw mana breath rose **2.7 blocks typically and 4.0 at the
+ * tail**, a plume taller than the keeper watching it. **That is a mana-well**, and canon rules in
+ * the same breath that *"the mana-well is the fountain, a break is a leak — keep them different on
+ * sight."* Every assert was green, because "gravity is negative" answers WHICH WAY and never HOW
+ * FAR. So the lift is small and the drag is heavy: the breath leaves the block, stalls, and fades
+ * where it stalled. § 8b flies the real integrator and holds it under a block.
+ *
  * **What is canon:** direction (outward/up), impermanence, which materials hold vs release, the
  * word. **What is mine:** count, speed, brightness, ramp, budget. The COUNTS below therefore
  * encode canon's relation — crystal gives *"only a thin breath off the new faces"*, raw mana
@@ -178,9 +188,9 @@ const RECIPES: Record<BreakBucket, ChipRecipe> = {
  */
 const BREATHS: Partial<Record<BreakBucket, ChipRecipe>> = {
   // A thin exhalation off the fracture faces: the shards kept nearly all of it.
-  crystal: { burst: 4,  swingRate: 0, speed: 0.55, spread: 0.7, gravity: -1.1, drag: 0.72, life: 1.5, glow: 1.6, size: 0.055 },
+  crystal: { burst: 4,  swingRate: 0, speed: 0.5,  spread: 0.7, gravity: -0.18, drag: 0.25, life: 1.1, glow: 1.6, size: 0.055 },
   // Nearly the whole block's worth, because nothing was holding it.
-  rawmana: { burst: 18, swingRate: 0, speed: 0.8,  spread: 0.8, gravity: -1.5, drag: 0.66, life: 1.9, glow: 1.6, size: 0.07 },
+  rawmana: { burst: 18, swingRate: 0, speed: 0.65, spread: 0.8, gravity: -0.28, drag: 0.30, life: 1.4, glow: 1.6, size: 0.07 },
 }
 
 /**
@@ -190,6 +200,22 @@ const BREATHS: Partial<Record<BreakBucket, ChipRecipe>> = {
  * say the wrong thing about stone. Canon also rules that **a mana-well is a fountain and a break is
  * a leak** — they must not read alike — so this is small, brief, and stops. It is never a jet.
  */
+/**
+ * One integration step for one velocity axis. **The world and the oracle share this**, which is the
+ * entire point of it existing.
+ *
+ * ⚠ IT WAS INLINE IN `break-fx.ts`'s `tick()` UNTIL A GUARD NEEDED TO ASK WHAT A PARTICLE ACTUALLY
+ * DOES. Re-typing the physics into the test would have been the hand-kept mirror this repo has paid
+ * for repeatedly — a copy that agrees with its original right up until it does not, and which then
+ * proves a trajectory nothing in the game flies. `break-fx.ts` imports THREE, so a pure oracle
+ * cannot reach into it; the fix is to move the arithmetic DOWN here rather than copy it sideways.
+ *
+ * `drag` is the fraction of speed kept per SECOND, so the per-frame factor is `drag^dt` and the
+ * result is framerate-correct. `gravity` is positive DOWN, so a negative gravity accelerates upward.
+ */
+export const stepVelocity = (v: number, gravity: number, drag: number, dt: number): number =>
+  v * Math.pow(drag, dt) - gravity * dt
+
 export const breathFor = (bucket: BreakBucket): ChipRecipe | null => BREATHS[bucket] ?? null
 
 /** Buckets that breathe. Derived from `BREATHS`, so the guard cannot drift from the table. */

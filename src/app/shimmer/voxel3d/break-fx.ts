@@ -19,7 +19,7 @@
 // as nothing at all. **The one you can't see is the right one to lose.**
 
 import * as THREE from 'three'
-import { bucketOf, recipeFor, breathFor, chipColor, type ChipRecipe } from './break-fx-spec'
+import { bucketOf, recipeFor, breathFor, chipColor, stepVelocity, type ChipRecipe } from './break-fx-spec'
 
 /** Live chips. 512 × (3+3+1+1+1+1+1) floats is ~28KB — the budget is about draw cost, not memory. */
 export const BUDGET = 512
@@ -292,10 +292,12 @@ void main() {
         // Exponential drag, then gravity. `drag` is the fraction of speed KEPT per second, so the
         // per-frame factor is dt-correct rather than framerate-dependent — the bug you only see on
         // a machine with a different frame time from the one you tuned on.
-        const keep = Math.pow(drag[i], dt)
-        vel[i * 3] *= keep
-        vel[i * 3 + 1] = vel[i * 3 + 1] * keep - grav[i] * dt
-        vel[i * 3 + 2] *= keep
+        // ★ THE ARITHMETIC LIVES IN THE SPEC MODULE so the oracle can fly a real trajectory rather
+        // than re-typing this loop into a test. x and z simply pass gravity 0 — one function, three
+        // axes, and no second copy of the physics to drift.
+        vel[i * 3]     = stepVelocity(vel[i * 3],     0,       drag[i], dt)
+        vel[i * 3 + 1] = stepVelocity(vel[i * 3 + 1], grav[i], drag[i], dt)
+        vel[i * 3 + 2] = stepVelocity(vel[i * 3 + 2], 0,       drag[i], dt)
         pos[i * 3] += vel[i * 3] * dt
         pos[i * 3 + 1] += vel[i * 3 + 1] * dt
         pos[i * 3 + 2] += vel[i * 3 + 2] * dt

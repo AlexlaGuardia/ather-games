@@ -17,7 +17,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import {
   bucketOf, recipeFor, chipColor, swingChips, ALL_BUCKETS, FALLBACK_COLOR,
-  breathFor, BREATHING_BUCKETS,
+  breathFor, BREATHING_BUCKETS, stepVelocity,
   type BreakBucket,
 } from './break-fx-spec'
 import { codeOnly } from '../testing/guard'
@@ -196,6 +196,64 @@ const ALL_ELEMENT_SEAMS = [ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EA
   ok(mundane.every(b => recipeFor(b).glow === 1),
      'ordinary matter carries no light of its own')
   ok(BREATHING_BUCKETS.length === 2, 'exactly two buckets breathe, derived from the table not restated')
+}
+
+// ── 8b. ⛔ A BREAK IS A LEAK, NOT A FOUNTAIN — HOW FAR THE BREATH ACTUALLY GOES ────────────────
+// Canon, in the same ruling: **"mana rises where the world OPENS it, not where a keeper BREAKS it —
+// the mana-well is the fountain, a break is a leak. Keep them different on sight."**
+//
+// ⚠⚠ § 8 ABOVE ASSERTS THAT THE BREATH RISES AND FADES. BOTH ARE MEMBERSHIP CLAIMS, AND NEITHER
+// BOUNDS THE THING CANON ACTUALLY CONSTRAINS. The first version of these recipes passed every one
+// of them while a raw mana breath climbed **2.7 blocks typically and 4.0 at the tail**, accelerating
+// the whole way toward a 3.6 blocks/sec terminal rise — a plume taller than the keeper looking at
+// it. That is a mana-well. Green suite, canon violation, and nothing in the oracle could see it,
+// because "gravity is negative" answers *which way* and never *how far*.
+//
+// ★ SO FLY THE PARTICLE. `stepVelocity` is the world's own integrator, imported rather than
+// re-typed — a copy of the physics here would prove a trajectory nothing in the game flies.
+{
+  const dt = 1 / 60
+  /** Blocks risen over a life, using the world's integrator at 60fps. */
+  const rise = (r: { gravity: number; drag: number }, vy0: number, life: number): number => {
+    let y = 0, vy = vy0
+    for (let t = 0; t < life; t += dt) { vy = stepVelocity(vy, r.gravity, r.drag, dt); y += vy * dt }
+    return y
+  }
+
+  // The worst case the spawner can actually produce: `spawn` jitters life ×1.25, and the breath
+  // launch speed is `speed × (0.5..1.4) × 0.5`. Assert the TAIL, not the average — the particle a
+  // player's eye follows is the one that goes furthest, and an average would hide it.
+  const CEILING = 1.0   // a block. The breath must read as lifting OFF the block, not leaving it.
+  for (const b of BREATHING_BUCKETS) {
+    const r = breathFor(b)!
+    const tail = rise(r, r.speed * 1.4 * 0.5, r.life * 1.25)
+    ok(tail > 0.05, `a ${b} breath actually leaves the block (rose ${tail.toFixed(2)})`)
+    ok(tail < CEILING,
+       `a ${b} breath stays a LEAK, not a fountain — longest-lived rises ${tail.toFixed(2)} blocks, ceiling ${CEILING}`)
+  }
+
+  // ★ AND THE TWO MUST STILL BE TELLABLE APART, or bounding them has flattened canon's own
+  // distinction into one effect wearing two names.
+  const cr = breathFor('crystal')!, rm = breathFor('rawmana')!
+  ok(rise(rm, rm.speed * 1.4 * 0.5, rm.life * 1.25) > rise(cr, cr.speed * 1.4 * 0.5, cr.life * 1.25),
+     'raw mana still breathes further than crystal after both are bounded')
+}
+
+// ── 8c. ⚠⚠ AND THE WORLD MUST ACTUALLY FLY THE INTEGRATOR § 8b FLIES ──────────────────────────
+// § 8b is only worth anything because `stepVelocity` is the SAME arithmetic the game runs. If
+// anyone ever re-inlines `Math.pow(drag, dt)` back into `tick()`, the oracle keeps happily flying
+// this module while the world flies something else — both internally consistent, about different
+// things. That is the module-and-its-consumer trap this repo has already paid for once, where a
+// 371-assert oracle called a function directly and the game reached it through a pre-filter.
+{
+  const fx = codeOnly(readFileSync(join(DIR, 'break-fx.ts'), 'utf-8'))
+  ok(/stepVelocity\s*\(/.test(fx), 'the GPU pass integrates through the shared stepVelocity')
+  // All THREE axes, because a partial adoption is the version nobody notices: x and z pass gravity
+  // 0 through the same function rather than keeping a second, simpler copy beside it.
+  ok((fx.match(/stepVelocity\s*\(/g) ?? []).length >= 3,
+     'all three axes go through it — a leftover inline axis is a second copy of the physics')
+  ok(!/Math\.pow\(\s*drag/.test(fx),
+     'and no inline drag maths survives in the pass — that is what § 8b would stop being able to see')
 }
 
 // ── 9. ⛔ THE NOUN. `motes` IS RULED AND MEANS SOMETHING ELSE ──────────────────────────────────
