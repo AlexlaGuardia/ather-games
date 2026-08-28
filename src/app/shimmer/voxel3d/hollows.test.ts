@@ -9,7 +9,11 @@ import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk,
          HOLLOW_SPEED, HOLLOW_HOVER, HOLLOW_STEP_UP, PACK_MAX, PACK_STEP, NIGHT_SKY_MAX, GUTTER_SKY,
          HOLLOW_FORMS, FORM_ORDER, pickForm, pushOutOfBodies, hollowTouching,
          type HollowState, type HollowForm , UNIMPAIRED, type Impair,
-         hollowStrike, keeperLooking, SEEN_ENTER } from './hollows'
+         hollowStrike, keeperLooking, SEEN_ENTER,
+         HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN, HOLLOW_REACH_Y_MAX, HOLLOW_REACH_Y_MIN, reachY } from './hollows'
+import { topSolidNear } from './ground-probe'
+import { WORLD_SEED } from './world-seed'
+import { treeStartsAt, growTreeCells, DEFAULT_TREES } from '../voxel/trees'
 import { greyness } from '../voxel/biome'
 import { columnHeight } from '../voxel/height'
 import { packLight } from '../voxel/light'
@@ -18,6 +22,15 @@ import { RUN_SPEED, DRAINED_SPEED } from './locomotion'
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
+
+// ★ EVERY ASSERT WRITTEN BEFORE 2026-08-28 MEANT "the keeper is level with the body" — the touch
+// had no height term at all, so elevation could not be expressed. These two name that assumption
+// instead of hiding it behind a repeated literal, and the elevation asserts sit in their own block
+// below where they can be read as being about elevation.
+const touchingLevel = (h: HollowState, px: number, pz: number, imp: Impair) =>
+  hollowTouching(h, px, h.y, pz, imp)
+const strikeLevel = (h: HollowState, dt: number, px: number, pz: number, imp: Impair, looking: boolean) =>
+  hollowStrike(h, dt, px, h.y, pz, imp, looking)
 
 const SEED = 1337
 
@@ -175,7 +188,7 @@ const SEED = 1337
   })(), 'so does a dispersed one')
 
   // Reach is per-form: the caster drains from where the warden cannot.
-  ok(hollowTouching(mk('caster', 5, 0), 0, 0, UNIMPAIRED) && !hollowTouching(mk('warden', 5, 0), 0, 0, UNIMPAIRED), '★ the caster drains at a range the warden cannot reach')
+  ok(touchingLevel(mk('caster', 5, 0), 0, 0, UNIMPAIRED) && !touchingLevel(mk('warden', 5, 0), 0, 0, UNIMPAIRED), '★ the caster drains at a range the warden cannot reach')
 }
 
 // ⚠⚠ THE "PUT THE REPORT LAST" RULE FAILED TWICE, SO IT IS NO LONGER A RULE (2026-08-15).
@@ -308,8 +321,8 @@ process.on('exit', () => {
   // 5. DISARMED STOPS THE TOUCH, at point-blank, for every form. This is the drain that made the
   //    night cost something; a status that claims to jam it must actually jam it.
   for (const f of FORM_ORDER) {
-    ok(hollowTouching(at(f, 0.2), 0, 0, UNIMPAIRED), `${f} drains at point-blank`)
-    ok(!hollowTouching(at(f, 0.2), 0, 0, DISARM), `★ disarmed, ${f} lays no drain even on contact`)
+    ok(touchingLevel(at(f, 0.2), 0, 0, UNIMPAIRED), `${f} drains at point-blank`)
+    ok(!touchingLevel(at(f, 0.2), 0, 0, DISARM), `★ disarmed, ${f} lays no drain even on contact`)
   }
 
   // 6. ★★ THE ONE THAT MAKES THE STATUS TRIANGLE WORTH HAVING — blinding does DIFFERENT work per
@@ -318,11 +331,11 @@ process.on('exit', () => {
   //    a fourth healthbar, which is the failure HOLLOW_FORMS' own header warns about.
   {
     const far = 4                                       // inside the caster's 7.5 reach, outside every other
-    ok(hollowTouching(at('caster', far), 0, 0, UNIMPAIRED), 'a caster drains from four metres')
-    ok(!hollowTouching(at('caster', far), 0, 0, BLIND),
+    ok(touchingLevel(at('caster', far), 0, 0, UNIMPAIRED), 'a caster drains from four metres')
+    ok(!touchingLevel(at('caster', far), 0, 0, BLIND),
       '★ blinded, the caster cannot reach past contact — its whole form is the range')
     // ...while the walkers keep a working attack, because they had no range to lose.
-    ok(hollowTouching(at('warden', 0.3), 0, 0, BLIND),
+    ok(touchingLevel(at('warden', 0.3), 0, 0, BLIND),
       '★ a blinded warden still drains what it blunders into — blinding is not disarming')
   }
 
@@ -330,7 +343,7 @@ process.on('exit', () => {
   //    on gutter regardless of what the bag says. Belt and braces on the same claim.
   {
     const dying = at('warden', 0.3); dying.gutter = 1
-    ok(!hollowTouching(dying, 0, 0, UNIMPAIRED), 'a guttered body drains nothing, status or not')
+    ok(!touchingLevel(dying, 0, 0, UNIMPAIRED), 'a guttered body drains nothing, status or not')
   }
 }
 
@@ -365,14 +378,14 @@ process.on('exit', () => {
     // measuring the fixture, not the blind spot — the empty-window trap in miniature.
     const behind = mk('stalker', -0.5, 0)
     ok(!keeperLooking(behind, 0, 0, FWD_X, FWD_Z), 'a body behind you is not seen')
-    const hit = hollowStrike(behind, 1, 0, 0, UNIMPAIRED, false)
+    const hit = strikeLevel(behind, 1, 0, 0, UNIMPAIRED, false)
     ok(!!hit && hit.hp > 0, '★ a stalker in your blind spot strikes, and it wounds')
 
     // In front → it must not, however long it waits.
     const front = mk('stalker', 0.6, 0)
     ok(keeperLooking(front, 0, 0, FWD_X, FWD_Z), 'a body in front of you IS seen')
     let landed = 0
-    for (let i = 0; i < 600; i++) if (hollowStrike(front, 1 / 60, 0, 0, UNIMPAIRED, true)) landed++
+    for (let i = 0; i < 600; i++) if (strikeLevel(front, 1 / 60, 0, 0, UNIMPAIRED, true)) landed++
     ok(landed === 0, `★★ a stalker CANNOT strike while you look at it — landed ${landed} over 10s`)
 
     // ⚠⚠ AND IT MUST NOT BANK THE COOLDOWN — A STRIKE MUST BE LOADED FIRST OR THIS PROVES NOTHING.
@@ -382,10 +395,10 @@ process.on('exit', () => {
     // Now: land one strike to load the clock, hold a stare for LONGER than the cooldown, and the
     // clock must have run to zero in that time.
     const banked = mk('stalker', -0.5, 0)
-    ok(!!hollowStrike(banked, 1 / 60, 0, 0, UNIMPAIRED, false), 'fixture: the first strike lands and loads the clock')
+    ok(!!strikeLevel(banked, 1 / 60, 0, 0, UNIMPAIRED, false), 'fixture: the first strike lands and loads the clock')
     ok((banked.strikeCd ?? 0) > 0, 'fixture: ...and the clock is genuinely loaded, or the test below is vacuous')
     const stareFor = HOLLOW_FORMS.stalker.strikeCd + 0.5
-    for (let i = 0; i < Math.ceil(stareFor * 60); i++) hollowStrike(banked, 1 / 60, 0, 0, UNIMPAIRED, true)
+    for (let i = 0; i < Math.ceil(stareFor * 60); i++) strikeLevel(banked, 1 / 60, 0, 0, UNIMPAIRED, true)
     ok((banked.strikeCd ?? 1) === 0, '★★ the cooldown runs DOWN while it waits out of sight — it cannot bank a punish for turning around')
   }
 
@@ -420,7 +433,7 @@ process.on('exit', () => {
       for (let i = 0; i < 60; i++) hollowStep(body, 1 / 60, 0, 0, flat, i / 60, UNIMPAIRED, FWD_X, FWD_Z)
       const moved = Math.hypot(body.x, body.z)
       ok(moved <= d0 + 0.05, `a ${f} does not flee from being looked at (${d0.toFixed(2)} → ${moved.toFixed(2)})`)
-      ok(!!hollowStrike(mk(f, f === 'caster' ? 5 : 0.8, 0), 9, 0, 0, UNIMPAIRED, true),
+      ok(!!strikeLevel(mk(f, f === 'caster' ? 5 : 0.8, 0), 9, 0, 0, UNIMPAIRED, true),
         `...and a ${f} strikes you while you watch it`)
     }
   }
@@ -463,7 +476,176 @@ process.on('exit', () => {
   }
 
   // ── disarmed stops a strike, per the status port's own rule ──
-  ok(!hollowStrike(mk('warden', 0.8, 0), 9, 0, 0, { rooted: false, blinded: false, disarmed: true }, false),
+  ok(!strikeLevel(mk('warden', 0.8, 0), 9, 0, 0, { rooted: false, blinded: false, disarmed: true }, false),
     'a disarmed body cannot strike — the status removes the OPTION')
 }
 
+
+// ── ★★★ THE SKY HOLLOWS (Alex, 2026-08-28: "they are 20 blocks above just hovering mid air.. ────
+//        but that doesnt stop them from damaging me")
+//
+// ⚠⚠ WHY 469 LINES OF THIS FILE COULD NOT SEE IT, WHICH IS THE REAL LESSON. Every fixture above
+// hands `hollowStep` a FLAT ground function — `() => 8`, `() => 10`, a kerb, a wall. None of them
+// is a function of the probe's own height, and the defect was precisely that the host's ground
+// probe TAKES the body's height as an argument. A stub that ignores the argument cannot ratchet,
+// so the oracle was not wrong about anything it asserted; it had simply never been shown the
+// composition where the bug lives. Both halves were internally consistent about different things.
+//
+// ★ SO THIS BLOCK IMPORTS THE REAL `topSolidNear` AND BINDS IT THE WAY `VoxelWorld` BINDS IT.
+// Restating the window scan here would be a mirror of a private value: it would agree with the
+// original the day it was written and drift silently afterwards.
+{
+  const GROUND = 64, LEAF_LO = 70, LEAF_HI = 76
+  // A trunk-and-canopy column, which is all a forest needs to be for this defect: leaves are not
+  // AIR, so anything that scans upward finds a second surface with a hole under it.
+  const solid = (_x: number, y: number, _z: number) =>
+    y <= GROUND || (y >= LEAF_LO && y <= LEAF_HI)
+
+  // Bound exactly as the host binds it: the hint is the body's OWN y, read live every call.
+  const probeFor = (h: HollowState, up: number, down: number) =>
+    (x: number, z: number) => topSolidNear(solid, x, z, h.y, up, down, 255, () => GROUND)
+
+  const walkUnderCanopy = (up: number, down: number) => {
+    const h: HollowState = { id: 'h', x: 6, y: GROUND + 1, z: 0,
+      form: 'warden', hp: HOLLOW_FORMS.warden.hp, gutter: 0, phase: 0 }
+    const ground = probeFor(h, up, down)
+    for (let i = 0; i < 600; i++) hollowStep(h, 1 / 60, 0, 0, ground, i / 60, UNIMPAIRED)
+    return h
+  }
+
+  // ★★ THE POSITIVE CONTROL COMES FIRST, AND IT IS NOT DECORATION. If the old symmetric window did
+  // NOT climb in this harness, the harness would be proving nothing — no canopy in reach, a body
+  // that never moves, a step that never re-grounds. Asserting that the bug reproduces is what makes
+  // the green below mean something. (Ask of any guard: is there an input that makes this fail?)
+  const ratcheted = walkUnderCanopy(HOLLOW_GROUND_DOWN, HOLLOW_GROUND_DOWN)
+  ok(ratcheted.y > LEAF_HI,
+    `fixture: the old symmetric window DOES climb the canopy — reproduces at y ${ratcheted.y.toFixed(1)}, ground ${GROUND}`)
+
+  const fixed = walkUnderCanopy(HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN)
+  ok(Math.abs(fixed.y - (GROUND + 1)) < 0.5,
+    `★★★ a warden under a canopy stands on the GROUND, not in the branches — y ${fixed.y.toFixed(2)}, ground line ${GROUND + 1}`)
+
+  // ★ THE UP-SPAN IS DERIVED FROM THE CLIMB, NOT PICKED. If someone raises the step-up, the probe
+  // must follow it, or a Hollow becomes unable to see ground it is allowed to climb onto. This
+  // assert is what makes that relationship expire instead of rot.
+  ok(HOLLOW_GROUND_UP === HOLLOW_STEP_UP,
+    '★ the ground probe looks up exactly as far as a walker can climb — one derivation, not two numbers')
+
+  // And the reason the down half stays generous: a caster hovers, and a walker that has just
+  // stepped off a ledge is above its own floor. A short down-window drops both onto the fallback.
+  ok(HOLLOW_GROUND_DOWN > HOLLOW_HOVER + HOLLOW_STEP_UP,
+    '★ the down half still clears a hovering body and a one-block drop')
+
+  // ── the height term on the touch ──
+  const at = (form: HollowForm, x: number, y: number): HollowState =>
+    ({ id: 'h', x, y, z: 0, form, hp: HOLLOW_FORMS[form].hp, gutter: 0, phase: 0 })
+  const FEET = GROUND + 1                     // where the keeper actually stands
+
+  // The reported harm, both forms, from the height the ratchet actually reached.
+  ok(!hollowTouching(at('warden', 0.4, LEAF_HI + 1), 0, FEET, 0, UNIMPAIRED),
+    '★★★ a warden in the canopy cannot drain a keeper on the ground — the infinite cylinder is closed')
+  ok(!hollowTouching(at('caster', 3, LEAF_HI + 1), 0, FEET, 0, UNIMPAIRED),
+    '★★★ nor can a caster, whose 7.5 reach is what made the missing height term bite')
+
+  // ⚠ THE REGRESSION THIS FIX IS MOST LIKELY TO CAUSE is "why did nothing happen" — a height term
+  // tighter than the caster's own hover would make the form unable to touch someone standing
+  // inside it. That is what the derived floor exists for, so it gets its own assert.
+  ok(hollowTouching(at('caster', 3, FEET + HOLLOW_HOVER), 0, FEET, 0, UNIMPAIRED),
+    '★★ a caster hovering over the ground the keeper stands on still drains her')
+  ok(hollowTouching(at('warden', 0.4, FEET), 0, FEET, 0, UNIMPAIRED),
+    'a warden toe to toe still drains')
+  // ★★ AND THE FLOOR'S REAL JOB IS THE BLINDED CASTER, which is the only body whose horizontal
+  // reach collapses BELOW its own hover. Without the floor, blinding a caster would make it unable
+  // to touch a keeper standing directly underneath it — quietly deleting the "a blind thing you are
+  // standing inside has found you by accident" rule the reach collapse is documented to preserve.
+  // ⚠ The two clamp asserts above restate the constants; this one is the behaviour, and it is the
+  // one that fails when the floor is lowered.
+  ok(hollowTouching(at('caster', 0.3, FEET + HOLLOW_HOVER), 0, FEET, 0,
+      { rooted: false, blinded: true, disarmed: false }),
+    '★★ a BLINDED caster hovering directly over the keeper still drains — the floor clears its own hover')
+  ok(hollowTouching(at('warden', 0.4, FEET + 1), 0, FEET, 0, UNIMPAIRED),
+    '★ and one off a kerb — a step it could climb is a step it can reach across')
+
+  // The clamp keeps the form triangle meaningful vertically: the caster reaches further up than the
+  // warden, and neither reaches as far up as the caster reaches sideways.
+  ok(reachY(HOLLOW_FORMS.caster.reach) === HOLLOW_REACH_Y_MAX,
+    "★ the caster's vertical reach is capped — 7.5 sideways is a form, 7.5 upward is a different creature")
+  ok(reachY(HOLLOW_FORMS.warden.reach) === HOLLOW_REACH_Y_MIN,
+    '★ the warden gets the floor, so terrain it cannot climb is terrain it cannot drain across')
+  ok(reachY(HOLLOW_FORMS.caster.reach) > reachY(HOLLOW_FORMS.warden.reach),
+    '★ and the triangle survives the clamp — the ranged form still outreaches the melee one upward')
+}
+
+// ── ★★★ THE SAME DEFECT, AGAINST THE REAL GENERATOR (2026-08-28) ──────────────────────────────
+// The block above proves the mechanism on a synthetic slab. A slab I built myself can only ever
+// show that the arithmetic works the way I think it does — it cannot say whether ATHER trees are
+// tall enough, dense enough, or overhung enough for a warden to actually climb one. That is a
+// claim about the shipped world, and only the shipped world's generator can answer it.
+//
+// ★ So this drives `hollowStep` through the REAL `topSolidNear`, over REAL `columnHeight` terrain,
+// under a REAL tree from `growTreeCells`, at the REAL `WORLD_SEED`. Measured when it was written:
+// a warden under a crown at ground 114 settled at y 127 with the old symmetric window — THIRTEEN
+// blocks in the air, which is what Alex was shot at by.
+//
+// ⚠ THE FIXTURE HUNTS ITS OWN SUBJECT AND FAILS LOUDLY IF IT CANNOT FIND ONE. A hardcoded tree
+// would drift the day worldgen moves and then measure an empty column forever — an assert that can
+// only ever return "fine" is decoration. If the Ather ever stops growing overhung canopies this
+// goes red and asks to be re-read, rather than quietly passing on nothing.
+{
+  const SEED = WORLD_SEED
+  // The subject is not "a tree" — it is a column with LEAVES OVERHEAD AND AIR BENEATH, which is the
+  // only shape that ratchets. A trunk you are standing against is not it (you cannot climb into it).
+  let found: { gx: number; gz: number; ground: number; leafLo: number; leafHi: number;
+               solid: (x: number, y: number, z: number) => boolean } | null = null
+  scan:
+  for (let cx = -30; cx <= 30 && !found; cx++) for (let cz = -30; cz <= 30; cz++) {
+    for (const s of treeStartsAt(SEED, cx, cz, 32, DEFAULT_TREES)) {
+      const g = columnHeight(s.x, s.z, SEED)
+      const cells = growTreeCells(s, g, DEFAULT_TREES)
+      const set = new Set(cells.map(c => `${c.x},${c.y},${c.z}`))
+      const byCol = new Map<string, number[]>()
+      for (const c of cells) {
+        const k = `${c.x},${c.z}`
+        if (!byCol.has(k)) byCol.set(k, [])
+        byCol.get(k)!.push(c.y)
+      }
+      for (const [k, ys] of byCol) {
+        const [x, z] = k.split(',').map(Number)
+        if (x === s.x && z === s.z) continue                    // the trunk, not an overhang
+        const gc = columnHeight(x, z, SEED)
+        const lo = Math.min(...ys), hi = Math.max(...ys)
+        if (lo - gc < 2) continue                               // no air to stand in
+        found = { gx: x, gz: z, ground: gc, leafLo: lo, leafHi: hi,
+          solid: (px, py, pz) => py <= columnHeight(px, pz, SEED) || set.has(`${px},${py},${pz}`) }
+        break scan
+      }
+    }
+  }
+
+  ok(found !== null,
+    '★ fixture: the Ather still grows a canopy with air under it — if this fails the guard below is measuring nothing')
+
+  if (found) {
+    const f = found
+    const walk = (up: number, down: number) => {
+      const h: HollowState = { id: 'h', x: f.gx, y: f.ground + 1, z: f.gz,
+        form: 'warden', hp: HOLLOW_FORMS.warden.hp, gutter: 0, phase: 0 }
+      const ground = (x: number, z: number) =>
+        topSolidNear(f.solid, x, z, h.y, up, down, 255, (xi, zi) => columnHeight(xi, zi, SEED))
+      // The keeper stands a third of a block off, so the body has somewhere to be without walking
+      // out from under the crown — the defect is about standing in a forest, not about pathing.
+      for (let i = 0; i < 900; i++) hollowStep(h, 1 / 60, f.gx + 0.3, f.gz, ground, i / 60, UNIMPAIRED)
+      return h.y
+    }
+
+    // The positive control again, and here it is load-bearing twice over: it proves the harness can
+    // reproduce the bug AND that this particular real column is one that ratchets.
+    const before = walk(HOLLOW_GROUND_DOWN, HOLLOW_GROUND_DOWN)
+    ok(before > f.leafLo,
+      `fixture: the old symmetric window climbs a REAL Ather canopy — y ${before.toFixed(1)} over ground ${f.ground}, leaves ${f.leafLo}..${f.leafHi}`)
+
+    const after = walk(HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN)
+    ok(Math.abs(after - (f.ground + 1)) < 0.5,
+      `★★★ in the real world a warden under a real crown stands on the real ground — y ${after.toFixed(2)}, ground line ${f.ground + 1}`)
+  }
+}

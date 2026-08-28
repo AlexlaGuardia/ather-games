@@ -156,8 +156,35 @@ function firstEmission(ear: Ear, x: number, z: number) {
   ok(/speed: dt > 0 \? Math\.hypot\(st\.x - vx0, st\.z - vz0\) \/ dt : 0/.test(push),
      'speed is what the body ACTUALLY moved across hollowStep')
   ok(!/HOLLOW_FORMS\[[^\]]*\]\.speed/.test(push), 'and never the form constant')
-  ok(/const vx0 = st\.x, vz0 = st\.z\s*\n\s*hollowStep\(/.test(src),
-     'the before-position is sampled immediately before hollowStep, with nothing in between')
+  // ⚠ COMMENT LINES ARE PERMITTED HERE AND STATEMENTS ARE NOT, AND THAT DISTINCTION IS THE WHOLE
+  // ASSERT. What this guards is that nothing MOVES the body between the sample and the step — a
+  // comment cannot move anything, so forbidding one is a false positive, and it fired as one on
+  // 2026-08-28 when the sky-Hollow fix documented the up-span argument directly above the call.
+  // ★ Loosened to match the intent rather than deleted or dodged: a red that is answered by moving
+  // the prose somewhere it reads worse teaches the next person to route around the guard.
+  ok(/const vx0 = st\.x, vz0 = st\.z\s*\n(?:\s*\/\/[^\n]*\n)*\s*hollowStep\(/.test(src),
+     'the before-position is sampled with no STATEMENT between it and hollowStep')
+
+  // ── ★★★ 6. THE SKY-HOLLOW FIX LIVES IN THE HOST CLOSURE, SO ONLY THE HOST CAN BE ASKED ────────
+  // `hollows.test.ts` proves the BODY behaves given a well-bounded ground probe. It cannot prove
+  // the world hands it one — the ratchet was never inside `hollowStep`, it was in the argument
+  // `VoxelWorld` bound to it. Collapse these back to their defaults and every module assert stays
+  // green while the Hollows climb the trees again. Same shape as the bridge oracle that called
+  // `bridgeVoxelAt` directly while the game reached it through `materialAt`.
+  const hollowGround = src.match(/hollowStep\(st, dt,[\s\S]{0,260}?\)\n/)?.[0] ?? ''
+  ok(hollowGround !== '', 'the Hollow step call is findable')
+  ok(/groundTopNear\(x, z, st\.y, HOLLOW_GROUND_DOWN, HOLLOW_GROUND_UP\)/.test(hollowGround),
+     '★★★ the Hollow ground probe is bounded UPWARD by the climb — the canopy ratchet cannot return')
+  ok(/HOLLOW_GROUND_UP/.test(src) && /HOLLOW_GROUND_DOWN/.test(src),
+     'and both spans come from the module that derives them, not from literals here')
+
+  // ⚠ THE KEEPER'S HEIGHT MUST BE HER FEET. `p` in this loop is the CAMERA, so `p.y` is the eye —
+  // passing it would put every keeper a constant 1.62 above where she stands and quietly eat most
+  // of a warden's vertical tolerance, which reads as "the melee forms stopped hitting me".
+  ok(/hollowStrike\(st, dt, p\.x, loco\.current\.py, p\.z,/.test(src),
+     '★★ the strike is told the keeper FEET, never the camera eye')
+  ok(!/hollowStrike\(st, dt, p\.x, p\.y, p\.z,/.test(src),
+     'and the eye-height mistake is not present')
 
   // The list must be rebuilt each frame, or a despawned body keeps walking.
   ok(/voices\.current\.length = 0/.test(src), 'the list is cleared every frame, so a departed body goes quiet')

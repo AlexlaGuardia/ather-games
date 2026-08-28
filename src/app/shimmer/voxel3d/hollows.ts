@@ -228,6 +228,65 @@ export const HOLLOW_HOVER = 1.15
 export const HOLLOW_STEP_UP = 1
 
 /**
+ * ── ★★★ HOW FAR A HOLLOW'S GROUND PROBE MAY LOOK, AND WHY UP AND DOWN DIFFER (2026-08-28) ─────
+ * Alex, playing: *"they are 20 blocks above just hovering mid air.. but that doesnt stop them from
+ * damaging me."*
+ *
+ * `hollowStep` asks its host `groundAt(x, z)` and then sets its own height to that answer plus a
+ * hover. The host answered with a window CENTRED ON THE BODY'S OWN Y — so the body's height was
+ * derived from a reply its own height had chosen. In open country that is invisible, because there
+ * is nothing overhead to find. Under a canopy it is a ratchet: leaves are not AIR, the window rises
+ * with each answer, and the body walks up its own reply to the top of the tree in about two frames.
+ *
+ * ⚠ THE DOWN HALF MUST STAY GENEROUS — a body legitimately sits above its ground (the caster hovers,
+ * a walker steps off a ledge), and a short down-window drops it onto the generator's fallback line,
+ * which is the "no wall ever stopped a Hollow" bug this probe was written to fix.
+ *
+ * ★ THE UP HALF IS DERIVED, NOT PICKED: a walker cannot get onto anything higher than
+ * `HOLLOW_STEP_UP`, so a surface further up than that is not ground it could ever be standing on.
+ * The day the step-up changes, this follows it. That is the difference between an exemption that
+ * expires and a number someone has to remember.
+ */
+export const HOLLOW_GROUND_UP = HOLLOW_STEP_UP
+/** The down half of the same window — unchanged from the host's old symmetric default. */
+export const HOLLOW_GROUND_DOWN = 6
+
+/**
+ * ── ★★★ THE TOUCH HAS A HEIGHT NOW (2026-08-28) ───────────────────────────────────────────────
+ * `hollowTouching` tested `dx*dx + dz*dz < r*r` and nothing else: **a cylinder of infinite height**,
+ * with neither call site guarding altitude. A caster's reach is 7.5, so it drained from 7.5 blocks
+ * away at ANY elevation, including from a tree.
+ *
+ * ⚠⚠ EITHER DEFECT ALONE IS SURVIVABLE, WHICH IS WHY NEITHER WAS FOUND. The ratchet alone is a
+ * Hollow sitting oddly in a branch. The missing height term alone never fires, because a Hollow
+ * that stays on the ground is always at your elevation. Together they are an enemy that damages you
+ * from somewhere you cannot see, reach or answer — and the ratchet is fixed above, so this term is
+ * now defence in depth rather than the cure. It stays because the cure is one regression away.
+ *
+ * ★ NOT PLAIN 3D DISTANCE, AND THAT IS THE DESIGN. Folding y into the same radius would give the
+ * caster a 7.5-block vertical reach, which is a different creature. Height is its own dial, clamped
+ * against the form's OWN horizontal reach so the warden/stalker/caster triangle keeps meaning
+ * something vertically too: a warden cannot drain you from a ledge it could not climb.
+ *
+ * ⏳ `HOLLOW_REACH_Y_MAX` IS A FEEL CALL AND IT IS ALEX'S. 4 blocks is chosen to be unarguably
+ * inside the canopy failure (17+) and unarguably outside ordinary terrain relief (1-2). It is the
+ * one number to move if the caster should or should not be able to drain across a gully.
+ */
+export const HOLLOW_REACH_Y_MAX = 4
+/**
+ * The floor, DERIVED so it cannot rot: a caster on the very ground the keeper stands on is already
+ * `HOLLOW_HOVER` above her feet, plus the bob. A ceiling tighter than that would make the form
+ * unable to touch someone standing inside it — the exact "why did nothing happen" bug a height
+ * term is most likely to introduce, so the floor is computed from the hover rather than guessed.
+ */
+export const HOLLOW_REACH_Y_MIN = HOLLOW_HOVER + 0.5
+
+/** The vertical half-height of a form's touch. Derived from its own reach; see the block above. */
+export function reachY(horizontalReach: number): number {
+  return Math.min(HOLLOW_REACH_Y_MAX, Math.max(HOLLOW_REACH_Y_MIN, horizontalReach))
+}
+
+/**
  * ⚠ SPEEDS ARE BOUNDED FROM BOTH SIDES, and the bound is a canon sentence, not taste. Every form
  * must glide SLOWER than a drained keeper (locomotion's DRAINED_SPEED, 4.2) so the escape the
  * ruling promises survives even at the keeper's worst. The stalker sits as close to that ceiling
@@ -492,7 +551,7 @@ export const DRAIN_TIME = 2.6        // seconds of slowed keeper per touch, refr
 
 /** True when the smear is on the keeper. Pure and shared with the oracle for the same reason the
  *  projectile test is: "it can actually reach you" has to be assertable. */
-export function hollowTouching(h: HollowState, px: number, pz: number, imp: Impair): boolean {
+export function hollowTouching(h: HollowState, px: number, py: number, pz: number, imp: Impair): boolean {
   if (h.hp <= 0 || h.gutter >= 1) return false
   // ★ DISARMED STOPS THE DRAIN OUTRIGHT. Canon's Shackle "jams a manalic weapon mid-draw"; the
   // Hollow's weapon is the touch, so this is the whole of it.
@@ -511,7 +570,12 @@ export function hollowTouching(h: HollowState, px: number, pz: number, imp: Impa
   // harmless to stand on top of.
   const r = imp.blinded ? Math.max(0.6, f.body) : f.reach
   const dx = px - h.x, dz = pz - h.z
-  return dx * dx + dz * dz < r * r
+  if (dx * dx + dz * dz >= r * r) return false
+  // ★ AND IT HAS TO BE AT YOUR ELEVATION. `py` is the keeper's FEET, the same reference `h.y`
+  // uses (both are a ground line plus one), so a body standing where you stand reads dy 0.
+  // Clamped through `reachY` rather than reusing `r`, so blinding still cannot make a caster
+  // hovering over your head harmless — see the block on `HOLLOW_REACH_Y_MAX`.
+  return Math.abs(h.y - py) < reachY(r)
 }
 
 /**
@@ -614,13 +678,13 @@ export interface HollowHit {
  * opposite of what a blind-spot attacker should teach.
  */
 export function hollowStrike(
-  h: HollowState, dt: number, px: number, pz: number, imp: Impair, looking: boolean,
+  h: HollowState, dt: number, px: number, py: number, pz: number, imp: Impair, looking: boolean,
 ): HollowHit | null {
   const f = formOf(h)
   h.strikeCd = Math.max(0, (h.strikeCd ?? 0) - dt)
   if (imp.disarmed) return null
   if (h.strikeCd > 0) return null
-  if (!hollowTouching(h, px, pz, imp)) return null
+  if (!hollowTouching(h, px, py, pz, imp)) return null
   // The stalker is the only form that asks. A warden does not care that you can see it — being
   // seen and coming anyway is what a wall IS.
   if (f.attack === 'ambush' && looking) return null

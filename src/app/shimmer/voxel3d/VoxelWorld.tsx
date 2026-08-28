@@ -182,9 +182,11 @@ import { dayProgress, getPhase, getDisplayTime, isTimePinned, setTimePin } from 
 import { stepVoices, newVoiceClock, type Voice, type VoiceClock } from './hollow-voice'
 import { playEmissions, unlockHollowSfx } from './hollow-sfx'
 import { setMasterVolume } from '../audio/bus'
+import { topSolidNear } from './ground-probe'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
+         HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN,
          HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike } from './hollows'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
@@ -4433,16 +4435,33 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * only needs to know the step in front of it, and an unbounded column scan per body per frame is
    * a cost with no buyer. Falls back to the generator when the window is all air, so behaviour
    * degrades to exactly today's rather than dropping a body through the floor.
+   *
+   * ── ★★★ `up` IS SEPARATE FROM `span` AND IT IS NOT A TIDINESS ARGUMENT (2026-08-28) ──────────
+   * Alex: *"they are 20 blocks above just hovering mid air.. but that doesnt stop them from
+   * damaging me."* A caller that derives `fromY` FROM THIS FUNCTION'S OWN PREVIOUS ANSWER — which
+   * every walking body does, since its height is its ground line plus a hover — turns a symmetric
+   * window into a **self-referential ratchet**: the answer lifts the window, the lifted window
+   * reaches higher leaves, the leaves lift the answer. Leaves are not AIR, so a forest is a
+   * staircase, and the Hollows climbed it to the canopy top.
+   *
+   * ⚠ THE FIX IS NOT TO CLAMP TO `columnHeight` — that would undo the whole point of this function
+   * (a wall the player built is not in the generator's line, and putting it back is how no wall
+   * ever stopped a Hollow). It is to stop looking UP further than the asker could climb. `up`
+   * defaults to `span`, so every existing caller is byte-identical; only the bodies that ratchet
+   * pass a bound. The scan itself is `topSolidNear` in `./ground-probe`, out of this file so the
+   * oracle can import the REAL algorithm instead of restating it.
+   *
+   * ⚠ STILL UNFIXED HERE, DELIBERATELY: the FOE callers below (`blocked`, the re-ground, the
+   * spirit trail) pass `e.y` and hit the same shape from the other side — a canopy overhead makes
+   * every candidate step read as too tall to climb, so a Moglin under a tree FREEZES rather than
+   * climbing. Same cause, opposite symptom, and it wants its own measurement.
    */
-  const groundTopNear = useCallback((x: number, z: number, fromY: number, span = 6): number => {
-    const xi = Math.floor(x), zi = Math.floor(z)
-    const top = Math.min(H - 1, Math.floor(fromY) + span)
-    const bottom = Math.max(0, Math.floor(fromY) - span)
-    for (let y = top; y >= bottom; y--) {
-      if (voxel(xi, y, zi) !== AIR) return y
-    }
-    return columnHeight(xi, zi, SEED)
-  }, [voxel])
+  const groundTopNear = useCallback((x: number, z: number, fromY: number, span = 6, up = span): number =>
+    topSolidNear(
+      (xi, y, zi) => voxel(xi, y, zi) !== AIR,
+      x, z, fromY, up, span, H - 1,
+      (xi, zi) => columnHeight(xi, zi, SEED),
+    ), [voxel])
 
 
   /**
@@ -6596,7 +6615,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // lies about what a body is doing is worse than no cue, which is the whole argument for
         // this feature — see `stepVoices`' `moveFloor`, which is the pure half of the same rule.
         const vx0 = st.x, vz0 = st.z
-        hollowStep(st, dt, p.x, p.z, (x, z) => groundTopNear(x, z, st.y), now, imp, hollowFwd.current.x, hollowFwd.current.z)
+        // ⚠⚠ THE UP-SPAN IS THE WHOLE OF THE 2026-08-28 SKY-HOLLOW FIX. `st.y` is this closure's own
+        // previous answer plus a hover, so a symmetric window makes the body walk up its own reply
+        // into the canopy. `HOLLOW_GROUND_UP` is the form's step-up, i.e. the only height it could
+        // actually be standing on. Do not collapse these two args back into one.
+        hollowStep(st, dt, p.x, p.z,
+          (x, z) => groundTopNear(x, z, st.y, HOLLOW_GROUND_DOWN, HOLLOW_GROUND_UP),
+          now, imp, hollowFwd.current.x, hollowFwd.current.z)
         // Guttering bodies are excluded: a Hollow dispersing at dawn is leaving, not walking.
         if (st.gutter <= 0) {
           voices.current.push({
@@ -6613,7 +6638,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // Each form now takes something different, and the rule about WHO may strike lives in
         // `hollowStrike` rather than here, so a second host cannot forget the stalker's blind-spot
         // condition. This block only applies consequences.
-        const hit = hollowStrike(st, dt, p.x, p.z, imp, st.seen ?? false)
+        // `loco.current.py` is the keeper's FEET by contract, the same reference frame `st.y` uses
+        // (a ground line plus one). `p.y` is the CAMERA, which is the eye — using it here would put
+        // every keeper a constant 1.62 out and eat most of a warden's vertical tolerance.
+        const hit = hollowStrike(st, dt, p.x, loco.current.py, p.z, imp, st.seen ?? false)
         if (hit) {
           if (hit.drain > 0) {
             // `loco.current`, not `lc` — the frame callback's `lc` alias is declared further down,
