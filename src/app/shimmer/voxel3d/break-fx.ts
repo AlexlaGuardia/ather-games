@@ -40,10 +40,28 @@ export interface BreakFxPass {
   /**
    * The burst when a block finally goes.
    *
-   * ★ NO FACE, DELIBERATELY. A break is not directional — and the caller that has the best claim to
-   * fire this (`setVoxel`, the single funnel every world write passes through) does not know which
-   * way a keeper was looking, or whether there was a keeper at all. Asking for a normal here would
-   * force every future caller — an explosion, a console verb, a deconstruct — to invent one.
+   * ★ NO FACE, DELIBERATELY. A break is not directional, and a future caller — an explosion, a
+   * console verb, a deconstruct — has no normal to hand over. Asking for one would force every
+   * one of them to invent it.
+   *
+   * ── ⛔ AND IT IS NOT WIRED INTO `setVoxel`, WHICH THIS COMMENT USED TO PROPOSE (2026-08-28) ──
+   * The funnel was the obvious home: one call site, every future destruction path covered for
+   * free. It was refused after counting what actually goes through it: of the 24 `setVoxel` call
+   * sites in `VoxelWorld.tsx` (counted 2026-08-28), TWO are a keeper breaking something — the fell
+   * loop and the single block, both in the mine branch. The other 22 are the world
+   * assembling itself — the court laying its platform and sockets, the gate carving its doorway,
+   * a waymark going down, a pot blooming, a tree GROWING, a placed piece's cells, a piece being
+   * picked back up. Firing here means the court bursts into stone chips every time a keeper walks
+   * into it, on load, with no keeper and no swing.
+   *
+   * ⚠ AND THE BUDGET WOULD HAVE HIDDEN IT RATHER THAN CAUGHT IT. `EMIT_PER_FRAME` bounds the
+   * damage to a bounded spray, so it would not stutter and nothing would look broken — it would
+   * just be wrong, in the one place the game is trying to look composed. **A ceiling that keeps a
+   * wrong effect cheap is not a guard against firing it.**
+   *
+   * The two real call sites are in the mine branch, asserted by `break-fx-wiring.test.ts` — which
+   * also asserts this function is NOT reached from `setVoxel`, so the tempting version cannot be
+   * quietly restored by someone reading the paragraph this one replaced.
    */
   burst(x: number, y: number, z: number, material: number): void
   tick(dt: number): void

@@ -11,6 +11,70 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🪓 Shimmer voxel3d — **BREAK-FX IS IN THE WORLD, AND THE FUNNEL THAT ASKED FOR IT WAS REFUSED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, morning) — tsc 7 (baseline), canon 0 CONFLICT / 3 NOTE / 13 CLEAN, break-fx 26 + spec 29 + **wiring 40 (new)** green, 8/8 mutations caught.*
+
+### Left off — the two call sites are taken, and the third one was argued down
+
+The pass shipped 08-28 02:32 and rendered only on `/shimmer/dev/break`. It is now reached from
+the game: chips off the struck face while a swing runs, a burst when the block gives. Four
+lifecycle lines (`useMemo` build, `tick(dt)`, `<primitive>`, `dispose()` + the dep array) plus a
+`setPixelScale` effect keyed on viewport height.
+
+- **⛔ THE BURST IS NOT WIRED INTO `setVoxel`, AND THAT WAS THE ONE REAL DECISION.** `break-fx.ts`'s
+  own header proposed the funnel — one call site, every future destruction path free — and the play
+  lane's NEXT carried it as P1. Counted before building: **24 `setVoxel` call sites, and TWO are a
+  keeper breaking something.** The other 22 are the world assembling itself — the court laying its
+  platform and sockets, the gate carving its doorway, a waymark going down, a pot blooming, a tree
+  *growing*, a placed piece's cells. Firing at the funnel bursts the court into stone chips every
+  time a keeper walks into it, on load, with no keeper and no swing.
+- **⚠ AND THE BUDGET WOULD HAVE HIDDEN IT RATHER THAN CAUGHT IT.** `EMIT_PER_FRAME` bounds the
+  overflow, so the wrong version would not stutter and nothing would look broken. It would just be
+  wrong, in the one place the game is trying to look composed. **A ceiling that keeps a wrong effect
+  cheap is not a guard against firing it.** The header now argues the refusal in place of the
+  proposal, and the guard asserts `setVoxel`'s body never names the pass — so the tempting version
+  cannot be quietly restored by the next reader of a paragraph that no longer exists.
+- **★★★ `break-fx-wiring.test.ts` (40 asserts) — BECAUSE THE 55 NEXT DOOR CALL THE MODULE DIRECTLY.**
+  Same gap as the 08-22 bridge: `bridges.test.ts` called `bridgeVoxelAt` while the game reached it
+  through `materialAt`, both halves internally consistent about different things, 371 asserts green
+  over a world missing 44% of the deck. Every way this feature can be dead in the shipped world
+  lives in that gap, and **three of the four are silent**:
+  - **The carry.** `swingChips` returns a rate × dt — proven in the guard against the real function
+    that **every bucket is under one chip per frame** at mid-swing, so a caller that rounds emits
+    ZERO forever while the burst still works. Working burst, missing swing, green suites: it reads
+    as a tuning choice, not a bug.
+  - **The face.** `hit.px - hit.x` is the raycast normal. Handing `0,0,0` is the cheapest wrong
+    answer that still compiles and still draws chips — at the cell centre, which the module's header
+    calls the difference between *"the block is being hit"* and *"something happened near it"*.
+  - **The order.** A burst fired after `setVoxel(…, AIR)` asks an air cell what it was, gets no
+    bucket and returns. Nothing throws. ⚠ The ordering assert is scoped to the loop body by
+    adjacency, not by a whole-file index compare — `setVoxel(c.x, c.y, c.z, AIR)` appears **four**
+    times in this host, so a file-wide comparison would have been asking about the gate's doorway.
+  - **The material, per cell.** Reading `hit.material` for a whole felled tree paints the canopy in
+    bark; leaves and logs are different buckets. The loop asks `voxel()` per cell, before the write.
+- **★ 8/8 MUTATIONS CAUGHT, each entering by the door the real bug would use** — round instead of
+  carry · `0,0,0` for the normal · burst after the write · one material for the whole tree · a burst
+  added inside the funnel · the tick removed · an invented pixel-scale constant · the swing guard
+  widened to `true`. ⚠ Two of them needed the guard fixed rather than the code: the first ordering
+  assert matched the wrong `setVoxel` of four, and the `setVoxel`-body slice was a **fixed 6000-char
+  window** — `codeOnly` blanks comments to *spaces*, so that function's ~100 lines of prose still
+  occupy their width and the slice stopped short of the end, reporting clean over the half it could
+  not see. Bounded by its real closer now, and it asserts the slice length so a failed look cannot
+  pass as a clean one.
+- **Mutation-swept from a WORKING-TREE backup with a `trap`, never `git checkout --`** — the file
+  held uncommitted work of my own the whole time (08-22's lesson, which cost that session its work).
+- **⏭ NEXT:** **Alex judges chip feel in the world**, not only on `/shimmer/dev/break` — swing at
+  stone, at a tree, at soil; the judging page cannot show the burst arriving at the same moment a
+  block vanishes, which is the half that either sells it or doesn't · then per-bucket tuning from
+  his call · the mana bucket stays falling like stone until Magii rules it (gap filed 08-28).
+- **Not mine, still red:** `render-audit.test.ts` reports `hollow-look.ts:63` constructing an
+  `OctahedronGeometry` outside a memo — a module-level const object built once, so almost certainly
+  the same false-positive shape that file's own header documents for `flora-mesh.ts`. Predates this
+  work (`cf92cd1`, 08-27 16:22) and the sprites lane already logged it.
+
+### Files
+`voxel3d/VoxelWorld.tsx` (wiring) · `voxel3d/break-fx.ts` (header: the refusal replaces the
+proposal) · `voxel3d/break-fx-wiring.test.ts` (new)
+
 ## 🪓 Shimmer voxel3d — **BLOCK-BREAK PARTICLES: P0 IS IN AND LIVE** (2026-08-28, play lane) · *Last touched 2026-08-28 (play, morning) — `4aa2cf6` pushed, tsc 7 (baseline), spec 29 + pass 26 green, render-audit 129 pass (its 3 fails are `hollow-look.ts`, not mine). ✅ **DEPLOYED** — see the correction below; the line that stood here said the opposite and was ten minutes stale.*
 
 ### Left off — the spike is built; the live copy is three minutes too early
@@ -57,7 +121,9 @@ buckets breaking on one clock, demo blocks taken from the registry rather than n
   expired between measurement and act, but one that expired between the act and the NEXT READER.
 - **⏭ NEXT:** ~~hub folds `4aa2cf6` into any next build~~ done (03:18) → **Alex judges motion per
   bucket on `/shimmer/dev/break`** — it is live, sign in, the whole `/shimmer/dev` tree is
-  owner-gated · then P1 (per-bucket tuning from his call, the burst through the `setVoxel` funnel) ·
+  owner-gated · then P1 (per-bucket tuning from his call; ~~the burst through the `setVoxel` funnel~~ —
+  **refused 08-28 by hub, see the block above: 22 of the 24 funnel call sites are the world building
+  itself, not a keeper breaking something**) ·
   the mana bucket stays falling like stone until Magii rules it.
 
 ### Files

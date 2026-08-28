@@ -210,6 +210,8 @@ import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSeamShimmer, PLOT_TRIGGER_RADIUS } from './seam'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
+import { createBreakFx } from './break-fx'
+import { bucketOf, swingChips } from './break-fx-spec'
 // ── ★★★ RING 2, THE KEEPER'S OWN SPIRITS ABOUT THE HOME PLOT (wired 2026-08-27) ───────────────
 // Canon RULED 2026-07-30 that a keeper's spirits are *"visible, wandering, underfoot"* around the
 // plot. `plot-ring-pass.ts` and its oracle shipped 08-27 and `createPlotRing` appeared in exactly
@@ -3452,7 +3454,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
   cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>
 }) {
-  const { camera } = useThree()
+  const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
   const highlight = useRef<THREE.LineSegments>(null)
   // ★ THE TEXTURE ARRAY, WIRED INTO THE MAIN WORLD (texture lane handoff, 406d492).
@@ -3553,6 +3555,39 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   }, [])
   // Hot-spring steam (2026-08-08) — sleeps everywhere but the Springs; see steam.ts.
   const steam = useMemo(() => createSteamPoints(SEED), [])
+  /**
+   * Block-break chips (2026-08-28) — the swing's debris and the burst when a block gives.
+   * Built once, like every other pass; `break-fx.ts` owns its own budget and drops overflow.
+   */
+  const breakFx = useMemo(() => createBreakFx(SEED), [])
+  /**
+   * Fractional chips owed by the swing in progress.
+   *
+   * ★ IT MUST BE A CARRY, NOT A ROUND. `swingChips` returns a rate times `dt`, which at 60fps is
+   * well under one for every recipe in the file — rounding per frame emits ZERO forever and the
+   * mid-swing half of this feature is silently dead while the burst still works, which looks like
+   * a tuning choice rather than a bug. `break-fx-spec.ts` says so in its own header; this is the
+   * caller half of that contract.
+   *
+   * Reset when the swing's target changes, so nibbling between two blocks cannot bank chips the
+   * same way it cannot bank progress (`tickBreak` discards progress on exactly that condition).
+   */
+  const chipCarry = useRef(0)
+  const chipTarget = useRef<string | null>(null)
+  /**
+   * A chip is sized in BLOCKS; the shader needs pixels. `heightPx / (2·tan(fov/2))` is the
+   * conversion, and it changes only when the viewport or the lens does — so this is an effect, not
+   * a per-frame uniform write.
+   *
+   * ⚠ THE UNIT IS THE WHOLE BUG THIS CLOSES. Point size started as a pixel count times an invented
+   * constant, and 55 green asserts could not see it: chips rendered as large as the blocks they
+   * came off, and only a screenshot said so. Getting this call site wrong reproduces that exactly,
+   * on a machine with a viewport height nobody tested at.
+   */
+  useEffect(() => {
+    const fov = (camera as THREE.PerspectiveCamera).fov ?? 75
+    breakFx.setPixelScale(size.height / (2 * Math.tan((fov * Math.PI) / 360)))
+  }, [breakFx, size.height, camera])
   // The keeper's front door, drawn.
   //
   // ⚠ THE THIRD ARG IS AN ACCESSOR, NOT A CONFIG, AND THAT IS THE 2026-08-27 FOLD-DOOR FIX. Both
@@ -4296,11 +4331,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     tiles?.texture.dispose()
     greg.dispose()
     steam.dispose()
+    breakFx.dispose()
     seam.dispose()
     mist.dispose()
     ring.dispose()
     flora.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, seam, mist, flora])
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, breakFx, seam, mist, flora])
 
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
@@ -5746,6 +5782,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     if (!g) return
     const p = camera.position
     steam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
+    breakFx.tick(dt)
     // ⚠ NEEDS THE CURRENT SPACE — the one argument steam does not take. It draws the Wilds seam
     // only in the Wilds and the plot-side one only in the plot. Hooked but never ticked renders
     // NOTHING and throws nothing (the meshes start hidden), so suspect this line before the shader.
@@ -7630,6 +7667,27 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       if (lastTool.current !== wantSkill) { lastTool.current = wantSkill; onTool(wantSkill) }
       const r = tickBreak(breaking.current, hit, dt, toolTier.current!, toolSkill.current!, eDef?.speedBonus ?? 1)
       breaking.current = r.state
+      // ── ★ CHIPS OFF THE STRUCK FACE, MID-SWING ──────────────────────────────────────────────
+      // Keyed off `r.state`, which is exactly "a swing is in progress on this block". The two ways
+      // it comes back null are the two ways there should be no chips, and both fall out rather than
+      // being tested for: the block GAVE (the burst below is the effect for that), or `breakSeconds`
+      // returned Infinity — refused, not slowed, and a refused block that sprays debris tells the
+      // keeper they are making progress they are not.
+      if (r.state) {
+        // The face, from the raycast: `p*` is the empty cell just before the hit, so the difference
+        // is a unit vector on exactly one axis. `break-fx.ts` documents this as the shape it wants.
+        const tk = `${hit.x},${hit.y},${hit.z},${hit.material}`
+        if (chipTarget.current !== tk) { chipTarget.current = tk; chipCarry.current = 0 }
+        const bucket = bucketOf(hit.material)
+        if (bucket) {
+          chipCarry.current += swingChips(bucket, r.state.progress / r.state.required, dt)
+          const n = Math.floor(chipCarry.current)
+          if (n > 0) {
+            chipCarry.current -= n
+            breakFx.chip(hit.x, hit.y, hit.z, hit.px - hit.x, hit.py - hit.y, hit.pz - hit.z, hit.material, n)
+          }
+        }
+      } else chipTarget.current = null
       if (r.broken) {
         // ── ★ THE FELL VERB — a tree is ONE object (Alex, 2026-08-13) ────────────────────────
         // *"lets make the trees one object that drops rng loot when felled logs included."* A swing
@@ -7751,8 +7809,17 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // is. Taking the base out first would strand the whole canopy on the first call and then
           // re-scan it on every remaining cell; from the top, each step orphans the little that
           // step actually released, and `enqueueLeaves` keeps the earliest time either way.
-          for (const c of [...felled.cells].sort((a, b) => b.y - a.y)) setVoxel(c.x, c.y, c.z, AIR)
+          // ⚠ THE MATERIAL IS READ BEFORE THE WRITE, and it has to be: a trunk is logs AND the
+          // canopy it owns, so asking each cell what it actually is makes leaves throw leaf chips
+          // and logs throw wood. Reading `hit.material` for the whole tree would paint the canopy
+          // in bark. A cell already AIR answers with no bucket and `burst` returns — which is the
+          // correct nothing, not a guard worth writing.
+          for (const c of [...felled.cells].sort((a, b) => b.y - a.y)) {
+            breakFx.burst(c.x, c.y, c.z, voxel(c.x, c.y, c.z))
+            setVoxel(c.x, c.y, c.z, AIR)
+          }
         } else {
+          breakFx.burst(hit.x, hit.y, hit.z, hit.material)
           setVoxel(hit.x, hit.y, hit.z, AIR)
         }
         // ★ Tutorial 'cut' step — any log, not one species (see LOG_MATERIALS's header).
@@ -7760,7 +7827,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         breaking.current = null
       }
     } else {
-      if (!mouse.current.left) breaking.current = null
+      if (!mouse.current.left) { breaking.current = null; chipTarget.current = null }
       // Not mining this frame (nothing under the reticle, LMB up, or weapon drawn) — clear the
       // gauge glow. Same dedup guard as above, so releasing LMB repeatedly does not spam `onTool`.
       if (lastTool.current !== null) { lastTool.current = null; onTool(null) }
@@ -8422,6 +8489,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       <primitive object={pieces.group} />
       <primitive object={greg.group} />
       <primitive object={steam.points} />
+      <primitive object={breakFx.points} />
       <primitive object={seam.group} />
       <primitive object={mist.points} />
       <primitive object={mist.residents} />
