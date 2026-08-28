@@ -50,7 +50,86 @@ the Arcade frame.
 - `src/app/shimmer/voxel3d/mist-pass.ts` (hub/world's — 14h cold, dbr'd both) · `plot-ring-pass.ts` (hub's — same)
 - `/root/athernyx/CANON/CANON_GAPS.md` — the size gap, still `[OPEN]`, now with the shipped table to ratify against
 
-## 🎯 Shimmer voxel3d — **THREE OF ALEX'S OWN BUG REPORTS, AND EVERY ONE WAS A THING THAT WAS ALREADY BUILT** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — `b83de66` `3eb8a54` `f152870` `f40e612`, all pushed, **NOT DEPLOYED** (world's tree dirty, lock held free on purpose)*
+## 🔧 Shimmer voxel3d — **SOUND GOT A LANE, THE INSTRUMENTS GOT FIXED, AND THE CANON GATE WENT CLEAN** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — all pushed and **DEPLOYED**, `BUILD_ID F6M6QmqjeUy91vzyW8nv3`, prod 200, tsc 7 (baseline), canon **0 CONFLICT · 13 CLEAN***
+
+### Left off — the theme was the same all day: built, tested, green, unreachable
+Four systems shipped this week that nothing in the game could reach, and one canon ruling the build
+was quietly violating. None of them was a missing feature; all of them were a missing call.
+
+- **THE HOLLOW VOICE** — `hollow-voice.ts` + `hollow-sfx.ts` had no caller outside their dev page, so
+  Alex met the stalker in silence. Wired; then he ruled a **sound lane** (SOP, dev port 3206) and the
+  audit made the case: **six independent `AudioContext`s**, two byte-identical copies of `tone()`,
+  **no master volume anywhere**, and *"unlock the audio"* not being one act — a browser needs a
+  gesture PER context and the refusal is SILENT. `audio/bus.ts` is now the only place in Shimmer that
+  may build a context or touch `.destination`, and the volume slider means the whole game.
+- **RING 2** — `createPlotRing` appeared in exactly one file, its own dev page. Wired, plot-space
+  only. It shipped for one deploy reading `restingSpirits`, which meant **a keeper with four or
+  fewer saw an empty fold** — Alex ruled it draws the whole roster.
+- **THE CROSSING'S ARRIVING HALF** — `consumeArrival` had a full oracle since 08-24 and no caller on
+  either side. Wired; the departing half waits on one thing only, and it is Alex's (below).
+- **RULE 3, VIOLATED IN PROD** — `shimmer-geography.md:752`: *"A PERSON MAY NOT INJURE YOU."* The
+  build said *"you are hurt"* from 08-26 until today, and **I read that line this morning and left
+  it alone**. ⚠ `npm run canon` cannot see this class — it judges retired vocabulary against a LIST,
+  so a phrase forbidden by a RULING passes clean.
+- **THE CANON GATE** — `Gate` read one rune because one summary cell said so, against canon stating
+  the Bind trifecta four times. **1 CONFLICT → 0**, first clean gate of the day.
+
+### Decisions
+- **The Hollow look is now DATA, in `hollow-look.ts`, and `/shimmer/dev/grey` is how it gets judged.**
+  I sized `HOLLOW_SELF_LIGHT` from arithmetic and never looked; Alex's verdict was *"looking
+  terrible"*. The page runs the real `VoxelDayNight` rig with an **hour** slider and a **framebuffer
+  luma readout** (body / ground / ratio, red at 0.85–1.15) because **contrast decides a silhouette,
+  not brightness**. The value is still his to rule.
+- **`coord build` now refuses an incomplete artifact.** It checks `BUILD_ID` + chunk count on the
+  SUCCESS path and exits non-zero saying *do not restart* — the opposite call from the dirty-tree
+  notice beside it, deliberately: a dirty tree is a bookkeeping gap in a deploy that WORKED, this is
+  a deploy that did not, and the damage lands on whoever restarts next.
+- **The stale canon hold was retired but its RECORD kept.** It had anchored to the Gate message as a
+  proxy for Alex's `eligibleMoves` scoping HOLD; deleting it as a dead exemption would have deleted
+  the ruling. His scoping hold stands untouched.
+
+### ⚠ Traps banked this session
+- **★★★ A BUILD THAT REPORTED SUCCESS, A LOCK THAT READ FREE, AND A SITE THAT ANSWERED 200 — ALL
+  THREE WRONG FOR FORTY MINUTES.** `coord build` killed mid-write by a harness timeout (**I passed
+  `timeout 900`; the tool's own 2-minute ceiling won**). Prod kept serving because the pm2 process
+  had started 37 min earlier from the previous good build. `.next` had **no BUILD_ID**. ★ Run deploys
+  **backgrounded**.
+- **★★ `git add <path>` SCOPES THE ADD; `git commit` TAKES THE WHOLE INDEX.** Followed the SOP's
+  pathspec rule exactly and still pushed six of world's staged files under a message about recoil.
+  Complete form: **`git add <paths> && git commit -- <paths>`**.
+- **★★ FIVE OF MY OWN GUARDS FAILED AND THE SHAPE NEVER CHANGED — cleverer than the question needed.**
+  A regex satisfied by matching ANYWHERE · a multi-line pattern that matched NOTHING and took five
+  asserts red against correct code · a `*/` inside a doc glob that closed its own comment · a `<= 6`
+  ceiling with no author · a closer-count assert that refused two correct edits. **The compiler was
+  the right instrument nearly every time.**
+- **★ TWO CORRECT RULES CAN COMPOSE INTO A BUG.** `spawnDark` puts a Hollow only where it is darkest;
+  a `MeshLambertMaterial` with no `emissive` is bounded by what lights it. Neither is wrong.
+- **⚠ "git status is clean" is not "nothing was left behind"** — stashes, `.gitignore` matches (this
+  repo's bare `build` matches AT ANY DEPTH), other repos, and daemons writing files that look like
+  edits.
+- **⚠ The owner gate 403s a MISSING route too**, so a dev-URL typo is indistinguishable from a page
+  that was never built.
+
+### Next
+- **Alex rules `HOLLOW_SELF_LIGHT`** on `/shimmer/dev/grey` (owner-gated — sign in first).
+- **Alex walks the Home Plot** and says whether ring 2 reads as inhabited now the whole roster draws.
+- **Alex fires a burst facing 90°** and confirms the horizon stays level. Facing 0° proves nothing.
+- **`depart()` is hub's and unwired**, waiting on one thing: **which tile the keeper stands up on**
+  when THE LANDING is painted. ⚠ A gate's `toX/toY` is where it SENDS you, not where you stand up
+  beside it — the obvious shortcut is wrong and was nearly shipped.
+- **The starved-lane ceiling should drop 2 → 0** the day `Gate` or `Overpressure` gets a real cast.
+  Both are registered and deliberately unbuilt.
+- **Not mine, filed not built:** nothing sizes creatures — mist residents are all `PRESENCE_TALL =
+  2.1`, which `mist-pass.ts:112` says is the HALO's lathe-profile height.
+
+### Files
+`audio/bus.ts` + `audio-bus.test.ts` (41) · `testing/guard.ts` + `guard.test.ts` (25) ·
+`scripts/mutate.mts` · `voxel3d/hollow-look.ts` + `hollow-look.test.ts` (43) · `dev/grey/page.tsx` ·
+`voxel3d/rule-three.test.ts` (7) · `voxel3d/ring-wiring.test.ts` (35) · `voxel3d/hollow-wiring.test.ts`
+(51) · `voxel3d/hollow-visible.test.ts` (14) · `play3d/crossing-in.test.ts` (32) ·
+`play3d/keeper-moves.ts` · `play3d/cast.ts` · `scripts/canon-drift.mjs` · `tools/coord.sh`
+
+## 🎯 Shimmer voxel3d — **THREE OF ALEX'S OWN BUG REPORTS, AND EVERY ONE WAS A THING THAT WAS ALREADY BUILT** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — `b83de66` `3eb8a54` `f152870` `f40e612`, **DEPLOYED***
 
 ### Left off — nothing was missing; three things were unreachable
 Alex played and filed three complaints. None of them was a missing system. In each case the code
