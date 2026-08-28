@@ -11,6 +11,57 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 👻 Shimmer voxel3d — **THE HOLLOWS WERE NEVER TOO DARK. THEY WERE TWENTY BLOCKS UP, IN THE TREES** (2026-08-28, play lane — Alex found it by playing) · *Last touched 2026-08-28 (play) — DIAGNOSED, NOT FIXED. Both files are hub's and hub was mid-deploy. Nothing touched.*
+
+### Left off — two defects that are each harmless alone
+
+Alex: *"i see why the hallows are invisible.. they are 20 blocks above just hovering mid air.. but
+that doesnt stop them from damaging me."*
+
+- **★★★ DEFECT 1 — `groundTopNear` IS A SELF-REFERENTIAL RATCHET.** `VoxelWorld.tsx:4437` returns the
+  topmost SOLID within ±6 **of a window centred on the asker's own y**, and `hollows.ts:467` sets
+  `want = groundAt(x, z) + 1 + hover`. So the body's height is derived from an answer its own height
+  chose, and **each ascent moves the window up and widens what it can find next.** Simulated against
+  a synthetic trunk + canopy: **66.15 → 74.15 → 81.15 in TWO frames**, then a stable perch on the
+  canopy top — **17.2 blocks above ground**, which is Alex's "20". Leaves are non-AIR, so a forest is
+  a staircase. ⚠ The docstring says it returns *"the same thing `columnHeight` returns but true"* —
+  true of a walker stepping onto a ledge, **false of anything that can be carried upward by its own
+  reply.**
+- **★★★ DEFECT 2 — `hollowTouching` HAS NO Y TERM AT ALL.** `hollows.ts:495` is
+  `dx*dx + dz*dz < r*r` on x and z only: **a horizontal cylinder of infinite height**, and neither
+  call site guards altitude. A caster's `reach` is **7.5**, so it drains a keeper from 7.5 blocks
+  away at *any* altitude.
+- **★★ EITHER ALONE IS SURVIVABLE, WHICH IS EXACTLY WHY NEITHER WAS FOUND.** The ratchet alone is a
+  hollow sitting oddly in a tree. The missing Y term alone never fires, because hollows stay on the
+  ground. **Together they make an enemy that damages you from somewhere you cannot see, reach, or
+  answer** — and the 371-assert lesson applies: both halves were internally consistent about
+  different things.
+- **⚠⚠ AND IT RECONTEXTUALISES 08-27's WHOLE HOLLOW-VISIBILITY EFFORT.** `hollow-look.ts`,
+  `/shimmer/dev/grey`, the hour slider, the framebuffer luma readout and `HOLLOW_SELF_LIGHT = 0.15`
+  were all built on the model that the Hollows were **too dark**. They were **above him**. That work
+  is not wasted — the shared dials and the judging page are right, and the emissive fix was real —
+  but **`HOLLOW_SELF_LIGHT` must not be tuned further against this symptom until the placement is
+  fixed**, or the dial will be bent to compensate for a bug it cannot reach. ⚠ Second time in two
+  days that **Alex standing in his own world beat the instruments** (the first was the court piling).
+
+### Decisions
+- **Diagnosed and handed over, not fixed.** Both files are hub's shared surface and hub was mid-deploy
+  — a build bundles the working tree. Deploy was told to proceed regardless: this pre-dates today's
+  work and shipping does not worsen it.
+
+### Next
+- **`hollowTouching` needs a Y term** — the smaller, safer half: a pure module with an oracle already
+  around it. ⚠ Not simply 3D distance: a caster is *meant* to reach 7.5 horizontally, so the vertical
+  tolerance is a separate dial and picking it is a feel call.
+- **`groundTopNear` needs to stop asking the asker** — the harder half, because *"topmost solid near
+  me"* is the RIGHT answer for a walker stepping onto a ledge and the WRONG one for anything that can
+  be lifted by its own reply. ⚠ Fixing it by clamping to `columnHeight` would break the ledge case it
+  was written for; the two callers want different questions.
+
+### Files
+`voxel3d/hollows.ts` (`hollowTouching`, the `want` line) · `voxel3d/VoxelWorld.tsx` (`groundTopNear`)
+· repro sim in the session scratchpad (`ratchet.mts`, a labelled diagnostic copy, not an import)
+
 ## 🌬 Shimmer voxel3d — **THE BREATH: A GAP FILED, RULED AND BUILT INSIDE ONE DAY** (2026-08-28, play lane) · *Last touched 2026-08-28 (play) — `da28e42` pushed, spec oracle **47 pass / 0 fail**, 8 mutation doors red, tsc 7 (baseline). NOT deployed — hub owns the lock.*
 
 ### Left off — the two mana breaks are built and waiting on Alex's eye
