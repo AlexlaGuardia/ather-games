@@ -75,6 +75,75 @@ lifecycle lines (`useMemo` build, `tick(dt)`, `<primitive>`, `dispose()` + the d
 `voxel3d/VoxelWorld.tsx` (wiring) · `voxel3d/break-fx.ts` (header: the refusal replaces the
 proposal) · `voxel3d/break-fx-wiring.test.ts` (new)
 
+## 🔬 Shimmer voxel3d — **THE STANDING RED WAS A BLIND INSTRUMENT, AND THE FILE IT ACCUSED WAS CORRECT** (2026-08-28, play lane) · *Last touched 2026-08-28 (play) — `63300a9` pushed, render-audit **135 pass / 0 fail** (was 130/3), tsc 7 (baseline), all three new guards mutation-verified.*
+
+### Left off — `render-audit` is green for the first time since 08-27, and nothing in `hollow-look.ts` changed
+
+`render-audit.test.ts` had stood at **3 FAIL on `hollow-look.ts:61-63`** for a day, and three
+separate lanes had written it down as *"not mine"*. It was not anybody's: **the file was correct
+and the audit could not see it.** ⚠ A standing red is not a low-priority bug, it is a guard
+being trained out of the room — the next real finding arrives wearing the same costume.
+
+### What it actually was
+
+- **★★★ A FACTORY CAN HAND BACK AN OBJECT LITERAL, AND THAT WRAPS ITS BRACE IN A PAREN.**
+  `createHollowGeo = (): Record<…> => ({ warden: new THREE.IcosahedronGeometry(…) })`. The audit
+  credits a construction that sits inside a named factory, and it finds the factory by walking out
+  through enclosing `{`. Here the only enclosing brace is the **object literal's**, whose preceding
+  character is `(` and not `=>` — so the walk read a nameless block, gave no credit, and reported
+  three deliberate, shared, caller-memoised geometries as the context-loss bug. **Both call sites
+  memoise** (`VoxelWorld.tsx:5457`, `dev/grey/page.tsx:42`); there was never an allocation to fix.
+- **★★ THIS IS THE THIRD TIME THIS ONE QUESTION HAS BEEN ANSWERED WITH THE WRONG PROXY, and the
+  first two are written up in that file's own header.** 08-12: it measured *distance* to a `useMemo`
+  instead of containment. 08-26: it asked whether a factory was *spelled* `function` and *named*
+  with one of four verbs, and spent four days calling `flora-mesh.ts`'s four arrow-const geometry
+  factories the context-loss bug. 08-28: it asked whether the body's brace was the arrow's own.
+  **Each fix was correct, and each left the next syntax for the next reader.** The lesson is not
+  "handle parens" — it is that a guard which recognises its subject by SHAPE will keep meeting
+  shapes, so every one of these belongs in `scopeAt` where it is answered once.
+- **⚠ THE FIX WIDENS NOTHING, WHICH THE FILE'S HEADER DEMANDS IN CAPITALS.** The name is still
+  required: an anonymous `x => ({ … new THREE.Material … })` — the `.map()` shape — still earns no
+  credit and is still judged per-object. Mutation-verified: it goes red. And crediting a factory
+  **moves** the rule to its call sites rather than waiving it — a probe factory built as
+  `=> ({ Material })` was registered by § 1 and then **caught by § 1b being called in a loop**.
+- **★ THREE COPIES OF ONE REGEX BECAME ONE.** `scopeAt`, `enclosingFunction` and `isRepeatedCall`
+  each carried their own arrow-head pattern, differing only in how they anchor the tail — a
+  hand-kept mirror inside the file that warns about believing a guard. They agreed, which is the
+  state a mirror is in right until it is not, and it meant a fix reached whichever copy the fixer
+  happened to open. Landed as a **separately verified step**: the refactor alone produced
+  byte-identical audit output (130/3 → 130/3) before the behaviour change went in on top.
+
+### ★★ AND THE MUTATION FOUND A SECOND DOOR, BY MISSING
+
+- **A MUTATION THAT DOES NOT FIRE IS A CLAIM ABOUT THE MUTATION FIRST.** The probe proving that
+  factory credit moves to the call sites came back **green**, which for a minute read as the fix
+  having failed. It had not: my probe wrote `for (…) out.push(makeMat())` — a **braceless** loop —
+  and `isRepeatedCall` walks *braces*, so the scope walk sailed past the loop to the function
+  holding it and answered one-shot. Re-entering with braces caught it immediately.
+- **MEASURED BEFORE BUILDING ANYTHING: 134 braceless loop bodies in the render path, and ZERO hold
+  a THREE construction or a call to a judged factory.** The hole is real and unoccupied. ⚠ So it did
+  NOT get a parser — the 08-27 round of this same file cost five guards that were cleverer than the
+  question needed. It got **§ 1c: an assert that expires.** The day someone writes that shape it
+  goes red and **names the line**, instead of passing in silence.
+- **⚠ AND § 1c HAS TO PROVE IT CAN STILL SEE ITS SUBJECT.** A scan that matches nothing reports
+  "nothing wrong" — the failure this entire file exists about. `seen >= 40` fires if the loop-head
+  pattern ever stops matching; verified by blinding the pattern on purpose.
+
+### Decisions
+
+- **A standing red gets fixed or gets explained, never inherited.** Three lanes disowning the same
+  three lines for a day is the actual defect; the geometry was never in danger.
+- **The braceless-loop hole is named and left open on purpose**, matching the precedent already in
+  § 1b for one-line delegates. Close it with a call graph if it ever bites, not with a name match.
+
+### Next
+
+- Nothing blocking. `render-audit` is green, so the next lane to break the render contract will hear
+  about it from the guard rather than from a black canvas.
+
+### Files
+`voxel3d/render-audit.test.ts` (only — `hollow-look.ts` was correct and is untouched)
+
 ## 🪓 Shimmer voxel3d — **BLOCK-BREAK PARTICLES: P0 IS IN AND LIVE** (2026-08-28, play lane) · *Last touched 2026-08-28 (play, morning) — `4aa2cf6` pushed, tsc 7 (baseline), spec 29 + pass 26 green, render-audit 129 pass (its 3 fails are `hollow-look.ts`, not mine). ✅ **DEPLOYED** — see the correction below; the line that stood here said the opposite and was ten minutes stale.*
 
 ### Left off — the spike is built; the live copy is three minutes too early
