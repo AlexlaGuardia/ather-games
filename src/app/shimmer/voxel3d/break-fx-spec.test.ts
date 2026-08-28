@@ -183,8 +183,13 @@ const ALL_ELEMENT_SEAMS = [ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EA
   ok(recipeFor('crystal').glow > recipeFor('rawmana').glow,
      'and lit is brighter than spent, which is the whole readable difference between the two breaks')
 
-  // Ordinary matter neither breathes nor glows: a stone that breathed would say the wrong thing
-  // about stone, and canon scopes the ruling to a mana-bearing block.
+  // ⛔ ORDINARY MATTER NEITHER BREATHES NOR GLOWS — RULED, not merely conservative. "Only mana
+  // breathes — a felled tree does NOT" (`design-briefs/shimmer-resources.md`, 2026-08-28, `828fe74`,
+  // raised from this build). ⚠ DO NOT "IMPROVE" THIS INTO *"matter that was never alive does not
+  // breathe"* — that generalisation was offered to the Magii seat and explicitly refused: the true
+  // rule is NARROWER, not broader. Wood, leaves, plants, sand and stone all breathe nothing, and a
+  // living/non-living test would start letting things through the day someone adds a mana-bearing
+  // plant. The assert below is the whole rule and it is finished.
   const mundane = ALL_BUCKETS.filter(b => b !== 'crystal' && b !== 'rawmana')
   ok(mundane.every(b => breathFor(b) === null),
      `only mana-bearing blocks breathe — offenders: ${mundane.filter(b => breathFor(b)).join(', ')}`)

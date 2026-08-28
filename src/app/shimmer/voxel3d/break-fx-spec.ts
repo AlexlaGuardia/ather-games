@@ -153,10 +153,23 @@ const RECIPES: Record<BreakBucket, ChipRecipe> = {
  * doc has said *"negative RISES"* since the first draft, written the day the gap was filed, against
  * the day the ruling would land. Nothing new was needed to express it.
  *
- * ⚠ ONLY MANA-BEARING BLOCKS BREATHE, AND I AM DELIBERATELY NOT WIDENING THAT. The light law's
- * older half says mana lives in *living* matter and working it releases the mana — which reads as
- * though a felled tree should breathe too. **The 08-28 ruling is scoped to a mana BLOCK**, so
- * extending it to timber would be me authoring, not building. Raised with Alex, not decided here.
+ * ⛔ ONLY MANA BREATHES — A FELLED TREE DOES NOT. **RULED 2026-08-28 (`828fe74`), raised from this
+ * module.** The light law's older half says mana lives in *living* matter and working it releases
+ * the mana, which reads as though timber should breathe too. It does not, and canon rules it out
+ * with a POSITIVE statement rather than a silence: the resource table files *"raw but cut"* as
+ * *"faint, at the edges only — a fresh branch."* **If the cut released the mana, a fresh branch
+ * would be DULL. Canon says it is not**, so nothing left at the cut and there was never a breath.
+ *
+ * ★★ THE RECONCILIATION IS A TIMESCALE, AND THE LATTICE SETS IT — the same lattice that splits the
+ * ladder above. A breath is what a lattice failing **at once** looks like; a fracture is a single
+ * event, so the release is a single event. Living matter has no lattice — it holds mana in tissue
+ * and gives it up **gradually, across the working and the drying**. Standing tree → cut branch
+ * (faint at the edges) → plank (dull) IS that release, already written out. **The light law is the
+ * slow version of this file; the breath is the fast one.** Both halves were always true.
+ *
+ * ⚠⚠ AND DO **NOT** WIDEN THE GUARD TO *"matter that was never alive does not breathe"* — I offered
+ * exactly that generalisation when I handed the question back, and canon refused it: **the true
+ * rule is narrower, not broader.** Nothing breathes but mana. A guard that says so is finished.
  *
  * **What is canon:** direction (outward/up), impermanence, which materials hold vs release, the
  * word. **What is mine:** count, speed, brightness, ramp, budget. The COUNTS below therefore

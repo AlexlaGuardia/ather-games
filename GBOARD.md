@@ -63,7 +63,22 @@ the freed light rises outward and fades, and the word is `breath`.**
 - **Alex judges the two mana breaks at `/shimmer/dev/break`** — **seven buckets now**, and the page
   derives from `ALL_BUCKETS` so both appeared without anyone editing it. ⚠ The breath rides
   `burst()`, so watch the **completed** break, not the swing.
-- **Does a felled tree breathe?** A canon question, not a tuning one. Unfiled, pending Alex.
+- ~~**Does a felled tree breathe?**~~ **RULED THE SAME HOUR IT WAS RAISED — no, nothing breathes but
+  mana** (`828fe74`, `design-briefs/shimmer-resources.md` › *ONLY MANA BREATHES*). ★ Canon ruled it
+  out with a **positive statement rather than a silence**: the resource table already files *"raw but
+  cut"* as *"faint, at the edges only — a fresh branch."* **If the cut released the mana a fresh
+  branch would be dull; canon says it is not**, so nothing left at the cut. ★★ And the two halves of
+  the light law reconcile as a **timescale set by the lattice** — a breath is a lattice failing *at
+  once*, while living matter has no lattice and gives its mana up gradually across the working and
+  the drying (standing tree → cut branch, faint at the edges → plank, dull). **The light law is the
+  slow version; the breath is the fast one.** ⚠⚠ **The guard stays EXACTLY as written and must not be
+  widened to *"matter that was never alive does not breathe"*** — I offered that generalisation and
+  canon refused it: the true rule is narrower, not broader. Both the module and the oracle now carry
+  the citation and the refusal, so the next reader cannot "improve" it into the wrong rule.
+- **Two dials canon handed back, both the build's:** whether a log visibly **dims between cut and
+  plank** is renderable and mine (canon gives the endpoints, never the animation) · and ⚠ if anything
+  is ever to dim **by waiting**, canon has already named the only two candidates — **saps and crystal
+  rinn**, the things *"still faintly alive"* which *"can dull if left."* Nothing else dims by sitting.
 
 ### Files
 `voxel3d/break-fx-spec.ts` · `voxel3d/break-fx.ts` · `voxel3d/break-fx-spec.test.ts`
