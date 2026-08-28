@@ -11,6 +11,44 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🪓 Shimmer voxel3d — **BLOCK-BREAK PARTICLES: P0 IS IN, AND PROD IS SERVING A DRAFT OF IT** (2026-08-28, play lane) · *Last touched 2026-08-28 (play) — `4aa2cf6` pushed, tsc 7 (baseline), spec 29 + pass 26 green, render-audit 129 pass (its 3 fails are `hollow-look.ts`, not mine). ⚠ **4aa2cf6 is NOT deployed** and prod holds a mid-edit snapshot — see below.*
+
+### Left off — the spike is built; the live copy is three minutes too early
+
+`voxel3d/break-fx-spec.ts` (pure, every bucket derived from `blockDef().skill` + the range
+predicates, colour from `MATERIAL_COLOR`) · `voxel3d/break-fx.ts` (Points pass in the `steam.ts`
+shape, birth ceiling that DROPS overflow + a ring bounding existence) · `dev/break/page.tsx` (six
+buckets breaking on one clock, demo blocks taken from the registry rather than named).
+**Nothing is wired into the world** — the two call sites are hub's and were asked for, not taken.
+
+- **★★★ THE PICTURE CORRECTED WHAT 55 GREEN ASSERTS COULD NOT.** Point size was a pixel count times
+  a constant I invented, so chips rendered **as large as the blocks they came off**. The comment
+  directly above the bug already described the correct behaviour. `size` is in BLOCKS now with the
+  viewport conversion in the shader. **A suite and a camera answer different questions.**
+- **★★ A MUTATION EARNED A NEW ASSERT, AND THE FIRST VERSION OF THAT ASSERT COULD NOT FIRE.** The
+  slot-leak mutation passed twice: once because the oracle never emitted a second burst, then again
+  because the fixture used the default 512-slot budget, so the second burst took FRESH slots and
+  never touched a stale one. An 8-slot budget makes it fire. The bug it now catches is the quiet
+  kind — after every chip dies the next burst is skipped by the idle early-return and the effect
+  goes dark permanently. ⚠ *Ask of any guard: is there an input that makes this fail?*
+- **⚠⚠⚠ THE SHARED-TREE HAZARD HAS A MIRROR AND NOBODY HAD WRITTEN IT DOWN.** `.next/BUILD_ID` is
+  stamped **02:40:30**; my commit is **02:43:41**. Hub's court build bundled these files while they
+  were still **uncommitted**, so prod is serving my work as it stood mid-edit — the giant-chip
+  version I had already measured as wrong and replaced. The 08-19/08-20 entries are all about a
+  build **DROPPING** in-flight work (which also happened tonight, to the crossing fix, same two
+  windows, opposite direction). **The mirror is worse: a dropped fix announces itself the moment
+  someone looks for it, while a shipped half-tune looks like a finished feature that is simply
+  bad.** Had Alex opened the page in that window he would have judged the effect on numbers already
+  rejected — and every test was green for both versions, because what was wrong is what no test
+  sees. The pre-flight dirty-file listing should be read as *"someone may be mid-thought in these"*,
+  not only *"these might not ship"*.
+- **⏭ NEXT:** hub folds `4aa2cf6` into any next build → Alex judges motion per bucket on
+  `/shimmer/dev/break` · then P1 (per-bucket tuning from his call, the burst through the `setVoxel`
+  funnel) · the mana bucket stays falling like stone until Magii rules it.
+
+### Files
+`voxel3d/break-fx.ts` · `voxel3d/break-fx-spec.ts` · both `.test.ts` · `dev/break/page.tsx`
+
 ## 🪓 Shimmer voxel3d — **BLOCK-BREAK PARTICLES: THE PLAN** (2026-08-28, play lane — Alex's idea, scouted not guessed) · *Last touched 2026-08-28 (play) — design only, nothing built. Three read-only sweeps over the material, mining and FX surfaces; face-normal derivation verified live.*
 
 ### Left off — Alex: *"what if we add particles to each block so that when mining it the particles give a realistic look as the block breaks"*
