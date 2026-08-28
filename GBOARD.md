@@ -111,7 +111,9 @@ instead of reading the recipe, and the numbers were wrong in the one way the ora
 ### Files
 `voxel3d/break-fx-spec.ts` · `voxel3d/break-fx.ts` · `voxel3d/break-fx-spec.test.ts`
 
-## 🎮 Shimmer voxel3d — **THE CONTROLLER WAS FULLY DESIGNED AND ENTIRELY UNPLUGGED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, afternoon) — tsc 7 (baseline), canon 0 CONFLICT / 13 CLEAN, input 217 asserts (was 194), 10/10 mutations caught.*
+## 🎮 Shimmer voxel3d — **THE CONTROLLER WAS FULLY DESIGNED AND ENTIRELY UNPLUGGED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, evening) — `49f96d0` pushed, 0 unpushed, tsc 7 (baseline), canon 0 CONFLICT / 13 CLEAN, input 217 asserts (was 194), 10/10 mutations caught, sweep 195/195 0 FAIL 0 KILLED. ✅ **DEPLOYED** with play's breath in the same build — `BUILD_ID BVx3gfCAIAcvIQEzGrN7f`, 157 chunks, prod 200, Alex's go, run backgrounded from a clean tree.*
+
+> **⚠ VERIFIED AS SERVED, NOT AS BUILT.** `prod answers 200` is evidence a process is alive, not that the artifact landed — the 08-27 lesson, where a mid-write kill left `.next` with no BUILD_ID while pm2 happily served the previous build and every instrument read fine. So: the new `_buildManifest.js` answers **200** and the previous BUILD_ID's answers **404**. That pair is the check. ⚠ Still NOT verified: that a pad casts in a browser. That needs Alex's hands, and it is his pass anyway.
 
 ### Left off — one missing import was the whole controller
 
