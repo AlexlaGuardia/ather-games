@@ -11,6 +11,52 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🚪 Shimmer play3d — **THE ARRIVAL WORKS, AND WATCHING IT WORK FOUND WHAT WAS UNDER IT** (2026-08-27, play lane) · *Last touched 2026-08-27 (play) — `aa7ac19` pushed, tsc 7 (baseline), crossing-in 36/36 + crossing-out 34 + crossing 25 green, arrival verified in a browser against a BUILT artifact.*
+
+### Left off — the receiving half is no longer a claim
+
+The Ather crossing's arriving half shipped at 13:33 (`07938f8`) with unit tests and a
+source-string reader, and nobody had watched it in a browser. Driven end to end against a
+built artifact with a fresh profile: born, one-shot staged by hand at `rune-hold` 48,50
+(the departure still refuses — the landing is unpainted), reload. **The keeper stands up in
+Rune Hold at 48,50, the one-shot is cleared, and the town's three gate labels are on
+screen.** So the far side of the door is real, not merely green.
+
+- **★★★ AND THE THIRD STEP OF THE PROBE FOUND A BUG THE FIRST TWO COULD NOT.** The next
+  reload put the keeper back in the Home Plot. The saved-position resolution lived inside
+  `if (data?.spirits?.length)`, so **a keeper who owns no spirit had neither tile nor zone
+  restored on any load, ever** — every reload stood them at `START_ZONE`. Not a crossing
+  bug: it is every spirit-less keeper, and Greg's gift is the only source of a first
+  spirit, so it was the newest keepers who had it. The crossing is only where it stops
+  looking cosmetic, because **a crossing that undoes itself one load later is worse than
+  one that never fired — the player watched it work.** Hoisted the tile and all three zone
+  branches out to `if (data)`; the arrival block was already outside the spirits block for
+  exactly this reason and says so in its comment, so half the precedence chain the contract
+  describes could not run at all.
+- **★ THE GUARD ASSERTS THE GUARD, NOT A BRACE TALLY.** Whichever `if (…) {` opened last
+  before the restore IS the condition it runs under, so asking which one is nearer asks the
+  real question and survives reindentation. Mutation-tested both ways: restore the bug and
+  exactly one assert goes red naming it; fixed, 36/36.
+- **⚠⚠ A LANE DEV SERVER CANNOT VERIFY ANY LOAD-PATH BEHAVIOUR, AND IT FAILS TOWARD *you
+  found something*.** The same probe on `tools/devwin.sh play` said the arrival was never
+  consumed. It is StrictMode: the effect double-invokes, cleanup sets `alive = false` before
+  `load()` resolves, and `loadedRef` makes the second mount return early — so **the entire
+  save load is discarded in dev**, which is indistinguishable from a broken feature.
+  Instrumented it to be sure (`load resolved, alive= false`). Verify against a built
+  artifact: `NEXT_DIST_DIR=.next-play npx next build` + `next start` on your port — never
+  `.next`, never pm2.
+- **⏭ NOT MINE, HANDED TO HUB:** `/shimmer/play3d` is `gated-game` in `proxy.ts` while
+  voxel3d is public, so a non-owner walking into the Rune Hold gate would be staged an
+  arrival and then **bounced to `/room` with the one-shot unconsumed** — a product call
+  about the legacy route, not a patch to make quietly · `crossing-out.ts` exports a **dead
+  second dialect**, `ARRIVAL_KEY = 'ather:shimmer:arriving'`, written and read by nothing
+  (the live key is `shimmer:crossing:pending`), with a test asserting its prefix that reads
+  as coverage.
+
+### Files
+`play3d/Shimmer3D.tsx` · `play3d/crossing-in.test.ts` (36 asserts) · read-only:
+`engine/crossing.ts`, `voxel3d/crossing-out.ts`, `src/proxy.ts`
+
 ## 🏛 Shimmer voxel3d — **THE DAIS WAS BUILT, TESTED, GREEN AND NOT IN THE WORLD** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — tsc 7 (baseline), crossings 3786 + court-wiring 26 green, dais measured live.*
 
 ### Left off — Alex: *"take the platform wire"*
