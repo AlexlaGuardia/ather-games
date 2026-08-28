@@ -18,7 +18,7 @@
 // must not share an exit code — five of the canon gate's ten checks had that branch.
 
 import { readFileSync } from 'node:fs'
-import { codeOnly } from '../testing/guard'
+import { codeOnly, blockAt } from '../testing/guard'
 import { COURT_REV, PLATFORM_MAT, isCourtMaterial, courtLevel, courtPlatformCells,
          sockets, socketCells } from './crossings'
 import { plotForTier, plotHeight } from '../voxel/plot'
@@ -112,6 +112,32 @@ const once = (needle: string, n: number, what: string) => {
   ok(/dais\.every\(c => cols\.current\.has\(colOf\(c\.x, c\.z\)\)\)/.test(src),
      'the dais columns must be loaded before the court is laid')
   ok(/level !== null/.test(src), 'and a court with no derivable level is not half-built')
+}
+
+// ── 4b. ★★★ NOTHING MAY BE LAID THAT THE SUBSET GUARD DOES NOT KNOW ABOUT ───────────────────
+// `crossings.test.ts` proves *laid ⊆ clearable* by listing the three things the court lays. That
+// list is HAND-KEPT, which is the mirror trap: add a fourth thing to the host and the guard keeps
+// agreeing with itself about the old three, exactly as green as it is now. That is how this hole
+// opened — the dais and the hub were each added to the lay path while the sweep stayed a box around
+// a socket, and 38-42% of the court became un-removable without a single test going red.
+//
+// So this counts the court block's WRITES. Three, no more: the deck, the hub, the frames. A fourth
+// `setVoxel` in this block fails here and sends its author to the subset guard, which is the only
+// place that can tell them whether the sweep can reach it.
+{
+  // ⚠ ANCHORED IN `raw`, NOT `src`. My first version searched the stripped source for a COMMENT
+  // marker — a string `codeOnly` had already blanked — so it found nothing and reported "0 writes",
+  // which reads as *the court lays nothing at all*. The guard failed loudly instead of passing, and
+  // that is the only reason it cost a minute. `blockAt` returns `.code` already stripped, so the
+  // count still asks what the block DOES.
+  const { at, code: block } = blockAt(raw, '// ── the crossing court', 'courtMarks.current = held')
+  ok(at > 0, 'the court build block is findable')
+  ok(block.length > 500, `and substantial (${block.length} chars of code)`)
+  const writes = (block.match(/setVoxel\(/g) ?? []).length
+  // sweep() carries its own setVoxel — the clear path — so the lay writes are the rest.
+  ok(writes === 4,
+     `the court block writes voxels in exactly 4 places: sweep + deck + hub + frames (found ${writes}). ` +
+     `A new one must be added to crossings.test.ts's laid-set before it ships, or it becomes stone nobody can remove.`)
 }
 
 // ── 5. THE REV MOVED, OR A STANDING COURT KEEPS ITS OLD Y FOREVER ───────────────────────────
