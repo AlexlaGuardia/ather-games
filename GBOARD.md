@@ -11,6 +11,120 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🪓 Shimmer voxel3d — **BLOCK-BREAK PARTICLES: THE PLAN** (2026-08-28, play lane — Alex's idea, scouted not guessed) · *Last touched 2026-08-28 (play) — design only, nothing built. Three read-only sweeps over the material, mining and FX surfaces; face-normal derivation verified live.*
+
+### Left off — Alex: *"what if we add particles to each block so that when mining it the particles give a realistic look as the block breaks"*
+
+Nothing exists today. Mining's only feedback is a black wireframe cube. No chips, no dust, no
+crack overlay. **But every input the effect needs is already in the build**, which is why this is
+a small feature and not a system.
+
+### What the scouts found — the four facts the design rests on
+
+- **★★★ THERE IS ALREADY ONE UPSTREAM COLOUR, SO PARTICLES NEED NO NEW TABLE.**
+  `MATERIAL_COLOR[baseOf(m)]` (`voxel3d/attrs.ts:23`) is what the flat path renders as vertex
+  colour **and** what every procedural tile painter in `tex/atlas.ts` takes as its input tone and
+  shades around (`paintRock`, `writeOre`, `paintBark`, `paintLeaves`…). It is upstream of the art,
+  not a sibling of it. ⚠ A hand-kept id→colour list for particles would be the **hand-kept mirror**
+  this repo has paid for twice — and the sapling icon proved a mirror can agree about colour and
+  still be wrong. Read the same value the mesher reads.
+- **★★ THE CATEGORY TAXONOMY ALSO ALREADY EXISTS.** `blockDef(m).skill` is
+  `'prospecting' | 'forestry' | 'farming' | null` — literally stone-family vs wood vs soil/plants,
+  and it is the tool-gating vocabulary the game already speaks. With `isOre` / `isLogMat` /
+  `isLeafMat` / `isPlant` / `isScatter` for the finer cuts, **every bucket derives itself.** A new
+  material added next month lands in a bucket without anyone remembering to add it, which is the
+  only kind of list that does not go stale.
+- **★★ THE FACE IS RECOVERABLE AND NOTHING USES IT YET.** `RayHit` carries no normal, but it
+  carries `px,py,pz` — the empty cell the ray stepped from — so the face is `(px-x, py-y, pz-z)`.
+  **Verified live against a synthetic column on all six faces: unit vector every time, and null
+  into empty sky.** Today only the Y half is used, for slab placement (`VoxelWorld.tsx:8068`).
+  ⚠ `BreakState` does NOT carry it, so swing chips cannot be emitted from inside `tickBreak` —
+  they have to come from the call site where `hit` is still in scope.
+- **★ THE DROPS ALREADY DEFINE THE MOTION LANGUAGE.** `spawnDrop` gives every drop a
+  **hash-seeded** outward kick and `vy: 3.1`, then `tickDrops` runs real gravity, drag and floor
+  collision. Chips should share that arc so the two read as one event, and should use the same
+  deterministic hash rather than `Math.random` — the seed pattern is right there in `drops.ts:65`.
+
+### The design
+
+**Two modules, split so half of it can actually be tested.** `voxel3d/break-fx-spec.ts` is PURE —
+material in, recipe out (count, speed, spread, gravity sign, life, colour), no THREE, real oracle.
+`voxel3d/break-fx.ts` is the `steam.ts`-shaped factory that owns the GPU resources and knows
+nothing about mining. **One `THREE.Points` pass, one draw call, fixed budget, square points, no
+texture at all** — Alex's UHD 630 profiles 84% GPU-bound at ~298 draws and a texture upload stalls
+its main thread, so the cheapest thing that can look right is the right thing.
+
+**Two hook sites, and they are different on purpose:**
+1. **Swing chips → the mining branch (`VoxelWorld.tsx:7623`)**, because that is the only place the
+   face exists. A few chips off the struck face per swing tick, rate rising with `progress/required`.
+2. **The break burst → inside `setVoxel` on `prevMat !== AIR && mat === AIR`.** That is the single
+   funnel — `sections[s].set` appears **exactly once** in the file (`:4940`) — and it already
+   carries two hooks reasoned this way (the chest record, the leaf-orphan decay at `:4969`). Hooking
+   the funnel means an explosion, a console verb or a piece deconstruct invented next month gets its
+   puff for free.
+
+### The per-material read — derived, never listed
+
+| bucket | derived from | reads as |
+|---|---|---|
+| stone / deep stone / masonry | `skill === 'prospecting'` | hard chips, tight fast arcs, grey dust that hangs |
+| ore | `isOre(m)` | the above plus a brighter fleck of the ore's own colour |
+| logs | `isLogMat(m)` | fewer, bigger, slower splinters thrown further |
+| leaves | `isLeafMat(m)` | no arc — a flutter that DRIFTS, gravity near zero |
+| plants / crops / herbs | `isPlant(m)` | a soft scatter, short life, no dust |
+| sand | `MAT.SAND` | no chips at all — a slump, particles falling straight |
+| raw mana / ather crystal | `isOre` + canon | **⛔ NOT MINE — see the canon flag** |
+
+⚠ **I pitched ice, glass and gravel to Alex and this world has none of them.** Minecraft habit,
+caught by reading `depth.ts`. The list above is only materials that exist.
+
+### Phases
+
+- **P0 — the spike.** Spec module + Points pass + swing chips only, one bucket, hardcoded feel
+  numbers. The point is Alex touching it on his own machine, not coverage.
+- **P1 — the rest of the effect.** Per-bucket recipes, the break burst through the `setVoxel`
+  funnel, the per-frame emit cap.
+- **P2 — the pairing.** A landing puff where a chip reaches ground; a break sound through
+  `audio/bus.ts` (`tone()`, synthesized, never a new `AudioContext`, never `.destination`).
+- **P3 — the crack overlay.** Progressive damage on the face as `progress` climbs. Particles say
+  something happened; cracks say it is *about to*. Different system, own decision, probably worth
+  more than P2.
+
+### The traps, named now
+
+- **⚠⚠ FELLING A TREE IS HUNDREDS OF `setVoxel(AIR)` CALLS IN ONE FRAME** (`:7740-7749` loops every
+  felled cell). A burst per cell would empty the particle budget and spike a frame on the exact
+  machine we are protecting. **The cap is a per-frame emit ceiling that DROPS the overflow rather
+  than queueing it** — a queue turns one bad frame into a bad second. Follows `spawn-budget.ts`,
+  whose own docstring is the cautionary tale: a budget checked at the top of a loop does not bound
+  the cost of an iteration already started.
+- **⚠ `render-audit` §2 HARD-FAILS on `new THREE.Vector3/Color/Matrix4` inside `useFrame`.** All
+  particle state stays in `Float32Array`s; no vector objects anywhere in the tick.
+- **⚠ Construct every GPU resource once inside the named factory** (§1), and add `dispose()` to
+  `VoxelWorld.tsx`'s cleanup list *and* its dependency array. Add a `prof.current.mark('break-fx')`
+  so the profiler's `UNACCOUNTED` bucket does not silently absorb it.
+- **⚠ THIS IS NOT THE JUICE PASS ALEX KILLED (2026-07-21).** That revert was about *drawing objects
+  with canvas primitives* instead of producing real models — *"circles in an arrangement… nothing
+  like the silhouette."* The same entry files **particle FX under KEEP VECTOR/light** in Alex's own
+  words. Chips are motion, not a stand-in for a model. Keep it that way: the day a chip becomes a
+  little hand-drawn rock, it has crossed the line that ruling drew.
+
+### Owners
+
+**Alex:** the feel call on his own machine (P0 exists to produce that), and the look at the end ·
+**Magii / canon:** what raw mana DOES when you break it out of the ground. ⚠ **The word "motes" is
+already taken** — ruled 2026-07-21, the garden's drifting motes are the Anemonyx's wind-borne
+seeds. Rising glow off a broken mana block is a claim about mana, and the boundary line from that
+same ruling is *"hue identity + meaning = canon; exact fog/particle/shader tuning = Jin's build."*
+So the tuning is mine and the behaviour is not. **File it as a gap before building that bucket, not
+after** · **hub:** owns `VoxelWorld.tsx`, so the two call sites and the wiring are theirs to accept
+— asked, awaiting their word · **play (me):** both new modules and their oracles.
+
+### Files
+`voxel3d/break-fx-spec.ts` (new, pure) · `voxel3d/break-fx.ts` (new, factory) · read-only:
+`voxel3d/attrs.ts`, `voxel/registry.ts`, `voxel/mine.ts`, `voxel/drops.ts`, `voxel3d/steam.ts`,
+`voxel3d/render-audit.test.ts`, `audio/bus.ts` · hub's: `voxel3d/VoxelWorld.tsx` (~`4874`, `7623`)
+
 ## 🚪 Shimmer play3d — **THE ARRIVAL WORKS, AND WATCHING IT WORK FOUND WHAT WAS UNDER IT** (2026-08-27, play lane) · *Last touched 2026-08-27 (play) — `aa7ac19` pushed, tsc 7 (baseline), crossing-in 36/36 + crossing-out 34 + crossing 25 green, arrival verified in a browser against a BUILT artifact.*
 
 ### Left off — the receiving half is no longer a claim
