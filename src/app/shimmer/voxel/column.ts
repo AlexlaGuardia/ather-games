@@ -3,7 +3,7 @@
 // ★ PURE CORE. No react/three/DOM, no imports from outside this folder.
 //
 // A COLUMN is a 16x16 footprint at full world height: 16 sections of 16³ stacked. It is the unit
-// everything below already wanted — `carveStack` and `placeOre` both take a section stack, and the
+// everything below already wanted — `carveStack` and `placeSeams` both take a section stack, and the
 // mesher's unit is the section. Named `Column`, not `Chunk`, deliberately: the tile world already
 // has `CHUNK = 64` for streaming, and reusing the word would quietly conflate a 64-tile streaming
 // cell with a 16-tile generation unit. Mapping one streaming chunk onto its 4x4 columns is the
@@ -15,7 +15,7 @@
 // features WRITE into neighbouring chunks (the 3x3 bound) — a push model, which needs the neighbour
 // to exist and be at the right stage first, and whose failure mode is the pre-1.13 cascade.
 //
-// Ours never writes outside itself. `carveStack` and `placeOre` SCAN nearby chunks' pure start
+// Ours never writes outside itself. `carveStack` and `placeSeams` SCAN nearby chunks' pure start
 // functions and apply the overlap to their OWN sections. Nothing is pushed, so nothing has to wait:
 // a column can generate in complete isolation, in any order, on any thread, and be correct.
 //
@@ -34,7 +34,7 @@ import {
 import { ZONE_ANCHORS } from './zones'
 import { plantWaystones } from './story-path'
 import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
-import { placeOre, type OreBatch, ORE_BATCHES } from './ore'
+import { placeSeams, type SeamBatch, SEAM_BATCHES } from './seams'
 import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
 import { plantBoulders, type BoulderConfig, DEFAULT_BOULDERS } from './boulders'
 import { digDens, type DenConfig, DEFAULT_DENS } from './dens'
@@ -55,9 +55,9 @@ export const SECTION = 16
 export enum Stage {
   Empty = 0,
   Terrain = 1,   // height spline + depth rule: solid host rock
-  PreOre = 2,    // tier-4 pockets, before anything cuts through them
+  PreSeams = 2,    // tier-4 pockets, before anything cuts through them
   Carved = 3,    // tunnels and caverns
-  PostOre = 4,   // tiers 1-3, so they land in cave walls
+  PostSeams = 4,   // tiers 1-3, so they land in cave walls
   Vegetation = 5, // trees — last, because they stand on finished ground
   Ready = 6,
 }
@@ -69,7 +69,7 @@ export interface ColumnConfig {
   height: HeightConfig
   depth: DepthConfig
   carve: CarveConfig
-  ore: OreBatch[]
+  seams: SeamBatch[]
   trees: TreeConfig
   boulders: BoulderConfig
   dens: DenConfig
@@ -81,7 +81,7 @@ export const DEFAULT_COLUMN: ColumnConfig = {
   height: DEFAULT_HEIGHT,
   depth: DEFAULT_DEPTH,
   carve: DEFAULT_CARVE,
-  ore: ORE_BATCHES,
+  seams: SEAM_BATCHES,
   trees: DEFAULT_TREES,
   boulders: DEFAULT_BOULDERS,
   dens: DEFAULT_DENS,
@@ -364,9 +364,9 @@ export function generateColumn(
   const bare = (col.stage === Stage.Terrain && upTo >= Stage.Ready && !col.overrides)
     ? col.sections.map(sec => Uint16Array.from(sec.data)) : null
 
-  if (col.stage < Stage.PreOre && upTo >= Stage.PreOre) {
-    placeOre(col.sections, wx, 0, wz, cfg.chunk, seed, 'pre', cfg.ore)
-    col.stage = Stage.PreOre
+  if (col.stage < Stage.PreSeams && upTo >= Stage.PreSeams) {
+    placeSeams(col.sections, wx, 0, wz, cfg.chunk, seed, 'pre', cfg.seams)
+    col.stage = Stage.PreSeams
   }
 
   if (col.stage < Stage.Carved && upTo >= Stage.Carved) {
@@ -395,9 +395,9 @@ export function generateColumn(
     col.stage = Stage.Carved
   }
 
-  if (col.stage < Stage.PostOre && upTo >= Stage.PostOre) {
-    placeOre(col.sections, wx, 0, wz, cfg.chunk, seed, 'post', cfg.ore)
-    col.stage = Stage.PostOre
+  if (col.stage < Stage.PostSeams && upTo >= Stage.PostSeams) {
+    placeSeams(col.sections, wx, 0, wz, cfg.chunk, seed, 'post', cfg.seams)
+    col.stage = Stage.PostSeams
   }
 
   if (col.stage < Stage.Vegetation && upTo >= Stage.Vegetation) {
@@ -410,9 +410,9 @@ export function generateColumn(
     // asks the GENERATED surface material, never what has been written into the column, so it can
     // never see a boulder that is already there.
     //
-    // ★ AND THIS ORDER IS ALSO WHAT PROTECTS BOULDERS FROM ORE — for free. The pipeline is
+    // ★ AND THIS ORDER IS ALSO WHAT PROTECTS BOULDERS FROM SEAM — for free. The pipeline is
     // `depth → pre-carve ore → carvers → post-carve ore → vegetation`, so ore cannot land INSIDE a
-    // boulder: those cells do not exist when either ore phase runs, and `placeOre` discards mass
+    // boulder: those cells do not exist when either ore phase runs, and `placeSeams` discards mass
     // above the surface anyway.
     //
     // ⚠ THE REVERSE IS NOT FREE, AND `plantBoulders` OWNS IT. Landing last means a boulder writes

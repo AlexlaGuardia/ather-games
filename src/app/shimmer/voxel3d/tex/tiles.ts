@@ -16,7 +16,7 @@
 // The wrong economy here would be saving half a megabyte and buying a renumbering.
 
 import { MAT } from '../../voxel/depth'
-import { ORE } from '../../voxel/ore'
+import { SEAM } from '../../voxel/seams'
 import { WOOD } from '../../voxel/trees'
 import { MATERIAL_COLOR } from '../attrs'
 import { baseOf } from '../../voxel/depth'
@@ -28,8 +28,8 @@ export const BOTTOM = 2
 /** Ordered — a material's position here IS its slot, so do not reorder without rebuilding. */
 export const TILE_MATERIALS: number[] = [
   MAT.PACKED_CLOUD, MAT.DEEP_STONE, MAT.STONE, MAT.SUBSOIL, MAT.TOPSOIL, MAT.SAND, MAT.WATER,
-  ORE.RAW_MANA, ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER,
-  ORE.PURE_CORE, ORE.ATHER_CRYSTAL,
+  SEAM.RAW_MANA, SEAM.ELEMENT_VIOLET, SEAM.ELEMENT_STORM, SEAM.ELEMENT_EARTH, SEAM.ELEMENT_WATER,
+  SEAM.PURE_CORE, SEAM.ATHER_CRYSTAL,
   // ⚠ APPEND ONLY — a material's position here IS its layer slot. Wood added 2026-08-07 with trees.
   WOOD.GOLDWOOD_LOG, WOOD.GOLDWOOD_LEAVES,
   WOOD.SHIMMEROAK_LOG, WOOD.SHIMMEROAK_LEAVES,
@@ -488,7 +488,7 @@ function writeOre(dst: Layer, size: number, material: number, seed: number) {
 
 // ── wood ─────────────────────────────────────────────────────────────────────────────────────────
 // These exist because they were MISSING: TILE_MATERIALS listed the wood ids (so layerOf mapped them
-// to real slots) but paintFor had no cases for them, and the switch's `default` is the ORE painter.
+// to real slots) but paintFor had no cases for them, and the switch's `default` is the SEAM painter.
 // Every log and every leaf block rendered as crystal shards in deep-stone host rock — Alex's "the
 // trees are made out of stone ore blocks", 2026-08-07. The fallback checker never fired because the
 // materials WERE mapped; the hole was between the slot table and the painter. When you append to

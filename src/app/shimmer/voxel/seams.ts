@@ -1,14 +1,33 @@
-// Ore features — the Prospecting ladder, buried at depth.
+// Seam features — the Prospecting ladder, buried at depth.
+//
+// ── ⛔ THIS FILE WAS `ore.ts` AND THE WORLD HAS NO ORE (renamed 2026-08-28, Alex's call) ───────
+// Canon: there is no ore in the Ather. What is down here is MANA — held still by a lattice, in
+// seams. The player-facing half was already correct and had been for a long time: every entry in
+// `registry.ts` is named a *Seam* and drops a shard, a crystal or a core, and nothing a keeper
+// reads has ever said "ore". Only the code said it — `ORE`, `isOre`, `placeOre`, `ORE_BATCHES`,
+// `PreOre`/`PostOre`, a `cfg.ore` field, this filename.
+//
+// ⚠ IT SURVIVED PRECISELY BECAUSE NOTHING BROKE. A name that encodes a substance the world does
+// not contain is the `model_pools` problem — a key that outlived two decommissions while pointing
+// at a third model — and it is invisible to every gate here: `npm run canon` reports vocabulary
+// only for nouns canon has listed as fully RETIRED, and "ore" was never retired, it simply never
+// existed. A word that was always wrong is harder to catch than one that went wrong.
+//
+// ★ AND IT IS NOT COSMETIC: the word teaches. "Ore" carries a Minecraft model — inert rock with
+// metal in it — into a system whose whole break behaviour turns on mana being HELD and then
+// released (see `break-fx-spec.ts`'s lattice split, and the no-metal-over-buildings law). Two
+// buckets in that file are named `crystal` and `rawmana` for exactly this reason. The generator
+// was the last place still calling it the other thing.
 //
 // ★ PURE CORE. No react/three/DOM, no imports from outside this folder.
 //
 // ── WHY THIS IS A FEATURE STAGE AND NOT PART OF THE DEPTH RULE ───────────────────────────────
-//   depth rule (host rock)  →  PRE-CARVE ore  →  CARVERS  →  POST-CARVE ore  →  vegetation
+//   depth rule (host rock)  →  PRE-CARVE seams  →  CARVERS  →  POST-CARVE seams  →  vegetation
 //
-// Ore sits on BOTH sides of the carvers deliberately, and that is the whole reason it cannot live
-// in `depth.ts`. Tiers 1–3 are placed AFTER carving, so they appear in the walls of a cave you walk
-// into. Tier 4 is placed BEFORE, so a carver slices through the pocket and you break into a seam by
-// luck. Fold ore into the depth rule and every ore becomes pre-carve, permanently.
+// Seams sit on BOTH sides of the carvers deliberately, and that is the whole reason they cannot
+// live in `depth.ts`. Tiers 1–3 are placed AFTER carving, so they appear in the walls of a cave you
+// walk into. Tier 4 is placed BEFORE, so a carver slices through the pocket and you break into a
+// seam by luck. Fold seams into the depth rule and every one becomes pre-carve, permanently.
 //
 // ── ★ THE LADDER ALREADY EXISTED; DEPTH IS JUST THE AXIS IT WANTED ───────────────────────────
 // `world/resources.ts` gates the four Prospecting nodes at minLevel 1 / 4 / 7 / 10. That is already
@@ -29,8 +48,8 @@ import { hash2, mixSeed } from './noise'
 import { MAT } from './depth'
 import { Section, AIR } from './section'
 
-/** Ore palette indices, continuing after the terrain materials in `MAT`. */
-export const ORE = {
+/** Seam palette indices, continuing after the terrain materials in `MAT`. */
+export const SEAM = {
   RAW_MANA: 16,
   ELEMENT_VIOLET: 17,
   ELEMENT_STORM: 18,
@@ -50,10 +69,10 @@ export const ORE = {
  *
  * ⚠ KEEP 16-22 CONTIGUOUS, for the same reason the plant ranges say so.
  */
-export const isOre = (m: number): boolean => m >= ORE.RAW_MANA && m <= ORE.ATHER_CRYSTAL
+export const isSeam = (m: number): boolean => m >= SEAM.RAW_MANA && m <= SEAM.ATHER_CRYSTAL
 
 /** Which element a crystal is, resolved at PLACEMENT (steal #11) rather than rolled on break. */
-const ELEMENTS = [ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER]
+const ELEMENTS = [SEAM.ELEMENT_VIOLET, SEAM.ELEMENT_STORM, SEAM.ELEMENT_EARTH, SEAM.ELEMENT_WATER]
 
 export interface Band {
   min: number
@@ -62,7 +81,7 @@ export interface Band {
   plateau: number
 }
 
-export interface OreBatch {
+export interface SeamBatch {
   /** Matches the ruled NodeType family in resources.ts. */
   id: string
   /** Palette index, or null when the batch resolves a state at placement (element crystal). */
@@ -93,9 +112,9 @@ const ROCK = [MAT.STONE, MAT.DEEP_STONE] as const
  * in this file: one float decides whether an ore is something you stumble into or something you go
  * and dig for.
  */
-export const ORE_BATCHES: OreBatch[] = [
+export const SEAM_BATCHES: SeamBatch[] = [
   // ── tier 1 · raw mana (minLevel 1) — the ore you see in every cave wall ────────────────────
-  { id: 'raw_mana', material: ORE.RAW_MANA, phase: 'post', perChunk: 18,   // scaled with the band: the rebalance shrank the rock, and unshrunk counts doubled the density
+  { id: 'raw_mana', material: SEAM.RAW_MANA, phase: 'post', perChunk: 18,   // scaled with the band: the rebalance shrank the rock, and unshrunk counts doubled the density
     band: { min: 16, max: 112, plateau: 96 },       // effectively uniform: it is everywhere
     // (bands rode the datum down 40 in the vertical rebalance — mass above the surface is discarded)
     size: 9, discardOnAirExposure: 0, targets: ROCK },
@@ -109,17 +128,17 @@ export const ORE_BATCHES: OreBatch[] = [
     size: 7, discardOnAirExposure: 0.25, targets: ROCK },
 
   // ── tier 3 · pure core (minLevel 7) — buried by design, rewards tunnelling ─────────────────
-  { id: 'pure_core', material: ORE.PURE_CORE, phase: 'post', perChunk: 5,
+  { id: 'pure_core', material: SEAM.PURE_CORE, phase: 'post', perChunk: 5,
     band: { min: 6, max: 76, plateau: 0 },          // triangle peaked at y=41
     size: 5, discardOnAirExposure: 0.7, targets: ROCK },
-  { id: 'pure_core_deep', material: ORE.PURE_CORE, phase: 'post', perChunk: 3,
+  { id: 'pure_core_deep', material: SEAM.PURE_CORE, phase: 'post', perChunk: 3,
     band: { min: 5, max: 40, plateau: 35 },
     size: 5, discardOnAirExposure: 0.7, targets: ROCK },
 
   // ── tier 4 · ather crystal (minLevel 10) — PRE-carve, so carvers slice it open ─────────────
   // A rare large pocket rather than a trickle. Placed before the carvers precisely so that finding
   // one is sometimes luck (a cavern cut through it) and sometimes work (you dug to the right depth).
-  { id: 'ather_crystal', material: ORE.ATHER_CRYSTAL, phase: 'pre', perChunk: 1.4,
+  { id: 'ather_crystal', material: SEAM.ATHER_CRYSTAL, phase: 'pre', perChunk: 1.4,
     band: { min: 5, max: 44, plateau: 0 },          // triangle peaked at y=24
     size: 22, discardOnAirExposure: 0, targets: ROCK },
 ]
@@ -164,9 +183,9 @@ const veinSec = new Array<Section | null>(MAX_VEIN)
  * each voxel is dispatched to the section that owns it. Doing it per-section re-rolls every nearby
  * attempt once per section, which measured at a 12x penalty for carvers and would be worse here.
  */
-export function placeOre(
+export function placeSeams(
   sections: (Section | null)[], ox: number, oy0: number, oz: number, chunk: number, seed: number,
-  phase: 'pre' | 'post', batches: OreBatch[] = ORE_BATCHES,
+  phase: 'pre' | 'post', batches: SeamBatch[] = SEAM_BATCHES,
 ): number {
   const first = sections.find(Boolean)
   if (!first) return 0

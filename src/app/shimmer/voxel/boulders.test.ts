@@ -7,7 +7,7 @@
 //     boulder's own centre, both answers would still be deterministic and a single column would
 //     still look perfect — and every boulder crossing a chunk boundary would grow a crack.
 //
-//  §6 ORE — the stage order that protects boulders from ore is exactly what exposes ore to
+//  §6 SEAM — the stage order that protects boulders from ore is exactly what exposes ore to
 //     boulders. A boulder landing on an exposed element crystal converts it to stone that drops
 //     rubble, which moves the rarity of a third of the canon evolution grid and is invisible in
 //     play: no error, no wrong pixel, just slightly fewer crystals forever. This is the assert that
@@ -24,7 +24,7 @@ import { SCATTER_DRESS, MAX_BOULDER_K } from './scatter'
 import { LAND_IDS, landMix, dominantLand, type LandId } from './character'
 import { Section, AIR } from './section'
 import { MAT } from './depth'
-import { ORE, isOre, placeOre, ORE_BATCHES } from './ore'
+import { SEAM, isSeam, placeSeams, SEAM_BATCHES } from './seams'
 import { isLogMat, isLeafMat } from './trees'
 
 let pass = 0
@@ -194,7 +194,7 @@ const CFG = DEFAULT_BOULDERS
     `★★ and stands at least 3 rows proud everywhere in the band (worst ${worstRows} rows) — two rows is a bump, not a boulder`)
 }
 
-// ── 6/7. ★★ BOULDERS DO NOT EAT ORE, LOGS OR LEAVES ────────────────────────────────────────────
+// ── 6/7. ★★ BOULDERS DO NOT EAT SEAM, LOGS OR LEAVES ────────────────────────────────────────────
 // ⚠⚠ REWRITTEN AFTER THREE MUTATIONS SURVIVED THE FIRST VERSION, and the reason is worth more than
 // the asserts. The first cut planted boulders into an ore fixture and checked the ore count had not
 // moved — which passed with the refusal DELETED, because no boulder ever reached those windows.
@@ -230,11 +230,11 @@ const CFG = DEFAULT_BOULDERS
 
   if (hitX >= 0) {
     const ox = hitX * SIZE
-    // ── ORE. Checkerboard so the boulder must write into the gaps while sparing every ore cell.
-    const oreW = mk(); fill(oreW, i => (i % 2 === 0 ? ORE.ELEMENT_EARTH : AIR))
-    const oreBefore = count(oreW, isOre)
+    // ── SEAM. Checkerboard so the boulder must write into the gaps while sparing every ore cell.
+    const oreW = mk(); fill(oreW, i => (i % 2 === 0 ? SEAM.ELEMENT_EARTH : AIR))
+    const oreBefore = count(oreW, isSeam)
     plantBoulders(oreW, ox, 0, 0, SIZE, SEED, GROUND, SEA)
-    const oreAfter = count(oreW, isOre)
+    const oreAfter = count(oreW, isSeam)
     const stoneInOre = count(oreW, m => m === MAT.STONE)
     ok(oreBefore > 0, `the ore fixture holds ore (${oreBefore} cells)`)
     ok(stoneInOre > 0, `★★ the boulder DID write into this ore window (${stoneInOre} cells) — the collision is real`)

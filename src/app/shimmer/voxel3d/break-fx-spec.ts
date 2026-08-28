@@ -23,7 +23,7 @@
 // how a sapling's icon came to be a cube while the world drew a cross.
 
 import { MAT, baseOf, isPlant, isSapling } from '../voxel/depth'
-import { isOre, ORE } from '../voxel/ore'
+import { isSeam, SEAM } from '../voxel/seams'
 import { isLogMat, isLeafMat } from '../voxel/trees'
 import { blockDef } from '../voxel/registry'
 import { MATERIAL_COLOR } from './attrs'
@@ -58,11 +58,11 @@ export function bucketOf(material: number): BreakBucket | null {
   // there.** So crystal shards are STILL lattice and still hold (they fall lit, and only the new
   // fracture faces breathe), while raw mana never had a lattice and has nothing keeping it, so it
   // breathes out almost entirely and what falls is dull spent stone.
-  // ⚠ RAW_MANA MUST BE TESTED BEFORE `isOre`, which spans the whole ladder RAW_MANA..ATHER_CRYSTAL
+  // ⚠ RAW_MANA MUST BE TESTED BEFORE `isSeam`, which spans the whole ladder RAW_MANA..ATHER_CRYSTAL
   // and would otherwise swallow it — the same narrowest-first rule the header states, now with a
   // case where getting it backwards is silent: every seam would simply read as crystal.
-  if (m === ORE.RAW_MANA) return 'rawmana'
-  if (isOre(m)) return 'crystal'
+  if (m === SEAM.RAW_MANA) return 'rawmana'
+  if (isSeam(m)) return 'crystal'
   if (m === MAT.SAND) return 'sand'
   const def = blockDef(m)
   if (!def) return null

@@ -30,7 +30,7 @@ import { Column, SECTION } from './column'
  * loader can warn, migrate, or refuse rather than quietly producing a broken world.
  */
 // v2 (2026-08-07): per-item seeds now go through `mixSeed`. That fixed a real distribution bug
-// (see noise.ts) but it also MOVES EVERY CARVE, ORE VEIN AND TREE — which is exactly the case this
+// (see noise.ts) but it also MOVES EVERY CARVE, SEAM VEIN AND TREE — which is exactly the case this
 // constant exists for. A v1 save's edits were diffed against a world that no longer exists.
 // v3: valley-floor shaping + woodland mask (2026-08-07) — the surface moved, so v2 edits may sit
 // above or below the ground they were made on. The warning is honest; the edits still apply.

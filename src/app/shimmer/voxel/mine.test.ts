@@ -2,7 +2,7 @@
 
 import { AIR } from './section'
 import { MAT } from './depth'
-import { ORE } from './ore'
+import { SEAM } from './seams'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from './mine'
 import { breakSeconds, canBreak, blockDef, materialForItem, BLOCKS } from './registry'
 
@@ -14,7 +14,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const world = (x: number, y: number, z: number): number => {
   if (y <= 0) return MAT.STONE
   if (x === 3 && z === 0 && y <= 3) return MAT.STONE
-  if (x === 6 && z === 0 && y === 2) return ORE.RAW_MANA
+  if (x === 6 && z === 0 && y === 2) return SEAM.RAW_MANA
   return AIR
 }
 
@@ -62,20 +62,20 @@ const world = (x: number, y: number, z: number): number => {
 
   // ★ The tier gate must REFUSE, not slow. A player grinding 40s on a block that was never going
   // to break is the worst version of this mechanic.
-  ok(breakSeconds(ORE.PURE_CORE, 1, 'prospecting') === Infinity, '★ a tier-1 spike REFUSES pure core')
-  ok(breakSeconds(ORE.PURE_CORE, 2, 'prospecting') < Infinity, 'a tier-2 spike breaks it')
-  ok(breakSeconds(ORE.ATHER_CRYSTAL, 2, 'prospecting') === Infinity, 'ather crystal needs tier 3')
-  ok(breakSeconds(ORE.ATHER_CRYSTAL, 3, 'prospecting') < Infinity, 'and a tier-3 spike gets it')
+  ok(breakSeconds(SEAM.PURE_CORE, 1, 'prospecting') === Infinity, '★ a tier-1 spike REFUSES pure core')
+  ok(breakSeconds(SEAM.PURE_CORE, 2, 'prospecting') < Infinity, 'a tier-2 spike breaks it')
+  ok(breakSeconds(SEAM.ATHER_CRYSTAL, 2, 'prospecting') === Infinity, 'ather crystal needs tier 3')
+  ok(breakSeconds(SEAM.ATHER_CRYSTAL, 3, 'prospecting') < Infinity, 'and a tier-3 spike gets it')
   ok(canBreak(MAT.STONE, 1, 'prospecting') && !canBreak(MAT.STONE, 0, null), 'canBreak agrees with breakSeconds')
 }
 
 // ── 5. the ladder is monotone in effort ──────────────────────────────────────────────────────
 {
   const t = (m: number) => breakSeconds(m, 3, 'prospecting')
-  ok(t(MAT.STONE) < t(ORE.RAW_MANA), 'ore is harder than its host rock')
-  ok(t(ORE.RAW_MANA) < t(ORE.ELEMENT_VIOLET), 'tier 2 is harder than tier 1')
-  ok(t(ORE.ELEMENT_VIOLET) < t(ORE.PURE_CORE), 'tier 3 is harder than tier 2')
-  ok(t(ORE.PURE_CORE) < t(ORE.ATHER_CRYSTAL), 'tier 4 is hardest')
+  ok(t(MAT.STONE) < t(SEAM.RAW_MANA), 'ore is harder than its host rock')
+  ok(t(SEAM.RAW_MANA) < t(SEAM.ELEMENT_VIOLET), 'tier 2 is harder than tier 1')
+  ok(t(SEAM.ELEMENT_VIOLET) < t(SEAM.PURE_CORE), 'tier 3 is harder than tier 2')
+  ok(t(SEAM.PURE_CORE) < t(SEAM.ATHER_CRYSTAL), 'tier 4 is hardest')
   ok(breakSeconds(MAT.STONE, 3, 'prospecting') < breakSeconds(MAT.STONE, 1, 'prospecting'),
      'a better spike is faster on the same block')
 }
@@ -114,7 +114,7 @@ const world = (x: number, y: number, z: number): number => {
 {
   const r = tickBreak(null, { x: 0, y: 0, z: 0, material: MAT.PACKED_CLOUD }, 5, 3, 'prospecting')
   ok(r.state === null && !r.broken, 'the cloud floor accrues no progress and never breaks')
-  const r2 = tickBreak(null, { x: 0, y: 0, z: 0, material: ORE.PURE_CORE }, 5, 1, 'prospecting')
+  const r2 = tickBreak(null, { x: 0, y: 0, z: 0, material: SEAM.PURE_CORE }, 5, 1, 'prospecting')
   ok(r2.state === null && !r2.broken, 'an under-tier tool accrues nothing')
 }
 
@@ -122,9 +122,9 @@ const world = (x: number, y: number, z: number): number => {
 {
   ok(dropsFor(MAT.PACKED_CLOUD).length === 0, 'the cloud floor drops nothing')
   ok(dropsFor(MAT.WATER).length === 0, 'water drops nothing')
-  ok(dropsFor(ORE.RAW_MANA)[0]?.itemId === 'raw_mana_shard', 'raw mana drops the RULED shard id')
-  ok(dropsFor(ORE.PURE_CORE)[0]?.itemId === 'pure_mana_core', 'pure core drops the ruled core id')
-  ok(dropsFor(ORE.ATHER_CRYSTAL)[0]?.itemId === 'ather_crystal', 'ather crystal drops the ruled id')
+  ok(dropsFor(SEAM.RAW_MANA)[0]?.itemId === 'raw_mana_shard', 'raw mana drops the RULED shard id')
+  ok(dropsFor(SEAM.PURE_CORE)[0]?.itemId === 'pure_mana_core', 'pure core drops the ruled core id')
+  ok(dropsFor(SEAM.ATHER_CRYSTAL)[0]?.itemId === 'ather_crystal', 'ather crystal drops the ruled id')
   // Placeable blocks must round-trip: break it, hold it, put it back as the same material.
   let bad = 0
   for (const b of BLOCKS) {
@@ -140,8 +140,8 @@ const world = (x: number, y: number, z: number): number => {
 // A material with no BlockDef is unmineable and unnamed — it would read as an invisible wall.
 {
   const generated = [MAT.PACKED_CLOUD, MAT.DEEP_STONE, MAT.STONE, MAT.SUBSOIL, MAT.TOPSOIL, MAT.SAND, MAT.WATER,
-    ORE.RAW_MANA, ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER,
-    ORE.PURE_CORE, ORE.ATHER_CRYSTAL]
+    SEAM.RAW_MANA, SEAM.ELEMENT_VIOLET, SEAM.ELEMENT_STORM, SEAM.ELEMENT_EARTH, SEAM.ELEMENT_WATER,
+    SEAM.PURE_CORE, SEAM.ATHER_CRYSTAL]
   const missing = generated.filter(m => !blockDef(m))
   ok(missing.length === 0, `every generated material has a BlockDef (missing: ${missing.join(',')})`)
 }

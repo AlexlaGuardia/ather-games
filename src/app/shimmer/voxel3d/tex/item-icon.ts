@@ -397,7 +397,7 @@ export function flatIcon(itemId: string, size = ICON): Uint8Array | null {
 /**
  * The icon for a material as a raw RGBA buffer.
  *
- * ⚠ CALLERS MUST CHECK `hasTileArt` FIRST. `paintFor`'s switch defaults to the ORE painter, so a
+ * ⚠ CALLERS MUST CHECK `hasTileArt` FIRST. `paintFor`'s switch defaults to the SEAM painter, so a
  * material with no case of its own comes back as crystal in host rock — which is how the ground
  * cover icons rendered as magenta gemstones (caught by looking at `scripts/icon-sheet.mts`, not by
  * any test). It is the same hole this file's own header warns about between TILE_MATERIALS and the

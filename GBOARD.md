@@ -111,6 +111,74 @@ instead of reading the recipe, and the numbers were wrong in the one way the ora
 ### Files
 `voxel3d/break-fx-spec.ts` · `voxel3d/break-fx.ts` · `voxel3d/break-fx-spec.test.ts`
 
+## ⛏ Shimmer voxel — **THERE IS NO ORE IN THE ATHER, AND A VERIFICATION STEP TOOK PROD DOWN** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, night) — tsc 7 (baseline), canon 0 CONFLICT / 13 CLEAN, seams oracle 83/83, 5/5 mutations caught.*
+
+### Left off — two stale claims closed, one live incident caused and fixed
+
+- **⛔ `ore.ts` → `seams.ts`, AND EVERY IDENTIFIER WITH IT** (Alex's call). `ORE`→`SEAM`,
+  `isOre`→`isSeam`, `placeOre`→`placeSeams`, `OreBatch`/`ORE_BATCHES`, `Stage.PreOre`/`PostOre`,
+  the `cfg.ore` field, plus a play3d placeholder `itemId: 'ore'` naming an item the world does not
+  have. 22 files, 16 importers, done with `sed` rather than by hand — **a wide shallow diff is
+  exactly the shape that hides a transcription slip**, and a mechanical swap against a typechecker
+  is reviewable where 22 bespoke edits are not. `git mv` so history follows.
+- **★★ THE PLAYER-FACING HALF WAS ALREADY CLEAN AND HAD BEEN FOR MONTHS.** Every `registry.ts`
+  entry is a *Seam* dropping a shard, a crystal or a core; nothing a keeper reads ever said "ore".
+  Only the code said it, and **it survived precisely because nothing broke** — the `model_pools`
+  problem, a name encoding a substance the world does not contain. ⚠ And no gate could catch it:
+  `npm run canon` reports vocabulary only for nouns canon has listed as **retired**, and "ore" was
+  never retired, it simply never existed. **A word that was always wrong is harder to catch than
+  one that went wrong.**
+- **★ NOT COSMETIC — THE WORD TEACHES.** "Ore" carries a Minecraft model (inert rock with metal in
+  it) into a system whose entire break behaviour turns on mana being HELD by a lattice and then
+  released. `break-fx-spec.ts` already named its two buckets `crystal` and `rawmana` for that
+  reason; the generator was the last place still calling it the other thing.
+- **★★★ THE GUARD READS `codeOnly()`, AND THAT IS THE WHOLE TRICK.** It blanks comments AND string
+  bodies, so it **physically cannot see the paragraphs explaining the rename** — including the ones
+  that must spell the banned word to explain it. That is the `CROP_DEFS` trap (documenting a marker
+  created a marker); the fix is structural, not careful wording. 5/5 mutations caught, including
+  **the tempting `export const ORE = SEAM` back-compat alias**, which is the form a future reader
+  would actually reach for.
+- **⚠ TWO OF MY FIRST MUTATIONS CRASHED RATHER THAN FAILED, WHICH IS NEITHER A PASS NOR A FAIL.**
+  One was invalid syntax (a `TransformError` scores as neither), one was `readFileSync` on a
+  missing file. The second is the real one: this guard is **a list of other files' names**, so it
+  goes stale the moment one is renamed — which is exactly what just happened to `ore.ts`. An
+  unreadable file now files a NAMED failure saying the list is stale, not clean.
+- **✔ `voxel/territory.ts:8` — the false cross-file claim, fixed.** It read *"`holds.ts:1` still
+  opens 'story-node strongholds' — worth correcting there"*. That file was corrected; this sentence
+  was not, so a reader arriving here was dispatched to repair something already repaired, in a file
+  this one does not own. ⚠ **Not simply updated: an updated cross-reference rots exactly as fast as
+  the one it replaces.** Replaced by a property assert over both headers' FIRST LINE — first line
+  only, because both quote "stronghold" correctly below while explaining the ban, and
+  `story-path.ts:10` quotes it verbatim by design.
+
+### ★★★ AND THE INCIDENT: A VERIFICATION STEP TOOK THE LIVE WORLD DOWN FOR ~2 MINUTES
+
+Running `scripts/build-worker.mjs` **on its own**, purely to check the rename's module graph still
+resolved, unlinked `public/voxel-gen.worker.ecc155dbbd.js` — **the hash the deployed bundle was
+still asking for.** It went **500** while the app kept answering **200**. Restored from git (a
+deleted TRACKED file, nothing uncommitted at risk) and re-verified 200.
+
+- **⚠⚠ THE SYMPTOM IS SILENT BY CONSTRUCTION.** A Worker whose script 404s still CONSTRUCTS, still
+  accepts `postMessage`, and simply never replies. No throw, no failed import, no console entry.
+  The world just never generates, on a site whose every instrument reads healthy.
+- **★★ THE FILE'S OWN HEADER DOCUMENTED THIS EXACT HAZARD (2026-08-20) AND STATED THE CHECK — AND
+  NOTHING HAD EVER PERFORMED IT.** Nine days of accurate prose did not stop it happening. *A
+  comment cannot check anything;* the header even ends with the right rule (*"ask the thing that is
+  running, not the thing you have"*) and had no code behind it.
+- **★ THE HAZARD IS NOT THE DEPLOY — IT IS RUNNING THE SCRIPT WITHOUT ONE.** Inside `coord build`
+  the window is seconds and the new bundle lands asking for the new hash. Standalone, prod stays
+  broken until somebody deploys, for an unbounded time, invisibly.
+- **FIXED IN THE TOOL:** the prune now scans `.next/static/chunks` for the hash the SERVED bundle
+  references and keeps that artifact, whatever it is. Proven by re-running it — *"deployed bundle
+  asks for: voxel-gen.worker.ecc155dbbd.js — keeping"*, live worker still 200. A stray 61KB
+  artifact is the entire cost; the alternative is a world that does not generate.
+
+### Files
+`voxel/seams.ts` + `seams.test.ts` (renamed from `ore.*`, +the vocabulary guard) · `voxel/`
+{`column`,`registry`,`dens`,`boulders`,`depth`,`trees`,`edits`,`territory`} · `voxel3d/`
+{`break-fx-spec`,`attrs`,`tex/tiles`,`tex/item-icon`,`tex/TileStrip`} · `play3d/HotBar.tsx` ·
+`scripts/build-worker.mjs` (the prune guard) · `src/workers/worker-url.ts`
+
 ## 🎮 Shimmer voxel3d — **THE CONTROLLER WAS FULLY DESIGNED AND ENTIRELY UNPLUGGED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, evening) — `49f96d0` pushed, 0 unpushed, tsc 7 (baseline), canon 0 CONFLICT / 13 CLEAN, input 217 asserts (was 194), 10/10 mutations caught, sweep 195/195 0 FAIL 0 KILLED. ✅ **DEPLOYED** with play's breath in the same build — `BUILD_ID BVx3gfCAIAcvIQEzGrN7f`, 157 chunks, prod 200, Alex's go, run backgrounded from a clean tree.*
 
 > **⚠ VERIFIED AS SERVED, NOT AS BUILT.** `prod answers 200` is evidence a process is alive, not that the artifact landed — the 08-27 lesson, where a mid-write kill left `.next` with no BUILD_ID while pm2 happily served the previous build and every instrument read fine. So: the new `_buildManifest.js` answers **200** and the previous BUILD_ID's answers **404**. That pair is the check. ⚠ Still NOT verified: that a pad casts in a browser. That needs Alex's hands, and it is his pass anyway.

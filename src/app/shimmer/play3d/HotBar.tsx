@@ -23,13 +23,13 @@ interface ToolGauge { id: string; label: string; glyph: string; tint: string; in
 const PH_ITEMS: (ItemStack | null)[] = [
   { itemId: 'seed', count: 12 }, { itemId: 'berry', count: 3 }, { itemId: 'potion', count: 1 }, null, null, null,
   { itemId: 'wood', count: 47 }, { itemId: 'stone', count: 21 }, { itemId: 'fiber', count: 8 }, { itemId: 'petal', count: 5 }, null, null,
-  { itemId: 'ore', count: 4 }, null, null, null, null, null,
+  { itemId: 'raw_mana_shard', count: 4 }, null, null, null, null, null,
   null, null, null, null, null, null,
 ]
 const ITEM_LOOK: Record<string, { c: string; s: string }> = {
   seed: { c: '#8fd97f', s: 'SD' }, berry: { c: '#e0607a', s: 'BR' }, potion: { c: '#6fa8e6', s: 'PO' },
   wood: { c: '#b08355', s: 'WD' }, stone: { c: '#9aa0a8', s: 'ST' }, fiber: { c: '#c8b86a', s: 'FB' },
-  petal: { c: '#e69ac8', s: 'PT' }, ore: { c: '#7fd0e6', s: 'OR' },
+  petal: { c: '#e69ac8', s: 'PT' },
   mana_draught: { c: '#5a9be6', s: 'MD' }, shard_tonic: { c: '#8f7fe6', s: 'TN' },
   shimmeroak_plank: { c: '#b08355', s: 'PL' }, amber_sap: { c: '#e0a34a', s: 'SP' }, raw_mana_shard: { c: '#6fd0e6', s: 'MS' },
   alchemy_station: { c: '#a679ff', s: 'AL' }, crafting_table: { c: '#c8a05a', s: 'CT' },

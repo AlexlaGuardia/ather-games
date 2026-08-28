@@ -25,7 +25,7 @@ import { codeOnly } from '../testing/guard'
 const DIR = join(process.cwd(), 'src/app/shimmer/voxel3d')
 import { ALL_BLOCKS, blockDef } from '../voxel/registry'
 import { MAT, baseOf } from '../voxel/depth'
-import { ORE } from '../voxel/ore'
+import { SEAM } from '../voxel/seams'
 import { WOOD } from '../voxel/trees'
 import { MATERIAL_COLOR } from './attrs'
 
@@ -58,20 +58,20 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(seen.size === ALL_BUCKETS.length, 'the buckets a real registry produces are exactly the buckets with recipes')
 }
 
-const ALL_ELEMENT_SEAMS = [ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER]
+const ALL_ELEMENT_SEAMS = [SEAM.ELEMENT_VIOLET, SEAM.ELEMENT_STORM, SEAM.ELEMENT_EARTH, SEAM.ELEMENT_WATER]
 
 // ── 3. THE MISCLASSIFICATIONS THE BRANCH ORDER EXISTS TO PREVENT ───────────────────────────────
 // Each of these passed through a WRONG branch in a draft of this file, so each is a real defect
 // caught rather than a hypothetical.
 {
-  ok(bucketOf(ORE.RAW_MANA) === 'rawmana',
+  ok(bucketOf(SEAM.RAW_MANA) === 'rawmana',
      "raw mana is not swallowed by stone — its skill is 'prospecting' too, so a plain skill test gets this wrong")
-  ok(bucketOf(ORE.ATHER_CRYSTAL) === 'crystal' && bucketOf(ORE.PURE_CORE) === 'crystal',
+  ok(bucketOf(SEAM.ATHER_CRYSTAL) === 'crystal' && bucketOf(SEAM.PURE_CORE) === 'crystal',
      'the lattice-bearing end of the ladder is crystal')
-  // ⚠ THE BRANCH-ORDER TRAP THIS SPLIT INTRODUCED, AND IT IS SILENT. `isOre` spans the WHOLE ladder
+  // ⚠ THE BRANCH-ORDER TRAP THIS SPLIT INTRODUCED, AND IT IS SILENT. `isSeam` spans the WHOLE ladder
   // RAW_MANA..ATHER_CRYSTAL, so if the `rawmana` test is ever moved below it every seam in the game
   // reads as crystal — no error, no unbucketed material, just the wrong break forever.
-  ok(bucketOf(ORE.RAW_MANA) !== bucketOf(ORE.ATHER_CRYSTAL),
+  ok(bucketOf(SEAM.RAW_MANA) !== bucketOf(SEAM.ATHER_CRYSTAL),
      'raw mana and ather crystal do NOT share a bucket — the lattice is what tells them apart')
   ok(ALL_ELEMENT_SEAMS.every(m => bucketOf(m) === 'crystal'),
      'every element seam is crystal — canon names them Crystal Seams and they hold a lattice')

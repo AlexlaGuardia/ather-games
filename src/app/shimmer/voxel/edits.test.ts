@@ -7,7 +7,7 @@
 
 import { AIR } from './section'
 import { MAT } from './depth'
-import { ORE } from './ore'
+import { SEAM } from './seams'
 import { Column, SECTION, makeColumn } from './column'
 import {
   GENERATOR_VERSION, editIndex, unpackIndex, recordEdit, applyEdits,
@@ -87,7 +87,7 @@ const WX = 512, WZ = 768
   ok(edits.size === 0, '★ putting the block back empties the save, it does not store a no-op')
 
   // And a genuinely different material still stores.
-  recordEdit(edits, editIndex(4, h, 4), ORE.RAW_MANA, original)
+  recordEdit(edits, editIndex(4, h, 4), SEAM.RAW_MANA, original)
   ok(edits.size === 1, 'a real change is still recorded')
 }
 

@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { buildTileArray, sliceLayer, layerOf, TOP, SIDE } from './tiles'
 import { MAT } from '../../voxel/depth'
-import { ORE } from '../../voxel/ore'
+import { SEAM } from '../../voxel/seams'
 
 /** A readable cross-section of the set, not all 43 layers — grass crown, grass flank, the rocks,
  *  the soil, and two ores so the emissive mask is visible as a shape. */
@@ -22,8 +22,8 @@ const SHOWN: [number, number, string][] = [
   [MAT.DEEP_STONE, SIDE, 'deep'],
   [MAT.SUBSOIL, SIDE, 'soil'],
   [MAT.SAND, SIDE, 'sand'],
-  [ORE.RAW_MANA, SIDE, 'mana'],
-  [ORE.ATHER_CRYSTAL, SIDE, 'ather'],
+  [SEAM.RAW_MANA, SIDE, 'mana'],
+  [SEAM.ATHER_CRYSTAL, SIDE, 'ather'],
 ]
 
 export function TileStrip() {

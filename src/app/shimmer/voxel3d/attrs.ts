@@ -7,7 +7,7 @@
 // a BufferGeometry. The main thread's share of a chunk arrival becomes four `setAttribute` calls.
 
 import { MAT } from '../voxel/depth'
-import { ORE } from '../voxel/ore'
+import { SEAM } from '../voxel/seams'
 import { WOOD } from '../voxel/trees'
 import type { MeshResult } from '../voxel/greedy'
 import { layerOf, faceOfNormal } from './tex/tiles'
@@ -116,16 +116,16 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.MOSSY_STONE_BRICK]: 0x848e83,
   [MAT.CRACKED_STONE_BRICK]: 0x93989b,
   [MAT.MOSSY_CUT_STONE]: 0x8a9184,
-  [ORE.RAW_MANA]: 0x7fd4ff,
+  [SEAM.RAW_MANA]: 0x7fd4ff,
   // Mana in the shape of a wall. Deliberately the palest, coolest thing in the table and NOT in
   // stone's family — a cast wall must never be mistaken for one you could have built.
   [MAT.CONJURED]: 0xaef2ff,
-  [ORE.ELEMENT_VIOLET]: 0xa974ff,
-  [ORE.ELEMENT_STORM]: 0xe8e46a,
-  [ORE.ELEMENT_EARTH]: 0xc4813f,
-  [ORE.ELEMENT_WATER]: 0x53b7d8,
-  [ORE.PURE_CORE]: 0xfff2c4,
-  [ORE.ATHER_CRYSTAL]: 0xff6fd0,
+  [SEAM.ELEMENT_VIOLET]: 0xa974ff,
+  [SEAM.ELEMENT_STORM]: 0xe8e46a,
+  [SEAM.ELEMENT_EARTH]: 0xc4813f,
+  [SEAM.ELEMENT_WATER]: 0x53b7d8,
+  [SEAM.PURE_CORE]: 0xfff2c4,
+  [SEAM.ATHER_CRYSTAL]: 0xff6fd0,
   // Wood — placeholders like everything else here. Each species gets a distinguishable bark/leaf
   // pair so four species read as four species before a single tile is hand-painted.
   [WOOD.GOLDWOOD_LOG]: 0x8a6a34, [WOOD.GOLDWOOD_LEAVES]: 0x5aa845,
@@ -265,13 +265,13 @@ export const MATERIAL_COLOR: Record<number, number> = {
 
 /** Materials that glow, so ore reads in an unlit cave instead of being a slightly different grey. */
 export const EMISSIVE: Record<number, number> = {
-  [ORE.RAW_MANA]: 0.55,
-  [ORE.ELEMENT_VIOLET]: 0.5,
-  [ORE.ELEMENT_STORM]: 0.5,
-  [ORE.ELEMENT_EARTH]: 0.35,
-  [ORE.ELEMENT_WATER]: 0.5,
-  [ORE.PURE_CORE]: 0.8,
-  [ORE.ATHER_CRYSTAL]: 1.0,
+  [SEAM.RAW_MANA]: 0.55,
+  [SEAM.ELEMENT_VIOLET]: 0.5,
+  [SEAM.ELEMENT_STORM]: 0.5,
+  [SEAM.ELEMENT_EARTH]: 0.35,
+  [SEAM.ELEMENT_WATER]: 0.5,
+  [SEAM.PURE_CORE]: 0.8,
+  [SEAM.ATHER_CRYSTAL]: 1.0,
   // The lantern out-glows every seam — it is the one block whose JOB is light. (Render-side only;
   // the spawn-side truth is registry `emit`, flooded by light.ts. Two systems, one story.)
   [MAT.MANA_LANTERN]: 1.0,

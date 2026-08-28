@@ -1,4 +1,4 @@
-// Ore oracle. Run: npx tsx src/app/shimmer/voxel/ore.test.ts
+// Seam oracle. Run: npx tsx src/app/shimmer/voxel/seams.test.ts
 //
 // The ore stage's failures are all "the world looks fine but the game is wrong": a tier that spawns
 // at the wrong depth breaks progression silently, an element split that drifts turns a 4-way choice
@@ -9,7 +9,9 @@ import { Section, AIR } from './section'
 import { columnHeight } from './height'
 import { materialAt, MAT, DEFAULT_DEPTH } from './depth'
 import { carveStack, DEFAULT_CARVE } from './carve'
-import { placeOre, sampleBand, ORE, ORE_BATCHES } from './ore'
+import { placeSeams, sampleBand, SEAM, SEAM_BATCHES } from './seams'
+import { readFileSync } from 'node:fs'
+import { codeOnly } from '../testing/guard'
 
 let pass = 0
 const fails: string[] = []
@@ -18,8 +20,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const SEED = 1337, CHUNK = 64, S = 16, H = 256
 const D = DEFAULT_DEPTH
 const surf = (x: number, z: number) => columnHeight(x, z, SEED)
-const ORE_IDS = Object.values(ORE) as number[]
-const ELEMENTS = [ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER]
+const ORE_IDS = Object.values(SEAM) as number[]
+const ELEMENTS = [SEAM.ELEMENT_VIOLET, SEAM.ELEMENT_STORM, SEAM.ELEMENT_EARTH, SEAM.ELEMENT_WATER]
 
 /** Full pipeline for one stack: host rock → pre-carve ore → carvers → post-carve ore. */
 function gen(ox: number, oz: number, carve = true): Section[] {
@@ -32,9 +34,9 @@ function gen(ox: number, oz: number, carve = true): Section[] {
     }
     a.push(sec)
   }
-  placeOre(a, ox, 0, oz, CHUNK, SEED, 'pre')
+  placeSeams(a, ox, 0, oz, CHUNK, SEED, 'pre')
   if (carve) carveStack(a, ox, 0, oz, CHUNK, SEED, DEFAULT_CARVE, surf, D.seaLevel)
-  placeOre(a, ox, 0, oz, CHUNK, SEED, 'post')
+  placeSeams(a, ox, 0, oz, CHUNK, SEED, 'post')
   return a
 }
 
@@ -79,15 +81,15 @@ const total = (m: number) => (census[m] || []).length
 // This is the progression itself. If two tiers swap depths, the Prospecting ladder inverts and
 // nothing in the game says so.
 {
-  const raw = med(census[ORE.RAW_MANA] || [])
+  const raw = med(census[SEAM.RAW_MANA] || [])
   const elem = med(ELEMENTS.flatMap(e => census[e] || []))
-  const pure = med(census[ORE.PURE_CORE] || [])
-  const ather = med(census[ORE.ATHER_CRYSTAL] || [])
+  const pure = med(census[SEAM.PURE_CORE] || [])
+  const ather = med(census[SEAM.ATHER_CRYSTAL] || [])
   ok(raw > elem, `★ raw mana sits above element crystal (${raw} vs ${elem})`)
   ok(elem > pure, `★ element crystal sits above pure core (${elem} vs ${pure})`)
   ok(pure > ather, `★ pure core sits above ather crystal (${pure} vs ${ather})`)
-  ok(total(ORE.RAW_MANA) > total(ORE.PURE_CORE), 'tier 1 is more common than tier 3')
-  ok(total(ORE.PURE_CORE) > 0 && total(ORE.ATHER_CRYSTAL) > 0, 'the deep tiers actually generate')
+  ok(total(SEAM.RAW_MANA) > total(SEAM.PURE_CORE), 'tier 1 is more common than tier 3')
+  ok(total(SEAM.PURE_CORE) > 0 && total(SEAM.ATHER_CRYSTAL) > 0, 'the deep tiers actually generate')
 }
 
 // ── 3. the four elements stay a four-way choice ──────────────────────────────────────────────
@@ -105,7 +107,7 @@ const total = (m: number) => (census[m] || []).length
 // something you tunnel for. If these converge, the knob is not wired.
 {
   const rate = (m: number) => (exposed[m] || 0) / Math.max(1, total(m))
-  const raw = rate(ORE.RAW_MANA), pure = rate(ORE.PURE_CORE)
+  const raw = rate(SEAM.RAW_MANA), pure = rate(SEAM.PURE_CORE)
   ok(raw > 0.01, `raw mana is genuinely visible in cave walls (${(raw * 100).toFixed(1)}%)`)
   ok(raw > pure * 2, `★ raw mana is far more exposed than pure core (${(raw * 100).toFixed(1)}% vs ${(pure * 100).toFixed(1)}%) — the discard knob is live`)
 }
@@ -154,8 +156,8 @@ const total = (m: number) => (census[m] || []).length
 
 // ── 7. phases are separate, and tier 4 is pre-carve ──────────────────────────────────────────
 {
-  ok(ORE_BATCHES.some(b => b.phase === 'pre'), 'a pre-carve batch exists')
-  ok(ORE_BATCHES.filter(b => b.phase === 'pre').every(b => b.id.startsWith('ather')), 'only ather crystal is pre-carve')
+  ok(SEAM_BATCHES.some(b => b.phase === 'pre'), 'a pre-carve batch exists')
+  ok(SEAM_BATCHES.filter(b => b.phase === 'pre').every(b => b.id.startsWith('ather')), 'only ather crystal is pre-carve')
   // Placing the 'pre' phase must not place any 'post' ore.
   // ⚠ Sampled across several sites on purpose. Tier 4 is rare by design — ~1.4 attempts per 64-wide
   // chunk, of which a 16x16 stack covers 6% of the area — so a SINGLE stack legitimately containing
@@ -167,9 +169,9 @@ const total = (m: number) => (census[m] || []).length
       for (let z = 0; z < S; z++) for (let x = 0; x < S; x++) { const h = surf(ox + x, oz + z)
         for (let y = 0; y < S; y++) sec.set(x, y, z, materialAt(ox + x, oy + y, oz + z, SEED, h)) }
       st.push(sec) }
-    placeOre(st, ox, 0, oz, CHUNK, SEED, 'pre')
+    placeSeams(st, ox, 0, oz, CHUNK, SEED, 'pre')
     for (const sec of st) for (const v of sec.data) {
-      if (v === ORE.ATHER_CRYSTAL) pre++
+      if (v === SEAM.ATHER_CRYSTAL) pre++
       else if (ORE_IDS.includes(v)) post++
     }
   }
@@ -177,7 +179,67 @@ const total = (m: number) => (census[m] || []).length
   ok(pre > 0, `the pre phase actually places ather crystal (${pre} voxels over 20 stacks)`)
 }
 
-console.log(`\nore: ${pass} passed, ${fails.length} failed`)
+// ── ★★★ THE RETIRED VOCABULARY CANNOT COME BACK, AND THE GUARD IS BLIND TO ITS OWN PROSE ─────
+// Canon: there is no ore in the Ather. `ore.ts` was renamed to this file on 2026-08-28 and every
+// identifier with it. The word survived for months because **nothing broke** — the same shape as a
+// pool key naming a model the pool does not run — and `npm run canon` cannot catch it: that gate
+// reports vocabulary only for nouns canon has listed as fully RETIRED, and "ore" was never
+// retired, it simply never existed. A word that was always wrong has no gate.
+//
+// ⚠⚠ THE TRAP THIS GUARD HAD TO AVOID IS THE ONE THAT BIT `CROP_DEFS`: **documenting a banned word
+// creates an instance of it.** Every file that explains this rename must SAY "ore", including the
+// paragraph you are reading. A naive source grep would find its own documentation and report the
+// explanation as the violation. So it reads `codeOnly()`, which blanks comments AND string bodies —
+// the guard literally cannot see prose, which is why the prose can be as thorough as it likes.
+{
+  const files = ['seams.ts', 'column.ts', 'registry.ts', 'dens.ts', 'boulders.ts', 'depth.ts',
+                 'territory.ts', 'holds.ts']
+  // ⚠ ASSERT THE READER CAN SEE ITS SUBJECT FIRST. A missing file would make every check below
+  // pass over an empty string — "I found no drift" and "I could not look" must not share a result.
+  // ⚠⚠ AND A FILE IT CANNOT OPEN MUST FAIL, NOT THROW. `readFileSync` on a renamed or moved file
+  // raises ENOENT, and a crash is NEITHER A PASS NOR A FAIL — it exits non-zero with no assert
+  // named, which under a sweep that judges by exit code is indistinguishable from a real defect
+  // and under a runner that catches it could read as a skip. This file is a list of OTHER files'
+  // names, so it goes stale the moment one of them is renamed, which is the exact thing that just
+  // happened to `ore.ts`. Say which one and keep going.
+  const seen: Record<string, string> = {}
+  for (const f of files) {
+    let raw = ''
+    try { raw = readFileSync(new URL(`./${f}`, import.meta.url), 'utf8') }
+    catch { fails.push(`${f} could not be read — this guard's file list is stale, not clean`); continue }
+    ok(raw.length > 500, `${f} read (${raw.length} bytes)`)
+    seen[f] = codeOnly(raw)
+  }
+  ok(seen['seams.ts'].includes('SEAM_BATCHES'), 'the stripper blanked the code as well as the prose')
+  ok(!seen['seams.ts'].includes('there is no ore in the Ather'),
+     'prose survived codeOnly — this guard would flag its own documentation')
+
+  // The identifiers, as whole words. `\b` matters: `SEAM_BATCHES` must not be read as `ORE`, and
+  // `before` must not be read as `ore`.
+  for (const f of files) {
+    if (seen[f] === undefined) continue   // already filed above as unreadable
+    for (const bad of [/\bORE\b/, /\bisOre\b/, /\bplaceOre\b/, /\bOreBatch\b/, /\bPreOre\b/, /\bPostOre\b/]) {
+      ok(!bad.test(seen[f]), `${f} carries the retired identifier ${bad.source} — the world has no ore`)
+    }
+  }
+
+  // ── ★★ AND THE OTHER RESERVED WORD, ASSERTED AS A PROPERTY RATHER THAN A CROSS-REFERENCE ────
+  // `shimmer-storyline.md:23` reserves "stronghold" for the Wilds; the main-map three are HOLDS.
+  // `territory.ts` used to carry a sentence saying `holds.ts:1` still had it wrong. That file was
+  // fixed and the sentence was not, so it sent readers to repair something already repaired — a
+  // claim about another file's text with no way to fail. This is its replacement: it asserts the
+  // PROPERTY, on both headers at once, and goes red instead of stale.
+  // ⚠ FIRST LINE ONLY, ON PURPOSE. Both headers quote "stronghold" below, correctly, while
+  // explaining the ban — and `story-path.ts:10` quotes it verbatim by design. The first line is
+  // the file's own claim about what these things ARE, which is the only place it can be a lie.
+  for (const f of ['holds.ts', 'territory.ts']) {
+    const first = readFileSync(new URL(`./${f}`, import.meta.url), 'utf8').split('\n')[0]
+    ok(!/stronghold/i.test(first),
+       `${f}:1 calls the story-node three "strongholds" — canon reserves that word for the Wilds`)
+  }
+}
+
+console.log(`\nseams: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)
 console.log('✅ the ladder is buried correctly')

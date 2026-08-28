@@ -79,9 +79,37 @@ const code = readFileSync('public/voxel-gen.worker.js')
 const hash = createHash('sha256').update(code).digest('hex').slice(0, 10)
 const name = `voxel-gen.worker.${hash}.js`
 
+// ── ★★★ THE PRUNE KEEPS WHATEVER THE DEPLOYED BUNDLE IS STILL ASKING FOR (2026-08-28) ─────────
+// The header above documents this hazard exactly — *"a commit that rebuilds the worker DELETES the
+// previous hash from /public"* — and states the check a human should run afterwards. It had never
+// been PERFORMED by anything, and on 2026-08-28 it bit for real: a rebuild run on its own, purely
+// to verify the rename resolved, unlinked the hash live prod was serving. `/voxel-gen.worker.
+// ecc155dbbd.js` went 500 while the app kept answering 200, which is precisely the silent shape the
+// header warns about — a Worker that constructs, accepts postMessage and never replies, so no
+// terrain arrives and nothing throws.
+//
+// ⚠ THE HAZARD IS NOT THE DEPLOY, IT IS RUNNING THIS SCRIPT WITHOUT ONE. Inside `coord build` the
+// window is a few seconds and the new bundle lands asking for the new hash. Run standalone — a
+// verification, a typecheck of the worker graph, a curious `npm run build:worker` — and prod stays
+// broken for as long as nobody deploys, with every instrument reading healthy.
+//
+// So: read the hash the SERVED bundle asks for and keep that file, whatever it is. Asking the
+// thing that is running rather than the thing we have is the header's own rule; this is it, in
+// code, where it cannot be forgotten. A stray extra artifact costs 61KB. The alternative costs a
+// world that does not generate.
+const deployed = new Set()
+try {
+  for (const f of readdirSync('.next/static/chunks')) {
+    if (!f.endsWith('.js')) continue
+    const m = readFileSync(`.next/static/chunks/${f}`, 'utf8').match(/voxel-gen\.worker\.[0-9a-f]{10}\.js/g)
+    for (const hit of m ?? []) deployed.add(hit)
+  }
+} catch { /* no .next yet — nothing is deployed, so nothing needs keeping */ }
+if (deployed.size) console.log(`   deployed bundle asks for: ${[...deployed].join(', ')} — keeping`)
+
 // Drop previous builds so /public does not accumulate a worker per deploy.
 for (const f of readdirSync('public')) {
-  if (/^voxel-gen\.worker\.[0-9a-f]{10}\.js$/.test(f) && f !== name) unlinkSync(`public/${f}`)
+  if (/^voxel-gen\.worker\.[0-9a-f]{10}\.js$/.test(f) && f !== name && !deployed.has(f)) unlinkSync(`public/${f}`)
 }
 writeFileSync(`public/${name}`, code)
 unlinkSync('public/voxel-gen.worker.js')

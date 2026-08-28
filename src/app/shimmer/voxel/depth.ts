@@ -9,7 +9,7 @@
 // height is already known analytically. `materialAt` is O(1) for any y: it never iterates a column,
 // so a chunk builder can fill sections in any order, or fill only the one section it needs.
 //
-// ⚠ ORE IS NOT HERE, DELIBERATELY. This produces HOST ROCK only. Ores are features placed later
+// ⚠ SEAM IS NOT HERE, DELIBERATELY. This produces HOST ROCK only. Ores are features placed later
 // (post-carve blobs, pre-carve pockets — WORLDGEN-RESEARCH steals #8–#11) and they overwrite what
 // this returns. Mixing them would put ore placement on the wrong side of the carver ordering, which
 // is the single decision that makes ore appear in cave walls or stay buried.
@@ -37,9 +37,9 @@ import { AIR } from './section'
  * becomes accidental canon.
  */
 // ── ★ THE MATERIAL ID MAP — one number space, four files ────────────────────────────────────────
-// MAT 0-13 + 24-30 + 40-47 + 50-56 (here) · ORE 16-22 (ore.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
+// MAT 0-13 + 24-30 + 40-47 + 50-56 (here) · SEAM 16-22 (seams.ts) · WOOD 32-39 (trees.ts) · STRUCTURE 48-49 (pieces.ts).
 // PLANTS take 24-26, in the gap between ore and wood. ⚠ The first cut put them at 14-16 because
-// MAT stops at 13 — and 16 is ORE.RAW_MANA, so a wildflower WAS a mana seam: it inherited ore
+// MAT stops at 13 — and 16 is SEAM.RAW_MANA, so a wildflower WAS a mana seam: it inherited ore
 // hardness, dropped shards, and `isPlant` matched ore and logs all through the underground.
 // Nothing warned, because these enums are separate `const` objects that never see each other.
 // Check this map before adding any material anywhere.
@@ -278,7 +278,7 @@ export const MAT = {
   // permanently scars the garden is the wrong trade; so is a perfect undo.
   //
   // ⚠ Ids 40-41, in the clean band between WOOD (32-39) and STRUCTURE (48-49). NOT 14-15: those
-  // sit against ORE's range and that adjacency is exactly how a wildflower became a mana seam.
+  // sit against SEAM's range and that adjacency is exactly how a wildflower became a mana seam.
   RUBBLE: 40,
   CUT_STONE: 41,
   // ── ★ SAPLINGS (2026-08-13) — a forest you planted ──────────────────────────────────────────
@@ -287,7 +287,7 @@ export const MAT = {
   // here. No sidecar, no lookup, and a save that survives a wipe of everything except the blocks.
   //
   // ⚠ 42-45. STRUCTURE is 48 and STRUCTURE_HALF is 49 (pieces.ts), so 42-47 is the free gap — NOT
-  // the 14-23 gap, which is ORE.
+  // the 14-23 gap, which is SEAM.
   SAPLING_GOLDWOOD: 42,
   SAPLING_SHIMMEROAK: 43,
   SAPLING_STARWILLOW: 44,
@@ -324,7 +324,7 @@ export const MAT = {
    * Never generated; only ever placed. ⚠ TBD-CANON on the name, same as everything else here.
    *
    * ⚠ 50 OPENS A NEW BAND, because 42-47 is full and STRUCTURE owns 48-49 (pieces.ts). Ids 14-15,
-   * 23 and 31 are also free and were all rejected: 14-15 sit against ORE's range (that adjacency is
+   * 23 and 31 are also free and were all rejected: 14-15 sit against SEAM's range (that adjacency is
    * how a wildflower once became a mana seam), 23 is the same story one slot up, and 31 is the lone
    * cell under WOOD's 32-39 band. A station is furniture, so 50+ is the STATION/FURNITURE band from
    * here on — the next one is 51, not another squeeze into somebody else's gap.
@@ -366,7 +366,7 @@ export const MAT = {
   // ⚠ 54 BREAKS THIS BAND'S STATED RULE AND THE RULE IS THE THING THAT WAS WRONG. The 51-53 note
   // says everything up here is "placed rather than generated" — true of 50-53, and never a
   // contract (nothing range-tests it). This is GENERATED, and it still belongs at 54: the
-  // generated band 0-13 is full, and 14-15/23/31 are all rejected for the documented ORE-adjacency
+  // generated band 0-13 is full, and 14-15/23/31 are all rejected for the documented SEAM-adjacency
   // reason that once turned a wildflower into a mana seam. So 50+ is the OVERFLOW band, not the
   // hand-placed band. Read it that way from here on.
   DECK: 54,

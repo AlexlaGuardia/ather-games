@@ -38,7 +38,7 @@ import { Section } from './section'
 import { MAT } from './depth'
 import { hash2, mixSeed } from './noise'
 import { isLogMat, isLeafMat } from './trees'
-import { isOre } from './ore'
+import { isSeam } from './seams'
 import { scatterCharacterAt, MAX_BOULDER_K } from './scatter'
 
 export interface BoulderConfig {
@@ -210,7 +210,7 @@ interface Ctx {
 }
 
 /**
- * ⚠ REFUSES ANY CELL HOLDING A LOG, A LEAF **OR ORE**, and that refusal is the whole reason boulders
+ * ⚠ REFUSES ANY CELL HOLDING A LOG, A LEAF **OR SEAM**, and that refusal is the whole reason boulders
  * are placed AFTER the trees rather than before.
  *
  * Before-trees would let a trunk grow straight out of solid rock, because `plantTrees` asks the
@@ -223,7 +223,7 @@ interface Ctx {
  * Overlap is rare by construction anyway: `boulderK` runs roughly inverse to `treeK` (crag 3.0
  * against treeK 0, highland 2.2 against 0.5, versus meadow 0.15).
  *
- * ── ★★ AND ORE IS THE ONE THAT WOULD NEVER HAVE BEEN NOTICED ───────────────────────────────────
+ * ── ★★ AND SEAM IS THE ONE THAT WOULD NEVER HAVE BEEN NOTICED ───────────────────────────────────
  * The stage order that protects boulders FROM ore is exactly what exposes ore TO boulders. The
  * pipeline is `depth → pre-carve ore → carvers → post-carve ore → VEGETATION`, so ore cannot land
  * inside a boulder (those cells do not exist yet) — but a boulder writing STONE in the vegetation
@@ -248,7 +248,7 @@ function put(c: Ctx, wx: number, wy: number, wz: number, mat: number): void {
   if (!sec) return
   const li = sec.idx(wx - c.ox, wy - c.oy0 - si * c.size, wz - c.oz)
   const cur = sec.data[li]
-  if (isLogMat(cur) || isLeafMat(cur) || isOre(cur)) return
+  if (isLogMat(cur) || isLeafMat(cur) || isSeam(cur)) return
   sec.data[li] = mat
 }
 

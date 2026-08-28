@@ -123,7 +123,7 @@ const DRESS = landCharacter({
 
 // ── 5. the table only names materials the world actually knows ──────────────────────────────────
 // ⚠ THIS IS THE ONE THAT CATCHES A TYPO'D ID, and the failure it prevents is not subtle: an
-// unregistered material has no `paintFor` case, and the tile switch's default is the ORE painter —
+// unregistered material has no `paintFor` case, and the tile switch's default is the SEAM painter —
 // which is how every tree once rendered as crystal. It also breaks unmineably, since `blockDef`
 // backs hardness and drops.
 {
@@ -188,7 +188,7 @@ const DRESS = landCharacter({
 }
 
 // ── 9. ★ EVERY GROUND HAS A TEXTURE SLOT AND A PAINTER — the "renders as crystal" trap ─────────
-// `TILE_MATERIALS` position IS the texture-array slot, and `paintFor`'s switch DEFAULTS TO THE ORE
+// `TILE_MATERIALS` position IS the texture-array slot, and `paintFor`'s switch DEFAULTS TO THE SEAM
 // PAINTER. So a ground added to the world and forgotten in that file does not fall back to plain
 // dirt — it renders as a crystal seam, in a meadow, at 45% of the world's surface. tiles.ts says so
 // twice in its own comments because it has already happened once, to the trees. This is the assert

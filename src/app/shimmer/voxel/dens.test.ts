@@ -15,7 +15,7 @@
 //     distance-from-mouth rather than as "does it look right", because a trench through a hilltop
 //     and a den mouth differ only in where the removed blocks are.
 //
-//  §7 ORE — boulders found that a feature landing on an exposed element crystal converts it to
+//  §7 SEAM — boulders found that a feature landing on an exposed element crystal converts it to
 //     stone. A den does something strictly harder to notice: it removes the crystal and leaves
 //     NOTHING, so there is no artefact for anyone to trip over. Each element gates ten canon second
 //     forms, so an unnoticed shave off crystal rarity moves a third of the evolution grid.
@@ -32,7 +32,7 @@ import { LAND_IDS, landMix, dominantLand, type LandId } from './character'
 import { Section, AIR } from './section'
 import { MAT, DEFAULT_DEPTH } from './depth'
 import { columnHeight, DEFAULT_HEIGHT } from './height'
-import { isOre, placeOre } from './ore'
+import { isSeam, placeSeams } from './seams'
 import { isLogMat, isLeafMat } from './trees'
 import { HOLDS } from './holds'
 
@@ -492,7 +492,7 @@ function allMouthsNear(cx0: number, cz0: number, n: number): [number, number][] 
   ok(opened > 20, `★ the refusal fixture actually contains a den (${opened} cells dug) — PRECONDITION`)
 
   for (const [name, mat, pred] of [
-    ['ore', ORE_SAMPLE(), isOre],
+    ['ore', ORE_SAMPLE(), isSeam],
     ['a log', LOG_SAMPLE(), isLogMat],
     ['a leaf', LEAF_SAMPLE(), isLeafMat],
   ] as [string, number, (m: number) => boolean][]) {
@@ -517,8 +517,8 @@ function ORE_SAMPLE(): number {
   const sec = new Section(SIZE)
   sec.data.fill(MAT.STONE)
   const secs = [sec] as (Section | null)[]
-  placeOre(secs, 0, 0, 0, SIZE, SEED, 'post')
-  for (const s of secs) if (s) for (const v of s.data) if (isOre(v)) return v
+  placeSeams(secs, 0, 0, 0, SIZE, SEED, 'post')
+  for (const s of secs) if (s) for (const v of s.data) if (isSeam(v)) return v
   throw new Error('ORE_SAMPLE found no ore — the fixture, not the feature, is broken')
 }
 function LOG_SAMPLE(): number { for (let m = 1; m < 4096; m++) if (isLogMat(m)) return m; return MAT.STONE }

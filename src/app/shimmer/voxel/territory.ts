@@ -5,8 +5,16 @@
 // 'stronghold' is reserved for the Wilds."* Thistle/Vetch/Brack are garden-plot scale — the game's
 // Thornlords, rung ONE of the ladder, not its top. The individuals are **hold-Moglins**
 // (`glossary.md:23`), the places are **holds / camps / plot-holds**. This file's own first line said
-// "stronghold" until canon was checked, and `holds.ts:1` still opens "story-node strongholds" —
-// worth correcting there before more code hardens around the reserved word.
+// "stronghold" until canon was checked.
+//
+// ⚠⚠ THE LINE THAT STOOD HERE MADE A FALSE CLAIM ABOUT ANOTHER FILE, AND STAYED TRUE-SOUNDING FOR
+// DAYS AFTER IT STOPPED BEING TRUE. It read *"`holds.ts:1` still opens 'story-node strongholds' —
+// worth correcting there"*. That file was corrected; this sentence was not, so a reader arriving
+// here was sent to fix something already fixed, in a file this one does not own. **A comment about
+// another file's current text is a standing claim with no way to fail** — the same shape as a doc
+// citing a test that never existed, and the reason it is not simply UPDATED here: an updated
+// cross-reference rots exactly as fast as the one it replaces. `seams.test.ts`'s reserved-word
+// guard asserts the property instead, on both headers at once, and goes red rather than stale.
 //
 // ★ PURE CORE, GEOMETRY ONLY. Imports `holds` and nothing else, for the same reason holds.ts imports
 // only story-path: no caller's height, grid or renderer can leak in, so the oracle can ask about any

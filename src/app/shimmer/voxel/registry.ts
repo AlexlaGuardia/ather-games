@@ -21,7 +21,7 @@
 import { MAT, HALF_BIT, TOP_BIT } from './depth'
 import { meadowSeedDrops } from './meadow-seed'
 
-import { ORE } from './ore'
+import { SEAM } from './seams'
 import { WOOD } from './trees'
 import { AIR } from './section'
 
@@ -440,13 +440,13 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.SPRING_CRUST, name: 'Spring Crust', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_spring_crust', count: 1 }], placeable: true },
 
   // ── the Prospecting ladder — hardness AND tier both climb, so depth gates twice over ────────
-  { material: ORE.RAW_MANA, name: 'Raw Mana Seam', hardness: 2.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'raw_mana_shard', count: 1 }], placeable: false },
-  { material: ORE.ELEMENT_VIOLET, name: 'Violet Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'violet_crystal', count: 1 }], placeable: false },
-  { material: ORE.ELEMENT_STORM, name: 'Storm Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'storm_crystal', count: 1 }], placeable: false },
-  { material: ORE.ELEMENT_EARTH, name: 'Earth Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'earth_crystal', count: 1 }], placeable: false },
-  { material: ORE.ELEMENT_WATER, name: 'Water Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'water_crystal', count: 1 }], placeable: false },
-  { material: ORE.PURE_CORE, name: 'Pure Core Seam', hardness: 4.5, skill: 'prospecting', minTier: 2, drops: [{ itemId: 'pure_mana_core', count: 1 }], placeable: false },
-  { material: ORE.ATHER_CRYSTAL, name: 'Ather Crystal Seam', hardness: 6.5, skill: 'prospecting', minTier: 3, drops: [{ itemId: 'ather_crystal', count: 1 }], placeable: false },
+  { material: SEAM.RAW_MANA, name: 'Raw Mana Seam', hardness: 2.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'raw_mana_shard', count: 1 }], placeable: false },
+  { material: SEAM.ELEMENT_VIOLET, name: 'Violet Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'violet_crystal', count: 1 }], placeable: false },
+  { material: SEAM.ELEMENT_STORM, name: 'Storm Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'storm_crystal', count: 1 }], placeable: false },
+  { material: SEAM.ELEMENT_EARTH, name: 'Earth Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'earth_crystal', count: 1 }], placeable: false },
+  { material: SEAM.ELEMENT_WATER, name: 'Water Crystal Seam', hardness: 3.0, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'water_crystal', count: 1 }], placeable: false },
+  { material: SEAM.PURE_CORE, name: 'Pure Core Seam', hardness: 4.5, skill: 'prospecting', minTier: 2, drops: [{ itemId: 'pure_mana_core', count: 1 }], placeable: false },
+  { material: SEAM.ATHER_CRYSTAL, name: 'Ather Crystal Seam', hardness: 6.5, skill: 'prospecting', minTier: 3, drops: [{ itemId: 'ather_crystal', count: 1 }], placeable: false },
 
   // ── Forestry — the four ruled woods ────────────────────────────────────────────────────────
   // ★ skill: 'forestry' means a SPIKE WILL NOT CUT A TREE and a BLADE will not break stone. The

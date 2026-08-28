@@ -55,7 +55,7 @@
 import { Section, AIR } from './section'
 import { hash2, mixSeed } from './noise'
 import { isLogMat, isLeafMat } from './trees'
-import { isOre } from './ore'
+import { isSeam } from './seams'
 import { holdIndexAt } from './holds'
 import { landMix, LAND_IDS, type LandId } from './character'
 import { type BiomeConfig, DEFAULT_BIOME } from './biome'
@@ -470,7 +470,7 @@ interface Ctx {
  * writing is the tempting simplification and it is how the notch quietly becomes a trench: the
  * planner knows where the mouth is, the writer only knows a cell.
  *
- * ⚠ AND IT REFUSES ORE, LOGS AND LEAVES. Ore is belt-and-braces — living in the Carved stage means
+ * ⚠ AND IT REFUSES SEAM, LOGS AND LEAVES. Ore is belt-and-braces — living in the Carved stage means
  * post-carve ore is dealt around us — but a REMOVAL bug is strictly nastier than the addition bug
  * boulders found: a boulder converting an element crystal leaves stone where the crystal was, and
  * a den simply leaves nothing, so there is no artefact for anyone to notice. Each element gates ten
@@ -492,7 +492,7 @@ function dig(
   const li = sec.idx(wx - c.ox, wy - c.oy0 - si * c.size, wz - c.oz)
   const cur = sec.data[li]
   if (cur === AIR) return false
-  if (isLogMat(cur) || isLeafMat(cur) || isOre(cur)) return false
+  if (isLogMat(cur) || isLeafMat(cur) || isSeam(cur)) return false
   sec.data[li] = AIR
   return true
 }

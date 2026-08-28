@@ -38,7 +38,7 @@ import { speciesFactor, treeDensityAt } from './character'
  */
 const LUMP = 0.5
 
-/** Wood materials. Continue past ORE (which ends at 22) with room to spare. */
+/** Wood materials. Continue past SEAM (which ends at 22) with room to spare. */
 export const WOOD = {
   GOLDWOOD_LOG: 32, GOLDWOOD_LEAVES: 33,
   SHIMMEROAK_LOG: 34, SHIMMEROAK_LEAVES: 35,

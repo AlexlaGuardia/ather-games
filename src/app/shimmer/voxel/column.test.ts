@@ -6,7 +6,7 @@
 
 import { AIR } from './section'
 import { MAT } from './depth'
-import { ORE } from './ore'
+import { SEAM } from './seams'
 import { Column, Stage, SECTION, makeColumn, generateColumn, meshColumn, refreshUniform, DEFAULT_COLUMN } from './column'
 import { createMeshScratch } from './greedy'
 
@@ -24,7 +24,7 @@ const scratch = createMeshScratch(SECTION)
 {
   const whole = makeColumn(512, 768, SEED)
   const stepped = new Column(512, 768, C)
-  for (const s of [Stage.Terrain, Stage.PreOre, Stage.Carved, Stage.PostOre, Stage.Ready]) generateColumn(stepped, SEED, C, s)
+  for (const s of [Stage.Terrain, Stage.PreSeams, Stage.Carved, Stage.PostSeams, Stage.Ready]) generateColumn(stepped, SEED, C, s)
   let diff = 0
   for (let i = 0; i < whole.sections.length; i++)
     for (let k = 0; k < whole.sections[i].data.length; k++)
@@ -60,7 +60,7 @@ const scratch = createMeshScratch(SECTION)
   ok(seen.has(MAT.PACKED_CLOUD), 'the column has a cloud floor')
   ok(seen.has(MAT.STONE) || seen.has(MAT.DEEP_STONE), 'the column has rock')
   ok(seen.has(AIR), 'the column has sky')
-  ok(seen.has(ORE.RAW_MANA), 'the column has ore')
+  ok(seen.has(SEAM.RAW_MANA), 'the column has ore')
   let bad = 0
   for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
     const h = col.heightAt(x, z)
