@@ -152,6 +152,40 @@ const memStore = (): Store & { keys: () => string[] } => {
      'the fallback is a real landing, never (0,0) — banned by name in the contract')
 }
 
+// ── 7. ★★★ AND THE THING THE ARRIVAL HAS TO BEAT MUST BE ABLE TO RUN AT ALL ────────────────────
+// Section 5 proves the arrival runs LAST. Precedence is only meaningful if the loser can run: the
+// saved-position resolution spent months INSIDE `if (data?.spirits?.length)`, so for a keeper with
+// no spirit it never ran, and "staged beats saved" was a rule about a branch that was dead anyway.
+//
+// ⚠ WHAT IT COST, MEASURED IN A BROWSER AGAINST THE BUILT ARTIFACT (2026-08-27, play lane): a
+// staged arrival placed the keeper in Rune Hold and the save recorded it — and the next load stood
+// them back in the Home Plot. The crossing worked and then undid itself, which reads to a player as
+// the crossing being broken. Greg's gift is the only source of a first spirit, so the keepers who
+// had this were the newest ones.
+//
+// ★ THE ASSERT IS ON THE GUARD, NOT ON A LINE NUMBER OR A BRACE COUNT. Whichever `if (…) {` most
+// recently opened before the position restore IS the condition it runs under, so asking which one
+// is nearer is asking the real question — and it stays true through reindentation, added branches
+// and moved comments, none of which a brace tally survives.
+{
+  const src = readFileSync(new URL('./Shimmer3D.tsx', import.meta.url), 'utf8')
+  const restore = src.indexOf("if (typeof data.playerTileX === 'number' && typeof data.playerTileY === 'number')")
+  ok(restore > 0, 'the saved-position restore is still findable')
+
+  const before = src.slice(0, restore)
+  const bySpirits = before.lastIndexOf('if (data?.spirits?.length) {')
+  const byData = before.lastIndexOf('if (data) {')
+  ok(bySpirits > 0, 'the spirits block is still there to be confused with')
+  ok(byData > bySpirits,
+     'the saved position is restored under `if (data)`, NOT inside the spirits block — a keeper who owns no spirit still stands where they left off')
+
+  // And the zone resolution travels with it: all three branches must be under the same guard, or a
+  // spirit-less keeper keeps their tile and loses their zone, which is a worse place than either.
+  const zoneBranch = src.indexOf('else if (data.zoneId && getZone(ALL_ZONES, data.zoneId))')
+  ok(zoneBranch > restore && src.slice(restore, zoneBranch).indexOf('if (data?.spirits?.length) {') < 0,
+     'the zone branches sit with the tile restore, under the same guard')
+}
+
 console.log(`crossing-in: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  FAIL ' + f)
 process.exit(fails.length ? 1 : 0)

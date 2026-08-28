@@ -4139,6 +4139,28 @@ export default function Shimmer3D() {
         // legal shape on load so the roster and the battlefield finally agree.
         normalizeRoster(partyRef.current, MAX_PARTY)
         setHasStarter(true)
+      }
+
+      // ── ★★★ WHERE A KEEPER STANDS IS NOT A FACT ABOUT THEIR PARTY (2026-08-27, play lane) ─────
+      // This whole resolution used to live INSIDE the `data.spirits.length` block above, so a
+      // keeper who owns no spirit had no position restored and no zone restored — every reload put
+      // them back at `START_ZONE` at the spawn tile, however far they had walked. Not a crossing
+      // bug: it is every spirit-less keeper, on every load, and Greg's gift is the only way to get
+      // a first spirit, so it is precisely the newest keepers who had it.
+      //
+      // ⚠⚠ FOUND BY THE CROSSING, BECAUSE THE CROSSING IS WHERE IT STOPS LOOKING COSMETIC. A
+      // staged arrival placed the keeper in Rune Hold correctly and the save recorded `rune-hold`
+      // 48,50 — and the NEXT load threw it away and stood them in the Home Plot. That is the
+      // contract's Rule 1 (`engine/crossing.ts`) broken one load late: *"a keeper has a real
+      // position in BOTH and should return to the one they left."* A crossing that undoes itself on
+      // reload is worse than one that never fired, because the player watched it work.
+      //
+      // ★ MEASURED, NOT REASONED. Against the BUILT artifact on :3200 with a fresh profile: born →
+      // stage the one-shot → reload lands `zoneId: rune-hold, 48,50, pending cleared` → reload
+      // again → `r-home-plot, 89,68`. The arrival block below was already written outside the
+      // spirits block for exactly this reason, and its comment says so; the restore it has to beat
+      // was still inside it, so half the precedence chain could not run at all.
+      if (data) {
         if (typeof data.playerTileX === 'number' && typeof data.playerTileY === 'number') {
           posRef.current!.set(data.playerTileX, posRef.current!.y, data.playerTileY)
         }
