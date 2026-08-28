@@ -4,6 +4,7 @@
 //   WORLD_URL=http://localhost:3201/shimmer/voxel3d?hour=12   — a lane's dev server, day pinned
 //   WORLD_GOTO=twilight-thicket                               — drive the console before shooting
 //   WORLD_CMD='tp -139 -588'                                  — any console line (owner-gated, same as GOTO)
+//   WORLD_CMD='space plot; tp 254 18'                         — several, in order, ';' separated
 //   WORLD_FLY=8                                               — rise for N seconds first (owner-only)
 //   WORLD_OWNER=1                                             — fetch the owner cookie for a GATED PAGE (dev/*)
 //   WORLD_PITCH=-10                                           — degrees; negative looks UP
@@ -196,14 +197,26 @@ const OWNER = process.env.WORLD_OWNER === '1'
   }
 
   if (GOTO || CMD) {
+    // ★ SEMICOLON-SEPARATED, because one vantage can need two commands (2026-08-27). The Home
+    // Plot's court is reached by `space plot; tp 254 18`: `/space` crosses into the plot's
+    // coordinate space and `/tp` moves within it, and NEITHER alone lands you at the court —
+    // `/tp` in the Wilds photographs Wilds terrain at the same numbers, which is the wrong-door
+    // failure this codebase already names (the plot and the Wilds share every coordinate and are
+    // different worlds). A harness that can only type one line cannot photograph that place at all.
+    const lines = (CMD ? CMD.split(';') : [`goto ${GOTO}`]).map(l => l.trim()).filter(Boolean)
     // T opens the chat, Escape closes it. Typed through the real keyboard because the console is a
     // controlled input — dispatching a synthetic KeyboardEvent sets no value and submits nothing.
-    await page.keyboard.press('KeyT')
-    await new Promise(r => setTimeout(r, 300))
-    await page.keyboard.type(CMD ? `/${CMD.replace(/^\//, '')}` : `/goto ${GOTO}`)
-    await page.keyboard.press('Enter')
-    await new Promise(r => setTimeout(r, 300))
-    await page.keyboard.press('Escape')
+    for (const line of lines) {
+      await page.keyboard.press('KeyT')
+      await new Promise(r => setTimeout(r, 300))
+      await page.keyboard.type(`/${line.replace(/^\//, '')}`)
+      await page.keyboard.press('Enter')
+      await new Promise(r => setTimeout(r, 300))
+      await page.keyboard.press('Escape')
+      // ⚠ Between commands, not only after the last one: `/space` discards every loaded column and
+      // streams a new world in, so a `/tp` typed immediately after runs against a half-built place.
+      if (lines.length > 1) await new Promise(r => setTimeout(r, 1500))
+    }
     // A teleport discards every loaded column and streams a new place in from nothing, so this
     // needs the SAME wall-clock the first load did. Shooting early photographs a blue void.
     await new Promise(r => setTimeout(r, SETTLE * 1000))
