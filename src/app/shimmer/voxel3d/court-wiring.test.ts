@@ -94,7 +94,13 @@ const once = (needle: string, n: number, what: string) => {
   ok(/isCourtMaterial\(voxel\(c\.x, c\.y, c\.z\)\)/.test(src), 'the sweep asks isCourtMaterial')
   ok(!/m === MAT\.CUT_STONE \|\| m === MAT\.MANA_LANTERN/.test(src),
      'and the two-literal whitelist is gone, not merely joined')
-  once('courtPlatformCells(SEED, oldCfg)', 1, 'a retired fold\'s floor is swept too')
+  // ★★★ THE ASSERT THAT WOULD HAVE CAUGHT THE PILE. Both paths must sweep the FLOOR, not just the
+  // socket boxes: a retired fold's court AND this fold's own previous attempt. The second is the one
+  // that was missing, and it is the one that fires on every ship — Alex watched three revs stack.
+  once('courtFloorClearCells(SEED, oldCfg)', 1, 'a retired fold\'s floor is swept')
+  once('courtFloorClearCells(SEED, cfg)', 1, 'and so is THIS fold\'s previous attempt, before re-laying')
+  ok(src.indexOf('courtFloorClearCells(SEED, cfg)') < src.indexOf('PLATFORM_MAT)'),
+     'and the sweep runs BEFORE the floor is laid, or it erases what it just wrote')
   ok(isCourtMaterial(PLATFORM_MAT), 'and the dais material is one that sweep will remove')
 }
 

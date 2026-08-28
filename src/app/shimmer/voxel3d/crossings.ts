@@ -617,8 +617,11 @@ export function courtClearCells(
  * 5 = the hub and wedges (2026-08-27, Alex: *"a bunch of stone with no real form"*): a stone hub on
  *     the focus with a wedge running out to each socket. Purely additive to a rev-4 court, but a
  *     standing one will never grow them without this, and the tier never changes again.
+ * 6 = the floor sweep (2026-08-27, Alex: *"each pass is adding more stone brick blocks ontop of the
+ *     previous attempt"*). Revs 4 and 5 laid a floor no sweep could reach, so they PILED UP. This
+ *     rev exists to run `courtFloorClearCells` over every earlier attempt and re-lay once.
  */
-export const COURT_REV = 5
+export const COURT_REV = 6
 
 /** Why the court could not stand where it was derived. Every one is a placement bug, not a refusal. */
 export type CourtMisfit =
@@ -982,6 +985,60 @@ export function courtHubCells(
   }
   return out.filter(c => reachable.has(`${c.x},${c.z}`))
 }
+
+/**
+ * Every cell a clear pass must sweep for the court's FLOOR — the dais and the hub together.
+ *
+ * ── ★★★ ALEX, 2026-08-27, STANDING IN IT: *"it almost looks as tho each pass is adding more stone
+ * brick blocks ontop of the previous attempt"* — AND IT WAS ────────────────────────────────────
+ * `courtClearCells` sweeps a box around ONE SOCKET, which was the whole footprint back when a court
+ * was four frames and nothing else. The dais and the hub span a sector far wider than those boxes,
+ * so **38-42% of every cell the court lays sat outside anything the court could later remove.**
+ * Measured before this existed: 262 of 695 cells on t0. Every rev therefore laid a floor the next
+ * rev could not take back, and they stacked. A tier change was handled — I extended that path when
+ * the dais landed — and a REV change at the SAME SITE was not, which is the case that fires every
+ * time this file ships.
+ *
+ * ⚠ A FULL DISC, NOT THE SECTOR, AND FROM THE GROUND UP. Same argument `courtClearCells` makes in
+ * its own header and the reason it is worth repeating: a sweep derived from the CURRENT geometry
+ * can only find courts the current geometry would build, which is exactly the set that does not
+ * need clearing. A past apron may have had a different angular span or margin, so the angle is not
+ * trusted and the radius carries slack.
+ *
+ * ⚠ AND THE COST IS REAL, STATED RATHER THAN DISCOVERED: a keeper who builds with cut stone, stone
+ * brick or a lamp inside their own court's footprint loses it when the court is re-laid. That is
+ * the same bargain `courtClearCells` already struck, over a larger area. The alternative is the
+ * accumulating pile Alex is looking at, which nobody can remove at all.
+ */
+export function courtFloorClearCells(
+  seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): { x: number; y: number; z: number }[] {
+  const level = courtLevel(seed, cfg)
+  if (level === null) return []
+  const a = courtAnchor(seed, cfg)
+  if (a.y === null) return []
+  const reach = COURT_RADIUS + PLATFORM_MARGIN + FLOOR_CLEAR_SLACK
+  const out: { x: number; y: number; z: number }[] = []
+  for (let dx = -reach; dx <= reach; dx++) {
+    for (let dz = -reach; dz <= reach; dz++) {
+      if (Math.hypot(dx, dz) > reach) continue
+      const x = a.x + dx, z = a.z + dz
+      const g = plotHeight(x, z, seed, cfg)
+      if (g === null) continue
+      // From the ground the dais fills off, up past the hub course that stands on it.
+      for (let y = g + 1; y <= level + FLOOR_CLEAR_HEAD; y++) out.push({ x, y, z })
+    }
+  }
+  return out
+}
+
+/**
+ * How much wider than today's apron the floor sweep reaches, and how far above the level it looks.
+ * ⚠ Slack exists so a PREVIOUS, wider apron is still reachable; head exists because the hub stands
+ * a course above the deck and a sweep stopping at `level` would leave it hanging in the air.
+ */
+export const FLOOR_CLEAR_SLACK: number = 4
+export const FLOOR_CLEAR_HEAD: number = 2
 
 /**
  * Is this block one the court laid, and therefore one the host may sweep when the court moves?

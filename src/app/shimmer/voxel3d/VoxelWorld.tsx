@@ -203,7 +203,7 @@ import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
          legacyRowSockets, courtClearCells, COURT_REV,
-         courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells } from './crossings'
+         courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells } from './crossings'
 import { crossingReady, LANDING_LABEL } from './crossing-out'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
@@ -7141,10 +7141,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // around one socket; the dais is a sector out past all of them, so the frames would come
           // up and the platform they stood on would stay — abandoned architecture, and far larger
           // than the arches. It is derived from seed + cfg, so the old one can be asked for exactly.
-          for (const c of courtPlatformCells(SEED, oldCfg)) sweep(c)
-          // ⚠ And its hub and wedges, for the same reason and by the same derivation — they sit a
-          // course ABOVE the dais, so a sweep of the platform alone leaves them standing in the air.
-          for (const c of courtHubCells(SEED, oldCfg)) sweep(c)
+          // ★★ ONE SWEEP FOR THE WHOLE FLOOR — dais, hub and wedges together, over a disc wider
+          // than any apron this station has worn and from the ground up past the hub course. A
+          // per-shape sweep can only find the shape it was written for; this is the same argument
+          // `courtClearCells` makes for the frames, one footprint out.
+          for (const c of courtFloorClearCells(SEED, oldCfg)) sweep(c)
         }
         // 3. And THIS fold's retired straight row, which no tier change would ever have reached.
         for (const sk of legacyRowSockets(SEED, cfg)) clearSite(sk, cfg, null)
@@ -7155,6 +7156,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // columns are not even covered by the new floor. A rev change moves the stone; the stone
         // does not move itself.
         for (const sk of socks) clearSite(sk, cfg, level)
+        // ★★★ AND ITS FLOOR. Alex: *"each pass is adding more stone brick blocks ontop of the
+        // previous attempt."* `clearSite` sweeps a box around each SOCKET, which was the entire
+        // footprint when a court was four frames — the dais and hub span a sector far wider, so
+        // 38-42% of every cell the court lays was outside anything that could remove it, and each
+        // rev stacked another floor on the last. A tier change already got this treatment; a rev
+        // change at the SAME SITE did not, and that is the case that fires on every ship.
+        for (const c of courtFloorClearCells(SEED, cfg)) sweep(c)
         // ★★ EVERY SOCKET STANDS, EARNED OR NOT — canon 08-24: Greg PRE-PLACES them, one lit and
         // the rest dark, and *"the station grants nothing — it displays reach the keeper has
         // already earned."* This used to lay a socket's stone only once its waymark was held, so

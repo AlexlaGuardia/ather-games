@@ -12,7 +12,7 @@ import {
   courtAnchor, sockets, socketCells, socketLit, socketMaterial, courtFits, SOCKET_KINDS, SOCKET_PITCH,
   COURT_ARC, COURT_INSET, staleCourts, COURT_RADIUS, socketArcAngles, legacyRowSockets, courtClearCells,
   courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT,
-  courtHubCells, COURT_HUB_RADIUS, WEDGE_HALF,
+  courtHubCells, COURT_HUB_RADIUS, WEDGE_HALF, courtFloorClearCells,
 } from './crossings'
 import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
@@ -755,6 +755,54 @@ for (const seed of SEEDS) {
       // Everything it lays must be removable when the court moves.
       ok(isCourtMaterial(MAT.CUT_STONE), `the hub's material is one the court sweep will remove`)
       ok(COURT_HUB_RADIUS >= 1, `the hub is a real disc (${COURT_HUB_RADIUS})`)
+    }
+  }
+}
+
+// ── 5f. ★★★ EVERYTHING THE COURT LAYS, THE COURT CAN TAKE BACK ───────────────────────────────
+// Alex, standing in his own plot: *"it almost looks as tho each pass is adding more stone brick
+// blocks ontop of the previous attempt."* He was right and it was measurable — 262 of 695 cells on
+// t0 sat outside every sweep, so each rev piled a floor on the last and nothing could remove any of
+// it. This is the assert that had to exist, and note the SHAPE of it: not "does the sweep run", but
+// **is the set of cells laid a SUBSET of the set that can be removed.** A guard asking whether a
+// clear happened would have been green the whole time this was broken.
+{
+  for (const t of [0, 1, 2]) {
+    const cfg = plotForTier(t)
+    for (const seed of [1337, 555, 1000, 42]) {
+      const level = courtLevel(seed, cfg)
+      if (level === null) continue
+      const laid = new Set<string>()
+      for (const c of courtPlatformCells(seed, cfg)) laid.add(`${c.x},${c.y},${c.z}`)
+      for (const c of courtHubCells(seed, cfg)) laid.add(`${c.x},${c.y},${c.z}`)
+      for (const sk of sockets(seed, cfg))
+        for (const c of socketCells(sk, level)) laid.add(`${c.x},${c.y},${c.z}`)
+
+      const clearable = new Set<string>()
+      for (const c of courtFloorClearCells(seed, cfg)) clearable.add(`${c.x},${c.y},${c.z}`)
+      for (const sk of sockets(seed, cfg)) {
+        const h = plotHeight(sk.x, sk.z, seed, cfg)
+        if (h === null) continue
+        for (const c of courtClearCells(sk, h, level - h)) clearable.add(`${c.x},${c.y},${c.z}`)
+      }
+      const stuck = [...laid].filter(k => !clearable.has(k))
+      ok(stuck.length === 0,
+         `s${seed} t${t}: every cell the court lays can be swept again (${stuck.length} of ${laid.size} stuck)`)
+
+      // ── ⚠ AND THE SLACK HAS TO BE FALSIFIABLE, OR IT IS A NUMBER NOBODY IS CHECKING ─────────
+      // The subset assert above passed with `FLOOR_CLEAR_SLACK` mutated to 0, because it only ever
+      // asks about TODAY's apron and today's apron fits without slack. Slack exists for a PREVIOUS,
+      // WIDER apron — the case no fixture can contain, since that geometry is gone. So assert the
+      // property that stands in for it: the sweep must reach FURTHER than the floor it is sweeping,
+      // by enough that a margin widened up to the slack is still reachable tomorrow.
+      const a2 = courtAnchor(seed, cfg)
+      if (a2.y !== null) {
+        const swept = courtFloorClearCells(seed, cfg)
+        const outer = Math.max(...swept.map(c => Math.hypot(c.x - a2.x, c.z - a2.z)))
+        const apron = Math.max(...courtPlatformCells(seed, cfg).map(c => Math.hypot(c.x - a2.x, c.z - a2.z)))
+        ok(outer >= apron + 2,
+           `s${seed} t${t}: the sweep reaches past the apron it clears (${outer.toFixed(1)} vs ${apron.toFixed(1)})`)
+      }
     }
   }
 }
