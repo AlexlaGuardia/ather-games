@@ -86,6 +86,48 @@ lifecycle lines (`useMemo` build, `tick(dt)`, `<primitive>`, `dispose()` + the d
 `voxel3d/VoxelWorld.tsx` (wiring) · `voxel3d/break-fx.ts` (header: the refusal replaces the
 proposal) · `voxel3d/break-fx-wiring.test.ts` (new)
 
+## 🧾 Shimmer — **A BOARD ROW IS A CLAIM, AND FOUR OF THEM HAD STOPPED BEING TRUE** (2026-08-28, play lane) · *Last touched 2026-08-28 (play) — audit of row #825, verified against the code rather than against the board.*
+
+### Left off — the recent rows are re-checked; the GBOARD *Next* sweep is NOT finished
+
+Row **#825** exists because three stale claims turned up in a week. Auditing it found four more, and
+two of them are the expensive kind.
+
+- **★★ TWO "NOT WIRED" CLAIMS WERE BOTH WIRED — THE SHAPE THAT COST THE WORLD LANE A WHOLE TASK ON
+  08-27** (*"the practice range was already built and a board row sent me to build it again"*).
+  **Hollow voice**: `VoxelWorld.tsx:6685` runs `playEmissions(stepVoices(…))`. **Ring 2**:
+  `createPlotRing` at 3625, `ring.tick` at 5808, `<primitive object={ring.group} />` at 8498,
+  `ring.dispose()` at 4337. ⚠ Both were accurate the day they were written; the hub wired them
+  hours later and nothing walked back to the world lane's block. **Checked "called", not just
+  "imported" — an import alone would have been the weaker claim and I nearly filed it as the
+  stronger one.** `depart()` and `creature-billboard` ARE still genuinely unwired.
+- **★★ THREE DUPLICATE PAIRS IN THE OPEN BAND, AND THE DEDUP COULD NOT SEE THEM.** #831/#835
+  (Alex looks at a sized spirit), #834/#836 (moglin height, two canon files disagree), #828/#841
+  (`PLATFORM_MAT`). Dedup is on **normalized text**, so the same item raised twice in different
+  WORDS mints a second row. ⚠ That defeats the point of rows-over-prose: closing one leaves its
+  twin still asserting, which is the exact failure the `NEXT{}` design replaced prose to avoid.
+  Closed the weaker twin of each; kept the one carrying file:line cites.
+- **★ AND A COMPOUND ROW CANNOT CLOSE.** #827 is *"deploy henge+platform AND Alex walks it"* — two
+  owners in one row. The deploy half shipped on 08-27 and is invisible, because the row can only
+  close when Alex acts. One row, one owner, or the finished half never shows.
+- **⚠ I ALSO NEARLY FILED A FALSE CORRECTION.** #839 says Hydro Armor is registered in canon and not
+  in the build. `grep hydro_armor` hits `engine/moves.ts:133` and `base-learnset.ts:99`, so the row
+  looks wrong — **it is not**. The canon gate reads `play3d/keeper-moves.ts` (the KEEPER registry);
+  `engine/moves.ts` is the SPIRIT battle system. Different systems, and the Shimmer conventions warn
+  in as many words not to conflate them. **A name match is not a subsystem match.** #839 stands.
+
+### Closed this pass
+#826 (verified: `socketCells(sk, level)` takes `courtLevel` at `VoxelWorld.tsx:7125/7217`) · #845
+(hub wired break-fx, `6849803`) · #847 (the render-audit red) · #835 #834 #828 (duplicate twins).
+
+### Next
+- **#825 stays OPEN and that is deliberate.** The 30 recent GBOARD blocks were swept for
+  code-checkable *Next* claims; the older blocks were not, and "I checked the recent ones" is not
+  "the board is clean". ⚠ A row closed on a partial sweep is worse than one left open.
+
+### Files
+`GBOARD.md` (two corrections + this block) — no source touched.
+
 ## 🔬 Shimmer voxel3d — **THE STANDING RED WAS A BLIND INSTRUMENT, AND THE FILE IT ACCUSED WAS CORRECT** (2026-08-28, play lane) · *Last touched 2026-08-28 (play) — `63300a9` pushed, render-audit **135 pass / 0 fail** (was 130/3), tsc 7 (baseline), all three new guards mutation-verified.*
 
 ### Left off — `render-audit` is green for the first time since 08-27, and nothing in `hollow-look.ts` changed
@@ -1238,7 +1280,7 @@ Greg's upgrade and walked to the door. That is the check still owed.
 
 **Files:** `play3d/cast.ts` · `play3d/keeper-moves.ts` · `play3d/loadout.ts` · `play3d/birth-affinity.ts` · `play3d/crucible-fleet.ts` · `engine/hunter-ai.ts` · `voxel3d/hollows.ts` · `voxel3d/VoxelWorld.tsx` · `nolmir/lib/expedition.ts` (+ oracles for each)
 
-## 🔊 Shimmer voxel3d — **THE NIGHT HAS A SOUND NOW, AND IT TELLS YOU WHICH WAY TO TURN** (2026-08-27, world lane) · *Last touched 2026-08-27 (world) — pure + shell + bench shipped `d9b562d` `4c1791d`, NOT wired*
+## 🔊 Shimmer voxel3d — **THE NIGHT HAS A SOUND NOW, AND IT TELLS YOU WHICH WAY TO TURN** (2026-08-27, world lane) · *Last touched 2026-08-27 (world) — pure + shell + bench shipped `d9b562d` `4c1791d`. ⚠ **THE "NOT wired" HERE WAS TRUE ON 08-27 AND IS NOT TRUE NOW** — corrected 08-28 (play, row #825): `VoxelWorld.tsx:6685` runs `playEmissions(stepVoices(…))`. **It is wired and it is live.***
 
 ### Left off — Alex reported being attacked by something he never saw; this is the fix he ruled
 **What he said:** *"i was just testing the passage and got attacked by invisible enemies"*, then
@@ -1309,7 +1351,7 @@ and give the stalker footsteps or a distinct movement sound it wont feel so bad.
 `voxel3d/hollow-voice.ts` · `hollow-voice.test.ts` (26 asserts, 12 mutations) · `hollow-sfx.ts` ·
 `dev/creep/page.tsx` · read-only: `voxel3d/hollows.ts`
 
-## 🐾 Shimmer voxel — **DIRECTION: THE GARDEN SHOULD BE INHABITED, AND CANON RULED THAT A MONTH AGO** (2026-08-26, world lane) · *Last touched 2026-08-27 (world) — RING 2 BUILT: pure + oracle + THREE shell + a harness, pushed, NOT yet wired into the world*
+## 🐾 Shimmer voxel — **DIRECTION: THE GARDEN SHOULD BE INHABITED, AND CANON RULED THAT A MONTH AGO** (2026-08-26, world lane) · *Last touched 2026-08-27 (world) — RING 2 BUILT and — corrected 08-28 (play, row #825) — **WIRED**: `createPlotRing(SEED)` at `VoxelWorld.tsx:3625`, `ring.tick(…)` at 5808, `<primitive object={ring.group} />` at 8498, `ring.dispose()` at 4337. ⚠ The "NOT yet wired" that stood here was true when written and would have sent the next reader to wire it twice.*
 
 ### 2026-08-27 — ring 2 exists, and the reason it could never have worked was in the hub's files
 - **★★★ THE RING'S POPULATION WAS STRUCTURALLY EMPTY AND NOBODY HAD NOTICED.** Ring 2 is
