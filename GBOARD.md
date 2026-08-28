@@ -11,7 +11,18 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🪓 Shimmer voxel3d — **BREAK-FX IS IN THE WORLD, AND THE FUNNEL THAT ASKED FOR IT WAS REFUSED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, morning) — tsc 7 (baseline), canon 0 CONFLICT / 3 NOTE / 13 CLEAN, break-fx 26 + spec 29 + **wiring 40 (new)** green, 8/8 mutations caught.*
+## 🪓 Shimmer voxel3d — **BREAK-FX IS IN THE WORLD, AND THE FUNNEL THAT ASKED FOR IT WAS REFUSED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, morning) — `6849803` pushed, 0 unpushed, tsc 7 (baseline), canon 0 CONFLICT / 3 NOTE / 13 CLEAN, break-fx 26 + spec 29 + **wiring 40 (new)** green, 8/8 mutations caught, sweep 195 suites / 194 pass / 0 KILLED (the 1 FAIL is `hollow-look.ts`, not this). ✅ **DEPLOYED** `BUILD_ID iSOkQgkIvRYFmfYiKd47_`, 157 chunks, pm2 restarted, prod 200 — built backgrounded from a clean tree, no dirty-file warning.*
+
+> **⚠ AND SAY WHICH HALF WAS CHECKED.** Verified: the build ran from a clean tree at `6849803`,
+> `coord build`'s own artifact gate passed (BUILD_ID + chunk count, the 08-27 fix), pm2 came back,
+> `/shimmer/voxel3d` answers 200. **NOT verified: that a chip appears when someone swings.** Three
+> different bundle greps were tried and all three returned empty for reasons that say nothing about
+> the feature — the minifier renames `breakFx`, the shader chunk and the VoxelWorld chunk do not
+> intersect (normal: it is an import across chunks, not an inlining), and the page's initial HTML
+> carries only the 10-chunk app shell because the world loads lazily. That is the 08-23 rule wearing
+> three costumes in ten minutes: **an empty result is a statement about the instrument.** The wiring
+> is asserted in the SOURCE by 40 guard asserts and 8/8 mutations; the world half needs a keeper and
+> a swing, which is Alex's pass anyway since the open question is feel.
 
 ### Left off — the two call sites are taken, and the third one was argued down
 
