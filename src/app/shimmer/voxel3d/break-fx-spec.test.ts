@@ -13,10 +13,16 @@
 // requires every bucket to be REACHED by some real material, and §3 pins the specific
 // misclassifications the branch order exists to prevent.
 
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import {
   bucketOf, recipeFor, chipColor, swingChips, ALL_BUCKETS, FALLBACK_COLOR,
+  breathFor, BREATHING_BUCKETS,
   type BreakBucket,
 } from './break-fx-spec'
+import { codeOnly } from '../testing/guard'
+
+const DIR = join(process.cwd(), 'src/app/shimmer/voxel3d')
 import { ALL_BLOCKS, blockDef } from '../voxel/registry'
 import { MAT, baseOf } from '../voxel/depth'
 import { ORE } from '../voxel/ore'
@@ -52,12 +58,23 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(seen.size === ALL_BUCKETS.length, 'the buckets a real registry produces are exactly the buckets with recipes')
 }
 
+const ALL_ELEMENT_SEAMS = [ORE.ELEMENT_VIOLET, ORE.ELEMENT_STORM, ORE.ELEMENT_EARTH, ORE.ELEMENT_WATER]
+
 // ── 3. THE MISCLASSIFICATIONS THE BRANCH ORDER EXISTS TO PREVENT ───────────────────────────────
 // Each of these passed through a WRONG branch in a draft of this file, so each is a real defect
 // caught rather than a hypothetical.
 {
-  ok(bucketOf(ORE.RAW_MANA) === 'ore',
-     "ore is not swallowed by stone — its skill is 'prospecting' too, so a plain skill test gets this wrong")
+  ok(bucketOf(ORE.RAW_MANA) === 'rawmana',
+     "raw mana is not swallowed by stone — its skill is 'prospecting' too, so a plain skill test gets this wrong")
+  ok(bucketOf(ORE.ATHER_CRYSTAL) === 'crystal' && bucketOf(ORE.PURE_CORE) === 'crystal',
+     'the lattice-bearing end of the ladder is crystal')
+  // ⚠ THE BRANCH-ORDER TRAP THIS SPLIT INTRODUCED, AND IT IS SILENT. `isOre` spans the WHOLE ladder
+  // RAW_MANA..ATHER_CRYSTAL, so if the `rawmana` test is ever moved below it every seam in the game
+  // reads as crystal — no error, no unbucketed material, just the wrong break forever.
+  ok(bucketOf(ORE.RAW_MANA) !== bucketOf(ORE.ATHER_CRYSTAL),
+     'raw mana and ather crystal do NOT share a bucket — the lattice is what tells them apart')
+  ok(ALL_ELEMENT_SEAMS.every(m => bucketOf(m) === 'crystal'),
+     'every element seam is crystal — canon names them Crystal Seams and they hold a lattice')
   ok(bucketOf(WOOD.GOLDWOOD_LOG) === 'wood', 'a log is wood')
   ok(bucketOf(WOOD.GOLDWOOD_LOG + 1) === 'leaf',
      'and its leaves are NOT — one id apart, told apart only by parity')
@@ -135,6 +152,76 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   const skills = new Set(ALL_BLOCKS.map(d => blockDef(d.material)?.skill))
   ok(skills.has('prospecting') && skills.has('forestry'),
      "the tool vocabulary this file classifies by is still the one the registry speaks")
+}
+
+// ── 8. THE BREATH — CANON'S RELATIONS, NEVER MY DECIMALS ──────────────────────────────────────
+// `world/mother.md` › *What a broken mana block does* + `design-briefs/shimmer-resources.md` › *the
+// light law now covers the BREAK*, both RULED 2026-08-28, commit `2ca6c9e`.
+//
+// ★ EVERY ASSERT BELOW IS A SENTENCE FROM CANON, NOT A NUMBER FROM THE TABLE. A test reading
+// `crystal.burst === 4` would be the hand-kept mirror wearing a test's name — it would agree with
+// the table perfectly and tell us nothing, and it would go red the first time Alex tunes the feel,
+// which is HIS call. What must not change without a ruling is the ORDERING and the DIRECTION.
+{
+  const cb = breathFor('crystal'), rb = breathFor('rawmana')
+  ok(cb !== null && rb !== null, 'both mana-bearing buckets breathe')
+
+  // "The freed light rises, outward, and fades." Negative gravity IS the rise.
+  ok(!!cb && cb.gravity < 0, 'a crystal breath RISES — canon: outward, toward the sun')
+  ok(!!rb && rb.gravity < 0, 'a raw mana breath RISES')
+  ok(!!cb && !!rb && cb.life > 0 && rb.life > 0 && cb.life < 4 && rb.life < 4,
+     'and FADES — a breath is brief; canon keeps a break a leak, not a fountain')
+
+  // "Crystal... only a thin breath lifts off the new faces." / "Raw mana... breathes out almost
+  // entirely." That is a RELATION between the two, and it survives any retuning of either.
+  ok(!!cb && !!rb && rb.burst > cb.burst,
+     'raw mana breathes out MORE than crystal — the lattice is what holds mana still')
+
+  // "Shards fall still lit from within" vs "leaves dull spent stone."
+  ok(recipeFor('crystal').glow > 1, 'crystal shards fall LIT — they are still lattice')
+  ok(recipeFor('rawmana').glow < 1, 'raw mana falls DULL — spent stone, the light has left it')
+  ok(recipeFor('crystal').glow > recipeFor('rawmana').glow,
+     'and lit is brighter than spent, which is the whole readable difference between the two breaks')
+
+  // Ordinary matter neither breathes nor glows: a stone that breathed would say the wrong thing
+  // about stone, and canon scopes the ruling to a mana-bearing block.
+  const mundane = ALL_BUCKETS.filter(b => b !== 'crystal' && b !== 'rawmana')
+  ok(mundane.every(b => breathFor(b) === null),
+     `only mana-bearing blocks breathe — offenders: ${mundane.filter(b => breathFor(b)).join(', ')}`)
+  ok(mundane.every(b => recipeFor(b).glow === 1),
+     'ordinary matter carries no light of its own')
+  ok(BREATHING_BUCKETS.length === 2, 'exactly two buckets breathe, derived from the table not restated')
+}
+
+// ── 9. ⛔ THE NOUN. `motes` IS RULED AND MEANS SOMETHING ELSE ──────────────────────────────────
+// 2026-07-21: "the drifting motes are the Anemonyx's wind-borne seeds." Using it for mining debris
+// would put seeds in the air every time a keeper hits a rock. The cheapest way it comes back is
+// somebody who never read that ruling reaching for the obvious English word.
+//
+// ⚠⚠ AND THE FIRST VERSION OF THIS GUARD COULD NOT HAVE PASSED. Both modules EXPLAIN the ban in
+// their own prose, so a plain search for the word finds their documentation and reports it as the
+// violation — a comment accurate enough to warn the next reader is what trips it. That is this
+// repo's "documenting a marker created a marker" bug exactly, and my first draft answered it with a
+// regex that whitelisted the sentences I happened to have written, which would rot the moment
+// anyone reworded them.
+//
+// ★ THE FIX IS TO ASK THE RIGHT QUESTION: the ban is on what the CODE names the thing, not on
+// whether the prose may discuss it. `testing/guard.ts` › `codeOnly` is the shared stripper that
+// exists because six hand-rolled ones had already drifted into four behaviours.
+{
+  const specCode = codeOnly(readFileSync(join(DIR, 'break-fx-spec.ts'), 'utf-8'))
+  const fxCode = codeOnly(readFileSync(join(DIR, 'break-fx.ts'), 'utf-8'))
+  const banned = /\bmotes?\b/i          // word-boundaried: `remotes`/`promotes` are not the noun
+  ok(!banned.test(specCode), 'no CODE in the spec module names the freed light "motes"')
+  ok(!banned.test(fxCode), 'and none in the GPU pass does either')
+  // ⚠ The negative above is satisfied by a module that says nothing at all, so assert the positive
+  // too: the canon word is actually the one in use. An absence claim needs the presence beside it.
+  ok(/breathFor/.test(specCode) && /breathFor/.test(fxCode),
+     'the canon word "breath" is what both halves actually call it')
+  // And prove the stripper really removed the prose, or the two asserts above are vacuous — both
+  // files DO discuss "motes" in comments, so a working stripper must leave that behind.
+  ok(/\bmotes?\b/i.test(readFileSync(join(DIR, 'break-fx-spec.ts'), 'utf-8')),
+     'the spec still EXPLAINS the ban in prose — if this fails the guard above is testing nothing')
 }
 
 console.log(`break-fx-spec: ${pass} pass, ${fails.length} fail`)

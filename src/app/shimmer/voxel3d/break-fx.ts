@@ -19,7 +19,7 @@
 // as nothing at all. **The one you can't see is the right one to lose.**
 
 import * as THREE from 'three'
-import { bucketOf, recipeFor, chipColor, type ChipRecipe } from './break-fx-spec'
+import { bucketOf, recipeFor, breathFor, chipColor, type ChipRecipe } from './break-fx-spec'
 
 /** Live chips. 512 × (3+3+1+1+1+1+1) floats is ~28KB — the budget is about draw cost, not memory. */
 export const BUDGET = 512
@@ -191,7 +191,11 @@ void main() {
     aT[i] = 0
     // Shade each chip a little off its material so a face of them has depth. `>> 16 & 255` etc:
     // MATERIAL_COLOR is packed hex, and unpacking here keeps the spec module free of colour maths.
-    const shade = 0.75 + rand() * 0.45
+    // ★ `glow` is canon wearing a number — crystal keeps its lattice and falls LIT, raw mana is
+    // spent stone by the time it lands (`shimmer-resources.md` › the light law covers the BREAK).
+    // It multiplies the per-chip shade rather than replacing it, so the ±25% variation that stops a
+    // burst reading as clones survives on every bucket, lit or dull.
+    const shade = (0.75 + rand() * 0.45) * r.glow
     col[i * 3]     = Math.min(1, ((hex >> 16) & 255) / 255 * shade)
     col[i * 3 + 1] = Math.min(1, ((hex >> 8) & 255) / 255 * shade)
     col[i * 3 + 2] = Math.min(1, (hex & 255) / 255 * shade)
@@ -234,6 +238,29 @@ void main() {
       if (!b) return
       const r = recipeFor(b)
       const hex = chipColor(material)
+      // ── ★★ THE BREATH RIDES THE BREAK, NOT THE SWING (RULED 2026-08-28) ──────────────────────
+      // `world/mother.md` › *What a broken mana block does*: the substance falls, the freed light
+      // goes outward toward the sun and fades. So it is emitted HERE, on the completed break, and
+      // not in `chip()` — a swing throws fragments, and it is the BREAK that opens the lattice.
+      // ⚠ Emitted BEFORE the chips on purpose: the frame ceiling drops overflow, and if the order
+      // were reversed a big burst could spend the whole budget on rubble and silently drop the one
+      // thing canon actually rules. The chips are the part a player can lose without noticing.
+      const breath = breathFor(b)
+      if (breath) {
+        for (let k = 0; k < breath.burst; k++) {
+          // Outward and up, from anywhere in the cell. `gravity` is NEGATIVE for a breath, so the
+          // rise comes from the integrator rather than from a launch speed that would read as a jet
+          // — canon keeps the mana-well a fountain and a break a leak, and they must not look alike.
+          const ux = rand() * 2 - 1, uz = rand() * 2 - 1
+          const len = Math.hypot(ux, uz) || 1
+          const sp = breath.speed * (0.5 + rand() * 0.9)
+          if (!spawn(
+            x + 0.2 + rand() * 0.6, y + 0.2 + rand() * 0.6, z + 0.2 + rand() * 0.6,
+            (ux / len) * sp * breath.spread, sp * 0.5, (uz / len) * sp * breath.spread,
+            breath, hex,
+          )) break
+        }
+      }
       for (let k = 0; k < r.burst; k++) {
         // Omnidirectional from the cell, biased upward — the block is coming apart, not being hit.
         const ux = rand() * 2 - 1, uy = rand() * 2 - 1, uz = rand() * 2 - 1

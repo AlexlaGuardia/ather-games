@@ -23,7 +23,7 @@
 // how a sapling's icon came to be a cube while the world drew a cross.
 
 import { MAT, baseOf, isPlant, isSapling } from '../voxel/depth'
-import { isOre } from '../voxel/ore'
+import { isOre, ORE } from '../voxel/ore'
 import { isLogMat, isLeafMat } from '../voxel/trees'
 import { blockDef } from '../voxel/registry'
 import { MATERIAL_COLOR } from './attrs'
@@ -36,7 +36,7 @@ import { MATERIAL_COLOR } from './attrs'
  * all three to Alex from Minecraft habit and `depth.ts` says otherwise. If one is ever added it
  * arrives through `blockDef().skill` like everything else, and the guard will say so.
  */
-export type BreakBucket = 'stone' | 'ore' | 'wood' | 'leaf' | 'plant' | 'sand'
+export type BreakBucket = 'stone' | 'crystal' | 'rawmana' | 'wood' | 'leaf' | 'plant' | 'sand'
 
 /**
  * Which bucket a material breaks into.
@@ -52,7 +52,17 @@ export function bucketOf(material: number): BreakBucket | null {
   if (isLeafMat(m)) return 'leaf'
   if (isLogMat(m)) return 'wood'
   if (isSapling(m) || isPlant(m)) return 'plant'
-  if (isOre(m)) return 'ore'
+  // ── ★★ THE LATTICE SPLITS THE PROSPECTING LADDER IN TWO, AND CANON DREW THE LINE ────────────
+  // `world/mother.md` › *What a broken mana block does* (RULED 2026-08-28): **the lattice is what
+  // holds mana still. Break the lattice and it stops holding — exactly at the break, and only
+  // there.** So crystal shards are STILL lattice and still hold (they fall lit, and only the new
+  // fracture faces breathe), while raw mana never had a lattice and has nothing keeping it, so it
+  // breathes out almost entirely and what falls is dull spent stone.
+  // ⚠ RAW_MANA MUST BE TESTED BEFORE `isOre`, which spans the whole ladder RAW_MANA..ATHER_CRYSTAL
+  // and would otherwise swallow it — the same narrowest-first rule the header states, now with a
+  // case where getting it backwards is silent: every seam would simply read as crystal.
+  if (m === ORE.RAW_MANA) return 'rawmana'
+  if (isOre(m)) return 'crystal'
   if (m === MAT.SAND) return 'sand'
   const def = blockDef(m)
   if (!def) return null
@@ -81,6 +91,17 @@ export interface ChipRecipe {
   /** Seconds a chip lives. */
   life: number
   /**
+   * Brightness multiplier on the fragment's own colour. **1 = ordinary matter**, reflecting the
+   * world and nothing more. **>1 = still lit from within** — canon's crystal, whose shards keep
+   * their lattice. **<1 = spent**, the light has left it: raw mana's *"dull spent stone"*.
+   *
+   * ⚠ THIS IS A CANON FACT WEARING A NUMBER, not a look I chose. `shimmer-resources.md` › *the
+   * light law now covers the BREAK*: crystal shards *"stay lit from within"*, raw mana *"leaves
+   * dull spent stone"*. The DECIMALS are mine (feel is the build's); the ORDERING is not, and
+   * `break-fx-spec.test.ts` asserts the ordering rather than the values.
+   */
+  glow: number
+  /**
    * Chip size in BLOCKS, not pixels.
    *
    * ⚠ IT WAS PIXELS IN THE FIRST DRAFT AND THE JUDGING PAGE KILLED IT ON SIGHT: a fixed pixel size
@@ -99,15 +120,67 @@ export interface ChipRecipe {
  * feature; the decimals are decoration.
  */
 const RECIPES: Record<BreakBucket, ChipRecipe> = {
-  stone: { burst: 14, swingRate: 9,  speed: 3.0, spread: 0.45, gravity: 11, drag: 0.35, life: 0.55, size: 0.075 },
-  ore:   { burst: 16, swingRate: 10, speed: 3.4, spread: 0.5,  gravity: 11, drag: 0.35, life: 0.65, size: 0.085 },
-  wood:  { burst: 10, swingRate: 6,  speed: 2.3, spread: 0.35, gravity: 8,  drag: 0.5,  life: 0.8,  size: 0.13 },
-  leaf:  { burst: 12, swingRate: 5,  speed: 0.9, spread: 0.85, gravity: 0.7, drag: 0.8, life: 1.6,  size: 0.14 },
-  plant: { burst: 8,  swingRate: 5,  speed: 1.3, spread: 0.7,  gravity: 5,  drag: 0.6,  life: 0.7,  size: 0.10 },
+  stone:   { burst: 14, swingRate: 9,  speed: 3.0, spread: 0.45, gravity: 11,  drag: 0.35, life: 0.55, glow: 1,    size: 0.075 },
+  // ★ Crystal falls LIT. The shards are still lattice, so they still hold their own light — the one
+  // bucket whose fragments are brighter than the block they came off, because a fracture face is
+  // fresh where the weathered outside was not.
+  crystal: { burst: 16, swingRate: 10, speed: 3.4, spread: 0.5,  gravity: 11,  drag: 0.35, life: 0.65, glow: 1.45, size: 0.085 },
+  // ★ Raw mana falls DULL. Same motion as any other seam — canon is explicit that the substance
+  // behaves like matter — but the light has already left it by the time it lands.
+  rawmana: { burst: 16, swingRate: 10, speed: 3.3, spread: 0.5,  gravity: 11,  drag: 0.35, life: 0.65, glow: 0.5,  size: 0.085 },
+  wood:    { burst: 10, swingRate: 6,  speed: 2.3, spread: 0.35, gravity: 8,   drag: 0.5,  life: 0.8,  glow: 1,    size: 0.13 },
+  leaf:    { burst: 12, swingRate: 5,  speed: 0.9, spread: 0.85, gravity: 0.7, drag: 0.8,  life: 1.6,  glow: 1,    size: 0.14 },
+  plant:   { burst: 8,  swingRate: 5,  speed: 1.3, spread: 0.7,  gravity: 5,   drag: 0.6,  life: 0.7,  glow: 1,    size: 0.10 },
   // ★ Sand is the one bucket whose CHARACTER is an absence: almost no outward speed and the
   // heaviest fall, so it reads as a face collapsing rather than a block shattering.
-  sand:  { burst: 16, swingRate: 8,  speed: 0.5, spread: 0.25, gravity: 15, drag: 0.2,  life: 0.45, size: 0.055 },
+  sand:    { burst: 16, swingRate: 8,  speed: 0.5, spread: 0.25, gravity: 15,  drag: 0.2,  life: 0.45, glow: 1,    size: 0.055 },
 }
+
+/**
+ * ── ★★★ THE BREATH — what a broken mana block gives up, RULED 2026-08-28 ──────────────────────
+ * `design-briefs/shimmer-resources.md` › *the light law now covers the BREAK*, authority in
+ * `world/mother.md` › *What a broken mana block does*:
+ *
+ *   **The substance falls. The freed light rises, outward, and fades. It is never collectable.**
+ *   **The canon word for it is `breath` — the block breathes out.**
+ *
+ * ⛔ **NOT `motes`.** That noun is ruled (2026-07-21) and means the Anemonyx's wind-borne seeds.
+ * Reusing it here would put seeds in the air every time a keeper hit a rock. The guard asserts the
+ * word `motes` appears nowhere in this module, because the cheapest way to reintroduce it is for
+ * someone who never read the ruling to reach for the obvious English word.
+ *
+ * ★ A BREATH IS A `ChipRecipe` WITH NEGATIVE GRAVITY, and that is not a shortcut — the field's own
+ * doc has said *"negative RISES"* since the first draft, written the day the gap was filed, against
+ * the day the ruling would land. Nothing new was needed to express it.
+ *
+ * ⚠ ONLY MANA-BEARING BLOCKS BREATHE, AND I AM DELIBERATELY NOT WIDENING THAT. The light law's
+ * older half says mana lives in *living* matter and working it releases the mana — which reads as
+ * though a felled tree should breathe too. **The 08-28 ruling is scoped to a mana BLOCK**, so
+ * extending it to timber would be me authoring, not building. Raised with Alex, not decided here.
+ *
+ * **What is canon:** direction (outward/up), impermanence, which materials hold vs release, the
+ * word. **What is mine:** count, speed, brightness, ramp, budget. The COUNTS below therefore
+ * encode canon's relation — crystal gives *"only a thin breath off the new faces"*, raw mana
+ * *"breathes out almost entirely"* — and the guard asserts that ordering, never the decimals.
+ */
+const BREATHS: Partial<Record<BreakBucket, ChipRecipe>> = {
+  // A thin exhalation off the fracture faces: the shards kept nearly all of it.
+  crystal: { burst: 4,  swingRate: 0, speed: 0.55, spread: 0.7, gravity: -1.1, drag: 0.72, life: 1.5, glow: 1.6, size: 0.055 },
+  // Nearly the whole block's worth, because nothing was holding it.
+  rawmana: { burst: 18, swingRate: 0, speed: 0.8,  spread: 0.8, gravity: -1.5, drag: 0.66, life: 1.9, glow: 1.6, size: 0.07 },
+}
+
+/**
+ * The breath a broken block gives up, or `null` for everything that has none.
+ *
+ * ⚠ NULL IS THE ANSWER FOR MOST OF THE WORLD and it is load-bearing: a stone that breathed would
+ * say the wrong thing about stone. Canon also rules that **a mana-well is a fountain and a break is
+ * a leak** — they must not read alike — so this is small, brief, and stops. It is never a jet.
+ */
+export const breathFor = (bucket: BreakBucket): ChipRecipe | null => BREATHS[bucket] ?? null
+
+/** Buckets that breathe. Derived from `BREATHS`, so the guard cannot drift from the table. */
+export const BREATHING_BUCKETS = Object.keys(BREATHS) as BreakBucket[]
 
 export const recipeFor = (bucket: BreakBucket): ChipRecipe => RECIPES[bucket]
 
@@ -144,16 +217,20 @@ export function swingChips(bucket: BreakBucket, progress01: number, dt: number):
 }
 
 /**
- * ── ⛔ WHAT IS DELIBERATELY MISSING, AND WHY IT IS NOT AN OVERSIGHT ────────────────────────────
- * Raw mana and ather crystal take the `ore` recipe above: they FALL, like rubble. That is not a
- * decision about mana, it is the absence of one. Whether freed mana rises is a claim about what
- * mana IS, and by the 2026-07-21 garden ruling — *"hue identity + meaning = canon; exact
- * fog/particle/shader tuning = Jin's build"* — that half belongs to the Magii seat. Filed as an
- * open gap 2026-08-28.
+ * ── ✅ THE GAP THAT USED TO BE HERE IS CLOSED ─────────────────────────────────────────────────
+ * This file shipped on 2026-08-28 with a footer explaining that raw mana and ather crystal took the
+ * `ore` recipe and FELL like rubble, because whether freed mana rises is a claim about what mana IS
+ * and belonged to the Magii seat. That gap was filed the same day and RULED the same day
+ * (`CANON_GAPS.md` › *What does raw mana DO when a keeper breaks it out of the ground?*, landed in
+ * `world/mother.md` + `design-briefs/shimmer-resources.md`, commit `2ca6c9e`).
  *
- * ⚠ AND THE WORD FOR IT IS NOT "MOTES". Canon ruled that noun on 2026-07-21 for the Anemonyx's
- * wind-borne seeds, and reusing it here would put seeds in the air every time a keeper hit a rock.
- * `ChipRecipe.gravity` accepts a negative value so the ruling can land as one number, but nothing
- * passes one today. **A rock that behaves like a rock invents nothing** — that is the fail-quiet
- * direction, and it is why this ships without the answer.
+ * ★ THE RULING WAS A RATIFICATION — canon had answered it twice already and the answer only needed
+ * assembling from three files. **The build shipped the fail-quiet version and waited**, which is
+ * why the ruling landed as a diff rather than as a design session. A rock that behaved like a rock
+ * invented nothing in the meantime, and nothing had to be un-shipped.
+ *
+ * ⚠ AND IT WAS BUILT ONLY ONCE THE RULING WAS IN GIT. The `[RULED]` text sat in an uncommitted
+ * working tree for fifty minutes; building against it then would have been building against a
+ * draft, which is how a guess becomes accidental canon. Verified at `HEAD:CANON/CANON_GAPS.md`
+ * before a line of this was written.
  */
