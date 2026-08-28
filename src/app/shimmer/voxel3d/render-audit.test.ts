@@ -73,6 +73,30 @@ function* enclosingScopes(src: string, at: number): Generator<number> {
   }
 }
 
+/**
+ * ── ★★ ONE READER FOR THE ARROW HEAD, BECAUSE THERE WERE THREE (2026-08-28) ────────────────────
+ * `scopeAt`, `enclosingFunction` and `isRepeatedCall` each carried their own copy of this pattern
+ * — a hand-kept mirror of a derivation, in the file whose header warns about believing a guard.
+ * They agreed, which is the state a mirror is in right up until it is not: the copies differ only
+ * in how they anchor the tail, so a fix to the shape reaches whichever one the fixer opened.
+ */
+const ARROW_HEAD = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=]+?)?\s*$/
+
+/** The name of the arrow whose `=>` has its `>` at `gt`; `''` when it is anonymous. */
+const arrowNameAt = (src: string, gt: number): string =>
+  ARROW_HEAD.exec(src.slice(Math.max(0, gt - 300), gt - 1))?.[1] ?? ''
+
+/**
+ * If `at` sits immediately after an `=>`, the name of that arrow (`''` if anonymous).
+ * `null` means `at` is not an arrow body at all — distinct from an anonymous one, and the two
+ * callers below want opposite things from that distinction.
+ */
+function arrowBodyAt(src: string, at: number): string | null {
+  const lead = src.slice(Math.max(0, at - 300), at)
+  const m = /=>\s*$/.exec(lead)
+  return m ? arrowNameAt(src, at - lead.length + m.index + 1) : null
+}
+
 const LOOP_WORDS = ['for', 'while', 'do']
 const BRANCH_WORDS = ['if', 'switch', 'catch', 'else', 'try']
 
@@ -90,10 +114,32 @@ function scopeAt(src: string, open: number): { kind: 'fn' | 'loop' | 'block'; na
   const block = { kind: 'block' as const, name: '' }
   let j = open - 1
   while (j >= 0 && /\s/.test(src[j])) j--
-  if (j >= 1 && src[j] === '>' && src[j - 1] === '=') {
-    const head = src.slice(Math.max(0, j - 300), j - 1)
-    const m = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=]+?)?\s*$/.exec(head)
-    return { kind: 'fn', name: m?.[1] ?? '' }
+  if (j >= 1 && src[j] === '>' && src[j - 1] === '=') return { kind: 'fn', name: arrowNameAt(src, j) }
+  /**
+   * ── ★★★ A CONCISE ARROW BODY CAN BE AN OBJECT LITERAL, AND THAT WRAPS THE BRACE IN A PAREN
+   * (2026-08-28) ────────────────────────────────────────────────────────────────────────────────
+   * `const f = (): T => ({ a: new THREE.X() })`. The `{` here is not preceded by `=>` — it is
+   * preceded by `(` — so the branch above misses it, and the walk below reads a nameless block,
+   * because that is genuinely what an object literal opens. The factory then earns no credit and
+   * its constructions report as the context-loss bug.
+   *
+   * ⚠ THIS IS THE THIRD TIME THIS ONE QUESTION HAS BEEN ANSWERED WITH THE WRONG PROXY, and the two
+   * earlier ones are written up in the block above `enclosingScopes`: 08-12 measured DISTANCE to a
+   * memo instead of containment; 08-26 asked whether a factory was SPELLED `function` and NAMED
+   * with one of four verbs, and spent four days calling `flora-mesh.ts`'s four arrow-const
+   * geometry factories the context-loss bug. This one asked whether the body's brace is the
+   * ARROW'S OWN. Each fix was correct and each left the next syntax for the next reader.
+   * `hollow-look.ts` stood red for a day on exactly that.
+   *
+   * ⚠ AND THE NAME IS STILL REQUIRED, so this widens nothing: an anonymous `x => ({ … })` — the
+   * `.map()` shape — yields `''`, which earns no factory credit and is judged per-object, the same
+   * verdict it got before. What changes is only that a NAMED factory can now be recognised through
+   * a paren, and the rule moves to its call sites where § 1b can see it.
+   */
+  if (src[j] === '(') {
+    let k = j - 1
+    while (k >= 0 && /\s/.test(src[k])) k--
+    if (k >= 1 && src[k] === '>' && src[k - 1] === '=') return { kind: 'fn', name: arrowNameAt(src, k) }
   }
   if (src[j] !== ')') {
     // a return-type annotation can sit between the parameters and the body: `): Foo {`
@@ -133,11 +179,8 @@ const isComponent = (name: string): boolean => /^[A-Z]/.test(name)
 
 function enclosingFunction(src: string, at: number): string | null {
   // A concise arrow body has no braces to match: `const floraRockGeo = (): T => new THREE.X(...)`.
-  const lead = src.slice(Math.max(0, at - 300), at)
-  if (/=>\s*$/.test(lead)) {
-    const m = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=]+?)?\s*=>\s*$/.exec(lead)
-    return m?.[1] ?? ''
-  }
+  const arrow = arrowBodyAt(src, at)
+  if (arrow !== null) return arrow
   for (const open of enclosingScopes(src, at)) {
     const sc = scopeAt(src, open)
     if (sc.kind === 'fn') return isComponent(sc.name) ? null : sc.name
@@ -181,11 +224,11 @@ function isRepeatedCall(src: string, at: number): boolean {
   // past to whatever named function holds it. `[8, 16].map(s => toTexture(...))` read as one-shot
   // for exactly that reason — caught by mutation, not by review.
   const lead = src.slice(Math.max(0, at - 300), at)
-  if (/=>\s*$/.test(lead)) {
-    const named = /(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*(?::[^=]+)?\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=]+?)?\s*=>\s*$/.test(lead)
+  const arrow = arrowBodyAt(src, at)
+  if (arrow !== null) {
     // a named arrow is a factory and the question moves to ITS call sites; an anonymous one is a
     // callback, which is the per-object shape — unless it is a memo initialiser, which runs once.
-    return named ? false : !/useMemo\(\s*\(\s*\)\s*=>\s*$/.test(lead)
+    return arrow !== '' ? false : !/useMemo\(\s*\(\s*\)\s*=>\s*$/.test(lead)
   }
   for (const open of enclosingScopes(src, at)) {
     const sc = scopeAt(src, open)
@@ -350,6 +393,54 @@ for (const file of files) {
     }
   }
   console.log(`render-audit § 1b judged ${judged.length} material/texture factories, derived from § 1: ${judged.join(', ')}`)
+
+  // ── ⚠ THE OTHER DOOR INTO § 1b, AND MY OWN MUTATION WALKED THROUGH IT BY ACCIDENT (2026-08-28) ─
+  // `isRepeatedCall` walks enclosing BRACES. So `for (…) out.push(makeMat())` — a loop with no
+  // braces — is invisible to it: the walk sails past the loop to the function that holds it and
+  // answers one-shot. I found this while mutation-testing the § 1 fix above: my probe used a
+  // braceless `for` without meaning to, stayed green, and for a minute that read as the fix having
+  // failed. Re-entering with braces caught it. ★ A MUTATION THAT DOES NOT FIRE IS A CLAIM ABOUT
+  // THE MUTATION FIRST, and this file has a history of readings that were about the instrument.
+  //
+  // ★ MEASURED BEFORE BUILDING ANYTHING: 134 braceless loop bodies in the render path, and ZERO
+  // hold either a THREE construction or a call to a judged factory. The hole is real and currently
+  // unoccupied — so a parser for it is the expensive answer to a question nobody is asking, and the
+  // 08-27 round of this file cost five guards that were cleverer than the question needed. What it
+  // gets instead is an assert that EXPIRES: the day somebody writes that shape this goes red and
+  // names the line, instead of passing in silence.
+  {
+    const GPU_IN_BODY = /new\s+THREE\.\w*(?:Geometry|Material|Texture|RenderTarget)\b/
+    const judgedCall = judged.length ? new RegExp(`(?<![.\\w$])(?:${judged.join('|')})\\s*\\(`) : null
+    const offenders: string[] = []
+    let seen = 0
+    for (const [file, src] of sources) {
+      for (const h of src.matchAll(/\b(?:for|while)\s*\(/g)) {
+        let i = (h.index ?? 0) + h[0].length - 1, d = 0
+        for (; i < src.length; i++) {
+          if (src[i] === '(') d++
+          else if (src[i] === ')') { d--; if (d === 0) break }
+        }
+        let j = i + 1
+        while (src[j] === ' ' || src[j] === '\t') j++
+        // a braced body is what the scope walk already reads; a body on its OWN line is rarer than
+        // the parser needed to read it reliably, and is left to § 1/§ 1b as before.
+        if (j >= src.length || src[j] === '{' || src[j] === '\n') continue
+        seen++
+        const nl = src.indexOf('\n', j)
+        const body = src.slice(j, nl < 0 ? src.length : nl)
+        if (GPU_IN_BODY.test(body) || (judgedCall?.test(body) ?? false)) {
+          offenders.push(`${file}:${src.slice(0, h.index ?? 0).split('\n').length} (${body.trim().slice(0, 60)})`)
+        }
+      }
+    }
+    // ⚠ AND THE SCAN HAS TO PROVE IT CAN STILL SEE ITS SUBJECT. An empty measurement window returns
+    // "nothing wrong" for a scan that matched nothing at all, which is the failure this whole file
+    // is about — a green that means "I could not look".
+    ok(seen >= 40, `the braceless-loop scan matched only ${seen} loop bodies — it has stopped seeing its subject`)
+    ok(offenders.length === 0,
+       `GPU work inside a BRACELESS loop body — invisible to the scope walk, so neither § 1 nor § 1b can judge it; give the loop braces: ${offenders.join(' · ')}`)
+  }
+
 }
 
 // ── 3. the shared-resource contract is stated where it can be read ────────────────────────────
