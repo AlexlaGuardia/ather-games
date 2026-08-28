@@ -11,6 +11,80 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🏛 Shimmer voxel3d — **THE DAIS WAS BUILT, TESTED, GREEN AND NOT IN THE WORLD** (2026-08-27, hub lane) · *Last touched 2026-08-27 (hub) — tsc 7 (baseline), crossings 3786 + court-wiring 26 green, dais measured live.*
+
+### Left off — Alex: *"take the platform wire"*
+World shipped `courtPlatformCells` / `courtLevel` / `isCourtMaterial` in `633ba52` with **3786
+asserts green**, and the functions appeared in exactly one file: their own test. **Fourth instance
+of that shape this week** (98 unreachable build pieces · the collar prompt · ring 2 · this).
+
+- **★★★ THE HANDOVER SAID "FOUR-LINE DIFF" AND THE FOUR LINES WERE THE EASY HALF.** Passing
+  `courtLevel` instead of per-socket `plotHeight` is genuinely four lines. What it does not mention
+  is that **laying a third material makes three other things wrong at once**, each silent:
+  1. **The sweep could not reach a dais.** `courtClearCells` is a box around ONE socket; the
+     platform is a sector out past all of them. The frames would come up when the fold grew and
+     **the floor they stood on would stay** — abandoned architecture, far larger than the arches.
+     Fixed by sweeping `courtPlatformCells(SEED, oldCfg)` for each retired fold, derived exactly.
+  2. **The readiness check only knew about sockets.** A frame is 7 wide; the apron reaches
+     `COURT_RADIUS + PLATFORM_MARGIN` = 13 out and crosses section seams the frames never came
+     near. Half a floor would be laid — and the pass is keyed on the TIER, so it never comes back.
+  3. **The clear pass was bounded one lintel too low.** A rev-4 frame stands on the dais, so it is
+     `courtLevel - groundY` courses above where a sweep measuring from the ground stops looking.
+- **★★ AND THE REV HAD TO MOVE — plus this fold's OWN court now needs clearing, which is new.**
+  Every earlier rev stood each frame on its own ground. The lay pass only writes the cells it
+  wants, so the courses an old frame held BELOW the new one survive as stubs, and the frame is
+  wider than the apron so its outermost columns are not even covered by the new floor.
+  `COURT_REV` 3 → 4, and the build now clears the current site before re-laying it.
+- **★ THE LAMP PASS IS THE HALF THAT WOULD HAVE STAYED WRONG QUIETLY.** Two passes derive the same
+  cells independently. Build at `courtLevel` + lamps at per-socket ground writes the lamp a course
+  or two below the frame that holds it — into the dais, or into air beside it. **The socket simply
+  never lights**, and nothing reports a lamp set in a block that is not there.
+
+### ★★★ `court-wiring.test.ts` — the module's own suite could not have caught any of this
+`crossings.test.ts` has an assert literally named *"the host must pass courtLevel, not per-socket
+ground"* — and it proves it **by calling `socketCells(sk, level)` itself.** It is green whatever
+`VoxelWorld.tsx` passes. That is the 08-22 bridges shape exactly: a test reaching the module
+directly while the game reaches it through a gate, both halves internally consistent about
+different things, 371 asserts green over a world missing 44% of its deck.
+- **26 asserts that read the HOST**, every anchor through a `once()` that fails on missing OR
+  ambiguous — *"I found no drift"* and *"I could not look"* must not share an exit code.
+- **Mutation-verified from eight doors, all red:** build pass to per-socket ground · lamp pass to
+  per-socket ground · dais not laid · the two-literal whitelist restored · dais dropped from
+  readiness · lift dropped from the clear · `COURT_REV` back to 3 · old dais left standing.
+- ⚠ **THE GUARD CAUGHT ITS OWN AUTHOR TWICE.** `src.length < raw.length` went red against a
+  **correct** stripper — `strip` blanks to spaces so index offsets survive, which is the whole
+  reason a slicing guard can trust them. Length was the wrong property. And a first `lift` sample of
+  4 seeds saw lift 1 every time and would have let `PLATFORM_RISE` stand in for the lift forever.
+
+### Measured, not modelled
+- **`EMBEDDED old=42 new=0` on s1337 t2** — reproduces world's figure exactly from the shipped
+  module, and the wire zeroes it. Also 40 / 39 / 42 on s555 t2, s1000 t3, s42 t1.
+- **Dais 317 cells over 316 columns** (s1337 t2) — one course on a flat shelf, which is what a
+  0-1 block ground spread predicts.
+- **Lift histogram over 400 seeds x 3 tiers: `1:4225  2:575`.** One socket in eight is lifted TWO,
+  so the lift genuinely varies and `PLATFORM_RISE` cannot stand in for it. The guard now demands
+  that spread rather than restating the constant.
+
+### Next
+- **Alex walks the henge and picks `PLATFORM_MAT`** — `STONE_BRICK` default (unmistakably WORKED
+  where the ground is raw), `SANDSTONE` if grey-on-grey still reads flat at distance,
+  `MOSSY_CUT_STONE` if it should look older than the keeper. **His call; material is a look.**
+- **NOT DEPLOYED** — nothing is live until the dais is in a build.
+- `depart()` still unwired, still waiting on Alex naming the anchor tile.
+
+### Decisions
+- **The dais stays VOXEL and that is canon, not taste.** Alex asked whether it could be "a
+  standalone object". `game/two-lines-two-games.md` (ruled 08-12): *"The Ather is quantized.
+  Athernyx is continuous."* There are **zero** GLB props anywhere in `voxel3d`; every mesh prop
+  lives in `play3d`, the mortal side. A mesh dais in the keeper's own garden puts a continuous-side
+  object on the quantized side at the one place the player spends the most time.
+- **The sweep asks `isCourtMaterial`, it does not list materials.** Two literals in a render file is
+  how an entire platform gets left standing.
+
+### Files
+`src/app/shimmer/voxel3d/VoxelWorld.tsx` (the wire) · `crossings.ts` (`courtClearCells` takes a
+`lift`, `COURT_REV` 3 → 4) · `court-wiring.test.ts` (new, 26 asserts, 8 mutations)
+
 ## 📏 Shimmer sprites — **A FIREFLY WAS STANDING EYE-TO-EYE WITH THE KEEPER** (2026-08-27, sprites lane) · *Last touched 2026-08-27 (sprites) — `a4fa76f` `ab4fbad` `6519c21` `7de1705` `2a7fc88`, all pushed, 0 unpushed, tsc 7 (baseline), canon **12 CLEAN** (gate 13 live), sweep 190 suites / 189 pass / 1 FAIL (not mine — `hollow-look.ts`, `cf92cd1`). **DEPLOYED** `BqsB_uC-QJvGmIu-p4qei` — verified in the served chunk over HTTP, not on the build's word.*
 
 ### Left off — Alex ruled it, and canon had already answered most of it

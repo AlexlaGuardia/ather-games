@@ -552,20 +552,31 @@ export function socketMaterial(c: SocketCell, lit: boolean): number {
  * course entirely and leaves a ring of half-sunk stone behind the new station.
  *
  * ★ SO IT SWEEPS A COLUMN RANGE, NOT A SHAPE: from the ground itself (where the buried course sat)
- * up past the tallest frame on the station, across the widest half-span. Bounded, and safe because
+ * up past the tallest frame on the station, across the widest half-span.
+ *
+ * ⚠⚠ AND `lift` IS THE SAME TRAP ONE MORE TIME, ARRIVING FROM UNDERNEATH. Since rev 4 a frame does
+ * not stand on its own ground — it stands on the dais, `courtLevel - groundY` courses higher — so a
+ * sweep bounded at `SOCKET_MAX_HEIGHT` above the GROUND stops short of that court's lintel and
+ * leaves the top of every arch standing when the fold grows. The host passes the lift it actually
+ * built with, rather than this file guessing at `PLATFORM_RISE`, because the lift a socket got is
+ * `level - its own ground` and the sockets do not all share a ground. Default 0 = a pre-dais court,
+ * which is exactly what the legacy sites are. Bounded, and safe because
  * the host only ever clears CUT_STONE and MANA_LANTERN — a keeper's own build in that volume is
  * some other material and is left alone. ⚠ A keeper who built with cut stone inside a retired
  * court's footprint loses it; that is a real cost, accepted because the alternative is abandoned
  * architecture nobody can remove, and recorded here rather than discovered later.
  */
-export function courtClearCells(s: Socket, groundY: number): { x: number; y: number; z: number }[] {
+export function courtClearCells(
+  s: Socket, groundY: number, lift: number = 0,
+): { x: number; y: number; z: number }[] {
   const tx = -Math.sin(s.facing), tz = Math.cos(s.facing)
   const nx = Math.cos(s.facing), nz = Math.sin(s.facing)
   const out: { x: number; y: number; z: number }[] = []
   const seen = new Set<string>()
   for (let h = -SOCKET_HALF; h <= SOCKET_HALF; h++) {
-    // From `groundY` (the pre-08-27 buried course) through the tallest frame's lintel.
-    for (let y = 0; y <= SOCKET_MAX_HEIGHT; y++) {
+    // From `groundY` (the pre-08-27 buried course) through the tallest frame's lintel, plus
+    // however far this court's frames were LIFTED off their own ground by the dais under them.
+    for (let y = 0; y <= SOCKET_MAX_HEIGHT + Math.max(0, lift); y++) {
       // ⚠⚠ AND ACROSS THE FULL DEPTH, INCLUDING d = -1. The 08-27 henge pass made frames thick
       // along the normal; a sweep built for the old SHEET would leave every layer behind the front
       // face standing, which is the abandoned-architecture failure this function's header exists to
@@ -600,8 +611,11 @@ export function courtClearCells(s: Socket, groundY: number): { x: number; y: num
  *     kinds a course taller. A keeper who already stood a rev-2 court has SHEET frames in the
  *     world; without this bump they would keep them forever, since the tier never changes again
  *     once they are at their final fold.
+ * 4 = the dais (2026-08-27, wired): the stones stand on `courtLevel`, not each on its own ground,
+ *     and a platform in a third material stands under them. A rev-3 court is at the wrong Y by a
+ *     course or two AND has no floor, so it has to be re-laid rather than added to.
  */
-export const COURT_REV = 3
+export const COURT_REV = 4
 
 /** Why the court could not stand where it was derived. Every one is a placement bug, not a refusal. */
 export type CourtMisfit =

@@ -202,7 +202,8 @@ import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, STAGE_ACTIONS, 
 import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
-         legacyRowSockets, courtClearCells, COURT_REV } from './crossings'
+         legacyRowSockets, courtClearCells, COURT_REV,
+         courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT } from './crossings'
 import { crossingReady, LANDING_LABEL } from './crossing-out'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
@@ -7077,11 +7078,28 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       const fit = courtFits(SEED, cfg)
       const socks = courtSockets(SEED, cfg)
       const a = courtAnchor(SEED, cfg)
+      // ★★★ ONE Y FOR THE WHOLE COURT, AND EVERY CALLER BELOW TAKES IT INSTEAD OF ITS OWN GROUND.
+      // `courtLevel` is derived once from EVERY socket; asking `plotHeight` per socket instead is
+      // the wiring bug `crossings.test.ts` asserts against by name — the frame's first course then
+      // lands ON the dais's top course rather than above it and the stone is embedded in the floor
+      // by a block (42 cells on s1337 t2). It is silent: nothing errors, nothing renders empty, a
+      // keeper just sees stones sunk into their own plinth. It reads null for the same reason
+      // `courtFits` refuses — a court that cannot stand should not be half-built.
+      const level = courtLevel(SEED, cfg)
+      const dais = level === null ? [] : courtPlatformCells(SEED, cfg)
       // Every footprint column loaded first — a 5-wide frame straddling a SECTION seam would
       // otherwise drop whichever half landed in a neighbour that has not arrived. Same reason
       // GATE_COLS checks all of them rather than the centre.
-      const ready = a.y !== null && socks.every(sk => cols.current.has(colOf(sk.x, sk.z)))
-      if (fit.ok && ready) {
+      //
+      // ⚠ AND THE DAIS IS THE PART THAT MAKES THIS BITE. A frame is 7 wide; the apron reaches
+      // COURT_RADIUS + PLATFORM_MARGIN out from the focus, so it crosses section seams the frames
+      // never came near. Checking only the sockets would lay whichever half of the floor happened
+      // to have arrived and leave the rest as a hole the keeper walks into — and the build pass is
+      // keyed on the tier, so it would never come back to finish it.
+      const ready = a.y !== null && level !== null
+        && socks.every(sk => cols.current.has(colOf(sk.x, sk.z)))
+        && dais.every(c => cols.current.has(colOf(c.x, c.z)))
+      if (fit.ok && ready && level !== null) {
         // Clear first: an older court's stone may stand where the new one goes, and laying the new
         // court before clearing would then delete cells it had just placed.
         //
@@ -7091,22 +7109,43 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // a column range wide and tall enough for any frame this station has ever laid, starting at
         // the ground itself so the pre-08-27 BURIED course is included, and it only ever removes
         // cut stone and lamp — a keeper's own build in that volume is another material.
-        const clearSite = (sk: ReturnType<typeof courtSockets>[number], cfg2: typeof cfg) => {
+        // ⚠ THE MATERIALS ARE ASKED FOR, NOT LISTED HERE. This was `CUT_STONE || MANA_LANTERN`,
+        // written when those were the only two a court could contain. `isCourtMaterial` is the
+        // court's own answer, so the day it lays a fourth thing the sweep already knows — the two
+        // literals in a render file are how an entire platform gets left standing.
+        const sweep = (c: { x: number; y: number; z: number }) => {
+          if (isCourtMaterial(voxel(c.x, c.y, c.z))) setVoxel(c.x, c.y, c.z, AIR)
+        }
+        const clearSite = (sk: ReturnType<typeof courtSockets>[number], cfg2: typeof cfg,
+                           lvl: number | null) => {
           const h = plotHeight(sk.x, sk.z, SEED, cfg2)
           if (h === null) return
-          for (const c of courtClearCells(sk, h)) {
-            const m = voxel(c.x, c.y, c.z)
-            if (m === MAT.CUT_STONE || m === MAT.MANA_LANTERN) setVoxel(c.x, c.y, c.z, AIR)
-          }
+          // A rev-4 frame stands on the dais, so its lintel is `lvl - h` courses above where a
+          // sweep bounded at the frame's own height would stop looking. Pass the lift this site
+          // was actually built with; a pre-dais site passes null and sweeps from its ground.
+          for (const c of courtClearCells(sk, h, lvl === null ? 0 : lvl - h)) sweep(c)
         }
         // 1 + 2. Every smaller fold's court, in BOTH shapes it may have been laid in.
         for (const { tier: oldTier } of staleCourts(SEED, plotTier.current)) {
           const oldCfg = plotForTier(oldTier)
-          for (const sk of courtSockets(SEED, oldCfg)) clearSite(sk, oldCfg)
-          for (const sk of legacyRowSockets(SEED, oldCfg)) clearSite(sk, oldCfg)
+          const oldLevel = courtLevel(SEED, oldCfg)
+          for (const sk of courtSockets(SEED, oldCfg)) clearSite(sk, oldCfg, oldLevel)
+          for (const sk of legacyRowSockets(SEED, oldCfg)) clearSite(sk, oldCfg, null)
+          // ★★ AND THE OLD FLOOR, WHICH NO PER-SOCKET SWEEP REACHES. `courtClearCells` is a box
+          // around one socket; the dais is a sector out past all of them, so the frames would come
+          // up and the platform they stood on would stay — abandoned architecture, and far larger
+          // than the arches. It is derived from seed + cfg, so the old one can be asked for exactly.
+          for (const c of courtPlatformCells(SEED, oldCfg)) sweep(c)
         }
         // 3. And THIS fold's retired straight row, which no tier change would ever have reached.
-        for (const sk of legacyRowSockets(SEED, cfg)) clearSite(sk, cfg)
+        for (const sk of legacyRowSockets(SEED, cfg)) clearSite(sk, cfg, null)
+        // 4. ★ AND THIS FOLD'S OWN PREVIOUS COURT, which is new with the dais: every earlier rev
+        // stood its frames on each socket's own ground, and rev 4 lifts them onto `courtLevel`. The
+        // lay pass below only writes the cells it wants, so the courses the old frame held BELOW
+        // the new one survive as stubs — and the frame is wider than the apron, so the outermost
+        // columns are not even covered by the new floor. A rev change moves the stone; the stone
+        // does not move itself.
+        for (const sk of socks) clearSite(sk, cfg, level)
         // ★★ EVERY SOCKET STANDS, EARNED OR NOT — canon 08-24: Greg PRE-PLACES them, one lit and
         // the rest dark, and *"the station grants nothing — it displays reach the keeper has
         // already earned."* This used to lay a socket's stone only once its waymark was held, so
@@ -7114,11 +7153,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // it existed. Dark is information. `socketLit` decides the LAMP; the frame is unconditional
         // and therefore pure geometry again.
         const held = waymarks.current.marks.length
+        // ★ THE FLOOR GOES DOWN FIRST. It fills each column from that column's own terrain up to
+        // the shared level, so it meets the ground wherever the ground is — and laying it after the
+        // frames would bury their first course in it.
+        for (const c of dais) if (voxel(c.x, c.y, c.z) !== PLATFORM_MAT) setVoxel(c.x, c.y, c.z, PLATFORM_MAT)
         for (const sk of socks) {
-          const h = plotHeight(sk.x, sk.z, SEED, cfg)
-          if (h === null) continue
           const lit = socketLit(sk, held)
-          for (const c of socketCells(sk, h)) {
+          for (const c of socketCells(sk, level)) {
             const want = socketMaterial(c, lit)
             if (voxel(c.x, c.y, c.z) !== want) setVoxel(c.x, c.y, c.z, want)
           }
@@ -7138,13 +7179,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         && courtMarks.current !== waymarks.current.marks.length) {
       const cfg = plotCfg.current
       const a = courtAnchor(SEED, cfg)
-      if (a.y !== null) {
+      // ⚠⚠ THE SAME `courtLevel` THE BUILD PASS LAID WITH, and this is the half that would have
+      // stayed wrong quietly. These two passes derive the same cells independently; if this one
+      // asks `plotHeight` per socket while the build asks `courtLevel`, the lamp is written a
+      // course or two BELOW the frame that holds it — into the dais, or into air beside it. The
+      // lit socket would simply never change colour, and nothing anywhere reports a lamp set in a
+      // block that is not there.
+      const level = courtLevel(SEED, cfg)
+      if (a.y !== null && level !== null) {
         const held = waymarks.current.marks.length
         for (const sk of courtSockets(SEED, cfg)) {
-          const h = plotHeight(sk.x, sk.z, SEED, cfg)
-          if (h === null) continue
           const lit = socketLit(sk, held)
-          for (const c of socketCells(sk, h))
+          for (const c of socketCells(sk, level))
             if (c.lamp && voxel(c.x, c.y, c.z) !== socketMaterial(c, lit))
               setVoxel(c.x, c.y, c.z, socketMaterial(c, lit))
         }
