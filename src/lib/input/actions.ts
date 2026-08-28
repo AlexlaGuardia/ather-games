@@ -113,10 +113,20 @@ export const DEFAULTS: Record<ActionId, Binding> = {
   'world.interact': { keys: ['KeyE'],                      pad: ['X'] },
   'item.draw':      { keys: ['KeyF'],                      pad: ['Y'] },
   'item.drop':      { keys: ['KeyQ'],                      pad: ['DDOWN'] },
-  // ⚠ PAD MOVED RB -> Y (2026-08-28, Alex's ruling put the shield on RB). Y is `item.draw`, and
-  // the two resolve the same way KeyQ's drop/cycle overlap already does: drawn = cycle, stowed =
-  // draw. That is the "weapon verb consolidates onto Y" consolidation the old comment below was
-  // waiting for; it is here because the ruling needed RB, not because the weapon work happened.
+  // ⚠ PAD MOVED RB -> Y (2026-08-28, Alex's ruling put the shield on RB). Y is also `item.draw`.
+  //
+  // ⚠⚠ CORRECTED 2026-08-28 (the UI-verb tranche). This comment used to say the two "resolve the
+  // same way KeyQ's drop/cycle overlap already does: drawn = cycle, stowed = draw." THAT WAS NEVER
+  // TRUE OF THE SHIPPED ORDER, and it was written on the day the pad's edge half was plugged in —
+  // so it described a resolution nothing implemented and nothing could have implemented. The verb
+  // chain runs `item.draw` first, ungated, and stops there, so pad Y has always drawn and stowed
+  // and has never cycled. The keyboard never noticed because F and Q are different keys.
+  //
+  // ★ AND THE ORDER WAS NOT CHANGED TO MATCH THE COMMENT, DELIBERATELY. Putting cycle first would
+  // make it eat every drawn press, and a controller could then DRAW A WEAPON AND NEVER STOW IT —
+  // stow is the verb you cannot afford to lose. `ui-chain.test.ts` asserts the draw wins, in both
+  // states, so this cannot be quietly "fixed" back into the trap. Making cycle reachable on a pad
+  // needs a SECOND button, which is a controls call and Alex's; it is logged on GBOARD.
   'item.cycle':     { keys: ['KeyQ'],                      pad: ['Y'] },
   'ui.craft':       { keys: ['KeyC'],                      pad: ['DLEFT'] },
   'ui.build':       { keys: ['Tab'],                       pad: ['DRIGHT'] },

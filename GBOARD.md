@@ -286,17 +286,40 @@ keeps its own hotkey.** Measuring before building turned a rebinding job into a 
   moment `item.cycle` moved to Y, with a message telling the next person to finish the job. **That
   is the whole argument for writing an exemption so it expires**, and it is the only reason the
   section got rewritten by someone who was not looking for it.
-- **⏭ NEXT:** **Alex plays it on a pad** — RT to mine, hold RB to charge, RB+LB for the signature ·
-  then the **UI-verb tranche**: craft/build/map/satchel/draw/drop/close still live inside the
-  keydown listener behind priority rules encoded as early `return`s (cursor-surface gating, the
-  draw lock). Reaching them means lifting that chain into a function both callers share — a real
-  refactor of an 8500-line component, its own commit. ⚠ **Doing half of it by duplicating the
-  conditions in the frame loop is how the two paths start disagreeing about what E does.**
+- **★★★ THE UI-VERB TRANCHE LANDED (2026-08-28, play lane) — `ui-chain.ts`.** The seven verbs
+  (craft/build/map/satchel/draw/drop/close) are reachable from a pad. The priority order and its
+  two barriers are now a 15-step ARRAY, and both devices walk the same one: the keydown adapter
+  passes `matches(code)`, the frame loop passes `padNow.has`. The bodies stayed in `VoxelWorld` as
+  named thunks with their comments, because the seam worth extracting is ORDER-AND-GATING, not
+  behaviour. The effect's dep list went **19 → 4**, which is the refactor showing its work — a
+  stale gate is no longer something you can write by forgetting a name.
+- **⚠⚠ `actions.ts` CLAIMED A RESOLUTION NOTHING IMPLEMENTED, and it was one day old.** Pad Y is
+  bound to BOTH `item.draw` and `item.cycle`, and the comment said they resolve *"drawn = cycle,
+  stowed = draw"*. The shipped order runs `item.draw` first, ungated, and stops — so pad Y has
+  always drawn and stowed and **has never cycled**. The keyboard never noticed because F and Q are
+  different keys. ★ **The order was NOT changed to match the comment**: cycle-first would eat every
+  drawn press and a controller could draw a weapon and never stow it. Comment corrected, assert
+  added in both states.
+- **⚠⚠ AND THE FIRST VERSION OF THE NEW GUARD WAS DECORATION — 300 ASSERTS THAT COULD NOT FAIL.**
+  It walked the chain with a keyboard predicate and a pad predicate and compared the run lists.
+  Both walks take the SAME array and the two predicates are equal by construction, so it was
+  proving an identity. *Ask of any guard: is there an input that makes this fire?* The property
+  really at risk is structural and lives at the CALL SITES — a second chain built for the pad, or
+  a gate re-tested in the frame loop — so the guard reads the component's source through
+  `codeOnly()` and asserts **one construction site, two walks, and no condition on the pad's**.
+  8/8 mutations caught, entering from both files.
+- **⏭ NEXT:** **Alex plays it on a pad** — RT to mine, hold RB to charge, RB+LB for the signature,
+  and now the d-pad/SELECT/START panels · **three controller gaps named rather than guessed**, all
+  of them controls calls that are Alex's: (a) the **hotbar number row is keyboard-only** — the
+  digits are read off `e.key` and have no `ActionId`, so a pad cannot select a slot at all; (b)
+  **drop-all** is Shift+Q and a pad has no shift, so a controller drops one stack per press;
+  (c) **`item.cycle` is unreachable on a pad** and needs a second button if it should be reachable.
 
 ### Files
 `lib/input/actions.ts` (`padChord`, the ruling) · `lib/input/resolve.ts` (chord resolution +
 `chordOf`) · `lib/input/bindings.ts` (merge fallback, padGaps) · `lib/input/hints.ts` (chord
 rendering) · `lib/input/input.test.ts` (194 → 217) · `voxel3d/VoxelWorld.tsx` (the edge half)
+· **`voxel3d/ui-chain.ts` + `ui-chain.test.ts` (the UI-verb tranche, 44 asserts)**
 
 ## 🪓 Shimmer voxel3d — **BREAK-FX IS IN THE WORLD, AND THE FUNNEL THAT ASKED FOR IT WAS REFUSED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, morning) — `6849803` pushed, 0 unpushed, tsc 7 (baseline), canon 0 CONFLICT / 3 NOTE / 13 CLEAN, break-fx 26 + spec 29 + **wiring 40 (new)** green, 8/8 mutations caught, sweep 195 suites / 194 pass / 0 KILLED (the 1 FAIL is `hollow-look.ts`, not this). ✅ **DEPLOYED** `BUILD_ID iSOkQgkIvRYFmfYiKd47_`, 157 chunks, pm2 restarted, prod 200 — built backgrounded from a clean tree, no dirty-file warning.*
 

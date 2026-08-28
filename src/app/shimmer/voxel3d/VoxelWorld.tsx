@@ -54,6 +54,7 @@ import { stopScan, mayStartColdField, SPAWN_SCAN_MAX } from './spawn-budget'
 import { load as loadBindings, type BindingMap } from '@/lib/input/bindings'
 import { matches, heldActions, padPressed, stickMove } from '@/lib/input/resolve'
 import type { ActionId } from '@/lib/input/actions'
+import { uiChain, runChain, SUPPRESS_DEFAULT, type Step as UiStep } from './ui-chain'
 import { poll as pollPad, resetEdges, type PadSample, type PadKind } from '@/lib/input/gamepad'
 import BindingsPanel from './BindingsPanel'
 import { hintsFor } from '@/lib/input/hints'
@@ -1844,121 +1845,133 @@ export default function VoxelWorld() {
     else advanceTutorial('light', 'report')
   }, [advanceTutorial])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Typing beats verbs: keystrokes aimed at ANY text field (the console line, a settings
-      // slider) must never run game verbs underneath what you're writing.
-      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
-      // T / Enter / '/' — the chat console (MC's three doors, verbatim: '/' arrives pre-slashed).
+  /**
+   * ── ★★★ THE UI VERB CHAIN, LIFTED SO A CONTROLLER CAN WALK IT (2026-08-28) ──────────────────
+   * These verbs used to live as an `if` chain inside `onKey` below, with their priority rules
+   * written as early `return`s. That made a `KeyboardEvent` the only way to reach them: when the
+   * pad's edge half was plugged in, it got the cast and world verbs and NOT craft/build/map/
+   * satchel/draw/close, because the rules deciding whether `ui.craft` may run lived inside a
+   * keystroke handler. The order and the gates now live in `ui-chain.ts` and BOTH devices walk the
+   * same array; the bodies stayed here, as thunks, with the comments that explain them.
+   * ⚠ Not re-testing `cursorUIOpen`/`drawn` in the frame loop is the whole point — a duplicated
+   * priority order drifts one branch at a time until the two devices disagree and nothing is red.
+   */
+  const uiSteps = useMemo(() => uiChain(
+    { consoleOpen, dialogueOpen, craftOpen, bagOpen, showSettings, cursorUIOpen, drawn, build },
+    {
+      // T / Enter / '/' — the chat console (MC's three doors; '/' arrives pre-slashed via the seed).
       // Above the draw lock on purpose: a console you cannot open while your weapon is out is a
       // console you cannot use to debug the weapon.
-      if (!consoleOpen && !dialogueOpen && !craftOpen && !bagOpen && !showSettings) {
-        if (matches(bindings.current, e.code, 'ui.chat')) { e.preventDefault(); openCursorUI(); setConsoleSeed(''); setConsoleOpen(true); return }
-        if (e.key === '/') { e.preventDefault(); openCursorUI(); setConsoleSeed('/'); setConsoleOpen(true); return }
-      }
-      const n = Number(e.key)
-      /**
-       * ── ★ THE SURFACE KEYS RUN FIRST, AND THEY RUN EVEN WITH A SURFACE UP ────────────────────
-       * They are how you get OUT. Everything below them is a world verb, and a world verb under an
-       * open menu is a key whose effect the player cannot see happen — which is how you end up
-       * drawing a weapon or flipping into build mode from inside the bag and only finding out when
-       * you close it. Ordered this way rather than gated in place because the close paths and the
-       * world verbs want opposite answers to the same question.
-       *
-       * The draw lock still wraps them: with a weapon out neither hand is free, menus included.
-       */
-      if (matches(bindings.current, e.code, 'ui.close')) {
-        // Escape only reaches us when the pointer is already free (the browser eats it to exit the
-        // lock first) — so close the surfaces AND settle the handoff ledger. closeCursorUI's relock
-        // will be refused by the browser's post-Esc cooldown and swallowed; that is the one seam
-        // where a canvas click is still needed, same as play3d.
+      openConsole: (seed: string) => { openCursorUI(); setConsoleSeed(seed); setConsoleOpen(true) },
+      // Escape only reaches us when the pointer is already free (the browser eats it to exit the
+      // lock first) — so close the surfaces AND settle the handoff ledger. closeCursorUI's relock
+      // will be refused by the browser's post-Esc cooldown and swallowed; that is the one seam
+      // where a canvas click is still needed, same as play3d.
+      closeSurfaces: () => {
         if (craftOpen) { setCraftOpen(false); closeCursorUI() }
         if (bagOpen || openChest) closeBag()
         if (dialogueOpen) closeDialogue()
         if (consoleOpen) { setConsoleOpen(false); closeCursorUI() }
-        return
-      }
-      if (!drawn) {
-        // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
-        if (matches(bindings.current, e.code, 'ui.settings')) {
-          if (showSettings) { setShowSettings(false); closeCursorUI() }
-          else { openCursorUI(); setShowSettings(true) }
-          return
-        }
-        // C opens the crafting surface. It used to auto-craft the next affordable tool with no UI at
-        // all, which hid the fact that the whole forestry ladder was uncraftable — you pressed C,
-        // nothing happened, and nothing told you why. A list that shows what you CANNOT afford yet
-        // is the difference between a broken key and a goal.
-        if (matches(bindings.current, e.code, 'ui.craft')) {
-          if (craftOpen) { setCraftOpen(false); closeCursorUI() }
-          else { openCursorUI(); setCraftOpen(true) }
-          return
-        }
-        // I opens the satchel — same open/close-on-the-same-key shape as C and E, so the three
-        // cursor surfaces behave identically. Escape dismisses them all as well.
-        // M opens the map and closes it — the same one-key shape as I and C, and it is a CURSOR
-        // surface (you read a map standing still), so it takes the pointer like the others do.
-        if (matches(bindings.current, e.code, 'ui.map')) {
-          if (showMap) { setShowMap(false); closeCursorUI() }
-          else if (!cursorUIOpen) { openCursorUI(); setShowMap(true) }
-          return
-        }
-        if (matches(bindings.current, e.code, 'ui.inventory')) {
-          if (bagOpen || openChest) closeBag()
-          else { openCursorUI(); setBagOpen(true) }
-          return
-        }
-        // E talks to Greg when the crosshair is ON him, and closes the box that opens from it — the same key
-        // both opens and dismisses, matching how C works for the crafting surface just above.
-        if (matches(bindings.current, e.code, 'world.interact')) {
-          if (dialogueOpen) closeDialogue()   // hands the cursor back itself
-          else if (cursorUIOpen) { /* a surface is up and E is not its door — do nothing */ }
-          else if (nearGreg) { openCursorUI(); setDialogueOpen(true) }
-          // E is the interact key everywhere else too: at the bench it opens the craft surface —
-          // the MC muscle memory — with Greg taking priority when you're near both. C still works.
-          else if (nearTable) { openCursorUI(); setCraftOpen(true) }
-          // A presence in the mist answers E last: Greg and the bench are both things you walked to
-          // deliberately inside a settled place, and a patch never overlaps either. Ordered anyway
-          // so the priority is stated rather than incidental.
-          else if (nearMist && hasParty) startSpar(nearMist)
-          return
-        }
-      }
-      // ★ Past this line every key changes the WORLD, so a surface being up stops all of them.
-      if (cursorUIOpen) return
+      },
+      // Esc exits pointer lock anyway, so O is the settings key — it must not fight the browser.
+      toggleSettings: () => {
+        if (showSettings) { setShowSettings(false); closeCursorUI() }
+        else { openCursorUI(); setShowSettings(true) }
+      },
+      // C opens the crafting surface. It used to auto-craft the next affordable tool with no UI at
+      // all, which hid the fact that the whole forestry ladder was uncraftable — you pressed C,
+      // nothing happened, and nothing told you why. A list that shows what you CANNOT afford yet
+      // is the difference between a broken key and a goal.
+      toggleCraft: () => {
+        if (craftOpen) { setCraftOpen(false); closeCursorUI() }
+        else { openCursorUI(); setCraftOpen(true) }
+      },
+      // M opens the map and closes it — the same one-key shape as I and C, and it is a CURSOR
+      // surface (you read a map standing still), so it takes the pointer like the others do.
+      toggleMap: () => {
+        if (showMap) { setShowMap(false); closeCursorUI() }
+        else if (!cursorUIOpen) { openCursorUI(); setShowMap(true) }
+      },
+      // I opens the satchel — same open/close-on-the-same-key shape as C and E, so the three
+      // cursor surfaces behave identically. Escape dismisses them all as well.
+      toggleBag: () => {
+        if (bagOpen || openChest) closeBag()
+        else { openCursorUI(); setBagOpen(true) }
+      },
+      // E talks to Greg when the crosshair is ON him, and closes the box that opens from it — the
+      // same key both opens and dismisses, matching how C works for the crafting surface.
+      interact: () => {
+        if (dialogueOpen) closeDialogue()   // hands the cursor back itself
+        else if (cursorUIOpen) { /* a surface is up and E is not its door — do nothing */ }
+        else if (nearGreg) { openCursorUI(); setDialogueOpen(true) }
+        // E is the interact key everywhere else too: at the bench it opens the craft surface —
+        // the MC muscle memory — with Greg taking priority when you're near both. C still works.
+        else if (nearTable) { openCursorUI(); setCraftOpen(true) }
+        // A presence in the mist answers E last: Greg and the bench are both things you walked to
+        // deliberately inside a settled place, and a patch never overlaps either. Ordered anyway
+        // so the priority is stated rather than incidental.
+        else if (nearMist && hasParty) startSpar(nearMist)
+      },
       // ── ★ THE DRAW LOCK (Alex, 2026-08-07) ────────────────────────────────────────────────
       // "when the player has a weapon stowed the hotbar kicks in and when they draw their weapon
       // the hotbar and tools lock up." F is the toggle, matching play3d's holster key so the two
-      // walkers do not disagree about what F means.
-      //
-      // The lock is a MODE, not a disable: it blocks the verbs (mine, place, switch slot, build)
-      // rather than hiding the row, so you can still see what you were holding and what you will
-      // be holding again the moment you stow. A hotbar that vanished would make drawing feel like
-      // losing your inventory.
-      //
-      // ⚠ The weapon itself is NOT here yet. Guns live inside Shimmer3D (a 3-entry WEAPONS table
-      // plus the FiringRange rig) and porting them is its own step — this ships the mode and the
-      // lock, which is the half that decides how the hotbar behaves. Alex ruled guns DO cross into
-      // the Ather (2026-08-07), overturning the 07-22 aegis; that ruling still needs authoring into
-      // world/lucernyx.md — see CANON_GAPS.md.
-      if (matches(bindings.current, e.code, 'item.draw')) { setDrawn(d => !d); return }
+      // walkers do not disagree about what F means. The lock is a MODE, not a disable: it blocks
+      // the verbs rather than hiding the row, so you can still see what you were holding and what
+      // you will be holding again the moment you stow.
+      // ⚠ The weapon itself is NOT here yet — Alex ruled guns DO cross into the Ather (2026-08-07),
+      // overturning the 07-22 aegis; that ruling still needs authoring into world/lucernyx.md.
+      toggleDrawn: () => setDrawn(d => !d),
       // Q swaps the model, and ONLY while drawn — with the weapon stowed Q would be a key that
       // silently changes something you cannot see, which is how a player learns not to trust a HUD.
-      if (matches(bindings.current, e.code, 'item.cycle') && drawn) { setWeaponIdx(i => { const n = (i + 1) % WEAPONS.length; setAmmoUi(WEAPONS[n].clip); return n }); return }
-      if (drawn) return   // every verb below is locked while the weapon is out
-      if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
-      if (matches(bindings.current, e.code, 'ui.build')) { e.preventDefault(); setBuild(v => !v) }
-      if (matches(bindings.current, e.code, 'build.rotate')) setRot(r => ((r + 1) % 4) as Rotation)
+      cycleWeapon: () => setWeaponIdx(i => { const n = (i + 1) % WEAPONS.length; setAmmoUi(WEAPONS[n].clip); return n }),
+      toggleBuild: () => setBuild(v => !v),
+      rotatePiece: () => setRot(r => ((r + 1) % 4) as Rotation),
       // ] and [ walk the material axis. Gated on `build` because outside the palette they would be
       // keys that silently change something with nothing on screen to show it.
-      if (build && matches(bindings.current, e.code, 'build.materialNext')) setMatIdx(v => (v + 1) % PIECE_MATERIALS.length)
-      if (build && matches(bindings.current, e.code, 'build.materialPrev')) setMatIdx(v => (v - 1 + PIECE_MATERIALS.length) % PIECE_MATERIALS.length)
-      // Tool tier is a debug lever so the tier GATE can be felt in ten seconds: a tier-1 spike
-      // REFUSES pure core, and that should be provable without crafting your way up first.
-      // ★ THE TIER LEVER IS GONE. Tier comes from the equipped tool now, and a better tool is
-      // CRAFTED from what you mined — which is the loop this port exists to close. The C / I / E / O
-      // surface keys and Escape live ABOVE the world-verb gate now (see the block up there): they
-      // are the doors, and a door that only works when nothing is open is not a door.
+      materialNext: () => setMatIdx(v => (v + 1) % PIECE_MATERIALS.length),
+      materialPrev: () => setMatIdx(v => (v - 1 + PIECE_MATERIALS.length) % PIECE_MATERIALS.length),
+    },
+  ), [consoleOpen, dialogueOpen, craftOpen, bagOpen, showSettings, cursorUIOpen, drawn, build, showMap,
+      openChest, nearGreg, nearTable, nearMist, hasParty, openCursorUI, closeCursorUI, closeBag,
+      closeDialogue, startSpar])
+
+  /**
+   * The chain as a ref, because `World`'s frame loop is a different component and reads it per
+   * frame. Same reason `bindings`, `pad` and `uiOpen` are refs: a prop captured by a `useFrame`
+   * closure is a value from whichever render registered it.
+   */
+  const uiStepsRef = useRef(uiSteps)
+  uiStepsRef.current = uiSteps
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Typing beats verbs: keystrokes aimed at ANY text field (the console line, a settings
+      // slider) must never run game verbs underneath what you're writing.
+      // ⚠ THIS GUARD IS THE KEYBOARD ADAPTER'S, NOT THE CHAIN'S, and deliberately so: it asks
+      // whether this KEYSTROKE was aimed at a text field, which is a question a pad button cannot
+      // ask and must not be made to answer. A controller press is never aimed at an input.
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return
+      /**
+       * `/` is `ui.chat` with a different seed, so it fires the SAME step at the SAME position
+       * behind the SAME surface gate rather than getting a branch of its own above the chain.
+       * ⚠ A code the player has bound to `ui.chat` still wins on its own merits — this only widens
+       * what counts as a chat press, it does not reorder anything.
+       */
+      const fires = (id: ActionId) => matches(bindings.current, e.code, id) || (id === 'ui.chat' && e.key === '/')
+      const r = runChain(uiSteps, fires, { consoleSeed: e.key === '/' ? '/' : '' })
+      for (const id of r.ran) if (SUPPRESS_DEFAULT.has(id)) e.preventDefault()
+      if (r.stopped) return
+      /**
+       * The hotbar's number row. Keyboard-only — there is no `ActionId` for "slot 5", because the
+       * digits are read off `e.key` rather than bound, so a pad cannot reach them at all. That is
+       * a REAL controller gap, named on GBOARD rather than papered over here.
+       * ⚠ It ran ABOVE `ui.build` in the old chain and runs below it now. That is equivalent and
+       * not an oversight: one `e.code` reaching both a digit and `ui.build` would have run both
+       * either way, and `build` here is the render's value, which `setBuild` does not change
+       * synchronously — so the branch taken is the same in both orders.
+       */
+      const n = Number(e.key)
+      if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
     }
     // Scroll to change slot — the reason tools are IN the row rather than on their own keys.
     // In BUILD mode the same wheel walks the piece catalogue (2026-08-08 — it used to dead-end
@@ -1980,7 +1993,11 @@ export default function VoxelWorld() {
     window.addEventListener('keydown', onKey)
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel); window.removeEventListener('blur', onBlur) }
-  }, [build, drawn, dialogueOpen, nearGreg, nearTable, craftOpen, showSettings, consoleOpen, closeDialogue, openCursorUI, closeCursorUI, nearMist, hasParty, startSpar, bagOpen, openChest, closeBag, cursorUIOpen, showMap])
+    // ⚠ THE DEP LIST SHRANK FROM NINETEEN TO FOUR AND THAT IS THE REFACTOR SHOWING ITS WORK.
+    // Every gate and body this effect used to close over now hangs off `uiSteps`, which carries
+    // its own memo deps — so a stale gate here is no longer possible to write by forgetting a name.
+    // `build`/`drawn`/`cursorUIOpen` remain because the WHEEL handler reads them directly.
+  }, [uiSteps, build, drawn, cursorUIOpen])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -2056,7 +2073,7 @@ export default function VoxelWorld() {
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
           onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
-          uiOpen={cursorUIOpenRef} owner={isOwnerRef} foesOut={foesRef} pressOut={pressRef}
+          uiOpen={cursorUIOpenRef} uiSteps={uiStepsRef} owner={isOwnerRef} foesOut={foesRef} pressOut={pressRef}
           waterOut={waterOut}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
@@ -3338,7 +3355,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, owner, foesOut, pressOut, waterOut, castOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3444,6 +3461,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * which want the LIVE value rather than the one captured at their last render.
    */
   uiOpen: React.RefObject<boolean>
+  /**
+   * The UI verb chain, so the frame loop can walk the SAME priority order the keydown handler
+   * walks. A ref because this is read per frame — see `ui-chain.ts` for why it is one array.
+   */
+  uiSteps: React.RefObject<UiStep[]>
   /** Keeper of the realm. Gates FLY — see the V binding. Live ref, never the state (async fetch). */
   /**
    * ⚠ A REF, FOR THE SAME REASON `owner` IS ONE. This component's key listener is registered once
@@ -7392,12 +7414,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // the shield charge, a hold) was reachable. The map itself was complete and correct the whole
     // time; nobody had plugged it in.
     //
-    // ⚠ THIS BLOCK IS THE CAST + WORLD-VERB TRANCHE, NOT ALL SEVENTEEN. The UI verbs (craft,
-    // build, map, satchel, draw, drop, close) live inside the keydown listener above, wrapped in
-    // priority rules — cursor-surface gating, the draw lock — that are encoded as early `return`s.
-    // Reaching them from here means lifting that chain into a function both callers share, which
-    // is a real refactor of an 8500-line component and belongs in its own commit. Doing half of it
-    // by duplicating the conditions here is how the two paths start disagreeing about what E does.
+    // ★ AND THE UI TRANCHE FOLLOWED (2026-08-28, later the same day). The seven remaining verbs —
+    // craft, build, map, satchel, draw, drop, close — were the ones whose priority rules lived as
+    // early `return`s inside that keydown handler, unreachable without a `KeyboardEvent`. Those
+    // rules are now the array in `ui-chain.ts` and this loop walks the SAME one, so there is no
+    // second copy of the order to drift. `item.drop` is the single exception and says why below.
     const padNow = padPressed(bindings.current, pad.current)
 
     // The cast bar. ⚠ ONE FRAME LATE BY CONSTRUCTION and that is fine: `pendingCast` is consumed
@@ -7405,6 +7426,33 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // cast lands on the next frame (~16ms). The keyboard path has no such ordering only because a
     // keydown can arrive at any moment. Not worth reordering the poll to fix a frame nobody feels.
     for (let i = 0; i < CAST_ACTIONS.length; i++) if (padNow.has(CAST_ACTIONS[i])) pendingCast.current = i
+
+    /**
+     * ── ★★★ THE UI VERBS, WALKED FROM THE PAD ────────────────────────────────────────────────
+     * The same array the keydown handler walks, with the same gates in the same order — the only
+     * difference is the predicate: `padNow.has` here, `matches(code)` there. That is the whole
+     * design. `ui-chain.test.ts` walks one chain with both predicates and asserts they agree.
+     *
+     * ⚠ NO `preventDefault` HALF: a pad press has no browser default to suppress, which is why
+     * `SUPPRESS_DEFAULT` is consulted by the keyboard adapter and not by the chain.
+     *
+     * ⚠ THE SEED IS EMPTY AND CANNOT MATTER: `ui.chat` has no pad binding by design (you cannot
+     * type into the console with a controller), so the step it feeds is unreachable from here. It
+     * is passed honestly rather than faked, so the day chat gets a button this opens an empty line
+     * instead of a slash command nobody asked for.
+     */
+    runChain(uiSteps.current, id => padNow.has(id), { consoleSeed: '' })
+
+    /**
+     * `item.drop` is the one UI verb NOT in the chain, because its body is not the parent's:
+     * `pendingDrop` is World's own ref, handed to the frame that has the live drops array. So it
+     * mirrors the listener it actually belongs to — the `kd` handler above, whose only gate is
+     * `uiOpen` — rather than being bent into a chain thunk the parent cannot write.
+     * ⚠ `all: false`. Shift+Q throws the WHOLE stack on a keyboard and a pad has no shift, so a
+     * controller drops one stack per press. Inventing a chord for "drop all" is a controls call,
+     * not a wiring one, and it is Alex's — logged on GBOARD rather than guessed at here.
+     */
+    if (padNow.has('item.drop') && !uiOpen.current) pendingDrop.current = { all: false }
 
     // ── world.mine / world.place: the triggers MIRROR THE MOUSE AT ITS SOURCE ────────────────
     // ⚠ `mouse.current.left/right` are not "is the button down". They are latched, CONSUMABLE —

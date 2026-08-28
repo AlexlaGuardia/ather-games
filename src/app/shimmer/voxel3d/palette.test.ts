@@ -12,6 +12,7 @@
 // consumer, separated by a gate.
 
 import { readFileSync } from 'node:fs'
+import { uiChain, runChain } from './ui-chain'
 import { PIECES, ALL_PIECES, PIECE_MATERIALS, pieceVariants, pieceDef, pieceMaterial, basePieceId } from '../voxel/pieces'
 
 let pass = 0
@@ -79,9 +80,15 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(/pieceDef\(pieceId\)/.test(src), 'and places THAT piece — not PIECES[pieceIdx]')
   ok(!/pieceDef\(PIECES\[pieceIdx\]/.test(src), 'the old shape-only resolution is gone from the placement site')
 
-  // Both keys reach the material axis, and only inside build mode.
-  ok(/build\.materialNext/.test(src) && /build\.materialPrev/.test(src), 'both material keys are handled')
+  // ⚠⚠ THIS ASSERT USED TO GREP THIS FILE FOR `build.materialNext` AND IT WENT RED ON 2026-08-28,
+  // CORRECTLY. The two keys' priority and gating moved into `ui-chain.ts` when the UI verbs were
+  // lifted so a controller could reach them, and a text search over `VoxelWorld.tsx` could no
+  // longer see a thing that had not broken. ★ It is rewritten rather than REPOINTED at the new
+  // file, because a regex over ui-chain.ts would be the same standing claim about a file this
+  // test does not own, one move behind again. Ask the chain the game actually walks.
   ok(!/build\.tierUp|build\.tierDown/.test(src), 'the dead tier branch that occupied those keys is gone')
+  ok(/materialNext: \(\) =>[^\n]*setMatIdx/.test(src), 'the next-material body no longer lives in VoxelWorld')
+  ok(/materialPrev: \(\) =>[^\n]*setMatIdx/.test(src), 'the prev-material body no longer lives in VoxelWorld')
 
   // ⚠ The palette must highlight off the resolved id. Highlighting off the pair is a SECOND
   // derivation of "what is selected", and two derivations agree until they do not.
@@ -91,6 +98,32 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
   // The material row is a row: it renders every material, not the ones one shape happens to have.
   ok(/PIECE_MATERIALS\.map\(/.test(src), 'the material strip is rendered from the full material table')
+}
+// ── 4b. ★★ BOTH MATERIAL KEYS REACH THE AXIS, AND ONLY INSIDE BUILD MODE ───────────────────────
+// Asked THROUGH the shared verb chain, in both states, because that is what both the keydown
+// handler and the frame loop walk. Outside the palette these keys would silently change something
+// with nothing on screen to show it, which is the gate this proves is still there.
+{
+  const fired: string[] = []
+  const hit = (n: string) => () => { fired.push(n) }
+  const spy = {
+    openConsole: hit('openConsole'), closeSurfaces: hit('closeSurfaces'),
+    toggleSettings: hit('toggleSettings'), toggleCraft: hit('toggleCraft'), toggleMap: hit('toggleMap'),
+    toggleBag: hit('toggleBag'), interact: hit('interact'), toggleDrawn: hit('toggleDrawn'),
+    cycleWeapon: hit('cycleWeapon'), toggleBuild: hit('toggleBuild'), rotatePiece: hit('rotatePiece'),
+    materialNext: hit('materialNext'), materialPrev: hit('materialPrev'),
+  }
+  const base = { consoleOpen: false, dialogueOpen: false, craftOpen: false, bagOpen: false,
+                 showSettings: false, cursorUIOpen: false, drawn: false }
+  const press = (id: 'build.materialNext' | 'build.materialPrev', build: boolean) => {
+    fired.length = 0
+    runChain(uiChain({ ...base, build }, spy), a => a === id, { consoleSeed: '' })
+    return [...fired]
+  }
+  ok(press('build.materialNext', true).includes('materialNext'), '] does not reach the material axis inside build mode')
+  ok(press('build.materialPrev', true).includes('materialPrev'), '[ does not reach the material axis inside build mode')
+  ok(press('build.materialNext', false).length === 0, '] walks the material axis OUTSIDE build mode — invisible state change')
+  ok(press('build.materialPrev', false).length === 0, '[ walks the material axis OUTSIDE build mode — invisible state change')
 }
 
 // ── 5. THE KEYS EXIST AND NOTHING ELSE CLAIMS THEM ──────────────────────────────────────────────
