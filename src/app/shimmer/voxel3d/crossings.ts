@@ -614,8 +614,11 @@ export function courtClearCells(
  * 4 = the dais (2026-08-27, wired): the stones stand on `courtLevel`, not each on its own ground,
  *     and a platform in a third material stands under them. A rev-3 court is at the wrong Y by a
  *     course or two AND has no floor, so it has to be re-laid rather than added to.
+ * 5 = the hub and wedges (2026-08-27, Alex: *"a bunch of stone with no real form"*): a stone hub on
+ *     the focus with a wedge running out to each socket. Purely additive to a rev-4 court, but a
+ *     standing one will never grow them without this, and the tier never changes again.
  */
-export const COURT_REV = 4
+export const COURT_REV = 5
 
 /** Why the court could not stand where it was derived. Every one is a placement bug, not a refusal. */
 export type CourtMisfit =
@@ -834,6 +837,150 @@ export function courtPlatformCells(
     }
   }
   return out
+}
+
+// ═══ THE HUB AND THE WEDGES ══════════════════════════════════════════════════════════════════
+//
+// ── ★★★ ALEX, 2026-08-27: *"a bunch of stone with no real form … kinda looks garbled"* ────────
+// The SECOND time he has said this about this court, and PATTERNS is explicit that a repeated
+// complaint after a fix means the fix missed. The dais answered the first one (grey worked stone on
+// grey raw stone, no edge for the eye). It could not answer this one, because this one is not about
+// material at all: **four stones standing apart on a slab have no composition.** Crisp stones would
+// still be four separate objects. His fix, and it is the right level: give the court a centre and
+// run each wedge out to it, so the eye starts somewhere and the station reads as ONE thing.
+//
+// ── ⚠⚠ AND "CENTRE" IS A CANON NOUN THAT MEANS SOMETHING ELSE ────────────────────────────────
+// `shimmer-geography.md:1131` rules the station's **Centre** as the middle SOCKET — the one home-gate
+// that crosses out of the Ather and the only reach that pays home-cost. Left and right arc are
+// passages. That file warns in as many words: *"Five sockets sitting side by side invites one noun
+// for all of them. It is one gate and N passages."* So the stone at the focus is **the hub**, never
+// "the centre", and it is deliberately given no meaning — a named object in the keeper's garden
+// (an altar, a shrine, a hearth) is canon, and Magii rules that, not this file. Composition is
+// Jin's by the same boundary: *"Jin's build: arc geometry … how sockets render … frame art."*
+//
+// ★ AND IT PAYS A CANON DEBT FOR FREE. Canon asks that the home-gate *"render it unlike its
+// neighbours"* — a live requirement the build met only by making that one frame bigger, which is
+// weak. The gate's wedge is wider than the passages', so the COMPOSITION carries the distinction.
+
+/** How far the hub reaches from the focus. Its top course is the one the keeper steps up onto. */
+export const COURT_HUB_RADIUS: number = 3
+
+/**
+ * Half-width of a wedge, per socket kind. The gate's is wider on purpose — see the canon note above.
+ * ⚠ Widths, not a hand-kept list of which socket is special: `SOCKET_KINDS[0]` is the gate by
+ * construction, so this cannot drift out of step with which socket actually crosses out.
+ */
+export const WEDGE_HALF: Record<SocketKind, number> = { gate: 2, passage: 1 }
+
+/**
+ * Every cell of the hub and its wedges — the course that stands ON the dais, at `level + 1`.
+ *
+ * ── ★★★ RASTERISED BY DISTANCE, NEVER BY STEPPING A LINE ─────────────────────────────────────
+ * This is the whole reason the wedges will read and the frames do not. `socketCells` walks its own
+ * lattice `(h, d)` and `Math.round`s each point onto the grid; at a facing near an axis that gives
+ * a solid 2x2 post, and at 40 degrees it gives a **three-cell diagonal staircase with gaps in it** —
+ * measured on s1337, and it is exactly what Alex is calling garbled. Half of every court's passages
+ * voxelise off-axis, so this is not one unlucky seed.
+ *
+ * A wedge cannot afford that, so it asks the opposite question: for every cell in the bounding box,
+ * *is my centre within `half + 0.5` of the segment?* That fills rather than samples, so the result
+ * is SOLID at every angle — staircased at the edge, which is what a path should look like, and
+ * never holed. ⚠ A staircase is fine for a path and fatal for a post; that difference is the whole
+ * reading, and it is why this fix does not also fix the frames.
+ *
+ * ⚠ IT STOPS AT THE FRAME, IT DOES NOT ENTER IT. Alex ruled *"reach"*, and reaching means butting
+ * against the stone — a wedge cell inside a doorway is a sill the keeper trips up as they cross,
+ * and one inside a jamb is a block fighting the frame for the same cell. Both look like a bug.
+ * ⚠ AND IT NEVER LEAVES THE DAIS. A wedge cell off the apron is a stone floating over grass; the
+ * dais is derived from the same seed, so the footprint can be asked for exactly rather than assumed.
+ */
+export function courtHubCells(
+  seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): { x: number; y: number; z: number }[] {
+  const level = courtLevel(seed, cfg)
+  if (level === null) return []
+  const a = courtAnchor(seed, cfg)
+  if (a.y === null) return []
+  const y = level + 1
+
+  // ── ⚠⚠ "IS THERE A DAIS BLOCK HERE" IS THE WRONG QUESTION, AND IT COST A WHOLE COURT ────────
+  // `courtPlatformCells` fills each column from its own ground UP to `level`, so a column whose
+  // ground is ALREADY at `level` gets no block — it is flush, and part of the floor, and absent
+  // from that set. And `courtLevel` is derived from the SOCKETS' grounds; the focus is not a
+  // socket, so nothing guarantees it sits under the level. Measured: the focus column is bare on
+  // **3.2% of 600 courts**, and on s42 t1 that emptied the entire hub — the connectedness guard
+  // caught it as "the court has a hub at all", which is the failure reading like a missing feature.
+  // So the question is whether the column is FLOOR, not whether a block was laid on it.
+  const laid = new Set(courtPlatformCells(seed, cfg).map(c => `${c.x},${c.z}`))
+  const onFloor = (x: number, z: number) => {
+    if (laid.has(`${x},${z}`)) return true
+    const g = plotHeight(x, z, seed, cfg)
+    return g !== null && g === level          // flush already; a column ABOVE level is a lump, not floor
+  }
+  // Every cell any frame occupies, at any height — what a wedge must stop against.
+  const stone = new Set<string>()
+  for (const s of sockets(seed, cfg))
+    for (const c of socketCells(s, level)) stone.add(`${c.x},${c.z}`)
+
+  const out: { x: number; y: number; z: number }[] = []
+  const seen = new Set<string>()
+  const put = (x: number, z: number) => {
+    const k = `${x},${z}`
+    if (seen.has(k) || stone.has(k) || !onFloor(x, z)) return
+    seen.add(k)
+    out.push({ x, y, z })
+  }
+
+  // ── the hub: a disc on the focus, the thing the wedges run out from ──
+  const R = COURT_HUB_RADIUS
+  for (let dx = -R; dx <= R; dx++)
+    for (let dz = -R; dz <= R; dz++)
+      if (Math.hypot(dx, dz) <= R + 0.5) put(a.x + dx, a.z + dz)
+
+  // ── the wedges: focus → socket, filled by distance to the segment ──
+  for (const s of sockets(seed, cfg)) {
+    const half = WEDGE_HALF[s.kind]
+    const vx = s.x - a.x, vz = s.z - a.z
+    const len2 = vx * vx + vz * vz
+    if (len2 === 0) continue
+    const pad = Math.ceil(half) + 1
+    const x0 = Math.min(a.x, s.x) - pad, x1 = Math.max(a.x, s.x) + pad
+    const z0 = Math.min(a.z, s.z) - pad, z1 = Math.max(a.z, s.z) + pad
+    for (let x = x0; x <= x1; x++) {
+      for (let z = z0; z <= z1; z++) {
+        // Distance from this cell's centre to the segment, clamped to its ends so the wedge does
+        // not bulge past the socket or behind the focus.
+        const t = Math.max(0, Math.min(1, ((x - a.x) * vx + (z - a.z) * vz) / len2))
+        if (Math.hypot(x - (a.x + t * vx), z - (a.z + t * vz)) <= half + 0.5) put(x, z)
+      }
+    }
+  }
+
+  // ── ★★★ ONLY WHAT IS ACTUALLY CONNECTED TO THE FOCUS SURVIVES ───────────────────────────────
+  // Rasterising solid is necessary and NOT sufficient, and the guard caught this the minute it was
+  // written: the two exclusions above can CUT a wedge across its middle — a frame footprint lying
+  // athwart it, or the dais ending under it — and everything past the cut is then a little raft of
+  // stone with no path back to the hub. Measured before this existed: up to 22 orphaned cells on
+  // one court. **That is the garble again, one level up**, and it would have looked deliberate.
+  //
+  // ⚠ THIS DOES NOT MAKE THE CONNECTEDNESS ASSERT DECORATION. It guarantees the invariant, so the
+  // assert that can still fail is *"each wedge REACHES its stone"* — which is what goes red if the
+  // exclusions ever trim so hard that a wedge no longer arrives. Alex ruled *"reach"*; the pair of
+  // asserts is what holds him to it.
+  const reachable = new Set<string>()
+  const start = `${a.x},${a.z}`
+  if (seen.has(start)) {
+    const queue: [number, number][] = [[a.x, a.z]]
+    reachable.add(start)
+    while (queue.length) {
+      const [x, z] = queue.pop()!
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const k = `${x + dx},${z + dz}`
+        if (seen.has(k) && !reachable.has(k)) { reachable.add(k); queue.push([x + dx, z + dz]) }
+      }
+    }
+  }
+  return out.filter(c => reachable.has(`${c.x},${c.z}`))
 }
 
 /**

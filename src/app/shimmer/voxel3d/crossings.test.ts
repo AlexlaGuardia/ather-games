@@ -12,6 +12,7 @@ import {
   courtAnchor, sockets, socketCells, socketLit, socketMaterial, courtFits, SOCKET_KINDS, SOCKET_PITCH,
   COURT_ARC, COURT_INSET, staleCourts, COURT_RADIUS, socketArcAngles, legacyRowSockets, courtClearCells,
   courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT,
+  courtHubCells, COURT_HUB_RADIUS, WEDGE_HALF,
 } from './crossings'
 import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
@@ -673,6 +674,89 @@ for (const seed of SEEDS) {
     }
   }
   ok(COURT_RADIUS > 0, `COURT_RADIUS is a real radius (${COURT_RADIUS})`)
+}
+
+// ── 5e. ★★★ THE HUB AND THE WEDGES — Alex: *"no real form … kinda looks garbled"* ────────────
+// His diagnosis, and it was better than mine: four stones on a slab have no composition, so making
+// each stone crisp would still leave four separate objects. A hub with a wedge out to each socket
+// gives the eye somewhere to start. These asserts guard the properties that make it read.
+{
+  for (const t of [0, 1, 2]) {
+    const cfg = plotForTier(t)
+    for (const seed of [1337, 555, 1000, 42]) {
+      const level = courtLevel(seed, cfg)
+      if (level === null) continue
+      const a = courtAnchor(seed, cfg)
+      if (a.y === null) continue
+      const hub = courtHubCells(seed, cfg)
+      const keys = new Set(hub.map(c => `${c.x},${c.z}`))
+      const deck = new Set(courtPlatformCells(seed, cfg).map(c => `${c.x},${c.z}`))
+      const socks = sockets(seed, cfg)
+
+      ok(hub.length > 0, `s${seed} t${t}: the court has a hub at all`)
+      // One course, and the one that stands ON the deck rather than in it.
+      ok(hub.every(c => c.y === level + 1),
+         `s${seed} t${t}: every hub cell is the course above the dais surface`)
+
+      // ── ⚠ NEVER OFF THE APRON, NEVER INSIDE A STONE ────────────────────────────────────────
+      // ⚠ NOT `deck.has(...)`. That was this assert's first form and it went red against a CORRECT
+      // hub: a column whose ground already sits at `level` is flush floor and gets no dais block,
+      // so it is absent from the laid set while being perfectly solid to stand on. Membership of
+      // the laid set was never the property — **is there something directly under this stone** is.
+      // The tempting fix was to drop the assert; the right one was to ask the affordance.
+      const floats = hub.filter(c => {
+        if (deck.has(`${c.x},${c.z}`)) return false           // a dais block, top at `level`
+        return plotHeight(c.x, c.z, seed, cfg) !== level      // or ground already flush at `level`
+      })
+      ok(floats.length === 0,
+         `s${seed} t${t}: every hub cell rests on the court floor, none over air (${floats.length} floating)`)
+      const inStone = new Set<string>()
+      for (const sk of socks) for (const c of socketCells(sk, level)) inStone.add(`${c.x},${c.z}`)
+      ok(hub.every(c => !inStone.has(`${c.x},${c.z}`)),
+         `s${seed} t${t}: no hub cell fights a frame for its cell, or sills its doorway`)
+
+      // ── ★★★ CONTIGUOUS, AND THIS IS THE WHOLE POINT OF THE FILE ───────────────────────────
+      // The frames garble because `socketCells` steps a lattice and rounds, so a 40° facing lays a
+      // diagonal staircase WITH GAPS. A wedge is rasterised by distance-to-segment instead, which
+      // fills. If that ever regresses to sampling, the wedges become dotted lines and this is the
+      // assert that notices — a picture would not, at a glance, and neither would a cell count.
+      const seen = new Set<string>([`${a.x},${a.z}`])
+      const queue = [[a.x, a.z] as [number, number]]
+      while (queue.length) {
+        const [x, z] = queue.pop()!
+        for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          const k = `${x+dx},${z+dz}`
+          if (keys.has(k) && !seen.has(k)) { seen.add(k); queue.push([x+dx, z+dz]) }
+        }
+      }
+      const orphans = hub.filter(c => !seen.has(`${c.x},${c.z}`)).length
+      ok(orphans === 0,
+         `s${seed} t${t}: every hub cell is 4-connected to the focus — no dotted wedge (${orphans} orphaned)`)
+
+      // ── AND EACH WEDGE ACTUALLY REACHES ITS STONE. Alex ruled *"reach"*, so a wedge that stops
+      // three blocks short is the thing he asked against — and it stops AT the frame, so the test
+      // is adjacency to the frame's footprint, not overlap with it.
+      for (const sk of socks) {
+        const touches = [...keys].some(k => {
+          const [x, z] = k.split(',').map(Number)
+          return [[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz]) => inStone.has(`${x+dx},${z+dz}`))
+            && Math.hypot(x - sk.x, z - sk.z) < COURT_RADIUS
+        })
+        ok(touches, `s${seed} t${t}: socket ${sk.index}'s wedge reaches its stone`)
+      }
+
+      // ── ★ THE GATE IS VISIBLY SINGULAR, WHICH CANON ASKS FOR IN AS MANY WORDS ─────────────
+      // `shimmer-geography.md`: *"render it unlike its neighbours"*. Asserted as a RELATION, not as
+      // a number — a literal `gate === 2` would be the hand-kept mirror wearing a test's name, and
+      // the relation is what canon actually requires.
+      ok(WEDGE_HALF.gate > WEDGE_HALF.passage,
+         `the home-gate's wedge is wider than a passage's (${WEDGE_HALF.gate} vs ${WEDGE_HALF.passage})`)
+
+      // Everything it lays must be removable when the court moves.
+      ok(isCourtMaterial(MAT.CUT_STONE), `the hub's material is one the court sweep will remove`)
+      ok(COURT_HUB_RADIUS >= 1, `the hub is a real disc (${COURT_HUB_RADIUS})`)
+    }
+  }
 }
 
 console.log(`crossings: ${pass} passed, ${fails.length} failed`)

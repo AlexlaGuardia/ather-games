@@ -203,7 +203,7 @@ import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
          legacyRowSockets, courtClearCells, COURT_REV,
-         courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT } from './crossings'
+         courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells } from './crossings'
 import { crossingReady, LANDING_LABEL } from './crossing-out'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
@@ -7087,6 +7087,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // `courtFits` refuses — a court that cannot stand should not be half-built.
       const level = courtLevel(SEED, cfg)
       const dais = level === null ? [] : courtPlatformCells(SEED, cfg)
+      // The hub and its wedges — Alex's answer to *"no real form"*. They stand ON the dais, so they
+      // are laid after it and before the frames, and they are CUT_STONE like the frames rather than
+      // the dais brick: the reading is stone → floor → stone, hub and stones one family with the
+      // deck between them. Already inside the dais footprint by construction, so the readiness
+      // check below needs nothing extra.
+      const hub = level === null ? [] : courtHubCells(SEED, cfg)
       // Every footprint column loaded first — a 5-wide frame straddling a SECTION seam would
       // otherwise drop whichever half landed in a neighbour that has not arrived. Same reason
       // GATE_COLS checks all of them rather than the centre.
@@ -7136,6 +7142,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // up and the platform they stood on would stay — abandoned architecture, and far larger
           // than the arches. It is derived from seed + cfg, so the old one can be asked for exactly.
           for (const c of courtPlatformCells(SEED, oldCfg)) sweep(c)
+          // ⚠ And its hub and wedges, for the same reason and by the same derivation — they sit a
+          // course ABOVE the dais, so a sweep of the platform alone leaves them standing in the air.
+          for (const c of courtHubCells(SEED, oldCfg)) sweep(c)
         }
         // 3. And THIS fold's retired straight row, which no tier change would ever have reached.
         for (const sk of legacyRowSockets(SEED, cfg)) clearSite(sk, cfg, null)
@@ -7157,6 +7166,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // the shared level, so it meets the ground wherever the ground is — and laying it after the
         // frames would bury their first course in it.
         for (const c of dais) if (voxel(c.x, c.y, c.z) !== PLATFORM_MAT) setVoxel(c.x, c.y, c.z, PLATFORM_MAT)
+        for (const c of hub) if (voxel(c.x, c.y, c.z) !== MAT.CUT_STONE) setVoxel(c.x, c.y, c.z, MAT.CUT_STONE)
         for (const sk of socks) {
           const lit = socketLit(sk, held)
           for (const c of socketCells(sk, level)) {
