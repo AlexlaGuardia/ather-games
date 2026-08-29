@@ -66,6 +66,41 @@ what tsc rejects, wearing a syntax error instead of a type error. A semicolon fi
 errors hiding underneath were real (`m = S` gave the parameter the LITERAL type of `CUT_STONE`, so
 every other material in the file was a type error).
 
+### ★★ THE PALETTE WAS BURYING THE LOAD BUTTON, AND ONLY LOOKING FOUND IT (same day, `BUILD_ID bplxiYbQ-nsHsi64ZI00x`)
+Alex asked what blocks me from building unaided. Answering it honestly meant testing the claim, so I
+shot the page headlessly (`WORLD_OWNER=1`, the rig's own owner bypass) and **read the PNG** — and the
+defect was visible in two seconds. **65 blocks in two columns is 33 rows**, so `saved structures` —
+the LOAD half of *"view and edit"* — sat off the bottom of the viewport, along with the view readout.
+**Every assert was about correctness and every one passed.** The panel was correct and unusable.
+- Fixed three ways, because order alone is not enough: saved structures moved **above** the palette
+  (asserted, so it cannot silently revert), the palette got its **own bounded scroll box** (it grows
+  every time a block is added), and it is **grouped by family**.
+- ★ The families are **derived like the palette itself** — `skill ?? fastSkill` already partitions the
+  placeable set the way a builder reaches. Measured: 65 blocks, 4 groups, **none stranded**. The guard
+  asserts the partition is TOTAL *and* that every family is non-empty, so a grouping that collapsed
+  everything into one bucket goes red rather than looking tidy. Slabs sort after full cubes via
+  `isHalfMat`, the shipped predicate, never a name ending in `" Slab"`.
+- ⚠⚠ **AND THE ORDERING GUARD WAS DECORATION UNTIL THE MUTATION SWEEP.** A bare
+  `indexOf('saved structures')` matched the page's own FAMILY docstring, which **explains the burial
+  by naming the section** forty lines above the markup. The guard read the prose, concluded the order
+  was right, and **could not have failed however the JSX was arranged**. *Documenting a marker created
+  a marker* — the 08-22 canon-gate shape, committed by the comment written to prevent it. Fixed by
+  stripping comments and asserting each header appears EXACTLY ONCE; mutation-verified by physically
+  swapping the two sections back.
+
+### ★ WHAT ACTUALLY BLOCKS THIS SEAT, MEASURED RATHER THAN ASSUMED
+- **I CAN see.** `world-shot.mts` + `WORLD_OWNER=1` reaches a gated dev page and the PNG can be read
+  directly. "I am blind" was too strong and it was costing us — the court was judged from ASCII for a
+  day when a screenshot was available the whole time.
+- **I cannot CLICK.** The worktable is interactive and I can only photograph its first frame. The
+  data path (write a blueprint through the route, load it back) I can prove; the feel of using it I
+  never can. Every interactive tool gets built one frame deep. ⏳ Closable — scripted browser input.
+- **I cannot tell when an instrument is lying**, which is the expensive one and had three examples in
+  one day: a board note that misdiagnosed the profiler, a `tsc` count that FELL from 7 to 1 and read
+  as progress, and a shot rig that returned exit 0 on a meadow 700 blocks from its subject.
+- **Taste is not mine and should not be.** I can compute that the tower subtends 12°; I cannot say it
+  reads as a landmark.
+
 ### Next
 - ⏳ **Alex builds something at `/shimmer/dev/worktable`** and says what the editor is missing. It is
   deployed and gated to him; it has never been used by a human.
