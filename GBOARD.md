@@ -308,6 +308,36 @@ keeps its own hotkey.** Measuring before building turned a rebinding job into a 
   a gate re-tested in the frame loop — so the guard reads the component's source through
   `codeOnly()` and asserts **one construction site, two walks, and no condition on the pad's**.
   8/8 mutations caught, entering from both files.
+- **★★★ THE CLIMB'S SIDEWAYS LAUNCH (2026-08-28, `62ab704`).** Alex: *"when you climb, upon reaching
+  the top it's not mantling the ledge but instead jumps to the left (sometimes to the right)."* He
+  named the right suspect. **The wall-jump was the only wall verb with NO facing condition** — climb
+  and grab each need the wall within `WALL_FACING` (60°) of where you look, the wall-jump needed
+  nothing, so it caught every case the climb refused and pushed along the wall's **grid cardinal**
+  while the player reads the result in camera space. Measured: at 65° off the normal the climb
+  refuses and the launch is **5.44 of its 6.0 sideways**; by 85° it is 5.98, sign following the side
+  you came from. Refused now while the move wish pushes into the face — the wish, not the camera,
+  because you LOOK at the ledge you are climbing toward.
+- **⚠⚠ AND THE SECOND FIX IS NOT WHAT FIXED IT, WHICH IS WORTH MORE THAN THE FIX.** `CLIMB_REGRIP`
+  was added so a brief release cannot abort a climb. Measured after: with the facing gate in,
+  **removing the regrip changes no outcome at all** — a climb only engages while the wish pushes
+  into the wall, and that is exactly what the gate refuses. It buys climb CONTINUITY (20 climbing
+  frames against 24 at a 100ms gap) and that is what its assert measures. ★ Shipping it as "the
+  fix" would have been a true-sounding claim about a mechanism doing nothing.
+- **⚠⚠ JUMP AND SLIDE HAD NEVER BEEN WIRED TO THE BINDINGS.** `jumpKey: !!k.Space` read the raw key
+  map, so the settings panel offered Jump/Slide as rebindable and **rebinding them configured
+  nothing**, and **pad A / L3 never reached the walker** — a controller could steer the keeper and
+  could not jump. `orphans()`/`padGaps()` ask whether a binding EXISTS; both existed and were
+  correct. **Nothing asked whether anything CONSUMES one** — same shape as `padPressed`. There is a
+  guard for that now, over the walker's own argument slice. `ShiftRight` became a `move.slide`
+  default so the raw read's behaviour was not quietly retired, and is pinned in SHIPPED.
+- **★ TWO OF MY OWN, both caught by mutation rather than by review.** The first gate tested `> 0`
+  and **killed the wall-kick for a strafe** — `Math.cos(Math.PI/2)` is 6.1e-17 and a keyboard strafe
+  against an axis-aligned wall is the commonest way anyone sets a kick up (hence `WALLJUMP_INTO`).
+  And two new asserts passed under mutation: one built its strafe wish as literal `(0, 1)` instead
+  of through `cos`, testing away from its own bug; the other tested a case the facing gate already
+  covered. Both rewritten to fire. `locomotion.test.ts` **102 → 126**, 6/6 mutations.
+- **⛔ UNCHANGED ON PURPOSE:** past 60° off the normal you still cannot climb. It no longer throws
+  you, it does nothing. Widening `WALL_FACING` is a separate feel call and it is Alex's.
 - **⏭ NEXT:** **Alex plays it on a pad** — RT to mine, hold RB to charge, RB+LB for the signature,
   and now the d-pad/SELECT/START panels · **three controller gaps named rather than guessed**, all
   of them controls calls that are Alex's: (a) the **hotbar number row is keyboard-only** — the
@@ -320,6 +350,7 @@ keeps its own hotkey.** Measuring before building turned a rebinding job into a 
 `chordOf`) · `lib/input/bindings.ts` (merge fallback, padGaps) · `lib/input/hints.ts` (chord
 rendering) · `lib/input/input.test.ts` (194 → 217) · `voxel3d/VoxelWorld.tsx` (the edge half)
 · **`voxel3d/ui-chain.ts` + `ui-chain.test.ts` (the UI-verb tranche, 44 asserts)**
+· **`voxel3d/locomotion.ts`** (the facing gate, `WALLJUMP_INTO`, `CLIMB_REGRIP`) · **`locomotion.test.ts`** (102 → 126)
 
 ## 🪓 Shimmer voxel3d — **BREAK-FX IS IN THE WORLD, AND THE FUNNEL THAT ASKED FOR IT WAS REFUSED** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, morning) — `6849803` pushed, 0 unpushed, tsc 7 (baseline), canon 0 CONFLICT / 3 NOTE / 13 CLEAN, break-fx 26 + spec 29 + **wiring 40 (new)** green, 8/8 mutations caught, sweep 195 suites / 194 pass / 0 KILLED (the 1 FAIL is `hollow-look.ts`, not this). ✅ **DEPLOYED** `BUILD_ID iSOkQgkIvRYFmfYiKd47_`, 157 chunks, pm2 restarted, prod 200 — built backgrounded from a clean tree, no dirty-file warning.*
 
