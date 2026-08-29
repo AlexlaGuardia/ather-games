@@ -22,6 +22,16 @@
 // ruin in the world, and nothing downstream would report it. Equivalence was proven by hashing
 // `ruinPlan` over 641 sites before and after: `dc703495d76c5250eaf1`, unchanged.
 //
+// ★ THAT PROCEDURE IS A COMMITTED TOOL NOW — `npx tsx scripts/ruin-hash.mts` (added 2026-08-29 with
+// the optional start pool). It was right to have done and nothing in the tree could CHECK it: the
+// site set behind that figure was never recorded, so the claim was a citation nobody could open.
+// ⚠ The script cannot reproduce `dc703495…` for that same reason, and says so; what it proves is
+// BEFORE vs AFTER for one change against one fixed site set, which is the property the claim was
+// actually asserting. Its own baseline over 681 sites / 2346 parts is `53d5fde6d6bd79fdba5c`, and
+// the start-pool change left it untouched. **The tool was mutation-tested for sensitivity first** —
+// nudging the start salt and pinning the start pool to one member each move it — because an
+// equivalence hash that cannot see a change reports every change as safe.
+//
 // ⚠ SEED DISCIPLINE, INHERITED AND STILL LOAD-BEARING. Every roll is keyed on `(the structure's
 // own seed, the socket's WORLD coordinates, the attempt number)` — never a counter, never arrival
 // order — which is what lets any column re-derive the same assembly without talking to any other
@@ -141,6 +151,11 @@ export function assemble<P extends JigsawPiece>(
   cfg: JigsawConfig,
   ground: GroundRule<P>,
   sprouts: (def: P) => boolean = () => true,
+  /**
+   * Pieces eligible to START the assembly. Omit for the historical behaviour — a roll across the
+   * whole extension pool. See the note at the roll itself for why this is a pool and not a piece.
+   */
+  starts?: P[],
 ): JigsawPart<P>[] {
   const ext = pool.filter(p => !p.terminal)
   const term = pool.filter(p => p.terminal)
@@ -148,7 +163,18 @@ export function assemble<P extends JigsawPiece>(
   // ★ THE START PIECE IS ROLLED, NOT FIXED, and the oracle is why. With a hardcoded start every
   // one-piece structure was identical — and one-piece is a THIRD of all of them, so the exact bug
   // this machinery exists to kill survived inside its most common case.
-  const start = pick(ext, hash2(origin.z, origin.x, origin.seed ^ 0x57a7))
+  // ★★ THE START POOL IS OPTIONAL AND DEFAULTS TO THE EXTENSION POOL, WHICH IS THE OLD BEHAVIOUR
+  // EXACTLY. Ruins pass nothing and roll their start from `ext` as they always have — the roll, the
+  // salt and the draw are untouched, so no ruin moves. A caller that needs a GUARANTEED kind of
+  // start (a burrow-town must have a green: the doctrine's ring is worn into it, and a town without
+  // one has nowhere to put the hold's heart) passes a narrower pool and still gets a ROLL within it.
+  //
+  // ⚠ IT IS A POOL AND NOT A PIECE, DELIBERATELY, because the reason above still binds: a single
+  // fixed start made every one-piece structure identical. Guaranteeing a KIND while still rolling
+  // WHICH is the only shape that satisfies both. A caller handing this a one-member pool has
+  // re-created the bug, and `burrowtown.test.ts` asserts its own heart pool has at least two.
+  const startPool = starts && starts.length ? starts : ext
+  const start = pick(startPool, hash2(origin.z, origin.x, origin.seed ^ 0x57a7))
   const parts: JigsawPart<P>[] = [{
     def: start,
     x0: origin.x - (start.w >> 1), x1: origin.x + (start.w >> 1),

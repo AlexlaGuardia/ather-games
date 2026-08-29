@@ -7,7 +7,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  DOWNBARROW, DOWNBARROW_CFG, overlayFor, type BurrowKind, type Doctrine,
+  DOWNBARROW, DOWNBARROW_CFG, DOWNBARROW_HEARTS, planTown, overlayFor,
+  type BurrowKind, type Doctrine,
 } from './burrowtown'
 
 let pass = 0
@@ -112,8 +113,10 @@ const KINDS: BurrowKind[] = ['green', 'homes', 'dell', 'lane', 'mouth', 'bank']
 // Alex's ≥150x200, granted at stronghold scale. ⚠ This is a REACHABILITY check, not a tuning claim —
 // every number in that config is unswept and says so.
 {
+  // ⚠ SIZE IS AN OUTCOME, NOT A TARGET (Alex, 08-29). An assert demanding a particular footprint
+  // makes the number a thing the generator must satisfy; what these check is that the config is
+  // CONSISTENT WITH ITS OWN POOL, so changing the pieces changes the town and nothing goes red.
   const c = DOWNBARROW_CFG
-  ok(c.envelope * 2 >= 200, `★★ the envelope admits a 200-block span (${c.envelope * 2})`)
   const biggest = Math.max(...DOWNBARROW.map(p => Math.max(p.w, p.d)))
   ok(c.envelope > biggest * 2,
     `★ and is comfortably larger than the largest piece (${c.envelope} vs ${biggest}) — an envelope near one piece's size cannot branch`)
@@ -126,16 +129,43 @@ const KINDS: BurrowKind[] = ['green', 'homes', 'dell', 'lane', 'mouth', 'bank']
   // per-column cost; it does not decide how far the town gets.
   const typical = DOWNBARROW.reduce((s, p) => s + (p.w + p.d) / 2, 0) / DOWNBARROW.length
   const reach = c.maxDepth * typical
-  ok(reach * 2 >= 150,
-    `★★★ the chain can span the ruled footprint (maxDepth ${c.maxDepth} x ~${typical.toFixed(0)} = ${reach.toFixed(0)} out, ${(reach * 2).toFixed(0)} across, target >=150)`)
+  ok(reach * 2 > 60,
+    `★★ the chain produces a TOWN rather than a homestead (~${(reach * 2).toFixed(0)} across) — a sanity floor, not the ruled footprint`)
   ok(reach <= c.envelope,
-    `★★ and the envelope does not clip the chain before it gets there (reach ${reach.toFixed(0)} vs envelope ${c.envelope}) — a chain that outruns its envelope is rejected at the edge, so the town silently stops short`)
+    `★★★ the envelope covers what the pool can reach (reach ${reach.toFixed(0)} vs envelope ${c.envelope}) — ` +
+    'this is the one figure that is NOT a suggestion: a chain that outruns its envelope is rejected at the edge and the town silently stops short, reading as small rather than as clipped')
   ok(c.maxPieces * typical * typical > 5000,
     `★ with enough mass in it to read as a town rather than a hamlet (~${Math.round(c.maxPieces * typical * typical)} sq blocks built)`)
   ok(c.sizeBias < 1,
     '★★★ sizeBias biases LARGE — a ruin should usually be a stump, a stronghold should usually be a country')
   ok(c.maxPieces <= 32,
     `★★ and the budget stays bounded (${c.maxPieces}) — every COLUMN re-derives the whole assembly, so this is a per-frame cost, not just a size`)
+}
+
+// ── 9. ★★★ EVERY TOWN HAS A GREEN — the guarantee, exercised, not declared ────────────────────
+// `assemble` rolls its start across the whole extension pool by default. A town planned by calling
+// it directly would usually start on a lane and might carry no green at all — and the failure is a
+// hold that quietly has no set piece, not an error anybody sees. `planTown` is the only entry point
+// that closes this, so it is the thing the assert has to drive.
+{
+  ok(DOWNBARROW_HEARTS.length >= 2,
+    `★★ BLIND CHECK: ${DOWNBARROW_HEARTS.length} hearts — one member re-creates the identical-structure bug assemble's own comment exists to prevent`)
+
+  // A flat, always-buildable country: this assert is about the START, not about terrain rejection.
+  const flat = () => 64
+  let withGreen = 0, planned = 0, greensSeen = new Set<string>()
+  for (let i = 0; i < 40; i++) {
+    const parts = planTown({ x: i * 400, z: i * 260, seed: 1337, floor: 64 }, flat)
+    if (!parts.length) continue
+    planned++
+    if (parts.some(p => p.def.kind === 'green')) withGreen++
+    if (parts[0].def.kind === 'green') greensSeen.add(parts[0].def.id)
+  }
+  ok(planned >= 30, `★★ BLIND CHECK: ${planned} of 40 towns actually planned — a mostly-empty run proves nothing below`)
+  ok(withGreen === planned,
+    `★★★ every planned town contains a green (${withGreen}/${planned}) — the doctrine's ring is worn INTO it, so a green-less town has nowhere to put the hold's heart`)
+  ok(greensSeen.size >= 2,
+    `★★★ and WHICH green is still rolled (${[...greensSeen].join(', ')}) — guaranteeing a kind must not cost the variety a fixed start destroyed`)
 }
 
 if (fails.length) {

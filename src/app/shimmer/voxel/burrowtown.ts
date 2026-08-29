@@ -36,7 +36,7 @@
 // **So the identifier here is `holdRing`, never bare `ring`.** Third vocabulary collision in one day
 // (`structure` was taken twice and cost a file; `arena` was taken and inverted); the rule that keeps
 // falling out is: **grep the tree for a word before you build on it.**
-import type { JigsawPiece, JigsawConfig } from './jigsaw'
+import { assemble, type JigsawPiece, type JigsawConfig, type JigsawPart, type GroundRule } from './jigsaw'
 
 /**
  * What a hold believes, made buildable. The facet decides the heart — canon, not a build knob
@@ -108,21 +108,44 @@ export const DOWNBARROW: BurrowPiece[] = [
 ]
 
 /**
- * Sized for Alex's ≥150x200, which canon granted at stronghold scale.
+ * How far the chain can reach from the origin, DERIVED from the pool rather than picked.
  *
- * ⚠⚠ EVERY NUMBER HERE IS AN UNSWEPT STARTING POINT AND MUST NOT BE READ AS TUNED. `ruins.ts` records
- * the rule for this file's own machinery — *"Tune by sweep, never by eye"* — and its figures came off
- * `scripts/ruin-sweep.mts` over 681 structures. Nothing equivalent has been run here. A sweep is owed
- * before a Snagbarrow ships, and the thing it must measure is **span** (does a town actually reach
- * 150x200, or saturate small) and **green placement** (is the heart reachable, or walled in).
+ * ★★ SIZE IS AN OUTCOME HERE, NOT A TARGET (Alex, 2026-08-29: *"we dont need to put a cap on the
+ * size, its more of a suggestion to have an idea of how many pieces we would need"*). The first cut
+ * of this file had it backwards — it picked an envelope to hit 150x200 and asserted the town reached
+ * it, which makes the footprint a thing the generator must satisfy instead of a thing it produces.
+ * Each hop advances roughly one piece extent, so reach ≈ `maxDepth x typical extent` and the town is
+ * about twice that across. **Change the pool and the size follows; nobody re-picks a number.**
+ */
+const TYPICAL = DOWNBARROW.reduce((s, p) => s + (p.w + p.d) / 2, 0) / DOWNBARROW.length
+const REACH = Math.ceil(5 * TYPICAL)   // 5 = maxDepth below; kept together so they cannot drift apart
+
+/**
+ * ⚠⚠ `envelope` IS THE ONE FIGURE HERE THAT IS NOT A SUGGESTION. `jigsaw` calls it *"a CORRECTNESS
+ * BOUND, NOT A TASTE KNOB — no cell may sit further than this from the origin"*, because the caller
+ * scans a bounded ring of cells and anything outside it is simply not looked at. Set it below what
+ * the chain can reach and pieces are rejected at the edge: the town **silently stops short**, which
+ * reads as a small town rather than as a clipped one. So it is derived from `REACH` with headroom —
+ * never chosen to make a footprint come out at a particular number.
  *
- * ★ `sizeBias` BELOW 1 BIASES LARGE, which is the opposite of the ruins tuning and deliberate: a ruin
- * should usually be a stump, a stronghold should usually be a country. Ruins measured 37%→98% of
- * structures hitting the cap across sprawl 0.4–0.75, so expect this pool to saturate and expect the
+ * ⚠ EVERY OTHER NUMBER BELOW IS AN UNSWEPT STARTING POINT. `ruins.ts` records the rule for this
+ * machinery — *"tune by sweep, never by eye"* — and its figures came off `scripts/ruin-sweep.mts`
+ * over 681 structures. Nothing equivalent has run here. A sweep is owed before a Snagbarrow ships,
+ * and what it must measure is **how big towns actually come out** (so the estimate can be corrected)
+ * and **whether the green stays reachable** rather than walled in behind its own suburbs.
+ *
+ * ★ `sizeBias` BELOW 1 BIASES LARGE, the opposite of the ruins tuning and deliberate: a ruin should
+ * usually be a stump, a stronghold should usually be a country. Ruins measured 37%→98% of structures
+ * hitting the cap across sprawl 0.4–0.75, so expect this pool to saturate and expect the per-site
  * budget roll — not `sprawl` — to be the lever that stops it.
+ *
+ * ★ For a sense of scale only, not a promise: at this pool's ~17-block typical extent, five hops
+ * reach about ${REACH} blocks out, so a full town lands near 150–175 across. That is the ballpark
+ * Alex asked for and it fell out of the pieces rather than being aimed at.
  */
 export const DOWNBARROW_CFG: JigsawConfig = {
-  envelope: 100,   // ~200 across; the correctness bound the caller's cell scan must match
+  // Derived, with headroom for a chain that hops long pieces late. NEVER hand-picked — see above.
+  envelope: REACH + 20,
   maxPieces: 24,
   maxDepth: 5,
   tries: 6,
@@ -178,4 +201,27 @@ export function overlayFor(kind: BurrowKind, doctrine: Doctrine): Overlay {
   }
   // sport/status — Burdock. The green becomes the ring, and the rim becomes the audience.
   return { ...taken, rows: kind === 'green', holdRing: kind === 'green' }
+}
+
+/** The hearts, as the assembler's start pool. Derived from the pool — never a second list. */
+export const DOWNBARROW_HEARTS: BurrowPiece[] = DOWNBARROW.filter(p => p.heart)
+
+/**
+ * Plan a town. The only entry point; nothing else should call `assemble` with this pool.
+ *
+ * ★★ THE HEART IS GUARANTEED HERE AND NOWHERE ELSE. `assemble` rolls its start across the whole
+ * extension pool by default — correctly, for ruins — so a town planned by calling it directly would
+ * usually start on a lane and might carry no green at all. The doctrine's ring is worn INTO the
+ * green; a green-less town has nowhere to put the hold's heart, and the failure would be a hold that
+ * quietly has no set piece rather than an error anybody sees.
+ *
+ * ⚠ `starts` IS STILL A POOL, so the roll survives: which green, rolled; that there IS one,
+ * guaranteed. Passing a one-member pool would re-create the identical-structure bug `assemble`'s own
+ * comment exists to prevent, which is why `burrowtown.test.ts` asserts at least two hearts.
+ */
+export function planTown(
+  origin: { x: number; z: number; seed: number; floor: number },
+  ground: GroundRule<BurrowPiece>,
+): JigsawPart<BurrowPiece>[] {
+  return assemble(origin, DOWNBARROW, DOWNBARROW_CFG, ground, () => true, DOWNBARROW_HEARTS)
 }
