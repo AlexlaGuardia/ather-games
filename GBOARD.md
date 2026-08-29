@@ -11,6 +11,78 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔭 Shimmer voxel3d — **THE INSTRUMENT COULD NOT BE POINTED AT ALEX'S COURT, AND NOTHING SAID SO** (2026-08-29, play lane) · *Last touched 2026-08-29 (play) — `78135fd` pushed, 0 unpushed, preview guard **8 asserts**, 2/2 new mutations fire, tsc 7 (baseline). NOT deployed — hub owns the lock; Alex's go relayed 11:23Z.*
+
+### Left off — Alex called it, and the second half was worse than it sounded
+> *"the landmark is partially built .. i can tell we still dont have a way to isolate the build
+> because there's not much change on the way it looks .. pretty obvious you flying blind."*
+
+Both halves were true. `dev/grey`'s header carries the SAME complaint from three days earlier
+(*"is there a way to isolate this chunk"*) — **a repeated complaint after a fix is evidence the fix
+missed, not evidence it was handled.** Grey got a page. The court never did, and the gate tower
+shipped on 08-29 having been judged only from ASCII and arithmetic.
+
+### ⚠⚠ THE WORLD SHOT CANNOT PHOTOGRAPH HIS COURT, AND IT FAILS AT EXIT 0
+Two independent reasons, both silent, both failing toward a confident wrong picture:
+1. **`console.ts` has no tier command.** A headless run carries no save, so it is always
+   `DEFAULT_PLOT` = **tier 0**. `courtAnchor` solves against the PlotConfig, so the court moves with
+   the tier — t0 (248,26) · t1 (337,24). **Alex plays t1.** Last night's hub lane photographed t0,
+   ninety blocks from the building it was judging, and filed it afterwards as *"check the tier
+   before computing a placement"* — which reads as an operator slip. **It is not one.** The tool has
+   no way to be aimed there.
+2. **The court is in the PLOT space; the keeper spawns in the WILDS.** `tp` without `space plot`
+   answers politely and moves you nowhere near it.
+Both returned **EXIT 0 and a real 850KB PNG of a meadow 700 blocks away**, twice, before anyone
+noticed. Same family as `WORLD_GOTO` photographing the glade for months under the requested zone's
+filename.
+
+### ★★ THE PAGE CAUGHT ITS OWN AUTHOR IN THE FIRST RENDER
+I tagged the hub and all **480 tower cells `m: 4`** — a guess — and the entire tower came up **dirt
+brown** while every other assert stayed green. `CUT_STONE` is **41**. A magic number is how a preview
+stops being a preview of anything, and it is invisible in review because `4` looks like an id. There
+is now an assert refusing a numeric material literal on that page; mutation-verified.
+
+### ★ FOG IS ON BY DEFAULT AND THAT IS THE DESIGN, NOT A DETAIL
+The tower is sized to subtend `LANDMARK_ANGLE_DEG` at the draw ring and `DAY.fogNear` is **80**, so
+at the 96-block ring the thing being judged is **already inside the fog eating it**. A clean studio
+rig would have shown a tall convincing landmark and answered a question the world never asks.
+`VoxelDayNight` is mounted for exactly this reason.
+
+### THE TOWER, ONCE IT COULD BE SEEN
+It **is** built — 27 courses of relief, hub's deploy carried it, **not a deploy failure**. What Alex
+is calling *partially built* is fair and specific: **one material, no cap, no trim course, no
+openings, three abrupt steps, terminating in a flat cut.** Gate and tower read as one continuous
+7-wide slab; at 96 blocks it is a thin pale spike against a fogged horizon. **Height was the right
+diagnosis and not the whole defect.** `crossings.ts` is hub's file — filed, not patched.
+
+### Decisions
+- **The view comes from the URL, not from a drag.** `?tier=1&dist=96&yaw=0&hour=12`. An orbit
+  control cannot be written down, and *"does it read from the draw ring"* is a question about a
+  SPECIFIC distance — so the rail is reproducible by a headless shot and comparable between two days.
+- **The guard compares DERIVATIONS, not values** (PATTERNS 08-22, the hand-kept mirror): it reads the
+  cell-producing exports off `crossings.ts`, so a new pass joins the guard **by being exported**
+  rather than by someone remembering. A literal list would go stale quietly, and the preview would
+  keep rendering a court that was complete last week.
+- **The clear-pass exemption asserts its own premise.** `courtClearCells` / `courtFloorClearCells` are
+  removals, so a preview correctly does not call them — but the skip is not a bare name filter: it
+  checks `crossings.ts` still documents each as a sweep. The day one starts laying stone it goes red.
+- **Full cubes, no greedy merge, no AO — stated rather than hidden.** Judge MASS, SILHOUETTE,
+  PROPORTION and READ-AT-DISTANCE here; judge shading and seams in the world.
+
+### Next
+- ⏳ **Alex rules the tower** at `/shimmer/dev/court?tier=1&dist=96` — landmark, or chimney?
+- **The tower has no CAP.** It stops in a flat cut. A crown/cornice is the single highest-value
+  change on it and `crossings.ts` is hub's.
+- **No trim course.** 20 courses of identical brick with no banding is what denies it scale.
+- The rail is orbital only — **no keeper-eye walk-up from ground level**, which is the view that
+  actually answers whether the gate reads as a door.
+- ⚠ The page is **owner-gated** (`proxy.ts` 403s `/shimmer/dev/*`) and only reaches Alex on a deploy.
+
+### Files
+- `src/app/shimmer/dev/court/page.tsx` — the viewer
+- `src/app/shimmer/dev/court/court-preview.test.ts` — the fidelity guard (8 asserts)
+- reads: `voxel3d/crossings.ts`, `voxel3d/tex/tiles.ts`, `voxel3d/day-night`, `voxel3d/locomotion`
+
 ## 📐 Shimmer voxel3d — **THE PROFILER'S 249% WAS NOT A DOUBLE COUNT — IT WAS TWO FRAMES SPLICED, IN THE ONE BRANCH THE LAST FIX DID NOT TOUCH** (2026-08-29, hub lane) · *Last touched 2026-08-29 (hub) — profile oracle **110 asserts**, 6/6 mutations fire, tsc 7 (baseline). NOT deployed.*
 
 ### Left off — the diagnosis on the board was wrong, and checking it is what found the bug
