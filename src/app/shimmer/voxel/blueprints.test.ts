@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { MAT } from './depth'
 import { ALL_BLOCKS, type BlockSkill } from './registry'
+import { ALL_PIECES, pieceDef, cellsOf } from './pieces'
+import { normalize, pieceFootprint, stampPieces, type BlueprintPiece } from './blueprints'
 
 let pass = 0
 const fails: string[] = []
@@ -301,6 +303,112 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
     'a missing side means this reader lost its subject, not that the contract holds')
   ok(served === read,
     `★★★ the list endpoint's key and the page's read are the same word (route '${served}' vs page '${read}')`)
+}
+
+// ── 14. ★★★ A BLUEPRINT CARRIES PIECES, BECAUSE BLOCKS ALONE CANNOT MAKE A BUILDING ───────────
+// 14 pieces are the building vocabulary — doorway, window, door, shutter, arch, gate, roof_slope,
+// roof_cap, stair, beam, fence, half_slab, bracket, hook. A format that stores only raw voxels
+// produces block-boxes with a hole where a door goes, and that is what this shipped as.
+{
+  ok(ALL_PIECES.length >= 14,
+    `★★ BLIND CHECK: ${ALL_PIECES.length} pieces in the registry — under 14 and every assert below is vacuous`)
+
+  const piece = (pieceId: string, x: number, y: number, z: number, rot = 0): BlueprintPiece =>
+    ({ pieceId, x, y, z, rot: rot as 0 | 1 | 2 | 3 });
+
+  // ★★★ BLOCKS AND PIECES NORMALIZE TOGETHER, ON ONE ORIGIN. Re-basing each on its own minimum
+  // slides them apart by the difference: a door that was IN a wall ends up beside it, and nothing
+  // reports anything because each collection is internally perfect.
+  {
+    const n = normalize([cell(10, 5, 10)], [piece('doorway', 12, 5, 10)])
+    ok(n.cells[0].x === 0 && n.cells[0].y === 0 && n.cells[0].z === 0, '★ the block lands on the origin')
+    ok(n.pieces[0].x === 2 && n.pieces[0].y === 0 && n.pieces[0].z === 0,
+      `★★★ and the piece keeps its offset FROM the block (${n.pieces[0].x},${n.pieces[0].y},${n.pieces[0].z}) — not re-based to its own zero`)
+  }
+
+  // ★★ A PIECE'S FOOTPRINT IS PART OF THE BUILDING'S SIZE. Bounds over blocks alone report a
+  // cottage that does not contain its own roof.
+  {
+    const s = makeBlueprint('cot', 'Cot', [cell(0, 0, 0)], [piece('roof_cap', 0, 3, 0)])
+    ok(s.h === 4, `★★ a roof cap three above the floor makes the blueprint 4 tall (${s.h})`)
+    ok(blueprintProblems(s).length === 0, `and it validates (${blueprintProblems(s).join('; ')})`)
+    // ⚠ The doorway's PASSABLE cells count too — the bounds must contain the hole you walk through.
+    const d = makeBlueprint('d', 'D', [cell(0, 0, 0)], [piece('doorway', 0, 0, 1)])
+    ok(d.h === 3 && d.d === 2, `★★ a doorway's passable cells are still footprint (${d.w}x${d.h}x${d.d})`)
+  }
+
+  // ★★ A BLUEPRINT OF PIECES ALONE IS LEGITIMATE — a fence line, an arch. The old rule said "no
+  // blocks is not a structure", which was right when blocks were the only content and became wrong
+  // the moment pieces arrived.
+  {
+    const f = makeBlueprint('fence', 'Fence', [], [piece('fence', 0, 0, 0), piece('fence', 1, 0, 0)])
+    ok(blueprintProblems(f).length === 0,
+      `★★ pieces with no blocks is a blueprint (${blueprintProblems(f).join('; ') || 'valid'})`)
+    ok(blueprintProblems(makeBlueprint('e', 'E', [], [])).some(m => /no blocks and no pieces/.test(m)),
+      '★ while nothing at all is still refused')
+  }
+
+  // ★★★ EVERY PIECE REJECTION HAS AN INPUT THAT FIRES IT.
+  {
+    const good = makeBlueprint('h', 'H', [cell(0, 0, 0)], [piece('fence', 0, 1, 0)])
+    const cases: [string, unknown, RegExp][] = [
+      ['an unknown piece id', { ...good, pieces: [piece('trebuchet', 0, 1, 0)] }, /unknown piece id/],
+      ['a rotation of 7',     { ...good, pieces: [{ ...piece('fence', 0, 1, 0), rot: 7 }] }, /rotation 7, not 0-3/],
+      ['a fractional position', { ...good, pieces: [piece('fence', 0.5, 1, 0)] }, /non-integer position/],
+      ['pieces not an array',  { ...good, pieces: 'a door' }, /pieces is not an array/],
+    ]
+    for (const [what, input, expect] of cases) {
+      const why = blueprintProblems(input)
+      ok(why.some(m => expect.test(m)), `★ ${what} is refused (${why.join('; ') || 'NOTHING REPORTED'})`)
+    }
+
+    // ⚠ SOLID-vs-SOLID ONLY, AND THE PASSABLE CASE MUST STILL PASS. An arch's opening and a bracket
+    // hung in it legitimately share a cell; two solid pieces in one place is a file no editor can
+    // produce. Getting this backwards would refuse ordinary building.
+    const stacked = { ...makeBlueprint('s', 'S', [], [piece('fence', 0, 0, 0)]),
+                      pieces: [piece('fence', 0, 0, 0), piece('roof_cap', 0, 0, 0)] }
+    ok(blueprintProblems(stacked).some(m => /both fill the cell/.test(m)),
+      `★★★ two SOLID pieces in one cell is refused (${blueprintProblems(stacked).join('; ') || 'NOTHING'})`)
+    const nested = makeBlueprint('n', 'N', [], [piece('arch', 0, 0, 0), piece('bracket', 1, 0, 0)])
+    ok(blueprintProblems(nested).length === 0,
+      `★★★ but a bracket inside an arch's OPENING is allowed — passable cells may overlap (${blueprintProblems(nested).join('; ')})`)
+  }
+
+  // ★★ ROUND TRIP WITH PIECES, AND SAVE-COMPAT WITHOUT THEM.
+  {
+    const withP = makeBlueprint('barn', 'Barn', [cell(0, 0, 0)], [piece('doorway', 1, 0, 0, 2)])
+    const back = parseBlueprint(serializeBlueprint(withP))
+    ok(JSON.stringify(back) === JSON.stringify(withP), '★★ a blueprint with pieces survives write/read')
+    ok(back.pieces?.[0].rot === 2, '★ rotation intact')
+
+    // ⚠⚠ THE COMPAT CLAIM, ASSERTED RATHER THAN TRUSTED. Every blueprint written before pieces
+    // existed has no `pieces` key, and emitting `"pieces": []` would rewrite all of them on first read.
+    const noP = makeBlueprint('old', 'Old', [cell(0, 0, 0)])
+    ok(!('pieces' in noP), '★★★ a piece-less blueprint has NO pieces key at all, not an empty array')
+    ok(!/pieces/.test(serializeBlueprint(noP)),
+      `★★★ and the serialized file never mentions pieces (${serializeBlueprint(noP).replace(/\n/g, ' ')})`)
+  }
+
+  // ★ STAMPING PIECES IS A TRANSLATION AND NOTHING ELSE.
+  {
+    const s = makeBlueprint('p', 'P', [], [piece('fence', 0, 0, 0), piece('fence', 2, 0, 0)])
+    const at = stampPieces(s, { x: 100, y: 64, z: -20 })
+    ok(at.length === 2 && at[0].x === 100 && at[0].y === 64 && at[0].z === -20, '★ pieces land at the world origin')
+    ok(at[1].x === 102, '★ keeping their relative offsets')
+    ok(at.every(q => q.pieceId === 'fence' && q.rot === 0), '★ id and rotation carried through')
+    ok((s.pieces ?? [])[0].x === 0, '★★ and the blueprint itself is unchanged by being stamped')
+  }
+
+  // ★★★ THE FOOTPRINT COMES FROM `cellsOf`, NOT FROM A SECOND DERIVATION IN THIS FILE.
+  {
+    const p = piece('arch', 0, 0, 0)
+    const mine = pieceFootprint(p)
+    const theirs = cellsOf(p, pieceDef('arch')!)
+    ok(mine.length === theirs.length && mine.length === 9,
+      `★★★ pieceFootprint returns exactly what the shipped helper returns (${mine.length} vs ${theirs.length})`)
+    ok(pieceFootprint(piece('trebuchet', 0, 0, 0)).length === 0,
+      '★ and an unknown id footprints as nothing rather than throwing — callers validate first')
+  }
 }
 
 if (fails.length) {

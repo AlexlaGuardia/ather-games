@@ -42,9 +42,20 @@
 // believed.
 import { blockDef } from './registry'
 import { MAT } from './depth'
+import { pieceDef, cellsOf, type Placement, type Rotation } from './pieces'
 
-/** One block of a structure, in structure-local coordinates. */
+/** One block of a blueprint, in blueprint-local coordinates. */
 export interface BlueprintCell { x: number; y: number; z: number; m: number }
+
+/**
+ * One PIECE of a blueprint — a door, a window, a roof slope — in blueprint-local coordinates.
+ *
+ * ★★ SAME SHAPE AS THE WORLD'S `Placement`, DELIBERATELY, AND NOT A SECOND TYPE FOR THE SAME THING.
+ * The only difference is the coordinate space, so `stampPieces` is a translation and nothing else —
+ * no field mapping, no defaults invented at the boundary. A blueprint piece that needed a different
+ * shape from a placed piece would mean one of the two was wrong about what a placed piece IS.
+ */
+export type BlueprintPiece = Placement
 
 /**
  * A saved structure, as it sits on disk.
@@ -58,9 +69,20 @@ export interface BlueprintCell { x: number; y: number; z: number; m: number }
 export interface BlueprintDef {
   id: string
   name: string
-  /** Derived bounds, in blocks. See the note above on why these are checked and not trusted. */
+  /** Derived bounds, in blocks — over the blocks AND every piece's footprint. Checked, not trusted. */
   w: number; h: number; d: number
   cells: number[]
+  /**
+   * Placed pieces — doorway, window, door, shutter, arch, gate, roof_slope, roof_cap, stair, beam,
+   * fence, half_slab, bracket, hook. **The building vocabulary; blocks alone cannot make a building.**
+   *
+   * ⚠⚠ OPTIONAL, AND THAT IS THE SAVE-COMPAT STORY — the same reasoning `Placement.open` records.
+   * Every blueprint written before pieces existed has no `pieces` key, `undefined` is falsy, and
+   * `serializeBlueprint` OMITS the key when there are none. So an older file round-trips byte for
+   * byte rather than being silently rewritten the first time something opens it. A required field,
+   * or a default of `[]`, would change the meaning of stored data on read.
+   */
+  pieces?: BlueprintPiece[]
 }
 
 /** Characters allowed in an id — it becomes a filename, so this is a path guard as much as a style. */
@@ -68,6 +90,23 @@ export const SAFE_BLUEPRINT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/
 
 /** The largest structure that may be saved, per axis. A cottage is ~12; this is a sanity ceiling. */
 export const BLUEPRINT_MAX_SPAN = 128
+
+/**
+ * Every cell a placed piece occupies, asked of `pieces.ts` rather than re-derived here.
+ *
+ * ★★ `cellsOf` ALREADY KNOWS THE ROTATION MATHS AND THE PASSABLE CELLS. A second footprint
+ * derivation in this file would be a hand-kept mirror of a rule that lives one module over — it
+ * would agree right up until a piece's footprint changed, and then disagree silently about where a
+ * building's bounds are. Returns [] for an unknown id; callers must have validated first.
+ *
+ * ⚠ EVERY cell, solid or not. A doorway's passable cells are still part of the building's FOOTPRINT
+ * — the bounds have to cover the hole you walk through, or a blueprint reports a size that does not
+ * contain the door in it.
+ */
+export function pieceFootprint(p: BlueprintPiece): { x: number; y: number; z: number }[] {
+  const def = pieceDef(p.pieceId)
+  return def ? cellsOf(p, def).map(c => ({ x: c.x, y: c.y, z: c.z })) : []
+}
 
 /** Unpack the flat quad array. The ONLY reader of the layout. */
 export function blueprintCells(s: BlueprintDef): BlueprintCell[] {
@@ -98,35 +137,66 @@ export function packCells(cells: BlueprintCell[]): number[] {
  * different feature (a "clear this volume" mask) and wants to be asked for on purpose.
  */
 export function normalizeCells(cells: BlueprintCell[]): BlueprintCell[] {
+  return normalize(cells, []).cells
+}
+
+/**
+ * Move a loose pile of blocks AND pieces into blueprint-local space together.
+ *
+ * ⚠⚠ THE MIN CORNER IS TAKEN OVER BOTH, AND NORMALIZING THEM SEPARATELY IS THE BUG THIS SHAPE
+ * PREVENTS. Re-basing blocks on their own minimum and pieces on theirs slides the two apart by the
+ * difference — a door that was in a wall ends up beside it, and nothing reports anything, because
+ * each collection is internally perfect. They are one building; they get one origin.
+ *
+ * ★ AND A PIECE'S WHOLE FOOTPRINT COUNTS, not its origin cell. A roof slope whose origin sits inside
+ * the blocks but which overhangs below them would otherwise be re-based to a negative y.
+ */
+export function normalize(cells: BlueprintCell[], pieces: BlueprintPiece[]):
+  { cells: BlueprintCell[]; pieces: BlueprintPiece[] } {
   const solid = cells.filter(c => c.m !== MAT.AIR)
-  if (!solid.length) return []
-  const minX = Math.min(...solid.map(c => c.x))
-  const minY = Math.min(...solid.map(c => c.y))
-  const minZ = Math.min(...solid.map(c => c.z))
+  const pts = [...solid, ...pieces.flatMap(pieceFootprint)]
+  if (!pts.length) return { cells: [], pieces: [] }
+  const minX = Math.min(...pts.map(c => c.x))
+  const minY = Math.min(...pts.map(c => c.y))
+  const minZ = Math.min(...pts.map(c => c.z))
   // Last write wins, which is what an editor session means by placing twice on one cell.
   const at = new Map<string, BlueprintCell>()
   for (const c of solid) {
     const k = `${c.x - minX},${c.y - minY},${c.z - minZ}`
     at.set(k, { x: c.x - minX, y: c.y - minY, z: c.z - minZ, m: c.m })
   }
-  return [...at.values()].sort((a, b) => a.y - b.y || a.z - b.z || a.x - b.x)
+  return {
+    cells: [...at.values()].sort((a, b) => a.y - b.y || a.z - b.z || a.x - b.x),
+    pieces: pieces
+      .map(p => ({ ...p, x: p.x - minX, y: p.y - minY, z: p.z - minZ }))
+      .sort((a, b) => a.y - b.y || a.z - b.z || a.x - b.x || a.pieceId.localeCompare(b.pieceId)),
+  }
 }
 
 /** Bounds of a normalized cell list, derived. Never read off a file. */
-export function boundsOf(cells: BlueprintCell[]): { w: number; h: number; d: number } {
-  if (!cells.length) return { w: 0, h: 0, d: 0 }
+export function boundsOf(cells: BlueprintCell[], pieces: BlueprintPiece[] = []): { w: number; h: number; d: number } {
+  // ⚠ A PIECE'S FOOTPRINT IS PART OF THE BUILDING'S SIZE. Bounds taken over blocks alone report a
+  // cottage that does not contain its own doorway, and the number is used to place the thing.
+  const pts = [...cells, ...pieces.flatMap(pieceFootprint)]
+  if (!pts.length) return { w: 0, h: 0, d: 0 }
   return {
-    w: Math.max(...cells.map(c => c.x)) + 1,
-    h: Math.max(...cells.map(c => c.y)) + 1,
-    d: Math.max(...cells.map(c => c.z)) + 1,
+    w: Math.max(...pts.map(c => c.x)) + 1,
+    h: Math.max(...pts.map(c => c.y)) + 1,
+    d: Math.max(...pts.map(c => c.z)) + 1,
   }
 }
 
 /** Build a `BlueprintDef` from loose cells. The bounds come out of the cells, so they cannot lie. */
-export function makeBlueprint(id: string, name: string, cells: BlueprintCell[]): BlueprintDef {
-  const norm = normalizeCells(cells)
-  const b = boundsOf(norm)
-  return { id, name, w: b.w, h: b.h, d: b.d, cells: packCells(norm) }
+export function makeBlueprint(
+  id: string, name: string, cells: BlueprintCell[], pieces: BlueprintPiece[] = [],
+): BlueprintDef {
+  const n = normalize(cells, pieces)
+  const b = boundsOf(n.cells, n.pieces)
+  const out: BlueprintDef = { id, name, w: b.w, h: b.h, d: b.d, cells: packCells(n.cells) }
+  // ⚠ THE KEY IS OMITTED WHEN EMPTY, not written as []. See `BlueprintDef.pieces`: a blueprint saved
+  // before pieces existed must round-trip byte for byte, and `{...s, pieces: []}` is a different file.
+  if (n.pieces.length) out.pieces = n.pieces
+  return out
 }
 
 /**
@@ -146,7 +216,12 @@ export function blueprintProblems(s: unknown): string[] {
   }
   if (typeof d.name !== 'string' || !d.name.trim()) p.push('name is empty')
   if (!Array.isArray(d.cells)) return [...p, 'cells is not an array']
-  if (d.cells.length === 0) p.push('a structure with no blocks is not a structure')
+  // ⚠ THE EMPTY RULE SPANS BOTH NOW. A fence line or a lone arch is a legitimate blueprint with no
+  // blocks at all, and the old wording would have refused it — a rule that was right when blocks
+  // were the only content and became wrong the moment pieces arrived.
+  if (d.cells.length === 0 && !(d.pieces ?? []).length) {
+    p.push('a blueprint with no blocks and no pieces is not a blueprint')
+  }
   if (d.cells.length % 4 !== 0) p.push(`cells must be a flat quad array, length ${d.cells.length} is not a multiple of 4`)
   if (d.cells.some(n => !Number.isInteger(n))) p.push('every packed value must be an integer')
   if (p.length) return p
@@ -155,8 +230,11 @@ export function blueprintProblems(s: unknown): string[] {
   if (cells.some(c => c.x < 0 || c.y < 0 || c.z < 0)) p.push('cells must be normalized to a non-negative origin')
 
   // ★ THE MIRROR CHECK. Stored bounds vs bounds derived from the blocks themselves — see the header.
+  // ★ Blocks-only bounds are checked ONLY on a piece-less blueprint; with pieces the authoritative
+  // check is the one below, over both. Running this one regardless would refuse every valid
+  // blueprint whose size comes partly from a roof cap.
   const b = boundsOf(cells)
-  if (d.w !== b.w || d.h !== b.h || d.d !== b.d) {
+  if (!(d.pieces ?? []).length && (d.w !== b.w || d.h !== b.h || d.d !== b.d)) {
     p.push(`stored bounds ${d.w}x${d.h}x${d.d} disagree with the blocks, which span ${b.w}x${b.h}x${b.d}`)
   }
   if (b.w > BLUEPRINT_MAX_SPAN || b.h > BLUEPRINT_MAX_SPAN || b.d > BLUEPRINT_MAX_SPAN) {
@@ -175,6 +253,46 @@ export function blueprintProblems(s: unknown): string[] {
     const k = `${c.x},${c.y},${c.z}`
     if (seen.has(k)) { p.push(`two blocks share the cell ${k}`); break }
     seen.add(k)
+  }
+
+  // ── pieces ──────────────────────────────────────────────────────────────────────────────────
+  if (d.pieces !== undefined && !Array.isArray(d.pieces)) return [...p, 'pieces is not an array']
+  const pieces = d.pieces ?? []
+  for (const q of pieces) {
+    if (!q || typeof q !== 'object') { p.push('a piece entry is not an object'); continue }
+    // ⚠ THE ID IS RESOLVED AGAINST THE REGISTRY, NOT PATTERN-MATCHED. An unknown piece id stamps
+    // NOTHING — a doorway that silently does not exist leaves a wall with no way in, and the file
+    // still looks like a house. Same failure the unknown-material check exists for, one type over.
+    if (!pieceDef(q.pieceId)) { p.push(`unknown piece id: ${JSON.stringify(q.pieceId)}`); continue }
+    if (![0, 1, 2, 3].includes(q.rot as number)) p.push(`piece '${q.pieceId}' has rotation ${q.rot}, not 0-3`)
+    if (![q.x, q.y, q.z].every(Number.isInteger)) p.push(`piece '${q.pieceId}' has a non-integer position`)
+  }
+  if (p.length) return p
+
+  const footprints = pieces.map(q => ({ q, cells: pieceFootprint(q) }))
+  if (footprints.some(fp => fp.cells.some(c => c.x < 0 || c.y < 0 || c.z < 0))) {
+    p.push('a piece reaches outside the blueprint origin — pieces normalize with the blocks, not separately')
+  }
+  // ★ THE BOUNDS CHECK ABOVE COUNTED BLOCKS ONLY; re-check it with the pieces included, because a
+  // piece can legitimately be the thing that makes a building tall (a roof cap) or wide (an arch).
+  const withPieces = boundsOf(cells, pieces)
+  if (d.w !== withPieces.w || d.h !== withPieces.h || d.d !== withPieces.d) {
+    p.push(`stored bounds ${d.w}x${d.h}x${d.d} disagree with blocks AND pieces, which span ${withPieces.w}x${withPieces.h}x${withPieces.d}`)
+  }
+  // ⚠ SOLID-vs-SOLID ONLY. Two pieces may legitimately share a PASSABLE cell (an arch over a
+  // doorway), and a piece may sit where a block is — that is the world's `canPlace` question at
+  // stamp time, not a claim about whether the file is well formed. Two SOLID piece cells in one
+  // place is a file no editor can produce and only a hand edit can write.
+  const solidAt = new Map<string, string>()
+  for (const q of pieces) {
+    const def = pieceDef(q.pieceId)!
+    for (const c of cellsOf(q, def)) {
+      if (!c.solid) continue
+      const k = `${c.x},${c.y},${c.z}`
+      const prev = solidAt.get(k)
+      if (prev) { p.push(`pieces '${prev}' and '${q.pieceId}' both fill the cell ${k}`); break }
+      solidAt.set(k, q.pieceId)
+    }
   }
   return p
 }
@@ -195,7 +313,19 @@ export function parseBlueprint(raw: string): BlueprintDef {
   return json as BlueprintDef
 }
 
-/** Place a structure into the world: its local cells, offset to a world origin. */
+/**
+ * Place a blueprint's PIECES into the world — local placements, offset to a world origin.
+ *
+ * ★ A TRANSLATION AND NOTHING ELSE. `BlueprintPiece` IS `Placement`, so there is no field mapping
+ * here and no default invented at the boundary — the two types agreeing is what makes that true.
+ * ⚠ It does NOT ask `canPlace`. Whether a piece may legally stand in a given world cell is the
+ * world's question at stamp time and depends on what is already there; this only says where.
+ */
+export function stampPieces(s: BlueprintDef, at: { x: number; y: number; z: number }): Placement[] {
+  return (s.pieces ?? []).map(p => ({ ...p, x: p.x + at.x, y: p.y + at.y, z: p.z + at.z }))
+}
+
+/** Place a blueprint into the world: its local cells, offset to a world origin. */
 export function stampCells(s: BlueprintDef, at: { x: number; y: number; z: number }): BlueprintCell[] {
   return blueprintCells(s).map(c => ({ x: c.x + at.x, y: c.y + at.y, z: c.z + at.z, m: c.m }))
 }
@@ -212,6 +342,11 @@ export function stampCells(s: BlueprintDef, at: { x: number; y: number; z: numbe
  * cottage into a two-thousand-line file that nobody reads and every edit rewrites.
  */
 export function serializeBlueprint(s: BlueprintDef): string {
+  // ⚠ THE `pieces` KEY IS OMITTED ENTIRELY WHEN EMPTY. A blueprint written before pieces existed
+  // must come back byte for byte; emitting `"pieces": []` rewrites every one of them on first read.
+  const pieces = (s.pieces ?? []).length
+    ? `,\n  "pieces": [\n${(s.pieces ?? []).map(p => `    ${JSON.stringify(p)}`).join(',\n')}\n  ]`
+    : ''
   return `{\n  "id": ${JSON.stringify(s.id)},\n  "name": ${JSON.stringify(s.name)},\n` +
-    `  "w": ${s.w}, "h": ${s.h}, "d": ${s.d},\n  "cells": [${s.cells.join(',')}]\n}\n`
+    `  "w": ${s.w}, "h": ${s.h}, "d": ${s.d},\n  "cells": [${s.cells.join(',')}]${pieces}\n}\n`
 }

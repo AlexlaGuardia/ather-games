@@ -43,9 +43,11 @@ import { VoxelDayNight, DAY } from '../../voxel3d/day-night'
 import { setTimePin } from '../../engine/day-cycle'
 import { BODY_H, BODY_R } from '../../voxel3d/locomotion'
 import {
-  makeBlueprint, blueprintCells, boundsOf, normalizeCells, BLUEPRINT_MAX_SPAN,
-  type BlueprintCell, type BlueprintDef,
+  makeBlueprint, blueprintCells, boundsOf, normalizeCells, pieceFootprint, BLUEPRINT_MAX_SPAN,
+  type BlueprintCell, type BlueprintDef, type BlueprintPiece,
 } from '../../voxel/blueprints'
+import { PIECES, type Rotation } from '../../voxel/pieces'
+import { createPieceRenderer } from '../../voxel3d/piece-mesh'
 
 const TILE = 16
 /** The build pad, in blocks. Big enough for a cottage and a yard; not a world. */
@@ -174,6 +176,26 @@ function Pad({ onHit }: { onHit: (e: { point: THREE.Vector3; normal: THREE.Vecto
   )
 }
 
+/**
+ * The pieces, drawn by the SHIPPED renderer.
+ *
+ * ★★ `createPieceRenderer` IS WHAT THE WORLD USES, and mounting its group here is the whole reason
+ * a door in the worktable looks like a door in the game. Drawing piece footprints as boxes would
+ * have been quicker and would have made this page a liar about the one thing it exists to show —
+ * seven previews that re-derived were perfectly correct while the game was wrong.
+ *
+ * ⚠ `setWorldSolid` IS FED FROM THE BLUEPRINT'S OWN BLOCKS. Fence arms reach for adjacent solids;
+ * without it a fence built against a wall renders unconnected here and connected in the world, which
+ * is exactly the kind of small lie that sends someone rebuilding a fence that was already right.
+ */
+function Pieces({ placements, solid }: { placements: BlueprintPiece[]; solid: (x: number, y: number, z: number) => boolean }) {
+  const renderer = useMemo(() => createPieceRenderer(), [])
+  useEffect(() => () => renderer.dispose(), [renderer])
+  useEffect(() => { renderer.setWorldSolid(solid) }, [renderer, solid])
+  useEffect(() => { renderer.sync(placements) }, [renderer, placements])
+  return <primitive object={renderer.group} />
+}
+
 /** A keeper-sized capsule, so proportion is FELT rather than read off a number. */
 function Keeper({ at }: { at: [number, number, number] }) {
   return (
@@ -244,6 +266,11 @@ function Rig({ yaw, pitch, dist, target, onView }: {
 export default function WorktablePage() {
   const [cells, setCells] = useState<Cells>(new Map())
   const [material, setMaterial] = useState<number>(MAT.CUT_STONE)
+  /** What a click places. Blocks build the mass; pieces are the vocabulary that makes it a building. */
+  const [mode, setMode] = useState<'block' | 'piece'>('block')
+  const [pieceId, setPieceId] = useState<string>('doorway')
+  const [rot, setRot] = useState<Rotation>(0)
+  const [placements, setPlacements] = useState<BlueprintPiece[]>([])
   const [id, setId] = useState('untitled')
   const [name, setName] = useState('Untitled')
   const [list, setList] = useState<{ id: string; name: string; w: number; h: number; d: number; blocks: number; error?: string }[]>([])
@@ -254,8 +281,12 @@ export default function WorktablePage() {
   const [view, setView] = useState({ yaw: -0.9, pitch: 0.5, dist: 34 })
   /** Which palette families are expanded. Seeded from `FAMILY`, then the keeper's own choice. */
   const [open, setOpen] = useState<Record<string, boolean>>({})
-  /** Undo stack of whole cell maps. Authoring at this scale is thousands of cells, not millions. */
-  const undo = useRef<Cells[]>([])
+  /**
+   * Undo stack of whole EDITS — blocks and pieces together. Authoring at this scale is thousands of
+   * cells, not millions, so a full snapshot is cheaper than a command log and cannot drift from it.
+   * ⚠ Both collections, because undoing a door and leaving the wall it punched is not an undo.
+   */
+  const undo = useRef<{ cells: Cells; placements: BlueprintPiece[] }[]>([])
 
   useEffect(() => { setTimePin(hour) }, [hour])
 
@@ -271,10 +302,11 @@ export default function WorktablePage() {
   }, [])
   useEffect(() => { void refresh() }, [refresh])
 
-  const push = (next: Cells) => {
-    undo.current.push(new Map(cells))
+  const push = (next: Cells, nextPieces: BlueprintPiece[] = placements) => {
+    undo.current.push({ cells: new Map(cells), placements })
     if (undo.current.length > 100) undo.current.shift()
     setCells(next)
+    setPlacements(nextPieces)
   }
 
   const onHit = useCallback((e: { point: THREE.Vector3; normal: THREE.Vector3; shift: boolean; alt: boolean }) => {
@@ -286,11 +318,23 @@ export default function WorktablePage() {
     const c = { x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) }
     if (c.y < 0) return                                   // the pad itself is not editable
     if (c.x < 0 || c.z < 0 || c.x >= PAD || c.z >= PAD) return
+    if (mode === 'piece') {
+      // ⚠ REMOVING A PIECE ASKS ITS FOOTPRINT, NOT ITS ORIGIN. A doorway is three cells tall and you
+      // will click the middle of it — matching only the origin means the lintel deletes and the hole
+      // does not, which reads as a broken editor rather than a missed click.
+      if (removing) {
+        const hit = placements.filter(p => !pieceFootprint(p).some(fc => fc.x === c.x && fc.y === c.y && fc.z === c.z))
+        push(new Map(cells), hit)
+      } else {
+        push(new Map(cells), [...placements, { pieceId, x: c.x, y: c.y, z: c.z, rot }])
+      }
+      return
+    }
     const next = new Map(cells)
     if (removing) next.delete(key(c.x, c.y, c.z))
     else next.set(key(c.x, c.y, c.z), material)
     push(next)
-  }, [cells, material])
+  }, [cells, material, mode, pieceId, rot, placements])
 
   const asCells = useMemo((): BlueprintCell[] =>
     [...cells.entries()].map(([k, m]) => ({ ...unkey(k), m })), [cells])
@@ -306,10 +350,10 @@ export default function WorktablePage() {
   const tex = useTiles(useMemo(() => [...new Set(asCells.map(c => c.m))].sort((a, b) => a - b), [asCells]))
   // ★ Bounds of the NORMALIZED cells — the same function `makeBlueprint` will use when it saves,
   // so the size on the panel is the size in the file rather than a second measurement of it.
-  const bounds = useMemo(() => boundsOf(normalizeCells(asCells)), [asCells])
+  const bounds = useMemo(() => boundsOf(normalizeCells(asCells), placements), [asCells, placements])
 
   const save = async () => {
-    const s = makeBlueprint(id.trim(), name.trim() || id.trim(), asCells)
+    const s = makeBlueprint(id.trim(), name.trim() || id.trim(), asCells, placements)
     const r = await fetch('/shimmer/save-blueprint', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s),
     }).then(x => x.json()).catch(e => ({ error: String(e) }))
@@ -324,9 +368,12 @@ export default function WorktablePage() {
     if ('error' in s) { setStatus(`LOAD FAILED: ${s.error}`); return }
     const m: Cells = new Map()
     for (const c of blueprintCells(s)) m.set(key(c.x, c.y, c.z), c.m)
-    push(m); setId(s.id); setName(s.name)
-    setStatus(`loaded ${s.id} — ${m.size} blocks`)
+    push(m, s.pieces ?? []); setId(s.id); setName(s.name)
+    setStatus(`loaded ${s.id} — ${m.size} blocks, ${(s.pieces ?? []).length} pieces`)
   }
+
+  /** ★ The blueprint's own blocks, as the "is this solid?" the fence arms ask. */
+  const solid = useCallback((x: number, y: number, z: number) => cells.has(key(x, y, z)), [cells])
 
   const target = useMemo(
     () => new THREE.Vector3(PAD / 2, Math.min(8, Math.max(2, bounds.h / 2)), PAD / 2),
@@ -348,6 +395,7 @@ export default function WorktablePage() {
         {byMaterial.map(([mat, list]) => (
           <MaterialMesh key={mat} mat={mat} cells={list} tex={tex} onHit={onHit} />
         ))}
+        <Pieces placements={placements} solid={solid} />
         {showKeeper && <Keeper at={[PAD / 2 - 3, 0, PAD / 2 + 4]} />}
       </Canvas>
 
@@ -359,7 +407,7 @@ export default function WorktablePage() {
           structure worktable
         </div>
         <div style={{ margin: '4px 0 8px', opacity: 0.8 }}>
-          {cells.size} blocks · {bounds.w}x{bounds.h}x{bounds.d}
+          {cells.size} blocks · {placements.length} pieces · {bounds.w}x{bounds.h}x{bounds.d}
           {(bounds.w > BLUEPRINT_MAX_SPAN || bounds.h > BLUEPRINT_MAX_SPAN || bounds.d > BLUEPRINT_MAX_SPAN) &&
             <span style={{ color: '#ff9b8a' }}> · OVER THE SPAN CEILING</span>}
         </div>
@@ -376,8 +424,8 @@ export default function WorktablePage() {
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
           <button style={btn} onClick={save}>save</button>
-          <button style={btn} onClick={() => { const p = undo.current.pop(); if (p) setCells(p) }}>undo</button>
-          <button style={btn} onClick={() => push(new Map())}>clear</button>
+          <button style={btn} onClick={() => { const p = undo.current.pop(); if (p) { setCells(p.cells); setPlacements(p.placements) } }}>undo</button>
+          <button style={btn} onClick={() => push(new Map(), [])}>clear</button>
           <button style={btn} onClick={() => setFog(f => !f)}>fog {fog ? 'on' : 'off'}</button>
           <button style={btn} onClick={() => setShowKeeper(k => !k)}>keeper</button>
         </div>
@@ -406,6 +454,45 @@ export default function WorktablePage() {
             </div>
           ))}
         </div>
+
+        {/* ★★ WHAT A CLICK PLACES. Blocks are the mass; the 14 pieces are the building vocabulary —
+            without them a blueprint is a box with a hole where a door goes. */}
+        <div style={{ display: 'flex', gap: 4, margin: '10px 0 6px' }}>
+          {(['block', 'piece'] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)}
+              style={{ ...btn, flex: 1, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10,
+                       borderColor: mode === m ? '#ffcf8a' : 'rgba(150,180,210,0.25)',
+                       color: mode === m ? '#ffcf8a' : '#cfd8e0' }}>
+              {m}s
+            </button>
+          ))}
+        </div>
+
+        {mode === 'piece' && (
+          <>
+            <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10, margin: '4px 0' }}>
+              piece — <span style={{ color: '#ffcf8a' }}>{pieceId}</span>
+              {/* ⚠ Rotation is a FACING, not a cosmetic: a doorway rotated wrong opens into a wall. */}
+              <button onClick={() => setRot(((rot + 1) % 4) as Rotation)}
+                style={{ ...btn, float: 'right', fontSize: 10, padding: '1px 6px' }}>rot {rot} ↻</button>
+            </div>
+            <div style={{ maxHeight: '32vh', overflowY: 'auto', display: 'grid',
+                          gridTemplateColumns: 'repeat(2, 1fr)', gap: 3, marginBottom: 6 }}>
+              {/* ★ Straight off `PIECES` — the base vocabulary, derived, never a list retyped here.
+                  Material variants (`ALL_PIECES`) are deliberately not offered yet: they multiply the
+                  palette by the wood/stone families and nobody has asked to build in a second timber. */}
+              {PIECES.map(p => (
+                <button key={p.id} onClick={() => setPieceId(p.id)} title={`${p.id} ${p.w}x${p.h}x${p.d}`}
+                  style={{ ...btn, textAlign: 'left', fontSize: 10, overflow: 'hidden',
+                           textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                           borderColor: p.id === pieceId ? '#ffcf8a' : 'rgba(150,180,210,0.25)',
+                           color: p.id === pieceId ? '#ffcf8a' : '#cfd8e0' }}>
+                  {p.id}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10, margin: '10px 0 4px' }}>
           material — <span style={{ color: '#ffcf8a' }}>{label(material)}</span>
