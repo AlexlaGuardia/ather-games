@@ -277,6 +277,32 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
   }
 }
 
+// ── 13. ★★★ THE ROUTE'S RESPONSE KEY AND THE PAGE'S READ MUST BE THE SAME WORD ────────────────
+// Found by CLICKING the deployed page, and nothing else could have found it (2026-08-29). After the
+// `structure` → `blueprint` rename the route answered `{ blueprints }` while the page still read
+// `r?.structures`, so `setList` was never called: the file was on disk, the endpoint returned it,
+// the status line said "saved", and the panel rendered "none yet" **forever**.
+//
+// ⚠⚠ IT IS INVISIBLE TO EVERYTHING ELSE WE HAVE. `fetch(...).json()` is `any`, so tsc cannot see it;
+// the format oracle passes because the FORMAT is fine; a screenshot of the first frame passes
+// because the list is legitimately empty before anything is saved. Both halves were internally
+// consistent about different things — the prebuilt-worker shape, wearing a JSON key.
+{
+  const root = join(__dirname, '../../..')
+  const route = readFileSync(join(root, 'app/shimmer/save-blueprint/route.ts'), 'utf8')
+  const page = readFileSync(join(root, 'app/shimmer/dev/worktable/page.tsx'), 'utf8')
+
+  // The key the LIST endpoint actually answers with, read off the route rather than restated here.
+  const served = (route.match(/NextResponse\.json\(\{\s*([a-zA-Z]+)\s*\}\)/) ?? [])[1]
+  // The key the page reads off that response.
+  const read = (page.match(/if \(r\?\.([a-zA-Z]+)\) setList/) ?? [])[1]
+  ok(!!served && !!read,
+    `★★★ BLIND CHECK: found both sides of the contract (route serves '${served}', page reads '${read}') — ` +
+    'a missing side means this reader lost its subject, not that the contract holds')
+  ok(served === read,
+    `★★★ the list endpoint's key and the page's read are the same word (route '${served}' vs page '${read}')`)
+}
+
 if (fails.length) {
   console.log(`\n${fails.map(f => `  ✗ ${f}`).join('\n')}\n`)
   console.log(`❌ ${fails.length} failed, ${pass} passed`)

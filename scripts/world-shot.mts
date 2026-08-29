@@ -13,6 +13,8 @@
 //   WORLD_EVAL='(() => document.title)'                       — run an expression in the page, print it
 //   WORLD_RADIUS=10                                           — load ring, in columns (default: the app's 6)
 //   WORLD_FPS=1                                               — turn the frame meter on for the shot
+//   WORLD_CLICK='700,430; 730,445'                            — click these viewport points, in order
+//   WORLD_CLICK_WAIT=120                                      — ms between clicks (default 120)
 //
 // It prints the HUD counter line after the shot. `mesh` is geometry BUILT, `draws` is what survived
 // frustum culling this frame — the two are far apart and only the second is the frame's cost.
@@ -107,6 +109,26 @@ const FLY = Number(process.env.WORLD_FLY ?? 0)
 const PITCH = Number(process.env.WORLD_PITCH ?? 0)
 const YAW = Number(process.env.WORLD_YAW ?? 0)   // degrees, + turns right. A fresh keeper faces -Z.
 const EXE = process.env.CHROME ?? '/usr/bin/chromium-browser'
+/**
+ * ── ★★★ WORLD_CLICK (2026-08-29) — THE HARNESS COULD ALREADY DO THIS AND NOTHING EXPOSED IT ─────
+ * `x,y; x,y; ...` in viewport pixels, clicked in order before the shot.
+ *
+ * Alex asked whether a dev page could only be photographed because we are on a headless server, and
+ * whether connecting through his desktop would let this seat click. **Neither.** A real Chromium
+ * runs on this box and this very file has been sending `page.mouse.click` and `page.keyboard.press`
+ * for weeks — to earn a pointer lock and to drive the console. Input was never missing; it was
+ * simply never offered for an arbitrary page, so every interactive dev tool got judged one frame
+ * deep. ★ Same shape as the WORLD_OWNER gap: a capability we had, behind no door at all.
+ *
+ * ⚠ AND IT IMMEDIATELY PAID. Fifteen clicks into `/shimmer/dev/worktable` found a broken client
+ * contract — the route answered `{ blueprints }` while the page read `r.structures`, so a saved
+ * structure never appeared in its own list. `fetch` is `any` so tsc could not see it; the format
+ * oracle passed because the format was fine; a first-frame screenshot passed because the list is
+ * legitimately empty before anything is saved. **Only clicking could ask that question.**
+ */
+const CLICK = process.env.WORLD_CLICK ?? ''
+/** Milliseconds between clicks — React state and a re-render need a frame to land. */
+const CLICK_WAIT = Number(process.env.WORLD_CLICK_WAIT ?? 120)
 
 const browser = await puppeteer.launch({
   executablePath: EXE,
@@ -268,6 +290,26 @@ const OWNER = process.env.WORLD_OWNER === '1'
       await page.mouse.move(x, 380 + PITCH * 8)
       await new Promise(r => setTimeout(r, 400))
     } catch { /* no lock — default facing */ }
+  }
+
+  // ── ★ CLICKS, LAST, SO THEY LAND ON A SETTLED PAGE ────────────────────────────────────────────
+  // After the settle and after any camera work: a click into a half-loaded scene hits whatever
+  // happened to be under the cursor, which is the "photographed a meadow" failure with a pointer.
+  if (CLICK) {
+    const pts = CLICK.split(';').map(p => p.trim()).filter(Boolean)
+      .map(p => p.split(',').map(n => Number(n.trim())))
+    const bad = pts.filter(p => p.length !== 2 || p.some(n => !Number.isFinite(n)))
+    if (bad.length) {
+      // ⚠ REFUSE RATHER THAN SKIP. A malformed point silently dropped means the shot is of a page
+      // that was clicked FEWER times than asked, reported as success — this file's own recurring sin.
+      console.error(`WORLD_CLICK: ${bad.length} malformed point(s); expected 'x,y; x,y'`)
+      process.exit(2)
+    }
+    for (const [x, y] of pts) {
+      await page.mouse.click(x, y)
+      await new Promise(r => setTimeout(r, CLICK_WAIT))
+    }
+    console.log(`clicked ${pts.length} point(s)`)
   }
 
   await page.screenshot({ path: OUT })

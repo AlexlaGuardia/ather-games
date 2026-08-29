@@ -261,7 +261,13 @@ export default function WorktablePage() {
 
   const refresh = useCallback(async () => {
     const r = await fetch('/shimmer/save-blueprint').then(x => x.json()).catch(() => null)
-    if (r?.structures) setList(r.structures)
+    // ⚠⚠ THE KEY IS `blueprints` AND READING THE WRONG ONE FAILS IN COMPLETE SILENCE. This said
+    // `r?.structures` for an hour after the rename: the route answered correctly, the file was on
+    // disk, the save status line said "saved", and the list rendered "none yet" forever. `fetch`
+    // returns `any`, so the type system cannot see it; both halves were internally consistent about
+    // different things. Found by CLICKING — no assert and no screenshot of a first frame could ask
+    // the question. `blueprints.test.ts` now compares the route's response key against this read.
+    if (r?.blueprints) setList(r.blueprints)
   }, [])
   useEffect(() => { void refresh() }, [refresh])
 
