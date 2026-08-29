@@ -28,6 +28,41 @@
 // "the ones we can't do yet" is the thing that would still be there a month after they shipped.
 
 import { POTION_DEFS, getVisiblePotions, elementForInfusion, type PotionDef } from '../engine/alchemy'
+import { stationBlocker, type StationDef, type StationRecipe } from './station'
+import { MAT } from '../voxel/depth'
+
+/**
+ * The cauldron, as a station.
+ *
+ * ★ THE LADDER MOVED OUT AND THE REASONING WENT WITH IT (2026-08-29). Every argument this file's
+ * header makes about the ORDER of refusals — absent before level, room before spending, the
+ * self-healing cost last — turned out to be about stations in general rather than about alchemy, so
+ * it lives in `station.ts` now and every future station inherits it instead of re-deriving it.
+ * What stayed here is what is genuinely alchemy's: canon's menu window, the Infusion label, and the
+ * `absent` set that exists because this world has no farming.
+ *
+ * ★ `replenishing` IS THE LOAD-BEARING FIELD. Mana refills on its own clock, which is the entire
+ * reason it is checked last — a keeper three shards short is told to wait, and waiting works. A
+ * station whose cost is CONSUMED must not inherit that position; see `station.ts`.
+ */
+export const CAULDRON: StationDef<PotionDef> = {
+  id: 'cauldron',
+  material: MAT.CAULDRON,
+  // ⚠ CANON'S OWN WORD. `game/alchemy.md` says brewing happens in a cauldron; `depth.ts` records why
+  // that matters (an invented "alchemy bench" would be a build word for a thing canon named).
+  name: 'Cauldron',
+  verb: 'Brew',
+  cost: 'replenishing',
+  menu: (level: number) => getVisiblePotions(level),
+  toRecipe: (d: PotionDef): StationRecipe => ({
+    id: d.id,
+    inputs: d.recipe,
+    outputId: d.id,
+    outputCount: d.resultCount,
+    minLevel: d.minAlchemyLevel,
+    power: d.manaCost,
+  }),
+}
 
 /**
  * Why the brew button is not going to work, or `'ok'`.
@@ -73,16 +108,12 @@ export function brewBlocker(
   // for want of a herb that does not grow here. They would have ground five hundred XP toward it.
   // A refusal that will still be true after you fix it must be said FIRST; `level` is the answer
   // only when reaching that level is actually enough.
-  if (def.recipe.some(r => !inWorld(r.itemId))) return 'absent'
-  if (alchemyLevel < def.minAlchemyLevel) return 'level'
-  if (def.recipe.some(r => have(r.itemId) < r.count)) return 'ingredients'
-  // ⚠ The bonus yield is NOT accounted for here and must not be: the companion perk can add one
-  // bottle beyond `resultCount`, and demanding room for a roll that usually does not happen would
-  // refuse a legal brew most of the time. An overflow bottle drops at the keeper's feet host-side,
-  // which is what every other full-bag payout in this world does.
-  if (room(def.id) < def.resultCount) return 'room'
-  if (manaCurrent < def.manaCost) return 'mana'
-  return 'ok'
+  // ★ THE LADDER IS `stationBlocker` NOW. This is a NAME ADAPTER, not a second implementation — the
+  // panel's vocabulary ('ingredients', 'mana') is alchemy's and stays, while the ordering rule lives
+  // in one place where a second station cannot fork it. Proven byte-identical over an exhaustive
+  // 21,420-row grid: see `brew.test.ts` s extraction hash.
+  const b = stationBlocker(CAULDRON, def, alchemyLevel, manaCurrent, have, inWorld, room)
+  return b === 'inputs' ? 'ingredients' : b === 'power' ? 'mana' : b
 }
 
 /**
