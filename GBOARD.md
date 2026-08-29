@@ -77,9 +77,37 @@ deterministic after, and the assert still goes red on a real throttle regression
 - ⚠ **Every config number is UNSWEPT and labelled.** `ruins.ts` records the rule for this machinery
   (*"tune by sweep, never by eye"*) and its figures came off 681 structures. A sweep is owed.
 
+### ★★★ AND THEN THE RING FLOOR — resolving a tension canon sets up on purpose
+Bonn #3: *"a wide shallow bowl… **like a stage worn flat by use**."* The brief bans, in the same
+breath: ⛔ *"a flattened construction pad."* **Both sentences are about flatness; the difference is
+WORN vs BUILT**, and it shows in exactly two places — a pad has a hard edge at a chosen radius, wear
+fades wherever feet stopped going; a pad is uniformly deep, wear is deepest where the traffic is. So
+the bowl is a wear FIELD, not a shape. Nothing picks a circle and digs it.
+- **The split is the design: what un-wears when the hold falls, and what does not.** S6's *"the cloud
+  takes its colour back"* returns the COLOUR; the ground does not un-dip. `bowlAt` is geometry and
+  wear — doctrine-free, equally true of Downbarrow's own gathering-green. `floorSurface` is
+  bare/scorch/grass and lifts. One function returning *"a scorched bowl"* would make freeing mean
+  REGENERATING the ground, flattening the hollow the act was staged in.
+- **Three things the oracle found that I had wrong:** the rim came out in **8 abrupt steps** (noise
+  sampled around a circle is smooth only while the circle stays inside a few lattice cells — at
+  radius 8 it crossed sixteen, and steps read as damage, not wear) · **the bowl ate the front row**
+  (`innerRadius - 1` plus a +1.6 jitter puts the rim at 9.6 against seating at 9, and only on the
+  bearings the noise pushed outward — a collared spirit seated *inside* the fighting floor) · and
+  ★★ **a drag-line was gated behind wear, which is backwards** — behind `wear >= bareAt` a line could
+  only appear where the ground was ALREADY bare, but **dragging is what wears it**; the brief says
+  *"grass and paths, worn, trampled, dragged-over"*, paths THROUGH grass.
+- ⚠⚠ **TWO OF MY ASSERTS WERE DECORATION, IN TWO CLASSIC WAYS.** The depth check read
+  `drop <= DEFAULT_FLOOR.maxDrop` — **an assert against the dial it is checking, which moves with the
+  mutation and can never fail**; it pins an absolute now, on canon's reasoning rather than mine
+  (deeper than a keeper is tall stops being a dip you look down into and becomes a pit you are thrown
+  into, which is a different room). The falloff check asked only for an ORDERING of three means, and
+  under a uniform depth those land within noise of each other — a coin flip. It requires a measurable
+  gap now. *Ordering is what the property sounds like; a falloff is what it is.*
+- ✅ **Read out of the generator as an ASCII cross-section, not guessed at** — irregular rim, depth
+  falling from the middle, three drag-lines fanning from the way in.
+
 ### Next
-- **The ring floor** — now that the rows exist, in canon's order. Its dip, surface and wear.
-- **The voxel realization** — `burrowtown` and `hold-rows` are pure placement; nothing draws yet.
+- **The voxel realization** — `burrowtown`, `hold-rows` and `ring-floor` are all pure placement.
 - **Bodies in the seats** — collared Luminara, dimmed. `plot-ring-pass` already renders Luminara.
 - ⚠ **Do not build a forced evolution** off the beat sheet — it says so explicitly; that is a gap.
 
