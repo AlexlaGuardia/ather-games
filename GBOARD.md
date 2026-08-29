@@ -11,6 +11,84 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🕯 Shimmer voxel — **THE ROWS: 91 SMALL LIGHTS, AND BUILDING THEM RESIZED THE GREEN** (2026-08-29, hub lane) · *Last touched 2026-08-29 (hub) — burrowtown 46 asserts, hold-rows 36, jigsaw equivalence re-proven, tsc 7 (baseline). Pure core; nothing deployed.*
+
+### Left off — the Snagbarrows' set piece, built in canon's own order
+Canon ruled the hold gap and then the staged-fight gap the same day, and both landed with build
+instructions attached. The sharpest: **"The captives in the rows are the cruelty; the fight in the
+middle is only the excuse. Build the rows before you build the ring."** So `voxel/hold-rows.ts` exists
+and no fighting floor does. That is not sequencing — it is where the meaning is.
+
+### What was built
+- **`voxel/burrowtown.ts`** — the Snagbarrows *were* Downbarrow, a free burrow-town that collarers
+  took, so it is **one generator with a doctrine flag**: `free` (Downbarrow, Gloview, the Warren) ·
+  `sport` (the ring worn into the old common green) · `industry` (Hemlock's sorting yard, declared,
+  unbuilt). **The taking is a LAYER, forced by beat S6** — freeing must lift it, so the free town is
+  the thing that persists. ★ `free` returns the zero overlay for every kind, which turns canon's
+  *"never grey a free Moglin's home"* from a discipline someone remembers into a value the module
+  cannot express by accident.
+- **`voxel/hold-rows.ts`** — 91 seats in three curving rows (25/31/35), facing the middle, opening
+  where the player walks in. **Nothing about the taking is baked in**: a seat carrying its own dimness
+  would mean freeing REGENERATES the seating, and the reward would read as a glitch.
+- **`jigsaw.ts` optional start pool** — a town must contain a green (the ring is worn into it).
+  Measured: without it, **7 towns in 40 had no green at all**. A pool, not a piece, because a fixed
+  start made every one-piece ruin identical and that reasoning still binds.
+
+### ★★★ "TIDY" IS THE HORROR, AND IT HAS A GEOMETRIC CONSEQUENCE
+Seats are spaced by **arc length, not by angle**. Equal angles crowd the inner row and thin the outer
+one, which reads as *a crowd that gathered* rather than *a stock that was placed* — and the cruelty
+here is bookkeeping made visible, so the regularity IS the content. The observable proof is that the
+outer row seats **more** (35 against 25), and that is what the oracle asserts, because equal angles
+would make the counts equal.
+
+### ★★★ AND BUILDING THE ROWS RESIZED THE GREEN — WHICH IS WHY CANON PUT THEM FIRST
+`green_round` was **25x25**, an ordinary jigsaw piece. Three rows at radius 9/11/13 need a half-span
+of 13. **The third row did not fit** — and it would not have crashed. It would have been a smaller
+audience, and *"in tidy rows"* quietly becoming two rows is exactly what nobody notices. The greens
+are sized by what must fit in them now (31x31, 37x27), with a **cross-file assert** comparing what
+the pool offers against what the seating needs, so shrinking a green OR adding a row goes red.
+
+### ★★ THE EQUIVALENCE CLAIM IN `jigsaw.ts` IS A TOOL NOW
+Its header asserted a change was proven safe by hashing `ruinPlan` over 641 sites — right to have
+done, and **nothing in the tree could check it**, because the site set was never recorded. A citation
+nobody can open retires the question instead of answering it. `scripts/ruin-hash.mts` makes the
+procedure reproducible (baseline 681 sites / 2346 parts / `53d5fde6d6bd79fdba5c`; the start-pool
+change left it byte-identical). ⚠ It cannot reproduce the historical figure and says so.
+★★ **And it was mutation-tested for sensitivity BEFORE its "unchanged" was believed** — an
+equivalence hash that cannot see a change reports every change as safe.
+
+### ⚠ AND A FLAKY SUITE, FOUND BY THE SWEEP AND NOT BY ITSELF
+`hollow-voice` failed at **27 vs 28** in a full sweep while passing 12/12 standing alone.
+`hollow-voice.ts:164` seeds each body's phase with `Math.random()` — legitimate in the game, where a
+pack starting in lockstep would sound like one animal — so emissions in a fixed window vary, and the
+throttle asserts sit near the ceiling by design. **The tempting fix was loosening the assert, and
+that file's own comment already refuses it.** Phases are seeded as an even spread instead: 15/15
+deterministic after, and the assert still goes red on a real throttle regression.
+
+### Decisions
+- **Size is an OUTCOME, not a target** (Alex). Reach derives from the pool (`maxDepth x typical
+  extent`), envelope from reach — change the pieces and the town's size follows. Lands ~168 across.
+  ⚠ `envelope` stays the one figure that is not a suggestion: jigsaw calls it a correctness bound
+  because the caller scans a bounded ring, and a chain that outruns it is rejected at the edge, so
+  the town **silently stops short and reads as small rather than as clipped**.
+- **Pieces are masses, not rooms.** Every COLUMN re-derives the whole assembly, so 150x200 at
+  room granularity is hundreds of pieces across ~30,000 columns. At mass scale it is ~20 — and
+  closer to *"fold crammed against fold"* than a corridor of rooms was.
+- ⚠ **Every config number is UNSWEPT and labelled.** `ruins.ts` records the rule for this machinery
+  (*"tune by sweep, never by eye"*) and its figures came off 681 structures. A sweep is owed.
+
+### Next
+- **The ring floor** — now that the rows exist, in canon's order. Its dip, surface and wear.
+- **The voxel realization** — `burrowtown` and `hold-rows` are pure placement; nothing draws yet.
+- **Bodies in the seats** — collared Luminara, dimmed. `plot-ring-pass` already renders Luminara.
+- ⚠ **Do not build a forced evolution** off the beat sheet — it says so explicitly; that is a gap.
+
+### Files
+- `src/app/shimmer/voxel/burrowtown.ts` · `burrowtown.test.ts` — the pool and the doctrine
+- `src/app/shimmer/voxel/hold-rows.ts` · `hold-rows.test.ts` — the audience
+- `src/app/shimmer/voxel/jigsaw.ts` — optional start pool · `scripts/ruin-hash.mts` — equivalence
+- `src/app/shimmer/voxel3d/hollow-voice.test.ts` — the flake
+
 ## 🧱 Shimmer voxel3d — **THE STRUCTURE WORKTABLE: BUILD A BUILDING, SAVE IT, STAMP IT** (2026-08-29, hub lane) · *Last touched 2026-08-29 (hub) — `11dcc79` pushed, 0 unpushed, blueprint oracle **54 asserts**, 7/7 mutations fire, tsc 7 (baseline). ✅ **DEPLOYED** `BUILD_ID -8riCplNhtANZhMWQbjsD`, 163 chunks.*
 
 ### Left off — Alex asked for the general version of what the court got
