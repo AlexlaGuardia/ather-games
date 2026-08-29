@@ -122,7 +122,13 @@ export interface FrameProfile {
    */
   worstZones: FrameProfile['zones']
   /**
-   * When the worst frame ENDED, on the profiler's own clock (ms).
+   * When the worst frame was ACCOUNTED, on the profiler's own clock (ms) — i.e. the `frameEnd` that
+   * carried its delta, which is the frame AFTER it.
+   *
+   * ⚠ NOT "when the worst frame ended", which is what this line used to say. A frame is accounted
+   * when the following frame hands over the delta that describes it, so the stamp is one frame
+   * late — uniformly, in both modes, since 2026-08-29. It is a lattice probe (see below) and a
+   * constant offset does not disturb a period, but it is not the stall's own timestamp.
    *
    * ★★★ ATTRIBUTION ALONE CAN NAME A ZONE AND STILL BE WRONG ABOUT THE MECHANISM (root-ef's catch,
    * 2026-08-23). `worstZones` says what was inside ONE stall. It cannot say whether the stalls in
@@ -161,7 +167,15 @@ export interface FrameProfile {
    */
   worstGpuStatus: 'ok' | 'pending' | 'dropped' | 'unavailable'
   /**
-   * Did the host call `frameStart`, so that `PROLOGUE_ROW` and `TAIL_ROW` could be measured?
+   * Did **every frame counted in this window** stamp a callback start, so that `PROLOGUE_ROW` and
+   * `TAIL_ROW` are real for all of them?
+   *
+   * ⚠⚠ CORRECTED 2026-08-29: this used to publish the profiler's state AT PUBLISH TIME, which is a
+   * different question and answers it wrong in the direction that hides a missing measurement. A
+   * window whose only counted frame had no stamp still reported `true`, because by the time the
+   * window closed the host was stamping again — so `snapshotText`'s "the split is unavailable" note
+   * stayed silent on precisely the reading that needed it. It is a property of the DATA now, ANDed
+   * over the counted frames, and one undivided frame makes the whole window undivided.
    *
    * ★ FALSE IS THE FAIL-CLOSED STATE, NOT A DEGRADED ONE. Without a callback-start stamp the
    * partition cannot be computed at all, and the honest output is the old undivided `UNACCOUNTED`
@@ -307,7 +321,18 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
   let prevReady = false
   /** Did the host stamp a callback start, so prologue/tail are real? See `FrameProfile.partitioned`. */
   let partitionOn = false
+  /** Did the frame `prevAcc` holds stamp one? Its prologue is only real if it did. */
+  let prevPartitioned = false
+  /**
+   * Was every frame COUNTED IN THIS WINDOW divisible? Fail-closed: one undivided frame makes the
+   * window undivided. ⚠ Not the same question as `partitionOn`, which is about the instrument right
+   * now — a window can hold nothing but un-stamped frames while the profiler is stamping happily by
+   * the time it publishes, and that is exactly the case that used to lie.
+   */
+  let windowPartitioned = true
   let worstPrologue = 0, worstTail = 0
+  /** Did the worst frame get a real prologue/tail split? See `worstSplit` in `frameEnd`. */
+  let worstSplit = false
   /** GPU queries still in flight, oldest first, each tagged with the frame it spans. */
   const inflight: { q: WebGLQuery; seq: number }[] = []
   let gpuNs = 0, gpuSamples = 0
@@ -346,7 +371,8 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       // setter already guards for `openAt` — one link further along.
       callbackAt = -1; firstMarkAt = -1; endAt = -1
       prevPrologue = 0; prevReady = false; partitionOn = false
-      worstPrologue = 0; worstTail = 0
+      prevPartitioned = false; windowPartitioned = true
+      worstPrologue = 0; worstTail = 0; worstSplit = false
       worstSeq = -1; worstGpuNs = null; worstGpuState = 'pending'
     },
     get gpuStatus() { return gpuStatus },
@@ -401,58 +427,73 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       // breakdown is unknown is precisely the "tidy breakdown of the 13% we wrapped" this file
       // exists to refuse. One frame of a ~15-frame window, dropped loudly here rather than folded
       // silently into the means.
-      if (partitionOn) {
-        const prologue = firstMarkAt >= 0 ? firstMarkAt - callbackAt : t - callbackAt
-        if (prevReady) {
-          const tail = callbackAt - endAt
-          frames++
-          time += dtRaw
-          for (const [k, v] of prevAcc) acc.set(k, (acc.get(k) ?? 0) + v)
-          acc.set(PROLOGUE_ROW, (acc.get(PROLOGUE_ROW) ?? 0) + prevPrologue)
-          acc.set(TAIL_ROW, (acc.get(TAIL_ROW) ?? 0) + tail)
-          // ⚠ THE COPY HAPPENS BEFORE THE ROLL AND ONLY ON A NEW WORST. Snapshotting at publish
-          // instead would hand back the LAST frame's parts wearing the worst frame's duration —
-          // two frames spliced into one reading, which is the shape that corroborates a wrong
-          // answer. That is also the defect the attribution above fixes, one level up.
-          if (dtRaw > worst) {
-            worst = dtRaw
-            worstAt = t
-            worstAcc.clear()
-            for (const [k, v] of prevAcc) worstAcc.set(k, v)
-            worstPrologue = prevPrologue
-            worstTail = tail
-            // The query spanning this dt is the one `gpuFrame` closed at the top of THIS callback.
-            worstSeq = closedSeq
-            worstGpuNs = null
-            worstGpuState = 'pending'
-          }
-        }
-        // Roll: this frame becomes the one the NEXT dt describes.
-        prevAcc.clear()
-        for (const [k, v] of frameAcc) prevAcc.set(k, v)
-        prevPrologue = prologue
-        endAt = t
-        prevReady = true
-      } else {
-        // ★ FALL-BACK, AND IT IS THE OLD BEHAVIOUR VERBATIM. No `frameStart` means no callback-start
-        // stamp, so prologue and tail cannot be computed and must not be guessed. `partitioned`
-        // goes out false and the panel says the split is unavailable — a missing measurement
-        // reported as missing, never as two plausible rows derived from a timestamp nobody took.
+      // ── ★★★ ONE ATTRIBUTION CHAIN, IN BOTH MODES — AND THE FALL-BACK USED TO SKIP IT ──────────
+      // `dtRaw` describes the PREVIOUS frame in both modes, because it is r3f's delta and nothing
+      // about the callback stamp changes that. The un-partitioned branch used to pair it with the
+      // CURRENT frame's zone map — **the exact defect `fad9e08` fixed for `worstZones`, surviving
+      // in the one branch that commit did not touch**, and it fails toward a finding rather than
+      // toward a shrug: a frame more expensive than its predecessor reports parts that outrun the
+      // whole, so the panel prints a negative UNACCOUNTED and rows over 100%.
+      //
+      // ⚠ MEASURED, NOT REASONED: a 240ms frame following a 16ms one published `measured 193.00 of
+      // a 16.00 ms frame — 1206%, UNACCOUNTED -177.00`. Alex's 249% on the UHD 630 is this at a
+      // smaller ratio, and it appeared on the FIRST window after switching the panel on because the
+      // host stamped `frameStart` before turning the profiler on (fixed in `VoxelWorld.tsx`), which
+      // put exactly one un-partitioned frame — the most expensive one in the run, the frame that
+      // mounts the panel — at the head of every session.
+      //
+      // So the roll below is unconditional and the ONLY thing the callback stamp decides is whether
+      // the remainder can be SPLIT. A frame is divisible only when it stamped its own callback
+      // start (its prologue is real) AND the frame after it stamped one too (its tail is real);
+      // anything else keeps the old undivided row rather than deriving a row from a stamp nobody
+      // took.
+      const prologue = partitionOn ? (firstMarkAt >= 0 ? firstMarkAt - callbackAt : t - callbackAt) : 0
+      if (prevReady) {
+        const split = prevPartitioned && partitionOn
+        const tail = split ? callbackAt - endAt : 0
         frames++
         time += dtRaw
-        for (const [k, v] of frameAcc) acc.set(k, (acc.get(k) ?? 0) + v)
+        for (const [k, v] of prevAcc) acc.set(k, (acc.get(k) ?? 0) + v)
+        if (split) {
+          acc.set(PROLOGUE_ROW, (acc.get(PROLOGUE_ROW) ?? 0) + prevPrologue)
+          acc.set(TAIL_ROW, (acc.get(TAIL_ROW) ?? 0) + tail)
+        } else {
+          // ⚠ FAIL-CLOSED, AND IT IS A PROPERTY OF THE WINDOW RATHER THAN OF THE INSTRUMENT. One
+          // undivided frame makes the whole window's remainder undivided, so the panel's "the split
+          // is unavailable" note prints. Reading `partitionOn` at publish time instead reported
+          // `partitioned: true` for a window whose only counted frame had no stamp at all — the one
+          // field whose job is to say the measurement is missing, saying it was taken.
+          windowPartitioned = false
+        }
+        // ⚠ THE COPY HAPPENS BEFORE THE ROLL AND ONLY ON A NEW WORST. Snapshotting at publish
+        // instead would hand back the LAST frame's parts wearing the worst frame's duration —
+        // two frames spliced into one reading, which is the shape that corroborates a wrong
+        // answer. That is also the defect the attribution above fixes, one level up.
         if (dtRaw > worst) {
           worst = dtRaw
           worstAt = t
           worstAcc.clear()
-          for (const [k, v] of frameAcc) worstAcc.set(k, v)
-          worstPrologue = 0
-          worstTail = 0
+          for (const [k, v] of prevAcc) worstAcc.set(k, v)
+          worstPrologue = prevPrologue
+          worstTail = tail
+          // ★ Whether THIS frame's table gets prologue/tail rows, rather than whether the profiler
+          // happens to be partitioning when the window closes. An undivided worst frame inside an
+          // otherwise-partitioned window would otherwise be handed two rows reading 0.00 — a
+          // measurement that was never taken, printed as one that came back empty.
+          worstSplit = split
+          // The query spanning this dt is the one `gpuFrame` closed at the top of THIS callback.
           worstSeq = closedSeq
           worstGpuNs = null
           worstGpuState = 'pending'
         }
       }
+      // Roll: this frame becomes the one the NEXT dt describes. Unconditional — see above.
+      prevAcc.clear()
+      for (const [k, v] of frameAcc) prevAcc.set(k, v)
+      prevPrologue = prologue
+      prevPartitioned = partitionOn
+      endAt = t
+      prevReady = true
       frameAcc.clear()
     },
 
@@ -474,7 +515,15 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
 
     /** @internal — reachable for the oracle; callers use `gpuFrame`. */
     gpuEnd() {
-      if (!querying || !gl || !ext) return
+      // ⚠⚠ NOTHING TO CLOSE MEANS THERE IS NO QUERY FOR THIS FRAME, AND `closedSeq` MUST SAY SO.
+      // It used to keep the previous frame's id, so `frameEnd`'s `worstSeq = closedSeq` tagged the
+      // stall with a query spanning a DIFFERENT frame — a frame's GPU time and a frame's duration
+      // taken from two frames, which is the same sentence as the zone-attribution bug this file was
+      // fixed for on 2026-08-29, one field over. Reachable whenever `gpuBegin` could not open one
+      // (`createQuery` returning null, a context loss between the two halves). -1 matches no query,
+      // so the reading is WITHHELD as pending rather than answered with someone else's number —
+      // the direction this instrument is required to fail in.
+      if (!querying || !gl || !ext) { closedSeq = -1; return }
       gl.endQuery(ext.TIME_ELAPSED_EXT)
       querying = false
       // Drain whatever has landed. ⚠ A DISJOINT frame is thrown away rather than recorded — the
@@ -525,7 +574,7 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       // ★ In partition mode the worst frame's two unwrapped halves are rows of its table too, so a
       // stall lands on the row that says WHERE it was rather than on a remainder that says only
       // that nobody wrapped it.
-      if (partitionOn) {
+      if (worstSplit) {
         worstZones.push({ name: PROLOGUE_ROW, ms: worstPrologue, pct: 0 })
         worstZones.push({ name: TAIL_ROW, ms: worstTail, pct: 0 })
       }
@@ -543,19 +592,27 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
         // pending and nothing was dropped; saying otherwise sends a reader hunting a driver quirk
         // that is really a missing extension.
         worstGpuStatus: !ext ? 'unavailable' : worstGpuState,
-        partitioned: partitionOn,
+        // ⚠ THE WINDOW'S OWN PROPERTY, NOT THE INSTRUMENT'S CURRENT STATE — see `windowPartitioned`.
+        partitioned: windowPartitioned,
         // ⚠ AGAINST WALL CLOCK, NEVER AGAINST THE ZONE SUM. Deriving the total from the parts is how
         // a profiler comes to believe it saw the whole frame.
         unaccounted: ms - measured,
         frames,
       }
-      acc.clear(); frameAcc.clear(); worstAcc.clear(); names.clear()
+      // ⚠⚠ `frameAcc` IS NOT WINDOW STATE AND MUST SURVIVE — the host calls `publish()` from the
+      // MIDDLE of its frame callback (`VoxelWorld.tsx`, between the `hud` and `save` marks), so
+      // clearing it here threw away the zones of the frame currently being measured. One frame per
+      // window then reached `acc` carrying its prologue and tail but none of its zones, which
+      // inflates UNACCOUNTED by a whole frame's marked work and dilutes every zone mean. Same
+      // reasoning as the attribution chain below: per-frame state does not belong to the window.
+      acc.clear(); worstAcc.clear(); names.clear()
       frames = 0; time = 0; worst = 0; worstAt = 0; windowAt = t
+      windowPartitioned = true
       gpuNs = 0; gpuSamples = 0
       // ⚠ `prevAcc` / `prevReady` / `endAt` SURVIVE THE WINDOW ON PURPOSE. They are the attribution
       // chain, not window totals — clearing them would make the first frame of every window
       // unattributable and quietly drop four frames a second.
-      worstPrologue = 0; worstTail = 0
+      worstPrologue = 0; worstTail = 0; worstSplit = false
       worstSeq = -1; worstGpuNs = null; worstGpuState = 'pending'
       return out
     },

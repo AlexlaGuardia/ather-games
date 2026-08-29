@@ -6,6 +6,7 @@
 // wrap and says nothing about the other 87%.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { Profiler } from './profile'
 import { createProfiler, snapshotText, gpuTrusted, GPU_COVERAGE_MIN, WINDOW_MS, MAX_ZONES, OVERFLOW, UNACCOUNTED_ROW, PROLOGUE_ROW, TAIL_ROW } from './profile'
 
 let pass = 0
@@ -16,6 +17,21 @@ const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= tol
 /** A clock we drive by hand, so a test never measures the test runner. */
 const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
 
+/**
+ * Hand the profiler the NEXT frame's delta — which is what ACCOUNTS the frame just closed.
+ *
+ * ★★ `dtRaw` always describes the PREVIOUS frame (r3f takes its delta at the top of the callback and
+ * renders after every subscriber), so a frame's zones are folded into the window only when the
+ * FOLLOWING frame ends. That was already true in partition mode and is true in both modes since
+ * 2026-08-29 — the un-partitioned branch used to pair a frame's zones with its predecessor's
+ * duration, which is the two-frames-spliced defect block 9 exists for, and it published parts that
+ * outran the whole (a 240ms frame after a 16ms one read `measured 193.00 of a 16.00 ms frame`).
+ *
+ * ⚠ So a ONE-FRAME test publishes nothing at all, and that is the contract: the first frame's dt
+ * reaches back before the profiler was watching, so nothing can be said about its parts.
+ */
+const accountFrame = (p: Profiler, dt: number) => p.frameEnd(dt)
+
 // ── 1. ★★ MARKS PARTITION THE FRAME — the claim the whole file rests on ────────────────────────
 {
   const { c, now } = clock()
@@ -25,6 +41,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   c.t = 104; p.mark('flora')
   c.t = 110; p.mark('light')
   c.t = 112; p.frameEnd(0.016)
+  accountFrame(p, 0.016)   // the frame above is accounted by the NEXT frame's delta
   c.t = 100 + WINDOW_MS + 1
   const w = p.publish()!
   ok(!!w, 'a window is published once the interval has passed')
@@ -44,6 +61,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   p.enabled = true
   c.t = 0; p.mark('a')
   c.t = 3; p.frameEnd(0.016)           // 16ms of wall clock, 3ms of it wrapped
+  accountFrame(p, 0.016)
   c.t = WINDOW_MS + 1
   const w = p.publish()!
   ok(near(w.ms, 16, 0.001), `★ seconds in, milliseconds out — a 0.016s frame reads as ${w.ms.toFixed(3)} ms`)
@@ -70,6 +88,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   const p = createProfiler(now)
   p.enabled = true
   p.frameEnd(0.020)
+  accountFrame(p, 0.020)
   c.t = WINDOW_MS + 1
   const w = p.publish()!
   ok(w.measured === 0 && near(w.unaccounted, 20, 0.001),
@@ -86,6 +105,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   const p = createProfiler(now)
   p.enabled = true
   c.t = 0; p.mark('mesh'); c.t = 3; p.mark('flora'); c.t = 4; p.frameEnd(0.030)
+  accountFrame(p, 0.030)
   c.t = WINDOW_MS + 1
   const w = p.publish()!
   ok(w.zones[0].unaccounted === true,
@@ -111,6 +131,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   ok(p.gpuStatus !== 'ok', `the status says why (${p.gpuStatus})`)
   p.gpuFrame(); p.gpuFrame()
   p.frameEnd(0.016)
+  accountFrame(p, 0.016)
   c.t = WINDOW_MS + 1
   const w = p.publish()!
   ok(w.gpuMs === null, '★★★ gpuMs is null with no extension')
@@ -142,6 +163,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   // ★ Driven through the SUPPORTED call, twice — `gpuFrame` closes the previous frame's query and
   // opens the next, so one call can never produce a sample and two must.
   good.gpuFrame(); good.gpuFrame(); good.frameEnd(0.016)
+  accountFrame(good, 0.016)
   c.t = WINDOW_MS + 1
   ok(near(good.publish()!.gpuMs!, 4, 0.001), '★ a clean sample comes back in ms')
 
@@ -153,6 +175,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   const one = createProfiler(c3.now); one.enabled = true
   one.attach(mkGl(false, 4_000_000))
   one.gpuFrame(); one.frameEnd(0.016)
+  accountFrame(one, 0.016)
   c3.c.t = WINDOW_MS + 1
   ok(one.publish()!.gpuMs === null,
     '★★ a single gpuFrame reports null — the window has been opened and not yet closed by a render')
@@ -161,6 +184,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   const bad = createProfiler(c2.now); bad.enabled = true
   bad.attach(mkGl(true, 999_000_000))            // driver says the timing is garbage
   bad.gpuFrame(); bad.gpuFrame(); bad.frameEnd(0.016)
+  accountFrame(bad, 0.016)
   c2.c.t = WINDOW_MS + 1
   ok(bad.publish()!.gpuMs === null,
     '★ a DISJOINT frame is thrown away and reports null, not a garbage number')
@@ -178,6 +202,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   // ⚠ The keeper walks away for a minute with the panel open, then it is toggled off and on.
   c.t = 60_000; p.enabled = false; p.enabled = true
   c.t = 60_001; p.mark('z'); c.t = 60_003; p.frameEnd(0.016)
+  accountFrame(p, 0.016)
   c.t = 60_003 + WINDOW_MS + 1
   const w = p.publish()!
   const real = w.zones.filter(z => !z.unaccounted)
@@ -192,6 +217,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   p.enabled = true
   for (let i = 0; i < MAX_ZONES + 40; i++) { c.t = i; p.mark(`chunk-${i}`) }
   c.t = MAX_ZONES + 41; p.frameEnd(0.016)
+  accountFrame(p, 0.016)
   c.t += WINDOW_MS + 1
   const w = p.publish()!
   // MAX_ZONES real names + one overflow bucket + the unaccounted row.
@@ -210,6 +236,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   const p = createProfiler(now)
   p.enabled = true
   p.frameEnd(0.016)
+  accountFrame(p, 0.016)
   c.t = WINDOW_MS - 1
   ok(p.publish() === null, 'nothing is published before the window elapses')
   c.t = WINDOW_MS + 1
@@ -244,7 +271,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   const thin = createProfiler(now); thin.enabled = true
   thin.attach(mkGl())
   thin.gpuFrame(); thin.gpuFrame()                 // exactly one sample lands
-  for (let i = 0; i < 10; i++) thin.frameEnd(0.016)
+  for (let i = 0; i < 11; i++) thin.frameEnd(0.016)   // 11 driven, 10 counted — the first is never counted
   c.t = WINDOW_MS + 1
   const tw = thin.publish()!
   ok(tw.frames === 10, 'the window counted every frame')
@@ -261,7 +288,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   const full = createProfiler(c2.now); full.enabled = true
   full.attach(mkGl())
   full.gpuFrame()
-  for (let i = 0; i < 10; i++) { full.gpuFrame(); full.frameEnd(0.016) }
+  for (let i = 0; i < 11; i++) { full.gpuFrame(); full.frameEnd(0.016) }
   c2.c.t = WINDOW_MS + 1
   const fw = full.publish()!
   ok(fw.gpuSamples >= fw.frames * GPU_COVERAGE_MIN,
@@ -275,6 +302,7 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   const c3 = clock()
   const none = createProfiler(c3.now); none.enabled = true
   none.frameEnd(0.016)
+  accountFrame(none, 0.016)
   c3.c.t = WINDOW_MS + 1
   const nw = none.publish()!
   ok(nw.gpuMs === null && !gpuTrusted(nw), 'no extension: gpuMs null and not trusted')
@@ -298,8 +326,12 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   }
   p.mark('ticks'); c.t += 240          // the stall, inside a wrapped zone
   p.mark('render'); c.t += 2
+  // ⚠ THIS frameEnd's delta describes the PREVIOUS, clean frame — it is the NEXT one that carries
+  // the stall's 250ms. Writing `frameEnd(0.250)` here would hand the stall frame's parts to a
+  // duration r3f never measured for it, which is the two-frames-spliced defect block 9 is about.
+  p.frameEnd(0.016)
   const stallAt = c.t
-  p.frameEnd(0.250)
+  accountFrame(p, 0.250)
   c.t = stallAt + WINDOW_MS + 1
   const w = p.publish()!
 
@@ -309,7 +341,10 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   ok(near(top.ms, 240, 2), `★★ and its cost is the STALL's, not the window mean's (${top.ms.toFixed(1)}ms)`)
   ok(w.zones.find(z => z.name === 'ticks')!.ms < 100,
     '★★ while the WINDOW mean for the same zone stays small — the two must not be the same number')
-  ok(w.worstAt === stallAt, `★ worstAt stamps the stall frame (${w.worstAt} vs ${stallAt})`)
+  // ★ `worstAt` is stamped when the stall frame is ACCOUNTED — i.e. at the frameEnd that carries its
+  // delta, one frame later. It is documented as meaningful only when DIFFED against another
+  // window's, and this pins which of the two frameEnds it belongs to.
+  ok(w.worstAt === stallAt, `★ worstAt stamps the stall frame's accounting (${w.worstAt} vs ${stallAt})`)
 
   // ★ the worst frame carries its OWN unaccounted remainder, against its OWN duration
   const un = w.worstZones.find(z => z.unaccounted)!
@@ -612,6 +647,227 @@ const clock = () => { const c = { t: 0 }; return { c, now: () => c.t } }
   }
   ok(!seen.has('world:ticks'),
     '★★★ and `world:ticks` is gone rather than kept beside its own replacements')
+}
+
+// ── 13. ★★★ A FRAME'S PARTS AND A FRAME'S DURATION, IN THE **UN-PARTITIONED** BRANCH ───────────
+// Block 9 fixed this for the partition path. The fall-back path kept the defect, and it is the
+// reading Alex hit on the UHD 630: `249%` with a NEGATIVE UNACCOUNTED. `dtRaw` describes the
+// PREVIOUS frame in BOTH modes — nothing about a callback stamp changes what r3f's delta measures —
+// so pairing it with the CURRENT frame's zone map makes an expensive frame report parts that outrun
+// the whole. ⚠ It fails toward a FINDING: a percentage over 100 and a negative remainder read as a
+// double-counting profiler, which is what the first diagnosis of this bug said, and it is not.
+{
+  const { c, now } = clock()
+  const p = createProfiler(now); p.enabled = true    // ⚠ no frameStart anywhere: fall-back mode
+
+  // one cheap frame, then a 240ms one — the shape of the frame that mounts the panel on a UHD 630
+  c.t += 2; p.mark('world'); c.t += 6; p.frameEnd(0.016)
+  p.mark('world'); c.t += 240; p.frameEnd(0.016)     // its delta describes the CHEAP frame above
+  const stallAt = c.t
+  accountFrame(p, 0.240)                             // ★ and THIS delta is the stall frame's
+  c.t = stallAt + WINDOW_MS + 1
+  const w = p.publish()!
+
+  ok(w.unaccounted >= -0.001,
+    `★★★ the remainder is never negative — parts that outrun the frame mean two frames were spliced (${w.unaccounted.toFixed(2)}ms)`)
+  ok(w.measured <= w.ms + 0.001,
+    `★★★ and the wrapped zones cannot exceed the frame they are a share OF (${((w.measured / w.ms) * 100).toFixed(0)}% of the frame)`)
+  ok(!w.zones.some(z => z.pct > 100.001),
+    `★★ so no row reads over 100% (worst row ${Math.max(...w.zones.map(z => z.pct)).toFixed(0)}%)`)
+  ok(near(w.worst, 240, 1) && near(w.worstZones.find(z => z.name === 'world')!.ms, 240, 1),
+    `★★★ and the stall frame's 240ms of 'world' is billed to the 240ms frame, not to the 16ms one ` +
+    `(worst ${w.worst.toFixed(1)}ms, world ${w.worstZones.find(z => z.name === 'world')?.ms.toFixed(1)}ms)`)
+  ok(!w.worstZones.some(z => z.unaccounted && z.ms < -0.001),
+    'the worst frame\'s remainder is not negative either')
+
+  // ★★ AND THE FIRST FRAME IS NOT COUNTED, IN EITHER MODE. Its delta reaches back before the
+  // profiler was watching, so nothing can be said about its parts — counting it is exactly the
+  // splice above. The fall-back branch used to count it; partition mode already refused to.
+  const c2 = clock()
+  const one = createProfiler(c2.now); one.enabled = true
+  one.mark('world'); c2.c.t += 8; one.frameEnd(0.016)
+  c2.c.t += WINDOW_MS + 1
+  ok(one.publish() === null,
+    '★★ a single un-partitioned frame publishes NOTHING rather than a reading built on a foreign delta')
+}
+
+// ── 14. ★★★ `partitioned` DESCRIBES THE WINDOW, NOT THE INSTRUMENT AT PUBLISH TIME ─────────────
+// The field exists so a reader can tell "the stall was outside every mark" from "this host never
+// stamped a frame start". It was read off `partitionOn` when the window closed — a different
+// question. A window whose only counted frame had NO stamp still reported `true`, because by then
+// the host was stamping again, so `snapshotText`'s note stayed silent on precisely the reading that
+// needed it. ⚠ A missing measurement that reports itself as taken is this file's whole subject.
+{
+  const { c, now } = clock()
+  const p = createProfiler(now); p.enabled = true
+
+  // frame 1: NO frameStart (the toggle frame, before the host order was fixed)
+  c.t += 2; p.mark('world'); c.t += 20; p.frameEnd(0.016)
+  // frame 2 onward: stamped normally — the profiler is partitioning happily by publish time
+  p.frameStart(); c.t += 2; p.mark('world'); c.t += 6; p.frameEnd(0.022)
+  const at = c.t
+  c.t = at + WINDOW_MS + 1
+  const w = p.publish()!
+
+  ok(w.partitioned === false,
+    '★★★ one undivided frame makes the WINDOW undivided — fail-closed, not "whatever the instrument is doing now"')
+  const ctx = { space: 'plot' as const, x: 0, y: 0, z: 0, viewRadius: 12,
+    cols: 1, meshes: 1, draws: 1, tris: 1, geometries: 1, programs: 1, gpuStatus: 'ok' }
+  ok(/remainder is UNDIVIDED/.test(snapshotText(w, ctx)),
+    '★★ and the note prints, so the reader is told the split was never taken')
+  ok(!w.zones.some(z => z.name === PROLOGUE_ROW || z.name === TAIL_ROW),
+    '★★ with no prologue/tail rows derived from a stamp nobody took')
+  // ★★★ AND THE WORST FRAME'S OWN TABLE ANSWERS FOR ITSELF. The worst frame here is the undivided
+  // one, inside a profiler that is partitioning by the time the window closes. Keying its rows on
+  // the instrument hands it a prologue and a tail reading `0.00` — a measurement that was never
+  // taken, printed as one that came back empty, which is the more convincing of the two lies.
+  ok(!w.worstZones.some(z => z.name === PROLOGUE_ROW || z.name === TAIL_ROW),
+    `★★★ an undivided worst frame gets no 0.00 prologue/tail rows (${w.worstZones.map(z => z.name.split(' (')[0]).join(', ')})`)
+
+  // ★ AND IT IS NOT SIMPLY ALWAYS-FALSE — a fully stamped window still says true.
+  const c2 = clock()
+  const q = createProfiler(c2.now); q.enabled = true
+  for (let i = 0; i < 4; i++) { q.frameStart(); c2.c.t += 2; q.mark('world'); c2.c.t += 6; q.frameEnd(0.016) }
+  c2.c.t += WINDOW_MS + 1
+  ok(q.publish()!.partitioned === true, '★ a window where every counted frame stamped reports partitioned')
+}
+
+// ── 15. ★★ PUBLISHING MID-CALLBACK MUST NOT EAT THE FRAME BEING MEASURED ───────────────────────
+// The host calls `publish()` from the MIDDLE of its frame callback (`VoxelWorld.tsx`, between the
+// `hud` and `save` marks) because the snapshot quotes scene facts that only exist inside the frame.
+// `publish` cleared `frameAcc` with the window totals — but `frameAcc` is PER-FRAME state, so one
+// frame per window reached the next window carrying its prologue and tail and none of its zones.
+// ⚠ That inflates UNACCOUNTED by a whole frame's marked work and dilutes every zone mean, in the
+// direction that reads as "nobody wrapped this" — an honest-looking gap that was measurement loss.
+{
+  const { c, now } = clock()
+  const p = createProfiler(now); p.enabled = true
+  // ★ The host calls `publish()` EVERY frame and lets it rate-limit itself, so the window lands from
+  // inside whichever callback happens to be running when the interval elapses. Driven that way here
+  // rather than by jumping the clock — idle time the delta never saw is not a frame, and a test that
+  // invents one measures its own fixture.
+  const wins: NonNullable<ReturnType<typeof p.publish>>[] = []
+  for (let i = 0; i < 40; i++) {
+    p.frameStart(); c.t += 2
+    // ⚠ TWO zones before the publish, not one, and that is what makes this fixture able to see the
+    // bug at all: a zone reaches `frameAcc` only when the NEXT mark closes it, so with a single
+    // open zone the map is still EMPTY at publish time and clearing it is invisible. The host has
+    // ten closed zones sitting there when it publishes, with `hud` still open.
+    p.mark('world'); c.t += 4
+    p.mark('hud'); c.t += 2
+    const win = p.publish()           // ← mid-callback, exactly where the host calls it
+    if (win) wins.push(win)
+    p.mark('save'); c.t += 1
+    p.frameEnd(0.016)
+    c.t += 7                          // tail — 2 + 4 + 2 + 1 + 7 = the 16ms the delta reports
+  }
+  ok(wins.length >= 2, `★ BLIND CHECK: ${wins.length} windows landed mid-callback — under 2 and this proves nothing`)
+  const w = wins[wins.length - 1]
+
+  ok(w.zones.find(z => z.name === 'world')!.ms === 4,
+    `★★★ every counted frame contributed its zones — the frame that published is not a hole (world ${w.zones.find(z => z.name === 'world')!.ms}ms, expected 4)`)
+  ok(w.zones.find(z => z.name === 'hud')!.ms === 2,
+    '★★ including the zone that was still OPEN when publish was called')
+  ok(w.zones.find(z => z.name === 'save')!.ms === 1,
+    '★★ including the marks that came AFTER the publish call')
+  ok(near(w.unaccounted, 0, 0.001),
+    `★★★ and the frame still divides exactly, so the remainder stays a wiring check (${w.unaccounted.toFixed(3)}ms)`)
+}
+
+// ── 16. ★★ THE HOST GATES BEFORE IT STAMPS — the order that manufactured the whole bug ─────────
+// Every profiler entry point returns on `enabled` first. With `prof.current.enabled = ...` placed
+// BELOW `frameStart()`, the frame that switches the panel on ran its marks and its `frameEnd` and
+// **not** its callback stamp — one un-partitioned frame at the head of every session, and the most
+// expensive frame in the run. `profile.ts` now attributes such a frame correctly anyway; this asserts
+// the host stops minting them. ⚠ A textual reader of a file it does not own fails silently, so it
+// proves it found each anchor EXACTLY ONCE before judging their order (canon gate, 08-22).
+{
+  const raw = readFileSync(join(__dirname, 'VoxelWorld.tsx'), 'utf8')
+  const code = raw.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+  const enabledAt = [...code.matchAll(/prof\.current\.enabled = /g)].map(m => m.index!)
+  const startAt = [...code.matchAll(/prof\.current\.frameStart\(\)/g)].map(m => m.index!)
+  ok(enabledAt.length === 1 && startAt.length === 1,
+    `★★★ BLIND CHECK: one \`enabled =\` (${enabledAt.length}) and one \`frameStart()\` (${startAt.length}) — ` +
+    'any other count means this reader has lost its subject and its verdict is worthless')
+  ok(enabledAt.length === 1 && startAt.length === 1 && enabledAt[0] < startAt[0],
+    '★★★ the host sets `enabled` BEFORE `frameStart()`, so the frame that turns the panel on is stamped like any other')
+}
+
+// ── 17. ★★ A FRAME WITH NO QUERY MUST NOT BORROW ANOTHER FRAME'S GPU TIME ──────────────────────
+// The zone-attribution bug of 2026-08-29, one field over. `gpuEnd` returns early when there is
+// nothing open — and it used to leave `closedSeq` holding the PREVIOUS frame's query id, so
+// `frameEnd`'s `worstSeq = closedSeq` tagged the stall with a query spanning a different interval.
+// Reachable whenever `gpuBegin` could not open one (`createQuery` returning null, a context loss
+// between the two halves), which is likeliest on exactly the flaky-timer machines this field exists
+// to answer about. ⚠ The wrong answer is a plausible millisecond figure on the one row a reader
+// uses to decide "blocked in the driver" vs "waiting on a busy GPU" — opposite fixes.
+{
+  // ⚠ A query lands one frame LATE, exactly as a driver's does — the same fake shape block 10 uses.
+  // A fake that answers instantly drains the query before `frameEnd` can name it, so the worst
+  // frame reads `pending` in every case and the positive control below is what caught that.
+  let failNext = false
+  const mkGl = () => {
+    let made = 0
+    const landed: unknown[] = []
+    return {
+      QUERY_RESULT_AVAILABLE: 'avail', QUERY_RESULT: 'res',
+      getExtension: (n: string) =>
+        n === 'EXT_disjoint_timer_query_webgl2' ? { TIME_ELAPSED_EXT: 'te', GPU_DISJOINT_EXT: 'dj' } : null,
+      // ★ each query carries a DISTINCT timing, so a mis-tag is a visible wrong number rather than
+      // a coincidence that reads as correct.
+      createQuery: () => (failNext ? ((failNext = false), null) : { id: ++made }),
+      beginQuery: () => {}, endQuery: () => { landed.push(true) },
+      getQueryParameter: (q: { id: number }, what: string) =>
+        what === 'avail' ? landed.length > q.id : q.id * 7e6,
+      getParameter: () => false,
+      deleteQuery: () => {},
+    } as unknown as WebGL2RenderingContext
+  }
+
+  const { c, now } = clock()
+  const p = createProfiler(now); p.enabled = true
+  p.attach(mkGl())
+  const frame = (dt: number, fail = false) => {
+    failNext = fail
+    p.gpuFrame(); p.frameStart(); c.t += 2
+    p.mark('world'); c.t += 6
+    p.frameEnd(dt)
+    c.t += 8
+  }
+  frame(0.016)
+  frame(0.016)
+  frame(0.016, true)     // ⚠ no query opened for the interval that follows
+  frame(0.300)           // ← the stall. Its query never existed.
+  frame(0.016)           // drains whatever landed
+  frame(0.016)
+  c.t += WINDOW_MS + 1
+  const w = p.publish()!
+
+  ok(near(w.worst, 300, 1), `★ the stall is the worst frame (${w.worst.toFixed(0)}ms)`)
+  ok(w.worstGpuMs === null,
+    `★★★ a frame whose query was never opened reports NO gpu time, rather than the previous frame's (${w.worstGpuMs}ms)`)
+  ok(w.worstGpuStatus === 'pending',
+    `★★ and withholds it as pending — a missing measurement reported as missing (${w.worstGpuStatus})`)
+  const ctx = { space: 'plot' as const, x: 0, y: 0, z: 0, viewRadius: 12,
+    cols: 1, meshes: 1, draws: 1, tris: 1, geometries: 1, programs: 1, gpuStatus: 'ok' }
+  ok(!/gpu on THIS frame  \d/.test(snapshotText(w, ctx)),
+    '★★ so the printed table names no gpu figure for that frame at all')
+
+  // ★ AND IT IS NOT SIMPLY ALWAYS-NULL — an uninterrupted run still tags its stall.
+  const c2 = clock()
+  const q = createProfiler(c2.now); q.enabled = true
+  q.attach(mkGl())
+  const frame2 = (dt: number) => {
+    q.gpuFrame(); q.frameStart(); c2.c.t += 2
+    q.mark('world'); c2.c.t += 6
+    q.frameEnd(dt)
+    c2.c.t += 8
+  }
+  frame2(0.016); frame2(0.016); frame2(0.300); frame2(0.016); frame2(0.016)
+  c2.c.t += WINDOW_MS + 1
+  const w2 = q.publish()!
+  ok(w2.worstGpuMs !== null && w2.worstGpuStatus === 'ok',
+    `★★ a stall whose query DID open still gets its own gpu timing (${w2.worstGpuMs}ms, ${w2.worstGpuStatus})`)
 }
 
 if (fails.length) {

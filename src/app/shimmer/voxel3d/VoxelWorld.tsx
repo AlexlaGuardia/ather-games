@@ -5793,16 +5793,25 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // answer to the one question it exists to settle. `gpuFrame` closes the previous frame's query
     // and opens the next, so the window always spans a real render. See profile.ts for the full note.
     prof.current.gpuFrame()
+    // ⚠⚠ THE GATE COMES BEFORE THE STAMP, AND THE ORDER IS THE WHOLE BUG (2026-08-29). Every entry
+    // point returns on `enabled` first, so with the assignment BELOW `frameStart()` the frame that
+    // switches the panel on got its marks and its `frameEnd` and **not** its callback stamp — one
+    // un-partitioned frame at the head of every session, and it is the most expensive frame in the
+    // run (the panel mounts, the first profiled work lands). Paired with the previous frame's
+    // `delta` it published parts that outran the whole: Alex's `249%` with a NEGATIVE UNACCOUNTED
+    // on the UHD 630, reproduced at 1206% with a 240ms toggle frame. Setting `enabled` first makes
+    // the toggle frame stamp like any other. ★ `profile.ts` was fixed to attribute an un-stamped
+    // frame correctly ANYWAY — this line only stops the host manufacturing them.
+    // Both setters are guarded for idempotence, so this costs a comparison. `enabled` clears the
+    // window when it actually flips, so a toggle cannot attribute a long idle gap to whichever zone
+    // happened to be open.
+    prof.current.enabled = settings.showFps
     // ★★ AND THE CALLBACK-START STAMP, WITHOUT WHICH THE REMAINDER CANNOT BE DIVIDED. r3f takes its
     // `delta` at the top of the frame and calls `gl.render` AFTER every subscriber, so the render
     // submit lives between our `frameEnd` and this line. Stamping here is what lets the profiler
     // separate "the stall was in the submit" from "the stall was in our unwrapped prologue" — see
     // `TAIL_ROW`. Skipping it degrades to one undivided UNACCOUNTED row, never to invented ones.
     prof.current.frameStart()
-    // Both setters are guarded for idempotence, so this costs a comparison. `enabled` clears the
-    // window when it actually flips, so a toggle cannot attribute a long idle gap to whichever zone
-    // happened to be open.
-    prof.current.enabled = settings.showFps
     const dt = Math.min(dtRaw, 0.05)
 
     // ── ★ THE FRAME METER ────────────────────────────────────────────────────────────────────────
