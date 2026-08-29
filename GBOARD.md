@@ -11,6 +11,51 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🗼 Shimmer voxel3d — **THE GATE GROWS A TOWER, AND THE GUARDS CAUGHT ME THREE TIMES BUILDING IT** (2026-08-29, hub lane) · *Last touched 2026-08-29 (hub) — `4ba4843` pushed, 0 unpushed, tsc 7 (baseline), canon 0 CONFLICT / 13 CLEAN, crossings **4001 asserts**, court-wiring 31, sweep **196/196 · 0 FAIL · 0 KILLED**. ✅ **DEPLOYED** `BUILD_ID 2QnqixlRCXj8GhAfDJl3O`, 157 chunks, verified AS SERVED and photographed standing in prod.*
+
+### Left off — Alex asked for a 3D structure and the answer was no
+- **It already WAS one.** Stone trilithons, two deep, on a dais, with mana lanterns. Alex: the station *"still looks pretty rough .. what if we make it a 3d structure?"* Photographed on his own **tier-1** plot it read as **a long grey wall with a hole punched in it**, and from twenty blocks out the whole station was a smudge on an empty plain. **The defect was never dimensionality. Nothing here was tall.** He ruled the intent: ***"a landmark you steer by."***
+- **⚠ AND MY FIRST PHOTOGRAPHS WERE OF THE WRONG COURT.** `courtAnchor` solves against the **PlotConfig**, so the court MOVES with tier: t0 (254,18) · t1 (344,17) · t2 (434,18). I shot `DEFAULT_PLOT` while his save is t1 — 90 blocks away from the building he was talking about. His keeper's saved position was `x341 z18`, **three blocks from the t1 anchor**: he had been standing in it, and so had I, in the very first screenshot. *Check the tier before computing a placement.*
+- **⚠ THE FIX IS NOT TO SCALE THE DOORWAYS** — a door a keeper walks through stops reading as a door. Height goes **above the lintel, on the GATE alone**: `shimmer-geography.md` already requires the one-gate to *"render it unlike its neighbours"*, so the singularity was **already owed** and the tower spends it rather than inventing a second special thing. Hub stays walkable. **Unnamed on purpose — a named tower is a canon fact and belongs to Magii.**
+- **★ HEIGHT DERIVED FROM THE DRAW DISTANCE, NOT THE PLOT**, which only looks backwards until you check the numbers: a tier-1 fold is `capRadius` **400** and the default view ring is 6 columns × 16 = **96 blocks**. *You cannot see across your own plot*, so sizing a landmark against it sizes it against a distance at which it is not rendered at all. **12° at 96 blocks = 20 courses**, topping out 27 above the dais. The old 7-block frame subtends **4.2°** — that IS the smudge.
+
+### ★★★ Three failures building it, every one caught by an assert, every one the same lesson
+1. **My first tower STEPPED THE SOCKET LATTICE AND ROUNDED** — the exact bug the hub header documents and that I had just written the warning comment against, one screen earlier. The solidity assert found it inside a minute: **6 of 8 seeds, 50 interior holes each**. A frame survives that; a twenty-course shaft ships as a column of holes.
+2. **Then `courtClearCells` still SAMPLED while the tower FILLED**, so the sweep had gaps the tower no longer had — **41–83 orphan cells per socket at tier 2**, each one a block left hanging over a court that has moved. ⚠ This is the file header's own warning *arriving from the opposite side*: there a sweep too NARROW for older geometry, here one too SPARSE for newer. The sweep fills now, so the two derivations agree **by construction** rather than by coincidence.
+3. **Then a PRE-EXISTING assert went red at 10 of 992** — *"every cell the court lays can be swept again"*. A bound that FILLS must still cover what a SAMPLER emits, and rounding displaces a point by up to `hypot(0.5, 0.5)`. That is **`ROUND_SLACK`**.
+
+### Decisions
+- **The gate sweeps taller and deeper, and ONLY the gate.** Raising every socket's sweep to the tower's height was the tidier code and the worse call: the host clears a keeper's own `CUT_STONE` inside the footprint as an accepted cost, and that blast radius would have **quadrupled** for stone that can never be there.
+- **`court-wiring.test.ts` refused the commit** until the tower joined the laid-set — it counts `setVoxel` sites in the host and fails on a new one (4 → 5). **That guard is the only reason the tower is removable** instead of stone nobody can delete.
+- **⚠ WHAT THE HEIGHT GUARD CANNOT SEE, recorded rather than glossed:** a literal equal to today's derived value **passes** — mutation-confirmed, freezing `TOWER_HEIGHT` to 20 is invisible. It catches the case it exists for (the draw ring moves, the tower stays behind), so the derivation is asserted as a **function** where it can actually fail.
+- `COURT_REV` 6 → 7 so standing courts rebuild. **`LANDMARK_ANGLE_DEG` 12 is the feel dial and is Alex's.**
+
+### Next
+- **Alex rules `LANDMARK_ANGLE_DEG`** now the tower is in world — 27 blocks: monumental, or thin?
+- **The frame openings still read wall-with-a-slot** (void is 24% of the face). Widening needs `COURT_RADIUS` / `COURT_ARC` — **Alex's ruled dials**, not mine to turn.
+- **Not built, filed:** a floor treatment that reads as built, and a trim course to break up the flat `CUT_STONE` planes.
+
+### Files
+`voxel3d/crossings.ts` (tower + fill sweep + `ROUND_SLACK`) · `voxel3d/crossings.test.ts` · `voxel3d/court-wiring.test.ts` · `voxel3d/VoxelWorld.tsx`
+
+## 🌲 Shimmer voxel3d — **THE HOLLOWS WERE NEVER HOVERING, THEY WERE CLIMBING THE TREES** (2026-08-28, hub lane) · *Last touched 2026-08-28 (hub, night) — `e2bdc0d` pushed, hollows **106 asserts**, hollow-wiring 56, 8/8 mutations. ✅ **DEPLOYED** `BUILD_ID uq_LHLO6ZdXECA6xw5wsR`. Rows #849 + #850 closed. Fixes the play-lane block below.*
+
+### Left off — play diagnosed it, hub built it (both files are hub's)
+- **THE RATCHET.** `groundTopNear` returns the topmost solid in a window **centred on the asker's own Y**, and `hollowStep` sets its height to that answer plus a hover — so the height was derived from a reply its own height chose. Leaves are not AIR, **so a forest is a staircase.** Measured against the **REAL generator** (`WORLD_SEED`, a real `growTreeCells` tree, real `columnHeight` terrain): a warden under a real crown at ground 114 settles at **y 127**. Thirteen blocks up, which is Alex's *"20 blocks above just hovering mid air"*.
+- **⚠ THE FIX IS NOT A CLAMP TO `columnHeight`** — that undoes the whole reason the probe exists (a wall the player built is not in the generator's line). It is to **stop looking UP past what the asker can climb**: `HOLLOW_GROUND_UP = HOLLOW_STEP_UP`, derived so it expires. Scan extracted to `ground-probe.ts` so the oracle imports the **real** algorithm instead of mirroring it.
+- **THE INFINITE CYLINDER.** `hollowTouching` was `dx*dx + dz*dz` and nothing else, neither call site guarding altitude, so a caster drained from 7.5 away **at any elevation**. Now takes the keeper's **FEET** (`loco.current.py` — `p.y` is the CAMERA and would put every keeper 1.62 out) clamped through `reachY`.
+- **★★★ WHY 469 LINES OF `hollows.test.ts` COULD NOT SEE IT: every fixture hands `hollowStep` a FLAT ground function.** A stub that ignores its argument cannot ratchet, and the defect was precisely that the host's probe **takes the body's height as an argument.** The oracle was never shown the composition where the bug lives — same shape as the bridge oracle calling `bridgeVoxelAt` while the game reached it through `materialAt`.
+- **★ Every new guard carries a POSITIVE CONTROL** asserting the OLD window still reproduces the climb, so a harness that goes blind fails instead of passing. Three: synthetic canopy · **real-generator forest, hunted at test time** so a worldgen move re-finds a tree rather than silently measuring an empty column · **host-wiring asserts**, because the fix lives in the HOST CLOSURE and collapsing it back keeps every module assert green.
+
+### Next
+- **Alex walks a forest at night** — fixed and heavily asserted, still unseen by a human.
+- **Alex rules `HOLLOW_REACH_Y_MAX`** (4) — how far vertically a Hollow may drain.
+- **`pushOutOfBodies` is the same infinite cylinder** — but push is a **CONTACT** question, not a reach one, so it needs its own derivation.
+- **The FOE callers hit the same ratchet from the other side** (`blocked` / re-ground / spirit trail all pass `e.y`): a canopy overhead makes every candidate step read as too tall, so **a Moglin under a tree freezes** rather than climbing. Same cause, opposite symptom, unmeasured.
+
+### Files
+`voxel3d/ground-probe.ts` (new) · `voxel3d/hollows.ts` · `voxel3d/hollows.test.ts` · `voxel3d/hollow-wiring.test.ts` · `voxel3d/locomotion.test.ts` · `voxel3d/VoxelWorld.tsx`
+
 ## 👻 Shimmer voxel3d — **THE HOLLOWS WERE NEVER TOO DARK. THEY WERE TWENTY BLOCKS UP, IN THE TREES** (2026-08-28, play lane — Alex found it by playing) · *Last touched 2026-08-28 (play) — DIAGNOSED, NOT FIXED. Both files are hub's and hub was mid-deploy. Nothing touched.*
 
 ### Left off — two defects that are each harmless alone
