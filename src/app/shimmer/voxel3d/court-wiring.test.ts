@@ -135,8 +135,8 @@ const once = (needle: string, n: number, what: string) => {
   ok(block.length > 500, `and substantial (${block.length} chars of code)`)
   const writes = (block.match(/setVoxel\(/g) ?? []).length
   // sweep() carries its own setVoxel — the clear path — so the lay writes are the rest.
-  ok(writes === 4,
-     `the court block writes voxels in exactly 4 places: sweep + deck + hub + frames (found ${writes}). ` +
+  ok(writes === 5,
+     `the court block writes voxels in exactly 5 places: sweep + deck + hub + tower + frames (found ${writes}). ` +
      `A new one must be added to crossings.test.ts's laid-set before it ships, or it becomes stone nobody can remove.`)
 }
 

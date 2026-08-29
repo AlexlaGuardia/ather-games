@@ -13,6 +13,8 @@ import {
   COURT_ARC, COURT_INSET, staleCourts, COURT_RADIUS, socketArcAngles, legacyRowSockets, courtClearCells,
   courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT,
   courtHubCells, COURT_HUB_RADIUS, WEDGE_HALF, courtFloorClearCells,
+  gateTowerCells, TOWER_HEIGHT, TOWER_BACK, LANDMARK_DIST, LANDMARK_ANGLE_DEG,
+  COURT_MAX_HEIGHT, COURT_MAX_BACK, SOCKET_MAX_HEIGHT, landmarkHeight,
 } from './crossings'
 import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
@@ -775,6 +777,10 @@ for (const seed of SEEDS) {
       const laid = new Set<string>()
       for (const c of courtPlatformCells(seed, cfg)) laid.add(`${c.x},${c.y},${c.z}`)
       for (const c of courtHubCells(seed, cfg)) laid.add(`${c.x},${c.y},${c.z}`)
+      // ★ THE TOWER JOINS THE LAID SET THE DAY IT IS BUILT, not the day someone notices twenty
+      // orphan courses over a moved court. `court-wiring.test.ts` counts the write sites in the
+      // host and fails until this line exists — which is how it got here.
+      for (const c of gateTowerCells(seed, cfg)) laid.add(`${c.x},${c.y},${c.z}`)
       for (const sk of sockets(seed, cfg))
         for (const c of socketCells(sk, level)) laid.add(`${c.x},${c.y},${c.z}`)
 
@@ -805,6 +811,109 @@ for (const seed of SEEDS) {
       }
     }
   }
+}
+
+
+// ── ★★★ THE GATE TOWER — "a landmark you steer by" (Alex, 2026-08-29) ─────────────────────────
+// He said the station looked rough and asked for a 3D structure; it already was one, and what it
+// actually lacked was HEIGHT. These asserts pin the three ways a twenty-course shaft on a rotated
+// socket can go wrong, and all three have already happened to something in this file.
+{
+  // ⚠⚠ 1. THE SWEEP MUST BE ABLE TO RETIRE IT. This is the failure `courtClearCells`' own header
+  // exists to prevent, and a tower makes it far worse than a frame did: stone the clear pass cannot
+  // reach is architecture nobody can remove, and it would hang TWENTY COURSES in the air over a
+  // plot whose fold has grown. Asserted per tier because the sweep is bounded by a LIFT the host
+  // passes, and the tiers do not share a ground.
+  for (const t of [0, 1, 2]) {
+    const cfg = plotForTier(t)
+    for (const seed of SEEDS) {
+      const lvl = courtLevel(seed, cfg)
+      const tower = gateTowerCells(seed, cfg)
+      if (lvl === null || tower.length === 0) continue
+      const gate = sockets(seed, cfg)[0]
+      const gy = plotHeight(gate.x, gate.z, seed, cfg)
+      if (gy === null) continue
+      const swept = new Set(
+        courtClearCells(gate, gy, lvl - gy).map(c => `${c.x},${c.y},${c.z}`))
+      const missed = tower.filter(c => !swept.has(`${c.x},${c.y},${c.z}`))
+      ok(missed.length === 0,
+        `★★★ tier ${t} seed ${seed}: every tower cell is inside the clear sweep — ${missed.length} of ${tower.length} unreachable`)
+    }
+  }
+
+  // ⚠⚠ 2. SOLID AT EVERY BEARING, WHICH IS WHY IT IS FILLED AND NOT SAMPLED. `socketCells` walks a
+  // lattice and rounds; this file's own hub header measured that giving "a three-cell diagonal
+  // staircase with gaps in it" at forty degrees. A frame survives that. A twenty-course shaft ships
+  // as a column of holes. Every course must be a solid rectangle in its own (h, d) frame.
+  for (const seed of SEEDS) {
+    const cfg = plotForTier(1)
+    const tower = gateTowerCells(seed, cfg)
+    if (tower.length === 0) continue
+    const byY = new Map<number, { x: number; z: number }[]>()
+    for (const c of tower) {
+      if (!byY.has(c.y)) byY.set(c.y, [])
+      byY.get(c.y)!.push({ x: c.x, z: c.z })
+    }
+    let holed = 0
+    for (const [, cells] of byY) {
+      // A filled course has no interior gap: every cell inside the course's own bounding box that
+      // lies between two occupied cells on the same row must itself be occupied.
+      const occ = new Set(cells.map(c => `${c.x},${c.z}`))
+      const xs = cells.map(c => c.x), zs = cells.map(c => c.z)
+      for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
+        const row = cells.filter(c => c.x === x).map(c => c.z)
+        if (row.length === 0) continue
+        for (let z = Math.min(...row); z <= Math.max(...row); z++) if (!occ.has(`${x},${z}`)) holed++
+      }
+    }
+    ok(holed === 0, `★★ seed ${seed}: the tower is solid at its bearing — ${holed} interior holes`)
+  }
+
+  // ★ 3. IT NEVER REACHES INTO THE COURT'S WALK. `socketCells` records that extruding along +n once
+  // turned a COURT_RADIUS of 10 into an 8-block court while the docstring still read 10. The tower
+  // thickens BACKWARD; a cell in front of the frame face is that bug returning at twenty courses.
+  for (const seed of SEEDS) {
+    const cfg = plotForTier(1)
+    const gate = sockets(seed, cfg)[0]
+    const tower = gateTowerCells(seed, cfg)
+    if (tower.length === 0) continue
+    const nx = Math.cos(gate.facing), nz = Math.sin(gate.facing)
+    const intruding = tower.filter(c => (c.x - gate.x) * nx + (c.z - gate.z) * nz > 0.5)
+    ok(intruding.length === 0,
+      `★ seed ${seed}: no tower cell reaches past the frame face into the walk — ${intruding.length} do`)
+  }
+
+  // ★ 4. IT STANDS ON THE LINTEL, NOT IN THE AIR AND NOT INSIDE THE DOORWAY.
+  {
+    const cfg = plotForTier(1)
+    const lvl = courtLevel(2026, cfg)
+    const tower = gateTowerCells(2026, cfg)
+    if (lvl !== null && tower.length > 0) {
+      const lo = Math.min(...tower.map(c => c.y))
+      ok(lo === lvl + 1 + SOCKET_MAX_HEIGHT,
+        `★ the shaft starts on the gate's top course (${lo} vs ${lvl + 1 + SOCKET_MAX_HEIGHT})`)
+      ok(Math.max(...tower.map(c => c.y)) - lvl === COURT_MAX_HEIGHT,
+        '★ and the court\'s stated max height is the height it actually reaches')
+    }
+  }
+
+  // ★ 5. THE HEIGHT IS DERIVED FROM THE DRAW DISTANCE, NOT PICKED. If someone replaces the
+  // derivation with a literal this goes red, which is the point: the day the default view ring
+  // changes, a landmark sized against the old one silently stops being a landmark.
+  // ⚠ WHAT THIS CANNOT SEE, STATED SO NOBODY READS IT AS MORE THAN IT IS: a literal equal to
+  // today's derived value passes. Mutation-tested and confirmed — freezing TOWER_HEIGHT to 20 is
+  // invisible here, because 20 is what the formula yields. The failure it DOES catch is the one
+  // that matters: the default view ring moving while the tower stays behind.
+  ok(TOWER_HEIGHT === landmarkHeight(LANDMARK_DIST, LANDMARK_ANGLE_DEG),
+    '★ tower height tracks the angle at the draw distance')
+  // So the derivation itself is guarded as a function, where it CAN fail.
+  ok(landmarkHeight(96, 12) === 20 && landmarkHeight(192, 12) === 41,
+    '★ landmarkHeight is the arc it claims to be — doubling the draw distance doubles the height')
+  ok(landmarkHeight(96, 24) > landmarkHeight(96, 12) && landmarkHeight(0, 12) === 0,
+    '★ and it is monotonic in the angle, with no height owed at no distance')
+  ok(TOWER_HEIGHT > SOCKET_MAX_HEIGHT,
+    `★ and it is the tall thing — ${TOWER_HEIGHT} courses over a ${SOCKET_MAX_HEIGHT}-course frame`)
+  ok(COURT_MAX_BACK >= TOWER_BACK, '★ the clear sweep reaches as far back as the tower does')
 }
 
 console.log(`crossings: ${pass} passed, ${fails.length} failed`)

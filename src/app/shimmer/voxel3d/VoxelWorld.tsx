@@ -207,7 +207,8 @@ import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
          legacyRowSockets, courtClearCells, COURT_REV,
-         courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells } from './crossings'
+         courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells,
+         gateTowerCells } from './crossings'
 import { crossingReady, LANDING_LABEL } from './crossing-out'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
@@ -7203,6 +7204,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // deck between them. Already inside the dais footprint by construction, so the readiness
       // check below needs nothing extra.
       const hub = level === null ? [] : courtHubCells(SEED, cfg)
+      // ★ THE TOWER (Alex 2026-08-29: "a landmark you steer by"). It stands on the GATE's lintel
+      // only — canon already requires the one-gate to render unlike its neighbours, so the height
+      // is spent where the singularity is already owed rather than on a new special thing. Same
+      // material as the frames: the tower is the gate continuing upward, not an object beside it.
+      const tower = level === null ? [] : gateTowerCells(SEED, cfg)
       // Every footprint column loaded first — a 5-wide frame straddling a SECTION seam would
       // otherwise drop whichever half landed in a neighbour that has not arrived. Same reason
       // GATE_COLS checks all of them rather than the centre.
@@ -7285,6 +7291,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // frames would bury their first course in it.
         for (const c of dais) if (voxel(c.x, c.y, c.z) !== PLATFORM_MAT) setVoxel(c.x, c.y, c.z, PLATFORM_MAT)
         for (const c of hub) if (voxel(c.x, c.y, c.z) !== MAT.CUT_STONE) setVoxel(c.x, c.y, c.z, MAT.CUT_STONE)
+        // After the frames would be tidier to read; it goes BEFORE them for the same reason the
+        // dais does — the tower's first course sits on the lintel, and anything laid over a frame
+        // cell has to lose to the frame, not the other way round.
+        for (const c of tower) if (voxel(c.x, c.y, c.z) !== MAT.CUT_STONE) setVoxel(c.x, c.y, c.z, MAT.CUT_STONE)
         for (const sk of socks) {
           const lit = socketLit(sk, held)
           for (const c of socketCells(sk, level)) {

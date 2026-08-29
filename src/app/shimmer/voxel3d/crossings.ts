@@ -51,6 +51,7 @@
 // actually OWNS its ground, every seed, or the derivation quietly outlives its reason. `courtFits`
 // below is that assert, and `crossings.test.ts` runs it across seeds.
 
+import { DEFAULT_SETTINGS } from './settings'
 import {
   plotThreshold, plotHeight, insideCore, edgeAt, caveAt, plotForTier, PLOT_TIERS,
   DEFAULT_PLOT, type PlotConfig,
@@ -573,25 +574,53 @@ export function courtClearCells(
   const nx = Math.cos(s.facing), nz = Math.sin(s.facing)
   const out: { x: number; y: number; z: number }[] = []
   const seen = new Set<string>()
-  for (let h = -SOCKET_HALF; h <= SOCKET_HALF; h++) {
-    // From `groundY` (the pre-08-27 buried course) through the tallest frame's lintel, plus
-    // however far this court's frames were LIFTED off their own ground by the dais under them.
-    for (let y = 0; y <= SOCKET_MAX_HEIGHT + Math.max(0, lift); y++) {
+  // ⚠⚠ THE GATE SWEEPS TALLER AND DEEPER THAN ITS NEIGHBOURS, AND ONLY THE GATE (2026-08-29).
+  // The tower stands on the gate alone, so only the gate's column needs clearing to `COURT_MAX_*`.
+  // Sweeping every socket to the tower's height would be the tidier-looking code and the worse
+  // decision: this function's own header records that the host clears a keeper's CUT_STONE inside
+  // the footprint, accepted as a real cost — and raising a passage's sweep from 5 courses to
+  // twenty-odd would multiply that blast radius four times over for stone that can never be there.
+  const top = (s.kind === 'gate' ? COURT_MAX_HEIGHT : SOCKET_MAX_HEIGHT) + Math.max(0, lift)
+  const back = s.kind === 'gate' ? COURT_MAX_BACK : 1
+  // ⚠⚠⚠ SWEPT AS A FILLED BOX IN WORLD COORDINATES, NEVER BY STEPPING THE SOCKET LATTICE (fixed
+  // 2026-08-29). The old form walked integer `(h, d)` and rounded — the same sampling that leaves a
+  // rotated shape holed — so the swept SET had gaps in it. That was survivable while the only thing
+  // it had to erase was a frame built by the SAME sampling, because two identical samplings agree.
+  // The tower is FILLED, and the moment one derivation fills while the other samples the sweep can
+  // no longer reach every cell it is responsible for: measured at 41-83 orphan cells per socket on
+  // 6 of 8 seeds at tier 2, each one a block of a twenty-course shaft left hanging over a plot whose
+  // court has moved. ★ This is the header's own warning arriving from the opposite side — there it
+  // was a sweep too NARROW for older geometry, here a sweep too SPARSE for newer.
+  // ⚠⚠ AND THE BOUND CARRIES `ROUND_SLACK`, WHICH IS THE SAME LESSON A THIRD TIME. A sweep that
+  // fills must still cover every cell a SAMPLER can emit, and `socketCells` rounds independently in
+  // x and z — displacing a point by up to 0.5 on each axis, so by up to sqrt(0.5) in the plane. A
+  // frame cell laid at h = 3 can therefore recompute to h = 3.7 and fall outside a bound of 3.5.
+  // Measured: without this, 10 of 992 laid cells were unsweepable, and the pre-existing
+  // "every cell the court lays can be swept again" assert is what found it.
+  const reach = Math.ceil(Math.hypot(SOCKET_HALF, Math.max(back, SOCKET_DEPTH)) + ROUND_SLACK) + 1
+  const cx = Math.round(s.x), cz = Math.round(s.z)
+  for (let x = cx - reach; x <= cx + reach; x++) {
+  for (let z = cz - reach; z <= cz + reach; z++) {
+    const ddx = x - s.x, ddz = z - s.z
+    const h = ddx * tx + ddz * tz
+    const d = ddx * nx + ddz * nz
+    if (Math.abs(h) > SOCKET_HALF + 0.5 + ROUND_SLACK) continue
+    if (d > SOCKET_DEPTH + 0.5 + ROUND_SLACK || d < -(back + 0.5 + ROUND_SLACK)) continue
+    // From `groundY` (the pre-08-27 buried course) through the tallest thing this socket carries,
+    // plus however far this court's frames were LIFTED off their own ground by the dais under them.
+    for (let y = 0; y <= top; y++) {
       // ⚠⚠ AND ACROSS THE FULL DEPTH, INCLUDING d = -1. The 08-27 henge pass made frames thick
       // along the normal; a sweep built for the old SHEET would leave every layer behind the front
       // face standing, which is the abandoned-architecture failure this function's header exists to
       // prevent, one axis over. The extra course BEHIND the origin costs nothing and covers a frame
       // laid by any future derivation that straddles instead of extruding forward — the same
       // reasoning as starting at `groundY` to catch the buried course.
-      for (let d = -1; d <= SOCKET_DEPTH; d++) {
-        const x = Math.round(s.x + tx * h + nx * d)
-        const z = Math.round(s.z + tz * h + nz * d)
-        const key = `${x},${groundY + y},${z}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        out.push({ x, y: groundY + y, z })
-      }
+      const key = `${x},${groundY + y},${z}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ x, y: groundY + y, z })
     }
+  }
   }
   return out
 }
@@ -621,7 +650,7 @@ export function courtClearCells(
  *     previous attempt"*). Revs 4 and 5 laid a floor no sweep could reach, so they PILED UP. This
  *     rev exists to run `courtFloorClearCells` over every earlier attempt and re-lay once.
  */
-export const COURT_REV = 6
+export const COURT_REV = 7
 
 /** Why the court could not stand where it was derived. Every one is a placement bug, not a refusal. */
 export type CourtMisfit =
@@ -866,7 +895,158 @@ export function courtPlatformCells(
 // weak. The gate's wedge is wider than the passages', so the COMPOSITION carries the distinction.
 
 /** How far the hub reaches from the focus. Its top course is the one the keeper steps up onto. */
+/**
+ * The most a round-to-nearest can displace a point in the plane: 0.5 on each axis independently,
+ * so `hypot(0.5, 0.5)`. Anything that FILLS a region but must still cover cells some other pass
+ * SAMPLED into it has to widen its bound by this, or the two derivations disagree at the edge.
+ */
+const ROUND_SLACK: number = Math.SQRT1_2
+
 export const COURT_HUB_RADIUS: number = 3
+
+/**
+ * ── ★★★ THE GATE TOWER (Alex, 2026-08-29: "a landmark you steer by") ──────────────────────────
+ *
+ * He said the station *"still looks pretty rough"* and asked whether it should be a 3D structure.
+ * It already was one — stone trilithons, two deep, on a dais. Photographed on his own tier-1 plot
+ * it read as **a long grey brick wall with a hole in it**, and from twenty blocks out as a smudge
+ * on an empty plain. The defect was never dimensionality. It was that nothing here is TALL.
+ *
+ * ⚠ AND THE FIX IS NOT TO SCALE THE DOORWAYS. A door a keeper walks through has to stay
+ * human-sized or it stops reading as a door and becomes a hole in a cliff. Height has to come from
+ * somewhere that is not the opening — so it comes from a mass ABOVE the gate's lintel.
+ *
+ * ★ WHY THE GATE AND NOT THE HUB. `shimmer-geography.md` already requires the centre socket to be
+ * *"render it unlike its neighbours"* — the one-gate is GIVEN, stands from the first minute, and
+ * crosses OUT of the Ather where the other three only cross within it. So canon has already asked
+ * for exactly this singularity and the tower spends it rather than inventing a second special
+ * thing. ⚠ It also keeps the hub clear: the hub is where the keeper STANDS to choose, and a spire
+ * on that spot is a pillar in the middle of the one room it exists to make usable.
+ *
+ * ⚠⚠ IT IS UNNAMED, DELIBERATELY. A named tower is a canon fact and belongs to Magii, not here.
+ * This is architecture, which `SHIMMER-CANON-BOUNDARY.md` gives to the build.
+ */
+
+/**
+ * How tall the tower must stand to read as a landmark, IN DEGREES of arc at the edge of the draw
+ * distance. ⏳ ALEX'S DIAL — this is the feel number, and it is the only free one here.
+ *
+ * ★ THE HEIGHT ITSELF IS DERIVED, NOT PICKED, and the anchor is the DRAW DISTANCE rather than the
+ * plot. That looks backwards until you check the numbers: a tier-1 fold is `capRadius` 400, and the
+ * default view ring is 6 columns of 16 = **96 blocks**. You cannot see across your own plot, so
+ * sizing a landmark against the plot would size it against a distance at which it is not rendered
+ * at all. What matters is that it reads the moment it comes INTO view.
+ *
+ * For scale: the old 7-block gate frame subtends 4.2 degrees at 96 blocks, which is the smudge in
+ * the photographs. ⚠ The day the default view ring changes, this follows it.
+ */
+export const LANDMARK_ANGLE_DEG: number = 12
+
+/** The draw distance the tower is sized against — the default view ring, in blocks. */
+export const LANDMARK_DIST: number = DEFAULT_SETTINGS.viewRadius * 16
+
+/**
+ * Courses of stone needed to subtend `deg` at `distBlocks`. A function rather than an inline
+ * expression so the RELATIONSHIP can be asserted at several distances — the constant alone cannot
+ * be, because a literal equal to today's value is indistinguishable from the derivation that
+ * produced it. What the guard does catch is the case it exists for: the draw distance moving and
+ * the tower failing to follow it.
+ */
+export const landmarkHeight = (distBlocks: number, deg: number): number =>
+  Math.round(distBlocks * Math.tan(deg * Math.PI / 180))
+
+/** Courses of stone above the gate's lintel. Derived from the angle and the draw distance. */
+export const TOWER_HEIGHT: number = landmarkHeight(LANDMARK_DIST, LANDMARK_ANGLE_DEG)
+
+/**
+ * How far the tower reaches BACK from the frame's face, along the outward normal.
+ *
+ * ★ BACKWARD IS THE ONLY FREE DIRECTION AND THIS FILE ALREADY SAYS SO. Width is spoken for
+ * (`SOCKET_PITCH` 8 leaves about one clear block beside a 7-wide gate frame) and forward is the
+ * court's own walk — `socketCells`' header records that extruding along +n once turned a
+ * `COURT_RADIUS` of 10 into an 8-block court while the docstring still said 10. So the tower
+ * thickens away from the keeper, into the empty ground behind the arc, where nothing competes.
+ */
+export const TOWER_BACK: number = 5
+
+/**
+ * The taper, as (fraction of height reached, half-extent at that stage). A straight box reads as a
+ * chimney; a stepped shaft reads as built, and in a voxel world the steps ARE the silhouette.
+ * ⚠ Half-extents only ever DECREASE, which is what keeps the whole tower inside the frame's own
+ * footprint — and therefore inside the clear sweep's `h` range, with no second derivation to drift.
+ */
+const TOWER_STAGES: { upTo: number; half: number; back: number }[] = [
+  { upTo: 0.45, half: 3, back: TOWER_BACK },
+  { upTo: 0.80, half: 2, back: TOWER_BACK - 1 },
+  { upTo: 1.00, half: 1, back: TOWER_BACK - 3 },
+]
+
+/**
+ * Every cell of the gate's tower.
+ *
+ * ── ★★★ FILLED BY DISTANCE, NEVER BY STEPPING A LATTICE ───────────────────────────────────────
+ * This is the same lesson `courtHubCells` records one function down, and ignoring it here would
+ * reproduce the exact defect Alex called garbled. `socketCells` walks `(h, d)` and `Math.round`s
+ * each point; at a facing near an axis that gives a solid post, and at forty degrees it gives a
+ * **three-cell diagonal staircase with gaps in it**. A frame can survive that. A twenty-course
+ * tower cannot: it would ship as a column of holes, and half of every court's sockets voxelise
+ * off-axis, so it would not even be one unlucky seed.
+ *
+ * ★ SO IT ASKS THE OPPOSITE QUESTION — for every cell in the bounding box, is my centre inside the
+ * stage's extents? That FILLS rather than samples, so the shaft is solid at every bearing.
+ */
+export function gateTowerCells(
+  seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): { x: number; y: number; z: number }[] {
+  const level = courtLevel(seed, cfg)
+  if (level === null) return []
+  const gate = sockets(seed, cfg)[0]
+  if (!gate || gate.kind !== 'gate') return []
+  const f = FRAME[gate.kind]
+  const tx = -Math.sin(gate.facing), tz = Math.cos(gate.facing)
+  const nx = Math.cos(gate.facing), nz = Math.sin(gate.facing)
+  // The shaft starts on the lintel's top course, so it grows out of the frame rather than hovering.
+  const baseY = level + 1 + f.height
+  const out: { x: number; y: number; z: number }[] = []
+  const seen = new Set<string>()
+  // ⚠⚠ THE BOX IS SWEPT IN WORLD COORDINATES, NOT IN THE SOCKET'S. Stepping the socket lattice and
+  // rounding — which is what the first version of this function did — IS the sampling bug this
+  // whole approach exists to avoid: some world cells inside the rectangle are the image of no
+  // integer lattice pair, so they are never visited and the shaft ships holed. The solidity assert
+  // in `crossings.test.ts` caught it on 6 of 8 seeds, 50 holes each, within a minute of being
+  // written. A guard you have not seen fail is a guard you have not tested.
+  const reach = Math.ceil(Math.hypot(
+    Math.max(...TOWER_STAGES.map(t => t.half)),
+    Math.max(...TOWER_STAGES.map(t => t.back)),
+  )) + 1
+  const cx = Math.round(gate.x), cz = Math.round(gate.z)
+  for (let i = 0; i < TOWER_HEIGHT; i++) {
+    const frac = (i + 1) / TOWER_HEIGHT
+    const st = TOWER_STAGES.find(t => frac <= t.upTo) ?? TOWER_STAGES[TOWER_STAGES.length - 1]
+    const y = baseY + i
+    for (let x = cx - reach; x <= cx + reach; x++) {
+      for (let z = cz - reach; z <= cz + reach; z++) {
+        // Distance in the socket's own frame, measured from the CELL CENTRE back onto the axes —
+        // the fill test, not a sample of the lattice.
+        const dx = x - gate.x, dz = z - gate.z
+        const h = dx * tx + dz * tz          // along the arc
+        const d = dx * nx + dz * nz          // along the normal; negative is behind the face
+        if (Math.abs(h) > st.half + 0.5) continue
+        if (d > 0.5 || d < -(st.back - 0.5)) continue
+        const key = `${x},${y},${z}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({ x, y, z })
+      }
+    }
+  }
+  return out
+}
+
+/** The tallest thing the court builds, measured from the dais — what a clear sweep must cover. */
+export const COURT_MAX_HEIGHT: number = SOCKET_MAX_HEIGHT + TOWER_HEIGHT
+/** The deepest the court reaches behind a socket face — likewise. */
+export const COURT_MAX_BACK: number = Math.max(SOCKET_DEPTH, TOWER_BACK)
 
 /**
  * Half-width of a wedge, per socket kind. The gate's is wider on purpose — see the canon note above.
