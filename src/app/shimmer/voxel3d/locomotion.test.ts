@@ -13,6 +13,10 @@ import {
   launchKeeper, blinkKeeper,
 } from './locomotion'
 import { hollowTouching, HOLLOW_SPEED, HOLLOW_HP, DRAIN_TIME, UNIMPAIRED } from './hollows'
+import { codeOnly, blockAt } from '../testing/guard'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { HELD } from '@/lib/input/actions'
 
 let pass = 0
 const fails: string[] = []
@@ -160,19 +164,110 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(s.vy > JUMP_V0 - 0.01, 'the hop is a real jump, not a ground dash')
 }
 
-// ── ★ wall jump: tap against a wall kicks up and away ────────────────────────────────────────
+// ── ★ wall jump: kicks up and away — but ONLY if you are not asking to go UP the wall ────────
+// ⚠⚠ THIS BLOCK'S CONTRACT CHANGED ON 2026-08-28 (Alex's ruling) AND THE OLD ASSERT WENT RED.
+// It used to read `mvX: 1` — pushing INTO the face — and assert that the tap kicked you off. That
+// WAS the shipped behaviour and it was the bug: the wall-jump was the only wall verb with no
+// facing condition, so it caught every case the climb refused and launched the keeper along the
+// wall's grid cardinal. Reported as *"upon reaching the top it jumps to the left (sometimes to the
+// right)"* — sideways because the push is a grid axis while the player reads it in camera space.
+// The red was a contract change, not a regression; it is rewritten rather than deleted, and the
+// kick is still proved — through the inputs that now mean "kick".
 {
   const solid = world((x, y) => x >= 4 && y < 16)     // a tall wall at x=4
-  const s = createLoco(2.5, 10, 0.5); settle(s, solid)
-  // run at the wall and jump just before it
-  for (let i = 0; i < 40; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
-  tickLocomotion(s, input({ mvX: 1, jumpKey: true }), solid)      // takeoff
-  for (let i = 0; i < 12; i++) tickLocomotion(s, input({ mvX: 1 }), solid)  // fly into the wall
-  ok(s.onWall || s.wallStick > 0, 'pressed into the wall mid-air registers contact')
-  tickLocomotion(s, input({ mvX: 1, jumpKey: true }), solid)      // tap = wall jump
-  ok(s.justWallJumped, '★ Space tap on the wall is a wall jump')
-  ok(s.hvx <= -WALLJUMP_PUSH + 0.01, `the kick pushes AWAY from the face (hvx ${s.hvx.toFixed(2)})`)
-  ok(s.vy > 0, 'and upward')
+  /** Fly into the wall, then press jump with `mv` — returns whether the kick fired. */
+  const atWall = (mvX: number, mvZ: number) => {
+    const s = createLoco(2.5, 10, 0.5); settle(s, solid)
+    for (let i = 0; i < 40; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
+    tickLocomotion(s, input({ mvX: 1, jumpKey: true }), solid)      // takeoff
+    for (let i = 0; i < 12; i++) tickLocomotion(s, input({ mvX: 1 }), solid)  // fly into the wall
+    const contact = s.onWall || s.wallStick > 0
+    for (let i = 0; i < 3; i++) tickLocomotion(s, input({ mvX, mvZ }), solid) // settle the new wish
+    tickLocomotion(s, input({ mvX, mvZ, jumpKey: true }), solid)
+    return { contact, fired: s.justWallJumped, hvx: s.hvx, hvz: s.hvz, vy: s.vy }
+  }
+  const away = atWall(-1, 0)
+  ok(away.contact, 'pressed into the wall mid-air registers contact')
+  ok(away.fired, '★ jump while moving AWAY from the face is a wall jump')
+  ok(away.hvx <= -WALLJUMP_PUSH + 0.01, `the kick pushes AWAY from the face (hvx ${away.hvx.toFixed(2)})`)
+  ok(away.vy > 0, 'and upward')
+
+  // ★★ THE STRAFE IS THE CASE THAT CAUGHT MY OWN FIX. The first cut refused the kick whenever the
+  // inward component was `> 0`, and `Math.cos(Math.PI/2)` is 6.1e-17 — so moving exactly along the
+  // face read as pushing into it and the kick died for every keyboard strafe against an
+  // axis-aligned wall, which is the commonest way anyone sets one up. Hence WALLJUMP_INTO.
+  // ⚠⚠ THE WISH IS BUILT WITH `Math.cos`, NOT WRITTEN AS `0`, AND THAT IS THE ENTIRE ASSERT.
+  // My first version passed `(0, 1)` — an exact integer zero — so `dot > 0` was false and the
+  // assert passed against the very bug it was written for. A real strafe comes out of a camera
+  // basis, where `Math.cos(Math.PI/2)` is 6.1e-17 and `> 0` is TRUE. Written the tidy way this
+  // could not fail; written the way the game produces it, it catches a zero threshold.
+  const perp = Math.PI / 2
+  const along = atWall(Math.cos(perp), Math.sin(perp)), alongB = atWall(Math.cos(perp), -Math.sin(perp))
+  ok(along.fired && alongB.fired, '⚠ the kick died for a strafe — float noise on an exactly-perpendicular wish read as pushing in')
+
+  // ★ and the fix itself: asking to go UP the wall never launches you OFF it.
+  const into = atWall(1, 0)
+  ok(!into.fired, '⚠⚠ pushing INTO the face still wall-jumps — this is the reported sideways launch')
+  const graze = atWall(Math.cos(80 * Math.PI / 180), Math.sin(80 * Math.PI / 180))
+  ok(!graze.fired, '⚠⚠ a GRAZING push into the face still launches — that band is where the throw is most sideways')
+  ok(Math.hypot(into.hvx, into.hvz) < WALLJUMP_PUSH * 0.5, 'refusing the kick must not leave the launch velocity behind')
+}
+
+// ── ★★ THE CLIMB SURVIVES A BRIEF RELEASE, AND A TAP STILL CANNOT CLIMB ──────────────────────
+// The second half of the same report. Releasing Space zeroed `spaceHeldT` instantly, so a 33ms
+// chatter dropped `climbActive`, dropped `s.climbing` — one of the terms holding the wall-jump off
+// — and the re-press arrived as a fresh edge with `wallStick` alive. A pump mid-climb threw the
+// keeper off the wall at every height, including the frame before the lip.
+{
+  const solid = world((x, y) => x >= 3 && y < 13)     // a 3-high wall: climb country
+  /** Hold forward+jump up the wall, optionally releasing jump for `gap` frames at frame `at`. */
+  const climb = (at: number, gap: number) => {
+    const s = createLoco(2.0, 10, 0.5); settle(s, solid)
+    for (let i = 0; i < 40; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
+    let kicked = false, climbFrames = 0
+    for (let i = 0; i < 120; i++) {
+      const jumpKey = !(i >= at && i < at + gap)
+      tickLocomotion(s, input({ mvX: 1, jumpKey }), solid)
+      if (s.justWallJumped) kicked = true
+      if (s.climbing) climbFrames++
+    }
+    return { kicked, py: s.py, climbFrames }
+  }
+  const clean = climb(999, 0)
+  ok(clean.py >= 12.95, `★ an uninterrupted climb tops out (feet ${clean.py.toFixed(2)})`)
+  for (const at of [22, 30, 38, 44]) {
+    const pumped = climb(at, 2)
+    ok(!pumped.kicked, `⚠⚠ a 2-frame release at f${at} threw the keeper off the wall — the reported bug`)
+    ok(pumped.py >= 12.95, `a pumped climb still tops out at f${at} (feet ${pumped.py.toFixed(2)})`)
+  }
+  /**
+   * ★★ AND WHAT `CLIMB_REGRIP` ITSELF IS WORTH — MEASURED, BECAUSE THE FIRST ASSERT FOR IT COULD
+   * NOT FAIL. Removing the regrip did not change a single outcome above: every climb still topped
+   * out and none was kicked, because a climb only engages while the wish pushes INTO the wall, and
+   * pushing in is exactly what the facing gate now refuses. The wall-jump fix fully covers the
+   * reported symptom on its own. What the regrip changes is that an interrupted climb does not
+   * have to RE-CLIMB ground it already covered: at a 100ms gap it spends 20 climbing frames
+   * against 24 without. That is the stall a player feels, it is the only thing this constant buys,
+   * and it is what gets asserted — not the bug, which something else fixed.
+   */
+  const gap = climb(20, 6)
+  ok(!gap.kicked, 'a longer release must still not launch the keeper')
+  ok(gap.climbFrames <= clean.climbFrames + 2,
+     `⚠ an interrupted climb re-climbed ground it had covered (${gap.climbFrames} frames vs ${clean.climbFrames} clean) — the regrip window is not holding`)
+  // ⚠ AND THE GRACE MUST NOT LET A TAP ACCUMULATE. If a release merely PAUSED the counter, repeated
+  // taps would cross CLIMB_HOLD_MIN on the third one and "a tap is always a ballistic jump, never a
+  // mantle" would stop being true — which is the 2026-08-07 lunge bug coming back through the door
+  // built to stop it. Below the threshold a release must still zero instantly.
+  {
+    const s = createLoco(2.0, 10, 0.5); settle(s, solid)
+    for (let i = 0; i < 40; i++) tickLocomotion(s, input({ mvX: 1 }), solid)
+    let climbed = false
+    for (let i = 0; i < 120; i++) {
+      tickLocomotion(s, input({ mvX: 1, jumpKey: (i % 10) < 4 }), solid)   // 4-frame taps
+      if (s.climbing) climbed = true
+    }
+    ok(!climbed, '⚠⚠ repeated taps accumulated into a climb — the regrip grace leaked past an engaged hold')
+  }
 }
 
 // ── ★ climb: holding Space against a wall scrambles up, grip is finite ───────────────────────
@@ -626,6 +721,39 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
     ok(blinkKeeper(s, 12, 0, () => 10, boxed) === 0, '★ nowhere to land reports 0, it does not throw')
     ok(s.px === x0, '...and does not move you')
   }
+}
+
+// ── ★★★ THE WALKER MUST CONSUME THE BINDINGS, NOT THE RAW KEYBOARD ───────────────────────────
+// `move.jump` and `move.slide` are `ActionId`s with correct keyboard AND pad defaults, and for
+// months `VoxelWorld` fed this module `jumpKey: !!k.Space` / `crouchKey: !!k.ShiftLeft` — the raw
+// key map. Two silent consequences: the settings panel offered "Jump" and "Slide" as rebindable
+// and rebinding them configured nothing, and pad A / L3 never reached the walker, so a controller
+// could steer the keeper and could not jump.
+//
+// ⚠⚠ NO EXISTING GUARD COULD SEE THIS, AND THAT IS THE POINT. `orphans()` and `padGaps()` ask
+// whether a binding EXISTS; both existed and both were right. Nothing asked whether anything
+// CONSUMES them — the same shape as `padPressed`, which was written, unit-tested, and imported by
+// nothing. A binding is not wired because it is in the table.
+{
+  const file = readFileSync(join(__dirname, 'VoxelWorld.tsx'), 'utf8')
+  // ★ `blockAt` slices the walker's own argument object by index and hands back BOTH forms, which
+  // is exactly the split this guard needs — and the first version got it wrong. It matched the
+  // action ids against `codeOnly`, which blanks STRING BODIES as well as comments, so
+  // `heldNow.has('move.jump')` reads as `heldNow.has('')` and the guard went red against correct
+  // code. Positive asserts read `raw`; negative asserts read `code`, or the comment above
+  // explaining the old `k.Space` read would fail the very check it documents.
+  const call = blockAt(file, 'tickLocomotion(lc, {', '}, solidProbe)')
+  ok(call.at >= 0, 'BLIND: could not locate the walker call — the asserts below measure nothing')
+  ok(call.code.includes('heldNow.has('), 'BLIND: the argument slice does not look like the call site')
+
+  for (const [field, action] of [['jumpKey', 'move.jump'], ['crouchKey', 'move.slide']] as [string, string][]) {
+    ok(call.raw.includes(`${field}: heldNow.has('${action}')`),
+       `⚠⚠ ${field} does not read ${action} through the bindings — rebinding it configures nothing and no pad can reach it`)
+  }
+  // ★ AND THE GENERAL FORM, so the next held verb cannot arrive unwired: nothing handed to the
+  // walker may come from the raw key map. Negative, so it reads `code`.
+  ok(!/\bk\.[A-Za-z]/.test(call.code), '⚠ a raw key read is back in the walker input — route it through heldNow')
+  ok(HELD.includes('move.jump' as never), 'move.jump left the HELD set — this guard assumes it is polled, not edged')
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)

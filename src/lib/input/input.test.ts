@@ -41,6 +41,10 @@ for (const id of grouped) ok(ALL_ACTIONS.includes(id), `GROUPS names "${id}", wh
 const SHIPPED: [ActionId, string][] = [
   ['move.forward', 'KeyW'], ['move.back', 'KeyS'], ['move.left', 'KeyA'], ['move.right', 'KeyD'],
   ['move.jump', 'Space'], ['move.slide', 'ShiftLeft'],
+  // ⚠ BOTH SHIFTS. `VoxelWorld` read `k.ShiftLeft || k.ShiftRight` directly until 2026-08-28; when
+  // that moved behind the bindings, a ShiftLeft-only default would have silently retired the right
+  // shift for anyone who slides with it. Pinned here so the second key cannot be tidied away.
+  ['move.slide', 'ShiftRight'],
   ['world.interact', 'KeyE'], ['item.draw', 'KeyF'], ['item.drop', 'KeyQ'],
   ['ui.craft', 'KeyC'], ['ui.build', 'Tab'], ['ui.map', 'KeyM'], ['ui.inventory', 'KeyI'],
   ['ui.chat', 'KeyT'], ['ui.close', 'Escape'], ['build.rotate', 'KeyR'], ['owner.fly', 'KeyV'],

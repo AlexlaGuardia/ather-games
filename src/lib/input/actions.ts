@@ -107,7 +107,10 @@ export const DEFAULTS: Record<ActionId, Binding> = {
   'move.left':      { keys: ['KeyA'],                      pad: [] },
   'move.right':     { keys: ['KeyD'],                      pad: [] },
   'move.jump':      { keys: ['Space'],                     pad: ['A'] },
-  'move.slide':     { keys: ['ShiftLeft'],                 pad: ['L3'] },
+  // ⚠ BOTH SHIFTS. VoxelWorld read `k.ShiftLeft || k.ShiftRight` directly until 2026-08-28; when
+  // that read moved behind the bindings, a single-key default would have quietly retired the right
+  // shift for anyone who slides with it. The table must copy the shipped controls, not tidy them.
+  'move.slide':     { keys: ['ShiftLeft', 'ShiftRight'],   pad: ['L3'] },
   'world.mine':     { keys: [],                            pad: ['RT'] },
   'world.place':    { keys: [],                            pad: ['LT'] },
   'world.interact': { keys: ['KeyE'],                      pad: ['X'] },

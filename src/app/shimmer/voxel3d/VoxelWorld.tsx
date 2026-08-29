@@ -7531,10 +7531,25 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       tickLocomotion(lc, {
         mvX: wish.x, mvZ: wish.z,
         fwdX: fwd.x, fwdZ: fwd.z, rightX: right.x, rightZ: right.z,
-        jumpKey: !!k.Space,
-        // Shift is CROUCH/SLIDE now, exactly as in play3d — its life as a sprint key here is what
-        // made the slide-jump muscle memory read as "a dash of some sort". Run speed is automatic.
-        crouchKey: !!k.ShiftLeft || !!k.ShiftRight,
+        /**
+         * ── ★★ JUMP AND SLIDE GO THROUGH THE BINDINGS NOW (2026-08-28) ────────────────────────
+         * These two read the RAW key map for months, which made them the only movement verbs the
+         * input layer did not actually own. Two consequences, both silent:
+         *   · the settings panel listed "Jump" and "Slide" as rebindable and rebinding them
+         *     configured nothing — the menu was offering a control it could not change
+         *   · `move.jump` is bound to pad A and `move.slide` to L3, correctly, and NEITHER
+         *     reached this walker: a controller could steer the keeper and could not jump
+         * ⚠ `padGaps()`/`orphans()` cannot see this class of bug. They ask whether a binding
+         * EXISTS, and both bindings existed and were right. Nothing asked whether anything
+         * CONSUMES them — the same shape as `padPressed`, which was written, tested, and imported
+         * by nothing for weeks. A binding is not wired because it is in the table.
+         * `heldNow` unions keyboard and pad and reads the player's own map, so both are fixed by
+         * asking it instead. ShiftRight stayed a slide key by being added to the DEFAULTS, not by
+         * being special-cased here — the raw read accepted it and dropping it would be a silent
+         * remap of somebody's hands.
+         */
+        jumpKey: heldNow.has('move.jump'),
+        crouchKey: heldNow.has('move.slide'),
         dt,
       }, solidProbe)
       p.set(lc.px, eyeY(lc), lc.pz)

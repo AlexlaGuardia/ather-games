@@ -75,7 +75,25 @@ export const WALLJUMP_UP = 7.0
 export const WALLJUMP_PUSH = 6.0
 export const WALL_COYOTE = 0.18
 export const WALLJUMP_LOCK = 0.22
+/** Inward component of the move wish above which a jump press is read as "up this", not "off this".
+ *  Sized to clear float noise on an exactly-perpendicular strafe (6.1e-17) and nothing else. */
+export const WALLJUMP_INTO = 0.05
 export const CLIMB_HOLD_MIN = 0.18
+// ── ★ THE CLIMB'S REGRIP WINDOW (2026-08-28, Alex: "upon reaching the top it jumps to the left") ──
+// A release of Space used to zero `spaceHeldT` instantly, so a 2-FRAME chatter — a pump, a key
+// repeat, a stutter — dropped `climbActive`, which dropped `s.climbing`, which is one of the terms
+// keeping the wall-jump off. The re-press then arrived as a fresh `jumpEdge` with `wallStick` still
+// alive and LAUNCHED the keeper off the wall mid-climb. Measured: a 33ms gap aborted the climb at
+// every height including the last frame before the lip.
+//
+// ⚠⚠ THE GRACE IS FOR AN ENGAGED CLIMB ONLY, AND THAT RESTRICTION IS THE WHOLE DESIGN. If a release
+// merely PAUSED the counter, repeated taps would accumulate across their gaps, `spaceHeldT` would
+// cross CLIMB_HOLD_MIN on the third tap, and "a jump tap is ALWAYS a pure ballistic jump, never a
+// mantle" would quietly stop being true — which is the 2026-08-07 "jump lunges sideways" bug
+// (a tap near a wall read as a mantle-grab) walking back in through the door built to stop it.
+// So: below the threshold a release still zeroes instantly; only a climb that has already earned
+// its hold may survive a gap this short.
+export const CLIMB_REGRIP = 0.12
 export const HANG_DROP = 0.9
 export const MANTLE_TIME = 0.30
 export const HANG_MIN = 0.22
@@ -171,6 +189,8 @@ export interface LocoState {
   airSpeed: number; prevMvX: number; prevMvZ: number
   landGrace: number; landSpeed: number
   jumpHeld: boolean; spaceHeldT: number
+  /** Seconds since Space was released, while an ENGAGED climb is inside its regrip window. */
+  jumpGapT: number
   climbRise: number
   onWall: boolean; wallNX: number; wallNZ: number; wallCX: number; wallCZ: number
   wallStick: number; wallLock: number
@@ -209,7 +229,7 @@ export function createLoco(px: number, feetY: number, pz: number): LocoState {
   return {
     px, py: feetY, pz, hvx: 0, hvz: 0, vy: 0, eye: EYE_STAND,
     airborne: true, coyoteT: 0, slideT: 0, crouchHeld: false, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
-    landGrace: 0, landSpeed: 0, jumpHeld: false, spaceHeldT: 0, climbRise: 0,
+    landGrace: 0, landSpeed: 0, jumpHeld: false, spaceHeldT: 0, jumpGapT: 0, climbRise: 0,
     onWall: false, wallNX: 0, wallNZ: 0, wallCX: 0, wallCZ: 0, wallStick: 0, wallLock: 0,
     hanging: false, hangT: 0, hangLock: 0, hangLipX: 0, hangLipY: 0, hangLipZ: 0, hangCX: 0, hangCZ: 0,
     mantleT: 0, mantleDur: MANTLE_TIME, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
@@ -463,7 +483,12 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   else if (s.wallStick > 0) s.wallStick -= dt
 
   // Tap vs hold: a jump tap never climbs and never mantles; a held Space does both.
-  if (jumpKey) s.spaceHeldT += dt; else s.spaceHeldT = 0
+  // See CLIMB_REGRIP: an engaged climb survives a brief release, a tap still cannot accumulate.
+  if (jumpKey) { s.spaceHeldT += dt; s.jumpGapT = 0 }
+  else {
+    s.jumpGapT += dt
+    if (s.spaceHeldT < CLIMB_HOLD_MIN || s.jumpGapT > CLIMB_REGRIP) s.spaceHeldT = 0
+  }
   const climbActive = s.spaceHeldT >= CLIMB_HOLD_MIN
   // Facing gates the climb exactly as it gates the grab: you scramble up what you LOOK at. A wall
   // you are merely strafe-pressed against is collision, not a ladder.
@@ -577,7 +602,32 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   }
   const intoLedge = hasInput ? (mvX * s.hangCX + mvZ * s.hangCZ) : 0
 
-  const wallJumping = s.airborne && jumpEdge && !s.hanging && s.mantleT <= 0 && !s.climbing && s.wallStick > 0
+  /**
+   * ── ★★★ A WALL-JUMP YOU DID NOT AIM IS NOT A WALL-JUMP (2026-08-28, Alex's report) ───────────
+   * This was the ONLY wall verb with no facing condition at all. The climb and the grab each
+   * require the wall within `WALL_FACING` (60°) of where you look; the wall-jump required nothing,
+   * so it was the fallback that caught every case the climb refused — and it throws you along the
+   * wall's GRID CARDINAL at WALLJUMP_PUSH while "sideways" is measured in the CAMERA's frame.
+   * Measured across the approach angle: at 65° off the normal the climb refuses and the launch is
+   * already 5.44 of its 6.0 sideways; by 85° it is 5.98. The sign follows which side you came from,
+   * which is exactly *"jumps to the left (sometimes to the right)"*.
+   *
+   * ⚠ THE TEST IS THE MOVE INPUT, NOT THE CAMERA. Where you LOOK is a poor statement of intent
+   * here — you look at the ledge you are climbing toward — while pushing INTO a face is
+   * unambiguous: you are asking to go up it, not off it. Holding along the wall (dot ≈ 0) or away
+   * (dot < 0) still kicks, so the parkour verb is untouched; no input at all still kicks.
+   *
+   * ⚠⚠ THE EPSILON IS NOT A FEEL DEADZONE, IT IS A FLOAT GUARD, AND `> 0` WAS WRONG. My first cut
+   * tested `> 0` and argued in this comment that any threshold left a sideways band near 90°.
+   * It then KILLED the wall-kick for a strafe: `Math.cos(Math.PI/2)` is **6.1e-17**, not zero, so
+   * moving exactly along a face read as pushing into it. That is not a rounding curiosity — a
+   * keyboard strafe against an axis-aligned wall produces exactly-perpendicular input, which is
+   * the single most common way anyone sets up a kick. The band the old comment feared is 0.05
+   * wide (about 3° of approach, where the player is strafing rather than climbing); the bug the
+   * comment created was the whole strafe case. Measured both, kept the one that costs 3°.
+   */
+  const pushingIntoWall = hasInput && (mvX * s.wallCX + mvZ * s.wallCZ) > WALLJUMP_INTO
+  const wallJumping = s.airborne && jumpEdge && !s.hanging && s.mantleT <= 0 && !s.climbing && s.wallStick > 0 && !pushingIntoWall
   if (wallJumping) {
     s.vy = WALLJUMP_UP
     s.hvx = s.wallNX * WALLJUMP_PUSH; s.hvz = s.wallNZ * WALLJUMP_PUSH
