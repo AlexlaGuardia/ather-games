@@ -191,13 +191,38 @@ function Ground({ y }: { y: number }) {
  * SPECIFIC distance. A rail that reads its numbers from the URL is reproducible by a headless shot
  * and comparable between two days.
  */
-function Rail({ dist, yaw, eye, height }: { dist: number; yaw: number; eye: boolean; height: number }) {
+function Rail({ dist, yaw, eye, height, facing, stand, doorMid }: {
+  dist: number; yaw: number; eye: boolean; height: number; facing: number
+  /** Scene y of the surface a keeper stands on inside the court — DERIVED, see `courtCells`. */
+  stand: number
+  /** Scene y of the middle of the gate's opening — what an eye-level view must be aimed through. */
+  doorMid: number
+}) {
   const { camera } = useThree()
   useFrame(() => {
-    const r = (yaw * Math.PI) / 180
-    // Look at the middle of the standing mass, or at the keeper's eye when standing on the ground.
-    const aimY = eye ? EYE_STAND : height / 2
-    camera.position.set(Math.sin(r) * dist, eye ? EYE_STAND : height * 0.55, Math.cos(r) * dist)
+    // ── ⚠⚠ YAW IS RELATIVE TO THE GATE'S OWN FACE, NOT TO WORLD NORTH ────────────────────────
+    // The first version orbited in world space, and `yaw=0` put the camera on +Z — which is a
+    // different, oblique view of the gate AT EVERY TIER, because each socket turns to face the
+    // court's focus (t1's gate bears 311 degrees; t0's 310; t2 differs again). So the page's
+    // DEFAULT view was not the front of the thing it exists to judge, and finding head-on meant
+    // knowing a number that moves with the tier. That is the same defect this whole page was built
+    // against — an instrument you cannot aim — reproduced inside the instrument, at a smaller scale.
+    // Anchoring to `facing` makes yaw=0 mean "square on to the gate" for every tier and every seed,
+    // which is the only bearing that is the same question twice.
+    //
+    // ★ +NORMAL IS THE KEEPER'S SIDE. `socketCells` records it: "the normal points at the keeper, so
+    // depth is laid back from it". So facing+0 stands you in the court, looking at the gate's face.
+    const r = facing + (yaw * Math.PI) / 180
+    // Look at the middle of the standing mass, or level at the keeper's eye from the ground.
+    // ── ⚠ EYE HEIGHT IS MEASURED FROM THE FLOOR THE KEEPER STANDS ON, NOT FROM THE DAIS TOP ────
+    // Measured at t1: courtLevel 98, the dais tops out AT 98 (scene 0), and the hub floor is 99 —
+    // so a keeper stands at scene 1 and their eye rides at 1 + EYE_STAND. My first version put the
+    // camera at EYE_STAND above scene 0, a full course low, and aimed it at the doorway's SILL
+    // rather than through the opening (the door spans scene 1..4). The view filled with stone and
+    // read as "you cannot see the gate from here", which is a claim about the building. It was a
+    // claim about the camera. `stand` and `doorMid` are both derived off the host's own cells.
+    const aimY = eye ? doorMid : height / 2
+    camera.position.set(Math.cos(r) * dist, eye ? stand + EYE_STAND : height * 0.55, Math.sin(r) * dist)
     camera.lookAt(0, aimY, 0)
   })
   return null
@@ -262,14 +287,22 @@ export default function CourtPage() {
     }
     const cols = hMax - hMin + 1, rows = top - level + 1
     const solid = face.size, area = cols * rows
+    // The floor a keeper stands on and the middle of the opening — read off the cells the host
+    // lays, never restated. `courtHubCells` is the court's floor course; the doorway is the
+    // `doorway` cells of the gate's own frame.
+    const hubYs = courtHubCells(SEED, plotForTier(tier)).map(c => c.y - level)
+    const stand = hubYs.length ? Math.max(...hubYs) : 1
+    const doorYs = socketCells(gate, level).filter(c => c.doorway).map(c => c.y - level)
+    const doorMid = doorYs.length ? (Math.min(...doorYs) + Math.max(...doorYs)) / 2 : stand + EYE_STAND
+
     return {
-      cells: cells.length, top, bot, relief, subtend,
+      cells: cells.length, top, bot, relief, subtend, stand, doorMid,
       void: area > 0 ? 1 - solid / area : 0, cols, rows,
       fogBite: Math.max(0, dist - DAY.fogNear) / Math.max(1, DAY.fogFar - DAY.fogNear),
       byMat: [...cells.reduce((m, c) => m.set(c.m, (m.get(c.m) ?? 0) + 1), new Map<number, number>())]
         .sort((a, b) => b[1] - a[1]),
     }
-  }, [cells, level, gate, dist])
+  }, [cells, level, gate, dist, tier])
 
   // The world origin for the scene: the gate's own column at the court's ground, so `dist` is
   // measured from the building rather than from a plot coordinate that moves with the tier.
@@ -308,7 +341,7 @@ export default function CourtPage() {
             <button onClick={() => setDist(20)} className="bg-white/5 px-2 py-0.5">20</button>
           </label>
           <label className="flex items-center gap-2">
-            <span className="text-white/40">yaw</span>
+            <span className="text-white/40">yaw<span className="text-white/25"> (0 = facing the gate)</span></span>
             <input type="range" min={-180} max={180} step={1} value={yaw}
               onChange={e => setYaw(Number(e.target.value))} className="w-32" />
             <span className="w-10 tabular-nums text-right">{Math.round(yaw)}</span>
@@ -341,6 +374,12 @@ export default function CourtPage() {
             <span>gate face {stats.cols}×{stats.rows}, void <b className="text-white/80">{(stats.void * 100).toFixed(0)}%</b></span>
             <span>fog eats <b className="text-white/80">{(stats.fogBite * 100).toFixed(0)}%</b> at this range</span>
             <span>radius {COURT_RADIUS} · arc {COURT_ARC}</span>
+            {/* ⚠ dist is measured from the GATE and the focus is COURT_RADIUS away, so past that
+                you have walked THROUGH the court and are looking back at it from outside. Easy to
+                do by accident and it looks like a broken view rather than a chosen one. */}
+            {dist > COURT_RADIUS && (
+              <span className="text-amber-300/70">⚠ {(dist - COURT_RADIUS).toFixed(0)} past the focus</span>
+            )}
           </div>
         )}
         <div className="mt-1 text-[10px] text-white/25">shot: <code>{link}</code></div>
@@ -357,7 +396,8 @@ export default function CourtPage() {
             {/* The shipped rig. Fog is part of it, which is why turning fog off is a deliberate act. */}
             <VoxelDayNight />
             {!fog && <fog attach="fog" args={[DAY.bg, 5000, 6000]} />}
-            <Rail dist={dist} yaw={yaw} eye={eye} height={stats?.relief ?? 20} />
+            <Rail dist={dist} yaw={yaw} eye={eye} height={stats?.relief ?? 20} facing={gate?.facing ?? 0}
+              stand={stats?.stand ?? 1} doorMid={stats?.doorMid ?? 2.5} />
             <Ground y={groundY} />
             <Court cells={cells} origin={origin} />
             <Keeper at={keeperAt} />

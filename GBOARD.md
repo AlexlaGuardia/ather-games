@@ -74,8 +74,21 @@ diagnosis and not the whole defect.** `crossings.ts` is hub's file — filed, no
 - **The tower has no CAP.** It stops in a flat cut. A crown/cornice is the single highest-value
   change on it and `crossings.ts` is hub's.
 - **No trim course.** 20 courses of identical brick with no banding is what denies it scale.
-- The rail is orbital only — **no keeper-eye walk-up from ground level**, which is the view that
-  actually answers whether the gate reads as a door.
+- ⚠ **THIS ROW WAS FALSE WHEN I WROTE IT** — `eye=1` already existed and already stood the camera at
+  `EYE_STAND`. I filed a NEXT for work that was done, in the same session that shipped it, and it
+  was about to cause the work a second time. *A board row is a claim, not a state.* What checking it
+  DID find was two real defects it had been hiding, both fixed in `0b1f6f8`:
+  - **`yaw=0` was not the front of the gate.** The rail orbited in WORLD space while each socket
+    turns to face the court's focus (t1 bears 311°, t0 310°, t2 differs again) — so the page's
+    default view was an oblique one, different at every tier, and finding head-on meant knowing a
+    number that moves. **The page built against "an instrument you cannot aim" could not be aimed.**
+    Yaw is now relative to `gate.facing`, so 0 is square-on at every tier and seed.
+  - **The keeper's eye was a full course too low, aimed at the doorway's SILL.** Measured at t1:
+    `courtLevel` 98, the dais tops out AT 98, the hub floor a keeper stands on is 99, the opening
+    spans 99–102. So the eye rides at `stand + EYE_STAND`, not `EYE_STAND`. The old view filled with
+    stone and read as *"you cannot see the gate from here"* — a claim about the building that was
+    really a claim about the camera. Both `stand` and the aim point are now read off the host's own
+    cells rather than restated.
 - ⚠ The page is **owner-gated** (`proxy.ts` 403s `/shimmer/dev/*`) and only reaches Alex on a deploy.
 
 ### Files
