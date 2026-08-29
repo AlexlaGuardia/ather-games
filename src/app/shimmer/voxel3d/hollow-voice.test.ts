@@ -14,8 +14,27 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const ear = (x = 0, z = 0, yaw = 0): Ear => ({ x, z, yaw })
 const body = (o: Partial<Voice> = {}): Voice =>
   ({ id: 'h1', x: 5, z: 0, form: 'stalker', speed: 3.9, ...o })
-/** Run n seconds at 60fps and collect everything heard. */
+/**
+ * Run n seconds at 60fps and collect everything heard.
+ *
+ * ⚠⚠ EVERY PHASE IS SEEDED, AND WITHOUT IT THIS SUITE IS DECIDED BY DICE. `hollow-voice.ts:164`
+ * falls back to `Math.random() * stride` for a body it has not seen — legitimate in the game, where
+ * a pack starting in lockstep would sound like one animal — but it means the number of emissions in
+ * a fixed window varies per run. The throttle asserts sit near the ceiling by design, so the
+ * twelve-vs-four monotonicity check flipped at **27 vs 28** in a full sweep while passing twelve
+ * times out of twelve standing alone. ★ The tempting fix was to loosen that assert, and this file's
+ * own comment already refuses it: *"nudge the number until the red goes green is how a threshold
+ * stops meaning anything."* The dice were never the thing being tested.
+ *
+ * ★ SPREAD, NOT ZEROED. Setting every phase to 0 would make the pack fire in lockstep — an input the
+ * game never produces, and one that would flatter a throttle by handing it a single burst instead of
+ * a steady stream. An even spread across the stride is the distribution the randomness was reaching
+ * for, minus the variance.
+ */
 function run(bodies: Voice[], e: Ear, secs: number, clock: VoiceClock = newVoiceClock()) {
+  bodies.forEach((b, i) => {
+    if (clock.phase[b.id] === undefined) clock.phase[b.id] = (i / bodies.length) * (D.strideAt1 / b.speed)
+  })
   const out = []
   for (let i = 0; i < Math.round(secs * 60); i++) out.push(...stepVoices(clock, bodies, e, 1 / 60))
   return out
