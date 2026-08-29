@@ -24,7 +24,7 @@
 // Run: tools/devwin.sh world → http://localhost:3200/shimmer/dev/hold
 // Shot: WORLD_OWNER=1 WORLD_URL='http://localhost:3200/shimmer/dev/hold' npx tsx scripts/world-shot.mts out.png 5
 import { useEffect, useMemo, useState } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { MAT } from '../../voxel/depth'
 import { blockDef } from '../../voxel/registry'
@@ -137,6 +137,32 @@ function Audience({ green, entryYaw, base }: { green: Box; entryYaw: number; bas
   )
 }
 
+/**
+ * The camera, driven from INSIDE the Canvas.
+ *
+ * ⚠⚠ THIS WAS A `camera={{ position }}` PROP PLUS `onCreated(lookAt)` AND THE PAGE CAME UP BLACK IN
+ * A REAL BROWSER — while rendering perfectly headless, which is how it got shipped. r3f applies its
+ * own framing to a default camera and re-derives the projection on resize; a one-shot `lookAt` at
+ * creation does not survive that, and nothing errors, so the console is clean and the canvas is
+ * simply empty. **A black canvas with no error is a camera problem, not a render failure.**
+ *
+ * ★ AND THE FIX IS THE PATTERN THIS REPO ALREADY PROVED — `dev/court` and `dev/worktable` both
+ * position the camera from a component inside the Canvas. I invented a shorter way and it worked on
+ * the one instrument I could see with. Use the shape that ships.
+ */
+function Rig({ target, yaw, dist }: { target: THREE.Vector3; yaw: number; dist: number }) {
+  const { camera } = useThree()
+  useEffect(() => {
+    camera.position.set(
+      target.x + Math.cos(yaw) * dist,
+      target.y + 10 + dist * 0.45,
+      target.z + Math.sin(yaw) * dist)
+    camera.lookAt(target)
+    camera.updateProjectionMatrix()
+  }, [camera, target, yaw, dist])
+  return null
+}
+
 /** A keeper-sized capsule, so proportion is FELT rather than read off a number. */
 function Keeper({ at }: { at: [number, number, number] }) {
   return (
@@ -183,17 +209,16 @@ export default function HoldPreview() {
   }, [green, entry, taken])
 
   const tex = useTiles(useMemo(() => [...new Set(cells.map(k => k.m))].sort((a, b) => a - b), [cells]))
-  const cam = useMemo<[number, number, number]>(
-    () => [c.x + Math.cos(yaw) * dist, 16 + dist * 0.35, c.z + Math.sin(yaw) * dist], [c.x, c.z, yaw, dist])
+  const target = useMemo(() => new THREE.Vector3(c.x, 2, c.z), [c.x, c.z])
 
   const seatCount = useMemo(() => holdRows(green, entry).length, [green, entry])
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0b0f14', color: '#dfe7ee',
                   font: '12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace' }}>
-      <Canvas camera={{ fov: 50, near: 0.1, far: 900, position: cam }}
-              onCreated={({ camera }) => camera.lookAt(c.x, 0, c.z)}>
+      <Canvas camera={{ fov: 50, near: 0.1, far: 900 }}>
         <VoxelDayNight />
+        <Rig target={target} yaw={yaw} dist={dist} />
         {!fog && <fog attach="fog" args={[DAY.bg, 5000, 6000]} />}
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[c.x, -SOIL_DEPTH - 0.5, c.z]}>
           <planeGeometry args={[600, 600]} />
