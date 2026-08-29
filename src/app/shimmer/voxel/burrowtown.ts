@@ -85,8 +85,18 @@ export interface BurrowPiece extends JigsawPiece {
  */
 export const DOWNBARROW: BurrowPiece[] = [
   // ── hearts. Rolled among themselves so no two towns share a green, but a green is guaranteed.
-  { id: 'green_round', kind: 'green', w: 25, d: 25, weight: 3, heart: true },
-  { id: 'green_long',  kind: 'green', w: 31, d: 21, weight: 2, heart: true },
+  //
+  // ★★ THESE ARE SIZED BY WHAT MUST FIT INSIDE THEM, NOT BY EYE — the same rule as the town's own
+  // footprint, one level down. The green is the SET PIECE: the doctrine wears a ring into it and
+  // seats three curving rows of audience around that. `hold-rows.ts` puts the outermost row at
+  // `innerRadius + 2 * rowStep` = 13 blocks, so a green with a half-span under 13 silently drops
+  // its back row — which is not a crash, it is a smaller audience, and *"in tidy rows"* quietly
+  // becoming two rows is exactly the kind of thing nobody notices.
+  // ⚠ Caught by building the rows, which is precisely why canon said to build them first. My first
+  // pass had these at 25x25 and 31x21 — ordinary jigsaw pieces — and the third row did not fit.
+  // `hold-rows.test.ts` asserts the relation, so shrinking a green or adding a row goes red.
+  { id: 'green_round', kind: 'green', w: 31, d: 31, weight: 3, heart: true },
+  { id: 'green_long',  kind: 'green', w: 37, d: 27, weight: 2, heart: true },
 
   // ── the town. Mounded homes are the bulk; lanes are cheap connective tissue and carry the sprawl.
   { id: 'homes_row',     kind: 'homes', w: 21, d: 13, weight: 5 },
