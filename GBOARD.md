@@ -88,13 +88,36 @@ the LOAD half of *"view and edit"* — sat off the bottom of the viewport, along
   stripping comments and asserting each header appears EXACTLY ONCE; mutation-verified by physically
   swapping the two sections back.
 
+### ★★★ AND THEN THE "I CANNOT CLICK" BLOCKER TURNED OUT NOT TO EXIST EITHER (`BUILD_ID _2ZqAKt5v1tJaBhl3J38Z`)
+Alex asked whether clicking needs his desktop, or whether the headless server is the blocker.
+**Neither.** A real Chromium runs on this box and `world-shot.mts` **has been sending
+`page.mouse.click` and `page.keyboard.press` for weeks** — to earn a pointer lock and drive the
+console. Input was never missing; it was never *offered* for an arbitrary page, so every interactive
+dev tool got judged one frame deep. ★ Same shape as the `WORLD_OWNER` gap and the "I am blind" claim
+before it: **a capability we already had, behind no door at all. Two of my three stated blockers were
+unwired, not impossible** — and I asserted both rather than testing them.
+- `WORLD_CLICK='700,430; 730,445'` · `WORLD_CLICK_WAIT=120`. Clicks land AFTER the settle and after
+  camera work; a malformed point **refuses** rather than being dropped, since a shot clicked fewer
+  times than asked and reported as success is that file's own recurring sin.
+- **⚠⚠ AND IT PAID INSIDE ONE MINUTE.** Fifteen clicks found a broken client contract: after the
+  rename the route answered `{ blueprints }` while the page read `r?.structures`, so `setList` was
+  **never called**. The file was on disk, the endpoint returned it, the status line said *"saved
+  clicked_wall — 14 blocks"*, and the panel rendered **"none yet" forever.** Invisible to everything
+  else: `fetch(...).json()` is `any` so tsc cannot see it, the format oracle passes because the
+  FORMAT is fine, and a first-frame screenshot passes because the list is legitimately empty before
+  anything is saved. **Both halves internally consistent about different things** — the
+  prebuilt-worker shape wearing a JSON key. A guard now reads the response key off the route and the
+  property off the page and compares them, mutation-verified by restoring `r?.structures`.
+- Verified end to end through the SHIPPED tool, not a scratch script: clicks place blocks, the
+  palette picks a second material, save writes a correct file, and `SAVED STRUCTURES` now lists it.
+
 ### ★ WHAT ACTUALLY BLOCKS THIS SEAT, MEASURED RATHER THAN ASSUMED
 - **I CAN see.** `world-shot.mts` + `WORLD_OWNER=1` reaches a gated dev page and the PNG can be read
   directly. "I am blind" was too strong and it was costing us — the court was judged from ASCII for a
   day when a screenshot was available the whole time.
-- **I cannot CLICK.** The worktable is interactive and I can only photograph its first frame. The
-  data path (write a blueprint through the route, load it back) I can prove; the feel of using it I
-  never can. Every interactive tool gets built one frame deep. ⏳ Closable — scripted browser input.
+- **~~I cannot CLICK.~~ CLOSED the same day — see above.** `WORLD_CLICK` drives a real mouse into any
+  page. What remains is narrower and honest: I can drive input, but I still cannot judge **feel** —
+  latency, whether a drag-orbit is comfortable, whether placement lands where a hand expects.
 - **I cannot tell when an instrument is lying**, which is the expensive one and had three examples in
   one day: a board note that misdiagnosed the profiler, a `tsc` count that FELL from 7 to 1 and read
   as progress, and a shot rig that returned exit 0 on a meadow 700 blocks from its subject.
