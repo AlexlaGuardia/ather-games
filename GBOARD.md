@@ -11,6 +11,80 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🧱 Shimmer voxel3d — **THE STRUCTURE WORKTABLE: BUILD A BUILDING, SAVE IT, STAMP IT** (2026-08-29, hub lane) · *Last touched 2026-08-29 (hub) — `11dcc79` pushed, 0 unpushed, blueprint oracle **54 asserts**, 7/7 mutations fire, tsc 7 (baseline). ✅ **DEPLOYED** `BUILD_ID -8riCplNhtANZhMWQbjsD`, 163 chunks.*
+
+### Left off — Alex asked for the general version of what the court got
+> *"a demo space where you can view independant structures .. if we wanted to build houses here we
+> can not only view but build them in an isolated enviroment that you can see and edit at .. a kind
+> of structure worktable."*
+
+`dev/court` fixed the LOOKING half for one code-generated building. This is the other half and it is
+general: **a human places blocks, the result is DATA, and the world can stamp that data.** Structures
+stop being something only code can author. `/shimmer/dev/worktable` — a 24x24 pad in a void, loads in
+about a second against thirty at 19fps, which is most of why nothing gets judged today.
+
+### ⚠⚠⚠ "STRUCTURE" WAS ALREADY TAKEN TWICE, AND FINDING THAT OUT COST A FILE
+This began as `voxel/structures.ts` + `/shimmer/save-structure` + `data/structures/`. **All three
+already existed**, for the 2D TILE GROUP system — `world/structures.ts` (cols/rows of tile indices),
+`engine/structures.ts`, `dev/editors/StructureBuilder.tsx`. The existing route was **overwritten
+before anyone read it**; git had it and it is restored byte-identical.
+- ★★ **THE NEAR-MISS WAS THE SHARED DATA DIRECTORY, NOT THE FILE.** Two formats writing `.json` into
+  one folder, each listing that folder and parsing every file as its own type. The 2D editor would
+  have rendered voxel blueprints as **broken tile groups** and neither side would have said why. A
+  destroyed file is loud and recoverable; a folder two systems disagree about is neither.
+- The fix is disjoint names at **every** layer — `blueprints.ts` · `/shimmer/save-blueprint` ·
+  `data/blueprints/` — plus a guard asserting the two systems share no folder and no route,
+  mutation-verified by pointing both back at `data/structures`.
+- ⚠ **The rule that would have prevented it is "look at the target before you write to it"**, and it
+  was not followed. `cat >` on a path nobody had read.
+
+### Decisions
+- **The palette is DERIVED from the registry's own `placeable` flag**, not a hand-kept list. 65 blocks
+  today; a new one joins by being placeable. A literal list here would be a THIRD dialect of the
+  building vocabulary beside `dev/building`'s 2D board and `pieces.ts`'s families.
+- **Stored bounds are checked, never trusted.** `w/h/d` live in the file so a listing need not parse
+  every cell — which makes them a hand-kept mirror, so `parseBlueprint` re-derives them and refuses a
+  file whose bounds disagree. The mirror may exist; it may not be believed.
+- **Air is dropped rather than stored.** A blueprint is what it IS. Storing air would make a stamped
+  building carve holes in whatever it lands on, which is a different feature (a clear-volume mask)
+  and wants to be asked for on purpose.
+- **The route's name IS its security.** `proxy.ts:20` hard-403s `/shimmer/save-*`; at any other prefix
+  this is an unauthenticated file write into a directory the build reads. The oracle asserts that
+  premise still holds rather than assuming it — an exemption that expires.
+- **The camera drags here, and `dev/court`'s refuses to.** That page answers "does it read from the
+  draw ring", a question about a specific distance, so a dragged camera cannot be written down. An
+  editor has the opposite need. The current view is printed as numbers you can copy.
+- **Cells sort y/z/x and serialize on one line** so a git diff of a cottage is readable and stable
+  whatever order it was built in.
+
+### ⚠ A `tsc` GOTCHA THAT BLINDED THE WHOLE PROJECT
+An arrow whose body is a parenthesized object literal, followed by a bare `{` block, reports
+`TS1005: '=>' expected` **at the block** — and a parse error stops the file, so every later error in
+every later file goes unreported. **The project count fell from 7 to 1, which reads as progress.**
+`tsx` parses it happily, so the oracle was green throughout: the PATTERNS note about tsx accepting
+what tsc rejects, wearing a syntax error instead of a type error. A semicolon fixes it, and the three
+errors hiding underneath were real (`m = S` gave the parameter the LITERAL type of `CUT_STONE`, so
+every other material in the file was a type error).
+
+### Next
+- ⏳ **Alex builds something at `/shimmer/dev/worktable`** and says what the editor is missing. It is
+  deployed and gated to him; it has never been used by a human.
+- **The jigsaw bridge is NOT built** — a saved blueprint is not yet a pool entry, so nothing stamps
+  one into a hamlet or a hold. That is the payoff and it is the next slice. `holds.ts`'s own header
+  has been waiting on "the tombstone save layer" for this.
+- **No way to load a code-generated structure INTO the worktable yet** — the move that would let Alex
+  sculpt the gate tower's cap by hand and have it encoded back into `crossings.ts`.
+- No rotate/mirror, no box fill, no copy-paste, no camera presets. All cheap; none guessed at until
+  a human has used the thing.
+- ⚠ Verified served and gated (403 to an anonymous request, which is the gate working). **Nobody has
+  confirmed it RENDERS** — that needs the owner cookie and a human.
+
+### Files
+- `src/app/shimmer/voxel/blueprints.ts` — the format (pure core)
+- `src/app/shimmer/voxel/blueprints.test.ts` — 54 asserts, incl. the two-systems collision guard
+- `src/app/shimmer/save-blueprint/route.ts` — GET/PUT/DELETE, owner-gated by prefix
+- `src/app/shimmer/dev/worktable/page.tsx` — the editor
+
 ## 🔭 Shimmer voxel3d — **THE INSTRUMENT COULD NOT BE POINTED AT ALEX'S COURT, AND NOTHING SAID SO** (2026-08-29, play lane) · *Last touched 2026-08-29 (play) — `78135fd` pushed, 0 unpushed, preview guard **8 asserts**, 2/2 new mutations fire, tsc 7 (baseline). NOT deployed — hub owns the lock; Alex's go relayed 11:23Z.*
 
 ### Left off — Alex called it, and the second half was worse than it sounded
