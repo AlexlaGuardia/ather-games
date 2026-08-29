@@ -1,4 +1,40 @@
-// The Moglin holds — the three story-node HOLDS, blocked out in stone.
+// The Moglin holds — the three story-node HOLDS. **Taken ground, not architecture.**
+//
+// ── ★★★ CORRECTED 2026-08-29 TO A CANON RULING, AND WHAT CAME OUT WAS A CASTLE ────────────────
+// This file blocked the three out as *a flattened pad, a stone curtain wall pierced by gatehouse
+// gaps, corner posts, and an offset keep with a doorway*. `design-briefs/moglin-holds.md` (RULED
+// 2026-08-29, /magii + Alex, from a gap this build raised) says that is wrong at every level:
+//
+//   **"A hold is neither built nor dug. It is folded, pinned and stacked — and at plot scale it is
+//   simply ground somebody else folded, taken."**
+//
+// ⛔ **No masonry anywhere.** No curtain wall, gatehouse, keep, tower, corner post or cut stone. The
+// Ather has no ore and no quarry-craft, and Bonn #1 ch4 negates it BY NAME at exactly this location:
+// a garden plot's walls are *"not of stone, not of wood. Walls of cloud… piled high like heaped
+// wool."* A Thornlord's hold IS one of those plots — Gregory on Bramble, *"his plot is the last
+// door"* — so the three weeds raised nothing. They squat Gregory's ground inside Gregory's cloud.
+//
+// ★★ AND THE REASON IS SHARPER THAN INACCURACY. Masonry would hand the collar-culture **craft,
+// ambition and dignity** — it would say *these people make things*. They do not. *"A collarer is not
+// a builder; he is a squatter with a good grip."* The creature card solved this at body scale (soft
+// body, the collar carries the menace); this is the same solution at environment scale.
+//
+// ★ WHAT REMAINS IS THE COLLAR'S KIT, AND CANON SAYS IT IS THE WHOLE BUILT VOCABULARY: cages,
+// tethers, stakes, lead-lines, cage-hooks, a lantern hung to watch something. *"Metal on a structure
+// means a hold"* — everything a keeper owns is grown, pegged and lashed, so a hold's irons are the
+// single place the eye finds forged metal and it learns the moral map in one screen with no
+// tutorial. **A curtain wall dilutes the strongest signal the build owns.**
+//
+// ⚠⚠ TWO THINGS THE RULING ASKS FOR THAT ARE NOT HERE YET, NAMED SO NOBODY READS THIS AS FINISHED:
+//   · **Cages and tethers do not exist as pieces.** `pieces.ts` has 14 and none of them is a cage,
+//     a tether, a stake-and-line or a lead. That is new art, and the hold is under-dressed until it
+//     lands — a lantern on a post is the tell, not the scene.
+//   · **The flattened pad is still here, and canon bans it** (⛔ *"a flattened construction pad"*).
+//     It cannot simply be deleted: `height.ts` IMPORTS this file, so this file cannot ask for a
+//     column's height, and the single pad level is what breaks that cycle — dressing needs SOME
+//     ground to stand on. Removing it means handing `holdGenPieces` a ground-lookup the way
+//     `jigsaw` takes a `GroundRule`, which is a terrain refactor with six suites downstream and
+//     wants its own pass. **Filed, not forgotten.**
 //
 // ⚠ NOT "strongholds", AND THE WORD IS LOCKED RATHER THAN PREFERRED. `game/shimmer-storyline.md:23`
 // (ruled 2026-06-03): *"the v1 main-map three are **holds / camps**; the word **stronghold** is
@@ -13,10 +49,11 @@
 // no height↔holds import cycle can exist.
 //
 // ── BLOCKOUT, deliberately (2026-08-08, Alex: "lets do the hold blockouts") ──────────────────
-// Massing first: a flattened pad, a stone curtain wall the ROAD pierces through real gatehouse
-// gaps, corner posts, an offset keep with a doorway, lanterns over the gates (lit gates hold the
-// grey out of the threshold — same spawn-gate veto the waystones use). Piece dressing (roofs,
-// stairs, beams — the build-mode vocabulary) comes with the tombstone save layer, next pass.
+// ⚠ HISTORY, KEPT FOR THE LESSON: this once read *"Massing first: a flattened pad, a stone curtain
+// wall the ROAD pierces through real gatehouse gaps, corner posts, an offset keep with a doorway."*
+// It shipped 2026-08-08 as a deliberate massing blockout with piece dressing deferred — so it never
+// claimed to be canon, and it was still the only picture of a Moglin hold that existed for three
+// weeks. **A blockout is a claim about shape, and shape is exactly what the ruling overturned.**
 // WHO lives here and what the fight is = canon (Thistle/Vetch/Brack are the ruled names; the
 // beat sheet reconcile is already in CANON_GAPS). The shapes are Jin's.
 
@@ -42,10 +79,21 @@ export interface HoldSpec {
   gates: HoldGate[]
 }
 
-const WALL_H = 4       // curtain wall height above the pad
-const KEEP_H = 7       // keep height above the pad
-const GATE_HALF = 1    // gate gap half-width (3 wide)
-const GATE_H = 3       // gate gap height
+/** A watch-stake stands this many blocks, with the lantern on top. Canon's only made thing here. */
+const STAKE_H = 2
+/**
+ * How far along the edge the stake stands FROM the road's crossing.
+ *
+ * ⚠⚠ IT IS NOT ZERO, AND THE FIRST CUT MADE IT ZERO. Standing the stake exactly on the gate line
+ * put it IN THE ROADWAY — where the old code punched a hole for the road to walk through — so all
+ * three holds sealed their own road. `holds.test.ts` caught it on every hold. Canon is explicit that
+ * a collarer *"takes and pressures; he does not injure"*, and a hold that closes the quest spine is
+ * a hold that seals. **The light watches the road; it does not stand in it.**
+ *
+ * ★ EXPORTED so the oracle can ASK where the stake is rather than restating the offset — a second
+ * copy would agree until somebody moved it, which is this codebase's most-repeated failure.
+ */
+export const STAKE_OFFSET = 2
 export const PAD_BLEND = 18   // blocks past the wall over which the pad melts into the country
 
 /** Where the segment from (px,pz) toward (qx,qz) crosses a wall `half` out on the dominant axis. */
@@ -103,83 +151,54 @@ export interface GenPiece {
   open?: boolean
 }
 
-const WALL_TOP = WALL_H       // parapet feet sit ON the wall (y = pad + WALL_H + 1)
-
 /** Every dressing piece of one hold, given its pad level. Deterministic, whole-hold. */
 export function holdGenPieces(i: number, pad: number): GenPiece[] {
   const s = HOLDS[i]
   const out: GenPiece[] = []
-  const gateSpan = (wall: number, along: number): boolean =>
-    s.gates.some(g => g.wall === wall && Math.abs(along - g.at) <= GATE_HALF + 1)
 
-  // Parapet: alternating fence posts along the wall top, skipping corners (stone posts rise
-  // there) and gate spans (the lantern hangs there).
-  for (let t = -s.half + 1; t <= s.half - 1; t++) {
-    if ((t & 1) !== 0) continue
-    const spots: [number, number, number][] = [
-      [s.x + s.half, s.z + t, 0], [s.x - s.half, s.z + t, 1],
-      [s.x + t, s.z + s.half, 2], [s.x + t, s.z - s.half, 3],
+  // ── ★★★ THE COLLAR'S KIT, WHICH CANON SAYS IS THE WHOLE BUILT VOCABULARY ────────────────────
+  // What stood here was a stone parapet along a curtain wall and a gate in each gap. Both are gone
+  // with the wall. Canon's list is exhaustive: *"cages, tethers, stakes, lead-lines, cage-hooks, a
+  // lantern hung to watch something"* — imported metal, and nothing architectural.
+  //
+  // ⚠⚠ ONLY PART OF THAT LIST EXISTS AS PIECES, AND THE GAP IS NAMED RATHER THAN PAPERED OVER.
+  // `pieces.ts` has 14 shapes and none of them is a cage, a tether or a lead-line. What it does have
+  // is `hook` — canon's own *cage-hook* — and `fence`, which reads as a stake-and-line where a
+  // tether would be strung. So a hold is under-dressed until the cage lands, and this file says so
+  // rather than substituting something architectural to fill the space. **An under-dressed hold is
+  // honest; a hold with a wall is a lie about who these people are.**
+  //
+  // ★ THE `gen` KEYS ARE POSITION-BASED AND UNCHANGED IN SHAPE. `gen` is the TOMBSTONE key — what
+  // persists is a piece's ABSENCE — so keying on position rather than on the piece id means a
+  // keeper who tore a hook down last week keeps it down, across this very correction.
+  const rim = s.half - 1
+  // ⚠ THE CORNERS ARE SHARED BY TWO RUNS AND WERE EMITTED TWICE. The four edges are walked with one
+  // parameter, so at |t| == rim the x-run and the z-run name the same cell — two pieces, one
+  // position, and because `gen` keys on POSITION (the tombstone rule) that is two pieces with ONE
+  // id. The uniqueness assert caught it; without dedup, tearing one down would tear down a piece
+  // that is still standing, or leave a ghost that cannot be removed.
+  const seen = new Set<string>()
+
+  // Lead-lines: stakes strung at intervals around the taken ground's edge, skipping the road.
+  for (let t = -rim; t <= rim; t += 3) {
+    const spots: [number, number][] = [
+      [s.x + rim, s.z + t], [s.x - rim, s.z + t], [s.x + t, s.z + rim], [s.x + t, s.z - rim],
     ]
-    for (const [wx, wz, wall] of spots) {
-      if (gateSpan(wall, t)) continue
-      // ★ A STONE PARAPET ON A STONE WALL (2026-08-27). This was `fence` — the base piece, which
-      // costs goldwood — so every hold wore a WOODEN railing along a masonry curtain wall. Nothing
-      // was broken and it read wrong at every gate: mixing a warm timber into a cold grey mass is
-      // the palette clash the building sources warn about, and it happened here purely because the
-      // catalogue could not express a stone fence until the material variants landed.
-      //
-      // ⚠ THE `gen` KEY IS UNCHANGED ON PURPOSE. It is the TOMBSTONE key — what persists is a
-      // piece's ABSENCE — so a keeper who knocked a parapet off last week keeps it knocked off.
-      // Changing the material must not resurrect removed dressing, and keying on position rather
-      // than on the piece id is what makes that free.
-      out.push({ gen: `${s.id}:p:${wx},${wz}`, pieceId: 'fence_stonebrick', x: wx, y: pad + WALL_TOP + 1, z: wz,
-                 rot: wall <= 1 ? 1 : 0 })   // rails run ALONG the wall, not across it
+    for (const [wx, wz] of spots) {
+      // Leave the road's crossing clear — a lead-line across the quest spine reads as a barrier,
+      // and canon is explicit that a hold takes and pressures rather than seals.
+      if (s.gates.some(g => Math.abs((g.wall <= 1 ? wz - s.z : wx - s.x) - g.at) <= 2)) continue
+      const key = `${wx},${wz}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ gen: `${s.id}:t:${key}`, pieceId: 'fence', x: wx, y: pad + 1, z: wz, rot: 0 })
     }
   }
 
-  // ── ★ THE GATES (2026-08-27, Alex ruled it) ─────────────────────────────────────────────────
-  // Until now `holdVoxelAt` punched the gate as a HOLE — three blocks of nothing where the road
-  // crosses the wall. That is a breach, not a gate, and it reads as one from the road: a hold that
-  // cannot close is not holding anything. The piece existed the same day the doors did; what was
-  // missing was the ruling on whether a closable thing may sit on the quest spine at all.
-  //
-  // ★ BORN OPEN. See `GenPiece.open` — an open gate occupies no solid cells, so the road is
-  // untouched until a keeper chooses otherwise. The affordance arrives; the obstacle does not.
-  //
-  // ★ TIMBER ON STONE, DELIBERATELY, AND IT IS THE SAME ARGUMENT AS THE KEEP ROOF RATHER THAN THE
-  // PARAPET. The parapet was wrong because it ran warm timber the whole length of a cold grey mass;
-  // a gate is a small accent AT A THRESHOLD, which is exactly where the gate lanterns already put
-  // the eye. ⚠ And no metal — `shimmer-alchemy-vessels.md` rules the Ather's craft has none of it,
-  // so a wrought-iron portcullis is the one gate this may never be. (Whether that law governs
-  // architecture at all is filed `[OPEN]` in CANON_GAPS; timber is inside it either way.)
-  for (const gt of s.gates) {
-    const along = gt.at
-    for (let o = -GATE_HALF; o <= GATE_HALF; o++) {
-      // The leaf lies IN the wall plane, same rule the parapet rails use.
-      const rot: 0 | 1 | 2 | 3 = gt.wall <= 1 ? 1 : 0
-      const wx = gt.wall === 0 ? s.x + s.half : gt.wall === 1 ? s.x - s.half : s.x + along + o
-      const wz = gt.wall === 0 ? s.z + along + o : gt.wall === 1 ? s.z + along + o : gt.wall === 2 ? s.z + s.half : s.z - s.half
-      out.push({ gen: `${s.id}:g:${wx},${wz}`, pieceId: 'gate', x: wx, y: pad + 1, z: wz, rot, open: true })
-    }
-  }
-
-  // Keep roof: slopes on the perimeter facing outward, caps inside; the four corners stay clear
-  // (the blockout's voxel lanterns stand there — the dressing defers to the light).
-  const ky = pad + KEEP_H + 1
-  for (let kz = -s.keepHalf; kz <= s.keepHalf; kz++) {
-    for (let kx = -s.keepHalf; kx <= s.keepHalf; kx++) {
-      if (Math.abs(kx) === s.keepHalf && Math.abs(kz) === s.keepHalf) continue
-      const wx = s.x + s.keepOx + kx, wz = s.z + s.keepOz + kz
-      const edge = Math.abs(kx) === s.keepHalf || Math.abs(kz) === s.keepHalf
-      const rot: 0 | 1 | 2 | 3 = !edge ? 0
-        : Math.abs(kx) === s.keepHalf ? (kx > 0 ? 3 : 1)
-        : (kz > 0 ? 0 : 2)
-      // ⚠ THE KEEP ROOF STAYS TIMBER, AND THAT IS A CHOICE RATHER THAN AN OVERSIGHT. A stone wall
-      // carrying a timber roof is what actually gets built — the roof is the part you can afford to
-      // replace — and it puts one warm line along the top of a grey mass, which is the accent the
-      // same sources call for. The parapet was wrong because it ran the whole wall; this is a rim.
-      out.push({ gen: `${s.id}:r:${wx},${wz}`, pieceId: edge ? 'roof_slope' : 'roof_cap', x: wx, y: ky, z: wz, rot })
-    }
+  // Cage-hooks, clustered where stock is kept: a short row inside the ground, off the road.
+  for (let k = -1; k <= 1; k++) {
+    const hx = s.x + s.keepOx + k * 2, hz = s.z + s.keepOz
+    out.push({ gen: `${s.id}:h:${hx},${hz}`, pieceId: 'hook', x: hx, y: pad + 2, z: hz, rot: 0 })
   }
   return out
 }
@@ -259,46 +278,31 @@ function mixed(x: number, y: number, z: number, stone: number, worn: number, cra
 
 export function holdVoxelAt(
   x: number, y: number, z: number, i: number, pad: number,
-  stone: number, lantern: number, worn = stone, cracked = stone,
+  stake: number, lantern: number,
 ): number {
   const s = HOLDS[i]
   const lx = x - s.x, lz = z - s.z
-  const alx = Math.abs(lx), alz = Math.abs(lz)
-  if (alx > s.half || alz > s.half || y <= pad) return 0
-  const dy = y - pad                                    // 1.. above the pad
+  if (Math.abs(lx) > s.half || Math.abs(lz) > s.half || y <= pad) return 0
+  const dy = y - pad                                    // 1.. above the ground
 
-  // ── the keep — a solid mass with a doorway facing the courtyard centre ──
-  const kx = lx - s.keepOx, kz = lz - s.keepOz
-  if (Math.abs(kx) <= s.keepHalf && Math.abs(kz) <= s.keepHalf) {
-    if (dy <= KEEP_H) {
-      // Doorway: 2 tall, 2 wide, punched through the wall nearest the courtyard centre.
-      const doorWallZ = s.keepOz !== 0 ? -Math.sign(s.keepOz) * s.keepHalf : null
-      const doorWallX = s.keepOx !== 0 ? -Math.sign(s.keepOx) * s.keepHalf : null
-      const inDoor = dy <= 2 && (
-        (doorWallZ !== null && kz === doorWallZ && Math.abs(kx) <= 1) ||
-        (doorWallX !== null && kx === doorWallX && Math.abs(kz) <= 1))
-      return inDoor ? 0 : mixed(x, y, z, stone, worn, cracked)
-    }
-    // Lanterns on the keep's roof corners — the courtyard is TENDED ground.
-    if (dy === KEEP_H + 1 && Math.abs(kx) === s.keepHalf && Math.abs(kz) === s.keepHalf) return lantern
-    return 0
-  }
-
-  // ── the curtain wall ──
-  const onWall = (alx === s.half && alz <= s.half) || (alz === s.half && alx <= s.half)
-  if (!onWall) return 0
-  // Gate gaps: the road walks through; a lantern hangs over each gap's centre.
+  // ── ★★★ THE WATCH-STAKES, AND THEY ARE ALL THAT IS LEFT ─────────────────────────────────────
+  // Canon's made-things list for a hold is exhaustive and short: *"cages, tethers, stakes,
+  // lead-lines, cage-hooks, **a lantern hung to watch something**"* — and *"metal on a structure
+  // means a hold"*, which is why the lantern is the tell rather than the decoration. So a hold's
+  // whole built vocabulary at the road is a stake with a light on it, standing where the road comes
+  // in. Nothing else about the ground is made by anybody.
+  //
+  // ⚠ THE GATE POSITIONS ARE KEPT, THE GATE IS NOT. `s.gates` still names where the story road
+  // crosses the hold's edge, and that is exactly where a collarer would stand a light to watch who
+  // arrives. What is gone is the wall it used to hang on.
   for (const g of s.gates) {
     const along = g.wall <= 1 ? lz : lx
-    const isThisWall =
+    const onEdge =
       (g.wall === 0 && lx === s.half) || (g.wall === 1 && lx === -s.half) ||
       (g.wall === 2 && lz === s.half) || (g.wall === 3 && lz === -s.half)
-    if (!isThisWall) continue
-    if (Math.abs(along - g.at) <= GATE_HALF && dy <= GATE_H) return 0          // the gap
-    if (along === g.at && dy === WALL_H + 1) return lantern                    // the gate light
+    if (!onEdge || along !== g.at + STAKE_OFFSET) continue
+    if (dy <= STAKE_H) return stake
+    if (dy === STAKE_H + 1) return lantern
   }
-  if (dy <= WALL_H) return mixed(x, y, z, stone, worn, cracked)
-  // Corner posts rise two blocks above the wall line.
-  if (alx === s.half && alz === s.half && dy <= WALL_H + 2) return stone
   return 0
 }

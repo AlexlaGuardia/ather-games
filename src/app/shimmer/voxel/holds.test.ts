@@ -1,8 +1,18 @@
-// The hold blockouts' contract: pads are flat, walls stand, the road walks IN through a gate
-// (never through stone), the courtyard wears bare, and the gates are lit.
+// The holds' contract. ⚠⚠ REWRITTEN 2026-08-29 TO A CANON RULING — the previous contract was
+// *"pads are flat, walls stand, the road walks IN through a gate"*, and every one of those asserts
+// was correct about a hold that canon says never existed.
+//
+// `design-briefs/moglin-holds.md` (RULED 2026-08-29): **"A hold is neither built nor dug. It is
+// folded, pinned and stacked — and at plot scale it is simply ground somebody else folded, taken."**
+// ⛔ No masonry anywhere. What remains is the collar's kit: a watch-stake with a lantern, lead-lines
+// around the edge, cage-hooks where stock is kept — *"metal on a structure means a hold."*
+//
+// ★ THESE ASSERTS WERE REWRITTEN, NOT DELETED. A red that is a contract change teaches everyone to
+// discount red if it is simply removed; the new law needs guarding at least as hard as the old one
+// did, and the strongest assert here is the one that says a hold builds NOTHING.
 // Run: npx tsx src/app/shimmer/voxel/holds.test.ts
 
-import { HOLDS, holdIndexAt, holdCourtyardAt, holdVoxelAt, holdGenPieces, holdGenPiecesForCol } from './holds'
+import { HOLDS, holdIndexAt, holdCourtyardAt, holdVoxelAt, holdGenPieces, holdGenPiecesForCol, STAKE_OFFSET } from './holds'
 import { basePieceId, pieceMaterial, cellsOf, pieceDef } from './pieces'
 import { columnHeight, holdPadLevel } from './height'
 import { materialAt, MAT } from './depth'
@@ -27,15 +37,63 @@ for (const [i, s] of HOLDS.entries()) {
     if (columnHeight(s.x + dx, s.z + dz, SEED) !== pad) flat = false
   check(`${s.id}: the pad is flat at the pad level`, flat)
 
-  // Wall stands on the wall line; courtyard surface is worn path.
-  // ⚠ THE WALL IS MIXED MASONRY SINCE 2026-08-27, so this asserts MEMBERSHIP OF THE COURSE SET
-  // rather than one id. It deliberately does NOT accept MAT.STONE: raw stone is what the hillside
-  // is made of, and the whole change was that a hold must not be the same material as the ground it
-  // stands on. Widening this to "any solid" would make it a guard that cannot fail — it has to
-  // still go red if the wall reverts to bare rock, which is the regression that matters.
-  const COURSE = new Set<number>([MAT.CUT_STONE, MAT.MOSSY_CUT_STONE, MAT.CRACKED_STONE_BRICK])
-  check(`${s.id}: wall is dressed masonry above the pad`,
-        COURSE.has(materialAt(s.x + s.half, pad + 2, s.z, SEED, columnHeight(s.x + s.half, s.z, SEED))))
+  // ── ★★★ A HOLD BUILDS NOTHING, AND THIS IS THE ASSERT THAT SAYS SO ───────────────────────
+  // The old contract asserted the wall was dressed masonry and refused to accept MAT.STONE, so that
+  // it would still go red if a wall reverted to bare rock. That reasoning was sound and its subject
+  // is gone: canon rules there is no wall. ⛔ The Ather has no ore and no quarry-craft, and Bonn #1
+  // negates stone BY NAME at a garden plot's walls.
+  //
+  // ⚠ IT SWEEPS THE WHOLE FOOTPRINT RATHER THAN CHECKING THE OLD WALL LINE. Checking one cell where
+  // masonry used to be would pass the day somebody rebuilt a keep two blocks inward — an assert
+  // written against the shape of the bug it replaced, which is how the original defect walks back in
+  // from a door nobody is watching.
+  const MASONRY = new Set<number>([
+    MAT.CUT_STONE, MAT.MOSSY_CUT_STONE, MAT.CRACKED_STONE_BRICK, MAT.STONE_BRICK,
+    MAT.MOSSY_STONE_BRICK, MAT.PALE_BRICK,
+  ])
+  let stoneCells = 0, builtCells = 0
+  for (let dx = -s.half; dx <= s.half; dx += 2) for (let dz = -s.half; dz <= s.half; dz += 2) {
+    for (let dy = 1; dy <= 8; dy++) {
+      const m = holdVoxelAt(s.x + dx, pad + dy, s.z + dz, i, pad, MAT.PLANKS_GOLDWOOD, MAT.MANA_LANTERN)
+      if (m === 0) continue
+      builtCells++
+      if (MASONRY.has(m)) stoneCells++
+    }
+  }
+  check(`${s.id}: ⛔ not one block of masonry anywhere in the hold (${stoneCells})`, stoneCells === 0)
+  // ★★ AND THE MASS IS TINY — "a bully squatting a room", not a structure. A hold that started
+  // growing walls again out of some other material would pass the masonry check and fail this one.
+  check(`${s.id}: builds almost nothing at all (${builtCells} cells over the whole footprint)`,
+        builtCells > 0 && builtCells < 24)
+
+  // ★ THE WATCH-STAKE STANDS WHERE THE ROAD COMES IN, and canon says a lantern is the only made
+  // thing here: *"a lantern hung to watch something."*
+  for (const g of s.gates) {
+    const gx = g.wall === 0 ? s.x + s.half : g.wall === 1 ? s.x - s.half : s.x + g.at + STAKE_OFFSET
+    const gz = g.wall === 2 ? s.z + s.half : g.wall === 3 ? s.z - s.half : s.z + g.at + STAKE_OFFSET
+    const post = holdVoxelAt(gx, pad + 1, gz, i, pad, MAT.PLANKS_GOLDWOOD, MAT.MANA_LANTERN)
+    const light = holdVoxelAt(gx, pad + 3, gz, i, pad, MAT.PLANKS_GOLDWOOD, MAT.MANA_LANTERN)
+    check(`${s.id}: a watch-stake stands where the road comes in (${gx},${gz})`, post === MAT.PLANKS_GOLDWOOD)
+    check(`${s.id}: with a lantern on it — the hold's only made thing`, light === MAT.MANA_LANTERN)
+  }
+
+  // ⚠ AND THE ROAD IS NOT BLOCKED. The old assert checked the road pierced a WALL; with no wall the
+  // property that still matters is that nothing of the hold's stands in the roadway.
+  for (const g of s.gates) {
+    const gx = g.wall === 0 ? s.x + s.half : g.wall === 1 ? s.x - s.half : s.x + g.at
+    const gz = g.wall === 2 ? s.z + s.half : g.wall === 3 ? s.z - s.half : s.z + g.at
+    let blocked = false
+    for (let dy = 1; dy <= 3; dy++) {
+      for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        if (holdVoxelAt(gx + ox, pad + dy, gz + oz, i, pad, MAT.PLANKS_GOLDWOOD, MAT.MANA_LANTERN) !== 0) blocked = true
+      }
+    }
+    check(`${s.id}: the road walks in beside the stake, not through anything`, !blocked)
+  }
+
+  // ★ THE ONE THING THE OLD CONTRACT GOT RIGHT AND CANON KEPT: the ground wears bare. The brief's
+  // ground row is "the plot's grass and paths, worn, trampled, dragged-over" — worn is correct, and
+  // it is the ⛔ *flattened construction pad* that is not.
   const hc = columnHeight(s.x + 2, s.z + 2, SEED)
   check(`${s.id}: courtyard surface is worn path`, materialAt(s.x + 2, hc, s.z + 2, SEED, hc) === MAT.PATH)
   check(`${s.id}: courtyard membership agrees`, holdCourtyardAt(s.x, s.z) && !holdCourtyardAt(s.x + s.half + 30, s.z))
@@ -53,7 +111,10 @@ for (const [i, s] of HOLDS.entries()) {
     }
     const hw = columnHeight(gx, gz, SEED)
     const open = materialAt(gx, hw + 1, gz, SEED, hw) === MAT.AIR && materialAt(gx, hw + 2, gz, SEED, hw) === MAT.AIR
-    check(`${s.id}: the road pierces the wall toward ${other.id} (gap at ${gx},${gz})`, open)
+    // ⚠ REPHRASED, NOT RELAXED. This said *"the road pierces the WALL"*, and with no wall the
+    // property that still matters is the same one it was really protecting: **the road stays open
+    // where it meets the hold.** A hold takes and pressures; canon is explicit it does not seal.
+    check(`${s.id}: the road stays open where it meets the hold (${gx},${gz})`, open)
     check(`${s.id}: the road actually runs there`, roadAt(gx, gz, SEED))
   }
 
@@ -61,59 +122,60 @@ for (const [i, s] of HOLDS.entries()) {
   let lanterns = 0
   for (const g of s.gates) {
     const [wx, wz] =
-      g.wall === 0 ? [s.x + s.half, s.z + g.at] : g.wall === 1 ? [s.x - s.half, s.z + g.at] :
-      g.wall === 2 ? [s.x + g.at, s.z + s.half] : [s.x + g.at, s.z - s.half]
-    if (holdVoxelAt(wx, pad + 5, wz, i, pad, MAT.STONE, MAT.MANA_LANTERN) === MAT.MANA_LANTERN) lanterns++
+      // ★ ASKED, NOT RESTATED — the stake stands STAKE_OFFSET along the edge from the road.
+      g.wall === 0 ? [s.x + s.half, s.z + g.at + STAKE_OFFSET] : g.wall === 1 ? [s.x - s.half, s.z + g.at + STAKE_OFFSET] :
+      g.wall === 2 ? [s.x + g.at + STAKE_OFFSET, s.z + s.half] : [s.x + g.at + STAKE_OFFSET, s.z - s.half]
+    // ⚠ THE LANTERN MOVED DOWN WITH THE WALL IT USED TO HANG ON. It sat at pad+5, over a 4-high
+    // curtain wall; it now tops a watch-stake at pad+3. Same fact — *"a lantern hung to watch
+    // something"* — at the only height a hold still has.
+    if (holdVoxelAt(wx, pad + 3, wz, i, pad, MAT.PLANKS_GOLDWOOD, MAT.MANA_LANTERN) === MAT.MANA_LANTERN) lanterns++
   }
-  check(`${s.id}: both gates are lit`, lanterns === 2)
+  check(`${s.id}: both roads in are watched (${lanterns} lit stakes)`, lanterns === 2)
 }
 
 check('holdIndexAt rejects open country', holdIndexAt(0, 0) === -1 && holdIndexAt(-150, -640) === -1)
 
-// ── the generated dressing: parapets on the walls, a roof on the keep, tombstonable ids ────────
-for (const [i, s] of HOLDS.entries()) {
+// ── the collar's kit: lead-lines, cage-hooks, tombstonable ids ────────────────────────────────
+// ⚠⚠ REWRITTEN 2026-08-29. This block asserted parapets on the wall tops and a roof over the keep,
+// and every assert was correct about dressing for a building canon says was never there. What it
+// checks now is the list canon DOES give: *"cages, tethers, stakes, lead-lines, cage-hooks, a
+// lantern hung to watch something."*
+//
+// ★ THE TOMBSTONE PROPERTY IS THE ONE THAT SURVIVED UNCHANGED, and it mattered through this very
+// correction: `gen` keys on POSITION, not on the piece id, so a keeper who tore a piece down last
+// week keeps it down even though every piece here changed identity today.
+for (let i = 0; i < HOLDS.length; i++) {
+  const s = HOLDS[i]
   const pad = holdPadLevel(i, SEED)
   const dressing = holdGenPieces(i, pad)
-  // ★ THE PARAPET IS A STONE FENCE VARIANT SINCE 2026-08-27 (`fence_stonebrick`), so this matches
-  // the SHAPE via basePieceId rather than the exact id — a wooden railing on a masonry wall was the
-  // palette clash being fixed. ⚠ The material is asserted separately below; matching the base alone
-  // would let the timber fence come straight back without a word.
-  const parapets = dressing.filter(g => basePieceId(g.pieceId) === 'fence')
-  const roof = dressing.filter(g => g.pieceId.startsWith('roof_'))
-  check(`${s.id}: parapets exist`, parapets.length > 10)
 
-  // ── ★★ THE GATES, AND THE ASSERT THAT MATTERS IS THE ROAD (2026-08-27) ──────────────────────
-  // Alex ruled gates into the gate gaps. The gap is where the STORY ROAD crosses the curtain wall,
-  // so the ONLY way this feature can be a disaster is by being born closed — a shut door across the
-  // quest spine, on three holds, before any keeper has a reason to open one. That is not a cosmetic
-  // regression and it would not show up in any other check here, so it gets its own.
-  const gates = dressing.filter(g => basePieceId(g.pieceId) === 'gate')
-  check(`${s.id}: gates stand in the gate gaps`, gates.length === s.gates.length * 3)
-  check(`${s.id}: ★ every hold gate is born OPEN`, gates.length > 0 && gates.every(g => g.open === true))
-  // ★★ AND THE STRONGER FORM: ask `cellsOf` — the function the world actually writes occupancy
-  // from — whether any gate cell blocks. Asserting `open === true` alone would still pass if the
-  // OPEN state stopped meaning passable; this asks the thing a walker actually meets.
-  const blocking = gates.flatMap(g => cellsOf(g, pieceDef(g.pieceId)!)).filter(c => c.solid)
-  check(`${s.id}: ★★ no gate cell blocks the road (${blocking.length} blocking)`, blocking.length === 0)
-  // Deterministic ids, or a tombstone cannot find its piece again after a reload.
-  check(`${s.id}: gate ids are unique`, new Set(gates.map(g => g.gen)).size === gates.length)
-  check(`${s.id}: ★ the parapet is stone, not timber`,
-        parapets.length > 0 && parapets.every(g => pieceMaterial(g.pieceId)?.family === 'stone'))
-  check(`${s.id}: every parapet stands ON the wall top`, parapets.every(g =>
-    g.y === pad + 5 && (Math.abs(g.x - s.x) === s.half || Math.abs(g.z - s.z) === s.half)))
-  check(`${s.id}: no parapet in a gate span`, parapets.every(g => {
-    for (const gt of s.gates) {
+  check(`${s.id}: BLIND CHECK — there is dressing to inspect (${dressing.length})`, dressing.length > 4)
+
+  const lines_ = dressing.filter(g => basePieceId(g.pieceId) === 'fence')
+  const hooks = dressing.filter(g => basePieceId(g.pieceId) === 'hook')
+  check(`${s.id}: lead-lines are strung around the taken ground (${lines_.length})`, lines_.length > 4)
+  check(`${s.id}: and cage-hooks where stock is kept (${hooks.length})`, hooks.length > 0)
+
+  // ⛔ NOTHING ARCHITECTURAL. A hold that grew a roof, a stair or a beam again would pass every
+  // count above and fail this — the assert is against the CLASS of thing, not against a tally.
+  const ARCH = new Set(['roof_slope', 'roof_cap', 'stair', 'beam', 'arch', 'window', 'doorway', 'door'])
+  const built = dressing.filter(g => ARCH.has(basePieceId(g.pieceId)))
+  check(`${s.id}: ⛔ nothing architectural in the kit (${built.map(g => g.pieceId).join(', ') || 'none'})`,
+        built.length === 0)
+
+  // ★ AND NOTHING STANDS IN THE ROADWAY. A lead-line across the quest spine reads as a barrier, and
+  // canon is explicit that a collarer takes and pressures rather than seals.
+  check(`${s.id}: the road's crossings are left clear`, dressing.every(g => {
+    return !s.gates.some(gt => {
       const along = gt.wall <= 1 ? g.z - s.z : g.x - s.x
-      const onThatWall = gt.wall === 0 ? g.x - s.x === s.half : gt.wall === 1 ? g.x - s.x === -s.half
-        : gt.wall === 2 ? g.z - s.z === s.half : g.z - s.z === -s.half
-      if (onThatWall && Math.abs(along - gt.at) <= 2) return false
-    }
-    return true
+      return Math.abs(along - gt.at) <= 1
+    })
   }))
-  const keepArea = (2 * s.keepHalf + 1) ** 2 - 4    // minus the four lantern corners
-  check(`${s.id}: the keep roof covers the keep`, roof.length === keepArea)
+
   check(`${s.id}: gen ids are unique`, new Set(dressing.map(g => g.gen)).size === dressing.length)
-  check(`${s.id}: determinism`, JSON.stringify(holdGenPieces(i, pad)) === JSON.stringify(dressing))
+  check(`${s.id}: gen ids key on POSITION, so a torn-down piece stays down across a piece change`,
+        dressing.every(g => g.gen.includes(`${g.x},${g.z}`)))
+
 
   // Column partition: collecting per-column over the bbox reproduces the whole set exactly.
   const got = new Set<string>()
