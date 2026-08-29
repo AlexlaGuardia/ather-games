@@ -106,8 +106,33 @@ the bowl is a wear FIELD, not a shape. Nothing picks a circle and digs it.
 - ✅ **Read out of the generator as an ASCII cross-section, not guessed at** — irregular rim, depth
   falling from the middle, three drag-lines fanning from the way in.
 
+### ★★ AND THE REALIZATION — `green-terrain.ts`, the bowl and the banks as GROUND
+`hold-rows` and `ring-floor` answer *where*; this answers what the ground does there, **by asking
+them**, so a dial moved in either file moves the ground and nothing is re-derived.
+- **One profile, because a bowl with tiers around it is one shape** — negative in the middle,
+  stepping positive on the rows, zero once the green resumes. Two functions would need a seam, and
+  the seam is exactly where a rim goes wrong.
+- ⚠⚠ **MATERIALS ARE PASSED IN, AND IT IS A HARD CONTRACT.** `depth.ts` and `attrs.ts` are a module
+  cycle, so nothing on this side may import `MAT` — `holdVoxelAt` takes its stone and its lantern as
+  arguments for the same reason. Break it and the cycle closes at import time, which fails as a
+  **blank world** rather than as a compile error anybody can read. Asserted, with a mutation that
+  hardcodes an id.
+- ★ **The aisle is derived by ASKING for the seats**, never by re-testing the angle — a second copy
+  of that rule would agree until somebody widened one of them, and the failure is an aisle clear of
+  audience and blocked by a step.
+- **The assert worth having is the integration one:** `hold-rows` says a seat sits at `row * rise`,
+  this file banks the ground under it, and if the two disagree **the audience floats or is buried
+  while each module stays perfectly correct about its own half.** 91 of 91, on every green the pool
+  produces.
+- ⚠ **A guard of mine could not fail**, found by deleting it and watching everything stay green: a
+  band-width check after `Math.round`, which already snaps the distance to within `rowStep/2`. It
+  read like a bound and constrained nothing. **Removed rather than repaired** — a guard kept "just in
+  case" teaches the next reader that the rounding does less than it does. *Fifth decorative guard of
+  the day; the mutation sweeps are earning their runtime.*
+- ⚠ And one assert failed because it sampled **along the aisle** — the one bearing that must be flat.
+  The failure was the aisle working.
+
 ### Next
-- **The voxel realization** — `burrowtown`, `hold-rows` and `ring-floor` are all pure placement.
 - **Bodies in the seats** — collared Luminara, dimmed. `plot-ring-pass` already renders Luminara.
 - ⚠ **Do not build a forced evolution** off the beat sheet — it says so explicitly; that is a gap.
 
