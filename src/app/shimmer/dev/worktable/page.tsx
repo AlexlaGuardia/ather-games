@@ -36,8 +36,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { ALL_BLOCKS, blockDef } from '../../voxel/registry'
-import { MAT } from '../../voxel/depth'
+import { ALL_BLOCKS, blockDef, type BlockSkill } from '../../voxel/registry'
+import { MAT, isHalfMat } from '../../voxel/depth'
 import { buildTileArray, sliceLayer, layerOf, TOP, SIDE, BOTTOM } from '../../voxel3d/tex/tiles'
 import { VoxelDayNight, DAY } from '../../voxel3d/day-night'
 import { setTimePin } from '../../engine/day-cycle'
@@ -58,6 +58,34 @@ const PAD = 24
  * piece families — and it would go stale silently the day a block is added.
  */
 const PALETTE = ALL_BLOCKS.filter(b => b.placeable).map(b => b.material)
+
+/**
+ * The palette, in FAMILIES — and the families are derived too.
+ *
+ * ⚠⚠ THE FLAT LIST WAS A REAL DEFECT AND ONLY LOOKING FOUND IT (2026-08-29). 65 blocks in two
+ * columns is 33 rows, which pushed *saved structures* — the LOAD half of "view and edit" — clean off
+ * the bottom of the viewport. Every assert was about correctness and passed; the panel was correct
+ * and unusable. A screenshot answered in two seconds what the oracle could not ask.
+ *
+ * ★ `skill ?? fastSkill` IS THE GROUPING, NOT A HAND-KEPT TABLE. `skill` gates a block (a spike will
+ * not cut a tree) and `fastSkill` names the right tool on an ungated one — between them they already
+ * partition the placeable set exactly the way a builder reaches: prospecting is stone, forestry is
+ * wood, farming is ground and growing things, and what neither claims is a fixture. Measured, not
+ * assumed: 65 blocks fall into 4 groups with none left stranded. A new block joins its family by
+ * having a tool, the same way it joined the palette by being placeable.
+ */
+const FAMILY: { key: BlockSkill | null; label: string; open: boolean }[] = [
+  { key: 'prospecting', label: 'stone',            open: true },
+  { key: 'forestry',    label: 'wood',             open: true },
+  { key: null,          label: 'fixtures',         open: false },
+  { key: 'farming',     label: 'ground & growing', open: false },
+]
+
+/** Which family a material belongs to. One question, asked once. */
+const familyOf = (m: number): BlockSkill | null => {
+  const d = blockDef(m)
+  return d ? (d.skill ?? d.fastSkill ?? null) : null
+}
 
 type Cells = Map<string, number>
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`
@@ -224,6 +252,8 @@ export default function WorktablePage() {
   const [hour, setHour] = useState(12)
   const [showKeeper, setShowKeeper] = useState(true)
   const [view, setView] = useState({ yaw: -0.9, pitch: 0.5, dist: 34 })
+  /** Which palette families are expanded. Seeded from `FAMILY`, then the keeper's own choice. */
+  const [open, setOpen] = useState<Record<string, boolean>>({})
   /** Undo stack of whole cell maps. Authoring at this scale is thousands of cells, not millions. */
   const undo = useRef<Cells[]>([])
 
@@ -353,33 +383,63 @@ export default function WorktablePage() {
 
         {status && <div style={{ marginBottom: 8, color: /REFUSED|FAILED/.test(status) ? '#ff9b8a' : '#9bd88a' }}>{status}</div>}
 
+        {/* ★★ SAVED STRUCTURES COME FIRST, AND THE ORDER IS THE FIX. The palette is 65 blocks; below
+            it, the load half of "view and edit" sat off the bottom of the viewport. `blueprints.test.ts`
+            asserts this section appears BEFORE the palette in the source, so the burial cannot return. */}
         <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10, margin: '8px 0 4px' }}>
-          material — {label(material)}
+          saved structures
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 3 }}>
-          {PALETTE.map(m => (
-            <button key={m} onClick={() => setMaterial(m)} title={`${label(m)} (${m})`}
-              style={{ ...btn, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis',
-                       whiteSpace: 'nowrap', fontSize: 10,
-                       borderColor: m === material ? '#ffcf8a' : 'rgba(150,180,210,0.25)',
-                       color: m === material ? '#ffcf8a' : '#cfd8e0' }}>
-              {label(m)}
-            </button>
+        {list.length === 0 && <div style={{ opacity: 0.5, marginBottom: 6 }}>none yet — build something and save it</div>}
+        <div style={{ maxHeight: 132, overflowY: 'auto', marginBottom: 4 }}>
+          {list.map(s => (
+            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '2px 0' }}>
+              <button style={{ ...btn, flex: 1, textAlign: 'left' }} onClick={() => void load(s.id)}>
+                {s.name} <span style={{ opacity: 0.5 }}>{s.w}x{s.h}x{s.d}</span>
+              </button>
+              {s.error && <span style={{ color: '#ff9b8a' }} title={s.error}>broken</span>}
+            </div>
           ))}
         </div>
 
         <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10, margin: '10px 0 4px' }}>
-          saved structures
+          material — <span style={{ color: '#ffcf8a' }}>{label(material)}</span>
         </div>
-        {list.length === 0 && <div style={{ opacity: 0.5 }}>none yet — build something and save it</div>}
-        {list.map(s => (
-          <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '2px 0' }}>
-            <button style={{ ...btn, flex: 1, textAlign: 'left' }} onClick={() => void load(s.id)}>
-              {s.name} <span style={{ opacity: 0.5 }}>{s.w}x{s.h}x{s.d}</span>
-            </button>
-            {s.error && <span style={{ color: '#ff9b8a' }} title={s.error}>broken</span>}
-          </div>
-        ))}
+        {/* ⚠ ITS OWN SCROLL BOX WITH A BOUNDED HEIGHT. The palette grows every time a block is added,
+            and an unbounded list pushes whatever follows it out of reach — which is exactly what it
+            did. Bounding it here means a new block costs scrolling inside this box and nothing else. */}
+        <div style={{ maxHeight: '38vh', overflowY: 'auto', paddingRight: 2 }}>
+          {FAMILY.map(fam => {
+            const mine = PALETTE.filter(m => familyOf(m) === fam.key)
+            if (!mine.length) return null
+            // ★ Full cubes before slabs, and a slab is identified by the SHIPPED predicate rather
+            // than by its name ending in " Slab" — a textual reader of someone else's naming rule
+            // is a standing claim about a file it does not own.
+            const sorted = [...mine].sort((a, b) => Number(isHalfMat(a)) - Number(isHalfMat(b)) || a - b)
+            const isOpen = open[fam.label] ?? fam.open
+            return (
+              <div key={fam.label} style={{ marginBottom: 5 }}>
+                <button
+                  onClick={() => setOpen(o => ({ ...o, [fam.label]: !isOpen }))}
+                  style={{ ...btn, width: '100%', textAlign: 'left', fontSize: 10, opacity: 0.85 }}>
+                  {isOpen ? '▾' : '▸'} {fam.label} <span style={{ opacity: 0.5 }}>{sorted.length}</span>
+                </button>
+                {isOpen && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 3, marginTop: 3 }}>
+                    {sorted.map(m => (
+                      <button key={m} onClick={() => setMaterial(m)} title={`${label(m)} (${m})`}
+                        style={{ ...btn, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis',
+                                 whiteSpace: 'nowrap', fontSize: 10,
+                                 borderColor: m === material ? '#ffcf8a' : 'rgba(150,180,210,0.25)',
+                                 color: m === material ? '#ffcf8a' : '#cfd8e0' }}>
+                        {label(m)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
 
         <div style={{ marginTop: 10, opacity: 0.45, fontSize: 10 }}>
           view: yaw {view.yaw.toFixed(2)} · pitch {view.pitch.toFixed(2)} · dist {view.dist.toFixed(0)}

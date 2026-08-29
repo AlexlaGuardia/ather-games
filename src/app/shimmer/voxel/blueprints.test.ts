@@ -11,6 +11,7 @@ import {
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { MAT } from './depth'
+import { ALL_BLOCKS, type BlockSkill } from './registry'
 
 let pass = 0
 const fails: string[] = []
@@ -216,6 +217,64 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
     '★★ every texture is sliced out of the array the game samples')
   ok(!/function paintFor|const paintFor/.test(page),
     '★ and the page defines no paint function of its own — seven previews that re-derived were right while the game was wrong')
+}
+
+// ── 11. ★★★ THE PALETTE MUST NOT BURY THE THING BELOW IT ──────────────────────────────────────
+// Found by LOOKING, not by asserting (2026-08-29). 65 blocks in two columns is 33 rows, and *saved
+// structures* — the LOAD half of "view and edit" — sat off the bottom of the viewport. Every assert
+// was about correctness and every one passed: the panel was correct and unusable. ⚠ These guards
+// exist because the defect returns for free the day someone adds blocks, and nothing would say so.
+{
+  const root = join(__dirname, '../../..')
+  const page = readFileSync(join(root, 'app/shimmer/dev/worktable/page.tsx'), 'utf8')
+
+  // ⚠⚠ COMMENTS STRIPPED FIRST, AND THE MUTATION SWEEP IS WHY. The first cut of this guard did a
+  // bare `indexOf('saved structures')` — and the page's own FAMILY docstring EXPLAINS the burial by
+  // naming the section, forty lines above the markup. So the guard matched the PROSE, concluded the
+  // order was right, and could not have failed however the JSX was arranged. **Documenting a marker
+  // created a marker** — the same shape that blinded the canon gate on 08-22, committed by the very
+  // comment written to prevent it. Accuracy is not the property that saves you here.
+  const markup = page.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*(\/\/|\*|\/\*).*$/gm, '')
+  const occurrences = (hay: string, needle: string) => hay.split(needle).length - 1
+  ok(occurrences(markup, 'saved structures') === 1 && occurrences(markup, 'material — ') === 1,
+    `★★★ BLIND CHECK: each section header appears EXACTLY ONCE in the markup ` +
+    `(saved ${occurrences(markup, 'saved structures')}, palette ${occurrences(markup, 'material — ')}) — ` +
+    'any other count and this reader is matching something it did not mean to')
+  ok(markup.indexOf('saved structures') < markup.indexOf('material — '),
+    '★★★ saved structures renders BEFORE the palette — the order IS the fix, asserted so it cannot silently revert')
+
+  // ⚠ A bounded box is the other half: the palette grows every time a block is added, and an
+  // unbounded list pushes whatever follows it out of reach no matter what order things are in.
+  ok(/maxHeight: '38vh'/.test(page),
+    '★★ and the palette lives in its own bounded scroll box, so a new block costs scrolling and nothing else')
+
+  // ★★ THE GROUPING IS DERIVED. A hand-kept family table would go stale the day a block is added —
+  // the same failure the palette itself was built to avoid one level up.
+  ok(/d\.skill \?\? d\.fastSkill/.test(page),
+    '★★★ families come off `skill ?? fastSkill`, the registry\'s own answer to "what tool does this want"')
+  ok(/isHalfMat/.test(page) && !/endsWith\('? ?Slab/.test(page),
+    '★★ and a slab is identified by the shipped predicate, never by its name ending in " Slab"')
+}
+
+// ── 12. ★★★ EVERY PLACEABLE BLOCK LANDS IN EXACTLY ONE FAMILY ─────────────────────────────────
+// The grouping is only honest if it PARTITIONS. A block whose tool family the panel does not list
+// is invisible in the worktable — placeable, in the registry, and unreachable — and it would be
+// invisible silently, which is how a palette quietly stops being the whole vocabulary.
+{
+  const placeable = ALL_BLOCKS.filter(b => b.placeable)
+  ok(placeable.length > 40, `★★ BLIND CHECK: ${placeable.length} placeable blocks — under 40 means this read the wrong set`)
+
+  const FAMILIES: (BlockSkill | null)[] = ['prospecting', 'forestry', 'farming', null]
+  const stranded = placeable.filter(b => !FAMILIES.includes(b.skill ?? b.fastSkill ?? null))
+  ok(stranded.length === 0,
+    `★★★ no placeable block falls outside the four families — ${stranded.map(b => `${b.name}(${b.skill ?? b.fastSkill})`).join(', ') || 'none stranded'}`)
+
+  // ★ AND THE PARTITION IS NOT VACUOUS — every family actually has members, so a grouping that
+  // collapsed everything into one bucket would go red rather than look tidy.
+  for (const fam of FAMILIES) {
+    const n = placeable.filter(b => (b.skill ?? b.fastSkill ?? null) === fam).length
+    ok(n > 0, `★ the '${fam ?? 'fixtures'}' family is non-empty (${n} blocks)`)
+  }
 }
 
 if (fails.length) {
