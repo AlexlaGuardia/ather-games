@@ -167,6 +167,36 @@ export interface FrameProfile {
    */
   worstGpuStatus: 'ok' | 'pending' | 'dropped' | 'unavailable'
   /**
+   * JS heap change across the worst frame, in MB. `null` where the host does not expose it.
+   *
+   * ★★★ THIS IS THE LINE THAT SPLITS THE TWO MAIN-THREAD SUSPECTS, and nothing else here can.
+   * `worstGpuMs` separates a busy GPU from a blocked main thread. It does NOT say WHY the main
+   * thread was blocked, and the two live candidates want opposite fixes:
+   *   · **GC** — the mesher churns 154-390 KB of fresh typed arrays per column (measured
+   *     2026-08-29) and drops the previous set, so a streaming burst is a garbage firehose. A
+   *     collection shows up here as a large NEGATIVE delta on the stalling frame.
+   *   · **Buffer upload** — three.js uploads a `BufferGeometry` lazily at first draw, synchronously
+   *     on the main thread under ANGLE/D3D11. That allocates on the GPU, not the JS heap, so it
+   *     shows up here as a delta near ZERO, or positive from ordinary allocation.
+   * A quarter-second stall with the heap FLAT is not GC. A quarter-second stall with the heap
+   * dropping 40MB is not an upload. One number, and it retires one of them.
+   *
+   * ⚠ IT IS A DELTA ACROSS ONE FRAME, NOT A HEAP SIZE. A heap total says how much is live and
+   * answers a different question (that is LEAK WATCH's job); the stall question is what MOVED
+   * during the freeze.
+   *
+   * ⚠ SAMPLED AT `frameEnd`, SO IT BRACKETS `frameEnd(N-1) → frameEnd(N)` while `dtRaw` brackets
+   * `callbackStart(N-1) → callbackStart(N)`. Same length, offset by the render submit — stated
+   * rather than smoothed over, because this file has twice shipped a reading whose parts came from
+   * a different frame than its duration. It is right for "did a collection happen during the
+   * stall" and must not be read as exact frame accounting.
+   *
+   * ⚠ `performance.memory` IS CHROME-ONLY, NON-STANDARD, AND QUANTISED. Absent everywhere else,
+   * which is why this is `null` and not `0` — a zero delta is a real and load-bearing answer here,
+   * so it must never be the value that means "not measured".
+   */
+  worstHeapMb: number | null
+  /**
    * Did **every frame counted in this window** stamp a callback start, so that `PROLOGUE_ROW` and
    * `TAIL_ROW` are real for all of them?
    *
@@ -340,6 +370,17 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
   /** Monotonic query id. `beganSeq` is the open one; `closedSeq` the one `gpuEnd` just closed. */
   let seq = 0, beganSeq = -1, closedSeq = -1
   /** The query spanning the worst frame, and its result once it lands. */
+  /**
+   * Last frame's heap reading, in bytes, so a delta can be taken across the frame boundary. -1 =
+   * no sample yet (first frame of a run), which must not be published as a huge false delta.
+   */
+  let prevHeap = -1
+  let worstHeapBytes: number | null = null
+  /** Chrome only. Read through a function so an absent API is decided once, not per frame. */
+  const heapNow = (): number => {
+    const m = (performance as unknown as { memory?: { usedJSHeapSize?: number } }).memory
+    return typeof m?.usedJSHeapSize === 'number' ? m.usedJSHeapSize : -1
+  }
   let worstSeq = -1, worstGpuNs: number | null = null
   let worstGpuState: FrameProfile['worstGpuStatus'] = 'pending'
 
@@ -373,6 +414,11 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       prevPrologue = 0; prevReady = false; partitionOn = false
       prevPartitioned = false; windowPartitioned = true
       worstPrologue = 0; worstTail = 0; worstSplit = false
+      // ⚠ `prevHeap` is deliberately NOT cleared here. It is a rolling sample of the world, not a
+      // property of the window — clearing it would throw away the only reading a new window's FIRST
+      // frame could take a delta against, and that frame is disproportionately likely to be the
+      // stalling one (a window often opens on a load or a teleport).
+      worstHeapBytes = null
       worstSeq = -1; worstGpuNs = null; worstGpuState = 'pending'
     },
     get gpuStatus() { return gpuStatus },
@@ -469,6 +515,7 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
         // instead would hand back the LAST frame's parts wearing the worst frame's duration —
         // two frames spliced into one reading, which is the shape that corroborates a wrong
         // answer. That is also the defect the attribution above fixes, one level up.
+        const h = heapNow()
         if (dtRaw > worst) {
           worst = dtRaw
           worstAt = t
@@ -485,8 +532,15 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
           worstSeq = closedSeq
           worstGpuNs = null
           worstGpuState = 'pending'
+          // Same pairing discipline as `prevAcc` directly above: the interval that stalled ended
+          // at THIS sample and began at the previous one, so the delta is taken against `prevHeap`
+          // and never against a sample from some other frame.
+          worstHeapBytes = (h >= 0 && prevHeap >= 0) ? h - prevHeap : null
         }
       }
+      // Roll the heap sample too, and unconditionally for the same reason the zone roll is: a
+      // sample taken only on interesting frames would compare across a gap of unknown length.
+      { const h2 = heapNow(); if (h2 >= 0) prevHeap = h2 }
       // Roll: this frame becomes the one the NEXT dt describes. Unconditional — see above.
       prevAcc.clear()
       for (const [k, v] of frameAcc) prevAcc.set(k, v)
@@ -592,6 +646,7 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
         // pending and nothing was dropped; saying otherwise sends a reader hunting a driver quirk
         // that is really a missing extension.
         worstGpuStatus: !ext ? 'unavailable' : worstGpuState,
+        worstHeapMb: worstHeapBytes === null ? null : worstHeapBytes / (1024 * 1024),
         // ⚠ THE WINDOW'S OWN PROPERTY, NOT THE INSTRUMENT'S CURRENT STATE — see `windowPartitioned`.
         partitioned: windowPartitioned,
         // ⚠ AGAINST WALL CLOCK, NEVER AGAINST THE ZONE SUM. Deriving the total from the parts is how
@@ -613,6 +668,11 @@ export function createProfiler(now: () => number = () => performance.now()): Pro
       // chain, not window totals — clearing them would make the first frame of every window
       // unattributable and quietly drop four frames a second.
       worstPrologue = 0; worstTail = 0; worstSplit = false
+      // ⚠ `prevHeap` is deliberately NOT cleared here. It is a rolling sample of the world, not a
+      // property of the window — clearing it would throw away the only reading a new window's FIRST
+      // frame could take a delta against, and that frame is disproportionately likely to be the
+      // stalling one (a window often opens on a load or a teleport).
+      worstHeapBytes = null
       worstSeq = -1; worstGpuNs = null; worstGpuState = 'pending'
       return out
     },
@@ -736,6 +796,21 @@ export function snapshotText(p: FrameProfile, ctx: {
         : p.worstGpuStatus === 'pending'
           ? `  gpu on THIS frame  pending — the query had not landed when the window closed; the next one may carry it`
           : `  gpu on THIS frame  UNAVAILABLE (${ctx.gpuStatus})`)
+    // ★★★ AND THE LINE THAT SPLITS THE MAIN-THREAD HALF. `gpu on THIS frame` says whether the GPU
+    // was busy; this says, when it was NOT, whether the main thread was in a collection or in the
+    // driver. Printed with its own reading of what it means, because a bare signed number invites
+    // the reader to supply the interpretation and the two interpretations are opposite.
+    if (p.worstHeapMb !== null) {
+      const d = p.worstHeapMb
+      L.push(`  js heap on THIS frame  ${d >= 0 ? '+' : ''}${n(d, 1)} MB  ·  ${
+        d < -4 ? 'a collection ran during this frame — GC is a live suspect'
+        : Math.abs(d) < 1 ? 'flat — NOT a collection; look at buffer upload / driver'
+        : 'ordinary allocation, no collection'}`)
+    } else {
+      // ⚠ Absence stated, never rendered as 0.0 — a flat heap is a real answer here and must not
+      // share a rendering with a measurement nobody took.
+      L.push('  js heap on THIS frame  unavailable (performance.memory is Chrome-only)')
+    }
     for (const z of p.worstZones) L.push(`  ${n(z.ms, 2).padStart(7)} ms  ${n(z.pct, 0).padStart(3)}%  ${z.name}`)
   }
   // ⚠ SAY WHEN THE SPLIT IS NOT AVAILABLE. Without it a reader sees one undivided UNACCOUNTED row

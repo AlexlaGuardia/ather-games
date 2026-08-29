@@ -4790,6 +4790,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const queueRemesh = useCallback((cx: number, cz: number) => {
     if (cols.current.has(key(cx, cz))) remeshQueue.current.add(key(cx, cz))
   }, [])
+  /**
+   * A running estimate of what ONE `remesh` costs, in ms. Seeded high on purpose: the first drain
+   * of a session has no measurement to reason from, and guessing LOW there spends a whole frame
+   * finding out. It converges within a few columns.
+   */
+  const remeshCostMs = useRef(12)
   /** Mesh queued columns until the frame budget runs out. Always does at least one so the queue
    *  cannot starve on a slow machine whose every mesh overruns the budget. */
   const drainRemeshQueue = useCallback((pcx: number, pcz: number, budgetMs: number) => {
@@ -4804,10 +4810,33 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       return ((ax - pcx) ** 2 + (az - pcz) ** 2) - ((bx - pcx) ** 2 + (bz - pcz) ** 2)
     })
     const end = performance.now() + budgetMs
+    // ── ★★ THE BUDGET USED TO BE CHECKED AFTER THE WORK, WHICH MADE IT DECORATIVE ──────────────
+    // The old loop ran `remesh` and only then asked whether the budget was spent, so it could not
+    // decline a column — it could only notice, one whole column too late, that it should have.
+    // MEASURED 2026-08-29 on generated columns with full neighbours: `meshColumn` is 11.2ms in open
+    // country and 15.5ms in forest, against a 12ms budget. So the old loop's real behaviour was:
+    // open country 11.2 < 12, start a SECOND, break at ~22ms; forest break at 15.5ms. Either way it
+    // OVERRAN a 16.7ms frame every frame that streamed, by arithmetic, on every machine.
+    //
+    // ⚠ THE STARVATION GUARD STAYS AND IT IS NOT NEGOTIABLE. A machine whose every mesh overruns
+    // the budget must still make progress, or the world stops loading and the fix reads as a
+    // hang — strictly worse than the hitch it replaces. So the FIRST column is unconditional and
+    // only the SECOND onward has to fit. That is the whole change: `first` below, nothing else.
+    let first = true
     for (const k of keys) {
+      // Only the estimate decides, never the queue length: a long queue is exactly when a frame is
+      // most tempting to overspend and least able to afford it.
+      if (!first && performance.now() + remeshCostMs.current > end) break
       q.delete(k)
       const [gx, gz] = k.split(',').map(Number)
+      const t0 = performance.now()
       remesh(gx, gz)
+      const spent = performance.now() - t0
+      // EWMA, weighted toward the recent: column cost varies 11→15ms by terrain (forest carries
+      // leaf geometry open country does not), so a lifetime mean would under-estimate exactly where
+      // it matters. A slow column raises the bar for the next one in the SAME frame.
+      remeshCostMs.current = remeshCostMs.current * 0.7 + spent * 0.3
+      first = false
       if (performance.now() > end) break
     }
   }, [remesh])

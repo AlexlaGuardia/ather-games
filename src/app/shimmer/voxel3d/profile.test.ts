@@ -870,6 +870,31 @@ const accountFrame = (p: Profiler, dt: number) => p.frameEnd(dt)
     `★★ a stall whose query DID open still gets its own gpu timing (${w2.worstGpuMs}ms, ${w2.worstGpuStatus})`)
 }
 
+// ── ★★★ THE HEAP DELTA — THE LINE THAT SPLITS GC FROM BUFFER UPLOAD (2026-08-29) ───────────────
+// `worstGpuMs` separates a busy GPU from a blocked main thread. It cannot say WHY the main thread
+// was blocked, and the two candidates want opposite fixes. This asserts the field is honest about
+// being unmeasurable, because that is the failure mode that would matter here: node has no
+// `performance.memory`, so if `null` and `0.0` shared a rendering, every reading taken off a
+// non-Chrome host would say "flat — NOT a collection" about a measurement nobody took.
+{
+  const c = clock()
+  const p = createProfiler(c.now); p.enabled = true
+  const frame = (dt: number) => { p.frameStart(); c.c.t += 2; p.mark('world'); c.c.t += 6; p.frameEnd(dt); c.c.t += 8 }
+  frame(0.016); frame(0.016); frame(0.300); frame(0.016)
+  c.c.t += WINDOW_MS + 1
+  const w = p.publish()!
+
+  ok(w.worstHeapMb === null,
+    `★★ where the host exposes no heap API the delta is NULL, never 0 (${w.worstHeapMb})`)
+  const ctx = { space: 'plot' as const, x: 0, y: 0, z: 0, viewRadius: 12,
+    cols: 1, meshes: 1, draws: 1, tris: 1, geometries: 1, programs: 1, gpuStatus: 'ok' }
+  const txt = snapshotText(w, ctx)
+  ok(/js heap on THIS frame  unavailable/.test(txt),
+    '★★★ and the table SAYS it is unavailable rather than printing a flat 0.0 MB')
+  ok(!/NOT a collection/.test(txt),
+    '★★★ so an unmeasured heap can never render as the sentence that EXONERATES GC — the whole point')
+}
+
 if (fails.length) {
   console.log(`\n${fails.map(f => `  ✗ ${f}`).join('\n')}\n`)
   console.log(`❌ ${fails.length} failed, ${pass} passed`)
