@@ -66,6 +66,36 @@ what tsc rejects, wearing a syntax error instead of a type error. A semicolon fi
 errors hiding underneath were real (`m = S` gave the parameter the LITERAL type of `CUT_STONE`, so
 every other material in the file was a type error).
 
+### ★★★ BLUEPRINTS CARRY PIECES NOW — blocks alone cannot make a building (`BUILD_ID KIq_HMs9Xwa2ORpkEl1XU`)
+14 pieces are the building vocabulary — doorway, window, door, shutter, arch, gate, roof_slope,
+roof_cap, stair, beam, fence, half_slab, bracket, hook — and a blueprint could hold **none of them**.
+Anything batch-generated would have been a block-box with a hole where a door goes, and Alex would
+have hit the identical wall in the worktable the moment he tried to hang one. Raised while scoping
+batch generation; built because it is **shape-agnostic** and therefore not blocked by the canon gap.
+- **`BlueprintPiece` IS `Placement`**, not a restatement of it — so `stampPieces` is a translation
+  with no field mapping and no default invented at the boundary. `piece-mesh.ts` records exactly what
+  the copy-of-a-type version cost: when `open?` was added, a narrower structural type **silently
+  dropped it**, and an open door would have arrived as a closed one with no error anywhere.
+- **`pieces?` is OPTIONAL and the key is OMITTED when empty** — the save-compat reasoning
+  `Placement.open` already records. A blueprint written before pieces existed must round-trip byte
+  for byte; emitting `"pieces": []` rewrites every one of them on first read. **Asserted, not trusted.**
+- **ONE normalize over blocks AND pieces.** Re-basing each on its own minimum slides them apart by
+  the difference — *a door that was IN a wall ends up beside it* — and nothing reports it, because
+  each collection is internally perfect. Mutation-verified.
+- **Bounds cover piece footprints, passable cells included.** The size has to contain the hole you
+  walk through. `pieceFootprint` asks `cellsOf`; a second footprint derivation here would be a mirror
+  of a rule that lives one module over.
+- **Overlap is SOLID-vs-solid only.** A bracket hung in an arch's opening is ordinary building; two
+  solid pieces in one cell is a file no editor can produce. ⚠ Getting this backwards refuses real work.
+- **"no blocks is not a structure" became "no blocks AND no pieces"** — a fence line is a legitimate
+  blueprint. A rule that was correct while blocks were the only content and wrong the moment pieces
+  arrived; the exemption did not expire on its own.
+- The editor places them, drawn by **`createPieceRenderer` — the shipped renderer, mounted**, not
+  boxes drawn on this page. `setWorldSolid` is fed the blueprint's own blocks so fence arms connect
+  the way they will in the world.
+- ✅ **Verified by clicking, not asserting:** 6 blocks + 2 doorways reads `9x3x8` in the panel — 3
+  tall *because the doorway extends the bounds*, which is the footprint rule visible in the real UI.
+
 ### ★★ THE PALETTE WAS BURYING THE LOAD BUTTON, AND ONLY LOOKING FOUND IT (same day, `BUILD_ID bplxiYbQ-nsHsi64ZI00x`)
 Alex asked what blocks me from building unaided. Answering it honestly meant testing the claim, so I
 shot the page headlessly (`WORLD_OWNER=1`, the rig's own owner bypass) and **read the PNG** — and the
