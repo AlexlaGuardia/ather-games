@@ -11,6 +11,80 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 📐 Shimmer voxel3d — **THE PROFILER'S 249% WAS NOT A DOUBLE COUNT — IT WAS TWO FRAMES SPLICED, IN THE ONE BRANCH THE LAST FIX DID NOT TOUCH** (2026-08-29, hub lane) · *Last touched 2026-08-29 (hub) — profile oracle **110 asserts**, 6/6 mutations fire, tsc 7 (baseline). NOT deployed.*
+
+### Left off — the diagnosis on the board was wrong, and checking it is what found the bug
+Last night's note filed Alex's UHD 630 reading (`249%`, a **negative** `UNACCOUNTED`) as *"the partition
+double-counts."* It does not. The partition divides **exactly** and a fuzz over 13,303 windows could not
+make it over-count. **The defect was in `frameEnd`'s un-partitioned FALL-BACK branch**, which paired the
+CURRENT frame's zone map with a `dtRaw` that describes the **PREVIOUS** frame — precisely the defect
+`fad9e08` fixed for `worstZones`, surviving in the one branch that commit did not touch. An expensive
+frame following a cheap one therefore reports parts that outrun the whole. Reproduced deterministically:
+a 240ms frame after a 16ms one publishes **`measured 193.00 of a 16.00 ms frame — 1206%, UNACCOUNTED
+-177.00`**. 249% is the same shape at a smaller ratio.
+
+### ★★★ AND THE HOST GUARANTEED IT HAPPENED, ONCE PER SESSION, ON THE WORST POSSIBLE FRAME
+Every profiler entry point returns on `enabled` first. `VoxelWorld.tsx` assigned
+`prof.current.enabled = settings.showFps` **below** `prof.current.frameStart()` — so the frame that
+switches the panel on ran its marks and its `frameEnd` and **never got a callback stamp**. One
+un-partitioned frame at the head of every session, and it is the most expensive frame in the run: the
+panel mounts, React re-renders, the first profiled work lands. **The first window Alex ever sees is the
+one built on the spliced frame.** Fixed in both places — the host stops minting them, and `profile.ts`
+attributes one correctly anyway.
+
+### ★★ THE FIELD WHOSE JOB IS TO SAY "THIS MEASUREMENT WAS NOT TAKEN" SAID IT WAS
+`partitioned` was read off `partitionOn` **at publish time** — a different question from the one it
+names. A window whose only counted frame had no stamp still reported `true`, because by the time the
+window closed the host was stamping again, so `snapshotText`'s *"the remainder is UNDIVIDED"* note stayed
+silent on exactly the reading that needed it. It is a property of the **window** now, ANDed over the
+counted frames, fail-closed: one undivided frame makes the window undivided. Same fix for the worst
+frame's prologue/tail rows, which were keyed on the instrument and would hand an undivided worst frame
+two rows reading `0.00` — **a measurement never taken, printed as one that came back empty.**
+
+### ⚠ AND `publish()` WAS EATING THE FRAME IT WAS CALLED FROM
+The host publishes from the **middle** of its frame callback (between the `hud` and `save` marks),
+because the snapshot quotes scene facts that only exist inside the frame. `publish` cleared `frameAcc`
+along with the window totals — but `frameAcc` is **per-frame** state. One frame per window reached the
+next window carrying its prologue and its tail and **none of its zones**, which inflates `UNACCOUNTED`
+by a whole frame's marked work and dilutes every zone mean — in the direction that reads as *"nobody
+wrapped this"*. Measured before the fix: `2.17ms` of phantom remainder on a frame that divided exactly.
+
+### ★ ONE MORE, THE SAME SENTENCE ONE FIELD OVER
+`gpuEnd` returns early when there is nothing to close and used to leave `closedSeq` holding the
+**previous** frame's query id, so `worstSeq = closedSeq` tagged the stall with a query spanning a
+different interval. Reachable whenever `gpuBegin` could not open one (`createQuery` null, a context loss
+between the halves) — likeliest on exactly the flaky-timer machines the field exists to answer about.
+The mutation prints the concrete wrong answer: **`14ms`, status `ok`**, on the one row a reader uses to
+decide *blocked in the driver* vs *waiting on a busy GPU*. Now `-1`, so the reading is withheld.
+
+### Decisions
+- **The first frame after `enabled` is not counted, in EITHER mode** — its delta reaches back before the
+  profiler was watching. Partition mode already refused it; the fall-back counted it. That is a contract
+  change and it reddened eleven existing asserts, every one repaired rather than deleted: a one-frame
+  test now publishes **nothing**, and `accountFrame(p, dt)` names why in the oracle.
+- **Two of my own new guards were decoration and the sweep caught both.** The publish-mid-frame fixture
+  marked ONE zone before publishing — and a zone reaches `frameAcc` only when the NEXT mark closes it, so
+  the map was empty and clearing it was invisible. The worst-frame row check asserted the WINDOW table.
+  Both fixtures now reach the bug; both mutations fire.
+- **And my first positive control failed for the right reason.** The fake GL answered query results
+  instantly, so every query drained before `frameEnd` could name it and the worst frame read `pending` in
+  every case — including the healthy one. A fake that cannot reproduce success cannot prove a failure.
+
+### Next
+- ⏳ **Alex re-reads the panel on the UHD 630** — press the FPS toggle and check the FIRST window is now
+  sane. That is the reading that was broken, and none of this has been in a browser.
+- **NOT DEPLOYED.** `play` booted mid-session and holds its lane; the deploy is hub's on Alex's go.
+- The `worstAt` doc said *"when the worst frame ENDED"* and it is the **accounting** stamp, one frame
+  late — true in partition mode before this round too. Corrected, not re-timed: it is a lattice probe and
+  a constant offset does not disturb a period.
+- ⚠ Context-loss handling around `gpuBegin`/`gpuEnd` is **not** hardened: `attach(null)` between the two
+  halves leaves `querying` true. Named, not fixed — it wants its own round.
+
+### Files
+- `src/app/shimmer/voxel3d/profile.ts` — the attribution chain, `windowPartitioned`, `worstSplit`, `closedSeq`
+- `src/app/shimmer/voxel3d/profile.test.ts` — blocks 13-17, `accountFrame`, 110 asserts
+- `src/app/shimmer/voxel3d/VoxelWorld.tsx` — the gate moved above the stamp (8 lines, useFrame head)
+
 ## 🗼 Shimmer voxel3d — **THE GATE GROWS A TOWER, AND THE GUARDS CAUGHT ME THREE TIMES BUILDING IT** (2026-08-29, hub lane) · *Last touched 2026-08-29 (hub) — `4ba4843` pushed, 0 unpushed, tsc 7 (baseline), canon 0 CONFLICT / 13 CLEAN, crossings **4001 asserts**, court-wiring 31, sweep **196/196 · 0 FAIL · 0 KILLED**. ✅ **DEPLOYED** `BUILD_ID 2QnqixlRCXj8GhAfDJl3O`, 157 chunks, verified AS SERVED and photographed standing in prod.*
 
 ### Left off — Alex asked for a 3D structure and the answer was no
