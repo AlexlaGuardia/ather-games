@@ -114,8 +114,19 @@ function Inst({ geo, materials, cells }: { geo: THREE.BoxGeometry; materials: TH
  */
 function Audience({ green, entryYaw, base }: { green: Box; entryYaw: number; base: number }) {
   const seats = useMemo(() => holdRows(green, entryYaw), [green, entryYaw])
-  const geo = useMemo(() => new THREE.CapsuleGeometry(0.28, 0.5, 3, 6), [])
-  const mat = useMemo(() => new THREE.MeshLambertMaterial({ color: '#6d6a55', emissive: '#3a3720' }), [])
+  const geo = useMemo(() => new THREE.CapsuleGeometry(0.3, 0.55, 3, 6), [])
+  // ★★ THEY HAVE TO READ AS LIGHTS, AND THE FIRST PASS DID NOT. Dim grey capsules on brown banks
+  // vanished at dusk — and canon's whole first image of this hold, from the bramble road, is
+  // *"small lights, moving, in rows"*, with the horror arriving only when you get close enough to
+  // see what they are. An audience you cannot pick out is not the set piece canon says it is.
+  //
+  // ⚠ DIMMED, NOT DARK, AND THE DISTINCTION IS THE ACT. *"He collars the brightest thing in the
+  // world and keeps it just bright enough to show."* A Luminara at full brightness here says the
+  // opposite thing; one that is merely dark says they have already been put out. This is the
+  // guttering middle, and it is what the S6 reward lifts.
+  const mat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: '#c8b168', emissive: '#8a6f28', emissiveIntensity: 0.85, roughness: 0.7,
+  }), [])
   return (
     <>
       {seats.map((s, i) => (
