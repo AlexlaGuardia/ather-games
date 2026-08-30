@@ -8,7 +8,7 @@
 
 import {
   bridgeSpecs, bridgeAt, deckTopAt, bridgeVoxelAt, __clearBridgeCache, BRIDGE_REACH, kindFor,
-  bridgeGenPiecesForCol, ABUT_REACH,
+  bridgeGenPiecesForCol, ABUT_REACH, deckFloorAt,
 } from './bridges'
 import { STORY_NODES } from './story-path'
 import { columnHeight } from './height'
@@ -139,9 +139,34 @@ for (const SEED of SEEDS) {
     // is here for the day a seed generates a crossing under ~16 blocks, not as evidence the clamp
     // is exercised now. An assert with no input that can make it fire is decoration, and calling
     // this one covered would be the same lie as a guard that cannot see its subject.
-    const crown = Math.round((deckTopAt(b, b.span / 2) - (b.table + 1)) * 2)
-    check(`s${SEED}/${b.id}: rise is the crown the deck actually reaches`, crown === b.rise,
-      `spec says ${b.rise}, profile gives ${crown}`)
+    //
+    // ⚠⚠ AND IT ASKS THE ARCH, NOT THE DECK — CORRECTED 2026-08-30 WHEN "the deck at the rim" LANDED.
+    // This measured `deckTopAt(mid) - (table + 1)`, which was the arch's crown only while the arch
+    // was the ONLY thing lifting the deck. `deckFloorAt` is now a second term, so on a gorge the
+    // measurement returns the RIM: `s5/vetch-hold-7` gave 20 against a `rise` of 2 and the assert
+    // went red on a crossing that is flush at both ends. ★ The fix is not to subtract the floor and
+    // compare the remainder — that is a mirror of `deckTopAt`'s own `max`, and it would pass for a
+    // deck of any shape. Ask the real `deckTopAt` for a spec whose RIMS ARE NEUTRAL: the arch is
+    // then the only term left standing, which is exactly the quantity `rise` names.
+    const flatRims = { ...b, abut: [b.table + 1, b.table + 1] as [number, number] }
+    const crown = Math.round((deckTopAt(flatRims, b.span / 2) - (b.table + 1)) * 2)
+    check(`s${SEED}/${b.id}: rise is the crown the arch actually reaches`, crown === b.rise,
+      `spec says ${b.rise}, arch gives ${crown}`)
+
+    // ★★ AND THE DECK MAY NOT SAG BELOW THE LOWER OF ITS TWO RIMS — the guard for the other half of
+    // "the deck at the rim". Without it, raising `ABUT_UP` alone builds a hammock: both ramps decay
+    // toward `base`, so a 9-wide gorge with both rims at 129 dips to 127 in the middle. A bridge
+    // does not sag toward the river it crosses. Asks `deckFloorAt` rather than restating it.
+    {
+      const floor = deckFloorAt(b)
+      let below = 0, worstSag = 0
+      for (let t = 0; t <= b.span; t++) {
+        const d = deckTopAt(b, t)
+        if (d < floor) { below++; worstSag = Math.max(worstSag, floor - d) }
+      }
+      check(`s${SEED}/${b.id}: the deck never sags below the lower of its two rims`, below === 0,
+        `${below} of ${b.span + 1} columns, worst ${worstSag}`)
+    }
     check(`s${SEED}/${b.id}: both ramps fit inside the span`, 2 * b.rise <= b.span + 1,
       `rise ${b.rise}, span ${b.span}`)
   }
@@ -663,7 +688,14 @@ for (const SEED of SEEDS) {
       // ★ Ask the WORLD for the surface on both sides and the units cannot drift apart again.
       const surfAt = (x: number, z: number): number | null => {
         const h = columnHeight(x, z, SEED)
-        for (let y = h + 6; y >= h - 8; y--) {
+        // ⚠⚠⚠ THE SCAN TOP IS DERIVED FROM `BRIDGE_REACH`, AND IT USED TO BE `h + 6`.
+        // Six is generous for a deck sitting one block over a waterline and BLIND to a deck at the rim of
+        // a gorge: `s5/vetch-hold-7` carries its deck 14 blocks above the bed it spans, so a window
+        // anchored on `columnHeight` scanned right past it and returned the GORGE FLOOR as the deck's
+        // surface. That reads as a 5-block step off a crossing that is in fact flush at both ends — a
+        // wrong answer, not a missing one. `BRIDGE_REACH` is exactly how far above its own ground a
+        // bridge cell may be, so it is the only honest ceiling here; +2 covers the rail above the deck.
+        for (let y = h + BRIDGE_REACH + 2; y >= h - 8; y--) {
           const m = materialAt(x, y, z, SEED, h)
           if (m === MAT.WATER) return null            // standing water is not a landing
           if (isSolid(m)) return isHalfMat(m) ? y + 0.5 : y + 1
@@ -687,6 +719,75 @@ for (const SEED of SEEDS) {
   }
   check(`s${SEED}: no crossing-end is a full-block step off the deck`, vaults === 0,
     `${vaults} of ${landed} — ${worst.join(' · ')}`)
+}
+
+// ── ★★★ THE GORGE — THE CASE "THE DECK AT THE RIM" EXISTS FOR (2026-08-30, Alex: *"do the deck
+// at the rim"*) ──────────────────────────────────────────────────────────────────────────────
+// `s5/vetch-hold-7` is a **9-wide, 13-deep gorge**: both banks flat at 129, water table 118, bed
+// 116, and the story road walks it at 129 on both sides. Clamped to `table + 1 + 2` the deck sprang
+// at 121 and left an 8-block cliff at EACH end - the worst landing on the map.
+//
+// ⚠⚠ AND IT IS GUARDED BY NAME RATHER THAN BY ADDING SEED 5 TO `SEEDS`. That seed carries four
+// unrelated pre-existing failures (a deck hole and an unreachable near end on `vetch-hold-5`, 74
+// lone stakes, a deck cell with no surface on `thistle-hold-4`) - all four verified present on
+// HEAD in an isolated worktree, none of them this fix's doing. Importing them would put a standing
+// red in the suite, and a standing red is how a suite stops being read. ★ But leaving the fix
+// UNGUARDED because its only witness lives on an awkward seed is the same mistake wearing the
+// opposite coat: seeds 1 and 1337 contain no gorge at all, so every assert above is green whether
+// `ABUT_UP` is 10 or 2. **An unexercised clamp is not a working clamp.**
+{
+  const S = 5
+  __clearBridgeCache()
+  const b = bridgeSpecs(S).find(x => x.id === 'vetch-hold-7')
+  check('s5/vetch-hold-7 exists — the gorge fixture is still on the map', b !== undefined)
+  if (b) {
+    const base = b.table + 1
+    // ★ ASSERT THE FIXTURE IS STILL THE FIXTURE. If worldgen ever moves this crossing off its gorge
+    // the asserts below start passing for the wrong reason, which is the hole every "assert the
+    // coverage" note in this file is about.
+    check('s5/vetch-hold-7 is still a gorge — both rims stand well above the waterline',
+      b.abut[0] - base >= 8 && b.abut[1] - base >= 8,
+      `rims +${b.abut[0] - base} / +${b.abut[1] - base} over base ${base}`)
+
+    // ★★ THE DECK IS READ AGAINST THE SURVEY, NOT AGAINST ITS OWN FORMULA. Comparing the springing
+    // to `endAt(...)` would restate `deckTopAt` and pass for a deck of any shape.
+    //
+    // ⚠⚠ BUT ASK THE CHEAPEST-WRONG-ANSWER QUESTION OF IT, BECAUSE IT HAS ONE: `abut` is the survey
+    // value AFTER `ABUT_UP` clamped it, so if the clamp is tightened back to 2 this assert still
+    // passes - deck 121 against a rim the survey now also calls 121, agreeing perfectly about the
+    // wrong height. Mutation-verified: `ABUT_UP = 2` leaves this GREEN. It is the two asserts either
+    // side of it that trip - the gorge-is-still-a-gorge check above, and the clearance below - so
+    // neither of those is decoration and neither may be deleted as redundant.
+    for (const [end, t, rim] of [['near', 0, b.abut[0]], ['far', b.span, b.abut[1]]] as const) {
+      check(`s5/vetch-hold-7: the deck springs level with the ${end} rim`, deckTopAt(b, t) === rim,
+        `deck ${deckTopAt(b, t)} vs measured rim ${rim}`)
+    }
+
+    // ★★ AND IT RUNS THERE — a deck that touches both rims and dives between them is a hammock. The
+    // rims are equal here, so the whole span must sit at the rim; `deckFloorAt` is asked, not copied.
+    let low = 0, worst = 0
+    for (let t = 0; t <= b.span; t++) {
+      const d = deckTopAt(b, t)
+      if (d < deckFloorAt(b)) { low++; worst = Math.max(worst, deckFloorAt(b) - d) }
+    }
+    check('s5/vetch-hold-7: the deck runs at the rim across the whole gorge', low === 0,
+      `${low} of ${b.span + 1} columns sag, worst ${worst}`)
+
+    // ★★ CLEARANCE OVER THE BED — the independent tripwire, and the one that does not go through
+    // `abut` at all. A gorge crossing carries its deck a long way over what it spans; a deck pinned
+    // near the waterline does not, however self-consistent the rest of the spec is about it.
+    const deckTop = Math.max(...Array.from({ length: b.span + 1 }, (_, t) => deckTopAt(b, t)))
+    check('s5/vetch-hold-7: the deck clears the gorge floor it spans', deckTop - b.bed >= 12,
+      `deck ${deckTop} over bed ${b.bed} = ${deckTop - b.bed}`)
+
+    // ⚠ AND THE Y-GATE MUST STILL COVER IT. A deck 13 blocks over its own bed is exactly the thing
+    // `BRIDGE_REACH` is derived to admit; if the derivation ever stops tracking `ABUT_UP`, the top
+    // of this crossing is sliced off silently and it still looks like a deck from the bank.
+    const rail = deckTop + 1
+    check('s5/vetch-hold-7: the y-gate reaches its rail', rail - b.bed <= BRIDGE_REACH,
+      `rail ${rail} over bed ${b.bed} = ${rail - b.bed} vs BRIDGE_REACH ${BRIDGE_REACH}`)
+  }
+  __clearBridgeCache()
 }
 
 // ── the survey is a pure function of the seed ────────────────────────────────────────────────

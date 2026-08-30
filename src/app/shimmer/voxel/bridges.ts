@@ -232,8 +232,45 @@ export const ABUT_REACH = 4
  * ★ EXPORTED so `scripts/bridge-clamp-sweep.mts` can ask for it instead of keeping its own `const
  * ABUT_MAX = 2`. A guard that hand-copies the value it is checking agrees with its source while both
  * go stale, and reads as corroboration rather than as the mirror it is.
+ *
+ * ★★★ AND IT IS TWO NUMBERS NOW, BECAUSE IT WAS ONE CONSTANT ANSWERING TWO QUESTIONS WHOSE COSTS
+ * ARE NOTHING ALIKE (2026-08-30, Alex: *"do the deck at the rim"*). Measured over 40 seeds / 383
+ * crossing-ends, the clamp bound 14 times and the split was **UP 8 / DOWN 6** — the board had this
+ * tail recorded as the upward half alone, which was true of the two seeds it was measured on.
+ *
+ *   · UP costs `BRIDGE_REACH`, `depth.ts`'s cheap y-band gate on every column near the story path.
+ *     That is a real budget and it is why a clamp exists at all.
+ *   · DOWN costs nothing at all: `deckTopAt`'s `endAt` is `max(base, land)`, so a bank below the
+ *     waterline never moves the deck — it may not drop into its own river. The only consumer of a
+ *     below-base landing is the APRON's length.
+ *
+ * ⚠⚠ SO THEY MUST NOT MOVE TOGETHER. `ABUT_DOWN` is deliberately left at the old 2: the apron is a
+ * ribbon that lays a deck course and NO FILL, so over ground that falls away a longer one FLOATS.
+ * Measured: lengthening it scored 21 -> 15 vaults on this sweep and simultaneously put **34 AIR
+ * cells and 9 railing posts over nothing** into `bridges.test.ts`. The downward tail wants an
+ * EMBANKMENT and that is a mechanism, not a constant. Raising this number is not the fix and it
+ * looks exactly like one.
  */
-export const ABUT_MAX = 2
+export const ABUT_DOWN = 2
+
+/**
+ * ★★★ HOW FAR THE DECK MAY CLIMB TO MEET A HIGH BANK — "the deck at the rim".
+ *
+ * At 2 this refused every gorge on the map. `s5/vetch-hold-7` is the case that names the rule: both
+ * banks sit flat at **129**, the water table is 118 and the bed 116 — a **9-wide, 13-deep gorge**,
+ * and the road walks it at 129 on both sides. Clamped to `table + 1 + 2`, the deck sprang at 121 and
+ * left the keeper an **8-block cliff at each end**. That is not a bank a ramp can reach; the deck
+ * belongs at the RIM, which is where a real crossing of a gorge puts it.
+ *
+ * ⚠ 10 IS NOT A CEILING ON AMBITION, IT IS WHERE THE Y-GATE STOPS PAYING. `BRIDGE_REACH` adds this
+ * verbatim, so every block here widens the band `materialAt` must consider before it can cheap-out.
+ * 10 covers every gorge in the 40-seed sweep that a walkable deck can actually connect. The one case
+ * it does not reach — `s37/vetch-hold-2`, near rim 141 against a far rim of 127 — is **not reachable
+ * at any value**: 14 blocks of height difference across a 14-block span is a grade of 1.0, and
+ * `MAX_GRADE` is 0.5. That crossing is mis-sited, not under-clamped, and a bigger number would only
+ * buy a deck that arrives 7 blocks over its far bank instead of 7 under it.
+ */
+export const ABUT_UP = 10
 
 /**
  * ★ HOW FAR ABOVE ITS OWN GROUND A BRIDGE CAN REACH — the caller's cheap y-band gate, DERIVED.
@@ -264,7 +301,7 @@ export const ABUT_MAX = 2
  */
 export const BRIDGE_BAND = DECK_HALF + 2
 
-export const BRIDGE_REACH = Math.max(...Object.values(KINDS).map(k => k.rise)) / 2 + 2 + RIVER_DEPTH + 1 + ABUT_MAX
+export const BRIDGE_REACH = Math.max(...Object.values(KINDS).map(k => k.rise)) / 2 + 2 + RIVER_DEPTH + 1 + ABUT_UP
 
 export interface BridgeSpec {
   id: string
@@ -278,7 +315,11 @@ export interface BridgeSpec {
    *  OWN bed (`pierBed`), because on a 149-block span the deepest point can be four blocks under
    *  the shallows and every pier would otherwise start buried in the bank it does not stand on. */
   bed: number
-  /** Crown height above `table + 1`, in HALF-steps, after the span's own ramp-fitting clamp. */
+  /** Crown height of the ARCH above `table + 1`, in HALF-steps, after the span's own ramp-fitting
+   *  clamp. ⚠ NOT the height the deck reaches: since "the deck at the rim" this is one of the terms
+   *  `deckTopAt` maxes, and on a gorge the rim floor dwarfs it (`s5/vetch-hold-7` runs its deck 20
+   *  half-steps up while `rise` is 2). The deck's actual top is `max(base + rise/2, deckFloorAt)`.
+   *  Two quantities, one of them named like the other — read the name literally. */
   rise: number
   /** Half-length of each pier along the span, from the kind. */
   pierHalf: number
@@ -293,7 +334,9 @@ export interface BridgeSpec {
   pierPos: { x: number; z: number }[]
   /**
    * ★★ THE GROUND EACH END ACTUALLY LANDS ON — `[near, far]`, whole blocks, clamped to
-   * `table + 1 ± ABUT_MAX`. This is the field that lets `deckTopAt` stay pure.
+   * `table + 1 + ABUT_UP` above and `table + 1 - ABUT_DOWN` below — an ASYMMETRIC clamp, because
+   * climbing costs `BRIDGE_REACH` and descending costs nothing. This is the field that lets
+   * `deckTopAt` stay pure.
    *
    * `deckTopAt(spec, t)` has no world position and cannot ask where the bank is. But the SPEC is
    * surveyed — `table` is already a measured world fact sitting one field up — so the landing is
@@ -434,7 +477,7 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
           // probe comparing `deckTopAt` against `columnHeight` reported it fixed. **Two quantities
           // one block apart, both honest, both named like heights.**
           const h = columnHeight(lx, lz, seed, cfg) + 1
-          return Math.max(tbl + 1 - ABUT_MAX, Math.min(tbl + 1 + ABUT_MAX, h))
+          return Math.max(tbl + 1 - ABUT_DOWN, Math.min(tbl + 1 + ABUT_UP, h))
         }
         return tbl + 1        // never reached dry ground inside the probe — leave the deck alone
       }
@@ -616,13 +659,27 @@ export function bridgeAt(x: number, z: number, seed: number, cfg: HeightConfig =
  * the springing (where the walkability cap has to hold) and flattest in the middle (where the
  * clearance is wanted). The trapezoid is the same shape a real approach embankment makes.
  */
+/**
+ * ★★ THE HEIGHT THE DECK MAY NOT SAG BELOW — the lower of its two springings, never under the
+ * waterline. The floor of "the deck at the rim".
+ *
+ * ⚠ EXPORTED ON PURPOSE, and the reason is the whole point: `bridges.test.ts` has to subtract this
+ * to ask what the ARCH contributes, and a test that restated the expression would be a hand-copy of
+ * a value this file owns — the shape that agrees with its source while both go stale. There is one
+ * derivation and both callers ask it.
+ */
+export function deckFloorAt(spec: BridgeSpec): number {
+  const base = spec.table + 1
+  return Math.max(base, Math.min(Math.max(base, spec.abut[0]), Math.max(base, spec.abut[1])))
+}
+
 export function deckTopAt(spec: BridgeSpec, t: number): number {
   const base = spec.table + 1
 
   // ── the abutment, per end ───────────────────────────────────────────────────────────────────
   // The springing is the height of the land that end actually lands on, never below the waterline:
   // the deck may CLIMB to meet a high bank (it cannot cut one down) but may never drop into its own
-  // river. `abut` is already clamped to `base ± ABUT_MAX` by the survey.
+  // river. `abut` is already clamped to `base + ABUT_UP` / `base - ABUT_DOWN` by the survey.
   const endAt = (land: number): number => Math.max(base, land)
   const nearEnd = endAt(spec.abut[0]), farEnd = endAt(spec.abut[1])
 
@@ -664,7 +721,21 @@ export function deckTopAt(spec: BridgeSpec, t: number): number {
   // Inside the span, an end that had to climb eases back to the arch at the same grade.
   const riseNear = Math.max(base, nearEnd - Math.floor(u) * MAX_GRADE)
   const riseFar = Math.max(base, farEnd - Math.floor(spec.span - u) * MAX_GRADE)
-  return Math.max(arch, riseNear, riseFar)
+  // ★★★ AND THE DECK MAY NOT SAG BELOW THE LOWER OF ITS TWO RIMS — the other half of "the deck at
+  // the rim", and without it raising `ABUT_UP` alone builds a hammock.
+  //
+  // Both ramps above decay toward `base`, which is right when `base` is where the deck is GOING: one
+  // high bank easing down to a waterline crossing. It is wrong when BOTH ends stand high. On
+  // `s5/vetch-hold-7` — a 9-wide gorge with both rims at 129 over a table of 118 — the two ramps
+  // decay past each other and the deck dips to **127 in the middle**, a 2-block trough in a 9-block
+  // crossing. A bridge does not dip toward the river it is crossing. `min` of the two ends, floored
+  // at `base` so a crossing with no high bank is untouched to the voxel, and the ramps still do all
+  // the work of grading UP to the higher rim.
+  //
+  // ⚠ THIS CANNOT LIFT A DECK ABOVE GROUND IT WAS NOT ALREADY CLEARED FOR: both rims are landings
+  // the survey measured and `ABUT_UP` already clamped, so the floor is bounded by the same number
+  // `BRIDGE_REACH` is derived from.
+  return Math.max(arch, riseNear, riseFar, deckFloorAt(spec))
 }
 
 /** The pier standing at this along-span offset: its index and the distance to its centre. */

@@ -53,7 +53,7 @@
 //
 // ⚠ RUN IT WIDE. `SEEDS=$(seq -s, 1 40)`. The default 8 is a smoke test and it is the sample size
 // that produced the one-directional diagnosis this header exists to correct.
-import { bridgeSpecs, bridgeAt, deckTopAt, ABUT_MAX, ABUT_REACH } from '../src/app/shimmer/voxel/bridges'
+import { bridgeSpecs, bridgeAt, deckTopAt, ABUT_UP, ABUT_DOWN, ABUT_REACH, BRIDGE_REACH } from '../src/app/shimmer/voxel/bridges'
 import { columnHeight } from '../src/app/shimmer/voxel/height'
 import { materialAt, MAT, isSolid, isHalfMat } from '../src/app/shimmer/voxel/depth'
 import { STORY_NODES } from '../src/app/shimmer/voxel/story-path'
@@ -63,7 +63,14 @@ import { STORY_NODES } from '../src/app/shimmer/voxel/story-path'
 // asymmetry, because it only had one number to compare against.
 const surfAt = (x:number,z:number,S:number):number|null => {
   const h = columnHeight(x,z,S)
-  for(let y=h+6;y>=h-8;y--){ const m=materialAt(x,y,z,S,h); if(m===MAT.WATER) return null; if(isSolid(m)) return isHalfMat(m)?y+0.5:y+1 }
+  // ⚠⚠⚠ THE SCAN TOP IS DERIVED FROM `BRIDGE_REACH`, AND IT USED TO BE `h + 6`.
+  // Six is generous for a deck sitting one block over a waterline and BLIND to a deck at the rim of
+  // a gorge: `s5/vetch-hold-7` carries its deck 14 blocks above the bed it spans, so a window
+  // anchored on `columnHeight` scanned right past it and returned the GORGE FLOOR as the deck's
+  // surface. That reads as a 5-block step off a crossing that is in fact flush at both ends — a
+  // wrong answer, not a missing one. `BRIDGE_REACH` is exactly how far above its own ground a
+  // bridge cell may be, so it is the only honest ceiling here; +2 covers the rail above the deck.
+  for(let y=h+BRIDGE_REACH+2;y>=h-8;y--){ const m=materialAt(x,y,z,S,h); if(m===MAT.WATER) return null; if(isSolid(m)) return isHalfMat(m)?y+0.5:y+1 }
   return null
 }
 const SEEDS = (process.env.SEEDS ?? '1,2,3,4,5,6,7,8').split(',').filter(Boolean).map(Number)
@@ -117,14 +124,14 @@ for (const S of SEEDS) {
       // one defect: UP is bounded by BRIDGE_REACH (depth.ts's hot y-gate) and DOWN is not bounded by
       // anything except the apron's length. Printing them together is how the tail got recorded as
       // "the shore is higher than the bridge" when half of it is the shore being LOWER.
-      const dir=signed>0?'UP':'DOWN'
-      if(gap>ABUT_MAX){ clampBound++; clampDir[dir]++; offenders.push(`s${S}/${b.id} ${end} CLAMP BOUND ${dir}: bank ${land} vs springing ${base}, gap ${gap} > ABUT_MAX ${ABUT_MAX}`) }
+      const dir=signed>0?'UP':'DOWN', lim=signed>0?ABUT_UP:ABUT_DOWN
+      if(gap>lim){ clampBound++; clampDir[dir]++; offenders.push(`s${S}/${b.id} ${end} CLAMP BOUND ${dir}: bank ${land} vs springing ${base}, gap ${gap} > ABUT_${dir} ${lim}`) }
     }
   }
 }
 console.log(`seeds ${SEEDS.length} · crossing-ends ${ends}` + (unmeasured?`  ⚠ ${unmeasured} UNMEASURED`:''))
 console.log(`  flush ${flush} · half-step ${half} · FULL-BLOCK VAULT ${vault}`)
-console.log(`  widest bank-to-springing gap seen: ${maxGap}   (ABUT_MAX = ${ABUT_MAX})`)
+console.log(`  widest bank-to-springing gap seen: ${maxGap}   (ABUT_UP = ${ABUT_UP}, ABUT_DOWN = ${ABUT_DOWN})`)
 console.log(`  ends where the clamp BOUND: ${clampBound}   (UP ${clampDir.UP} · DOWN ${clampDir.DOWN})`)
 console.log(`  gap distribution: ${[...gapHist.entries()].sort((a,b)=>a[0]-b[0]).map(([g,n])=>`${g}:${n}`).join('  ')}`)
 if(offenders.length) console.log(`  ⚠  (${offenders.length} lines)\n   ${offenders.join('\n   ')}`)
