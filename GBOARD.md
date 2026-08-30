@@ -11,7 +11,39 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🌉 Shimmer voxel — **THE BRIDGE LANDINGS: THE NUMBER WAS WRONG AND ITS FIX WOULD HAVE GONE THE WRONG WAY** (2026-08-30, world lane) · *Last touched 2026-08-30 — bridges oracle 2120→2185, 4/4 mutations fire, sweep **204/204 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon unchanged. ✅ **DEPLOYED** `BUILD_ID O8PO1U1cFws1mjXMopvIA`, 162 chunks — `df68ea3` + worker rebundle `1b13cd8`, 0 unpushed.*
+## 🌉 Shimmer voxel — **THE BRIDGE LANDINGS: THE NUMBER WAS WRONG AND ITS FIX WOULD HAVE GONE THE WRONG WAY** (2026-08-30, world lane) · *Last touched 2026-08-30 — ⚠ **READ THE CORRECTION BLOCK BELOW FIRST: the first diagnosis AND the first fix were both wrong.** Final state: bridges oracle **2207**, 3/3 mutations fire, sweep 204/204, tsc 7 (baseline), canon green. ✅ **DEPLOYED** `BUILD_ID 3EOpI6AXeBV46wHghfV5E`, 162 chunks — `909d3eb` + worker rebundle, 0 unpushed. **28/28 crossing-ends flush across both seeds.***
+
+
+### ⚠⚠⚠ CORRECTION, SAME DAY — THE ABOVE DIAGNOSIS IS WRONG AND THE FIX IT DESCRIBES DID NOTHING
+**Everything above this line about "5 of 6 defects are DROPS" and "the board had the direction
+backwards" is FALSE. Alex's original report was right and my correction of it was wrong.** Kept
+rather than deleted, because the shape of the error is the most useful thing produced today.
+
+- **THE OFF-BY-ONE.** `deckTopAt` returns a **standing surface** (`table + 1` springs one above the
+  waterline). `columnHeight` returns the **index of the top solid cell** — `depth.ts` fills the
+  surface voxel at `depth === 0`, i.e. **at** `y === h` — so a keeper stands at `h + 1`. I compared
+  them directly. ★★★ **Two quantities one block apart, both honest, both named like heights.**
+- **IT PRODUCED A SELF-CONSISTENT STORY THAT WAS WRONG IN DIRECTION.** Measured on the true standing
+  surface, read from the world on BOTH sides: **13 of 22 crossing-ends were a full-block step UP and
+  there were no drops at all.** Not one.
+- **⚠⚠ AND THE FIRST FIX WAS INERT.** Checked against the pre-fix commit in an isolated worktree:
+  **12 vaults before, 13 after.** `spec.abut` was fed a top-solid index, so the deck climbed to a
+  target exactly one block short of the bank it aimed at — while a probe reported it fixed.
+- **THE REAL FIX, two lines of meaning.** `landingAt` returns `columnHeight + 1`; and an apron is
+  built ONLY toward a bank **below** the springing, because against a rising bank the ramp descends
+  while the terrain climbs, the two cross, and the join lands mid-slope (`moonwell-glade-0 far`,
+  seed 1 — the last one left).
+- **RESULT: 22/22 flush on seed 1337, 6/6 on seed 1. No vaults, no half-steps.** The apron is tiny —
+  6–9 cells per crossing, 68 total — roughly one row at each end, not a masonry mass.
+- **The guard had the same off-by-one and so could not see any of it.** It reads the standing surface
+  from the world on both sides now. Mutation-swept: reverting the `+1` restores all 13, building the
+  apron on rising banks restores `moonwell`, disabling the up-climb restores 12.
+- **★★★ THE RULE: read both sides of a join with ONE instrument, and let that instrument be the
+  world.** Two readings taken from different layers cannot be compared no matter how carefully each
+  one is taken. ⚠ This was the **fourth** instance of that shape in a single session — this bug, the
+  grid assert that sampled only integer `t` (where every `Math.floor` is a no-op), the peer's
+  `groundTopNear` simulation run with the default `up` instead of the bound the world passes, and
+  their own `91 figures standing a block under the ground`. **It is the house defect, not four slips.**
 
 ### Left off — Alex found it by playing, and the board wrote it up backwards
 Alex, from play: *"i found alot of instances where they didnt land on the shore smoothly.. (like the
