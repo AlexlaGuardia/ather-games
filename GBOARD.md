@@ -16,8 +16,13 @@ the Arcade frame.
 
 
 ### ✅ **THE DECK AT THE RIM** (2026-08-30 night, hub lane — Alex ruled it: *"do the deck at the rim"*)
-`5754bd3`. **40 seeds / 383 shared crossing-ends: vaults 21 → 15, EIGHT improved, NONE worse.** Oracle
-**2228/0**, mutations 3/3, tsc 7 (baseline). ⏸ NOT DEPLOYED — worldgen change, wants Alex's go.
+`5754bd3` + worker rebundle `24b35ea`. **40 seeds / 383 shared crossing-ends: vaults 21 → 15, EIGHT
+improved, NONE worse.** Oracle **2228/0**, mutations 3/3, tsc 7 (baseline), sweep **206/206 · 0 FAIL ·
+0 KILLED**. ✅ **DEPLOYED on Alex's go** — `BUILD_ID i0KuueV7KxIE0HPsHiy6d`, 163 chunks, served build id
+== disk, new worker `8c086d2f86` found in the shipped chunk `980c5b36fe121867.js` and serving live, old
+`38aff56a94` **zero** occurrences in the build and 404 on the wire. Tree clean, 0 unpushed. **Alex is
+walking it.** ⚠ The deploy dirtied the tree by itself (the prebuild rebundles the voxel worker and
+`bridges.ts` is in its import graph) — committed, because that artifact is what the rendered PAGE runs.
 
 **`s5/vetch-hold-7` is flush at both rims.** It is a **9-wide, 13-deep GORGE** — both banks flat at
 129, water table 118, bed 116, and the story road walks it at 129 on both sides. Clamped to
