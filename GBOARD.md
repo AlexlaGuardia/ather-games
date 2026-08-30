@@ -400,6 +400,31 @@ quietly retired to keep the build.
 - **NOT a defect, checked before touching:** `maxDrop: 0` is Alex's own ruling — a hold is neither
   built nor dug, so the dip comes from the banks rising, not from digging.
 
+### 👁 …AND THE SWEEP THAT FOLLOWED IT (`f4ae0d0`)
+Of 15 dev pages only **8 render a scene**, so the real work was four, not the thirteen I first said.
+- **`ring` had `GY + 1.62`; `seam` had `anchor.y + 1.7` under a comment calling it eye height.** 1.7
+  is not a keeper's eye — the seam had been judged from **8cm above one**, and seam wrote the number
+  **twice in one function** (camera and pass), where the two could drift apart silently. Both derive
+  from `EYE_STAND` now, seam's from a single value.
+- **`worktable` gains the stance**, which is the page Alex asked for a ground view of. Clamped to the
+  pad: an unclamped stance hangs in the void and **still renders**, reading as a low orbit.
+- **`runehold` was already right** (`body.eyeStand`) and is left alone — it is the model, and the
+  guard asserts the `metrics.test.ts` pin that makes that a derivation rather than a second copy.
+- **⛔ `grey` REFUSED, and this is the useful half.** Its readout samples **fixed frame coordinates**
+  (`0.5,0.46` = body, `0.5,0.88` = ground) and prints their luma ratio. Moving that camera makes it
+  report a **confidently wrong contrast number** — its own comment says that is worse than none. The
+  guard asserts those coordinates are still fixed, **so the exemption expires** the day the readout
+  learns where the body is. `break` is refused as a particle bench, premise: no human-scale
+  reference at all.
+- **`dev-eye.test.ts` enumerates pages OFF THE FILESYSTEM**, so a new page joins by existing rather
+  than by anyone remembering. Mutation-tested six ways, all six fire — **the one that matters being a
+  brand-new Canvas page with no eye mode.**
+- **⏳ ALEX: the worktable pad is the constraint, and it is a `#900` answer.** `PAD = 24` against
+  `BLUEPRINT_MAX_SPAN = 128` — the editor can author only the smallest fifth of what the format
+  allows, and at eye height you can stand at most **11 blocks back from centre**, which plants you
+  almost inside a 13-wide structure. Not changed here: `PAD` runs through the placement maths and is
+  a call about what the editor is FOR.
+
 
 ### Left off — the Snagbarrows' set piece, built in canon's own order
 Canon ruled the hold gap and then the staged-fight gap the same day, and both landed with build
