@@ -21,6 +21,7 @@ import { createSeamShimmer, wildsSeamAnchor, plotSeamAnchor } from '../../voxel3
 import { WILDS_BUBBLE } from '../../voxel/column'
 import { plotForTier, PLOT_TIERS } from '../../voxel/plot'
 import type { Space } from '../../voxel3d/save'
+import { EYE_STAND } from '../../voxel3d/locomotion'
 
 const SEED = 1337
 
@@ -49,12 +50,19 @@ function Seam({ space, dist, frozen, tier }: { space: Space; dist: number; froze
 
   useFrame((state, dt) => {
     // Stand the camera off the seam along its own normal, at the requested distance, eye height.
+    //
+    // ⚠ THIS SAID `+ 1.7` AND CALLED IT EYE HEIGHT. A keeper's eye is `EYE_STAND` = 1.62, so every
+    // seam judgement was taken from 8cm above one — harmless on its own, and exactly the shape that
+    // is not harmless elsewhere: a number that is WRONG while wearing the name of the right one.
+    // ★ AND IT WAS WRITTEN TWICE in one function, camera and pass, so the two could drift apart
+    // silently — the pass shimmers against the eye position it is GIVEN, not the one on screen.
     const b = anchor.bearing
     const px = anchor.x + Math.cos(b) * dist
     const pz = anchor.z + Math.sin(b) * dist
-    state.camera.position.set(px, anchor.y + 1.7, pz)
+    const eyeY = anchor.y + EYE_STAND
+    state.camera.position.set(px, eyeY, pz)
     state.camera.lookAt(anchor.x, anchor.y + anchor.height * 0.35, anchor.z)
-    pass.tick(px, anchor.y + 1.7, pz, dt, frozen ? 0 : state.clock.elapsedTime, space)
+    pass.tick(px, eyeY, pz, dt, frozen ? 0 : state.clock.elapsedTime, space)
   })
 
   return (

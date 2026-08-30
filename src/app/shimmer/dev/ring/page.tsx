@@ -26,6 +26,7 @@ import { ringCap, DEFAULT_RING } from '../../voxel3d/plot-ring'
 import { plotForTier, withinCap, PLOT_TIERS } from '../../voxel/plot'
 import { SPECIES_IDS } from '../../sprites/registry'
 import { DAY } from '../../voxel3d/day-night'
+import { EYE_STAND } from '../../voxel3d/locomotion'
 
 const SEED = 1337
 /** The ground plane the stand-in keeper and every resident stands on. */
@@ -85,7 +86,10 @@ function Ring({ tier, roster, walk, yaw, onStats }: {
   // is answering. A free camera would let you watch a recycle the pass believed was unwitnessed.
   useFrame(({ camera }) => {
     const k = keeper.current
-    camera.position.set(k.x, GY + 1.62, k.z)
+    // ⚠ `EYE_STAND`, NOT A RE-TYPED `1.62`. The claim this camera makes is *"you are seeing what
+    // the keeper sees"*, and a literal makes that claim true only until the walker's eye moves.
+    // `dev/hold` shipped a whole set piece judged from 32 blocks up for want of this idea.
+    camera.position.set(k.x, GY + EYE_STAND, k.z)
     camera.lookAt(k.x + Math.cos(k.yaw) * 10, GY + 1.4, k.z + Math.sin(k.yaw) * 10)
   })
 

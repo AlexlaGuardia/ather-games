@@ -41,7 +41,7 @@ import { MAT, isHalfMat } from '../../voxel/depth'
 import { buildTileArray, sliceLayer, layerOf, TOP, SIDE, BOTTOM } from '../../voxel3d/tex/tiles'
 import { VoxelDayNight, DAY } from '../../voxel3d/day-night'
 import { setTimePin } from '../../engine/day-cycle'
-import { BODY_H, BODY_R } from '../../voxel3d/locomotion'
+import { BODY_H, BODY_R, EYE_STAND } from '../../voxel3d/locomotion'
 import {
   makeBlueprint, blueprintCells, boundsOf, normalizeCells, pieceFootprint, BLUEPRINT_MAX_SPAN,
   type BlueprintCell, type BlueprintDef, type BlueprintPiece,
@@ -52,6 +52,12 @@ import { createPieceRenderer } from '../../voxel3d/piece-mesh'
 const TILE = 16
 /** The build pad, in blocks. Big enough for a cottage and a yard; not a world. */
 const PAD = 24
+/**
+ * The face a keeper stands on. The pad mesh is a 1-deep box centred at `-0.5`, so its top is 0 —
+ * which is also why a block at `c.y` sits directly on it. ⚠ Named rather than typed at the two use
+ * sites: `dev/hold` had 91 figures a block under the ground for exactly the want of one of these.
+ */
+const PAD_TOP = 0
 
 /**
  * The palette, DERIVED. `placeable` is the registry's own answer to "can a player put this down",
@@ -207,18 +213,39 @@ function Keeper({ at }: { at: [number, number, number] }) {
 }
 
 /** Drag to orbit, wheel to zoom. The current view is published back so it can be written down. */
-function Rig({ yaw, pitch, dist, target, onView }: {
-  yaw: number; pitch: number; dist: number; target: THREE.Vector3
+function Rig({ yaw, pitch, dist, eye, target, onView }: {
+  yaw: number; pitch: number; dist: number; eye: boolean; target: THREE.Vector3
   onView: (v: { yaw: number; pitch: number; dist: number }) => void
 }) {
   const { camera, gl } = useThree()
-  const state = useRef({ yaw, pitch, dist, dragging: false, lx: 0, ly: 0 })
-  useEffect(() => { state.current.yaw = yaw; state.current.pitch = pitch; state.current.dist = dist }, [yaw, pitch, dist])
+  const state = useRef({ yaw, pitch, dist, eye, dragging: false, lx: 0, ly: 0 })
+  useEffect(() => {
+    state.current.yaw = yaw; state.current.pitch = pitch; state.current.dist = dist; state.current.eye = eye
+  }, [yaw, pitch, dist, eye])
 
   useEffect(() => {
     const el = gl.domElement
     const apply = () => {
       const s = state.current
+      if (s.eye) {
+        // ── ★★ STANDING ON THE PAD, NOT ORBITING CLOSE TO IT ────────────────────────────────
+        // The orbit's height is `target.y + sin(pitch) * dist` — it is a function of the DISTANCE,
+        // so backing off to see a whole house also lifts you off the ground. This is the other
+        // question, and it is the one Alex asked the worktable for: *what does the thing I just
+        // built look like to somebody standing in front of it.* Height comes from the pad and
+        // `EYE_STAND`; `dist` only says how far back the keeper is standing; the look is LEVEL.
+        //
+        // ⚠ CLAMPED TO THE PAD. `dist` runs to 300 and the pad is 24 across, so an unclamped
+        // stance walks off the edge and hangs in the void — which still RENDERS, and reads as a
+        // low orbit rather than as a keeper. Stand at the edge instead and stay honest.
+        const back = Math.min(s.dist, PAD / 2 - 1)
+        camera.position.set(
+          target.x + Math.cos(s.yaw) * back,
+          PAD_TOP + EYE_STAND,
+          target.z + Math.sin(s.yaw) * back)
+        camera.lookAt(target.x, PAD_TOP + EYE_STAND, target.z)
+        return
+      }
       const cp = Math.cos(s.pitch), sp = Math.sin(s.pitch)
       camera.position.set(
         target.x + Math.cos(s.yaw) * cp * s.dist,
@@ -259,7 +286,7 @@ function Rig({ yaw, pitch, dist, target, onView }: {
       window.removeEventListener('pointerup', up)
       el.removeEventListener('wheel', wheel)
     }
-  }, [camera, gl, target.x, target.y, target.z, onView])
+  }, [camera, gl, target.x, target.y, target.z, eye, onView])
   return null
 }
 
@@ -278,6 +305,7 @@ export default function WorktablePage() {
   const [fog, setFog] = useState(true)
   const [hour, setHour] = useState(12)
   const [showKeeper, setShowKeeper] = useState(true)
+  const [eye, setEye] = useState(false)
   const [view, setView] = useState({ yaw: -0.9, pitch: 0.5, dist: 34 })
   /** Which palette families are expanded. Seeded from `FAMILY`, then the keeper's own choice. */
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -390,13 +418,13 @@ export default function WorktablePage() {
             `VoxelDayNight` owns the world's fog and a second way to disable it would be a second
             dialect of the same switch. */}
         {!fog && <fog attach="fog" args={[DAY.bg, 5000, 6000]} />}
-        <Rig yaw={view.yaw} pitch={view.pitch} dist={view.dist} target={target} onView={setView} />
+        <Rig yaw={view.yaw} pitch={view.pitch} dist={view.dist} eye={eye} target={target} onView={setView} />
         <Pad onHit={onHit} />
         {byMaterial.map(([mat, list]) => (
           <MaterialMesh key={mat} mat={mat} cells={list} tex={tex} onHit={onHit} />
         ))}
         <Pieces placements={placements} solid={solid} />
-        {showKeeper && <Keeper at={[PAD / 2 - 3, 0, PAD / 2 + 4]} />}
+        {showKeeper && <Keeper at={[PAD / 2 - 3, PAD_TOP, PAD / 2 + 4]} />}
       </Canvas>
 
       {/* ── the panel ─────────────────────────────────────────────────────────────────────── */}
@@ -428,6 +456,7 @@ export default function WorktablePage() {
           <button style={btn} onClick={() => push(new Map(), [])}>clear</button>
           <button style={btn} onClick={() => setFog(f => !f)}>fog {fog ? 'on' : 'off'}</button>
           <button style={btn} onClick={() => setShowKeeper(k => !k)}>keeper</button>
+          <button style={btn} onClick={() => setEye(e => !e)}>{eye ? 'keeper eye' : 'from above'}</button>
         </div>
         <label style={{ display: 'block', opacity: 0.7, marginBottom: 8 }}>
           hour {hour}
