@@ -11,6 +11,120 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🌉 Shimmer voxel — **THE BRIDGE LANDINGS: THE NUMBER WAS WRONG AND ITS FIX WOULD HAVE GONE THE WRONG WAY** (2026-08-30, world lane) · *Last touched 2026-08-30 — bridges oracle 2120→2185, 4/4 mutations fire, sweep **204/204 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon unchanged. Pure core; NOT deployed.*
+
+### Left off — Alex found it by playing, and the board wrote it up backwards
+Alex, from play: *"i found alot of instances where they didnt land on the shore smoothly.. (like the
+shore is higher than the bridge)"*. The complaint was exactly right. The board's **diagnosis** was
+not, and it had already been written up as a ruled next-session with a number and a proposed fix.
+
+- **What the board said:** `19 flush · 18 SHORE HIGHER (up to +2)`, fix = an abutment ramping UP to
+  a higher bank.
+- **What is actually there:** 22 crossing-ends — **11 flush · 5 half-step · 6 FULL-BLOCK VAULT · 0
+  never-lands**. Of the 6 real defects **5 are DROPS and one is a step up.** ★★ An up-ramp fixes one
+  end and misses five.
+- **The 5 half-steps were never defects.** `STEP_CAPTURE` is 0.55, so ±0.5 is walked with no press —
+  `bridges.ts`'s own header says so. Counting them as broken is half of what inflated the figure.
+
+### ★★★ FOUR INSTRUMENT FAULTS, AND EVERY ONE FAILED TOWARD "THERE IS A BIG PROBLEM HERE"
+That is the direction that gets ACTED ON, which is why this cost a diagnosis rather than a minute.
+1. **★★ IT READ `columnHeight` ON BOTH SIDES OF THE JOIN.** `height.ts` contains no reference to
+   bridges, so the "deck" was the TERRAIN UNDER the deck. It approximated the right answer only
+   because the blend aims at `table + 1` and the deck springs there, and it sampled exactly there.
+   ⚠⚠ **A fix that raises the deck moves `deckTopAt` and leaves `columnHeight` untouched — so a
+   WORKING fix would have reported the number completely unchanged.** Blind in the direction that
+   reads as *your change did nothing*.
+2. **★★ IT COUNTED FALLING OFF THE SIDE AS A LANDING.** All four neighbours of the end cell, two of
+   them perpendicular to the span — the open flanks, over the river by design. **Stepping sideways
+   off a bridge into the water is not a defect, it is a bridge**, and it scored 26 samples.
+3. **★★ IT ANCHORED ITS SCAN ON `pierPos[0] ?? {x:0,z:0}`.** A single-bay crossing has no piers, so
+   **both** were measured at the WORLD ORIGIN and silently dropped — `vetch-hold-9 near` was a real
+   vault that was never counted. Coverage is now ASSERTED (`every crossing is reachable from the
+   spine`), because a crossing the walk cannot see is a hole, not a pass.
+4. **★ A `Math.sign` STEP** drifts on a diagonal road, and **`h <= table` is not the world's question
+   about water** (a column outside the channel sits below the table and carries none). Together they
+   manufactured a phantom *"35 samples end over water"* that does not exist.
+
+### ★★★ THE FIX LAYS BLOCKS, AND ALEX'S OWN PROPOSAL WAS THE RIGHT ONE
+*"premake all the blocks from one end of the bridge to the other, including the shore."* `holds.ts`
+can flatten terrain because `height.ts` imports it; **`bridges.ts` imports `height.ts`**, so the
+arrow runs the other way and a bridge cannot contribute a height blend without restructuring.
+- **`deckTopAt` KEPT ITS SIGNATURE.** The board framed the open question as *widen a core signature
+  that a 371-assert oracle runs through, or add a parallel abutment pass*. **Neither.** `deckTopAt`
+  is pure and has no world position — but the SPEC does (`table` is already a surveyed world fact),
+  so the landing is measured once in `survey()` into `spec.abut` and the pure function is unchanged.
+  ★ A parallel pass would have left the oracle on one path and the world on another, which is the
+  `bridgeVoxelAt`-vs-`materialAt` split that cost a day on 08-22.
+- **One mechanism, both directions.** High bank → the deck CLIMBS inside the span to meet it (it
+  cannot cut a bank down). Low bank → an apron of blocks descends OUTSIDE the span (the deck may not
+  drop, or it loses its clearance). Both at `MAX_GRADE`, because a fix that introduced a full-block
+  riser elsewhere is no fix.
+- **★★ THE APRON NEEDS NO LENGTH.** It descends at `MAX_GRADE` and the survey's EXISTING skip rule
+  (`nearBank && h >= deckTop`) stops it where the ground rises to meet it.
+- **⚠ AND THE RASTER LOOP WAS MIRRORING `deckTopAt`.** It carried its own copy of the arch formula —
+  fine while there was only an arch, and the abutment gives the two a way to disagree. It asks the
+  real function now via a provisional spec.
+
+### ⚠⚠ TWO WRONG APRONS BEFORE THE RIGHT ONE, PULLING IN OPPOSITE DIRECTIONS
+- **A FLAT apron walked out over ground that falls away behind a bank crest.** `moonwell-glade-0 far`
+  needs no abutment at all; a blanket four-cell extension **turned a walkable -0.5 into a full-block
+  vault** by moving the cliff further out. ⚠ The skip rule is per-cell, so it also produced a
+  NON-CONTIGUOUS apron — three cells skipped at the crest, one laid in the air beyond it (caught by
+  the pre-existing `the deck has no interior gap` assert).
+- **Deriving the apron's LENGTH from `abut` fixed that and left a different hole.**
+  `gloview-village-1 near` (seed 1) meets its bank flush at 122 with a **one-cell trench two deep**
+  sitting in the join, and a length of zero bridges nothing.
+- **A descending ramp answers both and needs no length**: against a falling bank it stays under the
+  terrain and lays nothing; over a trench it lays the one cell that spans it.
+
+### ★★ A CONTRACT CHANGE IN THE ORACLE — REWRITTEN, NOT DELETED
+`springs flush at the bank` asserted `deckTopAt(b, 0) === b.table + 1`, quoting height.ts:368 as its
+premise. **That premise is false in both directions** — banks land at the table itself and stand
+above `table + 1` — and the assert was not merely stale, **it was pinning the deck to the height
+that caused the defect.** Replaced by the half that was always load-bearing (never BELOW the
+waterline) plus an upper bound of its own landing. ⚠ Anyone hitting that red in a stale checkout
+must not fix it back.
+
+### ★★★ AND TWO OF MY OWN GUARDS WERE BLIND — ONE IN DOMAIN, ONE IN PHASE
+The new landing guard asserts the **affordance, not the membership**: how far is the step, measured
+through the world, not *is this cell in the deck set*. Mutation-swept 4/4. But:
+- **DOMAIN:** the `0.5`-grid and `STEP_CAPTURE` asserts walked `0 .. span` — the arch and nothing
+  else. The abutment lives OUTSIDE the span, so **a mutation removing the apron's `Math.floor`
+  (deck tops like `113.655`, the exact defect the grid assert exists to catch) passed all 2185.**
+- **★★ PHASE, and this one is nastier:** widening the domain STILL passed, because the sweep stepped
+  in **integers** — and at integer `t` every `Math.floor` in `deckTopAt` is a no-op. The generator
+  evaluates it at the ribbon's continuous offsets, so the sweep steps in quarters. **Two guards, one
+  blind spot each, and both read green.**
+
+### Decisions
+- **`ABUT_MAX = 2` is a clamp, not a dial.** `abut` is a MEASURED ground height; unclamped, a bank
+  could ask the deck to climb any amount and push it through `BRIDGE_REACH` — the caller's y-gate —
+  which slices the top off a deck **without erroring**. `BRIDGE_REACH` adds `ABUT_MAX`; the two are
+  one decision and must move together.
+- **`ABUT_REACH = 4` is a bound, not a length.** The ramp and the skip rule decide the real length.
+- **The apron fill is scoped to `t` outside `[0, span]`, and the scope IS the safety property.**
+  Mid-span cells stand over the channel where `g` is the river BED — filling those would pack the
+  river solid from bed to deck and dam the crossing shut.
+- **`bridges.ts`'s header claim was corrected with the code.** It said *"deck and bank met flush by
+  construction, no ramp logic anywhere"*; the blend AIMS at `table + 1` and does not arrive there.
+
+### Next
+- **Alex walks a crossing and calls it** — 10 half-steps remain across both seeds, all inside
+  `STEP_CAPTURE`, all walkable. Whether a ±0.5 lip at an abutment READS right is a look call, not a
+  measurement, and it is his.
+- **NOT DEPLOYED.** Pure core, no build run this session.
+- **`ABUT_MAX = 2` is unswept** — no crossing on either seed currently asks for more than it grants,
+  so the clamp has never actually bound. A seed that needs 3 would silently land short.
+- **The landing guard measures the CENTRELINE only.** The road is wobbled (`ROAD_WOBBLE` 1.4), so a
+  keeper walking the edge of the road leaves by a column this never samples.
+
+### Files
+- `src/app/shimmer/voxel/bridges.ts` — `ABUT_REACH`/`ABUT_MAX`, `spec.abut`, `cell.g`, `deckTopAt`
+  rewritten, apron fill in `bridgeVoxelAt`, survey measures the landings and stops mirroring the arch
+- `src/app/shimmer/voxel/bridges.test.ts` — landing + coverage guards, springing contract rewritten,
+  grid/grade asserts widened in domain AND phase
+- `scripts/bridge-landings.mts` — rewritten on the spine walk; carries the full post-mortem
+
 ## ⏱ Shimmer — **THE 12ms MESH BUDGET NEVER BOUND ANYTHING, AND HALF THE STREAMING MESH WORK IS REDUNDANT** (2026-08-30, hub lane) · *Last touched 2026-08-30 — `824364c` deployed, BUILD_ID `-bnI3d1Riyg-UNh4jJXsT`. Oracle 110→113, sweep 203/203 · 0 FAIL · 0 KILLED, tsc 7 (baseline).*
 
 - **★★★ THE BUDGET WAS DECORATIVE, AND IT WAS ARITHMETIC ALL ALONG.** `drainRemeshQueue` took a

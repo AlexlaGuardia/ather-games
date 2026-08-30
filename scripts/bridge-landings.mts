@@ -1,70 +1,105 @@
 // DOES THE DECK MEET THE SHORE? Run: npx tsx scripts/bridge-landings.mts
 //
 // ★★★ WHY THIS EXISTS. Alex, 2026-08-30, from play: *"i found alot of instances where they didnt
-// land on the shore smoothly.. (like the shore is higher than the bridge)"*. `bridges.ts`'s own
-// header says the opposite — *"deck and bank met flush by construction, no ramp logic anywhere"* —
-// so the claim and the world disagreed and nothing in the tree could say which was right.
-// Measured at 2026-08-30 on seed 1337: **19 flush · 18 SHORE HIGHER (up to +2) · 2 lower.**
+// land on the shore smoothly.. (like the shore is higher than the bridge)"*. `bridges.ts`'s header
+// claimed the opposite — *"deck and bank met flush by construction, no ramp logic anywhere"* — so
+// the claim and the world disagreed and nothing in the tree could say which was right.
 //
-// ── ★★ THE DIAGNOSIS, so the number is not just a number ──────────────────────────────────────
-// Both halves are correct about different PLACES. `height.ts`'s approach blend pins the bank to
-// `table + 1` **at the waterline** and eases back toward raw terrain as you move away
-// (`h = raw + ((table+1) - raw) * sm01(...)`). The deck springs from `table + 1` **at its span
-// anchor**, which is further out — where the blend has already relaxed. The gap between those two
-// places is the step a keeper walks up.
+// ── ⚠⚠⚠ THE FIRST NUMBER THIS FILE PRODUCED WAS WRONG, AND ITS FIX WOULD HAVE GONE THE WRONG WAY ─
+// It reported **19 flush · 18 SHORE HIGHER (up to +2)**, and the board wrote the fix up as an
+// abutment ramping UP to a higher bank. Re-measured correctly: of 22 crossing-ends, **5 of the 6
+// real defects are DROPS and exactly one is a step up.** An up-ramp would have fixed one end and
+// missed five. Four separate faults produced that number, and every one of them failed toward
+// "there is a big problem here", which is the direction that gets ACTED ON:
 //
-// ⚠ AND THE OBVIOUS FIX IS BLOCKED BY THE MODULE GRAPH. `holds.ts` can flatten terrain because
-// `height.ts` IMPORTS it; `bridges.ts` imports height, so the arrow runs the other way and a bridge
-// cannot contribute a height blend without restructuring. The fix has to lay BLOCKS, not move
-// ground — which is what Alex proposed independently: *"premake all the blocks from one end of the
-// bridge to the other, including the shore."*
+//   1. ★★ IT READ `columnHeight` ON BOTH SIDES OF THE JOIN. `height.ts` contains no reference to
+//      bridges, so the "deck" reading was the TERRAIN UNDER the deck and never the deck. It
+//      approximated the right answer only because the approach blend aims at `table + 1` and the
+//      deck springs from `table + 1`, and it sampled exactly there. ⚠ The consequence is the
+//      dangerous half: raising the deck moves `deckTopAt` and leaves `columnHeight` untouched, so
+//      **a working fix would have reported this number completely unchanged.**
+//   2. ★★ IT COUNTED FALLING OFF THE SIDE AS A LANDING. It took all four neighbours of the end
+//      cell, and two of those are PERPENDICULAR to the span — the open flanks, which stand over the
+//      river by design. Stepping sideways off a bridge into the water is not a defect, it is a
+//      bridge, and it was scoring 26 samples as "shore lower".
+//   3. ★★ IT ANCHORED ITS SCAN ON `pierPos[0] ?? {x:0,z:0}`. A single-bay crossing has NO piers, so
+//      both such crossings were measured at the WORLD ORIGIN and silently dropped. One of them,
+//      `vetch-hold-9 near`, was a real vault that was never counted. **A crossing the walk cannot
+//      see is a hole in the measurement, not a pass** — so coverage is asserted below, not assumed.
+//   4. ★ A `Math.sign` STEP OFF THE END CELL drifts on a diagonal road, and `h <= table` is not the
+//      question the world asks about water (a column outside the channel sits below the table and
+//      carries none). Together those manufactured a phantom "35 samples end over water".
 //
-// ⚠⚠ THE FIRST VERSION OF THIS PROBE READ `s.x` / `s.z` / `s.dir`, WHICH DO NOT EXIST ON
-// `BridgeSpec`. Every sample was NaN and it reported a confident **100% in one direction with zero
-// in the others** — which is the only reason it got caught. A probe's shape is evidence about the
-// probe first. It finds bridges the way the world does now: `bridgeAt()` per column.
-import { bridgeSpecs, bridgeAt } from '../src/app/shimmer/voxel/bridges'
+// ── WHAT IT MEASURES NOW ─────────────────────────────────────────────────────────────────────
+// Walk the SPINE — the road the keeper actually walks — collect each crossing's centreline cells in
+// order, and step outward from the outermost one until the road reaches ground that `materialAt`
+// says is not water. Compare that ground against `deckTopAt`, which is what the world builds the
+// walking surface from.
+//
+// The verdict bands are locomotion's, not taste: `STEP_CAPTURE` is 0.55, so a half-step is walked
+// with no press and a full block "stays out of reach and stays a vault" (`locomotion.ts`). A
+// half-step landing is NOT a defect, and counting it as one is what inflated the original figure.
+import { bridgeSpecs, bridgeAt, deckTopAt } from '../src/app/shimmer/voxel/bridges'
 import { columnHeight } from '../src/app/shimmer/voxel/height'
+import { materialAt, MAT } from '../src/app/shimmer/voxel/depth'
+import { STORY_NODES } from '../src/app/shimmer/voxel/story-path'
 
-const SEED = 1337
-const specs = bridgeSpecs(SEED)
+const SEEDS = [1, 1337]
 
-// Scan around each crossing's piers to find its columns.
-const landings: { id: string; end: string; deck: number; shore: number; d: number; at: string }[] = []
-for (let i = 0; i < specs.length; i++) {
-  const s = specs[i]
-  const anchor = s.pierPos[0] ?? { x: 0, z: 0 }
-  const cells = new Map<string, { x: number; z: number; t: number }>()
-  const R = s.span + 20
-  for (let x = anchor.x - R; x <= anchor.x + R; x++) for (let z = anchor.z - R; z <= anchor.z + R; z++) {
-    const b = bridgeAt(x, z, SEED)
-    if (b && b.i === i) cells.set(`${x},${z}`, { x, z, t: b.t })
-  }
-  if (!cells.size) continue
-  const ts = [...cells.values()].map(c => c.t)
-  const tMin = Math.min(...ts), tMax = Math.max(...ts)
-  for (const [end, tEnd] of [['near', tMin], ['far', tMax]] as const) {
-    for (const c of cells.values()) {
-      if (c.t !== tEnd) continue
-      // The deck's own top here, and the first LAND column beyond it in each direction.
-      const deck = columnHeight(c.x, c.z, SEED)
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        const nx = c.x + dx, nz = c.z + dz
-        if (bridgeAt(nx, nz, SEED)) continue          // still on the bridge
-        const shore = columnHeight(nx, nz, SEED)
-        landings.push({ id: s.id, end, deck, shore, d: shore - deck, at: `${nx},${nz}` })
-      }
-      break
+for (const SEED of SEEDS) {
+  const specs = bridgeSpecs(SEED)
+
+  type C = { x: number; z: number; t: number; ux: number; uz: number }
+  const line = new Map<number, C[]>()
+  for (let n = 0; n < STORY_NODES.length - 1; n++) {
+    const a = STORY_NODES[n], b = STORY_NODES[n + 1]
+    const len = Math.hypot(b.x - a.x, b.z - a.z)
+    const ux = (b.x - a.x) / len, uz = (b.z - a.z) / len
+    for (let d = -8; d <= len + 8; d += 0.5) {
+      const x = Math.floor(a.x + ux * d), z = Math.floor(a.z + uz * d)
+      const c = bridgeAt(x, z, SEED)
+      if (!c) continue
+      const arr = line.get(c.i) ?? []
+      if (!arr.some(v => v.x === x && v.z === z)) arr.push({ x, z, t: c.t, ux, uz })
+      line.set(c.i, arr)
     }
   }
-}
 
-const up = landings.filter(l => l.d > 0), flat = landings.filter(l => l.d === 0), down = landings.filter(l => l.d < 0)
-console.log(`bridges ${specs.length} · landing samples ${landings.length}`)
-console.log(`  flush           ${flat.length}`)
-console.log(`  SHORE HIGHER    ${up.length}   <- a step UP off the deck, which is what Alex reported`)
-console.log(`  shore lower     ${down.length}`)
-if (up.length) {
-  up.sort((a, b) => b.d - a.d)
-  console.log(`  worst: ${up.slice(0, 8).map(l => `${l.id} ${l.end} +${l.d} @${l.at}`).join(' · ')}`)
+  let flush = 0, half = 0, vault = 0, dry = 0
+  const bad: string[] = []
+  const rows: string[] = []
+  for (let i = 0; i < specs.length; i++) {
+    const b = specs[i]
+    const cells = (line.get(i) ?? []).sort((p, q) => p.t - q.t)
+    if (!cells.length) { rows.push(`${b.id.padEnd(20)} NOT REACHED FROM THE SPINE`); continue }
+    for (const [end, c0, sgn] of [['near', cells[0], -1], ['far', cells[cells.length - 1], +1]] as const) {
+      const deck = deckTopAt(b, c0.t)
+      const out: string[] = []
+      let ground: number | null = null
+      for (let k = 1; k <= 12; k++) {
+        const nx = Math.floor(c0.x + 0.5 + c0.ux * sgn * k), nz = Math.floor(c0.z + 0.5 + c0.uz * sgn * k)
+        if (bridgeAt(nx, nz, SEED)) { out.push('  [b]'); continue }
+        const h = columnHeight(nx, nz, SEED)
+        const wet = materialAt(nx, h, nz, SEED, h) === MAT.WATER
+        out.push(`${String(h).padStart(4)}${wet ? '~' : ' '}`)
+        if (!wet && ground === null) ground = h
+      }
+      let tag: string
+      if (ground === null) { tag = 'NEVER LANDS'; bad.push(`${b.id} ${end} never lands`) }
+      else {
+        dry++
+        const d = ground - deck
+        if (d === 0) { tag = 'flush'; flush++ }
+        else if (Math.abs(d) <= 0.5) { tag = `${d > 0 ? '+' : ''}${d} step`; half++ }
+        else { tag = `${d > 0 ? '+' : ''}${d} VAULT`; vault++; bad.push(`${b.id} ${end} ${d > 0 ? '+' : ''}${d}`) }
+      }
+      rows.push(`${b.id.padEnd(20)} ${end.padEnd(4)} deck=${String(deck).padStart(6)} ${tag.padStart(12)} |${out.join('')}`)
+    }
+  }
+
+  console.log(`\n── seed ${SEED} · ${specs.length} crossings, ${line.size} reached from the spine ──`)
+  for (const r of rows) console.log(r)
+  console.log(`  flush ${flush} · half-step ${half} (walkable, STEP_CAPTURE 0.55) · FULL-BLOCK VAULT ${vault} · of ${dry} landings`)
+  if (line.size !== specs.length) console.log(`  ⚠ ${specs.length - line.size} crossing(s) NOT REACHED — that is a hole in the measurement, not a pass`)
+  if (bad.length) console.log(`  ⚠ ${bad.join(' · ')}`)
 }

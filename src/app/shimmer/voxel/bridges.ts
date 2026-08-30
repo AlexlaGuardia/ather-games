@@ -24,14 +24,22 @@
 // knows its span, the realism levers stop being special cases and become arithmetic.
 //
 // ── ★★ THE ARCH IS NOT DECORATION — IT IS THE ONLY WAY TO GET CLEARANCE ───────────────────────
-// `height.ts`'s approach blend pins river banks at `table + 1` (:368), and that is why the old deck
-// sat there: deck and bank met flush by construction, no ramp logic anywhere. That flush join is
-// worth keeping and it is also the whole constraint. Lift a FLAT deck for clearance and it no longer
-// meets the ground at either end, so you owe abutment ramps at both banks and a keeper walks up a
-// step to get on the bridge.
+// `height.ts`'s approach blend aims river banks at `table + 1` (:368), and that is why the old deck
+// sat there. That flush join is worth keeping and it is also the whole constraint. Lift a FLAT deck
+// for clearance and it no longer meets the ground at either end, so you owe abutment ramps at both
+// banks and a keeper walks up a step to get on the bridge.
 //
-// An arch pays for itself twice: it SPRINGS from `table + 1` at both banks (join preserved, exactly
-// as before) and rises over the water in the middle (clearance, where the clearance is wanted). The
+// ⚠⚠ THIS PARAGRAPH USED TO END "deck and bank met flush by construction, no ramp logic anywhere",
+// AND THAT CLAIM WAS FALSE FOR AS LONG AS IT STOOD (corrected 2026-08-30, after Alex found it in
+// play). The blend AIMS at `table + 1`; it does not arrive there. Measured across two seeds, banks
+// land at the table itself and banks stand above `table + 1`, and a deck that springs at
+// `table + 1` regardless put a FULL-BLOCK step — a vault — at 6 of 22 crossing-ends. The ramps this
+// paragraph says are not needed are now built; see `ABUT_REACH` and `deckTopAt`. A comment that
+// asserts an invariant nothing checks is the shape this file has been bitten by twice.
+//
+// An arch pays for itself twice: it SPRINGS at the bank (join preserved, exactly as before — at
+// `table + 1`, or at the bank's own height where the abutment had to reach for it) and rises over
+// the water in the middle (clearance, where the clearance is wanted). The
 // short creek keeps its flat plank because its arch rounds to nothing, and the wide river gets a
 // real hump. That is item 3 above solving itself out of one formula rather than a span-type switch.
 //
@@ -185,6 +193,45 @@ const RAIL_MIN_WIDTH = 5
 const MAX_GRADE = 0.5
 
 /**
+ * ★★★ HOW FAR THE DECK MAY REACH PAST ITS OWN SPRINGING TO MEET THE GROUND — the abutment.
+ *
+ * Measured 2026-08-30 (Alex, from play: *"i found alot of instances where they didnt land on the
+ * shore smoothly"*): of 22 crossing-ends, **11 were flush, 5 were a half-step (walkable — see
+ * MAX_GRADE), and 6 were a FULL BLOCK, which locomotion treats as a vault.** A bridge you mantle
+ * off is the same defect as a bridge you mantle across.
+ *
+ * ⚠⚠ AND THE DIRECTION IS THE OPPOSITE OF WHAT THIS FILE PREVIOUSLY RECORDED. The board read
+ * "18 SHORE HIGHER, up to +2" and framed the fix as a ramp climbing to a higher bank. That number
+ * came from an instrument that read `columnHeight` on BOTH sides of the join — and `height.ts`
+ * contains no reference to bridges, so it was comparing the terrain under the deck against the
+ * terrain beside it and never saw the deck at all. Measured against `deckTopAt` on the actual
+ * spine, **5 of the 6 real defects are DROPS and 1 is a step up.** An up-ramp would have fixed one
+ * end and missed five. (`scripts/bridge-landings.mts` carries the full post-mortem.)
+ *
+ * WHY THE FIX LAYS BLOCKS RATHER THAN MOVING GROUND: `holds.ts` can flatten terrain because
+ * `height.ts` imports it. This file imports `height.ts`, so the arrow runs the other way and a
+ * bridge cannot contribute a height blend without restructuring the module graph. Which is also
+ * what Alex proposed independently: *"premake all the blocks from one end of the bridge to the
+ * other, including the shore."*
+ *
+ * ★★ ONE MECHANISM COVERS BOTH DIRECTIONS, AND THE EXISTING SKIP RULE ENDS IT. The ribbon is
+ * rasterised past the springing by `ABUT_REACH`; those cells descend toward the landing ground at
+ * MAX_GRADE. The survey ALREADY refuses a bank cell whose ground stands at or above the deck
+ * (`nearBank && h >= deckTop`), so the apron terminates itself exactly where the ground rises to
+ * meet it — no length calculation, no second rule to keep in step with the first.
+ */
+export const ABUT_REACH = 4
+
+/**
+ * ⚠ The most a landing may drag the deck away from `table + 1`, in blocks. A clamp, not a dial:
+ * `abut` is a MEASURED ground height, so an unclamped bank could ask the deck to climb any amount
+ * and would silently push the crossing through `BRIDGE_REACH` — the caller's y-gate — which slices
+ * the top off a deck without erroring. `BRIDGE_REACH` adds this for exactly that reason; the two
+ * constants are one decision and must move together.
+ */
+const ABUT_MAX = 2
+
+/**
  * ★ HOW FAR ABOVE ITS OWN GROUND A BRIDGE CAN REACH — the caller's cheap y-band gate, DERIVED.
  *
  * depth.ts early-outs on `y - h` before it asks anything expensive, and that gate was written for a
@@ -213,7 +260,7 @@ const MAX_GRADE = 0.5
  */
 export const BRIDGE_BAND = DECK_HALF + 2
 
-export const BRIDGE_REACH = Math.max(...Object.values(KINDS).map(k => k.rise)) / 2 + 2 + RIVER_DEPTH + 1
+export const BRIDGE_REACH = Math.max(...Object.values(KINDS).map(k => k.rise)) / 2 + 2 + RIVER_DEPTH + 1 + ABUT_MAX
 
 export interface BridgeSpec {
   id: string
@@ -240,6 +287,18 @@ export interface BridgeSpec {
    *  so it passes cleanly when every pier is collapsed back onto the crossing minimum — which is
    *  the exact regression `pierBed` exists to prevent, and a mutation sweep proved it survived. */
   pierPos: { x: number; z: number }[]
+  /**
+   * ★★ THE GROUND EACH END ACTUALLY LANDS ON — `[near, far]`, whole blocks, clamped to
+   * `table + 1 ± ABUT_MAX`. This is the field that lets `deckTopAt` stay pure.
+   *
+   * `deckTopAt(spec, t)` has no world position and cannot ask where the bank is. But the SPEC is
+   * surveyed — `table` is already a measured world fact sitting one field up — so the landing is
+   * measured once, here, and the pure function keeps its exact signature. That is why this is not
+   * a parallel abutment pass: a second path would leave the 371-assert oracle running through
+   * `deckTopAt` while the world ran through something else, which is the `bridgeVoxelAt`
+   * vs `materialAt` split that cost a day on 08-22.
+   */
+  abut: [number, number]
 }
 
 /** What a bridge column knows about itself: which bridge, and where it stands on it. */
@@ -270,6 +329,14 @@ export interface BridgeCell {
   idx: number
   /** How many cells this row has. `idx` is meaningless without it. */
   n: number
+  /**
+   * ★ The generated ground height at this column, measured in the survey (it already samples it to
+   * decide whether the cell belongs to the ribbon at all). An apron cell must be filled SOLID from
+   * the ground up, or it is a slab floating over the bank — and `bridgeVoxelAt` has no world
+   * position with which to ask. Mid-span cells carry it too and never use it: the fill is scoped to
+   * `t` outside the span, because a fill mid-span would wall in the river.
+   */
+  g: number
 }
 
 interface BridgeIndex {
@@ -343,10 +410,37 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
       // where the waterline happens to cut. `roadAt` no longer decides the shape — a bridge is a
       // structure, not a terrain feature, and asking the road for its outline is what produced a
       // deck one block wide.
+      // ★★ THE GROUND EACH END LANDS ON — measured on the centreline, once, before the ribbon is
+      // rasterised (the raster needs the deck profile, and the deck profile now needs this).
+      // "Dry" is asked of `submerged`, the survey's own question, rather than re-derived: a column
+      // can sit below the water TABLE and carry no water at all when it is outside the channel, so
+      // `h <= table` is a different question and answers it wrongly on exactly these bank cells.
+      const landingAt = (t0: number, step: number): number => {
+        for (let k = 1; k <= ABUT_REACH + 6; k++) {
+          const t = t0 + step * k
+          const lx = Math.floor(ox + ux * t), lz = Math.floor(oz + uz * t)
+          if (submerged(lx, lz, seed, cfg) !== null) continue       // still over the water
+          const h = columnHeight(lx, lz, seed, cfg)
+          return Math.max(tbl + 1 - ABUT_MAX, Math.min(tbl + 1 + ABUT_MAX, h))
+        }
+        return tbl + 1        // never reached dry ground inside the probe — leave the deck alone
+      }
+      const abut: [number, number] = [landingAt(0, -1), landingAt(span, +1)]
+
+      // ★ THE RIBBON ASKS `deckTopAt`, IT DOES NOT RESTATE IT. This loop used to carry its own copy
+      // of the arch formula, which was correct while there was only an arch; the abutment gives the
+      // two a way to disagree, and a copy that agrees with its original is not evidence about
+      // either of them. A provisional spec costs one object and removes the mirror entirely.
+      const profile = { table: tbl, span, rise: riseFor, abut } as BridgeSpec
+
+      // ⚠ `ABUT_REACH` IS A BOUND, NOT A LENGTH. How far the apron actually runs is decided by the
+      // descending ramp meeting the ground (`h >= deckTop`, below) — see the two bugs written up
+      // on `deckTopAt`. This only says how far out it is worth asking.
+
       let table = -Infinity, bed = Infinity, found = 0
-      const mine: { key: string; t: number; s: number }[] = []
+      const mine: { key: string; t: number; s: number; g: number }[] = []
       const claimed = new Map<string, number>()   // world cell -> |s| that claimed it
-      for (let t = 0; t <= span; t += RASTER) {
+      for (let t = -ABUT_REACH; t <= span + ABUT_REACH; t += RASTER) {
         for (let so = -DECK_HALF; so <= DECK_HALF; so += RASTER) {
           const x = Math.floor(ox + ux * t - uz * so)
           const z = Math.floor(oz + uz * t + ux * so)
@@ -363,7 +457,10 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
           // anything today, and it must not be cited as load-bearing. (I first wrote it up as the fix
           // for three deck holes; those holes were the assert's own false positive at the springing,
           // where the bank sits flush with the deck.)
-          const deckTop = tbl + 1 + Math.min(riseFor, Math.floor(t), Math.floor(span - t)) * MAX_GRADE
+          const deckTop = deckTopAt(profile, t)
+          // ★★ THIS IS ALSO WHAT ENDS THE APRON. Outside the span every cell is "near bank", so the
+          // apron is laid only while the ground still stands below the descending deck and stops
+          // itself the moment the bank rises to meet it. No apron length is computed anywhere.
           const nearBank = t < 2 || t > span - 2
           if (nearBank && h >= deckTop) continue
           if (claimed.has(key)) continue
@@ -374,7 +471,7 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
           // silently unrails 118 of 545 rows. Project the cell CENTRE back onto the crossing frame
           // instead: one true answer per cell, independent of which sample happened to find it.
           const px = x + 0.5 - ox, pz = z + 0.5 - oz
-          mine.push({ key, t: px * ux + pz * uz, s: -px * uz + pz * ux })
+          mine.push({ key, t: px * ux + pz * uz, s: -px * uz + pz * ux, g: h })
           found++
           table = Math.max(table, tbl)
           bed = Math.min(bed, h)
@@ -426,7 +523,7 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
         pierBed.push(columnHeight(bx, bz, seed, cfg))
       }
 
-      specs.push({ id, kind, span, table, bed, rise, pierHalf: k.pierHalf, piers, pierBed, pierPos })
+      specs.push({ id, kind, span, table, bed, rise, pierHalf: k.pierHalf, piers, pierBed, pierPos, abut })
       // Rank each row's cells across the deck once, so geometry can be placed by INDEX.
       const ranked = new Map<number, { key: string; s: number }[]>()
       for (const c of mine) {
@@ -452,6 +549,7 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
           half: DECK_HALF,
           idx: rankOf.get(c.key)!,
           n: row.n,
+          g: c.g,
         })
       }
     }
@@ -497,11 +595,53 @@ export function bridgeAt(x: number, z: number, seed: number, cfg: HeightConfig =
  */
 export function deckTopAt(spec: BridgeSpec, t: number): number {
   const base = spec.table + 1
-  if (spec.rise <= 0 || spec.span <= 1) return base
+
+  // ── the abutment, per end ───────────────────────────────────────────────────────────────────
+  // The springing is the height of the land that end actually lands on, never below the waterline:
+  // the deck may CLIMB to meet a high bank (it cannot cut one down) but may never drop into its own
+  // river. `abut` is already clamped to `base ± ABUT_MAX` by the survey.
+  const endAt = (land: number): number => Math.max(base, land)
+  const nearEnd = endAt(spec.abut[0]), farEnd = endAt(spec.abut[1])
+
+  // ⚠⚠ THE COLUMN COUNT IS FLOORED, EXACTLY AS THE ARCH FLOORS `u`. `t` is a continuous
+  // projection, so scaling it by MAX_GRADE directly yields tops like `113.655`, and this file's
+  // contract is that a deck top is ALWAYS a multiple of 0.5 — a value between the halves is the
+  // vault the whole half-step scheme exists to prevent. Measured before the floor went in: 4 of 22
+  // ends landed on a fraction. `abut` is a whole block, so flooring the count keeps every result on
+  // the half-grid.
+  //
+  // ★★★ OUTSIDE THE SPAN THE APRON DESCENDS, AND IT MUST DESCEND RATHER THAN RUN FLAT. Two bugs
+  // were found by building it the other way round, and they pull in opposite directions:
+  //
+  //   · A FLAT apron at the springing walks straight out over ground that falls away behind a bank
+  //     crest. `moonwell-glade-0 far` lands on such a crest, needs no abutment at all, and a flat
+  //     four-cell extension turned a walkable -0.5 into a full-block vault by moving the cliff
+  //     further out. ⚠ The skip rule is evaluated PER CELL, so it also produced a NON-CONTIGUOUS
+  //     apron: three cells skipped at the crest, then one laid in the air beyond it.
+  //   · Deriving the apron's LENGTH from `abut` instead fixed that and left a different hole —
+  //     `gloview-village-1 near` on seed 1 meets its bank flush at 122 with a one-cell trench two
+  //     deep sitting in the join, and a length of zero bridges nothing.
+  //
+  // A ramp that descends at MAX_GRADE and stops where the ground rises to meet it answers both,
+  // and needs no length at all: against a falling bank it stays under the terrain and lays nothing;
+  // over a trench it lays the one cell that spans it.
+  const apron = (end: number, d: number): number => end - Math.floor(d) * MAX_GRADE
+
+  // ★ AND THE ARCH MUST NOT PARTICIPATE OUT HERE. `u` clamps to the span, so the arch term reads
+  // `base` on every apron cell — above every descending apron value — and a blanket
+  // `Math.max(arch, ...)` would pin the apron flat and silently restore the first bug above.
+  if (t < 0) return apron(nearEnd, -t)
+  if (t > spec.span) return apron(farEnd, t - spec.span)
+
   const u = Math.max(0, Math.min(spec.span, t))
-  // Climb from whichever bank is nearer, and stop at the crown.
-  const halves = Math.min(spec.rise, Math.floor(u), Math.floor(spec.span - u))
-  return base + halves * MAX_GRADE
+  const arch = (spec.rise <= 0 || spec.span <= 1)
+    ? base
+    // Climb from whichever bank is nearer, and stop at the crown.
+    : base + Math.min(spec.rise, Math.floor(u), Math.floor(spec.span - u)) * MAX_GRADE
+  // Inside the span, an end that had to climb eases back to the arch at the same grade.
+  const riseNear = Math.max(base, nearEnd - Math.floor(u) * MAX_GRADE)
+  const riseFar = Math.max(base, farEnd - Math.floor(spec.span - u) * MAX_GRADE)
+  return Math.max(arch, riseNear, riseFar)
 }
 
 /** The pier standing at this along-span offset: its index and the distance to its centre. */
@@ -541,6 +681,18 @@ export function bridgeVoxelAt(
   // an integer surface to sit on the whole way across. It also reads correctly: a raised kerb under
   // a parapet is what a real deck has.
   if (y === yc) return (top - yc >= 1 || cell.edge) ? deck : deckHalf
+
+  // ── the abutment's fill ─────────────────────────────────────────────────────────────────────
+  // ★★ AN APRON MUST BE SOLID OR IT IS A SLAB FLOATING OVER THE BANK. The deck descends toward the
+  // landing at MAX_GRADE while the ground beneath it does whatever the terrain does, so the gap
+  // between them has to be packed. `cell.g` carries that ground because this function has no world
+  // position to ask with.
+  //
+  // ⚠ SCOPED TO THE APRON ON PURPOSE, AND THE SCOPE IS THE SAFETY PROPERTY. Mid-span cells stand
+  // over the channel, where `g` is the river BED — filling those would pack the river solid from
+  // the bed to the deck and dam the crossing shut. `t` outside `[0, span]` is exactly the abutment
+  // and nothing else.
+  if ((cell.t < 0 || cell.t > spec.span) && y < yc && y >= cell.g) return stone
 
   // ── the railing is NOT voxels ─────────────────────────────────────────────────────────────
   // It was: a solid course on the deck edge (a kerb), then posts + a top rail out of whole blocks.

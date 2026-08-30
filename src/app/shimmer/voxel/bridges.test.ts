@@ -8,11 +8,11 @@
 
 import {
   bridgeSpecs, bridgeAt, deckTopAt, bridgeVoxelAt, __clearBridgeCache, BRIDGE_REACH, kindFor,
-  bridgeGenPiecesForCol,
+  bridgeGenPiecesForCol, ABUT_REACH,
 } from './bridges'
 import { STORY_NODES } from './story-path'
 import { columnHeight } from './height'
-import { materialAt, isSolid, isHalfMat } from './depth'
+import { materialAt, isSolid, isHalfMat, MAT } from './depth'
 
 let pass = 0, fail = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -37,20 +37,43 @@ for (const SEED of SEEDS) {
     // locomotion.ts: STEP_CAPTURE 0.55 walks a +0.5 rise with no press; a full +1 "stays out of
     // reach and stays a vault". A deck that steps a whole block is a bridge you MANTLE across.
     // This is the single assert that must never be relaxed to make a nicer-looking arch fit.
+    // ⚠⚠ THE DOMAIN IS THE WHOLE RIBBON, NOT THE SPAN. Both of these used to walk `0 .. span`,
+    // which is the arch and nothing else — so when the abutment added deck OUTSIDE the span they
+    // could not see it, and a mutation dropping the apron's `Math.floor` (deck tops like
+    // `113.655`, the exact defect the 0.5-grid assert exists to catch) passed all 2185 asserts.
+    // An assert that cannot reach its subject reports "nothing wrong" and means "I could not look".
+    // ⚠⚠ AND THE PHASE MATTERS AS MUCH AS THE DOMAIN. Sampling at INTEGER `t` makes every
+    // `Math.floor` in `deckTopAt` a no-op, so the widened domain STILL passed a mutation that
+    // removed the apron's floor. The generator evaluates this at the ribbon's own continuous
+    // offsets (`RASTER` 0.5, and a cell's `t` is a projected float), so the sweep steps in
+    // quarters. Two guards, one blind spot each, and both read as green.
+    const T0 = -ABUT_REACH, T1 = b.span + ABUT_REACH
     let worst = 0
-    for (let t = 0; t < b.span; t++) worst = Math.max(worst, Math.abs(deckTopAt(b, t + 1) - deckTopAt(b, t)))
+    for (let t = T0; t < T1; t += 0.25) worst = Math.max(worst, Math.abs(deckTopAt(b, t + 1) - deckTopAt(b, t)))
     check(`s${SEED}/${b.id}: no deck step exceeds STEP_CAPTURE`, worst <= 0.5, `steepest ${worst}`)
 
     // A height between the halves is unrepresentable — there is no third slab.
     let offGrid = 0
-    for (let t = 0; t <= b.span; t++) { const v = deckTopAt(b, t); if (Math.abs(v * 2 - Math.round(v * 2)) > 1e-9) offGrid++ }
+    for (let t = T0; t <= T1; t += 0.25) { const v = deckTopAt(b, t); if (Math.abs(v * 2 - Math.round(v * 2)) > 1e-9) offGrid++ }
     check(`s${SEED}/${b.id}: every deck height sits on the 0.5 grid`, offGrid === 0, `${offGrid} off-grid`)
 
     // ── the springing meets the bank ─────────────────────────────────────────────────────────
-    // height.ts:368 pins the approach at table+1. The arch exists so clearance costs nothing at
-    // the join; if either end lifts off that level, abutment ramps are owed and nobody built them.
-    check(`s${SEED}/${b.id}: springs flush at the near bank`, deckTopAt(b, 0) === b.table + 1, `${deckTopAt(b, 0)} vs ${b.table + 1}`)
-    check(`s${SEED}/${b.id}: springs flush at the far bank`, deckTopAt(b, b.span) === b.table + 1, `${deckTopAt(b, b.span)} vs ${b.table + 1}`)
+    // ⚠⚠ CONTRACT CHANGE 2026-08-30 — NOT A REGRESSION, AND DO NOT "FIX" IT BACK. This pair used to
+    // assert `deckTopAt(b, 0) === b.table + 1` outright, on the premise quoted from height.ts:368
+    // that the approach blend pins every bank to `table + 1`. MEASURED, that premise is false in
+    // BOTH directions: banks land at the table itself and banks stand above `table + 1`. Springing
+    // at `table + 1` regardless is what PUT a full-block step at 6 of 22 crossing-ends — the assert
+    // was not merely stale, it was pinning the deck to the height that caused the defect.
+    //
+    // The half that was always load-bearing survives: the springing may never sit BELOW the
+    // waterline, which is what keeps the deck out of the river. The upper bound is its own landing,
+    // so the abutment can lift the end to meet high ground and cannot invent height beyond it.
+    for (const [end, t, land] of [['near', 0, b.abut[0]], ['far', b.span, b.abut[1]]] as const) {
+      check(`s${SEED}/${b.id}: springs no lower than the waterline at the ${end} bank`,
+        deckTopAt(b, t) >= b.table + 1, `${deckTopAt(b, t)} vs ${b.table + 1}`)
+      check(`s${SEED}/${b.id}: springs no higher than its own landing at the ${end} bank`,
+        deckTopAt(b, t) <= Math.max(b.table + 1, land), `${deckTopAt(b, t)} vs landing ${land}`)
+    }
 
     // The deck never dips into the water it crosses.
     let sunk = 0
@@ -582,6 +605,72 @@ for (const SEED of SEEDS) {
     // silently orphans every tombstone a player has earned. Nothing here can catch that; the id's
     // SHAPE is the guard, which is why it is written out in the comment on `railPiecesFor`.
   }
+}
+
+// ── ★★★ THE LANDING — DOES A KEEPER WALK OFF THE DECK, OR MANTLE OFF IT? ────────────────────
+// Alex, 2026-08-30, from play: *"i found alot of instances where they didnt land on the shore
+// smoothly"*. Nothing in this oracle could see that: every assert above judges the deck against
+// ITSELF (its own grid, its own grade, its own springing) and the defect lives in the JOIN between
+// the deck and ground that no bridge code owns.
+//
+// ⚠ THIS IS THE AFFORDANCE, NOT THE MEMBERSHIP. The question a keeper asks is not "is this cell in
+// the deck set" but "how far is the step", so it is measured through the world in world
+// coordinates: walk the spine, take each crossing's outermost centreline cell, and step outward
+// until the road reaches ground that is not water.
+//
+// ⚠⚠ AND "DRY" IS ASKED OF `materialAt`, NOT DERIVED. A column can sit below the water TABLE and
+// carry no water at all when it lies outside the channel, so `h <= table` answers a different
+// question and answers it wrongly on exactly these bank cells — it was the reason an earlier
+// measurement reported 35 samples "ending over water" that were nothing of the kind.
+for (const SEED of SEEDS) {
+  const specs = bridgeSpecs(SEED)
+  type C = { x: number; z: number; t: number; ux: number; uz: number }
+  const line = new Map<number, C[]>()
+  for (let n = 0; n < STORY_NODES.length - 1; n++) {
+    const a = STORY_NODES[n], b = STORY_NODES[n + 1]
+    const len = Math.hypot(b.x - a.x, b.z - a.z)
+    const ux = (b.x - a.x) / len, uz = (b.z - a.z) / len
+    for (let d = -8; d <= len + 8; d += 0.5) {
+      const x = Math.floor(a.x + ux * d), z = Math.floor(a.z + uz * d)
+      const c = bridgeAt(x, z, SEED)
+      if (!c) continue
+      const arr = line.get(c.i) ?? []
+      if (!arr.some(v => v.x === x && v.z === z)) arr.push({ x, z, t: c.t, ux, uz })
+      line.set(c.i, arr)
+    }
+  }
+
+  // ⚠ A CROSSING THIS WALK CANNOT SEE IS A HOLE IN THE GUARD, NOT A PASS. The probe this replaces
+  // anchored its scan on `pierPos[0] ?? {x:0,z:0}`, so both SINGLE-BAY crossings — which have no
+  // piers at all — were measured at the world origin and silently dropped, and one of them was a
+  // real vault. Assert the coverage, or the next such hole reads as a clean run.
+  check(`s${SEED}: every crossing is reachable from the spine`, line.size === specs.length,
+    `walked ${line.size} of ${specs.length}`)
+
+  let vaults = 0, landed = 0
+  const worst: string[] = []
+  for (let i = 0; i < specs.length; i++) {
+    const b = specs[i]
+    const cells = (line.get(i) ?? []).sort((p, q) => p.t - q.t)
+    if (!cells.length) continue
+    for (const [end, c0, sgn] of [['near', cells[0], -1], ['far', cells[cells.length - 1], +1]] as const) {
+      const deck = deckTopAt(b, c0.t)
+      let ground: number | null = null
+      for (let k = 1; k <= 12 && ground === null; k++) {
+        const nx = Math.floor(c0.x + 0.5 + c0.ux * sgn * k), nz = Math.floor(c0.z + 0.5 + c0.uz * sgn * k)
+        if (bridgeAt(nx, nz, SEED)) continue
+        const h = columnHeight(nx, nz, SEED)
+        if (materialAt(nx, h, nz, SEED, h) !== MAT.WATER) ground = h
+      }
+      check(`s${SEED}/${b.id}: the ${end} end reaches dry ground`, ground !== null)
+      if (ground === null) continue
+      landed++
+      // locomotion.ts: STEP_CAPTURE 0.55 walks 0.5 with no press; a full 1.0 stays a vault.
+      if (Math.abs(ground - deck) > 0.5) { vaults++; worst.push(`${b.id} ${end} ${ground - deck > 0 ? '+' : ''}${ground - deck}`) }
+    }
+  }
+  check(`s${SEED}: no crossing-end is a full-block step off the deck`, vaults === 0,
+    `${vaults} of ${landed} — ${worst.join(' · ')}`)
 }
 
 // ── the survey is a pure function of the seed ────────────────────────────────────────────────
