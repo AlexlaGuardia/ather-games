@@ -15,6 +15,55 @@ the Arcade frame.
 
 
 
+### ✅ **THE DECK AT THE RIM** (2026-08-30 night, hub lane — Alex ruled it: *"do the deck at the rim"*)
+`5754bd3`. **40 seeds / 383 shared crossing-ends: vaults 21 → 15, EIGHT improved, NONE worse.** Oracle
+**2228/0**, mutations 3/3, tsc 7 (baseline). ⏸ NOT DEPLOYED — worldgen change, wants Alex's go.
+
+**`s5/vetch-hold-7` is flush at both rims.** It is a **9-wide, 13-deep GORGE** — both banks flat at
+129, water table 118, bed 116, and the story road walks it at 129 on both sides. Clamped to
+`table + 1 + 2` the deck sprang at **121 and left an 8-block cliff at each end**, the worst landing on
+the map. It is not a bank a ramp can reach, and a ramp was never the answer.
+
+- **★★ TWO HALVES, AND EITHER ALONE IS WRONG.** `ABUT_UP` 2 → 10 lets the deck climb to the rim the
+  survey already measured. **`deckFloorAt` stops it sagging back down between two rims** — both ramps
+  decay toward `base`, which is right when `base` is where the deck is GOING and wrong when both ends
+  stand high, so the gorge dipped to **127 in the middle of a 9-block span**. Raising the clamp alone
+  builds a hammock. ★ The floor also removes a half-block dip on **five existing seed-1337
+  crossings** — it was never only a gorge fix.
+- **★ `ABUT_DOWN` DELIBERATELY STAYS AT 2**, and that asymmetry is the point: UP costs `BRIDGE_REACH`
+  (`depth.ts`'s hot y-gate), DOWN costs nothing because `endAt` is `max(base, land)`. The downward
+  tail wants an EMBANKMENT — measured last round, lengthening that apron scored 21→15 on the sweep
+  while putting **34 AIR cells and 9 floating railing posts** into the oracle. Still open.
+- **⚠ THE ONE CROSSING LEFT IS NOT UNDER-CLAMPED, IT IS MIS-SITED.** `s37/vetch-hold-2` faces a near
+  rim of **141** against a far rim of **127** across a **14-block span** — a grade of 1.0 where
+  `MAX_GRADE` is 0.5. **No value of `ABUT_UP` reaches it**; a bigger number only buys a deck arriving
+  7 blocks OVER its far bank instead of 7 under it. It improved anyway (21 → 13, and 7 → 1).
+- **Cost, measured not assumed: ~9% on generating a chunk that actually contains a crossing, nothing
+  elsewhere.** ⚠ Normalized against an open-country control that drifted **6% while nothing about it
+  changed** — that is the noise floor on this shared box, and the raw +15.6% is not the number.
+- **⚠⚠ TWO CONTRACTS BROKE AND BOTH WERE REAL FINDINGS, NOT PAPERWORK.** (1) `spec.rise` means the
+  ARCH's crown; `deckTopAt` now maxes it against a second term, so the oracle's crown assert was
+  reading the RIM (`20` against a `rise` of 2). It asks the real `deckTopAt` for a spec with NEUTRAL
+  RIMS now — subtracting the floor instead would have been a mirror of the `max` and would pass for a
+  deck of any shape. (2) ★★★ **`surfAt` in BOTH the oracle and the sweep scanned `h + 6`, anchored on
+  the TERRAIN.** A rim deck stands 14 blocks over its bed, so the probe scanned straight past it and
+  returned **the gorge floor as the deck's surface** — reporting a 5-block step off a crossing that is
+  flush. *A wrong answer, not a missing one.* Derived from `BRIDGE_REACH` now.
+- **★★ GUARDED BY NAME, NOT BY ADDING SEED 5 TO `SEEDS`.** That seed carries **four unrelated
+  pre-existing failures** (verified present on HEAD in an isolated worktree) and a standing red is how
+  a suite stops being read. ⚠ **But leaving the fix unguarded because its only witness lives on an
+  awkward seed is the same mistake in the opposite coat** — seeds 1 and 1337 contain no gorge, so
+  every assert that existed before tonight is green whether `ABUT_UP` is 10 or 2.
+- **Mutation-swept 3/3, each entering by the door the bug uses:** `ABUT_UP` back to 2 → 2 asserts ·
+  drop the rim floor → 10 · detach `BRIDGE_REACH` from `ABUT_UP` → the y-gate assert. ⚠ **And one of
+  the three guards is GREEN under its own mutation on purpose:** *springs level with the rim* compares
+  against `abut`, which is itself the clamped value, so a tightened clamp makes deck and survey agree
+  perfectly about the wrong height. Its two neighbours are what trip — **neither may be deleted as
+  redundant**, and the comment says so.
+- **⏭ NEXT:** Alex walks a gorge crossing (`s5/vetch-hold-7`) and rules whether a plank reads right at
+  a rim — a 9-block beam over a 13-deep chasm needs no pier by the bay math, and that is a LOOK call ·
+  the DOWN tail's embankment · `s37/vetch-hold-2` is a siting question, not a bridge one.
+
 ### ⚠⚠⚠ CORRECTION (2026-08-30 evening, hub lane) — **8 SEEDS NAMED ONE DIRECTION. 40 SEEDS SHOW TWO.**
 > Correcting the section below **in place** rather than rewriting it: the wrong reading is the useful
 > artifact, and a silently-fixed board teaches nobody. `c859fe3`. Geometry on `master` is UNCHANGED —
