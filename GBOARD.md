@@ -11,6 +11,67 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🪑 Shimmer — **THE BENCH, AND THE KEEPER'S RING: THE COUNTER-IMAGE, BUILT** (2026-08-30, world lane) · *Last touched 2026-08-30 — bench is the 15th piece, `sparring_ring` is the first authored blueprint. piece-mesh 11 asserts (new file), green-terrain 26, 7/7 mutations. Deployed.*
+
+### Left off — Alex asked for benches, and the answer was two different things
+> *"what if we created benches as a craftable object and used it to make a real mini arena?"*
+
+**The bench is the KEEPER's, and a hold gets none.** `moglin-holds.md` fixes the collar-culture's
+built vocabulary as an exhaustive list — cages, tethers, stakes, lead-lines, cage-hooks, a lantern —
+against ⛔ *"anything architectural"*, and the campaign arc points at that row for Burdock by name.
+Benching a hold's audience would say **these people built seating**: the donation of craft and
+ceremony the masonry ruling refused. And that audience is **collared spirits — stock in rows, not
+guests.** Seat them on carpentry and they become an audience that was *invited*.
+- ★★ **What it IS for is the counter-image.** Bonn #3 puts both rooms in one book fifty lines apart
+  and states the difference in the narration: *"no crown in it and **no audience that was not also a
+  player**, and that was the whole of the difference."* The Snagbarrows' ring seats **91** collared
+  spirits made to watch; the keeper's seats **15** who take turns. Same shape, consent restored.
+- ★ Half-height like `half_slab`, because that is what a seat is — you step UP onto it. One cell, so
+  a run follows a curve. Garden furniture was already canon, so it needed no ruling.
+
+### ⚠⚠ ADDING A PIECE FOUND A SILENT TRAP THAT WOULD HAVE BITTEN THE NEXT ONE TOO
+`buildGeometry`'s `default` arm draws **the beam** — a thin upright post. A piece added to `PIECES`
+with no arm renders as a little stick, **throws nothing, logs nothing, and looks deliberate.** That
+file's header already records this happening once (all 72 material variants went to `default` before
+`basePieceId` landed) and nothing stopped it recurring for a NEW piece. `piece-mesh.test.ts` is new
+and asserts every piece and all **105 variants** resolve to a real arm.
+- ⚠ **The guard then immediately found six pieces with NO TINT** — shutter, arch, door, gate,
+  bracket, hook — all rendering as the same flat `0x999999` placeholder. Not my bug; found by
+  looking. ★ `hook` and `bracket` are iron now on purpose: *"metal on a structure means a hold"*
+  makes forged metal the strongest signal the build owns, and a cage-hook is where the eye finds it.
+
+### ★★★ WORN SEAT-LINES — the fix for a read problem that needed NO object
+Alex: the banks read as green steps, not seating. 91 bodies sit in those arcs daily, so the grass
+under them is trodden bare — literally the brief's ground row, *"worn, trampled, dragged-over"*.
+**Rows read as rows because something has been sitting in them.** ⚠ Taken only: a free green was
+gathered on for generations and wears in general, but the **tidy concentric arcs are the collar's
+arrangement**, and the horror here is bookkeeping made visible. Free ground wears; it does not line up.
+
+### ⚠ AND I MIS-STATED THE SEAT COUNT ON THE LAYOUT HE PICKED
+Three layouts were offered; Alex chose C, the raised ring. I had described it as *"seats a dozen and
+has no back row"* — **it seated 27.** He chose it on that description, and the description was the
+thing that made it defensible: seating may not exceed the number who could plausibly be taking turns,
+or *"no audience that was not also a player"* stops being true. Trimmed to five a side (15) before
+shipping. ★ **The build now matches the argument it was chosen on**, rather than the argument being
+quietly retired to keep the build.
+
+### Decisions
+- **No back row, ever, on a keeper's ring.** One tier is a place to sit; two is a place to spectate,
+  and spectating is Nettle's entire doctrine. Same reasoning as the open side — an enclosure is the
+  hold's grammar.
+- **The keeper's lantern is for SEEING BY**, the exact opposite of the hold's *"lantern hung to watch
+  something"*. Same object, opposite verb.
+
+### Next
+- **Alex builds his own in the worktable** — the ring is a starting point, not a fixture.
+- Keeper-eye renders of the ring: the read at standing height differs from the read from above, and
+  standing height is what a player gets.
+- ⚠ Nothing places the ring in the world yet — it is a blueprint, and the jigsaw bridge is unbuilt.
+
+### Files
+- `voxel/pieces.ts` — the bench · `voxel3d/piece-mesh.ts` + `.test.ts` — geometry and the new guard
+- `voxel/green-terrain.ts` — worn seat-lines · `data/blueprints/sparring_ring.json` — the ring
+
 ## 🕯 Shimmer voxel — **THE ROWS: 91 SMALL LIGHTS, AND BUILDING THEM RESIZED THE GREEN** (2026-08-29, hub lane) · *Last touched 2026-08-29 (hub) — burrowtown 46 asserts, hold-rows 36, jigsaw equivalence re-proven, tsc 7 (baseline). Pure core; nothing deployed.*
 
 ### Left off — the Snagbarrows' set piece, built in canon's own order
