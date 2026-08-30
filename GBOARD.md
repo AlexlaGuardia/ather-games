@@ -11,9 +11,64 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🌉 Shimmer voxel — **THE BRIDGE LANDINGS: THE NUMBER WAS WRONG AND ITS FIX WOULD HAVE GONE THE WRONG WAY** (2026-08-30, world lane) · *Last touched 2026-08-30 — ⚠ **READ THE CORRECTION BLOCK BELOW FIRST: the first diagnosis AND the first fix were both wrong.** Final state: bridges oracle **2207**, 3/3 mutations fire, sweep 204/204, tsc 7 (baseline), canon green. ✅ **DEPLOYED** `BUILD_ID 3EOpI6AXeBV46wHghfV5E`, 162 chunks — `909d3eb` + worker rebundle, 0 unpushed. **28/28 crossing-ends flush across both seeds.***
+## 🌉 Shimmer voxel — **THE BRIDGE LANDINGS + THE CLAMP TAIL** (2026-08-30, world then hub lane) · *Last touched 2026-08-30 — ⚠ **READ THE CORRECTION BLOCK BELOW FIRST: the first diagnosis AND the first fix were both wrong.** Final state: bridges oracle **2207**, 3/3 mutations fire, sweep 204/204, tsc 7 (baseline), canon green. ✅ **DEPLOYED** `BUILD_ID 3EOpI6AXeBV46wHghfV5E`, 162 chunks — `909d3eb` + worker rebundle, 0 unpushed. **28/28 crossing-ends flush across both seeds.***
 
 
+
+### ⚠⚠⚠ CORRECTION (2026-08-30 evening, hub lane) — **8 SEEDS NAMED ONE DIRECTION. 40 SEEDS SHOW TWO.**
+> Correcting the section below **in place** rather than rewriting it: the wrong reading is the useful
+> artifact, and a silently-fixed board teaches nobody. `c859fe3`. Geometry on `master` is UNCHANGED —
+> three fixes were built, measured and reverted. **The measurements are the deliverable.**
+
+**383 crossing-ends over 40 seeds: 21 full-block vaults, 14 clamp-bound — and the split is `UP 8 ·
+DOWN 6`.** The section below says the tail is banks standing ABOVE the springing. That is true of the
+8 seeds it was measured on and false of the population. ⚠ **A tail is the one part of a distribution
+a small sample cannot describe**, and this one implied a terrain-side fix that is the wrong operation
+for nearly half the cases: `s28/gloview-village-1` lands on ground **6 blocks BELOW** its own
+springing, `s34/thistle-hold-4` **8 below**. Those do not want the ground cut. They want a ramp.
+
+- **★★★ ONE SYMMETRIC CONSTANT WAS SERVING TWO QUESTIONS WHOSE COSTS ARE NOTHING ALIKE.** Climbing
+  raises `BRIDGE_REACH`, `depth.ts`'s cheap y-band gate on every column near the story path — a hot
+  path, and a real budget. Descending costs **nothing**: `deckTopAt`'s `endAt` is `max(base, land)`,
+  so a low bank never moves the deck at all, and the only consumer of a below-base landing is the
+  apron's LENGTH. `ABUT_MAX` clamps both to 2 and cannot tell them apart.
+- **★★ AND `ABUT_REACH = 4` IS EXACTLY `ABUT_MAX / MAX_GRADE`** — one derivation, done by hand, never
+  written down. That is the whole downward defect: the apron is correct **by construction** for a
+  CLAMPED landing and wrong for a real one. The clamp reports a bank 6 down as 2 down, the ramp
+  descends the 2 it was told about, and ends in the air over the 4 it was not. *Everything downstream
+  was correct about a lie.*
+- **⚠⚠⚠ THREE FIXES, ALL MEASURED, ALL REVERTED — AND THE THIRD IS THE ONE TO LEARN FROM:**
+  1. Split the clamp, lengthen the apron to `ceil(drop / MAX_GRADE)` → **4 improved, 6 WORSE.** A ramp
+     falling at `MAX_GRADE` against ground that falls faster never catches it, so every extra cell
+     **moves the cliff further out**. `deckTopAt` already records this for a FLAT apron; it wears the
+     descending costume just as well.
+  2. Search the reach — ask the world what each length would land on, keep the best → **6 improved,
+     5 worse.** A margin gate changed *nothing*, which proved the regressions were the search choosing
+     **zero** where the old blind `4` had quietly been working.
+  3. Floor the search at the old `4` so it can only ever lengthen → **on the 383 ends both runs can
+     see, vaults 21 → 15. Six improved. NONE regressed.** By the sweep, a clean win.
+- **★★★ AND IT IS NOT ONE — A SECOND INSTRUMENT KILLED IT.** `bridges.test.ts` on the same seeds says
+  those lengthened aprons carry **34 AIR cells (baseline: 1)** and **9 railing posts standing over
+  nothing (baseline: 1)**. ⚠ The sweep measures the STEP AT THE END of an apron and has nothing to say
+  about whether the apron's own cells are solid. **It reported a clean win over geometry full of
+  holes.** The apron is a RIBBON — a deck course and no fill — so over ground that falls away, a
+  longer one floats. **A deep landing wants an EMBANKMENT, and that is a mechanism, not a constant.**
+  ★ Same family as every entry in PATTERNS about one instrument: the sweep was not wrong, it was
+  answering a different question than the one that decides.
+- **⚠⚠ AND THE SWEEP LIED TO ITS AUTHOR THREE WAYS, ALL NOW FIXED IN THE SCRIPT:** it kept its own
+  `const ABUT_MAX = 2` (a mirror, and with one number it could never have reported an asymmetry) ·
+  it printed `offenders.slice(0, 25)`, so comparing a truncated list against a full one read exactly
+  like *"those ends were fine before"* — which is how fix #1 first looked like a win · and its landing
+  probe gave up **silently**, so an unreachable end left the count as a smaller denominator rather
+  than as a blindness. **23 of 383 ends are UNMEASURED on today's HEAD and nothing ever said so.**
+- **⚠ SEEDS 28 AND 34 EXPOSE 12 PRE-EXISTING ORACLE FAILURES** (verified against pristine HEAD in an
+  isolated worktree, so they are the fixtures' gap, not anyone's regression): deck-hole, AIR-through-
+  `materialAt`, floating posts, lone stakes, and 6 crossing-ends the oracle's own 12-cell probe cannot
+  reach. **Still not adding them to `SEEDS`** — same reasoning as below, a standing red is how a suite
+  stops being read — but the coverage gap is now named rather than merely suspected.
+- **Repro:** `SEEDS=$(seq -s, 1 40) npx tsx scripts/bridge-clamp-sweep.mts` (add `DUMP=1` for one line
+  per end, which is what makes a before/after diff possible at all). ⚠ **The default 8 is a smoke
+  test** — it is the sample size that produced the one-directional diagnosis this block corrects.
 
 ### ⚠⚠⚠ ABUT_MAX **DOES** BIND — SWEPT 8 SEEDS AT ALEX'S ASK, AND THE ANSWER IS NOT A DIAL
 **80 crossing-ends, 8 seeds: 74 flush · 0 half-step · 6 FULL-BLOCK VAULT · the clamp bound on 4.**
