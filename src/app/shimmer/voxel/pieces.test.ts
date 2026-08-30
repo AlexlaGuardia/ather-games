@@ -32,7 +32,14 @@ const solid = () => MAT.STONE
   // door pass (door, gate; the shutter became openable rather than gaining a `trapdoor` twin). Alex
   // reopened STRUCTURE-LAYER §9's "six and stop" now the loop is proven. The count stays asserted
   // so growth is always a DECISION that edits this line, never a drift.
-  ok(PIECES.length === 14, `the catalogue is fourteen pieces, deliberately (${PIECES.length})`)
+  // FIFTEEN since 2026-08-30 — the BENCH (Alex: "benches as a craftable object.. to make a real
+  // mini arena"). It earns its place by being the first piece whose reason is a ROOM rather than a
+  // wall: a keeper crafts a run of them into a sparring ring, which is Gregory's free training game
+  // built — *"no crown in it and no audience that was not also a player"* — and the deliberate
+  // counter-image of the Snagbarrows' ring. ⚠ It is the KEEPER's and never a hold's: canon fixes the
+  // collar-culture's built vocabulary as an exhaustive list against "anything architectural", and
+  // benching a hold's audience would say those people built seating for guests.
+  ok(PIECES.length === 15, `the catalogue is fifteen pieces, deliberately (${PIECES.length})`)
   const ids = PIECES.map(p => p.id)
   ok(!ids.includes('wall') && !ids.includes('floor'),
      '★ walls and floors are BLOCKS, not pieces — that split is the whole design')

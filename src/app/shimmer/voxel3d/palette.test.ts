@@ -38,7 +38,11 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   const phantom = [...reachable].filter(id => !all.includes(id))
   ok(phantom.length === 0, `and the palette offers nothing that is not a real piece (${phantom.join(', ')})`)
 
-  ok(reachable.size === 98, `the catalogue is 98 pieces and all 98 are on the axes (saw ${reachable.size})`)
+  // 105 since 2026-08-30: the bench (15 base pieces x 7 material variants). ⚠ THIS COUNT IS A
+  // TRIPWIRE, NOT A CEILING — it fires whenever the catalogue grows so that growth is a decision
+  // somebody wrote down, and it caught the bench within the hour. Bumping it without saying WHY is
+  // the only way to use it wrongly.
+  ok(reachable.size === 105, `the catalogue is 105 pieces and all 105 are on the axes (saw ${reachable.size})`)
   ok(all.length === PIECES.length * PIECE_MATERIALS.length,
      '14 shapes x 7 materials, with no shape quietly missing a material')
 }
