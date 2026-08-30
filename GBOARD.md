@@ -14,6 +14,33 @@ the Arcade frame.
 ## 🌉 Shimmer voxel — **THE BRIDGE LANDINGS: THE NUMBER WAS WRONG AND ITS FIX WOULD HAVE GONE THE WRONG WAY** (2026-08-30, world lane) · *Last touched 2026-08-30 — ⚠ **READ THE CORRECTION BLOCK BELOW FIRST: the first diagnosis AND the first fix were both wrong.** Final state: bridges oracle **2207**, 3/3 mutations fire, sweep 204/204, tsc 7 (baseline), canon green. ✅ **DEPLOYED** `BUILD_ID 3EOpI6AXeBV46wHghfV5E`, 162 chunks — `909d3eb` + worker rebundle, 0 unpushed. **28/28 crossing-ends flush across both seeds.***
 
 
+
+### ⚠⚠⚠ ABUT_MAX **DOES** BIND — SWEPT 8 SEEDS AT ALEX'S ASK, AND THE ANSWER IS NOT A DIAL
+**80 crossing-ends, 8 seeds: 74 flush · 0 half-step · 6 FULL-BLOCK VAULT · the clamp bound on 4.**
+Tested by CONSEQUENCE rather than by restating `landingAt` — if the clamp binds, the deck cannot
+reach its bank and the end stops being flush — so no mirror of the code was involved.
+- **The distribution is the finding, not the count:** gaps of `0:7 · 1:56 · 2:13` then a hard tail of
+  `3:1 · 6:1 · 10:2`. `ABUT_MAX = 2` covers **76 of 80** ends and then falls off a cliff, literally.
+- **★★★ RAISING `ABUT_MAX` CANNOT FIX THE TAIL, AND THIS IS THE WHOLE POINT.** `s5/vetch-hold-7` is a
+  **plank of span 9** whose bank stands **10 blocks** above its springing (129 vs 119). Climbing 10
+  at `MAX_GRADE` 0.5 needs **20 columns of ramp on a 9-block crossing.** `s5/gloview-village-2` is a
+  span-15 trestle facing a gap of 6, i.e. 12 columns of ramp on 15. **The geometry forbids the dial.**
+- **⚠ AND THE DECK CAN ONLY ADD BLOCKS.** An abutment fills UP to a low bank; a bank 10 blocks HIGH
+  needs the ground CUT, which `bridges.ts` cannot do — `height.ts` is imported by this file, not the
+  reverse. So the tail is either a terrain-side fix (the approach blend, or hold-style flattening) or
+  **a siting question: a crossing should probably not be placed where one bank is a cliff.**
+- **⚠⚠ THE ORACLE'S TWO SEEDS DO NOT CONTAIN THE CASE.** Seeds 1 and 1337 have **no** clamp-bound end,
+  which is exactly why the guard is green and why the clamp had "never bound". ★ **An unexercised
+  clamp is not a working clamp** — the guard can fail (mutation-tested 3/3), its FIXTURES just never
+  present the input. Deliberately NOT adding seed 5 to `SEEDS` at wrap: it would leave a red suite
+  overnight for a defect nobody is mid-fix on, and a standing red is how a suite stops being read.
+- **Two of the six vaults are NOT clamp-related** — `s6/moonwell-glade-0 far` and
+  `s8/moonwell-glade-0 near`, both **-1 drops**. A separate residual the descending apron did not
+  close, and it wants its own measurement rather than being folded in with the cliffs.
+- **Repro is ready:** `SEEDS=1,2,3,4,5,6,7,8 npx tsx <clampsweep>` — the script is in this session's
+  scratchpad and should be promoted into `scripts/` as a multi-seed companion to
+  `bridge-landings.mts`, which only ever looks at the two oracle seeds.
+
 ### ⚠⚠⚠ CORRECTION, SAME DAY — THE ABOVE DIAGNOSIS IS WRONG AND THE FIX IT DESCRIBES DID NOTHING
 **Everything above this line about "5 of 6 defects are DROPS" and "the board had the direction
 backwards" is FALSE. Alex's original report was right and my correction of it was wrong.** Kept
