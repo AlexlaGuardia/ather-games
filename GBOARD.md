@@ -259,7 +259,33 @@ quietly retired to keep the build.
 - `voxel/pieces.ts` — the bench · `voxel3d/piece-mesh.ts` + `.test.ts` — geometry and the new guard
 - `voxel/green-terrain.ts` — worn seat-lines · `data/blueprints/sparring_ring.json` — the ring
 
-## 🕯 Shimmer voxel — **THE ROWS: 91 SMALL LIGHTS, AND BUILDING THEM RESIZED THE GREEN** (2026-08-29, hub lane) · *Last touched 2026-08-29 (hub) — burrowtown 46 asserts, hold-rows 36, jigsaw equivalence re-proven, tsc 7 (baseline). Pure core; nothing deployed.*
+## 🕯 Shimmer voxel — **THE ROWS: 91 SMALL LIGHTS, AND BUILDING THEM RESIZED THE GREEN** (2026-08-29, hub lane) · *Last touched 2026-08-30 (sprites) — keeper eye shipped on `dev/hold`, 91 sunk figures raised, hold-preview 24 asserts, tsc 7 (baseline). Pure core + a dev page; nothing deployed.*
+
+### 👁 2026-08-30 (sprites lane) — **THE PAGE COULD NOT GET LOW, SO NOBODY SAW THAT EVERY FIGURE WAS BURIED**
+`b2f7f85` pushed, 0 unpushed. Four renders taken and LOOKED AT (`above-taken`, `eye-wayin`,
+`eye-rows`, `eye-free`), which is the first time a human-shaped vantage has existed for this hold.
+- **★★★ THE TWO DEFECTS WERE ONE BLIND SPOT.** The orbit height is `target.y + 10 + dist * 0.45` —
+  a function of the DISTANCE — so there was no vantage below ~16 blocks and the default sat **32
+  blocks up**. From up there a figure sunk a block into the ground is invisible, and one was:
+  `greenProfileAt` returns the **top solid cell**, a figure stands on its **face**, and the audience
+  was placed at the top-cell index plus a guessed `0.6`. Measured against the generator: **91 of 91
+  seats 0.975 blocks low**, keeper feet a typed `0` against a surface of 1.
+- **★★ THE WORLD LANE FOUND THE IDENTICAL CONFUSION THE SAME AFTERNOON** (`909d3eb`, bridge
+  abutments: `columnHeight` vs `deckTopAt`). Two files, one confusion, found independently within
+  the hour. **A quantity named like a height is not a floor** — this repo now has two receipts.
+- **`eye=1` is a STANCE, not a closer orbit.** Height comes from the ground under the keeper's cell
+  plus `EYE_STAND`; `dist` only says how far out they stand; the look is LEVEL. The reference figure
+  moves to the middle of the ring, where it answers *how big is this ring* instead of *how tall is a
+  keeper*. Guard mutation-tested five ways, all five fire.
+- **⏳ ALEX'S CALLS, from the renders — three look questions a top-down shot could not raise:** the
+  **aisle reads right** (a clean flat walk in, audience towering either side — canon S4 delivered) ·
+  the outermost bank is a **3-block sheer dirt wall from outside**, above `CLIMB_MAX_RISE` 2.5, so
+  the hold is a closed rampart with exactly one way in — almost certainly correct, but nobody has
+  ruled it · that outer face is **one flat untextured course of subsoil for its full height**, and
+  it is the first thing a keeper meets walking up to the place.
+- **NOT a defect, checked before touching:** `maxDrop: 0` is Alex's own ruling — a hold is neither
+  built nor dug, so the dip comes from the banks rising, not from digging.
+
 
 ### Left off — the Snagbarrows' set piece, built in canon's own order
 Canon ruled the hold gap and then the staged-fight gap the same day, and both landed with build
