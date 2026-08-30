@@ -178,6 +178,47 @@ function firstEmission(ear: Ear, x: number, z: number) {
   ok(/HOLLOW_GROUND_UP/.test(src) && /HOLLOW_GROUND_DOWN/.test(src),
      'and both spans come from the module that derives them, not from literals here')
 
+  // ── ★★ 6b. THE `window.__hollows()` READOUT (2026-08-30) ─────────────────────────────────────
+  // It exists to answer "are they in the trees again?" from the RUNNING world, because bodies spawn
+  // at runtime and no generator query can see them. Guarded here because a readout that quietly
+  // reports the wrong quantity is worse than none: the last two arguments about Hollow altitude were
+  // both lost to units, and this one publishes a number people will act on.
+  const readout = src.match(/w\.__hollows = \(\) =>[\s\S]{0,1200}?\n {4}\}\)\n/)?.[0] ?? ''
+  ok(readout !== '', 'the __hollows readout is findable')
+
+  // ★★★ THE STANDING SURFACE IS THE PROBE PLUS ONE. `groundTopNear` returns the TOP SOLID CELL and
+  // `hollowStep` rests a body at `groundAt + 1 + hover`. Publishing `y - probe` would report 1.0 for
+  // a body standing perfectly on the floor — the same off-by-one that inverted the bridge-landing
+  // diagnosis on this very day, and it would read as a Hollow permanently a block in the air.
+  ok(/groundTopNear\(st\.x, st\.z, st\.y, HOLLOW_GROUND_DOWN, HOLLOW_GROUND_UP\) \+ 1/.test(readout),
+     '★★★ the readout derives standingY as probe + 1, so a settled body reads 0 and not 1')
+  ok(/HOLLOW_GROUND_DOWN, HOLLOW_GROUND_UP/.test(readout),
+     '★★ and it probes with the HOST\'S OWN bounds — a readout on the default symmetric window would'
+     + ' disagree with the world it reports on, which is the 08-28 simulation error in a lab coat')
+
+  // ★ The three quantities stay SEPARATE and the answer is pre-subtracted, so no reader has to
+  // remember which of them the hover belongs to.
+  // ⚠ MATCH SHORTHAND TOO. `{ standingY, hover }` publishes both just as surely as `standingY:` does,
+  // and a `${field}:` regex reports a field that IS published as missing — a guard failing toward
+  // "you found something", which is the direction that gets acted on. Caught by this assert going
+  // red against a readout that was correct.
+  for (const field of ['standingY', 'aboveStanding', 'hover', 'offItsFloor']) {
+    ok(new RegExp(`[\\s,{]${field}\\s*[:,}]`).test(readout), `the readout publishes ${field}`)
+  }
+
+  // ⚠⚠ THE GATE IS READ AT CALL TIME. `owner` is a ref because /api/owner answers async; an effect
+  // that early-returned on `!owner.current` would install nothing before the fetch landed and the
+  // hook would be missing for everyone, the owner included — the exact trap this file's own keydown
+  // note describes. So the refusal must live INSIDE the published function.
+  ok(/w\.__hollows = \(\) => !owner\.current \?/.test(src),
+     '★★ the owner check is inside the published function, not around its installation')
+  ok(!/if \(!owner\.current\) return\s*\n\s*const w = window/.test(src),
+     'and the install-time early return (which would never arm) is not present')
+
+  // A hot reload that left the old closure behind would hold a dead `hollows` ref and report a world
+  // that no longer exists — which is worse than reporting nothing.
+  ok(/delete w\.__hollows/.test(src), 'the readout is torn down on unmount')
+
   // ⚠ THE KEEPER'S HEIGHT MUST BE HER FEET. `p` in this loop is the CAMERA, so `p.y` is the eye —
   // passing it would put every keeper a constant 1.62 above where she stands and quietly eat most
   // of a warden's vertical tolerance, which reads as "the melee forms stopped hitting me".

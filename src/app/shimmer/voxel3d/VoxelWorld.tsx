@@ -4486,6 +4486,59 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       (xi, zi) => columnHeight(xi, zi, SEED),
     ), [voxel])
 
+  /**
+   * ── ★★ `window.__hollows()` — WHERE THE DARK ACTUALLY IS (2026-08-30, Alex asked for it) ──────
+   *
+   * A read-only debug readout of every live Hollow. It exists because the question *"are the
+   * Hollows in the trees again?"* had no cheap answer: the 08-28 sky-Hollow bug was found from a
+   * screenshot, argued about from a simulation that used the WRONG ground bound, and re-filed as
+   * live weeks after it was fixed. Bodies spawn at runtime off the light field, so no generator
+   * query can say where they are — only the running world knows, and nothing was asking it.
+   *
+   * ⚠⚠⚠ IT REPORTS THE SURFACE AND THE HOVER SEPARATELY, AND THAT IS THE WHOLE DESIGN. `groundAt`
+   * (i.e. `groundTopNear`) returns the index of the TOP SOLID CELL; `hollowStep` rests a body at
+   * `groundAt + 1 + form.hover`. Those are three different numbers and two of them are called
+   * "height". A readout that published `y - groundTopNear(...)` would report **1.0 for a body
+   * standing perfectly on the floor**, and the next person to read it would file a one-block lie —
+   * which is exactly the mistake that inverted the bridge-landing fix on this same day. So:
+   *   · `y`            the body's own line, as the simulation holds it
+   *   · `standingY`    the surface it would stand on   (= probe + 1)
+   *   · `aboveStanding` y - standingY                  (0 for a settled warden/stalker)
+   *   · `hover`        what its FORM is entitled to    (warden/stalker 0, caster HOLLOW_HOVER)
+   * ★ `aboveStanding - hover` is the number that answers the question, and it should be ~0 for
+   * every settled body. Anything near the canopy is the ratchet returning.
+   *
+   * ⚠ THE PROBE IS THE HOST'S OWN, WITH THE HOST'S OWN BOUNDS. `HOLLOW_GROUND_DOWN/UP`, exactly as
+   * the step call binds them — a readout that used the default symmetric window would disagree with
+   * the world it is reporting on, which is the 08-28 simulation's error wearing a lab coat.
+   *
+   * ⚠⚠ THE OWNER GATE IS READ AT CALL TIME, NEVER AT INSTALL TIME, and that is not a style choice.
+   * `owner` is a REF precisely because `/api/owner` answers ASYNC — this component's own header says
+   * so two hundred lines up, about the keydown handler that bound `false` "for everyone, forever".
+   * An effect that returned early on `!owner.current` would run once at mount, before the fetch
+   * lands, and the hook would never be installed for anybody including the owner. So the function is
+   * always defined and refuses inside itself. (Same shape as reading a secret at call time rather
+   * than as a module constant.)
+   *
+   * Torn down on unmount so a hot reload cannot leave a stale closure holding a dead `hollows` ref.
+   */
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>
+    w.__hollows = () => !owner.current ? 'owner only' : hollows.current.map(({ st }) => {
+      const standingY = groundTopNear(st.x, st.z, st.y, HOLLOW_GROUND_DOWN, HOLLOW_GROUND_UP) + 1
+      const hover = HOLLOW_FORMS[st.form].hover
+      const aboveStanding = st.y - standingY
+      return {
+        id: st.id, form: st.form, hp: st.hp, gutter: st.gutter,
+        x: +st.x.toFixed(2), y: +st.y.toFixed(2), z: +st.z.toFixed(2),
+        standingY, aboveStanding: +aboveStanding.toFixed(2), hover,
+        /** ★ The answer, pre-subtracted so a reader cannot get the units wrong: ~0 is settled. */
+        offItsFloor: +(aboveStanding - hover).toFixed(2),
+      }
+    })
+    return () => { delete w.__hollows }
+  }, [owner, groundTopNear])
+
 
   /**
    * ── ★ LEAVES WAITING TO FALL (2026-08-13) ─────────────────────────────────────────────────────
