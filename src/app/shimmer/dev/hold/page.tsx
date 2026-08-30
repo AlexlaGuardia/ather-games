@@ -31,7 +31,7 @@ import { blockDef } from '../../voxel/registry'
 import { buildTileArray, sliceLayer, layerOf, TOP, SIDE, BOTTOM } from '../../voxel3d/tex/tiles'
 import { VoxelDayNight, DAY } from '../../voxel3d/day-night'
 import { setTimePin } from '../../engine/day-cycle'
-import { BODY_H, BODY_R } from '../../voxel3d/locomotion'
+import { BODY_H, BODY_R, EYE_STAND } from '../../voxel3d/locomotion'
 import { DOWNBARROW_HEARTS } from '../../voxel/burrowtown'
 import { holdRows, bowlCentre, DEFAULT_ROWS } from '../../voxel/hold-rows'
 import { greenProfileAt, greenSurfaceAt, type GreenMats } from '../../voxel/green-terrain'
@@ -40,6 +40,30 @@ import type { Box } from '../../voxel/jigsaw'
 const TILE = 16
 /** Courses of ground under the surface, so the green reads as land rather than as a sheet. */
 const SOIL_DEPTH = 3
+
+/**
+ * The scene height a figure's FEET rest at, over the cell (x, z).
+ *
+ * ── ⚠⚠ `greenProfileAt` RETURNS THE TOP SOLID CELL. A KEEPER STANDS ON TOP OF IT. ──────────────
+ * A cell at `y` is drawn as a unit box centred at `y + 0.5` (see `Inst`), so the face you walk on
+ * is at `y + 1`. The two numbers are one block apart, both are honest, and both are named like
+ * heights — which is exactly how this page shipped with every figure on the green sunk a full
+ * block: the audience was placed at the bank's top-cell INDEX and the keeper at a typed `0`.
+ * Measured against the generator before the fix: **91 of 91 seats, 0.975 blocks low.**
+ *
+ * ★ THE WORLD LANE FOUND THE IDENTICAL DEFECT THE SAME AFTERNOON, in the bridge abutments —
+ * `columnHeight` (top solid) fed to `deckTopAt` (standing surface), one block low, "both honest,
+ * both named like heights". Two files, one confusion, found independently. Anything that wants a
+ * FLOOR on this page asks here and nowhere else.
+ */
+const standAt = (green: Box, x: number, z: number, entryYaw: number): number =>
+  greenProfileAt(green, Math.round(x), Math.round(z), entryYaw) + 1
+
+/** A collared spirit, seated. Named so the half-height below is DERIVED and not typed as `0.6`. */
+const SEAT_R = 0.3
+const SEAT_LEN = 0.55
+/** Centre-to-foot of that capsule: the straight half plus the cap. */
+const SEAT_HALF = SEAT_LEN / 2 + SEAT_R
 
 /**
  * ★ THE ONLY PLACE IN THIS FEATURE THAT NAMES A MATERIAL. `green-terrain` takes them as arguments
@@ -117,9 +141,9 @@ function Inst({ geo, materials, cells }: { geo: THREE.BoxGeometry; materials: TH
  * ★ Dimmed, because canon's whole image is *"he collars the brightest thing in the world and keeps
  * it just bright enough to show"* — a Luminara at full brightness here would say the opposite thing.
  */
-function Audience({ green, entryYaw, base }: { green: Box; entryYaw: number; base: number }) {
+function Audience({ green, entryYaw }: { green: Box; entryYaw: number }) {
   const seats = useMemo(() => holdRows(green, entryYaw), [green, entryYaw])
-  const geo = useMemo(() => new THREE.CapsuleGeometry(0.3, 0.55, 3, 6), [])
+  const geo = useMemo(() => new THREE.CapsuleGeometry(SEAT_R, SEAT_LEN, 3, 6), [])
   // ★★ THEY HAVE TO READ AS LIGHTS, AND THE FIRST PASS DID NOT. Dim grey capsules on brown banks
   // vanished at dusk — and canon's whole first image of this hold, from the bramble road, is
   // *"small lights, moving, in rows"*, with the horror arriving only when you get close enough to
@@ -135,8 +159,10 @@ function Audience({ green, entryYaw, base }: { green: Box; entryYaw: number; bas
   return (
     <>
       {seats.map((s, i) => (
+        // ⚠ THE HEIGHT IS ASKED, NOT RE-DERIVED. This read `s.y + rise + 0.6`, which is the bank's
+        // top-cell index plus a guess at half a capsule — a block low, on every seat. See `standAt`.
         <mesh key={i} geometry={geo} material={mat}
-          position={[s.x + 0.5, base + s.y + DEFAULT_ROWS.rise + 0.6, s.z + 0.5]} />
+          position={[s.x + 0.5, standAt(green, s.x, s.z, entryYaw) + SEAT_HALF, s.z + 0.5]} />
       ))}
     </>
   )
@@ -155,16 +181,35 @@ function Audience({ green, entryYaw, base }: { green: Box; entryYaw: number; bas
  * position the camera from a component inside the Canvas. I invented a shorter way and it worked on
  * the one instrument I could see with. Use the shape that ships.
  */
-function Rig({ target, yaw, dist }: { target: THREE.Vector3; yaw: number; dist: number }) {
+/**
+ * ── ★★★ THE ORBIT CANNOT GET LOW, AND THAT IS WHY NOBODY HAD SEEN THIS PLACE ──────────────────
+ * The orbit height is `target.y + 10 + dist * 0.45` — it is a FUNCTION OF THE DISTANCE, so there
+ * is no vantage on this page below about sixteen blocks up, and at the default `dist` 46 the eye
+ * rides **32 blocks over the green**. Every judgement made of this hold has been made from up
+ * there. `dev/court` already carries the fix and its reasoning; this is that mode, here.
+ *
+ * ★ `eye` IS NOT A LOW ORBIT. The height is decided by the ground under the keeper's cell and by
+ * `EYE_STAND`, never by `dist` — `dist` only says how far out they are standing. The look is
+ * LEVEL, because that is what a keeper's default view is: the far bank rises into it or it does
+ * not, and that is the question a picture from above cannot answer.
+ */
+function Rig({ target, yaw, dist, eye, eyePos }: {
+  target: THREE.Vector3; yaw: number; dist: number; eye: boolean; eyePos: THREE.Vector3
+}) {
   const { camera } = useThree()
   useEffect(() => {
-    camera.position.set(
-      target.x + Math.cos(yaw) * dist,
-      target.y + 10 + dist * 0.45,
-      target.z + Math.sin(yaw) * dist)
-    camera.lookAt(target)
+    if (eye) {
+      camera.position.copy(eyePos)
+      camera.lookAt(target.x, eyePos.y, target.z)
+    } else {
+      camera.position.set(
+        target.x + Math.cos(yaw) * dist,
+        target.y + 10 + dist * 0.45,
+        target.z + Math.sin(yaw) * dist)
+      camera.lookAt(target)
+    }
     camera.updateProjectionMatrix()
-  }, [camera, target, yaw, dist])
+  }, [camera, target, yaw, dist, eye, eyePos])
   return null
 }
 
@@ -186,6 +231,7 @@ export default function HoldPreview() {
   const [which, setWhich] = useState(0)
   const [dist, setDist] = useState(46)
   const [yaw, setYaw] = useState(-0.7)
+  const [eye, setEye] = useState(false)
 
   useEffect(() => { setTimePin(hour) }, [hour])
   useEffect(() => {
@@ -195,6 +241,7 @@ export default function HoldPreview() {
     if (q.get('dist')) setDist(Number(q.get('dist')))
     if (q.get('yaw')) setYaw(Number(q.get('yaw')) * Math.PI / 180)
     if (q.get('fog') === '0') setFog(false)
+    if (q.get('eye') === '1') setEye(true)
   }, [])
 
   const def = DOWNBARROW_HEARTS[which] ?? DOWNBARROW_HEARTS[0]
@@ -216,6 +263,29 @@ export default function HoldPreview() {
   const tex = useTiles(useMemo(() => [...new Set(cells.map(k => k.m))].sort((a, b) => a - b), [cells]))
   const target = useMemo(() => new THREE.Vector3(c.x, 2, c.z), [c.x, c.z])
 
+  /**
+   * Where the keeper is standing, and where their eye is. Snapped to the cell it stands on, so the
+   * floor under the camera is the floor the generator actually lays there — not an interpolation
+   * between two cells that would put the eye inside a bank on one bearing and over air on the next.
+   */
+  const eyePos = useMemo(() => {
+    const kx = Math.round(c.x + Math.cos(yaw) * dist), kz = Math.round(c.z + Math.sin(yaw) * dist)
+    return new THREE.Vector3(kx + 0.5, standAt(green, kx, kz, entry) + EYE_STAND, kz + 0.5)
+  }, [green, entry, c.x, c.z, yaw, dist])
+
+  /**
+   * The reference figure. On the orbit it stands off the way in, where it reads against the rows.
+   * ★ IN EYE MODE IT MOVES TO THE MIDDLE OF THE FLOOR, because from the keeper's own eye the
+   * question stops being "how tall is a keeper" and becomes "how big is this ring" — and the only
+   * honest answer to that is a keeper-sized figure standing in it at a real distance.
+   */
+  const refAt = useMemo(() => {
+    const r = DEFAULT_ROWS.innerRadius + 7
+    const kx = Math.round(eye ? c.x : c.x + Math.cos(entry) * r)
+    const kz = Math.round(eye ? c.z : c.z + Math.sin(entry) * r)
+    return [kx + 0.5, standAt(green, kx, kz, entry), kz + 0.5] as [number, number, number]
+  }, [green, entry, c.x, c.z, eye])
+
   const seatCount = useMemo(() => holdRows(green, entry).length, [green, entry])
 
   return (
@@ -223,15 +293,15 @@ export default function HoldPreview() {
                   font: '12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace' }}>
       <Canvas camera={{ fov: 50, near: 0.1, far: 900 }}>
         <VoxelDayNight />
-        <Rig target={target} yaw={yaw} dist={dist} />
+        <Rig target={target} yaw={yaw} dist={dist} eye={eye} eyePos={eyePos} />
         {!fog && <fog attach="fog" args={[DAY.bg, 5000, 6000]} />}
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[c.x, -SOIL_DEPTH - 0.5, c.z]}>
           <planeGeometry args={[600, 600]} />
           <meshLambertMaterial color="#5f7a4e" />
         </mesh>
         <Blocks cells={cells} tex={tex} />
-        {taken && <Audience green={green} entryYaw={entry} base={0} />}
-        <Keeper at={[c.x + Math.cos(entry) * (DEFAULT_ROWS.innerRadius + 7), 0, c.z + Math.sin(entry) * (DEFAULT_ROWS.innerRadius + 7)]} />
+        {taken && <Audience green={green} entryYaw={entry} />}
+        <Keeper at={refAt} />
       </Canvas>
 
       <div style={{ position: 'absolute', top: 8, left: 8, width: 268, background: 'rgba(8,12,16,0.86)',
@@ -247,6 +317,7 @@ export default function HoldPreview() {
           <button style={btn(!taken)} onClick={() => setTaken(false)}>free</button>
           <button style={btn(false)} onClick={() => setWhich(w => (w + 1) % DOWNBARROW_HEARTS.length)}>green ↻</button>
           <button style={btn(false)} onClick={() => setFog(f => !f)}>fog {fog ? 'on' : 'off'}</button>
+          <button style={btn(eye)} onClick={() => setEye(e => !e)}>{eye ? 'keeper eye' : 'from above'}</button>
         </div>
         {(['hour', 'dist', 'yaw', 'way in'] as const).map(k => (
           <label key={k} style={{ display: 'block', opacity: 0.75, marginBottom: 5 }}>
