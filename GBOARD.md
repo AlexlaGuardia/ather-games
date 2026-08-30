@@ -11,6 +11,72 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⏱ Shimmer — **THE 12ms MESH BUDGET NEVER BOUND ANYTHING, AND HALF THE STREAMING MESH WORK IS REDUNDANT** (2026-08-30, hub lane) · *Last touched 2026-08-30 — `824364c` deployed, BUILD_ID `-bnI3d1Riyg-UNh4jJXsT`. Oracle 110→113, sweep 203/203 · 0 FAIL · 0 KILLED, tsc 7 (baseline).*
+
+- **★★★ THE BUDGET WAS DECORATIVE, AND IT WAS ARITHMETIC ALL ALONG.** `drainRemeshQueue` took a
+  12ms budget and checked it **after** the work, so it could never decline a column — only notice,
+  one whole column too late, that it should have. **Measured on generated columns with full
+  neighbours: `meshColumn` is 11.2ms open country, 15.5ms forest.** So the real behaviour was: open
+  country 11.2 < 12 → start a SECOND → break at ~22ms; forest → break at 15.5ms. **It overran a
+  16.7ms frame every frame that streamed, on every machine.** Now cost-aware against an EWMA of real
+  column cost. ⚠ The starvation guard STAYS — the first column is unconditional, because a machine
+  whose every mesh overruns must still make progress or the world stops loading, and a hang reads
+  worse than the hitch it replaces. **Side effect worth having: the 12ms budget is a working dial
+  for the first time.** Before, turning it did nothing predictable.
+- **★★ THE QUEUE-GROWTH HYPOTHESIS IS RETIRED, AND THE NEGATIVE IS THE POINT.** Adopt takes 2
+  columns/frame and each dirties itself + 4 neighbours, against a drain of ~1 — which looks like
+  unbounded growth and is not. Simulated the real policy (`queue-sim.mts`): max depth 43–151,
+  settles in under a second. **Reported as a negative rather than hunted until it became a finding.**
+- **★★★ WHAT IS ACTUALLY THERE: EVERY COLUMN MESHES ~1.92 TIMES.** A column is meshed, then a
+  neighbour arrives and re-dirties it. Deferring until its four neighbours are loaded — 0.5s timeout
+  as the safety valve, plus a near-gate so nothing within 64 blocks ever waits — gives **1.12, i.e.
+  42% less meshing**. The near-gate is free (711 vs 707 remeshes) because **the redundant meshing
+  lives entirely at the frontier**; columns beside the keeper already have their neighbours.
+  ⚠ **HELD, NOT SHIPPED, ON PURPOSE** — it moves GC pressure and upload count in the SAME direction,
+  so landing it before the stall reading would perturb the measurement it is waiting on. Same call
+  the profiler fix made on 08-24.
+- **★★ THE LINE THAT SPLITS THE LAST TWO SUSPECTS.** `worstGpuMs` separates a busy GPU from a
+  blocked main thread; it cannot say WHY the thread was blocked, and the candidates want opposite
+  fixes. **GC** (the mesher churns 154–390 KB of fresh typed arrays per column and drops the previous
+  set) reads as a large **negative** heap delta; **buffer upload** (three.js uploads lazily at first
+  draw, synchronous under ANGLE/D3D11) allocates on the GPU, so it reads **flat**. `worstHeapMb` is
+  **null, never 0**, where `performance.memory` is absent — a flat heap is a load-bearing answer and
+  must not share a rendering with a measurement nobody took. Mutation-tested both ways: publishing 0
+  trips 3 asserts, printing the exoneration sentence unconditionally trips 2.
+- **★★★ AND THE MERGE CAP IS FAR CHEAPER THAN THIS LANE PREDICTED — a correction, measured in an
+  isolated worktree.** The block-edge bow needs vertices a merged quad does not have, and I called
+  that a hard fight with greedy meshing. It is not. Vertices per column, deterministic: **∞ (shipped)
+  3164 open / 7480 forest · cap 4×4 +2.5%/+2.0% · cap 2×2 +15.6%/+8.6% · cap 1×1 (per-block)
+  +61%/+32%.** The reason is that **AO already fragments the merges** (the greedy win was down from
+  4.4× to 1.8× before anyone capped anything). ⚠ Harness sanity check: `cap=16` came back
+  byte-identical to `∞`, which is correct — sections are 16 wide. ⚠ The ms column was **noise** on a
+  shared box (9.8–25.0, no trend) and is not quoted; only vertex/byte figures are.
+- **★★ SO THE DEFER PAYS FOR THE BOW.** Combining the two measurements — 1.92→1.12 passes per column
+  against +61%/+32% vertices: open country 6075 → **5708 (−6%)**, forest 14362 → **11092 (−23%)**.
+  **Shipping the defer AND per-block vertices is less total work than today.** The look is not
+  blocked behind the stall; it is paid for by the fix.
+- **Design ruled this session (Alex):** individual blocks carry a cartoon **bowed** edge that
+  **loops per material**, and only the OUTER silhouette bows. ★ Half of it already ships — the heavy
+  ink is the existing `outline` uniform (0.6), derived in-shader from world position with no extra
+  pass — and "only outer edges" is what greedy already produces, since **interior faces are never
+  generated**. ⚠ Two rules the build must carry: displacement is a **pure function of world
+  position** (two blocks sharing an edge sample the same coordinate, so gaps are structurally
+  impossible), and per-material profiles belong to **~5 material CLASSES, not 64 `MAT` entries**,
+  plus a **precedence table** so a stone/dirt boundary has exactly one answer. A hand-kept 64-entry
+  profile list is the arcade-environment tax wearing a new hat.
+- **⚠ A LANE I FORCED THAT WAS NOT DEAD.** I took `hub` from session `2aa83616` after proving it had
+  been silent 6h+ in `signals.session_id`. It was the LIVE world window under a **new session id** —
+  their correction caught it, my check could not have. **A session going quiet proves a session id
+  stopped signalling, not that a window is gone.** No damage (they were in `voxel/`, I was in
+  `voxel3d/`), but the peer-liveness check needs the mtime half, not the signal half alone.
+- **⏭ NEXT:** **Alex walks the fold and presses `P`** — the gpu line + the new js-heap line decide
+  GC vs buffer upload · then ship the neighbour-defer alongside whichever fix that names, and measure
+  the pair · then the bow: cap the merge, displacement keyed to world position, ~5 material classes
+  + a precedence table.
+- **Files:** `voxel3d/VoxelWorld.tsx` (`drainRemeshQueue` cost-aware), `voxel3d/profile.ts`
+  (`worstHeapMb` + its row), `voxel3d/profile.test.ts` (+3 asserts). Benches live in the session
+  scratchpad, not the repo: `mesh-bench.mts`, `queue-sim.mts`.
+
 ## 🪑 Shimmer — **THE BENCH, AND THE KEEPER'S RING: THE COUNTER-IMAGE, BUILT** (2026-08-30, world lane) · *Last touched 2026-08-30 — bench is the 15th piece, `sparring_ring` is the first authored blueprint. piece-mesh 11 asserts (new file), green-terrain 26, 7/7 mutations. Deployed.*
 
 ### Left off — Alex asked for benches, and the answer was two different things
