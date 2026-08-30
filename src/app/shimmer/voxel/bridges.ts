@@ -228,8 +228,12 @@ export const ABUT_REACH = 4
  * and would silently push the crossing through `BRIDGE_REACH` — the caller's y-gate — which slices
  * the top off a deck without erroring. `BRIDGE_REACH` adds this for exactly that reason; the two
  * constants are one decision and must move together.
+ *
+ * ★ EXPORTED so `scripts/bridge-clamp-sweep.mts` can ask for it instead of keeping its own `const
+ * ABUT_MAX = 2`. A guard that hand-copies the value it is checking agrees with its source while both
+ * go stale, and reads as corroboration rather than as the mirror it is.
  */
-const ABUT_MAX = 2
+export const ABUT_MAX = 2
 
 /**
  * ★ HOW FAR ABOVE ITS OWN GROUND A BRIDGE CAN REACH — the caller's cheap y-band gate, DERIVED.
