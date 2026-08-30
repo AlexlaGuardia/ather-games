@@ -29,6 +29,18 @@
 //   4. ★ A `Math.sign` STEP OFF THE END CELL drifts on a diagonal road, and `h <= table` is not the
 //      question the world asks about water (a column outside the channel sits below the table and
 //      carries none). Together those manufactured a phantom "35 samples end over water".
+//   5. ★★★ AND THE ONE THAT SURVIVED ALL FOUR REPAIRS, BECAUSE IT WAS AN OFF-BY-ONE BETWEEN TWO
+//      QUANTITIES THAT ARE BOTH HONEST AND BOTH NAMED LIKE HEIGHTS. `deckTopAt` returns a STANDING
+//      SURFACE (`table + 1` springs one above the waterline). `columnHeight` returns the index of
+//      the TOP SOLID CELL — `depth.ts` fills the surface voxel at `depth === 0`, i.e. AT `y === h`,
+//      so a keeper stands at `h + 1`. Comparing them directly reported every `+1` vault as FLUSH.
+//      ⚠⚠ It produced a fully self-consistent story that was wrong in DIRECTION: it said 5 of 6
+//      defects were drops and the shore-higher reading was an artifact. **The original report was
+//      right and this probe's correction of it was wrong** — measured on the true surface there
+//      were 13 up-steps and no drops at all, and the first abutment moved that 12 → 13.
+//      ★ THE RULE: read BOTH sides of a join with ONE instrument, and let that instrument be the
+//      world. Two readings taken from different layers cannot be compared no matter how carefully
+//      each is taken.
 //
 // ── WHAT IT MEASURES NOW ─────────────────────────────────────────────────────────────────────
 // Walk the SPINE — the road the keeper actually walks — collect each crossing's centreline cells in
@@ -41,13 +53,25 @@
 // half-step landing is NOT a defect, and counting it as one is what inflated the original figure.
 import { bridgeSpecs, bridgeAt, deckTopAt } from '../src/app/shimmer/voxel/bridges'
 import { columnHeight } from '../src/app/shimmer/voxel/height'
-import { materialAt, MAT } from '../src/app/shimmer/voxel/depth'
+import { materialAt, MAT, isSolid, isHalfMat } from '../src/app/shimmer/voxel/depth'
 import { STORY_NODES } from '../src/app/shimmer/voxel/story-path'
 
 const SEEDS = [1, 1337]
 
+// The standing surface a keeper occupies, asked of the world, used on BOTH sides of every join.
+const surfAt = (x: number, z: number, SEED: number): number | null => {
+  const h = columnHeight(x, z, SEED)
+  for (let y = h + 6; y >= h - 8; y--) {
+    const m = materialAt(x, y, z, SEED, h)
+    if (m === MAT.WATER) return null                 // standing water is not a landing
+    if (isSolid(m)) return isHalfMat(m) ? y + 0.5 : y + 1
+  }
+  return null
+}
+
 for (const SEED of SEEDS) {
   const specs = bridgeSpecs(SEED)
+  const surf = (x: number, z: number) => surfAt(x, z, SEED)
 
   type C = { x: number; z: number; t: number; ux: number; uz: number }
   const line = new Map<number, C[]>()
@@ -73,17 +97,17 @@ for (const SEED of SEEDS) {
     const cells = (line.get(i) ?? []).sort((p, q) => p.t - q.t)
     if (!cells.length) { rows.push(`${b.id.padEnd(20)} NOT REACHED FROM THE SPINE`); continue }
     for (const [end, c0, sgn] of [['near', cells[0], -1], ['far', cells[cells.length - 1], +1]] as const) {
-      const deck = deckTopAt(b, c0.t)
+      const deck = surf(c0.x, c0.z)
       const out: string[] = []
       let ground: number | null = null
       for (let k = 1; k <= 12; k++) {
         const nx = Math.floor(c0.x + 0.5 + c0.ux * sgn * k), nz = Math.floor(c0.z + 0.5 + c0.uz * sgn * k)
         if (bridgeAt(nx, nz, SEED)) { out.push('  [b]'); continue }
-        const h = columnHeight(nx, nz, SEED)
-        const wet = materialAt(nx, h, nz, SEED, h) === MAT.WATER
-        out.push(`${String(h).padStart(4)}${wet ? '~' : ' '}`)
-        if (!wet && ground === null) ground = h
+        const s = surf(nx, nz)
+        out.push(s === null ? '   ~' : `${String(s).padStart(4)}`)
+        if (s !== null && ground === null) ground = s
       }
+      if (deck === null) { rows.push(`${b.id.padEnd(20)} ${end.padEnd(4)} DECK CELL HAS NO SURFACE`); continue }
       let tag: string
       if (ground === null) { tag = 'NEVER LANDS'; bad.push(`${b.id} ${end} never lands`) }
       else {

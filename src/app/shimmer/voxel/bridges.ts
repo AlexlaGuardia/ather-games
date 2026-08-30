@@ -420,7 +420,16 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
           const t = t0 + step * k
           const lx = Math.floor(ox + ux * t), lz = Math.floor(oz + uz * t)
           if (submerged(lx, lz, seed, cfg) !== null) continue       // still over the water
-          const h = columnHeight(lx, lz, seed, cfg)
+          // ⚠⚠⚠ `+ 1` IS THE WHOLE FIX, AND ITS ABSENCE MADE THE FIRST ABUTMENT INERT.
+          // `columnHeight` returns the index of the TOP SOLID CELL — `depth.ts` fills the surface
+          // voxel at `depth === 0`, i.e. AT `y === h` — so a keeper stands at `h + 1`. `deckTopAt`
+          // returns the STANDING SURFACE (`table + 1` springs one above the waterline). Feeding a
+          // top-solid index into a function that speaks surfaces is a silent off-by-one, and it
+          // aimed every abutment exactly one block low: measured against the true walking surface
+          // on both sides, the first cut moved 12 vaults to 13 — no improvement at all, while a
+          // probe comparing `deckTopAt` against `columnHeight` reported it fixed. **Two quantities
+          // one block apart, both honest, both named like heights.**
+          const h = columnHeight(lx, lz, seed, cfg) + 1
           return Math.max(tbl + 1 - ABUT_MAX, Math.min(tbl + 1 + ABUT_MAX, h))
         }
         return tbl + 1        // never reached dry ground inside the probe — leave the deck alone
@@ -436,11 +445,21 @@ function survey(seed: number, cfg: HeightConfig): BridgeIndex {
       // ⚠ `ABUT_REACH` IS A BOUND, NOT A LENGTH. How far the apron actually runs is decided by the
       // descending ramp meeting the ground (`h >= deckTop`, below) — see the two bugs written up
       // on `deckTopAt`. This only says how far out it is worth asking.
+      //
+      // ★★★ AND AN APRON IS ONLY EVER BUILT TOWARD A BANK THAT SITS BELOW THE SPRINGING. It exists
+      // to reach DOWN to low ground; against a RISING bank the ramp descends while the terrain
+      // climbs, so the two cross and the join lands mid-slope. `moonwell-glade-0 far` on seed 1 is
+      // that case exactly — bank going 123 → 124 → 125 → 126 while the apron walked out on top of
+      // it — and it was the last full-block step left in either seed. Where the bank is at or above
+      // the springing the deck climbs to meet it INSIDE the span (see `deckTopAt`) and the ribbon
+      // ends where it always did.
+      const apronReach = (land: number): number => land < tbl + 1 ? ABUT_REACH : 0
+      const apronNear = apronReach(abut[0]), apronFar = apronReach(abut[1])
 
       let table = -Infinity, bed = Infinity, found = 0
       const mine: { key: string; t: number; s: number; g: number }[] = []
       const claimed = new Map<string, number>()   // world cell -> |s| that claimed it
-      for (let t = -ABUT_REACH; t <= span + ABUT_REACH; t += RASTER) {
+      for (let t = -apronNear; t <= span + apronFar; t += RASTER) {
         for (let so = -DECK_HALF; so <= DECK_HALF; so += RASTER) {
           const x = Math.floor(ox + ux * t - uz * so)
           const z = Math.floor(oz + uz * t + ux * so)

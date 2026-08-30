@@ -654,14 +654,30 @@ for (const SEED of SEEDS) {
     const cells = (line.get(i) ?? []).sort((p, q) => p.t - q.t)
     if (!cells.length) continue
     for (const [end, c0, sgn] of [['near', cells[0], -1], ['far', cells[cells.length - 1], +1]] as const) {
-      const deck = deckTopAt(b, c0.t)
+      // ⚠⚠⚠ BOTH SIDES ARE READ AS A STANDING SURFACE, AND THE FIRST VERSION OF THIS GUARD WAS NOT.
+      // It compared `deckTopAt` (a SURFACE — `table + 1` springs one above the waterline) against
+      // `columnHeight` (the index of the TOP SOLID CELL — `depth.ts` fills the surface voxel at
+      // `depth === 0`, i.e. AT `y === h`). Those are one block apart, both honest, and both named
+      // like heights. The guard therefore read every `+1` vault as flush and passed a world in
+      // which 13 of 22 crossing-ends were a full-block step UP — the exact defect Alex reported.
+      // ★ Ask the WORLD for the surface on both sides and the units cannot drift apart again.
+      const surfAt = (x: number, z: number): number | null => {
+        const h = columnHeight(x, z, SEED)
+        for (let y = h + 6; y >= h - 8; y--) {
+          const m = materialAt(x, y, z, SEED, h)
+          if (m === MAT.WATER) return null            // standing water is not a landing
+          if (isSolid(m)) return isHalfMat(m) ? y + 0.5 : y + 1
+        }
+        return null
+      }
+      const deck = surfAt(c0.x, c0.z)
       let ground: number | null = null
       for (let k = 1; k <= 12 && ground === null; k++) {
         const nx = Math.floor(c0.x + 0.5 + c0.ux * sgn * k), nz = Math.floor(c0.z + 0.5 + c0.uz * sgn * k)
         if (bridgeAt(nx, nz, SEED)) continue
-        const h = columnHeight(nx, nz, SEED)
-        if (materialAt(nx, h, nz, SEED, h) !== MAT.WATER) ground = h
+        ground = surfAt(nx, nz)
       }
+      if (deck === null) { check(`s${SEED}/${b.id}: the ${end} deck cell has a surface`, false); continue }
       check(`s${SEED}/${b.id}: the ${end} end reaches dry ground`, ground !== null)
       if (ground === null) continue
       landed++
