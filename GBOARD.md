@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🌉 Shimmer voxel — **THE BRIDGE LANDINGS: THE NUMBER WAS WRONG AND ITS FIX WOULD HAVE GONE THE WRONG WAY** (2026-08-30, world lane) · *Last touched 2026-08-30 — bridges oracle 2120→2185, 4/4 mutations fire, sweep **204/204 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon unchanged. Pure core; NOT deployed.*
+## 🌉 Shimmer voxel — **THE BRIDGE LANDINGS: THE NUMBER WAS WRONG AND ITS FIX WOULD HAVE GONE THE WRONG WAY** (2026-08-30, world lane) · *Last touched 2026-08-30 — bridges oracle 2120→2185, 4/4 mutations fire, sweep **204/204 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon unchanged. ✅ **DEPLOYED** `BUILD_ID O8PO1U1cFws1mjXMopvIA`, 162 chunks — `df68ea3` + worker rebundle `1b13cd8`, 0 unpushed.*
 
 ### Left off — Alex found it by playing, and the board wrote it up backwards
 Alex, from play: *"i found alot of instances where they didnt land on the shore smoothly.. (like the
@@ -112,7 +112,14 @@ through the world, not *is this cell in the deck set*. Mutation-swept 4/4. But:
 - **Alex walks a crossing and calls it** — 10 half-steps remain across both seeds, all inside
   `STEP_CAPTURE`, all walkable. Whether a ±0.5 lip at an abutment READS right is a look call, not a
   measurement, and it is his.
-- **NOT DEPLOYED.** Pure core, no build run this session.
+- **DEPLOYED** `BUILD_ID O8PO1U1cFws1mjXMopvIA`, 162 chunks. ⚠ **The build's own prebuild rebundled the
+  voxel worker** (`bridges.ts` is in its import graph): `bda902ff49` → `38aff56a94`, `worker-url.ts`
+  repointed, committed as `1b13cd8`. That artifact is what the rendered PAGE runs — a node script
+  importing source directly would show the fix either way — so leaving it uncommitted would have put
+  prod on a worker existing in no commit. Verified: old bundle has no `abut`, new one carries the
+  survey's landing measurement; new hash 200, old 404; one built chunk names the new hash and none
+  name the old. ★ `coord build`'s dirty-tree backstop is what caught it — my pre-flight was clean and
+  the tree went dirty INSIDE the build window, which is the 08-20 expiring-reading lesson exactly.
 - **`ABUT_MAX = 2` is unswept** — no crossing on either seed currently asks for more than it grants,
   so the clamp has never actually bound. A seed that needs 3 would silently land short.
 - **The landing guard measures the CENTRELINE only.** The road is wobbled (`ROAD_WOBBLE` 1.4), so a
