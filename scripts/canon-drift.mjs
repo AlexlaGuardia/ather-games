@@ -579,6 +579,22 @@ function canonRetiredVocabulary() {
     // switched off, which is the failure this whole file exists to prevent.
     clan:     { mode: 'review', why: 'retired ONLY for a company of keepers (→ chord); the Wilds factions, the awakened-clans and the Tribal Era sense are canon' },
     shipyard: { mode: 'fail',   why: 'there is one keeper home and it is the home plot / fold' },
+    // ── added 2026-08-30, after Magii's RETIRED VOCABULARY sweep (athernyx 235db0f) put three new
+    // rows in the table and this gate correctly went BLIND on all three rather than reading clean.
+    // ★ Each mode is a MEASUREMENT, not a guess — occurrence counts taken before choosing:
+    //
+    // ⚠⚠ `reach` IS THE SUBSTRING TRAP IN ITS PUREST FORM: 1745 occurrences in src/app/shimmer, and
+    // essentially none of them are the retired sense. The matcher is deliberately substring (see the
+    // block below on identifiers), so it hits `reaches`, `reachable`, `unreachable`, `BRIDGE_REACH`,
+    // `ABUT_REACH`, a Hollow's `f.reach` — and, memorably, **`forEach`**. What canon retired is the
+    // old free-not-KO battle MODE, not the English word. `fail` here would bury the gate in 1745
+    // false hits, and a guard that cries wolf gets switched off.
+    reach:    { mode: 'review', why: 'retired only as the old free-not-KO battle MODE; the English word and a form/gate reach are live code' },
+    // 0 occurrences in the build, so `fail` costs nothing today and catches the first one tomorrow.
+    graft:    { mode: 'fail',   why: 'the Gregory/Moglin-portal storyline graft was cut 2026-06-24; nothing should reintroduce it' },
+    // Retired as a GAME/LINE name (2026-08-15) — but the PLACE is canon: the Crucible is held inside
+    // Pyramid Zero. One sense only, 4 occurrences, so a human reads them.
+    pyramidzero: { mode: 'review', why: 'retired as a game/line NAME only — the location is canon (the Crucible is held inside it)' },
     gate:     { mode: 'review', why: 'retired ONLY for travel that stays inside the Ather; correct for a crossing OUT' },
     rune:     { mode: 'review', why: 'retired only as a thing BOUGHT — a crafted/gifted rune is canon' },
   }
