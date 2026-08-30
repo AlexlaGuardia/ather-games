@@ -78,6 +78,19 @@ export function greenProfileAt(
 }
 
 /**
+ * Is a seat sitting on this cell? Asked of `holdRows`, so the wear can never drift from the rows.
+ *
+ * ⚠ ROUNDED TO THE CELL RATHER THAN MEASURED BY DISTANCE. A radius test would smear the wear into a
+ * continuous band and lose the arcs — and the arcs ARE the content, because *tidy* is the horror.
+ */
+function seatWorn(green: Box, x: number, z: number, entryYaw: number, rows: RowDials): boolean {
+  for (const s of holdRows(green, entryYaw, rows)) {
+    if (Math.round(s.x) === x && Math.round(s.z) === z) return true
+  }
+  return false
+}
+
+/**
  * Is there a seating bank at this bearing in this row?
  *
  * ⚠ IT ASKS `holdRows` RATHER THAN RE-TESTING THE AISLE ANGLE. The alternative — comparing the
@@ -116,6 +129,19 @@ export function greenSurfaceAt(
     const s = floorSurface(bowl, green, x, z, entryYaw, taken, floor)
     return s === 'scorch' ? m.scorch : s === 'bare' ? m.bare : m.grass
   }
-  if (greenProfileAt(green, x, z, entryYaw, rows, floor) > 0) return m.tier
+  if (greenProfileAt(green, x, z, entryYaw, rows, floor) > 0) {
+    // ★★★ WORN SEAT-LINES. Alex, on the first build: the banks read as green steps rather than as
+    // seating. Ninety-one bodies sit in these arcs every day, so the grass under them is trodden
+    // bare — which is not a decoration, it is literally the brief's ground row: *"the plot's grass
+    // and paths, **worn, trampled**, dragged-over."* Rows read as rows because something has been
+    // sitting in them, and nothing had to be BUILT to say so. ⚠ That distinction is the whole
+    // reason a hold gets no benches: carpentry would say these people made seating for guests.
+    //
+    // ⚠ TAKEN ONLY. A free Downbarrow's green was gathered on for generations and is worn in
+    // general — but the TIDY CONCENTRIC ARCS are the collar's arrangement, and canon's horror here
+    // is bookkeeping made visible. Free ground wears; it does not line up.
+    if (taken && seatWorn(green, x, z, entryYaw, rows)) return m.bare
+    return m.tier
+  }
   return 0
 }

@@ -26,6 +26,20 @@ const TINT: Record<string, number> = {
   roof_cap: 0x6b3f31,
   stair: 0x8d8a94,
   beam: 0x6f5a3f,
+  bench: 0x8a7145,
+  // ⚠ THESE SIX HAD NO TINT AND ALL RENDERED AS THE SAME FLAT `0x999999` FALLBACK — found
+  // 2026-08-30 by the new arm-coverage guard, not by anyone looking. A grey placeholder reads as
+  // unfinished art rather than as a piece, and six of them read as the SAME unfinished art.
+  // ★ `hook` and `bracket` are deliberately iron: canon's *"metal on a structure means a hold"*
+  // makes forged metal the single strongest signal the build owns, and a cage-hook is where the eye
+  // is supposed to find it. The other four are placeholder-honest wood and stone.
+  // ⏳ Colours are a look call and Alex's to overrule; what is not negotiable is that they DIFFER.
+  shutter: 0x7d6440,
+  arch: 0x8d8a94,
+  door: 0x7a5c30,
+  gate: 0x6d5433,
+  bracket: 0x4a4a52,
+  hook: 0x4a4a52,
   fence: 0x8a6a34,
   half_slab: 0xa8834d,
 }
@@ -147,6 +161,19 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
       // its whole job is to put the light SOURCE away from the masonry.
       box(0.12, 0.12, 0.62, 0, 0.86, -0.24)
       box(0.12, 0.34, 0.12, 0, 0.7, -0.5)
+      break
+    }
+    // ★ A BENCH: a seat plank on two short legs, sitting in the LOWER half of its cell so a keeper
+    // steps up onto it. ⚠ Without this arm it would have fallen to `default` and rendered as the
+    // beam's little post — silently, with nothing thrown, which is the exact failure this switch's
+    // own header describes. `piece-mesh.test.ts` now asserts every piece has an arm, so the
+    // sixteenth cannot repeat it.
+    case 'bench': {
+      box(0.92, 0.12, 0.46, 0, 0.44, 0)          // the plank
+      box(0.10, 0.34, 0.10, -0.36, 0.17, -0.16)  // four short legs
+      box(0.10, 0.34, 0.10, 0.36, 0.17, -0.16)
+      box(0.10, 0.34, 0.10, -0.36, 0.17, 0.16)
+      box(0.10, 0.34, 0.10, 0.36, 0.17, 0.16)
       break
     }
     default: {   // beam

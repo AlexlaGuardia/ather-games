@@ -196,6 +196,33 @@ export const PIECES: PieceDef[] = [
   { id: 'half_slab', name: 'Half Slab', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 1 }], halfHeight: true, variants: ['wood', 'stone'] },
 
+  // ── ★★★ THE BENCH (2026-08-30, Alex: "benches as a craftable object… to make a real mini arena")
+  // Fifteenth piece, and the first one whose reason is a ROOM rather than a wall.
+  //
+  // ★★ IT IS THE KEEPER'S, AND THAT IS THE WHOLE POINT — IT IS NOT FOR A HOLD. `design-briefs/
+  // moglin-holds.md` fixes the collar-culture's built vocabulary as an exhaustive list — cages,
+  // tethers, stakes, lead-lines, cage-hooks, a lantern — against ⛔ *"anything architectural"*, and
+  // the campaign arc points at that row for Burdock's furniture by name. Benching a hold's audience
+  // would say **these people built seating**, which is the donation of craft and ceremony the
+  // masonry ruling refused. And the audience there is COLLARED SPIRITS: stock arranged in rows, not
+  // guests. Seat them on carpentry and they become an audience that was invited.
+  //
+  // ★★★ WHAT IT IS FOR: the counter-image. Bonn #3 puts both rooms in one book — Gregory's free
+  // training game, *"there was no crown in it and **no audience that was not also a player**, and
+  // that was the whole of the difference"*, then Nettle's rows of switched-off eyes. A keeper who
+  // crafts benches and lays out a sparring ring on their own plot is building the collarer's ring
+  // with the consent restored, which is the cozy line's whole argument said in furniture.
+  // ⚠ And it is the one place the word `arena` legitimately belongs: `shimmer-combat.md` is titled
+  // *The Keeper's Arena* and means exactly that relationship.
+  //
+  // ★ HALF-HEIGHT, LIKE `half_slab`, BECAUSE THAT IS WHAT A SEAT IS — it occupies the lower half of
+  // its cell and collides at +0.5, so a keeper steps up onto it rather than being stopped by it.
+  // One cell rather than a three-long bench: a run of them follows a curve, and a curve is what a
+  // ring is made of. Garden furniture is already canon (`shimmer-multiplayer-plan.md`: *"you own it,
+  // you customize it — furniture, layout, decorations"*), so this needs no ruling to exist.
+  { id: 'bench', name: 'Bench', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 2 }], halfHeight: true, variants: ['wood', 'stone'] },
+
   // ── ★ NINE THROUGH TWELVE: THE SUB-CUBE DETAIL (2026-08-27) ─────────────────────────────────
   // The catalogue could build a shape and could not DETAIL one. Every building source says the
   // same thing about what separates a block shed from a building, and it is not more block types:

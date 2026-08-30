@@ -145,6 +145,41 @@ const M: GreenMats = { grass: 5, bare: 8, scorch: 40, tier: 4 }
   }
 }
 
+// ── 8. ★★★ THE ROWS ARE WORN WHERE THE AUDIENCE SITS ──────────────────────────────────────────
+// Alex, on the first build: the banks read as green steps rather than as seating. Ninety-one bodies
+// sit in these arcs every day, so the ground under them is trodden bare — the brief's own ground row
+// is *"the plot's grass and paths, worn, trampled, dragged-over."* ★ Rows read as rows because
+// something has been SITTING in them; nothing had to be built. That is exactly why a hold gets no
+// benches: carpentry would say these people made seating for guests.
+{
+  const seats = holdRows(GREEN, ENTRY)
+  let wornUnderSeats = 0, grassBetween = 0
+  for (const s of seats) {
+    if (greenSurfaceAt(GREEN, Math.round(s.x), Math.round(s.z), ENTRY, true, M) === M.bare) wornUnderSeats++
+  }
+  ok(wornUnderSeats === seats.length,
+    `★★★ every seat has worn ground under it (${wornUnderSeats}/${seats.length})`)
+
+  // ⚠ AND THE BANK BETWEEN THEM IS STILL GRASS, or the wear is a band and the arcs are lost — and
+  // the arcs are the content, because *tidy* is the horror.
+  const occupied = new Set(seats.map(s => `${Math.round(s.x)},${Math.round(s.z)}`))
+  for (let x = GREEN.x0; x <= GREEN.x1; x++) for (let z = GREEN.z0; z <= GREEN.z1; z++) {
+    if (occupied.has(`${x},${z}`)) continue
+    if (greenProfileAt(GREEN, x, z, ENTRY) > 0 && greenSurfaceAt(GREEN, x, z, ENTRY, true, M) === M.tier) grassBetween++
+  }
+  ok(grassBetween > seats.length / 2,
+    `★★★ and the banks between the seats stay grass (${grassBetween} cells) — a solid worn band would lose the rows`)
+
+  // ★★★ A FREE GREEN'S BANKS ARE NOT LINED UP. Its ground was gathered on for generations and wears
+  // in general; the TIDY CONCENTRIC ARCS are the collar's arrangement. Free ground wears, it does
+  // not line up — and this is the doctrine split holding one level further in.
+  let freeWorn = 0
+  for (const s of seats) {
+    if (greenSurfaceAt(GREEN, Math.round(s.x), Math.round(s.z), ENTRY, false, M) === M.bare) freeWorn++
+  }
+  ok(freeWorn === 0, `★★★ a FREE green has no seat-lines at all (${freeWorn}) — nobody is made to sit in rows there`)
+}
+
 if (fails.length) {
   console.log(`\n${fails.map(f => `  ✗ ${f}`).join('\n')}\n`)
   console.log(`❌ ${fails.length} failed, ${pass} passed`)
