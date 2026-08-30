@@ -18,16 +18,22 @@ const at = (dx: number, dz: number) => bowlAt(GREEN, C.x + dx, C.z + dz)
 
 // ── 1. ★★ THERE IS A BOWL, AND IT IS SHALLOW ──────────────────────────────────────────────────
 {
-  ok(at(0, 0).drop > 0, `★★ BLIND CHECK: the middle dips at all (${at(0, 0).drop}) — a flat green makes every assert below vacuous`)
+  // ⚠⚠ CONTRACT CHANGE 2026-08-30, NOT A REGRESSION. This asserted the middle DIPPED. Alex looked
+  // at it and called it a dirt horseshoe, and the fix he named — raise the floor flush with the
+  // grass — also corrects a canon error: a hold is *"neither built nor dug"*, and an excavated
+  // hollow is digging, which is what FREE Moglins do. The dip Bonn describes now comes from the
+  // banks rising around a floor that was *"worn flat by use"*.
+  ok(at(0, 0).drop === 0, `★★★ the floor is FLUSH with the green — a collarer takes ground, he does not carve it (${at(0, 0).drop})`)
+  ok(at(0, 0).wear > 0, `★★ BLIND CHECK: the middle is still worn, which is what the surface reads off (${at(0, 0).wear.toFixed(2)})`)
   // ⚠⚠ AGAINST AN ABSOLUTE, NOT AGAINST THE DIAL. This read `drop <= DEFAULT_FLOOR.maxDrop`, which
   // moves WITH the value it is checking and therefore cannot fail — the mutation sweep raised
   // maxDrop to 6 and the assert sailed through. Canon's word is **shallow**, and what makes it
   // shallow is not a number this file chose: a bowl deeper than a keeper is tall stops being a dip
   // you look down into and becomes a pit you are thrown into, which is a different room.
   const SHALLOW = 3
-  ok(DEFAULT_FLOOR.maxDrop <= SHALLOW,
-    `★★★ the bowl is SHALLOW as canon says (maxDrop ${DEFAULT_FLOOR.maxDrop}, ceiling ${SHALLOW}) — deeper than a keeper is tall is a pit, not a dip`)
-  ok(at(0, 0).drop <= SHALLOW, `★★ and no cell exceeds it (${at(0, 0).drop})`)
+  ok(DEFAULT_FLOOR.maxDrop === 0,
+    `★★★ nothing is dug at all (maxDrop ${DEFAULT_FLOOR.maxDrop}) — "neither built nor dug" is the law, and digging is the FREE Moglins' verb`)
+  ok(at(0, 0).drop <= SHALLOW, `★★ and the dial cannot exceed a dip even if someone reaches for it (${at(0, 0).drop})`)
   let worst = 0
   for (let x = -20; x <= 20; x++) for (let z = -20; z <= 20; z++) worst = Math.max(worst, at(x, z).drop)
   ok(worst <= SHALLOW, `★★ nowhere in the green is deeper (${worst})`)
@@ -152,7 +158,10 @@ const at = (dx: number, dz: number) => bowlAt(GREEN, C.x + dx, C.z + dz)
   for (const g of DOWNBARROW_HEARTS) {
     const box: Box = { x0: 0, x1: g.w - 1, z0: 0, z1: g.d - 1 }
     const c = bowlCentre(box)
-    ok(bowlAt(box, c.x, c.z).drop > 0, `★★ '${g.id}' has a bowl in the middle of it`)
+    // ⚠ THE FLOOR IS FLUSH NOW, so "has a bowl" is asked as WEAR rather than as depth — the middle
+    // is worn bare and the banks make the bowl. Asking for depth here would be asserting the very
+    // thing the 08-30 correction removed.
+    ok(bowlAt(box, c.x, c.z).wear > 0, `★★ '${g.id}' has a worn floor in the middle of it`)
     let outside = 0
     for (let x = 0; x < g.w; x++) for (let z = 0; z < g.d; z++) {
       if (bowlAt(box, x, z).wear > 0 && Math.hypot(x - c.x, z - c.z) > Math.min(g.w, g.d) / 2) outside++

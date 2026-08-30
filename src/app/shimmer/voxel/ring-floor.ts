@@ -37,7 +37,23 @@ import { bowlFloorRadius, bowlCentre, DEFAULT_ROWS, type RowDials } from './hold
 import type { Box } from './jigsaw'
 
 export interface FloorDials {
-  /** Deepest the bowl ever gets, in blocks. ⚠ *Shallow* is canon's word — this is not a pit. */
+  /**
+   * Deepest the floor sits below the green, in blocks.
+   *
+   * ⚠⚠ ZERO — THE FLOOR IS FLUSH, AND THAT IS A CORRECTION, NOT A DIAL SET LOW. Alex, looking at the
+   * first build: *"just looks like a dirt horseshoe… if we just raise the sand pit in the middle so
+   * its flush with the grass that might look better giving a nice flat battle area."* He is right on
+   * feel and it resolves a canon error I had papered over: **a hold is "neither built nor DUG"**, and
+   * an excavated hollow is digging. Digging is what FREE Moglins do — the Warren, Gloview's
+   * burrow-town. A collarer takes ground; he does not carve it.
+   *
+   * ★ AND BONN #3 SAYS FLAT, NOT DEEP: *"a ring of bare smooth earth, **like a stage worn flat by
+   * use**."* The *"ground dipped into a wide shallow bowl"* in the same sentence is satisfied by the
+   * BANKS rising around it — you walk up over the seating and down onto the floor, which is a dip
+   * without a single block being dug out.
+   *
+   * Kept as a dial rather than deleted so the shape stays reachable, but the default is the ruling.
+   */
   maxDrop: number
   /** How far the irregular rim can wander in or out, in blocks. 0 makes it a surveyed circle. */
   rimJitter: number
@@ -54,7 +70,7 @@ export interface FloorDials {
 
 /** ⚠ UNSWEPT, like every number in this family. `ruins.ts`: *"tune by sweep, never by eye."* */
 export const DEFAULT_FLOOR: FloorDials = {
-  maxDrop: 2,
+  maxDrop: 0,
   rimJitter: 1.6,
   bareAt: 0.25,
   dragHalfAngle: 0.10,

@@ -50,7 +50,12 @@ const MATS: GreenMats = {
   grass: MAT.TOPSOIL,
   bare: MAT.PATH,        // "Worn Path" — the same material a hold's trodden ground already uses
   scorch: MAT.GREY_SOIL, // the greying, made ground
-  tier: MAT.SUBSOIL,
+  // ⚠ GRASS, NOT SUBSOIL, AND ALEX NAMED THE PROBLEM: *"just looks like a dirt horseshoe."* The
+  // banks were brown subsoil, which reads as imported earth — a thing somebody carted in and heaped
+  // up. They are none of that: they are **the plot's own ground, raised**, and canon's ground row is
+  // *"the plot's grass and paths, worn, trampled, dragged-over"*. Green banks around a bare floor
+  // put the contrast where the meaning is, and stop the whole set piece reading as a spoil heap.
+  tier: MAT.TOPSOIL,
 }
 
 type Cell = { x: number; y: number; z: number; m: number }

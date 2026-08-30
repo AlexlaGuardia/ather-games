@@ -54,7 +54,10 @@ const M: GreenMats = { grass: 5, bare: 8, scorch: 40, tier: 4 }
 
 // ── 3. ★★ THE PROFILE DIPS IN THE MIDDLE AND BANKS UP OUTSIDE ─────────────────────────────────
 {
-  ok(greenProfileAt(GREEN, C.x, C.z, ENTRY) < 0, '★★ the middle dips')
+  // ⚠ CONTRACT CHANGE 2026-08-30 (Alex): the floor is FLUSH with the green. The dip is made by the
+  // banks rising around it, not by digging — *"neither built nor dug"*, and digging is the free
+  // Moglins' verb. What this must still assert is that the middle is not RAISED.
+  ok(greenProfileAt(GREEN, C.x, C.z, ENTRY) === 0, '★★★ the fighting floor sits flush with the green')
   ok(greenProfileAt(GREEN, C.x + 40, C.z, ENTRY) === 0, '★ and well outside, the green is left alone')
   let banked = 0
   for (let a = 0; a < Math.PI * 2; a += 0.05) {
@@ -138,7 +141,7 @@ const M: GreenMats = { grass: 5, bare: 8, scorch: 40, tier: 4 }
       if (greenProfileAt(box, Math.round(s.x), Math.round(s.z), 0) !== s.y + DEFAULT_ROWS.rise) wrong++
     }
     ok(wrong === 0, `★★★ '${g.id}': all ${seats.length} seats sit on their own bank (${wrong} wrong)`)
-    ok(bowlAt(box, bowlCentre(box).x, bowlCentre(box).z).drop > 0, `★★ '${g.id}' has its bowl`)
+    ok(bowlAt(box, bowlCentre(box).x, bowlCentre(box).z).wear > 0, `★★ '${g.id}' has its worn floor`)
   }
 }
 
