@@ -23,8 +23,8 @@
 // `BridgeSpec`. Every sample was NaN and it reported a confident **100% in one direction with zero
 // in the others** — which is the only reason it got caught. A probe's shape is evidence about the
 // probe first. It finds bridges the way the world does now: `bridgeAt()` per column.
-import { bridgeSpecs, bridgeAt } from './src/app/shimmer/voxel/bridges'
-import { columnHeight } from './src/app/shimmer/voxel/height'
+import { bridgeSpecs, bridgeAt } from '../src/app/shimmer/voxel/bridges'
+import { columnHeight } from '../src/app/shimmer/voxel/height'
 
 const SEED = 1337
 const specs = bridgeSpecs(SEED)
