@@ -559,7 +559,25 @@ function canonRetiredVocabulary() {
   // ⚠ Per-term rules. `fail` means an occurrence is drift; `review` means the gate can find it but
   // cannot judge it, so it reports without failing. A term absent here is BLIND, never clean.
   const RULES = {
-    clan:     { mode: 'fail',   why: 'a canon noun the world does not use — the world says chord' },
+    // ⚠⚠ SCOPED 2026-08-30 (was `fail`), AND THE DEFECT WAS IN CANON'S TABLE, NOT IN THIS GATE.
+    // The 08-24 retirement scoped itself correctly in prose (`shimmer-geography.md:1175` — *clan*
+    // WHERE THE WORLD WOULD SAY CHORD) and then wrote an UNSCOPED row fifty lines later, in the one
+    // place the preamble declares machine-readable. This reader parsed that row faithfully, so the
+    // gate stood permanently red against `voxel/burrowtown.ts:8` — a comment quoting canon verbatim
+    // and CORRECTLY. Magii re-scoped the row (`athernyx 7cc5315`); the encoding is this file's call.
+    //
+    // ★ A RETIREMENT RETIRES A SENSE, NOT A STRING — canon's own words for the rule it derived. Three
+    // senses survive and all are canon: the Moglin/Wilds factions (Snagbarrows / Gorsejacks /
+    // Cinchfist, Alex 2026-07-24 — one of them a PROPER NAME a wholesale read would have retroactively
+    // unnamed), the awakened-clans (2026-08-13), and the main line's Tribal Era tribes-clans-villages,
+    // which was never in scope. Exactly one sense is retired: a **company of keepers** → **chord**.
+    // Verified against the ruling rather than assumed: `burrowtown.ts:8` is the Snagbarrows sense.
+    //
+    // ⚠ `review` is therefore the honest mode, for the same reason `gate` and `rune` carry it — the
+    // word is legitimate in another sense, so the gate can FIND an occurrence and cannot JUDGE it.
+    // Promoting it back to `fail` re-arms a guard that cries wolf, and a guard that cries wolf gets
+    // switched off, which is the failure this whole file exists to prevent.
+    clan:     { mode: 'review', why: 'retired ONLY for a company of keepers (→ chord); the Wilds factions, the awakened-clans and the Tribal Era sense are canon' },
     shipyard: { mode: 'fail',   why: 'there is one keeper home and it is the home plot / fold' },
     gate:     { mode: 'review', why: 'retired ONLY for travel that stays inside the Ather; correct for a crossing OUT' },
     rune:     { mode: 'review', why: 'retired only as a thing BOUGHT — a crafted/gifted rune is canon' },
