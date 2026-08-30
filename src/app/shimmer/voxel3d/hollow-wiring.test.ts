@@ -219,6 +219,33 @@ function firstEmission(ear: Ear, x: number, z: number) {
   // that no longer exists — which is worse than reporting nothing.
   ok(/delete w\.__hollows/.test(src), 'the readout is torn down on unmount')
 
+  // ── ★★ 6c. `/hollow` — THE SPAWN HARNESS (2026-08-30) ────────────────────────────────────────
+  // Its whole value is that it drives the SHIPPED construction, so a body it makes is
+  // indistinguishable from one the night made. A command that built its own mesh and pushed its own
+  // record would test a second code path and report on the first — the `bridgeVoxelAt`-vs-
+  // `materialAt` split, one floor down.
+  const drain = src.match(/if \(pendingHollow\.current\) \{[\s\S]{0,1400}?\n {6}\}/)?.[0] ?? ''
+  ok(drain !== '', 'the /hollow drain is findable')
+  ok(/spawnHollow\(sx, sh, sz, req\.form\)/.test(drain),
+     '★★★ /hollow spawns through the SHIPPED spawnHollow, not a parallel construction')
+  ok(/groundTopNear\(sx, sz, loco\.current\.py, HOLLOW_GROUND_DOWN, HOLLOW_GROUND_UP\)/.test(drain),
+     '★★ and it grounds them with the step\'s own probe and bounds — a body spawned onto a different'
+     + ' floor than the one that walks it jumps on its first step and reads as the ratchet')
+  ok(!/groundTopNear\(sx, sz, p\.py/.test(drain) && !/groundTopNear\(sx, sz, p\.y/.test(drain),
+     '★ the probe is hinted with the keeper FEET, never the camera eye')
+
+  // ⚠⚠ IT MUST NOT SIT INSIDE THE NIGHT'S GATE. Behind `hollowNight` the command would do nothing at
+  // noon on lit ground, which is the only condition anyone would reach for it in; INSIDE the gate as
+  // an extra clause it could loosen when the world spawns its own. It stands beside it.
+  const nightGate = src.match(/if \(hollowNight\(day\)[\s\S]{0,80}/)?.[0] ?? ''
+  ok(!/pendingHollow/.test(nightGate), 'the harness does not ride inside the night gate')
+  ok(src.indexOf('if (pendingHollow.current)') < src.indexOf('if (hollowNight(day)'),
+     '★ the harness drains BEFORE the night gate, so neither can change the other')
+
+  // The requested form defaults to the shipped roll, or the command would quietly change the mix.
+  ok(/const form = force \?\? pickForm\(Math\.random\(\)\)/.test(src),
+     '★★ a forced form DEFAULTS to the night\'s own roll')
+
   // ⚠ THE KEEPER'S HEIGHT MUST BE HER FEET. `p` in this loop is the CAMERA, so `p.y` is the eye —
   // passing it would put every keeper a constant 1.62 above where she stands and quietly eat most
   // of a warden's vertical tolerance, which reads as "the melee forms stopped hitting me".

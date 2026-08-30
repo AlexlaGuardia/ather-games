@@ -184,7 +184,8 @@ import { stepVoices, newVoiceClock, type Voice, type VoiceClock } from './hollow
 import { playEmissions, unlockHollowSfx } from './hollow-sfx'
 import { setMasterVolume } from '../audio/bus'
 import { topSolidNear } from './ground-probe'
-import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
+import { type HollowForm,
+         hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
          HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN,
@@ -1428,7 +1429,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => ({
     isOwner,
     foes: () => {
@@ -1466,6 +1467,7 @@ export default function VoxelWorld() {
       refreshHotbar(); setCraftTick(t => t + 1)
       return `gave ${count}× ${id.replace(/_/g, ' ')}`
     },
+    hollow: (form, n) => worldCmd.current ? worldCmd.current.hollow(form, n) : 'the world is still waking',
     tp: (x, z) => worldCmd.current ? worldCmd.current.tp(x, z) : 'the world is still waking',
     pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, z: 0 },
     space: (to) => worldCmd.current ? worldCmd.current.space(to) : 'the world is still waking',
@@ -3493,7 +3495,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -3801,6 +3803,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // of dropping the walker through a world that has not generated yet.
   useEffect(() => {
     cmdOut.current = {
+      hollow: (form?: string, n = 1) => {
+        if (form && !(form in HOLLOW_FORMS)) return `no such form: ${form} (warden · stalker · caster)`
+        const count = Math.max(1, Math.min(6, Math.floor(n) || 1))
+        pendingHollow.current = { n: count, form: form as HollowForm | undefined }
+        return `${count} ${form ?? 'random'} hollow(s) forming in front of you`
+          + ' — window.__hollows() reads their heights'
+          + ' (in daylight they gutter out in seconds: /time 0 first)'
+      },
       tp: (x: number, z: number) => {
         const lc = loco.current
         // ── ⚠⚠ THE GARDEN'S FLOOR, NOT THE CONTINENT'S (2026-08-19) ──────────────────────────
@@ -4562,6 +4572,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * without going stale. `all` carries Shift at the moment the key went down, because by the time
    * the frame runs the modifier may already be released.
    */
+  /**
+   * ★★ `/hollow` PARKS ITS REQUEST HERE AND THE FRAME LOOP SPAWNS IT — same shape as `pendingCast`
+   * and `pendingDrop`, and for the same reason. The real spawner (`spawnHollow`) is a closure INSIDE
+   * the frame block: it needs the live geometry/material caches, the scene group and the profiler
+   * zone, none of which a console handler can reach. Parking the request means the command drives
+   * **the shipped construction path** rather than a second one written to look like it — the rule
+   * `/waymark` states outright ("the thing being tested is the shipped path"), and the reason a test
+   * harness is allowed to exist at all.
+   */
+  const pendingHollow = useRef<null | { n: number; form?: HollowForm }>(null)
   const pendingDrop = useRef<null | { all: boolean }>(null)
 
   const decayQueue = useRef<PendingLeaf[]>([])
@@ -6320,12 +6340,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       camera.getWorldDirection(hollowFwd.current)
       hollowClock.current -= dt
       const cap = hollowCap(cols.current.size)
-      const spawnHollow = (sx: number, sh: number, sz: number) => {
+      const spawnHollow = (sx: number, sh: number, sz: number, force?: HollowForm) => {
         // ★ A SUB-ZONE, OPENED HERE SO BOTH CALL SITES ARE COVERED BY ONE MARK PAIR. Marks are flat
         // by construction, so re-opening `world:spawn` at the end resumes the parent zone — this
         // measures exactly the mesh construction and its scene-graph insert, nothing around it.
         prof.current.mark('world:spawn/mesh')
-        const form = pickForm(Math.random())
+        // ⚠ `force` is the console's, and it DEFAULTS to the shipped roll — a spawner that took its
+        // form from a parameter with no default would let a caller silently change the mix the
+        // night is supposed to produce.
+        const form = force ?? pickForm(Math.random())
         const mesh = new THREE.Mesh(hollowGeo[form], hollowMat[form])
         mesh.scale.set(0.01, 0.01, 0.01)          // rises from nothing — the forming IS the tell
         mesh.position.set(sx, sh + 1 + HOLLOW_HOVER, sz)
@@ -6336,6 +6359,39 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           mesh,
         })
         prof.current.mark('world:spawn')   // resume the parent zone — see the mark above
+      }
+      // ── ★ THE CONSOLE'S REQUEST, DRAINED BEFORE THE NIGHT'S OWN GATE ───────────────────────
+      // Deliberately NOT behind `hollowNight` / `spawnDark` / the cap, so a body can be had without
+      // first finding drained ground on the right side of dusk. It stands BESIDE those rules rather
+      // than inside them, so nothing here can loosen what the night is allowed to make on its own,
+      // and the bodies are ordinary from the moment they exist — walked and despawned by the same
+      // code as any other.
+      //
+      // ⚠⚠ IT IS STILL A NIGHT TOOL, AND THE FIRST VERSION OF THIS COMMENT CLAIMED OTHERWISE.
+      // It said the point was "a body on lit ground at noon". Measured: at `?hour=12` the readout
+      // came back `n: 0` every time. `gutter` is driven up by DAWN and never down (`hollows.ts`),
+      // so a daylight body disperses within seconds — the SPAWN gate is what this sidesteps, and
+      // guttering is a different rule that it cannot and should not touch. At `?hour=0` and
+      // `?hour=22` the same call returns three bodies. **Spawning and persisting are two gates and
+      // the comment conflated them.**
+      if (pendingHollow.current) {
+        const req = pendingHollow.current
+        pendingHollow.current = null
+        const fwd = hollowFwd.current
+        for (let i = 0; i < req.n; i++) {
+          // A ring in front of the keeper, far enough not to be standing inside her.
+          const a = (i / Math.max(1, req.n)) * Math.PI * 2
+          const sx = p.x + fwd.x * 6 + Math.cos(a) * 2.5
+          const sz = p.z + fwd.z * 6 + Math.sin(a) * 2.5
+          // ⚠ THE SAME GROUND PROBE THE STEP USES, WITH THE SAME BOUNDS. A body spawned onto a
+          // different notion of "the floor" than the one that walks it would settle with a jump the
+          // moment it took its first step, and read as the ratchet this command exists to check for.
+          // ⚠ `loco.current.py` IS THE KEEPER'S FEET; `p` is the CAMERA. Using the eye would hint
+          // the probe 1.62 too high — the identical slip `hollow-wiring.test.ts` already guards for
+          // on `hollowStrike`, and tsc caught it here only because Vector3 has no `py`.
+          const sh = groundTopNear(sx, sz, loco.current.py, HOLLOW_GROUND_DOWN, HOLLOW_GROUND_UP)
+          spawnHollow(sx, sh, sz, req.form)
+        }
       }
       // The despawn line IS the load edge — it derives from viewRadius now, so a wider view means
       // a wider night. hollows.ts's DESPAWN_DIST constant documented the r=6 baseline (96).

@@ -46,6 +46,13 @@ export interface ConsoleCtx {
   radius: () => number
   give: (id: string, n: number) => string
   tp: (x: number, z: number) => string
+  /**
+   * Put a Hollow in front of the keeper. A TEST HARNESS — the same standing warning `/rune` and
+   * `/waymark` carry: this is not how the dark arrives. The night's own rules (`hollowNight`,
+   * the eligibility gate, the cap) are untouched and this stands beside them, because the point is
+   * to get a body onto LIT ground at NOON, which is precisely where those rules refuse to make one.
+   */
+  hollow: (form?: string, n?: number) => string
   /** Player position, for `~` relative coordinates (MC's convention, ported with the chat). */
   pos: () => { x: number; z: number }
   /** Cross between the Wilds and the Home Plot. Owner-gated — see the `/space` row. */
@@ -194,6 +201,29 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
   { name: 'give', usage: 'give <item> [count]', help: 'conjure items into the bag', owner: true,
     run: (a, c) => a[0] ? c.give(a[0], Math.max(1, Math.round(Number(a[1]) || 1))) : 'give what?',
     suggest: (i) => i === 0 ? [...KNOWN_ITEMS].sort() : ['1', '4', '16', '64'] },
+  // ── ★★ /hollow (2026-08-30, Alex: "add the /hollow spawn command") ──────────────────────────
+  // It exists because "are the Hollows in the trees again?" was a question nobody could answer
+  // cheaply. Bodies form only on drained ground at night, so the honest way to check the 08-28
+  // sky-Hollow fix was to go and find some dark — and a readout you can only exercise by hunting
+  // for the right patch of world is a readout with no positive control. Pair it with
+  // `window.__hollows()`, which prints each body's height above the floor it belongs on.
+  //
+  // ⚠ IT CANNOT LOOSEN THE NIGHT. The spawn runs BESIDE `hollowNight`/`spawnDark`, not through
+  // them, so nothing here changes when or where the world makes its own — and the bodies are
+  // ordinary once made, walked and despawned by the same code as every other.
+  //
+  // ⚠⚠ USE IT AT NIGHT. Spawning and PERSISTING are two different gates: this sidesteps the first
+  // and cannot touch the second. `gutter` is driven up by dawn and never down, so a body made in
+  // daylight disperses in seconds — measured, `n: 0` at hour=12 and three bodies at hour=0 and 22.
+  { name: 'hollow', usage: 'hollow [warden|stalker|caster] [count]', help: 'form Hollows in front of you — use at night, they gutter at dawn (test harness)', owner: true,
+    run: (a, c) => {
+      const form = a[0] && !/^\d+$/.test(a[0]) ? a[0].toLowerCase() : undefined
+      const nRaw = form ? a[1] : a[0]
+      const n = nRaw ? Number(nRaw) : 1
+      if (nRaw && !Number.isFinite(n)) return `not a count: ${nRaw}`
+      return c.hollow(form, n)
+    },
+    suggest: () => ['warden', 'stalker', 'caster'] },
   { name: 'tp', usage: 'tp <x> <z>  (~ = here, ~-20 = 20 west)', help: 'teleport to ground level', owner: true,
     run: (a, c) => {
       if (!a[0] || !a[1]) return 'tp needs two coordinates'
