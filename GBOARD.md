@@ -11,6 +11,70 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🧭 Shimmer — **UNBUILT: A REASON THAT CANNOT EXPIRE QUIETLY** (2026-08-31, play lane) · *Last touched 2026-08-31 — `de2216c` pushed. unbuilt-premise oracle **22/0**, mutation-swept **6 ways, all 6 fire**. cast 103/0, keeper-moves 386/0, all play3d green, tsc 7 (baseline), canon exit 0.*
+
+### The problem, stated once
+`cast.ts`'s honesty rule — *a canon move the sim cannot run is `unbuilt` WITH a reason* — is a good
+rule with one hole: **the reason is PROSE, and prose cannot be checked.** Tremor Sense sat behind an
+accurate sentence for months after the sentence stopped being true. Auditing the other twelve the
+same afternoon turned up **three more of exactly that shape.** That is not bad luck; it is what an
+unchecked list does over time.
+
+### ★★ The two classes behave completely differently, and conflating them is why nobody noticed
+- **CANON-BLOCKED** — declares `needs` in `keeper-moves.ts`, transcribed from canon (manatech, a
+  second mage, a craft rather than magic). **Stable.** These expire only when canon changes its mind,
+  which is a ruling, not a drift. No probe, and none is wanted.
+- **BUILD-BLOCKED** — names a hook the sim owes. **This is the class that rots.**
+
+13 unbuilt: **5 canon-blocked, 8 build-blocked** — a clean partition. Each build-blocked move now
+carries a **premise**: a file to look in and a pattern whose ABSENCE is the blocker. The day the hook
+lands, the suite goes red and names the move to re-read.
+
+⚠ **Assert C is the one that matters:** the two classes together must be EXACTLY the unbuilt roster,
+so a newly unbuilt move is red until classified. **A worklist with a red light on it, not an
+exemption list** — same shape as `tokens.test.ts` assert B, for the same reason.
+
+### Three corrections the audit forced — each verified with a second instrument
+⚠ **A grep is not enough here and nearly said the opposite.** A sweep for the named hooks reported
+*9 of 10 blockers have lifted*; checking properly, `manatech` appears in six files and **every one is
+prose** (comments, canon effect text, a `needs:` field). The crude instrument failed toward *"you
+found something"*, which is the direction that gets acted on.
+- **`waymark`** said it wants `voxel/waymark.ts` and the passage arc. **Both exist** and VoxelWorld
+  imports `Waymark`/`WaymarkNet`. Rewritten to the surviving **design** half — a place-binding is not
+  a slot you press — rather than deleted, because the move is still correctly unbuilt.
+- **`overpressure`** said it needs *a damage-to-shield bank*. `vitals.ts` **has one**, with Alex's
+  ruled `resist → shield → spill` order. What is missing is narrower and now says so: nothing feeds
+  **absorbed** damage back in. The wide version read as a far bigger job than it is.
+- **`bind-mastery`** had a **canon** requirement living in build prose where no guard could read it
+  (`moves.md:28` — *"the foundation of gatecraft and manatech. A scholar's mastery, not a
+  fighter's."*). Moved into `needs`, so it files as canon-blocked (a world we do not have) rather
+  than build-blocked (a hook we owe).
+
+### Decisions
+- **No probe searches for the move's own name.** The move is exactly what does not exist, so a probe
+  for `flame-cloak` would stay quiet forever and prove nothing. It watches the **capability**, in the
+  file that would gain it.
+- **Assert A checks every premise's file exists first.** ⚠ A probe aimed at a moved file matches
+  nothing forever and **reads exactly like "still blocked"** — the blind-instrument bug, which would
+  make this whole file decoration without it ever going red.
+- **A move may not be in both classes.** Filing one as both hides which is actually true, and the
+  wrong half is the half that gets worked on.
+
+### ⚠ One mutation reported a false green
+Mutation R **missed its anchor** on the first run and printed a full pass. That is a false pass, not
+a result — it ran unmutated. Re-run with the correct anchor, it fires. **A sweep that cannot apply
+its own mutation is indistinguishable from a guard that works.**
+
+### Next
+**`flame-cloak` — hook verified, not grepped.** `hollowStrike` returns `HollowHit | null` at
+`VoxelWorld.tsx:6843`: a real contact event with the form attached, which is exactly the
+contact-retaliation hook its reason says is missing. Pure half is this lane; the retaliation write
+is hub's.
+
+### Files
+`play3d/unbuilt-premise.test.ts` (new, 22 asserts) · `play3d/cast.ts` (two reasons corrected) ·
+`play3d/keeper-moves.ts` (`bind-mastery` gains its canon `needs`)
+
 ## 👣 Shimmer — **TREMOR SENSE: THE BLOCKER LIFTED MONTHS AGO AND THE NOTE DID NOT** (2026-08-31, play lane) · *Last touched 2026-08-31 — `6739a9e` committed AND pushed, 0 unpushed. tremor-sense oracle **60/0**, mutation-swept **17 ways, all 17 fire**. cast oracle 103/0 (55 → 56 runnable), every play3d suite green, tsc 7 (baseline), canon exit 0. **NOT deployed** — the tree carries another window's vtuber work.*
 
 ### The find, and it is the house's most expensive recurring shape
