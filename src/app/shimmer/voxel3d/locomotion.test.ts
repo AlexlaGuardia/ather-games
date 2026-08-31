@@ -6,7 +6,8 @@
 
 import {
   createLoco, tickLocomotion, bodyFree, floorProbe,
-  RUN_SPEED, JUMP_V0, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
+  RUN_SPEED, WALK_SPEED, SPRINT_RAMP, SLIDE_MIN_SPEED, SLIDE_BOOST, SPEED_CAP,
+  JUMP_V0, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
   CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, eyeY, STEP_SMOOTH_MAX, DRAINED_SPEED,
   CROUCH_SPEED, type LocoInput,
   CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF, SWIM_SPEED, SWIM_UP, SWIM_IDLE_SINK, TREAD_SINK_CAP,
@@ -754,6 +755,157 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   // walker may come from the raw key map. Negative, so it reads `code`.
   ok(!/\bk\.[A-Za-z]/.test(call.code), '⚠ a raw key read is back in the walker input — route it through heldNow')
   ok(HELD.includes('move.jump' as never), 'move.jump left the HELD set — this guard assumes it is polled, not edged')
+}
+
+// ── ★ THE SPRINT RAMP, AND THE SLIDE IT PAYS FOR (2026-08-31) ────────────────────────────────
+// The verbs here are new but the SHAPE is the oldest lesson in this file: a burst that is always
+// available is not a burst, it is a button. Every assert below is written so that deleting the
+// ramp — not breaking it, DELETING it, which is what a future "simplify the movement code" pass
+// would do — goes red naming the thing that was lost.
+{
+  const solid = world()
+  const hold = (frames: number, extra: Partial<LocoInput> = {}) => {
+    const s = createLoco(0.5, 10, 0.5); settle(s, solid)
+    for (let i = 0; i < frames; i++) tickLocomotion(s, input({ mvX: 1, ...extra }), solid)
+    return s
+  }
+  const spd = (s: ReturnType<typeof createLoco>) => Math.hypot(s.hvx, s.hvz)
+  const RAMP_F = Math.round(SPRINT_RAMP * 60)
+
+  // 1. A press buys the WALK, and only the walk. This is the assert the old build could not pass:
+  //    it reached 95% of its single speed in 0.43s, so at 0.5s it was already done accelerating.
+  // ⚠ THERE IS NO WALK PLATEAU AND THIS ASSERT IS WRITTEN KNOWING IT. The bank starts filling on
+  //   the first frame of input, so WALK_SPEED is where the ramp BEGINS, not a state you sit in.
+  //   My first cut asserted `|early - WALK_SPEED| < 0.15` and it went red at 4.82 — the assert was
+  //   wrong, not the code. What is worth pinning is that half a second in you are still in the
+  //   BOTTOM HALF of the climb, which is the property "the top is not simply handed over".
+  const early = spd(hold(30))                                  // 0.5s — well past the 0.14s accel lag
+  ok(early >= WALK_SPEED - 0.1,
+     `★ the ramp starts AT the walk, never below it (${early.toFixed(2)} vs walk ${WALK_SPEED})`)
+  ok(early < (WALK_SPEED + RUN_SPEED) / 2 + 0.2,
+     `★ half a second in is still the bottom half of the ramp (${early.toFixed(2)}, midpoint ${((WALK_SPEED + RUN_SPEED) / 2).toFixed(2)})`)
+  ok(early < RUN_SPEED - 1.5,
+     `★ and the top is not simply handed over — the ramp exists (${early.toFixed(2)} vs run ${RUN_SPEED})`)
+
+  // 2. It climbs, monotonically, and arrives. Sampled rather than end-checked: an end-check alone
+  //    passes for a step function, which is the thing this is meant to stop being.
+  const marks = [0.25, 0.5, 0.75, 1].map(f => spd(hold(Math.round(RAMP_F * f))))
+  ok(marks.every((v, i) => i === 0 || v > marks[i - 1] + 0.1),
+     `★ the ramp climbs the whole way, it does not step (${marks.map(v => v.toFixed(2)).join(' → ')})`)
+  // ⚠ SAMPLED PAST SPRINT_RAMP, DELIBERATELY. The bank is full at 1.2s but hvel is still chasing
+  //   it through GROUND_ACCEL's 0.14s lag, so the speed AT the ramp's end is 6.26, not 6.5. That
+  //   is the two systems composing correctly; asserting equality at RAMP_F measures the lag and
+  //   calls it a ramp bug. The reachability claim is what matters: held input does arrive.
+  const settled = spd(hold(RAMP_F + 20))
+  ok(Math.abs(settled - RUN_SPEED) < 0.1,
+     `and sustained input does arrive at RUN_SPEED (${settled.toFixed(2)}, ~0.3s after the bank fills)`)
+  ok(marks[1] < RUN_SPEED - 0.8,
+     `★ halfway through the ramp is meaningfully short of the top — 1.2s is a duration you can feel (${marks[1].toFixed(2)})`)
+
+  // 3. ★★ THE GATE. Alex's ruling in his own words: "using it before the peak is reached causes a
+  //    dead slide". Before the ramp this could not be tested, because the gate was crossed 8
+  //    frames after the first press and every input in this file cleared it by accident.
+  const earlyS = hold(30)
+  ok(spd(earlyS) < SLIDE_MIN_SPEED, `(premise) a walking keeper is below the gate (${spd(earlyS).toFixed(2)} < ${SLIDE_MIN_SPEED.toFixed(2)})`)
+  tickLocomotion(earlyS, input({ mvX: 1, crouchKey: true }), solid)
+  ok(!earlyS.sliding, '★★ crouch BEFORE the peak does not slide — the dead slide')
+  ok(earlyS.crouching, '★ ...and it is not a no-op either: it crouches, so the press did something')
+  for (let i = 0; i < 30; i++) tickLocomotion(earlyS, input({ mvX: 1, crouchKey: true }), solid)
+  ok(spd(earlyS) < WALK_SPEED - 0.5,
+     `★★ the early press COSTS speed rather than doing nothing (${spd(earlyS).toFixed(2)} → crouch)`)
+  // and the bank is gone with it, so the mistake is paid for twice: you re-climb from zero.
+  ok(earlyS.sprintT === 0, '★ an early slide press wipes the sprint bank — the ramp restarts')
+
+  // 4. At the peak it slides, and the peak slide keeps the number it always had.
+  const peakS = hold(RAMP_F + 10)
+  ok(spd(peakS) > SLIDE_MIN_SPEED, `(premise) a sprinting keeper clears the gate (${spd(peakS).toFixed(2)})`)
+  tickLocomotion(peakS, input({ mvX: 1, crouchKey: true }), solid)
+  ok(peakS.sliding && spd(peakS) >= SLIDE_SPEED - 0.15,
+     `★ crouch AT the peak still lands on ${SLIDE_SPEED} — earned now, not weaker (${spd(peakS).toFixed(2)})`)
+
+  // 5. ★★★ A FASTER ENTRY MUST BUY A FASTER SLIDE. The old entry floored at SLIDE_SPEED, so every
+  //    ground slide was exactly 10 however you came in — building speed first bought nothing, and
+  //    THAT is what made the payoff feel flat. Restoring the floor makes these two equal.
+  const chained = hold(RAMP_F + 10); chained.hvx = 12; chained.hvz = 0   // a bhop-chained entry
+  tickLocomotion(chained, input({ mvX: 1, crouchKey: true }), solid)
+  ok(spd(chained) > spd(peakS) + 0.5,
+     `★★★ entering above the ramp slides FASTER than entering at it (${spd(chained).toFixed(2)} vs ${spd(peakS).toFixed(2)})`)
+  ok(spd(chained) <= SPEED_CAP + 1e-6, `and the cap is still the only ceiling (${spd(chained).toFixed(2)})`)
+  // ⚠⚠ AND THE CASE THAT ACTUALLY PINS THE ORIGINAL BUG, WHICH THE ASSERT ABOVE DOES NOT. The
+  //    sweep caught this: `chained` enters at 12, and the OLD `max(SLIDE_SPEED, curSpeed * 1.35)`
+  //    scales there too (16.2), so restoring the floor tripped only the cap. The floor's real
+  //    damage lives BELOW 7.41, where every ground entry was clamped to exactly 10 — so the two
+  //    entries that must differ are two entries a keeper can actually reach on foot.
+  const barely = hold(RAMP_F + 10); const k = (SLIDE_MIN_SPEED + 0.05) / spd(barely)
+  barely.hvx *= k; barely.hvz *= k                             // just over the gate, on the ground
+  tickLocomotion(barely, input({ mvX: 1, crouchKey: true }), solid)
+  ok(barely.sliding && spd(barely) < spd(peakS) - 0.4,
+     `★★★ a bare-minimum entry slides SLOWER than a peak one (${spd(barely).toFixed(2)} vs ${spd(peakS).toFixed(2)}) — under the old floor both were exactly ${SLIDE_SPEED}`)
+
+  // 6. ★★ THE BACK DOOR. The jump takeoff floored at RUN_SPEED, so press-and-hop minted the full
+  //    sprint in the air a tenth of a second after the first input — the cheapest way to skip the
+  //    entire ramp, and invisible to every assert above because they never leave the ground.
+  const hopper = hold(12)                                      // 0.2s: barely moving
+  tickLocomotion(hopper, input({ mvX: 1, jumpKey: true }), solid)
+  ok(hopper.airborne && hopper.airSpeed < WALK_SPEED + 0.1,
+     `★★ a jump cannot mint the sprint — it floors at the walk (airSpeed ${hopper.airSpeed.toFixed(2)})`)
+
+  // 7. ...but it must CARRY what was actually earned, or the chain this system is built on dies.
+  const sprintHop = hold(RAMP_F + 10)
+  tickLocomotion(sprintHop, input({ mvX: 1, jumpKey: true }), solid)
+  ok(sprintHop.airSpeed > RUN_SPEED - 0.2,
+     `★ an earned sprint carries into the air intact (${sprintHop.airSpeed.toFixed(2)})`)
+  // ⚠ TICK PAST THE LANDING, NOT UP TO IT. The sweep caught this too: a 40-frame flight lands on
+  //   almost exactly the last frame, so the assert sampled the instant of touchdown — before the
+  //   ground target had any frames to pull the speed down. A drained bank and a frozen one are
+  //   identical at that instant, and the mutation SURVIVED. Land first, then give it 20 frames.
+  let air = 0
+  while (sprintHop.airborne && air < 120) { tickLocomotion(sprintHop, input({ mvX: 1 }), solid); air++ }
+  ok(!sprintHop.airborne, `(premise) the hop lands within a second (${air} frames)`)
+  for (let i = 0; i < 20; i++) tickLocomotion(sprintHop, input({ mvX: 1 }), solid)
+  ok(spd(sprintHop) > RUN_SPEED - 0.3,
+     `★★ and landing does NOT dump you back to a walk — the bank is frozen in the air, not drained (${spd(sprintHop).toFixed(2)})`)
+
+  // 8. The drain's band. Two inequalities, not the coincidence that they currently share a number:
+  //    below the walk a drain is a wall again by another door; at or above the run it costs nothing.
+  ok(DRAINED_SPEED >= WALK_SPEED,
+     `⚠ DRAINED_SPEED fell below the walk (${DRAINED_SPEED} < ${WALK_SPEED}) — that is "menace, not a wall" broken by a tuning number`)
+  ok(DRAINED_SPEED < RUN_SPEED, `⚠ DRAINED_SPEED no longer costs the sprint (${DRAINED_SPEED} >= ${RUN_SPEED})`)
+  ok(WALK_SPEED > HOLLOW_SPEED, `⚠ even a WALK must outpace the base glide (${WALK_SPEED} vs ${HOLLOW_SPEED})`)
+  ok(WALK_SPEED < RUN_SPEED && SLIDE_BOOST > 1, 'the tiers are ordered and the slide is a boost')
+
+  // 9. ★★★ A DRAINED KEEPER CANNOT SLIDE, AND THAT IS A BALANCE CHANGE NOBODY DESIGNED.
+  //    It falls straight out of the arithmetic: the drain caps you at DRAINED_SPEED (4.2) and the
+  //    gate now sits at RUN_SPEED * 0.92 (5.98), so once the cap has actually bitten there is no
+  //    input that clears the gate. Get touched by a Hollow and you lose the slide outright until
+  //    the drain wears off — not slowed, GONE. Pinned here because it is a real consequence of the
+  //    gate and it should break loudly if anyone retunes either number into contradicting it.
+  //    ⚠ It is only true once you have DECELERATED: a touch landing mid-sprint leaves hvel above
+  //    the gate for a few frames, and a slide entered in that window is legal.
+  const drained = hold(RAMP_F + 10)
+  drained.drainT = DRAIN_TIME
+  for (let i = 0; i < 60; i++) tickLocomotion(drained, input({ mvX: 1 }), solid)   // let the cap bite
+  ok(Math.abs(spd(drained) - DRAINED_SPEED) < 0.15, `(premise) the drain has bitten (${spd(drained).toFixed(2)})`)
+  tickLocomotion(drained, input({ mvX: 1, crouchKey: true }), solid)
+  ok(!drained.sliding,
+     `★★★ a drained keeper cannot reach the gate, so the slide is gone until it wears off (${DRAINED_SPEED} < ${SLIDE_MIN_SPEED.toFixed(2)})`)
+}
+
+// ── ★ THE GATE IS DERIVED, AND ONLY THE SOURCE CAN SAY SO ────────────────────────────────────
+// A value check cannot tell `RUN_SPEED * 0.92` from a hand-written `5.98`: they are the same
+// number today and they differ the moment anyone retunes the sprint — at which point the literal
+// silently stops gating anything, and an un-gated slide looks EXACTLY like a working one. So this
+// one assert reads the declaration itself. Mutation: write the literal, it goes red.
+{
+  const src = readFileSync(join(__dirname, 'locomotion.ts'), 'utf8')
+  const code = codeOnly(src)
+  const decl = code.match(/^export const SLIDE_MIN_SPEED\s*=\s*(.+)$/m)
+  ok(!!decl, 'BLIND: could not find the SLIDE_MIN_SPEED declaration — this assert measures nothing')
+  ok(!!decl && /\bRUN_SPEED\b/.test(decl[1]),
+     `★★ SLIDE_MIN_SPEED must DERIVE from RUN_SPEED, not mirror it as a literal (found \`${decl?.[1]?.trim()}\`)`)
+  // and the ramp's own two ends, for the same reason a mirror is worse than an omission.
+  ok(/^export const WALK_SPEED\s*=/m.test(code), 'BLIND: WALK_SPEED declaration is gone — the ramp has no bottom')
+  ok(/^export const SPRINT_RAMP\s*=/m.test(code), 'BLIND: SPRINT_RAMP declaration is gone — the ramp has no duration')
 }
 
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)

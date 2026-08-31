@@ -31,7 +31,32 @@
 //   wall jump  tap Space against a wall (0.18s coyote after leaving it) = kick up and away;
 //              re-grip locked 0.22s so the push actually separates
 
-export const RUN_SPEED = 6.5
+// ── ★ THE RUN IS A RAMP NOW (2026-08-31, Alex: "the run itself needs to ramp up from a walk into
+// a sprint .. then once the player reaches peak speed then the slide jump .. using it before the
+// peak is reached causes a dead slide") ──────────────────────────────────────────────────────────
+// WHAT WAS HERE, measured before changing it: ONE ground speed, reached in 0.43s (GROUND_ACCEL 7
+// is a 0.14s time constant). The slide's own gate, SLIDE_MIN_SPEED 3.8, was crossed 0.13s after
+// the first press — eight frames at 60fps — so the burst was always available and there was
+// nothing to build toward. That is the whole of "the slide jump is a little meh": it was not a
+// weak payout, it was an unearned one.
+//
+// ⚠ AND THE ENTRY PAID YOU FOR ENTERING SLOW. `max(SLIDE_SPEED, curSpeed * 1.35)` is 2.56x at a
+// barely-qualifying 3.9 against 1.54x at full run, and its scaling branch only beats the floor
+// above 7.41 — which is ABOVE RUN_SPEED, so unreachable from the ground. Every ground slide in the
+// game was exactly 10 however you entered it. Building speed first bought literally nothing.
+//
+// Now: WALK_SPEED is what a press gives you, RUN_SPEED is what SPRINT_RAMP seconds of held input
+// EARNS you, and the slide gate sits just under the top so the burst is the ramp's payout.
+//
+// ⚠⚠ RUN_SPEED IS NO LONGER A SPEED YOU HAVE, IT IS ONE YOU REACH, and every importer that reads
+// it as "the keeper's speed" is now reading the BEST case. `hollows.test.ts` is the one that
+// matters — it asserts running outruns every Hollow form ("menace, not a wall") and it is CORRECT
+// to keep reading the top, because canon's word is *runs*: a walk is not a run, and the stalker at
+// 3.9 is meant to close on somebody who dawdles. That is a ruling this ramp makes true rather than
+// one it breaks, but it is true by argument now and not by there being only one number.
+export const WALK_SPEED = 4.2       // what a press gives you, free and immediately
+export const RUN_SPEED = 6.5        // the TOP of the ramp — earned, see SPRINT_RAMP
+export const SPRINT_RAMP = 1.2      // seconds of sustained ground input from walk to full sprint
 export const BACK_SPEED = 3.5
 export const CROUCH_SPEED = 2.6
 
@@ -42,6 +67,13 @@ export const CROUCH_SPEED = 2.6
  * pack closes and never lets go, and the ruling is broken by a tuning number nobody would think
  * to re-read. It must stay above 3.4. The oracle asserts exactly that, so a future balance pass
  * that lowers it fails loudly instead of quietly turning menace into a wall.
+ *
+ * ★ SINCE THE RAMP (2026-08-31) THE RULE IS A BAND, AND THE BAND IS THE DESIGN: at or above
+ * WALK_SPEED (a drain must never take you below the speed a single press gives everyone — below
+ * that it is a wall again, by a different door) and strictly below RUN_SPEED (a drain has to
+ * actually cost you the sprint, or it costs nothing). It currently sits exactly ON WALK_SPEED,
+ * which reads as *drained: you can no longer run* — a clean rule, and the oracle asserts the two
+ * inequalities rather than the coincidence, so either number may move without the other.
  */
 export const DRAINED_SPEED = 4.2
 
@@ -49,8 +81,19 @@ export const GROUND_ACCEL = 7
 export const GROUND_FRICTION = 13
 export const GRAVITY = 22
 export const JUMP_V0 = 7.4          // apex ≈ 1.24 blocks — clears a 1-block step with a tap
-export const SLIDE_SPEED = 10
-export const SLIDE_MIN_SPEED = 3.8
+export const SLIDE_SPEED = 10       // the nominal peak slide — the BLEED rate is still sized off it
+/** ★ DERIVED, NEVER A LITERAL. The slide is the ramp's payout, so its gate has to move when the top
+ *  of the ramp moves. A hand-written 5.98 here is a mirror of RUN_SPEED, and it would go stale the
+ *  first time anyone retunes the sprint — SILENTLY, because an un-gated slide looks exactly like a
+ *  working one. 0.92 leaves the last ~8% of the ramp as the window (~0.1s of held input): tight
+ *  enough that an early press is a real mistake, wide enough that it is not frame-perfect. */
+export const SLIDE_MIN_SPEED = RUN_SPEED * 0.92
+/** Entry multiplier, applied to the LIVE speed with NO FLOOR under it — the floor was the whole bug
+ *  (see the ramp note above). Sized so a slide entered at the top of the ramp still lands on
+ *  SLIDE_SPEED: 6.5 x 1.55 = 10.1. The peak slide keeps the number it has always had, it just has
+ *  to be earned now; and an entry above the ramp (a bhop chain) scales PAST it toward SPEED_CAP
+ *  instead of being clamped back down to 10. */
+export const SLIDE_BOOST = 1.55
 export const SLIDE_TIME = 0.6
 export const AIR_CONTROL = 0.4
 export const SLIDEHOP_BOOST = 1.12
@@ -186,6 +229,8 @@ export interface LocoState {
   airborne: boolean
   coyoteT: number
   slideT: number; crouchHeld: boolean
+  /** Seconds of sustained ground input banked toward the sprint, 0..SPRINT_RAMP. */
+  sprintT: number
   airSpeed: number; prevMvX: number; prevMvZ: number
   landGrace: number; landSpeed: number
   jumpHeld: boolean; spaceHeldT: number
@@ -228,7 +273,7 @@ function stepDebt(s: LocoState, rise: number): void {
 export function createLoco(px: number, feetY: number, pz: number): LocoState {
   return {
     px, py: feetY, pz, hvx: 0, hvz: 0, vy: 0, eye: EYE_STAND,
-    airborne: true, coyoteT: 0, slideT: 0, crouchHeld: false, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
+    airborne: true, coyoteT: 0, slideT: 0, crouchHeld: false, sprintT: 0, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
     landGrace: 0, landSpeed: 0, jumpHeld: false, spaceHeldT: 0, jumpGapT: 0, climbRise: 0,
     onWall: false, wallNX: 0, wallNZ: 0, wallCX: 0, wallCZ: 0, wallStick: 0, wallLock: 0,
     hanging: false, hangT: 0, hangLock: 0, hangLipX: 0, hangLipY: 0, hangLipZ: 0, hangCX: 0, hangCZ: 0,
@@ -398,7 +443,7 @@ export function blinkKeeper(
     s.wallStick = 0; s.wallLock = 0
     s.hanging = false; s.hangT = 0
     s.climbing = false; s.mantleT = 0
-    s.slideT = 0
+    s.slideT = 0; s.sprintT = 0     // the blink zeroes hvel, so it must zero what hvel had earned
     return Math.hypot(x - fromX, z - fromZ)
   }
   return 0
@@ -426,7 +471,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   s.swimming = chestIn && feetIn
   if (s.swimming) {
     s.sliding = false; s.crouching = false; s.climbing = false; s.onWall = false
-    s.hanging = false; s.mantleT = 0; s.vaulting = false; s.slideT = 0
+    s.hanging = false; s.mantleT = 0; s.vaulting = false; s.slideT = 0; s.sprintT = 0
     s.airborne = true                      // leaving the water without a jump is a fall, correctly
     const k = Math.min(1, dt * SWIM_ACCEL)
     s.hvx += (mvX * SWIM_SPEED - s.hvx) * k
@@ -452,13 +497,47 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   const curSpeed = Math.hypot(s.hvx, s.hvz)
   if (crouchKey && !s.crouchHeld && !s.airborne && curSpeed > SLIDE_MIN_SPEED && s.slideT <= 0) {
     s.slideT = SLIDE_TIME
-    const burst = Math.max(SLIDE_SPEED, curSpeed * 1.35) / Math.max(1e-6, curSpeed)
+    // No floor under this. SPEED_CAP is the only ceiling, so a chained entry scales and a
+    // barely-qualifying one is not handed the top of the curve. (The gate above is ~5.98, so
+    // curSpeed cannot be near zero here; the guard is kept so lowering the gate cannot NaN.)
+    const burst = Math.min(SPEED_CAP, curSpeed * SLIDE_BOOST) / Math.max(1e-6, curSpeed)
     s.hvx *= burst; s.hvz *= burst
   }
   s.crouchHeld = crouchKey
   s.sliding = s.slideT > 0 && !s.airborne
   if (s.sliding) s.slideT -= dt
   s.crouching = crouchKey && !s.sliding && !s.airborne
+
+  // ── ★ THE SPRINT RAMP ───────────────────────────────────────────────────────────────────────
+  // THE RAMP LIVES IN THE TARGET, NEVER IN GROUND_ACCEL. Slowing the accel would build speed too,
+  // and it would do it by making the first step mushy — which reads as input LAG, not as momentum,
+  // and players feel that as a broken control rather than as a heavy one. The 0.14s lag constant
+  // stays exactly where it is so a standing start is still crisp; all that changes is where that
+  // crisp acceleration is heading.
+  //
+  // ⚠ FROZEN IN THE AIR, NOT DECAYED. A bhop chain is the reward for having earned the sprint, and
+  // draining the charge over a jump would land you at a walk with your air speed intact — the
+  // ground immediately fighting the momentum the air had just kept, which is the opposite of the
+  // chain this movement system is built around. Held through a slide for the same reason (you
+  // cannot enter one below the gate, so it is full by construction).
+  //
+  // ★ AND THE EARLY SLIDE PRESS COSTS SOMETHING RATHER THAN DOING NOTHING. Below the gate a crouch
+  // press falls through to `s.crouching`, which is not `sprinting`, which zeroes the bank AND caps
+  // the target at CROUCH_SPEED. A "dead slide" that is a literal no-op reads as a dropped input —
+  // a bug, not a lesson; one that dumps you to a crouch and wipes the ramp reads as *too early*.
+  const backpedal = hasInput && (mvX * input.fwdX + mvZ * input.fwdZ) < -0.2
+  const sprinting = hasInput && !backpedal && !s.crouching
+  if (!s.airborne && !s.sliding) s.sprintT = sprinting ? Math.min(SPRINT_RAMP, s.sprintT + dt) : 0
+  // Linear in the target; GROUND_ACCEL's first-order lag is what smooths it.
+  const ramped = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * (s.sprintT / SPRINT_RAMP)
+  // ── ★ THE HOLLOW'S DRAIN (2026-08-11) — a CAP, not a multiplier ─────────────────────────
+  // Applied with `min` so it can only ever take speed away. A multiplier would silently SPEED
+  // UP a crouch (2.6 x anything < 1 is still a slow-down, but the sliding branch below runs at
+  // 10 and a drained slide must not read as a normal one), and it would compound with a future
+  // second source of slow into something neither of them meant. A cap composes; a factor does
+  // not. Above the Hollow's own glide by ruling — see DRAINED_SPEED above.
+  const free = s.crouching ? CROUCH_SPEED : backpedal ? BACK_SPEED : ramped
+  const groundTarget = s.drainT > 0 ? Math.min(free, DRAINED_SPEED) : free
 
   // ── wall contact (climb + wall-jump) ────────────────────────────────────────────────────────
   if (s.wallLock > 0) s.wallLock -= dt
@@ -524,7 +603,13 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     // Live speed, not the pre-entry sample — the entry tick multiplied hvel into the burst, and
     // bleeding from the stale number would cancel the burst on the very frame it fired.
     const cs = Math.hypot(s.hvx, s.hvz)
-    const speed = Math.max(RUN_SPEED, cs - (SLIDE_SPEED - RUN_SPEED) * (dt / SLIDE_TIME))
+    // Floors on the LIVE ground target rather than a bare RUN_SPEED — more honest (the floor
+    // should be whatever you would be running at) and, measured, ALMOST NEVER OBSERVABLE: the
+    // bleed rate is sized so a slide expires just as it reaches RUN_SPEED, so neither floor binds
+    // inside SLIDE_TIME. ⚠ SAYING SO BECAUSE A MUTATION SWEEP FOUND IT AND NO ASSERT CAN: putting
+    // RUN_SPEED back here survives the whole oracle. It is not guarded, it is not load-bearing,
+    // and it is written down instead of being left to look like a tested improvement.
+    const speed = Math.max(groundTarget, cs - (SLIDE_SPEED - RUN_SPEED) * (dt / SLIDE_TIME))
     if (hasInput && cs > 1e-3) {
       let dx = s.hvx / cs, dz = s.hvz / cs
       dx += (mvX - dx) * 0.05; dz += (mvZ - dz) * 0.05
@@ -534,18 +619,9 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
       const f = speed / cs; s.hvx *= f; s.hvz *= f
     }
   } else {
-    const backpedal = hasInput && (mvX * input.fwdX + mvZ * input.fwdZ) < -0.2
-    // ── ★ THE HOLLOW'S DRAIN (2026-08-11) — a CAP, not a multiplier ─────────────────────────
-    // Applied with `min` so it can only ever take speed away. A multiplier would silently SPEED
-    // UP a crouch (2.6 × anything < 1 is still a slow-down, but the sliding branch above runs at
-    // 10 and a drained slide must not read as a normal one), and it would compound with a future
-    // second source of slow into something neither of them meant. A cap composes; a factor does
-    // not. Above the Hollow's own glide by ruling — see DRAINED_SPEED above.
-    const free = s.crouching ? CROUCH_SPEED : backpedal ? BACK_SPEED : RUN_SPEED
-    const target = s.drainT > 0 ? Math.min(free, DRAINED_SPEED) : free
     const rate = Math.min(1, (hasInput ? GROUND_ACCEL : GROUND_FRICTION) * dt)
-    s.hvx += ((hasInput ? mvX * target : 0) - s.hvx) * rate
-    s.hvz += ((hasInput ? mvZ * target : 0) - s.hvz) * rate
+    s.hvx += ((hasInput ? mvX * groundTarget : 0) - s.hvx) * rate
+    s.hvz += ((hasInput ? mvZ * groundTarget : 0) - s.hvz) * rate
   }
 
   // ── horizontal apply, axis-separated. A 1-block rise BLOCKS — going up it is the vault. ─────
@@ -638,7 +714,11 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     // Coyote jump: the ground JUST left (a downhill micro-fall, a ledge a frame ago) — honour the
     // press as the ground jump it was meant to be. The wall jump wins when both are live.
     s.vy = JUMP_V0
-    s.airSpeed = Math.max(Math.hypot(s.hvx, s.hvz), hasInput ? RUN_SPEED : 0)
+    // ⚠ WALK_SPEED, NOT RUN_SPEED — this floor is the ramp's back door. At RUN_SPEED a press-and-
+    // jump handed you the full sprint in the air 0.1s after the first input, so the cheapest way
+    // to skip the entire ramp was to hop. A jump may FLOOR at what a press gives you and CARRY
+    // whatever you actually earned; it may not mint the top of the ramp for free.
+    s.airSpeed = Math.max(Math.hypot(s.hvx, s.hvz), hasInput ? WALK_SPEED : 0)
     s.coyoteT = 0
   }
   if (s.coyoteT > 0) s.coyoteT -= dt
@@ -729,7 +809,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
       s.hangCX = cardX; s.hangCZ = cardZ         // mantle lerp reads these on completion
     } else {
       s.airborne = true; s.vy = JUMP_V0
-      let takeoff = Math.max(Math.hypot(s.hvx, s.hvz), hasInput ? RUN_SPEED : 0)
+      let takeoff = Math.max(Math.hypot(s.hvx, s.hvz), hasInput ? WALK_SPEED : 0)  // see the coyote floor: RUN_SPEED here is the ramp's back door
       if (s.sliding) { takeoff = Math.min(SPEED_CAP, Math.hypot(s.hvx, s.hvz) * SLIDEHOP_BOOST); s.justHopped = true }
       else if (s.landGrace > 0) takeoff = Math.min(SPEED_CAP, Math.max(takeoff, s.landSpeed * BHOP_KEEP))
       s.airSpeed = takeoff
