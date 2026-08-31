@@ -11,6 +11,68 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🕳 Shimmer — **BREACH: WHAT "NOTHING REFUSES IT FOREVER" ACTUALLY MEANS** (2026-08-31, play lane) · *Last touched 2026-08-31 — `b546c98` pushed. breach oracle **32/0**, mutation-swept **8 ways, all 8 fire once corrected**. sustain 33/0, unbuilt-premise 20/0, cast 103/0, all play3d green, tsc 7 (baseline), canon exit 0. Pure `play3d/`, no host touched, NOT deployed.*
+
+### ★★★ The canon line is precise, and the registry had already drawn it
+`registry.ts` › `breakSeconds` returns `Infinity` for **three different reasons**, and they are not
+the same kind of thing:
+1. `hardness === Infinity` — the material is not matter
+2. `toolSkill !== def.skill` — wrong tool family
+3. `toolTier < def.minTier` — *"too weak — refused, not slowed"*
+
+2 and 3 are refusals **by a tool**, and a bore has no tool: no family to mismatch, no tier to fall
+short of. So it spends its seconds against raw `hardness` and ignores both. **Where a keeper with the
+wrong pick is told no, a Magma mage is told wait.** Reason 1 is not a refusal and is honoured —
+`hardness: Infinity` is how this world spells *"not a thing that can stop existing"* (water,
+cloud-wall, `MAT.CONJURED`). **No canon ruling was needed and no exception exists:** the bore asks the
+question mining asks and gets the same answer, because the answer is about the material rather than
+about who is asking.
+
+★ A consequence nobody designed: a Stonewall is `MAT.CONJURED`, so **conjured matter is the one thing
+a bore cannot chew. Stonewall answers Meltbore, for free.**
+
+### Decisions
+- **ONE SPOT is enforced** — aiming at a different voxel resets progress. Without it a player sweeps
+  the reticle across a wall and collapses it on time that belonged to no block; patience stops being
+  the cost.
+- **It yields NOTHING.** A bore ignores both tool gates, so if it dropped what mining drops it would
+  BE mining — a strictly better pick needing no tools, skill or tier, and the whole progression under
+  `registry.ts` evaporates. Canon says *"until the spot stops existing"*, not *"until you have it"*.
+- **`BORE_PATIENCE` 1.6** — a magnitude, so Jin's, but above 1 for canon's reason: at 1.0 the bore
+  matches a basic tool while ignoring every gate, which makes patience free and *"slow"* decorative.
+- **An absolute block reports `absolute`, not silence**, with progress pinned at 0. A bar filling
+  toward something unreachable is worse than no bar.
+
+### ⚠⚠ The sweep corrected me three times, all the same shape
+1. **A `!` non-null assertion on `MAT.DIRT` — which does not exist here, the soil is `SUBSOIL` —
+   THREW instead of failing.** A crash is neither a pass nor a fail (the 08-22 origin-fixture bug).
+2. **Two of eight mutations did not fire, and both were MY fault, not the guard's.** One gated on
+   `minTier > 1` when stone's is exactly 1 — a no-op. The other removed the `Infinity` early-return,
+   which is **arithmetically equivalent**: `Infinity * 1.6` is still `Infinity`. Re-run with biting
+   versions they trip **12** and **4** asserts. ⚠ **A mutation that cannot apply is indistinguishable
+   from a guard that works, and I nearly banked both as passes.**
+3. **That second one is a real finding about the code.** The `Infinity` guard *looks* redundant and is
+   not: if `BORE_PATIENCE` were ever 0, `Infinity * 0` is **NaN**, every comparison against it is
+   false, and the bore would report `boring` forever at NaN progress against a block made of water.
+   The guard is the statement of intent; the arithmetic is a coincidence. Documented so nobody deletes it.
+
+### ⚠ And the premise probe false-fired on prose
+Re-aimed at `cast-dispatch` for `/released\b/`, it matched the **stance-drop message** —
+`${spec.label} released`. A probe satisfiable by a user-facing string is not watching a capability,
+and it failed toward *"the hook has arrived"*, the direction that gets acted on. It watches a **call**
+in the host now (`sustainStep(`, which a channel must run every frame), verified to still fire by
+planting one. **Third time today a search matched something that merely talks about its subject.**
+
+### ★ Meltbore stays unbuilt, deliberately
+Both mechanisms its reason named now exist. What is missing is neither: **no host holds a key down for
+a cast.** Every cast in both worlds is edge-triggered on a press, and a channel needs
+press-hold-release — a new **input** path, not a new rule. Marking it built with no host is exactly
+the silent no-op `cast.ts` forbids, **and the temptation is strongest when the hard part is done.**
+
+### Files
+`play3d/breach.ts` (new, pure) · `play3d/breach.test.ts` (32 asserts) · `play3d/cast.ts` (meltbore
+narrowed a second time) · `play3d/unbuilt-premise.test.ts` (probe re-aimed at a call)
+
 ## ⏳ Shimmer — **SUSTAIN: A CAST THAT IS HELD, AND BILLS BY THE SECOND** (2026-08-31, play lane) · *Last touched 2026-08-31 — `1bbe83e` pushed. sustain oracle **33/0**, mutation-swept **8 ways, all 8 fire**. cast 103/0, unbuilt-premise 20/0, all play3d green, tsc 7 (baseline), canon exit 0. Pure `play3d/`, no host touched, NOT deployed.*
 
 ### What it is, and what it deliberately is not
