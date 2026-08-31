@@ -11,6 +11,79 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 👣 Shimmer — **TREMOR SENSE: THE BLOCKER LIFTED MONTHS AGO AND THE NOTE DID NOT** (2026-08-31, play lane) · *Last touched 2026-08-31 — `6739a9e` committed AND pushed, 0 unpushed. tremor-sense oracle **60/0**, mutation-swept **17 ways, all 17 fire**. cast oracle 103/0 (55 → 56 runnable), every play3d suite green, tsc 7 (baseline), canon exit 0. **NOT deployed** — the tree carries another window's vtuber work.*
+
+### The find, and it is the house's most expensive recurring shape
+`cast.ts` had Tremor Sense as `archetype: 'unbuilt'` with `why: 'needs a perception layer — enemy
+positions surfaced to the HUD'`. **That sentence was true the day it was written and stopped being
+true without anyone noticing.** The voxel world grew real-time bodies with positions and hp
+(`voxel3d/hollows.ts`) and `VoxelWorld.tsx:5719` already declares *every* archetype in `supports`.
+An accurate note that quietly expires and keeps being believed — the same shape as the stale board
+rows, the `.output` liveness probe and the Groq model table.
+
+### ★★★ The design came out of canon and out of hub's own file. I invented none of it.
+`runes.md:557` binds the awareness to *"the ground beneath you"* and reads *"footsteps"* and
+*"weight"*. **A body that does not touch the ground leaves neither**, so the sense is blind to
+anything hovering. `hollows.ts` then hands that limitation a perfect target without having been
+written for it: `warden` and `stalker` are `hover: 0`, `caster` is `HOLLOW_HOVER`, and its own
+comment on the caster reads *"The ONLY form that floats — and the only one a wall cannot answer.
+That pairing is the point."* So:
+
+- the **stalker** — the ambusher, whose whole design is the strike you can only deny by turning
+  around — **is felt.** Canon's *"ambush becomes impossible"*, aimed at the one thing that ambushes.
+- the **warden** — the wall — **is felt.** You know which way around is cheaper before you commit.
+- the **caster** — the floater, the form whose job is to make backing away not work — **cannot be
+  felt.** The move never solves the night; it solves being *surprised* by it.
+
+⚠ The predicate asks `hover`, **never a form name**. Keying on `form === 'caster'` would read
+identically today and silently mean something else the day a fourth form lands — it would assert a
+ROSTER where canon asserts a RELATIONSHIP TO THE FLOOR.
+
+### Decisions
+- **`SENSE_RADIUS` is DERIVED, not picked** — it is `hollows.PLAYER_EXCLUSION`, the ring the night is
+  forbidden to spawn inside, so a pack is felt in the same instant it is *allowed to exist*. The
+  oracle imports both and asserts they are **equal** rather than restating `24`; retune the exclusion
+  and this goes red instead of drifting.
+- **Free.** Canon states no cost and `cast.ts` records that the drain belongs to the shell pair.
+  Inventing a mana ebb here would be writing a canon cost from the build side. What limits it is what
+  canon BOUND it to.
+- **All drawing math lives in `tremor-sense.ts`**, not the component. A tick on the wrong side of a
+  ring is entirely plausible, and a component is the one place nothing can assert against.
+- **`TremorRing.tsx` joins the tokens guard as CONVERTED, not PENDING** — a new file born clean.
+
+### ⚠ The honest limit — read this before calling it playable
+The host is wired in **play3d**, and `proxy.ts:45` says play3d is the **LEGACY, owner-gated route**
+since Alex flipped it 2026-08-07. So the move is genuinely built and genuinely playable *in the
+world we are leaving*. **Alex plays voxel3d.** The core is world-agnostic and needs no porting; only
+the wiring is host-shaped. **I have not seen it render** — deploy is hub's and the tree is dirty.
+
+### ★★ Two of my own asserts were decoration, and only the mutation sweep said so
+The spec-read check stayed **green while one of the two stance sites was hardcoded**, because the
+*other* site still matched the regex — a match anywhere in a 7500-line file proves nothing about the
+site you broke. The pointer-events check stayed **green while the outer overlay ate clicks**, because
+the inner SVG still said `none`. Both now compare against a **reference count** instead of presence.
+
+### Also measured, and it corrects the board
+Open row **#294** says *"moglin patrols today are turn-based — build real-time world enemies so runes
+ARE the combat"*. **Shots damage hollows (`VoxelWorld.tsx:6169`), fields burn them (`:6099`), both
+drop a mana shard.** Runes already ARE the combat. The gap was never targets — it was that **you
+cannot find them**, which is what this move is. And `engine/cast-dispatch.ts`'s header still says the
+voxel world *"cannot yet place fields, terrain or statuses"* and calls it *slice 2* future work,
+while `:5719` supports all of them. `engine/` is hub's, so both are flagged, not touched.
+
+### Next
+- **hub wires it into voxel3d — now three wires, not a feature:** read `spec.senseRadius` into a ref
+  where resist/castMult/moveMult are read · map `hollows.current` to
+  `{x,y,z,hover:formOf(st).hover,present:st.hp>0&&st.gutter<1}` and call `senseGround` — ⚠ **pass
+  `formOf().hover`, never `0`; that field is the entire canon limitation** · mount `<TremorSenseHud>`.
+- Oracle section 8 reads the HOST source and asserts a built move has a host that both resolves and
+  draws it, so a voxel3d wiring cannot silently regress afterwards.
+
+### Files
+`play3d/tremor-sense.ts` (pure) · `play3d/tremor-sense.test.ts` (60 asserts) ·
+`play3d/TremorRing.tsx` · `play3d/cast.ts` (contract + build) · `play3d/Shimmer3D.tsx` (host) ·
+`play3d/tokens.test.ts` (registry)
+
 ## 🎭 Stream avatar — **THE DESIGN DELETED THE EXPENSIVE PART, AND THREE THINGS WERE ONLY FINDABLE BY LOOKING** (2026-08-31, hub lane) · *Last touched 2026-08-31 — `39dae5a` committed, **NOT pushed** (see Decisions), rig oracle **36 asserts**, 9/9 mutations fire, tsc 7 (baseline). NOT deployed. Camera path UNVERIFIED — no webcam on this box.*
 
 **Left off:** `/vtuber` renders Alex's hooded-grin character talking, driven by a webcam, a microphone, or a deterministic synthetic driver. Photographed at four pinned moments (shut / mid / wide / blink) and it reads correctly at all four.
