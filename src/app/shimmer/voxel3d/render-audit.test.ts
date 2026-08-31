@@ -449,7 +449,54 @@ for (const file of files) {
   ok(/dropGeo/.test(vw) && /dropMats/.test(vw), 'drop rendering shares geometry and caches materials')
   ok(/dropGeo\.dispose\(\)/.test(vw), 'shared drop geometry is released on unmount')
   ok(/material\.dispose\(\)/.test(vw), 'the shared chunk material is released on unmount')
+  // ── a lost context is reported on a channel the frame loop CANNOT erase ────────────────────
+  //
+  // ★★★ THE ASSERT THAT USED TO LIVE HERE WAS `ok(/webglcontextlost/.test(vw))` AND IT WAS GREEN
+  // THROUGH A REAL FAILURE (2026-08-31). Alex's tab lost its context and told him nothing for the
+  // 16 minutes he sat in front of it. The listener existed — so the assert passed — and it wrote its
+  // warning to `onStats`, the one-line channel the frame loop rewrites unconditionally every frame.
+  // Measured on the dead tab by dispatching the real event: visible for 2 frames, gone by 500ms.
+  //
+  // ⚠ THE OLD ASSERT COULD NOT HAVE FAILED THIS WAY. It proved a listener was REGISTERED and had no
+  // vocabulary for where the message went, so it was structurally unable to see the defect it was
+  // written to prevent — a guard that cannot see its subject. The checks below assert the two things
+  // that actually make a warning a warning: that it does not go through a channel the frame loop
+  // owns, and that nothing schedules it to disappear.
   ok(/webglcontextlost/.test(vw), 'a lost WebGL context is surfaced rather than left as a black screen')
+
+  const lostBody = vw.match(/const lost = \(e: Event\) => \{[\s\S]*?\n {4}\}/)
+  ok(!!lostBody, 'the webglcontextlost handler is findable — if this fails the checks below are blind, not green')
+  if (lostBody) {
+    ok(!/onStats\(/.test(lostBody[0]),
+       'the lost-context warning does NOT go through onStats — the frame loop rewrites that line every frame, so a warning written there lives ~33ms')
+    ok(/onContextLost\(/.test(lostBody[0]),
+       'the lost-context warning goes to its own channel, which nothing in the frame loop writes')
+    ok(/ctxLost\.current = true/.test(lostBody[0]),
+       'losing the context latches a ref the frame loop can read on the very next frame')
+  }
+
+  // The gate must sit AHEAD of the profiler, or the HUD keeps publishing a true 60fps about work
+  // nobody can see. The number is not wrong; it is answering a question nobody asked.
+  const loop = vw.slice(vw.indexOf('useFrame((state, dtRaw) => {'))
+  const gateAt = loop.indexOf('if (ctxLost.current) return')
+  const gpuAt = loop.indexOf('prof.current.gpuFrame()')
+  ok(gateAt > -1, 'the frame loop returns early on a lost context instead of running blind')
+  ok(gateAt > -1 && gpuAt > -1 && gateAt < gpuAt,
+     'the lost-context gate comes BEFORE gpuFrame(), so the profiler stops publishing too')
+
+  ok(/\{ctxLost !== null && \(/.test(vw),
+     'the warning renders from a latch, not from the toast channel (toasts self-clear after 4200ms and a context loss is met minutes later)')
+  // ⚠⚠ THE FIRST VERSION OF THIS ASSERT WAS `/setTimeout\([^)]*setCtxLost/` AND IT WAS BLIND —
+  // `[^)]*` cannot cross a `)`, and the idiomatic form `setTimeout(() => setCtxLost(null), 4200)`
+  // puts one two characters in. It passed the mutation that clears the warning on a timer, which is
+  // the single defect this line exists to catch. Caught by mutating it, never by reading it: a guard
+  // written against a bug, in the same session as that bug, still could not see the bug.
+  ok(!/setTimeout\([\s\S]{0,120}?setCtxLost/.test(vw),
+     'nothing schedules the lost-context warning to disappear — a context loss is met minutes after it happens')
+  // Belt and braces, and this one has no vocabulary to go stale: the setter is DECLARED once and
+  // HANDED to the world once, and a third mention is something clearing the latch behind our back.
+  ok((vw.match(/setCtxLost/g) ?? []).length === 2,
+     'setCtxLost is declared once and passed once — a third use is code clearing the lost-context latch')
   const bridge = readFileSync(join(DIR, 'mesh-bridge.ts'), 'utf-8')
   // Two constructions since tier-1 water: the opaque chunk material and the ONE shared water
   // material (the world's single transparent pass). Both live in exported factories; the checks

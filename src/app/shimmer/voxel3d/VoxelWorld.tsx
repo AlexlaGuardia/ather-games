@@ -846,6 +846,22 @@ export default function VoxelWorld() {
     return () => clearTimeout(t)
   }, [toast])
 
+  /**
+   * ★★ THE LOST-CONTEXT LATCH, AND IT IS DELIBERATELY NEITHER `onStats` NOR `onSay` (2026-08-31).
+   * Alex's tab went white after 51 minutes and told him NOTHING, because the handler below wrote
+   * its warning to `onStats` — the same one-line channel the frame loop rewrites unconditionally
+   * every frame. Measured live on the dead tab by dispatching the real event: the message is on
+   * screen for 2 frames and gone by 500ms. A warning with a 33ms lifetime is not a warning.
+   *
+   * ⚠ `onSay` IS ALSO WRONG HERE, WHICH IS THE PART THAT IS EASY TO GET WRONG. `:3405` names it as
+   * the durable player-addressed channel and for ordinary messages it is — but the toast self-clears
+   * after 4200ms (`:845`). A context loss is precisely the event you are NOT at the keyboard for;
+   * Alex's died while he was away and he met it minutes later. So this one latches and stays until
+   * the tab closes. It holds the WALL-CLOCK MOMENT rather than a boolean so the page can say when
+   * it stopped drawing, which is the difference between "this is broken" and "this broke at 7:23".
+   */
+  const [ctxLost, setCtxLost] = useState<number | null>(null)
+
   const [pos, setPos] = useState('')
   // ── ★ THE MAP (2026-08-13) ────────────────────────────────────────────────────────────────────
   // The keeper's live spot, kept as a ref rather than state: the frame loop writes it 60×/sec and a
@@ -2073,7 +2089,7 @@ export default function VoxelWorld() {
           weaponDrawn={drawn}
           weaponIdx={weaponIdx}
           onAmmo={setAmmoUi}
-          onStats={setStats} onPerf={setPerf} onProfile={setProf} onSay={say} runeTick={runeTick}
+          onStats={setStats} onPerf={setPerf} onProfile={setProf} onSay={say} onContextLost={setCtxLost} runeTick={runeTick}
           onPos={(p, yaw) => {
             mapPos.current = { x: p.x, z: p.z }
             mapHeading.current = yaw
@@ -2113,6 +2129,47 @@ export default function VoxelWorld() {
            tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
            nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty}
            sparLedger={sparLedger} vitals={vitals} mana={mana} cast={castOut} />
+      {/* ★★★ THE ONE MESSAGE THAT MUST OUTLIVE THE FRAME LOOP.
+          Sticky by construction: no timer, no `key` remount, no channel the world writes to. It is
+          rendered from a latch that only a context RESTORE clears, because the failure it reports is
+          one the player meets minutes after it happens. `pointer-events-none` like every other HUD
+          layer — it must never eat a click, even though nothing behind it is drawing any more. */}
+      {ctxLost !== null && (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center p-6">
+          <div className="max-w-[30rem] rounded border border-amber-400/30 bg-black/85 px-5 py-4
+                          text-[13px] leading-relaxed text-amber-100/90 shadow-2xl backdrop-blur-[3px]">
+            {/* `.gx-label` rather than a hand-rolled uppercase+tracking triplet — the house type
+                role from gameui.css. hud-type.test.ts ratchets the count of hand-rolled label roles
+                in this file and this overlay made it 30 against a baseline of 29; the ratchet says
+                in its own words not to raise the baseline, and it is right. Asking for the role is
+                also the only version that follows the palette when the layer moves. */}
+            <div className="gx-label mb-2 text-[11px] text-amber-300/80">
+              graphics context lost
+            </div>
+            <p className="mb-2">
+              The GPU dropped this page at{' '}
+              <span className="tabular-nums text-amber-50">
+                {new Date(ctxLost).toLocaleTimeString()}
+              </span>
+              . The world stopped drawing then — what you can see is the last frame it managed.
+            </p>
+            {/* ⚠ THIS SENTENCE IS LOAD-BEARING AND IT IS NOT RE-ASSURANCE. A frozen frame arrives
+                looking exactly like whatever you were doing when it froze — mid-sprint it reads as
+                "the movement change locked the game up", mid-stream as "worldgen died". That is the
+                wrong-layer hunt render-audit's own header describes, and the overlay is the only
+                thing in a position to head it off. Name the layer that actually failed. */}
+            <p className="mb-2 text-amber-100/70">
+              This is the GPU letting go of the page, not the game. Nothing you were doing caused it
+              and nothing is broken in the world — your position, your edits and anything you built
+              are intact and already saved.
+            </p>
+            <p className="text-amber-100/70">
+              This tab cannot get the context back, and reloading will not clear it. Close the tab
+              and open a new one.
+            </p>
+          </div>
+        </div>
+      )}
       {settings.showFps && prof && <ProfilePanel p={prof.profile} copiedAt={profCopied} />}
       {showSettings && <SettingsPanel s={settings} update={update}
         onControls={() => { setShowSettings(false); setShowBindings(true) }}
@@ -3380,7 +3437,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3405,6 +3462,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   /** Addressed to the PLAYER — held long enough to read. `onStats` is plumbing and gets clobbered
    *  every 10 frames by the biome line; see the SAY CHANNEL note on VoxelWorld. */
   onSay: (s: string) => void
+  /** The GPU dropped the context (or handed it back). Carries the wall-clock moment it happened,
+   *  `null` on restore. ⚠ NOT `onStats` and NOT `onSay` — see the latch note in `VoxelWorld`. */
+  onContextLost: (at: number | null) => void
   /** Bumped when the rune inventory changed under us — re-resolve the loadout, no reload. */
   runeTick: number
   /** `yaw` is a map-marker CANVAS ROTATION (`screenHeading`), not a world yaw. */
@@ -4413,18 +4473,28 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     flora.dispose()
   }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, breakFx, seam, mist, flora])
 
+  /**
+   * Set the instant the context is lost, read by the FRAME LOOP so it stops. A ref and not state:
+   * the loop must see it on the very next frame, and a state flush is a render away.
+   */
+  const ctxLost = useRef(false)
+
   // ★ A LOST WEBGL CONTEXT MUST SAY SO. Chrome blocks a page that loses its context repeatedly, and
   // the result is a black canvas with the HUD still drawn on top — indistinguishable from a
   // generation failure, which is exactly why I hunted the mesher first when it happened. The block
   // is sticky for the life of the tab: reloading does not clear it, closing the tab does.
   useEffect(() => {
     const cv = gl.domElement
-    const lost = (e: Event) => { e.preventDefault(); onStats('WEBGL CONTEXT LOST — close this tab and open a new one') }
-    const restored = () => onStats('webgl context restored')
+    const lost = (e: Event) => {
+      e.preventDefault()
+      ctxLost.current = true
+      onContextLost(Date.now())
+    }
+    const restored = () => { ctxLost.current = false; onContextLost(null) }
     cv.addEventListener('webglcontextlost', lost)
     cv.addEventListener('webglcontextrestored', restored)
     return () => { cv.removeEventListener('webglcontextlost', lost); cv.removeEventListener('webglcontextrestored', restored) }
-  }, [gl, onStats])
+  }, [gl, onContextLost, ctxLost])
 
   /**
    * Hand the profiler the live WebGL2 context so it can ask for GPU timings.
@@ -5969,6 +6039,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   }, [camera, tracerGeo, tracerMat, onAmmo])
 
   useFrame((state, dtRaw) => {
+    /**
+     * ★★★ A DEAD CONTEXT STOPS THE FRAME — IT IS NOT ENOUGH TO STOP DRAWING (2026-08-31).
+     *
+     * This return is AHEAD of `gpuFrame()` on purpose, so the profiler stops publishing too. When
+     * Alex's context died the loop kept running and the HUD kept reporting `60 fps · 16.7 ms` with
+     * a full zone breakdown beside a white canvas — and every one of those numbers was TRUE, because
+     * the CPU frame work genuinely continues on a lost context. That is the worst half of this whole
+     * family: the reading is not lying, it is answering a question nobody asked, and a true number
+     * retires the question a blank panel would have raised.
+     *
+     * It also stops the stats line being rewritten, which is what erased the warning in the first
+     * place, and stops burning a core to render into a context that will never present again.
+     */
+    if (ctxLost.current) return
     // ★★ FIRST LINE OF THE FRAME, AND IT IS ONE CALL RATHER THAN A PAIR. r3f renders AFTER every
     // `useFrame` callback has run, so a begin/end pair inside this callback would bracket our JS
     // and almost none of our drawing — reporting a nearly idle GPU, which is a confident WRONG
