@@ -54,3 +54,10 @@ icon-sheet.png
 canopy*.png
 world.png
 shots/
+
+# vtuber: the MediaPipe runtime + model are COPIES of an npm dep and a Google-hosted
+# model file, not source. `npm run vtuber:assets` puts them in place. Vendored rather
+# than CDN-loaded on purpose — a live stream must not depend on someone else's uptime
+# at go-live — but a 12MB wasm blob does not belong in this repo's history.
+/public/vtuber/wasm/
+/public/vtuber/face_landmarker.task

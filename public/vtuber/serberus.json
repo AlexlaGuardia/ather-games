@@ -1,0 +1,36 @@
+{
+  "name": "serberus",
+  "source": "serberus-src.png",
+  "w": 1596,
+  "h": 1665,
+  "mouth": {
+    "pivotX": 832.5,
+    "pivotY": 841.0,
+    "splitY": 926.8,
+    "coreTop": 841.0,
+    "coreBottom": 997.0,
+    "coreLeft": 671.0,
+    "coreRight": 994.0,
+    "box": [
+      651,
+      828,
+      1012,
+      1011
+    ],
+    "corePx": 23279,
+    "layerPx": 36998,
+    "dominance": 0.8804
+  },
+  "eyes": {
+    "leftX": 742.06,
+    "rightX": 922.94,
+    "y": 705.34,
+    "r": 27.455000000000002
+  },
+  "cut": {
+    "coreLuma": 190,
+    "glowLuma": 55,
+    "coreGrow": 4,
+    "glowGrow": 26
+  }
+}
