@@ -11,6 +11,49 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔬 Shimmer — **dev/moves: A BENCH FOR THE FOUR SYSTEMS THAT SHIPPED UNSEEN** (2026-08-31, play lane) · *Last touched 2026-08-31 — `8dab6dd` pushed. Rendered 200 / 37KB through the owner gate on the lane server. dev-eye 22/0, tsc 7 (baseline), all play3d green. ⏸ NOT deployed — hub has it.*
+
+### Why
+Four move systems shipped in one day — Tremor Sense, Flame Cloak, the sustained channel, the bore —
+and **every one was verified only by an oracle.** Seeing any of them meant loading `voxel3d`, waiting
+out worldgen, granting the right rune pair, waiting for **night**, and then persuading the right FORM
+of Hollow to walk into you. A ten-minute errand per look, **which is how a thing ships unseen for weeks.**
+
+### It mounts the real modules, never a copy
+The rule `dev/hud` states and `dev/icons` wrote: *"a preview that re-derives can be perfectly correct
+while the game is wrong, which is the exact failure a preview exists to catch."* Every number comes
+out of `tremor-sense` / `flame-cloak` / `sustain` / `breach`; the ring is the shipped `TremorRing`;
+the bodies come from `HOLLOW_FORMS`, **so a form retuned in the world is retuned here by doing nothing.**
+
+### Three panels, each aimed at the rule hardest to believe without seeing it
+- **tremor sense** — bodies orbit a keeper you can turn. The table names each form's `hover` and
+  whether it is FELT, so the caster's permanent invisibility is **legible rather than inferred**, and
+  bearings are shown in degrees so a mirrored compass could not hide a second time.
+- **flame cloak** — the charge builds live against the real magnitudes, and three buttons let a form
+  touch you. **The caster's button is there on purpose: watching it do nothing is the point.**
+- **channel + bore** — mana buys seconds, seconds buy hardness. Hold against Water or Conjured Matter
+  and it reports **ABSOLUTE** rather than creeping toward something unreachable.
+
+### ⚠ What it cannot vouch for — said on the page itself
+No camera, no terrain, no night. It proves the **rules** — who is felt, what ignites, what a channel
+costs, what refuses a bore — and says nothing about whether a ring reads at a glance over grass at
+3am. **That is still a walk**, and the page says so where a reader will see it.
+
+★ The bench also **is** meltbore's missing input path, standing in: the only thing keeping that move
+unbuilt is that no host holds a key down for a cast. Here a button does.
+
+### ⚠ Verified rendered, not merely typechecked
+Served **200 at 37KB through the owner gate** on the lane dev server (3203, own `.next-play`, prod
+untouched), all three panels present, three forms drawn from `HOLLOW_FORMS`. A grep for `error` in the
+stream returned **34 lines and every one is Next's own `global-error` boilerplate**
+(`"error":"$undefined"`) — zero thrown errors. **A count is not evidence until you have seen what it
+counted.** `dev-eye` passes because it filters to `<Canvas>` pages, so a non-Canvas bench is exempt
+**correctly, not by luck.**
+
+### Lane note
+Lives under `dev/`, which the SOP puts in the **sprites** lane — unclaimed all session, and nothing
+else in it was touched.
+
 ## 🕳 Shimmer — **BREACH: WHAT "NOTHING REFUSES IT FOREVER" ACTUALLY MEANS** (2026-08-31, play lane) · *Last touched 2026-08-31 — `b546c98` pushed. breach oracle **32/0**, mutation-swept **8 ways, all 8 fire once corrected**. sustain 33/0, unbuilt-premise 20/0, cast 103/0, all play3d green, tsc 7 (baseline), canon exit 0. Pure `play3d/`, no host touched, NOT deployed.*
 
 ### ★★★ The canon line is precise, and the registry had already drawn it
