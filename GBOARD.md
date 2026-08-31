@@ -11,6 +11,68 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⏳ Shimmer — **SUSTAIN: A CAST THAT IS HELD, AND BILLS BY THE SECOND** (2026-08-31, play lane) · *Last touched 2026-08-31 — `1bbe83e` pushed. sustain oracle **33/0**, mutation-swept **8 ways, all 8 fire**. cast 103/0, unbuilt-premise 20/0, all play3d green, tsc 7 (baseline), canon exit 0. Pure `play3d/`, no host touched, NOT deployed.*
+
+### What it is, and what it deliberately is not
+Canon has sustained casting as a category in its own right, not a meltbore special case —
+`runes.md:948` *"Sustained casting (holding a barrier, maintaining a technique)"*, `:85` *"maintain —
+burns mana fast"*, `:1057` Barrier-class passives *"drain you while held"*.
+
+⚠ **It is not a long cooldown and not a cast that fires N times.** Canon's meltbore is *"slow,
+undramatic, and nothing refuses it forever"* — the resource spent is **time, continuously**, and what
+it buys is progress a tap cannot buy at any price. A channel modelled as a repeating cast lets a
+player mash for the same result, **which deletes the only property canon gives the move.**
+
+### ★★★ Three rules, each a bug that would not look like one
+1. **Time is credited only for mana actually PAID.** `held` is what a breach reads to decide it is
+   done. Credit wall-clock instead and a keeper with an empty pool finishes the same bore as a full
+   one — slower, but free — **while the mana bar looks correct the whole way.** Asserted as a
+   comparison, not a value: *twice the pool must buy twice the channel.*
+2. **The last partial second is bought and credited in proportion.** The frame the pool runs dry is
+   neither free nor full. Anything else is a rounding gift or a rounding theft **at the exact moment
+   the player is watching the bar.**
+3. **The cooldown runs from RELEASE, never from press.** Start it at the press and a ten-second
+   channel costs the same recovery as a tap — holding becomes strictly better than tapping, for free,
+   with nothing on screen to say so. Asserted by comparing two hold **lengths**; a single one cannot
+   tell the two apart.
+
+**Fail-closed on a missing cost:** a move with no drain BREAKS the channel rather than running it
+free. A free infinite channel is the most expensive possible way to discover a zero.
+
+### Decisions
+- **Lives in `play3d/`, not `engine/`.** That is already where the shared cast layer sits
+  (`engine/cast-dispatch.ts` imports `play3d/cast`), so both worlds reach it and hub's surface is
+  untouched.
+- **`sustainDrain` is a RATE and `manaCost` still means the press.** A channel charging its whole
+  price up front is a normal cast with a long animation: releasing early would refund nothing and
+  holding longer would cost nothing, so the resource canon actually spends is not spent at all.
+- **★ No move sustains yet, and the oracle asserts it.** The hook shipped before its first user on
+  purpose, so there is no built-but-silent move and no host is owed anything.
+
+### ⚠ Meltbore is still unbuilt, and its reason was narrowed the same hour
+A held channel was only **half** its blocker. The breach half stands — `moves.md:82`, *"held against
+one spot until the spot stops existing"* — and nothing in either world lets a cast **open** terrain.
+Its premise now watches `conjured-terrain.ts` for that half instead of `cast-dispatch.ts` for the half
+that just shipped. **The guard would have gone red for a blocker that genuinely lifted, and the right
+answer to that red is to re-read the move — never to widen the probe until the red goes away.**
+
+### ⚠⚠ Two of my own instruments were weak, and the sweep found both
+The most important mutation — crediting wall-clock instead of payment — **missed its anchor on the
+first run and printed a full green.** That is a false pass, not a result, and it is the **second time
+today**. Re-run correctly it fired, but only through a floating-point crumb: pool 10 / drain 4 / dt
+0.1 lands on exactly 0 after 25 whole frames, so the partial-frame path was barely exercised and the
+rule was being caught by **rounding rather than by the rule**. Added a pool that cannot divide
+(10 / 1.2 = 8.33 frames); the mutation now trips two asserts including the rule itself.
+**An assert that fires by accident is one refactor away from firing never.**
+
+### Next
+`meltbore` needs the terrain breach — a cast that REMOVES what is already there. `conjured-terrain.ts`
+only raises new shapes today. That is the other half, and it is a bigger, world-shaped job.
+
+### Files
+`play3d/sustain.ts` (new, pure) · `play3d/sustain.test.ts` (33 asserts) · `play3d/cast.ts`
+(`sustainDrain` + meltbore's narrowed reason) · `play3d/unbuilt-premise.test.ts` (premise re-aimed)
+
 ## 🧭 Shimmer — **UNBUILT: A REASON THAT CANNOT EXPIRE QUIETLY** (2026-08-31, play lane) · *Last touched 2026-08-31 — `de2216c` pushed. unbuilt-premise oracle **22/0**, mutation-swept **6 ways, all 6 fire**. cast 103/0, keeper-moves 386/0, all play3d green, tsc 7 (baseline), canon exit 0.*
 
 ### The problem, stated once
