@@ -84,6 +84,43 @@ while `:5719` supports all of them. `engine/` is hub's, so both are flagged, not
 `play3d/TremorRing.tsx` · `play3d/cast.ts` (contract + build) · `play3d/Shimmer3D.tsx` (host) ·
 `play3d/tokens.test.ts` (registry)
 
+
+### ✅ ADDENDUM — WIRED INTO voxel3d (2026-08-31, Alex reassigned the slice to the play window)
+`b239300`. hub's lane, entered on Alex's explicit go, with voxel3d verified **clean and untouched
+for 45 minutes** first. Oracle **72/0**, mutation-swept **23 ways across three sweeps, all 23 fire**.
+hollows 106, hollow-wiring 73/0, cast 103/0, every play3d suite green, tsc 7 (baseline), canon exit 0.
+The `/shimmer/voxel3d` route compiles and serves 200 on the lane dev server (3203, own `.next-play`).
+
+- **★★ THE COMPASS WAS MIRRORED AND FOUR ASSERTS SAID IT WAS FINE.** `bearingOf` computed
+  `atan2(contact) − atan2(facing)`. The host's facing is `hollowFwd` = `camera.getWorldDirection()`,
+  and screen-right is `cross(fwd, up)` = `(−fz, 0, fx)` — so with `fwd` at +z the keeper's right is
+  **−x**, the opposite of what the function claimed. **Every bearing assert pinned a convention I had
+  CHOSEN rather than one the world uses.** A mirrored compass is not a wrong number; it is a cue that
+  points the wrong way, and this cue exists to announce a stalker — it would have turned a keeper
+  **away** from the thing behind them. The oracle now DERIVES right from that cross product and tests
+  **two facings**, because one facing cannot tell a correct formula from one that agrees on that axis.
+  ⚠ Restoring the old form trips **7** asserts; it tripped **0** before.
+- **★★★ `hover: formOf(st).hover`, never a literal 0** — that one argument IS the canon limitation,
+  and this is the only world with a body that floats. A hardcoded 0 makes Tremor Sense a wallhack
+  revealing the one form canon says it cannot feel, and **nothing on screen would look wrong, because
+  a ring with an extra tick is just a ring.** Guarded, and the mutation fires.
+- **⚠ THAT GUARD WENT RED ON ITSELF FIRST.** A bare `/hover:\s*.../` sweep matched every Tailwind
+  `hover:` utility in the HUD **and the comment three lines above it that quotes `hover: 0` to explain
+  the danger**. The 2026-08-22 canon-gate bug exactly — *documenting a marker created a marker* — and
+  the prose was accurate. **Accuracy is not the property that saves you.** Now scoped to the single
+  object literal that feeds the sense, which no comment and no className can impersonate.
+- **The facing is `hollowFwd`, the SAME vector `keeperLooking` reads** for the stalker's blind-spot
+  condition. A sense that announces an ambusher must agree with the ambusher about which way you look.
+- **Asserted in voxel3d's own shape, not play3d's** — this host keeps the whole worn spec in `stance`,
+  so it reads `senseRadius` off it directly rather than mirroring the field into a ref. Demanding
+  play3d's pattern would be asserting a house style; what matters is resolved, drawn, and the argument.
+- **★ HOW TO ACTUALLY FEEL IT (measured, not assumed): a keeper holding exactly Stone + Enchant, in
+  either birth order, derives Tremor Sense as their one always-on passive.** It is worn automatically
+  — no key, no slot. Then stand out at night with a warden or stalker inside 24 units.
+- **⚠ STILL NOT DEPLOYED AND STILL NOT SEEN.** Deploy is hub's. I could not view it in a browser:
+  Chrome runs on Alex's machine and the lane dev server (3203) is not reachable from it. **Compiles
+  and serves 200 is not the same claim as renders correctly**, and I am not making the second one.
+
 ## 🎭 Stream avatar — **THE DESIGN DELETED THE EXPENSIVE PART, AND THREE THINGS WERE ONLY FINDABLE BY LOOKING** (2026-08-31, hub lane) · *Last touched 2026-08-31 — `39dae5a` committed, **NOT pushed** (see Decisions), rig oracle **36 asserts**, 9/9 mutations fire, tsc 7 (baseline). NOT deployed. Camera path UNVERIFIED — no webcam on this box.*
 
 **🧹 STRIPPED 2026-08-31 (Alex's call) — THE AVATAR ART IS OUT OF HEAD; THE PIPELINE STAYS.** All `serberus-*` art removed from the index and disk, replaced by `fixture` — a synthetic avatar drawn from primitives by `scripts/vtuber-fixture.py`, carrying no licence and no likeness. `/vtuber?avatar=<name>` selects any other set; `public/vtuber/*` is now gitignored except `fixture*`, so personal art cannot be staged by accident.
