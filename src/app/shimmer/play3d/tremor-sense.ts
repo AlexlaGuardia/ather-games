@@ -131,7 +131,15 @@ export function senseGround(
  */
 export function bearingOf(c: Contact, px: number, pz: number, fx: number, fz: number): number {
   if (fx === 0 && fz === 0) return 0
-  const a = Math.atan2(c.x - px, c.z - pz) - Math.atan2(fx, fz)
+  // ⚠⚠⚠ THE ORDER OF THESE TWO TERMS IS THE WHOLE FUNCTION, AND THE FIRST VERSION HAD IT MIRRORED —
+  // green under four asserts that each pinned a convention I had CHOSEN rather than one the world
+  // uses. The world's answer: `hollowFwd` is `camera.getWorldDirection()`, and for a camera looking
+  // along `fwd` with world up +y, screen-right is `cross(fwd, up)` = `(-fz, 0, fx)`. So with `fwd`
+  // pointing at +z, the keeper's RIGHT is −x — the opposite of what the mirrored form claimed.
+  // A mirrored compass is not a wrong number, it is a cue that confidently points the wrong way,
+  // which is worse than no cue: it would send a keeper turning AWAY from the stalker it exists to
+  // announce. The oracle now DERIVES right from that cross product instead of restating a choice.
+  const a = Math.atan2(fx, fz) - Math.atan2(c.x - px, c.z - pz)
   return Math.atan2(Math.sin(a), Math.cos(a))
 }
 

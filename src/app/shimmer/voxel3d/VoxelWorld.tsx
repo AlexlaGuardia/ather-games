@@ -275,6 +275,8 @@ import { emptyNet, plant as plantMark, pull as pullMark, destination as markDest
          rename as renameMark, spokesOf, markAt, arrivalOf, MAX_MARKS, DOOR_ID,
          type WaymarkNet, type Waymark } from '../voxel/waymark'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
+import { senseGround, type SensedBody } from '../play3d/tremor-sense'
+import { TremorSenseHud, emptyReadout, type TremorReadout } from '../play3d/TremorRing'
 
 /**
  * ★ THE BAND BINDS FOR THIS WORLD, AND WHY THEY ARE NOT `BAND_KEYS`.
@@ -302,6 +304,14 @@ import type { CastSpec, CastArchetype } from '../play3d/cast'
  * SAME kind (it does not today — `loadout.test.ts` asserts that and says so by name), both would draw
  * the same key. That test going red is the signal to give this a per-slot shape again.
  */
+/**
+ * How often Tremor Sense re-reads the ground, seconds. ~10Hz.
+ * ★ Derived, not taste: the fastest Hollow (`stalker`, speed 3.9) covers 0.39 world units in this
+ * window — under a degree on a ring `PLAYER_EXCLUSION` wide. A faster sense would burn frames to
+ * report a difference nobody can see.
+ */
+const TREMOR_TICK = 0.1
+
 const WORLD_KEY_BY_KIND: Record<Exclude<SlotKind, 'passive' | 'trait'>, string> = {
   tactical: 'z',   // throw
   ultimate: 'b',   // the signature — B here, not C, because C is craft in this world
@@ -1062,6 +1072,9 @@ export default function VoxelWorld() {
    * would silently drop the other two the day anyone looked.
    */
   const vitals = useRef<Vitals>(freshVitals(birthAffinity(loadRuneInventory().birth)))
+  /** Tremor Sense: the scene posts what the keeper feels, the HUD draws it. Same outward-ref
+   *  shape as `lookOut`/`foesOut` — the scene knows where bodies are, the HUD knows how to draw. */
+  const tremor = useRef<TremorReadout>(emptyReadout())
   /**
    * ── ★ MANA — the cost side of casting, and it needed no new design ──────────────────────────
    * `engine/mana.ts` already derives pool and regen from `skills.mana.level`, which this world
@@ -2076,7 +2089,7 @@ export default function VoxelWorld() {
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
           onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
-          uiOpen={cursorUIOpenRef} uiSteps={uiStepsRef} owner={isOwnerRef} foesOut={foesRef} pressOut={pressRef}
+          uiOpen={cursorUIOpenRef} uiSteps={uiStepsRef} owner={isOwnerRef} foesOut={foesRef} tremorOut={tremor} pressOut={pressRef}
           waterOut={waterOut}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
@@ -2088,7 +2101,7 @@ export default function VoxelWorld() {
             a menu is up are already refused by the onCreated click handler. */}
         <PointerLockControls selector="#voxel3d-no-autolock" />
       </Canvas>
-      <Hud stats={stats} diagnostics={settings.showFps} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
+      <Hud tremor={tremor} stats={stats} diagnostics={settings.showFps} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
            build={build} pieceId={pieceId} rot={rot} inv={inv} collarNear={collarNear}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
@@ -2240,7 +2253,7 @@ function Clock() {
  * directly, and leave the component tree alone. 10 Hz is well under a frame and well over the eye.
  */
 
-function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceId, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast, collarNear }: {
+function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceId, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast, collarNear, tremor }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
@@ -2287,6 +2300,8 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
   sparLedger: string[] | null
   /** The keeper's health + shields. A ref: the bars poll it, nothing re-renders. */
   vitals: React.RefObject<Vitals>
+  /** Tremor Sense readout, posted by the frame loop. See `TremorSenseHud`. */
+  tremor: React.MutableRefObject<TremorReadout>
   /** The mana pool, for the vessel in the bottom-right corner. Same ref the sim ticks. */
   mana: React.RefObject<{ cur: number; max: number; regen: number } | null>
   /** Bound casts + their cooldown deadlines, published by `World`. */
@@ -2663,6 +2678,10 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           <ResourceBars vitals={vitals} />
         </div>
       )}
+      {/* Tremor Sense — a ring of contacts around the reticle, drawn only while the keeper wears a
+          sense AND something is standing on the ground within it. Renders null otherwise, so the
+          cost of not having it is one `rev` comparison per animation frame. */}
+      {!build && <TremorSenseHud tremorRef={tremor} />}
       {/* ── ★★ THE MANA VESSEL, AND THE FIRST TIME MANA HAS BEEN DRAWN AT ALL (2026-08-26) ──────
           `brewPotion` has subtracted `manaCost` and `engine/mana.ts` has derived the pool and its
           regen for as long as either has existed, and the keeper has been spending a resource with
@@ -3358,7 +3377,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3482,6 +3501,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   owner: React.RefObject<boolean>
   /** Filled by the World so the owner-only `/foes` can read the live patrol. See its ctx entry. */
   foesOut: React.RefObject<null | (() => { posture: string; dist: number; collar: number }[])>
+  /** Tremor Sense readout — written here each ~100ms, drained by `TremorSenseHud`. */
+  tremorOut: React.MutableRefObject<TremorReadout>
   /** True while a still-collared Moglin is close enough that the keeper needs to know the verb. */
   onCollarNear: (near: boolean) => void
   /** The keeper's spirits. A REF, like `plotCfg` and `spiritIndex` — ring 2 reads it every frame
@@ -5416,6 +5437,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * change inside a frame; that is the shape `render-audit` exists to catch.
    */
   const hollowFwd = useRef(new THREE.Vector3(0, 0, -1))
+  /**
+   * Tremor Sense frame scratch. ★ The radius is read from `stance.current` directly rather than
+   * mirrored into a ref — this host already keeps the whole worn spec, and a copy would be a second
+   * answer to "what is the keeper wearing", which is the hand-kept-mirror shape the house keeps
+   * getting bitten by. Only the READOUT crosses to the HUD, as `tremorOut`.
+   */
+  const tremorAcc = useRef(0)
+  const tremorBodies = useMemo<SensedBody[]>(() => [], [])
   /** Stride phase per body, carried across frames. `stepVoices` mutates it; the host owns it. */
   const voiceClock = useRef<VoiceClock>(newVoiceClock())
   /** Filled during the Hollow loop, drained straight after it — never held between frames. */
@@ -6886,6 +6915,49 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // long night, growing fastest exactly when the most is happening.
           statusBag.current = clearTarget(statusBag.current, st.id)
           g.remove(hw.mesh); hollows.current.splice(i, 1)
+        }
+      }
+
+      // ── TREMOR SENSE — what the keeper feels through the floor ──────────────────────────────
+      // Placed here, after the body loop and inside the same block, for the reason the sound block
+      // below states about itself: a frame with no Hollow pass must report nothing rather than
+      // replay the last list it saw.
+      //
+      // ★★ `formOf(st).hover` IS PASSED, NEVER A LITERAL 0, AND THAT ONE ARGUMENT IS THE WHOLE
+      // CANON LIMITATION. `runes.md:557` binds the awareness to the ground and reads footsteps and
+      // weight, so a body that floats leaves neither. This world is the only one where that bites:
+      // `warden`/`stalker` are `hover: 0` and the `caster` floats, and hollows.ts's own note calls
+      // the caster *"the ONLY form that floats — and the only one a wall cannot answer."* Hardcode
+      // a 0 here and Tremor Sense silently becomes a wallhack that reveals the one form it must not.
+      //
+      // ⚠ THE FACING IS `hollowFwd`, WHICH IS THE VECTOR THE STALKER'S OWN BLIND-SPOT CONDITION
+      // READS (`keeperLooking`, via `hollowStrike` above). That is deliberate and not convenience:
+      // a sense that announces an ambusher must agree with the ambusher about which way you are
+      // looking, or the ring points one way while the strike resolves off another.
+      tremorAcc.current -= dt
+      if (tremorAcc.current <= 0) {
+        tremorAcc.current = TREMOR_TICK
+        const radius = stance.current?.senseRadius ?? 0
+        const lc = loco.current
+        if (radius > 0) {
+          tremorBodies.length = 0
+          for (const hw of hollows.current) {
+            const st = hw.st
+            tremorBodies.push({
+              x: st.x, y: st.y, z: st.z,
+              hover: formOf(st).hover,
+              present: st.hp > 0 && st.gutter < 1,
+            })
+          }
+          const r = tremorOut.current
+          r.contacts = senseGround(tremorBodies, lc.px, lc.pz, radius)
+          r.px = lc.px; r.pz = lc.pz
+          r.fx = hollowFwd.current.x; r.fz = hollowFwd.current.z
+          r.radius = radius
+          r.rev++
+        } else if (tremorOut.current.contacts.length > 0) {
+          const r = tremorOut.current
+          r.contacts = []; r.radius = 0; r.rev++
         }
       }
 

@@ -125,22 +125,44 @@ function body(x: number, z: number, over: Partial<SensedBody> = {}): SensedBody 
 // ── 6. bearing — four separate facts, because a sign flip is plausible in both directions ───────
 {
   const at = (x: number, z: number) => ({ x, z, dist: Math.hypot(x, z) })
-  // Facing +z. Screen-space convention matches the world: +x is the keeper's right.
-  chk('dead ahead is 0', near(bearingOf(at(0, 5), 0, 0, 0, 1), 0))
-  chk('directly behind is PI', near(Math.abs(bearingOf(at(0, -5), 0, 0, 0, 1)), Math.PI))
-  chk('to the right is +PI/2', near(bearingOf(at(5, 0), 0, 0, 0, 1), Math.PI / 2))
-  chk('to the left is -PI/2', near(bearingOf(at(-5, 0), 0, 0, 0, 1), -Math.PI / 2))
+
+  // ★★★ THE CONVENTION IS DERIVED FROM THE WORLD, NOT RESTATED — AND THE FIRST VERSION OF THIS
+  // BLOCK WAS MIRRORED AND FOUR-ASSERTS GREEN. It hardcoded "+x is the keeper's right", which is
+  // simply a thing I decided. The host's facing is `hollowFwd` = `camera.getWorldDirection()`, so
+  // the real answer comes from three.js: screen-right is `cross(fwd, up)`, which for `up = +y` and
+  // a flat facing is `(-fz, 0, fx)`. Deriving it here means the day the host's facing convention
+  // changes, this goes red instead of quietly pointing a keeper away from the stalker.
+  const rightOf = (fx: number, fz: number) => ({ x: -fz, z: fx })
+  const along = (d: { x: number; z: number }, k = 5) => at(d.x * k, d.z * k)
+
+  // Two facings, because a single one cannot tell a correct formula from one that happens to agree
+  // on that axis. +z and the three.js default −z pull the mirrored form in opposite directions.
+  for (const [fx, fz, name] of [[0, 1, 'facing +z'], [0, -1, 'facing −z (three.js default)']] as const) {
+    const R = rightOf(fx, fz)
+    chk(`${name}: dead ahead is 0`, near(bearingOf(at(fx * 5, fz * 5), 0, 0, fx, fz), 0))
+    chk(`${name}: directly behind is PI`,
+      near(Math.abs(bearingOf(at(-fx * 5, -fz * 5), 0, 0, fx, fz)), Math.PI))
+    chk(`★ ${name}: cross(fwd, up) — the keeper's actual right — is +PI/2`,
+      near(bearingOf(along(R), 0, 0, fx, fz), Math.PI / 2),
+      `right=(${R.x},${R.z}) got ${bearingOf(along(R), 0, 0, fx, fz).toFixed(3)}`)
+    chk(`★ ${name}: and their actual left is -PI/2`,
+      near(bearingOf(along(R, -5), 0, 0, fx, fz), -Math.PI / 2))
+  }
   chk('left and right are opposite signs, not the same magnitude twice',
-    bearingOf(at(-5, 0), 0, 0, 0, 1) < 0 && bearingOf(at(5, 0), 0, 0, 0, 1) > 0)
+    bearingOf(along(rightOf(0, 1), -5), 0, 0, 0, 1) < 0 && bearingOf(along(rightOf(0, 1)), 0, 0, 0, 1) > 0)
   chk('turning the keeper turns the bearing — it is relative to FACING, not to north',
     near(bearingOf(at(5, 0), 0, 0, 1, 0), 0))
-  chk('facing need not be normalised', near(bearingOf(at(5, 0), 0, 0, 0, 17), Math.PI / 2))
+  chk('facing need not be normalised',
+    near(bearingOf(along(rightOf(0, 17)), 0, 0, 0, 17), Math.PI / 2))
   chk('bearing is wrapped to (-PI, PI], never 3PI/2',
     Math.abs(bearingOf(at(-1, -5), 0, 0, 0, 1)) <= Math.PI)
   chk('a zero-length facing gives 0, not NaN — NaN vanishes a HUD element with no error',
     bearingOf(at(5, 0), 0, 0, 0, 0) === 0)
-  chk('bearing is taken from the KEEPER\'s position',
-    near(bearingOf(at(5, 0), 10, 0, 0, 1), -Math.PI / 2))
+  // Offset the KEEPER, not the contact: from (10,0) facing +z, a contact at (5,0) lies 5 along
+  // −x, and −x is `cross(+z, up)` — the keeper's right. Derived, so it moves with the convention.
+  chk('bearing is taken from the KEEPER\'s position, not the origin',
+    near(bearingOf(at(5, 0), 10, 0, 0, 1), Math.PI / 2) &&
+    near(bearingOf(at(5, 0), 0, 0, 0, 1), -Math.PI / 2))
 }
 
 // ── 7. the ring's geometry — a tick on the wrong side of a circle looks entirely plausible ──────
@@ -218,6 +240,43 @@ function body(x: number, z: number, over: Partial<SensedBody> = {}): SensedBody 
   const pe = hud.match(/pointerEvents: '(\w+)'/g) ?? []
   chk('...and no layer of it ever eats a click meant for the world',
     pe.length >= 2 && pe.every((m) => m.endsWith("'none'")), pe.join(' '))
+
+  // ── the voxel world, which is the one Alex plays (proxy.ts:45 makes play3d legacy) ───────────
+  // ⚠ ASSERTED IN ITS OWN SHAPE, NOT play3d's. This host keeps the whole worn spec in `stance`, so
+  // it reads `senseRadius` off it directly instead of mirroring the field into a ref. Demanding
+  // play3d's pattern here would be asserting a house style; what matters is that the sense is
+  // resolved, drawn, and given the ARGUMENT that carries the canon limitation.
+  const vox = readFileSync(new URL('../voxel3d/VoxelWorld.tsx', import.meta.url), 'utf8')
+
+  chk('voxel3d resolves the sense', !built || /senseGround\(/.test(vox))
+  chk('voxel3d draws it', !built || /<TremorSenseHud\b/.test(vox))
+  chk('voxel3d reads the reach off the worn spec, not a copy of it',
+    !built || /stance\.current\?\.senseRadius \?\? 0/.test(vox))
+
+  // ★★★ THE ONE THAT MATTERS MOST IN THIS WHOLE FILE. `hover` is the entire canon limitation, and
+  // this is the only world with a body that floats. A host that passes a literal 0 turns Tremor
+  // Sense into a wallhack that reveals the ONE form canon says it cannot feel — and nothing on
+  // screen would look wrong, because a ring with an extra tick on it is just a ring.
+  // ⚠⚠ SCOPED TO THE CALL, NOT SCANNED OVER THE FILE — AND THE FIRST VERSION OF THIS ASSERT WENT
+  // RED ON ITSELF. A bare /hover:\s*.../ sweep matched every Tailwind `hover:` utility in the HUD
+  // *and the comment three lines above it that quotes `hover: 0` to explain the danger*. That is
+  // this repo's 2026-08-22 canon-gate bug exactly: documenting a marker created a marker, and the
+  // prose was accurate — accuracy is not the property that saves you. So this reads the ONE object
+  // literal that feeds the sense, which no comment and no className can impersonate.
+  const push = vox.match(/tremorBodies\.push\(\{[\s\S]*?\}\)/)?.[0] ?? ''
+  chk('the sense is fed from a body literal the guard can actually find',
+    !built || push.length > 0, 'tremorBodies.push({...}) not located')
+  chk('★★★ voxel3d passes the body\'s REAL hover — a literal 0 here would be a silent wallhack',
+    !built || /hover:\s*formOf\(\w+\)\.hover/.test(push), push.replace(/\s+/g, ' '))
+  chk('★ ...and not a hardcoded one',
+    !built || !/hover:\s*0\b/.test(push), push.replace(/\s+/g, ' '))
+  chk('...and a dispersing body is excluded, or the ring keeps announcing a corpse',
+    !built || /present:\s*st\.hp > 0 && st\.gutter < 1/.test(push), push.replace(/\s+/g, ' '))
+
+  // The sense must agree with the ambusher about which way the keeper looks, or the ring points one
+  // way while the strike resolves off another. `hollowFwd` is the vector `keeperLooking` reads.
+  chk('★ voxel3d takes its facing from hollowFwd — the SAME vector the stalker\'s blind spot reads',
+    !built || /r\.fx = hollowFwd\.current\.x; r\.fz = hollowFwd\.current\.z/.test(vox))
 
   // Canon says WHERE, not WHO. `Contact` carries no identity; this stops one being smuggled in.
   chk('the readout still carries no identity — canon says "know where everyone stands"',
