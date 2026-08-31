@@ -47,6 +47,26 @@ def luma(a):
     return 0.2126 * a[:, :, 0] + 0.7152 * a[:, :, 1] + 0.0722 * a[:, :, 2]
 
 
+def _profile(grin: np.ndarray, split: float, step: int = 2) -> dict:
+    """Per-column bottom edge of the upper row and top edge of the lower row.
+
+    ⚠ Columns where either row has no lit pixel are emitted as null and the renderer skips
+    them. Interpolating across a gap would draw cavity where there are no teeth to bound it,
+    which at the crescent's tapering ends is exactly where it would show.
+    """
+    ys, xs = np.nonzero(grin)
+    x0, x1 = int(xs.min()), int(xs.max())
+    si = int(round(split))
+    upper, lower = [], []
+    for x in range(x0, x1 + 1, step):
+        col = np.nonzero(grin[:, x])[0]
+        up = col[col < si]
+        lo = col[col >= si]
+        upper.append(int(up.max()) if up.size else None)
+        lower.append(int(lo.min()) if lo.size else None)
+    return {"x0": x0, "step": step, "upperBottom": upper, "lowerTop": lower}
+
+
 def cut(src: Path, out: Path, name: str):
     im = Image.open(src).convert("RGB")
     a = np.asarray(im).astype(np.float32)
@@ -126,12 +146,26 @@ def cut(src: Path, out: Path, name: str):
             "coreLeft": float(gxs.min()),
             "coreRight": float(gxs.max()),
             "box": [int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())],
+            # ★★★ THE GRIN'S OWN SILHOUETTE, PER COLUMN. The first cavity was a plain ellipse,
+            # and against a CURVED crescent it read as a grey lozenge pasted over the teeth —
+            # the worst thing in the frame at any zoom. A mouth's interior is bounded by the
+            # actual edges of the teeth, so those edges are measured: for every column, the
+            # lowest lit pixel of the upper row and the highest lit pixel of the lower row.
+            # The renderer fills between them, so the cavity follows the art rather than
+            # approximating it.
+            "profile": _profile(grin, float(gys.min() + (gys.max() - gys.min()) * 0.55)),
             "corePx": int(grin.sum()),
             "layerPx": int(mouth.sum()),
             "dominance": round(float(dominance), 4),
         },
         # Where a pair of eye glows would sit if the rig is asked to draw them. Derived
         # from the mouth, not typed: eyes ride above it by roughly the grin's own width.
+        # ★★★ THE GRIN'S OWN SILHOUETTE, PER COLUMN. The first cavity was a plain ellipse, and
+        # against a CURVED crescent it read as a grey lozenge pasted over the teeth — the single
+        # worst thing in the frame at any zoom. A mouth's interior is bounded by the actual edges
+        # of the teeth, so those edges are measured here: for every column, the lowest lit pixel
+        # of the upper row and the highest lit pixel of the lower row. The renderer fills between
+        # them, so the cavity follows the art instead of approximating it.
         "eyes": {
             "leftX":  float(gxs.min() + (gxs.max() - gxs.min()) * 0.22),
             "rightX": float(gxs.min() + (gxs.max() - gxs.min()) * 0.78),

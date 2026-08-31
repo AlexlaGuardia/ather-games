@@ -23,6 +23,11 @@ export interface ExpressionState {
   mouthOpen: number
   /** 0 = neutral, 1 = full grin. Drives the crescent's width, not its height. */
   mouthWide: number
+  /**
+   * 0 = neutral, 1 = fully pursed. Its own channel because a pucker is NOT a point on the
+   * open/shut ramp — "oh" is narrow AND open, so a single openness dial can never reach it.
+   */
+  mouthPucker: number
   /** 1 = open, 0 = closed. Two channels so a wink survives the trip. */
   eyeOpenL: number
   eyeOpenR: number
@@ -38,7 +43,7 @@ export interface ExpressionState {
 }
 
 export const NEUTRAL: ExpressionState = {
-  mouthOpen: 0, mouthWide: 0,
+  mouthOpen: 0, mouthWide: 0, mouthPucker: 0,
   eyeOpenL: 1, eyeOpenR: 1,
   browRaise: 0,
   yaw: 0, pitch: 0, roll: 0,
@@ -68,6 +73,7 @@ export const DEFAULT_CHANNELS = {
   // Spans are what a normal speaking face actually reaches, not the 0..1 the API offers.
   jawOpen:   { rest: 0.05, span: 0.38 },
   mouthWide: { rest: 0.10, span: 0.55 },
+  mouthPucker: { rest: 0.05, span: 0.40 },
   blink:     { rest: 0.06, span: 0.45 },
   browRaise: { rest: 0.08, span: 0.42 },
 } satisfies Record<string, Channel>
@@ -109,6 +115,7 @@ export function smooth(prev: ExpressionState, next: ExpressionState): Expression
   return {
     mouthOpen: approach(prev.mouthOpen, next.mouthOpen, MOUTH_SMOOTH),
     mouthWide: approach(prev.mouthWide, next.mouthWide, MOUTH_SMOOTH),
+    mouthPucker: approach(prev.mouthPucker, next.mouthPucker, MOUTH_SMOOTH),
     eyeOpenL:  approach(prev.eyeOpenL,  next.eyeOpenL,  EYE_SMOOTH),
     eyeOpenR:  approach(prev.eyeOpenR,  next.eyeOpenR,  EYE_SMOOTH),
     browRaise: approach(prev.browRaise, next.browRaise, MOUTH_SMOOTH),

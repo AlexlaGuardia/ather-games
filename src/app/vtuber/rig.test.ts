@@ -16,7 +16,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { rig, DEFAULT_OPTIONS, type AvatarMeta } from './rig'
+import { rig, pickViseme, DEFAULT_OPTIONS, type AvatarMeta, type VisemeSet } from './rig'
 import { OVERSCAN } from './renderer'
 import { poseFromMatrix, stateFromBlend, DEFAULT_TUNING, Calibrator, blendMap } from './tracker'
 import { NEUTRAL, approach, MOUTH_SMOOTH, EYE_SMOOTH, normalise, DEFAULT_CHANNELS } from './expression'
@@ -28,8 +28,8 @@ function ok(cond: boolean, label: string) { if (cond) pass++; else fails.push(la
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps
 
 // ── the avatar the page ships with, read rather than invented ────────────────────────────────
-const METAP = join(process.cwd(), 'public/vtuber/serberus.json')
-ok(existsSync(METAP), 'the shipped avatar has metadata (run `npm run vtuber:layers`)')
+const METAP = join(process.cwd(), 'public/vtuber/fixture.json')
+ok(existsSync(METAP), 'the shipped avatar has metadata (run `python3 scripts/vtuber-fixture.py`)')
 const meta: AvatarMeta = JSON.parse(readFileSync(METAP, 'utf8'))
 
 // ── 1. THE CUT ITSELF ────────────────────────────────────────────────────────────────────────
@@ -84,6 +84,29 @@ ok(mono, 'glow and jaw drop both rise monotonically across the whole range')
 const grin = rig({ ...NEUTRAL, mouthWide: 1 }, meta, { ...DEFAULT_OPTIONS, now: 0 })
 ok(grin.mouth.scaleX > 1 && near(grin.jawDrop, 0),
   'a grin widens the crescent and does not open the jaw')
+
+// ── 2b. IT MUST NOT READ AS A PUPPET ─────────────────────────────────────────────────────────
+// ★★★ ALEX'S NOTE, 2026-08-31: "the smile is a bit awkward like a puppet". A marionette jaw is a
+// rigid trapdoor — constant width at every opening, sliding straight down. Both halves of that
+// are asserted against here, because both are easy to lose in a refactor and neither shows up
+// as an error, only as a feel.
+ok(open.mouth.scaleX < shut.mouth.scaleX,
+  `the corners PULL IN as the mouth opens (${shut.mouth.scaleX.toFixed(3)} -> ${open.mouth.scaleX.toFixed(3)}) — a trapdoor keeps its width`)
+ok(open.jawScale < 1 && open.jawScale > 0.75,
+  `the lower row recedes as the jaw swings back (${open.jawScale.toFixed(3)}) — present, and not so far it detaches`)
+ok(near(shut.jawScale, 1), 'a shut jaw is drawn at full size')
+// ⚠ AND SMILING MUST NOT NARROW THE MOUTH. Widening and narrowing are different axes; folding
+// them into one dial makes a grin close the mouth, which is the opposite of a grin.
+ok(grin.mouth.scaleX > shut.mouth.scaleX,
+  'a grin still WIDENS even though opening narrows — the two axes stayed independent')
+// Both effects must be monotonic or the mouth pumps mid-syllable.
+let puppetMono = true
+for (let i = 1; i <= 20; i++) {
+  const a = rig({ ...NEUTRAL, mouthOpen: (i - 1) / 20 }, meta, { ...DEFAULT_OPTIONS, now: 0 })
+  const b = rig({ ...NEUTRAL, mouthOpen: i / 20 }, meta, { ...DEFAULT_OPTIONS, now: 0 })
+  if (b.mouth.scaleX > a.mouth.scaleX || b.jawScale > a.jawScale) puppetMono = false
+}
+ok(puppetMono, 'corner pull and jaw recession both move one way across the range')
 
 // ── 3. THE HEAD MOVES AND THE BACKDROP RESISTS ───────────────────────────────────────────────
 const turned = rig({ ...NEUTRAL, yaw: 1 }, meta, { ...DEFAULT_OPTIONS, now: 0 })
@@ -190,6 +213,86 @@ ok(allFinite, 'the synthetic driver produces a finite pose at every sampled mome
 const zeroBlend = stateFromBlend(blendMap([]), null, DEFAULT_TUNING, 0)
 ok(finite(zeroBlend) && zeroBlend.mouthOpen === 0,
   'a frame with no blendshapes at all yields a closed, finite face rather than NaN')
+
+// ── 9. THE MOUTH SET: REGISTERED, RAMPED, AND REACHABLE ──────────────────────────────────────
+// ★★★ THIS IS WHAT THE WHOLE 2026-08-31 SESSION WAS FOR. `serberus`'s painted grin is a solid
+// slab with no upper/lower separation, so no rig can open it — the fix was a set of DRAWN
+// shapes. What makes a set usable is not that the shapes look good individually; it is that
+// they are registered to each other and that every one of them is reachable.
+const VP = join(process.cwd(), 'public/vtuber/visemes/fixture-visemes.json')
+if (!existsSync(VP)) {
+  fails.push('the mouth set is missing (run scripts/vtuber-fixture.py then vtuber-visemes-cut.py)')
+} else {
+  const vs: VisemeSet & {
+    registration: { anchorXSpread: number; anchorTopSpread: number }
+    shapes: Record<string, { file: string; openness: number | null; fill: number }>
+  } = JSON.parse(readFileSync(VP, 'utf8'))
+
+  // ⚠⚠ REGISTRATION IS THE ONE THING EYEBALLING CANNOT CHECK, AND IT ALREADY CAUGHT A REAL
+  // DEFECT. The five generated edits came back at identical pixel dimensions, which looked
+  // aligned; measured, `wide` sat 125px higher than the rest because the editor moved the whole
+  // mouth up instead of dropping the jaw. Swapping to it would jump the mouth mid-word.
+  ok(vs.registration.anchorXSpread < 2,
+    `the set is registered horizontally (${vs.registration.anchorXSpread}px spread)`)
+  ok(vs.registration.anchorTopSpread < 2,
+    `the set is registered vertically (${vs.registration.anchorTopSpread}px spread) — this is the one that pops`)
+
+  // Every shape must actually exist on disk. A ramp entry whose file is missing renders as a
+  // gap in the mouth: the avatar's face briefly goes blank mid-word.
+  for (const n of Object.keys(vs.shapes)) {
+    ok(existsSync(join(process.cwd(), 'public/vtuber/visemes', vs.shapes[n].file)),
+      `shape "${n}" has its PNG on disk`)
+  }
+
+  // ⚠ A RAMP THAT IS NOT STRICTLY INCREASING HAS AN UNREACHABLE FRAME — a drawing nobody will
+  // ever see, which is indistinguishable from it working.
+  const opens = vs.ramp.map(n => vs.shapes[n].openness ?? -1)
+  ok(opens.every((v, i) => i === 0 || v > opens[i - 1]),
+    `the ramp is strictly increasing (${vs.ramp.map((n, i) => n + '=' + opens[i].toFixed(2)).join(' ')})`)
+  ok(near(opens[0], 0, 1e-6) && near(opens[opens.length - 1], 1, 1e-6),
+    'the ramp spans the full 0..1, so a shut mouth and a fully open one are both reachable')
+
+  // ★ SELECTION: the ends must land exactly, and nothing may go backwards.
+  const shut = pickViseme(0, 0, vs)
+  ok(shut.a === vs.ramp[0] && shut.t < 1e-6, 'openness 0 selects the shut shape with no blend')
+  const full = pickViseme(1, 0, vs)
+  ok(full.b === vs.ramp[vs.ramp.length - 1] || full.a === vs.ramp[vs.ramp.length - 1],
+    'openness 1 reaches the widest shape')
+  let ordered = true, blendOk = true, lastIdx = -1
+  for (let i = 0; i <= 100; i++) {
+    const pick = pickViseme(i / 100, 0, vs)
+    if (pick.t < -1e-9 || pick.t > 1 + 1e-9) blendOk = false
+    const idx = vs.ramp.indexOf(pick.a)
+    if (idx < lastIdx) ordered = false
+    lastIdx = idx
+  }
+  ok(blendOk, 'the blend factor stays inside 0..1 across the whole range')
+  ok(ordered, 'the selection never walks BACK down the ramp as the mouth opens')
+
+  // ★★ EVERY SHAPE ON THE RAMP MUST BE SELECTABLE. A shape that is never picked is a drawing
+  // that cost money and does nothing — and with uneven spacing that is easy to do by accident.
+  const seen = new Set<string>()
+  for (let i = 0; i <= 200; i++) {
+    const pick = pickViseme(i / 200, 0, vs)
+    seen.add(pick.a); if (pick.t > 0.02) seen.add(pick.b)
+  }
+  for (const n of vs.ramp) ok(seen.has(n), `shape "${n}" is actually reachable from some openness`)
+
+  // ⚠ PUCKER IS ITS OWN AXIS. "oh" is narrow AND open, so an openness dial can never reach it;
+  // if this ever collapses into the ramp the round shape becomes dead art.
+  ok(pickViseme(0.5, 0, vs).round === 0, 'no pucker means no round shape')
+  ok(near(pickViseme(0.5, 1, vs).round, 1), 'full pucker on an open mouth fully weights the round shape')
+  // ⚠⚠ THE ONE A PHOTOGRAPH FOUND. Ungated, a high pucker replaced the ramp outright and a SHUT
+  // mouth rendered as a glowing "O". You cannot say "oh" with your mouth closed.
+  ok(pickViseme(0, 1, vs).round === 0, 'a CLOSED mouth can never be puckered into an O')
+  let puckerMono = true
+  for (let i = 1; i <= 20; i++) {
+    const a = pickViseme((i - 1) / 20, 1, vs).round
+    const b = pickViseme(i / 20, 1, vs).round
+    if (b < a - 1e-9) puckerMono = false
+  }
+  ok(puckerMono, 'the pucker fades IN with openness and never back out')
+}
 
 console.log(fails.length ? `❌ ${pass} passed, ${fails.length} FAILED` : `✅ ${pass} passed`)
 for (const f of fails) console.log(`   · ${f}`)

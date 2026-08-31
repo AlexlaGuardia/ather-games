@@ -17,10 +17,15 @@ const port = flag('--port', '3204')
 const obs = args.includes('--obs')
 
 // synthetic(t): syllable period 145ms, blink at (t % 4300)/4300 > 0.965
+// Chosen to land on distinct points of the viseme ramp rather than at pretty pictures: the
+// page's own readout names which shapes are blended at each, so a shot can be checked against
+// what the rig SAID it drew rather than against an impression of it.
 const MOMENTS: [string, number][] = [
   ['shut',       4060],   // between syllables
+  ['ajar',       1015],
   ['mid',        1180],
   ['wide',        228],   // near a syllable peak
+  ['round',      5180],   // pucker channel high
   ['blink',      4200],   // inside the blink window
 ]
 

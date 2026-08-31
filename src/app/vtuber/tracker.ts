@@ -93,6 +93,9 @@ export function stateFromBlend(
   return {
     mouthOpen: normalise(b.jawOpen ?? 0, c.jawOpen, t.gain),
     mouthWide: normalise(smile, c.mouthWide, t.gain),
+    // Funnel and pucker are two ways of describing the same rounded mouth; take whichever
+    // this face expresses more strongly rather than averaging them into something weaker.
+    mouthPucker: normalise(Math.max(b.mouthPucker ?? 0, b.mouthFunnel ?? 0), c.mouthPucker, t.gain),
     eyeOpenL: 1 - normalise(b.eyeBlinkLeft  ?? 0, c.blink, t.gain),
     eyeOpenR: 1 - normalise(b.eyeBlinkRight ?? 0, c.blink, t.gain),
     browRaise: normalise(
@@ -132,6 +135,9 @@ export class Calibrator {
     return {
       jawOpen:   { rest: mean('jawOpen'), span: base.jawOpen.span },
       mouthWide: { rest: smile,           span: base.mouthWide.span },
+      mouthPucker: { rest: this.samples.reduce(
+        (s, b) => s + Math.max(b.mouthPucker ?? 0, b.mouthFunnel ?? 0), 0) / this.samples.length,
+        span: base.mouthPucker.span },
       blink:     { rest: Math.min(mean('eyeBlinkLeft'), mean('eyeBlinkRight')), span: base.blink.span },
       browRaise: { rest: brow,            span: base.browRaise.span },
     }

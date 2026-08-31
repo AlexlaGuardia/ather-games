@@ -1,0 +1,63 @@
+{
+  "name": "fixture",
+  "w": 1000,
+  "h": 1040,
+  "scale": 1.0,
+  "shapes": {
+    "closed": {
+      "file": "fixture-closed.png",
+      "anchorX": 500.0,
+      "anchorTop": 531.0,
+      "widthPx": 600.0,
+      "heightPx": 243.0,
+      "openness": 0.0,
+      "fill": 0.4166
+    },
+    "ajar": {
+      "file": "fixture-ajar.png",
+      "anchorX": 499.99,
+      "anchorTop": 531.0,
+      "widthPx": 588.0,
+      "heightPx": 350.0,
+      "openness": 0.5105,
+      "fill": 0.2676
+    },
+    "mid": {
+      "file": "fixture-mid.png",
+      "anchorX": 499.99,
+      "anchorTop": 531.0,
+      "widthPx": 564.0,
+      "heightPx": 512.0,
+      "openness": 0.801,
+      "fill": 0.1828
+    },
+    "wide": {
+      "file": "fixture-wide.png",
+      "anchorX": 499.97,
+      "anchorTop": 531.0,
+      "widthPx": 528.0,
+      "heightPx": 750.0,
+      "openness": 1.0,
+      "fill": 0.1247
+    },
+    "round": {
+      "file": "fixture-round.png",
+      "anchorX": 500.2,
+      "anchorTop": 531.0,
+      "widthPx": 204.0,
+      "heightPx": 282.0,
+      "openness": null,
+      "fill": 0.5633
+    }
+  },
+  "ramp": [
+    "closed",
+    "ajar",
+    "mid",
+    "wide"
+  ],
+  "registration": {
+    "anchorXSpread": 0.23,
+    "anchorTopSpread": 0.0
+  }
+}

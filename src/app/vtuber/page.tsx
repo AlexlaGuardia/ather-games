@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { type ExpressionState, NEUTRAL, smooth } from './expression'
-import { type AvatarMeta, rig, DEFAULT_OPTIONS } from './rig'
+import { type AvatarMeta, type VisemeSet, rig, DEFAULT_OPTIONS } from './rig'
 import { draw, DEFAULT_DRAW } from './renderer'
 import { AudioMouth, stateFromAudio, synthetic } from './sources'
 import {
@@ -34,6 +34,9 @@ export default function VTuberPage() {
   const [status, setStatus] = useState('loading avatar…')
   const [calibrating, setCalibrating] = useState(false)
   const [fps, setFps] = useState(0)
+  // ⚠ Updated on the fps tick, NOT every frame. A readout that re-renders React 60 times a
+  // second costs more than the whole compositor it is reporting on.
+  const [visLabel, setVisLabel] = useState('')
   // ★ A PINNED CLOCK, so a screenshot of this page is comparable to one taken next week.
   // `?frame=1200` freezes both the synthetic driver and the rig's idle clock at that moment.
   // Without it every shot samples a different instant of a breathing, blinking avatar and no
@@ -42,7 +45,12 @@ export default function VTuberPage() {
 
   // Refs, not state: the frame loop reads these every frame and a re-render per frame would
   // cost more than the whole compositor.
-  const imgs = useRef<{ base: HTMLImageElement; mouth: HTMLImageElement } | null>(null)
+  const imgs = useRef<{
+    base: HTMLImageElement
+    mouth: HTMLImageElement
+    visemes?: Record<string, HTMLImageElement>
+  } | null>(null)
+  const visemeSet = useRef<VisemeSet | null>(null)
   const tuning = useRef<TrackerTuning>({ ...DEFAULT_TUNING })
   const calib = useRef(new Calibrator())
   const audio = useRef(new AudioMouth())
@@ -70,7 +78,14 @@ export default function VTuberPage() {
     let dead = false
     ;(async () => {
       try {
-        const m: AvatarMeta = await fetch('/vtuber/serberus.json').then(r => {
+        // ★ WHICH AVATAR. The repo ships only `fixture` — a synthetic, procedurally drawn
+        // stand-in that carries no licence and no likeness. Personal art goes in as another
+        // name (gitignored) and is selected with `?avatar=<name>`.
+        // ⚠ Restricted to a safe charset: this value becomes a URL path, and a param that
+        // reaches a fetch path unchecked is a habit worth not forming even where it is harmless.
+        const raw = new URLSearchParams(window.location.search).get('avatar') ?? 'fixture'
+        const avatar = /^[a-z0-9-]{1,40}$/.test(raw) ? raw : 'fixture'
+        const m: AvatarMeta = await fetch(`/vtuber/${avatar}.json`).then(r => {
           if (!r.ok) throw new Error(`avatar.json HTTP ${r.status}`)
           return r.json()
         })
@@ -84,15 +99,34 @@ export default function VTuberPage() {
           i.src = u
         })
         const [base, mouth] = await Promise.all([
-          load('/vtuber/serberus-base.png'),
-          load('/vtuber/serberus-mouth.png'),
+          load(`/vtuber/${avatar}-base.png`),
+          load(`/vtuber/${avatar}-mouth.png`),
         ])
         if (dead) return
         imgs.current = { base, mouth }
+
+        // ── the mouth set, if one has been cut ────────────────────────────────────────────
+        // ⚠ OPTIONAL ON PURPOSE, AND IT FAILS QUIET RATHER THAN FATAL. An avatar without a
+        // viseme set still renders — it just falls back to the legacy jaw. Making this
+        // required would mean a missing art step takes the whole page down, and the page is
+        // how anyone finds out the art step is missing.
+        try {
+          const vs: VisemeSet = await fetch(`/vtuber/visemes/${avatar}-visemes.json`)
+            .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+          const names = Object.keys(vs.shapes)
+          const loaded = await Promise.all(names.map(n => load(`/vtuber/visemes/${vs.shapes[n].file}`)))
+          if (!dead) {
+            visemeSet.current = vs
+            imgs.current = { base, mouth, visemes: Object.fromEntries(names.map((n, i) => [n, loaded[i]])) }
+          }
+        } catch {
+          visemeSet.current = null
+        }
+
         setMeta(m)
         setStatus('')
       } catch (e) {
-        setStatus(`✗ ${(e as Error).message} — run \`npm run vtuber:layers public/vtuber/serberus-src.png --name=serberus\``)
+        setStatus(`✗ ${(e as Error).message} — run \`python3 scripts/vtuber-fixture.py\``)
       }
     })()
     return () => { dead = true }
@@ -135,7 +169,8 @@ export default function VTuberPage() {
       }
 
       prev.current = smooth(prev.current, raw)
-      const pose = rig(prev.current, meta, { ...DEFAULT_OPTIONS, ...optsRef.current, now })
+      const pose = rig(prev.current, meta, { ...DEFAULT_OPTIONS, ...optsRef.current, now },
+        visemeSet.current)
       draw(ctx, imgs.current, meta, pose, { ...DEFAULT_DRAW, opaque: !obs })
 
       frames++
@@ -144,7 +179,12 @@ export default function VTuberPage() {
       // compositor has actually run is the difference between waiting for the picture and
       // hoping for it.
       ;(window as unknown as { __avatarDrawn?: number }).__avatarDrawn = frames
-      if (now - last > 1000) { setFps(Math.round(frames * 1000 / (now - last))); frames = 0; last = now }
+      if (now - last > 1000) {
+        setFps(Math.round(frames * 1000 / (now - last)))
+        const v = pose.viseme
+        setVisLabel(v ? `${v.a}${v.t > 0.02 ? `→${v.b}` : ''}${v.round > 0.05 ? '+round' : ''}` : 'legacy jaw')
+        frames = 0; last = now
+      }
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
@@ -220,7 +260,7 @@ export default function VTuberPage() {
       <div style={{ maxWidth: 1040, margin: '0 auto' }}>
         <h1 className="gx-title" style={{ fontSize: 22, marginBottom: 4 }}>STREAM AVATAR</h1>
         <p className="gx-label" style={{ fontSize: 11, opacity: 0.5, marginBottom: 20 }}>
-          serberus · face → grin
+          face → grin
         </p>
 
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -273,7 +313,7 @@ export default function VTuberPage() {
             <div style={{ marginTop: 14, fontSize: 11, opacity: 0.45,
               display: 'flex', justifyContent: 'space-between' }}>
               <span>{fps} fps</span>
-              <span className="gx-value">{src.toUpperCase()}</span>
+              <span className="gx-value">{visLabel} · {src.toUpperCase()}</span>
             </div>
             {status && <p style={{ fontSize: 12, marginTop: 10, color: status.startsWith('✗') ? '#e8877a' : '#9ad8a0' }}>{status}</p>}
           </div>

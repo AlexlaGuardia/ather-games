@@ -61,3 +61,14 @@ shots/
 # at go-live — but a 12MB wasm blob does not belong in this repo's history.
 /public/vtuber/wasm/
 /public/vtuber/face_landmarker.task
+
+# vtuber: PERSONAL avatar art stays out of this PUBLIC repo. Only `fixture` — the synthetic
+# stand-in drawn by scripts/vtuber-fixture.py — is committed. Drop real art in as any other
+# name and select it with /vtuber?avatar=<name>; it will never be staged by accident.
+# ⚠ On this shared trunk a commit IS a publication decision: any window's push publishes the
+# whole branch, so "I'll hold the push" is not a control anyone here actually has.
+/public/vtuber/*
+!/public/vtuber/fixture*
+!/public/vtuber/visemes/
+/public/vtuber/visemes/*
+!/public/vtuber/visemes/fixture-*

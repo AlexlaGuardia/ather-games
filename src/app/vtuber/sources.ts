@@ -64,6 +64,9 @@ export function stateFromAudio(level: number, at: number): ExpressionState {
     // A voice cannot report a smile, so the grin widens slightly with emphasis rather than
     // sitting at a constant. Guessing MORE than this from audio reads as a puppet miming.
     mouthWide: clamp01(level * 0.35),
+    // ⚠ A microphone cannot hear a pursed mouth. Guessing one from amplitude would put the
+    // avatar into an "oh" at random moments, which reads worse than never puckering at all.
+    mouthPucker: 0,
     eyeOpenL: 1, eyeOpenR: 1,
     browRaise: clamp01(level * 0.2),
     yaw: 0, pitch: 0, roll: 0,
@@ -87,6 +90,10 @@ export function synthetic(t: number): ExpressionState {
   return {
     mouthOpen: open,
     mouthWide: clamp01(0.25 + 0.45 * (0.5 + 0.5 * Math.sin(ms / 5100))),
+    // ⚠ Correlated with `open` on purpose. The first version ran pucker on its own clock, so
+    // the demo puckered while the mouth was shut — which is not a thing a face does, and it
+    // made a rig bug look like a driver quirk (and vice versa).
+    mouthPucker: clamp01((Math.max(0, Math.sin(ms / 3300)) ** 3) * (0.35 + open)),
     eyeOpenL: blink, eyeOpenR: blink,
     browRaise: clamp01(0.15 + 0.4 * Math.max(0, Math.sin(ms / 3700))),
     yaw:   0.55 * Math.sin(ms / 4100),
