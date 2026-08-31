@@ -11,6 +11,35 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🎭 Stream avatar — **THE DESIGN DELETED THE EXPENSIVE PART, AND THREE THINGS WERE ONLY FINDABLE BY LOOKING** (2026-08-31, hub lane) · *Last touched 2026-08-31 — `39dae5a` committed, **NOT pushed** (see Decisions), rig oracle **36 asserts**, 9/9 mutations fire, tsc 7 (baseline). NOT deployed. Camera path UNVERIFIED — no webcam on this box.*
+
+**Left off:** `/vtuber` renders Alex's hooded-grin character talking, driven by a webcam, a microphone, or a deterministic synthetic driver. Photographed at four pinned moments (shut / mid / wide / blink) and it reads correctly at all four.
+
+**★★★ THE PICK WAS SHARPER THAN IT LOOKED.** Everything expensive about rigging a VTuber lives in the face — eyelids, brows, skin that deforms without tearing. This character's face is **in shadow**, so there is nothing in there to rig, and the one element that reads is the grin, which is exactly the element lip-sync has to move. Measured, not assumed: the grin is **23,279 px in one connected component and 88% of every pixel above luma 190**. It separates from a flat AI render with no repaint at all.
+
+**⚠ AND THE FIGURE DOES NOT SEPARATE FROM ITS BACKDROP.** Hood interior luma 18.4 / purple-cast 20.3 against backdrop 12.1 / 18.5 — they overlap because the figure is LIT BY the backdrop. Every threshold tried flagged 78-96% of the frame. `vtuber-layers.py` **refuses** rather than emitting a confident wrong cut. A transparent cutout needs a hand mask or a real segmentation pass; the portrait-card framing does not need one at all.
+
+**★★ THREE DEFECTS, NONE OF WHICH ANY GREEN TEST WOULD HAVE FOUND:**
+- **`poseFromMatrix` had yaw and pitch SWAPPED.** A pure 25° head TURN reported as 25° of NOD and zero turn. Caught by driving pure `rotX`/`rotY`/`rotZ` through the shipped function and asserting **which channel answers**. ⚠ A swapped axis still produces smooth, plausible, confidently wrong motion — PATTERNS' rule that a wrong DIRECTION is worse than a wrong magnitude, again.
+- **★★★ THE MOUTH OPENED BY SCALING THE CRESCENT, SO THE TEETH STRETCHED.** Every number correct, the guard green, and the photograph unmistakable: the face read as **melting**. Teeth are rigid. The upper row now holds still, the lower row travels `jawDrop`, and a dark cavity opens between them. ⚠ **The arithmetic was never the thing that was wrong**, which is why only a picture could find it.
+- **THE SHOT TOOL WAS EARLY.** It waited 3 drawn frames; the asymmetric smoother needs ~10, so the BLINK frame photographed **with the eyes still open** and the mouth short of its opening. Nothing looked broken — the pictures were of a moment between two poses. Raised to 40. ⚠ Same family as every under-settled screenshot in PATTERNS: **early reads as the feature being wrong.**
+- **A hairline seam through the shut teeth.** Two adjacent clips across a soft-alpha layer do not meet cleanly. A shut mouth is now drawn **in one piece** — not an optimisation: that seam would be on screen for most of a stream.
+
+**Next:** the **cavity still reads as a flat black lozenge** rather than following the grin's arc — the weakest thing in the frame and the obvious next polish · **first run on a real camera** is the measurement that settles the axis signs (they are exposed as controls, not baked, for exactly that reason) · eye-glow is a **toggle** and Alex has not called it yet · a proper transparent cutout, if the overlay is wanted floating rather than as a portrait card.
+
+**Parked:** Live2D-style warping (this rig frame-swaps and translates; warping is a different engine and the shadowed face does not need it) · iPhone ARKit as a third source (the `ExpressionState` seam already accepts it).
+
+**Decisions:**
+- **Every source produces one normalised `ExpressionState` and the rig accepts nothing else.** Webcam, mic and synthetic are interchangeable, so the avatar **degrades instead of dying** when the camera is off — and a fourth source costs a converter, not a rig.
+- **Calibration is not optional.** `jawOpen` idles at 0.05-0.15 on a resting face and rarely passes 0.4 in speech; mapped raw, the mouth sits open and never fully opens. That reads as **broken art**, and the instinct is to go redraw the mouth, which fixes nothing.
+- **Smoothing is asymmetric on purpose** (attack 0.55 / release 0.20). A mouth must open faster than it closes: symmetric is either laggy on the onset or chattering on the tail, and no single value avoids both.
+- **The cutter emits its own anchors as JSON.** Nothing downstream restates a measured number — the hand-kept-mirror shape from 2026-08-22.
+- **Runtime is vendored, not CDN-loaded** (`npm run vtuber:assets`, gitignored). A stream must come up when someone else's edge is having a bad morning. 12MB of wasm stays out of git history.
+- **⛔ COMMITTED, NOT PUSHED — DELIBERATE.** `ather-games` is a **public** repo and the avatar art is an AI render whose licence Alex has not confirmed. Pushing publishes it. That is his call, not mine.
+
+**Files:** `src/app/vtuber/{expression,rig,renderer,tracker,sources}.ts` + `page.tsx` + `rig.test.ts` · `scripts/vtuber-layers.py` (the cutter) · `scripts/vtuber-assets.mjs` · `scripts/avatar-shot.mts` · `public/vtuber/serberus{,-base,-mouth,-src}` · OBS: `/vtuber?obs=1&src=cam`
+
+
 ## 🌉 Shimmer voxel — **THE BRIDGE LANDINGS + THE CLAMP TAIL** (2026-08-30, world then hub lane) · *Last touched 2026-08-30 — ⚠ **READ THE CORRECTION BLOCK BELOW FIRST: the first diagnosis AND the first fix were both wrong.** Final state: bridges oracle **2207**, 3/3 mutations fire, sweep 204/204, tsc 7 (baseline), canon green. ✅ **DEPLOYED** `BUILD_ID 3EOpI6AXeBV46wHghfV5E`, 162 chunks — `909d3eb` + worker rebundle, 0 unpushed. **28/28 crossing-ends flush across both seeds.***
 
 
