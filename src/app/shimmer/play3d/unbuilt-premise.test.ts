@@ -76,9 +76,14 @@ const BUILD_BLOCKED: Record<string, Premise> = {
     hook: 'a two-point bind: an anchor PAIR a cast can warp between',
   },
   meltbore: {
-    file: 'engine/cast-dispatch.ts',
-    arrives: /sustained|channel(ing)?\b|heldCast/i,
-    hook: 'a sustained/held cast the sim can run over time',
+    // ⚠ NARROWED 2026-08-31, AND THE NARROWING IS THE GUARD WORKING. This used to watch for a
+    // sustained cast; `play3d/sustain.ts` shipped that, so the probe would have gone red for a
+    // blocker that genuinely lifted. The right response to that red is to re-read the move and
+    // name what is STILL missing — never to widen the probe until the red goes away.
+    // What is left is canon's own sentence: *"held against one spot until the spot stops existing."*
+    file: 'engine/conjured-terrain.ts',
+    arrives: /breach|removeCells|openTerrain|carve/i,
+    hook: 'a cast that can OPEN terrain — remove what is already there, not only raise new shapes',
   },
   overpressure: {
     file: 'engine/vitals.ts',

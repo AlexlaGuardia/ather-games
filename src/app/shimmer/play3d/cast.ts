@@ -193,6 +193,17 @@ export interface CastSpec {
   cloakBurn: number
   /** Damage-equivalent of heat regained per second while nothing is touching you. */
   cloakRebuild: number
+  // ── sustain (SYSTEM 7) — the cast is HELD and bills by the second ─────────
+  /**
+   * Mana per second while the key is down. 0 = this is not a sustained cast, which is every move
+   * today — the hook exists before its first user on purpose (see `sustain.ts`).
+   *
+   * ⚠ IT IS A RATE, NOT A TOTAL, AND `manaCost` STILL MEANS THE PRESS. A channel that charged its
+   * whole price up front would be a normal cast with a long animation: releasing early would refund
+   * nothing and holding longer would cost nothing, so the resource canon actually spends — TIME,
+   * continuously — would not be spent at all.
+   */
+  sustainDrain: number
   /** why this move has no sim behaviour yet — only set on 'unbuilt' */
   why?: string
 }
@@ -209,6 +220,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
+  sustainDrain: 0,
 }
 
 /** per-move build spec, keyed by keeper-moves id. Numbers are Jin's and free to tune. */
@@ -427,7 +439,12 @@ const BUILDS: Record<string, Build> = {
   // is no held-cast verb, so the honest realisations are both lies: a field is "set it and walk away"
   // and a projectile is "a hot bolt". Either would ship the name on the wrong mechanic — which is the
   // one thing this file's `unbuilt` tag exists to refuse.
-  meltbore:  { archetype: 'unbuilt', why: 'a held channel that BREACHES — the sim has no sustained cast and nothing that opens terrain' },
+  // ⚠ HALF ITS BLOCKER LIFTED 2026-08-31 and the reason was narrowed the same hour rather than left
+  // to rot — which is the failure mode this whole roster was audited for. `sustain.ts` now gives the
+  // sim a held channel that bills by the second, so the first half of the old reason ("no sustained
+  // cast") is retired. The BREACH half stands: `moves.md:82` — *"held against one spot until the
+  // spot stops existing"* — and nothing in either world lets a cast open terrain.
+  meltbore:  { archetype: 'unbuilt', why: 'the sim can hold a channel now; nothing lets a cast OPEN terrain — the spot has to stop existing' },
   // "Sight goes soft, edges stop agreeing on where they are. Confrontation DECLINED rather than won."
   // ⚠ It lands on `blinded` — the same option Enlighten removes — and that is not the two converging:
   // the sim's three statuses are what a move can take, and both of these take sight. The geometry is
