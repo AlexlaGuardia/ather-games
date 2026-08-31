@@ -444,7 +444,15 @@ const BUILDS: Record<string, Build> = {
   // sim a held channel that bills by the second, so the first half of the old reason ("no sustained
   // cast") is retired. The BREACH half stands: `moves.md:82` — *"held against one spot until the
   // spot stops existing"* — and nothing in either world lets a cast open terrain.
-  meltbore:  { archetype: 'unbuilt', why: 'the sim can hold a channel now; nothing lets a cast OPEN terrain — the spot has to stop existing' },
+  // ⚠ SECOND NARROWING IN ONE DAY, and the reason is worth reading because the move is now one step
+  // from built. BOTH mechanisms it named exist: `sustain.ts` holds a channel and bills by the second,
+  // `breach.ts` spends those seconds against a block's hardness and ignores the TOOL gates the way
+  // canon's *"nothing refuses it forever"* requires. What is missing is neither of them — it is that
+  // **no host holds a key down for a cast**. Every cast in both worlds is edge-triggered on a press;
+  // a channel needs a press, a hold and a release, which is a new INPUT path rather than a new rule.
+  // ★ Left unbuilt deliberately: marking it built with no host is exactly the silent no-op this
+  // file's honesty rule exists to forbid, and the temptation is strongest when the hard part is done.
+  meltbore:  { archetype: 'unbuilt', why: 'the channel and the bore both exist; no host holds a key down for a cast yet — every cast is edge-triggered on a press' },
   // "Sight goes soft, edges stop agreeing on where they are. Confrontation DECLINED rather than won."
   // ⚠ It lands on `blinded` — the same option Enlighten removes — and that is not the two converging:
   // the sim's three statuses are what a move can take, and both of these take sight. The geometry is

@@ -76,14 +76,22 @@ const BUILD_BLOCKED: Record<string, Premise> = {
     hook: 'a two-point bind: an anchor PAIR a cast can warp between',
   },
   meltbore: {
-    // ⚠ NARROWED 2026-08-31, AND THE NARROWING IS THE GUARD WORKING. This used to watch for a
-    // sustained cast; `play3d/sustain.ts` shipped that, so the probe would have gone red for a
-    // blocker that genuinely lifted. The right response to that red is to re-read the move and
-    // name what is STILL missing — never to widen the probe until the red goes away.
-    // What is left is canon's own sentence: *"held against one spot until the spot stops existing."*
-    file: 'engine/conjured-terrain.ts',
-    arrives: /breach|removeCells|openTerrain|carve/i,
-    hook: 'a cast that can OPEN terrain — remove what is already there, not only raise new shapes',
+    // ⚠ RE-AIMED TWICE IN ONE DAY, WHICH IS THE GUARD WORKING RATHER THAN THRASHING. It watched for
+    // a sustained cast (shipped), then for a terrain breach (shipped). Both halves of the move's
+    // original reason now exist. What is left is an INPUT path: every cast in both worlds is
+    // edge-triggered on a press, and a channel needs press-hold-release. So the probe watches the
+    // dispatcher for a held-cast concept reaching the cast layer at all.
+    // ★ The rule each time: re-read the move and name what is still missing. Never widen the probe.
+    // ⚠⚠ AND THE FIRST VERSION OF THIS PROBE FALSE-FIRED ON PROSE. It watched cast-dispatch for
+    // /released\b/ — which matches the STANCE-DROP MESSAGE, `${spec.label} released`. A probe that
+    // can be satisfied by a user-facing string is not watching a capability, and it failed toward
+    // "the hook has arrived", the direction that gets acted on. Watch a CALL in the HOST instead:
+    // a world that runs a channel must call `sustainStep` every frame, and no comment or label can
+    // impersonate a call. Third time today a search matched something that merely talks about its
+    // subject rather than being it.
+    file: 'voxel3d/VoxelWorld.tsx',
+    arrives: /sustainStep\(/,
+    hook: 'a host that actually runs a channel frame by frame — every cast today is edge-triggered on a press',
   },
   overpressure: {
     file: 'engine/vitals.ts',
