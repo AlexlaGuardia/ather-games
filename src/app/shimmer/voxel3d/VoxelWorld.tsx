@@ -276,6 +276,7 @@ import { emptyNet, plant as plantMark, pull as pullMark, destination as markDest
          type WaymarkNet, type Waymark } from '../voxel/waymark'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 import { senseGround, type SensedBody } from '../play3d/tremor-sense'
+import { cloakBuild, cloakIgnite, freshCloak } from '../play3d/flame-cloak'
 import { TremorSenseHud, emptyReadout, type TremorReadout } from '../play3d/TremorRing'
 
 /**
@@ -5443,6 +5444,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * answer to "what is the keeper wearing", which is the hand-kept-mirror shape the house keeps
    * getting bitten by. Only the READOUT crosses to the HUD, as `tremorOut`.
    */
+  /**
+   * Flame Cloak's held heat. ★ Frame state, so it lives with the frame scratch and not in the HUD:
+   * nothing renders it. Like the sense, the MAGNITUDES are read off `stance.current` rather than
+   * mirrored into refs — one answer to what the keeper is wearing.
+   */
+  const cloak = useRef(freshCloak())
   const tremorAcc = useRef(0)
   const tremorBodies = useMemo<SensedBody[]>(() => [], [])
   /** Stride phase per body, carried across frames. `stepVoices` mutates it; the host owns it. */
@@ -6782,6 +6789,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // stop making footsteps on the SAME frame it leaves, and carrying the list would keep it
       // walking — the exact class of lie this feature exists to remove.
       voices.current.length = 0
+      // ── FLAME CLOAK — Static accumulation ─────────────────────────────────────────────────
+      // Built BEFORE the body loop resolves any contact, so heat gathered this frame is available to
+      // a strike landing this frame. ⚠ Unconditional, and free when the keeper wears no cloak:
+      // `cloakBuild` returns the SAME object when nothing changes, so an unworn cloak allocates
+      // nothing. Gating it on the stance instead would leave a stale charge waiting whenever the
+      // passive was re-derived, and the first touch after that would pay out heat nobody built.
+      cloak.current = cloakBuild(
+        cloak.current, dt, stance.current?.cloakBurn ?? 0, stance.current?.cloakRebuild ?? 0)
+
       for (let i = hollows.current.length - 1; i >= 0; i--) {
         const hw = hollows.current[i]
         const st = hw.st
@@ -6842,6 +6858,24 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // every keeper a constant 1.62 out and eat most of a warden's vertical tolerance.
         const hit = hollowStrike(st, dt, p.x, loco.current.py, p.z, imp, st.seen ?? false)
         if (hit) {
+          // ── FLAME CLOAK — Star ignition ─────────────────────────────────────────────────────
+          // ★★★ FED THE FORM'S `body`, ITS CONTACT LINE — NEVER ITS REACH, AND THE DIFFERENCE IS
+          // THE WHOLE MOVE. `hollowStrike` fires on `reach`, and the caster's reach is 7.5m, so
+          // igniting on "took a hit" would burn a body that never came near you — against canon's
+          // *"punishes grapplers and melee rushers"* and *"hug them and regret it"*. A caster's
+          // `body` is 0 (`hollows.ts`: *"a thing made of absence at seven metres has no surface to
+          // bump into"*), so it cannot ignite the cloak, and the predicate needs no special case.
+          const ig = cloakIgnite(cloak.current, formOf(st).body)
+          cloak.current = ig.cloak
+          if (ig.burn > 0) {
+            st.hp -= ig.burn
+            if (st.hp <= 0) {
+              // ⚠ THE LOOP MUST CLOSE THE SAME WAY IT DOES FOR A ROUND AND FOR A FIELD, or burning
+              // one to death quietly pays less than shooting it — the reason the field path says so
+              // in its own comment.
+              drops.current.push(spawnDrop('raw_mana_shard', 1, Math.floor(st.x), Math.floor(st.y), Math.floor(st.z)))
+            }
+          }
           if (hit.drain > 0) {
             // `loco.current`, not `lc` — the frame callback's `lc` alias is declared further down,
             // in the movement block. Same ref either way.

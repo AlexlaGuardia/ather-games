@@ -45,6 +45,7 @@
 
 import { KEEPER_MOVES, type KeeperMove, type MoveTier, knownMoves } from './keeper-moves'
 import { SENSE_RADIUS } from './tremor-sense'
+import { CLOAK_BURN, CLOAK_REBUILD } from './flame-cloak'
 import { RUNES } from './birth/runes.data'
 import { hasLearned, type Book } from './scroll-market'
 import type { ConjureShape } from '../engine/conjured-terrain'
@@ -180,6 +181,18 @@ export interface CastSpec {
    * one form the sense is supposed to miss shows up in the readout.
    */
   senseRadius: number
+  // ── cloak (SYSTEM 6) — the cast answers a touch by itself ─────────────────
+  /**
+   * A full Flame Cloak release, in damage. 0 = this move holds no heat, which is every move but one.
+   *
+   * ★ TWO FIELDS BECAUSE CANON NAMES TWO RUNES DOING TWO JOBS — Static ACCUMULATES, Star IGNITES.
+   * A single "reflect N" number would be a different, simpler move wearing the same name: spacing
+   * would stop mattering and a swarm would be punished as hard as the lone rusher canon says the
+   * move is for. `flame-cloak.ts` owns the charge; these are only its magnitudes.
+   */
+  cloakBurn: number
+  /** Damage-equivalent of heat regained per second while nothing is touching you. */
+  cloakRebuild: number
   /** why this move has no sim behaviour yet — only set on 'unbuilt' */
   why?: string
 }
@@ -195,6 +208,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   shape: 'wall', shapeHeight: 1, statuses: [],
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
+  cloakBurn: 0, cloakRebuild: 0,
 }
 
 /** per-move build spec, keyed by keeper-moves id. Numbers are Jin's and free to tune. */
@@ -236,7 +250,20 @@ const BUILDS: Record<string, Build> = {
   'molten-shell': { archetype: 'stance', resist: 0.5, moveMult: 0.8, cooldownMs: 500 },
   'storm-cloak': { archetype: 'stance', resist: 0.3, cooldownMs: 500 },
   'ice-armor': { archetype: 'stance', resist: 0.42, moveMult: 0.95, cooldownMs: 500 },
-  'flame-cloak': { archetype: 'unbuilt', why: 'needs a contact-retaliation hook — it is aura only, with no shell to fall back on' },
+  // ★★★ BUILT 2026-08-31. Its reason read *'needs a contact-retaliation hook'*, and the hook had
+  // already arrived: `hollowStrike` returns a `HollowHit` at the moment a body lands on the keeper.
+  // Found by the unbuilt-premise audit, not by anyone remembering — which is the whole argument for
+  // `unbuilt-premise.test.ts` existing.
+  //
+  // ⚠ NO `resist`, ON PURPOSE, AND THE OLD REASON'S SECOND HALF IS WHY: *'it is aura only, with no
+  // shell to fall back on.'* That was never a blocker, it is the move's IDENTITY. Molten Shell is a
+  // BARRIER canon calls *'draining to maintain'* and it carries resist 0.5; Flame Cloak is skin. It
+  // buys nothing defensively and answers only what actually touches you — so wearing it instead of a
+  // shell is a real trade rather than a strictly better one.
+  //
+  // Free to hold, like the other non-shell passives: canon states no cost, and the drain is the
+  // shell pair's (see `regenMult`). Its cost is the defence it does not give you.
+  'flame-cloak': { archetype: 'stance', cloakBurn: CLOAK_BURN, cloakRebuild: CLOAK_REBUILD, cooldownMs: 500 },
   // ★★★ BUILT 2026-08-31, AND THE INTERESTING PART IS WHY IT WAS UNBUILT UNTIL TODAY. Its reason
   // read *"needs a perception layer — enemy positions surfaced to the HUD"*, and that was true the
   // day it was written: there was nothing in the world to perceive. There is now. The voxel world

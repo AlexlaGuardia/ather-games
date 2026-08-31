@@ -50,13 +50,6 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
 interface Premise { file: string; arrives: RegExp; hook: string }
 
 const BUILD_BLOCKED: Record<string, Premise> = {
-  'flame-cloak': {
-    file: 'voxel3d/VoxelWorld.tsx',
-    // A body's strike already returns a hit object here. Retaliation would read that hit and put
-    // damage back INTO the striker — a write to the attacker on the frame it connects.
-    arrives: /const hit = hollowStrike\([\s\S]{0,900}?st\.hp -= /,
-    hook: 'a contact-retaliation hook: damage written back into the body that just struck you',
-  },
   'heat-mirage': {
     file: 'engine/statuses.ts',
     // Every status today is applied to a TARGET id. A self-centred one is a status the CASTER wears

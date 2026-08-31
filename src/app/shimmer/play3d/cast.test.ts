@@ -544,17 +544,45 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   chk('a keeper who has learned nothing derives no passive (empty book → null)',
     passiveFor(['barrier'], EMPTY_BOOK) === null)
   // ⚠ built-first is the whole ranking, and it only BITES when the pool is MIXED — a barrier keeper's
-  // passives are all built, so order cannot surface an unbuilt one there (a reverse mutation slips
-  // past). star+static is the discriminating fixture: Flame Manipulation (star) is BUILT, Flame Cloak
-  // (star+static) is UNBUILT, both eligible — so built-first must return the built one, and reversing
-  // the sort makes this assert red.
+  // passives are all built, so order cannot surface an unbuilt one there and a reverse mutation slips
+  // past.
+  //
+  // ★★ THE FIXTURE IS SEARCHED FOR, NOT NAMED, AND THAT IS A REPAIR NOT A FLOURISH. It used to be
+  // hardcoded as star+static (Flame Manipulation BUILT, Flame Cloak UNBUILT). Flame Cloak was built
+  // on 2026-08-31 and the pair stopped being mixed — so the non-vacuity assert went red and caught
+  // it, exactly as written. But a hand-named pair would just go stale again on the next build, and
+  // the fix that only re-picks a pair is the fix that has to be made a third time. Searching means
+  // the fixture repairs itself, and the day NO pair is mixed the search returns nothing and this
+  // goes red on purpose: built-first would no longer be testable, which is worth being told.
   {
-    const mixed = eligibleFor(['star', 'static'], 'passive', ALL)
-    chk('fixture: star+static has BOTH a built and an unbuilt passive eligible (or the assert is vacuous)',
-      mixed.some((x) => isBuilt(x.id)) && mixed.some((x) => !isBuilt(x.id)))
-    const p = passiveFor(['star', 'static'], ALL)
-    chk('built-first: the derived passive is the BUILT one when the pool mixes built and unbuilt',
-      !!p && isBuilt(p.id))
+    // ⚠ SEARCHES PAIRS *AND TRIPLES*, and the widening is itself a finding. With flame-cloak built,
+    // NO two-rune keeper has a mixed pool any more — it was the last unbuilt passive reachable with
+    // two runes. The only one left, Bind Mastery, is Enchant + Metalergy + Illuminate, so a pair-only
+    // search reports "built-first is untestable" while a perfectly good fixture exists one rune away.
+    // That is an instrument too narrow to see its subject, not an absence.
+    const runeIds = RUNES.map((r) => r.id)
+    const isMixed = (owned: string[]) => {
+      const pool = eligibleFor(owned, 'passive', ALL)
+      return pool.some((x) => isBuilt(x.id)) && pool.some((x) => !isBuilt(x.id))
+    }
+    let mixedPair: string[] | null = null
+    outer: for (const a of runeIds) {
+      for (const b of runeIds) {
+        if (a === b) continue
+        if (isMixed([a, b])) { mixedPair = [a, b]; break outer }
+        for (const c of runeIds) {
+          if (c === a || c === b) continue
+          if (isMixed([a, b, c])) { mixedPair = [a, b, c]; break outer }
+        }
+      }
+    }
+    chk('fixture: SOME rune pair has both a built and an unbuilt passive eligible (or built-first is untestable)',
+      mixedPair !== null)
+    if (mixedPair) {
+      const p = passiveFor(mixedPair, ALL)
+      chk(`built-first: the derived passive is the BUILT one when the pool mixes (${mixedPair.join('+')})`,
+        !!p && isBuilt(p.id))
+    }
   }
 }
 
