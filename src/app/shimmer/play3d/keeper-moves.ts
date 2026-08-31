@@ -164,7 +164,12 @@ export const KEEPER_MOVES: KeeperMove[] = [
   { id: 'iron-skin', name: 'Iron Skin', tier: 'passive', runes: ['metalergy'],
     effect: 'Metal bound over the body — armor you ARE. Refuses to move under a hit.' },
   { id: 'bind-mastery', name: 'Bind Mastery', tier: 'passive', runes: ['enchant', 'metalergy', 'illuminate'],
-    effect: "Command of all three Bind runes — the foundation of gatecraft and manatech. A scholar's mastery." },
+    effect: "Command of all three Bind runes — the foundation of gatecraft and manatech. A scholar's mastery." ,
+    // ⚠ TRANSCRIBED FROM CANON, NOT DECIDED HERE. `moves.md:28` — *"the foundation of
+    // gatecraft and manatech. A scholar's mastery, not a fighter's."* This requirement lived in
+    // `cast.ts`'s build prose until 2026-08-31, where no guard could read it, so the move looked
+    // BUILD-blocked (a hook we owe) when it is CANON-blocked (a world that has no manatech).
+    needs: 'gatecraft and manatech — a scholar\'s mastery, not a fighter\'s'},
   // ★ A TRAIT, NOT A PASSIVE, AND THE `runes: []` IS WHAT SAYS SO. Canon's test reads the move's own
   // source: no rune → Trait. The empty rune list was right all along; `tier: 'passive'` was the wrong
   // half, and it put a runeless craft in the one band a rune is supposed to gate. Helga's, and

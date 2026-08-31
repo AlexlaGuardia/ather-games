@@ -217,7 +217,8 @@ const BUILDS: Record<string, Build> = {
   // passives that change how the player moves. Deepened 0.85 → 0.7 the day it became the whole cost:
   // at 0.85 the drawback was inside the noise floor of ordinary movement, so it was a cost on paper only.
   'iron-skin': { archetype: 'stance', resist: 0.45, moveMult: 0.7, cooldownMs: 500 },
-  'bind-mastery': { archetype: 'unbuilt', why: 'gatecraft + manatech — no runtime system yet' },
+  // Canon-blocked, and canon says so itself — see the `needs` now carried in `keeper-moves.ts`.
+  'bind-mastery': { archetype: 'unbuilt', why: 'canon: gatecraft + manatech, a scholar\'s mastery — the world has no manatech' },
   'herbal-knowledge': { archetype: 'unbuilt', why: 'out-of-combat medicine; no combat behaviour' },
 
   // ── ★ THE CONTACT-PUNISH SHELLS, and why three ship and one does not (the Great Registration) ──
@@ -375,7 +376,12 @@ const BUILDS: Record<string, Build> = {
   // placed blocks with their own persistence. Realising this as a combat slot would ship the name on
   // top of something that is not it; realising it properly is the *"develop Enchant → cast your own
   // Waymark → outgrow Greg"* arc, which is a feature, not a number. Same call as `gate`.
-  waymark:   { archetype: 'unbuilt', why: 'a place-binding, not a combat cast — it wants voxel/waymark.ts and the passage arc, not a slot' },
+  // ⚠ CORRECTED 2026-08-31 — the old reason said it *"wants voxel/waymark.ts and the passage arc"*.
+  // Both now exist (`voxel/waymark.ts` ships `Waymark`/`WaymarkNet` and VoxelWorld imports them), so
+  // the sentence named a hook that had already arrived. **The surviving half is the DESIGN half and
+  // it is unchanged:** binding a place is not a thing you put in a cast slot and press. Rewritten to
+  // the reason that is still true rather than deleted, because the move is still correctly unbuilt.
+  waymark:   { archetype: 'unbuilt', why: 'a place-binding, not a combat cast — it belongs to the passage arc, never a slot' },
   // "Splitting ONCE when it finds a second… the floor Chain Lightning is the ceiling of." So it is
   // literally the ultimate with `chain` turned down to one and the price turned down with it: a
   // tactical you throw constantly, against an ultimate you spend a pool on.
@@ -425,7 +431,12 @@ const BUILDS: Record<string, Build> = {
   // the ten archetypes expresses absorb-and-convert: a 'field' that stops shots would be a plain
   // bubble, which is precisely the "shipped it as a blink with extra words" mistake the `gate` note
   // above warns about. Registered, labelled, never a silent no-op.
-  overpressure: { archetype: 'unbuilt', why: 'needs a damage-to-shield bank: the layer must mend itself out of what it stops' },
+  // ⚠ CORRECTED 2026-08-31 — the old reason said it needed *"a damage-to-shield bank"*, and one
+  // exists: `engine/vitals.ts` carries shields with a ruled damage ORDER (resist → shield → spill).
+  // What is actually missing is narrower and worth naming precisely, because the wide version reads
+  // as a much bigger job than it is: the shield must MEND ITSELF out of what it absorbs, and nothing
+  // feeds absorbed damage back into the pool.
+  overpressure: { archetype: 'unbuilt', why: 'the shield bank exists; nothing feeds ABSORBED damage back into it — the layer cannot yet mend itself out of what it stops' },
 
   // ── The Great Registration's ultimates (2026-08-13) ──────────────────────────────────────────
   // "Samantha's signature" — the biggest heal in the book, and the first ultimate a Water keeper can
