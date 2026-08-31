@@ -908,6 +908,34 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(/^export const SPRINT_RAMP\s*=/m.test(code), 'BLIND: SPRINT_RAMP declaration is gone — the ramp has no duration')
 }
 
+// ── ★ THE SPEED LENS IS WIRED, AND WIRED TO SPEED ────────────────────────────────────────────
+// A call-site reader, because there is no headless way to run that frame loop — same reasoning as
+// channel-wiring.test.ts. Read against `codeOnly`, which blanks comments: the block ABOVE the lens
+// explains why it must not read `sprintT`, and a bare negative regex would match that explanation
+// and go red on accurate prose. That is the 08-22 canon-gate bug, and it is easier to walk into
+// than it looks — this assert was written by someone who had just read the entry.
+{
+  const vw = codeOnly(readFileSync(join(__dirname, 'VoxelWorld.tsx'), 'utf8'))
+  const lens = blockAt(vw, 'const lspd = Math.hypot(loco.current', 'cam.updateProjectionMatrix()')
+  ok(lens.at >= 0, 'BLIND: could not locate the speed lens — every assert below measures nothing')
+  ok((vw.match(/const wantFov =/g) ?? []).length === 1,
+     'BLIND: wantFov is not assigned exactly once — the lens this reads may not be the one that runs')
+
+  ok(/\(lspd - WALK_SPEED\)/.test(lens.code),
+     '★★ the lens must derive from SPEED — a bank-derived lens announces a sprint the keeper does not have')
+  ok(!/sprintT/.test(lens.code),
+     '⚠ the lens reads the sprint BANK: it will widen while a wall, a backpedal or a drain holds the real speed down')
+  ok(/ads\.current \? ADS_FOV :/.test(lens.code),
+     '★ ADS still wins outright — a widened lens while aiming fights the zoom the player asked for')
+  ok(/SPEED_LENS_PUSH/.test(lens.code) && /SPEED_LENS_MAX/.test(lens.code),
+     'the lens is tuned by named constants, not by literals buried in the frame loop')
+  // ⚠ AND IT MUST SIT UNDER THE CONTEXT-LOSS GATE (another window's a348cc2). A dead context
+  // should not be running the lens either; asserting the ORDER, since both lines are in useFrame.
+  const gate = vw.indexOf('if (ctxLost.current) return')
+  ok(gate >= 0 && gate < lens.at,
+     '⚠ the speed lens runs ABOVE the context-loss gate — it will keep animating on a dead canvas')
+}
+
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

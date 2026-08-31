@@ -196,8 +196,14 @@ import { computeLight, dayFactor, type LightField } from '../voxel/light'
 import { WOOD } from '../voxel/trees'
 // ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
+/** How far the lens opens at the top of the sprint ramp, in degrees (75 → 81). */
+const SPEED_LENS_PUSH = 6
+/** Ceiling on the ramp-fraction, so a slide (≈10) and a chained hop keep widening past a plain
+ *  sprint without the lens running away: 1.5 puts a slide at 84° and stops there. */
+const SPEED_LENS_MAX = 1.5
 // voxel collision. See locomotion.ts for provenance; its test file is the feel contract.
 import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
+         WALK_SPEED, RUN_SPEED,
          CELL_EMPTY, CELL_SOLID, CELL_WATER, CELL_HALF } from './locomotion'
 // ── ★ THE TUTORIAL (2026-08-08) — Moonwell Glade becomes spawn + the Greg tutorial chain ─────
 // `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
@@ -3711,6 +3717,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * came off, and only a screenshot said so. Getting this call site wrong reproduces that exactly,
    * on a machine with a viewport height nobody tested at.
    */
+  // ⚠⚠ THE PREMISE ABOVE ("it changes only when the viewport or the lens does") IS ALREADY FALSE
+  // AND THE SPEED LENS MAKES IT FALSE MORE OFTEN. `cam.fov` is mutated IMPERATIVELY in the frame
+  // loop, which triggers no React render, so this effect does not re-run and the scale stays at
+  // whatever the lens read at mount. ADS has broken it since it shipped — 75° → 50° is a ~65%
+  // error in chip size while aiming — and the sprint lens adds ~10% at 81°. NOT FIXED HERE on
+  // purpose: the comment above says explicitly this must not become a per-frame uniform write,
+  // and the honest fix is to recompute on the lens settling, which is a break-fx change and does
+  // not belong in a movement commit. Written down so the next reader does not conclude the sprint
+  // lens introduced it — it is older and it is much larger under ADS.
   useEffect(() => {
     const fov = (camera as THREE.PerspectiveCamera).fov ?? 75
     breakFx.setPixelScale(size.height / (2 * Math.tan((fov * Math.PI) / 360)))
@@ -6195,8 +6210,24 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (infusion.current && nowMs >= infusion.current.until) infusion.current = null
       }
       ads.current = weaponDrawn && mouse.current.right
-      // ADS zoom is lerped, never snapped: an instant FOV change reads as a teleport.
-      const wantFov = ads.current ? ADS_FOV : 75
+      // ── ★ THE SPEED LENS (2026-08-31) — the ramp has to be SEEN, not merely be true ────────
+      // A walk→sprint ramp that nothing on screen reports is felt as "sometimes I am faster",
+      // which is noise, not momentum. The FOV push is the cheapest honest cue: it says how fast
+      // you are ACTUALLY going.
+      //
+      // ★ DERIVED FROM SPEED, NOT FROM THE SPRINT BANK, AND THE DIFFERENCE MATTERS. Reading
+      // `sprintT` would light the lens whenever the ramp was CHARGING — including while a wall,
+      // a backpedal or a drain held the real speed down, so the camera would announce a sprint
+      // the keeper does not have. Speed is the thing the player feels, so speed is the thing the
+      // lens reports. It also means a bhop chain above the ramp widens further for free, without
+      // the cue needing to know that verb exists.
+      // Scaled over the RAMP's own span, not over SPEED_CAP: across 4.2→14 a full sprint moves
+      // the lens 1.4°, which is invisible, and the ramp is the thing being made legible here.
+      const lspd = Math.hypot(loco.current.hvx, loco.current.hvz)
+      const over = Math.min(SPEED_LENS_MAX, Math.max(0, (lspd - WALK_SPEED) / (RUN_SPEED - WALK_SPEED)))
+      // ADS zoom is lerped, never snapped: an instant FOV change reads as a teleport. ADS WINS
+      // outright — a widened lens while aiming would fight the zoom the player asked for.
+      const wantFov = ads.current ? ADS_FOV : 75 + SPEED_LENS_PUSH * over
       const cam = camera as THREE.PerspectiveCamera
       if (Math.abs(cam.fov - wantFov) > 0.01) { cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 12); cam.updateProjectionMatrix() }
 
