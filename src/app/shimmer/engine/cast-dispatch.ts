@@ -180,6 +180,23 @@ export function resolveCast(slot: number, loadout: readonly (string | null)[], e
       out.surge = { until: env.now + spec.surgeSecs * 1000, mult: spec.surgeMult }
       return out
     }
+    // ★★ A CHANNEL STARTS NO COOLDOWN HERE, AND THAT `null` IS THE WHOLE CASE. `sustain.ts` rule 3:
+    // *"the cooldown starts on RELEASE, never on press"* — start it at the press and a ten-second
+    // channel costs the same recovery as a tap, which quietly makes holding strictly better than
+    // tapping, for free, with nothing on screen to say so. The host closes the channel and calls
+    // `sustainCooldownUntil(releasedAt, cooldownMs)`; this function cannot, because it does not know
+    // when the key comes up.
+    //
+    // ⚠ IT IS ALSO NOT `placed`. Every placed archetype is an entity dropped at an aim point and then
+    // left alone; a channel is the opposite — it has no entity and it is never left alone, because
+    // it must be re-decided every frame against the mana that is left. The host recognises it by
+    // `out.spec.archetype === 'channel'` rather than by a new outcome field, so nothing here has to
+    // learn what a bore is.
+    case 'channel': {
+      // The press pays `manaCost` (applied() already sets it) and buys the right to hold. Everything
+      // the move actually does is bought by the seconds after this frame.
+      return applied(slot, spec, `${spec.label} — held`, null)
+    }
     case 'infusion': {
       const out = applied(slot, spec, `${spec.label} — your shots burn`, cd)
       out.infusion = { until: env.now + spec.surgeSecs * 1000, mult: spec.surgeMult }

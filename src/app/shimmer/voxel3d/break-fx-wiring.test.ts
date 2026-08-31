@@ -140,7 +140,36 @@ const at = (needle: string, what: string): number => {
 // because a burst against an already-AIR cell finds no bucket and returns — silently, correctly,
 // and invisibly.
 {
-  once('breakFx.burst(', 2, 'exactly two break call sites')
+  // ── ★★★ A NAMED SET, NOT A TALLY (rewritten 2026-08-31, hub, when Meltbore added the third) ──
+  // This was `once('breakFx.burst(', 2)`, and a bore that opens a block is a THIRD legitimate
+  // destruction verb — so the assert went red for a change it had no complaint about. ⚠ THE
+  // TEMPTING FIX WAS TO WRITE 3, which is the cheapest lie that makes a red count green: it buys
+  // silence and gives up the thing the count was protecting (see section 6 — a burst must never
+  // appear at the `setVoxel` funnel). A tally cannot tell a new verb from a mistake, because a
+  // tally does not know the NAME of anything.
+  //
+  // So: every burst call site must be one this file can name, and each must appear exactly once.
+  // A fourth, unnamed call site is still red — including the funnel one section 6 exists to refuse
+  // — and the reason it is red now says which site is unaccounted for instead of printing a number.
+  const BURST_SITES: readonly [string, string][] = [
+    ['breakFx.burst(c.x, c.y, c.z, voxel(c.x, c.y, c.z))', 'the fell loop, per cell'],
+    ['breakFx.burst(hit.x, hit.y, hit.z, hit.material)', 'the single struck block'],
+    ['breakFx.burst(target.x, target.y, target.z, hit!.material)', "the bore's spot (Meltbore)"],
+  ]
+  {
+    const total = src.split('breakFx.burst(').length - 1
+    let named = 0
+    for (const [needle, what] of BURST_SITES) {
+      const n = src.split(needle).length - 1
+      ok(n === 1, `burst site accounted for — ${what} (found ${n}x)`)
+      named += n
+    }
+    // ★ THE LINE THAT MAKES IT A SET AND NOT A CHECKLIST. Without it, a new call site simply is not
+    // looked at: every named site would still be present, every assert above green, and the guard
+    // would have gone quiet exactly when something new appeared.
+    ok(total === named,
+       `every burst call site is one of the ${BURST_SITES.length} named above — ${total} in the file, ${named} accounted for`)
+  }
 
   const fell = at('breakFx.burst(c.x, c.y, c.z, voxel(c.x, c.y, c.z))', 'the fell loop bursts per cell')
   // ⚠ SCOPED TO THE LOOP BODY, NOT TO THE FILE. `setVoxel(c.x, c.y, c.z, AIR)` appears four times
@@ -180,10 +209,11 @@ const at = (needle: string, what: string): number => {
   ok(fn.code.length > 3000, `and the whole body was sliced, not a prefix (${fn.code.length} chars)`)
   ok(!fn.code.includes('breakFx'), 'setVoxel itself never fires chips — destruction is decided by the caller')
 
-  // And the count above (exactly 2) is what keeps a third, well-meant call site from appearing at
-  // the funnel later. Restated here as the reason, not as a second check.
-  ok(src.split('breakFx.burst(').length - 1 === 2,
-     'still exactly two burst call sites, both in the swing')
+  // And the NAMED SET in section 5 is what keeps a well-meant call site from appearing at the funnel
+  // later. Restated here as the reason, not as a second check — it used to restate the tally, which
+  // meant a legitimate new verb had to be argued with in two places at once.
+  ok(!/setVoxel = useCallback[\s\S]{0,4000}?breakFx\.burst\(/.test(src),
+     'no burst call site has appeared inside the funnel')
 }
 
 // ── 7. THE SPEC AGREES ABOUT WHAT THE CALL SITES HAND IT ─────────────────────────────────────

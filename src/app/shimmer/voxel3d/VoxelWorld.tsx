@@ -277,6 +277,8 @@ import { emptyNet, plant as plantMark, pull as pullMark, destination as markDest
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 import { senseGround, type SensedBody } from '../play3d/tremor-sense'
 import { cloakBuild, cloakIgnite, freshCloak } from '../play3d/flame-cloak'
+import { beginSustain, sustainStep, sustainCooldownUntil, type Sustain } from '../play3d/sustain'
+import { boreStep, freshBore, type Bore } from '../play3d/breach'
 import { TremorSenseHud, emptyReadout, type TremorReadout } from '../play3d/TremorRing'
 
 /**
@@ -5450,6 +5452,30 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * mirrored into refs — one answer to what the keeper is wearing.
    */
   const cloak = useRef(freshCloak())
+  /**
+   * ── ★★ THE CHANNEL — Meltbore, the first held cast in either world ────────────────────────────
+   * Frame state, like the cloak above and for the same reason: nothing renders it except the bore's
+   * own progress, and a channel that lived in React state would re-render the whole world sixty
+   * times a second while the key is down.
+   *
+   * ★ THE SLOT IS KEPT BESIDE THE CHANNEL, not derived. `sustain.ts` records the slot on the
+   * `Sustain` itself, and the frame loop needs it twice: to read the key that is being HELD
+   * (`CAST_CODES[slot]`) and to start the right cooldown on release. Deriving it from the moveId
+   * would mean searching the loadout every frame for something we were told at the press.
+   *
+   * ⚠ `channelSpec` IS CAPTURED AT THE PRESS AND NOT RE-READ. The drain and the cooldown must not
+   * change under a channel that is already running — a rune swap mid-hold would otherwise re-price
+   * seconds already paid for, and the keeper would have no way to see it happen.
+   */
+  const channel = useRef<Sustain | null>(null)
+  const channelSpec = useRef<CastSpec | null>(null)
+  /**
+   * The bore's one spot. Lives across frames because that is the entire mechanic — `boreStep` resets
+   * it itself the moment the reticle names a different voxel, so the host never has to notice.
+   */
+  const bore = useRef<Bore>(freshBore())
+  /** So `absolute` is said once per spot, not sixty times a second. Cleared when the spot changes. */
+  const boreToldAbsolute = useRef<string | null>(null)
   const tremorAcc = useRef(0)
   const tremorBodies = useMemo<SensedBody[]>(() => [], [])
   /** Stride phase per body, carried across frames. `stepVoices` mutates it; the host owns it. */
@@ -5752,7 +5778,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * 7 more casts.
    */
   const supports = useMemo<ReadonlySet<CastArchetype>>(
-    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field', 'terrain', 'status', 'impulse']), [])
+    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field', 'terrain', 'status', 'impulse', 'channel']), [])
 
   const castSlot = useCallback((slot: number, g: THREE.Group) => {
     const v = vitals.current, m = mana.current
@@ -5899,6 +5925,24 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // already decided, and an unclassified one is refused by `answerCollar` rather than trusted.
         delivery: collarClassOf(out.placed.moveId),
       })
+    }
+    // ── ★★ THE CHANNEL OPENS HERE AND IS CLOSED BY THE FRAME LOOP ──────────────────────────────
+    // Recognised by the archetype on the spec rather than by a new outcome field: a channel places
+    // no entity, so `out.placed` is null and there is nothing for the branches above to do. The
+    // press has already paid `manaCost` through the same one-apply line every other cast uses.
+    //
+    // ⚠ NO COOLDOWN WAS SET, and that is not an omission — `cast-dispatch` deliberately returns
+    // `cooldownUntil: null` for a channel so that `sustain.ts` rule 3 (the cooldown starts on
+    // RELEASE) can be honoured by the only code that knows when the key came up. If a cooldown ever
+    // appears on a channel here, the ten-second hold has silently become as cheap as a tap.
+    if (out.spec.archetype === 'channel') {
+      channel.current = beginSustain(slot, out.spec.moveId)
+      channelSpec.current = out.spec
+      // A fresh bore per press. Without this a keeper could hold, release just before a block gives,
+      // walk away, and finish it seconds later on a spot they are no longer aiming at — canon's
+      // "one spot" would become "one spot, whenever".
+      bore.current = freshBore()
+      boreToldAbsolute.current = null
     }
     if (out.message) onSay(out.message)
   }, [camera, tracerGeo, tracerMat, supports, vitals, mana, onSay, solidProbe])
@@ -8035,6 +8079,88 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       return
     }
     pieces.hideGhost()
+
+    // ── the channel: Meltbore ────────────────────────────────────────────────────────────────
+    /**
+     * ★★★ THE FIRST HELD CAST IN EITHER WORLD, and it sits HERE — below the reticle raycast and
+     * above mining — for two reasons that are both about `hit`. It needs this frame's crosshair,
+     * measured after movement (the same argument the three aimed verbs make ~150 lines up); and it
+     * belongs beside mining because they are the same shape of mechanic seen from opposite sides.
+     * Mining spends TOOL TIER against a block that may refuse it. A bore spends SECONDS against a
+     * block that cannot refuse it. `breach.ts` is emphatic about why that is not a better pick:
+     * it yields NOTHING, so it can ignore every tool gate without deleting the progression under
+     * `registry.ts`. Nothing below drops an item, and that absence is the design.
+     *
+     * ⚠ KEYBOARD ONLY TODAY, SAID OUT LOUD RATHER THAN LEFT TO BE DISCOVERED. `padNow` is
+     * `padPressed` — an EDGE, the newly-pressed set — and a channel needs the HELD state, which the
+     * pad path does not currently expose. A pad keeper can open a channel (the press routes through
+     * `pendingCast` like every other cast) and it will close on the very next frame, reading as a
+     * cast that does nothing. That is the honest limit; the fix is a held-set from the pad adapter,
+     * not a special case here.
+     */
+    if (channel.current && channelSpec.current) {
+      const spec = channelSpec.current
+      const cslot = channel.current.slot
+      // ⚠ THE KEY, NOT THE LATCH. `pendingCast` is an edge consumed at the top of this loop; asking
+      // it here would answer "was it pressed this frame", which is false on every frame of a hold.
+      const stillDown = !!keys.current[CAST_CODES[cslot]]
+      const m = mana.current
+      const step = stillDown
+        ? sustainStep(channel.current, dt, m.cur, spec.sustainDrain)
+        : null
+
+      if (step) {
+        // The host applies what the pure step decided. `sustainStep` never mutates, so this is the
+        // only place the pool moves — and `manaSpent` is capped at the pool it was handed, which is
+        // why there is no clamp here to disagree with the one inside it.
+        m.cur = Math.max(0, m.cur - step.manaSpent)
+        channel.current = step.sustain
+
+        // ── the bore ────────────────────────────────────────────────────────────────────────
+        // `credited` — NOT `dt`. Rule 1 of `sustain.ts`: only seconds the keeper actually PAID for
+        // buy progress, or an empty pool would finish the same bore for free, slower, with a mana
+        // bar that looked correct the whole way down.
+        const target = hit ? { x: hit.x, y: hit.y, z: hit.z } : null
+        const bs = boreStep(bore.current, target, hit ? hit.material : 0, step.credited)
+        bore.current = bs.bore
+        const spot = target ? `${target.x},${target.y},${target.z}` : null
+        if (bs.state !== 'absolute') boreToldAbsolute.current = null
+
+        if (bs.state === 'broke' && target) {
+          // The spot stops existing. `breakFx.burst` before `setVoxel` for the same reason the mine
+          // path does it in that order: the burst reads the material, and the write takes it away.
+          breakFx.burst(target.x, target.y, target.z, hit!.material)
+          setVoxel(target.x, target.y, target.z, AIR)
+          // ★ NO DROP, NO XP, ON PURPOSE. A bore that paid out would be a pick that needs no
+          // family, no tier and no tool at all — see `breach.ts`. Canon's words are "until the spot
+          // stops existing", not "until you have it".
+          onSay('the spot stops existing')
+        } else if (bs.state === 'absolute' && spot !== boreToldAbsolute.current) {
+          // ★ SAID ONCE PER SPOT, NOT SIXTY TIMES A SECOND. And it must be said at all: a bar that
+          // fills toward something unreachable is worse than no bar, so `boreStep` pins progress at
+          // 0 here and leaves the telling to the host.
+          boreToldAbsolute.current = spot
+          onSay(`${spec.label} finds nothing to open — this is not matter`)
+        }
+      }
+
+      // ── closing the channel ───────────────────────────────────────────────────────────────
+      // Three ways it ends and each one is named. `sustain.ts` returns the reason on the frame it
+      // stops precisely so a host cannot drop it: a channel that ended because the pool ran dry and
+      // one the keeper let go of must not look identical.
+      const ended = step ? step.ended : 'released'
+      if (ended) {
+        // ★★ RULE 3, AND THIS IS THE ONLY PLACE IT CAN LIVE. The cooldown starts NOW, at the
+        // release, never at the press — `cast-dispatch` returned `cooldownUntil: null` for exactly
+        // this line. Start it at the press and a ten-second channel recovers as fast as a tap.
+        castCd.current[cslot] = sustainCooldownUntil(performance.now(), spec.cooldownMs)
+        if (ended === 'dry') onSay(`${spec.label} gutters out — no mana left`)
+        channel.current = null
+        channelSpec.current = null
+        bore.current = freshBore()
+        boreToldAbsolute.current = null
+      }
+    }
 
     // ── mine ─────────────────────────────────────────────────────────────────────────────────
     // ★ THE TOOL IS CHOSEN BY THE BLOCK, NOT BY A HOTKEY. Every block declares its skill, and the

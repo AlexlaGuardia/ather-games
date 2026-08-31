@@ -62,6 +62,7 @@ export type CastArchetype =
   | 'status'      // SYSTEM 3 — removes an OPTION from every enemy near the aim point (statuses.ts)
   | 'impulse'     // SYSTEM 4 — the cast moves the KEEPER: a launch or a blink (locomotion.ts)
   | 'infusion'    // a timed multiplier on the WEAPON, not the cast (Flame Infusion)
+  | 'channel'     // SYSTEM 7 — a cast that is HELD: press, hold, release, billed per second (sustain.ts)
   | 'unbuilt'     // registered in canon, no sim behaviour yet — labelled, never a silent no-op
 
 export interface CastSpec {
@@ -452,7 +453,23 @@ const BUILDS: Record<string, Build> = {
   // a channel needs a press, a hold and a release, which is a new INPUT path rather than a new rule.
   // ★ Left unbuilt deliberately: marking it built with no host is exactly the silent no-op this
   // file's honesty rule exists to forbid, and the temptation is strongest when the hard part is done.
-  meltbore:  { archetype: 'unbuilt', why: 'the channel and the bore both exist; no host holds a key down for a cast yet — every cast is edge-triggered on a press' },
+  // ✅ BUILT 2026-08-31 (hub) — THE THIRD NARROWING WAS THE LAST ONE. The reason above expired
+  // exactly the way this file's honesty rule wants a reason to expire: it named ONE missing thing,
+  // that thing was built, and the premise guard went red the moment `VoxelWorld.tsx` called
+  // `sustainStep(` — it did not have to be remembered. Nothing here was widened to fit.
+  //
+  // ★ THE MAGNITUDES ARE JIN'S, THE SHAPE IS CANON'S, and they are sized against real numbers
+  // rather than picked: stone is hardness 1.6, so at `BORE_PATIENCE` 1.6 a bore costs 2.56s of
+  // channel; deep stone 3.84s; the hardest block in the registry 10.4s. A fresh keeper's pool is
+  // 100 at 1.0/s regen (`engine/mana.ts`), so at 8/s the whole pool buys 12.5 seconds — enough for
+  // one hard block and not two. That IS canon's *"burns mana fast"* (runes.md:85) meeting *"slow,
+  // undramatic ... the reason a Magma mage is patient"* (moves.md:82) in one pair of numbers.
+  //
+  // ⚠ `manaCost` IS THE PRESS AND `sustainDrain` IS THE HOLD — the two are not alternatives, and
+  // `sustain.ts` is emphatic about why: a channel that charged its whole price up front would be a
+  // normal cast with a long animation. The press is deliberately cheap (4) because the press buys
+  // nothing on its own; every block this move opens is bought by the seconds after it.
+  meltbore:  { archetype: 'channel', manaCost: 4, cooldownMs: 3000, sustainDrain: 8 },
   // "Sight goes soft, edges stop agreeing on where they are. Confrontation DECLINED rather than won."
   // ⚠ It lands on `blinded` — the same option Enlighten removes — and that is not the two converging:
   // the sim's three statuses are what a move can take, and both of these take sight. The geometry is

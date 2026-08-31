@@ -7,7 +7,8 @@
 //   2. the last, partial second is bought and credited in proportion — no rounding gift or theft
 //   3. cooldown runs from RELEASE — otherwise holding is strictly better than tapping, silently
 
-import { castForMove } from './cast'
+import { castForMove, type CastArchetype } from './cast'
+import { resolveCast, type CastEnv } from '../engine/cast-dispatch'
 import { beginSustain, sustainStep, sustainCooldownUntil, type Sustain } from './sustain'
 
 let ok = 0, bad = 0
@@ -120,19 +121,48 @@ function run(pool: number, dt: number, frames: number, drain = DRAIN) {
 {
   chk('the spec carries a per-second drain, not a lump price',
     'sustainDrain' in castForMove('mend'))
-  chk('★ no move sustains yet — the hook shipped before its first user, on purpose',
-    castForMove('meltbore').sustainDrain === 0)
+  // ── ★★ THIS BLOCK WAS INVERTED 2026-08-31 (hub) WHEN MELTBORE SHIPPED, AND THE INVERSION IS THE
+  // POINT. It used to assert that NO move sustains and that meltbore stays `unbuilt` — both true
+  // when written, both false within the day. A red that only means "the world moved on" is the
+  // exact thing that trains a room to discount red, so the asserts were re-aimed at the new truth
+  // rather than deleted. What they guard is unchanged: that this hook has a real first user and
+  // that nobody quietly widened the move to make a red go away.
+  const mb = castForMove('meltbore')
+  chk('★ meltbore is the hook\'s first user — a channel, not a hopeful comment',
+    mb.archetype === 'channel')
+  chk('★ ...and it bills by the second, or it is a channel in name only',
+    mb.sustainDrain > 0, `sustainDrain ${mb.sustainDrain}`)
 
-  // ⚠ Meltbore is the move this was built for and it is STILL unbuilt, because a channel was only
-  // half its blocker. If its reason ever stops naming the terrain half, someone has widened it to
-  // make a red go away rather than re-reading the move.
-  const why = castForMove('meltbore').why ?? ''
-  chk('meltbore stays unbuilt — a held channel was only half of what it needs',
-    castForMove('meltbore').archetype === 'unbuilt')
-  chk('★ ...and its reason now names the half that is actually left: opening terrain',
-    /terrain|exist/i.test(why), why)
-  chk('★ ...and no longer claims the sim cannot hold a channel, because it can',
-    !/no sustained cast|has no sustained/i.test(why), why)
+  // ⚠ THE PRESS AND THE HOLD ARE DIFFERENT PRICES AND MUST BOTH EXIST. A channel with the whole
+  // cost on `manaCost` is a normal cast with a long animation — releasing early would refund
+  // nothing and holding longer would cost nothing, so TIME, the resource canon actually spends,
+  // would not be spent at all. This is the assert that catches that being flattened later.
+  chk('★ the press is cheap and the hold is where the price lives',
+    mb.manaCost > 0 && mb.sustainDrain > mb.manaCost,
+    `press ${mb.manaCost}, drain ${mb.sustainDrain}/s`)
+
+  // ⚠⚠ AND THE ONE THAT COULD NOT BE WRITTEN UNTIL THERE WAS A HOST: a channel whose cooldown is
+  // started at the PRESS makes a ten-second hold recover as fast as a tap. `cast-dispatch` must
+  // return `cooldownUntil: null` for it, and the host must start the clock on release. Asserted
+  // through the dispatcher rather than by reading the file, so it fails if the case is ever folded
+  // back into the placed `default:` branch.
+  {
+    const env: CastEnv = {
+      now: 1000, hp: 10, hpMax: 10, mana: 100, cooldownUntil: [0, 0, 0, 0],
+      stanceMoveId: null, supports: new Set<CastArchetype>(['channel']),
+    }
+    const out = resolveCast(0, ['meltbore', null, null, null], env)
+    chk('★★ a channel starts NO cooldown at the press — rule 3 lives in the host',
+      out.kind === 'applied' && out.cooldownUntil === null,
+      out.kind === 'applied' ? `cooldownUntil ${out.cooldownUntil}` : out.kind)
+    chk('★ ...and the press still charges its own price',
+      out.kind === 'applied' && out.manaCost === mb.manaCost)
+    // The release instant decides the recovery, so the same channel held twice as long recovers at
+    // two different moments. A cooldown read off the press cannot tell those apart.
+    chk('★ ...and the cooldown is measured from the RELEASE',
+      sustainCooldownUntil(5000, mb.cooldownMs) === 5000 + mb.cooldownMs
+      && sustainCooldownUntil(9000, mb.cooldownMs) !== sustainCooldownUntil(5000, mb.cooldownMs))
+  }
 }
 
 console.log(`\nsustain oracle: ${ok} passed, ${bad} failed`)

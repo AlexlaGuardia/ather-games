@@ -54,6 +54,67 @@ counted.** `dev-eye` passes because it filters to `<Canvas>` pages, so a non-Can
 Lives under `dev/`, which the SOP puts in the **sprites** lane — unclaimed all session, and nothing
 else in it was touched.
 
+## 🔥 Shimmer — **MELTBORE: THE THIRD NARROWING WAS THE LAST ONE, AND A GUARD WENT RED ON SCHEDULE** (2026-08-31, hub lane) · *Last touched 2026-08-31 (hub) — channel-wiring oracle **12/0/0**, mutation-swept **9 ways, all 9 fire** (incl. both blindness shapes). sustain 33→35, cast 103/0, unbuilt-premise 18/0, breach 32/0, tsc 7 (baseline), canon exit 0.*
+
+### What shipped
+Meltbore is built. The first **held** cast in either world: press, hold, release, billed by the
+second. Holding it on one spot bores through the block the reticle names, ignoring every tool gate,
+and the spot stops existing.
+
+### ★★★ The reason expired OUT LOUD, which is the whole point of how play wrote it
+`cast.ts` had meltbore `unbuilt` behind a reason narrowed **twice in one day** — first "no sustained
+cast" (retired by `sustain.ts`), then "nothing opens terrain" (retired by `breach.ts`), leaving
+exactly one thing: *"no host holds a key down for a cast — every cast is edge-triggered on a press."*
+play then aimed `unbuilt-premise.test.ts` at `voxel3d/VoxelWorld.tsx` watching for `/sustainStep\(/`.
+**So the guard went red the moment the host called it, and nobody had to remember.** That is a
+premise that cannot expire quietly, doing the one job it was written for. It also refused to be
+fooled twice: an earlier version of that probe watched for `/released\b/`, which the stance-drop
+MESSAGE satisfies — a probe a user-facing string can answer is not watching a capability.
+
+### ★★ The input path was mostly already there, which the note could not know
+The blocker read as "a new INPUT path". In this host it was ~15 lines: `keys.current[CAST_CODES[slot]]`
+is already a live held-key map, and the frame loop already polls it. What was genuinely missing was
+the decision about **which** state to read — `pendingCast` is an EDGE consumed at the top of the loop,
+so asking it during a hold answers *"was it pressed this frame"*, false on every frame after the
+first. A channel wired to the latch closes instantly and reads as a cast that does nothing.
+
+### Decisions
+- **The cooldown starts on RELEASE, and `cast-dispatch` returns `cooldownUntil: null` to force it.**
+  Rule 3 of `sustain.ts`. Start it at the press and a ten-second hold recovers as fast as a tap,
+  which makes holding strictly better than tapping, for free, with nothing on screen to say so.
+  The dispatcher *cannot* honour it — it does not know when the key came up — so the `null` is the
+  mechanism, not an omission.
+- **The bore is paid in `credited`, never `dt`.** Rule 1. One character-range wide, and no pure
+  oracle can see it: `boreStep` is correct either way. Pass `dt` and an empty pool bores as fast as
+  a full one, free, with the mana bar looking right the whole way down because it is already zero.
+- **It yields nothing and awards no XP.** `breach.ts` is emphatic: a bore that paid out would BE
+  mining — a strictly better pick needing no family, no tier and no tool — and the progression under
+  `registry.ts` would evaporate. Canon says *"until the spot stops existing"*, not *"until you have it"*.
+- **Magnitudes are sized against real numbers, not picked.** Stone 1.6 hardness × `BORE_PATIENCE`
+  1.6 = 2.56s; deep stone 3.84s; the hardest block 10.4s. Fresh pool is 100 at 1.0/s regen, so at
+  drain 8/s the whole pool buys 12.5s — one hard block, not two. Press costs 4 because the press
+  buys nothing on its own.
+- **`channel` is its own dispatcher case, NOT `placed`.** Everything placed is an entity dropped at
+  an aim point and left alone; a channel has no entity and is never left alone — it is re-decided
+  every frame against the mana that is left.
+
+### ⚠ The honest limits — read before calling it done
+- **KEYBOARD ONLY.** `padNow` is `padPressed`, an EDGE set; the pad path exposes no held state. A pad
+  keeper can *open* a channel and it closes on the next frame, reading as a cast that does nothing.
+  Said in the code rather than left to be discovered. Fix is a held-set from the pad adapter.
+- **NOBODY HAS SEEN IT RENDER.** 12 wiring asserts, 9 mutations and a green canon gate prove the
+  wiring; they prove nothing about the feel. There is no headless way to run this frame loop — the
+  host pulls three.js, WebGL and the chunk streamer — which is exactly why the guard is a call-site
+  reader with a `BLIND` severity instead of a runtime oracle pretending to be one.
+- **No progress bar yet.** `boreStep` returns `progress` 0..1 and nothing draws it. The `absolute`
+  case is *told* (once per spot) because a bar filling toward nothing is worse than no bar, but a
+  keeper boring granite currently sees only the block vanish at the end.
+
+### Files
+`play3d/cast.ts` (union + roster) · `engine/cast-dispatch.ts` (the `channel` case) ·
+`voxel3d/VoxelWorld.tsx` (supports, refs, open, frame tick) · `voxel3d/channel-wiring.test.ts` (new) ·
+`play3d/sustain.test.ts` (block inverted) · `play3d/unbuilt-premise.test.ts` (meltbore retired)
+
 ## 🕳 Shimmer — **BREACH: WHAT "NOTHING REFUSES IT FOREVER" ACTUALLY MEANS** (2026-08-31, play lane) · *Last touched 2026-08-31 — `b546c98` pushed. breach oracle **32/0**, mutation-swept **8 ways, all 8 fire once corrected**. sustain 33/0, unbuilt-premise 20/0, cast 103/0, all play3d green, tsc 7 (baseline), canon exit 0. Pure `play3d/`, no host touched, NOT deployed.*
 
 ### ★★★ The canon line is precise, and the registry had already drawn it
