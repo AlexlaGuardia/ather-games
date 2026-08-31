@@ -135,7 +135,20 @@ ok('snap is identity on a tier', snapHeight(LEDGE_VAULT, BODY) === LEDGE_VAULT)
 // ── (2) DRIFT GUARD — vs voxel3d/locomotion.ts ───────────────────────────────────────────────
 const DIVERGENT: Record<string, string> = {
   FALL_OFF: 'voxel widened the step band to 0.55 for half-blocks; play3d resolves tile tiers',
+  // ★ ADDED 2026-08-31 TOGETHER WITH THE CONSTANT IT COMPARES. voxel3d's slide is now the payout
+  // of a walk→sprint ramp, so its gate is RUN_SPEED * 0.92 (5.98) against play3d's flat 3.8. The
+  // divergence is the POINT of that change — but until SLIDE_MIN_SPEED was added to KIT this
+  // guard could not see it at all, and reported 71 green while the two walkers' slides had
+  // stopped meaning the same thing. An undeclared divergence is worse than a declared one
+  // precisely because nothing goes red; this file exists to make that impossible.
+  SLIDE_MIN_SPEED: 'voxel gates the slide on the sprint ramp (RUN_SPEED * 0.92); play3d has no ramp',
 }
+// ⚠⚠ AND THE LIMIT OF THIS GUARD, STATED BECAUSE IT CANNOT ASSERT IT: RUN_SPEED still MATCHES at
+// 6.5 and its MEANING has diverged. In play3d it is the speed a press gives you; in voxel3d it is
+// now the top of a 1.2s ramp that WALK_SPEED begins. A value comparison cannot see a noun change
+// its referent, so this pair is green while the two walkers no longer feel alike. If play3d is
+// ever revived as more than the legacy route, that is the line to re-read first — not this one,
+// which will keep saying they agree.
 
 let comparedLoco = 0
 for (const [name, value] of Object.entries(KIT)) {

@@ -61,6 +61,7 @@ export const KIT = {
   GRAVITY: 22,
   JUMP_V0: 7.4,
   SLIDE_SPEED: 10,
+  SLIDE_MIN_SPEED: 3.8,
   SLIDE_TIME: 0.6,
   SLIDEHOP_BOOST: 1.12,
   FALL_OFF: 0.32,
