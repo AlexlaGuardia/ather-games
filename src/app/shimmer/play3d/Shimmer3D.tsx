@@ -30,6 +30,8 @@ import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave } from '@/lib/cloud-sync'
 import { saveKey, saveOwner } from '@/lib/save-slot'
 import { birthAffinity, NEUTRAL_AFFINITY, attunementResist, combineResist, type Affinity } from './birth-affinity'
+import TremorRing, { TremorSenseHud, emptyReadout, type TremorReadout } from './TremorRing'
+import { senseGround, type SensedBody } from './tremor-sense'
 import { castForMove, isBuilt, CAST_SLOTS, ALL_BANDS, BAND_KEYS, derivePassive, type CastSpec } from './cast'
 import { getRegenRate } from '../engine/mana'
 import { moveById } from './keeper-moves'
@@ -1922,13 +1924,25 @@ function GunBenches() {
     </>
   )
 }
-function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+/**
+ * How often Tremor Sense re-reads the ground, seconds. ~10Hz.
+ * ★ Derived, not taste: the fastest body that walks covers under half a world unit in this window,
+ * which is a fraction of a degree on a ring 24 units wide. A faster sense would burn frames to
+ * report a difference that cannot be seen.
+ */
+const SENSE_TICK = 0.1
+
+function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
   gridRef: React.RefObject<number[][]>
   recoilRef: React.MutableRefObject<{ p: number; y: number }>  // pending camera kick; CameraRig drains it
   bloomRef: React.MutableRefObject<number>  // current spread bloom (deg); WeaponReticle reads it too
+  /** the worn sense's reach in world units — `spec.senseRadius`, 0 when the keeper wears no sense */
+  senseRadiusRef: React.RefObject<number>
+  /** where the scene POSTS what the keeper feels; `TremorSenseHud` is the only reader. See below. */
+  tremorRef: React.MutableRefObject<TremorReadout>
   posRef: React.RefObject<THREE.Vector3>    // player position — hunter orbs aim at + collide with it
   hpRef: React.MutableRefObject<number>     // player HP; ResourceBars reads, this sim writes
   shieldRef: React.MutableRefObject<number> // player shield; drains first — mend potions refill it
@@ -2097,9 +2111,61 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     if (hpRef.current <= 0) { hpRef.current = hpMaxRef.current ?? MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD; onPlayerDown() }
     else onPlayerDamage()
   }, [resistRef, birthRuneRef, shieldRef, hpRef, hpMaxRef, shieldMaxRef, onPlayerDamage, onPlayerDown])
+  // Tremor Sense scratch. Reused across frames — a sense that allocated a fresh array 10x a second
+  // would be the only allocating thing in this loop.
+  const senseAcc = useRef(0)
+  const senseBodies = useMemo<SensedBody[]>(() => [], [])
+  const senseFacing = useMemo(() => new THREE.Vector3(), [])
+
   useFrame((state, dt) => {
     const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // live weapon — stats + tracer look
     const nowFrame = performance.now()  // ONE clock per frame — fields, terrain and statuses all read it
+
+    // ── TREMOR SENSE ────────────────────────────────────────────────────────────────────────────
+    // The scene owns this because the scene is what knows where the bodies are; the HUD half draws
+    // and knows nothing. ★ THROTTLED TO ~10Hz ON PURPOSE, and the cadence is derived rather than
+    // taste: the fastest thing that can walk covers well under half a world unit in 100ms, which is
+    // a fraction of a degree on a 24-unit ring, so a faster sense would cost frames to report a
+    // difference nobody can see. ⚠ It writes into a REF and never into state — a HUD that re-renders
+    // the tree every frame is how a readout costs more than the world it reports on.
+    senseAcc.current -= dt
+    if (senseAcc.current <= 0) {
+      senseAcc.current = SENSE_TICK
+      const radius = senseRadiusRef.current ?? 0
+      const p = posRef.current
+      if (radius > 0 && p) {
+        // Every body in the range stands on the floor, so `hover` is 0 across the board here and the
+        // canon predicate has nothing to bite on. ⚠ THAT IS A PROPERTY OF THIS WORLD, NOT A LICENCE
+        // TO DROP THE FIELD: the voxel world's caster floats, and the day a floating body reaches
+        // the range this is already correct. Mapping it explicitly is what keeps that true.
+        senseBodies.length = 0
+        for (const t of targets) senseBodies.push({ x: t.pos.x, y: t.pos.y, z: t.pos.z, hover: 0, present: t.alive })
+        const h = hunter.current
+        senseBodies.push({ x: h.pos.x, y: h.pos.y, z: h.pos.z, hover: 0, present: h.alive })
+        if (guardSim.current.spawned) {
+          for (let gi = 0; gi < guardBodies.length; gi++) {
+            const st = guardSim.current.enc.guards[gi]
+            const b = guardBodies[gi]
+            senseBodies.push({ x: b.pos.x, y: b.pos.y, z: b.pos.z, hover: 0, present: !!st?.alive })
+          }
+        }
+        state.camera.getWorldDirection(senseFacing)
+        const r = tremorRef.current
+        r.contacts = senseGround(senseBodies, p.x, p.z, radius)
+        r.px = p.x; r.pz = p.z
+        // The facing is the camera's, FLATTENED. A keeper looking at the sky has not turned around,
+        // and an unflattened direction shrinks toward zero as you look up — which would swing every
+        // bearing wildly for a player doing nothing but glancing upward.
+        r.fx = senseFacing.x; r.fz = senseFacing.z
+        r.radius = radius
+        r.rev++
+      } else if (tremorRef.current.contacts.length > 0) {
+        // Sense dropped (or the keeper is gone). Clear ONCE rather than every tick, so the HUD's
+        // change detector is not woken by a readout that has been empty for a minute.
+        const r = tremorRef.current
+        r.contacts = []; r.radius = 0; r.rev++
+      }
+    }
     // Flame Infusion sheathes the weapon in fire: the only cast that makes the GUN better rather than
     // doing what a gun cannot. Resolved once so every damage site downstream reads the same number.
     const inf = infusionRef.current
@@ -3219,6 +3285,8 @@ const Scene = memo(function Scene(props: {
   reloadingRef: React.MutableRefObject<number>
   pendingCastRef: React.MutableRefObject<CastSpec | null>
   castMultRef: React.RefObject<number>
+  senseRadiusRef: React.RefObject<number>
+  tremorRef: React.MutableRefObject<TremorReadout>
   resistRef: React.RefObject<number>
   birthRuneRef: React.RefObject<string | null>
   infusionRef: React.RefObject<{ until: number; mult: number }>
@@ -3327,7 +3395,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
@@ -5383,6 +5451,11 @@ export default function Shimmer3D() {
   const stanceRef = useRef<CastSpec | null>(null)
   const resistRef = useRef(0)     // incoming damage absorbed by the stance
   const castMultRef = useRef(1)   // stance multiplier on cast damage
+  // Tremor Sense. `senseRadiusRef` is set from the worn passive exactly where resist/castMult are —
+  // one place decides what the stance grants, so a new stance field cannot be wired in only half the
+  // sites. `tremorRef` is the scene→HUD bridge; nothing else may write it.
+  const senseRadiusRef = useRef(0)
+  const tremorRef = useRef<TremorReadout>(emptyReadout())
   const stanceMoveRef = useRef(1) // stance multiplier on move speed
   const surgeRef = useRef({ until: 0, mult: 1 })  // Static Burst — a short self-buff window
   const infusionRef = useRef({ until: 0, mult: 1 })  // Flame Infusion — a WEAPON-damage window
@@ -5449,6 +5522,7 @@ export default function Shimmer3D() {
     // resist / castMult / moveMult live from load; a null passive leaves the neutral refs.
     const pspec = (() => { const p = derivePassive(runeInvRef.current.owned, runeInvRef.current.birth, bookRef.current); return p ? castForMove(p.id) : null })()
     stanceRef.current = pspec; resistRef.current = pspec?.resist ?? 0; castMultRef.current = pspec?.castMult ?? 1; stanceMoveRef.current = pspec?.moveMult ?? 1
+    senseRadiusRef.current = pspec?.senseRadius ?? 0
     surgeRef.current = { until: 0, mult: 1 }; infusionRef.current = { until: 0, mult: 1 }
     fieldsRef.current = []; conjuredRef.current = []; statusRef.current = emptyBag()
     setCastHud({ slots: castLoadoutRef.current, stance: pspec?.moveId ?? null })
@@ -5870,6 +5944,7 @@ export default function Shimmer3D() {
       resistRef.current = s?.resist ?? 0
       castMultRef.current = s?.castMult ?? 1
       stanceMoveRef.current = s?.moveMult ?? 1
+      senseRadiusRef.current = s?.senseRadius ?? 0
       syncWeaponMove()
       setCastHud((h) => ({ ...h, stance: s?.moveId ?? null }))
     }
@@ -6514,7 +6589,7 @@ export default function Shimmer3D() {
           ammoRef={ammoRef}
           reloadingRef={reloadingRef}
           pendingCastRef={pendingCastRef}
-          castMultRef={castMultRef}
+          castMultRef={castMultRef} senseRadiusRef={senseRadiusRef} tremorRef={tremorRef}
           resistRef={resistRef}
           infusionRef={infusionRef}
           fieldsRef={fieldsRef}
@@ -7100,6 +7175,7 @@ export default function Shimmer3D() {
           <ResourceBars hpRef={hpRef} hpMaxRef={hpMaxRef} shieldRef={shieldRef} shieldMaxRef={shieldMaxRef} />
           <AmmoCounter ammoRef={ammoRef} reloadingRef={reloadingRef} weaponIdxRef={weaponIdxRef} />
           <CastBar slots={castHud.slots} stance={castHud.stance} cdRef={castCdRef} />
+          <TremorSenseHud tremorRef={tremorRef} />
           <style>{`@keyframes hitFlash{0%{opacity:1}100%{opacity:0}}@keyframes dmgFlash{0%{opacity:1}100%{opacity:0}}@keyframes downFlash{0%{opacity:1}55%{opacity:0.85}100%{opacity:0}}`}</style>
           {/* hitmarker — four outward diagonal ticks around the reticle, flashed per landed round */}
           <div ref={hitmarkRef} style={{ position: 'fixed', left: '50%', top: '50%', zIndex: 31, pointerEvents: 'none', opacity: 0 }}>

@@ -44,6 +44,7 @@
 // asserts full coverage, so a newly authored canon move cannot slip through unclassified.
 
 import { KEEPER_MOVES, type KeeperMove, type MoveTier, knownMoves } from './keeper-moves'
+import { SENSE_RADIUS } from './tremor-sense'
 import { RUNES } from './birth/runes.data'
 import { hasLearned, type Book } from './scroll-market'
 import type { ConjureShape } from '../engine/conjured-terrain'
@@ -160,6 +161,25 @@ export interface CastSpec {
   impulseFwd: number
   /** launch: speed straight up, world units/sec. Updraft is almost all of this and no forward. */
   impulseUp: number
+  // ── sense (SYSTEM 5) — the cast tells the keeper where the world IS ────────
+  /**
+   * How far a ground-bound awareness reaches, in world units. 0 = this move senses nothing, which
+   * is every move but one.
+   *
+   * ★★ IT IS A RADIUS AND NOT A BOOLEAN BECAUSE CANON WRITES A LADDER, NOT A SWITCH.
+   * `runes.md:558` — *"Novices detect nearby movement. Masters read an entire battlefield through
+   * the soles of their feet."* A flag could only ever express the master. The magnitude is Jin's
+   * (the boundary: canon owns that the awareness exists and what it is bound to, the build owns how
+   * far it carries), and the number chosen is not taste — see the `tremor-sense` build below.
+   *
+   * ⚠⚠ THIS IS A SENSE, NOT A REVEAL, AND THE HOST MUST NOT WIDEN IT. Canon binds the awareness to
+   * *"the ground beneath you"*, so what it can feel is what STANDS ON the ground — see
+   * `tremor-sense.ts`, which owns that predicate and is where the limitation is asserted. A host
+   * that surfaces every body inside the radius has not implemented this move, it has implemented a
+   * wallhack that happens to share its name, and the difference is invisible on screen until the
+   * one form the sense is supposed to miss shows up in the readout.
+   */
+  senseRadius: number
   /** why this move has no sim behaviour yet — only set on 'unbuilt' */
   why?: string
 }
@@ -174,6 +194,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   fieldDps: 0, fieldHps: 0, fieldStopsShots: false,
   shape: 'wall', shapeHeight: 1, statuses: [],
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
+  senseRadius: 0,
 }
 
 /** per-move build spec, keyed by keeper-moves id. Numbers are Jin's and free to tune. */
@@ -215,7 +236,27 @@ const BUILDS: Record<string, Build> = {
   'storm-cloak': { archetype: 'stance', resist: 0.3, cooldownMs: 500 },
   'ice-armor': { archetype: 'stance', resist: 0.42, moveMult: 0.95, cooldownMs: 500 },
   'flame-cloak': { archetype: 'unbuilt', why: 'needs a contact-retaliation hook — it is aura only, with no shell to fall back on' },
-  'tremor-sense': { archetype: 'unbuilt', why: 'needs a perception layer — enemy positions surfaced to the HUD' },
+  // ★★★ BUILT 2026-08-31, AND THE INTERESTING PART IS WHY IT WAS UNBUILT UNTIL TODAY. Its reason
+  // read *"needs a perception layer — enemy positions surfaced to the HUD"*, and that was true the
+  // day it was written: there was nothing in the world to perceive. There is now. The voxel world
+  // runs real-time bodies with positions, hp and a hunt (`voxel3d/hollows.ts`), and `supports`
+  // already declares every archetype. ⚠ THE BLOCKER LIFTED AND THE NOTE DID NOT, which is this
+  // house's most expensive recurring bug — an accurate sentence that quietly expires and keeps
+  // being believed. The guard against a repeat is in `tremor-sense.test.ts`: it asserts the move is
+  // BUILT while a hunting body exists, so the claim cannot rot in the other direction either.
+  //
+  // ── FREE, AND THAT IS A READING OF CANON RATHER THAN A BALANCE CALL ─────────
+  // `runes.md:557` states no cost. The shell pair is where canon put the drain (see `regenMult`), so
+  // inventing a mana ebb here would be writing a canon cost from the build side. It pays the way
+  // Flame Manipulation pays: it doesn't. What limits it is what canon BOUND it to — the ground.
+  //
+  // ── THE RADIUS IS DERIVED, NOT PICKED ──────────────────────────────────────
+  // `SENSE_RADIUS` is `hollows.PLAYER_EXCLUSION` — the ring inside which the night is forbidden to
+  // form a body. Making the sense exactly that wide means a pack is felt in the same instant it is
+  // allowed to exist, which is canon's *"ambush becomes impossible"* stated in the world's own
+  // numbers instead of in mine. `tremor-sense.test.ts` asserts the two are equal, so if the night's
+  // exclusion is ever retuned this number moves with it or the suite goes red.
+  'tremor-sense': { archetype: 'stance', senseRadius: SENSE_RADIUS, cooldownMs: 500 },
 
   // ── Tacticals ────────────────────────────────────────────────────────────────────────────────
   'static-burst': { archetype: 'surge', manaCost: 10, cooldownMs: 4500, surgeSecs: 2.5, surgeMult: 1.7 },
