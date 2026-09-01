@@ -23,6 +23,72 @@ the Arcade frame.
 
 **Files.** `voxel3d/locomotion.ts` · `voxel3d/locomotion.test.ts` · `voxel3d/VoxelWorld.tsx` (the lens) · `play3d/metrics.ts` + `metrics.test.ts` (the drift guard that reported 71 green through the whole divergence, because `SLIDE_MIN_SPEED` was never in `KIT`).
 
+## 🖥 Shimmer — **A WARNING WITH A 33ms LIFETIME IS NOT A WARNING** (2026-09-01, hub lane) · *Last touched 2026-09-01 — `a348cc2` pushed and LIVE in `BUILD_ID MK-apkdra3bOJTNesDMNu`. render-audit **144/0**, mutation-swept **5 ways, all 5 fire**, sweep **213/213 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon exit 0. Deploy double-verified from two angles.*
+
+### What happened, diagnosed in Alex's live browser rather than reproduced
+Alex's `/shimmer/voxel3d` tab went white after ~51 minutes and told him nothing for the 16 minutes
+he sat in front of it. Console: `THREE.WebGLRenderer: Context Lost.` at 19:23:49, main canvas
+`isContextLost: true`, the 2D minimap unaffected. **Not the server** (200 in 88ms, 5h uptime, no
+OOM, 4.8GB free) and **not a heap blowout** (179MB against a 4192MB limit). ⚠ **The cause of the
+loss itself is still UNKNOWN** — UHD 630 under ANGLE, a driver reset is the usual suspect, and this
+block does not claim more than that.
+
+### ★★★ The handler was CORRECT. The channel erased it.
+`VoxelWorld.tsx:4422` called `preventDefault()` and wrote `WEBGL CONTEXT LOST` — to `onStats`, the
+one-line channel the frame loop rewrites **unconditionally every frame** at `:8936`. Reproduced by
+dispatching the real `webglcontextlost` event on the already-dead canvas: **on screen for 2 frames,
+gone by 500ms.** So Alex got a white canvas under a HUD reporting `60 fps · 16.7 ms` with a full
+profiler breakdown, **all of it true**, because the CPU frame work genuinely continues on a lost
+context. The reading was not lying; it was answering a question nobody asked.
+
+### Decisions
+- **The loss latches a ref the FRAME LOOP returns on, ahead of `gpuFrame()`.** The loop stops
+  rewriting the line, the profiler stops publishing, and we stop burning a core rendering into a
+  context that will never present again. (Shape suggested by the locomotion window.)
+- **The warning is a sticky overlay with no timer**, naming the wall-clock moment drawing stopped.
+  ⚠ **NOT `onSay`, despite `:3405` pointing there as the durable player channel** — the toast
+  self-clears after 4200ms (`:845`) and a context loss is met minutes later by someone who was not
+  at the keyboard. `onStats` is too loud a channel; `onSay` is too short a one. **Ask how long a
+  message must SURVIVE, not merely where it goes.**
+- **The overlay names the GPU as the failed layer on purpose.** A frozen frame arrives looking like
+  whatever the player was doing when it froze — mid-sprint it reads as the new movement ramp locking
+  up, mid-stream as worldgen dying. That is the wrong-layer hunt `render-audit`'s own header
+  describes. The sentence is load-bearing and the file says so above it.
+- **`.gx-label`, not a hand-rolled uppercase+tracking triplet.** The overlay pushed `hud-type`'s
+  hand-rolled-label ratchet to 30 against a baseline of 29; the ratchet forbids raising the baseline
+  in its own words and it is right.
+
+### ⚠ The guard was green through all of it, and its replacement was blind too
+`render-audit.test.ts:452` was `ok(/webglcontextlost/.test(vw))` — a source-string assert proving a
+listener was REGISTERED, with no vocabulary for where its message went. It could not have failed
+this way. Replaced with asserts on the two properties that make a warning a warning: it does not go
+through a channel the frame loop owns, and nothing schedules it to disappear.
+★★ **The first version of the replacement was itself blind.** `/setTimeout\([^)]*setCtxLost/` cannot
+cross a `)`, and `setTimeout(() => setCtxLost(null), 4200)` puts one two characters in — so the one
+mutation it exists to catch passed clean. Caught by mutating it, never by reading it. A guard written
+against a bug, by the person who had just diagnosed that bug, in the same hour, still could not see it.
+
+### ⚠ The honest limits — read before calling it done
+- **Nobody has WATCHED the overlay render.** It is guarded five mutations deep and completely unseen;
+  it only draws on a real context loss. Same gap as meltbore — the wiring is proven, the look is not.
+  A temporary dev trigger is the honest way and is deliberately a separate commit.
+- **The cause of the context loss is not fixed, because it is not known.** If voxel3d loses the
+  context AGAIN, treat it as a resource leak rather than bad luck: `render-audit` guards per-object
+  allocation but nothing watches geometry/program growth as a TREND across a session.
+
+### ⚠ Still open in this lane, held deliberately
+`breakFx.setPixelScale` runs in a `useEffect` whose deps are `[breakFx, size.height, camera]`, but
+`cam.fov` is mutated IMPERATIVELY at `:6232` and `camera` is a stable reference — so no dependency
+changes, the effect never re-runs, and the chip scale stays at its mount value. `ADS_FOV = 50`
+(`engine/weapons.ts:100`), and `1/(2·tan(fov/2))` puts **50° at +64.6%** against the 75° baked in at
+mount. **Break chips have been ~65% oversized the entire time you are aiming, since ADS shipped.**
+The sprint lens adds −10.2% at 81° (top of the ramp) and −14.8% at 84° (the ceiling, reachable only
+above run speed — a bhop chain). **NOT fixed in this build on purpose:** Alex is judging the new run
+ramp by feel, and a chip-size change on the same screen makes an off-looking frame unattributable.
+
+### Files
+`src/app/shimmer/voxel3d/VoxelWorld.tsx` · `src/app/shimmer/voxel3d/render-audit.test.ts`
+
 ## 🔬 Shimmer — **dev/moves: A BENCH FOR THE FOUR SYSTEMS THAT SHIPPED UNSEEN** (2026-08-31, play lane) · *Last touched 2026-08-31 — `8dab6dd` pushed. Rendered 200 / 37KB through the owner gate on the lane server. dev-eye 22/0, tsc 7 (baseline), all play3d green. ⏸ NOT deployed — hub has it.*
 
 ### Why
