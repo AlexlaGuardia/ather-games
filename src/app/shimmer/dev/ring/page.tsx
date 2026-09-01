@@ -34,8 +34,8 @@ const GY = 0
 /** How fast the keeper ambles when `walk` is on — fast enough to force a recycle in seconds. */
 const WALK = 14
 
-function Ring({ tier, roster, walk, yaw, onStats }: {
-  tier: number; roster: number; walk: boolean; yaw: number
+function Ring({ tier, roster, walk, yaw, close, onStats }: {
+  tier: number; roster: number; walk: boolean; yaw: number; close: boolean
   onStats: (s: { drawn: number; cap: number; x: number; onScreen: number; nearest: number }) => void
 }) {
   const ring = useMemo(() => createPlotRing(SEED), [])
@@ -70,6 +70,7 @@ function Ring({ tier, roster, walk, yaw, onStats }: {
     // exactly that on 2026-08-27: the model said two residents were on screen and the screen was
     // empty, and the fault was neither the placement rule nor the camera.
     let onScreen = 0, nearest = Infinity
+    let nearestObj: THREE.Object3D | null = null
     for (const o of ring.group.children) {
       const dx = o.position.x - k.x, dz = o.position.z - k.z
       const dist = Math.hypot(dx, dz)
@@ -77,7 +78,34 @@ function Ring({ tier, roster, walk, yaw, onStats }: {
       while (off > Math.PI) off -= Math.PI * 2
       while (off < -Math.PI) off += Math.PI * 2
       if (Math.abs(off) < (53 * Math.PI) / 180 && dist < DAY.fogFar) onScreen++
-      if (dist < nearest) nearest = dist
+      if (dist < nearest) { nearest = dist; nearestObj = o }
+    }
+
+    /**
+     * ★★★ STAND NEXT TO ONE. THE PAGE COULD NOT DO ITS OWN JOB WITHOUT THIS (2026-09-01).
+     *
+     * The ring keeps its residents about the FOLD, so the nearest is ~48-52m away and stays there
+     * however far the keeper walks — walking to x=95 still reported `nearest 52`, because the pass
+     * recycles them to hold the ring. Meanwhile `creature-size.ts` sizes bodies from the books:
+     * a fox is **0.50m** and a firefly is **0.04m**. At 50m the largest resident subtends about
+     * twelve pixels and the smallest about one.
+     *
+     * ⚠ SO THE PAGE PROMISED *"standing still enough to look at"* AND SHOWED AN EMPTY FIELD, while
+     * its own readout truthfully said `drawn 6 / on screen 1`. Measured: two shots at different
+     * keeper positions contain ZERO creature-coloured pixels — only the 1px horizon seam — against
+     * a positive control on `dev/hold` that returns 252,055. Nothing was broken in the placement,
+     * the recycling or the cap; the looking-glass was simply fifty metres from its subject after
+     * the creature sizes were corrected in `a4fa76f`, and nobody re-checked what it could resolve.
+     *
+     * ⚠ IT MOVES THE KEEPER, NOT THE RESIDENT, and never touches the pass. The placement you judge
+     * has to stay the placement the world makes, or this page becomes a picture of its own opinion.
+     */
+    if (close && nearestObj) {
+      const to = nearestObj.position
+      k.yaw = Math.atan2(to.z - k.z, to.x - k.x)
+      const back = 1.5
+      k.x = to.x - Math.cos(k.yaw) * back
+      k.z = to.z - Math.sin(k.yaw) * back
     }
     onStats({ drawn: ring.count(), cap: ringCap(cfg), x: Math.round(k.x), onScreen, nearest })
   })
@@ -107,16 +135,17 @@ function Ring({ tier, roster, walk, yaw, onStats }: {
 // the params, and React reports a HYDRATION MISMATCH — which ships a red issue badge sitting over
 // the very picture this page exists to take. Caught by reading the page's console, not by looking
 // at it; the render was correct either way. (world lane, 2026-08-27.)
-function readParams(): Partial<{ tier: number; resting: number; yaw: number; walk: number }> {
+function readParams(): Partial<{ tier: number; resting: number; yaw: number; walk: number; close: number }> {
   const q = new URLSearchParams(window.location.search)
   const num = (n: string) => { const v = q.get(n); const x = v === null ? NaN : Number(v); return Number.isFinite(x) ? x : undefined }
-  return { tier: num('tier'), resting: num('resting'), yaw: num('yaw'), walk: num('walk') }
+  return { tier: num('tier'), resting: num('resting'), yaw: num('yaw'), walk: num('walk'), close: num('close') }
 }
 
 export default function RingPreview() {
   const [tier, setTier] = useState(0)
   const [roster, setRoster] = useState(6)
   const [walk, setWalk] = useState(false)
+  const [close, setClose] = useState(false)
   const [yaw, setYaw] = useState(0)
   const [stats, setStats] = useState({ drawn: 0, cap: 0, x: 0, onScreen: 0, nearest: Infinity })
   useEffect(() => {
@@ -125,6 +154,7 @@ export default function RingPreview() {
     if (p.resting !== undefined) setRoster(p.resting)
     if (p.yaw !== undefined) setYaw(p.yaw)
     if (p.walk !== undefined) setWalk(p.walk === 1)
+    if (p.close !== undefined) setClose(p.close === 1)
   }, [])
 
   return (
@@ -152,6 +182,12 @@ export default function RingPreview() {
                 className={`rounded px-2 py-0.5 ${walk ? 'bg-amber-300/20 text-amber-200' : 'bg-white/10'}`}>
           {walk ? 'walking' : 'still'}
         </button>
+        {/* ⚠ The residents sit ~50m out and are 4-50cm tall, so the default view cannot resolve
+            them at all. This stands the keeper next to the nearest one. */}
+        <button onClick={() => { setClose(c => !c); if (!close) setWalk(false) }}
+                className={`rounded px-2 py-0.5 ${close ? 'bg-emerald-300/20 text-emerald-200' : 'bg-white/10'}`}>
+          {close ? 'up close' : 'go to nearest'}
+        </button>
         {/* ★ `drawn` vs `cap` is the readout that matters: the cap is what the fold allows, drawn is
             what the world accepted. A gap between them is a placement being refused, not a bug. */}
         <span className="tabular-nums text-white/45">
@@ -172,7 +208,7 @@ export default function RingPreview() {
           <planeGeometry args={[2400, 2400]} />
           <meshStandardMaterial color="#3f6b46" />
         </mesh>
-        <Ring tier={tier} roster={roster} walk={walk} yaw={yaw} onStats={setStats} />
+        <Ring tier={tier} roster={roster} walk={walk} yaw={yaw} close={close} onStats={setStats} />
       </Canvas>
     </div>
   )
