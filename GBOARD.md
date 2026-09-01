@@ -11,7 +11,62 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🐌 Shimmer — **A 53ms UNIT CANNOT BE BUDGETED, SO IT IS NOT A UNIT ANY MORE** (2026-09-01, hub lane) · *Last touched 2026-09-01 — `978e1ec` pushed and LIVE in `BUILD_ID kwHqlf5i0zTVk1svXCnbl`. light **50/0**, spawn-budget **41/0**, mutation-swept **9 ways, all 9 fire**, sweep **213/213 · 0 FAIL · 0 KILLED** (SWEEP_EXIT read off the process), tsc 7 (baseline), canon 0.*
+## 🐌 Shimmer — **AN OVERLAY GUARDED FIVE MUTATIONS DEEP, WATCHED ONCE, AND WRONG IN THE FIRST SECOND** (2026-09-01, play lane) · *Last touched 2026-09-01 — `1794d57` + `f546df5` pushed and LIVE in `BUILD_ID CAX1SpHcuw8VF37eM-QDu` (served md5 == disk md5 on the public tunnel; retired string absent, new copy present, negative control 0). ctxlost-wiring **17/0/0** BLIND-separate-from-FAIL, **16 mutations across two sweeps, 14 fire and 2 survive by design**, console **83/0**, sweep **217/217 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon 0.*
+
+### `/ctxlost` — the door to a thing nobody could look at (closes #938)
+An owner-gated console verb that drops the GPU context **for real** via `WEBGL_lose_context`, so the
+lost-context overlay can be watched once. It had eleven asserts and five mutations against it since
+08-31 and **not one pair of eyes**, because it draws only on a genuine context loss.
+
+### Decisions
+- **★★★ A STATE POKE WAS THE CHEAP BUILD AND IT WAS THE WRONG ONE.** The overlay is the LAST of five
+  links — browser fires `webglcontextlost`, handler `preventDefault`s, `ctxLost.current` flips, the
+  frame loop bails, `onContextLost` stamps the moment. Poking link five draws a **correct** panel over
+  a world that is **still drawing**, which is not the event Alex met (a frozen HUD reporting 60fps).
+  A trigger whose picture differs from the real one *in the respect the panel's own text talks about*
+  does not answer the question, it **retires** it.
+- **Nothing calls `restoreContext()`, deliberately.** The blank world is half of what there is to look
+  at, and it makes the panel's "reloading will not clear it" true when triggered too. The tab is spent,
+  which is why the warning is in the **help line** — the reply is read after the context is gone.
+- **The trigger lives INSIDE the effect that owns the listeners.** In its own effect it could arm on a
+  canvas nothing is listening to: the original bug wearing the trigger's name. That is the guard's
+  load-bearing assert.
+
+### ★★★ And then looking at it broke it — the copy was wrong (`f546df5`)
+The panel promised *"what you can see is the last frame it managed"*. **The canvas CLEARS**: sky,
+terrain and reticle gone, HUD still fully drawn over nothing.
+- **⚠ CHECKED BEFORE REWRITING: not an artefact of the deliberate trigger.** The 08-31 incident says
+  Alex met a **WHITE** canvas in the wild. Two independent observations, one mechanism — this
+  `<Canvas>` does not pass `preserveDrawingBuffer`, so the page has no right to its last frame.
+- **★★ SAME FACT, TWO PAGES, OPPOSITE CONCLUSIONS, BOTH CORRECT.** `dev/court` and `dev/grey` DO set
+  it — which is load-bearing in hub's grey fix the same evening: the world's canvas lacks it so a lost
+  context clears, grey's has it so a read can reach the last frame.
+- **The guard is BIDIRECTIONAL.** The retired sentence must be gone **AND** the fact that retired it
+  must still hold; turn `preserveDrawingBuffer` on and it fires. A one-directional prose check goes
+  quiet at exactly the moment the old claim becomes true again.
+- The wrong reading is **kept in place with a correction above it**. A silently fixed comment teaches
+  nobody and quietly asserts the author was right all along.
+
+### ⚠ The guard failed on its own documentation twice in one session
+A `restoreContext` check matched the comment saying nothing calls `restoreContext`; later the copy
+check nearly matched the correction note naming the retired phrase. Both fixed with `codeOnly`, both
+kept as **negative controls** in the sweep. ★ And the fix taught the other half: `codeOnly` blanks
+**string bodies** too, so **structure asks `code`, literals ask `raw`** — `guard.ts` documents only
+the negative half. A flat 700-char window also overran into a dependency array; fixed the **domain**
+with `blockAt`, not the number.
+
+### Parked — Alex's to feel, not anyone's to build
+- **`#930` `dev/moves`** — burn 12 / rebuild 4s and ring legibility are still first guesses.
+- **Meltbore in-world** — hold **Z** or **B**. ⚠ Nothing draws the progress, and the bore pays in
+  **`credited`** mana, so an empty pool does nothing while the bar reads right. Without both facts a
+  correct cast reads as a dead key.
+- **`#940`** drained-keeper-cannot-slide is a **design ruling**, not a build item. Building it would
+  settle the question by shipping.
+
+### Files
+`voxel3d/VoxelWorld.tsx` (verb bridge, trigger, overlay copy) · `voxel3d/console.ts` (`ConsoleCtx.ctxLost`,
+the `ctxlost` row) · `voxel3d/console.test.ts` (+ section 7) · `voxel3d/ctxlost-wiring.test.ts` (new)
+
 
 ### What Alex saw, and the arithmetic that named it
 *"the game is spazzing out"*, with a profile: `world:spawn/light` at **55.80ms of a 58.9ms frame —
