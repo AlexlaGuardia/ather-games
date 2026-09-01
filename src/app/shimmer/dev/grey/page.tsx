@@ -70,8 +70,33 @@ function Bodies({ look, spin }: { look: HollowLook; spin: boolean }) {
  * Read the actual pixels back.
  *
  * ★★ THE ONLY HONEST INSTRUMENT ON THIS PAGE. Everything else is a picture and a picture cannot
- * tell you whether the body moved or the ground did. `readRenderTargetPixels` on the default frame
- * buffer gives the post-lighting, post-tone-map value — what an eye actually receives.
+ * tell you whether the body moved or the ground did. This is the post-lighting, post-tone-map
+ * value — what an eye actually receives.
+ *
+ * ⚠⚠⚠ AND IT RETURNED 0.0 FOR EVERY PIXEL IT EVER SAMPLED, UNTIL 2026-09-01. The old body of this
+ * function called `gl.readRenderTargetPixels(null, …)`, casting the null through
+ * `as unknown as THREE.WebGLRenderTarget` to get it past the compiler. three's very first line is
+ * `if (!(renderTarget && renderTarget.isWebGLRenderTarget)) { error(…); return }`
+ * (WebGLRenderer.js:2970) — so it logged to the console and **returned without touching the
+ * buffer**, leaving the freshly-allocated Uint8Array at zeros. luma(0,0,0) is 0. The panel then
+ * printed `body 0.0 · ground 0.0 · body/ground 0.00` with total confidence, on every frame, at
+ * every hour, since the page was written on 2026-08-27.
+ *
+ * ★★★ THE PAGE EXISTS BECAUSE ALEX SAID *"is there a way to isolate this chunk to be able to
+ * design this easily able to double check your work"*, and its own header calls this readout the
+ * only honest instrument on it. The one thing here that was not a picture was returning a constant.
+ * Measured from outside on 2026-09-01, the true values at these exact two points were **19.4 and
+ * 30.4** — a real contrast ratio of 0.64 reported as 0.00, which is the page's own stated failure.
+ *
+ * ⚠ THE CAST IS THE WHOLE STORY. `as unknown as` silenced the one check that would have caught it,
+ * and three reports this by console.error rather than by throwing, so nothing on the page or in any
+ * test could see it. Never widen a type to make an argument fit an API; the API meant it.
+ *
+ * ⚠ WE READ THE DEFAULT FRAMEBUFFER DIRECTLY, which is what `null` was reaching for. `useFrame` at
+ * the default priority runs BEFORE the renderer draws, so this samples the PREVIOUS frame — fine
+ * here and only because `<Canvas gl={{ preserveDrawingBuffer: true }}>` keeps it, and because the
+ * scene is sampled four times a second while turning slowly. Take the preserve flag away and this
+ * reads a cleared buffer and goes back to lying.
  */
 function Readout({ onSample }: { onSample: (s: { body: number; ground: number }) => void }) {
   const { gl, size } = useThree()
@@ -83,11 +108,15 @@ function Readout({ onSample }: { onSample: (s: { body: number; ground: number })
     const px = new Uint8Array(4)
     const luma = (b: Uint8Array) => (0.2126 * b[0] + 0.7152 * b[1] + 0.0722 * b[2])
     const dpr = gl.getPixelRatio()
+    const ctx = gl.getContext()
     const read = (fx: number, fy: number) => {
       // ⚠ WebGL reads from the BOTTOM-LEFT, so y is flipped against CSS coordinates. Getting this
       // wrong samples the sky and reports a confidently wrong number, which is worse than none.
-      gl.readRenderTargetPixels(null as unknown as THREE.WebGLRenderTarget,
-        Math.floor(fx * size.width * dpr), Math.floor((1 - fy) * size.height * dpr), 1, 1, px)
+      px[0] = px[1] = px[2] = px[3] = 0
+      ctx.bindFramebuffer(ctx.FRAMEBUFFER, null)   // null HERE is correct: it selects the canvas
+      ctx.readPixels(
+        Math.floor(fx * size.width * dpr), Math.floor((1 - fy) * size.height * dpr), 1, 1,
+        ctx.RGBA, ctx.UNSIGNED_BYTE, px)
       return luma(px)
     }
     // Centre of the frame is the stalker's body; a point well below it is bare ground.
