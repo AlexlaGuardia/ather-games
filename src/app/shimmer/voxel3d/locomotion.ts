@@ -115,7 +115,51 @@ export const CLIMB_STRAFE = 1.6
 export const CLIMB_MAX_RISE = 2.5
 export const MANTLE_REACH = 1.4
 export const WALLJUMP_UP = 7.0
+/** FLOOR on the kick's speed, not the kick's speed. See `kickOffWall`. */
 export const WALLJUMP_PUSH = 6.0
+// ── ★★★ THE WALL CATCH (2026-09-01, Alex: "when the player runs into an object it should feel
+// like a collision, sort of like the game is waiting for an input for a second — if no input the
+// player falls, forward the player climbs, and wall jump if the player hits the jump button") ──
+// THIS IS NOT A NEW MECHANIC. `hanging` already does exactly this at a LEDGE — its own comment
+// reads "a guaranteed beat, THEN input decides — in = pull up, away = drop". The catch is that
+// same beat generalised to a BLANK wall, with a third branch for jump.
+//
+// ⚠⚠ AND IT IS THE ROOT FIX FOR THREE SEPARATE DEFECTS, WHICH IS WHY IT IS WORTH THE STATE.
+// Measured on the old build: (1) contact only registered while pressing INTO the wall, while the
+// kick was REFUSED while pressing into it — so the move demanded press-in → reverse → jump inside
+// WALL_COYOTE. It fired at 150ms after reversing and was DEAD at 200ms, and nothing taught the
+// sequence or showed the window. (2) `airSpeed = WALLJUMP_PUSH` was an ASSIGNMENT, so arriving at
+// a full sprint 6.5 kicked at 6.00 and arriving off a slide at 10 also kicked at 6.00 — it paid
+// you for arriving slow, the same inverted reward the slide had until this morning. (3) the kick
+// threw you along the wall's GRID CARDINAL: measured 45° off a diagonal wish and 90° off a strafe.
+// All three trace to one root — CONTACT WAS DEFINED BY YOUR INPUT DIRECTION. The catch defines it
+// by the collision instead, which is what frees the kick to read input as steering.
+export const WALL_CATCH_TIME = 0.45
+/** ★★ THE GUARANTEED PIN, AND IT IS THE WHOLE FEATURE — see the branch block for what it cost to
+ *  leave out. Mirrors HANG_MIN, which exists for exactly this reason at a ledge. */
+export const WALL_CATCH_MIN = 0.18
+/** ★ DERIVED, and the derivation is the design: a WALK never catches, a sprint does. Casual
+ *  navigation must not pin you to every wall you brush, and after this morning's ramp the walk is
+ *  a real tier rather than the only speed — so the catch becomes one more thing the sprint EARNS.
+ *  A literal here goes stale the day RUN_SPEED moves and silently starts catching walkers. */
+export const WALL_CATCH_SPEED = RUN_SPEED * 0.8
+export const WALL_CATCH_SLIDE = 1.2   // slow slip down the face during the beat — grip, not glue
+export const WALL_CATCH_LOCK = 0.30   // after a release, the same wall cannot re-catch immediately
+/**
+ * Momentum carried OUT of a kick, against WALLJUMP_PUSH as a FLOOR.
+ * ⚠⚠ THIS WAS 0.92 AND THE FIX DID NOT FIX ANYTHING AT THE SPEED PEOPLE ACTUALLY ARRIVE AT.
+ * A sprint lands you at RUN_SPEED 6.5; 6.5 × 0.92 = 5.98, which is UNDER the 6.0 floor, so the
+ * floor won and the kick came out at exactly 6.00 — the old constant, the old speed loss, and a
+ * carry term that only paid above 6.52 (a slide or a bhop). The dead band covered essentially the
+ * whole realistic range and the code READ like a momentum fix the entire time.
+ * At 1.0 a wall returns exactly what you brought and never less. That cannot run away: the kick
+ * SETS speed from the arrival rather than adding to it, so a wall-to-wall chain is flat, not
+ * growing — which is why this does not need the bhop's fatigue term to stay bounded.
+ */
+export const WALLJUMP_KEEP = 1.0
+/** How far the move wish may angle the kick off the wall normal. Any component back INTO the face
+ *  is stripped before it is applied, so steering can never kick you into the wall you just left. */
+export const WALLJUMP_STEER = 0.8
 export const WALL_COYOTE = 0.18
 export const WALLJUMP_LOCK = 0.22
 /** Inward component of the move wish above which a jump press is read as "up this", not "off this".
@@ -239,6 +283,14 @@ export interface LocoState {
   climbRise: number
   onWall: boolean; wallNX: number; wallNZ: number; wallCX: number; wallCZ: number
   wallStick: number; wallLock: number
+  /** Seconds left in the wall-catch beat; >0 means the keeper is pinned and the game is waiting. */
+  wallCatchT: number
+  /** The speed the keeper ARRIVED with. This is what a kick carries out — see kickOffWall. */
+  catchSpeed: number
+  catchCX: number; catchCZ: number
+  catchLock: number
+  /** Armed by a catch resolving into a climb, so "forward" climbs without a held Space. */
+  catchClimb: boolean
   hanging: boolean; hangT: number; hangLock: number
   hangLipX: number; hangLipY: number; hangLipZ: number; hangCX: number; hangCZ: number
   mantleT: number; mantleDur: number
@@ -270,12 +322,43 @@ function stepDebt(s: LocoState, rise: number): void {
   s.stepSmooth = Math.max(-STEP_SMOOTH_MAX, Math.min(STEP_SMOOTH_MAX, s.stepSmooth + rise))
 }
 
+/**
+ * ── ★ THE ONE KICK — both the catch and the airborne wallStick path come through here ─────────
+ * Two call sites producing wall jumps with different momentum rules is exactly the drift this file
+ * keeps re-learning, so there is one function and no second copy of the maths.
+ *
+ * `carry` is the speed the keeper brought to the wall. It is a FLOOR, never an assignment: a walk
+ * into a wall still gets WALLJUMP_PUSH, and a slide into one leaves faster than it arrived.
+ * ⚠ The steer is stripped of any component back INTO the face BEFORE it is applied, so no wish can
+ * kick you into the wall you are leaving; if steering collapses the vector (a wish pointing exactly
+ * into the wall) it falls back to the pure normal rather than to a zero-length direction.
+ */
+function kickOffWall(s: LocoState, cx: number, cz: number, carry: number, mvX: number, mvZ: number): void {
+  let nx = -cx, nz = -cz                                   // the face's outward normal
+  if (mvX !== 0 || mvZ !== 0) {
+    let bx = nx + mvX * WALLJUMP_STEER, bz = nz + mvZ * WALLJUMP_STEER
+    const into = bx * cx + bz * cz                         // component pointing back at the face
+    if (into > 0) { bx -= cx * into; bz -= cz * into }
+    if (Math.hypot(bx, bz) > 1e-3) { nx = bx; nz = bz }
+  }
+  const n = Math.hypot(nx, nz) || 1
+  const speed = Math.min(SPEED_CAP, Math.max(WALLJUMP_PUSH, carry * WALLJUMP_KEEP))
+  s.hvx = (nx / n) * speed; s.hvz = (nz / n) * speed
+  s.vy = WALLJUMP_UP
+  s.airSpeed = speed
+  s.airborne = true
+  s.wallStick = 0; s.wallLock = WALLJUMP_LOCK
+  s.wallCatchT = 0; s.catchLock = WALL_CATCH_LOCK
+  s.justWallJumped = true
+}
+
 export function createLoco(px: number, feetY: number, pz: number): LocoState {
   return {
     px, py: feetY, pz, hvx: 0, hvz: 0, vy: 0, eye: EYE_STAND,
     airborne: true, coyoteT: 0, slideT: 0, crouchHeld: false, sprintT: 0, airSpeed: 0, prevMvX: 0, prevMvZ: 0,
     landGrace: 0, landSpeed: 0, jumpHeld: false, spaceHeldT: 0, jumpGapT: 0, climbRise: 0,
     onWall: false, wallNX: 0, wallNZ: 0, wallCX: 0, wallCZ: 0, wallStick: 0, wallLock: 0,
+    wallCatchT: 0, catchSpeed: 0, catchCX: 0, catchCZ: 0, catchLock: 0, catchClimb: false,
     hanging: false, hangT: 0, hangLock: 0, hangLipX: 0, hangLipY: 0, hangLipZ: 0, hangCX: 0, hangCZ: 0,
     mantleT: 0, mantleDur: MANTLE_TIME, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
     vaulting: false, carryVX: 0, carryVZ: 0,
@@ -568,14 +651,21 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     s.jumpGapT += dt
     if (s.spaceHeldT < CLIMB_HOLD_MIN || s.jumpGapT > CLIMB_REGRIP) s.spaceHeldT = 0
   }
-  const climbActive = s.spaceHeldT >= CLIMB_HOLD_MIN
+  // ★ EITHER a held Space (the original contract) OR a catch that resolved into a climb. The
+  // tap-never-mantles ruling is untouched: `catchClimb` can only be armed by an actual catch, so a
+  // tap still cannot accumulate its way into a mantle, which is the 08-07 bug that gate exists for.
+  const climbActive = s.spaceHeldT >= CLIMB_HOLD_MIN || s.catchClimb
   // Facing gates the climb exactly as it gates the grab: you scramble up what you LOOK at. A wall
   // you are merely strafe-pressed against is collision, not a ladder.
   const wallFaced = s.onWall && (input.fwdX * s.wallCX + input.fwdZ * s.wallCZ) > WALL_FACING
   s.climbing = s.airborne && wallFaced && climbActive && s.climbRise < CLIMB_MAX_RISE
 
   // ── horizontal velocity ─────────────────────────────────────────────────────────────────────
-  if (s.hanging || s.mantleT > 0) {
+  if (s.wallCatchT > 0) {
+    // Pinned against the face. The beat is the feature: nothing moves horizontally until the
+    // keeper says what this collision was FOR.
+    s.hvx = 0; s.hvz = 0
+  } else if (s.hanging || s.mantleT > 0) {
     s.hvx = 0; s.hvz = 0
   } else if (s.climbing) {
     const strafe = Math.max(-1, Math.min(1, mvX * input.rightX + mvZ * input.rightZ))
@@ -638,11 +728,37 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     s.py = ft
     return true
   }
+  const preVX = s.hvx, preVZ = s.hvz
+  const preSpeed = Math.hypot(preVX, preVZ)
+  let blockedX = 0, blockedZ = 0
   if ((s.hvx !== 0 || s.hvz !== 0) && s.mantleT <= 0 && !s.hanging) {
     const nx = s.px + s.hvx * dt
-    if (bodyFree(probe, nx, s.pz, s.py) || stepped(nx, s.pz)) s.px = nx; else s.hvx = 0
+    if (bodyFree(probe, nx, s.pz, s.py) || stepped(nx, s.pz)) s.px = nx; else { blockedX = Math.sign(s.hvx); s.hvx = 0 }
     const nz = s.pz + s.hvz * dt
-    if (bodyFree(probe, s.px, nz, s.py) || stepped(s.px, nz)) s.pz = nz; else s.hvz = 0
+    if (bodyFree(probe, s.px, nz, s.py) || stepped(s.px, nz)) s.pz = nz; else { blockedZ = Math.sign(s.hvz); s.hvz = 0 }
+  }
+
+  // ── ★★★ WALL-CATCH ENTRY — THE COLLISION IS THE TRIGGER, NOT YOUR INPUT DIRECTION ───────────
+  // The old `onWall` required `hasInput` AND the wall to lie along that input, which is what made
+  // the kick a press-in-then-reverse dance. A wall you hit at speed is a wall you hit at speed;
+  // the keeper does not stop being against it because they let go of the stick.
+  if (s.catchLock > 0) s.catchLock -= dt
+  if (s.wallCatchT <= 0 && s.catchLock <= 0 && (blockedX !== 0 || blockedZ !== 0)
+      && preSpeed >= WALL_CATCH_SPEED && !s.hanging && !s.climbing && !s.vaulting && s.mantleT <= 0 && !s.swimming) {
+    let cx = 0, cz = 0
+    if (blockedX !== 0 && (blockedZ === 0 || Math.abs(preVX) >= Math.abs(preVZ))) cx = blockedX
+    else if (blockedZ !== 0) cz = blockedZ
+    // ⚠ A REAL WALL ONLY. The same 2-high test the climb uses: a 1-block rise belongs to the vault
+    // ("going up a block is always a deliberate press", 07-08-07) and a half-slab is a STEP. If the
+    // catch took those it would eat both verbs at exactly the speed they are most used.
+    const bx = Math.floor(s.px), bz = Math.floor(s.pz)
+    const tall = solid(bx + cx, Math.floor(s.py + 0.5), bz + cz) && solid(bx + cx, Math.floor(s.py + 1.3), bz + cz)
+    if (tall) {
+      s.wallCatchT = WALL_CATCH_TIME
+      s.catchSpeed = preSpeed
+      s.catchCX = cx; s.catchCZ = cz
+      s.hvx = 0; s.hvz = 0
+    }
   }
 
   // ── vertical ────────────────────────────────────────────────────────────────────────────────
@@ -705,11 +821,10 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   const pushingIntoWall = hasInput && (mvX * s.wallCX + mvZ * s.wallCZ) > WALLJUMP_INTO
   const wallJumping = s.airborne && jumpEdge && !s.hanging && s.mantleT <= 0 && !s.climbing && s.wallStick > 0 && !pushingIntoWall
   if (wallJumping) {
-    s.vy = WALLJUMP_UP
-    s.hvx = s.wallNX * WALLJUMP_PUSH; s.hvz = s.wallNZ * WALLJUMP_PUSH
-    s.airSpeed = WALLJUMP_PUSH
-    s.wallStick = 0; s.wallLock = WALLJUMP_LOCK
-    s.justWallJumped = true
+    // ★ THROUGH THE SAME KICK AS THE CATCH, and carrying `airSpeed` rather than discarding it.
+    // This line used to be three assignments that pinned the launch at exactly WALLJUMP_PUSH from
+    // any approach; two call sites with two momentum rules is the drift this file keeps re-learning.
+    kickOffWall(s, s.wallCX, s.wallCZ, Math.max(s.airSpeed, Math.hypot(s.hvx, s.hvz)), mvX, mvZ)
   } else if (s.airborne && jumpEdge && s.coyoteT > 0 && !s.hanging && s.mantleT <= 0 && !s.climbing) {
     // Coyote jump: the ground JUST left (a downhill micro-fall, a ledge a frame ago) — honour the
     // press as the ground jump it was meant to be. The wall jump wins when both are live.
@@ -763,6 +878,49 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
         s.hvx = s.hangCX * settle; s.hvz = s.hangCZ * settle
       }
     }
+  } else if (s.wallCatchT > 0) {
+    /**
+     * ── ★★★ THE CATCH: THE GAME WAITS, AND THE KEEPER SAYS WHAT THE COLLISION WAS FOR ─────────
+     * Alex's three branches, in his own order: no input → fall · forward → climb · jump → kick.
+     * Deliberately modelled on the `hanging` block below, which is the same idea at a ledge and
+     * which already reads "a guaranteed beat, THEN input decides".
+     *
+     * ⚠⚠ MY FIRST CUT HAD NO MINIMUM AND THE BEAT NEVER HAPPENED. I argued in this very comment
+     * that the hang's HANG_MIN existed only because a hang is entered mid-climb with a direction
+     * already under the thumb, and that a catch was different. It is not different — IT IS THE
+     * SAME CASE AND MORE SO. You arrive at the wall by holding forward, so on the frame the catch
+     * fires, forward is still held, the climb branch resolves instantly and the keeper never
+     * pauses. Measured: caught and resolved on the SAME FRAME (f178), pinned for 0.00s.
+     * ⚠ AND IT LOOKED CORRECT — a keeper who runs at a wall and climbs it is a perfectly sensible
+     * thing to watch, so nothing on screen said the feature was missing. Only a frame dump did.
+     *
+     * So the DIRECTIONAL branches wait out WALL_CATCH_MIN, exactly as the hang does. JUMP does
+     * not: `jumpEdge` is already an edge, so it cannot be a leftover from the approach the way a
+     * held axis can, and an instant kick is the skilled play rather than an accident.
+     */
+    // Grip and slip, never glue — but CLAMPED TO THE FLOOR. A catch taken at the foot of a wall
+    // is grounded, and this branch runs ahead of the airborne one, so an unclamped slip would sink
+    // the keeper 0.54 blocks THROUGH the ground over one beat with nothing to catch them.
+    s.vy = -WALL_CATCH_SLIDE
+    const nyC = s.py + s.vy * dt
+    if (floorTop !== null && nyC <= floorTop) { s.py = floorTop; s.vy = 0 }
+    else s.py = nyC
+    const intoWall = hasInput ? (mvX * s.catchCX + mvZ * s.catchCZ) : 0
+    s.wallCatchT -= dt
+    const pinned = WALL_CATCH_TIME - s.wallCatchT      // how long the keeper has been held
+    if (jumpEdge) {
+      kickOffWall(s, s.catchCX, s.catchCZ, s.catchSpeed, mvX, mvZ)
+    } else if (pinned >= WALL_CATCH_MIN && intoWall > WALLJUMP_INTO) {
+      // Forward into the face = climb it. Hand off to the real climb rather than growing a second
+      // one: arm `catchClimb`, publish the wall refs the climb reads, and let next frame's
+      // predicate take it. CLIMB_MAX_RISE still budgets it, so this is not an infinite ladder.
+      s.wallCatchT = 0; s.catchClimb = true; s.airborne = true
+      s.onWall = true; s.wallCX = s.catchCX; s.wallCZ = s.catchCZ
+      s.wallNX = -s.catchCX; s.wallNZ = -s.catchCZ
+      s.wallStick = WALL_COYOTE
+    } else if (s.wallCatchT <= 0) {
+      s.catchLock = WALL_CATCH_LOCK; s.airborne = true                              // nobody spoke: fall
+    }
   } else if (s.hanging) {
     // Hang: gripped at the lip. A guaranteed beat, THEN input decides — in = pull up, away = drop.
     s.vy = 0
@@ -787,7 +945,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
       else s.py = ny
     }
     if (s.vy <= 0 && floorTop !== null && s.py <= floorTop) {
-      s.py = floorTop; s.vy = 0; s.airborne = false; s.climbRise = 0
+      s.py = floorTop; s.vy = 0; s.airborne = false; s.climbRise = 0; s.catchClimb = false
       s.landGrace = BHOP_WINDOW; s.landSpeed = Math.hypot(s.hvx, s.hvz)
     }
   } else if (jumpEdge) {

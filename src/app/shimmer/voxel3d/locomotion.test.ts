@@ -7,6 +7,7 @@
 import {
   createLoco, tickLocomotion, bodyFree, floorProbe,
   RUN_SPEED, WALK_SPEED, SPRINT_RAMP, SLIDE_MIN_SPEED, SLIDE_BOOST, SPEED_CAP,
+  WALL_CATCH_TIME, WALL_CATCH_MIN, WALL_CATCH_SPEED, WALL_CATCH_SLIDE, WALLJUMP_UP, WALLJUMP_STEER,
   JUMP_V0, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
   CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, eyeY, STEP_SMOOTH_MAX, DRAINED_SPEED,
   CROUCH_SPEED, type LocoInput,
@@ -906,6 +907,124 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   // and the ramp's own two ends, for the same reason a mirror is worse than an omission.
   ok(/^export const WALK_SPEED\s*=/m.test(code), 'BLIND: WALK_SPEED declaration is gone — the ramp has no bottom')
   ok(/^export const SPRINT_RAMP\s*=/m.test(code), 'BLIND: SPRINT_RAMP declaration is gone — the ramp has no duration')
+}
+
+// ── ★★★ THE WALL CATCH (2026-09-01) — "the game is waiting for an input for a second" ────────
+// Alex's three branches: no input → fall · forward → climb · jump → kick. The asserts below are
+// written against the shape of the bug I ACTUALLY SHIPPED while building it, not against the
+// design — see the guaranteed-pin assert, which is the one that would have caught me.
+{
+  const flat = (x: number, y: number, z: number) => y < 10 || (x >= 20 && y < 24)
+  /** Drop the keeper at the wall carrying an exact speed; return it on the frame it is caught. */
+  const catchAt = (v: number, feetY = 10, air = false) => {
+    const s = createLoco(19.0, 10, 0.5)
+    for (let i = 0; i < 10; i++) tickLocomotion(s, input(), flat)
+    if (air) { s.py = feetY; s.airborne = true; s.vy = 0 }
+    for (let i = 0; i < 90; i++) {
+      if (s.wallCatchT <= 0) { s.hvx = v; s.hvz = 0 }
+      tickLocomotion(s, input({ mvX: 1 }), flat)
+      if (s.wallCatchT > 0) return s
+    }
+    return null
+  }
+  // ⚠ NULL-TOLERANT ON PURPOSE. The asserts below short-circuit on a null, but the template
+  // literal in the MESSAGE is evaluated eagerly either way — so a strict `sp` makes a guard that
+  // is correct at runtime fail to typecheck, and the tempting fix is a `!` that throws instead of
+  // failing. That is the crash-not-fail bug this same block already learned once.
+  const sp = (s: ReturnType<typeof createLoco> | null) => (s ? Math.hypot(s.hvx, s.hvz) : NaN)
+
+  // 1. The gate. A walk must pass a wall without being pinned to it, or ordinary navigation
+  //    becomes flypaper; a sprint must catch. DERIVED from RUN_SPEED, so retuning the ramp cannot
+  //    silently start catching walkers.
+  ok(catchAt(WALK_SPEED) === null, `★ a WALK is not caught — navigation is not flypaper (${WALK_SPEED} vs gate ${WALL_CATCH_SPEED.toFixed(2)})`)
+  ok(catchAt(RUN_SPEED) !== null, '★ a SPRINT is caught — the catch is one more thing the ramp earns')
+
+  // 2. ★★★ THE GUARANTEED PIN. THIS IS THE ASSERT THAT WOULD HAVE CAUGHT MY OWN FIRST CUT.
+  //    You arrive holding forward, so on the frame the catch fires forward is STILL HELD. Without
+  //    a minimum the climb branch resolves on that same frame and the beat never happens — measured
+  //    at 0.00s pinned, and it LOOKED right, because a keeper who runs at a wall and climbs it is
+  //    a sensible thing to watch. Only a frame dump said otherwise.
+  {
+    const s0 = catchAt(RUN_SPEED)
+    // ⚠ NOT `!`. Removing the pin makes catchAt return null, and a non-null assertion THROWS —
+    // which the mutation harness read as neither pass nor fail, i.e. as a survivor. A guard must
+    // fail with a name, never crash. (PATTERNS 08-22: "a crash reads as neither pass nor fail".)
+    ok(s0 !== null, '★★★ BLIND/FAIL: no catch survived a frame — the pin is gone and the beat never happens')
+    const s = s0 ?? createLoco(0, 10, 0)
+    let held = 0
+    while (s.wallCatchT > 0 && held < 120) { tickLocomotion(s, input({ mvX: 1 }), flat); held++ }
+    ok(held / 60 >= WALL_CATCH_MIN - 0.02,
+       `★★★ holding FORWARD through the collision still pins for WALL_CATCH_MIN (${(held/60).toFixed(3)}s vs ${WALL_CATCH_MIN}) — without this the beat never happens`)
+    ok(s.catchClimb, '★ ...and then it converts to a climb, which is Alex\'s forward branch')
+  }
+
+  // 3. No input → falls, after the full beat, having slipped rather than stuck.
+  {
+    const air = (x: number, y: number, z: number) => y < 0 || (x >= 20 && y < 40)
+    const s = createLoco(19.0, 20, 0.5); s.airborne = true; s.vy = 0
+    let caught = -1, released = -1, yC = 0, yR = 0
+    for (let i = 0; i < 600; i++) {
+      if (s.wallCatchT <= 0 && caught < 0) { s.hvx = RUN_SPEED; s.hvz = 0 }
+      tickLocomotion(s, input(), air)                       // ⚠ no input at all
+      if (s.wallCatchT > 0 && caught < 0) { caught = i; yC = s.py }
+      if (caught >= 0 && released < 0 && s.wallCatchT <= 0) { released = i; yR = s.py }
+      if (released >= 0 && !s.airborne) break
+    }
+    ok(caught >= 0, '(premise) an airborne keeper is caught by the wall')
+    ok(Math.abs((released - caught) / 60 - WALL_CATCH_TIME) < 0.03,
+       `★ no input holds the FULL beat then releases (${((released-caught)/60).toFixed(2)}s vs ${WALL_CATCH_TIME})`)
+    ok(Math.abs((yC - yR) - WALL_CATCH_SLIDE * WALL_CATCH_TIME) < 0.05,
+       `★ and it slips down the face rather than sticking (${(yC-yR).toFixed(2)} blocks)`)
+    ok(s.py < yR - 1, `★ then FALLS — Alex's no-input branch (dropped to ${s.py.toFixed(2)} from ${yR.toFixed(2)})`)
+  }
+
+  // 4. ★★ THE KICK CARRIES WHAT YOU BROUGHT. The first cut had WALLJUMP_KEEP 0.92, and a sprint
+  //    arrival (6.5 × 0.92 = 5.98) fell UNDER the 6.0 floor — so the kick came out at exactly the
+  //    old constant and the "momentum fix" fixed nothing at the speed people actually arrive at.
+  const kickFrom = (v: number) => {
+    const s = catchAt(v); if (!s) return null
+    for (let i = 0; i < 12; i++) tickLocomotion(s, input(), flat)     // sit in the beat, no input
+    tickLocomotion(s, input({ mvX: -1, jumpKey: true }), flat)
+    return s
+  }
+  const slow = kickFrom(WALL_CATCH_SPEED + 0.1), fast = kickFrom(RUN_SPEED), slid = kickFrom(SLIDE_SPEED)
+  ok(!!slow && !!fast && !!slid, 'BLIND: an arrival was never caught — the kick asserts below measure nothing')
+  ok(!!slow?.justWallJumped && !!fast?.justWallJumped && !!slid?.justWallJumped, '(premise) all three arrivals kick')
+  ok(!!fast && !!slow && sp(fast) > sp(slow) + 0.15,
+     `★★ a SPRINT arrival kicks harder than a crawling one (${sp(fast).toFixed(2)} vs ${sp(slow).toFixed(2)}) — both were exactly 6.00 before`)
+  ok(!!slid && !!fast && sp(slid) > sp(fast) + 2,
+     `★★ and a SLIDE arrival harder still (${sp(slid).toFixed(2)}) — the wall returns what you brought`)
+  ok(!!fast && fast.vy > WALLJUMP_UP - 0.01, `the kick is a real jump (vy ${fast?.vy.toFixed(2)})`)
+
+  // 5. Steering, and the thing steering must never do.
+  {
+    const away = kickFrom(RUN_SPEED)
+    ok(!!away && away.hvx < 0, '★ the kick leaves the wall')
+    const s = catchAt(RUN_SPEED) ?? createLoco(0, 10, 0)
+    for (let i = 0; i < 12; i++) tickLocomotion(s, input(), flat)
+    tickLocomotion(s, input({ mvX: 1, jumpKey: true }), flat)         // ask to go INTO the face
+    ok(s.justWallJumped && s.hvx < 0,
+       `★★ asking to kick INTO the wall still leaves it (hvx ${s.hvx.toFixed(2)})`)
+    // ⚠⚠ AND THE HONEST NOTE ABOUT THE ASSERT ABOVE, found by the sweep: at WALLJUMP_STEER ≤ 1 the
+    // inward-strip in kickOffWall is UNREACHABLE — the normal is a unit vector and the wish adds at
+    // most STEER, so the sum can never point inward, and removing the strip SURVIVES the whole
+    // oracle. The strip is a guard for a future STEER, not live code. Rather than pretend to test
+    // it, pin the premise that makes it dead: raise STEER above 1 and this fails, which is exactly
+    // when someone must go read the strip.
+    ok(WALLJUMP_STEER <= 1,
+       `⚠ WALLJUMP_STEER is ${WALLJUMP_STEER} — above 1 a wish CAN point the kick back into the wall, so kickOffWall's inward-strip stops being dead code and needs a real test`)
+  }
+
+  // 6. ⚠ THE CATCH MUST NOT EAT THE VAULT. A 1-block rise is a deliberate press (07-08-07) and a
+  //    half-slab is a step; the catch takes only 2-high faces. If it ever widened, it would steal
+  //    both verbs at exactly the speed they are most used, and a stolen vault reads as a stuck player.
+  {
+    const terrace = (x: number, y: number, z: number) => y < 10 || (x >= 20 && y < 11)
+    const s = createLoco(19.0, 10, 0.5)
+    for (let i = 0; i < 10; i++) tickLocomotion(s, input(), terrace)
+    for (let i = 0; i < 40; i++) { if (s.wallCatchT <= 0) { s.hvx = RUN_SPEED; s.hvz = 0 } ; tickLocomotion(s, input({ mvX: 1 }), terrace) }
+    ok(s.wallCatchT <= 0 && !s.catchClimb, '⚠ a 1-block rise does NOT catch — it is still the vault')
+  }
 }
 
 // ── ★ THE SPEED LENS IS WIRED, AND WIRED TO SPEED ────────────────────────────────────────────
