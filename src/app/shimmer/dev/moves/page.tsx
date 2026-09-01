@@ -254,8 +254,12 @@ export default function MovesBenchPage() {
           </div>
           {ended && <p style={{ marginTop: 10, marginBottom: 0, color: ended === 'broke through' ? '#40d060' : ended === 'dry' ? '#e05a4d' : '#8aa9a0' }}>{ended}</p>}
           <p style={{ ...sub, marginTop: 10, marginBottom: 0 }}>
-            ⚠ meltbore is still UNBUILT in the game: both halves exist, but no host holds a key down
-            for a cast. This bench IS that missing input path, standing in.
+            Meltbore is LIVE in the world: hold the cast key. The host polls the held key and pays
+            the bore in credited mana every frame (VoxelWorld, sustainStep + boreStep). Two honest
+            limits remain, and they are the reason to still use this bench: it is KEYBOARD ONLY
+            (the pad adapter exposes a newly-pressed edge, not a held set, so a pad channel shuts
+            the frame after it opens), and nothing draws the progress — boreStep returns it, no HUD
+            reads it, so in the world you feel the wait without seeing it.
           </p>
         </section>
       </div>
