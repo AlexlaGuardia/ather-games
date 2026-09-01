@@ -3721,7 +3721,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // AND THE SPEED LENS MAKES IT FALSE MORE OFTEN. `cam.fov` is mutated IMPERATIVELY in the frame
   // loop, which triggers no React render, so this effect does not re-run and the scale stays at
   // whatever the lens read at mount. ADS has broken it since it shipped — 75° → 50° is a ~65%
-  // error in chip size while aiming — and the sprint lens adds ~10% at 81°. NOT FIXED HERE on
+  // error in chip size while aiming. The lens adds −10% at 81° and −15% at its 84° ceiling, and
+  // those are two different VERBS, not a big sprint and a bigger one: `over` reaches 1.0 exactly
+  // AT RUN_SPEED (81°), and the SPEED_LENS_MAX 1.5 ceiling needs 7.65 — above run speed, so only
+  // a slide or a chained hop ever sees 84°. Both numbers recomputed from 1/(2·tan(fov/2)); a peer
+  // and I each got one of them wrong first, in opposite directions. NOT FIXED HERE on
   // purpose: the comment above says explicitly this must not become a per-frame uniform write,
   // and the honest fix is to recompute on the lens settling, which is a break-fx change and does
   // not belong in a movement commit. Written down so the next reader does not conclude the sprint
