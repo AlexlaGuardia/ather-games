@@ -27,6 +27,7 @@ import * as THREE from 'three'
 import { createBreakFx } from '../../voxel3d/break-fx'
 import { bucketOf, recipeFor, swingChips, chipColor, ALL_BUCKETS, type BreakBucket } from '../../voxel3d/break-fx-spec'
 import { ALL_BLOCKS } from '../../voxel/registry'
+import { blockX, fitDistance } from './framing'
 import { MATERIAL_COLOR } from '../../voxel3d/attrs'
 import { baseOf } from '../../voxel/depth'
 
@@ -112,15 +113,48 @@ function Row({ onStats }: { onStats: (live: number, dropped: number) => void }) 
     <>
       <primitive object={fx.points} />
       {blocks.map((b, i) => (
-        <mesh key={b.bucket} position={[i * 2 - blocks.length, 0, 0]} visible={!hidden[i]}>
+        <mesh key={b.bucket} position={[blockX(i, blocks.length), 0, 0]} visible={!hidden[i]}>
           <boxGeometry args={[1, 1, 1]} />
           {/* The demo block wears the chips' own colour — one source, so they cannot disagree. */}
           <meshLambertMaterial color={chipColor(b.material)} />
         </mesh>
       ))}
       <gridHelper args={[40, 40, 0x3a3a44, 0x2a2a33]} position={[0, -0.5, 0]} />
+      <FitRow count={blocks.length} />
     </>
   )
+}
+
+/**
+ * Keep every bucket inside the frame, at any window shape.
+ *
+ * ★★ WHY THIS IS NOT A BIGGER `z` LITERAL. On 2026-09-01 this page was cropping its FIRST bucket
+ * off the left edge at a 1500px viewport, and the first bucket is **stone** — the one the caption
+ * builds its whole argument on (*"stone should snap and die"*). Two separate faults stacked:
+ * the row was laid out from `i * 2 - blocks.length`, which for 7 blocks runs x=-7..+5 and is
+ * centred on **-1**, not 0; and even centred, ±6.5 of cubes does not fit the ±6.30 the frustum
+ * gives at that aspect. A hand-picked camera distance fixes today's window and silently re-crops
+ * on a laptop, a phone, or the day an eighth bucket is added.
+ *
+ * ⚠ SO THE DISTANCE IS DERIVED FROM THE THINGS THAT DECIDE IT — the block COUNT, the fov and the
+ * live aspect. Add a bucket and the camera pulls back on its own. `ALL_BUCKETS` comes from the
+ * shipped recipe table, so the count is not this page's to know.
+ *
+ * ⚠ AND A CROPPED LOOKING-GLASS IS THE WORST KIND OF WRONG: nothing is missing from the SCENE, so
+ * the page looks correct and simply is not showing you one of the things it is comparing. The
+ * caption still said "left to right: stone, crystal, ..." while stone was off-screen.
+ */
+function FitRow({ count }: { count: number }) {
+  const { camera, size } = useThree()
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera
+    const aspect = size.width / Math.max(1, size.height)
+    // ⚠ The derivation lives in `framing.ts` so the guard can assert the real invariant instead of
+    // restating this arithmetic beside it. `fitDistance` never returns less than the authored z.
+    cam.position.z = fitDistance(count, cam.fov, aspect)
+    cam.updateProjectionMatrix()
+  }, [camera, size, count])
+  return null
 }
 
 export default function BreakFxPage() {
