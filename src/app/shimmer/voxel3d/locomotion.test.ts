@@ -8,6 +8,7 @@ import {
   createLoco, tickLocomotion, bodyFree, floorProbe,
   RUN_SPEED, WALK_SPEED, SPRINT_RAMP, SLIDE_MIN_SPEED, SLIDE_BOOST, SPEED_CAP,
   WALL_CATCH_TIME, WALL_CATCH_MIN, WALL_CATCH_SPEED, WALL_CATCH_SLIDE, WALLJUMP_UP, WALLJUMP_STEER,
+  HANG_MIN, MANTLE_VAULT_WINDOW,
   JUMP_V0, SLIDE_SPEED, SLIDEHOP_BOOST, WALLJUMP_PUSH,
   CLIMB_HOLD_MIN, CLIMB_MAX_RISE, EYE_STAND, EYE_SLIDE, eyeY, STEP_SMOOTH_MAX, DRAINED_SPEED,
   CROUCH_SPEED, type LocoInput,
@@ -907,6 +908,101 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   // and the ramp's own two ends, for the same reason a mirror is worse than an omission.
   ok(/^export const WALK_SPEED\s*=/m.test(code), 'BLIND: WALK_SPEED declaration is gone — the ramp has no bottom')
   ok(/^export const SPRINT_RAMP\s*=/m.test(code), 'BLIND: SPRINT_RAMP declaration is gone — the ramp has no duration')
+}
+
+// ── ★★★ THE LEDGE IS PART OF THE MOVEMENT (2026-09-01, Alex) ─────────────────────────────────
+// "a grab leads to a mantle and at the end of a mantle if the player taps the jump button it
+// vaults". Three changes, one guard each, plus the two contracts that must NOT move.
+{
+  const TOP = 16
+  const face = (x: number, y: number, z: number) => y < 0 || (x >= 20 && y < TOP)
+  /** Pressed to the face inside the grab window, descending. */
+  /**
+   * `after` is what the keeper does ONCE GRIPPED, and it is the whole point of the parameter.
+   * ⚠⚠ MY FIRST VERSION HELD FORWARD THROUGHOUT, AND THE CENTRAL MUTATION SURVIVED BECAUSE OF IT:
+   * forward also satisfies the OLD `intoLedge > HANG_COMMIT` requirement, so restoring the old
+   * design changed nothing the test could see. It is the same shape as the wall-catch bug earlier
+   * today — the input that gets you to the wall is still held when the branch is evaluated — and
+   * knowing that did not stop me writing it again. Use 'none' to assert the AUTO-commit.
+   */
+  const atLedge = (space: boolean, tapTail = false, after: 'into' | 'none' | 'away' = 'into', seed = 0) => {
+    const s = createLoco(19.6, TOP - 1.2, 0.5)
+    s.airborne = true; s.vy = 0; s.airSpeed = seed
+    let hung = false, hangFrames = 0, mantled = false, start = -1, tapped = false
+    for (let i = 0; i < 400; i++) {
+      let jk = space
+      if (tapTail && s.mantleT > 0 && s.mantleT <= MANTLE_VAULT_WINDOW && !tapped) { jk = true; tapped = true }
+      const mv = !hung ? 1 : after === 'away' ? -1 : after === 'none' ? 0 : 1
+      tickLocomotion(s, input({ mvX: mv, jumpKey: jk }), face)
+      if (s.hanging) { hung = true; hangFrames++ }
+      if (s.mantleT > 0 && start < 0) { mantled = true; start = i }
+      if (mantled && s.mantleT <= 0 && i > start + 2) break
+      if (!s.airborne && !s.hanging && i > 60) break
+    }
+    return { s, hung, hangFrames, mantled }
+  }
+  const sp = (s: ReturnType<typeof createLoco>) => Math.hypot(s.hvx, s.hvz)
+
+  // 1. ★★ THE GRAB IS SITUATIONAL, NOT KEYED. Measured before the change: an identical fall with
+  //    no Space held went straight past a lip the keeper's hands were inside, to the floor.
+  ok(atLedge(false).hung, '★★ a ledge is grabbed with NO held Space — the grab is part of the movement')
+  ok(atLedge(true).hung, '...and a held Space still grabs, unchanged')
+
+  // 2. ★★ A GRAB LEADS TO A MANTLE. The hang used to need a FRESH push past HANG_COMMIT, so a
+  //    keeper who grabbed and did nothing hung there forever: the ledge was a stop.
+  {
+    const r = atLedge(false, false, 'none')     // ⚠ 'none': release everything once gripped
+    ok(r.mantled, '★★ the grab commits to a mantle on its own — no second input')
+    ok(r.hangFrames / 60 >= HANG_MIN - 0.02,
+       `★ ...but not instantly: the beat survives (${(r.hangFrames/60).toFixed(2)}s vs HANG_MIN ${HANG_MIN}) — a catch that pulls on frame one is a snap`)
+    ok(Math.abs(r.s.py - TOP) < 0.05 && !r.s.airborne, `and it ends standing on the lip (py ${r.s.py.toFixed(2)})`)
+  }
+
+  // 3. ⚠ AND AWAY STILL DROPS. Checked BEFORE the auto-commit, so the drop can never be eaten by
+  //    the pull-up firing on the same frame — the whole reason the beat is kept.
+  {
+    const r = atLedge(false, false, 'away')
+    ok(!r.mantled, '⚠ pressing AWAY still drops instead of mantling — the auto-commit did not eat it')
+    ok(r.s.hvx < -1, `and it shoves you off the face (hvx ${r.s.hvx.toFixed(2)})`)
+  }
+
+  // 4. ★★★ THE TOP OF A MANTLE IS AN INPUT.
+  {
+    const settleR = atLedge(false, false, 'none'), vaultR = atLedge(false, true, 'none')
+    ok(!settleR.s.airborne && sp(settleR.s) < RUN_SPEED,
+       `(premise) no tap = settle onto the lip (speed ${sp(settleR.s).toFixed(2)})`)
+    ok(vaultR.s.justLedgeVault && vaultR.s.airborne,
+       '★★★ a jump tapped in the mantle tail VAULTS out instead of settling')
+    ok(sp(vaultR.s) > sp(settleR.s) + 2,
+       `★★ and leaves carrying speed (${sp(vaultR.s).toFixed(2)} vs ${sp(settleR.s).toFixed(2)})`)
+    ok(vaultR.s.vy > 0, `and airborne with real lift (vy ${vaultR.s.vy.toFixed(2)})`)
+  }
+
+  // 5. ★ THE WINDOW IS REAL — a tap that is not in the tail does not arm it. Without this the
+  //    assert above passes for "any jump ever pressed during a mantle", which is not the feature.
+  {
+    const s = createLoco(19.6, TOP - 1.2, 0.5); s.airborne = true; s.vy = 0
+    let armedEarly = false
+    for (let i = 0; i < 400; i++) {
+      // press jump ONLY while the mantle still has more than the window left
+      const early = s.mantleT > MANTLE_VAULT_WINDOW + 0.02
+      tickLocomotion(s, input({ mvX: 1, jumpKey: early }), face)
+      if (s.justLedgeVault) armedEarly = true
+      if (!s.airborne && !s.hanging && i > 60) break
+    }
+    ok(!armedEarly, '★ a jump pressed EARLY in the mantle does not arm the vault — the tail window is real')
+  }
+
+  // 6. ★ IT CARRIES WHAT YOU BROUGHT. Floored at RUN_SPEED so a grab taken at a crawl still flows.
+  //    ⚠ THAT FLOOR IS A REAL DEAD BAND AND IT IS DELIBERATE: an arrival anywhere from 0 to
+  //    RUN_SPEED leaves at RUN_SPEED, so this does NOT reward a sprint over a walk — only a slide
+  //    or a chain shows above it. Said out loud because the same shape WAS the bug in the wall
+  //    kick this morning, and there it was an accident; here it is the design.
+  {
+    const slow = atLedge(false, true, 'none', 0), slid = atLedge(false, true, 'none', SLIDE_SPEED)
+    ok(Math.abs(sp(slow.s) - RUN_SPEED) < 0.1, `a crawl still flows out at RUN_SPEED (${sp(slow.s).toFixed(2)})`)
+    ok(sp(slid.s) > sp(slow.s) + 2, `★ and a SLIDE arrival launches harder (${sp(slid.s).toFixed(2)})`)
+  }
 }
 
 // ── ★★★ THE WALL CATCH (2026-09-01) — "the game is waiting for an input for a second" ────────

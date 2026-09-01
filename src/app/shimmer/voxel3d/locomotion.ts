@@ -184,6 +184,25 @@ export const CLIMB_REGRIP = 0.12
 export const HANG_DROP = 0.9
 export const MANTLE_TIME = 0.30
 export const HANG_MIN = 0.22
+// ── ★★★ THE LEDGE IS PART OF THE MOVEMENT NOW (2026-09-01, Alex: "what if we just make grabbing
+// the ledges part of the movement.. so a grab leads to a mantle and at the end of a mantle if the
+// player taps the jump button it vaults") ──────────────────────────────────────────────────────
+// Three changes, and the first is the one that makes the ledge stop being a stop:
+//  1. A GRAB NO LONGER NEEDS A HELD SPACE. Measured before: with no key held, a keeper falling
+//     with their hands inside the grab window fell straight past it to the floor; the identical
+//     fall holding Space grabbed. That is the same "entry gated on an input rather than on the
+//     situation" defect the wall jump had this morning, wearing a ledge.
+//  2. A GRAB LEADS TO A MANTLE. The hang used to WAIT — it needed a fresh push into the ledge past
+//     HANG_COMMIT to commit. The default is inverted: after the beat it pulls up on its own, and
+//     pushing AWAY is what still drops you. The beat survives because it is what makes the drop
+//     possible at all, and because a catch that pulls instantly reads as a snap.
+//  3. AND THE TOP OF A MANTLE IS AN INPUT. Tap jump in the last MANTLE_VAULT_WINDOW and you leave
+//     the lip carrying what you brought to it instead of settling on it — the same rhythm the
+//     vault-chain combo already rewards on a staircase, extended to the ledge.
+// ⚠ WHAT DELIBERATELY DID NOT CHANGE: the camera-facing gate. It is what stops "keeps grabbing
+// adjacent blocks that happen to be 2 high" (Alex, 08-07) and its guard is still green — the fix
+// there was contact+facing, and only the HELD-KEY half of the entry was the problem.
+export const MANTLE_VAULT_WINDOW = 0.15
 export const HANG_COMMIT = 0.35
 export const WALL_FACING = 0.5      // camera-forward · wall-cardinal for a CLIMB or a GRAB — both
                                     // belong to the wall directly ahead of your eyes, never a face
@@ -292,6 +311,11 @@ export interface LocoState {
   /** Armed by a catch resolving into a climb, so "forward" climbs without a held Space. */
   catchClimb: boolean
   hanging: boolean; hangT: number; hangLock: number
+  /** Speed the keeper brought to the ledge — what a vault-out at the top gives back. */
+  grabSpeed: number
+  /** A jump tapped in the mantle's tail: leave the lip instead of settling on it. */
+  vaultArmed: boolean
+  justLedgeVault: boolean
   hangLipX: number; hangLipY: number; hangLipZ: number; hangCX: number; hangCZ: number
   mantleT: number; mantleDur: number
   mFromX: number; mFromY: number; mFromZ: number; mToX: number; mToY: number; mToZ: number
@@ -360,6 +384,7 @@ export function createLoco(px: number, feetY: number, pz: number): LocoState {
     onWall: false, wallNX: 0, wallNZ: 0, wallCX: 0, wallCZ: 0, wallStick: 0, wallLock: 0,
     wallCatchT: 0, catchSpeed: 0, catchCX: 0, catchCZ: 0, catchLock: 0, catchClimb: false,
     hanging: false, hangT: 0, hangLock: 0, hangLipX: 0, hangLipY: 0, hangLipZ: 0, hangCX: 0, hangCZ: 0,
+    grabSpeed: 0, vaultArmed: false, justLedgeVault: false,
     mantleT: 0, mantleDur: MANTLE_TIME, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
     vaulting: false, carryVX: 0, carryVZ: 0,
     justWallJumped: false, justHopped: false, sliding: false, crouching: false, climbing: false,
@@ -536,7 +561,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   const dt = Math.min(input.dt, 0.05)          // a stutter frame must not launch a huge step
   const { mvX, mvZ, crouchKey, jumpKey } = input
   const hasInput = (mvX !== 0 || mvZ !== 0)
-  s.justWallJumped = false; s.justHopped = false
+  s.justWallJumped = false; s.justHopped = false; s.justLedgeVault = false
 
   // Normalise at the boundary: booleans stay valid (every feel test, unchanged), codes add water.
   // CELL_HALF collides as full until the half-slab pass teaches ground height fractions.
@@ -778,7 +803,9 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   // happened to be 2-high could snatch a hang out of the air. Now a hang can only target the wall
   // being CLIMBED: real contact (or the breath of coyote after it), that wall's own cardinal, and
   // the camera facing it. Off-wall jumps never grab; that is what the vault and the jump are for.
-  if (!s.hanging && s.mantleT <= 0 && s.hangLock <= 0 && climbActive && s.airborne) {
+  // ★ `climbActive` IS GONE FROM THIS CONDITION — that is change (1). Contact, the wall's own
+  // cardinal and the camera facing it all still gate the grab; only the held key left.
+  if (!s.hanging && s.mantleT <= 0 && s.hangLock <= 0 && s.airborne) {
     const hasCard = (s.onWall || s.wallStick > 0) && (s.wallCX !== 0 || s.wallCZ !== 0)
     const faced = hasCard && (input.fwdX * s.wallCX + input.fwdZ * s.wallCZ) > WALL_FACING
     if (faced) {
@@ -786,6 +813,11 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
       const lip = lipAt(solid, bx, bz, s.py)
       if (lip !== null) {
         s.hanging = true; s.hangT = 0
+        // What the keeper brought to the ledge. `airSpeed` is the airborne momentum the walker
+        // actually renormalises to, so it survives the frame the wall zeroed hvel — reading hvel
+        // here would bank a 0 for every grab that follows a contact, which is most of them.
+        s.grabSpeed = Math.max(s.airSpeed, Math.hypot(s.hvx, s.hvz))
+        s.vaultArmed = false
         s.hangLipX = bx + 0.5; s.hangLipY = lip; s.hangLipZ = bz + 0.5
         s.hangCX = s.wallCX; s.hangCZ = s.wallCZ
         s.climbRise = 0
@@ -844,6 +876,13 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     // climb-mantle, and dividing by the constant meant a vault began its ease ~47% complete — ~70%
     // of the height applied on frame one. That was the "sometimes it just blinks up": the full
     // mantle (0.30s) divided correctly and read as a hop; every vault (0.16s) snapped.
+    // ★ CHANGE (3): a jump tapped in the TAIL of the mantle arms a vault-out. Buffered rather
+    // than read at the instant of completion — completion lands between frames, so requiring the
+    // press on that exact frame would make the combo a coin flip at any framerate. This is the
+    // same reasoning as BHOP_WINDOW and COYOTE_TIME: the input is judged over a window, not a tick.
+    // ⚠ Armed only during a LEDGE mantle, never a vault: `s.vaulting` already owns its own chain
+    // (jump HELD + another faced step) and two combos on one press would fight.
+    if (jumpEdge && !s.vaulting && s.mantleT <= MANTLE_VAULT_WINDOW) s.vaultArmed = true
     s.mantleT -= dt
     const t = 1 - Math.max(0, s.mantleT) / s.mantleDur
     const e = t * t * (3 - 2 * t)
@@ -873,6 +912,14 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
             s.hangCX = cardX; s.hangCZ = cardZ
           }
         }
+      } else if (s.vaultArmed) {
+        // Leave the lip carrying what you brought to it. Floored at RUN_SPEED so a grab taken at
+        // a crawl still flows, and capped so a slide into a ledge cannot launch past SPEED_CAP.
+        const out = Math.min(SPEED_CAP, Math.max(RUN_SPEED, s.grabSpeed))
+        s.hvx = s.hangCX * out; s.hvz = s.hangCZ * out
+        s.vy = JUMP_V0 * 0.8
+        s.airborne = true; s.airSpeed = out
+        s.vaultArmed = false; s.justLedgeVault = true
       } else {
         const settle = RUN_SPEED * 0.4
         s.hvx = s.hangCX * settle; s.hvz = s.hangCZ * settle
@@ -926,14 +973,18 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     s.vy = 0
     s.py = s.hangLipY - HANG_DROP
     s.hangT += dt
-    if (s.hangT >= HANG_MIN && intoLedge > HANG_COMMIT) {
-      s.mFromX = s.px; s.mFromY = s.py; s.mFromZ = s.pz
-      s.mToX = s.hangLipX; s.mToY = s.hangLipY; s.mToZ = s.hangLipZ
-      s.mantleT = MANTLE_TIME; s.mantleDur = MANTLE_TIME; s.hanging = false
-    } else if (s.hangT >= HANG_MIN && intoLedge < -HANG_COMMIT) {
+    // ★ CHANGE (2): after the beat this pulls up ON ITS OWN. It used to require a fresh push past
+    // HANG_COMMIT, so a keeper who grabbed a ledge and did nothing hung there indefinitely — the
+    // ledge was a stop, which is exactly what Alex asked to remove. Away still drops, and it is
+    // checked FIRST so the drop can never be lost to the auto-commit on the same frame.
+    if (s.hangT >= HANG_MIN && intoLedge < -HANG_COMMIT) {
       s.hanging = false; s.hangLock = 0.35
       s.airborne = true; s.vy = 0
       s.hvx = -s.hangCX * 2.2; s.hvz = -s.hangCZ * 2.2
+    } else if (s.hangT >= HANG_MIN) {
+      s.mFromX = s.px; s.mFromY = s.py; s.mFromZ = s.pz
+      s.mToX = s.hangLipX; s.mToY = s.hangLipY; s.mToZ = s.hangLipZ
+      s.mantleT = MANTLE_TIME; s.mantleDur = MANTLE_TIME; s.hanging = false
     }
   } else if (s.airborne) {
     if (wallJumping) { s.py += s.vy * dt }
