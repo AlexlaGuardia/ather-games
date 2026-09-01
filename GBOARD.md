@@ -11,6 +11,43 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔭 Shimmer — **THE DEV SURFACE: 15 OF 16 PAGES WERE URL-ONLY, AND THREE OF THEM COULD NOT SEE THEIR OWN SUBJECT** (2026-09-01, hub lane) · *Last touched 2026-09-01 — `060a6fd` `5a89236` `3b24d43` `b00e120` `00b6985` pushed and LIVE in `BUILD_ID NTo6mijWQBlleLjvJZj_L`, 169 chunks (served md5 == disk md5 on both changed chunks, positive markers present, control absent). dev-pages **205/0**, dev-claims **7/0**, grey-readout **9/0/0**, break-framing **33/0**, dev-eye **22/22**. Sweep **218/218 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon 0.*
+
+### What Alex asked for
+*"id like to spend our first session organizing and improving the dev side of our game i feel like there is way more than i even know about lol so at the very least i should be able to navigate trough it."* The number is the argument: **16 standalone pages under `/shimmer/dev/`, exactly ONE linked from anywhere.** 14 were built Aug 23-31, several of them BECAUSE he said he was flying blind, then shipped into a place he could not click to. The Ctrl-K palette that would have surfaced them already existed, with **two** navigate entries in it.
+
+### The front door
+- `templates/dev-pages.ts` — one registry for every standalone dev route, including the out-of-tree ones (`/vault/dev`, `/nolmir/dev`, `/nolmir/sfx-lab`, `/shimmer/arena`, `play3d/birth`, `voxel3d/tex`) which were the most invisible of all, since nothing in the Shimmer hub hinted they exist. Blurbs are **lifted from each page's own header**, not reworded, so there is no second description to drift.
+- `templates/DevIndex.tsx` — the default view of `/shimmer/dev`. **Every `?mode=` deep link is untouched**; only the bare URL moved, and the title is the way back.
+- `command-registry` link entries are now **derived** from the registry, so registering once reaches both surfaces.
+- **★★ `dev-pages.test.ts` makes registration MANDATORY and DISCOVERED.** A new dev page is red until it is registered, and that includes any future `/<game>/dev` — derived, not a hand-kept list, because a hand-kept list is the artifact this replaces. BLIND asserts fire if discovery finds nothing.
+
+### Three defects, and all three were instruments that had stopped seeing
+- **`dev/grey`** printed `body 0.0 · ground 0.0 · 0.00` on **every frame since 08-27**, on the page whose own header calls that readout *"the only honest instrument on this page"*. `readRenderTargetPixels` was handed **null through an `as unknown as` cast**; `WebGLRenderer.js:2970` errors to **console** and **returns without touching the buffer**, so a fresh `Uint8Array` stayed at zeros. True values **19.4 / 30.4** — a 0.64 contrast reported as 0.00, the page's own definition of failure. ⚠ `dev-eye.test.ts` had been **exempting this page on the premise that the readout was meaningful**. Fixed by reading the default framebuffer; the guard asserts the **premise** too, since `useFrame` runs BEFORE the draw and without `preserveDrawingBuffer` it returns to lying.
+- **`dev/break`** hid the bucket its caption argues from. Row laid out as `i * 2 - count`, centring 7 blocks on **-1**; and even centred, ±6.5 of cubes does not fit ±6.30. **Invisible at 1900px, present at 1500px** — which is how it survived four days. Distance now derived from count + fov + aspect. ★ The tempting fix (a bigger `z` literal) **reproduces the original signature exactly** in the mutation sweep: green at 1900x900, cropped at 1500x1000.
+- **`dev/ring` was NOT broken.** Placement, recycling and cap were correct throughout. The ring holds residents about the fold, so nearest stays **~50m however far you walk** (x=95 still reported `nearest 52`), while `creature-size.ts` sizes them from the books at **0.04-0.50m** — the largest subtends 12px, the smallest 1px. **A looking-glass fifty metres from a four-centimetre subject**, ever since the sizes were corrected in `a4fa76f`. Added a *go to nearest* control that moves the **KEEPER, never the resident**; at 2m the frame carries **54 creature pixels**, which is what proved they draw at all.
+
+### ⚠ Every measuring instrument built today failed at least once, always toward a FINDING
+None was caught by care. Each was caught by a **control**.
+- A palette check read `document.body.innerText` and reported success — it was matching the **index page underneath the overlay**. Caught by typing a term that must return nothing and watching it still "match".
+- A deploy grep for `ctx.bindFramebuffer` returned zero and **cascaded into a fake `MISMATCH`** against an empty path. `ctx` is a LOCAL VARIABLE the minifier renames; `bindFramebuffer` is a property name and survives.
+- An image parser read the hex field as RGB and called **all 76 colours outliers**. Caught by a positive control on `dev/hold`, which must return a large number and did (252,055).
+
+### Decisions
+- The index REPLACES the sprite-editor landing rather than sitting beside it. A front door nobody lands on is the problem restated.
+- Blurbs are copied from page headers **on purpose**; if a page's purpose changes, re-copy rather than re-invent.
+- `dev/ring`'s control moves the keeper, never the resident — the placement you judge must stay the placement the world makes, or the page becomes a picture of its own opinion.
+- **`dev/moves` line 257** claimed meltbore was unbuilt *"because no host holds a key down"*. False since the host wired it. Corrected, and guarded **bidirectionally** by `dev-claims.test.ts`: the page must not carry the phrase AND the host symbol must still be there, or the guard goes quiet exactly when the old claim becomes true again.
+
+### Next
+- **ALEX'S CALL, and the page now lets him look at it:** if residents live ~50m out at 4-50cm, a keeper standing in their own fold cannot see them **in the WORLD** either. Design question about the ring, not a dev-page bug.
+- **Open measurement, deliberately not asserted:** at 2m a resident occupied roughly **7x7px** where `creature-size.ts` implies ~21px for a 4cm firefly at this fov. Wrong species, a halo, or a real sizing gap — needs a per-species measurement nobody has done.
+- Name ~15 of the **64 unnamed scripts** in `scripts/` (9 of 73 have npm aliases today).
+- `dev/voice-test` is **Luna voice casting**, not game dev, and has sat in the Shimmer dev folder since June 13. Needs a home ruling.
+
+### Files
+`src/app/shimmer/dev/templates/{dev-pages.ts,DevIndex.tsx,command-registry.ts}` · `src/app/shimmer/dev/{page.tsx,dev-pages.test.ts,dev-claims.test.ts}` · `src/app/shimmer/dev/grey/{page.tsx,readout.test.ts}` · `src/app/shimmer/dev/break/{page.tsx,framing.ts,framing.test.ts}` · `src/app/shimmer/dev/ring/page.tsx` · `src/app/shimmer/dev/moves/page.tsx`
+
 ## 🐌 Shimmer — **AN OVERLAY GUARDED FIVE MUTATIONS DEEP, WATCHED ONCE, AND WRONG IN THE FIRST SECOND** (2026-09-01, play lane) · *Last touched 2026-09-01 — `1794d57` + `f546df5` pushed and LIVE in `BUILD_ID CAX1SpHcuw8VF37eM-QDu` (served md5 == disk md5 on the public tunnel; retired string absent, new copy present, negative control 0). ctxlost-wiring **17/0/0** BLIND-separate-from-FAIL, **16 mutations across two sweeps, 14 fire and 2 survive by design**, console **83/0**, sweep **217/217 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon 0.*
 
 ### `/ctxlost` — the door to a thing nobody could look at (closes #938)
