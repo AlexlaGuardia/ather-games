@@ -11,6 +11,76 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🐌 Shimmer — **A 53ms UNIT CANNOT BE BUDGETED, SO IT IS NOT A UNIT ANY MORE** (2026-09-01, hub lane) · *Last touched 2026-09-01 — `978e1ec` pushed and LIVE in `BUILD_ID kwHqlf5i0zTVk1svXCnbl`. light **50/0**, spawn-budget **41/0**, mutation-swept **9 ways, all 9 fire**, sweep **213/213 · 0 FAIL · 0 KILLED** (SWEEP_EXIT read off the process), tsc 7 (baseline), canon 0.*
+
+### What Alex saw, and the arithmetic that named it
+*"the game is spazzing out"*, with a profile: `world:spawn/light` at **55.80ms of a 58.9ms frame —
+95% — GPU 5.3ms, heap flat.** Not the driver, not GC. **It was exactly ONE cold light field, and
+the capture proves it rather than suggesting it:** 55.80 ÷ 20 frames in the window = **2.790**,
+which is precisely the 2.79ms mean the profiler reports for that zone. Every other frame's
+spawn/light was ~0. With `SPAWN_CYCLE_S` at 0.4 that hitch could recur ~2.5×/second all night until
+the cache filled — a stutter, not a hitch. Aggravated by view radius **12** against a default of 6
+(465 columns rather than ~116, so far more cold ones to grind).
+
+### ★★★ Third round on this bug, and the first two fixed the wrong thing
+137ms → 118ms → 55.8ms. 08-27 gated when a cold field may **start** and stated a ceiling of
+`SPAWN_BUDGET_MS + COLD_FIELD_MS`. A clock cannot bound a synchronous call already running, and
+`COLD_FIELD_MS = 20` was measured **on a server CPU** for a frame that has to hold on a UHD 630.
+Its own docstring predicted the staleness and prescribed re-measuring — **but re-measuring only
+makes the doc honest. 23ms and 55ms are both hitches.**
+
+### Decisions
+- **The unit changed rather than the number.** `computeLight` is resumable (`beginLight` /
+  `stepLight`, same four phases, same queue, same order); the host builds ONE field as a job
+  advanced `LIGHT_BUILD_MS` (2ms) per frame and publishes only when complete. **Per-frame cost no
+  longer scales with field cost, so no per-machine constant has to be right for the frame to hold.**
+- **★★★ THE NARROWER LESSON, and it is the transferable one: a ceiling containing a term you cannot
+  CONTROL is a measurement, not a bound.** `SPAWN_BUDGET_MS` was always a real bound because this
+  module decides it; `COLD_FIELD_MS` never was, because the machine decides it.
+- **Nothing about spawning changes semantically** — a cold column was already *skipped, never
+  guessed at* (no-spawn is the safe direction; the lantern's veto must not be bypassed by a cache
+  miss). Throughput actually rises: the job advances every frame, not only on 0.4s sweep frames.
+- **The sky table is sliced too.** 2,304 `columnHeight` calls that nobody had timed separately;
+  slicing only the flood would have left an unsliceable lump at the head of every cold column that
+  looked, from a profile, almost exactly like the bug it replaced.
+- Retired `COLD_FIELDS_PER_SWEEP` / `COLD_FIELD_MS` / `mayStartColdField`; `sweepCeilingMs()` is
+  `SPAWN_BUDGET_MS` alone. The superseded reasoning is **kept in place with a correction above it** —
+  the wrong reading is the useful artifact.
+
+### ⚠ A regression the slicing introduced, found and closed
+A synchronous build had no window to go stale in. A job spans frames, so an edit or eviction
+mid-build must **drop** it — otherwise a field read from pre-edit voxels lands in the cache a few
+frames after the player invalidated it, silently undoing the delete. Cancelled on both paths.
+
+### ⚠ Three of my own guards were blind, all found by mutation and none by reading
+The equivalence fixture was **12×12**, so the seed-axis mutation was a **no-op — it could not
+apply**; at 144 units against a 256-unit check interval the seed phase never paused, so a
+cursor-reset mutation changed nothing. Widened to 20×14. And I had written that preserving seed
+order is what makes the output identical — **measured, swapping it changes 0 of 2800 cells**,
+because the flood is a monotone fixpoint. Comment corrected rather than left as a false dependency,
+plus a note that `computeLight` now DELEGATES to `stepLight`, so the equivalence test compares a
+thing against itself and guards **resumption only**, never the algorithm.
+
+### ⚠ Two verification instruments retired this session
+- **"the old BUILD_ID must 404" measures the CDN, not the deploy.** `MK-apkdra3bOJTNesDMNu` returned
+  **200** with no directory on disk at all — Cloudflare serving a cached copy. It passed last night
+  and lied tonight. Replaced by: served md5 == disk md5 for a named chunk, a marker that survives
+  minification (a property name, not a const), and a **retired-string check** — presence proves the
+  new code shipped, absence of the old proves it is GONE rather than merely superseded.
+- **A sweep score is a claim about a TREE.** Two windows both reported 213/213 for this build and
+  neither run covered it: the peer's predated `978e1ec`, mine included it. The suite COUNT is
+  identical across both trees, so nothing in either output hints they saw different code. **Cite a
+  sweep with the commit it ran against.**
+
+### Next
+Alex watches the `world:spawn/light` row in the fold at night — it should read a few ms and never
+spike. A spike means the slicing is not reaching the real cost.
+
+### Files
+`src/app/shimmer/voxel/light.ts` · `src/app/shimmer/voxel/light.test.ts` ·
+`src/app/shimmer/voxel3d/VoxelWorld.tsx` · `src/app/shimmer/voxel3d/spawn-budget.ts` ·
+`src/app/shimmer/voxel3d/spawn-budget.test.ts`
+
 ## 🏃 Shimmer — **THE RUN IS A RAMP, AND THE SLIDE IS WHAT IT PAYS FOR** (2026-09-01, hub lane) · *Last touched 2026-09-01 — `cca100d` `c5cccf7` `a97b8bb` `6a3dc83` pushed. **DEPLOYED `BUILD_ID MK-apkdra3bOJTNesDMNu`**, 169 chunks. locomotion oracle **163/0**, mutation-swept **16 ways across three sweeps, 15 fire**; sweep 213/213 · 0 FAIL · 0 KILLED; tsc 7 (baseline). Serving layer verified from two sides by two windows.*
 
 **Left off.** Alex: *"the slide jump is a little meh .. the run itself needs to ramp up from a walk into a sprint .. using it before the peak is reached causes a dead slide."* He was right, and the measurement says the slide was not a weak payout but an **unearned** one. Before: ONE ground speed, 95% of it in 0.43s; the gate `SLIDE_MIN_SPEED 3.8` crossed **0.13s after the first press** (eight frames); and the entry `max(SLIDE_SPEED, curSpeed * 1.35)` **paid MORE for entering slow**, with a scaling branch needing 7.41 — above `RUN_SPEED`, so unreachable on foot. **Every ground slide in the game was exactly 10 however you entered it.** Now `WALK_SPEED 4.2` → `RUN_SPEED 6.5` over `SPRINT_RAMP 1.2s`, gate DERIVED at `RUN_SPEED * 0.92`, `SLIDE_BOOST 1.55` so a peak slide still lands on the 10 it always was and a chained entry scales past it.
