@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import CommandPalette from './templates/CommandPalette'
+import DevIndex from './templates/DevIndex'
 import InspectorSidebar from './templates/InspectorSidebar'
 import { InspectorContext } from './templates/inspector-context'
 
@@ -39,10 +40,10 @@ const WeatherEditor = dynamic(() => import('./editors/WeatherEditor'))
 const MeshBench = dynamic(() => import('./editors/MeshBench'))
 const DoctorPanel = dynamic(() => import('./editors/DoctorPanel'))
 
-type EditorMode = 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'beasts' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'voices' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench'
+type EditorMode = 'index' | 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'beasts' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'voices' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench'
 
 // Component map — replaces 25 conditional renders
-const EDITOR_MAP: Record<EditorMode, { component: ComponentType<any>; deployable: boolean }> = {
+const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentType<any>; deployable: boolean }> = {
   sprites:    { component: SpriteEditor,        deployable: true },
   player:     { component: PlayerEditor,        deployable: true },
   beasts:     { component: BeastEditor,         deployable: true },
@@ -145,9 +146,9 @@ const ALL_TABS = TAB_GROUPS.flatMap(g => g.tabs)
 
 function EditorHub() {
   const searchParams = useSearchParams()
-  const initialMode = (searchParams.get('mode') as EditorMode) || 'sprites'
+  const initialMode = (searchParams.get('mode') as EditorMode) || 'index'
   const [mode, setMode] = useState<EditorMode>(
-    ALL_TABS.some(t => t.id === initialMode) ? initialMode : 'sprites'
+    initialMode === 'index' || ALL_TABS.some(t => t.id === initialMode) ? initialMode : 'index'
   )
   const [deployState, setDeployState] = useState<'idle' | 'building' | 'done' | 'error'>('idle')
   const deployPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -183,7 +184,7 @@ function EditorHub() {
   const switchMode = useCallback((m: EditorMode) => {
     setMode(m)
     const url = new URL(window.location.href)
-    if (m === 'sprites') {
+    if (m === 'index') {
       url.searchParams.delete('mode')
     } else {
       url.searchParams.set('mode', m)
@@ -238,19 +239,23 @@ function EditorHub() {
   }), [])
 
   // Editors that keep state between tab switches (mounted once, hidden when inactive)
-  const PERSISTENT_MODES: EditorMode[] = ['map']
-  const [visitedPersistent, setVisitedPersistent] = useState<Set<EditorMode>>(new Set())
+  const PERSISTENT_MODES: Exclude<EditorMode, 'index'>[] = ['map']
+  const [visitedPersistent, setVisitedPersistent] = useState<Set<Exclude<EditorMode, 'index'>>>(new Set())
   useEffect(() => {
-    if (PERSISTENT_MODES.includes(mode) && !visitedPersistent.has(mode)) {
-      setVisitedPersistent(prev => new Set(prev).add(mode))
+    const m = mode as Exclude<EditorMode, 'index'>
+    if (PERSISTENT_MODES.includes(m) && !visitedPersistent.has(m)) {
+      setVisitedPersistent(prev => new Set(prev).add(m))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
   // Render active editor via component map
-  const entry = EDITOR_MAP[mode]
-  const ActiveEditor = entry.component
-  const isPersistentActive = PERSISTENT_MODES.includes(mode)
+  const isIndex = mode === 'index'
+  const entry = isIndex ? null : EDITOR_MAP[mode as Exclude<EditorMode, 'index'>]
+  const isPersistentActive = !isIndex && PERSISTENT_MODES.includes(mode as Exclude<EditorMode, 'index'>)
+
+  /** The editor roster the index lists — derived from TAB_GROUPS, never a second copy of it. */
+  const indexEditors = TAB_GROUPS.flatMap(g => g.tabs.map(t => ({ id: t.id, label: t.label, group: g.label })))
 
   return (
     <InspectorContext.Provider value={inspectorContextValue}>
@@ -260,7 +265,13 @@ function EditorHub() {
 
             {/* Header bar */}
             <div className="flex items-center gap-4 mb-5">
-              <h1 className="font-display text-lg text-gold tracking-wide select-none">Shimmer Dev</h1>
+              <button
+                onClick={() => switchMode('index')}
+                className="font-display text-lg text-gold tracking-wide hover:text-gold/70 transition-colors"
+                title="All editors and dev pages"
+              >
+                Shimmer Dev
+              </button>
               <span className="text-white/10 select-none">/</span>
               <a
                 href="/shimmer"
@@ -279,8 +290,8 @@ function EditorHub() {
               </button>
             </div>
 
-            {/* Two-level nav — group selectors */}
-            <div className="flex items-center gap-1 mb-2">
+            {/* Two-level nav — group selectors. Hidden on the index, which is not an editor. */}
+            {!isIndex && <div className="flex items-center gap-1 mb-2">
               {TAB_GROUPS.map((group, gi) => (
                 <button
                   key={group.label}
@@ -295,10 +306,10 @@ function EditorHub() {
                   <span className="ml-1.5 text-[9px] opacity-40">{group.tabs.length}</span>
                 </button>
               ))}
-            </div>
+            </div>}
 
             {/* Two-level nav — sub-tabs for active group */}
-            <div className="flex items-center gap-1 mb-6 border-b border-white/10 pb-3">
+            {!isIndex && <div className="flex items-center gap-1 mb-6 border-b border-white/10 pb-3">
               {activeGroup.tabs.map(tab => (
                 <button
                   key={tab.id}
@@ -321,7 +332,9 @@ function EditorHub() {
                   {link.label}
                 </a>
               ))}
-            </div>
+            </div>}
+
+            {isIndex && <DevIndex editors={indexEditors} onOpenEditor={(id) => switchMode(id as EditorMode)} />}
 
             {/* Persistent editors — stay mounted once visited, hidden when inactive */}
             {PERSISTENT_MODES.map(m => {
@@ -340,12 +353,14 @@ function EditorHub() {
             })}
 
             {/* Non-persistent active editor */}
-            {!isPersistentActive && (
+            {!isIndex && !isPersistentActive && entry && (
               <Suspense fallback={<div className="flex items-center justify-center py-20"><p className="text-text-faint text-sm animate-pulse">Loading editor...</p></div>}>
-                {entry.deployable
-                  ? <ActiveEditor onDeploy={deployToGame} deployState={deployState} />
-                  : <ActiveEditor />
-                }
+                {(() => {
+                  const E = entry.component
+                  return entry.deployable
+                    ? <E onDeploy={deployToGame} deployState={deployState} />
+                    : <E />
+                })()}
               </Suspense>
             )}
           </div>

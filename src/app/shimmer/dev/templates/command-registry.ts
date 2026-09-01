@@ -1,3 +1,12 @@
+/**
+ * ⚠ THE LINK ENTRIES ARE DERIVED FROM `dev-pages.ts`, NOT TYPED OUT HERE.
+ * This registry had thirty editor modes and TWO navigate entries, while sixteen standalone dev
+ * pages shipped with their own URLs — so Ctrl-K could not reach the pages most in need of being
+ * reachable. Hand-maintaining a second roster is what produced that gap; a page registered once
+ * now appears in the palette and on the index without anyone adding it twice.
+ */
+import { DEV_PAGES } from './dev-pages'
+
 export interface CommandEntry {
   id: string
   label: string
@@ -43,7 +52,15 @@ export const COMMAND_REGISTRY: CommandEntry[] = [
   { id: 'voices', label: 'Voices', keywords: ['audio', 'sound', 'speech'], category: 'editor', action: 'switchMode', mode: 'voices' },
 
   // Links
-  { id: 'dialogue', label: 'Dialogue Editor', keywords: ['conversation', 'npc', 'talk'], category: 'link', action: 'navigate', href: '/shimmer/dev/dialogue' },
+  { id: 'index', label: 'All dev pages', keywords: ['index', 'home', 'everything', 'list'], category: 'editor', action: 'switchMode', mode: 'index' },
+  ...DEV_PAGES.map((p): CommandEntry => ({
+    id: `page:${p.path}`,
+    label: p.title,
+    keywords: [...(p.keywords ?? []), ...p.path.split('/').filter(Boolean)],
+    category: 'link',
+    action: 'navigate',
+    href: p.path,
+  })),
   { id: 'play', label: 'Play Game', keywords: ['test', 'run'], category: 'link', action: 'navigate', href: '/shimmer' },
 
   // Actions
