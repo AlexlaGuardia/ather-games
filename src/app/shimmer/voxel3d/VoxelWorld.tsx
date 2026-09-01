@@ -2163,13 +2163,33 @@ export default function VoxelWorld() {
               <span className="tabular-nums text-amber-50">
                 {new Date(ctxLost).toLocaleTimeString()}
               </span>
-              . The world stopped drawing then — what you can see is the last frame it managed.
+              . The world stopped drawing then and the view went blank — what is gone is the
+              surface the page draws on, not the world.
             </p>
-            {/* ⚠ THIS SENTENCE IS LOAD-BEARING AND IT IS NOT RE-ASSURANCE. A frozen frame arrives
-                looking exactly like whatever you were doing when it froze — mid-sprint it reads as
-                "the movement change locked the game up", mid-stream as "worldgen died". That is the
-                wrong-layer hunt render-audit's own header describes, and the overlay is the only
-                thing in a position to head it off. Name the layer that actually failed. */}
+            {/* ── ★★ CORRECTED 2026-09-01, THE FIRST TIME ANYONE ACTUALLY LOOKED AT THIS PANEL ──────
+                The paragraph above used to end "what you can see is the last frame it managed", and
+                the comment here used to reason from a FROZEN FRAME. Both were wrong, and the whole
+                reason they stood for a fortnight is that this overlay draws only on a real context
+                loss, so it had eleven asserts and five mutations against it and not one pair of eyes.
+                `/ctxlost` (focus #938) put it on screen and the claim died in the first second: the
+                canvas goes BLANK. Sky, terrain and the block reticle all gone, HUD still fully drawn
+                over nothing.
+
+                ⚠ AND IT WAS NOT AN ARTEFACT OF THE DELIBERATE TRIGGER — the 08-31 incident report
+                says Alex met a WHITE canvas, not a frozen frame, so the original event cleared it too.
+                Two independent observations, one deliberate and one in the wild, and the mechanism
+                explains both: this Canvas (:2051) does NOT pass `preserveDrawingBuffer`, so the page
+                has no right to the last frame and the browser is free to drop it. The two dev pages
+                that DO set it (dev/court, dev/grey) are the contrast that proves the rule.
+                ★ `ctxlost-wiring.test.ts` pairs the retired sentence with that fact, so if anyone ever
+                turns the buffer on here the guard fires and this copy gets revisited rather than
+                quietly becoming true again.
+
+                ⚠ THE SENTENCE BELOW IS STILL LOAD-BEARING AND STILL NOT RE-ASSURANCE — a BLANK view
+                is just as ambiguous as a frozen one, and ambiguous in the same direction: mid-stream
+                it reads as "worldgen died", after a movement change as "the new code locked it up".
+                That is the wrong-layer hunt render-audit's own header describes, and the overlay is
+                the only thing in a position to head it off. Name the layer that actually failed. */}
             <p className="mb-2 text-amber-100/70">
               This is the GPU letting go of the page, not the game. Nothing you were doing caused it
               and nothing is broken in the world — your position, your edits and anything you built

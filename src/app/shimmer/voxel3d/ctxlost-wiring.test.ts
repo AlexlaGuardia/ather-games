@@ -124,6 +124,36 @@ console.log('\n── 5. ★ NOTHING RESTORES THE CONTEXT ON PURPOSE ──')
 // `codeOnly`, which blanks comments and string bodies, so the guard judges what the file DOES.
 chk('no restoreContext() call exists in the host', !/restoreContext\(/.test(codeOnly(src)))
 
+console.log('\n── 6. ★★ THE PANEL DESCRIBES WHAT A LOST CONTEXT ACTUALLY LOOKS LIKE ──')
+// Added 2026-09-01 after the trigger put the overlay on screen for the first time. The panel used
+// to say "what you can see is the last frame it managed". It is not: the canvas goes BLANK. The
+// 08-31 incident report says Alex met a WHITE canvas in the wild, so the deliberate trigger and the
+// real event agree, and neither leaves a frozen frame.
+//
+// ⚠⚠ BIDIRECTIONAL ON PURPOSE, WHICH IS THE ONLY THING THAT MAKES A PROSE GUARD WORTH WRITING.
+// A one-directional "the page must not say X" check goes quiet at exactly the moment X becomes TRUE
+// again — and here there is a specific switch that would do it. `preserveDrawingBuffer` is what buys
+// a page the right to its last frame; this Canvas does not pass it, which is WHY the claim was false.
+// So the guard asserts BOTH: the retired sentence is gone, AND the fact that retired it still holds.
+// Turn the buffer on and this fires, and someone gets sent back to the copy rather than discovering
+// the panel has quietly started lying in the other direction.
+{
+  const overlay = blockAt(src, 'graphics context lost', '</p>')
+  if (overlay.at < 0) { blind++; console.log('  BLIND: could not find the overlay block') }
+  // ★ `code`, not `raw`: JSX TEXT survives codeOnly (it is neither a comment nor a string literal),
+  // so the real copy is still judged — while a JSX comment discussing the retired sentence is
+  // blanked and cannot trip it. That is the exact bug this file shipped with in section 5, and the
+  // correction note above this overlay names the retired phrase, so without `code` the guard would
+  // fail on its own documentation for the second time in one session.
+  chk('the panel no longer promises a frozen last frame',
+    overlay.at >= 0 && !/last frame it managed/.test(overlay.code))
+  chk('...and says the view went blank instead',
+    /the view went blank/.test(overlay.raw))
+  // The fact that makes the sentence above correct. `once` so a second Canvas cannot smuggle one in.
+  chk('the world Canvas still does not preserve the drawing buffer — the reason there is no last frame',
+    once('world canvas', /<Canvas camera=\{\{ fov: 75/) && !/preserveDrawingBuffer/.test(codeOnly(src)))
+}
+
 console.log(`\nctxlost-wiring oracle: ${ok} passed, ${bad} failed, ${blind} blind`)
 // ⚠ BLIND COUNTS AS DRIFT — a reader that cannot see its subject reports "nothing wrong" unless the
 // exit code says otherwise, which is the entire reason this file is shaped like this.
