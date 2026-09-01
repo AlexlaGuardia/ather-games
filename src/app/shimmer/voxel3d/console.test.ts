@@ -137,6 +137,25 @@ for (const c of CONSOLE_CMDS.filter(c => c.owner)) {
   ok(bad.length === 0, `no verb is named with retired canon vocabulary${bad.length ? ` — ${bad.join(', ')}` : ''}`)
 }
 
+// ── 7. ★ /ctxlost CALLS THE VERB, AND WARNS IN THE HELP LINE (focus #938) ────────────────────
+// The owner gate is covered above for free — section 2 sweeps every `owner: true` row. What that
+// cannot see is whether the command DOES anything: a row whose `run` returned a string and touched
+// nothing would pass the gate check, the registry check and the suggestion check.
+//
+// ⚠ THE HELP LINE IS ASSERTED BECAUSE IT IS THE ONLY WARNING THAT ARRIVES IN TIME. This is the one
+// verb in the registry that ends the session — the reply telling you the tab is spent is read AFTER
+// the context is gone, so the suggestion strip is where the sentence has to be. `ctxlost-wiring`
+// guards what it does to the GPU; this guards what the keeper is told before they run it.
+{
+  calls.length = 0
+  const r = runConsoleLine('/ctxlost', ctx(true))
+  ok(calls.includes('ctxLost:'), `/ctxlost actually calls ctxLost (recorded: ${calls.join(' ') || 'nothing'})`)
+  ok(r.err !== true, '/ctxlost does not report an error to the owner')
+  const row = CONSOLE_CMDS.find(c => c.name === 'ctxlost')
+  ok(!!row?.owner, '/ctxlost is owner-gated — it destroys the page it is run on')
+  ok(!!row && /tab/i.test(row.help), `/ctxlost warns in its HELP line that the tab is spent (${row?.help ?? 'no row'})`)
+}
+
 console.log(`console: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length === 0 ? 0 : 1)

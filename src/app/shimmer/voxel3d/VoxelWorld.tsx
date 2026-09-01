@@ -1150,6 +1150,11 @@ export default function VoxelWorld() {
   const playerSnapRef = useRef<(() => PlayerSave) | null>(null)
   /** Filled by the scene: the camera is three's and only the component holding it can turn it. */
   const lookOut = useRef<((deg: number) => string) | null>(null)
+  /** Filled by the scene: only the component holding the renderer can ask the browser to drop its
+   *  context. Same outward-ref shape as `lookOut` — and the same reason, that the verb has to run
+   *  where the thing lives. See `ConsoleCtx.ctxLost` for why this throws the REAL context away
+   *  rather than poking the overlay's state. */
+  const ctxLostOut = useRef<(() => string) | null>(null)
   /** How submerged the CAMERA is, filled by `World` (which owns the cell probes) and read by the
    *  atmosphere rig (which owns the fog). The rig mounts out here and the probes live in there, so
    *  the answer has to travel — same outward-ref shape as `lookOut`/`foesOut` above. */
@@ -1497,6 +1502,7 @@ export default function VoxelWorld() {
     // the cursor, or the pointer re-locks with the dialogue still up. See that entry for the autopsy.
     greg: () => { setConsoleOpen(false); setDialogueOpen(true); return 'he looks up from the book' },
     look: (deg) => lookOut.current ? lookOut.current(deg) : 'the world is still waking',
+    ctxLost: () => ctxLostOut.current ? ctxLostOut.current() : 'the world is still waking',
     radius: () => settings.viewRadius,
     setRadius: (r) => update({ viewRadius: r }),
     give: (id, count) => {
@@ -2108,7 +2114,7 @@ export default function VoxelWorld() {
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
-          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut}
+          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut} ctxLostOut={ctxLostOut}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
@@ -3443,7 +3449,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3529,6 +3535,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   space: React.RefObject<Space>
   /** Filled with a camera-yaw setter for `/look` — see that entry on why it has to exist. */
   lookOut: React.RefObject<((deg: number) => string) | null>
+  ctxLostOut: React.RefObject<(() => string) | null>
   /** The arena owns the screen while true; the world keeps streaming but stops reporting prompts. */
   sparring: boolean
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
@@ -4512,8 +4519,35 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     const restored = () => { ctxLost.current = false; onContextLost(null) }
     cv.addEventListener('webglcontextlost', lost)
     cv.addEventListener('webglcontextrestored', restored)
-    return () => { cv.removeEventListener('webglcontextlost', lost); cv.removeEventListener('webglcontextrestored', restored) }
-  }, [gl, onContextLost, ctxLost])
+
+    /**
+     * ── ★★★ `/ctxlost` LIVES HERE, INSIDE THE EFFECT THAT OWNS THE LISTENERS (focus #938) ────────
+     * Because the whole point is that it does NOT take a shortcut past them. `loseContext()` makes
+     * the browser fire the real `webglcontextlost` at `lost` above, so every link runs: the
+     * preventDefault, the ref the frame loop reads, the latch that stamps the wall-clock moment.
+     * The overlay appears because the context died, which is the only way anyone can find out
+     * whether it appears when the context dies.
+     *
+     * ⚠ NOTHING CALLS `restoreContext()`, DELIBERATELY. A trigger that healed itself would show the
+     * panel and then take away the frozen world underneath it — and the frozen world is half of
+     * what Alex needs to look at, since the confusion this panel exists to end is a still frame
+     * that reads as "the movement change locked the game up". Spent tab, on purpose, exactly like
+     * the real block.
+     *
+     * ⚠ AND AN ABSENT EXTENSION SAYS SO. Returning a cheerful string on a browser that will not
+     * drop its context would hand back "I could not look" wearing the costume of "the overlay is
+     * broken" — this file's own render-audit header warns about that direction, and a dev verb is
+     * exactly where it would be believed.
+     */
+    ctxLostOut.current = () => {
+      const ext = gl.getContext().getExtension('WEBGL_lose_context')
+      if (!ext) return 'this browser will not drop a context on request (no WEBGL_lose_context) — the overlay cannot be triggered here'
+      ext.loseContext()
+      return 'dropping the graphics context — the world stops drawing now, and this tab is spent'
+    }
+
+    return () => { cv.removeEventListener('webglcontextlost', lost); cv.removeEventListener('webglcontextrestored', restored); ctxLostOut.current = null }
+  }, [gl, onContextLost, ctxLost, ctxLostOut])
 
   /**
    * Hand the profiler the live WebGL2 context so it can ask for GPU timings.

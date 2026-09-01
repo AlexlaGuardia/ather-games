@@ -144,6 +144,32 @@ export interface ConsoleCtx {
    * it is, and it must NOT become the way a player gets a second rune.
    */
   rune: (arg?: string) => string
+  /**
+   * ★★★ `/ctxlost` — THROW AWAY THE GPU CONTEXT ON PURPOSE. OWNER-GATED, A TEST INSTRUMENT, AND
+   * THE ONLY WAY ANYONE HAS EVER BEEN ABLE TO LOOK AT THE LOST-CONTEXT OVERLAY (focus #938).
+   *
+   * ── ⚠⚠ WHY A FAKE WOULD HAVE BEEN THE WRONG BUILD, AND IT WAS THE OBVIOUS ONE ────────────────
+   * The cheap version of this verb sets the overlay's state directly, and it would have been a
+   * measurement taken one layer away from where the world takes it. The overlay is the LAST link in
+   * a five-link chain — `webglcontextlost` fires, the handler preventDefaults, `ctxLost.current`
+   * flips, the frame loop bails on it, `onContextLost(Date.now())` latches the wall-clock moment —
+   * and a state poke exercises the fifth link while asserting the whole chain works. It would draw
+   * a correct-looking panel over a world that is STILL DRAWING, which is not the thing Alex met: he
+   * met a frozen frame under a HUD reporting 60fps. A trigger whose picture differs from the real
+   * event in the one respect the panel talks about ("what you can see is the last frame it
+   * managed") is worse than no trigger, because it retires the question.
+   *
+   * ★ So this asks the browser to genuinely drop the context, via `WEBGL_lose_context`. Every link
+   * runs for real, the canvas really does stop presenting, and what Alex sees is what the GPU
+   * dropping the page looks like. The context stays dead because nothing calls `restoreContext()` —
+   * the same stickiness the real block has, so the panel's "reloading will not clear it" is true
+   * here too. **This tab is spent afterwards, on purpose.**
+   *
+   * ⚠ THE EXTENSION CAN SIMPLY BE ABSENT, and this reports that rather than papering over it. A
+   * silent no-op would read as "the overlay is broken" — the instrument's own blindness arriving
+   * dressed as a finding about the thing it was pointed at.
+   */
+  ctxLost: () => string
 }
 export const NAMED_HOURS: Record<string, number> = { midnight: 0, dawn: 6.5, noon: 12, dusk: 18.75, night: 21 }
 /** `~` / `~-5` → relative to `cur`; anything else parses as absolute. NaN propagates for the caller. */
@@ -403,6 +429,12 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.waymark(`reach ${a[1] ?? ''}`.trim())
     },
     suggest: (i, c) => i === 0 && c.isOwner ? ['reach'] : [] },
+  /* ⚠ THE ONE VERB IN THIS REGISTRY THAT ENDS THE SESSION. It is owner-gated like every other
+     cheat, but the gate is not what makes it safe to sit here — the help line is, because a keeper
+     who runs it without reading is owed the knowledge that the tab is spent. Say it in the help,
+     not only in the reply, since the suggestion strip is where it gets read. */
+  { name: 'ctxlost', usage: 'ctxlost', help: 'drop the GPU context on purpose to see the lost-context overlay — KILLS THIS TAB', owner: true,
+    run: (_a, c) => c.ctxLost() },
   { name: 'weather', usage: 'weather', help: 'someday', run: () =>
       'no weather in the Ather yet — the day it exists, its command lands here' },
 ]
