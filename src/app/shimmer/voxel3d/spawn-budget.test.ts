@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   stopScan, SPAWN_SCAN_MAX, SPAWN_BUDGET_MS,
-  mayStartColdField, COLD_FIELDS_PER_SWEEP, COLD_FIELD_MS, sweepCeilingMs,
+  LIGHT_BUILD_MS, sweepCeilingMs,
 } from './spawn-budget'
 
 let pass = 0
@@ -53,26 +53,26 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(examined < 273, `★★ and it stops after ${examined} columns, not all 273`)
 }
 
-// ── 3b. ★★★ THE ASSERT SECTION 3 COULD NOT MAKE: A LOOP WHERE ONE ITERATION IS ENORMOUS ────────
-// Section 3 above replays the 2026-08-23 stall at a UNIFORM 0.504ms per column, and under a uniform
-// cost the top-of-loop check is genuinely enough — the overshoot is one cheap iteration. **So it
-// passed, correctly, about a loop that was not the one shipping.** The real body had one call that
-// cost hundreds of times the others, and a check evaluated BEFORE the body cannot bound a call that
-// begins after it. Nothing on a single thread preempts a synchronous call.
+// ── 3b. ★★★ A LOOP WHERE ONE ITERATION IS ENORMOUS — AND THE THIRD ROUND OF FIXING IT ──────────
+// Section 3 replays the 2026-08-23 stall at a UNIFORM 0.504ms per column, and under a uniform cost
+// the top-of-loop check is genuinely enough. **So it passed, correctly, about a loop that was not
+// the one shipping.** The real body had one call costing hundreds of times the others, and a check
+// evaluated BEFORE the body cannot bound a call that begins after it.
 //
-// ⚠ THIS IS THE SAME SHAPE AS THE SEAM ORACLE THE SAME NIGHT: an assert that was accurate, was not
-// weak, and simply did not constrain the axis that broke. Ask of any passing guard what the
-// cheapest wrong answer is that still satisfies it. Here it was *"make one column cost 118ms."*
+// ⚠⚠ 08-27 ADDED A GATE ON THAT CALL AND STATED A CEILING OF `SPAWN_BUDGET_MS + COLD_FIELD_MS`.
+// That held the count and could not hold the cost: `COLD_FIELD_MS = 20` was measured on a server
+// CPU, and Alex's UHD 630 answered with **55.80ms of a 58.9ms frame — 2.4x the stated bound**.
+// 09-01 removed the term instead of re-measuring it. These asserts now cover BOTH halves: the
+// sweep is cheap because it computes nothing, and the field is cheap because it is sliced.
 {
   const CHEAP_MS = 0.05          // a warm column: a map hit, some arithmetic, two dice
-  /** A faithful mini-model of the host sweep: the clock is checked at the TOP, and the body pays. */
-  const sweep = (coldCost: number, gate: boolean) => {
+
+  /** The OLD host sweep, kept as history: the clock is checked at the TOP, and the body pays. */
+  const oldSweep = (coldCost: number) => {
     let examined = 0, elapsed = 0, cold = 0
     for (let i = 0; i < 500; i++) {
       if (stopScan(examined, elapsed)) break
-      // Worst case on purpose: every column cold, which is exactly a freshly-loaded night.
-      if (gate) { if (!mayStartColdField(cold, elapsed)) continue }
-      else if (cold >= 2) continue          // the old rule: an inline `lightBudget = 2`, no clock
+      if (cold >= 2) continue               // the original inline `lightBudget = 2`, no clock
       cold++
       elapsed += coldCost                   // ← the call nothing could interrupt
       examined++
@@ -80,48 +80,53 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     }
     return { elapsed, cold }
   }
-
-  // ── ⚠⚠ AND MODELLING IT CORRECTED THE DIAGNOSIS, WHICH IS WHY THE MODEL WAS WORTH WRITING ────
-  // The hand-off note read the 118.60ms frame as *"lightBudget=2 ⇒ ~59ms per cold field"* — two
-  // fields, halved. This model says that cannot happen: after ONE field `elapsed` is ~118 and the
-  // top-of-loop `stopScan` breaks immediately, so the old rule admitted exactly one however high
-  // `lightBudget` was set. **The count limit was never what let the cost in.** Confirmed from the
-  // other side by direct measurement of the untabulated field: 113.16ms median on a server CPU
-  // against the profile's 118.60ms. One call, not two — and the arithmetic that produced "59"
-  // was an inference from a limit that was not binding.
-  //
-  // ★ IT ALSO MOVES THE FIX. If two fields were the problem, lowering the count fixes it; since one
-  // field was, only making the field cheap does — which is what the tabulation is for. The gate
-  // below is the belt, not the braces.
-  const before = sweep(118, false)
+  const before = oldSweep(118)
   ok(before.elapsed > 100 && before.cold === 1,
     `★★★ the OLD rule reproduces Alex's 2026-08-27 frame — ${before.elapsed.toFixed(1)}ms from ` +
-    `${before.cold} cold field, against a "budget" of ${SPAWN_BUDGET_MS}ms whose docstring said ` +
-    'a single pathological column could not blow the frame. It could, and it was the only one that did.')
+    `${before.cold} cold field. **The count limit was never what let the cost in**: after one field ` +
+    'the top-of-loop check breaks immediately however high the count was set.')
 
-  // The same sweep under the new rule, at the same per-field cost, and at the stated ceiling.
-  for (const cost of [59, COLD_FIELD_MS, 200]) {
-    const after = sweep(cost, true)
-    ok(after.cold <= COLD_FIELDS_PER_SWEEP,
-      `★★ at ${cost}ms/field the sweep admits ${after.cold} cold field(s), never more than ${COLD_FIELDS_PER_SWEEP}`)
-    ok(after.elapsed <= SPAWN_BUDGET_MS + cost,
-      `★★★ the worst frame is budget + ONE admitted field and no more — ${after.elapsed.toFixed(1)}ms ` +
-      `at ${cost}ms/field. This is the bound the module can state; the old one was a promise.`)
+  /** The sweep as it ships now: a cold column is nominated and SKIPPED, never built inline. */
+  const sweep = () => {
+    let examined = 0, elapsed = 0
+    for (let i = 0; i < 500; i++) {
+      if (stopScan(examined, elapsed)) break
+      // Worst case on purpose: every column cold, which is exactly a freshly-loaded night. Each is
+      // a map miss and a nomination — no field is computed here at any price.
+      examined++
+      elapsed += CHEAP_MS
+    }
+    return elapsed
   }
+  ok(sweep() <= sweepCeilingMs(),
+    `★★★ the walk is bounded by sweepCeilingMs() = ${sweepCeilingMs()}ms with NOTHING behind it — ` +
+    `modelled ${sweep().toFixed(2)}ms with every column cold`)
+  ok(sweepCeilingMs() === SPAWN_BUDGET_MS,
+    '★★ the ceiling has ONE term now, and it is the one this module controls. A ceiling containing ' +
+    'a term the machine decides (a measured field cost) is a measurement wearing a bound\'s name.')
 
-  // ★ AND THE STATED CEILING MUST BE THE ONE THAT ACTUALLY HOLDS at the measured cost — a ceiling
-  // nothing checks is the docstring bug wearing a constant's name.
-  ok(sweep(COLD_FIELD_MS, true).elapsed <= sweepCeilingMs(),
-    `★★★ sweepCeilingMs() = ${sweepCeilingMs()}ms actually bounds the modelled sweep`)
-  ok(sweepCeilingMs() < 123.4,
-    `★★ and the ceiling is well under the 123.4ms frame that prompted it (${sweepCeilingMs()}ms)`)
-
-  // The gate must be a gate: once the walk's clock is spent, no new field may START.
-  ok(mayStartColdField(0, 0) === true, 'a fresh sweep may compute its one field')
-  ok(mayStartColdField(COLD_FIELDS_PER_SWEEP, 0) === false, '★★ the count alone refuses a second field')
-  ok(mayStartColdField(0, SPAWN_BUDGET_MS) === false,
-    '★★★ the CLOCK alone refuses a field the sweep has no room to finish — the check the old loop ' +
-    'never made, because it only ever asked at the top of the iteration')
+  // ── ★★★ THE ASSERT THE LAST TWO ROUNDS COULD NOT MAKE: PER-FRAME COST IS INDEPENDENT OF THE
+  // FIELD'S TOTAL COST. This is the whole difference between budgeting a call and slicing it.
+  const sliced = (total: number, budget: number) => {
+    let left = total, frames = 0, worst = 0
+    while (left > 0) { const spent = Math.min(left, budget); worst = Math.max(worst, spent); left -= spent; frames++ }
+    return { frames, worst }
+  }
+  // 13ms = the server measurement · 20 = the retired COLD_FIELD_MS · 53 = Alex's actual box ·
+  // 200 = a machine nobody has tested on yet, which is the case a per-machine constant fails.
+  for (const total of [13, 20, 52.8, 200]) {
+    const r = sliced(total, LIGHT_BUILD_MS)
+    ok(r.worst <= LIGHT_BUILD_MS,
+      `★★★ a ${total}ms field costs at most ${r.worst}ms in any ONE frame (${r.frames} frames) — ` +
+      'the per-frame cost does not scale with the field, which is why no per-machine constant has ' +
+      'to be right for the frame to hold')
+    // The old design's worst frame WAS the total. Stated as a contrast so the regression is legible.
+    ok(r.worst < total || total <= LIGHT_BUILD_MS,
+      `★★ and it is strictly better than the atomic build, whose worst frame was the whole ${total}ms`)
+  }
+  ok(sliced(52.8, LIGHT_BUILD_MS).worst < 58.9 / 10,
+    '★★★ Alex\'s 55.80ms-of-58.9ms frame cannot recur: the same field now costs ' +
+    `${sliced(52.8, LIGHT_BUILD_MS).worst}ms a frame across ${sliced(52.8, LIGHT_BUILD_MS).frames} frames`)
 }
 
 // ── 4. ★★★ THE HOST ACTUALLY ASKS — a predicate nothing calls is decoration ─────────────────────
@@ -145,9 +150,36 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     'silently bills the rest of the frame to itself')
 
   // ── ★★★ AND THE GATE MUST BE ON THE EXPENSIVE CALL, NOT MERELY IMPORTED ──────────────────────
-  ok(/mayStartColdField\(/.test(code),
-    '★★★ the sweep asks before starting a cold light field — the top-of-loop check cannot bound ' +
-    'a call that begins after it')
+  // ── ★★★ THE SWEEP MUST NOMINATE, NEVER BUILD (2026-09-01) ───────────────────────────────────
+  // The retired assert here was `/mayStartColdField\(/` — it proved the sweep asked permission
+  // before an inline build, which was the 08-27 design. The build is no longer inline at all, so
+  // the thing to assert is that it CANNOT become inline again by accident.
+  ok(/startLightBuild\(/.test(code),
+    '★★★ the sweep nominates a cold column for the job instead of building it')
+  ok(/if \(!lf\) \{ startLightBuild\([^)]*\); continue \}/.test(code),
+    '★★★ and a column without a ready field is SKIPPED in the same breath — no-spawn is the safe ' +
+    'direction, so the lantern\'s veto can never be bypassed by a cache miss')
+  ok(/advanceLightBuild\(LIGHT_BUILD_MS\)/.test(code),
+    '★★★ the frame loop advances the job by the module\'s own slice — a job nothing advances is a ' +
+    'column that is skipped forever, which reads in-game as "Hollows stopped spawning"')
+  ok(!/mayStartColdField/.test(code),
+    '★★ the retired gate is gone from the host, not merely unused');
+  // ── ⚠⚠ THE WINDOW SLICING OPENED, AND IT DID NOT EXIST BEFORE ────────────────────────────────
+  // A synchronous build had no window to go stale in. A job spans frames, so an edit or an
+  // eviction mid-build must DROP it — otherwise a pre-edit field lands in the cache a few frames
+  // after the player invalidated it, which is the delete silently undone.
+  ok(/lightJob\.current = null/.test(code),
+    '★★★ an in-flight field build is cancellable at all');
+  ok((code.match(/lightJob\.current = null/g) ?? []).length >= 3,
+    '★★★ and it is cancelled on BOTH invalidation paths (block edit, eviction) as well as on ' +
+    'publish — a job cancelled only where somebody remembered is a stale field waiting to happen')
+  // ⚠⚠ THE REGRESSION THAT WOULD UNDO ALL OF THIS: someone calling the builder straight from the
+  // sweep again. Both entry points must appear EXACTLY ONCE, inside `advanceLightBuild`.
+  for (const fn of ['beginLight(', 'stepLight(']) {
+    ok((code.match(new RegExp(fn.replace('(', '\\('), 'g')) ?? []).length === 1,
+      `★★★ ${fn}) is called in exactly one place — a second call site is a synchronous field build ` +
+      'somewhere, which is the 55.80ms frame coming back')
+  }
   ok(!/\blightBudget\b/.test(code),
     '★★ the old inline `lightBudget` literal is gone — a term of the frame ceiling living as a ' +
     'bare number inside a 9,000-line component is a term nobody can check')

@@ -99,64 +99,189 @@ const inside = (b: LightBounds, x: number, y: number, z: number): boolean =>
  * For light the conservative direction is dark, which errs toward MORE spawn-eligible space at a
  * region edge rather than a bright seam. Recompute with loaded neighbours to settle an edge.
  */
-export function computeLight(bounds: LightBounds, inputs: LightInputs): LightField {
-  const { x0, y0, z0, sx, sy, sz } = bounds
-  const data = new Uint8Array(sx * sy * sz)
-  const { opaque, emit, openToSky } = inputs
+/**
+ * ── ★★★ THE FIELD IS BUILT IN SLICES, BECAUSE A 53ms UNIT CANNOT BE BUDGETED (2026-09-01) ───────
+ *
+ * `spawn-budget.ts` spent two rounds bounding when a cold field may START and could never bound
+ * what it COSTS, because nothing on a single thread preempts a synchronous call once begun. The
+ * ceiling it could honestly state was `SPAWN_BUDGET_MS + COLD_FIELD_MS`, and `COLD_FIELD_MS` was
+ * measured on a server CPU. From Alex's capture on the UHD 630 (home plot, 465 columns, view
+ * radius 12): `world:spawn/light` was **55.80ms of a 58.9ms frame — 95% — with the GPU at 5.3ms
+ * and the heap flat.** One field. The stated ceiling was 23ms, so the bound was out by 2.4x, in
+ * exactly the way `COLD_FIELD_MS`'s own docstring predicted it would go stale.
+ *
+ * ★★ SO THE UNIT IS THE BUG, NOT THE BUDGET. `beginLight` + `stepLight` run the same four phases
+ * against the same queue in the same order, stopping whenever a wall-clock slice is spent and
+ * resuming exactly where they left off. The caller pays a few ms a frame instead of one 53ms
+ * hitch, and no per-machine constant has to be right for the frame to hold.
+ *
+ * ⚠ THE OUTPUT IS BYTE-IDENTICAL AND THAT IS ASSERTED, NOT ASSUMED. `light.test.ts` compares a
+ * fully-stepped field against a one-shot one cell by cell, at several slice sizes including 0.
+ *
+ * ⚠ THE SEED ORDER IS PRESERVED AS BELT-AND-BRACES, NOT BECAUSE THE FIELD DEPENDS ON IT — and the
+ * distinction is measured, not reasoned. Swapping the sky seed to x-major changes **0 of 2800
+ * cells**: the flood is a monotone max-fixpoint, so a FIFO order cannot change where it converges.
+ * Keeping the original order makes the equivalence trivially true rather than argued; do not read
+ * it as a constraint a refactor must respect.
+ *
+ * ⚠⚠ AND KNOW WHAT THE EQUIVALENCE TEST CANNOT SEE. `computeLight` now DELEGATES to `stepLight`,
+ * so the reference and the subject are the same code: any mutation that affects both sides cancels
+ * out and the comparison stays green. It guards RESUMPTION — that pausing and continuing lands in
+ * the same place as not pausing — and nothing else. What guards the algorithm is the behavioural
+ * block above it. A comparison between a thing and itself is not evidence about either.
+ *
+ * ⚠ A PARTIAL FIELD IS NEVER PUBLISHED. `field` stays null until the last phase completes, so a
+ * consumer either has a finished field or has nothing — which is the host's existing rule ("a cold
+ * column is SKIPPED, never guessed at") reaching one layer down. Half a flood is darker than the
+ * truth, and darker means MORE spawn-eligible space: the one direction this must never fail in.
+ */
+export type LightWork = {
+  readonly bounds: LightBounds
+  readonly inputs: LightInputs
+  readonly data: Uint8Array
+  readonly queue: Int32Array
+  /** 0 sky-seed · 1 sky-flood · 2 block-seed · 3 block-flood · 4 done. */
+  phase: 0 | 1 | 2 | 3 | 4
+  head: number
+  tail: number
+  /** Progress within the current SEED phase; floods carry their own head/tail. */
+  cursor: number
+  /** Non-null only once `phase === 4`. */
+  field: LightField | null
+}
 
-  // Reused across both channels — one allocation for the whole flood.
-  const queue = new Int32Array(sx * sy * sz)
+/**
+ * How many units pass between wall-clock checks.
+ *
+ * ⚠ NOT A TUNING KNOB — it is the granularity of the budget, and it bounds the overshoot. A slice
+ * can run one check-interval past its deadline, so this must stay small enough that 256 units of
+ * the most expensive phase is a rounding error against the slice. It is NOT free to raise: at 4096
+ * the overshoot would be most of a frame on the machine this exists to protect.
+ */
+const STEP_CHECK = 256
 
-  // ── sky: seed, then spread ──────────────────────────────────────────────────────────────────
+export function beginLight(bounds: LightBounds, inputs: LightInputs): LightWork {
+  const n = bounds.sx * bounds.sy * bounds.sz
+  return {
+    bounds, inputs,
+    data: new Uint8Array(n),
+    // Reused across both channels — one allocation for the whole flood.
+    queue: new Int32Array(n),
+    phase: 0, head: 0, tail: 0, cursor: 0, field: null,
+  }
+}
+
+/**
+ * Advance the build by at most `budgetMs` of wall clock. Returns true when the field is finished.
+ *
+ * Pass `Infinity` to run it to completion in one call — that is exactly what `computeLight` does,
+ * so the one-shot path and the stepped path are the same code and cannot drift apart.
+ */
+export function stepLight(w: LightWork, budgetMs: number): boolean {
+  if (w.phase === 4) return true
+  const b = w.bounds
+  const { x0, y0, z0, sx, sy, sz } = b
+  const { opaque, emit, openToSky } = w.inputs
+  const t0 = performance.now()
+  let since = 0
+  // ⚠ Checked on a counter, not every unit: `performance.now()` in the inner loop of a flood is
+  // itself a measurable cost, and this function exists to make frames cheaper.
+  const outOfTime = (): boolean => {
+    if (++since < STEP_CHECK) return false
+    since = 0
+    return performance.now() - t0 >= budgetMs
+  }
+
+  // ── sky: seed ───────────────────────────────────────────────────────────────────────────────
   // ★ STRAIGHT DOWN DOES NOT DECAY. That single rule is what makes a shaft of daylight reach the
   // bottom of a ravine instead of petering out after fifteen blocks, and it is why sky light is
   // worth having as its own channel at all. Sideways decays normally.
-  let head = 0, tail = 0
-  for (let z = z0; z < z0 + sz; z++) {
-    for (let x = x0; x < x0 + sx; x++) {
+  if (w.phase === 0) {
+    const columns = sz * sx
+    while (w.cursor < columns) {
+      if (outOfTime()) return false
+      const c = w.cursor++
+      const z = z0 + ((c / sx) | 0)
+      const x = x0 + (c % sx)
       for (let y = y0 + sy - 1; y >= y0; y--) {
         if (opaque(x, y, z)) break            // the column is closed from here down
         if (!openToSky(x, z, y)) break        // something above this slice already closed it
-        data[idx(bounds, x, y, z)] = packLight(MAX_LIGHT, 0)
-        queue[tail++] = idx(bounds, x, y, z)
+        const i = idx(b, x, y, z)
+        w.data[i] = packLight(MAX_LIGHT, 0)
+        w.queue[w.tail++] = i
       }
     }
+    w.phase = 1
   }
-  head = floodChannel(bounds, data, queue, head, tail, opaque, true)
 
-  // ── block: seed from emitters, then spread ──────────────────────────────────────────────────
-  head = 0; tail = 0
-  for (let y = y0; y < y0 + sy; y++) {
-    for (let z = z0; z < z0 + sz; z++) {
-      for (let x = x0; x < x0 + sx; x++) {
-        const e = emit(x, y, z)
-        if (e <= 0) continue
-        const i = idx(bounds, x, y, z)
-        data[i] = packLight(skyOf(data[i]), e)
-        queue[tail++] = i
-      }
+  // ── sky: spread ─────────────────────────────────────────────────────────────────────────────
+  if (w.phase === 1) {
+    if (!floodSlice(w, opaque, true, outOfTime)) return false
+    w.phase = 2; w.head = 0; w.tail = 0; w.cursor = 0
+  }
+
+  // ── block: seed from emitters ───────────────────────────────────────────────────────────────
+  if (w.phase === 2) {
+    const cells = sx * sy * sz
+    while (w.cursor < cells) {
+      if (outOfTime()) return false
+      // The linear index IS the original loop order (y outer, then z, then x), so the queue is
+      // seeded in exactly the sequence the one-shot version produced.
+      const i = w.cursor++
+      const y = y0 + ((i / (sx * sz)) | 0)
+      const rem = i % (sx * sz)
+      const z = z0 + ((rem / sx) | 0)
+      const x = x0 + (rem % sx)
+      const e = emit(x, y, z)
+      if (e <= 0) continue
+      w.data[i] = packLight(skyOf(w.data[i]), e)
+      w.queue[w.tail++] = i
     }
+    w.phase = 3
   }
-  floodChannel(bounds, data, queue, head, tail, opaque, false)
 
+  // ── block: spread ───────────────────────────────────────────────────────────────────────────
+  if (w.phase === 3) {
+    if (!floodSlice(w, opaque, false, outOfTime)) return false
+    w.phase = 4
+  }
+
+  const data = w.data
   const get = (x: number, y: number, z: number): number =>
-    inside(bounds, x, y, z) ? data[idx(bounds, x, y, z)] : 0
-  return { bounds, data, get, sky: (x, y, z) => skyOf(get(x, y, z)), block: (x, y, z) => blockOf(get(x, y, z)) }
+    inside(b, x, y, z) ? data[idx(b, x, y, z)] : 0
+  w.field = { bounds: b, data, get, sky: (x, y, z) => skyOf(get(x, y, z)), block: (x, y, z) => blockOf(get(x, y, z)) }
+  return true
 }
 
-/** One channel's BFS. Shared so the two floods cannot drift apart in their decay rules. */
-function floodChannel(
-  b: LightBounds, data: Uint8Array, queue: Int32Array,
-  head: number, tail: number,
+export function computeLight(bounds: LightBounds, inputs: LightInputs): LightField {
+  const w = beginLight(bounds, inputs)
+  // Infinity means `outOfTime` can never be true, so this runs the identical code path to
+  // completion in one call. There is no separate one-shot implementation to drift.
+  stepLight(w, Infinity)
+  return w.field!
+}
+
+/**
+ * One channel's BFS, resumable. Shared so the two floods cannot drift apart in their decay rules.
+ *
+ * Returns true when the queue is drained, false when the slice ran out of time — in which case
+ * `w.head` / `w.tail` are left exactly where the next slice must resume.
+ */
+function floodSlice(
+  w: LightWork,
   opaque: (x: number, y: number, z: number) => boolean,
   isSky: boolean,
-): number {
+  outOfTime: () => boolean,
+): boolean {
+  const b = w.bounds
+  const data = w.data, queue = w.queue
   const read = (i: number) => (isSky ? skyOf(data[i]) : blockOf(data[i]))
   const write = (i: number, v: number) => {
     data[i] = isSky ? packLight(v, blockOf(data[i])) : packLight(skyOf(data[i]), v)
   }
-  while (head < tail) {
-    const i = queue[head++]
+  while (w.head < w.tail) {
+    if (outOfTime()) return false
+    const i = queue[w.head++]
     const level = read(i)
     if (level <= 1) continue
     const y = b.y0 + Math.floor(i / (b.sx * b.sz))
@@ -171,10 +296,10 @@ function floodChannel(
       const ni = idx(b, nx, ny, nz)
       if (read(ni) >= next) continue
       write(ni, next)
-      queue[tail++] = ni
+      queue[w.tail++] = ni
     }
   }
-  return head
+  return true
 }
 
 const NEIGHBOURS: readonly (readonly [number, number, number])[] = [

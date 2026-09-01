@@ -45,7 +45,7 @@ import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GEN
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
 import { createProfiler, snapshotText, shortRowLabel, type FrameProfile, gpuTrusted } from './profile'
-import { stopScan, mayStartColdField, SPAWN_SCAN_MAX } from './spawn-budget'
+import { stopScan, SPAWN_SCAN_MAX, LIGHT_BUILD_MS } from './spawn-budget'
 // ── the input layer (lib/input) ───────────────────────────────────────────────────────────────
 // Keys used to be decided inline, 25 times, across three listeners in this file — so the meaning of
 // a key could not be tested and could not be rebound. The meaning lives in lib/input now and this
@@ -192,7 +192,7 @@ import { type HollowForm,
          HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike } from './hollows'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
-import { computeLight, dayFactor, type LightField } from '../voxel/light'
+import { beginLight, stepLight, dayFactor, type LightField, type LightWork, type LightBounds } from '../voxel/light'
 import { WOOD } from '../voxel/trees'
 // ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
@@ -5259,6 +5259,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // (or roofing a room) must change what the NEXT spawn scan reads, not what the last one read.
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
       lightCache.current.delete(key(cx + dx, cz + dz))
+    // ⚠⚠ AND CANCEL AN IN-FLIGHT BUILD OF ANY OF THEM — A REGRESSION THE SLICING INTRODUCED.
+    // While the field was built synchronously inside the sweep there was no window to be stale in.
+    // A job spans frames, so a job that STARTED before this edit is reading pre-edit voxels, and
+    // publishing it would put a field the player just invalidated back into the cache — the exact
+    // thing the delete above exists to prevent, arriving a few frames late. Dropping the job is
+    // free: the next sweep re-nominates the column, and until then it is skipped, which is
+    // no-spawn, which is the safe direction.
+    if (lightJob.current) {
+      const jk = lightJob.current.k
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
+        if (jk === key(cx + dx, cz + dz)) lightJob.current = null
+    }
     // Fence connections are DERIVED from the world, so a terrain edit beside a fence makes or
     // breaks an arm — re-derive. O(placements) matrix writes; edits are player-paced, not 60Hz.
     pieces.sync(placements.current)
@@ -5690,14 +5702,41 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // grey body one block across a border from a light). Fields are computed lazily when the cycle
   // scans a column, evicted with the column, and invalidated by any edit their box can see.
   const lightCache = useRef(new Map<string, LightField>())
-  const lightFor = useCallback((cx: number, cz: number): LightField => {
-    const k = key(cx, cz)
-    const hit = lightCache.current.get(k)
-    if (hit) return hit
+  /**
+   * ── ★★★ A COLD FIELD IS BUILT ACROSS FRAMES, NOT INSIDE ONE (2026-09-01) ────────────────────
+   *
+   * It used to be one synchronous call, and `spawn-budget.ts` spent two rounds trying to bound it
+   * from the outside. It could not: a clock can refuse to START work and nothing on a single
+   * thread can stop work already running. Alex's UHD 630 capture settled it — `world:spawn/light`
+   * at **55.80ms of a 58.9ms frame, 95%, GPU 5.3ms, heap flat**, against a stated 23ms ceiling,
+   * because `COLD_FIELD_MS` was measured on a server CPU. And with `SPAWN_CYCLE_S` at 0.4 that
+   * hitch could recur ~2.5x a second all night until the cache filled. That is the "spazzing".
+   *
+   * ★★ SO THE FIELD IS A JOB WITH A CURSOR. One job at a time, advanced by `LIGHT_BUILD_MS` per
+   * frame, published to `lightCache` only when finished. **The frame ceiling is now a slice size
+   * this file controls, not a per-machine measurement that has to be right.**
+   *
+   * ⚠ NOTHING ABOUT SPAWNING CHANGES SEMANTICALLY. The sweep already SKIPPED a column whose field
+   * was not ready — "a cold column is skipped, never guessed at", because no-spawn is the safe
+   * direction and the lantern's veto must never be bypassed by a cache miss. That rule is now the
+   * only rule: the column is skipped while its job runs and eligible once it lands. Throughput
+   * actually rises, because the job advances EVERY frame rather than only on 0.4s sweep frames.
+   */
+  const lightJob = useRef<{
+    k: string
+    bounds: LightBounds
+    hmN: number
+    skyH: Uint16Array
+    skyCursor: number
+    work: LightWork | null
+  } | null>(null)
+
+  /** Bounds for a column's field. Split out because the job needs it before any flooding starts. */
+  const lightBoundsFor = useCallback((cx: number, cz: number): LightBounds => {
     // Vertical slice: the column's own surface span, padded down for pockets and up past a
-    // lantern's reach. Full-height would be 9× the cells for air that cannot matter — block
+    // lantern's reach. Full-height would be 9x the cells for air that cannot matter — block
     // light decays 1/step, so nothing >15 above the highest surface can touch the ground.
-    const col = cols.current.get(k)
+    const col = cols.current.get(key(cx, cz))
     let lo = H - 1, hi = 0
     if (col) {
       for (let i = 0; i < SECTION * SECTION; i++) {
@@ -5707,50 +5746,76 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       }
     } else { lo = 0; hi = H - 1 }
     const y0 = Math.max(0, lo - 10)
-    const bounds = { x0: cx * SECTION - SECTION, y0, z0: cz * SECTION - SECTION,
-                     sx: SECTION * 3, sy: Math.min(H, hi + 16) - y0, sz: SECTION * 3 }
-    // ── ★★★ THE SKY SEED'S HEIGHT IS TABULATED, NOT REGENERATED PER CELL (2026-08-27) ──────────
-    // This was `openToSky: (x, z, y) => y > columnHeight(x, z, SEED)`, and `columnHeight` is
-    // GENERATED terrain — multi-octave noise, not a lookup. The sky seed walks x,z,y and asks it
-    // once per cell, so a field paid tens of thousands of terrain generations to answer 2,304
-    // distinct questions. **Measured, holding everything else identical: 113.16ms live against
-    // 12.98ms from a precomputed 48×48 map — 8.7× the whole rest of the flood, in one predicate.**
-    // The table costs 2,304 calls, paid once, and it is the SAME `columnHeight` answering: this is
-    // memoisation, not an approximation, and the field it produces is byte-identical.
-    //
-    // ★ WHY IT HID FOR SO LONG: it is one short arrow function that reads like a comparison. The
-    // cost is not in this file, it is in what `columnHeight` does, and nothing at the call site
-    // says so. The 08-23 header below already warns about benching a component and concluding
-    // about the loop — this is the same mistake standing one level up, inside the loop's own body.
-    //
-    // ⚠ THE APRON IS 3×3 COLUMNS AND THE TABLE MUST COVER ALL OF IT, not just the centre column —
-    // the box is `SECTION * 3` on both horizontal axes and the seed walks every cell of it.
+    return { x0: cx * SECTION - SECTION, y0, z0: cz * SECTION - SECTION,
+             sx: SECTION * 3, sy: Math.min(H, hi + 16) - y0, sz: SECTION * 3 }
+  }, [])
+
+  /** Claim a column for building, if nothing is already in flight. */
+  const startLightBuild = useCallback((cx: number, cz: number): void => {
+    if (lightJob.current) return
+    const bounds = lightBoundsFor(cx, cz)
     const hmN = SECTION * 3
-    const skyH = new Uint16Array(hmN * hmN)
-    for (let hz = 0; hz < hmN; hz++) {
-      for (let hx = 0; hx < hmN; hx++) {
-        skyH[hz * hmN + hx] = columnHeight(bounds.x0 + hx, bounds.z0 + hz, SEED)
+    lightJob.current = { k: key(cx, cz), bounds, hmN, skyH: new Uint16Array(hmN * hmN), skyCursor: 0, work: null }
+  }, [lightBoundsFor])
+
+  /**
+   * Advance the in-flight field by at most `budgetMs`. Returns true if a field was published.
+   *
+   * ⚠ THE SKY TABLE IS SLICED TOO, AND LEAVING IT ATOMIC WOULD HAVE UNDONE THE WHOLE FIX. It is
+   * 2,304 `columnHeight` calls — multi-octave noise, not a lookup — which is single-digit ms on a
+   * server and was never the part anyone timed separately. A "fix" that sliced only the flood
+   * would have left a fat unsliceable lump at the head of every cold column and looked, from a
+   * profile, almost exactly like the bug it replaced.
+   */
+  const advanceLightBuild = useCallback((budgetMs: number): boolean => {
+    const j = lightJob.current
+    if (!j) return false
+    const t0 = performance.now()
+
+    // ── phase 1: the sky-height table ─────────────────────────────────────────────────────────
+    // ★ THE SKY SEED'S HEIGHT IS TABULATED, NOT REGENERATED PER CELL (2026-08-27). This was
+    // `openToSky: (x, z, y) => y > columnHeight(x, z, SEED)`, asked once per CELL, so a field paid
+    // tens of thousands of terrain generations to answer 2,304 distinct questions. Measured
+    // 113.16ms -> 12.98ms, byte-identical output. Memoisation, not approximation.
+    //
+    // ⚠ THE APRON IS 3x3 COLUMNS AND THE TABLE MUST COVER ALL OF IT, not just the centre column.
+    const total = j.hmN * j.hmN
+    while (j.skyCursor < total) {
+      if (performance.now() - t0 >= budgetMs) return false
+      // A row at a time: 48 noise calls between clock reads, the same reasoning as STEP_CHECK.
+      const rowEnd = Math.min(total, j.skyCursor + j.hmN)
+      for (; j.skyCursor < rowEnd; j.skyCursor++) {
+        const hx = j.skyCursor % j.hmN, hz = (j.skyCursor / j.hmN) | 0
+        j.skyH[hz * j.hmN + hx] = columnHeight(j.bounds.x0 + hx, j.bounds.z0 + hz, SEED)
       }
     }
-    const field = computeLight(bounds, {
-      // Air, water and foliage pass light; everything else stops it. Matches light.ts's contract.
-      opaque: (x, y, z) => {
-        const m = voxel(x, y, z)
-        return m !== AIR && m !== MAT.WATER && !LIGHT_PASSES.has(m)
-      },
-      emit: (x, y, z) => emitOf(voxel(x, y, z)),
-      // ⚠ Generated surface, not live voxels: a player-built roof does not register as closing
-      // the sky. That only mis-lights covered ground DURING THE DAY (at night the sky channel is
-      // worth 0 regardless), and surface Hollows only body at night — so the approximation is
-      // free until daytime interior spawning exists.
-      //
-      // ⚠ IN-BOUNDS BY CONSTRUCTION, NOT BY LUCK: `computeLight` only ever asks about cells inside
-      // `bounds`, and the table is exactly `bounds`' horizontal footprint. A clamp here would turn
-      // a future bounds change into silently wrong lighting at the apron instead of a crash.
-      openToSky: (x, z, y) => y > skyH[(z - bounds.z0) * hmN + (x - bounds.x0)],
-    })
-    lightCache.current.set(k, field)
-    return field
+
+    // ── phase 2: the flood ────────────────────────────────────────────────────────────────────
+    if (!j.work) {
+      j.work = beginLight(j.bounds, {
+        // Air, water and foliage pass light; everything else stops it. Matches light.ts's contract.
+        opaque: (x, y, z) => {
+          const m = voxel(x, y, z)
+          return m !== AIR && m !== MAT.WATER && !LIGHT_PASSES.has(m)
+        },
+        emit: (x, y, z) => emitOf(voxel(x, y, z)),
+        // ⚠ Generated surface, not live voxels: a player-built roof does not register as closing
+        // the sky. That only mis-lights covered ground DURING THE DAY (at night the sky channel is
+        // worth 0 regardless), and surface Hollows only body at night.
+        //
+        // ⚠ IN-BOUNDS BY CONSTRUCTION, NOT BY LUCK: the flood only ever asks about cells inside
+        // `bounds`, and the table is exactly `bounds`' horizontal footprint. A clamp here would
+        // turn a future bounds change into silently wrong lighting instead of a crash.
+        openToSky: (x, z, y) => y > j.skyH[(z - j.bounds.z0) * j.hmN + (x - j.bounds.x0)],
+      })
+    }
+    const left = budgetMs - (performance.now() - t0)
+    if (left <= 0) return false
+    if (!stepLight(j.work, left)) return false
+
+    lightCache.current.set(j.k, j.work.field!)
+    lightJob.current = null
+    return true
   }, [voxel])
   // ── ★ THREE SILHOUETTES, ONE GEOMETRY EACH, SHARED ACROSS EVERY BODY OF THAT FORM ──────────
   // ⚠ BLOCKOUT, same standing as the single body it replaces: the locked look is owed a
@@ -6525,6 +6590,17 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     pad.current = pollPad()
     prof.current.mark('input:poll')
     prof.current.mark('world:spawn')
+    // ── ★★★ THE COLD-FIELD JOB GETS ITS SLICE, EVERY FRAME, BEFORE ANYTHING ELSE ───────────────
+    // Outside the `hollowNight` / `hollowClock` gate on purpose: the sweep runs every
+    // `SPAWN_CYCLE_S` (0.4s) and only at night, but the job wants every frame it can get. Building
+    // a field over ~20 slices of a few ms beats one 53ms stall, and finishing it SOONER is what
+    // makes the column eligible sooner — so throughput went up, not down.
+    //
+    // ⚠ This keeps the `world:spawn/light` row pointed at the same work it always measured, so a
+    // future capture is comparable with Alex's. The row should now read a few ms and never spike.
+    prof.current.mark('world:spawn/light')
+    advanceLightBuild(LIGHT_BUILD_MS)
+    prof.current.mark('world:spawn')
     // ── ★ THE NIGHT TIDE'S PAYOFF — the Hollows' SPAWN CYCLE, MINECRAFT'S SHAPE ──────────────
     // Reworked 2026-08-07 eve after Alex night-walked without meeting one: the first cut scanned
     // ONE random column per 1.6s (a trickle); MC attempts EVERY eligible chunk every tick, and
@@ -6600,16 +6676,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       if (hollowNight(day) && hollows.current.length < cap && hollowClock.current <= 0) {
         hollowClock.current = SPAWN_CYCLE_S
         const keys = [...cols.current.keys()]
-        // ── ★★★ COLD LIGHT FIELDS ARE ADMITTED, NOT WANDERED INTO (2026-08-27) ─────────────────
+        // ── ★★★ THE SWEEP NO LONGER COMPUTES ANYTHING EXPENSIVE (2026-09-01) ──────────────────
         // A column whose field is not ready is SKIPPED, not guessed at — no-spawn is the safe
         // direction and the lantern's veto must never be bypassed by a cache miss. That rule was
-        // already right. What was wrong is that computing a cold field was the ONE unbounded call
-        // in a loop whose budget is checked at the TOP of the iteration: `world:spawn/light` came
-        // back at 118.60ms of a 123.4ms frame in Alex's profile while the GPU sat at 8%.
-        // `mayStartColdField` asks the clock immediately before the expensive call — the last
-        // moment a single thread can still decide anything — and `spawn-budget.ts` now states the
-        // resulting ceiling instead of promising one it could not keep.
-        let coldFields = 0
+        // always right; what was wrong is that the sweep also BUILT the field it was missing, and
+        // no clock can bound a synchronous call already running. Two rounds of budgeting tried and
+        // the third capture still read 55.80ms of a 58.9ms frame. The build is now a sliced job
+        // (`advanceLightBuild`, above) and this loop only nominates a column for it, so the walk's
+        // own ceiling is `SPAWN_BUDGET_MS` with nothing hiding behind it.
         // Random start offset so the same early-loaded columns do not win every night.
         const start = Math.floor(Math.random() * Math.max(1, keys.length))
         // ── ★★★ THE SWEEP IS BUDGETED — it owned 137.5ms of a 163ms frame before this ───────────
@@ -6626,16 +6700,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // A column entirely beyond despawn range would breed instant despawns — skip it.
           if (Math.hypot(ccx - p.x, ccz - p.z) > despawn + SECTION / 2) continue
           const kk = key(scx, scz)
-          if (!lightCache.current.has(kk)) {
-            if (!mayStartColdField(coldFields, performance.now() - scanAt)) continue
-            coldFields++
-          }
+          // ★★ A COLD COLUMN IS SKIPPED AND QUEUED, NEVER COMPUTED HERE (2026-09-01).
+          // This used to admit one cold field into the sweep and pay for it inline, which is how
+          // `world:spawn/light` took 55.80ms of a 58.9ms frame on Alex's UHD 630. The build is now
+          // a job advanced a slice at a time by `advanceLightBuild`, and the sweep's only job is
+          // to nominate a column. Skipping stays the safe direction it always was — no-spawn — so
+          // the lantern's veto still cannot be bypassed by a cache miss.
+          const lf = lightCache.current.get(kk)
+          if (!lf) { startLightBuild(scx, scz); continue }
           examined++
-          // ★ The one call anybody had already suspected, given its own row so the next capture can
-          // confirm or clear it rather than leaving it the default answer.
-          prof.current.mark('world:spawn/light')
-          const lf = lightFor(scx, scz)
-          prof.current.mark('world:spawn')
           // MC's structure: ONE random anchor per column per sweep. Coverage comes from sweeping
           // every column, not from hammering one.
           const wx = scx * SECTION + Math.floor(Math.random() * SECTION)
@@ -9125,6 +9198,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       for (const kk of [...cols.current.keys()]) if (!keep.has(kk)) { cols.current.delete(kk); floraDirty.current = true }
       for (const kk of [...requested.current]) if (!keep.has(kk)) requested.current.delete(kk)
       for (const kk of [...lightCache.current.keys()]) if (!keep.has(kk)) lightCache.current.delete(kk)
+      // Same reasoning as the edit path: a job for a column that has just been unloaded is work
+      // toward a field nothing will read, and publishing it would re-populate a cache entry the
+      // eviction just cleared.
+      if (lightJob.current && !keep.has(lightJob.current.k)) lightJob.current = null
       // The worker mirrors this eviction, or its column cache grows by every chunk ever visited.
       worker.current?.postMessage({ type: 'evict', keep: [...keep] })
       // ⚠ EDITS ARE NOT EVICTED WITH THEIR COLUMN. Walking away from a house and back must not lose

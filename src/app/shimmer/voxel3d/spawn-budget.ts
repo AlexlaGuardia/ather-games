@@ -67,61 +67,66 @@ export const SPAWN_SCAN_MAX = 32
  *
  * The worst frame is therefore `sweepCeilingMs()` — a number this module can state and the oracle
  * can check — instead of a promise. **Say what is bounded and by how much, or say nothing.**
+ *
+ * ── ⚠⚠ SUPERSEDED 2026-09-01, AND KEPT BECAUSE THE WRONG READING IS THE USEFUL ARTIFACT ────────
+ * Everything above this line is 08-27 history. `mayStartColdField` and `COLD_FIELDS_PER_SWEEP` no
+ * longer exist. The paragraph above is right that a bound must exist and wrong about where it can
+ * come from: it bounds the START of the field and then states a ceiling containing the field's own
+ * COST, `COLD_FIELD_MS` — a constant measured on a server CPU for a frame that has to hold on a
+ * UHD 630. Alex's next capture read **55.80ms of a 58.9ms frame** against that 23ms ceiling.
+ *
+ * ★★★ THE LESSON IS NARROWER THAN "SAY WHAT IS BOUNDED": a ceiling containing a term you cannot
+ * CONTROL is a measurement, not a bound. `SPAWN_BUDGET_MS` was always a real bound because this
+ * module decides it; `COLD_FIELD_MS` never was, because the machine decides it. The 09-01 fix
+ * removes the term rather than re-measuring it — see `LIGHT_BUILD_MS` below.
  */
 export const SPAWN_BUDGET_MS = 3
 
 /**
- * How many COLD light fields one sweep may compute. Was an inline `lightBudget = 2` in the host.
+ * How long the cold-light-field JOB may run per frame, in ms.
  *
- * ★ IT IS OUT HERE BECAUSE IT IS HALF OF THE CEILING, and a term of the ceiling that lives as a
- * literal in a 9,000-line component is a term nobody can check. Two of these were 118ms of the
- * measured frame; one tabulated field is ~13ms on a fast box.
+ * ── ★★★ THE THIRD ROUND, AND THIS TIME THE UNIT CHANGED RATHER THAN THE NUMBER (2026-09-01) ────
+ * `COLD_FIELDS_PER_SWEEP`, `COLD_FIELD_MS` and `mayStartColdField` lived here and are gone. They
+ * bounded when a field could START and could never bound what it COST, because nothing on a single
+ * thread preempts a synchronous call already running. The honest ceiling they could state was
+ * `SPAWN_BUDGET_MS + COLD_FIELD_MS` = 23ms, and `COLD_FIELD_MS` was measured on a server CPU.
  *
- * ⚠ A COLD COLUMN IS SKIPPED, NEVER GUESSED AT — the host's own rule, and the reason lowering this
- * is safe: no-spawn is the safe direction, the lantern's veto must never be bypassed by a cache
- * miss, and the cache fills over the next few sweeps regardless.
+ * ⚠ IT WENT STALE EXACTLY AS ITS OWN DOCSTRING PREDICTED. From Alex's capture on the UHD 630 (home
+ * plot, 465 columns, view radius 12): `world:spawn/light` was **55.80ms of a 58.9ms frame — 95% —
+ * GPU 5.3ms, heap flat.** One field, 2.4x the stated bound. That docstring said "if a future field
+ * genuinely costs more, the ceiling goes stale and the honest fix is to re-measure it, not to widen
+ * it." Re-measuring would have made the doc honest and the frame no better: **23ms and 55ms are
+ * both hitches**, and with `SPAWN_CYCLE_S` at 0.4 either could recur ~2.5x a second all night.
+ *
+ * ★★ SO THE FIX IS NOT A TRUER CONSTANT, IT IS A SMALLER UNIT. The field is built by
+ * `beginLight`/`stepLight` as a resumable job, advanced this many ms per frame and published only
+ * when complete. The frame cost is now a slice size this file chooses, and **no per-machine
+ * measurement has to be right for the frame to hold** — which is the property the last two rounds
+ * were missing. A slower box takes more frames to finish a field; it does not drop one.
+ *
+ * ⚠ THE ONE THING THAT STILL SCALES WITH THE MACHINE is how many frames a field takes, and that is
+ * the safe direction: a column stays SKIPPED while its job runs, and skipped means no-spawn.
  */
-export const COLD_FIELDS_PER_SWEEP = 1
-
-/**
- * Measured ceiling for ONE cold light field, in ms — the term that used to be unbounded.
- *
- * ⚠ EMPIRICAL, AND DELIBERATELY GENEROUS. Measured 4.5–6.6ms for the flood alone and 13.0ms median
- * (23.6ms worst) through the host's own predicates on a server CPU; Alex's UHD 630 desktop is the
- * slower machine and is the one that has to hold. This is a BOUND to reason with, not a target to
- * hit — if a future field genuinely costs more, the ceiling below goes stale and the honest fix is
- * to re-measure it, not to widen it.
- */
-export const COLD_FIELD_MS = 20
+export const LIGHT_BUILD_MS = 2
 
 /**
  * The worst frame this sweep can produce, stated rather than promised.
  *
- * ── ★★ THE COUNT IS NOT A TERM, AND FINDING THAT OUT TIGHTENED THE BOUND (2026-08-27) ──────────
- * The first version of this was `SPAWN_BUDGET_MS + COLD_FIELDS_PER_SWEEP * COLD_FIELD_MS`, and a
- * mutation raising `COLD_FIELDS_PER_SWEEP` to 5 changed no behaviour at all — which is what sent me
- * back to the derivation. `mayStartColdField` refuses to START a field once the walk's clock is
- * spent, so **at most one field can ever be in flight past the budget**: every earlier one both
- * began and finished inside `SPAWN_BUDGET_MS`, or the next would have been refused. The count is
- * belt to the clock's braces and does not enter the arithmetic.
+ * ── ★★ IT IS NOW `SPAWN_BUDGET_MS` ALONE, AND THAT IS THE WHOLE POINT OF THE 09-01 CHANGE ──────
+ * The sweep no longer computes anything expensive: a cold column is nominated and skipped, and the
+ * field is built by the job. So there is no second term — nothing hides behind the walk's clock any
+ * more. The frame's total light cost is `LIGHT_BUILD_MS`, billed to its own zone, and the two
+ * numbers are independent because they happen in different places.
  *
- * ⚠ So the honest ceiling is tighter than the one I first wrote, and it stops moving when somebody
- * retunes the count. A ceiling that overstates by 4× is not a lie, but it is a claim nobody can act
- * on — and this file has already shipped one docstring that could not be acted on.
+ * ⚠ HISTORY, BECAUSE THE SHAPE REPEATS: the first version of this was
+ * `SPAWN_BUDGET_MS + COLD_FIELDS_PER_SWEEP * COLD_FIELD_MS`, and a mutation raising the count to 5
+ * changed no behaviour at all — the clock refused the second field regardless, so the count was
+ * never a term. **A ceiling that overstates by 4x is not a lie, but it is a claim nobody can act
+ * on.** Two rounds later the remaining term was the one measured on the wrong machine.
  */
-export const sweepCeilingMs = (): number => SPAWN_BUDGET_MS + COLD_FIELD_MS
+export const sweepCeilingMs = (): number => SPAWN_BUDGET_MS
 
-/**
- * May the sweep begin computing a cold light field right now?
- *
- * ★ THE POINT IS *BEGIN*. This is asked immediately before the only call in the body that costs
- * more than a rounding error, which is the one place a single-threaded loop can still decide
- * anything — after the call starts, nothing can. `stopScan` answers the clock half so there is ONE
- * definition of "the walk has run out of time", not a second copy that can drift from it.
- */
-export function mayStartColdField(coldUsed: number, elapsedMs: number): boolean {
-  return coldUsed < COLD_FIELDS_PER_SWEEP && !stopScan(0, elapsedMs)
-}
+
 
 /**
  * Should the sweep stop walking columns this frame?

@@ -13,6 +13,7 @@
 
 import {
   MAX_LIGHT, packLight, skyOf, blockOf, computeLight, dayFactor, effectiveLight, spawnDark,
+  beginLight, stepLight,
   type LightBounds,
 } from './light'
 
@@ -122,6 +123,63 @@ console.log('★ spawn eligibility — the four behaviours')
 
   check('effectiveLight scales sky by the clock', effectiveLight(packLight(15, 0), 0.5) === 7.5)
   check('effectiveLight takes the max, not the sum', effectiveLight(packLight(10, 4), 1) === 10)
+}
+
+// ── ★★★ THE STEPPED BUILD MUST EQUAL THE ONE-SHOT BUILD, CELL FOR CELL ────────────────────────
+//
+// The whole justification for slicing the flood (2026-09-01) is that it changes WHEN the work
+// happens and nothing else. That is a claim about output, so it is checked as one: the same box
+// built at several slice sizes, compared byte by byte against `computeLight`.
+//
+// ⚠ THE SLICE SIZES MATTER MORE THAN THE COUNT. 0 forces a pause at every single check interval,
+// which is the case that actually exercises resumption — a generous budget finishes in one call
+// and would assert nothing about the seam. A test that only ran the fast slice would be green
+// while resumption was completely broken.
+{
+  // A box with terrain, an overhang and an emitter, so every phase has real work: both seed loops
+  // are non-empty and both floods spread.
+  // ⚠⚠ THE BOX IS NON-SQUARE AND LARGER THAN `STEP_CHECK` ON PURPOSE, AND BOTH WERE FOUND BY
+  // MUTATION, NOT BY DESIGN (2026-09-01). The first version was 12x10x12 and TWO mutations passed
+  // it clean:
+  //   · swapping the sky seed's `c / sx` for `c / sz` is a NO-OP when sx === sz, so the mutation
+  //     could not apply — a mutation that cannot apply is indistinguishable from a guard that works
+  //   · the sky seed was 144 units against a 256-unit check interval, so it never paused and never
+  //     resumed; a mutation resetting the seed cursor every slice therefore changed nothing
+  // 20 x 14 makes the axes distinguishable (280 seed columns, 2800 cells), so both phases actually
+  // cross a check boundary and both axes are separable. ⚠ Do not "tidy" these back to equal.
+  const bounds: LightBounds = { x0: 0, y0: 0, z0: 0, sx: 20, sy: 10, sz: 14 }
+  const solid = (x: number, y: number, z: number) => y < 3 || (y === 6 && x > 3 && x < 15 && z > 3 && z < 11)
+  const inputs = {
+    opaque: (x: number, y: number, z: number) => solid(x, y, z),
+    emit: (x: number, y: number, z: number) => (x === 5 && y === 4 && z === 5 ? 14 : 0),
+    openToSky: (x: number, z: number, y: number) => y >= 3,
+  }
+
+  const oneShot = computeLight(bounds, inputs)
+  check('the reference field is not trivially empty', oneShot.data.some(v => v !== 0))
+  check('the emitter actually lit something', oneShot.block(6, 4, 5) > 0)
+  check('the overhang shades the cell beneath it', oneShot.sky(5, 5, 5) < MAX_LIGHT)
+
+  for (const budget of [0, 0.05, 0.5, Infinity]) {
+    const w = beginLight(bounds, inputs)
+    let slices = 0
+    // ⚠ A BOUND, NOT A `while (true)`: a resumption bug that fails to advance would otherwise hang
+    // the suite with no output, and a hang is the one failure a sweep cannot report usefully.
+    while (!stepLight(w, budget) && slices < 100000) slices++
+    check(`stepped @${budget}ms finishes`, w.phase === 4 && w.field !== null, `slices=${slices}`)
+    const same = w.field !== null && w.field.data.length === oneShot.data.length
+      && w.field.data.every((v, i) => v === oneShot.data[i])
+    check(`stepped @${budget}ms is byte-identical to computeLight`, same)
+    // The interesting half: a tiny budget must ACTUALLY have paused, or this case proved nothing.
+    if (budget !== Infinity) {
+      check(`stepped @${budget}ms really resumed rather than finishing in one call`, slices > 0, `slices=${slices}`)
+    }
+  }
+
+  // A partial field must never be readable — the host's "skip, never guess" rule one layer down.
+  const partial = beginLight(bounds, inputs)
+  stepLight(partial, 0)
+  check('★ a partial build exposes no field', partial.phase !== 4 ? partial.field === null : true)
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)
