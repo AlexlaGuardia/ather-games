@@ -16,11 +16,11 @@
 // This is the same family as the 07-07 watchdog probe-calibration lesson: two independently sensible
 // numbers, no single place that asserts they still mean what the feature needs.
 
-import { spawnField, containsVolume, blocksShotAtVolume, absorbShotAtVolume, absorbShotAt, FIELD_HEIGHT, FIELD_UNDERBITE } from '../engine/field-effects'
+import { spawnField, containsVolume, blocksShotAtVolume, absorbShotAtVolume, absorbShotAt, absorbStrikeAtVolume, FIELD_HEIGHT, FIELD_UNDERBITE } from '../engine/field-effects'
 import { castForMove } from '../play3d/cast'
 import { readFileSync } from 'node:fs'
 import { noComments } from '../testing/guard'
-import { HOLLOW_HOVER, HOLLOW_RADIUS, HOLLOW_FORMS, FORM_ORDER } from './hollows'
+import { HOLLOW_HOVER, HOLLOW_RADIUS, HOLLOW_FORMS, FORM_ORDER, formOf } from './hollows'
 
 let ok = 0, bad = 0
 const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.error('  FAIL:', n, x)) }
@@ -146,6 +146,23 @@ console.log('\n── ★ shield hit points: a shell pays for what it eats (rule
   chk('★ a zero-damage round costs nothing — and does not go negative-into-healing', absorbShotAt(shell(20), 0, 0, -5).fields[0].hp === 20)
 }
 
+console.log('\n── ★ a Hollow\'s blow breaks the shell (ruled by Alex 2026-09-02) ──')
+{
+  const shell = (hp: number) => spawnField([], { moveId: 'threshold', x: 0, y: GROUND, z: 0, radius: 2.4, height: FIELD_HEIGHT,
+    secs: 5, dps: 0, hps: 0, stopsShots: true, hp }, 0)
+  const press = formOf({ form: 'warden' } as never).damage, ambush = formOf({ form: 'stalker' } as never).damage
+  chk('the forms still carry the numbers this section reasons with', press > 0 && ambush > press, `press ${press} ambush ${ambush}`)
+  const b1 = absorbStrikeAtVolume(shell(20), 0, GROUND + 1, 0, press)
+  chk('★ a warden\'s press lands on the shell, not the keeper — and the shell pays', b1.hit !== null && !b1.broke && b1.fields[0].hp === 20 - press)
+  const b2 = absorbStrikeAtVolume(shell(2), 0, GROUND + 1, 0, ambush)
+  chk('★ a stalker\'s ambush on a worn shell shatters it', b2.hit !== null && b2.broke && b2.fields.length === 0)
+  chk('...and with no shell standing, the blow reaches the keeper (nothing absorbs)', absorbStrikeAtVolume(b2.fields, 0, GROUND + 1, 0, ambush).hit === null)
+  const wall = spawnField([], { moveId: 'firewall', x: 0, y: GROUND, z: 0, radius: 3, height: FIELD_HEIGHT, secs: 6, dps: 12, hps: 0, stopsShots: true, hp: 0 }, 0)
+  chk('★★ a Firewall does NOT parry — a Hollow swings straight through fire (rounds, not arms)', absorbStrikeAtVolume(wall, 0, GROUND + 1, 0, press).hit === null)
+  chk('...while the same Firewall still eats a round', absorbShotAtVolume(wall, 0, GROUND + 1, 0, press).hit !== null)
+  chk('a keeper standing OUTSIDE the shell is not covered by it', absorbStrikeAtVolume(shell(20), 4, GROUND + 1, 0, press).hit === null)
+}
+
 console.log('\n── ★ the hosts ask the reader with the bill attached, not the free one ──')
 {
   const vw = noComments(readFileSync('src/app/shimmer/voxel3d/VoxelWorld.tsx', 'utf8'))
@@ -154,7 +171,14 @@ console.log('\n── ★ the hosts ask the reader with the bill attached, not t
   chk('voxel: the shot site charges the shell with the round\'s damage, once', count(vw, /absorbShotAtVolume\(fields\.current, sh\.x, sh\.y, sh\.z, sh\.dmg\)/) === 1)
   chk('voxel: no shot site still asks the free query', count(vw, /blocksShotAtVolume\(/) === 0)
   chk('voxel: the spawn hands the spec\'s hp in', count(vw, /hp: out\.placed\.fieldHp/) === 1)
-  chk('voxel: a shattered shell says so', count(vw, /shattered/) === 1)
+  chk('voxel: a shattered shell says so (one template, both doors — round and blow)', count(vw, /shattered/) === 2)
+  chk('voxel: the blow asks the STRIKE reader at the keeper\'s feet, once', count(vw, /absorbStrikeAtVolume\(fields\.current, kp\.px, kp\.py, kp\.pz, hit\.hp\)/) === 1)
+  chk('voxel: the wound is skipped only when a shell took the blow', count(vw, /if \(hit\.hp > 0 && !shell\?\.hit\) \{/) === 1)
+  chk('voxel: the shell is asked BEFORE the wound, not after', vw.indexOf('absorbStrikeAtVolume(fields.current') < vw.indexOf('damage(vitals.current, hit.hp'))
+  // ⚠ Found by mutation: the host could say 'takes the blow' and never charge the shell — an absorbed
+  // strike that costs nothing is an immortal door with a working say-line. The payment is one
+  // assignment, and it must be the strike result's list, not the shot path's.
+  chk('voxel: the shell PAYS for the blow (the strike result is written back), once', count(vw, /fields\.current = shell\.fields/) === 1)
   chk('play3d: both shot sites charge the shell (gun + drone)', count(s3, /absorbShotAt\(fieldsRef\.current/) === 2 && count(s3, /blocksShotAt\(/) === 0)
   chk('play3d: the spawn hands the spec\'s hp in', count(s3, /hp: pending\.fieldHp/) === 1)
 }

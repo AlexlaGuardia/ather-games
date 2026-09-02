@@ -187,6 +187,20 @@ export function absorbShotAtVolume(fields: Field[], x: number, y: number, z: num
 }
 
 /**
+ * A MELEE blow lands on a keeper standing inside a SHELL (ruled by Alex 2026-09-02): the shell takes
+ * it first, pays the blow's damage, and is gone at zero — the wound reaches the keeper only when no
+ * shell stands. ⚠ Only a SHELL answers (`hp > 0`). Unbreakable cover is fire and wind, and a Hollow
+ * swings straight through fire: it stops rounds, not arms. That is the one difference from the shot
+ * path, and it is why this is a separate function rather than a flag on `absorbShotAtVolume` — a
+ * host that reached for the shot reader here would have every Firewall parrying a warden.
+ * `(x, y, z)` is the KEEPER (feet), not the striker: fields do not block movement, so a Hollow may
+ * be inside the shell with you, and the door still has to break before it reaches you.
+ */
+export function absorbStrikeAtVolume(fields: Field[], x: number, y: number, z: number, dmg: number): ShotAbsorbed {
+  return absorb(fields, fields.findIndex((f) => f.stopsShots && f.hp > 0 && containsVolume(f, x, y, z)), dmg)
+}
+
+/**
  * Advance the clocks and report which fields fire an effect tick this frame.
  *
  * Returns the fields whose tick came due (their `nextTick` is rolled forward in the returned list),

@@ -272,7 +272,7 @@ import { ResourceBars } from './resource-bars'
 import { CastGauges, type CastHud } from './cast-gauges'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
-import { spawnField, tickFields, containsVolume, fieldsAtVolume, absorbShotAtVolume,
+import { spawnField, tickFields, containsVolume, fieldsAtVolume, absorbShotAtVolume, absorbStrikeAtVolume,
          FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured } from '../engine/conjured-terrain'
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
@@ -7281,7 +7281,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
               else if (before > 0) onSay('the reach finds you — your mana thins')
             }
           }
-          if (hit.hp > 0) {
+          // ── ★ A SHELL TAKES THE BLOW FIRST (Alex ruled 2026-09-02: "make hollow melee break the
+          // shell"). The keeper's FEET are the point asked, not the Hollow — fields do not block
+          // movement, so a warden can be inside the door with you, and it still has to break the
+          // door. Only a shell answers: a Firewall stops rounds, not arms, and `absorbStrikeAtVolume`
+          // says so itself. The wound below is skipped ONLY when a shell took it; a sap (mana) is
+          // not a blow and is not asked.
+          const kp = loco.current
+          const shell = hit.hp > 0 ? absorbStrikeAtVolume(fields.current, kp.px, kp.py, kp.pz, hit.hp) : null
+          if (shell?.hit) {
+            fields.current = shell.fields
+            const label = castForMove(shell.hit.moveId).label
+            onSay(shell.broke ? `${label} — shattered` : `${label} takes the blow`)
+          }
+          if (hit.hp > 0 && !shell?.hit) {
             // ★★ THE FIRST THING IN THE ATHER THAT WOUNDS A KEEPER (Alex ruled 2026-08-26, closing
             // the cozy-vs-peril gap `hollows.ts` deliberately left open). It routes through
             // `vitals.damage()` — the wounding path that has existed, tested, with NO caller since
