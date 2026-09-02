@@ -348,7 +348,7 @@ const CAST_ACTIONS: readonly ActionId[] =
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
 import { CAST_SLOTS, ALL_BANDS, derivePassive, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
-import { saveLoadout, setSlot, resolveLoadout, emptySlotSentence, emptySlotWhy,
+import { saveLoadout, setSlot, resolveLoadout, emptySlotWhy,
          type Loadout, type ResolvedLoadout } from '../play3d/loadout'
 import { keeperBook } from '../play3d/book'
 import { VoxelMap, VoxelMiniMap, MAP_W, MAP_H, toLocal } from './VoxelMap'
@@ -836,7 +836,8 @@ export default function VoxelWorld() {
    * 11px grey debug text and read as nothing happening at all.
    *
    * That is what made a fresh keeper's cast keys look BROKEN rather than empty: `cast-dispatch`
-   * refuses honestly ("No tactical bound — your book has none for your runes") and the host threw
+   * refuses honestly (then "No tactical bound — your book has none for your runes", a cause it
+   * could not know and no longer claims; now `No tactical bound` or the derived reason) and the host threw
    * the sentence away before it could be read. The pure layer was right and the host lost it.
    *
    * So: two channels. `stats` stays plumbing and may be clobbered at will; `say` is addressed to
@@ -6055,28 +6056,22 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     const env: CastEnv = {
       now: performance.now(), hp: v.hp, hpMax: v.hpMax, mana: m.cur,
       cooldownUntil: castCd.current, stanceMoveId: stance.current?.moveId ?? null, supports,
+      // ── ★★★ WHY EACH EMPTY SLOT IS EMPTY GOES IN WITH THE SLOTS, from the SAME resolve ───────
+      // The engine cannot know it (it sees bound ids, the one input that cannot separate
+      // `no-move` / `cleared` / `dropped`) and until 2026-09-02 it asserted one anyway — *"your
+      // book has none for your runes"* — which cost a TEMPEST keeper who knew Squall a session
+      // hunting an acquisition path that was never the problem. This host first overrode the
+      // sentence here; the override then moved into `CastEnv.emptyWhy` so the next host gets it
+      // without knowing to. ★ The panel key is read from the live bindings, never spelled: it is
+      // rebindable, and a literal here would be a copy of a binding the player can change.
+      emptyWhy: loadoutRes.current.why,
+      panelKey: hintFor(bindings.current, 'ui.inventory', 'key') ?? undefined,
     }
     const out = resolveCast(slot, loadoutRes.current.slots, env)
     if (out.kind === 'refused') {
-      // ── ★★★ THE ENGINE CANNOT KNOW WHY A SLOT IS EMPTY, AND ITS SENTENCE CLAIMS TO ───────────
-      // `engine/cast-dispatch` answers `empty-slot` with *"your book has none for your runes"* —
-      // one of three possible causes, asserted as fact from the bound ids alone, which are the one
-      // thing that cannot tell them apart. It is not the engine's fault: it never sees the save or
-      // the runes. The host does, so the true sentence belongs here.
-      //
-      // ⚠ MEASURED 2026-09-02, AND IT COST A SESSION. A keeper born of TEMPEST knows Squall, Squall
-      // is built, `field` is in `supports` — and the slot resolved empty because a save said so.
-      // The game told them their runes had no move, so they went looking for an acquisition path
-      // that was never the problem. A wrong explanation does not merely misinform, it CANCELS THE
-      // LOOK — the same failure as a stale note, wearing a different hat.
-      //
-      // ★ The panel key is read from the live bindings, never spelled: it is rebindable, and a
-      // literal here would be a copy of a binding the player can change.
-      const why = out.reason === 'empty-slot' ? loadoutRes.current.why[slot] : null
-      onSay(why
-        ? emptySlotSentence(ALL_BANDS[slot] ?? 'slot', why,
-                            hintFor(bindings.current, 'ui.inventory', 'key') ?? undefined)
-        : out.message)
+      // Every refusal — empty slot included, now that `emptyWhy` rides in the env — says what the
+      // engine said. One sentence per cause, composed in one place; nothing here rewrites it.
+      onSay(out.message)
       return
     }
 

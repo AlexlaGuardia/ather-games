@@ -14,6 +14,7 @@ import {
   type CastEnv, type CastApplied,
 } from './cast-dispatch'
 import { castForMove, type CastArchetype } from '../play3d/cast'
+import { emptySlotWhy, emptySlotSentence } from '../play3d/loadout'
 
 let pass = 0, fail = 0
 const check = (label: string, ok: boolean, detail = '') => {
@@ -37,6 +38,34 @@ const MEND = 'mend', DART = 'ice-dart', WALL = 'stonewall', BURST = 'static-burs
 {
   const empty = resolveCast(0, [null, null, null, null], env())
   check('an empty slot refuses with a message', empty.kind === 'refused' && empty.message.length > 0)
+
+  // ── ★★★ AN EMPTY SLOT NAMES ITS CAUSE ONLY WHEN THE HOST SUPPLIES ONE (2026-09-02) ──────────
+  // This file used to say *"your book has none for your runes"* — `no-move` asserted from the
+  // bound ids alone, which cannot tell `no-move` / `cleared` / `dropped` apart. A TEMPEST keeper who
+  // knew a built, supported Squall was told that over a save that had CLEARED the slot, and stopped
+  // looking. The rule: no `emptyWhy` → a symptom with no cause attached; `emptyWhy` → the one
+  // sentence the panel and `/rune` also compose. A wrong cause cancels the look; no cause invites it.
+  const CAUSES = ['book has none', emptySlotWhy('no-move'), emptySlotWhy('cleared'), emptySlotWhy('dropped')]
+  const bare = resolveCast(0, [null, null, null, null], env())
+  check('★★★ without emptyWhy the engine attaches NO cause to an empty slot',
+    bare.kind === 'refused' && bare.reason === 'empty-slot' && !CAUSES.some((c) => bare.message.includes(c)),
+    bare.message)
+  check('...and still names the slot', bare.message.includes('tactical'))
+  const cleared = resolveCast(0, [null, null, null, null], env({ emptyWhy: ['cleared', null, null, null], panelKey: 'I' }))
+  check('★★ a supplied reason composes the SHARED sentence, key included',
+    cleared.kind === 'refused' && cleared.message === emptySlotSentence('tactical', 'cleared', 'I'),
+    cleared.message)
+  const nomove = resolveCast(0, [null, null, null, null], env({ emptyWhy: ['no-move', null, null, null], panelKey: 'I' }))
+  check('★ no-move never offers the key — there is nothing to go and pick',
+    nomove.message.includes(emptySlotWhy('no-move')) && !nomove.message.includes('(I to pick one)'))
+  // ⚠ Resolved at slot 1 on purpose: a mutation reading `emptyWhy[0]` is a no-op at slot 0, and the
+  // first draft of this assert sat there and could not fire. Two DIFFERENT reasons, so the wrong
+  // index produces a wrong sentence rather than a missing one.
+  const shifted = resolveCast(1, [null, null, null, null], env({ emptyWhy: ['cleared', 'dropped', null, null] }))
+  check('★★ the reason is read at the SLOT, not at index 0',
+    shifted.message.includes(emptySlotWhy('dropped')) && !shifted.message.includes(emptySlotWhy('cleared')), shifted.message)
+  const stale = resolveCast(1, [null, 'ice-dart', null, null], env({ emptyWhy: ['cleared', 'cleared', null, null] }))
+  check('★★ a reason sitting on a BOUND slot is ignored — the bind wins', stale.kind === 'applied')
   // Every registered-but-unbuilt canon move must name itself AND its reason.
   const unbuiltId = 'gate'   // cast.ts: 'needs a two-point bind + warp on a placed anchor'
   const u = resolveCast(0, [unbuiltId, null, null, null], env())

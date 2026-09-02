@@ -123,9 +123,9 @@ export function isLegacyLoadout(saved: unknown[]): boolean {
  *   `cleared`  a save exists and this slot is empty in it      → they can fix it, in the panel, now
  *   `dropped`  a bind was stored and is no longer legal        → something they HAD went away
  *
- * ⚠⚠ AND THE GAME ALREADY ASSERTED ONE OF THEM UNCONDITIONALLY. `engine/cast-dispatch.ts` answers
- * an empty slot with *"your book has none for your runes"* — which is `no-move` stated as fact, with
- * no way to know it. Measured 2026-09-02: a keeper born of TEMPEST knows Squall, Squall is built,
+ * ⚠⚠ AND THE GAME ASSERTED ONE OF THEM UNCONDITIONALLY, until 2026-09-02. `engine/cast-dispatch.ts`
+ * answered an empty slot with *"your book has none for your runes"* — which is `no-move` stated as
+ * fact, with no way to know it. (It now takes the reason in through `CastEnv.emptyWhy`, or says none.) Measured 2026-09-02: a keeper born of TEMPEST knows Squall, Squall is built,
  * `field` is supported, and the loadout still resolved empty because a save said so. The game told
  * them their runes had no move. **They concluded the acquisition path was unbuilt and stopped
  * looking** — a whole session lost to a sentence that was confidently wrong about its own cause.

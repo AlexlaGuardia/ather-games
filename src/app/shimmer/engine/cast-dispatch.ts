@@ -38,10 +38,11 @@
 // 'field' to the voxel host's set and deletes nothing here.
 
 import { castForMove, CAST_SLOTS, type CastSpec, type CastArchetype } from '../play3d/cast'
+import { emptySlotSentence, type EmptyReason } from '../play3d/loadout'
 
 /** Why a cast did not happen. Every one of these is shown to the player; none is silent. */
 export type CastRefusal =
-  | 'empty-slot'    // nothing bound to this slot
+  | 'empty-slot'    // nothing bound to this slot — WHY is the host's knowledge, see `CastEnv.emptyWhy`
   | 'unbuilt'       // canon move, no sim behaviour anywhere yet
   | 'unsupported'   // built, but THIS world cannot run the archetype yet
   | 'cooldown'      // still recovering
@@ -60,6 +61,27 @@ export interface CastEnv {
   stanceMoveId: string | null
   /** Archetypes this world can actually land. See the honesty rule above. */
   supports: ReadonlySet<CastArchetype>
+  /**
+   * ── ★★★ WHY EACH EMPTY SLOT IS EMPTY, index-aligned with the loadout — OPTIONAL, AND THE ─────
+   * ── ENGINE SAYS LESS WITHOUT IT, NEVER MORE. ──────────────────────────────────────────────────
+   *
+   * Until 2026-09-02 this file answered an empty slot with *"your book has none for your runes"*.
+   * That is ONE of three causes (`play3d/loadout.ts`: `no-move` / `cleared` / `dropped`) asserted
+   * as fact from the bound ids alone — the single input that cannot tell them apart, because
+   * `resolveCast` never sees the save or the runes. A keeper born of TEMPEST, who knew Squall, with
+   * Squall built and `field` supported, was told their runes had no move because a SAVE had left the
+   * slot empty. They concluded the acquisition path was unbuilt and stopped looking. A session.
+   *
+   * The voxel host overrode the sentence the same day; this field is that override moved to where
+   * every host gets it. The host that resolved the loadout already knows why each null is null
+   * (`resolveLoadout().why`) and hands it in; the engine composes the ONE sentence the panel and
+   * `/rune` also use. A host that omits it gets `No tactical bound` — a symptom with no cause
+   * attached, which is the most this file can honestly say. ⚠ Never put a cause back in the
+   * fallback: a cause-free line invites a look, a wrong cause cancels it.
+   */
+  emptyWhy?: readonly (EmptyReason | null)[]
+  /** The key that opens the loadout panel, read from the host's LIVE bindings — never spelled here. */
+  panelKey?: string
 }
 
 /** A timed multiplier window. `surge` moves the keeper, `infusion` moves the weapon. */
@@ -133,7 +155,9 @@ export function resolveCast(slot: number, loadout: readonly (string | null)[], e
   const spec = castForMove(moveId)
 
   if (!moveId) {
-    return refuse(slot, spec, 'empty-slot', `No ${CAST_SLOTS[slot] ?? 'slot'} bound — your book has none for your runes`)
+    const kind = CAST_SLOTS[slot] ?? 'slot'
+    const why = env.emptyWhy?.[slot] ?? null
+    return refuse(slot, spec, 'empty-slot', why ? emptySlotSentence(kind, why, env.panelKey) : `No ${kind} bound`)
   }
   if (spec.archetype === 'unbuilt') {
     return refuse(slot, spec, 'unbuilt', `${spec.label} — not built yet (${spec.why})`)

@@ -8,8 +8,8 @@
 // unbuilt. A save said the slot was empty, and `loadLoadout` honours a save exactly — *"a saved
 // empty slot is a CHOICE, not a hole"*, which is correct and deliberate.
 //
-// ⚠⚠ WHAT TURNED THAT INTO A LOST SESSION WAS THE SENTENCE. `engine/cast-dispatch` answers an empty
-// slot with *"your book has none for your runes"* — ONE of three possible causes, asserted as fact,
+// ⚠⚠ WHAT TURNED THAT INTO A LOST SESSION WAS THE SENTENCE. `engine/cast-dispatch` answered an empty
+// slot (until 2026-09-02; §6 below guards the repair) with *"your book has none for your runes"* — ONE of three possible causes, asserted as fact,
 // from the bound ids alone, which are the one thing that cannot tell them apart. So the game
 // confidently named the wrong cause, and a wrong explanation does not merely misinform: **it cancels
 // the look.** He stopped investigating a save because he had been told it was a content gap.
@@ -117,13 +117,19 @@ const once = (label: string, re: RegExp, src: string): boolean => {
 }
 chk('★★ the host resolves binds and reasons together, in ONE ref',
   once('loadoutRes ref', /const loadoutRes = useRef<ResolvedLoadout>/, hostCode))
-chk('★★★ the empty-slot refusal is answered with the DERIVED reason, not the engine sentence',
-  once('empty-slot override', /out\.reason === 'empty-slot' \? loadoutRes\.current\.why\[slot\] : null/, noComments(hostSrc)))
-// ⚠ The engine's own sentence must still exist as the fallback for every OTHER refusal — this is
-// not an instruction to gut it, and a host that stopped saying `out.message` at all would go silent
-// on cooldown, mana and unbuilt.
-chk('★ ...while every other refusal still says what the engine said',
-  /: out\.message\)/.test(hostCode))
+// ★★★ (2026-09-02, evening) The reason used to be applied as a host-side OVERRIDE of the engine's
+// sentence. That left the false clause live in the engine for the next host, so the override moved
+// INTO `CastEnv.emptyWhy` and this host now hands the reason in and repeats what the engine says.
+chk('★★★ the host hands the DERIVED reasons to the engine, from the same resolve as the slots',
+  once('emptyWhy in env', /emptyWhy: loadoutRes\.current\.why,/, nc))
+chk('★★ ...and the panel key beside them, so the engine can offer the fix',
+  once('panelKey in env', /panelKey: hintFor\(bindings\.current, 'ui\.inventory', 'key'\) \?\? undefined,/, nc))
+chk('★★ the host no longer keeps a second sentence source — no empty-slot override remains',
+  !/out\.reason === 'empty-slot'/.test(hostCode))
+// ⚠ Every refusal — the empty slot included now — says what the engine said. A host that stopped
+// saying `out.message` would go silent on cooldown, mana, unbuilt AND empty.
+chk('★ every refusal says what the engine said',
+  once('refused block repeats the engine', /kind === 'refused'\) \{\s*onSay\(out\.message\)\s*return\s*\}/, nc))
 chk('★★ the panel key is read from the live bindings, never spelled as a literal',
   once('hintFor call', /hintFor\(bindings\.current, 'ui\.inventory', 'key'\)/, nc))
 chk('★ the loadout panel shows a reason under an empty slot',
@@ -137,6 +143,31 @@ chk('★★ the /rune readout names the empty slots, so the one diagnostic repor
 // printed whole inside a 9px span. Ask for the half you want.
 chk('★★★ nothing strips the "bound —" lead back off a sentence',
   !/\.replace\([^)]*bound —/.test(hostCode))
+
+console.log('\n── 6. ★★★ the false clause is gone from BOTH dispatchers, and the replacement is present ──')
+// A retired phrase is guarded in both directions (`dev-claims.test.ts` shape): the phrase must be
+// absent from CODE, and the symbol that replaced it must be present — or the guard goes silent at
+// exactly the moment the old claim comes back. Read through `noComments`, because the phrase is
+// quoted in the doc comments that explain its retirement, and that quote must NOT count.
+const ENGINE = join(process.cwd(), 'src/app/shimmer/engine/cast-dispatch.ts')
+const PLAY3D = join(process.cwd(), 'src/app/shimmer/play3d/Shimmer3D.tsx')
+const engineNc = noComments(readFileSync(ENGINE, 'utf8'))
+const play3dSrc = readFileSync(PLAY3D, 'utf8')
+const play3dNc = noComments(play3dSrc), play3dCode = codeOnly(play3dSrc)
+const RETIRED = /book has none/
+chk('★★★ engine: "your book has none" is not in the code', !RETIRED.test(engineNc))
+chk('★★ engine: an empty slot composes the shared sentence from the host-supplied reason',
+  once('engine composes', /emptySlotSentence\(kind, why, env\.panelKey\)/, engineNc))
+chk('★★ engine: the reason is read at the SLOT from `CastEnv.emptyWhy`',
+  once('engine reads emptyWhy', /env\.emptyWhy\?\.\[slot\]/, engineNc))
+chk('★★★ play3d: the inline dispatcher\'s copy of the clause is gone too', !RETIRED.test(play3dNc))
+chk('★★ play3d: binds and reasons come from ONE resolveLoadout pass',
+  once('castWhyRef from res', /castWhyRef\.current = res\.why/, play3dCode) &&
+  once('castLoadoutRef from res', /castLoadoutRef\.current = res\.slots/, play3dCode))
+chk('★★ play3d: the empty branch says the shared sentence when it has a reason',
+  once('play3d empty branch', /emptySlotSentence\(ALL_BANDS\[slot\], why\)/, play3dNc))
+chk('★ play3d: the loadout is still re-derived from the runes held (nothing bypasses the resolve)',
+  !/castLoadoutRef\.current = loadLoadout\(/.test(play3dCode))
 
 console.log(`\nloadout-why: ${ok} passed, ${bad} failed, ${blind} blind`)
 process.exit(bad || blind ? 1 : 0)

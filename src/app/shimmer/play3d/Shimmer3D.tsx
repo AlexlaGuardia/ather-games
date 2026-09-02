@@ -35,7 +35,7 @@ import { senseGround, type SensedBody } from './tremor-sense'
 import { castForMove, isBuilt, CAST_SLOTS, ALL_BANDS, BAND_KEYS, derivePassive, type CastSpec } from './cast'
 import { getRegenRate } from '../engine/mana'
 import { moveById } from './keeper-moves'
-import { loadLoadout } from './loadout'
+import { loadLoadout, resolveLoadout, emptySlotSentence, type EmptyReason } from './loadout'
 import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
 import { fillRoster, ROSTER_SIZE } from './crucible-bots'
 import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from './crucible-fleet'
@@ -5445,6 +5445,13 @@ export default function Shimmer3D() {
   // hands do. Slots are typed by canon tier (1 passive · 2 tacticals · 1 ultimate) and bound G/Z/X/C.
   const runeInvRef = useRef<RuneInventory>(EMPTY_INVENTORY)
   const castLoadoutRef = useRef<(string | null)[]>(ALL_BANDS.map(() => null))  // move id per band slot
+  /**
+   * Why each empty slot is empty, from the SAME `resolveLoadout` pass that filled `castLoadoutRef`
+   * (`no-move` / `cleared` / `dropped`; null on a bound slot). This host predates `engine/cast-dispatch`
+   * and still dispatches inline, so it carried the engine's old false clause — *"your book has none
+   * for your runes"* — as its own literal. Same lie, second copy; see `CastEnv.emptyWhy` for the cost.
+   */
+  const castWhyRef = useRef<(EmptyReason | null)[]>(ALL_BANDS.map(() => null))
   const castCdRef = useRef<number[]>(ALL_BANDS.map(() => 0))   // per-slot ready-at wall clock (ms)
   const pendingCastRef = useRef<CastSpec | null>(null)  // a projectile waiting for FiringRange to spawn it
   // the HELD stance (slot 0). Its effects are read live by the sim; holding it pauses mana recovery.
@@ -5515,7 +5522,9 @@ export default function Shimmer3D() {
     // The book is re-read here rather than held from mount: this runs on every rune change, and a
     // scroll bought in the Passage between two rune changes must be in hand by the next resolve.
     bookRef.current = keeperBook(runeInvRef.current.owned)
-    castLoadoutRef.current = loadLoadout(runeInvRef.current.owned, runeInvRef.current.birth, bookRef.current)
+    const res = resolveLoadout(runeInvRef.current.owned, runeInvRef.current.birth, bookRef.current)
+    castLoadoutRef.current = res.slots
+    castWhyRef.current = res.why
     castCdRef.current = ALL_BANDS.map(() => 0)
     // The passive is always-on and DERIVED (capped at one), never cast — since Alex's 2026-08-26
     // ruling it holds no key, so it is applied HERE from the runes rather than set by a keypress. Its
@@ -5930,7 +5939,12 @@ export default function Shimmer3D() {
   // `cast.test.ts` prints the live pair on every run, which is the number to believe.
   const castSlot = useCallback((slot: number) => {
     const moveId = castLoadoutRef.current[slot]
-    if (!moveId) { setHarvestToast(`No ${ALL_BANDS[slot]} bound — your book has none for your runes`); return }
+    if (!moveId) {
+      // A cause only when the resolve supplied one; a symptom alone otherwise. Never a guessed cause.
+      const why = castWhyRef.current[slot]
+      setHarvestToast(why ? emptySlotSentence(ALL_BANDS[slot], why) : `No ${ALL_BANDS[slot]} bound`)
+      return
+    }
     const spec = castForMove(moveId)
     if (spec.archetype === 'unbuilt') { setHarvestToast(`${spec.label} — not built yet (${spec.why})`); return }
 
