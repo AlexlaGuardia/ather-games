@@ -10,15 +10,33 @@
 // the loop is gone. This is the only piece left, and deleting art is Alex's call, not a cleanup.
 //
 // ⚠ DO NOT CONFUSE THIS WITH `beasts/beast.ts`. That is the Mana'mal SYSTEM (species, defs, perks,
-// unlocks) and it is ALIVE in `play3d`, which the voxel port is still mining. If followers land in
-// voxel3d, this art is the obvious input — which is the argument for parking rather than deleting.
+// unlocks) and it is ALIVE in `play3d`, which the voxel port is still mining. `BEAST_SPECIES` there
+// is exactly the five painted here, and canon still carries all five (4-9 files each).
+//
+// ★★★ AND THE FORMAT IS NOT DEAD IN A VOXEL WORLD — THAT ASSUMPTION WAS CHECKED AND IT WAS WRONG.
+// `voxel3d/creature-atlas.ts` renders creatures as camera-facing billboards fed by **32x32
+// DIRECTIONAL sprites**, and says so outright: *"All ten species canon's mist rosters name are
+// already painted at 32x32 (`sprites/*.ts`), and they are already DIRECTIONAL ... The art debt for
+// spirits was always zero."* This file is in that exact format — down/up/right/downright/upright,
+// left as right mirrored. So the Mana'mals plug into the SAME billboard path the spirits already
+// use, and deleting this would be throwing away the identical head start. That is the argument for
+// parking, and it is a mechanism rather than a hope.
 //
 // TO REMOVE IT: delete this file and the `beasts.ts` routing in `save-sprite/route.ts` (which is
 // unreachable now that its editor is gone). Recoverable at 1555ca2 either way.
 
 // Mana'mal sprites — 16x16 pixel art placeholders
 // 5 beasts, 8-directional (flip for left), full animation set
-// Draw real art later, these are silhouette placeholders
+// ⚠ THAT LINE ABOVE IS STALE AND SAID "these are silhouette placeholders" (corrected 2026-09-02).
+// Measured: 47 of 55 frames use 4-7 palette indices with shading. Only 8 are flat one-colour blobs
+// (4 dustwhisker, 4 embermole). Somebody drew past the silhouettes and never updated the header, so
+// the comment was talking every reader out of looking. Quality still runs from genuinely drawn
+// (drifthorn: antlers, shaded body, eyes, legs) to rough.
+//
+// ⚠⚠ THE OPEN ART DEFECT, UNRULED: four of the five draw TWO SEPARATE CLUSTERS per 32x32 frame
+// (verified not duplicated data — the halves differ). Only drifthorn is one centred creature. Those
+// are either intentional pairs/swarms (plausible for glowmite and sporeling) or working-sheet
+// artifacts, in which case a billboard would render two animals. Alex's call, not a cleanup.
 
 import { px, SpriteAnim } from './sprite-data'
 
