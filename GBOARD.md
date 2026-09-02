@@ -24,7 +24,9 @@ the Arcade frame.
 
 **Next:** `save-sprite/route.ts`'s `beasts.ts` routing (`beastFrameMap`, the species→file map) is unreachable now its editor is gone — noted in the art file's header, removable with the art if Alex rules it.
 
-**Parked:** the art itself, and `data/voice-profiles.ts`. Both one command from gone; both recoverable at `1555ca2`.
+**Parked:** `data/voice-profiles.ts`. One command from gone, recoverable at `1555ca2`.
+
+**⏭ OPEN — ALEX'S ART CALL (`f4f5089`):** keep or delete `sprites/beasts.ts`. **My recommendation is KEEP, and the reason reversed my own lean.** I assumed 32x32 2D sprites were format-dead in a voxel world; `voxel3d/creature-atlas.ts` renders creatures as camera-facing billboards fed by **32x32 DIRECTIONAL sprites** and states *"the art debt for spirits was always zero"* because that format was already painted. This file is that format, `BEAST_SPECIES` is exactly its five species, canon carries all five. ⚠ **Unruled defect:** four of five draw TWO SEPARATE CLUSTERS per frame (halves differ, so not duplicated data); only `drifthorn` is one centred creature — intentional swarm or working-sheet artifact is an art call. ⚠ **And two of my measurements reached Alex wrong first:** "62-73% fill" was junk sampling (real 11-21%) and "hand-painted" overstated four of five; the file's own "silhouette placeholders" header was stale the other way (47 of 55 frames are shaded).
 
 **Files:** `src/app/shimmer/dev/editors/{BeastEditor,VoiceProfilesEditor}.tsx` (deleted) · `dev/page.tsx` · `dev/templates/command-registry.ts` · `doctor/checks.ts` · `doctor/subjects.test.ts` (new) · `sprites/beasts.ts` + `data/voice-profiles.ts` (headers only)
 
@@ -46,6 +48,90 @@ the Arcade frame.
 **Parked:** whether the 2 `legacy` editors (`exchange`, `skills`) follow `play3d` when the port finishes mining it.
 
 **Files:** `src/proxy.ts` · `src/app/shimmer/dev/templates/{band-derive.ts,DevBack.tsx,editor-bands.generated.ts,DevIndex.tsx}` · `src/app/shimmer/dev/{editor-bands,dev-back}.test.ts` · `scripts/dev-bands.mts` (`npm run gen:bands` / `check:bands`) · 7 `layout.tsx` (shimmer/dev, shimmer/arena, voxel3d/tex, play3d/birth, nolmir/dev, nolmir/sfx-lab, vault/dev)
+
+## 🗝 Shimmer — **THE GAME NAMED THE WRONG CAUSE, CONFIDENTLY, AND THE KEEPER STOPPED LOOKING** (2026-09-02, play lane) · *Last touched 2026-09-02 — loadout-why **23/0/0**, mutation-swept **13 ways: 12 fire, 1 negative control passes by design**, loadout **27/0**, loadout-migrate **21/0**, cast **103/0**, tsc 7 (baseline).*
+
+### What Alex said, and why it was reasonable
+*"i dont have a tactical yet since we havent built a way to aquire them yet."* Then: *"my player was
+born tempest."* Every part of that is a sound inference from what the game told him. **All of it was
+wrong, and none of it was his mistake.**
+
+Measured, not read: tempest knows **Squall**, Squall is **built** (`archetype: 'field'`, cost 24),
+`field` is in the fold's `supports` set, and a fresh tempest keeper resolves to `["squall", null]`.
+Nothing was unbuilt. **A save said the slot was empty**, and `loadout.ts` honours a save exactly —
+*"a saved empty slot is a CHOICE, not a hole"* — which is correct and deliberate.
+
+### ★★★ The defect was one clause in one sentence
+`engine/cast-dispatch.ts:136` answers an empty slot with *"your book has none for your runes."*
+That is a **cause**, and the engine cannot know it: an empty slot has three, and `resolveCast` sees
+only the bound ids, which are the one input that cannot tell them apart.
+
+| the three | what it means | what the keeper can do |
+|---|---|---|
+| `no-move` | nothing they have learned fits the slot | nothing — this is the honest "your book has none" |
+| `cleared` | a save exists and this slot is empty in it | fix it in the panel, now |
+| `dropped` | a bind was stored and is no longer legal | something they HAD went away |
+
+Alex was in row two and was told row one. ⚠⚠ **A wrong explanation does not merely misinform — it
+CANCELS THE LOOK.** Same family as the stale `dev/moves` note that told him meltbore was unbuilt,
+one day earlier, wearing a different hat: prose and a hard-coded sentence rot the same way, and the
+more confident they read, the longer they are believed.
+
+### The fix — a derived reason, not better wording
+- **`resolveLoadout()` returns `{ slots, why }` decided in ONE pass.** Every branch that yields a
+  null already knows why it did; a second function re-deriving it from the outside would be a
+  hand-kept mirror, agreeing with itself while drifting.
+- **`loadLoadout` is now a thin wrapper over it**, so the binds and the reasons can never describe
+  different saves. Asserted equal across all four save shapes.
+- **The host holds ONE ref** (`loadoutRes`), not two, for the same reason.
+- **`no-move` never offers a key.** Telling a vapor keeper to go and pick a move invites them to
+  look for something that does not exist, so a saved-null on a keeper with nothing eligible reports
+  `no-move`, not `cleared`. Both are true; only one is actionable.
+- **Three surfaces, one sentence:** the say-line on a refused cast, the loadout panel's empty row,
+  and `/rune` — which now names the empty slots instead of reporting `0/2` and leaving the keeper to
+  wonder why that disagrees with `1 move known`.
+- **The panel key is read from the live bindings** (`hintFor`), never spelled. A literal `I` would be
+  a copy of a rebindable binding.
+
+### ⚠ Two traps I walked into while building it, both caught by the tooling and not by care
+- **I wrote `.replace(\`no ${kind} bound — \`, '')`** to strip the sentence's own lead back off in the
+  panel. `String.replace` with a pattern that stops matching **returns the string unchanged and
+  throws nothing**, so a reworded sentence would have silently printed whole inside a 9px span.
+  Fixed structurally by splitting `emptySlotWhy` out of `emptySlotSentence` — *ask for the half you
+  want, never take the whole and cut* — and there is now an assert forbidding the shape.
+- **I read the host through `codeOnly` for three asserts that name string literals.** `codeOnly`
+  blanks string BODIES, so `'ui.inventory'`, `'cleared'` and a separator all matched **zero** and
+  reported BLIND against code that was right there. **Structure asks `code`; literals ask `nc`.**
+  The house note says this in one line and I still had to be shown by a red run.
+
+### Mutation sweep — 13, including the original bug re-introduced
+`cleared` collapsing back to `no-move` · `dropped` indistinguishable from `cleared` · a reason on a
+FILLED slot · **`loadLoadout` growing a second implementation** · the sentence not composing from its
+clause · `no-move` offering a key · **the host dropping the override and going back to the false
+claim** · a hard-coded panel key · the panel silent · **a consumer re-adding the strip** · two refs
+instead of one · `/rune` back to symptom-only. ★ Negative control: a comment quoting every pattern
+at once must change nothing, and does not.
+
+### Decisions
+- **The engine's sentence was NOT edited — it is hub's lane and it is filed to them.** VoxelWorld is
+  the only `resolveCast` caller in the tree, so the false clause is currently unreachable; it stays
+  latent for the next host, and the next host will not know to override it. Hub's call to retire it.
+- **Every non-`empty-slot` refusal still says `out.message` verbatim**, with an assert on it — a host
+  that gutted the override would go silent on cooldown, mana and unbuilt.
+- **`initial.why` is load-time truth and is deliberately not refreshed.** It answers *"why was this
+  empty when you walked in"*, the only question a keeper cannot answer themselves; a slot they clear
+  while looking at it falls back to `cleared`, which is what they just did.
+
+### Next
+- **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
+  and pick Squall — and the bar will say so instead of blaming his runes.
+- **3 of 20 birth runes (barrier, dust, vapor) seat no tactical at all** — `no-move` now says so out
+  loud rather than leaving a dead key, but whether that is the intended start is Alex's call.
+
+### Files
+`play3d/loadout.ts` (`resolveLoadout`, `EmptyReason`, `emptySlotWhy`/`emptySlotSentence`) ·
+`play3d/loadout-why.test.ts` (new) · `voxel3d/VoxelWorld.tsx` (one ref, the refusal, the panel row,
+the `/rune` readout)
 
 ## 🔥 Shimmer — **THE MOVE COMPUTED ITS OWN PROGRESS AND THREW IT AWAY, ~760 LINES ABOVE THE ONLY CODE THAT DRAWS BARS** (2026-09-02, play lane) · *Last touched 2026-09-02 — **DEPLOYED by hub in `BUILD_ID 7tqjIUuSp7lTNzi0O9h6n`** (`c90d4af`, pushed; the "NOT deployed" above was true when written and shipped ~40min later). Sweep **219/219 · 0 FAIL · 0 KILLED** (exit read off the process, not a pipe; `plot.test.ts` 211s — a fifth reading for that ceiling entry, and ⚠ it ran while hub was landing work, so it covers THESE four files and makes no claim about theirs). channel-wiring **23/0/0** (was 12), dev-claims **9/0** (3 retired claims watched), breach **32/0**, sustain **35/0**, dev-eye **22/0**, hud-type **17/0**, render-audit **144/0**, tsc 7 (baseline), canon exit 0 (5 NOTE, 13 CLEAN). Mutation-swept **14 ways: 13 fire, 1 negative control passes by design**.*
 
