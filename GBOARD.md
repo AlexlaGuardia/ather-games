@@ -138,10 +138,30 @@ which blanks string bodies — **structure asks `code`; literals ask `nc`**, the
 before, performed again by the window that had just read it. §6 of `loadout-why` guards the retired
 phrase in BOTH directions across engine and play3d, through `noComments` so the doc quote does not count.
 
+### The three empty tacticals, measured (hub, 2026-09-02 evening) — `8d7942b`, LIVE in `BUILD_ID tvC98v6prRRAJCYazbDb4`
+Alex: *"make the barrier/dust/vapor runes seat a tactical."* Measured first: **the count above was over all
+20 runes; the carousel offers 17.** Static / Dust / Vapor are `lostState` (`birth/runes.data.ts:158`), kept off
+it by canon's own ruling (`moves.md:12`, `shimmer-birth-rune.md:68`) — a keeper born of Dust came through the
+owner-only dev door and their empty tactical *is* the canon. **The player-facing gap is Barrier alone**, and it
+is a real one: the doubled-focus law says every keeper is born holding a one-rune tactical, the registry has
+one for 17 runes, and Barrier's only tactical is Life + Barrier. ⚠ The coverage tables (`moves.md:529`, `:576`)
+call Barrier COMPLETE with T = 1 because they count that two-rune move — *does a technique exist* answered
+where the keeper asked *can I cast*. A move's name is Magii's, so it is **filed, not invented**: athernyx
+`5231e78`, `CANON_GAPS.md` [OPEN] *Barrier has no doubled-focus tactical*, with three build facts the seat may
+ignore (Backlash is already the Manifestation; Barrier/Bulwark own *held shell*; field/status/impulse are
+castable today). Build side: `play3d/birth-tactical.test.ts` **40/0** — 17 on the carousel, the lost three
+exactly Scatter, every birthable rune born with its tactical seated, and Barrier a **declared exception whose
+premise is asserted both ways** (no one-rune Barrier tactical in the registry AND the gap still [OPEN]) so it
+expires out loud. `/rune` now names a lost-state birth as a LOST STATE from the data flag. 6 mutations, 5
+fire, comment control green. ⚠ The guard's first run failed 15 of 16 runes — `keeperBook` seeds the store per
+keeper and the loop never reset it: a shared fixture reading as sixteen defects. Sweep **224/224**, tsc 7.
+
 ### Next
+- **⏭ Magii rules the Barrier gap** (name + one line), then hub registers it in `keeper-moves.ts` + `cast.ts`
+  and deletes the exception in `birth-tactical.test.ts` — the guard will go red to say so.
 - **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
   and pick Squall — and the bar will say so instead of blaming his runes.
-- **3 of 20 birth runes (barrier, dust, vapor) seat no tactical at all** — `no-move` now says so out
+- ~~3 of 20 birth runes (barrier, dust, vapor) seat no tactical at all~~ **Re-measured above: 1 of 17, Barrier, filed to Magii.** — `no-move` still says so out
   loud rather than leaving a dead key, but whether that is the intended start is Alex's call.
 
 ### Files
