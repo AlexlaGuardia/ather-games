@@ -168,13 +168,22 @@ birth-tactical exception expired the way it was built to; §C now guards the res
 verbatim from `moves.md`, a Barrier-born keeper born holding it). 4 mutations, 4 fire — including the canon
 gate catching an unlocked name. Sweep **224/224**, tsc 7, served == disk == public on all three chunks.
 
-**Decisions.** ⚠ *"Gone at the first hard blow"* is canon and is **NOT modelled**: fields have a duration and
-no hit points, so Threshold lasts its five seconds whatever strikes it. Shield HP for placed fields is a
-build decision (Jin's), open — it would also give Firewall a breakable state. Not hidden in a comment only.
+**Decisions.** ~~*"Gone at the first hard blow"* is NOT modelled~~ → **RULED by Alex the same evening: *"add
+shield hp to placed fields."*** Built `e070295`, LIVE in `BUILD_ID INLQLGSbkYm7p1ieAfND2`. `FieldDef.hp` is
+REQUIRED (the y/height lesson): 0 = cover that does not break (Firewall, Cyclone Cage — a round dies in fire, it
+does not shatter it), >0 = a SHELL. `absorbShotAt*` is the blocks-query with a bill attached, asked at every shot
+site in both hosts; the free `blocksShotAt*` query is asked nowhere a round dies (guarded). Threshold `fieldHp`
+20: one Keenshard (24) takes the door, three Hollow rounds wear it 20 → 11 → 2 → gone, and the fourth passes.
+The say-line *"Threshold — shattered"* is the only tell; the mesh simply stops being there. cast-fields **40/0**
+(+16), 9 mutations fire on named asserts, control green; sweep **224/224**, tsc 7, served == disk == public.
+⚠ **Still not modelled, on purpose and on the board:** Hollow MELEE does not touch a shell (fields do not block
+movement, so nothing swings at one — a Hollow walks through the door and hits you inside it), and a worn shell
+looks identical to a fresh one until it goes. Both are Jin's calls; neither is hidden in a comment only.
 
 ### Next
-- **⏭ Alex, born of Barrier: press the tactical key at a doorway** and say whether a five-second door reads
-  as a shield or as a wall. Then rule whether placed fields want hit points.
+- **⏭ Alex, born of Barrier: press the tactical key at a doorway, then shoot your own door** — a Keenshard
+  should shatter it in one, a light bolt should not. Say whether 20 reads as *a few breaths* or as paper.
+- Rule whether a Hollow's melee should break a shell, and whether a worn shell should look worn.
 - **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
   and pick Squall — and the bar will say so instead of blaming his runes.
 - ~~3 of 20 birth runes (barrier, dust, vapor) seat no tactical at all~~ **Re-measured: 1 of 17, Barrier — ruled and built as Threshold the same evening.** — `no-move` still says so out
