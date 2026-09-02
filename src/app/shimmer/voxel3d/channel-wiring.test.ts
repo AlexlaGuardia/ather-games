@@ -20,6 +20,7 @@
 // a header quoting its own declaration handed every reader a second match).
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { noComments, blockAt } from '../testing/guard'
 
 let ok = 0, bad = 0, blind = 0
 const chk = (name: string, cond: boolean, extra = '') => {
@@ -90,6 +91,76 @@ console.log('\n── 5. the hold is read from the KEY, not from the press latch
 // and read as a cast that does nothing.
 chk('the held state comes from the key map', once('held read', /const stillDown = !!keys\.current\[CAST_CODES\[cslot\]\]/))
 chk('...and not from the press latch', !/stillDown\s*=\s*[^\n]*pendingCast/.test(src))
+
+console.log('\n── 6. ★★★ THE PROGRESS REACHES A CONSUMER (added 2026-09-02) ──')
+// `boreStep` has returned `progress` since the move shipped, and until today NOTHING read it. So
+// the only held move in the game ran with no readout: holding the key against a rock and holding it
+// against nothing were the same picture, and the single line it did print arrived when the block was
+// already gone. The value was never missing — it was computed, and dropped, ~760 lines above the
+// only code in this file that draws a bar.
+//
+// ⚠⚠ ELEVEN ASSERTS OVER `breach.ts` AND FIVE MUTATIONS COULD NOT SEE IT, and that is the point of
+// this whole file: `boreStep` is correct whether or not a host reads what it returns. A pure core
+// with no consumer is a feature that exists everywhere except on screen.
+//
+// ★ READ THROUGH `noComments`, NOT RAW. The host now explains this wiring in prose, and one of those
+// comments quotes the render's "spike too weak" sentence in order to say why a bore must never be
+// marked refused. Read raw, that explanation would satisfy — or duplicate — the very asserts below.
+// Strings stay INTACT (`noComments`, not `codeOnly`) because two asserts here are about literals.
+const nc = noComments(src)
+
+// ── the channel block publishes what it computed ────────────────────────────────────────────
+const pub = blockAt(nc, "bs.state === 'boring'", ': null')
+if (pub.at < 0) { blind++; console.log('  BLIND: could not find the bore readout publish') }
+chk('★★ the bore publishes the progress it computed, not a recomputation',
+  pub.at >= 0 && /progress: bs\.progress/.test(pub.raw))
+chk("★★ ...and pins `absolute` at 0 — `breach.ts` says a bar filling toward something unreachable is worse than no bar",
+  pub.at >= 0 && /'absolute'\s*\?\s*\{\s*progress:\s*0/.test(pub.raw))
+
+// ★★ AND IT MUST LIVE INSIDE THE CHANNEL BLOCK. Drifting into a scope of its own would publish a
+// readout for a channel nobody is holding — the original defect wearing the fix's name, which is
+// exactly how `/ctxlost` nearly shipped its trigger onto a canvas with no listeners.
+const chanAt = nc.indexOf('if (channel.current && channelSpec.current) {')
+const mineAt = nc.indexOf('if (hit && mouse.current.left && !weaponDrawn) {')
+if (chanAt < 0 || mineAt < 0) { blind++; console.log('  BLIND: could not locate the channel/mine block boundary') }
+chk('★★ the publish sits inside the channel block, not in a scope of its own',
+  pub.at > 0 && chanAt >= 0 && mineAt > chanAt && pub.at > chanAt && pub.at < mineAt)
+
+// ── the HUD consumes it, and consumes it AFTER it is written ────────────────────────────────
+const readAt = nc.indexOf('const bl = boreLook.current')
+chk('★★ the HUD reads the bore readout at all — this is the assert the feature did not have',
+  readAt >= 0)
+// ★★★ ORDER IS THE FEATURE. Both live in one frame callback; move the HUD block above the channel
+// block and every bar is one frame stale, which on a fast bore is the difference between a readout
+// and a flicker. An index compare is the only thing that can see this — no runtime oracle can.
+chk('★★★ ...and reads it AFTER the channel wrote it, in one frame',
+  readAt > 0 && pub.at > 0 && readAt > pub.at)
+
+const feed = blockAt(nc, 'onLook(hit && def', '      : null)')
+if (feed.at < 0) { blind++; console.log('  BLIND: could not find the HUD onLook construction') }
+chk('★★ the bore drives the progress the reticle draws',
+  feed.at >= 0 && /progress: bl \? bl\.progress/.test(feed.raw))
+chk('★★ ...and names the block it is boring, so the line is not silent',
+  feed.at >= 0 && /name: bl/.test(feed.raw))
+
+// ── ★★★ THE ONE THAT SHIPS A LIE IF IT GOES ──────────────────────────────────────────────────
+// The render appends "— spike too weak" to any line flagged `refused`. That is a sentence about a
+// TOOL, and the bore's defining canon property (`moves.md:82`, "nothing refuses it forever") is that
+// it has none — `breach.ts` opens on exactly this distinction. An absolute block LOOKS like a
+// refusal, so the tempting reading is `refused: true`, and it would print a false explanation of a
+// true refusal in red over the one move whose whole point is that tools cannot tell it no.
+chk('★★★ a bore is never flagged `refused` — that word ships a sentence about a tool the bore has not got',
+  feed.at >= 0 && /refused: !bl &&/.test(feed.raw))
+
+// ── the render can tell the two mechanics apart, and the readout is cleared ──────────────────
+// A swing banks its progress; a channel loses it the moment the reticle moves. Same bar shape so
+// the eye reads it instantly, different hue so it is not one claim.
+chk('the bar asks which mechanic it belongs to', /look\.channel \? '/.test(nc))
+chk('the look payload carries `channel` at all three declarations',
+  (nc.match(/refused: boolean; channel: boolean/g) || []).length === 3)
+chk('★★ the readout is cleared when the channel closes — or the bar freezes on screen after release',
+  /channelSpec\.current = null\s*\n\s*bore\.current = freshBore\(\)\s*\n\s*boreToldAbsolute\.current = null\s*\n\s*boreLook\.current = null/.test(nc))
+
 
 console.log(`\nchannel-wiring oracle: ${ok} passed, ${bad} failed, ${blind} blind`)
 // ⚠ BLIND COUNTS AS DRIFT. A reader that cannot see its subject reports "nothing wrong" unless the

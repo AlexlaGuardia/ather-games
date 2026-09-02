@@ -956,7 +956,7 @@ export default function VoxelWorld() {
   // one that exists rather than resolve to `undefined` and take the ghost down with it.
   const pieceId = (variants[matIdx] ?? variants[0] ?? PIECES[pieceIdx]).id
   const [rot, setRot] = useState<Rotation>(0)
-  const [look, setLook] = useState<{ name: string; progress: number; refused: boolean } | null>(null)
+  const [look, setLook] = useState<{ name: string; progress: number; refused: boolean; channel: boolean } | null>(null)
   /** A still-collared Moglin is on you. Drives the "what to press" line — see `collar-prompt.ts`. */
   const [collarNear, setCollarNear] = useState(false)
   const [settings, setSettings] = useState<VoxelSettings>(() => loadSettings())
@@ -2349,7 +2349,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
-  look: { name: string; progress: number; refused: boolean } | null
+  look: { name: string; progress: number; refused: boolean; channel: boolean } | null
   hotbar: (HotbarEntry | null)[]; sel: number; tier: number
   held: { text: string; out: boolean } | null
   build: boolean; pieceId: string; rot: Rotation
@@ -2612,9 +2612,13 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           <div className={`text-[11px] font-mono tracking-wide ${look.refused ? 'text-red-300' : 'text-white/85'}`}>
             {look.name}{look.refused && ' — spike too weak'}
           </div>
+          {/* ★ TWO MECHANICS, TWO COLOURS. A swing and a channel both fill this bar and they are
+              not the same promise: the amber one is a tool making progress it can bank, the molten
+              one is seconds a keeper is paying for and loses the moment the reticle moves. Same
+              shape, so the eye reads it instantly; different hue, so it is not one claim. */}
           {look.progress > 0 && (
             <div className="mt-1 w-28 h-1 bg-black/50 rounded overflow-hidden mx-auto">
-              <div className="h-full bg-amber-300" style={{ width: `${Math.min(100, look.progress * 100)}%` }} />
+              <div className={`h-full ${look.channel ? 'bg-orange-400' : 'bg-amber-300'}`} style={{ width: `${Math.min(100, look.progress * 100)}%` }} />
             </div>
           )}
         </div>
@@ -3501,7 +3505,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   runeTick: number
   /** `yaw` is a map-marker CANVAS ROTATION (`screenHeading`), not a world yaw. */
   onPos: (p: THREE.Vector3, yaw: number) => void
-  onLook: (l: { name: string; progress: number; refused: boolean } | null) => void
+  onLook: (l: { name: string; progress: number; refused: boolean; channel: boolean } | null) => void
   onInvChange: () => void
   worker: React.RefObject<Worker | null>
   incoming: React.RefObject<{ cx: number; cz: number; voxels: Uint16Array; oIdx?: Uint32Array; oMat?: Uint16Array }[]>
@@ -5631,6 +5635,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const bore = useRef<Bore>(freshBore())
   /** So `absolute` is said once per spot, not sixty times a second. Cleared when the spot changes. */
   const boreToldAbsolute = useRef<string | null>(null)
+  /**
+   * What the bore wants the reticle to say THIS FRAME, or null when no bore is running against the
+   * aimed spot. Written by the channel block and read by the HUD block ~760 lines below it, in that
+   * order, inside one frame. A ref rather than state for the same reason as the two above: a
+   * channel that re-rendered the world sixty times a second would cost more than it reports.
+   *
+   * ★★ IT EXISTS BECAUSE THE HUD OVERWRITES `look` UNCONDITIONALLY EVERY FRAME, so the progress was
+   * not missing — it was computed and dropped. `boreStep` has returned `progress` since the move
+   * shipped and nothing ever read it, which left the only held move in the game with no readout at
+   * all: holding the key against a rock and holding it against nothing looked identical, and the
+   * one line it did print arrived when the block was already gone.
+   */
+  const boreLook = useRef<{ progress: number; absolute: boolean } | null>(null)
   const tremorAcc = useRef(0)
   const tremorBodies = useMemo<SensedBody[]>(() => [], [])
   /** Stride phase per body, carried across frames. `stepVoices` mutates it; the host owns it. */
@@ -6151,6 +6168,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // "one spot" would become "one spot, whenever".
       bore.current = freshBore()
       boreToldAbsolute.current = null
+      boreLook.current = null
     }
     if (out.message) onSay(out.message)
   }, [camera, tracerGeo, tracerMat, supports, vitals, mana, onSay, solidProbe])
@@ -8316,7 +8334,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         }
       }
 
-      onLook(hit ? { name: `${def.name}${!afford ? ' — need materials' : fits ? '' : ' — blocked'}`, progress: 0, refused: !fits || !afford } : null)
+      onLook(hit ? { name: `${def.name}${!afford ? ' — need materials' : fits ? '' : ' — blocked'}`, progress: 0, refused: !fits || !afford, channel: false } : null)
       onPos(p, screenHeading(aim.x, aim.z))
       if (++frame.current % 10 === 0) {
         const info = gl.info
@@ -8372,6 +8390,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         const spot = target ? `${target.x},${target.y},${target.z}` : null
         if (bs.state !== 'absolute') boreToldAbsolute.current = null
 
+        // ── the readout ───────────────────────────────────────────────────────────────────
+        // ★ THE BAR THE MOVE NEVER HAD. This only states what is true this frame; the HUD block
+        // below owns the drawing, because that is where `look` is built and a second writer would
+        // be a second answer to one question.
+        // ⚠ `absolute` CARRIES 0 AND MUST KEEP IT — `breach.ts` pins it there on purpose, and the
+        // reason is in its header: a bar that fills toward something unreachable is worse than no
+        // bar. The name says why instead, and `onSay` above says it once per spot.
+        boreLook.current =
+          bs.state === 'boring'   ? { progress: bs.progress, absolute: false }
+          : bs.state === 'absolute' ? { progress: 0, absolute: true }
+          : null
+
         if (bs.state === 'broke' && target) {
           // The spot stops existing. `breakFx.burst` before `setVoxel` for the same reason the mine
           // path does it in that order: the burst reads the material, and the write takes it away.
@@ -8405,6 +8435,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         channelSpec.current = null
         bore.current = freshBore()
         boreToldAbsolute.current = null
+        boreLook.current = null
       }
     }
 
@@ -9134,11 +9165,25 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     prof.current.mark('hud')
     // ── HUD ──────────────────────────────────────────────────────────────────────────────────
     const def = hit ? blockDef(hit.material) : undefined
+    // ★★ THE BORE OWNS THIS LINE WHILE IT RUNS, and that is a choice rather than a merge. Both
+    // readouts describe the same aimed block, so showing both would be two answers to one question;
+    // the held channel is the more specific truth and it is the one the keeper is paying for.
+    const bl = boreLook.current
     onLook(hit && def
       ? {
-          name: def.name,
-          progress: breaking.current ? breaking.current.progress / breaking.current.required : 0,
-          refused: mouse.current.left && !breaking.current && def.hardness !== Infinity,
+          name: bl
+            ? bl.absolute
+              ? `${def.name} — this is not matter`
+              : `${def.name} — ${channelSpec.current?.label ?? 'channel'}`
+            : def.name,
+          progress: bl ? bl.progress : breaking.current ? breaking.current.progress / breaking.current.required : 0,
+          // ⚠⚠ NEVER `refused` FOR A BORE, however much an absolute block looks like a refusal. The
+          // render appends "— spike too weak" to a refused line: that is a sentence about a TOOL,
+          // and the bore's defining canon property (`breach.ts`, "nothing refuses it forever") is
+          // that it has none. Water would have shipped a false explanation of a true refusal, in
+          // red, over the one move whose whole point is that tools cannot tell it no.
+          refused: !bl && mouse.current.left && !breaking.current && def.hardness !== Infinity,
+          channel: !!bl,
         }
       : null)
     onPos(p, screenHeading(aim.x, aim.z))

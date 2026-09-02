@@ -11,6 +11,87 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔥 Shimmer — **THE MOVE COMPUTED ITS OWN PROGRESS AND THREW IT AWAY, ~760 LINES ABOVE THE ONLY CODE THAT DRAWS BARS** (2026-09-02, play lane) · *Last touched 2026-09-02 — 4 files changed, NOT deployed (hub holds the lane and the lock). Sweep **219/219 · 0 FAIL · 0 KILLED** (exit read off the process, not a pipe; `plot.test.ts` 211s — a fifth reading for that ceiling entry, and ⚠ it ran while hub was landing work, so it covers THESE four files and makes no claim about theirs). channel-wiring **23/0/0** (was 12), dev-claims **9/0** (3 retired claims watched), breach **32/0**, sustain **35/0**, dev-eye **22/0**, hud-type **17/0**, render-audit **144/0**, tsc 7 (baseline), canon exit 0 (5 NOTE, 13 CLEAN). Mutation-swept **14 ways: 13 fire, 1 negative control passes by design**.*
+
+### The defect, and why nothing could see it
+`boreStep` has returned `progress` since Meltbore shipped, and **nothing ever read it**. So the only
+held move in the game ran with no readout at all: holding the cast key against a rock and holding it
+against nothing were the same picture, and the one line it did print (`the spot stops existing`)
+arrived when the block was already gone. The value was never missing — it was computed, and dropped,
+~760 lines above the only code in `VoxelWorld.tsx` that draws a bar.
+
+⚠⚠ **Eleven asserts over `breach.ts` and five mutations could not find this, and that is not a gap in
+them.** `boreStep` is correct whether or not a host reads what it returns. **A pure core with no
+consumer is a feature that exists everywhere except on screen** — the same shape as the module/gate
+family in PATTERNS, with the *return value* cast as the thing nobody was measuring.
+
+### ★★ The note claimed TWO defects. Only one was real — measured, not read
+`SHIMMER_SESSION` listed a second: *"the bore pays in `credited` mana, so an empty pool does nothing
+while the bar looks right the whole way down."* **Both empty-pool paths already speak**, and running
+the real modules says so rather than reasoning about them:
+
+    press @ mana   0 -> refused  reason=mana   says: Meltbore — not enough mana
+    press @ mana 999 -> applied                says: Meltbore — held
+    held frame @ mana 0    (empty)        -> credited=0.00000 ended="dry"   → host says "gutters out — no mana left"
+    held frame @ mana 0.05 (nearly empty) -> credited=0.00417 ended="dry"   → rule 2, the partial second
+
+That sentence is an accurate statement of the **design rule** (`credited`, never `dt`) written in the
+grammar of an open defect. It was one look from being built a second time. **A stale note does not
+rot into nonsense; the second half of this one rotted into a plausible bug report.**
+
+### The fix — the readout the move never had
+- **It reuses the reticle line, not a second dialect of it.** `look` already carries `{ name, progress,
+  refused }` and already draws a bar for mining. A bore is aimed at a block, so it is the same
+  question; a second HUD would have been two answers to one.
+- **`boreLook` is a ref, written by the channel block and read by the HUD block, in that order, inside
+  one frame.** State would re-render the world sixty times a second — the reason the channel's other
+  refs are refs.
+- **`absolute` keeps progress 0.** `breach.ts` pins it there on purpose and the header says why: a bar
+  filling toward something unreachable is worse than no bar. The line says *"— this is not matter"*
+  instead, and `onSay` still says it once per spot.
+- **Two mechanics, two colours.** A swing banks progress it can keep; a channel loses it the moment
+  the reticle moves. Same bar shape so the eye reads it instantly, molten vs amber so it is not one
+  claim.
+
+### ★★★ The trap that would have shipped a lie
+The render appends **"— spike too weak"** to any line flagged `refused`. An absolute block *looks*
+like a refusal, so `refused: true` is the tempting read — and it would have printed **a sentence about
+a tool, in red, over the one move whose defining canon property is that it has none**
+(`moves.md:82`, *"nothing refuses it forever"*; `breach.ts` opens on exactly this distinction).
+A false explanation of a true refusal. `refused: !bl && …` is the whole fix and it has its own assert.
+
+### Guards
+- **`channel-wiring.test.ts` § 6, eleven new asserts**, read through `noComments` — because the host
+  now explains this wiring in prose, and one comment **quotes the render's "spike too weak" sentence**
+  to say why a bore must never be marked refused. Read raw, that explanation would satisfy the assert
+  it exists under. *Documenting a marker creates a marker*, hit again, expected this time.
+- **Order is asserted as an index compare**: the HUD must read the readout **after** the channel writes
+  it. Move the HUD block above the channel block and every bar is one frame stale — no runtime oracle
+  can see that, and both mutations that reproduce it (publish drifts up, read drifts up) fire.
+- **`dev-claims.test.ts` gets a third retired row.** `dev/moves` closed on *"nothing draws the progress
+  — boreStep returns it, no HUD reads it"*, true that morning and false by lunchtime, **on the bench
+  Alex uses to judge this exact move**. Rewrote the paragraph and registered the retirement against the
+  host symbol that falsifies it (`bl ? bl.progress`). Mutation-tested **both** directions: sentence back
+  on the page FIRES, host draw removed FIRES.
+
+### Mutation sweep — 14, and the negative control is the point
+All eleven new asserts fire against the bug each exists to catch, entered from the door the bug uses:
+constant progress · absolute creeping · publish drifting above its block · the HUD not reading at all ·
+the read landing before the write · progress falling back to mining · the name going silent ·
+**`refused` on a bore** · one bar colour · a dropped payload field · no clear on release.
+★ **The negative control is a comment quoting every marker at once — it must change nothing, and does
+not.** That is what separates *"the stripper works"* from *"the guard is not looking."*
+
+### Next
+- **⏭ NOT DEPLOYED.** Hub holds the lane and the deploy lock; this is three files sitting green.
+- **⏭ Alex feels it.** Hold the cast key at a rock and the molten bar should fill; at water it should
+  refuse to fill and say why. Whether the bar wants to be bigger, or elsewhere, is his call.
+- Keyboard-only remains the one honest limit — the pad adapter exposes a pressed EDGE, not a held set.
+
+### Files
+`voxel3d/VoxelWorld.tsx` (the ref, the publish, the HUD feed, the bar) · `voxel3d/channel-wiring.test.ts`
+(§ 6) · `dev/moves/page.tsx` (one paragraph) · `dev/dev-claims.test.ts` (third retired row)
+
 ## 🔭 Shimmer — **THE DEV SURFACE: 15 OF 16 PAGES WERE URL-ONLY, AND THREE OF THEM COULD NOT SEE THEIR OWN SUBJECT** (2026-09-01, hub lane) · *Last touched 2026-09-02 — `060a6fd` `5a89236` `3b24d43` `b00e120` `00b6985` LIVE in `BUILD_ID NTo6mijWQBlleLjvJZj_L`; `521f25e` `7131148` (tools + sweep scope) pushed, dev-only so nothing to deploy, 169 chunks (served md5 == disk md5 on both changed chunks, positive markers present, control absent). dev-pages **205/0**, dev-claims **7/0**, grey-readout **9/0/0**, break-framing **33/0**, dev-eye **22/22**. Sweep **219/219 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon 0.*
 
 ### What Alex asked for

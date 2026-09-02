@@ -255,11 +255,12 @@ export default function MovesBenchPage() {
           {ended && <p style={{ marginTop: 10, marginBottom: 0, color: ended === 'broke through' ? '#40d060' : ended === 'dry' ? '#e05a4d' : '#8aa9a0' }}>{ended}</p>}
           <p style={{ ...sub, marginTop: 10, marginBottom: 0 }}>
             Meltbore is LIVE in the world: hold the cast key. The host polls the held key and pays
-            the bore in credited mana every frame (VoxelWorld, sustainStep + boreStep). Two honest
-            limits remain, and they are the reason to still use this bench: it is KEYBOARD ONLY
-            (the pad adapter exposes a newly-pressed edge, not a held set, so a pad channel shuts
-            the frame after it opens), and nothing draws the progress — boreStep returns it, no HUD
-            reads it, so in the world you feel the wait without seeing it.
+            the bore in credited mana every frame (VoxelWorld, sustainStep + boreStep), and since
+            2026-09-02 the reticle draws what boreStep returns: a molten bar under the block name,
+            held at zero on a block that is not matter rather than creeping toward something it can
+            never reach. ONE honest limit remains, and it is the reason to still use this bench: it
+            is KEYBOARD ONLY (the pad adapter exposes a newly-pressed edge, not a held set, so a pad
+            channel shuts the frame after it opens). Everything else here you can now feel in world.
           </p>
         </section>
       </div>

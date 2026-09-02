@@ -72,6 +72,20 @@ const RETIRED: RetiredClaim[] = [
     host: 'src/app/shimmer/voxel3d/VoxelWorld.tsx',
     proof: 'sustainStep(',
   },
+  {
+    // Retired 2026-09-02. The bench said the bore's progress reached no HUD, which was true for as
+    // long as the move had shipped — `boreStep` returned `progress` and the host dropped it. It
+    // stopped being true the moment the reticle started drawing it, and this row is what stops the
+    // sentence coming back: a bench that tells Alex a shipped readout does not exist does not
+    // merely misinform him, it CANCELS THE LOOK at the thing he was about to judge.
+    page: 'src/app/shimmer/dev/moves/page.tsx',
+    retired: /nothing draws the progress|no HUD\s+reads it|feel the wait without seeing it/i,
+    claim: "the bore's progress reaches no HUD, so the wait is felt but never seen",
+    host: 'src/app/shimmer/voxel3d/VoxelWorld.tsx',
+    // ★ THE PROOF IS THE DRAW, NOT THE REF. `boreLook.current` existing proves only that a value is
+    // published; this is the line that puts it on the reticle, which is what the page denied.
+    proof: 'bl ? bl.progress',
+  },
 ]
 
 // ⚠ An empty table makes every loop below vacuous, which is the assert-that-cannot-fire trap.
