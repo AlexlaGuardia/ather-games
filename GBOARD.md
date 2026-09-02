@@ -49,7 +49,7 @@ the Arcade frame.
 
 **Files:** `src/proxy.ts` · `src/app/shimmer/dev/templates/{band-derive.ts,DevBack.tsx,editor-bands.generated.ts,DevIndex.tsx}` · `src/app/shimmer/dev/{editor-bands,dev-back}.test.ts` · `scripts/dev-bands.mts` (`npm run gen:bands` / `check:bands`) · 7 `layout.tsx` (shimmer/dev, shimmer/arena, voxel3d/tex, play3d/birth, nolmir/dev, nolmir/sfx-lab, vault/dev)
 
-## 🗝 Shimmer — **THE GAME NAMED THE WRONG CAUSE, CONFIDENTLY, AND THE KEEPER STOPPED LOOKING** (2026-09-02, play lane) · *Last touched 2026-09-02 — loadout-why **23/0/0**, mutation-swept **13 ways: 12 fire, 1 negative control passes by design**, loadout **27/0**, loadout-migrate **21/0**, cast **103/0**, tsc 7 (baseline).*
+## 🗝 Shimmer — **THE GAME NAMED THE WRONG CAUSE, CONFIDENTLY, AND THE KEEPER STOPPED LOOKING** (2026-09-02, play lane; engine half closed by hub the same afternoon) · *Last touched 2026-09-02 (hub) — `ff34e18` pushed and **LIVE in `BUILD_ID _L1QtC33MO3B1uq0O9hGu`**, 167 chunks, 0 unpushed, tree clean. Sweep **223/223 · 0 FAIL · 0 KILLED** against the dirty tree that became `ff34e18` (same six files). loadout-why **32/0/0** (was 23), cast-dispatch green with 7 new cause asserts, loadout **27/0**, sustain **35/0**, cast **103/0**, tsc 7 (baseline), canon 0. Served md5 == disk == public tunnel on all three changed chunks; `emptyWhy`/`panelKey` present in the served voxel chunk, `book has none` absent from every chunk on disk and served. Mutation-swept **12 ways: 10 fire, 2 negative controls green by design**. Earlier play-lane figures: loadout-why 23/0/0, 13 mutations 12 fire.*
 
 ### What Alex said, and why it was reasonable
 *"i dont have a tactical yet since we havent built a way to aquire them yet."* Then: *"my player was
@@ -122,6 +122,22 @@ at once must change nothing, and does not.
   empty when you walked in"*, the only question a keeper cannot answer themselves; a slot they clear
   while looking at it falls back to `cleared`, which is what they just did.
 
+### The engine half, closed (hub, 2026-09-02 afternoon)
+The play lane filed *"the engine's false clause itself is NOT FIXED — latent for the next host"* and
+it was, plus a second copy nobody had listed: **`play3d/Shimmer3D.tsx` never went through
+`resolveCast` at all** and carried *"your book has none for your runes"* as its own inline literal.
+Same lie, two dispatchers. Now `CastEnv.emptyWhy` (index-aligned `resolveLoadout().why`) and
+`CastEnv.panelKey` let a host hand the reason IN; the engine composes the one `emptySlotSentence` the
+panel and `/rune` use, and **without them says only `No tactical bound`** — a symptom with no cause.
+VoxelWorld's override is gone (it repeats `out.message` for every refusal, empty included); Shimmer3D
+resolves binds and reasons in one pass (`castWhyRef`). ⚠ Two asserts earned their keep on the way in:
+the *read at the SLOT* check was first written at slot 0, where an index-0 mutation is a **no-op** and
+only the source regex caught it — resolved at slot 1 against two different reasons now, and it fires
+alone. And the *every refusal repeats the engine* check named a string literal and asked `codeOnly`,
+which blanks string bodies — **structure asks `code`; literals ask `nc`**, the lesson from the night
+before, performed again by the window that had just read it. §6 of `loadout-why` guards the retired
+phrase in BOTH directions across engine and play3d, through `noComments` so the doc quote does not count.
+
 ### Next
 - **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
   and pick Squall — and the bar will say so instead of blaming his runes.
@@ -131,7 +147,8 @@ at once must change nothing, and does not.
 ### Files
 `play3d/loadout.ts` (`resolveLoadout`, `EmptyReason`, `emptySlotWhy`/`emptySlotSentence`) ·
 `play3d/loadout-why.test.ts` (new) · `voxel3d/VoxelWorld.tsx` (one ref, the refusal, the panel row,
-the `/rune` readout)
+the `/rune` readout) · **hub:** `engine/cast-dispatch.ts` (`CastEnv.emptyWhy`/`panelKey`) + its test ·
+`play3d/Shimmer3D.tsx` (`castWhyRef`)
 
 ## 🔥 Shimmer — **THE MOVE COMPUTED ITS OWN PROGRESS AND THREW IT AWAY, ~760 LINES ABOVE THE ONLY CODE THAT DRAWS BARS** (2026-09-02, play lane) · *Last touched 2026-09-02 — **DEPLOYED** (`c90d4af`, pushed; the "NOT deployed" above was true when written and shipped ~40min later). ⚠ **Corrected 2026-09-02, play lane — this line named `BUILD_ID 7tqjIUuSp7lTNzi0O9h6n` and that build is no longer live.** It was true when hub wrote it; a later deploy from the play lane superseded it. Measured rather than assumed: `.next/BUILD_ID` and the served `/shimmer/voxel3d` both read **`LIC5NEUml535xdBppJwyj`**, and `7tqjI…` has **no `static/` dir on disk at all**. The substance holds — meltbore shipped — only the id went stale, which is what a build id does the moment anyone else builds. ★ Cite a deploy by the artifact you can still read, not by the id you remember writing. Sweep **219/219 · 0 FAIL · 0 KILLED** (exit read off the process, not a pipe; `plot.test.ts` 211s — a fifth reading for that ceiling entry, and ⚠ it ran while hub was landing work, so it covers THESE four files and makes no claim about theirs). channel-wiring **23/0/0** (was 12), dev-claims **9/0** (3 retired claims watched), breach **32/0**, sustain **35/0**, dev-eye **22/0**, hud-type **17/0**, render-audit **144/0**, tsc 7 (baseline), canon exit 0 (5 NOTE, 13 CLEAN). Mutation-swept **14 ways: 13 fire, 1 negative control passes by design**.*
 
