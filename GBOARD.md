@@ -156,12 +156,28 @@ expires out loud. `/rune` now names a lost-state birth as a LOST STATE from the 
 fire, comment control green. ⚠ The guard's first run failed 15 of 16 runes — `keeperBook` seeds the store per
 keeper and the loop never reset it: a shared fixture reading as sixteen defects. Sweep **224/224**, tsc 7.
 
+### Threshold — ruled, locked, built, the same evening (`187ebd8`, LIVE in `BUILD_ID qAH-o9z7GtHY1_uBIKQy4`)
+Alex: *"what if we spin up a magii agent to ruling"* — dispatched under a progress-file watchdog, ruled in
+six minutes (athernyx `2782941`), name **Threshold** locked by Alex (`84a718d`; alternates Holdfast / Stopgap
+passed over). Derived by subtraction from Part I: the held shell and standing wall are the passives and carry
+the drain, flare-and-disperse is Backlash, protecting-many is Overpressure — leaving *"blocking doorways"*,
+**the shell with nobody inside it.** Built as a PLACED field, never a stance: 14 mana, 8s, range 6, door-sized,
+5s, `fieldStopsShots` on, `fieldDps` 0 — the first zero-damage field in the file. The cast oracle's *a field
+must hurt or heal* rule now reads *hurt, heal, or COVER* and still fails a field with all three off. The
+birth-tactical exception expired the way it was built to; §C now guards the result (gap [RULED] once, name
+verbatim from `moves.md`, a Barrier-born keeper born holding it). 4 mutations, 4 fire — including the canon
+gate catching an unlocked name. Sweep **224/224**, tsc 7, served == disk == public on all three chunks.
+
+**Decisions.** ⚠ *"Gone at the first hard blow"* is canon and is **NOT modelled**: fields have a duration and
+no hit points, so Threshold lasts its five seconds whatever strikes it. Shield HP for placed fields is a
+build decision (Jin's), open — it would also give Firewall a breakable state. Not hidden in a comment only.
+
 ### Next
-- **⏭ Magii rules the Barrier gap** (name + one line), then hub registers it in `keeper-moves.ts` + `cast.ts`
-  and deletes the exception in `birth-tactical.test.ts` — the guard will go red to say so.
+- **⏭ Alex, born of Barrier: press the tactical key at a doorway** and say whether a five-second door reads
+  as a shield or as a wall. Then rule whether placed fields want hit points.
 - **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
   and pick Squall — and the bar will say so instead of blaming his runes.
-- ~~3 of 20 birth runes (barrier, dust, vapor) seat no tactical at all~~ **Re-measured above: 1 of 17, Barrier, filed to Magii.** — `no-move` still says so out
+- ~~3 of 20 birth runes (barrier, dust, vapor) seat no tactical at all~~ **Re-measured: 1 of 17, Barrier — ruled and built as Threshold the same evening.** — `no-move` still says so out
   loud rather than leaving a dead key, but whether that is the intended start is Alex's call.
 
 ### Files
