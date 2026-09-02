@@ -1550,7 +1550,15 @@ export default function VoxelWorld() {
           ? 'no move answers to it yet — the Schools have not written one'
           : `${moves.length} move${moves.length === 1 ? '' : 's'} known · ${bound}/${ALL_BANDS.length} cast slot${bound === 1 ? '' : 's'} bound`
         const gap = empties.length ? ` · ${empties.join(' · ')}` : ''
-        return `${lead}${names.join(', ') || 'nothing'} — ${tail}${gap}`
+        // ★ A LOST-STATE BIRTH SAYS SO. Static / Dust / Vapor are kept off the carousel by canon's own
+        // ruling; a keeper born of one came through the dev door. Their empty tactical is not a
+        // missing move, it is canon ("the emptiness IS the canon" — `birth/runes.data.ts`), and a
+        // readout that only said `no-move` would send the next reader hunting a registry gap.
+        const birthRune = RUNES.find(r => r.id === rv.birth)
+        const lost = birthRune?.lostState
+          ? ` · ${birthRune.name} is a LOST STATE — never offered at birth, no one-rune move written; this keeper exists through the dev door`
+          : ''
+        return `${lead}${names.join(', ') || 'nothing'} — ${tail}${gap}${lost}`
       }
       if (!arg) return report(inv, inv.owned.length === 1 ? 'born of ' : 'you hold ')
       if (!isOwner) return 'a rune is trained, not typed — bare /rune reads your hand'
