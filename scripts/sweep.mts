@@ -63,7 +63,13 @@ function run(file: string): Promise<Result> {
   })
 }
 
-const files = walk(join(ROOT, 'src')).filter(f => f.includes(FILTER)).sort()
+// ⚠ `scripts/` IS SWEPT TOO, AND IT WAS NOT UNTIL 2026-09-01. This walked `src/` alone, so a guard
+// written next to the tool it guards was run by nobody — `scripts/tools.test.ts` passed 108 asserts
+// on demand and was absent from a green 218/218, which is a guard believed to be covered and is
+// not. Same shape as every other blind instrument in PATTERNS, one level up: the sweep could not
+// see part of its own subject. A new guard in either tree now joins by EXISTING.
+const files = [...walk(join(ROOT, 'src')), ...walk(join(ROOT, 'scripts'))]
+  .filter(f => f.includes(FILTER)).sort()
 console.log(`sweeping ${files.length} suites${FILTER ? ` matching '${FILTER}'` : ''} · ceiling ${CEILING_S}s · ${LANES} at a time\n`)
 // ⚠ An empty sweep must not read as a clean one — same rule the guards use.
 if (files.length === 0) { console.error(`❌ no suites matched '${FILTER}' — the sweep could not look, which is not a pass`); process.exit(2) }
