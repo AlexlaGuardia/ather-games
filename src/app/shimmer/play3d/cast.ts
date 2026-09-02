@@ -138,6 +138,12 @@ export interface CastSpec {
   fieldHps: number
   /** field: does it eat projectiles crossing it? (Firewall is cover; a grove is not) */
   fieldStopsShots: boolean
+  /**
+   * field: hit points of the cover — 0 = it does not break (fire, wind), >0 = a SHELL that eats
+   * rounds until it has dispersed all it can. See `field-effects.ts` › `FieldDef.hp`. Only Threshold
+   * carries one today; Alex ruled shield HP for placed fields 2026-09-02.
+   */
+  fieldHp: number
   /** terrain: which shape is raised */
   shape: ConjureShape
   /**
@@ -216,7 +222,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   resist: 0, moveMult: 1, castMult: 1, regenMult: 1,
   surgeSecs: 0, surgeMult: 1,
   castRange: 0, areaSize: 0, areaSecs: 0,
-  fieldDps: 0, fieldHps: 0, fieldStopsShots: false,
+  fieldDps: 0, fieldHps: 0, fieldStopsShots: false, fieldHp: 0,
   shape: 'wall', shapeHeight: 1, statuses: [],
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
@@ -483,9 +489,10 @@ const BUILDS: Record<string, Build> = {
   // covers one door for a few breaths": door-sized, a handful of seconds, cheaper than Firewall
   // because it carries no fire. It is cover and only cover: `fieldStopsShots` on, `fieldDps` 0 —
   // the first zero-damage field in the file, which is the whole point of a shield you give away.
-  // ⚠ "gone at the first hard blow" is NOT modelled: fields have a duration and no hit points, so
-  // today it lasts its seconds whatever strikes it. Shield HP is a build decision, filed on GBOARD.
-  threshold: { archetype: 'field', manaCost: 14, cooldownMs: 8000, castRange: 6, areaSize: 2.4, areaSecs: 5, fieldDps: 0, fieldStopsShots: true },
+  // "Gone at the first hard blow" — `fieldHp` 20 (ruled by Alex 2026-09-02, the same evening the row
+  // shipped without it): one Keenshard (24) or Forked Bolt (19, nearly) takes the door; a Hollow's
+  // light rounds need several. Firewall and Cyclone Cage stay 0 — a round does not shatter fire.
+  threshold: { archetype: 'field', manaCost: 14, cooldownMs: 8000, castRange: 6, areaSize: 2.4, areaSecs: 5, fieldDps: 0, fieldStopsShots: true, fieldHp: 20 },
 
   // ── Ultimates ────────────────────────────────────────────────────────────────────────────────
   'chain-lightning': { archetype: 'projectile', manaCost: 34, cooldownMs: 9000, damage: 26, projSpeed: 70, projLife: 1.2, chain: 3, chainRange: 9 },

@@ -40,7 +40,7 @@ import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/h
 import { fillRoster, ROSTER_SIZE } from './crucible-bots'
 import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from './crucible-fleet'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
-import { spawnField, tickFields, fieldsAt, blocksShotAt, FIELD_HEIGHT, type Field } from '../engine/field-effects'
+import { spawnField, tickFields, fieldsAt, absorbShotAt, FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from '../engine/conjured-terrain'
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget, type StatusBag } from '../engine/statuses'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
@@ -2245,7 +2245,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         if (pending.archetype === 'field') {
           fieldsRef.current = spawnField(fieldsRef.current, {
             moveId: pending.moveId, x: ax, z: az, radius: pending.areaSize, secs: pending.areaSecs,
-            dps: pending.fieldDps, hps: pending.fieldHps, stopsShots: pending.fieldStopsShots,
+            dps: pending.fieldDps, hps: pending.fieldHps, stopsShots: pending.fieldStopsShots, hp: pending.fieldHp,
             // y/height are new (the voxel port made a field a slab). play3d's own readers stay 2D,
             // so these change nothing here — they are recorded truthfully rather than faked.
             y: posRef.current?.y ?? 0, height: FIELD_HEIGHT,
@@ -2320,7 +2320,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       // A Firewall eats what crosses it, which is the "cover" half of its canon line.
       if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
       if (conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
-      if (blocksShotAt(fieldsRef.current, p.pos.x, p.pos.z)) { p.life = 0; continue }
+      { const ab = absorbShotAt(fieldsRef.current, p.pos.x, p.pos.z, wDmg); if (ab.hit) { fieldsRef.current = ab.fields; p.life = 0; continue } }
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
           // bullseye: radial miss-distance of the flight line from the board center. Inside the gold
@@ -2625,7 +2625,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         if (cell === undefined || (cell & 0xFF) === WALL_ID) { o.life = 0; continue }
         // incoming fire is stopped by your own terrain + firewall. That symmetry IS the move.
         if (conjuredBlockedAt(conjuredRef.current, o.pos.x, o.pos.z, nowFrame)) { o.life = 0; continue }
-        if (blocksShotAt(fieldsRef.current, o.pos.x, o.pos.z)) { o.life = 0; continue }
+        { const ab = absorbShotAt(fieldsRef.current, o.pos.x, o.pos.z, DRONE_DMG); if (ab.hit) { fieldsRef.current = ab.fields; o.life = 0; continue } }
         if (o.pos.distanceToSquared(pEye) < PLAYER_HIT_R2) {
           o.life = 0
           hurtPlayer(DRONE_DMG)  // a training drone — carries no rune

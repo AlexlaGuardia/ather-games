@@ -272,7 +272,7 @@ import { ResourceBars } from './resource-bars'
 import { CastGauges, type CastHud } from './cast-gauges'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
-import { spawnField, tickFields, containsVolume, fieldsAtVolume, blocksShotAtVolume,
+import { spawnField, tickFields, containsVolume, fieldsAtVolume, absorbShotAtVolume,
          FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured } from '../engine/conjured-terrain'
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
@@ -6109,6 +6109,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         moveId: out.placed.moveId, x: aim.x, y: gy, z: aim.z,
         radius: out.placed.areaSize, height: FIELD_HEIGHT, secs: out.placed.areaSecs,
         dps: out.placed.fieldDps, hps: out.placed.fieldHps, stopsShots: out.placed.fieldStopsShots,
+        hp: out.placed.fieldHp,
       }, env.now)
     }
     if (out.placed && out.placed.archetype === 'impulse') {
@@ -6559,7 +6560,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // covers ~1 unit per frame, so a bolt cannot skip one — unlike the block raycast, which must
         // sweep because a wall is one voxel thin. Sweeping this too would cost a per-field segment
         // test every frame for no reachable bug.
-        if (blocksShotAtVolume(fields.current, sh.x, sh.y, sh.z)) {
+        // ★ AND A SHELL PAYS FOR WHAT IT EATS (2026-09-02). `absorbShotAtVolume` is the blocks-query
+        // with a bill attached: unbreakable cover (Firewall) eats and is unchanged, a shell
+        // (Threshold) loses the round's damage and is gone at zero — the say-line is the only tell,
+        // since the mesh simply stops being there. Asking `blocksShotAtVolume` here instead would
+        // quietly make every shell immortal again.
+        const ab = absorbShotAtVolume(fields.current, sh.x, sh.y, sh.z, sh.dmg)
+        if (ab.hit) {
+          fields.current = ab.fields
+          if (ab.broke) onSay(`${castForMove(ab.hit.moveId).label} — shattered`)
           g.remove(sh.mesh); shots.current.splice(i, 1)
           continue
         }

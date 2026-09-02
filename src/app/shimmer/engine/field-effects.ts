@@ -53,6 +53,19 @@ export interface FieldDef {
   hps: number
   /** does it stop projectiles crossing it? Firewall is cover; a grove is not. */
   stopsShots: boolean
+  /**
+   * ── ★ SHIELD HIT POINTS (ruled by Alex 2026-09-02, after Threshold shipped without them) ──────
+   * How much a piece of COVER can eat before it disperses early. `0` = the cover does not break —
+   * a wall of flame or a cyclone is not a thing a round shatters, it is a thing a round dies in.
+   * `>0` = a SHELL: every round it stops costs it that round's damage, and at zero it is gone,
+   * whatever its clock says. Canon for Threshold is *"gone at the first hard blow"* — a novice's
+   * door is one heavy bolt or a few light ones, and the number that says so lives on the CastSpec.
+   * Meaningless when `stopsShots` is false; a grove has nothing to shatter.
+   *
+   * REQUIRED, not optional — same reason `y`/`height` are: an optional field lets every caller that
+   * was not updated keep constructing indestructible cover silently.
+   */
+  hp: number
 }
 
 /**
@@ -142,6 +155,35 @@ export function blocksShotAt(fields: Field[], x: number, z: number): boolean {
  */
 export function blocksShotAtVolume(fields: Field[], x: number, y: number, z: number): boolean {
   return fields.some((f) => f.stopsShots && containsVolume(f, x, y, z))
+}
+
+/** What a round that met cover did to it. `hit` is the field that ate the round (null = nothing did). */
+export interface ShotAbsorbed { fields: Field[]; hit: Field | null; broke: boolean }
+
+/**
+ * A round meets cover: the FIRST cover field containing the point eats it, and pays for it in `hp`
+ * if it is a shell. Returns the new list — the field is removed the instant its hp reaches zero, so
+ * the next round this frame passes through the gap. Unbreakable cover (`hp` 0) eats and is unchanged.
+ *
+ * ⚠ THIS REPLACES `blocksShotAt*` AT THE HOST'S SHOT SITE, and it is not the same question. The
+ * `blocks*` readers say whether a point is under cover and change nothing; a host that keeps asking
+ * them where a round dies has cover that can never be worn down — a regression that looks exactly
+ * like the pre-09-02 game, which is why the host guard names this function.
+ */
+function absorb(fields: Field[], idx: number, dmg: number): ShotAbsorbed {
+  if (idx < 0) return { fields, hit: null, broke: false }
+  const f = fields[idx]
+  if (f.hp <= 0) return { fields, hit: f, broke: false }
+  const hp = f.hp - Math.max(0, dmg)
+  if (hp <= 0) return { fields: fields.filter((_, i) => i !== idx), hit: f, broke: true }
+  const next = fields.slice(); next[idx] = { ...f, hp }
+  return { fields: next, hit: next[idx], broke: false }
+}
+export function absorbShotAt(fields: Field[], x: number, z: number, dmg: number): ShotAbsorbed {
+  return absorb(fields, fields.findIndex((f) => f.stopsShots && contains(f, x, z)), dmg)
+}
+export function absorbShotAtVolume(fields: Field[], x: number, y: number, z: number, dmg: number): ShotAbsorbed {
+  return absorb(fields, fields.findIndex((f) => f.stopsShots && containsVolume(f, x, y, z)), dmg)
 }
 
 /**

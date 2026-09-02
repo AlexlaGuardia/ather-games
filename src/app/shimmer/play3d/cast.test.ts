@@ -154,7 +154,7 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
   // ── SYSTEM 1: fields ──
   {
     const fw = castForMove('firewall')
-    let fields = spawnField([], { moveId: fw.moveId, x: 10, y: 0, z: 10, radius: fw.areaSize, height: FIELD_HEIGHT, secs: fw.areaSecs, dps: fw.fieldDps, hps: fw.fieldHps, stopsShots: fw.fieldStopsShots }, T0)
+    let fields = spawnField([], { moveId: fw.moveId, x: 10, y: 0, z: 10, radius: fw.areaSize, height: FIELD_HEIGHT, secs: fw.areaSecs, dps: fw.fieldDps, hps: fw.fieldHps, stopsShots: fw.fieldStopsShots , hp: 0}, T0)
     chk('a field contains its centre', contains(fields[0], 10, 10))
     chk('...and not a point outside its radius', !contains(fields[0], 10 + fw.areaSize + 1, 10))
     chk('Firewall blocks a shot crossing it', blocksShotAt(fields, 10, 10))
@@ -181,7 +181,7 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     chk('a field ticks once per second, not once per frame', fired === 3, `fired ${fired} over 3s`)
 
     // a backgrounded tab must not burst-apply the ticks it missed
-    let f2 = spawnField([], { moveId: 'x', x: 0, y: 0, z: 0, radius: 3, height: FIELD_HEIGHT, secs: 30, dps: 5, hps: 0, stopsShots: false }, T0)
+    let f2 = spawnField([], { moveId: 'x', x: 0, y: 0, z: 0, radius: 3, height: FIELD_HEIGHT, secs: 30, dps: 5, hps: 0, stopsShots: false , hp: 0}, T0)
     const jump = tickFields(f2, T0 + 10_000)
     chk('a long stall resyncs instead of replaying 10 ticks', jump.fired.length === 1)
 
@@ -189,7 +189,7 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
 
     // the cap drops the OLDEST, never the cast just paid for
     let many: Field[] = []
-    for (let i = 0; i < MAX_FIELDS + 3; i++) many = spawnField(many, { moveId: `m${i}`, x: i, y: 0, z: 0, radius: 1, height: FIELD_HEIGHT, secs: 60, dps: 1, hps: 0, stopsShots: false }, T0)
+    for (let i = 0; i < MAX_FIELDS + 3; i++) many = spawnField(many, { moveId: `m${i}`, x: i, y: 0, z: 0, radius: 1, height: FIELD_HEIGHT, secs: 60, dps: 1, hps: 0, stopsShots: false , hp: 0}, T0)
     chk('the field cap holds', many.length === MAX_FIELDS)
     chk('...and drops the oldest, so a paid cast always appears', many[many.length - 1].moveId === `m${MAX_FIELDS + 2}`)
   }
