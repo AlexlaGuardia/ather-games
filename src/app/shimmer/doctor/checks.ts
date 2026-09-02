@@ -237,25 +237,6 @@ async function checkPlayerFrameMaps(add: Add) {
     add({ severity: 'warn', domain: 'framemaps', check: 'player-map-sync', file: 'dev/editors/PlayerEditor.tsx', message: `Anim '${k}' exists in route PLAYER_FRAME_MAP but not PlayerEditor FRAME_CONST_MAP — invisible in the editor.` })
 }
 
-async function checkBeastFrameMaps(add: Add) {
-  const route = await read('save-sprite/route.ts')
-  const editor = await read('dev/editors/BeastEditor.tsx')
-  if (!route || !editor) return
-  const fnMatch = route.match(/function beastFrameMap\s*\([^)]*\)/)
-  const fnBlock = fnMatch && fnMatch.index !== undefined ? braceBlock(route, fnMatch.index) : null
-  const retBlock = fnBlock ? braceBlock(fnBlock, fnBlock.indexOf('return')) : null
-  const routeKeys = retBlock ? objectKeys(retBlock) : []
-  const editorKeys = objectKeys(exportBlock(editor, 'DEFAULT_FRAME_CONST_MAP') ?? '')
-  if (!routeKeys.length || !editorKeys.length) {
-    add({ severity: 'info', domain: 'framemaps', check: 'beast-map-sync', message: 'Could not parse beastFrameMap or DEFAULT_FRAME_CONST_MAP — parser drift, update doctor.' })
-    return
-  }
-  for (const k of setDiff(editorKeys, routeKeys))
-    add({ severity: 'error', domain: 'framemaps', check: 'beast-map-sync', file: 'save-sprite/route.ts', message: `Beast anim '${k}' in BeastEditor map but not route beastFrameMap() — saving it fails.` })
-  for (const k of setDiff(routeKeys, editorKeys))
-    add({ severity: 'warn', domain: 'framemaps', check: 'beast-map-sync', file: 'dev/editors/BeastEditor.tsx', message: `Beast anim '${k}' in route beastFrameMap() but not BeastEditor map — invisible in the editor.` })
-}
-
 async function checkCharacterRegistries(add: Add) {
   const route = await read('save-sprite/route.ts')
   const editor = await read('dev/editors/PlayerEditor.tsx')
@@ -367,27 +348,6 @@ async function checkSpriteFile(add: Add, rel: string, spritesExport: string, pal
         if (max > palLen)
           add({ severity: referenced.has(c.name) ? 'error' : 'warn', domain: 'palettes', check: 'palette-range', file: rel, message: `'${c.name}' uses color index ${max} but ${paletteExport} has only ${palLen} colors — out-of-range pixels render in the previous draw color (the "colors look wrong" bug).` })
       }
-    }
-  }
-}
-
-async function checkBeastPalettes(add: Add) {
-  const content = await read('sprites/beasts.ts')
-  if (!content) return
-  const palBlock = exportBlock(content, 'BEAST_PALETTES')
-  if (!palBlock) return
-  const species = objectKeys(palBlock)
-  const consts = pxConsts(content)
-  for (const sp of species) {
-    const m = palBlock.match(new RegExp(`${sp}\\s*:\\s*\\[([^\\]]*)\\]`))
-    const palLen = m ? (m[1].match(/['"]/g) || []).length / 2 : null
-    if (!palLen) continue
-    const prefix = sp.toUpperCase().replace(/-/g, '_') + '_'
-    for (const c of consts.filter(c => c.name.startsWith(prefix))) {
-      let max = 0
-      for (const row of c.rows) for (const ch of row) max = Math.max(max, parseInt(ch, 16))
-      if (max > palLen)
-        add({ severity: 'error', domain: 'palettes', check: 'palette-range', file: 'sprites/beasts.ts', message: `'${c.name}' uses color index ${max} but BEAST_PALETTES.${sp} has only ${palLen} colors.` })
     }
   }
 }
@@ -647,9 +607,7 @@ export async function runDoctor(): Promise<DoctorReport> {
 
   const checks: [string, () => Promise<void>][] = [
     ['player-framemaps', () => checkPlayerFrameMaps(add)],
-    ['beast-framemaps', () => checkBeastFrameMaps(add)],
     ['character-registries', () => checkCharacterRegistries(add)],
-    ['beast-palettes', () => checkBeastPalettes(add)],
     ['item-maps', () => checkItemMaps(add)],
     ['spirit-palettes', () => checkSpiritPalettes(add)],
     ['sidecars', () => checkSidecars(add)],

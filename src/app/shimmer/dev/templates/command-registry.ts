@@ -21,7 +21,6 @@ export const COMMAND_REGISTRY: CommandEntry[] = [
   // SPRITES group
   { id: 'sprites', label: 'Spirits', keywords: ['sprite', 'fox', 'owl'], category: 'editor', action: 'switchMode', mode: 'sprites' },
   { id: 'player', label: 'Player', keywords: ['character'], category: 'editor', action: 'switchMode', mode: 'player' },
-  { id: 'beasts', label: 'Beasts', keywords: ['enemy', 'monster'], category: 'editor', action: 'switchMode', mode: 'beasts' },
   { id: 'items', label: 'Items', keywords: ['inventory', 'equipment'], category: 'editor', action: 'switchMode', mode: 'items' },
   { id: 'furniture', label: 'Furniture', keywords: ['decoration', 'house'], category: 'editor', action: 'switchMode', mode: 'furniture' },
   { id: 'nodes', label: 'Nodes', keywords: ['resource', 'gather'], category: 'editor', action: 'switchMode', mode: 'nodes' },
@@ -49,7 +48,6 @@ export const COMMAND_REGISTRY: CommandEntry[] = [
   // TOOLS group
   { id: 'banner', label: 'Banner', keywords: ['header', 'title'], category: 'editor', action: 'switchMode', mode: 'banner' },
   { id: 'spinner', label: 'Spinner', keywords: ['loading', 'wheel'], category: 'editor', action: 'switchMode', mode: 'spinner' },
-  { id: 'voices', label: 'Voices', keywords: ['audio', 'sound', 'speech'], category: 'editor', action: 'switchMode', mode: 'voices' },
 
   // Links
   { id: 'index', label: 'All dev pages', keywords: ['index', 'home', 'everything', 'list'], category: 'editor', action: 'switchMode', mode: 'index' },

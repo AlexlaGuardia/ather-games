@@ -1,3 +1,17 @@
+// ⏸ ORPHANED 2026-09-02 — its editor was deleted and it has no reader.
+//
+// `VoiceProfilesEditor` was the ONE editor on the dev surface authoring data no shipped game
+// imports, so it went. This file was what it wrote. `getVoiceProfile()` below has no caller
+// anywhere in the tree, and the only writer was that editor's deploy path through
+// `save-map/route.ts` (VOICE_FILE).
+//
+// ⚠ `engine/dialogue-schema` — which this imports a TYPE from — is a different matter and is very
+// much alive: chatterbox, dialogue-runtime, save-dialogue and data/dialogues all use it. Deleting
+// the schema because this file is orphaned would be the mistake here.
+//
+// Kept rather than deleted because removing it means surgery in `save-map/route.ts`, which is
+// shared infrastructure. Safe to delete with that writer; nothing else will notice.
+
 // Voice profiles — per-NPC chatterbox voice configurations
 // Each NPC gets a distinct mumble voice shaped by pitch, speed, tone, and syllable set
 // Profiles are looked up by NPC id at dialogue runtime

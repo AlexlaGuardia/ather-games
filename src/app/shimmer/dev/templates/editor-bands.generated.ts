@@ -35,8 +35,6 @@ export const EDITOR_BANDS: EditorBand[] = [
     live: [], legacy: [], orphan: [] },
   { id: "battle", file: "BattleTester.tsx", band: "orphan", deployable: false,
     live: ["engine/battle","engine/battle-ai","engine/moves","engine/party-stats","spirits/spirit","sprites/palette","sprites/registry","sprites/sprite-data"], legacy: [], orphan: ["engine/party-battle"] },
-  { id: "beasts", file: "BeastEditor.tsx", band: "orphan", deployable: true,
-    live: ["sprites/sprite-data"], legacy: [], orphan: ["sprites/beasts"] },
   { id: "daycycle", file: "DayCycleEditor.tsx", band: "opaque", deployable: true,
     live: [], legacy: [], orphan: [] },
   { id: "doctor", file: "DoctorPanel.tsx", band: "tool", deployable: false,
@@ -85,8 +83,6 @@ export const EDITOR_BANDS: EditorBand[] = [
     live: [], legacy: ["engine/renderer","world/tiles"], orphan: ["world/structures"] },
   { id: "tools", file: "ToolsEditor.tsx", band: "live", deployable: true,
     live: ["engine/tools","sprites/items"], legacy: [], orphan: [] },
-  { id: "voices", file: "VoiceProfilesEditor.tsx", band: "orphan", deployable: true,
-    live: [], legacy: [], orphan: ["data/voice-profiles","engine/dialogue-schema"] },
   { id: "weather", file: "WeatherEditor.tsx", band: "orphan", deployable: true,
     live: ["world/zones"], legacy: [], orphan: ["engine/weather"] },
 ]

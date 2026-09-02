@@ -15,7 +15,6 @@ const MapEditor = dynamic(() => import('./editors/MapEditor'))
 const BattleTester = dynamic(() => import('./editors/BattleTester'))
 const ItemEditor = dynamic(() => import('./editors/ItemEditor'))
 const NodeEditor = dynamic(() => import('./editors/NodeEditor'))
-const BeastEditor = dynamic(() => import('./editors/BeastEditor'))
 const BannerEditor = dynamic(() => import('./editors/BannerEditor'))
 const FurnitureEditor = dynamic(() => import('./editors/FurnitureEditor'))
 const StructureBuilder = dynamic(() => import('./editors/StructureBuilder'))
@@ -30,7 +29,6 @@ const ResourcesEditor = dynamic(() => import('./editors/ResourcesEditor'))
 const ToolsEditor = dynamic(() => import('./editors/ToolsEditor'))
 const SkillsEditor = dynamic(() => import('./editors/SkillsEditor'))
 const MovesEditor = dynamic(() => import('./editors/MovesEditor'))
-const VoiceProfilesEditor = dynamic(() => import('./editors/VoiceProfilesEditor'))
 const NPCEditor = dynamic(() => import('./editors/NPCEditor'))
 const DayCycleEditor = dynamic(() => import('./editors/DayCycleEditor'))
 const ManaEditor = dynamic(() => import('./editors/ManaEditor'))
@@ -40,13 +38,12 @@ const WeatherEditor = dynamic(() => import('./editors/WeatherEditor'))
 const MeshBench = dynamic(() => import('./editors/MeshBench'))
 const DoctorPanel = dynamic(() => import('./editors/DoctorPanel'))
 
-type EditorMode = 'index' | 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'beasts' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'voices' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench'
+type EditorMode = 'index' | 'sprites' | 'player' | 'map' | 'battle' | 'items' | 'nodes' | 'banner' | 'furniture' | 'structures' | 'farming' | 'exchange' | 'encounters' | 'alchemy' | 'quests' | 'spinner' | 'evolution' | 'resources' | 'tools' | 'skills' | 'moves' | 'npcs' | 'daycycle' | 'mana' | 'puppet' | 'grimoire' | 'weather' | 'doctor' | 'meshbench'
 
 // Component map — replaces 25 conditional renders
 const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentType<any>; deployable: boolean }> = {
   sprites:    { component: SpriteEditor,        deployable: true },
   player:     { component: PlayerEditor,        deployable: true },
-  beasts:     { component: BeastEditor,         deployable: true },
   items:      { component: ItemEditor,          deployable: true },
   furniture:  { component: FurnitureEditor,     deployable: true },
   nodes:      { component: NodeEditor,          deployable: true },
@@ -68,7 +65,6 @@ const EDITOR_MAP: Record<Exclude<EditorMode, 'index'>, { component: ComponentTyp
   daycycle:   { component: DayCycleEditor,      deployable: true },
   banner:     { component: BannerEditor,        deployable: false },
   spinner:    { component: SpinnerEditor,       deployable: false },
-  voices:     { component: VoiceProfilesEditor, deployable: true },
   puppet:     { component: PuppetEditor,         deployable: false },
   grimoire:   { component: GrimoireEditor,      deployable: false },
   weather:    { component: WeatherEditor,       deployable: true },
@@ -81,7 +77,6 @@ const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; li
     label: 'Sprites',
     tabs: [
       { id: 'player', label: 'Player' },
-      { id: 'beasts', label: "Mana'mals" },
       { id: 'items', label: 'Items' },
       { id: 'nodes', label: 'Nodes' },
     ],
@@ -135,7 +130,6 @@ const TAB_GROUPS: { label: string; tabs: { id: EditorMode; label: string }[]; li
     tabs: [
       { id: 'banner', label: 'Banner' },
       { id: 'spinner', label: 'Spinner' },
-      { id: 'voices', label: 'Voices' },
       { id: 'doctor', label: 'Doctor' },
       { id: 'meshbench', label: 'Mesh Bench' },
     ],

@@ -65,7 +65,7 @@ const has = (p: string) => live.has(join(SRC, p))
 ok(has('app/shimmer/engine/alchemy.ts'), 'CONTROL FAILED: engine/alchemy is not in the voxel closure, but voxel3d imports it — the resolver is broken')
 ok(has('app/shimmer/voxel/greedy.ts'), 'CONTROL FAILED: voxel/greedy is not in the voxel closure')
 ok(!has('app/shimmer/dev/editors/BeastEditor.tsx'), 'CONTROL FAILED: a dev editor is inside the shipped game closure — the closure is not discriminating')
-ok(!has('app/shimmer/sprites/beasts.ts'), 'CONTROL FAILED: sprites/beasts reads as live, but only BeastEditor and the doctor import it')
+ok(!has('app/shimmer/sprites/beasts.ts'), 'CONTROL FAILED: sprites/beasts reads as live — it is PARKED art with no renderer, and its editor and doctor check were deleted 2026-09-02. If this fires, followers reached voxel3d and the park note is stale.')
 
 // ── THE CACHE MATCHES THE DERIVATION ──────────────────────────────────────────────────────────
 // One string compare, because the generator is the single renderer of this file: a field-by-field

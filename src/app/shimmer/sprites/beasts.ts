@@ -1,3 +1,21 @@
+// ⏸ PARKED 2026-09-02 — NOTHING RENDERS THIS, AND ITS EDITOR IS GONE.
+//
+// 1322 lines of hand-painted 32x32 art: five Mana'mal species (drifthorn, dustwhisker, sporeling,
+// glowmite, embermole), each with a full directional idle/walk set plus `happy`. It is real work and
+// it is why this file was NOT deleted alongside `BeastEditor.tsx`.
+//
+// ★ WHAT WAS ACTUALLY WRONG, and it was a closed loop rather than a dead file: `BeastEditor` WROTE
+// this file, `doctor/checks.ts` VALIDATED its palette ranges, and **no game ever read it** — an
+// editor and a guard keeping each other busy over art nothing draws. Both ends are removed now, so
+// the loop is gone. This is the only piece left, and deleting art is Alex's call, not a cleanup.
+//
+// ⚠ DO NOT CONFUSE THIS WITH `beasts/beast.ts`. That is the Mana'mal SYSTEM (species, defs, perks,
+// unlocks) and it is ALIVE in `play3d`, which the voxel port is still mining. If followers land in
+// voxel3d, this art is the obvious input — which is the argument for parking rather than deleting.
+//
+// TO REMOVE IT: delete this file and the `beasts.ts` routing in `save-sprite/route.ts` (which is
+// unreachable now that its editor is gone). Recoverable at 1555ca2 either way.
+
 // Mana'mal sprites — 16x16 pixel art placeholders
 // 5 beasts, 8-directional (flip for left), full animation set
 // Draw real art later, these are silhouette placeholders
