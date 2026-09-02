@@ -57,7 +57,7 @@ import type { ActionId } from '@/lib/input/actions'
 import { uiChain, runChain, SUPPRESS_DEFAULT, type Step as UiStep } from './ui-chain'
 import { poll as pollPad, resetEdges, type PadSample, type PadKind } from '@/lib/input/gamepad'
 import BindingsPanel from './BindingsPanel'
-import { hintsFor } from '@/lib/input/hints'
+import { hintsFor, hintFor } from '@/lib/input/hints'
 import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
   bedsToSave, bedsFromSave, type PlantedBeds,
@@ -348,7 +348,8 @@ const CAST_ACTIONS: readonly ActionId[] =
 import { RUNES } from '../play3d/birth/runes.data'
 import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
 import { CAST_SLOTS, ALL_BANDS, derivePassive, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
-import { loadLoadout, saveLoadout, setSlot, type Loadout } from '../play3d/loadout'
+import { saveLoadout, setSlot, resolveLoadout, emptySlotSentence, emptySlotWhy,
+         type Loadout, type ResolvedLoadout } from '../play3d/loadout'
 import { keeperBook } from '../play3d/book'
 import { VoxelMap, VoxelMiniMap, MAP_W, MAP_H, toLocal } from './VoxelMap'
 import { loadSeen, saveSeen, see, CELL, type Seen } from './discovery'
@@ -1529,14 +1530,26 @@ export default function VoxelWorld() {
       const report = (rv: RuneInventory, lead: string) => {
         const names = rv.owned.map(id => RUNES.find(r => r.id === id)?.name ?? id)
         const moves = knownMoves(rv.owned)
-        const bound = loadLoadout(rv.owned, rv.birth, keeperBook(rv.owned)).filter(Boolean).length
+        const res = resolveLoadout(rv.owned, rv.birth, keeperBook(rv.owned))
+        const bound = res.slots.filter(Boolean).length
         // ⚠ Sized from the band list, never a literal. This read `/4` until 2026-08-26 — a number
         // left over from the four-slot bar, still parsing perfectly while overstating the denominator
         // by half on every dev readout that quoted it.
+        //
+        // ── ★★ AND IT NAMES THE EMPTY SLOTS (2026-09-02) ──────────────────────────────────────
+        // `bound/2` was the closest thing to a diagnostic this game had for "why can I not cast",
+        // and it reported the SYMPTOM. A keeper reading `1 move known · 0/2 cast slots bound` knows
+        // the two halves disagree and cannot find out why — which is the position Alex was in for a
+        // session. The reasons come from the same resolve as the count, so this line cannot claim a
+        // cause the cast bar would contradict.
+        const empties = ALL_BANDS
+          .map((kind, i) => (res.slots[i] ? null : `${kind}: ${emptySlotWhy(res.why[i] ?? 'cleared')}`))
+          .filter((x): x is string => x !== null)
         const tail = moves.length === 0
           ? 'no move answers to it yet — the Schools have not written one'
           : `${moves.length} move${moves.length === 1 ? '' : 's'} known · ${bound}/${ALL_BANDS.length} cast slot${bound === 1 ? '' : 's'} bound`
-        return `${lead}${names.join(', ') || 'nothing'} — ${tail}`
+        const gap = empties.length ? ` · ${empties.join(' · ')}` : ''
+        return `${lead}${names.join(', ') || 'nothing'} — ${tail}${gap}`
       }
       if (!arg) return report(inv, inv.owned.length === 1 ? 'born of ' : 'you hold ')
       if (!isOwner) return 'a rune is trained, not typed — bare /rune reads your hand'
@@ -3051,7 +3064,19 @@ function LoadoutTab() {
   // moment this panel opened, and a slot list that re-derived mid-interaction would change its
   // options under the cursor.
   const [book] = useState(() => keeperBook(owned))
-  const [slots, setSlots] = useState<Loadout>(() => loadLoadout(owned, birth, book))
+  /**
+   * ★ ONE RESOLVE, SEEDING BOTH THE BINDS AND THE REASONS. `resolveLoadout` decides them in a single
+   * pass, so a slot's emptiness and its explanation can never describe different saves.
+   *
+   * ⚠ `initial.why` IS THE LOAD-TIME TRUTH AND IS DELIBERATELY NOT REFRESHED. It answers *"why was
+   * this empty when you walked in"*, which is the only question a keeper cannot answer themselves; a
+   * slot they clear WHILE LOOKING AT IT needs no explanation, and falls back to `cleared` below,
+   * which is exactly what they just did. Re-resolving on every bind would also read back through
+   * `saveLoadout`, so in private mode a pick would visibly snap back — truthful, but a UX change
+   * nobody asked for.
+   */
+  const [initial] = useState(() => resolveLoadout(owned, birth, book))
+  const [slots, setSlots] = useState<Loadout>(initial.slots)
   const [picking, setPicking] = useState<number | null>(null)
   // The one always-on passive — derived, capped at one, never chosen. Null if the keeper's runes
   // have taught them none, in which case the section renders nothing (an empty frame would assert a
@@ -3089,6 +3114,17 @@ function LoadoutTab() {
               <span className={`text-[12px] ${spec ? (isBuilt(bound) ? 'text-amber-200/90' : 'text-white/40') : 'text-white/25'}`}>
                 {spec ? spec.label : '— empty —'}
               </span>
+              {/* ★★ THE EMPTY SLOT SAYS WHY (2026-09-02). It used to say only '— empty —', and the
+                  cast refusal behind it asserted 'your book has none for your runes' whatever the
+                  cause — so a keeper whose SAVE was empty was told their runes were, went looking
+                  for an acquisition path that was not the problem, and stopped. The sentence comes
+                  from `emptySlotSentence`, never restated here, so the bar and the say-line cannot
+                  drift. No panel key in it: the keeper is already in the panel. */}
+              {!spec && (
+                <span className="text-[9px] text-white/30">
+                  {emptySlotWhy(initial.why[i] ?? 'cleared')}
+                </span>
+              )}
               {spec && !isBuilt(bound) && (
                 <span className="text-[9px] uppercase tracking-[0.14em] text-amber-200/40">unbuilt</span>
               )}
@@ -5934,7 +5970,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // writes a read-only view into a ref the HUD holds. Copying the arrays would be a mirror; this
   // writes the live ones, so the gauge cannot disagree with the dispatcher that refuses the cast.
   useEffect(() => {
-    castOut.current = { ids: loadout.current, until: castCd.current }
+    castOut.current = { ids: loadoutRes.current.slots, until: castCd.current }
   })
   /** Slot pressed this frame, consumed by the frame loop. -1 = nothing. */
   const pendingCast = useRef<number>(-1)
@@ -5960,9 +5996,17 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const stance = useRef<CastSpec | null>(derivePassiveSpec())
   const surge = useRef<{ until: number; mult: number } | null>(null)
   const infusion = useRef<{ until: number; mult: number } | null>(null)
-  const loadout = useRef<(string | null)[]>((() => {
+  /**
+   * The binds AND why each empty slot is empty, held as ONE value.
+   *
+   * ★★ ONE REF RATHER THAN TWO, BECAUSE THEY MUST DESCRIBE THE SAME SAVE. Two refs written at two
+   * sites is a mirror waiting to happen: the bar would hold one read of the store and the sentence
+   * another, and the day they disagreed the game would explain an empty slot that was not empty, or
+   * fill one it had just explained. `resolveLoadout` decides both in a single pass.
+   */
+  const loadoutRes = useRef<ResolvedLoadout>((() => {
     const inv = loadRuneInventory()
-    return loadLoadout(inv.owned, inv.birth, keeperBook(inv.owned))
+    return resolveLoadout(inv.owned, inv.birth, keeperBook(inv.owned))
   })())
   /**
    * The rune inventory changed (today only `/rune`; tomorrow the Passage). Re-resolve rather than
@@ -5976,7 +6020,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     runeTickSeen.current = runeTick
     {
       const inv = loadRuneInventory()
-      loadout.current = loadLoadout(inv.owned, inv.birth, keeperBook(inv.owned))
+      loadoutRes.current = resolveLoadout(inv.owned, inv.birth, keeperBook(inv.owned))
     }
     // The passive is derived from the same runes, so a rune change can open, close or swap it — keep
     // the always-on stance in step with the loadout it is derived alongside.
@@ -6012,8 +6056,29 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       now: performance.now(), hp: v.hp, hpMax: v.hpMax, mana: m.cur,
       cooldownUntil: castCd.current, stanceMoveId: stance.current?.moveId ?? null, supports,
     }
-    const out = resolveCast(slot, loadout.current, env)
-    if (out.kind === 'refused') { onSay(out.message); return }
+    const out = resolveCast(slot, loadoutRes.current.slots, env)
+    if (out.kind === 'refused') {
+      // ── ★★★ THE ENGINE CANNOT KNOW WHY A SLOT IS EMPTY, AND ITS SENTENCE CLAIMS TO ───────────
+      // `engine/cast-dispatch` answers `empty-slot` with *"your book has none for your runes"* —
+      // one of three possible causes, asserted as fact from the bound ids alone, which are the one
+      // thing that cannot tell them apart. It is not the engine's fault: it never sees the save or
+      // the runes. The host does, so the true sentence belongs here.
+      //
+      // ⚠ MEASURED 2026-09-02, AND IT COST A SESSION. A keeper born of TEMPEST knows Squall, Squall
+      // is built, `field` is in `supports` — and the slot resolved empty because a save said so.
+      // The game told them their runes had no move, so they went looking for an acquisition path
+      // that was never the problem. A wrong explanation does not merely misinform, it CANCELS THE
+      // LOOK — the same failure as a stale note, wearing a different hat.
+      //
+      // ★ The panel key is read from the live bindings, never spelled: it is rebindable, and a
+      // literal here would be a copy of a binding the player can change.
+      const why = out.reason === 'empty-slot' ? loadoutRes.current.why[slot] : null
+      onSay(why
+        ? emptySlotSentence(ALL_BANDS[slot] ?? 'slot', why,
+                            hintFor(bindings.current, 'ui.inventory', 'key') ?? undefined)
+        : out.message)
+      return
+    }
 
     // One apply, no archetype branching — every effect field is neutral when it does not apply,
     // which is the entire point of the outcome being a description rather than an action.

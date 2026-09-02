@@ -9,7 +9,8 @@
 // It stores choices only. Every rule about what may go in a slot stays in `cast.ts` (`canSlot`),
 // so there is one definition of legality and this file cannot drift from it.
 
-import { ALL_BANDS, canSlot, defaultLoadout } from './cast'
+import { ALL_BANDS, canSlot, defaultLoadout, eligibleMoves } from './cast'
+import type { SlotKind } from './cast'
 import type { Book } from './scroll-market'
 import { keeperKey } from '@/lib/keeper-local'
 
@@ -113,36 +114,128 @@ export function isLegacyLoadout(saved: unknown[]): boolean {
  * does nothing, which is precisely the "cast is broken" report `cast.ts`'s honesty rule was written
  * to prevent.
  */
-export function loadLoadout(owned: string[], birth: string | null, book: Book): Loadout {
+/**
+ * ── ★★★ WHY A SLOT IS EMPTY — THREE SITUATIONS THAT LOOK IDENTICAL ON THE BAR ─────────────────
+ *
+ * An empty cast slot is not one state, it is three, and a keeper needs a different thing from each:
+ *
+ *   `no-move`  nothing they have learned fits this slot        → the honest "your book has none"
+ *   `cleared`  a save exists and this slot is empty in it      → they can fix it, in the panel, now
+ *   `dropped`  a bind was stored and is no longer legal        → something they HAD went away
+ *
+ * ⚠⚠ AND THE GAME ALREADY ASSERTED ONE OF THEM UNCONDITIONALLY. `engine/cast-dispatch.ts` answers
+ * an empty slot with *"your book has none for your runes"* — which is `no-move` stated as fact, with
+ * no way to know it. Measured 2026-09-02: a keeper born of TEMPEST knows Squall, Squall is built,
+ * `field` is supported, and the loadout still resolved empty because a save said so. The game told
+ * them their runes had no move. **They concluded the acquisition path was unbuilt and stopped
+ * looking** — a whole session lost to a sentence that was confidently wrong about its own cause.
+ *
+ * ★ SO THE REASON IS DERIVED WHERE THE DECISION IS MADE, AND NOWHERE ELSE. Every branch below that
+ * yields a null already knows why it did; a second function re-deriving it from the outside would be
+ * a hand-kept mirror of this one, agreeing with itself while drifting — the exact shape this repo
+ * keeps filing. `loadLoadout` is now a thin wrapper so the two answers cannot come apart.
+ */
+export type EmptyReason = 'no-move' | 'cleared' | 'dropped'
+
+export interface ResolvedLoadout {
+  slots: Loadout
+  /** Index-aligned with `slots`. `null` wherever the slot is FILLED — never a reason for a bound slot. */
+  why: (EmptyReason | null)[]
+}
+
+/**
+ * The one sentence for an empty slot, so the HUD and the panel cannot say different things.
+ *
+ * ⚠ `openKey` IS PASSED IN, NEVER SPELLED HERE. The key that opens the panel is rebindable
+ * (`lib/input/bindings`), so a literal "I" in this file would be a copy of a binding that a player
+ * can change — the mirror problem again, in miniature. A caller that has the real binding passes it;
+ * one that does not (the panel itself, where the keeper is already looking) omits it and says less.
+ */
+export function emptySlotWhy(reason: EmptyReason, openKey?: string): string {
+  const fix = openKey ? ` (${openKey} to pick one)` : ''
+  switch (reason) {
+    case 'no-move': return 'nothing you have learned fits this slot'
+    case 'cleared': return `your saved loadout leaves it empty${fix}`
+    case 'dropped': return `what was here no longer fits, so it was unbound${fix}`
+  }
+}
+
+/**
+ * The full line, for a caller with no slot label of its own on screen.
+ *
+ * ⚠⚠ IT COMPOSES FROM `emptySlotWhy` AND CALLERS MUST NOT STRIP THE LEAD BACK OFF. The first version
+ * of the panel did exactly that — `.replace(\`no ${kind} bound — \`, '')` — and `String.replace`
+ * with a pattern that stops matching returns the string UNCHANGED and throws nothing, so the day the
+ * wording moved the panel would have quietly printed the whole sentence inside a 9px span. Ask for
+ * the half you want; never take the whole and cut.
+ */
+export function emptySlotSentence(kind: string, reason: EmptyReason, openKey?: string): string {
+  return `no ${kind} bound — ${emptySlotWhy(reason, openKey)}`
+}
+
+/**
+ * The loadout AND why each empty slot is empty, decided in one pass.
+ *
+ * ★ A saved null on a keeper with nothing eligible reports `no-move`, not `cleared`. Both are true;
+ * only one is the root cause, and *"your saved loadout leaves it empty"* invites a keeper to go and
+ * pick a move that does not exist. Prefer the reason that names what they can actually act on.
+ */
+export function resolveLoadout(owned: string[], birth: string | null, book: Book): ResolvedLoadout {
+  // No save of any kind → the starting kit. A null here can only ever be `no-move`: the default
+  // took the first eligible move per slot, so an empty slot means there was nothing to take.
+  const kit = (): ResolvedLoadout => {
+    const slots = defaultLoadout(owned, birth, book)
+    return { slots, why: slots.map((id) => (id ? null : 'no-move')) }
+  }
   let raw: string | null = null
   try {
     raw = localStorage.getItem(keeperKey(LOADOUT_KEY))
   } catch {
-    return defaultLoadout(owned, birth, book)  // private mode — a keeper who cannot save still gets a kit
+    return kit()
   }
-  if (!raw) return defaultLoadout(owned, birth, book)
+  if (!raw) return kit()
 
   let saved: unknown
   try {
     saved = JSON.parse(raw)
   } catch {
-    return defaultLoadout(owned, birth, book)  // corrupt JSON reads as "never chosen", not as an empty loadout
+    return kit()
   }
-  if (!Array.isArray(saved)) return defaultLoadout(owned, birth, book)
+  if (!Array.isArray(saved)) return kit()
 
-  // ★ RE-SEAT BEFORE VALIDATING, NEVER AFTER. `canSlot` asks whether a move is legal in a slot
-  // NUMBER, so validating first would judge every legacy id against the wrong slot and null it —
-  // the migration would then be handed an already-emptied array and faithfully preserve nothing.
-  // The order is the whole fix.
   const seated: (string | null)[] = isLegacyLoadout(saved)
     ? migrateLegacyLoadout(saved.map((id) => (typeof id === 'string' ? id : null)), ALL_BANDS)
     : saved.map((id) => (typeof id === 'string' ? id : null))
 
-  return ALL_BANDS.map((_, i) => {
+  const slots: Loadout = []
+  const why: (EmptyReason | null)[] = []
+  ALL_BANDS.forEach((kind, i) => {
     const id = seated[i]
-    if (typeof id !== 'string') return null
-    return canSlot(owned, birth, i, id, book) ? id : null
+    const anyEligible = () => eligibleMoves(owned, birth, kind as SlotKind, book).length > 0
+    if (typeof id !== 'string') {
+      slots.push(null)
+      why.push(anyEligible() ? 'cleared' : 'no-move')
+      return
+    }
+    if (!canSlot(owned, birth, i, id, book)) {
+      slots.push(null)
+      // ★ `dropped` stands even when nothing else is eligible. The keeper had something and it went
+      // away; that is the fact they are missing, and it is not the same news as "you never had one".
+      why.push('dropped')
+      return
+    }
+    slots.push(id)
+    why.push(null)
   })
+  return { slots, why }
+}
+
+export function loadLoadout(owned: string[], birth: string | null, book: Book): Loadout {
+  // ★ A THIN WRAPPER ON PURPOSE. Every caller that only wants the binds keeps its old signature,
+  // and there is exactly ONE implementation of the decision — so the slots and the reasons can
+  // never disagree about the same save. Re-implementing the branches here to "avoid the extra
+  // object" is how a mirror gets born.
+  return resolveLoadout(owned, birth, book).slots
 }
 
 /**
