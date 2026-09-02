@@ -185,14 +185,25 @@ that swaps in the shot reader has every Firewall parrying). A press/ambush lands
 not a blow. cast-fields **51/0** (+11), 5 mutations fire on named asserts, control green; sweep **224/224**, tsc 7,
 served == disk == public. ⚠ One mutation SURVIVED the first pass: the host could say *takes the blow* and never
 charge the shell — an immortal door with a working say-line. A guard on the write-back closed it.
-⚠ **Still not modelled:** a worn shell looks identical to a fresh one until it goes. Jin's call; on the board, not
-in a comment only.
+~~⚠ a worn shell looks identical to a fresh one until it goes~~ → **RULED by Alex: *"make a worn shell look worn
+and fractured."*** Built `9dd9b5d` (+ `56b737b` bands cache: the voxel3d closure grew 210 → 211 by the new crack
+module, no band moved — the sweep caught it and I had chained the commit ahead of reading the exit line; fixed
+forward, nothing pushed red), LIVE in `BUILD_ID jZbHQ3vRXkRJtXcETgZfN`. `Field.hpMax` + `shellWear` in the engine
+(one denominator for picture and mechanic). `voxel3d/shell-cracks.ts`: a 4-tier ladder (tier 0 = exactly wear 0,
+**any blow is at least tier 1**), opacity thinning per tier, and 0/2/5/10 deterministic jagged crack lines from the
+rim down, lifted a hair off the body. The host builds `SHELL_TIERS` materials + crack geometries ONCE in `useMemo`
+and SWAPS references per tier — no per-mesh material state (render-audit green). A worn shell also shivers (pulse
+rate/amp read wear). shell-wear **30/0**, 12 mutations 11 fire, control green; sweep **225/225**, tsc 7. ⚠ One
+survivor on the first pass: the lift assert compared against the constant it guards, so lowering the constant
+passed — pinned as a number now. ⚠ **NOT LOOKED AT: I have not seen a cracked shell rendered.** The ladder, the
+geometry and the host mapping are asserted headless; whether ten lines on a 2.4-radius cylinder READ as fractured
+at play distance is Alex's eye, and if it reads as a halo the lift (1.02) or the line opacity (0.85) is the dial.
 
 ### Next
 - **⏭ Alex, born of Barrier: press the tactical key at a doorway, then shoot your own door** — a Keenshard
   should shatter it in one, a light bolt should not. Say whether 20 reads as *a few breaths* or as paper.
-- **Stand inside your own door and let a warden press it** — it should say *takes the blow* twice and
-  *shattered* on the third. Then rule whether a worn shell should look worn.
+- **Stand inside your own door and let a warden press it** — *takes the blow* twice, *shattered* on the
+  third, and **the door should thin and crack between blows**. Say whether the cracks read, or halo.
 - **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
   and pick Squall — and the bar will say so instead of blaming his runes.
 - ~~3 of 20 birth runes (barrier, dust, vapor) seat no tactical at all~~ **Re-measured: 1 of 17, Barrier — ruled and built as Threshold the same evening.** — `no-move` still says so out
