@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🔭 Shimmer — **THE DEV SURFACE: 15 OF 16 PAGES WERE URL-ONLY, AND THREE OF THEM COULD NOT SEE THEIR OWN SUBJECT** (2026-09-01, hub lane) · *Last touched 2026-09-01 — `060a6fd` `5a89236` `3b24d43` `b00e120` `00b6985` pushed and LIVE in `BUILD_ID NTo6mijWQBlleLjvJZj_L`, 169 chunks (served md5 == disk md5 on both changed chunks, positive markers present, control absent). dev-pages **205/0**, dev-claims **7/0**, grey-readout **9/0/0**, break-framing **33/0**, dev-eye **22/22**. Sweep **218/218 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon 0.*
+## 🔭 Shimmer — **THE DEV SURFACE: 15 OF 16 PAGES WERE URL-ONLY, AND THREE OF THEM COULD NOT SEE THEIR OWN SUBJECT** (2026-09-01, hub lane) · *Last touched 2026-09-02 — `060a6fd` `5a89236` `3b24d43` `b00e120` `00b6985` LIVE in `BUILD_ID NTo6mijWQBlleLjvJZj_L`; `521f25e` `7131148` (tools + sweep scope) pushed, dev-only so nothing to deploy, 169 chunks (served md5 == disk md5 on both changed chunks, positive markers present, control absent). dev-pages **205/0**, dev-claims **7/0**, grey-readout **9/0/0**, break-framing **33/0**, dev-eye **22/22**. Sweep **219/219 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), canon 0.*
 
 ### What Alex asked for
 *"id like to spend our first session organizing and improving the dev side of our game i feel like there is way more than i even know about lol so at the very least i should be able to navigate trough it."* The number is the argument: **16 standalone pages under `/shimmer/dev/`, exactly ONE linked from anywhere.** 14 were built Aug 23-31, several of them BECAUSE he said he was flying blind, then shipped into a place he could not click to. The Ctrl-K palette that would have surfaced them already existed, with **two** navigate entries in it.
@@ -39,10 +39,17 @@ None was caught by care. Each was caught by a **control**.
 - `dev/ring`'s control moves the keeper, never the resident — the placement you judge must stay the placement the world makes, or the page becomes a picture of its own opinion.
 - **`dev/moves` line 257** claimed meltbore was unbuilt *"because no host holds a key down"*. False since the host wired it. Corrected, and guarded **bidirectionally** by `dev-claims.test.ts`: the page must not carry the phrase AND the host symbol must still be there, or the guard goes quiet exactly when the old claim becomes true again.
 
-### Next
-- **ALEX'S CALL, and the page now lets him look at it:** if residents live ~50m out at 4-50cm, a keeper standing in their own fold cannot see them **in the WORLD** either. Design question about the ring, not a dev-page bug.
+### The layer under it — the tools got names too (`521f25e`, `7131148`)
+- **73 scripts, 9 npm names.** `page-shot.mts` was typed by hand a dozen times in one session. **35 named now**, grouped so related tools sit together: `shot` / `shot:page` / `shot:icons` · `tour:land` / `tour:dens` / `tour:terrain` · `check:map|brew|moves|void|greg|infuse|bridges` · `read:ruin|town|tree|leaves` · `sweep:ruins` / `sweep:mist` · `art:spirits` / `art:png2sprite` · and **`mutate`**, the harness this tree's whole practice runs on, which had no name at all.
+- ⚠ **I named THREE of the six `*-check` probes first, which is worse than naming none** — a half-named family reads as *"the others do not exist"*. Completed it.
+- `npm run tools` prints the catalogue, **read out of the script headers, never retyped**; `--all` also lists the **50 still unnamed**, because showing only what IS named looks complete at any coverage. Most of the 50 describe themselves as throwaway or one-off and should stay that way.
+- ⚠ `holds` was declared as bare `tsx scripts/board-holds.mts` — resolves only where `tsx` happens to be on PATH. The hand-rolled-runner problem in miniature. Normalised, and asserted.
+- **★★★ AND THE SWEEP WALKED `src/` ALONE, so `scripts/tools.test.ts` — the guard written to stop tool names rotting — WAS RUN BY NOBODY.** It passed 108 asserts on demand and was **absent from a green 218/218**. One push from shipping a guard believed to be covered. Widened to walk both trees, so a guard beside its tool joins by EXISTING. **218 → 219.**
+- ⚠ **Verified by NAME with a negative control, not by the count rising.** The first check grepped a background log and found nothing — that task was piped through `tail -3`, so the log held only the summary and had no per-suite lines to match. It could not have found the guard whatever the truth was.
+
+### Next — all three are Alex's, none are builds
+- **The ring, in the WORLD:** if residents live ~50m out at 4-50cm, a keeper standing in their own fold cannot see them there either. Design question, not a dev-page bug — and the bench now lets him look at it.
 - **Open measurement, deliberately not asserted:** at 2m a resident occupied roughly **7x7px** where `creature-size.ts` implies ~21px for a 4cm firefly at this fov. Wrong species, a halo, or a real sizing gap — needs a per-species measurement nobody has done.
-- Name ~15 of the **64 unnamed scripts** in `scripts/` (9 of 73 have npm aliases today).
 - `dev/voice-test` is **Luna voice casting**, not game dev, and has sat in the Shimmer dev folder since June 13. Needs a home ruling.
 
 ### Files
