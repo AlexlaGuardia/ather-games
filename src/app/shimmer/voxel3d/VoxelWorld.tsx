@@ -272,8 +272,9 @@ import { ResourceBars } from './resource-bars'
 import { CastGauges, type CastHud } from './cast-gauges'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
-import { spawnField, tickFields, containsVolume, fieldsAtVolume, absorbShotAtVolume, absorbStrikeAtVolume,
+import { spawnField, tickFields, containsVolume, fieldsAtVolume, absorbShotAtVolume, absorbStrikeAtVolume, shellWear,
          FIELD_HEIGHT, type Field } from '../engine/field-effects'
+import { SHELL_TIERS, wearTier, tierOpacity, crackSegments } from './shell-cracks'
 import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured } from '../engine/conjured-terrain'
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
          type StatusBag } from '../engine/statuses'
@@ -5632,6 +5633,23 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     color: 0xaef2ff, transparent: true, opacity: 0.17, side: THREE.DoubleSide,
     depthWrite: false, toneMapped: false,
   }), [])
+  // ── ★ A WORN SHELL LOOKS WORN AND FRACTURED (Alex ruled 2026-09-02) — SHARED TIERS, NOT PER-MESH ──
+  // `SHELL_TIERS` body materials (thinner as it wears) and `SHELL_TIERS` crack geometries (more
+  // cracks as it wears), built ONCE here and pointed at by reference in the loop. Which tier is a
+  // pure question (`shell-cracks.ts`), so the picture is asserted headless. Tier 0 is the plain
+  // `fieldMat` and an empty crack set: an unbreakable field never leaves it.
+  const shellMats = useMemo(() => Array.from({ length: SHELL_TIERS }, (_, t) => {
+    const m = fieldMat.clone(); m.opacity = tierOpacity(t, fieldMat.opacity); return m
+  }), [fieldMat])
+  const crackGeos = useMemo(() => Array.from({ length: SHELL_TIERS }, (_, t) => {
+    const gm = new THREE.BufferGeometry()
+    gm.setAttribute('position', new THREE.BufferAttribute(crackSegments(t), 3))
+    return gm
+  }), [])
+  const crackMat = useMemo(() => new THREE.LineBasicMaterial({
+    color: 0xaef2ff, transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false,
+  }), [])
+  const crackMeshes = useRef(new Map<number, THREE.LineSegments>())
 
   // ── the Hollows (body blockout — see hollows.ts for the canon) ────────────────────────────────
   // ONE shared geometry and material for every Hollow that will ever body (render-audit rule).
@@ -6529,18 +6547,36 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           }
           // A mend breathes slowly; a bite flickers. Motion is the ONLY tell available — canon puts
           // colour on the caster's soul, not the move, so two fields of one keeper share a hue.
-          const rate = fd.hps > 0 ? 1.4 : 7.5
-          const amp = fd.hps > 0 ? 0.05 : 0.02
+          // A worn shell also SHIVERS: the pulse gets faster and rougher with wear. Motion is the
+          // one tell the colour rule leaves, and a door about to go should not breathe evenly.
+          const wear = shellWear(fd)
+          const rate = (fd.hps > 0 ? 1.4 : 7.5) * (1 + wear * 1.5)
+          const amp = (fd.hps > 0 ? 0.05 : 0.02) + wear * 0.04
           const pulse = 1 + Math.sin(nowMs * 0.001 * rate + fd.id) * amp
           mesh.scale.set(fd.radius * pulse, fd.height, fd.radius * pulse)
           // CylinderGeometry is centred on its own origin, so the slab's midpoint is half its height
           // above the ground line it was stamped with.
           mesh.position.set(fd.x, fd.y + fd.height / 2, fd.z)
+          // ★ WEAR IS A TIER SWAP, NEVER MATERIAL STATE: point the body at the shared tier material
+          // and the crack lines at the shared tier geometry. Tier 0 (unbreakable, or unhurt) is the
+          // plain material and an empty crack set, so a Firewall costs nothing extra here.
+          const tier = wearTier(wear)
+          if (mesh.material !== shellMats[tier]) mesh.material = shellMats[tier]
+          let cracks = crackMeshes.current.get(fd.id)
+          if (!cracks) {
+            cracks = new THREE.LineSegments(crackGeos[tier], crackMat)
+            g.add(cracks)
+            crackMeshes.current.set(fd.id, cracks)
+          } else if (cracks.geometry !== crackGeos[tier]) cracks.geometry = crackGeos[tier]
+          cracks.scale.copy(mesh.scale)
+          cracks.position.copy(mesh.position)
         }
         for (const [id, mesh] of fieldMeshes.current) {
           if (live.has(id)) continue
           g.remove(mesh)
           fieldMeshes.current.delete(id)
+          const cracks = crackMeshes.current.get(id)
+          if (cracks) { g.remove(cracks); crackMeshes.current.delete(id) }
         }
       }
 

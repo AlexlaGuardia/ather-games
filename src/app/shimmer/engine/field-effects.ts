@@ -87,6 +87,8 @@ export interface Field extends FieldDef {
   until: number
   /** ms timestamp of the next effect tick */
   nextTick: number
+  /** `hp` as spawned — the denominator of `shellWear`. 0 for cover that does not break. */
+  hpMax: number
 }
 
 /** one effect application per second — slow enough to read, fast enough to matter */
@@ -104,7 +106,7 @@ export function resetFieldIds(): void { nextId = 1 }
  * new one — a player who just paid mana must always see their cast happen.
  */
 export function spawnField(fields: Field[], def: FieldDef, now: number): Field[] {
-  const f: Field = { ...def, id: nextId++, until: now + def.secs * 1000, nextTick: now + FIELD_TICK_MS }
+  const f: Field = { ...def, id: nextId++, until: now + def.secs * 1000, nextTick: now + FIELD_TICK_MS, hpMax: def.hp }
   const kept = fields.length >= MAX_FIELDS ? fields.slice(1) : fields
   return [...kept, f]
 }
@@ -155,6 +157,17 @@ export function blocksShotAt(fields: Field[], x: number, z: number): boolean {
  */
 export function blocksShotAtVolume(fields: Field[], x: number, y: number, z: number): boolean {
   return fields.some((f) => f.stopsShots && containsVolume(f, x, y, z))
+}
+
+/**
+ * How worn a shell is, 0 (as cast) → 1 (about to go). Unbreakable cover is never worn: it has no
+ * body to wear. Ruled by Alex 2026-09-02 ("make a worn shell look worn and fractured") — the host
+ * reads THIS, never `hp` directly, so the picture and the mechanic cannot use two different
+ * denominators.
+ */
+export function shellWear(f: Field): number {
+  if (f.hpMax <= 0) return 0
+  return Math.min(1, Math.max(0, 1 - f.hp / f.hpMax))
 }
 
 /** What a round that met cover did to it. `hit` is the field that ate the round (null = nothing did). */
