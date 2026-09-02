@@ -1,17 +1,17 @@
-// ── Every birthable rune seats a starting tactical — and the one that does not is DECLARED ──────
+// ── Every birthable rune seats a starting tactical — and the one that once did not is now guarded by name ──
 // Run: npx tsx src/app/shimmer/play3d/birth-tactical.test.ts
 //
 // Canon (`moves.md` › Doubled focus, amended 2026-08-15): every rune has a one-rune tactical and every
 // keeper is BORN holding theirs. The play-lane note of 2026-09-02 counted "3 of 20 birth runes seat no
 // tactical" — but the birth carousel offers 17, not 20: Static / Dust / Vapor are `lostState` and are
-// kept off it by canon's own ruling. Re-measured, the player-facing count is ONE, and it is Barrier.
+// kept off it by canon's own ruling. Re-measured, the player-facing count was ONE, and it was Barrier.
 //
-// ⚠ THIS FILE IS NOT AN EXEMPTION LIST; IT IS AN EXEMPTION WITH AN EXPIRY. Barrier is allowed to seat
-// nothing ONLY while the gap that names it is still [OPEN] in CANON_GAPS.md AND no one-rune Barrier
-// tactical has landed in the registry. Either event turns this red, naming Barrier, so the day Magii
-// registers the move (or rules there is none) somebody has to come back here and either build it or
-// rewrite the premise. A hand-kept "known gaps" list is the thing still sitting there a month after the
-// gap closed (PATTERNS 08-22: "write the exemption so it EXPIRES").
+// ★ THE EXCEPTION THIS FILE SHIPPED WITH HAS EXPIRED, THE WAY IT WAS BUILT TO. Its first version let
+// Barrier seat nothing ONLY while the gap naming it was [OPEN] and no one-rune Barrier tactical existed,
+// asserting both. Magii ruled the same evening (`Threshold`, name locked by Alex 2026-09-02), the flip to
+// [RULED] turned this red, and the row landed. Section C now guards the RESULT instead: the ruled gap is
+// there, once, and the build's row carries canon's name verbatim — the canon gate checks that too, but
+// this file is where the next reader of "born holding nothing" will look.
 
 import { readFileSync } from 'node:fs'
 import { noComments } from '../testing/guard'
@@ -33,8 +33,7 @@ const store: Record<string, string> = {}
 }
 
 const GAPS = '/root/athernyx/CANON/CANON_GAPS.md'
-const GAP_TITLE = '## [OPEN] Barrier has no doubled-focus tactical'
-const EXCEPTION = new Set(['barrier'])
+const GAP_TITLE = '## [RULED] Barrier has no doubled-focus tactical'
 
 const birthable = ELEMENTS.flatMap((e) => runesOf(e.id))
 const lost = RUNES.filter((r) => r.lostState).map((r) => r.id).sort()
@@ -55,23 +54,20 @@ for (const r of birthable) {
   // answers for all sixteen and every one of them reads as "born holding nothing". It did.
   for (const k of Object.keys(store)) delete store[k]
   const seated = resolveLoadout([r.id], r.id, keeperBook([r.id])).slots[tIdx]
-  const has = oneRuneTactical(r.id).length > 0
-  if (EXCEPTION.has(r.id)) {
-    chk(`★ ${r.name}: the exception still holds — NO one-rune tactical registered (else build it and delete the exception)`,
-      !has && !seated, has ? `registry now has: ${oneRuneTactical(r.id).map((m) => m.id).join(',')}` : `seated ${seated}`)
-  } else {
-    chk(`${r.name}: a one-rune tactical exists`, has)
-    chk(`${r.name}: a fresh keeper is born with it seated`, !!seated)
-  }
+  chk(`${r.name}: a one-rune tactical exists`, oneRuneTactical(r.id).length > 0)
+  chk(`${r.name}: a fresh keeper is born with it seated`, !!seated)
 }
 
-console.log('\n── C. the exception\'s premise is still true in canon ──')
+console.log('\n── C. the Barrier ruling is in canon, once, and the build carries its name verbatim ──')
 const gaps = readFileSync(GAPS, 'utf8')
 const n = gaps.split(GAP_TITLE).length - 1
-chk('★★ the Barrier gap is filed, ONCE, and still [OPEN] — when it flips to [RULED] this goes red on purpose',
-  n === 1, n === 0 ? 'no [OPEN] entry with that title: ruled? then build the move and retire the exception' : `matched ${n}`)
-chk('★ and the exception set is exactly the runes the gap names (no silent widening)',
-  [...EXCEPTION].join(',') === 'barrier')
+chk('★★ the Barrier gap is [RULED], once', n === 1, `matched ${n}`)
+const row = KEEPER_MOVES.find((m) => m.id === 'threshold')
+chk('★ the build registers Barrier\'s doubled focus as a one-rune tactical', !!row && row.tier === 'tactical' && row.runes.join() === 'barrier')
+const canonRow = readFileSync('/root/athernyx/CANON/game/moves.md', 'utf8').match(/^\| \*\*(Threshold)\*\* \| Barrier \+ Barrier \(doubled focus\)/m)
+chk('★★ ...under the name canon locked, verbatim (`moves.md` row, not this file, is the source)', !!canonRow && row?.name === canonRow[1])
+for (const k of Object.keys(store)) delete store[k]   // same fixture rule as section B: one keeper per resolve
+chk('★ a Barrier-born keeper is born holding it', resolveLoadout(['barrier'], 'barrier', keeperBook(['barrier'])).slots[tIdx] === 'threshold')
 
 console.log('\n── D. the dev readout says a lost-state birth is canon, not a registry gap ──')
 // Literal-bearing asserts read `noComments`, never `codeOnly` (which blanks string bodies).

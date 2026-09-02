@@ -301,6 +301,18 @@ export const KEEPER_MOVES: KeeperMove[] = [
   // is not defeating, so it never opens a collar and it is not trying to.
   { id: 'hush', name: 'Hush', tier: 'tactical', runes: ['mist'],
     effect: 'Vapor spread wide and carrying nothing but itself — sight goes soft, sound goes flat, edges stop agreeing on where they are.', collar: 'no-contest' },
+  // ── ★ THE EIGHTH — BARRIER'S DOUBLED FOCUS (canon 2026-09-02, name locked by Alex the same day) ──
+  // The 08-15 pass said *"every keeper-reachable rune now has a move written in itself"* and it was
+  // one short: Barrier's one-rune entries were two passives, an ultimate and a combo, so a
+  // Barrier-born keeper was the one keeper in the game born holding NO tactical. Found by measuring
+  // what a fresh keeper of each carousel rune actually seats (`birth-tactical.test.ts`), not by
+  // reading the coverage tables, which called Barrier COMPLETE by counting Living Architecture.
+  // Magii derived it by subtraction from Part I — the held shell and the standing wall are the
+  // passives, flare-and-disperse is Backlash, protecting-many is Overpressure — leaving *"blocking
+  // doorways"*: the shell with nobody inside it. `no-contest` for the Waymark reason: a shield set
+  // down declines the contest rather than winning it, and it renders on a DOORWAY, not a body.
+  { id: 'threshold', name: 'Threshold', tier: 'tactical', runes: ['barrier'],
+    effect: 'The shell set down instead of worn — across a doorway, over a companion, wherever you are not. Paid once at the cast, then it holds itself where it was put until it has dispersed all it can.', collar: 'no-contest' },
 
   // Ultimates — signature, high pool cost.
   { id: 'chain-lightning', name: 'Chain Lightning', tier: 'ultimate', runes: ['lightning'],

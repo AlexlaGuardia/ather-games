@@ -477,6 +477,15 @@ const BUILDS: Record<string, Build> = {
   // bank of vapor you pull over the ground around you (range 10, size 8, 4s) so you can leave.
   // Blinding everyone nearby IS concealment realised, with no concealment status to model it.
   hush:      { archetype: 'status', manaCost: 14, cooldownMs: 10000, castRange: 10, areaSize: 8, areaSecs: 4, statuses: ['blinded'] },
+  // ── Barrier's doubled focus (canon 2026-09-02, built the same day) ─────────────────────────
+  // "Paid at the cast and then it holds itself: it does not drain you, does not follow you." So it
+  // is a PLACED field, never a stance — the passives own the held shell and its drain. "A novice
+  // covers one door for a few breaths": door-sized, a handful of seconds, cheaper than Firewall
+  // because it carries no fire. It is cover and only cover: `fieldStopsShots` on, `fieldDps` 0 —
+  // the first zero-damage field in the file, which is the whole point of a shield you give away.
+  // ⚠ "gone at the first hard blow" is NOT modelled: fields have a duration and no hit points, so
+  // today it lasts its seconds whatever strikes it. Shield HP is a build decision, filed on GBOARD.
+  threshold: { archetype: 'field', manaCost: 14, cooldownMs: 8000, castRange: 6, areaSize: 2.4, areaSecs: 5, fieldDps: 0, fieldStopsShots: true },
 
   // ── Ultimates ────────────────────────────────────────────────────────────────────────────────
   'chain-lightning': { archetype: 'projectile', manaCost: 34, cooldownMs: 9000, damage: 26, projSpeed: 70, projLife: 1.2, chain: 3, chainRange: 9 },
