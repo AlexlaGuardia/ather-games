@@ -40,7 +40,9 @@
     "read:ruin": "npx tsx scripts/ruin-shot.mts",
     "read:town": "npx tsx scripts/town-plan.mts",
     "read:tree": "npx tsx scripts/tree-profile.mts",
-    "read:leaves": "npx tsx scripts/leaf-census.mts"
+    "read:leaves": "npx tsx scripts/leaf-census.mts",
+    "gen:bands": "npx tsx scripts/dev-bands.mts",
+    "check:bands": "npx tsx scripts/dev-bands.mts --check"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",

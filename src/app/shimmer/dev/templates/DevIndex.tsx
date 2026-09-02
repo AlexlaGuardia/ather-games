@@ -16,6 +16,23 @@
 
 import { useState, useMemo } from 'react'
 import { DEV_PAGES, DEV_GROUPS, DEV_GROUP_ORDER, type DevPage } from './dev-pages'
+import { bandOf, BAND_LABELS, EDITOR_BANDS, type Band } from './editor-bands.generated'
+
+/**
+ * ★★ THE BAND ANSWERS "WHICH GAME IS THIS FOR", WHICH IS THE QUESTION THE INDEX CREATED.
+ * Alex, 2026-09-02, the morning after this page shipped: *"it looks like we have a bunch of the old
+ * pixel game editors mixed in here.. this has nothing to do with our game anymore."* Half right, and
+ * finding out which half took an import-closure measurement — eleven of the thirty still author data
+ * the shipped voxel game imports. The badge puts that measurement on the card so nobody has to take
+ * it again, and `editor-bands.generated.ts` is DERIVED, so it cannot rot into a comfortable answer.
+ */
+const BAND_STYLE: Record<Band, string> = {
+  live:   'border-emerald-400/30 text-emerald-300/80',
+  legacy: 'border-amber-400/30 text-amber-300/80',
+  orphan: 'border-rose-400/35 text-rose-300/80',
+  opaque: 'border-sky-400/30 text-sky-300/80',
+  tool:   'border-white/15 text-white/40',
+}
 
 export interface IndexEditor {
   id: string
@@ -31,6 +48,7 @@ export default function DevIndex({
   onOpenEditor: (id: string) => void
 }) {
   const [q, setQ] = useState('')
+  const [bandFilter, setBandFilter] = useState<Band | null>(null)
   const query = q.trim().toLowerCase()
 
   const matchPage = (p: DevPage) =>
@@ -40,11 +58,25 @@ export default function DevIndex({
     p.path.toLowerCase().includes(query) ||
     (p.keywords ?? []).some(k => k.includes(query))
 
-  const matchEditor = (e: IndexEditor) =>
-    !query || e.label.toLowerCase().includes(query) || e.group.toLowerCase().includes(query)
+  const matchEditor = (e: IndexEditor) => {
+    const b = bandOf(e.id)
+    if (bandFilter && b?.band !== bandFilter) return false
+    if (!query) return true
+    return e.label.toLowerCase().includes(query)
+      || e.group.toLowerCase().includes(query)
+      // Searching a dead module name should find the editor that still authors it.
+      || (b?.orphan ?? []).some(m => m.includes(query))
+  }
 
-  const pages = useMemo(() => DEV_PAGES.filter(matchPage), [query])
-  const eds = useMemo(() => editors.filter(matchEditor), [query, editors])
+  const pages = useMemo(() => (bandFilter ? [] : DEV_PAGES.filter(matchPage)), [query, bandFilter])
+  const eds = useMemo(() => editors.filter(matchEditor), [query, editors, bandFilter])
+
+  /** Counts come from the cache, not from `editors`, so a chip reads 0 rather than vanishing. */
+  const bandCounts = useMemo(() => {
+    const c = {} as Record<Band, number>
+    for (const b of EDITOR_BANDS) c[b.band] = (c[b.band] ?? 0) + 1
+    return c
+  }, [])
   const total = pages.length + eds.length
 
   return (
@@ -76,19 +108,62 @@ export default function DevIndex({
       {eds.length > 0 && (
         <section className="mb-8">
           <h3 className="font-display text-xs uppercase tracking-[0.18em] text-white/60 mb-1">Editors</h3>
-          <p className="text-[11px] text-white/40 mb-3">Author game data. Open in this hub, no navigation.</p>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-1.5">
-            {eds.map(e => (
+          <p className="text-[11px] text-white/40 mb-2 max-w-[70ch]">
+            Author game data. Open in this hub, no navigation. The badge says which game&rsquo;s data each
+            one actually feeds &mdash; measured from the shipped import graph, not maintained by hand.
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            {(Object.keys(BAND_LABELS) as Band[]).map(b => (
               <button
-                key={e.id}
-                onClick={() => onOpenEditor(e.id)}
-                className="text-left px-3 py-2 rounded-md border border-white/8 bg-white/[0.02]
-                           hover:border-white/20 hover:bg-white/[0.06] transition-all group"
+                key={b}
+                onClick={() => setBandFilter(bandFilter === b ? null : b)}
+                title={BAND_LABELS[b].note}
+                className={`px-2 py-0.5 rounded border text-[10px] uppercase tracking-wider transition-all ${BAND_STYLE[b]} ${
+                  bandFilter === b ? 'bg-white/10' : 'bg-transparent hover:bg-white/5'
+                }`}
               >
-                <span className="block text-[13px] text-white/85 group-hover:text-white">{e.label}</span>
-                <span className="block text-[10px] text-white/35 uppercase tracking-wider">{e.group}</span>
+                {BAND_LABELS[b].label} <span className="tabular-nums opacity-60">{bandCounts[b] ?? 0}</span>
               </button>
             ))}
+            {bandFilter && (
+              <button onClick={() => setBandFilter(null)} className="px-2 py-0.5 text-[10px] text-white/40 hover:text-white/70">
+                clear
+              </button>
+            )}
+          </div>
+          {bandFilter && (
+            <p className="text-[11px] text-white/45 mb-3 max-w-[70ch]">{BAND_LABELS[bandFilter].note}</p>
+          )}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-1.5">
+            {eds.map(e => {
+              const b = bandOf(e.id)
+              return (
+                <button
+                  key={e.id}
+                  onClick={() => onOpenEditor(e.id)}
+                  title={b ? BAND_LABELS[b.band].note : undefined}
+                  className="text-left px-3 py-2 rounded-md border border-white/8 bg-white/[0.02]
+                             hover:border-white/20 hover:bg-white/[0.06] transition-all group"
+                >
+                  <span className="flex items-baseline justify-between gap-1.5">
+                    <span className="text-[13px] text-white/85 group-hover:text-white">{e.label}</span>
+                    {b && (
+                      <span className={`shrink-0 px-1 rounded border text-[9px] uppercase tracking-wider ${BAND_STYLE[b.band]}`}>
+                        {BAND_LABELS[b.band].label}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-[10px] text-white/35 uppercase tracking-wider">{e.group}</span>
+                  {/* ⚠ NAME THE DEAD MODULE. A bare "orphaned" badge is an accusation with no
+                      evidence on it, and the only safe response to one is to ignore it. */}
+                  {b && b.orphan.length > 0 && (
+                    <span className="block mt-1 text-[9px] font-mono leading-tight text-rose-300/45 break-all">
+                      {b.orphan.join(' · ')}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </section>
       )}

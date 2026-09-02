@@ -22,6 +22,17 @@ function classify(path: string): "tool" | "gated-game" | null {
     path.startsWith("/shimmer/deploy") ||
     path.startsWith("/nolmir/dev") ||
     path.startsWith("/nolmir/sfx-lab") ||
+    // ★★ ADDED 2026-09-02 — IT WAS MISSING, AND A COMMENT ASSERTED OTHERWISE. `/vault` is tier
+    // `live`, so it never entered GATED_GAME_PREFIXES and `classify` returned null for everything
+    // beneath it: `/vault/dev` answered **200 to anybody**, and `/vault/dev/save` has no owner
+    // check of its own — an unauthenticated POST with a valid slot key overwrites or DELETES an
+    // authored Vault level in `public/vault/authored-levels.json` on prod.
+    // ⚠ THE TELL WAS PROSE THAT WAS NEVER TRUE. `vault/dev/layout.tsx` says "Owner tool — keep it
+    // out of the index (mirrors /shimmer/dev)". It did not mirror /shimmer/dev; it was simply
+    // omitted from this list while its two siblings above were not. PATTERNS 09-01: a note does
+    // not rot into nonsense, it rots into something plausible — and this one was plausible enough
+    // that a reader checking "is the vault editor gated?" would have stopped at the comment.
+    path.startsWith("/vault/dev") ||
     // NOTE the trailing slash: `/api/shimmer/*` is the source-mutating tooling (save-sprite).
     // A bare `/api/shimmer` prefix ALSO swallows `/api/shimmerfile`, which is the public
     // account/profile endpoint the username picker calls — that 403'd every non-owner player.
