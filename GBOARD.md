@@ -176,14 +176,23 @@ site in both hosts; the free `blocksShotAt*` query is asked nowhere a round dies
 20: one Keenshard (24) takes the door, three Hollow rounds wear it 20 → 11 → 2 → gone, and the fourth passes.
 The say-line *"Threshold — shattered"* is the only tell; the mesh simply stops being there. cast-fields **40/0**
 (+16), 9 mutations fire on named asserts, control green; sweep **224/224**, tsc 7, served == disk == public.
-⚠ **Still not modelled, on purpose and on the board:** Hollow MELEE does not touch a shell (fields do not block
-movement, so nothing swings at one — a Hollow walks through the door and hits you inside it), and a worn shell
-looks identical to a fresh one until it goes. Both are Jin's calls; neither is hidden in a comment only.
+~~⚠ Hollow MELEE does not touch a shell~~ → **RULED by Alex: *"make hollow melee break the shell."*** Built
+`68e9adb`, LIVE in `BUILD_ID DmCdPkwG6XcLXDllESJEe`. `absorbStrikeAtVolume` is asked at the KEEPER's feet (a
+warden may be inside the door with you; it still has to break the door), and **only a shell answers** — a Firewall
+stops rounds, not arms, so a Hollow swings straight through fire (a separate function, not a flag, and the mutation
+that swaps in the shot reader has every Firewall parrying). A press/ambush lands on the shell first, the shell pays,
+*"Threshold takes the blow"* / *"— shattered"*; the wound reaches vitals only when no shell took it. A sap is
+not a blow. cast-fields **51/0** (+11), 5 mutations fire on named asserts, control green; sweep **224/224**, tsc 7,
+served == disk == public. ⚠ One mutation SURVIVED the first pass: the host could say *takes the blow* and never
+charge the shell — an immortal door with a working say-line. A guard on the write-back closed it.
+⚠ **Still not modelled:** a worn shell looks identical to a fresh one until it goes. Jin's call; on the board, not
+in a comment only.
 
 ### Next
 - **⏭ Alex, born of Barrier: press the tactical key at a doorway, then shoot your own door** — a Keenshard
   should shatter it in one, a light bolt should not. Say whether 20 reads as *a few breaths* or as paper.
-- Rule whether a Hollow's melee should break a shell, and whether a worn shell should look worn.
+- **Stand inside your own door and let a warden press it** — it should say *takes the blow* twice and
+  *shattered* on the third. Then rule whether a worn shell should look worn.
 - **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
   and pick Squall — and the bar will say so instead of blaming his runes.
 - ~~3 of 20 birth runes (barrier, dust, vapor) seat no tactical at all~~ **Re-measured: 1 of 17, Barrier — ruled and built as Threshold the same evening.** — `no-move` still says so out
