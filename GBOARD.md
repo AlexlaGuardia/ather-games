@@ -6894,7 +6894,29 @@ source alpha. Measured 296→140 opaque of 2304; colours 13 → 25/20/35/37. Ren
 >   low coverage always means a worse bake, and it is fixable by packing rather than by spending credits.
 > - **⛔ THE SEVEN PROPS IN `public/models/props/` CANNOT BE FIXED IN PLACE — their raw high-poly GLBs are
 >   gone** (`/tmp/meshy` is cleared; only the five manabox rawfiles survive, in athernyx). `vault_door.glb`
->   included. Each one needs regenerating from source to benefit, which is a credit decision per prop, not
+>   included.
+>   ⚠ **CORRECTED SAME DAY — "only the five manabox rawfiles survive" was WRONG, and the search that
+>   produced it was the weak kind.** It was `find /root -iname "*.glb"`: one location, one extension, and
+>   an ABSENCE claim resting on it. Alex pushed back ("I thought we stored a lot of models on disk"), and
+>   he was right. **There are 30 models in the OneDrive library on hp-elitedesk**, which this box cannot
+>   see at all: `Athernyx/Shimmer/{tools-3dmodel 11, spirits-3dmodels-rough 10, items-3dmodels 4,
+>   MB-3dmodels 5}`. The claim about the seven props still holds — no vault/door/gate/throne model exists
+>   on either machine — but the reason given for it did not.
+>   - **★ AND THE 25 NON-MANABOX MODELS ARE NOT BAKE SOURCES, measured not assumed:** opened in Blender
+>     they are **3.6k–4.4k tris with ZERO images and ZERO materials**. They are Meshy **preview-stage**
+>     output (the filenames say `_generate`), untextured geometry only, already at this pipeline's 4k
+>     budget — so `glb_optimize.py` correctly skips the bake and they would ship as grey meshes. Contrast
+>     `mb-charred-rifle-1.blend`: 31k tris, three packed 2048² maps, textured material, because it came
+>     through `img_to_3d.py` (meshy-5 PBR, 30k tris) rather than the website.
+>   - **Texturing them needs the Meshy WEBSITE, not this box.** `create_text_refine` requires a
+>     `preview_task_id` and **no task id was ever stored anywhere** — these were made in the browser on
+>     2026-07-23. The tasks are in Alex's account or nowhere.
+>   - **⚠ AND MOST OF THEM ARE IN CATEGORIES ALREADY RULED AGAINST MESHY, which is the real reason not to
+>     spend on them.** The 10 spirits are LIVING things — the art-medium law keeps those as Alex's
+>     hand-drawn pixel art. The 4 items are icon-shaped, and the 08-26 ruling above says Meshy is the wrong
+>     medium for icons (16×16 quantised). The 11 tools are the only arguable set, and Shimmer tools are
+>     held in a hand. **They predate every one of those rulings (July, rulings landed 08-06 / 08-24 /
+>     08-26), so this is an exploration the canon caught up with — not a stock of free assets.** Each one needs regenerating from source to benefit, which is a credit decision per prop, not
 >   a re-run. **Budget is no longer the constraint:** Alex read the account 2026-09-03 — the subscription
 >   runs to **2026-10-23** with ~1000 credits this month, so the "credits lapse ~09-06, spend-it-or-lose-it"
 >   line on focus rows #343/#345 was wrong and both rows are corrected in place.
