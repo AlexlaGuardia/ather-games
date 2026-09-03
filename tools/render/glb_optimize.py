@@ -47,7 +47,7 @@
 #
 # The budget is the point: a Shimmer prop should land in the LOW HUNDREDS of KB. If it
 # doesn't, it isn't ready to ship — lower --tris/--tex rather than waving it through.
-import bpy, sys, os, argparse, math
+import bpy, sys, os, argparse, math, tempfile
 import numpy as np
 
 FLAT = np.array([0.5, 0.5, 1.0], dtype=np.float32)  # what an unbaked tangent-space normal is
@@ -276,6 +276,23 @@ def bake_pair(low, high, size, cage_ratio, margin, uv_angle):
     bpy.ops.object.bake(type="DIFFUSE")
 
     img_n.pack()
+
+    # ★ THE COLOUR MAP MUST BE ROUND-TRIPPED THROUGH A REAL JPEG FILE, and setting
+    # `img.file_format = "JPEG"` on a GENERATED image is not enough — the glTF exporter's AUTO
+    # mode writes generated images as PNG whatever the field says. Measured on the gate arch: a
+    # 512px colour map shipped as a 415KB PNG, 48% of the whole 869KB prop, against 385KB for the
+    # normal map it exists to accompany. Saving to disk and reloading gives the image a real JPEG
+    # source, which AUTO then honours. The NORMAL map stays PNG on purpose — chroma subsampling
+    # mangles a normal map, and that is not a size decision.
+    tmp_jpg = os.path.join(tempfile.gettempdir(), f"{low.name}_color.jpg")
+    bpy.context.scene.render.image_settings.file_format = "JPEG"
+    bpy.context.scene.render.image_settings.quality = 90
+    img_c.filepath_raw = tmp_jpg
+    img_c.file_format = "JPEG"
+    img_c.save()
+    img_c.source = "FILE"
+    img_c.filepath = tmp_jpg
+    img_c.reload()
     img_c.pack()
 
     dev = deviation_pct(img_n)
