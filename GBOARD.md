@@ -6911,6 +6911,34 @@ source alpha. Measured 296→140 opaque of 2304; colours 13 → 25/20/35/37. Ren
 >   from *no* bake, so it is kept as a floor against silence and the file header now says so outright. The
 >   instrument that actually discriminates is the new **UV-coverage readout**, which warns below 25% —
 >   low coverage always means a worse bake, and it is fixable by packing rather than by spending credits.
+> **★★ SCALE, ASKED BY ALEX 2026-09-03 ("do we have the game lifesize scaled.. is that even a thing?")
+> — YES, RIGOROUSLY, AND IT HAS A CONSEQUENCE FOR THE ARCH JUST SHIPPED.**
+> Measured, not recalled: **one block = one metre.** `locomotion.ts` — `BODY_H 1.75`, `BODY_R 0.3`
+> (a 0.6 m shoulder), `EYE_STAND 1.62` — and the code says *metres* in prose throughout
+> (`hollows.ts`: *"float height, in metres above the ground line"*). `pieces.ts` agrees: `doorway`
+> is `h: 3`, a three-metre opening; `arch` is `w:3 h:3 d:1`.
+> - **The grid is a deliberate survivor of a failure, and `pieces.ts` says so in its own header:** the
+>   FIRST version of this design was **Sims-scale and it failed**, because The Sims only reads clean
+>   when lots are **FLAT** and Shimmer columns step up to 3 voxels — so a room-scale wall floats,
+>   sinks or clips. The fix was blocks-build-the-shell (they meet uneven ground the way terrain does,
+>   so nothing needs flattening) and pieces dress it, **block-thick and grid-aligned like Valheim**.
+> - **⚠⚠ AND `STRUCTURE-LAYER.md` §10 ALREADY RULED ON THE TOOL: "⛔ Meshy is the wrong tool —
+>   modular pieces need clean, dimension-exact geometry that tiles against a grid, and Meshy makes
+>   organic meshes."** That ruling was on disk before the 30 credits went out and was not read. The
+>   landmark case is arguable — a one-off civic arch is not a modular piece — but the argument should
+>   have been made BEFORE the spend, not found afterwards.
+> - **★ THE CONCRETE GAP: `gate_landing.glb` HAS NO COLLISION.** A `pieces.ts` piece renders as a mesh
+>   AND writes `STRUCTURE` into the voxel grid, which is the whole reason collision is free — *"the
+>   expensive-sounding half of the idea reduces to a value already in an array."* A bare GLB in
+>   `PROP_MODELS` writes nothing, so a keeper walks straight through both piers. Fixable the way
+>   pieces already do it (stamp STRUCTURE cells under the mesh), but that is real work on the hub
+>   surface and it is not done.
+> - **Sizing, measured off the shipped GLB** (Meshy returns arbitrary units; the game sets the metres
+>   through the height-anchored fit): aspect H/W **1.24**, and the clear span between the piers is
+>   only **48% of total width**. So total height **3 m → a 1.15 m opening** (tight — the keeper is
+>   0.6 m across, that reads as a door), **4 m → 1.54 m** (comfortable), **5 m → 1.92 m** (civic). The
+>   existing voxel `arch` piece opens **1 m** (its middle column), so 4 m+ reads as deliberately
+>   grander than a burrow mouth, which is what a public landing wants.
 > - **⛔ THE SEVEN PROPS IN `public/models/props/` CANNOT BE FIXED IN PLACE — their raw high-poly GLBs are
 >   gone** (`/tmp/meshy` is cleared; only the five manabox rawfiles survive, in athernyx). `vault_door.glb`
 >   included.
