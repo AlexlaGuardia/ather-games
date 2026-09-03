@@ -146,6 +146,23 @@ you hold. Five-day week read from `calendar.md` (asserted, not restated), one we
 dirty for BOTH lanes, so my four hunks were staged by patch and the INDEX committed — `git commit -- <path>`
 would have swept hub's two landing hunks in (the 09-02 entry, avoided by the letter).
 
+### Vessels — a second focus and bracelet, the fourth shelf (`18fb63e`, committed on play, awaiting deploy)
+Canon: *one loadout = one focus + one bracelet; a second loadout needs a second of both AND its own gems.* Built
+without moving the active loadout: it stays under `LOADOUT_KEY` + `VESSELS_KEY` and every reader is untouched; the
+new thing is the **parked** list (`play3d/loadouts.ts`, key `ather:shimmer:parked`) — every other loadout the keeper
+owns, each with its own slots and its own set letters. **Swap** exchanges the active pair with a parked one and the
+world re-resolves through `runeTick`; **the bag never moves** (loose letters are the keeper's, the paper is not).
+**Buy** a pair at the Passage's vessel shelf, 150 Marks, any day (grown, not ridden in), arrives EMPTY, three in
+all. Loadout tab grows a switch row (`active · TU` + `swap to 2 · n bound · n set`). `/reborn` clears the parked
+pairs. **The canon sentence is the assert:** with one set of letters the second build cannot write the word
+loadout 1 holds; with two, both hold it — and after two swaps the active loadout resolves seated through the real
+consumer. loadouts **27/0**, keeper-local **83/0**, bands 218, tsc 7. **6 mutations fire — one only after the
+guard grew a bag-survives-swap assert**: the fixture had an EMPTY bag at swap time, so *"swap drops the bag"*
+survived every assert (an assert that cannot fail is decoration — PATTERNS 08-22). ⚠ The key is `parked`, not
+`loadouts`: the registry's spell-check reads `ather:shimmer:loadout` as a prefix of `ather:shimmer:loadouts` and
+flagged the new module for spelling another file's key. ⚠ And my first spare gem was the word's own rune, which
+handed a one-rune word a full set and broke the "cannot write" assert for the wrong reason.
+
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
   of one rune, for now. One focus + one bracelet, implicit — a second loadout is not built. No merchant yet.
