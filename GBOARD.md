@@ -220,13 +220,32 @@ the console row through `codeOnly`, which empties the very name string the row i
 claimed a lost-state keeper lands EMPTY when Gregory's gift seeds any keeper a tactical — the world corrected
 the test, not the other way round.
 
+### The cracks read as a halo — Alex looked, and the look was wrong by construction (hub, 2026-09-03 afternoon)
+**What he said:** *"i tested it, the cracks read as a halo."* **Why, read off the material rather than guessed:** every
+crack was drawn in the shell's OWN pale cyan (`0xaef2ff`) at 0.85 opacity — five times the 0.17 body — lifted 2%
+off the skin (a twentieth of a block on a 2.4-radius door) with no depth write. A brighter line in the membrane's
+own hue, floating outside it, IS a glow outline; nothing about it could read as a fracture. **The fix is a
+different claim about what a crack is:** a fracture in a light-shell is where the light is MISSING, so the core
+is dark (`CRACK_CORE`, lum < 0.15). But wardens press doors at NIGHT and a dark line on a dark scene is nothing,
+so each run has a dim grey twin one lip below it (`CRACK_LIP`, lum 0.4–0.7, `CRACK_LIP_DROP` 0.012 — light from
+above lights the lower edge of a groove). Day reads the core, night reads the lip, neither is the shell's colour.
+Baked as VERTEX COLOURS into the one shared tier geometry (`crackLines`), so the host keeps one LineSegments, one
+material, one tier swap — the render-audit shape stands. Lift 1.02 → 1.005. shell-wear **40/0** (was 30),
+sweep **226/226 · 0 FAIL · 0 KILLED**, tsc 7 (baseline). **Mutation-swept 7 ways: 5 fired on the first pass, 1
+control passed by design, and 1 SURVIVED — lift back to 1.02 — because the old assert's ceiling was 1.05: a guard
+that admits the value the defect was reported at cannot see the defect.** Ceiling now 1.01; the mutation fires.
+⚠ Two of my new asserts went red on 3e-8: Float32 storage compared as exact doubles. The instrument, not the
+picture. **Dials if it still reads wrong:** `CRACK_CORE`/`CRACK_LIP` tones, `CRACK_LIP_DROP`, material opacity 0.9.
+⚠ NOT LOOKED AT by me — Alex's eye again.
+
 ### Next
 - **⏭ Alex, born of Barrier: press the tactical key at a doorway, then shoot your own door** — a Keenshard
   should shatter it in one, a light bolt should not. Say whether 20 reads as *a few breaths* or as paper.
 - ~~build owner-only `/reborn <rune>`~~ **BUILT 2026-09-03 (hub).** Alex: open the console, `/reborn barrier`,
   read the line back — it should say *born of Barrier · … Threshold* seated in the tactical. Then:
 - **Stand inside your own door and let a warden press it** — *takes the blow* twice, *shattered* on the
-  third, and **the door should thin and crack between blows**. Say whether the cracks read, or halo.
+  third, and **the door should thin and crack between blows**. ~~Say whether the cracks read, or halo.~~ **Halo,
+  said Alex 09-03 → re-cut as dark core + lit lip (section above). Look again: fissure, or still a ring?**
 - **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
   and pick Squall — and the bar will say so instead of blaming his runes.
 - ~~3 of 20 birth runes (barrier, dust, vapor) seat no tactical at all~~ **Re-measured: 1 of 17, Barrier — ruled and built as Threshold the same evening.** — `no-move` still says so out
