@@ -360,9 +360,16 @@ function EditorHub() {
           </div>
         </div>
 
-        <InspectorSidebar title={inspectorTitle}>
-          {inspectorContent}
-        </InspectorSidebar>
+        {/* ★ NOT ON THE INDEX. The index is not an editor, nothing can ever populate the
+            inspector there (the mode effect clears it and no editor is mounted to fill it), so on
+            the front door it was a third of the viewport rendering the words "No details
+            available". A panel that is structurally empty is not a small cost on the one page
+            whose job is showing you everything. */}
+        {!isIndex && (
+          <InspectorSidebar title={inspectorTitle}>
+            {inspectorContent}
+          </InspectorSidebar>
+        )}
 
         {showPalette && (
           <CommandPalette

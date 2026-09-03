@@ -34,6 +34,17 @@ const BAND_STYLE: Record<Band, string> = {
   tool:   'border-white/15 text-white/40',
 }
 
+/**
+ * The hover text for a band badge: what the band means, and — when the editor authors dead
+ * modules — exactly which ones. The card used to print that list in red monospace; moving it here
+ * keeps the evidence one hover away instead of deleting it, which is the whole reason the list
+ * existed. See the note at the badge.
+ */
+const bandTitle = (b: { band: Band; orphan: string[] }) =>
+  b.orphan.length > 0
+    ? `${BAND_LABELS[b.band].note}\n\nNo shipped game imports: ${b.orphan.join(', ')}`
+    : BAND_LABELS[b.band].note
+
 export interface IndexEditor {
   id: string
   label: string
@@ -49,6 +60,7 @@ export default function DevIndex({
 }) {
   const [q, setQ] = useState('')
   const [bandFilter, setBandFilter] = useState<Band | null>(null)
+  const [protoOpen, setProtoOpen] = useState(false)
   const query = q.trim().toLowerCase()
 
   const matchPage = (p: DevPage) =>
@@ -78,6 +90,17 @@ export default function DevIndex({
     return c
   }, [])
   const total = pages.length + eds.length
+
+  /** Editors under their own group heading, in the order the hub's tab bar already uses. */
+  const editorGroups = useMemo(() => {
+    const by = new Map<string, IndexEditor[]>()
+    for (const e of eds) {
+      const list = by.get(e.group)
+      if (list) list.push(e)
+      else by.set(e.group, [e])
+    }
+    return [...by.entries()]
+  }, [eds])
 
   return (
     <div>
@@ -134,50 +157,78 @@ export default function DevIndex({
           {bandFilter && (
             <p className="text-[11px] text-white/45 mb-3 max-w-[70ch]">{BAND_LABELS[bandFilter].note}</p>
           )}
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-1.5">
-            {eds.map(e => {
-              const b = bandOf(e.id)
-              return (
-                <button
-                  key={e.id}
-                  onClick={() => onOpenEditor(e.id)}
-                  title={b ? BAND_LABELS[b.band].note : undefined}
-                  className="text-left px-3 py-2 rounded-md border border-white/8 bg-white/[0.02]
-                             hover:border-white/20 hover:bg-white/[0.06] transition-all group"
-                >
-                  <span className="flex items-baseline justify-between gap-1.5">
-                    <span className="text-[13px] text-white/85 group-hover:text-white">{e.label}</span>
-                    {b && (
-                      <span className={`shrink-0 px-1 rounded border text-[9px] uppercase tracking-wider ${BAND_STYLE[b.band]}`}>
-                        {BAND_LABELS[b.band].label}
+          {/* ★ GROUPED, BECAUSE A FLAT GRID PRINTED ITS OWN GROUP LABEL 28 TIMES AND ORGANISED
+              NOTHING. Every card carried an uppercase SPRITES / SPIRITS / WORLD line that repeated
+              its neighbours and could not be scanned; the same word said once, as a heading, both
+              removes 28 lines of text and puts the editors in the order the tab bar already uses. */}
+          {editorGroups.map(([groupLabel, items]) => (
+            <div key={groupLabel} className="mb-3">
+              <h4 className="text-[10px] uppercase tracking-[0.16em] text-white/30 mb-1.5">{groupLabel}</h4>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-1.5">
+                {items.map(e => {
+                  const b = bandOf(e.id)
+                  return (
+                    <button
+                      key={e.id}
+                      onClick={() => onOpenEditor(e.id)}
+                      title={b ? bandTitle(b) : undefined}
+                      className="text-left px-3 py-2 rounded-md border border-white/8 bg-white/[0.02]
+                                 hover:border-white/20 hover:bg-white/[0.06] transition-all group"
+                    >
+                      <span className="flex items-baseline justify-between gap-1.5">
+                        <span className="text-[13px] text-white/85 group-hover:text-white">{e.label}</span>
+                        {b && (
+                          <span className={`shrink-0 px-1 rounded border text-[9px] uppercase tracking-wider ${BAND_STYLE[b.band]}`}>
+                            {BAND_LABELS[b.band].label}
+                            {/* ⚠ THE COUNT KEEPS THE ACCUSATION HONEST WITHOUT PRINTING THE CASE.
+                                A bare "orphaned" badge is an accusation with no evidence on it and
+                                the only safe response to one is to ignore it — that reasoning still
+                                holds, so the dead modules are still NAMED, in the card's tooltip.
+                                What is gone is four lines of red monospace on every offending card,
+                                which was the loudest thing on the page and made ORPHANED read as an
+                                error rather than a note. It is not one: `map` is banded orphaned and
+                                still authors THIRTEEN live modules. */}
+                            {b.orphan.length > 0 && <span className="tabular-nums opacity-70"> {b.orphan.length}</span>}
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  <span className="block text-[10px] text-white/35 uppercase tracking-wider">{e.group}</span>
-                  {/* ⚠ NAME THE DEAD MODULE. A bare "orphaned" badge is an accusation with no
-                      evidence on it, and the only safe response to one is to ignore it. */}
-                  {b && b.orphan.length > 0 && (
-                    <span className="block mt-1 text-[9px] font-mono leading-tight text-rose-300/45 break-all">
-                      {b.orphan.join(' · ')}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </section>
       )}
 
       {DEV_GROUP_ORDER.map(g => {
         const inGroup = pages.filter(p => p.group === g)
         if (inGroup.length === 0) return null
+        /* ★ THE ONE SECTION THAT ASKS TO BE FOLDED IS THE ONE THAT DESCRIBES ITSELF AS UNMAINTAINED.
+           `proto`'s own note is "Standalone routes kept because they still answer a question. Not
+           maintained as tools." — so it is the only group on this page that is explicitly not part of
+           anyone's working set, and it sat open at the bottom taking the same room as the benches.
+           Folded, not removed: the routes still answer their question, and a search still finds them
+           because `pages` is filtered before this runs. */
+        const foldable = g === 'proto' && !query
+        const open = foldable ? protoOpen : true
         return (
           <section key={g} className="mb-8">
             <h3 className="font-display text-xs uppercase tracking-[0.18em] text-white/60 mb-1">
-              {DEV_GROUPS[g].label}
+              {foldable ? (
+                <button
+                  onClick={() => setProtoOpen(v => !v)}
+                  className="inline-flex items-center gap-1.5 uppercase tracking-[0.18em] hover:text-white/85 transition-colors"
+                  aria-expanded={open}
+                >
+                  <span className={`text-[9px] transition-transform ${open ? 'rotate-90' : ''}`}>&#9656;</span>
+                  {DEV_GROUPS[g].label}
+                  <span className="tabular-nums text-white/30 normal-case tracking-normal">{inGroup.length}</span>
+                </button>
+              ) : DEV_GROUPS[g].label}
             </h3>
-            <p className="text-[11px] text-white/40 mb-3 max-w-[70ch]">{DEV_GROUPS[g].note}</p>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-2">
+            {open && <p className="text-[11px] text-white/40 mb-3 max-w-[70ch]">{DEV_GROUPS[g].note}</p>}
+            {open && <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-2">
               {inGroup.map(p => (
                 <a
                   key={p.path}
@@ -194,7 +245,7 @@ export default function DevIndex({
                   <span className="block text-[11px] text-white/55 mt-1 leading-snug">{p.blurb}</span>
                 </a>
               ))}
-            </div>
+            </div>}
           </section>
         )
       })}
