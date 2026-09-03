@@ -15,6 +15,7 @@
 
 import { readFileSync } from 'node:fs'
 import { consumeArrival, stageArrival, arrivalFor, type Store, type TilePos } from '../engine/crossing'
+import { LANDING_ARRIVAL } from '../world/landing'
 import { depart, LANDING_ZONE, LANDING_LABEL } from '../voxel3d/crossing-out'
 import { ALL_ZONES } from '../world/all-zones'
 import { getZone, type Gate, type Zone } from '../world/zones'
@@ -77,18 +78,23 @@ const memStore = (): Store & { keys: () => string[] } => {
        `${LANDING_ZONE} (${x},${y}) has no legacy migration — the plain-zone branch is the right one`)
 }
 
-// ── 3. THE DORMANT STATE IS THE SHIPPED STATE, AND IT MUST BE QUIET ─────────────────────────────
-// Today nothing stages anything, so every load consumes null. Assert that this does nothing at all
-// rather than doing something small and wrong.
+// ── 3. THE EMPTY ONE-SHOT MUST BE QUIET, AND THE FULL ONE MUST ARRIVE ───────────────────────────
+// ⚠ RE-AIMED 2026-09-03. This section asserted that the departure is REFUSED on the shipped map,
+// which was true while nobody had painted THE LANDING and is false now that somebody has. The
+// claim worth keeping is not "the crossing is dormant" — that was a fact about the calendar. It is
+// that a load with nothing staged does nothing at all, and that a real departure reaches the town.
 {
   const store = memStore()
   ok(consumeArrival(store) === null, 'with nothing staged the arrival is null')
   ok(store.keys().length === 0, 'and reading an empty one-shot writes nothing')
 
-  const cold = depart(store, { x: 60, y: 60 })   // shipped zones — no landing painted
-  ok('refused' in cold && cold.refused === 'unpainted',
-     'the departure is still refused by name on the shipped map — the dormant half, on purpose')
-  ok(store.keys().length === 0, 'a refused departure stages nothing for the town to find')
+  const live = depart(store, LANDING_ARRIVAL)     // shipped zones — the landing is painted now
+  ok(!('refused' in live), `the shipped map departs (${JSON.stringify(live)})`)
+  ok(store.keys().length === 1, 'a real departure stages exactly one key for the town to find')
+  const landed = consumeArrival(store)
+  ok(landed?.zone === LANDING_ZONE && landed.x === LANDING_ARRIVAL.x && landed.y === LANDING_ARRIVAL.y,
+     'and the town consumes it onto the anchor beside the door')
+  ok(store.keys().length === 0, 'read-and-clear: the one-shot does not survive to re-place anyone')
 }
 
 // ── 4. A MALFORMED OR IMPOSSIBLE ARRIVAL IS DROPPED, NEVER A CRASH AND NEVER (0,0) ──────────────

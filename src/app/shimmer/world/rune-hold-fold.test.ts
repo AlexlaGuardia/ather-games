@@ -99,7 +99,12 @@ const ownerSample = expandGate({ x: 0, y: 0, toZone: 'garden', toX: 1, toY: 1, l
 ok(ownerSample.every(w => w.ownerOnly === true), 'ownerOnly propagates to every tile of a gate')
 
 const gates = runeHold!.gates ?? []
-ok(gates.length === 3, 'Rune Hold has three gates (Spirit Corner, Passage, Travelers Station)')
+// ⚠ FOUR SINCE 2026-09-03. THE LANDING was painted (Alex: *"the landing gate — voxel-built"*), and
+// this count is asserted by NAME rather than by number so a door appearing is not the same event as
+// a door being renamed. A bare `=== 4` goes green if the Passage is deleted and something else added.
+ok(gates.length === 4, `Rune Hold has four gates (${gates.map(g => g.label).join(', ')})`)
+for (const want of ['THE SPIRIT CORNER', 'THE PASSAGE', 'TRAVELERS STATION', 'THE LANDING'])
+  ok(gates.some(g => g.label.toUpperCase() === want), `the town still has ${want}`)
 // ★ A gate must sit ON the warp tiles Alex painted. This is the check that ties CODE to MAP: he
 // positions doors by painting 2x2 blocks of tile 14, and the anchor here is read off that. If he
 // moves a door and the anchor isn't updated, the gate keeps firing on bare grass at the old spot

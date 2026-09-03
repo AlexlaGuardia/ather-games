@@ -175,6 +175,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 
 import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, CRUCIBLE, RUNE_HOLD, THE_PASSAGE, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
+import { LANDING, LANDING_ARRIVAL, LANDING_LABEL } from './landing'
 export const ZONES: Zone[] = [
   {
     id: 'garden',            // keep id stable (referenced widely); display = the player's own plot
@@ -541,6 +542,35 @@ export const ZONES: Zone[] = [
         // believed. Verify a claim about canon against `CANON/`, not against the comment.
         x: 48, y: 86, toZone: 'travelers-station', toX: 4, toY: 7, direction: 'up',
         label: 'TRAVELERS STATION',
+      },
+      {
+        // ---- THE LANDING (49, 49-50) - the square's public gate-landing --------------------
+        // Canon `world/gates.md` > WHERE IT LETS OUT, ruled 2026-08-12: Rune Hold's square holds a
+        // PUBLIC gate-landing, and the gates table names it *framed* - a tuned, kept gate rather
+        // than a bare spiral. This is the far end of the ONE home-gate the keeper steps into on
+        // the plot, and the reason `crossingReady()` has anything to be ready for.
+        //
+        // * THE PLACEMENT AND THE PIERS LIVE IN `world/landing.ts`, WITH THEIR PROOF. Nothing here
+        // restates a number: a door and the stone around it are one fact, and this repo has paid
+        // more than once for a second copy of a fact agreeing with itself while both went stale.
+        // `landing.test.ts` measures every cell against the shipped grid.
+        //
+        // ** `toX/toY` IS READ ON EVERY CROSSING BACK, AND IT IS A STEP ASIDE, NOT A DESTINATION.
+        // Returning to the Ather is a change of ROUTE, not of zone: `Shimmer3D`'s `onWarp` catches
+        // this door by LABEL, runs this same-zone warp, and only then navigates to
+        // `/shimmer/voxel3d`. The warp's whole job is to leave the keeper's TOWN record standing
+        // BESIDE the gate instead of inside it - a record left on a warp tile fires that gate again
+        // on the next ordinary load, forever, which is the self-feeding shape the 2026-08-15
+        // space-less save cost a day of.
+        //
+        // * SO IT IS ALSO THE HONEST DEGRADED CASE, FOR FREE. If the interception is ever removed
+        // this door still does something a player can read - you step into the arch and step back
+        // out beside it - rather than filing them somewhere legal and meaningless, which is what
+        // `engine/crossing.ts` bans (0,0) by name for. A fallback nothing exercises is a fallback
+        // that rots; this one is on the live path.
+        x: LANDING.x, y: LANDING.y, w: LANDING.w, h: LANDING.h,
+        toZone: 'rune-hold', toX: LANDING_ARRIVAL.x, toY: LANDING_ARRIVAL.y, direction: 'down',
+        label: LANDING_LABEL,
       },
     ],
     warps: [],

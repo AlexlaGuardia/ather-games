@@ -17,6 +17,7 @@ import { ALL_ZONES } from '../world/all-zones'
 // The far end of the Ather crossing. `engine/crossing.ts` holds the contract and the reasoning;
 // this file is the half that receives. See the boot effect for why the read lives where it does.
 import { consumeArrival } from '../engine/crossing'
+import { LANDING_LABEL } from '../world/landing'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
@@ -6394,6 +6395,32 @@ export default function Shimmer3D() {
   const onWarp = useCallback((w: Warp) => {
     if (w.ownerOnly && !isOwnerRef.current) return  // dev/test gate — silent no-op for players
     if (transitRef.current) return  // mid-transition: the world is covered, nothing may warp
+
+    // ── ★★★ THE HOME-GATE IS A CHANGE OF ROUTE, NOT OF ZONE (2026-09-03) ───────────────────────
+    // THE LANDING is the one door in the town that does not lead anywhere in the town. It crosses
+    // OUT of the waking world back into the Ather, and the Ather is a separate Next route — so no
+    // amount of `performWarp` can express it and the transit cinematic below would play a title
+    // card for a place this warp never reaches.
+    //
+    // ★ CAUGHT BY `gate`, WHICH IS THE LABEL `expandGate` STAMPS ON EVERY TILE OF A DOOR. Matching
+    // on the label rather than on coordinates means the door can be re-painted anywhere in the
+    // square and this keeps working — the same reason `crossing-out.ts` asks the map for a label
+    // instead of keeping a tile constant.
+    //
+    // ⚠⚠ `performWarp` RUNS FIRST, AND IT IS NOT DECORATION. It is a same-zone warp onto
+    // `LANDING_ARRIVAL`, the open plaza tile one south of the door, so the keeper's TOWN record
+    // ends up standing BESIDE the gate rather than inside it. Skip it and the record keeps the
+    // keeper on a warp tile: the next ordinary load of the town fires that gate again and throws
+    // them straight back to the Ather, every load, forever. That is exactly the self-feeding state
+    // the 2026-08-15 space-less save autopsy cost a day of — a record whose own value re-triggers
+    // the thing that wrote it. The contract's rule 1 permits this: neither record is cleared, and
+    // *"a keeper has a real position in BOTH"*. Standing next to the door you just used is true.
+    if (w.gate?.toUpperCase() === LANDING_LABEL) {
+      performWarp(w)
+      window.location.href = '/shimmer/voxel3d'
+      return
+    }
+
     const label = regionDisplayName(w.toZone)
     // The cinematic plays only when ARRIVING at a region map (interior doors stay instant),
     // and never re-fires for a warp inside the same region. Keyed on the DISPLAY NAME, not on a

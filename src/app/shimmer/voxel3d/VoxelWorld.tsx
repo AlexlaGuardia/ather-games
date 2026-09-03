@@ -216,7 +216,8 @@ import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMat
          legacyRowSockets, courtClearCells, COURT_REV,
          courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells,
          gateTowerCells } from './crossings'
-import { crossingReady, LANDING_LABEL } from './crossing-out'
+import { depart, LANDING_LABEL } from './crossing-out'
+import { LANDING_ARRIVAL } from '../world/landing'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
@@ -8255,16 +8256,38 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // canon insists stays unbuilt."* The seam keeps being the way back out to the Wilds.
         const marks = waymarks.current.marks
         if (standing === 0) {
-          // ⚠ THE GATE'S BLOCKER IS NAMED, AND IT IS ASKED OF THE MAP RATHER THAN OF A CONSTANT.
-          // `crossing-out.ts` exists precisely so nobody keeps a `LANDING_BUILT` flag by hand: it
-          // reads the shipped zone map for a gate labelled THE LANDING, so the day Alex paints one
-          // this sentence changes by itself and the day it is unpainted the refusal comes back.
-          // Both ends of that crossing are still unwired (`consumeArrival` has no caller in play3d)
-          // — so this reports the FIRST thing standing in the way, honestly, and does not pretend
-          // the rest is done.
-          onSay(crossingReady()
-            ? 'the Rune Hold gate — the landing is painted; the crossing itself is not wired yet'
-            : `the Rune Hold gate — nobody has painted ${LANDING_LABEL} on the town square yet`)
+          // ── ★★★ AND NOW THE HOME-GATE CROSSES OUT (2026-09-03) ─────────────────────────────
+          // This block printed a sentence for a week because THE LANDING was unpainted and the
+          // anchor tile was nobody's to guess. Both landed together: `world/landing.ts` places the
+          // door at the heart of the 24x24 plaza with its jambs stamped into the grid, and
+          // `landing.test.ts` proves every cell against the shipped map rather than asserting it.
+          //
+          // ⚠ THE BLOCKER IS STILL ASKED OF THE MAP, NOT OF A FLAG, and that has to stay true. If
+          // the landing is ever unpainted, `depart` refuses by name on its own and this says so —
+          // no `LANDING_BUILT` constant anybody has to remember to flip back.
+          //
+          // ⚠⚠ `depart` WRITES THE ONE-SHOT AND NOTHING ELSE, THEN WE NAVIGATE. That order is the
+          // contract's *no committed middle* (`engine/crossing.ts`): either the departure has not
+          // happened and the keeper reloads standing in the arch, or the arrival is complete. ★ The
+          // tempting symmetry — also parking the keeper at the gate on the Ather side so they
+          // "come back where they left" — is exactly the committed middle, and it is unnecessary:
+          // the Ather record was never moved, so returning already puts them back in this socket.
+          //
+          // ★ A FULL PAGE NAVIGATION, DELIBERATELY. The two sides are separate code-split routes
+          // and do not share module state (measured 2026-08-07 on `justBorn`), which is the whole
+          // reason the handoff goes through storage. `Shimmer3D`'s own menu already crosses back
+          // this way.
+          const out = depart(localStorage, LANDING_ARRIVAL)
+          if ('refused' in out) {
+            // Two refusals, two different sentences — collapsing them would report a map problem
+            // as a build problem, or the reverse.
+            onSay(out.refused === 'unpainted'
+              ? `the Rune Hold gate — nobody has painted ${LANDING_LABEL} on the town square yet`
+              : 'the Rune Hold gate — the landing has no clear tile to stand up on')
+          } else {
+            onSay(`stepping through the ${out.via.toLowerCase()} — Rune Hold`)
+            window.location.href = '/shimmer/play3d'
+          }
         } else if (standing !== null) {
           // ⚠ DARK AND UNBUILT ARE DIFFERENT STATES AND MUST NOT SHARE A SENTENCE — the whole point
           // of a dark socket is that it says a way exists here that you have not earned. Reporting

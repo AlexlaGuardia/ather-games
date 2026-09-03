@@ -31,8 +31,16 @@ import { stageArrival, type Store, type TilePos } from '../engine/crossing'
 /** The town the one home-gate opens onto. Canon's *"established crossing"*, not a keeper's choice. */
 export const LANDING_ZONE = 'rune-hold'
 
-/** The gate's nametag on the map. The oracle and the map editor both speak in labels. */
-export const LANDING_LABEL = 'THE LANDING'
+/**
+ * The gate's nametag on the map. The oracle and the map editor both speak in labels.
+ *
+ * ★ RE-EXPORTED, NEVER RESTATED. It used to be a second `const` holding the same string, which is
+ * the hand-kept mirror this repo keeps paying for: two copies of one fact agree with each other
+ * forever, including after one of them stops being true. `world/landing.ts` owns it because the
+ * label is MAP data — it is what the door is called in `zones.ts` — and this side only reads it.
+ */
+export { LANDING_LABEL } from '../world/landing'
+import { LANDING_LABEL } from '../world/landing'
 
 /**
  * One-shot handoff key, read and CLEARED by the arriving side.

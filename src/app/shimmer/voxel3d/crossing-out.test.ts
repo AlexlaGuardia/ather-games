@@ -12,6 +12,7 @@ import {
   landingGate, crossingReady, arrivalBlockedBy, packArrival, depart,
 } from './crossing-out'
 import { consumeArrival, arrivalFor, type Store } from '../engine/crossing'
+import { LANDING_ARRIVAL } from '../world/landing'
 
 /** The landing exactly as Alex will paint it: 1×2, the map's first non-square gate. */
 const LANDING: Gate = { x: 4, y: 4, w: 1, h: 2, toZone: 'x', toX: 1, toY: 1, label: LANDING_LABEL }
@@ -98,11 +99,28 @@ ok(gates.length > 0, `the town has doors to reason about (${gates.length})`)
   }
   const painted: Zone[] = [{ ...(town as Zone), gates: [...gates, LANDING] } as Zone]
 
-  // (a) unpainted — the refusal is the SHIPPED state today, and it must write nothing at all.
+  // (a) unpainted — the refusal must still be reachable, and it must write nothing at all.
+  //
+  // ⚠ RE-AIMED 2026-09-03, AND WHICH KIND OF RED THIS WAS IS THE WHOLE NOTE. This case used to
+  // call `depart(store, ...)` with the DEFAULT zones and lean on the shipped map having no landing.
+  // THE LANDING is painted now, so the default answers 'blocked' instead of 'unpainted' and the
+  // assert went red — **a location that expired, not an assertion that was wrong.** The refusal
+  // path is not dead code the day it stops being the shipped state: unpaint the door and it is the
+  // shipped state again. So it moves onto a synthetic unpainted town, where it cannot expire twice.
   ops.length = 0
-  const cold = depart(store, { x: 20, y: 20 })
+  const bare: Zone[] = [{ ...(town as Zone), gates: gates.filter(g => g.label.toUpperCase() !== LANDING_LABEL) } as Zone]
+  const cold = depart(store, { x: 20, y: 20 }, bare)
   ok('refused' in cold && cold.refused === 'unpainted', 'with no landing painted, the gate refuses by name')
   ok(ops.filter(o => !o.startsWith('get')).length === 0, `a refused departure writes NOTHING (${ops.join(',')})`)
+
+  // ★ AND THE OTHER HALF, WHICH ONLY BECAME ASSERTABLE TODAY: on the SHIPPED map the departure
+  // now succeeds. Without this the suite would still pass if painting the landing had done nothing.
+  ops.length = 0
+  const live = depart(store, LANDING_ARRIVAL)
+  ok(!('refused' in live), `the shipped map departs for real (${JSON.stringify(live)})`)
+  ok('staged' in live && live.staged.zone === LANDING_ZONE
+     && live.staged.x === LANDING_ARRIVAL.x && live.staged.y === LANDING_ARRIVAL.y,
+     'and it stages the anchor beside the door, not the door')
 
   // (b) painted but the anchor bounces — refused, and again nothing is written.
   ops.length = 0
