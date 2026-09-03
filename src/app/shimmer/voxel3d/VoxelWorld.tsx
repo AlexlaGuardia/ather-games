@@ -268,6 +268,8 @@ import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND, V
 import { imbue, imbueWhy, imbueSentence, crystalFor } from '../play3d/imbue'
 import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
+import { loadParked, swapTo, MAX_LOADOUTS } from '../play3d/loadouts'
+import { starterFor } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
@@ -3245,6 +3247,28 @@ function ToolsTab({ tools, skills }: {
  * listed, dimmed, bindable, and carry their reason — and the passive readout says 'unbuilt' the same
  * way when its effect has no runtime yet.
  */
+function LoadoutSwitch({ owned, birth, onSwapped }: { owned: readonly string[]; birth: string | null; onSwapped: (slots: Loadout) => void }) {
+  const parked = loadParked()
+  const total = 1 + parked.length
+  const swap = (i: number) => {
+    if (!swapTo(i, birth, starterFor(owned))) return
+    onSwapped(resolveLoadout([...owned], birth, keeperBook(owned)).slots)
+  }
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+      <span className="gx-label text-[10px] text-white/35">loadout</span>
+      <span className="rounded border border-amber-200/40 px-2 py-0.5 text-[10px] text-amber-200/90">active · {ALL_BANDS.map(k => k[0]!.toUpperCase()).join('')}</span>
+      {parked.map((p, i) => (
+        <button key={i} type="button" onPointerDown={() => swap(i)}
+                className="gx-btn rounded border border-white/15 px-2 py-0.5 text-[10px] text-white/60 hover:bg-white/[0.06]">
+          swap to {i + 2} · {p.slots.filter(Boolean).length} bound · {p.vessels.bracelet.length + p.vessels.focus.length} set
+        </button>
+      ))}
+      <span className="ml-auto text-[10px] text-white/30">{total} of {MAX_LOADOUTS}{total < MAX_LOADOUTS ? ' · a pair is grown at the Passage' : ''}</span>
+    </div>
+  )
+}
+
 function LoadoutTab({ items, onLetters }: { items: React.RefObject<Inventory>; onLetters: () => void }) {
   const [owned] = useState(() => loadRuneInventory().owned)
   // Read with the runes and pinned for the same reason: the birth-exclusive band decides which
@@ -3290,6 +3314,10 @@ function LoadoutTab({ items, onLetters }: { items: React.RefObject<Inventory>; o
 
   return (
     <div className="flex flex-col gap-1.5">
+      {/* ── ★ MORE THAN ONE LOADOUT (2026-09-03): the active pair + every parked pair. A swap exchanges the
+          paper (slots + set letters) and leaves the bag alone; the world re-resolves on `onLetters`
+          (the host bumps runeTick there). A pair is bought at the Passage's vessel shelf. */}
+      <LoadoutSwitch owned={owned} birth={birth} onSwapped={(next) => { setSlots(next); setPicking(null); onLetters() }} />
       <LettersCard owned={owned} birth={birth} items={items} onChange={onLetters} />
       {ALL_BANDS.map((kind, i) => {
         const bound = slots[i] ?? null

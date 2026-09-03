@@ -28,6 +28,7 @@ import { RUNES } from './birth/runes.data'
 import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { saveLetters } from './gems'
+import { buyPair, loadoutCount, PAIR_PRICE, MAX_LOADOUTS } from './loadouts'
 import { rackFor, buy, priceOf, canRead, msUntilRotation, cycleAt as rackCycleAt } from './scroll-market'
 import {
   WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, cycleAt, weekdayOf, daysUntil, gemTrayFor, gemPrice,
@@ -82,6 +83,12 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
     setNote(r.say); if (!r.ok) return
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
     saveLetters(r.letters); rerender()
+  }
+  const onBuyPair = () => {
+    const r = buyPair(marks)
+    setNote(r.say); if (!r.ok) return
+    if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
+    rerender()
   }
   const onSell = (itemId: string, n: number) => {
     if (!bag) return
@@ -172,8 +179,17 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
           })}
         </Shelf>
 
+        <Shelf title="The vessel shelf" when="every day · the paper, grown">
+          {/* Canon: one loadout = one focus + one bracelet; a second loadout needs a second of both and its
+              own gems. A pair arrives EMPTY — write something on it from the Loadout tab. */}
+          <Row left={<span className="text-white/70">a focus and a bracelet</span>}
+               mid={`you carry ${loadoutCount()} of ${MAX_LOADOUTS} · a second loadout, with its own letters`}
+               price={PAIR_PRICE} action={onBuyPair} disabled={loadoutCount() >= MAX_LOADOUTS}
+               label={loadoutCount() >= MAX_LOADOUTS ? 'all you can carry' : 'buy the pair'} />
+        </Shelf>
+
         {note && <div className="mt-2 rounded border border-amber-200/20 bg-amber-200/[0.06] px-2.5 py-1.5 text-[10px] text-amber-100/80">{note}</div>}
-        <div className="mt-2 text-[10px] text-white/25">Vessels — a second focus and bracelet — are not on the shelves yet. Ultimates never are.</div>
+        <div className="mt-2 text-[10px] text-white/25">Ultimates are never on the shelves.</div>
       </div>
     </div>
   )
