@@ -85,6 +85,17 @@ The three shelves (merchants E'xday, teachers Coomday, scroll racks, vessels).
 - **The cast panel names what is short** — each option says *short Barrier — the Passage sells gems* before the
   press, because a refused bind is otherwise silent.
 
+### Imbue — the in-world road to a letter (`0150cd6`, LIVE in `BUILD_ID tnaQNTsyVmbbJfIUH7dBs`)
+Canon: a gem is *"found, bought, or **bound from a rune you know**; quality = the prospecting ladder"* — and the
+ladder was already in the ground: the seams drop `raw_mana_shard`, the four `*_crystal`s, `pure_mana_core`,
+`ather_crystal`. So `play3d/imbue.ts`: a rune you HOLD + one element crystal of its element → one gem in the bag.
+Identity is checked before the crystal (you imbue what you ARE). The letters card grows an **imbue** row per held
+rune (crystal · count · a button that refuses in words). No shop, no currency — the Passage is the OTHER road.
+Only the element crystal imbues today; the core/ather rungs are the ladder's promise (quality), not modelled.
+imbue **21/0**, gems **39/0**, 3 mutations fire, bands 213 → 214. ⚠ Two guard slices had an unanchored END and
+sliced to the file tail when the function they anchored on grew props — every assert below passed for the wrong
+reason. Both anchors now asserted present. Served == disk; imbue row, refusal sentence and crystal map present.
+
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
   of one rune, for now. One focus + one bracelet, implicit — a second loadout is not built. No merchant yet.
