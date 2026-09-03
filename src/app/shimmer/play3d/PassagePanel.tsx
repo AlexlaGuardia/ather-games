@@ -7,7 +7,9 @@
  * › `the-passage`), and the voxel world's crossing OUT to Rune Hold is being painted by the hub lane as
  * this is written. Until a keeper can walk there, the shelves open through an owner-gated console door
  * (`/market`) so the economy can be TRIED — the same reason `/brew` exists beside the cauldron block.
- * The host that mounts this at the real stalls comes with the crossing; the panel does not change.
+ * ★ AND THE REAL HOST ALREADY EXISTS: the tile Passage's trader (`npcs3d.ts` › `passage-trader`) has
+ * opened the scroll rack from `Shimmer3D.tsx` since August; it opens THIS panel now, and the rack-only
+ * `PassageRack.tsx` is retired into the rack section below (its canon note travels with it).
  *
  * The shelves (`passage.ts` says what is canon and what is Jin's):
  *   RACK     · Knowledge Scrolls, daily, for Marks         (`scroll-market.ts` — dormant until now)
@@ -26,7 +28,7 @@ import { RUNES } from './birth/runes.data'
 import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { saveLetters } from './gems'
-import { rackFor, buy, priceOf, cycleAt as rackCycleAt } from './scroll-market'
+import { rackFor, buy, priceOf, canRead, msUntilRotation, cycleAt as rackCycleAt } from './scroll-market'
 import {
   WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, cycleAt, weekdayOf, daysUntil, gemTrayFor, gemPrice,
   buyGem, sell, teacherFor, takeLesson, type Weekday,
@@ -57,6 +59,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   const rerender = () => { bump(n => n + 1); onChange() }
 
   const rack = rackFor(1, rackCycleAt(nowMs))
+  const rackMins = Math.max(1, Math.round(msUntilRotation(nowMs) / 60000))
   const tray = gemTrayFor(cycle)
   const teacher = teacherFor(cycle)
   const inDays = (d: Weekday) => { const n = daysUntil(cycle, d); return n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days` }
@@ -122,13 +125,24 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
           Rotating spots. One leaves, another takes their place. Merchants ride on {MARKET_DAY} ({inDays(MARKET_DAY)}); the masters hold on {TEACHING_DAY} ({inDays(TEACHING_DAY)}). The week: {WEEK.join(' · ')}.
         </div>
 
-        <Shelf title="The scroll racks" when="every day · the word, bought">
-          {rack.map(m => (
-            <Row key={m.id} left={<span style={{ color: glow(m.runes[0] ?? '') }}>{m.name}</span>}
-                 mid={`${m.tier} · ${m.runes.map(runeName).join(' + ') || 'no rune'}`}
-                 price={priceOf(m)} action={() => onBuyScroll(m.id)}
-                 disabled={book.learned.includes(m.id)} label={book.learned.includes(m.id) ? 'known' : 'buy'} />
-          ))}
+        <Shelf title="The scroll racks" when={`every day · the word, bought · the traders change over in ${rackMins}m`}>
+          {/* ★ THE UNREADABLE ROW IS THE FEATURE (ported from the retired PassageRack.tsx): canon rules
+              "the same rack means something different to every keeper who walks past it". An unreadable
+              scroll is DRAWN, dimmed, with the runes it is written in named — the rack as a map of where
+              your identity could go next. Hiding it would make every keeper's Passage identical. */}
+          <div className="mb-1.5 text-[10px] italic text-white/35">A scroll teaches a technique, never a rune. What you can read is what you already are.</div>
+          {rack.map(m => {
+            const readable = canRead(m, owned), known = book.learned.includes(m.id)
+            return (
+              <div key={m.id} style={{ opacity: readable ? 1 : 0.45 }}>
+                <Row left={<span style={{ color: glow(m.runes[0] ?? '') }}>{m.name}</span>}
+                     mid={`${m.tier} · ${readable ? '◆' : '◇'} ${m.runes.map(runeName).join(' + ') || 'no rune'}${readable ? '' : ' — you do not carry this'}${m.needs ? ` · needs ${m.needs}` : ''}`}
+                     price={priceOf(m)} action={() => onBuyScroll(m.id)}
+                     disabled={known} label={known ? 'known' : 'buy'} />
+                <div className="pb-1 text-[10px] leading-snug text-white/35">{m.effect}</div>
+              </div>
+            )
+          })}
         </Shelf>
 
         <Shelf title="The teacher's bench" when={`${TEACHING_DAY} · the word, given`}>

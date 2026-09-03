@@ -88,7 +88,7 @@ import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SP
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { keeperBook, saveBook } from './book'
-import { PassageRack } from './PassageRack'
+import { PassagePanel } from './PassagePanel'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem, menuBtn, TOOL_HUD } from './ui'
@@ -7451,18 +7451,18 @@ export default function Shimmer3D() {
       />
 
       {rackOpen !== null && (
-        <PassageRack
-          seed={WORLD_SEED}
+        <PassagePanel
+          items={invRef}
+          owned={runeInvRef.current.owned}
+          birth={runeInvRef.current.birth}
           nowMs={rackOpen}
-          book={bookRef.current}
-          marks={wallet.marks}
-          ownedRunes={runeInvRef.current.owned}
-          onBuy={(book, spent) => {
-            bookRef.current = book
-            saveBook(book)
-            wallet.spend(spent)
-            // Re-resolve immediately: a scroll you just bought must be bindable without a reload,
-            // and `applyLoadout` re-reads the book by design.
+          dayOverride={null}
+          onChange={() => {
+            // A scroll or a lesson changes the book; a sale changes the bag; a gem changes the letters.
+            // Re-read the book from the one door (`keeperBook`) and re-resolve immediately: a word you
+            // just bought must be bindable without a reload, and `applyLoadout` re-reads by design.
+            bookRef.current = keeperBook(runeInvRef.current.owned)
+            syncSkillHud()
             applyLoadout()
           }}
           onClose={() => { setRackOpen(null); battleRef.current = false; closeCursorUI() }}

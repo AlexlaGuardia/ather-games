@@ -40,7 +40,7 @@ const CONVERTED = ['PassagePanel.tsx', 'TremorRing.tsx', 'ui.tsx']
  */
 const PENDING = [
   'GfxPanel.tsx', 'HotBar.tsx', 'MoveBook.tsx',
-  'npcs3d.ts', 'page.tsx', 'PartyPanel.tsx', 'PassageRack.tsx', 'RemotePlayers.tsx',
+  'npcs3d.ts', 'page.tsx', 'PartyPanel.tsx', 'RemotePlayers.tsx',
   'Shimmer3D.tsx', 'StationMenus.tsx', 'WorldMap.tsx',
 ]
 

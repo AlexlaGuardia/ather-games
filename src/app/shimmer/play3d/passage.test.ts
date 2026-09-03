@@ -1,7 +1,7 @@
 /**
  * The Passage's shelves — the week, the tray, the counter, the bench. Run: `npx tsx src/app/shimmer/play3d/passage.test.ts`
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import {
   WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, TRAY_SIZE, GEM_PRICE_LANE, GEM_PRICE_OFF,
   weekdayOf, daysUntil, gemTrayFor, gemPrice, buyGem, sell, teacherFor, takeLesson, TEACHABLE,
@@ -96,6 +96,15 @@ const store: Record<string, string> = {}
   const earth = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].filter(d => new RegExp(d, 'i').test(panel + src.slice(at, at + 2000)))
   ok(earth.length === 0, `★ no Earth weekday in the panel or the op (${earth.join(', ') || 'none'})`)
   ok(/addMarks\(/.test(panel) && /spendMarks\(/.test(panel), 'the panel both earns and spends Marks — a counter without a sell side is a shop nobody can pay at')
+  // ★ THE REAL HOST: the tile Passage's trader opens the four shelves, not a rack-only panel.
+  const tile = noComments(readFileSync(new URL('./Shimmer3D.tsx', import.meta.url), 'utf8'))
+  const mount = tile.indexOf('{rackOpen !== null && (')
+  const mountEnd = tile.indexOf('/>', mount)
+  ok(mount >= 0 && mountEnd > mount, 'Shimmer3D still mounts a panel behind rackOpen (the trader\'s onDone)')
+  const m = tile.slice(mount, mountEnd)
+  ok(/<PassagePanel/.test(m) && /items=\{invRef\}/.test(m) && /keeperBook\(/.test(m) && /applyLoadout\(\)/.test(m), 'the trader mounts PassagePanel with the tile bag, and onChange re-reads the book and re-resolves')
+  ok(!/<PassageRack/.test(tile) && !existsSync(new URL('./PassageRack.tsx', import.meta.url)), 'the rack-only panel is retired — one Passage, not two')
+  ok(/unreadable|you do not carry this/.test(panel) && /canRead\(/.test(panel), 'the unreadable row is DRAWN and named (the rack\'s canon note survived the retirement)')
 }
 
 console.log(`passage: ${pass} passed, ${fails.length} failed`)

@@ -21,7 +21,7 @@
 // ── ★★ 2026-08-17 — THE PANEL WAS THE LAST THING THAT DIDN'T KNOW THE PASSAGE SHIPPED ───────────
 // The line above used to end *"the book MAY claim a move as known once acquisition is built. It
 // still doesn't, because nothing grants one yet."* **That stopped being true when `scroll-market.ts`
-// + `PassageRack.tsx` shipped** — the rack rotates, prices, refuses with typed reasons, and writes
+// + `PassageRack.tsx` shipped** (retired 2026-09-03 into `PassagePanel.tsx`, the four shelves) — the rack rotates, prices, refuses with typed reasons, and writes
 // a `Book` the cast layer reads. So the keeper buys a scroll, the rack's own button says **known**,
 // the move binds to a cast key and FIRES — and this panel went on stamping **NOT YET LEARNED** on
 // it, because `MoveRow` hardcoded that string and the component was never handed the book.
