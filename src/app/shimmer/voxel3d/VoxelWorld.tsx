@@ -275,7 +275,7 @@ import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
 import { spawnField, tickFields, containsVolume, fieldsAtVolume, absorbShotAtVolume, absorbStrikeAtVolume, shellWear,
          FIELD_HEIGHT, type Field } from '../engine/field-effects'
-import { SHELL_TIERS, wearTier, tierOpacity, crackSegments } from './shell-cracks'
+import { SHELL_TIERS, wearTier, tierOpacity, crackLines } from './shell-cracks'
 import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured } from '../engine/conjured-terrain'
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
          type StatusBag } from '../engine/statuses'
@@ -5671,11 +5671,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   }), [fieldMat])
   const crackGeos = useMemo(() => Array.from({ length: SHELL_TIERS }, (_, t) => {
     const gm = new THREE.BufferGeometry()
-    gm.setAttribute('position', new THREE.BufferAttribute(crackSegments(t), 3))
+    const lines = crackLines(t)
+    gm.setAttribute('position', new THREE.BufferAttribute(lines.position, 3))
+    gm.setAttribute('color', new THREE.BufferAttribute(lines.color, 3))
     return gm
   }), [])
+  // ⚠ NOT the shell's colour. It was, at 0.85, and Alex read the result as a halo (2026-09-03) —
+  // a brighter line in the membrane's own hue is an outline, not a fracture. The tone lives in
+  // the geometry now (dark core + lit lip, `shell-cracks.ts`); this material only carries alpha.
   const crackMat = useMemo(() => new THREE.LineBasicMaterial({
-    color: 0xaef2ff, transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false,
+    color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false,
   }), [])
   const crackMeshes = useRef(new Map<number, THREE.LineSegments>())
 

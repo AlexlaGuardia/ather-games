@@ -8,7 +8,7 @@
 
 import { readFileSync } from 'node:fs'
 import { spawnField, absorbShotAtVolume, shellWear, FIELD_HEIGHT } from '../engine/field-effects'
-import { SHELL_TIERS, wearTier, tierOpacity, cracksForTier, crackSegments, CRACK_LIFT, CRACK_SEGMENTS } from './shell-cracks'
+import { SHELL_TIERS, wearTier, tierOpacity, cracksForTier, crackSegments, CRACK_LIFT, CRACK_SEGMENTS, CRACK_CORE, CRACK_LIP, CRACK_LIP_DROP, crackLines } from './shell-cracks'
 import { noComments, codeOnly } from '../testing/guard'
 
 let ok = 0, bad = 0
@@ -62,12 +62,37 @@ console.log('\n── C. the cracks ──')
   // ⚠ Found by mutation: comparing against the constant passes whatever the constant is. The lift
   // must be pinned OUTSIDE the body, as a number, or the assert is a tautology.
   chk('★ every vertex sits at the lift radius', onSurface)
-  chk('★ ...and the lift is strictly OUTSIDE the unit body, and only a hair (no z-fight, no halo)', CRACK_LIFT > 1.0 && CRACK_LIFT <= 1.05)
+  // ⚠ The ceiling was 1.05 and Alex called 1.02 a HALO (2026-09-03). A guard that admits the value
+  // the defect was reported at cannot see the defect — found by mutation (lift → 1.02 survived).
+  chk('★ ...and the lift is strictly OUTSIDE the unit body, and only a hair (no z-fight, no halo: 1.02 was seen and read as one)', CRACK_LIFT > 1.0 && CRACK_LIFT <= 1.01)
   chk('every vertex is within the unit slab\'s height', inHeight)
   chk('cracks start at the rim and run DOWN (a struck shell cracks from the edge)', fromRim >= cracksForTier(SHELL_TIERS - 1))
   const a = crackSegments(2, 11), b = crackSegments(2, 11), c = crackSegments(2, 12)
   chk('deterministic: the same shell cracks the same way every frame', a.length === b.length && a.every((v, i) => v === b[i]))
   chk('...and two shells crack differently', c.length !== a.length || !a.every((v, i) => v === c[i]))
+}
+
+console.log('\n── C2. ★ a crack is DARK with a lit lower lip — never the shell\'s own light (Alex 2026-09-03: "halo") ──')
+{
+  const lum = (c: readonly [number, number, number]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+  chk('★ the core is dark — a fracture is where the light is MISSING (lum < 0.15)', lum(CRACK_CORE) < 0.15)
+  chk('★ the lip is lit but NOT white-hot — a white line on a faint membrane is the halo again (0.4 ≤ lum ≤ 0.7)', lum(CRACK_LIP) >= 0.4 && lum(CRACK_LIP) <= 0.7)
+  chk('the lip sits a hair BELOW the core (light from above lights the lower edge of a groove)', CRACK_LIP_DROP > 0 && CRACK_LIP_DROP < 0.05)
+  const l = crackLines(SHELL_TIERS - 1, 7), core = crackSegments(SHELL_TIERS - 1, 7)
+  chk('every core segment has a lip twin: positions double, colours match positions', l.position.length === core.length * 2 && l.color.length === l.position.length)
+  let twinned = true, toned = true
+  for (let i = 0; i < core.length; i += 3) {
+    const j = core.length + i
+    // Float32 storage: compare within float precision, not as exact doubles (my first cut did, and
+    // two correct asserts went red on 3e-8).
+    const near = (a: number, b: number) => Math.abs(a - b) <= 1e-6
+    if (!near(l.position[j], core[i]) || !near(l.position[j + 2], core[i + 2]) || !near(l.position[j + 1], core[i + 1] - CRACK_LIP_DROP)) twinned = false
+    if (!near(l.color[i], CRACK_CORE[0]) || !near(l.color[i + 1], CRACK_CORE[1]) || !near(l.color[i + 2], CRACK_CORE[2])) toned = false
+    if (!near(l.color[j], CRACK_LIP[0]) || !near(l.color[j + 1], CRACK_LIP[1]) || !near(l.color[j + 2], CRACK_LIP[2])) toned = false
+  }
+  chk('★ the twin is the same run, one lip lower, same radius', twinned)
+  chk('★ core vertices wear the core tone, lip vertices the lip tone', toned)
+  chk('the lip never leaves the unit slab', Math.min(...Array.from(l.position).filter((_, k) => k % 3 === 1)) >= -0.5)
 }
 
 console.log('\n── D. the host maps wear through SHARED tiers, and constructs nothing per frame ──')
@@ -81,6 +106,13 @@ console.log('\n── D. the host maps wear through SHARED tiers, and constructs
   chk('★ the cracks are pointed at a SHARED tier geometry', count(code, /cracks\.geometry = crackGeos\[tier\]/) === 1)
   chk('the crack lines follow the body exactly', count(code, /cracks\.scale\.copy\(mesh\.scale\)/) === 1 && count(code, /cracks\.position\.copy\(mesh\.position\)/) === 1)
   chk('the crack lines are retired with their field', count(code, /crackMeshes\.current\.delete\(id\)/) === 1)
+  // ★ THE HALO'S CAUSE, PINNED: the crack material must not carry the shell's colour, and the tone
+  // must come from the geometry. A one-line "tidy" back to `color: 0xaef2ff` is exactly the bug.
+  const matAt = code.indexOf('const crackMat = useMemo(')
+  const matBlock = matAt >= 0 ? code.slice(matAt, code.indexOf('}), [])', matAt)) : ''
+  chk('★ the crack material takes its tone from VERTEX COLOURS (vertexColors: true)', /vertexColors:\s*true/.test(matBlock))
+  chk('★ ...and does not carry the shell\'s own colour (0xaef2ff — the halo)', matBlock.length > 0 && !/0xaef2ff/.test(matBlock))
+  chk('the tier geometry carries a color attribute from crackLines', count(nc, /setAttribute\('color'/) === 1 && /crackLines\(t\)/.test(code))
   chk('the tier resources are built once, in useMemo', /const shellMats = useMemo\(/.test(code) && /const crackGeos = useMemo\(/.test(code) && /const crackMat = useMemo\(/.test(code))
   chk('a worn shell shivers: the pulse rate and amplitude read wear', /\* \(1 \+ wear \* 1\.5\)/.test(nc) && /\+ wear \* 0\.04/.test(nc))
   chk('★ no per-mesh opacity write anywhere in the field loop (that would be material state)', !/mesh\.material\.opacity\s*=/.test(code))

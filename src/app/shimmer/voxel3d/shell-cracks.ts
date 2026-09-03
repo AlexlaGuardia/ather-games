@@ -45,8 +45,10 @@ export const CRACK_SEGMENTS = 7
  * cracks the same way each frame, and two shells crack differently.
  *
  * Cracks sit a hair OUTSIDE the surface (`CRACK_LIFT`) so they are not z-fought by the body.
+ * ⚠ 1.02 → 1.005 on 2026-09-03: Alex looked and the cracks read as a HALO. Part of that was the
+ * lift — on a 2.4-radius door 2% is a twentieth of a block of air between line and skin.
  */
-export const CRACK_LIFT = 1.02
+export const CRACK_LIFT = 1.005
 export function crackSegments(tier: number, seed = 1): Float32Array {
   const cracks = cracksForTier(tier)
   const out: number[] = []
@@ -73,4 +75,39 @@ export function crackSegments(tier: number, seed = 1): Float32Array {
     }
   }
   return new Float32Array(out)
+}
+
+/**
+ * ── ★ A CRACK IS DARK, WITH A LIT LOWER LIP — NOT A BRIGHTER LINE OF THE SHELL'S OWN LIGHT ─────
+ * The first cut drew every crack in the shell's pale cyan at five times the body's opacity, lifted
+ * off the skin. Alex looked (2026-09-03): *"the cracks read as a halo."* Of course they did — a
+ * brighter line in the same hue, floating outside a faint membrane, IS a glow outline. A fracture
+ * in a light-shell is where the light is MISSING, so the core is dark. But wardens press doors at
+ * NIGHT, and a dark line on a dark scene is nothing — so each run is twinned by a dim grey line one
+ * lip below it (light from above lights the lower edge of a groove; the upper edge is in shadow).
+ * By day the dark core reads; by night the lip does. Neither is the shell's colour, on purpose.
+ *
+ * Baked as VERTEX COLOURS into one geometry so the host keeps exactly one LineSegments per shell,
+ * one material, one tier swap — the render-audit shape `shell-wear.test.ts` asserts stays put.
+ * Dials, if Alex's eye says so: `CRACK_CORE` / `CRACK_LIP` tones, `CRACK_LIP_DROP`.
+ */
+export const CRACK_CORE: readonly [number, number, number] = [0.02, 0.08, 0.10]
+export const CRACK_LIP: readonly [number, number, number] = [0.55, 0.62, 0.66]
+/** how far below the dark core the lit lip sits, in unit-slab height */
+export const CRACK_LIP_DROP = 0.012
+
+export function crackLines(tier: number, seed = 1): { position: Float32Array; color: Float32Array } {
+  const core = crackSegments(tier, seed)
+  const n = core.length
+  const position = new Float32Array(n * 2)
+  const color = new Float32Array(n * 2)
+  position.set(core, 0)
+  for (let i = 0; i < n; i += 3) {
+    color[i] = CRACK_CORE[0]; color[i + 1] = CRACK_CORE[1]; color[i + 2] = CRACK_CORE[2]
+    position[n + i] = core[i]
+    position[n + i + 1] = core[i + 1] - CRACK_LIP_DROP
+    position[n + i + 2] = core[i + 2]
+    color[n + i] = CRACK_LIP[0]; color[n + i + 1] = CRACK_LIP[1]; color[n + i + 2] = CRACK_LIP[2]
+  }
+  return { position, color }
 }
