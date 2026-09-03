@@ -6934,7 +6934,22 @@ source alpha. Measured 296→140 opaque of 2304; colours 13 → 25/20/35/37. Ren
 >     spend on them.** The 10 spirits are LIVING things — the art-medium law keeps those as Alex's
 >     hand-drawn pixel art. The 4 items are icon-shaped, and the 08-26 ruling above says Meshy is the wrong
 >     medium for icons (16×16 quantised). The 11 tools are the only arguable set, and Shimmer tools are
->     held in a hand. **They predate every one of those rulings (July, rulings landed 08-06 / 08-24 /
+>     held in a hand.
+>   - **✅ AND THE 11 TOOLS ARE SETTLED TOO — DO NOT SPEND ON THEM. Alex asked to be sure they were not
+>     already done; the answer is better than that: they were never ours to do.** Shimmer's tool vocabulary
+>     is canon in `engine/tools.ts` — **blades → forestry, spikes → prospecting, rinsticks → rinning**, plus
+>     spades: **15 ids, and not one is a spear, wand, staff, longbow, mallet, dagger, quill or claw.** A
+>     grep for each of those nouns across `tools.ts`, `registry.ts` and `world/resources.ts` returns
+>     **nothing** (the single `claw` hit is `clickclaw`, a crafting drop). The 11 models map to no slot in
+>     the build, so texturing them buys an asset with nowhere to go.
+>   - **★ AND THE ART THEY WOULD HAVE FILLED IS ALREADY FINISHED.** `npx tsx scripts/item-art.mts`:
+>     **134 reachable items, 0 missing, 0 blank** — every tool already ships a painted flat sprite. ⚠ The
+>     real gap it does report is a different one and costs zero credits: **24 painted items render the
+>     `#d544c8` no-palette sentinel**, i.e. shipping in placeholder magenta, three of them tools
+>     (`shimmeroak_blade` 14%, `basic_rinstick` 6%, `glowfin_rinstick` 5%). That is an `ITEM_PALETTES`
+>     entry each and it is **Alex's hand**, not Meshy's.
+>   - ⚠ `spirits-3dmodels-rough/Meshy_AI_Blue_Shellback_...blend` is **corrupt** — Blender: *"not a blend
+>     file"*. 29 of the 30 open; noting it so nobody counts it as an asset. **They predate every one of those rulings (July, rulings landed 08-06 / 08-24 /
 >     08-26), so this is an exploration the canon caught up with — not a stock of free assets.** Each one needs regenerating from source to benefit, which is a credit decision per prop, not
 >   a re-run. **Budget is no longer the constraint:** Alex read the account 2026-09-03 — the subscription
 >   runs to **2026-10-23** with ~1000 credits this month, so the "credits lapse ~09-06, spend-it-or-lose-it"
