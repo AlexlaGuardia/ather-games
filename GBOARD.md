@@ -171,6 +171,9 @@ handed a one-rune word a full set and broke the "cannot write" assert for the wr
   a rune id.
 
 ### Next
+- **⏭ FIRST NEXT SESSION (pinned by Alex at wrap 09-03): TALK ABOUT THE INVENTORY MENU — how it works.** A
+  design conversation before any more is built on the panel (Satchel · Runes · Grimoire · Tools · Loadout, the
+  Letters card on two tabs, the loadout switch). Bring the tab map; Alex drives.
 - ~~Hub: deploy~~ **LIVE.** **Alex: open the panel — Runes tab and Loadout tab both carry the LETTERS card** (bracelet
   · focus · bag, `f66532f`, LIVE in `BUILD_ID t2w11XSVU9KquMs2_86wO`, served == disk). `/gems <rune> 2` as owner,
   bind on the Loadout tab, watch the chips move bag → bracelet under the cursor, clear, watch them return — does a
