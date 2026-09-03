@@ -668,14 +668,14 @@ export const BAND_KEYS: readonly string[] = SLOT_KEYS
  * never `row` / `column`. Naming the axis instead of its picture is what stops the two docs' argument
  * from reaching the build.
  */
-type Lane = 'element' | 'state'
+export type Lane = 'element' | 'state'
 
 /**
  * ⚠ EXHAUSTIVE OVER `MoveTier`, so a new canon tier is a COMPILE ERROR here rather than silently
  * defaulting to unscoped. `null` means "this band has no lane", which is a DECISION for passive and
  * a non-question for trait/combo — and it must stay a stated null, never an absent key.
  */
-const LANE_FOR_KIND: Record<MoveTier, Lane | null> = {
+export const LANE_FOR_KIND: Record<MoveTier, Lane | null> = {
   tactical: 'element',
   ultimate: 'state',
   passive: null,

@@ -263,6 +263,8 @@ import { BrewPanel } from './brew-panel'
 import { brewBlocker } from './brew'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneInventory } from '../play3d/rune-inventory'
 import { rebirth } from '../play3d/reborn'
+import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND } from '../play3d/gems'
+import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
@@ -1584,6 +1586,29 @@ export default function VoxelWorld() {
      * keeper reborn of Barrier who still carried tempest's shield ceiling would be half of each.
      * `runeTick` then has `World` re-resolve the loadout + stance exactly as `/rune` does.
      */
+    /**
+     * `/gems` — the letters readout, and the dev door for putting gems in the bag (2026-09-03).
+     * Reads through `keeperLetters` so a fresh keeper is seeded on the same door the panel uses.
+     */
+    gems: (arg, n) => {
+      const inv = loadRuneInventory()
+      const l = keeperLetters(inv.owned, inv.birth)
+      const name = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
+      const line = (l2: typeof l) => {
+        const bag = Object.entries(l2.bag).map(([r, k]) => `${name(r)}×${k}`).join(', ') || 'empty'
+        const set = VESSELS.map(v => `${v}: ${l2.vessels[v].map(name).join(', ') || '—'}`).join(' · ')
+        const total = Object.values(allLetters(l2)).reduce((a, b) => a + b, 0)
+        return `bag: ${bag} · ${set} · ${total} gem${total === 1 ? '' : 's'} in all`
+      }
+      if (!arg) return line(l)
+      if (!isOwner) return 'gems are found at the Passage, not typed — bare /gems reads your letters'
+      const id = arg.toLowerCase()
+      if (!RUNES.some(r => r.id === id)) return `no such rune: ${arg}`
+      const next = addGems(l, id, n ?? 1)
+      saveLetters(next)
+      setRuneTick(t => t + 1)
+      return `⟳ dev · ${n ?? 1} ${name(id)} gem${(n ?? 1) === 1 ? '' : 's'} into the bag · ${line(next)}`
+    },
     reborn: (arg) => {
       if (!isOwner) return 'a keeper is born once — /reborn is keeper-of-the-realm only'
       if (!arg) return 'reborn of what? — /reborn <rune>'
@@ -3120,6 +3145,10 @@ function LoadoutTab() {
   // have taught them none, in which case the section renders nothing (an empty frame would assert a
   // trait that is not there).
   const passive = derivePassive(owned, birth, book)
+  // ★ The letters, read fresh each render: `bind` below is a gem transaction (`setSlot` moves them),
+  // so what an option is short of changes with every pick. Cheap — two small arrays and a bag.
+  const letters = keeperLetters(owned, birth)
+  const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
 
   const bind = (slot: number, moveId: string | null) => {
     const next = setSlot(owned, birth, slots, slot, moveId, book)
@@ -3178,6 +3207,10 @@ function LoadoutTab() {
                   <>
                     {options.map(m => {
                       const built = isBuilt(m.id)
+                      // what the keeper is SHORT to write this word in this slot's vessel — the reason a
+                      // pick will not seat, named before they press it (a refused bind is otherwise silent)
+                      const vessel = VESSEL_FOR_KIND[kind]
+                      const short = vessel ? shortFor(m, birth, letters, vessel) : []
                       return (
                         <button key={m.id} type="button" onPointerDown={() => bind(i, m.id)}
                                 className="block w-full rounded px-2 py-1 text-left hover:bg-white/[0.06]">
@@ -3186,6 +3219,9 @@ function LoadoutTab() {
                             {bound === m.id && <span className="text-[9px] text-amber-200/60">bound</span>}
                             {!built && (
                               <span className="text-[9px] text-white/25">{castForMove(m.id).why}</span>
+                            )}
+                            {short.length > 0 && (
+                              <span className="text-[9px] text-rose-200/50">short {short.map(runeName).join(', ')} — the Passage sells gems</span>
                             )}
                           </span>
                         </button>

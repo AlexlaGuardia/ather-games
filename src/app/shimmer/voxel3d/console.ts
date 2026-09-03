@@ -152,6 +152,13 @@ export interface ConsoleCtx {
    */
   reborn: (rune?: string) => string
   /**
+   * ★ `/gems` — THE LETTERS. Bare is VIEW-GRADE: the bag and what is set in the bracelet and the
+   * focus, which is the one thing that explains a `no-gem` slot. `gems <rune> [n]` puts gems in the
+   * bag and is OWNER-ONLY — a test harness with the standing `/rune` warning: the Passage merchants
+   * (E'xday) are the acquisition system, and this must not become a second one.
+   */
+  gems: (rune?: string, n?: number) => string
+  /**
    * ★★★ `/ctxlost` — THROW AWAY THE GPU CONTEXT ON PURPOSE. OWNER-GATED, A TEST INSTRUMENT, AND
    * THE ONLY WAY ANYONE HAS EVER BEEN ABLE TO LOOK AT THE LOST-CONTEXT OVERLAY (focus #938).
    *
@@ -231,6 +238,12 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
   { name: 'rune', usage: 'rune [id]  (bare: your hand · id: develop/drop it)', help: 'the runes you hold and the moves they open',
     run: (a, c) => c.rune(a[0]),
     suggest: (i, c) => i === 0 && c.isOwner ? RUNES.map(r => r.id).sort() : [] },
+  // ★ /gems (2026-09-03, the casting vessels ruling). Bare = your letters, for everyone — a keeper
+  // whose slot says `no-gem` deserves to see which stones they are short. Granting is checked inside
+  // `c.gems`, the /rune split.
+  { name: 'gems', usage: 'gems [rune] [n]  (bare: your letters · rune: put n gems in the bag)', help: 'the rune-gems you carry, loose and set',
+    run: (a, c) => c.gems(a[0], a[1] === undefined ? undefined : Math.max(1, Math.round(Number(a[1]) || 1))),
+    suggest: (i, c) => i === 0 && c.isOwner ? RUNES.map(r => r.id).sort() : i === 1 ? ['1', '2', '3'] : [] },
   // ★ /reborn (2026-09-03, Alex: test Threshold on a keeper born of Barrier). Whole-command
   // owner gate: there is no view half — bare /rune already reads the hand. The rune list is the
   // same one /rune offers, lost states included: a keeper born through the dev door of a lost

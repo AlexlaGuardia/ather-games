@@ -9,7 +9,10 @@
 // It stores choices only. Every rule about what may go in a slot stays in `cast.ts` (`canSlot`),
 // so there is one definition of legality and this file cannot drift from it.
 
-import { ALL_BANDS, canSlot, defaultLoadout, eligibleMoves } from './cast'
+import { ALL_BANDS, canSlot, eligibleMoves } from './cast'
+import { moveById } from './keeper-moves'
+import { VESSEL_FOR_KIND, bindLetters, unbindLetters, lettersOf, missingLetters, saveLetters, shortFor, type Letters } from './gems'
+import { keeperLetters } from './book'
 import type { SlotKind } from './cast'
 import type { Book } from './scroll-market'
 import { keeperKey } from '@/lib/keeper-local'
@@ -135,7 +138,7 @@ export function isLegacyLoadout(saved: unknown[]): boolean {
  * a hand-kept mirror of this one, agreeing with itself while drifting — the exact shape this repo
  * keeps filing. `loadLoadout` is now a thin wrapper so the two answers cannot come apart.
  */
-export type EmptyReason = 'no-move' | 'cleared' | 'dropped'
+export type EmptyReason = 'no-move' | 'cleared' | 'dropped' | 'no-gem'
 
 export interface ResolvedLoadout {
   slots: Loadout
@@ -157,6 +160,7 @@ export function emptySlotWhy(reason: EmptyReason, openKey?: string): string {
     case 'no-move': return 'nothing you have learned fits this slot'
     case 'cleared': return `your saved loadout leaves it empty${fix}`
     case 'dropped': return `what was here no longer fits, so it was unbound${fix}`
+    case 'no-gem': return `the gems its word is written in are not set in the vessel${fix}`
   }
 }
 
@@ -183,10 +187,28 @@ export function emptySlotSentence(kind: string, reason: EmptyReason, openKey?: s
 export function resolveLoadout(owned: string[], birth: string | null, book: Book): ResolvedLoadout {
   // No save of any kind → the starting kit. A null here can only ever be `no-move`: the default
   // took the first eligible move per slot, so an empty slot means there was nothing to take.
+  // ★ THE KIT WRITES ITS WORDS. `defaultLoadout` picked the first eligible move per slot with no
+  // notion of letters; now a pick must be body-held or writable from the bag, and picking it SETS
+  // its letters (Gregory's gift arrives loose in the bag and is set here on the first resolve).
   const kit = (): ResolvedLoadout => {
-    const slots = defaultLoadout(owned, birth, book)
+    let letters = keeperLetters(owned, birth)
+    const used = new Set<string>()
+    const slots: Loadout = []
+    ALL_BANDS.forEach((kind) => {
+      const vessel = VESSEL_FOR_KIND[kind]
+      const pick = eligibleMoves(owned, birth, kind, book).find((m) => {
+        if (used.has(m.id)) return false
+        if (!vessel) return true
+        return shortFor(m, birth, letters, vessel).length === 0
+      })
+      if (pick && vessel) letters = bindLetters(letters, vessel, pick, birth) ?? letters
+      if (pick) used.add(pick.id)
+      slots.push(pick?.id ?? null)
+    })
+    saveLetters(letters)
     return { slots, why: slots.map((id) => (id ? null : 'no-move')) }
   }
+  const letters = keeperLetters(owned, birth)
   let raw: string | null = null
   try {
     raw = localStorage.getItem(keeperKey(LOADOUT_KEY))
@@ -222,6 +244,16 @@ export function resolveLoadout(owned: string[], birth: string | null, book: Book
       // ★ `dropped` stands even when nothing else is eligible. The keeper had something and it went
       // away; that is the fact they are missing, and it is not the same news as "you never had one".
       why.push('dropped')
+      return
+    }
+    // ★ A BOUND WORD MUST BE WRITTEN: its letters SET in the slot's vessel (not merely in the bag).
+    // Body-held moves need none. `no-gem` is its own reason because the fix is different — not the
+    // panel, the Passage.
+    const vessel = VESSEL_FOR_KIND[kind]
+    const m = moveById(id)
+    if (vessel && m && missingLetters(lettersOf(m, birth), letters.vessels[vessel]).length > 0) {
+      slots.push(null)
+      why.push('no-gem')
       return
     }
     slots.push(id)
@@ -294,9 +326,29 @@ export function clearLoadout(): void {
 export function setSlot(owned: string[], birth: string | null, slots: Loadout, slot: number, moveId: string | null, book: Book): Loadout {
   if (slot < 0 || slot >= ALL_BANDS.length) return slots
   if (moveId !== null && !canSlot(owned, birth, slot, moveId, book)) return slots
+  // ★ A BIND IS A GEM TRANSACTION (2026-09-03). Setting a move writes its letters from the bag into
+  // the slot's vessel; clearing (or displacing) one returns them. Refused — slots unchanged, nothing
+  // persisted — when a letter is missing, so the panel cannot seat a word the keeper cannot write.
+  // Persisted HERE, beside the decision, so the two hosts that bind cannot disagree about the gems.
+  const vessel = VESSEL_FOR_KIND[ALL_BANDS[slot]!]
+  let letters: Letters | null = keeperLetters(owned, birth)
+  if (vessel) {
+    if (moveId === null) letters = unbindLetters(letters, vessel)
+    else {
+      const m = moveById(moveId)
+      if (!m) return slots
+      letters = bindLetters(letters, vessel, m, birth)
+      if (!letters) return slots
+    }
+  }
   const next = ALL_BANDS.map((_, i) => (i === slot ? moveId : (slots[i] ?? null)))
   if (moveId !== null) {
-    for (let i = 0; i < next.length; i++) if (i !== slot && next[i] === moveId) next[i] = null
+    for (let i = 0; i < next.length; i++) if (i !== slot && next[i] === moveId) {
+      next[i] = null
+      const v = VESSEL_FOR_KIND[ALL_BANDS[i]!]
+      if (v) letters = unbindLetters(letters, v)
+    }
   }
+  saveLetters(letters)
   return next
 }

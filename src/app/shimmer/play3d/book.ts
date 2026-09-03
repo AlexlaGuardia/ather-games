@@ -22,6 +22,7 @@
 import { seedBook, starterFor, type Book } from './scroll-market'
 import { rawLoadout } from './loadout'
 import { keeperKey } from '@/lib/keeper-local'
+import { loadLetters, type Letters } from './gems'
 
 export const BOOK_KEY = 'ather:shimmer:book'
 
@@ -76,4 +77,13 @@ export function clearBook(): void {
  */
 export function keeperBook(ownedRunes: readonly string[]): Book {
   return loadBook(rawLoadout(), starterFor(ownedRunes))
+}
+
+/**
+ * The letters for the keeper holding these runes — the one call every consumer should make, the
+ * `keeperBook` shape again: seeds from what was literally bound + Gregory's gift, so no call site
+ * has to remember the migration.
+ */
+export function keeperLetters(ownedRunes: readonly string[], birth: string | null): Letters {
+  return loadLetters(birth, rawLoadout(), starterFor(ownedRunes))
 }

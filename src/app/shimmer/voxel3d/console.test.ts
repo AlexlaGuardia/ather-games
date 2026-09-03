@@ -173,6 +173,19 @@ for (const c of CONSOLE_CMDS.filter(c => c.owner)) {
   ok(suggestionsFor('/reborn ', ctx(false)).options.length === 0, 'a player is offered none')
 }
 
+// ── 9. /gems: bare is view-grade for everyone, granting is checked inside (2026-09-03) ───────
+{
+  const g = CONSOLE_CMDS.find(c => c.name === 'gems')!
+  ok(!!g && !g.owner, '/gems is not a whole-command owner gate — a no-gem slot needs its readout for everyone')
+  calls.length = 0
+  runConsoleLine('/gems', ctx(false))
+  ok(calls.includes('gems:,'), 'a player reads their letters')
+  calls.length = 0
+  runConsoleLine('/gems barrier 2', ctx(true))
+  ok(calls.includes('gems:barrier,2'), `the owner hands rune + count to the ctx (recorded: ${calls.join(' ')})`)
+  ok(suggestionsFor('/gems ', ctx(false)).options.length === 0 && suggestionsFor('/gems ', ctx(true)).options.length > 0, 'rune ids are offered to the owner only')
+}
+
 console.log(`console: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length === 0 ? 0 : 1)

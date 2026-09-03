@@ -19,6 +19,7 @@ import { rebirth } from './reborn'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, EMPTY_INVENTORY, BIRTH_KEY, RUNES_KEY } from './rune-inventory'
 import { resolveLoadout, saveLoadout, LOADOUT_KEY } from './loadout'
 import { keeperBook, saveBook, BOOK_KEY } from './book'
+import { GEMS_KEY, VESSELS_KEY } from './gems'
 import { ALL_BANDS } from './cast'
 import { RUNES } from './birth/runes.data'
 import { noComments } from '../testing/guard'
@@ -55,6 +56,7 @@ ok(TAC >= 0, 'the band list has a tactical slot — otherwise nothing below meas
   saveRuneInventory(old)
   saveLoadout(['squall', null])
   saveBook({ learned: ['squall'] })
+  store[GEMS_KEY] = JSON.stringify({ tempest: 2 }); store[VESSELS_KEY] = JSON.stringify({ bracelet: ['tempest'], focus: [] })
   ok(store[LOADOUT_KEY] !== undefined && store[BOOK_KEY] !== undefined, 'fixture: a loadout and a book are saved before the rebirth')
 
   const inv = rebirth('barrier')
@@ -63,6 +65,7 @@ ok(TAC >= 0, 'the band list has a tactical slot — otherwise nothing below meas
   ok(store[RUNES_KEY] === JSON.stringify(['barrier']), `developed runes are NOT carried over (${store[RUNES_KEY]})`)
   ok(store[LOADOUT_KEY] === undefined, 'the saved loadout is REMOVED, not blanked')
   ok(store[BOOK_KEY] === undefined, 'the saved book is REMOVED')
+  ok(store[GEMS_KEY] === undefined && store[VESSELS_KEY] === undefined, 'the gems and both vessels are REMOVED (2026-09-03) — a different keeper writes with different letters')
   const re = loadRuneInventory()
   ok(re.birth === 'barrier' && re.owned.length === 1, 'a fresh read agrees with the returned hand')
 

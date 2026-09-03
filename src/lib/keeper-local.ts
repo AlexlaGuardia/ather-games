@@ -61,6 +61,8 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'ather:shimmer:runes',     worldTied: true },   // what they have collected since
   { base: 'ather:shimmer:book',      worldTied: false },  // the moves they have learned — deliberately survives
   { base: 'ather:shimmer:loadout',   worldTied: false },  // the cast slots they have set
+  { base: 'ather:shimmer:gems',      worldTied: false },  // the rune-gems in the bag — letters, counted (2026-09-03)
+  { base: 'ather:shimmer:vessels',   worldTied: false },  // the bracelet + focus and what is set in them
   { base: 'ather:mp:id',             worldTied: false },  // ★ the peer other players see — two accounts were ONE peer
   { base: 'ather:mp:name',           worldTied: false },  // and this MIRRORS the signed-in username, so B announced A's name
   // ── dynamic tails: no suffix can match these, so the epoch matches them by PREFIX ─────────────

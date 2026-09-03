@@ -12,6 +12,7 @@
  *   1. the inventory becomes `[rune]` — birth set, developed runes gone (`rebornInventory`)
  *   2. the saved LOADOUT is removed, so `resolveLoadout` takes the starting-kit path
  *   3. the saved BOOK is removed, so `keeperBook` re-seeds from that kit + Gregory's gift
+ *   4. the GEMS and VESSELS are removed (2026-09-03), so `keeperLetters` re-seeds for the new birth
  * Vitals and mana are the HOST's (`VoxelWorld.tsx`): they are refs derived from the birth affinity
  * at mount, so the host re-derives them on the same tick it bumps `runeTick`.
  *
@@ -25,12 +26,14 @@
  */
 import { clearLoadout } from './loadout'
 import { clearBook } from './book'
+import { clearLetters } from './gems'
 import { rebornInventory, saveRuneInventory, type RuneInventory } from './rune-inventory'
 
 /** Be born again of `runeId`. Writes all three saves; returns the new hand. */
 export function rebirth(runeId: string): RuneInventory {
   clearLoadout()
   clearBook()
+  clearLetters()   // the gems and both vessels: a different keeper writes with different letters
   const inv = rebornInventory(runeId)
   saveRuneInventory(inv)
   return inv
