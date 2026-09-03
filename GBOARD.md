@@ -202,6 +202,10 @@ at play distance is Alex's eye, and if it reads as a halo the lift (1.02) or the
 ### Next
 - **⏭ Alex, born of Barrier: press the tactical key at a doorway, then shoot your own door** — a Keenshard
   should shatter it in one, a light bolt should not. Say whether 20 reads as *a few breaths* or as paper.
+- **⏭ FIRST, 2026-09-03 (pinned by Alex at wrap): build owner-only `/reborn <rune>`** — set birth, hand =
+  `[rune]`, clear saved loadout + book. Birth is the only built rune acquisition and Threshold is granted at
+  birth only (measured: tempest-born + dev `/rune barrier` still seats only Squall), so his tempest keeper
+  cannot reach Threshold without a rebirth. Then:
 - **Stand inside your own door and let a warden press it** — *takes the blow* twice, *shattered* on the
   third, and **the door should thin and crack between blows**. Say whether the cracks read, or halo.
 - **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
