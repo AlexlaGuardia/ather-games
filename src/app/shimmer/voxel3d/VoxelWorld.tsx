@@ -263,7 +263,7 @@ import { BrewPanel } from './brew-panel'
 import { brewBlocker } from './brew'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneInventory } from '../play3d/rune-inventory'
 import { rebirth } from '../play3d/reborn'
-import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND } from '../play3d/gems'
+import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel } from '../play3d/gems'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
@@ -2986,6 +2986,68 @@ function BirthLean({ birth }: { birth: string | null }) {
   )
 }
 
+/**
+ * ── ★ THE LETTERS CARD — the bag and both vessels, on the panel (Alex, 2026-09-03: "shouldn't we update
+ * the inventory tabs?") ───────────────────────────────────────────────────────────────────────────────
+ * Until this, the gems were visible only through `/gems` and the picker's short-line: a keeper could be
+ * short a letter and have no page that showed them their stones. Reads `keeperLetters` on EVERY render on
+ * purpose — the Loadout tab's `bind` is a gem transaction, so the bag and the bracelet change under the
+ * cursor and this card has to move with them (the runes and the book are pinned per mount; the letters
+ * are not, and that difference is the whole point of the card).
+ */
+const VESSEL_LANE_LABEL: Record<Vessel, string> = { bracelet: 'worn · tacticals · element lane', focus: 'held · signature · state lane' }
+function LettersCard({ owned, birth }: { owned: readonly string[]; birth: string | null }) {
+  const l = keeperLetters(owned, birth)
+  const rune = (id: string) => RUNES.find(r => r.id === id)
+  const chip = (id: string, k: number, n?: number) => {
+    const r = rune(id)
+    return (
+      <span key={`${id}-${k}`} className="gx-label rounded px-1.5 py-0.5 text-[10px]"
+            style={{ color: r?.glow ?? '#fff', background: `${r?.glow ?? '#fff'}18` }}>
+        {r?.name ?? id}{n !== undefined && n > 1 && <span className="ml-1 text-white/45">×{n}</span>}
+      </span>
+    )
+  }
+  const bag = Object.entries(l.bag)
+  const total = Object.values(allLetters(l)).reduce((a, b) => a + b, 0)
+  return (
+    <div className="mb-4">
+      <div className="gx-label mb-1.5 text-[10px] text-white/35">Letters · {total} gem{total === 1 ? '' : 's'}</div>
+      <div className="flex flex-col gap-1">
+        {VESSELS.map(v => (
+          <div key={v} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[12px] text-white/75">{v}</span>
+              <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[v]}</span>
+              <span className="ml-auto text-[9px] text-white/30">{l.vessels[v].length}/{VESSEL_CAP}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {l.vessels[v].length === 0
+                ? <span className="text-[10px] text-white/30">— nothing set —</span>
+                : l.vessels[v].map((id, k) => chip(id, k))}
+            </div>
+          </div>
+        ))}
+        <div className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[12px] text-white/75">bag</span>
+            <span className="gx-label text-[9px] text-white/25">loose · set when you bind</span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {bag.length === 0
+              ? <span className="text-[10px] text-white/30">— empty — the Passage sells gems</span>
+              : bag.map(([id, n], k) => chip(id, k, n))}
+          </div>
+        </div>
+        <div className="text-[10px] leading-snug text-white/30">
+          A move is a word; gems are its letters; the vessel is the paper. Two words naming one rune need two of its gems.
+          What you were born with — your doubled focus, your Manifestation — needs none.
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RunesTab() {
   // localStorage read, so it happens once per mount rather than per render.
   const [inv] = useState(() => loadRuneInventory())
@@ -3031,6 +3093,7 @@ function RunesTab() {
         })}
       </div>
       <BirthLean birth={inv.birth} />
+      <LettersCard owned={owned} birth={inv.birth} />
       {known.length === 0 && learnable.length === 0 ? (
         <div className="rounded border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-white/40">
           No move answers to this rune. The Schools do not teach it and scholars do not name it —
@@ -3163,6 +3226,7 @@ function LoadoutTab() {
 
   return (
     <div className="flex flex-col gap-1.5">
+      <LettersCard owned={owned} birth={birth} />
       {ALL_BANDS.map((kind, i) => {
         const bound = slots[i] ?? null
         const spec = bound ? castForMove(bound) : null

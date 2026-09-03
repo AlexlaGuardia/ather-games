@@ -182,6 +182,18 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   ok(/keeperLetters\(/.test(op) && /addGems\(/.test(op) && /saveLetters\(/.test(op) && /setRuneTick\(/.test(op), 'the op reads through keeperLetters, adds, persists, and ticks the world')
   ok(/isOwner\) return/.test(op), 'granting is owner-gated inside the op; bare is not')
   ok(/shortFor\(/.test(src), 'the cast panel asks shortFor — an option the keeper cannot write says which letters are short')
+  // ★ THE LETTERS CARD (Alex: "shouldn't we update the inventory tabs?") — the bag and both vessels
+  // on the panel, in BOTH tabs, read fresh each render so a bind moves them under the cursor.
+  const cardAt = src.indexOf('function LettersCard(')
+  ok(cardAt >= 0, 'VoxelWorld has a LettersCard')
+  const card = cardAt >= 0 ? src.slice(cardAt, src.indexOf('\nfunction RunesTab()', cardAt)) : ''
+  ok(/keeperLetters\(owned, birth\)/.test(card) && !/useState\(/.test(card), 'the card reads keeperLetters on every render — never pinned in useState')
+  ok(/VESSELS\.map\(/.test(card) && /l\.bag/.test(card) && /VESSEL_CAP/.test(card), 'it renders both vessels (from the list, not two literals), the bag, and the cap')
+  const uses = src.split('<LettersCard ').length - 1
+  ok(uses === 2, `the card is rendered in two tabs — runes and loadout (${uses})`)
+  const runesTab = src.slice(src.indexOf('function RunesTab()'), src.indexOf('function ToolsTab('))
+  const loadTab = src.slice(src.indexOf('function LoadoutTab()'), src.indexOf('ALL_BANDS.map((kind, i) =>', src.indexOf('function LoadoutTab()')))
+  ok(/<LettersCard /.test(runesTab) && /<LettersCard /.test(loadTab), 'one in RunesTab, one in LoadoutTab above the slots')
 }
 
 console.log(`gems: ${pass} passed, ${fails.length} failed`)
