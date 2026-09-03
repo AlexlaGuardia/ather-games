@@ -49,6 +49,63 @@ the Arcade frame.
 
 **Files:** `src/proxy.ts` · `src/app/shimmer/dev/templates/{band-derive.ts,DevBack.tsx,editor-bands.generated.ts,DevIndex.tsx}` · `src/app/shimmer/dev/{editor-bands,dev-back}.test.ts` · `scripts/dev-bands.mts` (`npm run gen:bands` / `check:bands`) · 7 `layout.tsx` (shimmer/dev, shimmer/arena, voxel3d/tex, play3d/birth, nolmir/dev, nolmir/sfx-lab, vault/dev)
 
+## 💎 Shimmer — **THE LETTERS AND THE PAPER: A MOVE IS WRITTEN, NOT OWNED** (2026-09-03, play lane; hub holds the lock) · *Last touched 2026-09-03 — committed on `play`, NOT deployed (hub's lock; pinged). gems **33/0** (new), loadout **27/0**, loadout-why **32/0**, cast **104/0**, console **98/0** (+6), keeper-local **82/0**, reborn **32/0**, editor-bands green after `gen:bands` (212 → 213). Sweep **227 suites · 226 pass · 1 FAIL** — the one red was the bands cache, stale by exactly this module, regenerated and re-run green alone; tsc 7 (baseline). **Mutation-swept 10 ways: 9 fire, 1 negative control passes by design.***
+
+### What Alex said, and what canon made of it the same day
+Alex, after `/reborn`: *"moves are basically a three rune word so if two moves require the same rune the player would
+need to acquire two of that rune.. the same with weapons and tools.. the passage in rune hold is meant to be a
+merchant centered area."* Jin filed it as a gap (it collided with 08-03: *a rune is identity, never bought*) and
+Alex + Magii ruled it inside the hour with a third reading better than either of mine: **four layers.** The RUNE is
+identity (never bought). The RUNE-GEM is the *letter* — countable, found, bought, bound. The COMBINATION is the *word*
+— a master or a scroll. The VESSEL is the *paper* — bears at most three gems, innately. *"Two moves naming Barrier
+need two Barriers"* = **two Barrier GEMS.** The **bracelet** (worn) bears the tacticals on the element lane; the
+**focus** (held) bears the signature on the state lane — the vessel gates the lane physically. **The floor:** a move
+written in the birth rune alone (doubled focus, Manifestation) takes no gem and no vessel — *the vessel holds what
+you learned; your body holds what you are.* Ruling: `shimmer-skilling.md` § THE CASTING VESSELS · `rune-hold.md` §
+The three shelves (merchants E'xday, teachers Coomday, scroll racks, vessels).
+
+### What shipped (play lane)
+- **`play3d/gems.ts`** — the bag (`GemStock`, counted per rune) and the two vessels (`bracelet`/`focus`, ≤3 each).
+  `bindLetters` moves a word's letters bag → vessel and REFUSES on a missing letter, an off-lane gem, or the cap;
+  `unbindLetters` returns them, free (Jin's call). `isBodyHeld` is the floor: birth-rune-alone, birth-exclusive
+  traits, every passive (canon: an innate socket). Keys `ather:shimmer:gems` + `:vessels`, registered per keeper,
+  survive the epoch like the book.
+- **`loadout.ts`** — `resolveLoadout` refuses a bound word whose letters are not SET in the slot's vessel with a
+  fourth reason, **`no-gem`** (the fix is the Passage, not the panel — a different sentence). The kit seats only
+  what the keeper can write, and writes it. **`setSlot` is now a gem transaction**: binding moves the letters,
+  clearing or displacing returns them, a word you cannot write is refused with nothing persisted. Persisted beside
+  the decision, so both hosts agree about the gems.
+- **★ THE SEED IS THE MIGRATION.** Every keeper alive had words bound with no gem anywhere; stripping them would be
+  the worst first contact with a feature that exists to make moves feel owned. `keeperLetters` seeds the letters of
+  what they had bound **SET**, straight from the saved loadout (the book migration's door), and Gregory's gift
+  arrives with its letters loose. Asserted, mutation-verified (*seed sets nothing* → two asserts red).
+- **Console `/gems`** — bare is view-grade (bag · bracelet · focus · total; the one line that explains a `no-gem`
+  slot); `/gems <rune> [n]` is the owner's dev door with the standing `/rune` warning. **`/reborn` also clears the
+  letters** now — a different keeper writes with different letters.
+- **The cast panel names what is short** — each option says *short Barrier — the Passage sells gems* before the
+  press, because a refused bind is otherwise silent.
+
+### Decisions (Jin's, canon says so)
+- Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
+  of one rune, for now. One focus + one bracelet, implicit — a second loadout is not built. No merchant yet.
+- ⚠ Two of my fixtures were wrong about the world, not the code: I assumed tempest+freeze had a written element-lane
+  tactical (the registry said no) — the fixture now SEARCHES births; and the `/gems` verb is plural because `gem` is
+  a rune id.
+
+### Next
+- **Hub: deploy** (pinged via dbr). Then **Alex: `/gems`**, open the cast panel, read the *short* line, `/gems
+  <rune> 2` as owner, bind, clear, watch the bag — does a word feel WRITTEN?
+- **The Passage merchant** (E'xday rotation) + teachers (Coomday) + a vessel seller: the shelves are ruled, the
+  numbers and the shop UI are Jin's. Needs a place — Rune Hold interior opens *"when the move economy ships"*, which
+  is now this.
+- Gem quality on the prospecting ladder; a second focus + bracelet as purchasable loadouts.
+
+### Files
+`play3d/gems.ts` `gems.test.ts` (new) · `play3d/loadout.ts` (`no-gem`, kit writes, `setSlot` transaction) ·
+`play3d/book.ts` (`keeperLetters`) · `play3d/cast.ts` (`LANE_FOR_KIND` exported) · `play3d/reborn.ts` (+clear) ·
+`voxel3d/console.ts` (`/gems`) · `voxel3d/VoxelWorld.tsx` (consoleCtx op + picker short line) · `lib/keeper-local.ts`
+(2 keys) · `dev/templates/editor-bands.generated.ts` (213).
+
 ## 🗝 Shimmer — **THE GAME NAMED THE WRONG CAUSE, CONFIDENTLY, AND THE KEEPER STOPPED LOOKING** (2026-09-02, play lane; engine half closed by hub the same afternoon) · *Last touched 2026-09-03 (hub) — `/reborn` built, see the section below. Previously: `ff34e18` pushed and **LIVE in `BUILD_ID _L1QtC33MO3B1uq0O9hGu`**, 167 chunks, 0 unpushed, tree clean. Sweep **223/223 · 0 FAIL · 0 KILLED** against the dirty tree that became `ff34e18` (same six files). loadout-why **32/0/0** (was 23), cast-dispatch green with 7 new cause asserts, loadout **27/0**, sustain **35/0**, cast **103/0**, tsc 7 (baseline), canon 0. Served md5 == disk == public tunnel on all three changed chunks; `emptyWhy`/`panelKey` present in the served voxel chunk, `book has none` absent from every chunk on disk and served. Mutation-swept **12 ways: 10 fire, 2 negative controls green by design**. Earlier play-lane figures: loadout-why 23/0/0, 13 mutations 12 fire.*
 
 ### What Alex said, and why it was reasonable
