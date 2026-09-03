@@ -49,7 +49,7 @@ the Arcade frame.
 
 **Files:** `src/proxy.ts` · `src/app/shimmer/dev/templates/{band-derive.ts,DevBack.tsx,editor-bands.generated.ts,DevIndex.tsx}` · `src/app/shimmer/dev/{editor-bands,dev-back}.test.ts` · `scripts/dev-bands.mts` (`npm run gen:bands` / `check:bands`) · 7 `layout.tsx` (shimmer/dev, shimmer/arena, voxel3d/tex, play3d/birth, nolmir/dev, nolmir/sfx-lab, vault/dev)
 
-## 🗝 Shimmer — **THE GAME NAMED THE WRONG CAUSE, CONFIDENTLY, AND THE KEEPER STOPPED LOOKING** (2026-09-02, play lane; engine half closed by hub the same afternoon) · *Last touched 2026-09-02 (hub) — `ff34e18` pushed and **LIVE in `BUILD_ID _L1QtC33MO3B1uq0O9hGu`**, 167 chunks, 0 unpushed, tree clean. Sweep **223/223 · 0 FAIL · 0 KILLED** against the dirty tree that became `ff34e18` (same six files). loadout-why **32/0/0** (was 23), cast-dispatch green with 7 new cause asserts, loadout **27/0**, sustain **35/0**, cast **103/0**, tsc 7 (baseline), canon 0. Served md5 == disk == public tunnel on all three changed chunks; `emptyWhy`/`panelKey` present in the served voxel chunk, `book has none` absent from every chunk on disk and served. Mutation-swept **12 ways: 10 fire, 2 negative controls green by design**. Earlier play-lane figures: loadout-why 23/0/0, 13 mutations 12 fire.*
+## 🗝 Shimmer — **THE GAME NAMED THE WRONG CAUSE, CONFIDENTLY, AND THE KEEPER STOPPED LOOKING** (2026-09-02, play lane; engine half closed by hub the same afternoon) · *Last touched 2026-09-03 (hub) — `/reborn` built, see the section below. Previously: `ff34e18` pushed and **LIVE in `BUILD_ID _L1QtC33MO3B1uq0O9hGu`**, 167 chunks, 0 unpushed, tree clean. Sweep **223/223 · 0 FAIL · 0 KILLED** against the dirty tree that became `ff34e18` (same six files). loadout-why **32/0/0** (was 23), cast-dispatch green with 7 new cause asserts, loadout **27/0**, sustain **35/0**, cast **103/0**, tsc 7 (baseline), canon 0. Served md5 == disk == public tunnel on all three changed chunks; `emptyWhy`/`panelKey` present in the served voxel chunk, `book has none` absent from every chunk on disk and served. Mutation-swept **12 ways: 10 fire, 2 negative controls green by design**. Earlier play-lane figures: loadout-why 23/0/0, 13 mutations 12 fire.*
 
 ### What Alex said, and why it was reasonable
 *"i dont have a tactical yet since we havent built a way to aquire them yet."* Then: *"my player was
@@ -199,13 +199,32 @@ passed — pinned as a number now. ⚠ **NOT LOOKED AT: I have not seen a cracke
 geometry and the host mapping are asserted headless; whether ten lines on a 2.4-radius cylinder READ as fractured
 at play distance is Alex's eye, and if it reads as a halo the lift (1.02) or the line opacity (0.85) is the dial.
 
+### `/reborn <rune>` — the dev door to a different birth (hub, 2026-09-03 morning, pinned by Alex at wrap)
+**Why a door and not a grant:** birth is the only built rune acquisition and a doubled-focus tactical is granted at
+BIRTH only — tempest-born + dev `/rune barrier` seats Squall, never Threshold. That is now a **premise assert**
+(`reborn.test.ts` §A), not a header sentence: the day a developed rune grants its focus, the test goes red naming
+the file whose reason expired. **What a rebirth is** (`play3d/reborn.ts`, one call): inventory → `[rune]`
+(developed runes NOT carried — `rebornInventory`, distinct from `setBirthRune` which re-heads a hand), saved
+loadout REMOVED (not blanked — `[null,null]` would resolve as `cleared` and send a newborn to a panel), saved book
+REMOVED so `keeperBook` re-seeds from the new kit + Gregory's gift. The host (`VoxelWorld.tsx`) re-derives the two
+refs the saves cannot reach — vitals and mana from the new birth affinity — on the same tick it bumps `runeTick`,
+which has `World` re-resolve loadout + stance exactly as `/rune` does. Readout goes through the SAME `handReport`
+as `/rune` (hoisted; two readouts would be two claims). Console row is a whole-command owner gate, rune ids
+tab-complete for the owner only, lost states included (bare `/rune` names them). ⚠ Deliberately NOT cleared:
+tutorial, seen-map, pots, mist — the world's memory, the epoch sweep's job; a tester should not get the Glade gate
+back. reborn **31/0**, console **92/0** (+5), sweep **226/226 · 0 FAIL · 0 KILLED**, tsc 7 (baseline), bands
+211 → 212. **Mutation-swept 7 ways: 6 fire** (skip book clear · skip loadout clear · skip inventory save · host
+skips vitals · tick before save · owner check removed), **1 negative control passes by design** (a comment
+quoting `rebirth(` — read through `noComments`). ⚠ Two of my own asserts went red on first run because I read
+the console row through `codeOnly`, which empties the very name string the row is found by; and one assert
+claimed a lost-state keeper lands EMPTY when Gregory's gift seeds any keeper a tactical — the world corrected
+the test, not the other way round.
+
 ### Next
 - **⏭ Alex, born of Barrier: press the tactical key at a doorway, then shoot your own door** — a Keenshard
   should shatter it in one, a light bolt should not. Say whether 20 reads as *a few breaths* or as paper.
-- **⏭ FIRST, 2026-09-03 (pinned by Alex at wrap): build owner-only `/reborn <rune>`** — set birth, hand =
-  `[rune]`, clear saved loadout + book. Birth is the only built rune acquisition and Threshold is granted at
-  birth only (measured: tempest-born + dev `/rune barrier` still seats only Squall), so his tempest keeper
-  cannot reach Threshold without a rebirth. Then:
+- ~~build owner-only `/reborn <rune>`~~ **BUILT 2026-09-03 (hub).** Alex: open the console, `/reborn barrier`,
+  read the line back — it should say *born of Barrier · … Threshold* seated in the tactical. Then:
 - **Stand inside your own door and let a warden press it** — *takes the blow* twice, *shattered* on the
   third, and **the door should thin and crack between blows**. Say whether the cracks read, or halo.
 - **⏭ Alex reads bare `/rune`.** It now names the cause. If it says `cleared`, press the panel key
