@@ -186,13 +186,15 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   // on the panel, in BOTH tabs, read fresh each render so a bind moves them under the cursor.
   const cardAt = src.indexOf('function LettersCard(')
   ok(cardAt >= 0, 'VoxelWorld has a LettersCard')
-  const card = cardAt >= 0 ? src.slice(cardAt, src.indexOf('\nfunction RunesTab()', cardAt)) : ''
+  const cardEnd = src.indexOf('\nfunction RunesTab(', cardAt)
+  ok(cardAt >= 0 && cardEnd > cardAt, 'the card slice has BOTH anchors — an unanchored end slices to the file tail and every assert below passes anywhere')
+  const card = cardAt >= 0 && cardEnd > cardAt ? src.slice(cardAt, cardEnd) : ''
   ok(/keeperLetters\(owned, birth\)/.test(card) && !/useState\(/.test(card), 'the card reads keeperLetters on every render — never pinned in useState')
   ok(/VESSELS\.map\(/.test(card) && /l\.bag/.test(card) && /VESSEL_CAP/.test(card), 'it renders both vessels (from the list, not two literals), the bag, and the cap')
   const uses = src.split('<LettersCard ').length - 1
   ok(uses === 2, `the card is rendered in two tabs — runes and loadout (${uses})`)
-  const runesTab = src.slice(src.indexOf('function RunesTab()'), src.indexOf('function ToolsTab('))
-  const loadTab = src.slice(src.indexOf('function LoadoutTab()'), src.indexOf('ALL_BANDS.map((kind, i) =>', src.indexOf('function LoadoutTab()')))
+  const runesTab = src.slice(src.indexOf('function RunesTab('), src.indexOf('function ToolsTab('))
+  const loadTab = src.slice(src.indexOf('function LoadoutTab('), src.indexOf('ALL_BANDS.map((kind, i) =>', src.indexOf('function LoadoutTab(')))
   ok(/<LettersCard /.test(runesTab) && /<LettersCard /.test(loadTab), 'one in RunesTab, one in LoadoutTab above the slots')
 }
 

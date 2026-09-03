@@ -264,6 +264,7 @@ import { brewBlocker } from './brew'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneInventory } from '../play3d/rune-inventory'
 import { rebirth } from '../play3d/reborn'
 import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel } from '../play3d/gems'
+import { imbue, imbueWhy, imbueSentence, crystalFor } from '../play3d/imbue'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
@@ -2321,7 +2322,8 @@ export default function VoxelWorld() {
                   onSplit={(f, t, m) => { splitRef(f, t, m); setCraftTick(v => v + 1) }}
                   onQuick={(r) => { quickRef(r); setCraftTick(v => v + 1) }}
                   onClose={closeBag} tools={tools} skills={skills} party={party}
-                  onParty={() => { writeParty(); setCraftTick(v => v + 1) }} />
+                  onParty={() => { writeParty(); setCraftTick(v => v + 1) }}
+                  onLetters={() => { refreshHotbar(); setCraftTick(v => v + 1) }} />
       )}
       {/* The map — minimap always up, M expands it. Hidden while another cursor surface owns the
           screen, so it never sits on top of the bag or the craft grid. */}
@@ -2996,8 +2998,25 @@ function BirthLean({ birth }: { birth: string | null }) {
  * are not, and that difference is the whole point of the card).
  */
 const VESSEL_LANE_LABEL: Record<Vessel, string> = { bracelet: 'worn · tacticals · element lane', focus: 'held · signature · state lane' }
-function LettersCard({ owned, birth }: { owned: readonly string[]; birth: string | null }) {
+function LettersCard({ owned, birth, items, onChange }: {
+  owned: readonly string[]; birth: string | null
+  /** the item inventory — an imbue takes an element crystal out of it */
+  items: React.RefObject<Inventory>
+  /** called after an imbue so the host refreshes the hotbar and re-renders this card */
+  onChange: () => void
+}) {
   const l = keeperLetters(owned, birth)
+  // ── ★ IMBUE — the in-world road to a letter (canon: "bound from a rune you know") ──
+  // One element crystal + a rune you HOLD → one gem in the bag. Per held rune, the row says which
+  // crystal, how many you carry, and refuses in words when you cannot (`imbueSentence`).
+  const doImbue = (id: string) => {
+    const bag = items.current
+    if (!bag) return
+    const r = imbue(bag, l, owned, id)
+    if (r.why) return
+    saveLetters(r.letters)
+    onChange()
+  }
   const rune = (id: string) => RUNES.find(r => r.id === id)
   const chip = (id: string, k: number, n?: number) => {
     const r = rune(id)
@@ -3039,6 +3058,30 @@ function LettersCard({ owned, birth }: { owned: readonly string[]; birth: string
               : bag.map(([id, n], k) => chip(id, k, n))}
           </div>
         </div>
+        <div className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[12px] text-white/75">imbue</span>
+            <span className="gx-label text-[9px] text-white/25">a crystal of the element · a rune you hold · one gem</span>
+          </div>
+          <div className="mt-1 flex flex-col gap-1">
+            {owned.map(id => {
+              const r = rune(id)
+              const crystal = crystalFor(id)
+              const have = items.current && crystal ? countItem(items.current, crystal) : 0
+              const why = items.current ? imbueWhy(items.current, owned, id) : 'no-crystal'
+              return (
+                <div key={id} className="flex items-center gap-2">
+                  <span className="w-[76px] shrink-0 text-[11px]" style={{ color: r?.glow ?? '#fff' }}>{r?.name ?? id}</span>
+                  <span className="text-[10px] text-white/40">{crystal?.replace(/_/g, ' ') ?? '—'} ×{have}</span>
+                  <button type="button" disabled={why !== null} onPointerDown={() => doImbue(id)}
+                          className={`gx-btn ml-auto rounded border px-2 py-0.5 text-[10px] ${why === null ? 'border-amber-200/40 text-amber-200/90 hover:bg-white/[0.06]' : 'gx-inactive border-white/10 text-white/40'}`}>
+                    {why === null ? 'imbue' : imbueSentence(why, id).split(' — ')[0]}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
         <div className="text-[10px] leading-snug text-white/30">
           A move is a word; gems are its letters; the vessel is the paper. Two words naming one rune need two of its gems.
           What you were born with — your doubled focus, your Manifestation — needs none.
@@ -3048,7 +3091,7 @@ function LettersCard({ owned, birth }: { owned: readonly string[]; birth: string
   )
 }
 
-function RunesTab() {
+function RunesTab({ items, onLetters }: { items: React.RefObject<Inventory>; onLetters: () => void }) {
   // localStorage read, so it happens once per mount rather than per render.
   const [inv] = useState(() => loadRuneInventory())
   const owned = inv.owned
@@ -3093,7 +3136,7 @@ function RunesTab() {
         })}
       </div>
       <BirthLean birth={inv.birth} />
-      <LettersCard owned={owned} birth={inv.birth} />
+      <LettersCard owned={owned} birth={inv.birth} items={items} onChange={onLetters} />
       {known.length === 0 && learnable.length === 0 ? (
         <div className="rounded border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-white/40">
           No move answers to this rune. The Schools do not teach it and scholars do not name it —
@@ -3181,7 +3224,7 @@ function ToolsTab({ tools, skills }: {
  * listed, dimmed, bindable, and carry their reason — and the passive readout says 'unbuilt' the same
  * way when its effect has no runtime yet.
  */
-function LoadoutTab() {
+function LoadoutTab({ items, onLetters }: { items: React.RefObject<Inventory>; onLetters: () => void }) {
   const [owned] = useState(() => loadRuneInventory().owned)
   // Read with the runes and pinned for the same reason: the birth-exclusive band decides which
   // passives this keeper may hold at all, and it can never change while the panel is open.
@@ -3226,7 +3269,7 @@ function LoadoutTab() {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <LettersCard owned={owned} birth={birth} />
+      <LettersCard owned={owned} birth={birth} items={items} onChange={onLetters} />
       {ALL_BANDS.map((kind, i) => {
         const bound = slots[i] ?? null
         const spec = bound ? castForMove(bound) : null
@@ -3353,8 +3396,10 @@ function LoadoutTab() {
 }
 
 function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSplit, onQuick, onClose,
-                   tools, skills, party, onParty, spiritIndex }: {
+                   tools, skills, party, onParty, spiritIndex, onLetters }: {
   inv: React.RefObject<Inventory>
+  /** the letters changed (an imbue took a crystal and made a gem) — refresh the hotbar and re-render */
+  onLetters: () => void
   /** Species SEEN in the world — the grimoire lights a portrait for a spirit you met but never held. */
   spiritIndex: React.RefObject<SpiritIndex>
   chest: OpenChest | null
@@ -3630,10 +3675,10 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
     <KeeperFrame tab={tab} setTab={setTab} onClose={onClose}
                  hint={tab === 'satchel' ? hint : undefined}>
       {tab === 'satchel' && satchel}
-      {tab === 'runes' && <RunesTab />}
+      {tab === 'runes' && <RunesTab items={inv} onLetters={onLetters} />}
       {tab === 'grimoire' && <GrimoireTab party={party} inv={inv} onChange={onParty} spiritIndex={spiritIndex} />}
       {tab === 'tools' && <ToolsTab tools={tools} skills={skills} />}
-      {tab === 'loadout' && <LoadoutTab />}
+      {tab === 'loadout' && <LoadoutTab items={inv} onLetters={onLetters} />}
     </KeeperFrame>
   )
 }
