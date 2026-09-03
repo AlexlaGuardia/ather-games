@@ -122,7 +122,7 @@ imbue **21/0**, gems **39/0**, 3 mutations fire, bands 213 → 214. ⚠ Two guar
 sliced to the file tail when the function they anchored on grew props — every assert below passed for the wrong
 reason. Both anchors now asserted present. Served == disk; imbue row, refusal sentence and crystal map present.
 
-### The Passage — four shelves on one plate (`8b42c06`, committed on play, NOT deployed — hub's lock)
+### The Passage — four shelves on one plate (`8b42c06` + `3624714` + `e225736`, **LIVE in `BUILD_ID TGTHpgxRIteEw0DTsPy_3`**, shipped by hub with the landing; served == disk on all four marker chunks, the retired rack in none)
 `rune-hold.md` § The three shelves (RULED 09-03) says the Passage sells every layer of a move; `play3d/passage.ts`
 + `PassagePanel.tsx` build it. **RACK** — Knowledge Scrolls daily for Marks. ⚠ **CORRECTED IN PLACE (same
 evening):** this line said the scroll market had *"NO HOST — a mechanic with no page"*. **False for the tile world**:
