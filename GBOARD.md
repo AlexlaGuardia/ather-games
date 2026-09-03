@@ -6864,6 +6864,41 @@ source alpha. Measured 296→140 opaque of 2304; colours 13 → 25/20/35/37. Ren
 > - **The fix is the standard workflow the optimizer skips:** bake the high-poly's detail into a **normal map**, *then* decimate to ~6-10k. Free (Blender only), and it improves **every** asset through this pipeline, not just this door.
 > - **Do this BEFORE spending more credits.** Every Meshy asset made without it throws away most of what was paid for.
 >
+> **✅ DEBT PAID 2026-09-03 (`383f5f0`) — and the diagnosis above was RIGHT but INCOMPLETE.** The bake is
+> built: `glb_optimize.py` now keeps a high-poly copy, smart-unwraps the low, and bakes a tangent-space
+> normal + colour map high→low. `--no-bake` restores the old behaviour. Validated on
+> `mb-charred-rifle-1.glb`, a raw Meshy GLB already sitting in `athernyx/assets/manaboxes/models/`, so it
+> cost **zero credits**. New `tools/render/bake_compare.py` renders high / low-with-map / low-without under
+> one camera and one raking light, because a bake is judged by looking at it.
+> - **★★ THE MISSING NORMAL MAP WAS NOT THE ONLY REASON PROPS READ GENERIC, AND PROBABLY NOT THE BIGGEST.**
+>   **UV coverage was 1.7%.** `smart_project`'s `island_margin` is charged **per island**, and the shipped
+>   call passed `0.02` — on a 4k-tri projection with hundreds of islands that ate the sheet alive, so a
+>   2048px Meshy albedo was being resampled into the effective area of a **~170px** map. Every prop through
+>   this tool has been soft for that reason as well. ⚠ **The tell that separated the two causes was the
+>   no-normal-map CONTROL smearing identically** — the defect was in the colour path, which a normal-map
+>   diagnosis would never have looked at. Fixed by moving spacing onto `pack_islands` with
+>   `margin_method="ADD"` (measured at a 1px gap: **ADD 55% · FRACTION 45% · SCALED 39%**) plus
+>   `ADJACENT_FACES` bake bleed so tightly packed islands do not spill into each other. **1.7% → 43.5%.**
+> - **⚠ `blender -b -P script.py` EXITS 0 WHEN THE SCRIPT RAISES.** Traceback to the log, no GLB written,
+>   and the caller's `&&` chain proceeds as though the optimize succeeded. (`sys.exit(msg)` *does*
+>   propagate as 1 — which is why the BLIND guard was honest and a bare `raise` was not.) `main()` is now
+>   wrapped so the tool carries its own exit code rather than depending on `--python-exit-code` living in
+>   somebody's shell history. Mutation-verified: the unselected-source bake failure exited **0** before and
+>   exits **1** now.
+> - **⚠⚠ AND THE GUARD I WROTE FOR THIS WAS MEASURING THE WRONG THING — it reported "% of pixels off flat"
+>   and that number is UV COVERAGE IN DISGUISE.** An **identity bake** (source geometrically identical to
+>   target, nothing whatsoever to capture) scored **47%** and sailed straight through, unchanged from cage
+>   ratio 0.02 down to 0.001. It cannot separate a good bake from a useless one; it can only separate a bake
+>   from *no* bake, so it is kept as a floor against silence and the file header now says so outright. The
+>   instrument that actually discriminates is the new **UV-coverage readout**, which warns below 25% —
+>   low coverage always means a worse bake, and it is fixable by packing rather than by spending credits.
+> - **⛔ THE SEVEN PROPS IN `public/models/props/` CANNOT BE FIXED IN PLACE — their raw high-poly GLBs are
+>   gone** (`/tmp/meshy` is cleared; only the five manabox rawfiles survive, in athernyx). `vault_door.glb`
+>   included. Each one needs regenerating from source to benefit, which is a credit decision per prop, not
+>   a re-run. **Budget is no longer the constraint:** Alex read the account 2026-09-03 — the subscription
+>   runs to **2026-10-23** with ~1000 credits this month, so the "credits lapse ~09-06, spend-it-or-lose-it"
+>   line on focus rows #343/#345 was wrong and both rows are corrected in place.
+>
 > **💸 Credit correction (measured, supersedes the 08-05 morning claim):** image-to-3d cost **30 credits** (950 → 920). The earlier "image-to-3d is cheaper than text" was inferred from the code's one-task-vs-two structure and **never measured** — it does not survive the meter. The *accuracy* argument for image-to-3d still stands and is the better reason anyway: it locks the silhouette instead of paying Meshy to guess one from words.
 >
 > **Replicate:** ~$0.32 spent across 8 concept images; balance is **under $5** (that is what throttles it to 6/min, burst 1).
