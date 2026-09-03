@@ -96,6 +96,23 @@ imbue **21/0**, gems **39/0**, 3 mutations fire, bands 213 → 214. ⚠ Two guar
 sliced to the file tail when the function they anchored on grew props — every assert below passed for the wrong
 reason. Both anchors now asserted present. Served == disk; imbue row, refusal sentence and crystal map present.
 
+### The Passage — four shelves on one plate (`8b42c06`, committed on play, NOT deployed — hub's lock)
+`rune-hold.md` § The three shelves (RULED 09-03) says the Passage sells every layer of a move; `play3d/passage.ts`
++ `PassagePanel.tsx` build it. **RACK** — Knowledge Scrolls daily for Marks (`scroll-market.ts` had rotation,
+prices and `buy()` since August and NO HOST — a mechanic with no page, the 08-23 shape, now live). **BENCH** —
+Coomday, one master, one combination, free if you can read it (a master who takes you on is earned; `unreadable`
+is the Lane Law at the bench). **TRAY** — E'xday, six rune-gems, 30 on your lanes / 60 specialized; an off-lane
+gem can be bought and not seated, and the merchant does not care. **COUNTER** — E'xday, the prospecting ladder
+bought for Marks: **the one place this world earns Marks** (nothing did, anywhere; the wallet was an empty
+cross-site balance). A crystal sells for 12 and a lane gem costs 30, so imbuing stays the better road for a rune
+you hold. Five-day week read from `calendar.md` (asserted, not restated), one weekday per world day (`CYCLE_MS`,
+64 min). Ultimates never; vessels not yet. **Host:** owner dev door **`/market [day]`** until the crossing lands
+(hub is painting it now); the panel mounts beside brew and moves to the tile Passage zone unchanged. Not
+`/passage` — that word is a crossing socket in this world. passage **34/0**, console **105/0**, 6 mutations fire
+(one first-cut mutation was inert — it still refused — re-cut, fires), bands 216. ⚠ Shared-index: VoxelWorld was
+dirty for BOTH lanes, so my four hunks were staged by patch and the INDEX committed — `git commit -- <path>`
+would have swept hub's two landing hunks in (the 09-02 entry, avoided by the letter).
+
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
   of one rune, for now. One focus + one bracelet, implicit — a second loadout is not built. No merchant yet.
