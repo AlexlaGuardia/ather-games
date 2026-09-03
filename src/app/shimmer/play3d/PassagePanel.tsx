@@ -23,6 +23,7 @@ import { useState } from 'react'
 import { countItem, type Inventory } from '../engine/inventory'
 import { getMarks, addMarks, spendMarks } from '@/lib/wallet'
 import { RUNES } from './birth/runes.data'
+import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { saveLetters } from './gems'
 import { rackFor, buy, priceOf, cycleAt as rackCycleAt } from './scroll-market'
@@ -50,7 +51,9 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   const letters = keeperLetters(owned, birth)
   const book = keeperBook(owned)
   const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
-  const glow = (id: string) => RUNES.find(r => r.id === id)?.glow ?? '#fff'
+  // The fallback is a TOKEN, not a literal — this file is CONVERTED in `tokens.test.ts`, born clean rather
+  // than added to PENDING (the cheap lie that keeps a red light off a new file).
+  const glow = (id: string) => RUNES.find(r => r.id === id)?.glow ?? gold.parchment
   const rerender = () => { bump(n => n + 1); onChange() }
 
   const rack = rackFor(1, rackCycleAt(nowMs))
