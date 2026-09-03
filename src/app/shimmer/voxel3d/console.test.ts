@@ -186,6 +186,16 @@ for (const c of CONSOLE_CMDS.filter(c => c.owner)) {
   ok(suggestionsFor('/gems ', ctx(false)).options.length === 0 && suggestionsFor('/gems ', ctx(true)).options.length > 0, 'rune ids are offered to the owner only')
 }
 
+// ── 10. /market: the dev door to the Passage shelves (2026-09-03) ────────────────────────────
+{
+  const r = CONSOLE_CMDS.find(c => c.name === 'market')!
+  ok(!!r?.owner, '/market is owner-gated — a dev door until the crossing lands')
+  calls.length = 0
+  runConsoleLine("/market E'xday", ctx(true))
+  ok(calls.includes("market:E'xday"), `the day reaches the ctx (recorded: ${calls.join(' ')})`)
+  ok(!CONSOLE_CMDS.some(c => c.name === 'passage'), 'the verb is not /passage — that word is a crossing socket in this world')
+}
+
 console.log(`console: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length === 0 ? 0 : 1)

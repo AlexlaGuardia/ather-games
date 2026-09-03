@@ -265,6 +265,8 @@ import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneI
 import { rebirth } from '../play3d/reborn'
 import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel } from '../play3d/gems'
 import { imbue, imbueWhy, imbueSentence, crystalFor } from '../play3d/imbue'
+import { PassagePanel } from '../play3d/PassagePanel'
+import { WEEK, type Weekday } from '../play3d/passage'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
@@ -1455,6 +1457,9 @@ export default function VoxelWorld() {
    * `OpenStation`-shaped record on the same day and for the same reason.
    */
   const [brewOpen, setBrewOpen] = useState(false)
+  // The Passage's shelves, through the owner's dev door (`/market`) until the crossing lands.
+  const [marketOpen, setMarketOpen] = useState(false)
+  const [marketDay, setMarketDay] = useState<Weekday | null>(null)
   const openChestRef = useRef<OpenChest | null>(null)
   openChestRef.current = openChest
   const [craftOpen, setCraftOpen] = useState(false)
@@ -1546,6 +1551,15 @@ export default function VoxelWorld() {
      * over: it closes, the panel opens, and the panel's own close settles the lock.
      */
     brew: () => { setConsoleOpen(false); setBrewOpen(true); return 'the cauldron is warm' },
+    // Same console→panel handoff as `brew`: the console closes, the panel owns the cursor surface.
+    market: (day) => {
+      if (!isOwner) return 'the Passage is under Rune Hold — walk there'
+      const pick = day ? WEEK.find(w => w.toLowerCase() === day.toLowerCase()) : undefined
+      if (day && !pick) return `no such day: ${day} — the week is ${WEEK.join(', ')}`
+      setMarketDay(pick ?? null)
+      setConsoleOpen(false); setMarketOpen(true)
+      return pick ? `the Passage, as on ${pick}` : 'the Passage — rotating spots'
+    },
     // Same console→panel handoff as `brew` above: the console closes itself and does NOT re-claim
     // the cursor, or the pointer re-locks with the dialogue still up. See that entry for the autopsy.
     greg: () => { setConsoleOpen(false); setDialogueOpen(true); return 'he looks up from the book' },
@@ -2301,6 +2315,12 @@ export default function VoxelWorld() {
       {openWaymark && (
         <WaymarkPanel wm={openWaymark} onSay={say}
                       onClose={() => { setOpenWaymark(null); closeCursorUI() }} />
+      )}
+      {marketOpen && (
+        <PassagePanel items={inv} owned={loadRuneInventory().owned} birth={loadRuneInventory().birth} nowMs={Date.now()}
+                      dayOverride={marketDay}
+                      onChange={() => { refreshHotbar(); setCraftTick(v => v + 1); setRuneTick(t => t + 1) }}
+                      onClose={() => { setMarketOpen(false); closeCursorUI() }} />
       )}
       {brewOpen && (
         <BrewPanel inv={inv} skills={skills} mana={mana} tick={craftTick}
