@@ -49,7 +49,7 @@ the Arcade frame.
 
 **Files:** `src/proxy.ts` · `src/app/shimmer/dev/templates/{band-derive.ts,DevBack.tsx,editor-bands.generated.ts,DevIndex.tsx}` · `src/app/shimmer/dev/{editor-bands,dev-back}.test.ts` · `scripts/dev-bands.mts` (`npm run gen:bands` / `check:bands`) · 7 `layout.tsx` (shimmer/dev, shimmer/arena, voxel3d/tex, play3d/birth, nolmir/dev, nolmir/sfx-lab, vault/dev)
 
-## 💎 Shimmer — **THE LETTERS AND THE PAPER: A MOVE IS WRITTEN, NOT OWNED** (2026-09-03, play lane; hub holds the lock) · *Last touched 2026-09-03 — committed on `play`, NOT deployed (hub's lock; pinged). gems **33/0** (new), loadout **27/0**, loadout-why **32/0**, cast **104/0**, console **98/0** (+6), keeper-local **82/0**, reborn **32/0**, editor-bands green after `gen:bands` (212 → 213). Sweep **227 suites · 226 pass · 1 FAIL** — the one red was the bands cache, stale by exactly this module, regenerated and re-run green alone; tsc 7 (baseline). **Mutation-swept 10 ways: 9 fire, 1 negative control passes by design.***
+## 💎 Shimmer — **THE LETTERS AND THE PAPER: A MOVE IS WRITTEN, NOT OWNED** (2026-09-03, play lane; hub holds the lock) · *Last touched 2026-09-03 — `74a8828` + `1914b1c` **LIVE in `BUILD_ID UQt-Mll5vEE9TAfSlcCSe`**, deployed from the play lane at Alex's word after hub wrapped; served md5 == disk on both changed chunks, `/gems` refusal + picker short-line + vessels key + no-gem sentence all present in the served bytes. **Merged-head sweep against `1914b1c` itself: 227/227 · 0 FAIL · 0 KILLED** (`plot.test.ts` 169s under a concurrent build — another reading for the ceiling entry). ⚠ Alex hit ~3 min of prod 500s mid-deploy: the build writes into the live `.next` and the sweep was loading the box at the same time — not a code fault, cleared on restart, no manual restart. Serialize sweep and build. gems **33/0** (new), loadout **27/0**, loadout-why **32/0**, cast **104/0**, console **98/0** (+6), keeper-local **82/0**, reborn **32/0**, editor-bands green after `gen:bands` (212 → 213). Sweep **227 suites · 226 pass · 1 FAIL** — the one red was the bands cache, stale by exactly this module, regenerated and re-run green alone; tsc 7 (baseline). **Mutation-swept 10 ways: 9 fire, 1 negative control passes by design.***
 
 ### What Alex said, and what canon made of it the same day
 Alex, after `/reborn`: *"moves are basically a three rune word so if two moves require the same rune the player would
@@ -93,8 +93,8 @@ The three shelves (merchants E'xday, teachers Coomday, scroll racks, vessels).
   a rune id.
 
 ### Next
-- **Hub: deploy** (pinged via dbr). Then **Alex: `/gems`**, open the cast panel, read the *short* line, `/gems
-  <rune> 2` as owner, bind, clear, watch the bag — does a word feel WRITTEN?
+- ~~Hub: deploy~~ **LIVE.** **Alex: `/gems`**, open the cast panel, read the *short* line, `/gems <rune> 2` as
+  owner, bind, clear, watch the bag — does a word feel WRITTEN?
 - **The Passage merchant** (E'xday rotation) + teachers (Coomday) + a vessel seller: the shelves are ruled, the
   numbers and the shop UI are Jin's. Needs a place — Rune Hold interior opens *"when the move economy ships"*, which
   is now this.
