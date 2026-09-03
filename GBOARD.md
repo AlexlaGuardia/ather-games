@@ -146,7 +146,7 @@ you hold. Five-day week read from `calendar.md` (asserted, not restated), one we
 dirty for BOTH lanes, so my four hunks were staged by patch and the INDEX committed — `git commit -- <path>`
 would have swept hub's two landing hunks in (the 09-02 entry, avoided by the letter).
 
-### Vessels — a second focus and bracelet, the fourth shelf (`18fb63e`, committed on play, awaiting deploy)
+### Vessels — a second focus and bracelet, the fourth shelf (`18fb63e`, **LIVE in `BUILD_ID ONLHEcN_sCLbcVvtaC_XB`**, deployed from play after hub sat silent 42 min with the lock free — notice sent; served == disk on all four marker chunks)
 Canon: *one loadout = one focus + one bracelet; a second loadout needs a second of both AND its own gems.* Built
 without moving the active loadout: it stays under `LOADOUT_KEY` + `VESSELS_KEY` and every reader is untouched; the
 new thing is the **parked** list (`play3d/loadouts.ts`, key `ather:shimmer:parked`) — every other loadout the keeper
