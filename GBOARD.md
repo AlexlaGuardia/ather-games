@@ -93,8 +93,13 @@ The three shelves (merchants E'xday, teachers Coomday, scroll racks, vessels).
   a rune id.
 
 ### Next
-- ~~Hub: deploy~~ **LIVE.** **Alex: `/gems`**, open the cast panel, read the *short* line, `/gems <rune> 2` as
-  owner, bind, clear, watch the bag — does a word feel WRITTEN?
+- ~~Hub: deploy~~ **LIVE.** **Alex: open the panel — Runes tab and Loadout tab both carry the LETTERS card** (bracelet
+  · focus · bag, `f66532f`, LIVE in `BUILD_ID t2w11XSVU9KquMs2_86wO`, served == disk). `/gems <rune> 2` as owner,
+  bind on the Loadout tab, watch the chips move bag → bracelet under the cursor, clear, watch them return — does a
+  word feel WRITTEN? ⚠ Alex asked for the tabs ("shouldn't we update the inventory tabs?") — the first cut shipped
+  with the letters visible only through the console, which is the 08-23 shape: a mechanic with no page. The card
+  reads `keeperLetters` every render on purpose (the runes and the book are pinned per mount; the letters move).
+  The hud-type ratchet caught four hand-rolled label triplets in it → `.gx-label`.
 - **The Passage merchant** (E'xday rotation) + teachers (Coomday) + a vessel seller: the shelves are ruled, the
   numbers and the shop UI are Jin's. Needs a place — Rune Hold interior opens *"when the move economy ships"*, which
   is now this.
