@@ -262,6 +262,7 @@ import { MAX_INFUSIONS_PER_ELEMENT } from '../spirits/spirit'
 import { BrewPanel } from './brew-panel'
 import { brewBlocker } from './brew'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneInventory } from '../play3d/rune-inventory'
+import { rebirth } from '../play3d/reborn'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
 import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
@@ -1476,7 +1477,48 @@ export default function VoxelWorld() {
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
   const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>(null)
-  const consoleCtx = useMemo<ConsoleCtx>(() => ({
+  const consoleCtx = useMemo<ConsoleCtx>(() => {
+    // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
+    // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
+    // The readout, and the reason the bare form is view-grade: it names the gap instead of
+    // leaving four dead keys. `bound` counts SLOTS FILLED, not moves owned — a keeper can know a
+    // move the loadout cannot seat (wrong slot kind), and that difference is the whole confusion.
+    // ⚠ Takes the whole INVENTORY, not a bare rune list. The birth-exclusive band (2026-08-26)
+    // makes the answer depend on which rune you were BORN with, not only which you hold, so a
+    // readout handed `owned` alone would quietly report a different keeper than the one asking.
+    const handReport = (rv: RuneInventory, lead: string) => {
+      const names = rv.owned.map(id => RUNES.find(r => r.id === id)?.name ?? id)
+      const moves = knownMoves(rv.owned)
+      const res = resolveLoadout(rv.owned, rv.birth, keeperBook(rv.owned))
+      const bound = res.slots.filter(Boolean).length
+      // ⚠ Sized from the band list, never a literal. This read `/4` until 2026-08-26 — a number
+      // left over from the four-slot bar, still parsing perfectly while overstating the denominator
+      // by half on every dev readout that quoted it.
+      //
+      // ── ★★ AND IT NAMES THE EMPTY SLOTS (2026-09-02) ──────────────────────────────────────
+      // `bound/2` was the closest thing to a diagnostic this game had for "why can I not cast",
+      // and it reported the SYMPTOM. A keeper reading `1 move known · 0/2 cast slots bound` knows
+      // the two halves disagree and cannot find out why — which is the position Alex was in for a
+      // session. The reasons come from the same resolve as the count, so this line cannot claim a
+      // cause the cast bar would contradict.
+      const empties = ALL_BANDS
+        .map((kind, i) => (res.slots[i] ? null : `${kind}: ${emptySlotWhy(res.why[i] ?? 'cleared')}`))
+        .filter((x): x is string => x !== null)
+      const tail = moves.length === 0
+        ? 'no move answers to it yet — the Schools have not written one'
+        : `${moves.length} move${moves.length === 1 ? '' : 's'} known · ${bound}/${ALL_BANDS.length} cast slot${bound === 1 ? '' : 's'} bound`
+      const gap = empties.length ? ` · ${empties.join(' · ')}` : ''
+      // ★ A LOST-STATE BIRTH SAYS SO. Static / Dust / Vapor are kept off the carousel by canon's own
+      // ruling; a keeper born of one came through the dev door. Their empty tactical is not a
+      // missing move, it is canon ("the emptiness IS the canon" — `birth/runes.data.ts`), and a
+      // readout that only said `no-move` would send the next reader hunting a registry gap.
+      const birthRune = RUNES.find(r => r.id === rv.birth)
+      const lost = birthRune?.lostState
+        ? ` · ${birthRune.name} is a LOST STATE — never offered at birth, no one-rune move written; this keeper exists through the dev door`
+        : ''
+      return `${lead}${names.join(', ') || 'nothing'} — ${tail}${gap}${lost}`
+    }
+    return {
     isOwner,
     foes: () => {
       const list = foesRef.current?.() ?? []
@@ -1523,44 +1565,7 @@ export default function VoxelWorld() {
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
       const inv = loadRuneInventory()
-      // The readout, and the reason the bare form is view-grade: it names the gap instead of
-      // leaving four dead keys. `bound` counts SLOTS FILLED, not moves owned — a keeper can know a
-      // move the loadout cannot seat (wrong slot kind), and that difference is the whole confusion.
-      // ⚠ Takes the whole INVENTORY, not a bare rune list. The birth-exclusive band (2026-08-26)
-      // makes the answer depend on which rune you were BORN with, not only which you hold, so a
-      // readout handed `owned` alone would quietly report a different keeper than the one asking.
-      const report = (rv: RuneInventory, lead: string) => {
-        const names = rv.owned.map(id => RUNES.find(r => r.id === id)?.name ?? id)
-        const moves = knownMoves(rv.owned)
-        const res = resolveLoadout(rv.owned, rv.birth, keeperBook(rv.owned))
-        const bound = res.slots.filter(Boolean).length
-        // ⚠ Sized from the band list, never a literal. This read `/4` until 2026-08-26 — a number
-        // left over from the four-slot bar, still parsing perfectly while overstating the denominator
-        // by half on every dev readout that quoted it.
-        //
-        // ── ★★ AND IT NAMES THE EMPTY SLOTS (2026-09-02) ──────────────────────────────────────
-        // `bound/2` was the closest thing to a diagnostic this game had for "why can I not cast",
-        // and it reported the SYMPTOM. A keeper reading `1 move known · 0/2 cast slots bound` knows
-        // the two halves disagree and cannot find out why — which is the position Alex was in for a
-        // session. The reasons come from the same resolve as the count, so this line cannot claim a
-        // cause the cast bar would contradict.
-        const empties = ALL_BANDS
-          .map((kind, i) => (res.slots[i] ? null : `${kind}: ${emptySlotWhy(res.why[i] ?? 'cleared')}`))
-          .filter((x): x is string => x !== null)
-        const tail = moves.length === 0
-          ? 'no move answers to it yet — the Schools have not written one'
-          : `${moves.length} move${moves.length === 1 ? '' : 's'} known · ${bound}/${ALL_BANDS.length} cast slot${bound === 1 ? '' : 's'} bound`
-        const gap = empties.length ? ` · ${empties.join(' · ')}` : ''
-        // ★ A LOST-STATE BIRTH SAYS SO. Static / Dust / Vapor are kept off the carousel by canon's own
-        // ruling; a keeper born of one came through the dev door. Their empty tactical is not a
-        // missing move, it is canon ("the emptiness IS the canon" — `birth/runes.data.ts`), and a
-        // readout that only said `no-move` would send the next reader hunting a registry gap.
-        const birthRune = RUNES.find(r => r.id === rv.birth)
-        const lost = birthRune?.lostState
-          ? ` · ${birthRune.name} is a LOST STATE — never offered at birth, no one-rune move written; this keeper exists through the dev door`
-          : ''
-        return `${lead}${names.join(', ') || 'nothing'} — ${tail}${gap}${lost}`
-      }
+      const report = handReport
       if (!arg) return report(inv, inv.owned.length === 1 ? 'born of ' : 'you hold ')
       if (!isOwner) return 'a rune is trained, not typed — bare /rune reads your hand'
       const id = arg.toLowerCase()
@@ -1572,7 +1577,30 @@ export default function VoxelWorld() {
       setRuneTick(t => t + 1)
       return report(next, `⟳ dev · ${held ? 'dropped' : 'developed'} ${RUNES.find(r => r.id === id)!.name} · `)
     },
-  }), [isOwner, settings.viewRadius, update, refreshHotbar, partyOps])
+    /**
+     * ★ `/reborn <rune>` — the dev door, and the ONLY way to change a birth rune (2026-09-03).
+     * `rebirth` rewrites the three saves; the two things it cannot reach are refs of THIS component
+     * derived from the birth affinity at mount, so they are re-derived here on the same tick — a
+     * keeper reborn of Barrier who still carried tempest's shield ceiling would be half of each.
+     * `runeTick` then has `World` re-resolve the loadout + stance exactly as `/rune` does.
+     */
+    reborn: (arg) => {
+      if (!isOwner) return 'a keeper is born once — /reborn is keeper-of-the-realm only'
+      if (!arg) return 'reborn of what? — /reborn <rune>'
+      const id = arg.toLowerCase()
+      const rune = RUNES.find(r => r.id === id)
+      if (!rune) return `no such rune: ${arg}`
+      const next = rebirth(id)
+      const aff = birthAffinity(next.birth)
+      vitals.current = freshVitals(aff)
+      const lvl = skills.current.mana.level
+      mana.current.max = getMaxPool(lvl) + aff.manaBonus
+      mana.current.regen = getRegenRate(lvl)
+      mana.current.cur = mana.current.max
+      setRuneTick(t => t + 1)
+      return handReport(next, `⟳ reborn of ${rune.name} · hand, loadout and book re-derived · `)
+    },
+  } }, [isOwner, settings.viewRadius, update, refreshHotbar, partyOps])
   const submitLine = useCallback((raw: string) => {
     const line = raw.trim()
     if (!line) return

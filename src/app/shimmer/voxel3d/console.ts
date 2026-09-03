@@ -145,6 +145,13 @@ export interface ConsoleCtx {
    */
   rune: (arg?: string) => string
   /**
+   * ★ `/reborn <rune>` — BE BORN AGAIN OF ANOTHER RUNE. Owner-only, the dev door, pinned by Alex
+   * 2026-09-02: birth is the only built rune acquisition and a doubled-focus tactical (Threshold)
+   * is granted at birth only, so a tempest-born keeper cannot test it by developing Barrier — the
+   * hand has to START as Barrier. `play3d/reborn.ts` says what a rebirth clears and what it keeps.
+   */
+  reborn: (rune?: string) => string
+  /**
    * ★★★ `/ctxlost` — THROW AWAY THE GPU CONTEXT ON PURPOSE. OWNER-GATED, A TEST INSTRUMENT, AND
    * THE ONLY WAY ANYONE HAS EVER BEEN ABLE TO LOOK AT THE LOST-CONTEXT OVERLAY (focus #938).
    *
@@ -224,6 +231,13 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
   { name: 'rune', usage: 'rune [id]  (bare: your hand · id: develop/drop it)', help: 'the runes you hold and the moves they open',
     run: (a, c) => c.rune(a[0]),
     suggest: (i, c) => i === 0 && c.isOwner ? RUNES.map(r => r.id).sort() : [] },
+  // ★ /reborn (2026-09-03, Alex: test Threshold on a keeper born of Barrier). Whole-command
+  // owner gate: there is no view half — bare /rune already reads the hand. The rune list is the
+  // same one /rune offers, lost states included: a keeper born through the dev door of a lost
+  // state is exactly the case bare /rune's LOST STATE line exists to name.
+  { name: 'reborn', usage: 'reborn <rune>', help: 'be born again of that rune — one-rune hand, loadout and book re-derive (dev)', owner: true,
+    run: (a, c) => a[0] ? c.reborn(a[0]) : 'reborn of what? — /reborn <rune>',
+    suggest: (i) => i === 0 ? RUNES.map(r => r.id).sort() : [] },
   { name: 'give', usage: 'give <item> [count]', help: 'conjure items into the bag', owner: true,
     run: (a, c) => a[0] ? c.give(a[0], Math.max(1, Math.round(Number(a[1]) || 1))) : 'give what?',
     suggest: (i) => i === 0 ? [...KNOWN_ITEMS].sort() : ['1', '4', '16', '64'] },

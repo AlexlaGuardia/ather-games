@@ -156,6 +156,23 @@ for (const c of CONSOLE_CMDS.filter(c => c.owner)) {
   ok(!!row && /tab/i.test(row.help), `/ctxlost warns in its HELP line that the tab is spent (${row?.help ?? 'no row'})`)
 }
 
+// ── 8. ★ /reborn HANDS THE RUNE TO THE CTX, AND A BARE FORM TOUCHES NOTHING (2026-09-03) ────
+// Section 2 covers the owner gate for free. What it cannot see: a row that returned a string and
+// never called `c.reborn`, or one that called it with no rune and left the host to rebirth `undefined`.
+{
+  calls.length = 0
+  const bare = runConsoleLine('/reborn', ctx(true))
+  ok(bare.err !== true && !calls.some(c => c.startsWith('reborn:')), `bare /reborn asks "of what?" and never reaches the ctx (${bare.text})`)
+  calls.length = 0
+  runConsoleLine('/reborn barrier', ctx(true))
+  ok(calls.includes('reborn:barrier'), `/reborn barrier hands the rune to the ctx (recorded: ${calls.join(' ') || 'nothing'})`)
+  calls.length = 0
+  runConsoleLine('/reborn barrier', ctx(false))
+  ok(!calls.some(c => c.startsWith('reborn:')), '★ a player cannot be reborn — the ctx was never asked')
+  ok(suggestionsFor('/reborn ', ctx(true)).options.length > 0, 'the owner is offered rune ids')
+  ok(suggestionsFor('/reborn ', ctx(false)).options.length === 0, 'a player is offered none')
+}
+
 console.log(`console: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length === 0 ? 0 : 1)

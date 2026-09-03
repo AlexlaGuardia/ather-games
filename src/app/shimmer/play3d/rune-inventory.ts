@@ -119,3 +119,12 @@ export function revokeRune(inv: RuneInventory, runeId: string): RuneInventory {
 export function setBirthRune(inv: RuneInventory, runeId: string): RuneInventory {
   return normalize(runeId, inv.owned.filter((r) => r !== inv.birth))
 }
+
+/**
+ * A keeper born again of `runeId`: ONE rune, no developed ones carried over. `setBirthRune` keeps
+ * the developed runes because the birth screen and the dev swap re-head a hand; a rebirth starts a
+ * hand. Pure — `reborn.ts` is what clears the saves around it.
+ */
+export function rebornInventory(runeId: string): RuneInventory {
+  return normalize(runeId, [])
+}

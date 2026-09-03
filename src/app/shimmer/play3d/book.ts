@@ -58,6 +58,18 @@ export function saveBook(book: Book): void {
 }
 
 /**
+ * Forget the book, so the next `loadBook` re-seeds it from the (also cleared) loadout and Gregory's
+ * gift for the NEW runes. One caller: a rebirth. ⚠ A book that survives a rebirth keeps the old
+ * keeper's moves as "learned" — the epoch sweep deliberately lets the book outlive a WORLD
+ * (`keeper-local.ts`: `worldTied: false`), but a different BIRTH is a different keeper.
+ */
+export function clearBook(): void {
+  try {
+    localStorage.removeItem(keeperKey(BOOK_KEY))
+  } catch { /* private mode */ }
+}
+
+/**
  * The book for the keeper holding these runes — the one call every consumer should make.
  * Composes the two halves the migration needs (what was literally bound + Gregory's gift, resolved
  * against the keeper's own runes) so no call site has to remember either.

@@ -271,6 +271,18 @@ export function saveLoadout(slots: Loadout): void {
 }
 
 /**
+ * Forget the saved slots entirely, so the next `resolveLoadout` takes the STARTING KIT path
+ * (`kit()` above) rather than re-seating stale binds. One caller: a rebirth (`reborn.ts`). Removing
+ * the key is not the same as saving `[null, null]` — that would resolve every slot as `cleared`
+ * and tell a freshly born keeper to open a panel they have never seen.
+ */
+export function clearLoadout(): void {
+  try {
+    localStorage.removeItem(keeperKey(LOADOUT_KEY))
+  } catch { /* private mode */ }
+}
+
+/**
  * Put a move in a slot (or clear it with `null`), returning the new loadout. Refuses an illegal
  * bind by returning the loadout unchanged — the caller cannot produce an invalid state.
  *
