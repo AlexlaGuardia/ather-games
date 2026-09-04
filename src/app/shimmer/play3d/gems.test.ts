@@ -182,7 +182,9 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   const op = at >= 0 ? src.slice(at, src.indexOf('\n    },\n', at)) : ''
   ok(/keeperLetters\(/.test(op) && /addGems\(/.test(op) && /saveLetters\(/.test(op) && /setRuneTick\(/.test(op), 'the op reads through keeperLetters, adds, persists, and ticks the world')
   ok(/isOwner\) return/.test(op), 'granting is owner-gated inside the op; bare is not')
-  ok(/shortFor\(/.test(src), 'the cast panel asks shortFor — an option the keeper cannot write says which letters are short')
+  // ★ RE-POINTED 2026-09-04 (hub): the cast bar is a READOUT now; the SATCHEL's vessel parts say what a
+  // vessel is short (`shortOf`), and writing happens there. Same claim, new surface.
+  ok(/shortOf\(/.test(src), 'the satchel asks shortOf — a vessel the keeper cannot write yet says which letters are short')
   // ★★ THE LETTERS, SPLIT BY WHERE THE THING LIVES (Alex, 2026-09-03): the BAG on the Satchel, the
   // VESSELS on Gear (was Loadout), and no Runes tab at all since 09-04. ⚠ RE-POINTED from `LettersCard`, which this block
   // anchored on until the split retired it. Every behavioural assert below is the original, re-aimed
@@ -199,7 +201,8 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   const rackEnd = declAfter(src, 'GearTab', rackAt)
   ok(rackAt >= 0 && rackEnd > rackAt, 'the rack slice has BOTH anchors')
   const rack = rackAt >= 0 && rackEnd > rackAt ? src.slice(rackAt, rackEnd) : ''
-  ok(/VESSELS\.map\(/.test(rack) && /VESSEL_CAP/.test(rack), 'the LOADOUT half renders both vessels from the list, not two literals, and the cap')
+  // ★ RE-POINTED 2026-09-04 (hub): seats come from the WORD (`seatCount`), not from the cap.
+  ok(/VESSELS\.map\(/.test(rack) && /seatCount\(/.test(rack), 'the GEAR half renders both vessels from the list, not two literals, with seats from the word')
   // ⚠⚠ THE POSITIVE ABOVE IS NOT ENOUGH, AND A MUTATION PROVED IT (2026-09-03). The rack contains
   // TWO `VESSELS.map(` — the header's owned-count summary and the row loop — so replacing the ROW
   // loop with a hardcoded `['bracelet', 'focus']` left the header's match standing and the assert

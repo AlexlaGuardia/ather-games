@@ -268,7 +268,8 @@ import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND, V
 import { imbue, imbueWhy, imbueSentence, crystalFor } from '../play3d/imbue'
 import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
-import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL } from '../play3d/vessels'
+import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn,
+         placeGems, seatCount, seatLetters, shortOf, isComplete, setWord } from '../play3d/vessels'
 import { starterFor } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
@@ -3074,10 +3075,12 @@ export function GemChip({ id, n }: { id: string; n?: number }) {
  * ⚠ Never a socket, slot, bezel or prong in the LOOK (brief: *"the vessel closed around it"*) — a
  * dark seat is a dim rounded void in the weave, not a hole with a rim.
  */
-export function Seats({ gems }: { gems: readonly string[] }) {
+export function Seats({ gems, seats = VESSEL_CAP }: { gems: readonly string[]; seats?: number }) {
+  // ★ SEATS = THE WORD'S LETTERS (Alex, 2026-09-04): a vessel cut for a one-letter word bears one seat.
+  // `VESSEL_CAP` is the ceiling a word can ask for, and the default only for a caller with no word.
   return (
     <span className="inline-flex items-center gap-1">
-      {Array.from({ length: VESSEL_CAP }, (_, k) => {
+      {Array.from({ length: Math.min(VESSEL_CAP, Math.max(0, seats)) }, (_, k) => {
         const id = gems[k]
         const r = id ? RUNES.find(x => x.id === id) : undefined
         return id
@@ -3176,63 +3179,147 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
  * show the previous word for one frame in private mode, where `saveLoadout` does not persist.
  * The GEMS come from `keeperLetters`, which is the same live read the bind moves letters through.
  */
-export function VesselRack({ owned, birth, slots, onEquipped }: {
-  owned: readonly string[]; birth: string | null; slots: Loadout
-  /** the equipped vessel changed — hand the tab its re-resolved slots and let the host re-render */
-  onEquipped: (slots: Loadout) => void
+/**
+ * ★ VESSELS ARE PARTS UNTIL THEY ARE WRITTEN (Alex, 2026-09-04): *"a bunch of parts in the inventory —
+ * you click the vessel and if the gem is in the inventory it asks if you'd like to place them; once the
+ * vessel is prepped it's sent into the gear tab."* This is that list: every stowed vessel, cut for its
+ * word, with its seats drawn (as many as the WORD needs) and one button that places what the bag holds.
+ * A written one says so and is already on the Gear tab's dropdown; a legacy blank asks for a word first.
+ */
+export function VesselParts({ owned, birth, onChange }: {
+  owned: readonly string[]; birth: string | null
+  /** letters or vessels changed — the host re-renders and the Gear tab re-reads the stowed list */
+  onChange: () => void
 }) {
+  const [note, setNote] = useState<string | null>(null)
   const stowed = loadStowed()
   const l = keeperLetters(owned, birth)
-  const doEquip = (kind: Vessel, i: number) => {
-    if (!equip(kind, i, birth, starterFor(owned))) return
-    onEquipped(resolveLoadout([...owned], birth, keeperBook(owned)).slots)
-  }
+  const book = keeperBook(owned)
   const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
+  const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
+  const doPlace = (i: number) => {
+    const { r, letters } = placeGems(i, birth, l)
+    setNote(r.say)
+    if (!r.ok) return
+    saveLetters(letters); onChange()
+  }
+  const doDismantle = (i: number) => { saveLetters(dismantle(i, l)); setNote('Taken apart. The letters are back in your bag.'); onChange() }
+  const doWord = (i: number, kind: Vessel, word: string) => { if (setWord(i, word, birth)) { setNote(`Cut for ${wordOf(word)}.`); onChange() } }
+  if (!stowed.length) return null
+  return (
+    <div className="mt-4">
+      <SectionHead label="Vessels" note={<><span className="gx-value text-white/50">{stowed.length}</span> carried · written ones are on Gear</>} />
+      <div className="flex flex-col gap-1">
+        {stowed.map((v, i) => {
+          const seats = seatCount(v, birth)
+          const short = shortOf(v, birth)
+          const written = isComplete(v, birth)
+          const canPlace = short.some(r => (l.bag[r] ?? 0) > 0)
+          const kindBand = BAND_FOR_VESSEL[v.kind]
+          return (
+            <div key={i} className={`gx-plate px-2.5 py-1.5 ${written ? 'is-lit' : ''}`}>
+              <div className="flex items-center gap-2">
+                <ItemChip itemId={`vessel_${VESSEL_NOUN[v.kind]}_t1`} size={26} />
+                <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[v.kind]}</span>
+                {v.move
+                  ? <span className="gx-title text-[11px] text-white/80">for {wordOf(v.move)}</span>
+                  : <span className="gx-label text-[9px] text-white/30">never cut for a word</span>}
+                <span className="gx-value ml-auto text-[10px] text-white/45">{v.gems.length}/{seats}</span>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                {v.move ? <Seats gems={v.gems} seats={seats} /> : null}
+                {written
+                  ? <span className="gx-label ml-1 text-[9px] text-amber-200/70">written · on the Gear tab</span>
+                  : v.move
+                    ? <span className="text-[9px] text-white/35">short {short.map(runeName).join(', ')}</span>
+                    : (
+                      <select value="" onChange={e => { if (e.target.value) doWord(i, v.kind, e.target.value) }}
+                              className="gx-btn bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal">
+                        <option value="">cut it for a word you hold…</option>
+                        {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
+                          .filter(m => seatLetters({ kind: v.kind, gems: [], move: m.id }, birth).length > 0)
+                          .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                    )}
+                {!written && v.move && (
+                  <button type="button" disabled={!canPlace} onPointerDown={() => doPlace(i)}
+                          className={`gx-btn ml-auto px-2 py-0.5 text-[10px] ${canPlace ? '' : 'gx-inactive'}`}>
+                    {canPlace ? `place ${short.filter(r => (l.bag[r] ?? 0) > 0).length} gem${short.filter(r => (l.bag[r] ?? 0) > 0).length === 1 ? '' : 's'}` : 'none of its letters in the bag'}
+                  </button>
+                )}
+                {v.gems.length > 0 && (
+                  <button type="button" onPointerDown={() => doDismantle(i)}
+                          className="gx-btn gx-inactive px-2 py-0.5 text-[10px] hover:opacity-100">dismantle</button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+        {note && <div className="text-[10px] leading-snug text-amber-100/70">{note}</div>}
+      </div>
+    </div>
+  )
+}
+
+export function VesselRack({ owned, birth, slots, onEquipped }: {
+  owned: readonly string[]; birth: string | null; slots: Loadout
+  /** the worn vessel changed (equipped or dismantled) — hand the tab its re-resolved slots and let the host re-render */
+  onEquipped: (slots: Loadout) => void
+}) {
+  const l = keeperLetters(owned, birth)
+  const reresolve = () => onEquipped(resolveLoadout([...owned], birth, keeperBook(owned)).slots)
+  const doEquip = (kind: Vessel, i: number) => { if (equip(kind, i, birth, starterFor(owned))) reresolve() }
+  const doDismantle = (kind: Vessel) => { if (dismantleWorn(kind, birth, starterFor(owned))) reresolve() }
+  const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
+  const seatsOfWorn = (moveId: string | null) => (moveId ? seatCount({ kind: 'bracelet', gems: [], move: moveId }, birth) : 0)
   return (
     <div className="mb-3 flex flex-col gap-1">
       <SectionHead label="Vessels" note={<>
         <span className="gx-value text-white/50">{VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(' · ')}</span>
-        {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · grown at the Passage' : ''}
+        {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · cut at the Passage' : ''}
       </>} />
+      {/* ★ ONLY WRITTEN VESSELS ARE GEAR (Alex, 2026-09-04). The rack shows what is WORN, and a dropdown of the
+          written spares to swap in. Unwritten ones live in the satchel as parts until every seat their word
+          cut holds its letter. Dismantle sends the worn one back there, letters to the bag — canon's unbind
+          is free, so this costs nothing but the walk. */}
       {VESSELS.map(kind => {
         const band = BAND_FOR_VESSEL[kind]
         const worn = band >= 0 ? (slots[band] ?? null) : null
-        const spare = stowed.map((v, i) => ({ v, i })).filter(({ v }) => v.kind === kind)
+        const seats = seatsOfWorn(worn)
+        const spares = completeVessels(kind, birth)
         return (
-          <div key={kind} className="gx-plate px-2.5 py-1.5">
+          <div key={kind} className={`gx-plate px-2.5 py-1.5 ${worn ? 'is-lit' : ''}`}>
             <div className="flex items-center gap-2">
               {/* the vessel's own icon — through the bag's `ItemChip`, so the rack and the bag can never
                   disagree about what a bracelet looks like. `_t1` until the tier model lands.
-                  ⚠ Keyed by the NOUN, not the kind id: the kind is `focus`, the sprite is `vessel_glove_t1`.
-                  The first cut asked for `vessel_focus_t1`, the headless probe checked the ids I meant,
-                  and only the screenshot showed a grey chip — the measured thing was not the running thing. */}
+                  ⚠ Keyed by the NOUN, not the kind id: the kind is `focus`, the sprite is `vessel_glove_t1`. */}
               <ItemChip itemId={`vessel_${VESSEL_NOUN[kind]}_t1`} size={26} />
               <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[kind]}</span>
               <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[kind]}</span>
-              <span className="gx-value ml-auto text-[10px] text-white/45">{l.vessels[kind].length}/{VESSEL_CAP}</span>
+              <span className="gx-value ml-auto text-[10px] text-white/45">{l.vessels[kind].length}/{seats}</span>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1">
               <span className="gx-label rounded-[2px] border border-amber-200/45 bg-amber-200/10 px-1.5 py-0.5 text-[9px] text-amber-200/90">
                 {kind === 'bracelet' ? 'wrist' : 'hand'}
               </span>
-              <Seats gems={l.vessels[kind]} />
-              <span className={`gx-title ml-1 text-[11px] ${worn ? 'text-white/80' : 'text-white/30'}`}>{wordOf(worn) ?? 'no word'}</span>
+              {worn
+                ? <><Seats gems={l.vessels[kind]} seats={seats} />
+                    <span className="gx-title ml-1 text-[11px] text-white/80">{wordOf(worn)}</span>
+                    <button type="button" onPointerDown={() => doDismantle(kind)}
+                            className="gx-btn gx-inactive ml-auto px-2 py-0.5 text-[10px] hover:opacity-100">dismantle</button></>
+                : <span className="gx-title ml-1 text-[11px] text-white/30">nothing worn · your birth move needs no vessel</span>}
             </div>
-            {/* ★ EVERY OTHER ONE OF THIS KIND, WITH WHAT IS WRITTEN ON IT. A keeper picks the vessel
-                by reading the word, not by remembering which number they parked it under — that is
-                the whole gain over the retired pair-swap, which could only say "swap to 2". */}
-            {spare.length > 0 && (
-              <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-white/[0.07] pt-1.5">
-                {spare.map(({ v, i }) => (
-                  <button key={i} type="button" onPointerDown={() => doEquip(kind, i)}
-                          className="gx-btn flex items-center gap-1.5 px-2 py-0.5 text-[10px]">
-                    <span>equip</span>
-                    <Seats gems={v.gems} />
-                    <span className="gx-title normal-case tracking-normal text-white/60">{wordOf(v.move) ?? 'no word'}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* ★ THE DROPDOWN (Alex): every written spare of this kind, by its WORD — a keeper picks a vessel by
+                reading what it says, never by remembering which number it was parked under. */}
+            <div className="mt-1.5 flex items-center gap-2 border-t border-white/[0.07] pt-1.5">
+              <span className="gx-label text-[9px] text-white/30">equip</span>
+              <select value="" onChange={e => { const i = Number(e.target.value); if (!Number.isNaN(i) && e.target.value !== '') doEquip(kind, i) }}
+                      disabled={!spares.length}
+                      className="gx-btn min-w-[160px] bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal disabled:opacity-40">
+                <option value="">{spares.length ? `a written ${VESSEL_NOUN[kind]}…` : `none written yet — see the satchel`}</option>
+                {spares.map(({ v, i }) => <option key={i} value={i}>{wordOf(v.move)} · {v.gems.length}/{seatCount(v, birth)}</option>)}
+              </select>
+            </div>
           </div>
         )
       })}
@@ -3344,22 +3431,13 @@ export function GearTab({ items, onLetters, tools, skills }: {
    */
   const [initial] = useState(() => resolveLoadout(owned, birth, book))
   const [slots, setSlots] = useState<Loadout>(initial.slots)
-  const [picking, setPicking] = useState<number | null>(null)
   // The one always-on passive — derived, capped at one, never chosen. Null if the keeper's runes
   // have taught them none, in which case the section renders nothing (an empty frame would assert a
   // trait that is not there).
   const passive = derivePassive(owned, birth, book)
   // ★ The letters, read fresh each render: `bind` below is a gem transaction (`setSlot` moves them),
   // so what an option is short of changes with every pick. Cheap — two small arrays and a bag.
-  const letters = keeperLetters(owned, birth)
-  const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
 
-  const bind = (slot: number, moveId: string | null) => {
-    const next = setSlot(owned, birth, slots, slot, moveId, book)
-    setSlots(next)
-    saveLoadout(next)
-    setPicking(null)
-  }
 
   if (owned.length === 0) {
     return <TabEmpty>No runes, so no moves to bring. A keeper is born with their first.</TabEmpty>
@@ -3375,18 +3453,17 @@ export function GearTab({ items, onLetters, tools, skills }: {
           `onLetters` (the host bumps runeTick there). Vessels are grown at the Passage, one at a
           time. The bag and imbue moved to the Satchel, where carried things live. */}
       <VesselRack owned={owned} birth={birth} slots={slots}
-                  onEquipped={(next) => { setSlots(next); setPicking(null); onLetters() }} />
-      <SectionHead label="Cast bar" note="what the keys carry" />
+                  onEquipped={(next) => { setSlots(next); onLetters() }} />
+      <SectionHead label="Cast bar" note="what the worn vessels carry" />
+      {/* ★ A READOUT, NOT A PICKER (Alex, 2026-09-04). Z is the worn bracelet's word, B the worn glove's.
+          Writing happens on the vessel in the satchel, and only a written vessel can be worn — so there is
+          nothing to pick here, and two places to bind was the bug the letters card fixed the day before. */}
       {ALL_BANDS.map((kind, i) => {
         const bound = slots[i] ?? null
         const spec = bound ? castForMove(bound) : null
-        const open = picking === i
-        const options = eligibleMoves(owned, birth, kind, book)
         return (
-          <div key={i}>
-          <div className={`gx-plate ${spec && isBuilt(bound) ? 'is-lit' : ''}`}>
-            <button type="button" onPointerDown={() => setPicking(open ? null : i)}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left">
+          <div key={i} className={`gx-plate ${spec && isBuilt(bound) ? 'is-lit' : ''}`}>
+            <div className="flex w-full items-center gap-2.5 px-3 py-2 text-left">
               <span className="gx-btn flex h-5 w-5 shrink-0 items-center justify-center text-[10px] font-bold">
                 {CAST_KEYS[i].toUpperCase()}
               </span>
@@ -3398,12 +3475,7 @@ export function GearTab({ items, onLetters, tools, skills }: {
               {spec && isBuilt(bound) && (
                 <span className="gx-value text-[9px] text-white/50">{spec.manaCost} mana · {(spec.cooldownMs / 1000).toFixed(1)}s</span>
               )}
-              {/* ★★ THE EMPTY SLOT SAYS WHY (2026-09-02). It used to say only '— empty —', and the
-                  cast refusal behind it asserted 'your book has none for your runes' whatever the
-                  cause — so a keeper whose SAVE was empty was told their runes were, went looking
-                  for an acquisition path that was not the problem, and stopped. The sentence comes
-                  from `emptySlotSentence`, never restated here, so the bar and the say-line cannot
-                  drift. No panel key in it: the keeper is already in the panel. */}
+              {/* ★★ THE EMPTY SLOT SAYS WHY (2026-09-02): from `emptySlotSentence`, never restated here. */}
               {!spec && (
                 <span className="text-[9px] text-white/30">
                   {emptySlotWhy(initial.why[i] ?? 'cleared')}
@@ -3412,57 +3484,10 @@ export function GearTab({ items, onLetters, tools, skills }: {
               {spec && !isBuilt(bound) && (
                 <span className="gx-label text-[9px] text-amber-200/40">unbuilt</span>
               )}
-              <span className="ml-auto text-[10px] text-white/25">{open ? '▴' : '▾'}</span>
-            </button>
-            {open && (
-              <div className="border-t border-white/10 px-2 py-1.5">
-                {options.length === 0 ? (
-                  <div className="px-1 py-1 text-[10px] text-white/30">
-                    Your runes open no {kind} yet.
-                  </div>
-                ) : (
-                  <>
-                    {options.map(m => {
-                      const built = isBuilt(m.id)
-                      // what the keeper is SHORT to write this word in this slot's vessel — the reason a
-                      // pick will not seat, named before they press it (a refused bind is otherwise silent)
-                      const vessel = VESSEL_FOR_KIND[kind]
-                      const short = vessel ? shortFor(m, birth, letters, vessel) : []
-                      return (
-                        <button key={m.id} type="button" onPointerDown={() => bind(i, m.id)}
-                                className="block w-full rounded-[2px] px-2 py-1 text-left hover:bg-amber-200/[0.06]">
-                          <span className="flex items-baseline gap-2">
-                            <span className={`gx-title text-[11px] ${built ? 'text-white/80' : 'text-white/35'}`}>{m.name}</span>
-                            {bound === m.id && <span className="gx-label text-[9px] text-amber-200/60">bound</span>}
-                            {!built && (
-                              <span className="text-[9px] text-white/25">{castForMove(m.id).why}</span>
-                            )}
-                            {short.length > 0 && (
-                              <span className="text-[9px] text-rose-200/50">short {short.map(runeName).join(', ')} — the Passage sells gems</span>
-                            )}
-                          </span>
-                        </button>
-                      )
-                    })}
-                    {bound && (
-                      <button type="button" onPointerDown={() => bind(i, null)}
-                              className="mt-0.5 block w-full rounded-[2px] px-2 py-1 text-left text-[10px]
-                                         text-white/30 hover:bg-amber-200/[0.06]">
-                        leave this slot empty
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+            </div>
           </div>
         )
       })}
-      {/* ── THE PASSIVE — always on, derived, capped at one. Not a slot: no key, no pick, no toggle.
-          It stands apart from the cast bar above because it is not one of `ALL_BANDS`; the keeper
-          INSPECTS what their runes grant rather than choosing it. Null (no passive learned) renders
-          nothing rather than an empty frame that would assert a trait that is not there. */}
       {/* ★ THE BIRTH LEAN CAME BACK WITH THE PASSIVE (2026-09-04). `BirthLean` was mounted on the
           Runes tab, and retiring that tab the same morning unmounted it silently — nothing asserted
           the readout was reachable, so the one panel that says what your birth rune does went dark
@@ -3793,7 +3818,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   return (
     <KeeperFrame tab={tab} setTab={setTab} onClose={onClose}
                  hint={tab === 'satchel' ? hint : undefined}>
-      {tab === 'satchel' && <>{satchel}<SatchelLetters owned={runesHeld} birth={birthRune} items={inv} onChange={onLetters} /></>}
+      {tab === 'satchel' && <>{satchel}<SatchelLetters owned={runesHeld} birth={birthRune} items={inv} onChange={onLetters} /><VesselParts owned={runesHeld} birth={birthRune} onChange={onLetters} /></>}
       {tab === 'grimoire' && <GrimoireTab party={party} inv={inv} onChange={onParty} spiritIndex={spiritIndex} />}
       {tab === 'gear' && <GearTab items={inv} onLetters={onLetters} tools={tools} skills={skills} />}
     </KeeperFrame>

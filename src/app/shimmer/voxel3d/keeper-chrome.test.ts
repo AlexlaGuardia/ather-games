@@ -111,6 +111,17 @@ ok(!/'held'/.test(R) && /hand/.test(VESSEL_COPY(R)) && /wrist/.test(VESSEL_COPY(
    '★ the vessel copy follows the 09-03 amendment: HAND vs WRIST, never "held" (a glove is worn)')
 function VESSEL_COPY(src: string) { return /const VESSEL_LANE_LABEL[^\n]*/.exec(src)?.[0] ?? '' }
 
+// ── 3c. the ruling (2026-09-04): parts in the satchel, written vessels in Gear, a cast bar that reads ─
+ok(count(R, /<VesselParts /g) === 1, '★ the satchel mounts VesselParts once — vessels are parts until written')
+const partsAt = declAt(R, 'VesselParts')
+const parts = partsAt >= 0 ? R.slice(partsAt, declAfter(R, 'VesselRack', partsAt)) : ''
+ok(/placeGems\(/.test(parts) && /shortOf\(/.test(parts) && /isComplete\(/.test(parts), 'a part places what the bag holds, says what it is short, and knows when it is written')
+ok(/<Seats gems=\{v\.gems\} seats=\{seats\}/.test(parts), '★ a part draws as many seats as its WORD needs')
+const gearAt3 = declAt(R, 'GearTab')
+const gear3 = gearAt3 >= 0 ? R.slice(gearAt3, R.indexOf('\nfunction BagPanel(', gearAt3)) : ''
+ok(!/setPicking|leave this slot empty|eligibleMoves\(/.test(gear3), '★ the cast bar is a READOUT — no picker, no bind, writing happens on the vessel')
+ok(/<select /.test(rack2) && /dismantleWorn\(/.test(rack2), 'the rack equips written spares from a dropdown and can dismantle the worn one')
+
 // ── 4. label / value must not collapse to one tone, region-wide ─────────────────────────────
 const pairRe = /<span className="gx-label([^"]*)">[\s\S]{0,220}?<span className="gx-value([^"]*)">/g
 const tone = (s: string) => (s.match(/text-(?:white|amber|slate|sky)\/?\[?[\w./]*\]?/g) ?? []).join(' ')

@@ -28,7 +28,10 @@ import { RUNES } from './birth/runes.data'
 import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { saveLetters, VESSELS, type Vessel } from './gems'
-import { buyVessel, ownedCount, VESSEL_PRICE, MAX_PER_KIND } from './vessels'
+import { buyVessel, ownedCount, loadStowed, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL } from './vessels'
+import { eligibleMoves, ALL_BANDS } from './cast'
+import { lettersOf } from './gems'
+import { rawLoadout } from './loadout'
 import { rackFor, buy, priceOf, canRead, msUntilRotation, cycleAt as rackCycleAt } from './scroll-market'
 import {
   WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, cycleAt, weekdayOf, daysUntil, gemTrayFor, gemPrice,
@@ -84,8 +87,8 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
     saveLetters(r.letters); rerender()
   }
-  const onBuyVessel = (kind: Vessel) => {
-    const r = buyVessel(kind, marks)
+  const onBuyVessel = (kind: Vessel, word: string) => {
+    const r = buyVessel(kind, marks, word)
     setNote(r.say); if (!r.ok) return
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
     rerender()
@@ -179,20 +182,32 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
           })}
         </Shelf>
 
-        <Shelf title="The vessel shelf" when="every day · the paper, grown">
-          {/* ★ SOLD ONE AT A TIME, NOT AS A PAIR (Alex, 2026-09-03). Canon's sentence is *"they will need
-              to acquire more of BOTH the focus and accessories"* — two acquisitions. The pair was the
-              build's own bundling and it forbade the obvious thing: wear one bracelet, hold another
-              keeper's focus. Each arrives EMPTY and carries its own letters once you write on it. */}
+        <Shelf title="The vessel shelf" when="every day · the paper, cut to order">
+          {/* ★ MADE FOR ONE WORD (Alex, 2026-09-04): *"each vessel is unique that its made the word and none
+              other."* So the shelf does not sell "a bracelet"; it cuts one for a word you already hold, with
+              exactly that word's seats. Words that already have a vessel (worn or in the satchel) are not
+              offered twice. Sold one at a time, never as a pair (Alex, 2026-09-03). */}
           {VESSELS.map(kind => {
             const have = ownedCount(kind)
             const full = have >= MAX_PER_KIND
-            return (
-              <Row key={kind} left={<span className="text-white/70">a {kind}</span>}
-                   mid={`you carry ${have} of ${MAX_PER_KIND} · its own letters, its own word`}
-                   price={VESSEL_PRICE} action={() => onBuyVessel(kind)} disabled={full}
-                   label={full ? 'all you can carry' : `buy the ${kind}`} />
-            )
+            const band = BAND_FOR_VESSEL[kind]
+            const taken = new Set([...loadStowed().filter(v => v.kind === kind).map(v => v.move), rawLoadout()[band] ?? null])
+            const words = eligibleMoves([...owned], birth, ALL_BANDS[band]!, book)
+              .filter(m => lettersOf(m, birth).length > 0 && !taken.has(m.id))
+            if (!words.length) {
+              return <Row key={kind} left={<span className="text-white/70">a {kind}</span>}
+                          mid={full ? `you carry ${have} of ${MAX_PER_KIND}` : 'every word you hold already has one'}
+                          action={() => {}} disabled label="nothing to cut" />
+            }
+            return words.map(m => {
+              const seats = lettersOf(m, birth).length
+              return (
+                <Row key={`${kind}-${m.id}`} left={<span className="text-white/70">a {kind} for <span className="text-amber-200/90">{m.name}</span></span>}
+                     mid={`${seats} seat${seats === 1 ? '' : 's'} · you carry ${have} of ${MAX_PER_KIND}`}
+                     price={VESSEL_PRICE} action={() => onBuyVessel(kind, m.id)} disabled={full}
+                     label={full ? 'all you can carry' : 'cut it'} />
+              )
+            })
           })}
         </Shelf>
 

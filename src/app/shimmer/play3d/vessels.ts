@@ -46,7 +46,8 @@
  */
 import { keeperKey } from '@/lib/keeper-local'
 import { LOADOUT_KEY, rawLoadout, saveLoadout, type Loadout } from './loadout'
-import { VESSELS_KEY, loadLetters, saveLetters, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel } from './gems'
+import { VESSELS_KEY, loadLetters, saveLetters, lettersOf, missingLetters, unbindLetters, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel, type Letters } from './gems'
+import { moveById } from './keeper-moves'
 import { ALL_BANDS } from './cast'
 
 export const STOWED_KEY = 'ather:shimmer:stowed'
@@ -150,22 +151,34 @@ export function ownedCount(kind: Vessel): number {
   return 1 + loadStowed().filter(v => v.kind === kind).length
 }
 
-export type VesselRefusal = 'too-dear' | 'at-cap'
+export type VesselRefusal = 'too-dear' | 'at-cap' | 'no-such-word'
 export interface VesselPurchase { ok: boolean; marks: number; why?: VesselRefusal; say: string }
 
 const NOUN: Record<Vessel, string> = { bracelet: 'A bracelet', focus: 'A focus' }
 
 /** Buy one vessel: a new, EMPTY one, stowed. Persists on success; the caller spends the Marks. */
-export function buyVessel(kind: Vessel, marks: number): VesselPurchase {
+export function buyVessel(kind: Vessel, marks: number, word?: string): VesselPurchase {
   const stowed = loadStowed()
+  // ★ MADE FOR ONE WORD (Alex, 2026-09-04). The Passage makes the paper to order, for a word the keeper
+  // already holds; the vessel's seats are that word's letters. `word` is optional only for the legacy
+  // blank (a vessel bought before the ruling), which the satchel lets a keeper assign a word to.
+  const m = word !== undefined ? moveById(word) : undefined
+  if (word !== undefined && (!m || ALL_BANDS[BAND_FOR_VESSEL[kind]] !== m.tier)) {
+    return { ok: false, marks, why: 'no-such-word', say: `Nobody down here has heard of that word for a ${kind}.` }
+  }
   if (1 + stowed.filter(v => v.kind === kind).length >= MAX_PER_KIND) {
     return { ok: false, marks, why: 'at-cap', say: `Three ${kind}s is what a keeper can carry. Nobody down here will sell you a fourth.` }
   }
   if (marks < VESSEL_PRICE) {
     return { ok: false, marks, why: 'too-dear', say: `${VESSEL_PRICE} Marks — grown, not ridden in. Come back with them.` }
   }
-  saveStowed([...stowed, emptyVessel(kind)])
-  return { ok: true, marks: marks - VESSEL_PRICE, say: `${NOUN[kind]}, empty. Write something on it.` }
+  saveStowed([...stowed, { kind, gems: [], move: m?.id ?? null }])
+  const seats = m ? lettersOf(m, null).length : 0
+  return {
+    ok: true, marks: marks - VESSEL_PRICE,
+    say: m ? `${NOUN[kind]} for ${m.name}, ${seats} seat${seats === 1 ? '' : 's'} cut. Set its letters and it is yours to wear.`
+           : `${NOUN[kind]}, empty. Write something on it.`,
+  }
 }
 
 /**
@@ -191,12 +204,16 @@ export function equip(kind: Vessel, i: number, birth: string | null, starter?: s
   const stowed = loadStowed()
   const next = stowed[i]
   if (!next || next.kind !== kind) return false
+  // ★ ONLY A WRITTEN VESSEL IS GEAR (Alex, 2026-09-04): every seat its word cut must hold its letter.
+  if (!isComplete(next, birth)) return false
   const band = BAND_FOR_VESSEL[kind]
   if (band < 0) return false
   const active = loadLetters(birth, rawLoadout(), starter)
   const slots: Loadout = ALL_BANDS.map((_, k) => rawLoadout()[k] ?? null)
-
-  stowed[i] = { kind, gems: [...active.vessels[kind]], move: slots[band] ?? null }
+  // The one coming off goes to the satchel with its word and letters. Wearing NOTHING (after a
+  // dismantle) must not mint a blank vessel out of thin air — the slot is simply taken.
+  if (slots[band] || active.vessels[kind].length) stowed[i] = { kind, gems: [...active.vessels[kind]], move: slots[band] ?? null }
+  else stowed.splice(i, 1)
   saveStowed(stowed)
 
   slots[band] = next.move
@@ -207,3 +224,107 @@ export function equip(kind: Vessel, i: number, birth: string | null, starter?: s
 
 /** the two keys an equip writes — restated for the guard that checks every keeper key is registered */
 export const EQUIP_WRITES: readonly string[] = [LOADOUT_KEY, VESSELS_KEY]
+
+// ── ★ A VESSEL IS MADE FOR ONE WORD, AND BEARS EXACTLY THE SEATS THAT WORD NEEDS (Alex, 2026-09-04) ──
+// *"each vessel is unique that its made the word and none other so if the move its meant to represent
+// has one slot then it only needs the one slot."* So `move` on a stowed vessel is not "what happens to
+// be written on it" — it is what the paper was CUT for. The seat count is derived from the word, never
+// stored; a word's letters come from `lettersOf`, which is also what the cast layer needs to run it, so
+// the seats and the requirement cannot drift apart. `VESSEL_CAP` is the ceiling a word can ask for, not
+// a property of every vessel. Filed for Magii to land in the brief (CANON_GAPS, 2026-09-04).
+//
+// The flow: the Passage makes a vessel for a word → it sits in the SATCHEL as a part → the keeper places
+// the gems they hold (`placeGems`) → every seat filled = the word is WRITTEN = it moves to Gear
+// (`isComplete`) → equip / dismantle. Dismantle returns the letters (canon: unbind is free) and the
+// vessel goes back to the satchel, still cut for its word.
+
+/** The letters this vessel's seats were cut for. A legacy blank (bought before the ruling) has none yet. */
+export function seatLetters(v: StowedVessel, birth: string | null): string[] {
+  if (!v.move) return []
+  const m = moveById(v.move)
+  return m ? lettersOf(m, birth) : []
+}
+export const seatCount = (v: StowedVessel, birth: string | null): number => seatLetters(v, birth).length
+/** Which of its own letters this vessel still lacks. */
+export const shortOf = (v: StowedVessel, birth: string | null): string[] => missingLetters(seatLetters(v, birth), v.gems)
+/** Written = made for a word AND every seat holds its letter. Only a written vessel is gear. */
+export const isComplete = (v: StowedVessel, birth: string | null): boolean => !!v.move && shortOf(v, birth).length === 0
+/** The stowed vessels of a kind that are written — what the Gear dropdown may offer to equip. */
+export function completeVessels(kind: Vessel, birth: string | null): { v: StowedVessel; i: number }[] {
+  return loadStowed().map((v, i) => ({ v, i })).filter(({ v }) => v.kind === kind && isComplete(v, birth))
+}
+
+export interface Placement { ok: boolean; placed: string[]; short: string[]; complete: boolean; say: string }
+/**
+ * Place, from the bag, every letter this vessel is still short — as many as the bag holds. Writes the
+ * stowed list; RETURNS the letters for the caller to save (same shape as `imbue`, so a private-mode
+ * refusal to persist is the caller's to notice). `ok` means at least one gem moved.
+ */
+export function placeGems(i: number, birth: string | null, l: Letters): { r: Placement; letters: Letters } {
+  const stowed = loadStowed()
+  const v = stowed[i]
+  if (!v) return { r: { ok: false, placed: [], short: [], complete: false, say: 'No such vessel.' }, letters: l }
+  if (!v.move) return { r: { ok: false, placed: [], short: [], complete: false, say: 'This one was never cut for a word. Choose one first.' }, letters: l }
+  const bag = { ...l.bag }
+  const placed: string[] = []
+  const short: string[] = []
+  for (const r of shortOf(v, birth)) {
+    if ((bag[r] ?? 0) > 0) { bag[r] = bag[r]! - 1; placed.push(r) } else short.push(r)
+  }
+  if (!placed.length) {
+    return { r: { ok: false, placed, short, complete: false, say: `You hold none of what it is short: ${short.join(', ')}.` }, letters: l }
+  }
+  stowed[i] = { ...v, gems: [...v.gems, ...placed] }
+  saveStowed(stowed)
+  const tidy: Record<string, number> = {}
+  for (const [k, n] of Object.entries(bag)) if (n > 0) tidy[k] = n
+  const complete = short.length === 0
+  return {
+    r: { ok: true, placed, short, complete,
+         say: complete ? `Written. It is gear now — find it on the Gear tab.` : `${placed.length} set. Still short: ${short.join(', ')}.` },
+    letters: { bag: tidy, vessels: l.vessels },
+  }
+}
+/** Take a stowed vessel apart: its gems go back to the bag; the paper stays cut for its word. Returns the letters to save. */
+export function dismantle(i: number, l: Letters): Letters {
+  const stowed = loadStowed()
+  const v = stowed[i]
+  if (!v || !v.gems.length) return l
+  const bag = { ...l.bag }
+  for (const r of v.gems) bag[r] = (bag[r] ?? 0) + 1
+  stowed[i] = { ...v, gems: [] }
+  saveStowed(stowed)
+  return { bag, vessels: l.vessels }
+}
+/**
+ * Take the WORN vessel apart: its letters return to the bag, its band clears, and the empty paper goes
+ * back to the satchel still cut for its word. Refuses at the stowed cap (three of a kind is what a
+ * keeper carries, worn or not). A keeper with nothing worn still casts their birth move — the floor.
+ */
+export function dismantleWorn(kind: Vessel, birth: string | null, starter?: string): boolean {
+  const band = BAND_FOR_VESSEL[kind]
+  if (band < 0) return false
+  const slots: Loadout = ALL_BANDS.map((_, k) => rawLoadout()[k] ?? null)
+  const word = slots[band] ?? null
+  const active = loadLetters(birth, slots, starter)
+  if (!word && !active.vessels[kind].length) return false
+  const stowed = loadStowed()
+  if (stowed.filter(v => v.kind === kind).length >= MAX_PER_KIND - 1) return false
+  saveStowed([...stowed, { kind, gems: [], move: word }])
+  saveLetters(unbindLetters(active, kind))
+  slots[band] = null
+  saveLoadout(slots)
+  return true
+}
+/** Give a legacy blank its word. Refuses if the vessel already has one, or holds gems its new word cannot seat. */
+export function setWord(i: number, word: string, birth: string | null): boolean {
+  const stowed = loadStowed()
+  const v = stowed[i]
+  if (!v || v.move) return false
+  const m = moveById(word)
+  if (!m || ALL_BANDS[BAND_FOR_VESSEL[v.kind]] !== m.tier) return false
+  if (missingLetters(v.gems, lettersOf(m, birth)).length) return false
+  stowed[i] = { ...v, move: word }
+  saveStowed(stowed)
+  return true
+}

@@ -43,10 +43,17 @@ ok(rackAt >= 0 && gearAt > rackAt, 'VesselRack and GearTab both present, in that
 const rack = rackAt >= 0 && gearAt > rackAt ? src.slice(rackAt, gearAt) : ''
 const seatsAt = declAt(src, 'Seats')
 const seats = seatsAt >= 0 ? src.slice(seatsAt, src.indexOf('\n}\n', seatsAt)) : ''
-ok(/Array\.from\(\{ length: VESSEL_CAP \}/.test(seats),
-   '★ Seats draws exactly VESSEL_CAP seats — the cap, never a literal 3, never the gems.length')
-ok(count(rack, /<Seats /g) === 2,
-   `★ the rack draws seats on the worn vessel AND on every spare (${count(rack, /<Seats /g)} mounts, want 2)`)
+// ★ RE-POINTED 2026-09-04 (Alex: *"if the move its meant to represent has one slot then it only needs
+// the one slot"*): seats = the WORD's letters, capped at VESSEL_CAP — never a literal 3, never gems.length.
+ok(/Array\.from\(\{ length: Math\.min\(VESSEL_CAP, Math\.max\(0, seats\)\) \}/.test(seats),
+   '★ Seats draws the word\'s seat count, capped at VESSEL_CAP — the cap is a ceiling, not every vessel\'s count')
+ok(/seats = VESSEL_CAP/.test(seats), 'a caller with no word still gets the cap as the default')
+// ★ RE-POINTED 2026-09-04: only WRITTEN vessels are gear. The rack draws seats on the WORN vessel and
+// offers the written spares in a dropdown BY WORD; unwritten parts live in the satchel (`VesselParts`).
+ok(count(rack, /<Seats /g) === 1, `★ the rack draws seats on the worn vessel (${count(rack, /<Seats /g)} mounts, want 1)`)
+ok(/<select /.test(rack) && /completeVessels\(/.test(rack), '★ the spares are a dropdown of WRITTEN vessels, by word (completeVessels)')
+ok(/dismantleWorn\(/.test(rack), 'the worn vessel can be dismantled from the rack')
+ok(!/doEquip\(kind, i\)\}\s*className="gx-btn flex/.test(rack), 'the old spare-button row is gone')
 ok(!/nothing set|>empty</.test(rack),
    '★ an empty vessel is three dark seats, never a sentence — "nothing set" and "empty" are gone from the rack')
 const gear = gearAt >= 0 ? src.slice(gearAt) : ''

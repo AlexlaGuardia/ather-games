@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs'
 import {
   STOWED_KEY, LEGACY_PAIRS_KEY, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL,
   loadStowed, saveStowed, buyVessel, equip, ownedCount, emptyVessel, equippedVessel,
+  dismantleWorn, placeGems, seatCount, shortOf, isComplete,
 } from './vessels'
 import { saveLoadout, rawLoadout, resolveLoadout, setSlot } from './loadout'
 import { GEMS_KEY, VESSELS_KEY, addGems, isBodyHeld, saveLetters, loadLetters, VESSELS, type Letters } from './gems'
@@ -88,31 +89,39 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     const before = loadLetters(birth, rawLoadout())
     saveLetters({ ...before, vessels: { ...before.vessels, focus: [birth] } })
 
-    ok(buyVessel('bracelet', VESSEL_PRICE).ok, 'a second bracelet is bought')
-    ok(equip('bracelet', 0, birth), 'equip the second bracelet')
-
+    // ★ RE-POINTED 2026-09-04 (hub) TO ALEX'S RULING: a vessel is MADE for one word and bears exactly its
+    // seats; only a WRITTEN vessel is gear. So the parking move is DISMANTLE (letters to the bag, the empty
+    // paper to the satchel still cut for its word), and an unwritten vessel refuses to be worn.
+    ok(dismantleWorn('bracelet', birth), 'dismantle the worn bracelet')
     ok(JSON.parse(store[GEMS_KEY]!)[spare] === 1,
-       "★ the BAG survives an equip untouched — loose letters are the keeper's, not the paper's")
-    ok(rawLoadout()[TAC] === null, 'the worn bracelet is now the empty one: no word on the tactical band')
+       "★ the BAG's spare survives a dismantle untouched — loose letters are the keeper's, not the paper's")
+    for (const r of word.runes) ok((loadLetters(birth, rawLoadout()).bag[r] ?? 0) >= 1, `the word's letter ${r} came back to the bag`)
+    ok(rawLoadout()[TAC] === null, 'nothing worn on the tactical band now')
     ok(JSON.parse(store[VESSELS_KEY]!).focus.length === 1 && rawLoadout()[ULT] === null,
-       '★★ THE FOCUS DID NOT MOVE. A bracelet equip touches the bracelet alone — the whole point of retiring the pair')
-
-    const stowed = loadStowed()[0]!
-    ok(stowed.kind === 'bracelet' && stowed.move === word.id && stowed.gems.length === word.runes.length,
-       '★ the bracelet you took off keeps its word AND its letters — the gems ride the vessel')
-
-    // with one set of letters, the empty bracelet cannot be written with the same word
-    const s2 = setSlot(inv.owned, birth, rawLoadout(), TAC, word.id, keeperBook(inv.owned))
-    ok(s2[TAC] === null, '★ one gem is one letter: the second bracelet cannot write a word whose letters are on the first')
-
-    // equip back: the word and its letters return together
-    ok(equip('bracelet', 0, birth) && rawLoadout()[TAC] === word.id, 'equipping the first bracelet back restores its word')
-    ok(loadLetters(birth, rawLoadout()).vessels.bracelet.length === word.runes.length, 'and its letters came back with it')
+       '★★ THE FOCUS DID NOT MOVE. A bracelet dismantle touches the bracelet alone')
+    const parked = loadStowed()[0]!
+    ok(parked.kind === 'bracelet' && parked.move === word.id && parked.gems.length === 0,
+       '★ the paper went to the satchel EMPTY and still cut for its word')
+    ok(seatCount(parked, birth) === word.runes.length, `★ its seats are the word's letters (${word.runes.length}), not the cap`)
+    ok(!isComplete(parked, birth) && shortOf(parked, birth).length === word.runes.length, 'unwritten, and short every one of its letters')
+    ok(equip('bracelet', 0, birth) === false, '★ an unwritten vessel refuses to be worn')
+    const placed = placeGems(0, birth, loadLetters(birth, rawLoadout()))
+    ok(placed.r.ok && placed.r.complete && placed.r.placed.length === word.runes.length, 'placing from the bag writes it in one press when the bag holds every letter')
+    saveLetters(placed.letters)
+    ok((loadLetters(birth, rawLoadout()).bag[spare] ?? 0) === 1, 'the spare stayed in the bag; only the word\'s letters moved')
+    ok(isComplete(loadStowed()[0]!, birth), 'written now')
+    ok(equip('bracelet', 0, birth) && rawLoadout()[TAC] === word.id, 'and a written vessel goes on: its word is on the band')
+    ok(loadLetters(birth, rawLoadout()).vessels.bracelet.length === word.runes.length, 'and its letters came with it')
+    ok(loadStowed().filter(v => v.kind === 'bracelet').length === 0, '★ wearing nothing minted no blank — the slot was simply taken')
     const res = resolveLoadout(inv.owned, birth, keeperBook(inv.owned))
-    ok(res.slots[TAC] === word.id && res.why[TAC] === null,
-       'the worn vessel resolves seated through the real consumer after two equips')
+    ok(res.slots[TAC] === word.id && res.why[TAC] === null, 'the worn vessel resolves seated through the real consumer')
     const worn = equippedVessel('bracelet', birth)
     ok(worn.move === word.id && worn.gems.length === word.runes.length, 'equippedVessel reads the same vessel the world is wearing')
+    // the Passage cuts to order
+    const cut = buyVessel('bracelet', VESSEL_PRICE, word.id)
+    ok(cut.ok && loadStowed().some(v => v.move === word.id && v.gems.length === 0), '★ the Passage cuts a bracelet FOR a word: it arrives empty, cut for that word')
+    ok(buyVessel('bracelet', VESSEL_PRICE, 'no-such-move').why === 'no-such-word', 'a word nobody has heard of is refused')
+    ok(buyVessel('focus', VESSEL_PRICE, word.id).why === 'no-such-word', '★ a tactical word cannot be cut into a FOCUS — the kind gates the band')
   }
 }
 
@@ -122,7 +131,7 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   ok(equip('bracelet', 0, 'tempest') === false, 'equipping a vessel you do not own does nothing')
   saveStowed([emptyVessel('focus')])
   ok(equip('bracelet', 0, 'tempest') === false, '★ the worn slot refuses a FOCUS — a vessel is not a generic holder')
-  ok(equip('focus', 0, 'tempest') === true, 'and the held slot takes it')
+  ok(equip('focus', 0, 'tempest') === false, '★ and an UNWRITTEN focus refuses too — only written vessels are gear (2026-09-04)')
   wipe()
   store[STOWED_KEY] = '{"not":"a list"}'
   ok(loadStowed().length === 0, 'a corrupt stowed save reads as none, not a crash')
@@ -163,8 +172,9 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   const end = declAfter(src, 'GearTab', at)
   ok(at >= 0 && end > at, 'VoxelWorld has a VesselRack, sliced on both anchors')
   const rack = at >= 0 && end > at ? src.slice(at, end) : ''
-  ok(/equip\(kind, i, birth/.test(rack) && /loadStowed\(\)/.test(rack) && /onEquipped\(/.test(rack),
-     'the rack equips through vessels.ts and hands the tab its new slots')
+  // ★ RE-POINTED 2026-09-04 (hub): the rack reads the stowed list through `completeVessels` (written only).
+  ok(/equip\(kind, i, birth/.test(rack) && /completeVessels\(/.test(rack) && /onEquipped\(/.test(rack),
+     'the rack equips through vessels.ts (written vessels only) and hands the tab its new slots')
   const useAt = src.indexOf('<VesselRack ')
   ok(useAt >= 0 && /onLetters\(\)/.test(src.slice(useAt, useAt + 400)),
      'the tab re-resolves and tells the world (onLetters → runeTick) after an equip')
