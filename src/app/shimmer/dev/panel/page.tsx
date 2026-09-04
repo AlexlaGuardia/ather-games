@@ -40,6 +40,9 @@ import { KeeperFrame, TabEmpty, type KeeperTab } from '../../voxel3d/keeper-pane
 import { GearTab, SatchelLetters } from '../../voxel3d/VoxelWorld'
 import { PANEL_SCENARIOS, planPanel, seedPanel, type PanelPlan, type PanelScenarioId } from '../../play3d/panel-fixture'
 import { VESSEL_CAP, VESSELS } from '../../play3d/gems'
+import { BAND_FOR_VESSEL, ownedCount } from '../../play3d/vessels'
+import { castForMove } from '../../play3d/cast'
+import { VesselCard } from './vessel-card'
 import { createInventory, type Inventory } from '../../engine/inventory'
 import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
@@ -58,6 +61,10 @@ export default function PanelDevPage() {
   const [tab, setTab] = useState<KeeperTab>('gear')
   const [bg, setBg] = useState<string>(BACKDROPS[0].css)
   const [gen, setGen] = useState(0)
+  // ★ THE A/B. `shipped` mounts hub's real GearTab; `item` mounts the PROPOSAL in vessel-card.tsx.
+  // Flipping between them is the whole point — a look is judged against the thing it replaces, not
+  // in isolation, and the proposal is the only thing on this bench that is not what ships.
+  const [look, setLook] = useState<'shipped' | 'item'>('shipped')
   // ⚠ CLIENT-ONLY ON PURPOSE, AND NOT FOR TIDINESS. Every save function here is try/catch'd for
   // private mode, so a server render does not crash — it does something worse. It reads a keeper
   // with no runes, paints an EMPTY panel, and then hydration swaps in the seeded one: a flash of
@@ -77,6 +84,7 @@ export default function PanelDevPage() {
     if (s && PANEL_SCENARIOS.some(x => x.id === s)) setScenario(s as PanelScenarioId)
     if (t === 'satchel' || t === 'gear' || t === 'grimoire') setTab(t)
     const b = BACKDROPS.find(x => x.id === q.get('bg')); if (b) setBg(b.css)
+    const lk = q.get('look'); if (lk === 'item' || lk === 'shipped') setLook(lk)
   }, [])
 
   // The same ref SHAPES the game hands these bodies — refs, not props, because that is what it takes.
@@ -111,6 +119,13 @@ export default function PanelDevPage() {
         ))}
         <button type="button" onClick={() => setGen(n => n + 1)}
           className="px-2 py-1 rounded border border-white/20 text-white/60">re-seed</button>
+        <span className="mx-1 text-white/20">|</span>
+        {(['shipped', 'item'] as const).map(v => (
+          <button key={v} type="button" onClick={() => setLook(v)}
+            className={`px-2 py-1 rounded border ${look === v ? 'border-emerald-300 text-emerald-200' : 'border-white/20 text-white/60'}`}>
+            {v === 'shipped' ? 'shipped rack' : 'item-first (proposal)'}
+          </button>
+        ))}
       </div>
 
       {/* ★ THE QUESTION IS PRINTED BESIDE THE PICTURE. A bench of images with no question is
@@ -131,7 +146,18 @@ export default function PanelDevPage() {
         {!mounted ? null : <KeeperFrame key={`${scenario}:${gen}`} tab={tab} setTab={setTab} onClose={() => {}}
                      hint={<span className="text-white/40">dev bench · nothing here is saved to a real keeper</span>}>
           {tab === 'satchel' && <SatchelLetters owned={plan.owned} birth={plan.birth} items={items} onChange={() => setGen(n => n + 1)} />}
-          {tab === 'gear' && <GearTab items={items} onLetters={() => setGen(n => n + 1)} tools={tools} skills={skills} />}
+          {tab === 'gear' && look === 'shipped' && <GearTab items={items} onLetters={() => setGen(n => n + 1)} tools={tools} skills={skills} />}
+          {tab === 'gear' && look === 'item' && (
+            <div className="flex flex-col gap-2">
+              <div className="gx-label text-[9px] text-emerald-200/60">proposal · not what ships · built against CANON/design-briefs/shimmer-casting-vessels.md</div>
+              {VESSELS.map(kind => {
+                const band = BAND_FOR_VESSEL[kind]
+                const id = band >= 0 ? plan.slots[band] : null
+                return <VesselCard key={kind} kind={kind} gems={plan.worn[kind]}
+                                   word={id ? (castForMove(id)?.label ?? id) : null} owned={ownedCount(kind)} />
+              })}
+            </div>
+          )}
           {tab === 'grimoire' && (
             <TabEmpty>The grimoire needs a party and a spirit index. This bench drives the seats; open the game for that one.</TabEmpty>
           )}
