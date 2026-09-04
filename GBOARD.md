@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 (second window, hub) — `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
+## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 afternoon (hub) — `bff8d2d` **the chrome pass: every body on a `gx-plate`, one `SectionHead`, the birth lean remounted under Gear › Innate — LIVE in `BUILD_ID 8QCMVsuKqAR9akome2ztT`**, keeper-chrome 41/0, sweep 234/234, see *THE BODIES STAND ON PLATES* under the 💎 block. Before that: `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
 
 ## 🚪 Shimmer — **THE LANDING: THE ARCH WAS ALREADY BUILT, THE DOOR WAS NOT** (2026-09-03, hub lane) · *Last touched 2026-09-03 — `0f4ffa5` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID TGTHpgxRIteEw0DTsPy_3`, 168 chunks**, built from `6c0b3d1` — this work plus the play lane's Passage shelves and trader in one deploy, after their tokens row cleared the red. **Sweep 231 suites · 231 pass · 0 FAIL · 0 KILLED, started AND ended at `6c0b3d1`** (ceiling 600s, `plot.test.ts` 145s). ⚠ The run before it started at `3624714` and the play lane landed two commits INSIDE it, one of them in `Shimmer3D.tsx` where my return leg lives — **231/231 about a tree that no longer existed.** Nothing was broken (their diff touched none of my lines, checked rather than assumed) but the number was void, so the tree was frozen by request and re-swept. Served md5 == disk md5 == public tunnel on both changed chunks; retired string 0 everywhere, positive controls present. landing **46/0** (new), landing-wiring **23/0** (new), crossing-out 38/0, crossing-in 38/0, rune-hold-doors 15/0/0-pending, rune-hold-fold green, gate-collapse 55/0. **Mutation-swept 12 ways across two sweeps: all 12 fire, 2 negative controls pass by design.** tsc 7 (baseline), canon 13 CLEAN.*
 
@@ -256,6 +256,56 @@ imbue 22/0, dev-claims 9/0, tsc 7 (baseline), canon 13 CLEAN, bands cache unchan
 
 **⚠ NOT LOOKED AT by Alex.** Headless asserts cover the shape; whether three dark seats READ as an unwritten vessel
 at panel distance is his eye. The spiral / resonance render of a lit seat stays a shader question and his.
+
+### ★ THE BODIES STAND ON PLATES: THE CHROME PASS, AND THE BIRTH LEAN CAME BACK (hub, 2026-09-04 afternoon)
+Alex walked the three-tab panel — *"looking alot better"* — and asked how to make it read as a game menu, and
+whether Meshy helps. **Meshy is the wrong tool for chrome**: a menu reads as a game menu through type, plates,
+framing and state contrast, not geometry. Where 3D genuinely matters later is ITEM ICONS (gem, bracelet, focus,
+Blade / Rinstick as objects instead of text chips) — dead objects, so the art-medium law allows pre-rendering,
+and that is a picaso render-to-sprite job on Alex's art call, not a Meshy job. Credits are not the constraint.
+
+**What was actually wrong:** the FRAME had been on the house layer since 08-26 (`gx-card`, `gx-btn` tabs). Every
+body under it was still `rounded border border-white/10 bg-white/[0.03]` with hierarchy carried by the opacity
+of white — the exact signature `hud-type.test.ts` was written against on 08-23, one level down. Three spellings
+of a section head were live in one panel.
+
+**What changed (`bff8d2d`):**
+- **`gameui.css` gains `.gx-plate` (+ `.is-lit`)** — a recessed sub-panel INSIDE a card, near-sharp, accent
+  hairline, inset shadow. The doc had named `.gx-plate` as planned since June; only `gx-card` existed.
+- **`keeper-panel.tsx` gains `SectionHead`** — dim caps label, fading accent hairline, optional note. One spelling.
+- **Every body row on a plate.** Letters (bag · imbue), Vessels, the cast bar, Innate, Gathering focuses,
+  Satchel, Hotbar, the chest, and both Grimoire lists. Labels ask `gx-label`, numbers `gx-value`, names
+  `gx-title`. Cast-bar rows LIGHT when the word is bound and built and show **mana · cooldown read off the
+  CastSpec** (never restated). Bag cells sharp with an inset; lifted cells keep their colour and gain a ring.
+  The Yours / Species switch is a `gx-btn` with brutal on/off.
+- **The dark seat is deeper and still RIMLESS.** ⚠ I had proposed a socket ring; the vessel brief rules it out
+  (*"the vessel closed around it"*). The guard asserts no border / ring / outline on the seat, so the tempting
+  chrome fix is the one it forbids.
+- **★★ `BirthLean` WAS DARK, AND NOTHING SAID SO.** The birth-rune readout — Alex's 08-25 *"maybe we can work it
+  into the rune tab later"*, built the same day — was mounted on the Runes tab. Retiring that tab this morning
+  unmounted it silently: defined, imported nowhere, no red. Same shape as the 08-22 doctor check that would have
+  retired in the pass direction. Remounted under **Gear › Innate**, beside the passive (both are traits a keeper
+  INSPECTS), and asserted reachable. An orphaned 18-line Runes-tab doc comment went with it.
+
+**Guards:** `keeper-chrome.test.ts` (new, **41/0**) reads the layer FIRST — a role the stylesheet no longer
+defines is BLIND, not a pass — then asserts the bodies ask for it: zero web rows, ≥7 plates, every section
+headed by `SectionHead`, no hand-rolled hairline, the seat rimless, the key cap a `gx-btn`, the price derived,
+the lit-plate condition, BirthLean mounted once inside GearTab, label/value pairs not collapsing; the grimoire
+under the same rules. **Mutation-swept 9 ways, all 9 fire; 2 negative controls (the web-row spelling and the
+hairline inside comments) pass by design.** ⚠ One mutation SURVIVED on the first cut and it was the guard's
+blind spot: the 220-char pair window cannot see the cast bar's label/price pair because the comment between them
+is blanked to spaces with layout kept. That pair is pinned by anchor now. hud-type baseline **26 → 20** (six
+label roles converted, banked), `npm run gx` shimmer floor **64 → 170** (banked). tsc 7 (baseline), canon exit 0.
+**Sweep 234 suites · 234 pass · 0 FAIL · 0 KILLED at `92423b1` + this diff, tree unmoved** (rc off the file;
+`plot.test.ts` 149s). ✅ **`bff8d2d` pushed, DEPLOYED `BUILD_ID 8QCMVsuKqAR9akome2ztT`, 168 chunks** (`coord build`, backgrounded, artifact check OK, lock free). Served md5 == disk == public tunnel on the panel chunk (`4cd0f47657051fbe.js`) AND on the stylesheet carrying `.gx-plate` (`3c441d57770bd43d.css`, linked by the voxel page); positive controls `Cast bar` `Birth lean` `Gathering focuses` `empty seat`×2 `gx-plate`×10 present, retired `Hotbar · 1-8` / `With you · ` / `nothing set` 0.
+
+**⛔ NOT LOOKED AT — the headless asserts prove the bodies ASK for the layer, not that it reads well.** Whether a
+lit plate reads as "this is the live word" at play distance, and whether the deeper seat still reads as empty
+rather than as a hole, is Alex's eye.
+
+**Next (Alex, in order):** open the panel, all three tabs, and call the chrome. Then the icon question: the
+text chips for gems / vessels / focuses are the biggest remaining tell — a pixel icon set is Alex's, a
+pre-rendered prop set is picaso's, and which is the call.
 
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
