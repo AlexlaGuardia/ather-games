@@ -177,6 +177,26 @@ export function KeeperFrame({ tab, setTab, title, tall, hint, onClose, children 
 }
 
 /**
+ * ★ ONE SPELLING OF A SECTION HEAD (2026-09-04, the chrome pass). Before this, the panel's bodies
+ * headed their sections three ways — a bare `gx-label`, a hand-rolled `uppercase tracking-[0.16em]`
+ * div, and the hairline-with-a-note the passive and the gathering focuses used — and the last one
+ * was the only one that read as a game menu. Two spellings of one role is the ratchet defect
+ * `hud-type.test.ts` exists for, one level down. So the head is a component: dim caps label, an
+ * accent hairline that fades, and an optional note on the right (a count, a hint, never a sentence).
+ * The note is dim prose; when it carries a NUMBER, wrap that number in `gx-value` at the call site
+ * so the label/value contrast the layer asks for is there to read.
+ */
+export function SectionHead({ label, note }: { label: ReactNode; note?: ReactNode }) {
+  return (
+    <div className="mb-1.5 flex items-center gap-2">
+      <span className="gx-label shrink-0 text-[9px] text-amber-200/45">{label}</span>
+      <span className="h-px min-w-4 flex-1 bg-gradient-to-r from-amber-200/25 to-transparent" />
+      {note !== undefined && <span className="shrink-0 text-[9px] text-white/30">{note}</span>}
+    </div>
+  )
+}
+
+/**
  * What a tab shows when its system exists but the player has nothing in it yet, versus when the
  * system itself is not wired. These are different sentences on purpose — "you have none" is a
  * game state a player can act on; "not built yet" is ours, and dressing the second as the first

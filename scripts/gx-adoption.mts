@@ -44,7 +44,7 @@ const FLOORS: Record<string, number> = {
   // a floor that only travels one way: every later run red, unfixable except by writing more
   // commentary about gx. 23 -> 64 is the honest climb (the fold HUD, brew + keeper panels, the
   // grimoire portraits, the map caption).
-  shimmer: 64,
+  shimmer: 170,
   lucernyx: 7, nolmir: 3,
 }
 

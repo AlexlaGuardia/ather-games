@@ -255,7 +255,7 @@ import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { normalizeRoster, activeSpirits, MAX_PARTY } from '../engine/spirit-health'
 import { LAUNCHED_SPECIES } from '../engine/spirit-index'
 import type { Species } from '../spirits/spirit'
-import { KeeperFrame, TabEmpty, type KeeperTab } from './keeper-panel'
+import { KeeperFrame, TabEmpty, type KeeperTab, SectionHead } from './keeper-panel'
 import { GrimoireTab } from './grimoire-tab'
 import { evolveSpirit } from '../spirits/evolution'
 import { POTION_IDS, POTION_DEFS } from '../engine/alchemy'
@@ -2926,31 +2926,14 @@ const DRAG_SLOP = 5
 
 /** One place each for what a lift LOOKS like, so a fourth mode cannot be added and left invisible. */
 const LIFT_LOOK: Record<LiftMode, string> = {
-  whole: 'border-amber-300 bg-amber-300/20',
-  half: 'border-sky-300 bg-sky-300/20',
-  one: 'border-emerald-300 bg-emerald-300/20',
+  whole: 'border-amber-300 bg-amber-300/20 ring-1 ring-inset ring-amber-300/70',
+  half: 'border-sky-300 bg-sky-300/20 ring-1 ring-inset ring-sky-300/70',
+  one: 'border-emerald-300 bg-emerald-300/20 ring-1 ring-inset ring-emerald-300/70',
 }
 const LIFT_BADGE: Record<LiftMode, string> = {
   whole: 'bg-amber-300', half: 'bg-sky-300', one: 'bg-emerald-300',
 }
 
-/**
- * The RUNES tab — your runes, and what each one opens.
- *
- * ── THE BOOK IS DERIVED, NEVER KEPT ───────────────────────────────────────────────────────────
- * `keeper-moves.ts` already builds the whole index by inverting each move's rune requirement, so
- * this component owns no lists of its own and cannot drift from the registry. Three states, which
- * are the three a keeper actually cares about (#309):
- *   KNOWN     — you hold every rune it needs. Yours now.
- *   REACHABLE — one rune away, along your rune's own element/state lanes. The path forward.
- *   LOCKED    — everything else. Shown as a count, not a list; a wall of unreachable names is
- *               noise, and the number alone still says "there is more".
- *
- * ★ SCATTER'S EMPTY LIST IS CANON, NOT A GAP. `runes.data.ts` states it: the Schools do not teach
- * Scatter, scholars do not recognise it, and a Scatter-born keeper has no trainable keeper move at
- * all. So an empty book here must read as a *fact about the world*, never as "content coming soon" —
- * Benji carries this rune, and the emptiness is the point of him.
- */
 /**
  * ── THE BIRTH RUNE'S LEAN, MADE READABLE (2026-08-25, play lane) ───────────────────────────────
  *
@@ -2993,15 +2976,15 @@ function BirthLean({ birth }: { birth: string | null }) {
   const essence = essenceOf(aff)
 
   return (
-    <div className="mb-4 rounded border border-amber-200/15 bg-amber-100/[0.03] px-2.5 py-2">
+    <div className="gx-plate is-lit mb-1.5 px-3 py-2">
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <span className="gx-label text-[10px] text-amber-200/50">Birth lean</span>
         <span className="gx-label text-[9px] text-white/25">{aff.lean}</span>
       </div>
-      <div className="text-[11px] leading-snug text-white/70">{essence}</div>
+      <div className="gx-title text-[11px] leading-snug text-white/80">{essence}</div>
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
         {effects.map(e => (
-          <span key={e} className="text-[10px] tabular-nums text-amber-200/70">{e}</span>
+          <span key={e} className="gx-value text-[10px] text-amber-200/75">{e}</span>
         ))}
       </div>
       <div className="mt-1 text-[9px] leading-snug text-white/25">
@@ -3036,9 +3019,9 @@ const VESSEL_LANE_LABEL: Record<Vessel, string> = { bracelet: 'worn · tacticals
 function GemChip({ id, n }: { id: string; n?: number }) {
   const r = RUNES.find(x => x.id === id)
   return (
-    <span className="gx-label rounded px-1.5 py-0.5 text-[10px]"
+    <span className="gx-label rounded-[2px] px-1.5 py-0.5 text-[10px]"
           style={{ color: r?.glow ?? '#fff', background: `${r?.glow ?? '#fff'}18` }}>
-      {r?.name ?? id}{n !== undefined && n > 1 && <span className="ml-1 text-white/45">×{n}</span>}
+      {r?.name ?? id}{n !== undefined && n > 1 && <span className="gx-value ml-1 text-white/45">×{n}</span>}
     </span>
   )
 }
@@ -3061,7 +3044,7 @@ function Seats({ gems }: { gems: readonly string[] }) {
         return id
           ? <GemChip key={`${id}-${k}`} id={id} />
           : <span key={`dark-${k}`} role="img" aria-label="empty seat" title="empty seat"
-                  className="inline-block h-[18px] w-[26px] rounded-full bg-white/[0.04] shadow-[inset_0_0_4px_rgba(0,0,0,0.6)]" />
+                  className="inline-block h-[18px] w-[26px] rounded-full bg-black/35 shadow-[inset_0_2px_5px_rgba(0,0,0,0.85),inset_0_-1px_0_rgba(255,255,255,0.03)]" />
       })}
     </span>
   )
@@ -3096,12 +3079,12 @@ function SatchelLetters({ owned, birth, items, onChange }: {
   const bag = Object.entries(l.bag)
   const total = Object.values(allLetters(l)).reduce((a, b) => a + b, 0)
   return (
-    <div className="mt-4 border-t border-white/10 pt-3">
-      <div className="gx-label mb-1.5 text-[10px] text-white/35">Letters · {total} gem{total === 1 ? '' : 's'}</div>
+    <div className="mt-4">
+      <SectionHead label="Letters" note={<><span className="gx-value text-white/50">{total}</span> gem{total === 1 ? '' : 's'}</>} />
       <div className="flex flex-col gap-1">
-        <div className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+        <div className="gx-plate px-2.5 py-1.5">
           <div className="flex items-baseline gap-2">
-            <span className="text-[12px] text-white/75">bag</span>
+            <span className="gx-title text-[11px] text-amber-200/80">bag</span>
             <span className="gx-label text-[9px] text-white/25">loose · set when you bind</span>
           </div>
           <div className="mt-1 flex flex-wrap gap-1">
@@ -3110,9 +3093,9 @@ function SatchelLetters({ owned, birth, items, onChange }: {
               : bag.map(([id, n], k) => <GemChip key={`${id}-${k}`} id={id} n={n} />)}
           </div>
         </div>
-        <div className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+        <div className="gx-plate px-2.5 py-1.5">
           <div className="flex items-baseline gap-2">
-            <span className="text-[12px] text-white/75">imbue</span>
+            <span className="gx-title text-[11px] text-amber-200/80">imbue</span>
             <span className="gx-label text-[9px] text-white/25">a crystal of the element · a rune you hold · one gem</span>
           </div>
           <div className="mt-1 flex flex-col gap-1">
@@ -3124,7 +3107,7 @@ function SatchelLetters({ owned, birth, items, onChange }: {
               return (
                 <div key={id} className="flex items-center gap-2">
                   <span className="w-[76px] shrink-0 text-[11px]" style={{ color: r?.glow ?? '#fff' }}>{r?.name ?? id}</span>
-                  <span className="text-[10px] text-white/40">{crystal?.replace(/_/g, ' ') ?? '—'} ×{have}</span>
+                  <span className="text-[10px] text-white/40">{crystal?.replace(/_/g, ' ') ?? '—'} <span className="gx-value text-white/55">×{have}</span></span>
                   <button type="button" disabled={why !== null} onPointerDown={() => doImbue(id)}
                           className={`gx-btn ml-auto rounded border px-2 py-0.5 text-[10px] ${why === null ? 'border-amber-200/40 text-amber-200/90 hover:bg-white/[0.06]' : 'gx-inactive border-white/10 text-white/40'}`}>
                     {why === null ? 'imbue' : imbueSentence(why, id).split(' — ')[0]}
@@ -3165,30 +3148,27 @@ function VesselRack({ owned, birth, slots, onEquipped }: {
   const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
   return (
     <div className="mb-3 flex flex-col gap-1">
-      <div className="flex items-baseline gap-2">
-        <span className="gx-label text-[10px] text-white/35">Vessels</span>
-        <span className="ml-auto text-[10px] text-white/30">
-          {VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(' · ')}
-          {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · grown at the Passage' : ''}
-        </span>
-      </div>
+      <SectionHead label="Vessels" note={<>
+        <span className="gx-value text-white/50">{VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(' · ')}</span>
+        {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · grown at the Passage' : ''}
+      </>} />
       {VESSELS.map(kind => {
         const band = BAND_FOR_VESSEL[kind]
         const worn = band >= 0 ? (slots[band] ?? null) : null
         const spare = stowed.map((v, i) => ({ v, i })).filter(({ v }) => v.kind === kind)
         return (
-          <div key={kind} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+          <div key={kind} className="gx-plate px-2.5 py-1.5">
             <div className="flex items-baseline gap-2">
-              <span className="text-[12px] text-white/75">{kind}</span>
+              <span className="gx-title text-[11px] text-amber-200/80">{kind}</span>
               <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[kind]}</span>
-              <span className="ml-auto text-[9px] text-white/30">{l.vessels[kind].length}/{VESSEL_CAP}</span>
+              <span className="gx-value ml-auto text-[10px] text-white/45">{l.vessels[kind].length}/{VESSEL_CAP}</span>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1">
-              <span className="rounded border border-amber-200/40 px-1.5 py-0.5 text-[10px] text-amber-200/90">
+              <span className="gx-label rounded-[2px] border border-amber-200/45 bg-amber-200/10 px-1.5 py-0.5 text-[9px] text-amber-200/90">
                 {kind === 'bracelet' ? 'worn' : 'held'}
               </span>
               <Seats gems={l.vessels[kind]} />
-              <span className="ml-1 text-[10px] text-white/40">{wordOf(worn) ?? 'no word'}</span>
+              <span className={`gx-title ml-1 text-[11px] ${worn ? 'text-white/80' : 'text-white/30'}`}>{wordOf(worn) ?? 'no word'}</span>
             </div>
             {/* ★ EVERY OTHER ONE OF THIS KIND, WITH WHAT IS WRITTEN ON IT. A keeper picks the vessel
                 by reading the word, not by remembering which number they parked it under — that is
@@ -3197,10 +3177,10 @@ function VesselRack({ owned, birth, slots, onEquipped }: {
               <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-white/[0.07] pt-1.5">
                 {spare.map(({ v, i }) => (
                   <button key={i} type="button" onPointerDown={() => doEquip(kind, i)}
-                          className="gx-btn flex items-center gap-1.5 rounded border border-white/15 px-2 py-0.5 text-[10px] text-white/60 hover:bg-white/[0.06]">
+                          className="gx-btn flex items-center gap-1.5 px-2 py-0.5 text-[10px]">
                     <span>equip</span>
                     <Seats gems={v.gems} />
-                    <span className="text-white/40">{wordOf(v.move) ?? 'no word'}</span>
+                    <span className="gx-title normal-case tracking-normal text-white/60">{wordOf(v.move) ?? 'no word'}</span>
                   </button>
                 ))}
               </div>
@@ -3229,11 +3209,7 @@ function GatheringFocuses({ tools, skills }: {
 }) {
   return (
     <div className="mt-2">
-      <div className="mb-1 flex items-center gap-2">
-        <span className="gx-label text-[9px] text-amber-200/40">Gathering focuses</span>
-        <span className="h-px flex-1 bg-amber-200/10" />
-        <span className="text-[9px] text-white/25">held · the working shape</span>
-      </div>
+      <SectionHead label="Gathering focuses" note="held · the working shape" />
     <div className="flex flex-col gap-1.5">
       {TOOL_FAMILIES.map(family => {
         const held = getEquippedTool(tools.current!, family)
@@ -3242,20 +3218,20 @@ function GatheringFocuses({ tools, skills }: {
         const need = xpForSkillLevel(sk.level)
         const pct = Math.min(1, sk.xp / Math.max(1, need))
         return (
-          <div key={family} className="rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+          <div key={family} className="gx-plate px-3 py-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-[12px] uppercase tracking-[0.14em] text-amber-200/80">{family}</span>
-              <span className="ml-auto text-[10px] tabular-nums text-white/35">lv {sk.level}</span>
+              <span className="gx-label text-[11px] text-amber-200/85">{family}</span>
+              <span className="gx-value ml-auto text-[10px] text-white/55">lv {sk.level}</span>
             </div>
             <div className="mt-1 flex items-baseline gap-2">
               {/* An empty hand is a real state, not a missing tool — bare hands mine, just slowly. */}
-              <span className="text-[11px] text-white/60">{def?.name ?? 'bare hands'}</span>
-              {def && <span className="text-[9px] uppercase tracking-[0.14em] text-white/25">tier {def.tier}</span>}
+              <span className="gx-title text-[11px] text-white/80">{def?.name ?? 'bare hands'}</span>
+              {def && <span className="gx-label text-[9px] text-white/30">tier {def.tier}</span>}
             </div>
-            <div className="mt-1.5 h-1 overflow-hidden rounded bg-white/10">
-              <div className="h-full bg-amber-300/50" style={{ width: `${(pct * 100).toFixed(1)}%` }} />
+            <div className="mt-1.5 h-1 overflow-hidden rounded-[1px] bg-black/50 shadow-[inset_0_0_3px_rgba(0,0,0,0.8)]">
+              <div className="h-full bg-amber-300/70 shadow-[0_0_6px_rgba(252,211,77,0.5)]" style={{ width: `${(pct * 100).toFixed(1)}%` }} />
             </div>
-            <div className="mt-1 text-[9px] tabular-nums text-white/25">{sk.xp} / {need} xp</div>
+            <div className="gx-value mt-1 text-[9px] text-white/35">{sk.xp} / {need} xp</div>
           </div>
         )
       })}
@@ -3346,6 +3322,7 @@ function GearTab({ items, onLetters, tools, skills }: {
           time. The bag and imbue moved to the Satchel, where carried things live. */}
       <VesselRack owned={owned} birth={birth} slots={slots}
                   onEquipped={(next) => { setSlots(next); setPicking(null); onLetters() }} />
+      <SectionHead label="Cast bar" note="what the keys carry" />
       {ALL_BANDS.map((kind, i) => {
         const bound = slots[i] ?? null
         const spec = bound ? castForMove(bound) : null
@@ -3353,17 +3330,20 @@ function GearTab({ items, onLetters, tools, skills }: {
         const options = eligibleMoves(owned, birth, kind, book)
         return (
           <div key={i}>
-          <div className="rounded border border-white/10 bg-white/[0.03]">
+          <div className={`gx-plate ${spec && isBuilt(bound) ? 'is-lit' : ''}`}>
             <button type="button" onPointerDown={() => setPicking(open ? null : i)}
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-left">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border
-                               border-white/20 text-[10px] font-bold text-white/60">
+              <span className="gx-btn flex h-5 w-5 shrink-0 items-center justify-center text-[10px] font-bold">
                 {CAST_KEYS[i].toUpperCase()}
               </span>
-              <span className="w-[68px] shrink-0 text-[9px] uppercase tracking-[0.14em] text-white/30">{kind}</span>
-              <span className={`text-[12px] ${spec ? (isBuilt(bound) ? 'text-amber-200/90' : 'text-white/40') : 'text-white/25'}`}>
+              <span className="gx-label w-[68px] shrink-0 text-[9px] text-white/35">{kind}</span>
+              <span className={`gx-title text-[12px] ${spec ? (isBuilt(bound) ? 'text-amber-200/90' : 'text-white/40') : 'text-white/25'}`}>
                 {spec ? spec.label : '— empty —'}
               </span>
+              {/* the price of the word, read off the spec the cast layer runs — never restated */}
+              {spec && isBuilt(bound) && (
+                <span className="gx-value text-[9px] text-white/50">{spec.manaCost} mana · {(spec.cooldownMs / 1000).toFixed(1)}s</span>
+              )}
               {/* ★★ THE EMPTY SLOT SAYS WHY (2026-09-02). It used to say only '— empty —', and the
                   cast refusal behind it asserted 'your book has none for your runes' whatever the
                   cause — so a keeper whose SAVE was empty was told their runes were, went looking
@@ -3376,7 +3356,7 @@ function GearTab({ items, onLetters, tools, skills }: {
                 </span>
               )}
               {spec && !isBuilt(bound) && (
-                <span className="text-[9px] uppercase tracking-[0.14em] text-amber-200/40">unbuilt</span>
+                <span className="gx-label text-[9px] text-amber-200/40">unbuilt</span>
               )}
               <span className="ml-auto text-[10px] text-white/25">{open ? '▴' : '▾'}</span>
             </button>
@@ -3396,10 +3376,10 @@ function GearTab({ items, onLetters, tools, skills }: {
                       const short = vessel ? shortFor(m, birth, letters, vessel) : []
                       return (
                         <button key={m.id} type="button" onPointerDown={() => bind(i, m.id)}
-                                className="block w-full rounded px-2 py-1 text-left hover:bg-white/[0.06]">
+                                className="block w-full rounded-[2px] px-2 py-1 text-left hover:bg-amber-200/[0.06]">
                           <span className="flex items-baseline gap-2">
-                            <span className={`text-[11px] ${built ? 'text-white/75' : 'text-white/35'}`}>{m.name}</span>
-                            {bound === m.id && <span className="text-[9px] text-amber-200/60">bound</span>}
+                            <span className={`gx-title text-[11px] ${built ? 'text-white/80' : 'text-white/35'}`}>{m.name}</span>
+                            {bound === m.id && <span className="gx-label text-[9px] text-amber-200/60">bound</span>}
                             {!built && (
                               <span className="text-[9px] text-white/25">{castForMove(m.id).why}</span>
                             )}
@@ -3412,8 +3392,8 @@ function GearTab({ items, onLetters, tools, skills }: {
                     })}
                     {bound && (
                       <button type="button" onPointerDown={() => bind(i, null)}
-                              className="mt-0.5 block w-full rounded px-2 py-1 text-left text-[10px]
-                                         text-white/30 hover:bg-white/[0.06]">
+                              className="mt-0.5 block w-full rounded-[2px] px-2 py-1 text-left text-[10px]
+                                         text-white/30 hover:bg-amber-200/[0.06]">
                         leave this slot empty
                       </button>
                     )}
@@ -3429,16 +3409,18 @@ function GearTab({ items, onLetters, tools, skills }: {
           It stands apart from the cast bar above because it is not one of `ALL_BANDS`; the keeper
           INSPECTS what their runes grant rather than choosing it. Null (no passive learned) renders
           nothing rather than an empty frame that would assert a trait that is not there. */}
-      {passive && (
+      {/* ★ THE BIRTH LEAN CAME BACK WITH THE PASSIVE (2026-09-04). `BirthLean` was mounted on the
+          Runes tab, and retiring that tab the same morning unmounted it silently — nothing asserted
+          the readout was reachable, so the one panel that says what your birth rune does went dark
+          with no red anywhere. Both are traits a keeper INSPECTS, not gear: one section, headed once. */}
+      {(passive || birth) && (
         <div className="mt-2">
-          <div className="mb-1 flex items-center gap-2">
-            <span className="gx-label text-[9px] text-amber-200/40">Passive</span>
-            <span className="h-px flex-1 bg-amber-200/10" />
-            <span className="text-[9px] text-white/25">always on</span>
-          </div>
-          <div className="rounded border border-amber-200/20 bg-amber-100/[0.03] px-3 py-2">
+          <SectionHead label="Innate" note="always on · no slot · no key" />
+          <BirthLean birth={birth} />
+          {passive && (
+          <div className="gx-plate is-lit px-3 py-2">
             <div className="flex items-baseline gap-2">
-              <span className={`text-[12px] ${isBuilt(passive.id) ? 'text-amber-200/90' : 'text-white/40'}`}>{passive.name}</span>
+              <span className={`gx-title text-[12px] ${isBuilt(passive.id) ? 'text-amber-200/90' : 'text-white/40'}`}>{passive.name}</span>
               {!isBuilt(passive.id) && (
                 <span className="gx-label text-[9px] text-amber-200/40">unbuilt</span>
               )}
@@ -3459,6 +3441,7 @@ function GearTab({ items, onLetters, tools, skills }: {
               })()}
             </div>
           </div>
+          )}
         </div>
       )}
       <GatheringFocuses tools={tools} skills={skills} />
@@ -3649,15 +3632,16 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
         title={st ? `${itemLabel(st.itemId)} ×${st.count}` : 'empty'}
         // ⚠ `touch-none` is what lets a drag be a drag on a phone — without it the browser claims the
         // gesture as a scroll partway through and the pointer stream just stops.
-        className={`relative w-12 h-12 rounded border-2 flex flex-col items-center justify-center
+        className={`relative w-12 h-12 rounded-[2px] border flex flex-col items-center justify-center
           text-[9px] font-mono transition-colors touch-none select-none
+          shadow-[inset_0_0_8px_rgba(0,0,0,0.6)]
           ${lifted && dragFrom ? LIFT_LOOK[dragFrom.mode]
-            : dragFrom !== null ? 'border-white/30 bg-black/50 hover:border-amber-200/70'
-            : 'border-white/20 bg-black/40 hover:border-white/40'}`}>
+            : dragFrom !== null ? 'border-amber-200/30 bg-black/55 hover:border-amber-200/80'
+            : 'border-amber-200/[0.14] bg-black/45 hover:border-amber-200/50'}`}>
         {st ? (
           <>
             <ItemChip itemId={st.itemId} size={26} />
-            <span className="mt-0.5 tabular-nums text-white/80">{st.count}</span>
+            <span className="gx-value mt-0.5 text-white/85">{st.count}</span>
             {/* How many the lift will actually take, stated rather than left to be counted — "half
                 of 7" is 4 here and 3 elsewhere, and a player should not have to find out by doing
                 it. A whole lift needs no badge: the count under the icon already says it. */}
@@ -3714,25 +3698,24 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
           {/* The capacity is stated in BAGFULS, not slots — the number means something that way
               ("two of these") and 48 does not. Derived from the grid so the sentence cannot drift
               from it; see `CHEST_BAGFULS`. */}
-          <div className="mb-1.5 flex items-baseline justify-between text-[10px] uppercase tracking-[0.16em] text-white/35">
-            <span>in the chest · {chest.x} {chest.y} {chest.z}</span>
-            <span className="text-white/20">{CHEST_BAGFULS} bagfuls</span>
-          </div>
+          <SectionHead label={`in the chest · ${chest.x} ${chest.y} ${chest.z}`}
+                       note={<><span className="gx-value text-white/40">{CHEST_BAGFULS}</span> bagfuls</>} />
           <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 1fr))` }}>
             {Array.from({ length: CHEST_SLOTS }, (_, k) => cell({ g: 'chest', i: k }))}
           </div>
         </div>
       )}
       {/* Satchel: slots 8-23, the 16 that are not the bar. */}
+      <SectionHead label="Satchel" note={<><span className="gx-value text-white/40">16</span> slots</>} />
       <div className="grid grid-cols-8 gap-1.5">
         {Array.from({ length: 16 }, (_, k) => cell({ g: 'bag', i: k + 8 }))}
       </div>
       {/* The bar itself, set apart by a rule so its slots read as the SAME grid, not a copy. */}
       <div className="mt-4 border-t border-white/10 pt-3">
-        <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">Hotbar · 1-8</div>
+        <SectionHead label="Hotbar" note="keys 1 – 8" />
         <div className="grid grid-cols-8 gap-1.5">
           {Array.from({ length: 8 }, (_, k) => (
-            <div key={k} className={sel === k ? 'ring-2 ring-amber-300/70 rounded' : ''}>{cell({ g: 'bag', i: k })}</div>
+            <div key={k} className={sel === k ? 'rounded-[2px] ring-1 ring-amber-300/80 shadow-[0_0_10px_-2px_#d4a843]' : ''}>{cell({ g: 'bag', i: k })}</div>
           ))}
         </div>
       </div>

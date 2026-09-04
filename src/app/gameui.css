@@ -41,6 +41,31 @@
 }
 .gx-card.is-interactive:active { transform: translateY(0); }
 
+/* --- the sub-plate: a recessed panel INSIDE a card — a section row, a socket bed, a readout.
+       `gx-card` is the thing you hold; `gx-plate` is a thing set into it. Darker than the card
+       (recessed, not raised), near-sharp, an accent hairline; `.is-lit` marks the row that is
+       live (the bound move, the worn vessel, the trait you carry). First adopted by the keeper
+       panel's bodies 2026-09-04, which until then were `rounded border border-white/10
+       bg-white/[0.03]` — a web row inside a game plate. --- */
+.gx-plate {
+  --gx-accent: #d4a843;
+  position: relative;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0.42));
+  border: 1px solid color-mix(in srgb, var(--gx-accent) 12%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 0 0 18px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.18s ease, box-shadow 0.22s ease;
+}
+.gx-plate.is-lit {
+  border-color: color-mix(in srgb, var(--gx-accent) 40%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gx-accent) 14%, transparent),
+    inset 0 0 18px rgba(0, 0, 0, 0.45),
+    0 0 16px -8px var(--gx-accent);
+}
+
 /* --- texture: faint scanlines + a top vignette, the CRT-cabinet skin (::before) --- */
 .gx-scan::before {
   content: "";

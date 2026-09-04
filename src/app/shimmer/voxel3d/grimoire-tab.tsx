@@ -54,6 +54,7 @@
  * and explicitly not as progress. A "0 / 210" that can never move is worse than an honest gap.
  */
 
+import { SectionHead } from './keeper-panel'
 import { useState } from 'react'
 import type { Spirit, Species, Element } from '../spirits/spirit'
 import {
@@ -183,7 +184,7 @@ function YoursFace({ party, inv, onChange }: {
     const xpPct = Math.min(1, s.xp / Math.max(1, xpForLevel(s.level)))
     const dom = dominantInfusion(s.infusions)
     return (
-      <div key={s.id} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+      <div key={s.id} className="gx-plate px-2.5 py-1.5">
         <div className="flex items-center gap-2.5">
         <Cube color={tint} lit size={22} />
         <div className="min-w-0 flex-1">
@@ -191,7 +192,7 @@ function YoursFace({ party, inv, onChange }: {
             <span className="truncate text-[12px] text-white/80">{s.name}</span>
             <span className="truncate text-[10px] text-white/35">{displayName}</span>
             {stage !== 'base' && (
-              <span className="text-[9px] uppercase tracking-[0.14em] text-white/25">{stage}</span>
+              <span className="gx-label text-[9px] text-white/25">{stage}</span>
             )}
           </div>
           <div className="mt-1 h-[3px] overflow-hidden rounded bg-white/10">
@@ -211,7 +212,7 @@ function YoursFace({ party, inv, onChange }: {
             The dominant element is named rather than left to be counted off four bars: it is the
             single fact the level-34 threshold will read, and a tie means no form at all. */}
         <div className="mt-1.5 flex items-center gap-2 border-t border-white/[0.06] pt-1.5">
-          <span className="text-[9px] uppercase tracking-[0.14em] text-white/30">infusion</span>
+          <span className="gx-label text-[9px] text-white/30">infusion</span>
           <span className="text-[10px] tabular-nums text-white/45">
             {infusionTotal(s.infusions)}/{INFUSION_CAPS.totalCap}
           </span>
@@ -262,11 +263,9 @@ function YoursFace({ party, inv, onChange }: {
     <div className="flex flex-col gap-3">
       {/* One line, and it says what actually happened — a refusal that shows nothing is how a
           keeper concludes the button is broken. */}
-      {note && <div className="rounded bg-white/[0.05] px-2 py-1 text-[10px] text-white/55">{note}</div>}
+      {note && <div className="gx-plate is-lit px-2 py-1 text-[10px] text-white/70">{note}</div>}
       <div>
-        <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">
-          With you · {withYou.length}
-        </div>
+        <SectionHead label="With you" note={<span className="gx-value text-white/45">{withYou.length}</span>} />
         <div className="flex flex-col gap-1.5">
           {withYou.length > 0
             ? withYou.map(row)
@@ -277,9 +276,7 @@ function YoursFace({ party, inv, onChange }: {
         <div>
           {/* ★ "In your garden", never "bank" — see the header. Canon: spirits live in your garden
               and the grimoire is how you call one home, not a depot they are filed in. */}
-          <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">
-            In your garden · {inGarden.length}
-          </div>
+          <SectionHead label="In your garden" note={<span className="gx-value text-white/45">{inGarden.length}</span>} />
           <div className="flex flex-col gap-1.5">{inGarden.map(row)}</div>
         </div>
       )}
@@ -309,7 +306,7 @@ function SpeciesFace({ party, index }: { party: Spirit[]; index?: SpiritIndex | 
         const isOpen = open === sp
         const forms = SECOND_FORM_NAMES[sp]
         return (
-          <div key={sp} className="rounded border border-white/10 bg-white/[0.03]">
+          <div key={sp} className="gx-plate">
             <button type="button" onPointerDown={() => setOpen(isOpen ? null : sp)}
                     className="flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left">
               <Portrait artKey={sp} color={ELEMENT_COLORS.base} lit={met} size={40} />
@@ -379,8 +376,7 @@ export function GrimoireTab({ party, inv, onChange, spiritIndex }: {
       <div className="mb-3 flex gap-1">
         {([['yours', 'Yours'], ['species', 'Species']] as const).map(([id, label]) => (
           <button key={id} type="button" onPointerDown={() => setFace(id)}
-                  className={`rounded px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] transition-colors ${
-                    face === id ? 'bg-white/10 text-white/80' : 'text-white/30 hover:text-white/60'}`}>
+                  className={`gx-btn px-2.5 py-1 text-[10px] ${face === id ? 'gx-active' : 'gx-inactive'}`}>
             {label}
           </button>
         ))}
