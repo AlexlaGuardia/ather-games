@@ -8,7 +8,7 @@ import { EMPTY_LETTERS } from './gems'
 import { RUNES, ELEMENTS } from './birth/runes.data'
 import { createInventory, addItems, countItem } from '../engine/inventory'
 import { BLOCKS } from '../voxel/registry'
-import { noComments } from '../testing/guard'
+import { noComments, declAt, declAfter } from '../testing/guard'
 
 let pass = 0
 const fails: string[] = []
@@ -58,8 +58,8 @@ const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 // what was ruled. Deleting them to clear the red would have been the cheapest lie available.
 {
   const src = noComments(readFileSync(new URL('../voxel3d/VoxelWorld.tsx', import.meta.url), 'utf8'))
-  const at = src.indexOf('function SatchelLetters(')
-  const cardEnd = src.indexOf('\nfunction VesselRack(', at)
+  const at = declAt(src, 'SatchelLetters')
+  const cardEnd = declAfter(src, 'VesselRack', at)
   ok(at >= 0 && cardEnd > at, 'the card slice has BOTH anchors — my first version sliced to the file tail when the end anchor missed, and passed for the wrong reason')
   const card = at >= 0 && cardEnd > at ? src.slice(at, cardEnd) : ''
   ok(/imbueWhy\(/.test(card) && /imbue\(/.test(card), 'the card asks imbueWhy per held rune and calls imbue on press')

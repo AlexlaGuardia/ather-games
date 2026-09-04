@@ -3016,7 +3016,7 @@ function BirthLean({ birth }: { birth: string | null }) {
 const VESSEL_LANE_LABEL: Record<Vessel, string> = { bracelet: 'worn · tacticals · element lane', focus: 'held · signature · state lane' }
 
 /** One gem, in its rune's own glow. Shared by both halves so a letter looks the same everywhere. */
-function GemChip({ id, n }: { id: string; n?: number }) {
+export function GemChip({ id, n }: { id: string; n?: number }) {
   const r = RUNES.find(x => x.id === id)
   return (
     <span className="gx-label rounded-[2px] px-1.5 py-0.5 text-[10px]"
@@ -3036,7 +3036,7 @@ function GemChip({ id, n }: { id: string; n?: number }) {
  * ⚠ Never a socket, slot, bezel or prong in the LOOK (brief: *"the vessel closed around it"*) — a
  * dark seat is a dim rounded void in the weave, not a hole with a rim.
  */
-function Seats({ gems }: { gems: readonly string[] }) {
+export function Seats({ gems }: { gems: readonly string[] }) {
   return (
     <span className="inline-flex items-center gap-1">
       {Array.from({ length: VESSEL_CAP }, (_, k) => {
@@ -3057,7 +3057,7 @@ function Seats({ gems }: { gems: readonly string[] }) {
  * a bind on the Loadout tab moves letters out of it. The runes and the book are pinned per mount;
  * the letters are not, and that difference is the whole reason this is a live card.
  */
-function SatchelLetters({ owned, birth, items, onChange }: {
+export function SatchelLetters({ owned, birth, items, onChange }: {
   owned: readonly string[]; birth: string | null
   /** the item inventory — an imbue takes an element crystal out of it */
   items: React.RefObject<Inventory>
@@ -3134,7 +3134,7 @@ function SatchelLetters({ owned, birth, items, onChange }: {
  * show the previous word for one frame in private mode, where `saveLoadout` does not persist.
  * The GEMS come from `keeperLetters`, which is the same live read the bind moves letters through.
  */
-function VesselRack({ owned, birth, slots, onEquipped }: {
+export function VesselRack({ owned, birth, slots, onEquipped }: {
   owned: readonly string[]; birth: string | null; slots: Loadout
   /** the equipped vessel changed — hand the tab its re-resolved slots and let the host re-render */
   onEquipped: (slots: Loadout) => void
@@ -3203,7 +3203,7 @@ function VesselRack({ owned, birth, slots, onEquipped }: {
  * four sockets need somewhere they CAN be inspected without a HUD element growing a menu, and this
  * is it — same data, same order, no second source.
  */
-function GatheringFocuses({ tools, skills }: {
+export function GatheringFocuses({ tools, skills }: {
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
 }) {
@@ -3265,7 +3265,7 @@ function GatheringFocuses({ tools, skills }: {
  * listed, dimmed, bindable, and carry their reason — and the passive readout says 'unbuilt' the same
  * way when its effect has no runtime yet.
  */
-function GearTab({ items, onLetters, tools, skills }: {
+export function GearTab({ items, onLetters, tools, skills }: {
   items: React.RefObject<Inventory>; onLetters: () => void
   tools: React.RefObject<EquippedTools>; skills: React.RefObject<SkillSet>
 }) {

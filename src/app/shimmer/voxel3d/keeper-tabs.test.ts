@@ -10,7 +10,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { KEEPER_TABS } from './keeper-panel'
-import { noComments } from '../testing/guard'
+import { noComments, declAt, declAfter } from '../testing/guard'
 
 let pass = 0
 const fails: string[] = []
@@ -37,11 +37,11 @@ ok(!/function RunesTab\(|function ToolsTab\(|function LoadoutTab\(/.test(src),
    'the retired tab components are gone from the host, not merely unmounted')
 
 // ── C. Gear: the seats, and the gathering focuses ──────────────────────────────────────────────
-const rackAt = src.indexOf('function VesselRack(')
-const gearAt = src.indexOf('\nfunction GearTab(', rackAt)
+const rackAt = declAt(src, 'VesselRack')
+const gearAt = declAfter(src, 'GearTab', rackAt)
 ok(rackAt >= 0 && gearAt > rackAt, 'VesselRack and GearTab both present, in that order (the slice below needs both anchors)')
 const rack = rackAt >= 0 && gearAt > rackAt ? src.slice(rackAt, gearAt) : ''
-const seatsAt = src.indexOf('function Seats(')
+const seatsAt = declAt(src, 'Seats')
 const seats = seatsAt >= 0 ? src.slice(seatsAt, src.indexOf('\n}\n', seatsAt)) : ''
 ok(/Array\.from\(\{ length: VESSEL_CAP \}/.test(seats),
    '★ Seats draws exactly VESSEL_CAP seats — the cap, never a literal 3, never the gems.length')
@@ -51,7 +51,7 @@ ok(!/nothing set|>empty</.test(rack),
    '★ an empty vessel is three dark seats, never a sentence — "nothing set" and "empty" are gone from the rack')
 const gear = gearAt >= 0 ? src.slice(gearAt) : ''
 ok(count(gear, /<GatheringFocuses /g) === 1, '★ Gear mounts the gathering focuses once — Tools folded in, not duplicated')
-const gfAt = src.indexOf('function GatheringFocuses(')
+const gfAt = declAt(src, 'GatheringFocuses')
 ok(gfAt >= 0 && /TOOL_FAMILIES\.map\(/.test(src.slice(gfAt, gfAt + 2500)),
    'the section still derives its rows from TOOL_FAMILIES — same data as the ToolArc, no second source')
 

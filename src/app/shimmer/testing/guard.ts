@@ -131,3 +131,23 @@ export function blockAt(src: string, anchor: string, closer: string): { at: numb
  */
 export const justBefore = (src: string, at: number, chars = 200): string =>
   at <= 0 ? '' : src.slice(Math.max(0, at - chars), at)
+
+/**
+ * ★ DECLARATION ANCHORS THAT TOLERATE AN `export ` PREFIX (2026-09-04, play lane's find, hub's copy).
+ * `src.indexOf('\nfunction GearTab(')` is a standing claim one character wide: the moment that
+ * declaration is exported it returns -1, and `slice(at, -1)` is not empty, it is the WHOLE REST OF
+ * THE FILE (measured: 7,432 -> 464,645 chars), at which point every positive assert on the slice is
+ * satisfiable by any match anywhere in the host. Anchored at line start on purpose: pass a
+ * comment-stripped `src` and nothing in prose can match. Keep the "has BOTH anchors" assert beside
+ * every use — that is what makes a MISSING anchor loud instead of blind.
+ */
+export const declAt = (src: string, name: string): number => {
+  const m = new RegExp(`^(?:export )?function ${name}\\(`, 'm').exec(src)
+  return m ? m.index : -1
+}
+/** The same, searched from an offset; returns the index of the leading newline, as `indexOf('\nfunction …')` did. */
+export const declAfter = (src: string, name: string, from: number): number => {
+  if (from < 0) return -1
+  const m = new RegExp(`\\n(?:export )?function ${name}\\(`).exec(src.slice(from))
+  return m ? from + m.index : -1
+}

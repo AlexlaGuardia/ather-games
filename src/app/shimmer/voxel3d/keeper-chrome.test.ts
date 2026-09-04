@@ -17,7 +17,7 @@
  * a ring — it is the one this file forbids.
  */
 import { readFileSync } from 'node:fs'
-import { noComments } from '../testing/guard'
+import { noComments, declAt, declAfter } from '../testing/guard'
 
 let pass = 0
 const fails: string[] = []
@@ -45,8 +45,8 @@ ok(/h-px/.test(head), 'SectionHead draws the hairline — bodies must not draw t
 
 // ── 3. the host's panel region ─────────────────────────────────────────────────────────────
 const HOST = noComments(read('./VoxelWorld.tsx'))
-const from = HOST.indexOf('function BirthLean(')
-const to = HOST.indexOf('\nfunction World(', from)
+const from = declAt(HOST, 'BirthLean')
+const to = declAfter(HOST, 'World', from)
 ok(from >= 0 && to > from, 'BirthLean … World anchors present, in that order (the region below needs both)')
 const R = from >= 0 && to > from ? HOST.slice(from, to) : ''
 
@@ -79,7 +79,7 @@ ok(/gx-plate \$\{spec && isBuilt\(bound\) \? 'is-lit' : ''\}/.test(R),
    'a bound, built word lights its plate; an empty or unbuilt slot stays dark')
 
 // the innate traits: the birth lean is mounted again, inside Gear, beside the passive
-const gearAt = R.indexOf('\nfunction GearTab(')
+const gearAt = declAfter(R, 'GearTab', 0)
 const gear = gearAt >= 0 ? R.slice(gearAt) : ''
 ok(count(R, /<BirthLean birth=/g) === 1, `★ BirthLean is mounted exactly once (${count(R, /<BirthLean birth=/g)}) — it went dark when the Runes tab retired, and nothing said so`)
 ok(count(gear, /<BirthLean birth=/g) === 1, '… and that mount is inside GearTab, under the Innate head')
