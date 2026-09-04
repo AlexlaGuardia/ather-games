@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 afternoon (hub) — `bff8d2d` **the chrome pass: every body on a `gx-plate`, one `SectionHead`, the birth lean remounted under Gear › Innate — LIVE in `BUILD_ID 8QCMVsuKqAR9akome2ztT`**, keeper-chrome 41/0, sweep 234/234, see *THE BODIES STAND ON PLATES* under the 💎 block. Before that: `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
+## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 evening (hub) — `380cb00` **the icon pass, first cut: gem stones, focus sprites in Gear, glove on the hand — LIVE in `BUILD_ID w_TC3g03z2hldtCSxpD81`**, keeper-chrome 47/0, sweep 235/235, three canon gaps filed, see *THE ICON PASS* under the 💎 block. Before that: `bff8d2d` **the chrome pass: every body on a `gx-plate`, one `SectionHead`, the birth lean remounted under Gear › Innate — LIVE in `BUILD_ID 8QCMVsuKqAR9akome2ztT`**, keeper-chrome 41/0, sweep 234/234, see *THE BODIES STAND ON PLATES* under the 💎 block. Before that: `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
 
 ## 🚪 Shimmer — **THE LANDING: THE ARCH WAS ALREADY BUILT, THE DOOR WAS NOT** (2026-09-03, hub lane) · *Last touched 2026-09-03 — `0f4ffa5` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID TGTHpgxRIteEw0DTsPy_3`, 168 chunks**, built from `6c0b3d1` — this work plus the play lane's Passage shelves and trader in one deploy, after their tokens row cleared the red. **Sweep 231 suites · 231 pass · 0 FAIL · 0 KILLED, started AND ended at `6c0b3d1`** (ceiling 600s, `plot.test.ts` 145s). ⚠ The run before it started at `3624714` and the play lane landed two commits INSIDE it, one of them in `Shimmer3D.tsx` where my return leg lives — **231/231 about a tree that no longer existed.** Nothing was broken (their diff touched none of my lines, checked rather than assumed) but the number was void, so the tree was frozen by request and re-swept. Served md5 == disk md5 == public tunnel on both changed chunks; retired string 0 everywhere, positive controls present. landing **46/0** (new), landing-wiring **23/0** (new), crossing-out 38/0, crossing-in 38/0, rune-hold-doors 15/0/0-pending, rune-hold-fold green, gate-collapse 55/0. **Mutation-swept 12 ways across two sweeps: all 12 fire, 2 negative controls pass by design.** tsc 7 (baseline), canon 13 CLEAN.*
 
@@ -306,6 +306,47 @@ rather than as a hole, is Alex's eye.
 **Next (Alex, in order):** open the panel, all three tabs, and call the chrome. Then the icon question: the
 text chips for gems / vessels / focuses are the biggest remaining tell — a pixel icon set is Alex's, a
 pre-rendered prop set is picaso's, and which is the call.
+
+### ★ THE ICON PASS, FIRST CUT: A GEM IS A STONE, A FOCUS IS ITS SPRITE, THE GLOVE IS ON THE HAND (hub, 2026-09-04 evening)
+Alex, after the chrome shots: *"yea i like it lets dive into icons next!"* — and *"feel free to use your agents/shadows
+as well as do research as you deem best."* Three icon families, three states, so the work split:
+- **Gems — had no art at all.** `GemStone` (`VoxelWorld.tsx`) is the DERIVED tier of gem art in the sense
+  `tex/item-icon.ts` uses the word: one cut-stone polygon shape, tinted by the rune's canon `glow`, **lit** (drop-shadow
+  bloom) when seated on a vessel, unlit loose in the bag. Every rune has a stone the moment it has a colour, and Alex's
+  hand-pixelled stone replaces the polygons in ONE place. ⛔ No setting is ever drawn around it — the seat is the vessel
+  closed around the stone — and the guard forbids a `rect`/`stroke` there. The chip's ×count is the same glow dimmed,
+  not a white value beside a coloured label (the pair checkers caught that as a collapse).
+- **Gathering focuses — already had 12 painted icons the bag draws.** The Gear rows now mount the same `ItemChip`; no
+  second source of tool art. Three (`shimmeroak_blade` 14%, `basic_rinstick` 6%, `glowfin_rinstick` 5%) still wear the
+  magenta no-palette sentinel — Alex's palette call, already on `npm run item-art`'s list.
+- **Vessels — no art, no TIER in the build, and the copy was stale against canon.** The casting-vessels brief was
+  AMENDED the day it was ruled: the axis is **hand vs wrist**, a glove is worn, so "held" collapsed. The panel now says
+  *glove · casting focus · hand* and *bracelet · wrist*; kind id stays `focus`. Icons per tier need the tier to exist:
+  a Plan agent mapped the tier model (rhymes with `TOOL_DEFS`: `tier` on `StowedVessel`, legacy → 1, Greg's tier-0
+  pair handed out like the Worn tools, Passage sells tier 1, tiers 2–3 grown from the brief's materials) and **found
+  three canon gaps I filed instead of guessing** (`CANON_GAPS.md`, athernyx `6c03288`): **silver-thread in a no-metal
+  world** (the brief's own tier-3 row vs its own ⛔), luminescent sap = starwillow sap or a second substance, and
+  whether Greg's tier-0 pair is a permanent floor like the Worn tools or a cap-counted vessel. **The tier model waits
+  on those.** picaso is rendering a VESSELS concept sheet (t0 + t1, glove + bracelet, dormant, empty seats) against
+  the locked brief so the MEDIUM call (Alex's pixels vs a pre-rendered craft object) is made on a picture.
+
+**Looked at before committing** — through the play lane's new `/shimmer/dev/panel` fixture page on their own dev port
+(`page-shot.mts --port 3203`): a seated gem reads as a lit stone with the dark seat beside it, the rack reads 2 OF 3, the
+bag reads stone + name. That page earned its keep in its first minute.
+
+**Guards:** `keeper-chrome.test.ts` **47/0** (+8): a seated gem is the stone lit, a loose gem is stone then name, the
+stone is code-drawn and tinted by `glow`, no rect/stroke around it, the focus row mounts `ItemChip`, the copy says
+hand/wrist and never "held". **4 new mutations, all fire.** keeper-tabs 13/0 · hud-type 21/0 · gems 44/0 · vessels 48/0
+· imbue 22/0 · tsc 7 (baseline). **Sweep 235 suites · 235 pass · 0 FAIL · 0 KILLED at `380cb00`** (rc off the file;
+`plot.test.ts` 170s). ⚠ HEAD moved to `27d94d9` during the sweep — the play lane's coord/SOP/package.json change, nothing
+under `src/`, checked rather than assumed. ✅ **`380cb00` pushed, DEPLOYED `BUILD_ID w_TC3g03z2hldtCSxpD81`, 178 chunks**
+(carries play's `e26b159` dev/panel page too; the public page 403s without the owner cookie, as designed). Served md5 ==
+disk == public on the panel chunk; positive controls `GemStone` `polygon`×5 `casting focus · hand` `wrist`×2 present,
+retired `held · signature` 0. ⚠ My first positive control was `CASTING FOCUS` in caps and read **0** — the source is
+lowercase and CSS uppercases it; a miscategorised control fires exactly like a regression (PATTERNS 09-03).
+
+**Next:** Alex calls the vessel MEDIUM off picaso's sheet → Magii rules the three gaps → build the tier model → vessel
+icons per tier. Alex's palette for the three magenta focuses whenever.
 
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
