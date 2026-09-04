@@ -163,6 +163,59 @@ survived every assert (an assert that cannot fail is decoration — PATTERNS 08-
 flagged the new module for spelling another file's key. ⚠ And my first spare gem was the word's own rune, which
 handed a one-rune word a full set and broke the "cannot write" assert for the wrong reason.
 
+### ★★ THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED (hub, 2026-09-03 evening — the pinned inventory-menu conversation)
+Alex pinned *"talk about the inventory menu"* first for this session. Three rulings came out of it, and the third
+retired code that had shipped **less than a day earlier**.
+
+**1. The Letters card was on TWO tabs, and that was the smell.** Runes and Loadout both rendered it, because
+binding a gem is a rune thing and a loadout thing and neither tab wanted to be the one that could not do it.
+Alex: *"that should be in the satchel.. from the gear tab they can add them in."* So the card SPLITS by where the
+thing lives — `SatchelLetters` (bag + imbue) on **Satchel**, where carried things live; `VesselRack` on
+**Loadout**; **Runes renders nothing**, because that tab is what you ARE and a gem inventory was never that. The
+guard asserts **exactly ONE mount** — two was the bug, three would be worse.
+
+**2. *"the load out should be where the collected vessels can be equipt."*** Vessels are gear you own, not a
+fixed pair. Worn slot + held slot, each showing what is written on the vessel in it and every other one of that
+kind you carry, **named by its word rather than by a number** — the retired switch could only say *"swap to 2"*.
+
+**3. ★★ *"yes, gems ride the vessel"* — and this is the one that deleted a concept.** Canon already said the
+vessel is the PAPER; Alex made it literal. A bracelet IS its letters and the word written in them, so equipping
+one brings its tactical with it — and at that point **a "parked loadout" stops existing**: the vessels you own ARE
+your loadouts. `play3d/loadouts.ts` and its suite are **gone**, replaced by `play3d/vessels.ts` (key
+`ather:shimmer:stowed`). The pair is retired from the Passage too: a bracelet and a focus sell **separately, 75
+Marks each** — 75+75 is exactly the 150 the pair cost, because a correction should not arrive as a price rise.
+
+**⚠ THE PAIR WAS MY CALL, NOT CANON'S, AND THE FILE SAID SO.** `loadouts.ts` listed it under JIN'S CALLS —
+*"a pair is a pair."* Canon's actual sentence (`shimmer-skilling.md` § One loadout = one focus + one bracelet,
+Alex verbatim 09-03) is *"they will need to acquire more of **both** the focus and accessories"* — **two
+acquisitions**. So this is a correction TOWARD canon, not away from it, and it buys the thing the bundle forbade:
+wear one bracelet, hold a different focus. **No canon change was needed and none was made** — *one loadout = one
+focus + one bracelet* is still true; you wear one of each.
+
+**⚠ THE LEGACY DOOR IS LOAD-BEARING, NOT TIDINESS.** Keepers bought pairs for 150 Marks the day before. Renaming
+the key without reading the old one would have silently taken back what they paid for. `loadStowed` migrates
+`ather:shimmer:parked` on first read — each pair splits into the two vessels it always was, keeping its letters
+and the word on its own band — then **removes** the key so it cannot double-credit. Both halves are asserted.
+
+**★ THE BAND MAP IS DERIVED, NEVER RESTATED.** `BAND_FOR_VESSEL` is computed from `VESSEL_FOR_KIND`; a
+hand-kept `{bracelet: 0, focus: 1}` would be a mirror that agrees with its source until the day the bands change
+(PATTERNS 08-22, *a copy reads as corroboration*). The mutation that hardcodes it swapped fires 4 asserts.
+
+**Numbers.** vessels **48/0** (new, replacing loadouts 27/0), tsc **7** (baseline, unchanged), canon exit 0.
+**Mutation-swept 8 ways: all 8 fire, 1 negative control passes by design** (a comment quoting the retired
+`LettersCard` / `LoadoutSwitch` / `swapTo` names — the *documenting a marker created a marker* trap, read through
+`noComments`). The load-bearing assert is **★★ THE FOCUS DID NOT MOVE**: restoring the pair (an equip writing both
+vessels) fires it and nothing else, and the retired model could not even express that bug.
+
+**⚠⚠ AND A MUTATION FOUND A DEFECT IN MY OWN GUARD, WHICH IS THE ONLY REASON IT WAS FOUND.** The
+boarded-up-legacy-door mutation **crashed** the suite instead of failing it: `migrated.find(...)!` threw on
+`b.gems` when migration returned nothing, and *a crash reads as neither pass nor fail* (PATTERNS 08-22 #1, the
+origin-fixture shape, exactly). The sanity assert one line above had already caught it and the throw buried it.
+Re-cut without the `!`, the same mutation now reports **4 named failures**. ⚠ Two earlier attempts at that
+mutation ALSO crashed rather than applying — one because `keeperKey` correctly refuses an unregistered key — and
+**an unapplied mutation is indistinguishable from a guard that works** (PATTERNS 08-31). Each was re-cut until it
+actually ran.
+
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
   of one rune, for now. One focus + one bracelet, implicit — a second loadout is not built. No merchant yet.
@@ -171,9 +224,14 @@ handed a one-rune word a full set and broke the "cannot write" assert for the wr
   a rune id.
 
 ### Next
-- **⏭ FIRST NEXT SESSION (pinned by Alex at wrap 09-03): TALK ABOUT THE INVENTORY MENU — how it works.** A
-  design conversation before any more is built on the panel (Satchel · Runes · Grimoire · Tools · Loadout, the
-  Letters card on two tabs, the loadout switch). Bring the tab map; Alex drives.
+- ~~FIRST NEXT SESSION: talk about the inventory menu~~ **HAD, and it produced three rulings — see the vessels
+  section above.** ⏭ **Alex: open the panel and walk the new shape.** Satchel now carries the bag + imbue at the
+  bottom; Runes carries nothing but runes; Loadout is the gear tab — worn bracelet, held focus, each naming its
+  word. Buy a bracelet at the Passage (75 M) and equip it: does swapping the paper feel like changing a build?
+  ⚠ **NOT LOOKED AT — no one has seen any of this rendered.** Headless asserts cover the split, the equip and the
+  migration; whether the rack READS as gear at play distance is Alex's eye.
+- Gem quality, and whether a vessel should have a TIER — the model now has somewhere to put one (a vessel is an
+  object you own, not a slot), which it did not when a pair was a pair.
 - ~~Hub: deploy~~ **LIVE.** **Alex: open the panel — Runes tab and Loadout tab both carry the LETTERS card** (bracelet
   · focus · bag, `f66532f`, LIVE in `BUILD_ID t2w11XSVU9KquMs2_86wO`, served == disk). `/gems <rune> 2` as owner,
   bind on the Loadout tab, watch the chips move bag → bracelet under the cursor, clear, watch them return — does a
@@ -187,6 +245,10 @@ handed a one-rune word a full set and broke the "cannot write" assert for the wr
 - Gem quality on the prospecting ladder; a second focus + bracelet as purchasable loadouts.
 
 ### Files
+`play3d/vessels.ts` `vessels.test.ts` (new, 2026-09-03 eve; **replace `loadouts.ts` + `loadouts.test.ts`, deleted**) ·
+`play3d/PassagePanel.tsx` (the shelf sells one at a time, rows derived from `VESSELS`) · `voxel3d/VoxelWorld.tsx`
+(`SatchelLetters` + `VesselRack` + `GemChip` replace `LettersCard` + `LoadoutSwitch`; Satchel/Runes/Loadout rewired) ·
+`lib/keeper-local.ts` + `.test.ts` (`stowed` registered, `parked` kept as legacy) ·
 `play3d/gems.ts` `gems.test.ts` (new) · `play3d/loadout.ts` (`no-gem`, kit writes, `setSlot` transaction) ·
 `play3d/book.ts` (`keeperLetters`) · `play3d/cast.ts` (`LANE_FOR_KIND` exported) · `play3d/reborn.ts` (+clear) ·
 `voxel3d/console.ts` (`/gems`) · `voxel3d/VoxelWorld.tsx` (consoleCtx op + picker short line) · `lib/keeper-local.ts`

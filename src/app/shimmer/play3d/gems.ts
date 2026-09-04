@@ -15,8 +15,12 @@
  *   BRACELET — worn at the wrist — bears the TACTICALS, and takes only ELEMENT-lane gems.
  *   FOCUS    — held —              bears the SIGNATURE, and takes only STATE-lane gems.
  * The vessel gates the lane physically: the Lane Law stops being a tooltip and becomes an object.
- * One loadout = one focus + one bracelet; a keeper starts with one of each. (A second loadout needs a
- * second of both — not built yet; today's `Vessels` IS the one pair.)
+ * One loadout = one focus + one bracelet; a keeper starts with one of each.
+ *
+ * ⚠ `Vessels` HERE IS THE PAIR THE KEEPER IS *WEARING*, NOT EVERY VESSEL THEY OWN (2026-09-03).
+ * Alex ruled that gems ride the vessel: a bracelet IS its letters and the word written in them, and
+ * the Loadout tab equips the one you want. `vessels.ts` owns the ones you are not wearing and swaps
+ * them through these same two keys — which is why nothing in this file had to learn about it.
  *
  * ── ⛔ THE FLOOR ──
  * The doubled-focus tactical and the Manifestation — a move written in the birth rune ALONE — take no

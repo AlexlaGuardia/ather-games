@@ -268,7 +268,7 @@ import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND, V
 import { imbue, imbueWhy, imbueSentence, crystalFor } from '../play3d/imbue'
 import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
-import { loadParked, swapTo, MAX_LOADOUTS } from '../play3d/loadouts'
+import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL } from '../play3d/vessels'
 import { starterFor } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
@@ -3012,16 +3012,44 @@ function BirthLean({ birth }: { birth: string | null }) {
 }
 
 /**
- * ── ★ THE LETTERS CARD — the bag and both vessels, on the panel (Alex, 2026-09-03: "shouldn't we update
- * the inventory tabs?") ───────────────────────────────────────────────────────────────────────────────
- * Until this, the gems were visible only through `/gems` and the picker's short-line: a keeper could be
- * short a letter and have no page that showed them their stones. Reads `keeperLetters` on EVERY render on
- * purpose — the Loadout tab's `bind` is a gem transaction, so the bag and the bracelet change under the
- * cursor and this card has to move with them (the runes and the book are pinned per mount; the letters
- * are not, and that difference is the whole point of the card).
+ * ── ★★ THE LETTERS, SPLIT IN TWO BY WHERE THEY LIVE (Alex, 2026-09-03) ────────────────────────
+ * One card used to carry the bag, both vessels and imbue, and it was rendered on TWO tabs — Runes
+ * and Loadout — because binding a gem is a rune thing and a loadout thing and neither tab wanted to
+ * be the one that could not do it. Alex ruled the split instead of the duplication:
+ *
+ *   *"that should be in the satchel.. from the gear tab they can add them in"*
+ *
+ *   SATCHEL → `SatchelLetters`: the BAG and IMBUE. Gems are carried; they live where carried
+ *             things live, next to the grid that holds everything else a keeper picked up.
+ *   LOADOUT → `VesselRack`: the vessels themselves, equipped. Not a readout — the gear slots.
+ *   RUNES   → nothing. That tab is what you ARE; a gem inventory was never that.
+ *
+ * ★ AND THE VESSELS ARE NOW GEAR, NOT A FIXED PAIR (`vessels.ts`): *"yes, gems ride the vessel"*.
+ * Equip a different bracelet and the letters written on it come with it, because canon's *the
+ * vessel is the paper* is meant literally. So this rack shows what is ON each vessel you are
+ * wearing, and what is on each one you are not.
  */
 const VESSEL_LANE_LABEL: Record<Vessel, string> = { bracelet: 'worn · tacticals · element lane', focus: 'held · signature · state lane' }
-function LettersCard({ owned, birth, items, onChange }: {
+
+/** One gem, in its rune's own glow. Shared by both halves so a letter looks the same everywhere. */
+function GemChip({ id, n }: { id: string; n?: number }) {
+  const r = RUNES.find(x => x.id === id)
+  return (
+    <span className="gx-label rounded px-1.5 py-0.5 text-[10px]"
+          style={{ color: r?.glow ?? '#fff', background: `${r?.glow ?? '#fff'}18` }}>
+      {r?.name ?? id}{n !== undefined && n > 1 && <span className="ml-1 text-white/45">×{n}</span>}
+    </span>
+  )
+}
+
+/**
+ * The SATCHEL half — loose letters, and the road that makes one.
+ *
+ * Reads `keeperLetters` on every render on purpose: an imbue changes the bag under the cursor, and
+ * a bind on the Loadout tab moves letters out of it. The runes and the book are pinned per mount;
+ * the letters are not, and that difference is the whole reason this is a live card.
+ */
+function SatchelLetters({ owned, birth, items, onChange }: {
   owned: readonly string[]; birth: string | null
   /** the item inventory — an imbue takes an element crystal out of it */
   items: React.RefObject<Inventory>
@@ -3040,36 +3068,12 @@ function LettersCard({ owned, birth, items, onChange }: {
     saveLetters(r.letters)
     onChange()
   }
-  const rune = (id: string) => RUNES.find(r => r.id === id)
-  const chip = (id: string, k: number, n?: number) => {
-    const r = rune(id)
-    return (
-      <span key={`${id}-${k}`} className="gx-label rounded px-1.5 py-0.5 text-[10px]"
-            style={{ color: r?.glow ?? '#fff', background: `${r?.glow ?? '#fff'}18` }}>
-        {r?.name ?? id}{n !== undefined && n > 1 && <span className="ml-1 text-white/45">×{n}</span>}
-      </span>
-    )
-  }
   const bag = Object.entries(l.bag)
   const total = Object.values(allLetters(l)).reduce((a, b) => a + b, 0)
   return (
-    <div className="mb-4">
+    <div className="mt-4 border-t border-white/10 pt-3">
       <div className="gx-label mb-1.5 text-[10px] text-white/35">Letters · {total} gem{total === 1 ? '' : 's'}</div>
       <div className="flex flex-col gap-1">
-        {VESSELS.map(v => (
-          <div key={v} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
-            <div className="flex items-baseline gap-2">
-              <span className="text-[12px] text-white/75">{v}</span>
-              <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[v]}</span>
-              <span className="ml-auto text-[9px] text-white/30">{l.vessels[v].length}/{VESSEL_CAP}</span>
-            </div>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {l.vessels[v].length === 0
-                ? <span className="text-[10px] text-white/30">— nothing set —</span>
-                : l.vessels[v].map((id, k) => chip(id, k))}
-            </div>
-          </div>
-        ))}
         <div className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
           <div className="flex items-baseline gap-2">
             <span className="text-[12px] text-white/75">bag</span>
@@ -3078,7 +3082,7 @@ function LettersCard({ owned, birth, items, onChange }: {
           <div className="mt-1 flex flex-wrap gap-1">
             {bag.length === 0
               ? <span className="text-[10px] text-white/30">— empty — the Passage sells gems</span>
-              : bag.map(([id, n], k) => chip(id, k, n))}
+              : bag.map(([id, n], k) => <GemChip key={`${id}-${k}`} id={id} n={n} />)}
           </div>
         </div>
         <div className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
@@ -3088,7 +3092,7 @@ function LettersCard({ owned, birth, items, onChange }: {
           </div>
           <div className="mt-1 flex flex-col gap-1">
             {owned.map(id => {
-              const r = rune(id)
+              const r = RUNES.find(x => x.id === id)
               const crystal = crystalFor(id)
               const have = items.current && crystal ? countItem(items.current, crystal) : 0
               const why = items.current ? imbueWhy(items.current, owned, id) : 'no-crystal'
@@ -3110,6 +3114,79 @@ function LettersCard({ owned, birth, items, onChange }: {
           What you were born with — your doubled focus, your Manifestation — needs none.
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The LOADOUT half — the vessels you own, and which one you are wearing.
+ *
+ * ★ THE WORD SHOWN ON A VESSEL COMES FROM `slots`, THE TAB'S LIVE STATE, NOT FROM STORAGE. A bind
+ * two rows below this rack writes the loadout and re-renders; reading storage here instead would
+ * show the previous word for one frame in private mode, where `saveLoadout` does not persist.
+ * The GEMS come from `keeperLetters`, which is the same live read the bind moves letters through.
+ */
+function VesselRack({ owned, birth, slots, onEquipped }: {
+  owned: readonly string[]; birth: string | null; slots: Loadout
+  /** the equipped vessel changed — hand the tab its re-resolved slots and let the host re-render */
+  onEquipped: (slots: Loadout) => void
+}) {
+  const stowed = loadStowed()
+  const l = keeperLetters(owned, birth)
+  const doEquip = (kind: Vessel, i: number) => {
+    if (!equip(kind, i, birth, starterFor(owned))) return
+    onEquipped(resolveLoadout([...owned], birth, keeperBook(owned)).slots)
+  }
+  const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
+  return (
+    <div className="mb-3 flex flex-col gap-1">
+      <div className="flex items-baseline gap-2">
+        <span className="gx-label text-[10px] text-white/35">Vessels</span>
+        <span className="ml-auto text-[10px] text-white/30">
+          {VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(' · ')}
+          {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · grown at the Passage' : ''}
+        </span>
+      </div>
+      {VESSELS.map(kind => {
+        const band = BAND_FOR_VESSEL[kind]
+        const worn = band >= 0 ? (slots[band] ?? null) : null
+        const spare = stowed.map((v, i) => ({ v, i })).filter(({ v }) => v.kind === kind)
+        return (
+          <div key={kind} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[12px] text-white/75">{kind}</span>
+              <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[kind]}</span>
+              <span className="ml-auto text-[9px] text-white/30">{l.vessels[kind].length}/{VESSEL_CAP}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <span className="rounded border border-amber-200/40 px-1.5 py-0.5 text-[10px] text-amber-200/90">
+                {kind === 'bracelet' ? 'worn' : 'held'}
+              </span>
+              {l.vessels[kind].length === 0
+                ? <span className="text-[10px] text-white/30">— nothing set —</span>
+                : l.vessels[kind].map((id, k) => <GemChip key={`${id}-${k}`} id={id} n={undefined} />)}
+              <span className="ml-1 text-[10px] text-white/40">{wordOf(worn) ?? 'no word'}</span>
+            </div>
+            {/* ★ EVERY OTHER ONE OF THIS KIND, WITH WHAT IS WRITTEN ON IT. A keeper picks the vessel
+                by reading the word, not by remembering which number they parked it under — that is
+                the whole gain over the retired pair-swap, which could only say "swap to 2". */}
+            {spare.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-white/[0.07] pt-1.5">
+                {spare.map(({ v, i }) => (
+                  <button key={i} type="button" onPointerDown={() => doEquip(kind, i)}
+                          className="gx-btn flex items-center gap-1.5 rounded border border-white/15 px-2 py-0.5 text-[10px] text-white/60 hover:bg-white/[0.06]">
+                    <span>equip</span>
+                    {v.gems.length === 0
+                      ? <span className="text-white/30">empty</span>
+                      : v.gems.map((id, k) => <GemChip key={`${id}-${k}`} id={id} n={undefined} />)}
+                    <span className="text-white/40">{wordOf(v.move) ?? 'no word'}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -3159,7 +3236,6 @@ function RunesTab({ items, onLetters }: { items: React.RefObject<Inventory>; onL
         })}
       </div>
       <BirthLean birth={inv.birth} />
-      <LettersCard owned={owned} birth={inv.birth} items={items} onChange={onLetters} />
       {known.length === 0 && learnable.length === 0 ? (
         <div className="rounded border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-white/40">
           No move answers to this rune. The Schools do not teach it and scholars do not name it —
@@ -3247,28 +3323,6 @@ function ToolsTab({ tools, skills }: {
  * listed, dimmed, bindable, and carry their reason — and the passive readout says 'unbuilt' the same
  * way when its effect has no runtime yet.
  */
-function LoadoutSwitch({ owned, birth, onSwapped }: { owned: readonly string[]; birth: string | null; onSwapped: (slots: Loadout) => void }) {
-  const parked = loadParked()
-  const total = 1 + parked.length
-  const swap = (i: number) => {
-    if (!swapTo(i, birth, starterFor(owned))) return
-    onSwapped(resolveLoadout([...owned], birth, keeperBook(owned)).slots)
-  }
-  return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
-      <span className="gx-label text-[10px] text-white/35">loadout</span>
-      <span className="rounded border border-amber-200/40 px-2 py-0.5 text-[10px] text-amber-200/90">active · {ALL_BANDS.map(k => k[0]!.toUpperCase()).join('')}</span>
-      {parked.map((p, i) => (
-        <button key={i} type="button" onPointerDown={() => swap(i)}
-                className="gx-btn rounded border border-white/15 px-2 py-0.5 text-[10px] text-white/60 hover:bg-white/[0.06]">
-          swap to {i + 2} · {p.slots.filter(Boolean).length} bound · {p.vessels.bracelet.length + p.vessels.focus.length} set
-        </button>
-      ))}
-      <span className="ml-auto text-[10px] text-white/30">{total} of {MAX_LOADOUTS}{total < MAX_LOADOUTS ? ' · a pair is grown at the Passage' : ''}</span>
-    </div>
-  )
-}
-
 function LoadoutTab({ items, onLetters }: { items: React.RefObject<Inventory>; onLetters: () => void }) {
   const [owned] = useState(() => loadRuneInventory().owned)
   // Read with the runes and pinned for the same reason: the birth-exclusive band decides which
@@ -3317,8 +3371,12 @@ function LoadoutTab({ items, onLetters }: { items: React.RefObject<Inventory>; o
       {/* ── ★ MORE THAN ONE LOADOUT (2026-09-03): the active pair + every parked pair. A swap exchanges the
           paper (slots + set letters) and leaves the bag alone; the world re-resolves on `onLetters`
           (the host bumps runeTick there). A pair is bought at the Passage's vessel shelf. */}
-      <LoadoutSwitch owned={owned} birth={birth} onSwapped={(next) => { setSlots(next); setPicking(null); onLetters() }} />
-      <LettersCard owned={owned} birth={birth} items={items} onChange={onLetters} />
+      {/* ★ THE VESSELS ARE THE LOADOUT (Alex, 2026-09-03). Equipping exchanges the paper — its letters
+          AND the word written on them — and leaves the bag alone; the world re-resolves on
+          `onLetters` (the host bumps runeTick there). Vessels are grown at the Passage, one at a
+          time. The bag and imbue moved to the Satchel, where carried things live. */}
+      <VesselRack owned={owned} birth={birth} slots={slots}
+                  onEquipped={(next) => { setSlots(next); setPicking(null); onLetters() }} />
       {ALL_BANDS.map((kind, i) => {
         const bound = slots[i] ?? null
         const spec = bound ? castForMove(bound) : null
@@ -3475,6 +3533,10 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   // for "my bag", and a key that sometimes opens the grimoire because that is where you were last
   // is a key that has to be looked at before it is pressed.
   const [tab, setTab] = useState<KeeperTab>('satchel')
+  // The keeper's runes and birth rune, pinned per mount for the same reason the other tabs pin
+  // theirs: they decide what `SatchelLetters` may imbue, and neither can change while this is open.
+  const [runesHeld] = useState(() => loadRuneInventory().owned)
+  const [birthRune] = useState(() => loadRuneInventory().birth)
   const bag = inv.current?.slots ?? []
   const slotKey = (r: SlotRef) => `${r.g}${r.i}`
 
@@ -3723,7 +3785,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   return (
     <KeeperFrame tab={tab} setTab={setTab} onClose={onClose}
                  hint={tab === 'satchel' ? hint : undefined}>
-      {tab === 'satchel' && satchel}
+      {tab === 'satchel' && <>{satchel}<SatchelLetters owned={runesHeld} birth={birthRune} items={inv} onChange={onLetters} /></>}
       {tab === 'runes' && <RunesTab items={inv} onLetters={onLetters} />}
       {tab === 'grimoire' && <GrimoireTab party={party} inv={inv} onChange={onParty} spiritIndex={spiritIndex} />}
       {tab === 'tools' && <ToolsTab tools={tools} skills={skills} />}

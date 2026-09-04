@@ -182,20 +182,39 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   ok(/keeperLetters\(/.test(op) && /addGems\(/.test(op) && /saveLetters\(/.test(op) && /setRuneTick\(/.test(op), 'the op reads through keeperLetters, adds, persists, and ticks the world')
   ok(/isOwner\) return/.test(op), 'granting is owner-gated inside the op; bare is not')
   ok(/shortFor\(/.test(src), 'the cast panel asks shortFor — an option the keeper cannot write says which letters are short')
-  // ★ THE LETTERS CARD (Alex: "shouldn't we update the inventory tabs?") — the bag and both vessels
-  // on the panel, in BOTH tabs, read fresh each render so a bind moves them under the cursor.
-  const cardAt = src.indexOf('function LettersCard(')
-  ok(cardAt >= 0, 'VoxelWorld has a LettersCard')
-  const cardEnd = src.indexOf('\nfunction RunesTab(', cardAt)
+  // ★★ THE LETTERS, SPLIT BY WHERE THE THING LIVES (Alex, 2026-09-03): the BAG on the Satchel, the
+  // VESSELS on the Loadout, and nothing on Runes. ⚠ RE-POINTED from `LettersCard`, which this block
+  // anchored on until the split retired it. Every behavioural assert below is the original, re-aimed
+  // at whichever half now owns it; the two-tab assert is REPLACED rather than dropped, because the
+  // arrangement is exactly what was ruled and an unasserted arrangement drifts back.
+  const cardAt = src.indexOf('function SatchelLetters(')
+  ok(cardAt >= 0, 'VoxelWorld has a SatchelLetters')
+  const cardEnd = src.indexOf('\nfunction VesselRack(', cardAt)
   ok(cardAt >= 0 && cardEnd > cardAt, 'the card slice has BOTH anchors — an unanchored end slices to the file tail and every assert below passes anywhere')
   const card = cardAt >= 0 && cardEnd > cardAt ? src.slice(cardAt, cardEnd) : ''
   ok(/keeperLetters\(owned, birth\)/.test(card) && !/useState\(/.test(card), 'the card reads keeperLetters on every render — never pinned in useState')
-  ok(/VESSELS\.map\(/.test(card) && /l\.bag/.test(card) && /VESSEL_CAP/.test(card), 'it renders both vessels (from the list, not two literals), the bag, and the cap')
-  const uses = src.split('<LettersCard ').length - 1
-  ok(uses === 2, `the card is rendered in two tabs — runes and loadout (${uses})`)
+  ok(/l\.bag/.test(card), 'the SATCHEL half renders the bag')
+  const rackAt = src.indexOf('function VesselRack(')
+  const rackEnd = src.indexOf('\nfunction LoadoutTab(', rackAt)
+  ok(rackAt >= 0 && rackEnd > rackAt, 'the rack slice has BOTH anchors')
+  const rack = rackAt >= 0 && rackEnd > rackAt ? src.slice(rackAt, rackEnd) : ''
+  ok(/VESSELS\.map\(/.test(rack) && /VESSEL_CAP/.test(rack), 'the LOADOUT half renders both vessels from the list, not two literals, and the cap')
+  // ⚠⚠ THE POSITIVE ABOVE IS NOT ENOUGH, AND A MUTATION PROVED IT (2026-09-03). The rack contains
+  // TWO `VESSELS.map(` — the header's owned-count summary and the row loop — so replacing the ROW
+  // loop with a hardcoded `['bracelet', 'focus']` left the header's match standing and the assert
+  // passed. It could not tell WHICH one it had found: the cheapest wrong answer still satisfied it
+  // (PATTERNS 08-23, *a guard satisfiable by being ANYWHERE*). The named negative closes it.
+  ok(!/\[\s*'bracelet'\s*,\s*'focus'\s*\]/.test(rack) && !/\[\s*'focus'\s*,\s*'bracelet'\s*\]/.test(rack),
+     '★ and the vessel names are NEVER paired as a literal array — that list is `VESSELS` or it is a mirror of it')
+  ok(/keeperLetters\(owned, birth\)/.test(rack), 'and reads the letters fresh too — a bind two rows below moves them under the cursor')
+  const bagUses = src.split('<SatchelLetters ').length - 1
+  const rackUses = src.split('<VesselRack ').length - 1
+  ok(bagUses === 1 && rackUses === 1, `★ ONE mount each — the bag on the satchel, the vessels on the loadout (${bagUses}/${rackUses})`)
   const runesTab = src.slice(src.indexOf('function RunesTab('), src.indexOf('function ToolsTab('))
+  ok(!/<SatchelLetters /.test(runesTab) && !/<VesselRack /.test(runesTab),
+     '★ the RUNES tab carries neither — it is what you ARE, and a gem inventory was never that')
   const loadTab = src.slice(src.indexOf('function LoadoutTab('), src.indexOf('ALL_BANDS.map((kind, i) =>', src.indexOf('function LoadoutTab(')))
-  ok(/<LettersCard /.test(runesTab) && /<LettersCard /.test(loadTab), 'one in RunesTab, one in LoadoutTab above the slots')
+  ok(/<VesselRack /.test(loadTab) && !/<SatchelLetters /.test(loadTab), 'the rack sits in LoadoutTab above the slots, and the bag does not follow it there')
 }
 
 console.log(`gems: ${pass} passed, ${fails.length} failed`)

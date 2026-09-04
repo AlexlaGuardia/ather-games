@@ -27,8 +27,8 @@ import { getMarks, addMarks, spendMarks } from '@/lib/wallet'
 import { RUNES } from './birth/runes.data'
 import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
-import { saveLetters } from './gems'
-import { buyPair, loadoutCount, PAIR_PRICE, MAX_LOADOUTS } from './loadouts'
+import { saveLetters, VESSELS, type Vessel } from './gems'
+import { buyVessel, ownedCount, VESSEL_PRICE, MAX_PER_KIND } from './vessels'
 import { rackFor, buy, priceOf, canRead, msUntilRotation, cycleAt as rackCycleAt } from './scroll-market'
 import {
   WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, cycleAt, weekdayOf, daysUntil, gemTrayFor, gemPrice,
@@ -84,8 +84,8 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
     saveLetters(r.letters); rerender()
   }
-  const onBuyPair = () => {
-    const r = buyPair(marks)
+  const onBuyVessel = (kind: Vessel) => {
+    const r = buyVessel(kind, marks)
     setNote(r.say); if (!r.ok) return
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
     rerender()
@@ -180,12 +180,20 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
         </Shelf>
 
         <Shelf title="The vessel shelf" when="every day · the paper, grown">
-          {/* Canon: one loadout = one focus + one bracelet; a second loadout needs a second of both and its
-              own gems. A pair arrives EMPTY — write something on it from the Loadout tab. */}
-          <Row left={<span className="text-white/70">a focus and a bracelet</span>}
-               mid={`you carry ${loadoutCount()} of ${MAX_LOADOUTS} · a second loadout, with its own letters`}
-               price={PAIR_PRICE} action={onBuyPair} disabled={loadoutCount() >= MAX_LOADOUTS}
-               label={loadoutCount() >= MAX_LOADOUTS ? 'all you can carry' : 'buy the pair'} />
+          {/* ★ SOLD ONE AT A TIME, NOT AS A PAIR (Alex, 2026-09-03). Canon's sentence is *"they will need
+              to acquire more of BOTH the focus and accessories"* — two acquisitions. The pair was the
+              build's own bundling and it forbade the obvious thing: wear one bracelet, hold another
+              keeper's focus. Each arrives EMPTY and carries its own letters once you write on it. */}
+          {VESSELS.map(kind => {
+            const have = ownedCount(kind)
+            const full = have >= MAX_PER_KIND
+            return (
+              <Row key={kind} left={<span className="text-white/70">a {kind}</span>}
+                   mid={`you carry ${have} of ${MAX_PER_KIND} · its own letters, its own word`}
+                   price={VESSEL_PRICE} action={() => onBuyVessel(kind)} disabled={full}
+                   label={full ? 'all you can carry' : `buy the ${kind}`} />
+            )
+          })}
         </Shelf>
 
         {note && <div className="mt-2 rounded border border-amber-200/20 bg-amber-200/[0.06] px-2.5 py-1.5 text-[10px] text-amber-100/80">{note}</div>}

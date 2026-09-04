@@ -50,18 +50,24 @@ const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
   for (const w of ['not-held', 'no-crystal', 'unknown-rune'] as const) ok(imbueSentence(w, rune.id).length > 10, `sentence for ${w}`)
 }
 
-// ── C. the host: the letters card offers imbue and refreshes the world after ─────────────────
+// ── C. the host: the SATCHEL's letters card offers imbue and refreshes the world after ───────
+// ⚠ RE-POINTED 2026-09-03. This block anchored on `function LettersCard(`, which Alex's split
+// retired — and every assert in it went red against a garbage slice. NOT ONE was a finding: imbue
+// still persists and still notifies, it simply moved to `SatchelLetters`. The behavioural asserts
+// are kept verbatim and re-aimed; only the ARRANGEMENT assert changed, because the arrangement is
+// what was ruled. Deleting them to clear the red would have been the cheapest lie available.
 {
   const src = noComments(readFileSync(new URL('../voxel3d/VoxelWorld.tsx', import.meta.url), 'utf8'))
-  const at = src.indexOf('function LettersCard(')
-  const cardEnd = src.indexOf('\nfunction RunesTab(', at)
+  const at = src.indexOf('function SatchelLetters(')
+  const cardEnd = src.indexOf('\nfunction VesselRack(', at)
   ok(at >= 0 && cardEnd > at, 'the card slice has BOTH anchors — my first version sliced to the file tail when the end anchor missed, and passed for the wrong reason')
   const card = at >= 0 && cardEnd > at ? src.slice(at, cardEnd) : ''
   ok(/imbueWhy\(/.test(card) && /imbue\(/.test(card), 'the card asks imbueWhy per held rune and calls imbue on press')
   ok(/saveLetters\(/.test(card), 'the imbued letters are persisted')
   ok(/onChange\(\)/.test(card) || /onInvChange\(\)/.test(card), 'the world is told the bag changed (hotbar/craft refresh)')
-  const uses = src.split('<LettersCard ').length - 1
-  ok(uses === 2 && (src.match(/<LettersCard [^>]*items=\{items\}/g) ?? []).length === 2, 'both tab usages hand the card the item inventory')
+  const uses = src.split('<SatchelLetters ').length - 1
+  ok(uses === 1, `★ imbue lives on the SATCHEL and nowhere else — one mount, not two (${uses})`)
+  ok((src.match(/<SatchelLetters [^>]*items=\{inv\}/g) ?? []).length === 1, 'and that mount hands the card the item inventory an imbue takes its crystal from')
 }
 
 console.log(`imbue: ${pass} passed, ${fails.length} failed`)
