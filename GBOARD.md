@@ -11,6 +11,49 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔍 Shimmer — **THE PANEL COULD NOT BE LOOKED AT, AND THAT WAS THE REASON IT KEPT SHIPPING UNSEEN** (2026-09-04, play lane) · *Last touched 2026-09-04 — `e26b159` + `fdec53d` + `533a722` pushed; **LIVE in `BUILD_ID w_TC3g03z2hldtCSxpD81`**, 178 chunks, shipped by hub inside their icon pass from `380cb00` (which contains `e26b159`). Verified on prod AND the public tunnel with the owner cookie: 200, identical byte counts, positive controls present, negative absent, and an ungated fetch still 403s. panel-fixture **88/0**, dev-pages **214/0** (was 205), dev-back 39/0, keeper-tabs 13/0, keeper-chrome 41/0, gems 44/0, vessels 48/0, imbue 22/0, tsc 7 (baseline). Mutation-swept 9 ways on the fixture: 7 fire, 2 negative controls pass by design.*
+
+### Why it existed: every block above it said NOT LOOKED AT, and the cause was mechanical
+The vessels ruling, the letters split, the three-tab shell, the chrome pass — all asserted, none seen.
+The only road to a written vessel ran through play: earn 75 Marks, buy a bracelet, dig a crystal, imbue
+it, bind the word. Twenty minutes to answer a question the brief asks of the EYE. `/shimmer/dev/panel`
+removes the twenty minutes: it mounts the REAL `SatchelLetters` and `GearTab` (hub exported the six
+bodies in `0dfae8d`) over a keeper written by `play3d/panel-fixture.ts` through the SHIPPED save
+functions. It draws no seat of its own — the `dev/hud` rule, that a preview which re-derives can be
+perfectly correct while the game is wrong. Five scenarios, readable from the URL
+(`?s=written&tab=gear&bg=sky`) because `page-shot.mts` photographs a path and cannot click.
+
+### ★★ THE FIXTURE WAS GREEN AT 71/0 AND DREW TWO SCENARIOS IDENTICALLY
+`written` took the FIRST word each lane offered; for that birth it was a one-letter word, so *a word
+written* and *one letter seated* rendered the same picture under opposite labels. Every assert was
+green because each only checked its own scenario in isolation. ⚠ **Caught by reading the output, not
+the count.** Births are now scored by seats filled, each lane takes its richest word, and a section
+asserts the scenarios DIFFER against an independently computed maximum.
+
+### ★★★ AND LOOKING AT IT FOUND IN NINETY SECONDS WHAT 80 ASSERTS COULD NOT
+`written` rendered two lit seats, **"no word"**, and the cast bar reading *"what was here no longer
+fits, so it was unbound"*. The fixture seated the letters and set the band while owning only the birth
+rune, so `keeperBook` never held the move and `resolveLoadout` unbound it on read. **Every assert was
+about what the fixture WROTE; not one asked the resolver what a keeper would GET BACK.** The runes are
+the knowing — granted with the letters now, and a new section asserts the word survives a real
+`resolveLoadout`. Mutation-verified: removing the grant reds 6 asserts by name.
+
+### ⛔ ALEX'S CALL — the dark-seat read, measured on the LIVE build, not asserted
+⚠ **Re-measured after hub's icon pass and the number MOVED, so the earlier flat "2%" is retired.** Lit
+seats are now coloured gem icons, not text chips, and that splits the read in two:
+- **A partly-filled vessel is now unmissable** — lit gem vs dark seat is **117.7 of 255**. The icon
+  pass effectively solved this case.
+- **A wholly empty vessel is unchanged** — no lit neighbour exists in the row, so the only cue is the
+  seat against its own plate: **4.3 of 255, about 1.7% luminance** (lum 5.3 on a 9.6 plate).
+★ That is the case a NEW keeper meets first, on a panel where nothing is written yet, and the brief
+asks a player to read how loaded a keeper is *from across the square*. Whether 4.3/255 carries that far
+is Alex's eye and an art call; `keeper-chrome` forbids a rim on the dark seat, which reads as
+deliberate, so nothing has been touched. The bench is how he answers it in one click.
+
+### Files
+`dev/panel/page.tsx` (new) · `dev/templates/dev-pages.ts` (registered — discovery is mandatory) ·
+`play3d/panel-fixture.ts` + `.test.ts` (new) · `play3d/gems.test.ts` + `vessels.test.ts` (anchors widened)
+
 ## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 evening (hub) — `380cb00` **the icon pass, first cut: gem stones, focus sprites in Gear, glove on the hand — LIVE in `BUILD_ID w_TC3g03z2hldtCSxpD81`**, keeper-chrome 47/0, sweep 235/235, three canon gaps filed, see *THE ICON PASS* under the 💎 block. Before that: `bff8d2d` **the chrome pass: every body on a `gx-plate`, one `SectionHead`, the birth lean remounted under Gear › Innate — LIVE in `BUILD_ID 8QCMVsuKqAR9akome2ztT`**, keeper-chrome 41/0, sweep 234/234, see *THE BODIES STAND ON PLATES* under the 💎 block. Before that: `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
 
 ## 🚪 Shimmer — **THE LANDING: THE ARCH WAS ALREADY BUILT, THE DOOR WAS NOT** (2026-09-03, hub lane) · *Last touched 2026-09-03 — `0f4ffa5` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID TGTHpgxRIteEw0DTsPy_3`, 168 chunks**, built from `6c0b3d1` — this work plus the play lane's Passage shelves and trader in one deploy, after their tokens row cleared the red. **Sweep 231 suites · 231 pass · 0 FAIL · 0 KILLED, started AND ended at `6c0b3d1`** (ceiling 600s, `plot.test.ts` 145s). ⚠ The run before it started at `3624714` and the play lane landed two commits INSIDE it, one of them in `Shimmer3D.tsx` where my return leg lives — **231/231 about a tree that no longer existed.** Nothing was broken (their diff touched none of my lines, checked rather than assumed) but the number was void, so the tree was frozen by request and re-swept. Served md5 == disk md5 == public tunnel on both changed chunks; retired string 0 everywhere, positive controls present. landing **46/0** (new), landing-wiring **23/0** (new), crossing-out 38/0, crossing-in 38/0, rune-hold-doors 15/0/0-pending, rune-hold-fold green, gate-collapse 55/0. **Mutation-swept 12 ways across two sweeps: all 12 fire, 2 negative controls pass by design.** tsc 7 (baseline), canon 13 CLEAN.*
