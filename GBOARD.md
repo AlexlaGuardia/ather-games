@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 — `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
+## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 (second window, hub) — `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
 
 ## 🚪 Shimmer — **THE LANDING: THE ARCH WAS ALREADY BUILT, THE DOOR WAS NOT** (2026-09-03, hub lane) · *Last touched 2026-09-03 — `0f4ffa5` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID TGTHpgxRIteEw0DTsPy_3`, 168 chunks**, built from `6c0b3d1` — this work plus the play lane's Passage shelves and trader in one deploy, after their tokens row cleared the red. **Sweep 231 suites · 231 pass · 0 FAIL · 0 KILLED, started AND ended at `6c0b3d1`** (ceiling 600s, `plot.test.ts` 145s). ⚠ The run before it started at `3624714` and the play lane landed two commits INSIDE it, one of them in `Shimmer3D.tsx` where my return leg lives — **231/231 about a tree that no longer existed.** Nothing was broken (their diff touched none of my lines, checked rather than assumed) but the number was void, so the tree was frozen by request and re-swept. Served md5 == disk md5 == public tunnel on both changed chunks; retired string 0 everywhere, positive controls present. landing **46/0** (new), landing-wiring **23/0** (new), crossing-out 38/0, crossing-in 38/0, rune-hold-doors 15/0/0-pending, rune-hold-fold green, gate-collapse 55/0. **Mutation-swept 12 ways across two sweeps: all 12 fire, 2 negative controls pass by design.** tsc 7 (baseline), canon 13 CLEAN.*
 
@@ -218,6 +218,45 @@ mutation ALSO crashed rather than applying — one because `keeperKey` correctly
 **an unapplied mutation is indistinguishable from a guard that works** (PATTERNS 08-31). Each was re-cut until it
 actually ran.
 
+### ★ THE SHELL FOLLOWED THE MODEL: THREE TABS, EVERY SEAT DRAWN (hub, 2026-09-04 — the second half of the same conversation, in a second window)
+Alex ran the pinned inventory-menu conversation in **two Jin windows at once**, and the two halves did not know it
+until he said *"let's touch base with the other window."* The other window (`a1d298f8`) got the DATA rulings above
+and shipped them (`57a2ef9`). This window got the SHELL rulings, verbatim: *"i'm not convinced we need that runes
+tab"* · *"the move is the object.. this runes tab should be more of a 'gear' tab"* · *"you get it back when you
+clear"* · *"the gems should live in the satchel.. and be equipt from there"* · *"the seats should show up in gear."*
+Reconciled by dbr, then built on top of `57a2ef9` with nothing to unwind — the two halves agreed everywhere they
+overlapped, and Alex used the word *gear* to both windows independently.
+
+**What changed (`keeper-panel.tsx` + the tab region of `VoxelWorld.tsx` only; nothing in `play3d/`):**
+- **Five tabs → three: Satchel · Gear · Grimoire.** `KeeperTab` no longer has `runes` / `tools` / `loadout` in the
+  union on purpose — a stale `setTab('loadout')` anywhere is a compile error, not a tab that silently never opens.
+- **Runes RETIRED.** Its move list was `knownMoves`/`learnableMoves` over the same runes the Gear bind picker
+  already lists per band, and the rune chips are one row. `RunesTab` deleted (65 lines), its two imports with it.
+  The letters that briefly lived on it had already moved to the Satchel in `57a2ef9`.
+- **Tools FOLDED INTO Gear as a section, `GatheringFocuses`** — canon's word for a Blade / Spike / Rinstick is
+  *gathering focus*, "two shapes, one class" with the casting glove (`glossary.md` § Focus, ruled 09-03). A
+  separate tab was the build drawing a line canon does not. Body unchanged (family → in hand → skill bar).
+- **Loadout RENAMED Gear (`GearTab`)**, mounting the rack, the bands, the passive, then the gathering focuses.
+- **★ EVERY SEAT IS DRAWN.** `Seats` renders exactly `VESSEL_CAP` seats per vessel — a lit `GemChip` or a dark
+  rounded void — on the worn vessel AND on every spare in the rack. "— nothing set —" and "empty" are gone: a
+  sentence says the count is zero, three dark seats say it is zero OF THREE, which is the number a keeper is
+  deciding on (brief: *"an empty seat is dark and visibly empty."*). ⚠ No rim, no bezel, no socket in the look
+  (brief: *"the vessel closed around it"*). The dark seat is a placeholder read until Alex calls the art.
+
+**Guards:** `voxel3d/keeper-tabs.test.ts` (new, **13/0**): the tab list asserted by VALUE, one body per tab at
+line start (⚠ an unanchored `{tab === '` counted the frame's `hint={tab === 'satchel' ? …}` prop as a fourth body
+on a correct host), no retired components, `Seats` sized by `VESSEL_CAP`, two `<Seats` mounts in the rack, no
+collapse sentence, one `GatheringFocuses` mount, rows still from `TOOL_FAMILIES`. **Mutation-swept 5 ways, all 5
+fire; 2 negative controls (a dead-tab body inside a comment; the word "empty" in a rack comment) pass by design.**
+Two play-lane suites read this file by anchor and were RE-POINTED, not deleted: `gems.test.ts` sliced
+`RunesTab..ToolsTab` to prove Runes carried no card — both anchors gone means a `''` slice and every assert on it
+passing vacuously, so it now asserts the retirement itself; `vessels.test.ts` required `<RunesTab ` to EXIST.
+`hud-type` ratchet banked 29 → 26 (three hand-rolled label triplets left with RunesTab). gems 44/0, vessels 48/0,
+imbue 22/0, dev-claims 9/0, tsc 7 (baseline), canon 13 CLEAN, bands cache unchanged. **Sweep 233 suites · 233 pass · 0 FAIL · 0 KILLED at `4e5d992`+this diff, tree unmoved** (rc off the process; `plot.test.ts` 153s). ✅ **`46156a3` pushed, DEPLOYED `BUILD_ID s-W-G-tgukjS9QyaiFbII`, 168 chunks**; served md5 == disk == public tunnel on the panel chunk, positive controls (`empty seat` ×2, `Gathering focuses`) present, retired `nothing set` and `label:"Runes"` 0 across every chunk.
+
+**⚠ NOT LOOKED AT by Alex.** Headless asserts cover the shape; whether three dark seats READ as an unwritten vessel
+at panel distance is his eye. The spiral / resonance render of a lit seat stays a shader question and his.
+
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
   of one rune, for now. One focus + one bracelet, implicit — a second loadout is not built. No merchant yet.
@@ -226,12 +265,13 @@ actually ran.
   a rune id.
 
 ### Next
-- ~~FIRST NEXT SESSION: talk about the inventory menu~~ **HAD, and it produced three rulings — see the vessels
-  section above.** ⏭ **Alex: open the panel and walk the new shape.** Satchel now carries the bag + imbue at the
-  bottom; Runes carries nothing but runes; Loadout is the gear tab — worn bracelet, held focus, each naming its
-  word. Buy a bracelet at the Passage (75 M) and equip it: does swapping the paper feel like changing a build?
-  ⚠ **NOT LOOKED AT — no one has seen any of this rendered.** Headless asserts cover the split, the equip and the
-  migration; whether the rack READS as gear at play distance is Alex's eye.
+- ~~FIRST NEXT SESSION: talk about the inventory menu~~ **HAD, in two windows, and it produced five rulings — the
+  vessels section (data) and the shell section (tabs) above.** ⏭ **Alex: press `I` and walk the new shape.** Three
+  tabs: Satchel (bag + imbue at the bottom) · Gear (worn bracelet + held focus with THREE SEATS each, lit or dark;
+  the bands; the passive; the gathering focuses) · Grimoire. Buy a bracelet at the Passage (75 M), equip it, bind a
+  word, clear it and watch the seats go dark: does a dark seat read as *unwritten*, and does swapping the paper feel
+  like changing a build? ⚠ **NOT LOOKED AT — no one has seen any of this rendered.** Headless asserts cover the
+  split, the equip, the migration and the shell; the read at play distance is Alex's eye.
 - Gem quality, and whether a vessel should have a TIER — the model now has somewhere to put one (a vessel is an
   object you own, not a slot), which it did not when a pair was a pair.
 - ~~Hub: deploy~~ **LIVE.** **Alex: open the panel — Runes tab and Loadout tab both carry the LETTERS card** (bracelet
@@ -247,7 +287,7 @@ actually ran.
 - Gem quality on the prospecting ladder; a second focus + bracelet as purchasable loadouts.
 
 ### Files
-`play3d/vessels.ts` `vessels.test.ts` (new, 2026-09-03 eve; **replace `loadouts.ts` + `loadouts.test.ts`, deleted**) ·
+`voxel3d/keeper-panel.tsx` (3 tabs) · `voxel3d/keeper-tabs.test.ts` (new, 09-04) · `voxel3d/VoxelWorld.tsx` (`Seats`, `GatheringFocuses`, `GearTab`; `RunesTab`/`ToolsTab` deleted) · `play3d/vessels.ts` `vessels.test.ts` (new, 2026-09-03 eve; **replace `loadouts.ts` + `loadouts.test.ts`, deleted**) ·
 `play3d/PassagePanel.tsx` (the shelf sells one at a time, rows derived from `VESSELS`) · `voxel3d/VoxelWorld.tsx`
 (`SatchelLetters` + `VesselRack` + `GemChip` replace `LettersCard` + `LoadoutSwitch`; Satchel/Runes/Loadout rewired) ·
 `lib/keeper-local.ts` + `.test.ts` (`stowed` registered, `parked` kept as legacy) ·
