@@ -171,7 +171,6 @@ entry to give one its own colours.
 - [ ] `ather_crystal`
 - [ ] `ather_infusion`
 - [ ] `atherwheat_grain`
-- [ ] `basic_rinstick`
 - [ ] `bond_philter`
 - [ ] `crystal_elixir`
 - [ ] `crystal_rinn`
@@ -186,7 +185,6 @@ entry to give one its own colours.
 - [ ] `earth_crystal`
 - [ ] `glowfin`
 - [ ] `glowfin_brew`
-- [ ] `glowfin_rinstick`
 - [ ] `glowroot_bulb`
 - [ ] `goldwood_blade`
 - [ ] `harvest_brew`
@@ -211,7 +209,6 @@ entry to give one its own colours.
 - [ ] `shard_tonic`
 - [ ] `shimmer_salve`
 - [ ] `shimmerbloom_petal`
-- [ ] `shimmeroak_blade`
 - [ ] `shimmerwheat_grain`
 - [ ] `starbean_pod`
 - [ ] `starlight_tincture`
