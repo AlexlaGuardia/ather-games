@@ -3208,6 +3208,7 @@ export function VesselParts({ owned, birth, onChange }: {
   if (!stowed.length) return null
   return (
     <div className="mt-4">
+      {/* above the letters on purpose: the vessel is what a keeper ACTS on, the letters are what it consumes */}
       <SectionHead label="Vessels" note={<><span className="gx-value text-white/50">{stowed.length}</span> carried · written ones are on Gear</>} />
       <div className="flex flex-col gap-1">
         {stowed.map((v, i) => {
@@ -3818,7 +3819,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   return (
     <KeeperFrame tab={tab} setTab={setTab} onClose={onClose}
                  hint={tab === 'satchel' ? hint : undefined}>
-      {tab === 'satchel' && <>{satchel}<SatchelLetters owned={runesHeld} birth={birthRune} items={inv} onChange={onLetters} /><VesselParts owned={runesHeld} birth={birthRune} onChange={onLetters} /></>}
+      {tab === 'satchel' && <>{satchel}<VesselParts owned={runesHeld} birth={birthRune} onChange={onLetters} /><SatchelLetters owned={runesHeld} birth={birthRune} items={inv} onChange={onLetters} /></>}
       {tab === 'grimoire' && <GrimoireTab party={party} inv={inv} onChange={onParty} spiritIndex={spiritIndex} />}
       {tab === 'gear' && <GearTab items={inv} onLetters={onLetters} tools={tools} skills={skills} />}
     </KeeperFrame>
