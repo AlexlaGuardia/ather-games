@@ -85,6 +85,24 @@ ok(count(R, /<BirthLean birth=/g) === 1, `★ BirthLean is mounted exactly once 
 ok(count(gear, /<BirthLean birth=/g) === 1, '… and that mount is inside GearTab, under the Innate head')
 ok(/\(passive \|\| birth\) && \(/.test(gear), 'the Innate section renders when EITHER trait exists — the lean without a passive still shows')
 
+// ── 3b. the icon pass (2026-09-04): a gem is a stone, a focus is its painted sprite ────────────
+const seatsAt = declAt(R, 'Seats')
+const seats = seatsAt >= 0 ? R.slice(seatsAt, R.indexOf('\n}\n', seatsAt)) : ''
+ok(count(seats, /<GemStone /g) === 1 && /lit/.test(seats), '★ a seated gem is the STONE, lit — not a text chip')
+const chipAt = declAt(R, 'GemChip')
+const chip = chipAt >= 0 ? R.slice(chipAt, R.indexOf('\n}\n', chipAt)) : ''
+ok(count(chip, /<GemStone /g) === 1, 'a loose gem in the bag is the stone, then its name')
+const stoneAt = declAt(R, 'GemStone')
+const stone = stoneAt >= 0 ? R.slice(stoneAt, R.indexOf('\n}\n', stoneAt)) : ''
+ok(/<svg/.test(stone) && /fill=\{glow\}/.test(stone), 'the stone is drawn from code and tinted by the rune\'s canon glow (the derived tier)')
+ok(!/<rect|stroke=/.test(stone), '★ no setting drawn around the stone — no rect, no stroke (the seat is the vessel closed around it)')
+const gfAt2 = declAt(R, 'GatheringFocuses')
+const gf = gfAt2 >= 0 ? R.slice(gfAt2, R.indexOf('\n}\n', gfAt2)) : ''
+ok(/<ItemChip itemId=\{held\.toolId\}/.test(gf), '★ a gathering focus row draws the SAME painted sprite the bag draws — ItemChip, no second source')
+ok(!/'held'/.test(R) && /hand/.test(VESSEL_COPY(R)) && /wrist/.test(VESSEL_COPY(R)),
+   '★ the vessel copy follows the 09-03 amendment: HAND vs WRIST, never "held" (a glove is worn)')
+function VESSEL_COPY(src: string) { return /const VESSEL_LANE_LABEL[^\n]*/.exec(src)?.[0] ?? '' }
+
 // ── 4. label / value must not collapse to one tone, region-wide ─────────────────────────────
 const pairRe = /<span className="gx-label([^"]*)">[\s\S]{0,220}?<span className="gx-value([^"]*)">/g
 const tone = (s: string) => (s.match(/text-(?:white|amber|slate|sky)\/?\[?[\w./]*\]?/g) ?? []).join(' ')

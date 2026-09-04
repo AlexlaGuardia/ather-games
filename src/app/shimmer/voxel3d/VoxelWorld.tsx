@@ -3013,15 +3013,53 @@ function BirthLean({ birth }: { birth: string | null }) {
  * vessel is the paper* is meant literally. So this rack shows what is ON each vessel you are
  * wearing, and what is on each one you are not.
  */
-const VESSEL_LANE_LABEL: Record<Vessel, string> = { bracelet: 'worn · tacticals · element lane', focus: 'held · signature · state lane' }
+/**
+ * ★ HAND vs WRIST, not held vs worn (`shimmer-casting-vessels.md`, amended 2026-09-03 the same day it
+ * was ruled): the casting focus is a GLOVE, and a glove is worn, so "held" collapsed. What carries
+ * the split is deliberate (the hand you raise and aim — the signature) vs reflex (what is on you
+ * whether you reached for it or not — the tacticals). The build's kind id stays `focus`; the word
+ * on screen is canon's noun for the object.
+ */
+const VESSEL_LANE_LABEL: Record<Vessel, string> = { bracelet: 'wrist · tacticals · element lane', focus: 'casting focus · hand · signature · state lane' }
+const VESSEL_NOUN: Record<Vessel, string> = { bracelet: 'bracelet', focus: 'glove' }
 
-/** One gem, in its rune's own glow. Shared by both halves so a letter looks the same everywhere. */
+/**
+ * ★ A GEM IS A STONE, NOT A WORD (2026-09-04, the icon pass — Alex: *"lets dive into icons"*).
+ * A rune-gem is canon's LETTER: countable, tradeable, quality-graded, and its LIGHT is the whole
+ * information a vessel carries (`shimmer-casting-vessels.md`). Until now the panel drew it as a
+ * text chip in the rune's colour, which is a label, not a thing. This is the DERIVED tier of gem
+ * art, in the sense `tex/item-icon.ts` uses the word: one cut-stone shape, tinted by the rune's
+ * canon glow, drawn from code so every rune has a stone the moment it has a colour. It is the
+ * placeholder read — Alex's hand-pixelled stone replaces these polygons in ONE place, and the seats,
+ * the bag and the rack all follow, because all three ask here.
+ * `lit` = seated on a vessel (the light runs out of the stone); unlit = loose in the bag.
+ * ⚠ No setting is drawn around it, ever — the seat is the vessel closed around the stone.
+ */
+export function GemStone({ glow, lit, size = 18, title }: { glow: string; lit?: boolean; size?: number; title?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" role="img" aria-label={title} className="shrink-0"
+         style={lit ? { filter: `drop-shadow(0 0 2px ${glow}) drop-shadow(0 0 6px ${glow}88)` } : undefined}>
+      {title && <title>{title}</title>}
+      <polygon points="9,1 16,6 13,17 5,17 2,6" fill={glow} opacity={lit ? 0.95 : 0.7} />
+      <polygon points="9,1 16,6 9,7.5 2,6" fill="#ffffff" opacity={lit ? 0.5 : 0.28} />
+      <polygon points="2,6 9,7.5 5,17" fill="#000000" opacity="0.18" />
+      <polygon points="9,7.5 16,6 13,17" fill="#000000" opacity="0.34" />
+      <polygon points="9,7.5 13,17 5,17" fill="#000000" opacity="0.08" />
+      <circle cx="6.5" cy="4" r="1" fill="#ffffff" opacity={lit ? 0.9 : 0.55} />
+    </svg>
+  )
+}
+
+/** One gem, in its rune's own glow: the stone, then its name. Shared by both halves so a letter looks the same everywhere. */
 export function GemChip({ id, n }: { id: string; n?: number }) {
   const r = RUNES.find(x => x.id === id)
   return (
-    <span className="gx-label rounded-[2px] px-1.5 py-0.5 text-[10px]"
+    <span className="inline-flex items-center gap-1 rounded-[2px] py-0.5 pl-1 pr-1.5 text-[10px]"
           style={{ color: r?.glow ?? '#fff', background: `${r?.glow ?? '#fff'}18` }}>
-      {r?.name ?? id}{n !== undefined && n > 1 && <span className="gx-value ml-1 text-white/45">×{n}</span>}
+      <GemStone glow={r?.glow ?? '#fff'} size={14} />
+      <span className="gx-label">{r?.name ?? id}</span>
+      {/* the count is the same glow, dimmed — not a white value beside a coloured label */}
+      {n !== undefined && n > 1 && <span className="ml-0.5 tabular-nums opacity-60">×{n}</span>}
     </span>
   )
 }
@@ -3041,8 +3079,11 @@ export function Seats({ gems }: { gems: readonly string[] }) {
     <span className="inline-flex items-center gap-1">
       {Array.from({ length: VESSEL_CAP }, (_, k) => {
         const id = gems[k]
+        const r = id ? RUNES.find(x => x.id === id) : undefined
         return id
-          ? <GemChip key={`${id}-${k}`} id={id} />
+          ? <span key={`${id}-${k}`} className="inline-flex h-[18px] w-[26px] items-center justify-center">
+              <GemStone glow={r?.glow ?? '#fff'} lit title={r?.name ?? id} />
+            </span>
           : <span key={`dark-${k}`} role="img" aria-label="empty seat" title="empty seat"
                   className="inline-block h-[18px] w-[26px] rounded-full bg-black/35 shadow-[inset_0_2px_5px_rgba(0,0,0,0.85),inset_0_-1px_0_rgba(255,255,255,0.03)]" />
       })}
@@ -3160,13 +3201,13 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
         return (
           <div key={kind} className="gx-plate px-2.5 py-1.5">
             <div className="flex items-baseline gap-2">
-              <span className="gx-title text-[11px] text-amber-200/80">{kind}</span>
+              <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[kind]}</span>
               <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[kind]}</span>
               <span className="gx-value ml-auto text-[10px] text-white/45">{l.vessels[kind].length}/{VESSEL_CAP}</span>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1">
               <span className="gx-label rounded-[2px] border border-amber-200/45 bg-amber-200/10 px-1.5 py-0.5 text-[9px] text-amber-200/90">
-                {kind === 'bracelet' ? 'worn' : 'held'}
+                {kind === 'bracelet' ? 'wrist' : 'hand'}
               </span>
               <Seats gems={l.vessels[kind]} />
               <span className={`gx-title ml-1 text-[11px] ${worn ? 'text-white/80' : 'text-white/30'}`}>{wordOf(worn) ?? 'no word'}</span>
@@ -3219,7 +3260,12 @@ export function GatheringFocuses({ tools, skills }: {
         const need = xpForSkillLevel(sk.level)
         const pct = Math.min(1, sk.xp / Math.max(1, need))
         return (
-          <div key={family} className="gx-plate px-3 py-2">
+          <div key={family} className="gx-plate flex items-center gap-3 px-3 py-2">
+            {/* the same painted sprite the bag draws (`ItemChip`) — no second source of tool art */}
+            {held
+              ? <ItemChip itemId={held.toolId} size={30} />
+              : <span className="h-[30px] w-[30px] shrink-0 rounded-[2px] bg-black/30 shadow-[inset_0_0_6px_rgba(0,0,0,0.7)]" />}
+            <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">
               <span className="gx-label text-[11px] text-amber-200/85">{family}</span>
               <span className="gx-value ml-auto text-[10px] text-white/55">lv {sk.level}</span>
@@ -3233,6 +3279,7 @@ export function GatheringFocuses({ tools, skills }: {
               <div className="h-full bg-amber-300/70 shadow-[0_0_6px_rgba(252,211,77,0.5)]" style={{ width: `${(pct * 100).toFixed(1)}%` }} />
             </div>
             <div className="gx-value mt-1 text-[9px] text-white/35">{sk.xp} / {need} xp</div>
+            </div>
           </div>
         )
       })}
