@@ -54,7 +54,7 @@ deliberate, so nothing has been touched. The bench is how he answers it in one c
 `dev/panel/page.tsx` (new) · `dev/templates/dev-pages.ts` (registered — discovery is mandatory) ·
 `play3d/panel-fixture.ts` + `.test.ts` (new) · `play3d/gems.test.ts` + `vessels.test.ts` (anchors widened)
 
-## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 evening (hub) — `380cb00` **the icon pass, first cut: gem stones, focus sprites in Gear, glove on the hand — LIVE in `BUILD_ID w_TC3g03z2hldtCSxpD81`**, keeper-chrome 47/0, sweep 235/235, three canon gaps filed, see *THE ICON PASS* under the 💎 block. Before that: `bff8d2d` **the chrome pass: every body on a `gx-plate`, one `SectionHead`, the birth lean remounted under Gear › Innate — LIVE in `BUILD_ID 8QCMVsuKqAR9akome2ztT`**, keeper-chrome 41/0, sweep 234/234, see *THE BODIES STAND ON PLATES* under the 💎 block. Before that: `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
+## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 night (hub) — `712d620` **art-to-pixel: the way around the art blocker, first two vessel icons through it — LIVE in `BUILD_ID TYv2qQTAYLgEFhJuqMpz5` (play's deploy of `b2b61ba`)**, keeper-chrome 51/0, sweep 235/235, see *THE WAY AROUND THE BLOCKER* under the 💎 block. Before that: `380cb00` **the icon pass, first cut: gem stones, focus sprites in Gear, glove on the hand — LIVE in `BUILD_ID w_TC3g03z2hldtCSxpD81`**, keeper-chrome 47/0, sweep 235/235, three canon gaps filed, see *THE ICON PASS* under the 💎 block. Before that: `bff8d2d` **the chrome pass: every body on a `gx-plate`, one `SectionHead`, the birth lean remounted under Gear › Innate — LIVE in `BUILD_ID 8QCMVsuKqAR9akome2ztT`**, keeper-chrome 41/0, sweep 234/234, see *THE BODIES STAND ON PLATES* under the 💎 block. Before that: `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
 
 ## 🚪 Shimmer — **THE LANDING: THE ARCH WAS ALREADY BUILT, THE DOOR WAS NOT** (2026-09-03, hub lane) · *Last touched 2026-09-03 — `0f4ffa5` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID TGTHpgxRIteEw0DTsPy_3`, 168 chunks**, built from `6c0b3d1` — this work plus the play lane's Passage shelves and trader in one deploy, after their tokens row cleared the red. **Sweep 231 suites · 231 pass · 0 FAIL · 0 KILLED, started AND ended at `6c0b3d1`** (ceiling 600s, `plot.test.ts` 145s). ⚠ The run before it started at `3624714` and the play lane landed two commits INSIDE it, one of them in `Shimmer3D.tsx` where my return leg lives — **231/231 about a tree that no longer existed.** Nothing was broken (their diff touched none of my lines, checked rather than assumed) but the number was void, so the tree was frozen by request and re-swept. Served md5 == disk md5 == public tunnel on both changed chunks; retired string 0 everywhere, positive controls present. landing **46/0** (new), landing-wiring **23/0** (new), crossing-out 38/0, crossing-in 38/0, rune-hold-doors 15/0/0-pending, rune-hold-fold green, gate-collapse 55/0. **Mutation-swept 12 ways across two sweeps: all 12 fire, 2 negative controls pass by design.** tsc 7 (baseline), canon 13 CLEAN.*
 
@@ -390,6 +390,50 @@ lowercase and CSS uppercases it; a miscategorised control fires exactly like a r
 
 **Next:** Alex calls the vessel MEDIUM off picaso's sheet → Magii rules the three gaps → build the tier model → vessel
 icons per tier. Alex's palette for the three magenta focuses whenever.
+
+### ★ THE WAY AROUND THE BLOCKER: `art-to-pixel`, AND THE FIRST TWO VESSEL ICONS THROUGH IT (hub, 2026-09-04 night)
+Alex, after the casting-vessels concept sheet: *"no need to wait on me to draw them myself.. for game art we need to
+find a way around this blocker."* Saved as a standing rule (memory `feedback_game_art_no_alex_blocker`): **game art no
+longer parks on Alex's hand; Alex JUDGES a picture, never draws on request.**
+
+**The concept sheet first (picaso, `refs/CASTING-VESSELS-concept-sheet.png`, $0.64, zero Meshy):** the focuses sheet
+was never a 3D render — it was flux-1.1-pro concept art on parchment — so picaso rebuilt that pipeline. Verdict: the
+medium holds for the BRACELET (t1: hoop + goldwood discs + three dark seats, the only render where seats read) and fails
+for the GLOVE twice (both gloves lost their seats and closed their fingers; on cloth the model turns an empty seat into a
+grommet or deletes it — *seats survive only in wood*). ⚠ Nearly overwrote the July ALCHEMY `VESSELS-concept-sheet.png`
+(my dispatch reused the name); renamed in flight. ★ **Found a 4th canon gap: the brief binds three seats per vessel AND
+says Greg's glove has ONE** — filed, `CANON_GAPS.md` (athernyx `0e92bd4`).
+
+**Then the pipeline (`712d620`):** `scripts/art-to-pixel.py` — generated image → chroma-key cut-out → crop → 32×32 by
+CELL sampling (lanczos invents colours that eat palette slots) → ≤7 colours + house outline → pixel PNG, 8× preview,
+an `ITEM_PALETTES` line, the `px()` literal. `scripts/art-to-pixel-verify.mts` re-derives the literal through the SAME
+four editor functions `png2sprite` uses with the derived palette injected: **worst distance 0, byte-identical**.
+Emit-only like `png2sprite`; a human lands the lines. **Two routes proved on one compare sheet ($0.48, 12 images):**
+bracelet t1 won by DOWNSAMPLING the render (route A); glove t1 won by asking flux for PIXEL ART directly on a chroma
+key (route B) — the render's glove was off-brief and the same value as its parchment, **unkeyable**. ⚠ *An object the
+same value as its ground cannot be keyed: generate onto a chroma key, never parchment, when the target is a sprite.*
+`VESSEL_BRACELET_T1` + `VESSEL_GLOVE_T1` landed in all three maps of `sprites/items.ts`. **Placeholder-grade on purpose
+and the file says so**: glove fingers closed (brief: open), seats not a knuckle arc; bracelet a notch too saturated for
+dormant. Regenerate through the same script to replace. `_t1` in the id because the build has no vessel tier yet.
+
+**★★ THE PICTURE CAUGHT WHAT THE HEADLESS PROBE PASSED.** `VesselRack` first asked for `vessel_${kind}_t1` — and the
+kind id is `focus`, the sprite is `vessel_glove_t1`. My probe called the icon chain on the ids I MEANT (both painted,
+both flat) and said fine; the dev/panel shot on play's `:3203` showed a grey chip. PATTERNS 08-30: *the thing you
+measured is not the thing that runs.* Fixed by keying on `VESSEL_NOUN`, guarded three ways (the noun spelling in the
+rack, both ids present in `ITEM_ICONS`, no sprite under the kind id). Pixel-sampled the icon boxes after: both read
+their own outline colour.
+
+**Guards:** keeper-chrome **51/0**, keeper-tabs 13/0, gems 44/0, vessels 48/0, palette green, **doctor adds no
+finding** (9 non-info, all pre-existing), tsc 7. **Sweep 235/235 · 0 FAIL · 0 KILLED at `712d620`** — ⚠ and the new
+`coord.sh sweep` wrapper then crashed (`line 412: sess: unbound variable`) and reported **EXIT 1 on a green run**: the
+08-31 laundered-exit shape with the roles reversed, told to the play lane, not mine to fix. ✅ **LIVE in `BUILD_ID
+TYv2qQTAYLgEFhJuqMpz5`** — the PLAY lane's deploy (`b2b61ba`, which carries `712d620`); I verified rather than built:
+items chunk `e481d861` disk == local == public; the served panel chunk asks `` itemId:`vessel_${…}_t1` `` (template
+form survives minification — my first grep for `.concat` read 0, second instrument); `vessel_focus_t1` 0.
+
+**Next:** the three magenta focuses (`shimmeroak_blade`, `basic_rinstick`, `glowfin_rinstick`) through the same pipe —
+route B, chroma key, brief in the prompt. Then a glove regen forcing open fingers. Then per-tier vessels once Magii
+rules the four gaps and the tier model lands.
 
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
