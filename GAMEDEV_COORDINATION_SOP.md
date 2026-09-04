@@ -95,7 +95,7 @@ Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COO
 1. Boot `/jin` — its boot sequence runs `coord status` and detects the live swarm automatically.
 2. Read this file.
 3. Claim a free lane (inlined identity, as above). Tell Alex which lane you took.
-4. Work your lane only. **Satellites edit + commit their lane; they do NOT `coord build`.** The hub ships.
+4. Work your lane only. **Any lane may `coord build`** (ruled by Alex 2026-09-04 — see *Deploying* below). The hub still integrates; it is no longer the only seat that can ship.
 
 ## Git discipline (trunk-based)
 - **★★★ SCOPE THE COMMIT, NOT JUST THE ADD: `git commit -m msg -- <your paths>`.** The old rule here
@@ -260,7 +260,7 @@ coord build "what changed"     # acquire lock -> npm run build -> pm2 restart ->
   - **⚠ AND DO NOT REPORT A POST-BUILD TREE FROM A PRE-BUILD READING.** The hub called the tree clean
     in its wrap on the strength of a `git status` run *before* taking the lock, which was true when
     it was run and stale by the time it was quoted. A build is exactly the step that invalidates it.
-- **Convention: only the hub deploys.** Satellites edit + commit their lane; the hub integrates and runs `coord build`. Keeps git + lock contention near zero. The lock still **serializes** any build as a backstop (and protects you if a second deployer ever happens or you open a real extra window), waiting up to 4m for a held lock.
+- **Any lane deploys, through `coord build` and nothing else** (Alex, 2026-09-04: *"we have been tripping over ourselves a lot deciding who deploys"*). The old rule was *only the hub deploys* — and it was a SOCIAL rule sitting on top of a mechanism that does not need one. `coord build` takes the lock, takes its **own** dirty-tree observation at build start so the check cannot go stale, unsets `NEXT_DIST_DIR`, verifies `BUILD_ID` + chunk count and **exits non-zero on a half-written artifact** telling you not to restart. It never asks who you are. ⚠ What the convention actually bought was contention avoidance, and what it cost was a bottleneck: the hub owns the busiest lane, so the seat with sole authority to ship is the seat least able to stop and do it. **The lock is the safety; the convention was the queue.** Announce a deploy by dbr and verify your own chunks — the window that made the change is the only one that knows which string to grep for.
 - A build older than 15m is treated as dead and stolen (a wedged build never blocks the team forever).
 - **Never run `npm run build` / `pm2 restart` / a bare `npm run dev` directly.** All three touch the production `.next`; only `coord build` is safe.
 - **Satellites preview with `tools/devwin.sh <lane>`, not `npm run dev`.** It pins the window to its own `.next-<lane>` (via `NEXT_DIST_DIR`) and its own port — world 3201, sprites 3202, play 3203, assets 3204 — so a preview can never touch the `.next` the hub deploys from. It refuses `hub` and refuses port 3200. A bare `npm run dev` is still banned because it defaults to both.

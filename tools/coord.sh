@@ -25,6 +25,10 @@
 #       "live hub — HEAD=<sha>, tree clean 0 unpushed (verify: git status)".
 #   coord status                show all claims + build-lock state
 #   coord build [msg]           acquire build lock -> build -> pm2 restart -> release
+#   coord sweep [args]          acquire the SAME lock -> run the full suite -> release
+#     ★ `npm run sweep` routes here on purpose (2026-09-04). The guard belongs where the habit
+#       already goes; a lock you have to remember to take is a lock nobody takes. `npm run
+#       sweep:nolock` is the escape hatch for a deliberate concurrent run.
 #   coord release [lane]        drop your claim
 #   coord lock / unlock         manual build-lock control (edge cases)
 
@@ -190,7 +194,10 @@ acquire_lock() {
       # ★ session= stamped on the LOCK, not just owner=. owner is the lane name ("hub"), which is
       # byte-identical across two windows that both call themselves hub — so it cannot tell a slow
       # build of MINE from a live PEER's. session can. (Hardened 2026-08-25; diagnosis by 164b5211.)
-      printf 'owner=%s\nsession=%s\nts=%s\npid=%s\n' "$WIN" "$SESSION" "$(now_epoch)" "$$" > "$LOCKDIR/info"
+      # ★ kind= (2026-09-04): a sweep holds this lock too, and a sweep is MINUTES. "held by play"
+      # with no verb reads as a stuck build and invites a force-steal; "held by play, sweeping"
+      # tells the waiting window both what is happening and roughly how long it has.
+      printf 'owner=%s\nsession=%s\nkind=%s\nts=%s\npid=%s\n' "$WIN" "$SESSION" "${LOCK_KIND:-build}" "$(now_epoch)" "$$" > "$LOCKDIR/info"
       return 0
     fi
     # lock exists. Steal ONLY a stale lock we can positively attribute to NOBODY (empty session) or
@@ -208,15 +215,52 @@ acquire_lock() {
     if [ "$waited" -ge "$WAIT_SECS" ]; then
       echo "could not acquire build lock after ${WAIT_SECS}s. Held by:"
       lock_owner_info | sed 's/^/  /'
-      [ "$attributed_to_peer" = "1" ] && echo "  ⚠ stale (${age}s) but attributed to live session ${held:0:8}, not yours — NOT auto-stolen. If that window is truly gone: COORD_FORCE=1 ... coord build"
+      # ⚠ ONLY CALL IT STALE IF IT IS (fixed 2026-09-04). This printed "⚠ stale (6s)" for a lock six
+    # seconds old against a 900s threshold, because the branch tested attribution and then described
+    # AGE it had not checked. On the one screen where somebody is deciding whether to force-steal a
+    # peer's lock, the tool was volunteering the word "stale" about a hold that was plainly alive.
+    if [ "$attributed_to_peer" = "1" ]; then
+      if [ "$age" -gt "$STALE_LOCK_SECS" ]; then
+        echo "  ⚠ stale (${age}s) but attributed to live session ${held:0:8}, not yours — NOT auto-stolen. If that window is truly gone: COORD_FORCE=1 ... coord build"
+      else
+        echo "  held by session ${held:0:8}, $(age_human "$age") old — NOT stale, that window is working. dbr them rather than forcing."
+      fi
+    fi
       return 1
     fi
-    echo "build lock held by $(sed -n 's/^owner=//p' "$LOCKDIR/info" 2>/dev/null)${held:+ (session ${held:0:8})} — waiting... (${waited}s)"
+    local kind; kind=$(sed -n 's/^kind=//p' "$LOCKDIR/info" 2>/dev/null)
+    echo "build lock held by $(sed -n 's/^owner=//p' "$LOCKDIR/info" 2>/dev/null)${kind:+, ${kind}ing}${held:+ (session ${held:0:8})} — waiting... (${waited}s)"
     sleep 6; waited=$((waited+6))
   done
 }
 
 release_lock() { rm -rf "$LOCKDIR"; }
+
+# ── ★★★ A SWEEP TAKES THE BUILD LOCK (2026-09-04, Alex's ruling) ───────────────────────────────
+# The lock serialized builds against builds and left the expensive overlap wide open: `npm run
+# build` REWRITES THE LIVE `.next` IN PLACE, and on 2026-09-03 a sweep was loading the box while a
+# build did exactly that — ~3 minutes of prod 500s. Not a code fault and not a lock failure; the
+# lock was simply never asked about sweeps.
+#
+# ⚠ A SWEEP HOLDS THIS FOR MINUTES, AND THAT IS THE POINT, NOT A REGRESSION. A build that waits for
+# a running sweep is waiting in the correct order — you wanted that sweep's result before shipping
+# anyway. `acquire_lock` waits 240s and then fails with the holder NAMED, and a lock attributed to a
+# live peer session is never auto-stolen, so the wait ends in a sentence rather than a mystery.
+#
+# ⚠ AND IT RUNS `scripts/sweep.mts` DIRECTLY, NEVER `npm run sweep` — package.json points that
+# script at THIS function, so calling it here would recurse until the box gave out.
+cmd_sweep() {
+  LOCK_KIND=sweep acquire_lock || exit 1
+  trap release_lock EXIT
+  echo ">> build lock acquired by '$WIN' for a SWEEP — deploys will wait on this"
+  signal "$WIN sweeping (holds the build lock)"
+  cd "$REPO"
+  # A satellite dev server's NEXT_DIST_DIR must not decide what a suite reads, same as in build.
+  unset NEXT_DIST_DIR
+  # ⚠ No pipe. `$?` after a pipeline is the LAST stage's status (PATTERNS 08-31), and a sweep whose
+  # failure is eaten by a `| tail` is the exact instrument this file exists to be trusted over.
+  npx tsx scripts/sweep.mts "$@"
+}
 
 cmd_build() {
   local msg="${*:-deploy}"
@@ -359,8 +403,9 @@ case "${1:-status}" in
   claim)   shift; cmd_claim "$@" ;;
   release) shift; cmd_release "$@" ;;
   build)   shift; cmd_build "$@" ;;
+  sweep)   shift; cmd_sweep "$@" ;;
   lock)    cmd_lock ;;
   unlock)  cmd_unlock ;;
   status)  cmd_status ;;
-  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | release [lane] | lock | unlock}"; exit 1 ;;
+  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | lock | unlock}"; exit 1 ;;
 esac
