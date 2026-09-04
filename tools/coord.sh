@@ -280,10 +280,18 @@ cmd_build() {
   # the files is enough: "greedy.ts is dirty and it isn't mine" is a thought you can only have if
   # something says `greedy.ts`.
   local pre
-  pre=$(git -C "$REPO" status --porcelain 2>/dev/null | grep '^ *[MADRC]' || true)
+  # ⚠ UNTRACKED FILES SHIP TOO, AND THIS GREP COULD NOT SEE THEM (fixed 2026-09-04). The pattern
+  # was '^ *[MADRC]' — modified, added, deleted, renamed, copied — which excludes '??'. A file that
+  # exists but has never been committed is invisible to `git log`, invisible to a diff, and the one
+  # thing here that was supposed to name it stayed silent. It is also the WORST case: a modified
+  # file at least has a committed version to fall back to; a new one exists in no history anywhere,
+  # and it goes live under a build message that never mentions it. Caught when this build shipped an
+  # untracked `vessel-card.tsx` and listed only the tracked file beside it.
+  pre=$(git -C "$REPO" status --porcelain 2>/dev/null | grep -E '^( *[MADRC]|\?\?)' || true)
   if [ -n "$pre" ]; then
     echo ">> ⚠ BUILDING A DIRTY TREE — these uncommitted files are about to go live:"
     echo "$pre" | sed 's/^/>>    /'
+    echo ">>   ?? = untracked: it exists in NO history anywhere, and it is about to be served."
     echo ">>   if any of them are not yours, STOP and ask that window before this ships."
   fi
   signal "$WIN building: $msg"
