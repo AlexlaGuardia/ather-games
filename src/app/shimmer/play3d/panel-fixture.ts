@@ -170,6 +170,14 @@ export function planPanel(id: PanelScenarioId): PanelPlan {
     for (const r of need) l = addGems(l, r)
     const bound = bindLetters(l, kind, m, birth)
     if (!bound) { notes.push(`${m.id} would not bind to the ${kind} — left dark rather than faked`); return [] }
+    // ★★ THE KEEPER MUST KNOW THE WORD, NOT MERELY HOLD ITS LETTERS (found by LOOKING, 2026-09-04).
+    // The first cut seated the letters and set the band, and every assert passed — but `owned` was
+    // the birth rune alone, so `keeperBook` never contained the move and the shipped panel resolved
+    // the slot to EMPTY. On screen: two lit seats, "no word", and the cast bar reading *"what was
+    // here no longer fits, so it was unbound"* under a scenario labelled *a word written*. A keeper
+    // holding letters for a word they cannot know is exactly the impossible state this file's header
+    // forbids teaching an eye to accept. The runes ARE the knowing; grant them with the letters.
+    for (const r of m.runes) if (!owned.includes(r)) owned.push(r)
     const band = bandOf(kind)
     if (band >= 0) slots[band] = m.id
     notes.push(`${kind}: ${m.id} (${need.length}/${VESSEL_CAP})`)

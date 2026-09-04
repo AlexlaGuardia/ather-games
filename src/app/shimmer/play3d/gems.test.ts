@@ -22,33 +22,8 @@ import { keeperBook, saveBook } from './book'
 import { setBirthRune, grantRune, saveRuneInventory, EMPTY_INVENTORY } from './rune-inventory'
 import { RUNES, ELEMENTS, runesOf } from './birth/runes.data'
 import { KEEPER_KEYS } from '@/lib/keeper-local'
-import { noComments } from '../testing/guard'
+import { noComments, declAt, declAfter } from '../testing/guard'
 
-/**
- * ★ THE DECLARATION ANCHORS TOLERATE AN `export ` PREFIX (2026-09-04, play lane).
- *
- * These slices are a standing claim about a file this suite does not own, and the claim was one
- * character wide. `src.indexOf('\nfunction GearTab(')` returns -1 the moment that declaration is
- * exported, and `slice(at, -1)` is not empty — it is the WHOLE REST OF THE FILE (measured: the rack
- * slice goes 7,432 to 464,645 chars), at which point every positive assert below is satisfiable by
- * any match anywhere in the host. That is PATTERNS 08-23, *a guard satisfiable by being ANYWHERE*,
- * in the same slice this suite already closed it in once.
- *
- * ⚠ It did NOT go blind — the `has BOTH anchors` asserts below fire, which is why they are kept
- * exactly as they are. Widening the anchor is so a legitimate export does not cost eleven red
- * asserts across three suites; the presence check is what makes a MISSING anchor loud either way.
- * Anchored at line start on purpose: `src` is comment-stripped, so nothing in prose can match.
- */
-const declAt = (src: string, name: string) => {
-  const m = new RegExp(`^(?:export )?function ${name}\\(`, 'm').exec(src)
-  return m ? m.index : -1
-}
-/** the same, searched from an offset, returning the index of the leading newline (as `indexOf` did). */
-const declAfter = (src: string, name: string, from: number) => {
-  if (from < 0) return -1
-  const m = new RegExp(`\\n(?:export )?function ${name}\\(`).exec(src.slice(from))
-  return m ? from + m.index : -1
-}
 
 let pass = 0
 const fails: string[] = []

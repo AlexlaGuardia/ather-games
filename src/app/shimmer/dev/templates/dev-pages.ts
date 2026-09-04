@@ -64,6 +64,13 @@ export const DEV_GROUPS: Record<DevGroup, { label: string; note: string }> = {
 export const DEV_PAGES: DevPage[] = [
   // ── Looking glasses ─────────────────────────────────────────────────────────────────────────
   {
+    path: '/shimmer/dev/panel',
+    title: 'The keeper panel',
+    blurb: 'The inventory panel over a fabricated keeper, so a dark seat can be read without earning 75 Marks first.',
+    group: 'glass',
+    keywords: ['panel', 'inventory', 'seats', 'vessel', 'bracelet', 'focus', 'gear', 'satchel', 'letters', 'gems'],
+  },
+  {
     path: '/shimmer/dev/grey',
     title: 'The Grey',
     blurb: 'A Hollow, at the hour it actually exists, next to the ground it has to stand out from.',

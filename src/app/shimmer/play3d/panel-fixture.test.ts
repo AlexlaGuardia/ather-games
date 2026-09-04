@@ -17,8 +17,9 @@ import { PANEL_SCENARIOS, planPanel, seedPanel, type PanelScenarioId } from './p
 import { VESSEL_CAP, VESSELS, isBodyHeld, lettersOf } from './gems'
 import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { ALL_BANDS, laneRunes } from './cast'
+import { resolveLoadout } from './loadout'
 import { BAND_FOR_VESSEL } from './vessels'
-import { keeperLetters } from './book'
+import { keeperBook, keeperLetters } from './book'
 import { loadStowed } from './vessels'
 import { loadRuneInventory } from './rune-inventory'
 
@@ -173,6 +174,31 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
      `★ written seats every letter the richest focus word allows (${written.worn.focus.length} of a possible ${maxFor(written.birth, 'ultimate', 'state')})`)
   ok(VESSELS.some(k => written.worn[k].length === VESSEL_CAP),
      `★★ at least one vessel in 'written' is FULL — otherwise no scenario on this page ever shows a vessel with no dark seat, and "full" is the control the dark read is judged against`)
+}
+
+// ── H. ★★★ THE WORD ACTUALLY HOLDS — asserted through the SHIPPED resolver ──────────────────
+{
+  // ★★★ THIS SECTION EXISTS BECAUSE A SCREENSHOT FOUND WHAT 80 ASSERTS COULD NOT. Sections B-E all
+  // passed on a `written` keeper whose vessels said "no word": the letters were seated, the band was
+  // set, and the fixture owned only its birth rune — so `keeperBook` never held the move and
+  // `resolveLoadout` unbound it on read. Every assert was about what the fixture WROTE; none asked
+  // the shipped resolver what a keeper would actually get back. Ask it here, in world terms.
+  for (const id of ['written', 'rack'] as PanelScenarioId[]) {
+    wipe()
+    const plan = seedPanel(id)
+    const resolved = resolveLoadout([...plan.owned], plan.birth, keeperBook(plan.owned))
+    plan.slots.forEach((want, band) => {
+      if (!want) return
+      ok(resolved.slots[band] === want,
+         `★★★ ${id}: band ${band} still holds ${want} after the real resolve (got ${resolved.slots[band] ?? 'EMPTY'}) — a seated letter with no word is the picture this caught`)
+    })
+    for (const k of VESSELS) if (plan.worn[k].length > 0) {
+      const band = BAND_FOR_VESSEL[k]
+      ok(band >= 0 && resolved.slots[band] !== null,
+         `★★ ${id}: the ${k} carries a word, not just letters`)
+    }
+  }
+  wipe()
 }
 
 console.log(`panel-fixture: ${pass} passed, ${fails.length} failed`)
