@@ -54,7 +54,7 @@ deliberate, so nothing has been touched. The bench is how he answers it in one c
 `dev/panel/page.tsx` (new) · `dev/templates/dev-pages.ts` (registered — discovery is mandatory) ·
 `play3d/panel-fixture.ts` + `.test.ts` (new) · `play3d/gems.test.ts` + `vessels.test.ts` (anchors widened)
 
-## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 late (hub) — `ad3782a` **the three magenta focuses palleted, LIVE in `BUILD_ID 8on0oZ4rEiq-AgMbDySlp`, sentinel 24 → 21**; before that `712d620` **art-to-pixel: the way around the art blocker, first two vessel icons through it — LIVE in `BUILD_ID TYv2qQTAYLgEFhJuqMpz5` (play's deploy of `b2b61ba`)**, keeper-chrome 51/0, sweep 235/235, see *THE WAY AROUND THE BLOCKER* under the 💎 block. Before that: `380cb00` **the icon pass, first cut: gem stones, focus sprites in Gear, glove on the hand — LIVE in `BUILD_ID w_TC3g03z2hldtCSxpD81`**, keeper-chrome 47/0, sweep 235/235, three canon gaps filed, see *THE ICON PASS* under the 💎 block. Before that: `bff8d2d` **the chrome pass: every body on a `gx-plate`, one `SectionHead`, the birth lean remounted under Gear › Innate — LIVE in `BUILD_ID 8QCMVsuKqAR9akome2ztT`**, keeper-chrome 41/0, sweep 234/234, see *THE BODIES STAND ON PLATES* under the 💎 block. Before that: `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
+## 💠 Shimmer — **THE VESSELS BECAME GEAR, AND A CONCEPT WAS DELETED RATHER THAN ADDED** (2026-09-04, hub lane) · *Last touched 2026-09-04 night (hub) — `795b6f7` **ALEX RULED: a vessel is made for ONE word with exactly its seats; parts in the satchel, written vessels in Gear, cast bar a readout — LIVE in `BUILD_ID Z67qAk6Lk18hA2BKsGpzs`**, sweep 235/235, see *ALEX RULED* under the 💎 block. Before that `ad3782a` **the three magenta focuses palleted, LIVE in `BUILD_ID 8on0oZ4rEiq-AgMbDySlp`, sentinel 24 → 21**; before that `712d620` **art-to-pixel: the way around the art blocker, first two vessel icons through it — LIVE in `BUILD_ID TYv2qQTAYLgEFhJuqMpz5` (play's deploy of `b2b61ba`)**, keeper-chrome 51/0, sweep 235/235, see *THE WAY AROUND THE BLOCKER* under the 💎 block. Before that: `380cb00` **the icon pass, first cut: gem stones, focus sprites in Gear, glove on the hand — LIVE in `BUILD_ID w_TC3g03z2hldtCSxpD81`**, keeper-chrome 47/0, sweep 235/235, three canon gaps filed, see *THE ICON PASS* under the 💎 block. Before that: `bff8d2d` **the chrome pass: every body on a `gx-plate`, one `SectionHead`, the birth lean remounted under Gear › Innate — LIVE in `BUILD_ID 8QCMVsuKqAR9akome2ztT`**, keeper-chrome 41/0, sweep 234/234, see *THE BODIES STAND ON PLATES* under the 💎 block. Before that: `46156a3` **the shell followed: Satchel · Gear · Grimoire, every seat drawn — LIVE in `BUILD_ID s-W-G-tgukjS9QyaiFbII`**, see *THE SHELL FOLLOWED THE MODEL* under the 💎 block. Before that: `57a2ef9` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID pG1MsxQbt9YK78-WvDFK8`, 168 chunks**, built from `57a2ef9`. **Sweep 232 suites · 232 pass · 0 FAIL · 0 KILLED, started AND ended at `57a2ef9`** (exit read off the process, not a pipe; ceiling 600s, `plot.test.ts` 145s). vessels **48/0** (new, replaces loadouts 27/0), gems **44/0** (was 33), imbue **22/0**, tsc 7 (baseline), canon exit 0. Served md5 == disk on all three changed chunks, with a positive control that hit and the retired strings absent from every one. **Mutation-swept 12 ways: all 12 fire, 2 negative controls pass by design** — and two of those mutations found defects in MY OWN guards (a `!` that crashed instead of failing; a derive-assert satisfiable by a different match in the same slice). Detail lives under the 💎 block below, section **THE VESSELS BECAME GEAR**.*
 
 ## 🚪 Shimmer — **THE LANDING: THE ARCH WAS ALREADY BUILT, THE DOOR WAS NOT** (2026-09-03, hub lane) · *Last touched 2026-09-03 — `0f4ffa5` pushed, 0 unpushed, tree clean. ✅ **DEPLOYED `BUILD_ID TGTHpgxRIteEw0DTsPy_3`, 168 chunks**, built from `6c0b3d1` — this work plus the play lane's Passage shelves and trader in one deploy, after their tokens row cleared the red. **Sweep 231 suites · 231 pass · 0 FAIL · 0 KILLED, started AND ended at `6c0b3d1`** (ceiling 600s, `plot.test.ts` 145s). ⚠ The run before it started at `3624714` and the play lane landed two commits INSIDE it, one of them in `Shimmer3D.tsx` where my return leg lives — **231/231 about a tree that no longer existed.** Nothing was broken (their diff touched none of my lines, checked rather than assumed) but the number was void, so the tree was frozen by request and re-swept. Served md5 == disk md5 == public tunnel on both changed chunks; retired string 0 everywhere, positive controls present. landing **46/0** (new), landing-wiring **23/0** (new), crossing-out 38/0, crossing-in 38/0, rune-hold-doors 15/0/0-pending, rune-hold-fold green, gate-collapse 55/0. **Mutation-swept 12 ways across two sweeps: all 12 fire, 2 negative controls pass by design.** tsc 7 (baseline), canon 13 CLEAN.*
 
@@ -443,6 +443,49 @@ rinstick draws no claw; the glowfin's lure shares an index with the wrap.
 
 **Next:** per-tier vessels once Magii rules the four gaps and the tier model lands; a glove regen that KEEPS the seats
 (prompt the seats as dark wooden hollows on the splints, not on cloth); Alex judges the icons and the palettes.
+
+### ★★ ALEX RULED: A VESSEL IS MADE FOR ONE WORD, AND BEARS EXACTLY ITS SEATS (hub, 2026-09-04 night, in Chrome together)
+Reviewing the Gear tab live: *"each vessel is unique with a job.. once the gems are placed on it that's when it should be
+equippable.. like a bunch of parts in the inventory, you click the vessel and if the gem is in the inventory it asks if
+you'd like to place them; once the vessel is prepped it's sent into the gear tab.. a dropdown with complete vessels that
+you can equip or dismantle"* — then the sentence that changes canon: *"each vessel is unique that its made the word and
+none other so if the move its meant to represent has one slot then it only needs the one slot."* Filed for Magii to
+land in the brief (`CANON_GAPS.md`, athernyx `f912588`); it also DISSOLVES the one-vs-three seat gap — Greg's glove has
+one seat because it was cut for a one-letter word. The brief's two sentences were never in conflict once the seat count
+belongs to the word.
+
+**Built (`c148183` + `795b6f7`), LIVE in `BUILD_ID Z67qAk6Lk18hA2BKsGpzs`** (served == disk == public on the panel chunk;
+`leave this slot empty` and `what the keys carry` 0, the new strings present):
+- **`vessels.ts`:** `move` on a stowed vessel is what the paper was CUT for. Seats are derived from the word
+  (`seatLetters` / `seatCount`, via the same `lettersOf` the cast layer runs on), never stored. `shortOf`, `isComplete`
+  (written = every seat holds its letter), `completeVessels`, `placeGems` (from the bag, as many as it holds),
+  `dismantle` (stowed) and `dismantleWorn` (letters back, band cleared, paper to the satchel still cut for its word),
+  `setWord` for a legacy blank. **`equip` refuses an unwritten vessel**; wearing nothing no longer mints a blank when a
+  written one goes on (caught by the re-pointed suite). `buyVessel(kind, marks, word)` validates the word against the
+  kind's band.
+- **Satchel → `VesselParts`, ABOVE the letters** (the thing you act on, then what it consumes): icon · word · as many
+  seats as the word needs · what it is short · one button that places what the bag holds · dismantle. A legacy blank
+  says *never cut for a word* and gets a picker.
+- **Gear:** the WORN vessel lit, a `<select>` of written spares BY WORD, dismantle. **The cast bar is a READOUT** — the
+  picker is gone; two places to bind was the bug the letters card fixed the day before.
+- **Passage:** the vessel shelf cuts to order, one row per word you hold with no vessel yet, showing its seat count.
+- **Seats** draws the word's count, capped at `VESSEL_CAP`.
+
+**Guards:** vessels **57/0** (block C re-pointed to dismantle → place → equip + the cut-to-order refusals; an unwritten
+focus refuses too), gems 44/0 (shortOf on the satchel, seatCount on the rack), keeper-tabs **17/0** (seats off the
+word; the rack = one Seats mount + dropdown + dismantleWorn), keeper-chrome **57/0** (VesselParts mounted once, no
+picker in GearTab, the rack's select), panel-fixture 94/0, imbue 22/0, tsc 7. **Sweep 235/235 · 0 FAIL · 0 KILLED at
+`c148183`**, head unmoved — and the `coord.sh sweep` wrapper exited 0 this time (play fixed the `sess` crash).
+⚠ Three play-lane suites were re-pointed by hub; told them, with the corrected fragment resent from a file after a
+backticked one was eaten by the shell (memory `reference_shell_backticks_eat_text`, hit again).
+
+**Looked at:** through play's dev/panel on `:3203` (rack 2/2 — a two-letter word — dropdown by word, dismantle,
+readout) and the real satchel via a headless keeper seeded with their fixture (the parts list was below the fold →
+moved above the letters in `795b6f7`). Then loaded in Alex's Chrome at `ather.games/shimmer/dev/panel`.
+
+**Next (Alex's eye):** click a part, place its gems, watch it move to Gear, dismantle it back. Does "written" feel like
+finishing something? Is the native dropdown enough, or does the spare list want to be a row of vessels with icons?
+**Magii:** land the ruling in the brief (four gaps open, one dissolved). **Then:** the tier model.
 
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
