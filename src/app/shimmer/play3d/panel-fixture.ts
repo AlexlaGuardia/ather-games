@@ -43,6 +43,7 @@ import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { ALL_BANDS, laneRunes } from './cast'
 import { saveLoadout, type Loadout } from './loadout'
 import { saveRuneInventory } from './rune-inventory'
+import { saveBook } from './book'
 import { ELEMENTS, runesOf } from './birth/runes.data'
 
 export type PanelScenarioId = 'fresh' | 'loose' | 'partial' | 'written' | 'rack'
@@ -242,6 +243,17 @@ function write2(moveId: string, kind: Vessel, birth: string): StowedVessel | nul
 export function seedPanel(id: PanelScenarioId): PanelPlan {
   const plan = planPanel(id)
   saveRuneInventory({ birth: plan.birth, owned: [...plan.owned] })
+  // ★★★ THE BOOK IS A KEEPER KEY TOO, AND NOT WRITING IT MADE THIS FIXTURE NON-HERMETIC (2026-09-04).
+  // Found by opening the bench in ALEX'S browser, where a real saved book already existed. Every
+  // other key was seeded, so the scenario looked right on a clean profile and rendered "no word" plus
+  // "what was here no longer fits" on his — `resolveLoadout` reading a book that does not contain the
+  // word this fixture just bound, and being CORRECT to unbind it.
+  //
+  // ⚠⚠ THE VERIFICATION WAS TAKEN IN THE ONE ENVIRONMENT WHERE THE BUG CANNOT APPEAR. A headless
+  // shot runs on a fresh profile with no keeper state, so the book fell back to a derivation of the
+  // loadout I had just written and agreed with it. A fixture must OWN every key its render reads;
+  // anything it leaves alone is inherited from whoever used this browser last.
+  saveBook({ learned: plan.slots.filter((id): id is string => !!id) })
   saveLoadout(plan.slots)
   saveLetters({ bag: { ...plan.bag }, vessels: { bracelet: [...plan.worn.bracelet], focus: [...plan.worn.focus] } })
   saveStowed(plan.spares)

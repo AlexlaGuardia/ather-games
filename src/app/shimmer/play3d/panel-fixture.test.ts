@@ -17,11 +17,11 @@ import { PANEL_SCENARIOS, planPanel, seedPanel, type PanelScenarioId } from './p
 import { VESSEL_CAP, VESSELS, isBodyHeld, lettersOf } from './gems'
 import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { ALL_BANDS, laneRunes } from './cast'
-import { resolveLoadout } from './loadout'
+import { resolveLoadout, saveLoadout } from './loadout'
 import { BAND_FOR_VESSEL } from './vessels'
-import { keeperBook, keeperLetters } from './book'
+import { keeperBook, keeperLetters, saveBook } from './book'
 import { loadStowed } from './vessels'
-import { loadRuneInventory } from './rune-inventory'
+import { loadRuneInventory, saveRuneInventory } from './rune-inventory'
 
 let pass = 0
 const fails: string[] = []
@@ -197,6 +197,34 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
       ok(band >= 0 && resolved.slots[band] !== null,
          `★★ ${id}: the ${k} carries a word, not just letters`)
     }
+  }
+  wipe()
+}
+
+// ── I. ★★★ HERMETIC: A KEEPER'S EXISTING STATE MUST NOT LEAK INTO A SCENARIO ─────────────────
+{
+  // ★★★ THE REGRESSION FOR THE BUG ALEX'S BROWSER FOUND AND MINE COULD NOT. Every section above
+  // seeds into an EMPTY store, which is the one condition under which an unwritten key is harmless.
+  // Here the store is dirtied first with a plausible real keeper — a book that knows something else
+  // entirely — and the scenario must still come out as its label claims. If a future key joins
+  // KEEPER_KEY_SPECS and seedPanel does not write it, this is what goes red.
+  for (const id of ['written', 'rack'] as PanelScenarioId[]) {
+    wipe()
+    // a keeper who has played: a book of moves that has nothing to do with this scenario
+    const foreign = KEEPER_MOVES.filter(m => m.tier === 'tactical').slice(0, 3).map(m => m.id)
+    saveBook({ learned: foreign })
+    saveRuneInventory({ birth: 'ember', owned: ['ember'] })
+    saveLoadout([foreign[0] ?? null, null])
+
+    const plan = seedPanel(id)
+    const resolved = resolveLoadout([...plan.owned], plan.birth, keeperBook(plan.owned))
+    plan.slots.forEach((want, band) => {
+      if (!want) return
+      ok(resolved.slots[band] === want,
+         `★★★ ${id}: band ${band} holds ${want} even over a pre-existing keeper (got ${resolved.slots[band] ?? 'EMPTY'}) — the bench must not inherit whoever used this browser last`)
+    })
+    ok(!keeperBook(plan.owned).learned.some(m => foreign.includes(m) && !plan.slots.includes(m)),
+       `★★ ${id}: the foreign book did not survive the seed`)
   }
   wipe()
 }
