@@ -31,7 +31,7 @@
 set -euo pipefail
 
 REPO="/root/ather-games"
-COORD_DIR="$REPO/.coord"
+COORD_DIR="${COORD_DIR:-$REPO/.coord}"   # overridable so the tool can be tested on a scratch board
 CLAIMS_DIR="$COORD_DIR/claims"
 LOCKDIR="$COORD_DIR/build.lock"        # mkdir is atomic -> our mutex
 STALE_LOCK_SECS="${STALE_LOCK_SECS:-900}"   # 15m: a build that outlives this is dead, steal it
@@ -63,6 +63,7 @@ age_human() {
 
 signal() {
   # best-effort cortex signal, never fails the command
+  [ "${COORD_NO_SIGNAL:-}" = "1" ] && return 0   # tests only — never set this in a real window
   local content="$1"
   local args="{\"content\":\"[coord] $content\",\"from_agent\":\"jin-cc\""
   [ -n "$SESSION" ] && args="$args,\"session_id\":\"$SESSION\""
@@ -70,6 +71,19 @@ signal() {
   curl -s --max-time 8 -X POST "$MCP_URL" \
     -H "Content-Type: application/json" \
     -d "{\"tool\":\"cortex_signal\",\"arguments\":$args}" >/dev/null 2>&1 || true
+}
+
+# Is the session that holds a claim still alive? Ground truth, in order of strength (PATTERNS
+# 08-26, *three instruments, three different questions*): a `cc-end` boot row keyed to the session
+# proves it ENDED; its newest signal proves it was alive at that moment; nothing at all is UNKNOWN
+# — and unknown is printed as unknown, never laundered into "gone".
+holder_state() {
+  local sess="$1" db=/root/guardia-core/cortex.db ended last
+  command -v sqlite3 >/dev/null 2>&1 && [ -r "$db" ] || { echo unknown; return 0; }
+  ended=$(sqlite3 "$db" "SELECT booted_at FROM interface_boots WHERE interface='cc-end' AND agent_id='$sess' ORDER BY booted_at DESC LIMIT 1;" 2>/dev/null || true)
+  if [ -n "$ended" ]; then echo "ended $ended"; return 0; fi
+  last=$(sqlite3 "$db" "SELECT CAST((julianday('now')-julianday(MAX(created_at)))*86400 AS INTEGER) FROM signals WHERE session_id='$sess';" 2>/dev/null || true)
+  if [ -n "$last" ]; then echo "live $last"; else echo unknown; fi
 }
 
 cmd_claim() {
@@ -80,13 +94,52 @@ cmd_claim() {
   # overwrote a live claim, leaving the board asserting the wrong owner while both edited one file.
   # Re-claiming your OWN lane stays free (that is how you update the note), and an unattributed
   # claim stays claimable so a crashed window's lane can be taken.
+  #
+  # ★★ AND THE ESCAPE HATCH WAS THE HOLE (2026-09-03 eve — two hubs for six hours). The refusal above
+  # was in place and still a window took a LIVE hub claim ten seconds after booting onto an empty
+  # board, because `COORD_FORCE=1` asked for nothing: "take it anyway only if that window is gone"
+  # was a sentence, and a sentence cannot check anything. Now force has to PROVE the holder is gone,
+  # from the same ground truth PATTERNS names for liveness (`interface_boots` cc-end / `signals`):
+  #   · holder has a cc-end row          → dead, take it (says so in the signal)
+  #   · holder signalled < 30 min ago    → ALIVE, refused even with force; dbr them instead
+  #   · holder silent ≥ 30 min / unknown → take it, and the signal names the evidence
+  #   · COORD_FORCE=dead                 → the last override, for a wedged window you have LOOKED at
+  # And a claimer with no COORD_SESSION cannot take an attributed lane at all — an unattributed
+  # window cannot be asked "is that you?", so it cannot be trusted to answer "they are gone".
   if [ -f "$CLAIMS_DIR/$lane" ]; then
     local held; held=$(sed -n 's/^session=//p' "$CLAIMS_DIR/$lane")
-    if [ -n "$held" ] && [ -n "$SESSION" ] && [ "$held" != "$SESSION" ] && [ "${COORD_FORCE:-}" != "1" ]; then
-      echo "lane '$lane' is already claimed by session ${held:0:8} (yours: ${SESSION:0:8})."
-      sed 's/^/  /' "$CLAIMS_DIR/$lane"
-      echo "  take it anyway only if that window is gone: COORD_FORCE=1 coord claim $lane \"note\""
-      return 1
+    if [ -n "$held" ] && [ "$held" != "$SESSION" ]; then
+      local force="${COORD_FORCE:-}" state; state=$(holder_state "$held")
+      if [ -z "$SESSION" ]; then
+        echo "lane '$lane' is held by session ${held:0:8} and you have no COORD_SESSION — refusing."
+        echo "  an unattributed window cannot take an attributed lane. Set COORD_SESSION=<your cc-session-id>."
+        return 1
+      fi
+      if [ "$force" != "1" ] && [ "$force" != "dead" ]; then
+        echo "lane '$lane' is already claimed by session ${held:0:8} (yours: ${SESSION:0:8})."
+        sed 's/^/  /' "$CLAIMS_DIR/$lane"
+        echo "  holder: $state"
+        echo "  if that window is gone: COORD_FORCE=1 coord claim $lane \"note\"  (force checks the holder is really gone)"
+        echo "  if it is alive: dbr them — COORD_WIN=$WIN python3 /root/cortex/scripts/dbr.py send <their-lane> \"...\""
+        return 1
+      fi
+      case "$state" in
+        live\ *)
+          local age="${state#live }"
+          if [ "$force" != "dead" ] && [ "$age" -lt "${FORCE_QUIET_SECS:-1800}" ]; then
+            echo "REFUSING to force lane '$lane': holder ${held:0:8} signalled $(age_human "$age") ago — that window is ALIVE."
+            echo "  talk to it: COORD_WIN=$WIN python3 /root/cortex/scripts/dbr.py send <their-lane> \"...\""
+            echo "  only if you have looked and it is wedged: COORD_FORCE=dead coord claim $lane \"note\""
+            return 1
+          fi
+          state="holder last signalled $(age_human "$age") ago, no cc-end${force:+ (COORD_FORCE=$force)}" ;;
+        ended\ *) state="holder session ended ${state#ended }" ;;
+        *)        state="holder liveness UNKNOWN (no signals, no cc-end)" ;;
+      esac
+      echo "⚠ FORCE-TAKING lane '$lane' from session ${held:0:8} — $state"
+      signal "$WIN FORCE-TOOK lane '$lane' from session ${held:0:8} — $state"
+    elif [ -z "$held" ] && [ -n "$SESSION" ]; then
+      echo "⚠ taking an UNATTRIBUTED claim on '$lane' ($(sed -n 's/^owner=//p' "$CLAIMS_DIR/$lane"), $(sed -n 's/^ts=//p' "$CLAIMS_DIR/$lane")) — a crashed or legacy window; the board keeps no record of who it was."
     fi
   fi
   # ★ session= is written BEFORE note= on purpose: note is free text and is the

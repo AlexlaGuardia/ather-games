@@ -80,6 +80,8 @@ Alex assigns. From then on, prefix every `coord` call with `COORD_WIN=<lane> COO
 > This is here because on 2026-08-12 a booting window read a live hub claim, matched it on timestamp
 > alone, and told Alex it held the lane. The id was being passed on every call and thrown away.
 
+> **★ `COORD_FORCE=1` now has to PROVE the holder is gone (2026-09-04).** Two hubs ran for six hours after a window force-took a live claim ten seconds after booting onto an empty board. Force now reads `interface_boots` (`cc-end`) and `signals`: an ENDED holder is taken and said so; a holder that signalled in the last 30 min is **refused even with force** — dbr them instead; silent/unknown is taken with the evidence in the `[coord]` signal. `COORD_FORCE=dead` is the last override for a window you have LOOKED at and found wedged. A claimer with no `COORD_SESSION` cannot take an attributed lane at all.
+
 > ★ **RE-CLAIM WHEN YOUR WORK CHANGES — the claim note is a statement about what you are doing RIGHT
 > NOW, not a lock you take once (2026-08-15).** `claim` is idempotent on your own lane, so running it
 > again just updates the note. This was learned the boring way: a hub claim sat for **9h40m** still
