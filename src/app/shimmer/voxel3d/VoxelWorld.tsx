@@ -3077,10 +3077,11 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
     onChange()
   }
   const bag = Object.entries(l.bag)
-  const total = Object.values(allLetters(l)).reduce((a, b) => a + b, 0)
+  const loose = Object.values(l.bag).reduce((a, b) => a + b, 0)
+  const set = VESSELS.reduce((a, k) => a + l.vessels[k].length, 0)
   return (
     <div className="mt-4">
-      <SectionHead label="Letters" note={<><span className="gx-value text-white/50">{total}</span> gem{total === 1 ? '' : 's'}</>} />
+      <SectionHead label="Letters" note={<><span className="gx-value text-white/50">{loose}</span> loose · <span className="gx-value text-white/50">{set}</span> set</>} />
       <div className="flex flex-col gap-1">
         <div className="gx-plate px-2.5 py-1.5">
           <div className="flex items-baseline gap-2">
@@ -3108,10 +3109,10 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
                 <div key={id} className="flex items-center gap-2">
                   <span className="w-[76px] shrink-0 text-[11px]" style={{ color: r?.glow ?? '#fff' }}>{r?.name ?? id}</span>
                   <span className="text-[10px] text-white/40">{crystal?.replace(/_/g, ' ') ?? '—'} <span className="gx-value text-white/55">×{have}</span></span>
-                  <button type="button" disabled={why !== null} onPointerDown={() => doImbue(id)}
-                          className={`gx-btn ml-auto rounded border px-2 py-0.5 text-[10px] ${why === null ? 'border-amber-200/40 text-amber-200/90 hover:bg-white/[0.06]' : 'gx-inactive border-white/10 text-white/40'}`}>
-                    {why === null ? 'imbue' : imbueSentence(why, id).split(' — ')[0]}
-                  </button>
+                  {why === null
+                    ? <button type="button" onPointerDown={() => doImbue(id)}
+                              className="gx-btn ml-auto px-2 py-0.5 text-[10px]">imbue</button>
+                    : <span className="ml-auto text-right text-[9px] leading-tight text-white/30">{imbueSentence(why, id).split(' — ')[0]}</span>}
                 </div>
               )
             })}
