@@ -3482,6 +3482,8 @@ export const ITEM_PALETTES: Record<string, string[]> = {
   worn_blade:        ['#8a7f6a', '#5a5145', '#9aa0a6', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   worn_spike:        ['#8a7f6a', '#5a5145', '#9aa0a6', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   worn_rinstick:     ['#8a7f6a', '#5a5145', '#cfe6f0', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
+  vessel_bracelet_t1:['#50250d', '#784820', '#8a4d1a', '#8c5c2c', '#cb7209', '#db830a', '#e5910e', '#1a1a2e'],
+  vessel_glove_t1:   ['#38170f', '#94542d', '#b37035', '#c07e38', '#d7933a', '#e19c3b', '#e4a241', '#1a1a2e'],
   amber_sap: ['#c98c36', '#5a3a10', '#86612d', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],}
 
 const SHIMMER_DUST_1 = px(S, S, `
@@ -3576,6 +3578,8 @@ export const ITEM_FRAME_MAP: Record<string, string[]> = {
   worn_blade:        ['WORN_BLADE'],
   worn_spike:        ['WORN_SPIKE'],
   worn_rinstick:     ['WORN_RINSTICK'],
+  vessel_bracelet_t1: ['VESSEL_BRACELET_T1'],
+  vessel_glove_t1:   ['VESSEL_GLOVE_T1'],
   goldwood_spade:    ['GOLDWOOD_SPADE'],
   shimmeroak_spade:  ['SHIMMEROAK_SPADE'],
   starwillow_spade:  ['STARWILLOW_SPADE'],
@@ -3687,6 +3691,87 @@ export function paletteForItem(itemId: string): readonly string[] {
 export const PALETTE_COLLISIONS: string[] = Object.keys(SEED_PALETTES).filter(id => id in ITEM_PALETTES)
 
 // Export as SpriteAnims (single frame each, except mana_seed variants which animate)
+// ── ★ THE CASTING VESSELS — FIRST ICONS THROUGH `scripts/art-to-pixel.py` (2026-09-04) ─────────
+// Alex, the same evening: *"no need to wait on me to draw them myself.. for game art we need to find
+// a way around this blocker."* These two are the way around: a generated image → chroma-key cut-out →
+// 32×32 cell sampling → ≤7 colours + outline → the SAME editor mapping png2sprite uses (verified,
+// worst palette distance 0). Bracelet t1 came from the flux concept render (route A); the glove t1
+// from flux asked for pixel art directly (route B) — the render's glove was off-brief and unkeyable.
+// ⚠ PLACEHOLDER-GRADE ON PURPOSE and the brief still catches them: the glove's fingers are CLOSED
+// (brief: open-fingered, back-of-hand) and its seats are not a knuckle-line arc; the bracelet reads a
+// notch too saturated for a dormant state. Alex judges; regenerate through the same script to replace.
+// Tier is baked into the id (`_t1`) because the build has no vessel tier yet — see the 09-04 GBOARD
+// plan and the three [OPEN] gaps in CANON_GAPS.md that the tier model waits on.
+const VESSEL_BRACELET_T1 = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000000111000000000000
+  00000000000000001121000000000000
+  00000000000001111311000000000000
+  00000000001111332110000000000000
+  00000000111111114111110000000000
+  00000001111131411144411100000000
+  00000011111111110111144111000000
+  00000112110000000000111431100000
+  00000121100000000000001142100000
+  00000111000000000000000112110000
+  00001110000000000000000011210000
+  00001310000000000000000001210000
+  00001310000000000000000001410000
+  00001310000000000000000001310000
+  00001211000000000000000011310000
+  00001431100000000000111113110000
+  00001213111100000001177777310000
+  00001116677110000001775117710000
+  00000156556711111111571116610000
+  00000165113671177771366116610000
+  00000155111651776677236666110000
+  00000155515613631157111553100000
+  00000125555113611157222221100000
+  00000142211222662166444411000000
+  00000114444112366663111110000000
+  00000011111114213221100000000000
+  00000000000011444411000000000000
+  00000000000001111110000000000000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+
+const VESSEL_GLOVE_T1 = px(S, S, `
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+  00000000000000001111111000000000
+  00000000001111111177711111100000
+  00000000001111111476661111111000
+  00000000011776631466661277311000
+  00000000011766661566652466621000
+  00000000011766661444662466641000
+  00000000011662141411152334641000
+  00000000011661111411151111641000
+  00000000011661111411151111631000
+  00011111111561151441552113611000
+  00011111111266633355533444311000
+  00012776111144666666666666321000
+  00012666611136446666666666631000
+  00011266631247634666666666531000
+  00011223467766664664666666331000
+  00001112466666666444446666331000
+  00000112366666666411114666331000
+  00000011236666666411114666331000
+  00000011223466666411114666321000
+  00000001122346664641346663221000
+  00000001112223333444433332221000
+  00000000111223333223333333211000
+  00000000011122223333333222211000
+  00000000011233333444432223211000
+  00000000011244444566444444311000
+  00000000011233333334444443321000
+  00000000011222222222222222211000
+  00000000011111111111111111111000
+  00000000000000000000000000000000
+  00000000000000000000000000000000
+`)
+
 export const ITEM_ICONS: Record<string, SpriteAnim> = {
   sunfruit:         { frames: [SUNFRUIT], rate: 1 },
   moonberry:        { frames: [MOONBERRY], rate: 1 },
@@ -3753,6 +3838,8 @@ export const ITEM_ICONS: Record<string, SpriteAnim> = {
   worn_blade:        { frames: [WORN_BLADE], rate: 1 },
   worn_spike:        { frames: [WORN_SPIKE], rate: 1 },
   worn_rinstick:     { frames: [WORN_RINSTICK], rate: 1 },
+  vessel_bracelet_t1: { frames: [VESSEL_BRACELET_T1], rate: 1 },
+  vessel_glove_t1:   { frames: [VESSEL_GLOVE_T1], rate: 1 },
   goldwood_spade:    { frames: [GOLDWOOD_SPADE], rate: 1 },
   shimmeroak_spade:  { frames: [SHIMMEROAK_SPADE], rate: 1 },
   starwillow_spade:  { frames: [STARWILLOW_SPADE], rate: 1 },

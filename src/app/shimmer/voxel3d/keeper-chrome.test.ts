@@ -99,6 +99,14 @@ ok(!/<rect|stroke=/.test(stone), '★ no setting drawn around the stone — no r
 const gfAt2 = declAt(R, 'GatheringFocuses')
 const gf = gfAt2 >= 0 ? R.slice(gfAt2, R.indexOf('\n}\n', gfAt2)) : ''
 ok(/<ItemChip itemId=\{held\.toolId\}/.test(gf), '★ a gathering focus row draws the SAME painted sprite the bag draws — ItemChip, no second source')
+const rackAt2 = declAt(R, 'VesselRack')
+const rack2 = rackAt2 >= 0 ? R.slice(rackAt2, declAfter(R, 'GatheringFocuses', rackAt2)) : ''
+ok(/<ItemChip itemId=\{`vessel_\$\{VESSEL_NOUN\[kind\]\}_t1`\}/.test(rack2),
+   '★ the rack draws each vessel\'s icon through ItemChip, keyed by the NOUN (glove), never the kind id (focus) — `vessel_focus_t1` is a grey chip')
+// and the ids the rack can build must exist in the sprite table — the headless half of the screenshot that caught this
+import { ITEM_ICONS } from '../sprites/items'
+for (const noun of ['bracelet', 'glove']) ok(!!ITEM_ICONS[`vessel_${noun}_t1`], `ITEM_ICONS has vessel_${noun}_t1`)
+ok(!ITEM_ICONS['vessel_focus_t1'], 'no sprite is registered under the kind id — the noun is the only spelling')
 ok(!/'held'/.test(R) && /hand/.test(VESSEL_COPY(R)) && /wrist/.test(VESSEL_COPY(R)),
    '★ the vessel copy follows the 09-03 amendment: HAND vs WRIST, never "held" (a glove is worn)')
 function VESSEL_COPY(src: string) { return /const VESSEL_LANE_LABEL[^\n]*/.exec(src)?.[0] ?? '' }

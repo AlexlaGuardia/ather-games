@@ -3200,7 +3200,13 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
         const spare = stowed.map((v, i) => ({ v, i })).filter(({ v }) => v.kind === kind)
         return (
           <div key={kind} className="gx-plate px-2.5 py-1.5">
-            <div className="flex items-baseline gap-2">
+            <div className="flex items-center gap-2">
+              {/* the vessel's own icon — through the bag's `ItemChip`, so the rack and the bag can never
+                  disagree about what a bracelet looks like. `_t1` until the tier model lands.
+                  ⚠ Keyed by the NOUN, not the kind id: the kind is `focus`, the sprite is `vessel_glove_t1`.
+                  The first cut asked for `vessel_focus_t1`, the headless probe checked the ids I meant,
+                  and only the screenshot showed a grey chip — the measured thing was not the running thing. */}
+              <ItemChip itemId={`vessel_${VESSEL_NOUN[kind]}_t1`} size={26} />
               <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[kind]}</span>
               <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[kind]}</span>
               <span className="gx-value ml-auto text-[10px] text-white/45">{l.vessels[kind].length}/{VESSEL_CAP}</span>
