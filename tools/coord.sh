@@ -39,7 +39,15 @@ COORD_DIR="${COORD_DIR:-$REPO/.coord}"   # overridable so the tool can be tested
 CLAIMS_DIR="$COORD_DIR/claims"
 LOCKDIR="$COORD_DIR/build.lock"        # mkdir is atomic -> our mutex
 STALE_LOCK_SECS="${STALE_LOCK_SECS:-900}"   # 15m: a build that outlives this is dead, steal it
-WAIT_SECS="${WAIT_SECS:-240}"               # how long `build` waits for the lock before giving up
+# ⚠ SIZED AGAINST A SWEEP, NOT A BUILD (raised 240 -> 1200 on 2026-09-04, measured not guessed).
+# 240s was tuned when the only thing that held this lock was another BUILD, which takes ~90s. Since
+# sweeps joined the same mutex the same day, the longest legitimate hold is a full suite run — and
+# the very first real collision proved the point: a build queued behind a live sweep, printed
+# "held by ..., sweeping" for 240s, and then FAILED while the sweep was still perfectly healthy at
+# 8m56s. A build that gives up on a hold that is working as intended is friction the lock invented
+# for itself. Twenty minutes outlasts the worst sweep on record (plot.test.ts alone has read 266s
+# under load) and still ends in a sentence rather than hanging forever.
+WAIT_SECS="${WAIT_SECS:-1200}"              # how long `build` waits for the lock before giving up
 # Credentials come from the local untracked env file. This repo is public;
 # never inline a secret here.
 # shellcheck source=/dev/null
