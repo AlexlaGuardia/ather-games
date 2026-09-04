@@ -53,11 +53,13 @@ const R = from >= 0 && to > from ? HOST.slice(from, to) : ''
 const WEB_ROW = /border border-white\/10 bg-white\/\[0\.03\]/g
 ok(count(R, WEB_ROW) === 0,
    `★ no web row left in the panel bodies (${count(R, WEB_ROW)} × "border border-white/10 bg-white/[0.03]") — ask gx-plate`)
-const PLATE_FLOOR = 7
+// 7 → 6 on 2026-09-04: the bag + imbue CARDS became GRID CELLS (Alex: "a second inventory under the hotbar").
+// A cell is the bag's own idiom, not a plate; the floor drops by exactly the two cards that stopped existing.
+const PLATE_FLOOR = 6
 ok(count(R, /className=[{"][^"}]*\bgx-plate\b/g) >= PLATE_FLOOR,
    `the bodies stand on plates (${count(R, /className=[{"][^"}]*\bgx-plate\b/g)} gx-plate uses, floor ${PLATE_FLOOR})`)
 
-for (const label of ['Letters', 'Vessels', 'Cast bar', 'Innate', 'Gathering focuses', 'Satchel', 'Hotbar']) {
+for (const label of ['Gems', 'Vessels', 'Cast bar', 'Innate', 'Gathering focuses', 'Satchel', 'Hotbar']) {
   ok(new RegExp(`<SectionHead label="${label}"`).test(R), `section "${label}" is headed by SectionHead`)
 }
 ok(/<SectionHead label=\{`in the chest/.test(R), 'the chest is headed by SectionHead too')

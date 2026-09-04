@@ -3095,23 +3095,28 @@ export function Seats({ gems, seats = VESSEL_CAP }: { gems: readonly string[]; s
 }
 
 /**
- * The SATCHEL half — loose letters, and the road that makes one.
+ * ★ GEMS — A SECOND INVENTORY UNDER THE HOTBAR (Alex, 2026-09-04, looking at the real satchel):
+ * *"there's too much text.. it should be called Gems or runes.. like a second inventory under the
+ * hotbar."* So the letters card and the parts list became a GRID that reads like the bag: a cell per
+ * loose gem stack (the stone, a count), a cell per carried vessel (its icon, its seats as dots, lit
+ * when written), empty cells dark. Click a vessel cell and ONE strip under the grid says what it is
+ * and offers place / dismantle. Imbue is a row of cells too — crystal in, stone out — with the refusal
+ * on the tooltip, not in a sentence. The paragraph about words and paper is gone; it was true and it
+ * was in the way.
  *
- * Reads `keeperLetters` on every render on purpose: an imbue changes the bag under the cursor, and
- * a bind on the Loadout tab moves letters out of it. The runes and the book are pinned per mount;
- * the letters are not, and that difference is the whole reason this is a live card.
+ * Reads `keeperLetters` on every render on purpose: an imbue changes the bag under the cursor and a
+ * place moves letters out of it. The runes and the book are pinned per mount; the letters are not.
  */
 export function SatchelLetters({ owned, birth, items, onChange }: {
   owned: readonly string[]; birth: string | null
   /** the item inventory — an imbue takes an element crystal out of it */
   items: React.RefObject<Inventory>
-  /** called after an imbue so the host refreshes the hotbar and re-renders this card */
+  /** called after any change so the host refreshes the hotbar and re-renders this grid */
   onChange: () => void
 }) {
   const l = keeperLetters(owned, birth)
-  // ── ★ IMBUE — the in-world road to a letter (canon: "bound from a rune you know") ──
-  // One element crystal + a rune you HOLD → one gem in the bag. Per held rune, the row says which
-  // crystal, how many you carry, and refuses in words when you cannot (`imbueSentence`).
+  const stowed = loadStowed()
+  const [sel, setSel] = useState<number | null>(null)
   const doImbue = (id: string) => {
     const bag = items.current
     if (!bag) return
@@ -3120,144 +3125,145 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
     saveLetters(r.letters)
     onChange()
   }
-  const bag = Object.entries(l.bag)
-  const loose = Object.values(l.bag).reduce((a, b) => a + b, 0)
+  const loose = Object.entries(l.bag)
   const set = VESSELS.reduce((a, k) => a + l.vessels[k].length, 0)
+  const runeOf = (id: string) => RUNES.find(x => x.id === id)
+  const cellCls = 'relative flex h-12 w-12 flex-col items-center justify-center rounded-[2px] border text-[9px] font-mono shadow-[inset_0_0_8px_rgba(0,0,0,0.6)] transition-colors'
+  const COLS = 8
+  const cells = loose.length + stowed.length
+  const pad = Math.max(0, COLS - (cells % COLS || COLS))
   return (
     <div className="mt-4">
-      <SectionHead label="Letters" note={<><span className="gx-value text-white/50">{loose}</span> loose · <span className="gx-value text-white/50">{set}</span> set</>} />
-      <div className="flex flex-col gap-1">
-        <div className="gx-plate px-2.5 py-1.5">
-          <div className="flex items-baseline gap-2">
-            <span className="gx-title text-[11px] text-amber-200/80">bag</span>
-            <span className="gx-label text-[9px] text-white/25">loose · set when you bind</span>
-          </div>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {bag.length === 0
-              ? <span className="text-[10px] text-white/30">— empty — the Passage sells gems</span>
-              : bag.map(([id, n], k) => <GemChip key={`${id}-${k}`} id={id} n={n} />)}
-          </div>
-        </div>
-        <div className="gx-plate px-2.5 py-1.5">
-          <div className="flex items-baseline gap-2">
-            <span className="gx-title text-[11px] text-amber-200/80">imbue</span>
-            <span className="gx-label text-[9px] text-white/25">a crystal of the element · a rune you hold · one gem</span>
-          </div>
-          <div className="mt-1 flex flex-col gap-1">
-            {owned.map(id => {
-              const r = RUNES.find(x => x.id === id)
-              const crystal = crystalFor(id)
-              const have = items.current && crystal ? countItem(items.current, crystal) : 0
-              const why = items.current ? imbueWhy(items.current, owned, id) : 'no-crystal'
-              return (
-                <div key={id} className="flex items-center gap-2">
-                  <span className="w-[76px] shrink-0 text-[11px]" style={{ color: r?.glow ?? '#fff' }}>{r?.name ?? id}</span>
-                  <span className="text-[10px] text-white/40">{crystal?.replace(/_/g, ' ') ?? '—'} <span className="gx-value text-white/55">×{have}</span></span>
-                  {why === null
-                    ? <button type="button" onPointerDown={() => doImbue(id)}
-                              className="gx-btn ml-auto px-2 py-0.5 text-[10px]">imbue</button>
-                    : <span className="ml-auto text-right text-[9px] leading-tight text-white/30">{imbueSentence(why, id).split(' — ')[0]}</span>}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-        <div className="text-[10px] leading-snug text-white/30">
-          A move is a word; gems are its letters; the vessel is the paper. Two words naming one rune need two of its gems.
-          What you were born with — your doubled focus, your Manifestation — needs none.
-        </div>
+      <SectionHead label="Gems" note={<><span className="gx-value text-white/50">{loose.reduce((a, [, n]) => a + n, 0)}</span> loose · <span className="gx-value text-white/50">{set}</span> set</>} />
+      <div className="grid grid-cols-8 gap-1.5">
+        {loose.map(([id, n]) => {
+          const r = runeOf(id)
+          return (
+            <div key={`g-${id}`} title={`${r?.name ?? id} ×${n} — a letter; place it on a vessel cut for a word that needs it`}
+                 className={`${cellCls} border-amber-200/[0.14] bg-black/45`}>
+              <GemStone glow={r?.glow ?? '#fff'} size={24} />
+              <span className="gx-value mt-0.5 text-white/85">{n}</span>
+            </div>
+          )
+        })}
+        {stowed.map((v, i) => {
+          const seats = seatCount(v, birth)
+          const written = isComplete(v, birth)
+          const word = v.move ? (castForMove(v.move)?.label ?? v.move) : null
+          return (
+            <button key={`v-${i}`} type="button" onPointerDown={() => setSel(sel === i ? null : i)}
+                    title={word ? `${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ''}` : `${VESSEL_NOUN[v.kind]} — never cut for a word`}
+                    className={`${cellCls} ${sel === i ? 'border-amber-300 bg-amber-300/15' : written ? 'border-amber-200/45 bg-black/45' : 'border-amber-200/[0.14] bg-black/45'} hover:border-amber-200/60`}>
+              <ItemChip itemId={`vessel_${VESSEL_NOUN[v.kind]}_t1`} size={26} />
+              {/* the seats as dots — the word's count, lit where a letter sits */}
+              <span className="absolute bottom-1 flex gap-[3px]">
+                {Array.from({ length: Math.min(VESSEL_CAP, seats) }, (_, k) => (
+                  <span key={k} className={`h-[5px] w-[5px] rounded-full ${v.gems[k] ? 'bg-amber-200 shadow-[0_0_4px_#d4a843]' : 'bg-black/60 shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]'}`} />
+                ))}
+              </span>
+            </button>
+          )
+        })}
+        {Array.from({ length: pad }, (_, k) => (
+          <div key={`e-${k}`} className={`${cellCls} border-white/[0.06] bg-black/30`}><span className="text-white/15">·</span></div>
+        ))}
       </div>
+      {sel !== null && stowed[sel] && (
+        <VesselParts owned={owned} birth={birth} index={sel} onChange={() => { onChange(); if (!loadStowed()[sel]) setSel(null) }} />
+      )}
+      {/* ── IMBUE, as cells: a crystal of the element and a rune you hold → one gem. Refusal on the tooltip. ── */}
+      {owned.length > 0 && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className="gx-label mr-1 text-[9px] text-white/30">imbue</span>
+          {owned.map(id => {
+            const r = runeOf(id)
+            const crystal = crystalFor(id)
+            const have = items.current && crystal ? countItem(items.current, crystal) : 0
+            const why = items.current ? imbueWhy(items.current, owned, id) : 'no-crystal'
+            const can = why === null
+            return (
+              <button key={id} type="button" disabled={!can} onPointerDown={() => doImbue(id)}
+                      title={can ? `imbue: one ${crystal?.replace(/_/g, ' ')} → one ${r?.name ?? id} gem` : imbueSentence(why!, id)}
+                      className={`${cellCls} h-10 w-10 ${can ? 'border-amber-200/45 bg-black/45 hover:border-amber-200/80' : 'border-white/[0.06] bg-black/30 opacity-50'}`}>
+                {crystal ? <ItemChip itemId={crystal} size={18} /> : null}
+                <span className="absolute -right-1 -top-1"><GemStone glow={r?.glow ?? '#fff'} size={12} /></span>
+                <span className="gx-value absolute bottom-0.5 right-1 text-[8px] text-white/70">{have}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
 /**
- * The GEAR half — the vessels you own, and which one you are wearing.
- *
- * ★ THE WORD SHOWN ON A VESSEL COMES FROM `slots`, THE TAB'S LIVE STATE, NOT FROM STORAGE. A bind
- * two rows below this rack writes the loadout and re-renders; reading storage here instead would
- * show the previous word for one frame in private mode, where `saveLoadout` does not persist.
- * The GEMS come from `keeperLetters`, which is the same live read the bind moves letters through.
+ * The ONE strip for a selected vessel part: what it is, its seats, what it is short, place / dismantle.
+ * (Alex, 2026-09-04: *"you click the vessel and if the gem is in the inventory it asks if you'd like to
+ * place them"* — this is the ask.) A legacy blank gets the word picker here instead of a place button.
  */
-/**
- * ★ VESSELS ARE PARTS UNTIL THEY ARE WRITTEN (Alex, 2026-09-04): *"a bunch of parts in the inventory —
- * you click the vessel and if the gem is in the inventory it asks if you'd like to place them; once the
- * vessel is prepped it's sent into the gear tab."* This is that list: every stowed vessel, cut for its
- * word, with its seats drawn (as many as the WORD needs) and one button that places what the bag holds.
- * A written one says so and is already on the Gear tab's dropdown; a legacy blank asks for a word first.
- */
-export function VesselParts({ owned, birth, onChange }: {
+export function VesselParts({ owned, birth, index, onChange }: {
   owned: readonly string[]; birth: string | null
+  /** which stowed vessel is selected in the grid */
+  index: number
   /** letters or vessels changed — the host re-renders and the Gear tab re-reads the stowed list */
   onChange: () => void
 }) {
   const [note, setNote] = useState<string | null>(null)
   const stowed = loadStowed()
+  const v = stowed[index]
   const l = keeperLetters(owned, birth)
   const book = keeperBook(owned)
   const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
   const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
-  const doPlace = (i: number) => {
-    const { r, letters } = placeGems(i, birth, l)
-    setNote(r.say)
-    if (!r.ok) return
+  if (!v) return null
+  const seats = seatCount(v, birth)
+  const short = shortOf(v, birth)
+  const written = isComplete(v, birth)
+  const placeable = short.filter(r => (l.bag[r] ?? 0) > 0).length
+  const kindBand = BAND_FOR_VESSEL[v.kind]
+  const doPlace = () => {
+    const { r, letters } = placeGems(index, birth, l)
+    setNote(r.say); if (!r.ok) return
     saveLetters(letters); onChange()
   }
-  const doDismantle = (i: number) => { saveLetters(dismantle(i, l)); setNote('Taken apart. The letters are back in your bag.'); onChange() }
-  const doWord = (i: number, kind: Vessel, word: string) => { if (setWord(i, word, birth)) { setNote(`Cut for ${wordOf(word)}.`); onChange() } }
-  if (!stowed.length) return null
+  const doDismantle = () => { saveLetters(dismantle(index, l)); setNote('Taken apart. The letters are back in your bag.'); onChange() }
+  const doWord = (word: string) => { if (setWord(index, word, birth)) { setNote(`Cut for ${wordOf(word)}.`); onChange() } }
   return (
-    <div className="mt-4">
-      {/* above the letters on purpose: the vessel is what a keeper ACTS on, the letters are what it consumes */}
-      <SectionHead label="Vessels" note={<><span className="gx-value text-white/50">{stowed.length}</span> carried · written ones are on Gear</>} />
-      <div className="flex flex-col gap-1">
-        {stowed.map((v, i) => {
-          const seats = seatCount(v, birth)
-          const short = shortOf(v, birth)
-          const written = isComplete(v, birth)
-          const canPlace = short.some(r => (l.bag[r] ?? 0) > 0)
-          const kindBand = BAND_FOR_VESSEL[v.kind]
-          return (
-            <div key={i} className={`gx-plate px-2.5 py-1.5 ${written ? 'is-lit' : ''}`}>
-              <div className="flex items-center gap-2">
-                <ItemChip itemId={`vessel_${VESSEL_NOUN[v.kind]}_t1`} size={26} />
-                <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[v.kind]}</span>
-                {v.move
-                  ? <span className="gx-title text-[11px] text-white/80">for {wordOf(v.move)}</span>
-                  : <span className="gx-label text-[9px] text-white/30">never cut for a word</span>}
-                <span className="gx-value ml-auto text-[10px] text-white/45">{v.gems.length}/{seats}</span>
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                {v.move ? <Seats gems={v.gems} seats={seats} /> : null}
-                {written
-                  ? <span className="gx-label ml-1 text-[9px] text-amber-200/70">written · on the Gear tab</span>
-                  : v.move
-                    ? <span className="text-[9px] text-white/35">short {short.map(runeName).join(', ')}</span>
-                    : (
-                      <select value="" onChange={e => { if (e.target.value) doWord(i, v.kind, e.target.value) }}
-                              className="gx-btn bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal">
-                        <option value="">cut it for a word you hold…</option>
-                        {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
-                          .filter(m => seatLetters({ kind: v.kind, gems: [], move: m.id }, birth).length > 0)
-                          .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    )}
-                {!written && v.move && (
-                  <button type="button" disabled={!canPlace} onPointerDown={() => doPlace(i)}
-                          className={`gx-btn ml-auto px-2 py-0.5 text-[10px] ${canPlace ? '' : 'gx-inactive'}`}>
-                    {canPlace ? `place ${short.filter(r => (l.bag[r] ?? 0) > 0).length} gem${short.filter(r => (l.bag[r] ?? 0) > 0).length === 1 ? '' : 's'}` : 'none of its letters in the bag'}
-                  </button>
-                )}
-                {v.gems.length > 0 && (
-                  <button type="button" onPointerDown={() => doDismantle(i)}
-                          className="gx-btn gx-inactive px-2 py-0.5 text-[10px] hover:opacity-100">dismantle</button>
-                )}
-              </div>
-            </div>
-          )
-        })}
-        {note && <div className="text-[10px] leading-snug text-amber-100/70">{note}</div>}
-      </div>
+    <div className={`gx-plate mt-1.5 flex flex-wrap items-center gap-2 px-2.5 py-1.5 ${written ? 'is-lit' : ''}`}>
+      <ItemChip itemId={`vessel_${VESSEL_NOUN[v.kind]}_t1`} size={22} />
+      <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[v.kind]}</span>
+      {v.move
+        ? <span className="gx-title text-[11px] text-white/80">for {wordOf(v.move)}</span>
+        : <span className="gx-label text-[9px] text-white/30">never cut for a word</span>}
+      {v.move ? <Seats gems={v.gems} seats={seats} /> : null}
+      <span className="gx-value text-[10px] text-white/45">{v.gems.length}/{seats}</span>
+      {written
+        ? <span className="gx-label text-[9px] text-amber-200/70">written · on Gear</span>
+        : v.move
+          ? short.length > 0 && <span className="text-[9px] text-white/35">short {short.map(runeName).join(', ')}</span>
+          : (
+            <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
+                    className="gx-btn bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal">
+              <option value="">cut it for a word you hold…</option>
+              {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
+                .filter(m => seatLetters({ kind: v.kind, gems: [], move: m.id }, birth).length > 0)
+                .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          )}
+      <span className="ml-auto flex items-center gap-1.5">
+        {!written && v.move && (
+          <button type="button" disabled={!placeable} onPointerDown={doPlace}
+                  className={`gx-btn px-2 py-0.5 text-[10px] ${placeable ? '' : 'gx-inactive'}`}>
+            {placeable ? `place ${placeable}` : 'no letters for it'}
+          </button>
+        )}
+        {v.gems.length > 0 && (
+          <button type="button" onPointerDown={doDismantle}
+                  className="gx-btn gx-inactive px-2 py-0.5 text-[10px] hover:opacity-100">dismantle</button>
+        )}
+      </span>
+      {note && <span className="w-full text-[10px] leading-snug text-amber-100/70">{note}</span>}
     </div>
   )
 }
@@ -3819,7 +3825,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   return (
     <KeeperFrame tab={tab} setTab={setTab} onClose={onClose}
                  hint={tab === 'satchel' ? hint : undefined}>
-      {tab === 'satchel' && <>{satchel}<VesselParts owned={runesHeld} birth={birthRune} onChange={onLetters} /><SatchelLetters owned={runesHeld} birth={birthRune} items={inv} onChange={onLetters} /></>}
+      {tab === 'satchel' && <>{satchel}<SatchelLetters owned={runesHeld} birth={birthRune} items={inv} onChange={onLetters} /></>}
       {tab === 'grimoire' && <GrimoireTab party={party} inv={inv} onChange={onParty} spiritIndex={spiritIndex} />}
       {tab === 'gear' && <GearTab items={inv} onLetters={onLetters} tools={tools} skills={skills} />}
     </KeeperFrame>
