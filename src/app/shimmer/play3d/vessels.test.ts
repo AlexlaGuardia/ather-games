@@ -159,7 +159,7 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
 {
   const src = noComments(readFileSync(new URL('../voxel3d/VoxelWorld.tsx', import.meta.url), 'utf8'))
   const at = src.indexOf('function VesselRack(')
-  const end = src.indexOf('\nfunction LoadoutTab(', at)
+  const end = src.indexOf('\nfunction GearTab(', at)
   ok(at >= 0 && end > at, 'VoxelWorld has a VesselRack, sliced on both anchors')
   const rack = at >= 0 && end > at ? src.slice(at, end) : ''
   ok(/equip\(kind, i, birth/.test(rack) && /loadStowed\(\)/.test(rack) && /onEquipped\(/.test(rack),
@@ -170,8 +170,8 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
 
   // ★ Alex's split, asserted as a split: the letters are on the satchel and NOWHERE else.
   ok(/\{tab === 'satchel' && <>\{satchel\}<SatchelLetters /.test(src), '★ the SATCHEL carries the letters card')
-  const runesAt = src.indexOf('<RunesTab ')
-  ok(runesAt >= 0 && !/LettersCard/.test(src), '★ the retired LettersCard is gone entirely — no tab renders it')
+  ok(!/LettersCard/.test(src) && !/<RunesTab /.test(src),
+     '★ the retired LettersCard is gone entirely — and so is the Runes tab that carried it (Alex, 2026-09-04: Gear holds the vessels)')
   const satchelUses = src.match(/<SatchelLetters /g) ?? []
   ok(satchelUses.length === 1, '★ ONE mount of the letters card. Two was the bug Alex ruled out; three tabs would be worse')
   ok(!/<LoadoutSwitch/.test(src) && !/swapTo\(/.test(src), 'the pair-swap is gone from the host, not merely unused')

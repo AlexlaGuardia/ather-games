@@ -5,8 +5,9 @@
  *
  * ── WHY A FRAME EXISTS AT ALL (Alex, 2026-08-12: "expand it to have tabs") ─────────────────────
  * The satchel used to be the only thing behind `I`, so it could be its own window. It is now one
- * of five: satchel · runes · grimoire · tools · loadout. Five screens that each drew their own
- * window would be five different-sized windows sharing one keystroke.
+ * of three: satchel · gear · grimoire (five until 2026-09-04 — see `KEEPER_TABS` for what folded
+ * where). Screens that each drew their own window would be that many different-sized windows
+ * sharing one keystroke.
  *
  * ── ★ THE FRAME IS A FIXED SIZE, AND THAT IS THE WHOLE POINT ──────────────────────────────────
  * `BagPanel` is shrink-to-fit: its width is the widest thing inside it. That is why every hint
@@ -32,36 +33,44 @@
 
 import type { ReactNode } from 'react'
 
-export type KeeperTab = 'satchel' | 'runes' | 'grimoire' | 'tools' | 'loadout'
+export type KeeperTab = 'satchel' | 'gear' | 'grimoire'
 
 /**
- * Tab order is the keeper's own chain, not alphabetical and not arbitrary:
- * what you CARRY → what you ARE → what you KNOW → what you WORK with → what you BRING.
- * `rune-inventory.ts` states the mechanical half of that chain (owned runes → known moves →
- * a loadout slot → a cast archetype), so runes sit left of loadout for the same reason.
+ * Tab order is the keeper's own chain: what you CARRY → what you WEAR → what you KNOW.
+ *
+ * ★ THREE TABS, NOT FIVE (Alex, 2026-09-03 eve, the pinned inventory-menu conversation).
+ *   · RUNES is gone — *"not convinced we need that runes tab."* Its move list was the same data the
+ *     bind picker on Gear draws from, and the runes you hold are one chip row. The letters that
+ *     briefly lived on it are carried things, so they moved to the Satchel with the bag.
+ *   · TOOLS folded INTO Gear — canon's word for a Blade, Spike or Rinstick is *gathering focus*
+ *     (`CANON/glossary.md` § Focus: *"two shapes, one class"*), the same class as the casting glove
+ *     the Gear tab already equips. Two tabs for one class of object was the build asserting a
+ *     distinction canon does not draw.
+ *   · LOADOUT is renamed GEAR — Alex's word in both windows (*"from the gear tab they can add them
+ *     in"*, *"the seats should show up in gear"*). The vessels are gear you own singly since
+ *     `57a2ef9`; the label follows the model.
+ *
+ * ⚠ THE OLD `runes` / `tools` / `loadout` IDS ARE GONE FROM THE TYPE ON PURPOSE. A stale
+ * `setTab('loadout')` anywhere is a compile error, not a tab that silently never opens.
  */
 export const KEEPER_TABS: { id: KeeperTab; label: string }[] = [
   { id: 'satchel', label: 'Satchel' },
-  { id: 'runes', label: 'Runes' },
+  { id: 'gear', label: 'Gear' },
   { id: 'grimoire', label: 'Grimoire' },
-  { id: 'tools', label: 'Tools' },
-  { id: 'loadout', label: 'Loadout' },
 ]
 
 /**
- * ★ "Runes", not "Runebook" — and that is a canon decision, not a style one.
+ * ★ "Gear" and "Satchel" are plain UI words; "Grimoire" is canon — and that asymmetry is deliberate.
  *
  * `Grimoire` is a ruled canon instrument (`CANON/glossary.md`): a keeper-MADE device, the first
  * instrument for studying spirits, with two ruled faces (what a spirit *is*, and who *yours* are).
  * A tab named after it is naming a real object in the world, which is why it is spelled the way
  * canon spells it.
  *
- * There is no canon counterpart for runes — "runebook" appears nowhere in CANON, and runes do not
- * behave like something a keeper catalogues in a device: one is innate at birth and the others are
- * *trained through practice* (`glossary.md` § Rune System). So this tab is labelled with the plain
- * UI word for its contents, which asserts nothing about an in-world instrument and therefore cannot
- * become accidental canon. If a keeper's rune-instrument should exist, that is Magii's ruling and
- * this label changes after it lands — not before.
+ * The other two labels assert nothing about an in-world object, so they cannot become accidental
+ * canon. The canon words live INSIDE Gear — glove, bracelet, gathering focus — where the objects
+ * are. (The retired Runes tab was labelled the same way for the same reason; "runebook" appears
+ * nowhere in CANON and a keeper's rune-instrument, should one be ruled, is Magii's call.)
  */
 
 /** One place for the frame's dimensions. See the header: no tab may override these. */

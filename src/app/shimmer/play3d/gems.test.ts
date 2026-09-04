@@ -183,7 +183,7 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   ok(/isOwner\) return/.test(op), 'granting is owner-gated inside the op; bare is not')
   ok(/shortFor\(/.test(src), 'the cast panel asks shortFor — an option the keeper cannot write says which letters are short')
   // ★★ THE LETTERS, SPLIT BY WHERE THE THING LIVES (Alex, 2026-09-03): the BAG on the Satchel, the
-  // VESSELS on the Loadout, and nothing on Runes. ⚠ RE-POINTED from `LettersCard`, which this block
+  // VESSELS on Gear (was Loadout), and no Runes tab at all since 09-04. ⚠ RE-POINTED from `LettersCard`, which this block
   // anchored on until the split retired it. Every behavioural assert below is the original, re-aimed
   // at whichever half now owns it; the two-tab assert is REPLACED rather than dropped, because the
   // arrangement is exactly what was ruled and an unasserted arrangement drifts back.
@@ -195,7 +195,7 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   ok(/keeperLetters\(owned, birth\)/.test(card) && !/useState\(/.test(card), 'the card reads keeperLetters on every render — never pinned in useState')
   ok(/l\.bag/.test(card), 'the SATCHEL half renders the bag')
   const rackAt = src.indexOf('function VesselRack(')
-  const rackEnd = src.indexOf('\nfunction LoadoutTab(', rackAt)
+  const rackEnd = src.indexOf('\nfunction GearTab(', rackAt)
   ok(rackAt >= 0 && rackEnd > rackAt, 'the rack slice has BOTH anchors')
   const rack = rackAt >= 0 && rackEnd > rackAt ? src.slice(rackAt, rackEnd) : ''
   ok(/VESSELS\.map\(/.test(rack) && /VESSEL_CAP/.test(rack), 'the LOADOUT half renders both vessels from the list, not two literals, and the cap')
@@ -210,11 +210,13 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   const bagUses = src.split('<SatchelLetters ').length - 1
   const rackUses = src.split('<VesselRack ').length - 1
   ok(bagUses === 1 && rackUses === 1, `★ ONE mount each — the bag on the satchel, the vessels on the loadout (${bagUses}/${rackUses})`)
-  const runesTab = src.slice(src.indexOf('function RunesTab('), src.indexOf('function ToolsTab('))
-  ok(!/<SatchelLetters /.test(runesTab) && !/<VesselRack /.test(runesTab),
-     '★ the RUNES tab carries neither — it is what you ARE, and a gem inventory was never that')
-  const loadTab = src.slice(src.indexOf('function LoadoutTab('), src.indexOf('ALL_BANDS.map((kind, i) =>', src.indexOf('function LoadoutTab(')))
-  ok(/<VesselRack /.test(loadTab) && !/<SatchelLetters /.test(loadTab), 'the rack sits in LoadoutTab above the slots, and the bag does not follow it there')
+  // ⚠ RE-POINTED 2026-09-04: this sliced RunesTab..ToolsTab to prove Runes carried no card. Both
+  // functions are gone (Runes retired, Tools folded into Gear), and a slice between two missing
+  // anchors is '' — every assert on it passes vacuously. So assert the retirement itself instead.
+  ok(!/function RunesTab\(/.test(src) && !/function ToolsTab\(/.test(src),
+     '★ no RUNES tab and no TOOLS tab — Runes retired, Tools folded into Gear (Alex, 2026-09-04)')
+  const loadTab = src.slice(src.indexOf('function GearTab('), src.indexOf('ALL_BANDS.map((kind, i) =>', src.indexOf('function GearTab(')))
+  ok(/<VesselRack /.test(loadTab) && !/<SatchelLetters /.test(loadTab), 'the rack sits in GearTab above the slots, and the bag does not follow it there')
 }
 
 console.log(`gems: ${pass} passed, ${fails.length} failed`)

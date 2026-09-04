@@ -94,7 +94,7 @@ for (const [i, m] of pairs.entries()) {
 // So the ratchet stays exactly as designed and the REPORT changes: every offender is printed with
 // its line number and the tracking value it hand-rolls, and the spellings are tallied, because
 // "one role spelled nine ways" is the actual defect and a bare total cannot show it.
-const HAND_ROLLED_BASELINE = 29
+const HAND_ROLLED_BASELINE = 26
 const hudLines = HUD.split('\n')
 const handRolled = [...block.matchAll(/className="[^"]*\buppercase\b[^"]*"/g)]
   .filter(m => !m[0].includes('gx-label'))

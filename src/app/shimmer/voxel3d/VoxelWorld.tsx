@@ -356,7 +356,7 @@ const CAST_ACTION_BY_KIND: Record<Exclude<SlotKind, 'passive' | 'trait'>, Action
 const CAST_ACTIONS: readonly ActionId[] =
   ALL_BANDS.map(k => CAST_ACTION_BY_KIND[k as Exclude<SlotKind, 'passive' | 'trait'>])
 import { RUNES } from '../play3d/birth/runes.data'
-import { knownMoves, learnableMoves, MOVES_BY_RUNE } from '../play3d/keeper-moves'
+import { knownMoves } from '../play3d/keeper-moves'
 import { CAST_SLOTS, ALL_BANDS, derivePassive, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
 import { saveLoadout, setSlot, resolveLoadout, emptySlotWhy,
          type Loadout, type ResolvedLoadout } from '../play3d/loadout'
@@ -3021,8 +3021,9 @@ function BirthLean({ birth }: { birth: string | null }) {
  *
  *   SATCHEL → `SatchelLetters`: the BAG and IMBUE. Gems are carried; they live where carried
  *             things live, next to the grid that holds everything else a keeper picked up.
- *   LOADOUT → `VesselRack`: the vessels themselves, equipped. Not a readout — the gear slots.
- *   RUNES   → nothing. That tab is what you ARE; a gem inventory was never that.
+ *   GEAR    → `VesselRack`: the vessels themselves, equipped, every seat drawn. Not a readout — the gear slots.
+ *   RUNES   → retired 2026-09-04 (Alex: *"not convinced we need that runes tab"*). Its move list
+ *             was the Gear bind picker's own data; nothing on it was lost.
  *
  * ★ AND THE VESSELS ARE NOW GEAR, NOT A FIXED PAIR (`vessels.ts`): *"yes, gems ride the vessel"*.
  * Equip a different bracelet and the letters written on it come with it, because canon's *the
@@ -3038,6 +3039,30 @@ function GemChip({ id, n }: { id: string; n?: number }) {
     <span className="gx-label rounded px-1.5 py-0.5 text-[10px]"
           style={{ color: r?.glow ?? '#fff', background: `${r?.glow ?? '#fff'}18` }}>
       {r?.name ?? id}{n !== undefined && n > 1 && <span className="ml-1 text-white/45">×{n}</span>}
+    </span>
+  )
+}
+
+/**
+ * ★ THE SEATS SHOW UP IN GEAR (Alex, 2026-09-03 eve, verbatim: *"the seats should show up in gear"*).
+ * Every vessel bears exactly `VESSEL_CAP` seats, innately (glossary § Focus / § Bracelet), and the
+ * design brief's read is the whole point: *"an empty seat is dark and visibly empty — a player reads
+ * how loaded a keeper is from across the square."* So this draws ALL the seats, filled or dark, and
+ * never collapses an empty vessel into a sentence: "nothing set" says the count is zero; three dark
+ * seats say it is zero OF THREE, which is the number a keeper is actually deciding on.
+ * ⚠ Never a socket, slot, bezel or prong in the LOOK (brief: *"the vessel closed around it"*) — a
+ * dark seat is a dim rounded void in the weave, not a hole with a rim.
+ */
+function Seats({ gems }: { gems: readonly string[] }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {Array.from({ length: VESSEL_CAP }, (_, k) => {
+        const id = gems[k]
+        return id
+          ? <GemChip key={`${id}-${k}`} id={id} />
+          : <span key={`dark-${k}`} role="img" aria-label="empty seat" title="empty seat"
+                  className="inline-block h-[18px] w-[26px] rounded-full bg-white/[0.04] shadow-[inset_0_0_4px_rgba(0,0,0,0.6)]" />
+      })}
     </span>
   )
 }
@@ -3119,7 +3144,7 @@ function SatchelLetters({ owned, birth, items, onChange }: {
 }
 
 /**
- * The LOADOUT half — the vessels you own, and which one you are wearing.
+ * The GEAR half — the vessels you own, and which one you are wearing.
  *
  * ★ THE WORD SHOWN ON A VESSEL COMES FROM `slots`, THE TAB'S LIVE STATE, NOT FROM STORAGE. A bind
  * two rows below this rack writes the loadout and re-renders; reading storage here instead would
@@ -3162,9 +3187,7 @@ function VesselRack({ owned, birth, slots, onEquipped }: {
               <span className="rounded border border-amber-200/40 px-1.5 py-0.5 text-[10px] text-amber-200/90">
                 {kind === 'bracelet' ? 'worn' : 'held'}
               </span>
-              {l.vessels[kind].length === 0
-                ? <span className="text-[10px] text-white/30">— nothing set —</span>
-                : l.vessels[kind].map((id, k) => <GemChip key={`${id}-${k}`} id={id} n={undefined} />)}
+              <Seats gems={l.vessels[kind]} />
               <span className="ml-1 text-[10px] text-white/40">{wordOf(worn) ?? 'no word'}</span>
             </div>
             {/* ★ EVERY OTHER ONE OF THIS KIND, WITH WHAT IS WRITTEN ON IT. A keeper picks the vessel
@@ -3176,9 +3199,7 @@ function VesselRack({ owned, birth, slots, onEquipped }: {
                   <button key={i} type="button" onPointerDown={() => doEquip(kind, i)}
                           className="gx-btn flex items-center gap-1.5 rounded border border-white/15 px-2 py-0.5 text-[10px] text-white/60 hover:bg-white/[0.06]">
                     <span>equip</span>
-                    {v.gems.length === 0
-                      ? <span className="text-white/30">empty</span>
-                      : v.gems.map((id, k) => <GemChip key={`${id}-${k}`} id={id} n={undefined} />)}
+                    <Seats gems={v.gems} />
                     <span className="text-white/40">{wordOf(v.move) ?? 'no word'}</span>
                   </button>
                 ))}
@@ -3191,84 +3212,28 @@ function VesselRack({ owned, birth, slots, onEquipped }: {
   )
 }
 
-function RunesTab({ items, onLetters }: { items: React.RefObject<Inventory>; onLetters: () => void }) {
-  // localStorage read, so it happens once per mount rather than per render.
-  const [inv] = useState(() => loadRuneInventory())
-  const owned = inv.owned
-  const known = knownMoves(owned)
-  const learnable = learnableMoves(owned)
-  const lockedCount = Math.max(0, Object.values(MOVES_BY_RUNE).flat()
-    .filter((m, i, a) => a.findIndex(x => x.id === m.id) === i).length - known.length - learnable.length)
-
-  if (owned.length === 0) {
-    return <TabEmpty>You have no rune yet. A keeper is born with one — the birth screen sets it.</TabEmpty>
-  }
-
-  const row = (label: string, moves: typeof known, tone: string) => moves.length > 0 && (
-    <div className="mb-4">
-      <div className="mb-1.5 text-[10px] uppercase tracking-[0.16em] text-white/35">{label} · {moves.length}</div>
-      <div className="flex flex-col gap-1">
-        {moves.map(m => (
-          <div key={m.id} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
-            <div className="flex items-baseline gap-2">
-              <span className={`text-[12px] ${tone}`}>{m.name}</span>
-              <span className="text-[9px] uppercase tracking-[0.14em] text-white/25">{m.tier}</span>
-              {m.needs && <span className="text-[9px] text-amber-200/40">needs {m.needs}</span>}
-            </div>
-            <div className="text-[10px] leading-snug text-white/40">{m.effect}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-
-  return (
-    <div>
-      <div className="mb-4 flex flex-wrap gap-1.5">
-        {owned.map(id => {
-          const r = RUNES.find(x => x.id === id)
-          return (
-            <span key={id} className="rounded px-2 py-1 text-[11px] uppercase tracking-[0.14em]"
-                  style={{ color: r?.glow ?? '#fff', background: `${r?.glow ?? '#fff'}18` }}>
-              {r?.name ?? id}{id === inv.birth && <span className="ml-1.5 text-[9px] text-white/35">birth</span>}
-            </span>
-          )
-        })}
-      </div>
-      <BirthLean birth={inv.birth} />
-      {known.length === 0 && learnable.length === 0 ? (
-        <div className="rounded border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-white/40">
-          No move answers to this rune. The Schools do not teach it and scholars do not name it —
-          a keeper born to it manifests, untrained. That is the rune, not a missing page.
-        </div>
-      ) : (
-        <>
-          {row('Known', known, 'text-amber-200/90')}
-          {row('One rune away', learnable, 'text-white/70')}
-          {lockedCount > 0 && (
-            <div className="text-[10px] text-white/25">
-              {lockedCount} more move{lockedCount === 1 ? '' : 's'} sit behind runes you do not hold.
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
 /**
- * The TOOLS tab — the four gathering families, what you hold in each, and how far your skill has come.
+ * THE GATHERING FOCUSES — a section of Gear since 2026-09-04 (the TOOLS tab until then): the four
+ * gathering families, what you hold in each, and how far your skill has come. Canon's word for a
+ * Blade, Spike or Rinstick is *gathering focus*, "two shapes, one class" with the casting glove
+ * (`CANON/glossary.md` § Focus) — a separate tab was the build drawing a line canon does not.
  *
  * ★ This is the surface `ToolArc` deliberately is not. That arc is read-only on purpose ("nothing
  * here is clickable, which is the point") because it lives over the world during play. The same
  * four sockets need somewhere they CAN be inspected without a HUD element growing a menu, and this
  * is it — same data, same order, no second source.
  */
-function ToolsTab({ tools, skills }: {
+function GatheringFocuses({ tools, skills }: {
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
 }) {
   return (
+    <div className="mt-2">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="gx-label text-[9px] text-amber-200/40">Gathering focuses</span>
+        <span className="h-px flex-1 bg-amber-200/10" />
+        <span className="text-[9px] text-white/25">held · the working shape</span>
+      </div>
     <div className="flex flex-col gap-1.5">
       {TOOL_FAMILIES.map(family => {
         const held = getEquippedTool(tools.current!, family)
@@ -3295,11 +3260,12 @@ function ToolsTab({ tools, skills }: {
         )
       })}
     </div>
+    </div>
   )
 }
 
 /**
- * The LOADOUT tab — which of your known moves sit on the cast bar (Z / B), plus the one passive you
+ * The GEAR tab (LOADOUT until 2026-09-04) — which of your known moves sit on the cast bar (Z / B), plus the one passive you
  * run always-on.
  *
  * ── WHAT WAS ACTUALLY MISSING (2026-08-12) ────────────────────────────────────────────────────
@@ -3323,7 +3289,10 @@ function ToolsTab({ tools, skills }: {
  * listed, dimmed, bindable, and carry their reason — and the passive readout says 'unbuilt' the same
  * way when its effect has no runtime yet.
  */
-function LoadoutTab({ items, onLetters }: { items: React.RefObject<Inventory>; onLetters: () => void }) {
+function GearTab({ items, onLetters, tools, skills }: {
+  items: React.RefObject<Inventory>; onLetters: () => void
+  tools: React.RefObject<EquippedTools>; skills: React.RefObject<SkillSet>
+}) {
   const [owned] = useState(() => loadRuneInventory().owned)
   // Read with the runes and pinned for the same reason: the birth-exclusive band decides which
   // passives this keeper may hold at all, and it can never change while the panel is open.
@@ -3492,11 +3461,13 @@ function LoadoutTab({ items, onLetters }: { items: React.RefObject<Inventory>; o
           </div>
         </div>
       )}
+      <GatheringFocuses tools={tools} skills={skills} />
       {/* ★ SAY WHERE THIS TAKES EFFECT. A chooser that silently governs nothing is the unwired dial
           this repo keeps paying for, so the panel states its own reach rather than letting a keeper
           infer it from a fight. */}
       <div className="mt-1 text-[10px] leading-relaxed text-white/25">
-        Saved to your keeper. The cast bar and this passive take effect where the cast layer runs.
+        Saved to your keeper. The cast bar and this passive take effect where the cast layer runs; the
+        gathering focuses work wherever you swing them.
       </div>
     </div>
   )
@@ -3786,10 +3757,8 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
     <KeeperFrame tab={tab} setTab={setTab} onClose={onClose}
                  hint={tab === 'satchel' ? hint : undefined}>
       {tab === 'satchel' && <>{satchel}<SatchelLetters owned={runesHeld} birth={birthRune} items={inv} onChange={onLetters} /></>}
-      {tab === 'runes' && <RunesTab items={inv} onLetters={onLetters} />}
       {tab === 'grimoire' && <GrimoireTab party={party} inv={inv} onChange={onParty} spiritIndex={spiritIndex} />}
-      {tab === 'tools' && <ToolsTab tools={tools} skills={skills} />}
-      {tab === 'loadout' && <LoadoutTab items={inv} onLetters={onLetters} />}
+      {tab === 'gear' && <GearTab items={inv} onLetters={onLetters} tools={tools} skills={skills} />}
     </KeeperFrame>
   )
 }
