@@ -24,6 +24,32 @@ import { RUNES, ELEMENTS, runesOf } from './birth/runes.data'
 import { KEEPER_KEYS } from '@/lib/keeper-local'
 import { noComments } from '../testing/guard'
 
+/**
+ * ★ THE DECLARATION ANCHORS TOLERATE AN `export ` PREFIX (2026-09-04, play lane).
+ *
+ * These slices are a standing claim about a file this suite does not own, and the claim was one
+ * character wide. `src.indexOf('\nfunction GearTab(')` returns -1 the moment that declaration is
+ * exported, and `slice(at, -1)` is not empty — it is the WHOLE REST OF THE FILE (measured: the rack
+ * slice goes 7,432 to 464,645 chars), at which point every positive assert below is satisfiable by
+ * any match anywhere in the host. That is PATTERNS 08-23, *a guard satisfiable by being ANYWHERE*,
+ * in the same slice this suite already closed it in once.
+ *
+ * ⚠ It did NOT go blind — the `has BOTH anchors` asserts below fire, which is why they are kept
+ * exactly as they are. Widening the anchor is so a legitimate export does not cost eleven red
+ * asserts across three suites; the presence check is what makes a MISSING anchor loud either way.
+ * Anchored at line start on purpose: `src` is comment-stripped, so nothing in prose can match.
+ */
+const declAt = (src: string, name: string) => {
+  const m = new RegExp(`^(?:export )?function ${name}\\(`, 'm').exec(src)
+  return m ? m.index : -1
+}
+/** the same, searched from an offset, returning the index of the leading newline (as `indexOf` did). */
+const declAfter = (src: string, name: string, from: number) => {
+  if (from < 0) return -1
+  const m = new RegExp(`\\n(?:export )?function ${name}\\(`).exec(src.slice(from))
+  return m ? from + m.index : -1
+}
+
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
@@ -187,15 +213,15 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   // anchored on until the split retired it. Every behavioural assert below is the original, re-aimed
   // at whichever half now owns it; the two-tab assert is REPLACED rather than dropped, because the
   // arrangement is exactly what was ruled and an unasserted arrangement drifts back.
-  const cardAt = src.indexOf('function SatchelLetters(')
+  const cardAt = declAt(src, 'SatchelLetters')
   ok(cardAt >= 0, 'VoxelWorld has a SatchelLetters')
-  const cardEnd = src.indexOf('\nfunction VesselRack(', cardAt)
+  const cardEnd = declAfter(src, 'VesselRack', cardAt)
   ok(cardAt >= 0 && cardEnd > cardAt, 'the card slice has BOTH anchors — an unanchored end slices to the file tail and every assert below passes anywhere')
   const card = cardAt >= 0 && cardEnd > cardAt ? src.slice(cardAt, cardEnd) : ''
   ok(/keeperLetters\(owned, birth\)/.test(card) && !/useState\(/.test(card), 'the card reads keeperLetters on every render — never pinned in useState')
   ok(/l\.bag/.test(card), 'the SATCHEL half renders the bag')
-  const rackAt = src.indexOf('function VesselRack(')
-  const rackEnd = src.indexOf('\nfunction GearTab(', rackAt)
+  const rackAt = declAt(src, 'VesselRack')
+  const rackEnd = declAfter(src, 'GearTab', rackAt)
   ok(rackAt >= 0 && rackEnd > rackAt, 'the rack slice has BOTH anchors')
   const rack = rackAt >= 0 && rackEnd > rackAt ? src.slice(rackAt, rackEnd) : ''
   ok(/VESSELS\.map\(/.test(rack) && /VESSEL_CAP/.test(rack), 'the LOADOUT half renders both vessels from the list, not two literals, and the cap')
@@ -213,9 +239,9 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   // ⚠ RE-POINTED 2026-09-04: this sliced RunesTab..ToolsTab to prove Runes carried no card. Both
   // functions are gone (Runes retired, Tools folded into Gear), and a slice between two missing
   // anchors is '' — every assert on it passes vacuously. So assert the retirement itself instead.
-  ok(!/function RunesTab\(/.test(src) && !/function ToolsTab\(/.test(src),
+  ok(declAt(src, 'RunesTab') < 0 && declAt(src, 'ToolsTab') < 0,
      '★ no RUNES tab and no TOOLS tab — Runes retired, Tools folded into Gear (Alex, 2026-09-04)')
-  const loadTab = src.slice(src.indexOf('function GearTab('), src.indexOf('ALL_BANDS.map((kind, i) =>', src.indexOf('function GearTab(')))
+  const loadTab = src.slice(declAt(src, 'GearTab'), src.indexOf('ALL_BANDS.map((kind, i) =>', declAt(src, 'GearTab')))
   ok(/<VesselRack /.test(loadTab) && !/<SatchelLetters /.test(loadTab), 'the rack sits in GearTab above the slots, and the bag does not follow it there')
 }
 
