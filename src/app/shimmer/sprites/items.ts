@@ -3482,6 +3482,14 @@ export const ITEM_PALETTES: Record<string, string[]> = {
   worn_blade:        ['#8a7f6a', '#5a5145', '#9aa0a6', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   worn_spike:        ['#8a7f6a', '#5a5145', '#9aa0a6', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   worn_rinstick:     ['#8a7f6a', '#5a5145', '#cfe6f0', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
+  // ── the three that rendered the magenta sentinel until 2026-09-04 (item-art listed them for weeks).
+  // Palettes chosen from the concept renders (refs/focus-*.png) + the focuses brief, index roles
+  // established by lighting each index in turn, not guessed: idx1→[0] highlight, idx2→[1], idx3→[2],
+  // idx4→[3] house outline; glowfin's [6] is the ribboneel wrap AND the lure (one index serves both, so
+  // "lit while dormant" cannot be told from the wrap — a sprite-geometry limit, not a colour one).
+  shimmeroak_blade:  ['#cf9c58', '#e5a52c', '#6b4526', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
+  basic_rinstick:    ['#f4dc84', '#8a6a3c', '#c6b485', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#d4a026'],
+  glowfin_rinstick:  ['#eec369', '#c8933f', '#c6b485', '#1a1a2e', '#d06040', '#50a040', '#46c9ae', '#6f4a1e'],
   vessel_bracelet_t1:['#50250d', '#784820', '#8a4d1a', '#8c5c2c', '#cb7209', '#db830a', '#e5910e', '#1a1a2e'],
   vessel_glove_t1:   ['#38170f', '#94542d', '#b37035', '#c07e38', '#d7933a', '#e19c3b', '#e4a241', '#1a1a2e'],
   amber_sap: ['#c98c36', '#5a3a10', '#86612d', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],}
