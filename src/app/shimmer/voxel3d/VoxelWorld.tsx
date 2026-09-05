@@ -3131,10 +3131,14 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
   const cellCls = 'relative flex h-12 w-12 flex-col items-center justify-center rounded-[2px] border text-[9px] font-mono shadow-[inset_0_0_8px_rgba(0,0,0,0.6)] transition-colors'
   const COLS = 8
   const cells = loose.length + stowed.length
-  const pad = Math.max(0, COLS - (cells % COLS || COLS))
+  // an EMPTY grid still draws one row of dark cells — the bag does, and a section that vanishes when it
+  // has nothing to show gives no hint that vessels and gems will land here (Alex's real keeper, 09-05)
+  const pad = cells === 0 ? COLS : Math.max(0, COLS - (cells % COLS || COLS))
   return (
     <div className="mt-4">
-      <SectionHead label="Gems" note={<><span className="gx-value text-white/50">{loose.reduce((a, [, n]) => a + n, 0)}</span> loose · <span className="gx-value text-white/50">{set}</span> set</>} />
+      <SectionHead label="Gems" note={cells === 0
+        ? <>none yet · the Passage cuts vessels and sells letters</>
+        : <><span className="gx-value text-white/50">{loose.reduce((a, [, n]) => a + n, 0)}</span> loose · <span className="gx-value text-white/50">{set}</span> set</>} />
       <div className="grid grid-cols-8 gap-1.5">
         {loose.map(([id, n]) => {
           const r = runeOf(id)
