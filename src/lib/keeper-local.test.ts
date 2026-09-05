@@ -375,7 +375,7 @@ const OWNERS: Record<string, string> = {
   'ather:shimmer:book': 'play3d/book.ts', 'ather:shimmer:loadout': 'play3d/loadout.ts',
   'ather:shimmer:gems': 'play3d/gems.ts', 'ather:shimmer:vessels': 'play3d/gems.ts',
   'ather:shimmer:stowed': 'play3d/vessels.ts', 'ather:shimmer:parked': 'play3d/vessels.ts',
-  'ather:shimmer:worn-tier': 'play3d/vessels.ts',
+  'ather:shimmer:worn-tier': 'play3d/vessels.ts', 'ather:shimmer:trials': 'play3d/vessel-drops.ts',
   'ather:mp:id': 'play3d/multiplayer.ts', 'ather:mp:name': 'play3d/multiplayer.ts',
   'ather:shimmer:seen:': 'voxel3d/discovery.ts', 'voxel3d:tutorial:': 'voxel3d/tutorial.ts',
   'voxel3d:mist:': 'voxel3d/mist-encounter.ts', 'voxel3d:pots:': 'voxel3d/VoxelWorld.tsx',

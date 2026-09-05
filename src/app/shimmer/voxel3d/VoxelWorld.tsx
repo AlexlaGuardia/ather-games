@@ -270,7 +270,8 @@ import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
 import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn,
          placeGems, seatCount, seatLetters, shortOf, isComplete, setWord,
-         wornTier, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, type VesselTier } from '../play3d/vessels'
+         wornTier, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier } from '../play3d/vessels'
+import { rollDig, parseVesselItem, takeVessel, vesselItemId, vesselRoom } from '../play3d/vessel-drops'
 import { starterFor } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
@@ -2217,6 +2218,7 @@ export default function VoxelWorld() {
           weaponIdx={weaponIdx}
           onAmmo={setAmmoUi}
           onStats={setStats} onPerf={setPerf} onProfile={setProf} onSay={say} onContextLost={setCtxLost} runeTick={runeTick}
+          onVesselFound={() => setRuneTick(t => t + 1)}
           onPos={(p, yaw) => {
             mapPos.current = { x: p.x, z: p.z }
             mapHeading.current = yaw
@@ -3042,7 +3044,6 @@ function BirthLean({ birth }: { birth: string | null }) {
  * on screen is canon's noun for the object.
  */
 const VESSEL_LANE_LABEL: Record<Vessel, string> = { bracelet: 'wrist · tacticals · element lane', focus: 'casting focus · hand · signature · state lane' }
-const VESSEL_NOUN: Record<Vessel, string> = { bracelet: 'bracelet', focus: 'glove' }
 /**
  * The icon for a vessel of this kind and TIER — `vessel_<noun>_t<tier>` when that art exists, else the
  * tier-1 art. ⚠ The fallback is a placeholder, not a claim: Greg's mortal-cloth glove drawn as goldwood is
@@ -3883,7 +3884,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3913,6 +3914,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   onContextLost: (at: number | null) => void
   /** Bumped when the rune inventory changed under us — re-resolve the loadout, no reload. */
   runeTick: number
+  /** a vessel was taken off the ground into the satchel — the panel re-reads the stowed list */
+  onVesselFound: () => void
   /** `yaw` is a map-marker CANVAS ROTATION (`screenHeading`), not a world yaw. */
   onPos: (p: THREE.Vector3, yaw: number) => void
   onLook: (l: { name: string; progress: number; refused: boolean; channel: boolean } | null) => void
@@ -9093,6 +9096,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // material, so this costs one Map lookup per block broken.
           clearBed(beds.current, hit.x, hit.y, hit.z)
           for (const d of dropsFor(hit.material)) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
+          // ★ THE FOUND DOOR (vessels are not crafted, 2026-09-04): a rare roll on deep rock turns up a
+          // vessel somebody lost — it falls out of the block like any drop and is TAKEN on pickup.
+          const dug = rollDig(hit.material)
+          if (dug) drops.current.push(spawnDrop(vesselItemId(dug.kind, dug.tier), 1, hit.x, hit.y, hit.z))
         }
         // ★ A BROKEN CHEST SPILLS WHAT IT HELD — before `setVoxel`, which is what drops the record.
         // It spills rather than refusing to break: the pile is visible, `tickDrops`' capacity gate
@@ -9633,7 +9640,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // ★ A FULL BAG REFUSES THE PICKUP so the item stays on the ground and stays yours. Before
         // this the drop was consumed and the leftover discarded — walking over a stack you had no
         // room for destroyed it, with nothing on screen to say so.
-        (itemId) => roomFor(inv.current!, itemId))
+        // ★ a vessel is not a bag item: it is taken by the satchel, and refused at the cap the same way a full
+        // bag refuses a stack — the drop stays on the ground, yours, until there is room for it.
+        (itemId) => { const v = parseVesselItem(itemId); return v ? (vesselRoom(v.kind) ? 1 : 0) : roomFor(inv.current!, itemId) })
       if (res.picked.length) {
         // ⚠ A FULL BAG MUST SAY SO. `give` returns what did not fit, and every caller here used to
         // discard that — which is how mining past a full inventory destroyed the drop in silence.
@@ -9642,6 +9651,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // ⏭ The right end state is refusing the PICKUP so the drop stays on the ground; that needs
         // a capacity check inside `tickDrops`, which is the next inventory slice.
         for (const it of res.picked) {
+          if (parseVesselItem(it.itemId)) {
+            // ★ FOUND: cut for a word somebody meant to write — inheriting an intention (canon). The word
+            // is chosen for THIS keeper's lanes at the moment of pickup; the host only relays the line.
+            const rinv = loadRuneInventory()
+            const r = takeVessel(it.itemId, 'dig', rinv.owned, rinv.birth)
+            onSay(r.say)
+            if (r.ok) onVesselFound()
+            continue
+          }
           const left = give(inv.current!, it.itemId, it.count)
           if (left > 0) onSay(`bag full — ${left}× ${itemLabel(it.itemId)} did not fit`)
         }

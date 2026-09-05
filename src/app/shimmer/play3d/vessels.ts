@@ -102,6 +102,12 @@ export const TIER_MATERIAL: Record<Vessel, Record<VesselTier, string>> = {
 }
 /** canon's four verbs — the only ways a vessel reaches a keeper */
 export type VesselSource = 'given' | 'bought' | 'found' | 'won'
+/**
+ * The word on screen for each kind. The build's kind id stays `focus` (a cast-slot word); canon's
+ * noun for the object is GLOVE (`shimmer-casting-vessels.md`, hand vs wrist). Sprite ids and drop
+ * ids are keyed by THIS, never by the kind id — `vessel_focus_t1` is a grey chip. One spelling, here.
+ */
+export const VESSEL_NOUN: Record<Vessel, string> = { bracelet: 'bracelet', focus: 'glove' }
 
 /** a vessel the keeper owns but is not wearing: its own letters, its own word, its own material */
 export interface StowedVessel { kind: Vessel; gems: string[]; move: string | null; tier: VesselTier }
@@ -266,7 +272,6 @@ export type VesselRefusal = 'too-dear' | 'at-cap' | 'no-such-word' | 'too-many-s
 export interface VesselPurchase { ok: boolean; marks: number; why?: VesselRefusal; say: string }
 export interface VesselGrant { ok: boolean; why?: VesselRefusal; say: string; index?: number }
 
-const NOUN: Record<Vessel, string> = { bracelet: 'A bracelet', focus: 'A focus' }
 
 /**
  * ★ THE ONE DOOR A VESSEL COMES THROUGH — bought, found or won. Given (Greg's floor) is `withFloor`
@@ -276,7 +281,7 @@ const NOUN: Record<Vessel, string> = { bracelet: 'A bracelet', focus: 'A focus' 
  */
 export function grantVessel(kind: Vessel, tier: VesselTier, word: string | null, source: VesselSource): VesselGrant {
   if (isFloor({ tier }) || source === 'given') {
-    return { ok: false, why: 'not-given', say: `Greg gave you the ${kind} you have. Nobody hands out a second.` }
+    return { ok: false, why: 'not-given', say: `Greg gave you the ${VESSEL_NOUN[kind]} you have. Nobody hands out a second.` }
   }
   const m = word !== null ? moveById(word) : undefined
   if (word !== null && (!m || ALL_BANDS[BAND_FOR_VESSEL[kind]] !== m.tier)) {
@@ -295,8 +300,9 @@ export function grantVessel(kind: Vessel, tier: VesselTier, word: string | null,
   const how = { bought: 'yours', found: 'found', won: 'won', given: 'given' }[source]
   return {
     ok: true, index,
-    say: m ? `${NOUN[kind]} of ${TIER_MATERIAL[kind][tier]} for ${m.name}, ${seats} seat${seats === 1 ? '' : 's'} cut — ${how}. Set its letters and it is yours to wear.`
-           : `${NOUN[kind]} of ${TIER_MATERIAL[kind][tier]}, uncut — ${how}. Write something on it.`,
+    // copy says canon's noun (a GLOVE of starwillow), never the kind id
+    say: m ? `A ${VESSEL_NOUN[kind]} of ${TIER_MATERIAL[kind][tier]} for ${m.name}, ${seats} seat${seats === 1 ? '' : 's'} cut — ${how}. Set its letters and it is yours to wear.`
+           : `A ${VESSEL_NOUN[kind]} of ${TIER_MATERIAL[kind][tier]}, uncut — ${how}. Write something on it.`,
   }
 }
 

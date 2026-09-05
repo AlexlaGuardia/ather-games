@@ -65,6 +65,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'ather:shimmer:vessels',   worldTied: false },  // the bracelet + focus and what is set in them
   { base: 'ather:shimmer:stowed',     worldTied: false },  // the vessels owned but not worn — each with its own gems and word (2026-09-03)
   { base: 'ather:shimmer:worn-tier',  worldTied: false },  // the TIER (material) of the worn bracelet + focus — the one field the two live keys do not carry (2026-09-04)
+  { base: 'ather:shimmer:trials',     worldTied: false },  // how many times each trial was cleared — the WON door's ledger (first clear = a sure prize) (2026-09-05)
   { base: 'ather:shimmer:parked',    worldTied: false },  // ⚠ LEGACY: the retired 09-03 PAIRS. `vessels.ts` reads it once, migrates it, removes it
   { base: 'ather:mp:id',             worldTied: false },  // ★ the peer other players see — two accounts were ONE peer
   { base: 'ather:mp:name',           worldTied: false },  // and this MIRRORS the signed-in username, so B announced A's name

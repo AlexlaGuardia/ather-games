@@ -95,6 +95,7 @@ import { prettyItem, menuBtn, TOOL_HUD } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
+import { clearTrial } from './vessel-drops'
 
 /**
  * The T range-console settings, in one place.
@@ -1931,7 +1932,7 @@ function GunBenches() {
  */
 const SENSE_TICK = 0.1
 
-function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown }: {
+function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -1970,6 +1971,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   onShot: () => void
   onPlayerDamage: () => void  // vignette flash
   onPlayerDown: () => void    // HP hit zero → systems reset (longer flash)
+  onTrial: (say: string) => void  // a trial was cleared — the line for the banner (the range has none of its own)
 }) {
   const MAX = 20
   const SEG = TRAIL_N + 1  // instances per round = head + trail
@@ -2048,7 +2050,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // floors do not exist yet. BEHAVIOUR LIVES IN puppet-guards.ts — this ref holds only bodies.
   // The sim decides who leads, who claims ground and who counters; the frame just moves meshes and
   // fires orbs, so the encounter stays provable headless.
-  const guardSim = useRef({ enc: initEncounter(), spawned: false, orbit: 0, fireCd: [0, 0, 0] })
+  // `prized` latches the WON door: a cleared encounter keeps stepping every frame, and the prize is paid on the edge
+  const guardSim = useRef({ enc: initEncounter(), spawned: false, orbit: 0, fireCd: [0, 0, 0], prized: false })
   const guardBodies = useMemo(() => GUARDS.map((g) => ({ id: g.id, pos: new THREE.Vector3() })), [])
   const guardMeshRef = useRef<THREE.InstancedMesh>(null)
   const shotRef = useRef<THREE.InstancedMesh>(null)
@@ -2569,7 +2572,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const gs = guardSim.current
       if (cfg?.guards) {
         if (!gs.spawned) {
-          gs.enc = initEncounter(cfg.tune); gs.spawned = true; gs.orbit = 0; gs.fireCd = [1.0, 1.6, 2.2]
+          gs.enc = initEncounter(cfg.tune); gs.spawned = true; gs.orbit = 0; gs.fireCd = [1.0, 1.6, 2.2]; gs.prized = false
           const base = (posRef.current?.y ?? 0) + 0.55
           guardBodies.forEach((b, i) => {
             const a = -Math.PI / 2 + (i - 1) * 0.7
@@ -2578,6 +2581,14 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         }
         const hpFrac = (hpRef.current ?? 1) / (hpMaxRef.current || 1)
         gs.enc = stepEncounter(gs.enc, dt, hpFrac, cfg.tune)
+        // ★ THE WON DOOR (vessels are not crafted, 2026-09-04): clearing the Three is a trial, and a trial's
+        // prize is a vessel. Paid ONCE, on the edge into `cleared`; the ledger in vessel-drops makes the
+        // first clear sure and later ones a roll, so re-arming the range is not a farm.
+        if (gs.enc.cleared && !gs.prized) {
+          gs.prized = true
+          const rinv = loadRuneInventory()
+          onTrial(clearTrial('puppet-guards', rinv.owned, rinv.birth).say)
+        }
         gs.orbit += dt * 0.5
         guardBodies.forEach((b, i) => {
           const st = gs.enc.guards[i]
@@ -3296,6 +3307,7 @@ const Scene = memo(function Scene(props: {
   onNeedReload: () => void
   onPlayerDamage: () => void
   onPlayerDown: () => void
+  onTrial: (say: string) => void
   mpPeers: React.RefObject<Map<string, RemotePlayer>>
   /** Directional-light shadow map edge, or null for shadows off. Player-set — see gfx.ts. */
   shadowMap: number | null
@@ -3394,7 +3406,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
@@ -6638,6 +6650,7 @@ export default function Shimmer3D() {
           onNeedReload={startReload}
           onPlayerDamage={onPlayerDamage}
           onPlayerDown={onPlayerDown}
+          onTrial={(say) => setBanner(`✦ ${say}`)}
           mpPeers={mpPeers}
           shadowMap={SHADOW_MAP_SIZE[gfx.shadows]}
         />

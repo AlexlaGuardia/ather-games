@@ -28,6 +28,7 @@ import { clearLoadout } from './loadout'
 import { clearBook } from './book'
 import { clearLetters } from './gems'
 import { clearStowed } from './vessels'
+import { clearTrials } from './vessel-drops'
 import { rebornInventory, saveRuneInventory, type RuneInventory } from './rune-inventory'
 
 /** Be born again of `runeId`. Writes all three saves; returns the new hand. */
@@ -36,6 +37,7 @@ export function rebirth(runeId: string): RuneInventory {
   clearBook()
   clearLetters()   // the gems and both vessels: a different keeper writes with different letters
   clearStowed()    // and every other vessel they owned — the letters ride the paper
+  clearTrials()    // and the trials they cleared — a different keeper has won nothing yet
   const inv = rebornInventory(runeId)
   saveRuneInventory(inv)
   return inv
