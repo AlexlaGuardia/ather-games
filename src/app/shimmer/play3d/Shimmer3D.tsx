@@ -95,6 +95,13 @@ import { prettyItem, menuBtn, TOOL_HUD } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
+// ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
+// `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
+// by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
+// seconds, with three other files carrying comments that CITE it as done. A tested module with no
+// consumer reads as covered from every angle except the one that asks who calls it.
+import { crucibleAt, LEVEL_WINDOWS, MATCH_END_SEC, VAULT_END_SEC, TUNING as CRUCIBLE_TUNING } from './crucible-phases'
+import { stepPrize, resetPrize, type PrizeState } from './crucible-prize'
 import { clearTrial } from './vessel-drops'
 
 /**
@@ -1932,7 +1939,7 @@ function GunBenches() {
  */
 const SENSE_TICK = 0.1
 
-function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial }: {
+function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial, onMatch }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -1972,6 +1979,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   onPlayerDamage: () => void  // vignette flash
   onPlayerDown: () => void    // HP hit zero → systems reset (longer flash)
   onTrial: (say: string) => void  // a trial was cleared — the line for the banner (the range has none of its own)
+  /** the match HUD line, or null when no match is running. ⚠ CALLED ONLY WHEN THE STRING CHANGES —
+   *  a per-frame setState here is a re-render per frame, which is the one thing this file must not do. */
+  onMatch: (line: string | null) => void
 }) {
   const MAX = 20
   const SEG = TRAIL_N + 1  // instances per round = head + trail
@@ -2051,7 +2061,18 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // The sim decides who leads, who claims ground and who counters; the frame just moves meshes and
   // fires orbs, so the encounter stays provable headless.
   // `prized` latches the WON door: a cleared encounter keeps stepping every frame, and the prize is paid on the edge
-  const guardSim = useRef({ enc: initEncounter(), spawned: false, orbit: 0, fireCd: [0, 0, 0], prized: false })
+  // `viaMatch` is the WON door's whole gate: the Three summoned by the T console are the same
+  // encounter and earn nothing, because a practice zone is not the Throne. See `crucible-prize.ts`.
+  const guardSim = useRef({ enc: initEncounter(), spawned: false, orbit: 0, fireCd: [0, 0, 0], prized: false, viaMatch: false })
+  // ── ★ THE MATCH ────────────────────────────────────────────────────────────────────────────
+  // One number: when the glyph lit. Everything else — which floor is open, what is sealing, when
+  // the Vault opens — is `crucibleAt(elapsed)`, derived fresh every frame from that alone, so the
+  // HUD, the guards and the prize cannot disagree and a reload lands on the same second.
+  // ⚠ NEVER cache a phase in a ref. `crucible-phases`' header is explicit that a per-client clock
+  // that drifts is unshippable, and a cached phase IS a second clock.
+  const matchStart = useRef<number | null>(null)
+  const matchLine = useRef<string | null>(null)
+  const prize = useRef<PrizeState>(resetPrize())
   const guardBodies = useMemo(() => GUARDS.map((g) => ({ id: g.id, pos: new THREE.Vector3() })), [])
   const guardMeshRef = useRef<THREE.InstancedMesh>(null)
   const shotRef = useRef<THREE.InstancedMesh>(null)
@@ -2569,10 +2590,56 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       // The formation is canon: Seren holds the line, Cade flanks and traps, Wren hangs back and
       // counters. So the bodies are placed by ROLE around the player, not by a chase heuristic —
       // Seren dead ahead, Cade and Wren on the shoulders. The sim owns the loop; this owns motion.
+      // ── ★★★ THE MATCH CLOCK — the Crucible stops being a firing range with extra bots ────────
+      // The match runs while you stand in the zone. `crucibleAt` owns every phase; nothing here
+      // re-derives a window, a seal or the Vault from a literal.
+      // ⚠ THE FLOORS ARE TIME WINDOWS IN ONE ARENA UNTIL THE GEOMETRY EXISTS (`zones.ts` carries
+      // the TODO). That is a staging decision, not a claim: the HUD names the floor that is open
+      // and NEVER says you ascended, because you did not. When the three maps land they hang off
+      // this same clock and nothing here changes.
+      // ⛔ AND PRESSURE IS DELIBERATELY NOT WIRED YET. `TUNING.pressureDps` exists and canon wants
+      // a sealed floor "slowly killing" — but pressure is escapable only by CLIMBING, and there is
+      // nowhere to climb. Wiring it now would be an unavoidable death timer wearing a canon
+      // citation, which is worse than an absent feature. It arrives with the floors.
+      // ⚠ ONE CLOCK, `state.clock.elapsedTime`, in SECONDS — the same frame clock the drift targets
+      // read. Not `performance.now()`: mixing a ms clock and a seconds clock in one file is how a
+      // match ends 1000× early, and `crucibleAt` takes seconds.
+      const tNow = state.clock.elapsedTime
+      const inMatch = zoneId === 'crucible'
+      if (inMatch && matchStart.current === null) { matchStart.current = tNow; prize.current = resetPrize() }
+      if (!inMatch && matchStart.current !== null) { matchStart.current = null; prize.current = resetPrize() }
+      const match = matchStart.current !== null ? crucibleAt(tNow - matchStart.current) : null
+      // The Throne is L3 and canon puts the Three on it — read off the level DATA, never an id
+      // string here, so the day a floor's guards flag moves this follows it.
+      const throneOpen = match?.activeLevel?.guards === true
+
+      // ── the HUD line ────────────────────────────────────────────────────────────────────────
+      // ⚠ IT NAMES THE FLOOR THAT IS OPEN AND NEVER SAYS YOU CLIMBED. The floors are time windows
+      // in one arena until the geometry lands, and a HUD that said "Level 2" would be asserting an
+      // ascent that did not happen — a claim the player would believe and the world would not honour.
+      {
+        const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.max(0, Math.floor(sec % 60))).padStart(2, '0')}`
+        let line: string | null = null
+        if (match) {
+          if (match.matchPhase === 'glyph') line = `THE GLYPH HOLDS · ${mmss(match.nextEventIn)}`
+          else if (match.matchPhase === 'vault') line = `THE VAULT IS OPEN · ${mmss(match.nextEventIn)}`
+          else if (match.matchPhase === 'over') line = 'THE MATCH IS OVER'
+          else if (match.activeLevel) {
+            const lv = match.levels.find(l => l.level.id === match.activeLevel!.id)
+            const sealing = lv?.phase === 'sealing' ? ' · SEALING' : ''
+            line = `${match.activeLevel.name.toUpperCase()}${sealing} · ${mmss(match.nextEventIn)}`
+          }
+        }
+        // Latched on the STRING, so a re-render happens about once a second rather than 60 times.
+        if (line !== matchLine.current) { matchLine.current = line; onMatch(line) }
+      }
+
       const gs = guardSim.current
-      if (cfg?.guards) {
+      if (cfg?.guards || throneOpen) {
         if (!gs.spawned) {
           gs.enc = initEncounter(cfg.tune); gs.spawned = true; gs.orbit = 0; gs.fireCd = [1.0, 1.6, 2.2]; gs.prized = false
+          // ★ WHO SUMMONED THEM decides whether clearing them is worth anything.
+          gs.viaMatch = throneOpen
           const base = (posRef.current?.y ?? 0) + 0.55
           guardBodies.forEach((b, i) => {
             const a = -Math.PI / 2 + (i - 1) * 0.7
@@ -2581,14 +2648,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         }
         const hpFrac = (hpRef.current ?? 1) / (hpMaxRef.current || 1)
         gs.enc = stepEncounter(gs.enc, dt, hpFrac, cfg.tune)
-        // ★ THE WON DOOR (vessels are not crafted, 2026-09-04): clearing the Three is a trial, and a trial's
-        // prize is a vessel. Paid ONCE, on the edge into `cleared`; the ledger in vessel-drops makes the
-        // first clear sure and later ones a roll, so re-arming the range is not a farm.
-        if (gs.enc.cleared && !gs.prized) {
-          gs.prized = true
-          const rinv = loadRuneInventory()
-          onTrial(clearTrial('puppet-guards', rinv.owned, rinv.birth).say)
-        }
+        // ⚠ THE PRIZE IS NO LONGER PAID HERE. It was, until 2026-09-05, on the edge into `cleared` —
+        // which paid wherever the Three were summoned, so the game's top reward was a keypress away
+        // in the practice range. Clearing the Throne now only ARMS it; the Vault pays, below.
+        // See `crucible-prize.ts` for why the room and the earning are kept apart.
         gs.orbit += dt * 0.5
         guardBodies.forEach((b, i) => {
           const st = gs.enc.guards[i]
@@ -2626,6 +2689,20 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           }
         })
       } else if (gs.spawned) { gs.spawned = false; gs.enc = initEncounter(rangeCfgRef.current.tune) }  // toggle off = gone
+
+      // ── ★★★ THE VAULT PAYS ──────────────────────────────────────────────────────────────────
+      // Canon's WON road, finally at its own door. `stepPrize` is pure and tested: clearing the
+      // Three on the Throne inside a match ARMS it, the Vault window PAYS it, exactly once.
+      // ⚠ Runs whether or not the guards block ran this frame — the Vault opens after the Throne
+      // has sealed and the Three are long gone, so gating this on their block would pay nobody.
+      if (match) {
+        const step = stepPrize(prize.current, match.matchPhase, gs.enc.cleared, gs.viaMatch)
+        prize.current = step.next
+        if (step.pay) {
+          const rinv = loadRuneInventory()
+          onTrial(clearTrial('puppet-guards', rinv.owned, rinv.birth).say)
+        }
+      }
       for (const o of orbs) {
         if (o.life <= 0) continue
         o.life -= dt
@@ -3308,6 +3385,7 @@ const Scene = memo(function Scene(props: {
   onPlayerDamage: () => void
   onPlayerDown: () => void
   onTrial: (say: string) => void
+  onMatch: (line: string | null) => void
   mpPeers: React.RefObject<Map<string, RemotePlayer>>
   /** Directional-light shadow map edge, or null for shadows off. Player-set — see gfx.ts. */
   shadowMap: number | null
@@ -3406,7 +3484,7 @@ const Scene = memo(function Scene(props: {
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
@@ -5828,6 +5906,8 @@ export default function Shimmer3D() {
   // hostile ground hunter, stats reset. Same cursor dance as the satchel: open frees the pointer,
   // close re-locks. Settings live in a ref so FiringRange reads them at frame rate with no re-render.
   const [rangeOpen, setRangeOpen] = useState(false)
+  /** the Crucible match HUD line, or null outside a match. Set only when the string changes. */
+  const [matchHud, setMatchHud] = useState<string | null>(null)
   const rangeOpenRef = useRef(false); rangeOpenRef.current = rangeOpen
   const [rangeCfg, setRangeCfg] = useState<RangeCfg>({
     moving: false, hostile: false, guards: false, bots: false,
@@ -6651,6 +6731,7 @@ export default function Shimmer3D() {
           onPlayerDamage={onPlayerDamage}
           onPlayerDown={onPlayerDown}
           onTrial={(say) => setBanner(`✦ ${say}`)}
+          onMatch={setMatchHud}
           mpPeers={mpPeers}
           shadowMap={SHADOW_MAP_SIZE[gfx.shadows]}
         />
@@ -7132,6 +7213,20 @@ export default function Shimmer3D() {
           the pointer under the panel) and let clicking outside the bag close it. Below the hotbar (z35)
           + satchel (z37), above the canvas. */}
       {bagOpen && <div onPointerDown={() => toggleBag(false)} style={{ position: 'fixed', inset: 0, zIndex: 34, background: 'transparent' }} />}
+
+      {/* ── ★ THE CRUCIBLE MATCH CLOCK ────────────────────────────────────────────────────────
+          The floor that is open and the seconds left in it, straight off `crucibleAt`. Sits above
+          the weapon HUD because it governs it: a sealing floor is the reason to stop shooting and
+          move. Shown on touch as well — the match runs whatever you are holding.
+          ⚠ It NAMES the open floor and never claims an ascent; the floors are time windows in one
+          arena until the geometry lands. */}
+      {matchHud && !editMode && !dialogue && !battle && (
+        <div style={{
+          position: 'fixed', top: 44, left: '50%', transform: 'translateX(-50%)', zIndex: 36, pointerEvents: 'none',
+          padding: '5px 16px', borderRadius: 999, background: 'rgba(28,14,10,0.88)', border: '1px solid #ffb26644',
+          color: '#ffd7a8', fontSize: 12, letterSpacing: '0.16em', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+        }}>{matchHud}</div>
+      )}
 
       {/* ── Weapon viewmodel + firing-range HUD — outside the Ather only, desktop (click = fire) ── */}
       {weaponDrawn && !editMode && !dialogue && !battle && !placing && !isTouch && (
