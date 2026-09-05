@@ -11,6 +11,82 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🕯 Shimmer — **THE HOLLOWS SHIP AS THREE PRIMITIVES, AND THE BRIEF ASKS FOR SOMETHING THAT LOSES ITSELF** (2026-09-04, sprites lane) · *Last touched 2026-09-04 — hollow-pose 25/0 mutation-swept 10 ways all 10 fire; hollow-look 43/0, hollows 106/0, hollow-visible 14/0, hollow-wiring 73/0, hollow-voice 26/0 all still green; dev-pages 232/0, dev-eye 28/0, tsc 7 (baseline), canon exit 0. Sweep + deploy pending at commit time.*
+
+**Left off:** Alex asked for Hollows next, and whether Meshy could do them. Measuring first turned up
+two things worth writing down before any art call.
+
+**★ WHAT SHIPS TODAY IS THREE SINGLE PRIMITIVES.** `hollow-look.ts:createHollowGeo` returns an
+`IcosahedronGeometry` (warden), a `ConeGeometry` (stalker) and an `OctahedronGeometry` (caster). The
+locked brief (`design-briefs/hollows.md`, ruled 2026-08-15 with Alex) asks for upright plantigrade
+goop with legible limbs that is **"always visibly LOSING itself"** — which it calls *the single most
+important animation note in this file* — and says outright that **a Hollow holding a crisp shape is
+drift**. Three primitives are crisp shapes that hold perfectly. The gap is the whole look.
+
+**★★ AND MESHY IS THE WRONG TOOL HERE, ON FOUR COUNTS FROM THE BRIEF ITSELF.** (1) A Meshy model
+arrives with a baked albedo — *a colour it owns*, top of the what-would-break-it list. (2) The
+specular has to be **tinted entirely by the environment**, which is a live material, not a baked map.
+(3) It must continuously fail and re-gather; Meshy outputs a frozen solid. (4) *One substance, three
+densities* — Meshy would hand back three creature designs, also on the break list. ⚠ Note the
+**art-medium law does not settle this by itself**: its actual text is *"Meshy builds dead grey PROPS
+and code-built assets ONLY"*, and a Hollow is neither a prop nor alive. The brief settles it on
+technical grounds instead. **Meshy's real remaining use is named in canon** — `pyramid-zero.md`: the
+Crucible, ancient manatech and stone, *"the single best remaining use of the subscription."*
+
+**★★★ THE CONFLICT THIS SURFACED, WHICH IS ALEX'S AND MAGII'S TO RULE.** The brief lists **emissive**
+under what would break a Hollow: *it borrows, or it is grey.* The shipped material sets `emissive` to
+the body's own colour at `selfLight: 0.15`. That is not sloppiness — `spawnDark` refuses all block
+light and needs night skylight, so at `selfLight: 0` a Hollow is **invisible**, which Alex reported
+twice, and an arithmetic-sized fix got *"looking terrible"*. The shipped file treats the AMOUNT as
+Alex's dial and quietly treats its EXISTENCE as settled; canon says it is not. ⚠ **The canon gate
+cannot see this** — it checks names and rosters, never material law, and it reports exit 0 here.
+
+**Built (prototype, nothing wired into the game):**
+- `voxel3d/hollow-pose.ts` — the body plan as a field of blobs, a cohere loop that never settles, and
+  density as ONE axis (`warden 1 > stalker 0.72 > caster 0.4`). No colour, no glow, no emissive
+  anywhere in the file, so it cannot be the file that grows one.
+- `voxel3d/hollow-pose.test.ts` — 25 asserts, **mutation-swept 10 ways, 10/10 fire.**
+- `voxel3d/HollowDoll.tsx` — blobs, and the brief's material: `metalness: 1` so a PBR surface has NO
+  diffuse term and every visible photon is reflected environment. The comparison side imports the
+  REAL `createHollowMat`, never a copy of its numbers.
+- `dev/hollow/page.tsx` — greyfield left, tended plot right, a slider that walks it between them.
+
+**★ THE SHARPEST ASSERT, worth keeping as a pattern.** *Mass depends on cohesion ALONE.* Sampling a
+time and the same time one full cohere-cycle later gives equal cohesion but a completely different
+wobble, so equal mass at those two instants proves shed pieces are handed back rather than lost —
+without the test ever restating the derivation. And a companion assert proves the two fields actually
+DIFFER, so the mass assert cannot be satisfied by sameness. **An assert that can only pass one way is
+decoration; this pair fixes that in the shape of the check rather than in a comment.**
+
+**★★ THE GUARD CAUGHT TWO REAL DEFECTS ON FIRST RUN, both invisible to a typecheck.** (1) `cohesionAt`
+used a **2.3 harmonic**, so the dissolution loop never closed and popped on every repeat — fine for a
+few seconds, wrong forever after, and unnoticeable to anyone watching less than one full cycle.
+(2) The caster's **shins were gated on speed rather than on `floats`**, so it bent knees it does not
+have while hovering. That second one is the *three creature designs* failure arriving through the
+back door: a floating thing performing a walk is neither of the two bodies canon allows.
+
+**Decisions:**
+- **No Meshy for Hollows**, four reasons above. Props and the Crucible stay its lane.
+- **Do not step a Hollow at 12fps** like the moglin. Stop-motion judder reads as handmade and
+  charming; a Hollow is dread. Smooth, slow, continuous.
+- **Materials pooled into six alpha buckets, never one per blob.** `hollow-look.ts` carries the
+  warning: a material per body is a shader program per body, and that allocation blocked a page from
+  WebGL on 2026-08-06. Twelve blobs each would be twelve programs per Hollow.
+- **The bench defaults to NIGHT**, because `spawnDark` means that is the only place a Hollow exists.
+  Judging one under a daylight rig is the 2026-08-30 wrong-layer failure exactly.
+
+**Next:** Alex walks the slider and calls whether borrowed specular makes a Hollow findable without
+self-light. If it does, the emissive conflict dissolves instead of one side being traded away, and
+`selfLight` can go to 0 against canon. If it does not, the shipped self-light stays and Magii should
+be told the brief needs an amendment rather than the build quietly disagreeing with it.
+
+**Parked:** wiring any of this into the world (`hollows.ts` + `VoxelWorld`) — that is shared surface
+and waits on the look call. Dispersal VFX (the ground's own colour blooming up, never a burst from
+the Hollow) — canon is specific and it is a separate build.
+
+**Files:** `voxel3d/hollow-pose.ts` · `voxel3d/hollow-pose.test.ts` · `voxel3d/HollowDoll.tsx` ·
+`dev/hollow/page.tsx` · `dev/templates/dev-pages.ts`
+
 ## 🧱 Shimmer — **A CLAY DOLL HAS NO RIG, AND THE MOGLIN WAS ALREADY MOST OF ONE** (2026-09-04, sprites lane) · *Last touched 2026-09-04 — NOT YET DEPLOYED; sweep + build pending at commit time. tokens 29/0, dev-pages 223/0, dev-eye 25/0, moglin-pose 25/0 mutation-swept 8 ways all 8 fire, tsc 7 (baseline).*
 
 **Left off:** Alex asked how clay-doll character models are done, "as far as the rigging and etc". The

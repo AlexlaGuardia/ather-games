@@ -85,6 +85,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['wall', 'texture', 'stone', 'brick', 'palette', 'material'],
   },
   {
+    path: '/shimmer/dev/hollow',
+    title: 'The Hollow Bench',
+    blurb: 'Can a Hollow be findable at night without owning a light?',
+    group: 'glass',
+    keywords: ['hollow', 'grey', 'borrowed specular', 'emissive', 'enemy', 'night', 'canon'],
+  },
+  {
     path: '/shimmer/dev/clay',
     title: 'The Clay Bench',
     blurb: 'Does a rigid-part moglin, posed and shot on twos, read as clay?',
