@@ -69,6 +69,91 @@ export const HOLLOW_LOOK: HollowLook = {
 }
 
 /**
+ * ── THE SURFACE ────────────────────────────────────────────────────────────────────────────────
+ *
+ * ★★★ WHY A HOLLOW NEEDED ONE (Alex, 2026-09-05, after the ghost came out): *"they all need to be a
+ * solid texture... wet clay, like goop monsters."* Solid was the first half and it landed; this is
+ * the second. A `MeshLambertMaterial` has one colour and nothing else — no roughness, no normal, no
+ * specular — so however solid it is it can only ever read as a SHADOW PUPPET. It cannot look wet,
+ * cannot catch a highlight, and cannot show that it is made of anything.
+ *
+ * ⚠ AND CANON ASKED FOR EXACTLY THIS FIRST. `design-briefs/hollows.md`: *"Diffuse: dead flat,
+ * unlit, zero saturation"* and *"Specular: high, and tinted entirely by the environment... A matte
+ * Hollow would be the drift, because matte means the surface is GENERATING its own flat tone. A wet
+ * one generates nothing and shows you the room."* Lambert has no specular term at all, so the
+ * shipped material could not express the brief's central claim even in principle. Standard can.
+ *
+ * ⚠⚠ ONE TEXTURE FOR THE WHOLE GAME, BUILT LAZILY, AND DELIBERATELY NEVER DISPOSED WITH A MATERIAL.
+ * A texture per body is the same allocation class as a material per body — the one that got this
+ * page blocked from WebGL on 2026-08-06. It is also shared by every live material, so disposing it
+ * alongside any one of them would blank the surface on all the others; a single 256^2 map for the
+ * app's lifetime is the cheap, correct trade and this comment is the reason it looks like a leak.
+ */
+const SURF = 256
+let GOOP: THREE.DataTexture | null = null
+
+/** Value noise, 4 octaves, tiling — the lumps and runs a clay body has. */
+function goopHeight(): Float32Array {
+  const h = new Float32Array(SURF * SURF)
+  // Deterministic: the surface must be the same on every machine and in every screenshot, or a
+  // look call made from one picture is a call about that picture only.
+  let seed = 0x9e3779b9
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 0x100000000 }
+  let amp = 1, total = 0
+  for (let oct = 0, cells = 4; oct < 4; oct++, cells *= 2) {
+    const g = new Float32Array(cells * cells)
+    for (let i = 0; i < g.length; i++) g[i] = rnd()
+    for (let y = 0; y < SURF; y++) {
+      for (let x = 0; x < SURF; x++) {
+        const fx = (x / SURF) * cells, fy = (y / SURF) * cells
+        const x0 = Math.floor(fx) % cells, y0 = Math.floor(fy) % cells
+        const x1 = (x0 + 1) % cells, y1 = (y0 + 1) % cells
+        const tx = fx - Math.floor(fx), ty = fy - Math.floor(fy)
+        // Smoothstep, so the lumps have no grid tell along the cell edges.
+        const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty)
+        const a = g[y0 * cells + x0] * (1 - sx) + g[y0 * cells + x1] * sx
+        const b = g[y1 * cells + x0] * (1 - sx) + g[y1 * cells + x1] * sx
+        h[y * SURF + x] += (a * (1 - sy) + b * sy) * amp
+      }
+    }
+    total += amp; amp *= 0.55
+  }
+  for (let i = 0; i < h.length; i++) h[i] /= total
+  return h
+}
+
+/**
+ * The shared goop surface: a normal map in RGB with the same height in A, so one texture serves as
+ * BOTH the normal map and the roughness map. Wet clay is not uniformly wet — a run catches the light
+ * and the pit beside it does not — and driving roughness from the same field is what makes a
+ * highlight break up along the lumps instead of sliding over them like plastic.
+ */
+export function goopSurface(): THREE.DataTexture {
+  if (GOOP) return GOOP
+  const h = goopHeight()
+  const data = new Uint8Array(SURF * SURF * 4)
+  const at = (x: number, y: number) => h[((y + SURF) % SURF) * SURF + ((x + SURF) % SURF)]
+  const STRENGTH = 2.6
+  for (let y = 0; y < SURF; y++) {
+    for (let x = 0; x < SURF; x++) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * STRENGTH
+      const dy = (at(x, y + 1) - at(x, y - 1)) * STRENGTH
+      const len = Math.hypot(dx, dy, 1)
+      const i = (y * SURF + x) * 4
+      data[i] = Math.round((-dx / len * 0.5 + 0.5) * 255)
+      data[i + 1] = Math.round((-dy / len * 0.5 + 0.5) * 255)
+      data[i + 2] = Math.round((1 / len * 0.5 + 0.5) * 255)
+      data[i + 3] = Math.round(h[y * SURF + x] * 255)
+    }
+  }
+  GOOP = new THREE.DataTexture(data, SURF, SURF, THREE.RGBAFormat)
+  GOOP.wrapS = GOOP.wrapT = THREE.RepeatWrapping
+  GOOP.repeat.set(2, 2)
+  GOOP.needsUpdate = true
+  return GOOP
+}
+
+/**
  * Three geometries, built once and shared by every body of that form.
  *
  * ⚠ ⚠ NOT PER BODY. A geometry per Hollow is a GPU buffer per Hollow; a MATERIAL per Hollow is a
@@ -83,9 +168,23 @@ export const createHollowGeo = (): Record<HollowForm, THREE.BufferGeometry> => (
 })
 
 /** Three materials, one per form, built from the dials. */
-export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowForm, THREE.MeshLambertMaterial> {
-  const one = (f: HollowForm) => new THREE.MeshLambertMaterial({
+export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowForm, THREE.MeshStandardMaterial> {
+  const surface = goopSurface()
+  const one = (f: HollowForm) => new THREE.MeshStandardMaterial({
     color: look.colour[f],
+    // ★ WET, AND THE NUMBERS COME FROM THE BRIEF RATHER THAN FROM TASTE. Low roughness is the
+    // "specular: high" half; low metalness keeps it a dielectric, because a metal reads as a
+    // POLISHED thing and a Hollow owns nothing. `envMapIntensity` above 1 is the "tinted entirely
+    // by the environment" half: where a scene gives it something to borrow, it borrows hard.
+    roughness: 0.34,
+    metalness: 0.10,
+    envMapIntensity: 1.35,
+    normalMap: surface,
+    normalScale: new THREE.Vector2(0.85, 0.85),
+    // ⚠ ROUGHNESS FROM THE SAME FIELD, VIA ITS ALPHA. Uniform roughness slides a highlight across
+    // the body like plastic; varying it along the same lumps the normal map describes is what makes
+    // the thing read as WET rather than as shiny.
+    roughnessMap: surface,
     // ★ THE SELF-LIGHT IS THE BODY'S OWN HUE, NEVER A TINT. A white emissive shifts the grey as the
     // scene light drops, so a Hollow would change colour with the time of day — and the grey is the
     // whole read of the thing.
@@ -109,7 +208,7 @@ export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowFo
  * the three that already exist is both cheaper and a truer picture of what the world does.
  */
 export function applyHollowLook(
-  mats: Record<HollowForm, THREE.MeshLambertMaterial>, look: HollowLook,
+  mats: Record<HollowForm, THREE.MeshStandardMaterial>, look: HollowLook,
 ): void {
   for (const f of ['warden', 'stalker', 'caster'] as const) {
     mats[f].color.setHex(look.colour[f])

@@ -48,11 +48,11 @@ export const BUCKETS = 6
 /** Unit sphere, scaled per blob. One buffer for every Hollow in the world. */
 let SPHERE: THREE.SphereGeometry | null = null
 /** form → six materials of rising opacity, cloned from the shipped look. */
-let MATS: Record<HollowForm, THREE.MeshLambertMaterial[]> | null = null
+let MATS: Record<HollowForm, THREE.MeshStandardMaterial[]> | null = null
 
 const bucketOf = (o: number) => Math.max(0, Math.min(BUCKETS - 1, Math.round(o * (BUCKETS - 1))))
 
-function shared(): { sphere: THREE.SphereGeometry; mats: Record<HollowForm, THREE.MeshLambertMaterial[]> } {
+function shared(): { sphere: THREE.SphereGeometry; mats: Record<HollowForm, THREE.MeshStandardMaterial[]> } {
   if (!SPHERE) SPHERE = new THREE.SphereGeometry(1, 10, 8)
   if (!MATS) {
     // ★ CLONED FROM THE SHIPPED MATERIAL, NEVER RETYPED FROM ITS NUMBERS. A hand-kept copy of
@@ -60,7 +60,7 @@ function shared(): { sphere: THREE.SphereGeometry; mats: Record<HollowForm, THRE
     // confidently wrong with nothing to catch it (PATTERNS 2026-08-22, the hand-kept mirror).
     const base = createHollowMat()
     const forForm = (f: HollowForm) => {
-      const out: THREE.MeshLambertMaterial[] = []
+      const out: THREE.MeshStandardMaterial[] = []
       // ⚠ A `for`, not `Array.from(…, () => new Material)` — `render-audit.test.ts` reads an
       // anonymous callback around a GPU construction as the per-object allocation shape, and it is
       // right to: it cannot tell a bounded six from an unbounded entity list.

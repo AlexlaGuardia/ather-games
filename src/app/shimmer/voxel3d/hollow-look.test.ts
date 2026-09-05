@@ -8,7 +8,7 @@
 
 import { readFileSync } from 'node:fs'
 import { codeOnly } from '../testing/guard'
-import { HOLLOW_LOOK, createHollowGeo, createHollowMat, applyHollowLook, type HollowLook } from './hollow-look'
+import { HOLLOW_LOOK, createHollowGeo, createHollowMat, applyHollowLook, goopSurface, type HollowLook } from './hollow-look'
 
 let pass = 0
 const fails: string[] = []
@@ -98,6 +98,52 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
     ok(HOLLOW_LOOK.opacity[f] > 0.2, `${f} is a body, not a rumour`)
     ok(HOLLOW_LOOK.opacity[f] <= 1, `${f}'s opacity is a fraction`)
   }
+}
+
+// ── ★★★ THE SURFACE CAN EXPRESS THE BRIEF, AND IT IS ONE TEXTURE FOR THE WHOLE GAME ─────────────
+// The material was a `MeshLambertMaterial` until 2026-09-05, which has NO SPECULAR TERM — so the
+// brief's central claim (*"specular high, and tinted entirely by the environment... a matte Hollow
+// would be the drift"*) could not be expressed even in principle, and every look call made against
+// it was a call about a shadow puppet. ⚠ This suite passed 43/0 across that whole change: it
+// asserted the SEAM (dials reach the mesh) and never that the material could carry the look. Both
+// are worth having and neither substitutes for the other.
+{
+  const mats = createHollowMat(HOLLOW_LOOK)
+  for (const f of FORMS) {
+    const m = mats[f]
+    ok(typeof m.roughness === 'number' && typeof m.metalness === 'number',
+      `★★ ${f} has a specular response at all — the brief's "wet, never matte" needs one to exist`)
+    ok(m.roughness < 0.5, `★ ${f} reads WET rather than matte (roughness ${m.roughness})`)
+    ok(m.metalness < 0.35,
+      `★ ${f} stays a dielectric — a metal reads as POLISHED, and a Hollow owns nothing (metalness ${m.metalness})`)
+    ok(m.envMapIntensity > 1,
+      `★ ${f} borrows hard where a scene gives it something to borrow (envMapIntensity ${m.envMapIntensity})`)
+    ok(m.normalMap !== null, `★★ ${f} has a SURFACE — flat shading is what made it read as a shadow puppet`)
+    ok(m.normalMap === m.roughnessMap,
+      `★★ ${f} drives roughness from the SAME field as the normal — uniform roughness slides a highlight across it like plastic; wet clay breaks it along the lumps`)
+  }
+
+  // ⚠⚠ ONE TEXTURE, SHARED. A texture per body is the allocation class that got this page blocked
+  // from WebGL on 2026-08-06 — same family as a material per body, and less obvious because a
+  // texture is created by a helper rather than by a `new` the reader can see.
+  ok(new Set(FORMS.map(f => mats[f].normalMap)).size === 1, '★★ all three forms share ONE surface texture')
+  ok(mats.warden.normalMap === goopSurface(), 'and it is the shared one, not a per-call build')
+  ok(createHollowMat(HOLLOW_LOOK).warden.normalMap === goopSurface(),
+    '★★ a SECOND createHollowMat reuses it too — the singleton survives repeated construction')
+
+  // ★ AND THE SURFACE IS DETERMINISTIC. A look call is made from a picture; if the lumps differed
+  // between two builds, "does this read right" would be a statement about one screenshot and not
+  // about the game. Seeded value noise, asserted by content rather than by reading the source.
+  const a = goopSurface().image.data as Uint8Array
+  const sum = a.reduce((t: number, v: number) => (t + v) % 1000003, 0)
+  // ⚠ PINNED, AND `|| true` WAS THE FIRST VERSION OF THIS LINE — an assert with no input that
+  // makes it fire is decoration, and it went green while saying nothing (PATTERNS 2026-08-22).
+  // A deliberate retune of the noise SHOULD fail here: updating the number is the moment someone
+  // states that the surface changed, instead of it drifting under a look call made last week.
+  ok(sum === 32084, `the goop surface is byte-identical to the pinned one (got ${sum}, want 32084)`)
+  ok(a.length === 256 * 256 * 4 && a.some(v => v !== a[0]),
+    '★ the surface has real content — an all-one-value map is a normal map that does nothing')
+  for (const f of FORMS) mats[f].dispose()
 }
 
 console.log(`hollow-look: ${pass} pass, ${fails.length} fail`)
