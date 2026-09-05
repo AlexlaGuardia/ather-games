@@ -27,6 +27,14 @@ import type { HollowForm } from './hollow-look'
  * doing is for the mounted body to say so. It doubles as the cost readout this needs anyway: the
  * vertex count IS the per-frame price of a fused Hollow.
  */
+/**
+ * ⚠ HOISTED OUT OF THE FRAME LOOP, and `render-audit.test.ts` is what said so — a `new Vector3()`
+ * inside `useFrame` is per-frame garbage even when the loop around it is sampled. One scratch vector
+ * for the readout, reused; the readout runs on one body at a time, so sharing it is safe and stating
+ * that here is the price of sharing it.
+ */
+const SCRATCH = new THREE.Vector3()
+
 export function HollowFused({ form, speed, onStats }: {
   form: HollowForm; speed: number; onStats?: (s: { verts: number; y: [number, number] }) => void
 }) {
@@ -57,9 +65,8 @@ export function HollowFused({ form, speed, onStats }: {
       const pos = surf.geometry.getAttribute('position')
       const n = Math.min(surf.geometry.drawRange.count, pos ? pos.count : 0)
       let lo = Infinity, hi = -Infinity
-      const v = new THREE.Vector3()
       surf.updateMatrixWorld(true)
-      for (let i = 0; i < n; i += 7) { v.fromBufferAttribute(pos, i).applyMatrix4(surf.matrixWorld); if (v.y < lo) lo = v.y; if (v.y > hi) hi = v.y }
+      for (let i = 0; i < n; i += 7) { SCRATCH.fromBufferAttribute(pos, i).applyMatrix4(surf.matrixWorld); if (SCRATCH.y < lo) lo = SCRATCH.y; if (SCRATCH.y > hi) hi = SCRATCH.y }
       onStats({ verts: n, y: [n ? lo : 0, n ? hi : 0] })
     }
   })
