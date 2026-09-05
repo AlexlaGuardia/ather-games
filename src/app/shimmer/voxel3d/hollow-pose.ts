@@ -118,6 +118,8 @@ export interface HollowPose {
   thighL: number; thighR: number
   shinL: number; shinR: number
   armL: number; armR: number
+  /** The forearm trails the shoulder and folds ONE WAY only — the knee's rule, on the arm. */
+  elbowL: number; elbowR: number
   /** 0..1 — how gathered the whole body is right now. Never reaches 1 and never reaches 0. */
   cohesion: number
   /** true only for the caster: it never gathered enough matter to be pulled down. */
@@ -125,7 +127,11 @@ export interface HollowPose {
 }
 
 /** Where each anchor sits on the body plan, before any sag. Keeper-scaled, feet at y=0. */
-const REST: Record<Anchor, [number, number, number]> = {
+/**
+ * ⚠ EXPORTED because the doll builds its BONE hierarchy from these positions. It is the one table
+ * both the field and the rig read, so a joint cannot be in two places at once.
+ */
+export const REST: Record<Anchor, [number, number, number]> = {
   head: [0, 1.52, 0], chest: [0, 1.19, 0], gut: [0, 0.90, 0], hip: [0, 0.67, 0],
   // ★ A LIMB IS A CHAIN OF OVERLAPPING BLOBS, NEVER ONE BLOB PER LIMB, and the spacing is SOLVED
   // rather than eyeballed. `MIN_R` below turns "every joint must stay fused" into one condition —
@@ -250,6 +256,12 @@ export function hollowPose(t: number, form: HollowForm, speed: number): HollowPo
     shinL: legs * Math.max(0, Math.sin(phase - Math.PI / 2)) * 0.5,
     shinR: legs * Math.max(0, -Math.sin(phase - Math.PI / 2)) * 0.5,
     armL: swing * 0.3, armR: -swing * 0.3,
+    // ⚠ DERIVED FROM THE SHOULDER, AND CLAMPED AT 0, so an elbow can never hinge backwards. Same
+    // rule and same reason as the knee above. Computed HERE and not in the renderer: this module
+    // owns what the body does, the doll owns how it is drawn, and an angle invented in a component
+    // is an angle no guard can see. That separation is the whole reason the walk cycle below is
+    // testable at all.
+    elbowL: Math.max(0, -swing * 0.3) * 1.2, elbowR: Math.max(0, swing * 0.3) * 1.2,
     cohesion: cohesionAt(t),
     floats,
   }
