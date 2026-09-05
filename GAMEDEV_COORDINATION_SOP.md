@@ -272,6 +272,60 @@ coord build "what changed"     # acquire lock -> npm run build -> pm2 restart ->
   ("touching the movement state machine, hub heads-up").
 - This is the async standup. `coord status` is the live board; cortex is the log.
 
+## ★★ Addressed messages (`dbr`), waking a seat, and the hub as the gate (Alex + hub, 2026-09-05)
+> Alex, wrapping the vessel session: *"my wonder is if the window is idle will this or can this wake
+> them? … i also wonder if the hub should be a dedicated 'final gate' so the hub can sit idle while the
+> other windows and i work on different lanes but they all go through the hub."* Both were MEASURED
+> before being written down, and the measurement produced the rules below, plus one live repeat of the
+> 08-26 recycled-mailbox trap.
+
+### What each channel actually does (measured 2026-09-05, ~00:45 ET)
+| channel | delivers | wakes an idle window? | who reads it |
+|---|---|---|---|
+| `[coord]` cortex thread | a broadcast note | **no** — read on the peer's next turn | every window, at boot / on a check |
+| `dbr send <lane>` | an ADDRESSED cortex signal + a Discord ping | **no** — the play window slept through three of them for 4h | the addressed window on its next `dbr check`; the ping goes to a HUMAN |
+| host `SendMessage` (ListAgents name) | injected into the peer's conversation | **reached a LIVE window in ~80s; idle-wake UNPROVEN** (the only peer listed was mid-turn) | that window, as a message in its transcript |
+| host idle notice (`notify_when_idle`) | one notice when the peer next finishes a turn | n/a — it is the peer telling YOU | the subscriber |
+| a self-scheduled loop (`/loop`, self-paced wakeups) | nothing — it wakes the window ITSELF | **yes, by construction** | the window that set it |
+
+- **⚠ `dbr` is a mailbox with a doorbell for the human, not a wake.** Nothing in it reaches a window that
+  is sitting at its prompt. Say "sent" and mean "queued"; never assume a reply is coming.
+- **★★ THE 08-26 LESSON, PERFORMED AGAIN WHILE TESTING THIS.** The wake test was addressed to the peer
+  named `Jin 2` — the play window's name at boot. That mailbox now held the **Magii** seat (Alex had
+  rebooted it), which was mid-turn with him typing. So the datapoint was about the wrong seat and the
+  wrong state, and the only reason it cost nothing is that Magii **refused the scripted reply** because
+  it would have asserted two false things. A name on `ListAgents` is an address; the occupant is proven
+  only by the CONTENT of what comes back.
+
+### The rules
+1. **Every addressed message opens with a discard header:** `FOR <seat> (<session-id>) — if you are not
+   that seat, discard.` The wrong recipient bounces it in one line instead of investigating. Magii's
+   bounce is the model. This applies to `dbr` AND to host `SendMessage`.
+2. **Confirm identity from the reply's content, never from the roster.** `signals.session_id` says who
+   DID something; `ListAgents` only says an address is bound.
+3. **A seat that others wait on is ON CALL, not idle.** The **hub** (ship requests) and **Magii** (canon
+   questions) each run a self-paced loop while their human is away: wake, `dbr check`, act on what is
+   addressed to them, sleep 20–30 min. A gate that cannot be woken is a queue with no worker — which
+   is precisely why lanes were given self-deploy on 09-04 (line: *"we have been tripping over
+   ourselves"*). The loop is what makes a gate honest; host wake, if it ever proves out on an idle
+   window, becomes a faster path, not the mechanism.
+4. **Lanes send, they do not park.** A ship request goes to hub by `dbr`; a canon question goes to
+   Magii by `dbr` AND into `CANON_GAPS.md` (the file survives a dead window — see the relay entry
+   above; the message draws attention to the file, never carries the ruling).
+5. **The hub as the gate, with the condition.** Integration, the sweep, and the deploy belong to one
+   seat that read both sides — that is how the sharpest bugs of 09-04 were caught (by the window that
+   was not the author). **While the hub is on call (rule 3), lanes ship THROUGH it.** While it is not,
+   lanes keep self-deploy through `coord build` and the hub reviews after the fact. Never both at once;
+   say on the board which mode is live.
+6. **Subscribe to a lane going idle** (`notify_when_idle`) when you are waiting on its chunk. It is a
+   cleaner "ready for review" than polling the board, and it costs the lane nothing.
+7. **Magii is a lane on this bus.** `dbr send magii …` works today (the seat signs as `magii/<id>`);
+   canon gates go through Magii the way builds go through the hub.
+
+### Still to measure
+- **Does host `SendMessage` wake a window that is genuinely idle at its prompt?** Needs a peer that is
+  listed, idle, and known by its session id. Until then rule 3 assumes NO.
+
 ## Boards & canon (unchanged)
 - **GBOARD** per-game blocks are section-disjoint — bump your game's block, commit it with your lane.
 - **CANON_GAPS.md** is append-only — safe from any window. Canon stays **read-only** (Magii owns it).
