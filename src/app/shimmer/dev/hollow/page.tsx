@@ -62,6 +62,7 @@ export default function HollowBenchPage() {
   // bipedal, plantigrade); the blob doll is the thing it replaces, kept beside it so the two can be
   // told apart in MOTION rather than from memory.
   const [rig, setRig] = useState<'fused' | 'bones' | 'blob'>('fused')
+  const [stats, setStats] = useState<{ verts: number; y: [number, number] } | null>(null)
   const [night, setNight] = useState(true)
   const [eye, setEye] = useState(true)
 
@@ -88,6 +89,12 @@ export default function HollowBenchPage() {
           {FORMS.map(f => <Btn key={f} on={form === f} onClick={() => setForm(f)}>{f}</Btn>)}
           <span style={{ width: 10 }} />
           <Btn on={rig === 'fused'} onClick={() => setRig('fused')}>Fused field</Btn>
+          {rig === 'fused' && (
+            <span className="gx-value" style={{ ...chip, cursor: 'default', fontVariantNumeric: 'tabular-nums',
+              color: stats && stats.verts > 0 ? '#8fbf8a' : '#d08a8a' }}>
+              {stats ? `${stats.verts} verts · y ${stats.y[0].toFixed(2)}..${stats.y[1].toFixed(2)}` : 'no frame yet'}
+            </span>
+          )}
           <Btn on={rig === 'bones'} onClick={() => setRig('bones')}>Bones (spheres)</Btn>
           <Btn on={rig === 'blob'} onClick={() => setRig('blob')}>Blob doll (what it replaces)</Btn>
           <span style={{ width: 10 }} />
@@ -136,7 +143,7 @@ export default function HollowBenchPage() {
           <CubeCamera resolution={64} frames={Infinity} position={[x, 1.1, 0]}>
             {(texture) => (
               <group position={[x, 0, 0]}>
-                {rig === 'fused' ? <HollowFused form={form} speed={speed} />
+                {rig === 'fused' ? <HollowFused form={form} speed={speed} onStats={setStats} />
                   : rig === 'bones' ? <HollowRig form={form} speed={speed} />
                   : <HollowDoll form={form} speed={speed} mode={mode} envMap={texture} />}
               </group>

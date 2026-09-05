@@ -19,7 +19,17 @@ import * as THREE from 'three'
 import { createHollowMeta, updateHollowMeta, disposeHollowMetas } from './hollow-meta'
 import type { HollowForm } from './hollow-look'
 
-export function HollowFused({ form, speed }: { form: HollowForm; speed: number }) {
+/**
+ * ⚠ `onStats` EXISTS BECAUSE THE BODY WAS INVISIBLE AND EVERY INSTRUMENT SAID IT WAS FINE. The
+ * headless guard surfaced 1,044 vertices, the console was clean, and the page drew nothing — and
+ * R3F keeps its scene in its OWN reconciler, so the THREE objects are not reachable from the DOM
+ * fiber tree that a page-side probe can walk. The only honest way to see what the mounted body is
+ * doing is for the mounted body to say so. It doubles as the cost readout this needs anyway: the
+ * vertex count IS the per-frame price of a fused Hollow.
+ */
+export function HollowFused({ form, speed, onStats }: {
+  form: HollowForm; speed: number; onStats?: (s: { verts: number; y: [number, number] }) => void
+}) {
   const host = useRef<THREE.Group>(null)
   const body = useRef<THREE.Group | null>(null)
 
@@ -36,8 +46,22 @@ export function HollowFused({ form, speed }: { form: HollowForm; speed: number }
   // Shared materials are module-level and lazily rebuilt, so release them on unmount only.
   useEffect(() => () => disposeHollowMetas(), [])
 
+  const tick = useRef(0)
   useFrame(state => {
-    if (body.current) updateHollowMeta(body.current, state.clock.elapsedTime, form, speed)
+    if (!body.current) return
+    updateHollowMeta(body.current, state.clock.elapsedTime, form, speed)
+    // Sampled, not every frame: this is a readout, and a setState per frame is its own bug.
+    if (onStats && ++tick.current % 30 === 0) {
+      const surf = body.current.children.find(c => c.name === 'hollowField') as THREE.Mesh | undefined
+      if (!surf) return
+      const pos = surf.geometry.getAttribute('position')
+      const n = Math.min(surf.geometry.drawRange.count, pos ? pos.count : 0)
+      let lo = Infinity, hi = -Infinity
+      const v = new THREE.Vector3()
+      surf.updateMatrixWorld(true)
+      for (let i = 0; i < n; i += 7) { v.fromBufferAttribute(pos, i).applyMatrix4(surf.matrixWorld); if (v.y < lo) lo = v.y; if (v.y > hi) hi = v.y }
+      onStats({ verts: n, y: [n ? lo : 0, n ? hi : 0] })
+    }
   })
 
   return <group ref={host} />
