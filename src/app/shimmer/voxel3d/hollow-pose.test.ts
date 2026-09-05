@@ -9,6 +9,7 @@
  */
 import {
   hollowPose, hollowField, cohesionAt, fieldMass, DENSITY, COHERE_S, HOLLOW_STRIDE_S,
+  MAX_BLOB_R, SHED_FLOOR,
   type Blob,
 } from './hollow-pose'
 import type { HollowForm } from './hollow-look'
@@ -82,7 +83,7 @@ ok(hollowField(1, 'warden').every(b => !('color' in b) && !('emissive' in b) && 
 // ── IT SAGS, THEN IS DRAWN BACK UP ────────────────────────────────────────────────────────────
 let lowT = 0, highT = 0
 for (const t of T) { if (cohesionAt(t) < cohesionAt(lowT)) lowT = t; if (cohesionAt(t) > cohesionAt(highT)) highT = t }
-const meanY = (t: number) => hollowField(t, 'warden').reduce((n, b) => n + b.y, 0) / 12
+const meanY = (t: number) => hollowField(t, 'warden').reduce((n, b) => n + b.y, 0) / hollowField(t, 'warden').length
 ok(meanY(lowT) < meanY(highT) - 0.02,
   '★ the body hangs LOWER when it is least gathered — it sags, and is drawn back up')
 
@@ -93,6 +94,62 @@ ok(walk.every(p => p.thighL * p.thighR <= 1e-12), 'the legs swing in opposite di
 ok(walk.every(p => p.lean >= 0 && p.lean < 0.2),
   'it leans INTO the walk and never strikes a menace pose — it has no intent to perform')
 ok(near(hollowPose(0.5, 'warden', 0).thighL, 0), 'standing still is standing still')
+
+// ── ★★★ IT IS A BODY, NOT A BALL ──────────────────────────────────────────────────────────────
+// Added 2026-09-05 after Alex looked at the bench and said "the blob isnt the right look". He was
+// reading a real defect: `gut` and `chest` were reaching r=1.19 and r=1.04 on a body 1.56 tall — one
+// sphere enclosing the head AND the feet — while the limbs flickered at 6-43% presence inside it.
+//
+// ⚠⚠ EVERY ASSERT ABOVE STAYED GREEN THROUGH ALL OF IT, AND THE MASS ASSERT IS THE REASON: POURING
+// THE WHOLE BODY INTO ONE BALL CONSERVES MASS PERFECTLY. Conservation is a claim about arithmetic;
+// none of it was a claim about a figure. These asserts are about the SILHOUETTE, which is the thing
+// the brief actually rules and the thing a player actually sees.
+const field = (t: number, f: HollowForm) => hollowField(t, f)
+const span = (bs: Blob[], k: 'x' | 'y') =>
+  Math.max(...bs.map(b => b[k] + b.r)) - Math.min(...bs.map(b => b[k] - b.r))
+
+ok(FORMS.every(f => T.every(t => field(t, f).every(b => b.r <= MAX_BLOB_R))),
+  `★★ no single blob reaches ${MAX_BLOB_R} blocks — none is big enough to BE the body (pre-fix peak: 1.19)`)
+
+ok(FORMS.every(f => T.every(t => span(field(t, f), 'y') / span(field(t, f), 'x') > 1.25)),
+  '★★ the silhouette stays taller than it is wide — upright and bipedal, never a boulder')
+
+// The walkers keep every part through the whole loop. "Edges never resolve" is not "a leg blinks out".
+//
+// ⚠ THE FIRST VERSION OF THIS ASSERT COULD NOT FAIL, AND A MUTATION SWEEP IS THE ONLY REASON I KNOW.
+// It read `b.r > 0.02`, and setting SHED_FLOOR to 0 sailed straight through it — because the `dip`
+// expression bottoms out near 0.075 on its own, so no part was ever going to approach 0.02 whatever
+// SHED_FLOOR said. It was green for a reason that had nothing to do with the constant it existed to
+// guard. Restated against what SHED_FLOOR actually PROMISES — a part keeps a real fraction of itself
+// — it fails the moment that floor is lowered. (PATTERNS 2026-08-22: ask of any assert whether there
+// is an input that makes it fire.)
+const swing = (f: HollowForm, a: Blob['anchor']) => {
+  const rs = T.map(t => field(t, f).find(b => b.anchor === a)!.r)
+  return Math.min(...rs) / Math.max(...rs)
+}
+ok((['warden', 'stalker'] as HollowForm[]).every(f =>
+    (['head', 'armL', 'handR', 'thighL', 'shinR'] as const).every(a => swing(f, a) > 0.25)),
+  `★★ a walker's parts thin but never amputate — each keeps >25% of its fullest size (SHED_FLOOR ${SHED_FLOOR})`)
+
+// A leg you cannot see is not a leg. The shins must stand clear of the trunk blob, not inside it.
+ok(['warden', 'stalker'].every(f => T.every(t => {
+    const bs = field(t, f as HollowForm)
+    const gut = bs.find(b => b.anchor === 'gut')!
+    return (['shinL', 'shinR'] as const).every(a => {
+      const sh = bs.find(b => b.anchor === a)!
+      return Math.hypot(sh.x - gut.x, sh.y - gut.y, sh.z - gut.z) + sh.r > gut.r + 0.05
+    })
+  })),
+  '★★ the shins stand OUTSIDE the trunk — legs that are swallowed by the gut are not legs')
+
+// ★ Canon: `body: 0`, "reach is its body". True of the geometry, not merely of the alpha.
+ok(T.every(t => {
+    const bs = field(t, 'caster')
+    const reach = bs.find(b => b.anchor === 'handR')!.r + bs.find(b => b.anchor === 'armR')!.r
+    const trunk = bs.find(b => b.anchor === 'chest')!.r + bs.find(b => b.anchor === 'gut')!.r
+    return reach > trunk
+  }),
+  '★★ a caster carries more mass in its REACH than in its trunk — "reach is its body"')
 
 // ── PERIODIC ──────────────────────────────────────────────────────────────────────────────────
 ok(T.every(t => near(cohesionAt(t), cohesionAt(t + COHERE_S), 1e-9)),

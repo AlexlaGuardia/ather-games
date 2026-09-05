@@ -45,11 +45,28 @@ export const HOLLOW_STRIDE_S = 1.35
  */
 export const DENSITY: Record<HollowForm, number> = { warden: 1, stalker: 0.72, caster: 0.4 }
 
+/**
+ * A part thins but never disappears. The brief says *edges never resolve*; it does not say a leg
+ * blinks out. A floor here is what keeps the silhouette bipedal through the whole cohere loop.
+ */
+export const SHED_FLOOR = 0.34
+
+/**
+ * The ceiling no single blob may cross, in blocks.
+ *
+ * ⚠ DERIVED, NOT FITTED. The head anchor sits at 1.56, so that is the body's standing height. A
+ * sphere whose DIAMETER reaches two thirds of that has stopped being a part of a figure and has
+ * become the figure — which is precisely the failure this rewrite fixes. 1.56 × ⅔ ÷ 2 = 0.52.
+ * The number is set from the body plan so that tuning the body cannot quietly move the guard; the
+ * pre-rewrite field peaked at **1.19**, blowing through it by 2.3×. Asserted, never clamped.
+ */
+export const MAX_BLOB_R = 0.52
+
 /** Anchors of the one body plan. Bipedal, plantigrade, roughly keeper-scaled, no face. */
 export type Anchor =
   | 'head' | 'chest' | 'gut' | 'hip'
-  | 'armL' | 'armR' | 'handL' | 'handR'
-  | 'thighL' | 'thighR' | 'shinL' | 'shinR'
+  | 'armL' | 'armR' | 'elbowL' | 'elbowR' | 'handL' | 'handR'
+  | 'thighL' | 'thighR' | 'kneeL' | 'kneeR' | 'shinL' | 'shinR' | 'footL' | 'footR'
 
 export interface Blob {
   anchor: Anchor
@@ -80,20 +97,33 @@ export interface HollowPose {
 /** Where each anchor sits on the body plan, before any sag. Keeper-scaled, feet at y=0. */
 const REST: Record<Anchor, [number, number, number]> = {
   head: [0, 1.56, 0], chest: [0, 1.18, 0], gut: [0, 0.88, 0], hip: [0, 0.66, 0],
-  armL: [-0.34, 1.16, 0], armR: [0.34, 1.16, 0],
-  handL: [-0.42, 0.74, 0], handR: [0.42, 0.74, 0],
-  thighL: [-0.16, 0.48, 0], thighR: [0.16, 0.48, 0],
-  shinL: [-0.17, 0.18, 0], shinR: [0.17, 0.18, 0],
+  // ★ A LIMB IS A CHAIN OF OVERLAPPING BLOBS, NEVER ONE BLOB PER LIMB. Spaced ~0.21 apart against
+  // radii around 0.12-0.20, so consecutive spheres always intersect and read as one continuous arm.
+  // The first cut hung a single sphere off each shoulder and hip: the render came back a snowman
+  // with pellets stuck to it, arithmetically bipedal and visually a bag of marbles.
+  armL: [-0.40, 1.16, 0], armR: [0.40, 1.16, 0],
+  elbowL: [-0.46, 0.95, 0], elbowR: [0.46, 0.95, 0],
+  handL: [-0.48, 0.72, 0], handR: [0.48, 0.72, 0],
+  thighL: [-0.17, 0.50, 0], thighR: [0.17, 0.50, 0],
+  kneeL: [-0.17, 0.32, 0], kneeR: [0.17, 0.32, 0],
+  shinL: [-0.18, 0.16, 0], shinR: [0.18, 0.16, 0],
+  // Plantigrade, heavy in the heel — the brief's words. The foot sits forward of the shin.
+  footL: [-0.19, 0.05, 0.05], footR: [0.19, 0.05, 0.05],
 }
 
 /** Base radius per anchor. The mass is chest-and-gut heavy, so it sags believably. */
 const BASE_R: Record<Anchor, number> = {
-  head: 0.20, chest: 0.30, gut: 0.28, hip: 0.24,
-  armL: 0.13, armR: 0.13, handL: 0.11, handR: 0.11,
-  thighL: 0.15, thighR: 0.15, shinL: 0.12, shinR: 0.12,
+  head: 0.19, chest: 0.27, gut: 0.26, hip: 0.23,
+  armL: 0.135, armR: 0.135, elbowL: 0.115, elbowR: 0.115, handL: 0.115, handR: 0.115,
+  thighL: 0.155, thighR: 0.155, kneeL: 0.13, kneeR: 0.13,
+  shinL: 0.125, shinR: 0.125, footL: 0.12, footR: 0.12,
 }
 
-const ORDER: Anchor[] = ['head','chest','gut','hip','armL','armR','handL','handR','thighL','thighR','shinL','shinR']
+const ORDER: Anchor[] = [
+  'head','chest','gut','hip',
+  'armL','elbowL','handL','armR','elbowR','handR',
+  'thighL','kneeL','shinL','footL','thighR','kneeR','shinR','footR',
+]
 
 /**
  * Deterministic smooth noise in [-1, 1].
@@ -152,47 +182,85 @@ export function hollowPose(t: number, form: HollowForm, speed: number): HollowPo
  * silhouette readable at distance and unreliable up close, which is the brief's *edges never
  * resolve* — it falls out of the construction rather than being a separate effect.
  *
+ * ★★★ WHY THIS WAS REWRITTEN (2026-09-05, sprites lane) — THE RIG WAS BIPEDAL ON PAPER AND A BALL
+ * ON SCREEN, AND THE GUARD COULD NOT TELL. Alex looked at the bench and said *"the blob isnt the
+ * right look"*, and he was reading a real defect, not a style preference. Measured over three
+ * cohere cycles, the old field put `gut` and `chest` at **100% presence with peak radii 1.19 and
+ * 1.04** on a body 1.56 blocks tall — a single sphere that ENCLOSED the head and the feet — while
+ * every limb flickered at 6–43% presence with peak radius 0.03–0.15, inside that sphere whenever it
+ * existed at all. The caster's reach anchor, which canon says **is** its body, was present in **1%**
+ * of frames.
+ *
+ * ⚠⚠ TWO MECHANISMS, AND THE SECOND IS THE ONE WORTH REMEMBERING.
+ *  1. `shedding = w*0.9 + (c - 0.72)*2.2` is negative for most of the loop (cohesion averages 0.62),
+ *     so **shedding was the default state of every part** rather than an occasional event.
+ *  2. All of that shed mass was handed to `gut` and `chest` **with no ceiling and no way back out**.
+ *     A one-way sink: the more the body shed, the bigger the ball got. Mass was conserved the whole
+ *     time — which is exactly why nothing went red.
+ *
+ * ★★★ THE GUARD ASSERTED CONSERVATION, AND POURING THE WHOLE BODY INTO ONE BALL CONSERVES MASS
+ * PERFECTLY. That is the cheapest wrong answer that still satisfies it (PATTERNS 2026-08-31). The
+ * fix is in both halves: parts now dip on their own phase and never fully vanish, and shed mass is
+ * redistributed **across the whole body in proportion to what each part is currently holding**, so
+ * the grey moves around a body instead of collecting in its middle. `hollow-pose.test.ts` now
+ * asserts the SILHOUETTE — taller than wide, limbs outside the trunk, no blob big enough to swallow
+ * the figure — which is a claim about being a body, not about arithmetic.
+ *
  * ★ THE CASTER'S REACH. Canon: `body: 0`, *"reach is its body"*. So on a caster every anchor is
- * pushed toward suggestion EXCEPT the reaching arm, which is the only thing approaching solid.
+ * pushed toward suggestion EXCEPT the reaching arm, which is held near solid and is given the
+ * BULK as well as the opacity — the old code made it the least transparent part while leaving it
+ * the smallest, so "reach is its body" was true of the alpha and false of the geometry.
  */
 export function hollowField(t: number, form: HollowForm, reach: Anchor = 'handR'): Blob[] {
   const d = DENSITY[form]
   const c = cohesionAt(t)
-  const out: Blob[] = []
-  let shed = 0                                    // mass that has left its anchor this instant
+  const floats = form === 'caster'
 
-  ORDER.forEach((anchor, i) => {
+  // Pass 1 — how much of each part is gathered right now, and where it has sagged to.
+  const raw = ORDER.map((anchor, i) => {
     const [bx, by, bz] = REST[anchor]
     const w = wobble(i, t)
-    // Sag: the field drifts DOWN as cohesion falls, and is drawn back up as it rises.
     const sag = (1 - c) * 0.16
-    // A piece can be shed entirely for a moment — radius to zero — and then re-gathered.
-    const shedding = Math.max(0, w * 0.9 + (c - 0.72) * 2.2)
-    const rBase = BASE_R[anchor] * d * (0.72 + 0.5 * c)
-    const r = Math.max(0, rBase * Math.min(1, shedding))
-    shed += rBase - r
-
-    const isReach = form === 'caster' && (anchor === reach || anchor === 'armR')
-    const localOpacity = form === 'caster' ? (isReach ? 0.92 : 0.22) : 1
-    out.push({
+    // ⚠ EACH PART DIPS ON ITS OWN PHASE (the `i` seed), so at any instant a few parts are letting go
+    // and the rest are holding. That is "always visibly losing itself". A shared phase would pulse
+    // the whole body in and out together, which reads as a breathing lung, not as dissolution.
+    const dip = 0.62 + 0.38 * w - (0.72 - c) * 0.55
+    const isReach = floats && (anchor === reach || anchor === 'armR')
+    const f = isReach
+      ? Math.max(0.9, Math.min(1, dip + 0.5))     // the reach stays gathered while the rest lets go
+      : Math.max(SHED_FLOOR, Math.min(1, dip))
+    // A caster is mostly suggestion; its reach is the exception that approaches solid.
+    const bulk = floats ? (isReach ? 2.4 : 0.62) : 1
+    const rBase = BASE_R[anchor] * d * bulk * (0.72 + 0.5 * c)
+    // ★★ A WALKER IS NEARLY OPAQUE, AND THAT IS THE BRIEF, NOT A PREFERENCE. The warden is "nearly
+    // opaque"; the stalker has "legible limbs". Only the CASTER is "mostly the suggestion of a body".
+    // ⚠ The first cut scaled alpha by `DENSITY`, which conflates how much matter gathered (a SIZE
+    // fact, and the axis canon actually rules) with how much you can see through it — so the stalker
+    // came out at 62% alpha and its overlapping spheres each drew their own outline. Overlapping
+    // OPAQUE spheres merge into one silhouette; overlapping transparent ones are a bag of marbles.
+    const localOpacity = floats ? (isReach ? 0.95 : 0.24) : 1
+    const alpha = floats ? localOpacity * (0.45 + 0.55 * c) : 0.86 + 0.14 * c
+    return {
       anchor,
       x: bx + w * 0.035,
       y: by - sag + w * 0.02,
       z: bz + wobble(i + 31, t) * 0.03,
-      r,
-      opacity: Math.max(0, Math.min(1, d * (0.45 + 0.55 * c) * localOpacity)),
-    })
+      rBase,
+      r: rBase * f,
+      opacity: Math.max(0, Math.min(1, alpha)),
+    }
   })
 
-  // ★ RE-MADE OUT OF THE SAME GREY. Whatever was shed is handed back to the trunk rather than
-  // vanishing, so the total is steady and the body reads as re-forming, not as leaking away.
-  if (shed > 0) {
-    const trunk = out.find(b => b.anchor === 'gut')!
-    trunk.r += shed * 0.55
-    const chest = out.find(b => b.anchor === 'chest')!
-    chest.r += shed * 0.45
-  }
-  return out
+  // ★ RE-MADE OUT OF THE SAME GREY — and spread across the body, not poured into its middle.
+  // Each part takes a share of the shed mass proportional to what it is already holding, so the
+  // total is exactly the sum of the base radii (conservation is preserved to the last digit, which
+  // is what the existing mass assert checks) while the SHAPE stays a body.
+  // ⚠ DELIBERATELY NOT CLAMPED. `MAX_BLOB_R` is asserted in the guard rather than enforced here: a
+  // silent clamp would swallow the exact regression this rewrite exists to fix and report nothing.
+  const shed = raw.reduce((n, p) => n + (p.rBase - p.r), 0)
+  const held = raw.reduce((n, p) => n + p.r, 0)
+  const gain = held > 0 ? shed / held : 0
+  return raw.map(({ rBase: _rBase, ...b }) => ({ ...b, r: b.r * (1 + gain) }))
 }
 
 /** Total mass of the field — the quantity the re-gathering conserves. */
