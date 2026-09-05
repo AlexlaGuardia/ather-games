@@ -26,6 +26,10 @@ import { columnHeight } from './height'
 import { MAT } from './depth'
 import { AIR } from './section'
 import { blockDef } from './registry'
+// ⚠ A TEST MAY reach into the host: `purity.test.ts` scans `*.ts` and skips `*.test.ts`, so the
+// port boundary binds the core and not its oracle. That is what lets this file check the render
+// tables at all — and those tables are exactly where this feature was broken.
+import { MATERIAL_COLOR, EMISSIVE } from '../voxel3d/attrs'
 import { makeColumn, SECTION } from './column'
 
 let pass = 0
@@ -301,6 +305,34 @@ const HARD_MIN_COVER = 1
   ok(def!.placeable !== true, 'a cache is not furniture — it is a thing that was left somewhere once')
   ok((def!.emit ?? 0) > 0,
     'the cache emits — in a warren with no sky channel it is the only lit thing, and that is how it is found')
+}
+
+// ── 10. ⚠⚠ THE RENDER TABLES — TWO OF THEM, AND `emit` IS IN NEITHER ─────────────────────────
+// ★ THIS BLOCK EXISTS BECAUSE THE FEATURE WAS ALREADY WRONG WHEN IT WAS WRITTEN. `registry.emit`
+// drives `light.ts`'s block-light BFS and nothing else; what a block LOOKS like comes from two
+// separate tables in `voxel3d/attrs.ts`, and the cache had a row in neither. The proof that these
+// are genuinely independent is in the tree: `MAT.WAYMARK` has `emit: 7` and no `EMISSIVE` row, so
+// it lights the ground around it while looking like ordinary stone. Correct for a landmark.
+//
+// For the cache it would have shipped the design inverted: a 6-block pool of light in a black
+// corridor with a plain grey cube at the centre of it — light with nothing to walk towards, which
+// reads as a lighting bug rather than as a find. The whole feature is "the cache is the only lit
+// thing down there", and two of the three tables that make that true are not the one the registry
+// owns.
+//
+// ⚠ AND THE EXISTING PALETTE GUARD COULD NOT HAVE CAUGHT IT: `break-fx-spec.test.ts` asserts chip
+// colours agree with `MATERIAL_COLOR` only `if (c !== undefined)` — a missing colour is EXEMPT, so
+// coverage is exactly the case it does not check. Same shape as every exemption in PATTERNS: a
+// silent promise that somebody is watching that corner.
+// Mutation: delete either `attrs.ts` row → the matching assert fires.
+{
+  ok(MATERIAL_COLOR[MAT.CACHE] !== undefined,
+    'the cache has a colour — an unmapped material renders as the loud magenta fallback')
+  ok(MATERIAL_COLOR[MAT.CACHE] !== 0xff00ff, 'and it is not the fallback itself')
+  ok((EMISSIVE[MAT.CACHE] ?? 0) > 0,
+    '★ the cache READS as self-lit, not merely as a light source — see the note above')
+  ok((EMISSIVE[MAT.CACHE] ?? 0) < (EMISSIVE[MAT.MANA_LANTERN] ?? 1),
+    'and it stays under the lantern — a cache is a thing you glimpse and go to, not the light you carry')
 }
 
 // ── 9. ⚠⚠ THE CLIP COVERS THE STRUCTURE — asserted as a relationship, not observed as a slice ─

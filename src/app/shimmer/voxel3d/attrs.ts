@@ -116,6 +116,12 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.MOSSY_STONE_BRICK]: 0x848e83,
   [MAT.CRACKED_STONE_BRICK]: 0x93989b,
   [MAT.MOSSY_CUT_STONE]: 0x8a9184,
+  // ── ★ THE CACHE — warm, against a warren that is entirely grey-green ─────────────────────────
+  // Amber, and the choice is doing work rather than decorating: the rooms around it are mossy brick
+  // (0x7f8a7c) and mossy cut stone (0x8a9184), so the ONE warm thing in a lightless corridor is the
+  // thing worth walking to. `light.ts` gives it a 6-block block-light pool; this is what that pool
+  // is centred on.
+  [MAT.CACHE]: 0xd9a441,
   [SEAM.RAW_MANA]: 0x7fd4ff,
   // Mana in the shape of a wall. Deliberately the palest, coolest thing in the table and NOT in
   // stone's family — a cast wall must never be mistaken for one you could have built.
@@ -278,6 +284,18 @@ export const EMISSIVE: Record<number, number> = {
   // It glows because it IS mana, and because a glow is the cheapest way to say "this is not rock
   // and it will not be here long". Below the lantern: a wall should not out-light the light source.
   [MAT.CONJURED]: 0.45,
+  // ── ★★ THE CACHE, AND IT NEEDS BOTH TABLES — registry `emit` AND this one ───────────────────
+  // They are separate systems and a block can sit in one without the other: the WAYMARK has
+  // registry `emit: 7` and no row here, so it lights the ground around it without looking lit
+  // itself. That is right for a landmark and wrong for this. The cache's whole job is to be SEEN
+  // from down a dark corridor — *"a filled seat is a line of light"*, pointed at the object — so it
+  // must both cast light (registry) and read as self-lit (here).
+  // ⚠ Setting only the registry field would have shipped a cache that lights the room it is in and
+  // is itself an ordinary grey cube: the pool of light would be there with nothing at the middle of
+  // it, which looks like a bug in the lighting rather than a thing to walk towards.
+  // ★ Under the lantern's 1.0 on the same reasoning the waymark row gives: a cache is a thing you
+  // glimpse and go to, not the light you carry.
+  [MAT.CACHE]: 0.7,
 }
 
 /** An unmapped material must be LOUD, not invisible — magenta says "the registry missed one". */
