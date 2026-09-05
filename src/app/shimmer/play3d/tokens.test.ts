@@ -40,6 +40,11 @@ const CONVERTED = ['PassagePanel.tsx', 'TremorRing.tsx', 'ui.tsx']
  */
 const PENDING = [
   'GfxPanel.tsx', 'HotBar.tsx', 'MoveBook.tsx',
+  // ⚠ Arrived by MOVING, not by being written: the three moglin fur/collar literals were already
+  // raw inside Shimmer3D.tsx and were extracted to a leaf module so the clay bench could import
+  // them instead of retyping them. The count on this worklist went up and the repo's actual drift
+  // did not change by one literal. Convert it with Shimmer3D's, not before.
+  'moglin-look.ts',
   'npcs3d.ts', 'page.tsx', 'PartyPanel.tsx', 'RemotePlayers.tsx',
   'Shimmer3D.tsx', 'StationMenus.tsx', 'WorldMap.tsx',
 ]

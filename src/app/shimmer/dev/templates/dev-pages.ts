@@ -85,6 +85,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['wall', 'texture', 'stone', 'brick', 'palette', 'material'],
   },
   {
+    path: '/shimmer/dev/clay',
+    title: 'The Clay Bench',
+    blurb: 'Does a rigid-part moglin, posed and shot on twos, read as clay?',
+    group: 'glass',
+    keywords: ['claymation', 'stop motion', 'moglin', 'rig', 'animation', 'doll', 'character'],
+  },
+  {
     path: '/shimmer/dev/break',
     title: 'The Chips',
     blurb: 'Every bucket breaking side by side, so the feel can be judged instead of argued.',

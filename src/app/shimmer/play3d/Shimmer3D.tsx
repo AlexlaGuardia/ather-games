@@ -139,6 +139,7 @@ import { WorldMap, MiniMap } from './WorldMap'
 import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWorld } from '../world/garden-world'
 import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
+import { MOGLIN_FUR, MOGLIN_FUR_LIGHT, GATE_COLORS } from './moglin-look'
 import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop, type WanderDials } from '../engine/burrows'
 import type { DealWindow } from '../engine/spawn-board'
 import { regionIdOf, REGION_FILES, regionSpawnConfig, migrateLegacyPosition, WILDS_ZONE, WILDS_GEO, loadWildsRegion, isRegionZone, regionDisplayName } from '../world/region-maps'
@@ -252,7 +253,6 @@ const SPAWNER_TOOLS: { id: SpawnerTool; gate: SpawnerPlacement['gate']; label: s
   { id: 'sp_brack', gate: 'brack', label: 'Sp·Brack' },
 ]
 const SPAWNER_TOOL_IDS = new Set<string>(SPAWNER_TOOLS.map(t => t.id))
-const GATE_COLORS: Record<SpawnerPlacement['gate'], string> = { thistle: '#8fd14f', vetch: '#f0a526', brack: '#e05a4d' }
 // itemId → display label (e.g. shimmeroak_plank → "Shimmeroak Plank"). Real item names live in
 // sprites/items.ts; this prettifier is enough for harvest toasts until those are wired.
 // Tap-to-transfer destination pick: a slot already holding the same item (merge target) wins,
@@ -523,8 +523,6 @@ function nodeShards(tx: number, ty: number, count: number): { a: number; tilt: n
 // thing the caution bans. Hold freed → pennant comes down, the mouth quiets; after Brack
 // falls a REFORMED moglin (no collar) sits by it — "came to raid, stayed to be neighbours."
 
-const MOGLIN_FUR = '#8a6a48'      // drab-but-warm earth — never grey
-const MOGLIN_FUR_LIGHT = '#a3855e'
 
 function BurrowWalker({ sp, heights, gridRef, ready, keyFor }: {
   sp: SpawnerPlacement; heights: number[][]; gridRef: React.MutableRefObject<number[][]>

@@ -11,6 +11,68 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🧱 Shimmer — **A CLAY DOLL HAS NO RIG, AND THE MOGLIN WAS ALREADY MOST OF ONE** (2026-09-04, sprites lane) · *Last touched 2026-09-04 — NOT YET DEPLOYED; sweep + build pending at commit time. tokens 29/0, dev-pages 223/0, dev-eye 25/0, moglin-pose 25/0 mutation-swept 8 ways all 8 fire, tsc 7 (baseline).*
+
+**Left off:** Alex asked how clay-doll character models are done, "as far as the rigging and etc". The
+answer this lane bet on, and then built to test: **for this look there is no rigging step.** Claymation
+does not deform a skin over bones — Wallace and Gromit, The Neverhood, Armikrog are rigid parts posed
+between frames. And `Shimmer3D.tsx:561-565` was already drawing a moglin as a capsule, a head, two ears
+and a collar. It was most of a clay doll already; what it lacked was a JOINT HIERARCHY and a reason to
+move, neither of which is a skinned mesh.
+
+**Built (prototype, nothing wired into the game):**
+- `play3d/moglin-pose.ts` — pure joint angles from one clock, plus `stepTime()`, the stop-motion
+  quantizer. No three.js, so it tests headlessly.
+- `play3d/moglin-pose.test.ts` — 25 asserts, **mutation-swept 8 ways, 8/8 fire, none survived.**
+- `play3d/MoglinDoll.tsx` — `root → hips → torso → head → ears`, `shoulder → elbow`, `hip → knee`.
+  No armature, no vertex weights, no `SkinnedMesh`, no GLB, no Blender.
+- `play3d/moglin-look.ts` — the fur/collar palette, extracted so the bench imports the game's real
+  colours rather than a retyped copy.
+- `dev/clay/page.tsx` — three dolls at smooth / 24fps / 12fps, plus limbs, matte and pace toggles.
+
+**★ QUANTIZE THE TIME, NEVER THE OUTPUTS.** Every angle derives from one `t`, so stepping `t` once makes
+the whole figure hold and then snap together, which is what a puppet does. Rounding each angle
+separately lets the head land on a new frame while an arm is still on the old one, and the read
+collapses from "stop motion" into "low framerate". Those look completely different and the only
+difference is whether the parts move as one.
+
+**★★ THE GUARD CAUGHT A DEFECT IN ITS OWN AUTHOR'S FIRST DRAFT, one hour after being written.** The knee
+bend was keyed straight off the stride, which peaks it at maximum BACKWARD extension — a quarter cycle
+early, reading as the doll kicking its heel on the wrong beat. The comment above it said "bends while
+the leg swings forward" and the code did the opposite. **Accurate prose describing code that does
+something else** is this file's oldest theme, and it survived writing, reading and a typecheck.
+
+**★ AND TWO ASSERTS WERE WRONG WHILE THE MODULE WAS RIGHT** — the mirror trap, which feels like
+diligence the whole way down. The right knee's peak was asserted backwards, and periodicity was
+asserted over ONE stride when `headYaw` deliberately runs at half rate so the head does not lock to the
+feet. Fixing the module to satisfy either would have damaged working animation. Both are now asserted
+as what they are: locomotion closes over one stride, the whole pose over two, **and a third assert pins
+the desync so nobody "simplifies" the half-rate term away.**
+
+**⚠ `moglin-look.ts` arrived on the tokens PENDING worklist by MOVING, not by being written.** Three
+literals that were already raw inside `Shimmer3D.tsx` are now raw in a leaf module. The worklist count
+went up; the repo's drift did not change by one literal.
+
+**Decisions:**
+- **No skinned rig, and not because it is hard.** The art-medium law says living things stay live-glow
+  and only dead grey things get pre-rendered. A skinned GLB character is a pre-rendered living thing,
+  so that path needs Alex + Magii before anyone opens Blender. Rigid-part posing stays inside the law.
+- **The bench does not reproduce today's moglin for comparison.** A hand-kept copy of shipped geometry
+  reads as corroboration (PATTERNS 08-22); the honest comparison is the doll's own limbs/posed toggles,
+  labelled as such.
+- **Judge it from the keeper's-eye toggle, not the turntable.** A doll spinning two blocks away reads
+  as clay whether or not it does at the range a moglin is actually met at.
+
+**Next:** Alex judges the three cadences and calls whether a moglin gets limbs at all. If yes, the
+wiring into `Shimmer3D.tsx` is a separate coordinated commit — that file is the shared surface.
+
+**Parked:** skinned-mesh path (Mixamo retarget, Meshy auto-rig is humanoid-only so moglins and spirits
+would not take it either way). Clay SURFACE work (thumbprint normals) — the cadence question comes first.
+
+**Files:** `play3d/moglin-pose.ts` · `play3d/moglin-pose.test.ts` · `play3d/MoglinDoll.tsx` ·
+`play3d/moglin-look.ts` · `dev/clay/page.tsx` · `dev/templates/dev-pages.ts` · `play3d/tokens.test.ts` ·
+`play3d/Shimmer3D.tsx` (palette extraction only, 3 consts + 1 import)
+
 ## 🔍 Shimmer — **THE PANEL COULD NOT BE LOOKED AT, AND THAT WAS THE REASON IT KEPT SHIPPING UNSEEN** (2026-09-04, play lane) · *Last touched 2026-09-04 — `e26b159` + `fdec53d` + `533a722` pushed; **LIVE in `BUILD_ID w_TC3g03z2hldtCSxpD81`**, 178 chunks, shipped by hub inside their icon pass from `380cb00` (which contains `e26b159`). Verified on prod AND the public tunnel with the owner cookie: 200, identical byte counts, positive controls present, negative absent, and an ungated fetch still 403s. panel-fixture **88/0**, dev-pages **214/0** (was 205), dev-back 39/0, keeper-tabs 13/0, keeper-chrome 41/0, gems 44/0, vessels 48/0, imbue 22/0, tsc 7 (baseline). Mutation-swept 9 ways on the fixture: 7 fire, 2 negative controls pass by design.*
 
 ### Why it existed: every block above it said NOT LOOKED AT, and the cause was mechanical
