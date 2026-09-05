@@ -39,6 +39,7 @@ import { moveById } from './keeper-moves'
 import { loadLoadout, resolveLoadout, emptySlotSentence, type EmptyReason } from './loadout'
 import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
 import { fillRoster, ROSTER_SIZE } from './crucible-bots'
+import { startingPositions } from './crucible-entrances'
 import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from './crucible-fleet'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
 import { spawnField, tickFields, fieldsAt, absorbShotAt, FIELD_HEIGHT, type Field } from '../engine/field-effects'
@@ -2522,6 +2523,27 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       if (cfg?.bots && zoneId === 'crucible') {
         if (!fleetRef.current) {
           fleetRef.current = createFleet(fillRoster([{ id: 'you', name: 'You' }], CRUCIBLE_SEED), CRUCIBLE_SEED)
+          // ── ★★★ WARP THE SIXTY TO THEIR ENTRANCES — canon's *"all 60 warped to starting
+          // positions"*, and the reason arena size is now a question you can answer by walking in.
+          //
+          // ⚠ WITHOUT THIS THE SIXTY SPAWN ON A RING AROUND THE PLAYER. `stepHunter` places a
+          // member on its first live tick at 12–16 tiles from whatever it is hunting, and on frame
+          // one the only living body is you — so every challenger arrived in one annulus centred on
+          // the keeper, AT THE SAME DENSITY AT EVERY ARENA SIZE. Resizing could not have changed how
+          // crowded the floor felt, and a judgement made from resizing would have measured nothing.
+          // ⚠ It also did not FIT: 39.6% of that ring fell off a 30-row grid and every one of those
+          // snapped to the single fallback tile — about 24 of the 60 on one square. ★ Enlarging the
+          // map alone would have made that pile vanish and been read as evidence about SIZE.
+          //
+          // ★ Setting `alive` is what does the work: `hunter-ai.ts`'s ring is inside `if (!alive)`,
+          // so a member that arrives already standing somewhere never asks for a ring at all.
+          const g = gridRef.current
+          const starts = startingPositions(g[0]?.length ?? 0, g.length)
+          fleetRef.current.members.forEach((m, i) => {
+            const p = starts[i]
+            if (!p) return
+            m.state.x = p.x + 0.5; m.state.z = p.z + 0.5; m.state.alive = true
+          })
         }
         const fleet = fleetRef.current
         const bodies = botBodies.current
