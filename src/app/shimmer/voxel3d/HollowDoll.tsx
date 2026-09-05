@@ -121,7 +121,8 @@ export function HollowDoll({ form, speed = 1, mode = 'borrowed', envMap = null }
       if (b.anchor === 'shinR') y = b.y - p.shinR * 0.1
       const swing = b.anchor.endsWith('L') ? p.thighL : b.anchor.endsWith('R') ? p.thighR : 0
       m.position.set(b.x + swing * 0.22, y, b.z + swing * 0.16)
-      m.scale.setScalar(b.r)
+      // Per-axis, never setScalar: a mass is an egg, a slab or a drip, and `s` is what says which.
+      m.scale.set(b.r * b.s[0], b.r * b.s[1], b.r * b.s[2])
       if (b.anchor === 'head') m.rotation.z = p.headTilt
       m.material = mode === 'borrowed' ? borrowed[bucketOf(b.opacity)] : shipped[form]
     })

@@ -104,6 +104,18 @@ export interface Blob {
   x: number; y: number; z: number
   /** Radius in blocks. 0 means this piece has been shed for the moment. */
   r: number
+  /**
+   * Per-axis STRETCH on top of `r`, so a mass can be an egg, a slab or a drip instead of a ball.
+   *
+   * ★★★ EVERY COMPONENT IS >= 1, AND THAT IS A FUSION INVARIANT, NOT A STYLE RULE. The 09-05
+   * skeleton solve guarantees each joint overlaps by deriving a floor from `BASE_a + BASE_b >=
+   * 1.25 x bone length`, and that arithmetic is about the extent along the bone. Stretching only
+   * ever makes an extent larger, so fusion is preserved by construction; a single component below 1
+   * could pull a limb apart on an axis nothing measures, which is precisely the failure the solve
+   * exists to prevent and precisely the one no silhouette assert can see (they are all true of a
+   * disconnected pile). Asserted in the guard.
+   */
+  s: [number, number, number]
   /** 0..1. The caster is mostly suggestion, so most of its field sits low. */
   opacity: number
 }
@@ -132,15 +144,15 @@ export interface HollowPose {
  * both the field and the rig read, so a joint cannot be in two places at once.
  */
 export const REST: Record<Anchor, [number, number, number]> = {
-  head: [0, 1.52, 0], chest: [0, 1.19, 0], gut: [0, 0.90, 0], hip: [0, 0.67, 0],
+  head: [0, 1.50, 0], chest: [0, 1.19, 0], gut: [0, 0.90, 0], hip: [0, 0.67, 0],
   // ★ A LIMB IS A CHAIN OF OVERLAPPING BLOBS, NEVER ONE BLOB PER LIMB, and the spacing is SOLVED
   // rather than eyeballed. `MIN_R` below turns "every joint must stay fused" into one condition —
   // `BASE_a + BASE_b >= 1.343 x bone length` — and every bone here satisfies it. The first cut hung
   // a single sphere off each shoulder at x=0.40 and the shoulder joint measured -0.81 overlap: the
   // arm was not attached to the body at any point in the cohere loop.
-  armL: [-0.30, 1.17, 0], armR: [0.30, 1.17, 0],
-  elbowL: [-0.36, 1.00, 0], elbowR: [0.36, 1.00, 0],
-  handL: [-0.39, 0.83, 0], handR: [0.39, 0.83, 0],
+  armL: [-0.265, 1.11, 0], armR: [0.265, 1.11, 0],
+  elbowL: [-0.315, 0.945, 0], elbowR: [0.315, 0.945, 0],
+  handL: [-0.335, 0.78, 0], handR: [0.335, 0.78, 0],
   thighL: [-0.16, 0.51, 0], thighR: [0.16, 0.51, 0],
   kneeL: [-0.16, 0.34, 0], kneeR: [0.16, 0.34, 0],
   shinL: [-0.17, 0.18, 0], shinR: [0.17, 0.18, 0],
@@ -150,10 +162,43 @@ export const REST: Record<Anchor, [number, number, number]> = {
 
 /** Base radius per anchor. The mass is chest-and-gut heavy, so it sags believably. */
 const BASE_R: Record<Anchor, number> = {
-  head: 0.19, chest: 0.27, gut: 0.26, hip: 0.23,
-  armL: 0.15, armR: 0.15, elbowL: 0.125, elbowR: 0.125, handL: 0.125, handR: 0.125,
-  thighL: 0.16, thighR: 0.16, kneeL: 0.135, kneeR: 0.135,
-  shinL: 0.13, shinR: 0.13, footL: 0.125, footR: 0.125,
+  head: 0.165, chest: 0.235, gut: 0.228, hip: 0.212,
+  armL: 0.15, armR: 0.15, elbowL: 0.115, elbowR: 0.115, handL: 0.10, handR: 0.10,
+  thighL: 0.16, thighR: 0.16, kneeL: 0.125, kneeR: 0.125,
+  shinL: 0.115, shinR: 0.115, footL: 0.105, footR: 0.105,
+}
+
+/**
+ * How each mass is SHAPED, on top of its radius. Stretch only — see `Blob.s`.
+ *
+ * ★★★ WHY THIS TABLE EXISTS (2026-09-05, sprites lane). Alex: *"the blob in general isnt looking
+ * good."* Rendering the shipped field to a still (`tools/render/hollow_silhouette.py`) showed why in
+ * one frame: **it was the Michelin Man.** Every mass a sphere, and limb radii within 0.02 of each
+ * other, so a limb read as a chain of beads and the trunk as a stack of snowballs. A sphere is an
+ * INFLATED shape; the brief asks for one *"sagging under its own weight"* and one *"taut, thrown
+ * forward, goop trailing and catching up"*, and neither of those is round.
+ *
+ * ⚠ THE TAPER IS MOSTLY HERE AND ONLY A LITTLE IN `BASE_R`, ON PURPOSE. Radius is what the joint
+ * floor is computed from, so thinning a limb by radius alone pushes `f` onto its floor and the part
+ * stops being able to shed — the body would stop losing itself, which is the brief's single most
+ * important animation note, traded away for a proportion fix. Stretching costs the floor nothing.
+ */
+/** The reach's shape: no stretch at all. See the exemption in `hollowField`. */
+const NO_STRETCH: [number, number, number] = [1, 1, 1]
+
+const SHAPE: Record<Anchor, [number, number, number]> = {
+  // Trunk: broad and flat rather than round, so weight reads as sag instead of inflation.
+  head: [1.0, 1.28, 1.0], chest: [1.05, 1.12, 1.0], gut: [1.02, 1.14, 1.0], hip: [1.06, 1.08, 1.0],
+  // Limbs: elongated ALONG the limb, which is also the bone axis — so every one of these
+  // strictly improves the overlap the fuse condition measures.
+  armL: [1.0, 1.55, 1.0], armR: [1.0, 1.55, 1.0],
+  elbowL: [1.0, 1.60, 1.0], elbowR: [1.0, 1.60, 1.0],
+  handL: [1.0, 1.55, 1.0], handR: [1.0, 1.55, 1.0],
+  thighL: [1.0, 1.50, 1.0], thighR: [1.0, 1.50, 1.0],
+  kneeL: [1.0, 1.55, 1.0], kneeR: [1.0, 1.55, 1.0],
+  shinL: [1.0, 1.65, 1.0], shinR: [1.0, 1.65, 1.0],
+  // Plantigrade, heavy in the heel: wide and long forward, and the only pair stretched on Z.
+  footL: [1.45, 1.0, 1.75], footR: [1.45, 1.0, 1.75],
 }
 
 const ORDER: Anchor[] = [
@@ -351,6 +396,17 @@ export function hollowField(t: number, form: HollowForm, reach: Anchor = 'handR'
       z: bz * scale + wobble(i + 31, t) * 0.03,
       rBase,
       r: rBase * f,
+      // ★★★ THE REACH TAKES NO STRETCH, AND THE REASON IS CANON RATHER THAN A CEILING. The limb
+      // stretch exists to make a limb read as a DRIP — something trailing off and not resolving.
+      // A caster's reach is the one part doing the opposite: *"dense only where it is reaching"*,
+      // *"reach is its body"*, held nearly solid while the rest lets go. Elongating it says the
+      // wrong thing about the one part canon is most specific about.
+      // ⚠ It also removes a real regression rather than papering over it. `armR` carries
+      // `bulk: 2.0`, so at r=0.433 a 1.55 stretch measured 0.671 against a 0.50 ceiling — ONE blob
+      // becoming the body, `778e04a`'s failure re-entering through an axis the ceiling did not
+      // measure. Found only after the guard was re-pointed at the longest SEMI-AXIS; it had sat
+      // green at 34/34 because `r` itself never moved.
+      s: isReach ? NO_STRETCH : SHAPE[anchor],
       opacity: Math.max(0, Math.min(1, alpha)),
     }
   })

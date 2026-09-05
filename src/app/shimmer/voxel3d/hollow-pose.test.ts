@@ -108,8 +108,24 @@ const field = (t: number, f: HollowForm) => hollowField(t, f)
 const span = (bs: Blob[], k: 'x' | 'y') =>
   Math.max(...bs.map(b => b[k] + b.r)) - Math.min(...bs.map(b => b[k] - b.r))
 
-ok(FORMS.every(f => T.every(t => field(t, f).every(b => b.r <= MAX_BLOB_R))),
-  `★★ no single blob reaches ${MAX_BLOB_R} blocks — none is big enough to BE the body (pre-fix peak: 1.19)`)
+// ★★★ MEASURED ON THE LONGEST SEMI-AXIS, NOT ON `r`, AND THAT CHANGE CAUGHT A LIVE REGRESSION
+// (2026-09-05). When `Blob.s` arrived, a caster's reach hand carried `bulk: 2.0` AND a 1.70 stretch,
+// and its longest semi-axis hit the ceiling — one blob becoming the body again, the exact failure
+// this assert exists to catch. It passed 34/34 the whole time, because `r` had not moved: the
+// quantity the ceiling was written against had stopped being the quantity that decides how big a
+// mass looks. ⚠ A guard does not have to be wrong to go blind; it only has to keep measuring the
+// old thing after a change adds a new one.
+const semi = (b: { r: number; s: [number, number, number] }) => b.r * Math.max(...b.s)
+ok(FORMS.every(f => T.every(t => field(t, f).every(b => semi(b) <= MAX_BLOB_R))),
+  `★★ no single blob's longest semi-axis reaches ${MAX_BLOB_R} blocks — none is big enough to BE the body (pre-fix peak: 1.19)`)
+
+// ★★★ THE FUSION INVARIANT, ASSERTED WHERE IT CANNOT BE ARGUED WITH. Every stretch is >= 1, so a
+// mass can only ever be LARGER than the sphere the 09-05 joint solve was computed against, and the
+// overlap that solve guarantees survives by construction. A single component below 1 would pull a
+// limb apart along an axis nothing else measures — and every silhouette assert in this file is
+// true of a disconnected pile, which is how the marbles shipped in the first place.
+ok(FORMS.every(f => T.every(t => field(t, f).every(b => b.s.every(v => v >= 1)))),
+  '★★ every per-axis stretch is >= 1 — a mass may be shaped, never shrunk on an axis, or joints come apart')
 
 ok(FORMS.every(f => T.every(t => span(field(t, f), 'y') / span(field(t, f), 'x') > 1.25)),
   '★★ the silhouette stays taller than it is wide — upright and bipedal, never a boulder')

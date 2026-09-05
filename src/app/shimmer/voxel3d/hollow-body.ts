@@ -39,7 +39,7 @@
  * Run: `npx tsx src/app/shimmer/voxel3d/hollow-body.test.ts`
  */
 import * as THREE from 'three'
-import { hollowPose, hollowField, REST, FORM_SCALE, type Anchor } from './hollow-pose'
+import { hollowPose, hollowField, REST, FORM_SCALE, type Anchor, type Blob } from './hollow-pose'
 import { createHollowMat, type HollowForm } from './hollow-look'
 
 /** How many shared alpha buckets stand in for per-blob opacity. Mirrors `HollowDoll`'s bench value. */
@@ -135,6 +135,16 @@ const ATTACH: Record<Anchor, BoneName> = {
   thighR: 'thighR', kneeR: 'shinR', shinR: 'shinR', footR: 'shinR',
 }
 
+/**
+ * A blob's per-axis scale. `Blob.s` shapes the mass (egg / slab / drip) and every component is >= 1,
+ * so this can only ever make a mesh larger than the sphere the fuse condition was solved against.
+ *
+ * ⚠ THE FLOOR IS PER AXIS, NOT ON `r`. Clamping `r` and then multiplying would let a shed piece come
+ * back as a degenerate matrix on the axes whose stretch is 1 — three.js warns and a normal goes NaN.
+ */
+const scaleOf = (b: Blob): [number, number, number] =>
+  [Math.max(1e-3, b.r * b.s[0]), Math.max(1e-3, b.r * b.s[1]), Math.max(1e-3, b.r * b.s[2])]
+
 const BONE_ORDER = Object.keys(BONE) as BoneName[]
 
 /** The pivot the pose writes to. Named so the host cannot mistake it for a blob. */
@@ -172,7 +182,7 @@ export function createHollowBody(form: HollowForm): THREE.Group {
   for (const b of hollowField(0, form)) {
     const m = new THREE.Mesh(sphere, mats[form][bucketOf(b.opacity)])
     m.name = b.anchor
-    m.scale.setScalar(Math.max(1e-3, b.r))
+    m.scale.set(...scaleOf(b))
     bones[ATTACH[b.anchor]].add(m)
   }
   return outer
@@ -220,7 +230,7 @@ export function updateHollowBody(body: THREE.Group, t: number, form: HollowForm,
     const [ox, oy, oz] = REST[BONE[ATTACH[b.anchor]].at]
     m.position.set(b.x - ox * scale, b.y - oy * scale, b.z - oz * scale)
     // ⚠ NEVER 0. A zero scale is a degenerate matrix; three.js warns and a normal can go NaN.
-    m.scale.setScalar(Math.max(1e-3, b.r))
+    m.scale.set(...scaleOf(b))
     m.material = mats[form][bucketOf(b.opacity)]
   }
 }
