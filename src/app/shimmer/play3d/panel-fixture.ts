@@ -228,7 +228,7 @@ function write2(moveId: string, kind: Vessel, birth: string): StowedVessel | nul
   let l: Letters = EMPTY_LETTERS
   for (const r of lettersOf(m, birth)) l = addGems(l, r)
   const bound = bindLetters(l, kind, m, birth)
-  return bound ? { kind, gems: bound.vessels[kind], move: m.id } : null
+  return bound ? { kind, gems: bound.vessels[kind], move: m.id, tier: 1 } : null
 }
 
 /**

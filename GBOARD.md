@@ -493,8 +493,57 @@ became cells). Sweep 235/235 at `f151faa`. ⚠ A slice boundary left 74 orphan l
 new one (`rfind('/**')` found an inner doc comment) — tsc caught it; cut by line range.
 
 **Next (Alex's eye):** on the real keeper: cut a vessel at the Passage (or `/market` + `/gems <rune> N` as owner),
-click its cell, place, watch it light and appear on Gear, dismantle it back. **Magii:** land the ruling (three gaps
-still open). **Then:** the tier model.
+click its cell, place, watch it light and appear on Gear, dismantle it back. ~~**Magii:** land the ruling (three gaps
+still open). **Then:** the tier model.~~ **DONE — all four gaps ruled the same night; the tier model is the section below.**
+
+### ★★ THE TIER MODEL, REWORKED AGAINST THE NO-CRAFT RULING (hub, 2026-09-04 late — the four gaps were clear)
+Magii cleared every vessel gap the same night, and the one that mattered was not an answer but a dissolution:
+**a keeper never makes a vessel** — *found, won, bought, or given*. The 09-04 plan two sections up said *tiers 2–3
+grown from the brief's materials*; that sentence is struck, and with it every recipe this tree would have grown.
+The tier tables are what a vessel is MADE OF. Also ruled: tier = material · **Greg's tier-0 pair is a permanent
+floor OUTSIDE the cap, one seat each** (the Worn tools' promise, made about magic) · silver-thread = moonvine ·
+luminescent sap = cured starwillow sap · and the boundary WIDENED Jin's side to *where vessels drop, what prizes
+award them, the seller's stock and rotation, whether a duplicate trades or breaks down*.
+
+**What shipped (`play3d/vessels.ts`, one door and one floor):**
+- `tier: 0 | 1 | 2 | 3` on every `StowedVessel`; a save with no tier reads as **1** (bought at the Passage — the
+  only way anyone had one). `TIER_MATERIAL` quotes the brief's rows per kind (glove: mortal cloth · goldwood ·
+  shimmeroak · starwillow; bracelet: mortal cord · goldwood · shimmerscale · pearlshell). The tier is READ as the
+  material everywhere it is shown — no "t2" in copy, only on the cell mark.
+- **`grantVessel(kind, tier, word, source)` is the ONE door.** `buyVessel` routes through it at tier 1; found and
+  won come through it with their tier; **tier 0 and `'given'` are refused** — Greg gave you the pair you have,
+  and a second floor is a save that lied. A word must fit the tier's seats (`seatCapOf`: the floor bears ONE).
+- **`withFloor`: Greg's pair is DERIVED on every read**, exactly `ensureBasicTools` — one tier-0 of each kind
+  unless one is here or is the one being worn. So `clearStowed` (a rebirth) cannot lose them, a corrupt save
+  cannot lose them, and two saved floors read as one. The floor sorts LAST so acquired indices hold.
+- **`ownedCount` = ACQUIRED only.** The cap governs what a keeper acquires; the floor sits under it. Three
+  goldwood gloves still have Greg's underneath, and Greg's still goes ON at the cap.
+- The worn vessel's tier lives in a new keeper key `ather:shimmer:worn-tier` (registered); it rides the equip
+  and comes back on the dismantle as the floor, not as a goldwood copy.
+- ⚠ **A latent stuck case, fixed by the recount:** the stowed cap was `MAX_PER_KIND - 1` on the assumption the
+  worn vessel was always an acquired one, and `dismantleWorn` refused at it — a keeper with two spares could not
+  take off the third. The list now holds `MAX_PER_KIND`; the BUY door counts the worn one; undressing is never
+  refused. Asserted as the scenario, with the old refusal re-introduced as a mutation (fires, 5 asserts).
+- **★ JIN'S CALL, forced by the build's own rune model, written in the file header:** the floor arrives UNCUT
+  and takes the keeper's first one-letter word. On day one every one-letter word a keeper can read is in their
+  birth rune, and a birth-rune word is body-held — it needs no paper — so Greg cannot have cut the pair for a
+  word the keeper holds at hand-out. One choice, then it is that word's paper like any vessel (the one-word law
+  holds once made). The picker on Greg's cell offers one-letter words only.
+- **Hosts:** `vesselIconId(kind, tier)` — `vessel_<noun>_t<tier>` when that art exists, else the tier-1 art
+  with a `G` / `t2` mark on the cell so the read never rests on a placeholder picture (⚠ **t0/t2/t3 icons are
+  NOT drawn** — the goldwood art stands in). Material labels on the grid tooltip, the part strip, the rack's
+  worn row and the spares dropdown. Passage rows say *a goldwood bracelet for X*. **`/vessel [kind] [1-3]
+  [word]`** = the FOUND door by hand, owner-only, until drop tables exist; bare `/vessel` reads what you own.
+- vessels **96/0** (was 48), panel-fixture 98/0, keeper-chrome 60/0 (repointed: the noun rule lives in the
+  helper, the literal `_t1` appears once), gems 44/0, keeper-tabs 17/0, console 107/0, passage 38/0, reborn
+  32/0, tsc 7 (baseline), canon exit 0. **Mutation-swept 7 ways, all 7 fire** — the first run of "no floor on
+  read" CRASHED the suite on a `back[0]!` instead of failing (the 09-03 `!` lesson, re-learned on the same
+  file); `?.` now, and it fails by name with 14 asserts.
+
+**Next (build):** where tiers 2–3 DROP and what PRIZES award them (Jin's; nothing drops yet — `/vessel` is the
+only found door) · t0/t2/t3 icons through `art-to-pixel` · a duplicate: trade or break down? **Alex's eye:** open
+the Satchel on the real keeper — does Greg's pair read as a FLOOR (the `G` mark, *one seat · never lost*) and not
+as a fourth vessel? Cut it for a one-letter word; wear it; take it off.
 
 ### Decisions (Jin's, canon says so)
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
@@ -511,8 +560,8 @@ still open). **Then:** the tier model.
   word, clear it and watch the seats go dark: does a dark seat read as *unwritten*, and does swapping the paper feel
   like changing a build? ⚠ **NOT LOOKED AT — no one has seen any of this rendered.** Headless asserts cover the
   split, the equip, the migration and the shell; the read at play distance is Alex's eye.
-- Gem quality, and whether a vessel should have a TIER — the model now has somewhere to put one (a vessel is an
-  object you own, not a slot), which it did not when a pair was a pair.
+- ~~Gem quality, and whether a vessel should have a TIER~~ **A vessel HAS a tier (0–3 = material), built 09-04 late against the
+  no-craft ruling — see *THE TIER MODEL* above.** Gem quality is still not modelled.
 - ~~Hub: deploy~~ **LIVE.** **Alex: open the panel — Runes tab and Loadout tab both carry the LETTERS card** (bracelet
   · focus · bag, `f66532f`, LIVE in `BUILD_ID t2w11XSVU9KquMs2_86wO`, served == disk). `/gems <rune> 2` as owner,
   bind on the Loadout tab, watch the chips move bag → bracelet under the cursor, clear, watch them return — does a

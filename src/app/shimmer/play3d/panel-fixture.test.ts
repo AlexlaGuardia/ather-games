@@ -20,7 +20,7 @@ import { ALL_BANDS, laneRunes } from './cast'
 import { resolveLoadout, saveLoadout } from './loadout'
 import { BAND_FOR_VESSEL } from './vessels'
 import { keeperBook, keeperLetters, saveBook } from './book'
-import { loadStowed } from './vessels'
+import { loadStowed, isFloor } from './vessels'
 import { loadRuneInventory, saveRuneInventory } from './rune-inventory'
 
 let pass = 0
@@ -121,7 +121,9 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
       ok(read.vessels[k].join(',') === plan.worn[k].join(','),
          `★★★ ${id}: the ${k}'s seats read back exactly as seeded (${read.vessels[k].length} of ${VESSEL_CAP}) — the panel will show this keeper, not another`)
     }
-    ok(loadStowed().length === plan.spares.length, `${id}: the rack reads back ${plan.spares.length} spare(s)`)
+    // ★ Greg's pair (tier 0) is on every read and is not a spare the fixture wrote — count above the floor
+    ok(loadStowed().filter(v => !isFloor(v)).length === plan.spares.length, `${id}: the rack reads back ${plan.spares.length} spare(s)`)
+    ok(loadStowed().filter(isFloor).length === 2, `${id}: and Greg's pair sits under them, one of each kind — never lost (ruled 2026-09-04)`)
     const inv = loadRuneInventory()
     ok(inv.birth === plan.birth, `${id}: the birth rune reads back`)
   }

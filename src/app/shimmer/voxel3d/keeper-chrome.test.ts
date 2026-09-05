@@ -103,8 +103,16 @@ const gf = gfAt2 >= 0 ? R.slice(gfAt2, R.indexOf('\n}\n', gfAt2)) : ''
 ok(/<ItemChip itemId=\{held\.toolId\}/.test(gf), '★ a gathering focus row draws the SAME painted sprite the bag draws — ItemChip, no second source')
 const rackAt2 = declAt(R, 'VesselRack')
 const rack2 = rackAt2 >= 0 ? R.slice(rackAt2, declAfter(R, 'GatheringFocuses', rackAt2)) : ''
-ok(/<ItemChip itemId=\{`vessel_\$\{VESSEL_NOUN\[kind\]\}_t1`\}/.test(rack2),
-   '★ the rack draws each vessel\'s icon through ItemChip, keyed by the NOUN (glove), never the kind id (focus) — `vessel_focus_t1` is a grey chip')
+// ★ RE-POINTED 2026-09-04 (the tier model): the id is built by ONE helper, `vesselIconId(kind, tier)`, and the
+// noun rule lives there. The rack, the satchel grid and the part strip all go through it.
+ok(/<ItemChip itemId=\{vesselIconId\(kind, /.test(rack2), '★ the rack draws each vessel\'s icon through ItemChip via vesselIconId — one spelling for every host')
+const iconFnAt = declAt(R, 'vesselIconId')
+const iconFn = iconFnAt >= 0 ? R.slice(iconFnAt, R.indexOf('\n}\n', iconFnAt)) : ''
+ok(/`vessel_\$\{VESSEL_NOUN\[kind\]\}_t\$\{tier\}`/.test(iconFn) && !/vessel_\$\{kind\}/.test(iconFn),
+   '★ vesselIconId keys by the NOUN (glove), never the kind id (focus) — `vessel_focus_t1` is a grey chip')
+ok(/itemIcon\(id\) \? id : `vessel_\$\{VESSEL_NOUN\[kind\]\}_t1`/.test(iconFn),
+   '★ and falls back to the tier-1 art when a tier has none yet — a missing t0/t2/t3 sprite is a placeholder, not a grey chip')
+ok(count(R, /vessel_\$\{VESSEL_NOUN\[[a-z.]+\]\}_t1/g) === 1, `★ the literal _t1 spelling appears ONCE, inside the helper (${count(R, /vessel_\$\{VESSEL_NOUN\[[a-z.]+\]\}_t1/g)}) — a host that restates it pins itself to goldwood`)
 // and the ids the rack can build must exist in the sprite table — the headless half of the screenshot that caught this
 import { ITEM_ICONS } from '../sprites/items'
 for (const noun of ['bracelet', 'glove']) ok(!!ITEM_ICONS[`vessel_${noun}_t1`], `ITEM_ICONS has vessel_${noun}_t1`)

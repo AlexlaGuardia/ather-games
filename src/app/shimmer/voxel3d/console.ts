@@ -159,6 +159,14 @@ export interface ConsoleCtx {
    */
   gems: (rune?: string, n?: number) => string
   /**
+   * ★ `/vessel <kind> <tier> [word]` — HAND A VESSEL THROUGH THE FOUND/WON DOOR. Owner-only, a dev
+   * door: vessels are not crafted (ruled 2026-09-04) — tier 1 is bought at the Passage, tiers 2–3
+   * are found and won in the world, and the drop tables that do the finding are not built yet.
+   * Until they are, this is how a shimmeroak glove or a pearlshell bracelet is looked at in the
+   * rack. Bare `/vessel` reads what you own, for everyone. Tier 0 is refused: Greg gave you that.
+   */
+  vessel: (kind?: string, tier?: string, word?: string) => string
+  /**
    * ★ `/market [day]` — OPEN THE PASSAGE'S SHELVES. Owner-only, a dev door: the Passage is a place
    * (a tile zone under Rune Hold) and the voxel crossing out to it is being painted; until a keeper
    * can walk there, this is how the economy is tried. `day` previews a weekday (the real clock is
@@ -251,6 +259,9 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
   { name: 'gems', usage: 'gems [rune] [n]  (bare: your letters · rune: put n gems in the bag)', help: 'the rune-gems you carry, loose and set',
     run: (a, c) => c.gems(a[0], a[1] === undefined ? undefined : Math.max(1, Math.round(Number(a[1]) || 1))),
     suggest: (i, c) => i === 0 && c.isOwner ? RUNES.map(r => r.id).sort() : i === 1 ? ['1', '2', '3'] : [] },
+  { name: 'vessel', usage: 'vessel [bracelet|focus] [1-3] [word]  (bare: what you own · args: a found vessel, dev)', help: 'the vessels you own, by material; owner: hand one through the found door',
+    run: (a, c) => c.vessel(a[0], a[1], a[2]),
+    suggest: (i, c) => !c.isOwner ? [] : i === 0 ? ['bracelet', 'focus'] : i === 1 ? ['1', '2', '3'] : [] },
   { name: 'market', usage: "market [Solday|Coomday|E'xday|Niteday|Floday]", help: 'open the Passage shelves here (dev door until the crossing lands); a day previews it', owner: true,
     run: (a, c) => c.market(a[0]),
     suggest: (i) => i === 0 ? ['Solday', 'Coomday', "E'xday", 'Niteday', 'Floday'] : [] },

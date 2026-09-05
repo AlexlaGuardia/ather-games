@@ -269,7 +269,8 @@ import { imbue, imbueWhy, imbueSentence, crystalFor } from '../play3d/imbue'
 import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
 import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn,
-         placeGems, seatCount, seatLetters, shortOf, isComplete, setWord } from '../play3d/vessels'
+         placeGems, seatCount, seatLetters, shortOf, isComplete, setWord,
+         wornTier, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, type VesselTier } from '../play3d/vessels'
 import { starterFor } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
@@ -1627,6 +1628,25 @@ export default function VoxelWorld() {
       saveLetters(next)
       setRuneTick(t => t + 1)
       return `⟳ dev · ${n ?? 1} ${name(id)} gem${(n ?? 1) === 1 ? '' : 's'} into the bag · ${line(next)}`
+    },
+    // ★ /vessel — the FOUND door, by hand, until the world drops them (vessels are not crafted, 2026-09-04)
+    vessel: (kindArg, tierArg, wordArg) => {
+      const inv = loadRuneInventory()
+      const line = () => {
+        const worn = VESSELS.map(k => `${VESSEL_NOUN[k]} worn: ${wornPresent(k) ? tierLabel(k, wornTier(k)) : '—'}`).join(' · ')
+        const satchel = loadStowed().map(v =>
+          `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]}${v.move ? ` for ${v.move}` : ', uncut'} ${v.gems.length}/${seatCount(v, inv.birth)}`).join(' · ')
+        return `${worn} · satchel: ${satchel || 'nothing'} · acquired ${VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(', ')}`
+      }
+      if (!kindArg) return line()
+      if (!isOwner) return 'vessels are found, won, bought or given — bare /vessel reads what you own'
+      const kind = kindArg.toLowerCase()
+      if (!(VESSELS as readonly string[]).includes(kind)) return `no such vessel: ${kindArg} — bracelet or focus`
+      const tier = Number(tierArg)
+      if (!(TIERS as readonly number[]).includes(tier)) return `which tier? 1–3 — /vessel ${kind} 2 [word]`
+      const r = grantVessel(kind as Vessel, tier as VesselTier, wordArg ?? null, 'found')
+      if (r.ok) setRuneTick(t => t + 1)
+      return `${r.ok ? '⟳ dev · ' : ''}${r.say}`
     },
     reborn: (arg) => {
       if (!isOwner) return 'a keeper is born once — /reborn is keeper-of-the-realm only'
@@ -3023,6 +3043,19 @@ function BirthLean({ birth }: { birth: string | null }) {
  */
 const VESSEL_LANE_LABEL: Record<Vessel, string> = { bracelet: 'wrist · tacticals · element lane', focus: 'casting focus · hand · signature · state lane' }
 const VESSEL_NOUN: Record<Vessel, string> = { bracelet: 'bracelet', focus: 'glove' }
+/**
+ * The icon for a vessel of this kind and TIER — `vessel_<noun>_t<tier>` when that art exists, else the
+ * tier-1 art. ⚠ The fallback is a placeholder, not a claim: Greg's mortal-cloth glove drawn as goldwood is
+ * wrong on purpose until `art-to-pixel` has run for t0/t2/t3, and `tierMark` says the tier beside it so
+ * the read never rests on the picture alone. Keyed by the NOUN, not the kind id (`focus` → `glove`).
+ */
+function vesselIconId(kind: Vessel, tier: VesselTier): string {
+  const id = `vessel_${VESSEL_NOUN[kind]}_t${tier}`
+  return itemIcon(id) ? id : `vessel_${VESSEL_NOUN[kind]}_t1`
+}
+/** the material, said short: Greg's pair by name, the rest by what they are made of */
+const tierLabel = (kind: Vessel, tier: VesselTier): string => (tier === 0 ? `Greg's · ${TIER_MATERIAL[kind][tier]}` : TIER_MATERIAL[kind][tier])
+const tierMark = (tier: VesselTier): string => (tier === 0 ? 'G' : `t${tier}`)
 
 /**
  * ★ A GEM IS A STONE, NOT A WORD (2026-09-04, the icon pass — Alex: *"lets dive into icons"*).
@@ -3156,9 +3189,10 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
           const word = v.move ? (castForMove(v.move)?.label ?? v.move) : null
           return (
             <button key={`v-${i}`} type="button" onPointerDown={() => setSel(sel === i ? null : i)}
-                    title={word ? `${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ''}` : `${VESSEL_NOUN[v.kind]} — never cut for a word`}
+                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ''}` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; cut it for a one-letter word' : 'never cut for a word'}`}
                     className={`${cellCls} ${sel === i ? 'border-amber-300 bg-amber-300/15' : written ? 'border-amber-200/45 bg-black/45' : 'border-amber-200/[0.14] bg-black/45'} hover:border-amber-200/60`}>
-              <ItemChip itemId={`vessel_${VESSEL_NOUN[v.kind]}_t1`} size={26} />
+              <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={26} />
+              <span className="gx-value absolute right-1 top-0.5 text-[8px] text-white/40">{tierMark(v.tier)}</span>
               {/* the seats as dots — the word's count, lit where a letter sits */}
               <span className="absolute bottom-1 flex gap-[3px]">
                 {Array.from({ length: Math.min(VESSEL_CAP, seats) }, (_, k) => (
@@ -3235,11 +3269,12 @@ export function VesselParts({ owned, birth, index, onChange }: {
   const doWord = (word: string) => { if (setWord(index, word, birth)) { setNote(`Cut for ${wordOf(word)}.`); onChange() } }
   return (
     <div className={`gx-plate mt-1.5 flex flex-wrap items-center gap-2 px-2.5 py-1.5 ${written ? 'is-lit' : ''}`}>
-      <ItemChip itemId={`vessel_${VESSEL_NOUN[v.kind]}_t1`} size={22} />
+      <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={22} />
       <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[v.kind]}</span>
+      <span className="gx-label text-[9px] text-white/30">{tierLabel(v.kind, v.tier)}</span>
       {v.move
         ? <span className="gx-title text-[11px] text-white/80">for {wordOf(v.move)}</span>
-        : <span className="gx-label text-[9px] text-white/30">never cut for a word</span>}
+        : <span className="gx-label text-[9px] text-white/30">{isFloor(v) ? 'one seat · never lost' : 'never cut for a word'}</span>}
       {v.move ? <Seats gems={v.gems} seats={seats} /> : null}
       <span className="gx-value text-[10px] text-white/45">{v.gems.length}/{seats}</span>
       {written
@@ -3249,9 +3284,10 @@ export function VesselParts({ owned, birth, index, onChange }: {
           : (
             <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
                     className="gx-btn bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal">
-              <option value="">cut it for a word you hold…</option>
+              <option value="">{isFloor(v) ? 'cut it for a one-letter word you hold…' : 'cut it for a word you hold…'}</option>
+              {/* ★ the floor bears ONE seat (ruled): a two-letter word is not offered to Greg's paper */}
               {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
-                .filter(m => seatLetters({ kind: v.kind, gems: [], move: m.id }, birth).length > 0)
+                .filter(m => { const n = seatLetters({ move: m.id }, birth).length; return n > 0 && n <= seatCapOf(v.tier) })
                 .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           )}
@@ -3282,12 +3318,12 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
   const doEquip = (kind: Vessel, i: number) => { if (equip(kind, i, birth, starterFor(owned))) reresolve() }
   const doDismantle = (kind: Vessel) => { if (dismantleWorn(kind, birth, starterFor(owned))) reresolve() }
   const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
-  const seatsOfWorn = (moveId: string | null) => (moveId ? seatCount({ kind: 'bracelet', gems: [], move: moveId }, birth) : 0)
+  const seatsOfWorn = (moveId: string | null) => (moveId ? seatCount({ move: moveId }, birth) : 0)
   return (
     <div className="mb-3 flex flex-col gap-1">
       <SectionHead label="Vessels" note={<>
         <span className="gx-value text-white/50">{VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(' · ')}</span>
-        {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · cut at the Passage' : ''}
+        {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · cut at the Passage' : ''} · Greg's underneath
       </>} />
       {/* ★ ONLY WRITTEN VESSELS ARE GEAR (Alex, 2026-09-04). The rack shows what is WORN, and a dropdown of the
           written spares to swap in. Unwritten ones live in the satchel as parts until every seat their word
@@ -3304,8 +3340,10 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
               {/* the vessel's own icon — through the bag's `ItemChip`, so the rack and the bag can never
                   disagree about what a bracelet looks like. `_t1` until the tier model lands.
                   ⚠ Keyed by the NOUN, not the kind id: the kind is `focus`, the sprite is `vessel_glove_t1`. */}
-              <ItemChip itemId={`vessel_${VESSEL_NOUN[kind]}_t1`} size={26} />
+              <ItemChip itemId={vesselIconId(kind, worn ? wornTier(kind) : 1)} size={26} />
               <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[kind]}</span>
+              {/* the MATERIAL of what is worn — the tier, read the way canon says it reads */}
+              {worn && wornPresent(kind) ? <span className="gx-label text-[9px] text-amber-200/50">{tierLabel(kind, wornTier(kind))}</span> : null}
               <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[kind]}</span>
               <span className="gx-value ml-auto text-[10px] text-white/45">{l.vessels[kind].length}/{seats}</span>
             </div>
@@ -3328,7 +3366,7 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
                       disabled={!spares.length}
                       className="gx-btn min-w-[160px] bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal disabled:opacity-40">
                 <option value="">{spares.length ? `a written ${VESSEL_NOUN[kind]}…` : `none written yet — see the satchel`}</option>
-                {spares.map(({ v, i }) => <option key={i} value={i}>{wordOf(v.move)} · {v.gems.length}/{seatCount(v, birth)}</option>)}
+                {spares.map(({ v, i }) => <option key={i} value={i}>{wordOf(v.move)} · {TIER_MATERIAL[v.kind][v.tier]} · {v.gems.length}/{seatCount(v, birth)}</option>)}
               </select>
             </div>
           </div>

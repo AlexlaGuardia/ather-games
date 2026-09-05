@@ -28,7 +28,7 @@ import { RUNES } from './birth/runes.data'
 import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { saveLetters, VESSELS, type Vessel } from './gems'
-import { buyVessel, ownedCount, loadStowed, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL } from './vessels'
+import { buyVessel, ownedCount, loadStowed, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, TIER_MATERIAL } from './vessels'
 import { eligibleMoves, ALL_BANDS } from './cast'
 import { lettersOf } from './gems'
 import { rawLoadout } from './loadout'
@@ -186,7 +186,10 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
           {/* ★ MADE FOR ONE WORD (Alex, 2026-09-04): *"each vessel is unique that its made the word and none
               other."* So the shelf does not sell "a bracelet"; it cuts one for a word you already hold, with
               exactly that word's seats. Words that already have a vessel (worn or in the satchel) are not
-              offered twice. Sold one at a time, never as a pair (Alex, 2026-09-03). */}
+              offered twice. Sold one at a time, never as a pair (Alex, 2026-09-03).
+              ★ THE SHELF'S STOCK IS TIER 1 — goldwood. Vessels are not crafted (ruled 2026-09-04): the Passage
+              is the BOUGHT door; tiers 2–3 are found and won in the world, never on a shelf. The cap counts
+              what a keeper acquires; Greg's pair sits under it. */}
           {VESSELS.map(kind => {
             const have = ownedCount(kind)
             const full = have >= MAX_PER_KIND
@@ -202,7 +205,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
             return words.map(m => {
               const seats = lettersOf(m, birth).length
               return (
-                <Row key={`${kind}-${m.id}`} left={<span className="text-white/70">a {kind} for <span className="text-amber-200/90">{m.name}</span></span>}
+                <Row key={`${kind}-${m.id}`} left={<span className="text-white/70">a {TIER_MATERIAL[kind][1]} {kind} for <span className="text-amber-200/90">{m.name}</span></span>}
                      mid={`${seats} seat${seats === 1 ? '' : 's'} · you carry ${have} of ${MAX_PER_KIND}`}
                      price={VESSEL_PRICE} action={() => onBuyVessel(kind, m.id)} disabled={full}
                      label={full ? 'all you can carry' : 'cut it'} />
