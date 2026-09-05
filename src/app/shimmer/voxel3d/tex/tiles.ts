@@ -103,6 +103,14 @@ export const TILE_MATERIALS: number[] = [
   // ⚠ Each has a `paintFor` case below. Appending here without one ships a magenta ore block — the
   // failure the rubble note above records happening twice.
   MAT.MOSSY_STONE_BRICK, MAT.CRACKED_STONE_BRICK, MAT.MOSSY_CUT_STONE,
+  // ── ★ THE CACHE (2026-09-05, with the warren) ─────────────────────────────────────────────
+  // ⚠ IT WAS ADDED TO THE REGISTRY AND `MATERIAL_COLOR` FIRST AND NOT HERE, AND THAT SHIPPED A
+  // MAGENTA CHECKER — the exact failure the note above records happening twice, made a third time
+  // by someone who had just read the note. `render-audit.test.ts` caught it in the sweep: *"registry
+  // block with NO atlas slot — samples the magenta checker in world: Cache (mat 86)."*
+  // ★ THREE TABLES, NOT TWO: registry `emit` (light), `attrs.ts` MATERIAL_COLOR + EMISSIVE (colour
+  // and self-lit), and THIS (the atlas). A block is only finished when it is in all of them.
+  MAT.CACHE,
 ]
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
@@ -1227,6 +1235,30 @@ export function paintFor(material: number, face: number, size: number): Layer {
       break
     }
     case MAT.MANA_LANTERN: paintLantern(dst, size, seed); break
+    // ── ★ THE CACHE — worked stone with the light still in its seams ────────────────────────
+    // Ashlar first, so it reads as the same masonry as the warren around it and is obviously a
+    // MADE thing rather than a mineral. Then a bright cross bled through the courses: the seam of
+    // whatever is sealed inside, which is the whole silhouette cue at six blocks of lantern range.
+    //
+    // ⚠ THE TILE IS A MULTIPLIER (`atlas.ts` does `diffuseColor.rgb *= tile.rgb`), so the seam is
+    // painted at FULL strength and the stone dark — the garden-bed frame's rule, for the same
+    // reason. Painting the seam in an absolute amber would come out amber x amber.
+    // ⚠ BOTTOM stays plain: a cache sits on a floor and nobody sees its underside, and a lit
+    // underside would put a glow on the stone beneath it that the block's own light already casts.
+    case MAT.CACHE: {
+      const c = rgbOf(MATERIAL_COLOR[material])
+      if (face === BOTTOM) { paintGrit(dst, size, shade(c, -40), 8, 8, seed); break }
+      paintAshlar(dst, size, shade(c, -30), seed, 4, 2)
+      const mid = (size - 1) / 2
+      const half = Math.max(1, size >> 3)                 // 2 texels at 16px
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const onSeam = Math.abs(x - mid) < half || Math.abs(y - mid) < half
+          if (onSeam) put(dst, size, x, y, shade(c, 40), 0)
+        }
+      }
+      break
+    }
     // ── the pot, in three states ────────────────────────────────────────────────────────────
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS these cases: the switch's default is the ore
     // painter, and that is exactly how every tree once rendered as crystal in deep stone.
