@@ -66,7 +66,12 @@ function shared(): { sphere: THREE.SphereGeometry; mats: Record<HollowForm, THRE
       // right to: it cannot tell a bounded six from an unbounded entity list.
       for (let i = 0; i < BUCKETS; i++) {
         const m = base[f].clone()
-        m.opacity = base[f].opacity * (0.4 + (i / (BUCKETS - 1)) * 0.6)
+        // ★ THE RAMP APPLIES ONLY TO A FORM THAT IS TRANSLUCENT AT ALL. With every form solid
+        // (Alex, 09-05: "lose that ghost-like look") a ramp here would put the ghost straight back
+        // — bucket 0 at 0.4 — under a constant that says 1. The buckets stay as a bounded, tiny
+        // program count; what they carry is now nothing, and the shed is carried by RADIUS.
+        m.opacity = base[f].opacity < 1 ? base[f].opacity * (0.4 + (i / (BUCKETS - 1)) * 0.6) : 1
+        m.transparent = m.opacity < 1
         out.push(m)
       }
       base[f].dispose()      // the template itself is never rendered

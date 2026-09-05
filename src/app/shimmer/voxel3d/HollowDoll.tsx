@@ -72,8 +72,11 @@ function makeBorrowed(envMap: THREE.Texture | null): THREE.MeshStandardMaterial[
       roughness: 0.28,
       envMap: envMap ?? undefined,
       envMapIntensity: 1.5,
-      transparent: true,
-      opacity: 0.35 + (i / (BUCKETS - 1)) * 0.6,
+      // ⚠ SOLID, like the shipped side. The borrowed-specular question is about what the surface
+      // REFLECTS; running the experiment at 0.35..0.95 alpha asked it through a ghost and made the
+      // two sides differ by two things at once.
+      transparent: false,
+      opacity: 1,
     }))
   }
   return out

@@ -32,7 +32,26 @@ export interface HollowLook {
   selfLight: number
   /** Per-form base grey. The caster reads colder so the thing draining you from range is findable. */
   colour: Record<HollowForm, number>
-  /** Per-form opacity. Lower reads as more smoke, less body. */
+  /**
+   * Per-form opacity.
+   *
+   * ★★★ ALL THREE ARE 1 AND THAT IS A RULING, NOT A DEFAULT (Alex, 2026-09-05, on the live bench):
+   * *"they all need to be a solid texture.. they need to lose that ghost-like look."* The old values
+   * (0.9 / 0.82 / 0.78) were annotated *"lower reads as more smoke, less body"* — and smoke is not
+   * what canon asks for. `design-briefs/hollows.md` calls the warden *"nearly opaque"*, gives the
+   * stalker *"legible limbs"*, and defines the whole density axis as **how much of the smear managed
+   * to gather** — a MASS fact. A barely-gathered caster is thin and sparse, not see-through.
+   *
+   * ⚠ AND THE OTHER HALF OF THE BUILD ALREADY SAID SO. `hollow-pose.ts` carries a starred note —
+   * *"A WALKER IS NEARLY OPAQUE, AND THAT IS THE BRIEF, NOT A PREFERENCE"* — recording that a 62%
+   * stalker rendered as *"a bag of marbles"*, and it sets per-blob alpha to 0.86..1 to fix exactly
+   * that. This file then multiplied 0.82 on top and the bucket ramp pulled it to 0.72, so the fix
+   * was applied in one module and silently undone in another with nothing able to see the pair.
+   *
+   * ⚠ THE SHED IS CARRIED BY RADIUS, NOT BY ALPHA, and always was: `hollowField` takes a shed piece
+   * to r = 0. Fading a part out was a second, redundant mechanism whose only visible effect was to
+   * let every sphere's outline show through the ones in front of it.
+   */
   opacity: Record<HollowForm, number>
 }
 
@@ -46,7 +65,7 @@ export const HOLLOW_LOOK: HollowLook = {
   selfLight: 0.15,
   // A smear of grey that holds a silhouette: darker than any ground grey, never a face.
   colour: { warden: 0x3f423d, stalker: 0x4a4d47, caster: 0x474f58 },
-  opacity: { warden: 0.9, stalker: 0.82, caster: 0.78 },
+  opacity: { warden: 1, stalker: 1, caster: 1 },
 }
 
 /**
@@ -72,7 +91,10 @@ export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowFo
     // whole read of the thing.
     emissive: look.colour[f],
     emissiveIntensity: look.selfLight,
-    transparent: true,
+    // ⚠ TRANSPARENCY IS DERIVED, NEVER ASSERTED. `transparent: true` at opacity 1 still costs the
+    // sorted-blend path, and overlapping blended spheres are drawn in an order depth-writing does
+    // not fix — which is the layered, glassy read even when the alpha is nearly gone.
+    transparent: look.opacity[f] < 1,
     opacity: look.opacity[f],
   })
   return { warden: one('warden'), stalker: one('stalker'), caster: one('caster') }
@@ -94,6 +116,7 @@ export function applyHollowLook(
     mats[f].emissive.setHex(look.colour[f])
     mats[f].emissiveIntensity = look.selfLight
     mats[f].opacity = look.opacity[f]
+    mats[f].transparent = look.opacity[f] < 1
     mats[f].needsUpdate = true
   }
 }

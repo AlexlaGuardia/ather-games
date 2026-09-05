@@ -275,6 +275,55 @@ ok(legAngles.size === 1 && [...legAngles][0] === 0,
     `★★ the posed body stands as tall as the field says (rig ${top.toFixed(3)} vs field ${fieldTop.toFixed(3)}; pre-fix rig was 0.62)`)
 }
 
+// ── ★★★ NO LAYER SECRETLY MULTIPLIES THE OPACITY DOWN ─────────────────────────────────────────
+// The defect this catches was live and invisible for weeks, and it is the shape worth naming: a fix
+// applied in ONE module and silently undone in ANOTHER, with nothing able to see the pair.
+// `hollow-pose.ts` argues at length that a walker must be nearly opaque, calls it "the brief, not a
+// preference", records that a 62% stalker rendered as "a bag of marbles", and sets per-blob alpha to
+// 0.86..1. `hollow-look.ts` then multiplied 0.82, and THIS file's bucket ramp pulled it to 0.72 —
+// so a stalker shipped at ~25% see-through across eighteen overlapping spheres, each drawing its
+// own outline through the ones in front. Alex, on the live bench: "they all need to be a solid
+// texture.. they need to lose that ghost-like look."
+//
+// ⚠ ASSERTED ON THE MATERIAL A BLOB IS ACTUALLY GIVEN, not on the constant. The constant was never
+// wrong about itself; every layer below it was free to disagree, and each one did so correctly
+// within its own frame. That is the only reading that would have caught this.
+{
+  for (const f of FORMS) {
+    const body = createHollowBody(f)
+    updateHollowBody(body, 1.1, f, 1)
+    const want = HOLLOW_LOOK.opacity[f]
+    const seen: number[] = []
+    body.traverse(o => {
+      const m = (o as THREE.Mesh).material as THREE.MeshLambertMaterial | undefined
+      if ((o as THREE.Mesh).isMesh && m) seen.push(m.opacity)
+    })
+    ok(seen.length > 0 && seen.every(v => Math.abs(v - want) < 1e-9),
+      `★★ every ${f} blob renders at the form's own opacity ${want} — no bucket ramp underneath it (saw ${[...new Set(seen.map(v => v.toFixed(2)))].join('/')})`)
+
+    const trans: boolean[] = []
+    body.traverse(o => {
+      const m = (o as THREE.Mesh).material as THREE.MeshLambertMaterial | undefined
+      if ((o as THREE.Mesh).isMesh && m) trans.push(m.transparent)
+    })
+    ok(trans.every(t => t === (want < 1)),
+      `★★ ${f} blends only when it is actually translucent — transparent:true at opacity 1 still takes the sorted-blend path, which IS the layered glassy read`)
+  }
+  ok((['warden', 'stalker', 'caster'] as const).every(f => HOLLOW_LOOK.opacity[f] === 1),
+    '★★ every form is SOLID — the ruling of 2026-09-05, and the density axis is carried by mass, not by alpha')
+
+  // ★★★ AND THE SAME CLAIM ABOUT THE BASE MATERIAL, WHICH IS A DIFFERENT CLAIM. Found by mutation:
+  // setting `transparent: true` at opacity 1 in `createHollowMat` passed everything above, because
+  // this file's rig RE-DERIVES `transparent` on its clones and so never sees the base's value. But
+  // `createHollowMat` is consumed directly by `VoxelWorld` and by the bench — so the blend path
+  // would ship to them while the rig looked clean. ⚠ A guard that only reads the copy cannot make a
+  // statement about the original, however carefully it reads the copy.
+  const base = createHollowMat()
+  ok((['warden', 'stalker', 'caster'] as const).every(f => base[f].transparent === (HOLLOW_LOOK.opacity[f] < 1)),
+    '★★ the SHIPPED material blends only when it is translucent — asserted on createHollowMat, not on the rig\'s clones')
+  for (const f of ['warden', 'stalker', 'caster'] as const) base[f].dispose()
+}
+
 console.log(`   ${FORMS.length} forms · ${BUCKETS} alpha buckets`)
 console.log(fails.length ? `❌ ${pass} passed, ${fails.length} FAILED` : `✅ ${pass} passed`)
 for (const f of fails) console.log(`   · ${f}`)
