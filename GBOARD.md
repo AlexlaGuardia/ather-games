@@ -746,6 +746,8 @@ as its own material — which is the whole point of *tier = material*: a keeper 
   registry 63/0, png-import 109/0, hud-type 23/0, vessel-drops 62/0, canon 0, tsc 7. `PALETTE_COLLISIONS` = 3, all
   pre-existing seeds. `vesselIconId`'s fallback branch is now dormant for these ids and stays as the guard for the next.
 
+**LIVE in `BUILD_ID bMhUSckRN3-p4kiEv4uZq`** (hub's deploy of `f2bd4bf`, 182 chunks; the items chunk served md5 == disk == public, all eight `vessel_<noun>_t<0-3>` ids in the served bytes, page carries the id).
+
 **Next:** Alex judges the six in the satchel (`/vessel bracelet 2`, `/vessel focus 3` as owner) · a REAL trial for
 the won door · a duplicate: trade or break down?
 
