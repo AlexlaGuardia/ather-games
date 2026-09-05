@@ -33,9 +33,14 @@ import { eligibleMoves, ALL_BANDS } from './cast'
 import { lettersOf } from './gems'
 import { rawLoadout } from './loadout'
 import { rackFor, buy, priceOf, canRead, msUntilRotation, cycleAt as rackCycleAt } from './scroll-market'
+// ⚠ TWO RACKS IN ONE SHOP: `rackFor` above is the SCROLL rack (the word); this is the VESSEL rack
+// (the paper). The prefix is what keeps them apart — see the note over the section in `passage.ts`.
+import { LANE_FOR_KIND, laneRunes } from './cast'
+import { moveById } from './keeper-moves'
 import {
   WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, cycleAt, weekdayOf, daysUntil, gemTrayFor, gemPrice,
   buyGem, sell, teacherFor, takeLesson, type Weekday,
+  vesselRackFor, buyFromVesselRack, type RackVessel,
 } from './passage'
 
 export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange, onClose }: {
@@ -89,6 +94,13 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   }
   const onBuyVessel = (kind: Vessel, word: string) => {
     const r = buyVessel(kind, marks, word)
+    setNote(r.say); if (!r.ok) return
+    if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
+    rerender()
+  }
+  /** Buy off the second-hand rack. Same shape as the cutter's handler — the shelf differs, not the till. */
+  const onBuyFromRack = (slot: number, rack: readonly RackVessel[]) => {
+    const r = buyFromVesselRack(marks, slot, rack)
     setNote(r.say); if (!r.ok) return
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
     rerender()
@@ -212,6 +224,53 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               )
             })
           })}
+        </Shelf>
+
+        <Shelf title="The second-hand rack" when="every day · someone else's word">
+          {/* ── ★★★ THE RACK IS A WALL OF OTHER PEOPLE'S PURPOSES (canon 2026-09-05) ──────────────
+              *"Every vessel on it was cut for a word somebody meant to write."* The stock is rolled
+              with NO reference to this keeper, so most rows are useless to them — that is the
+              feature, and finding the one that fits is the hunt canon names. The cutter above
+              serves the keeper who already knows what they want, at a higher price; this shelf is
+              the other half of that trade.
+
+              ⛔ A SLEEPER IS NEVER LABELLED. Canon calls it *"a fine vessel ... far above what the
+              shelf is priced for"* — the shelf does not know it has one, so a badge saying SLEEPER
+              would be the shopkeeper doing the player a favour, which is the exact sentence canon
+              spends its paragraph refusing. What the row shows is the MATERIAL and the PRICE, and
+              a keeper who has learned that pearlshell outranks goldwood reads the find themselves.
+              That is what the word "hunt" has to mean or it means nothing.
+
+              ★ BUT THE FIT IS STATED PLAINLY, because that is information, not a favour. A vessel
+              cut for a word off your lanes can never be bound — a brick with a story — and letting
+              a keeper spend Marks on one without saying so is a trap, not a hunt. It is still
+              BUYABLE: a shop that refuses your Marks on your behalf is a curated aisle. */}
+          {(() => {
+            const rack = vesselRackFor(cycle)
+            return rack.map((v, i) => {
+              const m = v.word ? moveById(v.word) : null
+              const mat = TIER_MATERIAL[v.kind][v.tier]
+              const full = ownedCount(v.kind) >= MAX_PER_KIND
+              // Can this keeper ever bind that word? The same test the found-vessel road uses: every
+              // rune of the move has to sit on one of their lanes, or the paper is a brick.
+              const lane = m ? LANE_FOR_KIND[ALL_BANDS[BAND_FOR_VESSEL[v.kind]]!] : null
+              const onLane = m && lane ? m.runes.every(r => laneRunes(birth, lane).has(r)) : true
+              const seats = m ? lettersOf(m, birth).length : 0
+              return (
+                <Row key={`rack-${i}`}
+                     left={<span className="text-white/70">
+                       a {mat} {v.kind}{' '}
+                       {m ? <>for <span className={onLane ? 'text-amber-200/90' : 'text-white/35'}>{m.name}</span></>
+                          : <span className="text-white/45">uncut</span>}
+                     </span>}
+                     mid={m
+                       ? (onLane ? `${seats} seat${seats === 1 ? '' : 's'} · someone else's` : 'not your lanes — you could never bind it')
+                       : 'blank paper · write on it when you have the word'}
+                     price={v.price} action={() => onBuyFromRack(i, rack)} disabled={full}
+                     label={full ? 'all you can carry' : 'take it'} />
+              )
+            })
+          })()}
         </Shelf>
 
         {note && <div className="mt-2 rounded border border-amber-200/20 bg-amber-200/[0.06] px-2.5 py-1.5 text-[10px] text-amber-100/80">{note}</div>}

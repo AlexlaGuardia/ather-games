@@ -5,7 +5,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import {
   WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, TRAY_SIZE, GEM_PRICE_LANE, GEM_PRICE_OFF,
   weekdayOf, daysUntil, gemTrayFor, gemPrice, buyGem, sell, teacherFor, takeLesson, TEACHABLE,
-  RACK_SIZE, rackFor, buyFromRack, type RackVessel,
+  VESSEL_RACK_SIZE, vesselRackFor, buyFromVesselRack, type RackVessel,
 } from './passage'
 import { VESSEL_PRICE, BAND_FOR_VESSEL } from './vessels'
 import { TRADE_POOL } from './scroll-market'
@@ -117,11 +117,11 @@ const store: Record<string, string> = {}
 {
   const CYCLES = 4000
   const all: RackVessel[] = []
-  for (let c = 0; c < CYCLES; c++) all.push(...rackFor(c))
-  ok(all.length === CYCLES * RACK_SIZE, `read ${all.length} rack slots across ${CYCLES} cycles`)
+  for (let c = 0; c < CYCLES; c++) all.push(...vesselRackFor(c))
+  ok(all.length === CYCLES * VESSEL_RACK_SIZE, `read ${all.length} rack slots across ${CYCLES} cycles`)
 
   // ── R1. THE RACK IS CHEAPER THAN THE CUTTER — canon's "cheap, plentiful" against "expensive" ──
-  // Mutation: RACK_BASE 40 -> 80 → fires. This is the trade the two counters exist to encode; if the
+  // Mutation: VESSEL_RACK_BASE 40 -> 80 → fires. This is the trade the two counters exist to encode; if the
   // rack ever costs more than made-to-order, the second counter has no reason to be there.
   {
     const dearest = Math.max(...all.map(v => v.price))
@@ -131,7 +131,7 @@ const store: Record<string, string> = {}
   // ── R2. ★★★ THE SHELF PRICES BY WEAR, NOT WORTH — which is what MAKES a sleeper ──────────────
   // The claim canon spends its whole paragraph on: *"not the shopkeeper doing the player a favour."*
   // A fine vessel must be reachable at second-hand money, or a sleeper is just an expensive vessel.
-  // Mutation: make rackPrice scale on tier (`+ tier * 40`) → fires, because the fine ones leave the
+  // Mutation: make vesselRackPrice scale on tier (`+ tier * 40`) → fires, because the fine ones leave the
   // band the cutter's price defines and the "find" becomes a purchase.
   {
     const fine = all.filter(v => v.tier > 1)
@@ -146,7 +146,7 @@ const store: Record<string, string> = {}
   // ★ It asks `tradeable`, never a list kept here — so the day the shop's own pool changes, this
   // guard follows canon instead of contradicting it. A hardcoded ['ultimate'] would be a second copy
   // of a rule that already has one home, which is the 08-22 hand-kept-mirror trap.
-  // Mutation: point RACK_WORD_POOL at KEEPER_MOVES instead of TRADE_POOL → fires.
+  // Mutation: point VESSEL_RACK_WORD_POOL at KEEPER_MOVES instead of TRADE_POOL → fires.
   {
     const untradeable = all.filter(v => v.word && !TRADE_POOL.some(m => m.id === v.word))
     ok(untradeable.length === 0,
@@ -171,7 +171,7 @@ const store: Record<string, string> = {}
   // were filtered to the keeper's lane the counter would be a worse cutter.
   // ★ Asserted as SPREAD rather than by reading the signature: the rack's words must span more of
   // the tradeable pool than any single keeper could ever bind, which is a claim a lane filter fails.
-  // Mutation: filter the pool in `rackFor` to one element's lane → the distinct count collapses.
+  // Mutation: filter the pool in `vesselRackFor` to one element's lane → the distinct count collapses.
   {
     const words = new Set(all.filter(v => v.word).map(v => v.word!))
     const bandPool = TRADE_POOL.filter(m => m.tier === ALL_BANDS[BAND_FOR_VESSEL.bracelet])
@@ -183,9 +183,9 @@ const store: Record<string, string> = {}
   // Mutation: key the hash on Math.random() → determinism fires. Drop `cycle` from the key → rotation fires.
   {
     const sig = (r: readonly RackVessel[]) => r.map(v => `${v.kind}${v.tier}${v.word}${v.price}`).join('|')
-    ok(sig(rackFor(77)) === sig(rackFor(77)), 'the same cycle shows the same rack')
+    ok(sig(vesselRackFor(77)) === sig(vesselRackFor(77)), 'the same cycle shows the same rack')
     let moved = 0
-    for (let c = 0; c < 50; c++) if (sig(rackFor(c)) !== sig(rackFor(c + 1))) moved++
+    for (let c = 0; c < 50; c++) if (sig(vesselRackFor(c)) !== sig(vesselRackFor(c + 1))) moved++
     ok(moved > 45, `the rack turns over — ${moved} of 50 consecutive cycles differ`)
   }
 
@@ -196,23 +196,44 @@ const store: Record<string, string> = {}
   {
     const rate = all.filter(v => v.tier > 1).length / all.length
     ok(rate > 0.02 && rate < 0.10, `a sleeper is occasional — ${(rate * 100).toFixed(1)}% of slots`)
-    const perCycle = 1 / (rate * RACK_SIZE)
+    const perCycle = 1 / (rate * VESSEL_RACK_SIZE)
     ok(perCycle > 2, `about one every ${perCycle.toFixed(1)} cycles — rare enough to be worth hunting`)
   }
 
   // ── R8. BUYING: the Marks leave, the cap holds, the refusals are honest ──────────────────────
   // Mutation: drop the `marks < v.price` check → the too-dear assert fires.
   {
-    const rack = rackFor(31)
+    const rack = vesselRackFor(31)
     const v = rack[0]!
-    const poor = buyFromRack(v.price - 1, 0, rack)
+    const poor = buyFromVesselRack(v.price - 1, 0, rack)
     ok(!poor.ok && poor.why === 'too-dear', `a keeper short by one Mark is refused (${poor.why})`)
     ok(poor.marks === v.price - 1, 'and a refused purchase spends nothing')
-    const gone = buyFromRack(9999, 99, rack)
+    const gone = buyFromVesselRack(9999, 99, rack)
     ok(!gone.ok && gone.why === 'not-stocked', 'a slot that is not there refuses rather than throwing')
-    const bought = buyFromRack(9999, 0, rack)
+    const bought = buyFromVesselRack(9999, 0, rack)
     ok(bought.ok, `a rack vessel can be bought (${bought.say.slice(0, 48)}…)`)
     ok(bought.marks === 9999 - v.price, `and it costs exactly its price (${9999 - bought.marks})`)
+  }
+
+  // ── R10. THE SHELF IS DRAWN, AND IT REFUSES TO DO THE PLAYER A FAVOUR ───────────────────────
+  // ⚠ THE STRONGEST ASSERT HERE IS A NEGATIVE ONE, and it guards against a future reader being
+  // HELPFUL. Badging the fine ones is the obvious "improvement" and it is the exact thing canon
+  // spends its paragraph refusing: *"not the shopkeeper doing the player a favour."* A sleeper is
+  // read off the MATERIAL by a keeper who has learned the ladder, or the word "hunt" means nothing.
+  // Mutation: add a `SLEEPER` badge to the row → fires. Drop the shelf → the first assert fires.
+  {
+    const panelSrc = noComments(readFileSync(new URL('./PassagePanel.tsx', import.meta.url), 'utf8'))
+    ok(/vesselRackFor\(/.test(panelSrc) && /second-hand rack/i.test(panelSrc),
+       'the second-hand rack is a shelf on the Passage panel')
+    ok(!/sleeper/i.test(panelSrc),
+       '⛔ nothing on the panel names a sleeper — the shelf does not know it has one')
+    ok(/TIER_MATERIAL\[v\.kind\]\[v\.tier\]/.test(panelSrc),
+       'and the MATERIAL is drawn, which is the only tell a keeper gets (positive control)')
+
+    // ★ THE FIT IS STATED AND THE SALE IS STILL ALLOWED — information, not a refusal. A shop that
+    // declines your Marks on your behalf is a curated aisle, which is the opposite of this counter.
+    ok(/not your lanes/.test(panelSrc), 'a vessel off the keeper\'s lanes says so plainly before they spend')
+    ok(!/disabled=\{[^}]*onLane/.test(panelSrc), 'but an off-lane vessel is still BUYABLE — the choice stays the keeper\'s')
   }
 
   // ── R9. ⛔ VOCABULARY — the collision canon rules outright ────────────────────────────────────

@@ -131,7 +131,18 @@ export function takeLesson(book: Book, owned: readonly string[], move: KeeperMov
 /** every move a teacher could ever give — the rack's pool, restated as a guard-readable fact */
 export const TEACHABLE: readonly KeeperMove[] = KEEPER_MOVES.filter(tradeable)
 
-// ── the RACK: second-hand vessels, someone else's word ──────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// ⚠⚠ THE NAMES ARE `vesselRack*`, AND THE PREFIX IS LOAD-BEARING — THERE ARE TWO RACKS IN THIS SHOP.
+//
+// `scroll-market.ts` already exports `rackFor` AND `RACK_SIZE`, for the SCROLL rack, which sells the
+// WORD. This one sells the PAPER. Canon calls both a rack (*"the scroll racks"*, *"the rack —
+// second-hand"*) and is right to — a keeper standing in the Passage sees two racks — but two exports
+// under one name in one module graph is the `chest`/`cache` mistake wearing code instead of copy.
+// ★ CAUGHT BY `PassagePanel.tsx`'s OWN IMPORT LINE, NOT BY REVIEW: it already imports `rackFor` from
+// scroll-market, so the panel would have had to name one of them something else anyway. The collision
+// is invisible while you are writing the second one and instant the moment something imports both.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// ── the VESSEL RACK: second-hand vessels, someone else's word ────────────────────────────────
 /**
  * ── ★★★ THE PASSAGE'S SECOND COUNTER (canon, 2026-09-05) ──────────────────────────────────────
  * `design-briefs/shimmer-casting-vessels.md` › THE THREE ROADS rules the BOUGHT road as **two
@@ -158,7 +169,7 @@ export const TEACHABLE: readonly KeeperMove[] = KEEPER_MOVES.filter(tradeable)
  * word far above what the shelf is priced for. This is not the shopkeeper doing the player a favour
  * — it is the supply chain working exactly as canon describes it."*
  *
- * So the shelf **prices by WEAR, not by WORTH** (`rackPrice`): a flat second-hand rate, a small
+ * So the shelf **prices by WEAR, not by WORTH** (`vesselRackPrice`): a flat second-hand rate, a small
  * count for seats the shelf can see, and only a token bump for material. A fine vessel therefore
  * sits at very nearly the price of a plain one — **the under-pricing IS the sleeper**, and nothing
  * in this file ever decides to be generous. That is what makes it the supply chain rather than a
@@ -177,22 +188,22 @@ export const TEACHABLE: readonly KeeperMove[] = KEEPER_MOVES.filter(tradeable)
  * so no counter in this shop has ever sold an ultimate and none can. A tier-3 sleeper is a keeper's
  * prize that outran them — canon's own words, *"somebody won a vessel, found they had no word for it,
  * and sold it on"* — and buying it hands you fine paper you still have no ultimate to write on.
- * ⚠ `RACK_WORD_POOL` is derived from `tradeable`, never from a list here, so the day an ultimate
+ * ⚠ `VESSEL_RACK_WORD_POOL` is derived from `tradeable`, never from a list here, so the day an ultimate
  * becomes tradeable this rack follows canon instead of contradicting it, and the day it must not,
  * one edit in `scroll-market.ts` closes every counter at once.
  *
  * ── JIN'S NUMBERS (canon hands the build stock, prices and rotation) ──
- *   · the rack holds `RACK_SIZE` vessels and turns over every world day, like the gem tray
- *   · `RACK_BASE` 40 against the cutter's 75 — "cheap, plentiful", and the gap is the trade
- *   · +`RACK_PER_SEAT` per seat past the first: the shelf can COUNT, it cannot judge
- *   · +`RACK_TIER_BUMP` flat for anything above tier 1, which is the whole of what the shelf knows
+ *   · the rack holds `VESSEL_RACK_SIZE` vessels and turns over every world day, like the gem tray
+ *   · `VESSEL_RACK_BASE` 40 against the cutter's 75 — "cheap, plentiful", and the gap is the trade
+ *   · +`VESSEL_RACK_PER_SEAT` per seat past the first: the shelf can COUNT, it cannot judge
+ *   · +`VESSEL_RACK_TIER_BUMP` flat for anything above tier 1, which is the whole of what the shelf knows
  *     about material — deliberately far less than the material is worth
  *   · `SLEEPER_CHANCE` per slot; a sleeper rolls tier 2, or tier 3 at `SLEEPER_FINE_CHANCE`
  */
-export const RACK_SIZE = 5
-export const RACK_BASE = 40
-export const RACK_PER_SEAT = 10
-export const RACK_TIER_BUMP = 15
+export const VESSEL_RACK_SIZE = 5
+export const VESSEL_RACK_BASE = 40
+export const VESSEL_RACK_PER_SEAT = 10
+export const VESSEL_RACK_TIER_BUMP = 15
 /**
  * ⚠ PER SLOT, NOT PER RACK, and the arithmetic is the whole tuning. At `1/7` across five slots the
  * rack held a sleeper roughly every 1.4 cycles — measured, not estimated — which is a shelf that
@@ -216,9 +227,9 @@ export const SLEEPER_FINE_CHANCE = 1 / 3
  * rack was blank paper, which reads as an empty shop rather than as a wall of other people's
  * purposes. So bracelets carry the rack and a glove is the rarer sight.
  * ⚠ DERIVED, NOT LISTED: if a future band gains tradeable words this weight is still just a weight,
- * and the "can it be cut" question stays answered by `RACK_WORD_POOL` alone.
+ * and the "can it be cut" question stays answered by `VESSEL_RACK_WORD_POOL` alone.
  */
-export const RACK_GLOVE_SHARE = 1 / 4
+export const VESSEL_RACK_GLOVE_SHARE = 1 / 4
 
 export interface RackVessel {
   kind: Vessel
@@ -229,35 +240,35 @@ export interface RackVessel {
 }
 
 /** Every word the rack could ever carry: the shop's own tradeable pool, never a list kept here. */
-export const RACK_WORD_POOL: readonly KeeperMove[] = TRADE_POOL
+export const VESSEL_RACK_WORD_POOL: readonly KeeperMove[] = TRADE_POOL
 
 /**
  * What the shelf asks. Wear, not worth — see the header. Pure, and it never sees the keeper: a
  * vessel is not priced up because it happens to fit you, which is the other half of "you hunt it".
  */
-export function rackPrice(kind: Vessel, tier: VesselTier, word: string | null): number {
+export function vesselRackPrice(kind: Vessel, tier: VesselTier, word: string | null): number {
   const m = word ? KEEPER_MOVES.find((k) => k.id === word) : undefined
   const seats = m ? lettersOf(m, null).length : 0
-  return RACK_BASE + Math.max(0, seats - 1) * RACK_PER_SEAT + (tier > 1 ? RACK_TIER_BUMP : 0)
+  return VESSEL_RACK_BASE + Math.max(0, seats - 1) * VESSEL_RACK_PER_SEAT + (tier > 1 ? VESSEL_RACK_TIER_BUMP : 0)
 }
 
 /**
  * The rack this cycle. Deterministic from `(cycle, seed, slot)` alone — no keeper, no birth, no
  * inventory. Same shape as `gemTrayFor` and `teacherFor` so all three counters turn on one clock.
  */
-export function rackFor(cycle: number, seed = 1, size = RACK_SIZE): RackVessel[] {
+export function vesselRackFor(cycle: number, seed = 1, size = VESSEL_RACK_SIZE): RackVessel[] {
   const out: RackVessel[] = []
   for (let i = 0; i < size; i++) {
     const k = (t: string) => hash01(`rack|${seed}|${cycle}|${i}|${t}`)
-    const kind: Vessel = k('kind') < RACK_GLOVE_SHARE ? 'focus' : 'bracelet'
+    const kind: Vessel = k('kind') < VESSEL_RACK_GLOVE_SHARE ? 'focus' : 'bracelet'
     // A sleeper is a TIER roll and nothing else — the price rule above does the rest.
     const sleeper = k('sleep') < SLEEPER_CHANCE
     const tier: VesselTier = !sleeper ? 1 : (k('fine') < SLEEPER_FINE_CHANCE ? 3 : 2)
     // The word: any tradeable word of this vessel's band, chosen with no reference to the keeper.
     const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
-    const pool = RACK_WORD_POOL.filter((m) => m.tier === band && lettersOf(m, null).length <= seatCapOf(tier))
+    const pool = VESSEL_RACK_WORD_POOL.filter((m) => m.tier === band && lettersOf(m, null).length <= seatCapOf(tier))
     const word = pool.length ? pool[Math.floor(k('word') * pool.length)]!.id : null
-    out.push({ kind, tier, word: word ?? null, price: rackPrice(kind, tier, word ?? null) })
+    out.push({ kind, tier, word: word ?? null, price: vesselRackPrice(kind, tier, word ?? null) })
   }
   return out
 }
@@ -274,7 +285,7 @@ export interface RackPurchase { ok: boolean; marks: number; why?: TradeRefusal; 
  * sell it to you, because a shop that refuses your Marks on your behalf is not a wall of other
  * people's purposes, it is a curated aisle. The information is the mercy; the choice stays yours.
  */
-export function buyFromRack(marks: number, slot: number, rack: readonly RackVessel[]): RackPurchase {
+export function buyFromVesselRack(marks: number, slot: number, rack: readonly RackVessel[]): RackPurchase {
   const no = (why: TradeRefusal, say: string): RackPurchase => ({ ok: false, marks, why, say })
   const v = rack[slot]
   if (!v) return no('not-stocked', 'That one is gone. The rack turns over.')
