@@ -5,7 +5,11 @@ import { readFileSync, existsSync } from 'node:fs'
 import {
   WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, TRAY_SIZE, GEM_PRICE_LANE, GEM_PRICE_OFF,
   weekdayOf, daysUntil, gemTrayFor, gemPrice, buyGem, sell, teacherFor, takeLesson, TEACHABLE,
+  RACK_SIZE, rackFor, buyFromRack, type RackVessel,
 } from './passage'
+import { VESSEL_PRICE, BAND_FOR_VESSEL } from './vessels'
+import { TRADE_POOL } from './scroll-market'
+import { ALL_BANDS } from './cast'
 import { EMPTY_LETTERS } from './gems'
 import { EMPTY_BOOK } from './scroll-market'
 import { RUNES, ELEMENTS, runesOf } from './birth/runes.data'
@@ -105,6 +109,130 @@ const store: Record<string, string> = {}
   ok(/<PassagePanel/.test(m) && /items=\{invRef\}/.test(m) && /keeperBook\(/.test(m) && /applyLoadout\(\)/.test(m), 'the trader mounts PassagePanel with the tile bag, and onChange re-reads the book and re-resolves')
   ok(!/<PassageRack/.test(tile) && !existsSync(new URL('./PassageRack.tsx', import.meta.url)), 'the rack-only panel is retired — one Passage, not two')
   ok(/unreadable|you do not carry this/.test(panel) && /canRead\(/.test(panel), 'the unreadable row is DRAWN and named (the rack\'s canon note survived the retirement)')
+}
+
+// ══ THE RACK — the Passage's second counter, and the sleepers ═══════════════════════════════════
+// Canon 2026-09-05 (`design-briefs/shimmer-casting-vessels.md` › THE THREE ROADS). Every assert here
+// was mutation-tested against the bug it is written for; the mutation is named above each block.
+{
+  const CYCLES = 4000
+  const all: RackVessel[] = []
+  for (let c = 0; c < CYCLES; c++) all.push(...rackFor(c))
+  ok(all.length === CYCLES * RACK_SIZE, `read ${all.length} rack slots across ${CYCLES} cycles`)
+
+  // ── R1. THE RACK IS CHEAPER THAN THE CUTTER — canon's "cheap, plentiful" against "expensive" ──
+  // Mutation: RACK_BASE 40 -> 80 → fires. This is the trade the two counters exist to encode; if the
+  // rack ever costs more than made-to-order, the second counter has no reason to be there.
+  {
+    const dearest = Math.max(...all.map(v => v.price))
+    ok(dearest < VESSEL_PRICE, `every rack price undercuts the cutter — dearest ${dearest} vs ${VESSEL_PRICE}`)
+  }
+
+  // ── R2. ★★★ THE SHELF PRICES BY WEAR, NOT WORTH — which is what MAKES a sleeper ──────────────
+  // The claim canon spends its whole paragraph on: *"not the shopkeeper doing the player a favour."*
+  // A fine vessel must be reachable at second-hand money, or a sleeper is just an expensive vessel.
+  // Mutation: make rackPrice scale on tier (`+ tier * 40`) → fires, because the fine ones leave the
+  // band the cutter's price defines and the "find" becomes a purchase.
+  {
+    const fine = all.filter(v => v.tier > 1)
+    ok(fine.length > 50, `${fine.length} fine vessels seen across the sample`)
+    const dearestFine = Math.max(...fine.map(v => v.price))
+    ok(dearestFine < VESSEL_PRICE,
+      `a FINE vessel still costs less than the cutter's plain one — ${dearestFine} vs ${VESSEL_PRICE}: the under-pricing IS the sleeper`)
+  }
+
+  // ── R3. ⚠⚠ NO ULTIMATE WORD EVER REACHES THE RACK, and the assert is DERIVED ────────────────
+  // The one thing that would break canon outright: *"ultimates are earned, never bought."*
+  // ★ It asks `tradeable`, never a list kept here — so the day the shop's own pool changes, this
+  // guard follows canon instead of contradicting it. A hardcoded ['ultimate'] would be a second copy
+  // of a rule that already has one home, which is the 08-22 hand-kept-mirror trap.
+  // Mutation: point RACK_WORD_POOL at KEEPER_MOVES instead of TRADE_POOL → fires.
+  {
+    const untradeable = all.filter(v => v.word && !TRADE_POOL.some(m => m.id === v.word))
+    ok(untradeable.length === 0,
+      `no rack vessel is cut for a word the shop may not sell (${untradeable.length}, e.g. ${untradeable[0]?.word ?? '—'})`)
+  }
+
+  // ── R4. ★★ A GLOVE IS NEVER CUT — asserted through its REASON, not its symptom ───────────────
+  // `focus` maps to the `ultimate` band and the shop has no ultimate word, so it cannot have cut one.
+  // ⚠ THE SECOND HALF IS WHAT KEEPS THIS HONEST: if a band ever gains tradeable words, the premise
+  // has changed and this test must go red and be re-thought rather than quietly keep passing. A
+  // one-directional "gloves are blank" assert would go silent at exactly that moment.
+  {
+    const gloveBand = ALL_BANDS[BAND_FOR_VESSEL.focus]
+    const cuttable = TRADE_POOL.filter(m => m.tier === gloveBand).length
+    ok(cuttable === 0, `the shop holds no word of the glove's band (${gloveBand}) — this is WHY a glove is blank`)
+    const cutGloves = all.filter(v => v.kind === 'focus' && v.word !== null)
+    ok(cutGloves.length === 0, `and so no glove on the rack is cut (${cutGloves.length})`)
+  }
+
+  // ── R5. ★★★ THE RACK IS GENERATED WITHOUT REFERENCE TO THE KEEPER ────────────────────────────
+  // The mechanic canon names: *"a wall of other people's purposes"*, which you HUNT. If the stock
+  // were filtered to the keeper's lane the counter would be a worse cutter.
+  // ★ Asserted as SPREAD rather than by reading the signature: the rack's words must span more of
+  // the tradeable pool than any single keeper could ever bind, which is a claim a lane filter fails.
+  // Mutation: filter the pool in `rackFor` to one element's lane → the distinct count collapses.
+  {
+    const words = new Set(all.filter(v => v.word).map(v => v.word!))
+    const bandPool = TRADE_POOL.filter(m => m.tier === ALL_BANDS[BAND_FOR_VESSEL.bracelet])
+    ok(words.size > bandPool.length * 0.8,
+      `the rack draws across the whole tradeable band — ${words.size} distinct words of ${bandPool.length} possible`)
+  }
+
+  // ── R6. DETERMINISM AND ROTATION — one clock, same as the tray and the teacher ───────────────
+  // Mutation: key the hash on Math.random() → determinism fires. Drop `cycle` from the key → rotation fires.
+  {
+    const sig = (r: readonly RackVessel[]) => r.map(v => `${v.kind}${v.tier}${v.word}${v.price}`).join('|')
+    ok(sig(rackFor(77)) === sig(rackFor(77)), 'the same cycle shows the same rack')
+    let moved = 0
+    for (let c = 0; c < 50; c++) if (sig(rackFor(c)) !== sig(rackFor(c + 1))) moved++
+    ok(moved > 45, `the rack turns over — ${moved} of 50 consecutive cycles differ`)
+  }
+
+  // ── R7. THE SLEEPER RATE IS IN THE BAND ITS OWN COMMENT CLAIMS ──────────────────────────────
+  // ⚠ A TUNING TRIPWIRE, not a correctness assert: it exists so raising SLEEPER_CHANCE without
+  // re-reading canon's "occasionally" goes red. Loose enough that ordinary retuning is free.
+  // Mutation: SLEEPER_CHANCE 1/18 -> 1/3 → fires.
+  {
+    const rate = all.filter(v => v.tier > 1).length / all.length
+    ok(rate > 0.02 && rate < 0.10, `a sleeper is occasional — ${(rate * 100).toFixed(1)}% of slots`)
+    const perCycle = 1 / (rate * RACK_SIZE)
+    ok(perCycle > 2, `about one every ${perCycle.toFixed(1)} cycles — rare enough to be worth hunting`)
+  }
+
+  // ── R8. BUYING: the Marks leave, the cap holds, the refusals are honest ──────────────────────
+  // Mutation: drop the `marks < v.price` check → the too-dear assert fires.
+  {
+    const rack = rackFor(31)
+    const v = rack[0]!
+    const poor = buyFromRack(v.price - 1, 0, rack)
+    ok(!poor.ok && poor.why === 'too-dear', `a keeper short by one Mark is refused (${poor.why})`)
+    ok(poor.marks === v.price - 1, 'and a refused purchase spends nothing')
+    const gone = buyFromRack(9999, 99, rack)
+    ok(!gone.ok && gone.why === 'not-stocked', 'a slot that is not there refuses rather than throwing')
+    const bought = buyFromRack(9999, 0, rack)
+    ok(bought.ok, `a rack vessel can be bought (${bought.say.slice(0, 48)}…)`)
+    ok(bought.marks === 9999 - v.price, `and it costs exactly its price (${9999 - bought.marks})`)
+  }
+
+  // ── R9. ⛔ VOCABULARY — the collision canon rules outright ────────────────────────────────────
+  // `gem` is the rune-gem, sold on the shelf beside this one. Naming a sleeper a "hidden gem" puts
+  // two objects in one market under one noun — the chest/cache mistake, in the same shop.
+  // Mutation: write "hidden gem" into passage.ts → fires.
+  {
+    // ⚠⚠ THIS ASSERT CAUGHT ITS OWN AUTHOR ON THE FIRST RUN. Written as a raw-source test it went red
+    // immediately — on the header comment that QUOTES the banned phrase in order to explain the ban.
+    // That is 08-22's *documenting a marker created a marker*, arriving through the one door most
+    // likely to be opened by someone doing the right thing: writing down why the rule exists.
+    // ★ So it reads through `noComments`, and the RAW file is asserted to still contain the phrase —
+    // which is the negative control that distinguishes *the stripper is working* from *the guard is
+    // not looking*. Without that second line, deleting the whole vocabulary note would read as a pass.
+    const raw = readFileSync(new URL('./passage.ts', import.meta.url), 'utf8')
+    const code = noComments(raw)
+    ok(!/hidden gem/i.test(code), 'no "hidden gem" in the Passage\'s CODE — canon calls them sleepers')
+    ok(/hidden gem/i.test(raw), 'the ban is still explained in prose (control: the comment stripper is what passed the line above)')
+    ok(/sleeper/i.test(code), 'and the word canon DID give them is in the code (positive control)')
+  }
 }
 
 console.log(`passage: ${pass} passed, ${fails.length} failed`)
