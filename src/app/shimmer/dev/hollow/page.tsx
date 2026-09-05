@@ -37,6 +37,7 @@ import { useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, CubeCamera } from '@react-three/drei'
 import { HollowDoll, type HollowMode } from '../../voxel3d/HollowDoll'
+import { HollowRig } from '../../voxel3d/HollowRig'
 import { HOLLOW_LOOK, type HollowForm } from '../../voxel3d/hollow-look'
 import { EYE_STAND } from '../../voxel3d/locomotion'
 
@@ -56,6 +57,10 @@ export default function HollowBenchPage() {
   const [mode, setMode] = useState<HollowMode>('borrowed')
   const [x, setX] = useState(-4)          // -6 greyfield … +6 tended plot
   const [speed, setSpeed] = useState(0.8)
+  // ⚠ BONES IS THE DEFAULT. `hollow-body.ts` is what canon has ruled since 08-15 (upright,
+  // bipedal, plantigrade); the blob doll is the thing it replaces, kept beside it so the two can be
+  // told apart in MOTION rather than from memory.
+  const [rig, setRig] = useState<'bones' | 'blob'>('bones')
   const [night, setNight] = useState(true)
   const [eye, setEye] = useState(true)
 
@@ -80,6 +85,9 @@ export default function HollowBenchPage() {
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
           {FORMS.map(f => <Btn key={f} on={form === f} onClick={() => setForm(f)}>{f}</Btn>)}
+          <span style={{ width: 10 }} />
+          <Btn on={rig === 'bones'} onClick={() => setRig('bones')}>Bones (11-bone rig)</Btn>
+          <Btn on={rig === 'blob'} onClick={() => setRig('blob')}>Blob doll (what it replaces)</Btn>
           <span style={{ width: 10 }} />
           <Btn on={mode === 'borrowed'} onClick={() => setMode('borrowed')}>Brief: borrowed light</Btn>
           <Btn on={mode === 'shipped'} onClick={() => setMode('shipped')}>
@@ -126,7 +134,9 @@ export default function HollowBenchPage() {
           <CubeCamera resolution={64} frames={Infinity} position={[x, 1.1, 0]}>
             {(texture) => (
               <group position={[x, 0, 0]}>
-                <HollowDoll form={form} speed={speed} mode={mode} envMap={texture} />
+                {rig === 'bones'
+                  ? <HollowRig form={form} speed={speed} />
+                  : <HollowDoll form={form} speed={speed} mode={mode} envMap={texture} />}
               </group>
             )}
           </CubeCamera>

@@ -9,10 +9,12 @@
  *
  * Run: `npx tsx src/app/shimmer/voxel3d/hollow-body.test.ts`
  */
+import { readFileSync } from 'node:fs'
 import * as THREE from 'three'
 import { createHollowBody, updateHollowBody, disposeHollowBodies, BUCKETS } from './hollow-body'
 import { hollowField, hollowPose, MAX_BLOB_R, HOLLOW_STRIDE_S } from './hollow-pose'
 import { createHollowMat, HOLLOW_LOOK, type HollowForm } from './hollow-look'
+import { codeOnly } from '../testing/guard'
 
 let pass = 0
 const fails: string[] = []
@@ -166,6 +168,39 @@ for (let i = 0; i < 24; i++) {
 }
 ok(legAngles.size === 1 && [...legAngles][0] === 0,
   '★★ a caster\'s legs never swing in the RIG either — it floats, it does not perform a walk')
+
+// ── ★★★ AND SOMETHING DRAWS IT ────────────────────────────────────────────────────────────────
+// The reason this section exists, and it is the sharpest thing this file learned (2026-09-05):
+// every assert above passed at 40-odd green while `hollow-body.ts` was imported by NOTHING BUT THIS
+// FILE. The bench drew `HollowDoll`, `VoxelWorld` drew an icosahedron, and a deploy would have
+// shipped 240 lines of skeleton and rendered none of it. A GUARD ON A PRODUCER SAYS NOTHING ABOUT
+// WHETHER A CONSUMER EXISTS — so the producer's own guard is where that has to be asserted.
+//
+// ⚠ READ THROUGH `codeOnly`. Both files below NAME these symbols in their prose, and a check that
+// counted a comment would go green the day the code was deleted and the explanation left behind
+// (PATTERNS 2026-08-22, documenting a marker created a marker).
+{
+  // ⚠ TWO READINGS OF EACH FILE, AND THE SPLIT IS LOAD-BEARING. `codeOnly` blanks STRING LITERALS
+  // as well as comments, so an import PATH is invisible to it — a behaviour assert read through it,
+  // an import assert read raw and anchored at line start, where no prose can reach (a comment cannot
+  // begin with `import`). Reading the path through `codeOnly` fails green-side: the string is empty
+  // whether or not the import is there.
+  const rigRaw = readFileSync(new URL('./HollowRig.tsx', import.meta.url), 'utf8')
+  const rig = codeOnly(rigRaw)
+  ok(/^import [\s\S]{0,120}?from '\.\/hollow-body'$/m.test(rigRaw), 'a component imports the body module')
+  ok(/createHollowBody\(/.test(rig), 'and builds a body from it')
+  ok(/useFrame\([^)]*=>[\s\S]{0,220}?updateHollowBody\(/.test(rig),
+    '★★ and drives it from a FRAME LOOP — a body built once and never updated does not walk')
+  ok(/disposeHollowBodies\(/.test(rig), 'and releases the shared geometry + materials on unmount')
+
+  // ★ And the component is MOUNTED. A consumer nothing renders is the same dead end one file out,
+  // which is exactly how the rig sat unseen: `hollow-body` had a test, and the test was the consumer.
+  const benchRaw = readFileSync(new URL('../dev/hollow/page.tsx', import.meta.url), 'utf8')
+  const bench = codeOnly(benchRaw)
+  ok(/<HollowRig\s/.test(bench), '★★ and a page MOUNTS that component — the rig is reachable by eye')
+  ok(/^import \{ HollowRig \} from '\.\.\/\.\.\/voxel3d\/HollowRig'$/m.test(benchRaw),
+    'from the bench, by import, not by copy')
+}
 
 console.log(`   ${FORMS.length} forms · ${BUCKETS} alpha buckets`)
 console.log(fails.length ? `❌ ${pass} passed, ${fails.length} FAILED` : `✅ ${pass} passed`)
