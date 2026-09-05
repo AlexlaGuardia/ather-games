@@ -548,6 +548,30 @@ export const MAT = {
   MOSSY_STONE_BRICK: 83,
   CRACKED_STONE_BRICK: 84,
   MOSSY_CUT_STONE: 85,
+  /**
+   * ── ★ THE CACHE — the FOUND road's object (canon, 2026-09-05) ────────────────────────────────
+   * `design-briefs/shimmer-casting-vessels.md` › THE THREE ROADS rules the first road: a vessel is
+   * FOUND as *a cache in the Wilds*, and *"a cached vessel is anonymous, and that is its whole
+   * character. Somebody made it for a word they meant to write, and the keeper who digs it out will
+   * never learn who or why."*
+   *
+   * ⛔ IT IS NOT A CHEST AND THE DISTINCTION IS CANON, NOT TASTE. `MAT.CHEST` is craftable player
+   * furniture in this build (Goldwood Plank ×5), and the ruling names the collision outright: *"a
+   * lootable container sharing that noun would be two things wearing one label."* Cache had zero
+   * prior occurrences anywhere in `CANON/`; it is the word now. Nothing about this id may drift
+   * toward the chest's behaviour — it holds no inventory, spills nothing, and is not placeable.
+   *
+   * ★ IT EMITS, AND THAT IS THE FEATURE RATHER THAN THE DECORATION. The vessel brief's own light
+   * rule — *"a filled seat is a line of light ... a player reads how loaded a keeper is from across
+   * the square, without a UI"* — pointed at the cache instead of at the keeper. In a warren with no
+   * sky channel it is the only lit thing, so the way you find it is by seeing it, at the end of a
+   * corridor, and no HUD is involved. `emit: 6` is under the waymark's 7 on purpose: a cache is a
+   * thing you glimpse and go towards, not a lamp that lights the room you are standing in.
+   *
+   * ⚠ TBD-CANON on nothing here — *cache* is ruled. The MATERIAL it is made of is not, so it draws
+   * as worked stone with a light in it and claims no more than that.
+   */
+  CACHE: 86,
 } as const
 
 /**

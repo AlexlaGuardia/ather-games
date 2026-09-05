@@ -8,6 +8,7 @@
 
 import { DEFAULT_SITES, siteAt } from './sites'
 import { DEFAULT_RUINS, RUIN_PIECES, RUIN_REACH, ruinPlan, buildRuin, type RuinPart } from './ruins'
+import { hasDescent, warrenPlan } from './warren'
 import { columnHeight } from './height'
 import { MAT } from './depth'
 import { makeColumn, SECTION } from './column'
@@ -207,6 +208,23 @@ ok(sites.length > 10, `found ruins to inspect (${sites.length})`)
   // column the ruin touches, generate it the way the game does, then run `buildRuin` over it a
   // second time. Writing the same blocks twice is a no-op — so if anything CHANGES, the pipeline
   // had not written it.
+  // ── ⚠⚠ ONE LEGITIMATE EXCEPTION, ADDED 2026-09-05 WITH THE DESCENT, AND IT IS NOT A WEAKENING ──
+  // A ruin with a warren under it has a STAIRWELL cut up through its floor (`warren.ts`), and the
+  // shaft stage runs after `buildRuin` inside the same `placeSites` call. So re-running `buildRuin`
+  // legitimately restores the rubble the shaft cleared, and the idempotence this block reasons from
+  // is genuinely false over the 3×3 at the site centre — measured as exactly 1 cell.
+  //
+  // ★ THE GUARD'S PURPOSE IS UNTOUCHED: it exists to catch the reach clip dropping a ruin's OUTER
+  // slices, and the shaft is at the dead centre, which is the one place a clip failure can never
+  // reach. Excluding it costs the assert nothing and keeps a real red available.
+  // ⛔ THE TEMPTING FIX WAS `dropped <= 1`. That is the cheapest thing that turns this green and it
+  // would have swallowed a genuinely missing cell anywhere in the ruin, forever, for one cell of
+  // convenience — a count nudged until it passes, which is the exact anti-pattern this repo keeps
+  // re-learning. Name the cells that are allowed to move instead of raising the tolerance.
+  const inStairwell = (wx: number, wz: number): boolean =>
+    hasDescent(site) && warrenPlan(site, SEED).length > 0 &&
+    Math.abs(wx - site.x) <= 1 && Math.abs(wz - site.z) <= 1
+
   let dropped = 0, touched = 0
   const seen = new Set<string>()
   for (const p of parts) for (const [cx, cz] of [[p.x0, p.z0], [p.x1, p.z0], [p.x0, p.z1], [p.x1, p.z1]]) {
@@ -221,7 +239,10 @@ ok(sites.length > 10, `found ruins to inspect (${sites.length})`)
     buildRuin(viaPipeline.sections, ox2, 0, oz2, SECTION, site, SEED)
     let i = 0
     for (let y = site.floor - 1; y <= site.floor + 5; y++)
-      for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) if (viaPipeline.get(x, y, z) !== before[i++]) dropped++
+      for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
+        const changed = viaPipeline.get(x, y, z) !== before[i++]
+        if (changed && !inStairwell(ox2 + x, oz2 + z)) dropped++
+      }
   }
   ok(touched > 1, `the ruin is checked across ${touched} columns of the real pipeline`)
   ok(dropped === 0, `the pipeline writes the WHOLE ruin, not just the middle (${dropped} cells it missed)`)

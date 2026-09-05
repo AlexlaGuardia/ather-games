@@ -2,6 +2,9 @@
 //
 // ── ★★★ WHY THIS IS ITS OWN FILE ─────────────────────────────────────────────────────────────
 // It lived inside `VoxelWorld.tsx`, an 8964-line component no test can import — so **not one
+import { WORLD_SEED } from './world-seed'
+import { DEFAULT_SITES, siteAt } from '../voxel/sites'
+import { hasDescent, warrenPlan, cacheCell } from '../voxel/warren'
 // console verb has ever been harness-covered.** `/space`, `/brew`, `/goto`, `/waymark`: every one
 // of them shipped on review alone, including their OWNER GATES. A cheat command whose gate is
 // checked by nobody is the kind of thing that reads fine in a diff and is a live cheat in prod.
@@ -347,6 +350,49 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.tp(z.x, z.z)
     },
     suggest: () => ZONE_ANCHORS.map(z => z.id) },
+
+  // ── ★ /warren — find the way down (2026-09-05, with the descent) ─────────────────────────────
+  // Alex, asking for the cache road: *"new points of interest to generate into the game that hides
+  // them within."* A warren is UNDER a ruin, only about a third of ruins have one, and ruins run
+  // roughly 1.1 per 1000² of greyfield. So the feature is real, shipped, and effectively
+  // unreachable on foot for anyone who has not already walked into one by luck.
+  //
+  // ⚠ THIS IS A TEST INSTRUMENT AND NOT HOW A KEEPER FINDS A CACHE — the same standing warning
+  // `/rune`, `/waymark` and `/foes` carry. A cache is meant to be found by walking into a ruin and
+  // noticing the stairwell. This exists because the alternative is judging a feature you cannot get
+  // to, and because *"is it any good"* is a question only Alex can answer from inside one.
+  //
+  // ★ OWNER-GATED WHOLE, unlike `/goto`'s compass/teleport split. There is no view-grade half here
+  // to protect: naming the coordinates of every cache in the world IS the cheat, so there is
+  // nothing to keep public.
+  { name: 'warren', usage: 'warren', help: 'teleport to the nearest ruin with a way down', owner: true,
+    run: (_a, c) => {
+      const p = c.pos()
+      const cell = (v: number) => Math.floor(Math.floor(v / 16) / DEFAULT_SITES.spacing)
+      const c0x = cell(p.x), c0z = cell(p.z)
+      let best: { x: number; z: number; rooms: number; hasCache: boolean; d: number } | null = null
+      // Rings outward, so the FIRST hit at a given radius is the nearest and the scan can stop.
+      // ⚠ Bounded at 12 cells (~2700 blocks). An unbounded search on a miss would walk the whole
+      // infinite plane and hang the tab — the console runs on the main thread.
+      for (let r = 0; r <= 12 && !best; r++) {
+        for (let dz = -r; dz <= r; dz++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue     // the ring, not the disc
+            const site = siteAt(WORLD_SEED, c0x + dx, c0z + dz)
+            if (!site || !hasDescent(site)) continue
+            const parts = warrenPlan(site, WORLD_SEED)
+            if (!parts.length) continue
+            const d = Math.round(Math.hypot(site.x - p.x, site.z - p.z))
+            if (!best || d < best.d) {
+              best = { x: site.x, z: site.z, rooms: parts.length, hasCache: !!cacheCell(parts, site), d }
+            }
+          }
+        }
+      }
+      if (!best) return 'no warren within ~2700 blocks — try walking into greyfield first'
+      const said = c.tp(best.x, best.z)
+      return `${said}\n${best.d} blocks away · ${best.rooms} rooms below${best.hasCache ? ' · a cache is down there' : ' · no cache (too few rooms)'}\nthe stairs are in the middle of the ruin`
+    } },
   // ★ /foes (2026-08-16, #294) — the instrument the patrols needed before they could be trusted.
   // Owner-only in FULL, unlike /goto and /mist: those two split because knowing a PLACE exists is
   // not a cheat, but knowing where three people are standing and how close their collars are to

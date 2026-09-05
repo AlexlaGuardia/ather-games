@@ -271,7 +271,7 @@ import { WEEK, type Weekday } from '../play3d/passage'
 import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn,
          placeGems, seatCount, seatLetters, shortOf, isComplete, setWord,
          wornTier, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier } from '../play3d/vessels'
-import { rollDig, parseVesselItem, takeVessel, vesselItemId, vesselRoom } from '../play3d/vessel-drops'
+import { rollDig, rollCache, parseVesselItem, takeVessel, vesselItemId, vesselRoom, type DropDoor } from '../play3d/vessel-drops'
 import { starterFor } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
@@ -9099,7 +9099,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // ★ THE FOUND DOOR (vessels are not crafted, 2026-09-04): a rare roll on deep rock turns up a
           // vessel somebody lost — it falls out of the block like any drop and is TAKEN on pickup.
           const dug = rollDig(hit.material)
-          if (dug) drops.current.push(spawnDrop(vesselItemId(dug.kind, dug.tier), 1, hit.x, hit.y, hit.z))
+          if (dug) drops.current.push(spawnDrop(vesselItemId(dug.kind, dug.tier), 1, hit.x, hit.y, hit.z, 'dig'))
+          // ★ THE CACHE — the FOUND road's other door, and the only block in the world that always
+          // gives. No roll: you walked down a warren in the dark to reach it, and the walk IS the
+          // cost. `registry.ts` gives this material no static drops precisely so this line owns it.
+          // ⚠ IT SPILLS ONTO THE GROUND RATHER THAN INTO THE SATCHEL, which is what makes the cap
+          // case correct for free: the pickup below refuses at `MAX_PER_KIND` and the vessel stays
+          // lying there, yours, exactly as a refused dig does.
+          if (hit.material === MAT.CACHE) {
+            const held = rollCache()
+            drops.current.push(spawnDrop(vesselItemId(held.kind, held.tier), 1, hit.x, hit.y, hit.z, 'cache'))
+            onSay('the cache gives — something was left in here for somebody')
+          }
         }
         // ★ A BROKEN CHEST SPILLS WHAT IT HELD — before `setVoxel`, which is what drops the record.
         // It spills rather than refusing to break: the pile is visible, `tickDrops`' capacity gate
@@ -9655,7 +9666,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
             // ★ FOUND: cut for a word somebody meant to write — inheriting an intention (canon). The word
             // is chosen for THIS keeper's lanes at the moment of pickup; the host only relays the line.
             const rinv = loadRuneInventory()
-            const r = takeVessel(it.itemId, 'dig', rinv.owned, rinv.birth)
+            // ★ THE DOOR RIDES ON THE DROP. A vessel out of deep rock and a vessel out of a cache are
+            // the same item and are not the same event, and the line the keeper reads says which.
+            // `'dig'` is the fallback for a drop that predates provenance — the old behaviour exactly.
+            const r = takeVessel(it.itemId, (it.from ?? 'dig') as DropDoor, rinv.owned, rinv.birth)
             onSay(r.say)
             if (r.ok) onVesselFound()
             continue

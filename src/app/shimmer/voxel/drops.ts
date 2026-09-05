@@ -25,6 +25,18 @@ export interface Drop {
    */
   pickupDelay: number
   resting: boolean
+  /**
+   * ★ WHERE THIS CAME FROM, as an opaque tag the CORE never interprets.
+   *
+   * Two drops can carry the same `itemId` and mean different things to the host: a vessel that fell
+   * out of deep rock and a vessel taken out of a cache are the same object with different
+   * provenance, and the line the player reads on pickup is keyed on that, not on the item.
+   *
+   * ⚠ A STRING AND NOT THE HOST'S OWN UNION, DELIBERATELY. `voxel/` is pure core and may not import
+   * from `play3d/` (`purity.test.ts` walks the graph). Typing this as `DropDoor` would close that
+   * door for one field's worth of convenience. The host owns the vocabulary; this owns the carry.
+   */
+  from?: string
 }
 
 export interface DropConfig {
@@ -62,7 +74,7 @@ export const resetDropIds = () => { nextId = 1 }
  * throws its drop the same way. That costs nothing and keeps the whole core deterministic — which
  * is the property that lets a TS and a Rust build be diffed.
  */
-export function spawnDrop(itemId: string, count: number, bx: number, by: number, bz: number): Drop {
+export function spawnDrop(itemId: string, count: number, bx: number, by: number, bz: number, from?: string): Drop {
   let h = (bx * 374761393) ^ (by * 668265263) ^ (bz * 2147483647)
   h = Math.imul(h ^ (h >>> 13), 1274126177)
   const a = ((h >>> 0) / 4294967296) * Math.PI * 2
@@ -72,6 +84,9 @@ export function spawnDrop(itemId: string, count: number, bx: number, by: number,
     x: bx + 0.5, y: by + 0.35, z: bz + 0.5,
     vx: Math.cos(a) * 1.4, vy: 3.1, vz: Math.sin(a) * 1.4,
     age: 0, pickupDelay: 0.45, resting: false,
+    // Omitted rather than set to undefined-as-a-value: a drop with no provenance has no `from`, so
+    // every existing call site keeps producing exactly the object it produced before.
+    ...(from === undefined ? {} : { from }),
   }
 }
 
@@ -117,7 +132,9 @@ export function tossDrop(
 
 export interface DropTickResult {
   /** Items collected this tick, already merged by id. */
-  picked: { itemId: string; count: number }[]
+  /** ⚠ CARRIES `from` THROUGH. The provenance is on the DROP and the host reads it at PICKUP, so a
+   *  picked entry that dropped the field would strip exactly the thing it exists to deliver. */
+  picked: { itemId: string; count: number; from?: string }[]
   /** Ids that despawned without being collected. */
   expired: number[]
 }
@@ -148,7 +165,7 @@ export function tickDrops(
    */
   capacity?: (itemId: string, count: number) => number,
 ): DropTickResult {
-  const picked: { itemId: string; count: number }[] = []
+  const picked: { itemId: string; count: number; from?: string }[] = []
   const expired: number[] = []
 
   // ── merge first, so physics and pickup run on the smaller set ────────────────────────────
@@ -206,7 +223,7 @@ export function tickDrops(
     if (dx * dx + dy * dy + dz * dz <= cfg.pickupRadius * cfg.pickupRadius) {
       const take = capacity ? Math.max(0, Math.min(d.count, capacity(d.itemId, d.count))) : d.count
       if (take <= 0) continue          // bag full: the item stays where it is, and stays yours
-      picked.push({ itemId: d.itemId, count: take })
+      picked.push({ itemId: d.itemId, count: take, ...(d.from === undefined ? {} : { from: d.from }) })
       d.count -= take
       // What did not fit keeps its pickup delay clear but must not be re-offered this same tick.
     }

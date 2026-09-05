@@ -143,8 +143,17 @@ ok(KEEPER_KEYS.includes(TRIALS_KEY), 'the trial ledger key is registered per kee
 // ── F. the hosts: the dig in the voxel world, the pickup into the satchel, the trial in the range ──
 {
   const W = noComments(readFileSync(new URL('../voxel3d/VoxelWorld.tsx', import.meta.url), 'utf8'))
-  ok(/const dug = rollDig\(hit\.material\)/.test(W) && /spawnDrop\(vesselItemId\(dug\.kind, dug\.tier\), 1, hit\.x, hit\.y, hit\.z\)/.test(W),
+  // ⚠ THE COORDINATE TAIL IS MATCHED LOOSELY ON PURPOSE. This pinned `hit.z)` exactly and went red
+  // the day the drop grew a provenance argument (`hit.z, 'dig')`) — a red that was entirely about
+  // punctuation while the behaviour it guards never moved. A test that goes red for that reason
+  // teaches its readers to discount red, which costs more than the precision was worth.
+  ok(/const dug = rollDig\(hit\.material\)/.test(W) && /spawnDrop\(vesselItemId\(dug\.kind, dug\.tier\), 1, hit\.x, hit\.y, hit\.z[,)]/.test(W),
      '★ breaking a block ROLLS the dig and spawns the vessel as a drop, through the real drop system')
+  // ★ THE CACHE — the FOUND road's other door. A cache always gives, so there is no roll to assert;
+  // what must be true is that it goes through the SAME drop system rather than teleporting a vessel
+  // into the satchel, and that it is tagged so the pickup can tell the two doors apart.
+  ok(/hit\.material === MAT\.CACHE/.test(W) && /spawnDrop\(vesselItemId\(held\.kind, held\.tier\), 1, hit\.x, hit\.y, hit\.z, 'cache'\)/.test(W),
+     '★ breaking a cache spawns its vessel as a drop, tagged `cache`, through the real drop system')
   const digAt = W.indexOf('const dug = rollDig(')
   const dropsForAt = W.lastIndexOf('dropsFor(hit.material)', digAt)
   ok(dropsForAt >= 0 && digAt - dropsForAt < 400, 'and the roll sits beside the ordinary block drops, not in a second break path')
@@ -152,8 +161,15 @@ ok(KEEPER_KEYS.includes(TRIALS_KEY), 'the trial ledger key is registered per kee
      '★ the pickup CAPACITY gate asks the satchel for a vessel and the bag for everything else — at the cap the drop stays')
   const pickAt = W.indexOf('for (const it of res.picked)')
   const pick = pickAt >= 0 ? W.slice(pickAt, pickAt + 900) : ''
-  ok(/if \(parseVesselItem\(it\.itemId\)\)/.test(pick) && /takeVessel\(it\.itemId, 'dig'/.test(pick) && /continue/.test(pick),
+  ok(/if \(parseVesselItem\(it\.itemId\)\)/.test(pick) && /takeVessel\(it\.itemId,/.test(pick) && /continue/.test(pick),
      '★ a picked-up vessel is TAKEN into the satchel and never reaches `give` — the bag would have stacked a glove like a plank')
+  // ★★ AND THE DOOR RIDES ON THE DROP RATHER THAN BEING ASSUMED. This was the literal `'dig'` until
+  // the cache road landed, at which point every cached vessel would have been announced as dug out
+  // of rock — the copy is the only place the two roads differ to a player, so hardcoding the door
+  // silently deletes the difference. The `?? 'dig'` fallback keeps a pre-provenance drop behaving
+  // exactly as it did.
+  ok(/takeVessel\(it\.itemId, \(it\.from \?\? 'dig'\)/.test(pick),
+     "★ the pickup relays the DROP's own door, so a cache does not announce itself as a dig")
   ok(pick.indexOf('takeVessel(') < pick.indexOf('give(inv.current!'), 'the vessel branch comes BEFORE the bag branch')
   ok(/if \(r\.ok\) onVesselFound\(\)/.test(pick) && /onVesselFound=\{\(\) => setRuneTick\(t => t \+ 1\)\}/.test(W),
      'and the host bumps runeTick so the satchel re-reads the stowed list')

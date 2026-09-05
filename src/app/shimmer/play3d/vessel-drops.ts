@@ -53,13 +53,28 @@ import {
 
 export const TRIALS_KEY = 'ather:shimmer:trials'
 
-export type DropDoor = 'dig' | 'trial'
+/**
+ * ★ THE ROADS, AS DOORS. `dig` and `cache` are both canon's FOUND road and they are kept apart
+ * because they are different acts: a dig is luck while you were mining for something else, a cache
+ * is a thing you went and got. They pay the same tier and read differently, which is the whole
+ * reason the copy is keyed on the door rather than on the tier.
+ */
+export type DropDoor = 'dig' | 'cache' | 'trial'
 export type TrialId = 'puppet-guards'
 
 export const DROP_TUNING = {
   /** chance per block BROKEN, by material; anything not listed never yields */
   dig: { [MAT.DEEP_STONE]: 1 / 250, [MAT.STONE]: 1 / 800 } as Readonly<Record<number, number>>,
   digTier: 2 as VesselTier,
+  /**
+   * ★★ THE CACHE ROAD IS CAPPED AT TIER 2, AND THE CAP IS THE LADDER (canon, 2026-09-05).
+   * `design-briefs/shimmer-casting-vessels.md` › THE THREE ROADS puts the Crucible band — *the
+   * paper for an ultimate* — at the top *"structurally unbuyable rather than merely expensive"*,
+   * and a cache that could pay it would collapse the three roads into one. So a warren pays what a
+   * dig pays. What a warren buys over a dig is CERTAINTY: a cache is always there and always gives
+   * one, where deep rock is 1 in 250. The road trades luck for a walk, never rarity for a walk.
+   */
+  cacheTier: 2 as VesselTier,
   trialTier: 3 as VesselTier,
   /** a trial's first clear is a sure prize; every clear after rolls this */
   trialAgain: 1 / 3,
@@ -89,6 +104,15 @@ export function rollDig(material: number, rng: () => number = Math.random): { ki
   if (chance === undefined || rng() >= chance) return null
   const kind = VESSELS[Math.min(VESSELS.length - 1, Math.floor(rng() * VESSELS.length))]!
   return { kind, tier: DROP_TUNING.digTier }
+}
+
+/**
+ * What this cache holds. Unlike `rollDig` there is no chance gate — a cache always gives one, and
+ * that certainty is what the descent buys. Pure: the caller passes the rng.
+ */
+export function rollCache(rng: () => number = Math.random): { kind: Vessel; tier: VesselTier } {
+  const kind = VESSELS[Math.min(VESSELS.length - 1, Math.floor(rng() * VESSELS.length))]!
+  return { kind, tier: DROP_TUNING.cacheTier }
 }
 
 // ── the word a found vessel was cut for ──────────────────────────────────────────────────────
@@ -136,7 +160,14 @@ export function chooseWord(kind: Vessel, tier: VesselTier, owned: readonly strin
 }
 
 // ── taking one off the ground / off the trial ─────────────────────────────────────────────────
-const DOOR_LINE: Record<DropDoor, string> = { dig: 'Dug out of the rock —', trial: 'The trial\'s prize —' }
+const DOOR_LINE: Record<DropDoor, string> = {
+  dig: 'Dug out of the rock —',
+  // ⚠ THE COPY SAYS WHAT WAS FOUND AND REFUSES TO SAY WHO LEFT IT, which is canon and not restraint
+  // for its own sake: *"somebody made it for a word they meant to write, and the keeper who digs it
+  // out will never learn who or why."* Naming a builder here would rule an OPEN gap by shipping.
+  cache: 'Left in the dark for somebody —',
+  trial: 'The trial\'s prize —',
+}
 function lower(s: string): string { return s.charAt(0).toLowerCase() + s.slice(1) }
 
 /**
@@ -147,7 +178,8 @@ export function takeVessel(itemId: string, door: DropDoor, owned: readonly strin
   const v = parseVesselItem(itemId)
   if (!v) return { ok: false, why: 'no-such-word', say: 'That is not a vessel.' }
   const word = chooseWord(v.kind, v.tier, owned, birth, rng)
-  const g = grantVessel(v.kind, v.tier, word, door === 'dig' ? 'found' : 'won')
+  // ★ TWO DOORS, ONE ROAD: `dig` and `cache` are both canon's FOUND. Only the trial is WON.
+  const g = grantVessel(v.kind, v.tier, word, door === 'trial' ? 'won' : 'found')
   return g.ok ? { ...g, say: `${DOOR_LINE[door]} ${lower(g.say)}` } : g
 }
 

@@ -167,6 +167,23 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.CRACKED_STONE_BRICK, name: 'Cracked Stone Bricks', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'cracked_stone_brick', count: 1 }], placeable: true },
   { material: MAT.MOSSY_CUT_STONE, name: 'Mossy Cut Stone', hardness: 1.4, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'mossy_cut_stone', count: 1 }], placeable: true },
 
+  // ── ★ THE CACHE — and every field on this row is a refusal ─────────────────────────────────
+  // ⛔ `drops: []` IS NOT AN OVERSIGHT, IT IS THE POINT. What a cache yields is a VESSEL, and a
+  // vessel is not an item this table can name: which one, at what tier, cut for WHICH WORD is a
+  // per-keeper question (`vessel-drops.ts` › `chooseWord` reads the keeper's own lane, seats and
+  // what they already own). A static drop list cannot ask any of that, and the registry's header
+  // forbids the alternative in as many words: *"the moment a block carries a function, the registry
+  // stops being portable."* So the host spawns the vessel at the break (`VoxelWorld.tsx`, the FOUND
+  // door) and this row stays data.
+  // ⛔ `placeable: false` — `materialForItem` derives placement from `placeable && drops[0]`, so
+  // this could never place anyway; saying it is what stops a later reader "fixing" the empty drops.
+  // A cache is a thing that was left somewhere once. It is not furniture and it is not a resource.
+  // ★ `skill: null`, `minTier: 0`: it opens by hand. The cost of a cache is the walk down, the dark
+  // and the way back out — gating it behind a spike tier would charge for it twice, and a keeper
+  // who reached the bottom of a warren has already paid.
+  // ★ `hardness: 1.1` — a beat, not a commitment. Long enough that opening one is a deliberate act.
+  { noSlab: true, material: MAT.CACHE, name: 'Cache', hardness: 1.1, skill: null, minTier: 0, drops: [], placeable: false, emit: 6 },
+
   // ── ★ SAPLINGS — placeable, and that is the whole plumbing ──────────────────────────────────
   // `materialForItem` is DERIVED from `placeable && drops[0]` (see BY_ITEM below), so declaring
   // these four rows is what makes a sapling item place a sapling block. No item->block table to

@@ -26,6 +26,19 @@ import { greyness, type BiomeConfig, DEFAULT_BIOME } from './biome'
 import { DEFAULT_DEPTH, type DepthConfig } from './depth'
 import { Section } from './section'
 import { buildRuin, RUIN_REACH } from './ruins'
+import { buildWarren, WARREN_REACH } from './warren'
+
+/**
+ * ★★ THE REACH A COLUMN MUST CLIP AGAINST IS THE LARGEST OF THEM, NOT THE RUIN'S ─────────────
+ * A site now builds two things: a ruin on the surface, and — for the share of them that have a way
+ * down (`warren.ts` › `hasDescent`) — a warren under it, which reaches FURTHER than the ruin does.
+ * Clipping on `RUIN_REACH` alone would skip every column between the two reaches, so a warren would
+ * lose its outer rooms at exactly the columns furthest from the shaft: silently, identically on
+ * every load, and invisible from the surface. That is the same bug this file's own clip comment
+ * records the assembler causing once already, and it is worse underground because nothing about the
+ * ruin overhead would look wrong.
+ */
+export const SITE_REACH = Math.max(RUIN_REACH, WARREN_REACH)
 
 export interface SiteConfig {
   /** Cell size in COLUMNS (16-block units). One candidate per cell. */
@@ -149,9 +162,13 @@ export function placeSites(
       // 11×11 rectangle, and the day the assembler landed that clip would have thrown away every
       // slice more than 6 blocks from the centre — a ruin cut down to its middle room, on the
       // columns furthest from it, identically on every load. It is the assembler's envelope.
-      const r = RUIN_REACH + 1
+      const r = SITE_REACH + 1
       if (site.x + r < ox || site.x - r >= ox + size || site.z + r < oz || site.z - r >= oz + size) continue
       buildRuin(sections, ox, oy0, oz, size, site, seed)
+      // ★ AFTER the ruin, and it has to be: the shaft comes up through the start piece's own
+      // footprint, and `buildRuin` writes a rubble scatter across that floor. Cut first, the ruin
+      // would sprinkle stone back into the top of the stairwell.
+      buildWarren(sections, ox, oy0, oz, size, site, seed)
       placed++
     }
   }
