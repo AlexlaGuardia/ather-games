@@ -180,11 +180,32 @@ ok(KEEPER_KEYS.includes(TRIALS_KEY), 'the trial ledger key is registered per kee
   const rangeAt = declAt(S, 'FiringRange')
   const range = rangeAt >= 0 ? S.slice(rangeAt, declAfter(S, 'GunBenches', rangeAt)) : ''
   ok(range.length > 0, 'Shimmer3D has a FiringRange')
-  ok(/gs\.enc = stepEncounter\(/.test(range) && /if \(gs\.enc\.cleared && !gs\.prized\)/.test(range) && /gs\.prized = true/.test(range),
-     '★ the trial pays on the EDGE into cleared, once — `prized` latches so a cleared encounter stepping every frame cannot pay every frame')
+  // ── ★★ THE PAYOUT MOVED, AND THIS ASSERT MOVED WITH IT (2026-09-05) ─────────────────────────
+  // It used to pin `if (gs.enc.cleared && !gs.prized)` right here. That was correct until the WON
+  // door left the dev range: clearing the Three paid wherever they were summoned, including a T
+  // range-console summon in the practice zone, so the game's top reward was one keypress away.
+  // The prize is now paid in the VAULT (`crucible-prize.ts`), and clearing the Throne only ARMS it.
+  //
+  // ⚠ THE REQUIREMENT THIS ASSERT GUARDED DID NOT GO AWAY — it RELOCATED. "A cleared encounter
+  // stepping every frame cannot pay every frame" is still true and still load-bearing; the latch is
+  // now `PrizeState.paid`, proven over a 7200-frame Vault window in `crucible-prize.test.ts`.
+  // So this does not get deleted, it gets re-pointed: a red that is merely OUT OF DATE teaches
+  // everyone to discount red, and a deleted one teaches nobody anything.
+  ok(/gs\.enc = stepEncounter\(/.test(range), 'the encounter still steps in the FiringRange')
+  ok(!/gs\.prized/.test(range),
+     '★ the guard-kill no longer pays — the old `prized` latch is GONE, not renamed')
+  ok(/stepPrize\(/.test(S) && /step\.pay/.test(S),
+     '★ and the payout runs through the Vault rule, which owns the once-per-match latch')
   ok(/clearTrial\('puppet-guards'/.test(range), 'through clearTrial, the won door')
-  ok(count(range, /gs\.prized = false/g) >= 1 && range.indexOf('gs.prized = false') < range.indexOf('gs.enc = stepEncounter('),
-     'and the latch is released when the encounter is re-armed, so the NEXT clear can pay (and is counted)')
+  // ⚠ THE SIBLING OF THE ASSERT ABOVE, and it was sitting one line down: same retired latch, same
+  // relocation. Fixing one branch and leaving the other is how a half-fixed query reads as fixed
+  // (PATTERNS, 07-17). The requirement is unchanged — re-arming must let the NEXT clear pay — and
+  // it now lives on the MATCH rather than on the encounter: `resetPrize()` runs when a match starts
+  // and when one ends, so a second run through the Crucible can be paid again.
+  ok(/prize\.current = resetPrize\(\)/.test(S),
+     'and a new match re-arms the prize, so the NEXT Throne clear can pay')
+  ok(count(S, /prize\.current = resetPrize\(\)/g) >= 2,
+     'on entering AND on leaving the zone — a match that ended must not leave the next one armed')
   ok(/onTrial\(/.test(range), 'the range hands the line up — it has no banner of its own')
 }
 function count(s: string, re: RegExp): number { return (s.match(re) ?? []).length }

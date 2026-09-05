@@ -2060,10 +2060,13 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // floors do not exist yet. BEHAVIOUR LIVES IN puppet-guards.ts — this ref holds only bodies.
   // The sim decides who leads, who claims ground and who counters; the frame just moves meshes and
   // fires orbs, so the encounter stays provable headless.
-  // `prized` latches the WON door: a cleared encounter keeps stepping every frame, and the prize is paid on the edge
+  // ⚠ `prized` IS GONE, NOT RENAMED. It latched a payout that happened here; the payout moved to the
+  // Vault on 2026-09-05 and the latch went with it (`crucible-prize.ts` › `paid`). Leaving the field
+  // would have been dead state carrying a comment that still described the old design — which is the
+  // thing that makes a later reader confident about a rule that no longer exists.
   // `viaMatch` is the WON door's whole gate: the Three summoned by the T console are the same
   // encounter and earn nothing, because a practice zone is not the Throne. See `crucible-prize.ts`.
-  const guardSim = useRef({ enc: initEncounter(), spawned: false, orbit: 0, fireCd: [0, 0, 0], prized: false, viaMatch: false })
+  const guardSim = useRef({ enc: initEncounter(), spawned: false, orbit: 0, fireCd: [0, 0, 0], viaMatch: false })
   // ── ★ THE MATCH ────────────────────────────────────────────────────────────────────────────
   // One number: when the glyph lit. Everything else — which floor is open, what is sealing, when
   // the Vault opens — is `crucibleAt(elapsed)`, derived fresh every frame from that alone, so the
@@ -2637,7 +2640,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const gs = guardSim.current
       if (cfg?.guards || throneOpen) {
         if (!gs.spawned) {
-          gs.enc = initEncounter(cfg.tune); gs.spawned = true; gs.orbit = 0; gs.fireCd = [1.0, 1.6, 2.2]; gs.prized = false
+          gs.enc = initEncounter(cfg.tune); gs.spawned = true; gs.orbit = 0; gs.fireCd = [1.0, 1.6, 2.2]
           // ★ WHO SUMMONED THEM decides whether clearing them is worth anything.
           gs.viaMatch = throneOpen
           const base = (posRef.current?.y ?? 0) + 0.55
