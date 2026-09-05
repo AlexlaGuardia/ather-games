@@ -11,7 +11,7 @@
  */
 import { readFileSync } from 'node:fs'
 import * as THREE from 'three'
-import { createHollowBody, updateHollowBody, disposeHollowBodies, BUCKETS } from './hollow-body'
+import { createHollowBody, updateHollowBody, disposeHollowBodies, BUCKETS, boneName } from './hollow-body'
 import { hollowField, hollowPose, MAX_BLOB_R, HOLLOW_STRIDE_S } from './hollow-pose'
 import { createHollowMat, HOLLOW_LOOK, type HollowForm } from './hollow-look'
 import { codeOnly } from '../testing/guard'
@@ -27,7 +27,29 @@ const blobsOf = (b: THREE.Group): THREE.Mesh[] => {
   b.traverse(o => { if ((o as THREE.Mesh).isMesh) out.push(o as THREE.Mesh) })
   return out
 }
-const boneOf = (b: THREE.Group, n: string) => b.getObjectByName(n) as THREE.Group | null
+// ⚠ THROUGH THE HOST'S OWN `boneName`, never a re-typed prefix. Reading bones by the bare anchor
+// is what let this file sit green at 33 while the rig was collapsed: the lookup hit the BONE for
+// the eight names that collide with blob anchors, so the test read back whatever the writer had
+// just written. Comparing derivations rather than values is the only version of this that holds.
+const boneOf = (b: THREE.Group, n: string) => b.getObjectByName(boneName(n)) as THREE.Group | null
+
+/**
+ * A bone the assert below NEEDS. Records a named failure and hands back an empty group when the
+ * lookup misses, instead of `boneOf(...)!` throwing on the null.
+ *
+ * ★★ A CRASH IS NEITHER A PASS NOR A FAIL, and this file demonstrated it on itself (2026-09-05):
+ * mutating the bone names back to the shipped bug produced a TypeError at line 48 and NO verdict
+ * line at all — so a mutation sweep grepping for the result learned nothing, and in a full run it
+ * reads as broken test code rather than as the finding it is. Same shape as the origin-fixture
+ * throw of 2026-08-22, arriving through a `!` that was correct on the day it was written.
+ */
+const dummy = new THREE.Group()
+const mustBone = (b: THREE.Group, n: string): THREE.Group => {
+  const g = boneOf(b, n)
+  if (g) return g
+  fails.push(`bone '${n}' is missing from the rig — the lookup returned null where a bone must be`)
+  return dummy
+}
 
 // ── IT IS A BODY, WITH THE PARTS THE BODY PLAN NAMES ──────────────────────────────────────────
 disposeHollowBodies()
@@ -41,9 +63,9 @@ ok(bodies.every(b => b.children.length === 1 && pivotOf(b).name === 'hollowPivot
 const rig = createHollowBody('warden')
 ok(['root', 'chest', 'head', 'armL', 'foreL', 'thighL', 'shinL'].every(n => boneOf(rig, n)),
   'every bone in the skeleton exists on the body')
-ok(boneOf(rig, 'shinL')!.parent === boneOf(rig, 'thighL'),
+ok(mustBone(rig, 'shinL').parent === boneOf(rig, 'thighL'),
   '★ the shin hangs off the THIGH, so swinging the thigh carries the whole lower leg with it')
-ok(boneOf(rig, 'foreL')!.parent === boneOf(rig, 'armL'),
+ok(mustBone(rig, 'foreL').parent === boneOf(rig, 'armL'),
   '★ the forearm hangs off the upper arm — a chain, not two parts that happen to sit near each other')
 ok(['kneeL', 'shinL', 'footL'].every(a =>
     blobsOf(rig).find(m => m.name === a)!.parent === boneOf(rig, 'shinL')),
@@ -85,7 +107,7 @@ ok(host.position.x === 12 && host.position.y === 34 && host.position.z === 56,
   '★★ updating the pose does NOT move the body in the world — the host keeps its position')
 ok(host.rotation.y === 1.1 && host.scale.x === 0.01,
   '★★ nor its facing, nor the spawn scale-up it is in the middle of')
-ok(pivotOf(host).position.y !== 0 || boneOf(host, 'root')!.rotation.x !== 0,
+ok(pivotOf(host).position.y !== 0 || mustBone(host, 'root').rotation.x !== 0,
   'but the pose DID write the rig, so the assert above is not passing because nothing ran')
 
 // ── NO DEGENERATE TRANSFORM, EVER ─────────────────────────────────────────────────────────────
@@ -129,7 +151,7 @@ for (let i = 0; i < 48; i++) {
   // actually moves along. A bone that cannot vary over the sampled window is not evidence of a
   // disconnected rig; it is evidence the window was the wrong one.
   for (const n of ['head', 'armL', 'armR', 'foreL', 'foreR', 'thighL', 'thighR', 'shinL', 'shinR']) {
-    const g = boneOf(walker, n)!
+    const g = mustBone(walker, n)
     if (!seen.has(n)) seen.set(n, new Set())
     seen.get(n)!.add(+(g.rotation.x + g.rotation.z).toFixed(6))
   }
@@ -141,9 +163,9 @@ ok(still.length === 0,
 // ★ `root` on its own axis: it leans INTO a walk and stands upright when still.
 const standing = createHollowBody('stalker')
 updateHollowBody(standing, 1.0, 'stalker', 0)
-const leanStill = boneOf(standing, 'root')!.rotation.x
+const leanStill = mustBone(standing, 'root').rotation.x
 updateHollowBody(standing, 1.0, 'stalker', 1)
-const leanWalk = boneOf(standing, 'root')!.rotation.x
+const leanWalk = mustBone(standing, 'root').rotation.x
 ok(leanStill === 0 && leanWalk > 0,
   '★★ the body leans into the walk and stands straight when still — root moves with SPEED, not time')
 
@@ -152,10 +174,10 @@ ok(leanStill === 0 && leanWalk > 0,
 const at = HOLLOW_STRIDE_S * 0.3
 updateHollowBody(walker, at, 'stalker', 1)
 const want = hollowPose(at, 'stalker', 1)
-ok(Math.abs(boneOf(walker, 'thighL')!.rotation.x - want.thighL) < 1e-9
-   && Math.abs(boneOf(walker, 'armR')!.rotation.x - want.armR) < 1e-9
-   && Math.abs(boneOf(walker, 'shinR')!.rotation.x - want.shinR) < 1e-9
-   && Math.abs(boneOf(walker, 'head')!.rotation.z - want.headTilt) < 1e-9,
+ok(Math.abs(mustBone(walker, 'thighL').rotation.x - want.thighL) < 1e-9
+   && Math.abs(mustBone(walker, 'armR').rotation.x - want.armR) < 1e-9
+   && Math.abs(mustBone(walker, 'shinR').rotation.x - want.shinR) < 1e-9
+   && Math.abs(mustBone(walker, 'head').rotation.z - want.headTilt) < 1e-9,
   '★★ each bone carries ITS OWN angle from the pose — not another joint\'s, and not an approximation')
 
 // ★ A caster never gathered legs, so its leg bones must stay still even at speed. The same rule the
@@ -164,7 +186,7 @@ const ghost = createHollowBody('caster')
 const legAngles = new Set<number>()
 for (let i = 0; i < 24; i++) {
   updateHollowBody(ghost, (i / 24) * HOLLOW_STRIDE_S, 'caster', 1)
-  legAngles.add(+boneOf(ghost, 'thighL')!.rotation.x.toFixed(9))
+  legAngles.add(+mustBone(ghost, 'thighL').rotation.x.toFixed(9))
 }
 ok(legAngles.size === 1 && [...legAngles][0] === 0,
   '★★ a caster\'s legs never swing in the RIG either — it floats, it does not perform a walk')
@@ -200,6 +222,57 @@ ok(legAngles.size === 1 && [...legAngles][0] === 0,
   ok(/<HollowRig\s/.test(bench), '★★ and a page MOUNTS that component — the rig is reachable by eye')
   ok(/^import \{ HollowRig \} from '\.\.\/\.\.\/voxel3d\/HollowRig'$/m.test(benchRaw),
     'from the bench, by import, not by copy')
+}
+
+// ── ★★★ AND THE BONES CANNOT BE MISTAKEN FOR THE BLOBS ────────────────────────────────────────
+// The bug this catches shipped in `e850580` and survived 33 green asserts: eight bone names were
+// also blob anchor names, `getObjectByName` returns the first match, and bones are added first — so
+// every per-blob write for those eight landed on a BONE. A bone got a scale (which compounds down
+// the chain), its rest offset was overwritten (so the skeleton folded into its own root), and the
+// eight MESHES kept their construction-time scale forever, which silently removed the shedding from
+// exactly the parts a body is most read by. Measured before the fix: head world scale 0.012 against
+// 0.24, world y 0.60 where the field puts it at 1.42 — a body at ~5% size, drawn every frame.
+{
+  const rig = createHollowBody('stalker')
+  const boneNames: string[] = [], blobNames: string[] = []
+  rig.traverse(o => {
+    if ((o as THREE.Mesh).isMesh) blobNames.push(o.name)
+    else if (o.name && o.name !== 'hollowPivot') boneNames.push(o.name)
+  })
+  const clash = boneNames.filter(n => blobNames.includes(n))
+  ok(clash.length === 0, `★★ no bone shares a name with a blob — collides on: ${clash.join(', ') || 'none'}`)
+  ok(boneNames.length === 11 && blobNames.length === 18, 'eleven bones, eighteen blobs, all named')
+
+  // ★ AND THE LOOKUP THE WRITER USES RESOLVES TO A MESH. The assert above is about the names; this
+  // one is about the call, and they are not the same claim — a future rename could satisfy one.
+  const pivot = rig.children[0] as THREE.Group
+  ok(((pivot.getObjectByName('head') as THREE.Mesh | null)?.isMesh) === true,
+    '★★ getObjectByName(anchor) returns the BLOB, not a bone standing in front of it')
+
+  // ★★ THE SYMPTOM, ASSERTED DIRECTLY: a blob mesh must track the field over TIME. Frozen scale is
+  // what a name collision produces, and no silhouette assert can see it — they all read the same
+  // frozen mesh and agree with each other perfectly.
+  const meshOf = (n: string) => { let m: THREE.Mesh | null = null; rig.traverse(o => { if ((o as THREE.Mesh).isMesh && o.name === n) m = o as THREE.Mesh }); return m as unknown as THREE.Mesh }
+  const seen = new Set<string>()
+  for (const t of [0, 0.9, 1.8, 2.7]) {
+    updateHollowBody(rig, t, 'stalker', 1)
+    const want = hollowField(t, 'stalker').find(b => b.anchor === 'head')!
+    ok(Math.abs(meshOf('head').scale.y - want.r * want.s[1]) < 1e-9,
+      `★★ the head blob carries the field's own size at t=${t} — not its construction-time one`)
+    seen.add(meshOf('head').scale.y.toFixed(6))
+  }
+  ok(seen.size > 1, '★★ and that size CHANGES across the cohere loop — a frozen blob never sheds')
+
+  // ★ The whole body stands where the field puts it. The collapse showed up here first: a rig whose
+  // bones carry scale folds toward its root, and a HEIGHT is the cheapest thing that notices.
+  updateHollowBody(rig, 0.4, 'stalker', 0)
+  rig.updateMatrixWorld(true)
+  const wp = new THREE.Vector3()
+  let top = -1e9
+  rig.traverse(o => { if ((o as THREE.Mesh).isMesh) { o.getWorldPosition(wp); top = Math.max(top, wp.y + o.scale.y) } })
+  const fieldTop = Math.max(...hollowField(0.4, 'stalker').map(b => b.y + b.r * b.s[1]))
+  ok(Math.abs(top - fieldTop) < 0.12,
+    `★★ the posed body stands as tall as the field says (rig ${top.toFixed(3)} vs field ${fieldTop.toFixed(3)}; pre-fix rig was 0.62)`)
 }
 
 console.log(`   ${FORMS.length} forms · ${BUCKETS} alpha buckets`)

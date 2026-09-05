@@ -21,6 +21,68 @@ import json, sys
 import numpy as np
 from PIL import Image
 
+def _rot(q):
+    """Rotation matrix from a three.js quaternion [x, y, z, w]."""
+    x, y, z, w = q
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w),     2 * (x * z + y * w)],
+        [2 * (x * y + z * w),     1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w),     2 * (y * z + x * w),     1 - 2 * (x * x + y * y)],
+    ])
+
+
+def _posed(blobs, res, margin):
+    """
+    A body as the scene graph holds it: every blob a ROTATED ellipsoid, centre / orientation / three
+    semi-axes decomposed from the shipped rig's world matrices (`hollow_pose_dump.mts`).
+
+    ★ Orthographic along +Z. With M = S^-1 R^T, a point is inside when |M(p - c)| < 1, so the ray
+    p = (px, py, t) gives a quadratic in t and the LARGER root is the surface facing the camera. The
+    world normal is M^T M (p - c) — no second matrix to keep in step with the first.
+    """
+    cs = np.array([[b["x"], b["y"], b["z"]] for b in blobs])
+    sas = np.array([b["sa"] for b in blobs])
+    lo = (cs - sas).min(0); hi = (cs + sas).max(0)
+    span = max(hi[0] - lo[0], hi[1] - lo[1]) * (1 + 2 * margin)
+    cx, cy = (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2
+    px = np.linspace(cx - span / 2, cx + span / 2, res)
+    py = np.linspace(cy + span / 2, cy - span / 2, res)
+    gx, gy = np.meshgrid(px, py)
+
+    depth = np.full((res, res), -1e9); normal = np.zeros((res, res, 3)); hit = np.zeros((res, res), bool)
+    for b in blobs:
+        sa = np.array(b["sa"])
+        if sa.max() <= 1e-4:
+            continue
+        M = np.diag(1.0 / np.maximum(sa, 1e-9)) @ _rot(b["q"]).T
+        rel = np.stack([gx - b["x"], gy - b["y"], np.full_like(gx, -b["z"])], axis=-1)
+        u = rel @ M.T
+        v = M @ np.array([0.0, 0.0, 1.0])
+        A = float(v @ v); B = 2.0 * (u @ v); C = (u * u).sum(-1) - 1.0
+        disc = B * B - 4 * A * C
+        inside = disc > 0
+        if not inside.any():
+            continue
+        t = np.zeros_like(disc)
+        t[inside] = (-B[inside] + np.sqrt(disc[inside])) / (2 * A)
+        win = inside & (t > depth)
+        depth[win] = t[win]
+        n = (u[win] + t[win, None] * v) @ M          # M^T (M(p-c)) written as a right-multiply
+        normal[win] = n / np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-12)
+        hit |= inside
+    return _shade(hit, normal, res)
+
+
+def _shade(hit, normal, res):
+    key = np.array([-0.45, 0.62, 0.64]); key /= np.linalg.norm(key)
+    lam = np.clip((normal * key).sum(-1), 0, 1)
+    shade = 0.24 + 0.62 * lam ** 0.85
+    img = np.ones((res, res, 3)) * 0.97
+    for c in range(3):
+        img[..., c] = np.where(hit, shade, img[..., c])
+    return Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8))
+
+
 def render(blobs, res=768, margin=0.12):
     xs = [b["x"] for b in blobs]; ys = [b["y"] for b in blobs]; rs = [b["r"] for b in blobs]
     lo_x = min(x - r for x, r in zip(xs, rs)); hi_x = max(x + r for x, r in zip(xs, rs))
@@ -71,6 +133,11 @@ if __name__ == "__main__":
     src, dst = sys.argv[1], sys.argv[2]
     res = int(sys.argv[sys.argv.index("--res") + 1]) if "--res" in sys.argv else 768
     d = json.load(open(src))
-    blobs = [b for b in d["blobs"] if b["r"] > 1e-4]
-    render(blobs, res).save(dst)
-    print(f"{dst}  ·  {d['form']} @ t={d['t']}  ·  {len(blobs)} blobs  ·  {res}px")
+    if d.get("posed"):
+        blobs = [b for b in d["blobs"] if max(b["sa"]) > 1e-4]
+        _posed(blobs, res, 0.12).save(dst)
+        print(f"{dst}  ·  {d['form']} POSED @ t={d['t']} speed={d['speed']}  ·  {len(blobs)} blobs")
+    else:
+        blobs = [b for b in d["blobs"] if b["r"] > 1e-4]
+        render(blobs, res).save(dst)
+        print(f"{dst}  ·  {d['form']} @ t={d['t']}  ·  {len(blobs)} blobs  ·  {res}px")

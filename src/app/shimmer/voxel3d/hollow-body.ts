@@ -151,6 +151,29 @@ const BONE_ORDER = Object.keys(BONE) as BoneName[]
 const PIVOT = 'hollowPivot'
 
 /**
+ * A bone's node name — NAMESPACED, and this is a bug fix, not tidiness (2026-09-05, sprites lane).
+ *
+ * ★★★ EIGHT BONE NAMES WERE ALSO BLOB ANCHOR NAMES: chest, head, armL, armR, thighL, shinL, thighR,
+ * shinR. `getObjectByName` returns the FIRST match in traversal order and bones are added first, so
+ * `updateHollowBody`'s blob loop was writing position and scale onto the BONE for all eight — giving
+ * a bone a scale it must never have (it compounds down the whole chain) and destroying the rest
+ * offset that puts the skeleton together. The head measured a world scale of 0.012 against a correct
+ * 0.24, and sat at y 0.60 where the field puts it at 1.42: the body collapsed to ~5% and folded into
+ * its own root. Meanwhile those eight MESHES kept their construction-time scale forever, so the
+ * shedding and re-gathering — the brief's single most important animation note — never reached them.
+ *
+ * ⚠⚠ AND `hollow-body.test.ts` WAS GREEN AT 33 THROUGHOUT, because its bone lookup used the same
+ * `getObjectByName` and therefore read back exactly what the writer had written, while its blob
+ * asserts traversed meshes frozen at t=0 and were internally consistent about a body that never
+ * moved. The test and the code made the SAME mistake, and agreement between two things making one
+ * mistake is not evidence about either (PATTERNS 2026-08-22).
+ *
+ * The file already had the idea one line up — the pivot is namespaced *"so the host cannot mistake
+ * it for a blob"*. The bones needed the same sentence and did not get it.
+ */
+export const boneName = (n: string) => `hollowBone_${n}`
+
+/**
  * One Hollow's body: an outer group for the world to place, an inner pivot for the pose, and twelve
  * blobs. Blob order matches `hollowField`'s, and `updateHollowBody` relies on that.
  */
@@ -167,7 +190,7 @@ export function createHollowBody(form: HollowForm): THREE.Group {
   const bones = {} as Record<BoneName, THREE.Group>
   for (const name of BONE_ORDER) {
     const g = new THREE.Group()
-    g.name = name
+    g.name = boneName(name)
     bones[name] = g
   }
   for (const name of BONE_ORDER) {
@@ -209,7 +232,7 @@ export function updateHollowBody(body: THREE.Group, t: number, form: HollowForm,
   // ★★ THE WALK, FINALLY REACHING THE SCENE GRAPH. Every angle the pose computes is applied here;
   // if you add one to `HollowPose`, add it here too, or it joins the seven that were being thrown
   // away. `walk-reaches-the-rig` in the guard fails if any of these stops moving.
-  const bone = (n: BoneName) => pivot.getObjectByName(n) as THREE.Group | null
+  const bone = (n: BoneName) => pivot.getObjectByName(boneName(n)) as THREE.Group | null
   const set = (n: BoneName, rx: number, rz = 0) => {
     const g = bone(n)
     if (g) { g.rotation.x = rx; g.rotation.z = rz }
