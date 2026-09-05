@@ -752,6 +752,15 @@ as its own material — which is the whole point of *tier = material*: a keeper 
 the won door · a duplicate: trade or break down?
 
 ### Decisions (Jin's, canon says so)
+- **A duplicate vessel is a SPARE (2026-09-05, hub).** The boundary left *whether a duplicate trades or breaks down*
+  to Jin. Drops already avoid a word that has a vessel while another word is possible; when the pool is exhausted
+  the second one simply exists — dismantle returns its letters, the paper stays cut, no trade-in, no break-down
+  table. A rule nobody needs is a rule nobody has to learn. Written into `vessel-drops.ts`'s header.
+- **The WON door's REAL trial is a canon question, filed with Magii by dbr (2026-09-05, hub), not invented.**
+  Canon already has two contest families: **Pyramid Zero prizes** (`game/economy.md` — *Lazerin's faucet*, PvP,
+  rotating rewards; the Puppet Guards ARE its Level-3 Throne encounter, which is what the range hook is) and
+  **shows / competitions** (`shimmer-mechanics.md` *win 10+ show contests*, the Snagbarrows fair). Which of them
+  awards a VESSEL, and whether a Lazerin prize can be a keeper's paper at all, is Magii's. The hook waits on it.
 - Unbind recovers the letters, free. Gem quality (the prospecting ladder) is NOT modelled — every gem is one letter
   of one rune, for now. One focus + one bracelet, implicit — a second loadout is not built. No merchant yet.
 - ⚠ Two of my fixtures were wrong about the world, not the code: I assumed tempest+freeze had a written element-lane

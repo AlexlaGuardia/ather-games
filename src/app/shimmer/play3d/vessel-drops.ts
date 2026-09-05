@@ -30,7 +30,10 @@
  * ── JIN'S NUMBERS (all of them; tune here, nowhere else) ──
  *   · dig: DEEP_STONE 1 in 250 blocks, STONE 1 in 800; tier 2 (shimmeroak / shimmerscale)
  *   · trial: tier 3 (starwillow / pearlshell); first clear sure, then 1 in 3
- *   · a duplicate (a second vessel for a word that has one) is avoided, not forbidden
+ *   · a duplicate (a second vessel for a word that has one) is avoided, not forbidden — and when it
+ *     happens (the pool exhausted), IT IS A SPARE. Ruled Jin's side 2026-09-05: a duplicate neither
+ *     trades in nor breaks down; `dismantle` already returns its letters and the paper stays cut, so
+ *     a second glove for one word is one more paper to write on, nothing more. No trade-in table.
  *
  * ── VOCABULARY ── ✅ found, won, dig, trial, prize, buried, taken.
  * ⛔ craft / recipe / grow (no vessel has one), loot-as-noun in copy (canon's word is *found*), chest
