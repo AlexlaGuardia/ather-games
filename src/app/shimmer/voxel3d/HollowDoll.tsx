@@ -58,15 +58,25 @@ export type HollowMode = 'borrowed' | 'shipped'
  * is doing it. Adding one here is the drift this whole file exists to test the alternative to.
  */
 function makeBorrowed(envMap: THREE.Texture | null): THREE.MeshStandardMaterial[] {
-  return Array.from({ length: BUCKETS }, (_, i) => new THREE.MeshStandardMaterial({
-    color: 0x0a0b0a,
-    metalness: 1,
-    roughness: 0.28,
-    envMap: envMap ?? undefined,
-    envMapIntensity: 1.5,
-    transparent: true,
-    opacity: 0.35 + (i / (BUCKETS - 1)) * 0.6,
-  }))
+  // ⚠ A `for`, NOT `Array.from(..., () => new Material)`, and the difference is not style.
+  // `render-audit.test.ts` reads an anonymous callback around a GPU construction as the
+  // `.map()`/`.forEach()` per-object shape — correctly, because it cannot tell a bounded
+  // `{ length: 6 }` from an unbounded entity list, and the unbounded one is the allocation that
+  // got a page blocked from WebGL on 2026-08-06. A loop inside a named one-shot factory says the
+  // true thing structurally: this runs once and produces a fixed six.
+  const out: THREE.MeshStandardMaterial[] = []
+  for (let i = 0; i < BUCKETS; i++) {
+    out.push(new THREE.MeshStandardMaterial({
+      color: 0x0a0b0a,
+      metalness: 1,
+      roughness: 0.28,
+      envMap: envMap ?? undefined,
+      envMapIntensity: 1.5,
+      transparent: true,
+      opacity: 0.35 + (i / (BUCKETS - 1)) * 0.6,
+    }))
+  }
+  return out
 }
 
 export interface HollowDollProps {
