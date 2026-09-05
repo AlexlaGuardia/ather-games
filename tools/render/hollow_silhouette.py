@@ -17,7 +17,7 @@ silhouette is a body, not beads on a string.
 
 Run: python3 tools/render/hollow_silhouette.py field.json out.png [--res 768]
 """
-import json, sys
+import json, os, sys
 import numpy as np
 from PIL import Image
 
@@ -83,6 +83,84 @@ def _shade(hit, normal, res):
     return Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8))
 
 
+
+def _metaball(blobs, res, margin, thresh=0.25, steps=200):
+    """
+    The body as ONE FUSED SURFACE — an implicit field, not a pile of separate spheres.
+
+    ★★★ WHY (2026-09-05, sprites lane). Alex, on the bone rig live: *"its still too bulky i dont
+    think the blobs are the play."* Drawing each blob as its own ellipsoid means every one carries
+    its own outline, so a limb reads as beads on a string and a joint reads as a crease — no amount
+    of proportion tuning removes that, because it is what SEPARATE SURFACES look like.
+
+    An implicit field has no such thing. F(p) = sum of 1 / |M_i (p - c_i)|^2, surfaced at F = 1: for
+    a lone blob that is exactly its ellipsoid, and where two overlap the field ADDS and the surface
+    bulges smoothly across the join. Nothing is drawn twice and nothing has an edge of its own.
+    Which is also the brief: *"edges never resolve"* and *"it sags, sheds, drips and re-gathers"*.
+    A fused field does both by construction; separate spheres approximate the first and fake the
+    second. This is the shape the blob substrate was standing in for all along.
+
+    Orthographic march along +Z, near to far, with a linear crossing solve. The normal is the
+    field's own gradient, so shading comes from the surface that exists rather than from any one
+    blob's idea of itself.
+    """
+    cs = np.array([[b["x"], b["y"], b["z"]] for b in blobs])
+    sas = np.array([b["sa"] for b in blobs])
+    # ⚠ SUPPORT RADIUS, NOT THE ELLIPSOID RADIUS. The first cut summed 1/d^2, which never falls to
+    # zero — so eighteen distant blobs each contributing a little summed past the threshold and the
+    # whole body surfaced as ONE EGG. A metaball kernel must have COMPACT SUPPORT: outside its
+    # support a blob contributes exactly nothing, so parts fuse only where they genuinely overlap.
+    # (1 - d^2)^3 on a support of 1.6x the semi-axes, surfaced at 0.25, puts a lone blob's surface
+    # back at ~0.98 of its own radius — so the silhouette still agrees with the guarded geometry.
+    # ⚠ THE DIAL THAT DECIDES WHETHER IT IS A CREATURE OR A LUMP. Wide support fuses arms into the
+    # trunk (one heavy mass, warden-ish); narrow support lets limbs separate and the joins start to
+    # show again. It is the density axis canon already rules, expressed as one number.
+    SUPPORT = float(os.environ.get("HOLLOW_SUPPORT", 1.6))
+    Ms = np.array([np.diag(1.0 / np.maximum(np.array(b["sa"]) * SUPPORT, 1e-9)) @ _rot(b["q"]).T for b in blobs])
+
+    lo = (cs - sas * 1.35).min(0); hi = (cs + sas * 1.35).max(0)
+    span = max(hi[0] - lo[0], hi[1] - lo[1]) * (1 + 2 * margin)
+    cx, cy = (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2
+    px = np.linspace(cx - span / 2, cx + span / 2, res)
+    py = np.linspace(cy + span / 2, cy - span / 2, res)
+    gx, gy = np.meshgrid(px, py)
+
+    def field(ox, oy, pz):
+        F = np.zeros_like(gx)
+        for M, c in zip(Ms, cs):
+            dx, dy, dz = gx + ox - c[0], gy + oy - c[1], pz - c[2]
+            ux = M[0, 0] * dx + M[0, 1] * dy + M[0, 2] * dz
+            uy = M[1, 0] * dx + M[1, 1] * dy + M[1, 2] * dz
+            uz = M[2, 0] * dx + M[2, 1] * dy + M[2, 2] * dz
+            d2 = ux * ux + uy * uy + uz * uz
+            w = np.maximum(0.0, 1.0 - d2)
+            F += w * w * w
+        return F
+
+    zs = np.linspace(hi[2] + 0.35, lo[2] - 0.35, steps)
+    hitZ = np.full(gx.shape, np.nan)
+    prevF = field(0, 0, zs[0]); prevZ = zs[0]
+    for z in zs[1:]:
+        F = field(0, 0, z)
+        cross = np.isnan(hitZ) & (prevF < thresh) & (F >= thresh)
+        if cross.any():
+            frac = (thresh - prevF[cross]) / np.maximum(F[cross] - prevF[cross], 1e-9)
+            hitZ[cross] = prevZ + frac * (z - prevZ)
+        prevF = F; prevZ = z
+    hit = ~np.isnan(hitZ)
+    if not hit.any():
+        return _shade(hit, np.zeros((res, res, 3)), res)
+
+    zc = np.where(hit, hitZ, 0.0)
+    e = 0.012
+    nx = field(e, 0, zc) - field(-e, 0, zc)
+    ny = field(0, e, zc) - field(0, -e, zc)
+    nz = field(0, 0, zc + e) - field(0, 0, zc - e)
+    n = np.stack([-nx, -ny, -nz], axis=-1)
+    n /= np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-12)
+    return _shade(hit, n, res)
+
+
 def render(blobs, res=768, margin=0.12):
     xs = [b["x"] for b in blobs]; ys = [b["y"] for b in blobs]; rs = [b["r"] for b in blobs]
     lo_x = min(x - r for x, r in zip(xs, rs)); hi_x = max(x + r for x, r in zip(xs, rs))
@@ -135,7 +213,8 @@ if __name__ == "__main__":
     d = json.load(open(src))
     if d.get("posed"):
         blobs = [b for b in d["blobs"] if max(b["sa"]) > 1e-4]
-        _posed(blobs, res, 0.12).save(dst)
+        fn = _metaball if "--metaball" in sys.argv else _posed
+        fn(blobs, res, 0.12).save(dst)
         print(f"{dst}  ·  {d['form']} POSED @ t={d['t']} speed={d['speed']}  ·  {len(blobs)} blobs")
     else:
         blobs = [b for b in d["blobs"] if b["r"] > 1e-4]
