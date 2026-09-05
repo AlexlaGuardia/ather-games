@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## ⛏ Shimmer — **THE DESCENT: A CACHE IS A PLACE, NOT A LOOT TABLE** (2026-09-05, hub lane) · *Last touched 2026-09-05 — `e260c7a` + `dcecd6d` + `d7c3845` committed, **NOT YET DEPLOYED** (holding: sprites' `hollow-pose.ts` + new `hollow-body.*` are dirty in the shared tree, mtime 18s old when checked — `coord build` bundles the working tree; dbr'd them, waiting on 'clean' or their go). `ruin-hash.mts` **`53d5fde6d6bd79fdba5c` before AND after — no existing ruin moved.** warren **60/0**, mutation-swept: M1 two-pass collapse, M4 shaft-before-rooms, M5 cover 0, M6 envelope 50, M8 cache-as-furniture, M9 SITE_REACH literal, M11/M12 the two attrs rows — all fire. ruins 726/0 (re-proved: clip shrunk to 6 still shows 51 missed cells), vessel-drops 64/0, console 111/0, render-audit 150/0, editor-bands 119/0, purity green, tsc 7 (baseline), canon exit 0.*
+## ⛏ Shimmer — **THE DESCENT: A CACHE IS A PLACE, NOT A LOOT TABLE** (2026-09-05, hub lane) · *Last touched 2026-09-05 — **LIVE in `BUILD_ID iBG8x6sWDZEymiMcuu6Tq`, 182 chunks**, from `8a5c4ce`, pushed, 0 unpushed, tree clean. **Merged-head sweep 240 suites · 240 pass · 0 FAIL · 0 KILLED, started AND ended at `778e04a`** with the tree clean at both ends — the first run covering BOTH lanes (mine predated sprites' commit and theirs predated mine; identical suite counts would have read as full coverage from either side alone). Served == disk on three marker chunks AND the worker, markers present IN the served bytes, positive control `corridor` hits, negative control (retired worker) 404s, public tunnel 200. ⚠ **The first build was KILLED MID-WRITE by the memory guard** — see *A KILLED BUILD IS NOT A NO-OP* below. `ruin-hash.mts` **`53d5fde6d6bd79fdba5c` before AND after — no existing ruin moved.** warren **60/0**, mutation-swept: M1 two-pass collapse, M4 shaft-before-rooms, M5 cover 0, M6 envelope 50, M8 cache-as-furniture, M9 SITE_REACH literal, M11/M12 the two attrs rows — all fire. ruins 726/0 (re-proved: clip shrunk to 6 still shows 51 missed cells), vessel-drops 64/0, console 111/0, render-audit 150/0, editor-bands 119/0, purity green, tsc 7 (baseline), canon exit 0.*
 
 ### Canon first: Magii ruled the FOUND road at 03:09 (`aa450bd`), and this builds the place
 `design-briefs/shimmer-casting-vessels.md` › THE THREE ROADS. A vessel is **found as a CACHE in the
@@ -87,6 +87,34 @@ interrupted sweeps had reported green before the first one I let finish on a sta
 **`/warren`** (owner) teleports to the nearest ruin with a way down and names the room count. The
 feature is a third of ~1.1 ruins per 1000² of greyfield, so it is effectively unfindable on foot
 without it. The stairs are in the middle of the ruin.
+
+### ⚠⚠ A KILLED BUILD IS NOT A NO-OP — and the lock read FREE the whole time
+`coord build` was killed mid-write by the mem-watcher. The 08-27 entry, live: **`.next/BUILD_ID`
+ABSENT, `static/chunks` 0 files, build lock FREE** (the trap released it), tree clean, commit clean,
+and **prod answering 307 throughout** — off an 11h-old pm2 process serving the PREVIOUS build out of
+memory. Prod answering is evidence a process is alive, never that an artifact exists. ★ The damage
+lands on whoever restarts next, not on whoever caused it, which is why the peer was warned inside a
+minute: the free lock is the dangerous part.
+
+**★★ THE ROOT CAUSE WAS NOT THE BUILD — 1.65GB OF IDLE SATELLITE DEV SERVERS.** sprites' devwin
+(1.15GB, started to shoot a bench an hour earlier) and play's (504MB, running 15h under a lane claim
+18h stale). Neither is visible to `coord build`, neither is visible to the lock. **The lock serialises
+DEPLOYS and measures nothing about MEMORY**, so two windows can be perfectly correct about the lock,
+the tree and the commit while one holds the GB the other needs. sprites' framing, and it is theirs:
+*a lane that is not deploying can still be the reason a deploy dies.* ⚠ `devwin.sh` has no idle
+timeout and no ceiling, so **a lane's memory cost outlives its session by default** — and the window
+that started one is precisely the window that will not be there to stop it. Proposed, not yet built:
+`coord build` pre-flight prints `MemAvailable` + any live devwin RSS, and devwin self-expires.
+
+**★★★ AND THE PART THAT WOULD HAVE SHIPPED A DEAD FEATURE: THE KILLED BUILD HAD ALREADY FINISHED ITS
+WORKER STEP.** It left `worker-url.ts` modified and a new `voxel-gen.worker.6ea7d72bd7.js` on disk,
+uncommitted, and both are load-bearing. **The page runs the PREBUILT worker; the tests import `voxel/`
+source directly** — so without that artifact all 240 suites pass and the world generates **no warrens
+at all**. The 08-19 prebuilt-worker trap, arriving through a door nobody was watching. Verified by
+content before committing, with controls: warren piece ids present in the new worker, absent from the
+old, and `corridor` (a pre-existing ruin piece) present in BOTH — the positive control that says the
+search can see either file rather than that it was pointed at the wrong one. ⚠ **`git status` after an
+OOM kill is telling you something to READ, not debris to clean up.**
 
 ### Files
 `voxel/warren.ts` + `warren.test.ts` (new) · `voxel/{depth,registry,sites,drops}.ts` ·
