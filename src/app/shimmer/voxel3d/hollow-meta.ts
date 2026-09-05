@@ -104,14 +104,26 @@ export function updateHollowMeta(body: THREE.Group, t: number, form: HollowForm,
   if (!rig || !mc) return
 
   updateHollowBody(rig, t, form, speed)
-  rig.updateMatrixWorld(true)
+  body.updateMatrixWorld(true)
   mc.reset()
 
+  // ★★★ IN THE BODY'S OWN FRAME, NOT IN THE WORLD'S — and this cost a deploy that drew NOTHING.
+  // `META_CENTRE` and `META_BOX` describe the cube in the OUTER GROUP's coordinates, so ball
+  // positions have to be expressed there too. Reading `matrixWorld` gave world coordinates, which
+  // are identical to local ones only when the body has no parent — exactly the case the guard
+  // built. The bench mounts it under a group at x = -4, so every ball mapped to -8/2.4 + 0.5 and
+  // landed outside the cube: zero sources, zero surface, no error, and a clean console.
+  // ⚠ THE GUARD MEASURED A BODY AT THE ORIGIN AND THE GAME NEVER PUTS ONE THERE. The world-frame
+  // reading was not wrong about anything; it was a reading of the wrong frame (PATTERNS 08-30), and
+  // the only thing that distinguishes the two is a parent — which a test has to be made to have.
+  const toLocal = new THREE.Matrix4().copy(body.matrixWorld).invert()
+  const local = new THREE.Matrix4()
   const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3()
   const axis = new THREE.Vector3()
   rig.traverse(o => {
     if (!(o as THREE.Mesh).isMesh) return
-    o.matrixWorld.decompose(p, q, sc)
+    local.multiplyMatrices(toLocal, o.matrixWorld)
+    local.decompose(p, q, sc)
     // A shed piece has ~zero radius. Emitting it would put a bead back exactly where the field is
     // supposed to have let go of one.
     const maxA = Math.max(sc.x, sc.y, sc.z)

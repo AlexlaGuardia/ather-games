@@ -140,8 +140,12 @@ function bounds(m: THREE.Mesh): THREE.Box3 {
   // ⚠ THE POSE MUST COME FROM THE RIG, NOT FROM A SECOND DERIVATION. A re-derivation here would be a
   // hand-kept mirror of hollow-body's geometry and would agree with it until somebody edited one.
   const src = codeOnly(readFileSync(new URL('./hollow-meta.ts', import.meta.url), 'utf8'))
-  ok(/updateHollowBody\(/.test(src) && /matrixWorld\.decompose\(/.test(src),
-    '★★ ball positions are READ off the rig\'s world matrices, never recomputed from the anchor table')
+  ok(/updateHollowBody\(/.test(src), '★★ the pose is driven through the rig, never recomputed here')
+  // ★ AND CONVERTED INTO THE BODY'S OWN FRAME. Naming the conversion rather than the read: the read
+  // was never wrong, the FRAME was, and a guard that only asserts "it reads matrixWorld" is green on
+  // both the working version and the one that shipped an invisible body.
+  ok(/multiplyMatrices\(toLocal, o\.matrixWorld\)/.test(src),
+    '★★ each blob is expressed in the BODY\'s frame — the cube is described there, and world == local only for an unparented body')
   ok(!/REST\[/.test(src), '★ and it does not reach for the anchor table itself — that is the rig\'s job')
 }
 
@@ -151,6 +155,32 @@ function bounds(m: THREE.Mesh): THREE.Box3 {
   ok(surfaceOf(a).material === surfaceOf(b).material,
     '★★ two bodies of a form SHARE one material — a material per body is a shader program per body (2026-08-06)')
   disposeHollowMetas()
+}
+
+// ── ★★★ AND IT WORKS WHEN SOMETHING ELSE HAS MOVED IT ─────────────────────────────────────────
+// The guard that was missing, and its absence shipped a body that drew NOTHING while every other
+// assert in this file was green. Ball positions were mapped from `matrixWorld` — world coordinates,
+// which equal local ones only when the body has no parent, which is exactly what a test builds. The
+// bench mounts it under a group at x = -4, so every ball mapped outside the field cube: zero
+// sources, zero surface, no error, clean console. ⚠ A BODY AT THE ORIGIN IS NOT THE BODY THE GAME
+// PLACES, and nothing about a body at the origin can tell you so. So this one is given a parent.
+{
+  for (const [px, py, pz] of [[-4, 0, 0], [7, 0.6, -3], [0, 0, 0]] as const) {
+    const parent = new THREE.Group()
+    parent.position.set(px, py, pz)
+    const body = createHollowMeta('stalker')
+    parent.add(body)
+    parent.updateMatrixWorld(true)
+    updateHollowMeta(body, 0.4, 'stalker', 1)
+    const n = surfaceOf(body).geometry.drawRange.count
+    ok(n > 200, `★★ a body parented at (${px}, ${py}, ${pz}) still surfaces (${n} vertices)`)
+
+    // ★ And it surfaces IN THE RIGHT PLACE — carried by the parent, not left behind at the origin.
+    parent.updateMatrixWorld(true)
+    const box = bounds(surfaceOf(body))
+    ok(Math.abs((box.min.x + box.max.x) / 2 - px) < 0.4,
+      `★★ and it stands where its parent puts it (centre x ${((box.min.x + box.max.x) / 2).toFixed(2)} vs ${px})`)
+  }
 }
 
 // ── ★★★ AND SOMETHING DRAWS IT ────────────────────────────────────────────────────────────────
