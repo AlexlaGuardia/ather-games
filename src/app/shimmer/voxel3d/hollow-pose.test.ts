@@ -9,7 +9,7 @@
  */
 import {
   hollowPose, hollowField, cohesionAt, fieldMass, DENSITY, COHERE_S, HOLLOW_STRIDE_S,
-  MAX_BLOB_R, SHED_FLOOR,
+  MAX_BLOB_R, SHED_FLOOR, CHAIN,
   type Blob,
 } from './hollow-pose'
 import type { HollowForm } from './hollow-look'
@@ -129,7 +129,23 @@ const swing = (f: HollowForm, a: Blob['anchor']) => {
 }
 ok((['warden', 'stalker'] as HollowForm[]).every(f =>
     (['head', 'armL', 'handR', 'thighL', 'shinR'] as const).every(a => swing(f, a) > 0.25)),
-  `★★ a walker's parts thin but never amputate — each keeps >25% of its fullest size (SHED_FLOOR ${SHED_FLOOR})`)
+  '★★ a walker\'s parts thin but never amputate — each keeps >25% of its fullest size')
+
+// ★★★ AND SHED_FLOOR IS ASSERTED ON THE CASTER, BECAUSE THAT IS THE ONLY FORM IT STILL BINDS ON.
+// ⚠ THIS ASSERT WAS DISARMED BY A TUNING CHANGE AND ONLY A RE-RUN CAUGHT IT. Setting SHED_FLOOR to
+// 0 used to turn the walker assert above red. After the joint-floor pass it did not: measured over
+// 7200 samples, `Math.max(SHED_FLOOR, joint, dip)` is won by the JOINT floor 74.9% of the time on
+// the warden and 75.5% on the stalker, and by SHED_FLOOR **0.0%** — the joint floor is strictly
+// higher everywhere, so SHED_FLOOR became dead code for walkers and the assert went green by asking
+// about a body the constant no longer touches. Nothing edited the assert. The geometry moved out
+// from under it. (Hub hit the identical shape the same hour on a sealed-room check, from a corridor
+// widening: a mutation that fired at w3 passed 60/60 at w5 because the sample stopped containing
+// the phenomenon. RE-RUN MUTATIONS AFTER A TUNING CHANGE — a sweep from before it is a statement
+// about the old geometry.)
+// The caster has no joint floor by canon, so SHED_FLOOR is the only thing holding its trailing
+// parts above nothing, and there the constant is live.
+ok((['head', 'thighL', 'shinR'] as const).every(a => swing('caster', a) > 0.25),
+  `★★ the caster's unresolved parts thin but never vanish — SHED_FLOOR ${SHED_FLOOR} is live HERE, and only here`)
 
 // A leg you cannot see is not a leg. The shins must stand clear of the trunk blob, not inside it.
 ok(['warden', 'stalker'].every(f => T.every(t => {
@@ -141,6 +157,49 @@ ok(['warden', 'stalker'].every(f => T.every(t => {
     })
   })),
   '★★ the shins stand OUTSIDE the trunk — legs that are swallowed by the gut are not legs')
+
+// ── ★★★ EVERY JOINT STAYS FUSED ─ a limb is one mass, not beads on a string ──────────────
+// Added 2026-09-05 after the first bipedal render came back a BAG OF MARBLES. Measured, the cause
+// was not the material and not the lighting: every chain had NEGATIVE overlap ─ worst cases
+// chest->armL -0.81, head->chest -0.31 ─ meaning the spheres did not touch. At points in the cohere
+// loop the body came apart at every joint into free-floating balls.
+//
+// ⚠ THE SILHOUETTE ASSERTS ABOVE ALL PASSED THROUGH THAT. "Taller than wide", "no blob too big"
+// and "shins outside the trunk" are every one of them true of a disconnected pile ─ a scatter of
+// balls in roughly the right places satisfies them all. Connectivity is a different claim.
+const overlap = (bs: Blob[], a: Blob['anchor'], b: Blob['anchor']) => {
+  const p = bs.find(x => x.anchor === a)!, q = bs.find(x => x.anchor === b)!
+  return (p.r + q.r - Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z)) / (2 * Math.min(p.r, q.r))
+}
+const WALKERS: HollowForm[] = ['warden', 'stalker']
+let worstJoint = Infinity, worstName = ''
+for (const f of WALKERS) for (const t of T) for (const [a, b] of CHAIN) {
+  const o = overlap(hollowField(t, f), a, b)
+  if (o < worstJoint) { worstJoint = o; worstName = `${f} ${a}->${b}` }
+}
+ok(worstJoint > 0.10,
+  `★★★ every joint on both walkers stays FUSED at every instant (worst ${worstJoint.toFixed(2)} at ${worstName})`)
+// ⚠ WHAT THIS ASSERT DOES NOT COVER, written down rather than left to be discovered: setting FUSE to
+// 0 does NOT turn it red. `MIN_R` takes each anchor's max over its bones, so most bones inherit a
+// floor set by a longer neighbour and carry slack; the measured worst never drops to the margin.
+// FUSE is a design margin in the DERIVATION, not a quantity this output can witness. It fires on
+// what matters — both real disconnection bugs (the one-way trunk sink, and radii scaled by DENSITY
+// while the skeleton stayed put) turn it red — but do not read a green here as "FUSE is verified".
+
+// ★ The caster is EXEMPT and the exemption is DERIVED, not a hand-waved skip. Canon calls it
+// "mostly the suggestion of a body" and the parts that trail off are supposed not to resolve. Its
+// REACH is the exception canon names outright, so the thing it DOES hold is asserted instead.
+// ⚠ Written this way so the exemption cannot rot into "we stopped checking the caster".
+ok(T.every(t => overlap(hollowField(t, 'caster'), 'chest', 'armR') > 0
+             && overlap(hollowField(t, 'caster'), 'armR', 'handR') > 0),
+  '★★ the caster REACH stays fused to it though the rest of the caster does not ─ "reach is its body"')
+
+// ★ Scale-invariance: the overlap fraction is a property of the BODY PLAN, so the two walkers must
+// agree on it closely. They differ in size, never in how they are put together.
+const worstOf = (f: HollowForm) =>
+  Math.min(...T.flatMap(t => CHAIN.map(([a, b]) => overlap(hollowField(t, f), a, b))))
+ok(Math.abs(worstOf('warden') - worstOf('stalker')) < 0.08,
+  '★★ warden and stalker share ONE body plan ─ same joint geometry at different sizes, not two rigs')
 
 // ★ Canon: `body: 0`, "reach is its body". True of the geometry, not merely of the alpha.
 ok(T.every(t => {
