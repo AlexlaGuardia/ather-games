@@ -115,8 +115,8 @@ ok(/itemIcon\(id\) \? id : `vessel_\$\{VESSEL_NOUN\[kind\]\}_t1`/.test(iconFn),
 ok(count(R, /vessel_\$\{VESSEL_NOUN\[[a-z.]+\]\}_t1/g) === 1, `★ the literal _t1 spelling appears ONCE, inside the helper (${count(R, /vessel_\$\{VESSEL_NOUN\[[a-z.]+\]\}_t1/g)}) — a host that restates it pins itself to goldwood`)
 // and the ids the rack can build must exist in the sprite table — the headless half of the screenshot that caught this
 import { ITEM_ICONS } from '../sprites/items'
-for (const noun of ['bracelet', 'glove']) ok(!!ITEM_ICONS[`vessel_${noun}_t1`], `ITEM_ICONS has vessel_${noun}_t1`)
-ok(!ITEM_ICONS['vessel_focus_t1'], 'no sprite is registered under the kind id — the noun is the only spelling')
+for (const noun of ['bracelet', 'glove']) for (const t of [0, 1, 2, 3]) ok(!!ITEM_ICONS[`vessel_${noun}_t${t}`], `ITEM_ICONS has vessel_${noun}_t${t} — every tier draws as its own material (2026-09-05)`)
+for (const t of [0, 1, 2, 3]) ok(!ITEM_ICONS[`vessel_focus_t${t}`], `no sprite under the kind id at t${t} — the noun is the only spelling`)
 ok(!/'held'/.test(R) && /hand/.test(VESSEL_COPY(R)) && /wrist/.test(VESSEL_COPY(R)),
    '★ the vessel copy follows the 09-03 amendment: HAND vs WRIST, never "held" (a glove is worn)')
 function VESSEL_COPY(src: string) { return /const VESSEL_LANE_LABEL[^\n]*/.exec(src)?.[0] ?? '' }
