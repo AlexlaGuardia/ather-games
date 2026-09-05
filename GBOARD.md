@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## ⛏ Shimmer — **THE DESCENT: A CACHE IS A PLACE, NOT A LOOT TABLE** (2026-09-05, hub lane) · *Last touched 2026-09-05 — **LIVE in `BUILD_ID iBG8x6sWDZEymiMcuu6Tq`, 182 chunks**, from `8a5c4ce`, pushed, 0 unpushed, tree clean. **Merged-head sweep 240 suites · 240 pass · 0 FAIL · 0 KILLED, started AND ended at `778e04a`** with the tree clean at both ends — the first run covering BOTH lanes (mine predated sprites' commit and theirs predated mine; identical suite counts would have read as full coverage from either side alone). Served == disk on three marker chunks AND the worker, markers present IN the served bytes, positive control `corridor` hits, negative control (retired worker) 404s, public tunnel 200. ⚠ **The first build was KILLED MID-WRITE by the memory guard** — see *A KILLED BUILD IS NOT A NO-OP* below. `ruin-hash.mts` **`53d5fde6d6bd79fdba5c` before AND after — no existing ruin moved.** warren **60/0**, mutation-swept: M1 two-pass collapse, M4 shaft-before-rooms, M5 cover 0, M6 envelope 50, M8 cache-as-furniture, M9 SITE_REACH literal, M11/M12 the two attrs rows — all fire. ruins 726/0 (re-proved: clip shrunk to 6 still shows 51 missed cells), vessel-drops 64/0, console 111/0, render-audit 150/0, editor-bands 119/0, purity green, tsc 7 (baseline), canon exit 0.*
+## ⛏ Shimmer — **THE DESCENT: A CACHE IS A PLACE, NOT A LOOT TABLE** (2026-09-05, hub lane) · *Last touched 2026-09-05 — **LIVE in `BUILD_ID fp02gUnav1cCP2v71pLP3`, 182 chunks**, from `001f7c5`: **corridors widened to 5 wide on Alex's call**. Verified the geometry itself in the SERVED worker bytes — `id:"run",w:5,d:9` — plus served == disk on the worker and its referencing chunk, the page asking for the new worker hash (1 hit) and not the old (0), tunnel 200. **Merged-head sweep 240/240 · 0 FAIL · 0 KILLED at `f2ac886`**, tree clean both ends. ⚠ See *A TUNING CHANGE CAN DISARM A GUARD* below. Before that: `iBG8x6sWDZEymiMcuu6Tq` from `8a5c4ce`, pushed, 0 unpushed, tree clean. **Merged-head sweep 240 suites · 240 pass · 0 FAIL · 0 KILLED, started AND ended at `778e04a`** with the tree clean at both ends — the first run covering BOTH lanes (mine predated sprites' commit and theirs predated mine; identical suite counts would have read as full coverage from either side alone). Served == disk on three marker chunks AND the worker, markers present IN the served bytes, positive control `corridor` hits, negative control (retired worker) 404s, public tunnel 200. ⚠ **The first build was KILLED MID-WRITE by the memory guard** — see *A KILLED BUILD IS NOT A NO-OP* below. `ruin-hash.mts` **`53d5fde6d6bd79fdba5c` before AND after — no existing ruin moved.** warren **60/0**, mutation-swept: M1 two-pass collapse, M4 shaft-before-rooms, M5 cover 0, M6 envelope 50, M8 cache-as-furniture, M9 SITE_REACH literal, M11/M12 the two attrs rows — all fire. ruins 726/0 (re-proved: clip shrunk to 6 still shows 51 missed cells), vessel-drops 64/0, console 111/0, render-audit 150/0, editor-bands 119/0, purity green, tsc 7 (baseline), canon exit 0.*
 
 ### Canon first: Magii ruled the FOUND road at 03:09 (`aa450bd`), and this builds the place
 `design-briefs/shimmer-casting-vessels.md` › THE THREE ROADS. A vessel is **found as a CACHE in the
@@ -76,10 +76,34 @@ interrupted sweeps had reported green before the first one I let finish on a sta
 ⚠ `e260c7a`'s message claims *"sweep clean"* and was read off an interrupted run; corrected in
 `d7c3845`'s message rather than by rewriting history.
 
+### ★★★ A TUNING CHANGE CAN DISARM A GUARD WITHOUT TOUCHING IT (the w5 pass)
+Alex, off the generator's own plan view: *"lets start with making them 5w"*. One field, `run` w3 → w5,
+so a corridor's interior is three columns instead of one. **It silently disarmed the sealed-room
+assert.** That check read ONE hand-picked warren; the widening moved that warren's layout so it no
+longer contained the wall-into-interior collision, and the M1 mutation — collapse the two build
+passes, the exact bug the assert exists to catch, which had fired at w3 with **36 solid cells** —
+**passed 60/60 clean**.
+
+The guard was not fixed and the bug had not gone away: **the sample stopped containing the
+phenomenon.** Nothing about the change went near the assert; it went green by being asked about a
+different world, which is indistinguishable from holding. ⚠ **A mutation sweep from before a tuning
+change is a statement about the OLD geometry — re-run it after.** Now reads 8 warrens (1000+ interior
+cells) and NAMES the offending cells instead of counting them; re-mutated at w5, M1 and M4 both fire.
+The sprites lane hit the identical shape twice the same hour on a skeleton pass (`SHED_FLOOR` became
+dead code, measured at **0.0% of 7200 samples**; `FUSE` fires never and was written up as a known
+blind spot rather than given a manufactured witness). Full entry in `cortex/PATTERNS.md`.
+
+★ **And the stair now descends INTO the landing room** rather than into its wall — at w3 the interior
+was a single column, so the treads fell in the masonry. That is architecture. Excluded by the stair's
+EXACT domain (the 3×3, only between warren floor and ruin floor), never the whole column at all
+heights, which would hide a real seal in the room every keeper arrives in. ⛔ The tempting fix was
+`solidCells <= 3` — three cells of convenience bought with a permanently blind assert.
+
 ### ⛔ ALEX'S CALL
-- **Corridors are 1 block wide** (`run` is w3, one interior column). Tight-vs-cramped is a feel call;
-  widening to w5 is one line. **This is the first thing to judge from inside one.**
-- Does the dark read as a maze, or just as annoying? That is the whole bet.
+- ✅ **Corridors: RULED w5** (2026-09-05) and live. `bend` was already 5×5, so a turn no longer
+  pinches down to a slot and back out.
+- Does the dark read as a maze, or just as annoying? That is the whole bet, and it is now judgeable
+  from inside a corridor you do not fill.
 - `chance: 1/3` of ruins having a descent — too high and every ruin is a dungeon, too low and it is a
   rumour. Opening guess only, same class as `GUARD_TUNING`.
 
