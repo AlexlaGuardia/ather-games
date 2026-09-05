@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🕯 Shimmer — **THE HOLLOWS SHIP AS THREE PRIMITIVES, AND THE BRIEF ASKS FOR SOMETHING THAT LOSES ITSELF** (2026-09-04, sprites lane) · *Last touched 2026-09-04 — hollow-pose 25/0 mutation-swept 10 ways all 10 fire; hollow-look 43/0, hollows 106/0, hollow-visible 14/0, hollow-wiring 73/0, hollow-voice 26/0 all still green; dev-pages 232/0, dev-eye 28/0, tsc 7 (baseline), canon exit 0. Sweep + deploy pending at commit time.*
+## 🕯 Shimmer — **THE HOLLOWS SHIP AS THREE PRIMITIVES, AND THE BRIEF ASKS FOR SOMETHING THAT LOSES ITSELF** (2026-09-04, sprites lane) · *Last touched 2026-09-05 — `cd262eb` + `6544458` pushed, **LIVE in `BUILD_ID NYpfHwONa06PKyy6J8N8K`, 182 chunks**, built from `f2bd4bf` (carries hub's vessel drop tables + tier icons). **Sweep 238 suites · 238 pass · 0 FAIL · 0 KILLED** at `f2bd4bf`, exit read off the file not a pipe. hollow-pose 25/0 mutation-swept 10 ways all 10 fire; hollow-look 43/0, hollows 106/0, hollow-visible 14/0, hollow-wiring 73/0, hollow-voice 26/0 all still green; render-audit 150/0, rule-three 7/0, portrait-art 91/0, dev-pages 232/0, dev-eye 28/0, tsc 7 (baseline), canon exit 0. Served verified through a cookie jar: 403 ungated / 200 owner on the public tunnel, five positive controls in the page, pose anchors + the borrowed material in served chunk `177810c12e4ffda9.js`.*
 
 **Left off:** Alex asked for Hollows next, and whether Meshy could do them. Measuring first turned up
 two things worth writing down before any art call.
@@ -87,7 +87,7 @@ the Hollow) — canon is specific and it is a separate build.
 **Files:** `voxel3d/hollow-pose.ts` · `voxel3d/hollow-pose.test.ts` · `voxel3d/HollowDoll.tsx` ·
 `dev/hollow/page.tsx` · `dev/templates/dev-pages.ts`
 
-## 🧱 Shimmer — **A CLAY DOLL HAS NO RIG, AND THE MOGLIN WAS ALREADY MOST OF ONE** (2026-09-04, sprites lane) · *Last touched 2026-09-04 — NOT YET DEPLOYED; sweep + build pending at commit time. tokens 29/0, dev-pages 223/0, dev-eye 25/0, moglin-pose 25/0 mutation-swept 8 ways all 8 fire, tsc 7 (baseline).*
+## 🧱 Shimmer — **A CLAY DOLL HAS NO RIG, AND THE MOGLIN WAS ALREADY MOST OF ONE** (2026-09-04, sprites lane) · *Last touched 2026-09-05 — `96e5c9b` + `71f4eb4` pushed, **now LIVE in `BUILD_ID NYpfHwONa06PKyy6J8N8K`** (first shipped in `AjIDaP8jxLoo_hLwdkBHW`; ⚠ cite the artifact you can still read — that id was superseded the same night). Sweep at `96e5c9b` 236 suites · 235 pass · 1 FAIL (the editor-bands generated cache, stale by exactly the four new play3d files, regenerated clean-tree 119/0 as `71f4eb4`). tokens 29/0, dev-pages 223/0, dev-eye 25/0, moglin-pose 25/0 mutation-swept 8 ways all 8 fire, tsc 7 (baseline).*
 
 **Left off:** Alex asked how clay-doll character models are done, "as far as the rigging and etc". The
 answer this lane bet on, and then built to test: **for this look there is no rigging step.** Claymation
