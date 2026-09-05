@@ -1,0 +1,139 @@
+/**
+ * A HOLLOW AS ONE FUSED SURFACE — the body the blob substrate was standing in for.
+ *
+ * ★★★ WHY (2026-09-05, sprites lane). Alex, on the bone rig live: *"its still too bulky i dont think
+ * the blobs are the play."* Two proportion passes moved it barely at all, and the still-renderer
+ * said why in one frame: drawing each blob as its own ellipsoid means every one carries its own
+ * OUTLINE, so a limb reads as beads and a joint reads as a crease. No tuning removes that — it is
+ * what separate surfaces look like. It is also where the bulk came from: eighteen overlapping
+ * silhouettes each adding width nothing asked for.
+ *
+ * An implicit field has no separate surfaces. The same anchors become sources in one scalar field,
+ * and the isosurface through it is a single continuous skin. ⚠ Which is the brief rather than a
+ * preference: *"Edges never resolve. Silhouette readable at distance and unreliable up close"* is
+ * TRUE BY CONSTRUCTION of a fused field, and *"it sags, sheds, drips and re-gathers"* is simply what
+ * a field does when its sources move — where spheres could only ever fake it by fading, which is the
+ * ghost Alex had already thrown out.
+ *
+ * ── THE POSE COMES FROM THE RIG, NOT FROM A SECOND DERIVATION ─────────────────────────────────
+ * ⚠⚠ This module does NOT re-derive where a blob is. It drives the real `hollow-body` rig — hidden,
+ * never rendered — and reads each blob's WORLD matrix. So the walk, the lean, the head tilt, the
+ * shed and the eleven bones are the ones the guarded code produces, and a fused Hollow cannot drift
+ * from a boned one. Re-deriving the anchor positions here would be a hand-kept mirror of another
+ * module's geometry, which agrees with its source right up until somebody edits one of them
+ * (PATTERNS 2026-08-22).
+ *
+ * ── ELLIPSOIDS BECOME SHORT CHAINS OF BALLS, AND THAT IS A REAL APPROXIMATION ─────────────────
+ * `MarchingCubes.addBall` is isotropic; `Blob.s` is not. A stretched mass is emitted as a few balls
+ * spaced along its own long axis, which is the union the stretch describes. It is an approximation
+ * and it is stated here rather than hidden: the guard asserts the emitted chain spans the blob's
+ * real extent, so the approximation cannot silently become a different body.
+ */
+import * as THREE from 'three'
+import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js'
+import { createHollowBody, updateHollowBody } from './hollow-body'
+import { createHollowMat, type HollowForm } from './hollow-look'
+
+/**
+ * Grid resolution of the field. ⚠ THE COST IS CUBIC: 32 is 32,768 cells re-evaluated per update, 48
+ * would be 110,592. This is the dial to reach for when a crowd of Hollows costs frames, and it is
+ * the honest trade against a sphere body being nearly free.
+ */
+export const META_RES = 32
+
+/** The cube the field is evaluated in, in body units. A Hollow stands ~1.75 tall at form scale 1. */
+export const META_BOX = 2.4
+const META_CENTRE = new THREE.Vector3(0, 0.86, 0)
+
+/**
+ * Field falloff. `addBall` solves radius^2 = strength / subtract, so a ball of normalised radius r
+ * needs strength = SUBTRACT * r^2. Raising SUBTRACT tightens every source and lets limbs separate;
+ * lowering it fuses them into one heavy mass — which IS the density axis canon rules, as one number.
+ */
+const SUBTRACT = 12
+
+/** Extra reach on each source, so neighbours actually merge instead of merely touching. */
+const FUSE = 1.28
+
+const NAME = 'hollowField'
+let MATS: Record<HollowForm, THREE.MeshStandardMaterial> | null = null
+
+/**
+ * ⚠ ONE MATERIAL PER FORM FOR THE WHOLE GAME, not one per body — the allocation that got this page
+ * blocked from WebGL on 2026-08-06. Cloned from the shipped factory so a fused Hollow and a boned
+ * one cannot disagree about the look.
+ */
+function mats(): Record<HollowForm, THREE.MeshStandardMaterial> {
+  if (!MATS) MATS = createHollowMat()
+  return MATS
+}
+
+export function disposeHollowMetas(): void {
+  if (MATS) for (const f of ['warden', 'stalker', 'caster'] as const) MATS[f].dispose()
+  MATS = null
+}
+
+/**
+ * One fused Hollow: an outer group the world places, a hidden rig that does the posing, and the
+ * surface. The outer group is never written by `updateHollowMeta`, so the host keeps owning world
+ * position, facing and the spawn scale-up — the same split `hollow-body` documents.
+ */
+export function createHollowMeta(form: HollowForm): THREE.Group {
+  const outer = new THREE.Group()
+
+  // The rig poses; it never draws. `visible = false` on the parent is enough — three.js skips the
+  // whole subtree at render, and `updateMatrixWorld(true)` still runs it, which is what we need.
+  const rig = createHollowBody(form)
+  rig.name = 'hollowPoseRig'
+  rig.visible = false
+  outer.add(rig)
+
+  const mc = new MarchingCubes(META_RES, mats()[form], true, false, 30000)
+  mc.name = NAME
+  mc.position.copy(META_CENTRE)
+  mc.scale.setScalar(META_BOX / 2)      // the generated geometry spans -1..1 in its own space
+  mc.isolation = 80
+  outer.add(mc)
+  return outer
+}
+
+/** Advance one fused body to time `t`. Writes the hidden rig and the surface, never the outer group. */
+export function updateHollowMeta(body: THREE.Group, t: number, form: HollowForm, speed = 0): void {
+  const rig = body.children.find(c => c.name === 'hollowPoseRig') as THREE.Group | undefined
+  const mc = body.children.find(c => c.name === NAME) as InstanceType<typeof MarchingCubes> | undefined
+  if (!rig || !mc) return
+
+  updateHollowBody(rig, t, form, speed)
+  rig.updateMatrixWorld(true)
+  mc.reset()
+
+  const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3()
+  const axis = new THREE.Vector3()
+  rig.traverse(o => {
+    if (!(o as THREE.Mesh).isMesh) return
+    o.matrixWorld.decompose(p, q, sc)
+    // A shed piece has ~zero radius. Emitting it would put a bead back exactly where the field is
+    // supposed to have let go of one.
+    const maxA = Math.max(sc.x, sc.y, sc.z)
+    if (maxA <= 2e-3) return
+
+    // The long axis in the blob's OWN frame, and the girth across the other two.
+    const longest = sc.x >= sc.y && sc.x >= sc.z ? 0 : sc.y >= sc.z ? 1 : 2
+    const girth = (sc.x + sc.y + sc.z - maxA) / 2
+    axis.set(longest === 0 ? 1 : 0, longest === 1 ? 1 : 0, longest === 2 ? 1 : 0).applyQuaternion(q)
+
+    const reach = Math.max(0, maxA - girth)            // how far the stretch pushes past a sphere
+    const n = reach < girth * 0.35 ? 1 : reach < girth ? 2 : 3
+    const rn = (girth * FUSE) / META_BOX
+    const strength = SUBTRACT * rn * rn
+    for (let i = 0; i < n; i++) {
+      const f = n === 1 ? 0 : (i / (n - 1)) * 2 - 1     // -1 .. +1 along the long axis
+      const x = p.x + axis.x * reach * f - META_CENTRE.x
+      const y = p.y + axis.y * reach * f - META_CENTRE.y
+      const z = p.z + axis.z * reach * f - META_CENTRE.z
+      // Normalised 0..1 across the box: the generated geometry spans -1..1, so 0.5 is the centre.
+      mc.addBall(x / META_BOX + 0.5, y / META_BOX + 0.5, z / META_BOX + 0.5, strength, SUBTRACT)
+    }
+  })
+  mc.update()
+}

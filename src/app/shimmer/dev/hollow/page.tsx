@@ -38,6 +38,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, CubeCamera } from '@react-three/drei'
 import { HollowDoll, type HollowMode } from '../../voxel3d/HollowDoll'
 import { HollowRig } from '../../voxel3d/HollowRig'
+import { HollowFused } from '../../voxel3d/HollowFused'
 import { HOLLOW_LOOK, type HollowForm } from '../../voxel3d/hollow-look'
 import { EYE_STAND } from '../../voxel3d/locomotion'
 
@@ -60,7 +61,7 @@ export default function HollowBenchPage() {
   // ⚠ BONES IS THE DEFAULT. `hollow-body.ts` is what canon has ruled since 08-15 (upright,
   // bipedal, plantigrade); the blob doll is the thing it replaces, kept beside it so the two can be
   // told apart in MOTION rather than from memory.
-  const [rig, setRig] = useState<'bones' | 'blob'>('bones')
+  const [rig, setRig] = useState<'fused' | 'bones' | 'blob'>('fused')
   const [night, setNight] = useState(true)
   const [eye, setEye] = useState(true)
 
@@ -86,7 +87,8 @@ export default function HollowBenchPage() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
           {FORMS.map(f => <Btn key={f} on={form === f} onClick={() => setForm(f)}>{f}</Btn>)}
           <span style={{ width: 10 }} />
-          <Btn on={rig === 'bones'} onClick={() => setRig('bones')}>Bones (11-bone rig)</Btn>
+          <Btn on={rig === 'fused'} onClick={() => setRig('fused')}>Fused field</Btn>
+          <Btn on={rig === 'bones'} onClick={() => setRig('bones')}>Bones (spheres)</Btn>
           <Btn on={rig === 'blob'} onClick={() => setRig('blob')}>Blob doll (what it replaces)</Btn>
           <span style={{ width: 10 }} />
           <Btn on={mode === 'borrowed'} onClick={() => setMode('borrowed')}>Brief: borrowed light</Btn>
@@ -134,8 +136,8 @@ export default function HollowBenchPage() {
           <CubeCamera resolution={64} frames={Infinity} position={[x, 1.1, 0]}>
             {(texture) => (
               <group position={[x, 0, 0]}>
-                {rig === 'bones'
-                  ? <HollowRig form={form} speed={speed} />
+                {rig === 'fused' ? <HollowFused form={form} speed={speed} />
+                  : rig === 'bones' ? <HollowRig form={form} speed={speed} />
                   : <HollowDoll form={form} speed={speed} mode={mode} envMap={texture} />}
               </group>
             )}
