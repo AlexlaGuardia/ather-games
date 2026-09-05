@@ -170,6 +170,14 @@ const HARD_MIN_COVER = 1
 // Everything above reasons about a PLAN. This reasons about what `placeSites` actually wrote, in
 // world coordinates, out of a column built by `makeColumn` — the same door the game comes through.
 //
+// ⚠⚠ AND THE SEALED-ROOM CHECK READS MANY WARRENS, NOT ONE, BECAUSE ONE WENT BLIND. It sampled a
+// single hand-picked subject until 2026-09-05. Widening `run` to w5 changed that subject's layout so
+// it no longer contained a wall-into-interior collision — and the mutation that collapses the two
+// build passes, which had fired at w3, **passed 60/60 clean**. The guard had not been fixed and the
+// bug had not gone away: the sample simply stopped containing the phenomenon. A structural claim
+// about a generator cannot rest on one seed's worth of output, and a guard whose power depends on
+// which warren you happened to pick goes quiet on a tuning change and says nothing about it.
+//
 // Mutation A: cut the shaft BEFORE the rooms in `buildWarren` → the landing assert dies.
 // Mutation B: drop `buildWarren` from `placeSites` → every count here goes to zero.
 // Mutation C: collapse the two passes back into one → the sealed-room assert fires (36 cells).
@@ -249,25 +257,52 @@ const HARD_MIN_COVER = 1
   // ⛔ THE TEMPTING FIX WAS TO SKIP THE SHAFT ROOM AND THE CACHE ROOM. That is the cheapest thing
   // that turns this green and it would have hidden the real defect completely, since the sealed
   // room was neither of them.
-  let solidCells = 0, interiorCells = 0
-  const cache = cacheCell(parts, subject)
-  for (const p of parts) {
+  let solidCells = 0, interiorCells = 0, warrensRead = 0
+  const worst: string[] = []
+  // ★ A POPULATION, NOT A SPECIMEN. Enough warrens that a collision somewhere in the set is near
+  // certain, few enough that building their columns stays well inside the suite's budget.
+  for (const subj of withDescent.slice(0, 8)) {
+   const subjParts = warrenPlan(subj, SEED)
+   const subjFloor = warrenFloor(subj)!
+   const subjCache = cacheCell(subjParts, subj)
+   warrensRead++
+   for (const p of subjParts) {
     for (let z = p.z0 + 1; z <= p.z1 - 1; z++) {
       for (let x = p.x0 + 1; x <= p.x1 - 1; x++) {
         for (let y = p.floor + 1; y <= p.floor + p.def.h; y++) {
           interiorCells++
           if (at(x, y, z) === AIR) continue
-          // The two things allowed to stand inside a room: the stair's newel, and the cache itself.
-          const isNewel = x === subject.x && z === subject.z
-          const isCache = !!cache && x === cache.x && y === cache.y && z === cache.z
-          if (!isNewel && !isCache) solidCells++
+          // The things allowed to stand inside a room: the STAIR, and the cache itself.
+          //
+          // ⚠ THE STAIR GREW INTO THE ROOM WHEN THE CORRIDOR WIDENED, and that is architecture, not
+          // a regression. At `run` w3 a corridor's interior was a SINGLE column — the newel — so the
+          // spiral's treads landed in the wall and this assert never saw them. At w5 the interior is
+          // three wide, so the bottom three steps are genuinely inside the landing room, which is
+          // what a staircase descending into a room looks like. Measured before it was excluded:
+          // three cells, all MOSSY_CUT_STONE, all inside the 3×3 at descending heights — the steps.
+          //
+          // ★ THE EXCLUSION IS THE STAIR'S EXACT DOMAIN, not the whole column. `buildWarren` writes
+          // the 3×3 only between `floor + 1` and the ruin floor, so a solid cell there is a tread or
+          // the newel and nothing else. Excluding the column at ALL heights would hide a real seal
+          // in the busiest part of the warren — the room everyone arrives in.
+          // ⛔ And the tempting fix was `solidCells <= 3`, which would swallow a genuinely sealed
+          // room forever to buy three cells of convenience. Name what is allowed to be there.
+          const inStair = Math.abs(x - subj.x) <= 1 && Math.abs(z - subj.z) <= 1
+            && y >= subjFloor + 1 && y <= subj.floor
+          const isCache = !!subjCache && x === subjCache.x && y === subjCache.y && z === subjCache.z
+          if (!inStair && !isCache) {
+            solidCells++
+            if (worst.length < 5) worst.push(`${p.def.id}@${x},${y},${z} mat=${at(x, y, z)}`)
+          }
         }
       }
     }
+   }
   }
-  ok(interiorCells > 200, `${interiorCells} interior cells read out of the built world`)
+  ok(warrensRead >= 5, `the sealed-room check read ${warrensRead} warrens, not one`)
+  ok(interiorCells > 1000, `${interiorCells} interior cells read out of the built world`)
   ok(solidCells === 0,
-    `no room is sealed by a neighbour's wall — ${solidCells} of ${interiorCells} interior cells were solid`)
+    `no room is sealed by a neighbour's wall — ${solidCells} of ${interiorCells} interior cells were solid${worst.length ? ' — ' + worst.join(', ') : ''}`)
 
   // 7d. THE CACHE IS IN THE WORLD, in air, reachable — not walled into brick.
   const c = cacheCell(parts, subject)

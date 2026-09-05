@@ -88,7 +88,12 @@ export interface WarrenPieceDef extends JigsawPiece {
  * midpoint of an edge and an even edge has no midpoint.
  */
 export const WARREN_PIECES: WarrenPieceDef[] = [
-  { id: 'run',     w: 3, d: 9, h: 3, weight: 5 },   // the long straight — the corridor that does the work
+  // ⚠ w5 = a THREE-WIDE walkable corridor, and the 3 vs 5 here is the whole feel of the place.
+  // At w3 the interior is a SINGLE column: measured on the first live warren, and Alex called it
+  // (2026-09-05, off the generator's own plan view). One-wide reads as a crawlspace, not a warren,
+  // and it also makes the dark cheap — you cannot be flanked in a corridor you fill. Matches `bend`,
+  // which was already 5×5, so a turn no longer pinches down to a slot and back out.
+  { id: 'run',     w: 5, d: 9, h: 3, weight: 5 },   // the long straight — the corridor that does the work
   { id: 'bend',    w: 5, d: 5, h: 3, weight: 4 },   // a turn: what makes it read as a warren and not a hall
   { id: 'gallery', w: 7, d: 5, h: 4, weight: 2 },
   { id: 'vault',   w: 7, d: 7, h: 5, weight: 1 },   // rare, tall, and where a cache usually ends up
