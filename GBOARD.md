@@ -11,6 +11,88 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⛏ Shimmer — **THE DESCENT: A CACHE IS A PLACE, NOT A LOOT TABLE** (2026-09-05, hub lane) · *Last touched 2026-09-05 — `e260c7a` + `dcecd6d` + `d7c3845` committed, **NOT YET DEPLOYED** (holding: sprites' `hollow-pose.ts` + new `hollow-body.*` are dirty in the shared tree, mtime 18s old when checked — `coord build` bundles the working tree; dbr'd them, waiting on 'clean' or their go). `ruin-hash.mts` **`53d5fde6d6bd79fdba5c` before AND after — no existing ruin moved.** warren **60/0**, mutation-swept: M1 two-pass collapse, M4 shaft-before-rooms, M5 cover 0, M6 envelope 50, M8 cache-as-furniture, M9 SITE_REACH literal, M11/M12 the two attrs rows — all fire. ruins 726/0 (re-proved: clip shrunk to 6 still shows 51 missed cells), vessel-drops 64/0, console 111/0, render-audit 150/0, editor-bands 119/0, purity green, tsc 7 (baseline), canon exit 0.*
+
+### Canon first: Magii ruled the FOUND road at 03:09 (`aa450bd`), and this builds the place
+`design-briefs/shimmer-casting-vessels.md` › THE THREE ROADS. A vessel is **found as a CACHE in the
+Wilds** — anonymous, *"left, stashed, forgotten, grown over"*, and *"finding one is inheriting an
+intention."* ⛔ **Never a chest** — `MAT.CHEST` is craftable player furniture, and canon names the
+collision outright. The cache road is **capped at tier 2**; the Crucible band is the paper for an
+ultimate and a cache that could pay it would collapse the three roads into one.
+
+### ★★★ THE DESCENT IS A ROLL ON THE SITE, NOT A PIECE IN `RUIN_PIECES` — and that is the design
+A stair piece in the ruin pool is the obvious build and it is the wrong one: `pick()` weights against
+the pool TOTAL, so appending one member re-rolls every socket in the world. The ruin pool is
+sweep-tuned and oracle-asserted over 681 sites. A roll on `site.seed` with its own salt costs nothing
+and perturbs nothing — **verified, not assumed**. So ~1/3 of the ruins that ALREADY generate now have
+a way down, and the feature arrived without a new POI having to be found first.
+
+### What is under it
+`jigsaw.assemble` with its own turn-heavy pool and the **inverse ground rule** — a ruin dies where the
+country stops being flat, a warren dies where the rock gets too thin to hide a room. That is the seam
+`jigsaw.ts` was extracted for on 08-27, used for the first time. 3×3 spiral stair around a solid newel
+(the newel stops one above the floor or the stairs deliver you into a pillar), rooms in salvageable
+brick, cache in the room **furthest** from the shaft. Walls are ordinary brick and mining through is
+allowed — **the dark is the maze, not the layout** (Night Tide, ruled 08-06: no sky channel down there).
+
+### ★★ A DEFECT THE ORACLE FOUND, AND IT IS `jigsaw`'S, NOT THE WARREN'S
+`interiorsOverlap` compares INTERIORS — *"two rooms SHARING a wall are legal"* — but *"our interiors do
+not overlap"* and *"your wall does not land in my interior"* are **different claims, and the gap is one
+cell wide**. Measured: a vault's west wall written down the only interior column of a 9-long run, **12
+of 21 cells**. ⚠ Harmless above ground (a ruin's interior is rubble, so it reads as architecture);
+underground it **seals a room** — still in the plan, still with a doorway, solid brick. Fixed LOCALLY
+(shells first, then hollow every interior) because tightening `jigsaw` would regenerate every ruin to
+fix a bug ruins do not have.
+
+### ⚠⚠ THREE GUARDS CAME BACK BLIND ON THE FIRST MUTATION SWEEP — recorded, not quietly fixed
+1. **The cover assert compared against the same constant it guarded.** `cover: 0` — every warren open
+   to the sky — passed **53/53 clean**. A guard keyed on the value it is guarding cannot fail. Now
+   pinned to a `HARD_MIN_COVER` this file owns, with the configured cover checked separately.
+2. **`worst <= SITE_REACH` could not fail.** `assemble` rejects boxes outside the envelope before the
+   ground rule runs, and `SITE_REACH` is derived from that envelope. It read like the strongest assert
+   in the file and was decoration. Replaced with a check that the clip is DERIVED, not written down.
+3. **The `cacheCell` i=0 mutation is INERT, not caught** — `parts[0]` is at distance 0 and a
+   max-distance scan can never pick it. Banking that as a kill is how a blind assert survives a sweep.
+
+### ★★★ A BLOCK NEEDS FOUR TABLES, AND EACH MISSING ONE FAILS DIFFERENTLY
+Found one failure at a time, and the last one by the sweep rather than by reading:
+| table | what breaks without it |
+|---|---|
+| registry `emit` | casts no light |
+| `attrs.MATERIAL_COLOR` | magenta vertex colour |
+| `attrs.EMISSIVE` | lights the room, looks like grey rock |
+| `tiles.TILE_MATERIALS` + a `paintFor` case | **magenta checker texture** |
+`MAT.WAYMARK` proves they are independent: `emit: 7`, no `EMISSIVE` row, so it lights the ground while
+looking like ordinary stone — right for a landmark, wrong for a thing you are meant to spot down a dark
+corridor. ⚠ `tiles.ts`'s own note says appending without a `paintFor` case *"ships a magenta ore block —
+the failure the rubble note above records happening twice."* **Made a third time, by someone who had
+just read the note.** `render-audit.test.ts` caught it; review did not.
+
+### ⚠ AND ONE READING I TALKED MYSELF PAST
+I checked `layerOf` early, saw `FALLBACK_LAYER`, called it *"safe, no crash, just a fallback texture"*
+and moved on. **The fallback IS the loud magenta checker.** The cache would have shipped as a
+checkerboard cube at the end of every warren — the one object the feature is built around. Two
+interrupted sweeps had reported green before the first one I let finish on a stable tree found it.
+⚠ `e260c7a`'s message claims *"sweep clean"* and was read off an interrupted run; corrected in
+`d7c3845`'s message rather than by rewriting history.
+
+### ⛔ ALEX'S CALL
+- **Corridors are 1 block wide** (`run` is w3, one interior column). Tight-vs-cramped is a feel call;
+  widening to w5 is one line. **This is the first thing to judge from inside one.**
+- Does the dark read as a maze, or just as annoying? That is the whole bet.
+- `chance: 1/3` of ruins having a descent — too high and every ruin is a dungeon, too low and it is a
+  rumour. Opening guess only, same class as `GUARD_TUNING`.
+
+### How to get to one
+**`/warren`** (owner) teleports to the nearest ruin with a way down and names the room count. The
+feature is a third of ~1.1 ruins per 1000² of greyfield, so it is effectively unfindable on foot
+without it. The stairs are in the middle of the ruin.
+
+### Files
+`voxel/warren.ts` + `warren.test.ts` (new) · `voxel/{depth,registry,sites,drops}.ts` ·
+`voxel/ruins.test.ts` · `play3d/vessel-drops.ts` + its test · `voxel3d/{VoxelWorld.tsx,console.ts,attrs.ts}` ·
+`voxel3d/tex/tiles.ts` · `dev/templates/editor-bands.generated.ts` (220 → 221, `warren.ts` via `sites.ts`)
+
 ## 🕯 Shimmer — **THE HOLLOWS SHIP AS THREE PRIMITIVES, AND THE BRIEF ASKS FOR SOMETHING THAT LOSES ITSELF** (2026-09-04, sprites lane) · *Last touched 2026-09-05 — `cd262eb` + `6544458` pushed, **LIVE in `BUILD_ID NYpfHwONa06PKyy6J8N8K`, 182 chunks**, built from `f2bd4bf` (carries hub's vessel drop tables + tier icons). **Sweep 238 suites · 238 pass · 0 FAIL · 0 KILLED** at `f2bd4bf`, exit read off the file not a pipe. hollow-pose 25/0 mutation-swept 10 ways all 10 fire; hollow-look 43/0, hollows 106/0, hollow-visible 14/0, hollow-wiring 73/0, hollow-voice 26/0 all still green; render-audit 150/0, rule-three 7/0, portrait-art 91/0, dev-pages 232/0, dev-eye 28/0, tsc 7 (baseline), canon exit 0. Served verified through a cookie jar: 403 ungated / 200 owner on the public tunnel, five positive controls in the page, pose anchors + the borrowed material in served chunk `177810c12e4ffda9.js`.*
 
 **Left off:** Alex asked for Hollows next, and whether Meshy could do them. Measuring first turned up
