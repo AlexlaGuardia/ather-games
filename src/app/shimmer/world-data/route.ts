@@ -19,7 +19,10 @@ function parseGrid(content: string, name: string): number[][] | null {
   if (eq === -1) return null
   const bracketStart = content.indexOf('[', eq)
   if (bracketStart === -1) return null
-  if (content.substring(eq, bracketStart).includes('createStubMap')) return null
+  // ★★ See `tilemap-source.ts` for the full note: literal-or-not, never a named allowlist. Forgetting
+  // to add a generator here does not yield null, it yields the NEXT literal array in the file served
+  // under this zone's name.
+  if (content.substring(eq + 1, bracketStart).trim() !== '') return null
   let depth = 0, pos = bracketStart
   while (pos < content.length) {
     if (content[pos] === '[') depth++

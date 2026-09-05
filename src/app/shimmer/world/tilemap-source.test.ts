@@ -83,6 +83,37 @@ ok(parseZoneGrid('export const X: number[][] = [\n  [1, 2],\n', 'X') === null, '
 }
 ok(zoneConstName('rune-hold') === 'RUNE_HOLD', 'zone id maps to const name')
 
+// ── ★★★ A GENERATED CONST IS REFUSED BY ITS SHAPE, NOT BY ITS NAME (2026-09-05) ──────────────
+// This guard used to be an allowlist of one function — `createStubMap` — kept in TWO files
+// (`tilemap-source.ts` and `world-data/route.ts`). Writing a second generator and forgetting either
+// copy does NOT produce a null: `indexOf('[', eq)` walks past the unrecognised call and finds the
+// NEXT literal array in the file, so the new zone is served some OTHER zone's grid under its own
+// name — and `applyLiveWorldData` installs it over `zone.grid` at boot. Silent, and wrong in the
+// shape of a working map.
+// ★ So the test is now "is there anything but whitespace between = and the first [", which is a
+// property of every generator that will ever be written rather than of the two that exist.
+// Mutation: restore the `includes('createStubMap')` check → the differently-named cases fire.
+{
+  const lit = 'export const A: number[][] = [\n  [1,2],\n  [3,4],\n]\nexport const NEXT: number[][] = [\n  [9,9],\n  [9,9],\n]'
+  ok(JSON.stringify(parseZoneGrid(lit, 'A')) === '[[1,2],[3,4]]', 'a literal still parses')
+
+  // every one of these is a generator call, and NONE of them is named createStubMap
+  for (const call of ['makeArena(40, 30)', 'createCrucibleArena(140, 140)', 'buildGrid(cols, rows, [])', 'gen(1)']) {
+    const src = `export const A: number[][] = ${call}\nexport const NEXT: number[][] = [\n  [9,9],\n  [9,9],\n]`
+    const got = parseZoneGrid(src, 'A')
+    ok(got === null, `a generated const is refused whatever it is called — ${call} gave ${JSON.stringify(got)}`)
+  }
+  // ⚠ THE ASSERT THAT NAMES THE ACTUAL DAMAGE: without the fix this returns [[9,9],[9,9]] — the
+  // NEXT const's grid, served under A's name. A null is a refusal; that is a substitution.
+  const bad = parseZoneGrid('export const A: number[][] = makeArena(40, 30)\nexport const NEXT: number[][] = [\n  [9,9],\n  [9,9],\n]', 'A')
+  ok(bad === null && JSON.stringify(bad) !== '[[9,9],[9,9]]',
+     '★ and it never silently returns the NEXT const\'s grid instead')
+
+  // the original case still holds
+  ok(parseZoneGrid('export const A: number[][] = createStubMap(40, 30)\nexport const B: number[][] = [\n  [1],\n  [2],\n]', 'A') === null,
+     'and createStubMap, the case this guard was born for, is still refused')
+}
+
 console.log(`tilemap source loader: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 process.exit(fails.length === 0 ? 0 : 1)

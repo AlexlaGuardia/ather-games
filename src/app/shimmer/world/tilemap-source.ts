@@ -40,7 +40,16 @@ export function parseZoneGrid(source: string, constName: string): number[][] | n
   if (eq === -1) return null
   const bracketStart = source.indexOf('[', eq)
   if (bracketStart === -1) return null
-  if (source.substring(declStart, bracketStart).includes('createStubMap')) return null
+  // ★★ IS THIS AN ARRAY LITERAL, rather than IS IT ONE SPECIFIC FUNCTION. Between the `=` and the
+  // first `[` a literal has nothing but whitespace; any generator call puts its name and arguments
+  // there. This used to test for the string `createStubMap` — correct for the one generator that
+  // existed, and an allowlist that had to be remembered in TWO files (here and `world-data/route.ts`)
+  // every time another was written.
+  // ⚠ THE COST OF FORGETTING IT IS NOT A NULL, IT IS THE WRONG ZONE'S GRID. `indexOf('[', eq)` walks
+  // straight past an unrecognised call and finds the NEXT literal array in the file, so a generated
+  // CRUCIBLE would have been served Travelers Station's map under its own name — and installed over
+  // `zone.grid` at boot by `applyLiveWorldData`. Silent, and wrong in the shape of a working map.
+  if (source.substring(eq + 1, bracketStart).trim() !== '') return null
 
   let depth = 0, pos = bracketStart
   while (pos < source.length) {
