@@ -825,38 +825,83 @@ export const RUNE_HOLD: number[][] = [
 // clock that governs them already exists and is already tested (`crucible-phases.ts`, floors
 // and windows as pure functions of elapsed seconds — do not re-derive them in a map).
 // ⚠ TODO(crucible-layout): the shape of The City is Alex's to author.
-export const CRUCIBLE: number[][] = [
-  [103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103],  // 0
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 1
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 2
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 3
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 4
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 5
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 6
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 7
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 8
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 9
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 10
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 11
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 12
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 13
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 14
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 15
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 16
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 17
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 18
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 19
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 20
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 21
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 22
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 23
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 24
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 25
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 26
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,14,14,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 27
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,14,14,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 28
-  [103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103],  // 29
-]
+// ── ★★★ THE CRUCIBLE IS GENERATED, AND THE SIZE IS THE POINT ─────────────────────────────────
+// It was a hand-typed 40×30 literal until 2026-09-06. Canon calls Pyramid Zero's floors *"four
+// massive chambers"* and *"one massive open area"* inside a *"moon-sized"* ship; the literal was
+// smaller than the practice range next door (50×50) and held sixty challengers to the range's one.
+// Nobody had ever stood in it to find out how wrong that was, and a hand-typed grid is the shape you
+// cannot cheaply try three of.
+//
+// ⚠ THIS IS A BLOCKOUT AND IT STAYS ONE. `zones.ts` carries `TODO(crucible-layout): the shape of
+// The City is Alex's to author`, and that is still true — four chambers is a LAYOUT question and
+// this answers a SIZE question. A generated blockout is what lets the size be settled first, so the
+// layout is authored once at a scale somebody has actually walked.
+//
+// ⚠⚠ AND EVERY POSITION THAT DEPENDS ON THE SIZE DERIVES FROM IT. Four places knew where a keeper
+// lands in the Crucible: this grid's warp paint, the zone's `playerStart`, the zone's own exit gate,
+// and — the one that is easy to miss — TRAVELERS STATION'S gate, which aims at the arrival tile from
+// another zone's block entirely. Resizing with any of those left as a literal puts a keeper in a
+// wall, or a gate onto floor, and three of the four are nowhere near this file.
+//
+// ⛔ THE BORDER IS TILE 103 AND BOTS CANNOT SEE IT. Every bot and projectile predicate tests
+// `WALL_ID === 34` (the cloud wall) rather than `SOLID`, so the mortal-side building block is solid
+// to the KEEPER and to the renderer and passable to everything else. Deliberately not fixed here: it
+// is six predicates in the combat path, it affects the firing range too, and doing it inside a map
+// change is how a regression arrives with nobody able to say which commit caused it. The cost today
+// is bounded — a bot may stand in the one-tile border ring, and the array edge still stops it.
+
+/**
+ * ⚠ THE SMALLEST ARENA THAT IS STILL A CRUCIBLE, and it is DERIVED rather than picked.
+ *
+ * The exit gate sits on the centre column (`cols >> 1`); the east entrances sit at
+ * `cols - 1 - WALL_INSET`. Those are the same column when `cols/2 === cols - 4`, i.e. at **cols 8**,
+ * and challengers on that side then spawn standing on the exit warp. So the bound is
+ * `cols > 2 * WALL_INSET + 4`, which is 11 — not a number chosen because it was the first size that
+ * passed a test, which is how a constant gets fitted to its own assert.
+ *
+ * ⚠ The editor's generic resize clamps at 8, so a keeper CAN drag the arena below this. Canon calls
+ * these floors *"massive"* inside a *"moon-sized"* ship, so 8×8 is not a Crucible under any reading
+ * and this is a stated floor rather than a guard against a case worth supporting.
+ */
+export const CRUCIBLE_MIN = 11
+
+/** The arena the game ships with. The size Alex settles on replaces these two numbers. */
+export const CRUCIBLE_COLS = 40
+export const CRUCIBLE_ROWS = 30
+
+/** Where a keeper arrives — and therefore where Travelers Station's gate must aim. */
+export const crucibleArrival = (cols = CRUCIBLE_COLS, rows = CRUCIBLE_ROWS) =>
+  ({ x: cols >> 1, y: Math.max(2, rows - 5) })
+/** The way out, two tiles behind the arrival so you do not spawn standing on it. */
+export const crucibleExit = (cols = CRUCIBLE_COLS, rows = CRUCIBLE_ROWS) =>
+  ({ x: cols >> 1, y: Math.max(3, rows - 3) })
+
+/**
+ * A bordered arena of open floor with the exit warp painted in.
+ *
+ * ★ 98 is `Flat Path Base` (walkable) and 103 is `Building Block (brown)` (SOLID) — the pair the
+ * hand-typed literal used, kept exactly so this is a resize and not a re-skin. 14 is WARP, and the
+ * footprint matches `gateFootprint`'s default size of 2, which is why four tiles are painted rather
+ * than one: a gate the generator paints smaller than the zone declares is a gate you fall through.
+ */
+export function createCrucibleArena(cols: number, rows: number): number[][] {
+  const FLOOR = 98, WALL = 103, WARP = 14
+  const gate = crucibleExit(cols, rows)
+  const grid: number[][] = []
+  for (let y = 0; y < rows; y++) {
+    const row: number[] = []
+    for (let x = 0; x < cols; x++) {
+      const border = y === 0 || y === rows - 1 || x === 0 || x === cols - 1
+      const onGate = (x === gate.x || x === gate.x + 1) && (y === gate.y || y === gate.y + 1)
+      row.push(onGate ? WARP : border ? WALL : FLOOR)
+    }
+    grid.push(row)
+  }
+  return grid
+}
+
+export const CRUCIBLE: number[][] = createCrucibleArena(CRUCIBLE_COLS, CRUCIBLE_ROWS)
+
 
 // THE TRAVELERS STATION — the departure hall on Rune Hold's south side (stub, 2026-08-05).
 // The town's way OUT: practice first at the Firing Range (west door back to the square, east

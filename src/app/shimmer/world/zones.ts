@@ -174,7 +174,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
 import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, CRUCIBLE, RUNE_HOLD, THE_PASSAGE, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
-  ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN } from './tilemap'
+  ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN, crucibleArrival, crucibleExit,} from './tilemap'
 import { LANDING, LANDING_ARRIVAL, LANDING_LABEL } from './landing'
 export const ZONES: Zone[] = [
   {
@@ -621,7 +621,10 @@ export const ZONES: Zone[] = [
       // is — canon has no objection to a keeper entering, that is what the pyramid is FOR.
       // Practice is deliberately the door with no gate on it: the point of the split was that a
       // player can warm up before anything is at stake.
-      { x: 11, y: 13, toZone: 'crucible', toX: 19, toY: 25, direction: 'up', label: 'THE CRUCIBLE', ownerOnly: true },
+      // ⚠ `toX/toY` IS THE CRUCIBLE'S ARRIVAL TILE, DERIVED FROM ITS SIZE — the coupling that lives
+      // in the wrong file. Resizing the arena with this left as (19,25) lands a keeper wherever that
+      // happens to be on the new grid, and nothing in the crucible's own block would show it.
+      { x: 11, y: 13, toZone: 'crucible', toX: crucibleArrival().x, toY: crucibleArrival().y, direction: 'up', label: 'THE CRUCIBLE', ownerOnly: true },
     ],
     warps: [],
   },
@@ -642,10 +645,15 @@ export const ZONES: Zone[] = [
     name: 'The Crucible',
     grid: CRUCIBLE,
     realm: 'outside',
-    playerStart: { tileX: 19, tileY: 25 },
+    // ⚠ DERIVED, NOT TYPED. These were (19,25) and (19,27), correct for the hand-typed 40×30 and
+    // silently wrong at any other size — a keeper in a wall, or a gate onto open floor. The grid is
+    // generated now (`createCrucibleArena`), so every position that depends on its size comes from
+    // the same two functions the generator paints from. ★ The fourth one is not in this block at
+    // all: Travelers Station's gate aims at the arrival tile from its own zone, twenty lines up.
+    playerStart: { tileX: crucibleArrival().x, tileY: crucibleArrival().y },
     gates: [
       // out — back to the concourse you entered from
-      { x: 19, y: 27, toZone: 'travelers-station', toX: 11, toY: 12, direction: 'down', label: 'LEAVE THE CRUCIBLE' },
+      { x: crucibleExit().x, y: crucibleExit().y, toZone: 'travelers-station', toX: 11, toY: 12, direction: 'down', label: 'LEAVE THE CRUCIBLE' },
     ],
     warps: [],
   },

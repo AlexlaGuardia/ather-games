@@ -41,9 +41,16 @@ ok(grids.length >= 20, `the module still exports grids to check (${grids.length}
  * reason and quietly excuses a real failure later. Ask the SOURCE instead: the day one of these is
  * written out as a literal, it stops being exempt on its own and gets asserted like every other.
  */
+// ⚠⚠ THIS HELPER CARRIED A THIRD COPY OF THE `createStubMap` ALLOWLIST. The rule was retired in
+// `tilemap-source.ts` and `world-data/route.ts` on 2026-09-06 — and the test that GUARDS those two
+// had its own, so the first generated const written afterwards (CRUCIBLE) read as a literal here and
+// this file reported the loader broken. ★ The exemption list was in three places and the third was
+// inside the thing asserting the other two. Now it asks the same structural question they do.
 const isComputed = (name: string): boolean => {
   const at = SRC.indexOf(`export const ${name}`)
-  return at !== -1 && SRC.substring(at, SRC.indexOf('[', SRC.indexOf('=', at))).includes('createStubMap')
+  if (at === -1) return false
+  const eq = SRC.indexOf('=', at)
+  return SRC.substring(eq + 1, SRC.indexOf('[', eq)).trim() !== ''
 }
 ok(grids.filter(g => isComputed(g[0])).length < grids.length / 2,
   'most grids are still literals — if this flips, this whole file is exempting itself')
