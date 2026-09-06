@@ -97,6 +97,17 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(/stepPrize\(/.test(host), '★ and so is the prize rule')
   ok(/matchStart\.current/.test(host), 'the host holds a match start — one number, the clock derives the rest')
 
+  // ── ⚠⚠ THE HUD MUST BE CLEARED BY SOMETHING THAT SURVIVES LEAVING THE ZONE ──────────────────
+  // Found by walking out of the Crucible and watching "THE CITY · 2:29" keep counting in the home
+  // plot. `FiringRange` emits the line and mounts ONLY in an outdoor non-peaceful zone, so leaving
+  // the arena unmounts the only thing that could ever retract it. Its own latch is correct and
+  // beside the point: `onMatch(null)` would fire on the frame the match ended, and there are no
+  // more frames. ★ State whose clearing depends on a consumer that was just removed outlives that
+  // consumer, and reads exactly like a live value.
+  // Mutation: delete the `useEffect(() => { setMatchHud(null) }, [zoneId])` → fires.
+  ok(/setMatchHud\(null\)[^]{0,40}\[zoneId\]/.test(host),
+     '★ the match HUD is cleared on ZONE CHANGE, not only by the frame loop that unmounts with it')
+
   // ⛔ THE OLD DOOR IS GONE, not merely superseded. A second payout path would make the guard-kill
   // pay again and nothing else would report it.
   const payouts = (host.match(/clearTrial\('puppet-guards'/g) ?? []).length

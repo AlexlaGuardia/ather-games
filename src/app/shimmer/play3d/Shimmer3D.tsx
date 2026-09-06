@@ -5933,6 +5933,16 @@ export default function Shimmer3D() {
   const [rangeOpen, setRangeOpen] = useState(false)
   /** the Crucible match HUD line, or null outside a match. Set only when the string changes. */
   const [matchHud, setMatchHud] = useState<string | null>(null)
+  // ── ⚠⚠ CLEARED ON ZONE CHANGE, AND IT HAS TO BE HERE RATHER THAN IN THE FRAME LOOP ──────────
+  // Found by walking out of the Crucible and watching "THE CITY · 2:29" keep counting down in the
+  // home plot (2026-09-06). `FiringRange` emits this line, and it MOUNTS ONLY IN AN OUTDOOR,
+  // NON-PEACEFUL ZONE — so leaving the arena unmounts the one thing that could ever clear it. The
+  // line's own latch is correct and irrelevant: `onMatch(null)` would fire on the frame the match
+  // ended, and there are no more frames.
+  // ★ The general shape, and it is this session's own lesson wearing UI: state whose clearing
+  // depends on a consumer that has just been removed. A value that only one component can retract
+  // outlives that component, and looks exactly like a live reading.
+  useEffect(() => { setMatchHud(null) }, [zoneId])
   const rangeOpenRef = useRef(false); rangeOpenRef.current = rangeOpen
   const [rangeCfg, setRangeCfg] = useState<RangeCfg>({
     moving: false, hostile: false, guards: false, bots: false,
