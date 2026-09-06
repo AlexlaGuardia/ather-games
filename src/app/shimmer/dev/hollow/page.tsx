@@ -33,7 +33,7 @@
  * Run: `tools/devwin.sh sprites` → http://localhost:3202/shimmer/dev/hollow
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, CubeCamera } from '@react-three/drei'
 import { HollowDoll, type HollowMode } from '../../voxel3d/HollowDoll'
@@ -42,6 +42,8 @@ import { HollowFused } from '../../voxel3d/HollowFused'
 import { HollowMesh } from '../../voxel3d/HollowMesh'
 import { HOLLOW_LOOK, type HollowForm } from '../../voxel3d/hollow-look'
 import { EYE_STAND } from '../../voxel3d/locomotion'
+import { DAY, NIGHT, VoxelDayNight } from '../../voxel3d/day-night'
+import { setTimePin } from '../../engine/day-cycle'
 
 const FORMS: HollowForm[] = ['warden', 'stalker', 'caster']
 
@@ -77,7 +79,21 @@ export default function HollowBenchPage() {
     ? { position: [0, EYE_STAND, 9] as [number, number, number], fov: 60 }
     : { position: [0, 3.4, 7] as [number, number, number], fov: 45 }
 
-  const sky = night ? '#080a0e' : '#9fb6c6'
+  const sky = night ? NIGHT.bg : DAY.bg
+
+  /**
+   * ★ THE CLOCK IS PINNED THROUGH THE SHIPPED MECHANISM, exactly as `dev/grey` does it —
+   * `VoxelDayNight` lights itself from `dayProgress()`, so the Night/Day toggle has to move the
+   * WORLD's clock or it moves nothing. Midnight is the hour a Hollow actually exists (`spawnDark`);
+   * noon is the daylight case #1047 is about.
+   *
+   * ⚠ RELEASED ON UNMOUNT. `setTimePin` is MODULE state — a bench that pins midnight and navigates
+   * away leaves the whole game at midnight.
+   */
+  useEffect(() => {
+    setTimePin(night ? 0 : 12)
+    return () => setTimePin(null)
+  }, [night])
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
@@ -139,8 +155,16 @@ export default function HollowBenchPage() {
         <Canvas shadows camera={camera} key={`${eye}-${night}`}>
           <color attach="background" args={[sky]} />
           {/* Night is the honest rig: spawnDark means a Hollow only exists in the darkest places. */}
-          <hemisphereLight args={[sky, '#101014', night ? 0.22 : 0.8]} />
-          <directionalLight position={[-4, 7, 3]} intensity={night ? 0.18 : 0.9} castShadow />
+          {/* ★★★ THE SHIPPED RIG, NOT A RECONSTRUCTION OF IT — the same component `dev/grey` mounts
+              and the same clock mechanism, so a look call made here is a call about the world.
+              ⚠ UNTIL 2026-09-06 THIS BENCH HAND-LIT ITSELF with six local values and every one was
+              darker than the world (hemi 0.8 vs 1.5, sun 0.9 vs 1.5, a near-black hemi ground
+              against #3b3a4a) — roughly 55% of the world's daylight, plus cast shadows the world
+              does not draw (`shadows={false}` in VoxelWorld). That manufactured a finding: "the
+              Hollow reads too DARK in daylight" was a claim about this ROOM, not the creature.
+              Matching the numbers would not have been enough; the world also lerps its colours,
+              cuts sun for gloom and mist and carries an ambient term. Ask the rig, never restate it. */}
+          <VoxelDayNight />
 
           {/* THE GREYFIELD — drained ground. Nothing here for a Hollow to borrow. */}
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-7, 0, 0]} receiveShadow>

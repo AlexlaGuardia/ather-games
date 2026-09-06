@@ -95,7 +95,13 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
   ok(/createHollowMat\(look\)/.test(page), 'the page builds from the same factory, varying the dials')
   ok(/applyHollowLook\(/.test(page), 'and re-points them in place rather than reallocating')
   ok(/HOLLOW_LOOK\.colour/.test(page), 'starting from the SHIPPED values, so load == what the game draws')
-  ok(!/0x3f423d|0x4a4d47|0x474f58/.test(page), '⚠ and the page restates no colour of its own')
+  // ⚠ DERIVED, NEVER RESTATED. This listed the three greys as literals — so the day anyone retuned
+  // HOLLOW_LOOK.colour the assert would have gone on guarding three colours that no longer ship,
+  // green by asking about a world that had stopped existing (the 2026-09-05 disarmed-guard shape).
+  for (const f of FORMS) {
+    const hex = `0x${HOLLOW_LOOK.colour[f].toString(16)}`
+    ok(!page.includes(hex), `⚠ the page restates no colour of its own (${f} ${hex})`)
+  }
 
   // ⚠ THE CLOCK. The rig reads dayProgress(), so a page-local hour would light the scene by a rule
   // the world does not have — and setTimePin is MODULE state, so leaving it pinned darkens the app.
@@ -104,12 +110,46 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
   ok(/<VoxelDayNight \/>/.test(page), 'and lights the scene with the real rig, not a hand-lit approximation')
 }
 
+// ── 4b. AND THE RULE IS THE RULE, NOT THE FILE IT WAS FIRST WRITTEN ABOUT ───────────────────────
+// ★★★ THE BENCH THIS GUARD DID NOT NAME IS THE ONE EVERY LOOK CALL WAS MADE ON. Block 4 asserts
+// `dev/grey` mounts the shipped rig, and `dev/grey` always did. `dev/hollow` — added later, made
+// the DEFAULT Hollow bench, and the page Alex judged the ghost, the solid texture and "it still
+// looks the same" on — hand-lit itself with six local values, and every one was darker than the
+// world: hemi 0.8 vs 1.5, sun 0.9 vs 1.5, a near-black hemi ground against #3b3a4a, plus cast
+// shadows the world does not draw. Roughly 55% of the world's daylight.
+//
+// ⚠⚠ IT MANUFACTURED A FINDING. Row #1047 — "the Hollow reads too DARK in daylight" — named two
+// causes and called it Alex's: lift the creature's grey, or lift the room. It was the ROOM, and
+// lifting the grey would have brightened the creature to compensate for an under-lit bench and
+// then shipped it too light in a world nearly twice as bright. A fix that moves the needle for
+// the wrong reason is invisible from inside the result.
+//
+// So this block asserts the RULE across every Hollow bench, not the file the rule was found in.
+{
+  const benches = ['../dev/grey/page.tsx', '../dev/hollow/page.tsx'] as const
+  for (const rel of benches) {
+    const src = codeOnly(readFileSync(new URL(rel, import.meta.url), 'utf8'))
+    ok(/<VoxelDayNight \/>/.test(src), `${rel} lights itself with the SHIPPED rig`)
+    // ⚠ The ban is on the AMBIENT/SUN rig only. A bench may still hang a local prop lamp — the
+    // tended plot's warm pointLight is the whole point of that half of dev/hollow.
+    ok(!/<hemisphereLight/.test(src), `★ ${rel} builds no hemisphere of its own`)
+    ok(!/<directionalLight/.test(src), `★ ${rel} builds no sun of its own`)
+    ok(/setTimePin\(/.test(src), `${rel} moves the WORLD's clock, not a page-local hour`)
+    ok(/return \(\) => setTimePin\(null\)/.test(src),
+       `★ ${rel} releases the pin on unmount — a dev tool must not leave the game at midnight`)
+  }
+}
+
 // ── 5. THE SHIPPED DIALS ARE IN A BAND THAT MEANS SOMETHING ─────────────────────────────────────
 // ⚠ Not a look ruling — a range. Alex rules the value; this only refuses the two ends that are
 // definitionally wrong.
 {
-  ok(HOLLOW_LOOK.selfLight >= 0, 'self-light is not negative')
-  ok(HOLLOW_LOOK.selfLight < 0.5, 'and under a half, past which the grey reads as a light source')
+  // ⛔ NOT A BAND ANY MORE. This was `>= 0 && < 0.5` — a range that permitted the exact value canon
+  // barred, and the build sat at 0.15 inside it for weeks reading green. Ruled 2026-09-06 (/magii,
+  // athernyx `3aef03e`): emissive is barred at EVERY value including a neutral grey one, because
+  // the bar is on GENERATION, not on hue. A range cannot express "none"; only the equality can.
+  ok(HOLLOW_LOOK.selfLight === 0,
+     `⛔ the shipped Hollow generates no light of its own (selfLight ${HOLLOW_LOOK.selfLight})`)
   for (const f of FORMS) {
     ok(HOLLOW_LOOK.opacity[f] > 0.2, `${f} is a body, not a rumour`)
     ok(HOLLOW_LOOK.opacity[f] <= 1, `${f}'s opacity is a fraction`)

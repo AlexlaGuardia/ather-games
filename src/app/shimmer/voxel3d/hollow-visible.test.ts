@@ -35,7 +35,21 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // the least light to render it by. Nothing else in the tree states that out loud.
 }
 
-// ── 2. ★★★ SO THE BODY MUST CARRY ITS OWN FLOOR OF LIGHT ────────────────────────────────────────
+// ── 2. ⛔ OVERRULED 2026-09-06 — THE BODY CARRIES NO LIGHT AT ALL ───────────────────────────────
+// ★★★ THE SECTION HEADER ABOVE USED TO READ "SO THE BODY MUST CARRY ITS OWN FLOOR OF LIGHT", and
+// the argument is kept rather than deleted because the wrong reading is the useful artifact. It
+// reasoned: section 1 proves a Hollow may only exist where there is least light to render it by,
+// therefore it must light itself. Sound, and canon rules the conclusion out anyway (/magii,
+// athernyx `3aef03e`): emissive is barred at EVERY value including a neutral grey one, because the
+// bar is on GENERATION, not on hue. Being hard to see with nothing to borrow is the DANGER READ,
+// not a defect. Findability is specular's job.
+//
+// ⚠⚠ AND THE CONSEQUENCE SECTION 1 PROVES IS NOT RESOLVED BY THAT RULING, SO IT IS WRITTEN HERE
+// RATHER THAN QUIETLY DROPPED. Specular borrows from the surroundings, and a Hollow spawns exactly
+// where there is nothing to borrow from. Alex reported an invisible Hollow at night TWICE. Nothing
+// in this tree measures night visibility — both asserts this section used to make were range checks
+// on a CONSTANT, not measurements of whether anything can be seen — so "0 is invisible" rests on
+// his eye, which is the strongest evidence available and the only evidence available.
 // ⚠ ASKED OF THE SHIPPED MATERIALS, NOT OF A SOURCE FILE. This section used to grep VoxelWorld.tsx,
 // and when the look moved to `hollow-look.ts` it went red against code that was fine — a guard
 // asserting a retired LOCATION rather than a retired rule. Building the real materials cannot go
@@ -43,8 +57,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 {
   const mats = createHollowMat(HOLLOW_LOOK)
   for (const f of ['warden', 'stalker', 'caster'] as const) {
-    ok(mats[f].emissiveIntensity > 0,
-       `${f} carries its own light — without it, it can only ever be as bright as the dark it stands in`)
+    ok(mats[f].emissiveIntensity === 0,
+       `⛔ ${f} generates no light of its own (emissiveIntensity ${mats[f].emissiveIntensity}) — canon 3aef03e`)
     // ⚠ THE SELF-LIGHT MUST BE THE BODY'S OWN COLOUR. A white or tinted one shifts the hue as the
     // scene light drops, so a Hollow would change colour with the hour — and the grey is the whole
     // read of the thing.
@@ -54,14 +68,14 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   for (const m of Object.values(mats)) m.dispose()
 }
 
-// ── 3. THE DIAL IS IN THE BAND WHERE IT MEANS SOMETHING ─────────────────────────────────────────
-// ⚠ Not a look ruling — a range check. Zero is the shipped-invisible behaviour and high is a
-// lantern, which is the opposite of what a Hollow is. Alex rules the value inside this band, on
-// `/shimmer/dev/grey`, which exists precisely so the number comes from a picture and not from me.
+// ── 3. NOT A BAND — A RULING ────────────────────────────────────────────────────────────────────
+// ⚠ THIS WAS `> 0 && < 0.5`, AND A RANGE CANNOT EXPRESS "NONE". The shipped 0.15 sat inside it
+// reading green while it violated the brief, in TWO files that each thought they were the guard
+// (`hollow-look.test.ts` carried the same band). One rule in two places is one rule nobody owns.
 {
   ok(Number.isFinite(HOLLOW_LOOK.selfLight), `the self-light dial is a real number (${HOLLOW_LOOK.selfLight})`)
-  ok(HOLLOW_LOOK.selfLight > 0, '★ above zero — zero IS the bug, and it is the value that looks like nobody chose it')
-  ok(HOLLOW_LOOK.selfLight < 0.5, 'and well under a half, or the grey starts to read as a light source')
+  ok(HOLLOW_LOOK.selfLight === 0,
+     `⛔ the shipped Hollow generates nothing (selfLight ${HOLLOW_LOOK.selfLight}) — canon 3aef03e`)
 }
 
 // ── 4. ★★ AND THE PROMISE THE LOOK MAKES IS STILL WRITTEN DOWN ──────────────────────────────────

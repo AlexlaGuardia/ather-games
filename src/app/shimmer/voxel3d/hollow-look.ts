@@ -27,7 +27,22 @@ export interface HollowLook {
   /**
    * Emissive intensity — the body's own light, in its own hue.
    *
-   * ⚠ 0 is the pre-2026-08-27 behaviour and it is INVISIBLE at night. This is the dial Alex rules.
+   * ⛔ RULED 2026-09-06 (/magii, athernyx `3aef03e`): THE SHIPPED VALUE IS 0, AND EMISSIVE IS BARRED
+   * AT EVERY VALUE INCLUDING A NEUTRAL GREY ONE. The build read the bar as being about HUE — *What
+   * would break it* says *"any colour it owns"*, and a neutral glow owns no colour, so 0.15 looked
+   * survivable. The sentence that kills it sits twenty lines earlier in the derivation: *"a matte
+   * Hollow would be the drift, because matte means the surface is GENERATING its own flat tone."*
+   * A self-lit term is a diffuse contribution with no light to cause it. **The bar is on
+   * generation, not on hue.**
+   *
+   * ⚠ AND THE OLD WORRY HERE WAS THE RIGHT WORRY POINTED AT THE WRONG ORGAN. This comment used to
+   * say 0 is INVISIBLE at night, as an argument for keeping the glow. Canon's answer: being hard to
+   * see with nothing to borrow is *the danger read*, not a defect — *"standing in a greyfield there
+   * is nothing to borrow, so a Hollow reads nearly matte, grey on grey, hard to see."* Findability
+   * is SPECULAR's job. A self-lit floor spends the tell to solve a problem the tell is not causing.
+   *
+   * ★ It stays a dial because `dev/hollow` slides it, and seeing the barred value is how the bar
+   * gets judged. The SHIPPED number is the ruling; the type is not.
    */
   selfLight: number
   /** Per-form base grey. The caster reads colder so the thing draining you from range is findable. */
@@ -62,7 +77,8 @@ export interface HollowLook {
  * page shows on load" and "what the game draws" are the same thing by construction.
  */
 export const HOLLOW_LOOK: HollowLook = {
-  selfLight: 0.15,
+  // ⛔ 0 by canon ruling 2026-09-06 — see `selfLight` on HollowLook. Not a taste value.
+  selfLight: 0,
   // A smear of grey that holds a silhouette: darker than any ground grey, never a face.
   colour: { warden: 0x3f423d, stalker: 0x4a4d47, caster: 0x474f58 },
   opacity: { warden: 1, stalker: 1, caster: 1 },

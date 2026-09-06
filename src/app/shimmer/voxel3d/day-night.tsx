@@ -95,7 +95,12 @@ export const DAY = {
   sun: '#ffffff', sunIntensity: 1.5,
   ambient: 0.4,
 }
-const NIGHT = {
+/** ⚠ EXPORTED 2026-09-06 for the same reason DAY was: `dev/hollow` was restating all six of its
+ *  lighting values locally and every one of them differed from the world's, so the bench Alex has
+ *  made every Hollow look call on was running at ~55% of the world's daylight. A preview lit by
+ *  different numbers than the world is the "preview that re-derives" trap, and it had already
+ *  produced one wrong diagnosis: "the Hollow reads too dark" was the ROOM, not the creature. */
+export const NIGHT = {
   bg: '#16223f', fogNear: 55, fogFar: 165,   // the dark stands closer — same world, smaller circle
   hemiSky: '#8ea8d8', hemiGround: '#252c47', hemiIntensity: 0.55,
   // ⚠ NOT A MOON. The Ather has no moon (Alex ruling 2026-08-08). This is the night's silver —
