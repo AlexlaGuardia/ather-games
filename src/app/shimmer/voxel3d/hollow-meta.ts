@@ -97,11 +97,31 @@ export function createHollowMeta(form: HollowForm): THREE.Group {
   return outer
 }
 
+/**
+ * What one update actually fed the field. Returned rather than logged, because the page and the
+ * guard have to be able to compare the SAME numbers — the fused body surfaces ~936 vertices in the
+ * browser against 2,016-3,060 headless at identical settings, and no page-side probe can reach an
+ * R3F scene to find out why. This splits the question in one reading: if the page emits the same
+ * balls as the guard, the fault is the field or the mapping; if it emits fewer, the RIG is posing
+ * differently and the surface is innocent.
+ */
+export interface MetaStats {
+  /** Blob meshes the rig offered. 18 unless a part has been shed to nothing. */
+  blobs: number
+  /** Balls actually added to the field — more than `blobs`, since a stretched mass emits a chain. */
+  balls: number
+  /** Y extent of the ball centres, in the BODY's frame. A body stands 0..~1.75 at form scale 1. */
+  loY: number
+  hiY: number
+  /** Balls that mapped outside the unit cube. Any at all means the body is partly off its own grid. */
+  outside: number
+}
+
 /** Advance one fused body to time `t`. Writes the hidden rig and the surface, never the outer group. */
-export function updateHollowMeta(body: THREE.Group, t: number, form: HollowForm, speed = 0): void {
+export function updateHollowMeta(body: THREE.Group, t: number, form: HollowForm, speed = 0): MetaStats | null {
   const rig = body.children.find(c => c.name === 'hollowPoseRig') as THREE.Group | undefined
   const mc = body.children.find(c => c.name === NAME) as InstanceType<typeof MarchingCubes> | undefined
-  if (!rig || !mc) return
+  if (!rig || !mc) return null
 
   updateHollowBody(rig, t, form, speed)
   body.updateMatrixWorld(true)
@@ -120,6 +140,7 @@ export function updateHollowMeta(body: THREE.Group, t: number, form: HollowForm,
   const local = new THREE.Matrix4()
   const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3()
   const axis = new THREE.Vector3()
+  let blobs = 0, balls = 0, outside = 0, loY = Infinity, hiY = -Infinity
   rig.traverse(o => {
     if (!(o as THREE.Mesh).isMesh) return
     local.multiplyMatrices(toLocal, o.matrixWorld)
@@ -128,6 +149,9 @@ export function updateHollowMeta(body: THREE.Group, t: number, form: HollowForm,
     // supposed to have let go of one.
     const maxA = Math.max(sc.x, sc.y, sc.z)
     if (maxA <= 2e-3) return
+    blobs++
+    if (p.y < loY) loY = p.y
+    if (p.y > hiY) hiY = p.y
 
     // The long axis in the blob's OWN frame, and the girth across the other two.
     const longest = sc.x >= sc.y && sc.x >= sc.z ? 0 : sc.y >= sc.z ? 1 : 2
@@ -144,8 +168,12 @@ export function updateHollowMeta(body: THREE.Group, t: number, form: HollowForm,
       const y = p.y + axis.y * reach * f - META_CENTRE.y
       const z = p.z + axis.z * reach * f - META_CENTRE.z
       // Normalised 0..1 across the box: the generated geometry spans -1..1, so 0.5 is the centre.
-      mc.addBall(x / META_BOX + 0.5, y / META_BOX + 0.5, z / META_BOX + 0.5, strength, SUBTRACT)
+      const nx = x / META_BOX + 0.5, ny = y / META_BOX + 0.5, nz = z / META_BOX + 0.5
+      if (nx < 0 || nx > 1 || ny < 0 || ny > 1 || nz < 0 || nz > 1) outside++
+      mc.addBall(nx, ny, nz, strength, SUBTRACT)
+      balls++
     }
   })
   mc.update()
+  return { blobs, balls, outside, loY: blobs ? loY : 0, hiY: blobs ? hiY : 0 }
 }

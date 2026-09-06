@@ -62,7 +62,7 @@ export default function HollowBenchPage() {
   // bipedal, plantigrade); the blob doll is the thing it replaces, kept beside it so the two can be
   // told apart in MOTION rather than from memory.
   const [rig, setRig] = useState<'fused' | 'bones' | 'blob'>('fused')
-  const [stats, setStats] = useState<{ verts: number; y: [number, number] } | null>(null)
+  const [stats, setStats] = useState<{ verts: number; y: [number, number]; feed: import('../../voxel3d/hollow-meta').MetaStats | null } | null>(null)
   const [night, setNight] = useState(true)
   const [eye, setEye] = useState(true)
 
@@ -92,7 +92,10 @@ export default function HollowBenchPage() {
           {rig === 'fused' && (
             <span className="gx-value" style={{ ...chip, cursor: 'default', fontVariantNumeric: 'tabular-nums',
               color: stats && stats.verts > 0 ? '#8fbf8a' : '#d08a8a' }}>
-              {stats ? `${stats.verts} verts · y ${stats.y[0].toFixed(2)}..${stats.y[1].toFixed(2)}` : 'no frame yet'}
+              {stats
+                ? `${stats.verts} verts · y ${stats.y[0].toFixed(2)}..${stats.y[1].toFixed(2)}`
+                  + (stats.feed ? ` · ${stats.feed.blobs} blobs → ${stats.feed.balls} balls, ${stats.feed.outside} outside, body y ${stats.feed.loY.toFixed(2)}..${stats.feed.hiY.toFixed(2)}` : '')
+                : 'no frame yet'}
             </span>
           )}
           <Btn on={rig === 'bones'} onClick={() => setRig('bones')}>Bones (spheres)</Btn>

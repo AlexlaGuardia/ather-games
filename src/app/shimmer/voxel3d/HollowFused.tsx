@@ -16,7 +16,7 @@
 import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { createHollowMeta, updateHollowMeta, disposeHollowMetas } from './hollow-meta'
+import { createHollowMeta, updateHollowMeta, disposeHollowMetas, type MetaStats } from './hollow-meta'
 import type { HollowForm } from './hollow-look'
 
 /**
@@ -36,7 +36,7 @@ import type { HollowForm } from './hollow-look'
 const SCRATCH = new THREE.Vector3()
 
 export function HollowFused({ form, speed, onStats }: {
-  form: HollowForm; speed: number; onStats?: (s: { verts: number; y: [number, number] }) => void
+  form: HollowForm; speed: number; onStats?: (s: { verts: number; y: [number, number]; feed: MetaStats | null }) => void
 }) {
   const host = useRef<THREE.Group>(null)
   const body = useRef<THREE.Group | null>(null)
@@ -55,9 +55,11 @@ export function HollowFused({ form, speed, onStats }: {
   useEffect(() => () => disposeHollowMetas(), [])
 
   const tick = useRef(0)
+  const lastFeed = useRef<MetaStats | null>(null)
   useFrame(state => {
     if (!body.current) return
-    updateHollowMeta(body.current, state.clock.elapsedTime, form, speed)
+    const feed = updateHollowMeta(body.current, state.clock.elapsedTime, form, speed)
+    lastFeed.current = feed
     // Sampled, not every frame: this is a readout, and a setState per frame is its own bug.
     if (onStats && ++tick.current % 30 === 0) {
       const surf = body.current.children.find(c => c.name === 'hollowField') as THREE.Mesh | undefined
@@ -67,7 +69,7 @@ export function HollowFused({ form, speed, onStats }: {
       let lo = Infinity, hi = -Infinity
       surf.updateMatrixWorld(true)
       for (let i = 0; i < n; i += 7) { SCRATCH.fromBufferAttribute(pos, i).applyMatrix4(surf.matrixWorld); if (SCRATCH.y < lo) lo = SCRATCH.y; if (SCRATCH.y > hi) hi = SCRATCH.y }
-      onStats({ verts: n, y: [n ? lo : 0, n ? hi : 0] })
+      onStats({ verts: n, y: [n ? lo : 0, n ? hi : 0], feed: lastFeed.current })
     }
   })
 
