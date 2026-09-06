@@ -98,6 +98,17 @@ function bounds(m: THREE.Mesh): THREE.Box3 {
     ok(Math.abs((box.max.x + box.min.x) / 2) < 0.35,
       `★ the ${f} body is centred on its own axis, not pushed to a wall of the cube`)
 
+    // ★★★ NOTHING MAY LEAVE THE GRID. A source outside the evaluation cube is not an error and not
+    // a warning — it is an ABSENCE, and the surface simply lacks that part while every other number
+    // looks correct. It shipped exactly that way: the caster's head sat at a normalised 1.07 and the
+    // form surfaced 0.64 of its own height, which read as "a caster does not fully resolve" and was
+    // in fact "a caster's head was never evaluated". ⚠ The two are indistinguishable from the output.
+    for (let i = 0; i < 10; i++) {
+      const st = updateHollowMeta(body, (i / 10) * 3.4, f, 1)!
+      ok(st.outside === 0, `★★ no ${f} source leaves the field cube at t=${((i / 10) * 3.4).toFixed(1)} (${st.outside} outside)`)
+    }
+
+
     // ★★ AND THE CASTER'S REACH IS SOLID — canon calls it the one part that nearly is, and glosses
     // it "reach is its body". Read off the rig rather than assumed: the surface must actually cover
     // where the reach blob sits, or the one thing canon is most specific about is missing.

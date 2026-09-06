@@ -41,9 +41,17 @@ import { createHollowMat, type HollowForm } from './hollow-look'
  */
 export const META_RES = 32
 
-/** The cube the field is evaluated in, in body units. A Hollow stands ~1.75 tall at form scale 1. */
-export const META_BOX = 2.4
-const META_CENTRE = new THREE.Vector3(0, 0.86, 0)
+/**
+ * The cube the field is evaluated in, in body units.
+ *
+ * ⚠⚠ IT HAS TO COVER A FLOATING CASTER, WHICH THE FIRST CUT DID NOT (2026-09-05). At centre 0.86 /
+ * box 2.4 the cube topped out at y 2.06, and a caster's head sits near 2.23 — it mapped to a
+ * normalised 1.07 and was simply never evaluated. That is why the caster surfaced 0.64 of its own
+ * height while every other number looked right: a source outside the grid is not an error, it is an
+ * absence. Found by the `outside` counter, which exists for exactly this and nothing else could see.
+ */
+export const META_BOX = 2.7
+const META_CENTRE = new THREE.Vector3(0, 1.05, 0)
 
 /**
  * Field falloff. `addBall` solves radius^2 = strength / subtract, so a ball of normalised radius r
@@ -53,7 +61,26 @@ const META_CENTRE = new THREE.Vector3(0, 0.86, 0)
 const SUBTRACT = 12
 
 /** Extra reach on each source, so neighbours actually merge instead of merely touching. */
-const FUSE = 1.28
+const FUSE: Record<HollowForm, number> = { warden: 1.55, stalker: 1.55, caster: 1.28 }
+
+/**
+ * A floor under a source's reach, in body units.
+ *
+ * ★★★ WHY IT IS NOT JUST A BIGGER `FUSE` (2026-09-05). At FUSE 1.28 the body reached full height and
+ * the LEGS still surfaced as separate lumps — the bead problem returning through the thinnest parts,
+ * because fusion depends on a source's own girth and a shin is half a chest. Raising FUSE alone fixes
+ * the legs by fattening EVERYTHING, which is the bulk Alex threw out in the first place. A floor
+ * couples only the thin parts: a shin merges with its knee while the trunk keeps the girth the field
+ * gives it. ⚠ The limb still reads thinner than the trunk — this sets the minimum REACH of a source,
+ * not its size, so the surface stays where the geometry puts it.
+ *
+ * ⚠⚠ AND NEITHER IT NOR THE WIDER FUSE APPLIES TO A CASTER, which the guard caught within a minute
+ * of each landing: with the floor on, and again with FUSE raised for everyone, the caster grew FEET
+ * (foot 0.95 against a surface floor of 0.87) and canon is explicit that it has none — it *"has not gathered enough matter to be pulled down"* and floats.
+ * The floor exists to fuse a body that gathered enough to HAVE limbs. A caster is the form that did
+ * not, so exempting it is the density axis rather than a special case.
+ */
+const MIN_REACH = 0.135
 
 const NAME = 'hollowField'
 let MATS: Record<HollowForm, THREE.MeshStandardMaterial> | null = null
@@ -160,7 +187,8 @@ export function updateHollowMeta(body: THREE.Group, t: number, form: HollowForm,
 
     const reach = Math.max(0, maxA - girth)            // how far the stretch pushes past a sphere
     const n = reach < girth * 0.35 ? 1 : reach < girth ? 2 : 3
-    const rn = (girth * FUSE) / META_BOX
+    const fuse = girth * FUSE[form]
+    const rn = (form === 'caster' ? fuse : Math.max(fuse, MIN_REACH)) / META_BOX
     const strength = SUBTRACT * rn * rn
     for (let i = 0; i < n; i++) {
       const f = n === 1 ? 0 : (i / (n - 1)) * 2 - 1     // -1 .. +1 along the long axis
