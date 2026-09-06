@@ -123,6 +123,33 @@ the LOD actually makes: with the deform off, the bones must still move. **7/7 ca
 And the geometry sweep was re-run after the wiring changed the module — the first re-run came back
 **BLIND, not survived**, because the anchor text had moved. The mutator refusing beats a green.
 
+### ⚠⚠ WHAT WAS VERIFIED, AND WHAT WAS NOT — the deploy line, honestly split
+**LIVE in `BUILD_ID b_vcuVdjxsMfPJhENB94Q`, 184 chunks, from `6aa798c` (pushed, tree clean, no
+dirty-tree warning).** Sweep **245 suites · 244 pass · 1 FAIL** — the bands cache, stale by exactly
+the three new voxel3d files, regenerated and re-run green alone at **119/0**. tsc 7 (baseline).
+The bench half is verified end to end: served md5 == disk == public tunnel byte-for-byte,
+`hollowSkin` and the `Modelled mesh` label present IN the served bytes, negative control clean,
+`/shimmer/dev/hollow` still 403 ungated.
+
+**★★★ THE WORLD HALF IS NOT CONFIRMED IN THE ARTIFACT, AND FOUR INSTRUMENTS IN A ROW COULD NOT SEE
+IT.** The chunk carrying `VoxelWorld`'s own strings does not carry `hollowSkin`; the world page's
+initial HTML lists none of the three chunks that do; the route's
+`page_client-reference-manifest.js` names none of them; neither does its `page.js.nft.json`.
+**Every one of those read as *the wiring did not ship*, and every one of them is blind** — the
+world is reached through a dynamic import whose graph none of those artifacts records.
+⚠⚠ **A POSITIVE CONTROL IS THE ONLY REASON THAT WAS NOT REPORTED AS A FINDING.** `locomotion.ts`,
+which `VoxelWorld` has imported for months, is **absent from the same manifest and the same trace**
+— so the absence of `hollow-mesh` is a statement about the instrument, not about the build. Without
+that control this board would now claim a shipped feature was missing, on a false negative, from
+the window that had just correctly built it. Sibling of the 08-31 chunk-grep entry, four doors at once.
+**What the artifact DOES support:** `hollowSkin` appeared in exactly **one** chunk in the previous
+build and in **three** in this one, and the only new importer of `hollow-mesh` in `6aa798c` is
+`VoxelWorld`. That is real evidence and it is inferential, which is a different claim from the
+byte-for-byte one made about the bench, and the two must not be collapsed.
+**The instrument that answers it is the world at night with a Hollow in front of you.** That needs
+a human. Until then: source wired, tsc clean, 60 asserts mutation-proven 7/7 on the wiring
+specifically — and *deployed ≠ rendering*.
+
 ### ⛔ OPEN, in order
 1. **★★ THE WARDEN'S COLLISION AND HIT SIZES WERE FITTED TO A 0.95-RADIUS BALL AND THE BODY IS NOW
    0.37 HALF-WIDTH.** `HOLLOW_FORMS.warden` carries `body: 0.85` (solid half-width) and
