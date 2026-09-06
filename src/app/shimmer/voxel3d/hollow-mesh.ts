@@ -100,7 +100,7 @@ export const hasFeet = (f: HollowForm) => DENSITY[f] > 0.5
  * `b` is the bone this ring rides. `mb`/`mw` blend a SECOND bone in — that blend is the entire
  * reason a knee bends instead of scissoring, and the rings on either side of a joint carry it.
  */
-interface Station {
+export interface Station {
   p: [number, number, number]
   r: number
   e?: [number, number]
@@ -110,7 +110,7 @@ interface Station {
 }
 
 type ChainKind = 'trunk' | 'arm' | 'leg' | 'foot'
-interface Chain { id: string; kind: ChainKind; radial: number; st: Station[] }
+export interface Chain { id: string; kind: ChainKind; radial: number; st: Station[] }
 
 /**
  * ★★ THE ANATOMY LIVES HERE AND NOWHERE ELSE, and every y is answerable to `REST`.
@@ -220,16 +220,26 @@ export function chainsFor(form: HollowForm): Chain[] {
  * trail off toward the ankle, its lower trunk thins below the gut, and the arm it reaches with gets
  * denser — *"the reaching limb is the only part of a caster that is nearly solid."*
  */
-function radiusFor(c: Chain, i: number, form: HollowForm): number {
+export function radiusFor(c: Chain, i: number, form: HollowForm): number {
   const base = c.st[i].r
   const trail = TRAIL[form]
   if (trail <= 0) return base
   if (c.kind === 'leg') return base * (1 - trail * (i / (c.st.length - 1)))
   if (c.kind === 'foot') return base * (1 - trail)
   if (c.kind === 'arm') return base * (1 + 0.25 * trail)
-  // trunk: thins downward, below the gut only
+  // ★★ TRUNK: TRAILS OFF OVER ITS WHOLE HEIGHT, AND HARDER BELOW THE GUT.
+  // ⚠ THIS USED TO THIN BELOW THE GUT *ONLY*, which left a caster's chest, shoulders and neck at
+  // FULL radius — byte-identical to a warden's, measured, and the trunk is the largest mass in the
+  // silhouette. Rendered side by side the caster read as a warden without feet: the three-density
+  // axis was being carried by feet and a little limb taper while the thing that dominates the
+  // read did not move. The brief asks for *"mostly the suggestion of a body, dense only where it
+  // is reaching"* — so the whole trunk has to answer the axis, not just the part under the gut.
+  // ★ `trail * 0.5` is in-family rather than to taste: a leg already reaches `1 - trail` at its
+  // tip, so half that over the trunk is the same axis, not a second dial. A warden is trail 0 and
+  // is therefore untouched, which is the control.
   const y = c.st[i].p[1]
-  return base * (1 - trail * 0.55 * Math.max(0, Math.min(1, (0.90 - y) / 0.34)))
+  const belowGut = trail * 0.55 * Math.max(0, Math.min(1, (0.90 - y) / 0.34))
+  return base * (1 - trail * 0.5 - belowGut)
 }
 
 /* ─── shared GPU state: one material per form for the whole world, never one per body ─────────── */

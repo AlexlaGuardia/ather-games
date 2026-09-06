@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs'
 import * as THREE from 'three'
 import {
   createHollowMeshBody, updateHollowMeshBody, disposeHollowMeshBody, disposeHollowMeshes,
-  meshParts, meshStats, chainsFor, hasFeet, SKIN,
+  meshParts, meshStats, chainsFor, hasFeet, radiusFor, SKIN,
 } from './hollow-mesh'
 import { hollowField, REST, FORM_SCALE, DENSITY, type Anchor } from './hollow-pose'
 import { BONE, boneName, type BoneName } from './hollow-body'
@@ -443,6 +443,44 @@ for (const f of FORMS) {
   ok(st.bones === 11, `${st.bones} bones`)
   disposeHollowMeshBody(body)
   disposeHollowMeshes()
+}
+
+// ── THE DENSITY AXIS REACHES THE TRUNK, WHICH IS THE LARGEST MASS IN THE SILHOUETTE ─────────────
+// ★★★ THE DEFECT THIS EXISTS FOR PASSED 60/60. The trunk rule thinned BELOW THE GUT ONLY, so a
+// caster's chest, shoulders and neck came out at full radius — arithmetically identical to a
+// warden's — and rendered side by side the caster read as a warden without feet. Every assert in
+// this file was true of that body: the anatomy asserts compare stations WITHIN one form (waist
+// against ribs, neck against shoulders) and every one of those ratios is preserved when two forms
+// share a trunk. ⚠ A suite can pin a shape perfectly and never ask whether two shapes DIFFER.
+//
+// The brief's named failure mode is "three distinct creature designs"; its answer is one substance
+// at three densities. That is a claim about the forms RELATIVE TO EACH OTHER, and until now nothing
+// asserted it about the part of the body that carries the read.
+{
+  const upperTrunk = (form: HollowForm) => {
+    const trunk = chainsFor(form).find(c => c.kind === 'trunk')!
+    // above the gut — precisely the region the old rule left untouched
+    const w = trunk.st.map((st, i) => ({ y: st.p[1], w: radiusFor(trunk, i, form) * (st.e?.[0] ?? 1) }))
+                      .filter(r => r.y > 0.90)
+    return w.reduce((a, r) => a + r.w, 0) / w.length
+  }
+  const warden = upperTrunk('warden'), stalker = upperTrunk('stalker'), caster = upperTrunk('caster')
+
+  ok(caster < stalker && stalker < warden,
+     `★ the three forms differ where it counts — upper trunk warden ${warden.toFixed(4)} > stalker ${stalker.toFixed(4)} > caster ${caster.toFixed(4)}`)
+
+  // ⚠ A FLOOR, NOT A FITTED VALUE, AND ASSERTED FROM THE DIRECTION THAT MATTERS. The bench renders
+  // ~366 px per world unit, so a trunk difference under a few percent is a pixel or two and cannot
+  // carry a read at the distance a Hollow is met. 5% is the point below which the axis stops being
+  // visible at all; it says nothing about how much MORE is right, which is Alex's look call.
+  const spread = 1 - caster / warden
+  ok(spread > 0.05,
+     `★ and by a margin a silhouette can carry — caster's upper trunk is ${(spread * 100).toFixed(1)}% narrower than a warden's`)
+
+  // ★ THE WARDEN IS THE CONTROL: trail 0 means the axis must not touch it at all.
+  const raw = chainsFor('warden').find(c => c.kind === 'trunk')!
+  ok(raw.st.every((st, i) => Math.abs(radiusFor(raw, i, 'warden') - st.r) < 1e-9),
+     '★ a warden is trail 0 and its trunk is untouched by the axis — the control that says the rule is keyed on density')
 }
 
 console.log(`   ${FORMS.length} forms · ${chainsFor('warden').length} chains`)
