@@ -70,10 +70,26 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
   const world = codeOnly(readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8'))
   const page = codeOnly(readFileSync(new URL('../dev/grey/page.tsx', import.meta.url), 'utf8'))
 
-  ok(/createHollowMat\(\)/.test(world), 'the world builds its materials from the shared factory')
-  ok(/createHollowGeo\(\)/.test(world), 'and its geometries')
+  // ★★ THE SEAM MOVED ONE HOP AND IS STILL A SEAM (2026-09-06, sprites lane). These two lines used
+  // to read `createHollowMat()` and `createHollowGeo()` straight out of `VoxelWorld`, and they went
+  // red on the commit that gave the world a MODELLED body — correctly. The world no longer builds a
+  // primitive at all; it builds `createHollowMeshBody`, and THAT module clones `createHollowMat`.
+  // ⚠ The claim being guarded never changed: the world and the page must draw from one source. So
+  // the assert follows the source rather than being deleted, and it now has to hold at BOTH ends —
+  // the world reaching the body factory, and the body factory reaching the look factory. Dropping
+  // the second half would leave a guard that passes while `hollow-mesh` invents its own grey.
+  const meshMod = codeOnly(readFileSync(new URL('./hollow-mesh.ts', import.meta.url), 'utf8'))
+  ok(/createHollowMeshBody\(/.test(world), 'the world builds the MODELLED body, not a primitive')
+  ok(/createHollowMat\(\)/.test(meshMod), 'and that body clones its materials from the shared factory')
+  ok(!/new THREE\.MeshStandardMaterial|setHex|new THREE\.Color/.test(meshMod),
+     '★ and invents no colour of its own — the emissive question is canon\'s and is still open')
   ok(!/IcosahedronGeometry|ConeGeometry\(0\.38/.test(world),
      '★ and holds NO inline copy of the silhouettes — that copy is what made the look unjudgeable')
+  // ⚠ `createHollowGeo` KEEPS A CONSUMER, and this asserts it rather than assuming it. The world was
+  // its main caller; if `/shimmer/dev/grey` ever stops calling it too, it becomes an exported
+  // primitive nobody draws — the unwired-module shape this line of work has now hit four times.
+  ok(/createHollowGeo\(\)/.test(page),
+     '⚠ the three flat silhouettes still have a consumer — the grey bench judges the LOOK against them')
   ok(!/MeshLambertMaterial\(\{ color: 0x3f423d/.test(world), 'nor of the greys')
 
   ok(/createHollowMat\(look\)/.test(page), 'the page builds from the same factory, varying the dials')

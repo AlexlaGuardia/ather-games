@@ -231,7 +231,13 @@ import { bucketOf, swingChips } from './break-fx-spec'
 // ONE file — its own dev page — so the fold has been empty the whole time. Same shape as the 98
 // unreachable build pieces and the collar prompt: built, tested, green, unreachable.
 import { createPlotRing } from './plot-ring-pass'
-import { createHollowGeo, createHollowMat } from './hollow-look'
+// ★★ THE WORLD DRAWS THE MODELLED BODY NOW (2026-09-06, sprites lane). `createHollowGeo` — an
+// icosahedron, a cone and an octahedron — is what every Hollow a player has ever met actually was,
+// while `hollow-pose` carried a full bipedal body plan that nothing in the game read. It is still
+// exported and still consumed by `/shimmer/dev/grey`, which judges the LOOK against three flat
+// silhouettes on purpose; it simply no longer stands in for a creature.
+import { createHollowMeshBody, updateHollowMeshBody, disposeHollowMeshBody, disposeHollowMeshes,
+         DEFORM_NEAR } from './hollow-mesh'
 import { withinCap } from '../voxel/plot'
 import { mistAt, mistPatchesNear, type MistPatch } from '../voxel/mist'
 import { loadMistLedger, saveMistLedger, recordWithdrawal, residentAt, quietMinutes, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
@@ -4924,8 +4930,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     flatMaterial.dispose()
     textured?.material.dispose()
     waterMaterial.dispose()
-    for (const gm of Object.values(hollowGeo)) gm.dispose()
-    for (const mt of Object.values(hollowMat)) mt.dispose()
+    // ⚠ THE BODIES' GEOMETRIES GO WITH THEM, ONE EACH. Unlike the old shared primitive, this
+    // surface writes its own vertices every frame, so a geometry cannot be shared between bodies
+    // and each one has to be released. The materials are shared and go once.
+    for (const hw of hollows.current) disposeHollowMeshBody(hw.mesh)
+    disposeHollowMeshes()
     tiles?.texture.dispose()
     greg.dispose()
     steam.dispose()
@@ -6026,7 +6035,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // ── the Hollows (body blockout — see hollows.ts for the canon) ────────────────────────────────
   // ONE shared geometry and material for every Hollow that will ever body (render-audit rule).
   // Guttering is expressed through per-mesh SCALE and a sink, never per-mesh material state.
-  const hollows = useRef<{ st: HollowState; mesh: THREE.Mesh }[]>([])
+  /**
+   * ⚠ `mesh` IS A GROUP, NOT A MESH, AND THE NAME IS KEPT DELIBERATELY. `createHollowMeshBody`
+   * returns an outer group the host owns (world position, facing, the spawn scale-up) wrapping a
+   * pivot the pose owns — that split is what stops two writers fighting over one transform. Renaming
+   * the field would touch five call sites for nothing; what matters is that nothing here reaches
+   * inside it. `px`/`pz` are last frame's position, and exist only to derive walking SPEED, which
+   * `HollowState` does not carry and the pose needs.
+   */
+  const hollows = useRef<{ st: HollowState; mesh: THREE.Group; px: number; pz: number }[]>([])
   const hollowClock = useRef(0)
   /**
    * The keeper's facing, refreshed ONCE per frame and read by every Hollow — the stalker's flee
@@ -6336,8 +6353,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // hub's biggest file. `dev/grey` and this world now build from the SAME dials — a preview that
   // re-derives can be perfectly correct while the game is wrong, which is the rule `dev/ring`
   // already states and the reason my first pass at this shipped a look nobody had looked at.
-  const hollowGeo = useMemo(() => createHollowGeo(), [])
-  const hollowMat = useMemo(() => createHollowMat(), [])
+  // ⚠ NO `useMemo` PAIR HERE ANY MORE. `hollow-mesh` owns its own shared materials — one per form
+  // for the whole world, built lazily and released by `disposeHollowMeshes` — because a SKINNED draw
+  // compiles its own shader program and cannot share the unskinned material the bench uses.
   const lastShot = useRef(0)
   const bloom = useRef(0)
   const semiLatch = useRef(false)   // semi-auto: one round per PRESS, not per frame held
@@ -7181,14 +7199,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // form from a parameter with no default would let a caller silently change the mix the
         // night is supposed to produce.
         const form = force ?? pickForm(Math.random())
-        const mesh = new THREE.Mesh(hollowGeo[form], hollowMat[form])
+        const mesh = createHollowMeshBody(form)
         mesh.scale.set(0.01, 0.01, 0.01)          // rises from nothing — the forming IS the tell
-        mesh.position.set(sx, sh + 1 + HOLLOW_HOVER, sz)
+        mesh.position.set(sx, sh + 1, sz)
         g.add(mesh)
         hollows.current.push({
           st: { id: `h${++hollowSeq.current}`, x: sx, y: sh + 1 + HOLLOW_HOVER, z: sz, form,
                 hp: HOLLOW_FORMS[form].hp, gutter: 0, phase: Math.random() * 6.28 },
-          mesh,
+          mesh, px: sx, pz: sz,
         })
         prof.current.mark('world:spawn')   // resume the parent zone — see the mark above
       }
@@ -7745,16 +7763,43 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         const pulse = 1 + Math.sin(now * 2.3 + st.phase) * 0.07
         hw.mesh.scale.x += (s * pulse - hw.mesh.scale.x) * Math.min(1, dt * 4)
         hw.mesh.scale.z += (s * pulse - hw.mesh.scale.z) * Math.min(1, dt * 4)
-        hw.mesh.scale.y += (1.55 * s * (1 + Math.sin(now * 1.9 + st.phase) * 0.05) - hw.mesh.scale.y) * Math.min(1, dt * 4)
-        hw.mesh.position.set(st.x, st.y - st.gutter * 0.9, st.z)
+        // ⚠ THE 1.55 IS GONE, AND ITS ABSENCE IS THE POINT. That factor existed to stretch a UNIT
+        // primitive into something body-shaped; the modelled body is already 1.63 blocks tall with
+        // its feet at y=0, so keeping it would make a two-and-a-half-metre Hollow.
+        hw.mesh.scale.y += (s * (1 + Math.sin(now * 1.9 + st.phase) * 0.05) - hw.mesh.scale.y) * Math.min(1, dt * 4)
+        // ★★ DRAWN AT THE GROUND LINE, AND THE FLOAT HAS EXACTLY ONE OWNER. `hollowStep` rests a
+        // body at ground + `hover` (0 for the walkers, 1.15 for the caster), and `hollowPose` ALSO
+        // lifts a caster — `floats` is what that field is for. Drawing at `st.y` would apply both
+        // and put the caster two metres up. Subtracting the hover here leaves the pose as the only
+        // thing that decides how a form sits, which is where canon's *"it never gathered enough
+        // matter to be pulled down"* actually lives.
+        // ⚠ So the SIM's y (st.y, hover included) and the DRAWN y differ by 0.25 for a caster. That
+        // is deliberate and it is a real gap: strike and touch math use st.y. At a 7.5 reach it is
+        // immaterial, and saying so is cheaper than a reader rediscovering it.
+        hw.mesh.position.set(st.x, st.y - HOLLOW_FORMS[st.form].hover - st.gutter * 0.9, st.z)
         const ddx = st.x - p.x, ddz = st.z - p.z
+        // ── ★★ THE WALK, AND THE LOD THAT MAKES IT AFFORDABLE ──────────────────────────────────
+        // Speed is derived from how far it actually moved, because `HollowState` carries none and a
+        // pose driven by the form's NOMINAL speed would stride while standing still.
+        const step = Math.hypot(st.x - hw.px, st.z - hw.pz)
+        hw.px = st.x; hw.pz = st.z
+        // ⚠ THE DEFORM IS THE EXPENSIVE HALF AND THE ONLY ONE THAT IS DISTANCE-GATED. Posing eleven
+        // bones is eleven rotations; the per-vertex sag rewrites ~700 vertices and re-uploads the
+        // buffer. Beyond DEFORM_NEAR the body still WALKS — the silhouette is the read at distance,
+        // and a Hollow frozen mid-stride on the horizon is the tell canon is built on — it simply
+        // stops re-guttering its skin. Cap is 12 bodies, so the near set is a handful.
+        updateHollowMeshBody(hw.mesh, now, st.form, dt > 0 ? step / dt : 0,
+                             ddx * ddx + ddz * ddz < DEFORM_NEAR * DEFORM_NEAR)
         if (st.gutter >= 1 || ddx * ddx + ddz * ddz > despawn * despawn) {
           // ⚠ CLEAR THE BAG ENTRY IN THE SAME BREATH AS THE BODY. `statuses.ts`: "an enemy that dies
           // must not carry a root into its respawn." Ids are never reused so this cannot mis-target,
           // but skipping it would leak one entry per Hollow for the whole session — a slow bag on a
           // long night, growing fastest exactly when the most is happening.
           statusBag.current = clearTarget(statusBag.current, st.id)
-          g.remove(hw.mesh); hollows.current.splice(i, 1)
+          // ⚠ THE GEOMETRY IS THIS BODY'S OWN and nothing else holds it — removing the group from
+          // the scene would leak one buffer per Hollow for the whole night, growing fastest exactly
+          // when the most is happening.
+          g.remove(hw.mesh); disposeHollowMeshBody(hw.mesh); hollows.current.splice(i, 1)
         }
       }
 

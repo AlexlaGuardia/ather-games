@@ -375,6 +375,52 @@ for (const f of FORMS) {
   ok((pageNC.match(/useState<'mesh'/g) ?? []).length === 1,
     "★ the modelled mesh is the bench's DEFAULT surface, declared exactly once; the other three are the comparison")
 
+  // ── ★★★ AND THE WORLD, WHICH IS THE CONSUMER THAT ACTUALLY MATTERS ────────────────────────
+  // A bench is a consumer; it is not the game. `VoxelWorld` spawned `new THREE.Mesh(hollowGeo[form])`
+  // — an icosahedron, a cone and an octahedron — for the entire life of the Hollows, while a full
+  // body plan sat in `hollow-pose` with nothing reading it. These asserts are the claim that the
+  // thing a PLAYER meets is the modelled body.
+  const world = codeOnly(readFileSync('src/app/shimmer/voxel3d/VoxelWorld.tsx', 'utf8'))
+  ok(/createHollowMeshBody\(/.test(world) && /updateHollowMeshBody\(/.test(world),
+     '★★★ THE WORLD BUILDS AND DRIVES THE MODELLED BODY — not a bench, the game')
+  ok(!/hollowGeo\[/.test(world),
+     '★★ and no longer spawns a primitive from `hollowGeo` — the three shapes every Hollow ever was')
+  // ⚠⚠ ANCHORED TO THE DESPAWN STATEMENT, NOT TO THE NAME. The first version of this assert read
+  // `disposeHollowMeshBody(hw.mesh)` anywhere in the file — and the UNMOUNT teardown contains that
+  // exact text, so deleting the despawn call left the guard green. Three of this block's asserts had
+  // the same defect and the mutation sweep found all three: a source-string check is satisfied by a
+  // MENTION, and an import line or a second call site is a mention.
+  ok(/g\.remove\(hw\.mesh\); disposeHollowMeshBody\(/.test(world),
+     '⚠ a DESPAWNED body releases its geometry in the same breath as leaving the scene. This surface writes its own vertices, so the buffer is per body and nothing else holds it — skipping it leaks one per Hollow for the whole night')
+  ok(/disposeHollowMeshes\(\)/.test(world), '⚠ and the shared materials go on unmount')
+  ok(!/1\.55 \* s/.test(world),
+     '★ the 1.55 unit-primitive stretch is GONE — the modelled body is already 1.63 blocks tall with its feet at y=0, and keeping it would ship a two-and-a-half-metre Hollow')
+  ok(/mesh\.position\.set\(st\.x, st\.y - HOLLOW_FORMS\[st\.form\]\.hover/.test(world),
+     "★★ the body is drawn at the GROUND LINE, hover subtracted — `hollowPose.floats` is the one owner of a caster's float, and drawing at `st.y` would apply it twice")
+  ok(/updateHollowMeshBody\([^;]{0,240}DEFORM_NEAR/.test(world),
+     '★★ the per-vertex deform is DISTANCE-GATED while the walk is not — at range the silhouette is the whole read, and a Hollow frozen mid-stride on the horizon breaks the tell canon is built on')
+
+  // ★★ AND THE CLAIM THE GATE ITSELF MAKES, which no source string can carry: with the skin
+  // deform OFF, the body must still WALK. Gating the whole update would freeze a distant Hollow
+  // mid-stride, and at range the silhouette is the entire read.
+  {
+    const far = createHollowMeshBody('warden')
+    const skin = far.getObjectByName(SKIN) as THREE.SkinnedMesh
+    const attr = skin.geometry.getAttribute('position') as THREE.BufferAttribute
+    const boneOf = (n: BoneName) => far.getObjectByName(boneName(n)) as THREE.Bone
+    updateHollowMeshBody(far, 0, 'warden', 1, false)
+    const rot0 = (Object.keys(BONE) as BoneName[]).map(n => boneOf(n).rotation.x)
+    const pos0 = Float32Array.from(attr.array as Float32Array)
+    updateHollowMeshBody(far, 0.9, 'warden', 1, false)
+    const rot1 = (Object.keys(BONE) as BoneName[]).map(n => boneOf(n).rotation.x)
+    ok(rot0.some((v, i) => Math.abs(v - rot1[i]) > 1e-4),
+       '★★★ A DISTANT BODY STILL WALKS — the pose is ungated, only the skin deform is')
+    ok(pos0.every((v, i) => v === (attr.array as Float32Array)[i]),
+       '★ and its skin is NOT re-deformed — which is the entire saving')
+    disposeHollowMeshBody(far)
+    disposeHollowMeshes()
+  }
+
   const mod = codeOnly(src('hollow-mesh.ts'))
   ok(/applyHollowPose\(pivot/.test(mod),
     '★★★ the pose is applied by `hollow-body.applyHollowPose`, the ONE writer')

@@ -85,21 +85,64 @@ Rendered headless (`tools/render/hollow_mesh_dump.mts` + `mesh_silhouette.py`, s
 Both fixed by profile, both invisible to every assert in the file, and the guard stayed green
 through both. ⚠ **A picture is an instrument this lane did not have and now does.**
 
+### ★★ AND IT IS IN THE WORLD (second commit, same session — Alex: *"wire it into the world"*)
+`VoxelWorld` spawned `new THREE.Mesh(hollowGeo[form], …)` for the entire life of the Hollows — an
+icosahedron, a cone and an octahedron — while a full bipedal body plan sat in `hollow-pose` with
+nothing reading it. It now builds `createHollowMeshBody`, drives it with the real walking speed
+(derived from how far the body actually moved, since `HollowState` carries none), and releases the
+per-body geometry on despawn and on unmount.
+- **The LOD is a SPLIT, not a gate.** Posing eleven bones is eleven rotations; the per-vertex sag
+  rewrites ~700 vertices and re-uploads the buffer, and the cap is twelve bodies. Beyond
+  `DEFORM_NEAR = 32` the body **still walks** and stops re-guttering its skin — at range the
+  silhouette is the entire read, and a Hollow frozen mid-stride on the horizon breaks the one tell
+  canon is built on.
+- **★ THE 1.55 IS GONE and its absence is load-bearing.** That factor stretched a UNIT primitive
+  into something body-shaped. The modelled body is already 1.63 blocks tall with feet at y=0, so
+  keeping it would have shipped a two-and-a-half-metre Hollow.
+- **★★ THE FLOAT NOW HAS EXACTLY ONE OWNER.** `hollowStep` rests a body at ground + `hover` (0 for
+  the walkers, 1.15 for the caster) and `hollowPose` ALSO lifts a caster — that is what `floats` is
+  for. Drawing at `st.y` would apply both and put the caster two metres up, so the draw subtracts
+  the hover and the pose decides how a form sits. ⚠ The sim's y and the drawn y therefore differ by
+  0.25 for a caster; strike and touch use `st.y`. At a 7.5 reach it is immaterial, and saying so is
+  cheaper than a reader rediscovering it.
+- `hollow-look.test.ts` went red on two asserts, **correctly** — the world no longer builds from
+  `createHollowMat`/`createHollowGeo` directly. The seam moved one hop and is still a seam, so the
+  assert follows the source and now holds at BOTH ends (world → body factory → look factory), plus
+  a new one that `createHollowGeo` still has a consumer (`/shimmer/dev/grey`) rather than becoming
+  an exported primitive nobody draws.
+
+### ⚠⚠ THE WORLD MUTATION SWEEP: 4 OF 7 SURVIVED, AND THREE WERE ONE DEFECT
+**A source-string assert is satisfied by a MENTION, and an import line or a second call site is a
+mention.** `disposeHollowMeshBody(hw.mesh)` appears in the unmount teardown too, so deleting the
+DESPAWN call left the guard green — a leak of one geometry per Hollow per night, invisible.
+`HOLLOW_FORMS[st.form].hover` appears in `window.__hollows()`, so removing it from the draw was
+invisible. `DEFORM_NEAR` appears in the import, so removing the LOD gate was invisible. All three
+now anchor on the STATEMENT. The fourth survivor was **a mutation that changed nothing** (an early
+return placed after the call it was meant to skip) — re-aimed, and the guard now asserts the claim
+the LOD actually makes: with the deform off, the bones must still move. **7/7 caught.**
+And the geometry sweep was re-run after the wiring changed the module — the first re-run came back
+**BLIND, not survived**, because the anchor text had moved. The mutator refusing beats a green.
+
 ### ⛔ OPEN, in order
-1. **Alex looks at it and calls the look** — it is the bench default at `/shimmer/dev/hollow`.
-2. **The world still spawns an icosahedron / cone / octahedron** (`VoxelWorld.tsx` → `hollowGeo`).
-   Wiring wants an LOD call first: this surface writes its own vertices every frame, so it is the
-   NEAR body and the blob rig stays the far one.
+1. **★★ THE WARDEN'S COLLISION AND HIT SIZES WERE FITTED TO A 0.95-RADIUS BALL AND THE BODY IS NOW
+   0.37 HALF-WIDTH.** `HOLLOW_FORMS.warden` carries `body: 0.85` (solid half-width) and
+   `radius: 1.15` (projectile hit sphere) — so a warden has an invisible wall a body-width out from
+   its shoulders, and can be shot from as far. The stalker is fine (`body: 0.34` against a ~0.35
+   visual). **Not changed: shrinking `body` makes a warden easy to slip past, and "you must go
+   around me" is the sentence that form exists to be.** Alex's call.
+2. **Alex looks at it** — bench at `/shimmer/dev/hollow`, and in the world at night.
 3. **The caster's trunk still reads solid.** The brief wants *"dense only where it is reaching"*;
-   `TRAIL` currently thins its legs and only the trunk below the gut.
+   `TRAIL` thins its legs and only the trunk below the gut.
 4. Too DARK in daylight since Lambert→Standard (open from 09-05, Alex's call).
-5. `emissive` remains an open canon conflict; this commit deliberately did not touch the material,
-   and the guard asserts element-by-element that it did not.
+5. `emissive` remains an open canon conflict; neither commit touched the material, and the guard
+   asserts element-by-element that they did not.
 
 ### Files
-`voxel3d/hollow-mesh.ts` (new) · `voxel3d/hollow-mesh.test.ts` (new, 51) ·
+`voxel3d/hollow-mesh.ts` (new) · `voxel3d/hollow-mesh.test.ts` (new, 60) ·
 `voxel3d/HollowMesh.tsx` (new) · `voxel3d/hollow-body.ts` (exports `BONE`, `BoneName` and the
 extracted `applyHollowPose` — ONE writer for the walk, two skins) ·
+`voxel3d/VoxelWorld.tsx` (the world builds and drives the modelled body; no `hollowGeo` primitive) ·
+`voxel3d/hollow-look.test.ts` (the seam, one hop further) ·
 `dev/hollow/page.tsx` · `tools/render/hollow_mesh_dump.mts` + `tools/render/mesh_silhouette.py` (new)
 
 ## ⛏ Shimmer — **THE DESCENT: A CACHE IS A PLACE, NOT A LOOT TABLE** (2026-09-05, hub lane) · *Last touched 2026-09-05 — **LIVE in `BUILD_ID fp02gUnav1cCP2v71pLP3`, 182 chunks**, from `001f7c5`: **corridors widened to 5 wide on Alex's call**. Verified the geometry itself in the SERVED worker bytes — `id:"run",w:5,d:9` — plus served == disk on the worker and its referencing chunk, the page asking for the new worker hash (1 hit) and not the old (0), tunnel 200. **Merged-head sweep 240/240 · 0 FAIL · 0 KILLED at `f2ac886`**, tree clean both ends. ⚠ See *A TUNING CHANGE CAN DISARM A GUARD* below. Before that: `iBG8x6sWDZEymiMcuu6Tq` from `8a5c4ce`, pushed, 0 unpushed, tree clean. **Merged-head sweep 240 suites · 240 pass · 0 FAIL · 0 KILLED, started AND ended at `778e04a`** with the tree clean at both ends — the first run covering BOTH lanes (mine predated sprites' commit and theirs predated mine; identical suite counts would have read as full coverage from either side alone). Served == disk on three marker chunks AND the worker, markers present IN the served bytes, positive control `corridor` hits, negative control (retired worker) 404s, public tunnel 200. ⚠ **The first build was KILLED MID-WRITE by the memory guard** — see *A KILLED BUILD IS NOT A NO-OP* below. `ruin-hash.mts` **`53d5fde6d6bd79fdba5c` before AND after — no existing ruin moved.** warren **60/0**, mutation-swept: M1 two-pass collapse, M4 shaft-before-rooms, M5 cover 0, M6 envelope 50, M8 cache-as-furniture, M9 SITE_REACH literal, M11/M12 the two attrs rows — all fire. ruins 726/0 (re-proved: clip shrunk to 6 still shows 51 missed cells), vessel-drops 64/0, console 111/0, render-audit 150/0, editor-bands 119/0, purity green, tsc 7 (baseline), canon exit 0.*

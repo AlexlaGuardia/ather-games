@@ -75,6 +75,20 @@ const TRAIL: Record<HollowForm, number> = {
   caster: 0.75 * (1 - DENSITY.caster),
 }
 
+/**
+ * How near a Hollow must be before its SKIN is re-deformed each frame, in blocks.
+ *
+ * ★★ THE POSE IS NOT GATED AND THE DEFORM IS, and the split is the whole LOD. Posing eleven bones
+ * is eleven rotations; the per-vertex sag rewrites ~700 vertices and re-uploads the buffer, and the
+ * world may hold twelve bodies. Beyond this the body still WALKS — at distance the silhouette is
+ * the entire read, and a Hollow that stopped moving on the horizon would break the one tell canon
+ * is built on. What it stops doing is re-guttering its skin, which nothing can resolve out there.
+ *
+ * ⚠ MEASURED IN THE HORIZONTAL PLANE, like every other range in the host. Despawn is
+ * `viewRadius * SECTION` (96 blocks at r=6), so this is a small fraction of the live set.
+ */
+export const DEFORM_NEAR = 32
+
 /** A form gathered enough to need feet. The brief's sentence, as a predicate. */
 export const hasFeet = (f: HollowForm) => DENSITY[f] > 0.5
 
@@ -491,12 +505,17 @@ export function createHollowMeshBody(form: HollowForm): THREE.Group {
  * names beside eleven angles is exactly the shape that drops seven of them on the floor the day
  * somebody adds a twelfth — which is what happened to the blob rig on 09-05 and stayed green.
  */
-export function updateHollowMeshBody(body: THREE.Group, t: number, form: HollowForm, speed = 0): void {
+export function updateHollowMeshBody(
+  body: THREE.Group, t: number, form: HollowForm, speed = 0, deformSkin = true,
+): void {
   const st = STATE.get(body)
   const pivot = body.children.find(c => c.name === PIVOT) as THREE.Group | undefined
   if (!st || !pivot) return
   applyHollowPose(pivot, hollowPose(t, form, speed))
-  deform(st, t, form)
+  // ⚠ THE WALK IS UNCONDITIONAL AND THE SKIN IS NOT — see `DEFORM_NEAR`. A caller that gates the
+  // whole update instead would freeze a distant Hollow mid-stride, which is the opposite of what
+  // costs nothing to keep.
+  if (deformSkin) deform(st, t, form)
 }
 
 /**
