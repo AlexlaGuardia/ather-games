@@ -147,6 +147,82 @@ OOM kill is telling you something to READ, not debris to clean up.**
 
 ## 🕯 Shimmer — **THE HOLLOWS SHIP AS THREE PRIMITIVES, AND THE BRIEF ASKS FOR SOMETHING THAT LOSES ITSELF** (2026-09-04, sprites lane) · *Last touched 2026-09-05 ~13:20 ET (sprites) — **THE HOLLOWS GOT BODIES.** `778e04a` the bipedal field (it was a BALL: gut peak r **1.19** on a body 1.56 tall, one sphere enclosing head AND feet, limbs at 6-43% presence, the caster's reach anchor — which canon says IS its body — present in **1%** of frames; ★★★ the guard asserted MASS CONSERVATION and pouring the whole body into one ball conserves mass perfectly). `f2ac886` the skeleton solved (the marbles were GEOMETRY not material — every chain at **negative overlap**, `chest->armL` -0.81, the spheres were not touching; ★★★ and all four silhouette asserts passed straight through it, because taller-than-wide / no-blob-too-big / shins-outside-the-trunk are every one of them TRUE OF A DISCONNECTED PILE. One condition per bone, `BASE_a + BASE_b >= 1.343 x length`, floors DERIVED from the skeleton. Worst joint -1.75 -> **+0.16**). `e850580` **the bone rig — THE HOLLOW HAD NEVER MOVED**: `hollowPose` computes nine fields, `updateHollowBody` read TWO; seven angles computed every frame and dropped on the floor, while `hollow-pose.test.ts` sat green at 34/0 — ⚠⚠ **a guard on a PRODUCER says nothing about whether a CONSUMER exists.** 11 bones, `MoglinDoll`'s rigid-part technique (no SkinnedMesh, no weights, no art), which is also what claymation IS. hollow-pose **34/0**, hollow-body **27/0** (new), 9 mutations fire across both incl. the original bug, tsc 7 (baseline). ⚠ **CORRECTED 2026-09-05 ~14:0x ET (sprites) — THE LINE BELOW WAS ALREADY FALSE WHEN IT WAS WRITTEN, and it is kept because the wrong reading is the useful artifact.** `e850580` (16:44Z) WAS in a build: hub deployed `AmCgu9s3lhQnAWi9Kk3p0` at 17:15:51Z from `f3b6f14`, 31 minutes after it, and this note was written ~5 minutes AFTER that deploy by a window that did not know it had happened. ★★★ **AND THE REASON IT LOOKED ABSENT IS THE REAL FINDING: `hollow-body.ts` HAD NO CONSUMER.** Only its own test imported it — the bench drew `HollowDoll`, `VoxelWorld` drew an icosahedron — so the rig shipped and nothing rendered it, behind 27 green asserts. *A guard on a PRODUCER says nothing about whether a CONSUMER exists*, which is the lesson `e850580` itself was written for, arriving one level out. Fixed in `41cc5f3`: `voxel3d/HollowRig.tsx` hosts the rig in R3F, `/shimmer/dev/hollow` **defaults to BONES** with the blob doll beside it for a MOTION comparison, and `hollow-body.test.ts` now goes red if the module ever loses its consumer again (imported · built · driven from a frame loop · disposed · MOUNTED by a page; mutation-swept four doors including a comment-only negative control that stays red). ⚠ Import paths must be read RAW and line-anchored, never through `codeOnly` — it blanks STRING LITERALS as well as comments, so a path read through it is empty whether or not the import is there, which fails green-side. ★ Third module found unwired in one day across three windows (`hollowPose`'s seven dropped angles · this rig · hub's `crucible-phases.ts`, 185 lines and 42/0 green, imported by nothing for weeks) — that is a law, not a coincidence. ⚠ hub's had the extra turn: THREE other files carried comments citing it as done. Checked mine — no source file cites the rig, only this board did. ✅ **LIVE in `BUILD_ID -nJ86t8nvHL29atL4XLMS`, 188 chunks** (hub's build off the merged head, carrying `41cc5f3`; `git merge-base --is-ancestor` confirmed). Verified from the sprites side: served md5 == disk md5 byte-for-byte on `c86b39fd661d1ced.js` (39121 B), **both button labels present in the SERVED bytes**, and `hollowPivot` — `hollow-body.ts`'s own pivot name — in the same served chunk, which is the assert that actually matters here: it says the RIG MODULE is bundled and reachable from the page, not merely that the page text changed. Negative control `Bones (12-bone rig)` returns 0, so the search discriminates; positive control `The Hollow Bench` hits, so it can see the page at all. `/shimmer/dev/hollow` answers **403 ungated** (owner gate intact). **THE SUPERSEDED READING, kept:** ⚠ **`e850580` is committed and NOT in a build** — LIVE is `fp02gUnav1cCP2v71pLP3` from `001f7c5`, which carries `f2ac886`. ⏸ **Bench only, wiring HELD on Alex's word** — the world still draws an icosahedron/cone/octahedron; the `VoxelWorld` change is 5 edits, ready, with raycast/transform/pooling already checked. ⚠ **A TUNING CHANGE DISARMED TWO ASSERTS WITHOUT TOUCHING THEM** — `SHED_FLOOR->0` stopped firing once the joint floor outranked it (measured: joint wins **74.9/75.5%**, SHED_FLOOR **0.0%**), re-pointed at the caster where it binds; `FUSE->0` fires **never** and the blind spot is written INTO the test rather than given a manufactured witness. Caught only because hub warned mid-pass to re-mutate AFTER the geometry change. ★ **A mutation sweep from before a tuning change is a statement about the OLD geometry.** **KIT is a canon gap** filed `[OPEN]` with Magii (`a87fb9e`) with concept art so it is ruled against pictures (18 plates, $0.05): https://claude.ai/code/artifact/e2224937-4957-432a-82ab-101895fc10f4 — Alex proposed samurai/ninja/mage, which collides with *no armour, no cloth, no ornament*, *three distinct creature designs*, and *always visibly losing itself*. ⛔ **NEXT: Alex watches it WALK on `/shimmer/dev/hollow`** — it moves now and still reads lumpy; if blob-on-bones is wrong in MOTION the substrate is wrong, and that is a Magii conversation because *edges never resolve* is what put us in blobs. Then: the warden form needs `picaso`/Blender (flux returns an ogre FACE on every heavy humanoid, 6 attempts across 3 framings). Before that: `cd262eb` + `6544458` pushed, **LIVE in `BUILD_ID NYpfHwONa06PKyy6J8N8K`, 182 chunks**, built from `f2bd4bf` (carries hub's vessel drop tables + tier icons). **Sweep 238 suites · 238 pass · 0 FAIL · 0 KILLED** at `f2bd4bf`, exit read off the file not a pipe. hollow-pose 25/0 mutation-swept 10 ways all 10 fire; hollow-look 43/0, hollows 106/0, hollow-visible 14/0, hollow-wiring 73/0, hollow-voice 26/0 all still green; render-audit 150/0, rule-three 7/0, portrait-art 91/0, dev-pages 232/0, dev-eye 28/0, tsc 7 (baseline), canon exit 0. Served verified through a cookie jar: 403 ungated / 200 owner on the public tunnel, five positive controls in the page, pose anchors + the borrowed material in served chunk `177810c12e4ffda9.js`.*
 
+**Left off (2026-09-05 → 09-06 ~02:00 ET, sprites lane):** ⛔ **ALEX'S VERDICT ON THE FUSED BODY:
+*"it still looks the same."*** He is right and the diagnosis matters more than the work: **the
+SURFACE was rewritten three times and the BODY never changed.** It is still eighteen spheres hung on
+a stick figure. Fusing the joins removes creases; it cannot invent anatomy, and at the size a Hollow
+is met the difference is nearly invisible. Every number cited tonight — vertex counts, heights,
+`0 outside` — measures whether the SURFACING is correct, never whether the SHAPE is good. ★ When he
+said *"the blobs arent the play... try a 3d model version"* he meant stop building it out of blobs,
+and the seat heard "render the blobs better". **NEXT is a modelled mesh on the existing rig**, and
+two things landed today that make it cheap: image-to-3D reliably strips the face / cloth / boots
+when handed a SILHOUETTE instead of a prompt, and the 11-bone rig works and drives a walk.
+
+**LIVE: `BUILD_ID VuDNsI0odv_dH-28AFORV` from `3fe9618` (HEAD, tree clean, 0 unpushed; hub's
+`e2974e0` + `24d6a19` ride in it). Sweep 243/243 · 0 FAIL · 0 KILLED, gated on `$?`. tsc 7 baseline.**
+Bench `/shimmer/dev/hollow` now has **Fused field / Bones (spheres) / Blob doll** and prints the
+field's own feed (`verts · blobs → balls, outside, body y`), which is the only instrument that can
+see inside a mounted R3F body — the scene lives in R3F's own reconciler, unreachable from the DOM.
+
+**Shipped tonight, in order — four defects that were live behind green suites:**
+1. **The bone rig had NO CONSUMER.** `hollow-body.ts` was imported by nothing but its own test, so
+   `e850580` shipped 240 lines of skeleton that nothing drew. The board meanwhile asserted the
+   OPPOSITE (*"not in a build"*) — it was live and invisible. `HollowRig` + a guard that fails if the
+   module loses its consumer again.
+2. **EIGHT BONE NAMES WERE ALSO BLOB NAMES** (chest head armL armR thighL shinL thighR shinR).
+   `getObjectByName` returns the first match and bones are added first, so every per-blob write
+   landed on a BONE: head world scale **0.012 against 0.24**, world y **0.60 where the field puts it
+   at 1.42** — a body drawn at ~5% size. ⚠⚠ Green at 33 throughout, because the TEST's lookup made
+   the same mistake and read back what the writer wrote. Bones namespaced via an exported `boneName()`.
+3. **The ghost was a fix undone one module downstream.** `hollow-pose.ts` argues at length that a
+   walker is *"nearly opaque — the brief, not a preference"* and sets per-blob alpha 0.86..1;
+   `hollow-look` multiplied 0.82 and the bucket ramp pulled it to **0.72**, across eighteen
+   overlapping spheres each drawing its outline through the ones in front. Alex: *"they all need to
+   be a solid texture."* All three forms solid; density is carried by MASS, which is what canon says.
+4. **The material could not express its own brief.** `MeshLambertMaterial` has NO specular term, so
+   *"specular high, tinted entirely by the environment"* was unrepresentable — every look call ever
+   made against it was a call about a shadow puppet. Now Standard, roughness 0.34 / metalness 0.10,
+   with a seeded 4-octave noise surface driving normal AND roughness from one shared texture.
+
+**Decisions:**
+- **The sphere body STAYS as the cheap one.** A fused Hollow rebuilds ~2,400–3,000 verts per frame;
+  a sphere body is nearly free. Which body a distance gets is the world's call, not the bench's.
+- **`MIN_REACH` and the wider `FUSE` are walker-only.** With either applied to a caster it grew FEET
+  (foot 0.95 against a surface floor of 0.87) and canon says it *"never gathered enough to need
+  them"*. Exempting it is the density axis, not a special case.
+- **Meshy is NOT the blocker and never was.** Three text-to-3D attempts proved prompting is dead —
+  negatives ignored (face, loincloth, boots), counts ignored (asked two columns, got one). The
+  pipeline was built, working and never pointed at a creature. Image-to-3D follows a silhouette.
+
+**⛔ OPEN, in order:**
+1. **A modelled mesh on the 11-bone rig.** The actual ask. Blender sculpt or silhouette-driven
+   image-to-3D; the walk already exists to drive it.
+2. **The Hollow reads too DARK in daylight** — a real consequence of Lambert→Standard. Two different
+   fixes that mean different things: lift the diffuse grey (the creature is lighter) or lift the
+   bench lighting (the room was dim). Alex's call.
+3. **Fusion width per form** is a guess — walkers surface at 0.90 of field height, caster 0.74.
+4. **Magii rules the KIT gap** (`a87fb9e`, 18 concept plates). 5. `emissive` stays an open conflict.
+
+**★★★ WHAT TONIGHT ACTUALLY TAUGHT — every one of these went green while wrong:**
+- **A guard on a PRODUCER says nothing about whether a CONSUMER exists** (the unmounted rig).
+- **A test and the code can make the SAME mistake and therefore agree** (the bone-name collision).
+- **A fix applied in one module can be undone in another**, each correct in its own frame (opacity).
+- **`Box3.setFromObject` reads the WHOLE preallocated buffer** — marching cubes fills a few thousand
+  of 30,000, so the box always contained the origin and reported a body in the wrong place and size.
+  It failed toward ALARM: it read as a finding about the feature and was a fact about the instrument.
+- **An assert whose two quantities scale together cannot discriminate.** `h < want * 0.9` compared
+  the surface to the FIELD'S OWN extent; fusing 4× wide and removing the caster's density reduction
+  both left it green. Replaced with WHICH ANCHORS resolve, which fires.
+- **A source outside the evaluation cube is an ABSENCE, not an error.** The caster's head mapped to a
+  normalised 1.07 and was never evaluated; the form surfaced 0.64 of its height, which read as canon
+  (*"the rest trails off"*) and was in fact *"its head is off the grid"*. Indistinguishable from output.
+- **A guard that builds an UNPARENTED body cannot see a frame bug**, and the game never places one at
+  the origin. Ball positions were read in WORLD space; the bench mounts at x=−4; every ball landed
+  outside the cube and the deploy drew nothing, silently.
+- ⚠⚠ **AND I DEPLOYED PAST MY OWN GATE**: `sweep; tail; coord build` — printing a sweep's output is
+  not reading its exit code, so a real `render-audit` FAIL went live. Every deploy after that is
+  `[ $? -eq 0 ] || exit`. Same shape as `find | wc -l`, performed by the window that keeps citing it.
+
 **Left off:** Alex asked for Hollows next, and whether Meshy could do them. Measuring first turned up
 two things worth writing down before any art call.
 
