@@ -39,7 +39,7 @@
  * Run: `npx tsx src/app/shimmer/voxel3d/hollow-body.test.ts`
  */
 import * as THREE from 'three'
-import { hollowPose, hollowField, REST, FORM_SCALE, type Anchor, type Blob } from './hollow-pose'
+import { hollowPose, hollowField, REST, FORM_SCALE, type Anchor, type Blob, type HollowPose } from './hollow-pose'
 import { createHollowMat, type HollowForm } from './hollow-look'
 
 /** How many shared alpha buckets stand in for per-blob opacity. Mirrors `HollowDoll`'s bench value. */
@@ -105,13 +105,13 @@ function shared(): { sphere: THREE.SphereGeometry; mats: Record<HollowForm, THRE
  * art and no external tool. It is also what claymation IS — rigid parts posed, never a skin
  * deformed — and a Hollow must *"never hold a crisp shape"*, which a skinned mesh is built to do.
  */
-type BoneName =
+export type BoneName =
   | 'root' | 'chest' | 'head'
   | 'armL' | 'foreL' | 'armR' | 'foreR'
   | 'thighL' | 'shinL' | 'thighR' | 'shinR'
 
 /** Each bone's ORIGIN is an anchor's rest position, and its parent is the bone above it. */
-const BONE: Record<BoneName, { at: Anchor; parent: BoneName | null }> = {
+export const BONE: Record<BoneName, { at: Anchor; parent: BoneName | null }> = {
   root: { at: 'hip', parent: null },
   chest: { at: 'chest', parent: 'root' },
   head: { at: 'head', parent: 'chest' },
@@ -179,6 +179,35 @@ const PIVOT = 'hollowPivot'
 export const boneName = (n: string) => `hollowBone_${n}`
 
 /**
+ * Write a pose onto a pivot's bones. THE ONE PLACE any surface applies the walk.
+ *
+ * ★★ THE WALK, FINALLY REACHING THE SCENE GRAPH (2026-09-05). Every angle the pose computes is
+ * applied here; if you add one to `HollowPose`, add it here too, or it joins the seven that were
+ * being thrown away when this file read `bodyY` and `lean` and dropped the other seven on the
+ * floor. `walk-reaches-the-rig` in the guard fails if any of these stops moving.
+ *
+ * ★★★ AND IT IS EXPORTED BECAUSE A SECOND SURFACE NOW EXISTS (2026-09-06, the modelled mesh).
+ * `hollow-mesh.ts` drives the SAME eleven bones with the SAME pose, and a second copy of this
+ * eleven-line block is the hand-kept mirror in its most tempting form: two tables of bone names
+ * next to two tables of angles, agreeing perfectly right up until somebody adds a twelfth angle to
+ * one of them (PATTERNS 2026-08-22). One writer, two skins.
+ */
+export function applyHollowPose(pivot: THREE.Object3D, p: HollowPose): void {
+  pivot.position.y = p.bodyY
+  const set = (n: BoneName, rx: number, rz = 0) => {
+    const g = pivot.getObjectByName(boneName(n))
+    if (g) { g.rotation.x = rx; g.rotation.z = rz }
+  }
+  set('root', p.lean)
+  // Canon: the head has no face and does not look at you. What moves is the TILT of the mass.
+  set('head', 0, p.headTilt)
+  set('armL', p.armL); set('armR', p.armR)
+  set('foreL', p.elbowL); set('foreR', p.elbowR)
+  set('thighL', p.thighL); set('thighR', p.thighR)
+  set('shinL', p.shinL); set('shinR', p.shinR)
+}
+
+/**
  * One Hollow's body: an outer group for the world to place, an inner pivot for the pose, and twelve
  * blobs. Blob order matches `hollowField`'s, and `updateHollowBody` relies on that.
  */
@@ -232,23 +261,7 @@ export function updateHollowBody(body: THREE.Group, t: number, form: HollowForm,
   const field = hollowField(t, form)
   const scale = FORM_SCALE[form]
 
-  pivot.position.y = p.bodyY
-
-  // ★★ THE WALK, FINALLY REACHING THE SCENE GRAPH. Every angle the pose computes is applied here;
-  // if you add one to `HollowPose`, add it here too, or it joins the seven that were being thrown
-  // away. `walk-reaches-the-rig` in the guard fails if any of these stops moving.
-  const bone = (n: BoneName) => pivot.getObjectByName(boneName(n)) as THREE.Group | null
-  const set = (n: BoneName, rx: number, rz = 0) => {
-    const g = bone(n)
-    if (g) { g.rotation.x = rx; g.rotation.z = rz }
-  }
-  set('root', p.lean)
-  // Canon: the head has no face and does not look at you. What moves is the TILT of the mass.
-  set('head', 0, p.headTilt)
-  set('armL', p.armL); set('armR', p.armR)
-  set('foreL', p.elbowL); set('foreR', p.elbowR)
-  set('thighL', p.thighL); set('thighR', p.thighR)
-  set('shinL', p.shinL); set('shinR', p.shinR)
+  applyHollowPose(pivot, p)
 
   // The substance still sheds and re-gathers on top of the walk — the two are independent, which is
   // the point: a Hollow is losing itself WHILE it comes for you, not instead of.

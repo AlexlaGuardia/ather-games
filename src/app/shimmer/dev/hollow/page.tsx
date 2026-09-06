@@ -39,6 +39,7 @@ import { OrbitControls, CubeCamera } from '@react-three/drei'
 import { HollowDoll, type HollowMode } from '../../voxel3d/HollowDoll'
 import { HollowRig } from '../../voxel3d/HollowRig'
 import { HollowFused } from '../../voxel3d/HollowFused'
+import { HollowMesh } from '../../voxel3d/HollowMesh'
 import { HOLLOW_LOOK, type HollowForm } from '../../voxel3d/hollow-look'
 import { EYE_STAND } from '../../voxel3d/locomotion'
 
@@ -58,10 +59,14 @@ export default function HollowBenchPage() {
   const [mode, setMode] = useState<HollowMode>('borrowed')
   const [x, setX] = useState(-4)          // -6 greyfield … +6 tended plot
   const [speed, setSpeed] = useState(0.8)
-  // ⚠ BONES IS THE DEFAULT. `hollow-body.ts` is what canon has ruled since 08-15 (upright,
-  // bipedal, plantigrade); the blob doll is the thing it replaces, kept beside it so the two can be
-  // told apart in MOTION rather than from memory.
-  const [rig, setRig] = useState<'fused' | 'bones' | 'blob'>('fused')
+  // ⚠⚠ THE MODELLED MESH IS THE DEFAULT, AND THE OTHER THREE ARE KEPT AS THE COMPARISON.
+  // All three of the others are the SAME eighteen spheres wearing different surfacing — a doll, a
+  // bone-rigged doll, a marching-cubes skin over the doll — which is exactly why Alex looked at an
+  // evening of work on the third and said *"it still looks the same."* `hollow-mesh.ts` is the
+  // first one whose SHAPE is different, so it opens; the rest stay so the difference can be seen in
+  // motion rather than argued from memory.
+  const [rig, setRig] = useState<'mesh' | 'fused' | 'bones' | 'blob'>('mesh')
+  const [mstats, setMstats] = useState<{ verts: number; tris: number; bones: number } | null>(null)
   const [stats, setStats] = useState<{ verts: number; y: [number, number]; feed: import('../../voxel3d/hollow-meta').MetaStats | null } | null>(null)
   const [night, setNight] = useState(true)
   const [eye, setEye] = useState(true)
@@ -88,6 +93,13 @@ export default function HollowBenchPage() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
           {FORMS.map(f => <Btn key={f} on={form === f} onClick={() => setForm(f)}>{f}</Btn>)}
           <span style={{ width: 10 }} />
+          <Btn on={rig === 'mesh'} onClick={() => setRig('mesh')}>Modelled mesh</Btn>
+          {rig === 'mesh' && (
+            <span className="gx-value" style={{ ...chip, cursor: 'default', fontVariantNumeric: 'tabular-nums',
+              color: mstats && mstats.verts > 0 ? '#8fbf8a' : '#d08a8a' }}>
+              {mstats ? `${mstats.verts} verts · ${mstats.tris} tris · ${mstats.bones} bones` : 'not mounted'}
+            </span>
+          )}
           <Btn on={rig === 'fused'} onClick={() => setRig('fused')}>Fused field</Btn>
           {rig === 'fused' && (
             <span className="gx-value" style={{ ...chip, cursor: 'default', fontVariantNumeric: 'tabular-nums',
@@ -146,7 +158,8 @@ export default function HollowBenchPage() {
           <CubeCamera resolution={64} frames={Infinity} position={[x, 1.1, 0]}>
             {(texture) => (
               <group position={[x, 0, 0]}>
-                {rig === 'fused' ? <HollowFused form={form} speed={speed} onStats={setStats} />
+                {rig === 'mesh' ? <HollowMesh form={form} speed={speed} onStats={setMstats} />
+                  : rig === 'fused' ? <HollowFused form={form} speed={speed} onStats={setStats} />
                   : rig === 'bones' ? <HollowRig form={form} speed={speed} />
                   : <HollowDoll form={form} speed={speed} mode={mode} envMap={texture} />}
               </group>

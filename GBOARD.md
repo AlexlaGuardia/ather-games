@@ -11,6 +11,97 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🗿 Shimmer — **THE BLOBS WERE NEVER THE SURFACE PROBLEM, AND THE MODELLED MESH IS THE ANSWER TO THE ASK HE MADE TWICE** (2026-09-06, sprites lane) · *Last touched 2026-09-06 — see the deploy line at the end of this block.*
+
+### What Alex actually asked for, twice, and what the seat heard
+*"the blobs arent the play, try a 3d model version."* Then, after an evening that rewrote the
+SURFACE three times — solid, wet clay, a fused marching-cubes field — **"it still looks the same."**
+He was right and it is the finding. Every one of those passes changed how the eighteen spheres were
+shaded or welded; **not one of them changed the eighteen spheres.** Fusing a join removes a crease;
+it cannot invent a neck, a calf, a shoulder line or a foot that points forward, and at the distance
+a Hollow is met a crease is invisible and the silhouette is the whole read.
+
+⚠ **AND EVERY NUMBER CITED THAT NIGHT MEASURED THE SURFACING.** Vertex counts, body heights,
+`0 anchors outside the cube` — all true, all green, and all about whether the skin over the spheres
+was correct. **Nothing in the tree could answer *is it a good shape*, so nothing ever asked.**
+
+### What shipped
+**`voxel3d/hollow-mesh.ts`** — eight lofted chains (trunk · 2 arms · 2 legs · 2 feet) built from
+tables of cross-sections, stitched into quad strips, ~713 verts / 1288 tris, bound as a
+`SkinnedMesh` to the **same eleven bones `hollow-body.ts` builds** and driven by the **same
+`hollowPose`**. The joint stations sit exactly on their `REST` anchors so skin and skeleton cannot
+disagree about where a joint is; the stations between them are the modelling — a waist narrower
+than the ribs, a shoulder shelf, a neck, a calf behind the knee, a foot running forward from the
+ankle. **None of those exist in a field of spheres and all of them are what "it still looks the
+same" was about.**
+- **`voxel3d/HollowMesh.tsx`** — its R3F host, **in the same commit**, because a guard on a producer
+  says nothing about whether a consumer exists and this repo learned that the hard way on 09-05.
+- **`/shimmer/dev/hollow` defaults to it**; the doll, the bone rig and the fused field stay beside it
+  so the difference is judged in MOTION rather than argued from memory.
+
+### ★★★ IT OVERTURNS A CLAIM `hollow-body.ts` MAKES, AND THE ARGUMENT IS WORTH KEEPING
+That file says a `SkinnedMesh` is wrong for a Hollow because it *"must never hold a crisp shape"*
+and skinning is built to hold one. Fair reading, and backwards: **rigid parts are the thing that
+cannot sag.** A sphere can move and can shrink; it cannot gutter at its edge, lose its outline on
+one side and keep it on the other, or drip. The brief calls *"sags, sheds, drips and re-gathers"*
+its single most important animation note, and a skin is the only one of the two surfaces that can
+actually do it. **Skinning buys the anatomy; the per-vertex displacement takes the crispness back
+off.** The blob body stays the cheap surface; which distance gets which is the world's call.
+
+### The losing-itself is the SOLVED field, not a second invention
+Every vertex carries inverse-square weights over its three nearest anchors, so the mesh sags exactly
+where the blob body sags and a future tuning of the cohere loop moves both. A hand-written sag law
+here would be the hand-kept mirror in its most tempting form: a table of drift beside a table of
+drift, agreeing until somebody edits one.
+
+### ⚠⚠ THE MUTATION SWEEP FOUND FOUR BLIND ASSERTS THAT THE 51-GREEN RUN DID NOT
+Every one read as a working guard. **14 mutations, 4 survivors on the first pass, 0 on the second.**
+1. **A waist compared against the SHOULDER SHELF** — whose width is mostly its ELLIPSE (1.46 across),
+   not its radius. Widening the waist all the way to the chest radius still measured under 85% of it:
+   **a barrel passed a waist assert.** Now compared against the ribcage, which is the actual sentence.
+2. **Foot-forward read ring EXTENTS.** Pulling the toe back under the ankle makes the loft's frame
+   degenerate, the ring turns to face a new way and its extent GROWS — hiding the exact shortening
+   being tested. Measured on ring CENTRES now: the modelled data, not an artifact of the sweep.
+3. **★★ A DENSITY-ORDER ASSERT DECIDED BY FLOAT NOISE.** Flattening `TRAIL` to zero makes all three
+   ankles the same modelled radius — and the three still came out correctly ordered, out of a divide
+   by three different `FORM_SCALE`s. A strict `>` between quantities the mutation makes EQUAL is
+   decided by dice. Now needs a 5% margin; the real gaps are 26% and 44%.
+4. **A no-second-pose-copy assert that banned two literal names** (`set('thighL'`, `rotation.x = p.`)
+   walked straight past a copy written through a differently-named local. Replaced with the
+   structural claim: **this module writes no bone rotation at all.**
+
+### ★★ AND THE ANATOMY ASSERTS ARE RUN AGAINST THE BLOB FIELD AS A CONTROL
+A guard that cannot tell a figure from a pile is decoration. The blob body is measured with the SAME
+yardstick and the file goes red if it PASSES — it fails the neck test at 56% where the mesh is 27%,
+and fails the taper test where the mesh tapers to 41%.
+
+### ★★★ TWO DEFECTS ONLY A PICTURE COULD HAVE FOUND, AND THE 51 ASSERTS SAW NEITHER
+Rendered headless (`tools/render/hollow_mesh_dump.mts` + `mesh_silhouette.py`, skinned through
+`applyBoneTransform` so it is the walking body and not the bind pose) and looked at it:
+- **The head was WIDER THAN IT WAS TALL** and stepped out over the ring below it — a brim, not a
+  skull. It read as a hat.
+- **The shoulder shelf was so wide it BURIED THE ARMS INSIDE THE TORSO** — trunk edge at 0.304, arm
+  centre at 0.265, so a limb that exists in the data did not exist in the silhouette.
+Both fixed by profile, both invisible to every assert in the file, and the guard stayed green
+through both. ⚠ **A picture is an instrument this lane did not have and now does.**
+
+### ⛔ OPEN, in order
+1. **Alex looks at it and calls the look** — it is the bench default at `/shimmer/dev/hollow`.
+2. **The world still spawns an icosahedron / cone / octahedron** (`VoxelWorld.tsx` → `hollowGeo`).
+   Wiring wants an LOD call first: this surface writes its own vertices every frame, so it is the
+   NEAR body and the blob rig stays the far one.
+3. **The caster's trunk still reads solid.** The brief wants *"dense only where it is reaching"*;
+   `TRAIL` currently thins its legs and only the trunk below the gut.
+4. Too DARK in daylight since Lambert→Standard (open from 09-05, Alex's call).
+5. `emissive` remains an open canon conflict; this commit deliberately did not touch the material,
+   and the guard asserts element-by-element that it did not.
+
+### Files
+`voxel3d/hollow-mesh.ts` (new) · `voxel3d/hollow-mesh.test.ts` (new, 51) ·
+`voxel3d/HollowMesh.tsx` (new) · `voxel3d/hollow-body.ts` (exports `BONE`, `BoneName` and the
+extracted `applyHollowPose` — ONE writer for the walk, two skins) ·
+`dev/hollow/page.tsx` · `tools/render/hollow_mesh_dump.mts` + `tools/render/mesh_silhouette.py` (new)
+
 ## ⛏ Shimmer — **THE DESCENT: A CACHE IS A PLACE, NOT A LOOT TABLE** (2026-09-05, hub lane) · *Last touched 2026-09-05 — **LIVE in `BUILD_ID fp02gUnav1cCP2v71pLP3`, 182 chunks**, from `001f7c5`: **corridors widened to 5 wide on Alex's call**. Verified the geometry itself in the SERVED worker bytes — `id:"run",w:5,d:9` — plus served == disk on the worker and its referencing chunk, the page asking for the new worker hash (1 hit) and not the old (0), tunnel 200. **Merged-head sweep 240/240 · 0 FAIL · 0 KILLED at `f2ac886`**, tree clean both ends. ⚠ See *A TUNING CHANGE CAN DISARM A GUARD* below. Before that: `iBG8x6sWDZEymiMcuu6Tq` from `8a5c4ce`, pushed, 0 unpushed, tree clean. **Merged-head sweep 240 suites · 240 pass · 0 FAIL · 0 KILLED, started AND ended at `778e04a`** with the tree clean at both ends — the first run covering BOTH lanes (mine predated sprites' commit and theirs predated mine; identical suite counts would have read as full coverage from either side alone). Served == disk on three marker chunks AND the worker, markers present IN the served bytes, positive control `corridor` hits, negative control (retired worker) 404s, public tunnel 200. ⚠ **The first build was KILLED MID-WRITE by the memory guard** — see *A KILLED BUILD IS NOT A NO-OP* below. `ruin-hash.mts` **`53d5fde6d6bd79fdba5c` before AND after — no existing ruin moved.** warren **60/0**, mutation-swept: M1 two-pass collapse, M4 shaft-before-rooms, M5 cover 0, M6 envelope 50, M8 cache-as-furniture, M9 SITE_REACH literal, M11/M12 the two attrs rows — all fire. ruins 726/0 (re-proved: clip shrunk to 6 still shows 51 missed cells), vessel-drops 64/0, console 111/0, render-audit 150/0, editor-bands 119/0, purity green, tsc 7 (baseline), canon exit 0.*
 
 ### Canon first: Magii ruled the FOUND road at 03:09 (`aa450bd`), and this builds the place
