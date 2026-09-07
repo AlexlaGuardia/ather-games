@@ -11,6 +11,51 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🕳 Shimmer — **DARKNESS IS A PLACE, NOT AN HOUR: THE SPAWNER GETS MINECRAFT'S Y AXIS** (2026-09-07, hub lane) · *Last touched 2026-09-07 — see the deploy line at the end of this block.*
+
+Alex: *"the hallows should be able to spawn on blocks that have 0 light level .. lets dig into how minecraft does their mob spawning to get a better idea of what we are going for."*
+
+### The research, and what the 08-07 port already had right
+Re-read `minecraft.wiki` › *Mob spawning* and › *Light*. The 08-07 port is faithful almost everywhere — the per-tick sweep over every eligible chunk, the single random anchor per chunk, the ±5 triangular pack walk, the 24-block player exclusion, block-light-0-absolute, internal-sky ≤ 7, midnight internal sky of 4. Two things it did not have:
+
+- **`Y` IS RANDOM IN MINECRAFT AND WAS FIXED HERE.** *"The Y coordinate is a random coordinate between the block above the highest block in the column and the minimum vertical limit."* Ours was `columnHeight(x, z) + 1` — the top of the generated surface, and nothing else, ever. **No cave in this world has ever been able to hold a Hollow**, and because an open surface cell's sky is 15 the whole feature was gated on the CLOCK rather than on the dark.
+- **MC's light gate is PROBABILISTIC** — *"a spawn only occurs if the light level is ≤ a random number between 0 and 7"*, so darker ground spawns faster rather than merely spawning. Ours is a hard ≤ 7. Not adopted this pass; noted as a real difference.
+
+### ★★★ ONE MISSING AXIS INVALIDATED THREE THINGS AT ONCE, AND NONE OF THE THREE WAS A BUG
+Each was correct for exactly as long as the surface was the only candidate, and this commit is the one that kills that premise. The 08-22 *exemption with a premise* shape, three times in one system:
+1. **the candidate** — `columnHeight + 1`
+2. **the `hollowNight(day)` pre-gate around the whole sweep** — its own comment said *"an open surface spot's sky is 15, so `spawnDark` can only pass once 15·day ≤ 7 anyway."* Every word true, and true only of an open surface spot. With a Y axis a clock now answers for a cave on behalf of a field it cannot see. **Deleted. A cave is dangerous at noon or the feature does not exist.**
+3. **the gutter rule** `15 * day >= GUTTER_SKY` — the effective light of an open-sky cell, a reading taken nowhere near the body. It would have burned a Hollow out of a sealed cave with a sun it cannot see, killing the daytime half **on the frame it was born**. Now reads the body's own light with the global rule as the no-field fallback (a body outliving its light data must disperse, never become immortal).
+
+### ★★★ THE GREYNESS GATE, NOT THE LIGHT GATE, IS WHAT HAS BEEN STARVING THIS — MEASURED
+Two sessions chased *"nothing has spawned in a while"* as a frame-rate bug and then as a light-field bug. It was neither. `hollowEligible` needs `greyness >= 0.5` and the map barely provides it where Alex plays (`scripts/hollow-ground.mts`, r=96 annulus, 400 stands per region):
+
+| region | stands with ANY eligible ground in the 24..96 annulus |
+|---|---|
+| **THE OUTFIELDS** | **13.3%** — at the anchor, max greyness across the whole r=96 disc is **0.062** against a 0.5 gate |
+| deep wilds +x | 32.3% |
+| garden (home) | 0.8% — correct, and by design |
+
+**87% of the places a keeper can stand in the Outfields have zero spawnable ground, at midnight, with the light rule perfectly satisfied.** Not rare — impossible. Filed as a canon gap rather than widened: *may grey form in a dark pocket under HEALTHY ground?* (`athernyx 0fcb8f1`, `CANON_GAPS.md` [OPEN], dbr'd to magii). The Y axis ships under the CURRENT rule, where a dark pocket under already-grey ground needs no ruling.
+
+### ⚠⚠ THE END-TO-END SIM FOUND A BUG THAT 43 GREEN UNIT ASSERTS COULD NOT, AND IT IS THIS FILE'S OWN LESSON
+`clearAt` was hand-rolled as `=== AIR`. **Nearly every surface cell in this world carries a plant at `surface + 1`**, so that predicate refused the overworld: the Y axis would have shipped as a spawner with more eligible ground on paper and less in fact. The pure guards were blind because the synthetic worlds have no plants in them — **I wrote the fixture, so the fixture agreed with me.**
+
+★ `VoxelWorld.tsx` has carried a comment since 2026-08-20 recording somebody making this identical mistake: *"that predicate counts a grass tuft as an obstruction, and it spent this session reporting the fold's own doorway as unstandable."* The shipped rule now asks `isSolid` — the notion collision and light already use — which is also MC's rule verbatim (*"not a block with a full 1×1×1 collision box"*), with WATER excluded on top because `!isSolid` admits it. Caught by `scripts/hollow-sweep-sim.mts` in one run.
+
+### ⚠⚠ AND THE SILENT ONE: AN OUT-OF-BOUNDS LIGHT READ IS "PITCH DARK"
+`LightField.get` answers out-of-bounds with 0, because *for LIGHTING the conservative direction is dark* (light.ts says so outright). For SPAWNING that is the dangerous direction: **every cell past the box reads as perfect spawn ground**, with no error and nothing in the output to notice. The roll is clamped to the field's own box, and the guard proves it with a positive control rather than asserting it — the same cell reads **sky 15 in a field that covers it and 0 in one that does not**, and unclamped a *sunlit clifftop is admitted at noon*.
+
+### The roll itself — where we deliberately bend MC
+MC rolls ONE Y and usually misses; it can afford that at 20Hz × every chunk. Our sweep runs at 2.5Hz over ≤32 columns — ~3,600× less coverage — and the 08-07 port already answered this once (*"coverage comes from sweeping every column, not from hammering one"*). So `pickSpawnY` walks the whole line and **reservoir-samples one valid cell uniformly**: same distribution as MC's rejection loop conditioned on success, one pass, no allocation, and a column that HAS a dark floor cannot be starved by our cycle rate. **The bend is in the number of attempts, never in which cells are eligible.**
+
+### ⛔ OPEN, in order
+1. **★ ALEX WALKS INTO A CAVE AT NOON.** Nobody has met a Hollow underground. `/time 12` then go down. This is the whole feature and it has never been seen.
+2. **★ WATCH FOR CAP STARVATION** — a predictable consequence, not a bug: a cave body never gutters, so it holds a slot in `hollowCap` (2–12) all day. This is authentic MC behaviour (players light caves to raise surface spawns) but our cap is an order of magnitude smaller, so a night walk could meet nothing because the cap is full of bodies underground. Tuning is mine; the call on whether it *feels* wrong is Alex's, from play.
+3. **Magii's ruling on the canon gap.** If YES, the Outfields get the feature and the greyness gate stops being the whole restriction. If NO, that is a clean answer and the Outfields need a different threat — Alex's call, not canon's.
+4. MC's probabilistic light gate (darker = faster) is not adopted. Cheap to add if the tide reads too uniform.
+5. **Player-built interiors are NOT dark for spawning by day** — `openToSky` reads the GENERATED surface, so a roof you built reads as open sky and refuses a spawn. A cellar you dug works; a shed you built does not. Fails toward no-spawn, so survivable, and it closes the day that reads live voxels.
+
 ## 🔦 Shimmer — **THE BENCH WAS A DIM ROOM, AND THE SPAWNER'S THROUGHPUT IS PROPORTIONAL TO FRAME RATE** (2026-09-06, hub+sprites lane) · *Last touched 2026-09-06 ~20:15 ET — ✅ **DEPLOYED `BUILD_ID hrKaBCbrtS8v3SYubSef_`, 188 chunks**, from `ec009ec`. Tree clean, 0 unpushed. Served md5 == disk on both changed chunks (`01465e84f8fcf60f`, `43e0b2967464ff07`), http 200, positive control `teleport to ground level` hits, **negative control `#101014` (the bench's retired hemi-ground literal) absent from every chunk**. hollow-mesh 63/0 (was 60), hollow-look 79/0, hollow-visible 13/0, hollow-body 50/0, hollow-pose 35/0, hollow-wiring 73/0, tsc 7 (baseline), canon exit 0.*
 
 ### ★★★ #1047 NAMED TWO CAUSES AND CALLED IT ALEX'S. IT WAS DECIDABLE, AND IT WAS THE ROOM.
