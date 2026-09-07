@@ -6323,6 +6323,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           return m !== AIR && m !== MAT.WATER && !LIGHT_PASSES.has(m)
         },
         emit: (x, y, z) => emitOf(voxel(x, y, z)),
+        // ⚠ COLLISION, NOT OPACITY — see `LightInputs.windBlocks`. Every plant in this world is
+        // opaque to light and passable to a body, so borrowing `opaque` here reported no wind
+        // across the whole grassy overworld.
+        windBlocks: (x, y, z) => isSolid(voxel(x, y, z)),
         // ⚠ Generated surface, not live voxels: a player-built roof does not register as closing
         // the sky. That only mis-lights covered ground DURING THE DAY (at night the sky channel is
         // worth 0 regardless).
@@ -7294,7 +7298,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
             // ground, not a thing in the water*, and water is non-solid so `!isSolid` admits it.
             (cy) => { const m = voxel(wx, cy, wz); return !isSolid(m) && m !== MAT.WATER },
           ),
-          (y) => spawnDark(lf.get(wx, y, wz), dayNow, NIGHT_SKY_MAX),
+          // ⚖ DARK **AND** REACHED BY THE WIND. Canon 2026-09-07 (THE THIRD PRECONDITION): a Hollow
+          // needs a seed to have been drained, seeds are wind-borne, and *"the test is not depth and
+          // not light — it is whether the wind could have put a seed there."*
+          // ⚠⚠ THIS IS NOT BELT-AND-BRACES ON THE DARK TEST AND IT WAS MEASURED, NOT REASONED. With
+          // dark alone, 70 of 853 eligible cells in cave-bearing grey columns sit in SEALED pockets
+          // (`hollow-wind.test.ts`). A body there could never be reached or dispersed and would hold
+          // one of `hollowCap`'s 2–12 slots for the rest of the session — the cap starvation this
+          // change already risks, made permanent and invisible.
+          // ⚠ AN EARLIER SAMPLED MEASUREMENT SAID 0 OF 5,335 AND WAS UNDERPOWERED: its aprons
+          // happened to contain no caves. The guard enumerates every candidate cell in cave-bearing
+          // columns instead of sampling, for exactly that reason.
+          (y) => spawnDark(lf.get(wx, y, wz), dayNow, NIGHT_SKY_MAX) && lf.windAt(wx, y, wz),
           Math.random,
         )
       }

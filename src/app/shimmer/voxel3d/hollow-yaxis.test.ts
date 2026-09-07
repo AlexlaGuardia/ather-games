@@ -57,6 +57,9 @@ const inputsFor = (w: typeof worldA, surf: (x: number) => number) => ({
   opaque: (x: number, y: number, z: number) => w(x, y, z) !== AIRV,
   emit: () => 0,
   openToSky: (x: number, z: number, y: number) => y > surf(x),
+  // These fixtures hold only ROCK and air, so wind and light agree here — stated rather than
+  // relied on, because the day a fixture grows a plant the two predicates must part company.
+  windBlocks: (x: number, y: number, z: number) => w(x, y, z) !== AIRV,
 })
 const boxOver = (y0: number, sy: number): LightBounds => ({ x0: -1, y0, z0: -1, sx: 4, sy, sz: 4 })
 
@@ -90,7 +93,7 @@ const dark = (f: typeof small, x: number, day: number) => (y: number) =>
   ok(!isSolid(PLANT), 'fixture: a crop really is non-solid to collision')
   ok(!isSolid(MAT.WATER) && !isSolid(0), 'fixture: water and air are non-solid too')
   // Ground at 100, a tuft standing at 101, open air at 102. A body's feet belong at 101.
-  const tufted = (y: number) => (y <= 100 ? ROCK : y === 101 ? PLANT : AIRV)
+  const tufted = (y: number): number => (y <= 100 ? ROCK : y === 101 ? PLANT : AIRV)
   const footsTufted = (y: number) => hollowFoots(
     y,
     (fy) => isSolid(tufted(fy)),
@@ -104,7 +107,7 @@ const dark = (f: typeof small, x: number, day: number) => (y: number) =>
      '★★★ POSITIVE CONTROL: the hand-rolled `=== AIR` refuses that same cell — this is the bug,'
      + ' reproduced, and it is why this block is not a source-text assert')
   // And water must still be refused, which `!isSolid` alone would admit.
-  const flooded = (y: number) => (y <= 100 ? ROCK : MAT.WATER)
+  const flooded = (y: number): number => (y <= 100 ? ROCK : MAT.WATER)
   const footsFlooded = (y: number) => hollowFoots(
     y,
     (fy) => isSolid(flooded(fy)),
@@ -222,6 +225,39 @@ const dark = (f: typeof small, x: number, day: number) => (y: number) =>
      '★ at the exact dusk boundary a surface cell can spawn and cannot yet gutter')
 }
 
+// ── 6b. ⚖ SPAWN CONDITION IS NOT PERSISTENCE CONDITION (canon, ruled 2026-09-06) ─────────────
+// `design-briefs/hollows.md` › *Visibility in the dark*: **"a dark veto governs whether the grey
+// BODIES, not whether a bodied Hollow CONTINUES. A formed Hollow does not un-body because a light
+// arrived. Without this, lighting one to see it deletes it and THE ACT OF LOOKING DESTROYS THE
+// SUBJECT."** The ruling then hands the check here by name: *"whether the build re-evaluates
+// per-tick is Jin's to check."*
+//
+// ★ THE GUTTER CHANGE IN THIS COMMIT IS THE PLACE THAT COULD HAVE BROKEN IT, because it moved the
+// dawn test from a global clock onto the body's own light reading — one line away from also
+// reading the lamp. It does not: `hollowGutters` takes a SKY accessor and block light cannot enter
+// through it. That was a tuning call made before the ruling existed and the ruling agrees with it,
+// which is worth asserting rather than leaving as a coincidence.
+{
+  const packed = (sky: number, block: number) => (sky << 4) | (block & 0xf)
+  // A keeper puts a lamp on a Hollow at midnight to find it. Block light 15, sky 0.
+  ok(!hollowGutters(packed(0, 15), 0, skyOf),
+     '★★★ A LAMP DOES NOT DISPERSE A BODIED HOLLOW — canon: the act of looking must not destroy'
+     + ' the subject')
+  ok(!hollowGutters(packed(0, 15), 1, skyOf),
+     '★★ nor at noon in a cave — block light is not on the gutter axis at any hour')
+  // ⚠ The mutation this exists to catch is one identifier wide: `skyOf` -> `effectiveLight`, which
+  // is `max(block, sky*day)` and WOULD delete a lit body. Proven by running that substitution here
+  // rather than described, because a described mutation is one nobody has seen fail.
+  const effective = (v: number) => Math.max(v & 0xf, ((v >> 4) & 0xf))
+  ok(hollowGutters(packed(0, 15), 1, effective),
+     '★★★ POSITIVE CONTROL: with an EFFECTIVE-light accessor the same lamp DOES disperse it — so'
+     + ' the assert above is discriminating, not vacuous')
+  // And the spawn side must still veto on that same block light — the two axes differ on purpose.
+  ok(!spawnDark(packed(0, 15), 0, NIGHT_SKY_MAX),
+     '★★ while SPAWNING is still vetoed by one unit of block light — *tended light holds grey off*'
+     + ' governs whether it bodies, never whether it continues')
+}
+
 // ── 7. WIRING — the pure rules above are worth nothing if the host asks a different question ──
 // (the `bridgeVoxelAt`-vs-`materialAt` lesson: a test that skips the gate tests a world that does
 // not exist. These are source-text asserts and they are the weaker kind, so each one names a
@@ -242,6 +278,13 @@ const dark = (f: typeof small, x: number, day: number) => (y: number) =>
   // The clamp, asserted as the arithmetic rather than as a comment about it.
   ok(/Math\.max\(b\.y0 \+ 1, 1\)/.test(src) && /Math\.min\(b\.y0 \+ b\.sy - 2, H - 2\)/.test(src),
      '★★★ the Y roll is clamped to the light field\'s OWN box — the silent failure, see block 4')
+  // ⚠⚠ ADDED AFTER A MUTATION SWEEP FOUND BOTH HOST MUTATIONS ALIVE. `hollow-wind.test.ts` builds
+  // its candidate set from `field.windAt` directly, so it proves the RULE and is structurally
+  // blind to whether the host applies it — dropping `&& lf.windAt(...)` from the roll left every
+  // wind assert green. The pure-guard-plus-blind-wiring shape, one more time.
+  ok(/spawnDark\(lf\.get\(wx, y, wz\), dayNow, NIGHT_SKY_MAX\) && lf\.windAt\(wx, y, wz\)/.test(src),
+     '★★★ the roll requires dark AND wind — catches dropping the gate, and catches the gate'
+     + ' REPLACING the dark test rather than joining it (canon needs both, they are different axes)')
   ok(/\(fy\) => isSolid\(voxel\(wx, fy, wz\)\)/.test(src),
      '★★ footing asks `isSolid`, the notion collision and light already use')
   ok(/return !isSolid\(m\) && m !== MAT\.WATER/.test(src),
@@ -260,6 +303,9 @@ const dark = (f: typeof small, x: number, day: number) => (y: number) =>
   // The gutter, at the host.
   ok(/hollowGutters\(glf\.get\(/.test(src),
      '★★★ the host gutters on the BODY\'S own light — catches a revert to `15 * day >= GUTTER_SKY`')
+  ok(/hollowGutters\(glf\.get\(Math\.floor\(st\.x\), Math\.floor\(st\.y\), Math\.floor\(st\.z\)\), day, skyOf\)/.test(src),
+     '★★★ the host hands `hollowGutters` a SKY accessor, never an effective-light one — canon:'
+     + ' a formed Hollow does not un-body because a light arrived')
   ok(/: 15 \* day >= GUTTER_SKY/.test(src),
      '★★ with the global rule as the NO-FIELD fallback: a body that outlives its light data must'
      + ' disperse, never become immortal')

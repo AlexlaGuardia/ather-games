@@ -69,6 +69,22 @@ export interface LightInputs {
    * it locally would light the ceiling of every cave that happens to sit at the top of a slice.
    */
   openToSky: (x: number, z: number, y: number) => boolean
+  /**
+   * Does this voxel stop the WIND? Distinct from `opaque`, and the distinction is not academic.
+   *
+   * ⚠⚠ THE FIRST VERSION OF THE WIND CHANNEL REUSED `opaque` AND ITS COMMENT ARGUED THAT THE TWO
+   * QUESTIONS HAPPEN TO HAVE THE SAME ANSWER. They do not, and the comment was wrong about this
+   * world specifically: only LEAVES are in the host's light-passes set, so every **plant** —
+   * grass, herbs, scatter, every crop — is OPAQUE to light while being walked straight through.
+   * A Hollow stands IN long grass (that is the `isSolid` rule the placement test uses), so a wind
+   * channel built on `opaque` reported *no wind* on the ordinary grassy overworld and refused it,
+   * and could not descend a cave mouth with a tuft over it. Caught by a differential against a
+   * second, independently written flood — not by reading, and the reading is what wrote the bug.
+   *
+   * ★ THE HOST PASSES `isSolid` — the collision notion. If a body can occupy a cell, air can be
+   * in it, and the Ather's breath can carry a seed through it. That is the whole rule.
+   */
+  windBlocks: (x: number, y: number, z: number) => boolean
 }
 
 /** A computed field over a box. `get` is world-coordinate; out-of-bounds reads as pitch dark. */
@@ -78,6 +94,27 @@ export interface LightField {
   get: (x: number, y: number, z: number) => number
   sky: (x: number, y: number, z: number) => number
   block: (x: number, y: number, z: number) => number
+  /**
+   * ── ★★★ THE THIRD CHANNEL: CAN THE ATHER'S BREATH GET HERE? (2026-09-07) ────────────────────
+   * Canon (`game/shimmer-geography.md` › THE HOLLOWS › THE THIRD PRECONDITION, ruled 2026-09-07):
+   * a Hollow needs a SEED to have been drained, Mana Seeds are **wind-borne**, and *"the test is
+   * not depth and not light — it is whether the wind could have put a seed there."* Sealed rock
+   * gets no seed, so nothing may body there however dark and however drained.
+   *
+   * ★ IT IS A SEPARATE CHANNEL BECAUSE IT IS A SEPARATE PHYSICS, and the same argument that
+   * justifies splitting sky from block applies again: **wind does not decay.** A cave twenty
+   * blocks from its mouth is still ventilated; sky light twenty blocks in is 0. Deriving wind from
+   * either light channel would make "deep enough" mean "sealed", which is exactly the reading
+   * canon rules out — *"do not read this as 'no seeds in dark places'."*
+   *
+   * ⚠⚠ OUT-OF-BOUNDS IS `false` HERE, WHICH IS THE OPPOSITE DEFAULT FROM `get`, AND THE INVERSION
+   * IS THE WHOLE POINT. `get` answers absent cells with 0 = pitch dark, because for LIGHTING the
+   * conservative direction is dark. For this channel the conservative direction is *no wind*, and
+   * both defaults point the same way once you ask what they do to a SPAWN: dark admits, windless
+   * refuses. A channel that answered `true` outside its box would hand every unexamined cell a
+   * free pass, which is the silent-permissive failure this file already documents for `get`.
+   */
+  windAt: (x: number, y: number, z: number) => boolean
 }
 
 const idx = (b: LightBounds, x: number, y: number, z: number): number =>
@@ -139,9 +176,18 @@ export type LightWork = {
   readonly bounds: LightBounds
   readonly inputs: LightInputs
   readonly data: Uint8Array
+  /**
+   * The wind channel, one BIT per cell rather than one byte.
+   *
+   * ★ A BITSET BECAUSE THIS IS CACHED PER COLUMN AND NEVER FREED WHILE THE COLUMN IS LOADED. A
+   * byte array would be a second `data` — ~69KB a column, ~32MB across a full load on a box whose
+   * memory guard already kills builds. At one bit it is 8.6KB. The channel carries one boolean, so
+   * spending eight bits on it would be paying 8x for nothing.
+   */
+  readonly wind: Uint8Array
   readonly queue: Int32Array
-  /** 0 sky-seed · 1 sky-flood · 2 block-seed · 3 block-flood · 4 done. */
-  phase: 0 | 1 | 2 | 3 | 4
+  /** 0 sky-seed · 1 sky-flood · 2 block-seed · 3 block-flood · 4 wind-seed · 5 wind-flood · 6 done. */
+  phase: 0 | 1 | 2 | 3 | 4 | 5 | 6
   head: number
   tail: number
   /** Progress within the current SEED phase; floods carry their own head/tail. */
@@ -165,7 +211,8 @@ export function beginLight(bounds: LightBounds, inputs: LightInputs): LightWork 
   return {
     bounds, inputs,
     data: new Uint8Array(n),
-    // Reused across both channels — one allocation for the whole flood.
+    wind: new Uint8Array((n + 7) >> 3),
+    // Reused across all three channels — one allocation for the whole flood.
     queue: new Int32Array(n),
     phase: 0, head: 0, tail: 0, cursor: 0, field: null,
   }
@@ -178,10 +225,10 @@ export function beginLight(bounds: LightBounds, inputs: LightInputs): LightWork 
  * so the one-shot path and the stepped path are the same code and cannot drift apart.
  */
 export function stepLight(w: LightWork, budgetMs: number): boolean {
-  if (w.phase === 4) return true
+  if (w.phase === 6) return true
   const b = w.bounds
   const { x0, y0, z0, sx, sy, sz } = b
-  const { opaque, emit, openToSky } = w.inputs
+  const { opaque, emit, openToSky, windBlocks } = w.inputs
   const t0 = performance.now()
   let since = 0
   // ⚠ Checked on a counter, not every unit: `performance.now()` in the inner loop of a flood is
@@ -243,13 +290,106 @@ export function stepLight(w: LightWork, budgetMs: number): boolean {
   // ── block: spread ───────────────────────────────────────────────────────────────────────────
   if (w.phase === 3) {
     if (!floodSlice(w, opaque, false, outOfTime)) return false
-    w.phase = 4
+    w.phase = 4; w.head = 0; w.tail = 0; w.cursor = 0
+  }
+
+  // ── wind: seed from open sky, AND from every open cell on the box's own faces ────────────────
+  //
+  // ★★★ WHAT THIS CHANNEL CAN HONESTLY DECIDE, AND WHAT IT CANNOT — read this before "tightening"
+  // it. Ventilation is a GLOBAL property: a cavern's mouth may be four columns away, far outside
+  // the 3x3 apron this box covers. So a flood seeded only from open sky answers
+  // *"is this void connected to the sky WITHIN THIS BOX"*, and it reported **every** cell of every
+  // large cave system as sealed — measured: underground spawn candidates went to **zero** in
+  // cave-bearing columns, which does not enforce canon, it deletes the feature canon explicitly
+  // preserved (*a cave with a mouth, a deep overhang, a warren*).
+  //
+  // ★★ AND THE ANSWER CAME FROM MEASURING THE WORLD RATHER THAN FROM CHOOSING A POLICY. The
+  // obvious fix — also seed from the box's faces, so a void that LEAVES the region counts as
+  // ventilated — was written, and then checked against a 144x144 full-height flood seeded only
+  // from open sky. In the cave-bearing column that motivated it: **0 of 255 sub-surface standable
+  // cells are reachable from the sky at ANY scale.** Those voids are genuinely sealed, not merely
+  // unseen, so face-seeding would have admitted exactly the vaults canon forbids. Reverted.
+  //
+  // ★ SO THE SEED STAYS OPEN-SKY ONLY, and its two failure directions are worth naming:
+  //   · a deep sealed void  -> refused. CORRECT, and it is most of this world's sub-surface space.
+  //   · a cave mouth, an overhang, a warren opening -> admitted. CORRECT, and it is the *"cave with
+  //     a mouth"* canon explicitly preserves.
+  //   · a genuinely ventilated cavern whose mouth lies outside the 3x3 apron -> refused. A false
+  //     negative, conservative, and the only direction a spawn gate may fail in.
+  if (w.phase === 4) {
+    const columns = sz * sx
+    while (w.cursor < columns) {
+      if (outOfTime()) return false
+      const c = w.cursor++
+      const z = z0 + ((c / sx) | 0)
+      const x = x0 + (c % sx)
+      for (let y = y0 + sy - 1; y >= y0; y--) {
+        if (windBlocks(x, y, z)) break
+        if (!openToSky(x, z, y)) break
+        const i = idx(b, x, y, z)
+        if (w.wind[i >> 3] & (1 << (i & 7))) continue
+        w.wind[i >> 3] |= 1 << (i & 7)
+        w.queue[w.tail++] = i
+      }
+    }
+    w.phase = 5
+  }
+
+  // ── wind: spread ────────────────────────────────────────────────────────────────────────────
+  if (w.phase === 5) {
+    if (!windSlice(w, windBlocks, outOfTime)) return false
+    w.phase = 6
   }
 
   const data = w.data
+  const wind = w.wind
   const get = (x: number, y: number, z: number): number =>
     inside(b, x, y, z) ? data[idx(b, x, y, z)] : 0
-  w.field = { bounds: b, data, get, sky: (x, y, z) => skyOf(get(x, y, z)), block: (x, y, z) => blockOf(get(x, y, z)) }
+  const windAt = (x: number, y: number, z: number): boolean => {
+    if (!inside(b, x, y, z)) return false        // ⚠ absent means NO WIND — see the interface note
+    const i = idx(b, x, y, z)
+    return (wind[i >> 3] & (1 << (i & 7))) !== 0
+  }
+  w.field = { bounds: b, data, get, windAt,
+              sky: (x, y, z) => skyOf(get(x, y, z)), block: (x, y, z) => blockOf(get(x, y, z)) }
+  return true
+}
+
+/**
+ * The wind BFS, resumable. Six-connected over everything light can pass, and **no decay** — that
+ * one difference from `floodSlice` is the entire reason this is not a third call to it.
+ *
+ * ⚠ IT TAKES `windBlocks`, NOT `opaque`, AND THE FIRST VERSION TOOK `opaque`. See the note on
+ * `LightInputs.windBlocks`: in this world every plant is opaque to light and passable to a body,
+ * so the borrowed predicate reported no wind across the ordinary grassy overworld. The two
+ * questions are *what stops light* and *what stops a body*, and only the second one is about air.
+ */
+function windSlice(
+  w: LightWork,
+  windBlocks: (x: number, y: number, z: number) => boolean,
+  outOfTime: () => boolean,
+): boolean {
+  const b = w.bounds
+  const { x0, y0, z0, sx, sy, sz } = b
+  while (w.head < w.tail) {
+    if (outOfTime()) return false
+    const i = w.queue[w.head++]
+    const y = y0 + ((i / (sx * sz)) | 0)
+    const rem = i % (sx * sz)
+    const z = z0 + ((rem / sx) | 0)
+    const x = x0 + (rem % sx)
+    for (let k = 0; k < 6; k++) {
+      const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0)
+      const ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0)
+      const nz = z + (k === 4 ? 1 : k === 5 ? -1 : 0)
+      if (nx < x0 || nx >= x0 + sx || ny < y0 || ny >= y0 + sy || nz < z0 || nz >= z0 + sz) continue
+      const j = idx(b, nx, ny, nz)
+      if (w.wind[j >> 3] & (1 << (j & 7))) continue
+      if (windBlocks(nx, ny, nz)) continue
+      w.wind[j >> 3] |= 1 << (j & 7)
+      w.queue[w.tail++] = j
+    }
+  }
   return true
 }
 
