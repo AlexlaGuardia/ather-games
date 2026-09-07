@@ -11,6 +11,128 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔦 Shimmer — **THE BENCH WAS A DIM ROOM, AND THE SPAWNER'S THROUGHPUT IS PROPORTIONAL TO FRAME RATE** (2026-09-06, hub+sprites lane) · *Last touched 2026-09-06 ~20:15 ET — ✅ **DEPLOYED `BUILD_ID hrKaBCbrtS8v3SYubSef_`, 188 chunks**, from `ec009ec`. Tree clean, 0 unpushed. Served md5 == disk on both changed chunks (`01465e84f8fcf60f`, `43e0b2967464ff07`), http 200, positive control `teleport to ground level` hits, **negative control `#101014` (the bench's retired hemi-ground literal) absent from every chunk**. hollow-mesh 63/0 (was 60), hollow-look 79/0, hollow-visible 13/0, hollow-body 50/0, hollow-pose 35/0, hollow-wiring 73/0, tsc 7 (baseline), canon exit 0.*
+
+### ★★★ #1047 NAMED TWO CAUSES AND CALLED IT ALEX'S. IT WAS DECIDABLE, AND IT WAS THE ROOM.
+The row read *"too DARK in daylight since Lambert->Standard — lift the diffuse grey (creature is
+lighter) **or** lift the bench lighting (room was dim), different claims, Alex's call."* Measured:
+`dev/hollow` hand-lit itself with **six local values and every one was darker than the world** —
+hemi 0.8 vs 1.5, sun 0.9 vs 1.5, a near-black hemi ground against `#3b3a4a`, plus **cast shadows the
+world does not draw** (`VoxelWorld` runs `shadows={false}`). Roughly **55% of the world's daylight**.
+⚠ **Lifting the grey would have brightened the creature to compensate for an under-lit bench, looked
+like success, and shipped it too light in a world nearly twice as bright** — the 09-06 arena-sizing
+shape, a fix that moves the needle for the wrong reason.
+
+**★★ AND THE REPO ALREADY HAD THE LAW, THE EXPORT, AND A GUARD — AIMED AT THE OTHER BENCH.** `DAY` was
+exported 08-27 with the note *"a preview lit by different numbers than the world is the preview that
+re-derives trap"*, `dev/grey` mounts `<VoxelDayNight />`, and `hollow-look.test.ts` asserts that it
+does. **`dev/hollow` was added later, became the DEFAULT Hollow bench, and never adopted it — and the
+guard could not see that because it names a FILE rather than the rule.** Every look call this week
+(the ghost, the solid texture, *"it still looks the same"*) was made in that room. Fixed by mounting
+the shipped rig and pinning the world clock, not by matching numbers: the world also lerps its
+colours, cuts sun for gloom and mist, and carries an ambient term. Guard now runs over BOTH benches.
+
+### ⛔ EMISSIVE RULED AND BUILT — `selfLight` 0.15 → 0 (magii, athernyx `3aef03e`)
+Barred at every value including a neutral grey one: **the bar is on GENERATION, not on hue.** The
+build read *"any colour it owns"* as the whole test and a neutral glow owns none; the sentence that
+kills it is in the derivation, not the summary list. ⚠ **The `> 0 && < 0.5` band existed in TWO test
+files, each reading as the guard, and 0.15 sat inside both green for weeks — a range cannot express
+"none".** Both are equality asserts now. The overruled argument is kept in place with its unresolved
+half beside it rather than deleted.
+
+### ★★★ A CASTER WAS A WARDEN WITHOUT FEET, AND 60 ASSERTS WERE TRUE OF IT
+`radiusFor` thinned the trunk **below the gut only**, so a caster's chest, shoulders and neck came out
+at full radius — **arithmetically identical to a warden's** (`warden 0.1516 > stalker 0.1516 > caster
+0.1516`). The whole three-density axis rode on feet and a little limb taper while the largest mass in
+the silhouette never moved. **Why the suite could not see it, and the shape generalises: the anatomy
+asserts compare stations WITHIN one form — waist against ribs, neck against shoulders — and every one
+of those ratios is preserved when two forms share a trunk outright. A suite can pin a shape perfectly
+and never ask whether two shapes DIFFER.** Trunk now answers the axis over its whole height at
+`trail * 0.5` (in-family: a leg reaches `1 - trail` at its tip). Warden is trail 0 = the control.
+Mutation-swept 4 ways, all fire; negative control (terms commuted) green.
+
+⚠ **AND ONE FINDING RETRACTED.** I measured six of twelve limb roots as "exposed" — root ring's outer
+edge past the trunk half-width — and read it as limbs detaching. **A limb MUST poke past the trunk
+half-width; that is what emerging is.** Root centres sit well inside (0.098 vs 0.19) and the render
+shows no gap. It failed toward *"you found something"*, which is the direction that gets acted on.
+**The picture settled it in one look; the metric never could.**
+
+### ★★★ THE SPAWNER'S THROUGHPUT IS PROPORTIONAL TO FRAME RATE — the likely cause of "nothing has spawned in a while"
+Since 2026-09-01 the sweep **skips any column whose light field is not built** and queues it
+(`if (!lf) { startLightBuild(scx, scz); continue }`). No field, no spawn, ever, for that column. Those
+fields are built one at a time by a sliced job at **`LIGHT_BUILD_MS = 2`, and that budget is PER
+FRAME.** So the builder gets **120ms of work per second at 60fps and 2ms per second at 1fps — a 60x
+reduction.** The sky table alone is ~13ms of it (measured warm ~9.6ms; ⚠ my first reading of 42.3ms
+was JIT warmup and is wrong). The flood phase is UNMEASURED, so per-column totals are a lower bound —
+but the argument is structural and does not rest on it.
+**★ So Alex's two complaints are one bug: the stall IS why nothing spawns.** ⛔ NOT CHANGED —
+`spawn-budget.ts` exists because that number was measured deliberately, and retuning a perf budget
+from a box that cannot reproduce the frame rate is the wrong-layer mistake. Alex's call.
+
+### ★★ AND #1052 WAS NEVER THE HARD PROBLEM — `/hollow` FORMS ONE IN FRONT OF YOU
+`console.ts:295`, owner-gated, *"form Hollows in front of you — use at night, they gutter at dawn
+(test harness)"*, deliberately outside `spawnDark`/`hollowNight`/the cap. The row reads *"no artifact
+instrument can answer it, four tried"* — **and the answer was a one-word console command that had been
+there the whole time. The row's confident framing cancelled the search for the simpler route.**
+- **`window.__hollows()`** (browser console, shipped 08-30 at Alex's own request) reads the live states
+  and heights. **It separates *formed but invisible* from *never formed* without using his eyes**,
+  which is what every instrument failed on today. Returns `'owner only'` for a non-owner.
+- **Nothing on this path fails silently**: `console.ts:561` prints `/hollow is keeper-of-the-realm
+  only`; a bad form names the three; an unready world says *"the world is still waking"*. So *"nothing
+  happened"* cannot be rejected-or-ran-and-drew-nothing — **if there was no text, it was not run.**
+- ⚠ **`/time 0` FIRST** — the success message says they gutter in seconds in daylight.
+- Canon half confirmed from source, not from an absence: `hollowEligible` is dark AND dry land AND
+  **`greyness >= 0.5`**. Drain is a hard third gate, so the 06-16 failure is not present. At Alex's
+  reported x230 z3 greyness is **0.000** and the nearest qualifying ground is **252 blocks NE**
+  (x≈399 z≈190); only **8.6%** of sampled ground within 400 blocks qualifies.
+
+### ⚠ THE FRAME PROFILE THAT STARTED IT — the zone breakdown was an error state, not a reading
+0 fps, multi-second frames, GPU 4.6ms, `flora 2223.51ms (84%)` and `UNACCOUNTED -2224.49ms (-84%)` —
+**the same milliseconds with opposite signs, 0.98ms apart**, zones summing to 4859ms inside a 2635ms
+frame. `profile.ts` treats a negative UNACCOUNTED as its own *the partition failed* signal. ⚠ All five
+profiler fixes (`fad9e08` `de1e931` `ab19ee3` `d3bbb78` `824364c`) are ancestors of the live build, so
+this is **not** the known bug resurfacing — it is the partition genuinely failing across frames varying
+100x. **Do not act on `flora 84%`.** What survives is the GPU timer (separate query) and the counts:
+8 draws, 2k tris. ★ Leading suspect for the stall itself, unproven: `VoxelWorld`'s Canvas sets no
+`preserveDrawingBuffer` (`:2304`), so an automation screenshot forces a compositor sync — on UHD 630 /
+ANGLE D3D11 that is the documented main-thread stall path. **The measurement may have caused the
+stall.** The free test is Alex opening the page with nothing attached.
+
+### Board audit — 11 rows closed, more than the previous 7 days combined (15)
+467 → 456 open. **152 opened against 15 closed in 7 days, and 185 of the remainder wait on Alex's eye
+— the bottleneck is not build throughput.** Closed against evidence: `#1041` (shipped last night,
+`hollowGeo` gone) · `#1042` (duplicate of `#1049`, wording defeated dedup) · `#1028` (superseded — the
+mesh shipped, not the doll) · `#1020` (**idle-wake MEASURED by accident**: a ListAgents-idle peer
+received `SendMessage` and acted; the SOP line calling it UNPROVEN is now false) · `#1045` (**real** —
+PATTERNS.md held 214 uncommitted lines from two dead windows in a repo with no remote; preserved at
+cortex `96e5a61` with authorship stated in the message, because one of the entries being preserved is
+the pathspec-protects-files-not-hunks one) · `#1027` `#1047` `#1054` this session's own.
+**Look list** (22 P1 calls grouped by where you have to stand, so one trip closes several):
+https://claude.ai/code/artifact/4d6c2d64-0675-4750-8595-a276fadb2a90 — deliberately NOT tickable; a
+second board that can disagree with cortex is the failure this list exists to reduce.
+
+### ⛔ OPEN, in order
+1. **Alex: `/time 0`, then `/hollow warden`, then `window.__hollows()`.** Deferred to next night. If
+   that returns an empty array on grey ground, the frame-rate-coupled spawner above is the cause.
+2. **Alex: the free fps test** — open the world with no automation attached and read the fps line.
+3. **KIT** — still `[OPEN]`, still with Alex in the Magii window. Additive if YES: a re-skin, not a
+   rebuild, and the brief needs three clauses amended rather than quietly contradicted.
+4. **The keeper's-light repair** — canon ruled reception mandatory (`4b6c9a4`) and **the world has no
+   local lights at all and no env map anywhere**, so nothing can put a lamp on a Hollow. The ★ FREE
+   tell (*glossy with your honey-gold near a tended plot*) has never been renderable. One light object
+   fits inside the one-material-per-form rule. World-lighting change = Alex's call.
+5. `#1053` warden collision sizes — his call, deliberately unchanged.
+6. The caster still reads more solid than *"mostly the suggestion of a body"*; the guard's floor only
+   asserts the axis is VISIBLE, never how much is right.
+
+### Files
+`voxel3d/hollow-look.ts` (`selfLight` 0 + the ruling) · `voxel3d/hollow-look.test.ts` (equality assert,
+de-blinded colour assert, cross-bench lighting guard) · `voxel3d/hollow-visible.test.ts` (overruled
+argument kept, consequence stated) · `voxel3d/hollow-mesh.ts` (trunk answers the axis; `radiusFor`,
+`Chain`, `Station` exported) · `voxel3d/hollow-mesh.test.ts` (density-spread guard + warden control) ·
+`voxel3d/day-night.tsx` (`NIGHT` exported) · `dev/hollow/page.tsx` (mounts `<VoxelDayNight />`, pins the
+clock) · cortex `PATTERNS.md` (preserved, not authored)
+
 ## 🗿 Shimmer — **THE BLOBS WERE NEVER THE SURFACE PROBLEM, AND THE MODELLED MESH IS THE ANSWER TO THE ASK HE MADE TWICE** (2026-09-06, sprites lane) · *Last touched 2026-09-06 — see the deploy line at the end of this block.*
 
 ### What Alex actually asked for, twice, and what the seat heard
