@@ -57,6 +57,24 @@ half-width; that is what emerging is.** Root centres sit well inside (0.098 vs 0
 shows no gap. It failed toward *"you found something"*, which is the direction that gets acted on.
 **The picture settled it in one look; the metric never could.**
 
+### ⚠⚠ CORRECTION 2026-09-06 ~20:40 ET — THE SECTION BELOW LOST ITS PREMISE WITHIN THE HOUR
+**Alex ran the world unattended and got a clean 60fps at 33x the scene** (relayed by the magii seat
+from his own run, not measured by me). So the 0 fps / 13-second frames were **the measurement**, not
+the build — a browser-automation screenshot forcing a compositor sync on a canvas with no
+`preserveDrawingBuffer`, which was the leading hypothesis and is now the settled one.
+
+⛔ **THAT REMOVES THE PREMISE THE SECTION BELOW RESTS ON.** The arithmetic is still correct and the
+coupling is still real — `LIGHT_BUILD_MS = 2` IS a per-frame budget and throughput IS proportional to
+frame rate — **but at 60fps a column's sky table finishes in ~0.4s and the spawner is not starving.**
+So it is NOT the explanation for *"nothing has spawned in a while"*, and **that remains unexplained.**
+
+★ **THE SHAPE, AND IT IS THIS FILE'S OWN LESSON LANDING ON THE PERSON WRITING IT DOWN:** I disqualified
+`flora 84%` as an artifact of a failed partition, correctly, and then **built a downstream conclusion on
+the 0 fps number from the same poisoned reading** — treating one output of a broken instrument as
+discredited and another as fact. A negative UNACCOUNTED says the partition failed; it says nothing about
+whether the frame TIMES were real, and I never asked. Kept below rather than deleted because the wrong
+reading is the useful artifact.
+
 ### ★★★ THE SPAWNER'S THROUGHPUT IS PROPORTIONAL TO FRAME RATE — the likely cause of "nothing has spawned in a while"
 Since 2026-09-01 the sweep **skips any column whose light field is not built** and queues it
 (`if (!lf) { startLightBuild(scx, scz); continue }`). No field, no spawn, ever, for that column. Those
@@ -112,9 +130,15 @@ https://claude.ai/code/artifact/4d6c2d64-0675-4750-8595-a276fadb2a90 — deliber
 second board that can disagree with cortex is the failure this list exists to reduce.
 
 ### ⛔ OPEN, in order
-1. **Alex: `/time 0`, then `/hollow warden`, then `window.__hollows()`.** Deferred to next night. If
-   that returns an empty array on grey ground, the frame-rate-coupled spawner above is the cause.
-2. **Alex: the free fps test** — open the world with no automation attached and read the fps line.
+1. **Alex: `/time 0`, then `/hollow warden`, then `window.__hollows()`.** Deferred to next night.
+   ⚠ **`/time 0` is very likely the whole answer** — *"at the Outfields at night"* reads as WALL-clock,
+   and the command's own success message says they gutter in seconds in daylight. `window.__hollows()`
+   settles it either way without using his eyes.
+2. ✅ **The fps test is SPENT and it came back clean — 60fps at 33x the scene, unattended.** The stall
+   was the observer. ⛔ **So *"nothing has spawned in a while"* is UNEXPLAINED again** — the spawner
+   theory lost its premise (see the correction above) and nothing has replaced it. If `/time 0` does not
+   account for it, this is the open thread and it starts from `window.__hollows()` returning empty on
+   ground with `greyness >= 0.5`.
 3. **KIT** — still `[OPEN]`, still with Alex in the Magii window. Additive if YES: a re-skin, not a
    rebuild, and the brief needs three clauses amended rather than quietly contradicted.
 4. **The keeper's-light repair** — canon ruled reception mandatory (`4b6c9a4`) and **the world has no
