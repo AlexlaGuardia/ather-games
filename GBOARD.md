@@ -36,7 +36,7 @@ Two sessions chased *"nothing has spawned in a while"* as a frame-rate bug and t
 | deep wilds +x | 32.3% |
 | garden (home) | 0.8% — correct, and by design |
 
-**87% of the places a keeper can stand in the Outfields have zero spawnable ground, at midnight, with the light rule perfectly satisfied.** Not rare — impossible. Filed as a canon gap rather than widened: *may grey form in a dark pocket under HEALTHY ground?* (`athernyx 0fcb8f1`, `CANON_GAPS.md` [OPEN], dbr'd to magii). The Y axis ships under the CURRENT rule, where a dark pocket under already-grey ground needs no ruling.
+**87% of the places a keeper can stand in the Outfields have zero spawnable ground, at midnight, with the light rule perfectly satisfied.** Not rare — impossible. Filed as a canon gap rather than widened: *may grey form in a dark pocket under HEALTHY ground?* (`athernyx 0fcb8f1`, dbr'd to magii). ⚠ **CORRECTED SAME DAY — this said `[OPEN]` and it is `[RULED]` (`athernyx f61fecf`), stale within hours of being written.** The ruling is the section below; the superseded wording is kept because a board that silently self-corrects teaches nobody. The Y axis ships under the CURRENT rule, where a dark pocket under already-grey ground needs no ruling.
 
 ### ⚠⚠ THE END-TO-END SIM FOUND A BUG THAT 43 GREEN UNIT ASSERTS COULD NOT, AND IT IS THIS FILE'S OWN LESSON
 `clearAt` was hand-rolled as `=== AIR`. **Nearly every surface cell in this world carries a plant at `surface + 1`**, so that predicate refused the overworld: the Y axis would have shipped as a spawner with more eligible ground on paper and less in fact. The pure guards were blind because the synthetic worlds have no plants in them — **I wrote the fixture, so the fixture agreed with me.**
@@ -1487,8 +1487,10 @@ is a real one: the doubled-focus law says every keeper is born holding a one-run
 one for 17 runes, and Barrier's only tactical is Life + Barrier. ⚠ The coverage tables (`moves.md:529`, `:576`)
 call Barrier COMPLETE with T = 1 because they count that two-rune move — *does a technique exist* answered
 where the keeper asked *can I cast*. A move's name is Magii's, so it is **filed, not invented**: athernyx
-`5231e78`, `CANON_GAPS.md` [OPEN] *Barrier has no doubled-focus tactical*, with three build facts the seat may
-ignore (Backlash is already the Manifestation; Barrier/Bulwark own *held shell*; field/status/impulse are
+`5231e78`, `CANON_GAPS.md` *Barrier has no doubled-focus tactical*, with three build facts the seat may
+ignore
+⚠ **CORRECTED 2026-09-07 by the hub lane, not the author — this row claimed `[OPEN]` for five days after it was `[RULED]`.** Magii ruled it 2026-09-02 and **Alex locked the name `Threshold`** the same day; `keeper-moves.ts:314` carries `{ id: 'threshold', tier: 'tactical', runes: ['barrier'] }`, so the build has it too. **Both halves of the hold were released and the board went on asserting it** — found by `scripts/board-holds.mts`, which exists for exactly this and which nobody had run since canon moved. The original wording is left standing above.
+ (Backlash is already the Manifestation; Barrier/Bulwark own *held shell*; field/status/impulse are
 castable today). Build side: `play3d/birth-tactical.test.ts` **40/0** — 17 on the carousel, the lost three
 exactly Scatter, every birthable rune born with its tactical seated, and Barrier a **declared exception whose
 premise is asserted both ways** (no one-rune Barrier tactical in the registry AND the gap still [OPEN]) so it
