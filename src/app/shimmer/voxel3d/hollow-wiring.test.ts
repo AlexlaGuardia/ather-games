@@ -234,13 +234,26 @@ function firstEmission(ear: Ear, x: number, z: number) {
   ok(!/groundTopNear\(sx, sz, p\.py/.test(drain) && !/groundTopNear\(sx, sz, p\.y/.test(drain),
      '★ the probe is hinted with the keeper FEET, never the camera eye')
 
-  // ⚠⚠ IT MUST NOT SIT INSIDE THE NIGHT'S GATE. Behind `hollowNight` the command would do nothing at
-  // noon on lit ground, which is the only condition anyone would reach for it in; INSIDE the gate as
-  // an extra clause it could loosen when the world spawns its own. It stands beside it.
-  const nightGate = src.match(/if \(hollowNight\(day\)[\s\S]{0,80}/)?.[0] ?? ''
-  ok(!/pendingHollow/.test(nightGate), 'the harness does not ride inside the night gate')
-  ok(src.indexOf('if (pendingHollow.current)') < src.indexOf('if (hollowNight(day)'),
-     '★ the harness drains BEFORE the night gate, so neither can change the other')
+  // ⚠⚠ IT MUST NOT SIT INSIDE THE SWEEP'S GATE. Behind the sweep the command would do nothing once
+  // the cap is full or the clock has not come round, which are exactly the conditions anyone would
+  // reach for it in; INSIDE the gate as an extra clause it could loosen when the world spawns its
+  // own. It stands beside it.
+  //
+  // ⚠ UPDATED 2026-09-07 AND THE OLD ANCHOR IS WORTH KEEPING IN VIEW: this used to read
+  // `if (hollowNight(day)` — the sweep's clock pre-gate — which was DELETED when the spawner got a
+  // Y axis (a cave is dark at noon, so a clock may not answer for it). A guard anchored on a string
+  // that no longer exists does not go quiet: `indexOf` returns -1 and `x < -1` is false, so it goes
+  // RED and names itself. That is the direction a stale anchor must fail in, and it is why the
+  // anchor is asserted to exist on its own line below rather than only used.
+  const SWEEP_GATE = 'if (hollows.current.length < cap && hollowClock.current <= 0)'
+  ok(src.includes(SWEEP_GATE), '★★ the sweep gate is findable — if this is red the anchor moved, not the rule')
+  ok(!src.includes('if (hollowNight(day)'),
+     '★★ the `hollowNight` clock pre-gate is GONE from the sweep — a cave is dark at noon and a'
+     + ' clock cannot answer for it (the exemption whose premise expired)')
+  const sweepGate = src.match(/if \(hollows\.current\.length < cap[\s\S]{0,80}/)?.[0] ?? ''
+  ok(!/pendingHollow/.test(sweepGate), 'the harness does not ride inside the sweep gate')
+  ok(src.indexOf('if (pendingHollow.current)') < src.indexOf(SWEEP_GATE),
+     '★ the harness drains BEFORE the sweep gate, so neither can change the other')
 
   // The requested form defaults to the shipped roll, or the command would quietly change the mix.
   ok(/const form = force \?\? pickForm\(Math\.random\(\)\)/.test(src),

@@ -363,11 +363,108 @@ export const DESPAWN_DIST = 96       // our load edge (MC uses 128 = its own spa
  * first cut's `day === 0` gate was the strictest possible misreading of the same rule.
  */
 export const NIGHT_SKY_MAX = 7
-/** The window, from a day factor: could a fully open-sky spot spawn? (15 · day ≤ 7) */
+/**
+ * Could a fully OPEN-SKY spot spawn right now? (15 · day ≤ 7)
+ *
+ * ⚠⚠ THIS IS A STATEMENT ABOUT THE SURFACE AND IT IS NO LONGER THE SWEEP'S GATE (2026-09-07).
+ * It was, and while the only candidate a sweep could roll was the top of a column it was exactly
+ * equivalent to the ruling: an open surface cell's sky is 15, so `spawnDark` could not pass until
+ * this did. **The equivalence was never a property of this function — it was a property of the
+ * candidate set**, and the Y axis below widens that set to include cells with no sky at all. A
+ * pre-gate on the clock now answers a question about noon on behalf of a cave, which is the
+ * 08-22 exemption-with-an-expired-premise shape exactly.
+ *
+ * Kept because it is still true and still useful (the HUD reads it, and it is the honest cheap
+ * test for *surface* eligibility). ⚠ Do not restore it as a gate around the sweep.
+ */
 export const hollowNight = (day: number): boolean => 15 * day <= NIGHT_SKY_MAX
 /** Dawn wins: bodied Hollows gutter once effective sky climbs past this. Sits above
- *  NIGHT_SKY_MAX so the boundary has hysteresis — no spawn-and-gutter flap at the dusk line. */
+ *  NIGHT_SKY_MAX so the boundary has hysteresis — no spawn-and-gutter flap at the dusk line.
+ *
+ *  ★ READ AGAINST THE BODY'S OWN LIGHT, NEVER AGAINST THE CLOCK — see `hollowGutters`. */
 export const GUTTER_SKY = 9
+
+/**
+ * Does THIS body's own spot burn it off? The dawn rule, asked where the body actually stands.
+ *
+ * ── ⚠⚠ WHAT THIS REPLACES, AND WHY THE OLD FORM WAS ONLY EVER ACCIDENTALLY RIGHT ───────────────
+ * The host guttered on `15 * day >= GUTTER_SKY` — the effective light of an OPEN SKY cell, which
+ * is not a reading taken anywhere near the body. It was correct for exactly as long as every
+ * Hollow stood under open sky, and it becomes wrong in the same commit that stops guaranteeing
+ * that: a body in a pitch-black cave would gutter out at dawn because the sun rose on a field it
+ * cannot see. Same family as `deckTopAt` vs `columnHeight` (PATTERNS 08-30) — two honest numbers,
+ * one of them measured a layer away from where the world takes it.
+ *
+ * ★ SKY ONLY, BLOCK LIGHT DELIBERATELY EXCLUDED, and this is a tuning call rather than a
+ * derivation: block light is an absolute veto on FORMING (*tended light holds grey off*), but a
+ * lantern does not banish a body that is already standing there. You light your ground so they do
+ * not come; one that came must still be dispersed by hand. Folding block light in here would make
+ * a dropped lantern a weapon, which is a different game and Alex's call, not mine to assume.
+ */
+export const hollowGutters = (packedLight: number, day: number, skyOfPacked: (v: number) => number): boolean =>
+  skyOfPacked(packedLight) * day >= GUTTER_SKY
+
+/**
+ * ── ★★★ THE Y AXIS — DARKNESS IS A PLACE, NOT AN HOUR (2026-09-07, Alex's call) ────────────────
+ *
+ * Pick the cell a body's FEET take, somewhere on the vertical line at one (x, z). Returns -1 when
+ * that line offers nothing, which is the common answer and is not an error.
+ *
+ * ── WHAT MINECRAFT DOES, AND THE ONE PLACE WE DELIBERATELY BEND IT ────────────────────────────
+ * MC (wiki › Mob spawning, re-read 2026-09-07): *"The Y coordinate is a random coordinate between
+ * the block above the highest block in the column and the minimum vertical limit."* One roll, one
+ * test, overwhelmingly a miss — which is affordable because MC attempts EVERY eligible chunk EVERY
+ * TICK. Our sweep runs at 2.5Hz across at most `SPAWN_SCAN_MAX` columns, roughly 3,600x less
+ * coverage, and the 08-07 port already had to answer this once: *"coverage comes from sweeping
+ * every column, not from hammering one."*
+ *
+ * ★ SO WE ROLL THE WHOLE LINE AND RESERVOIR-SAMPLE ONE VALID CELL, UNIFORMLY. Identical
+ * distribution to MC's rejection loop conditioned on success, at one pass and no allocation, and
+ * a column that HAS a dark floor cannot be silently starved by our low cycle rate. The bend is in
+ * the number of attempts, never in which cells are eligible.
+ *
+ * ⚠ `yLo`/`yHi` MUST BE CLAMPED TO THE LIGHT FIELD'S OWN BOX BY THE CALLER. `LightField.get`
+ * answers an out-of-bounds read with 0 — pitch dark — so a line that runs past the field reads as
+ * PERFECT SPAWN GROUND for its whole out-of-bounds length. That is the one direction this must
+ * never fail in, and it fails there silently and for free.
+ *
+ * ⚠ AND IT IS THE CALLER'S JOB THAT `foots` USES THE LIVE VOXELS. A body must not form inside a
+ * wall the player built, nor be refused by a floor they dug away.
+ */
+export function pickSpawnY(
+  yLo: number, yHi: number,
+  foots: (y: number) => boolean,
+  dark: (y: number) => boolean,
+  rand: () => number,
+): number {
+  let chosen = -1, seen = 0
+  for (let y = yLo; y <= yHi; y++) {
+    if (!foots(y) || !dark(y)) continue
+    seen++
+    // Reservoir of size 1: the k-th valid cell wins with probability 1/k, so every valid cell on
+    // the line ends up equally likely without knowing how many there are up front.
+    if (rand() * seen < 1) chosen = y
+  }
+  return chosen
+}
+
+/**
+ * MC's placement rule, as a predicate over one vertical line: *"the block directly below must have
+ * a solid, complete, top surface"*, the body's own cell must not collide, and the cell above must
+ * not be a full block. Two cells of room over a floor.
+ *
+ * ★ TWO PREDICATES RATHER THAN A MATERIAL ID, so this file still knows nothing about the block
+ * registry — the same wall `Impair` keeps against the status system. WATER is neither: it cannot
+ * floor a body (`floorAt` false) and a Hollow is *a shape in the air over ground, not a thing in
+ * the water*, so it cannot fill one either (`clearAt` false). The host owes both halves.
+ */
+export function hollowFoots(
+  y: number,
+  floorAt: (y: number) => boolean,
+  clearAt: (y: number) => boolean,
+): boolean {
+  return floorAt(y - 1) && clearAt(y) && clearAt(y + 1)
+}
 
 /**
  * At most this many bodied at once, scaled by how much world is loaded — a fixed cap on a

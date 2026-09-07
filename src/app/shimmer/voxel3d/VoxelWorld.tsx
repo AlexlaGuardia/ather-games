@@ -185,14 +185,15 @@ import { playEmissions, unlockHollowSfx } from './hollow-sfx'
 import { setMasterVolume } from '../audio/bus'
 import { topSolidNear } from './ground-probe'
 import { type HollowForm,
-         hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
+         hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
+         pickSpawnY, hollowFoots, hollowGutters, NIGHT_SKY_MAX,
          HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN,
          HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike } from './hollows'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
-import { beginLight, stepLight, dayFactor, type LightField, type LightWork, type LightBounds } from '../voxel/light'
+import { beginLight, stepLight, dayFactor, spawnDark, skyOf, type LightField, type LightWork, type LightBounds } from '../voxel/light'
 import { WOOD } from '../voxel/trees'
 // ── PORT STEP 5 — the movement (2026-08-07, Alex: "slide jump became a dash, climbing and wall
 // jumping are non-existent"). play3d's Apex-lineage locomotion, extracted pure and re-grounded on
@@ -6324,7 +6325,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         emit: (x, y, z) => emitOf(voxel(x, y, z)),
         // ⚠ Generated surface, not live voxels: a player-built roof does not register as closing
         // the sky. That only mis-lights covered ground DURING THE DAY (at night the sky channel is
-        // worth 0 regardless), and surface Hollows only body at night.
+        // worth 0 regardless).
+        // ⚠⚠ THIS COMMENT USED TO END "and surface Hollows only body at night", which was an
+        // EXEMPTION RESTING ON A PREMISE, and the premise died on 2026-09-07 when the spawner got
+        // a Y axis and started running by day. The exemption survives on a different ground and it
+        // is worth stating which: a player-built roof reads as OPEN sky, so the cell under it looks
+        // BRIGHT and refuses a spawn. It fails toward no-spawn. The live consequence is that
+        // player-built interiors are NOT dark for spawning purposes by day — a cellar you dug is,
+        // a shed you built is not — which is a real gap in the feature rather than a bug, and it
+        // closes the day this reads live voxels. GENERATED caves are unaffected: `columnHeight`
+        // knows about them, so they correctly carry no sky.
         //
         // ⚠ IN-BOUNDS BY CONSTRUCTION, NOT BY LUCK: the flood only ever asks about cells inside
         // `bounds`, and the table is exactly `bounds`' horizontal footprint. A clamp here would
@@ -7246,9 +7256,56 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // The despawn line IS the load edge — it derives from viewRadius now, so a wider view means
       // a wider night. hollows.ts's DESPAWN_DIST constant documented the r=6 baseline (96).
       const despawn = settings.viewRadius * SECTION
-      // hollowNight is a cheap pre-gate, not the rule: an open surface spot's sky is 15, so
-      // spawnDark can only pass once 15·day ≤ 7 anyway. The sweep is skipped, never the ruling.
-      if (hollowNight(day) && hollows.current.length < cap && hollowClock.current <= 0) {
+      /**
+       * ── ★★★ THE Y ROLL — the one place this sweep learns that darkness has a THIRD AXIS ───────
+       * Everything above picks an (x, z). This picks the cell a body's feet take on that line, out
+       * of the light field's OWN box, with the LIVE voxels deciding footing. Shared by the anchor
+       * and by every pack mate on purpose: *a pack mate is not exempt from the ruling*, and the
+       * 08-22 entry is about what happens when one caller gets a rule the other does not.
+       *
+       * ⚠⚠ THE CLAMP IS LOAD-BEARING AND FAILS SILENTLY IF IT IS WRONG. `LightField.get` answers
+       * an out-of-bounds read with 0 — pitch dark, per light.ts's "absence needs a deliberate
+       * answer and for light the conservative direction is dark". Conservative for LIGHTING is the
+       * *dangerous* direction for SPAWNING: every cell past the box would read as perfect spawn
+       * ground. So the line is cut to the field, never to the world.
+       */
+      const spawnFootY = (wx: number, wz: number, lf: LightField, dayNow: number): number => {
+        const b = lf.bounds
+        const yLo = Math.max(b.y0 + 1, 1)
+        const yHi = Math.min(b.y0 + b.sy - 2, H - 2)
+        return pickSpawnY(
+          yLo, yHi,
+          (y) => hollowFoots(
+            y,
+            // ★ `isSolid` — THE SAME NOTION COLLISION AND LIGHT USE, never a hand-rolled one.
+            // Water cannot hold a body up (it is in `SOLID_EXCEPT`) and unloaded space reads AIR,
+            // so neither can produce a foot; both fail toward NO spawn.
+            (fy) => isSolid(voxel(wx, fy, wz)),
+            // ⚠⚠ ROOM FOR THE BODY IS `!isSolid`, AND THE FIRST DRAFT OF THIS LINE WAS `=== AIR`,
+            // WHICH IS THE EXACT MISTAKE THE COMMENT ABOVE `World()` IN THIS FILE ALREADY RECORDS
+            // SOMEBODY MAKING ON 2026-08-20: *"that predicate counts a grass tuft as an
+            // obstruction."* Almost every surface cell in this world carries a plant at
+            // `surface + 1`, so `=== AIR` refused nearly the whole overworld and the change would
+            // have shipped as a spawner that quietly stopped using the surface. Caught by an
+            // end-to-end sim on real terrain, not by 43 green unit asserts — the pure guards had
+            // no plants in them, because I wrote the fixture.
+            // MC's rule is *"not a block with a full 1×1×1 collision box"*, which is `!isSolid`
+            // exactly. WATER is excluded on top of it: a Hollow is *a shape in the air over
+            // ground, not a thing in the water*, and water is non-solid so `!isSolid` admits it.
+            (cy) => { const m = voxel(wx, cy, wz); return !isSolid(m) && m !== MAT.WATER },
+          ),
+          (y) => spawnDark(lf.get(wx, y, wz), dayNow, NIGHT_SKY_MAX),
+          Math.random,
+        )
+      }
+      // ⚠⚠ NO `hollowNight` PRE-GATE ANY MORE, AND ITS REMOVAL IS THE POINT (2026-09-07).
+      // It read: *"a cheap pre-gate, not the rule: an open surface spot's sky is 15, so spawnDark
+      // can only pass once 15·day ≤ 7 anyway."* Every word true, and true only because the sole
+      // candidate was an open surface spot. With a Y axis the candidate set contains cells with no
+      // sky at all, and a clock gate now answers for a cave on behalf of a field it cannot see —
+      // the exemption whose premise expired, which is this repo's most-repeated failure. A cave is
+      // dangerous at noon or the feature does not exist. The ruling (`hollowEligible`) is the gate.
+      if (hollows.current.length < cap && hollowClock.current <= 0) {
         hollowClock.current = SPAWN_CYCLE_S
         const keys = [...cols.current.keys()]
         // ── ★★★ THE SWEEP NO LONGER COMPUTES ANYTHING EXPENSIVE (2026-09-01) ──────────────────
@@ -7288,10 +7345,23 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // every column, not from hammering one.
           const wx = scx * SECTION + Math.floor(Math.random() * SECTION)
           const wz = scz * SECTION + Math.floor(Math.random() * SECTION)
-          const sh = columnHeight(wx, wz, SEED)
           const dp = Math.hypot(wx + 0.5 - p.x, wz + 0.5 - p.z)
           if (dp < PLAYER_EXCLUSION || dp > despawn) continue
-          if (!hollowEligible(wx + 0.5, wz + 0.5, SEED, lf.get(wx, sh + 1, wz), day, sh, DEFAULT_DEPTH.seaLevel)) continue
+          // ★ THE FEET, ROLLED OFF THE WHOLE LINE — not `columnHeight(wx, wz) + 1`, which was the
+          // only cell this sweep could ever consider and is why no cave has ever held a Hollow.
+          const fy = spawnFootY(wx, wz, lf, day)
+          if (fy < 0) continue
+          const sh = fy - 1
+          // `hollowEligible` stays the RULING and is asked at the chosen cell: the Y roll only
+          // SEARCHES (dark + standable), it never decides. That the two both consult `spawnDark`
+          // is deliberate duplication — the search must not be able to admit ground the ruling
+          // would refuse, and the ruling must not depend on having been searched for.
+          // ⚠ `columnHeight` is still what feeds the sea-level clause, so a column whose generated
+          // surface is at or under the waterline refuses the whole line, cave included. That is
+          // strictly more conservative than before and is left that way on purpose: widening the
+          // water rule is a separate change with its own way of being wrong.
+          if (!hollowEligible(wx + 0.5, wz + 0.5, SEED, lf.get(wx, fy, wz), day,
+                              columnHeight(wx, wz, SEED), DEFAULT_DEPTH.seaLevel)) continue
           // The pack: the anchor bodies, then up to 3 mates on a triangular walk — each on its
           // OWN re-validated ground, because a pack mate is not exempt from the ruling (an
           // anchor at a lit greyfield edge must not smear its pack onto tended ground).
@@ -7299,11 +7369,22 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           spawnHollow(wx + 0.5, sh, wz + 0.5)
           for (const off of packWalk(k, Math.random)) {
             const mx = wx + 0.5 + off.dx, mz = wz + 0.5 + off.dz
-            const mh = columnHeight(Math.floor(mx), Math.floor(mz), SEED)
+            const mix = Math.floor(mx), miz = Math.floor(mz)
             const mdp = Math.hypot(mx - p.x, mz - p.z)
             if (mdp < PLAYER_EXCLUSION || mdp > despawn) continue
-            if (!hollowEligible(mx, mz, SEED, lf.get(Math.floor(mx), mh + 1, Math.floor(mz)), day, mh, DEFAULT_DEPTH.seaLevel)) continue
-            spawnHollow(mx, mh, mz)
+            // ⚠ A MATE ROLLS ITS OWN Y. It does NOT inherit the anchor's — a pack smearing ±5 over
+            // broken ground would otherwise plant bodies inside a hillside or hanging in a shaft,
+            // and the anchor's cave floor is not the mate's. Same reasoning as the eligibility
+            // re-check the pack has always done, one axis further in.
+            // ⚠ AND THE FIELD IS THE ANCHOR'S COLUMN. `lf` covers a 3x3 apron so a ±5 walk is
+            // inside it, but a mate that lands outside would read out-of-bounds as pitch dark;
+            // `pickSpawnY`'s clamp is on the field's box, so such a mate finds no lit-or-unlit
+            // cell to stand on rather than a free pass.
+            const mfy = spawnFootY(mix, miz, lf, day)
+            if (mfy < 0) continue
+            if (!hollowEligible(mx, mz, SEED, lf.get(mix, mfy, miz), day,
+                                columnHeight(mix, miz, SEED), DEFAULT_DEPTH.seaLevel)) continue
+            spawnHollow(mx, mfy - 1, mz)
           }
         }
       }
@@ -7612,9 +7693,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       for (let i = hollows.current.length - 1; i >= 0; i--) {
         const hw = hollows.current[i]
         const st = hw.st
-        // Dawn wins on the SAME clock the spawn gate reads (15·day = effective open-sky light);
-        // GUTTER_SKY > NIGHT_SKY_MAX gives the dusk boundary hysteresis instead of a flap.
-        if (15 * day >= GUTTER_SKY || st.hp <= 0) st.gutter = Math.min(1, st.gutter + dt * (st.hp <= 0 ? 2.2 : 0.7))
+        // ── ★★ DAWN WINS WHERE THE BODY IS STANDING, NOT WHERE THE SUN IS (2026-09-07) ────────
+        // This was `15 * day >= GUTTER_SKY` — the effective light of an OPEN SKY cell, a reading
+        // taken nowhere near the body. Correct for exactly as long as every Hollow stood under
+        // open sky, and wrong in the same commit that gives the spawner a Y axis: a body in a
+        // pitch-black cave would gutter out because the sun rose on a field it cannot see, and
+        // the daytime half of this feature would have died on the frame it was born.
+        // ⚠ NO FIELD FOR ITS COLUMN => THE OLD GLOBAL RULE. A body outliving its own light data
+        // must disperse, never become immortal: absence has to fail toward guttering.
+        const glf = lightCache.current.get(key(Math.floor(st.x / SECTION), Math.floor(st.z / SECTION)))
+        const burns = glf
+          ? hollowGutters(glf.get(Math.floor(st.x), Math.floor(st.y), Math.floor(st.z)), day, skyOf)
+          : 15 * day >= GUTTER_SKY
+        if (burns || st.hp <= 0) st.gutter = Math.min(1, st.gutter + dt * (st.hp <= 0 ? 2.2 : 0.7))
         // ★ THE LIVE GROUND, NOT THE GENERATOR'S (2026-08-14). This was `columnHeight`, which knows
         // nothing about mining, building or casting — so **no wall had ever stopped a Hollow**, and
         // my own walker commit claimed conjured terrain would stop a warden "for free". It would
