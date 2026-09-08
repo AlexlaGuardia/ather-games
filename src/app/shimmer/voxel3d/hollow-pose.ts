@@ -346,7 +346,23 @@ export function hollowPose(t: number, form: HollowForm, speed: number): HollowPo
  * BULK as well as the opacity — the old code made it the least transparent part while leaving it
  * the smallest, so "reach is its body" was true of the alpha and false of the geometry.
  */
-export function hollowField(t: number, form: HollowForm, reach: Anchor = 'handR'): Blob[] {
+/**
+ * WHICH SIDE A CASTER REACHES WITH — one declaration, read by the field AND by the mesh.
+ *
+ * ★★ IT IS A PAIR BECAUSE THE BODY IS BUILT TWO WAYS AND BOTH HAVE TO AGREE. `hollowField` thinks
+ * in ANCHORS (`handR`, `armR`); `hollow-mesh`'s loft thinks in CHAINS (`armR`). Until 2026-09-08
+ * each carried its own literal, so *"dense only where it is reaching"* could be true of the blob
+ * field and false of the shipped skin — and it was: the mesh thickened BOTH arms by the same
+ * amount, so the one sentence canon is most specific about was expressed on the surface nobody
+ * looks at and contradicted on the one they do.
+ *
+ * ⚠ EXPORTED SO A CONSUMER ASKS RATHER THAN RESTATES. Two hand-kept copies of a side agree until
+ * somebody moves the reach, and then they disagree silently, which is the 08-22 mirror shape with
+ * a body part in it.
+ */
+export const REACH = { anchor: 'handR' as Anchor, upper: 'armR' as Anchor, chain: 'armR' }
+
+export function hollowField(t: number, form: HollowForm, reach: Anchor = REACH.anchor): Blob[] {
   const c = cohesionAt(t)
   const floats = form === 'caster'
 
@@ -359,7 +375,7 @@ export function hollowField(t: number, form: HollowForm, reach: Anchor = 'handR'
     // and the rest are holding. That is "always visibly losing itself". A shared phase would pulse
     // the whole body in and out together, which reads as a breathing lung, not as dissolution.
     const dip = 0.62 + 0.38 * w - (0.72 - c) * 0.55
-    const isReach = floats && (anchor === reach || anchor === 'armR')
+    const isReach = floats && (anchor === reach || anchor === REACH.upper)
     const scale = FORM_SCALE[form]
     const bulge = TRUNK.has(anchor) ? trunkBulge(form) : 1
     // ★★ THE JOINT FLOOR, AND IT IS FOLDED IN HERE RATHER THAN CLAMPED AT THE END ON PURPOSE.

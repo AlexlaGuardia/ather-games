@@ -23,12 +23,12 @@ import { readFileSync } from 'node:fs'
 import * as THREE from 'three'
 import {
   createHollowMeshBody, updateHollowMeshBody, disposeHollowMeshBody, disposeHollowMeshes,
-  meshParts, meshStats, chainsFor, hasFeet, radiusFor, SKIN,
+  meshParts, meshStats, chainsFor, hasFeet, radiusFor, gutterFor, SKIN,
 } from './hollow-mesh'
-import { hollowField, REST, FORM_SCALE, DENSITY, type Anchor } from './hollow-pose'
+import { hollowField, REST, FORM_SCALE, DENSITY, REACH, type Anchor } from './hollow-pose'
 import { BONE, boneName, type BoneName } from './hollow-body'
 import { createHollowMat, HOLLOW_LOOK, type HollowForm } from './hollow-look'
-import { codeOnly, noComments } from '../testing/guard'
+import { codeOnly, noComments, strip } from '../testing/guard'
 
 let pass = 0
 const fails: string[] = []
@@ -481,6 +481,140 @@ for (const f of FORMS) {
   const raw = chainsFor('warden').find(c => c.kind === 'trunk')!
   ok(raw.st.every((st, i) => Math.abs(radiusFor(raw, i, 'warden') - st.r) < 1e-9),
      '★ a warden is trail 0 and its trunk is untouched by the axis — the control that says the rule is keyed on density')
+}
+
+/* ═══ THE CASTER IS DENSE ONLY WHERE IT IS REACHING (2026-09-08) ═════════════════════════════════
+ *
+ * Canon is more specific here than anywhere else in the brief — *"dense only at the reaching hand"*,
+ * *"reach is its body"*, *"the reaching limb is the only part of a caster that is nearly solid"* —
+ * and until this date the mesh answered it by thickening BOTH arms by the same 25%. `hollowField`
+ * had it right for the blob rig the whole time, so the claim was true of the surface nobody looks at
+ * and false of the shipped skin: the producer/consumer split again, with canon on the wrong side.
+ */
+{
+  const maxR = (form: HollowForm, id: string) => {
+    const c = chainsFor(form).find(ch => ch.id === id)!
+    return Math.max(...c.st.map((_, i) => radiusFor(c, i, form)))
+  }
+  const tipR = (form: HollowForm, id: string) => {
+    const c = chainsFor(form).find(ch => ch.id === id)!
+    return radiusFor(c, c.st.length - 1, form)
+  }
+
+  // ── 1. THE WARDEN IS THE CONTROL AND IT MUST NOT HAVE MOVED ──────────────────────────────────
+  // ★ Every number below acts through `TRAIL`, which is 0 for a warden — so a warden is untouched by
+  // construction. Asserting it is what turns "by construction" into something that can go red: if a
+  // future dial forgets the `trail <= 0` early-out, the most-gathered form starts dissolving and the
+  // only thing that would notice is a picture nobody took.
+  ok(Math.abs(maxR('warden', 'armL') - maxR('warden', 'armR')) < 1e-9,
+    "★★ a warden's arms are identical — the reach asymmetry is the caster's alone, and canon says nothing of the sort about the form it calls 'most gathered'")
+  ok(gutterFor('trunk', 'warden') === gutterFor('armR', 'warden'),
+    '★★ a warden gutters uniformly — no part of it is exempt from losing itself, because no part of it failed to gather')
+
+  // ── 2. THE STALKER KEEPS LEGIBLE LIMBS ───────────────────────────────────────────────────────
+  // ⚠ THIS ASSERT EXISTS BECAUSE THE FIRST CUT FAILED IT. Gating the asymmetry on `trail > 0` gave
+  // the stalker a withered arm too — 0.116 against 0.101, a visible difference on the form whose
+  // brief line is *"legible limbs"*. Caught by reading the numbers, not by looking at it.
+  ok(Math.abs(maxR('stalker', 'armL') - maxR('stalker', 'armR')) < 1e-9,
+    "★★★ a stalker's arms are identical — its line is \"taut, legible limbs\", and one-armed is a CASTER read that must not leak into the form between")
+  ok(gutterFor('armL', 'stalker') === gutterFor('armR', 'stalker'),
+    '★ and neither of a stalker\'s arms is exempt from the trail — it trails all over, that is its whole line')
+
+  // ── 3. THE CASTER: ONE ARM GATHERS, EVERYTHING ELSE LETS GO ─────────────────────────────────
+  ok(maxR('caster', 'armR') > maxR('caster', 'armL') * 1.2,
+    `★★★ a caster's reaching arm is substantially thicker than the other (${maxR('caster', 'armR').toFixed(3)} vs ${maxR('caster', 'armL').toFixed(3)}) — "dense only at the reaching hand"`)
+  ok(tipR('caster', 'armR') > tipR('caster', 'armL') * 1.5,
+    `★★ and the gap WIDENS toward the hand (${tipR('caster', 'armR').toFixed(3)} vs ${tipR('caster', 'armL').toFixed(3)}) — the off arm takes the leg law and tapers to nothing, which is "trails off and does not resolve"`)
+  // ★★★ THE SILHOUETTE CLAIM, AND IT IS THE ONE THAT ACTUALLY ANSWERS ALEX. A radius table can
+  // satisfy every assert above while the trunk still dominates the outline, which is exactly what
+  // "the caster's trunk still reads solid" meant. *"Reach is its body"* is only true when the
+  // reaching arm is the WIDEST THING ON THE BODY.
+  ok(maxR('caster', 'armR') > maxR('caster', 'trunk'),
+    `★★★ a caster's reach is wider than its trunk (${maxR('caster', 'armR').toFixed(3)} vs ${maxR('caster', 'trunk').toFixed(3)}) — canon's "reach is its body" as a silhouette, not as a radius table`)
+  ok(maxR('warden', 'trunk') > maxR('warden', 'armR') * 1.5,
+    `★ and that is a CASTER fact, not a body plan — a warden's trunk still dominates its arms (${maxR('warden', 'trunk').toFixed(3)} vs ${maxR('warden', 'armR').toFixed(3)}). Without this the previous assert is satisfiable by giving every Hollow enormous arms.`)
+
+  // ── 4. THE ANIMATION CARRIES THE DENSITY AXIS, WHICH IT PREVIOUSLY DID NOT AT ALL ────────────
+  // ★★★ `deform`'s swell is a RATIO of the field against the same form's own field at build time, so
+  // `hollowField`'s per-form `bulk` cancels out of numerator and denominator EXACTLY and never
+  // reached the skin. The gutter then scaled with the vertex's ring radius, so the form that should
+  // dissolve most dissolved least. Both halves said "solid" and no assert could see it.
+  ok(gutterFor('trunk', 'caster') > gutterFor('trunk', 'warden') * 2,
+    `★★★ a caster's trunk gutters far harder than a warden's (${gutterFor('trunk', 'caster').toFixed(2)} vs ${gutterFor('trunk', 'warden').toFixed(2)}) — "the rest trails off and does not resolve" is a claim about a surface that cannot hold still, and thinning a solid body only ever produces a thinner solid body`)
+  ok(gutterFor('armR', 'caster') < gutterFor('trunk', 'warden'),
+    `★★★ and the reach is CRISPER than a warden (${gutterFor('armR', 'caster').toFixed(2)} vs ${gutterFor('trunk', 'warden').toFixed(2)}) — the asymmetry is the read: a held arm on a body losing its own edge`)
+  ok(gutterFor('trunk', 'caster') > gutterFor('armR', 'caster') * 3,
+    '★★ the two are far apart rather than merely ordered — a strict > between them is satisfiable by a difference no eye can see')
+
+  // ── 4b. THE CONSUMER READS IT — AND A BLIND SPOT, WRITTEN DOWN RATHER THAN PAPERED OVER ────
+  // ⚠⚠⚠ EVERY ASSERT IN BLOCK 4 CALLS `gutterFor` DIRECTLY, AND REVERTING `deform` TO A SINGLE
+  // CONSTANT PASSED 76/76 — the 2026-09-05 `hollowPose` shape, where nine fields were computed
+  // every frame and two were read behind a green 34/0. So the call site is asserted here.
+  // ★ ANCHORED ON THE STATEMENT, not the name: `gutterFor` also appears in an import line and in
+  // this file's own prose, and a mention is not a call (the 09-06 world sweep, three survivors).
+  const deformSrc = codeOnly(readFileSync(new URL('hollow-mesh.ts', import.meta.url), 'utf8'))
+  ok(/gut\[built\.chain\[i\]\]/.test(deformSrc),
+    '★★★ `deform` multiplies by the PER-CHAIN gutter — without this the animation half of the density axis is computed correctly every frame and thrown away, which is a producer with no consumer')
+  ok(/const gut = built\.ids\.map\(id => gutterFor\(id, form\)\)/.test(deformSrc),
+    '★★ and it builds that table from `gutterFor` rather than restating the curve — a second copy of the falloff beside the first is the mirror this file keeps paying for')
+
+  // ⚠⚠ AND HERE IS WHAT A BEHAVIOURAL ASSERT CANNOT SHOW, MEASURED RATHER THAN ASSUMED. I wrote a
+  // vertex-level guard first — caster trunk displacement vs reach displacement on the shipped skin —
+  // and it could not be made to fail. Reverting `deform` to one constant left the ratio ABOVE the
+  // threshold, so the assert was decoration. The reason is arithmetic, not tuning:
+  //
+  //   mean anchor drift   0.0403   ← form-BLIND: the same wobble for every form
+  //   mean swell push     0.0330   ← form-BLIND: `hollowField`'s per-form `bulk` cancels exactly
+  //                                  out of `field[a].r / ref[a].r`, because `ref` IS that form's
+  //                                  own field at build time
+  //   mean gutter, trunk  0.0224   ← the only form-aware term, and the smallest of the three
+  //   mean gutter, reach  0.0049
+  //
+  // ★★★ SO ~77% OF WHAT A CASTER DOES ON SCREEN IS WHAT A WARDEN DOES, and no amount of moving the
+  // gutter constant changes that. It is why raising the gutter 4.5x barely moved the picture, and
+  // why the visible half of this change came almost entirely from `radiusFor`. *"The rest trails
+  // off and does not resolve"* cannot be delivered while two of the three motion terms are
+  // density-blind.
+  // ⚠ THE TEMPTING FIX WAS TO WRITE 1.08 AND KEEP THE GREEN — a number fitted to its own assert,
+  // which is the 09-06 entry, and it would have buried the one measurement that says where the
+  // remaining work is. Following the 09-05 `FUSE -> 0` precedent instead: a test file is allowed
+  // to say that a green here does not verify the thing. NEXT: make the drift and the swell answer
+  // the density axis too, and this becomes assertable.
+
+  // ── 5. ONE DECLARATION OF WHICH SIDE IT REACHES WITH ────────────────────────────────────────
+  // ⚠ The field thinks in ANCHORS and the loft thinks in CHAINS, so "the right arm" was written
+  // twice in two vocabularies. Two hand-kept copies of a side agree until somebody moves the reach.
+  ok(chainsFor('caster').some(c => c.id === REACH.chain),
+    `★★ the reach chain ${REACH.chain} exists on a caster — a reach that names a chain the body does not have would thin BOTH arms and read as a withered figure with no explanation`)
+  // ⚠ `strip`, NOT `codeOnly` — AND THE FIRST VERSION USED `codeOnly` AND SURVIVED ITS OWN
+  // MUTATION. `codeOnly` blanks string literals as well as comments, which is right for "does this
+  // file DO x" and exactly wrong for an assert whose entire subject IS a string literal: swapping
+  // `REACH.chain` back to a hard `'armR'` passed clean, because the thing being searched for had
+  // been erased before the search ran. Second time in one session for this pair; the tell is that
+  // the forbidden token is quoted.
+  const meshSrc = strip(readFileSync(new URL('hollow-mesh.ts', import.meta.url), 'utf8'))
+  // ⚠⚠ AND THE FIRST VERSION OF THIS WAS TOO BROAD AND WENT RED ON CORRECT CODE — the file has a
+  // legitimate literal in the bone MIRROR map (`armL: 'armR'`), which is a mirroring fact and not a
+  // reach decision. A guard that forbids a token everywhere forbids it in the places it belongs;
+  // this is the 08-22 mirror-image trap, a correct thing broken to satisfy a wrong assert, and it
+  // feels like diligence the whole way down. The claim is about the two functions that DECIDE the
+  // reach, so the search is scoped to them.
+  const fnBody = (name: string) => {
+    const i = meshSrc.indexOf(`export function ${name}(`)
+    if (i < 0) return null
+    const j = meshSrc.indexOf('\n}', i)
+    return j < 0 ? null : meshSrc.slice(i, j)
+  }
+  for (const fn of ['radiusFor', 'gutterFor']) {
+    const body = fnBody(fn)
+    // ⚠ A SLICE THAT MISSES MUST FAIL, NOT SKIP. "I could not look" and "I found no drift" sharing
+    // an exit is the BLIND-vs-FAIL lesson; a renamed function would otherwise silently retire this.
+    ok(body !== null, `★★ ${fn} is still readable as a top-level function — a guard that cannot find its subject must go red, never quiet`)
+    ok(body !== null && !/['"]armR['"]/.test(body),
+      `★★★ ${fn} contains no literal 'armR' — it asks \`REACH\`. A second copy of the side is the hand-kept mirror (08-22) with a body part in it, and it would go wrong silently on the day canon moves the reach to the other hand`)
+    ok(body !== null && body.includes('REACH.chain'),
+      `★★ and ${fn} actually consults REACH.chain rather than merely avoiding the literal — the negative assert alone is satisfied by a function that has stopped asking at all`)
+  }
 }
 
 console.log(`   ${FORMS.length} forms · ${chainsFor('warden').length} chains`)

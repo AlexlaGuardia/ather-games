@@ -50,7 +50,7 @@
  */
 import * as THREE from 'three'
 import {
-  hollowPose, hollowField, cohesionAt, REST, FORM_SCALE, DENSITY, type Anchor,
+  hollowPose, hollowField, cohesionAt, REST, FORM_SCALE, DENSITY, REACH, type Anchor,
 } from './hollow-pose'
 import { BONE, boneName, applyHollowPose, type BoneName } from './hollow-body'
 import { createHollowMat, setHollowBorrow, type HollowForm } from './hollow-look'
@@ -227,7 +227,32 @@ export function radiusFor(c: Chain, i: number, form: HollowForm): number {
   if (trail <= 0) return base
   if (c.kind === 'leg') return base * (1 - trail * (i / (c.st.length - 1)))
   if (c.kind === 'foot') return base * (1 - trail)
-  if (c.kind === 'arm') return base * (1 + 0.25 * trail)
+  // ★★★ ONE ARM GATHERS AND THE OTHER TRAILS OFF, AND UNTIL 2026-09-08 BOTH DID THE SAME THING.
+  // Canon is more specific here than anywhere else in the brief — *"dense only at the reaching
+  // hand"*, *"reach is its body"*, *"the reaching limb is the only part of a caster that is nearly
+  // solid"* — and the mesh answered it by thickening BOTH arms 25%, which says the opposite: a
+  // symmetric body is a body, and the whole point is that a caster is not one. `hollowField` had
+  // this right for the blob rig the entire time (`bulk` 2.0 on the reach, 0.62 everywhere else),
+  // so the sentence was true of the surface nobody looks at and false of the shipped skin.
+  // ⚠ THE SIDE COMES FROM `REACH`, not from a literal here. Two hand-kept copies of which arm it
+  // is would agree until somebody moved the reach.
+  if (c.kind === 'arm') {
+    // ⚠ THE ASYMMETRY IS THE CASTER'S ALONE, AND THE FIRST CUT GAVE IT TO THE STALKER TOO. Gating
+    // it on `trail > 0` handed a one-armed body to the form whose brief line is *"legible limbs"* —
+    // canon says *"dense only at the reaching hand"* about the caster and nothing of the sort about
+    // the other two. Caught by reading the numbers, not the picture: armR/armL came out 0.116/0.101
+    // on a stalker, which is a visible difference nobody asked for.
+    // ★ `hasFeet` IS THE PREDICATE, not `form === 'caster'`. It is the same fact — it never gathered
+    // enough to get a stem down — and it is already the sentence this file uses to decide whether
+    // feet exist at all, so the two cannot drift apart into two ideas of what a caster is.
+    if (!hasFeet(form) && c.id === REACH.chain) return base * (1 + 0.55 * trail)
+    if (hasFeet(form)) return base * (1 + 0.25 * trail)
+    // The off arm is not a limb any more, it is one of the parts that *"trails off and does not
+    // resolve"* — so it takes the LEG law, tapering to nothing toward the hand. Same expression,
+    // not a similar-looking one: a second falloff curve beside the first is the drift this file
+    // keeps paying for.
+    return base * (1 - trail * (i / (c.st.length - 1)))
+  }
   // ★★ TRUNK: TRAILS OFF OVER ITS WHOLE HEIGHT, AND HARDER BELOW THE GUT.
   // ⚠ THIS USED TO THIN BELOW THE GUT *ONLY*, which left a caster's chest, shoulders and neck at
   // FULL radius — byte-identical to a warden's, measured, and the trunk is the largest mass in the
@@ -240,7 +265,7 @@ export function radiusFor(c: Chain, i: number, form: HollowForm): number {
   // is therefore untouched, which is the control.
   const y = c.st[i].p[1]
   const belowGut = trail * 0.55 * Math.max(0, Math.min(1, (0.90 - y) / 0.34))
-  return base * (1 - trail * 0.5 - belowGut)
+  return base * (1 - trail * TRUNK_TRAIL - belowGut)
 }
 
 /* ─── shared GPU state: one material per form for the whole world, never one per body ─────────── */
@@ -541,10 +566,58 @@ export function updateHollowMeshBody(
  * ★★ THIS IS THE HALF A RIGID BODY CANNOT DO, and it is the brief's most important animation note.
  * A sphere can shrink; only a skin can lose its edge on one side while holding it on the other.
  */
+/**
+ * How hard the skin gutters, per chain, for a form — *"always visibly losing itself"* as a number.
+ *
+ * ★★★ THE BUILD-TIME RADII WERE CARRYING THE WHOLE DENSITY AXIS, AND THE ANIMATION WAS FORM-BLIND.
+ * `deform`'s swell term is a RATIO, `field[a].r / ref[a].r`, and `ref` is the same form's own field
+ * at build time — so `hollowField`'s per-form `bulk` (2.0 on a caster's reach, 0.62 elsewhere)
+ * cancels exactly out of the numerator and denominator and reaches the skin not at all. The gutter
+ * term then scaled with the vertex's own ring radius, so **the form that should dissolve most
+ * dissolved least**: a caster is thinner, so it moved less. Both halves said "solid".
+ *
+ * ⚠ THAT IS WHY THINNING THE TRUNK IN `radiusFor` DID NOT FIX THE READ. A thinner solid body is a
+ * thinner SOLID BODY. *"The rest trails off and does not resolve"* is a claim about the surface
+ * failing to hold still, not about how wide it is, and nothing in the pipe was making that claim.
+ *
+ * ★ THE REACH GOES THE OTHER WAY, and that asymmetry is the whole read: *"the reaching limb is the
+ * only part of a caster that is nearly solid."* It gutters LESS than a warden does, so a crisp arm
+ * hangs off a body that cannot keep its own edge.
+ *
+ * ⚠ A WARDEN IS `trail === 0` AND THEREFORE BYTE-IDENTICAL TO BEFORE — it is the control, and the
+ * guard asserts it rather than trusting the arithmetic.
+ */
+const GUTTER = 0.30
+const UNRESOLVED = 1.0
+/**
+ * How much of the trail axis the TRUNK takes. Raised from 0.5 to 1.0 on 2026-09-08.
+ *
+ * ★ 0.5 was argued as *"in-family — a leg reaches 1 - trail at its tip, so half that over the trunk
+ * is the same axis"*, and the arithmetic was fine. Measured against the brief it was still not
+ * enough: a caster's chest sat at 78% of a warden's and the trunk is the largest mass in the
+ * silhouette, so *"mostly the suggestion of a body"* was being carried by feet, limb taper and 22%.
+ * At 1.0 the trunk answers the axis as hard as a limb tip does, which is what makes the reaching
+ * arm the widest thing on a caster — canon's *"reach is its body"* as a silhouette rather than as
+ * a radius table.
+ * ⚠ A WARDEN IS `trail === 0` AND IS THEREFORE UNTOUCHED AT ANY VALUE OF THIS. That is what makes
+ * it safe to move: the constant can only ever act on the forms canon says are less gathered.
+ */
+const TRUNK_TRAIL = 1.0
+export function gutterFor(chainId: string, form: HollowForm): number {
+  const trail = TRAIL[form]
+  if (trail <= 0) return GUTTER
+  // Same gate as the radius, same reason: only the form that never gathered a stem has a part that
+  // is exempt from losing itself. A stalker trails all over — that is its whole line.
+  if (!hasFeet(form) && chainId === REACH.chain) return GUTTER * (1 - trail)
+  return GUTTER + UNRESOLVED * trail
+}
+
 function deform(st: Bodies, t: number, form: HollowForm): void {
   const { built, ref } = st
   const field = hollowField(t, form)
   const loose = 1 - cohesionAt(t)
+  // Per-chain, resolved once per frame rather than per vertex — `built.chain[i]` indexes `built.ids`.
+  const gut = built.ids.map(id => gutterFor(id, form))
   const n = built.rest.length / 3
   const attr = built.geo.getAttribute('position') as THREE.BufferAttribute
   const P = attr.array as Float32Array
@@ -567,7 +640,8 @@ function deform(st: Bodies, t: number, form: HollowForm): void {
       ox += w * dx[a]; oy += w * dy[a]; oz += w * dz[a]; swell += w * kk[a]
     }
     const push = built.rad[i] * (swell - 1) +
-      built.rad[i] * 0.30 * loose * gutterNoise(built.rest[i3], built.rest[i3 + 1], built.rest[i3 + 2], t)
+      built.rad[i] * gut[built.chain[i]] * loose *
+        gutterNoise(built.rest[i3], built.rest[i3 + 1], built.rest[i3 + 2], t)
     P[i3]     = built.rest[i3]     + ox + built.nrm[i3]     * push
     P[i3 + 1] = built.rest[i3 + 1] + oy + built.nrm[i3 + 1] * push
     P[i3 + 2] = built.rest[i3 + 2] + oz + built.nrm[i3 + 2] * push
