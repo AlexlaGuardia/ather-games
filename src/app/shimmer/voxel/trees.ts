@@ -27,6 +27,7 @@ import { MAT, TURF, LAND_DRESS } from './depth'
 import { hash2, mixSeed } from './noise'
 import { forestness } from './biome'
 import { speciesFactor, treeDensityAt } from './character'
+import { zoneTreeCeiling } from './zones'
 
 /**
  * How hard a lobe's radius is warped, as a fraction of r-squared. 0 is a perfect ellipsoid.
@@ -187,7 +188,15 @@ export function treeStartsAt(seed: number, cx: number, cz: number, size: number,
   // ⚠ BLENDED, NOT ROLLED. A trunk count is continuous, so it eases from 1.18 in a wood core to
   // 0.15 in a barrens with no border at all — see `blend` in character.ts on why the discrete/
   // continuous split is the whole design and not an optimisation.
-  const expected = (cfg.meadowPerColumn + forestness(seed, cx, cz) * (cfg.perColumn - cfg.meadowPerColumn))
+  //
+  // ── ★★ AND THE CEILING IS PER-PLACE (2026-09-08) ────────────────────────────────────────────
+  // `cfg.perColumn` is the trunk count a FULL forest mask buys. At 1.7 that caps canopy coverage
+  // near 26% whatever `forest` says, which is a fine wood and not a closed one — so the Twilight
+  // Thicket, ruled by canon as "closed canopy, dim floor, a permanent twilight", measured 72.5% of
+  // its floor at full daylight. `zoneTreeCeiling` lets one zone raise the ceiling; everywhere
+  // without one it returns `cfg.perColumn` unchanged, so this is a no-op outside the Thicket.
+  const ceiling = zoneTreeCeiling(cx * size + size / 2, cz * size + size / 2, seed, cfg.perColumn)
+  const expected = (cfg.meadowPerColumn + forestness(seed, cx, cz) * (ceiling - cfg.meadowPerColumn))
     * treeDensityAt(cx * size + size / 2, cz * size + size / 2, seed, LAND_DRESS)
   const whole = Math.floor(expected)
   const n = whole + (g0() < expected - whole ? 1 : 0)

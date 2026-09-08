@@ -51,6 +51,29 @@ export interface ZoneAnchor {
    *  closed canopy that IS its character; meadows near 0 = sparse lone trees. */
   forest: number
   /**
+   * ── ★★ THE TRUNK-COUNT CEILING THIS ZONE REACHES AT FULL MEMBERSHIP (2026-09-08) ─────────────
+   * Optional; absent means "whatever `TreeConfig.perColumn` says", i.e. every zone that does not
+   * name one is untouched by this knob existing.
+   *
+   * ⚠⚠ IT EXISTS BECAUSE `forest` COULD NOT EXPRESS WHAT ITS OWN COMMENT PROMISES. `forest` is a
+   * 0..1 MASK and trees.ts spends it as `meadowPerColumn + forestness * (perColumn - meadow)`, so
+   * with `perColumn` at 1.7 a forestness of 1.0 buys 1.7 trunks per 16x16 column. Mean crown
+   * radius across the four ruled species is ~3.5, so ~26% canopy coverage is the ARITHMETIC
+   * CEILING of that config and no setting of `forest` can pass it. The Thicket sat at `forest
+   * 0.97` — all but maxed — and measured 27.5% coverage with 72.5% of its floor at full daylight.
+   * Canon (`CANON/game/shimmer-geography.md:1051`) rules it "closed canopy, dim floor, a permanent
+   * twilight", and places Athowl, Noctyx and Luminara there ON that reading. So this is drift
+   * against a settled ruling, not a taste dial, and the fix had to be a new axis rather than a
+   * bigger number on the old one.
+   *
+   * ★ IT RAISES THE CEILING AND CHANGES NOTHING ELSE. The count still rides `forestness` and
+   * `treeDensityAt`, so the wood still thins at its edge, a barrens under the mask is still bare,
+   * and the four species' crowns are untouched — which matters, because crown radius is the tree's
+   * SILHOUETTE and that is an art call, not a worldgen one. Measured at 16
+   * (`scripts/thicket-close.mts`): 95.8% canopy, 4.2% of floor at full sky, mean sky 8.8.
+   */
+  treeCeiling?: number
+  /**
    * How readily this zone's mana pools into MIST PATCHES (mist.ts) — a per-cell rarity chance,
    * 0 = never. Zone character again, not a placement table: mist.ts rolls against this, the same
    * way biome reads `forest` and the grey band reads `tended`. A village is 0 because a village is
@@ -80,7 +103,7 @@ export const ZONE_ANCHORS: ZoneAnchor[] = [
   // Rolling hills: ridges and benches OFF, a long-wave swell ON — hills you walk over, not into.
   { id: 'spirit-meadow', x: -2150, z: 700, rx: 950, rz: 780, reliefK: 0.1, benchK: 0, swellAmp: 7, tended: 1, forest: 0.06, lift: 0, mist: 0.25 },
   // Dense forest keeps mild terrain — the CANOPY is the character, not the ground.
-  { id: 'twilight-thicket', x: -2000, z: -1150, rx: 800, rz: 650, reliefK: 0.4, benchK: 0.5, swellAmp: 2, tended: 1, forest: 0.97, lift: 0, mist: 0.45 },
+  { id: 'twilight-thicket', x: -2000, z: -1150, rx: 800, rz: 650, reliefK: 0.4, benchK: 0.5, swellAmp: 2, tended: 1, forest: 0.97, lift: 0, mist: 0.45, treeCeiling: 16 },
   // ★ THE HOT-SPRING MOUNTAIN (reworked 2026-08-08 from "benches HARD ON, modest relief"): lift
   // raises a terraced massif, benchK 2 saturates the bench blend so every flank IS terraces
   // (1.6 left the plains-field's low end only 60% benched — sloped steps no pool could sit on),
@@ -142,6 +165,22 @@ export function zoneAt(x: number, z: number, seed: number): ZoneAt {
 export const RIM_CENTER_X = 800
 export const RIM_START = 2600     // where wild-country grey begins strengthening
 export const RIM_FULL = 5200      // the deep rim
+
+/**
+ * The trunk-count ceiling in force at (x, z): a zone's `treeCeiling` blended in by membership, so
+ * the wood thickens toward the heart and eases back to ordinary country at the edge with no border.
+ * Same membership field every other zone character rides — see the file header.
+ *
+ * ⚠ `base` is passed IN rather than imported from trees.ts. This file is the pure core's bottom
+ * layer (it imports only noise) and trees.ts already imports biome, which imports here; taking the
+ * default from the caller keeps the graph acyclic and keeps the CONFIG the single owner of its own
+ * default. A zone with no ceiling returns `base` exactly, so this is a no-op everywhere but one.
+ */
+export function zoneTreeCeiling(x: number, z: number, seed: number, base: number): number {
+  const { zone, t } = zoneAt(x, z, seed)
+  if (!zone || t <= 0 || zone.treeCeiling === undefined) return base
+  return base + (zone.treeCeiling - base) * t
+}
 
 export function greyAllowance(x: number, z: number, seed: number): number {
   const d = Math.hypot(x - RIM_CENTER_X, z)
