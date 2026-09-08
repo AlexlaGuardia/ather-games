@@ -6,6 +6,8 @@ import { WORLD_SEED } from './world-seed'
 import { DEFAULT_SITES, siteAt } from '../voxel/sites'
 import { hasDescent, warrenPlan, cacheCell } from '../voxel/warren'
 import { aditStartsAt, aditAt, DEFAULT_ADITS } from '../voxel/dens'
+import { greyness } from '../voxel/biome'
+import { HOLLOW_GREY_MIN } from './hollows'
 import { carveTopAt, DEFAULT_CARVE } from '../voxel/carve'
 import { columnHeight } from '../voxel/height'
 import { DEFAULT_COLUMN, SECTION } from '../voxel/column'
@@ -420,26 +422,75 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       const surfaceAt = (x: number, z: number) => columnHeight(x, z, SEED)
       const carveTop = (x: number, z: number) =>
         carveTopAt(SEED, x, z, DEFAULT_COLUMN.chunk, surfaceAt, DEFAULT_COLUMN.depth.seaLevel, DEFAULT_CARVE)
-      const c0x = Math.floor(p.x / SECTION), c0z = Math.floor(p.z / SECTION)
-      let best: { x: number; z: number; y: number; lid: number; d: number } | null = null
-      // Rings outward, so the first ring with a hit holds the nearest and the scan stops.
-      for (let r = 0; r <= 20 && !best; r++) {
-        for (let dz = -r; dz <= r; dz++) {
-          for (let dx = -r; dx <= r; dx++) {
+      // ── ★★★ IT LOOKS FOR A CAVE WHERE SOMETHING CAN HAPPEN, NOT THE NEAREST HOLE (2026-09-08) ──
+      // The first version answered "nearest mouth" and it sent Alex to (-308,-641), 158 blocks from
+      // spawn, where `greyness` is **0.000**. `hollowEligible` needs >= 0.5, so that cave could
+      // never hold a Hollow at any depth or hour — and he walked in, found a mana seam and nothing
+      // else, and reported the feature not working. It was working; the command had answered a
+      // different question from the one he was asking.
+      //
+      // ⚠ NEAREST IS THE WRONG OPTIMISATION FOR A TEST COMMAND. Measured, only **9.33%** of the
+      // world clears the greyness gate (`scripts/hollow-map.mts`), so a nearest-first search lands
+      // on healthy ground roughly nine times in ten. The mouth was never the scarce thing.
+      //
+      // ★ TWO CHEAP SEARCHES, NOT ONE EXPENSIVE ONE. `greyness` is a noise read; `aditAt` walks
+      // every carver in a 5x5 chunk box behind its bank test. Searching rings for "an adit that is
+      // also grey" would pay the expensive half on ~14,000 columns. So: ring out on GREYNESS alone
+      // to find blighted ground, then ring out for an adit around THAT point. Both bounded.
+      const seaL = DEFAULT_COLUMN.depth.seaLevel
+      // ⚠⚠ `requireGrey` FILTERS THE MOUTH, NOT THE REGION, AND THE FIRST VERSION FILTERED THE
+      // REGION. It searched 12 rings around the nearest blighted column and returned the first adit
+      // it met — 192 blocks of wandering, which walked back out of the blight and landed on
+      // greyness 0.374. Near a grey place is not grey. The gate is asked at the cell, so the search
+      // must be too.
+      //
+      // ★ AND THE COLUMN'S GREYNESS IS CHECKED BEFORE THE ADIT, WHICH IS WHAT MAKES A WIDER SEARCH
+      // AFFORDABLE. `greyness` is a noise read; `aditAt` walks every carver in a 5x5 chunk box
+      // behind its bank test. Rejecting ~91% of columns on the cheap channel first means the
+      // expensive half runs on the few that could possibly qualify.
+      const mouthNear = (ox: number, oz: number, rings: number, requireGrey: boolean) => {
+        const b0x = Math.floor(ox / SECTION), b0z = Math.floor(oz / SECTION)
+        for (let r = 0; r <= rings; r++) {
+          for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
             if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue     // the ring, not the disc
-            for (const st of aditStartsAt(SEED, c0x + dx, c0z + dz, SECTION, DEFAULT_ADITS)) {
-              const plan = aditAt(st, surfaceAt, DEFAULT_COLUMN.depth.seaLevel, carveTop, DEFAULT_ADITS)
+            if (requireGrey && greyness((b0x + dx) * SECTION + SECTION / 2, (b0z + dz) * SECTION + SECTION / 2, SEED) < HOLLOW_GREY_MIN) continue
+            for (const st of aditStartsAt(SEED, b0x + dx, b0z + dz, SECTION, DEFAULT_ADITS)) {
+              const plan = aditAt(st, surfaceAt, seaL, carveTop, DEFAULT_ADITS)
               if (!plan) continue
               const mx = Math.round(plan.mouthX), mz = Math.round(plan.mouthZ)
-              const d = Math.round(Math.hypot(mx - p.x, mz - p.z))
-              if (!best || d < best.d) best = { x: mx, z: mz, y: plan.floorY, lid: surfaceAt(plan.anchorX, plan.anchorZ) - plan.tunnelY, d }
+              const g = greyness(mx, mz, SEED)
+              if (requireGrey && g < HOLLOW_GREY_MIN) continue          // the MOUTH must clear it
+              return { x: mx, z: mz, y: plan.floorY,
+                       lid: surfaceAt(plan.anchorX, plan.anchorZ) - plan.tunnelY,
+                       d: Math.round(Math.hypot(mx - p.x, mz - p.z)), grey: g }
             }
           }
         }
+        return null
       }
-      if (!best) return 'no cave mouth within ~320 blocks — walk a while and ask again'
-      const said = c.tp(best.x, best.z)
-      return `${said}\n${best.d} blocks away · the mouth is in the bank at y ${best.y}, facing you\nthe tunnel behind it runs ${best.lid} blocks under the crust — walk IN, not down`
+      // ⚠⚠ ONE SEARCH FROM THE KEEPER, NOT TWO STAGES — AND THE TWO-STAGE VERSION WAS WRONG TWICE.
+      // It found the nearest blighted COLUMN and then hunted an adit around that point, which (a)
+      // wandered back out of the blight and returned greyness 0.374, and then (b) with the mouth
+      // filter added, found nothing at all inside its radius and silently fell through to the very
+      // cave that started this. Measured after the fact: the nearest qualifying mouth to spawn is
+      // 952 blocks out, and the blighted column it was searching around is 539 blocks from it.
+      // The decomposition was the bug — "near blighted ground" is not a step toward "a blighted
+      // mouth", it is a different question that happens to sound like a subgoal.
+      //
+      // ★ THE PRE-FILTER IS WHAT MAKES ONE WIDE SEARCH AFFORDABLE. `greyness` is a noise read and
+      // rejects ~94% of columns; `aditAt` walks every carver in a 5x5 chunk box behind its bank
+      // test. Cheap channel first, expensive channel only on what survives.
+      const GREY_RINGS = 72          // ~1150 blocks — the nearest qualifying mouth to spawn is 952
+      const found = mouthNear(p.x, p.z, GREY_RINGS, true) ?? mouthNear(p.x, p.z, 20, false)
+      if (!found) return 'no cave mouth within ~320 blocks — walk a while and ask again'
+      const said = c.tp(found.x, found.z)
+      // ⚠ THE GREYNESS IS REPORTED EITHER WAY, so a barren cave explains itself instead of reading
+      // as a broken feature. That is the whole lesson of the first version: the command knew this
+      // number and kept it.
+      const verdict = found.grey >= HOLLOW_GREY_MIN
+        ? `greyness ${found.grey.toFixed(2)} — blighted ground, Hollows CAN body here (night, or deep enough by day)`
+        : `⚠ greyness ${found.grey.toFixed(2)} — healthy ground, so NO Hollow will ever form here. Canon: healthy ground makes spirits, not Hollows.`
+      return `${said}\n${found.d} blocks away · the mouth is in the bank at y ${found.y}, facing you\nthe tunnel behind it runs ${found.lid} blocks under the crust — walk IN, not down\n${verdict}`
     } },
   // ★ /foes (2026-08-16, #294) — the instrument the patrols needed before they could be trusted.
   // Owner-only in FULL, unlike /goto and /mist: those two split because knowing a PLACE exists is

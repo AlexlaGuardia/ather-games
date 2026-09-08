@@ -580,13 +580,26 @@ export function packWalk(k: number, rand: () => number): { dx: number; dz: numbe
  * back from the night, at any hour (*tended light holds grey off*). Sky passes at ≤ NIGHT_SKY_MAX
  * per MC 1.18+'s internal-light rule, so the tide starts at deep dusk, not pitch black.
  */
+/**
+ * The blight threshold the ruling turns on: below this, ground is HEALTHY and makes spirits, not
+ * Hollows (canon, 2026-09-07).
+ *
+ * ★ NAMED BECAUSE A SECOND CALLER APPEARED AND A COPIED `0.5` WOULD HAVE BEEN A MIRROR. `/cave`
+ * needs to tell a keeper whether the cave it just sent them to can hold anything — measured, only
+ * **9.33%** of the world clears this — and the first version of that command did not ask, sent Alex
+ * 158 blocks to a cave at greyness 0.000, and he reported the feature broken. It was not broken; it
+ * was refusing correctly somewhere nothing could ever spawn. Two literals agreeing until one of them
+ * moves is the shape this tree keeps paying for, so there is one.
+ */
+export const HOLLOW_GREY_MIN = 0.5
+
 export function hollowEligible(
   x: number, z: number, seed: number,
   packedLight: number, day: number, surfaceH: number, seaLevel: number,
 ): boolean {
   if (!spawnDark(packedLight, day, NIGHT_SKY_MAX)) return false
   if (surfaceH <= seaLevel + 1) return false
-  return greyness(x, z, seed) >= 0.5
+  return greyness(x, z, seed) >= HOLLOW_GREY_MIN
 }
 
 /**
