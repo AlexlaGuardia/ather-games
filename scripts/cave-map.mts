@@ -164,6 +164,31 @@ console.log(`\ncave air below the surface:      ${caveTotal.toLocaleString()} ce
 console.log(`  the wind reaches:              ${caveWind.toLocaleString()}  (${pct(caveWind, caveTotal)})`)
 console.log(`  inside the spawner's window:   ${caveInWindow.toLocaleString()}  (${pct(caveInWindow, caveTotal)})`)
 console.log(`  BOTH (a Hollow could body):    ${caveBoth.toLocaleString()}  (${pct(caveBoth, caveTotal)})`)
+// ── HOW DEEP DOES THE WIND ACTUALLY GET? ──────────────────────────────────────────────────────
+// ⚠ A SHARE OF CAVE AIR DOES NOT SAY WHERE THAT AIR IS, and the two readings answer different
+// questions. A mouth that opens a wide shallow sheet just under the turf and a mouth that opens a
+// system running to bedrock produce the same percentage. For "is it dangerous down there" the
+// depth distribution is the number, not the share.
+{
+  const bands = [0, 8, 16, 32, 64, 128, 1e9]
+  const hit = new Array(bands.length - 1).fill(0), all = new Array(bands.length - 1).fill(0)
+  for (let z = rz0; z < rz0 + RN; z++) for (let x = rx0; x < rx0 + RN; x++) {
+    const h = hAt(x, z)
+    for (let y = 1; y < h; y++) {
+      if (voxel(x, y, z) !== AIR) continue
+      const d = h - y
+      let b = 0; while (d >= bands[b + 1]) b++
+      all[b]++
+      if (open[idx(x, y, z)]) hit[b]++
+    }
+  }
+  console.log(`\ncave air by DEPTH below its own surface, and what the wind reaches there:`)
+  for (let b = 0; b < bands.length - 1; b++) {
+    const hi = bands[b + 1] > 1e8 ? '+' : `-${bands[b + 1] - 1}`
+    console.log(`  ${String(bands[b]).padStart(4)}${hi.padEnd(5)} ${String(all[b]).padStart(8)} cells  wind reaches ${String(hit[b]).padStart(8)}  ${pct(hit[b], all[b])}`)
+  }
+}
+
 const nCol = N * N
 console.log(`\ncolumns (16x16 each), of ${nCol}:`)
 console.log(`  with any wind-fed cave:        ${colHasWind.reduce((a, b) => a + b, 0)}  (${pct(colHasWind.reduce((a, b) => a + b, 0), nCol)})`)

@@ -168,31 +168,11 @@ export function carveOne(
   if (!first) return 0
   const S = first.size
   const yTop = oy0 + sections.length * S
-  const g = rng(start.seed ^ 0x5f356495)
-  let x = start.x, y = start.y, z = start.z
-  let yaw = start.yaw, pitch = start.pitch
   let carved = 0
 
-  for (let step = 0; step < start.steps; step++) {
-    // Smooth wander: nudge the heading rather than re-rolling it, or the tunnel becomes a scribble.
-    yaw += (g() - 0.5) * 0.38
-    pitch = Math.max(-0.6, Math.min(0.6, pitch + (g() - 0.5) * 0.16))
-    x += Math.cos(yaw) * Math.cos(pitch)
-    z += Math.sin(yaw) * Math.cos(pitch)
-    y += Math.sin(pitch)
-
-    if (y < cfg.floorGuard || y > cfg.yMax + 12) break
-    // Bounded reach is a hard contract: the scan box is sized from it, so a tunnel that outran it
-    // would be clipped invisibly and leave a wall mid-passage.
-    if (Math.abs(x - start.x) > cfg.maxReach || Math.abs(z - start.z) > cfg.maxReach) break
-
-    const cavern = g() < cfg.cavernChance
-    const r = cavern
-      ? cfg.cavernRadiusMin + g() * (cfg.cavernRadiusMax - cfg.cavernRadiusMin)
-      : start.radius * (0.75 + g() * 0.5)
-
+  walkCarve(start, cfg, (x, y, z, r) => {
     // Cheap reject before the O(r^3) sphere fill.
-    if (x + r < ox || x - r > ox + S || z + r < oz || z - r > oz + S || y + r < oy0 || y - r > yTop) continue
+    if (x + r < ox || x - r > ox + S || z + r < oz || z - r > oz + S || y + r < oy0 || y - r > yTop) return
 
     const r2 = r * r
     const x0 = Math.max(ox, Math.floor(x - r)), x1 = Math.min(ox + S - 1, Math.ceil(x + r))
@@ -212,20 +192,172 @@ export function carveOne(
           if (dx * dx + dy * dy + dz * dz > r2) continue
           const li = sec.idx(wx - ox, ly, wz - oz)
           if (!carvable(sec.data[li])) continue
-          if (surfaceAt) {
-            const h = surfaceAt(wx, wz)
-            // Leave the ground intact: no surface breach, and never open the floor under standing
-            // water (which drains a lake through a hole nobody can see).
-            if (wy > h - cfg.surfaceClearance) continue
-            if (h <= seaLevel && wy > h - 3) continue
-          }
+          if (surfaceAt && !carveReaches(wy, surfaceAt(wx, wz), cfg, seaLevel)) continue
           sec.data[li] = AIR
           carved++
         }
       }
     }
-  }
+  })
   return carved
+}
+
+/**
+ * May a carver open this cell, given its column's surface? The two altitude refusals `carveOne`
+ * applies, as one predicate.
+ *
+ * ★ IT IS A FUNCTION BECAUSE `carveTopAt` HAS TO ASK THE SAME QUESTION, and a second copy of two
+ * inequalities is exactly the hand-kept mirror this tree keeps paying for: both copies would stay
+ * correct until someone changed one, and a query that disagrees with the writer reports caves in
+ * cells that are solid. One definition, two callers.
+ */
+export function carveReaches(y: number, h: number, cfg: CarveConfig, seaLevel: number): boolean {
+  // Leave the ground intact: no surface breach, and never open the floor under standing water
+  // (which drains a lake through a hole nobody can see).
+  if (y > h - cfg.surfaceClearance) return false
+  if (h <= seaLevel && y > h - 3) return false
+  return true
+}
+
+/**
+ * ── ★★★ THE HIGHEST CELL ANY CARVER OPENS IN COLUMN (x, z), OR -1 ──────────────────────────────
+ *
+ * Pure, and that is the entire reason it exists rather than a read of the written grid. The adit
+ * in `dens.ts` has to know whether a tunnel runs just under the crust HERE before it will cut a
+ * mouth, and a den's plan may be resolved from a neighbouring column that has not been generated —
+ * that is what makes the whole no-coordination scheme work (`denAt` reads only `surfaceAt`, which
+ * is pure and global). A planner that peeked at `sections` would compute one plan from its own
+ * column and a different one from next door, and the seam would be half a cave mouth.
+ *
+ * ⚠ IT WALKS THE SAME `walkCarve` THE WRITER WALKS, AND SHARES `carveReaches` WITH IT. That is
+ * deliberate and it is the difference between a derivation and a mirror: the only thing this
+ * function adds is the projection of a sphere onto one vertical line. `carve.test.ts` asserts it
+ * against what `carveStack` actually WROTE over a few thousand columns rather than against a second
+ * reading of the same idea, because two functions that agree with each other prove nothing.
+ *
+ * ⚠ IT CANNOT SEE MATERIAL. `carveOne` also refuses a non-carvable cell (packed cloud, water), and
+ * nothing pure knows what is at a voxel before the stage runs. So this is an UPPER BOUND: it may
+ * report a cell the writer declined. The differential measures how often, and the adit treats a
+ * miss as a refusal rather than as a hole, so the failure direction is a mouth that does not get
+ * cut — never a mouth into solid rock.
+ */
+export function carveTopAt(
+  seed: number, x: number, z: number, chunk: number,
+  surfaceAt: (x: number, z: number) => number, seaLevel: number,
+  cfg: CarveConfig = DEFAULT_CARVE,
+): number {
+  return carveTopAtMany(seed, [{ x, z }], chunk, surfaceAt, seaLevel, cfg)[0]
+}
+
+/**
+ * ── ★★ `carveTopAt` FOR MANY COLUMNS AT ONCE, AND THE BATCHING IS NOT AN OPTIMISATION DETAIL ────
+ *
+ * It is the same lesson `carveOne` learned and wrote down two paragraphs up: *"the walk does not
+ * depend on which section is being filled, so it belongs outside that loop."* The adit planner asks
+ * this question once per attempt, every attempt in a column shares the same carvers, and answering
+ * them one at a time re-walks the whole scan box each time.
+ *
+ * ⚠ MEASURED, BECAUSE THE FIRST VERSION SHIPPED THE SLOW SHAPE AND IT WAS NOT SUBTLE: per-attempt
+ * queries took column generation from 288ms to 736ms per four columns — a 2.6x worldgen regression,
+ * in a browser worker, on a box whose GPU is an Intel UHD 630. That is the kind of cost that never
+ * shows up as a wrong pixel and only ever shows up as the world loading badly.
+ *
+ * The points are expected to sit within a column or two of each other (they are one column's adit
+ * attempts), so a single bounding box around them rejects almost every sphere before any point is
+ * tested. Answers are returned in the order the points were given.
+ */
+export function carveTopAtMany(
+  seed: number, pts: ReadonlyArray<{ x: number; z: number }>, chunk: number,
+  surfaceAt: (x: number, z: number) => number, seaLevel: number,
+  cfg: CarveConfig = DEFAULT_CARVE,
+): number[] {
+  const n = pts.length
+  const out = new Array<number>(n).fill(-1)
+  if (n === 0) return out
+
+  // ⚠⚠ THERE IS NO SECOND COPY OF THE ALTITUDE RULE HERE, AND THERE WAS ONE UNTIL A MUTATION
+  // PROVED IT DEAD. The first version precomputed a per-point ceiling as
+  // `min(h - surfaceClearance, h <= seaLevel ? h - 3 : Infinity)` — which is `carveReaches`
+  // rewritten as an inequality — and then ALSO called `carveReaches` in the loop below. The two
+  // agreed, so the call was unreachable: mutating it to `if (false)` changed nothing and the sweep
+  // reported SURVIVED, which reads as *the differential is blind*. It was not blind; the guard was
+  // simply guarding a copy of itself. Exactly the hand-kept-mirror shape, hiding inside a line
+  // written to avoid one. The loop now starts at the sphere's own top and `carveReaches` is the
+  // only thing that decides, so there is one definition and the mutation fires.
+  const hs = new Array<number>(n)
+  let px0 = Infinity, px1 = -Infinity, pz0 = Infinity, pz1 = -Infinity
+  for (let i = 0; i < n; i++) {
+    hs[i] = surfaceAt(pts[i].x, pts[i].z)
+    if (pts[i].x < px0) px0 = pts[i].x
+    if (pts[i].x > px1) px1 = pts[i].x
+    if (pts[i].z < pz0) pz0 = pts[i].z
+    if (pts[i].z > pz1) pz1 = pts[i].z
+  }
+
+  const rad = carveScanRadius(chunk, cfg)
+  const c0x = Math.floor(px0 / chunk) - rad, c1x = Math.floor(px1 / chunk) + rad
+  const c0z = Math.floor(pz0 / chunk) - rad, c1z = Math.floor(pz1 / chunk) + rad
+  for (let cz = c0z; cz <= c1z; cz++) {
+    for (let cx = c0x; cx <= c1x; cx++) {
+      for (const st of carveStartsAt(seed, cx, cz, chunk, cfg)) {
+        walkCarve(st, cfg, (sx, sy, sz, r) => {
+          // One box reject for the whole point set, before any per-point work.
+          if (sx + r < px0 || sx - r > px1 || sz + r < pz0 || sz - r > pz1) return
+          if (sy + r < cfg.floorGuard) return
+          for (let i = 0; i < n; i++) {
+            if (sy + r <= out[i]) continue
+            const dx = pts[i].x - sx, dz = pts[i].z - sz
+            const flat = dx * dx + dz * dz
+            if (flat > r * r) continue
+            const yTopHere = Math.floor(sy + Math.sqrt(r * r - flat))
+            for (let y = yTopHere; y > out[i] && y >= cfg.floorGuard; y--) {
+              const dy = y - sy
+              if (dy * dy + flat > r * r) continue
+              if (!carveReaches(y, hs[i], cfg, seaLevel)) continue
+              out[i] = y
+              break
+            }
+          }
+        })
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * One carver's walk, as a sequence of spheres. Extracted so the writer and `carveTopAt` cannot
+ * drift apart — the walk IS the tunnel's definition, and two copies of it would be two tunnels.
+ *
+ * ⚠ THE RNG STREAM IS THE CONTRACT. Four draws per step in a fixed order (yaw, pitch, cavern,
+ * radius), and both `break` conditions come BEFORE the cavern draw. A visitor cannot perturb it,
+ * which is what makes it safe to hand this walk to a caller that only looks.
+ */
+function walkCarve(
+  start: CarveStart, cfg: CarveConfig, visit: (x: number, y: number, z: number, r: number) => void,
+): void {
+  const g = rng(start.seed ^ 0x5f356495)
+  let x = start.x, y = start.y, z = start.z
+  let yaw = start.yaw, pitch = start.pitch
+  for (let step = 0; step < start.steps; step++) {
+    // Smooth wander: nudge the heading rather than re-rolling it, or the tunnel becomes a scribble.
+    yaw += (g() - 0.5) * 0.38
+    pitch = Math.max(-0.6, Math.min(0.6, pitch + (g() - 0.5) * 0.16))
+    x += Math.cos(yaw) * Math.cos(pitch)
+    z += Math.sin(yaw) * Math.cos(pitch)
+    y += Math.sin(pitch)
+
+    if (y < cfg.floorGuard || y > cfg.yMax + 12) break
+    // Bounded reach is a hard contract: the scan box is sized from it, so a tunnel that outran it
+    // would be clipped invisibly and leave a wall mid-passage.
+    if (Math.abs(x - start.x) > cfg.maxReach || Math.abs(z - start.z) > cfg.maxReach) break
+
+    const cavern = g() < cfg.cavernChance
+    const r = cavern
+      ? cfg.cavernRadiusMin + g() * (cfg.cavernRadiusMax - cfg.cavernRadiusMin)
+      : start.radius * (0.75 + g() * 0.5)
+    visit(x, y, z, r)
+  }
 }
 
 /**

@@ -5,6 +5,10 @@
 import { WORLD_SEED } from './world-seed'
 import { DEFAULT_SITES, siteAt } from '../voxel/sites'
 import { hasDescent, warrenPlan, cacheCell } from '../voxel/warren'
+import { aditStartsAt, aditAt, DEFAULT_ADITS } from '../voxel/dens'
+import { carveTopAt, DEFAULT_CARVE } from '../voxel/carve'
+import { columnHeight } from '../voxel/height'
+import { DEFAULT_COLUMN, SECTION } from '../voxel/column'
 // console verb has ever been harness-covered.** `/space`, `/brew`, `/goto`, `/waymark`: every one
 // of them shipped on review alone, including their OWNER GATES. A cheat command whose gate is
 // checked by nobody is the kind of thing that reads fine in a diff and is a live cheat in prod.
@@ -392,6 +396,50 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       if (!best) return 'no warren within ~2700 blocks — try walking into greyfield first'
       const said = c.tp(best.x, best.z)
       return `${said}\n${best.d} blocks away · ${best.rooms} rooms below${best.hasCache ? ' · a cache is down there' : ' · no cache (too few rooms)'}\nthe stairs are in the middle of the ruin`
+    } },
+  // ── ★★ /cave (2026-09-08) — THE INSTRUMENT A SEALED WORLD MADE NECESSARY ────────────────────
+  // Cave mouths are RARE ON PURPOSE (about one per 55 columns, measured) because a bank steep
+  // enough to hold one is rare and a tunnel running within `maxLid` of the crust is rarer. That is
+  // the right density for a world you explore and the wrong one for a world you are trying to
+  // TEST: before this command the only honest answer to "go and look at a cave" was "walk until
+  // you find one", and for the whole month before adits existed the honest answer was "you can't,
+  // they are sealed" (`scripts/cave-map.mts`: the wind reached 1.61% of cave air).
+  //
+  // ★ IT RESOLVES THE PLAN, IT DOES NOT GUESS FROM THE HEIGHTFIELD. The same `aditAt` the
+  // generator runs, so a mouth this command names is a mouth that is actually cut. If the two ever
+  // disagree, the command is wrong rather than the world, which is the correct direction.
+  //
+  // ⚠ THE SEARCH IS CHEAP ONLY BECAUSE `aditAt` REFUSES IN THE RIGHT ORDER. Its bank test is eight
+  // `surfaceAt` calls and rejects ~90%; `carveTopAt` behind it re-walks every carver in a 5x5 chunk
+  // box. Reversing those two would put hundreds of full carver walks on the MAIN THREAD, which is
+  // where the console runs. Bounded at 20 columns for the same reason `/warren` is bounded: an
+  // unbounded miss walks the infinite plane and hangs the tab.
+  { name: 'cave', usage: 'cave', help: 'teleport to the nearest cave mouth you can walk into', owner: true,
+    run: (_a, c) => {
+      const p = c.pos()
+      const surfaceAt = (x: number, z: number) => columnHeight(x, z, SEED)
+      const carveTop = (x: number, z: number) =>
+        carveTopAt(SEED, x, z, DEFAULT_COLUMN.chunk, surfaceAt, DEFAULT_COLUMN.depth.seaLevel, DEFAULT_CARVE)
+      const c0x = Math.floor(p.x / SECTION), c0z = Math.floor(p.z / SECTION)
+      let best: { x: number; z: number; y: number; lid: number; d: number } | null = null
+      // Rings outward, so the first ring with a hit holds the nearest and the scan stops.
+      for (let r = 0; r <= 20 && !best; r++) {
+        for (let dz = -r; dz <= r; dz++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue     // the ring, not the disc
+            for (const st of aditStartsAt(SEED, c0x + dx, c0z + dz, SECTION, DEFAULT_ADITS)) {
+              const plan = aditAt(st, surfaceAt, DEFAULT_COLUMN.depth.seaLevel, carveTop, DEFAULT_ADITS)
+              if (!plan) continue
+              const mx = Math.round(plan.mouthX), mz = Math.round(plan.mouthZ)
+              const d = Math.round(Math.hypot(mx - p.x, mz - p.z))
+              if (!best || d < best.d) best = { x: mx, z: mz, y: plan.floorY, lid: surfaceAt(plan.anchorX, plan.anchorZ) - plan.tunnelY, d }
+            }
+          }
+        }
+      }
+      if (!best) return 'no cave mouth within ~320 blocks — walk a while and ask again'
+      const said = c.tp(best.x, best.z)
+      return `${said}\n${best.d} blocks away · the mouth is in the bank at y ${best.y}, facing you\nthe tunnel behind it runs ${best.lid} blocks under the crust — walk IN, not down`
     } },
   // ★ /foes (2026-08-16, #294) — the instrument the patrols needed before they could be trusted.
   // Owner-only in FULL, unlike /goto and /mist: those two split because knowing a PLACE exists is

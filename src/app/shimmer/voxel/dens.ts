@@ -533,3 +533,285 @@ export function digDens(
 
 /** Loosest expected den ATTEMPTS per chunk anywhere in the world — the oracle's upper bound. */
 export const maxAttemptsPerChunk = (cfg: DenConfig = DEFAULT_DENS): number => cfg.perChunk * MAX_DEN_K
+
+// ── ★★★ ADITS — THE CAVE MOUTH `carve.ts` SPECIFIED A MONTH AGO AND NOBODY BUILT ────────────────
+//
+// ⚠⚠ THE WORLD'S CAVES WERE SEALED, AND EVERY FILE INVOLVED WAS CORRECT. `carve.ts` refuses to
+// breach the surface (`surfaceClearance` 3) for a good reason it states in full — an invisible
+// one-voxel hole you fall forty blocks down is a bug that reads as a cave mouth — and it hands the
+// job of a real entrance to "a DELIBERATE FEATURE (a widened, visible mouth)". This file was built
+// as that feature and its header says so. But a den digs its own small chamber for an animal; it
+// was never the thing that connects the CARVED NETWORK, and it only ever joins a tunnel by luck.
+// So the brief was written, the file that claims it was built, and the actual job was never done.
+//
+// Measured before this existed (`scripts/cave-map.mts`, 320x320 blocks of Wilds): 889,677 cells of
+// cave air below the surface, and the wind — canon's third precondition — reached 14,295 of them.
+// **1.61%.** 14 of 400 columns had any opening at all. A second instrument with no flood in it
+// agreed from the other side: 62.8% of the world has a cave under it, and the histogram of solid
+// lid over the topmost cave air has its tallest bar at exactly 3, which is `surfaceClearance`.
+// Nobody had met a Hollow underground because nobody could get underground.
+//
+// ── ★★ AN ADIT IS A DEN WITH A DIFFERENT FAR END, AND REUSE IS THE POINT ───────────────────────
+// It shares this file's bank probe, its throat, its apron notch and its `dig` rule verbatim. That
+// is not tidiness: those rules are the entire safety argument for opening ground to the sky-side
+// (bounded three ways, asserted by exact set membership), and a second file restating them would
+// be the hand-kept mirror this tree keeps paying for. Living HERE also keeps this file's own
+// header true — it is still the only thing in the generator allowed to open ground to daylight.
+//
+// ── ★★ IT CUTS THE LID; IT DOES NOT DIG A CAVE ────────────────────────────────────────────────
+// The whole feature rests on that histogram: 13.8% of cave-bearing cells have a tunnel exactly
+// three blocks down. So an adit does not need to sink a shaft to the mean lid of 44 — it needs to
+// find one of the many places the network already reaches the crust, and open it at a BANK so the
+// result is a mouth in a hillside rather than a pit in a lawn.
+//
+// ⚠ THE TUNNEL IS FOUND PURELY, VIA `carveTopAt`, NEVER BY READING `sections`. A plan resolved
+// from a neighbouring column must be the same plan, or the seam is half a cave mouth — the same
+// law that keeps `denAt` reading only `surfaceAt`. See that function's own header for why it is a
+// derivation of the carver's walk rather than a second copy of it.
+
+export interface AditConfig {
+  /** Expected adit ATTEMPTS per chunk. Most find no bank, and most of those find no tunnel. */
+  perChunk: number
+  /** Bank probe distance, in blocks — also the throat's run from the mouth back to the anchor. */
+  probe: number
+  /** Blocks the ground must fall across `probe`. A mouth in flat ground is a pit. See `DenConfig`. */
+  minDrop: number
+  /** How many steps in from the mouth may remove a SURFACE block. Same meaning as a den's. */
+  apronSteps: number
+  throatRadius: number
+  headroom: number
+  /**
+   * How far below the surface the tunnel may lie and still be worth opening.
+   *
+   * ★★ THIS IS THE FEATURE'S WHOLE SELECTIVITY, AND IT IS SET FROM A MEASUREMENT, NOT A FEELING.
+   * The lid histogram (`scripts/cave-map.mts`'s sibling reading) is not smooth: it spikes at
+   * exactly 3 — `carve.surfaceClearance`, where a tunnel ran up into the crust and was clipped —
+   * and then falls to a long flat tail averaging 44. So a small number here selects the spike and
+   * a large one starts sinking shafts through solid rock to reach nothing in particular. 6 keeps
+   * the spike and one block of slop either side of it.
+   */
+  maxLid: number
+  /** Steps driven PAST the anchor at the tunnel's own level, so the throat breaks properly in. */
+  breakInMin: number
+  breakInMax: number
+  maxAltitude: number
+  floorGuard: number
+}
+
+export const DEFAULT_ADITS: AditConfig = {
+  perChunk: 1.2,
+  probe: 4,
+  minDrop: 3,
+  apronSteps: 3,
+  throatRadius: 1.25,
+  headroom: 3,
+  maxLid: 6,
+  breakInMin: 2,
+  breakInMax: 5,
+  maxAltitude: 200,
+  floorGuard: 4,
+}
+
+export interface AditStart { x: number; z: number; seed: number; breakIn: number }
+
+export interface AditPlan {
+  /** Mouth foot, in world blocks — the outside ground the adit opens onto. */
+  mouthX: number
+  mouthZ: number
+  /** Floor at the mouth: the first AIR row, so a keeper walks in here. Outside ground + 1. */
+  floorY: number
+  /** Unit vector pointing OUT of the adit, downhill. */
+  dx: number
+  dz: number
+  /** The anchor — where the tunnel was found — and the altitude of its topmost open cell. */
+  anchorX: number
+  anchorZ: number
+  tunnelY: number
+  /** Steps from the mouth to the anchor, then past it. */
+  steps: number
+  breakIn: number
+}
+
+export const aditScanRadius = (size: number, cfg: AditConfig = DEFAULT_ADITS): number =>
+  Math.ceil((cfg.probe + cfg.breakInMax) / size) + 1
+
+/**
+ * The adit attempts anchored in chunk (cx, cz).
+ *
+ * ★ NO LAND DIAL, DELIBERATELY, AND THE ABSENCE IS AN ARGUMENT. `DEN_DRESS` exists because a den
+ * is DUG BY AN ANIMAL and canon's habitat column says which grounds animals dig. An adit is not
+ * dug by anything — it is a place the rock already opened and the hillside already fell away, so
+ * scaling it by how well a paw digs would be borrowing a reason that does not apply. If cave
+ * mouths should read differently by land, the honest dial is a ROCK one and it should be derived
+ * from where the carvers actually reach the crust, which is measurable rather than guessable.
+ */
+export function aditStartsAt(
+  seed: number, cx: number, cz: number, size: number, cfg: AditConfig = DEFAULT_ADITS,
+): AditStart[] {
+  const base = (hash2(cx, cz, seed ^ 0xad17e5) * 4294967296) | 0
+  const whole = Math.floor(cfg.perChunk)
+  const n = whole + (unit(cx, cz, seed ^ 0xad17) < cfg.perChunk - whole ? 1 : 0)
+  const out: AditStart[] = []
+  for (let i = 0; i < n; i++) {
+    const s = mixSeed(base, i)
+    out.push({
+      x: cx * size + Math.floor(unit(s, 1, seed ^ 0xa1) * size),
+      z: cz * size + Math.floor(unit(s, 2, seed ^ 0xa2) * size),
+      seed: s,
+      breakIn: cfg.breakInMin
+        + Math.floor(unit(s, 3, seed ^ 0xa3) * (cfg.breakInMax - cfg.breakInMin + 1)),
+    })
+  }
+  return out
+}
+
+/**
+ * Resolve an attempt into a plan, or `null` if this ground will not take an adit.
+ *
+ * `carveTop` answers "the highest cell a carver opens in this column, or -1" — `carve.ts`'s
+ * `carveTopAt`, injected rather than imported so the oracle can hand this function a tunnel it
+ * placed itself and assert the mouth reaches it. Every refusal below is a precondition a test can
+ * count, for the reason `denAt` states: a plan clipped cell-by-cell later looks like quiet success.
+ */
+export function aditAt(
+  st: AditStart, surfaceAt: (x: number, z: number) => number, seaLevel: number,
+  carveTop: (x: number, z: number) => number,
+  cfg: AditConfig = DEFAULT_ADITS,
+): AditPlan | null {
+  if (holdIndexAt(st.x, st.z) >= 0) return null
+
+  const hUp = surfaceAt(st.x, st.z)
+  if (hUp >= cfg.maxAltitude) return null
+  if (hUp < seaLevel) return null
+
+  // ── the bank: steepest descent over `probe`, exactly as a den finds one ────────────────────
+  let best = -1, bdx = 0, bdz = 0, hDown = 0
+  for (const [ux, uz] of DIRS) {
+    const px = Math.round(st.x + ux * cfg.probe), pz = Math.round(st.z + uz * cfg.probe)
+    const h = surfaceAt(px, pz)
+    if (hUp - h > best) { best = hUp - h; bdx = ux; bdz = uz; hDown = h }
+  }
+  if (best < cfg.minDrop) return null
+  if (hDown < seaLevel) return null              // a mouth below the waterline is a drowned hole
+
+  const floorY = hDown + 1
+  if (floorY - 1 < cfg.floorGuard) return null
+
+  // ── is there a tunnel just under the crust here? ──────────────────────────────────────────
+  // ⚠⚠ ASKED LAST, AND THE ORDER IS A REAL COST, NOT A STYLE. `carveTopAt` re-walks every carver
+  // in a 5x5 chunk scan box — the same work `carveStack` does to generate a whole column — while
+  // every test above it is a handful of `surfaceAt` calls. The first version of this function
+  // asked it FIRST, on the reasoning that it is the rarest condition and should reject earliest.
+  // Rarest and cheapest are different properties and only one of them belongs in this decision:
+  // the bank test alone refuses ~90% of attempts, so putting it in front turns roughly eleven
+  // full carver walks per column into one.
+  const tunnelY = carveTop(st.x, st.z)
+  if (tunnelY < cfg.floorGuard) return null
+  if (hUp - tunnelY > cfg.maxLid) return null
+
+  // ⚠⚠ THE GRADE IS A PRECONDITION, NOT A CLAMP, AND IT IS ASSERTED FROM BOTH SIDES. The mouth
+  // sits at the foot of the bank and the tunnel sits under its top, so the throat has to climb or
+  // fall between two altitudes neither of which this feature chose. A rise steeper than one block
+  // per step is a wall a keeper cannot step up — the passage would be visibly open and physically
+  // one-way, which is worse than no adit at all. Bounding it symmetrically also refuses the plunge
+  // in the other direction, where the "mouth" is the lip of a drop into a tunnel roof.
+  if (Math.abs(tunnelY - floorY) > cfg.probe) return null
+
+  return {
+    mouthX: st.x + bdx * cfg.probe, mouthZ: st.z + bdz * cfg.probe,
+    floorY, dx: bdx, dz: bdz,
+    anchorX: st.x, anchorZ: st.z, tunnelY,
+    steps: cfg.probe, breakIn: st.breakIn,
+  }
+}
+
+/**
+ * Every cell an adit wants, as world coordinates. Like `denCells`, this returns what it WANTS —
+ * the surface rule and the material refusals live in `dig`, so a test can measure both sets and
+ * see the difference rather than checking that a filter it is testing had been applied.
+ */
+export function aditCells(plan: AditPlan, cfg: AditConfig = DEFAULT_ADITS): DenCell[] {
+  const out: DenCell[] = []
+  const seen = new Map<string, DenCell>()
+  const push = (x: number, y: number, z: number, apron: boolean) => {
+    const key = `${x},${y},${z}`
+    const had = seen.get(key)
+    if (had) { if (apron) had.apron = true; return }
+    const cell: DenCell = { x, y, z, apron }
+    seen.set(key, cell)
+    out.push(cell)
+  }
+
+  const tr = Math.ceil(cfg.throatRadius)
+  const total = plan.steps + plan.breakIn
+  for (let s = 0; s <= total; s++) {
+    // Floor interpolates mouth -> tunnel over `steps`, then stays at the tunnel's own level for
+    // the break-in run. A passage that kept climbing past the anchor would surface behind the hill.
+    const t = Math.min(1, s / plan.steps)
+    const floor = Math.round(plan.floorY + (plan.tunnelY - plan.floorY) * t)
+    const ax = plan.mouthX - plan.dx * s, az = plan.mouthZ - plan.dz * s
+    for (let dz = -tr; dz <= tr; dz++) {
+      for (let dx = -tr; dx <= tr; dx++) {
+        const px = ax + dx, pz = az + dz
+        const ox = px - ax, oz = pz - az
+        const along = ox * plan.dx + oz * plan.dz
+        const perp = Math.hypot(ox - along * plan.dx, oz - along * plan.dz)
+        if (perp > cfg.throatRadius) continue
+        // ⚠ APRON IS THE CELL'S OWN DISTANCE FROM THE MOUTH, NOT THE STEP INDEX. `denCells` states
+        // the reason in full: a step's cross-section already reaches `tr` cells along the axis, so
+        // keying the notch to `s` declares a 3-step mouth and cuts a 5-step one.
+        const dm = Math.hypot(Math.round(px) - plan.mouthX, Math.round(pz) - plan.mouthZ)
+        for (let h = 0; h < cfg.headroom; h++) push(Math.round(px), floor + h, Math.round(pz), dm <= cfg.apronSteps)
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * Dig every adit that reaches into this column. Returns how many cells were opened.
+ *
+ * ⚠⚠ THE TUNNEL QUERY IS BATCHED ACROSS THE WHOLE SCAN BOX, AND THAT IS WHY THIS FUNCTION
+ * ENUMERATES ITS ATTEMPTS BEFORE IT PLANS ANY OF THEM. Asked one at a time, `carveTopAt` re-walks
+ * every carver in a 5x5 chunk box per attempt and took column generation from 288ms to 736ms per
+ * four columns. Asked once for every anchor in this column, it walks them once. `carve.ts` states
+ * the identical lesson about its own inner loop; this is the second place it applies.
+ *
+ * ★ IT COSTS THE CHEAP-FIRST ORDERING INSIDE `aditAt` AND THAT IS THE RIGHT TRADE. Batching means
+ * every attempt gets a tunnel answer, including the ~90% the bank test would have refused — but
+ * an extra point costs one box-rejected distance test, while an extra attempt used to cost a whole
+ * walk. The ordering inside `aditAt` still stands for any caller that asks one at a time.
+ */
+export function digAdits(
+  sections: (Section | null)[], ox: number, oy0: number, oz: number, size: number, seed: number,
+  surfaceAt: (x: number, z: number) => number,
+  seaLevel: number,
+  carveTops: (pts: ReadonlyArray<{ x: number; z: number }>) => number[],
+  cfg: AditConfig = DEFAULT_ADITS,
+): number {
+  const first = sections.find(Boolean)
+  if (!first) return 0
+  const c: Ctx = { sections, ox, oy0, oz, size, yTop: oy0 + sections.length * size }
+  const rad = aditScanRadius(size, cfg)
+  const c0x = Math.floor(ox / size), c0z = Math.floor(oz / size)
+
+  const starts: AditStart[] = []
+  for (let cz = c0z - rad; cz <= c0z + rad; cz++) {
+    for (let cx = c0x - rad; cx <= c0x + rad; cx++) starts.push(...aditStartsAt(seed, cx, cz, size, cfg))
+  }
+  if (!starts.length) return 0
+  const tops = carveTops(starts.map(st => ({ x: st.x, z: st.z })))
+  const top = new Map<string, number>()
+  for (let i = 0; i < starts.length; i++) top.set(`${starts[i].x},${starts[i].z}`, tops[i])
+  const carveTop = (x: number, z: number) => top.get(`${x},${z}`) ?? -1
+
+  let opened = 0
+  for (const st of starts) {
+    const plan = aditAt(st, surfaceAt, seaLevel, carveTop, cfg)
+    if (!plan) continue
+    for (const cell of aditCells(plan, cfg)) {
+      if (dig(c, cell.x, cell.y, cell.z, surfaceAt(cell.x, cell.z), cfg.floorGuard, cell.apron)) opened++
+    }
+  }
+  return opened
+}

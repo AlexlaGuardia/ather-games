@@ -33,11 +33,11 @@ import {
 } from './bubble'
 import { ZONE_ANCHORS } from './zones'
 import { plantWaystones } from './story-path'
-import { carveStack, type CarveConfig, DEFAULT_CARVE } from './carve'
+import { carveStack, carveTopAtMany, type CarveConfig, DEFAULT_CARVE } from './carve'
 import { placeSeams, type SeamBatch, SEAM_BATCHES } from './seams'
 import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
 import { plantBoulders, type BoulderConfig, DEFAULT_BOULDERS } from './boulders'
-import { digDens, type DenConfig, DEFAULT_DENS } from './dens'
+import { digDens, digAdits, type DenConfig, type AditConfig, DEFAULT_DENS, DEFAULT_ADITS } from './dens'
 import { placeSites } from './sites'
 import { slumpMask } from './slump'
 import { plantMaterialAt } from './flora'
@@ -73,6 +73,7 @@ export interface ColumnConfig {
   trees: TreeConfig
   boulders: BoulderConfig
   dens: DenConfig
+  adits: AditConfig
 }
 
 export const DEFAULT_COLUMN: ColumnConfig = {
@@ -85,6 +86,7 @@ export const DEFAULT_COLUMN: ColumnConfig = {
   trees: DEFAULT_TREES,
   boulders: DEFAULT_BOULDERS,
   dens: DEFAULT_DENS,
+  adits: DEFAULT_ADITS,
 }
 
 export class Column {
@@ -392,6 +394,19 @@ export function generateColumn(
     // ⚠ SECTION, not `cfg.chunk`: dens key their placement grid to the streaming section like the
     // planters do, not to the 64-wide carve grid. The measured rates were taken at 16.
     digDens(col.sections, wx, 0, wz, SECTION, seed, surfaceAt, cfg.depth.seaLevel, cfg.dens)
+    // ── ★★ ADITS: THE MOUTHS THAT MAKE THE CARVED NETWORK REACHABLE ─────────────────────────
+    // AFTER `digDens` so the two features cannot fight over the same bank — a den that got there
+    // first simply leaves the adit's cells already AIR, and `dig` reports those as not-opened
+    // rather than double-counting. AFTER `carveStack` for the reason an adit exists at all: it
+    // opens a hole into a tunnel, and if the tunnel is not cut yet there is nothing to open into.
+    //
+    // ⚠ `carveTopAt` IS HANDED IN AS A CLOSURE, NOT IMPORTED BY `dens.ts`, so the adit planner
+    // takes "where is the tunnel" as a parameter and an oracle can hand it one it placed itself.
+    // It reads `surfaceAt` and the seed only — no `sections` — which is what keeps a plan resolved
+    // from a neighbouring column identical to this one's. See `carveTopAt`'s header.
+    digAdits(col.sections, wx, 0, wz, SECTION, seed, surfaceAt, cfg.depth.seaLevel,
+             pts => carveTopAtMany(seed, pts, cfg.chunk, surfaceAt, cfg.depth.seaLevel, cfg.carve),
+             cfg.adits)
     col.stage = Stage.Carved
   }
 
