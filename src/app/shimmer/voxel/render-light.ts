@@ -92,8 +92,83 @@ export interface RenderLight {
 export const li = (lx: number, y: number, lz: number): number => (y * SPAN + lz) * SPAN + lx
 const bi = (face: number, y: number, span: number): number => (face * HEIGHT + y) * SPAN + span
 
+/** Material and surface readers. World-coordinate; may read outside the column's own footprint. */
+export type MatAt = (x: number, y: number, z: number) => number
+export type HeightAt = (x: number, z: number) => number
+
 /**
- * One pass over one column.
+ * ── ★★★ THE PASS IS A JOB WITH A CURSOR, FOR THE SAME REASON `light.ts` IS (2026-09-08) ────────
+ *
+ * 22ms is eleven times the host's 2ms slice, and the 09-01 ruling on `advanceLightBuild` is exact:
+ * *"a clock can refuse to START work and nothing on a single thread can stop work already running."*
+ * A one-shot `computeRenderLight` called from the frame loop would be a 22ms hitch per column and
+ * ~170 of them on a fresh ring — the "spazzing" that entry exists to have already fixed once.
+ *
+ * ⚠ THE WORKER IS NOT THE ANSWER HERE, THOUGH IT LOOKS LIKE IT. The generation worker holds its own
+ * `Column` cache and never sees a mined block: the main thread owns edits and re-meshes them
+ * synchronously (`voxel-gen.worker.ts` says so in writing — *"meshing stays on the main thread,
+ * deliberately"*). Light computed over there would be light for the world as GENERATED, so digging
+ * a shaft would let daylight into the mesh and nothing into the field. One voxel truth, one place.
+ *
+ * So: `beginRenderLight` + `stepRenderLight(w, budgetMs)`, and `computeRenderLight` is
+ * `stepRenderLight(w, Infinity)` — the one-shot path and the sliced path are the same code and
+ * cannot drift apart. That last sentence is `light.ts`'s and it is the whole point of the shape.
+ */
+export interface RenderLightWork {
+  ox: number
+  oz: number
+  matAt: MatAt
+  heightAt: HeightAt
+  incoming: LightBorders | null
+  sky: Uint8Array
+  blk: Uint8Array
+  solid: Uint8Array
+  spill: LightBorders
+  /** Packed indices; bit 30 marks the block channel. GROWABLE — see `pushQ`. */
+  q: Int32Array
+  qn: number
+  head: number
+  /** 0 seed, 1 incoming, 2 flood, 3 done. */
+  phase: number
+  cursor: number
+  field: RenderLight | null
+}
+
+/**
+ * How many queue pops pass between wall-clock checks, and one column of seeding likewise.
+ *
+ * ⚠ NOT A TUNING KNOB — it is the granularity of the budget and it bounds the OVERSHOOT, exactly as
+ * `light.ts`'s `STEP_CHECK` does. `performance.now()` in the inner loop of a flood is itself a
+ * measurable cost on the machine this exists to protect.
+ */
+const STEP_CHECK = 512
+
+/**
+ * ── ⚠⚠ THE QUEUE GROWS, AND THE FIXED ONE WAS A SILENT CORRUPTION (2026-09-08) ─────────────────
+ * It was `new Int32Array(n * 2)` written with a bare `q[qn++] = i`, on the reasoning that a cell is
+ * pushed once per channel. That holds for a flood seeded only from the sky, where the FIFO drains in
+ * strictly decreasing level order — and it stops holding the moment a column has more than one class
+ * of seed. An emitter, or a neighbour's `incoming`, can RAISE a cell the sky flood already settled,
+ * and the raise-and-repush is the mechanism the whole border design rests on ("light only ever
+ * INCREASES"). A cell can legally be pushed up to fifteen times per channel.
+ *
+ * ★ AND THE OVERFLOW WOULD NOT HAVE THROWN. A write past the end of a typed array is SILENTLY
+ * DROPPED — no exception, no NaN, no log. The lost entry is a cell whose light never propagates, so
+ * the failure is a dark patch in a lit cave, appearing only in the busiest columns (many lanterns,
+ * or a heavily-seeded border), and it would have been read as a bug in the shader or the upload.
+ * ⚠ It is the direction this tree keeps paying for: the instrument fails toward "nothing to see".
+ */
+const pushQ = (w: RenderLightWork, v: number): void => {
+  if (w.qn === w.q.length) {
+    const bigger = new Int32Array(w.q.length * 2)
+    bigger.set(w.q)
+    w.q = bigger
+  }
+  w.q[w.qn++] = v
+}
+
+/**
+ * Start one pass over one column. Nothing is computed here.
  *
  * `matAt` is world-coordinate and MAY read neighbours — materials are cheap and already generated;
  * it is the flood that is expensive and that stays inside the footprint. `heightAt` is the
@@ -102,26 +177,64 @@ const bi = (face: number, y: number, span: number): number => (face * HEIGHT + y
  * `incoming` is the light arriving from neighbouring columns (their `spill`, indexed by the face it
  * arrives ON — use `OPPOSITE`). Null on a first pass.
  */
-export function computeRenderLight(
+export function beginRenderLight(
   ox: number, oz: number,
-  matAt: (x: number, y: number, z: number) => number,
-  heightAt: (x: number, z: number) => number,
+  matAt: MatAt,
+  heightAt: HeightAt,
   incoming: LightBorders | null = null,
-): RenderLight {
+): RenderLightWork {
   const n = SPAN * HEIGHT * SPAN
-  const sky = new Uint8Array(n), blk = new Uint8Array(n)
-  const solid = new Uint8Array(n)
-  const spill = newBorders()
-  // The queue holds packed indices; bit 30 marks the block channel so both floods share one loop
-  // and therefore one set of border rules. Two loops would be two places to get the decay wrong.
-  const q = new Int32Array(n * 2)
-  let qn = 0
+  return {
+    ox, oz, matAt, heightAt, incoming,
+    sky: new Uint8Array(n), blk: new Uint8Array(n), solid: new Uint8Array(n),
+    spill: newBorders(),
+    // The queue holds packed indices; bit 30 marks the block channel so both floods share one loop
+    // and therefore one set of border rules. Two loops would be two places to get the decay wrong.
+    q: new Int32Array(n),
+    qn: 0, head: 0, phase: 0, cursor: 0, field: null,
+  }
+}
+
+/**
+ * Advance the pass by at most `budgetMs` of wall clock. Returns true when the field is finished,
+ * at which point `w.field` holds it.
+ *
+ * Pass `Infinity` to run to completion in one call — that is exactly what `computeRenderLight`
+ * does, so the one-shot path and the stepped path are the same code.
+ */
+export function stepRenderLight(w: RenderLightWork, budgetMs: number): boolean {
+  if (w.phase === 3) return true
+  const { ox, oz, matAt, heightAt, sky, blk, solid, spill } = w
+  const t0 = performance.now()
+  let since = 0
+  const outOfTime = (): boolean => {
+    if (++since < STEP_CHECK) return false
+    since = 0
+    return performance.now() - t0 >= budgetMs
+  }
 
   // ── seed: free sky above the heightmap, solids marked, emitters queued ───────────────────────
-  for (let lz = 0; lz < SPAN; lz++) {
-    for (let lx = 0; lx < SPAN; lx++) {
+  if (w.phase === 0) {
+    const columns = SPAN * SPAN
+    let did = 0
+    while (w.cursor < columns) {
+      // One footprint column between clock reads: at most 256 cells plus one `heightAt`, the same
+      // reasoning as `light.ts`'s per-column check.
+      //
+      // ⚠⚠ `did > 0` IS LOAD-BEARING AND ITS ABSENCE WAS AN INFINITE LOOP, caught by §7 running at
+      // `budgetMs = 0`. Elapsed time is `>= 0` on the very first iteration, so a bare deadline test
+      // returns before advancing the cursor — every call does nothing, forever, and the host's frame
+      // loop simply stops rendering with no error anywhere. Every slice must complete at least one
+      // unit; `drainRemeshQueue` states the same rule for the same reason ("always does at least
+      // one so the queue cannot starve on a slow machine whose every mesh overruns the budget").
+      // The other two phases are safe by construction — their `outOfTime` counter does STEP_CHECK
+      // units before it ever reads a clock.
+      if (did > 0 && performance.now() - t0 >= budgetMs) return false
+      did++
+      const c = w.cursor++
+      const lx = c % SPAN, lz = (c / SPAN) | 0
       const h = heightAt(ox + lx, oz + lz)
-      for (let y = HEIGHT - 1; y > h; y--) { const i = li(lx, y, lz); sky[i] = MAX_LIGHT; q[qn++] = i }
+      for (let y = HEIGHT - 1; y > h; y--) { const i = li(lx, y, lz); sky[i] = MAX_LIGHT; pushQ(w, i) }
       for (let y = h; y >= 0; y--) {
         const m = matAt(ox + lx, y, oz + lz)
         // ⚠ WATER IS NOT SOLID AND MUST NOT BLOCK LIGHT — the same split `light.ts` draws. A lake
@@ -144,32 +257,41 @@ export function computeRenderLight(
         // except a cave staying dark with a lit lantern in it. A source cell may be solid; what
         // solidity forbids is light ENTERING a cell, which the flood's neighbour test handles.
         const e = emitOf(m)
-        if (e > 0) { blk[i] = e; q[qn++] = i | 0x40000000 }
+        if (e > 0) { blk[i] = e; pushQ(w, i | 0x40000000) }
       }
     }
+    w.phase = 1; w.cursor = 0
   }
 
   // ── seed: light arriving from neighbours ─────────────────────────────────────────────────────
-  if (incoming) {
-    for (let face = 0; face < 4; face++) {
-      for (let y = 0; y < HEIGHT; y++) {
+  if (w.phase === 1) {
+    const inc = w.incoming
+    if (inc) {
+      const total = 4 * HEIGHT
+      while (w.cursor < total) {
+        if (outOfTime()) return false
+        const face = (w.cursor / HEIGHT) | 0
+        const y = w.cursor % HEIGHT
+        w.cursor++
         for (let s = 0; s < SPAN; s++) {
           const lx = face === FACE_XM ? 0 : face === FACE_XP ? SPAN - 1 : s
           const lz = face === FACE_ZM ? 0 : face === FACE_ZP ? SPAN - 1 : s
           const i = li(lx, y, lz)
           if (solid[i]) continue
-          const sv = incoming.sky[bi(face, y, s)]
-          if (sv > sky[i]) { sky[i] = sv; q[qn++] = i }
-          const bv = incoming.blk[bi(face, y, s)]
-          if (bv > blk[i]) { blk[i] = bv; q[qn++] = i | 0x40000000 }
+          const sv = inc.sky[bi(face, y, s)]
+          if (sv > sky[i]) { sky[i] = sv; pushQ(w, i) }
+          const bv = inc.blk[bi(face, y, s)]
+          if (bv > blk[i]) { blk[i] = bv; pushQ(w, i | 0x40000000) }
         }
       }
     }
+    w.phase = 2; w.cursor = 0
   }
 
   // ── the flood ────────────────────────────────────────────────────────────────────────────────
-  for (let head = 0; head < qn; head++) {
-    const raw = q[head]
+  for (; w.head < w.qn; w.head++) {
+    if (outOfTime()) return false
+    const raw = w.q[w.head]
     const isBlk = (raw & 0x40000000) !== 0
     const i = raw & 0x3FFFFFFF
     const lx = i % SPAN, lz = ((i / SPAN) | 0) % SPAN, y = (i / (SPAN * SPAN)) | 0
@@ -198,9 +320,24 @@ export function computeRenderLight(
       }
       const j = li(nx, ny, nz)
       if (solid[j]) continue
-      if (isBlk) { if (blk[j] >= nl) continue; blk[j] = nl; q[qn++] = j | 0x40000000 }
-      else       { if (sky[j] >= nl) continue; sky[j] = nl;  q[qn++] = j }
+      if (isBlk) { if (blk[j] >= nl) continue; blk[j] = nl; pushQ(w, j | 0x40000000) }
+      else       { if (sky[j] >= nl) continue; sky[j] = nl;  pushQ(w, j) }
     }
   }
-  return { sky, blk, spill, visited: qn }
+
+  w.phase = 3
+  w.field = { sky, blk, spill, visited: w.qn }
+  return true
+}
+
+/** One pass over one column, run to completion. See `stepRenderLight` for the sliced form. */
+export function computeRenderLight(
+  ox: number, oz: number,
+  matAt: MatAt,
+  heightAt: HeightAt,
+  incoming: LightBorders | null = null,
+): RenderLight {
+  const w = beginRenderLight(ox, oz, matAt, heightAt, incoming)
+  stepRenderLight(w, Infinity)
+  return w.field!
 }

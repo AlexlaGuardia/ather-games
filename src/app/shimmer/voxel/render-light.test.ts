@@ -9,7 +9,8 @@
 // oracle's scar (three surviving mutations against a fixture with no collision in it), and §1 is a
 // precondition rather than a nicety.
 import {
-  computeRenderLight, newBorders, li, MAX_LIGHT, SPAN, HEIGHT, OPPOSITE,
+  computeRenderLight, beginRenderLight, stepRenderLight,
+  newBorders, li, MAX_LIGHT, SPAN, HEIGHT, OPPOSITE,
   FACE_XM, FACE_XP,
 } from './render-light'
 import { MAT } from './depth'
@@ -143,6 +144,80 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
 {
   const frac = R.visited / (SPAN * HEIGHT * SPAN)
   ok(frac < 0.75, `§7 the flood touches a shell rather than the volume (${(100 * frac).toFixed(1)}% of cells)`)
+}
+
+// ── §7 the sliced pass and the one-shot pass are the same field ──────────────────────────────
+// ★★ THIS IS THE ASSERT THE HOST RESTS ON. `computeRenderLight` is `stepRenderLight(w, Infinity)`,
+// so the two paths share their code — but sharing code is not the same claim as producing the same
+// ANSWER, because the sliced path carries state across calls and every cursor is a chance to resume
+// in the wrong place. A phase that restarts its cursor, or a `head` that rewinds, gives a field that
+// is merely DIMMER: no throw, no red, a cave that reads as atmosphere. Byte equality or nothing.
+{
+  const w = beginRenderLight(0, 0, matAt, heightAt, null)
+  let steps = 0
+  // A budget of zero still does one check-interval of work, so this terminates; the cap is a
+  // runaway guard, not a timeout — if it is ever hit the loop is not advancing and that is the bug.
+  while (!stepRenderLight(w, 0) && steps < 100000) steps++
+  ok(steps > 1, `§7 the pass really was sliced — ${steps} resumptions, not one call in disguise`)
+  // ⚠ THE NULL CHECK GATES THE COMPARE INSTEAD OF PREFACING IT. A `w.field!` deref on a job that
+  // never finished THROWS, and a throw is neither a pass nor a fail — it aborts the run before §8
+  // exists, so a mutation that stalls the cursor would be reported as broken test code. This file's
+  // own header is about failures that do not look like failures; a crash is one of them.
+  ok(w.field !== null, `§7 ★★ a job driven to completion publishes its field (stalled after ${steps})`)
+  if (w.field) {
+    let differ = 0
+    for (let i = 0; i < R.sky.length; i++) {
+      if (w.field.sky[i] !== R.sky[i] || w.field.blk[i] !== R.blk[i]) differ++
+    }
+    ok(differ === 0, `§7 ★★ sliced === one-shot, cell for cell (${differ} of ${R.sky.length} differ)`)
+    let bdiffer = 0
+    for (let i = 0; i < R.spill.sky.length; i++) {
+      if (w.field.spill.sky[i] !== R.spill.sky[i] || w.field.spill.blk[i] !== R.spill.blk[i]) bdiffer++
+    }
+    ok(bdiffer === 0, `§7 ★ and the SPILL survives slicing too (${bdiffer} border cells differ)`)
+  }
+
+  // And the same with an incoming set, because phase 1 has its own cursor and the fixture above
+  // never exercises it — a resumption bug there would hide behind a null `incoming`.
+  const inc = newBorders()
+  for (let y = 0; y < HEIGHT; y++) for (let s = 0; s < SPAN; s++) {
+    const from = (FACE_XP * HEIGHT + y) * SPAN + s
+    inc.sky[(OPPOSITE[FACE_XP] * HEIGHT + y) * SPAN + s] = R.spill.sky[from]
+    inc.blk[(OPPOSITE[FACE_XP] * HEIGHT + y) * SPAN + s] = R.spill.blk[from]
+  }
+  const oneShot = computeRenderLight(SPAN, 0, matAt, heightAt, inc)
+  const w2 = beginRenderLight(SPAN, 0, matAt, heightAt, inc)
+  let s2 = 0
+  while (!stepRenderLight(w2, 0) && s2 < 100000) s2++
+  let d2 = w2.field ? 0 : oneShot.sky.length
+  for (let i = 0; w2.field && i < oneShot.sky.length; i++) {
+    if (w2.field.sky[i] !== oneShot.sky[i] || w2.field.blk[i] !== oneShot.blk[i]) d2++
+  }
+  ok(d2 === 0, `§7 ★★ and with an INCOMING set, whose seed phase has its own cursor (${d2} differ)`)
+}
+
+// ── §8 the queue outgrows its first allocation, and that is not a theoretical case ────────────
+// ⚠⚠ The queue was fixed at `n * 2` on the reasoning that a cell is pushed once per channel. This
+// fixture disproves it, and the disproof matters because a typed-array write past the end is
+// SILENTLY DROPPED — the failure is a dark patch in a lit cave, not an exception.
+//
+// The scenario is the cheapest one that reaches it: open sky to y=0, so the sky seed alone is
+// 255 x 256 = 65,280 pushes against an initial 65,536, and a single lantern at the bottom then
+// needs thousands more. Without growth every one of the lantern's flood entries is dropped, its
+// light is written into its six neighbours and propagates from none of them.
+{
+  const N = SPAN * HEIGHT * SPAN
+  const openHeight = () => 0
+  const lanternAt = (x: number, y: number, z: number): number =>
+    (y === 0 && x === 8 && z === 8) ? MAT.MANA_LANTERN : AIR
+  const w = beginRenderLight(0, 0, lanternAt, openHeight, null)
+  stepRenderLight(w, Infinity)
+  ok(w.qn > N, `§8 ★ the pass really does push more than its first allocation (${w.qn} > ${N})`)
+  ok(w.q.length > N, `§8 ★★ so the queue GREW — a fixed one would have dropped ${w.qn - N} entries`)
+  // Five blocks up from a 14-emitter is 9, and it is only reachable through four propagation steps
+  // that all live past the overflow point.
+  ok(w.field?.blk[li(8, 5, 8)] === 9,
+    `§8 ★★ the lantern's light still propagates past the overflow (got ${w.field?.blk[li(8, 5, 8)]}, want 9)`)
 }
 
 if (fails.length) {
