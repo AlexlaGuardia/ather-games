@@ -10,6 +10,7 @@
 import * as THREE from 'three'
 import type { MeshAttrs } from './attrs'
 import type { VoxelSettings } from './settings'
+import { LIGHT_DECL_GLSL, lightApply, createLightUniforms, type LightUniforms } from './light-glsl'
 
 export { MATERIAL_COLOR, EMISSIVE } from './attrs'
 
@@ -47,7 +48,7 @@ export interface VoxelMaterial extends THREE.Material {
  * this one program and selected by `uCartoon`, so switching styles in settings is instant and
  * allocates nothing. A second material would be the same bug wearing a different hat.
  */
-export function createVoxelMaterial(): VoxelMaterial {
+export function createVoxelMaterial(light: LightUniforms = createLightUniforms()): VoxelMaterial {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true }) as VoxelMaterial
   const u = {
     uCartoon: { value: 0 },
@@ -59,7 +60,7 @@ export function createVoxelMaterial(): VoxelMaterial {
   mat.uniforms = u
 
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, u)
+    Object.assign(shader.uniforms, u, light)
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>',
@@ -105,13 +106,15 @@ export function createVoxelMaterial(): VoxelMaterial {
       toonCol *= mix(1.0, 0.62, line * uOutline);
 
       vec3 finalCol = mix(outgoingLight, toonCol, uCartoon);
+      ${lightApply('finalCol', 'diffuseColor.rgb', 'vWPos', 'nrm')}
       gl_FragColor = vec4(finalCol + diffuseColor.rgb * vEmissive, diffuseColor.a);
     `
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>',
         '#include <common>\nvarying float vEmissive;\nvarying vec3 vWPos;\nvarying vec3 vWNorm;\n'
         + 'uniform float uCartoon;\nuniform float uToon;\nuniform float uOutline;\n'
-        + 'uniform float uFaceShading;\nuniform float uShadowLift;')
+        + 'uniform float uFaceShading;\nuniform float uShadowLift;'
+        + LIGHT_DECL_GLSL)
       // Three renamed this chunk around 0.16x; handle both, or a version bump silently unlights
       // every ore in the world with no error anywhere.
       .replace('#include <output_fragment>', emit)

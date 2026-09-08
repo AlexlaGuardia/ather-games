@@ -341,3 +341,33 @@ export function computeRenderLight(
   stepRenderLight(w, Infinity)
   return w.field!
 }
+
+/**
+ * ── ★★ TEXTURE ORDER IS NOT `li` ORDER, AND THE TWO LOOK IDENTICAL FROM A DISTANCE ─────────────
+ * `li` is `(y * SPAN + lz) * SPAN + lx`. A `Data3DTexture` of width SPAN, height HEIGHT, depth SPAN
+ * is indexed `(lz * HEIGHT + y) * SPAN + lx`. Both are "x fastest", both are the same length, and
+ * uploading one as the other produces a field that is *plausibly wrong*: light smeared along z in
+ * bands, which reads as a shader bug or a worldgen artefact rather than as a transpose. This
+ * function is the one place the two orders meet.
+ *
+ * ★ AND BOTH CHANNELS RIDE IN ONE BYTE — sky in the high nibble, block in the low. Levels are 0..15
+ * by construction (`MAX_LIGHT`), so a nibble is not a compression choice, it is the natural width.
+ * One byte per cell makes the ring texture R8 and halves the upload against any two-channel format.
+ */
+export function packForTexture(f: RenderLight, out?: Uint8Array): Uint8Array {
+  const dst = out ?? new Uint8Array(SPAN * HEIGHT * SPAN)
+  for (let lz = 0; lz < SPAN; lz++) {
+    for (let y = 0; y < HEIGHT; y++) {
+      const src = (y * SPAN + lz) * SPAN
+      const to = (lz * HEIGHT + y) * SPAN
+      for (let lx = 0; lx < SPAN; lx++) {
+        dst[to + lx] = (f.sky[src + lx] << 4) | f.blk[src + lx]
+      }
+    }
+  }
+  return dst
+}
+
+/** The inverse, for tests and for anything that has to read a packed field back. */
+export const unpackSky = (b: number): number => b >> 4
+export const unpackBlk = (b: number): number => b & 0x0F

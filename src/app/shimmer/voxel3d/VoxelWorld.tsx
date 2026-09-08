@@ -45,7 +45,7 @@ import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GEN
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
 import { createProfiler, snapshotText, shortRowLabel, type FrameProfile, gpuTrusted } from './profile'
-import { stopScan, SPAWN_SCAN_MAX, LIGHT_BUILD_MS } from './spawn-budget'
+import { stopScan, SPAWN_SCAN_MAX, LIGHT_BUILD_MS, RENDER_LIGHT_MS } from './spawn-budget'
 // ── the input layer (lib/input) ───────────────────────────────────────────────────────────────
 // Keys used to be decided inline, 25 times, across three listeners in this file — so the meaning of
 // a key could not be tested and could not be rebound. The meaning lives in lib/input now and this
@@ -128,6 +128,13 @@ const DECAY_BASE = 'voxel3d:leafdecay:'
 import { PIECES, PIECE_MATERIALS, STRUCTURE, STRUCTURE_HALF, pieceDef, pieceVariants, pieceMaterial, basePieceId, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
+import { beginRenderLight, stepRenderLight, packForTexture, type RenderLightWork } from '../voxel/render-light'
+import {
+  newLightRing, recenterRing, nextDirtyColumn, incomingFor, publishSpill,
+  invalidateColumn, drainUploads, eligible, ringKey,
+} from '../voxel/render-light-ring'
+import { createLightTexture } from './light-texture'
+import { createLightUniforms, LIGHT_LOOK } from './light-glsl'
 import { layerOf } from './tex/tiles'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
@@ -4055,8 +4062,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const tiles = useMemo(() => {
     try { return makeTileArray(settings.tileSize, gl) } catch { return null }
   }, [settings.tileSize, gl])
-  const flatMaterial = useMemo(() => createVoxelMaterial(), [])
-  const textured = useMemo(() => (tiles ? createTexturedVoxelMaterial(tiles) : null), [tiles])
+  // ── ★★ RENDER LIGHT: one uniform set and one ring texture, shared by BOTH block programs ────
+  // The uniform OBJECTS are shared, not their values — see `createLightUniforms`. Built here rather
+  // than inside either material because there is one ring for the world and two programs reading
+  // it, and a second copy is a second thing to keep in step with the frame loop.
+  const lightUniforms = useMemo(() => createLightUniforms(), [])
+  const lightTex = useMemo(() => createLightTexture(), [])
+  useEffect(() => {
+    lightUniforms.uLightTex.value = lightTex.texture
+    lightUniforms.uLightMix.value = LIGHT_LOOK.mix
+    return () => { lightTex.dispose() }
+  }, [lightTex, lightUniforms])
+  const flatMaterial = useMemo(() => createVoxelMaterial(lightUniforms), [lightUniforms])
+  const textured = useMemo(() => (tiles ? createTexturedVoxelMaterial(tiles, lightUniforms) : null), [tiles, lightUniforms])
   const material = textured?.material ?? flatMaterial
   // The world's ONE transparent pass — see mesh-bridge.ts. Shared instance, same rule as above.
   const waterMaterial = useMemo(() => createWaterMaterial(tiles, layerOf(MAT.WATER, 0)), [tiles])
@@ -5752,6 +5770,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
         if (jk === key(cx + dx, cz + dz)) lightJob.current = null
     }
+    // ── and the RENDER field, which has the same staleness and a visible symptom ───────────────
+    // Placing a lantern, or roofing a room, must change what the SHADER reads. The 3x3 is not
+    // caution: light reaches 15 blocks and a column is 16 wide, so a lantern broken at a corner
+    // darkens cells in three other columns, the diagonal included.
+    invalidateColumn(lightRing.current, cx, cz)
+    const rj = renderLightJob.current
+    if (rj && Math.abs(rj.cx - cx) <= 1 && Math.abs(rj.cz - cz) <= 1) renderLightJob.current = null
     // Fence connections are DERIVED from the world, so a terrain edit beside a fence makes or
     // breaks an arm — re-derive. O(placements) matrix writes; edits are player-paced, not 60Hz.
     pieces.sync(placements.current)
@@ -6366,6 +6391,144 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     lightJob.current = null
     return true
   }, [voxel])
+
+  /**
+   * ── ★★★ THE RENDER FIELD'S RING — a different field, a different consumer ────────────────────
+   *
+   * ⚠ IT IS NOT `lightCache` AND MUST NOT BECOME IT, however alike the two look. `light.ts` floods
+   * a 3x3-column box around the SURFACE, lazily, for columns the spawn sweep nominates, and answers
+   * out-of-box reads with "dark" because for a spawn gate dark is the conservative direction.
+   * Rendering wants every visible column at every height being drawn, always, and its conservative
+   * direction is the opposite: an unbuilt column renders fully LIT, i.e. exactly as the game does
+   * today. Merging them would force one of those two safe directions onto the other's failure.
+   *
+   * The ring is 9x9 columns around the keeper: above ground the field says 15 everywhere, so the
+   * only place it says anything a keeper can see is a cave, and a cave four columns off is behind
+   * sixty-four blocks of rock. `render-light-ring.ts` carries the rest of the reasoning.
+   */
+  const lightRing = useRef(newLightRing())
+  const renderLightJob = useRef<{ cx: number; cz: number; work: RenderLightWork } | null>(null)
+
+  /** Slices, finished columns and wall clock spent — the only honest answer to "why is it slow". */
+  const lightMeter = useRef({ slices: 0, done: 0, ms: 0, frames: 0 })
+  const advanceRenderLight = useCallback((budgetMs: number): void => {
+    lightMeter.current.frames++
+    const t0 = performance.now()
+    const pcx = Math.floor(loco.current.px / SECTION), pcz = Math.floor(loco.current.pz / SECTION)
+    const ring = lightRing.current
+    if (!ring.centred || ring.ccx !== pcx || ring.ccz !== pcz) {
+      // ⚠ THE EVICTED KEYS ARE ALSO THE ENTERING COLUMNS' SLOTS. The torus reuses a slot for the
+      // column exactly RING_N away, which is by construction the one that just left, so clearing
+      // what left is clearing what arrived. Skip it and a column whose field has not been built yet
+      // wears the darkness of a place sixteen columns away.
+      for (const k of recenterRing(ring, pcx, pcz)) {
+        const c = k.indexOf(',')
+        lightTex.clearSlot(gl, Number(k.slice(0, c)), Number(k.slice(c + 1)))
+      }
+      lightUniforms.uLightCentre.value.set(pcx, pcz)
+      const j = renderLightJob.current
+      if (j && !ring.cols.has(ringKey(j.cx, j.cz))) renderLightJob.current = null
+    }
+
+    lightMeter.current.slices++
+    let job = renderLightJob.current
+    if (!job) {
+      // Refuse a column whose voxels have not arrived — `voxel()` would answer AIR for the whole
+      // thing and the field would be a confident, wrong, fully-lit box. It stays dirty and is
+      // offered again once it streams in.
+      const c = nextDirtyColumn(ring, rc => cols.current.has(key(rc.cx, rc.cz)))
+      if (!c) return
+      const col = cols.current.get(key(c.cx, c.cz))!
+      // ── ★★★ A MATERIAL READER BOUND TO THE ONE COLUMN, NOT `voxel()` (measured, 2026-09-08) ──
+      // The seed phase asks for every cell from the surface down — about 33,000 reads per pass —
+      // and `voxel()` builds a TEMPLATE STRING key and hits a Map on every one of them. Measured in
+      // the running page: 128ms per column against the module's 22ms bench, and the bench was not
+      // wrong, it simply passed a closure instead of the host's accessor.
+      //
+      // ⚠ THE FALLBACK IS NOT PARANOIA. `render-light.ts` documents that `matAt` MAY read a
+      // neighbour; today's flood never leaves the footprint, so the fast path is exactly equivalent
+      // — but a future pass that widened by one cell would otherwise read a wrong column with no
+      // error, which is this file's oldest failure shape.
+      const cmat = (x: number, y: number, z: number): number => {
+        if (y < 0 || y >= H) return AIR
+        const lx = x - col.wx, lz = z - col.wz
+        if (lx < 0 || lx >= SECTION || lz < 0 || lz >= SECTION) return voxel(x, y, z)
+        return col.get(lx, y, lz)
+      }
+      job = {
+        cx: c.cx, cz: c.cz,
+        // ⚠ THE COLUMN'S OWN `surface`, NOT `columnHeight(x, z, SEED)`. They agree in the Wilds and
+        // they do NOT agree in the Home Plot, which has its own generator — and a plot lit against
+        // continent heights would be a garden rendered as though it were underground. It is also a
+        // lookup rather than multi-octave noise, which is 256 fewer terrain generations per pass.
+        work: beginRenderLight(
+          c.cx * SECTION, c.cz * SECTION,
+          cmat,
+          (x, z) => col.heightAt(x - col.wx, z - col.wz),
+          incomingFor(ring, c.cx, c.cz),
+        ),
+      }
+      renderLightJob.current = job
+    }
+    if (!stepRenderLight(job.work, budgetMs)) { lightMeter.current.ms += performance.now() - t0; return }
+    lightMeter.current.ms += performance.now() - t0
+    lightMeter.current.done++
+    renderLightJob.current = null
+    // It may have left the ring while its slices ran; its slot belongs to someone else now.
+    if (!ring.cols.has(ringKey(job.cx, job.cz))) return
+    // ⚠ PUBLISHED, THEN UPLOADED — AND NOT NECESSARILY THIS COLUMN. A field is only fit for the
+    // texture once its four neighbours have one too (see `eligible`); finishing this column is
+    // often what makes a NEIGHBOUR fit, and that neighbour's bytes are already in hand.
+    const packed = packForTexture(job.work.field!)
+    lastLightField.current = { cx: job.cx, cz: job.cz, packed }
+    publishSpill(ring, job.cx, job.cz, job.work.field!.spill, packed)
+    for (const c of drainUploads(ring, job.cx, job.cz)) lightTex.upload(gl, c.cx, c.cz, c.packed!)
+  }, [voxel, gl, lightTex, lightUniforms])
+
+  /**
+   * ── ★★ `window.__renderlight()` — IS THE FIELD THERE, OR IS THAT JUST THE WARM FRONT? ─────────
+   *
+   * An unbuilt column renders FULLY LIT on purpose, which makes a warming ring and a working cave
+   * indistinguishable in a screenshot: both are dark next to bright. The first headless shot of this
+   * feature showed a black cliff face beside daylit turf and there was no way to tell whether that
+   * was a cave or the boundary between a built column and one still queued. ⚠ That is the shape this
+   * tree keeps paying for — a picture that is accurate and does not mean what it looks like — and
+   * the cure is the same one every time: ask the generator, in the same coordinates.
+   *
+   * `built` vs `dirty` answers the warm-front question outright. `here` is the packed byte of the
+   * LAST field published, sampled at the keeper if they are standing in it, which is the closest
+   * thing to reading the texture back.
+   */
+  const lastLightField = useRef<{ cx: number; cz: number; packed: Uint8Array } | null>(null)
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>
+    w.__renderlight = () => {
+      const r = lightRing.current
+      let built = 0, shown = 0
+      for (const c of r.cols.values()) {
+        if (c.ready) built++
+        if (eligible(r, c.cx, c.cz) && !c.texDirty) shown++
+      }
+      const j = renderLightJob.current
+      const last = lastLightField.current
+      const px = Math.floor(loco.current.px), py = Math.floor(loco.current.py), pz = Math.floor(loco.current.pz)
+      let here: string | null = null
+      if (last && Math.floor(px / SECTION) === last.cx && Math.floor(pz / SECTION) === last.cz) {
+        const lx = ((px % SECTION) + SECTION) % SECTION, lz = ((pz % SECTION) + SECTION) % SECTION
+        const b = last.packed[(lz * H + py) * SECTION + lx]
+        here = `sky ${b >> 4} blk ${b & 15}`
+      }
+      return {
+        centre: [r.ccx, r.ccz], columns: r.cols.size, built, shown, dirty: r.dirty.size,
+        building: j ? [j.cx, j.cz] : null,
+        mix: lightUniforms.uLightMix.value,
+        texBound: !!lightUniforms.uLightTex.value,
+        at: [px, py, pz], lastField: last ? [last.cx, last.cz] : null, here,
+        meter: { ...lightMeter.current, ms: +lightMeter.current.ms.toFixed(0) },
+      }
+    }
+    return () => { delete w.__renderlight }
+  }, [lightUniforms])
   // ── ★ THREE SILHOUETTES, ONE GEOMETRY EACH, SHARED ACROSS EVERY BODY OF THAT FORM ──────────
   // ⚠ BLOCKOUT, same standing as the single body it replaces: the locked look is owed a
   // design-brief + /picaso pass (hollows.ts says so in writing) and these are read-at-a-glance
@@ -7201,6 +7364,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // future capture is comparable with Alex's. The row should now read a few ms and never spike.
     prof.current.mark('world:spawn/light')
     advanceLightBuild(LIGHT_BUILD_MS)
+    prof.current.mark('world:spawn')
+    // The RENDER field's slice. Billed to its own zone so a capture can tell the two light costs
+    // apart — they are different work for different consumers and only one of them is on screen.
+    prof.current.mark('world:renderlight')
+    advanceRenderLight(RENDER_LIGHT_MS)
     prof.current.mark('world:spawn')
     // ── ★ THE NIGHT TIDE'S PAYOFF — the Hollows' SPAWN CYCLE, MINECRAFT'S SHAPE ──────────────
     // Reworked 2026-08-07 eve after Alex night-walked without meeting one: the first cut scanned

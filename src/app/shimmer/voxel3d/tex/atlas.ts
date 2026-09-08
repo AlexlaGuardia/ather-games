@@ -13,6 +13,7 @@
 
 import * as THREE from 'three'
 import { buildTileArray, LAYER_COUNT } from './tiles'
+import { LIGHT_DECL_GLSL, lightApply, createLightUniforms, type LightUniforms } from '../light-glsl'
 
 export interface TileArray {
   texture: THREE.DataArrayTexture
@@ -96,7 +97,7 @@ export const DEFAULT_JITTER = 0.07
  * would darken every surface twice. The geometry still HAS its colour attribute — the flat control
  * material in the same scene reads it — it is simply ignored here.
  */
-export function createTexturedVoxelMaterial(tiles: TileArray): VoxelTexMaterial {
+export function createTexturedVoxelMaterial(tiles: TileArray, light: LightUniforms = createLightUniforms()): VoxelTexMaterial {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: false })
 
   // `onBeforeCompile` does not run until the first render, so a setter called before that would be
@@ -117,6 +118,7 @@ export function createTexturedVoxelMaterial(tiles: TileArray): VoxelTexMaterial 
     shader.uniforms.uOutline = { value: 0 }
     shader.uniforms.uFaceShading = { value: 0.35 }
     shader.uniforms.uShadowLift = { value: 0.15 }
+    Object.assign(shader.uniforms, light)
     liveCartoon = shader.uniforms as Record<string, { value: number }>
     if (pendingCartoon) for (const [k, val] of Object.entries(pendingCartoon)) {
       if (liveCartoon[k]) liveCartoon[k].value = val
@@ -162,6 +164,7 @@ uniform float uOutline;
 uniform float uFaceShading;
 uniform float uShadowLift;
 #include <common>
+${LIGHT_DECL_GLSL}
 uniform sampler2DArray uTiles;
 uniform float uJitter;
 varying float vLayer;
@@ -256,6 +259,7 @@ float gTileEmissive = 0.0;`,
        float line = 1.0 - smoothstep(0.0, 0.035, edge);
        toonCol *= mix(1.0, 0.62, line * uOutline);
        vec3 finalCol = mix(outgoingLight, toonCol, uCartoon);
+       ${lightApply('finalCol', 'diffuseColor.rgb', 'vWorldPos', 'cnrm')}
        gl_FragColor = vec4( finalCol + diffuseColor.rgb * vEmissive * gTileEmissive, diffuseColor.a );`,
       'fragment shader',
     )

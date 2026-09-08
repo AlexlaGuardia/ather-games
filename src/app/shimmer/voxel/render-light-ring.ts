@@ -53,8 +53,19 @@ export interface RingColumn {
   cz: number
   /** What this column sends to its neighbours. Zeroed until its first pass finishes. */
   spill: LightBorders
-  /** A field has been published at least once, so the texture slot holds real data. */
+  /** A field has been computed at least once. ⚠ NOT the same as fit to look at — see `eligible`. */
   ready: boolean
+  /**
+   * The packed field, kept rather than handed straight to the texture.
+   *
+   * ★★ BECAUSE A COLUMN IS USUALLY NOT FIT TO UPLOAD WHEN IT IS FIRST COMPUTED, and it becomes fit
+   * because a NEIGHBOUR finished, at which point the field is already right and rebuilding it would
+   * be a wasted 60ms pass. 64KB x 81 columns is 5.3MB against the 22MB of voxels the page already
+   * holds for the same ring.
+   */
+  packed: Uint8Array | null
+  /** True when `packed` has not yet reached the texture. */
+  texDirty: boolean
 }
 
 export interface LightRing {
@@ -92,7 +103,9 @@ export function recenterRing(r: LightRing, ccx: number, ccz: number): string[] {
     for (let dx = -BUILD_RADIUS; dx <= BUILD_RADIUS; dx++) {
       const k = ringKey(ccx + dx, ccz + dz)
       if (r.cols.has(k)) continue
-      r.cols.set(k, { cx: ccx + dx, cz: ccz + dz, spill: newBorders(), ready: false })
+      r.cols.set(k, {
+        cx: ccx + dx, cz: ccz + dz, spill: newBorders(), ready: false, packed: null, texDirty: false,
+      })
       r.dirty.add(k)
     }
   }
@@ -107,15 +120,29 @@ export function recenterRing(r: LightRing, ccx: number, ccz: number): string[] {
  * last. Chebyshev distance, matching the ring's own square shape — a Euclidean sort would order the
  * corners of a square ring in a way that looks arbitrary on screen.
  */
-export function nextDirtyColumn(r: LightRing): RingColumn | null {
+export function nextDirtyColumn(r: LightRing, accept?: (c: RingColumn) => boolean): RingColumn | null {
   let best: RingColumn | null = null
   let bestD = Infinity
   for (const k of r.dirty) {
     const c = r.cols.get(k)
     if (!c) continue
-    // Un-built columns beat built-but-restaled ones at the same distance: a column with no field at
-    // all renders fully lit, which is the visible defect; a settling border is a shade.
-    const d = Math.max(Math.abs(c.cx - r.ccx), Math.abs(c.cz - r.ccz)) * 2 + (c.ready ? 1 : 0)
+    // ⚠ A REJECTED COLUMN STAYS DIRTY. The host's reason for refusing one is that its voxels have
+    // not streamed in yet, which is temporary — clearing the flag here would mean the column is
+    // never built once it arrives, and it would render fully lit forever with nothing to show for
+    // it. Skipping is the whole contract of this parameter.
+    if (accept && !accept(c)) continue
+    // ── ★★★ NEVER-BUILT BEATS RE-SETTLING, GLOBALLY — NOT JUST AS A TIEBREAK (measured) ───────
+    // The first version sorted by distance and used `ready` only to break a tie. Every publish
+    // re-dirties neighbours, so the columns nearest the keeper are re-served forever and the ring
+    // warms as a slowly expanding, endlessly resettling blob: **77 passes produced 14 built columns**
+    // in the running page, and the outer ring never got a turn at all.
+    //
+    // The two states are not comparable and should never have been sorted on one axis. An UNBUILT
+    // column renders fully lit, which underground is a bright hole where a cave should be. A
+    // re-settling one is already close and gets a shade darker. So every unbuilt column outranks
+    // every settled one, and distance orders within each band. It still terminates: once nothing is
+    // unbuilt the first band is empty and the settling passes run.
+    const d = Math.max(Math.abs(c.cx - r.ccx), Math.abs(c.cz - r.ccz)) + (c.ready ? 1000 : 0)
     if (d < bestD) { bestD = d; best = c }
   }
   return best
@@ -156,8 +183,17 @@ export function incomingFor(r: LightRing, cx: number, cz: number): LightBorders 
   return inc
 }
 
-const bordersDiffer = (a: LightBorders, b: LightBorders): boolean => {
-  for (let i = 0; i < a.sky.length; i++) if (a.sky[i] !== b.sky[i] || a.blk[i] !== b.blk[i]) return true
+/**
+ * Did what leaves by ONE face change?
+ *
+ * ★★ PER FACE, NOT PER COLUMN, AND THE DIFFERENCE IS A FACTOR OF FOUR. A whole-borders compare
+ * cannot say WHICH neighbour is affected, so it wakes all four — three of them to recompute an
+ * identical field and publish an identical spill. Light that leaves by the +x face reaches exactly
+ * one column, so exactly one column needs to hear about it.
+ */
+const faceDiffers = (a: LightBorders, b: LightBorders, face: number): boolean => {
+  const lo = face * HEIGHT * SPAN, hi = lo + HEIGHT * SPAN
+  for (let i = lo; i < hi; i++) if (a.sky[i] !== b.sky[i] || a.blk[i] !== b.blk[i]) return true
   return false
 }
 
@@ -175,24 +211,29 @@ const bordersDiffer = (a: LightBorders, b: LightBorders): boolean => {
  * strictly decaying and dies within ~8 round trips rather than sustaining itself. That is the
  * property that lets this be a plain dirty queue instead of Minecraft's separate un-light pass.
  */
-export function publishSpill(r: LightRing, cx: number, cz: number, spill: LightBorders): boolean {
+export function publishSpill(
+  r: LightRing, cx: number, cz: number, spill: LightBorders, packed: Uint8Array | null = null,
+): boolean {
   const k = ringKey(cx, cz)
   const c = r.cols.get(k)
   r.dirty.delete(k)
-  if (!c) return false          // it left the ring while its slice was in flight
+  if (!c) return false
+  if (packed) { c.packed = packed; c.texDirty = true }          // it left the ring while its slice was in flight
   // ⚠ NOT `!c.ready || ...`. A first publish whose spill is all zeros — a sealed column, which is
   // most of a ring — changes nothing for its neighbours, and waking them anyway made every column
   // recompute about five times. The question is only ever whether what LEAVES has changed.
-  const changed = bordersDiffer(c.spill, spill)
-  c.spill = spill
-  c.ready = true
-  if (!changed) return false
   let woke = false
-  for (const [nx, nz] of [[cx - 1, cz], [cx + 1, cz], [cx, cz - 1], [cx, cz + 1]] as const) {
-    const nk = ringKey(nx, nz)
+  // Face order matches `FACE_*`; the neighbour a face's light reaches is the column on that side.
+  const NEIGHBOUR: readonly (readonly [number, number])[] = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+  for (let face = 0; face < 4; face++) {
+    if (!faceDiffers(c.spill, spill, face)) continue
+    const [dx, dz] = NEIGHBOUR[face]
+    const nk = ringKey(cx + dx, cz + dz)
     if (!r.cols.has(nk) || r.dirty.has(nk)) continue
     r.dirty.add(nk); woke = true
   }
+  c.spill = spill
+  c.ready = true
   return woke
 }
 
@@ -218,4 +259,52 @@ export function sampleable(r: LightRing, cx: number, cz: number): boolean {
   const c = r.cols.get(ringKey(cx, cz))
   return !!c && c.ready
     && Math.abs(cx - r.ccx) <= SAMPLE_RADIUS && Math.abs(cz - r.ccz) <= SAMPLE_RADIUS
+}
+
+/**
+ * ── ★★★ READY IS NOT FIT TO LOOK AT, AND CONFLATING THEM SHIPPED A BLACK WALL ──────────────────
+ *
+ * The header above argues that the outermost ring must not be sampled, because its neighbours were
+ * never built and it therefore reads their spill as zero and comes out darker than the truth. That
+ * argument is correct and it is about the SETTLED ring. It is silent about the warm-up, where the
+ * same sentence is true of EVERY column: the first one built has four unbuilt neighbours, so its
+ * light is under-computed within fifteen blocks of each border — which is nearly all of it.
+ *
+ * ⚠ Measured, not reasoned: a headless shot with 2 of 81 columns built photographed a solid black
+ * cliff face at noon; the same place with 20 built rendered correctly. Both were "working".
+ *
+ * So a column reaches the texture only when it AND its four neighbours have a field. Until then its
+ * slot holds daylight, which is exactly today's render. ★ And this subsumes the apron rule rather
+ * than sitting beside it: a column on the outer ring has neighbours that are not in the ring at
+ * all, so it can never become eligible and can never be uploaded — the apron falls out of the same
+ * sentence instead of needing its own radius check.
+ */
+export function eligible(r: LightRing, cx: number, cz: number): boolean {
+  const c = r.cols.get(ringKey(cx, cz))
+  if (!c || !c.ready || !c.packed) return false
+  for (const [nx, nz] of [[cx - 1, cz], [cx + 1, cz], [cx, cz - 1], [cx, cz + 1]] as const) {
+    const n = r.cols.get(ringKey(nx, nz))
+    if (!n || !n.ready) return false
+  }
+  return true
+}
+
+/**
+ * The columns around `(cx, cz)` that are now fit to upload and have something new to send.
+ *
+ * ⚠ THE 3x3, NOT JUST THE PUBLISHER. Finishing one column is what makes its NEIGHBOURS eligible,
+ * and their fields are already computed — asking them to rebuild in order to be uploaded would cost
+ * a 60ms pass each to produce bytes we are already holding.
+ */
+export function drainUploads(r: LightRing, cx: number, cz: number): RingColumn[] {
+  const out: RingColumn[] = []
+  for (let dz = -1; dz <= 1; dz++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const c = r.cols.get(ringKey(cx + dx, cz + dz))
+      if (!c || !c.texDirty || !eligible(r, cx + dx, cz + dz)) continue
+      c.texDirty = false
+      out.push(c)
+    }
+  }
+  return out
 }

@@ -10,6 +10,7 @@
 // precondition rather than a nicety.
 import {
   computeRenderLight, beginRenderLight, stepRenderLight,
+  packForTexture, unpackSky, unpackBlk,
   newBorders, li, MAX_LIGHT, SPAN, HEIGHT, OPPOSITE,
   FACE_XM, FACE_XP,
 } from './render-light'
@@ -218,6 +219,36 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
   // that all live past the overflow point.
   ok(w.field?.blk[li(8, 5, 8)] === 9,
     `§8 ★★ the lantern's light still propagates past the overflow (got ${w.field?.blk[li(8, 5, 8)]}, want 9)`)
+}
+
+// ── §9 the packed field the GPU sees ─────────────────────────────────────────────────────────
+// ⚠ A transposed upload is the failure this section exists for, and it does not look like a
+// transpose: `li` and the texture's own index are both x-fastest and the same length, so swapping
+// them yields light smeared along z — a plausible shader bug that would be hunted in the shader.
+{
+  const packed = packForTexture(R)
+  ok(packed.length === SPAN * HEIGHT * SPAN, '§9 the packed field is one byte per cell')
+  const at = (lx: number, y: number, lz: number) => packed[(lz * HEIGHT + y) * SPAN + lx]
+  // The shaft is at local (2,2) and the lantern's pocket at (12,12,80). Two cells that differ in
+  // BOTH x and z, so a transpose cannot satisfy them both.
+  ok(unpackSky(at(2, 80, 2)) === sky(2, 80, 2) && sky(2, 80, 2) > 0,
+    `§9 ★★ the shaft's sky survives the repack at its own coordinates (${unpackSky(at(2, 80, 2))} vs ${sky(2, 80, 2)})`)
+  ok(unpackBlk(at(12, 80, 12)) === 14,
+    `§9 ★★ and the lantern is at (12,80,12), not at (12,80,12) transposed (${unpackBlk(at(12, 80, 12))})`)
+  ok(unpackSky(at(12, 80, 12)) === 0 && unpackBlk(at(2, 80, 2)) === 0,
+    '§9 ★ the two channels do not bleed into each other — sealed pocket has no sky, shaft has no block light')
+  // Exhaustive, because the two orders agree on a great many cells by coincidence and a spot check
+  // of the wrong pair would pass a transposed pack.
+  let wrong = 0
+  for (let lz = 0; lz < SPAN; lz++) for (let y = 0; y < HEIGHT; y++) for (let lx = 0; lx < SPAN; lx++) {
+    const b = at(lx, y, lz)
+    if (unpackSky(b) !== sky(lx, y, lz) || unpackBlk(b) !== blk(lx, y, lz)) wrong++
+  }
+  ok(wrong === 0, `§9 ★★★ every one of the ${SPAN * HEIGHT * SPAN} cells round-trips (${wrong} wrong)`)
+  // The buffer is reusable — the host keeps one scratch for every upload rather than allocating
+  // 64KB per column per pass.
+  const reuse = new Uint8Array(SPAN * HEIGHT * SPAN)
+  ok(packForTexture(R, reuse) === reuse, '§9 a supplied buffer is filled in place, not replaced')
 }
 
 if (fails.length) {

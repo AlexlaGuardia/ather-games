@@ -9,7 +9,7 @@
 import {
   BUILD_RADIUS, SAMPLE_RADIUS, RING_N, slotOf, ringKey,
   newLightRing, recenterRing, nextDirtyColumn, incomingFor, publishSpill,
-  invalidateColumn, sampleable,
+  invalidateColumn, sampleable, eligible, drainUploads,
 } from './render-light-ring'
 import {
   computeRenderLight, newBorders, li, HEIGHT, SPAN, MAX_LIGHT,
@@ -78,6 +78,55 @@ ok(slotOf(-1) === RING_N - 1, `§2 ★ a NEGATIVE column wraps to the far slot, 
   ok(nextDirtyColumn(r) === null, '§4 a drained queue answers null rather than looping')
 }
 
+// ── §4b the host may refuse a column, and refusing must not retire it ────────────────────────
+// The host refuses a column whose voxels have not streamed in yet. ⚠ If that cleared the dirty
+// flag the column would never be built once it arrived and would render fully lit forever — the
+// failure would be a permanently bright patch that nobody could tie back to a streaming race.
+{
+  const r = newLightRing()
+  recenterRing(r, 0, 0)
+  const centre = ringKey(0, 0)
+  const first = nextDirtyColumn(r, c => ringKey(c.cx, c.cz) !== centre)
+  ok(first !== null && ringKey(first.cx, first.cz) !== centre, '§4b a refused column is skipped over')
+  ok(r.dirty.has(centre), '§4b ★★ and it is STILL dirty — a refusal is temporary, not a decision')
+  ok(nextDirtyColumn(r)?.cx === 0 && nextDirtyColumn(r)?.cz === 0,
+    '§4b ★ so it is offered again the moment the host stops refusing it')
+  ok(nextDirtyColumn(r, () => false) === null, '§4b refusing everything answers null rather than looping')
+}
+
+// ── §4c every column gets a first turn before any column gets a second ───────────────────────
+// ★★★ THE THROUGHPUT PROPERTY, AND IT WAS A MEASURED BUG. Sorting by distance with `ready` as a
+// TIEBREAK means a re-dirtied column beside the keeper outranks an unbuilt column further out
+// forever, so the ring warms as a slowly expanding, endlessly resettling blob — 77 passes produced
+// 14 built columns in the running page, and the outer ring never got a turn at all. The two states
+// are not comparable: an unbuilt column renders fully lit, which underground is a bright hole where
+// a cave should be; a re-settling one is already close and gets a shade darker.
+//
+// ⚠ The fixture publishes a spill that CHANGES every time, so every publish re-dirties a neighbour.
+// A fixture publishing zeros wakes nobody and could not tell the two orderings apart.
+{
+  const r = newLightRing()
+  recenterRing(r, 0, 0)
+  const seen = new Set<string>()
+  let n = 0, repeatedAt = -1
+  for (let i = 0; i < RING_N * RING_N; i++) {
+    const c = nextDirtyColumn(r)
+    if (!c) break
+    const k = ringKey(c.cx, c.cz)
+    if (seen.has(k) && repeatedAt < 0) repeatedAt = i
+    seen.add(k); n++
+    const spill = newBorders()
+    for (let f = 0; f < 4; f++) spill.sky[(f * HEIGHT + 40) * SPAN + 1] = 1 + (i % 14)
+    publishSpill(r, c.cx, c.cz, spill)
+  }
+  ok(repeatedAt < 0,
+    `§4c ★★★ no column is served twice before all ${RING_N * RING_N} have been served once (repeat at ${repeatedAt})`)
+  ok(seen.size === RING_N * RING_N,
+    `§4c ★★ so the whole ring gets a first field, outer columns included (${seen.size} of ${RING_N * RING_N})`)
+  ok(n === RING_N * RING_N && r.dirty.size > 0,
+    '§4c ★ and the fixture really did re-dirty as it went — otherwise the assert above is vacuous')
+}
+
 // ── §5 the face mapping — the assert most likely to be quietly inverted ──────────────────────
 // A wrong OPPOSITE here does not throw and does not look like a bug: it lights the far side of a
 // column instead of the near one, which reads as a generator artefact and gets filed against
@@ -119,15 +168,29 @@ ok(slotOf(-1) === RING_N - 1, `§2 ★ a NEGATIVE column wraps to the far slot, 
   r.dirty.clear()
   const hot = newBorders()
   hot.sky[(FACE_XP * HEIGHT + 50) * SPAN + 2] = 12
-  ok(publishSpill(r, 0, 0, hot) === true, '§6 a first publish wakes the neighbours')
-  ok(r.dirty.has(ringKey(1, 0)) && r.dirty.has(ringKey(-1, 0))
-     && r.dirty.has(ringKey(0, 1)) && r.dirty.has(ringKey(0, -1)),
-    '§6 ★ all four orthogonal neighbours, not just the one the light left by')
+  ok(publishSpill(r, 0, 0, hot) === true, '§6 a publish whose spill changed wakes somebody')
+  // ★★ EXACTLY THE NEIGHBOUR THE LIGHT LEFT TOWARDS. Light out of the +x face reaches the column at
+  // +x and no other, so waking all four is three columns recomputing an identical field to publish
+  // an identical spill — measured as most of why 77 passes only built 14 columns.
+  ok(r.dirty.has(ringKey(1, 0)), '§6 ★★ the +x spill wakes the +x neighbour')
+  ok(!r.dirty.has(ringKey(-1, 0)) && !r.dirty.has(ringKey(0, 1)) && !r.dirty.has(ringKey(0, -1)),
+    `§6 ★★★ and NOBODY else — light that leaves by one face reaches one column (${[...r.dirty].join(' ')})`)
   ok(!r.dirty.has(ringKey(0, 0)), '§6 ★ and the publishing column clears its own dirty flag')
+
+  // Non-vacuity for the face mapping: a spill on a DIFFERENT face must wake a DIFFERENT column, or
+  // the assert above is satisfied by a rule that always wakes +x.
+  r.dirty.clear()
+  const southbound = newBorders()
+  southbound.blk[(FACE_ZM * HEIGHT + 30) * SPAN + 5] = 9
+  publishSpill(r, 0, 0, southbound)
+  ok(r.dirty.has(ringKey(0, -1)),
+    `§6 ★★ a -z spill wakes the -z neighbour (${[...r.dirty].join(' ')})`)
+  ok(r.dirty.has(ringKey(1, 0)),
+    '§6 ★ and +x too, because the +x face went back to zero — a DROP is a change')
 
   r.dirty.clear()
   const same = newBorders()
-  same.sky[(FACE_XP * HEIGHT + 50) * SPAN + 2] = 12
+  same.blk[(FACE_ZM * HEIGHT + 30) * SPAN + 5] = 9
   ok(publishSpill(r, 0, 0, same) === false && r.dirty.size === 0,
     '§6 ★★ an identical re-publish wakes nobody — this is what makes the queue drain instead of spin')
 
@@ -135,8 +198,8 @@ ok(slotOf(-1) === RING_N - 1, `§2 ★ a NEGATIVE column wraps to the far slot, 
   // the neighbour it keeps the light of a wall that no longer has a hole in it, forever.
   r.dirty.clear()
   const dimmer = newBorders()
-  dimmer.sky[(FACE_XP * HEIGHT + 50) * SPAN + 2] = 4
-  ok(publishSpill(r, 0, 0, dimmer) === true && r.dirty.has(ringKey(1, 0)),
+  dimmer.blk[(FACE_ZM * HEIGHT + 30) * SPAN + 5] = 4
+  ok(publishSpill(r, 0, 0, dimmer) === true && r.dirty.has(ringKey(0, -1)),
     '§6 ★★★ a spill that DROPS wakes the neighbour too — phantom light is the placed-block failure')
 
   // A slice that finishes for a column the ring has already walked past must not resurrect it.
@@ -222,6 +285,54 @@ ok(slotOf(-1) === RING_N - 1, `§2 ★ a NEGATIVE column wraps to the far slot, 
   if (c2) for (let i = 0; i < c2.sky.length; i++) if (c2.sky[i] > 0 && c2.sky[i] < MAX_LIGHT) anyLit++
   ok(!!c2 && anyLit === 0,
     `§8 ★★ nothing dimly lit two columns away — light reaches 15 and a column is 16 wide (${anyLit} cells)`)
+}
+
+// ── §9 a field is not fit to look at the moment it exists ────────────────────────────────────
+// ★★★ THE ASSERT THAT COST A BLACK WALL. A column built before its neighbours reads their spill as
+// zero, so it is under-lit within fifteen blocks of each of its four borders — nearly all of it.
+// Measured in the running page, not reasoned: 2 of 81 columns built photographed a solid black
+// cliff at noon; the same place with 20 built rendered correctly. Both were "working".
+{
+  const r = newLightRing()
+  recenterRing(r, 0, 0)
+  const field = () => new Uint8Array(SPAN * HEIGHT * SPAN)
+
+  publishSpill(r, 0, 0, newBorders(), field())
+  ok(r.cols.get(ringKey(0, 0))!.ready, '§9 the centre has a field')
+  ok(!eligible(r, 0, 0), '§9 ★★★ and it is NOT fit to upload — its four neighbours have none')
+  ok(drainUploads(r, 0, 0).length === 0, '§9 ★★ so nothing is handed to the texture, and it stays daylight')
+
+  for (const [nx, nz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) publishSpill(r, nx, nz, newBorders(), field())
+  ok(eligible(r, 0, 0), '§9 ★★ with all four built it becomes fit')
+  // ⚠ THE DRAIN IS THE 3x3, NOT THE PUBLISHER. Finishing (0,1) is what made (0,0) fit, and (0,0)'s
+  // bytes are already in hand — asking it to rebuild to be uploaded would cost a whole pass.
+  const drained = drainUploads(r, 0, 1)
+  ok(drained.some(c => c.cx === 0 && c.cz === 0),
+    `§9 ★★★ publishing a NEIGHBOUR drains the column it made fit (${drained.map(c => `${c.cx},${c.cz}`).join(' ')})`)
+  ok(drainUploads(r, 0, 1).length === 0, '§9 ★ and a drained column is not handed over twice')
+  ok(drained.every(c => c.packed !== null), '§9 everything drained carries its bytes')
+
+  // ★ THE APRON FALLS OUT OF THE SAME SENTENCE. An outer-ring column has neighbours that are not in
+  // the ring at all, so it can never be eligible and can never reach the texture — no second rule.
+  publishSpill(r, BUILD_RADIUS, 0, newBorders(), field())
+  publishSpill(r, BUILD_RADIUS - 1, 0, newBorders(), field())
+  ok(!eligible(r, BUILD_RADIUS, 0),
+    '§9 ★★★ the outermost ring can NEVER be eligible — the apron rule, derived rather than restated')
+
+  // ⚠⚠ A PUBLISH CAN CARRY A SPILL WITHOUT A FIELD, and the two are not the same event. The first
+  // version of this assert built the centre with no bytes and left its neighbours unbuilt — so the
+  // neighbour check answered first and a mutation deleting the bytes check passed clean. The
+  // neighbours are built HERE so that nothing but `!c.packed` can produce the answer.
+  const r2 = newLightRing()
+  recenterRing(r2, 0, 0)
+  for (const [nx, nz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) publishSpill(r2, nx, nz, newBorders(), field())
+  publishSpill(r2, 0, 0, newBorders())
+  ok(r2.cols.get(ringKey(0, 0))!.ready, '§9 a spill-only publish still counts as built, for the border rules')
+  ok(r2.cols.get(ringKey(0, 0))!.packed === null && !r2.cols.get(ringKey(0, 0))!.texDirty,
+    '§9 a publish without bytes leaves nothing to upload')
+  ok(!eligible(r2, 0, 0),
+    '§9 ★★ and it is NOT eligible even with all four neighbours built — there is nothing to upload')
+  ok(drainUploads(r2, 0, 0).every(c => c.cx !== 0 || c.cz !== 0), '§9 ★ so the drain never yields it')
 }
 
 if (fails.length) {

@@ -110,6 +110,21 @@ export const SPAWN_BUDGET_MS = 3
 export const LIGHT_BUILD_MS = 2
 
 /**
+ * The RENDER light's slice — a different field, a different consumer, its own budget.
+ *
+ * ⚠ IT LIVES BESIDE `LIGHT_BUILD_MS` RATHER THAN NEXT TO THE CODE THAT SPENDS IT, on purpose. Two
+ * per-frame light budgets in two files is how a frame quietly ends up carrying both and nobody
+ * notices which one moved; this file is the ledger and it should read as one.
+ *
+ * ★ AND IT IS BIGGER THAN THE SPAWN FIELD'S FOR A REASON THAT IS NOT "IT IS MORE IMPORTANT". The
+ * spawn field is invisible until it is finished — a column is skipped meanwhile, which is
+ * no-spawn, which is safe. An unbuilt RENDER column is on screen: it renders as fully lit, so the
+ * cost of a slow warm is a cave that is bright for a second after you walk into it. That is the
+ * visible one, so it gets the larger slice. Together they are 5ms of a 16.6ms frame.
+ */
+export const RENDER_LIGHT_MS = 3
+
+/**
  * The worst frame this sweep can produce, stated rather than promised.
  *
  * ── ★★ IT IS NOW `SPAWN_BUDGET_MS` ALONE, AND THAT IS THE WHOLE POINT OF THE 09-01 CHANGE ──────
