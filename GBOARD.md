@@ -11,6 +11,45 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🕳 Shimmer — **THE CAVES WERE SEALED, AND EVERY FILE INVOLVED WAS CORRECT** (2026-09-08, hub lane) · *Last touched 2026-09-08 — committed + pushed `f345530`. Sweep + deploy pending at time of writing; see the deploy line at the end of this block.*
+
+Alex: *"connect the caves so noon underground is actually dangerous.. but how do i get a visual on these caves..?"* Those turned out to be one question.
+
+### ★★★ YOU COULD NOT GET A VISUAL BECAUSE YOU COULD NOT GET IN
+Measured (`scripts/cave-map.mts`, new), 320×320 blocks of Wilds: **889,997 cells of cave air** below the surface, and the wind — canon's third precondition, the same `isSolid` flood the host passes to `computeLight` — reached **14,295. 1.61%.** 14 of 400 columns had any opening at all.
+- **A second instrument with no flood in it agreed from the other side.** For every surface cell with cave beneath, the solid lid on top: **62.8% of the world has a cave under it**, mean lid 44, deepest cave 133 below its surface, and the histogram's tallest bar is at **exactly 3** — `carve.surfaceClearance`. **Zero cells in a 224² region reached daylight.**
+- ⚠ The region figure is a **floor, not a fact**: a cave whose only mouth lies outside the box reads as sealed, so the bias points at more-sealed-than-truth. At 128² it read 0.29%; at 320² with a margin, 1.61%.
+
+### ★★ NOBODY WAS WRONG, WHICH IS WHY IT SURVIVED A MONTH
+`carve.ts` refuses to breach the surface and says why in full — *"an invisible single-voxel hole you drop 40 blocks down is not a cave mouth, it is a bug that reads as one"* — and hands the job to *"a DELIBERATE FEATURE (a widened, visible mouth)"*. `dens.ts` was built as that feature and its header says so. But **a den digs its own small chamber for an animal** and only ever joins a tunnel by luck. The brief was written, the file that claims it was built, and the job was never done. Three board rows (#1068, #1069) bottomed out here and none of them could see it, because nothing in the tree could take this measurement.
+
+### What shipped — ADITS, and reuse is the argument
+An adit is a den with a different far end: same bank probe, same throat, same apron notch, same `dig` rule. Those rules ARE the safety case for opening ground to the sky-side, and a second file restating them is the hand-kept mirror this tree keeps paying for. It **cuts the lid where a tunnel already runs beneath it** (13.8% of cave-bearing cells have one at exactly 3 down) rather than sinking a shaft to the mean of 44.
+- `carveTopAt` / `carveTopAtMany` answer *"the highest cell a carver opens in this column"* **purely** — never by reading `sections`, because a plan resolved from a neighbouring column must be the same plan or the seam is half a mouth. `walkCarve` is extracted so writer and query cannot drift; **proven byte-identical against the pre-refactor file** (36 columns, 43,303 cells).
+- **`/cave`** teleports to the nearest mouth. Mouths are ~1 per 55 columns by design; before adits the honest answer to *"go look at a cave"* was that you can't.
+- **After: 25.47% wind-reached, 171 of 400 columns.** And it goes deep — 17.4% of cave air **64–127 blocks** below its surface is now reachable.
+
+### ⚠⚠ THE FIRST SHAPE WAS A 2.6× WORLDGEN REGRESSION AND LOOKED FINE
+Per-attempt `carveTopAt` took column generation **288ms → 736ms per four columns** — in a browser worker, on a UHD 630. Batched per column it is **317ms**. That is `carve.ts`'s own recorded lesson about its inner loop (*"the walk does not depend on which section is being filled"*), second application, in the file that wrote it.
+
+### ★★ THE SWEEP FOUND TWO SURVIVORS AND THEY WERE THE USEFUL HALF (7/7 after)
+1. **`carveTopAt` ignoring the carver's altitude refusals survived** — because a precomputed per-point *ceiling* was `carveReaches` rewritten as an inequality. The two agreed, so the shared call was **unreachable**: a hand-kept mirror hiding inside a line written to avoid one. ⚠ It read as *the differential is blind*; it was not blind, the guard was guarding a copy of itself.
+2. **Flattening the throat's climb survived** — the throat is `headroom` 3 tall and the grade bound allows 4, so a tunnel within two blocks of the mouth floor was dug **anyway**. The sample did not contain the phenomenon. Now asserted directly, with a count of the plans for which it is not free.
+3. **★ A third could not be run at all, and that is the tool working:** `mutate.mts` refused the bank anchor as **ambiguous** (two call sites) rather than reporting a no-op as a pass. **Nothing in the oracle would have caught a mouth in flat ground** — every other assert is satisfied by a pit. Asserted structurally now; without the bank check, **50 of 59 mouths become pits** and it fires.
+- ★ The §5 fixture also had to be re-asked. It first measured *"what share of this box's cave air does the wind reach"* and got **1.8% against the script's 25.5%** — not a bug in either, the margin bias, and a share is a statement about the box's size. An adit's promise is **local**: this mouth reaches this tunnel, and it joins the network rather than opening a private pocket. Both are now asserted exactly. **Depth is `carve.ts`'s property and is deliberately NOT asserted here** — this fixture holds two mouths and a two-sample claim about a regional distribution is decided by which hillside the seed put there.
+
+### ⚠ AND IT BLOCKED THE SPRITES LANE FOR AN HOUR
+Their block (below) records not deploying `8c5bbbd` because the hub tree held a file that does not parse. Mine. An un-terminated arrow returning a parenthesised object literal followed by a bare `{` section block parses as a **destructuring parameter list** — five syntax errors on a correct line, while `tsx` ran it green. **The oracle passed and the typecheck failed about the same bytes.** They were right to refuse the build (`coord build` bundles the TREE, not the commit) and dbr'd clear once it was committed.
+
+### ⛔ OPEN, in order
+1. **★★ ALEX WALKS INTO ONE.** `/cave` then walk IN, not down. Nothing static answers whether a mouth READS as a mouth from outside — the notch is bounded by exact set membership, which is a different claim from "you can see it in the hillside".
+2. **★★★ THE SECOND CEILING IS UNTOUCHED AND IT IS ALEX'S CALL.** `lightBoundsFor` builds the light field from `minSurface − 10` to `maxSurface + 16` — sized for LIGHTING, where block light decays in 15 steps — and `pickSpawnY` clamps to that box. **Only 9.85% of cave air falls inside it**, and `windAt` answers `false` out of bounds, so every cave deeper than ~10 blocks reads to the gate exactly like sealed rock. Connecting the caves made this the binding constraint on 90% of the volume. ⚠ It is not a bug to fix quietly: covering the 16–63 band means ~2.5× the field cells per column on an 8GB box, and *how far down danger follows you* is a design call, not a tuning one.
+3. **Mouth density is uniform across lands and probably should not be.** A den has `DEN_DRESS` because canon says which animals dig; an adit is geology and borrowed no dial. The honest one would be derived from **where carvers actually reach the crust**, which is measurable rather than guessable.
+4. Cap starvation (carried from 09-07): a cave body never gutters, so it holds a `hollowCap` slot all day. Now that caves are reachable this stops being theoretical.
+
+### Files
+`src/app/shimmer/voxel/dens.ts` (adits) · `voxel/carve.ts` (`walkCarve`, `carveTopAt`, `carveTopAtMany`, `carveReaches`) · `voxel/column.ts` (stage wiring) · `voxel3d/console.ts` (`/cave`) · `voxel/adits.test.ts` (30 asserts, 7/7 mutation-swept) · `scripts/cave-map.mts`
+
 ## 🌤 Shimmer — **THE SURFACE HAD NOWHERE TO BORROW FROM, SO IT RENDERED AS A BLACK CUTOUT AT NOON** (2026-09-08, sprites lane) · *Last touched 2026-09-08 ~08:40 ET — committed + pushed `8c5bbbd`. **NOT DEPLOYED**: the hub lane has in-flight cave work in the tree including a file that does not parse, and `coord build` bundles the TREE, not the commit.*
 
 Alex: *"fix the daylight darkness."* Board item #4 on the Hollow list, open since 09-05's Lambert→Standard.
