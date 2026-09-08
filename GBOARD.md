@@ -11,6 +11,45 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔦 Shimmer — **THE DARK FOLLOWS YOU DOWN, THE MOUTHS FIND THE BLIGHT, AND THE RENDERER STILL SHOWS YOU NOON** (2026-09-08, hub lane) · *Last touched 2026-09-08 — ✅ **DEPLOYED `BUILD_ID QTrnQl3GvfLS45fp3iqrj`, 184 chunks, `built from sha 3a0545a`**. Tree clean, 0 unpushed. Sweep **248 · 248 pass · 0 FAIL · 0 KILLED**. tsc 7 (baseline), canon exit 0, purity 53 files / 565 checks. ⚠ HEAD is `2e3b6fc` (render-light), which is PURE and UNWIRED — no behaviour change, nothing to deploy for it.*
+
+Alex: *"lets make exploring be suspenseful."* Four things shipped and the last one is only half built.
+
+### The arc, one instrument, start to end
+| | cave air a Hollow could body in | columns with a spawnable cave |
+|---|---|---|
+| morning | **1.27%** | 42 / 400 |
+| after adits (mouths) | 4.92% | 101 |
+| after the dark follows down | **17.36%** | **146** |
+
+### ★★ THE SECOND CEILING — `hollowFieldFloor`, and why the box STRETCHES rather than slides
+`lightBoundsFor` built the field from `minSurface−10`, sized correctly **for lighting** (block light decays in 15), and `pickSpawnY` clamps to it while `windAt` answers `false` outside. **Only 9.85% of cave air fell inside**, so every deeper cave read to the ruling exactly like sealed rock. The floor now follows the keeper's FEET. ⚠ The wind channel floods **from open sky**, so a box whose top is below the surface contains no sky and reports no wind anywhere in it — the floor may only ever descend. **Banded at 32, and that is a rebuild cadence not a distance**: a cold column is SKIPPED, so a continuous floor would mean a keeper walking down meets nothing — this bug, re-entered through the cache. Window ceiling by depth: 10.6% → 50.4% (20 down) → 59.8% (40) → **77.3% (70)**. Cost measured properly on the **second** attempt: **1.85× at worst** for 4.8× the cells, the added volume being nearly all solid rock.
+
+### ⚠⚠ AND THE FIRST BENCH WAS MEASURING TERRAIN NOISE, NOT THE FLOOD
+536ms for the current box and 538ms for one five times deeper — **flat**, because it passed `openToSky: y > columnHeight(...)` per CELL. `VoxelWorld` tabulates those 2304 heights once and **its own comment records that fix as 113ms → 13ms**. I reintroduced the bug inside the tool I was using to judge the change, then a re-run-last control caught a further 20% of JIT bias.
+
+### ★★★ `/cave` ANSWERED THE WRONG QUESTION, TWICE
+Alex walked into the cave it gave him: barren, and nothing spawned. **The feature was working.** Greyness at that cave is **0.000** against a gate of 0.5 — it could never hold a Hollow at any depth or hour. Nearest-first is the wrong optimisation when only 6–9% of the world clears the gate. ⚠ Fix v1 returned **greyness 0.374** — *near a grey place is not grey*; the gate is asked at the CELL. Fix v2 found nothing in radius and **silently fell through to the very cave that started it** — the worst outcome, because it looks like an answer. Now one wide ring search with a cheap greyness pre-filter (rejects ~94%) before `aditAt`. **And it reports the greyness either way, so a barren cave explains itself.** `HOLLOW_GREY_MIN` is named at its source rather than copied.
+
+### Adits biased toward blight — Alex's call, and it did what it could and no more
+`greyBias: 6`, eased continuously in `greyness`, **never gated** (a contour would put a visible wall of mouths along an invisible boundary). **91 → 253 mouths on blighted ground, 2.8×.** ⚠ **It does not shorten the walk** — nearest qualifying mouth to spawn is still **952 blocks**, because that is set by where the nearest greyfield IS. Predicted before measuring, confirmed after. ★ A diagnostic on the way reported *"the patch is TOO SMALL"* because its if-chain tested size before evidence, while its own numbers said **zero banks in 167 attempts** — and that was n=1. Generalised: blight is **8.36%** banked vs healthy **8.32%**, ratio **1.00**. No structural mismatch; both of my readings of that patch were wrong in different ways.
+
+### ⚠⚠ I TOLD ALEX CAVES RENDER AT FULL DAYLIGHT AND HE DISPROVED IT FROM INSIDE ONE
+They **do** look darker: `greedy.ts` bakes per-vertex **ambient occlusion** (a tunnel is nothing but concave corners) and `mesh-bridge.ts:82` shades per face (ceiling 0.83×, wall 0.92×, open ground 1.0), with `uShadowLift` carrying the comment *"without this, caves read as murk rather than as shade"*. ⚠⚠ **THE MECHANISM WAS IN MY OWN GREP OUTPUT** — I searched for `light|ao|shade`, six lines came back containing `ao:` and *"ambient occlusion"*, and I read past them and wrote *"empty = geometry carries no light"*. Looking for a WORD, finding it absent, reporting the CATEGORY absent. The peer hit the same defect independently with a pattern that could not match (AO is baked into vertex colours, not a named attribute). **What survives is narrower and still worth the work: the darkening is GEOMETRIC AND LOCAL** — a wide cavern reads BRIGHTER than the tunnel you entered by, and no depth is ever dark.
+
+### `render-light.ts` — step 1 of the fix, pure and UNWIRED (`2e3b6fc`)
+**22ms/column against `computeLight`'s 663ms** over a full-height box (which would be ~16 minutes to warm a 170-column ring). Solids never visited · sky falls free above the heightmap · light dies in 15 steps so the flood is a shell. **Borders designed in, not retrofitted** — an apron is correct and costs 9×, so the pass records what tried to LEAVE and neighbours re-seed; it terminates because incoming light only RAISES and caps at 15. ★★ **The oracle caught a bug that would have shipped silently: a Mana Lantern is a SOLID block**, and the loop `continue`d on solids before reading `emitOf` — every emitter in the world (lantern 14, waymark 7, cache 6) would have emitted nothing.
+
+### ⛔ OPEN, in order
+1. **★★★ WIRE `render-light` INTO THE HOST.** Per-column build on the 2ms slice · border queue to settle · texture upload · per-fragment sample (exactly what `light.ts` prescribed on 08-07; the mesher stays untouched). **Three built-and-inert things switch on at once**: dark caves, a working Mana Lantern, and a Cache you can spot in the dark. The 34s ring warm is a bench figure and has never met a real frame budget.
+2. **★★ THE ~950-BLOCK WALK IS ALEX'S / MAGII'S.** The density lever is spent. What remains is where greyfields sit (world-shaped) or giving the underground its own threat (a new canon fact).
+3. **Caves are geology.** Deep stone, subsoil, 35 Raw Mana Seam in the sampled column. Nothing to find down there — Alex noticed before any instrument did.
+4. **Does a mouth READ as a mouth** from outside the bank. Alex: *"its looking pretty good so far."* Not a clean yes; worth a second look.
+5. `CANON_GAPS` `[OPEN]`: is a freshly-generated land a **FOLD**? (Alex's instanced-world idea; athernyx `96f4344`.)
+
+### Files
+`voxel/render-light.ts` + its oracle (26 asserts, 6/6 swept) · `voxel3d/hollows.ts` (`hollowFieldFloor`, `HOLLOW_GREY_MIN`) · `voxel3d/VoxelWorld.tsx` (`lightBoundsFor`, sweep nomination) · `voxel3d/hollow-wiring.test.ts` §7 · `voxel3d/console.ts` (`/cave`) · `voxel/dens.ts` (`greyBias`) · `scripts/cave-map.mts` · `tools/coord.sh` (sha on build)
+
 ## 🕳 Shimmer — **THE CAVES WERE SEALED, AND EVERY FILE INVOLVED WAS CORRECT** (2026-09-08, hub lane) · *Last touched 2026-09-08 ~09:55 ET — ✅ **DEPLOYED `BUILD_ID XcSwQD7-L1bs45UC-TFlE`, 183 chunks**, from `f345530`+`5f1cd2e`. Tree clean, 0 unpushed. Sweep **248 suites · 247 pass · 0 KILLED** (the 1 FAIL was the editor-bands cache — regenerated, diff READ: closure 224→226 files, **no editor changed band**). tsc 7 (baseline), canon exit 0. ⚠ **`coord build`'s dirty-tree backstop fired and it was load-bearing**: the build regenerated the voxel worker (carve/dens/column are in its import graph) and left the artifact untracked — the page runs the PREBUILT worker while every test imports source, so without it the suite stays green and the world generates no mouths. Verified by CONTENT with controls: adit-only keys `maxLid`/`breakInMin` new=1 old=0; controls `surfaceClearance`/`tunnelsPerChunk`/`chamberSquash` new=1 old=1 (proves the search can see either file). Served worker md5 == disk, markers in the SERVED bytes, worker hash in 2 chunks and the **retired hash in 0**, that chunk served == disk, `/cave` in 4 chunks, tunnel 200. ⚠ A grep for `aditScanRadius` returns 0 in BOTH workers and the page HTML names NEITHER worker hash — both are the bundle-grep trap (a const name is erased by minification; voxel3d is a lazy chunk the initial HTML does not list), not findings.*
 
 Alex: *"connect the caves so noon underground is actually dangerous.. but how do i get a visual on these caves..?"* Those turned out to be one question.
