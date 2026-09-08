@@ -63,6 +63,10 @@ console.log(`light: ${lightMs.toFixed(0)}ms total, ${(lightMs / passes).toFixed(
 // Walk the standing surface of the middle 3x3 and bucket the sky level one block above the ground.
 const hist = new Map<number, number>()
 let underCanopy = 0, canopyDark = 0, open = 0
+// ⚠ A CELL AT 0 IS ONLY A DARK FLOOR IF A KEEPER COULD STAND IN IT. `columnHeight + 1` is inside a
+// TRUNK wherever a tree grows, and a trunk being unlit is correct, not a defect — the difference
+// between "four black patches in the wood" and "four tree trunks" is one material lookup.
+const darkSpots: [number, number, number, number][] = []
 for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
   const f = fields.get(`${CX + dx},${CZ + dz}`)
   if (!f) continue
@@ -77,12 +81,16 @@ for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
     // Is there a leaf anywhere above this spot?
     let leafAbove = false
     for (let yy = y + 1; yy < Math.min(256, y + 40); yy++) if (isLeafMat(matAt(wx, yy, wz))) { leafAbove = true; break }
-    if (leafAbove) { underCanopy++; if (sky <= 3) canopyDark++ } else { open++ }
+    if (leafAbove) { underCanopy++; if (sky <= 3) { canopyDark++; darkSpots.push([wx, y, wz, matAt(wx, y, wz)]) } } else { open++ }
   }
 }
 console.log(`\nstanding cells: ${open} open sky, ${underCanopy} under a canopy`)
 console.log(`under a canopy and sky <= 3 (i.e. near the shader floor): ${canopyDark}` +
   (underCanopy ? ` — ${(100 * canopyDark / underCanopy).toFixed(1)}% of canopied ground` : ''))
+for (const [x, y, z, m] of darkSpots) {
+  console.log(`  dark cell (${x},${y},${z}) material ${m} — ${m === 0 ? 'AIR: a real dark floor'
+    : isSolid(m) ? (isLeafMat(m) ? 'a LEAF' : 'SOLID (a trunk?) — not standable, not a defect') : 'passable'}`)
+}
 console.log('\nsky level one block above the generated surface:')
 for (const lvl of [...hist.keys()].sort((a, b) => b - a)) {
   const n = hist.get(lvl)!

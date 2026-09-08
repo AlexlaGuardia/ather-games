@@ -15,8 +15,10 @@ import {
   FACE_XM, FACE_XP,
 } from './render-light'
 import { MAT } from './depth'
+import { WOOD } from './trees'
 import { AIR } from './section'
 
+const isLeafMatCheck = (m: number) => m >= WOOD.GOLDWOOD_LEAVES && m <= WOOD.DAWNWOOD_LEAVES && m % 2 === 1
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -299,6 +301,52 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
     `§10 ★★ punch a hole in the roof and daylight reaches the floor at full strength (got ${R3.sky[li(6, G + 1, 6)]})`)
   ok(R3.sky[li(5, G + 1, 5)] > 0 && R3.sky[li(5, G + 1, 5)] < MAX_LIGHT,
     `§10 ★ and the corner beside it is dimmer, not equal — sideways still decays (got ${R3.sky[li(5, G + 1, 5)]})`)
+}
+
+// ── §11 a canopy shades; it does not switch the sun off ──────────────────────────────────────
+// ★★★ ALEX'S CALL, 2026-09-08: "do the minecraft leaves rule". Before it, leaves were `isSolid` and
+// therefore a wall — the measured result was 8 cells in 2304 at level 0, a black patch under a thick
+// crown at NOON. MC's rule is not "half opaque": a leaf costs the same single level as air, and what
+// it does is END THE FREE FALL, so the ground under a canopy reads 14, 13, 12 rather than 0.
+{
+  const G = 60
+  const LEAF = WOOD.GOLDWOOD_LEAVES
+  // Solid ground, then a flat leaf ceiling at G+8 covering local x,z in 2..13 — wide enough that
+  // the middle is more than 15 blocks from any edge, which is where a wall-shaped rule goes black.
+  const forest = (x: number, y: number, z: number): number => {
+    if (y <= G) return MAT.STONE
+    if (y === G + 8 && x >= 2 && x <= 13 && z >= 2 && z <= 13) return LEAF
+    return AIR
+  }
+  const F = computeRenderLight(0, 0, forest, null)
+  const at = (lx: number, y: number, lz: number) => F.sky[li(lx, y, lz)]
+
+  // §11a the fixture really is a canopy, and really is wide
+  ok(forest(7, G + 8, 7) === LEAF, '§11 there is a leaf overhead')
+  ok(isLeafMatCheck(LEAF), '§11 and the module agrees it is one')
+  ok(forest(7, G + 4, 7) === AIR, '§11 with open air under it')
+
+  ok(at(7, G + 9, 7) === MAX_LIGHT, '§11 above the canopy is full daylight')
+  ok(at(7, G + 8, 7) === MAX_LIGHT - 1,
+    `§11 ★★ the leaf itself takes one level, exactly as MC does (got ${at(7, G + 8, 7)})`)
+  ok(at(7, G + 7, 7) === MAX_LIGHT - 2,
+    `§11 ★★ and the cell below it is one lower again — a GRADIENT (got ${at(7, G + 7, 7)})`)
+  ok(at(7, G + 1, 7) > 0,
+    `§11 ★★★ THE FOREST FLOOR IS NOT BLACK under a canopy 12 wide (got ${at(7, G + 1, 7)})`)
+  ok(at(7, G + 1, 7) < MAX_LIGHT,
+    `§11 ★★ but it IS shaded — a rule that just passed light through would read 15 (got ${at(7, G + 1, 7)})`)
+  // ⚠ THE FREE FALL MUST NOT RESUME BELOW THE LEAF. If the latch closed one cell too late, the leaf
+  // would be seeded at 15 and everything under it would be 15 again — this bug, one block lower,
+  // and every assert above except this one would still pass.
+  ok(at(7, G + 3, 7) < at(7, G + 7, 7),
+    `§11 ★★★ it keeps decaying with depth rather than resuming full strength ` +
+    `(G+7 ${at(7, G + 7, 7)} -> G+3 ${at(7, G + 3, 7)})`)
+  // Open ground outside the canopy is untouched — the shade is the canopy's, not the sky's.
+  ok(at(0, G + 1, 0) === MAX_LIGHT, `§11 ★ ground beside the wood is still 15 (got ${at(0, G + 1, 0)})`)
+  // And laterally a leaf is NOT a wall: light from the open edge reaches under it.
+  ok(at(2, G + 1, 7) > at(7, G + 1, 7),
+    `§11 ★ the canopy edge is brighter than its middle — light comes in from the side ` +
+    `(edge ${at(2, G + 1, 7)}, middle ${at(7, G + 1, 7)})`)
 }
 
 if (fails.length) {

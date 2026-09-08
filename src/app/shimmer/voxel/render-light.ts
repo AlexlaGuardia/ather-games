@@ -49,7 +49,36 @@
 // dirty queue. Nothing here decides that cadence; this module is one pass.
 import { AIR } from './section'
 import { isSolid, MAT } from './depth'
+import { isLeafMat } from './trees'
 import { emitOf } from './registry'
+
+/**
+ * ── ★★★ LEAVES ARE MINECRAFT'S THIRD STATE, AND THE WORLD ONLY HAD TWO (2026-09-08, Alex's call) ─
+ *
+ * `isSolid` answers *can a body occupy this cell*, and it is the right question for collision, for
+ * the wind channel and for whether a light can ENTER a block. It is the wrong question for a canopy.
+ * Leaves are solid to a body and they are not a wall to daylight — asking one predicate both things
+ * gave a forest floor of **8 cells in 2304 at level 0**, a black patch under a thick crown at noon.
+ *
+ * Minecraft has a third state and it is not "half opaque": leaves cost the SAME single level as air
+ * to pass through, and what they do is **end the free fall**. Skylight drops straight down at full
+ * strength only while nothing has interrupted it, so under a canopy it is 14, then 13, then 12 —
+ * a gradient rather than a switch. That is the whole rule, and it is two predicates:
+ *
+ *   · `blocksLight` — light cannot enter at all. Every solid EXCEPT leaves.
+ *   · `dimsSky`     — light passes, but full-strength sky stops falling here.
+ *
+ * ⚠ IT DELIBERATELY DOES NOT UNIFY WITH `light.ts`, WHICH HAS A THIRD RULE AGAIN — *not air, not
+ * water, not one of four hand-listed leaf ids* — so in the SPAWN field leaves pass light and PLANTS
+ * BLOCK IT, which is the exact inverse of what `isSolid` says. Both are defensible and only one of
+ * them is on screen. Unifying would change where Hollows spawn, which is a ruling and not a
+ * refactor; the divergence is written down here instead of discovered later.
+ * ⚠ AND WATER IS NOT IN `dimsSky` YET, though Minecraft treats it the same way. Today a lake bottom
+ * is lit as though it were open ground. That is a look nobody has judged, not a decision.
+ */
+export const blocksLight = (m: number): boolean => isSolid(m) && !isLeafMat(m)
+/** Passes light, but full-strength sky stops falling free here. Leaves, today. */
+export const dimsSky = (m: number): boolean => isLeafMat(m)
 
 export const MAX_LIGHT = 15
 /** Column footprint. Kept local rather than imported so this file stays independent of column.ts. */
@@ -121,6 +150,8 @@ export interface RenderLightWork {
   sky: Uint8Array
   blk: Uint8Array
   solid: Uint8Array
+  /** Cells light passes through but full-strength sky does not fall through. See `dimsSky`. */
+  dims: Uint8Array
   spill: LightBorders
   /** Packed indices; bit 30 marks the block channel. GROWABLE — see `pushQ`. */
   q: Int32Array
@@ -182,7 +213,7 @@ export function beginRenderLight(
   const n = SPAN * HEIGHT * SPAN
   return {
     ox, oz, matAt, incoming,
-    sky: new Uint8Array(n), blk: new Uint8Array(n), solid: new Uint8Array(n),
+    sky: new Uint8Array(n), blk: new Uint8Array(n), solid: new Uint8Array(n), dims: new Uint8Array(n),
     spill: newBorders(),
     // The queue holds packed indices; bit 30 marks the block channel so both floods share one loop
     // and therefore one set of border rules. Two loops would be two places to get the decay wrong.
@@ -200,7 +231,7 @@ export function beginRenderLight(
  */
 export function stepRenderLight(w: RenderLightWork, budgetMs: number): boolean {
   if (w.phase === 3) return true
-  const { ox, oz, matAt, sky, blk, solid, spill } = w
+  const { ox, oz, matAt, sky, blk, solid, dims, spill } = w
   const t0 = performance.now()
   let since = 0
   const outOfTime = (): boolean => {
@@ -262,7 +293,12 @@ export function stepRenderLight(w: RenderLightWork, budgetMs: number): boolean {
         // unreachable line. `isSolid` is the one definition of "can a body occupy this cell", the
         // same notion collision and the wind channel use, and it is the right question here too.
         // The lake case is real and is asserted in `render-light.test.ts` §4 against `isSolid`.
-        if (m !== AIR && isSolid(m)) { solid[i] = 1; openSky = false }
+        if (m !== AIR && blocksLight(m)) { solid[i] = 1; openSky = false }
+        // ★ THE LATCH CLOSES **AT** THE LEAF, NOT AFTER IT, and the off-by-one is the whole look.
+        // Seeding the leaf itself at 15 would let the free fall resume from inside the canopy and
+        // every cell below would be 15 again — the bug this rule exists to remove, one block lower.
+        // The leaf takes 15 from the open cell above it and lands on 14, exactly as MC does.
+        else if (dimsSky(m)) { dims[i] = 1; openSky = false }
         else if (openSky) { sky[i] = MAX_LIGHT; pushQ(w, i) }
         // ⚠⚠ THE EMITTER CHECK IS NOT INSIDE THE `else`, AND THE FIRST VERSION HAD IT THERE.
         // A Mana Lantern is a SOLID PLACEABLE BLOCK. Marking it solid and `continue`ing before
@@ -320,7 +356,13 @@ export function stepRenderLight(w: RenderLightWork, budgetMs: number): boolean {
       // 15 all the way down, but light that has already been dimmed by a corner decays like any
       // other. Dropping the `lvl === MAX_LIGHT` half would light the floor of every cave that has a
       // crack over it as brightly as open ground.
-      const nl = (!isBlk && d === 3 && lvl === MAX_LIGHT) ? MAX_LIGHT : lvl - 1
+      //
+      // ★★ AND IT STOPS AT A CANOPY. `dims` is read on the cell being ENTERED, not the one being
+      // left, because that is where the opacity lives — the same place MC keeps it. A downward step
+      // never leaves the footprint (x and z do not move), so `dims` can be indexed here without the
+      // border case the lateral steps below have to handle.
+      const nl = (!isBlk && d === 3 && lvl === MAX_LIGHT && !dims[li(lx, ny, lz)])
+        ? MAX_LIGHT : lvl - 1
       if (nl <= 0) continue
 
       if (nx < 0 || nx >= SPAN || nz < 0 || nz >= SPAN) {
