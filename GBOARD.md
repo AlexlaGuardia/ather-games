@@ -50,7 +50,31 @@ Their block (below) records not deploying `8c5bbbd` because the hub tree held a 
 ### Files
 `src/app/shimmer/voxel/dens.ts` (adits) · `voxel/carve.ts` (`walkCarve`, `carveTopAt`, `carveTopAtMany`, `carveReaches`) · `voxel/column.ts` (stage wiring) · `voxel3d/console.ts` (`/cave`) · `voxel/adits.test.ts` (30 asserts, 7/7 mutation-swept) · `scripts/cave-map.mts`
 
-## 🌤 Shimmer — **THE SURFACE HAD NOWHERE TO BORROW FROM, SO IT RENDERED AS A BLACK CUTOUT AT NOON** (2026-09-08, sprites lane) · *Last touched 2026-09-08 ~08:40 ET — committed + pushed `8c5bbbd`. **NOT DEPLOYED**: the hub lane has in-flight cave work in the tree including a file that does not parse, and `coord build` bundles the TREE, not the commit.*
+## 🌤 Shimmer — **THE SURFACE HAD NOWHERE TO BORROW FROM, SO IT RENDERED AS A BLACK CUTOUT AT NOON** (2026-09-08, sprites lane) · *Last touched 2026-09-08 ~09:20 ET — ✅ **DEPLOYED** by the hub lane, `BUILD_ID XcSwQD7-L1bs45UC-TFlE`, 183 chunks, carrying `8c5bbbd` + `3da0978` alongside their adits and `/cave`.*
+
+> ⚠ **THIS LINE READ "NOT DEPLOYED" FOR 45 MINUTES AFTER IT SHIPPED**, and the correction is not a
+> typo fix. The hub lane deployed at 08:34 ET and told me by `dbr` — **and `dbr` does not wake a
+> window**, so the notice sat unread while I went on writing a board that asserted the opposite. The
+> stale-note entry (09-01) says a confident note does not misinform, it CANCELS THE LOOK; this is the
+> version where the note is mine and the thing it cancels is my own verification. They had to tell me
+> my board was wrong about my own commit.
+>
+> ★★★ **VERIFIED BY PIXELS AGAINST A RECORDED BEFORE, not by the message and not by a hash.** Same
+> headless shot, same crop, same sky-segmentation, against `:3200`:
+>
+> | | body mean | ground |
+> |---|---|---|
+> | before the fix (dev) | (26.0, 30.7, 30.7) | (46,48,54) |
+> | after the fix (dev) | (47.2, 58.0, 62.8) | (46,48,54) |
+> | **live prod now** | **(47.9, 58.8, 63.6)** | (46,48,54) |
+>
+> Within a point of the dev reading, the residue being the walk phase. **The before-value is the
+> control** — this is the one instrument in the session that can tell "the fix shipped" from "the
+> page loads", and it was recorded before the fix existed precisely so it could be.
+>
+> ⚠ **AND I VERIFIED EXACTLY ONE HALF.** The adits and `/cave` in the same build are the hub lane's;
+> their generator is measured and their LOOK is Alex's. I have not stood in a cave mouth and will not
+> write as though I had.
 
 Alex: *"fix the daylight darkness."* Board item #4 on the Hollow list, open since 09-05's Lambert→Standard.
 
