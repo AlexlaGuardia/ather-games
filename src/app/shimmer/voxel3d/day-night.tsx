@@ -33,6 +33,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { dayProgress, daylight, sunElevation, sunAzimuth } from '../engine/day-cycle'
 import { UNDER, fogUnder, domeVeil, stepUnder, newUnderState } from './underwater'
+import { SKY, DAY, NIGHT } from './sky-palette'
 
 // ── The sky dome (2026-08-08, Alex: "add a sky background… sun cycle but no moon in the Ather") ──
 // A camera-following inverted sphere with the whole sky in ONE fragment shader: vertical gradient
@@ -76,39 +77,14 @@ const SKY_FRAG = /* glsl */ `
     gl_FragColor = vec4(col, 1.0);
   }
 `
-const SKY = {
-  day: { zenith: '#6f9fd0', horizon: '#c9dff0' },
-  night: { zenith: '#101a33', horizon: '#2a3a63' },
-  sunHigh: '#fff4d6', sunLow: '#ffb45e',
-}
-
-// Day = the pre-clock look, verbatim. Night = the Ather's own hour: darker than the garden's
-// Moonwell blue (this is untended country and darkness is about to mean something), but with a
-// real floor — hemisphere and ambient never reach zero, because "you can't see" is a fail state
-// the SPAWN layer is allowed to threaten and the renderer is not.
-/** ⚠ EXPORTED 2026-08-27 so `dev/ring` can hang the SHIPPED fog in its preview, and so the ring's
- *  fade-in distance is read off the real fog rather than copied beside it. A preview lit by
- *  different numbers than the world is the "preview that re-derives" trap `dev/seam` warns about. */
-export const DAY = {
-  bg: '#8fb7d9', fogNear: 80, fogFar: 200,
-  hemiSky: '#cfe6ff', hemiGround: '#3b3a4a', hemiIntensity: 1.5,
-  sun: '#ffffff', sunIntensity: 1.5,
-  ambient: 0.4,
-}
-/** ⚠ EXPORTED 2026-09-06 for the same reason DAY was: `dev/hollow` was restating all six of its
- *  lighting values locally and every one of them differed from the world's, so the bench Alex has
- *  made every Hollow look call on was running at ~55% of the world's daylight. A preview lit by
- *  different numbers than the world is the "preview that re-derives" trap, and it had already
- *  produced one wrong diagnosis: "the Hollow reads too dark" was the ROOM, not the creature. */
-export const NIGHT = {
-  bg: '#16223f', fogNear: 55, fogFar: 165,   // the dark stands closer — same world, smaller circle
-  hemiSky: '#8ea8d8', hemiGround: '#252c47', hemiIntensity: 0.55,
-  // ⚠ NOT A MOON. The Ather has no moon (Alex ruling 2026-08-08). This is the night's silver —
-  // an authored illumination floor, because "you can't see" belongs to the spawn layer, never the
-  // renderer. What the silver IS in-fiction (starlight? the Shimmer?) is an open canon gap.
-  silver: '#cfe0ff', silverIntensity: 0.4,
-  ambient: 0.15,
-}
+// ── ★ THE PALETTE LIVES IN `sky-palette.ts` AND IS RE-EXPORTED FROM HERE (2026-09-08) ─────────
+// It moved so `sky-env.ts` can build the environment a Hollow borrows from out of the SAME numbers
+// the dome paints with — canon requires what it borrows to be the room, and a second copy of the
+// zenith beside this one is the hand-kept mirror that has cost this repo twice. Re-exported so the
+// six existing `from '../../voxel3d/day-night'` import sites did not have to move with it.
+// ⚠ `GLOOM`/`MIST` stayed: those are rig BEHAVIOUR, not palette, and nothing outside this file
+// needs them.
+export { DAY, NIGHT, SKY } from './sky-palette'
 
 // ── ★ CANOPY GLOOM (2026-08-08 — "closed canopy, dim floor", the Thicket's ruled character) ────
 // Under dense canopy the world dims and closes in: sun mostly gone (a canopy's whole job), sky

@@ -40,7 +40,8 @@
  */
 import * as THREE from 'three'
 import { hollowPose, hollowField, REST, FORM_SCALE, type Anchor, type Blob, type HollowPose } from './hollow-pose'
-import { createHollowMat, type HollowForm } from './hollow-look'
+import { createHollowMat, setHollowBorrow, type HollowForm } from './hollow-look'
+import { dayProgress, daylight } from '../engine/day-cycle'
 
 /** How many shared alpha buckets stand in for per-blob opacity. Mirrors `HollowDoll`'s bench value. */
 export const BUCKETS = 6
@@ -254,6 +255,12 @@ export function createHollowBody(form: HollowForm): THREE.Group {
  * dissolved. Swapping which shared material a blob points at is free and affects only that blob.
  */
 export function updateHollowBody(body: THREE.Group, t: number, form: HollowForm, speed = 0): void {
+  // ★ THE HOUR DECIDES HOW MUCH ROOM THERE IS TO BORROW. Canon: *"in a greyfield there is nothing
+  // to borrow, so a Hollow reads nearly matte; at the edge of a tended plot it goes glossy."* We
+  // have no per-body sample of the ground yet, so the CLOCK stands in for it: full borrow at noon,
+  // a trace at midnight. Here rather than in a rig component because this function is one of the
+  // only two the world AND the bench both run every frame — see `setHollowBorrow`.
+  setHollowBorrow(daylight(dayProgress()))
   const pivot = body.children.find(c => c.name === PIVOT) as THREE.Group | undefined
   if (!pivot) return
   const { mats } = shared()

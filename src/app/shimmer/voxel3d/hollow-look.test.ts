@@ -7,8 +7,11 @@
 // while the game is wrong. So the guard here is not about the numbers, it is about the SEAM.
 
 import { readFileSync } from 'node:fs'
-import { codeOnly } from '../testing/guard'
-import { HOLLOW_LOOK, createHollowGeo, createHollowMat, applyHollowLook, goopSurface, type HollowLook } from './hollow-look'
+import { codeOnly, strip } from '../testing/guard'
+import { HOLLOW_LOOK, createHollowGeo, createHollowMat, applyHollowLook, goopSurface, goopRoughness,
+         setHollowBorrow, BORROW, type HollowLook } from './hollow-look'
+import { skyEnvironment, borrowedSky, NIGHT_BORROW } from './sky-env'
+import { SKY } from './sky-palette'
 
 let pass = 0
 const fails: string[] = []
@@ -172,11 +175,27 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
     ok(m.roughness < 0.5, `★ ${f} reads WET rather than matte (roughness ${m.roughness})`)
     ok(m.metalness < 0.35,
       `★ ${f} stays a dielectric — a metal reads as POLISHED, and a Hollow owns nothing (metalness ${m.metalness})`)
-    ok(m.envMapIntensity > 1,
-      `★ ${f} borrows hard where a scene gives it something to borrow (envMapIntensity ${m.envMapIntensity})`)
+    // ★★★ THE ASSERT THAT WAS MISSING, AND IT IS THE WHOLE OF THE 2026-09-08 DEFECT. Until then
+    // this block checked `envMapIntensity > 1` and nothing checked that there was an ENVIRONMENT to
+    // apply it to — and there was not, anywhere in the game. A material's borrow strength is a
+    // ratio; asserting the ratio while the operand is null is asserting nothing. `envMap` is the
+    // operand, so it is what gets asserted first.
+    ok(m.envMap !== null && m.envMap !== undefined,
+      `★★★ ${f} HAS a room to borrow — canon: "specular tinted entirely by the environment". Without an envMap that sentence multiplies zero and the body reads as a black cutout in full daylight.`)
+    ok(m.envMap === skyEnvironment(),
+      `★★ ${f} borrows the SHIPPED sky, not a per-call build — one texture and one PMREM for the app`)
+    ok(m.envMapIntensity === BORROW,
+      `★ ${f} borrows at the calibrated strength (envMapIntensity ${m.envMapIntensity}, BORROW ${BORROW})`)
     ok(m.normalMap !== null, `★★ ${f} has a SURFACE — flat shading is what made it read as a shadow puppet`)
-    ok(m.normalMap === m.roughnessMap,
-      `★★ ${f} drives roughness from the SAME field as the normal — uniform roughness slides a highlight across it like plastic; wet clay breaks it along the lumps`)
+    // ⚠⚠ THIS ASSERT USED TO READ `m.normalMap === m.roughnessMap` AND IT ENCODED THE BUG. The
+    // intent was "roughness comes from the same FIELD as the normal"; what it checked was the same
+    // TEXTURE, and three reads roughness from channel G — which on a normal map is the Y slope, not
+    // the height. The guard could only ever pass while the material was wrong. A guard that asserts
+    // an IDENTITY when the claim is about a DERIVATION is the hand-kept-mirror shape (2026-08-22)
+    // pointed at a texture.
+    ok(m.roughnessMap !== null && m.roughnessMap !== m.normalMap,
+      `★★★ ${f} takes roughness from its OWN texture — three samples roughness from .g, so packing the height into a normal map's alpha writes it into a channel nothing reads`)
+    ok(m.roughnessMap === goopRoughness(), `★ ${f} uses the shared roughness field`)
   }
 
   // ⚠⚠ ONE TEXTURE, SHARED. A texture per body is the allocation class that got this page blocked
@@ -200,6 +219,136 @@ const FORMS = ['warden', 'stalker', 'caster'] as const
   ok(a.length === 256 * 256 * 4 && a.some(v => v !== a[0]),
     '★ the surface has real content — an all-one-value map is a normal map that does nothing')
   for (const f of FORMS) mats[f].dispose()
+}
+
+/* ═══ THE ROOM IT BORROWS (2026-09-08) ═══════════════════════════════════════════════════════════
+ *
+ * Everything here exists because the previous version of this file asserted the borrow STRENGTH
+ * and never asked whether there was anything to borrow. See `sky-env.ts` for the measurement.
+ */
+{
+  // ── 1. THE ROUGHNESS MAP, READ THE WAY THREE READS IT ────────────────────────────────────────
+  // ★★★ THE ONLY CHANNEL THAT MATTERS IS G. `roughnessmap_fragment.glsl.js`: `roughnessFactor *=
+  // texelRoughness.g`. Asserting "there is a roughness map" is satisfied by the broken version too
+  // — the broken version HAD one, pointed at a normal map whose G is the Y slope. So this reads G.
+  const r = goopRoughness().image.data as Uint8Array
+  const g: number[] = []
+  for (let i = 0; i < r.length; i += 4) g.push(r[i + 1])
+  const lo = Math.min(...g), hi = Math.max(...g)
+  ok(hi - lo > 20,
+    `★★★ the roughness map VARIES in G, the channel three samples (spread ${hi - lo}/255) — a flat G is a uniform roughness and the highlight slides over the body like plastic`)
+  // ⚠ AND IT STAYS IN A BAND AROUND 1.0. `roughnessFactor` is a MULTIPLIER on 0.34, so a raw
+  // 0..255 height would take the pits to a mirror and the peaks to full matte. Asserting only that
+  // it varies would pass a map that does exactly that.
+  ok(lo >= 0.60 * 255 && hi <= 1.0 * 255 && lo > 0,
+    `★★ the roughness band never reaches 0 (mirror) or beyond 1 (chalk) — G runs ${lo}..${hi} of 255`)
+  // ★ AND IT IS GREY. three would read G alone, but a coloured roughness map is a map somebody
+  // meant as something else; keeping R=G=B means a later reader cannot pick the wrong channel.
+  let grey = true
+  for (let i = 0; i < r.length && grey; i += 4) grey = r[i] === r[i + 1] && r[i + 1] === r[i + 2]
+  ok(grey, '★ the roughness map is greyscale — R=G=B, so no channel convention can defeat it again')
+  ok(goopRoughness() === goopRoughness(), '★★ one shared roughness texture, not one per call')
+
+  // ── 2. THE SKY ENVIRONMENT IS A SKY ──────────────────────────────────────────────────────────
+  const env = skyEnvironment()
+  const d = env.image.data as Uint8Array
+  const W = env.image.width, H = env.image.height
+  const rowLum = (y: number) => {
+    const i = (y * W) * 4
+    return d[i] + d[i + 1] + d[i + 2]
+  }
+  ok(rowLum(0) > rowLum(H - 1) + 60,
+    `★★ the environment has an UP — zenith clearly brighter than the ground half (${rowLum(0)} vs ${rowLum(H - 1)}). A near-uniform environment is an ambient light with extra steps, and it re-creates exactly the flat fill a hemisphere light already gave us. ⚠ The margin is the point: a bare \`>\` is satisfied by a one-count difference, which is a gradient nothing can see.`)
+  // ★★ THE ASSERT WITH TEETH: the top must agree with the DOME'S OWN CURVE, not merely be brighter.
+  // Canon requires a Hollow to borrow the room and *"never carry a hue the scene did not already
+  // have"*, which is only true while these two are built from one palette. Reconstruct the dome's
+  // `mix(horizon, zenith, pow(up, 0.6))` at a row and compare.
+  const hexOf = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]
+  const zen = hexOf(SKY.day.zenith)
+  ok(Math.abs(d[0] - zen[0]) < 14 && Math.abs(d[1] - zen[1]) < 14 && Math.abs(d[2] - zen[2]) < 14,
+    `★★ the top of the environment IS the palette's zenith (${d[0]},${d[1]},${d[2]} vs ${zen})`)
+
+  // ⚠⚠⚠ AND THAT ASSERT ALONE IS A MIRROR OF ITS OWN SOURCE — IT SURVIVED THE MUTATION THAT
+  // MATTERS. Changing `SKY.day.zenith` moved the environment AND the expected value together, so
+  // the sweep printed 102/0 on a repainted sky. The claim canon actually needs is that the
+  // environment agrees with **the dome the player is looking at**, and the dome is a GLSL string in
+  // another file. So the two things that can silently disagree are asserted against that file:
+  //   (a) the dome reads its palette from `sky-palette`, so there is one zenith and not two, and
+  //   (b) the horizon→zenith curve exponent is the same number in both.
+  // ★ This is the difference between comparing VALUES and comparing DERIVATIONS (PATTERNS 08-22):
+  // a value check goes green the moment both copies are wrong in the same way.
+  const domeSrc = readFileSync(new URL('day-night.tsx', import.meta.url), 'utf8')
+  // ⚠ `strip`, NOT `codeOnly`. `codeOnly` blanks STRING LITERALS as well as comments — correct for
+  // "does this file DO x", wrong here, because a module specifier IS a string literal and the whole
+  // claim is about which module. Comments still go, so documenting this line cannot satisfy it.
+  ok(/from '\.\/sky-palette'/.test(strip(domeSrc)),
+    "★★★ the dome takes its palette from `sky-palette` — the environment and the visible sky must be ONE set of numbers, or a Hollow borrows a hue the scene does not have and canon's central line about the surface stops being true with nothing to catch it")
+  // ⚠⚠ AND THE IMPORT ALONE IS NOT THE CLAIM — THIS EXACT MUTATION SURVIVED THE FIRST VERSION.
+  // Declaring a LOCAL `SKY` beside a surviving `import { DAY, NIGHT } from './sky-palette'` leaves
+  // the specifier in the file and the guard green, with two zeniths in the build. The claim is that
+  // the palette is not REDECLARED here, so that is what gets asserted.
+  for (const name of ['SKY', 'DAY', 'NIGHT']) {
+    ok(!new RegExp(`(const|let|var)\\s+${name}\\s*=`).test(strip(domeSrc)),
+      `★★★ the dome does not redeclare \`${name}\` — a local copy beside the import is two palettes wearing one name, and the sky the player sees would drift from the sky a Hollow reflects with every assert still green`)
+  }
+
+  const domePow = domeSrc.match(/pow\(\s*up\s*,\s*([0-9.]+)\s*\)/)
+  const envSrc = readFileSync(new URL('sky-env.ts', import.meta.url), 'utf8')
+  const envPow = envSrc.match(/Math\.pow\(\s*up\s*,\s*([0-9.]+)\s*\)/)
+  ok(domePow !== null && envPow !== null,
+    `★★ both curves are still readable (dome ${domePow?.[1] ?? 'MISSING'}, env ${envPow?.[1] ?? 'MISSING'}) — ⚠ a regex that stops matching reports "no drift" and "I could not look" with the same green, so a missing match is a FAILURE here, never a skip`)
+  ok(domePow !== null && envPow !== null && domePow[1] === envPow[1],
+    `★★★ the environment uses the DOME'S horizon→zenith curve (dome pow ${domePow?.[1]}, env pow ${envPow?.[1]}) — the same expression, not a similar-looking gradient`)
+  let anyBlack = false
+  for (let y = 0; y < H; y++) if (rowLum(y) === 0) anyBlack = true
+  ok(!anyBlack, '★ no fully black row — a black band in an environment reads as a hole in the world on a curved body')
+
+  // ── 3. THE HOUR IS THE BORROW, AND IT IS APPLIED TO LIVE MATERIALS ──────────────────────────
+  ok(borrowedSky(1) === 1, 'noon borrows the whole room')
+  // ⚠⚠ THE FIRST VERSION OF THIS WAS `borrowedSky(0) === NIGHT_BORROW` AND IT SURVIVED THE
+  // MUTATION IT EXISTS TO CATCH. Setting `NIGHT_BORROW = 0` left it green, because it compared the
+  // function to the very constant the function uses — the two moved together, which is the
+  // hand-kept-mirror shape (2026-08-22) with a one-line radius. The claim is not "the floor equals
+  // the constant", it is "there IS a floor and it is a trace" — so it is asserted as a BAND with
+  // literals in it, from both sides (2026-09-06: a bound checked from one side is a comment).
+  ok(borrowedSky(0) > 0.04,
+    `★★★ midnight keeps a TRACE (${borrowedSky(0)}), never zero — canon's word is "near-matte", and a flat cutout is the unlit-renderer fail state the rig refuses everywhere else`)
+  ok(borrowedSky(0) < 0.3,
+    `★★ and the trace is a TRACE (${borrowedSky(0)}) — a Hollow that keeps borrowing at midnight is a lit thing in the dark, which is the read the spawn layer exists to deny`)
+  ok(borrowedSky(0) === NIGHT_BORROW, 'and the floor is the named constant, not a second copy of it')
+  ok(borrowedSky(0.5) < 0.5,
+    '★ and the curve is not linear — daylight spends most of its range in the twilight band, so a linear borrow would keep a Hollow glossy well after the sun has gone')
+  const live = createHollowMat(HOLLOW_LOOK)
+  setHollowBorrow(1)
+  ok(live.warden.envMapIntensity === BORROW,
+    `★★★ setHollowBorrow REACHES a material the factory already returned — the tick walks a registry the producer keeps, because hollow-body and hollow-mesh each hold their own set and a tick that knew about one would light half the Hollows by a different clock`)
+  setHollowBorrow(0)
+  ok(Math.abs(live.warden.envMapIntensity - BORROW * NIGHT_BORROW) < 1e-6,
+    `★★ and midnight actually lands on the trace (${live.warden.envMapIntensity})`)
+  // ★★★ A MATERIAL BUILT AFTER THE TICK INHERITS THE HOUR. This is the spawn case and nothing else
+  // covers it: `setHollowBorrow` early-outs on an unchanged hour, so a body created at midnight
+  // would keep the noon default forever and burn a daylight sky into the dark. Found by asking what
+  // the early-out costs, not by a failing picture — a Hollow only exists at night, so this would
+  // have been THE shipping path.
+  setHollowBorrow(0)
+  const born = createHollowMat(HOLLOW_LOOK)
+  ok(Math.abs(born.stalker.envMapIntensity - BORROW * NIGHT_BORROW) < 1e-6,
+    `★★★ a Hollow built at midnight borrows midnight (${born.stalker.envMapIntensity}, want ${BORROW * NIGHT_BORROW}) — not the noon default it was constructed with`)
+  for (const f of FORMS) born[f].dispose()
+
+  setHollowBorrow(1)
+  for (const f of FORMS) live[f].dispose()
+
+  // ── 4. BOTH FRAME UPDATERS TICK IT ───────────────────────────────────────────────────────────
+  // ⚠ A STATEMENT, NOT A MENTION. The 2026-09-06 world sweep found three source asserts satisfied
+  // by the name appearing anywhere in the file — an import line counts, a comment counts. These
+  // anchor on the call with its argument.
+  const CALL = /setHollowBorrow\(daylight\(dayProgress\(\)\)\)/
+  for (const mod of ['hollow-mesh.ts', 'hollow-body.ts']) {
+    const src = codeOnly(readFileSync(new URL(mod, import.meta.url), 'utf8'))
+    ok(CALL.test(src),
+      `★★★ ${mod} ticks the borrow every frame — the world and the bench each run exactly one of these two, so a tick in only one lights the bench by a different rule than the game and manufactures the next "reads too dark" finding`)
+  }
 }
 
 console.log(`hollow-look: ${pass} pass, ${fails.length} fail`)

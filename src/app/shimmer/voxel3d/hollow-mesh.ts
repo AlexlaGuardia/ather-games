@@ -53,7 +53,8 @@ import {
   hollowPose, hollowField, cohesionAt, REST, FORM_SCALE, DENSITY, type Anchor,
 } from './hollow-pose'
 import { BONE, boneName, applyHollowPose, type BoneName } from './hollow-body'
-import { createHollowMat, type HollowForm } from './hollow-look'
+import { createHollowMat, setHollowBorrow, type HollowForm } from './hollow-look'
+import { dayProgress, daylight } from '../engine/day-cycle'
 
 /** The skinned mesh's node name, so a host or a guard can find it without walking by type. */
 export const SKIN = 'hollowSkin'
@@ -518,6 +519,12 @@ export function createHollowMeshBody(form: HollowForm): THREE.Group {
 export function updateHollowMeshBody(
   body: THREE.Group, t: number, form: HollowForm, speed = 0, deformSkin = true,
 ): void {
+  // ★ THE HOUR DECIDES HOW MUCH ROOM THERE IS TO BORROW. Canon: *"in a greyfield there is nothing
+  // to borrow, so a Hollow reads nearly matte; at the edge of a tended plot it goes glossy."* We
+  // have no per-body sample of the ground yet, so the CLOCK stands in for it: full borrow at noon,
+  // a trace at midnight. Here rather than in a rig component because this function is one of the
+  // only two the world AND the bench both run every frame — see `setHollowBorrow`.
+  setHollowBorrow(daylight(dayProgress()))
   const st = STATE.get(body)
   const pivot = body.children.find(c => c.name === PIVOT) as THREE.Group | undefined
   if (!st || !pivot) return

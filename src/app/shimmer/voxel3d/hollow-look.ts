@@ -19,6 +19,7 @@
  * look has to carry some of its own value. How MUCH is a feel call and it is Alex's.
  */
 import * as THREE from 'three'
+import { skyEnvironment, borrowedSky } from './sky-env'
 
 export type HollowForm = 'warden' | 'stalker' | 'caster'
 
@@ -107,6 +108,7 @@ export const HOLLOW_LOOK: HollowLook = {
  */
 const SURF = 256
 let GOOP: THREE.DataTexture | null = null
+let GOOP_R: THREE.DataTexture | null = null
 
 /** Value noise, 4 octaves, tiling — the lumps and runs a clay body has. */
 function goopHeight(): Float32Array {
@@ -139,10 +141,23 @@ function goopHeight(): Float32Array {
 }
 
 /**
- * The shared goop surface: a normal map in RGB with the same height in A, so one texture serves as
- * BOTH the normal map and the roughness map. Wet clay is not uniformly wet — a run catches the light
- * and the pit beside it does not — and driving roughness from the same field is what makes a
- * highlight break up along the lumps instead of sliding over them like plastic.
+ * The shared goop surface: a tangent-space NORMAL map in RGB, from the height field above.
+ *
+ * ⚠⚠ THIS DOCSTRING USED TO CLAIM THE ALPHA CHANNEL DOUBLED AS THE ROUGHNESS MAP, AND IT WAS A
+ * STANDING CLAIM ABOUT A FILE THIS FILE DOES NOT OWN (found 2026-09-08). **three reads roughness
+ * from channel `G`** — `roughnessmap_fragment.glsl.js`: `roughnessFactor *= texelRoughness.g`, with
+ * a comment saying it is the G of a packed ORM map. The height sat in `A`, which nothing samples.
+ * So the shipped roughness was `0.34 × (the normal map's Y slope)` — a value centred on ~0.5 by
+ * construction, i.e. **an effective roughness near 0.17, half the briefed number**, varying along
+ * the wrong field entirely. It made the surface sharper and glassier than the brief asks for, and
+ * because it never went out of range it could not look like an error from anywhere.
+ * ★ AND NO GUARD COULD HAVE CAUGHT IT FROM THE SOURCE: the file asserted `roughnessMap: surface`,
+ * which is exactly what a correct version says too. What separates them is a fact about three's
+ * shader — the file that was believed here is one nobody in this repo wrote. Same family as the
+ * regex readers of 2026-08-22: a hand-written claim about somebody else's file, failing silently.
+ *
+ * The roughness field now has its own texture (`goopRoughness`), height written to R, G AND B so it
+ * cannot be defeated by a channel convention again.
  */
 export function goopSurface(): THREE.DataTexture {
   if (GOOP) return GOOP
@@ -170,6 +185,38 @@ export function goopSurface(): THREE.DataTexture {
 }
 
 /**
+ * The shared goop ROUGHNESS map: the same height field, in R, G and B.
+ *
+ * Wet clay is not uniformly wet — a run catches the light and the pit beside it does not — and
+ * driving roughness from the same lumps the normal map describes is what makes a highlight break up
+ * along the body instead of sliding over it like plastic. That was always the intent; until
+ * 2026-09-08 it was written into a channel nothing reads (see `goopSurface`).
+ *
+ * ⚠ THE HEIGHT IS REMAPPED, NOT COPIED. Raw height runs the full 0..1, and `roughnessFactor` is a
+ * MULTIPLIER — so a raw copy would take the shiniest pits to roughness 0 (a mirror) and rough the
+ * peaks to the full 0.34. `ROUGH_LO..ROUGH_HI` keeps the variation to a band around 1.0, which
+ * varies the wetness without ever leaving the material a mirror or a chalk.
+ *
+ * Same never-disposed contract as `goopSurface`, for the same reason: shared by every live material.
+ */
+const ROUGH_LO = 0.72
+const ROUGH_HI = 1.28
+export function goopRoughness(): THREE.DataTexture {
+  if (GOOP_R) return GOOP_R
+  const h = goopHeight()
+  const data = new Uint8Array(SURF * SURF * 4)
+  for (let i = 0; i < SURF * SURF; i++) {
+    const v = Math.round(Math.max(0, Math.min(1, ROUGH_LO + (ROUGH_HI - ROUGH_LO) * h[i])) * 255)
+    data[i * 4] = v; data[i * 4 + 1] = v; data[i * 4 + 2] = v; data[i * 4 + 3] = 255
+  }
+  GOOP_R = new THREE.DataTexture(data, SURF, SURF, THREE.RGBAFormat)
+  GOOP_R.wrapS = GOOP_R.wrapT = THREE.RepeatWrapping
+  GOOP_R.repeat.set(2, 2)
+  GOOP_R.needsUpdate = true
+  return GOOP_R
+}
+
+/**
  * Three geometries, built once and shared by every body of that form.
  *
  * ⚠ ⚠ NOT PER BODY. A geometry per Hollow is a GPU buffer per Hollow; a MATERIAL per Hollow is a
@@ -183,9 +230,69 @@ export const createHollowGeo = (): Record<HollowForm, THREE.BufferGeometry> => (
   caster: new THREE.OctahedronGeometry(0.62, 0),
 })
 
+/**
+ * How hard a Hollow borrows at full daylight — the brief's *"tinted entirely by the environment"*
+ * half, as a number.
+ *
+ * ⚠ IT IS ONLY MEANINGFUL BECAUSE `envMap` IS SET ON THE MATERIAL. three DISCARDS a material's
+ * `envMapIntensity` and substitutes `scene.environmentIntensity` whenever the material's own
+ * `envMap` is null and the scene has one (`WebGLRenderer.js:2604`). Until 2026-09-08 there was no
+ * environment at all, anywhere, so this number multiplied nothing — see `sky-env.ts` for the
+ * measurement and for why a scene-wide environment is the wrong fix here.
+ *
+ * ── ★★ IT WAS 1.35 UNTIL 2026-09-08, AND THAT NUMBER WAS NEVER A MEASUREMENT ─────────────────
+ * 1.35 was chosen against the bench's `CubeCamera`, which photographs a small dim room at night;
+ * against a full noon sky it is a completely different quantity of light. Wired at 1.35 the body
+ * measured **(66, 81, 89)** against a greyfield plane at **(46, 48, 54)** — a Hollow BRIGHTER and
+ * bluer than the ground it stands on, which breaks two rules at once: this file's own *"darker
+ * than any ground grey"* and canon's *"the body's own tone must look like it is not being lit at
+ * all, even in full light."*
+ * ⚠⚠ AND IT IS THE FAILURE MODE THIS REPO KEEPS WRITING DOWN: the fix for *"too dark"* went past
+ * the target and produced *"too lit"*, which is a defect in the opposite direction and would have
+ * shipped as a success, because the thing it was measured against — the complaint — was gone.
+ * **Ask what else moved, not only whether the red went green.**
+ * Measured at four settings from the same headless frame (body mean vs a ground at 46,48,54):
+ *   borrow 0    → (26, 31, 31)  the black cutout Alex reported
+ *   borrow 1.35 → (66, 81, 89)  brighter than the ground; a lit figure, not an absence
+ *   borrow 0.60 → (47, 58, 63)  reads as an absence, anatomy legible, sheen along the limbs  ← shipped
+ *   metal 0.45  → (57, 71, 78)  keeps the borrow high by killing diffuse instead; reads WETSUIT,
+ *                               and it tints the specular with the BODY, which canon forbids
+ *                               (*"never carries a hue the scene did not already have"*).
+ * ⚠ The diffuse VALUE is explicitly Jin's to tune (`design-briefs/hollows.md`); its RESPONSE is
+ * canon's. This moves the value and leaves the response alone, which is the permitted direction.
+ */
+export const BORROW = 0.60
+
+/** Every material this module has built, so the hour can be applied to all of them at once. */
+const LIVE = new Set<THREE.MeshStandardMaterial>()
+
+/**
+ * Point every live Hollow material's borrow at the hour.
+ *
+ * ★ CALLED FROM THE PER-FRAME BODY UPDATERS (`updateHollowMeshBody`, `updateHollowBody`) rather
+ * than from a rig component, because those two are the only functions BOTH the world and the bench
+ * run every frame. A tick wired into `VoxelWorld` alone would leave `dev/hollow` — the one surface
+ * every Hollow look call is made on — showing a body lit by a different rule than the world's,
+ * which is the exact trap that manufactured the "reads too dark" finding on 2026-09-06.
+ *
+ * ⚠ NOT IN `applyHollowPose`. That function is the single writer for the WALK and knows nothing
+ * about time; putting a clock read in it would couple the pose to the hour for no reason.
+ *
+ * Idempotent and cheap: three materials, one float each, and it early-outs when the hour has not
+ * moved enough to see. Safe to call once per body per frame.
+ */
+let LAST_BORROW = -1
+export function setHollowBorrow(daylight: number): void {
+  const v = BORROW * borrowedSky(daylight)
+  if (Math.abs(v - LAST_BORROW) < 0.002) return
+  LAST_BORROW = v
+  for (const m of LIVE) m.envMapIntensity = v
+}
+
 /** Three materials, one per form, built from the dials. */
 export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowForm, THREE.MeshStandardMaterial> {
   const surface = goopSurface()
+  const rough = goopRoughness()
   const one = (f: HollowForm) => new THREE.MeshStandardMaterial({
     color: look.colour[f],
     // ★ WET, AND THE NUMBERS COME FROM THE BRIEF RATHER THAN FROM TASTE. Low roughness is the
@@ -194,13 +301,20 @@ export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowFo
     // by the environment" half: where a scene gives it something to borrow, it borrows hard.
     roughness: 0.34,
     metalness: 0.10,
-    envMapIntensity: 1.35,
+    // ★ THE ROOM IT BORROWS, AND THE REASON IT IS ON THE MATERIAL AND NOT ON THE SCENE: three
+    // applies `scene.environment` to Lambert and Phong too, and this world is Lambert nearly
+    // everywhere, so a scene-wide environment would re-light every voxel in Shimmer. `sky-env.ts`
+    // carries the full argument and the measurement that prompted it.
+    envMap: skyEnvironment(),
+    envMapIntensity: BORROW,
     normalMap: surface,
     normalScale: new THREE.Vector2(0.85, 0.85),
-    // ⚠ ROUGHNESS FROM THE SAME FIELD, VIA ITS ALPHA. Uniform roughness slides a highlight across
-    // the body like plastic; varying it along the same lumps the normal map describes is what makes
-    // the thing read as WET rather than as shiny.
-    roughnessMap: surface,
+    // ⚠ ROUGHNESS FROM THE SAME HEIGHT FIELD, IN ITS OWN TEXTURE. Uniform roughness slides a
+    // highlight across the body like plastic; varying it along the same lumps the normal map
+    // describes is what makes the thing read as WET rather than as shiny. It was packed into the
+    // normal map's ALPHA until 2026-09-08 and three reads roughness from G — so for three days the
+    // roughness rode the normal's Y slope at about half the briefed value. See `goopSurface`.
+    roughnessMap: rough,
     // ★ THE SELF-LIGHT IS THE BODY'S OWN HUE, NEVER A TINT. A white emissive shifts the grey as the
     // scene light drops, so a Hollow would change colour with the time of day — and the grey is the
     // whole read of the thing.
@@ -212,7 +326,22 @@ export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowFo
     transparent: look.opacity[f] < 1,
     opacity: look.opacity[f],
   })
-  return { warden: one('warden'), stalker: one('stalker'), caster: one('caster') }
+  const built = { warden: one('warden'), stalker: one('stalker'), caster: one('caster') }
+  // ⚠ REGISTERED, NOT TRACKED BY A CALLER. `hollow-body` and `hollow-mesh` each hold their own set
+  // built from this factory, and `dev/grey` builds more from varied dials; a tick that only knew
+  // about one of them would light half the Hollows on the bench by a different clock than the other
+  // half. The producer is the only place that can see all of them.
+  for (const f of ['warden', 'stalker', 'caster'] as const) {
+    LIVE.add(built[f])
+    // ⚠⚠ AND IT INHERITS THE CURRENT HOUR, WHICH IS NOT A DETAIL. `setHollowBorrow` early-outs when
+    // the hour has not moved, so a material built AFTER the last tick would never be visited — and
+    // the case where that happens is the only case that matters: a Hollow SPAWNS AT NIGHT, its
+    // material is constructed at the noon default, the tick sees no change and returns, and that
+    // body borrows a full daylight sky in the dark for the rest of its life. The early-out is what
+    // makes the tick free; this line is what stops it from being a leak.
+    if (LAST_BORROW >= 0) built[f].envMapIntensity = LAST_BORROW
+  }
+  return built
 }
 
 /**
