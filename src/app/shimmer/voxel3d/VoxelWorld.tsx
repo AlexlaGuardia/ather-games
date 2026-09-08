@@ -188,7 +188,7 @@ import { type HollowForm,
          hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk,
          type HollowState, HOLLOW_HP, HOLLOW_HOVER, HOLLOW_RADIUS,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
-         pickSpawnY, hollowFoots, hollowGutters, NIGHT_SKY_MAX,
+         pickSpawnY, hollowFoots, hollowGutters, NIGHT_SKY_MAX, hollowFieldFloor,
          HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN,
          HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike } from './hollows'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
@@ -6269,7 +6269,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (s > hi) hi = s
       }
     } else { lo = 0; hi = H - 1 }
-    const y0 = Math.max(0, lo - 10)
+    // ── ★★ THE FLOOR FOLLOWS THE KEEPER DOWN (2026-09-08) ─────────────────────────────────────
+    // `minSurface - 10` is the right floor for LIGHTING and it is why nothing has ever met a
+    // Hollow underground: `pickSpawnY` clamps to this box and `windAt` answers false outside it,
+    // so a cave deeper than ten blocks reads to the ruling exactly like sealed rock — measured,
+    // only 9.85% of this world's cave air falls inside it (`scripts/cave-map.mts`).
+    //
+    // ⚠ THE BOX STRETCHES, IT DOES NOT SLIDE. The wind channel floods from OPEN SKY, so a box
+    // whose top is below the surface contains no sky and reports no wind anywhere in it — the
+    // same silent, safe-looking false. `hollowFieldFloor` therefore only ever lowers the floor.
+    //
+    // ★ `loco.current.py` IS THE KEEPER'S FEET, NOT THE CAMERA — the same distinction the Hollow
+    // ground probe makes a few hundred lines down, and the eye is over a block higher.
+    const y0 = hollowFieldFloor(Math.max(0, lo - 10), loco.current.py)
     return { x0: cx * SECTION - SECTION, y0, z0: cz * SECTION - SECTION,
              sx: SECTION * 3, sy: Math.min(H, hi + 16) - y0, sz: SECTION * 3 }
   }, [])
@@ -7355,6 +7367,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // the lantern's veto still cannot be bypassed by a cache miss.
           const lf = lightCache.current.get(kk)
           if (!lf) { startLightBuild(scx, scz); continue }
+          // ★★ A FIELD SHALLOWER THAN THE KEEPER NOW NEEDS IS NOT WRONG — IT IS INCOMPLETE, and
+          // the difference decides whether descending costs you the spawner. It is exactly correct
+          // for every cell it covers, so it keeps being used while a deeper one is nominated.
+          // Dropping it instead (the obvious "invalidate stale cache" move) would make every
+          // column in range cold for the whole rebuild wave, and a cold column is SKIPPED — so a
+          // keeper walking downward would meet nothing, which is the bug this change exists to
+          // fix, re-entered through the cache.
+          if (lf.bounds.y0 > lightBoundsFor(scx, scz).y0) startLightBuild(scx, scz)
           examined++
           // MC's structure: ONE random anchor per column per sweep. Coverage comes from sweeping
           // every column, not from hammering one.

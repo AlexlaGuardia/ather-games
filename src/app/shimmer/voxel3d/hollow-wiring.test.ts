@@ -277,6 +277,57 @@ function firstEmission(ear: Ear, x: number, z: number) {
   ok(/unlockHollowSfx\(\)/.test(click), 'and that gesture is the canvas click — the same one that takes pointer lock')
 }
 
+// ── ★★★ 7. HOW FAR DOWN THE DARK FOLLOWS — THE HOST IS THE ONLY THING THAT CAN BE ASKED ────────
+// `hollows.test.ts` §D proves `hollowFieldFloor` is correct: it follows a keeper down, it is
+// banded, it never raises the floor, it survives NaN feet. **All eighteen of those asserts stay
+// green if nothing calls it**, and the world goes on doing exactly what it did for the month
+// nobody met a Hollow underground. This is the producer/consumer split that cost `hollowPose`
+// seven computed angles that `updateHollowBody` never read — the Hollow had never been animated
+// and 34 asserts were true of numbers nothing consumed.
+//
+// ⚠⚠ AND THIS FILE READS RAW SOURCE WITH NO COMMENT STRIPPER, so a bare /hollowFieldFloor/ is
+// satisfied by the two places `VoxelWorld` merely TALKS about it. That is the 08-22 bug where
+// documenting a marker created a marker, and the fix is the same: anchor on the STATEMENT and
+// assert it appears exactly once.
+{
+  const src = readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8')
+
+  ok(/hollowFieldFloor,?\s*\n?[^\n]*\} from '\.\/hollows'/.test(src) || /hollowFieldFloor/.test(src.split("from './hollows'")[0] ?? ''),
+     '7 VoxelWorld imports hollowFieldFloor')
+
+  const calls = src.match(/const y0 = hollowFieldFloor\(/g) ?? []
+  ok(calls.length === 1, `7 ★★ the light field's floor is COMPUTED by hollowFieldFloor, exactly once (${calls.length} statements)`)
+
+  // ⚠ NEGATIVE CONTROL. Presence proves the new code is there; only the absence of the retired
+  // line proves it REPLACED it rather than shipping beside it. The old floor was the bug.
+  ok(!/const y0 = Math\.max\(0, lo - 10\)/.test(src),
+     '7 ★ and the retired surface-only floor is gone, not merely superseded')
+
+  // ★ THE KEEPER'S FEET, NOT THE CAMERA. The eye is over a block higher, which at a band boundary
+  // is the difference between a field that reaches the keeper and one that stops just above them —
+  // and the failure is silent, because a too-shallow field reports no wind and simply never spawns.
+  const floorCall = src.match(/const y0 = hollowFieldFloor\([^\n]*\)/)?.[0] ?? ''
+  ok(/loco\.current\.py/.test(floorCall), `7 ★ it is handed the keeper's FEET (${floorCall.slice(0, 80)})`)
+  ok(!/camera\.position\.y/.test(floorCall), '7 and never the camera height')
+
+  // ★★ AND A DESCENT HAS TO INVALIDATE. Without this the floor follows the keeper only for columns
+  // whose field has not been built yet — every already-cached column keeps its surface-only box
+  // forever, so walking down into ground you have already stood on meets nothing. The rebuild is
+  // NOMINATED rather than the field dropped: a dropped field makes the column cold, and a cold
+  // column is skipped by the sweep, which would reproduce the bug through the cache.
+  ok(/lf\.bounds\.y0 > lightBoundsFor\(scx, scz\)\.y0\) startLightBuild\(/.test(src),
+     '7 ★★ the sweep nominates a deeper rebuild when a cached field no longer reaches the keeper')
+  // ⚠ SCOPED TO THE SWEEP, AND THE FIRST VERSION WAS NOT — it forbade `lightCache.current.delete`
+  // anywhere in the file and went red on the COLUMN EVICTION, which is correct code doing an
+  // unrelated job. A forbidden pattern that unrelated correct code satisfies is the mirror of the
+  // "satisfiable by being anywhere" trap, and acting on that red would have damaged eviction to
+  // please a guard about spawning.
+  const nominate = src.match(/const lf = lightCache\.current\.get\(kk\)[\s\S]{0,900}?examined\+\+/)?.[0] ?? ''
+  ok(nominate !== '', '7 the sweep\'s field lookup is findable')
+  ok(!/delete\(kk\)/.test(nominate),
+     '7 ★ and it does not DROP the shallow field there, which would make the column cold and unspawnable')
+}
+
 console.log(`hollow-wiring: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  FAIL ' + f)
 process.exit(fails.length ? 1 : 0)

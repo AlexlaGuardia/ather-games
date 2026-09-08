@@ -363,6 +363,77 @@ export const DESPAWN_DIST = 96       // our load edge (MC uses 128 = its own spa
  * first cut's `day === 0` gate was the strictest possible misreading of the same rule.
  */
 export const NIGHT_SKY_MAX = 7
+
+/**
+ * ── ★★★ HOW FAR DOWN THE DARK FOLLOWS A KEEPER (2026-09-08) ────────────────────────────────────
+ *
+ * The other half of the underground feature, and until now the half that made the first half a
+ * lie. Cave mouths shipped this morning (`dens.ts` › adits) and took the share of cave air the
+ * wind can reach from **1.61% to 25.47%** — but a keeper who walks in still meets nothing more
+ * than about ten blocks down, because the spawner cannot SEE deeper than that.
+ *
+ * ⚠⚠ AND IT IS NOT A SPAWN RULE THAT STOPS IT — IT IS A BOX SIZED FOR SOMETHING ELSE. `VoxelWorld`
+ * builds each column's light field from `minSurface - 10` to `maxSurface + 16`, which is correct
+ * and cheap FOR LIGHTING: block light decays one per step, so nothing more than 15 above the
+ * highest ground can reach it. `pickSpawnY` then clamps its scan to that box — and `windAt`
+ * answers `false` outside it, by a deliberate rule whose own header explains that *the
+ * conservative direction for wind is no-wind*. Measured with `scripts/cave-map.mts`: **only 9.85%
+ * of this world's cave air falls inside that box.** So every deeper cave reads to the ruling
+ * exactly like sealed rock, and nothing anywhere says so. The gate is not too tight; the gate is
+ * never asked.
+ *
+ * ★★ THE FLOOR HAS TO FOLLOW THE KEEPER, AND THE BOX CANNOT SIMPLY BE MOVED DOWN WITH THEM. The
+ * wind channel is a flood **from open sky**, so a box that starts below the surface contains no
+ * sky at all and reports no wind anywhere in it — the same silent, safe-looking `false`. The box
+ * therefore has to STRETCH from the surface down past the keeper, never slide.
+ *
+ * ★★ QUANTIZED, BECAUSE THE COST IS NOT THE DEPTH — IT IS THE REBUILD. A field is cached per
+ * column and is only invalidated by an edit; making its floor a continuous function of the
+ * keeper's altitude would invalidate every field in range on every block of descent, and a cold
+ * column is SKIPPED by the sweep. Continuous following would therefore mean a keeper who is
+ * walking down meets nothing, which is precisely the case this exists to fix. Banding it means a
+ * descent costs one rebuild wave per `HOLLOW_DEPTH_BAND` blocks and nothing in between.
+ *
+ * ★ ON THE SURFACE IT IS EXACTLY THE OLD BEHAVIOUR, BY CONSTRUCTION. A keeper at or above the
+ * shallow floor returns that floor unchanged — same box, same cells, same cost. The deep box is
+ * paid for only while somebody is actually underground to be frightened by it.
+ */
+export const HOLLOW_DEPTH_MARGIN = 16
+/**
+ * ⚠ THIS IS A REBUILD CADENCE, NOT A DISTANCE, and reading it as a distance is how it gets
+ * "tuned" to 4 by someone who wants tighter following. At 32 a descent triggers a deepening wave
+ * roughly every 32 blocks; at 4 it triggers one eight times as often, each one leaving columns
+ * cold and un-spawnable while it runs. Smaller is not more responsive here — it is less.
+ */
+export const HOLLOW_DEPTH_BAND = 32
+
+/**
+ * The floor a column's light field must reach for the dark to follow a keeper down.
+ *
+ * `surfaceFloor` is what the host would use on its own (`minSurface - 10`); `keeperY` is the
+ * keeper's FEET, not the camera. Returns `surfaceFloor` unchanged whenever the keeper is not
+ * below it, so the surface case is untouched and free.
+ *
+ * ★ PURE AND EXPORTED SO IT CAN BE ASSERTED FROM BOTH SIDES. The host's version of this was going
+ * to be three lines inline in `lightBoundsFor`, where nothing could reach it — and a bound that
+ * only one caller can see is a bound nobody can mutation-test.
+ */
+export function hollowFieldFloor(surfaceFloor: number, keeperY: number): number {
+  if (!Number.isFinite(keeperY) || keeperY >= surfaceFloor) return surfaceFloor
+  const want = Math.floor((keeperY - HOLLOW_DEPTH_MARGIN) / HOLLOW_DEPTH_BAND) * HOLLOW_DEPTH_BAND
+  // ⚠ THERE IS NO `Math.min(surfaceFloor, want)` HERE AND THE FIRST VERSION HAD ONE. It read as the
+  // safety property that matters — never RAISE the floor, which would shrink the box and hide
+  // surface ground from the ruling — and a mutation deleting it passed the whole suite clean.
+  // It could not fail: the early return above means `keeperY < surfaceFloor`, and rounding DOWN
+  // means `want <= keeperY - HOLLOW_DEPTH_MARGIN`, so `want` is already strictly below
+  // `surfaceFloor` by construction. A clamp that cannot fire is decoration, and worse than
+  // decoration — it makes a mutation sweep report a SURVIVOR, which reads as a blind test rather
+  // than as an unreachable line. The invariant is real and is proved in `hollows.test.ts` §D by
+  // sweeping the whole altitude range and asserting the floor is never raised; a mutation that
+  // makes `HOLLOW_DEPTH_MARGIN` negative breaks the construction and that assert fires.
+  return Math.max(0, want)
+}
+
 /**
  * Could a fully OPEN-SKY spot spawn right now? (15 · day ≤ 7)
  *

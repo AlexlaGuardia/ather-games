@@ -34,6 +34,7 @@
 import { Column, generateColumn, SECTION } from '../src/app/shimmer/voxel/column'
 import { isSolid, MAT } from '../src/app/shimmer/voxel/depth'
 import { columnHeight } from '../src/app/shimmer/voxel/height'
+import { hollowFieldFloor } from '../src/app/shimmer/voxel3d/hollows'
 
 const SEED = 1337, H = 256, AIR = 0
 const MARGIN = 6                            // columns; carve.maxReach 96 / SECTION 16
@@ -129,12 +130,16 @@ if (!posOk || ctlNeg !== 0) { console.log('\nthe flood is not measuring what it 
 
 // ── the reported centre ───────────────────────────────────────────────────────────────────────
 const rx0 = c0x * SECTION, rz0 = c0z * SECTION, RN = N * SECTION
-// The spawner's window, per column, exactly as `lightBoundsFor` builds it.
+// The spawner's window, per column, exactly as `lightBoundsFor` builds it — INCLUDING the floor
+// following the keeper down (`hollowFieldFloor`), so this measures the shipped rule rather than a
+// restatement of it. `CAVE_KEEPER_DEPTH` is how far below the column's own surface to stand a
+// keeper; 0 (the default) reproduces the surface-only box this feature replaced.
+const KEEPER_DEPTH = Number(process.env.CAVE_KEEPER_DEPTH ?? 0)
 const windowOf = (cx: number, cz: number) => {
   let lo = H - 1, hi = 0
   const c = cols.get(`${cx},${cz}`)!
   for (let i = 0; i < SECTION * SECTION; i++) { const s = c.surface[i]; if (s < lo) lo = s; if (s > hi) hi = s }
-  const y0 = Math.max(0, lo - 10)
+  const y0 = hollowFieldFloor(Math.max(0, lo - 10), hi - KEEPER_DEPTH)
   return { yLo: Math.max(y0 + 1, 1), yHi: Math.min(y0 + (Math.min(H, hi + 16) - y0) - 2, H - 2) }
 }
 let caveTotal = 0, caveWind = 0, caveInWindow = 0, caveBoth = 0, mouths = 0
@@ -159,6 +164,7 @@ for (let z = rz0; z < rz0 + RN; z++) for (let x = rx0; x < rx0 + RN; x++) {
 }
 const pct = (a: number, b: number) => b === 0 ? '  n/a' : `${(100 * a / b).toFixed(2)}%`
 console.log(`\nregion: ${RN}x${RN} blocks centred (${CX},${CZ}), seed ${SEED}, ${MARGIN}-column margin flooded`)
+console.log(`keeper standing ${KEEPER_DEPTH} blocks below the surface (CAVE_KEEPER_DEPTH)`)
 console.log(`sky seed cells: ${skySeeds.toLocaleString()}   flooded total: ${qn.toLocaleString()}`)
 console.log(`\ncave air below the surface:      ${caveTotal.toLocaleString()} cells`)
 console.log(`  the wind reaches:              ${caveWind.toLocaleString()}  (${pct(caveWind, caveTotal)})`)

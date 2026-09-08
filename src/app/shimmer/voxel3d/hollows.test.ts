@@ -10,7 +10,9 @@ import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk,
          HOLLOW_FORMS, FORM_ORDER, pickForm, pushOutOfBodies, hollowTouching,
          type HollowState, type HollowForm , UNIMPAIRED, type Impair,
          hollowStrike, keeperLooking, SEEN_ENTER,
-         HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN, HOLLOW_REACH_Y_MAX, HOLLOW_REACH_Y_MIN, reachY } from './hollows'
+         HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN, HOLLOW_REACH_Y_MAX, HOLLOW_REACH_Y_MIN, reachY,
+  hollowFieldFloor, HOLLOW_DEPTH_MARGIN, HOLLOW_DEPTH_BAND,
+} from './hollows'
 import { topSolidNear } from './ground-probe'
 import { WORLD_SEED } from './world-seed'
 import { treeStartsAt, growTreeCells, DEFAULT_TREES } from '../voxel/trees'
@@ -648,4 +650,66 @@ process.on('exit', () => {
     ok(Math.abs(after - (f.ground + 1)) < 0.5,
       `★★★ in the real world a warden under a real crown stands on the real ground — y ${after.toFixed(2)}, ground line ${f.ground + 1}`)
   }
+}
+
+
+// ── ★★★ HOW FAR DOWN THE DARK FOLLOWS (2026-09-08) ─────────────────────────────────────────────
+// `hollowFieldFloor` decides the floor of the light field, and the field is what `pickSpawnY`
+// scans and what `windAt` answers inside. Every failure mode here is SILENT and every one of them
+// fails toward no-spawn, which is the safe direction and therefore the invisible one: get this
+// wrong and the underground feature simply does not happen, exactly as it did not happen for the
+// month before this existed.
+{
+  const SF = 120                       // a typical `minSurface - 10`
+
+  // ★ THE SURFACE CASE MUST BE UNTOUCHED, BY CONSTRUCTION AND NOT BY LUCK. A keeper standing on
+  // the ground has to produce the identical box the host built before this function existed, or
+  // every surface night pays for a feature nobody is using.
+  ok(hollowFieldFloor(SF, SF) === SF, '§D a keeper AT the old floor changes nothing')
+  ok(hollowFieldFloor(SF, SF + 40) === SF, '§D a keeper well above it changes nothing')
+  ok(hollowFieldFloor(SF, 200) === SF, '§D a keeper on a hilltop changes nothing')
+
+  // ★★ AND IT MUST ACTUALLY GO DOWN. Asserted with a real gap rather than `<= SF`, which every
+  // value satisfies including the do-nothing one — the bound-from-one-side trap.
+  const deep = hollowFieldFloor(SF, 60)
+  ok(deep < SF - 40, `§D a keeper 60 blocks down pulls the floor well below the surface box (${deep})`)
+  ok(deep <= 60 - HOLLOW_DEPTH_MARGIN, `§D and to at least ${HOLLOW_DEPTH_MARGIN} below their feet (${deep} vs 60)`)
+
+  // ★★ IT MAY ONLY EVER LOWER THE FLOOR. Raising it would SHRINK the box and hide surface ground
+  // from the ruling — a spawn regression on the ground people actually walk on, paid to add a
+  // feature underground. Swept across the whole plausible range rather than spot-checked.
+  let raised = 0, lowered = 0
+  for (let keeper = 0; keeper <= 200; keeper++) {
+    const f = hollowFieldFloor(SF, keeper)
+    if (f > SF) raised++
+    if (f < SF) lowered++
+    if (f < 0) raised++                // below the world is not a floor either
+  }
+  ok(raised === 0, `§D the floor is never raised above the host's own, and never negative (${raised})`)
+  ok(lowered > 0, `§D ...and it IS lowered somewhere in the range (${lowered}) — without this the assert above passes on a no-op`)
+
+  // ★★ BANDED, AND THAT IS THE PERFORMANCE CONTRACT. A field is cached per column and rebuilt when
+  // its floor no longer reaches; a continuous floor would invalidate every field in range on every
+  // block of descent, and a cold column is SKIPPED by the sweep — so a keeper walking down would
+  // meet nothing, which is the bug this whole change exists to fix, re-entered through the cache.
+  //
+  // ⚠ THE CONTRACT IS A RATE, NOT A WINDOW, and the first version of this assert got that wrong
+  // and went red on correct code: it claimed any 32-block descent leaves the floor untouched,
+  // which is false for a descent that straddles a boundary — as most do. What is actually
+  // promised, and what the cache cares about, is that the floor changes at most ONCE per band.
+  let moves = 0
+  for (let keeper = 200; keeper > 0; keeper--) {
+    if (hollowFieldFloor(SF, keeper) !== hollowFieldFloor(SF, keeper - 1)) moves++
+  }
+  const allowed = Math.ceil(200 / HOLLOW_DEPTH_BAND) + 1
+  ok(moves <= allowed, `§D ★★ a 200-block descent triggers at most ${allowed} rebuild waves, not 200 (${moves})`)
+  ok(moves > 1, `§D ...and more than one, so the assert above is not passing on a floor that never moves (${moves})`)
+  ok(hollowFieldFloor(SF, 60) !== hollowFieldFloor(SF, 60 - HOLLOW_DEPTH_BAND),
+     '§D ★ but crossing a band DOES move it — without this, banding could be "never move at all"')
+
+  // ⚠ A GARBAGE ALTITUDE MUST NOT PRODUCE A GARBAGE BOX. `loco.current.py` is a live physics value
+  // and NaN propagates through `Math.floor` silently into `sy`, which would make the field a
+  // zero-or-negative-sized array and take the spawner out for the session with no error anywhere.
+  ok(hollowFieldFloor(SF, NaN) === SF, '§D NaN feet fall back to the surface box, never to a broken one')
+  ok(hollowFieldFloor(SF, -Infinity) === SF, '§D and so does -Infinity')
 }
