@@ -302,7 +302,27 @@ cmd_build() {
     echo ">>   ?? = untracked: it exists in NO history anywhere, and it is about to be served."
     echo ">>   if any of them are not yours, STOP and ask that window before this ships."
   fi
-  signal "$WIN building: $msg"
+  # ── ★★★ THE SHA THIS BUILD IS ACTUALLY BUILDING, PRINTED HERE (2026-09-08) ────────────────────
+  # A near-miss the same afternoon: a build sat queued behind a live sweep, and by the time it
+  # would have taken the lock the working tree had advanced onto a commit NO SWEEP HAD EVER SEEN.
+  # It would have shipped it and reported success, citing a 248/248 taken at the parent.
+  #
+  # ⚠⚠ AND THE OBVIOUS MECHANISM IS THE WRONG ONE, WHICH IS WHY THIS COMMENT NAMES IT. The first
+  # diagnosis was "coord build pulls before it builds". It does not — there is no git pull, fetch,
+  # reset, checkout, merge or rebase anywhere in this file. **There is ONE working tree and every
+  # window is in it**, so the tree moved the instant a peer ran `git commit`, with nothing on the
+  # builder's side happening at all.
+  #
+  # ★★ THAT IS WHY THE 08-20 REMEDY CANNOT REACH IT. That entry's fix is to move a reading INTO the
+  # act so no interval exists — and here there is no act and no interval, only a subject mutating
+  # continuously under a reading already taken. Nothing the builder does can be made atomic with a
+  # commit in another window. So the build states the sha it is building, and the human (or the
+  # peer who swept) compares it against the sha they tested. That comparison is the only thing that
+  # closes it, and it cannot be closed by remembering to look sooner.
+  local sha
+  sha=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)
+  echo ">> building sha $sha — if that is not the sha your sweep covered, STOP and re-sweep"
+  signal "$WIN building: $msg (sha $sha)"
   cd "$REPO"
   # A satellite's dev server sets NEXT_DIST_DIR. If one ever leaks into this shell the
   # deploy would build somewhere else and pm2 would restart onto a stale `.next`, with
@@ -365,6 +385,10 @@ cmd_build() {
       echo ">> ⚠⚠ DEPLOYED FROM A DIRTY TREE — $dirty modified file(s) are live on prod and in no commit."
       echo ">>   git add -p && git commit    (then push; see below)"
     fi
+    # ★ THE RECEIPT NAMES THE SHA TOO, not just the pre-flight. A peer who swept cites THIS line
+    # rather than their own `rev-parse`, which by the time they read it is a statement about the
+    # tree now and not about the tree that was built.
+    echo ">> built from sha $sha"
     local ahead
     ahead=$(git -C "$REPO" rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
     if [ "${ahead:-0}" -gt 0 ] 2>/dev/null; then
