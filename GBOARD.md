@@ -11,6 +11,119 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🌤 Shimmer — **THE SURFACE HAD NOWHERE TO BORROW FROM, SO IT RENDERED AS A BLACK CUTOUT AT NOON** (2026-09-08, sprites lane) · *Last touched 2026-09-08 ~08:40 ET — committed + pushed `8c5bbbd`. **NOT DEPLOYED**: the hub lane has in-flight cave work in the tree including a file that does not parse, and `coord build` bundles the TREE, not the commit.*
+
+Alex: *"fix the daylight darkness."* Board item #4 on the Hollow list, open since 09-05's Lambert→Standard.
+
+### ★★★ CANON DIAGNOSED THIS A MONTH BEFORE IT WAS FOUND, IN THE FILE THE MATERIAL WAS BUILT FROM
+`design-briefs/hollows.md`: *"Specular: high, and tinted entirely by the environment. It borrows."*
+And then, in a line nobody had had a reason to re-read: *"a Hollow that reads too dark in daylight
+is a **specular/environment-response** defect, never a case for lifting it off its own light."*
+**The build had no environment.** Not a dim one, not a wrong one — none. `scene.environment` is set
+nowhere in the app, and the only `envMap` in the whole tree was `dev/hollow`'s `CubeCamera`, wired
+to `HollowDoll` — the blob rig the modelled mesh replaced. So `envMapIntensity: 1.35` multiplied
+zero, and **every source guard about it stayed green, because the number was right there in the
+file.** Same family as the producer with no consumer (09-05) and the icon that derived the paint but
+not the picture (08-23): a value computed correctly and read by nothing.
+
+### ★★ MEASURED, AND MOST OF THE GAP IS CORRECT LIGHTING DOING ITS JOB
+One headless frame at noon, `dev/hollow`, body pixels segmented against sky:
+
+| | body mean | its own base | the greyfield plane beside it |
+|---|---|---|---|
+| before | **(22, 26, 25)** | `#3f423d` = (63,66,61) | `#3a3a3c` = (58,58,60) → renders **(46,48,54)** |
+
+**~2.4× darker than a flat roughness-1 material of the same value, in the same frame.** ⚠ And
+nothing was broken: a `HemisphereLight` gives a surface `mix(ground, sky, 0.5·dot(N,up)+0.5)`, so a
+floor collects the full sky and a body's **vertical flank** collects the midpoint of sky and
+`hemiGround` (`#3b3a4a`, nearly black) — half the irradiance before anything else. Then at noon the
+sun is overhead and `N·L` on a flank is ~0, so the 1.5 key light contributes almost nothing to it.
+**A hemisphere light is a two-colour approximation of a sky, and the term that lights a vertical
+surface facing a bright one is the term we did not have.** That term is IBL.
+
+### The fix, and the cheaper wrong version of each decision
+- **`sky-palette.ts`** (new, pure) — `SKY`/`DAY`/`NIGHT` moved out of `day-night.tsx` and
+  **re-exported** from it, so all six existing import sites are unchanged. The environment and the
+  visible sky must be ONE set of numbers or canon's *"never carries a hue the scene did not already
+  have"* quietly stops being true. A second zenith beside the first is the hand-kept mirror (08-22).
+- **`sky-env.ts`** (new, pure) — a 64×32 equirect day sky on **the dome's own curve**
+  (`mix(horizon, zenith, pow(up, 0.6))`, the same expression as `SKY_FRAG`), ground half from
+  `DAY.hemiGround`. Mixed in LINEAR and written back sRGB; mixing the bytes darkens the middle of
+  the band, and the middle of the band is the horizon, which is what a standing body faces.
+- **⚠ `material.envMap`, NEVER `scene.environment`.** three applies a scene environment to
+  **Lambert and Phong too** (`WebGLRenderer.js:2139`) and this world is Lambert nearly everywhere —
+  terrain, pieces, flora, NPCs. The one-line version re-lights every voxel in Shimmer under a ticket
+  about one creature. ⚠ It is also the only way the brief's number survives: with a null `envMap`
+  three **overwrites** `envMapIntensity` with `scene.environmentIntensity` (`:2604`).
+- **ONE static texture, the hour rides the intensity.** three PMREMs an equirect environment once
+  and caches it on a `WeakMap`; a texture rebuilt to follow the clock either costs a PMREM per frame
+  or silently keeps serving the first conversion. `borrowedSky(dl)` = `0.12 + 0.88·dl²`, floored at
+  a trace because an unlit renderer is a fail state and canon's word is *near*-matte.
+
+### ⚠⚠ AND THE FIRST FIX OVERSHOT INTO A DEFECT IN THE OPPOSITE DIRECTION, WHICH WOULD HAVE SHIPPED AS A SUCCESS
+1.35 was chosen against the bench's `CubeCamera`, which photographs a small dim room at night;
+against a full noon sky it is a different quantity of light entirely. Four settings, same frame:
+
+| setting | body mean | read |
+|---|---|---|
+| borrow 0 (shipped) | (26, 31, 31) | the black cutout Alex reported |
+| borrow 1.35 | (66, 81, 89) | **brighter and bluer than the ground it stands on** |
+| **borrow 0.60** | **(47, 58, 63)** | ✅ an absence you can read the anatomy of |
+| metal 0.45 | (57, 71, 78) | reads WETSUIT, and tints the specular with the BODY — canon forbids |
+
+Brighter than the ground breaks this file's own *"darker than any ground grey"* **and** canon's
+*"the body's own tone must look like it is not being lit at all, even in full light."* ⚠ The
+complaint was gone, so the overshoot would have read as done. **Ask what else moved, not only
+whether the red went green.** (The diffuse VALUE is explicitly Jin's to tune; its RESPONSE is
+canon's, and that is untouched.)
+
+### ★★ FOUND ON THE WAY: THE ROUGHNESS MAP WAS WRITTEN INTO A CHANNEL NOTHING READS
+`roughnessMap` pointed at the **normal map**, whose ALPHA held the height. **three reads roughness
+from `.g`** (`roughnessmap_fragment.glsl.js`) — which on a normal map is the Y slope, centred on
+~0.5 by construction. So shipped roughness was **≈0.17 against a briefed 0.34**, varying along the
+wrong field, never out of range, impossible to spot. ⚠ And its guard was
+`ok(m.normalMap === m.roughnessMap)` — *"drives roughness from the same field"* written as an
+IDENTITY when the claim was a DERIVATION, so **it could only ever pass while the material was
+wrong.** Now its own greyscale texture with the height in R, G and B.
+
+### ★★ THE MUTATION SWEEP CAUGHT THREE OF MY OWN GUARDS THAT COULD NOT FAIL, AND ONE REAL BUG
+- `borrowedSky(0) === NIGHT_BORROW` — **survived `NIGHT_BORROW → 0`**: it compared the function to
+  the constant the function uses. The mirror shape with a one-line radius. Now a band with literals,
+  asserted from both sides.
+- The zenith assert compared the environment to the palette it was **built from**, so repainting the
+  sky printed 102/0. Replaced with a DERIVATION check: the dome must import from `sky-palette`, must
+  not redeclare `SKY`/`DAY`/`NIGHT` locally, and both curve exponents must be the same number.
+  ⚠ The first version of *that* also survived — a local `const SKY` beside a surviving
+  `import { DAY, NIGHT }` leaves the specifier in the file.
+- *"the environment has an UP"* as a bare `>` — satisfied by a one-count difference.
+- **★★★ AND A REAL ONE, in the only code path that matters.** `setHollowBorrow` early-outs when the
+  hour has not moved — which is what makes the tick free — so a material built **after** the last
+  tick is never visited. That is the SPAWN case: a Hollow is born at night, its material is
+  constructed at the noon default, the tick returns, and that body borrows a full daylight sky in
+  the dark for its whole life. **A Hollow only exists at night, so this was the shipping path.**
+  Found by asking what the early-out costs, not by a picture.
+
+### ⛔ OPEN, in order
+1. **Alex judges it.** `/shimmer/dev/hollow` → **Day**. Is 0.60 right? It is a tuning number and his.
+2. **The greyfield/tended-plot tell is still NOT built.** Canon wants the borrow to depend on WHERE
+   it stands; the clock stands in for the ground, so a Hollow borrows the same sky everywhere. The
+   bench's own instruction text (*"it should go glossy as it nears the plot"*) describes a behaviour
+   the build still cannot produce. Needs a per-body sample of the ground, not a per-scene one.
+3. **The world has no IBL at all** — every Lambert surface is lit by that same two-colour
+   hemisphere approximation. Whether terrain should get an environment is a look call, not a bug fix,
+   and it would restyle everything at once.
+4. Night borrows the DAY palette faded rather than hue-shifted. Correct while it only lights
+   Hollows (canon wants near-matte in the dark); revisit the day it reaches the scene.
+5. Still open from 09-06: the warden's sim sizes fitted to the retired 0.95 ball; the caster's trunk
+   reading solid against *"dense only where it is reaching"*.
+
+### Files
+`voxel3d/sky-palette.ts` · `voxel3d/sky-env.ts` (both new) · `voxel3d/day-night.tsx` ·
+`voxel3d/hollow-look.ts` + `.test.ts` (111 asserts, all mutation-verified) · `voxel3d/hollow-mesh.ts` ·
+`voxel3d/hollow-body.ts`. voxel3d **65 suites pass · 0 fail**; tsc **7** (baseline, none mine —
+⚠ read with the hub lane's unparseable `voxel/adits.test.ts` excluded, or tsc reports syntax only
+and goes BLIND to the semantic baseline); canon exit 0.
+
 ## 🕳 Shimmer — **DARKNESS IS A PLACE, NOT AN HOUR: THE SPAWNER GETS MINECRAFT'S Y AXIS** (2026-09-07, hub lane) · *Last touched 2026-09-07 — see the deploy line at the end of this block.*
 
 Alex: *"the hallows should be able to spawn on blocks that have 0 light level .. lets dig into how minecraft does their mob spawning to get a better idea of what we are going for."*
