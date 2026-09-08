@@ -58,7 +58,7 @@ import { isLogMat, isLeafMat } from './trees'
 import { isSeam } from './seams'
 import { holdIndexAt } from './holds'
 import { landMix, LAND_IDS, type LandId } from './character'
-import { type BiomeConfig, DEFAULT_BIOME } from './biome'
+import { type BiomeConfig, DEFAULT_BIOME, greyness } from './biome'
 import { type HeightConfig, DEFAULT_HEIGHT } from './height'
 
 export interface DenConfig {
@@ -594,6 +594,34 @@ export interface AditConfig {
   /** Steps driven PAST the anchor at the tunnel's own level, so the throat breaks properly in. */
   breakInMin: number
   breakInMax: number
+  /**
+   * Multiplier on `perChunk` in fully blighted ground, eased continuously with `greyness`.
+   *
+   * ── ★★ WHY THIS EXISTS AND WHY IT IS NOT THE LAND DIAL THIS FILE REFUSED ─────────────────────
+   * `aditStartsAt` argues against a `DEN_DRESS`-style dial and that argument stands: a den is dug
+   * BY AN ANIMAL, so canon's habitat column tells you which grounds dig, and an adit is not dug by
+   * anything. This is a different kind of dial. It is a RATE, which the boundary line hands to Jin
+   * outright, and it is set from a gameplay measurement rather than from a claim about soil.
+   *
+   * ⚠⚠ THE MEASUREMENT THAT FORCED IT. Adits and greyfields are two independent conditions that
+   * know nothing about each other — a mouth needs a bank plus a tunnel near the crust, and the
+   * ruling needs `greyness >= 0.5`, which is 6-9% of the world. Their intersection was therefore
+   * thin BY ACCIDENT: swept over ±2880 blocks, **91 mouths on blighted ground out of 7,710 grey
+   * columns**, and the nearest one to spawn was **~950 blocks away**. Alex walked into the cave the
+   * console gave him, found a mana seam and nothing else, and reported the feature broken. It was
+   * not broken. It was unreachable, which in play is the same thing and is worse to diagnose.
+   *
+   * ★ EASED IN `greyness`, NEVER GATED ON IT. Same law `denStartsAt` states: a dial scales an
+   * expected count and must not veto, or it draws a hard line exactly where the blend exists to
+   * remove one. A contour at the eligibility threshold would put a visible wall of cave mouths
+   * along an invisible boundary.
+   *
+   * ⚠ AND IT DOES NOT KNOW ABOUT `HOLLOW_GREY_MIN`, DELIBERATELY. That constant lives in
+   * `voxel3d/hollows.ts` and this file is PURE CORE — `purity.test.ts` forbids the import. Reaching
+   * for it would mean copying the number, which is the hand-kept mirror this tree keeps paying for.
+   * A linear ease needs no knee and cannot drift from a threshold it never mentions.
+   */
+  greyBias: number
   maxAltitude: number
   floorGuard: number
 }
@@ -608,6 +636,7 @@ export const DEFAULT_ADITS: AditConfig = {
   maxLid: 6,
   breakInMin: 2,
   breakInMax: 5,
+  greyBias: 6,
   maxAltitude: 200,
   floorGuard: 4,
 }
@@ -649,8 +678,12 @@ export function aditStartsAt(
   seed: number, cx: number, cz: number, size: number, cfg: AditConfig = DEFAULT_ADITS,
 ): AditStart[] {
   const base = (hash2(cx, cz, seed ^ 0xad17e5) * 4294967296) | 0
-  const whole = Math.floor(cfg.perChunk)
-  const n = whole + (unit(cx, cz, seed ^ 0xad17) < cfg.perChunk - whole ? 1 : 0)
+  // The blight bias, read at the chunk's centre exactly as `denStartsAt` reads its land dial —
+  // pure, per-chunk, no neighbour, so two alignments compute the same count and the seam holds.
+  const g = greyness(cx * size + size / 2, cz * size + size / 2, seed)
+  const expected = cfg.perChunk * (1 + (cfg.greyBias - 1) * Math.max(0, Math.min(1, g)))
+  const whole = Math.floor(expected)
+  const n = whole + (unit(cx, cz, seed ^ 0xad17) < expected - whole ? 1 : 0)
   const out: AditStart[] = []
   for (let i = 0; i < n; i++) {
     const s = mixSeed(base, i)
