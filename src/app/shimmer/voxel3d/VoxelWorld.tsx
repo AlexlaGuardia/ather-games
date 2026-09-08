@@ -7353,6 +7353,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // button is pressed), which is why a missing pad is never an error here.
     pad.current = pollPad()
     prof.current.mark('input:poll')
+    // ── ★ THE RENDER FIELD'S SLICE, OUTSIDE THE SPAWN BRACKET AND BEFORE IT ────────────────────
+    // ⚠ IT WAS MARKED INSIDE `world:spawn` FIRST, AND `profile.test.ts` REFUSED IT — correctly. A
+    // parent zone may be re-opened once per SUB-zone, and `world:renderlight` is a sibling, not a
+    // slice of spawning: billing it inside the bracket would have made the spawn row mean two
+    // different things depending on where in the frame you read it. It is separate work for a
+    // separate consumer and it gets its own top-level row.
+    prof.current.mark('world:renderlight')
+    advanceRenderLight(RENDER_LIGHT_MS)
     prof.current.mark('world:spawn')
     // ── ★★★ THE COLD-FIELD JOB GETS ITS SLICE, EVERY FRAME, BEFORE ANYTHING ELSE ───────────────
     // Outside the `hollowNight` / `hollowClock` gate on purpose: the sweep runs every
@@ -7364,11 +7372,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // future capture is comparable with Alex's. The row should now read a few ms and never spike.
     prof.current.mark('world:spawn/light')
     advanceLightBuild(LIGHT_BUILD_MS)
-    prof.current.mark('world:spawn')
-    // The RENDER field's slice. Billed to its own zone so a capture can tell the two light costs
-    // apart — they are different work for different consumers and only one of them is on screen.
-    prof.current.mark('world:renderlight')
-    advanceRenderLight(RENDER_LIGHT_MS)
     prof.current.mark('world:spawn')
     // ── ★ THE NIGHT TIDE'S PAYOFF — the Hollows' SPAWN CYCLE, MINECRAFT'S SHAPE ──────────────
     // Reworked 2026-08-07 eve after Alex night-walked without meeting one: the first cut scanned
