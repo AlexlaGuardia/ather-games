@@ -92,9 +92,8 @@ export interface RenderLight {
 export const li = (lx: number, y: number, lz: number): number => (y * SPAN + lz) * SPAN + lx
 const bi = (face: number, y: number, span: number): number => (face * HEIGHT + y) * SPAN + span
 
-/** Material and surface readers. World-coordinate; may read outside the column's own footprint. */
+/** Material reader. World-coordinate; may read outside the column's own footprint. */
 export type MatAt = (x: number, y: number, z: number) => number
-export type HeightAt = (x: number, z: number) => number
 
 /**
  * ── ★★★ THE PASS IS A JOB WITH A CURSOR, FOR THE SAME REASON `light.ts` IS (2026-09-08) ────────
@@ -118,7 +117,6 @@ export interface RenderLightWork {
   ox: number
   oz: number
   matAt: MatAt
-  heightAt: HeightAt
   incoming: LightBorders | null
   sky: Uint8Array
   blk: Uint8Array
@@ -171,8 +169,7 @@ const pushQ = (w: RenderLightWork, v: number): void => {
  * Start one pass over one column. Nothing is computed here.
  *
  * `matAt` is world-coordinate and MAY read neighbours — materials are cheap and already generated;
- * it is the flood that is expensive and that stays inside the footprint. `heightAt` is the
- * generated surface, the same one the carvers and planters read.
+ * it is the flood that is expensive and that stays inside the footprint.
  *
  * `incoming` is the light arriving from neighbouring columns (their `spill`, indexed by the face it
  * arrives ON — use `OPPOSITE`). Null on a first pass.
@@ -180,12 +177,11 @@ const pushQ = (w: RenderLightWork, v: number): void => {
 export function beginRenderLight(
   ox: number, oz: number,
   matAt: MatAt,
-  heightAt: HeightAt,
   incoming: LightBorders | null = null,
 ): RenderLightWork {
   const n = SPAN * HEIGHT * SPAN
   return {
-    ox, oz, matAt, heightAt, incoming,
+    ox, oz, matAt, incoming,
     sky: new Uint8Array(n), blk: new Uint8Array(n), solid: new Uint8Array(n),
     spill: newBorders(),
     // The queue holds packed indices; bit 30 marks the block channel so both floods share one loop
@@ -204,7 +200,7 @@ export function beginRenderLight(
  */
 export function stepRenderLight(w: RenderLightWork, budgetMs: number): boolean {
   if (w.phase === 3) return true
-  const { ox, oz, matAt, heightAt, sky, blk, solid, spill } = w
+  const { ox, oz, matAt, sky, blk, solid, spill } = w
   const t0 = performance.now()
   let since = 0
   const outOfTime = (): boolean => {
@@ -213,13 +209,31 @@ export function stepRenderLight(w: RenderLightWork, budgetMs: number): boolean {
     return performance.now() - t0 >= budgetMs
   }
 
-  // ── seed: free sky above the heightmap, solids marked, emitters queued ───────────────────────
+  // ── seed: one downward scan per footprint column ─────────────────────────────────────────────
+  //
+  // ── ⚠⚠⚠ THIS USED TO TRUST THE HEIGHTMAP, AND THE HEIGHTMAP IS NOT THE TOP OF THE WORLD ───────
+  // It read `const h = heightAt(x, z)` and then wrote `sky = MAX_LIGHT` into **every cell above h
+  // without looking at the material**, scanning materials only from h downward. That is correct for
+  // bare terrain and wrong for everything that stands ON it: a tree, a ruin, a hold, and — the one
+  // that matters — a room a keeper BUILDS. Measured with `scripts/canopy-light.mts` against the
+  // wooded ground at Moonwell Glade: **7 of 7 leaf cells above the surface were reported FULLY LIT**,
+  // and 100% of standing ground was at sky 15 with 149 canopied cells in the sample.
+  //
+  // ★ IT FAILED TOWARD BRIGHT, WHICH IS WHY NOTHING LOOKED WRONG. The world above ground rendered
+  // exactly as it always had, so the feature appeared to be working perfectly and simply did not
+  // exist indoors. `light.ts` has the same behaviour by design and documents it — for SPAWNING it
+  // fails toward no-spawn, which is safe. For RENDERING the same shape means a sealed, windowless,
+  // player-built room is lit at noon like open field, forever, with nothing to see it by.
+  //
+  // So there is no heightmap here any more. One scan from the top: sky falls free until the first
+  // cell a body could occupy, and every cell is asked what it is. `heightAt` is gone from the
+  // signature rather than left unused — a parameter nothing reads is a claim about how this works.
   if (w.phase === 0) {
     const columns = SPAN * SPAN
     let did = 0
     while (w.cursor < columns) {
-      // One footprint column between clock reads: at most 256 cells plus one `heightAt`, the same
-      // reasoning as `light.ts`'s per-column check.
+      // One footprint column between clock reads — 256 material reads, the same reasoning as
+      // `light.ts`'s per-column check.
       //
       // ⚠⚠ `did > 0` IS LOAD-BEARING AND ITS ABSENCE WAS AN INFINITE LOOP, caught by §7 running at
       // `budgetMs = 0`. Elapsed time is `>= 0` on the very first iteration, so a bare deadline test
@@ -233,9 +247,8 @@ export function stepRenderLight(w: RenderLightWork, budgetMs: number): boolean {
       did++
       const c = w.cursor++
       const lx = c % SPAN, lz = (c / SPAN) | 0
-      const h = heightAt(ox + lx, oz + lz)
-      for (let y = HEIGHT - 1; y > h; y--) { const i = li(lx, y, lz); sky[i] = MAX_LIGHT; pushQ(w, i) }
-      for (let y = h; y >= 0; y--) {
+      let openSky = true
+      for (let y = HEIGHT - 1; y >= 0; y--) {
         const m = matAt(ox + lx, y, oz + lz)
         // ⚠ WATER IS NOT SOLID AND MUST NOT BLOCK LIGHT — the same split `light.ts` draws. A lake
         // that went black underneath would be the most visible possible version of this bug.
@@ -249,7 +262,8 @@ export function stepRenderLight(w: RenderLightWork, budgetMs: number): boolean {
         // unreachable line. `isSolid` is the one definition of "can a body occupy this cell", the
         // same notion collision and the wind channel use, and it is the right question here too.
         // The lake case is real and is asserted in `render-light.test.ts` §4 against `isSolid`.
-        if (m !== AIR && isSolid(m)) solid[i] = 1
+        if (m !== AIR && isSolid(m)) { solid[i] = 1; openSky = false }
+        else if (openSky) { sky[i] = MAX_LIGHT; pushQ(w, i) }
         // ⚠⚠ THE EMITTER CHECK IS NOT INSIDE THE `else`, AND THE FIRST VERSION HAD IT THERE.
         // A Mana Lantern is a SOLID PLACEABLE BLOCK. Marking it solid and `continue`ing before
         // reading `emitOf` meant every light source in the world emitted nothing — the lantern, the
@@ -334,10 +348,9 @@ export function stepRenderLight(w: RenderLightWork, budgetMs: number): boolean {
 export function computeRenderLight(
   ox: number, oz: number,
   matAt: MatAt,
-  heightAt: HeightAt,
   incoming: LightBorders | null = null,
 ): RenderLight {
-  const w = beginRenderLight(ox, oz, matAt, heightAt, incoming)
+  const w = beginRenderLight(ox, oz, matAt, incoming)
   stepRenderLight(w, Infinity)
   return w.field!
 }

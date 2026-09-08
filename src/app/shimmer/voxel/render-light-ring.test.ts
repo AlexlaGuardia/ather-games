@@ -255,7 +255,7 @@ ok(slotOf(-1) === RING_N - 1, `§2 ★ a NEGATIVE column wraps to the far slot, 
     const c = nextDirtyColumn(r)
     if (!c) break
     if (++passes > 4000) break
-    const f = computeRenderLight(c.cx * SPAN, c.cz * SPAN, matAt, heightAt, incomingFor(r, c.cx, c.cz))
+    const f = computeRenderLight(c.cx * SPAN, c.cz * SPAN, matAt, incomingFor(r, c.cx, c.cz))
     publishSpill(r, c.cx, c.cz, f.spill)
     fields.set(ringKey(c.cx, c.cz), f)
   }
@@ -273,7 +273,7 @@ ok(slotOf(-1) === RING_N - 1, `§2 ★ a NEGATIVE column wraps to the far slot, 
 
   // Non-vacuity: the same column computed with no incoming at all is pitch dark there, so the
   // assert above is about the border machinery and not about a tunnel that lights itself.
-  const alone = computeRenderLight(SPAN, 0, matAt, heightAt, null)
+  const alone = computeRenderLight(SPAN, 0, matAt, null)
   ok(alone.sky[li(0, 61, 2)] === 0,
     `§8 ★★ and it is dark without the ring — the assert is about spill, not about the fixture (${alone.sky[li(0, 61, 2)]})`)
 

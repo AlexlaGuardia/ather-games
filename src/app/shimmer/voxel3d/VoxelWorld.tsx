@@ -6455,18 +6455,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (lx < 0 || lx >= SECTION || lz < 0 || lz >= SECTION) return voxel(x, y, z)
         return col.get(lx, y, lz)
       }
+      // ⚠ NO HEIGHTMAP ANY MORE. It used to pass `col.heightAt` and the module seeded free sky above
+      // it without reading a material, so nothing standing on the terrain could cast shade — a tree,
+      // a ruin, or a room a keeper built. `render-light.ts` carries the measurement.
       job = {
         cx: c.cx, cz: c.cz,
-        // ⚠ THE COLUMN'S OWN `surface`, NOT `columnHeight(x, z, SEED)`. They agree in the Wilds and
-        // they do NOT agree in the Home Plot, which has its own generator — and a plot lit against
-        // continent heights would be a garden rendered as though it were underground. It is also a
-        // lookup rather than multi-octave noise, which is 256 fewer terrain generations per pass.
-        work: beginRenderLight(
-          c.cx * SECTION, c.cz * SECTION,
-          cmat,
-          (x, z) => col.heightAt(x - col.wx, z - col.wz),
-          incomingFor(ring, c.cx, c.cz),
-        ),
+        work: beginRenderLight(c.cx * SECTION, c.cz * SECTION, cmat, incomingFor(ring, c.cx, c.cz)),
       }
       renderLightJob.current = job
     }

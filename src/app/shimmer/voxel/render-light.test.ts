@@ -48,7 +48,7 @@ const matAt = (x: number, y: number, z: number): number => {
 }
 const heightAt = () => H0
 
-const R = computeRenderLight(0, 0, matAt, heightAt, null)
+const R = computeRenderLight(0, 0, matAt, null)
 const sky = (lx: number, y: number, lz: number) => R.sky[li(lx, y, lz)]
 const blk = (lx: number, y: number, lz: number) => R.blk[li(lx, y, lz)]
 
@@ -99,7 +99,7 @@ ok(litSolid === 0, `§4 ★ no solid cell is ever lit (${litSolid})`)
   // version of this bug, and `isSolid` alone would not catch it — water is already non-solid, so
   // the guard is against someone "simplifying" the material test into an `!== AIR`.
   const wet = (x: number, y: number, z: number) => (y <= H0 && y > H0 - 4 ? MAT.WATER : matAt(x, y, z))
-  const W = computeRenderLight(0, 0, wet, heightAt, null)
+  const W = computeRenderLight(0, 0, wet, null)
   ok(W.sky[li(5, H0 - 1, 5)] > 0, `§4 ★★ light reaches through WATER (got ${W.sky[li(5, H0 - 1, 5)]})`)
 }
 
@@ -122,8 +122,8 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
     const to = (OPPOSITE[FACE_XP] * HEIGHT + y) * SPAN + s
     inc.sky[to] = R.spill.sky[from]; inc.blk[to] = R.spill.blk[from]
   }
-  const A = computeRenderLight(SPAN, 0, matAt, heightAt, inc)
-  const B = computeRenderLight(SPAN, 0, matAt, heightAt, inc)
+  const A = computeRenderLight(SPAN, 0, matAt, inc)
+  const B = computeRenderLight(SPAN, 0, matAt, inc)
   let differ = 0
   for (let i = 0; i < A.sky.length; i++) if (A.sky[i] !== B.sky[i] || A.blk[i] !== B.blk[i]) differ++
   ok(differ === 0, `§6 ★ the pass is deterministic given the same incoming (${differ} cells differ)`)
@@ -131,7 +131,7 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
   // MONOTONIC: incoming light may only RAISE a cell, never lower one. That is what makes the
   // host's dirty-queue terminate instead of oscillating, and it cannot be asserted from inside a
   // single pass — it needs the with/without pair.
-  const none = computeRenderLight(SPAN, 0, matAt, heightAt, null)
+  const none = computeRenderLight(SPAN, 0, matAt, null)
   let raised = 0, lowered = 0
   for (let i = 0; i < A.sky.length; i++) {
     if (A.sky[i] > none.sky[i]) raised++
@@ -154,7 +154,7 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
 // in the wrong place. A phase that restarts its cursor, or a `head` that rewinds, gives a field that
 // is merely DIMMER: no throw, no red, a cave that reads as atmosphere. Byte equality or nothing.
 {
-  const w = beginRenderLight(0, 0, matAt, heightAt, null)
+  const w = beginRenderLight(0, 0, matAt, null)
   let steps = 0
   // A budget of zero still does one check-interval of work, so this terminates; the cap is a
   // runaway guard, not a timeout — if it is ever hit the loop is not advancing and that is the bug.
@@ -186,8 +186,8 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
     inc.sky[(OPPOSITE[FACE_XP] * HEIGHT + y) * SPAN + s] = R.spill.sky[from]
     inc.blk[(OPPOSITE[FACE_XP] * HEIGHT + y) * SPAN + s] = R.spill.blk[from]
   }
-  const oneShot = computeRenderLight(SPAN, 0, matAt, heightAt, inc)
-  const w2 = beginRenderLight(SPAN, 0, matAt, heightAt, inc)
+  const oneShot = computeRenderLight(SPAN, 0, matAt, inc)
+  const w2 = beginRenderLight(SPAN, 0, matAt, inc)
   let s2 = 0
   while (!stepRenderLight(w2, 0) && s2 < 100000) s2++
   let d2 = w2.field ? 0 : oneShot.sky.length
@@ -211,7 +211,7 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
   const openHeight = () => 0
   const lanternAt = (x: number, y: number, z: number): number =>
     (y === 0 && x === 8 && z === 8) ? MAT.MANA_LANTERN : AIR
-  const w = beginRenderLight(0, 0, lanternAt, openHeight, null)
+  const w = beginRenderLight(0, 0, lanternAt, null)
   stepRenderLight(w, Infinity)
   ok(w.qn > N, `§8 ★ the pass really does push more than its first allocation (${w.qn} > ${N})`)
   ok(w.q.length > N, `§8 ★★ so the queue GREW — a fixed one would have dropped ${w.qn - N} entries`)
@@ -249,6 +249,56 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
   // 64KB per column per pass.
   const reuse = new Uint8Array(SPAN * HEIGHT * SPAN)
   ok(packForTexture(R, reuse) === reuse, '§9 a supplied buffer is filled in place, not replaced')
+}
+
+// ── §10 a roof a keeper BUILT casts shade ────────────────────────────────────────────────────
+// ★★★ THE ASSERT NO FIXTURE ABOVE COULD MAKE. Every other section in this file puts its geometry
+// UNDER the terrain surface, which is exactly the half the old seed pass read. It took a heightmap
+// and wrote sky 15 into every cell above it WITHOUT LOOKING AT THE MATERIAL, so a tree, a ruin and
+// a built room were all invisible to the field — and it failed toward BRIGHT, so the world above
+// ground rendered exactly as it always had and the feature simply did not exist indoors.
+//
+// Measured before it was fixed, with `scripts/canopy-light.mts` against the wooded ground at
+// Moonwell Glade: 7 of 7 leaf cells above the surface reported FULLY LIT.
+{
+  const G = 60                                   // ground surface
+  const hut = (x: number, y: number, z: number): number => {
+    if (y <= G) return MAT.STONE                 // solid ground, no caves
+    // A 5x5 room from local (4,4) to (8,8): walls y=G+1..G+4, roof at y=G+5.
+    const inX = x >= 4 && x <= 8, inZ = z >= 4 && z <= 8
+    if (!inX || !inZ) return AIR
+    const wall = x === 4 || x === 8 || z === 4 || z === 8
+    if (y >= G + 1 && y <= G + 4) return wall ? MAT.STONE : AIR
+    if (y === G + 5) return MAT.STONE            // the roof
+    return AIR
+  }
+  const R2 = computeRenderLight(0, 0, hut, null)
+  // §10a the fixture is what the asserts think it is
+  ok(hut(6, G + 5, 6) === MAT.STONE, '§10 the roof is there')
+  ok(hut(6, G + 2, 6) === AIR, '§10 and the room under it is hollow')
+  ok(hut(6, G + 7, 6) === AIR, '§10 with open sky above the roof')
+
+  ok(R2.sky[li(6, G + 7, 6)] === MAX_LIGHT, '§10 open sky above the roof is still full daylight')
+  ok(R2.sky[li(6, G + 5, 6)] === 0,
+    `§10 ★★ the roof BLOCK itself is not lit — a solid cell is never lit (got ${R2.sky[li(6, G + 5, 6)]})`)
+  ok(R2.sky[li(6, G + 2, 6)] === 0,
+    `§10 ★★★ THE SEALED ROOM IS DARK (got ${R2.sky[li(6, G + 2, 6)]}) — the old seed said 15 here, ` +
+    'forever, for every building anyone will ever put up')
+  // ⚠ NON-VACUITY, and it is the assert that stops the fix being "seed nothing above the ground":
+  // the ground OUTSIDE the hut must still be full daylight, or this would pass by turning the sky off.
+  ok(R2.sky[li(1, G + 1, 1)] === MAX_LIGHT,
+    `§10 ★★ and open ground beside the hut is still 15 (got ${R2.sky[li(1, G + 1, 1)]})`)
+  ok(R2.sky[li(12, G + 1, 12)] === MAX_LIGHT, '§10 ★ on the other side too')
+
+  // A hole in the roof lets daylight fall straight down the way a shaft does — the same free-fall
+  // rule, entered from above ground rather than below it.
+  const holed = (x: number, y: number, z: number): number =>
+    (y === G + 5 && x === 6 && z === 6) ? AIR : hut(x, y, z)
+  const R3 = computeRenderLight(0, 0, holed, null)
+  ok(R3.sky[li(6, G + 1, 6)] === MAX_LIGHT,
+    `§10 ★★ punch a hole in the roof and daylight reaches the floor at full strength (got ${R3.sky[li(6, G + 1, 6)]})`)
+  ok(R3.sky[li(5, G + 1, 5)] > 0 && R3.sky[li(5, G + 1, 5)] < MAX_LIGHT,
+    `§10 ★ and the corner beside it is dimmer, not equal — sideways still decays (got ${R3.sky[li(5, G + 1, 5)]})`)
 }
 
 if (fails.length) {
