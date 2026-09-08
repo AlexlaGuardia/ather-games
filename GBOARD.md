@@ -11,7 +11,29 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🔦 Shimmer — **THE DARK FOLLOWS YOU DOWN, THE MOUTHS FIND THE BLIGHT, AND THE RENDERER STILL SHOWS YOU NOON** (2026-09-08, hub lane) · *Last touched 2026-09-08 — ✅ **DEPLOYED `BUILD_ID QTrnQl3GvfLS45fp3iqrj`, 184 chunks, `built from sha 3a0545a`**. Tree clean, 0 unpushed. Sweep **248 · 248 pass · 0 FAIL · 0 KILLED**. tsc 7 (baseline), canon exit 0, purity 53 files / 565 checks. ⚠ HEAD is `2e3b6fc` (render-light), which is PURE and UNWIRED — no behaviour change, nothing to deploy for it.*
+## 🔦 Shimmer — **THE FIELD IS WIRED: A CAVE IS DARK, A LANTERN WORKS, AND THE SURFACE IS UNTOUCHED** (2026-09-08, hub lane) · *Last touched 2026-09-08 — ✅ **DEPLOYED `BUILD_ID IRpC7L72FRzhJpRXgE2NY`, 183 chunks, `built from sha bfcbca6`**. Verified: `shimmerLight` present in a served chunk, served md5 == disk md5, prod 200. Tree clean, 0 unpushed (HEAD `84717f1` is one commit past the build and deletes only a stale unserved `public/` artifact). Sweep **250 suites · 248 pass · 2 FAIL · 0 KILLED** at `8aae9dc`; both failures were mine and both were correct refusals, fixed in `bfcbca6` and re-run green. tsc 7 (baseline), canon exit 0.*
+
+### ▶ WHAT LANDED TODAY (`6679e6c` · `ce6252c` · `8aae9dc` · `bfcbca6`)
+`voxel/render-light.ts` is a **job with a cursor** (`beginRenderLight`/`stepRenderLight`), because 22ms is eleven times the host's 2ms slice and the 09-01 ruling on `advanceLightBuild` is exact about why. `computeRenderLight` is `stepRenderLight(w, Infinity)`, so the one-shot and sliced paths are one piece of code. ⚠ **The generation worker is NOT the answer here even though it looks like one** — it holds its own `Column` cache and never sees a mined block, so light computed there would be light for the world *as generated*.
+
+The field reaches the GPU as a **toroidal 144×256×144 R8 3D texture** (9×9 columns, 5.3MB) sampled per-fragment by **both** block programs from one shared snippet (`voxel3d/light-glsl.ts`). A per-chunk texture is a per-chunk uniform is a per-chunk material, which `mesh-bridge.ts` refuses in writing.
+
+**The sky channel DARKENS and does not light.** The scene's sun already carries the hour; scaling by it again would black the world out at dusk. Sky 15 → shading exactly **1.0**, so **an unbuilt column renders EXACTLY as the game did yesterday** — the fallback is the current look, not a degradation of it. The block channel *adds* (a multiplier can never make a lantern work at midnight), scaled by `1 − skyShade` so a waymark does not wash the grass at noon.
+
+### ⚠⚠ FOUR THINGS THE RUNNING PAGE FOUND THAT READING COULD NOT
+1. **128ms per column against the module's own 22ms bench.** `voxel()` builds a template-string key and hits a Map, and the seed phase asks ~33,000 times per pass. The bench was not wrong; it passed a closure instead of the host's accessor. A reader bound to the one column: **63ms**.
+2. **★★★ A COLUMN BUILT BEFORE ITS NEIGHBOURS IS DARK AT ITS EDGES, AND I WAS UPLOADING IT IMMEDIATELY.** A headless shot with **2 of 81** columns built photographed a solid black cliff at noon; the same place with **20** built rendered correctly. **Both were "working".** The apron rule in the header was right about the *settled* ring and silent about the warm-up, where the same sentence is true of every column. A field now reaches the texture only when it **and its four neighbours** have one — which *subsumes* the apron rather than sitting beside it: an outer-ring column's neighbours are not in the ring, so it can never be eligible.
+3. **Waking all four neighbours when one FACE changed.** Light out of the +x face reaches one column. §8's settle assert does not even terminate without the per-face rule.
+4. **Nearest-first with `ready` as a tiebreak re-serves the keeper's own columns forever** — 77 passes produced **14** built columns and the outer ring never got a turn. Unbuilt now outranks re-settling *globally*; the new assert reads **9 of 81** under the old rule.
+
+### ★★ `window.__renderlight()` — AND WHY IT HAD TO EXIST BEFORE THE FEATURE COULD BE JUDGED
+An unbuilt column renders **bright on purpose**, so a warming ring and a working cave are indistinguishable in a screenshot. **My first cave shot WAS the warm front and read as the feature working.** The probe reports `built` / `shown` / `dirty` / the in-flight column and a slice meter (`slices`, `done`, `ms`, `frames`), and it answered the question outright the first time it ran: `built: 2, dirty: 79`.
+
+### ⛔ THE OPEN PERF ITEM, STATED WITH ITS LOAD CONDITION
+**63–73ms per column pass · ~2.5 passes/s at `RENDER_LIGHT_MS` 3 · a cold ring is ~33s.** The column you are standing in lands within a second or two and the ring warms outward, so the full-ring number is not the felt number — and it degrades **bright**, which is yesterday's render. ⚠ Sprinting (22 u/s = a column every 0.7s) outruns it. ⚠ The headless figures are frame-starved (SwiftShader ran **2386ms frames**, 0.4fps): the *per-pass ms* is honest, the *columns per second* is not.
+
+### ⛔ AND TWO THINGS THE FIELD DOES NOT REACH YET
+Water and leaf materials have their own programs and do not sample it, so a flooded cave and a canopy over a cave mouth still light as they did. Not a regression — an absence, and worth naming before somebody photographs it and files it as one.
 
 Alex: *"lets make exploring be suspenseful."* Four things shipped and the last one is only half built.
 
