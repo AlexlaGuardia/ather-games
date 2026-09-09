@@ -404,8 +404,9 @@ def _tube_from_points(name, points, radius, mat, bevel_res=3, resolution_u=3):
     return obj
 
 
-def build_woven_ring(major_r, strand_r, seat_angles_deg, mat, n_strands=2, seat_gap_deg=27,
-                      n_periods=12, amp_ratio=1.8, scale_z=0.34, min_run_deg=18, name_prefix="ring"):
+def build_woven_ring(major_r, strand_r, seat_angles_deg, mat, n_strands=2, seat_gap_deg=None,
+                      n_periods=12, amp_ratio=1.8, scale_z=0.34, min_run_deg=18, name_prefix="ring",
+                      seat_r=None):
     """A ring of `n_strands` (1 = a plain single cord, 2 = two strands that visibly interleave)
     built as real tube geometry, broken into arcs so each angle in `seat_angles_deg` interrupts
     every strand. Returns the list of tube mesh objects (join them with the rest of the part).
@@ -417,7 +418,26 @@ def build_woven_ring(major_r, strand_r, seat_angles_deg, mat, n_strands=2, seat_
     braid's cut end that the seat read as floating in open space instead of nested IN the weave.
     Right fix is `min_run_deg`: keep the gap SNUG (close to the seat's own footprint) and instead
     drop any leftover run too short to read as a real strand of braid, which merges only the
-    slivers a close seat-pair produces, without pushing well-spaced seats away from the ring."""
+    slivers a close seat-pair produces, without pushing well-spaced seats away from the ring.
+
+    ★★ FIX 2026-09-09 (play lane) — THE GAP WAS NEVER ACTUALLY SNUG, AND THE COMMENT ABOVE SAID IT
+    WAS. `seat_gap_deg` was a hardcoded 27, while a SEAT_R=0.086 seat on an R=0.82 ring spans 12
+    degrees. So the braid was cut 2.2x wider than the thing filling it and **55% of every gap was
+    bare background**. On a dark ground that is fatal in a way a light one would forgive: the void
+    is near-black, the background is near-black, and with no material touching the void's edge
+    there is no boundary to see. The seat stops reading as nested in the weave and starts reading
+    as a detached blob near a broken ring — which is exactly how it renders, and exactly the same
+    failure the SVG placeholder had for the same reason.
+    ⚠ THE PROSE WAS RIGHT AND THE NUMBER WAS WRONG, which is the hard kind to catch: the docstring
+    asserts snugness, so reading the code agrees with itself and only ARITHMETIC disagrees.
+    So the gap is no longer a number that can drift from the seat — pass `seat_r` and it is DERIVED
+    from the footprint, plus a fraction of a strand so the braid end kisses the void without
+    overlapping it. `seat_gap_deg` stays as an explicit override for a caller that means it."""
+    if seat_gap_deg is None:
+        if seat_r is None:
+            raise ValueError("build_woven_ring needs seat_r (to derive the gap) or an explicit "
+                             "seat_gap_deg — a default gap is what drifted from the seat size")
+        seat_gap_deg = math.degrees(2.0 * (seat_r + strand_r * 0.30) / major_r)
     step = 1.5
     forb = [((a - seat_gap_deg / 2) % 360, (a + seat_gap_deg / 2) % 360) for a in seat_angles_deg]
 

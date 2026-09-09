@@ -61,7 +61,7 @@ def build_bracelet(tier, seats):
         closure_mat = None
         strand_r = 0.022
         top_z = strand_r * SCALE_Z
-        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, n_strands=1,
+        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, seat_r=SEAT_R, n_strands=1,
                                    name_prefix="bracelet-t0")
         # the adjustable slip-knot tie — top of the ring, opposite the seat
         kx, ky, kz = ring_point(90, R, top_z)
@@ -81,12 +81,21 @@ def build_bracelet(tier, seats):
         closure_mat = ring_mat
         strand_r = 0.021
         top_z = strand_r * SCALE_Z
-        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, n_strands=2,
+        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, seat_r=SEAT_R, n_strands=2,
                                    name_prefix="bracelet-t1")
         bead_mat = mat_wood("bracelet-goldwood-bead", (0.72, 0.50, 0.15), rough=0.5, grain_scale=16)
+        # ⚠ THESE ARE DECORATION AND MUST NEVER BE COUNTABLE AS SEATS (fixed 2026-09-09, play lane).
+        # They were radius 0.075 against a seat's SEAT_R 0.086 — same disc, same axis, same size,
+        # differing only in colour. On a ONE-seat bracelet that renders three seat-shaped discs, and
+        # the single job this silhouette has is "a player reads how loaded a keeper is from across
+        # the square". A decoration indistinguishable from a seat does not merely fail to help, it
+        # reports a fill level the vessel does not have — the same defect as the panel's hardcoded
+        # three seats, in geometry instead of in a map. Kept (the tier IS the material, and goldwood
+        # is what says tier 1) but sized so they cannot be mistaken for a seat at panel scale.
+        bead_r = SEAT_R * 0.42
         for ang in (-90 - 55, -90 + 55):
             bx, by, bz = ring_point(ang, R, top_z)
-            bead = add(bpy.ops.mesh.primitive_cylinder_add, vertices=16, radius=0.075, depth=0.05,
+            bead = add(bpy.ops.mesh.primitive_cylinder_add, vertices=16, radius=bead_r, depth=0.05,
                        location=(bx, by, bz + 0.02))
             bead.rotation_euler = (0, 0, math.radians(ang))
             assign(bead, bead_mat)
@@ -101,7 +110,7 @@ def build_bracelet(tier, seats):
         closure_mat = mat_sap("bracelet-sap-seat", (0.60, 0.33, 0.05))
         strand_r = 0.030
         top_z = strand_r * SCALE_Z
-        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, n_strands=2,
+        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, seat_r=SEAT_R, n_strands=2,
                                    name_prefix="bracelet-t2")
 
     else:
@@ -109,7 +118,7 @@ def build_bracelet(tier, seats):
         closure_mat = mat_nacre("bracelet-nacre-seat")
         strand_r = 0.029
         top_z = strand_r * SCALE_Z
-        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, n_strands=2,
+        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, seat_r=SEAT_R, n_strands=2,
                                    name_prefix="bracelet-t3")
         # silver-thread (moonvine fibre) peeking from the inner edge of the pearlshell band —
         # ⚠ matte, non-metallic on purpose; see mat_silverthread's own note on the reflex risk
