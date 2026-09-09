@@ -27,11 +27,39 @@ import { toGeometry, createVoxelMaterial } from '../mesh-bridge'
 import { makeTileArray, createTexturedVoxelMaterial, DEFAULT_JITTER, DEFAULT_AO, DEFAULT_RELIEF, type TileArray } from './atlas'
 import { layerOf, faceOfNormal } from './tiles'
 import { TileStrip } from './TileStrip'
+import { SPIKE_ORIGIN_X, SPIKE_ORIGIN_Z, SPIKE_PATCH, SPIKE_SEED } from './spike-origin'
 
-const SEED = 1337
+const SEED = SPIKE_SEED
+/**
+ * ── ★★★ WHERE THE PATCH IS SAMPLED FROM, AND WHY IT IS NOT THE ORIGIN (2026-09-09) ────────────
+ * This page built its patch at world (0, 0) and rendered NOTHING — 64 columns generated, 0 meshes,
+ * 0 quads from 0 faces — because the origin is the fold's HOLLOW and has no ground at any altitude.
+ * It printed that as a statistic and drew a blue screen, so the page looked like a working bench
+ * with a flat-looking world on it.
+ *
+ * ⚠⚠ AND IT COST A REAL ANSWER. Alex was asked to judge the relief A/B here and said "it looks
+ * flat, the relief isnt doing much" — of a page with no blocks on it. The only thing rendering was
+ * the 2D tile strip along the bottom, which is flat by construction.
+ *
+ * ★ THIS IS THE THIRD TIME THIS EXACT TRAP HAS LANDED IN THIS REPO: a column oracle pinned at the
+ * origin (voxel/plot), the AO probe that reported 0 vertices there, and now a dev PAGE — the one
+ * place nobody thought to check, because a page is looked at rather than asserted.
+ *
+ * Measured over an 8x8 patch at each candidate: origin 0 quads · (256,0) 0 · (512,512) 107k/14
+ * materials · (1024,1024) 60k/14 · (3712,960) 96k/17 · (4096,4096) 102k/21 · HERE 90,828 quads
+ * across 426 meshes and 23 DISTINCT MATERIALS, the most variety of anywhere probed — which is the
+ * property a texture bench actually wants.
+ *
+ * ⚠ The columns are SAMPLED here and DRAWN at patch-local coordinates (see the subtraction below),
+ * so the camera framing, the two-copy offset and ?cam= all keep working in 0..SPAN as before.
+ * `spike-origin.test.ts` asserts this spot still has ground, so the day worldgen moves under it the
+ * sweep goes red instead of the page going quiet again.
+ */
+const ORIGIN_X = SPIKE_ORIGIN_X
+const ORIGIN_Z = SPIKE_ORIGIN_Z
 /** 8x8 columns = a 128-block patch. Big enough to stand back ~90 blocks and judge minification,
  *  small enough that generating it twice-over costs under a second. */
-const PATCH = 8
+const PATCH = SPIKE_PATCH
 const SPAN = PATCH * SECTION
 /** Gap between the two copies — wide enough to read as two places, narrow enough to pan between. */
 const GAP = 24
@@ -63,7 +91,7 @@ export default function TexSpike() {
         const cols = new Map<string, Column>()
         for (let cz = 0; cz < PATCH; cz++)
           for (let cx = 0; cx < PATCH; cx++)
-            cols.set(`${cx},${cz}`, makeColumn(cx * SECTION, cz * SECTION, SEED))
+            cols.set(`${cx},${cz}`, makeColumn(ORIGIN_X + cx * SECTION, ORIGIN_Z + cz * SECTION, SEED))
         const tGen = performance.now() - t0
 
         const t1 = performance.now()
@@ -85,7 +113,9 @@ export default function TexSpike() {
             }, scratch)) {
               const geom = toGeometry(buildAttrs(sm.mesh))
               geom.setAttribute('aLayer', new THREE.BufferAttribute(layerAttr(sm.mesh.materials, sm.mesh.normals), 1))
-              out.push({ geom, x: sm.wx, y: sm.wy, z: sm.wz })
+              // Drawn LOCAL: the terrain comes from (ORIGIN_X, ORIGIN_Z) but sits at 0..SPAN, so
+              // every framing calculation on this page stays in the coordinates it was written for.
+              out.push({ geom, x: sm.wx - ORIGIN_X, y: sm.wy, z: sm.wz - ORIGIN_Z })
               quads += sm.mesh.quads
               faces += sm.mesh.faces
             }
@@ -94,6 +124,15 @@ export default function TexSpike() {
         const tMesh = performance.now() - t1
         if (cancelled) return
         setBuilt(out)
+        // ── ★★ AN EMPTY PATCH IS AN ALARM, NOT A STATISTIC ────────────────────────────────────
+        // "0 quads from 0 faces" printed in the same grey as the timings is how this page rendered
+        // nothing for who knows how long while looking like it was working. A bench that cannot
+        // show its subject has to SAY it cannot, in the place a reader is already looking.
+        if (quads === 0) {
+          setErr(`NOTHING TO SHOW — ${PATCH * PATCH} columns at (${ORIGIN_X}, ${ORIGIN_Z}) meshed to 0 quads. ` +
+            `That is not a flat world, it is an empty one: this patch origin has no ground at any altitude. ` +
+            `Do not judge textures, relief or AO from this screen.`)
+        }
         setNote(
           `${PATCH * PATCH} columns · ${out.length} meshes · ${quads.toLocaleString()} quads ` +
           `from ${faces.toLocaleString()} faces (${(faces / Math.max(1, quads)).toFixed(1)}x greedy win) · ` +
@@ -290,7 +329,7 @@ function FlyCam() {
     }
 
     const midX = (OFFSET + SPAN) / 2
-    const h = columnHeight(SPAN / 2, SPAN / 2, SEED)
+    const h = columnHeight(ORIGIN_X + SPAN / 2, ORIGIN_Z + SPAN / 2, SEED)
     // Back off far enough that the full pair fits the narrower of the two FOV axes. Vertical FOV is
     // 75deg; on a portrait viewport the horizontal cone is the tighter one, so solve for that.
     const aspect = typeof window !== 'undefined' ? window.innerWidth / window.innerHeight : 1.6
