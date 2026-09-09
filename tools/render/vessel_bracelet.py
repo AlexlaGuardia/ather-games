@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vessel_common import (
     fresh_scene, setup_light_and_cam, mat_cloth, mat_wood, mat_cord, mat_sap, mat_nacre,
     mat_shimmerscale, mat_silverthread, mat_void, assign, add, join_all, build_seat,
+    build_woven_ring,
 )
 
 OUT = os.environ.get("RENDER_OUT", "/tmp/vessel_frames")
@@ -51,14 +52,17 @@ def build_ring(minor, mat, major=R):
 
 def build_bracelet(tier, seats):
     parts = []
+    seat_angles = SEAT_ANGLES[seats]
 
     if tier == 0:
+        # "a plain wrapped cord" — ONE strand, no interleave, but still gapped at the seat so
+        # the seat is an interruption in the cord, not a patch glued over an unbroken loop.
         ring_mat = mat_cord("bracelet-cord0", (0.55, 0.53, 0.50))  # greyed with age
         closure_mat = None
-        minor = 0.040
-        top_z = minor * SCALE_Z
-        ring = build_ring(minor, ring_mat)
-        parts.append(ring)
+        strand_r = 0.022
+        top_z = strand_r * SCALE_Z
+        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, n_strands=1,
+                                   name_prefix="bracelet-t0")
         # the adjustable slip-knot tie — top of the ring, opposite the seat
         kx, ky, kz = ring_point(90, R, top_z)
         knot = add(bpy.ops.mesh.primitive_ico_sphere_add, subdivisions=1, radius=0.05, location=(kx, ky, kz + 0.02))
@@ -71,12 +75,14 @@ def build_bracelet(tier, seats):
         parts.append(tail)
 
     elif tier == 1:
+        # a real two-strand braid — "warm golden discs strung on plain cord" still reads: the
+        # beads thread ONTO the woven cord, they don't replace the weave.
         ring_mat = mat_cord("bracelet-cord1", (0.42, 0.31, 0.19))
         closure_mat = ring_mat
-        minor = 0.042
-        top_z = minor * SCALE_Z
-        ring = build_ring(minor, ring_mat)
-        parts.append(ring)
+        strand_r = 0.021
+        top_z = strand_r * SCALE_Z
+        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, n_strands=2,
+                                   name_prefix="bracelet-t1")
         bead_mat = mat_wood("bracelet-goldwood-bead", (0.72, 0.50, 0.15), rough=0.5, grain_scale=16)
         for ang in (-90 - 55, -90 + 55):
             bx, by, bz = ring_point(ang, R, top_z)
@@ -93,25 +99,25 @@ def build_bracelet(tier, seats):
     elif tier == 2:
         ring_mat = mat_shimmerscale("bracelet-shimmerscale")
         closure_mat = mat_sap("bracelet-sap-seat", (0.60, 0.33, 0.05))
-        minor = 0.060
-        top_z = minor * SCALE_Z
-        ring = build_ring(minor, ring_mat)
-        parts.append(ring)
+        strand_r = 0.030
+        top_z = strand_r * SCALE_Z
+        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, n_strands=2,
+                                   name_prefix="bracelet-t2")
 
     else:
         ring_mat = mat_nacre("bracelet-pearlshell")
         closure_mat = mat_nacre("bracelet-nacre-seat")
-        minor = 0.058
-        top_z = minor * SCALE_Z
-        ring = build_ring(minor, ring_mat)
-        parts.append(ring)
+        strand_r = 0.029
+        top_z = strand_r * SCALE_Z
+        parts += build_woven_ring(R, strand_r, seat_angles, ring_mat, n_strands=2,
+                                   name_prefix="bracelet-t3")
         # silver-thread (moonvine fibre) peeking from the inner edge of the pearlshell band —
         # ⚠ matte, non-metallic on purpose; see mat_silverthread's own note on the reflex risk
-        thread = build_ring(0.016, mat_silverthread("bracelet-silverthread"), major=R - minor * 0.75)
+        thread = build_ring(0.016, mat_silverthread("bracelet-silverthread"), major=R - strand_r * 2.2)
         thread.location.z = -0.01
         parts.append(thread)
 
-    for ang in SEAT_ANGLES[seats]:
+    for ang in seat_angles:
         sx, sy, sz = ring_point(ang, R, top_z)
         parts += build_seat(sx, sy, sz, SEAT_R, tier, filled_tier0=True, closure_mat=closure_mat)
 

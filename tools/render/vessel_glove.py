@@ -19,7 +19,7 @@ import bpy, math, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vessel_common import (
     fresh_scene, setup_light_and_cam, mat_cloth, mat_wood, mat_cord, mat_sap, mat_nacre,
-    mat_shimmerscale, mat_void, assign, add, join_all, outline_solid, build_seat,
+    mat_shimmerscale, mat_void, assign, add, join_all, outline_solid, build_seat, tapered_digit,
 )
 
 OUT = os.environ.get("RENDER_OUT", "/tmp/vessel_frames")
@@ -28,57 +28,63 @@ os.makedirs(OUT, exist_ok=True)
 Z0 = 0.09      # pad top surface
 THICK = 0.085
 
-# the reference silhouette (Greg's / tier-0 IS this shape — brief: "design the Worn set first,
-# every tiered focus is a variation on it"). A rounded shield tapering to a narrow wrist-neck.
+# ★ FIX 2026-09-09 (picaso, self-critique pass): the play lane read the first pad as "a foot or
+# a paw" — it was widest through the MIDDLE (an oval/leaf), so nothing in the silhouette actually
+# said "hand". Redrawn as a real taper: WIDE across the knuckle line (high y, where the fingers
+# root) narrowing steadily to the wrist-neck (low y, where the cuff starts) — the first of the
+# brief's own three cues (taper / thumb leaves the outline / finger gaps).
 PAD_PTS = [
-    (-0.22, -0.98), (0.22, -0.98),
-    (0.36, -0.86), (0.50, -0.58),
-    (0.58, -0.16), (0.53, 0.24),
-    (0.44, 0.50), (0.22, 0.56),
-    (-0.22, 0.56), (-0.44, 0.50),
-    (-0.53, 0.24), (-0.58, -0.16),
-    (-0.50, -0.58), (-0.36, -0.86),
-]  # ★ FIX: top edge widened/flattened slightly so it reads under the now-wider-spread finger
-# loops instead of the loops overhanging a narrower dome
-# a wristband cuff flaring below the pad's narrow neck ("cuffing a little past the wrist-bone")
+    (-0.20, -0.95), (0.20, -0.95),
+    (0.30, -0.78), (0.36, -0.52),
+    (0.42, -0.22), (0.46, 0.08),
+    (0.48, 0.32), (0.42, 0.50),
+    (0.24, 0.58), (0.0, 0.60), (-0.24, 0.58),
+    (-0.42, 0.50), (-0.48, 0.32),
+    (-0.46, 0.08), (-0.42, -0.22),
+    (-0.36, -0.52), (-0.30, -0.78),
+]
+# a wristband cuff flaring below the pad's own narrow neck (matched to the new 0.20 neck width,
+# not the old 0.40 — "cuffing a little past the wrist-bone")
 CUFF_PTS = [
-    (-0.40, -0.96), (0.40, -0.96),
-    (0.46, -1.10), (0.44, -1.28),
-    (0.30, -1.40), (0.0, -1.44), (-0.30, -1.40),
-    (-0.44, -1.28), (-0.46, -1.10),
+    (-0.20, -0.94), (0.20, -0.94),
+    (0.28, -1.08), (0.26, -1.26),
+    (0.16, -1.38), (0.0, -1.42), (-0.16, -1.38),
+    (-0.26, -1.26), (-0.28, -1.08),
 ]
 
-FINGER_X = (-0.36, -0.13, 0.13, 0.36)  # ★ FIX: was (-.27,-.09,.09,.27) — the loops overlapped and
-# fused into one scalloped fringe (self-critique, first render pass). Widened + shrunk (below) so
-# all four read as distinct open-finger loops instead of a flower crown glued to the pad.
-THUMB_LOC = (-0.62, -0.62, Z0 + 0.02)  # ★ FIX: was (-.70,-.28) — floated off the pad like a stray
-# ring with no visible attachment. Moved down to the wrist-side "web" where a thumb actually
-# leaves the hand, so it now reads AS a thumb loop, not a fifth finger.
+# ★ FIX: fingers were open-hole tori (a curtain-ring read under a near-top-down camera). Now
+# hand-authored base -> tip pairs for solid tapered digits (tapered_digit sweeps a cone between
+# them) — base sits INSET into the pad silhouette (so the join is hidden, not a floating seam),
+# tip sits beyond the pad edge with a slight z-lift for an open, springy curl. Outer two shorter,
+# inner two longer — the knuckle-line stagger a real hand (and the SVG placeholder) both show.
+# Each entry: (base_x, base_y, tip_x, tip_y, tip_z, r_base, r_tip)
+FINGERS = [
+    (-0.33, 0.46, -0.40, 0.62, Z0 + 0.035, 0.058, 0.036),
+    (-0.11, 0.52, -0.13, 0.74, Z0 + 0.035, 0.060, 0.037),
+    (0.11, 0.52, 0.13, 0.74, Z0 + 0.035, 0.060, 0.037),
+    (0.33, 0.46, 0.40, 0.62, Z0 + 0.035, 0.058, 0.036),
+]
+# the thumb, angled off the pad's WRIST-side edge so its base is clearly a separate root from
+# the fingers and its tip clears the silhouette by a wide margin — "the thumb leaves the outline"
+THUMB = (-0.40, -0.28, -0.66, -0.58, Z0 + 0.03, 0.068, 0.040)
 
 SEAT_LAYOUT = {
-    1: [(0.0, 0.40)],
-    2: [(-0.14, 0.38), (0.14, 0.38)],
-    3: [(-0.24, 0.34), (0.0, 0.44), (0.24, 0.34)],
+    1: [(0.0, 0.36)],
+    2: [(-0.14, 0.34), (0.14, 0.34)],
+    3: [(-0.24, 0.30), (0.0, 0.40), (0.24, 0.30)],
 }
 
 
 def build_finger_loops(body_mat, glow=False):
+    """★ FIX 2026-09-09: solid tapered digits (tapered_digit), not tori. Fingertips get the
+    tier-3 glow material; the thumb stays body_mat even when glow=True — canon names the
+    resting light at "the fingertips" specifically, not the whole hand."""
     parts = []
-    for x in FINGER_X:
-        t = add(bpy.ops.mesh.primitive_torus_add, major_radius=0.095, minor_radius=0.026,
-                location=(x, 0.60, Z0 + 0.02), major_segments=20, minor_segments=10)
-        t.rotation_euler = (math.radians(8), 0, 0)  # a small forward tilt — open, not flat-stamped
-        assign(t, body_mat)
-        parts.append(t)
-    thumb = add(bpy.ops.mesh.primitive_torus_add, major_radius=0.135, minor_radius=0.033,
-                location=THUMB_LOC, major_segments=20, minor_segments=10)
-    thumb.rotation_euler = (math.radians(-14), math.radians(18), math.radians(28))
-    assign(thumb, body_mat)
-    parts.append(thumb)
+    tip_mat = body_mat
     if glow:
-        gm = bpy.data.materials.new("starwillow-tip-glow")
-        gm.use_nodes = True
-        b = gm.node_tree.nodes["Principled BSDF"]
+        tip_mat = bpy.data.materials.new("starwillow-tip-glow")
+        tip_mat.use_nodes = True
+        b = tip_mat.node_tree.nodes["Principled BSDF"]
         b.inputs["Base Color"].default_value = (0.86, 0.90, 0.78, 1)
         b.inputs["Metallic"].default_value = 0.0
         b.inputs["Roughness"].default_value = 0.4
@@ -86,8 +92,15 @@ def build_finger_loops(body_mat, glow=False):
         b.inputs["Emission Strength"].default_value = 1.8  # ★ FIX: 0.9 didn't read against the key
         # light in the first pass — bumped so the "never fully dark" exception is actually visible,
         # still well under a channelling bloom (no glare/compositor bloom added — see build note)
-        for p in parts:
-            assign(p, gm)
+
+    for (bx, by, tx, ty, tz, rb, rt) in FINGERS:
+        finger_parts = tapered_digit(f"finger-{bx:.2f}", (bx, by, Z0 + 0.02), (tx, ty, tz), rb, rt, body_mat)
+        if glow:
+            assign(finger_parts[-1], tip_mat)  # only the rounded tip cap glows, not the shaft
+        parts += finger_parts
+
+    tbx, tby, ttx, tty, ttz, trb, trt = THUMB
+    parts += tapered_digit("thumb", (tbx, tby, Z0 + 0.02), (ttx, tty, ttz), trb, trt, body_mat)
     return parts
 
 

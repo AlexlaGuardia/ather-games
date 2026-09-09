@@ -117,19 +117,46 @@ def mat_cloth(name, color, rough=0.82):
 
 
 def mat_wood(name, color, rough=0.55, grain_scale=14.0, grain_strength=0.14):
+    """★ FIX 2026-09-09 (picaso, self-critique pass): a single flat Base Color + a bump-only
+    grain is exactly what reads as tinted plastic — the ALBEDO never varies, only the normal
+    does, so under this soft area-light rig it just looks like smooth beige resin. Real wood's
+    color itself streaks. Fix: the same noise field now ALSO drives a colour ramp mixed into
+    Base Color (dark heartwood streaks through the base hue) and a small Roughness jitter
+    (wood's sheen is uneven, a plastic's is uniform) — the bump stays, doing normal work only."""
     m, b = _mat(name)
-    b.inputs["Base Color"].default_value = (*color, 1)
     b.inputs["Roughness"].default_value = rough
     b.inputs["Metallic"].default_value = 0.0
     b.inputs["Specular IOR Level"].default_value = 0.3
     nt = m.node_tree
-    noise = nt.nodes.new('ShaderNodeTexNoise')
-    noise.inputs['Scale'].default_value = grain_scale
+    coord = nt.nodes.new('ShaderNodeTexCoord')
     mapping = nt.nodes.new('ShaderNodeMapping')
     mapping.inputs['Scale'].default_value = (1.0, 6.0, 1.0)  # stretch noise into grain lines
-    coord = nt.nodes.new('ShaderNodeTexCoord')
     nt.links.new(coord.outputs['Object'], mapping.inputs['Vector'])
+
+    noise = nt.nodes.new('ShaderNodeTexNoise')
+    noise.inputs['Scale'].default_value = grain_scale
+    noise.inputs['Detail'].default_value = 3.0
     nt.links.new(mapping.outputs['Vector'], noise.inputs['Vector'])
+
+    # albedo streaking — dark heartwood value mixed in by the SAME field driving the bump, so
+    # the shaded grain and the coloured grain register as one streak, not two textures
+    dark = tuple(c * 0.52 for c in color)
+    ramp = nt.nodes.new('ShaderNodeValToRGB')
+    ramp.color_ramp.elements[0].position = 0.38
+    ramp.color_ramp.elements[0].color = (*dark, 1)
+    ramp.color_ramp.elements[1].position = 0.62
+    ramp.color_ramp.elements[1].color = (*color, 1)
+    nt.links.new(noise.outputs['Fac'], ramp.inputs['Fac'])
+    nt.links.new(ramp.outputs['Color'], b.inputs['Base Color'])
+
+    # roughness jitter — an uneven, hand-finished sheen instead of a uniform plastic gloss
+    rmath = nt.nodes.new('ShaderNodeMath')
+    rmath.operation = 'MULTIPLY_ADD'
+    rmath.inputs[1].default_value = 0.10
+    rmath.inputs[2].default_value = rough - 0.05
+    nt.links.new(noise.outputs['Fac'], rmath.inputs[0])
+    nt.links.new(rmath.outputs['Value'], b.inputs['Roughness'])
+
     bump = nt.nodes.new('ShaderNodeBump')
     bump.inputs['Strength'].default_value = grain_strength
     nt.links.new(noise.outputs['Fac'], bump.inputs['Height'])
@@ -337,4 +364,148 @@ def build_seat(x, y, z, r, tier, filled_tier0=False, closure_mat=None):
     assign(bump, mat)
     bpy.ops.object.shade_smooth()
     parts.append(bump)
+    return parts
+
+
+# ── the braid — real interleaved-strand geometry, so a seat can be a void IN the weave ────────
+#
+# ★ FIX 2026-09-09 (picaso, self-critique pass): the first cut of the bracelet was one smooth
+# torus with build_seat's void/closure disc glued on top of it. That is not "a void in the
+# weave" — the ring underneath is unbroken, so an empty seat reads as a bandage patch stuck on
+# a continuous hoop, and a filled seat reads as a bead sitting ON a rail, the exact barred-manabox
+# read this whole family exists to avoid. Fix: the ring body is now built as one or two actual
+# tube strands, swept as Blender curves (bevel_depth = strand radius) around the ring, each
+# strand's RADIUS modulated by a sine so two strands visibly interleave (cross over each other's
+# radial path — the read a top-down ortho camera can actually see, since it can't read a z-only
+# weave from nearly overhead), and each strand's path is literally SPLIT into arcs that stop
+# short of every seat angle and resume after it. The seat sits in the resulting gap — an actual
+# absence in the geometry, not a disc laid over continuous material.
+def _tube_from_points(name, points, radius, mat, bevel_res=3, resolution_u=3):
+    if len(points) < 2:
+        return None
+    cd = bpy.data.curves.new(name, type='CURVE')
+    cd.dimensions = '3D'
+    cd.resolution_u = resolution_u
+    spline = cd.splines.new('POLY')
+    spline.points.add(len(points) - 1)
+    for i, (x, y, z) in enumerate(points):
+        spline.points[i].co = (x, y, z, 1)
+    cd.bevel_depth = radius
+    cd.bevel_resolution = bevel_res
+    cd.fill_mode = 'FULL'
+    obj = bpy.data.objects.new(name, cd)
+    bpy.context.collection.objects.link(obj)
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.convert(target='MESH')
+    assign(obj, mat)
+    bpy.ops.object.shade_smooth()
+    return obj
+
+
+def build_woven_ring(major_r, strand_r, seat_angles_deg, mat, n_strands=2, seat_gap_deg=27,
+                      n_periods=12, amp_ratio=1.8, scale_z=0.34, min_run_deg=18, name_prefix="ring"):
+    """A ring of `n_strands` (1 = a plain single cord, 2 = two strands that visibly interleave)
+    built as real tube geometry, broken into arcs so each angle in `seat_angles_deg` interrupts
+    every strand. Returns the list of tube mesh objects (join them with the rest of the part).
+
+    ★ FIX 2026-09-09 (picaso, self-critique pass, round 2): the first cut sized the gap to each
+    seat independently, so two CLOSE seats (a 2- or 3-seat bracelet) left a short, isolated
+    sliver of braid stranded between them — a floating twig with no seat under it. Widening the
+    gap to force adjacent seats to merge overcorrected: it pushed every seat far enough from the
+    braid's cut end that the seat read as floating in open space instead of nested IN the weave.
+    Right fix is `min_run_deg`: keep the gap SNUG (close to the seat's own footprint) and instead
+    drop any leftover run too short to read as a real strand of braid, which merges only the
+    slivers a close seat-pair produces, without pushing well-spaced seats away from the ring."""
+    step = 1.5
+    forb = [((a - seat_gap_deg / 2) % 360, (a + seat_gap_deg / 2) % 360) for a in seat_angles_deg]
+
+    def forbidden(ang):
+        for lo, hi in forb:
+            if lo <= hi:
+                if lo <= ang <= hi:
+                    return True
+            elif ang >= lo or ang <= hi:
+                return True
+        return False
+
+    n = int(360 / step)
+    angles = [i * step for i in range(n)]
+    runs, cur = [], []
+    for ang in angles:
+        if forbidden(ang):
+            if len(cur) > 1:
+                runs.append(cur)
+            cur = []
+        else:
+            cur.append(ang)
+    if len(cur) > 1:
+        runs.append(cur)
+    if len(runs) > 1 and not forbidden(0.0) and not forbidden(angles[-1]):
+        runs[0] = runs[-1] + runs[0]
+        runs.pop()
+    # ★ FIX: span by ENDPOINT SUBTRACTION breaks on the wraparound-merged run (its last angle is
+    # numerically SMALLER than its first, e.g. 304.5 -> 235.5 after wrapping through 0), which
+    # made the filter read the majority of the ring as a negative-length "sliver" and drop it.
+    # Span by point COUNT instead — correct for a wrapped run and for a normal one alike.
+    runs = [r for r in runs if len(r) * step >= min_run_deg or len(runs) == 1]
+
+    parts = []
+    signs = [1] if n_strands == 1 else [1, -1]
+    amp = strand_r * amp_ratio if n_strands > 1 else 0.0
+    for s_idx, sign in enumerate(signs):
+        for r_idx, run in enumerate(runs):
+            pts = []
+            for ang in run:
+                rad = math.radians(ang)
+                wob = math.sin(math.radians(ang) * n_periods)
+                r = major_r + sign * amp * wob
+                z = sign * strand_r * 0.9 * wob * scale_z
+                pts.append((r * math.cos(rad), r * math.sin(rad), z))
+            obj = _tube_from_points(f"{name_prefix}-s{s_idx}-r{r_idx}", pts, strand_r, mat)
+            if obj:
+                parts.append(obj)
+    return parts
+
+
+# ── a solid tapered digit — the fix for "fingers render as open rings" ────────────────────────
+#
+# ★ FIX 2026-09-09 (picaso, self-critique pass): the first cut built each finger/thumb as a
+# torus lying almost flat under a near-top-down ortho camera — which is exactly what a torus
+# looks like from that angle: a closed ring, hole facing the lens, read instantly as a curtain
+# ring rather than a digit. A finger reads as a finger from a TAPER and a rounded tip, not from
+# a hole through it (the brief's own SVG placeholder settled this the same way, in 2D — solid
+# shapes, real gaps, a taper). Base and tip are hand-authored world points (mathutils tracks the
+# cone between them), never derived, so nothing autogenerated can sneak a ring back in.
+import mathutils
+
+
+def tapered_digit(name, base, tip, r_base, r_tip, mat, bevel_frac=0.8, tip_cap=True):
+    """A solid finger/thumb: a tapered cone from `base` to `tip` (both (x,y,z) world points),
+    bevelled round at both ends, with a small rounded cap sphere fused at the tip so the end
+    reads as a soft fingertip rather than a flat-cut cone face."""
+    base_v = mathutils.Vector(base)
+    tip_v = mathutils.Vector(tip)
+    direction = tip_v - base_v
+    length = direction.length
+    mid = (base_v + tip_v) * 0.5
+    cone = add(bpy.ops.mesh.primitive_cone_add, vertices=12, radius1=r_base, radius2=r_tip,
+               depth=length, location=(mid.x, mid.y, mid.z))
+    cone.rotation_euler = direction.to_track_quat('Z', 'Y').to_euler()
+    bpy.context.view_layer.objects.active = cone
+    bev = cone.modifiers.new("b", 'BEVEL')
+    bev.width = r_tip * bevel_frac
+    bev.segments = 3
+    bev.limit_method = 'ANGLE'
+    bpy.ops.object.modifier_apply(modifier="b")
+    bpy.ops.object.shade_smooth()
+    assign(cone, mat)
+    parts = [cone]
+    if tip_cap:
+        cap = add(bpy.ops.mesh.primitive_uv_sphere_add, segments=10, ring_count=6,
+                   radius=r_tip * 0.92, location=(tip_v.x, tip_v.y, tip_v.z))
+        bpy.ops.object.shade_smooth()
+        assign(cap, mat)
+        parts.append(cap)
     return parts
