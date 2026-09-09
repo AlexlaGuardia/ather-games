@@ -356,6 +356,49 @@ function cellHash(x: number, y: number, z: number): number {
  * `origin` is this section's world corner. It affects NOTHING but the leaf pass's hash, and it
  * defaults to the origin so every existing caller and every bench keeps its exact current output.
  */
+
+/**
+ * ── ★★ THE BOX A SAPLING ACTUALLY OCCUPIES (2026-09-09) ───────────────────────────────────────
+ * The reticle used to outline a full cube around every block, which for a sprout that stands 0.7 of
+ * a cell tall and about a third of one wide is an outline of the air around it. Alex named grass and
+ * flowers; a sapling is the same defect drawn by a different renderer, so it is fixed in the same
+ * pass and from the same numbers.
+ *
+ * ⚠⚠ THIS IS DELIBERATELY NOT AN EXTRACTION OF THE EMITTER'S ARITHMETIC. The obvious move is to
+ * pull `yaw`/`wide`/`jx` into a shared helper both call — but that helper would run per LEAF, in the
+ * hot mesher loop, and leaves are 13% of the world's quads. Allocating a placement object for every
+ * one of them to save a duplicated line here is a real frame cost paid for a tidiness that no player
+ * can see.
+ *
+ * So the two DO restate the same rolls, and the safety is not that they cannot drift — it is that
+ * `greedy.test.ts` MESHES A REAL SAPLING CELL and compares this box against the vertices the mesher
+ * actually emitted. A copy checked against its original's OUTPUT is not a hand-kept mirror: the day
+ * somebody re-tunes `0.30` or `yHi`, the guard goes red naming the cell. Nothing here is trusted
+ * because it looks right.
+ */
+export function saplingBounds(wx: number, wy: number, wz: number): {
+  x0: number; y0: number; z0: number; x1: number; y1: number; z1: number
+} {
+  const h = cellHash(wx, wy, wz)
+  const yaw = ((h & 1023) / 1024) * (Math.PI / 2)
+  const wide = 0.5 * (1.08 + (((h >>> 10) & 63) / 63) * 0.46)
+  const wideM = wide * 0.30
+  const jx = ((((h >>> 16) & 31) / 31) - 0.5) * 0.24
+  const jz = ((((h >>> 21) & 31) / 31) - 0.5) * 0.24
+  const cx = wx + 0.5 + jx * 0.3
+  const cz = wz + 0.5 + jz * 0.3
+  // The pair is perpendicular, so the cross's reach on each axis is the WIDER of the two quads'
+  // half-spans — not their sum. A box built from `|cos| + |sin|` would be up to 41% too wide at
+  // 45 degrees, which reads as a loose outline rather than a fitted one.
+  const reach = Math.max(Math.abs(Math.cos(yaw)), Math.abs(Math.sin(yaw))) * wideM
+  return {
+    x0: cx - reach, x1: cx + reach,
+    // `cy` is the cell centre, so the cross runs from the cell FLOOR to 0.2 above that centre.
+    y0: wy, y1: wy + 0.5 + 0.2,
+    z0: cz - reach, z1: cz + reach,
+  }
+}
+
 export function greedyMesh(
   sec: Section, neighbour: NeighbourFn = OUTSIDE_IS_AIR, scratch?: MeshScratch,
   half: HalfCells | null = null, origin: readonly [number, number, number] = [0, 0, 0],

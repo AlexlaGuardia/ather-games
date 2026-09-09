@@ -24,7 +24,7 @@ import * as THREE from 'three'
 import { saveKey } from '@/lib/save-slot'
 import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel, WILDS_BUBBLE, wildsSwallows } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
-import { createMeshScratch } from '../voxel/greedy'
+import { createMeshScratch, saplingBounds } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
 import { flatFightSpot } from '../voxel/footing'
 import { slumpMask } from '../voxel/slump'
@@ -34,9 +34,9 @@ import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
-import { materialAt, MAT, isPlant, isHerb, isScatter, isHalfMat, isTopSlab, baseOf, isSolid, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHerb, isScatter, isSapling, isHalfMat, isTopSlab, baseOf, isSolid, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
-import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from '../voxel/mine'
+import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState, type RayHit } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
 import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
 import { salvageItems, salvageMessage } from '../voxel/salvage'
@@ -383,7 +383,7 @@ import { loadSeen, saveSeen, see, CELL, type Seen } from './discovery'
 import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
-import { createFloraRenderer } from './flora-mesh'
+import { createFloraRenderer, floraBounds, type FloraBox } from './flora-mesh'
 
 /**
  * A chest the player has opened: where it stands, its LIVE contents array, and the call that marks
@@ -464,6 +464,9 @@ const SEED = WORLD_SEED
 const H = DEFAULT_COLUMN.worldHeight
 // Load-ring radius lives in settings now (viewRadius, O panel) — the World loops read it live.
 const REACH = 6            // how far you can mine or place, in voxels
+/** How far the reticle's outline stands off the thing it outlines, in world units. Flat, not a
+ *  ratio: it has to clear an alpha card, and a fraction of a 0.55-tall tuft is not clearance. */
+const HL_PAD = 0.02
 /**
  * How far outside a hold's curtain wall its patrol comes out to meet you, in blocks.
  *
@@ -4177,7 +4180,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    */
   const dropGeo = useMemo(() => new THREE.BoxGeometry(0.28, 0.28, 0.28), [])
   const dropMats = useRef(new Map<number, THREE.Material>())
-  const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)), [])
+  // ★ A UNIT BOX, SCALED PER FRAME — it was a fixed 1.002 cube until 2026-09-09, which is why a
+  // tuft was outlined by the cube of air around it. The 1.002 lives at the call site now (see
+  // `fitHighlight`) because only the full-block case wants it.
+  const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), [])
   const pieces = useMemo(() => createPieceRenderer(), [])
   // Greg — built once, positioned once. Static NPC, no per-frame update beyond the aim check
   // below (which reads GREG_X/GREG_Z/GREG_Y, not the mesh, so the mesh itself never moves).
@@ -5071,6 +5077,126 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     if (!c) return AIR
     return c.get(wx - cx * SECTION, wy, wz - cz * SECTION)
   }, [])
+
+  /**
+   * ── ★ ONE READING OF "WHAT PLANT STANDS HERE", FOR TWO CONSUMERS (hoisted 2026-09-09) ────────
+   * This walk used to be an anonymous closure handed to `flora.sync`, which made it private to the
+   * renderer: the only thing in the world that could say what grew on a cell was the thing drawing
+   * it. The reticle now needs the same answer — to outline a tuft rather than the cube of air
+   * around it — and the ONE thing it must not do is re-derive it. A second walk would agree with
+   * this one until an edit moved the ground under exactly one of them, and then the outline would
+   * hug a plant that is not there, confidently.
+   *
+   * So it is hoisted rather than copied: `flora.sync` and the highlight call THIS, and cannot
+   * disagree about which cell holds what.
+   */
+  const plantProbe = useCallback((fx: number, fz: number) => {
+    const fcx = Math.floor(fx / SECTION), fcz = Math.floor(fz / SECTION)
+    const c = cols.current.get(key(fcx, fcz))
+    if (!c) return null
+    let y = c.heightAt(fx - fcx * SECTION, fz - fcz * SECTION)
+    let guard = 8
+    // Walk to the ACTUAL ground (edits move it). Ground cover reads as air to this walk — it
+    // is what we are looking FOR, so stopping on it would report the plant as the ground.
+    const clear = (m: number) => m === AIR || isPlant(m)
+    while (guard-- > 0 && !clear(voxel(fx, y + 1, fz))) y++
+    while (guard-- > 0 && y > 1 && voxel(fx, y, fz) === AIR) y--
+    // TURF, not TOPSOIL (2026-08-19): ground cover grows on every land's turf, so picking it
+    // has to accept the same set the generator planted it on.
+    const ground = voxel(fx, y, fz)
+    const m = voxel(fx, y + 1, fz)
+    if (!isPlant(m)) return null
+    // ⚠ SCATTER IS EXEMPT FROM THE TURF GATE, AND THIS IS THE PICKING HALF OF A DECISION THE
+    // GENERATOR ALREADY MADE (slice ③). `TURF` answers "can a plant GROW here"; a stone and a
+    // fallen branch LIE on whatever is beneath them, and a mushroom comes up on wet mud — which
+    // is outside TURF on purpose. Without this line scatter would GENERATE on marsh mud and
+    // then be unpickable there: visible, solid-looking, and inert. Read the material FIRST so
+    // this can ask about it — the old order gated on the ground before it knew what stood on it.
+    // ⚠ DO NOT "fix" this by widening TURF or by adding these materials to it. They are not
+    // grounds, and that predicate has been reached for wrongly three times now.
+    if (!isScatter(m) && !TURF.has(ground)) return null
+    // A tuft on a slumped lip grows from the half-height top, not from where a full block
+    // would have been — otherwise 19% of the garden's ground cover hovers half a voxel up.
+    // Fractional by design: the spot's y is only ever used to place a root.
+    const gy = isHalfCell(c, fx - fcx * SECTION, y, fz - fcz * SECTION) ? y - 0.5 : y
+    // ⚠ ASKS `isHerb` BEFORE FALLING THROUGH TO FLOWER. The old chain ended in an unguarded
+    // `: FLORA.FLOWER`, so every material that was not a tuft or tall grass rendered as a
+    // wildflower — which is exactly how four new plants would have shipped as pink blooms with
+    // nothing in the code looking wrong. Same family as the tex switch defaulting to the ore
+    // painter, one layer up.
+    // ⚠ SCATTER IS ASKED BEFORE THE FLOWER TAIL, for the exact reason the herb line above was
+    // added: an unguarded `: FLORA.FLOWER` renders every unrecognised material as a wildflower,
+    // and that is how four plants nearly shipped as pink blooms. These three would have been
+    // the fifth through seventh — swaying pink blooms where a boulder field should be.
+    const kind = m === MAT.TUFT ? FLORA.TUFT : m === MAT.TALL_GRASS ? FLORA.TALL
+      : m === MAT.LOOSE_ROCK ? FLORA.ROCK
+      : m === MAT.DEADFALL ? FLORA.DEADFALL
+      : m === MAT.MUSHROOM ? FLORA.MUSHROOM
+      : isHerb(m) ? FLORA.HERB : FLORA.FLOWER
+    // ★ A LOG'S AXIS COMES FROM THE NEIGHBOURING VOXEL, NOT FROM THE FIELD. The world already
+    // holds the answer — the run was written into it — so re-deriving it would mean resolving
+    // the land blend at ten neighbour columns to learn something the save knows for free. If
+    // neither X neighbour is deadfall the run lies along Z, which is also the right default for
+    // a one-cell remnant clipped by a dial change.
+    const alongX = kind === FLORA.DEADFALL
+      && (voxel(fx + 1, y + 1, fz) === MAT.DEADFALL || voxel(fx - 1, y + 1, fz) === MAT.DEADFALL)
+    // `ground` rides along because this walk has ALREADY resolved it — `mat` is the plant, and
+    // `ground` is the somewhere it stands. `flora-mesh` tints the blades from it (slice ②), and
+    // any later consumer that wants to know what a plant is rooted in gets it for free rather
+    // than re-walking the column.
+    return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind), mat: m, ground, alongX }
+  }, [voxel])
+
+  /**
+   * ── ★★ THE RETICLE OUTLINES WHAT IS DRAWN, NOT THE CELL IT SITS IN (2026-09-09) ──────────────
+   * Alex: *"when grass, flowers or some other misc item block is selected its outlining the whole
+   * block instead of just the item."* It was a fixed 1.002 cube at the cell centre, so a grass tuft
+   * — 0.7 wide, 0.55 tall, rooted 0.03 BELOW the cell floor — was wrapped in a box it shares no
+   * face with. Same defect as the sapling icon that drew a cube while the mesher drew a cross: two
+   * consumers of one source disagreeing about a property the source does not carry.
+   *
+   * ⚠ EVERY BOX BELOW IS MEASURED FROM THE THING THAT DRAWS IT, never restated here. Ground cover
+   * goes through `floraBounds`, which pushes the renderer's real vertices through the renderer's
+   * real instance matrix; a sapling goes through `saplingBounds`, which the mesher's own test holds
+   * against the vertices the mesher emitted. A hand-written table of per-kind boxes would have been
+   * a third of the work and would have gone stale, silently, the first time anyone re-tuned a
+   * width — a slightly-wrong outline is not something a test notices or a player reports.
+   *
+   * ★ AND IT FAILS TOWARD THE OLD BEHAVIOUR. Anything this cannot measure — a piece, an ordinary
+   * block, a plant whose column the probe cannot resolve — falls through to the cube, which is
+   * exactly what shipped before. The new path can be wrong about a plant; it cannot be wrong about
+   * a wall.
+   */
+  const fitHighlight = useCallback((hl: THREE.LineSegments, hit: RayHit) => {
+    const m = hit.material
+    let b: FloraBox | null = null
+    if (isPlant(m)) {
+      // ⚠ THE PROBE ANSWERS ABOUT A COLUMN, NOT ABOUT A CELL — it walks to the live ground and
+      // reports what stands on it. That is this cell only when the two agree, and `spot.y` is a
+      // GROUND height (fractional on a slumped lip, hence `ceil`), not a cell index. Without this
+      // check a reticle on a plant the probe did not pick would be handed another cell's box and
+      // outline something a block away from what you are pointing at.
+      const spot = plantProbe(hit.x, hit.z)
+      if (spot && Math.ceil(spot.y) + 1 === hit.y) {
+        b = floraBounds(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX)
+      }
+    } else if (isSapling(m)) {
+      b = saplingBounds(hit.x, hit.y, hit.z)
+    } else if (isHalfMat(m)) {
+      // A slab is half a cell of the block it is made from, and the bit says which half.
+      const y0 = isTopSlab(m) ? hit.y + 0.5 : hit.y
+      b = { x0: hit.x, x1: hit.x + 1, y0, y1: y0 + 0.5, z0: hit.z, z1: hit.z + 1 }
+    }
+    if (b) {
+      // A flat pad rather than a ratio: the outline has to clear an alpha card it is nearly
+      // coplanar with, and 0.2% of a 0.55-tall tuft is not clearance, it is z-fighting.
+      hl.position.set((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2)
+      hl.scale.set(b.x1 - b.x0 + HL_PAD, b.y1 - b.y0 + HL_PAD, b.z1 - b.z0 + HL_PAD)
+    } else {
+      hl.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5)
+      hl.scale.setScalar(1.002)
+    }
+  }, [plantProbe])
 
   /**
    * ★ COLLISION TREATS UNGENERATED SPACE AS SOLID, AND THAT IS THE WHOLE FIX FOR FALLING OFF THE
@@ -8415,62 +8541,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         const [gx, gz] = kk.split(',').map(Number)
         list.push({ key: kk, x0: gx * SECTION, z0: gz * SECTION })
       }
-      flora.sync(list, SEED, (fx, fz) => {
-        const fcx = Math.floor(fx / SECTION), fcz = Math.floor(fz / SECTION)
-        const c = cols.current.get(key(fcx, fcz))
-        if (!c) return null
-        let y = c.heightAt(fx - fcx * SECTION, fz - fcz * SECTION)
-        let guard = 8
-        // Walk to the ACTUAL ground (edits move it). Ground cover reads as air to this walk — it
-        // is what we are looking FOR, so stopping on it would report the plant as the ground.
-        const clear = (m: number) => m === AIR || isPlant(m)
-        while (guard-- > 0 && !clear(voxel(fx, y + 1, fz))) y++
-        while (guard-- > 0 && y > 1 && voxel(fx, y, fz) === AIR) y--
-        // TURF, not TOPSOIL (2026-08-19): ground cover grows on every land's turf, so picking it
-        // has to accept the same set the generator planted it on.
-        const ground = voxel(fx, y, fz)
-        const m = voxel(fx, y + 1, fz)
-        if (!isPlant(m)) return null
-        // ⚠ SCATTER IS EXEMPT FROM THE TURF GATE, AND THIS IS THE PICKING HALF OF A DECISION THE
-        // GENERATOR ALREADY MADE (slice ③). `TURF` answers "can a plant GROW here"; a stone and a
-        // fallen branch LIE on whatever is beneath them, and a mushroom comes up on wet mud — which
-        // is outside TURF on purpose. Without this line scatter would GENERATE on marsh mud and
-        // then be unpickable there: visible, solid-looking, and inert. Read the material FIRST so
-        // this can ask about it — the old order gated on the ground before it knew what stood on it.
-        // ⚠ DO NOT "fix" this by widening TURF or by adding these materials to it. They are not
-        // grounds, and that predicate has been reached for wrongly three times now.
-        if (!isScatter(m) && !TURF.has(ground)) return null
-        // A tuft on a slumped lip grows from the half-height top, not from where a full block
-        // would have been — otherwise 19% of the garden's ground cover hovers half a voxel up.
-        // Fractional by design: the spot's y is only ever used to place a root.
-        const gy = isHalfCell(c, fx - fcx * SECTION, y, fz - fcz * SECTION) ? y - 0.5 : y
-        // ⚠ ASKS `isHerb` BEFORE FALLING THROUGH TO FLOWER. The old chain ended in an unguarded
-        // `: FLORA.FLOWER`, so every material that was not a tuft or tall grass rendered as a
-        // wildflower — which is exactly how four new plants would have shipped as pink blooms with
-        // nothing in the code looking wrong. Same family as the tex switch defaulting to the ore
-        // painter, one layer up.
-        // ⚠ SCATTER IS ASKED BEFORE THE FLOWER TAIL, for the exact reason the herb line above was
-        // added: an unguarded `: FLORA.FLOWER` renders every unrecognised material as a wildflower,
-        // and that is how four plants nearly shipped as pink blooms. These three would have been
-        // the fifth through seventh — swaying pink blooms where a boulder field should be.
-        const kind = m === MAT.TUFT ? FLORA.TUFT : m === MAT.TALL_GRASS ? FLORA.TALL
-          : m === MAT.LOOSE_ROCK ? FLORA.ROCK
-          : m === MAT.DEADFALL ? FLORA.DEADFALL
-          : m === MAT.MUSHROOM ? FLORA.MUSHROOM
-          : isHerb(m) ? FLORA.HERB : FLORA.FLOWER
-        // ★ A LOG'S AXIS COMES FROM THE NEIGHBOURING VOXEL, NOT FROM THE FIELD. The world already
-        // holds the answer — the run was written into it — so re-deriving it would mean resolving
-        // the land blend at ten neighbour columns to learn something the save knows for free. If
-        // neither X neighbour is deadfall the run lies along Z, which is also the right default for
-        // a one-cell remnant clipped by a dial change.
-        const alongX = kind === FLORA.DEADFALL
-          && (voxel(fx + 1, y + 1, fz) === MAT.DEADFALL || voxel(fx - 1, y + 1, fz) === MAT.DEADFALL)
-        // `ground` rides along because this walk has ALREADY resolved it — `mat` is the plant, and
-        // `ground` is the somewhere it stands. `flora-mesh` tints the blades from it (slice ②), and
-        // any later consumer that wants to know what a plant is rooted in gets it for free rather
-        // than re-walking the column.
-        return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind), mat: m, ground, alongX }
-      })
+      flora.sync(list, SEED, plantProbe)
     }
 
     // Until the spawn column exists every lookup returns AIR, so gravity would drop the player
@@ -9101,7 +9172,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     const hl = highlight.current
     if (hl) {
       hl.visible = !!hit
-      if (hit) hl.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5)
+      if (hit) fitHighlight(hl, hit)
     }
 
     // ── ★ THE THREE AIMED VERBS (2026-08-13, Alex: "only work when on the item/person you are

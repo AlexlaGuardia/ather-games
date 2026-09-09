@@ -6,9 +6,9 @@
 // rather than something to notice by eye later.
 
 import { AIR, Section } from './section'
-import { greedyMesh, TRUNK_WIDTH, waterTopKey } from './greedy'
+import { greedyMesh, TRUNK_WIDTH, waterTopKey, saplingBounds } from './greedy'
 import { WOOD } from './trees'
-import { MAT, PLANT_MIN } from './depth'
+import { MAT, PLANT_MIN, SAPLING_MIN } from './depth'
 
 let pass = 0
 const fails: string[] = []
@@ -762,6 +762,54 @@ for (const S of [4, 16, 32]) {
   // never call generateColumn pass `null`, and they must keep meshing exactly as they did.
   const a1 = greedyMesh(pond()), a2 = greedyMesh(pond(), undefined, undefined, null, [0, 0, 0], null)
   eq(a1.quads, a2.quads, 'a null water surface changes nothing')
+}
+
+
+// ── the sapling outline: `saplingBounds` against the vertices the mesher actually emitted ──────
+// The reticle outlines a sapling with `saplingBounds`, which restates the emitter's rolls rather
+// than sharing a helper with it — deliberately, because a shared helper would allocate per LEAF in
+// the hot loop (see that function's header). This is the guard that makes the restatement safe:
+// it meshes a REAL sapling cell and measures the quads that came out. A copy checked against its
+// original's OUTPUT is not a hand-kept mirror.
+//
+// ⚠ AND IT IS CHECKED AT SEVERAL WORLD CELLS. Every roll — turn, width, jitter — comes from
+// `cellHash(worldX, worldY, worldZ)`, so one cell tests one hash. A drift that happens to agree at
+// the origin would sail through a single-cell check.
+{
+  const S = 16
+  let checked = 0
+  for (const [ox, oy, oz, lx, ly, lz] of [
+    [0, 0, 0, 3, 4, 5], [32, 64, -48, 7, 2, 11], [-160, 128, 96, 0, 15, 15], [1024, 32, 2048, 9, 9, 9],
+  ]) {
+    const sec = new Section(S)
+    sec.set(lx, ly, lz, SAPLING_MIN)
+    const r = greedyMesh(sec, undefined, undefined, null, [ox, oy, oz])
+    // A cross is two quads; anything else means the sapling branch did not run and every
+    // measurement below would be of an empty set. An assert with no input cannot fail.
+    eq(r.quads, 2, `a lone sapling at ${ox + lx},${oy + ly},${oz + lz} emits one cross (2 quads)`)
+
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity
+    for (let i = 0; i < r.positions.length; i += 3) {
+      const px = r.positions[i] + ox, py = r.positions[i + 1] + oy, pz = r.positions[i + 2] + oz
+      if (px < x0) x0 = px; if (py < y0) y0 = py; if (pz < z0) z0 = pz
+      if (px > x1) x1 = px; if (py > y1) y1 = py; if (pz > z1) z1 = pz
+    }
+    const b = saplingBounds(ox + lx, oy + ly, oz + lz)
+    // Float32 all the way through the mesher's position buffer, so the tolerance is that quantum
+    // at world scale — not a concession. A real drift is 1e-2 or larger.
+    const near = (a: number, c: number, face: string) =>
+      ok(Math.abs(a - c) < 1e-4, `sapling ${face} at ${ox + lx},${oy + ly},${oz + lz}: bounds ${a} vs emitted ${c}`)
+    near(b.x0, x0, 'x0'); near(b.y0, y0, 'y0'); near(b.z0, z0, 'z0')
+    near(b.x1, x1, 'x1'); near(b.y1, y1, 'y1'); near(b.z1, z1, 'z1')
+
+    // The complaint this exists to answer: it must be visibly less than the cell it stands in.
+    ok(b.x1 - b.x0 < 0.5, `sapling is narrower than half its cell (got ${(b.x1 - b.x0).toFixed(3)})`)
+    ok(b.y1 - b.y0 < 0.75, `sapling is shorter than its cell (got ${(b.y1 - b.y0).toFixed(3)})`)
+    // ...and rooted ON the cell floor, not floating in the middle of it.
+    eq(b.y0, oy + ly, 'a sapling is rooted at the cell floor')
+    checked++
+  }
+  eq(checked, 4, 'every sapling cell in the fixture was measured')
 }
 
 console.log(`\ngreedy mesher: ${pass} passed, ${fails.length} failed`)

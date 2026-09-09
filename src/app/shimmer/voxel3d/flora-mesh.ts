@@ -300,6 +300,177 @@ function buildCrossGeometry(width: number, height: number, yBase = 0): THREE.Buf
 }
 
 /**
+ * ── ★★★ THE SHAPE OF A PLANT, IN ONE PLACE, BECAUSE A SECOND CONSUMER ARRIVED ────────────────
+ * (2026-09-09, Alex: *"when grass, flowers or some other misc item block is selected its outlining
+ * the whole block instead of just the item."*)
+ *
+ * The reticle's wireframe was a fixed 1.002 cube at the cell centre while a tuft is drawn 0.7 wide,
+ * 0.55 tall and ROOTED 0.03 BELOW the cell floor — so the outline agreed with the plant about
+ * nothing except which cell it was in. This is the sapling-icon bug exactly (`greedy.ts` draws a
+ * cross, the icon drew a cube): two consumers deriving from one source and disagreeing about a
+ * property the source did not carry.
+ *
+ * ⚠⚠ AND THE OBVIOUS FIX IS THE ONE THIS FILE HAS ALREADY BEEN BURNED BY TWICE — a hand-written
+ * table of per-kind boxes beside the geometry that builds them. `CAP` says it ("EXPORTED SO A PROBE
+ * CANNOT MIRROR IT"), the geometry factories say it ("One definition, two consumers"), and both
+ * entries exist because a copy and its original agreed perfectly and were both wrong. A box table
+ * would go stale the first time anyone re-tunes a width, and it would go stale SILENTLY, because a
+ * slightly-wrong outline is not something a test notices or a player reports.
+ *
+ * So nothing below restates a number. `FLORA_PARTS` is the ONLY statement of what a cross-kind is
+ * built from — `createFloraRenderer` builds its buffers from it — and `floraBounds` measures the
+ * REAL transformed vertices of those same buffers through `floraMatrix`, which is the same function
+ * `sync` composes its instance matrices with. Change a width and the outline moves with it; there
+ * is no second place to forget.
+ */
+export const FLORA_PARTS: Record<number, ReadonlyArray<{ w: number; h: number; yBase?: number }>> = {
+  // Widths chosen against the jitter so a blade can never overhang its cell (w/2 + 0.15 <= 0.5).
+  [FLORA.TUFT]: [{ w: 0.7, h: 0.55 }],
+  [FLORA.TALL]: [{ w: 0.7, h: 1.05 }],
+  // Stem plus a small cross riding near its top — the head carries the colour.
+  [FLORA.FLOWER]: [{ w: 0.5, h: 0.62 }, { w: 0.3, h: 0.3, yBase: 0.55 }],
+  // A herb stands taller than a wildflower and shorter than tall grass: findable at a few blocks
+  // without hiding what is behind it. Body plus tip.
+  [FLORA.HERB]: [{ w: 0.55, h: 0.8 }, { w: 0.34, h: 0.34, yBase: 0.72 }],
+  // Chest-high: a stand of grain has to read as CULTIVATED, and that silhouette is what separates a
+  // field from a meadow. Unit height, because the planted feed scales it per growth phase.
+  [FLORA.CROP]: [{ w: 0.62, h: 1.0 }, { w: 0.42, h: 0.30, yBase: 0.72 }],
+}
+
+/**
+ * Where a kind's root sits above the spot's ground height, and how far it may wander inside its
+ * cell. ⚠ THE ROOTS ARE BELOW 1.0 ON PURPOSE: a root emerging from the ground plane hides the
+ * single-texel alpha seam that a root sitting exactly ON it re-manufactures. That 0.03 is also
+ * why a cell-aligned outline can never fit a plant — it starts before the cell does.
+ */
+export const FLORA_PLACE: Record<number, { root: number; jitter: number }> = {
+  [FLORA.TUFT]: { root: 0.97, jitter: 0.3 },
+  [FLORA.TALL]: { root: 0.97, jitter: 0.3 },
+  [FLORA.FLOWER]: { root: 0.97, jitter: 0.3 },
+  [FLORA.HERB]: { root: 0.97, jitter: 0.3 },
+  [FLORA.CROP]: { root: 0.97, jitter: 0.3 },
+  [FLORA.ROCK]: { root: 1.06, jitter: 0.5 },
+  [FLORA.DEADFALL]: { root: 1.12, jitter: 0 },
+  [FLORA.MUSHROOM]: { root: 0.99, jitter: 0.55 },
+}
+
+/** A stalk's height roll. Y only — a wider blade would thin the texture, not grow the plant. */
+export const floraGrow = (variant: number): number => 0.75 + variant * 0.5
+/** Scatter's size roll. All three axes for a stone; length is held at 1.0 for a log (see below). */
+export const floraScatterScale = (variant: number): number => 0.8 + variant * 0.45
+
+const Y_UP = new THREE.Vector3(0, 1, 0)
+
+/**
+ * ★ THE ONE PLACEMENT DERIVATION. `sync` composes every instance matrix through this, and
+ * `floraBounds` measures through it, so the outline cannot drift from the plant it outlines.
+ *
+ * `y` is the spot's GROUND height, fractional on a slumped lip — not a cell index.
+ */
+export function floraMatrix(
+  kind: number, x: number, y: number, z: number, variant: number, alongX: boolean | undefined,
+  out: THREE.Matrix4, off: THREE.Vector3, quat: THREE.Quaternion, scl: THREE.Vector3,
+): THREE.Matrix4 {
+  // Deterministic per-spot jitter off the variant roll: offset within the cell, a turn, a little
+  // size. Same spot, same blades, forever.
+  const jx = (variant * 7.13) % 1 - 0.5, jz = (variant * 3.71) % 1 - 0.5
+  const place = FLORA_PLACE[kind] ?? FLORA_PLACE[FLORA.TUFT]
+  if (kind === FLORA.DEADFALL) {
+    // Quarter turn for a Z-run; no jitter along the log's own axis or the run gaps show.
+    quat.setFromAxisAngle(Y_UP, alongX ? 0 : Math.PI / 2)
+    off.set(x + 0.5, y + place.root, z + 0.5)
+    const sz = floraScatterScale(variant)
+    scl.set(1, sz, sz)            // ⚠ NOT the length axis — that stays 1.0 so runs butt up
+  } else if (kind === FLORA.ROCK) {
+    quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
+    off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
+    const sz = floraScatterScale(variant)
+    scl.set(sz, sz * 0.75, sz)    // squat: a stone lies ON the ground, it does not stand
+  } else if (kind === FLORA.MUSHROOM) {
+    quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
+    off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
+    const sz = floraScatterScale(variant)
+    scl.set(sz, sz, sz)
+  } else {
+    off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
+    quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
+    scl.set(1, floraGrow(variant), 1)
+  }
+  return out.compose(off, quat, scl)
+}
+
+/** Local vertex positions per kind, built ONCE from the same buffers the renderer draws. */
+let partVerts: Map<number, Float32Array[]> | null = null
+function vertsFor(kind: number): Float32Array[] {
+  if (!partVerts) {
+    partVerts = new Map()
+    for (const k of Object.keys(FLORA_PARTS)) {
+      const kind2 = Number(k)
+      partVerts.set(kind2, FLORA_PARTS[kind2].map(p => {
+        const g = buildCrossGeometry(p.w, p.h, p.yBase ?? 0)
+        const a = (g.getAttribute('position').array as Float32Array).slice()
+        g.dispose()
+        return a
+      }))
+    }
+    // ⚠ SCATTER READS ITS REAL FACTORIES, NOT A RESTATED PRIMITIVE. `logGeo.rotateZ` is what makes
+    // a log LIE DOWN and `translate` is what stacks a cap on its stalk — measuring a fresh
+    // `CylinderGeometry(...)` here would produce a box around a STANDING log, internally consistent
+    // and wrong, which is the mirror bug this file's own header warns about.
+    const grab = (g: THREE.BufferGeometry): Float32Array => {
+      const a = (g.getAttribute('position').array as Float32Array).slice()
+      g.dispose()
+      return a
+    }
+    partVerts.set(FLORA.ROCK, [grab(floraRockGeo())])
+    partVerts.set(FLORA.DEADFALL, [grab(floraLogGeo())])
+    partVerts.set(FLORA.MUSHROOM, [grab(floraShroomStemGeo()), grab(floraShroomCapGeo())])
+  }
+  return partVerts.get(kind) ?? []
+}
+
+export interface FloraBox { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number }
+
+const bMtx = new THREE.Matrix4()
+const bOff = new THREE.Vector3()
+const bQuat = new THREE.Quaternion()
+const bScl = new THREE.Vector3()
+const bVec = new THREE.Vector3()
+
+/**
+ * The world-space box a drawn plant actually occupies.
+ *
+ * ★ MEASURED, NOT DECLARED. Every vertex of the kind's real geometry is pushed through the real
+ * instance matrix and the extremes are kept — so a rotated cross gets the extent of the ROTATED
+ * cross (between 0.71 and 1.0 of its width, depending where the roll put it) rather than the
+ * corner-to-corner box of an axis-aligned one, which would be up to 41% too wide and would read as
+ * a loose outline rather than a wrong one. Cheap enough for the frame loop: one hit cell, at most
+ * 26 vertices, and the local buffers are built once.
+ *
+ * `y` is the spot's GROUND height, exactly as `PlantProbe` reports it.
+ */
+export function floraBounds(
+  kind: number, x: number, y: number, z: number, variant: number, alongX?: boolean,
+): FloraBox | null {
+  const parts = vertsFor(kind)
+  if (!parts.length) return null
+  floraMatrix(kind, x, y, z, variant, alongX, bMtx, bOff, bQuat, bScl)
+  let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity
+  for (const v of parts) {
+    for (let i = 0; i < v.length; i += 3) {
+      bVec.set(v[i], v[i + 1], v[i + 2]).applyMatrix4(bMtx)
+      if (bVec.x < x0) x0 = bVec.x
+      if (bVec.y < y0) y0 = bVec.y
+      if (bVec.z < z0) z0 = bVec.z
+      if (bVec.x > x1) x1 = bVec.x
+      if (bVec.y > y1) y1 = bVec.y
+      if (bVec.z > z1) z1 = bVec.z
+    }
+  }
+  return { x0, y0, z0, x1, y1, z1 }
+}
+
+/**
  * ★ THE PIXELS MOVED TO `tex/flora-tex.ts` AND THESE ARE NOW WRAPPERS (2026-08-12).
  * Ground cover has no block face, so its ITEM ICON had nothing to derive from and grass was on the
  * list for Alex to hand-paint. But the world draws grass from CODE, so the icon needs the same
@@ -349,24 +520,23 @@ export function createFloraRenderer(): FloraRenderer {
   const tallTex = makeBladeTexture(TALL_SEED, TALL_BLADES)
   const headTex = makeHeadTexture()
 
-  // Widths chosen against the jitter so a blade can never overhang its cell (w/2 + 0.15 ≤ 0.5):
-  // on a terrace step, grass leaning out over the riser reads as floating from below.
-  const tuftGeo = buildCrossGeometry(0.7, 0.55)
-  const tallGeo = buildCrossGeometry(0.7, 1.05)
-  const stemGeo = buildCrossGeometry(0.5, 0.62)
-  const headGeo = buildCrossGeometry(0.3, 0.3, 0.55)   // a small cross riding near the stem's top
-  // A herb stands taller than a wildflower and shorter than tall grass: it has to be findable from
-  // a few blocks away (it is the thing you came for) without hiding what is behind it.
-  const herbGeo = buildCrossGeometry(0.55, 0.8)
-  // ⚠ A CROP STANDS TALLER THAN A HERB AND THAT IS INFORMATION, NOT DRESSING. A herb is findable
-  // from a distance because it is rare; a crop has to read as *cultivated* — a stand of grain is
-  // chest-high and that silhouette is what separates a field from a meadow. Unit height, because
-  // the PLANTED feed scales it per growth phase and the wild feed leaves it at full.
-  const cropGeo = buildCrossGeometry(0.62, 1.0)
+  // ★ EVERY WIDTH AND HEIGHT COMES FROM `FLORA_PARTS`, WHICH THE RETICLE'S OUTLINE ALSO MEASURES.
+  // The reasoning behind each number lives on the table; restating one here would give the outline
+  // and the plant two sources that agree until somebody re-tunes exactly one of them.
+  const crossGeo = (kind: number, part = 0): THREE.BufferGeometry => {
+    const p = FLORA_PARTS[kind][part]
+    return buildCrossGeometry(p.w, p.h, p.yBase ?? 0)
+  }
+  const tuftGeo = crossGeo(FLORA.TUFT)
+  const tallGeo = crossGeo(FLORA.TALL)
+  const stemGeo = crossGeo(FLORA.FLOWER)
+  const headGeo = crossGeo(FLORA.FLOWER, 1)
+  const herbGeo = crossGeo(FLORA.HERB)
+  const cropGeo = crossGeo(FLORA.CROP)
   // The head rides at the top of a full-height stalk. Scaled with the stalk by the instance matrix,
   // so a half-grown planted crop carries a half-height head rather than a floating one.
-  const cropHeadGeo = buildCrossGeometry(0.42, 0.30, 0.72)
-  const tipGeo = buildCrossGeometry(0.34, 0.34, 0.72)
+  const cropHeadGeo = crossGeo(FLORA.CROP, 1)
+  const tipGeo = crossGeo(FLORA.HERB, 1)
 
   // ── ★★ SCATTER IS SOLID AND DOES NOT SWAY (2026-08-19, slice ③) ──────────────────────────────
   // Every material above injects a sway into its vertex shader, and that is correct for an alpha
@@ -468,7 +638,6 @@ export function createFloraRenderer(): FloraRenderer {
   const scl = new THREE.Vector3()
   const off = new THREE.Vector3()
   const tint = new THREE.Color()
-  const Y_AXIS = new THREE.Vector3(0, 1, 0)
 
   // target / BLADE_GREEN, memoised per ground — one divide per material ever, not per blade.
   const grassMul = new Map<number, THREE.Color>()
@@ -494,7 +663,15 @@ export function createFloraRenderer(): FloraRenderer {
       const x = x0 + dx, z = z0 + dz
       const p = probe(x, z)
       if (!p) continue
-      out.push({ x, y: p.y, z, kind: p.kind, variant: p.variant, mat: p.mat, ground: p.ground })
+      // ⚠⚠ `alongX` WAS DROPPED HERE AND NO LOG HAS EVER LAIN ALONG ITS RUN (found 2026-09-09 by
+      // the reticle-outline guard, which measured a log across the axis the probe said it ran on).
+      // The probe derives the axis from the neighbouring voxel and documents at length why it reads
+      // the world rather than the field; this line then copied every OTHER field into the Spot, so
+      // `s.alongX` was always undefined and `floraMatrix` took the quarter-turn branch for all of
+      // them. Every X-run rendered as logs turned across it — which also defeats the `scl(1, sz,
+      // sz)` reasoning one function down, whose whole point is that consecutive cells butt up into
+      // a continuous trunk. A computed field with no consumer, wearing a passing suite.
+      out.push({ x, y: p.y, z, kind: p.kind, variant: p.variant, mat: p.mat, ground: p.ground, alongX: p.alongX })
     }
     cache.set(k, out)
     return out
@@ -510,16 +687,9 @@ export function createFloraRenderer(): FloraRenderer {
       let wT = 0, wL = 0, wF = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0
       for (const c of cols) {
         for (const s of spotsFor(c.key, c.x0, c.z0, seed, probe)) {
-          // Deterministic per-spot jitter off the variant roll: offset within the cell, a turn,
-          // a little size. Same spot, same blades, forever.
-          const jx = (s.variant * 7.13) % 1 - 0.5, jz = (s.variant * 3.71) % 1 - 0.5
-          // Base sits a shade BELOW the surface top: a root emerging from the ground plane hides
-          // any single-texel alpha seam; a root exactly ON it re-manufactures the hover.
-          off.set(s.x + 0.5 + jx * 0.3, s.y + 0.97, s.z + 0.5 + jz * 0.3)
-          quat.setFromAxisAngle(Y_AXIS, s.variant * Math.PI * 2)
-          const grow = 0.75 + s.variant * 0.5
-          scl.set(1, grow, 1)
-          mtx.compose(off, quat, scl)
+          // ★ ONE PLACEMENT DERIVATION, SHARED WITH THE RETICLE'S OUTLINE. Jitter, turn, root
+          // height and grow all live in `floraMatrix`; see its header for why they are not here.
+          floraMatrix(s.kind, s.x, s.y, s.z, s.variant, s.alongX, mtx, off, quat, scl)
           // ── ★★ SCATTER TAKES ITS OWN TRANSFORM, BEFORE THE SHARED ONE IS APPLIED ─────────────
           // The `mtx` composed above is right for a stalk: a full random turn about Y and a
           // `grow` scale on Y only. Both are wrong here. A LOG must be turned to its RUN's axis and
@@ -528,27 +698,13 @@ export function createFloraRenderer(): FloraRenderer {
           // avoiding it. A STONE may turn freely (it has no axis) but must be scaled on all three,
           // not stretched vertically into a menhir.
           if (s.kind === FLORA.ROCK || s.kind === FLORA.DEADFALL || s.kind === FLORA.MUSHROOM) {
-            const sz = 0.8 + s.variant * 0.45
             if (s.kind === FLORA.DEADFALL) {
-              // Quarter turn for a Z-run; no jitter along the log's own axis or the run gaps show.
-              quat.setFromAxisAngle(Y_AXIS, s.alongX ? 0 : Math.PI / 2)
-              off.set(s.x + 0.5, s.y + 1.12, s.z + 0.5)
-              scl.set(1, sz, sz)          // ⚠ NOT the length axis — that stays 1.0 so runs butt up
-              mtx.compose(off, quat, scl)
               wG++
               if (nG < CAP.log) { logs.setMatrixAt(nG, mtx); logs.setColorAt(nG, tint.set(DEADFALL_COLOR)); nG++ }
             } else if (s.kind === FLORA.ROCK) {
-              quat.setFromAxisAngle(Y_AXIS, s.variant * Math.PI * 2)
-              off.set(s.x + 0.5 + jx * 0.5, s.y + 1.06, s.z + 0.5 + jz * 0.5)
-              scl.set(sz, sz * 0.75, sz)  // squat: a stone lies ON the ground, it does not stand
-              mtx.compose(off, quat, scl)
               wR++
               if (nR < CAP.rock) { rocks.setMatrixAt(nR, mtx); rocks.setColorAt(nR, rockTint(s.ground)); nR++ }
             } else {
-              quat.setFromAxisAngle(Y_AXIS, s.variant * Math.PI * 2)
-              off.set(s.x + 0.5 + jx * 0.55, s.y + 0.99, s.z + 0.5 + jz * 0.55)
-              scl.set(sz, sz, sz)
-              mtx.compose(off, quat, scl)
               wS++
               if (nS < CAP.shroom) {
                 shroomStems.setMatrixAt(nS, mtx); shroomCaps.setMatrixAt(nS, mtx)
