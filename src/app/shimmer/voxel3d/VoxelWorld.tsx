@@ -5167,9 +5167,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    * exactly what shipped before. The new path can be wrong about a plant; it cannot be wrong about
    * a wall.
    */
-  const fitHighlight = useCallback((hl: THREE.LineSegments, hit: RayHit) => {
+  const fitHighlight = useCallback((hl: THREE.LineSegments, hit: RayHit): boolean => {
     const m = hit.material
     let b: FloraBox | null = null
+    // ⚠ CLEARED FIRST, ON EVERY PATH. Only the ground-cover branch below re-sets it, so looking
+    // from a tuft to a stone wall retracts the border in the same frame. A clear that lives only
+    // on the "no hit" path leaves the last plant lit while you stare at something else.
+    flora.clearHighlight()
     if (isPlant(m)) {
       // ⚠ THE PROBE ANSWERS ABOUT A COLUMN, NOT ABOUT A CELL — it walks to the live ground and
       // reports what stands on it. That is this cell only when the two agree, and `spot.y` is a
@@ -5178,6 +5182,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // outline something a block away from what you are pointing at.
       const spot = plantProbe(hit.x, hit.z)
       if (spot && Math.ceil(spot.y) + 1 === hit.y) {
+        // ── ★★ THE BORDER REPLACES THE BOX WHERE THERE IS A BORDER TO DRAW (2026-09-09) ────────
+        // Alex, on the fitted box: *"is there no way to just darken the border of the item when
+        // looking at it?"* For ground cover there is, and `flora.setHighlight` draws it on the
+        // plant's own silhouette. When it takes the mark the wireframe stands down entirely —
+        // showing both would be a box around an outlined plant, which is worse than either.
+        //
+        // ⚠ IT RETURNS FALSE FOR A KIND IT CANNOT MARK, and that is the whole safety of this
+        // branch: an unhandled kind falls through to the fitted box below rather than to no
+        // reticle at all. Nothing under the crosshair is ever unmarked.
+        if (flora.setHighlight(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX)) return false
         b = floraBounds(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX)
       }
     } else if (isSapling(m)) {
@@ -5196,7 +5210,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       hl.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5)
       hl.scale.setScalar(1.002)
     }
-  }, [plantProbe])
+    return true
+  }, [plantProbe, flora])
 
   /**
    * ★ COLLISION TREATS UNGENERATED SPACE AS SOLID, AND THAT IS THE WHOLE FIX FOR FALLING OFF THE
@@ -9171,8 +9186,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     const hit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, voxel)
     const hl = highlight.current
     if (hl) {
-      hl.visible = !!hit
-      if (hit) fitHighlight(hl, hit)
+      // ⚠ CLEARED ON EVERY FRAME THAT DOES NOT SET IT. The border is a mesh with its own lifetime,
+      // not a property of the reticle, so looking away from a plant has to retract it explicitly —
+      // state whose only retractor is the thing that stopped running stays on screen.
+      if (!hit) { flora.clearHighlight(); hl.visible = false }
+      else hl.visible = fitHighlight(hl, hit)
     }
 
     // ── ★ THE THREE AIMED VERBS (2026-08-13, Alex: "only work when on the item/person you are
@@ -9243,6 +9261,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       if (hl) {
         const hm = hit ? voxel(hit.x, hit.y, hit.z) : AIR
         hl.visible = hm === STRUCTURE || hm === STRUCTURE_HALF
+        // In build mode the GHOST is the preview and the reticle marks only what LMB deconstructs.
+        // A plant border here would be a third mark competing with both.
+        flora.clearHighlight()
       }
       // The ghost sits in the EMPTY cell before what you are looking at — the same `px,py,pz` that
       // block placement uses, so both verbs agree about where "in front of" is.

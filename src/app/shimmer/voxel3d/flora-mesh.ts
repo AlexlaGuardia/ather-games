@@ -270,6 +270,14 @@ export interface FloraRenderer {
    */
   invalidateAll(): void
   tick(elapsed: number): void
+  /**
+   * Draw the selection border on ONE plant — the reticle's whole job for ground cover.
+   * Same geometry, same texture, same sway as the plant it marks; see `outlineMaterial`.
+   * `y` is the spot's GROUND height, exactly as `PlantProbe` reports it.
+   */
+  setHighlight(kind: number, x: number, y: number, z: number, variant: number, alongX?: boolean): boolean
+  /** No plant under the reticle. */
+  clearHighlight(): void
   dispose(): void
 }
 
@@ -335,6 +343,19 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<{ w: number; h: number; y
   // Chest-high: a stand of grain has to read as CULTIVATED, and that silhouette is what separates a
   // field from a meadow. Unit height, because the planted feed scales it per growth phase.
   [FLORA.CROP]: [{ w: 0.62, h: 1.0 }, { w: 0.42, h: 0.30, yBase: 0.72 }],
+}
+
+/**
+ * How hard each kind bends in the wind. ★ EXPORTED AND SHARED WITH THE SELECTION OUTLINE: the
+ * outline is the same geometry at the same matrix, so if its vertex program bends by a different
+ * amount the dark border walks off the blade. Two call sites, one number.
+ */
+export const FLORA_SWAY: Record<number, number> = {
+  [FLORA.TUFT]: 0.05,
+  [FLORA.TALL]: 0.1,
+  [FLORA.FLOWER]: 0.08,
+  [FLORA.HERB]: 0.07,
+  [FLORA.CROP]: 0.05,
 }
 
 /**
@@ -495,26 +516,102 @@ const makeHeadTexture = (size = 8): THREE.DataTexture => toTexture(headPixels(si
 export function createFloraRenderer(): FloraRenderer {
   const uTime = { value: 0 }
 
+  /**
+   * ★ THE SWAY INJECTION, SHARED BY THE PLANT AND ITS SELECTION OUTLINE (2026-09-09).
+   * Both materials MUST bend by the identical amount or the dark border slides off the blade it is
+   * drawn on — the outline is the same geometry at the same matrix, so any difference in the vertex
+   * program shows up as two plants a few centimetres apart. One function, called twice.
+   *
+   * ⚠ THE SWAY IS GATED ON `USE_INSTANCING`, which is why the outline is drawn as a ONE-INSTANCE
+   * InstancedMesh and not as a plain Mesh. A plain Mesh compiles without that define, stands
+   * perfectly still, and detaches from a swaying plant — correct-looking code, wrong-looking world.
+   */
+  const injectSway = (shader: { uniforms: Record<string, unknown>; vertexShader: string }, amp: number): void => {
+    shader.uniforms.uTime = uTime
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + [
+        '{',
+        '  #ifdef USE_INSTANCING',
+        '  float ph = (instanceMatrix[3].x + instanceMatrix[3].z) * 0.35;',
+        '  float w = uv.y * ' + amp.toFixed(3) + ';',
+        '  transformed.x += sin(uTime * 1.5 + ph) * w;',
+        '  transformed.z += cos(uTime * 1.1 + ph * 1.3) * w * 0.7;',
+        '  #endif',
+        '}',
+      ].join('\n'))
+  }
+
   /** Lambert so flora lives under the same day-night lights as the pieces; the sway is injected
    *  and the material stays ONE compiled program per mesh (audit's whole point). */
   const swayMaterial = (map: THREE.Texture, amp: number): THREE.MeshLambertMaterial => {
     const m = new THREE.MeshLambertMaterial({ map, alphaTest: 0.4, side: THREE.DoubleSide })
+    m.onBeforeCompile = (shader) => injectSway(shader, amp)
+    return m
+  }
+
+  /**
+   * ── ★★★ THE SELECTION BORDER: DARKEN THE ITEM'S OWN EDGE TEXELS ──────────────────────────────
+   * Alex, 2026-09-09, on the fitted wireframe box that replaced the full-block one: *"thats a
+   * little better ... but is there no way to just darken the border of the item when looking at
+   * it?"* Right instinct, and a box was always a compromise — a box around a grass tuft describes
+   * the tuft's EXTENT, and what a player reads as "this one" is its SHAPE.
+   *
+   * ★ SO NOTHING IS GROWN AND NOTHING IS ADDED. This is the plant's own geometry, its own texture
+   * and its own sway, with a fragment program that keeps ONLY the texels that are opaque AND touch
+   * a transparent neighbour — the sprite's silhouette, one texel wide — and paints them dark.
+   * Interior texels discard, so the plant beneath shows through untouched.
+   *
+   * ⚠ THE INVERTED-HULL OUTLINE (a scaled-up dark copy behind the original) IS WRONG FOR AN ALPHA
+   * CARD and was rejected on paper rather than by trying it: a card is half gaps, so the enlarged
+   * dark copy is visible THROUGH the gaps between the blades, and a tuft comes out with a dark
+   * smear behind it instead of a rim around it. It is the right trick for the closed solids, and
+   * they use it (see `outlineHullMaterial`).
+   *
+   * ⚠ ONE TEXEL, MEASURED FROM THE TEXTURE, NOT DECLARED. `1.0 / map.image.width` — the blades are
+   * 16px and the heads are 8px, so a hard-coded offset would be a half-texel rim on one and a
+   * double on the other. Reading it off the texture also means a re-paint at a new resolution keeps
+   * a one-texel border by construction. Pixel art with NearestFilter: one texel is the convention.
+   */
+  const outlineMaterial = (map: THREE.Texture, amp: number): THREE.MeshBasicMaterial => {
+    const m = new THREE.MeshBasicMaterial({
+      map, alphaTest: 0.4, side: THREE.DoubleSide, color: 0x000000,
+      // Same geometry at the same matrix as the plant means identical depth: without an offset the
+      // two z-fight and the border strobes. depthWrite off so the border never occludes the plant.
+      depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    })
     m.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = uTime
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime;')
-        .replace('#include <begin_vertex>', `#include <begin_vertex>
-{
-  #ifdef USE_INSTANCING
-  float ph = (instanceMatrix[3].x + instanceMatrix[3].z) * 0.35;
-  float w = uv.y * ${amp.toFixed(3)};
-  transformed.x += sin(uTime * 1.5 + ph) * w;
-  transformed.z += cos(uTime * 1.1 + ph * 1.3) * w * 0.7;
-  #endif
-}`)
+      injectSway(shader, amp)
+      const texel = 1 / ((map.image as { width?: number })?.width || 16)
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <map_fragment>', '#include <map_fragment>\n' + [
+          '{',
+          '  float aT = ' + texel.toFixed(6) + ';',
+          // Only opaque texels can be a border; transparent ones fall through to the standard
+          // alpha test below and are discarded there.
+          '  if (diffuseColor.a >= 0.4) {',
+          '    float nL = texture2D(map, vMapUv + vec2(-aT, 0.0)).a;',
+          '    float nR = texture2D(map, vMapUv + vec2( aT, 0.0)).a;',
+          '    float nD = texture2D(map, vMapUv + vec2(0.0, -aT)).a;',
+          '    float nU = texture2D(map, vMapUv + vec2(0.0,  aT)).a;',
+          // An interior texel is surrounded by opaque neighbours: drop it and let the plant show.
+          '    if (min(min(nL, nR), min(nD, nU)) >= 0.4) discard;',
+          '    diffuseColor.rgb = vec3(0.0);',
+          '  }',
+          '}',
+        ].join('\n'))
     }
     return m
   }
+
+  /**
+   * The closed solids get the outline the cards could not use: a dark copy of the hull, grown
+   * along its normals and drawn BACK faces only, so it peeks out exactly at the silhouette. A
+   * stone, a log and a mushroom cap are closed and convex enough for it, and they carry no alpha
+   * for a texel test to read.
+   */
+  const outlineHullMaterial = (): THREE.MeshBasicMaterial =>
+    new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, depthWrite: false })
 
   const bladeTex = makeBladeTexture(TUFT_SEED, TUFT_BLADES)
   const tallTex = makeBladeTexture(TALL_SEED, TALL_BLADES)
@@ -571,18 +668,18 @@ export function createFloraRenderer(): FloraRenderer {
   const shroomStemMat = solidMaterial()
   const shroomCapMat = solidMaterial()
 
-  const herbMat = swayMaterial(bladeTex, 0.07)
+  const herbMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.HERB])
   // Sway a touch stiffer than a herb: a laden crop is heavier and a field that ripples like grass
   // reads as grass. Its own tiles, so a crop is never accidentally drawn with a blade texture.
   const cropStalkTex = toTexture(cropStalkPixels(3), 16)
   const cropHeadTex = toTexture(cropHeadPixels(8), 8)
-  const cropMat = swayMaterial(cropStalkTex, 0.05)
-  const cropHeadMat = swayMaterial(cropHeadTex, 0.05)
-  const tipMat = swayMaterial(headTex, 0.07)
-  const tuftMat = swayMaterial(bladeTex, 0.05)
-  const tallMat = swayMaterial(tallTex, 0.1)
-  const stemMat = swayMaterial(bladeTex, 0.08)
-  const headMat = swayMaterial(headTex, 0.08)
+  const cropMat = swayMaterial(cropStalkTex, FLORA_SWAY[FLORA.CROP])
+  const cropHeadMat = swayMaterial(cropHeadTex, FLORA_SWAY[FLORA.CROP])
+  const tipMat = swayMaterial(headTex, FLORA_SWAY[FLORA.HERB])
+  const tuftMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.TUFT])
+  const tallMat = swayMaterial(tallTex, FLORA_SWAY[FLORA.TALL])
+  const stemMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.FLOWER])
+  const headMat = swayMaterial(headTex, FLORA_SWAY[FLORA.FLOWER])
 
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, CAP.tuft)
   const talls = new THREE.InstancedMesh(tallGeo, tallMat, CAP.tall)
@@ -623,6 +720,40 @@ export function createFloraRenderer(): FloraRenderer {
 
   const group = new THREE.Group()
   group.add(tufts, talls, stems, heads, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps)
+
+  // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
+  // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
+  // sway is gated on `USE_INSTANCING`, so a plain Mesh would compile without it, stand still, and
+  // shed its border the moment the wind moved the plant. Capacity 1 because only one thing is ever
+  // under the reticle.
+  //
+  // `grow` is 1 for the cards — their border is drawn IN PLACE by darkening edge texels, so
+  // growing them would be wrong twice over — and slightly above 1 for the solids, whose back-face
+  // hull has to peek out past the silhouette to be seen at all.
+  const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number }[] = [
+    { kind: FLORA.TUFT, geo: tuftGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.TUFT]), grow: 1 },
+    { kind: FLORA.TALL, geo: tallGeo, mat: outlineMaterial(tallTex, FLORA_SWAY[FLORA.TALL]), grow: 1 },
+    { kind: FLORA.FLOWER, geo: stemGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.FLOWER]), grow: 1 },
+    { kind: FLORA.FLOWER, geo: headGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.FLOWER]), grow: 1 },
+    { kind: FLORA.HERB, geo: herbGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
+    { kind: FLORA.HERB, geo: tipGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
+    { kind: FLORA.CROP, geo: cropGeo, mat: outlineMaterial(cropStalkTex, FLORA_SWAY[FLORA.CROP]), grow: 1 },
+    { kind: FLORA.CROP, geo: cropHeadGeo, mat: outlineMaterial(cropHeadTex, FLORA_SWAY[FLORA.CROP]), grow: 1 },
+    { kind: FLORA.ROCK, geo: rockGeo, mat: outlineHullMaterial(), grow: 1.14 },
+    { kind: FLORA.DEADFALL, geo: logGeo, mat: outlineHullMaterial(), grow: 1.1 },
+    { kind: FLORA.MUSHROOM, geo: shroomStemGeo, mat: outlineHullMaterial(), grow: 1.12 },
+    { kind: FLORA.MUSHROOM, geo: shroomCapGeo, mat: outlineHullMaterial(), grow: 1.12 },
+  ]
+  const hlMeshes = hlDefs.map(d => {
+    const im = new THREE.InstancedMesh(d.geo, d.mat, 1)
+    im.count = 0
+    im.frustumCulled = false
+    im.renderOrder = 3       // after the plants, so the border is never sorted behind its own plant
+    return { ...d, mesh: im }
+  })
+  for (const h of hlMeshes) group.add(h.mesh)
+  const hlMtx = new THREE.Matrix4()
+  const hlGrow = new THREE.Vector3()
 
   // Memoised per ground — a Color object per material ever, not per stone.
   const rockCols = new Map<number, THREE.Color>()
@@ -801,7 +932,31 @@ export function createFloraRenderer(): FloraRenderer {
     invalidate(colKey) { cache.delete(colKey) },
     invalidateAll() { cache.clear() },
     tick(elapsed) { uTime.value = elapsed },
+
+    setHighlight(kind, x, y, z, variant, alongX) {
+      // ★ THE SAME PLACEMENT DERIVATION THE PLANT ITSELF USES. If this composed its own matrix the
+      // border would be a second opinion about where the plant is, and the two would disagree the
+      // first time anyone re-tuned a jitter.
+      floraMatrix(kind, x, y, z, variant, alongX, hlMtx, off, quat, scl)
+      let drew = false
+      for (const h of hlMeshes) {
+        if (h.kind !== kind) { h.mesh.count = 0; continue }
+        if (h.grow === 1) h.mesh.setMatrixAt(0, hlMtx)
+        else h.mesh.setMatrixAt(0, mtx.copy(hlMtx).scale(hlGrow.setScalar(h.grow)))
+        h.mesh.instanceMatrix.needsUpdate = true
+        h.mesh.count = 1
+        drew = true
+      }
+      // ⚠ A kind with no outline mesh silently marks NOTHING, which reads to a player as the
+      // reticle being broken rather than as a missing case. The caller falls back to the wireframe
+      // box on false, so an unhandled kind degrades to the old behaviour instead of to nothing.
+      return drew
+    },
+    clearHighlight() {
+      for (const h of hlMeshes) h.mesh.count = 0
+    },
     dispose() {
+      for (const h of hlMeshes) { h.mesh.dispose(); (h.mat as THREE.Material).dispose() }
       tuftGeo.dispose(); tallGeo.dispose(); stemGeo.dispose(); headGeo.dispose()
       herbGeo.dispose(); tipGeo.dispose()
       tuftMat.dispose(); tallMat.dispose(); stemMat.dispose(); headMat.dispose()
