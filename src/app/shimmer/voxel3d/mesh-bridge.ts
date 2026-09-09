@@ -21,6 +21,10 @@ export function toGeometry(a: MeshAttrs): THREE.BufferGeometry {
   g.setAttribute('normal', new THREE.BufferAttribute(a.normals, 3))
   g.setAttribute('color', new THREE.BufferAttribute(a.colors, 3))
   g.setAttribute('aEmissive', new THREE.BufferAttribute(a.emissive, 1))
+  // ★ AO AS ITS OWN ATTRIBUTE, because the textured world cannot read `color` (see attrs.ts).
+  // It is set unconditionally: the flat control material ignores it, and a geometry that carries it
+  // only sometimes is a geometry whose shading depends on which material happened to build it.
+  g.setAttribute('aAo', new THREE.BufferAttribute(a.ao, 1))
   // One float per vertex is the entire cost of texturing — UVs are derived in-shader.
   g.setAttribute('aLayer', new THREE.BufferAttribute(a.layers, 1))
   // Leaves only — crossed quads have no face for the shader's UV derivation to key off. See attrs.ts.

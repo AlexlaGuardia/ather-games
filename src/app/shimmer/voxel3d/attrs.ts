@@ -307,6 +307,24 @@ export interface MeshAttrs {
   colors: Float32Array
   emissive: Float32Array
   /**
+   * The ambient-occlusion multiplier, on its OWN buffer.
+   *
+   * ★★ IT USED TO RIDE INSIDE `colors` AND THAT STOPPED REACHING THE SCREEN (2026-09-08).
+   * The 2026-08-12 design folded AO into the vertex colour precisely so no new buffer and no shader
+   * change were needed — correct at the time, because the world ran the flat vertex-colour material.
+   * Since the texture array was wired in, the world runs `tex/atlas.ts`, which sets
+   * `vertexColors: false` (it must: the tile already carries the colour, and multiplying by the
+   * palette again darkens every surface twice). The palette and the occlusion were multiplied
+   * together in one buffer, so turning the palette off turned the occlusion off with it — measured
+   * at 54.5% of vertices carrying a term, mean multiplier 0.885, all of it discarded.
+   *
+   * ⚠ It is a SEPARATE buffer rather than a second look at `colors` because the two terms cannot be
+   * un-multiplied per fragment: the shader has the tile, not the palette entry. Keeping them apart
+   * is what lets the flat control material and the textured world read the same mesh and each take
+   * the term it needs. One float per vertex.
+   */
+  ao: Float32Array
+  /**
    * Texture-array layer per vertex.
    *
    * ★ BUILT HERE, WHICH MEANS BUILT IN THE WORKER. The texture spike computed this host-side from
@@ -341,7 +359,7 @@ export interface MeshAttrs {
 
 /** Every buffer in a MeshAttrs, for structuredClone transfer. Zero-copy across the worker boundary. */
 export const attrBuffers = (a: MeshAttrs): ArrayBuffer[] =>
-  [a.positions.buffer, a.normals.buffer, a.colors.buffer, a.emissive.buffer,
+  [a.positions.buffer, a.normals.buffer, a.colors.buffer, a.ao.buffer, a.emissive.buffer,
    a.layers.buffer, a.indices.buffer,
    ...(a.uv ? [a.uv.buffer] : []),
    ...(a.depth ? [a.depth.buffer] : [])] as ArrayBuffer[]
@@ -462,6 +480,7 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
   const positions = new Float32Array(verts * 3)
   const normals = new Float32Array(verts * 3)
   const colors = new Float32Array(verts * 3)
+  const ao = new Float32Array(verts)
   const emissive = new Float32Array(verts)
   const layers = new Float32Array(verts)
   const indices = new Uint32Array(idxLen)
@@ -478,6 +497,10 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
     if (p.dy !== 0) for (let j = 0; j < n; j++) positions[(v + j) * 3 + 1] += p.dy
     normals.set(a.normals, v * 3)
     colors.set(a.colors, v * 3)
+    // ⚠ AO is copied here for the same reason `colors` is, and it has to be listed separately now
+    // that it is its own buffer: a merge that forgets one attribute produces a geometry whose
+    // vertex count is right and whose shading is another section's.
+    ao.set(a.ao, v)
     emissive.set(a.emissive, v)
     layers.set(a.layers, v)
     // ⚠ A PART WITHOUT DEPTH FILLS WITH THE -1 SENTINEL, NOT WITH ZERO. Zero is a real depth and
@@ -503,7 +526,7 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
     i += a.indices.length
   }
 
-  return { positions, normals, colors, emissive, layers, uv, depth, indices, quads }
+  return { positions, normals, colors, ao, emissive, layers, uv, depth, indices, quads }
 }
 
 /**
@@ -535,6 +558,7 @@ const EMPTY_DEPTH = new Float32Array(0)
 export function buildAttrs(mesh: MeshResult, withUV = false, withDepth = false): MeshAttrs {
   const n = mesh.materials.length
   const colors = new Float32Array(n * 3)
+  const aoOut = new Float32Array(n)
   const emissive = new Float32Array(n)
   const layers = new Float32Array(n)
   for (let i = 0; i < n; i++) {
@@ -546,6 +570,7 @@ export function buildAttrs(mesh: MeshResult, withUV = false, withDepth = false):
     // Inline hex→linear-ish float rather than THREE.Color, which is the whole reason this file has
     // no three import. Three's default is sRGB-in, and Lambert with vertexColors expects that.
     const ao = AO_CURVE[mesh.ao[i]] ?? 1
+    aoOut[i] = ao
     colors[i * 3] = (((hex >> 16) & 255) / 255) * ao
     colors[i * 3 + 1] = (((hex >> 8) & 255) / 255) * ao
     colors[i * 3 + 2] = ((hex & 255) / 255) * ao
@@ -566,6 +591,7 @@ export function buildAttrs(mesh: MeshResult, withUV = false, withDepth = false):
     positions: mesh.positions.slice(),
     normals: mesh.normals.slice(),
     colors,
+    ao: aoOut,
     emissive,
     layers,
     uv,

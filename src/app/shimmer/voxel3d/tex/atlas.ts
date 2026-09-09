@@ -13,10 +13,20 @@
 
 import * as THREE from 'three'
 import { buildTileArray, LAYER_COUNT } from './tiles'
+import { buildReliefArray } from './relief'
 import { LIGHT_DECL_GLSL, lightApply, createLightUniforms, type LightUniforms } from '../light-glsl'
 
 export interface TileArray {
   texture: THREE.DataArrayTexture
+  /**
+   * Per-texel surface normals for the same layers, in the same order (see `relief.ts`).
+   *
+   * ★ BUILT AND RETURNED TOGETHER WITH THE COLOUR, never fetched separately, because the two must
+   * agree about layer indexing or every block wears another block's relief — and that failure is
+   * quiet, since both halves stay internally consistent and the world merely lights oddly. One call
+   * site, one size, one layer order, no second lookup table.
+   */
+  relief: THREE.DataArrayTexture
   size: number
   /** The raw bytes, kept so the HUD can draw a reference swatch at true pixel size. */
   data: Uint8Array
@@ -49,7 +59,30 @@ export function makeTileArray(size: number, renderer?: THREE.WebGLRenderer): Til
   // constantly. Anisotropy is the cheapest fix available and costs nothing when unsupported.
   tex.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 8
   tex.needsUpdate = true
-  return { texture: tex, size, data }
+
+  // ── ★★ THE RELIEF MAP, AND ITS FILTERING IS THE OPPOSITE OF THE COLOUR'S ON PURPOSE ──────────
+  // The albedo is NEAREST because crisp texels are the entire aesthetic. The normal map is LINEAR,
+  // and that pairing IS the look: sharp pixels lit by a smooth surface. Sampling the normals
+  // NEAREST instead would light each texel as its own flat facet, so a wall would read as a grid of
+  // tiny tiles catching the sun at slightly different angles — which is not "more pixel art", it is
+  // the foil effect the blur in `relief.ts` exists to prevent, reintroduced one layer further on.
+  //
+  // ⚠ `NoColorSpace`, not sRGB. These bytes are a direction, not a colour; letting three apply the
+  // sRGB transfer curve would bend every normal toward the flat end non-linearly — a world that is
+  // subtly under-lit in shadow and over-lit in highlight, with nothing anywhere to point at.
+  const relief = new THREE.DataArrayTexture(buildReliefArray(data, size), size, size, LAYER_COUNT)
+  relief.format = THREE.RGBAFormat
+  relief.type = THREE.UnsignedByteType
+  relief.colorSpace = THREE.NoColorSpace
+  relief.wrapS = THREE.RepeatWrapping
+  relief.wrapT = THREE.RepeatWrapping
+  relief.magFilter = THREE.LinearFilter
+  relief.minFilter = THREE.LinearMipmapLinearFilter
+  relief.generateMipmaps = true
+  relief.anisotropy = tex.anisotropy
+  relief.needsUpdate = true
+
+  return { texture: tex, relief, size, data }
 }
 
 /**
@@ -77,6 +110,10 @@ export interface VoxelTexMaterial {
   setMipmapped: (on: boolean) => void
   /** Per-block value jitter, 0 = off. See the shader note on why this is not a vertex attribute. */
   setJitter: (amount: number) => void
+  /** How much of the mesher's AO term to apply, 0 = the flat look this material shipped with. */
+  setAo: (amount: number) => void
+  /** Per-texel relief strength, 0 = flat faces. Alex's dial. */
+  setRelief: (amount: number) => void
   /** Cartoon levers — uniform writes, never a recompile. See settings.ts. */
   setCartoon: (v: Record<string, number>) => void
 }
@@ -84,6 +121,19 @@ export interface VoxelTexMaterial {
 /** How much a block's brightness may drift from its neighbours. Small on purpose — this is meant to
  *  read as "stone is not uniform", not as a checkerboard. */
 export const DEFAULT_JITTER = 0.07
+
+/** How much of the mesher's ambient-occlusion term reaches the pixels. 1 = all of it, 0 = the flat
+ *  look this material shipped with while the term was being discarded. */
+export const DEFAULT_AO = 1
+
+/**
+ * Strength of the per-texel relief, 0 = flat faces (exactly the old look).
+ *
+ * ⚠ THIS IS A LOOK CALL AND IT IS ALEX'S. 0.6 is a starting position, not a ruling: enough that a
+ * mortar course and a plank groove catch the sun, short of the wet-plastic reading that full
+ * strength gives a surface whose silhouette never agrees with its shading.
+ */
+export const DEFAULT_RELIEF = 0.6
 
 /**
  * Lambert + a texture array, injected rather than written from scratch.
@@ -102,14 +152,23 @@ export function createTexturedVoxelMaterial(tiles: TileArray, light: LightUnifor
 
   // `onBeforeCompile` does not run until the first render, so a setter called before that would be
   // writing to a uniform object that does not exist yet. Hold the wanted value and apply on compile.
-  let live: { uJitter: { value: number } } | null = null
+  let live: {
+    uJitter: { value: number }
+    uAo: { value: number }
+    uReliefAmt: { value: number }
+  } | null = null
   let liveCartoon: Record<string, { value: number }> | null = null
   let jitter = DEFAULT_JITTER
+  let ao = DEFAULT_AO
+  let relief = DEFAULT_RELIEF
   let pendingCartoon: Record<string, number> | null = null
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTiles = { value: tiles.texture }
     shader.uniforms.uJitter = { value: jitter }
+    shader.uniforms.uAo = { value: ao }
+    shader.uniforms.uRelief = { value: tiles.relief }
+    shader.uniforms.uReliefAmt = { value: relief }
     // ★ CARTOON LEVERS LIVE HERE TOO, AS UNIFORMS ON THIS SAME PROGRAM. Switching the world to
     // textures must not lose the look, and a second material per style would be one shader program
     // per style — the allocation shape that got this page blocked from WebGL. See settings.ts.
@@ -123,7 +182,7 @@ export function createTexturedVoxelMaterial(tiles: TileArray, light: LightUnifor
     if (pendingCartoon) for (const [k, val] of Object.entries(pendingCartoon)) {
       if (liveCartoon[k]) liveCartoon[k].value = val
     }
-    live = shader.uniforms as { uJitter: { value: number } }
+    live = shader.uniforms as unknown as NonNullable<typeof live>
 
     shader.vertexShader = mustReplace(
       shader.vertexShader,
@@ -131,8 +190,10 @@ export function createTexturedVoxelMaterial(tiles: TileArray, light: LightUnifor
       `#include <common>
 attribute float aLayer;
 attribute float aEmissive;
+attribute float aAo;
 varying float vLayer;
 varying float vEmissive;
+varying float vAo;
 varying vec3 vVoxPos;
 varying vec3 vVoxNormal;
 varying vec3 vWorldPos;`,
@@ -144,6 +205,7 @@ varying vec3 vWorldPos;`,
       `#include <begin_vertex>
 vLayer = aLayer;
 vEmissive = aEmissive;
+vAo = aAo;
 vVoxPos = position;
 vVoxNormal = normal;
 // ⚠ WORLD position, separately from the object-space one above, and both are needed.
@@ -166,9 +228,13 @@ uniform float uShadowLift;
 #include <common>
 ${LIGHT_DECL_GLSL}
 uniform sampler2DArray uTiles;
+uniform sampler2DArray uRelief;
 uniform float uJitter;
+uniform float uAo;
+uniform float uReliefAmt;
 varying float vLayer;
 varying float vEmissive;
+varying float vAo;
 varying vec3 vVoxPos;
 varying vec3 vVoxNormal;
 varying vec3 vWorldPos;
@@ -200,7 +266,24 @@ float hashBlock(vec3 p) {
 // Alpha of the sampled tile — the emissive MASK (see writeOre), so only the crystal inside an ore
 // block glows and not the host rock around it. Global rather than a varying: it is produced and
 // consumed within one fragment, two chunks apart.
-float gTileEmissive = 0.0;`,
+float gTileEmissive = 0.0;
+// The tile UV, computed once in <color_fragment> and read again by the relief block a few chunks
+// later. Same reason as gTileEmissive above: produced and consumed within one fragment, and the two
+// MUST be the same value or the normal map and the colour describe different points on the tile.
+vec2 gTileUv = vec2(0.0);
+
+// ── ★ THE TANGENT FRAME, FREE ON AXIS-ALIGNED FACES ──────────────────────────────────────────
+// A normal map is in tangent space, so it needs u and v as world directions. The usual cost is a
+// tangent ATTRIBUTE per vertex; here every quad is an axis-aligned unit cube face and the UV
+// derivation below already picks the two in-plane axes, so the frame is those same two axes and
+// costs nothing. ⚠ THE BRANCHES HERE MUST MATCH THE UV BRANCHES EXACTLY — u and v swapped, or a
+// sign dropped, tilts the relief along the wrong axis and lights every wall as though the sun came
+// from ninety degrees off. relief.test.ts pins the map; this pins where the map is pointed.
+void tileFrame(vec3 an, out vec3 T, out vec3 B) {
+  if (an.y > 0.5)      { T = vec3(1.0, 0.0, 0.0);  B = vec3(0.0, 0.0, 1.0); }
+  else if (an.x > 0.5) { T = vec3(0.0, 0.0, 1.0);  B = vec3(0.0, -1.0, 0.0); }
+  else                 { T = vec3(1.0, 0.0, 0.0);  B = vec3(0.0, -1.0, 0.0); }
+}`,
       'fragment shader',
     )
 
@@ -223,14 +306,67 @@ float gTileEmissive = 0.0;`,
   vec2 tileUv = an.y > 0.5
     ? vVoxPos.xz
     : (an.x > 0.5 ? vec2(vVoxPos.z, -vVoxPos.y) : vec2(vVoxPos.x, -vVoxPos.y));
+  gTileUv = tileUv;
   vec4 tile = texture(uTiles, vec3(tileUv, vLayer));
   diffuseColor.rgb *= tile.rgb;
+  // ── ★★ AMBIENT OCCLUSION, WHICH THIS MATERIAL SPENT A MONTH COMPUTING AND DISCARDING ────────
+  // vertexColors is off here for a good reason (see the material note), and the mesher's AO term
+  // used to live INSIDE that vertex colour — so wiring the texture array into the world silently
+  // switched the corner shading off with it. Measured before the fix: 54.5% of vertices at Moonwell
+  // Glade carried a term, mean multiplier 0.885, none of it reaching a pixel.
+  //
+  // It arrives on its own aAo attribute now and multiplies the ALBEDO, which is the same path the
+  // flat control material puts it on: the Lambert term and the render-light field both read
+  // diffuseColor, so a corner is occluded from the sun and from a lantern alike — which is what
+  // occlusion means. ⚠ It is the SHORT-RANGE term under render-light's long-range one; if a corner
+  // ever reads dark twice, this dial and LIGHT_LOOK are the pair to look at together, not either
+  // one alone.
+  diffuseColor.rgb *= mix(1.0, vAo, uAo);
   gTileEmissive = tile.a;
   // Value-only jitter, deliberately not hue: shifting hue per block would fight the palette and read
   // as noise. Ore is exempt — a crystal that varies block to block reads as inconsistent material
   // rather than as natural variation, and its whole job is to be recognisable at a glance.
   if (uJitter > 0.0 && tile.a < 0.5) {
     diffuseColor.rgb *= 1.0 + (hashBlock(blockCoord()) - 0.5) * 2.0 * uJitter;
+  }
+}`,
+      'fragment shader',
+    )
+
+    // ── ★★★ THE RELIEF: WHERE A BLOCK FACE STOPS BEING A FLAT PANEL ─────────────────────────────
+    // Injected at `<normal_fragment_maps>` because that is where three has just finished deciding
+    // what `normal` is and has not yet lit anything with it — read off `meshlambert.glsl.js`, which
+    // orders color_fragment (96) → normal_fragment_begin (102) → normal_fragment_maps (103) →
+    // lights_lambert_fragment (107). Perturbing after the lighting would change nothing at all and
+    // look exactly like a relief map too weak to see.
+    //
+    // ⚠⚠ `normal` IS IN VIEW SPACE and the tangent frame is in world space, so the perturbed normal
+    // is transformed by `viewMatrix` on the way back. Skipping that does not blank the screen: it
+    // ties the lighting to the CAMERA, so the world's shading swims as the keeper turns, which reads
+    // as a shader bug in the sun rather than in this line.
+    //
+    // ★ AND THE GEOMETRIC NORMAL IS DELIBERATELY LEFT ALONE FOR EVERYTHING ELSE. `cnrm` below still
+    // drives face shading, the outline, and — the one that would actually break — `lightApply`,
+    // which steps half a block ALONG THE NORMAL to find the air cell in front of the face. A
+    // perturbed normal there would step into a neighbouring cell on any textured surface and sample
+    // the wrong column's light. Relief changes how a face catches light; it must not change which
+    // cell the face is standing next to.
+    shader.fragmentShader = mustReplace(
+      shader.fragmentShader,
+      '#include <normal_fragment_maps>',
+      `#include <normal_fragment_maps>
+{
+  if (uReliefAmt > 0.0) {
+    vec3 an = abs(vVoxNormal);
+    vec3 T, B;
+    tileFrame(an, T, B);
+    vec3 nmap = texture(uRelief, vec3(gTileUv, vLayer)).xyz * 2.0 - 1.0;
+    // The dial scales the TANGENT components and the vector is renormalised, so 0 is exactly flat
+    // and 1 is exactly what relief.ts baked — a lerp of the whole vector toward (0,0,1) would do
+    // the same thing more slowly and read as if the depth constant had moved.
+    nmap.xy *= uReliefAmt;
+    vec3 bumped = normalize(T * nmap.x + B * nmap.y + normalize(vVoxNormal) * nmap.z);
+    normal = normalize((viewMatrix * vec4(bumped, 0.0)).xyz);
   }
 }`,
       'fragment shader',
@@ -277,6 +413,14 @@ float gTileEmissive = 0.0;`,
       // No `needsUpdate` — this is a uniform value, not a shader recompile. Setting needsUpdate here
       // would rebuild the program on every keypress for nothing.
       if (live) live.uJitter.value = amount
+    },
+    setAo: (amount: number) => {
+      ao = amount
+      if (live) live.uAo.value = amount
+    },
+    setRelief: (amount: number) => {
+      relief = amount
+      if (live) live.uReliefAmt.value = amount
     },
     setCartoon: (v: Record<string, number>) => {
       // Held until compile for the same reason as the jitter: `onBeforeCompile` has not run before
