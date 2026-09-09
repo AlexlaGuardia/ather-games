@@ -36,6 +36,7 @@ def ring_point(angle_deg, radius=R, z=0.0):
 
 
 SEAT_ANGLES = {
+    0: [],            # an UNCUT vessel: raw braid, no word yet, no seat — a real stowed state (`move: null`)
     1: [-90],
     2: [-110, -70],
     3: [-124, -90, -56],
@@ -145,6 +146,6 @@ def render_one(tier, seats):
 
 if __name__ == "__main__":
     for tier in (0, 1, 2, 3):
-        seat_counts = (1,) if tier == 0 else (1, 2, 3)
+        seat_counts = (1,) if tier == 0 else (0, 1, 2, 3)   # the floor is always cut for one letter
         for seats in seat_counts:
             render_one(tier, seats)

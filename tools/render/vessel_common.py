@@ -470,6 +470,13 @@ def build_woven_ring(major_r, strand_r, seat_angles_deg, mat, n_strands=2, seat_
     # made the filter read the majority of the ring as a negative-length "sliver" and drop it.
     # Span by point COUNT instead — correct for a wrapped run and for a normal one alike.
     runs = [r for r in runs if len(r) * step >= min_run_deg or len(runs) == 1]
+    # ★ FIX 2026-09-09: an UNCUT ring (no seats, `SEAT_ANGLES[0]`) is ONE run from 0 to 358.5 and the
+    # tube stopped a step short of where it began — a 1.5° nick at the seam, which on a braid reads
+    # as a BREAK (seen on the first t1-s0 render). A run nothing interrupts is closed by coming back
+    # to its first angle a full turn later; the weave phase is continuous there because n_periods
+    # is an integer, so the strand meets itself.
+    if len(runs) == 1 and not forb:
+        runs[0] = runs[0] + [runs[0][0] + 360.0]
 
     parts = []
     signs = [1] if n_strands == 1 else [1, -1]
