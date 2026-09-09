@@ -11,6 +11,27 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔦 Shimmer — **THE BRACELET CARD DRAWS THE RENDER, AND AN UNCUT VESSEL IS A RAW BRAID** (2026-09-09 pm, hub lane) · *Last touched 2026-09-09 ~16:05 ET — ✅ **DEPLOYED `BUILD_ID 3qcfImIsMVeEfWi9-7eqS`, 184 chunks, from `d3dae36`**. Verified from the SERVED bytes: the render path `/models/props/vessels/bracelet-t` sits in exactly one chunk (`b0d1a37562e30526.js`), served md5 == disk md5, negative control 0 hits, the new `bracelet-t2-s0.png` answers 200 on the public tunnel, pm2 `ather-games` online. panel-fixture 137/0, keeper-tabs 17/0, vessels 96/0, gems 44/0, tsc 7 (baseline), canon exit 0. 0 unpushed.*
+
+**Alex called SHEET-v4 good.** So the item-first `VesselCard` stops drawing an SVG bracelet and mounts the Cycles render for its tier and seat count (`2100e1a`), with the written letters drawn over the render's own voids — the empty seat is the mesh's, so card and render can never disagree about what empty looks like. Ten frames re-rendered at the default `SAMPLES=160`.
+
+### Seat centres are projected, not eyeballed
+`tools/render/vessel_seat_probe.py` runs `render_one`'s camera and prints each seat centre in the render's 512px space via `world_to_camera_view`; the table in `vessel-card.tsx` is pasted from it and checked against the pixels. Identical across tiers to 0.2px (the seat sits on the ring; the tier only changes the strand). The arc is NOT symmetric about the front seat because the camera is off-axis on purpose — a symmetric table would have been the eyeballed one.
+
+### ⚠ The render is not 25 min an object
+The 09-09 note priced a 160-sample object at ~25 min; measured today it is **~17 s a frame**, ten frames in under four minutes. The three cut-off runs it was explaining were something else. Judge at 32 for form if you like, but 160 is not a cost worth planning around.
+
+### An uncut vessel is a real state (`4b2b836`)
+A stowed vessel with `move: null` ("cut it for a word you hold…") has no seat yet; drawing it with a void reports a seat it does not have. `SEAT_ANGLES[0]` renders a raw braid for tiers 1–3 (the floor is always cut for one letter). ⚠ **The first s0 frame had a nick at the seam**: a ring nothing interrupts is ONE run from 0 to 358.5° and the tube stopped a step short of its start. Seated rings never hit it (their runs end at a seat gap), so no seated frame changed. Closed by returning an uninterrupted run to its first angle a full turn later.
+
+### ⛔ ALEX'S CALL, in order
+1. **The CARD with real art** — `ather.games/shimmer/dev/panel`, gear tab, item look. The bench is the proposal; `VesselRack` (what `I` opens) still draws the item chip. Promote only after this read.
+2. **The glove** — twigs on a mitten. Needs a new form, not a tweak.
+3. The `X` cord-cross on an empty seat — he let it stand on the sheet; it is the same X on the card.
+
+### Files
+`src/app/shimmer/dev/panel/vessel-card.tsx` · `tools/render/vessel_{common,bracelet,seat_probe}.py` · `public/models/props/vessels/bracelet-t*-s*.png` (13 frames)
+
 ## 🔦 Shimmer — **A VESSEL BEARS THE SEATS ITS WORD NEEDS, AND THE BRAID WAS CUT TWICE AS WIDE AS THE SEAT** (2026-09-09, play lane) · *Last touched 2026-09-09 — `b565bd0` **LIVE** in `BUILD_ID eh8mAIFBqcUZjAuwtQPn6` (verified: ancestry + the new scenario string in the built chunk with a positive AND a negative control, served md5 == disk == public tunnel). `a638eb7` / `036c34f` / `9ce3a3d` committed + pushed, **NOT deployed** — none of it changes what a player sees until the art is judged. panel-fixture **137/0** (was 88), gems 44, vessels 96, loadout 27, imbue 22, dev-pages 232, dev-back 41, keeper-chrome 69 — exit codes read directly, not off tail lines. tsc 7 (baseline).*
 
 ### The canon bug: three seats in every vessel, forever
