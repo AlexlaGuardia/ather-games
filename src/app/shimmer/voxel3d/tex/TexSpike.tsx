@@ -24,7 +24,7 @@ import { createMeshScratch } from '../../voxel/greedy'
 import { columnHeight } from '../../voxel/height'
 import { buildAttrs } from '../attrs'
 import { toGeometry, createVoxelMaterial } from '../mesh-bridge'
-import { makeTileArray, createTexturedVoxelMaterial, DEFAULT_JITTER, type TileArray } from './atlas'
+import { makeTileArray, createTexturedVoxelMaterial, DEFAULT_JITTER, DEFAULT_AO, DEFAULT_RELIEF, type TileArray } from './atlas'
 import { layerOf, faceOfNormal } from './tiles'
 import { TileStrip } from './TileStrip'
 
@@ -45,6 +45,12 @@ export default function TexSpike() {
   const [textured, setTextured] = useState(true)
   const [mips, setMips] = useState(true)
   const [jitter, setJitter] = useState(true)
+  // ★ THE TWO DIALS THIS PAGE EXISTS TO LET ALEX JUDGE (2026-09-08). Both are uniform writes, so a
+  // toggle is instant and never recompiles a program — which is the whole reason an A/B is possible
+  // here at all. Relief is the per-texel normal map; AO is the mesher's corner term, which the
+  // textured path discarded entirely until 55d14f1.
+  const [relief, setRelief] = useState(true)
+  const [ao, setAo] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
   // ── generate once, off the first paint so the HUD message is actually seen ──────────────────────
@@ -106,6 +112,8 @@ export default function TexSpike() {
       if (e.code === 'Digit2') setTextured(true)
       if (e.code === 'KeyM') setMips(m => !m)
       if (e.code === 'KeyV') setJitter(v => !v)
+      if (e.code === 'KeyR') setRelief(v => !v)
+      if (e.code === 'KeyO') setAo(v => !v)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -119,7 +127,7 @@ export default function TexSpike() {
         <hemisphereLight args={['#cfe6ff', '#3b3a4a', 1.5]} />
         <directionalLight position={[80, 200, 40]} intensity={1.5} />
         <ambientLight intensity={0.35} />
-        {built && <Patches built={built} textured={textured} mips={mips} jitter={jitter} onError={setErr} />}
+        {built && <Patches built={built} textured={textured} mips={mips} jitter={jitter} relief={relief} ao={ao} onError={setErr} />}
         <FlyCam />
         <PointerLockControls />
       </Canvas>
@@ -136,10 +144,12 @@ export default function TexSpike() {
         <div className="text-white/70 mt-1">
           mode: {textured ? 'TEXTURED' : 'FLAT COLOUR (control)'} · mipmaps: {mips ? 'on' : 'OFF'}
           <br />per-block variation: {jitter ? 'on' : 'OFF'}
+          <br />relief (normal map): {relief ? `on ${DEFAULT_RELIEF}` : 'OFF'} · ambient occlusion: {ao ? 'on' : 'OFF'}
         </div>
         <div className="mt-1.5 text-white/45">
           click to look · WASD · space up · ctrl down · shift fast<br />
           1 flat · 2 textured · M mipmaps · V per-block variation<br />
+          <span className="text-amber-300/90">R relief · O ambient occlusion</span> — the HD pair; R off is the pre-09-08 look<br />
           <span className="text-white/30">?cam=x,y,z&amp;look=x,y,z pins the shot</span>
         </div>
         <div className="mt-1.5 text-white/35 leading-snug">
@@ -174,11 +184,13 @@ function layerAttr(materials: Uint16Array, normals: Float32Array): Float32Array 
   return out
 }
 
-function Patches({ built, textured, mips, jitter, onError }: {
+function Patches({ built, textured, mips, jitter, relief, ao, onError }: {
   built: Built[]
   textured: boolean
   mips: boolean
   jitter: boolean
+  relief: boolean
+  ao: boolean
   onError: (s: string) => void
 }) {
   const { gl } = useThree()
@@ -196,6 +208,17 @@ function Patches({ built, textured, mips, jitter, onError }: {
   const flat = useMemo(() => createVoxelMaterial(), [])
 
   useEffect(() => { m32.setMipmapped(mips); m64.setMipmapped(mips) }, [m32, m64, mips])
+  // ⚠ OFF is exactly 0, not a small number. The control in an A/B has to be the ABSENCE of the
+  // feature, or "off" is just a weaker version of it and the comparison answers a question nobody
+  // asked. On is the shipped default, so this page always A/Bs what the world actually runs.
+  useEffect(() => {
+    const r = relief ? DEFAULT_RELIEF : 0
+    m32.setRelief(r); m64.setRelief(r)
+  }, [m32, m64, relief])
+  useEffect(() => {
+    const v = ao ? DEFAULT_AO : 0
+    m32.setAo(v); m64.setAo(v)
+  }, [m32, m64, ao])
   useEffect(() => {
     const a = jitter ? DEFAULT_JITTER : 0
     m32.setJitter(a); m64.setJitter(a)
