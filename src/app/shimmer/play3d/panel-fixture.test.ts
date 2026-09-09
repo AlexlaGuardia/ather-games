@@ -231,6 +231,64 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
   wipe()
 }
 
+// ── F. THE SEAT COUNT IS THE WORD'S OWN NUMBER ───────────────────────────────────────────────
+// ★ WHY THIS SECTION EXISTS (2026-09-09). The brief was amended 2026-09-04: *"each vessel is unique
+// with a job … if the move it's meant to represent has one slot then it only needs the one slot."*
+// The item-first card had `[0,1,2].map` — three seats in every vessel, forever — and a `cap =
+// VESSEL_CAP` default standing ready to supply the wrong number to any caller that forgot. On screen
+// an unwritten bracelet drew three voids into a braid the width of one, and read as DAMAGE rather
+// than as capacity. Nothing was red: the fixture was green at 88/0 the whole time, because no assert
+// in this file had ever been told what a seat count IS.
+//
+// ⚠ The check is against `lettersOf` — what the BIND itself reads — and never against a literal.
+// An assert that says "three" here is the same defect wearing a test's clothes.
+{
+  for (const { id } of PANEL_SCENARIOS) {
+    const plan = planPanel(id)
+    for (const kind of VESSELS) {
+      const made = plan.wordFor[kind]
+      if (!made) {
+        ok(plan.worn[kind].length === 0,
+           `${id}/${kind}: a vessel bearing no word seats no letters (found ${plan.worn[kind].length})`)
+        continue
+      }
+      const m = moveById(made)
+      ok(!!m, `${id}/${kind}: wordFor names a move the registry actually has (${made})`)
+      const need = m ? lettersOf(m, plan.birth).length : -1
+      ok(need >= 1 && need <= VESSEL_CAP,
+         `★ ${id}/${kind}: ${made} asks for ${need} seats — one to three, never zero and never more than the cap`)
+      ok(plan.worn[kind].length <= need,
+         `★★ ${id}/${kind}: ${plan.worn[kind].length} letters seated in a vessel that bears ${need} — a vessel cannot hold more than its word asks for`)
+    }
+  }
+}
+
+// ── G. `dark` AND `partial` KEEP THE WORD WHILE THE BAND IS UNBOUND ──────────────────────────
+// ★ THE ONE THAT CAUGHT THE REAL SHAPE. Reading the seat count off `slots` looks right and is wrong
+// for exactly the two scenarios the seats exist to show: both deliberately unbind the band while the
+// vessel goes on bearing its word. A seat count sourced from `slots` renders ZERO seats there — the
+// panel would draw a gem floating in a vessel with nowhere to put it.
+{
+  const dark = planPanel('dark')
+  for (const kind of VESSELS) {
+    ok(!!dark.wordFor[kind], `★★ dark/${kind}: the vessel still bears its word with nothing written in it`)
+    ok(dark.worn[kind].length === 0, `★★ dark/${kind}: every seat is empty (found ${dark.worn[kind].length})`)
+    const b = BAND_FOR_VESSEL[kind]
+    if (b >= 0) ok(dark.slots[b] === null,
+                   `★ dark/${kind}: an unwritten vessel binds NOTHING — the brief calls a vessel finished only when every seat is filled`)
+  }
+
+  const partial = planPanel('partial')
+  const pb = BAND_FOR_VESSEL.bracelet
+  if (partial.worn.bracelet.length === 1 && partial.wordFor.bracelet) {
+    const m = moveById(partial.wordFor.bracelet)
+    const need = m ? lettersOf(m, partial.birth).length : 0
+    ok(need > 1, `★★★ partial: the bracelet bears a ${need}-seat word — 1 of 1 would not be a partial read at all`)
+    if (pb >= 0) ok(partial.slots[pb] === null,
+                    '★★★ partial: the band is UNBOUND while the vessel keeps its word — the case that breaks a slots-sourced seat count')
+  }
+}
+
 console.log(`panel-fixture: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log(`  ✗ ${f}`)
 process.exit(fails.length ? 1 : 0)

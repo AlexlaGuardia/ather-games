@@ -40,7 +40,7 @@ import { KeeperFrame, TabEmpty, type KeeperTab } from '../../voxel3d/keeper-pane
 import { GearTab, SatchelLetters } from '../../voxel3d/VoxelWorld'
 import { PANEL_SCENARIOS, planPanel, seedPanel, type PanelPlan, type PanelScenarioId } from '../../play3d/panel-fixture'
 import { VESSEL_CAP, VESSELS } from '../../play3d/gems'
-import { BAND_FOR_VESSEL, ownedCount } from '../../play3d/vessels'
+import { BAND_FOR_VESSEL, ownedCount, seatCount } from '../../play3d/vessels'
 import { castForMove } from '../../play3d/cast'
 import { VesselCard } from './vessel-card'
 import { createInventory, type Inventory } from '../../engine/inventory'
@@ -153,7 +153,13 @@ export default function PanelDevPage() {
               {VESSELS.map(kind => {
                 const band = BAND_FOR_VESSEL[kind]
                 const id = band >= 0 ? plan.slots[band] : null
+                // ★ SEATS COME FROM THE VESSEL'S OWN WORD, through the same `seatCount` the shipped
+                // rack reads — not from the bound band and not from VESSEL_CAP. `plan.wordFor` is
+                // the word the vessel was made for, which survives a scenario unbinding the band
+                // (`partial` and `dark` are both exactly that), so the seat count survives with it.
+                const made = plan.wordFor[kind]
                 return <VesselCard key={kind} kind={kind} gems={plan.worn[kind]}
+                                   seats={made ? seatCount({ move: made }, plan.birth) : 0}
                                    word={id ? (castForMove(id)?.label ?? id) : null} owned={ownedCount(kind)} />
               })}
             </div>

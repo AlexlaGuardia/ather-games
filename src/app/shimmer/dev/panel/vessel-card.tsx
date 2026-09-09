@@ -32,7 +32,7 @@
 // Boundary: the brief hands Jin "how a seat renders empty vs filled" and "the swap UI" explicitly.
 // The MATERIAL and tier art are Alex's; this draws one honest untiered shape as a placeholder.
 
-import { VESSEL_CAP, type Vessel } from '../../play3d/gems'
+import { type Vessel } from '../../play3d/gems'
 import { RUNES } from '../../play3d/birth/runes.data'
 
 const CORD = '#8a7a5e'        // plain cord — tier-0/1 honest craft, no metal
@@ -65,7 +65,7 @@ function Seat({ cx, cy, r, gem }: { cx: number; cy: number; r: number; gem?: str
  * ⛔ Not a torc, chain, band or cuff (all barred, collar-family). The braid is two interleaved
  * strands so the weave visibly passes OVER and UNDER each stone.
  */
-function BraceletArt({ gems }: { gems: readonly string[] }) {
+function BraceletArt({ gems, seats }: { gems: readonly string[]; seats: number }) {
   // ⚠ SEATS SPREAD ACROSS THE FRONT ARC, not clustered. The first cut packed all three into the
   // top-left quadrant and you could not COUNT them, which is the one job the silhouette has:
   // "a player reads how loaded a keeper is from across the square."
@@ -73,6 +73,10 @@ function BraceletArt({ gems }: { gems: readonly string[] }) {
     const t = (deg * Math.PI) / 180
     return [52 + 34 * Math.cos(t), 46 + 27 * Math.sin(t)] as const
   }
+  // ★ CENTRED ON THE ARC, whatever the count. A one-seat vessel puts its seat at the FRONT of the
+  // wrist, not where the first of three would have sat — otherwise a tier-0 bracelet reads as a
+  // three-seat bracelet missing two, which is the exact misread the amendment exists to stop.
+  const angle = (i: number) => -85 + (i - (seats - 1) / 2) * 55
   return (
     <svg viewBox="0 0 104 92" width="92" height="82" aria-label="bracelet">
       <ellipse cx={52} cy={46} rx={34} ry={27} fill="none" stroke={CORD} strokeWidth={7} opacity={0.95} />
@@ -81,7 +85,7 @@ function BraceletArt({ gems }: { gems: readonly string[] }) {
                strokeDasharray="8 9" opacity={0.8} />
       {[-155, -95, -35, 25, 85, 145].map(a => { const [x, y] = P(a)
         return <circle key={a} cx={x} cy={y} r={2} fill={WOOD} opacity={0.4} /> })}
-      {[0, 1, 2].map(i => { const [x, y] = P(-140 + i * 55)
+      {Array.from({ length: seats }, (_, i) => { const [x, y] = P(angle(i))
         return <Seat key={i} cx={x} cy={y} r={6.2} gem={gems[i]} /> })}
     </svg>
   )
@@ -96,7 +100,7 @@ function BraceletArt({ gems }: { gems: readonly string[] }) {
  * taper (wide at the knuckles, narrow at the wrist), a thumb that leaves the outline, and four
  * fingers with real gaps between them — so the shape is redrawn around those three cues.
  */
-function GloveArt({ gems }: { gems: readonly string[] }) {
+function GloveArt({ gems, seats }: { gems: readonly string[]; seats: number }) {
   return (
     <svg viewBox="0 0 104 92" width="92" height="82" aria-label="glove">
       {/* four open fingers, gaps between them, rounded tips — free, because a keeper works in this hand */}
@@ -116,8 +120,12 @@ function GloveArt({ gems }: { gems: readonly string[] }) {
       {/* the wrap that crosses the palm, and the cuff past the wrist-bone */}
       <path d="M29 55 q24 7 46 0" fill="none" stroke={WOOD} strokeWidth={2.2} opacity={0.45} />
       <path d="M32 63 q22 7 44 0" fill="none" stroke={CORD} strokeWidth={5} opacity={0.55} />
-      {/* the three seats, a shallow arc following the knuckle line */}
-      {[0, 1, 2].map(i => <Seat key={i} cx={38 + i * 14} cy={42 - (i === 1 ? 2.5 : 0)} r={6} gem={gems[i]} />)}
+      {/* the seats the word asks for, a shallow arc following the knuckle line — centred on the
+          back of the hand whatever the count, for the same reason the bracelet's arc is centred */}
+      {Array.from({ length: seats }, (_, i) => {
+        const off = i - (seats - 1) / 2
+        return <Seat key={i} cx={52 + off * 14} cy={42 - (Math.abs(off) < 0.5 ? 2.5 : 0)} r={6} gem={gems[i]} />
+      })}
     </svg>
   )
 }
@@ -127,18 +135,25 @@ function GloveArt({ gems }: { gems: readonly string[] }) {
  * The shipped row spends four qualifiers on each vessel ("WRIST · TACTICALS · ELEMENT LANE"); the
  * drawn object already says which vessel this is, so one lane tag survives and the rest goes.
  */
-export function VesselCard({ kind, gems, word, owned, cap = VESSEL_CAP }: {
-  kind: Vessel; gems: readonly string[]; word: string | null; owned: number; cap?: number
+export function VesselCard({ kind, gems, word, owned, seats }: {
+  kind: Vessel; gems: readonly string[]; word: string | null; owned: number
+  /**
+   * How many seats this vessel bears — ITS word's number, one to three, never a default.
+   * ⛔ There is deliberately no default value. A `cap = VESSEL_CAP` fallback is what drew three
+   * seats into every vessel and made an unwritten bracelet read as a braid with bites out of it;
+   * a caller that cannot say how many seats a vessel has does not know enough to draw it.
+   */
+  seats: number
 }) {
   const Art = kind === 'bracelet' ? BraceletArt : GloveArt
   return (
     <div className="gx-plate flex items-center gap-3 px-3 py-2">
-      <Art gems={gems} />
+      <Art gems={gems} seats={seats} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="gx-title text-[13px] text-amber-100/90">{kind === 'bracelet' ? 'bracelet' : 'glove'}</span>
           <span className="gx-label text-[9px] text-white/25">{kind === 'bracelet' ? 'tacticals' : 'signature'}</span>
-          <span className="gx-value ml-auto tabular-nums text-[11px] text-white/45">{gems.length}/{cap}</span>
+          <span className="gx-value ml-auto tabular-nums text-[11px] text-white/45">{gems.length}/{seats}</span>
         </div>
         {/* the WORD is the loudest text on the card — it is the thing the vessel is FOR */}
         <div className={`gx-title mt-0.5 text-[15px] ${word ? 'text-white/90' : 'text-white/25'}`}>

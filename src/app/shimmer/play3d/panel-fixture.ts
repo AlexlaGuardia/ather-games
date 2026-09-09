@@ -46,7 +46,7 @@ import { saveRuneInventory } from './rune-inventory'
 import { saveBook } from './book'
 import { ELEMENTS, runesOf } from './birth/runes.data'
 
-export type PanelScenarioId = 'fresh' | 'loose' | 'partial' | 'written' | 'rack'
+export type PanelScenarioId = 'fresh' | 'loose' | 'dark' | 'partial' | 'written' | 'rack'
 
 export interface PanelScenario {
   id: PanelScenarioId
@@ -63,9 +63,14 @@ export interface PanelScenario {
  * carries the count or it does not.
  */
 export const PANEL_SCENARIOS: readonly PanelScenario[] = [
-  { id: 'fresh',   label: 'fresh keeper',      asks: 'Six dark seats, nothing written. Does a dark seat read as UNWRITTEN, or as broken?' },
+  // ⚠ `fresh` NO LONGER ASKS THE SEAT QUESTION, and that is the 2026-09-04 amendment landing.
+  // A vessel bears the seats its word needs, so a keeper who owns no vessel has no seats to draw —
+  // this scenario used to promise "six dark seats" and now honestly shows none. The seat question
+  // moved to `dark`, which is a vessel that EXISTS with nothing written in it.
+  { id: 'fresh',   label: 'fresh keeper',      asks: 'No vessel owned yet. Does the panel read as NOTHING YET, or as something missing?' },
   { id: 'loose',   label: 'letters, unwritten', asks: 'Gems in the bag, none seated. Is it obvious the letters are held but not written?' },
-  { id: 'partial', label: 'one letter seated', asks: 'One lit beside two dark, in one row. THE hard read: does the row say 1 OF 3?' },
+  { id: 'dark',    label: 'a vessel, unwritten', asks: 'A vessel made for a word, every seat dark. Does a dark seat read as UNWRITTEN, or as broken?' },
+  { id: 'partial', label: 'one letter seated', asks: 'One lit beside the rest dark, in one row. THE hard read: does the row say 1 OF ITS OWN NUMBER?' },
   { id: 'written', label: 'a word written',    asks: 'Three lit, no dark. Does a full vessel look full at a glance?' },
   { id: 'rack',    label: 'a rack of spares',  asks: 'Worn plus spares at different fills. Can you pick a vessel by reading its word?' },
 ]
@@ -82,6 +87,18 @@ export interface PanelPlan {
   bag: GemStock
   /** the word bound per band, parallel to `ALL_BANDS` */
   slots: Loadout
+  /**
+   * The word each WORN vessel was made for, whether or not the loadout currently binds it.
+   *
+   * ★ WHY THIS IS NOT `slots` (2026-09-09). The brief was amended 2026-09-04: *"each vessel is
+   * unique with a job … if the move it's meant to represent has one slot then it only needs the one
+   * slot."* Seats come from the WORD, so anything drawing seats has to know the word — and `slots`
+   * is the wrong source, because a vessel keeps its word while the loadout is unbound. `partial`
+   * is exactly that case: one letter of a three-letter word, deliberately unbound, in a vessel that
+   * still bears three seats. Reading `slots` there gives ZERO seats and one gem floating in a
+   * vessel that cannot hold it — the impossible state this file's header forbids.
+   */
+  wordFor: Record<Vessel, string | null>
   /** what the registry actually allowed, in words — read it before believing the scenario. */
   why: string
 }
@@ -158,6 +175,7 @@ export function planPanel(id: PanelScenarioId): PanelPlan {
   const owned = [birth]
   const slots: Loadout = ALL_BANDS.map(() => null)
   const worn: Record<Vessel, string[]> = { bracelet: [], focus: [] }
+  const wordFor: Record<Vessel, string | null> = { bracelet: null, focus: null }
   const spares: StowedVessel[] = []
   let bag: GemStock = {}
   const notes: string[] = [`birth ${birth}`]
@@ -181,7 +199,12 @@ export function planPanel(id: PanelScenarioId): PanelPlan {
     for (const r of m.runes) if (!owned.includes(r)) owned.push(r)
     const band = bandOf(kind)
     if (band >= 0) slots[band] = m.id
-    notes.push(`${kind}: ${m.id} (${need.length}/${VESSEL_CAP})`)
+    // ★ The vessel bears this word from here on, even if a scenario later unbinds the BAND.
+    wordFor[kind] = m.id
+    // ⚠ NOT `/${VESSEL_CAP}`. Three is the most a word can ask for, not a property every vessel
+    // has (brief, amended 2026-09-04) — so the word's own letter count IS the seat count, and a
+    // denominator of 3 was this note asserting the pre-amendment shape.
+    notes.push(`${kind}: ${m.id} (${need.length} seat${need.length === 1 ? '' : 's'})`)
     return bound.vessels[kind]
   }
 
@@ -195,12 +218,29 @@ export function planPanel(id: PanelScenarioId): PanelPlan {
     notes.push(`bag holds ${need.length} letter${need.length === 1 ? '' : 's'}, none seated`)
   }
 
+  if (id === 'dark') {
+    // ★ THE SEAT QUESTION, PURE: the vessel bears its word's seats and NOT ONE of them is filled.
+    // `write` is what decides the seat count, so the vessel is built exactly as a keeper's would be
+    // and then emptied — rather than fabricating a seat count this fixture does not have to derive.
+    // ⚠ The bands go back to null on purpose: the brief calls a vessel FINISHED only when every seat
+    // is filled, so an unwritten vessel binds nothing and the cast bar must say so.
+    // ⚠ `write` binds the word and RETURNS the letters it would seat — and here we drop them on the
+    // floor. `worn` is never assigned, which is the whole scenario. An earlier cut of this block
+    // "cleared" `worn` afterwards; those two lines were dead, and a mutation that deleted them was
+    // indistinguishable from one that worked. Dead code in a fixture reads as an invariant being
+    // enforced when nothing is enforcing it.
+    write('bracelet', tac)
+    write('focus', ult)
+    for (const kind of VESSELS) { const b = bandOf(kind); if (b >= 0) slots[b] = null }
+    notes.push('both vessels bear their word and hold nothing — every seat dark')
+  }
+
   if (id === 'partial') {
     // ★ THE HARD READ: exactly ONE seated, the rest dark, in a vessel that can hold three.
     const full = write('bracelet', tac)
     worn.bracelet = full.slice(0, 1)
     if (full.length > 1) { slots[bandOf('bracelet')] = null; notes.push('bracelet word UNBOUND — one letter is not a word, and the row should say so') }
-    if (worn.bracelet.length === 1) notes.push('bracelet: 1 of 3 seated')
+    if (worn.bracelet.length === 1) notes.push(`bracelet: 1 of ${full.length} seated`)
   }
 
   if (id === 'written' || id === 'rack') {
@@ -218,7 +258,7 @@ export function planPanel(id: PanelScenarioId): PanelPlan {
     notes.push(second ? `spares: ${alt!.id} + one blank bracelet` : 'spares: two blank bracelets — the registry held no second element word')
   }
 
-  return { id, birth, owned, worn, spares, bag, slots, why: notes.join(' · ') }
+  return { id, birth, owned, worn, spares, bag, slots, wordFor, why: notes.join(' · ') }
 }
 
 /** a stowed vessel carrying a written word — the spare-row form of `write`. */
