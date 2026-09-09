@@ -32,7 +32,8 @@
 // Boundary: the brief hands Jin "how a seat renders empty vs filled" and "the swap UI" explicitly.
 // The MATERIAL and tier art are Alex's; this draws one honest untiered shape as a placeholder.
 
-import { type Vessel } from '../../play3d/gems'
+import { VESSEL_CAP, type Vessel } from '../../play3d/gems'
+import { type VesselTier } from '../../play3d/vessels'
 import { RUNES } from '../../play3d/birth/runes.data'
 
 const CORD = '#8a7a5e'        // plain cord — tier-0/1 honest craft, no metal
@@ -61,33 +62,50 @@ function Seat({ cx, cy, r, gem }: { cx: number; cy: number; r: number; gem?: str
 }
 
 /**
- * THE BRACELET — a braid at the wrist, three seats woven into it.
- * ⛔ Not a torc, chain, band or cuff (all barred, collar-family). The braid is two interleaved
- * strands so the weave visibly passes OVER and UNDER each stone.
+ * THE BRACELET — the RENDER, not a drawing (Alex called SHEET-v4 good, 2026-09-09).
+ * `tools/render/vessel_bracelet.py` renders every tier x seat-count as a flat dormant icon (no glow:
+ * the brief's inventory state), and the panel draws the WRITTEN letters over the render's own
+ * voids. So the braid, the weave passing over and under, the empty seat as a void with wood closing
+ * both sides — all of that is the mesh's, and this component only knows where the seats ARE.
+ *
+ * ★ SEAT POSITIONS ARE PROJECTED, NOT EYEBALLED. `tools/render/vessel_seat_probe.py` runs the same
+ * camera as `render_one` and prints each seat centre in the render's 512px space; the table below
+ * is pasted from it (identical across tiers to 0.2px — the seat sits on the ring, the tier only
+ * changes the strand). Re-run the probe if `SEAT_ANGLES`, `R` or the camera move; nothing here can
+ * notice on its own.
+ * ⚠ Verified against the pixels: each centre lands inside its void on `bracelet-t1-s3.png`, and the
+ * three x's (111 / 195 / 299) match the sheet by eye. The render is off-axis on purpose (camera at
+ * x=0.20, y=-0.55), which is why the arc is NOT symmetric about the front seat.
  */
-function BraceletArt({ gems, seats }: { gems: readonly string[]; seats: number }) {
-  // ⚠ SEATS SPREAD ACROSS THE FRONT ARC, not clustered. The first cut packed all three into the
-  // top-left quadrant and you could not COUNT them, which is the one job the silhouette has:
-  // "a player reads how loaded a keeper is from across the square."
-  const P = (deg: number) => {
-    const t = (deg * Math.PI) / 180
-    return [52 + 34 * Math.cos(t), 46 + 27 * Math.sin(t)] as const
-  }
-  // ★ CENTRED ON THE ARC, whatever the count. A one-seat vessel puts its seat at the FRONT of the
-  // wrist, not where the first of three would have sat — otherwise a tier-0 bracelet reads as a
-  // three-seat bracelet missing two, which is the exact misread the amendment exists to stop.
-  const angle = (i: number) => -85 + (i - (seats - 1) / 2) * 55
+const BRACELET_PNG_SEATS: Record<1 | 2 | 3, readonly (readonly [number, number])[]> = {
+  1: [[194.9, 423.0]],
+  2: [[141.2, 392.5], [256.1, 433.6]],
+  3: [[111.5, 361.1], [194.9, 423.0], [299.3, 428.4]],
+}
+/** a seat's radius in the same 512px space (SEAT_R 0.086 under ortho_scale 2.35) */
+const BRACELET_PNG_SEAT_R = 17.6
+const BRACELET_PNG_SIZE = 88
+
+/**
+ * The render for a tier and a seat count. Tier 0 is Greg's pair, always cut for one letter
+ * (`FLOOR_SEATS`), so it has exactly one frame; every other tier has a frame per count INCLUDING
+ * zero — an uncut vessel (`move: null`, "cut it for a word you hold…") is a raw braid with no seat
+ * in it, and drawing it with a void would report a seat the vessel does not have.
+ */
+export const braceletRender = (tier: VesselTier, seats: number): string =>
+  `/models/props/vessels/bracelet-t${tier}-s${tier === 0 ? 1 : Math.min(VESSEL_CAP, Math.max(0, seats))}.png`
+
+function BraceletArt({ gems, seats, tier }: { gems: readonly string[]; seats: number; tier: VesselTier }) {
+  const n = tier === 0 ? 1 : Math.min(VESSEL_CAP, Math.max(0, seats))
+  const pts = n ? BRACELET_PNG_SEATS[n as 1 | 2 | 3] : []
   return (
-    <svg viewBox="0 0 104 92" width="92" height="82" aria-label="bracelet">
-      <ellipse cx={52} cy={46} rx={34} ry={27} fill="none" stroke={CORD} strokeWidth={7} opacity={0.95} />
-      {/* the second strand, offset — the weave visibly passes over and under */}
-      <ellipse cx={52} cy={46} rx={34} ry={27} fill="none" stroke={WOOD} strokeWidth={2.6}
-               strokeDasharray="8 9" opacity={0.8} />
-      {[-155, -95, -35, 25, 85, 145].map(a => { const [x, y] = P(a)
-        return <circle key={a} cx={x} cy={y} r={2} fill={WOOD} opacity={0.4} /> })}
-      {Array.from({ length: seats }, (_, i) => { const [x, y] = P(angle(i))
-        return <Seat key={i} cx={x} cy={y} r={6.2} gem={gems[i]} /> })}
-    </svg>
+    <div className="relative shrink-0" style={{ width: BRACELET_PNG_SIZE, height: BRACELET_PNG_SIZE }} aria-label="bracelet">
+      <img src={braceletRender(tier, n)} alt="" width={BRACELET_PNG_SIZE} height={BRACELET_PNG_SIZE} draggable={false} />
+      {/* only WRITTEN seats are drawn — the empty seat is the render's own void, so the two can never disagree */}
+      <svg viewBox="0 0 512 512" className="absolute inset-0 h-full w-full" aria-hidden>
+        {pts.map(([x, y], i) => (gems[i] ? <Seat key={i} cx={x} cy={y} r={BRACELET_PNG_SEAT_R * 0.9} gem={gems[i]} /> : null))}
+      </svg>
+    </div>
   )
 }
 
@@ -135,8 +153,10 @@ function GloveArt({ gems, seats }: { gems: readonly string[]; seats: number }) {
  * The shipped row spends four qualifiers on each vessel ("WRIST · TACTICALS · ELEMENT LANE"); the
  * drawn object already says which vessel this is, so one lane tag survives and the rest goes.
  */
-export function VesselCard({ kind, gems, word, owned, seats }: {
+export function VesselCard({ kind, gems, word, owned, seats, tier = 1 }: {
   kind: Vessel; gems: readonly string[]; word: string | null; owned: number
+  /** the MATERIAL of what is worn (`wornTier`); 1 = bought at the Passage, the tier a pre-tier save reads as */
+  tier?: VesselTier
   /**
    * How many seats this vessel bears — ITS word's number, one to three, never a default.
    * ⛔ There is deliberately no default value. A `cap = VESSEL_CAP` fallback is what drew three
@@ -145,10 +165,9 @@ export function VesselCard({ kind, gems, word, owned, seats }: {
    */
   seats: number
 }) {
-  const Art = kind === 'bracelet' ? BraceletArt : GloveArt
   return (
     <div className="gx-plate flex items-center gap-3 px-3 py-2">
-      <Art gems={gems} seats={seats} />
+      {kind === 'bracelet' ? <BraceletArt gems={gems} seats={seats} tier={tier} /> : <GloveArt gems={gems} seats={seats} />}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="gx-title text-[13px] text-amber-100/90">{kind === 'bracelet' ? 'bracelet' : 'glove'}</span>
