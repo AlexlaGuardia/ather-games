@@ -284,7 +284,7 @@ import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
 import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn,
          placeGems, seatCount, seatLetters, shortOf, isComplete, setWord,
-         wornTier, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier } from '../play3d/vessels'
+         wornTier, wornWord, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier } from '../play3d/vessels'
 import { rollDig, rollCache, parseVesselItem, takeVessel, vesselItemId, vesselRoom, type DropDoor } from '../play3d/vessel-drops'
 import { starterFor } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
@@ -3351,7 +3351,12 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
       {VESSELS.map(kind => {
         const band = BAND_FOR_VESSEL[kind]
         const worn = band >= 0 ? (slots[band] ?? null) : null
-        const seats = seatsOfWorn(worn)
+        // ★ THE SEAT COUNT FOLLOWS THE VESSEL, NOT THE BAND (Alex, 2026-09-09: "fix the 1/0 count so it
+        // follows the vessel"). `worn` is the BINDING; the vessel bears its word whether or not the band
+        // is bound, so a letter seated in an unbound vessel reads 1 of ITS number, never 1/0. The band is
+        // the fallback for a save from before the word was recorded.
+        const word = wornWord(kind) ?? worn
+        const seats = seatsOfWorn(word)
         const spares = completeVessels(kind, birth)
         return (
           <div key={kind} className={`gx-plate px-2.5 py-1.5 ${worn ? 'is-lit' : ''}`}>
@@ -3361,8 +3366,9 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
                   every host, so the rack and the bench can never disagree about what a bracelet looks like.
                   The seats are IN the picture (a dark void is an unwritten seat, a lit pool is a letter), so
                   the old chip row beside the word is gone — it was the same fact in a second dialect.
-                  Nothing worn: the uncut tier-1 vessel, faded — a place for one, not one. */}
-              <VesselArt kind={kind} tier={worn ? wornTier(kind) : 1} seats={worn ? seats : 0}
+                  Nothing worn AND no word: the uncut tier-1 vessel, faded — a place for one, not one. A vessel
+                  bearing a word with its band unbound keeps its seats and its letters, faded. */}
+              <VesselArt kind={kind} tier={word ? wornTier(kind) : 1} seats={seats}
                          gems={l.vessels[kind]} size={72} dim={!worn} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">

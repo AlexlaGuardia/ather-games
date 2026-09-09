@@ -38,7 +38,7 @@ import {
   EMPTY_LETTERS, VESSEL_CAP, VESSELS, addGems, bindLetters, isBodyHeld, lettersOf, saveLetters,
   type GemStock, type Letters, type Vessel,
 } from './gems'
-import { BAND_FOR_VESSEL, emptyVessel, saveStowed, type StowedVessel } from './vessels'
+import { BAND_FOR_VESSEL, emptyVessel, saveStowed, saveWornWord, type StowedVessel } from './vessels'
 import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { ALL_BANDS, laneRunes } from './cast'
 import { saveLoadout, type Loadout } from './loadout'
@@ -297,6 +297,9 @@ export function seedPanel(id: PanelScenarioId): PanelPlan {
   saveLoadout(plan.slots)
   saveLetters({ bag: { ...plan.bag }, vessels: { bracelet: [...plan.worn.bracelet], focus: [...plan.worn.focus] } })
   saveStowed(plan.spares)
+  // ★ the worn vessel's WORD (2026-09-09) — the key the rack reads its seat count from, so `partial`
+  // and `dark` (band unbound, vessel still bearing its word) read 1 of 2 and 0 of 2, never n/0
+  for (const kind of VESSELS) saveWornWord(kind, plan.wordFor[kind])
   return plan
 }
 

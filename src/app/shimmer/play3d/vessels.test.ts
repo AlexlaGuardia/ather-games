@@ -8,7 +8,7 @@
  */
 import { readFileSync } from 'node:fs'
 import {
-  STOWED_KEY, LEGACY_PAIRS_KEY, WORN_TIER_KEY, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, FLOOR_TIER, FLOOR_SEATS,
+  STOWED_KEY, LEGACY_PAIRS_KEY, WORN_TIER_KEY, WORN_WORD_KEY, wornWord, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, FLOOR_TIER, FLOOR_SEATS,
   loadStowed, saveStowed, buyVessel, equip, ownedCount, emptyVessel, equippedVessel,
   dismantleWorn, placeGems, seatCount, shortOf, isComplete, isFloor, seatCapOf, grantVessel, setWord, wornTier, clearStowed, TIER_MATERIAL,
 } from './vessels'
@@ -36,6 +36,7 @@ const ULT = ALL_BANDS.indexOf('ultimate')
 
 ok(KEEPER_KEYS.includes(STOWED_KEY), 'the stowed-vessels key is registered per keeper')
 ok(KEEPER_KEYS.includes(WORN_TIER_KEY), 'the worn-tier key is registered per keeper')
+ok(KEEPER_KEYS.includes(WORN_WORD_KEY), 'the worn-word key is registered per keeper (2026-09-09)')
 /** the vessels a keeper ACQUIRED — the floor is always there and is not what these sections count */
 const acquired = () => loadStowed().filter(v => !isFloor(v))
 ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL registered — it ships, so it is claimed')
@@ -262,6 +263,22 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     const g = grantVessel('bracelet', 2, one, 'found'); ok(g.ok, 'a shimmerscale bracelet for the word')
     const p = placeGems(g.index!, birth, loadLetters(birth, rawLoadout())); saveLetters(p.letters)
     ok(equip('bracelet', g.index!, birth) && wornTier('bracelet') === 2, 'worn: the shimmerscale one')
+    // ★ THE WORD GOES ON WITH THE PAPER (2026-09-09). The band is a binding; the vessel bears its word.
+    ok(wornWord('bracelet') === one, `★ the worn vessel records ITS word (${wornWord('bracelet')} vs ${one})`)
+    // ⚠ the case the key exists for: the resolver unbinds the band and the letters stay seated. Before,
+    // the rack read the seat count off the band and showed 1/0; now the vessel still knows its number.
+    saveLoadout(ALL_BANDS.map(() => null))
+    ok(wornWord('bracelet') === one && equippedVessel('bracelet', birth).move === one,
+       '★★ with the BAND unbound the vessel still bears its word — the seat count has something to follow')
+    ok(equippedVessel('bracelet', birth).gems.length === 1, '… and its letter is still seated (the 1 of 1/0)')
+    ok(dismantleWorn('bracelet', birth) === true, '★ and it still comes off with the band unbound')
+    ok(wornWord('bracelet') === null, '★ dismantled: no worn word — a fresh equip must not inherit a stale one')
+    ok(loadStowed().some(v => v.kind === 'bracelet' && v.tier === 2 && v.move === one),
+       '★ it went back to the satchel cut for ITS word, though the band had forgotten it')
+    // put it back on for the cap case below
+    const back = loadStowed().findIndex(v => v.kind === 'bracelet' && v.tier === 2)
+    const pb = placeGems(back, birth, loadLetters(birth, rawLoadout())); saveLetters(pb.letters)
+    ok(equip('bracelet', back, birth) && wornWord('bracelet') === one, 're-equipped for the cap case')
     ok(grantVessel('bracelet', 1, null, 'bought').ok && grantVessel('bracelet', 1, null, 'bought').ok && ownedCount('bracelet') === MAX_PER_KIND, 'two goldwood spares: three acquired, at the cap')
     ok(dismantleWorn('bracelet', birth) === true, '★★ at the cap, the WORN vessel still comes off — the old `- 1` refused this and left a keeper unable to undress')
     ok(acquired().filter(v => v.kind === 'bracelet').length === MAX_PER_KIND && acquired().some(v => v.kind === 'bracelet' && v.tier === 2 && v.move === one),

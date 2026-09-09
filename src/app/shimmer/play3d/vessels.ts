@@ -83,6 +83,15 @@ export const LEGACY_PAIRS_KEY = 'ather:shimmer:parked'
 
 /** the tier of the WORN vessel of each kind — the one field the two live keys do not carry */
 export const WORN_TIER_KEY = 'ather:shimmer:worn-tier'
+/**
+ * the WORD the worn vessel of each kind was cut for. ★ ADDED 2026-09-09 (Alex: "fix the 1/0 count so
+ * it follows the vessel"). The word used to live only in the BAND (`slots[band]`), so the moment the
+ * loadout resolver unbound a band — a word the keeper no longer knows, a re-resolve after rebirth —
+ * the letters stayed seated in `vessels[kind]` while the vessel's seat count read as ZERO: the rack
+ * showed `1/0`, a letter in a vessel with nowhere to put it. The band is a BINDING; the vessel bears
+ * its word whether or not it is bound, and that is what this key records.
+ */
+export const WORN_WORD_KEY = 'ather:shimmer:worn-word'
 
 export const VESSEL_PRICE = 75
 /** acquired vessels of a kind, worn or stowed — Greg's floor sits OUTSIDE it (ruled 2026-09-04) */
@@ -185,6 +194,25 @@ function saveWornTier(kind: Vessel, tier: VesselTier): void {
 /** the tier of what is worn on `kind` — meaningful only while something IS worn (`wornPresent`) */
 export const wornTier = (kind: Vessel): VesselTier => loadWornTiers()[kind]
 
+// ── the worn word: the vessel's own number, whether or not the band is bound ─────────────────
+function loadWornWords(): Record<Vessel, string | null> {
+  const out = { bracelet: null, focus: null } as Record<Vessel, string | null>
+  try {
+    const raw = JSON.parse(localStorage.getItem(keeperKey(WORN_WORD_KEY)) ?? 'null') as unknown
+    if (raw && typeof raw === 'object') for (const k of VESSELS) { const v = (raw as Record<string, unknown>)[k]; out[k] = typeof v === 'string' ? v : null }
+  } catch { /* private mode */ }
+  return out
+}
+export function saveWornWord(kind: Vessel, move: string | null): void {
+  try { localStorage.setItem(keeperKey(WORN_WORD_KEY), JSON.stringify({ ...loadWornWords(), [kind]: move })) } catch { /* private mode */ }
+}
+/**
+ * the word the worn vessel of `kind` was cut for, or null when nothing recorded. A save from before
+ * this key has nothing here; callers fall back to the band (`wornWord(kind) ?? slots[band]`), which
+ * is exactly the old reading and is right whenever the band IS bound.
+ */
+export const wornWord = (kind: Vessel): string | null => loadWornWords()[kind]
+
 /**
  * Is anything worn on `kind`? Read RAW off the two live keys, never through `loadLetters` — that
  * seeds (writes) when absent, and a count must not create the thing it counts.
@@ -255,6 +283,7 @@ export function clearStowed(): void {
     localStorage.removeItem(keeperKey(STOWED_KEY))
     localStorage.removeItem(keeperKey(LEGACY_PAIRS_KEY))   // a reborn keeper keeps no pairs either
     localStorage.removeItem(keeperKey(WORN_TIER_KEY))      // ⚠ NOT the floor: `withFloor` hands Greg's pair back on the next read
+    localStorage.removeItem(keeperKey(WORN_WORD_KEY))
   } catch { /* private mode */ }
 }
 
@@ -333,7 +362,8 @@ export function buyVessel(kind: Vessel, marks: number, word?: string): VesselPur
 export function equippedVessel(kind: Vessel, birth: string | null, starter?: string): StowedVessel {
   const active = loadLetters(birth, rawLoadout(), starter)
   const band = BAND_FOR_VESSEL[kind]
-  return { kind, gems: [...active.vessels[kind]], move: band >= 0 ? (rawLoadout()[band] ?? null) : null, tier: wornTier(kind) }
+  // the vessel's own word first; the band only for a save from before the word was recorded
+  return { kind, gems: [...active.vessels[kind]], move: wornWord(kind) ?? (band >= 0 ? (rawLoadout()[band] ?? null) : null), tier: wornTier(kind) }
 }
 
 /**
@@ -357,10 +387,11 @@ export function equip(kind: Vessel, i: number, birth: string | null, starter?: s
   const slots: Loadout = ALL_BANDS.map((_, k) => rawLoadout()[k] ?? null)
   // The one coming off goes to the satchel with its word and letters. Wearing NOTHING (after a
   // dismantle) must not mint a blank vessel out of thin air — the slot is simply taken.
-  if (slots[band] || active.vessels[kind].length) stowed[i] = { kind, gems: [...active.vessels[kind]], move: slots[band] ?? null, tier: wornTier(kind) }
+  if (slots[band] || active.vessels[kind].length) stowed[i] = { kind, gems: [...active.vessels[kind]], move: wornWord(kind) ?? slots[band] ?? null, tier: wornTier(kind) }
   else stowed.splice(i, 1)
   saveStowed(stowed)
   saveWornTier(kind, next.tier)   // the material goes on with the paper
+  saveWornWord(kind, next.move)   // and so does the WORD — the vessel's number, bound or not
 
   slots[band] = next.move
   saveLoadout(slots)
@@ -369,7 +400,7 @@ export function equip(kind: Vessel, i: number, birth: string | null, starter?: s
 }
 
 /** the keys an equip writes — restated for the guard that checks every keeper key is registered */
-export const EQUIP_WRITES: readonly string[] = [LOADOUT_KEY, VESSELS_KEY, WORN_TIER_KEY]
+export const EQUIP_WRITES: readonly string[] = [LOADOUT_KEY, VESSELS_KEY, WORN_TIER_KEY, WORN_WORD_KEY]
 
 // ── ★ A VESSEL IS MADE FOR ONE WORD, AND BEARS EXACTLY THE SEATS THAT WORD NEEDS (Alex, 2026-09-04) ──
 // *"each vessel is unique that its made the word and none other so if the move its meant to represent
@@ -452,7 +483,9 @@ export function dismantleWorn(kind: Vessel, birth: string | null, starter?: stri
   const band = BAND_FOR_VESSEL[kind]
   if (band < 0) return false
   const slots: Loadout = ALL_BANDS.map((_, k) => rawLoadout()[k] ?? null)
-  const word = slots[band] ?? null
+  // the vessel's own word — the band may already be unbound (a word the keeper no longer knows) and
+  // the vessel still comes back to the satchel cut for what it was cut for
+  const word = wornWord(kind) ?? slots[band] ?? null
   const active = loadLetters(birth, slots, starter)
   if (!word && !active.vessels[kind].length) return false
   const stowed = loadStowed()
@@ -460,6 +493,7 @@ export function dismantleWorn(kind: Vessel, birth: string | null, starter?: stri
   saveLetters(unbindLetters(active, kind))
   slots[band] = null
   saveLoadout(slots)
+  saveWornWord(kind, null)
   return true
 }
 /**

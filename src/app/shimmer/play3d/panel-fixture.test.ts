@@ -18,7 +18,7 @@ import { VESSEL_CAP, VESSELS, isBodyHeld, lettersOf } from './gems'
 import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { ALL_BANDS, laneRunes } from './cast'
 import { resolveLoadout, saveLoadout } from './loadout'
-import { BAND_FOR_VESSEL } from './vessels'
+import { BAND_FOR_VESSEL, wornWord } from './vessels'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { loadStowed, isFloor } from './vessels'
 import { loadRuneInventory, saveRuneInventory } from './rune-inventory'
@@ -120,6 +120,10 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
     for (const k of VESSELS) {
       ok(read.vessels[k].join(',') === plan.worn[k].join(','),
          `★★★ ${id}: the ${k}'s seats read back exactly as seeded (${read.vessels[k].length} of ${VESSEL_CAP}) — the panel will show this keeper, not another`)
+      // ★ 2026-09-09: the rack reads its seat count from `wornWord`, so the fixture must write it — or
+      // `partial` reads 1/0 on the SHIPPED rack while the fixture's own note says "1 of 2 seated"
+      ok(wornWord(k) === plan.wordFor[k],
+         `★★ ${id}: the ${k}'s worn WORD reads back as seeded (${wornWord(k)} vs ${plan.wordFor[k]}) — the seat count has a vessel to follow`)
     }
     // ★ Greg's pair (tier 0) is on every read and is not a spare the fixture wrote — count above the floor
     ok(loadStowed().filter(v => !isFloor(v)).length === plan.spares.length, `${id}: the rack reads back ${plan.spares.length} spare(s)`)

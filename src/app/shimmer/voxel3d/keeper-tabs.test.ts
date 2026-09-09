@@ -56,7 +56,13 @@ ok(/seats = VESSEL_CAP/.test(seats), 'a caller with no word still gets the cap a
 // (it still draws the stowed parts in the satchel, which is where `Seats` is asserted above).
 ok(count(rack, /<VesselArt /g) === 1, `★ the rack draws the worn vessel's RENDER, once per row (${count(rack, /<VesselArt /g)} mounts, want 1)`)
 ok(count(rack, /<Seats /g) === 0, `★ and no chip row beside it — the seats are in the picture (${count(rack, /<Seats /g)} chip mounts, want 0)`)
-ok(/seats=\{worn \? seats : 0\}/.test(rack), '★ nothing worn draws the UNCUT vessel (0 seats), never a vessel with seats it does not have')
+// ★ RE-POINTED 2026-09-09 (Alex: "fix the 1/0 count so it follows the vessel"): the seat count comes from the
+// VESSEL'S word (`wornWord`), with the band only as the fallback for a pre-word save — so a letter seated in
+// an unbound vessel reads 1 of ITS number. The art takes the same `seats`; a vessel with no word draws uncut.
+ok(/const word = wornWord\(kind\) \?\? worn/.test(rack) && /seatsOfWorn\(word\)/.test(rack),
+   '★ the seat count follows the VESSEL (wornWord), the band is only the fallback — never n/0 for a letter in an unbound vessel')
+ok(/<VesselArt kind=\{kind\} tier=\{word \? wornTier\(kind\) : 1\} seats=\{seats\}/.test(rack),
+   '★ and the art draws that same count — no word draws the uncut vessel, never seats it does not have')
 ok(/<select /.test(rack) && /completeVessels\(/.test(rack), '★ the spares are a dropdown of WRITTEN vessels, by word (completeVessels)')
 ok(/dismantleWorn\(/.test(rack), 'the worn vessel can be dismantled from the rack')
 ok(!/doEquip\(kind, i\)\}\s*className="gx-btn flex/.test(rack), 'the old spare-button row is gone')
