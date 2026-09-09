@@ -33,12 +33,13 @@ THICK = 0.085
 PAD_PTS = [
     (-0.22, -0.98), (0.22, -0.98),
     (0.36, -0.86), (0.50, -0.58),
-    (0.58, -0.16), (0.55, 0.20),
-    (0.42, 0.48), (0.20, 0.58),
-    (-0.20, 0.58), (-0.42, 0.48),
-    (-0.55, 0.20), (-0.58, -0.16),
+    (0.58, -0.16), (0.53, 0.24),
+    (0.44, 0.50), (0.22, 0.56),
+    (-0.22, 0.56), (-0.44, 0.50),
+    (-0.53, 0.24), (-0.58, -0.16),
     (-0.50, -0.58), (-0.36, -0.86),
-]
+]  # ★ FIX: top edge widened/flattened slightly so it reads under the now-wider-spread finger
+# loops instead of the loops overhanging a narrower dome
 # a wristband cuff flaring below the pad's narrow neck ("cuffing a little past the wrist-bone")
 CUFF_PTS = [
     (-0.40, -0.96), (0.40, -0.96),
@@ -47,8 +48,12 @@ CUFF_PTS = [
     (-0.44, -1.28), (-0.46, -1.10),
 ]
 
-FINGER_X = (-0.27, -0.09, 0.09, 0.27)
-THUMB_LOC = (-0.70, -0.28, Z0 + 0.02)
+FINGER_X = (-0.36, -0.13, 0.13, 0.36)  # ★ FIX: was (-.27,-.09,.09,.27) — the loops overlapped and
+# fused into one scalloped fringe (self-critique, first render pass). Widened + shrunk (below) so
+# all four read as distinct open-finger loops instead of a flower crown glued to the pad.
+THUMB_LOC = (-0.62, -0.62, Z0 + 0.02)  # ★ FIX: was (-.70,-.28) — floated off the pad like a stray
+# ring with no visible attachment. Moved down to the wrist-side "web" where a thumb actually
+# leaves the hand, so it now reads AS a thumb loop, not a fifth finger.
 
 SEAT_LAYOUT = {
     1: [(0.0, 0.40)],
@@ -60,7 +65,7 @@ SEAT_LAYOUT = {
 def build_finger_loops(body_mat, glow=False):
     parts = []
     for x in FINGER_X:
-        t = add(bpy.ops.mesh.primitive_torus_add, major_radius=0.115, minor_radius=0.030,
+        t = add(bpy.ops.mesh.primitive_torus_add, major_radius=0.095, minor_radius=0.026,
                 location=(x, 0.60, Z0 + 0.02), major_segments=20, minor_segments=10)
         t.rotation_euler = (math.radians(8), 0, 0)  # a small forward tilt — open, not flat-stamped
         assign(t, body_mat)
@@ -78,7 +83,9 @@ def build_finger_loops(body_mat, glow=False):
         b.inputs["Metallic"].default_value = 0.0
         b.inputs["Roughness"].default_value = 0.4
         b.inputs["Emission Color"].default_value = (0.80, 0.92, 0.62, 1)
-        b.inputs["Emission Strength"].default_value = 0.9  # a RESTING glow, not a cast-bloom
+        b.inputs["Emission Strength"].default_value = 1.8  # ★ FIX: 0.9 didn't read against the key
+        # light in the first pass — bumped so the "never fully dark" exception is actually visible,
+        # still well under a channelling bloom (no glare/compositor bloom added — see build note)
         for p in parts:
             assign(p, gm)
     return parts
@@ -132,7 +139,7 @@ def build_glove(tier, seats):
         assign(knot, closure_mat)
         parts.append(knot)
 
-    r = 0.075
+    r = 0.085
     for (sx, sy) in SEAT_LAYOUT[seats]:
         parts += build_seat(sx, sy, Z0, r, tier, filled_tier0=True, closure_mat=closure_mat)
 

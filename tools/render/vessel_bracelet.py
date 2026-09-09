@@ -26,7 +26,7 @@ os.makedirs(OUT, exist_ok=True)
 
 R = 0.82          # ring major radius
 SCALE_Z = 0.34    # flatten the torus — reads as a flat braid-band icon, matches the glove's flat read
-SEAT_R = 0.078
+SEAT_R = 0.086
 
 
 def ring_point(angle_deg, radius=R, z=0.0):

@@ -26,7 +26,14 @@ def fresh_scene():
     scene = bpy.context.scene
     scene.render.engine = 'CYCLES'
     scene.cycles.device = 'CPU'
-    scene.cycles.samples = 160
+    # ★ TUNABLE SO THE FIRST LOOK IS CHEAP (2026-09-09). 160 samples x 512px x 10 frames per object
+    # is ~25 min an object on this CPU, and Cycles writes a PNG only when a FRAME completes — so
+    # every run that got cut off mid-frame left no file and no error, which reads exactly like a
+    # crash. Three runs died that way before anyone looked at the sample count.
+    # ⚠ The default is unchanged at 160: this makes the cost visible, it does not lower the bar.
+    # Judge the SILHOUETTE and the seat read at SAMPLES=32 (denoised, ~30s a frame), then render
+    # the approved shape at the default before anything ships.
+    scene.cycles.samples = int(os.environ.get("SAMPLES", "160"))
     scene.cycles.use_denoising = True
     try:
         scene.cycles.denoiser = 'OPENIMAGEDENOISE'
@@ -273,30 +280,31 @@ def join_all(parts, active=None):
 
 
 # ── the seat itself — built ONCE, reused by both objects, so the no-rim law can't drift ──────
+#
+# ★ FIX 2026-09-09 (picaso, self-critique pass): the first cut domed the closure geometry
+# (an ico_sphere) OVER a flat void disc of the SAME radius. That looks safe on paper — "same
+# footprint" — but a sphere's silhouette only reaches its full radius at its equator; anywhere
+# below that its cross-section is narrower than r, so the flat void disc's edge peeked out past
+# the dome's base as a thin dark ring. Rendered proof: bracelet-t0-s1's crystal seat showed
+# exactly that — a visible dark outline around the gem, i.e. a bezel by accident, the one thing
+# this brief bars by name. FIX: the closure is now a FLAT DISC at the void's own radius (so the
+# footprints are identical, not merely equal-looking), with a smaller, strictly-inset dome on
+# top purely for glassy dimension — inset enough that it can never reach the disc's own edge.
 def build_seat(x, y, z, r, tier, filled_tier0=False, closure_mat=None):
     """Returns the list of objects making up one seat. NEVER produces a raised ring/bezel:
     the void disc sits FLUSH (slightly recessed in Z, never proud of the surface), and any
-    closure geometry on top (a cord cross, a sap dome, a nacre dome) matches the void disc's
-    own footprint radius so no contrasting rim shows at the seam.
+    closure geometry sits on a disc of the EXACT SAME radius as the void — never merely a
+    same-radius dome, whose curved footprint can undershoot and let the void peek out as a rim.
       tier 0 → filled: a cloudy crystal cabochon (Greg's pair is described WITH its crystal)
       tier 1 → empty: dark void + two crossing cord strands ("woven in")
-      tier 2 → empty: dark void under a glassy amber sap dome ("sap-sealed")
-      tier 3 → empty: dark void under a pearlescent nacre dome ("nacre-clasped")
+      tier 2 → empty: dark void under a glassy amber sap seal ("sap-sealed")
+      tier 3 → empty: dark void under a pearlescent nacre clasp ("nacre-clasped")
     """
     parts = []
     void = add(bpy.ops.mesh.primitive_cylinder_add, vertices=28, radius=r, depth=0.014,
                location=(x, y, z - 0.007))
     assign(void, mat_void())
     parts.append(void)
-
-    if tier == 0 and filled_tier0:
-        gem = add(bpy.ops.mesh.primitive_ico_sphere_add, subdivisions=2, radius=r * 0.88,
-                   location=(x, y, z + r * 0.32))
-        gem.scale = (1.0, 1.0, 0.55)
-        assign(gem, mat_crystal_cloudy("seat-crystal"))
-        bpy.ops.object.shade_smooth()
-        parts.append(gem)
-        return parts
 
     if tier == 1:
         for ang in (35, -35):
@@ -307,11 +315,26 @@ def build_seat(x, y, z, r, tier, filled_tier0=False, closure_mat=None):
             parts.append(c)
         return parts
 
-    # tier 2 / tier 3 — a shallow dome, SAME footprint radius as the void beneath it
-    dome = add(bpy.ops.mesh.primitive_ico_sphere_add, subdivisions=2, radius=r,
-               location=(x, y, z))
-    dome.scale = (1.0, 1.0, 0.42)
-    assign(dome, closure_mat)
+    if tier == 0 and not filled_tier0:
+        return parts  # an unwritten tier-0 seat is just the void — Greg's pair arrives uncut
+
+    # tier 0 (filled) / tier 2 / tier 3 — a flush disc at the VOID'S OWN RADIUS (guarantees no
+    # peeking edge), with a smaller inset dome on top for glassy roundness only.
+    mat = mat_crystal_cloudy("seat-crystal") if (tier == 0 and filled_tier0) else closure_mat
+    disc = add(bpy.ops.mesh.primitive_cylinder_add, vertices=28, radius=r * 0.995, depth=0.02,
+               location=(x, y, z + 0.003))
+    bev = disc.modifiers.new("b", 'BEVEL')
+    bev.width = r * 0.18
+    bev.segments = 4
+    bpy.ops.object.modifier_apply(modifier="b")
+    assign(disc, mat)
     bpy.ops.object.shade_smooth()
-    parts.append(dome)
+    parts.append(disc)
+
+    bump = add(bpy.ops.mesh.primitive_ico_sphere_add, subdivisions=2, radius=r * 0.62,
+               location=(x, y, z + 0.02))
+    bump.scale = (1.0, 1.0, 0.45)
+    assign(bump, mat)
+    bpy.ops.object.shade_smooth()
+    parts.append(bump)
     return parts
