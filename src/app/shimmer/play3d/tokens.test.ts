@@ -32,7 +32,8 @@ const DIR = join(process.cwd(), 'src/app/shimmer/play3d')
  * Files whose colour comes entirely from `tokens.ts`. Adding a name here without converting the
  * file turns assert A red, which is the intended direction: the list cannot lie in the cheap way.
  */
-const CONVERTED = ['PassagePanel.tsx', 'TremorRing.tsx', 'ui.tsx']
+// vessel-art.tsx was born converted (2026-09-09): two literals, both tokens from the day it was written
+const CONVERTED = ['PassagePanel.tsx', 'TremorRing.tsx', 'ui.tsx', 'vessel-art.tsx']
 
 /**
  * Still holding raw literals. NOT an exemption — a worklist with a red light on it (assert B).

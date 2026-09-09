@@ -28,6 +28,7 @@
 import { VESSEL_CAP, type Vessel } from './gems'
 import { type VesselTier } from './vessels'
 import { RUNES } from './birth/runes.data'
+import { mint } from './tokens'
 
 const BRACELET_PNG_SEATS: Record<1 | 2 | 3, readonly (readonly [number, number])[]> = {
   1: [[194.9, 423.0]],
@@ -62,7 +63,8 @@ export const drawnSeats = (tier: VesselTier, seats: number): number =>
 export const vesselRender = (kind: Vessel, tier: VesselTier, seats: number): string =>
   `/models/props/vessels/${NOUN[kind]}-t${tier}-s${drawnSeats(tier, seats)}.png`
 
-const glowOf = (id: string | undefined) => (id ? RUNES.find(r => r.id === id)?.glow ?? '#cfd4dc' : null)
+// a rune with no canon glow falls back to the pale mint the panels use for "white" — never a raw literal (tokens guard)
+const glowOf = (id: string | undefined) => (id ? RUNES.find(r => r.id === id)?.glow ?? mint.pale : null)
 
 /**
  * One WRITTEN seat, over the render's void. ⚠ NO STROKE. A ring around a seat is a bezel, and the
@@ -70,11 +72,11 @@ const glowOf = (id: string | undefined) => (id ? RUNES.find(r => r.id === id)?.g
  * not as a jewel clamped in a setting. The EMPTY state is never drawn here: it is the render's own.
  */
 function LitSeat({ cx, cy, r, gem }: { cx: number; cy: number; r: number; gem: string }) {
-  const c = glowOf(gem) ?? '#cfd4dc'
+  const c = glowOf(gem) ?? mint.pale
   return (
     <g>
       <circle cx={cx} cy={cy} r={r} fill={c} opacity={0.92} />
-      <circle cx={cx - r * 0.28} cy={cy - r * 0.3} r={r * 0.34} fill="#fff" opacity={0.28} />
+      <circle cx={cx - r * 0.28} cy={cy - r * 0.3} r={r * 0.34} fill={mint.text} opacity={0.28} />
     </g>
   )
 }
