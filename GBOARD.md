@@ -25,7 +25,8 @@ The 09-09 note priced a 160-sample object at ~25 min; measured today it is **~17
 A stowed vessel with `move: null` ("cut it for a word you hold…") has no seat yet; drawing it with a void reports a seat it does not have. `SEAT_ANGLES[0]` renders a raw braid for tiers 1–3 (the floor is always cut for one letter). ⚠ **The first s0 frame had a nick at the seam**: a ring nothing interrupts is ONE run from 0 to 358.5° and the tube stopped a step short of its start. Seated rings never hit it (their runs end at a seat gap), so no seated frame changed. Closed by returning an uninterrupted run to its first angle a full turn later.
 
 ### ⛔ ALEX'S CALL, in order
-1. **The CARD with real art** — `ather.games/shimmer/dev/panel`, gear tab, item look. The bench is the proposal; `VesselRack` (what `I` opens) still draws the item chip. Promote only after this read.
+0. ✅ **RULED 2026-09-09 ~16:30 ET — the card stands as shipped.** Alex saw the four seat states at card scale (88px render, thin ring, X marks gone) and called it: *"that will have to go for now.. i dont think we can get it any better."* No more spend on the bracelet card. Promotion into `VesselRack` is still a separate call.
+1. ~~**The CARD with real art**~~ — `ather.games/shimmer/dev/panel`, gear tab, item look. The bench is the proposal; `VesselRack` (what `I` opens) still draws the item chip. Promote only after this read.
 2. **The glove** — twigs on a mitten. Needs a new form, not a tweak.
 3. The `X` cord-cross on an empty seat — he let it stand on the sheet; it is the same X on the card.
 
