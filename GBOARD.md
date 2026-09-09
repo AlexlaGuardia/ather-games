@@ -24,14 +24,19 @@ The 09-09 note priced a 160-sample object at ~25 min; measured today it is **~17
 ### An uncut vessel is a real state (`4b2b836`)
 A stowed vessel with `move: null` ("cut it for a word you hold…") has no seat yet; drawing it with a void reports a seat it does not have. `SEAT_ANGLES[0]` renders a raw braid for tiers 1–3 (the floor is always cut for one letter). ⚠ **The first s0 frame had a nick at the seam**: a ring nothing interrupts is ONE run from 0 to 358.5° and the tube stopped a step short of its start. Seated rings never hit it (their runs end at a seat gap), so no seated frame changed. Closed by returning an uninterrupted run to its first angle a full turn later.
 
+### ★ THE GLOVE — form pass 3, rendered and WIRED (`2a82338` · `b4ff5ed` · `820f5cd`) — ✅ **DEPLOYED `BUILD_ID pG8udwyAEkG-QmmaOq5Ot`, 184 chunks, from `820f5cd`**
+Verified from the served bytes: the glove render path in exactly one chunk (`d8c748a25ec38f91.js`), served md5 == disk, negative control 0, `glove-t1-s0.png` and `glove-t3-s3.png` 200 on the tunnel, pm2 online. tsc 7 (baseline), panel-fixture 137/0, keeper-tabs 17/0, vessels 96/0, gems 44/0.
+**Two passes tried to make the vessel alone read as a hand and could not.** Measured, the fingers were ~13% of the palm where a hand's are ~90% — but the brief's glove is OPEN-FINGERED with its body across the BACK of the hand, so the vessel by itself is a pad, a cuff and some loops, and no arrangement of those is hand-shaped. The icon now carries a quiet low-contrast HAND as substrate (full fanned fingers, thumb leaving the outline, forearm stub) and the vessel sits on it: pad over the back, band cuff past the wrist-bone, a sleeve at each digit root. Tier 3's resting light is a bead at each fingertip sleeve. The hand carries no tier and no glow. Alex: *"render them all and wire it in."* Thirteen frames at 160 (uncut s0 included, same as the bracelet). `GloveArt` mounts the render with letters overlaid on the voids; seat centres from the probe (⚠ the two-seat pair projects to different pixel ROWS from the same world y — the camera is off-axis; verified against the voids). The SVG glove is gone.
+⚠ Open reads for Alex, none blocking: two seats side by side read a little like eyes (three do not); the fingers have no knuckle joints.
+
 ### ⛔ ALEX'S CALL, in order
 0. ✅ **RULED 2026-09-09 ~16:30 ET — the card stands as shipped.** Alex saw the four seat states at card scale (88px render, thin ring, X marks gone) and called it: *"that will have to go for now.. i dont think we can get it any better."* No more spend on the bracelet card. Promotion into `VesselRack` is still a separate call.
 1. ~~**The CARD with real art**~~ — `ather.games/shimmer/dev/panel`, gear tab, item look. The bench is the proposal; `VesselRack` (what `I` opens) still draws the item chip. Promote only after this read.
-2. **The glove** — twigs on a mitten. Needs a new form, not a tweak.
+2. ~~**The glove** — twigs on a mitten.~~ Form pass 3 shipped, see above.
 3. The `X` cord-cross on an empty seat — he let it stand on the sheet; it is the same X on the card.
 
 ### Files
-`src/app/shimmer/dev/panel/vessel-card.tsx` · `tools/render/vessel_{common,bracelet,seat_probe}.py` · `public/models/props/vessels/bracelet-t*-s*.png` (13 frames)
+`src/app/shimmer/dev/panel/vessel-card.tsx` · `tools/render/vessel_{common,bracelet,glove,seat_probe}.py` · `public/models/props/vessels/{bracelet,glove}-t*-s*.png` (13 + 13 frames)
 
 ## 🔦 Shimmer — **A VESSEL BEARS THE SEATS ITS WORD NEEDS, AND THE BRAID WAS CUT TWICE AS WIDE AS THE SEAT** (2026-09-09, play lane) · *Last touched 2026-09-09 — `b565bd0` **LIVE** in `BUILD_ID eh8mAIFBqcUZjAuwtQPn6` (verified: ancestry + the new scenario string in the built chunk with a positive AND a negative control, served md5 == disk == public tunnel). `a638eb7` / `036c34f` / `9ce3a3d` committed + pushed, **NOT deployed** — none of it changes what a player sees until the art is judged. panel-fixture **137/0** (was 88), gems 44, vessels 96, loadout 27, imbue 22, dev-pages 232, dev-back 41, keeper-chrome 69 — exit codes read directly, not off tail lines. tsc 7 (baseline).*
 
