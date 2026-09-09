@@ -87,6 +87,7 @@ CUFF_PTS = [
 
 # seats on the back-of-hand pad, a shallow arc along the knuckle line, centred whatever the count
 SEAT_LAYOUT = {
+    0: [],                     # an UNCUT glove: no word yet, no seat (`move: null`) — same state as the bracelet's s0
     1: [(0.0, 0.26)],
     2: [(-0.15, 0.25), (0.15, 0.25)],
     3: [(-0.25, 0.19), (0.0, 0.30), (0.25, 0.19)],
@@ -221,6 +222,6 @@ def render_one(tier, seats):
 
 if __name__ == "__main__":
     for tier in (0, 1, 2, 3):
-        seat_counts = (1,) if tier == 0 else (1, 2, 3)
+        seat_counts = (1,) if tier == 0 else (0, 1, 2, 3)   # the floor is always cut for one letter
         for seats in seat_counts:
             render_one(tier, seats)

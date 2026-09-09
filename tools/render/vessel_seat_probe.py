@@ -1,10 +1,11 @@
-# Projects each bracelet seat centre (+ its rim) into render pixel space for the panel overlay.
+# Projects each bracelet AND glove seat centre (+ its rim) into render pixel space for the panel overlay.
 # Run: /opt/blender/blender -b -P tools/render/vessel_seat_probe.py | grep SEATS_JSON
 # Same camera as vessel_bracelet.render_one; the table in dev/panel/vessel-card.tsx is pasted from this.
 import bpy, math, os, sys, json
 sys.path.insert(0, "/root/ather-games/tools/render")
 from vessel_common import fresh_scene, setup_light_and_cam, RES_X, RES_Y
 from bpy_extras.object_utils import world_to_camera_view
+from mathutils import Vector
 R = 0.82; SEAT_R = 0.086; SCALE_Z = 0.34
 SEAT_ANGLES = {1: [-90], 2: [-110, -70], 3: [-124, -90, -56]}
 STRAND = {0: 0.022, 1: 0.021, 2: 0.030, 3: 0.029}
@@ -20,7 +21,6 @@ for tier in (0, 1, 2, 3):
         for ang in SEAT_ANGLES[seats]:
             t = math.radians(ang)
             sx, sy, sz = R * math.cos(t), R * math.sin(t), top_z
-            from mathutils import Vector
             c = world_to_camera_view(scene, cam, Vector((sx, sy, sz)))
             e = world_to_camera_view(scene, cam, Vector((sx + SEAT_R, sy, sz)))
             px, py = c.x * RES_X, (1 - c.y) * RES_Y
@@ -28,3 +28,19 @@ for tier in (0, 1, 2, 3):
             pts.append({"x": round(px, 1), "y": round(py, 1), "r": round(pr, 1)})
         out[f"t{tier}-s{seats}"] = pts
 print("SEATS_JSON " + json.dumps(out))
+
+# ── the glove: seats lie flat on the pad at Z0, layout per seat count, tier-independent ──
+import vessel_glove as vg
+scene = fresh_scene()
+setup_light_and_cam(scene, ortho_scale=3.25, cam_loc=(0.30, -0.75, 3.4))
+bpy.context.view_layer.update()
+cam = scene.camera
+gout = {}
+for seats in (1, 2, 3):
+    pts = []
+    for (sx, sy) in vg.SEAT_LAYOUT[seats]:
+        c = world_to_camera_view(scene, cam, Vector((sx, sy, vg.Z0)))
+        e = world_to_camera_view(scene, cam, Vector((sx + 0.085, sy, vg.Z0)))
+        pts.append({"x": round(c.x * RES_X, 1), "y": round((1 - c.y) * RES_Y, 1), "r": round(abs(e.x - c.x) * RES_X, 1)})
+    gout[f"s{seats}"] = pts
+print("GLOVE_SEATS_JSON " + json.dumps(gout))

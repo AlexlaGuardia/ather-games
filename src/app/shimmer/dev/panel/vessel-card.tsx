@@ -36,8 +36,6 @@ import { VESSEL_CAP, type Vessel } from '../../play3d/gems'
 import { type VesselTier } from '../../play3d/vessels'
 import { RUNES } from '../../play3d/birth/runes.data'
 
-const CORD = '#8a7a5e'        // plain cord — tier-0/1 honest craft, no metal
-const WOOD = '#c9a227'        // goldwood, the warm first material
 const VOID = '#07070b'        // an empty seat: a void in the weave. No stroke — a stroke is a rim.
 
 const glowOf = (id: string | undefined) => (id ? RUNES.find(r => r.id === id)?.glow ?? '#cfd4dc' : null)
@@ -84,6 +82,7 @@ const BRACELET_PNG_SEATS: Record<1 | 2 | 3, readonly (readonly [number, number])
 }
 /** a seat's radius in the same 512px space (SEAT_R 0.086 under ortho_scale 2.35) */
 const BRACELET_PNG_SEAT_R = 17.6
+/** both vessels render in the same square box */
 const BRACELET_PNG_SIZE = 88
 
 /**
@@ -110,41 +109,38 @@ function BraceletArt({ gems, seats, tier }: { gems: readonly string[]; seats: nu
 }
 
 /**
- * THE GLOVE — open-fingered, back-of-hand, three seats in a shallow arc on the knuckle line.
- * ⛔ No plate, no knuckle armour, no gauntlet silhouette — "a working glove, not armour".
+ * THE GLOVE — the RENDER, same contract as the bracelet (Alex, 2026-09-09: "render them all and
+ * wire it in"). `tools/render/vessel_glove.py` form pass 3 draws the vessel ON a quiet hand — the
+ * open-fingered back-of-hand glove by itself is a pad, a cuff and some loops, and no arrangement
+ * of those is hand-shaped. Seats sit on the back-of-hand pad along the knuckle line; the written
+ * letters are drawn over the render's own voids, as on the bracelet.
  *
- * ⚠ THE FIRST CUT READ AS A BASKET. Vertical splints under a horizontal wrap is a barrel, and no
- * amount of labelling fixes a silhouette that names the wrong object. What makes it a HAND is the
- * taper (wide at the knuckles, narrow at the wrist), a thumb that leaves the outline, and four
- * fingers with real gaps between them — so the shape is redrawn around those three cues.
+ * ★ Seat centres from `tools/render/vessel_seat_probe.py` (GLOVE_SEATS_JSON), tier-independent
+ * because every tier's pad sits at the same Z0. ⚠ The two-seat pair projects to DIFFERENT pixel
+ * rows (208 vs 226) from the SAME world y — the camera is off-axis in x and tilts to its target,
+ * so world x leaks into image y. That is the render, not a typo; verified against the voids.
  */
-function GloveArt({ gems, seats }: { gems: readonly string[]; seats: number }) {
+const GLOVE_PNG_SEATS: Record<1 | 2 | 3, readonly (readonly [number, number])[]> = {
+  1: [[271.2, 215.7]],
+  2: [[248.7, 208.6], [292.6, 225.7]],
+  3: [[230.5, 211.4], [273.6, 210.0], [303.7, 239.9]],
+}
+/** a seat's radius in the same 512px space (r 0.085 under ortho_scale 3.25) */
+const GLOVE_PNG_SEAT_R = 12.4
+
+export const gloveRender = (tier: VesselTier, seats: number): string =>
+  `/models/props/vessels/glove-t${tier}-s${tier === 0 ? 1 : Math.min(VESSEL_CAP, Math.max(0, seats))}.png`
+
+function GloveArt({ gems, seats, tier }: { gems: readonly string[]; seats: number; tier: VesselTier }) {
+  const n = tier === 0 ? 1 : Math.min(VESSEL_CAP, Math.max(0, seats))
+  const pts = n ? GLOVE_PNG_SEATS[n as 1 | 2 | 3] : []
   return (
-    <svg viewBox="0 0 104 92" width="92" height="82" aria-label="glove">
-      {/* four open fingers, gaps between them, rounded tips — free, because a keeper works in this hand */}
-      {[30, 44, 58, 72].map((x, i) => (
-        <rect key={x} x={x} y={12 + (i === 0 || i === 3 ? 5 : 0)} width={9}
-              height={20 - (i === 0 || i === 3 ? 5 : 0)} rx={4.5} fill={CORD} opacity={0.42} />
-      ))}
-      {/* the back of the hand: WIDE at the knuckles, tapering to the wrist */}
-      <path d="M27 31 h55 l-5 30 q-22 8 -45 0 z" fill={CORD} opacity={0.6} />
-      {/* the thumb leaves the outline — the cue that says hand and not box */}
-      <path d="M27 38 q-13 5 -14 17 q-1 7 6 8" fill="none" stroke={CORD} strokeWidth={7}
-            strokeLinecap="round" opacity={0.5} />
-      {/* goldwood splints laid like a leaf's ribs, lashed with cord — inside the taper, not a grid */}
-      {[36, 48, 60, 72].map((x, i) => (
-        <rect key={x} x={x - i * 0.8} y={34} width={2.4} height={24} rx={1.2} fill={WOOD} opacity={0.4} />
-      ))}
-      {/* the wrap that crosses the palm, and the cuff past the wrist-bone */}
-      <path d="M29 55 q24 7 46 0" fill="none" stroke={WOOD} strokeWidth={2.2} opacity={0.45} />
-      <path d="M32 63 q22 7 44 0" fill="none" stroke={CORD} strokeWidth={5} opacity={0.55} />
-      {/* the seats the word asks for, a shallow arc following the knuckle line — centred on the
-          back of the hand whatever the count, for the same reason the bracelet's arc is centred */}
-      {Array.from({ length: seats }, (_, i) => {
-        const off = i - (seats - 1) / 2
-        return <Seat key={i} cx={52 + off * 14} cy={42 - (Math.abs(off) < 0.5 ? 2.5 : 0)} r={6} gem={gems[i]} />
-      })}
-    </svg>
+    <div className="relative shrink-0" style={{ width: BRACELET_PNG_SIZE, height: BRACELET_PNG_SIZE }} aria-label="glove">
+      <img src={gloveRender(tier, n)} alt="" width={BRACELET_PNG_SIZE} height={BRACELET_PNG_SIZE} draggable={false} />
+      <svg viewBox="0 0 512 512" className="absolute inset-0 h-full w-full" aria-hidden>
+        {pts.map(([x, y], i) => (gems[i] ? <Seat key={i} cx={x} cy={y} r={GLOVE_PNG_SEAT_R * 0.9} gem={gems[i]} /> : null))}
+      </svg>
+    </div>
   )
 }
 
@@ -167,7 +163,7 @@ export function VesselCard({ kind, gems, word, owned, seats, tier = 1 }: {
 }) {
   return (
     <div className="gx-plate flex items-center gap-3 px-3 py-2">
-      {kind === 'bracelet' ? <BraceletArt gems={gems} seats={seats} tier={tier} /> : <GloveArt gems={gems} seats={seats} />}
+      {kind === 'bracelet' ? <BraceletArt gems={gems} seats={seats} tier={tier} /> : <GloveArt gems={gems} seats={seats} tier={tier} />}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="gx-title text-[13px] text-amber-100/90">{kind === 'bracelet' ? 'bracelet' : 'glove'}</span>
