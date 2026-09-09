@@ -50,7 +50,13 @@ ok(/Array\.from\(\{ length: Math\.min\(VESSEL_CAP, Math\.max\(0, seats\)\) \}/.t
 ok(/seats = VESSEL_CAP/.test(seats), 'a caller with no word still gets the cap as the default')
 // ★ RE-POINTED 2026-09-04: only WRITTEN vessels are gear. The rack draws seats on the WORN vessel and
 // offers the written spares in a dropdown BY WORD; unwritten parts live in the satchel (`VesselParts`).
-ok(count(rack, /<Seats /g) === 1, `★ the rack draws seats on the worn vessel (${count(rack, /<Seats /g)} mounts, want 1)`)
+// ★ RE-POINTED 2026-09-09 (hub, Alex: "yea that looks good lets continue"): the rack draws the VESSEL —
+// `VesselArt`, the render with the letters over its voids — and the seats are IN that picture. The
+// `Seats` chip row beside the word was the same fact in a second dialect and is gone from the rack
+// (it still draws the stowed parts in the satchel, which is where `Seats` is asserted above).
+ok(count(rack, /<VesselArt /g) === 1, `★ the rack draws the worn vessel's RENDER, once per row (${count(rack, /<VesselArt /g)} mounts, want 1)`)
+ok(count(rack, /<Seats /g) === 0, `★ and no chip row beside it — the seats are in the picture (${count(rack, /<Seats /g)} chip mounts, want 0)`)
+ok(/seats=\{worn \? seats : 0\}/.test(rack), '★ nothing worn draws the UNCUT vessel (0 seats), never a vessel with seats it does not have')
 ok(/<select /.test(rack) && /completeVessels\(/.test(rack), '★ the spares are a dropdown of WRITTEN vessels, by word (completeVessels)')
 ok(/dismantleWorn\(/.test(rack), 'the worn vessel can be dismantled from the rack')
 ok(!/doEquip\(kind, i\)\}\s*className="gx-btn flex/.test(rack), 'the old spare-button row is gone')

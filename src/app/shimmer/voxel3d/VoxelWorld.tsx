@@ -373,6 +373,7 @@ const CAST_ACTION_BY_KIND: Record<Exclude<SlotKind, 'passive' | 'trait'>, Action
 const CAST_ACTIONS: readonly ActionId[] =
   ALL_BANDS.map(k => CAST_ACTION_BY_KIND[k as Exclude<SlotKind, 'passive' | 'trait'>])
 import { RUNES } from '../play3d/birth/runes.data'
+import { VesselArt } from '../play3d/vessel-art'
 import { knownMoves } from '../play3d/keeper-moves'
 import { CAST_SLOTS, ALL_BANDS, derivePassive, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
 import { saveLoadout, setSlot, resolveLoadout, emptySlotWhy,
@@ -3354,27 +3355,34 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
         const spares = completeVessels(kind, birth)
         return (
           <div key={kind} className={`gx-plate px-2.5 py-1.5 ${worn ? 'is-lit' : ''}`}>
-            <div className="flex items-center gap-2">
-              {/* the vessel's own icon — through the bag's `ItemChip`, so the rack and the bag can never
-                  disagree about what a bracelet looks like. `_t1` until the tier model lands.
-                  ⚠ Keyed by the NOUN, not the kind id: the kind is `focus`, the sprite is `vessel_glove_t1`. */}
-              <ItemChip itemId={vesselIconId(kind, worn ? wornTier(kind) : 1)} size={26} />
-              <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[kind]}</span>
-              {/* the MATERIAL of what is worn — the tier, read the way canon says it reads */}
-              {worn && wornPresent(kind) ? <span className="gx-label text-[9px] text-amber-200/50">{tierLabel(kind, wornTier(kind))}</span> : null}
-              <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[kind]}</span>
-              <span className="gx-value ml-auto text-[10px] text-white/45">{l.vessels[kind].length}/{seats}</span>
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-1">
-              <span className="gx-label rounded-[2px] border border-amber-200/45 bg-amber-200/10 px-1.5 py-0.5 text-[9px] text-amber-200/90">
-                {kind === 'bracelet' ? 'wrist' : 'hand'}
-              </span>
-              {worn
-                ? <><Seats gems={l.vessels[kind]} seats={seats} />
-                    <span className="gx-title ml-1 text-[11px] text-white/80">{wordOf(worn)}</span>
-                    <button type="button" onPointerDown={() => doDismantle(kind)}
-                            className="gx-btn gx-inactive ml-auto px-2 py-0.5 text-[10px] hover:opacity-100">dismantle</button></>
-                : <span className="gx-title ml-1 text-[11px] text-white/30">nothing worn · your birth move needs no vessel</span>}
+            <div className="flex items-center gap-3">
+              {/* ★ THE OBJECT, NOT A CHIP (Alex, 2026-09-09, after judging both renders on the bench): the
+                  vessel's own render with its letters drawn over the voids — `VesselArt`, one drawing for
+                  every host, so the rack and the bench can never disagree about what a bracelet looks like.
+                  The seats are IN the picture (a dark void is an unwritten seat, a lit pool is a letter), so
+                  the old chip row beside the word is gone — it was the same fact in a second dialect.
+                  Nothing worn: the uncut tier-1 vessel, faded — a place for one, not one. */}
+              <VesselArt kind={kind} tier={worn ? wornTier(kind) : 1} seats={worn ? seats : 0}
+                         gems={l.vessels[kind]} size={72} dim={!worn} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[kind]}</span>
+                  {/* the MATERIAL of what is worn — the tier, read the way canon says it reads */}
+                  {worn && wornPresent(kind) ? <span className="gx-label text-[9px] text-amber-200/50">{tierLabel(kind, wornTier(kind))}</span> : null}
+                  <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[kind]}</span>
+                  <span className="gx-value ml-auto text-[10px] text-white/45">{l.vessels[kind].length}/{seats}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className="gx-label rounded-[2px] border border-amber-200/45 bg-amber-200/10 px-1.5 py-0.5 text-[9px] text-amber-200/90">
+                    {kind === 'bracelet' ? 'wrist' : 'hand'}
+                  </span>
+                  {worn
+                    ? <><span className="gx-title ml-1 text-[11px] text-white/80">{wordOf(worn)}</span>
+                        <button type="button" onPointerDown={() => doDismantle(kind)}
+                                className="gx-btn gx-inactive ml-auto px-2 py-0.5 text-[10px] hover:opacity-100">dismantle</button></>
+                    : <span className="gx-title ml-1 text-[11px] text-white/30">nothing worn · your birth move needs no vessel</span>}
+                </div>
+              </div>
             </div>
             {/* ★ THE DROPDOWN (Alex): every written spare of this kind, by its WORD — a keeper picks a vessel by
                 reading what it says, never by remembering which number it was parked under. */}

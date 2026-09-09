@@ -105,7 +105,11 @@ const rackAt2 = declAt(R, 'VesselRack')
 const rack2 = rackAt2 >= 0 ? R.slice(rackAt2, declAfter(R, 'GatheringFocuses', rackAt2)) : ''
 // ★ RE-POINTED 2026-09-04 (the tier model): the id is built by ONE helper, `vesselIconId(kind, tier)`, and the
 // noun rule lives there. The rack, the satchel grid and the part strip all go through it.
-ok(/<ItemChip itemId=\{vesselIconId\(kind, /.test(rack2), '★ the rack draws each vessel\'s icon through ItemChip via vesselIconId — one spelling for every host')
+// ★ RE-POINTED 2026-09-09 (hub): the RACK now draws the vessel's render (`VesselArt`, judged by Alex on the
+// bench), not the 26px item chip. The chip is still the one spelling in the SATCHEL hosts (the grid and the
+// part strip), which is what the helper asserts below still guard — so the noun rule keeps ONE home.
+ok(/<VesselArt kind=\{kind\}/.test(rack2) && !/<ItemChip /.test(rack2), '★ the rack draws each vessel\'s RENDER through VesselArt, and no item chip beside it')
+ok(count(R, /<ItemChip itemId=\{vesselIconId\(/g) >= 2, `★ the satchel hosts still draw the vessel chip through vesselIconId (${count(R, /<ItemChip itemId=\{vesselIconId\(/g)} mounts, want ≥2: grid + part strip)`)
 const iconFnAt = declAt(R, 'vesselIconId')
 const iconFn = iconFnAt >= 0 ? R.slice(iconFnAt, R.indexOf('\n}\n', iconFnAt)) : ''
 ok(/`vessel_\$\{VESSEL_NOUN\[kind\]\}_t\$\{tier\}`/.test(iconFn) && !/vessel_\$\{kind\}/.test(iconFn),
