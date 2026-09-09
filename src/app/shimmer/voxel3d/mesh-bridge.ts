@@ -10,7 +10,7 @@
 import * as THREE from 'three'
 import type { MeshAttrs } from './attrs'
 import type { VoxelSettings } from './settings'
-import { LIGHT_DECL_GLSL, lightApply, createLightUniforms, type LightUniforms } from './light-glsl'
+import { LIGHT_DECL_GLSL, lightApply, lightApplyHere, createLightUniforms, type LightUniforms } from './light-glsl'
 
 export { MATERIAL_COLOR, EMISSIVE } from './attrs'
 
@@ -178,7 +178,7 @@ const WATER_BASE_ALPHA = 0.78
 /** Solves `1 - exp(-k*3) = 0.78` — the median depth keeps the opacity that shipped before this. */
 const WATER_ABSORB = 0.505
 
-export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } | null, waterLayer: number): WaterMaterial {
+export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } | null, waterLayer: number, light: LightUniforms = createLightUniforms()): WaterMaterial {
   const mat = new THREE.MeshLambertMaterial({
     vertexColors: !tiles, transparent: true, opacity: WATER_BASE_ALPHA, depthWrite: false,
     // ── ★★ THE CEILING: WATER WAS UNDRAWN FROM BELOW (2026-08-21) ─────────────────────────────
@@ -201,6 +201,7 @@ export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } |
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = { value: now }
     if (tiles) shader.uniforms.uTiles = { value: tiles.texture }
+    Object.assign(shader.uniforms, light)
     live = shader.uniforms as { uTime: { value: number } }
 
     shader.vertexShader = shader.vertexShader
@@ -209,12 +210,16 @@ export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } |
         // ⚠ DECLARED WITH A DEFAULT, because the attribute is absent on any geometry that predates
         // it and an undeclared attribute is a link error, not a zero. `-1` is the no-data sentinel,
         // so a geometry without the buffer lands on the flat-opacity branch rather than vanishing.
-        + 'attribute float aDepth;\nvarying float vDepth;')
+        + 'attribute float aDepth;\nvarying float vDepth;\nvarying vec3 vWaterWPos;')
       .replace('#include <begin_vertex>',
         `#include <begin_vertex>
 vVoxPos = position;
 vVoxNormal = normal;
 vDepth = aDepth;
+// ⚠ TAKEN BEFORE THE RIPPLE AND THE RECESS BELOW MOVE IT. The light field is indexed by CELL, and
+// the surface is displaced by up to 0.15 of a block — enough to fall into the cell above or below
+// at a boundary and make a sheet of water flicker between two light levels as it waves.
+vWaterWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 if (normal.y > 0.5) {
   vec3 wp = (modelMatrix * vec4(position, 1.0)).xyz;
   // Recess + ripple, top faces only. Two phases at unrelated wavelengths so the surface never
@@ -233,8 +238,9 @@ if (normal.y > 0.5) {
       // compile fine WITH an atlas and fail to link without one, which is the configuration nobody
       // looks at.
       .replace('#include <common>',
-        '#include <common>\nvarying float vDepth;\nvarying vec3 vVoxNormal;\n'
-        + (tiles ? 'uniform sampler2DArray uTiles;\nuniform float uTime;\nvarying vec3 vVoxPos;\n' : ''))
+        '#include <common>\nvarying float vDepth;\nvarying vec3 vVoxNormal;\nvarying vec3 vWaterWPos;\n'
+        + (tiles ? 'uniform sampler2DArray uTiles;\nuniform float uTime;\nvarying vec3 vVoxPos;\n' : '')
+        + LIGHT_DECL_GLSL)
       .replace('#include <color_fragment>',
         `#include <color_fragment>
 // ⚠ NARROWING THE MATERIAL'S DoubleSide BACK DOWN — see the 'side' flag above. Only the sheet is meant to be
@@ -276,6 +282,21 @@ ${tiles ? `{
     diffuseColor.rgb *= mix(1.0, 0.72, clamp(att, 0.0, 1.0));
   }
 }`)
+
+    // ── ★★ WATER SAMPLES THE FIELD, AND IT USES THE **FACE** FORM ─────────────────────────────
+    // Water quads are cube faces, not cross-quads, so the cell that matters is the one IN FRONT of
+    // the face — for the sheet that is the air above it, which is exactly where its light comes
+    // from, and from underneath it is the same cell, i.e. the sky you are looking up at through it.
+    // ⚠ Left out of the first render-light pass because water is its own program: a flooded cave
+    // rendered at noon while the rock around it was black.
+    const wet = `
+      vec3 waterCol = outgoingLight;
+      ${lightApply('waterCol', 'diffuseColor.rgb', 'vWaterWPos', 'normalize(vVoxNormal)')}
+      gl_FragColor = vec4(waterCol, diffuseColor.a);
+    `
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <output_fragment>', wet)
+      .replace('#include <opaque_fragment>', wet)
   }
   return mat
 }

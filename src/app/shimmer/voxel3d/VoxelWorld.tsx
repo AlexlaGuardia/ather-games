@@ -134,7 +134,7 @@ import {
   invalidateColumn, drainUploads, eligible, ringKey,
 } from '../voxel/render-light-ring'
 import { createLightTexture } from './light-texture'
-import { createLightUniforms, LIGHT_LOOK } from './light-glsl'
+import { createLightUniforms, LIGHT_LOOK, LIGHT_DECL_GLSL, lightApplyHere } from './light-glsl'
 import { layerOf } from './tex/tiles'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
@@ -4077,7 +4077,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const textured = useMemo(() => (tiles ? createTexturedVoxelMaterial(tiles, lightUniforms) : null), [tiles, lightUniforms])
   const material = textured?.material ?? flatMaterial
   // The world's ONE transparent pass — see mesh-bridge.ts. Shared instance, same rule as above.
-  const waterMaterial = useMemo(() => createWaterMaterial(tiles, layerOf(MAT.WATER, 0)), [tiles])
+  const waterMaterial = useMemo(() => createWaterMaterial(tiles, layerOf(MAT.WATER, 0), lightUniforms), [tiles, lightUniforms])
 
   /**
    * ── ★ THE CANOPY MATERIAL (2026-08-12) ────────────────────────────────────────────────────────
@@ -4098,13 +4098,44 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     tex.minFilter = THREE.NearestFilter
     tex.colorSpace = THREE.SRGBColorSpace
     tex.needsUpdate = true
-    return new THREE.MeshLambertMaterial({
+    const mat = new THREE.MeshLambertMaterial({
       map: tex,
       vertexColors: true,        // species tint x canopy-depth shade, straight from the mesher
       alphaTest: 0.5,
       side: THREE.DoubleSide,
     })
-  }, [])
+    // ── ★★ THE CANOPY SAMPLES THE FIELD TOO (2026-09-08) ──────────────────────────────────────
+    // It was left out of the first render-light pass because leaves are their own program, and the
+    // Thicket is what made that visible: at 96% canopy the UNDERSIDE of a closed canopy rendered
+    // as bright as its top, hanging over the darkest ground in the world. One quad, DoubleSide, so
+    // there is no separate underside to shade — the light field is the only thing that can tell
+    // the two faces apart, and it does it by cell rather than by facing.
+    //
+    // ⚠ `lightApplyHere`, NOT `lightApply`. A leaf is a CROSS-QUAD: its fragments sit inside their
+    // own block and the normal flips halfway through the surface, so stepping half a block along it
+    // would land in a different cell depending on which side you look from and the same leaf would
+    // light differently front and back. `render-light.ts` gives leaves a real level (they pass
+    // light and only end the sky's free fall), so the cell they stand in has something to read.
+    mat.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, lightUniforms)
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLeafWPos;')
+        .replace('#include <begin_vertex>',
+          '#include <begin_vertex>\nvLeafWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+      const emit = `
+        vec3 leafCol = outgoingLight;
+        ${lightApplyHere('leafCol', 'diffuseColor.rgb', 'vLeafWPos')}
+        gl_FragColor = vec4(leafCol, diffuseColor.a);
+      `
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vLeafWPos;' + LIGHT_DECL_GLSL)
+        // Three renamed this chunk around 0.16x; handle both, exactly as mesh-bridge.ts does, or a
+        // version bump silently unlights the whole canopy with no error anywhere.
+        .replace('#include <output_fragment>', emit)
+        .replace('#include <opaque_fragment>', emit)
+    }
+    return mat
+  }, [lightUniforms])
   useEffect(() => () => { leafMaterial.map?.dispose(); leafMaterial.dispose() }, [leafMaterial])
 
   // ★ A VALUE WRITE, NOT A REBUILD. Both shading paths live in the one compiled program and are

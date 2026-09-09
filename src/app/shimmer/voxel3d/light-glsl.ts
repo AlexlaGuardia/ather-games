@@ -80,14 +80,10 @@ uniform float uBlockCurve;
 uniform float uBlockGain;
 uniform vec3  uBlockTint;
 
-vec3 shimmerLight(vec3 col, vec3 albedo, vec3 wpos, vec3 nrm) {
+// The whole model, given a CELL CENTRE. Split out because not every surface wants the same cell:
+// a block face wants the air in front of it, a cross-quad wants the cell it stands in. See below.
+vec3 shimmerLightCell(vec3 col, vec3 albedo, vec3 cell) {
   if (uLightMix <= 0.0) return col;
-  // ★ THE CELL IN FRONT OF THE FACE, NOT THE FACE'S OWN BLOCK. A fragment sits exactly on the
-  // boundary plane; the block behind it is solid and its light is 0 by construction, so sampling
-  // there would render every surface in the world at the floor. Half a block along the normal
-  // lands in the air cell that is actually lit. (blockCoord() in atlas.ts steps the other way,
-  // for the opposite reason — it wants the solid block's identity.)
-  vec3 cell = floor(wpos + nrm * 0.5) + 0.5;
   vec2 dcol = floor(cell.xz / ${SPAN}.0) - uLightCentre;
   float ring = max(abs(dcol.x), abs(dcol.y));
   // ★ FADED OUT OVER THE LAST SAMPLED COLUMN, never cut. A hard edge is a visible square drawn on
@@ -110,11 +106,35 @@ vec3 shimmerLight(vec3 col, vec3 albedo, vec3 wpos, vec3 nrm) {
               + albedo * uBlockTint * (uBlockGain * pow(blkL, uBlockCurve) * (1.0 - skyShade));
   return mix(col, shaded, w);
 }
+
+// ── ★ A BLOCK FACE: the air cell IN FRONT of it ───────────────────────────────────────────────
+// A fragment sits exactly on the boundary plane; the block behind it is solid and its light is 0 by
+// construction, so sampling there would render every surface in the world at the floor. Half a
+// block along the normal lands in the air cell that is actually lit. (blockCoord() in atlas.ts
+// steps the other way, for the opposite reason — it wants the solid block's identity.)
+vec3 shimmerLight(vec3 col, vec3 albedo, vec3 wpos, vec3 nrm) {
+  return shimmerLightCell(col, albedo, floor(wpos + nrm * 0.5) + 0.5);
+}
+
+// ── ★★ A CROSS-QUAD: the cell it STANDS IN, and stepping along the normal would be wrong ───────
+// Leaves and plants are crossed quads, not cube faces. Their fragments are strictly INSIDE their
+// own block and the quad is DoubleSide, so the normal flips halfway through the surface — stepping
+// half a block along it lands in a different cell depending which side you are looking from, and
+// the same leaf would light differently from the front and the back. The cell is simply the one
+// the fragment is in, and render-light.ts gives leaves a real light level (they pass light and
+// only end the sky's free fall), so there is something there to read.
+vec3 shimmerLightHere(vec3 col, vec3 albedo, vec3 wpos) {
+  return shimmerLightCell(col, albedo, floor(wpos) + 0.5);
+}
 `
 
-/** Call site. `wpos` is world position, `nrm` the face normal — both already varyings in callers. */
+/** Block faces. `wpos` is world position, `nrm` the face normal — both already varyings in callers. */
 export const lightApply = (col: string, albedo: string, wpos: string, nrm: string): string =>
   `${col} = shimmerLight(${col}, ${albedo}, ${wpos}, ${nrm});`
+
+/** Cross-quads (leaves, plants) and water — anything whose fragments sit inside their own cell. */
+export const lightApplyHere = (col: string, albedo: string, wpos: string): string =>
+  `${col} = shimmerLightHere(${col}, ${albedo}, ${wpos});`
 
 export { SAMPLE_RADIUS }
 
