@@ -11,6 +11,30 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔦 Shimmer — **A VESSEL BEARS THE SEATS ITS WORD NEEDS, AND THE BRAID WAS CUT TWICE AS WIDE AS THE SEAT** (2026-09-09, play lane) · *Last touched 2026-09-09 — `b565bd0` **LIVE** in `BUILD_ID eh8mAIFBqcUZjAuwtQPn6` (verified: ancestry + the new scenario string in the built chunk with a positive AND a negative control, served md5 == disk == public tunnel). `a638eb7` / `036c34f` / `9ce3a3d` committed + pushed, **NOT deployed** — none of it changes what a player sees until the art is judged. panel-fixture **137/0** (was 88), gems 44, vessels 96, loadout 27, imbue 22, dev-pages 232, dev-back 41, keeper-chrome 69 — exit codes read directly, not off tail lines. tsc 7 (baseline).*
+
+### The canon bug: three seats in every vessel, forever
+The lock was amended 2026-09-04 — *"each vessel is unique with a job … if the move it's meant to represent has one slot then it only needs the one slot."* The shipped `VesselRack` honoured it; the item-first proposal did not (`[0,1,2].map`, plus a `cap = VESSEL_CAP` default standing by to hand the wrong number to any caller that forgot). Seats now come from `seatCount(wordFor[kind])`, the same call the rack makes. New `PanelPlan.wordFor` = the word a WORN vessel was made for, which survives a scenario unbinding the band — `slots` would render ZERO seats on exactly the two scenarios seats exist to show.
+
+### ⚠⚠ THE RENDER TOLD ME THE SEATS WERE FLOATING AND THE GEOMETRY SAID THEY NEVER MOVED
+`seat_gap_deg` was a hardcoded **27** while the seat spans **12** — the braid was cut 2.2× wider than the thing filling it, so **55% of every gap was bare background**. Near-black void, near-black ground, no material touching the edge, therefore no boundary. I read that as "the seats are detached" and was about to fix a position bug that does not exist; a bpy probe found 88 verts on each expected centre and every vertex inside a 0.724–0.917 band around R=0.82. **A 2D projection of a near-black object on a near-black field is not an instrument for judging position.**
+★ And the docstring ASSERTED the gap was *"SNUG (close to the seat's own footprint)"*. Read the code and it agrees with itself — only the arithmetic disagreed, and nothing in the file computed it. The gap is now derived from `seat_r` and cannot drift.
+
+### Decoration that counts as a seat
+Tier-1 goldwood beads: radius 0.075 against a seat's 0.086. Same disc, same axis, only the colour differing — so a ONE-seat bracelet drew three seat-shaped discs. That does not merely fail to help, it **reports a fill level the vessel does not have**, which is the panel's hardcoded-three-seats defect expressed in geometry. Sized to `SEAT_R * 0.42` so they read as binding knots.
+
+### Meshy: tested, and it argues against itself
+My first ban was too broad — the licence risk attaches to the IMAGE path only; **text-to-3D takes no image and has no provenance question.** One generation (20 credits, 940 left): the rope twist beats the procedural braid, but it produced no seats, is untextured without a refine pass, and **a vessel must render at 1–3 seats depending on its word while a generated mesh is one fixed object.** Reference, not deliverable. `CANON_GAPS.md` carries an `[OPEN]` for Magii on whether the concept sheet is commercially usable as a render input.
+
+### `coord build` refuses two things now (`9ce3a3d`)
+Unpushed commits, and untracked files under `public/`. Both were DETECTED by the existing pre-flight and narrated past, twice in one day. Ordinary dirty files still print and continue — that argument was kept. **Workflow change: push before you build.**
+
+### ⛔ ALEX'S CALL
+The bracelet: seats nest in the weave now, 1/2/3 countable, wood closing both sides. The `X` cord-cross on an empty seat still reads a little like a crossed-out marker. **The glove is NOT fixed** — solid tapered digits now instead of curtain rings, but they read as twigs on a mitten; it does not read as a hand.
+
+### Files
+`src/app/shimmer/play3d/panel-fixture.ts` · `panel-fixture.test.ts` · `src/app/shimmer/dev/panel/{page,vessel-card}.tsx` · `tools/render/vessel_{common,bracelet,glove}.py` · `public/models/props/vessels/` · `tools/coord.sh`
+
 ## 🔦 Shimmer — **BLOCKS GOT A SURFACE, AND THE WORLD HAD BEEN THROWING ITS CORNER SHADING AWAY** (2026-09-08 late, hub lane) · *Last touched 2026-09-08 — ✅ **DEPLOYED `BUILD_ID 1asP45PMDIP8_QZcc6hU9`, 184 chunks, `built from sha 55d14f1`**. Verified from the SERVED bytes, not from disk: served md5 == disk md5 on `aa35b709fbea54d9.js`, markers `uReliefAmt`/`uAo`/`aAo`/`gTileUv`/`tileFrame` all present, `gTileEmissive` as a positive control proving the search can see pre-existing shader strings in that file, a negative control returning nothing, and ather.games 200. Sweep **253 suites · 252 pass · 1 FAIL · 0 KILLED** at `55d14f1`; the one FAIL was a stale generated cache, fixed in `7644df4`, and both suites that read that cache re-run green there. origin/master `7644df4`, 0 unpushed. tsc 7 (baseline), canon exit 0.* ⚠ *The previous receipt `BUILD_ID IRpC7L72FRzhJpRXgE2NY` / sha `bfcbca6` is superseded — the render-light block below is still current work, only its deploy line has moved.*
 
 ### ▶▶ ALEX ASKED FOR A MORE HD, 3D BLOCK LOOK. LEVER ONE WAS A REGRESSION NOBODY HAD SEEN.
