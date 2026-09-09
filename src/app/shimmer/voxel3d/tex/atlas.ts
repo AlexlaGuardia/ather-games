@@ -156,6 +156,7 @@ export function createTexturedVoxelMaterial(tiles: TileArray, light: LightUnifor
     uJitter: { value: number }
     uAo: { value: number }
     uReliefAmt: { value: number }
+    uReliefShade: { value: number }
   } | null = null
   let liveCartoon: Record<string, { value: number }> | null = null
   let jitter = DEFAULT_JITTER
@@ -169,6 +170,7 @@ export function createTexturedVoxelMaterial(tiles: TileArray, light: LightUnifor
     shader.uniforms.uAo = { value: ao }
     shader.uniforms.uRelief = { value: tiles.relief }
     shader.uniforms.uReliefAmt = { value: relief }
+    shader.uniforms.uReliefShade = { value: relief }
     // ★ CARTOON LEVERS LIVE HERE TOO, AS UNIFORMS ON THIS SAME PROGRAM. Switching the world to
     // textures must not lose the look, and a second material per style would be one shader program
     // per style — the allocation shape that got this page blocked from WebGL. See settings.ts.
@@ -232,6 +234,14 @@ uniform sampler2DArray uRelief;
 uniform float uJitter;
 uniform float uAo;
 uniform float uReliefAmt;
+uniform float uReliefShade;
+/** Where the painted light comes from, in a tile's tangent frame: up and slightly left, the pixel
+ *  artist's convention this world's art is already drawn to.
+ *  Written PRE-NORMALISED from vec3(-0.45, 0.62, 0.64) rather than wrapped in normalize(): a const
+ *  initialised by a function call is a constant-expression question that differs between GLSL ES
+ *  versions, and getting it wrong does not warn -- the program fails to LINK and the world renders
+ *  nothing, with no console error. Not a gamble worth taking to save one divide at compile time. */
+const vec3 RELIEF_KEY = vec3(-0.450790, 0.621088, 0.641123);
 varying float vLayer;
 varying float vEmissive;
 varying float vAo;
@@ -322,6 +332,36 @@ void tileFrame(vec3 an, out vec3 T, out vec3 B) {
   // ever reads dark twice, this dial and LIGHT_LOOK are the pair to look at together, not either
   // one alone.
   diffuseColor.rgb *= mix(1.0, vAo, uAo);
+  // ── ★★★ RELIEF, ON THE ALBEDO, BECAUSE THE CARTOON STACK QUANTISES THE LIGHT ────────────────
+  // Alex, 2026-09-09, judging uReliefAmt 0.6: *"it looks flat, the relief isnt doing much."* He was
+  // right and the map was never the problem. Relief perturbs the NORMAL, which lands in
+  // "outgoingLight" — and "<opaque_fragment>" below then posterises that to three levels
+  // ("floor(clum * 3.0 + 0.5) / 3.0", at uToon 0.85 in the shipped "cartoon" style).
+  //
+  // MEASURED against the real 64px tiles: relief moves face luminance by a mean of 1.66% at
+  // uReliefAmt 0.6. Only (1 - uToon) of that survives as continuous shading — 0.25% — and the
+  // other 85% must cross a 33.3% bucket to change a single pixel. It is twenty times too small.
+  // ⚠⚠ AND THE DIAL COULD NOT HAVE FIXED IT: at uReliefAmt 1.0 the surviving swing is 0.41%, still
+  // invisible. Judging that A/B could only ever have returned "flat".
+  //
+  // ★ THIS IS THE AO REGRESSION'S TWIN AND IT TAKES THE SAME MEDICINE. AO was computed and thrown
+  // away because it rode a channel the material had switched off; it works now because it
+  // multiplies the ALBEDO. Albedo is not quantised — "toonCol" is "diffuseColor.rgb * face *
+  // (0.35 + 0.95 * shaped)", so a per-texel factor here passes through the toon stack untouched
+  // and the cel look is preserved exactly. One term on the light, one on the paint.
+  //
+  // ⚠ THE KEY DIRECTION IS FIXED AND IN TANGENT SPACE, WHICH IS DELIBERATE, NOT A SHORTCUT. This
+  // renderer already draws light rather than simulating it — "faceLum" twenty lines down is a hard
+  // constant per axis. A sun-dependent term here would make surface detail swim as the day turns,
+  // which is the one thing a painted texture must not do.
+  if (uReliefShade > 0.0) {
+    vec3 rn = normalize(texture(uRelief, vec3(tileUv, vLayer)).xyz * 2.0 - 1.0);
+    // Subtracting KEY.z makes this EXACTLY neutral on a flat texel. Without it the dial would
+    // darken or brighten the whole world as it turns up, which reads as a brightness bug rather
+    // than as relief, and would send the next person to LIGHT_LOOK.
+    float rl = dot(rn, RELIEF_KEY) - RELIEF_KEY.z;
+    diffuseColor.rgb *= mix(1.0, clamp(1.0 + rl * 1.7, 0.5, 1.6), uReliefShade);
+  }
   gTileEmissive = tile.a;
   // Value-only jitter, deliberately not hue: shifting hue per block would fight the palette and read
   // as noise. Ore is exempt — a crystal that varies block to block reads as inconsistent material
@@ -420,7 +460,10 @@ void tileFrame(vec3 an, out vec3 T, out vec3 B) {
     },
     setRelief: (amount: number) => {
       relief = amount
-      if (live) live.uReliefAmt.value = amount
+      // ⚠ BOTH, OR THE A/B LIES. `uReliefAmt` is the normal perturbation (which only the natural
+      // style can show) and `uReliefShade` is the albedo term (which the cartoon style can). A
+      // toggle that moved only the first is exactly the switch that told Alex relief does nothing.
+      if (live) { live.uReliefAmt.value = amount; live.uReliefShade.value = amount }
     },
     setCartoon: (v: Record<string, number>) => {
       // Held until compile for the same reason as the jitter: `onBeforeCompile` has not run before

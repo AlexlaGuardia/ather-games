@@ -227,6 +227,61 @@ check(glslBlocks.length >= 4,
   check(!/cnrm/.test(reliefBlock), 'the relief block writes to cnrm — it must only write `normal`')
 }
 
+// ── ⑥ ★★★ RELIEF REACHES THE PAINT, NOT ONLY THE LIGHT ────────────────────────────────────────
+// The bug this section exists for shipped, was measured, and produced a WRONG ANSWER FROM ALEX.
+// Relief perturbed the normal, which lands in `outgoingLight` — and `<opaque_fragment>` posterises
+// that to three levels at uToon 0.85. Measured on the real 64px tiles: relief moves face luminance
+// by 1.66% mean, of which 0.25% survives the quantiser, against a bucket 33.3% wide. He judged the
+// A/B and said "it looks flat, the relief isnt doing much", which was the only answer the render
+// could give at ANY dial setting.
+//
+// ⚠ SO A GUARD THAT ONLY ASKS "IS RELIEF WIRED" PASSES THE BUG. §⑤ above asserts relief is applied
+// before the lighting reads it, and it was — that is exactly the half that gets thrown away. The
+// invariant is that relief ALSO rides the albedo, which the toon stack multiplies rather than
+// quantises. Same medicine AO needed for the same disease.
+{
+  // ⚠⚠ THE GLSL'S OWN COMMENTS ARE INSIDE THE LITERAL, so `scan` does not strip them — and the
+  // comment introducing this feature QUOTES the toon expression verbatim to explain what eats the
+  // relief. Searching the raw blocks would find the prose copy and compare positions against a
+  // sentence. That is this file's own headline bug (documenting a marker created a marker) arriving
+  // for the third time, so the GLSL gets comment-stripped before anything below reads it.
+  // ⚠ AND IT READS **EVERY** LITERAL, NOT `glslBlocks`. That list is filtered to blocks containing
+  // an #include or a function definition — and the cartoon block is neither, it is a bare run of
+  // statements replacing <opaque_fragment>. So the toon quantiser, the very thing this section
+  // measures relief AGAINST, is filtered out of it: the first version of this check reported a
+  // correct ordering as violated because its extraction could not see one of the two subjects.
+  const glslCode = scanned.literals.map(b => b.replace(/\/\/[^\n]*/g, '')).join('\n')
+  const reliefOnAlbedo = /diffuseColor\.rgb\s*\*=[^;]*uReliefShade/.test(glslCode)
+  check(reliefOnAlbedo,
+    'relief never multiplies diffuseColor — it rides only the light, which the toon stack posterises away')
+
+  // The albedo term must sit BEFORE the cartoon block, or it is quantised with everything else.
+  const iAlbedo = glslCode.search(/diffuseColor\.rgb\s*\*=[^;]*uReliefShade/)
+  const iToon = glslCode.indexOf('floor(clum * 3.0 + 0.5)')
+  check(iAlbedo > 0 && iToon > 0 && iAlbedo < iToon,
+    'the relief albedo term is not upstream of the toon quantiser — it will be posterised like the rest')
+
+  // ★★ THE DIAL MUST MOVE BOTH TERMS. A setRelief that touched only uReliefAmt is precisely the
+  // switch that told Alex relief does nothing: the A/B toggled the invisible half.
+  const setter = /setRelief:[\s\S]{0,400}?\n    \},/.exec(atlasCode)
+  check(!!setter, 'setRelief not found — the relief A/B cannot be checked')
+  check(!!setter && /uReliefAmt\.value\s*=/.test(setter[0]) && /uReliefShade\.value\s*=/.test(setter[0]),
+    'setRelief does not drive BOTH uReliefAmt and uReliefShade — the A/B will toggle only one half')
+
+  // ⚠ A const initialised by a function call is a constant-expression question that differs across
+  // GLSL ES versions, and losing that bet does not warn: the program fails to LINK and the world
+  // renders NOTHING, with no console error. The key vector stays a literal.
+  check(!/const\s+vec3\s+RELIEF_KEY\s*=\s*normalize/.test(glslCode),
+    'RELIEF_KEY is initialised by normalize() — write it pre-normalised, a link failure renders nothing silently')
+  check(/const\s+vec3\s+RELIEF_KEY\s*=\s*vec3\(/.test(glslCode),
+    'RELIEF_KEY is missing — the albedo relief term has no key direction')
+
+  // Neutral on a flat texel, or the dial reads as a brightness change and sends the next person to
+  // LIGHT_LOOK instead of here.
+  check(/RELIEF_KEY\.z/.test(glslCode),
+    'the relief term does not subtract RELIEF_KEY.z — it will tint the whole world as the dial turns up')
+}
+
 console.log(`\natlas wiring: ${pass} checks passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)
