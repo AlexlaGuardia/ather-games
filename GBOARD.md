@@ -11,7 +11,117 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🔦 Shimmer — **THE FIELD IS WIRED: A CAVE IS DARK, A LANTERN WORKS, AND THE SURFACE IS UNTOUCHED** (2026-09-08, hub lane) · *Last touched 2026-09-08 — ✅ **DEPLOYED `BUILD_ID IRpC7L72FRzhJpRXgE2NY`, 183 chunks, `built from sha bfcbca6`**. Verified: `shimmerLight` present in a served chunk, served md5 == disk md5, prod 200. Tree clean, 0 unpushed (HEAD `84717f1` is one commit past the build and deletes only a stale unserved `public/` artifact). Sweep **250 suites · 248 pass · 2 FAIL · 0 KILLED** at `8aae9dc`; both failures were mine and both were correct refusals, fixed in `bfcbca6` and re-run green. tsc 7 (baseline), canon exit 0.*
+## 🔦 Shimmer — **BLOCKS GOT A SURFACE, AND THE WORLD HAD BEEN THROWING ITS CORNER SHADING AWAY** (2026-09-08 late, hub lane) · *Last touched 2026-09-08 — ✅ **DEPLOYED `BUILD_ID 1asP45PMDIP8_QZcc6hU9`, 184 chunks, `built from sha 55d14f1`**. Verified from the SERVED bytes, not from disk: served md5 == disk md5 on `aa35b709fbea54d9.js`, markers `uReliefAmt`/`uAo`/`aAo`/`gTileUv`/`tileFrame` all present, `gTileEmissive` as a positive control proving the search can see pre-existing shader strings in that file, a negative control returning nothing, and ather.games 200. Sweep **253 suites · 252 pass · 1 FAIL · 0 KILLED** at `55d14f1`; the one FAIL was a stale generated cache, fixed in `7644df4`, and both suites that read that cache re-run green there. origin/master `7644df4`, 0 unpushed. tsc 7 (baseline), canon exit 0.* ⚠ *The previous receipt `BUILD_ID IRpC7L72FRzhJpRXgE2NY` / sha `bfcbca6` is superseded — the render-light block below is still current work, only its deploy line has moved.*
+
+### ▶▶ ALEX ASKED FOR A MORE HD, 3D BLOCK LOOK. LEVER ONE WAS A REGRESSION NOBODY HAD SEEN.
+`a2bc3bf` (`tex/relief.ts` + guard) · `55d14f1` (`attrs.ts`, `mesh-bridge.ts`, `tex/atlas.ts`, `tex/atlas-wiring.test.ts`) · `7644df4` (cache)
+
+**AMBIENT OCCLUSION HAD NOT REACHED A PIXEL SINCE THE TEXTURE ARRAY SHIPPED.** The full account and
+the correction to the six-week-old board claim are in the render-light block below, written by the
+seat that made it. Short version: `attrs.ts` folds the mesher's AO term into the vertex COLOUR and
+says *"the world shader already multiplies texture by vertex colour"*; `tex/atlas.ts` sets
+`vertexColors: false`, correctly, because the tile carries the colour and the palette would darken it
+twice. **Palette and occlusion were multiplied into ONE buffer, so switching the palette off switched
+the occlusion off with it** — both halves stayed internally consistent, which is why it read as fine
+for six weeks and why `atlas.ts:96` says so in plain words nobody read as a bug.
+
+★ **FOUND BY MEASURING, AND THE FIRST SAMPLE WOULD HAVE SAID THE TERM WAS DOING NOTHING.** Real
+mesher, three places: Moonwell Glade **54.5% of 10,608 vertices carry ao<3, mean multiplier 0.885** ·
+Outfields **59.6% of 4,488, mean 0.873** · **origin 0 vertices** — the fold's HOLLOW, the known
+08-22 fixture trap, and sampling only there would have reported no occlusion anywhere in the world.
+
+**AO cannot go back inside the colour.** The shader holds the tile, not the palette entry, so the two
+terms cannot be un-multiplied per fragment. It travels on its own `aAo` float now — which the 08-12
+design explicitly declined ("no new buffer, no shader change"), a tradeoff that was right while the
+world ran the flat material and bought nothing at all once it did not.
+
+### ★★ LEVER TWO — `tex/relief.ts`: A WALL STOPS BEING A FLAT PANEL WEARING A PICTURE OF STONE
+Lambert shades a merged quad by ONE face normal, so a stone wall does not change as the sun moves and
+**a bigger tile only makes it a sharper picture of a flat panel** — which is why "HD" was never a
+resolution problem. A per-texel normal map derived from tile luminance gives a mortar course a side
+that catches the morning sun and a side that shades.
+
+- **★★ THE BLUR IS THE WHOLE DIFFERENCE BETWEEN STONE AND CRUMPLED FOIL.** Pixel art is hard-edged by
+  construction; differentiate it raw and every texel boundary is a cliff, so the surface lights as a
+  grid of facets and reads as noise rather than form. ⚠ The albedo is deliberately NOT blurred:
+  **crisp colour, smooth lighting** is the look — `NearestFilter` on the tiles, `LinearFilter` on the
+  normals. Sampling the normals nearest puts the foil back one layer further on.
+- **★★ THE GAIN SCALES WITH TILE SIZE, AND THE CONSTANT THAT LOOKS RIGHT IS THE BUG.** Run between
+  texels is `1/size` of a block, so a fixed gain makes the 64px world flatter than the 32px one —
+  **turning the `tileSize` switch into a lighting change as well as a detail change, confounding the
+  exact comparison that switch exists to allow.**
+- **⚠ EVERY READ WRAPS.** Tiles repeat, so texel 0 neighbours texel `size-1` in the world. A clamped
+  blur flattens all four edges and draws a lit grid on **every block boundary in the world** — which
+  looks like the greedy mesher emitting bad normals and gets hunted in the wrong file for a day.
+- **⚠ `lightApply` STILL GETS THE GEOMETRIC NORMAL.** `shimmerLight` steps half a block ALONG the
+  normal to find the air cell in front of the face; a perturbed normal there samples a neighbouring
+  column's light **and only where the art is detailed**, i.e. exactly where nobody would look. That is
+  asserted now, not remembered.
+- Injected at `normal_fragment_maps`, read off three's own `meshlambert.glsl.js` rather than
+  remembered — perturbing after lighting would cost a texture fetch, change nothing, and look
+  precisely like a strength dial set too low. The tangent frame is free: axis-aligned faces, and the
+  UV derivation already picks the two in-plane axes.
+
+### ⛔ THE ONE DECISION, AND IT IS ALEX'S — THE TWO DIALS ARE NOW ONE CALL
+`uAo` (1) and `uReliefAmt` (0.6) are live uniform writes, no rebuild. But **AO composes
+multiplicatively with render-light**, so it landed on top of `LIGHT_LOOK.floor`, the cave dial already
+waiting for a ruling. Both cases, because they move oppositely:
+
+| where | an occluded corner |
+|---|---|
+| sunlit open ground | 0.62 × 1.0 = **0.62** — reads as intended |
+| **sealed UNLIT cave** | 0.62 × 0.08 = **0.0496** — the darkest corner in the game got **38% darker** |
+| sealed cave **with a lantern** | the block term is live, so the corner keeps **62% of the lantern**; AO shapes the pool rather than deepening the dark |
+
+⚠ The unlit figure is the hub seat's and the lit figure is the render-light seat's; **neither is a
+correction of the other, they are different caves**, and the pair was nearly banked as one number.
+Judge the floor with a lantern in hand and without one. ⛔ **And `style: 'cartoon'` (the default) runs
+`toon: 0.85`, which posterises lighting into three bands and will eat most of the relief BY DESIGN** —
+the fastest read on whether any of this is wanted is `natural` vs `cartoon` on the same wall.
+
+### ★★ `tex/atlas-wiring.test.ts` — BECAUSE EVERY FAILURE IN AN INJECTED SHADER IS SILENT
+46 asserts. A uniform DECLARED in GLSL and never registered **reads as 0**, so the feature is off and
+its dial does nothing — indistinguishable from a map too weak to see, which is the reading that gets
+acted on. Mutation-swept **7/7 killed**.
+
+⚠⚠ **THREE SURVIVED THE FIRST SWEEP AND EVERY SURVIVOR WAS THE GUARD FAILING THE WAY IT WAS WRITTEN
+TO CATCH.** Two "does this string appear" checks matched their own **commented-out** mutation, because
+a whole-file regex reads a document that still contains the disabled line — they read comment-stripped
+code now. The third is the sharp one: **the backtick check could not see a balanced backtick pair,
+because that backtick had already ended the block the check reads.** The scanner and the defect are the
+same mechanism, so the scanner can never be the witness. Caught by the WRECKAGE instead — a literal
+ending mid-comment, and a `mustReplace` no longer handed one whole literal — neither of which is about
+backticks at all.
+
+★ **AND THE GUARD'S OWN EXTRACTION WAS FOOLED BY THIS FILE'S HOUSE STYLE FIRST.** Naive backtick
+pairing straddles prose and literal, because the codebase quotes identifiers in prose; seven asserts
+went red about **correct code**. That is the 08-22 *documenting a marker created a marker* bug arriving
+through the guard's own door, and it is why the block-count assert exists: **an extraction that
+silently finds nothing makes every check below it vacuous, and vacuous checks pass.**
+
+★ A backtick went into a GLSL comment while this was being written and **tsc caught it, which
+`light-glsl.ts`'s own header correctly calls luck**. Two seats hit the same trap the same evening with
+the warning in front of both. The two guards are deliberately NOT merged: one refuses a backtick in
+the string, the other catches the balanced case tsc cannot see. Merging them gives one guard with both
+blind spots.
+
+### ⚠ AND ONE TRAP PERFORMED MINUTES AFTER NAMING IT
+The sweep's single FAIL was `editor-bands.test.ts` — `relief.ts` widened the voxel3d closure 230 → 231
+and the generated cache records that count. The guard re-derives from scratch and **refused the stale
+cache**, exactly as designed. But it was regenerated **while the sweep was still reading the tree**, by
+the seat that had just spent an hour being careful about shas. `dev-back.test.ts` reads that cache too
+and may have seen either version, so **252/253 is a claim about a tree that moved a line underneath
+it**; the render-light seat re-ran both at `7644df4` (119/0 and 41/0), reading exit codes directly
+rather than off a tail line, because `dev-back`'s last line is prose that reads as a pass whatever the
+verdict. ⚠ And "dev-only cache" was doing more work than it can carry — `DevIndex.tsx` imports that
+file, so it IS in the build graph. **The reason `55d14f1` stays live is that the diff is one COMMENT,
+not the file's location.**
+
+★ **TIMEOUT ENTRY, NEW READING WITH ITS LOAD CONDITION:** `plot.test.ts` **320s** under a concurrent
+`coord build`. Progression now 106s idle → 148 (three windows) → 266 (two sweeps) → **397** (sweep +
+headless Chrome) → 320 (sweep + a build). 397 still stands as the worst; 600s held with 47% headroom.
+
+
 
 ### ▶ WHAT LANDED TODAY (`6679e6c` · `ce6252c` · `8aae9dc` · `bfcbca6`)
 `voxel/render-light.ts` is a **job with a cursor** (`beginRenderLight`/`stepRenderLight`), because 22ms is eleven times the host's 2ms slice and the 09-01 ruling on `advanceLightBuild` is exact about why. `computeRenderLight` is `stepRenderLight(w, Infinity)`, so the one-shot and sliced paths are one piece of code. ⚠ **The generation worker is NOT the answer here even though it looks like one** — it holds its own `Column` cache and never sees a mined block, so light computed there would be light for the world *as generated*.
