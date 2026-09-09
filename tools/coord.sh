@@ -302,6 +302,50 @@ cmd_build() {
     echo ">>   ?? = untracked: it exists in NO history anywhere, and it is about to be served."
     echo ">>   if any of them are not yours, STOP and ask that window before this ships."
   fi
+
+  # ── ★★★ TWO THINGS THIS NOW REFUSES, AND WHY THESE TWO ONLY (2026-09-09, play lane) ───────────
+  # The block above prints and continues, on purpose, and that argument still stands for the
+  # ordinary dirty file: naming it is enough, and a deploy path that interrogates you is one people
+  # route around. ⚠ But on 2026-09-09 it PRINTED AND LOST TWICE IN ONE DAY — a peer's commit went
+  # to prod inside another lane's build, and untracked art under public/ went live in no commit.
+  # Both were detected here and narrated past. So the refusal is deliberately narrow: it fires only
+  # where the loss is UNRECOVERABLE and the thing being shipped is NOT THE BUILDER'S to ship.
+  # Everything else still prints and continues.
+  #
+  # 1. UNPUSHED COMMITS. On one shared tree, building your own commit builds every commit beneath
+  #    it, and the receipt prints ONE sha so it reads as one change. The day's second build was
+  #    safe for exactly one reason: `git log origin/master..HEAD` came back EMPTY because the peer
+  #    had pushed. That is the invariant, so make it the gate — if everything is pushed, the tree
+  #    you are about to ship is the tree everyone can already see, and no window can be surprised
+  #    by what went out under its name. Pushing is also the cheap half: it is one command and it
+  #    makes the work recoverable, which the alternative never does.
+  # 2. UNTRACKED FILES UNDER public/. `public/` is SERVED. An untracked file there ships to the
+  #    internet while existing in no history anywhere, so a `git clean` destroys something that is
+  #    simultaneously live. That is the only state in this repo that is both public and
+  #    unrecoverable, and it happened twice today.
+  local unpushed pub_untracked
+  unpushed=$(git -C "$REPO" log --oneline origin/master..HEAD 2>/dev/null || true)
+  pub_untracked=$(git -C "$REPO" status --porcelain 2>/dev/null | sed -n 's/^?? //p' | grep '^public/' || true)
+
+  if [ -n "$unpushed" ] && [ "${COORD_SHIP_UNPUSHED:-0}" != "1" ]; then
+    echo ">> ⛔ REFUSING: there are unpushed commits, so this build would ship work nobody else can see."
+    echo "$unpushed" | sed 's/^/>>    /'
+    echo ">>   On ONE shared tree, building your commit builds every commit under it — and the"
+    echo ">>   receipt prints a single sha, which reads as a single change. That is how a peer's"
+    echo ">>   work went to prod inside another lane's deploy on 2026-09-09."
+    echo ">>   FIX: 'git push' (one command, and it makes the work recoverable), then build."
+    echo ">>   Override, only if you mean it: COORD_SHIP_UNPUSHED=1 tools/coord.sh build \"msg\""
+    exit 3
+  fi
+
+  if [ -n "$pub_untracked" ] && [ "${COORD_SHIP_UNTRACKED_PUBLIC:-0}" != "1" ]; then
+    echo ">> ⛔ REFUSING: untracked files under public/ — public/ is SERVED, so these would be live"
+    echo ">>   on the internet while existing in no history anywhere. A 'git clean' then destroys"
+    echo ">>   something that is simultaneously in production. Commit them, or move them out of public/."
+    echo "$pub_untracked" | sed 's/^/>>    /'
+    echo ">>   Override, only if you mean it: COORD_SHIP_UNTRACKED_PUBLIC=1 tools/coord.sh build \"msg\""
+    exit 3
+  fi
   # ── ★★★ THE SHA THIS BUILD IS ACTUALLY BUILDING, PRINTED HERE (2026-09-08) ────────────────────
   # A near-miss the same afternoon: a build sat queued behind a live sweep, and by the time it
   # would have taken the lock the working tree had advanced onto a commit NO SWEEP HAD EVER SEEN.
