@@ -21,8 +21,9 @@
  * or a camera moves — nothing here can notice on its own.
  *  · bracelet: identical across tiers to 0.2px (the seat sits on the ring; the tier only changes the
  *    strand). The arc is NOT symmetric about the front seat: the camera is off-axis on purpose.
- *  · glove: tier-independent (every tier's pad sits at the same Z0). The two-seat pair projects to
- *    DIFFERENT pixel rows from the SAME world y — off-axis camera again, world x leaks into image y.
+ *  · glove: tier-independent (every tier's pad sits at the same Z0). ⚠ Off-axis camera: world x leaks
+ *    into image y, so a pair level in the model is NOT level on screen (that is why the two-seat layout
+ *    was re-cut along the knuckle line — a level-on-screen pair read as eyes).
  */
 
 import { VESSEL_CAP, type Vessel } from './gems'
@@ -40,7 +41,7 @@ const BRACELET_PNG_SEAT_R = 17.6
 
 const GLOVE_PNG_SEATS: Record<1 | 2 | 3, readonly (readonly [number, number])[]> = {
   1: [[271.2, 215.7]],
-  2: [[248.7, 208.6], [292.6, 225.7]],
+  2: [[257.5, 203.8], [296.1, 233.6]],   // layout C (Alex, 2026-09-09): the pair rides the knuckle line
   3: [[230.5, 211.4], [273.6, 210.0], [303.7, 239.9]],
 }
 /** a seat's radius in the glove render's 512px space (r 0.085 under ortho_scale 3.25) */

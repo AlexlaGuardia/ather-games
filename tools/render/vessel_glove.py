@@ -89,7 +89,10 @@ CUFF_PTS = [
 SEAT_LAYOUT = {
     0: [],                     # an UNCUT glove: no word yet, no seat (`move: null`) — same state as the bracelet's s0
     1: [(0.0, 0.26)],
-    2: [(-0.15, 0.25), (0.15, 0.25)],
+    # ★ C, Alex's pick 2026-09-09: the pair follows the KNUCKLE LINE down toward the little finger. Level
+    # in the model rendered as two equal discs almost side by side under the off-axis camera and read
+    # like EYES; three seats never did, because the arc carried them. So the pair rides the same arc.
+    2: [(-0.11, 0.30), (0.19, 0.21)],
     3: [(-0.25, 0.19), (0.0, 0.30), (0.25, 0.19)],
 }
 
