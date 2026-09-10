@@ -25,7 +25,7 @@
 // sharing one record. It also means a hundred chests across the world cost nothing until you walk
 // to them.
 
-import type { ItemStack } from '../engine/inventory'
+import { isUniqueStack, type ItemStack } from '../engine/inventory'
 
 /** A container's contents. Fixed length, `null` = empty slot — a gap is a place, not a shorter list. */
 export type Slots = (ItemStack | null)[]
@@ -109,7 +109,8 @@ export function moveBetween(
   const a = from[fi]
   if (!a) return                       // lifting nothing is not a move
   const b = to[ti]
-  if (b && b.itemId === a.itemId) {
+  // ★ a UNIQUE stack (a vessel, a chest with contents) never merges into its twin — it swaps
+  if (b && b.itemId === a.itemId && !isUniqueStack(a) && !isUniqueStack(b)) {
     const room = Math.max(0, maxStack(a.itemId) - b.count)
     const move = Math.min(room, a.count)
     b.count += move
@@ -153,9 +154,11 @@ export function moveCount(
   if (fi < 0 || ti < 0 || fi >= from.length || ti >= to.length) return 0
   const a = from[fi]
   if (!a || a.count <= 0) return 0
+  if (isUniqueStack(a)) return 0             // a vessel is one thing; there is no half of it
   const max = maxStack(a.itemId)
   const b = to[ti]
   if (b && b.itemId !== a.itemId) return 0   // no swap — see above
+  if (b && isUniqueStack(b)) return 0        // and nothing pours into a unique stack
   const room = b ? Math.max(0, max - b.count) : max
   const n = Math.min(Math.max(0, Math.floor(want)), a.count, room)
   if (n <= 0) return 0
@@ -220,7 +223,7 @@ export function addToGrid(
   let left = count
   for (let i = 0; i < g.length && left > 0; i++) {
     const s = g[i]
-    if (!s || s.itemId !== itemId || s.count >= max) continue
+    if (!s || s.itemId !== itemId || s.count >= max || isUniqueStack(s)) continue
     const n = Math.min(max - s.count, left)
     s.count += n; left -= n
   }

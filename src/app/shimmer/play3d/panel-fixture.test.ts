@@ -20,7 +20,8 @@ import { ALL_BANDS, laneRunes } from './cast'
 import { resolveLoadout, saveLoadout } from './loadout'
 import { BAND_FOR_VESSEL, wornWord } from './vessels'
 import { keeperBook, keeperLetters, saveBook } from './book'
-import { loadStowed, isFloor } from './vessels'
+import { loadStowed, isFloor, bagVessels } from './vessels'
+import { createInventory } from '../engine/inventory'
 import { loadRuneInventory, saveRuneInventory } from './rune-inventory'
 
 let pass = 0
@@ -114,7 +115,8 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
 {
   for (const id of ['fresh', 'partial', 'written', 'rack'] as PanelScenarioId[]) {
     wipe()
-    const plan = seedPanel(id)
+    const bag = createInventory()
+    const plan = seedPanel(id, bag)
     // `keeperLetters` is the exact call VesselRack makes for the worn seats.
     const read = keeperLetters(plan.owned, plan.birth)
     for (const k of VESSELS) {
@@ -125,9 +127,12 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
       ok(wornWord(k) === plan.wordFor[k],
          `★★ ${id}: the ${k}'s worn WORD reads back as seeded (${wornWord(k)} vs ${plan.wordFor[k]}) — the seat count has a vessel to follow`)
     }
-    // ★ Greg's pair (tier 0) is on every read and is not a spare the fixture wrote — count above the floor
-    ok(loadStowed().filter(v => !isFloor(v)).length === plan.spares.length, `${id}: the rack reads back ${plan.spares.length} spare(s)`)
-    ok(loadStowed().filter(isFloor).length === 2, `${id}: and Greg's pair sits under them, one of each kind — never lost (ruled 2026-09-04)`)
+    // ★ 2026-09-10: a vessel with no letters is an ITEM. The written spares are stowed; the blanks and Greg's pair are in the BAG.
+    const written = plan.spares.filter(v => v.gems.length > 0).length, blank = plan.spares.length - written
+    ok(loadStowed().filter(v => !isFloor(v)).length === written, `${id}: the rack reads back ${written} written spare(s)`)
+    ok(bagVessels(bag).filter(v => !isFloor(v)).length === blank, `${id}: the ${blank} blank spare(s) sit in the bag as items`)
+    ok(bagVessels(bag).filter(isFloor).length === 2 && loadStowed().filter(isFloor).length === 0,
+       `${id}: and Greg's pair sits in the bag, one of each kind — never lost (ruled 2026-09-04; an item since 2026-09-10)`)
     const inv = loadRuneInventory()
     ok(inv.birth === plan.birth, `${id}: the birth rune reads back`)
   }
@@ -191,7 +196,8 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
   // the shipped resolver what a keeper would actually get back. Ask it here, in world terms.
   for (const id of ['written', 'rack'] as PanelScenarioId[]) {
     wipe()
-    const plan = seedPanel(id)
+    const bag = createInventory()
+    const plan = seedPanel(id, bag)
     const resolved = resolveLoadout([...plan.owned], plan.birth, keeperBook(plan.owned))
     plan.slots.forEach((want, band) => {
       if (!want) return

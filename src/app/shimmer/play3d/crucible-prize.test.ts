@@ -110,9 +110,11 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 
   // ⛔ THE OLD DOOR IS GONE, not merely superseded. A second payout path would make the guard-kill
   // pay again and nothing else would report it.
-  const payouts = (host.match(/clearTrial\('puppet-guards'/g) ?? []).length
+  // ★ RE-POINTED 2026-09-10: the prize is a vessel and a vessel is an ITEM until written, so the payout
+  // hands the bag ref first — `clearTrial(invRef.current, 'puppet-guards'`.
+  const payouts = (host.match(/clearTrial\(invRef\.current, 'puppet-guards'/g) ?? []).length
   ok(payouts === 1, `exactly ONE payout site in the host (${payouts}) — the kill no longer pays`)
-  const i = host.indexOf("clearTrial('puppet-guards'")
+  const i = host.indexOf("clearTrial(invRef.current, 'puppet-guards'")
   ok(i > 0 && /stepPrize|step\.pay/.test(host.slice(Math.max(0, i - 400), i)),
      'and that site sits inside the Vault branch, not the guard-clear branch')
 

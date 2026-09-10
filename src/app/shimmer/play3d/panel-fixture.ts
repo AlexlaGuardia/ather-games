@@ -38,7 +38,8 @@ import {
   EMPTY_LETTERS, VESSEL_CAP, VESSELS, addGems, bindLetters, isBodyHeld, lettersOf, saveLetters,
   type GemStock, type Letters, type Vessel,
 } from './gems'
-import { BAND_FOR_VESSEL, emptyVessel, saveStowed, saveWornWord, type StowedVessel } from './vessels'
+import { BAND_FOR_VESSEL, emptyVessel, saveStowed, saveWornWord, vesselStack, ensureFloor, type StowedVessel } from './vessels'
+import type { Inventory } from '../engine/inventory'
 import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { ALL_BANDS, laneRunes } from './cast'
 import { saveLoadout, type Loadout } from './loadout'
@@ -280,7 +281,7 @@ function write2(moveId: string, kind: Vessel, birth: string): StowedVessel | nul
  * from the loadout and the dark seat would never appear. The one call that makes the empty cases
  * honest is the one that looks most redundant.
  */
-export function seedPanel(id: PanelScenarioId): PanelPlan {
+export function seedPanel(id: PanelScenarioId, inv?: Inventory): PanelPlan {
   const plan = planPanel(id)
   saveRuneInventory({ birth: plan.birth, owned: [...plan.owned] })
   // ★★★ THE BOOK IS A KEEPER KEY TOO, AND NOT WRITING IT MADE THIS FIXTURE NON-HERMETIC (2026-09-04).
@@ -296,7 +297,18 @@ export function seedPanel(id: PanelScenarioId): PanelPlan {
   saveBook({ learned: plan.slots.filter((id): id is string => !!id) })
   saveLoadout(plan.slots)
   saveLetters({ bag: { ...plan.bag }, vessels: { bracelet: [...plan.worn.bracelet], focus: [...plan.worn.focus] } })
-  saveStowed(plan.spares)
+  // ★ A VESSEL WITH NO LETTERS IS AN ITEM (2026-09-10): the spares split by that line. The written and
+  // half-written ones are stowed; the blanks go into the bench's bag as items, and Greg's pair lands there
+  // too, exactly as the world seeds it. The bag is cleared of vessels first so a re-seed does not stack.
+  saveStowed(plan.spares.filter(v => v.gems.length > 0))
+  if (inv) {
+    inv.slots = inv.slots.map(s => (s?.vesselData ? null : s))
+    for (const v of plan.spares.filter(v => v.gems.length === 0)) {
+      const at = inv.slots.indexOf(null)
+      if (at >= 0) inv.slots[at] = vesselStack(v.kind, v.tier, v.move)
+    }
+    ensureFloor(inv)
+  }
   // ★ the worn vessel's WORD (2026-09-09) — the key the rack reads its seat count from, so `partial`
   // and `dark` (band unbound, vessel still bearing its word) read 1 of 2 and 0 of 2, never n/0
   for (const kind of VESSELS) saveWornWord(kind, plan.wordFor[kind])

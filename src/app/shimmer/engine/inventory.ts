@@ -21,6 +21,29 @@ export interface ItemStack {
   itemId: string
   count: number
   chestData?: ChestStorage  // only when itemId === 'chest', carries contents
+  /**
+   * ★ A CASTING VESSEL AS AN ITEM (Alex, 2026-09-10: *"its an item untill the gems are put into it then
+   * its a vessel"*). A bracelet or glove sits in the bag as one of these until its first letter is set;
+   * the word it was cut for rides here. Kind and tier ride the item id (`vessel_<noun>_t<tier>`, see
+   * `play3d/vessels.ts`). Like `chestData`, this makes the stack UNIQUE — see `isUniqueStack`.
+   */
+  vesselData?: VesselItemData
+}
+
+/** what a vessel carries as an item: the word it was cut for, or null for an uncut blank */
+export interface VesselItemData { move: string | null }
+
+/**
+ * ★ A STACK THAT CARRIES ITS OWN STATE NEVER MERGES. Two chests with different contents, or two vessels
+ * cut for different words, share an item id and are not the same thing; a merge would silently destroy
+ * one of them. Every move/transfer/add path asks this before treating "same id" as "same item".
+ */
+export const isUniqueStack = (s: ItemStack | null | undefined): boolean =>
+  !!s && (s.vesselData !== undefined || s.chestData !== undefined)
+
+/** the first empty slot in a grid, or -1. The place a unique stack lands. */
+export function firstEmptySlot(grid: SlotGrid): number {
+  return grid.findIndex(s => s === null)
 }
 
 export type SlotGrid = (ItemStack | null)[]
@@ -102,7 +125,7 @@ export function addItems(inv: Inventory, itemId: string, count: number, maxStack
   // First pass: fill existing stacks of same item
   for (let i = 0; i < slotLimit && remaining > 0; i++) {
     const slot = inv.slots[i]
-    if (slot && slot.itemId === itemId && slot.count < max) {
+    if (slot && slot.itemId === itemId && slot.count < max && !isUniqueStack(slot)) {
       const space = max - slot.count
       const add = Math.min(space, remaining)
       slot.count += add
@@ -177,8 +200,8 @@ export function moveSlot(grid: SlotGrid, fromIdx: number, toIdx: number): void {
     return
   }
 
-  // Same item → merge up to maxStack
-  if (from.itemId === to.itemId) {
+  // Same item → merge up to maxStack (never across a unique stack — those swap like different items)
+  if (from.itemId === to.itemId && !isUniqueStack(from) && !isUniqueStack(to)) {
     const max = getMaxStack(from.itemId)
     const space = max - to.count
     if (space >= from.count) {
@@ -202,7 +225,7 @@ export function moveSlot(grid: SlotGrid, fromIdx: number, toIdx: number): void {
 /** Split count items from a slot to the first empty slot. Returns false if no space. */
 export function splitStack(grid: SlotGrid, slotIdx: number, count?: number): boolean {
   const slot = grid[slotIdx]
-  if (!slot || slot.count <= 1) return false
+  if (!slot || slot.count <= 1 || isUniqueStack(slot)) return false
 
   const splitCount = count ?? Math.floor(slot.count / 2)
   if (splitCount <= 0 || splitCount >= slot.count) return false
@@ -244,8 +267,8 @@ export function transferItem(
     return
   }
 
-  // Same item → merge
-  if (srcItem.itemId === dstItem.itemId) {
+  // Same item → merge (never across a unique stack — those swap like different items)
+  if (srcItem.itemId === dstItem.itemId && !isUniqueStack(srcItem) && !isUniqueStack(dstItem)) {
     const max = getMaxStack(srcItem.itemId)
     const space = max - dstItem.count
     if (space >= srcItem.count) {

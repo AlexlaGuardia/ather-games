@@ -28,7 +28,7 @@ import { RUNES } from './birth/runes.data'
 import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { saveLetters, VESSELS, type Vessel } from './gems'
-import { buyVessel, ownedCount, loadStowed, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, TIER_MATERIAL } from './vessels'
+import { buyVessel, ownedCount, loadStowed, bagVessels, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, TIER_MATERIAL } from './vessels'
 import { eligibleMoves, ALL_BANDS } from './cast'
 import { lettersOf } from './gems'
 import { rawLoadout } from './loadout'
@@ -93,14 +93,16 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
     saveLetters(r.letters); rerender()
   }
   const onBuyVessel = (kind: Vessel, word: string) => {
-    const r = buyVessel(kind, marks, word)
+    if (!bag) return
+    const r = buyVessel(bag, kind, marks, word)
     setNote(r.say); if (!r.ok) return
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
     rerender()
   }
   /** Buy off the second-hand rack. Same shape as the cutter's handler — the shelf differs, not the till. */
   const onBuyFromRack = (slot: number, rack: readonly RackVessel[]) => {
-    const r = buyFromVesselRack(marks, slot, rack)
+    if (!bag) return
+    const r = buyFromVesselRack(bag, marks, slot, rack)
     setNote(r.say); if (!r.ok) return
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
     rerender()
@@ -203,10 +205,11 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               is the BOUGHT door; tiers 2–3 are found and won in the world, never on a shelf. The cap counts
               what a keeper acquires; Greg's pair sits under it. */}
           {VESSELS.map(kind => {
-            const have = ownedCount(kind)
+            const have = ownedCount(kind, bag)
             const full = have >= MAX_PER_KIND
             const band = BAND_FOR_VESSEL[kind]
-            const taken = new Set([...loadStowed().filter(v => v.kind === kind).map(v => v.move), rawLoadout()[band] ?? null])
+            // words that already have a vessel: worn, stowed, or sitting in the bag as an item (2026-09-10)
+            const taken = new Set([...loadStowed().filter(v => v.kind === kind).map(v => v.move), ...bagVessels(bag).filter(v => v.kind === kind).map(v => v.move), rawLoadout()[band] ?? null])
             const words = eligibleMoves([...owned], birth, ALL_BANDS[band]!, book)
               .filter(m => lettersOf(m, birth).length > 0 && !taken.has(m.id))
             if (!words.length) {
@@ -250,7 +253,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
             return rack.map((v, i) => {
               const m = v.word ? moveById(v.word) : null
               const mat = TIER_MATERIAL[v.kind][v.tier]
-              const full = ownedCount(v.kind) >= MAX_PER_KIND
+              const full = ownedCount(v.kind, bag) >= MAX_PER_KIND
               // Can this keeper ever bind that word? The same test the found-vessel road uses: every
               // rune of the move has to sit on one of their lanes, or the paper is a brick.
               const lane = m ? LANE_FOR_KIND[ALL_BANDS[BAND_FOR_VESSEL[v.kind]]!] : null
