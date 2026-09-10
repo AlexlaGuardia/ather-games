@@ -4,17 +4,14 @@
  *
  * ★ WHAT THIS SUITE EXISTS TO CATCH: a found vessel cut for a word this keeper could never bind (off
  * their lane, body-held, or more seats than the tier bears) — a brick with a story. And the hosts:
- * a dig that never rolls, a pickup that `give`s a vessel like a plank (no word, stackable — since 2026-09-10 a
- * vessel IS a bag item, but a UNIQUE one carrying its word, and only `takeVessel` makes it), a trial that
- * pays twice for one clear.
+ * a dig that never rolls, a pickup that puts a vessel in the BAG, a trial that pays twice for one clear.
  */
 import { readFileSync } from 'node:fs'
 import {
   DROP_TUNING, TRIALS_KEY, vesselItemId, parseVesselItem, isVesselItem, vesselRoom, rollDig, wordPool, chooseWord,
   takeVessel, trialPays, clearTrial, loadTrials, clearTrials,
 } from './vessel-drops'
-import { loadStowed, isFloor, grantVessel, MAX_PER_KIND, seatCapOf, BAND_FOR_VESSEL, VESSEL_NOUN, bagVessels } from './vessels'
-import { createInventory } from '../engine/inventory'
+import { loadStowed, isFloor, grantVessel, MAX_PER_KIND, seatCapOf, BAND_FOR_VESSEL, VESSEL_NOUN } from './vessels'
 import { lettersOf, isBodyHeld, VESSELS } from './gems'
 import { ALL_BANDS, LANE_FOR_KIND, laneRunes } from './cast'
 import { KEEPER_MOVES } from './keeper-moves'
@@ -31,11 +28,8 @@ const store: Record<string, string> = {}
 ;(globalThis as unknown as { localStorage: unknown }).localStorage = {
   getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v }, removeItem: (k: string) => { delete store[k] },
 }
-// ★ THE BAG (2026-09-10): a vessel with no letters is an ITEM in here; every door lands here. Fresh on every wipe.
-let bag = createInventory()
-const wipe = () => { for (const k of Object.keys(store)) delete store[k]; bag = createInventory() }
-/** what the keeper ACQUIRED, wherever it sits: stowed (written) or in the bag (an item) — the floor excluded */
-const acquired = () => [...loadStowed().filter(v => !isFloor(v)), ...bagVessels(bag).filter(v => !isFloor(v))]
+const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
+const acquired = () => loadStowed().filter(v => !isFloor(v))
 const always = () => 0            // an rng that always says yes / picks the first
 const never = () => 0.999999      // an rng that always says no / picks the last
 /** an rng that yields the given values in order, then 0.5 */
@@ -106,43 +100,39 @@ ok(KEEPER_KEYS.includes(TRIALS_KEY), 'the trial ledger key is registered per kee
     // a word that already has a vessel is avoided while another is possible
     wipe(); saveRuneInventory(inv)
     const first = chooseWord('bracelet', 2, inv.owned, birth, always)!
-    ok(grantVessel(bag, 'bracelet', 1, first, 'bought').ok, `a vessel for ${first} exists`)
-    const second = chooseWord('bracelet', 2, inv.owned, birth, always, bag)
-    ok(second !== null && second !== first, '★ the same roll now avoids the word that already has a vessel — one sitting in the BAG as an item counts (2026-09-10)')
+    ok(grantVessel('bracelet', 1, first, 'bought').ok, `a vessel for ${first} exists`)
+    const second = chooseWord('bracelet', 2, inv.owned, birth, always)
+    ok(second !== null && second !== first, '★ the same roll now avoids the word that already has a vessel')
     // the whole pool taken → duplicates allowed rather than nothing
     wipe(); saveRuneInventory(inv)
     ok(chooseWord('bracelet', 2, inv.owned, birth, never) !== null, 'the last roll still returns a word')
 
     // ── D. taking one off the ground: satchel, tier, door line, the cap ──
     wipe(); saveRuneInventory(inv)
-    const t = takeVessel(bag, vesselItemId('bracelet', 2), 'dig', inv.owned, birth, always)
-    ok(t.ok && acquired().length === 1 && acquired()[0]!.tier === 2 && acquired()[0]!.kind === 'bracelet', '★ a dug vessel lands in the BAG at tier 2 — as a unique item, not a stacked plank (2026-09-10)')
-    ok(loadStowed().length === 0 && bag.slots[t.slot!]?.vesselData !== undefined, '★ it is an item with its word on it, and nothing was stowed')
+    const t = takeVessel(vesselItemId('bracelet', 2), 'dig', inv.owned, birth, always)
+    ok(t.ok && acquired().length === 1 && acquired()[0]!.tier === 2 && acquired()[0]!.kind === 'bracelet', '★ a dug vessel lands in the SATCHEL at tier 2 — never in the bag')
     ok(!!acquired()[0]!.move && pool.some(m => m.id === acquired()[0]!.move), 'cut for a word from the pool — finding one is inheriting an intention')
     ok(/^Dug out of the rock — a bracelet of shimmerscale/.test(t.say) && /found/.test(t.say), `the line says the door and the material (${t.say})`)
-    ok(takeVessel(bag, 'goldwood_plank', 'dig', inv.owned, birth).ok === false, 'an ordinary item is refused by name')
-    ok(vesselRoom('bracelet', bag) && grantVessel(bag, 'bracelet', 1, null, 'bought').ok && grantVessel(bag, 'bracelet', 1, null, 'bought').ok && !vesselRoom('bracelet', bag),
+    ok(takeVessel('goldwood_plank', 'dig', inv.owned, birth).ok === false, 'an ordinary item is refused by name')
+    ok(vesselRoom('bracelet') && grantVessel('bracelet', 1, null, 'bought').ok && grantVessel('bracelet', 1, null, 'bought').ok && !vesselRoom('bracelet'),
        'three acquired bracelets: no room')
-    ok(takeVessel(bag, vesselItemId('bracelet', 2), 'dig', inv.owned, birth).why === 'at-cap' && acquired().length === MAX_PER_KIND, '★ at the cap the pickup is refused — the drop stays on the ground')
-    ok(vesselRoom('focus', bag), 'and the glove has its own room')
-    // ★ and a FULL bag is the other refusal (2026-09-10): a vessel is an item and needs a slot
-    for (let i = 0; i < bag.slots.length; i++) if (!bag.slots[i]) bag.slots[i] = { itemId: 'goldwood_plank', count: 1 }
-    ok(!vesselRoom('focus', bag) && takeVessel(bag, vesselItemId('focus', 2), 'dig', inv.owned, birth).why === 'no-room', '★ a full bag refuses the pickup with no-room — the drop stays on the ground')
+    ok(takeVessel(vesselItemId('bracelet', 2), 'dig', inv.owned, birth).why === 'at-cap' && acquired().length === MAX_PER_KIND, '★ at the cap the pickup is refused — the drop stays on the ground')
+    ok(vesselRoom('focus'), 'and the glove has its own room')
 
     // ── E. the trial: first clear sure, then a roll; once per clear; the ledger survives ──
     wipe(); saveRuneInventory(inv)
     ok(trialPays(0, never) === true, '★ the FIRST clear is a sure prize')
     ok(trialPays(1, never) === false && trialPays(1, always) === true, 'later clears roll trialAgain')
-    const c1 = clearTrial(bag, 'puppet-guards', inv.owned, birth, 'focus', never)
+    const c1 = clearTrial('puppet-guards', inv.owned, birth, 'focus', never)
     ok(c1.paid && c1.clears === 1 && acquired().some(v => v.kind === 'focus' && v.tier === 3), '★ the first clear hands a tier-3 GLOVE through the won door')
     ok(/^The trial's prize — a glove of starwillow/.test(c1.say) && /won/.test(c1.say), `the line says the door and the material (${c1.say})`)
     ok(loadTrials()['puppet-guards'] === 1, 'the ledger counts the clear')
-    const c2 = clearTrial(bag, 'puppet-guards', inv.owned, birth, 'focus', never)
+    const c2 = clearTrial('puppet-guards', inv.owned, birth, 'focus', never)
     ok(!c2.paid && c2.clears === 2 && acquired().filter(v => v.kind === 'focus').length === 1, '★ a second clear on a bad roll pays nothing — and still counts')
-    const c3 = clearTrial(bag, 'puppet-guards', inv.owned, birth, 'focus', always)
+    const c3 = clearTrial('puppet-guards', inv.owned, birth, 'focus', always)
     ok(c3.paid && acquired().filter(v => v.kind === 'focus' && v.tier === 3).length === 2, 'a second clear on a good roll pays')
-    ok(clearTrial(bag, 'puppet-guards', inv.owned, birth, 'focus', always).paid && !vesselRoom('focus', bag), 'a third — at the cap now')
-    const c5 = clearTrial(bag, 'puppet-guards', inv.owned, birth, 'focus', always)
+    ok(clearTrial('puppet-guards', inv.owned, birth, 'focus', always).paid && !vesselRoom('focus'), 'a third — at the cap now')
+    const c5 = clearTrial('puppet-guards', inv.owned, birth, 'focus', always)
     ok(!c5.paid && /all the gloves a keeper can/.test(c5.say) && loadTrials()['puppet-guards'] === 5, '★ at the cap the prize is SAID and not given, and the clear still counts')
     clearTrials(); ok(loadTrials()['puppet-guards'] === undefined, 'clearTrials wipes the ledger (a rebirth)')
     store[TRIALS_KEY] = '{"puppet-guards":"three"}'
@@ -167,18 +157,18 @@ ok(KEEPER_KEYS.includes(TRIALS_KEY), 'the trial ledger key is registered per kee
   const digAt = W.indexOf('const dug = rollDig(')
   const dropsForAt = W.lastIndexOf('dropsFor(hit.material)', digAt)
   ok(dropsForAt >= 0 && digAt - dropsForAt < 400, 'and the roll sits beside the ordinary block drops, not in a second break path')
-  ok(/parseVesselItem\(itemId\); return v \? \(vesselRoom\(v\.kind, inv\.current!\) \? 1 : 0\) : roomFor\(/.test(W),
-     '★ the pickup CAPACITY gate asks vesselRoom (the cap AND a free slot, 2026-09-10) for a vessel and roomFor for everything else — refused, the drop stays')
+  ok(/parseVesselItem\(itemId\); return v \? \(vesselRoom\(v\.kind\) \? 1 : 0\) : roomFor\(/.test(W),
+     '★ the pickup CAPACITY gate asks the satchel for a vessel and the bag for everything else — at the cap the drop stays')
   const pickAt = W.indexOf('for (const it of res.picked)')
   const pick = pickAt >= 0 ? W.slice(pickAt, pickAt + 900) : ''
-  ok(/if \(parseVesselItem\(it\.itemId\)\)/.test(pick) && /takeVessel\(inv\.current!, it\.itemId,/.test(pick) && /continue/.test(pick),
-     '★ a picked-up vessel is TAKEN through takeVessel and never reaches `give` — give would stack a glove like a plank, with no word on it')
+  ok(/if \(parseVesselItem\(it\.itemId\)\)/.test(pick) && /takeVessel\(it\.itemId,/.test(pick) && /continue/.test(pick),
+     '★ a picked-up vessel is TAKEN into the satchel and never reaches `give` — the bag would have stacked a glove like a plank')
   // ★★ AND THE DOOR RIDES ON THE DROP RATHER THAN BEING ASSUMED. This was the literal `'dig'` until
   // the cache road landed, at which point every cached vessel would have been announced as dug out
   // of rock — the copy is the only place the two roads differ to a player, so hardcoding the door
   // silently deletes the difference. The `?? 'dig'` fallback keeps a pre-provenance drop behaving
   // exactly as it did.
-  ok(/takeVessel\(inv\.current!, it\.itemId, \(it\.from \?\? 'dig'\)/.test(pick),
+  ok(/takeVessel\(it\.itemId, \(it\.from \?\? 'dig'\)/.test(pick),
      "★ the pickup relays the DROP's own door, so a cache does not announce itself as a dig")
   ok(pick.indexOf('takeVessel(') < pick.indexOf('give(inv.current!'), 'the vessel branch comes BEFORE the bag branch')
   ok(/if \(r\.ok\) onVesselFound\(\)/.test(pick) && /onVesselFound=\{\(\) => setRuneTick\(t => t \+ 1\)\}/.test(W),
@@ -206,7 +196,7 @@ ok(KEEPER_KEYS.includes(TRIALS_KEY), 'the trial ledger key is registered per kee
      '★ the guard-kill no longer pays — the old `prized` latch is GONE, not renamed')
   ok(/stepPrize\(/.test(S) && /step\.pay/.test(S),
      '★ and the payout runs through the Vault rule, which owns the once-per-match latch')
-  ok(/clearTrial\(invRef\.current, 'puppet-guards'/.test(range), 'through clearTrial, the won door — handing it the bag (2026-09-10)')
+  ok(/clearTrial\('puppet-guards'/.test(range), 'through clearTrial, the won door')
   // ⚠ THE SIBLING OF THE ASSERT ABOVE, and it was sitting one line down: same retired latch, same
   // relocation. Fixing one branch and leaving the other is how a half-fixed query reads as fixed
   // (PATTERNS, 07-17). The requirement is unchanged — re-arming must let the NEXT clear pay — and

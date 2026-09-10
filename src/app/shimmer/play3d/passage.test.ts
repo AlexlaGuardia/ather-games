@@ -7,7 +7,7 @@ import {
   weekdayOf, daysUntil, gemTrayFor, gemPrice, buyGem, sell, teacherFor, takeLesson, TEACHABLE,
   VESSEL_RACK_SIZE, vesselRackFor, buyFromVesselRack, type RackVessel,
 } from './passage'
-import { VESSEL_PRICE, BAND_FOR_VESSEL, VESSEL_NOUN } from './vessels'
+import { VESSEL_PRICE, BAND_FOR_VESSEL } from './vessels'
 import { TRADE_POOL } from './scroll-market'
 import { ALL_BANDS } from './cast'
 import { EMPTY_LETTERS } from './gems'
@@ -205,16 +205,14 @@ const store: Record<string, string> = {}
   {
     const rack = vesselRackFor(31)
     const v = rack[0]!
-    const bag = createInventory()
-    const poor = buyFromVesselRack(bag, v.price - 1, 0, rack)
+    const poor = buyFromVesselRack(v.price - 1, 0, rack)
     ok(!poor.ok && poor.why === 'too-dear', `a keeper short by one Mark is refused (${poor.why})`)
     ok(poor.marks === v.price - 1, 'and a refused purchase spends nothing')
-    const gone = buyFromVesselRack(bag, 9999, 99, rack)
+    const gone = buyFromVesselRack(9999, 99, rack)
     ok(!gone.ok && gone.why === 'not-stocked', 'a slot that is not there refuses rather than throwing')
-    const bought = buyFromVesselRack(bag, 9999, 0, rack)
+    const bought = buyFromVesselRack(9999, 0, rack)
     ok(bought.ok, `a rack vessel can be bought (${bought.say.slice(0, 48)}…)`)
     ok(bought.marks === 9999 - v.price, `and it costs exactly its price (${9999 - bought.marks})`)
-    ok(bag.slots.some(s => s?.vesselData !== undefined && s.itemId === `vessel_${VESSEL_NOUN[v.kind]}_t${v.tier}` && s.vesselData.move === v.word), '★ and it lands in the BAG as an item, cut for the rack\'s word (2026-09-10)')
   }
 
   // ── R10. THE SHELF IS DRAWN, AND IT REFUSES TO DO THE PLAYER A FAVOUR ───────────────────────

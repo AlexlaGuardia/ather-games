@@ -36,11 +36,11 @@
 // Run: tools/devwin.sh play → /shimmer/dev/panel
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { KeeperFrame, TabEmpty, SectionHead, type KeeperTab } from '../../voxel3d/keeper-panel'
-import { GearTab, SatchelLetters, BagVesselStrip } from '../../voxel3d/VoxelWorld'
+import { KeeperFrame, TabEmpty, type KeeperTab } from '../../voxel3d/keeper-panel'
+import { GearTab, SatchelLetters } from '../../voxel3d/VoxelWorld'
 import { PANEL_SCENARIOS, planPanel, seedPanel, type PanelPlan, type PanelScenarioId } from '../../play3d/panel-fixture'
 import { VESSEL_CAP, VESSELS } from '../../play3d/gems'
-import { BAND_FOR_VESSEL, ownedCount, seatCount, bagVessels } from '../../play3d/vessels'
+import { BAND_FOR_VESSEL, ownedCount, seatCount } from '../../play3d/vessels'
 import { castForMove } from '../../play3d/cast'
 import { VesselCard } from './vessel-card'
 import { createInventory, type Inventory } from '../../engine/inventory'
@@ -96,7 +96,7 @@ export default function PanelDevPage() {
   // the state is written BEFORE the bodies below mount and read it. A seed in an effect would run
   // after the first paint, and the panel would show the previous keeper for a frame — briefly, which
   // is the worst duration for a lie in a tool built to be looked at.
-  const plan: PanelPlan = useMemo(() => (mounted ? seedPanel(scenario, items.current) : planPanel(scenario)), [mounted, scenario, gen])
+  const plan: PanelPlan = useMemo(() => (mounted ? seedPanel(scenario) : planPanel(scenario)), [mounted, scenario, gen])
   const asks = PANEL_SCENARIOS.find(s => s.id === scenario)?.asks ?? ''
   const seated = VESSELS.map(k => `${k} ${plan.worn[k].length}/${VESSEL_CAP}`).join(' · ')
 
@@ -145,15 +145,7 @@ export default function PanelDevPage() {
       <div className="relative w-full flex-1 min-h-0" style={{ background: bg }}>
         {!mounted ? null : <KeeperFrame key={`${scenario}:${gen}`} tab={tab} setTab={setTab} onClose={() => {}}
                      hint={<span className="text-white/40">dev bench · nothing here is saved to a real keeper</span>}>
-          {tab === 'satchel' && <>
-            {/* ★ the bench has no bag grid, so the vessels sitting in the bag as ITEMS (2026-09-10) are shown as
-                their strips — each is what a click on that slot opens in the game */}
-            <SectionHead label="In the bag" note={<>{bagVessels(items.current).length} vessel{bagVessels(items.current).length === 1 ? '' : 's'} as items · a click on the slot opens this</>} />
-            {bagVessels(items.current).map(v => (
-              <BagVesselStrip key={`bag-${v.slot}`} inv={items} slot={v.slot} owned={plan.owned} birth={plan.birth} onChange={() => setGen(n => n + 1)} />
-            ))}
-            <SatchelLetters owned={plan.owned} birth={plan.birth} items={items} onChange={() => setGen(n => n + 1)} />
-          </>}
+          {tab === 'satchel' && <SatchelLetters owned={plan.owned} birth={plan.birth} items={items} onChange={() => setGen(n => n + 1)} />}
           {tab === 'gear' && look === 'shipped' && <GearTab items={items} onLetters={() => setGen(n => n + 1)} tools={tools} skills={skills} />}
           {tab === 'gear' && look === 'item' && (
             <div className="flex flex-col gap-2">
@@ -168,7 +160,7 @@ export default function PanelDevPage() {
                 const made = plan.wordFor[kind]
                 return <VesselCard key={kind} kind={kind} gems={plan.worn[kind]}
                                    seats={made ? seatCount({ move: made }, plan.birth) : 0}
-                                   word={id ? (castForMove(id)?.label ?? id) : null} owned={ownedCount(kind, items.current)} />
+                                   word={id ? (castForMove(id)?.label ?? id) : null} owned={ownedCount(kind)} />
               })}
             </div>
           )}

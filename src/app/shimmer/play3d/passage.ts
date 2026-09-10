@@ -285,12 +285,12 @@ export interface RackPurchase { ok: boolean; marks: number; why?: TradeRefusal; 
  * sell it to you, because a shop that refuses your Marks on your behalf is not a wall of other
  * people's purposes, it is a curated aisle. The information is the mercy; the choice stays yours.
  */
-export function buyFromVesselRack(inv: Inventory, marks: number, slot: number, rack: readonly RackVessel[]): RackPurchase {
+export function buyFromVesselRack(marks: number, slot: number, rack: readonly RackVessel[]): RackPurchase {
   const no = (why: TradeRefusal, say: string): RackPurchase => ({ ok: false, marks, why, say })
   const v = rack[slot]
   if (!v) return no('not-stocked', 'That one is gone. The rack turns over.')
   if (marks < v.price) return no('too-dear', `${v.price} Marks, second-hand. Come back with them.`)
-  const g = grantVessel(inv, v.kind, v.tier, v.word, 'bought')
+  const g = grantVessel(v.kind, v.tier, v.word, 'bought')
   if (!g.ok) return no(g.why as TradeRefusal, g.say)
   return { ok: true, marks: marks - v.price, say: g.say }
 }

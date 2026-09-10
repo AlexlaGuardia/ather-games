@@ -208,6 +208,20 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
      `★ the satchel draws the gems, THEN a Vessels head, THEN the vessels (loose@${looseAt} head@${vesselHeadAt} stowed@${stowedAt})`)
   const gemsGrid = looseAt >= 0 && vesselHeadAt > looseAt ? card.slice(looseAt, vesselHeadAt) : ''
   ok(gemsGrid.length > 0 && !/stowed/.test(gemsGrid), '★ and no vessel is drawn inside the gems grid')
+  // ★ THE VESSEL CELL IS THE SOCKET (Alex, 2026-09-10 eve: "drag and drop it … to add in gems"). A gem cell
+  // lifts on press, a vessel short THAT letter lights, and the window's release sets exactly that letter
+  // through `placeGem`. Each half is asserted where it lives; the whole is the gesture.
+  ok(/onPointerDown=\{e => \{ if \(e\.button === 0\) lift\(id, e\) \}\}/.test(gemsGrid), '★ a gem cell LIFTS on a left press')
+  ok(/releasePointerCapture\(e\.pointerId\)/.test(card), '★ the lift releases implicit capture — on a phone no other cell would ever see pointerenter otherwise')
+  const vesselGrid = card.slice(stowedAt)
+  ok(/const wants = dragGem !== null && !!v\.move && shortOf\(v, birth\)\.includes\(dragGem\)/.test(vesselGrid), '★ a vessel lights only when its word is SHORT the lifted letter')
+  ok(/onPointerEnter=\{\(\) => \{ if \(dragRef\.current\) overVessel\.current = i \}\}/.test(vesselGrid), 'crossing a vessel makes it the drop target')
+  ok(/if \(!dragRef\.current\) setSel\(sel === i \? null : i\)/.test(vesselGrid), 'a press on a vessel still selects it — but not while a gem is lifted')
+  ok(/const r = placeGem\(i, birth, keeperLetters\(owned, birth\), id\)/.test(card) && /saveLetters\(r\.letters\); setSel\(i\); onChange\(\)/.test(card),
+     '★ the release sets ONE letter through placeGem, reading the letters fresh, and selects the vessel so its strip shows the result')
+  ok(/setDropNote\(r\.r\.say\)/.test(card) && /\{dropNote && /.test(card), 'and what happened is SAID under the grid — a refused drop is not a drop that did nothing')
+  ok(/window\.addEventListener\('pointercancel', up\)/.test(card), 'a cancelled pointer (a scroll steals it) ends the lift instead of leaving it stuck')
+  ok(/<div ref=\{ghost\} hidden className="pointer-events-none fixed/.test(card), 'the lifted gem rides under the pointer and can never eat the drop')
   const rackAt = declAt(src, 'VesselRack')
   const rackEnd = declAfter(src, 'GearTab', rackAt)
   ok(rackAt >= 0 && rackEnd > rackAt, 'the rack slice has BOTH anchors')

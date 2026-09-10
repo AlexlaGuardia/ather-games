@@ -282,8 +282,8 @@ import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND, V
 import { imbue, imbueWhy, imbueSentence, crystalFor } from '../play3d/imbue'
 import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
-import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn, placeGems, seatCount, seatLetters, shortOf, isComplete, wornTier, wornWord, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier, bagVessels, writeFromBag, setWordOnItem, ensureFloor, sweepEmptyToBag, parseVesselItem } from '../play3d/vessels'
-import { rollDig, rollCache, takeVessel, vesselItemId, vesselRoom, type DropDoor } from '../play3d/vessel-drops'
+import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn, placeGems, seatCount, seatLetters, shortOf, isComplete, setWord, wornTier, wornWord, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier, placeGem } from '../play3d/vessels'
+import { rollDig, rollCache, parseVesselItem, takeVessel, vesselItemId, vesselRoom, type DropDoor } from '../play3d/vessel-drops'
 import { starterFor } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
@@ -757,9 +757,6 @@ function ItemChip({ itemId, size }: { itemId: string; size: number }) {
 }
 
 export function itemLabel(itemId: string): string {
-  // ★ a vessel in the bag is named the way the rack names it — material and noun, Greg's by name (2026-09-10)
-  const vv = parseVesselItem(itemId)
-  if (vv) return `${vv.tier === 0 ? "Greg's " : ''}${TIER_MATERIAL[vv.kind][vv.tier]} ${VESSEL_NOUN[vv.kind]}`
   const m = materialForItem(itemId)
   const named = m !== undefined ? blockDef(m)?.name : undefined
   return named ?? itemId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -1651,15 +1648,12 @@ export default function VoxelWorld() {
     },
     // ★ /vessel — the FOUND door, by hand, until the world drops them (vessels are not crafted, 2026-09-04)
     vessel: (kindArg, tierArg, wordArg) => {
-      const rinv = loadRuneInventory()
+      const inv = loadRuneInventory()
       const line = () => {
         const worn = VESSELS.map(k => `${VESSEL_NOUN[k]} worn: ${wornPresent(k) ? tierLabel(k, wornTier(k)) : '—'}`).join(' · ')
         const satchel = loadStowed().map(v =>
-          `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]}${v.move ? ` for ${v.move}` : ', uncut'} ${v.gems.length}/${seatCount(v, rinv.birth)}`).join(' · ')
-        // ★ an unwritten vessel is an ITEM in the bag (2026-09-10) — a reading that skipped the bag would call a bought vessel lost
-        const bagged = bagVessels(inv.current).map(v =>
-          `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]}${v.move ? ` for ${v.move}` : ', uncut'} @${v.slot}`).join(' · ')
-        return `${worn} · vessels: ${satchel || 'none'} · bag: ${bagged || 'none'} · acquired ${VESSELS.map(k => `${ownedCount(k, inv.current)}/${MAX_PER_KIND} ${k}`).join(', ')}`
+          `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]}${v.move ? ` for ${v.move}` : ', uncut'} ${v.gems.length}/${seatCount(v, inv.birth)}`).join(' · ')
+        return `${worn} · satchel: ${satchel || 'nothing'} · acquired ${VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(', ')}`
       }
       if (!kindArg) return line()
       if (!isOwner) return 'vessels are found, won, bought or given — bare /vessel reads what you own'
@@ -1667,8 +1661,8 @@ export default function VoxelWorld() {
       if (!(VESSELS as readonly string[]).includes(kind)) return `no such vessel: ${kindArg} — bracelet or focus`
       const tier = Number(tierArg)
       if (!(TIERS as readonly number[]).includes(tier)) return `which tier? 1–3 — /vessel ${kind} 2 [word]`
-      const r = grantVessel(inv.current, kind as Vessel, tier as VesselTier, wordArg ?? null, 'found')
-      if (r.ok) { setRuneTick(t => t + 1); refreshHotbar(); setCraftTick(t => t + 1) }
+      const r = grantVessel(kind as Vessel, tier as VesselTier, wordArg ?? null, 'found')
+      if (r.ok) setRuneTick(t => t + 1)
       return `${r.ok ? '⟳ dev · ' : ''}${r.say}`
     },
     reborn: (arg) => {
@@ -3174,6 +3168,46 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
   const l = keeperLetters(owned, birth)
   const stowed = loadStowed()
   const [sel, setSel] = useState<number | null>(null)
+  // ── ★ THE VESSEL CELL IS THE SOCKET (Alex, 2026-09-10 eve) ───────────────────────────────────
+  // *"if the player want to add gems to it they drag and drop it"* — one gesture, no strip, no slot to
+  // drag into and back out of. A gem cell lifts on press; a vessel cell that is SHORT that letter lights
+  // as you cross it; release over it and `placeGem` sets exactly that letter. The lift is React state
+  // (the grid re-lights), the pointer position is a ref written straight to the ghost's transform (no
+  // re-render per move), and the drop target is a ref because the window's pointerup must read the
+  // latest one. Same split the bag panel uses, for the same reasons.
+  const [dragGem, setDragGem] = useState<string | null>(null)
+  const dragRef = useRef<string | null>(null)
+  const overVessel = useRef<number | null>(null)
+  const ghost = useRef<HTMLDivElement | null>(null)
+  const [dropNote, setDropNote] = useState<string | null>(null)
+  const lift = (id: string, e: React.PointerEvent) => {
+    // ⚠ release the implicit capture, or on a phone no other cell ever sees pointerenter and the drag
+    // can only ever land where it began
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* not captured */ }
+    dragRef.current = id; setDragGem(id); overVessel.current = null
+    const gh = ghost.current; if (gh) { gh.style.transform = `translate(${e.clientX - 12}px, ${e.clientY - 12}px)`; gh.hidden = false }
+  }
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      if (!dragRef.current) return
+      const gh = ghost.current; if (gh) gh.style.transform = `translate(${e.clientX - 12}px, ${e.clientY - 12}px)`
+    }
+    const up = () => {
+      const id = dragRef.current
+      dragRef.current = null; setDragGem(null)
+      const gh = ghost.current; if (gh) gh.hidden = true
+      const i = overVessel.current; overVessel.current = null
+      if (!id || i === null) return
+      const r = placeGem(i, birth, keeperLetters(owned, birth), id)
+      setDropNote(r.r.say)
+      if (!r.r.ok) return
+      saveLetters(r.letters); setSel(i); onChange()
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up) }
+  }, [owned, birth, onChange])
   const doImbue = (id: string) => {
     const bag = items.current
     if (!bag) return
@@ -3207,8 +3241,9 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
         {loose.map(([id, n]) => {
           const r = runeOf(id)
           return (
-            <div key={`g-${id}`} title={`${r?.name ?? id} ×${n} — a letter; place it on a vessel cut for a word that needs it`}
-                 className={`${cellCls} border-amber-200/[0.14] bg-black/45`}>
+            <div key={`g-${id}`} title={`${r?.name ?? id} ×${n} — a letter; drag it onto a vessel cut for a word that needs it`}
+                 onPointerDown={e => { if (e.button === 0) lift(id, e) }}
+                 className={`${cellCls} touch-none select-none cursor-grab border-amber-200/[0.14] bg-black/45 ${dragGem === id ? 'border-amber-300 bg-amber-300/15' : 'hover:border-amber-200/50'}`}>
               <GemStone glow={r?.glow ?? '#fff'} size={24} />
               <span className="gx-value mt-0.5 text-white/85">{n}</span>
             </div>
@@ -3240,21 +3275,24 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
           })}
         </div>
       )}
-      {/* ── VESSELS — in the making. A vessel is an ITEM in the bag above until its first letter is set
-          (Alex, 2026-09-10); from then on it is held here as parts, seats filling, and moves to Gear the
-          moment every seat holds its letter. Dismantling sends it back to the bag as an item. ── */}
+      {/* ── VESSELS — carried until worn. A vessel is held here as parts (cut for a word, seats filling) and
+          moves to Gear the moment every seat holds its letter; dismantling a worn one sends it back. ── */}
       <SectionHead label="Vessels" note={stowed.length === 0
-        ? <>none in the making · set a letter into a vessel from your bag</>
-        : <><span className="gx-value text-white/50">{stowed.length}</span> carried · <span className="gx-value text-white/50">{written}</span> written</>} />
+        ? <>none yet · cut at the Passage · Greg's underneath</>
+        : <><span className="gx-value text-white/50">{stowed.length}</span> carried · <span className="gx-value text-white/50">{written}</span> written · drag a gem onto one to set it</>} />
       <div className="grid grid-cols-8 gap-1.5">
         {stowed.map((v, i) => {
           const seats = seatCount(v, birth)
           const written = isComplete(v, birth)
           const word = v.move ? (castForMove(v.move)?.label ?? v.move) : null
+          // while a gem is lifted: a vessel short THAT letter is the socket and lights; every other one dims
+          const wants = dragGem !== null && !!v.move && shortOf(v, birth).includes(dragGem)
           return (
-            <button key={`v-${i}`} type="button" onPointerDown={() => setSel(sel === i ? null : i)}
-                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ''}` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; cut it for a one-letter word' : 'never cut for a word'}`}
-                    className={`${cellCls} ${sel === i ? 'border-amber-300 bg-amber-300/15' : written ? 'border-amber-200/45 bg-black/45' : 'border-amber-200/[0.14] bg-black/45'} hover:border-amber-200/60`}>
+            <button key={`v-${i}`} type="button" onPointerDown={() => { if (!dragRef.current) setSel(sel === i ? null : i) }}
+                    onPointerEnter={() => { if (dragRef.current) overVessel.current = i }}
+                    onPointerLeave={() => { if (overVessel.current === i) overVessel.current = null }}
+                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ''} · drag a gem here to set it` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; cut it for a one-letter word' : 'never cut for a word'}`}
+                    className={`${cellCls} ${wants ? 'border-amber-300 bg-amber-300/25 shadow-[0_0_10px_-2px_#d4a843]' : dragGem !== null ? 'border-white/[0.06] bg-black/30 opacity-50' : sel === i ? 'border-amber-300 bg-amber-300/15' : written ? 'border-amber-200/45 bg-black/45' : 'border-amber-200/[0.14] bg-black/45'} hover:border-amber-200/60`}>
               <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={26} />
               <span className="gx-value absolute right-1 top-0.5 text-[8px] text-white/40">{tierMark(v.tier)}</span>
               {/* the seats as dots — the word's count, lit where a letter sits */}
@@ -3270,9 +3308,14 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
           <div key={`ve-${k}`} className={`${cellCls} border-white/[0.06] bg-black/30`}><span className="text-white/15">·</span></div>
         ))}
       </div>
+      {dropNote && <div className="mt-1 text-[10px] leading-snug text-amber-100/70">{dropNote}</div>}
       {sel !== null && stowed[sel] && (
-        <VesselParts owned={owned} birth={birth} index={sel} items={items} onChange={() => { onChange(); if (!loadStowed()[sel]) setSel(null) }} />
+        <VesselParts owned={owned} birth={birth} index={sel} onChange={() => { onChange(); if (!loadStowed()[sel]) setSel(null) }} />
       )}
+      {/* the lifted gem, under the pointer — positioned by ref, never by state (no re-render per move) */}
+      <div ref={ghost} hidden className="pointer-events-none fixed left-0 top-0 z-50">
+        {dragGem && <GemStone glow={RUNES.find(x => x.id === dragGem)?.glow ?? '#fff'} lit size={24} />}
+      </div>
     </div>
   )
 }
@@ -3282,12 +3325,10 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
  * (Alex, 2026-09-04: *"you click the vessel and if the gem is in the inventory it asks if you'd like to
  * place them"* — this is the ask.) A legacy blank gets the word picker here instead of a place button.
  */
-export function VesselParts({ owned, birth, index, items, onChange }: {
+export function VesselParts({ owned, birth, index, onChange }: {
   owned: readonly string[]; birth: string | null
   /** which stowed vessel is selected in the grid */
   index: number
-  /** the item bag — a dismantled vessel goes back into it as an item (2026-09-10) */
-  items: React.RefObject<Inventory>
   /** letters or vessels changed — the host re-renders and the Gear tab re-reads the stowed list */
   onChange: () => void
 }) {
@@ -3295,6 +3336,7 @@ export function VesselParts({ owned, birth, index, items, onChange }: {
   const stowed = loadStowed()
   const v = stowed[index]
   const l = keeperLetters(owned, birth)
+  const book = keeperBook(owned)
   const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
   const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
   if (!v) return null
@@ -3302,20 +3344,14 @@ export function VesselParts({ owned, birth, index, items, onChange }: {
   const short = shortOf(v, birth)
   const written = isComplete(v, birth)
   const placeable = short.filter(r => (l.bag[r] ?? 0) > 0).length
+  const kindBand = BAND_FOR_VESSEL[v.kind]
   const doPlace = () => {
     const { r, letters } = placeGems(index, birth, l)
     setNote(r.say); if (!r.ok) return
     saveLetters(letters); onChange()
   }
-  // ★ TAKEN APART = AN ITEM AGAIN (2026-09-10): the letters go to the bag of letters, the vessel to the bag
-  // of things. A full bag refuses and says so; nothing moves.
-  const doDismantle = () => {
-    const bag = items.current
-    if (!bag) return
-    const r = dismantle(index, l, bag)
-    setNote(r.say); if (!r.ok) return
-    saveLetters(r.letters); onChange()
-  }
+  const doDismantle = () => { saveLetters(dismantle(index, l)); setNote('Taken apart. The letters are back in your bag.'); onChange() }
+  const doWord = (word: string) => { if (setWord(index, word, birth)) { setNote(`Cut for ${wordOf(word)}.`); onChange() } }
   return (
     <div className={`gx-plate mt-1.5 flex flex-wrap items-center gap-2 px-2.5 py-1.5 ${written ? 'is-lit' : ''}`}>
       <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={22} />
@@ -3326,14 +3362,20 @@ export function VesselParts({ owned, birth, index, items, onChange }: {
         : <span className="gx-label text-[9px] text-white/30">{isFloor(v) ? 'one seat · never lost' : 'never cut for a word'}</span>}
       {v.move ? <Seats gems={v.gems} seats={seats} /> : null}
       <span className="gx-value text-[10px] text-white/45">{v.gems.length}/{seats}</span>
-      {/* ★ no word picker here any more (2026-09-10): cutting happens on the ITEM in the bag (`BagVesselStrip`);
-          a stowed vessel bears a letter, so it bears a word. `never cut` below is a legacy save's blank that
-          found no bag room in the sweep — it goes to the bag the moment there is a slot. */}
       {written
         ? <span className="gx-label text-[9px] text-amber-200/70">written · on Gear</span>
         : v.move
           ? short.length > 0 && <span className="text-[9px] text-white/35">short {short.map(runeName).join(', ')}</span>
-          : <span className="text-[9px] text-white/35">it goes to your bag when there is room</span>}
+          : (
+            <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
+                    className="gx-btn bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal">
+              <option value="">{isFloor(v) ? 'cut it for a one-letter word you hold…' : 'cut it for a word you hold…'}</option>
+              {/* ★ the floor bears ONE seat (ruled): a two-letter word is not offered to Greg's paper */}
+              {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
+                .filter(m => { const n = seatLetters({ move: m.id }, birth).length; return n > 0 && n <= seatCapOf(v.tier) })
+                .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          )}
       <span className="ml-auto flex items-center gap-1.5">
         {!written && v.move && (
           <button type="button" disabled={!placeable} onPointerDown={doPlace}
@@ -3351,91 +3393,22 @@ export function VesselParts({ owned, birth, index, items, onChange }: {
   )
 }
 
-/**
- * ★ THE STRIP UNDER A VESSEL IN THE BAG (Alex, 2026-09-10: *"its an item untill the gems are put into it
- * then its a vessel"*). Click a vessel item in the satchel grid and this says what it is, cuts it for a
- * word if it has none, and SETS its first letters — at which point the item leaves its slot and the
- * vessel appears in the Vessels grid below as parts (`writeFromBag`). Same plate as `VesselParts`, the
- * stowed half: the two are one object at two stages, and they read alike on purpose.
- */
-export function BagVesselStrip({ inv, slot, owned, birth, onChange }: {
-  inv: React.RefObject<Inventory>; slot: number; owned: readonly string[]; birth: string | null
-  /** the bag or the letters changed — the host re-renders the grid */
-  onChange: () => void
-}) {
-  const [note, setNote] = useState<string | null>(null)
-  const bag = inv.current
-  const st = bag?.slots[slot] ?? null
-  const v = st ? parseVesselItem(st.itemId) : null
-  if (!bag || !st || !v || !st.vesselData) return null
-  const move = st.vesselData.move
-  const l = keeperLetters(owned, birth)
-  const book = keeperBook(owned)
-  const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
-  const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
-  const need = seatLetters({ move }, birth)
-  const held = need.filter(r => (l.bag[r] ?? 0) > 0).length
-  const kindBand = BAND_FOR_VESSEL[v.kind]
-  const doWord = (word: string) => { if (setWordOnItem(bag, slot, word, birth)) { setNote(`Cut for ${wordOf(word)}.`); onChange() } }
-  const doSet = () => {
-    const { r, letters } = writeFromBag(bag, slot, birth, l)
-    setNote(r.say); if (!r.ok) return
-    saveLetters(letters); onChange()
-  }
-  return (
-    <div className="gx-plate mt-1.5 flex flex-wrap items-center gap-2 px-2.5 py-1.5">
-      <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={22} />
-      <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[v.kind]}</span>
-      <span className="gx-label text-[9px] text-white/30">{tierLabel(v.kind, v.tier)}</span>
-      {move
-        ? <>
-            <span className="gx-title text-[11px] text-white/80">for {wordOf(move)}</span>
-            {/* every seat dark — nothing is set in an item; the first letter is what makes it a vessel */}
-            <Seats gems={[]} seats={need.length} />
-            <span className="gx-value text-[10px] text-white/45">0/{need.length}</span>
-            <span className="text-[9px] text-white/35">needs {need.map(runeName).join(', ')}</span>
-          </>
-        : (
-          <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
-                  className="gx-btn bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal">
-            <option value="">{isFloor(v) ? 'cut it for a one-letter word you hold…' : 'cut it for a word you hold…'}</option>
-            {/* ★ the floor bears ONE seat (ruled): a two-letter word is not offered to Greg's paper */}
-            {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
-              .filter(m => { const n = seatLetters({ move: m.id }, birth).length; return n > 0 && n <= seatCapOf(v.tier) })
-              .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        )}
-      <span className="ml-auto flex items-center gap-1.5">
-        {move && (
-          <button type="button" disabled={!held} onPointerDown={doSet}
-                  className={`gx-btn px-2 py-0.5 text-[10px] ${held ? '' : 'gx-inactive'}`}>
-            {held ? `set ${held} — it becomes a vessel` : 'no letters for it'}
-          </button>
-        )}
-      </span>
-      {note && <span className="w-full text-[10px] leading-snug text-amber-100/70">{note}</span>}
-    </div>
-  )
-}
-
-export function VesselRack({ owned, birth, slots, items, onEquipped }: {
+export function VesselRack({ owned, birth, slots, onEquipped }: {
   owned: readonly string[]; birth: string | null; slots: Loadout
-  /** the item bag — a dismantled vessel goes back into it as an item, and the cap counts what sits there */
-  items: React.RefObject<Inventory>
   /** the worn vessel changed (equipped or dismantled) — hand the tab its re-resolved slots and let the host re-render */
   onEquipped: (slots: Loadout) => void
 }) {
   const l = keeperLetters(owned, birth)
   const reresolve = () => onEquipped(resolveLoadout([...owned], birth, keeperBook(owned)).slots)
   const doEquip = (kind: Vessel, i: number) => { if (equip(kind, i, birth, starterFor(owned))) reresolve() }
-  const doDismantle = (kind: Vessel) => { if (items.current && dismantleWorn(kind, birth, items.current, starterFor(owned))) reresolve() }
+  const doDismantle = (kind: Vessel) => { if (dismantleWorn(kind, birth, starterFor(owned))) reresolve() }
   const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
   const seatsOfWorn = (moveId: string | null) => (moveId ? seatCount({ move: moveId }, birth) : 0)
   return (
     <div className="mb-3 flex flex-col gap-1">
       <SectionHead label="Vessels" note={<>
-        <span className="gx-value text-white/50">{VESSELS.map(k => `${ownedCount(k, items.current)}/${MAX_PER_KIND} ${k}`).join(' · ')}</span>
-        {VESSELS.some(k => ownedCount(k, items.current) < MAX_PER_KIND) ? ' · cut at the Passage' : ''} · Greg's underneath
+        <span className="gx-value text-white/50">{VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(' · ')}</span>
+        {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · cut at the Passage' : ''} · Greg's underneath
       </>} />
       {/* ★ ONLY WRITTEN VESSELS ARE GEAR (Alex, 2026-09-04). The rack shows what is WORN, and a dropdown of the
           written spares to swap in. Unwritten ones live in the satchel as parts until every seat their word
@@ -3626,7 +3599,7 @@ export function GearTab({ items, onLetters, tools, skills }: {
           AND the word written on them — and leaves the bag alone; the world re-resolves on
           `onLetters` (the host bumps runeTick there). Vessels are grown at the Passage, one at a
           time. The bag and imbue moved to the Satchel, where carried things live. */}
-      <VesselRack owned={owned} birth={birth} slots={slots} items={items}
+      <VesselRack owned={owned} birth={birth} slots={slots}
                   onEquipped={(next) => { setSlots(next); onLetters() }} />
       <SectionHead label="Cast bar" note="what the worn vessels carry" />
       {/* ★ A READOUT, NOT A PICKER (Alex, 2026-09-04). Z is the worn bracelet's word, B the worn glove's.
@@ -3766,13 +3739,8 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
    * them in the effect's deps would tear down and re-add a window listener on every inventory tick,
    * i.e. potentially mid-drag. One ref, one subscription, always the current functions.
    */
-  // ★ A CLICK ON A VESSEL ITEM SELECTS IT (2026-09-10) — the one slot whose press is not a lift. The strip
-  // under the grid then cuts it for a word and sets its letters. Dragging still moves it like any item;
-  // a drag that starts clears the selection so the strip never describes a slot that just emptied.
-  const [vesselSel, setVesselSel] = useState<number | null>(null)
-  const pickVessel = (i: number | null) => setVesselSel(prev => (i !== null && prev === i ? null : i))
-  const api = useRef({ onMove, onSplit, setDragFrom, pickVessel })
-  api.current = { onMove, onSplit, setDragFrom, pickVessel }
+  const api = useRef({ onMove, onSplit, setDragFrom })
+  api.current = { onMove, onSplit, setDragFrom }
 
   /**
    * ── ★ THE POINTER OWNS THE WHOLE INTERACTION (2026-08-11, Alex: "no drag to move yet i see") ───
@@ -3802,7 +3770,6 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
       // measurement, and a square deadzone is the honest shape of that question.
       if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < DRAG_SLOP) return
       d.moved = true
-      api.current.pickVessel(null)
       api.current.setDragFrom({ ...d.from, mode: d.mode })
     }
     const up = () => {
@@ -3811,11 +3778,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
       if (!d) return
       // ★ A PRESS THAT NEVER MOVED IS A CLICK, and the click verbs live here too so that the two
       // gestures cannot disagree about what a right button means.
-      if (!d.moved) {
-        // a vessel item is selected by a click, not lifted — either button (there is no "half" of a vessel)
-        if (d.from.g === 'bag' && inv.current?.slots[d.from.i]?.vesselData) { api.current.pickVessel(d.from.i); return }
-        api.current.setDragFrom({ ...d.from, mode: d.mode === 'one' ? 'half' : 'whole' }); return
-      }
+      if (!d.moved) { api.current.setDragFrom({ ...d.from, mode: d.mode === 'one' ? 'half' : 'whole' }); return }
       const to = hover.current
       // A sprinkle already dropped its items on the way across; releasing just ends it. A whole-stack
       // drag lands here, and releasing over nothing (outside the grid) cancels rather than guessing.
@@ -3838,11 +3801,6 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
   const cell = (ref: SlotRef) => {
     const st = (ref.g === 'bag' ? bag : chest?.slots ?? [])[ref.i]
     const lifted = dragFrom?.g === ref.g && dragFrom.i === ref.i
-    // a vessel item: its word on the tooltip, its seats as dark dots under the chip, lit when selected
-    const vd = st?.vesselData
-    const vWord = vd ? (vd.move ? (castForMove(vd.move)?.label ?? vd.move) : null) : null
-    const vSeats = vd ? Math.min(VESSEL_CAP, seatCount({ move: vd.move }, birthRune)) : 0
-    const picked = ref.g === 'bag' && vesselSel === ref.i && !!vd
     return (
       <button key={slotKey(ref)} type="button"
         /**
@@ -3897,26 +3855,19 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
         // The menu's only job now is to not appear. Its TIMING is why the verbs moved to the
         // pointer; see the state machine above.
         onContextMenu={(e) => e.preventDefault()}
-        title={st ? (vd ? `${itemLabel(st.itemId)} · ${vWord ? `for ${vWord} · ${vSeats} seat${vSeats === 1 ? '' : 's'}, none set` : 'uncut'} · click to write it` : `${itemLabel(st.itemId)} ×${st.count}`) : 'empty'}
+        title={st ? `${itemLabel(st.itemId)} ×${st.count}` : 'empty'}
         // ⚠ `touch-none` is what lets a drag be a drag on a phone — without it the browser claims the
         // gesture as a scroll partway through and the pointer stream just stops.
         className={`relative w-12 h-12 rounded-[2px] border flex flex-col items-center justify-center
           text-[9px] font-mono transition-colors touch-none select-none
           shadow-[inset_0_0_8px_rgba(0,0,0,0.6)]
           ${lifted && dragFrom ? LIFT_LOOK[dragFrom.mode]
-            : picked ? 'border-amber-300 bg-amber-300/15'
             : dragFrom !== null ? 'border-amber-200/30 bg-black/55 hover:border-amber-200/80'
             : 'border-amber-200/[0.14] bg-black/45 hover:border-amber-200/50'}`}>
         {st ? (
           <>
             <ItemChip itemId={st.itemId} size={26} />
-            {vd
-              ? <span className="mt-0.5 flex gap-[3px]">
-                  {Array.from({ length: vSeats }, (_, k) => (
-                    <span key={k} className="h-[5px] w-[5px] rounded-full bg-black/60 shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]" />
-                  ))}
-                </span>
-              : <span className="gx-value mt-0.5 text-white/85">{st.count}</span>}
+            <span className="gx-value mt-0.5 text-white/85">{st.count}</span>
             {/* How many the lift will actually take, stated rather than left to be counted — "half
                 of 7" is 4 here and 3 elsewhere, and a player should not have to find out by doing
                 it. A whole lift needs no badge: the count under the icon already says it. */}
@@ -3985,11 +3936,6 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
       <div className="grid grid-cols-8 gap-1.5">
         {Array.from({ length: 16 }, (_, k) => cell({ g: 'bag', i: k + 8 }))}
       </div>
-      {/* ★ the selected vessel item, under the grid it sits in: cut it, set its letters, watch it become a vessel */}
-      {vesselSel !== null && (
-        <BagVesselStrip inv={inv} slot={vesselSel} owned={runesHeld} birth={birthRune}
-                        onChange={() => { onLetters(); if (!inv.current?.slots[vesselSel]?.vesselData) setVesselSel(null) }} />
-      )}
       {/* The bar itself, set apart by a rule so its slots read as the SAME grid, not a copy. */}
       <div className="mt-4 border-t border-white/10 pt-3">
         <SectionHead label="Hotbar" note="keys 1 – 8" />
@@ -4764,18 +4710,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   useEffect(() => {
     let live = true
     void loadPlayer(SEED).then(p => {
-      if (!live) return
-      // ★ VESSELS ARE ITEMS (2026-09-10): Greg's pair lands in the bag when a kind has none anywhere, and any
-      // unwritten vessel a pre-ruling save still holds in the stowed list moves into the bag while there is
-      // room. Runs for a brand-new keeper (no save) and a restored one alike — after the bag is restored,
-      // never before, or the floor would take a slot the save was about to fill.
-      const settleVessels = () => {
-        const given = ensureFloor(inv.current)
-        const swept = sweepEmptyToBag(inv.current)
-        if (swept) onSay(`${swept} unwritten vessel${swept === 1 ? '' : 's'} moved into your bag — a vessel is an item until a letter is set in it`)
-        if (given.length || swept) onInvChange()
-      }
-      if (!p) { settleVessels(); return }
+      if (!p || !live) return
       if (p.inv) {
         inv.current = p.inv as Inventory
         // ── ★ A BAG OUTLIVES THE RULES IT WAS FILLED UNDER (2026-08-13) ────────────────────────
@@ -4794,7 +4729,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           onSay(`your bag caught up: ${msg}`)
         }
       }
-      settleVessels()
       // ensureBasicTools over the SAVED set: a future tool family added to the game arrives in
       // an old save as its basic tier instead of as undefined.
       if (p.tools) tools.current = ensureBasicTools(p.tools as EquippedTools)
@@ -10334,7 +10268,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // room for destroyed it, with nothing on screen to say so.
         // ★ a vessel is not a bag item: it is taken by the satchel, and refused at the cap the same way a full
         // bag refuses a stack — the drop stays on the ground, yours, until there is room for it.
-        (itemId) => { const v = parseVesselItem(itemId); return v ? (vesselRoom(v.kind, inv.current!) ? 1 : 0) : roomFor(inv.current!, itemId) })
+        (itemId) => { const v = parseVesselItem(itemId); return v ? (vesselRoom(v.kind) ? 1 : 0) : roomFor(inv.current!, itemId) })
       if (res.picked.length) {
         // ⚠ A FULL BAG MUST SAY SO. `give` returns what did not fit, and every caller here used to
         // discard that — which is how mining past a full inventory destroyed the drop in silence.
@@ -10350,7 +10284,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
             // ★ THE DOOR RIDES ON THE DROP. A vessel out of deep rock and a vessel out of a cache are
             // the same item and are not the same event, and the line the keeper reads says which.
             // `'dig'` is the fallback for a drop that predates provenance — the old behaviour exactly.
-            const r = takeVessel(inv.current!, it.itemId, (it.from ?? 'dig') as DropDoor, rinv.owned, rinv.birth)
+            const r = takeVessel(it.itemId, (it.from ?? 'dig') as DropDoor, rinv.owned, rinv.birth)
             onSay(r.say)
             if (r.ok) onVesselFound()
             continue

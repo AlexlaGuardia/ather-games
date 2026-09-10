@@ -37,7 +37,7 @@
  *     75 + 75 = the 150 the retired pair cost, so nobody pays more for the change than they did
  *     before it — a correction should not arrive as a price rise
  *   · `MAX_PER_KIND` of each kind in all, counting the one you are wearing
- *   · a new vessel arrives EMPTY, as an ITEM in the bag (2026-09-10) — cut for its word, no letters
+ *   · a new vessel arrives EMPTY: no letters, no word. The bag is shared; the paper is not
  *   · equipping is free and instant; a cozy game does not tax changing your mind
  *   · a vessel has a TIER (0–3), and the tier is the MATERIAL (canon) — see the tier section below
  *
@@ -59,25 +59,6 @@
  * and not being worn, `clearStowed` (a rebirth) cannot remove them, and `MAX_PER_KIND` counts only
  * ACQUIRED vessels (tier ≥ 1). Three grown gloves still have Greg's underneath.
  *
- * ── ★★ RULED 2026-09-10 (Alex, opening the real satchel): A VESSEL IS AN ITEM UNTIL A LETTER IS SET ──
- * *"its an item untill the gems are put into it then its a vessel"*. So a vessel with NO letters in it
- * is an `ItemStack` in the keeper's BAG — `vessel_<noun>_t<tier>` with `vesselData: { move }` carrying
- * the word it was cut for — and it moves, chests and drops like any item. The moment its first letter
- * is set (`writeFromBag`) it leaves the bag and becomes a STOWED vessel here (parts, then gear when
- * every seat is written). Taking every letter back out (`dismantle`, `dismantleWorn`) turns it back
- * into an item in the bag. The invariant, stated once: **a stowed vessel always bears at least one
- * letter; a vessel with none is an item.** `sweepEmptyToBag` is the migration for saves from before.
- *   · every door (`grantVessel`, and through it bought / found / won) lands in the BAG and takes an
- *     `Inventory`; a full bag refuses with `no-room` the way a full bag refuses any pickup
- *   · the cap (`ownedCount`) counts worn + stowed + bag, so the bag cannot hold a fourth
- *   · Greg's pair is still never lost, but it is no longer minted on every `loadStowed` read — it is
- *     an item, so `ensureFloor(inv)` puts one back in the bag when a kind has none worn, stowed or
- *     bagged. Same promise as before, checked where the bag is. ⚠ A floor item parked in a CHEST is
- *     out of that check's sight and Greg will hand out another — a mortal-cloth one-seat blank, so
- *     the exploit buys nothing, and reading every chest in the world for it is not worth the trip.
- *   · this is the imbue precedent, run the other way: a crystal (item) becomes a gem (keeper state);
- *     a vessel (item) becomes a stowed vessel (keeper state) when a gem goes in.
- *
  * ★ AND THE FLOOR IS ONE SEAT EACH, cut for a one-letter word (ruled). JIN'S CALL on WHICH word,
  * forced by the build's own rune model: on day one every one-letter word a keeper can read is in
  * their birth rune, and a birth-rune word is body-held (`isBodyHeld`) — it needs no paper at all.
@@ -95,7 +76,6 @@ import { LOADOUT_KEY, rawLoadout, saveLoadout, type Loadout } from './loadout'
 import { VESSELS_KEY, loadLetters, saveLetters, lettersOf, missingLetters, unbindLetters, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel, type Letters } from './gems'
 import { moveById } from './keeper-moves'
 import { ALL_BANDS } from './cast'
-import { firstEmptySlot, type Inventory, type ItemStack } from '../engine/inventory'
 
 export const STOWED_KEY = 'ather:shimmer:stowed'
 /** ⚠ read ONCE, by `loadStowed`, then removed. The 09-03 pairs; see the legacy-door note above. */
@@ -140,38 +120,6 @@ export const VESSEL_NOUN: Record<Vessel, string> = { bracelet: 'bracelet', focus
 
 /** a vessel the keeper owns but is not wearing: its own letters, its own word, its own material */
 export interface StowedVessel { kind: Vessel; gems: string[]; move: string | null; tier: VesselTier }
-
-// ── the vessel as an ITEM: id family, the stack, and reading the bag ────────────────────────
-const NOUN_KIND: Record<string, Vessel> = Object.fromEntries(VESSELS.map(k => [VESSEL_NOUN[k], k]))
-/** the item id — the icon family, keyed by the NOUN, so the thing draws as what it is */
-export const vesselItemId = (kind: Vessel, tier: VesselTier): string => `vessel_${VESSEL_NOUN[kind]}_t${tier}`
-/** `vessel_glove_t2` → `{ kind: 'focus', tier: 2 }`; anything else → null. Keyed by the NOUN. */
-export function parseVesselItem(itemId: string): { kind: Vessel; tier: VesselTier } | null {
-  const m = /^vessel_([a-z]+)_t([0-3])$/.exec(itemId)
-  if (!m) return null
-  const kind = NOUN_KIND[m[1]!]
-  return kind ? { kind, tier: Number(m[2]) as VesselTier } : null
-}
-export const isVesselItem = (itemId: string): boolean => parseVesselItem(itemId) !== null
-/** the stack a vessel is in the bag: one, unique, carrying its word (2026-09-10) */
-export const vesselStack = (kind: Vessel, tier: VesselTier, move: string | null): ItemStack =>
-  ({ itemId: vesselItemId(kind, tier), count: 1, vesselData: { move } })
-/** a vessel sitting in the bag as an item, and where */
-export interface BagVessel { slot: number; kind: Vessel; tier: VesselTier; move: string | null }
-/**
- * Every vessel in the bag. An item IS a vessel when it carries `vesselData` — a bare `vessel_*` id
- * with no data is not one (a drop is taken through `takeVessel`, which writes the data; nothing else
- * makes one). Read fresh each time: the bag is live.
- */
-export function bagVessels(inv: Inventory | null | undefined): BagVessel[] {
-  const out: BagVessel[] = []
-  inv?.slots.forEach((s, slot) => {
-    if (!s || !s.vesselData) return
-    const v = parseVesselItem(s.itemId)
-    if (v) out.push({ slot, kind: v.kind, tier: v.tier, move: s.vesselData.move ?? null })
-  })
-  return out
-}
 
 /**
  * Which cast band each vessel bears, DERIVED from `VESSEL_FOR_KIND` rather than restated.
@@ -279,48 +227,20 @@ export function wornPresent(kind: Vessel): boolean {
 }
 
 /**
- * ★ GREG'S PAIR, NEVER LOST — AS AN ITEM (2026-09-10; was minted into the stowed list on every read).
- * Puts a floor vessel of each kind into the BAG when that kind has none worn, none stowed and none
- * bagged. Derived, not stored, the same guarantee `ensureBasicTools` makes for the Worn tools, and the
- * reason a rebirth's `clearStowed` cannot take them — the host calls this after the bag loads. Returns
- * the kinds it handed out. A full bag hands out nothing and tries again next time.
+ * ★ GREG'S PAIR, NEVER LOST: every read puts a floor vessel of each kind back unless one is already
+ * here or is the one being worn. Derived, not stored — the same guarantee `ensureBasicTools` makes
+ * for the Worn tools, and the reason a rebirth's `clearStowed` cannot take them.
  */
-export function ensureFloor(inv: Inventory): Vessel[] {
+function withFloor(list: StowedVessel[]): StowedVessel[] {
   const tiers = loadWornTiers()
-  const stowed = loadStowed()
-  const bag = bagVessels(inv)
-  const added: Vessel[] = []
   for (const kind of VESSELS) {
+    if (list.some(v => v.kind === kind && isFloor(v))) continue
     if (wornPresent(kind) && tiers[kind] === FLOOR_TIER) continue
-    if (stowed.some(v => v.kind === kind && isFloor(v))) continue
-    if (bag.some(v => v.kind === kind && isFloor(v))) continue
-    const slot = firstEmptySlot(inv.slots)
-    if (slot < 0) break
-    inv.slots[slot] = vesselStack(kind, FLOOR_TIER, null)
-    added.push(kind)
+    list.push(emptyVessel(kind, FLOOR_TIER))
   }
-  return added
-}
-
-/**
- * ★ THE MIGRATION, AND THE INVARIANT'S KEEPER: every stowed vessel with NO letters becomes an item in
- * the bag (2026-09-10). Saves from before the ruling hold unwritten vessels here; so does a legacy
- * blank. Returns how many moved. One that finds no room stays stowed until there is — the satchel
- * grid says so rather than losing it.
- */
-export function sweepEmptyToBag(inv: Inventory): number {
-  const stowed = loadStowed()
-  const keep: StowedVessel[] = []
-  let moved = 0
-  for (const v of stowed) {
-    if (v.gems.length) { keep.push(v); continue }
-    const slot = firstEmptySlot(inv.slots)
-    if (slot < 0) { keep.push(v); continue }
-    inv.slots[slot] = vesselStack(v.kind, v.tier, v.move)
-    moved++
-  }
-  if (moved) saveStowed(keep)
-  return moved
+  // acquired first, the floor last — stable, so an index a host took from one read names the same
+  // vessel on the next, and Greg's pair reads as what sits UNDER the rest rather than ahead of it
+  return [...list.filter(v => !isFloor(v)), ...list.filter(isFloor)]
 }
 
 /**
@@ -344,14 +264,14 @@ function migratePairs(raw: unknown): StowedVessel[] {
 export function loadStowed(): StowedVessel[] {
   try {
     const raw = localStorage.getItem(keeperKey(STOWED_KEY))
-    if (raw) return parseStowed(JSON.parse(raw))
+    if (raw) return withFloor(parseStowed(JSON.parse(raw)))
     const legacy = localStorage.getItem(keeperKey(LEGACY_PAIRS_KEY))
-    if (!legacy) return []
+    if (!legacy) return withFloor([])
     const migrated = migratePairs(JSON.parse(legacy))
     saveStowed(migrated)
     localStorage.removeItem(keeperKey(LEGACY_PAIRS_KEY))   // once, so it cannot double-credit
-    return migrated
-  } catch { return [] }
+    return withFloor(migrated)
+  } catch { return withFloor([]) }
 }
 
 export function saveStowed(list: readonly StowedVessel[]): void {
@@ -362,26 +282,24 @@ export function clearStowed(): void {
   try {
     localStorage.removeItem(keeperKey(STOWED_KEY))
     localStorage.removeItem(keeperKey(LEGACY_PAIRS_KEY))   // a reborn keeper keeps no pairs either
-    localStorage.removeItem(keeperKey(WORN_TIER_KEY))      // ⚠ NOT the floor: `ensureFloor` hands Greg's pair back into the bag
+    localStorage.removeItem(keeperKey(WORN_TIER_KEY))      // ⚠ NOT the floor: `withFloor` hands Greg's pair back on the next read
     localStorage.removeItem(keeperKey(WORN_WORD_KEY))
   } catch { /* private mode */ }
 }
 
 /**
- * How many of `kind` the keeper has ACQUIRED: the worn one if it is not Greg's, every stowed one above
- * the floor, and every one sitting in the BAG as an item (2026-09-10). Greg's pair is never in this
- * number — the cap governs what a keeper acquires; the floor sits under it (ruled 2026-09-04).
+ * How many of `kind` the keeper has ACQUIRED: the worn one if it is not Greg's, plus every stowed one
+ * above the floor. Greg's pair is never in this number — the cap governs what a keeper acquires; the
+ * floor sits under it (ruled 2026-09-04).
  */
-export function ownedCount(kind: Vessel, inv: Inventory | null | undefined): number {
+export function ownedCount(kind: Vessel): number {
   const worn = wornPresent(kind) && !isFloor({ tier: wornTier(kind) }) ? 1 : 0
   return worn + loadStowed().filter(v => v.kind === kind && !isFloor(v)).length
-       + bagVessels(inv).filter(v => v.kind === kind && !isFloor(v)).length
 }
 
-export type VesselRefusal = 'too-dear' | 'at-cap' | 'no-such-word' | 'too-many-seats' | 'not-given' | 'no-room'
+export type VesselRefusal = 'too-dear' | 'at-cap' | 'no-such-word' | 'too-many-seats' | 'not-given'
 export interface VesselPurchase { ok: boolean; marks: number; why?: VesselRefusal; say: string }
-/** `slot` is where in the BAG it landed (2026-09-10; was `index` into the stowed list) */
-export interface VesselGrant { ok: boolean; why?: VesselRefusal; say: string; slot?: number }
+export interface VesselGrant { ok: boolean; why?: VesselRefusal; say: string; index?: number }
 
 
 /**
@@ -390,7 +308,7 @@ export interface VesselGrant { ok: boolean; why?: VesselRefusal; say: string; sl
  * `word` may be null only for a blank (the satchel cuts it later); a word must fit the tier's seats
  * and the kind's band. Persists on success. The caller spends Marks, rolls loot, or names the prize.
  */
-export function grantVessel(inv: Inventory, kind: Vessel, tier: VesselTier, word: string | null, source: VesselSource): VesselGrant {
+export function grantVessel(kind: Vessel, tier: VesselTier, word: string | null, source: VesselSource): VesselGrant {
   if (isFloor({ tier }) || source === 'given') {
     return { ok: false, why: 'not-given', say: `Greg gave you the ${VESSEL_NOUN[kind]} you have. Nobody hands out a second.` }
   }
@@ -402,25 +320,23 @@ export function grantVessel(inv: Inventory, kind: Vessel, tier: VesselTier, word
   if (seats > seatCapOf(tier)) {
     return { ok: false, why: 'too-many-seats', say: `${m!.name} asks ${seats} seats; a ${TIER_MATERIAL[kind][tier]} ${kind} bears ${seatCapOf(tier)}.` }
   }
-  if (ownedCount(kind, inv) >= MAX_PER_KIND) {
+  if (ownedCount(kind) >= MAX_PER_KIND) {
     return { ok: false, why: 'at-cap', say: `Three ${kind}s is what a keeper can carry, and Greg's underneath. Nobody down here will sell you a fourth.` }
   }
-  // ★ IT LANDS IN THE BAG (2026-09-10): an item until a letter goes in. A full bag refuses, the way it
-  // refuses any pickup — the vessel stays on the shelf / on the ground / in the prize line.
-  const slot = firstEmptySlot(inv.slots)
-  if (slot < 0) return { ok: false, why: 'no-room', say: `Your bag is full. Make room and the ${VESSEL_NOUN[kind]} is yours.` }
-  inv.slots[slot] = vesselStack(kind, tier, m?.id ?? null)
+  saveStowed([...loadStowed(), { kind, gems: [], move: m?.id ?? null, tier }])
+  // its index in the NEXT read: acquired vessels sort first, and this one is the newest of them
+  const index = loadStowed().filter(v => !isFloor(v)).length - 1
   const how = { bought: 'yours', found: 'found', won: 'won', given: 'given' }[source]
   return {
-    ok: true, slot,
+    ok: true, index,
     // copy says canon's noun (a GLOVE of starwillow), never the kind id
-    say: m ? `A ${VESSEL_NOUN[kind]} of ${TIER_MATERIAL[kind][tier]} for ${m.name}, ${seats} seat${seats === 1 ? '' : 's'} cut — ${how}. It is in your bag; set its first letter and it is yours to write.`
-           : `A ${VESSEL_NOUN[kind]} of ${TIER_MATERIAL[kind][tier]}, uncut — ${how}. It is in your bag; cut it for a word.`,
+    say: m ? `A ${VESSEL_NOUN[kind]} of ${TIER_MATERIAL[kind][tier]} for ${m.name}, ${seats} seat${seats === 1 ? '' : 's'} cut — ${how}. Set its letters and it is yours to wear.`
+           : `A ${VESSEL_NOUN[kind]} of ${TIER_MATERIAL[kind][tier]}, uncut — ${how}. Write something on it.`,
   }
 }
 
 /** Buy one vessel: the Passage's stock is TIER 1, cut to order. Persists on success; the caller spends the Marks. */
-export function buyVessel(inv: Inventory, kind: Vessel, marks: number, word?: string): VesselPurchase {
+export function buyVessel(kind: Vessel, marks: number, word?: string): VesselPurchase {
   // ★ MADE FOR ONE WORD (Alex, 2026-09-04). The Passage makes the paper to order, for a word the keeper
   // already holds; the vessel's seats are that word's letters. `word` is optional only for the legacy
   // blank (a vessel bought before the ruling), which the satchel lets a keeper assign a word to.
@@ -429,13 +345,13 @@ export function buyVessel(inv: Inventory, kind: Vessel, marks: number, word?: st
   if (word !== undefined && (!m || ALL_BANDS[BAND_FOR_VESSEL[kind]] !== m.tier)) {
     return { ok: false, marks, why: 'no-such-word', say: `Nobody down here has heard of that word for a ${kind}.` }
   }
-  if (ownedCount(kind, inv) >= MAX_PER_KIND) {
+  if (ownedCount(kind) >= MAX_PER_KIND) {
     return { ok: false, marks, why: 'at-cap', say: `Three ${kind}s is what a keeper can carry, and Greg's underneath. Nobody down here will sell you a fourth.` }
   }
   if (marks < VESSEL_PRICE) {
     return { ok: false, marks, why: 'too-dear', say: `${VESSEL_PRICE} Marks — grown, not ridden in. Come back with them.` }
   }
-  const g = grantVessel(inv, kind, 1, m?.id ?? null, 'bought')
+  const g = grantVessel(kind, 1, m?.id ?? null, 'bought')
   return g.ok ? { ok: true, marks: marks - VESSEL_PRICE, say: g.say } : { ok: false, marks, why: g.why, say: g.say }
 }
 
@@ -494,11 +410,10 @@ export const EQUIP_WRITES: readonly string[] = [LOADOUT_KEY, VESSELS_KEY, WORN_T
 // the seats and the requirement cannot drift apart. `VESSEL_CAP` is the ceiling a word can ask for, not
 // a property of every vessel. Filed for Magii to land in the brief (CANON_GAPS, 2026-09-04).
 //
-// The flow (amended 2026-09-10): the Passage makes a vessel for a word → it sits in the BAG as an ITEM →
-// the keeper sets its first letter (`writeFromBag`) and it becomes a STOWED vessel, a part → the rest of
-// its letters (`placeGems`) → every seat filled = the word is WRITTEN = it moves to Gear (`isComplete`)
-// → equip / dismantle. Dismantle returns the letters (canon: unbind is free) and the empty vessel goes
-// back to the BAG as an item, still cut for its word.
+// The flow: the Passage makes a vessel for a word → it sits in the SATCHEL as a part → the keeper places
+// the gems they hold (`placeGems`) → every seat filled = the word is WRITTEN = it moves to Gear
+// (`isComplete`) → equip / dismantle. Dismantle returns the letters (canon: unbind is free) and the
+// vessel goes back to the satchel, still cut for its word.
 
 /** The letters this vessel's seats were cut for. A legacy blank (bought before the ruling) has none yet. */
 export function seatLetters(v: Pick<StowedVessel, 'move'>, birth: string | null): string[] {
@@ -517,56 +432,6 @@ export function completeVessels(kind: Vessel, birth: string | null): { v: Stowed
 }
 
 export interface Placement { ok: boolean; placed: string[]; short: string[]; complete: boolean; say: string }
-const refuse = (say: string): Placement => ({ ok: false, placed: [], short: [], complete: false, say })
-
-/**
- * ★ THE ITEM BECOMES A VESSEL (2026-09-10): set, from the bag of letters, as many of this bag-vessel's
- * letters as the keeper holds. With at least one set, the item leaves its slot and joins the stowed
- * list — parts until every seat is filled. Same return shape as `placeGems`; `index` is where it now
- * sits in the stowed list, for a host that wants to keep it selected.
- */
-export function writeFromBag(inv: Inventory, slot: number, birth: string | null, l: Letters): { r: Placement; letters: Letters; index: number | null } {
-  const s = inv.slots[slot]
-  const v = s ? parseVesselItem(s.itemId) : null
-  if (!s || !v) return { r: refuse('No such vessel.'), letters: l, index: null }
-  const move = s.vesselData?.move ?? null
-  if (!move) return { r: refuse('This one was never cut for a word. Choose one first.'), letters: l, index: null }
-  const bag = { ...l.bag }
-  const placed: string[] = []
-  const short: string[] = []
-  for (const r of seatLetters({ move }, birth)) {
-    if ((bag[r] ?? 0) > 0) { bag[r] = bag[r]! - 1; placed.push(r) } else short.push(r)
-  }
-  if (!placed.length) return { r: { ...refuse(`You hold none of what it needs: ${short.join(', ')}.`), short }, letters: l, index: null }
-  const stowed = [...loadStowed(), { kind: v.kind, gems: placed, move, tier: v.tier }]
-  saveStowed(stowed)
-  inv.slots[slot] = null
-  const tidy: Record<string, number> = {}
-  for (const [k, n] of Object.entries(bag)) if (n > 0) tidy[k] = n
-  const complete = short.length === 0
-  return {
-    r: { ok: true, placed, short, complete,
-         say: complete ? `Written. It is gear now — find it on the Gear tab.` : `${placed.length} set. It is a vessel now — still short: ${short.join(', ')}.` },
-    letters: { bag: tidy, vessels: l.vessels },
-    index: loadStowed().length - 1,
-  }
-}
-/**
- * Cut an uncut vessel IN THE BAG for its word — a legacy blank, or Greg's floor taking its one-letter word.
- * Refuses if it already has one, if the word asks more seats than the tier bears (`seatCapOf`: the floor
- * takes ONE letter), if the word is off the kind's band, or if it is body-held (no paper needed).
- */
-export function setWordOnItem(inv: Inventory, slot: number, word: string, birth: string | null): boolean {
-  const s = inv.slots[slot]
-  const v = s ? parseVesselItem(s.itemId) : null
-  if (!s || !v || s.vesselData?.move) return false
-  const m = moveById(word)
-  if (!m || ALL_BANDS[BAND_FOR_VESSEL[v.kind]] !== m.tier) return false
-  const seats = lettersOf(m, birth).length
-  if (seats === 0 || seats > seatCapOf(v.tier)) return false
-  inv.slots[slot] = { ...s, vesselData: { move: word } }
-  return true
-}
 /**
  * Place, from the bag, every letter this vessel is still short — as many as the bag holds. Writes the
  * stowed list; RETURNS the letters for the caller to save (same shape as `imbue`, so a private-mode
@@ -598,47 +463,82 @@ export function placeGems(i: number, birth: string | null, l: Letters): { r: Pla
   }
 }
 /**
- * Take a stowed vessel apart: its gems go back to the bag of letters, and the vessel — empty now, so an
- * ITEM again (2026-09-10) — goes back to the bag of things, still cut for its word. Refused when the bag
- * has no room: nothing moves, and `say` says why. Returns the letters to save.
+ * ★ SET ONE LETTER BY HAND (Alex, 2026-09-10 eve: *"drag and drop it … to add in gems"*). The vessel cell
+ * is the socket: a gem dragged onto it sets exactly THAT letter, if the vessel's word is short it and the
+ * bag holds one. Same return shape as `placeGems` so a host reads both the same way. Refusals are named:
+ * an uncut vessel, a letter its word does not need, a letter the bag does not hold.
  */
-export function dismantle(i: number, l: Letters, inv: Inventory): { ok: boolean; say: string; letters: Letters } {
+export function placeGem(i: number, birth: string | null, l: Letters, rune: string): { r: Placement; letters: Letters } {
   const stowed = loadStowed()
   const v = stowed[i]
-  if (!v) return { ok: false, say: 'No such vessel.', letters: l }
-  const slot = firstEmptySlot(inv.slots)
-  if (slot < 0) return { ok: false, say: 'Your bag is full — nowhere to put the empty vessel.', letters: l }
+  const no = (say: string, short: string[] = []): { r: Placement; letters: Letters } => ({ r: { ok: false, placed: [], short, complete: false, say }, letters: l })
+  if (!v) return no('No such vessel.')
+  if (!v.move) return no('This one was never cut for a word. Choose one first.')
+  const short = shortOf(v, birth)
+  if (!short.includes(rune)) return no(isComplete(v, birth) ? 'Every seat is written already.' : `Its word has no seat for that letter — it is short ${short.join(', ')}.`, short)
+  if ((l.bag[rune] ?? 0) <= 0) return no('You hold none of that letter.', short)
+  stowed[i] = { ...v, gems: [...v.gems, rune] }
+  saveStowed(stowed)
+  const bag = { ...l.bag, [rune]: l.bag[rune]! - 1 }
+  const tidy: Record<string, number> = {}
+  for (const [k, n] of Object.entries(bag)) if (n > 0) tidy[k] = n
+  const left = short.filter(r => r !== rune)
+  const complete = left.length === 0
+  return {
+    r: { ok: true, placed: [rune], short: left, complete,
+         say: complete ? `Written. It is gear now — find it on the Gear tab.` : `Set. Still short: ${left.join(', ')}.` },
+    letters: { bag: tidy, vessels: l.vessels },
+  }
+}
+/** Take a stowed vessel apart: its gems go back to the bag; the paper stays cut for its word. Returns the letters to save. */
+export function dismantle(i: number, l: Letters): Letters {
+  const stowed = loadStowed()
+  const v = stowed[i]
+  if (!v || !v.gems.length) return l
   const bag = { ...l.bag }
   for (const r of v.gems) bag[r] = (bag[r] ?? 0) + 1
-  stowed.splice(i, 1)
+  stowed[i] = { ...v, gems: [] }
   saveStowed(stowed)
-  inv.slots[slot] = vesselStack(v.kind, v.tier, v.move)
-  return { ok: true, say: 'Taken apart. The letters are back in your bag, and so is the vessel.', letters: { bag, vessels: l.vessels } }
+  return { bag, vessels: l.vessels }
 }
 /**
  * Take the WORN vessel apart: its letters return to the bag, its band clears, and the empty paper goes
- * back to the BAG as an item, still cut for its word, in its own material. Never refused for the cap — the worn
+ * back to the satchel still cut for its word, in its own material. Never refused for the cap — the worn
  * vessel was already counted, so taking it off cannot put a keeper over. A keeper with nothing worn
  * still casts their birth move; a body-held word needs no paper.
  */
-export function dismantleWorn(kind: Vessel, birth: string | null, inv: Inventory, starter?: string): boolean {
+export function dismantleWorn(kind: Vessel, birth: string | null, starter?: string): boolean {
   const band = BAND_FOR_VESSEL[kind]
   if (band < 0) return false
-  // ★ the empty vessel is an ITEM (2026-09-10): it needs a bag slot, and a full bag refuses before any write
-  const slot = firstEmptySlot(inv.slots)
-  if (slot < 0) return false
   const slots: Loadout = ALL_BANDS.map((_, k) => rawLoadout()[k] ?? null)
   // the vessel's own word — the band may already be unbound (a word the keeper no longer knows) and
   // the vessel still comes back to the satchel cut for what it was cut for
   const word = wornWord(kind) ?? slots[band] ?? null
   const active = loadLetters(birth, slots, starter)
   if (!word && !active.vessels[kind].length) return false
-  inv.slots[slot] = vesselStack(kind, wornTier(kind), word)
+  const stowed = loadStowed()
+  saveStowed([...stowed, { kind, gems: [], move: word, tier: wornTier(kind) }])
   saveLetters(unbindLetters(active, kind))
   slots[band] = null
   saveLoadout(slots)
   saveWornWord(kind, null)
   return true
 }
-// `setWord` (cut a STOWED blank) retired 2026-09-10: a stowed vessel always bears a letter, so always a
-// word. Cutting happens on the item in the bag — `setWordOnItem`.
+/**
+ * Cut an uncut vessel for its word — a legacy blank, or Greg's floor taking its one-letter word. Refuses
+ * if the vessel already has one, if the word asks more seats than the tier bears (`seatCapOf`: the floor
+ * takes ONE letter), if the word is body-held (no paper needed), or if it holds gems the word cannot seat.
+ */
+export function setWord(i: number, word: string, birth: string | null): boolean {
+  const stowed = loadStowed()
+  const v = stowed[i]
+  if (!v || v.move) return false
+  const m = moveById(word)
+  if (!m || ALL_BANDS[BAND_FOR_VESSEL[v.kind]] !== m.tier) return false
+  const seats = lettersOf(m, birth).length
+  if (seats === 0 || seats > seatCapOf(v.tier)) return false
+  if (missingLetters(v.gems, lettersOf(m, birth)).length) return false
+  stowed[i] = { ...v, move: word }
+  saveStowed(stowed)
+  return true
+}

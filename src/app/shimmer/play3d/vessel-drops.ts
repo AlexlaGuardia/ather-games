@@ -3,7 +3,7 @@
  *
  * ── ★★ CANON (Magii + Alex, 2026-09-04): a keeper never makes a vessel ───────────────────────
  * *"They are found, won, bought, or given."* `vessels.ts` is the model (the tiers, the floor, the
- * one door `grantVessel`); the Passage is BOUGHT (tier 1) and `ensureFloor` is GIVEN (Greg's pair, into the bag).
+ * one door `grantVessel`); the Passage is BOUGHT (tier 1) and `withFloor` is GIVEN (Greg's pair).
  * This file is the other two verbs. The boundary widened Jin's side to exactly this: *"where
  * vessels drop, what prizes award them ... every number"* — so everything here is a build number
  * and none of it is lore. A drop says WHAT was found; it never says WHO lost it.
@@ -46,8 +46,10 @@ import { KEEPER_MOVES, type KeeperMove } from './keeper-moves'
 import { ALL_BANDS, LANE_FOR_KIND, laneRunes } from './cast'
 import { lettersOf, VESSELS, type Vessel } from './gems'
 import { rawLoadout } from './loadout'
-import { grantVessel, ownedCount, seatCapOf, loadStowed, bagVessels, MAX_PER_KIND, BAND_FOR_VESSEL, VESSEL_NOUN, TIER_MATERIAL, type VesselTier, type VesselGrant, vesselItemId, parseVesselItem } from './vessels'
-import { firstEmptySlot, type Inventory } from '../engine/inventory'
+import {
+  grantVessel, ownedCount, seatCapOf, loadStowed, MAX_PER_KIND, BAND_FOR_VESSEL, VESSEL_NOUN, TIER_MATERIAL,
+  type VesselTier, type VesselGrant,
+} from './vessels'
 
 export const TRIALS_KEY = 'ather:shimmer:trials'
 
@@ -82,14 +84,18 @@ export const DROP_TUNING = {
 } as const
 
 // ── the drop id: the icon family, so the drop draws as the thing it is ───────────────────────
-// ★ MOVED to `vessels.ts` 2026-09-10 (the item model needs them there); re-exported so nothing that
-// imported them from here has to know.
-export { vesselItemId, parseVesselItem, isVesselItem } from './vessels'
-/**
- * Can the bag take one more of `kind`? The pickup gate — a refused vessel stays on the ground. Two
- * refusals (2026-09-10): the cap, and a bag with no empty slot, since a vessel lands as an ITEM.
- */
-export const vesselRoom = (kind: Vessel, inv: Inventory): boolean => ownedCount(kind, inv) < MAX_PER_KIND && firstEmptySlot(inv.slots) >= 0
+const NOUN_KIND: Record<string, Vessel> = Object.fromEntries(VESSELS.map(k => [VESSEL_NOUN[k], k]))
+export const vesselItemId = (kind: Vessel, tier: VesselTier): string => `vessel_${VESSEL_NOUN[kind]}_t${tier}`
+/** `vessel_glove_t2` → `{ kind: 'focus', tier: 2 }`; anything else → null. Keyed by the NOUN. */
+export function parseVesselItem(itemId: string): { kind: Vessel; tier: VesselTier } | null {
+  const m = /^vessel_([a-z]+)_t([0-3])$/.exec(itemId)
+  if (!m) return null
+  const kind = NOUN_KIND[m[1]!]
+  return kind ? { kind, tier: Number(m[2]) as VesselTier } : null
+}
+export const isVesselItem = (itemId: string): boolean => parseVesselItem(itemId) !== null
+/** Can the satchel take one more of `kind`? The pickup gate — a refused vessel stays on the ground. */
+export const vesselRoom = (kind: Vessel): boolean => ownedCount(kind) < MAX_PER_KIND
 
 // ── FOUND: the dig roll ───────────────────────────────────────────────────────────────────────
 /** One roll per block broken. `null` almost always; a kind + tier when the rock gives something up. */
@@ -123,14 +129,10 @@ export function wordPool(kind: Vessel, tier: VesselTier, birth: string | null): 
     return m.runes.every(r => onIt.has(r))                    // a word off the lane could never be bound
   })
 }
-/**
- * the words that already have a vessel — worn, stowed, or sitting in the BAG as an item (2026-09-10) — a
- * duplicate is avoided while another word is possible
- */
-function vesseledWords(kind: Vessel, inv: Inventory | null | undefined): Set<string> {
+/** the words that already have a vessel, worn or stowed — a duplicate is avoided while another word is possible */
+function vesseledWords(kind: Vessel): Set<string> {
   const band = BAND_FOR_VESSEL[kind]
   const out = new Set<string>(loadStowed().filter(v => v.kind === kind && v.move).map(v => v.move!))
-  for (const v of bagVessels(inv)) if (v.kind === kind && v.move) out.add(v.move)
   const worn = band >= 0 ? rawLoadout()[band] : null
   if (worn) out.add(worn)
   return out
@@ -140,9 +142,9 @@ function vesseledWords(kind: Vessel, inv: Inventory | null | undefined): Set<str
  * words that already have a vessel are dropped from the pool unless that empties it. `null` only
  * when the keeper's lane holds no word at all — then the vessel arrives uncut.
  */
-export function chooseWord(kind: Vessel, tier: VesselTier, owned: readonly string[], birth: string | null, rng: () => number = Math.random, inv?: Inventory | null): string | null {
+export function chooseWord(kind: Vessel, tier: VesselTier, owned: readonly string[], birth: string | null, rng: () => number = Math.random): string | null {
   let pool = wordPool(kind, tier, birth)
-  const taken = vesseledWords(kind, inv)
+  const taken = vesseledWords(kind)
   const fresh = pool.filter(m => !taken.has(m.id))
   if (fresh.length) pool = fresh
   if (!pool.length) return null
@@ -172,12 +174,12 @@ function lower(s: string): string { return s.charAt(0).toLowerCase() + s.slice(1
  * Take a vessel drop into the satchel: parse the id, choose its word for this keeper, grant it
  * through the one door. `ok:false` at the cap (the drop stays) or on a foreign id.
  */
-export function takeVessel(inv: Inventory, itemId: string, door: DropDoor, owned: readonly string[], birth: string | null, rng: () => number = Math.random): VesselGrant {
+export function takeVessel(itemId: string, door: DropDoor, owned: readonly string[], birth: string | null, rng: () => number = Math.random): VesselGrant {
   const v = parseVesselItem(itemId)
   if (!v) return { ok: false, why: 'no-such-word', say: 'That is not a vessel.' }
-  const word = chooseWord(v.kind, v.tier, owned, birth, rng, inv)
+  const word = chooseWord(v.kind, v.tier, owned, birth, rng)
   // ★ TWO DOORS, ONE ROAD: `dig` and `cache` are both canon's FOUND. Only the trial is WON.
-  const g = grantVessel(inv, v.kind, v.tier, word, door === 'trial' ? 'won' : 'found')
+  const g = grantVessel(v.kind, v.tier, word, door === 'trial' ? 'won' : 'found')
   return g.ok ? { ...g, say: `${DOOR_LINE[door]} ${lower(g.say)}` } : g
 }
 
@@ -206,7 +208,7 @@ export interface TrialResult { paid: boolean; clears: number; grant?: VesselGran
  * Record a clear and, if it pays, hand a tier-3 vessel through the WON door. Which kind is the
  * trial's call (`kind`), or the roll's. Call ONCE per clear — the host owns the edge.
  */
-export function clearTrial(inv: Inventory, trial: TrialId, owned: readonly string[], birth: string | null, kind?: Vessel, rng: () => number = Math.random): TrialResult {
+export function clearTrial(trial: TrialId, owned: readonly string[], birth: string | null, kind?: Vessel, rng: () => number = Math.random): TrialResult {
   const ledger = loadTrials()
   const before = ledger[trial] ?? 0
   ledger[trial] = before + 1
@@ -214,9 +216,9 @@ export function clearTrial(inv: Inventory, trial: TrialId, owned: readonly strin
   if (!trialPays(before, rng)) return { paid: false, clears: before + 1, say: 'Cleared. Nothing left behind this time.' }
   const k = kind ?? VESSELS[Math.min(VESSELS.length - 1, Math.floor(rng() * VESSELS.length))]!
   const tier = DROP_TUNING.trialTier
-  if (!vesselRoom(k, inv)) {
+  if (!vesselRoom(k)) {
     return { paid: false, clears: before + 1, say: `Cleared — a ${TIER_MATERIAL[k][tier]} ${VESSEL_NOUN[k]} was here for the taking, and you carry all the ${VESSEL_NOUN[k]}s a keeper can.` }
   }
-  const grant = takeVessel(inv, vesselItemId(k, tier), 'trial', owned, birth, rng)
+  const grant = takeVessel(vesselItemId(k, tier), 'trial', owned, birth, rng)
   return { paid: grant.ok, clears: before + 1, grant, say: grant.say }
 }
