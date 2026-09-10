@@ -125,11 +125,17 @@ const FULL = charged(CLOAK_BURN / CLOAK_REBUILD)
   // captured call ended one character before the `.body` the assert exists to find. A regex too
   // naive for a nested call reads exactly like a wrongly-wired host. Third time today that a guard
   // accused working code; take the line and let the assert read what a human would.
-  const call = vox.split('\n').find((l) => l.includes('cloakIgnite(')) ?? ''
-  chk('the ignition call is locatable at all', !built || call.length > 0, 'cloakIgnite(...) not found')
+  // ★ TWO CONTACTS SINCE 2026-09-10 (#294): a Hollow's strike and a collared patrol's PRESS. Both are
+  // ignition sites, both must be fed a SURFACE — the Hollow's `formOf(st).body`, the foe's posture
+  // `body` — and neither a reach. Every call line is read, not the first one found.
+  const calls = vox.split('\n').filter((l) => l.includes('cloakIgnite('))
+  chk('the ignition call is locatable at all', !built || calls.length > 0, 'cloakIgnite(...) not found')
+  chk('★ two contact sites: a Hollow strike and a patrol press', !built || calls.length === 2, `${calls.length} calls`)
   chk('★★★ it is fed the body\'s SURFACE — reach would burn the caster from 7.5m',
-    !built || /formOf\(\w+\)\.body/.test(call), call)
-  chk('★ ...and never the reach', !built || !/\.reach\b/.test(call), call)
+    !built || calls.some((c) => /formOf\(\w+\)\.body/.test(c)), calls.join(' | '))
+  chk('★ …and the patrol site is fed the POSTURE\'s body — a channeler (body 0) never touches you',
+    !built || calls.some((c) => /foeDef\(e\.f\.posture\)\.body/.test(c)), calls.join(' | '))
+  chk('★ ...and never the reach', !built || calls.every((c) => !/\.reach\b/.test(c)), calls.join(' | '))
 
   // ★★ THE KILL MUST CLOSE THE LOOP THE SAME WAY THE OTHER TWO DO — and this assert exists because
   // a mutation removing the drop passed all 35 without it. `field-effects`' own kill path says why
@@ -137,7 +143,7 @@ const FULL = charged(CLOAK_BURN / CLOAK_REBUILD)
   // than shooting it."* A burn that kills without paying a shard is not a crash and not a visible
   // bug; it is a body that was worth something when shot and worth nothing when burned, which a
   // player would eventually feel as "don't bother with the cloak" and never be able to name.
-  const igniteAt = vox.indexOf('const ig = cloakIgnite(')
+  const igniteAt = vox.indexOf('const ig = cloakIgnite(cloak.current, formOf(st).body)')   // the HOLLOW site — the one that kills
   const block = igniteAt >= 0 ? vox.slice(igniteAt, igniteAt + 1200) : ''
   chk('the ignition block is locatable', !built || block.length > 0)
   chk('★★ a body killed by the cloak drops its shard, exactly as one shot or burned does',

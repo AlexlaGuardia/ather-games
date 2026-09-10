@@ -103,7 +103,7 @@ import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
   COLLAR_FOES, POSTURE_ORDER, rollPatrol, pressArrival, sendbackClock, type CollarFoeDef,
   SENDBACK_CALM, SENDBACK_REGEN,
-  type CollarFoe, type CollarDelivery, type FoePosture,
+  type CollarFoe, type CollarDelivery, type CollarAnswer, type FoePosture,
 } from '../engine/collar-foes'
 import { KEEPER_MOVES } from '../play3d/keeper-moves'
 import { collarPrompt, collarPromptText, type PromptSlot } from './collar-prompt'
@@ -6283,7 +6283,73 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   /** The live send-back dials. See `SENDBACK_DEFAULT` — this is the copy the loops read. */
   const sendback = useRef<SendbackTuning>({ ...SENDBACK_DEFAULT })
   /** Rate-limits the "a bullet cannot free anyone" line so it teaches once, not once per round. */
+  /** ms clock of the last spoken collar refusal — shared by every cast path, so three refusals do not shout three times */
   const leadSaid = useRef(0)
+  /**
+   * ── ★★ ONE DOOR FOR EVERY CAST THAT REACHES A COLLAR (2026-09-10, #294) ────────────────────────
+   * A round, a field's bite, a cloak's burn, a status landing: each is a DELIVERY meeting a collar,
+   * and `answerCollar` is the one rule that says what it does. Until today only the shot pool asked
+   * it — a field or a status looped `hollows.current` alone, so half the cast kit did nothing to a
+   * patrol and said nothing about why, which read as the cast being broken. Every path now comes
+   * through here: the strike, the freed beat, and the refusal lines are written ONCE.
+   *
+   * `amount` is what an `opens` delivery takes off the collar; 0 is legal (a status opens nothing
+   * by itself, it only asks permission). Returns the answer so a caller can act on `'opens'`.
+   * ⚠ Pure geometry stays with the caller — what counts as "reached" is a shot's capsule, a
+   * field's footprint, a status's radius, a press — and cannot be shared.
+   */
+  const contestCollar = (g: THREE.Group, e: { f: CollarFoe; hold: string; mesh: THREE.Mesh; spirit: THREE.Mesh | null; leash: THREE.Mesh | null },
+                         delivery: CollarDelivery | undefined, amount: number): CollarAnswer => {
+    const answer = answerCollar(e.f, delivery)
+    if (answer === 'not-a-target') return answer
+    if (answer === 'opens') {
+      const res = strike(e.f, amount)
+      e.f = res.foe
+      if (res.freed) {
+        // ⚠ FIRED ON THE EXACT STRIKE THAT BREAKS IT — that is what `freed` is for; the host does
+        // not track edges itself.
+        //
+        // ★★ THE ORDER IS THE PAYOFF AND CANON FORBIDS COLLAPSING IT: the SPIRIT is freed and
+        // *"returns to its freedom (it is not caught or kept)"* — so it leaves the world here, and
+        // the keeper gains nothing they can hold, which is the point. The Moglin deflates as the
+        // CONSEQUENCE, because his bravery was borrowed and the loan has just been called. He is
+        // not defeated; he is unfunded.
+        if (e.spirit) { g.remove(e.spirit); e.spirit = null }
+        if (e.leash) { g.remove(e.leash); e.leash = null }
+        e.mesh.material = foeFreedMat
+        // a freed Moglin carries no status: whatever held the spirit's posture goes with the spirit
+        statusBag.current = clearTarget(statusBag.current, e.f.id)
+        // ★★ THE ONLY THING THAT IS PERMANENT. Counted HERE, on the strike that breaks the collar
+        // — never at spawn, which is the mistake the old `patrolled` flag made. This one Moglin
+        // does not come back; the ones still holding leashes do.
+        foeFreed.current[e.hold] = (foeFreed.current[e.hold] ?? 0) + 1
+        onSay('the collar gives — the spirit goes free, and his swagger drains out of him')
+      }
+      return answer
+    }
+    const nowMs = performance.now()
+    if (nowMs - leadSaid.current > 6000) {
+      leadSaid.current = nowMs
+      // ★ EACH REFUSAL SAYS ITS OWN REASON, because canon drew the classes for different reasons
+      // and a keeper who hears one flat "that didn't work" learns nothing. Said, not punished: they
+      // are reaching for the wrong tool, and the line names why it is wrong.
+      onSay(
+        answer === 'refused-cruelty'
+          // Class 1. The refusal is about the MOGLIN, who is the soft body in the scene — not about
+          // the spirit, and not about the collar.
+          ? 'not like that — you would hurt him, and he is not the one you are freeing'
+          : answer === 'refused-control'
+          // Class 2, and the sharpest line in the encounter: the move IS the thing being undone. A
+          // keeper who takes a choice cannot be the one handing one back.
+          ? 'you cannot give a choice back by taking one'
+          : answer === 'no-contest'
+          // Not a rebuke. It is a fine move; it simply never entered the contest, and canon's verb
+          // is defeating.
+          ? 'kind, but a collar is not opened by kindness — it is out-contested'
+          : 'lead will not open a collar — it is a rune he needs, not a bullet')
+    }
+    return answer
+  }
   /**
    * One dispossession per encounter. Without the latch the guard sits at zero while the patrol keeps
    * pressing, so every frame fires another send-back and the keeper is pinned at the glade being
@@ -7069,6 +7135,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         statusBag.current = applyStatuses(statusBag.current, st.id, kinds, out.placed.areaSecs, env.now)
         caught++
       }
+      // ★ AND THE PATROL (2026-09-10, #294): a status meets the collar rule before it lands. Shackle
+      // is `control` and is refused on a person, with the line that names why; a status that opens
+      // holds the SPIRIT's posture — rooted, blinded, disarmed (`FoeImpair`) — and wears nothing off
+      // the collar. Held, never hurt: that is Rule 3 for this archetype.
+      for (const e of foes.current) {
+        if (!hostile(e.f)) continue
+        const dx = e.f.x - aim.x, dz = e.f.z - aim.z
+        if (dx * dx + dz * dz > r2) continue
+        if (contestCollar(g, e, collarClassOf(out.placed.moveId), 0) !== 'opens') continue
+        statusBag.current = applyStatuses(statusBag.current, e.f.id, kinds, out.placed.areaSecs, env.now)
+        caught++
+      }
       // ★ SAY WHAT IT CAUGHT. Every other placed archetype leaves something on screen — a bolt
       // flies, a field burns, a wall stands — but a status is invisible by nature: its whole effect
       // is a body NOT doing something. Casting Shackle into empty air and casting it onto three
@@ -7417,6 +7495,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
                 drops.current.push(spawnDrop('raw_mana_shard', 1, Math.floor(st.x), Math.floor(st.y), Math.floor(st.z)))
               }
             }
+            // ★ AND A PATROL STANDING IN IT (2026-09-10, #294). Tested against the SPIRIT's feet, like
+            // a round is tested against the spirit's body — the Moglin is never the target. What the
+            // bite DOES is the collar rule's to say: a field that opens wears the collar by its dps
+            // once per tick; a burning one is refused as cruelty and the world says so.
+            for (const e of foes.current) {
+              if (!hostile(e.f) || !e.spirit) continue
+              const sp = e.spirit
+              if (!containsVolume(fd, sp.position.x, sp.position.y - 0.95, sp.position.z)) continue
+              contestCollar(g, e, collarClassOf(fd.moveId), fd.dps)
+            }
           }
           // And the keeper standing in a grove is mended. Clamped to max: a heal that overshoots is
           // how a vitals bar starts reading above full.
@@ -7559,51 +7647,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           m.scale.setScalar(0.16)
           m.position.set(e.f.x, e.y + 1.2, e.f.z)
           g.add(m); impacts.current.push({ mesh: m, life: 0.25 })
-          // ★ THE RULE IS ASKED, NOT RESTATED. `answerCollar` is the canon half and is oracle-tested;
-          // everything above this line is geometry, which is the host's and cannot travel.
-          const answer = answerCollar(e.f, sh.delivery)
-          if (answer === 'not-a-target') continue      // freed: they are scenery now, let it pass
-          if (answer === 'opens') {
-            const res = strike(e.f, sh.dmg)
-            e.f = res.foe
-            if (res.freed) {
-              // ⚠ FIRED ON THE EXACT STRIKE THAT BREAKS IT — that is what `freed` is for; the host
-              // does not track edges itself.
-              //
-              // ★★ THE ORDER IS THE PAYOFF AND CANON FORBIDS COLLAPSING IT: the SPIRIT is freed and
-              // *"returns to its freedom (it is not caught or kept)"* — so it leaves the world here,
-              // and the keeper gains nothing they can hold, which is the point. The Moglin deflates
-              // as the CONSEQUENCE, because his bravery was borrowed and the loan has just been
-              // called. He is not defeated; he is unfunded.
-              if (e.spirit) { g.remove(e.spirit); e.spirit = null }
-              if (e.leash) { g.remove(e.leash); e.leash = null }
-              e.mesh.material = foeFreedMat
-              // ★★ THE ONLY THING THAT IS PERMANENT. Counted HERE, on the strike that breaks the
-              // collar — never at spawn, which is the mistake the old `patrolled` flag made. This
-              // one Moglin does not come back; the ones still holding leashes do.
-              foeFreed.current[e.hold] = (foeFreed.current[e.hold] ?? 0) + 1
-              onSay('the collar gives — the spirit goes free, and his swagger drains out of him')
-            }
-          } else if (state.clock.elapsedTime - leadSaid.current > 6) {
-            leadSaid.current = state.clock.elapsedTime
-            // ★ EACH REFUSAL SAYS ITS OWN REASON, because canon drew the classes for different
-            // reasons and a keeper who hears one flat "that didn't work" learns nothing. Said, not
-            // punished: they are reaching for the wrong tool, and the line names why it is wrong.
-            onSay(
-              answer === 'refused-cruelty'
-                // Class 1. The refusal is about the MOGLIN, who is the soft body in the scene —
-                // not about the spirit, and not about the collar.
-                ? 'not like that — you would hurt him, and he is not the one you are freeing'
-                : answer === 'refused-control'
-                // Class 2, and the sharpest line in the encounter: the move IS the thing being
-                // undone. A keeper who takes a choice cannot be the one handing one back.
-                ? 'you cannot give a choice back by taking one'
-                : answer === 'no-contest'
-                // Not a rebuke. It is a fine move; it simply never entered the contest, and canon's
-                // verb is defeating.
-                ? 'kind, but a collar is not opened by kindness — it is out-contested'
-                : 'lead will not open a collar — it is a rune he needs, not a bullet')
-          }
+          // ★ THE RULE IS ASKED, NOT RESTATED. `contestCollar` is the one door (strike, freed beat,
+          // refusal lines) — everything above this line is geometry, which is the host's and cannot
+          // travel. A freed Moglin is scenery: the round passes through.
+          if (contestCollar(g, e, sh.delivery, sh.dmg) === 'not-a-target') continue
           g.remove(sh.mesh); shots.current.splice(i, 1)
           absorbed = true
           break
@@ -8003,6 +8050,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         g.remove(e.mesh)
         if (e.spirit) g.remove(e.spirit)
         if (e.leash) g.remove(e.leash)
+        statusBag.current = clearTarget(statusBag.current, e.f.id)   // a body that left takes its statuses with it
         foes.current.splice(i, 1)
         // ★ AND THE HOLD LETS GO. Once the last of a patrol is out of the world the hold may send
         // again — that is what makes a lost encounter repeatable. The freed ones are held back by
@@ -8010,6 +8058,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (!foes.current.some(o => o.hold === e.hold)) foeOut.current.delete(e.hold)
       }
       prof.current.mark('world:foes')
+      const foeNowMs = performance.now()
       // ⚠ RESET EVERY FRAME AND SET BY THE LOOP — never carried, or a foe that despawns leaves the
       // prompt on screen with nobody in front of you.
       let pressedByCollar = false
@@ -8022,6 +8071,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         }
         const intent = stepFoe(e.f, {
           px: p.x, pz: p.z,
+          // ★ WHAT A STATUS HAS DONE TO IT (2026-09-10) — the same bag the Hollows read, same words
+          impair: {
+            rooted: hasStatus(statusBag.current, e.f.id, 'rooted', foeNowMs),
+            blinded: hasStatus(statusBag.current, e.f.id, 'blinded', foeNowMs),
+            disarmed: hasStatus(statusBag.current, e.f.id, 'disarmed', foeNowMs),
+          },
           // ── ★★ ASK THE WORLD WHAT IS UNDERFOOT, NEVER `columnHeight` (fixed 2026-08-16) ────────
           // The first version probed `columnHeight + 2` and every patrol froze on the spot — three
           // foes reported by `/foes` at 14.4, 15.1 and 14.5 blocks, still there seven seconds later.
@@ -8102,6 +8157,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (hostile(e.f) && Math.hypot(e.f.x - p.x, e.f.z - p.z) <= foeDef(e.f.posture).reach + COLLAR_PROMPT_LEAD)
           pressedByCollar = true
         if (intent.pressing && vitals.current) {
+          // ★ THE CLOAK ANSWERS CONTACT HERE TOO (2026-09-10, #294) — a Moglin pressing you IS
+          // contact — but only through the collar rule, and only if it opens. Flame Cloak carries
+          // no collar class, so `answerCollar` refuses it as cruelty and the world says why: a
+          // burning aura is a wound, and nothing on this side of the seam injures anyone. ⚠ The
+          // charge is NOT spent on a refusal — the cloak did not fire. The predicate is the
+          // posture's `body`, as it is for a Hollow: a channeler (body 0) never touches you.
+          if (cloak.current.charge > 0 && foeDef(e.f.posture).body > 0) {
+            const cls = collarClassOf('flame-cloak')
+            if (answerCollar(e.f, cls) === 'opens') {
+              const ig = cloakIgnite(cloak.current, foeDef(e.f.posture).body)
+              cloak.current = ig.cloak
+              if (ig.burn > 0) contestCollar(g, e, cls, ig.burn)
+            } else contestCollar(g, e, cls, 0)
+          }
           // ★★ `pressure`, NEVER `damage`, AND THAT IS RULE 3 IN CODE. Canon: *"the game gets the
           // warmth and the lesson, not the wound."* `vitals.pressure` wears the guard down and
           // STOPS — it can never reach health — so losing a road encounter is dispossession, being
@@ -8442,6 +8511,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
               hover: formOf(st).hover,
               present: st.hp > 0 && st.gutter < 1,
             })
+          }
+          // ★ AND THE PATROLS (2026-09-10, #294). A Moglin walks the road with a spirit on a leash;
+          // both have weight, so the sense that reads *"footsteps"* feels them — `hover: 0` because
+          // nothing here floats. A freed one is `present: false`: he is walking away and is no
+          // longer anyone's contact.
+          for (const e of foes.current) {
+            tremorBodies.push({ x: e.f.x, y: e.y, z: e.f.z, hover: 0, present: hostile(e.f) })
           }
           const r = tremorOut.current
           r.contacts = senseGround(tremorBodies, lc.px, lc.pz, radius)

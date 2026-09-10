@@ -276,6 +276,38 @@ const check = (label: string, ok: boolean, detail = '') => {
     `moved ${moved.toFixed(4)}`)
 }
 
+// ── 6b. ★ THE CAST KIT REACHES A PATROL (2026-09-10, #294): statuses hold, they never injure ──────
+{
+  const KEEPER = { px: 0, pz: 0 }
+  const at = (p: FoePosture, x: number, z: number) => spawnFoe(`i-${p}`, p, x, z)
+  const R = { rooted: true, blinded: false, disarmed: false }
+  const B = { rooted: false, blinded: true, disarmed: false }
+  const D = { rooted: false, blinded: false, disarmed: true }
+  // rooted: clamped in place, still leans if you are already in reach
+  const rootedFar = stepFoe(at('skirmisher', 5, 0), { ...KEEPER, impair: R }, 0.2)
+  check('★ a rooted foe does not step', rootedFar.moveTo === null && !rootedFar.pressing)
+  const free = stepFoe(at('skirmisher', 5, 0), KEEPER, 0.2)
+  check('control: the same foe unimpaired steps', free.moveTo !== null)
+  const rootedNear = stepFoe(at('bulwark', 1.2, 0), { ...KEEPER, impair: R }, 0.05)
+  check('★ …but a keeper standing inside a rooted foe\'s reach is still pressed — held, not switched off', rootedNear.pressing)
+  // disarmed: closes and holds its line, never leans
+  const disNear = stepFoe(at('bulwark', 1.2, 0), { ...KEEPER, impair: D }, 0.05)
+  check('★ a disarmed foe in reach does not press', !disNear.pressing)
+  const disFar = stepFoe(at('skirmisher', 5, 0), { ...KEEPER, impair: D }, 0.2)
+  check('…and still closes — disarmed removes the lean, not the approach', disFar.moveTo !== null)
+  const disOn = stepFoe(at('bulwark', 0, 0), { ...KEEPER, impair: D }, 0.05)
+  check('…even standing on the keeper, the press is gone', !disOn.pressing && disOn.moveTo === null)
+  // blinded: neither closes nor presses
+  const blind = stepFoe(at('bulwark', 1.2, 0), { ...KEEPER, impair: B }, 0.05)
+  check('★ a blinded foe neither steps nor presses — it has lost the line', blind.moveTo === null && !blind.pressing)
+  // the ruling outranks every impairment: a freed foe still leaves
+  const freed = strike(at('skirmisher', 3, 0), 10_000).foe
+  const gone = stepFoe(freed, { ...KEEPER, impair: R }, 0.1)
+  check('★ a FREED foe leaves even while "rooted" — the status is about the contest and the contest is over', gone.moveTo !== null && !gone.pressing)
+  // none of this touches the collar
+  check('an impairment never wears the collar', at('bulwark', 1, 0).collar!.integrity === COLLAR_FOES.bulwark.integrity)
+}
+
 // ── 7. what a round does to a collar (2026-08-16, #294) ─────────────────────────────────────────
 {
   const collared = spawnFoe('a', 'bulwark', 3, 0)

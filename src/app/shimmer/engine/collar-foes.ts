@@ -244,10 +244,27 @@ export const hostile = (foe: CollarFoe): boolean => foe.collar !== null
  */
 export const LEAVING_SPEED = 1.4
 
+/**
+ * What a STATUS cast has done to this foe (2026-09-10, #294 — the cast kit reaches the patrols).
+ * The same three words `hollows.ts` uses, so one status bag serves both classes. Every flag is a
+ * thing the foe does NOT do; none of them injures — a rooted Moglin is held, not hurt (Rule 3).
+ */
+export interface FoeImpair {
+  /** cannot move — clamped where it stands; it still presses if you walk into its reach */
+  rooted: boolean
+  /** cannot find you — neither closes nor presses; a line it cannot see is not a line it can lean on */
+  blinded: boolean
+  /** cannot press — it still closes and holds its line, but the lean is gone */
+  disarmed: boolean
+}
+export const FOE_UNIMPAIRED: FoeImpair = { rooted: false, blinded: false, disarmed: false }
+
 export interface FoeStepCtx {
   /** Where the keeper is standing. */
   px: number
   pz: number
+  /** What the keeper's statuses have done to it. Omitted = unimpaired, which is what the oracles use. */
+  impair?: FoeImpair
   /**
    * Is a walker blocked at this spot? The one thing that cannot travel between worlds — a tile
    * lookup in the range, a voxel probe here. Omit it and the foe walks as if the ground were open,
@@ -348,17 +365,24 @@ export function stepFoe(
     return { moveTo: { x: foe.x + (ax / d) * step, z: foe.z + (az / d) * step }, pressing: false }
   }
 
+  const imp = ctx.impair ?? FOE_UNIMPAIRED
+  // ★ BLINDED IS THE WHOLE STOP: a foe that cannot find you neither closes nor leans. It is not
+  // rooted (nothing clamps it) and not disarmed (its reach is intact) — it has simply lost the line.
+  if (imp.blinded) return { moveTo: null, pressing: false }
   const dx = ctx.px - foe.x, dz = ctx.pz - foe.z
   const dist = Math.hypot(dx, dz)
   // Standing exactly on the keeper has no direction to move along, and normalising it is a divide by
   // zero that would send the foe to NaN and out of the world for the rest of the session.
-  if (dist < 1e-6) return { moveTo: null, pressing: true }
+  if (dist < 1e-6) return { moveTo: null, pressing: !imp.disarmed }
 
   const ux = dx / dist, uz = dz / dist
   // ★★ CAN IT SEE YOU? Pressure is a person leaning on you, so it needs a line to lean along — see
   // `sightClear`. Without one this foe presses nothing AND stops holding its standoff, because a
   // line held across a wall is not a line: it closes until it has you in sight again.
   const seen = sightClear(foe.x, foe.z, ctx.px, ctx.pz, ctx.opaque)
+  // ★ THE LEAN IS A SEPARATE FACT FROM THE LINE: disarmed keeps every rule about closing and holding
+  // and removes only the press, so a Shackled channeler still stands its seven blocks off — harmless.
+  const canPress = seen && !imp.disarmed
   // ★ THE LINE THIS FOE HOLDS. `standoff` is the posture's own (7 for the channeler, 0 for the two
   // that come all the way), but 0 does not mean "occupy the keeper" — a body has width, and so does
   // a keeper. The floor keeps the bulwark a blockade you walk around rather than a shape you stand
@@ -368,7 +392,11 @@ export function stepFoe(
   const want = dist - hold
   // Already at or inside the line: hold it. Pressing is decided by REACH, never by the line — the
   // channeler's reach (8) is deliberately longer than its standoff (7) so holding still presses.
-  if (want <= 0) return { moveTo: null, pressing: seen && dist <= def.reach }
+  if (want <= 0) return { moveTo: null, pressing: canPress && dist <= def.reach }
+  // ★ ROOTED: clamped where it stands. It does not step, and a step it does not take cannot be billed
+  // as reach — but a keeper who walks INTO a rooted foe's reach is still leaned on, which is the
+  // difference between "held in place" and "switched off".
+  if (imp.rooted) return { moveTo: null, pressing: canPress && dist <= def.reach }
 
   const step = Math.min(def.speed * dt, want)
   const tx = foe.x + ux * step, tz = foe.z + uz * step
@@ -384,7 +412,7 @@ export function stepFoe(
 
   // ★ REACH IS MEASURED FROM WHERE IT IS NOW, NOT FROM WHERE IT WANTS TO BE. Billing pressure for a
   // step the host may refuse would let a foe press you through a wall it never got around.
-  return { moveTo, pressing: seen && dist <= def.reach }
+  return { moveTo, pressing: canPress && dist <= def.reach }
 }
 
 // ── ★★ WHO IS STILL STANDING THERE (2026-08-16, the send-back pass) ──────────────────────────────
