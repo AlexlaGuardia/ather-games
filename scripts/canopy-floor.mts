@@ -89,11 +89,18 @@ function measure(id: string) {
   console.log(`standing cells: ${total}   under canopy ${underCanopy}   open ${open}`)
   console.log(`at FULL sky (15): ${full}  = ${(100 * full / total).toFixed(1)}% of standing ground`)
   // ⚠ A DARK CELL IS ONLY A DARK FLOOR IF A KEEPER COULD STAND IN IT. columnHeight is the
-  // GENERATED terrain, so where anything sits on top of it (a hold pad, a bridge, a den lip) the
-  // cell one above the terrain is inside solid matter — correctly sky 0, and nothing anyone sees.
-  console.log(`  of those, cells that are SOLID (not standable, so not a dark floor): ${buriedDark}`)
+  // GENERATED terrain, so wherever anything sits on top of it — a trunk, a low leaf, a hold pad —
+  // the cell one above the terrain is inside solid matter: correctly sky 0, and nothing anyone sees.
+  //
+  // ⚠⚠ AND THE INDENTED LINE USED TO PRINT DIRECTLY UNDER THE FULL-SKY LINE WHILE COUNTING THE
+  // DARK ONES. At the Glade it read "4" beneath a "2155", which parses as "4 of 2155 full-sky
+  // cells are solid" and is wrong by every reading. The hub lane only worked out what it meant by
+  // diffing it against their own numbers. A label that has to be decoded is a label that will be
+  // miscited: the count now sits under the line it belongs to and names its own denominator.
   console.log(`canopied ground at or below sky ${NEAR_FLOOR}: ${canopyDark}` +
     `  = ${underCanopy ? (100 * canopyDark / underCanopy).toFixed(1) : '0.0'}% of canopied ground`)
+  console.log(`  of those ${canopyDark} dark cells, SOLID at standing height (not floor): ${buriedDark}` +
+    `   → STANDABLE dark floor: ${canopyDark - buriedDark}`)
   const keys = [...hist.keys()].sort((a, b) => b - a)
   for (const k of keys) console.log(`  sky ${String(k).padStart(2)}  ${String(hist.get(k)).padStart(5)}  ${'#'.repeat(Math.round(56 * hist.get(k)! / total))}`)
 }
