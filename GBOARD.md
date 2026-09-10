@@ -11,6 +11,30 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔦 Shimmer — **#294: THE ROW WAS 38 DAYS STALE, AND THE OPEN HALF WAS "HALF THE CAST KIT DOES NOTHING TO A PATROL"** (2026-09-10 eve, hub lane) · *Last touched 2026-09-10 — ✅ **DEPLOYED `BUILD_ID GZKE88W_Sa9Qcumw0OC_t`, 184 chunks, from `a906dac`**. Sweep **257/257 · 0 FAIL · 0 KILLED** at `a906dac`, tsc 7 (baseline).*
+
+**Alex said "go on #294".** The row read *"build real-time world enemies so runes ARE the combat — moglin patrols today are turn-based."* Grepped before building (the 08-12 lesson, again): **that sentence had been false since 08-16** and three windows had measured it (08-12 hub, 08-26 world, 08-31 play) without anyone rewriting the row. Hollows and collared Moglin patrols are real-time bodies in the frame loop; a cast projectile already struck a collar through `answerCollar`. **The row is rewritten in the focus table** to the measured state.
+
+### What was actually open, and shipped (`a906dac`)
+- **Fields, statuses and Flame Cloak looped `hollows.current` ALONE.** Cast Grove Fire onto a patrol and nothing happened and nothing was said — indistinguishable from a broken cast. Tremor Sense fed from hollows only, so a patrol on the road was unfelt by the one sense move.
+- **One door, `contestCollar`** (component scope): the `answerCollar` ask, the strike, the freed beat (spirit leaves, Moglin deflates, `foeFreed` counted), and the four refusal lines — written ONCE, with the 6s throttle shared so three refusing casts do not shout three times. The shot site now calls it instead of carrying its own copy.
+- **Fields** bite a patrol standing in them — tested at the SPIRIT's feet (never the Moglin), by the field's own move class and dps, once per tick. **Statuses** ask the door with amount 0 and land only on `opens`; Shackle is `control` and is refused on a person with its line. `engine/collar-foes.ts` gains **`FoeImpair`** (`rooted` = clamped, still presses if you walk into reach · `blinded` = neither closes nor presses · `disarmed` = closes and holds, never leans), read off the same status bag the Hollows use. A freed foe leaves even while "rooted" — the ruling outranks the status. **The cloak** answers a press through the door and **spends its charge only if the collar opens**; `flame-cloak` carries no collar class, so it is refused as cruelty and the world says why (a burning aura is a wound). **Tremor Sense** pushes every patrol with `hover: 0`, `present: hostile(e.f)`. Despawn and freeing clear the foe's statuses.
+- **Guards:** `voxel3d/foe-cast.test.ts` (new, 41: each host path asks the door; anchored slices, 2 mutations fire) · collar-foes 96 → **111** · flame-cloak re-pointed to TWO contact sites (a Hollow strike, a patrol press; both fed a `body`, neither a reach) · tremor-sense 72 · cast 104 · hollows 118 · hollow-wiring 83 · collar-prompt 69 · console 115.
+
+### Still open on #294 (rows to raise, not prose)
+- **No `ZoneId → hostile roster`.** Patrols key off `HOLDS`, Hollows off `greyness`; nothing reads `zoneAt` for enemies. `bandFor(zone)` exists and only the mist reads it.
+- **`play3d/collar-raid.ts`** — built, 35 asserts, one importer and it is a test. Blocked on the **quarry layer** (wild spirits standing in the field); GBOARD :8533 says do not answer the quarry question separately.
+- **No sim/render radius split** (GBOARD :8526) — enemy count is bound to draw distance.
+- **Four unrelated enemy shapes** (`HollowState` hp · `CollarFoe` collar · `Raider` neither · `GuardState` hp). A fifth would be a fifth.
+
+### ⛔ ALEX'S CALL
+1. Walk to a hold (`/foes` names the nearest patrol) and cast a FIELD and a STATUS at the pair. The refusal lines and the "N held" count are the read.
+2. Hold Tremor Sense near a patrol: the ring should point at the Moglin.
+3. Carried: Alex walks the item→vessel road (block above) · relief up close · Puppet Guards feel (#298) · Rune Hold square (#301).
+
+### Files
+`src/app/shimmer/voxel3d/VoxelWorld.tsx` (`contestCollar`, field/status/cloak/tremor/dropFoe sites) · `engine/collar-foes.ts` (`FoeImpair`, `stepFoe`) · `voxel3d/foe-cast.test.ts` · `engine/collar-foes.test.ts` · `play3d/flame-cloak.test.ts`
+
 ## 🔦 Shimmer — **A VESSEL IS AN ITEM UNTIL A LETTER IS SET IN IT** (2026-09-10, hub lane) · *Last touched 2026-09-10 — ✅ **DEPLOYED `BUILD_ID LeAZhpZGHxMMmCSw7hszY`, 184 chunks, from `a822483`** (`664706b` = the Gems/Vessels split, `So-o5Xi2J0zmu-c9MNUjv`, earlier today). Sweep **256/256 · 0 FAIL · 0 KILLED** at `a822483`, tsc 7 (baseline), canon 13 CLEAN.*
 
 **Alex opened `I` on his REAL save for the first time** (the carry item from every session since 09-03) and read two things off it. First: the Satchel's *Gems* grid held the stowed vessels beside the loose letters — *"this should be reserved for the gems hence the name"*. Shipped in an hour as `664706b` (two grids, `Gems` = letters + imbue, `Vessels` = its own head). Second, and the real ruling: *"yea its an item untill the gems are put into it then its a vessel"*. That is a model change, not a layout one, and it is `a822483`.
