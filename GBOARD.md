@@ -35,6 +35,24 @@ the Arcade frame.
 ### Files
 `src/app/shimmer/voxel3d/VoxelWorld.tsx` (`contestCollar`, field/status/cloak/tremor/dropFoe sites) · `engine/collar-foes.ts` (`FoeImpair`, `stepFoe`) · `voxel3d/foe-cast.test.ts` · `engine/collar-foes.test.ts` · `play3d/flame-cloak.test.ts`
 
+## 🔦 Shimmer — **THE SECTION IS THE HOME: DRAG A GEM ONTO A VESSEL** (2026-09-10 late, hub lane) · *Last touched 2026-09-10 — ✅ **DEPLOYED `BUILD_ID kh6ueagSZVlyVJFBEmUn5`, 184 chunks, from `b3ccef3`**. Sweep **257/257 · 0 FAIL · 0 KILLED** at `b3ccef3`, tsc 7 (baseline). Supersedes `LeAZhpZGHxMMmCSw7hszY` (the item model).*
+
+**The item model below lived three hours.** Alex opened `I` on it: *"if vessels are going to have there own section why is it in the hotbar, if it has its own section we can hold them there and if the player want to add gems to it they drag and drop it."* Two things were true at once — the bag placed a new vessel in the first empty slot, which on his save was a HOTBAR slot (a bug), and a vessel with its own section AND a copy in the bag has two homes, which is the design fault the bug exposed. **Reverted `a822483` in full** (`git revert`, no conflicts; the Gems/Vessels split `664706b` and #294 `a906dac` stand). Vessels are stowed-list state again; Greg's pair is minted on read again; chests and drops never see a vessel again.
+
+### The gesture (`b3ccef3`)
+- **The vessel cell is the socket.** Press a gem in the Gems grid and it lifts (a ghost rides under the pointer, positioned by ref). Every vessel whose word is SHORT that letter lights; every other one dims. Release over a lit one and `placeGem` sets exactly that letter, the vessel selects so its strip shows the new count, and the outcome is said under the grid (*"Set. Still short: Star."* / *"Written. It is gear now."* / a named refusal). The strip's *place N* button stays — Alex asked for it 09-04; the drag is the second road, not a replacement.
+- **Alex's alternative was an imbue SLOT** (drag the vessel in, add gems, take it out). Rejected for one gesture fewer: the vessel is already the thing the gem goes into, and "imbue" in this build means crystal → gem, which stays as the row under Gems.
+- **`placeGem(i, birth, l, rune)`** in `vessels.ts` — refuses by name: uncut, a letter the word has no seat for, a letter the bag does not hold, every seat written. Same `Placement` shape as `placeGems`.
+- **⚠ Phone:** the lift releases implicit pointer capture, or no other cell ever fires `pointerenter` during a touch drag and a gem can only land where it began. `pointercancel` ends a lift a scroll stole.
+- **Guards:** vessels 104 → **114**, gems 46 → **55** (the socket-lights-only-when-short assert fires under mutation).
+
+### ⛔ ALEX'S CALL
+1. Drag a gem onto Greg's bracelet on the real save (cut it for a one-letter word first, from its strip). The light-up, the ghost, and the said line are the read. Then on the phone.
+2. Carried: #294 walk (block below) · relief up close · Puppet Guards feel (#298) · Rune Hold square (#301).
+
+### Files
+`src/app/shimmer/voxel3d/VoxelWorld.tsx` (`SatchelLetters`) · `play3d/vessels.ts` (`placeGem`) · `play3d/{vessels,gems}.test.ts`
+
 ## 🔦 Shimmer — **A VESSEL IS AN ITEM UNTIL A LETTER IS SET IN IT** (2026-09-10, hub lane) · *Last touched 2026-09-10 — ✅ **DEPLOYED `BUILD_ID LeAZhpZGHxMMmCSw7hszY`, 184 chunks, from `a822483`** (`664706b` = the Gems/Vessels split, `So-o5Xi2J0zmu-c9MNUjv`, earlier today). Sweep **256/256 · 0 FAIL · 0 KILLED** at `a822483`, tsc 7 (baseline), canon 13 CLEAN.*
 
 **Alex opened `I` on his REAL save for the first time** (the carry item from every session since 09-03) and read two things off it. First: the Satchel's *Gems* grid held the stowed vessels beside the loose letters — *"this should be reserved for the gems hence the name"*. Shipped in an hour as `664706b` (two grids, `Gems` = letters + imbue, `Vessels` = its own head). Second, and the real ruling: *"yea its an item untill the gems are put into it then its a vessel"*. That is a model change, not a layout one, and it is `a822483`.
