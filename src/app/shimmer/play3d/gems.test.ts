@@ -197,6 +197,17 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   const card = cardAt >= 0 && cardEnd > cardAt ? src.slice(cardAt, cardEnd) : ''
   ok(/keeperLetters\(owned, birth\)/.test(card) && !/useState\(/.test(card), 'the card reads keeperLetters on every render — never pinned in useState')
   ok(/l\.bag/.test(card), 'the SATCHEL half renders the bag')
+  // ★ TWO GRIDS (Alex, 2026-09-10, on the real satchel: "this should be reserved for the gems hence the name..
+  // the vessels can be held in the inventory until equipt"). Gems is the letters; the carried vessels sit
+  // under their OWN head. Asserted by ORDER inside the card: loose cells, then the Vessels head, then the
+  // stowed cells — a vessel cell back inside the gems grid puts `stowed.map(` before the head again.
+  const looseAt = card.indexOf('{loose.map(')
+  const vesselHeadAt = card.indexOf('<SectionHead label="Vessels"')
+  const stowedAt = card.indexOf('{stowed.map(')
+  ok(looseAt >= 0 && vesselHeadAt > looseAt && stowedAt > vesselHeadAt,
+     `★ the satchel draws the gems, THEN a Vessels head, THEN the vessels (loose@${looseAt} head@${vesselHeadAt} stowed@${stowedAt})`)
+  const gemsGrid = looseAt >= 0 && vesselHeadAt > looseAt ? card.slice(looseAt, vesselHeadAt) : ''
+  ok(gemsGrid.length > 0 && !/stowed/.test(gemsGrid), '★ and no vessel is drawn inside the gems grid')
   const rackAt = declAt(src, 'VesselRack')
   const rackEnd = declAfter(src, 'GearTab', rackAt)
   ok(rackAt >= 0 && rackEnd > rackAt, 'the rack slice has BOTH anchors')

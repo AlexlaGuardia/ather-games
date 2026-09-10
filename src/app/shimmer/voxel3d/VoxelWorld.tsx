@@ -3150,8 +3150,9 @@ export function Seats({ gems, seats = VESSEL_CAP }: { gems: readonly string[]; s
  * ★ GEMS — A SECOND INVENTORY UNDER THE HOTBAR (Alex, 2026-09-04, looking at the real satchel):
  * *"there's too much text.. it should be called Gems or runes.. like a second inventory under the
  * hotbar."* So the letters card and the parts list became a GRID that reads like the bag: a cell per
- * loose gem stack (the stone, a count), a cell per carried vessel (its icon, its seats as dots, lit
- * when written), empty cells dark. Click a vessel cell and ONE strip under the grid says what it is
+ * loose gem stack (the stone, a count), empty cells dark. ★ Since 2026-09-10 the carried vessels sit in
+ * a SECOND grid under their own head (Alex, on the real satchel: *"reserved for the gems hence the
+ * name"*): a cell per vessel (its icon, its seats as dots, lit when written). Click a vessel cell and ONE strip under the grid says what it is
  * and offers place / dismantle. Imbue is a row of cells too — crystal in, stone out — with the refusal
  * on the tooltip, not in a sentence. The paragraph about words and paper is gone; it was true and it
  * was in the way.
@@ -3182,14 +3183,21 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
   const runeOf = (id: string) => RUNES.find(x => x.id === id)
   const cellCls = 'relative flex h-12 w-12 flex-col items-center justify-center rounded-[2px] border text-[9px] font-mono shadow-[inset_0_0_8px_rgba(0,0,0,0.6)] transition-colors'
   const COLS = 8
-  const cells = loose.length + stowed.length
+  // ★ TWO GRIDS, NOT ONE (Alex, 2026-09-10, opening the real satchel: *"this should be reserved for the
+  // gems hence the name.. the vessels can be held in the inventory until equipt"*). Gems is the LETTERS
+  // and nothing else; the carried vessels get their own section under it, so a keeper reading "Gems"
+  // never finds a bracelet in it. Each grid pads its own last row.
+  const cells = loose.length
   // an EMPTY grid still draws one row of dark cells — the bag does, and a section that vanishes when it
-  // has nothing to show gives no hint that vessels and gems will land here (Alex's real keeper, 09-05)
-  const pad = cells === 0 ? COLS : Math.max(0, COLS - (cells % COLS || COLS))
+  // has nothing to show gives no hint that gems will land here (Alex's real keeper, 09-05)
+  const padOf = (n: number) => (n === 0 ? COLS : Math.max(0, COLS - (n % COLS || COLS)))
+  const pad = padOf(cells)
+  const vpad = padOf(stowed.length)
+  const written = stowed.filter(v => isComplete(v, birth)).length
   return (
     <div className="mt-4">
       <SectionHead label="Gems" note={cells === 0
-        ? <>none yet · the Passage cuts vessels and sells letters</>
+        ? <>none yet · the Passage sells letters · a crystal imbues into one</>
         : <><span className="gx-value text-white/50">{loose.reduce((a, [, n]) => a + n, 0)}</span> loose · <span className="gx-value text-white/50">{set}</span> set</>} />
       <div className="grid grid-cols-8 gap-1.5">
         {loose.map(([id, n]) => {
@@ -3202,32 +3210,10 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
             </div>
           )
         })}
-        {stowed.map((v, i) => {
-          const seats = seatCount(v, birth)
-          const written = isComplete(v, birth)
-          const word = v.move ? (castForMove(v.move)?.label ?? v.move) : null
-          return (
-            <button key={`v-${i}`} type="button" onPointerDown={() => setSel(sel === i ? null : i)}
-                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ''}` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; cut it for a one-letter word' : 'never cut for a word'}`}
-                    className={`${cellCls} ${sel === i ? 'border-amber-300 bg-amber-300/15' : written ? 'border-amber-200/45 bg-black/45' : 'border-amber-200/[0.14] bg-black/45'} hover:border-amber-200/60`}>
-              <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={26} />
-              <span className="gx-value absolute right-1 top-0.5 text-[8px] text-white/40">{tierMark(v.tier)}</span>
-              {/* the seats as dots — the word's count, lit where a letter sits */}
-              <span className="absolute bottom-1 flex gap-[3px]">
-                {Array.from({ length: Math.min(VESSEL_CAP, seats) }, (_, k) => (
-                  <span key={k} className={`h-[5px] w-[5px] rounded-full ${v.gems[k] ? 'bg-amber-200 shadow-[0_0_4px_#d4a843]' : 'bg-black/60 shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]'}`} />
-                ))}
-              </span>
-            </button>
-          )
-        })}
         {Array.from({ length: pad }, (_, k) => (
           <div key={`e-${k}`} className={`${cellCls} border-white/[0.06] bg-black/30`}><span className="text-white/15">·</span></div>
         ))}
       </div>
-      {sel !== null && stowed[sel] && (
-        <VesselParts owned={owned} birth={birth} index={sel} onChange={() => { onChange(); if (!loadStowed()[sel]) setSel(null) }} />
-      )}
       {/* ── IMBUE, as cells: a crystal of the element and a rune you hold → one gem. Refusal on the tooltip. ── */}
       {owned.length > 0 && (
         <div className="mt-2 flex items-center gap-1.5">
@@ -3249,6 +3235,38 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
             )
           })}
         </div>
+      )}
+      {/* ── VESSELS — carried until worn. A vessel is held here as parts (cut for a word, seats filling) and
+          moves to Gear the moment every seat holds its letter; dismantling a worn one sends it back. ── */}
+      <SectionHead label="Vessels" note={stowed.length === 0
+        ? <>none yet · cut at the Passage · Greg's underneath</>
+        : <><span className="gx-value text-white/50">{stowed.length}</span> carried · <span className="gx-value text-white/50">{written}</span> written</>} />
+      <div className="grid grid-cols-8 gap-1.5">
+        {stowed.map((v, i) => {
+          const seats = seatCount(v, birth)
+          const written = isComplete(v, birth)
+          const word = v.move ? (castForMove(v.move)?.label ?? v.move) : null
+          return (
+            <button key={`v-${i}`} type="button" onPointerDown={() => setSel(sel === i ? null : i)}
+                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ''}` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; cut it for a one-letter word' : 'never cut for a word'}`}
+                    className={`${cellCls} ${sel === i ? 'border-amber-300 bg-amber-300/15' : written ? 'border-amber-200/45 bg-black/45' : 'border-amber-200/[0.14] bg-black/45'} hover:border-amber-200/60`}>
+              <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={26} />
+              <span className="gx-value absolute right-1 top-0.5 text-[8px] text-white/40">{tierMark(v.tier)}</span>
+              {/* the seats as dots — the word's count, lit where a letter sits */}
+              <span className="absolute bottom-1 flex gap-[3px]">
+                {Array.from({ length: Math.min(VESSEL_CAP, seats) }, (_, k) => (
+                  <span key={k} className={`h-[5px] w-[5px] rounded-full ${v.gems[k] ? 'bg-amber-200 shadow-[0_0_4px_#d4a843]' : 'bg-black/60 shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]'}`} />
+                ))}
+              </span>
+            </button>
+          )
+        })}
+        {Array.from({ length: vpad }, (_, k) => (
+          <div key={`ve-${k}`} className={`${cellCls} border-white/[0.06] bg-black/30`}><span className="text-white/15">·</span></div>
+        ))}
+      </div>
+      {sel !== null && stowed[sel] && (
+        <VesselParts owned={owned} birth={birth} index={sel} onChange={() => { onChange(); if (!loadStowed()[sel]) setSel(null) }} />
       )}
     </div>
   )
