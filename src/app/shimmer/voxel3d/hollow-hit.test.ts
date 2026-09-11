@@ -58,8 +58,8 @@ for (const form of FORM_ORDER) {
 // ── the wiring ───────────────────────────────────────────────────────────────────────────────
 {
   const src = readFileSync(join(__dirname, 'VoxelWorld.tsx'), 'utf8')
-  ok(/const \{ dispersed \} = hollowHit\(st, sh\.dx, sh\.dz, hp\.head \? sh\.crit : sh\.dmg\)/.test(src),
-     '★★ the shot site lands through hollowHit and the head zone pays the weapon crit')
+  ok(/const \{ dispersed \} = hollowHit\(st, sh\.dx, sh\.dz, hp\.head \? sh\.crit : sh\.dmg, hp\.head\)/.test(src),
+     '★★ the shot site lands through hollowHit, the head zone pays the weapon crit, and the body is TOLD it was a head (the warden only reacts to those)')
   ok(/if \(dispersed\) \{/.test(src), 'the shard drops on the round that dispersed it, not on any round into a corpse')
   ok(/crit: w\.crit,/.test(src), '★ a gun round carries its weapon\'s crit')
   ok(/dmg: out\.placed\.damage, crit: out\.placed\.damage,/.test(src), 'a cast bolt carries its own damage as its crit (a bolt is a place, not a bullet)')

@@ -7586,7 +7586,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
             // ★ THE HEAD IS WORTH AIMING AT (2026-09-11). `weapons.ts` has carried a `crit` — "head-zone
             // damage" — since the guns were written, and nothing ever read it because nothing could
             // reach a head. The column made the head hittable; this makes it count.
-            const { dispersed } = hollowHit(st, sh.dx, sh.dz, hp.head ? sh.crit : sh.dmg)
+            const { dispersed } = hollowHit(st, sh.dx, sh.dz, hp.head ? sh.crit : sh.dmg, hp.head)
             const m = new THREE.Mesh(tracerGeo, tracerMat)
             m.scale.setScalar(hp.head ? 0.28 : 0.16)
             m.position.set(st.x, hp.testY, st.z)

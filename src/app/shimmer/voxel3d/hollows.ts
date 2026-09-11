@@ -123,6 +123,9 @@ export interface HollowState {
   flinch?: number
   flinchX?: number
   flinchZ?: number
+  /** Seconds left of breaking off after a hit (the stalker): runs from the keeper, jinks sideways,
+   *  then stalks again. Absent = 0. */
+  evade?: number
 }
 
 /**
@@ -200,6 +203,16 @@ export interface HollowFormDef {
    * you from across the clearing is now the answer to it, not just a way to make it eventually stop.
    */
   recoil: number
+  /**
+   * ★ WHAT MAKES THIS FORM REACT AT ALL (Alex, 2026-09-11 eve: *"a warden only reacts to headshots,
+   * the stalker should start trying to evade"*). `'head'` = a body hit takes hp and nothing else —
+   * the wall does not notice lead in its chest; only the head-zone round staggers it. `'any'` =
+   * every round. The stalker's answer is not a throw but an EVADE (`evadeS`): for that long it
+   * breaks off, runs from the keeper and jinks sideways, then stalks again — a hit buys you the
+   * seconds it takes to turn around, which is exactly the habit the form exists to teach.
+   */
+  flinchOn: 'any' | 'head'
+  evadeS: number
   /** How close it has to be to drain. The caster's is long — that IS its form. */
   reach: number
   /** ★ Solid half-width. A warden you can walk through is not a guard, it is scenery — this is
@@ -324,18 +337,18 @@ export const HOLLOW_FORMS: Record<HollowForm, HollowFormDef> = {
   // The wall. Slow enough to walk around, solid enough that you must, and the heaviest drain —
   // so going THROUGH it is a real cost rather than a formality.
   warden:  { hp: 60, speed: 2.0, radius: 1.15, reach: 1.25, body: 0.85, hover: 0, drain: 3.4, standoff: 0,   weight: 3,
-             attack: 'press',  damage: 9, sap: 0,  strikeCd: 1.6, hitLo: 0, hitHi: 1.8, recoil: 0.2 },
+             attack: 'press',  damage: 9, sap: 0,  strikeCd: 1.6, hitLo: 0, hitHi: 1.8, recoil: 0.2, flinchOn: 'head', evadeS: 0 },
   // The pressure. Frail, fast, small. It is the reason you cannot stand still and mine while a
   // pack is out, which is the habit the night is supposed to break.
   // ★ The heaviest single hit in the game, and it is not a balance whim: a strike you can ALWAYS
   // deny by turning around has to be worth denying. A gentle ambush teaches nobody to look behind.
   stalker: { hp: 18, speed: 3.9, radius: 0.62, reach: 0.80, body: 0.34, hover: 0, drain: 0,   standoff: 0,   weight: 4,
-             attack: 'ambush', damage: 14, sap: 0,  strikeCd: 2.2, hitLo: 0, hitHi: 1.75, recoil: 1.4 },
+             attack: 'ambush', damage: 14, sap: 0,  strikeCd: 2.2, hitLo: 0, hitHi: 1.75, recoil: 0, flinchOn: 'any', evadeS: 1.6 },
   // The reason to move. It never closes and it barely has a body — it drains from across the
   // clearing, so a keeper who solves the other two by backing away has solved nothing.
   // ★ The ONLY form that floats — and the only one a wall cannot answer. That pairing is the point.
   caster:  { hp: 14, speed: 1.5, radius: 0.70, reach: 7.5,  body: 0,    hover: HOLLOW_HOVER, drain: 0,   standoff: 6.5, weight: 2,
-             attack: 'sap',    damage: 0,  sap: 11, strikeCd: 2.8, hitLo: -0.2, hitHi: 1.45, recoil: 0.5 },
+             attack: 'sap',    damage: 0,  sap: 11, strikeCd: 2.8, hitLo: -0.2, hitHi: 1.45, recoil: 0.5, flinchOn: 'any', evadeS: 0 },
 }
 
 export const formOf = (h: HollowState): HollowFormDef => HOLLOW_FORMS[h.form]
@@ -712,6 +725,7 @@ export function hollowStep(
   // outranks it: Shackle is iron, and iron does not give to a bullet. The decay runs regardless so
   // a rooted body's flinch still expires rather than waiting, armed, for the root to lift.
   const flinch = h.flinch ?? 0
+  const evade = h.evade ?? 0
   if (flinch > 0) {
     const spent = Math.min(flinch, dt / FLINCH_S)
     if (!imp.rooted) {
@@ -719,6 +733,23 @@ export function hollowStep(
       mz = (h.flinchZ ?? 0) * f.recoil * spent
     }
     h.flinch = flinch - spent
+  }
+  // ── ★ THE EVADE (Alex, 2026-09-11 eve: "the stalker should start trying to evade") ─────────
+  // For `evadeS` after a hit the body breaks off: AWAY from the keeper at its own speed with a
+  // sideways jink whose sign is per-body (`phase`), so a struck pack scatters rather than backing
+  // up in a line. It runs beside the flinch (the visual stagger still plays) and outranks the
+  // approach; rooted outranks it. When the clock runs out it is a stalker again.
+  if (evade > 0) {
+    h.evade = evade - dt
+    if (!imp.rooted && d > 1e-4) {
+      const side = h.phase % 2 < 1 ? 1 : -1
+      const ax = -(dx / d), az = -(dz / d)                  // away
+      const jx = -az * side, jz = ax * side                 // perpendicular
+      mx = (ax * 0.8 + jx * 0.6) * f.speed * dt
+      mz = (az * 0.8 + jz * 0.6) * f.speed * dt
+    }
+  } else if (flinch > 0) {
+    // staggered: the throw above is the whole move this frame
   } else if (imp.rooted) {
     // Clamped: no translation this frame. Everything below the movement block still runs.
   } else if (d > stop) {
@@ -912,13 +943,17 @@ export const FLINCH_S = 0.35
  * ⚠ FIELDS AND BURNS DO NOT COME THROUGH HERE. A field ticks every frame; a body flinching
  * sixty times a second reads as a seizure. Only a discrete strike flinches.
  */
-export function hollowHit(h: HollowState, dx: number, dz: number, dmg: number): { dispersed: boolean } {
+export function hollowHit(h: HollowState, dx: number, dz: number, dmg: number, head = false): { dispersed: boolean } {
   const f = formOf(h)
   const wasUp = h.hp > 0
   h.hp -= dmg
-  const L = Math.hypot(dx, dz)
-  if (L > 1e-6) { h.flinchX = dx / L; h.flinchZ = dz / L } else { h.flinchX = 0; h.flinchZ = 0 }
-  h.flinch = 1
+  // ★ THE WALL DOES NOT NOTICE A BODY HIT. hp is taken above regardless; the reaction is gated.
+  if (f.flinchOn === 'any' || head) {
+    const L = Math.hypot(dx, dz)
+    if (L > 1e-6) { h.flinchX = dx / L; h.flinchZ = dz / L } else { h.flinchX = 0; h.flinchZ = 0 }
+    h.flinch = 1
+    if (f.evadeS > 0) h.evade = f.evadeS
+  }
   if (f.attack === 'sap') h.strikeCd = f.strikeCd
   return { dispersed: wasUp && h.hp <= 0 }
 }

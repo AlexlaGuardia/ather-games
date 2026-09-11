@@ -165,8 +165,10 @@ const SEED = 1337
     ok(crown.dist < 1.15 && crown.head, `a crown shot on a warden is a HEAD hit (testY ${crown.testY.toFixed(2)})`)
     ok(HEAD_ZONE > 0.7 && HEAD_ZONE < 0.9, 'the head is the top of the column, not half of it')
     // hollowHit: hp, flinch armed along the round, flattened; dispersed only on the crossing round.
-    const r1 = hollowHit(w, 0.6, 0.8, 30)
-    ok(w.hp === 30 && !r1.dispersed && w.flinch === 1, 'a body hit takes hp and arms a full flinch')
+    const r0 = hollowHit(w, 0.6, 0.8, 30)
+    ok(w.hp === 30 && !r0.dispersed && (w.flinch ?? 0) === 0, '★ a BODY hit on the warden takes hp and the wall does not notice (Alex: it only reacts to headshots)')
+    const r1 = hollowHit(w, 0.6, 0.8, 0, true)
+    ok(w.hp === 30 && !r1.dispersed && w.flinch === 1, 'a HEAD hit arms a full flinch')
     ok(Math.abs((w.flinchX ?? 0) - 0.6) < 1e-9 && Math.abs((w.flinchZ ?? 0) - 0.8) < 1e-9, 'the flinch runs along the round, on the ground plane')
     const r2 = hollowHit(w, 0, 1, 30)
     ok(w.hp === 0 && r2.dispersed, 'the round that crosses zero disperses it')
@@ -188,7 +190,7 @@ const SEED = 1337
     // The step spends the flinch: thrown along the round, no advance, decays to zero within FLINCH_S.
     const flat = () => 0
     const none = { rooted: false, blinded: false, disarmed: false } as Impair
-    const st = mk('stalker'); hollowHit(st, 1, 0, 1)      // pushed toward +x; the keeper stands at x=0 (behind it)
+    const st = mk('caster'); hollowHit(st, 1, 0, 1)       // pushed toward +x; the keeper stands at x=0 (behind it)
     // ⚠ MEASURED AT THE MOMENT THE FLINCH EXPIRES, not after a fixed number of steps: once it is
     // spent the body resumes closing on the keeper (who stands behind it here), and a fixed loop
     // read 0.62 of 1.4 — the recoil minus two steps of pursuit, an instrument fact, not a feature.
@@ -199,15 +201,37 @@ const SEED = 1337
       return { moved: h.x - x0, steps }
     }
     const sp = spend(st, none)
-    ok(Math.abs(sp.moved - HOLLOW_FORMS.stalker.recoil) < 1e-6,
-       `★ a struck stalker is thrown exactly its recoil along the round (${sp.moved.toFixed(2)} of ${HOLLOW_FORMS.stalker.recoil}) and does not advance while it staggers`)
+    ok(Math.abs(sp.moved - HOLLOW_FORMS.caster.recoil) < 1e-6,
+       `★ a struck caster is thrown exactly its recoil along the round (${sp.moved.toFixed(2)} of ${HOLLOW_FORMS.caster.recoil}) and does not advance while it staggers`)
     ok(sp.steps === Math.ceil(FLINCH_S / 0.1), `the flinch spends itself in FLINCH_S (${sp.steps} steps of 0.1)`)
-    const w3 = mk('warden'); hollowHit(w3, 1, 0, 1)
+    const w3 = mk('warden'); hollowHit(w3, 1, 0, 1, true)
     const wsp = spend(w3, none)
-    ok(Math.abs(wsp.moved - HOLLOW_FORMS.warden.recoil) < 1e-6 && HOLLOW_FORMS.warden.recoil < HOLLOW_FORMS.stalker.recoil * 0.25,
-       `the wall barely moves (${wsp.moved.toFixed(2)})`)
+    ok(Math.abs(wsp.moved - HOLLOW_FORMS.warden.recoil) < 1e-6 && HOLLOW_FORMS.warden.recoil < HOLLOW_FORMS.caster.recoil * 0.5,
+       `the wall barely moves even on a head hit (${wsp.moved.toFixed(2)})`)
+    // ── ★ THE STALKER EVADES (Alex): away from the keeper with a sideways jink, then stalks again ──
+    const ev = mk('stalker'); ev.x = 6; ev.z = 0; hollowHit(ev, -1, 0, 1)   // round came from the keeper at x=0
+    ok((ev.evade ?? 0) === HOLLOW_FORMS.stalker.evadeS && HOLLOW_FORMS.stalker.evadeS > 1, 'a hit starts the stalker\'s evade clock')
+    ok(HOLLOW_FORMS.stalker.recoil === 0, 'the stalker is not thrown — it runs on its own legs instead')
+    let far = Math.hypot(ev.x, ev.z), lateral = 0, tt = 0
+    // ⚠ CAPPED: an evade that never expires must go RED here, not hang the suite (it hung the mutator once).
+    let guard = 0
+    while ((ev.evade ?? 0) > 0 && guard++ < 200) { hollowStep(ev, 0.05, 0, 0, flat, tt, none); tt += 0.05; lateral = Math.max(lateral, Math.abs(ev.z)) }
+    ok(guard < 200, '★ the evade clock actually runs down (an evade that never ends is a stalker that never comes back)')
+    const after = Math.hypot(ev.x, ev.z)
+    ok(after > far + 2, `★★ while evading it gets AWAY from the keeper (${far.toFixed(1)} → ${after.toFixed(1)} blocks)`)
+    ok(lateral > 0.8, `★ and it jinks sideways, not straight back (max |z| ${lateral.toFixed(2)})`)
+    ok(Math.abs(tt - HOLLOW_FORMS.stalker.evadeS) < 0.051, `the evade lasts evadeS (${tt.toFixed(2)}s)`)
+    for (let i = 0; i < 20; i++) hollowStep(ev, 0.05, 0, 0, flat, tt + i * 0.05, none)
+    ok(Math.hypot(ev.x, ev.z) < after, '★ when the clock runs out it is a stalker again and closes')
+    const ev2 = mk('stalker'); ev2.phase = 1.5; hollowHit(ev2, -1, 0, 1)
+    const ev3 = mk('stalker'); ev3.phase = 0.5; hollowHit(ev3, -1, 0, 1)
+    for (let i = 0; i < 10; i++) { hollowStep(ev2, 0.05, 0, 0, flat, 0, none); hollowStep(ev3, 0.05, 0, 0, flat, 0, none) }
+    ok(Math.sign(ev2.z) !== Math.sign(ev3.z) && ev2.z !== 0, 'two struck stalkers jink OPPOSITE ways — a pack scatters')
+    const rv = mk('stalker'); hollowHit(rv, -1, 0, 1); const rvx = rv.x, rvz = rv.z
+    hollowStep(rv, 0.1, 0, 0, flat, 0, { ...none, rooted: true })
+    ok(rv.x === rvx && rv.z === rvz && (rv.evade ?? 0) < HOLLOW_FORMS.stalker.evadeS, 'a rooted stalker cannot evade, but the clock still runs')
     // Rooted: iron does not give to a bullet, but the flinch still expires.
-    const rt = mk('stalker'); hollowHit(rt, 1, 0, 1)
+    const rt = mk('caster'); hollowHit(rt, 1, 0, 1)
     const rsp = spend(rt, { ...none, rooted: true })
     ok(rsp.moved === 0 && (rt.flinch ?? 0) === 0 && rsp.steps < 50, '★ a rooted body is not thrown, and its flinch still expires')
     ok(FLINCH_S < 0.6, 'a flinch is a stagger, not a stun')
