@@ -74,7 +74,7 @@
 import { keeperKey } from '@/lib/keeper-local'
 import { LOADOUT_KEY, rawLoadout, saveLoadout, type Loadout } from './loadout'
 import { VESSELS_KEY, loadLetters, saveLetters, lettersOf, missingLetters, unbindLetters, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel, type Letters } from './gems'
-import { moveById, KEEPER_MOVES } from './keeper-moves'
+import { moveById, KEEPER_MOVES, type KeeperMove } from './keeper-moves'
 import { ALL_BANDS, LANE_FOR_KIND, laneRunes } from './cast'
 import { loadRuneInventory } from './rune-inventory'
 
@@ -145,19 +145,24 @@ export const emptyVessel = (kind: Vessel, tier: VesselTier = 1): StowedVessel =>
  * one-letter word at all — the glove on many lanes (filed in CANON_GAPS 2026-09-11), which then stays
  * uncut and says so.
  */
-export function floorWordFor(kind: Vessel, birth: string | null): string | null {
+export function floorWordFor(kind: Vessel, birth: string | null, owned: readonly string[] = []): string | null {
   const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
   if (!band || !birth) return null
   const lane = LANE_FOR_KIND[band]
   if (!lane) return null
   const onIt = laneRunes(birth, lane)
   const fits = KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && lettersOf(m, birth).length === FLOOR_SEATS && m.runes.every(r => onIt.has(r)))
-  return (fits.find(m => (m as { collar?: string }).collar === 'opens') ?? fits[0])?.id ?? null
+  const opens = (m: KeeperMove) => (m as { collar?: string }).collar === 'opens'
+  // ★ a word the keeper can ALREADY write comes first (Alex held Lightning when Greg's bracelet was cut,
+  // and a bracelet made for Enlighten — a rune he did not hold — would have refused the gem in his hand);
+  // then a word that opens a collar; then the registry's first
+  const writable = fits.filter(m => m.runes.every(r => owned.includes(r)))
+  return (writable.find(opens) ?? writable[0] ?? fits.find(opens) ?? fits[0])?.id ?? null
 }
 /** Greg's vessel of `kind`, cut for the keeper's lane — `emptyVessel` at the floor tier with its word */
-export const floorVessel = (kind: Vessel, birth: string | null): StowedVessel => ({ ...emptyVessel(kind, FLOOR_TIER), move: floorWordFor(kind, birth) })
-/** the birth rune this browser's keeper was born of — read here so the floor can be cut without every caller passing it */
-const birthOf = (): string | null => { try { return loadRuneInventory().birth ?? null } catch { return null } }
+export const floorVessel = (kind: Vessel, birth: string | null, owned: readonly string[] = []): StowedVessel => ({ ...emptyVessel(kind, FLOOR_TIER), move: floorWordFor(kind, birth, owned) })
+/** the keeper this browser holds — read here so the floor can be cut without every caller passing it */
+const keeperOf = (): { birth: string | null; owned: string[] } => { try { const r = loadRuneInventory(); return { birth: r.birth ?? null, owned: [...r.owned] } } catch { return { birth: null, owned: [] } } }
 export const isFloor = (v: Pick<StowedVessel, 'tier'>): boolean => v.tier === FLOOR_TIER
 
 const isVessel = (x: unknown): x is Vessel => typeof x === 'string' && (VESSELS as readonly string[]).includes(x)
@@ -176,7 +181,8 @@ function parseStowed(raw: unknown): StowedVessel[] {
     const tier = tierOf(o.tier)
     const move = moveOf(o.move)
     // ★ a saved floor from before 2026-09-11 is uncut; it takes its lane's word on read, the way a new one does
-    out.push({ kind: o.kind, gems: gemList(o.gems).slice(0, seatCapOf(tier)), move: move ?? (tier === FLOOR_TIER ? floorWordFor(o.kind, birthOf()) : null), tier })
+    const k = keeperOf()
+    out.push({ kind: o.kind, gems: gemList(o.gems).slice(0, seatCapOf(tier)), move: move ?? (tier === FLOOR_TIER ? floorWordFor(o.kind, k.birth, k.owned) : null), tier })
   }
   return capped(out)
 }
@@ -263,7 +269,8 @@ function withFloor(list: StowedVessel[]): StowedVessel[] {
   for (const kind of VESSELS) {
     if (list.some(v => v.kind === kind && isFloor(v))) continue
     if (wornPresent(kind) && tiers[kind] === FLOOR_TIER) continue
-    list.push(floorVessel(kind, birthOf()))
+    const k = keeperOf()
+    list.push(floorVessel(kind, k.birth, k.owned))
   }
   // acquired first, the floor last — stable, so an index a host took from one read names the same
   // vessel on the next, and Greg's pair reads as what sits UNDER the rest rather than ahead of it
@@ -288,12 +295,23 @@ function migratePairs(raw: unknown): StowedVessel[] {
   return capped(out)
 }
 
+/**
+ * ⚠ A CUT MADE ON READ IS SAVED ON READ. The floor's word is chosen from the keeper's hand at the moment
+ * it is cut (`floorWordFor`), and a hand grows — so a floor that was minted or migrated in this read is
+ * written back at once, or the same bracelet could read as made for a different word tomorrow. The
+ * one-word law needs the word to be a fact, not a derivation.
+ */
+function settle(list: StowedVessel[], before: string | null): StowedVessel[] {
+  const after = JSON.stringify(capped(list))
+  if (after !== before) saveStowed(list)
+  return list
+}
 export function loadStowed(): StowedVessel[] {
   try {
     const raw = localStorage.getItem(keeperKey(STOWED_KEY))
-    if (raw) return withFloor(parseStowed(JSON.parse(raw)))
+    if (raw) return settle(withFloor(parseStowed(JSON.parse(raw))), raw)
     const legacy = localStorage.getItem(keeperKey(LEGACY_PAIRS_KEY))
-    if (!legacy) return withFloor([])
+    if (!legacy) return settle(withFloor([]), null)
     const migrated = migratePairs(JSON.parse(legacy))
     saveStowed(migrated)
     localStorage.removeItem(keeperKey(LEGACY_PAIRS_KEY))   // once, so it cannot double-credit
