@@ -256,8 +256,8 @@ function firstEmission(ear: Ear, x: number, z: number) {
      '★ the harness drains BEFORE the sweep gate, so neither can change the other')
 
   // The requested form defaults to the shipped roll, or the command would quietly change the mix.
-  ok(/const form = force \?\? pickForm\(Math\.random\(\)\)/.test(src),
-     '★★ a forced form DEFAULTS to the night\'s own roll')
+  ok(/const form = force \?\? pickForm\(Math\.random\(\), forms\)/.test(src),
+     '★★ a forced form DEFAULTS to the night\'s own roll, drawn over the GROUND\'s roster')
 
   // ⚠ THE KEEPER'S HEIGHT MUST BE HER FEET. `p` in this loop is the CAMERA, so `p.y` is the eye —
   // passing it would put every keeper a constant 1.62 above where she stands and quietly eat most

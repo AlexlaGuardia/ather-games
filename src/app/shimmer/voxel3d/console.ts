@@ -110,6 +110,13 @@ export interface ConsoleCtx {
    * something the rules refused to open.
    */
   foes: () => string
+  /**
+   * `/hostiles` — what the ground under the keeper can yield: zone, grey vs the Hollow floor, the
+   * roster of forms and pack, the holds on this ground, and the live count. OWNER-GATED and a TEST
+   * INSTRUMENT for the same reason `/foes` is: a night that yields only stalkers is
+   * indistinguishable from a broken roll unless something prints the roster it was drawn from.
+   */
+  hostiles: () => string
   /** `/press` — the send-back dials. Bare lists them; a key+value sets one; `reset` restores. */
   press: (key?: string, value?: number) => string
   /**
@@ -509,6 +516,10 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
   // breaking is exactly the information the encounter is supposed to make you earn.
   { name: 'foes', usage: 'foes', help: 'the collared patrol near you: distance and collar left', owner: true,
     run: (_a, c) => c.foes() },
+  // ★ /hostiles (#1112, 2026-09-11) — the ZoneId → hostile roster, read at the keeper's feet.
+  // Owner-only like /foes: it tells you what the night can send before the night does.
+  { name: 'hostiles', usage: 'hostiles', help: 'what this ground can yield: zone, grey, Hollow forms, holds', owner: true,
+    run: (_a, c) => c.hostiles() },
   // ★ /press (2026-08-16) — the send-back's dials, live. Owner-only for the same reason /foes is:
   // these decide how long a keeper survives a patrol, and handing that to a player is handing them
   // the encounter's difficulty slider. It exists because eight first guesses cannot be judged from a

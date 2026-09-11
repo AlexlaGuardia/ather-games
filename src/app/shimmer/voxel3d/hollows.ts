@@ -313,17 +313,23 @@ export const HOLLOW_FORMS: Record<HollowForm, HollowFormDef> = {
 export const formOf = (h: HollowState): HollowFormDef => HOLLOW_FORMS[h.form]
 
 /** Pick a form by weight. `roll` is 0..1 — injected so the oracle can pin the distribution
- *  instead of hoping. Ordered explicitly: a Record's key order is not a contract to lean on. */
+ *  instead of hoping. Ordered explicitly: a Record's key order is not a contract to lean on.
+ *  `forms` is the ground's roster (`hostile-roster.ts`, 2026-09-11): the same weights, drawn only
+ *  over the forms this ground may wear, so a Thicket roll never lands on a caster. ⚠ An EMPTY list
+ *  is not a roll — it is the roster's refusal, and the caller must `continue` before reaching
+ *  here; this throws rather than invent a form, because a default here would turn "this ground
+ *  yields nothing" into "this ground yields the last form in the list". */
 export const FORM_ORDER: HollowForm[] = ['warden', 'stalker', 'caster']
-export function pickForm(roll: number): HollowForm {
-  const total = FORM_ORDER.reduce((a, f) => a + HOLLOW_FORMS[f].weight, 0)
+export function pickForm(roll: number, forms: readonly HollowForm[] = FORM_ORDER): HollowForm {
+  if (!forms.length) throw new Error('pickForm: the roster is empty — refuse before rolling')
+  const total = forms.reduce((a, f) => a + HOLLOW_FORMS[f].weight, 0)
   let acc = 0
   const target = Math.min(0.999999, Math.max(0, roll)) * total
-  for (const f of FORM_ORDER) {
+  for (const f of forms) {
     acc += HOLLOW_FORMS[f].weight
     if (target < acc) return f
   }
-  return FORM_ORDER[FORM_ORDER.length - 1]
+  return forms[forms.length - 1]
 }
 
 /** Legacy single-body numbers, kept as the warden-neutral defaults the older call sites read. */

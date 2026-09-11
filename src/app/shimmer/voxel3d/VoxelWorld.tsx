@@ -197,7 +197,8 @@ import { type HollowForm,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
          pickSpawnY, hollowFoots, hollowGutters, NIGHT_SKY_MAX, hollowFieldFloor,
          HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN,
-         HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike } from './hollows'
+         HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike, HOLLOW_GREY_MIN } from './hollows'
+import { groundAt, hostileRosterFor, hostileReadout } from './hostile-roster'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
 import { beginLight, stepLight, dayFactor, spawnDark, skyOf, type LightField, type LightWork, type LightBounds } from '../voxel/light'
@@ -1506,7 +1507,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => {
     // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
     // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
@@ -1600,6 +1601,7 @@ export default function VoxelWorld() {
     pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, z: 0 },
     space: (to) => worldCmd.current ? worldCmd.current.space(to) : 'the world is still waking',
     waymark: (arg) => worldCmd.current ? worldCmd.current.waymark(arg) : 'the world is still waking',
+    hostiles: () => worldCmd.current ? worldCmd.current.hostiles() : 'the world is still waking',
     party: partyOps,
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
@@ -4156,7 +4158,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -4522,6 +4524,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // of dropping the walker through a world that has not generated yet.
   useEffect(() => {
     cmdOut.current = {
+      // ★ `/hostiles` (#1112, 2026-09-11) — what the ground under the keeper can yield, read off the
+      // same roster the sweep asks. An instrument like `/foes`: a Thicket night that produces only
+      // stalkers is indistinguishable from a broken caster roll unless something prints the roster.
+      hostiles: () => hostileReadout(camera.position.x, camera.position.z, SEED, HOLLOW_GREY_MIN,
+                                     { hollows: hollows.current.length, foes: foes.current.length }),
       hollow: (form?: string, n = 1) => {
         if (form && !(form in HOLLOW_FORMS)) return `no such form: ${form} (warden · stalker · caster)`
         const count = Math.max(1, Math.min(6, Math.floor(n) || 1))
@@ -7719,15 +7726,17 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       camera.getWorldDirection(hollowFwd.current)
       hollowClock.current -= dt
       const cap = hollowCap(cols.current.size)
-      const spawnHollow = (sx: number, sh: number, sz: number, force?: HollowForm) => {
+      const spawnHollow = (sx: number, sh: number, sz: number, force?: HollowForm, forms?: readonly HollowForm[]) => {
         // ★ A SUB-ZONE, OPENED HERE SO BOTH CALL SITES ARE COVERED BY ONE MARK PAIR. Marks are flat
         // by construction, so re-opening `world:spawn` at the end resumes the parent zone — this
         // measures exactly the mesh construction and its scene-graph insert, nothing around it.
         prof.current.mark('world:spawn/mesh')
         // ⚠ `force` is the console's, and it DEFAULTS to the shipped roll — a spawner that took its
         // form from a parameter with no default would let a caller silently change the mix the
-        // night is supposed to produce.
-        const form = force ?? pickForm(Math.random())
+        // night is supposed to produce. `forms` is the GROUND's roster (the sweep passes it; the
+        // console passes none and gets the whole wild mix in front of the keeper, which is what a
+        // test spawn is for).
+        const form = force ?? pickForm(Math.random(), forms)
         const mesh = createHollowMeshBody(form)
         mesh.scale.set(0.01, 0.01, 0.01)          // rises from nothing — the forming IS the tell
         mesh.position.set(sx, sh + 1, sz)
@@ -7900,11 +7909,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // water rule is a separate change with its own way of being wrong.
           if (!hollowEligible(wx + 0.5, wz + 0.5, SEED, lf.get(wx, fy, wz), day,
                               columnHeight(wx, wz, SEED), DEFAULT_DEPTH.seaLevel)) continue
+          // ── ★ THE GROUND'S ROSTER, ASKED SECOND (#1112, 2026-09-11) ──────────────────────────
+          // `hostile-roster.ts` says which FORMS this zone's grey may wear and how big a pack. It is
+          // a filter over the ruling above, never a source: it runs AFTER `hollowEligible` and can
+          // only `continue`. A Thicket edge yields stalkers alone; a village yields nothing even
+          // where a retune greyed it; wild country keeps the full mix the weights were tuned for.
+          const roster = hostileRosterFor(groundAt(wx + 0.5, wz + 0.5, SEED).ground)
+          if (!roster.forms.length) continue
           // The pack: the anchor bodies, then up to 3 mates on a triangular walk — each on its
           // OWN re-validated ground, because a pack mate is not exempt from the ruling (an
           // anchor at a lit greyfield edge must not smear its pack onto tended ground).
-          const k = Math.min(packSize(Math.random()), cap - hollows.current.length)
-          spawnHollow(wx + 0.5, sh, wz + 0.5)
+          const k = Math.min(packSize(Math.random()), roster.pack, cap - hollows.current.length)
+          spawnHollow(wx + 0.5, sh, wz + 0.5, undefined, roster.forms)
           for (const off of packWalk(k, Math.random)) {
             const mx = wx + 0.5 + off.dx, mz = wz + 0.5 + off.dz
             const mix = Math.floor(mx), miz = Math.floor(mz)
@@ -7922,7 +7938,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
             if (mfy < 0) continue
             if (!hollowEligible(mx, mz, SEED, lf.get(mix, mfy, miz), day,
                                 columnHeight(mix, miz, SEED), DEFAULT_DEPTH.seaLevel)) continue
-            spawnHollow(mx, mfy - 1, mz)
+            // A mate wears the ANCHOR's roster (a pack is one ground's pack) but may not stand on
+            // ground whose own roster is empty — the ±5 walk can cross a zone edge, and a village
+            // that yields nothing must not receive the wild's overflow.
+            if (!hostileRosterFor(groundAt(mx, mz, SEED).ground).forms.length) continue
+            spawnHollow(mx, mfy - 1, mz, undefined, roster.forms)
           }
         }
       }
