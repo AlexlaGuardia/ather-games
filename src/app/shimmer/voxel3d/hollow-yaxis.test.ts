@@ -272,7 +272,9 @@ const dark = (f: typeof small, x: number, day: number) => (y: number) =>
   ok(/const mfy = spawnFootY\(mix, miz, lf, day\)/.test(src),
      '★★★ a PACK MATE rolls its OWN Y — inheriting the anchor\'s plants bodies inside hillsides,'
      + ' and it is the exemption the pack has always had to be denied')
-  ok(/spawnHollow\(mx, mfy - 1, mz\)/.test(src) && /spawnHollow\(wx \+ 0\.5, sh, wz \+ 0\.5\)/.test(src),
+  // (the trailing `undefined, roster.forms` is the ground's roster, hostile-roster.ts 2026-09-11 — the
+  // subject here is still the Y argument: the rolled floor, never the surface)
+  ok(/spawnHollow\(mx, mfy - 1, mz, undefined, roster\.forms\)/.test(src) && /spawnHollow\(wx \+ 0\.5, sh, wz \+ 0\.5, undefined, roster\.forms\)/.test(src),
      '★ both spawns place the body on the rolled FLOOR (foot - 1), not on the surface')
 
   // The clamp, asserted as the arithmetic rather than as a comment about it.
