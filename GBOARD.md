@@ -11,6 +11,25 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🏚 Shimmer — **"MORE LIKE RUINS THAN A BUILDING": LOOKED, FOUND THREE CAUSES, FIXED TWO, NAMED THE THIRD** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID r5guqSxEBWPk6I83QRblc`, 184 chunks, from `98f47ae`**; served worker carries hazel v2. Sweep at `98f47ae` running at wrap. tsc 7 (baseline).*
+
+**Alex: *"from what ive seen its looking more like ruins than a building tbh.. are you able to use the dev pages to view it yourself?"*** Yes — `tools/devwin.sh play` + `world-shot` (eye level, yard side, rear, three-quarter) and the code behind each read. Three causes, in order of weight:
+
+1. **The roof was a comb, not a mass.** `piece-mesh.ts`'s `roof_slope` placeholder was five 0.2-deep LEDGES with air behind each, so every roof row was a row of brown teeth over a pale wall; from behind the building was a blank gable with teeth on its edges — a ruined hall. **Fixed:** each step now runs to the back of the cell; the wedge is solid, a roof is a surface. One placeholder, every roof in the world.
+2. **The open front read as collapse.** Three dark bays between posts in the wall's own colour say *the front fell in*, not *a workshop open to the air*. **Fixed:** closed wall, a doorway in the middle, a window either side; eaves (row-0 slopes one cell outside the side walls); gable-end triangles in dawnwood. `hazel_carpentry` 14×10×7, 335 blocks, 103 pieces.
+3. **★★ THE WALLS ARE PINK AND THE PALETTE IS NOT.** Measured, not eyeballed: goldwood planks are **(168,131,77)** in `attrs.ts` and the painter emits **(155,118,64)** — a real tan (sampled straight from `buildTileArray`). On a sunlit noon wall they render **(139,131,136)**: red −29, **blue +59**. Cut stone (154,160,164) → (133,142,157) the same way. **Every vertical face carries a blue-purple wash while tops get the white sun**, so warm wood goes grey-pink and grey stone goes lavender, and a whole building reads as one pale thing. This is the real R9 and it is not an art file: it is the lighting rig. ⚠ An A/B on the play lane with a warm `DAY.hemiGround` (`#3b3a4a` → `#6b5a48`) moved the wall **not at all** (139,131,136 → 138,135,144), so the day hemisphere alone is not the driver — `day-night.tsx` lerps the hemi from a per-zone palette `P` (the glade has `mist: 1`), and `light-glsl` has its own side terms. **Not chased further here:** it is a world-wide look, it is Alex's, and it wants its own pass with A/B shots, not a tweak inside a building thread.
+
+### Reshot after 1 + 2
+From the yard: a house with a dark stepped roof, a lit door, a fence. Three-quarter: a house. Rear: still a blank pale gable — cause 3, untouched.
+
+### ⛔ ALEX'S CALL
+1. Walk it on prod (`r5guqSxEBWPk6I83QRblc`) — does it read as a building now, pink and all?
+2. **Rule the wall light.** Say "warm the walls" and the next thread is the lighting pass with A/B shots; say "leave it" and the reach list (R1 post, R2 roof block, R5 sign) goes next.
+3. Carried: the approach walk · "incomplete platform" (which?) · the five trades' placement · Beat 0.
+
+### Files
+`voxel3d/piece-mesh.ts` (solid wedge) · `scripts/blueprint-hazel.mts` · `data/blueprints/hazel_carpentry.json` · worker rebuilt
+
 ## 🛤 Shimmer — **THE APPROACH: A LIT ROAD FROM THE FOLD'S DOOR TO THE GLADE** (2026-09-11 evening, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID WvSvfAOrwVkpmmO0_bR_5`, 184 chunks, from `38d87b3`**; served worker `voxel-gen.worker.a86e826060.js` 200 on the tunnel with `fold-door` in it. Sweep at `38d87b3` **263/263 · 0 FAIL · 0 KILLED**. Shot on the play lane by day and by night: the road leaves the door with a lantern post at its mouth and the next post in sight. tsc 7 (baseline).*
 
 **Alex: *"before i can walk the glade i need a way to reach it.. the platform in the home plot is still incomplete."*** Measured the route instead of the platform: leaving the plot with **no waymark planted** lands at `passageApproach` = **(−123, −521), 122 blocks from the glade, on untended ground with no road**; the court's three passage sockets stay dark until a waymark is planted OUT THERE (`travelTo` → `toDoor`). So the first trip is on foot and nothing in the world said which way. The platform is not what blocks the walk; the blank country between the door and the glade is.
