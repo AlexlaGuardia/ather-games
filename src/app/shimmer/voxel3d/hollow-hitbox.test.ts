@@ -62,11 +62,11 @@ for (const form of FORM_ORDER) {
 {
   const src = readFileSync(join(__dirname, 'VoxelWorld.tsx'), 'utf8')
   ok(/const mesh = createHollowMeshBody\(form\)/.test(src), 'the world spawns the mesh this file measured (if red, re-point the instrument)')
-  ok(/if \(hollowHitDist\(sh\.x, sh\.y, sh\.z, sh\.dx, sh\.dy, sh\.dz, step, st\) < formOf\(st\)\.radius\)/.test(src),
-     '★★ the round is tested against the body COLUMN (hollowHitDist)')
+  ok(/const hp = hollowHitPoint\(sh\.x, sh\.y, sh\.z, sh\.dx, sh\.dy, sh\.dz, step, st\)\n\s*if \(hp\.dist < formOf\(st\)\.radius\)/.test(src),
+     '★★ the round is tested against the body COLUMN (hollowHitPoint.dist vs the form radius)')
   ok(!/segmentDist\(sh\.x, sh\.y, sh\.z, sh\.dx, sh\.dy, sh\.dz, step, st\.x, st\.y, st\.z\)/.test(src),
      '★★ the one-sphere-at-the-feet test is gone')
-  ok(/m\.position\.set\(st\.x, hollowHitCentreY\(st\), st\.z\)/.test(src), 'the hit flash sits on the body, not at its feet')
+  ok(/m\.position\.set\(st\.x, hp\.testY, st\.z\)/.test(src), 'the hit flash sits where the round met the column, not at the feet')
 }
 
 console.log(fails.length ? `❌ hollow-hitbox: ${pass} pass, ${fails.length} fail\n  - ${fails.join('\n  - ')}` : `✅ hollow-hitbox: ${pass} pass, 0 fail`)

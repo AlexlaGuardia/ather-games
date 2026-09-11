@@ -198,7 +198,7 @@ import { type HollowForm,
          pickSpawnY, hollowFoots, hollowGutters, NIGHT_SKY_MAX, hollowFieldFloor,
          HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN,
          HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike, HOLLOW_GREY_MIN,
-         hollowHitDist, hollowHitCentreY } from './hollows'
+         hollowHitPoint, hollowHitCentreY, hollowHit, hollowFray } from './hollows'
 import { groundAt, hostileRosterFor, hostileReadout } from './hostile-roster'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
@@ -6202,6 +6202,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // mid-flight retro-changed what an already-travelling round would do.
   const shots = useRef<{ x: number; y: number; z: number; dx: number; dy: number; dz: number
                          speed: number; life: number; mesh: THREE.Mesh; dmg: number
+                         /** Head-zone damage (`weapons.ts` crit). A cast carries its own dmg here: a bolt is a place, not a bullet. */
+                         crit: number
                          /**
                           * ── ★★ WHAT THIS ROUND IS MADE OF, AND IT IS A CANON FIELD (2026-08-16, #294) ──
                           * A cast bolt and a gun round have ridden the same pool since the port, which is
@@ -7180,7 +7182,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       shots.current.push({
         x: camera.position.x, y: camera.position.y, z: camera.position.z,
         dx: f.x, dy: f.y, dz: f.z,
-        speed: out.placed.projSpeed, life: out.placed.projLife, mesh, dmg: out.placed.damage,
+        speed: out.placed.projSpeed, life: out.placed.projLife, mesh, dmg: out.placed.damage, crit: out.placed.damage,
         // ★ THE MOVE'S OWN CLASS RIDES THE ROUND. Not "is this a cast" — canon refuses two whole
         // classes of cast (cruelty, control) and rules that heals and launches never open a collar
         // at all. The class is authored on the move (`keeper-moves.ts`), so a new move arrives here
@@ -7221,7 +7223,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     mesh.position.copy(camera.position)
     g.add(mesh)
     shots.current.push({ x: camera.position.x, y: camera.position.y, z: camera.position.z,
-                         dx, dy, dz, speed: w.projSpeed, life: w.projLife, mesh, dmg: w.damage,
+                         dx, dy, dz, speed: w.projSpeed, life: w.projLife, mesh, dmg: w.damage, crit: w.crit,
                          delivery: 'lead' })   // lead. Disperses a Hollow, cannot free a person.
     ammo.current = Math.max(0, ammo.current - 1)
     bloom.current = bloomAfterShot(w, bloom.current)
@@ -7579,13 +7581,17 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // same capsule the foe path below has used since 08-16. The old one-sphere test sat at
           // `st.y` — the feet — so a chest shot at a stalker sailed through and fifteen wardens
           // read as invincible. What you see is what you can hit.
-          if (hollowHitDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, st) < formOf(st).radius) {
-            st.hp -= sh.dmg
+          const hp = hollowHitPoint(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, st)
+          if (hp.dist < formOf(st).radius) {
+            // ★ THE HEAD IS WORTH AIMING AT (2026-09-11). `weapons.ts` has carried a `crit` — "head-zone
+            // damage" — since the guns were written, and nothing ever read it because nothing could
+            // reach a head. The column made the head hittable; this makes it count.
+            const { dispersed } = hollowHit(st, sh.dx, sh.dz, hp.head ? sh.crit : sh.dmg)
             const m = new THREE.Mesh(tracerGeo, tracerMat)
-            m.scale.setScalar(0.16)
-            m.position.set(st.x, hollowHitCentreY(st), st.z)
-            g.add(m); impacts.current.push({ mesh: m, life: 0.25 })
-            if (st.hp <= 0) {
+            m.scale.setScalar(hp.head ? 0.28 : 0.16)
+            m.position.set(st.x, hp.testY, st.z)
+            g.add(m); impacts.current.push({ mesh: m, life: hp.head ? 0.4 : 0.25 })
+            if (dispersed) {
               // Dispersed — frequency returns to a place that had none, and a little of it
               // condenses. Compacted mana in, mana shard out: the loop closes.
               drops.current.push(spawnDrop('raw_mana_shard', 1, Math.floor(st.x), Math.floor(st.y), Math.floor(st.z)))
@@ -8466,7 +8472,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // and a Hollow frozen mid-stride on the horizon is the tell canon is built on — it simply
         // stops re-guttering its skin. Cap is 12 bodies, so the near set is a handful.
         updateHollowMeshBody(hw.mesh, now, st.form, dt > 0 ? step / dt : 0,
-                             ddx * ddx + ddz * ddz < DEFORM_NEAR * DEFORM_NEAR)
+                             ddx * ddx + ddz * ddz < DEFORM_NEAR * DEFORM_NEAR,
+                             { fray: hollowFray(st), flinch: st.flinch, fx: st.flinchX, fz: st.flinchZ })
         if (st.gutter >= 1 || ddx * ddx + ddz * ddz > despawn * despawn) {
           // ⚠ CLEAR THE BAG ENTRY IN THE SAME BREATH AS THE BODY. `statuses.ts`: "an enemy that dies
           // must not carry a root into its respawn." Ids are never reused so this cannot mis-target,

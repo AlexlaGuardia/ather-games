@@ -118,6 +118,11 @@ export interface HollowState {
    * frames reads as a physics bug, not as a thing that fears being watched.
    */
   seen?: boolean
+  /** 1 on the frame a round lands, decaying to 0 over `FLINCH_S`; the mesh buckles and tilts on it
+   *  and the step spends `recoil` along `flinchX/Z` while it is up. Absent = 0. */
+  flinch?: number
+  flinchX?: number
+  flinchZ?: number
 }
 
 /**
@@ -186,6 +191,15 @@ export interface HollowFormDef {
    */
   hitLo: number
   hitHi: number
+  /**
+   * ── ★ HOW A HIT LANDS ON THIS FORM (2026-09-11, Alex: "could they flinch from damage") ────────
+   * Blocks of knock-back per round, spent over `FLINCH_S`. The WALL barely moves (a wall that
+   * staggers is not a wall); the STALKER is thrown off its line, which is the counterplay a hit
+   * should buy against the form that punishes standing still; the CASTER drifts and, separately,
+   * has its sap INTERRUPTED (`hollowHit` resets its strike clock) — shooting the thing that drains
+   * you from across the clearing is now the answer to it, not just a way to make it eventually stop.
+   */
+  recoil: number
   /** How close it has to be to drain. The caster's is long — that IS its form. */
   reach: number
   /** ★ Solid half-width. A warden you can walk through is not a guard, it is scenery — this is
@@ -310,18 +324,18 @@ export const HOLLOW_FORMS: Record<HollowForm, HollowFormDef> = {
   // The wall. Slow enough to walk around, solid enough that you must, and the heaviest drain —
   // so going THROUGH it is a real cost rather than a formality.
   warden:  { hp: 60, speed: 2.0, radius: 1.15, reach: 1.25, body: 0.85, hover: 0, drain: 3.4, standoff: 0,   weight: 3,
-             attack: 'press',  damage: 9, sap: 0,  strikeCd: 1.6, hitLo: 0, hitHi: 1.8 },
+             attack: 'press',  damage: 9, sap: 0,  strikeCd: 1.6, hitLo: 0, hitHi: 1.8, recoil: 0.2 },
   // The pressure. Frail, fast, small. It is the reason you cannot stand still and mine while a
   // pack is out, which is the habit the night is supposed to break.
   // ★ The heaviest single hit in the game, and it is not a balance whim: a strike you can ALWAYS
   // deny by turning around has to be worth denying. A gentle ambush teaches nobody to look behind.
   stalker: { hp: 18, speed: 3.9, radius: 0.62, reach: 0.80, body: 0.34, hover: 0, drain: 0,   standoff: 0,   weight: 4,
-             attack: 'ambush', damage: 14, sap: 0,  strikeCd: 2.2, hitLo: 0, hitHi: 1.75 },
+             attack: 'ambush', damage: 14, sap: 0,  strikeCd: 2.2, hitLo: 0, hitHi: 1.75, recoil: 1.4 },
   // The reason to move. It never closes and it barely has a body — it drains from across the
   // clearing, so a keeper who solves the other two by backing away has solved nothing.
   // ★ The ONLY form that floats — and the only one a wall cannot answer. That pairing is the point.
   caster:  { hp: 14, speed: 1.5, radius: 0.70, reach: 7.5,  body: 0,    hover: HOLLOW_HOVER, drain: 0,   standoff: 6.5, weight: 2,
-             attack: 'sap',    damage: 0,  sap: 11, strikeCd: 2.8, hitLo: -0.2, hitHi: 1.45 },
+             attack: 'sap',    damage: 0,  sap: 11, strikeCd: 2.8, hitLo: -0.2, hitHi: 1.45, recoil: 0.5 },
 }
 
 export const formOf = (h: HollowState): HollowFormDef => HOLLOW_FORMS[h.form]
@@ -693,7 +707,19 @@ export function hollowStep(
     return
   }
 
-  if (imp.rooted) {
+  // ── ★ THE FLINCH SPENDS ITSELF FIRST (2026-09-11). While it is up the body is thrown along the
+  // round's direction and does NOT advance — a staggered thing does not also take its step. Rooted
+  // outranks it: Shackle is iron, and iron does not give to a bullet. The decay runs regardless so
+  // a rooted body's flinch still expires rather than waiting, armed, for the root to lift.
+  const flinch = h.flinch ?? 0
+  if (flinch > 0) {
+    const spent = Math.min(flinch, dt / FLINCH_S)
+    if (!imp.rooted) {
+      mx = (h.flinchX ?? 0) * f.recoil * spent
+      mz = (h.flinchZ ?? 0) * f.recoil * spent
+    }
+    h.flinch = flinch - spent
+  } else if (imp.rooted) {
     // Clamped: no translation this frame. Everything below the movement block still runs.
   } else if (d > stop) {
     mx = (dx / d) * speed * dt
@@ -855,6 +881,53 @@ export function hollowHitDist(
 export function hollowHitCentreY(st: HollowState): number {
   const f = formOf(st)
   return st.y + (f.hitLo + f.hitHi) / 2 - st.gutter * 0.9
+}
+
+/**
+ * `hollowHitDist` with the point it measured to — the clamped height on the column — so the caller
+ * can ask WHERE on the body the round struck. The head zone is the top `HEAD_ZONE` of the span.
+ */
+export function hollowHitPoint(
+  ax: number, ay: number, az: number, dx: number, dy: number, dz: number, len: number,
+  st: HollowState,
+): { dist: number; testY: number; head: boolean } {
+  const f = formOf(st)
+  const sink = st.gutter * 0.9
+  const lo = st.y + f.hitLo - sink, hi = st.y + f.hitHi - sink
+  const testY = Math.min(Math.max(ay, lo), hi)
+  const dist = segmentDist(ax, ay, az, dx, dy, dz, len, st.x, testY, st.z)
+  return { dist, testY, head: testY >= lo + HEAD_ZONE * (hi - lo) }
+}
+/** The top fraction of the column that counts as the head — where a weapon's `crit` lands. */
+export const HEAD_ZONE = 0.78
+
+/** Seconds a flinch takes to spend itself. Short: a stagger, not a stun. */
+export const FLINCH_S = 0.35
+
+/**
+ * ── ★ A ROUND LANDS (2026-09-11) — damage, and the body's answer to it ────────────────────────
+ * Pure. Takes the hp, arms the flinch along the round's direction (flattened — a body is pushed
+ * across the ground, never into it), and for the CASTER restarts its strike clock: the sap is
+ * interrupted. Returns whether this round dispersed it, so the host can drop the shard.
+ * ⚠ FIELDS AND BURNS DO NOT COME THROUGH HERE. A field ticks every frame; a body flinching
+ * sixty times a second reads as a seizure. Only a discrete strike flinches.
+ */
+export function hollowHit(h: HollowState, dx: number, dz: number, dmg: number): { dispersed: boolean } {
+  const f = formOf(h)
+  const wasUp = h.hp > 0
+  h.hp -= dmg
+  const L = Math.hypot(dx, dz)
+  if (L > 1e-6) { h.flinchX = dx / L; h.flinchZ = dz / L } else { h.flinchX = 0; h.flinchZ = 0 }
+  h.flinch = 1
+  if (f.attack === 'sap') h.strikeCd = f.strikeCd
+  return { dispersed: wasUp && h.hp <= 0 }
+}
+
+/** How much of this body is GONE, 0..1 — the canon health read: it visibly loses itself as it is
+ *  dispersed. What the skin frays on; there is no bar because there is nothing in it to measure. */
+export function hollowFray(h: HollowState): number {
+  const max = formOf(h).hp
+  return Math.max(0, Math.min(1, 1 - h.hp / max))
 }
 
 /**

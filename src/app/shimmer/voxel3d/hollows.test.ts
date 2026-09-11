@@ -5,7 +5,7 @@
 // the ruling names explicitly. The rest pins behaviour a playtest would misread as vibes: the
 // drift is slower than a runner, the gun can actually hit one, dawn always wins.
 
-import { hollowHitDist, hollowHitCentreY } from './hollows'
+import { hollowHitDist, hollowHitCentreY, hollowHitPoint, hollowHit, hollowFray, HEAD_ZONE, FLINCH_S } from './hollows'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          HOLLOW_SPEED, HOLLOW_HOVER, HOLLOW_STEP_UP, PACK_MAX, PACK_STEP, NIGHT_SKY_MAX, GUTTER_SKY,
          HOLLOW_FORMS, FORM_ORDER, pickForm, pushOutOfBodies, hollowTouching,
@@ -149,6 +149,68 @@ const SEED = 1337
     // Every form declares a span that stands ON the feet for walkers and brackets the float.
     for (const f of FORM_ORDER) ok(HOLLOW_FORMS[f].hitHi > HOLLOW_FORMS[f].hitLo + 1, `${f}: the column is at least a block tall`)
     ok(HOLLOW_FORMS.warden.hitLo === 0 && HOLLOW_FORMS.stalker.hitLo === 0, 'walkers stand on their feet cell')
+  }
+
+  // ── ★ A ROUND LANDS: the head counts, the body answers, the sap is interrupted (2026-09-11) ──
+  {
+    const mk = (form: HollowForm): HollowState =>
+      ({ id: 'h', x: 6, y: 1 + HOLLOW_FORMS[form].hover, z: 0, form, hp: HOLLOW_FORMS[form].hp, gutter: 0, phase: 0 })
+    // Head zone: a level shot from eye height at a warden 6 off meets the column at 1.62 — below the
+    // head (0.78 · 1.8 = 1.40 above the feet at y=1 → 2.40); a shot at the crown is a head.
+    const w = mk('warden')
+    const body = hollowHitPoint(0, 1.62, 0, 1, 0, 0, 100, w)
+    ok(body.dist < 1.15 && !body.head, `a chest shot on a warden is a body hit (testY ${body.testY.toFixed(2)})`)
+    const crownY = w.y + HOLLOW_FORMS.warden.hitHi - 0.05
+    const crown = hollowHitPoint(0, crownY, 0, 1, 0, 0, 100, w)
+    ok(crown.dist < 1.15 && crown.head, `a crown shot on a warden is a HEAD hit (testY ${crown.testY.toFixed(2)})`)
+    ok(HEAD_ZONE > 0.7 && HEAD_ZONE < 0.9, 'the head is the top of the column, not half of it')
+    // hollowHit: hp, flinch armed along the round, flattened; dispersed only on the crossing round.
+    const r1 = hollowHit(w, 0.6, 0.8, 30)
+    ok(w.hp === 30 && !r1.dispersed && w.flinch === 1, 'a body hit takes hp and arms a full flinch')
+    ok(Math.abs((w.flinchX ?? 0) - 0.6) < 1e-9 && Math.abs((w.flinchZ ?? 0) - 0.8) < 1e-9, 'the flinch runs along the round, on the ground plane')
+    const r2 = hollowHit(w, 0, 1, 30)
+    ok(w.hp === 0 && r2.dispersed, 'the round that crosses zero disperses it')
+    ok(!hollowHit(w, 0, 1, 5).dispersed, '★ and a round into an already-dispersing body does not disperse it twice (no double shard)')
+    // Fray is the health read.
+    const s = mk('stalker')
+    ok(hollowFray(s) === 0, 'a whole body has no fray')
+    hollowHit(s, 1, 0, 9)
+    ok(Math.abs(hollowFray(s) - 0.5) < 1e-9, 'half the hp gone = half frayed')
+    hollowHit(s, 1, 0, 90)
+    ok(hollowFray(s) === 1, 'fray clamps at 1 below zero hp')
+    // The caster's sap is interrupted; a walker's clock is not touched.
+    const c = mk('caster'); c.strikeCd = 0.1
+    hollowHit(c, 1, 0, 1)
+    ok(c.strikeCd === HOLLOW_FORMS.caster.strikeCd, '★ a hit on the caster restarts its strike clock — the sap is interrupted')
+    const w2 = mk('warden'); w2.strikeCd = 0.1
+    hollowHit(w2, 1, 0, 1)
+    ok(w2.strikeCd === 0.1, 'a hit on the warden leaves its clock alone — a wall does not lose its swing to a bullet')
+    // The step spends the flinch: thrown along the round, no advance, decays to zero within FLINCH_S.
+    const flat = () => 0
+    const none = { rooted: false, blinded: false, disarmed: false } as Impair
+    const st = mk('stalker'); hollowHit(st, 1, 0, 1)      // pushed toward +x; the keeper stands at x=0 (behind it)
+    // ⚠ MEASURED AT THE MOMENT THE FLINCH EXPIRES, not after a fixed number of steps: once it is
+    // spent the body resumes closing on the keeper (who stands behind it here), and a fixed loop
+    // read 0.62 of 1.4 — the recoil minus two steps of pursuit, an instrument fact, not a feature.
+    const spend = (h: HollowState, imp: Impair) => {
+      const x0 = h.x
+      let t = 0, steps = 0
+      while ((h.flinch ?? 0) > 0 && steps++ < 50) { hollowStep(h, 0.1, 0, 0, flat, t, imp); t += 0.1 }
+      return { moved: h.x - x0, steps }
+    }
+    const sp = spend(st, none)
+    ok(Math.abs(sp.moved - HOLLOW_FORMS.stalker.recoil) < 1e-6,
+       `★ a struck stalker is thrown exactly its recoil along the round (${sp.moved.toFixed(2)} of ${HOLLOW_FORMS.stalker.recoil}) and does not advance while it staggers`)
+    ok(sp.steps === Math.ceil(FLINCH_S / 0.1), `the flinch spends itself in FLINCH_S (${sp.steps} steps of 0.1)`)
+    const w3 = mk('warden'); hollowHit(w3, 1, 0, 1)
+    const wsp = spend(w3, none)
+    ok(Math.abs(wsp.moved - HOLLOW_FORMS.warden.recoil) < 1e-6 && HOLLOW_FORMS.warden.recoil < HOLLOW_FORMS.stalker.recoil * 0.25,
+       `the wall barely moves (${wsp.moved.toFixed(2)})`)
+    // Rooted: iron does not give to a bullet, but the flinch still expires.
+    const rt = mk('stalker'); hollowHit(rt, 1, 0, 1)
+    const rsp = spend(rt, { ...none, rooted: true })
+    ok(rsp.moved === 0 && (rt.flinch ?? 0) === 0 && rsp.steps < 50, '★ a rooted body is not thrown, and its flinch still expires')
+    ok(FLINCH_S < 0.6, 'a flinch is a stagger, not a stun')
   }
 }
 

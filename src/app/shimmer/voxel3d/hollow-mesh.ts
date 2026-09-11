@@ -541,8 +541,23 @@ export function createHollowMeshBody(form: HollowForm): THREE.Group {
  * names beside eleven angles is exactly the shape that drops seven of them on the floor the day
  * somebody adds a twelfth — which is what happened to the blob rig on 09-05 and stayed green.
  */
+/**
+ * What a hit does to the LOOK, handed in by the host (2026-09-11):
+ *   `fray`   0..1, how much of the body is gone (`hollowFray`) — the skin gutters harder, the
+ *            extremities first, so a nearly dispersed Hollow is visibly failing to hold. This IS
+ *            the health read; canon has nothing in a Hollow to hang a bar on.
+ *   `flinch` 0..1 with a direction — the body buckles (drops) and its top tilts AWAY along the
+ *            round, spending itself over `FLINCH_S`. Applied on the pivot, which nothing else
+ *            rotates, so the pose's own lean is untouched.
+ */
+export interface HollowHitLook { fray?: number; flinch?: number; fx?: number; fz?: number }
+const FRAY_GAIN = 2.2       // at fray 1 the gutter term is 3.2× — measured to still read bipedal
+const FLINCH_TILT = 0.5     // radians at flinch 1
+const FLINCH_DROP = 0.16    // blocks of buckle at flinch 1
+const _axis = new THREE.Vector3()
+
 export function updateHollowMeshBody(
-  body: THREE.Group, t: number, form: HollowForm, speed = 0, deformSkin = true,
+  body: THREE.Group, t: number, form: HollowForm, speed = 0, deformSkin = true, look?: HollowHitLook,
 ): void {
   // ★ THE HOUR DECIDES HOW MUCH ROOM THERE IS TO BORROW. Canon: *"in a greyfield there is nothing
   // to borrow, so a Hollow reads nearly matte; at the edge of a tended plot it goes glossy."* We
@@ -554,10 +569,23 @@ export function updateHollowMeshBody(
   const pivot = body.children.find(c => c.name === PIVOT) as THREE.Group | undefined
   if (!st || !pivot) return
   applyHollowPose(pivot, hollowPose(t, form, speed))
+  // The flinch: a buckle and a tilt away from the round. Zero flinch = identity, so a host that
+  // passes nothing gets exactly the pose it always did (asserted byte-for-byte in the guard).
+  const fl = look?.flinch ?? 0
+  if (fl > 0) {
+    const fx = look?.fx ?? 0, fz = look?.fz ?? 0
+    pivot.position.y -= FLINCH_DROP * fl
+    // Rotating `up` about (fz, 0, −fx) tips the top toward (fx, fz) — the way the round was going.
+    _axis.set(fz, 0, -fx)
+    if (_axis.lengthSq() > 1e-9) pivot.quaternion.setFromAxisAngle(_axis.normalize(), FLINCH_TILT * fl)
+    else pivot.quaternion.identity()
+  } else {
+    pivot.quaternion.identity()
+  }
   // ⚠ THE WALK IS UNCONDITIONAL AND THE SKIN IS NOT — see `DEFORM_NEAR`. A caller that gates the
   // whole update instead would freeze a distant Hollow mid-stride, which is the opposite of what
   // costs nothing to keep.
-  if (deformSkin) deform(st, t, form)
+  if (deformSkin) deform(st, t, form, look?.fray ?? 0)
 }
 
 /**
@@ -612,10 +640,12 @@ export function gutterFor(chainId: string, form: HollowForm): number {
   return GUTTER + UNRESOLVED * trail
 }
 
-function deform(st: Bodies, t: number, form: HollowForm): void {
+function deform(st: Bodies, t: number, form: HollowForm, fray = 0): void {
   const { built, ref } = st
   const field = hollowField(t, form)
-  const loose = 1 - cohesionAt(t)
+  // ★ FRAY RIDES THE GUTTER TERM, not the swell: a hurt Hollow does not shrink, it stops holding
+  // its edge — the brief's "always visibly losing itself", turned up by what it has lost.
+  const loose = (1 - cohesionAt(t)) * (1 + FRAY_GAIN * Math.max(0, Math.min(1, fray)))
   // Per-chain, resolved once per frame rather than per vertex — `built.chain[i]` indexes `built.ids`.
   const gut = built.ids.map(id => gutterFor(id, form))
   const n = built.rest.length / 3
