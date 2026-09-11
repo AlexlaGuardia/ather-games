@@ -74,8 +74,9 @@
 import { keeperKey } from '@/lib/keeper-local'
 import { LOADOUT_KEY, rawLoadout, saveLoadout, type Loadout } from './loadout'
 import { VESSELS_KEY, loadLetters, saveLetters, lettersOf, missingLetters, unbindLetters, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel, type Letters } from './gems'
-import { moveById } from './keeper-moves'
-import { ALL_BANDS } from './cast'
+import { moveById, KEEPER_MOVES } from './keeper-moves'
+import { ALL_BANDS, LANE_FOR_KIND, laneRunes } from './cast'
+import { loadRuneInventory } from './rune-inventory'
 
 export const STOWED_KEY = 'ather:shimmer:stowed'
 /** ⚠ read ONCE, by `loadStowed`, then removed. The 09-03 pairs; see the legacy-door note above. */
@@ -133,6 +134,30 @@ export const BAND_FOR_VESSEL: Record<Vessel, number> = VESSELS.reduce((acc, v) =
 
 /** an empty vessel of `kind`; tier 1 (bought) unless said — the tier a pre-tier save is read as */
 export const emptyVessel = (kind: Vessel, tier: VesselTier = 1): StowedVessel => ({ kind, gems: [], move: null, tier })
+
+/**
+ * ★ GREG'S PAIR ARRIVES CUT (Alex, 2026-09-11, on his real save: *"vessels should already come with
+ * prerequisite gems … the player should be able to see the vessel, insert the required gems for the move
+ * it's made for"*). The floor used to arrive UNCUT and hand a brand-new keeper a dropdown as their first
+ * act; now it is made for the first one-letter word on the keeper's own lane — a word they will grow
+ * into, whose empty seat says which rune it wants. Deterministic: registry order, a word that OPENS a
+ * collar preferred (it is the word the road fight is answered with). `null` when the lane holds no
+ * one-letter word at all — the glove on many lanes (filed in CANON_GAPS 2026-09-11), which then stays
+ * uncut and says so.
+ */
+export function floorWordFor(kind: Vessel, birth: string | null): string | null {
+  const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
+  if (!band || !birth) return null
+  const lane = LANE_FOR_KIND[band]
+  if (!lane) return null
+  const onIt = laneRunes(birth, lane)
+  const fits = KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && lettersOf(m, birth).length === FLOOR_SEATS && m.runes.every(r => onIt.has(r)))
+  return (fits.find(m => (m as { collar?: string }).collar === 'opens') ?? fits[0])?.id ?? null
+}
+/** Greg's vessel of `kind`, cut for the keeper's lane — `emptyVessel` at the floor tier with its word */
+export const floorVessel = (kind: Vessel, birth: string | null): StowedVessel => ({ ...emptyVessel(kind, FLOOR_TIER), move: floorWordFor(kind, birth) })
+/** the birth rune this browser's keeper was born of — read here so the floor can be cut without every caller passing it */
+const birthOf = (): string | null => { try { return loadRuneInventory().birth ?? null } catch { return null } }
 export const isFloor = (v: Pick<StowedVessel, 'tier'>): boolean => v.tier === FLOOR_TIER
 
 const isVessel = (x: unknown): x is Vessel => typeof x === 'string' && (VESSELS as readonly string[]).includes(x)
@@ -149,7 +174,9 @@ function parseStowed(raw: unknown): StowedVessel[] {
     const o = (p && typeof p === 'object' ? p : {}) as { kind?: unknown; gems?: unknown; move?: unknown; tier?: unknown }
     if (!isVessel(o.kind)) continue
     const tier = tierOf(o.tier)
-    out.push({ kind: o.kind, gems: gemList(o.gems).slice(0, seatCapOf(tier)), move: moveOf(o.move), tier })
+    const move = moveOf(o.move)
+    // ★ a saved floor from before 2026-09-11 is uncut; it takes its lane's word on read, the way a new one does
+    out.push({ kind: o.kind, gems: gemList(o.gems).slice(0, seatCapOf(tier)), move: move ?? (tier === FLOOR_TIER ? floorWordFor(o.kind, birthOf()) : null), tier })
   }
   return capped(out)
 }
@@ -236,7 +263,7 @@ function withFloor(list: StowedVessel[]): StowedVessel[] {
   for (const kind of VESSELS) {
     if (list.some(v => v.kind === kind && isFloor(v))) continue
     if (wornPresent(kind) && tiers[kind] === FLOOR_TIER) continue
-    list.push(emptyVessel(kind, FLOOR_TIER))
+    list.push(floorVessel(kind, birthOf()))
   }
   // acquired first, the floor last — stable, so an index a host took from one read names the same
   // vessel on the next, and Greg's pair reads as what sits UNDER the rest rather than ahead of it

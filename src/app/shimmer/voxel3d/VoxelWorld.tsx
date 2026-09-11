@@ -3141,7 +3141,9 @@ export function GemChip({ id, n }: { id: string; n?: number }) {
  * ⚠ Never a socket, slot, bezel or prong in the LOOK (brief: *"the vessel closed around it"*) — a
  * dark seat is a dim rounded void in the weave, not a hole with a rim.
  */
-export function Seats({ gems, seats = VESSEL_CAP }: { gems: readonly string[]; seats?: number }) {
+export function Seats({ gems, seats = VESSEL_CAP, need }: { gems: readonly string[]; seats?: number
+  /** ★ the word's letters in seat order (2026-09-11, Alex: "see the vessel, insert the required gems") — an empty seat shows the rune it wants, faint */
+  need?: readonly string[] }) {
   // ★ SEATS = THE WORD'S LETTERS (Alex, 2026-09-04): a vessel cut for a one-letter word bears one seat.
   // `VESSEL_CAP` is the ceiling a word can ask for, and the default only for a caller with no word.
   return (
@@ -3149,12 +3151,18 @@ export function Seats({ gems, seats = VESSEL_CAP }: { gems: readonly string[]; s
       {Array.from({ length: Math.min(VESSEL_CAP, Math.max(0, seats)) }, (_, k) => {
         const id = gems[k]
         const r = id ? RUNES.find(x => x.id === id) : undefined
+        // the seat's OWN letter: seats fill in word order, so the k-th empty seat wants the k-th letter not yet set
+        const wantId = need?.[k]
+        const want = wantId ? RUNES.find(x => x.id === wantId) : undefined
         return id
           ? <span key={`${id}-${k}`} className="inline-flex h-[18px] w-[26px] items-center justify-center">
               <GemStone glow={r?.glow ?? '#fff'} lit title={r?.name ?? id} />
             </span>
-          : <span key={`dark-${k}`} role="img" aria-label="empty seat" title="empty seat"
-                  className="inline-block h-[18px] w-[26px] rounded-full bg-black/35 shadow-[inset_0_2px_5px_rgba(0,0,0,0.85),inset_0_-1px_0_rgba(255,255,255,0.03)]" />
+          : <span key={`dark-${k}`} role="img" aria-label="empty seat" title={want ? `needs ${want.name}` : 'empty seat'}
+                  className="inline-flex h-[18px] w-[26px] items-center justify-center rounded-full bg-black/35 shadow-[inset_0_2px_5px_rgba(0,0,0,0.85),inset_0_-1px_0_rgba(255,255,255,0.03)]">
+              {/* the required gem, as a ghost in the void — what goes here, not what is here */}
+              {want && <span className="opacity-30"><GemStone glow={want.glow} size={12} /></span>}
+            </span>
       })}
     </span>
   )
@@ -3307,7 +3315,7 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
             <button key={`v-${i}`} type="button" onPointerDown={() => { if (!dragRef.current) setSel(sel === i ? null : i) }}
                     onPointerEnter={() => { if (dragRef.current) overVessel.current = i }}
                     onPointerLeave={() => { if (overVessel.current === i) overVessel.current = null }}
-                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ''} · drag a gem here to set it` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; cut it for a one-letter word' : 'never cut for a word'}`}
+                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ` · needs ${shortOf(v, birth).map(id => RUNES.find(x => x.id === id)?.name ?? id).join(', ')}`} · drag a gem here to set it` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; no one-letter word on your lane yet' : 'never cut for a word'}`}
                     className={`${cellCls} ${wants ? 'border-amber-300 bg-amber-300/25 shadow-[0_0_10px_-2px_#d4a843]' : dragGem !== null ? 'border-white/[0.06] bg-black/30 opacity-50' : sel === i ? 'border-amber-300 bg-amber-300/15' : written ? 'border-amber-200/45 bg-black/45' : 'border-amber-200/[0.14] bg-black/45'} hover:border-amber-200/60`}>
               <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={26} />
               <span className="gx-value absolute right-1 top-0.5 text-[8px] text-white/40">{tierMark(v.tier)}</span>
@@ -3376,16 +3384,18 @@ export function VesselParts({ owned, birth, index, onChange }: {
       {v.move
         ? <span className="gx-title text-[11px] text-white/80">for {wordOf(v.move)}</span>
         : <span className="gx-label text-[9px] text-white/30">{isFloor(v) ? 'one seat · never lost' : 'never cut for a word'}</span>}
-      {v.move ? <Seats gems={v.gems} seats={seats} /> : null}
+      {v.move ? <Seats gems={v.gems} seats={seats} need={seatLetters(v, birth)} /> : null}
       <span className="gx-value text-[10px] text-white/45">{v.gems.length}/{seats}</span>
+      {/* ★ a written vessel is gear, but the WORD is learned from a scroll (the Passage) — said here so the
+          keeper does not watch the Gear dropdown unbind a word they hold the letters for and cannot yet read */}
       {written
-        ? <span className="gx-label text-[9px] text-amber-200/70">written · on Gear</span>
+        ? <span className="gx-label text-[9px] text-amber-200/70">{hasLearned(keeperBook(owned), v.move!) ? 'written · on Gear' : 'written · learn the word at the Passage to wear it'}</span>
         : v.move
-          ? short.length > 0 && <span className="text-[9px] text-white/35">short {short.map(runeName).join(', ')}</span>
+          ? short.length > 0 && <span className="text-[9px] text-white/35">needs {short.map(runeName).join(', ')}</span>
           : (
             <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
                     className="gx-btn bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal">
-              <option value="">{isFloor(v) ? 'cut it for a one-letter word you hold…' : 'cut it for a word you hold…'}</option>
+              <option value="">{isFloor(v) ? 'cut it for a one-letter word you hold… (none on your lane yet)' : 'cut it for a word you hold…'}</option>
               {/* ★ the floor bears ONE seat (ruled): a two-letter word is not offered to Greg's paper */}
               {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
                 .filter(m => { const n = seatLetters({ move: m.id }, birth).length; return n > 0 && n <= seatCapOf(v.tier) })

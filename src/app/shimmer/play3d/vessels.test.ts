@@ -10,13 +10,13 @@ import { readFileSync } from 'node:fs'
 import {
   STOWED_KEY, LEGACY_PAIRS_KEY, WORN_TIER_KEY, WORN_WORD_KEY, wornWord, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, FLOOR_TIER, FLOOR_SEATS,
   loadStowed, saveStowed, buyVessel, equip, ownedCount, emptyVessel, equippedVessel,
-  dismantleWorn, placeGems, placeGem, stripVesselItems, seatCount, shortOf, isComplete, isFloor, seatCapOf, grantVessel, setWord, wornTier, clearStowed, TIER_MATERIAL,
+  dismantleWorn, placeGems, placeGem, stripVesselItems, floorWordFor, seatLetters, seatCount, shortOf, isComplete, isFloor, seatCapOf, grantVessel, setWord, wornTier, clearStowed, TIER_MATERIAL,
 } from './vessels'
 import { saveLoadout, rawLoadout, resolveLoadout, setSlot } from './loadout'
 import { GEMS_KEY, VESSELS_KEY, VESSEL_CAP as _CAP, addGems, isBodyHeld, saveLetters, loadLetters, VESSELS, type Letters } from './gems'
 import { keeperBook, saveBook } from './book'
 import { setBirthRune, grantRune, saveRuneInventory, EMPTY_INVENTORY } from './rune-inventory'
-import { KEEPER_MOVES } from './keeper-moves'
+import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { ALL_BANDS, laneRunes } from './cast'
 import { RUNES, ELEMENTS, runesOf } from './birth/runes.data'
 import { KEEPER_KEYS } from '@/lib/keeper-local'
@@ -180,7 +180,9 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   wipe()
   const floors = loadStowed().filter(isFloor)
   ok(floors.length === 2 && VESSELS.every(k => floors.some(v => v.kind === k)), '★ a fresh keeper holds Greg\'s pair: one tier-0 vessel of EACH kind, from the first read')
-  ok(floors.every(v => v.move === null && v.gems.length === 0), 'the pair arrives uncut and empty — the word is the keeper\'s first one-letter choice')
+  // ★ RE-POINTED 2026-09-11 (Alex: "vessels should already come with prerequisite gems"): the pair arrives
+  // CUT for the first one-letter word on the keeper's lane, empty — or uncut only when the lane has none.
+  ok(floors.every(v => v.gems.length === 0 && v.move === floorWordFor(v.kind, null)), 'the pair arrives empty, cut for the lane\'s one-letter word (none here: no birth in this store, so uncut)')
   ok(seatCapOf(FLOOR_TIER) === FLOOR_SEATS && FLOOR_SEATS === 1 && seatCapOf(1) === _CAP && seatCapOf(3) === _CAP, '★ the floor bears ONE seat; every other tier bears what its word needs, up to the cap')
   ok(loadStowed().every((v, i, a) => !isFloor(v) || a.slice(i).every(isFloor)), 'the floor sorts LAST — acquired vessels keep their indices')
   // never lost: a rebirth, a corrupt save, a save that dropped them — every read hands them back
@@ -223,33 +225,40 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     ok(grantVessel('bracelet', 1, one, 'bought').ok, 'and a one-letter word')
     const blank = grantVessel('bracelet', 1, null, 'bought')
     ok(blank.ok && loadStowed()[blank.index!]?.move === null && !isFloor(loadStowed()[blank.index!]!), 'and an uncut one, whose index names it on the next read')
+    // ★ the floor arrives CUT for this birth's lane (2026-09-11) — one seat, a one-letter word it can grow into
+    saveRuneInventory(setBirthRune(EMPTY_INVENTORY, birth))
+    const fw = floorWordFor('bracelet', birth)
+    ok(!!fw && seatLetters({ move: fw }, birth).length === 1 && ALL_BANDS[BAND_FOR_VESSEL.bracelet] === moveById(fw)!.tier, `★ the lane's floor word is a one-letter tactical (${fw})`)
     const floorAt = loadStowed().findIndex(v => v.kind === 'bracelet' && isFloor(v))
-    ok(floorAt >= 0 && setWord(floorAt, two, birth) === false, '★ Greg\'s bracelet REFUSES a two-letter word — one seat (ruled)')
-    ok(setWord(floorAt, one, birth) === true && loadStowed()[floorAt]?.move === one, '★ and takes a one-letter word: the floor is cut, the keeper\'s first choice')
-    ok(setWord(floorAt, one, birth) === false, 'once cut, it is that word\'s paper — not a re-cuttable blank (the one-word law)')
+    ok(floorAt >= 0 && loadStowed()[floorAt]?.move === fw, '★ Greg\'s bracelet ARRIVES cut for it — no dropdown as a new keeper\'s first act')
+    ok(setWord(floorAt, two, birth) === false && setWord(floorAt, one, birth) === false, 'once cut, it is that word\'s paper — not a re-cuttable blank (the one-word law)')
     ok(seatCount(loadStowed()[floorAt] ?? { move: null }, birth) === 1, 'its seat count is the word\'s: one')
+    // an uncut floor from an OLD save takes the word on read
+    saveStowed([...loadStowed().filter(v => !isFloor(v)), { kind: 'bracelet', gems: [], move: null, tier: 0 }])
+    ok(loadStowed().find(v => v.kind === 'bracelet' && isFloor(v))?.move === fw, '★ a pre-ruling save\'s uncut floor is cut on read — same word, no migration step')
     const bodyHeld = KEEPER_MOVES.find(m => m.tier === 'tactical' && m.runes.length === 1 && m.runes[0] === birth)
     if (bodyHeld) ok(setWord(blank.index!, bodyHeld.id, birth) === false, '★ a body-held word (your birth rune alone) is never cut into paper — it needs none')
 
     // the worn tier rides the equip and comes back on the dismantle
-    let inv = setBirthRune(EMPTY_INVENTORY, birth); inv = grantRune(inv, KEEPER_MOVES.find(m => m.id === one)!.runes[0]!)
-    saveRuneInventory(inv); saveBook({ learned: [one] })
+    const fwRune = moveById(fw!)!.runes[0]!
+    let inv = setBirthRune(EMPTY_INVENTORY, birth); inv = grantRune(inv, fwRune)
+    saveRuneInventory(inv); saveBook({ learned: [fw!] })
     saveLoadout(ALL_BANDS.map(() => null))
     let l: Letters = { bag: {}, vessels: { bracelet: [], focus: [] } }
-    l = addGems(l, KEEPER_MOVES.find(m => m.id === one)!.runes[0]!, 1)
+    l = addGems(l, fwRune, 1)
     saveLetters(l)
     const fl = loadStowed().findIndex(v => v.kind === 'bracelet' && isFloor(v))
     const placed = placeGems(fl, birth, loadLetters(birth, rawLoadout()))
     ok(placed.r.ok && placed.r.complete, 'the floor is written with its one letter')
     saveLetters(placed.letters)
-    ok(equip('bracelet', fl, birth) === true && rawLoadout()[TAC] === one, '★ Greg\'s written bracelet goes ON — the floor is gear like any written vessel')
+    ok(equip('bracelet', fl, birth) === true && rawLoadout()[TAC] === fw, '★ Greg\'s written bracelet goes ON — the floor is gear like any written vessel')
     ok(wornTier('bracelet') === FLOOR_TIER && equippedVessel('bracelet', birth).tier === FLOOR_TIER, '★ and the worn tier says mortal cord — the material went on with the paper')
     ok(loadStowed().filter(v => v.kind === 'bracelet' && isFloor(v)).length === 0, '★ while worn, the floor is NOT also in the satchel — one pair, not one plus a copy')
     ok(ownedCount('bracelet') === MAX_PER_KIND, '★ wearing Greg\'s counts NOTHING against the cap: three acquired in the satchel, the worn one is the floor — and it still went on AT the cap')
     ok(dismantleWorn('bracelet', birth) === true, 'take it off')
     const back = loadStowed().filter(v => v.kind === 'bracelet' && isFloor(v))
     // ⚠ `?.`, not `!`: with the floor gone this must FAIL BY NAME, not throw (the 09-03 migration lesson)
-    ok(back.length === 1 && back[0]?.move === one && back[0]?.gems.length === 0, '★ it comes back to the satchel as the FLOOR, empty, still cut for its word — not as a goldwood copy')
+    ok(back.length === 1 && back[0]?.move === fw && back[0]?.gems.length === 0, '★ it comes back to the satchel as the FLOOR, empty, still cut for its word — not as a goldwood copy')
     ok(loadStowed().filter(v => v.kind === 'bracelet' && isFloor(v)).length === 1, 'and exactly one — the read did not add a second on top of the returned one')
   }
 

@@ -90,7 +90,12 @@ ok(/\(passive \|\| birth\) && \(/.test(gear), 'the Innate section renders when E
 // ── 3b. the icon pass (2026-09-04): a gem is a stone, a focus is its painted sprite ────────────
 const seatsAt = declAt(R, 'Seats')
 const seats = seatsAt >= 0 ? R.slice(seatsAt, R.indexOf('\n}\n', seatsAt)) : ''
-ok(count(seats, /<GemStone /g) === 1 && /lit/.test(seats), '★ a seated gem is the STONE, lit — not a text chip')
+// ★ RE-POINTED 2026-09-11 (Alex: "see the vessel, insert the required gems"): TWO stones in Seats — the seated
+// one, lit, and the required one as a ghost in the empty seat (faint, never lit). A ghost that lit would read
+// as a letter that is there.
+ok(count(seats, /<GemStone /g) === 2 && /<GemStone glow=\{r\?\.glow \?\? '#fff'\} lit/.test(seats), '★ a seated gem is the STONE, lit — not a text chip')
+ok(/opacity-30"><GemStone glow=\{want\.glow\} size=\{12\} \/>/.test(seats) && !/want\.glow\} lit/.test(seats), '★ an empty seat shows the gem it WANTS as a faint ghost — never lit, or it would read as set')
+ok(/title=\{want \? `needs \$\{want\.name\}` : 'empty seat'\}/.test(seats), 'and names it on hover')
 const chipAt = declAt(R, 'GemChip')
 const chip = chipAt >= 0 ? R.slice(chipAt, R.indexOf('\n}\n', chipAt)) : ''
 ok(count(chip, /<GemStone /g) === 1, 'a loose gem in the bag is the stone, then its name')
