@@ -11,6 +11,32 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔦 Shimmer — **THE WORKTABLE'S MISSING HALF: A SAVED BLUEPRINT STANDS IN THE WORLD, AND THE FIRST TRADE BUILDING THROUGH IT** (2026-09-11 afternoon, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID RNPjp0r71iWLW9LMAQf1I`, 184 chunks, from `de3b79c`** (supersedes `q4pS_liWt5ZOCLALnwCpM` / `ae29b55`, the stamp alone). Served worker `voxel-gen.worker.4fae4daed3.js` 200 on the tunnel with the table in it. Sweep at `ae29b55` **263 · 262 pass · 1 FAIL (editor-bands cache, regenerated in `de3b79c`) · 0 KILLED**; sweep at `de3b79c` running at wrap. tsc 7 (baseline), canon clean.*
+
+**Alex: *"work on how our buildings get built to see what building blocks to introduce to our game next."*** Mapped the pipeline first: ~50 placeable blocks + 15 piece shapes (×wood/stone) → the worktable (`dev/worktable`) saves a `BlueprintDef` to `data/blueprints/` → **nothing read it.** `grep` for a consumer of `stampCells` found only its own module; every standing building was code-generated (jigsaw ruins/warrens/burrow-towns, bridges, the gate station). The one saved blueprint (the sparring ring, 08-30) sat on disk 13 days. STRUCTURE-LAYER § 6 promised the other half; this is it.
+
+### What shipped
+- **`voxel/stamps.ts` (pure) — a `Stamp` = blueprint + world corner + rotation + `sink`.** Floor read off the pad's HIGHEST point (+1 − sink) so nothing is buried; the rotated box is cleared above ground and never below (a sunk layer's gaps stay ground, not holes); a plinth of the cell's own material fills under the bottom layer to the surface; pieces ride along as `GenPiece`s with rotation COMPOSED (`rotatePiece`, proven over every piece × 16 rotations). `placeStamps` writes per column with a clipped `put` like `buildRuin`, so four columns agree with one grid cell-for-cell.
+- **Wiring:** `ColumnConfig.stamps` (DEFAULT empty on purpose — the core may not import `data/`); `placeStamps` after `placeSites`, before the waystones. The worker composes `WORLD_COLUMN = DEFAULT + PLACED_STAMPS`; the host concatenates `stampGenPiecesForCol` ABOVE `applyGenPieces`'s early-out. **`data/blueprints/placed.ts` is the table of what stands where** — authored coordinates, never hashed: map placement stays Alex's.
+- **Proof 1, the sparring ring** at (−148, −637) sink 1, south-east of spawn. Verified from the SERVED worker bundle run inside the real browser: all 40 expected cells in column (−10, −40) match position and material; the 12 gaps in its sunk floor stay turf.
+- **Proof 2, Hazel's carpentry** (`scripts/blueprint-hazel.mts` → `hazel_carpentry.json`, 13×9×7, 269 blocks, 86 pieces) — the first Moonwell trade building, authored through the SAME `makeBlueprint`/`blueprintProblems`/`serializeBlueprint` the worktable uses, so the worktable opens it. Provisionally at (−165, −632), open front toward spawn. **Shot on the play lane (`tools/devwin.sh play` + `world-shot`): it stands** — counters read, yard fence + gate read, the plank stack reads, the ring's benches are in the same frame.
+
+### ★ THE REACH LIST — what the hand went for and did not find (the deliverable)
+- **R1 a timber post.** Logs are raw material (08-13 ruling) and `beam` is horizontal; the posts are dawnwood PLANKS, a colour standing in for a shape — and the colour does not read either. → a `post` piece, or a placeable timber.
+- **R2 a roof fill that reads as roofing.** `roof_slope`/`roof_cap` are edges; the gable's mass is planks and reads as WALL. The shot shows one pale lump with brown zigzag edges. → a shingle/thatch BLOCK.
+- **R3 a counter** (fence + half slab = 1.5 high, the workaround; it reads passably). **R4 shelves. R5 a sign/nameboard** (five trades, one glade, no way to say whose door). **R6 the raw stock** (a log pile — R1 from the yard side). **R7 glass** (flagged, not counted).
+- **R8 THE VALIDATOR LET A PIECE SIT INSIDE A BLOCK** — the first draft's shutters were buried in wall planks with every check green (piece-vs-piece was checked; piece-vs-block was not). Closed: `blueprintProblems` refuses a SOLID piece cell that coincides with a block; passable cells over blocks stay legal (a hook on a wall). blueprints.test 91 → 93.
+- **R9 ⛔ ART CALL:** goldwood / shimmeroak / dawnwood planks and cut stone read as ONE pale pink-grey at play distance. Reported, not touched.
+
+### ⛔ ALEX'S CALL
+1. **Walk the glade on prod:** the ring south-east of spawn, the carpentry south-west. Say whether it reads as a building at all, and rule R9 (the woods need to read as different woods before any post/roof piece can help).
+2. **Pick from the reach list.** My order: R1 post + R2 roof block (the two the shot proves), then R3 counter, R5 sign.
+3. **Where the five trades stand** in the glade — Hazel is provisional.
+4. Carried: #1109 · #298 · #301 (the square is now the spawn per Magii 09-11) · Beat 0 wiring · the collar raid (#1114).
+
+### Files
+`voxel/stamps.ts` (new) · `voxel/column.ts` (`stamps` cfg + call) · `src/workers/voxel-gen.worker.ts` (`WORLD_COLUMN`) · `voxel3d/VoxelWorld.tsx` (`stampGenPiecesForCol`) · `data/blueprints/placed.ts` (new, the table) · `data/blueprints/hazel_carpentry.json` (new) · `scripts/blueprint-hazel.mts` (new, reach list in header) · `voxel/blueprints.ts` (R8) · guards `voxel/stamps.test.ts` (new, 52) · `data/blueprints/placed.test.ts` (new, 22, reads worker + host source) · `voxel/blueprints.test.ts` (93)
+
 ## 🔦 Shimmer — **#1113: THE NIGHT IS TICKED TO ONE RADIUS AND DRAWN TO ANOTHER** (2026-09-11 late, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID yCrLD0ykgCCgpfCxQz1hO`, 185 chunks, from `2f56d67`**, served == disk == public. Sweep **261/261 · 0 FAIL · 0 KILLED at `2f56d67`**, tsc 7 (baseline). Row #1113 closed.*
 
 **Alex: *"yea sounds good, go ahead."*** The last structural item on #294 apart from the collar raid. Minecraft 1.18's split, kept with its semantics: **the world is drawn to `viewRadius`; the night is ticked to `simRadius`, and the sim can never exceed the view** — a body cannot stand on ground that is not loaded. ⚠ **So my pitch line was half wrong:** *"a lower draw distance stops meaning a quieter night"* is not what this buys, and cannot be without loading beyond the render ring (a bigger change, and the same one MC declined). What it buys: **a wider view no longer widens the night**, and a phone can draw 6 and tick 4.
