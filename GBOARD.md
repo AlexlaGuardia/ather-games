@@ -11,6 +11,26 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🛤 Shimmer — **THE APPROACH: A LIT ROAD FROM THE FOLD'S DOOR TO THE GLADE** (2026-09-11 evening, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID WvSvfAOrwVkpmmO0_bR_5`, 184 chunks, from `38d87b3`**; served worker `voxel-gen.worker.a86e826060.js` 200 on the tunnel with `fold-door` in it. Shot on the play lane by day and by night: the road leaves the door with a lantern post at its mouth and the next post in sight. tsc 7 (baseline).*
+
+**Alex: *"before i can walk the glade i need a way to reach it.. the platform in the home plot is still incomplete."*** Measured the route instead of the platform: leaving the plot with **no waymark planted** lands at `passageApproach` = **(−123, −521), 122 blocks from the glade, on untended ground with no road**; the court's three passage sockets stay dark until a waymark is planted OUT THERE (`travelTo` → `toDoor`). So the first trip is on foot and nothing in the world said which way. The platform is not what blocks the walk; the blank country between the door and the glade is.
+
+### What shipped (`38d87b3`)
+- **`APPROACH_NODES`** (`fold-door` → the glade's own spine node) as a **second polyline** in `PATH_LEGS`. ⚠ Not a node prepended to the spine: `holds.ts` reads `STORY_NODES[2,3,4]` by index and `bridges.ts` names crossings `${node.id}-${i}`; a node in front of the glade would shift every hold and rename every bridge. The spine is untouched, `distToPath`/`WAYSTONE_CELLS` walk every leg. Posts on the approach every 40 from 6 blocks out, so the first light is in sight of the door at night.
+- **The door is pinned and asserted against the generator that owns it** (the crossings lesson): `story-path.ts` cannot import the bubble without a cycle, so `story-path.test.ts` compares the pinned node to `passageApproach(WORLD_SEED, WILDS_BUBBLE)` within 2 blocks, checks the road runs through the door and halfway along, that the leg is **dry end to end** (it has no bridges, so it must be), and that a post stands within 12 of the door. story-path **25 → 32**.
+- **The ring moved to (−143, −639):** the leg ran straight through its old pad — `placed.test`'s "keeps off the story road" caught it, which is the guard doing its job the same day it was written. Hazel clears the road by its margin.
+
+### ★ THE WALK (Alex, on prod, real save)
+Plot → the fold-seam (choose *the door*; with no waymarks it is the only choice) → you stand at the door with the road under you and a lit post beside you → follow it ~120 blocks to the glade (the ring is beside spawn, Hazel's carpentry south-west of it) → **craft a waymark (crafting table, one raw mana shard) and plant it at the glade**, and passage socket 1 on the court lights for the trip home. Owner shortcut: `/goto moonwell-glade`.
+
+### ⛔ ALEX'S CALL
+1. Walk it. Does the road read as "this way" from the door, and does 120 blocks feel like a walk or a slog?
+2. **The platform:** what *incomplete* means to you — the dark passage sockets (which the walk + a planted waymark answers), or the tower's look (no cap, no trim course; still `crossings.ts`, still hub's)? Say which and I build that next.
+3. Carried: the glade walk + R9 · the reach list (R1 post, R2 roof) · the five trades' placement · Beat 0 wiring.
+
+### Files
+`voxel/story-path.ts` (`APPROACH_NODES`, `PATH_LEGS`, `APPROACH_EVERY/FIRST`) · `voxel/story-path.test.ts` · `data/blueprints/placed.ts` (ring moved) · worker rebuilt
+
 ## 🔦 Shimmer — **THE WORKTABLE'S MISSING HALF: A SAVED BLUEPRINT STANDS IN THE WORLD, AND THE FIRST TRADE BUILDING THROUGH IT** (2026-09-11 afternoon, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID RNPjp0r71iWLW9LMAQf1I`, 184 chunks, from `de3b79c`** (supersedes `q4pS_liWt5ZOCLALnwCpM` / `ae29b55`, the stamp alone). Served worker `voxel-gen.worker.4fae4daed3.js` 200 on the tunnel with the table in it. Sweep at `ae29b55` **263 · 262 pass · 1 FAIL (editor-bands cache, regenerated in `de3b79c`) · 0 KILLED**; sweep at `de3b79c` **263/263 · 0 FAIL · 0 KILLED**. tsc 7 (baseline), canon clean.*
 
 **Alex: *"work on how our buildings get built to see what building blocks to introduce to our game next."*** Mapped the pipeline first: ~50 placeable blocks + 15 piece shapes (×wood/stone) → the worktable (`dev/worktable`) saves a `BlueprintDef` to `data/blueprints/` → **nothing read it.** `grep` for a consumer of `stampCells` found only its own module; every standing building was code-generated (jigsaw ruins/warrens/burrow-towns, bridges, the gate station). The one saved blueprint (the sparring ring, 08-30) sat on disk 13 days. STRUCTURE-LAYER § 6 promised the other half; this is it.
