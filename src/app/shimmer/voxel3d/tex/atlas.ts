@@ -422,11 +422,23 @@ void tileFrame(vec3 an, out vec3 T, out vec3 B) {
       `vec3 cnrm = normalize(vVoxNormal);
        float faceLum = cnrm.y > 0.5 ? 1.0 : (cnrm.y < -0.5 ? 0.52 : 0.76 + 0.05 * abs(cnrm.x));
        float face = mix(1.0, faceLum, uFaceShading);
-       float clum = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
+       // ★★ THIS IS THE COPY THE WORLD RENDERS WITH — mesh-bridge.ts's stack is the untextured
+       // fallback. Both carry the 2026-09-11 fix and cartoon-stack.test.ts holds them identical.
+       // (1) luminance is the LIGHT on the face (irradiance = lit ÷ albedo), not the lit pixel, so a
+       // dark material in full sun is not "in shadow"; (2) the shadow lift is scaled by the
+       // material's own luminance and the cooling is a TINT of the base, not a flat blue-grey ADD —
+       // the add was the same amount whatever the face was made of, so tan planks and dark shingles
+       // were swamped and every wall in the world converged on one mauve (bisected on a sunlit
+       // goldwood wall at 6 blocks, noon: shadowLift 0 → (88,61,26), default → (139,130,135)).
+       const vec3 W = vec3(0.2126, 0.7152, 0.0722);
+       float albLum = max(dot(diffuseColor.rgb, W), 0.03);
+       float clum = clamp(dot(outgoingLight, W) / albLum, 0.0, 1.0);
        float stepped = floor(clum * 3.0 + 0.5) / 3.0;
        float shaped = mix(clum, stepped, uToon);
        vec3 shade = mix(vec3(0.0), vec3(0.22, 0.26, 0.38), uShadowLift);
-       vec3 toonCol = diffuseColor.rgb * face * (0.35 + 0.95 * shaped) + shade * (1.0 - shaped);
+       vec3 cool = mix(vec3(1.0), vec3(0.80, 0.86, 1.0), uShadowLift);
+       vec3 lift = shade * (1.0 - shaped) * clamp(albLum * 2.0, 0.15, 1.0);
+       vec3 toonCol = diffuseColor.rgb * face * (0.35 + 0.95 * shaped) * mix(cool, vec3(1.0), shaped) + lift;
        vec3 fr = fract(vWorldPos - cnrm * 0.002);
        vec3 dEdge = min(fr, 1.0 - fr);
        vec3 planar = 1.0 - abs(cnrm);

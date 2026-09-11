@@ -88,15 +88,37 @@ export function createVoxelMaterial(light: LightUniforms = createLightUniforms()
       float face = mix(1.0, faceLum, uFaceShading);
 
       // 2. BAND THE LIGHTING. A smooth ramp reads as lit; hard steps read as drawn.
-      float lum = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
+      // ★★ THE LUMINANCE IS THE LIGHT ON THE FACE, NOT THE COLOUR OF THE FACE (2026-09-11). This
+      //    read dot(outgoingLight, W) — the LIT PIXEL — so a dark material in full sun scored as
+      //    "in shadow" and step 3 poured its blue-lavender lift onto it: tan planks rendered mauve,
+      //    brown shingles lavender, pale stone barely touched, grass tops (bright) not at all. Every
+      //    wall in the world read as one pale colour and a building read as a ruin. Pieces never
+      //    pass through this shader, which is how the fence beside the wall stayed brown and gave
+      //    it away. Dividing out the albedo's luminance leaves the IRRADIANCE, which is what a
+      //    shadow is. Measured at 6 blocks, noon: goldwood planks (155,118,64) rendered (139,130,135)
+      //    before; the A/B for after is in the commit.
+      const vec3 W = vec3(0.2126, 0.7152, 0.0722);
+      float albLum = max(dot(diffuseColor.rgb, W), 0.03);
+      float lum = clamp(dot(outgoingLight, W) / albLum, 0.0, 1.0);
       float bands = 3.0;
       float stepped = floor(lum * bands + 0.5) / bands;
       float shaped = mix(lum, stepped, uToon);
 
       // 3. LIFT AND TINT THE SHADOWS. Cartoon shadows are never black — they are a cooler, still
       //    saturated version of the base. Without this, caves read as murk rather than as shade.
+      //    ★★ THE LIFT IS SCALED BY THE MATERIAL AND THE COOLING IS A TINT, NOT AN ADD (2026-09-11).
+      //    This was "+ shade * (1.0 - shaped)": a flat blue-grey ADDED to every face that was not
+      //    fully lit, the same amount whatever the face was made of. A pale stone barely noticed; a
+      //    tan plank or a dark shingle was swamped, and every wall in the world converged on one
+      //    mauve. Bisected on a sunlit goldwood wall at 6 blocks, noon: shadowLift 0 → (88,61,26),
+      //    the default → (139,130,135); the other three dials moved it by single digits. Now the
+      //    cooling multiplies the base (a cooler, still saturated version of the SAME colour — the
+      //    stated intent) and the residual lift is proportional to the material's own luminance,
+      //    so a cave still never reads black and a dark wall in daylight is still a dark wall.
       vec3 shade = mix(vec3(0.0), vec3(0.22, 0.26, 0.38), uShadowLift);
-      vec3 toonCol = diffuseColor.rgb * face * (0.35 + 0.95 * shaped) + shade * (1.0 - shaped);
+      vec3 cool = mix(vec3(1.0), vec3(0.80, 0.86, 1.0), uShadowLift);
+      vec3 lift = shade * (1.0 - shaped) * clamp(albLum * 2.0, 0.15, 1.0);
+      vec3 toonCol = diffuseColor.rgb * face * (0.35 + 0.95 * shaped) * mix(cool, vec3(1.0), shaped) + lift;
 
       // 4. BLOCK OUTLINES, IN-SHADER. UVs are derived from world position, so the distance to a
       //    block boundary is already available — no post-process pass, no extra geometry. The axis
