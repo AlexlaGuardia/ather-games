@@ -84,7 +84,14 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
     case 'roof_slope': {
       // A real wedge, not a box: five steps approximating a 45° slope, which is the whole reason a
       // roof is a piece rather than a block.
-      for (let i = 0; i < 5; i++) box(1, 0.2, 0.2, 0, 0.1 + i * 0.2, 0.4 - i * 0.2)
+      // ★ SOLID, NOT A STAIR OF LEDGES (2026-09-11). The first cut laid five 0.2-deep ledges with
+      // air behind each, so a roof row was a comb of brown teeth over a pale wall and the whole
+      // building read as a ruin (Alex: "more like ruins than a building"). Each step now runs from
+      // the slope face to the BACK of the cell, so the wedge is a mass and a roof is a surface.
+      for (let i = 0; i < 5; i++) {
+        const depth = 1 - i * 0.2
+        box(1, 0.2, depth, 0, 0.1 + i * 0.2, -0.5 + depth / 2)
+      }
       break
     }
     case 'roof_cap': {

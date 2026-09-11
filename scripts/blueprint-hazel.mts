@@ -13,8 +13,7 @@
 // wood"; wants planks stacked square, "a crooked stack is the only thing that makes Hazel sigh";
 // makes furniture, storage, grown-and-jointed structures. The look and where it stands are Jin's.
 //
-// The look: a timber workshop, OPEN-FRONTED — a carpenter works in the air with a roof over the
-// bench — cut-stone footing, goldwood walls on dawnwood posts, a stepped shimmeroak gable, the
+// The look: a timber workshop — cut-stone footing, goldwood walls on dawnwood posts, a stepped shimmeroak gable, the
 // sawmill and the table under the roof, a squared plank stack by the door (the want-list, in wood),
 // a fenced yard with a gate.
 //
@@ -59,29 +58,38 @@ for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
   put(x, 0, z, edge ? MAT.CUT_STONE : MAT.PLANKS_GOLDWOOD)
 }
 // Posts (R1: planks standing in for a timber post) at the four corners and the front's two mid-posts.
-const posts = [[0, 0], [W - 1, 0], [0, D - 1], [W - 1, D - 1], [3, 0], [5, 0]]
+const posts = [[0, 0], [W - 1, 0], [0, D - 1], [W - 1, D - 1]]
 for (let y = 1; y <= WALL; y++) for (const [x, z] of posts) put(x, y, z, MAT.PLANKS_DAWNWOOD)
-// Walls: back (z=D-1) and both sides; the front stays open between the posts. Openings are cut below.
+const cut = (x: number, y: number, z: number) => { const i = cells.findIndex(c => c.x === x && c.y === y && c.z === z); if (i >= 0) cells.splice(i, 1) }
+// Walls: all four. ★ THE FRONT IS CLOSED (2026-09-11). The first cut left it open between posts —
+// a carpenter works in the air — and on screen three dark bays in a pale wall read as the front
+// having fallen in (Alex: "more like ruins than a building"). A shop reads as a shop through a door.
 for (let y = 1; y <= WALL; y++) {
-  for (let x = 1; x < W - 1; x++) put(x, y, D - 1, MAT.PLANKS_GOLDWOOD)
+  for (let x = 1; x < W - 1; x++) { put(x, y, D - 1, MAT.PLANKS_GOLDWOOD); put(x, y, 0, MAT.PLANKS_GOLDWOOD) }
   for (let z = 1; z < D - 1; z++) { put(0, y, z, MAT.PLANKS_GOLDWOOD); put(W - 1, y, z, MAT.PLANKS_GOLDWOOD) }
 }
-// Front lintel over the opening, so the roof has something to sit on.
-for (let x = 1; x < W - 1; x++) put(x, WALL, 0, MAT.PLANKS_GOLDWOOD)
+// The front: a doorway in the middle, a window either side.
+cut(4, 1, 0); cut(4, 2, 0); cut(4, 3, 0); piece('doorway', 4, 1, 0, 0)
+cut(2, 1, 0); cut(2, 2, 0); piece('window', 2, 1, 0, 0)
+cut(6, 1, 0); cut(6, 2, 0); piece('window', 6, 1, 0, 0)
 // Openings: a window each side with shutters, the door on the east wall to the yard.
-const cut = (x: number, y: number, z: number) => { const i = cells.findIndex(c => c.x === x && c.y === y && c.z === z); if (i >= 0) cells.splice(i, 1) }
 cut(0, 1, 3); cut(0, 2, 3); piece('window', 0, 1, 3, 1)
 cut(0, 2, 2); cut(0, 2, 4); piece('shutter', 0, 2, 2, 1); piece('shutter', 0, 2, 4, 1)   // shutters need their own cells (R8)
 cut(W - 1, 1, 3); cut(W - 1, 2, 3); piece('window', W - 1, 1, 3, 1)
 cut(W - 1, 1, 5); cut(W - 1, 2, 5); piece('door', W - 1, 1, 5, 1)
 // Stepped gable (R2: the fill between the slopes is planks and reads as wall).
+// ★ EAVES + DARK GABLE ENDS (2026-09-11). Row 0's slopes stand one cell OUTSIDE the side walls, so
+// the roof overhangs like a roof and the wall top has a shadow line; the gable-end triangles are
+// dawnwood (the darkest plank) so the roof mass reads as roof where it shows — the same-colour
+// triangle over the wall was half of the ruin read (R2 stands: this is a colour, not a roofing block).
 const ROOF0 = WALL + 1
-for (let r = 0; r <= 4; r++) {
-  const y = ROOF0 + r, xa = r, xb = W - 1 - r
+for (let r = 0; r <= 5; r++) {
+  const y = ROOF0 + r, xa = r - 1, xb = W - r
   for (let z = 0; z < D; z++) {
     if (xa === xb) { piece('roof_cap', xa, y, z, 0); continue }
     piece('roof_slope', xa, y, z, 3); piece('roof_slope', xb, y, z, 1)
-    for (let x = xa + 1; x < xb; x++) put(x, y, z, MAT.PLANKS_SHIMMEROAK)
+    const end = z === 0 || z === D - 1
+    for (let x = xa + 1; x < xb; x++) put(x, y, z, end ? MAT.PLANKS_DAWNWOOD : MAT.PLANKS_SHIMMEROAK)
   }
 }
 // Inside: the sawmill and the table under the roof, a chest, a lantern hung from a hook.
