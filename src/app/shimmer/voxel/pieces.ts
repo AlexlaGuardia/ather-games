@@ -190,6 +190,15 @@ export const PIECES: PieceDef[] = [
   { id: 'fence', name: 'Fence', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 1 }], variants: ['wood', 'stone'] },
 
+  // ── ★ THE POST (2026-09-11, reach-list R1 from the first Moonwell building) ─────────────────
+  // A timber frame has no vertical member: logs are raw material, not blocks (registry, 08-13), and
+  // `beam` is horizontal. Hazel's carpentry stood its corner posts as dawnwood PLANKS — a colour
+  // standing in for a shape, and the colour did not read either. A post is a full-cell, full-height
+  // square timber (or a stone pier in the stone variants): it stops things like a wall does, so it
+  // occupies its whole cell; the thinner look is the model's business, as with the fence.
+  { id: 'post', name: 'Post', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 2 }], variants: ['wood', 'stone'] },
+
   // Eighth, 2026-08-08 (same pass as the probe's CELL_HALF — the piece and its physics shipped
   // together). Stand at half height, walk up half-rises without a vault: floors that step, low
   // tables, roof edges. The first fractional-collision piece.

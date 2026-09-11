@@ -146,6 +146,8 @@ export const BLOCKS: BlockDef[] = [
   // block a keeper with no pick can still break, because the sand it came from was hand-diggable.
   { material: MAT.STONE_BRICK, name: 'Stone Bricks', hardness: 1.5, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'stone_brick', count: 1 }], placeable: true },
   { material: MAT.PALE_BRICK, name: 'Pale Bricks', hardness: 1.3, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'pale_brick', count: 1 }], placeable: true },
+  // Roofing (2026-09-11, R2): a wood block by trade — the carpenter's — so forestry is the fast skill.
+  { material: MAT.SHINGLES, name: 'Shingles', hardness: 0.8, skill: null, minTier: 0, drops: [{ itemId: 'shingle', count: 1 }], fastSkill: 'forestry', placeable: true },
   { material: MAT.SANDSTONE, name: 'Sandstone', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'sandstone', count: 1 }], fastSkill: 'prospecting', placeable: true },
 
   // ── ★ THE WEATHERED MASONRY (2026-08-27) ────────────────────────────────────────────────────

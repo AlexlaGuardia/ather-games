@@ -18,10 +18,10 @@
 // a fenced yard with a gate.
 //
 // ── ★★ THE REACH LIST (what the hand went for and did not find) ──────────────────────────────
-// R1  A TIMBER POST. Logs are raw material, not blocks (registry, 08-13 ruling), and `beam` is a
+// R1  A TIMBER POST. ✅ CLOSED 09-11 late: `post` piece (wood/stone variants). Was: Logs are raw material, not blocks (registry, 08-13 ruling), and `beam` is a
 //     horizontal piece. A timber frame has no vertical member; the posts here are dawnwood PLANKS,
 //     a colour standing in for a shape. → a `post` piece (1×1×1, full cell) or a placeable timber.
-// R2  A ROOF FILL THAT READS AS ROOFING. `roof_slope` and `roof_cap` are the edges; the gable's mass
+// R2  A ROOF FILL THAT READS AS ROOFING. ✅ CLOSED 09-11 late: `SHINGLES` block + painter. Was: `roof_slope` and `roof_cap` are the edges; the gable's mass
 //     between them is planks, which read as WALL. → a shingle/thatch block (material, not shape).
 // R3  A COUNTER. Hazel sells; canon puts the loop's close at a counter (Mallow's). A `half_slab` is
 //     knee-high, a block is a wall. Here: fence + half_slab = 1.5, a workaround. → a `counter`/`table`
@@ -59,7 +59,7 @@ for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
 }
 // Posts (R1: planks standing in for a timber post) at the four corners and the front's two mid-posts.
 const posts = [[0, 0], [W - 1, 0], [0, D - 1], [W - 1, D - 1]]
-for (let y = 1; y <= WALL; y++) for (const [x, z] of posts) put(x, y, z, MAT.PLANKS_DAWNWOOD)
+for (let y = 1; y <= WALL; y++) for (const [x, z] of posts) piece('post_dawnwood', x, y, z, 0)   // R1 closed: a real post
 const cut = (x: number, y: number, z: number) => { const i = cells.findIndex(c => c.x === x && c.y === y && c.z === z); if (i >= 0) cells.splice(i, 1) }
 // Walls: all four. ★ THE FRONT IS CLOSED (2026-09-11). The first cut left it open between posts —
 // a carpenter works in the air — and on screen three dark bays in a pale wall read as the front
@@ -89,7 +89,7 @@ for (let r = 0; r <= 5; r++) {
     if (xa === xb) { piece('roof_cap', xa, y, z, 0); continue }
     piece('roof_slope', xa, y, z, 3); piece('roof_slope', xb, y, z, 1)
     const end = z === 0 || z === D - 1
-    for (let x = xa + 1; x < xb; x++) put(x, y, z, end ? MAT.PLANKS_DAWNWOOD : MAT.PLANKS_SHIMMEROAK)
+    for (let x = xa + 1; x < xb; x++) put(x, y, z, MAT.SHINGLES)   // R2 closed: the mass is roofing
   }
 }
 // Inside: the sawmill and the table under the roof, a chest, a lantern hung from a hook.

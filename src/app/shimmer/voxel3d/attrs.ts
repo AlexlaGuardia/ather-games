@@ -92,6 +92,7 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // wall at distance, where the pattern blurs out first.
   [MAT.STONE_BRICK]: 0x8a9095,
   [MAT.PALE_BRICK]: 0xcfe0d7,
+  [MAT.SHINGLES]: 0x4a3a33,      // dark weathered wood, laid in courses — reads as roof, not wall
   // ⚠ ROSY, NOT YELLOW-TAN, AND THAT IS A LEGIBILITY FIX RATHER THAN A PREFERENCE. The first pass
   // took sand's own hue a step deeper (0xc6a76c) and landed it squarely between beach sand and
   // GOLDWOOD PLANKING — a warm banded cube beside a warm grained cube, which is the whole point of

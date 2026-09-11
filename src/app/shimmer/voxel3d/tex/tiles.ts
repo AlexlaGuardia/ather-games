@@ -60,6 +60,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.RUBBLE, MAT.CUT_STONE,
   // The masonry palette added 2026-08-15 — three crafted surfaces, no new rock.
   MAT.STONE_BRICK, MAT.PALE_BRICK, MAT.SANDSTONE,
+  // Roofing, 2026-09-11 (R2): its own painter below — courses of overlapping shingles.
+  MAT.SHINGLES,
   // The waymark + the plot's cloud-wall, added 2026-08-15 with the passages layer.
   MAT.WAYMARK, MAT.CLOUD_WALL,
   // The cauldron added 2026-08-18 with brewing — the alchemy station.
@@ -567,6 +569,32 @@ function paintLeaves(dst: Layer, size: number, base: [number, number, number], s
  * 8×4, half the unit in both axes, which reads as "somebody laid this" rather than "somebody cut
  * this". Both divisors keep the joints on whole pixels at 16 and 32.
  */
+/**
+ * Shingles: courses of short overlapping tabs, each course offset half a tab, a dark shadow line
+ * under every course and a lighter lip on top so the surface reads as LAID, not as a flat dark
+ * block. Same pixel vocabulary as ashlar (a seam line + per-cell tone), scaled to roofing.
+ */
+function paintShingles(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const course = Math.max(3, Math.round(size / 4))       // rows per course
+  const tab = Math.max(3, Math.round(size / 4))          // tab width
+  for (let y = 0; y < size; y++) {
+    const c = Math.floor(y / course)
+    const inCourse = y % course
+    const off = (c % 2) * Math.floor(tab / 2)
+    for (let x = 0; x < size; x++) {
+      const tx = (x + off) % tab
+      const seam = tx === 0
+      const lip = inCourse === 0
+      const shadow = inCourse === course - 1
+      const tone = (h2(Math.floor((x + off) / tab), c, seed) - 0.5) * 26
+      let col = shade(base, tone)
+      if (lip) col = shade(col, 22)
+      if (shadow || seam) col = shade(col, -40)
+      put(dst, size, x, y, col, 0)
+    }
+  }
+}
+
 function paintAshlar(
   dst: Layer, size: number, base: [number, number, number], seed: number,
   rows = 4, cols = 2,
@@ -1150,6 +1178,7 @@ export function paintFor(material: number, face: number, size: number): Layer {
     // the two greys are separated by pattern and the other two by mineral.
     case MAT.STONE_BRICK:
     case MAT.PALE_BRICK: paintAshlar(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, 8, 4); break
+    case MAT.SHINGLES: paintShingles(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     // ★ THE WEATHERED THREE — base painter first, then the overlay. Same courses as their clean
     // siblings by construction, which is the whole point: mixed into one wall they must line up.
     case MAT.MOSSY_STONE_BRICK: {

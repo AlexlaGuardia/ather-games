@@ -231,6 +231,9 @@ export const RECIPES: RecipeDef[] = [
   // already quarryable; this is what makes a trip to the Springs worth a cart.
   { id: 'pale_brick', name: 'Pale Bricks', milled: 3, family: 'stone', station: 'hand', mana: 0,
     input: [{ itemId: 'block_spring_crust', count: 3 }], output: { itemId: 'pale_brick', count: 2 } },
+  // Shingles (2026-09-11, R2): split from planks by hand, four to the plank pair — a roof takes many.
+  { id: 'shingle', name: 'Shingles', milled: 2, family: 'wood', station: 'hand', mana: 0,
+    input: [{ itemId: 'goldwood_plank', count: 2 }], output: { itemId: 'shingle', count: 4 } },
 
   // Warm tan, from beach sand — and the texture is BANDED rather than coursed, because sedimentary
   // layers are what tells sandstone apart from masonry at a glance even before the hue lands.

@@ -572,6 +572,15 @@ export const MAT = {
    * as worked stone with a light in it and claims no more than that.
    */
   CACHE: 86,
+  /**
+   * ── SHINGLES (2026-09-11, reach-list R2 from the first Moonwell building) ────────────────
+   * The roof pieces (`roof_slope`, `roof_cap`) are the EDGES of a roof; the mass between them was
+   * planks, which read as wall, and the gable end of Hazel's carpentry came out a blank pale slab.
+   * A roofing block: dark, laid in courses, so a roof's mass reads as roof where it shows.
+   * ⚠ TBD-CANON on the item name (`shingle`) — a build-side placeholder like `block_stone`; if the
+   * Ather roofs its houses in something with a name, that is Magii's.
+   */
+  SHINGLES: 87,
 } as const
 
 /**

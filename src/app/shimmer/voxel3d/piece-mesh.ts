@@ -27,6 +27,7 @@ const TINT: Record<string, number> = {
   stair: 0x8d8a94,
   beam: 0x6f5a3f,
   bench: 0x8a7145,
+  post: 0x6b4a2c,
   // ⚠ THESE SIX HAD NO TINT AND ALL RENDERED AS THE SAME FLAT `0x999999` FALLBACK — found
   // 2026-08-30 by the new arm-coverage guard, not by anyone looking. A grey placeholder reads as
   // unfinished art rather than as a piece, and six of them read as the SAME unfinished art.
@@ -103,6 +104,12 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
       box(1, 0.34, 1, 0, 0.17, 0)
       box(1, 0.33, 0.66, 0, 0.5, -0.17)
       box(1, 0.33, 0.33, 0, 0.83, -0.33)
+      break
+    }
+    case 'post': {
+      // A square timber the full height of its cell — thicker than a fence post, thinner than a
+      // block, so a frame reads as a frame against plank infill. Full-cell occupancy (pieces.ts).
+      box(0.44, 1, 0.44, 0, 0.5, 0)
       break
     }
     case 'fence': {

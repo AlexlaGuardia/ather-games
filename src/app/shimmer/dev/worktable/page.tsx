@@ -399,7 +399,22 @@ export default function WorktablePage() {
   const [placeX, setPlaceX] = useState('')
   const [placeZ, setPlaceZ] = useState('')
   const [placeRot, setPlaceRot] = useState<0 | 1 | 2 | 3>(0)
-  const [placeSink, setPlaceSink] = useState(0)
+  // ★ SINK DEFAULTS FROM THE BLUEPRINT (Alex, 09-11: "is it necessary for it to be elevated one block
+  // up or could it be flush?"). The stamp cannot tell a floor from a footing, but the panel can make
+  // the usual guess: a bottom layer that covers most of the footprint is a FLOOR and wants to sit at
+  // grade (sink 1); a sparse bottom layer is footings or posts and wants to stand on the ground
+  // (sink 0). The guess only holds until the author touches the control.
+  const [placeSink, setPlaceSinkRaw] = useState<number | null>(null)
+  const floorLike = useMemo(() => {
+    if (!asCells.length) return false
+    const y0 = Math.min(...asCells.map(c => c.y))
+    const bottom = asCells.filter(c => c.y === y0)
+    const xs = bottom.map(c => c.x), zs = bottom.map(c => c.z)
+    const area = (Math.max(...xs) - Math.min(...xs) + 1) * (Math.max(...zs) - Math.min(...zs) + 1)
+    return bottom.length / area >= 0.6
+  }, [asCells])
+  const sinkEffective = placeSink ?? (floorLike ? 1 : 0)
+  const setPlaceSink = (v: number) => setPlaceSinkRaw(v)
   const [placeId, setPlaceId] = useState('')
   const [placed, setPlaced] = useState<{ id: string; blueprint: string; x: number; z: number; rot: number; sink?: number }[]>([])
   const refreshPlaced = useCallback(async () => {
@@ -416,7 +431,7 @@ export default function WorktablePage() {
     const bpId = id.trim()
     if (!list.some(s => s.id === bpId)) { setStatus(`PLACE REFUSED: save '${bpId}' first — a placement names a file on disk`); return }
     const row = { id: (placeId.trim() || `placed-${bpId}`).replace(/[^a-z0-9_-]/g, '-'), blueprint: bpId,
-                  x: Number(placeX), z: Number(placeZ), rot: placeRot, ...(placeSink ? { sink: placeSink } : {}) }
+                  x: Number(placeX), z: Number(placeZ), rot: placeRot, ...(sinkEffective ? { sink: sinkEffective } : {}) }
     const r = await fetch('/shimmer/save-placement', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row),
     }).then(x => x.json()).catch(e => ({ error: String(e) }))
@@ -532,7 +547,7 @@ export default function WorktablePage() {
           <select value={placeRot} onChange={e => setPlaceRot(Number(e.target.value) as 0 | 1 | 2 | 3)} title="rotation, quarter turns" style={{ ...inputStyle, width: 56 }}>
             {[0, 1, 2, 3].map(r => <option key={r} value={r}>rot {r}</option>)}
           </select>
-          <select value={placeSink} onChange={e => setPlaceSink(Number(e.target.value))} title="how many bottom layers sit IN the ground (1 = the bottom layer is the floor, at grade)" style={{ ...inputStyle, width: 64 }}>
+          <select value={sinkEffective} onChange={e => setPlaceSink(Number(e.target.value))} title={`how many bottom layers sit IN the ground (1 = the bottom layer is the floor, at grade)${placeSink === null ? ` — guessed ${sinkEffective} from the bottom layer (${floorLike ? 'a floor' : 'footings'})` : ''}`} style={{ ...inputStyle, width: 64 }}>
             {[0, 1, 2].map(r => <option key={r} value={r}>sink {r}</option>)}
           </select>
         </div>
