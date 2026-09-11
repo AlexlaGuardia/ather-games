@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🧱 Shimmer — **THE WORKTABLE PLACES ITS OWN BUILDINGS: "PLACE IN WORLD"** (2026-09-11 late, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID CIdZwPbWJc925cacek6zO`, 184 chunks, from `cfcec9f`**; route 403 without the cookie on the tunnel, served worker 200. Sweep at `cfcec9f` running at wrap. tsc 7 (baseline).*
+## 🧱 Shimmer — **THE WORKTABLE PLACES ITS OWN BUILDINGS: "PLACE IN WORLD"** (2026-09-11 late, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID CIdZwPbWJc925cacek6zO`, 184 chunks, from `cfcec9f`**; route 403 without the cookie on the tunnel, served worker 200. Sweep at `cfcec9f` **264 · 263 pass · 1 FAIL** (editor-bands cache stale on the new files, regenerated in the next commit; not a runtime defect) · 0 KILLED. tsc 7 (baseline).*
 
 **Alex: *"could we have a page where i can freely use any block to build it myself.. owner gated.. a dropdown to choose the structure and build"* → it existed (`/shimmer/dev/worktable`, owner-gated, every placeable block + the 15 pieces, load/save). What it lacked: making a saved file STAND somewhere took a row in code. *"yea add the place in world button."***
 
