@@ -11,6 +11,26 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔦 Shimmer — **THE HIT IS HEARD: A TEAR, A KNOCK UNDER THE HEAD, AN EXHALE FOR THE DISPERSAL** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID azl-dFcEgkq2a2n_ZDinv`, 185 chunks, from `993b442`**, served == disk == public. Sweep **260/260 · 0 FAIL · 0 KILLED at `993b442`**, tsc 7 (baseline).*
+
+**Alex: *"yea that works fine..so whats up next."*** The damage read had its eyes (flinch, fray, the head flash); this is its ears, and it is the last piece of the hit-feedback pass before the structural item.
+
+### What shipped (`993b442`)
+- **`strikeVoice` (hollow-voice, pure):** which sound — `hit` (body) · `head` · `disperse` (the round that crossed zero) — its gain by distance, and its pan + front/rear muffle on **the same ear model the footsteps use**, so a hit and the next footstep from one body agree on which side it is. **Never budgeted by the footstep tokens and never dropped:** a footstep is the night's noise and may be thinned; a strike is the keeper's own act, and a silent hit reads as a miss — the exact misread the hitbox fix was for. Carries to twice the voice range, floored at 0.35.
+- **`playStrikes` (hollow-sfx):** synthesised from the same noise bed, no asset. A body hit is a **tear** in the form's own band (×1.8, 42ms); a head adds a **140Hz knock** under it; a dispersal is a **340ms exhale** whose lowpass sweeps 2.4k → 220Hz — canon: you disperse it, you do not kill it, so nothing crunches, something ceases to hold.
+- The shot site picks the kind **from the same facts the damage used** (`dispersed` / `hp.head`).
+
+### Guards
+hollow-voice 26 → **38** (head > hit, disperse loudest, pan sign both sides, muffled behind, footstep-and-hit agree on side, still marked near twice the range, silent past it, takes no clock) · hollow-hit 34 → **37** (the site chooses from the damage facts, hands straight to the shell, the ear faces where the footsteps say). **5 mutations fire**, negative control survives.
+
+### ⛔ ALEX'S CALL
+1. **Shoot: body, head, and through to a dispersal.** Three sounds, one body. Is the head knock enough heavier, and does the exhale read as letting go rather than dying?
+2. **Next structural piece (my pick): #1113, the sim/render radius split** — enemy count and the spawn ring are bound to `viewRadius`, so a lower draw distance is a quieter night. Say go.
+3. Carried: the roster walk · #1109 · #1111 · #1110 · #298 · #301 · specular flash on hit (still unbuilt).
+
+### Files
+`voxel3d/hollow-voice.ts` (`strikeVoice`, `STRIKE_GAIN`) · `voxel3d/hollow-sfx.ts` (`playStrikes`) · `voxel3d/VoxelWorld.tsx` (hit site) · guards `hollow-voice.test.ts`, `hollow-hit.test.ts`
+
 ## 🔦 Shimmer — **A ROUND IS ANSWERED: FLINCH, RECOIL, THE SAP INTERRUPTED, THE BODY FRAYS, THE HEAD PAYS** (2026-09-11 evening, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID SzKXT2mkjo2J84BXtp_tJ`, 185 chunks, from `fd36d5a`** (supersedes `MM-WJLe3ZVW_KdDvyoORh` / `d65ed84`). **`fd36d5a` = ALEX'S THREE RULINGS:** *"a warden only reacts to headshots, the stalker should start trying to evade and no bar for now."* → `flinchOn` per form (warden `head`: a body hit takes hp and the wall does not notice; stalker/caster `any`) · the stalker is no longer thrown (`recoil` 0) — a hit starts **`evadeS` 1.6s of breaking off**, away from the keeper at its own speed with a per-body sideways jink (a struck pack scatters), then it stalks again; rooted outranks it, the clock still runs · fray stays, no bar. hollows.test → **167** (the evade loop is CAPPED so a never-expiring clock goes red instead of hanging — it hung the mutator once), 6 mutations fire. Sweep **260/260 at `fd36d5a`**, tsc 7, served == disk == public., served == disk == public (positive control `recoil:1.4` in the served bytes). Sweep **260/260 · 0 FAIL · 0 KILLED at `d65ed84`**, tsc 7 (baseline).*
 
 **Alex, after the hitbox fix: *"its passable now the mobs sink down once defeated.. and even have drops.. so the thing i would look into next is how they receive the damage ..for example could they flinch from damage, have health bars, and if you've got any other ideas im all ears."*** Built the flinch and answered the bar with the canon read instead of a bar.
