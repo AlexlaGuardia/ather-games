@@ -11,6 +11,33 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔦 Shimmer — **A ROUND IS ANSWERED: FLINCH, RECOIL, THE SAP INTERRUPTED, THE BODY FRAYS, THE HEAD PAYS** (2026-09-11 evening, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID MM-WJLe3ZVW_KdDvyoORh`, 184 chunks, from `d65ed84`**, served == disk == public (positive control `recoil:1.4` in the served bytes). Sweep **260/260 · 0 FAIL · 0 KILLED at `d65ed84`**, tsc 7 (baseline).*
+
+**Alex, after the hitbox fix: *"its passable now the mobs sink down once defeated.. and even have drops.. so the thing i would look into next is how they receive the damage ..for example could they flinch from damage, have health bars, and if you've got any other ideas im all ears."*** Built the flinch and answered the bar with the canon read instead of a bar.
+
+### What shipped (`d65ed84`)
+- **Flinch.** `hollowHit(st, dx, dz, dmg)` is the one door a round lands through: hp, a flinch armed along the round (ground plane), and the answer. The mesh **buckles 0.16 and tips 0.5 rad toward the round** on the pivot (which nothing else rotates), spending itself over `FLINCH_S` 0.35s; while it is up the body is thrown its **per-form recoil and does not advance** — warden 0.2 (a wall that staggers is not a wall), **stalker 1.4** (thrown off its line: the counter to the form that punishes standing still), caster 0.5. **Rooted outranks the throw** (Shackle is iron) but the flinch still expires.
+- **The caster's sap is interrupted.** A hit restarts its strike clock. Shooting the thing draining you from across the clearing is now the ANSWER to it, not just a slow way to make it stop. The warden's clock is untouched.
+- **Fray = the health read.** No bar: canon has nothing in a Hollow to measure (*"nothing in it to free"*), and the brief's line is *"always visibly losing itself"*. Lost hp turns that up — `fray` (0..1) rides the skin's gutter term (×3.2 at fray 1, measured to still read bipedal), extremities first. A warden at 10 hp is visibly failing to hold its edge. **If it does not read at play distance, the fallback is a crosshair cohesion bar for the AIMED body only, never floating bars over every one.**
+- **The head pays the weapon crit.** `weapons.ts` has carried `crit` ("head-zone damage": spitter 7→11, lance 22→34, repeater 10→16) since the guns were written and nothing read it, because nothing could reach a head. `HEAD_ZONE` = the top 22% of the column; a head hit shows a bigger, longer flash. Cast bolts carry their own damage as crit (a bolt is a place). Fields and burns stay raw hp — a field ticking sixty times a second must not seize the body. **Shard drops only on the round that crossed zero**, never twice.
+
+### Guards
+`voxel3d/hollow-hit.test.ts` (new, **34**): a zero look is BYTE-IDENTICAL to no look (the old pose is untouched) · fray reaches the skin monotonically and a fully frayed body is still a body · the tilt goes toward the round on both axes and is per-frame, not accumulated · wiring (shot site through `hollowHit` with the head crit, gun rounds carry `w.crit`, the mesh is handed fray/flinch every frame, fields never flinch, the shot loop never touches hp directly). `hollows.test` 140 → **157**: head zone, hp, flinch direction, fray, caster interrupt vs warden, **recoil measured at the moment the flinch expires** (a fixed six-step loop read 0.62 of 1.4 — the recoil minus two steps of pursuit, an instrument fact), rooted. **8 mutations fire**, negative control survives.
+
+### Other ideas, not built — Alex's call
+1. **Hit sound.** `hollow-voice.ts` already owns footsteps; a dry crack per hit and a louder tear on a head would carry the read past the flash. Cheap next slice.
+2. **Skin flash.** One frame of the borrowed specular jumping on a hit — the brief's *"glossy beside a tended plot"* used as feedback.
+3. **A stalker hit breaks its stalk** for the flinch: forced `seen` so it withdraws instead of re-closing the instant it lands. Half-built by the recoil; the rest is one line if the throw does not read.
+4. **Crosshair cohesion bar** for the aimed body — only if fray does not read.
+
+### ⛔ ALEX'S CALL
+1. **Shoot a warden nine times and watch it fray; shoot a stalker once and watch it get thrown; aim at a head.** Does the fray read as a health read at fighting distance, or do you want the crosshair bar?
+2. Pick from the four ideas above, or none.
+3. Carried: the roster walk · exclusion-32 night · #1109 · #1111 · #1110 · #1113 · #298 · #301.
+
+### Files
+`voxel3d/hollows.ts` (`recoil`, `flinch*`, `hollowHit`, `hollowFray`, `hollowHitPoint`, `HEAD_ZONE`, `FLINCH_S`, the step's flinch block) · `voxel3d/hollow-mesh.ts` (`HollowHitLook`, the pivot flinch, `deform(…, fray)`) · `voxel3d/VoxelWorld.tsx` (shot record `crit`, shot site, mesh update) · guards `voxel3d/hollow-hit.test.ts` (new), `hollows.test.ts`, `hollow-hitbox.test.ts`
+
 ## 🔦 Shimmer — **"THEY WERE INVINCIBLE": A BODY IS A COLUMN, NOT A MARBLE AT THE FEET** (2026-09-11 afternoon, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID ojMpLAckb0PfBDkwzvPK0`, 184 chunks, from `1dd94b8`** (supersedes `GoAEA8e9W8ZZgoQ08-lEf` / `1a51a23`; `1dd94b8` = **spawn exclusion 24 → 32** on Alex's ask, Tremor Sense radius and the footstep audio range (26 → 34) follow — the mirrored literal in `tremor-sense.ts` went red and tsc caught the literal types, which is the guard working; patrols untouched, they are met on the road by a different rule; sweep 259/259 at `1dd94b8`), served == disk == public on the hollows chunk (positive control `hitHi:1.8` found in the served bytes). Sweep **259/259 · 0 FAIL · 0 KILLED at `1a51a23`**, tsc 7 (baseline).*
 
 **Alex, an hour after the roster shipped: *"i found the mob ..there were like 10-15 of the wardens i think.. but the were invincible.. i tried using the weapon but they took no damage."*** Not the roster. The shot loop tested a round against ONE SPHERE at `st.y` with the form's radius — and `st.y` is the FEET cell, with the mesh drawn UP from it. Measured against the shipped mesh (`createHollowMeshBody`, the one the world spawns): a warden stands 0..1.70 above `st.y` and its 1.15 sphere reached only 1.15 up, so the lower two thirds were hittable and the head was not; **a stalker's centre mass (+0.83) lay OUTSIDE its own 0.62 sphere entirely** — the fast form could be struck only at the knees. Aim at chests, as anyone does, and nothing lands; the only hit tell is a 0.25s flash that never fired. **The foe path fixed this exact shape on 08-16** (*"A BODY IS A COLUMN, NOT A MARBLE"*, the capsule clamp); the Hollow path was written ten days later, as the marble again.
