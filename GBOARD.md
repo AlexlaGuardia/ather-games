@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 💡 Shimmer — **THE LIGHTING PASS: ONE DIAL PAINTED EVERY WALL MAUVE, AND THE SHADER EXISTED TWICE** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID As3kDESXXUwBAti-ZWwG2`, 184 chunks, from `5c9b751`**; the fix is in the served chunks. Sweep at `5c9b751` running at wrap. cartoon-stack **15** (new), light-glsl 30, atlas-wiring, render-audit, ctxlost 17. tsc 7 (baseline).*
+## 💡 Shimmer — **THE LIGHTING PASS: ONE DIAL PAINTED EVERY WALL MAUVE, AND THE SHADER EXISTED TWICE** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID As3kDESXXUwBAti-ZWwG2`, 184 chunks, from `5c9b751`**; the fix is in the served chunks. Sweep at `5c9b751` **264 · 1 FAIL** — the shingle recipe (`milled` 2 < hand 4; a station may not pay less than the hand), fixed in the next commit, not yet deployed. cartoon-stack **15** (new), light-glsl 30, atlas-wiring, render-audit, ctxlost 17. tsc 7 (baseline).*
 
 **Alex: *"yea open the lighting pass."*** The finding from the ruins thread: every vertical face of every material rendered one pale colour. Chased with MEASUREMENTS on one sunlit goldwood wall at 6 blocks, noon, texel (155,118,64) → rendered (139,130,135):
 - **Fog: no** — same colour at 6 and 22 blocks.
