@@ -61,6 +61,10 @@ for (const form of FORM_ORDER) {
   ok(/const \{ dispersed \} = hollowHit\(st, sh\.dx, sh\.dz, hp\.head \? sh\.crit : sh\.dmg, hp\.head\)/.test(src),
      '★★ the shot site lands through hollowHit, the head zone pays the weapon crit, and the body is TOLD it was a head (the warden only reacts to those)')
   ok(/if \(dispersed\) \{/.test(src), 'the shard drops on the round that dispersed it, not on any round into a corpse')
+  ok(/const strike = strikeVoice\(dispersed \? 'disperse' : hp\.head \? 'head' : 'hit', st,/.test(src),
+     '★★ the hit is HEARD: disperse / head / hit chosen from the same facts the damage used')
+  ok(/if \(strike\) playStrikes\(\[strike\]\)/.test(src), 'and handed straight to the shell — never through the footstep budget')
+  ok(/yaw: Math\.atan2\(hollowFwd\.current\.z, hollowFwd\.current\.x\)/.test(src), 'the ear faces where the footsteps say the keeper faces (one answer to "which way")')
   ok(/crit: w\.crit,/.test(src), '★ a gun round carries its weapon\'s crit')
   ok(/dmg: out\.placed\.damage, crit: out\.placed\.damage,/.test(src), 'a cast bolt carries its own damage as its crit (a bolt is a place, not a bullet)')
   ok(/\{ fray: hollowFray\(st\), flinch: st\.flinch, fx: st\.flinchX, fz: st\.flinchZ \}/.test(src),

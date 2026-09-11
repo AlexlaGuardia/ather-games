@@ -5,7 +5,7 @@
 // turn — and telling them which way to turn IS the feature. Alex was hit by something he never
 // saw; a footstep that does not carry a direction only tells him it will happen again.
 
-import { stepVoices, loudness, newVoiceClock, DEFAULT_VOICE as D, type Voice, type Ear, type VoiceClock } from './hollow-voice'
+import { stepVoices, loudness, newVoiceClock, strikeVoice, STRIKE_GAIN, DEFAULT_VOICE as D, type Voice, type Ear, type VoiceClock } from './hollow-voice'
 import { PLAYER_EXCLUSION, PACK_MAX } from './hollows'
 
 let pass = 0
@@ -147,6 +147,32 @@ function run(bodies: Voice[], e: Ear, secs: number, clock: VoiceClock = newVoice
   ok(clock.phase.gone === undefined, '★ a body that walked out of range must drop its phase, or the clock grows forever across a night of spawns')
   ok(stepVoices(newVoiceClock(), [], ear(), 1 / 60).length === 0, 'no bodies, no sound')
   ok(stepVoices(newVoiceClock(), [body()], ear(), 0).length === 0, 'a zero-length frame emits nothing')
+}
+
+// ── ★ A ROUND LANDING, HEARD (2026-09-11) ────────────────────────────────────────────────────
+{
+  const e: Ear = { x: 0, z: 0, yaw: 0 }                       // facing +x
+  const at = (x: number, z: number) => ({ id: 'h', form: 'warden' as const, x, z })
+  const hit = strikeVoice('hit', at(6, 0), e)!, head = strikeVoice('head', at(6, 0), e)!, gone = strikeVoice('disperse', at(6, 0), e)!
+  ok(!!hit && !!head && !!gone, 'a strike six blocks ahead is heard in all three kinds')
+  ok(head.gain > hit.gain, `★ a head is louder than a body hit (${head.gain.toFixed(2)} > ${hit.gain.toFixed(2)})`)
+  ok(gone.gain >= head.gain, `★ a dispersal is the loudest moment (${gone.gain.toFixed(2)})`)
+  ok(hit.kind === 'hit' && head.kind === 'head' && gone.kind === 'disperse', 'each carries its kind to the shell')
+  ok(Math.abs(hit.pan) < 1e-6 && hit.muffle < 1e-6, 'dead ahead: centred and open')
+  const right = strikeVoice('hit', at(0, 6), e)!, left = strikeVoice('hit', at(0, -6), e)!
+  ok(right.pan > 0.9 && left.pan < -0.9, `★ a body to the right pans right (${right.pan.toFixed(2)}), to the left pans left (${left.pan.toFixed(2)})`)
+  const behind = strikeVoice('hit', at(-6, 0), e)!
+  ok(behind.muffle > 0.9, `a body behind is muffled (${behind.muffle.toFixed(2)})`)
+  // Same ear model as the footsteps: a hit and a footstep from one body agree on which side.
+  const steps = stepVoices(newVoiceClock(), [{ id: 'h', form: 'warden', x: 0, z: 6, speed: 2 }], e, 10)
+  ok(steps.length === 0 || Math.sign(steps[0].pan) === Math.sign(right.pan), 'a footstep and a hit from the same body sit on the same side')
+  // Carries further than a footstep (you shot it), floored, then silent.
+  const edge = strikeVoice('hit', at(D.range * 1.9, 0), e)
+  ok(!!edge && edge.gain >= 0.35 * STRIKE_GAIN.hit - 1e-9, `★ a hit near twice the voice range is still marked (${edge?.gain.toFixed(2)}) — a silent hit reads as a miss`)
+  ok(strikeVoice('hit', at(D.range * 2.5, 0), e) === null, 'and past that it is silent')
+  ok(STRIKE_GAIN.head > STRIKE_GAIN.hit && STRIKE_GAIN.disperse >= STRIKE_GAIN.head, 'the gain table orders hit < head ≤ disperse')
+  // Never budgeted: the footstep clock is not touched (no clock is even passed).
+  ok(strikeVoice.length === 3, 'strikeVoice takes no clock — it cannot spend the footstep tokens')
 }
 
 if (fails.length) { console.error(`❌ ${fails.length} failed:`); for (const f of fails) console.error('   · ' + f); process.exit(1) }

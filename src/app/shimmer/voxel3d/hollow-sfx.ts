@@ -27,7 +27,7 @@
 // second would allocate eight buffers a second, forever. The buffer is shared; only the cheap
 // `AudioBufferSourceNode` is per-sound, which is what the API requires.
 
-import type { Emission } from './hollow-voice'
+import type { Emission, StrikeEmission } from './hollow-voice'
 // ★ THE DEVICE IS THE BUS'S NOW (2026-08-27). This file made its own `AudioContext` and its own
 // noise buffer; it was one of four inside Shimmer, and four contexts cannot share an unlock or a
 // volume. What stays here is what was always this module's own: the per-form voices and the node
@@ -122,4 +122,55 @@ export function playEmissions(ems: readonly Emission[]): void {
  * anything that merely wanted footsteps to stop. Use `setHollowVolume(0)` for that; the names are
  * close and the acts are not.
  */
+/**
+ * The strike sounds — synthesised from the same noise bed as the footsteps, no asset:
+ *   hit      a dry TEAR in the form's own band, shorter and higher than its footstep — a piece
+ *            of the shape letting go.
+ *   head     the tear plus a low KNOCK underneath it, so the head reads heavier.
+ *   disperse a longer EXHALE: noise whose lowpass sweeps down as the body lets go of its
+ *            frequency. Canon: you disperse a Hollow, you do not kill it — so no thud, no crunch,
+ *            a sound of something ceasing to hold.
+ * Same ear treatment as a footstep (pan + the front/rear lowpass) so a hit sits where the body is.
+ */
+export function playStrikes(ems: readonly StrikeEmission[]): void {
+  if (ems.length === 0) return
+  const a = audioCtx()
+  const out = bus()
+  if (!a || !out || a.state !== 'running') return
+  try {
+    const buf = noiseBuffer()
+    if (!buf) return
+    const t0 = a.currentTime
+    const layer = (e: StrikeEmission, hz: number, q: number, ms: number, gain: number, sweepTo?: number) => {
+      const dur = ms / 1000
+      const src = a.createBufferSource()
+      src.buffer = buf
+      const off = Math.random() * (buf.duration - dur)
+      const band = a.createBiquadFilter()
+      band.type = sweepTo === undefined ? 'bandpass' : 'lowpass'
+      band.frequency.setValueAtTime(hz, t0)
+      if (sweepTo !== undefined) band.frequency.exponentialRampToValueAtTime(sweepTo, t0 + dur)
+      band.Q.value = q
+      const dark = a.createBiquadFilter()
+      dark.type = 'lowpass'
+      dark.frequency.value = 18000 - e.muffle * 16200
+      const pan = a.createStereoPanner()
+      pan.pan.value = Math.max(-1, Math.min(1, e.pan))
+      const g = a.createGain()
+      g.gain.setValueAtTime(0.0001, t0)
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, e.gain * gain * master), t0 + 0.004)
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
+      src.connect(band); band.connect(dark); dark.connect(pan); pan.connect(g); g.connect(out)
+      src.start(t0, off, dur)
+      src.stop(t0 + dur)
+    }
+    for (const e of ems) {
+      const v = VOICE[e.form]
+      if (e.kind === 'disperse') { layer(e, 2400, 0.7, 340, 0.9, 220); continue }
+      layer(e, v.hz * 1.8, 1.6, 42, 0.9)                     // the tear
+      if (e.kind === 'head') layer(e, 140, 1.0, 95, 1.0)     // the knock under it
+    }
+  } catch { /* audio blocked mid-frame — the world keeps running */ }
+}
+
 export const disposeHollowSfx = (): void => disposeAudio()

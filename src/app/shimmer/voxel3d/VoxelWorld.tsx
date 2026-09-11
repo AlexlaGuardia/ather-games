@@ -187,8 +187,8 @@ import { dayProgress, getPhase, getDisplayTime, isTimePinned, setTimePin } from 
 // ⚠ THIS FILE HAD 138 IMPORTS AND NOT ONE OF THEM WAS AUDIO. play3d has had `gather-fx`/`rin-fx`
 // for months and fourteen other surfaces use `engine/music`, so the site was never silent — the
 // VOXEL WORLD was, specifically and completely.
-import { stepVoices, newVoiceClock, type Voice, type VoiceClock } from './hollow-voice'
-import { playEmissions, unlockHollowSfx } from './hollow-sfx'
+import { stepVoices, strikeVoice, newVoiceClock, type Voice, type VoiceClock } from './hollow-voice'
+import { playEmissions, playStrikes, unlockHollowSfx } from './hollow-sfx'
 import { setMasterVolume } from '../audio/bus'
 import { topSolidNear } from './ground-probe'
 import { type HollowForm,
@@ -7587,6 +7587,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
             // damage" — since the guns were written, and nothing ever read it because nothing could
             // reach a head. The column made the head hittable; this makes it count.
             const { dispersed } = hollowHit(st, sh.dx, sh.dz, hp.head ? sh.crit : sh.dmg, hp.head)
+            // ★ HEARD (2026-09-11): a tear for a body hit, a knock under it for the head, an exhale
+            // for the round that dispersed it. Never budgeted, never dropped — a silent hit is a miss.
+            const strike = strikeVoice(dispersed ? 'disperse' : hp.head ? 'head' : 'hit', st,
+                                       { x: p.x, z: p.z, yaw: Math.atan2(hollowFwd.current.z, hollowFwd.current.x) })
+            if (strike) playStrikes([strike])
             const m = new THREE.Mesh(tracerGeo, tracerMat)
             m.scale.setScalar(hp.head ? 0.28 : 0.16)
             m.position.set(st.x, hp.testY, st.z)

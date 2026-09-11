@@ -135,6 +135,37 @@ export function loudness(dist: number, d: VoiceDials = DEFAULT_VOICE): number {
  * withdraw — a footfall from something that is not walking is the cue lying about what it is doing,
  * and a lying cue is worse than no cue for exactly the reason this whole feature was written.
  */
+/**
+ * ── ★ A ROUND LANDING, HEARD (2026-09-11, the ears half of the damage read) ───────────────────
+ * The pure decision for a strike sound: WHICH sound (`hit` body · `head` the head zone · `disperse`
+ * the round that crossed zero), how loud by distance, and where it sits in the stereo field — the
+ * same ear model the footsteps use, so a hit and the next footstep from the same body agree on
+ * which side it is on. ⚠ NOT budgeted by the footstep tokens and never dropped: a footstep is the
+ * night's own noise and may be thinned; a strike is the KEEPER'S act and must always answer, or a
+ * silent hit reads as a miss — the exact misread the hitbox fix was for.
+ * A head is louder than a body hit, and a dispersal is the loudest — the moment worth marking.
+ */
+export type Strike = 'hit' | 'head' | 'disperse'
+export interface StrikeEmission extends Emission { kind: Strike }
+export const STRIKE_GAIN: Record<Strike, number> = { hit: 0.8, head: 1.0, disperse: 1.0 }
+export function strikeVoice(
+  kind: Strike, body: { id: string; form: Voice['form']; x: number; z: number }, ear: Ear,
+  d: VoiceDials = DEFAULT_VOICE,
+): StrikeEmission | null {
+  const dist = Math.hypot(body.x - ear.x, body.z - ear.z)
+  // A strike carries further than a footstep: you shot it, you hear it. Floor at 0.35 within
+  // twice the voice range so a far dispersal is still marked; silent past that.
+  const raw = loudness(dist, { ...d, range: d.range * 2 })
+  if (raw <= 0) return null
+  const off = offAxis(ear, body.x, body.z)
+  return {
+    id: body.id, form: body.form, kind,
+    gain: Math.min(1, Math.max(0.35, raw) * STRIKE_GAIN[kind]),
+    pan: Math.sin(off),
+    muffle: (1 - Math.cos(off)) / 2,
+  }
+}
+
 export function stepVoices(
   clock: VoiceClock,
   bodies: readonly Voice[],
