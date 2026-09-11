@@ -11,6 +11,25 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔦 Shimmer — **#1113: THE NIGHT IS TICKED TO ONE RADIUS AND DRAWN TO ANOTHER** (2026-09-11 late, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID yCrLD0ykgCCgpfCxQz1hO`, 185 chunks, from `2f56d67`**, served == disk == public. Sweep **261/261 · 0 FAIL · 0 KILLED at `2f56d67`**, tsc 7 (baseline). Row #1113 closed.*
+
+**Alex: *"yea sounds good, go ahead."*** The last structural item on #294 apart from the collar raid. Minecraft 1.18's split, kept with its semantics: **the world is drawn to `viewRadius`; the night is ticked to `simRadius`, and the sim can never exceed the view** — a body cannot stand on ground that is not loaded. ⚠ **So my pitch line was half wrong:** *"a lower draw distance stops meaning a quieter night"* is not what this buys, and cannot be without loading beyond the render ring (a bigger change, and the same one MC declined). What it buys: **a wider view no longer widens the night**, and a phone can draw 6 and tick 4.
+
+### What shipped (`2f56d67`)
+- **`settings.simRadius`** (columns; floor 4 = 64 blocks so the 32-block spawn ring still exists; **default 6 = the old baseline**, so a keeper who never opens settings gets exactly the night they had). `simRadiusOf` clamps to the view radius at read time.
+- **Three consumers moved to the SIM number:** the Hollow cap (fed the sim disc's column count, bounded by what is loaded — `hollowCap(simColumns(6)) === hollowCap(113)`, the number hollows.test pins as "a full load"), the spawn ring's far edge / despawn line, the patrol despawn. **Two must NOT have moved and the guard says so:** the column loader and the eviction ring still read the view radius — the split ticks less, it must not load less.
+- **O panel:** a *sim radius* dial under *view radius*; its label shows the EFFECTIVE (clamped) blocks. **`/hostiles`** now prints the ring it actually spawns in and the cap.
+
+### Guards
+`voxel3d/sim-radius.test.ts` (new, **18**): clamp, floor vs exclusion, default cap unchanged, r=4 carries fewer, r=12 hits the same ceiling, wiring incl. the loader NOT moving. **6 mutations fire** (cap back on loaded count · despawn back on view · patrols at view edge · loader moved to sim · sim unclamped · default changed), negative control survives.
+
+### ⛔ ALEX'S CALL
+1. Nothing to feel at the default. **On the phone:** O panel → sim radius 4 with view 6, and say whether the frame pays less on a night.
+2. Carried: the roster walk · the three hit sounds · #1109 · #1111 · #1110 · #298 · #301 · specular flash on hit · collar raid (#1114, blocked on the quarry layer).
+
+### Files
+`voxel3d/settings.ts` (`simRadius`, `SIM_RADIUS_MIN`, `simRadiusOf`, `simColumns`) · `voxel3d/VoxelWorld.tsx` (cap, despawn, patrol despawn, `/hostiles`, O panel) · `voxel3d/hostile-roster.ts` (readout ring line) · guard `voxel3d/sim-radius.test.ts` (new)
+
 ## 🔦 Shimmer — **THE HIT IS HEARD: A TEAR, A KNOCK UNDER THE HEAD, AN EXHALE FOR THE DISPERSAL** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID azl-dFcEgkq2a2n_ZDinv`, 185 chunks, from `993b442`**, served == disk == public. Sweep **260/260 · 0 FAIL · 0 KILLED at `993b442`**, tsc 7 (baseline).*
 
 **Alex: *"yea that works fine..so whats up next."*** The damage read had its eyes (flinch, fray, the head flash); this is its ears, and it is the last piece of the hit-feedback pass before the structural item.
