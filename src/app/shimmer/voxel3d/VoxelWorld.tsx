@@ -2401,7 +2401,11 @@ export default function VoxelWorld() {
                   onQuick={(r) => { quickRef(r); setCraftTick(v => v + 1) }}
                   onClose={closeBag} tools={tools} skills={skills} party={party}
                   onParty={() => { writeParty(); setCraftTick(v => v + 1) }}
-                  onLetters={() => { refreshHotbar(); setCraftTick(v => v + 1) }} />
+                  // ★ AND THE WORLD RE-RESOLVES (2026-09-11, found driving the real save): an equip from Gear
+                  // showed Forked Bolt on the panel's cast bar while the HUD's Z box stayed EMPTY until a
+                  // reload — `loadoutRes` is rebuilt on `runeTick`, and this callback bumped only the panel.
+                  // The Passage's onChange (above) already did all three; this one now matches it.
+                  onLetters={() => { refreshHotbar(); setCraftTick(v => v + 1); setRuneTick(t => t + 1) }} />
       )}
       {/* The map — minimap always up, M expands it. Hidden while another cursor surface owns the
           screen, so it never sits on top of the bag or the craft grid. */}
