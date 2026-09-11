@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🏚 Shimmer — **"MORE LIKE RUINS THAN A BUILDING": LOOKED, FOUND THREE CAUSES, FIXED TWO, NAMED THE THIRD** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID r5guqSxEBWPk6I83QRblc`, 184 chunks, from `98f47ae`**; served worker carries hazel v2. Sweep at `98f47ae` running at wrap. tsc 7 (baseline).*
+## 🏚 Shimmer — **"MORE LIKE RUINS THAN A BUILDING": LOOKED, FOUND THREE CAUSES, FIXED TWO, NAMED THE THIRD** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID r5guqSxEBWPk6I83QRblc`, 184 chunks, from `98f47ae`**; served worker carries hazel v2. Sweep at `98f47ae` **263/263 · 0 FAIL · 0 KILLED**. tsc 7 (baseline).*
 
 **Alex: *"from what ive seen its looking more like ruins than a building tbh.. are you able to use the dev pages to view it yourself?"*** Yes — `tools/devwin.sh play` + `world-shot` (eye level, yard side, rear, three-quarter) and the code behind each read. Three causes, in order of weight:
 
