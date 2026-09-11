@@ -11,7 +11,31 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🏰 Shimmer — **THE GATE STATION IS A GATEHOUSE: CROWN, STRING COURSES, SLITS, KEYSTONES, A KERB** (2026-09-11 night, world lane — an agent under hub `be4e612f`) · *Last touched 2026-09-11 — committed `ad3589a`, pushed, **deploy pending** (one build with the editor pass `404ea7c` and Alex's ring). crossings **4001 → 5278**, court-wiring 31, court-preview **19 → 25**, 6 mutations fire. tsc 7 (baseline).*
+## 💡 Shimmer — **THE LIGHTING PASS: ONE DIAL PAINTED EVERY WALL MAUVE, AND THE SHADER EXISTED TWICE** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID As3kDESXXUwBAti-ZWwG2`, 184 chunks, from `5c9b751`**; the fix is in the served chunks. Sweep at `5c9b751` running at wrap. cartoon-stack **15** (new), light-glsl 30, atlas-wiring, render-audit, ctxlost 17. tsc 7 (baseline).*
+
+**Alex: *"yea open the lighting pass."*** The finding from the ruins thread: every vertical face of every material rendered one pale colour. Chased with MEASUREMENTS on one sunlit goldwood wall at 6 blocks, noon, texel (155,118,64) → rendered (139,130,135):
+- **Fog: no** — same colour at 6 and 22 blocks.
+- **Hemisphere / ambient / sun: no** — three palette variants (hemi 1.5 → 0.6/0.9, neutral-warm sky, warm sun 2.0) moved it by single digits. ⚠ My "overexposed" claim from the ruins block was WRONG; the light rig was never the driver.
+- **Render style `natural`: YES** — (119,91,46), wood. So: the cartoon stack, which is the default style.
+- **Bisect its four dials:** toon / outline / faceShading move it by single digits; **shadowLift 0 → (88,61,26).** One dial, the whole cast.
+
+### The cause
+Step 3 of the stack, *"lift and tint the shadows"*, ADDED a flat blue-grey `(0.22,0.26,0.38) × uShadowLift` to every face that was not fully lit — the same amount whatever the face was made of — and read *how lit* off the LIT PIXEL's luminance, so a dark or warm material in full sun scored as shadow and got the biggest add. Tan planks → mauve, dark shingles → lavender, pale stone barely touched, bright grass tops not at all. **Pieces never pass through this shader**, which is how the fence beside the wall stayed brown and gave it away.
+
+### The fix (`5c9b751`, both copies)
+Luminance is IRRADIANCE (lit ÷ albedo); the cooling is a TINT of the base; the residual lift is scaled by the material's own luminance so caves still never read black. After: wall **(141,115,89)**, rear wall (140,114,88), shingle gable (43,35,37), cut-stone footing (130,138,149), grass (99,163,71), night wall (111,97,93). Six views shot day and night; the lanterns still carry the night.
+
+### ★★ THE STACK EXISTS TWICE
+`mesh-bridge.ts` (`createVoxelMaterial`, the UNTEXTURED fallback) was patched first, measured **"no change"** on the live wall — and only then was `tex/atlas.ts`'s copy found (`createTexturedVoxelMaterial`, the one the world renders with). The hand-kept-mirror shape, in a shader. **`cartoon-stack.test.ts`** reads both files, holds the six load-bearing lines identical after renaming the local variables, and refuses the old flat add in either; mutation (old add restored in atlas) fires 2. **Extracting the stack into one module is the follow-up** — the guard is the tourniquet.
+
+### ⛔ ALEX'S CALL
+1. Walk it on prod: wood reads as wood now. Is the grass too saturated (99,163,71)? Are the shingles too dark? Both are one number each.
+2. Carried: the gatehouse read (same deploy) · Hazel v3 · the five trades · R5 sign · Beat 0.
+
+### Files
+`voxel3d/tex/atlas.ts` (the live stack) · `voxel3d/mesh-bridge.ts` (the fallback) · `voxel3d/cartoon-stack.test.ts` (new) · pictures `scratchpad/dist-6.png` → `G-dist6.png`, `G-{front,rear,east,night,road}.png`, the bisect `E-E1..E6.png`
+
+## 🏰 Shimmer — **THE GATE STATION IS A GATEHOUSE: CROWN, STRING COURSES, SLITS, KEYSTONES, A KERB** (2026-09-11 night, world lane — an agent under hub `be4e612f`) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID As3kDESXXUwBAti-ZWwG2` from `5c9b751`** (one build with the editor pass, Alex's ring and the lighting fix). crossings **4001 → 5278**, court-wiring 31, court-preview **19 → 25**, 6 mutations fire. tsc 7 (baseline).*
 
 **Alex: *"plus the home plot gate station.. thats in desperate need of fixing… feel free to use your agents."*** Photographed at tier 1 from 40 blocks first (`court-t1-40.png`): one material top to bottom, three abrupt telescoping steps ending in a flat cut, a sawtooth dais edge, plain 2-deep trilithons. Handed to a general-purpose agent with the module, its three guards, the picture and the constraints (pure math, no new `setVoxel` site, every laid cell sweepable, `courtFits` green, Alex's dials untouched, height derived as before). It iterated with pictures on the world lane's dev port.
 
@@ -36,7 +60,7 @@ the Arcade frame.
 ### Files
 `voxel3d/crossings.ts` · `voxel3d/crossings.test.ts` · `voxel3d/court-wiring.test.ts` · `dev/court/court-preview.test.ts` · pictures `scratchpad/court-agent-{0,1,2}-*.png`
 
-## 🧰 Shimmer — **POPULATING THE EDITOR: THE POST, THE SHINGLES, AND SINK GUESSED FROM THE FLOOR** (2026-09-11 night, hub lane, in parallel with the gate-station agent) · *Last touched 2026-09-11 — committed `404ea7c`, **deploy pending** (ships with the court pass in one build). tsc 7 (baseline).*
+## 🧰 Shimmer — **POPULATING THE EDITOR: THE POST, THE SHINGLES, AND SINK GUESSED FROM THE FLOOR** (2026-09-11 night, hub lane, in parallel with the gate-station agent) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID As3kDESXXUwBAti-ZWwG2` from `5c9b751`** (with the gatehouse, the ring and the lighting fix). tsc 7 (baseline).*
 
 **Alex: *"what other structure types we'll need to go ahead and populate the editor"* · *"is it necessary for it to be elevated one block up or could it be flush with the ground?"* · *"your lead lets do it… work on the editor page in parallel."***
 
