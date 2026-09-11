@@ -19,7 +19,7 @@ import sparringRing from './sparring_ring.json'
 import hazelCarpentry from './hazel_carpentry.json'
 
 export const PLACED_STAMPS: readonly Stamp[] = [
-  { id: 'glade-sparring-ring', bp: sparringRing as BlueprintDef, x: -148, z: -637, rot: 0, sink: 1 },
+  { id: 'glade-sparring-ring', bp: sparringRing as BlueprintDef, x: -143, z: -639, rot: 0, sink: 1 },
   // Hazel's carpentry (scripts/blueprint-hazel.mts) — the first Moonwell trade building, on the pad
   // south-west of spawn with its open front toward the spawn column. ⚠ PROVISIONAL: the glade's
   // layout (where the five trades stand) is a map-placement call, which is Alex's.

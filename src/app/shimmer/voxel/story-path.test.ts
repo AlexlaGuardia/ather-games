@@ -1,7 +1,10 @@
 // The story spine's contract: Alex's distances hold, the road exists exactly along the spine,
 // and the waystones stand beside it with lantern caps. Run: npx tsx src/app/shimmer/voxel/story-path.test.ts
 
-import { STORY_NODES, distToPath, roadAt, WAYSTONE_CELLS, plantWaystones } from './story-path'
+import { STORY_NODES, APPROACH_NODES, PATH_LEGS, distToPath, roadAt, WAYSTONE_CELLS, plantWaystones } from './story-path'
+import { passageApproach } from './bubble'
+import { WILDS_BUBBLE } from './column'
+import { DEFAULT_DEPTH } from './depth'
 import { Section } from './section'
 import { columnHeight, waterSurfaceAt, riverCarve } from './height'
 import { materialAt, MAT } from './depth'
@@ -17,6 +20,26 @@ const hop = (i: number) => Math.hypot(STORY_NODES[i + 1].x - STORY_NODES[i].x, S
 check('glade → village is ~500 (Alex ruling)', Math.abs(hop(0) - 500) < 40)
 for (let i = 1; i < 4; i++) check(`hold hop ${i} is 750–1200 (Alex ruling)`, hop(i) > 700 && hop(i) < 1260)
 check('the spine starts at the glade spawn', STORY_NODES[0].x === -150 && STORY_NODES[0].z === -640)
+{
+  // ── the approach leg: the fold's door → the glade (2026-09-11) ──
+  const door = APPROACH_NODES[0]
+  const real = passageApproach(SEED, WILDS_BUBBLE)
+  check(`★ the pinned door matches passageApproach(WORLD_SEED) within 2 blocks (pinned ${door.x},${door.z}; real ${real.x},${real.z})`,
+    Math.hypot(door.x - real.x, door.z - real.z) <= 2)
+  check('the approach ends where the spine begins (same object, not a copy)', APPROACH_NODES[APPROACH_NODES.length - 1] === STORY_NODES[0])
+  check('the spine is the LAST leg, so nothing indexing it moved', PATH_LEGS[PATH_LEGS.length - 1] === STORY_NODES)
+  check('the road runs through the door', roadAt(door.x, door.z, SEED))
+  check('and halfway along the approach', roadAt(Math.round((door.x + STORY_NODES[0].x) / 2), Math.round((door.z + STORY_NODES[0].z) / 2), SEED))
+  let wet = 0
+  for (let t = 0; t <= 1; t += 0.01) {
+    const x = Math.round(door.x + (STORY_NODES[0].x - door.x) * t), z = Math.round(door.z + (STORY_NODES[0].z - door.z) * t)
+    if (columnHeight(x, z, SEED) <= DEFAULT_DEPTH.seaLevel) wet++
+  }
+  check('the approach is dry end to end (it has no bridges, so it must be)', wet === 0)
+  let nearDoor = false
+  for (const k of WAYSTONE_CELLS) { const [x, z] = k.split(',').map(Number); if (Math.hypot(x - door.x, z - door.z) <= 12) nearDoor = true }
+  check('a lit post stands within sight of the door', nearDoor)
+}
 
 // ── the road is where the spine is, and nowhere else ──────────────────────────────────────────
 for (const n of STORY_NODES) check(`road runs through ${n.id}`, roadAt(n.x, n.z, SEED))

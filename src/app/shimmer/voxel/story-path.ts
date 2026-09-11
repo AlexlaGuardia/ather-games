@@ -54,6 +54,34 @@ export const STORY_NODES: StoryNode[] = [
 ]
 
 /** Road half-width in blocks, before the edge wobble. A path, not a highway. */
+/**
+ * ── ★ THE APPROACH: FROM THE FOLD'S DOOR TO THE GLADE (2026-09-11) ─────────────────────────────
+ * Alex: *"before i can walk the glade i need a way to reach it."* Leaving the plot with no waymark
+ * planted lands a keeper at `passageApproach` — the door of their own fold, 122 blocks from the
+ * glade on untended ground with nothing pointing anywhere. The court's passage sockets stay dark
+ * until a waymark is planted OUT THERE, so the first walk is on foot and the world has to say which
+ * way. This leg is that: a worn road with lit posts from the door to the spine's first node.
+ *
+ * ⚠ A SECOND POLYLINE, NOT A NODE PREPENDED TO THE SPINE. `holds.ts` reads `STORY_NODES[2,3,4]` by
+ * index and `bridges.ts` names its crossings `${node.id}-${i}`; a node in front of the glade would
+ * shift every hold and rename every bridge. The spine is untouched; `distToPath` and the waystone
+ * derivation walk every leg in `PATH_LEGS`.
+ *
+ * ★ THE DOOR IS PINNED HERE AND ASSERTED AGAINST THE GENERATOR THAT OWNS IT. This file may not
+ * import the bubble (depth → story-path → column would be a cycle), so the coordinate is written
+ * down — and `story-path.test.ts` compares it to `passageApproach(WORLD_SEED, WILDS_BUBBLE)`, the
+ * crossings lesson: a derived placement outlives its reason unless something checks it every run.
+ */
+export const APPROACH_NODES: StoryNode[] = [
+  { id: 'fold-door', x: -123, z: -521 },          // passageApproach(1337, WILDS_BUBBLE) — asserted
+  STORY_NODES[0],                                  // the glade: the spine picks up here
+]
+/** Every polyline the road wears. The spine is last so nothing that indexes it changes. */
+export const PATH_LEGS: readonly (readonly StoryNode[])[] = [APPROACH_NODES, STORY_NODES]
+/** Posts on the approach stand closer: a keeper stepping out at night needs the first light in sight. */
+const APPROACH_EVERY = 40
+const APPROACH_FIRST = 6
+
 const ROAD_HALF = 2.2
 /** Edge wobble amplitude — the road is worn by feet, not surveyed. */
 const ROAD_WOBBLE = 1.4
@@ -72,10 +100,12 @@ function segDist2(px: number, pz: number, ax: number, az: number, bx: number, bz
 /** Distance from (x,z) to the spine polyline, in blocks. */
 export function distToPath(x: number, z: number): number {
   let best = Infinity
-  for (let i = 0; i < STORY_NODES.length - 1; i++) {
-    const a = STORY_NODES[i], b = STORY_NODES[i + 1]
-    const d2 = segDist2(x, z, a.x, a.z, b.x, b.z)
-    if (d2 < best) best = d2
+  for (const leg of PATH_LEGS) {
+    for (let i = 0; i < leg.length - 1; i++) {
+      const a = leg[i], b = leg[i + 1]
+      const d2 = segDist2(x, z, a.x, a.z, b.x, b.z)
+      if (d2 < best) best = d2
+    }
   }
   return Math.sqrt(best)
 }
@@ -97,20 +127,25 @@ export function roadAt(x: number, z: number, seed: number): boolean {
  */
 export const WAYSTONE_CELLS: ReadonlySet<string> = (() => {
   const cells = new Set<string>()
-  let carry = 0
   let side = 1
-  for (let i = 0; i < STORY_NODES.length - 1; i++) {
-    const a = STORY_NODES[i], b = STORY_NODES[i + 1]
-    const dx = b.x - a.x, dz = b.z - a.z
-    const len = Math.hypot(dx, dz)
-    const ux = dx / len, uz = dz / len
-    for (let t = carry === 0 ? WAYSTONE_EVERY : carry; t < len; t += WAYSTONE_EVERY) {
-      // Perpendicular offset, alternating sides — a post IN the road is a post you walk into.
-      const off = WAYSTONE_OFFSET * side
-      side = -side
-      cells.add(`${Math.floor(a.x + ux * t - uz * off)},${Math.floor(a.z + uz * t + ux * off)}`)
+  for (const leg of PATH_LEGS) {
+    const approach = leg === APPROACH_NODES
+    const every = approach ? APPROACH_EVERY : WAYSTONE_EVERY
+    let carry = 0
+    for (let i = 0; i < leg.length - 1; i++) {
+      const a = leg[i], b = leg[i + 1]
+      const dx = b.x - a.x, dz = b.z - a.z
+      const len = Math.hypot(dx, dz)
+      const ux = dx / len, uz = dz / len
+      const first = approach ? APPROACH_FIRST : every
+      for (let t = carry === 0 ? first : carry; t < len; t += every) {
+        // Perpendicular offset, alternating sides — a post IN the road is a post you walk into.
+        const off = WAYSTONE_OFFSET * side
+        side = -side
+        cells.add(`${Math.floor(a.x + ux * t - uz * off)},${Math.floor(a.z + uz * t + ux * off)}`)
+      }
+      carry = 0   // node-to-node drift of a few blocks is fine; posts are mood, not measurement
     }
-    carry = 0   // node-to-node drift of a few blocks is fine; posts are mood, not measurement
   }
   return cells
 })()
