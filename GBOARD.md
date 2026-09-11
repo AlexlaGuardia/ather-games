@@ -11,6 +11,31 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🧱 Shimmer — **THE WORKTABLE PLACES ITS OWN BUILDINGS: "PLACE IN WORLD"** (2026-09-11 late, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID CIdZwPbWJc925cacek6zO`, 184 chunks, from `cfcec9f`**; route 403 without the cookie on the tunnel, served worker 200. Sweep at `cfcec9f` running at wrap. tsc 7 (baseline).*
+
+**Alex: *"could we have a page where i can freely use any block to build it myself.. owner gated.. a dropdown to choose the structure and build"* → it existed (`/shimmer/dev/worktable`, owner-gated, every placeable block + the 15 pieces, load/save). What it lacked: making a saved file STAND somewhere took a row in code. *"yea add the place in world button."***
+
+### What shipped (`cfcec9f`)
+- **The table is data now: `data/blueprints/placed.table.json`** (id, blueprint, x, z, rot, sink). Named with a dot on purpose — `SAFE_BLUEPRINT_ID` forbids dots, so no saved building can be written over the table, and both listers skip a file the id rule cannot name (⚠ the first cut listed it as a *"(broken)"* blueprint; caught driving the route).
+- **`index.generated.ts`** — every `*.json` as one importable module, written by `gen-index.ts` at prebuild (BEFORE the worker bundle that imports it) and by both save routes on every write. `placed.ts` resolves rows against it; an unresolved row is dropped there and refused by the guard.
+- **`voxel/placement.ts` (pure):** `placementProblems` (shape) + `placementSiteProblems` (ground: pad span ≤ 1, the story road, water, Greg, the spawn column) — the route, the button and the guard judge through the same two functions.
+- **`/shimmer/save-placement`** GET / PUT / DELETE, owner-gated by name. **Driven on the play lane:** a fractional x + rot 7 + ghost blueprint → three sentences; a row on the glade spawn → *"on the story road · on the spawn column · on Greg"*; a good row wrote, listed, deleted; no cookie → 403; the table byte-identical after.
+- **The panel** under SAVED STRUCTURES: x, z, rot, sink, an id, **place in world**, the current rows with ×. ⚠ **It says "live at the next deploy"** on the button, in the status and in the response — both the worker bundle and the host import the table at build time, exactly as a saved blueprint is on disk but not in the game until `coord build`. *"I placed it and nothing happened"* would otherwise be the first bug.
+- Dev-lane only: a write under `src/` makes `next dev` recompile and the first read in that window answers HTML; the panel's refresh retries once. `next start` has no watcher.
+
+### Guards
+`voxel/placement.test.ts` (new, **24**: shape, ground with reasons, and the wiring read at the source — the page PUTs to the route, the route exports the verbs and judges through both functions, save-blueprint regenerates the index, prebuild regenerates it before the worker, the gate still covers `save-*`) · `placed.test` 22 → **27** (index == directory, every row valid, every row resolves) · blueprints 93 · purity 602.
+
+### ★ HOW ALEX USES IT
+`ather.games/shimmer/dev/worktable` → build (or load Hazel / the ring) → **save** with an id → type x, z (`/pos` in the game prints where you stand; x/z are the box's min corner, the building extends +x/+z from there), rot, sink (1 if the bottom layer is a floor at grade) → **place in world** → the row lists below. It stands after the next `coord build` (say "deploy" and hub ships it).
+
+### ⛔ ALEX'S CALL
+1. Try it: place the ring somewhere else, say deploy, walk to it.
+2. Still open from tonight: the wall light (rule it) · does Hazel v2 read as a building · the reach list (R1 post, R2 roof block, R5 sign) · the five trades' placement · Beat 0.
+
+### Files
+`voxel/placement.ts` (+test) · `data/blueprints/placed.table.json` · `data/blueprints/gen-index.ts` · `data/blueprints/index.generated.ts` · `data/blueprints/placed.ts` · `save-placement/route.ts` (new) · `save-blueprint/route.ts` (index + lister rule) · `dev/worktable/page.tsx` · `scripts/gen-blueprints.mts` · `package.json` (prebuild, `gen:blueprints`)
+
 ## 🏚 Shimmer — **"MORE LIKE RUINS THAN A BUILDING": LOOKED, FOUND THREE CAUSES, FIXED TWO, NAMED THE THIRD** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID r5guqSxEBWPk6I83QRblc`, 184 chunks, from `98f47ae`**; served worker carries hazel v2. Sweep at `98f47ae` **263/263 · 0 FAIL · 0 KILLED**. tsc 7 (baseline).*
 
 **Alex: *"from what ive seen its looking more like ruins than a building tbh.. are you able to use the dev pages to view it yourself?"*** Yes — `tools/devwin.sh play` + `world-shot` (eye level, yard side, rear, three-quarter) and the code behind each read. Three causes, in order of weight:
