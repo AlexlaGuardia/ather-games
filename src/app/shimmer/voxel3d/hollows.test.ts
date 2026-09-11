@@ -5,6 +5,7 @@
 // the ruling names explicitly. The rest pins behaviour a playtest would misread as vibes: the
 // drift is slower than a runner, the gun can actually hit one, dawn always wins.
 
+import { hollowHitDist, hollowHitCentreY } from './hollows'
 import { hollowEligible, hollowStep, segmentDist, hollowCap, packSize, packWalk, hollowNight,
          HOLLOW_SPEED, HOLLOW_HOVER, HOLLOW_STEP_UP, PACK_MAX, PACK_STEP, NIGHT_SKY_MAX, GUTTER_SKY,
          HOLLOW_FORMS, FORM_ORDER, pickForm, pushOutOfBodies, hollowTouching,
@@ -119,6 +120,36 @@ const SEED = 1337
   ok(segmentDist(0, 0, 0, 1, 0, 0, 10, 5, 0.5, 0) < 0.6, 'a round passing close registers')
   ok(segmentDist(0, 0, 0, 1, 0, 0, 10, 20, 0, 0) > 9, 'a body beyond the segment does not')
   ok(segmentDist(0, 0, 0, 1, 0, 0, 0.9, 5, 0, 0) > 4, 'a short segment cannot hit a distant body — no tunnelling in reverse')
+
+  // ── ★★ A BODY IS A COLUMN, NOT A MARBLE (2026-09-11, "they were invincible") ─────────────────
+  // The keeper's eye is 1.62 above her feet; a Hollow's `st.y` is its feet cell (+hover). A LEVEL
+  // shot from eye height at a walker used to be measured against a sphere at the FEET.
+  {
+    const mk = (form: HollowForm, d: number): HollowState =>
+      ({ id: 'h', x: d, y: 1 + HOLLOW_FORMS[form].hover, z: 0, form, hp: 1, gutter: 0, phase: 0 })
+    const level = (st: HollowState) => hollowHitDist(0, 1.62, 0, 1, 0, 0, 100, st)
+    for (const form of FORM_ORDER) for (const d of [2, 4, 8, 16]) {
+      const st = mk(form, d)
+      ok(level(st) < HOLLOW_FORMS[form].radius, `★★ a level eye-height shot at a ${form} ${d} blocks off HITS (${level(st).toFixed(2)})`)
+    }
+    // The bug, kept as a negative baseline: the old marble MISSES a stalker's centre mass.
+    const stalker = mk('stalker', 6)
+    const marble = segmentDist(0, 1.62, 0, 1, 0, 0, 100, stalker.x, stalker.y, stalker.z)
+    ok(marble > HOLLOW_FORMS.stalker.radius, `the old one-sphere test missed that same stalker (${marble.toFixed(2)} > ${HOLLOW_FORMS.stalker.radius}) — this is the bug`)
+    // Head and feet both count; a hand above the head does not.
+    const w = mk('warden', 5)
+    const at = (y: number) => hollowHitDist(0, y, 0, 1, 0, 0, 100, w)
+    ok(at(w.y + HOLLOW_FORMS.warden.hitHi - 0.05) < 1.15, 'a shot at the crown of the warden hits')
+    ok(at(w.y + 0.05) < 1.15, 'a shot at the warden\'s feet hits')
+    ok(at(w.y + HOLLOW_FORMS.warden.hitHi + 1.15 + 0.3) > 1.15, 'a shot a body-radius above the head misses')
+    // Gutter sinks the column exactly as the mesh sinks.
+    const sunk = { ...w, gutter: 0.8 }
+    ok(hollowHitDist(0, sunk.y - 0.72 + 0.05, 0, 1, 0, 0, 100, sunk) < 0.1, 'a guttering body\'s feet have sunk 0.72 and the column went with them')
+    ok(Math.abs(hollowHitCentreY(sunk) - (sunk.y + 0.9 - 0.72)) < 1e-9, 'the hit flash sits mid-column, gutter-sunk')
+    // Every form declares a span that stands ON the feet for walkers and brackets the float.
+    for (const f of FORM_ORDER) ok(HOLLOW_FORMS[f].hitHi > HOLLOW_FORMS[f].hitLo + 1, `${f}: the column is at least a block tall`)
+    ok(HOLLOW_FORMS.warden.hitLo === 0 && HOLLOW_FORMS.stalker.hitLo === 0, 'walkers stand on their feet cell')
+  }
 }
 
 // ── ★ THE THREE FORMS — a triangle, not one enemy with three healthbars ─────────────────────

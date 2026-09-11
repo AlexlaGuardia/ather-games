@@ -197,7 +197,8 @@ import { type HollowForm,
          SPAWN_CYCLE_S, PLAYER_EXCLUSION, GUTTER_SKY, hollowTouching, DRAIN_TIME,
          pickSpawnY, hollowFoots, hollowGutters, NIGHT_SKY_MAX, hollowFieldFloor,
          HOLLOW_GROUND_UP, HOLLOW_GROUND_DOWN,
-         HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike, HOLLOW_GREY_MIN } from './hollows'
+         HOLLOW_FORMS, pickForm, formOf, pushOutOfBodies, hollowStrike, HOLLOW_GREY_MIN,
+         hollowHitDist, hollowHitCentreY } from './hollows'
 import { groundAt, hostileRosterFor, hostileReadout } from './hostile-roster'
 // The light field (port step 4's other half) — computed here, consumed by the spawn cycle only.
 // Per light.ts's header this deliberately never touches a mesh.
@@ -7573,11 +7574,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         for (const hw of hollows.current) {
           const st = hw.st
           if (st.hp <= 0 || st.gutter >= 1) continue
-          if (segmentDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, st.x, st.y, st.z) < formOf(st).radius) {
+          // ★★ AGAINST THE COLUMN, NOT A MARBLE AT THE FEET (2026-09-11). `hollowHitDist` clamps the
+          // round into the form's drawn span (`hitLo..hitHi` above `st.y`) before measuring, the
+          // same capsule the foe path below has used since 08-16. The old one-sphere test sat at
+          // `st.y` — the feet — so a chest shot at a stalker sailed through and fifteen wardens
+          // read as invincible. What you see is what you can hit.
+          if (hollowHitDist(sh.x, sh.y, sh.z, sh.dx, sh.dy, sh.dz, step, st) < formOf(st).radius) {
             st.hp -= sh.dmg
             const m = new THREE.Mesh(tracerGeo, tracerMat)
             m.scale.setScalar(0.16)
-            m.position.set(st.x, st.y, st.z)
+            m.position.set(st.x, hollowHitCentreY(st), st.z)
             g.add(m); impacts.current.push({ mesh: m, life: 0.25 })
             if (st.hp <= 0) {
               // Dispersed — frequency returns to a place that had none, and a little of it

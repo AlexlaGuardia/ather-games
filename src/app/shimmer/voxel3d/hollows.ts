@@ -172,6 +172,20 @@ export interface HollowFormDef {
   speed: number
   /** Projectile hit sphere. */
   radius: number
+  /**
+   * ── ★★ A BODY IS A COLUMN, NOT A MARBLE (2026-09-11, Alex: "they were invincible") ──────────
+   * The drawn body's vertical span RELATIVE TO `st.y` (the feet cell for a walker; `hover` above it
+   * for the caster). A round is tested against the nearest point of this column, not against one
+   * sphere at `st.y` — which sat at the FEET with the body drawn UP from it, so a warden could be
+   * struck only across its lower two thirds and a stalker's centre mass (+0.83) lay OUTSIDE its own
+   * 0.62 sphere. Alex met fifteen wardens, aimed at their chests, and nothing landed. The foe path
+   * fixed this exact shape on 08-16; this path was written ten days later as the marble again.
+   * ⚠ Bracketed against the real mesh from BOTH sides in `hollow-hitbox.test.ts` — a span fitted
+   * loosely would make every form a barn door, a span fitted tight would go stale on the next
+   * rig pass.
+   */
+  hitLo: number
+  hitHi: number
   /** How close it has to be to drain. The caster's is long — that IS its form. */
   reach: number
   /** ★ Solid half-width. A warden you can walk through is not a guard, it is scenery — this is
@@ -296,18 +310,18 @@ export const HOLLOW_FORMS: Record<HollowForm, HollowFormDef> = {
   // The wall. Slow enough to walk around, solid enough that you must, and the heaviest drain —
   // so going THROUGH it is a real cost rather than a formality.
   warden:  { hp: 60, speed: 2.0, radius: 1.15, reach: 1.25, body: 0.85, hover: 0, drain: 3.4, standoff: 0,   weight: 3,
-             attack: 'press',  damage: 9, sap: 0,  strikeCd: 1.6 },
+             attack: 'press',  damage: 9, sap: 0,  strikeCd: 1.6, hitLo: 0, hitHi: 1.8 },
   // The pressure. Frail, fast, small. It is the reason you cannot stand still and mine while a
   // pack is out, which is the habit the night is supposed to break.
   // ★ The heaviest single hit in the game, and it is not a balance whim: a strike you can ALWAYS
   // deny by turning around has to be worth denying. A gentle ambush teaches nobody to look behind.
   stalker: { hp: 18, speed: 3.9, radius: 0.62, reach: 0.80, body: 0.34, hover: 0, drain: 0,   standoff: 0,   weight: 4,
-             attack: 'ambush', damage: 14, sap: 0,  strikeCd: 2.2 },
+             attack: 'ambush', damage: 14, sap: 0,  strikeCd: 2.2, hitLo: 0, hitHi: 1.75 },
   // The reason to move. It never closes and it barely has a body — it drains from across the
   // clearing, so a keeper who solves the other two by backing away has solved nothing.
   // ★ The ONLY form that floats — and the only one a wall cannot answer. That pairing is the point.
   caster:  { hp: 14, speed: 1.5, radius: 0.70, reach: 7.5,  body: 0,    hover: HOLLOW_HOVER, drain: 0,   standoff: 6.5, weight: 2,
-             attack: 'sap',    damage: 0,  sap: 11, strikeCd: 2.8 },
+             attack: 'sap',    damage: 0,  sap: 11, strikeCd: 2.8, hitLo: -0.2, hitHi: 1.45 },
 }
 
 export const formOf = (h: HollowState): HollowFormDef => HOLLOW_FORMS[h.form]
@@ -813,6 +827,30 @@ export function segmentDist(
   const t = Math.max(0, Math.min(len, (px - ax) * dx + (py - ay) * dy + (pz - az) * dz))
   const qx = ax + dx * t, qy = ay + dy * t, qz = az + dz * t
   return Math.hypot(px - qx, py - qy, pz - qz)
+}
+
+/**
+ * ★★ How close a round's step passes to a Hollow's BODY — the column `hitLo..hitHi` above `st.y`,
+ * sunk with the gutter exactly as the mesh is drawn (`st.y - hover - gutter·0.9 + local`). The
+ * round's own height is clamped into the span first, the same capsule trick the foe path uses, so
+ * the test point is the part of the body the round could actually have struck. Compare to
+ * `formOf(st).radius`. See `HollowFormDef.hitLo` for the bug this replaces.
+ */
+export function hollowHitDist(
+  ax: number, ay: number, az: number, dx: number, dy: number, dz: number, len: number,
+  st: HollowState,
+): number {
+  const f = formOf(st)
+  const sink = st.gutter * 0.9
+  const lo = st.y + f.hitLo - sink, hi = st.y + f.hitHi - sink
+  const testY = Math.min(Math.max(ay, lo), hi)
+  return segmentDist(ax, ay, az, dx, dy, dz, len, st.x, testY, st.z)
+}
+
+/** Where a hit on this body is shown: the middle of its drawn column, gutter-sunk like the mesh. */
+export function hollowHitCentreY(st: HollowState): number {
+  const f = formOf(st)
+  return st.y + (f.hitLo + f.hitHi) / 2 - st.gutter * 0.9
 }
 
 /**
