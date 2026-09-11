@@ -39,6 +39,7 @@ import { plantTrees, type TreeConfig, DEFAULT_TREES } from './trees'
 import { plantBoulders, type BoulderConfig, DEFAULT_BOULDERS } from './boulders'
 import { digDens, digAdits, type DenConfig, type AditConfig, DEFAULT_DENS, DEFAULT_ADITS } from './dens'
 import { placeSites } from './sites'
+import { placeStamps, type Stamp } from './stamps'
 import { slumpMask } from './slump'
 import { plantMaterialAt } from './flora'
 import { biomeAt, DEFAULT_BIOME } from './biome'
@@ -74,6 +75,12 @@ export interface ColumnConfig {
   boulders: BoulderConfig
   dens: DenConfig
   adits: AditConfig
+  /**
+   * Authored buildings standing at fixed places (`stamps.ts`). EMPTY by default: the table of what
+   * stands where lives with the blueprints (`data/blueprints/placed.ts`), outside the core, and the
+   * worker hands it in. An oracle calling `generateColumn` with `DEFAULT_COLUMN` sees no stamps.
+   */
+  stamps: readonly Stamp[]
 }
 
 export const DEFAULT_COLUMN: ColumnConfig = {
@@ -87,6 +94,7 @@ export const DEFAULT_COLUMN: ColumnConfig = {
   boulders: DEFAULT_BOULDERS,
   dens: DEFAULT_DENS,
   adits: DEFAULT_ADITS,
+  stamps: [],
 }
 
 export class Column {
@@ -439,6 +447,9 @@ export function generateColumn(
     plantBoulders(col.sections, wx, 0, wz, SECTION, seed, surfaceAt, cfg.depth.seaLevel, cfg.boulders)
     // Sites go LAST: a ruin wall punches through whatever the fringe planted, never the reverse.
     placeSites(col.sections, wx, 0, wz, SECTION, seed)
+    // Authored buildings after the sites, for the same reason and one more: a stamp's box clears
+    // what the fringe planted inside it, and nothing generated after it may stand in a kitchen.
+    placeStamps(col.sections, wx, 0, wz, SECTION, cfg.stamps, surfaceAt)
     // …except the waystones, which go after even the sites: the story road's lit posts are the
     // one generated thing nothing may bury (they hold the spawn gate's light veto over the road).
     plantWaystones(col.sections, wx, wz, SECTION, surfaceAt, cfg.depth.seaLevel, MAT.STONE, MAT.MANA_LANTERN)

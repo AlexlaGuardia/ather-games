@@ -30,6 +30,8 @@ import { flatFightSpot } from '../voxel/footing'
 import { slumpMask } from '../voxel/slump'
 import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
 import { bridgeGenPiecesForCol } from '../voxel/bridges'
+import { stampGenPiecesForCol } from '../voxel/stamps'
+import { PLACED_STAMPS } from '../data/blueprints/placed'
 import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { findLands, LAND_IDS } from '../voxel/character'
@@ -5876,6 +5878,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     const gen = [
       ...holdGenPiecesForCol(gx, gz, SECTION, i => holdPadLevel(i, SEED)),
       ...bridgeGenPiecesForCol(gx, gz, SECTION, SEED),
+      ...stampGenPiecesForCol(PLACED_STAMPS, gx, gz, SECTION, (x, z) => columnHeight(x, z, SEED)),
     ]
     if (!gen.length) return
     const k = key(gx, gz)

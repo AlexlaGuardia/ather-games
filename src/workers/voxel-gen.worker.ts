@@ -26,6 +26,17 @@ import {
 } from '../app/shimmer/voxel/column'
 import { generatePlotColumn } from '../app/shimmer/voxel/plot-column'
 import { plotForTier } from '../app/shimmer/voxel/plot'
+import { PLACED_STAMPS } from '../app/shimmer/data/blueprints/placed'
+
+/**
+ * ★ THE WORLD'S COLUMN CONFIG IS THE DEFAULT PLUS THE STAMP TABLE, AND THIS IS THE ONLY PLACE THE
+ * WILDS ARE GENERATED FOR THE GAME. `DEFAULT_COLUMN.stamps` is empty by design (the core may not
+ * import `data/`), so a `makeColumn` here that forgot this object would generate a world with no
+ * authored buildings in it while every oracle stayed green — the exact shape `VoxelWorld.tsx`
+ * records for the slump mask and the water table. `data/blueprints/placed.test.ts` reads this
+ * file to prove the table is handed in.
+ */
+const WORLD_COLUMN = { ...DEFAULT_COLUMN, stamps: PLACED_STAMPS }
 
 const H = DEFAULT_COLUMN.worldHeight
 const cols = new Map<string, Column>()
@@ -96,7 +107,7 @@ self.onmessage = (e: MessageEvent) => {
         // post-conditions (uniform refreshed, stage Ready) so the switch is one line rather than a
         // mode threaded through seven stages the plot needs none of.
         ? generatePlotColumn(new Column(cx * SECTION, cz * SECTION, DEFAULT_COLUMN), seed, plotForTier(tier))
-        : makeColumn(cx * SECTION, cz * SECTION, seed))
+        : makeColumn(cx * SECTION, cz * SECTION, seed, WORLD_COLUMN))
     }
     // ★ ALWAYS answer with the voxels, cached or fresh. The main thread evicts columns it walks
     // away from and re-requests them on return; a request answered with a bare `done` (the old
