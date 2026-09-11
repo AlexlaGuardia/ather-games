@@ -3,6 +3,7 @@
 // ── ★★★ WHY THIS IS ITS OWN FILE ─────────────────────────────────────────────────────────────
 // It lived inside `VoxelWorld.tsx`, an 8964-line component no test can import — so **not one
 import { WORLD_SEED } from './world-seed'
+import { KEEPER_MOVES } from '../play3d/keeper-moves'
 import { DEFAULT_SITES, siteAt } from '../voxel/sites'
 import { hasDescent, warrenPlan, cacheCell } from '../voxel/warren'
 import { aditStartsAt, aditAt, DEFAULT_ADITS } from '../voxel/dens'
@@ -167,6 +168,8 @@ export interface ConsoleCtx {
    * (E'xday) are the acquisition system, and this must not become a second one.
    */
   gems: (rune?: string, n?: number) => string
+  /** owner: put a move in the book by id — the scroll, by hand (2026-09-11) */
+  learn: (moveId: string) => string
   /**
    * ★ `/vessel <kind> <tier> [word]` — HAND A VESSEL THROUGH THE FOUND/WON DOOR. Owner-only, a dev
    * door: vessels are not crafted (ruled 2026-09-04) — tier 1 is bought at the Passage, tiers 2–3
@@ -271,6 +274,14 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
   { name: 'vessel', usage: 'vessel [bracelet|focus] [1-3] [word]  (bare: what you own · args: a found vessel, dev)', help: 'the vessels you own, by material; owner: hand one through the found door',
     run: (a, c) => c.vessel(a[0], a[1], a[2]),
     suggest: (i, c) => !c.isOwner ? [] : i === 0 ? ['bracelet', 'focus'] : i === 1 ? ['1', '2', '3'] : [] },
+  // ★ /learn (2026-09-11, Alex's first written vessel). The book is the scroll economy's ledger and a
+  // fresh keeper's book holds only Gregory's gift — so a granted rune opens words the keeper still
+  // cannot CUT a vessel for (`eligibleMoves` asks `hasLearned`). Whole-command owner gate, same
+  // header as /rune: a test harness for the book, NOT the acquisition system. The Passage sells the
+  // scroll; this hands it over.
+  { name: 'learn', usage: 'learn <move-id>', help: 'learn a move by id — the Passage scroll, by hand (dev)', owner: true,
+    run: (a, c) => a[0] ? c.learn(a[0]) : 'learn what? — /learn <move-id>',
+    suggest: (i, c) => i === 0 && c.isOwner ? KEEPER_MOVES.map(m => m.id).sort() : [] },
   { name: 'market', usage: "market [Solday|Coomday|E'xday|Niteday|Floday]", help: 'open the Passage shelves here (dev door until the crossing lands); a day previews it', owner: true,
     run: (a, c) => c.market(a[0]),
     suggest: (i) => i === 0 ? ['Solday', 'Coomday', "E'xday", 'Niteday', 'Floday'] : [] },

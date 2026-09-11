@@ -284,7 +284,7 @@ import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
 import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn, placeGems, seatCount, seatLetters, shortOf, isComplete, setWord, wornTier, wornWord, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier, placeGem, stripVesselItems } from '../play3d/vessels'
 import { rollDig, rollCache, parseVesselItem, takeVessel, vesselItemId, vesselRoom, type DropDoor } from '../play3d/vessel-drops'
-import { starterFor } from '../play3d/scroll-market'
+import { starterFor, hasLearned, learn } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
 import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 // Health + shields are SHARED rules, not a second copy — see engine/vitals.ts on why.
@@ -376,7 +376,7 @@ import { knownMoves } from '../play3d/keeper-moves'
 import { CAST_SLOTS, ALL_BANDS, derivePassive, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
 import { saveLoadout, setSlot, resolveLoadout, emptySlotWhy,
          type Loadout, type ResolvedLoadout } from '../play3d/loadout'
-import { keeperBook } from '../play3d/book'
+import { keeperBook, saveBook } from '../play3d/book'
 import { VoxelMap, VoxelMiniMap, MAP_W, MAP_H, toLocal } from './VoxelMap'
 import { loadSeen, saveSeen, see, CELL, type Seen } from './discovery'
 import { screenHeading } from './map-heading'
@@ -1645,6 +1645,22 @@ export default function VoxelWorld() {
       saveLetters(next)
       setRuneTick(t => t + 1)
       return `⟳ dev · ${n ?? 1} ${name(id)} gem${(n ?? 1) === 1 ? '' : 's'} into the bag · ${line(next)}`
+    },
+    // ★ /learn — the SCROLL, by hand (2026-09-11). `eligibleMoves` asks the BOOK, and a fresh keeper's
+    // book holds only Gregory's gift: Alex granted Lightning and still could not cut Greg's bracelet
+    // for Forked Bolt, because holding a rune is not knowing the word. Owner-gated test harness.
+    learn: (moveId) => {
+      if (!isOwner) return 'moves are learned from scrolls at the Passage — /learn is keeper-of-the-realm only'
+      const id = moveId.toLowerCase()
+      const m = KEEPER_MOVES.find(x => x.id === id)
+      if (!m) return `no such move: ${moveId}`
+      const rv = loadRuneInventory()
+      const book = keeperBook(rv.owned)
+      if (hasLearned(book, id)) return `${m.name} is already in your book`
+      saveBook(learn(book, id))
+      setRuneTick(t => t + 1)
+      const writable = m.runes.every(r => rv.owned.includes(r))
+      return `⟳ dev · ${m.name} learned — a scroll's work, by hand${writable ? '' : ` · ⚠ your runes cannot write it yet (needs ${m.runes.filter(r => !rv.owned.includes(r)).join(', ')})`}`
     },
     // ★ /vessel — the FOUND door, by hand, until the world drops them (vessels are not crafted, 2026-09-04)
     vessel: (kindArg, tierArg, wordArg) => {

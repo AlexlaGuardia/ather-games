@@ -186,6 +186,17 @@ for (const c of CONSOLE_CMDS.filter(c => c.owner)) {
   ok(suggestionsFor('/gems ', ctx(false)).options.length === 0 && suggestionsFor('/gems ', ctx(true)).options.length > 0, 'rune ids are offered to the owner only')
 }
 
+// ── 9b. /learn: the scroll by hand — owner-gated, hands the move id to the ctx (2026-09-11) ────
+{
+  const r = CONSOLE_CMDS.find(c => c.name === 'learn')!
+  ok(!!r?.owner, '/learn is owner-gated — a test harness for the book, not the acquisition system')
+  calls.length = 0
+  runConsoleLine('/learn forked-bolt', ctx(true))
+  ok(calls.includes('learn:forked-bolt'), `the owner hands the move id to the ctx (recorded: ${calls.join(' ')})`)
+  ok(/learn what/.test(runConsoleLine('/learn', ctx(true)).text), 'bare /learn asks for a move id')
+  ok(suggestionsFor('/learn ', ctx(true)).options.length > 0 && suggestionsFor('/learn ', ctx(false)).options.length === 0, 'move ids are offered to the owner only')
+}
+
 // ── 10. /market: the dev door to the Passage shelves (2026-09-03) ────────────────────────────
 {
   const r = CONSOLE_CMDS.find(c => c.name === 'market')!
