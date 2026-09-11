@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import {
   STOWED_KEY, LEGACY_PAIRS_KEY, WORN_TIER_KEY, WORN_WORD_KEY, wornWord, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, FLOOR_TIER, FLOOR_SEATS,
   loadStowed, saveStowed, buyVessel, equip, ownedCount, emptyVessel, equippedVessel,
-  dismantleWorn, placeGems, placeGem, seatCount, shortOf, isComplete, isFloor, seatCapOf, grantVessel, setWord, wornTier, clearStowed, TIER_MATERIAL,
+  dismantleWorn, placeGems, placeGem, stripVesselItems, seatCount, shortOf, isComplete, isFloor, seatCapOf, grantVessel, setWord, wornTier, clearStowed, TIER_MATERIAL,
 } from './vessels'
 import { saveLoadout, rawLoadout, resolveLoadout, setSlot } from './loadout'
 import { GEMS_KEY, VESSELS_KEY, VESSEL_CAP as _CAP, addGems, isBodyHeld, saveLetters, loadLetters, VESSELS, type Letters } from './gems'
@@ -318,6 +318,31 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     ok(/never cut/.test(placeGem(0, birth, l, a).r.say), 'an uncut vessel says so first')
     ok(/No such vessel/.test(placeGem(7, birth, l, a).r.say), 'and a missing index fails by name, not by throw')
   }
+}
+
+// ── I. ★ THE REVERSE MIGRATION (2026-09-11): a vessel is never a bag item ─────────────────────
+{
+  wipe()
+  saveStowed([{ kind: 'focus', gems: ['g'], move: 'u', tier: 1 }])
+  const slots = [
+    { itemId: 'vessel_bracelet_t0', count: 1, vesselData: { move: null } },       // Greg's — dropped, withFloor mints it
+    { itemId: 'goldwood_plank', count: 3 },
+    { itemId: 'vessel_glove_t2', count: 1, vesselData: { move: 'w' } },            // acquired — back to the stowed list, cut for its word
+    null,
+    { itemId: 'vessel_bracelet_t1', count: 1 },                                   // a bare id with no data — still a vessel, uncut
+  ]
+  const r = stripVesselItems(slots)
+  ok(r.stowedBack === 2 && r.dropped === 1, `★ two acquired go back, Greg's is dropped (${r.stowedBack}/${r.dropped})`)
+  ok(r.slots[0] === null && r.slots[2] === null && r.slots[4] === null && r.slots[1]?.itemId === 'goldwood_plank' && r.slots[3] === null, 'every vessel slot is emptied; the plank is untouched')
+  const st = loadStowed()
+  ok(st.some(v => v.kind === 'focus' && v.tier === 2 && v.move === 'w' && v.gems.length === 0), '★ the glove is stowed again, shimmeroak, cut for its word, empty')
+  ok(st.some(v => v.kind === 'bracelet' && v.tier === 1 && v.move === null), 'the bare goldwood bracelet is stowed uncut')
+  ok(st.some(v => v.kind === 'focus' && v.gems.join() === 'g'), 'and the written glove that was already stowed is untouched')
+  ok(st.filter(isFloor).length === 2, '★ Greg\'s pair is there exactly once — from the read, not from the bag')
+  const again = stripVesselItems(r.slots)
+  ok(again.stowedBack === 0 && again.dropped === 0, 'a clean bag strips nothing — the migration is idempotent')
+  ok(/click it and choose one first/.test(placeGem(st.findIndex(v => v.move === null), 'ember', { bag: { ember: 1 }, vessels: { bracelet: [], focus: [] } }, 'ember').r.say),
+     '★ a gem dropped on an UNCUT vessel says what to do, not just that it failed')
 }
 
 // ── F. the hosts: the rack equips, the satchel carries the letters, the Passage sells one ───

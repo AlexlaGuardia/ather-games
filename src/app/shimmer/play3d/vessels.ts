@@ -473,7 +473,7 @@ export function placeGem(i: number, birth: string | null, l: Letters, rune: stri
   const v = stowed[i]
   const no = (say: string, short: string[] = []): { r: Placement; letters: Letters } => ({ r: { ok: false, placed: [], short, complete: false, say }, letters: l })
   if (!v) return no('No such vessel.')
-  if (!v.move) return no('This one was never cut for a word. Choose one first.')
+  if (!v.move) return no('This one was never cut for a word — click it and choose one first.')
   const short = shortOf(v, birth)
   if (!short.includes(rune)) return no(isComplete(v, birth) ? 'Every seat is written already.' : `Its word has no seat for that letter — it is short ${short.join(', ')}.`, short)
   if ((l.bag[rune] ?? 0) <= 0) return no('You hold none of that letter.', short)
@@ -489,6 +489,36 @@ export function placeGem(i: number, birth: string | null, l: Letters, rune: stri
          say: complete ? `Written. It is gear now — find it on the Gear tab.` : `Set. Still short: ${left.join(', ')}.` },
     letters: { bag: tidy, vessels: l.vessels },
   }
+}
+/**
+ * ★ THE REVERSE MIGRATION (2026-09-11). For three hours on 09-10 a vessel with no letters was an ITEM in
+ * the bag (`a822483`, reverted the same evening). Saves written in that window hold `vessel_<noun>_t<n>`
+ * stacks the game no longer knows — they sat in Alex's HOTBAR as junk. Every such stack comes OUT of the
+ * bag: an acquired one (tier ≥ 1) goes back to the stowed list cut for its word; Greg's tier-0 pair is
+ * simply dropped, because `withFloor` mints it on every read and a second would be a lie. Returns the
+ * emptied slot indices so the host can say what it did. Pure over the slots array it is handed.
+ */
+export function stripVesselItems<T extends { itemId: string; vesselData?: { move: string | null } }>(slots: (T | null)[]): { slots: (T | null)[]; stowedBack: number; dropped: number } {
+  let stowedBack = 0, dropped = 0
+  const back: StowedVessel[] = []
+  const out = slots.map(st => {
+    if (!st) return st
+    const v = parseVesselItem(st.itemId)
+    if (!v) return st
+    if (isFloor(v)) dropped++
+    else { back.push({ kind: v.kind, gems: [], move: st.vesselData?.move ?? null, tier: v.tier }); stowedBack++ }
+    return null
+  })
+  if (back.length) saveStowed([...loadStowed().filter(v => !isFloor(v)), ...back])
+  return { slots: out, stowedBack, dropped }
+}
+const NOUN_KIND: Record<string, Vessel> = Object.fromEntries(VESSELS.map(k => [VESSEL_NOUN[k], k]))
+/** `vessel_glove_t2` → `{ kind: 'focus', tier: 2 }`; anything else → null. Keyed by the NOUN. Lives here so the migration above needs no import from the drops module. */
+export function parseVesselItem(itemId: string): { kind: Vessel; tier: VesselTier } | null {
+  const m = /^vessel_([a-z]+)_t([0-3])$/.exec(itemId)
+  if (!m) return null
+  const kind = NOUN_KIND[m[1]!]
+  return kind ? { kind, tier: Number(m[2]) as VesselTier } : null
 }
 /** Take a stowed vessel apart: its gems go back to the bag; the paper stays cut for its word. Returns the letters to save. */
 export function dismantle(i: number, l: Letters): Letters {

@@ -46,10 +46,7 @@ import { KEEPER_MOVES, type KeeperMove } from './keeper-moves'
 import { ALL_BANDS, LANE_FOR_KIND, laneRunes } from './cast'
 import { lettersOf, VESSELS, type Vessel } from './gems'
 import { rawLoadout } from './loadout'
-import {
-  grantVessel, ownedCount, seatCapOf, loadStowed, MAX_PER_KIND, BAND_FOR_VESSEL, VESSEL_NOUN, TIER_MATERIAL,
-  type VesselTier, type VesselGrant,
-} from './vessels'
+import { grantVessel, ownedCount, seatCapOf, loadStowed, MAX_PER_KIND, BAND_FOR_VESSEL, VESSEL_NOUN, TIER_MATERIAL, type VesselTier, type VesselGrant, parseVesselItem } from './vessels'
 
 export const TRIALS_KEY = 'ather:shimmer:trials'
 
@@ -84,15 +81,9 @@ export const DROP_TUNING = {
 } as const
 
 // ── the drop id: the icon family, so the drop draws as the thing it is ───────────────────────
-const NOUN_KIND: Record<string, Vessel> = Object.fromEntries(VESSELS.map(k => [VESSEL_NOUN[k], k]))
 export const vesselItemId = (kind: Vessel, tier: VesselTier): string => `vessel_${VESSEL_NOUN[kind]}_t${tier}`
-/** `vessel_glove_t2` → `{ kind: 'focus', tier: 2 }`; anything else → null. Keyed by the NOUN. */
-export function parseVesselItem(itemId: string): { kind: Vessel; tier: VesselTier } | null {
-  const m = /^vessel_([a-z]+)_t([0-3])$/.exec(itemId)
-  if (!m) return null
-  const kind = NOUN_KIND[m[1]!]
-  return kind ? { kind, tier: Number(m[2]) as VesselTier } : null
-}
+/** `vessel_glove_t2` → `{ kind: 'focus', tier: 2 }` — moved to `vessels.ts` 2026-09-11 (the reverse migration needs it there); re-exported so nothing here has to know */
+export { parseVesselItem } from './vessels'
 export const isVesselItem = (itemId: string): boolean => parseVesselItem(itemId) !== null
 /** Can the satchel take one more of `kind`? The pickup gate — a refused vessel stays on the ground. */
 export const vesselRoom = (kind: Vessel): boolean => ownedCount(kind) < MAX_PER_KIND

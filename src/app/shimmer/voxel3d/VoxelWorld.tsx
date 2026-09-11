@@ -282,7 +282,7 @@ import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND, V
 import { imbue, imbueWhy, imbueSentence, crystalFor } from '../play3d/imbue'
 import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
-import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn, placeGems, seatCount, seatLetters, shortOf, isComplete, setWord, wornTier, wornWord, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier, placeGem } from '../play3d/vessels'
+import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn, placeGems, seatCount, seatLetters, shortOf, isComplete, setWord, wornTier, wornWord, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier, placeGem, stripVesselItems } from '../play3d/vessels'
 import { rollDig, rollCache, parseVesselItem, takeVessel, vesselItemId, vesselRoom, type DropDoor } from '../play3d/vessel-drops'
 import { starterFor } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
@@ -4727,6 +4727,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // Said out loud rather than done quietly: items changing in your bag while you were not
           // looking is exactly the kind of thing a player should be told, not left to discover.
           onSay(`your bag caught up: ${msg}`)
+        }
+      
+        // ★ AND NO VESSEL IS AN ITEM (2026-09-11). Saves from the three hours the item model lived hold
+        // `vessel_*` stacks — Alex's sat in his hotbar as junk. Out of the bag and back where vessels
+        // live; said out loud for the same reason the salvage line is.
+        const stripped = stripVesselItems(inv.current.slots)
+        if (stripped.stowedBack || stripped.dropped) {
+          inv.current.slots = stripped.slots
+          onSay(`your bag caught up: ${stripped.stowedBack + stripped.dropped} vessel${stripped.stowedBack + stripped.dropped === 1 ? '' : 's'} moved back to the Vessels section — a vessel is never a bag item`)
         }
       }
       // ensureBasicTools over the SAVED set: a future tool family added to the game arrives in
