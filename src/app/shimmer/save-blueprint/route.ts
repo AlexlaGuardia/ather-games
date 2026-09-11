@@ -17,6 +17,7 @@ import { safeWriteFile as writeFile } from '../lib/backup'
 import {
   blueprintProblems, parseBlueprint, serializeBlueprint, SAFE_BLUEPRINT_ID, type BlueprintDef,
 } from '../voxel/blueprints'
+import { writeIndex } from '../data/blueprints/gen-index'
 
 const DIR = join(process.cwd(), 'src/app/shimmer/data/blueprints')
 
@@ -35,7 +36,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(parseBlueprint(raw))
     }
 
-    const files = (await readdir(DIR)).filter(f => f.endsWith('.json'))
+    // ★ Only files the id rule can name: `placed.table.json` (the placement table) sits in this
+    // directory and must never list as a broken blueprint — same rule as `gen-index.ts`.
+    const files = (await readdir(DIR)).filter(f => f.endsWith('.json') && SAFE_BLUEPRINT_ID.test(f.replace(/\.json$/, '')))
     const blueprints = []
     // ⚠ ONE BAD FILE MUST NOT EMPTY THE LIST. A listing that 500s because a single blueprint is
     // malformed hides the other nine and reads as "you have no blueprints" — so a broken entry is
@@ -71,6 +74,7 @@ export async function PUT(req: NextRequest) {
     // ★ The layout comes from the FORMAT module, not from string concatenation here — see
     // `serializeBlueprint`. A route that invents its own file layout is a second definition of it.
     await writeFile(join(DIR, `${s.id}.json`), serializeBlueprint(s))
+    writeIndex()   // the world's import list follows the directory — see data/blueprints/gen-index.ts
     return NextResponse.json({ ok: true, id: s.id, blocks: s.cells.length / 4 })
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
@@ -83,6 +87,7 @@ export async function DELETE(req: NextRequest) {
     const id = req.nextUrl.searchParams.get('id')
     if (!id || !SAFE_BLUEPRINT_ID.test(id)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
     await unlink(join(DIR, `${id}.json`)).catch(() => null)
+    writeIndex()
     return NextResponse.json({ ok: true })
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })

@@ -391,6 +391,44 @@ export default function WorktablePage() {
     if (r?.ok) void refresh()
   }
 
+  // ── ★ PLACE IN WORLD (2026-09-11, Alex: "add the place in world button") ─────────────────────
+  // A saved blueprint is a file; a placement ROW is what makes it stand somewhere. The row goes to
+  // `/shimmer/save-placement`, which refuses bad shape and bad ground with the reasons, and it is
+  // LIVE AT THE NEXT DEPLOY — both the worker bundle and the host import the table at build time.
+  // The button says so, because "I placed it and nothing happened" would otherwise be the first bug.
+  const [placeX, setPlaceX] = useState('')
+  const [placeZ, setPlaceZ] = useState('')
+  const [placeRot, setPlaceRot] = useState<0 | 1 | 2 | 3>(0)
+  const [placeSink, setPlaceSink] = useState(0)
+  const [placeId, setPlaceId] = useState('')
+  const [placed, setPlaced] = useState<{ id: string; blueprint: string; x: number; z: number; rot: number; sink?: number }[]>([])
+  const refreshPlaced = useCallback(async () => {
+    // ⚠ ONE RETRY, FOR THE DEV LANE ONLY. A write under src/ makes `next dev` recompile, and the first
+    // request during that window answers with an HTML page, not JSON (measured 09-11: GET 1 of 3
+    // straight after a DELETE was the app shell). `next start` has no watcher, so prod never does this.
+    const get = () => fetch('/shimmer/save-placement').then(x => x.json()).catch(() => null)
+    let r = await get()
+    if (!r?.placements) { await new Promise(res => setTimeout(res, 700)); r = await get() }
+    if (r?.placements) setPlaced(r.placements)
+  }, [])
+  useEffect(() => { void refreshPlaced() }, [refreshPlaced])
+  const placeInWorld = async () => {
+    const bpId = id.trim()
+    if (!list.some(s => s.id === bpId)) { setStatus(`PLACE REFUSED: save '${bpId}' first — a placement names a file on disk`); return }
+    const row = { id: (placeId.trim() || `placed-${bpId}`).replace(/[^a-z0-9_-]/g, '-'), blueprint: bpId,
+                  x: Number(placeX), z: Number(placeZ), rot: placeRot, ...(placeSink ? { sink: placeSink } : {}) }
+    const r = await fetch('/shimmer/save-placement', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row),
+    }).then(x => x.json()).catch(e => ({ error: String(e) }))
+    setStatus(r?.ok ? `placed ${r.id} at ${row.x},${row.z} rot ${row.rot} — live ${r.live}` : `PLACE REFUSED: ${(r?.problems ?? [r?.error]).join(' · ')}`)
+    if (r?.ok) void refreshPlaced()
+  }
+  const removePlacement = async (which: string) => {
+    const r = await fetch(`/shimmer/save-placement?id=${encodeURIComponent(which)}`, { method: 'DELETE' }).then(x => x.json()).catch(e => ({ error: String(e) }))
+    setStatus(r?.ok ? `removed ${which} — gone at the next deploy` : `REMOVE FAILED: ${r?.error}`)
+    if (r?.ok) void refreshPlaced()
+  }
+
   const load = async (which: string) => {
     const s: BlueprintDef | { error: string } = await fetch(`/shimmer/save-blueprint?id=${which}`).then(x => x.json())
     if ('error' in s) { setStatus(`LOAD FAILED: ${s.error}`); return }
@@ -483,6 +521,36 @@ export default function WorktablePage() {
             </div>
           ))}
         </div>
+
+        {/* ★ PLACE IN WORLD — a row in data/blueprints/placed.table.json, live at the next deploy. */}
+        <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10, margin: '8px 0 4px' }}>
+          place in world
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+          <input value={placeX} onChange={e => setPlaceX(e.target.value)} placeholder="x" title="world column of the box's min corner (/pos in the game)" style={{ ...inputStyle, width: 64 }} />
+          <input value={placeZ} onChange={e => setPlaceZ(e.target.value)} placeholder="z" style={{ ...inputStyle, width: 64 }} />
+          <select value={placeRot} onChange={e => setPlaceRot(Number(e.target.value) as 0 | 1 | 2 | 3)} title="rotation, quarter turns" style={{ ...inputStyle, width: 56 }}>
+            {[0, 1, 2, 3].map(r => <option key={r} value={r}>rot {r}</option>)}
+          </select>
+          <select value={placeSink} onChange={e => setPlaceSink(Number(e.target.value))} title="how many bottom layers sit IN the ground (1 = the bottom layer is the floor, at grade)" style={{ ...inputStyle, width: 64 }}>
+            {[0, 1, 2].map(r => <option key={r} value={r}>sink {r}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+          <input value={placeId} onChange={e => setPlaceId(e.target.value)} placeholder={`placement id (placed-${id.trim() || 'untitled'})`} style={{ ...inputStyle, flex: 1 }} />
+          <button style={btn} onClick={() => void placeInWorld()} title="writes a row to placed.table.json — the world picks it up at the next deploy">place in world</button>
+        </div>
+        <div style={{ opacity: 0.5, fontSize: 10, marginBottom: 4 }}>places the SAVED file named above · live at the next deploy · refused if the pad steps, or it sits on the road, water, Greg or the spawn</div>
+        {placed.length > 0 && (
+          <div style={{ maxHeight: 96, overflowY: 'auto', marginBottom: 4 }}>
+            {placed.map(r => (
+              <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '2px 0', fontSize: 11 }}>
+                <span style={{ flex: 1 }}>{r.id} <span style={{ opacity: 0.5 }}>{r.blueprint} @ {r.x},{r.z} r{r.rot}{r.sink ? ` s${r.sink}` : ''}</span></span>
+                <button style={{ ...btn, padding: '0 6px' }} onClick={() => void removePlacement(r.id)} title="remove this row">×</button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ★★ WHAT A CLICK PLACES. Blocks are the mass; the 14 pieces are the building vocabulary —
             without them a blueprint is a box with a hole where a door goes. */}

@@ -8,7 +8,10 @@
 // reads them, the way `gen-pieces.test.ts` does.
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { PLACED_STAMPS } from './placed'
+import { PLACED_STAMPS, PLACED_ROWS } from './placed'
+import { BLUEPRINT_FILES } from './index.generated'
+import { blueprintFileIds, renderIndex, INDEX_FILE } from './gen-index'
+import { placementProblems } from '../../voxel/placement'
 import { blueprintProblems } from '../../voxel/blueprints'
 import { stampPadSpan, stampBox, STAMP_PAD_SPAN } from '../../voxel/stamps'
 import { columnHeight } from '../../voxel/height'
@@ -25,6 +28,18 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 const surf = (x: number, z: number) => columnHeight(x, z, WORLD_SEED)
 
 ok(PLACED_STAMPS.length >= 1, 'the table has at least the pipeline proof in it')
+{
+  // ── the JSON table and the generated index (2026-09-11, the place-in-world button) ──
+  const onDisk = blueprintFileIds()
+  ok(readFileSync(INDEX_FILE, 'utf-8') === renderIndex(onDisk), `★ index.generated.ts matches the directory (${onDisk.join(', ')}) — run npm run gen:blueprints`)
+  ok(onDisk.every(id => id in BLUEPRINT_FILES), 'every blueprint file is importable through the index')
+  const ids = new Set(onDisk)
+  for (const r of PLACED_ROWS) {
+    const p = placementProblems(r, ids)
+    ok(p.length === 0, `row '${r.id}' is valid (${p.join('; ')})`)
+  }
+  ok(PLACED_STAMPS.length === PLACED_ROWS.length, `every row resolved to a stamp (${PLACED_STAMPS.length}/${PLACED_ROWS.length}) — an unresolved row is dropped by placed.ts and must be caught here`)
+}
 ok(new Set(PLACED_STAMPS.map(s => s.id)).size === PLACED_STAMPS.length, 'stamp ids are unique (they key the pieces)')
 
 const glade = ZONE_ANCHORS.find(z => z.id === 'moonwell-glade')!
