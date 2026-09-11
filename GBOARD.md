@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🛤 Shimmer — **THE APPROACH: A LIT ROAD FROM THE FOLD'S DOOR TO THE GLADE** (2026-09-11 evening, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID WvSvfAOrwVkpmmO0_bR_5`, 184 chunks, from `38d87b3`**; served worker `voxel-gen.worker.a86e826060.js` 200 on the tunnel with `fold-door` in it. Shot on the play lane by day and by night: the road leaves the door with a lantern post at its mouth and the next post in sight. tsc 7 (baseline).*
+## 🛤 Shimmer — **THE APPROACH: A LIT ROAD FROM THE FOLD'S DOOR TO THE GLADE** (2026-09-11 evening, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID WvSvfAOrwVkpmmO0_bR_5`, 184 chunks, from `38d87b3`**; served worker `voxel-gen.worker.a86e826060.js` 200 on the tunnel with `fold-door` in it. Sweep at `38d87b3` **263/263 · 0 FAIL · 0 KILLED**. Shot on the play lane by day and by night: the road leaves the door with a lantern post at its mouth and the next post in sight. tsc 7 (baseline).*
 
 **Alex: *"before i can walk the glade i need a way to reach it.. the platform in the home plot is still incomplete."*** Measured the route instead of the platform: leaving the plot with **no waymark planted** lands at `passageApproach` = **(−123, −521), 122 blocks from the glade, on untended ground with no road**; the court's three passage sockets stay dark until a waymark is planted OUT THERE (`travelTo` → `toDoor`). So the first trip is on foot and nothing in the world said which way. The platform is not what blocks the walk; the blank country between the door and the glade is.
 
