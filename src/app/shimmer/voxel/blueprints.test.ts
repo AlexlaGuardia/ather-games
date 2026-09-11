@@ -372,6 +372,14 @@ const cell = (x: number, y: number, z: number, m: number = S): BlueprintCell => 
     const nested = makeBlueprint('n', 'N', [], [piece('arch', 0, 0, 0), piece('bracket', 1, 0, 0)])
     ok(blueprintProblems(nested).length === 0,
       `★★★ but a bracket inside an arch's OPENING is allowed — passable cells may overlap (${blueprintProblems(nested).join('; ')})`)
+    // ★ PIECE-vs-BLOCK (2026-09-11): a solid piece cell that coincides with a block is buried and
+    // invisible; the first scripted carpentry shipped two shutters that way with every check green.
+    const buried = makeBlueprint('b', 'B', [{ x: 0, y: 0, z: 0, m: MAT.CUT_STONE }], [piece('shutter', 0, 0, 0)])
+    ok(blueprintProblems(buried).some(m => /holds a block/.test(m)),
+      `★★★ a solid piece in a cell a block fills is refused (${blueprintProblems(buried).join('; ') || 'NOTHING'})`)
+    const hung = makeBlueprint('h', 'H', [{ x: 0, y: 0, z: 0, m: MAT.CUT_STONE }], [piece('hook', 0, 0, 0)])
+    ok(blueprintProblems(hung).length === 0,
+      `but a PASSABLE piece cell over a block is fine — a hook on a wall occupies nothing (${blueprintProblems(hung).join('; ')})`)
   }
 
   // ★★ ROUND TRIP WITH PIECES, AND SAVE-COMPAT WITHOUT THEM.

@@ -284,11 +284,20 @@ export function blueprintProblems(s: unknown): string[] {
   // stamp time, not a claim about whether the file is well formed. Two SOLID piece cells in one
   // place is a file no editor can produce and only a hand edit can write.
   const solidAt = new Map<string, string>()
+  // ★ A PIECE INSIDE A BLOCK IS INVISIBLE AND EVERY OTHER CHECK STAYS GREEN (2026-09-11). The first
+  // scripted carpentry put two shutters in cells its wall planks still filled; the file validated,
+  // the stamp placed it, and the shutters were simply never seen. Piece-vs-piece was checked; this
+  // is the piece-vs-block half. Passable cells (a doorway's opening, an open door) may share a cell
+  // with nothing either — but a piece's PASSABLE cell over a block is the piece standing on a floor
+  // it does not occupy, which is legitimate (a bench's own cell is solid; a hook's is passable).
+  // So only SOLID piece cells are checked against blocks.
+  const blockAt = new Set(cells.map(c => `${c.x},${c.y},${c.z}`))
   for (const q of pieces) {
     const def = pieceDef(q.pieceId)!
     for (const c of cellsOf(q, def)) {
       if (!c.solid) continue
       const k = `${c.x},${c.y},${c.z}`
+      if (blockAt.has(k)) { p.push(`piece '${q.pieceId}' fills the cell ${k}, which holds a block — it would be buried`); break }
       const prev = solidAt.get(k)
       if (prev) { p.push(`pieces '${prev}' and '${q.pieceId}' both fill the cell ${k}`); break }
       solidAt.set(k, q.pieceId)
