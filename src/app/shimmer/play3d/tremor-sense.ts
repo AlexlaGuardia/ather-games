@@ -62,7 +62,7 @@
  * house rule about a hand-kept mirror (compare the derivations, never trust that two numbers still
  * agree) applied to the one number that would otherwise rot in silence.
  */
-export const SENSE_RADIUS = 24
+export const SENSE_RADIUS = 32
 
 /**
  * A body as this sense needs to see it. Deliberately not `HollowState`: a host maps its own bodies

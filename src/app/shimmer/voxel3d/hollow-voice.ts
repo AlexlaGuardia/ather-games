@@ -82,7 +82,7 @@ export interface VoiceDials {
  * exists to provide. ⚠ If `PLAYER_EXCLUSION` moves, this is wrong and nothing will say so.
  */
 export const DEFAULT_VOICE: VoiceDials = {
-  range: 26, strideAt1: 1.9, moveFloor: 0.35, maxPerSec: 7,
+  range: 34, strideAt1: 1.9, moveFloor: 0.35, maxPerSec: 7,   // > PLAYER_EXCLUSION (32): the first footstep is still a far one
 }
 
 /**

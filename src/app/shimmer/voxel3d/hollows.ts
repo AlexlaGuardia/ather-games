@@ -372,7 +372,11 @@ export const HOLLOW_RADIUS = 0.85    // hit sphere for projectiles
 export const SPAWN_CYCLE_S = 0.4     // full-coverage sweep cadence (MC: every tick; see above)
 export const PACK_MAX = 4            // MC hostile pack max, kept — a pack is a mood, not an army
 export const PACK_STEP = 5           // ±5 triangular per-mob walk step, MC verbatim
-export const PLAYER_EXCLUSION = 24   // MC verbatim — it forms out of sight, never in your lap
+// ★ 24 was MC verbatim; Alex asked for 32 on 2026-09-11 after meeting a mob that formed too close
+// ("so mobs won't spawn within 32 blocks"). The load edge is viewRadius·16 = 96 by default and 64
+// at the minimum, so the ring stays ≥32 wide. Tremor Sense reaches exactly this far (derived, not
+// picked — see tremor-sense.ts) and the footstep audio range must exceed it (hollow-voice.ts).
+export const PLAYER_EXCLUSION = 32   // it forms out of sight, never in your lap
 export const DESPAWN_DIST = 96       // our load edge (MC uses 128 = its own spawn horizon)
 
 /**
