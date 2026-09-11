@@ -116,7 +116,7 @@ export function holdsOn(ground: HostileGround, seed: number): HoldSpec[] {
  */
 export function hostileReadout(
   x: number, z: number, seed: number, greyMin: number,
-  live: { hollows: number; foes: number },
+  live: { hollows: number; foes: number; cap?: number; simBlocks?: number; viewBlocks?: number },
 ): string {
   const { ground, t } = groundAt(x, z, seed)
   const r = hostileRosterFor(ground)
@@ -131,5 +131,8 @@ export function hostileReadout(
     `hollows  ${forms}`,
     `holds    ${holds.length ? holds.join(' · ') : 'none on this ground'} — patrols come out of these`,
     `live     ${live.hollows} hollow(s) · ${live.foes} collared foe(s) in the loaded world`,
+    ...(live.cap !== undefined && live.simBlocks !== undefined && live.viewBlocks !== undefined
+      ? [`ring     spawn 32..${live.simBlocks} blocks (sim), drawn to ${live.viewBlocks} — cap ${live.cap} bodies`]
+      : []),
   ].join('\n')
 }

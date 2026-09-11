@@ -138,7 +138,7 @@ import { createLightUniforms, LIGHT_LOOK, LIGHT_DECL_GLSL, lightApplyHere } from
 import { layerOf } from './tex/tiles'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
-import { loadSettings, saveSettings, withStyle, VIEW_RADIUS_MIN, VIEW_RADIUS_MAX, type VoxelSettings, type RenderStyle } from './settings'
+import { loadSettings, saveSettings, withStyle, VIEW_RADIUS_MIN, VIEW_RADIUS_MAX, type VoxelSettings, type RenderStyle , SIM_RADIUS_MIN, simRadiusOf, simColumns } from './settings'
 import { buildAttrsSplit, concatAttrs, MATERIAL_COLOR, type AttrPart } from './attrs'
 import { leafPixels } from './tex/flora-tex'
 import { isLeafMat, isLogMat } from '../voxel/trees'
@@ -4529,7 +4529,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // same roster the sweep asks. An instrument like `/foes`: a Thicket night that produces only
       // stalkers is indistinguishable from a broken caster roll unless something prints the roster.
       hostiles: () => hostileReadout(camera.position.x, camera.position.z, SEED, HOLLOW_GREY_MIN,
-                                     { hollows: hollows.current.length, foes: foes.current.length }),
+                                     { hollows: hollows.current.length, foes: foes.current.length,
+                                       cap: hollowCap(Math.min(cols.current.size, simColumns(simRadiusOf(settings)))),
+                                       simBlocks: simRadiusOf(settings) * SECTION, viewBlocks: settings.viewRadius * SECTION }),
       hollow: (form?: string, n = 1) => {
         if (form && !(form in HOLLOW_FORMS)) return `no such form: ${form} (warden · stalker · caster)`
         const count = Math.max(1, Math.min(6, Math.floor(n) || 1))
@@ -7742,7 +7744,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       const day = dayFactor(dayProgress())
       camera.getWorldDirection(hollowFwd.current)
       hollowClock.current -= dt
-      const cap = hollowCap(cols.current.size)
+      // ★ THE SIM RADIUS, NOT THE VIEW (#1113, 2026-09-11). The cap is fed the SIM disc's column
+      // count (bounded by what is loaded), so a wider view no longer means a wider night; the ring
+      // and the despawn line below sit on the same number. `simRadiusOf` clamps to the view radius.
+      const simR = simRadiusOf(settings)
+      const cap = hollowCap(Math.min(cols.current.size, simColumns(simR)))
       const spawnHollow = (sx: number, sh: number, sz: number, force?: HollowForm, forms?: readonly HollowForm[]) => {
         // ★ A SUB-ZONE, OPENED HERE SO BOTH CALL SITES ARE COVERED BY ONE MARK PAIR. Marks are flat
         // by construction, so re-opening `world:spawn` at the end resumes the parent zone — this
@@ -7798,9 +7804,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           spawnHollow(sx, sh, sz, req.form)
         }
       }
-      // The despawn line IS the load edge — it derives from viewRadius now, so a wider view means
-      // a wider night. hollows.ts's DESPAWN_DIST constant documented the r=6 baseline (96).
-      const despawn = settings.viewRadius * SECTION
+      // The despawn line is the SIM edge (#1113) — `simRadiusOf` never exceeds the view radius, so it
+      // is still inside the loaded world. hollows.ts's DESPAWN_DIST documents the r=6 baseline (96).
+      const despawn = simR * SECTION
       /**
        * ── ★★★ THE Y ROLL — the one place this sweep learns that darkness has a THIRD AXIS ───────
        * Everything above picks an (x, z). This picks the cell a body's feet take on that line, out
@@ -8074,9 +8080,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       let pressedByCollar = false
       for (let i = foes.current.length - 1; i >= 0; i--) {
         const e = foes.current[i]
-        // Despawn on the load edge, exactly as the Hollows do — a body outside the streamed world is
-        // standing on ground that no longer exists.
-        if (Math.hypot(e.f.x - p.x, e.f.z - p.z) > settings.viewRadius * SECTION) {
+        // Despawn on the SIM edge, exactly as the Hollows do (#1113) — never past the loaded world,
+        // because `simRadiusOf` clamps to the view radius.
+        if (Math.hypot(e.f.x - p.x, e.f.z - p.z) > simRadiusOf(settings) * SECTION) {
           dropFoe(i); continue
         }
         const intent = stepFoe(e.f, {
@@ -11347,6 +11353,17 @@ function SettingsPanel({ s, update, onClose, onControls }: {
           className="flex-1 accent-amber-300"
         />
         <span className="w-14 text-right tabular-nums text-white/50">{s.viewRadius * 16} blk</span>
+      </label>
+      {/* ★ The night's radius, split from the view's (#1113). Clamped to the view radius on read —
+          the label shows the EFFECTIVE value so a slider past the view reads as what it does. */}
+      <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
+        <span className="w-24 shrink-0">sim radius</span>
+        <input
+          type="range" min={SIM_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.simRadius}
+          onChange={e => update({ simRadius: Number(e.target.value) })}
+          className="flex-1 accent-amber-300"
+        />
+        <span className="w-14 text-right tabular-nums text-white/50">{simRadiusOf(s) * 16} blk</span>
       </label>
 
       {/* ── ★ ITS OWN SECTION, because it is the one setting that changes nothing about the world ──

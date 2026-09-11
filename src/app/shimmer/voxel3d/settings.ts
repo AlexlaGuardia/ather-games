@@ -30,6 +30,17 @@ export interface VoxelSettings {
    */
   viewRadius: number
   /**
+   * ── ★ SIMULATION radius in COLUMNS, split from the view radius (2026-09-11, #1113) ───────────
+   * Minecraft 1.18's split, kept with its semantics: the world is DRAWN to `viewRadius` and the
+   * night is TICKED to this — the Hollow spawn ring's far edge, the despawn line, the Hollow cap
+   * (scaled by the SIM disc's area, so a wider view no longer means a wider night) and the patrol
+   * despawn. Always clamped to `viewRadius` at read time (`simRadiusOf`): a body cannot stand on
+   * ground that is not loaded. Default 6 = the r=6 baseline the despawn line has always sat at, so
+   * a keeper who never opens settings gets exactly the night they had; a phone can draw 6 and tick
+   * 4 and the frame pays for four rings of enemies instead of six.
+   */
+  simRadius: number
+  /**
    * The frame meter. OFF by default — it is an instrument, not a look, and it is the only setting
    * here that is not about how the world is drawn.
    *
@@ -54,6 +65,14 @@ export interface VoxelSettings {
 
 export const VIEW_RADIUS_MIN = 4
 export const VIEW_RADIUS_MAX = 12
+/** 4 columns = 64 blocks: the spawn ring (PLAYER_EXCLUSION 32 → here) is still 32 wide at the floor. */
+export const SIM_RADIUS_MIN = 4
+
+/** The radius the night is actually ticked at: never past what is loaded. */
+export const simRadiusOf = (s: { simRadius: number; viewRadius: number }): number =>
+  Math.max(SIM_RADIUS_MIN, Math.min(s.simRadius, s.viewRadius))
+/** Columns in a disc of radius r — what `hollowCap` is fed, so the cap follows the SIM area. */
+export const simColumns = (r: number): number => Math.round(Math.PI * r * r)
 
 /**
  * ★ THE CARTOON PRESET IS A STARTING POINT, NOT A LOOK CALL. Look is Alex's; these are the values
@@ -64,7 +83,7 @@ export const VIEW_RADIUS_MAX = 12
  * listed gets overwritten by it. `showFps` is omitted because an instrument that a look-toggle can
  * switch off is worse than no instrument.
  */
-export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize' | 'viewRadius' | 'showFps' | 'volume'>> = {
+export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize' | 'viewRadius' | 'simRadius' | 'showFps' | 'volume'>> = {
   natural: { toon: 0, outline: 0, faceShading: 0.35, shadowLift: 0.15 },
   cartoon: { toon: 0.85, outline: 0.6, faceShading: 0.9, shadowLift: 0.5 },
 }
@@ -76,6 +95,7 @@ export const DEFAULT_SETTINGS: VoxelSettings = {
   // blocks rather than ~22, and a tile is 4x the pixels to hand-paint. Look is his call.
   tileSize: 64,
   viewRadius: 6,
+  simRadius: 6,
   showFps: false,
   // Matches `audio/bus.ts`'s own starting level, so a keeper who never opens settings hears the
   // game at the level it was mixed at.
@@ -95,6 +115,7 @@ export function loadSettings(): VoxelSettings {
     // viewRadius drives loop bounds and eviction, not a uniform — a stored garbage value here is
     // an infinite want-ring, so it clamps on the way in rather than trusting the merge.
     s.viewRadius = Math.max(VIEW_RADIUS_MIN, Math.min(VIEW_RADIUS_MAX, Math.round(Number(s.viewRadius) || DEFAULT_SETTINGS.viewRadius)))
+    s.simRadius = Math.max(SIM_RADIUS_MIN, Math.min(VIEW_RADIUS_MAX, Math.round(Number(s.simRadius) || DEFAULT_SETTINGS.simRadius)))
     // ⚠ CLAMPED ON THE WAY IN FOR THE SAME REASON `viewRadius` IS, and the failure is worse here.
     // The merge above defends a MISSING field; it does nothing about a stored `null` or a hand-
     // edited string, and `Number(null)` is 0 while `Number('x')` is NaN. A NaN gain is not loud or
