@@ -11,7 +11,7 @@
 
 import { ALL_BANDS, canSlot, eligibleMoves } from './cast'
 import { moveById } from './keeper-moves'
-import { VESSEL_FOR_KIND, bindLetters, unbindLetters, lettersOf, missingLetters, saveLetters, shortFor, type Letters } from './gems'
+import { VESSEL_FOR_KIND, bindLetters, unbindLetters, lettersOf, missingLetters, saveLetters, isBodyHeld, type Letters } from './gems'
 import { keeperLetters } from './book'
 import type { SlotKind } from './cast'
 import type { Book } from './scroll-market'
@@ -187,9 +187,13 @@ export function emptySlotSentence(kind: string, reason: EmptyReason, openKey?: s
 export function resolveLoadout(owned: string[], birth: string | null, book: Book): ResolvedLoadout {
   // No save of any kind → the starting kit. A null here can only ever be `no-move`: the default
   // took the first eligible move per slot, so an empty slot means there was nothing to take.
-  // ★ THE KIT WRITES ITS WORDS. `defaultLoadout` picked the first eligible move per slot with no
-  // notion of letters; now a pick must be body-held or writable from the bag, and picking it SETS
-  // its letters (Gregory's gift arrives loose in the bag and is set here on the first resolve).
+  // ★ THE KIT WRITES ONLY BODY-HELD WORDS (2026-09-11). It used to pick any eligible move whose letters
+  // sat loose in the bag and SET them into the worn vessel — and driving Alex's real save proved what
+  // that means: `/learn forked-bolt` with one Lightning gem in the bag minted a worn GOLDWOOD bracelet,
+  // written 1/1, that he had never bought, found, won or been given. The 09-04 ruling is the other way
+  // round: a vessel is acquired, cut for its word in the satchel, written by hand, and only a written
+  // vessel is gear. So a slot that needs a vessel takes only a body-held word here (the birth move —
+  // Gregory's gift, which needs no paper); everything else waits for the keeper to write it.
   const kit = (): ResolvedLoadout => {
     let letters = keeperLetters(owned, birth)
     const used = new Set<string>()
@@ -199,7 +203,7 @@ export function resolveLoadout(owned: string[], birth: string | null, book: Book
       const pick = eligibleMoves(owned, birth, kind, book).find((m) => {
         if (used.has(m.id)) return false
         if (!vessel) return true
-        return shortFor(m, birth, letters, vessel).length === 0
+        return isBodyHeld(m, birth)
       })
       if (pick && vessel) letters = bindLetters(letters, vessel, pick, birth) ?? letters
       if (pick) used.add(pick.id)

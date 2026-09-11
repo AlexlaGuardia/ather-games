@@ -26,9 +26,25 @@ const bornOf = (owned: string[]): string | null => owned[0] ?? null
 const eligibleFor = (owned: string[], kind: Parameters<typeof eligibleMoves>[2], book: Book) =>
   eligibleMoves(owned, bornOf(owned), kind, book)
 const defaultFor = (owned: string[], book: Book) => defaultLoadout(owned, bornOf(owned), book)
+/**
+ * ★ THE STARTING KIT (2026-09-11) is NOT `defaultLoadout`. That one is the bots' (crucible-fleet) and
+ * picks the first eligible move per slot. A keeper's kit seats only BODY-HELD words into a slot that
+ * needs a vessel — a vessel is acquired and written by hand (ruled 09-04), never minted by a resolve.
+ */
+const kitFor = (owned: string[], book: Book) => {
+  const birth = bornOf(owned); const used = new Set<string>()
+  return ALL_BANDS.map((kind) => {
+    const pick = eligibleMoves(owned, birth, kind, book).find((m) => !used.has(m.id) && (!VESSEL_FOR_KIND[kind] || isBodyHeld(m, birth)))
+    if (pick) used.add(pick.id)
+    return pick?.id ?? null
+  })
+}
 const passiveFor = (owned: string[], book: Book) => derivePassive(owned, bornOf(owned), book)
 
-import { LOADOUT_KEY, loadLoadout, saveLoadout, setSlot, type Loadout } from './loadout'
+import { LOADOUT_KEY, loadLoadout, saveLoadout, setSlot, resolveLoadout, type Loadout } from './loadout'
+import { VESSEL_FOR_KIND, isBodyHeld, saveLetters, lettersOf, VESSELS } from './gems'
+import { keeperLetters } from './book'
+import { moveById } from './keeper-moves'
 
 let pass = 0
 const fails: string[] = []
@@ -68,8 +84,10 @@ const reset = () => store.clear()
   reset()
   const fresh = loadLoadout(OWNED, BIRTH, ALL)
   ok(fresh.length === ALL_BANDS.length, 'a loadout always has exactly one entry per band slot')
-  ok(JSON.stringify(fresh) === JSON.stringify(defaultFor(OWNED, ALL)),
-     'a keeper who never chose gets the starting kit')
+  ok(JSON.stringify(fresh) === JSON.stringify(kitFor(OWNED, ALL)),
+     'a keeper who never chose gets the starting kit — body-held words only where a vessel is needed')
+  ok(JSON.stringify(fresh) !== JSON.stringify(defaultFor(OWNED, ALL)) || defaultFor(OWNED, ALL).every((id, i) => !id || !VESSEL_FOR_KIND[ALL_BANDS[i]!] || isBodyHeld(moveById(id)!, BIRTH)),
+     '★ and it is NOT the bots\' first-eligible kit whenever that would seat a vessel word the keeper never wrote')
 }
 {
   // ★ THE ONE THAT MATTERS. An emptied slot must survive a reload.
@@ -112,13 +130,13 @@ const reset = () => store.clear()
 {
   reset()
   store.set(LOADOUT_KEY, '{not json')
-  ok(JSON.stringify(loadLoadout(OWNED, BIRTH, ALL)) === JSON.stringify(defaultFor(OWNED, ALL)),
+  ok(JSON.stringify(loadLoadout(OWNED, BIRTH, ALL)) === JSON.stringify(kitFor(OWNED, ALL)),
      'corrupt JSON reads as never-chosen, not as an empty loadout')
 }
 {
   reset()
   store.set(LOADOUT_KEY, JSON.stringify({ passive: 'barrier' }))   // an older/other shape
-  ok(JSON.stringify(loadLoadout(OWNED, BIRTH, ALL)) === JSON.stringify(defaultFor(OWNED, ALL)),
+  ok(JSON.stringify(loadLoadout(OWNED, BIRTH, ALL)) === JSON.stringify(kitFor(OWNED, ALL)),
      'a non-array save is refused rather than indexed into')
 }
 {
@@ -197,6 +215,29 @@ const reset = () => store.clear()
      '★ and the derived passive is one their runes actually make eligible')
 }
 
+// ── ★ THE KIT NEVER MINTS A VESSEL (2026-09-11, found driving Alex's real save) ────────────────
+// `/learn forked-bolt` with one Lightning gem loose in the bag produced a worn GOLDWOOD bracelet,
+// written 1/1, that the keeper never acquired — the kit picked any eligible move whose letters were
+// in the bag and SET them into the worn vessel. A vessel is written by hand (09-04); the kit seats
+// only body-held words.
+{
+  reset()
+  const tacBand = ALL_BANDS.findIndex((k) => VESSEL_FOR_KIND[k])
+  const cand = KEEPER_MOVES.find((m) => m.tier === ALL_BANDS[tacBand] && !isBodyHeld(m, BIRTH) && m.runes.every((r) => OWNED.includes(r)) && ALL.learned.includes(m.id))
+  ok(!!cand, `fixture: a learned, non-body-held ${ALL_BANDS[tacBand]} the keeper's runes can write (${cand?.id ?? 'none'})`)
+  if (cand) {
+    const need = lettersOf(cand, BIRTH)
+    const bag: Record<string, number> = {}
+    for (const r of need) bag[r] = (bag[r] ?? 0) + 1
+    saveLetters({ bag, vessels: { bracelet: [], focus: [] } })
+    const res = resolveLoadout(OWNED, BIRTH, ALL)
+    ok(res.slots[tacBand] !== cand.id, `★ the kit does NOT auto-write ${cand.id} into a vessel the keeper never had`)
+    const after = keeperLetters(OWNED, BIRTH)
+    ok(need.every((r) => (after.bag[r] ?? 0) >= 1) && VESSELS.every((v) => after.vessels[v].every((g) => !need.includes(g))),
+       '★ and its letters stay LOOSE in the bag — nothing was seated by a resolve')
+  }
+}
+
 // ── the absent-localStorage path (the shape this runs in outside a browser) ───────────────────
 {
   const real = (globalThis as unknown as { localStorage: unknown }).localStorage
@@ -205,7 +246,7 @@ const reset = () => store.clear()
   let kit: Loadout = []
   try { kit = loadLoadout(OWNED, BIRTH, ALL) } catch { threw = true }
   ok(!threw, '★ no localStorage must not throw — private mode is a keeper, not a crash')
-  ok(JSON.stringify(kit) === JSON.stringify(defaultFor(OWNED, ALL)), 'and they still get a kit')
+  ok(JSON.stringify(kit) === JSON.stringify(kitFor(OWNED, ALL)), 'and they still get a kit')
   let saveThrew = false
   try { saveLoadout(kit) } catch { saveThrew = true }
   ok(!saveThrew, 'saving without a store is a no-op, not a throw')
