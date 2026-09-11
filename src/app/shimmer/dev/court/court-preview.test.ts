@@ -24,6 +24,9 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { courtPlatformCells, courtHubCells, sockets, socketCells, gateTowerCells, courtLevel } from '../../voxel3d/crossings'
+import { plotForTier } from '../../voxel/plot'
+import { WORLD_SEED } from '../../voxel3d/world-seed'
 
 let pass = 0
 const fails: string[] = []
@@ -126,6 +129,38 @@ for (const k of ['tier', 'dist', 'yaw']) {
 // view would not be the front of the thing it exists to judge. Caught by looking at a shot.
 ok(/facing\s*\+\s*\(yaw/.test(PAGE),
   '★ yaw=0 means square-on to the gate at every tier, not an accident of world axes')
+
+// ── 7. ★ ONE CUBE PER CELL — the lay passes the page draws never overlap ──────────────────────
+// The preview draws every cell of every lay pass as its own cube. The host writes the same cell
+// twice without complaint (last write wins, same stone), so an overlap between two producers is
+// INVISIBLE in the world and a z-fighting double cube here — the one direction a preview can be
+// wrong while the game is fine. Since 09-11 the tower's string courses come from the gate's
+// `socketCells` and are left OUT of `gateTowerCells`; this is what holds that line.
+// ⚠ STATIC IMPORTS, NOT `await import(...)`: tsx transpiles this file as CJS and a top-level await
+// is a transform error — the whole suite dies before its first assert, which is the "could not
+// look" exit this file's header says must never be confused with "found no drift". It was.
+{
+  for (const tier of [0, 1, 2]) {
+    const cfg = plotForTier(tier)
+    const level = courtLevel(WORLD_SEED, cfg)
+    if (level === null) { fails.push(`tier ${tier}: no court level to preview`); continue }
+    const seen = new Map<string, string>()
+    let dup = 0, where = ''
+    const lay = (name: string, cells: { x: number; y: number; z: number }[]) => {
+      for (const c of cells) {
+        const k = `${c.x},${c.y},${c.z}`
+        const prev = seen.get(k)
+        if (prev !== undefined) { dup++; where ||= `${k} (${prev} and ${name})` } else seen.set(k, name)
+      }
+    }
+    lay('courtPlatformCells', courtPlatformCells(WORLD_SEED, cfg))
+    lay('courtHubCells', courtHubCells(WORLD_SEED, cfg))
+    lay('gateTowerCells', gateTowerCells(WORLD_SEED, cfg))
+    for (const s of sockets(WORLD_SEED, cfg)) lay(`socketCells(${s.index})`, socketCells(s, level))
+    ok(seen.size > 1000, `tier ${tier}: the preview has a court to draw (${seen.size} cells)`)
+    ok(dup === 0, `★ tier ${tier}: no cell is drawn twice — ${dup} overlaps, first at ${where}`)
+  }
+}
 
 console.log(`court-preview: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)

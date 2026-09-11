@@ -315,12 +315,22 @@ export function courtAnchor(seed: number, cfg: PlotConfig = DEFAULT_PLOT): Court
   return layoutAt((lo + hi) / 2, seed, cfg)
 }
 
+/**
+ * What a socket cell IS, so `socketMaterial` can dress it without the host learning a second
+ * material table. `jamb` and `lintel` are the plain stone of the trilithon; `cap` is the lintel's
+ * top course and `keystone` the centre of its first course, both laid in `TRIM_MAT`; `band` is a
+ * string course of the gate's tower — gate only, and `socketCells` records why the tower's dress
+ * rides on the gate's own socket rather than on `gateTowerCells`.
+ */
+export type SocketRole = 'jamb' | 'lintel' | 'cap' | 'keystone' | 'doorway' | 'band'
+
 export interface SocketCell {
   x: number; y: number; z: number
   /** True for the 3×3 interior — the crossing itself. False for the jambs and lintel. */
   doorway: boolean
   /** The one cell that carries the socket's light: the middle of the lintel course. */
   lamp: boolean
+  role: SocketRole
 }
 
 export interface Socket {
@@ -465,7 +475,11 @@ const SOCKET_HALF = Math.max(...Object.values(FRAME).map(f => f.half))
  * ⚠ AND IT TAKES THE SOCKET'S OWN `facing`, not a shared bearing. On an arc every frame turns to
  * face the focus; a shared bearing is what made the old row a fence.
  */
-export function socketCells(s: Socket, groundY: number): SocketCell[] {
+/**
+ * The trilithon alone — every cell of one socket's FRAME. `socketCells` is this plus, for the
+ * gate, the string courses of the tower behind it.
+ */
+function frameCells(s: Socket, groundY: number): SocketCell[] {
   const f = FRAME[s.kind]
   const tx = -Math.sin(s.facing), tz = Math.cos(s.facing)
   // ── ★★ THE NORMAL POINTS AT THE KEEPER, SO DEPTH IS LAID BACKWARDS FROM IT ─────────────────
@@ -502,13 +516,22 @@ export function socketCells(s: Socket, groundY: number): SocketCell[] {
         const key = `${x},${baseY + y},${z}`
         if (seen.has(key)) continue
         seen.add(key)
+        const doorway = h >= -f.doorHalf && h <= f.doorHalf && y < f.doorHeight
+        // ★ THE DRESS IS PER CELL, DECIDED HERE. The top course of the lintel is the CAP and the
+        // centre of its first course the KEYSTONE — both in the trim stone, so a frame reads as
+        // jambs / lintel / cap rather than as one grey rectangle with a hole in it (Alex, 09-11:
+        // *"in desperate need of fixing"*, photographed at tier 1 from 40 blocks).
+        const role: SocketRole = doorway ? 'doorway'
+          : y === f.height - 1 ? 'cap'
+          : lintel && y === f.doorHeight && h === 0 ? 'keystone'
+          : lintel ? 'lintel' : 'jamb'
         cells.push({
-          x, y: baseY + y, z,
+          x, y: baseY + y, z, role,
           // ⚠ THE DOORWAY IS AIR THROUGH THE WHOLE DEPTH. Flagging only the front face would leave
           // the stone behind it solid and turn a two-block-thick arch into a two-block-thick WALL
           // — the keeper walks into the opening and stops. Depth is the whole change here, so this
           // is the line that change could most easily get wrong.
-          doorway: h >= -f.doorHalf && h <= f.doorHalf && y < f.doorHeight,
+          doorway,
           // ★ ONE CELL CARRIES THE LIGHT: the middle of the lintel course, on the face the keeper
           // reads it from (d === 0). Lit and dark sockets are the SAME frame — canon rules every
           // socket on the station framed, because *"a frame is the tuning made physical"* and Greg
@@ -524,6 +547,30 @@ export function socketCells(s: Socket, groundY: number): SocketCell[] {
 }
 
 /**
+ * Every cell one socket occupies: the frame, and for the gate the string courses of its tower.
+ *
+ * ── ★★ WHY THE TOWER'S DRESS RIDES ON THE GATE'S SOCKET (2026-09-11) ─────────────────────────
+ * The host lays four things and pins a material to three of them: the dais in `PLATFORM_MAT`, the
+ * hub and the tower in `MAT.CUT_STONE`. The ONE per-cell material path it has is
+ * `socketMaterial(c, lit)` on these cells — and `court-wiring.test.ts` counts the host's write
+ * sites and fails on a fifth, which is the right guard and means a second material path is not a
+ * change this module may make alone. So the tower's BODY is `gateTowerCells` (one stone, the
+ * host's), and the tower's string courses — the contrast that makes twenty courses of grey read as
+ * built rather than stacked — are cells of the gate's own socket, dressed by `socketMaterial`.
+ * ⚠ THE TWO SETS ARE DISJOINT BY CONSTRUCTION: a band course is left out of the body, not laid
+ * under it. Laying the same cell twice would be harmless to the host and a duplicate cube in the
+ * preview, and `crossings.test.ts` asserts the disjointness rather than trusting this sentence.
+ */
+export function socketCells(s: Socket, groundY: number): SocketCell[] {
+  const cells = frameCells(s, groundY)
+  if (s.kind !== 'gate') return cells
+  const frame = new Set(cells.map(c => `${c.x},${c.y},${c.z}`))
+  for (const c of towerCells(s, groundY, frame))
+    if (c.role === 'band') cells.push({ x: c.x, y: c.y, z: c.z, doorway: false, lamp: false, role: 'band' })
+  return cells
+}
+
+/**
  * ── ★★ WHAT MATERIAL ONE CELL WANTS — and this belongs HERE, not in the host ─────────────────
  * The file's header says it decides WHERE the court sits and WHICH cells belong to a frame vs a
  * doorway, and that `VoxelWorld.tsx` only lays the stone. The MATERIAL was the half that never
@@ -535,9 +582,21 @@ export function socketCells(s: Socket, groundY: number): SocketCell[] {
  * fix and after it — it asserted the list, while the defect was in the laying. Asking this function
  * instead means the assert fails if an unlit socket ever goes back to being air.
  */
+/**
+ * The trim stone: caps, keystones and the tower's string courses. ⚠ ALEX'S CALL — it is a look.
+ * Sandstone because it is WARM where every other stone here is grey: `CUT_STONE` 0x9aa0a4 and
+ * `STONE_BRICK` 0x8a9095 differ by one shade, which is why the 09-11 photograph read as one
+ * material. `PALE_BRICK` is the cold alternative. Whatever it is, it is swept — see
+ * `isCourtMaterial` — so a keeper's own sandstone inside the court's footprint is lost on a re-lay.
+ */
+export const TRIM_MAT: number = MAT.SANDSTONE
+
 export function socketMaterial(c: SocketCell, lit: boolean): number {
   if (c.doorway) return MAT.AIR          // the crossing itself is always walk-through
-  if (c.lamp) return lit ? MAT.MANA_LANTERN : MAT.CUT_STONE
+  // A dark lamp sits in the cap course, so it wears the cap's stone rather than punching a grey
+  // hole in a trim band.
+  if (c.lamp) return lit ? MAT.MANA_LANTERN : TRIM_MAT
+  if (c.role === 'cap' || c.role === 'keystone' || c.role === 'band') return TRIM_MAT
   return MAT.CUT_STONE                   // the frame stands whether the way is earned or not
 }
 
@@ -649,8 +708,13 @@ export function courtClearCells(
  * 6 = the floor sweep (2026-08-27, Alex: *"each pass is adding more stone brick blocks ontop of the
  *     previous attempt"*). Revs 4 and 5 laid a floor no sweep could reach, so they PILED UP. This
  *     rev exists to run `courtFloorClearCells` over every earlier attempt and re-lay once.
+ * 8 = the gatehouse (2026-09-11, Alex: *"in desperate need of fixing"*): the tower stands on the
+ *     dais as a gatehouse block with the doorway running through it, a shaft, a corbelled
+ *     crenellated crown, string courses and slits; frames get a cap course and a keystone in
+ *     `TRIM_MAT`; the dais gets a kerb and extends under the tower. A rev-7 tower is a stack of
+ *     three boxes floating on the lintel, and its lowest box hangs over the back of the dais.
  */
-export const COURT_REV = 7
+export const COURT_REV = 8
 
 /** Why the court could not stand where it was derived. Every one is a placement bug, not a refusal. */
 export type CourtMisfit =
@@ -837,38 +901,110 @@ export function courtPlatformCells(
   const apex = Math.atan2(gate.z - a.z, gate.x - a.x)
 
   const reach = COURT_RADIUS + PLATFORM_MARGIN
-  // The arc's own half-span, widened by the margin expressed as an angle at the stones' radius, so
-  // the apron is as generous at the mouth as it is in front.
-  const halfSpan = Math.PI / 2 + PLATFORM_MARGIN / COURT_RADIUS
   const out: { x: number; y: number; z: number }[] = []
   const seen = new Set<string>()
+  const column = (x: number, z: number) => {
+    const g = plotHeight(x, z, seed, cfg)
+    if (g === null) return          // off the island — the dais stops at the coast, not over it
+    for (let y = g + 1; y <= level; y++) {
+      const key = `${x},${y},${z}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ x, y, z })
+    }
+  }
+  for (let dx = -reach; dx <= reach; dx++)
+    for (let dz = -reach; dz <= reach; dz++)
+      if (inCourtSector(dx, dz, apex, reach)) column(a.x + dx, a.z + dz)
+  // ★ AND UNDER THE GATEHOUSE, WHICH REACHES PAST THE APRON. The tower block is `TOWER_BACK` deep
+  // behind a face that stands at `COURT_RADIUS`, so its back edge lands ~2 blocks outside a
+  // `PLATFORM_MARGIN` apron. Rev 7 hung there in the air; rev 8 stands it on a pad of the same
+  // deck, one block wider than the block on its flanks and behind. (Measured against
+  // `FLOOR_CLEAR_SLACK`: the sweep must still reach past this, and the test says so.)
+  for (const k of gateTowerFootprint(seed, cfg, 1)) {
+    const [x, z] = k.split(',').map(Number)
+    column(x, z)
+  }
+  return out
+}
 
+/**
+ * Is a column at (dx, dz) from the focus inside the court's sector — the half-disc under the arc,
+ * widened by the margin expressed as an angle at the stones' radius so the apron is as generous at
+ * the mouth as in front? ONE test, asked by the dais and by the kerb, so the two cannot disagree
+ * about where the floor ends.
+ */
+function inCourtSector(dx: number, dz: number, apex: number, reach: number): boolean {
+  const r = Math.hypot(dx, dz)
+  if (r > reach) return false
+  if (r <= 0.5) return true
+  // Which way this column lies relative to the arc's apex — the same half-circle the sockets sit
+  // on, not an arbitrary compass box.
+  const halfSpan = Math.PI / 2 + PLATFORM_MARGIN / COURT_RADIUS
+  let d = Math.atan2(dz, dx) - apex
+  while (d > Math.PI) d -= 2 * Math.PI
+  while (d < -Math.PI) d += 2 * Math.PI
+  return Math.abs(d) <= halfSpan
+}
+
+/**
+ * The kerb: one course of the hub's stone along the dais's outer rim, on the arc — the border
+ * course that turns a slab into a plinth. Columns, keyed `x,z`.
+ *
+ * ★ ON THE ARC ONLY, NEVER ACROSS THE MOUTH. The sector's two straight edges are where the keeper
+ * walks in; a kerb across them is a step to trip on in the one direction the court is entered
+ * from. It also stops at the gatehouse's padded footprint — the block is its own wall there — and
+ * at every frame, so no kerb cell fights a jamb for its column.
+ * ⚠ IT IS PART OF `courtHubCells`, NOT ITS OWN PASS, because the host lays the hub in `CUT_STONE`
+ * and counts its write sites. It is exported separately so the guards can tell a kerb cell from a
+ * wedge cell: the wedges must be 4-connected to the focus and the kerb, by design, is not.
+ */
+export function courtKerb(seed: number, cfg: PlotConfig = DEFAULT_PLOT): Set<string> {
+  const out = new Set<string>()
+  const level = courtLevel(seed, cfg)
+  if (level === null) return out
+  const a = courtAnchor(seed, cfg)
+  if (a.y === null) return out
+  const gate = sockets(seed, cfg)[0]
+  if (!gate) return out
+  const apex = Math.atan2(gate.z - a.z, gate.x - a.x)
+  const reach = COURT_RADIUS + PLATFORM_MARGIN
+  const floor = courtFloor(seed, cfg, level)
+  const blocked = gateTowerFootprint(seed, cfg, 1)
+  for (const s of sockets(seed, cfg))
+    for (const c of frameCells(s, level)) blocked.add(`${c.x},${c.z}`)
   for (let dx = -reach; dx <= reach; dx++) {
     for (let dz = -reach; dz <= reach; dz++) {
       const r = Math.hypot(dx, dz)
-      if (r > reach) continue
-      // Which way this column lies relative to the arc's apex. `a.facing` points from the focus at
-      // the apex, so the sector is everything within `halfSpan` of it — the same half-circle the
-      // sockets sit on, not an arbitrary compass box.
-      if (r > 0.5) {
-        const ang = Math.atan2(dz, dx)
-        let d = ang - apex
-        while (d > Math.PI) d -= 2 * Math.PI
-        while (d < -Math.PI) d += 2 * Math.PI
-        if (Math.abs(d) > halfSpan) continue
-      }
+      if (r <= reach - 1 || !inCourtSector(dx, dz, apex, reach)) continue
       const x = a.x + dx, z = a.z + dz
-      const g = plotHeight(x, z, seed, cfg)
-      if (g === null) continue          // off the island — the dais stops at the coast, not over it
-      for (let y = g + 1; y <= level; y++) {
-        const key = `${x},${y},${z}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        out.push({ x, y, z })
-      }
+      const k = `${x},${z}`
+      if (blocked.has(k) || !floor(x, z)) continue
+      out.add(k)
     }
   }
   return out
+}
+
+/**
+ * Is this column FLOOR — something a course at `level + 1` can stand on?
+ *
+ * ── ⚠⚠ "IS THERE A DAIS BLOCK HERE" IS THE WRONG QUESTION, AND IT COST A WHOLE COURT ──────────
+ * `courtPlatformCells` fills each column from its own ground UP to `level`, so a column whose
+ * ground is ALREADY at `level` gets no block — it is flush, and part of the floor, and absent from
+ * that set. And `courtLevel` is derived from the SOCKETS' grounds; the focus is not a socket, so
+ * nothing guarantees it sits under the level. Measured: the focus column is bare on **3.2% of 600
+ * courts**, and on s42 t1 that emptied the entire hub — the connectedness guard caught it as "the
+ * court has a hub at all", which is the failure reading like a missing feature. So the question is
+ * whether the column is FLOOR, not whether a block was laid on it.
+ */
+function courtFloor(seed: number, cfg: PlotConfig, level: number): (x: number, z: number) => boolean {
+  const laid = new Set(courtPlatformCells(seed, cfg).map(c => `${c.x},${c.z}`))
+  return (x, z) => {
+    if (laid.has(`${x},${z}`)) return true
+    const g = plotHeight(x, z, seed, cfg)
+    return g !== null && g === level          // flush already; a column ABOVE level is a lump, not floor
+  }
 }
 
 // ═══ THE HUB AND THE WEDGES ══════════════════════════════════════════════════════════════════
@@ -970,30 +1106,140 @@ export const TOWER_HEIGHT: number = landmarkHeight(LANDMARK_DIST, LANDMARK_ANGLE
 export const TOWER_BACK: number = 5
 
 /**
- * The taper, as (fraction of height reached, half-extent at that stage). A straight box reads as a
- * chimney; a stepped shaft reads as built, and in a voxel world the steps ARE the silhouette.
- * ⚠ Half-extents only ever DECREASE, which is what keeps the whole tower inside the frame's own
- * footprint — and therefore inside the clear sweep's `h` range, with no second derivation to drift.
+ * ── ★★★ THE SHAPE, 2026-09-11 — a GATEHOUSE, not a stack of boxes ────────────────────────────
+ * Alex, on the rev-7 tower: *"in desperate need of fixing."* Photographed at tier 1 from 40
+ * blocks it was three telescoping boxes of one grey, ending in a flat cut, standing on the lintel —
+ * and from the side (yaw 90) its lowest box hung THREE BLOCKS INTO THE AIR behind the gate, past
+ * the back of the dais, with nothing under it. A stepped taper in one material is exactly what
+ * "stacked boxes" looks like, because that is what it was.
+ *
+ * ★ SO THE MASS COMES DOWN TO THE FLOOR AND THE DOOR GOES THROUGH IT. The gatehouse block stands
+ * on the dais behind the frame (7 wide, `TOWER_BACK` deep), and the doorway runs on through it as a
+ * tunnel — the frame is the gatehouse's face, not a fence with a tower parked behind it. Above it
+ * the shaft steps in once (5 × 4), and the top is a CROWN: a parapet course the full width of the
+ * base, corbelled out over the shaft, carrying merlons. Between the two, string courses every
+ * `TOWER_BAND_PITCH` courses in the trim stone, and slit openings between the bands — scale, and
+ * the one thing that tells the eye a stone thing is a building rather than a block.
+ *
+ * ⚠ THE HEIGHT IS NOT TOUCHED. `TOWER_HEIGHT` is derived from the draw distance and the top course
+ * (the merlons) sits exactly where the old flat cut did; the crown is spent INSIDE that budget.
+ * ⚠ NOR THE FOOTPRINT: nothing here is wider than the frame's own half (`f.half`) or deeper than
+ * `TOWER_BACK`, which keeps every cell inside `courtClearCells`' sweep with no second derivation.
+ * The crown gets its overhang by the shaft below it being NARROWER, not by the crown being wider.
+ *
+ * ⚠ WHY TWO PRODUCERS. The host lays the tower in one stone. The string courses need a second
+ * one, and the only per-cell material path the host has is `socketMaterial` — so the bands are
+ * emitted by the gate's `socketCells` and LEFT OUT of `gateTowerCells`. One plan (`towerCells`),
+ * two disjoint views of it; `crossings.test.ts` asserts the disjointness and the band rows.
  */
-const TOWER_STAGES: { upTo: number; half: number; back: number }[] = [
-  { upTo: 0.45, half: 3, back: TOWER_BACK },
-  { upTo: 0.80, half: 2, back: TOWER_BACK - 1 },
-  { upTo: 1.00, half: 1, back: TOWER_BACK - 3 },
-]
+
+/** Courses of the gatehouse block that continue above the gate's lintel before the shaft steps in. */
+export const TOWER_BASE_COURSES: number = 3
+/** Courses between string courses on the tower, counted up from the gatehouse's top course. */
+export const TOWER_BAND_PITCH: number = 5
+/** The shaft between the gatehouse and the crown: half-width and depth. Inside the base's footprint. */
+const SHAFT_HALF = 2
+const SHAFT_BACK = 4
+
+export type TowerRole = 'body' | 'band' | 'parapet' | 'merlon' | 'slit'
+export interface TowerCell { x: number; y: number; z: number; role: TowerRole }
+
+/** The gate's frame, keyed — what the tower body must not lay over. */
+const frameKeys = (gate: Socket, groundY: number): Set<string> =>
+  new Set(frameCells(gate, groundY).map(c => `${c.x},${c.y},${c.z}`))
 
 /**
- * Every cell of the gate's tower.
+ * The ONE plan of the tower: every cell, with what it is. `gateTowerCells` takes the stone the host
+ * lays in one material, `socketCells` takes the bands, `gateTowerOpenings` the slits.
  *
  * ── ★★★ FILLED BY DISTANCE, NEVER BY STEPPING A LATTICE ───────────────────────────────────────
- * This is the same lesson `courtHubCells` records one function down, and ignoring it here would
- * reproduce the exact defect Alex called garbled. `socketCells` walks `(h, d)` and `Math.round`s
- * each point; at a facing near an axis that gives a solid post, and at forty degrees it gives a
- * **three-cell diagonal staircase with gaps in it**. A frame can survive that. A twenty-course
- * tower cannot: it would ship as a column of holes, and half of every court's sockets voxelise
- * off-axis, so it would not even be one unlucky seed.
+ * This is the same lesson `courtHubCells` records, and ignoring it here would reproduce the exact
+ * defect Alex called garbled. `frameCells` walks `(h, d)` and `Math.round`s each point; at a facing
+ * near an axis that gives a solid post, and at forty degrees it gives a **three-cell diagonal
+ * staircase with gaps in it**. A frame can survive that. A twenty-course tower cannot. So for every
+ * cell in the bounding box: is my centre inside this course's extents? That FILLS, at every bearing.
+ * The solidity assert in `crossings.test.ts` caught the sampled version on 6 of 8 seeds, 50 holes
+ * each, within a minute of being written.
  *
- * ★ SO IT ASKS THE OPPOSITE QUESTION — for every cell in the bounding box, is my centre inside the
- * stage's extents? That FILLS rather than samples, so the shaft is solid at every bearing.
+ * ⚠ AT FRAME HEIGHT THE BODY FILLS EVERYTHING BEHIND THE FACE LAYER THAT THE FRAME DID NOT LAY.
+ * The frame's back layer is sampled and therefore holed at rotated bearings; the body region starts
+ * at d = -0.5 so those holes are stone, and the frame's own cells are excluded by key so no cell
+ * has two owners. The doorway's line (|h| ≤ doorHalf) is left open through the whole depth.
+ */
+function towerCells(gate: Socket, groundY: number, frame: Set<string>): TowerCell[] {
+  const f = FRAME.gate
+  const tx = -Math.sin(gate.facing), tz = Math.cos(gate.facing)
+  const nx = Math.cos(gate.facing), nz = Math.sin(gate.facing)
+  const base = groundY + 1
+  const lintelTop = base + f.height - 1
+  const top = lintelTop + TOWER_HEIGHT
+  const baseTop = lintelTop + TOWER_BASE_COURSES
+  const parapetY = top - 1
+  const reach = Math.ceil(Math.hypot(f.half + 1, TOWER_BACK + 1)) + 1
+  const cx = Math.round(gate.x), cz = Math.round(gate.z)
+  const out: TowerCell[] = []
+  for (let y = base; y <= top; y++) {
+    let half: number, back: number, front = 0.5, kind: TowerRole = 'body'
+    if (y <= lintelTop) { half = f.half; back = TOWER_BACK; front = -0.5 }
+    else if (y <= baseTop) { half = f.half; back = TOWER_BACK }
+    else if (y < parapetY) { half = SHAFT_HALF; back = SHAFT_BACK }
+    else if (y === parapetY) { half = f.half; back = TOWER_BACK; kind = 'parapet' }
+    else { half = f.half; back = TOWER_BACK; kind = 'merlon' }
+    // String courses: the gatehouse's top course and every `TOWER_BAND_PITCH` above it, up the
+    // shaft. Never the parapet — the crown is stone, and the band under it reads as its corbel table.
+    const band = y > lintelTop && y < parapetY && (y - baseTop) % TOWER_BAND_PITCH === 0
+    if (band) kind = 'band'
+    const row: TowerCell[] = []
+    for (let x = cx - reach; x <= cx + reach; x++) {
+      for (let z = cz - reach; z <= cz + reach; z++) {
+        const dx = x - gate.x, dz = z - gate.z
+        const h = dx * tx + dz * tz          // along the arc
+        const d = dx * nx + dz * nz          // along the normal; negative is behind the face
+        if (Math.abs(h) > half + 0.5) continue
+        if (d > front || d < -(back - 0.5)) continue
+        if (frame.has(`${x},${y},${z}`)) continue
+        // ⚠ THE DOORWAY RUNS THROUGH. A gatehouse whose tunnel is sealed at the back is the
+        // two-block-thick-wall bug `frameCells` records, five blocks thick.
+        if (y < base + f.doorHeight && Math.abs(h) <= f.doorHalf + 0.5) continue
+        if (kind === 'merlon') {
+          // On the parapet's rim only, every other cell — a crenellation at any bearing, because
+          // world parity alternates along an axis run AND along a staircase.
+          const rim = Math.abs(h) > half - 0.5 || d > front - 1 || d < -(back - 1.5)
+          if (!rim || ((x + z) & 1) === 1) continue
+        }
+        row.push({ x, y, z, role: kind })
+      }
+    }
+    // ── the slits: between bands, one on the face and one on each flank ──────────────────────
+    // Chosen from the FILLED row rather than by a region test: a 1×1 region on a rotated lattice
+    // can contain no cell centre at all, so "the cell at h=0, d=0" may not exist. "The frontmost
+    // body cell nearest the centre line" always does. The opening is one cell deep into a solid
+    // shaft, which from outside is a dark recess — the reading of a slit, at no cost in stone.
+    const phase = (y - baseTop) % TOWER_BAND_PITCH
+    if (kind === 'body' && y > baseTop && y < parapetY && (phase === 2 || phase === 3)) {
+      const dMid = (front - (back - 0.5)) / 2
+      const hd = (c: TowerCell) => {
+        const dx = c.x - gate.x, dz = c.z - gate.z
+        return { h: dx * tx + dz * tz, d: dx * nx + dz * nz }
+      }
+      const pick = (ok: (p: { h: number; d: number }) => boolean, score: (p: { h: number; d: number }) => number) => {
+        let best: TowerCell | null = null, bs = -Infinity
+        for (const c of row) { const p = hd(c); if (!ok(p)) continue; const s = score(p); if (s > bs) { bs = s; best = c } }
+        if (best) best.role = 'slit'
+      }
+      pick(p => Math.abs(p.h) <= 0.75, p => p.d)                 // the face
+      pick(p => Math.abs(p.d - dMid) <= 0.75, p => -p.h)         // left flank
+      pick(p => Math.abs(p.d - dMid) <= 0.75, p => p.h)          // right flank
+    }
+    out.push(...row)
+  }
+  return out
+}
+
+/**
+ * Every cell of the gate's tower that the host lays in its one stone: the gatehouse, the shaft,
+ * the parapet and the merlons. NOT the string courses (the gate's `socketCells` carry those, in
+ * `TRIM_MAT`) and NOT the slits (`gateTowerOpenings` — they are the cells deliberately left out).
  */
 export function gateTowerCells(
   seed: number, cfg: PlotConfig = DEFAULT_PLOT,
@@ -1002,42 +1248,53 @@ export function gateTowerCells(
   if (level === null) return []
   const gate = sockets(seed, cfg)[0]
   if (!gate || gate.kind !== 'gate') return []
-  const f = FRAME[gate.kind]
+  return towerCells(gate, level, frameKeys(gate, level))
+    .filter(c => c.role === 'body' || c.role === 'parapet' || c.role === 'merlon')
+    .map(({ x, y, z }) => ({ x, y, z }))
+}
+
+/**
+ * The tower's openings: the slit cells inside its footprint that no producer lays, so they are
+ * air in a solid shaft. Exported for the solidity guard, which must know a hole from a window.
+ * ⚠ Not a lay pass and not named like one — `court-preview.test.ts` reads `*Cells` exports as
+ * things the world lays, and this is the set of things it deliberately does not.
+ */
+export function gateTowerOpenings(
+  seed: number, cfg: PlotConfig = DEFAULT_PLOT,
+): { x: number; y: number; z: number }[] {
+  const level = courtLevel(seed, cfg)
+  if (level === null) return []
+  const gate = sockets(seed, cfg)[0]
+  if (!gate || gate.kind !== 'gate') return []
+  return towerCells(gate, level, frameKeys(gate, level))
+    .filter(c => c.role === 'slit')
+    .map(({ x, y, z }) => ({ x, y, z }))
+}
+
+/**
+ * The columns the gatehouse stands on, padded by `pad` blocks on its flanks and behind — never in
+ * front, which is the court's walk. The dais runs under this (padded by 1) so the block stands on
+ * stone rather than hanging over the apron's edge, and the hub keeps its wedges and kerb out of it.
+ * Keyed `x,z`, a footprint and not a lay pass.
+ */
+export function gateTowerFootprint(
+  seed: number, cfg: PlotConfig = DEFAULT_PLOT, pad: number = 0,
+): Set<string> {
+  const out = new Set<string>()
+  const gate = sockets(seed, cfg)[0]
+  if (!gate || gate.kind !== 'gate') return out
+  const f = FRAME.gate
   const tx = -Math.sin(gate.facing), tz = Math.cos(gate.facing)
   const nx = Math.cos(gate.facing), nz = Math.sin(gate.facing)
-  // The shaft starts on the lintel's top course, so it grows out of the frame rather than hovering.
-  const baseY = level + 1 + f.height
-  const out: { x: number; y: number; z: number }[] = []
-  const seen = new Set<string>()
-  // ⚠⚠ THE BOX IS SWEPT IN WORLD COORDINATES, NOT IN THE SOCKET'S. Stepping the socket lattice and
-  // rounding — which is what the first version of this function did — IS the sampling bug this
-  // whole approach exists to avoid: some world cells inside the rectangle are the image of no
-  // integer lattice pair, so they are never visited and the shaft ships holed. The solidity assert
-  // in `crossings.test.ts` caught it on 6 of 8 seeds, 50 holes each, within a minute of being
-  // written. A guard you have not seen fail is a guard you have not tested.
-  const reach = Math.ceil(Math.hypot(
-    Math.max(...TOWER_STAGES.map(t => t.half)),
-    Math.max(...TOWER_STAGES.map(t => t.back)),
-  )) + 1
+  const reach = Math.ceil(Math.hypot(f.half + pad + 1, TOWER_BACK + pad + 1)) + 1
   const cx = Math.round(gate.x), cz = Math.round(gate.z)
-  for (let i = 0; i < TOWER_HEIGHT; i++) {
-    const frac = (i + 1) / TOWER_HEIGHT
-    const st = TOWER_STAGES.find(t => frac <= t.upTo) ?? TOWER_STAGES[TOWER_STAGES.length - 1]
-    const y = baseY + i
-    for (let x = cx - reach; x <= cx + reach; x++) {
-      for (let z = cz - reach; z <= cz + reach; z++) {
-        // Distance in the socket's own frame, measured from the CELL CENTRE back onto the axes —
-        // the fill test, not a sample of the lattice.
-        const dx = x - gate.x, dz = z - gate.z
-        const h = dx * tx + dz * tz          // along the arc
-        const d = dx * nx + dz * nz          // along the normal; negative is behind the face
-        if (Math.abs(h) > st.half + 0.5) continue
-        if (d > 0.5 || d < -(st.back - 0.5)) continue
-        const key = `${x},${y},${z}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        out.push({ x, y, z })
-      }
+  for (let x = cx - reach; x <= cx + reach; x++) {
+    for (let z = cz - reach; z <= cz + reach; z++) {
+      const dx = x - gate.x, dz = z - gate.z
+      const h = dx * tx + dz * tz, d = dx * nx + dz * nz
+      if (Math.abs(h) > f.half + 0.5 + pad) continue
+      if (d > 0.5 || d < -(TOWER_BACK - 0.5) - pad) continue
+      out.add(`${x},${z}`)
     }
   }
   return out
@@ -1086,24 +1343,14 @@ export function courtHubCells(
   if (a.y === null) return []
   const y = level + 1
 
-  // ── ⚠⚠ "IS THERE A DAIS BLOCK HERE" IS THE WRONG QUESTION, AND IT COST A WHOLE COURT ────────
-  // `courtPlatformCells` fills each column from its own ground UP to `level`, so a column whose
-  // ground is ALREADY at `level` gets no block — it is flush, and part of the floor, and absent
-  // from that set. And `courtLevel` is derived from the SOCKETS' grounds; the focus is not a
-  // socket, so nothing guarantees it sits under the level. Measured: the focus column is bare on
-  // **3.2% of 600 courts**, and on s42 t1 that emptied the entire hub — the connectedness guard
-  // caught it as "the court has a hub at all", which is the failure reading like a missing feature.
-  // So the question is whether the column is FLOOR, not whether a block was laid on it.
-  const laid = new Set(courtPlatformCells(seed, cfg).map(c => `${c.x},${c.z}`))
-  const onFloor = (x: number, z: number) => {
-    if (laid.has(`${x},${z}`)) return true
-    const g = plotHeight(x, z, seed, cfg)
-    return g !== null && g === level          // flush already; a column ABOVE level is a lump, not floor
-  }
-  // Every cell any frame occupies, at any height — what a wedge must stop against.
-  const stone = new Set<string>()
+  // "Is there a dais block here" is the wrong question — see `courtFloor` for the court it cost.
+  const onFloor = courtFloor(seed, cfg, level)
+  // Every cell any frame occupies, at any height — what a wedge must stop against — and the
+  // gatehouse's padded footprint, where the wedge to the gate would otherwise run on into the
+  // block behind the frame (same stone, so invisible in the world; a duplicate cube in the preview).
+  const stone = gateTowerFootprint(seed, cfg, 1)
   for (const s of sockets(seed, cfg))
-    for (const c of socketCells(s, level)) stone.add(`${c.x},${c.z}`)
+    for (const c of frameCells(s, level)) stone.add(`${c.x},${c.z}`)
 
   const out: { x: number; y: number; z: number }[] = []
   const seen = new Set<string>()
@@ -1163,7 +1410,17 @@ export function courtHubCells(
       }
     }
   }
-  return out.filter(c => reachable.has(`${c.x},${c.z}`))
+  const wedges = out.filter(c => reachable.has(`${c.x},${c.z}`))
+  // ── the kerb: the plinth's border course, on the rim, in the hub's stone ─────────────────
+  // Appended AFTER the connectedness filter on purpose: it is a rim, not a wedge, and it is not
+  // meant to reach the focus. `courtKerb` is exported so the guard can hold the wedges to
+  // connectedness and the kerb to the rim, rather than loosening one to admit the other.
+  for (const k of courtKerb(seed, cfg)) {
+    if (seen.has(k)) continue
+    const [x, z] = k.split(',').map(Number)
+    wedges.push({ x, y, z })
+  }
+  return wedges
 }
 
 /**
@@ -1216,8 +1473,10 @@ export function courtFloorClearCells(
  * How much wider than today's apron the floor sweep reaches, and how far above the level it looks.
  * ⚠ Slack exists so a PREVIOUS, wider apron is still reachable; head exists because the hub stands
  * a course above the deck and a sweep stopping at `level` would leave it hanging in the air.
+ * 4 → 6 on 2026-09-11: the dais now runs under the gatehouse, whose padded footprint reaches ~16.5
+ * blocks from the focus, and the sweep must reach past the apron it clears by 2 (asserted).
  */
-export const FLOOR_CLEAR_SLACK: number = 4
+export const FLOOR_CLEAR_SLACK: number = 6
 export const FLOOR_CLEAR_HEAD: number = 2
 
 /**
@@ -1232,9 +1491,9 @@ export const FLOOR_CLEAR_HEAD: number = 2
  *
  * ★ AND THE LIST MUST STAY SHORT FOR A REASON THAT IS NOT TIDINESS. The host clears these
  * unconditionally inside the court's footprint, so every material added here is one a keeper can
- * lose by building with it near their own station. Cut stone, lantern and the dais are the three
- * the court itself lays; nothing else belongs.
+ * lose by building with it near their own station. Cut stone, lantern, the dais and the trim stone
+ * are the four the court itself lays; nothing else belongs.
  */
 export function isCourtMaterial(m: number): boolean {
-  return m === MAT.CUT_STONE || m === MAT.MANA_LANTERN || m === PLATFORM_MAT
+  return m === MAT.CUT_STONE || m === MAT.MANA_LANTERN || m === PLATFORM_MAT || m === TRIM_MAT
 }

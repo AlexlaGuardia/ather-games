@@ -15,6 +15,8 @@ import {
   courtHubCells, COURT_HUB_RADIUS, WEDGE_HALF, courtFloorClearCells,
   gateTowerCells, TOWER_HEIGHT, TOWER_BACK, LANDMARK_DIST, LANDMARK_ANGLE_DEG,
   COURT_MAX_HEIGHT, COURT_MAX_BACK, SOCKET_MAX_HEIGHT, landmarkHeight,
+  TRIM_MAT, TOWER_BASE_COURSES, TOWER_BAND_PITCH, gateTowerOpenings, gateTowerFootprint, courtKerb,
+  PLATFORM_MARGIN,
 } from './crossings'
 import { plotThreshold, plotHeight, insideCore, plotForTier, PLOT_TIERS, DEFAULT_PLOT } from '../voxel/plot'
 import { PLOT_TRIGGER_RADIUS } from './seam'
@@ -242,12 +244,16 @@ for (const seed of SEEDS) {
   {
     const dark = socketCells(socks[MAX_MARKS], 100)
     const frame = dark.filter(c => !c.doorway)
-    ok(frame.length > 0 && frame.every(c => socketMaterial(c, false) === MAT.CUT_STONE),
-       `a DARK socket still stands in cut stone (${frame.length} frame cells)`)
+    // ★ STONE, in one of the two stones a frame is dressed in — the trim is not "lit", it is
+    // masonry. What must never come back is AIR: "unearned" meaning absent.
+    ok(frame.length > 0 && frame.every(c => [MAT.CUT_STONE, TRIM_MAT].includes(socketMaterial(c, false))),
+       `a DARK socket still stands in stone (${frame.length} frame cells)`)
+    ok(frame.filter(c => c.role === 'jamb').every(c => socketMaterial(c, false) === MAT.CUT_STONE),
+       'and its jambs are the plain cut stone')
     ok(dark.filter(c => c.doorway).every(c => socketMaterial(c, false) === MAT.AIR),
        'a dark socket is still walk-through — dark is not sealed')
-    ok(socketMaterial(dark.find(c => c.lamp)!, false) === MAT.CUT_STONE,
-       'a dark socket has plain stone where its lamp would be')
+    ok(socketMaterial(dark.find(c => c.lamp)!, false) === TRIM_MAT,
+       'a dark socket has the cap\'s own stone where its lamp would be — no grey hole in the trim')
     ok(socketMaterial(dark.find(c => c.lamp)!, true) === MAT.MANA_LANTERN,
        'a lit socket carries the lantern — the one cell that differs')
   }
@@ -263,9 +269,11 @@ for (const seed of SEEDS) {
     // frames stopped being one height — which is the right outcome for the wrong reason: it was
     // measuring the old shape's arithmetic rather than what a lamp has to BE. What matters is that
     // the light sits on the topmost course, above the opening, whatever that course's number is.
-    const top = Math.max(...cells.map(c => c.y))
+    // ⚠ OF THE FRAME. The gate's socket also carries its tower's string courses, twenty courses up;
+    // the lamp lights the OPENING, so it is the frame's top course it must sit on.
+    const top = Math.max(...cells.filter(c => c.role !== 'band').map(c => c.y))
     const doorTop = Math.max(...cells.filter(c => c.doorway).map(c => c.y))
-    ok(lamps.every(c => c.y === top), `socket ${sk.index}'s lamp is on the topmost course`)
+    ok(lamps.every(c => c.y === top), `socket ${sk.index}'s lamp is on the frame's topmost course`)
     ok(lamps.every(c => c.y > doorTop), `socket ${sk.index}'s lamp sits above the opening it lights`)
   }
 
@@ -731,9 +739,37 @@ for (const seed of SEEDS) {
           if (keys.has(k) && !seen.has(k)) { seen.add(k); queue.push([x+dx, z+dz]) }
         }
       }
-      const orphans = hub.filter(c => !seen.has(`${c.x},${c.z}`)).length
+      // ⚠ THE KERB IS EXEMPT BY NAME, NOT BY LOOSENING THE BOUND. It is a rim course on the dais's
+      // edge and by design never reaches the focus; `courtKerb` says which columns those are, so
+      // every OTHER hub cell is still held to connectedness and a dotted wedge still goes red.
+      const kerb = courtKerb(seed, cfg)
+      const orphans = hub.filter(c => !seen.has(`${c.x},${c.z}`) && !kerb.has(`${c.x},${c.z}`)).length
       ok(orphans === 0,
-         `s${seed} t${t}: every hub cell is 4-connected to the focus — no dotted wedge (${orphans} orphaned)`)
+         `s${seed} t${t}: every wedge cell is 4-connected to the focus — no dotted wedge (${orphans} orphaned)`)
+      // ── ★ THE KERB: the plinth's border course, on the rim, in the hub's stone ──────────────
+      {
+        const reach = COURT_RADIUS + PLATFORM_MARGIN
+        ok(kerb.size >= 12, `s${seed} t${t}: the dais has a kerb (${kerb.size} columns)`)
+        ok([...kerb].every(k => keys.has(k)),
+           `s${seed} t${t}: every kerb column is laid by courtHubCells — it is not its own pass`)
+        const offRim = [...kerb].filter(k => {
+          const [x, z] = k.split(',').map(Number)
+          const r = Math.hypot(x - a.x, z - a.z)
+          return r <= reach - 1.5 || r > reach + 0.5
+        }).length
+        ok(offRim === 0, `s${seed} t${t}: the kerb sits on the dais's outer rim (${offRim} columns off it)`)
+        const inBlock = [...kerb].filter(k => inStone.has(k) || gateTowerFootprint(seed, cfg, 1).has(k)).length
+        ok(inBlock === 0, `s${seed} t${t}: no kerb column fights a frame or the gatehouse (${inBlock} do)`)
+        // Not across the mouth: every kerb column is within the arc's own span, not on a radial
+        // edge. Measured as "no kerb column is nearer the focus's mouth line than the sockets are".
+        const th = plotThreshold(seed, cfg)
+        const nearestSock = Math.min(...socks.map(sk => Math.hypot(sk.x - th.x, sk.z - th.z)))
+        const nearestKerb = Math.min(...[...kerb].map(k => {
+          const [x, z] = k.split(',').map(Number); return Math.hypot(x - th.x, z - th.z)
+        }))
+        ok(nearestKerb > nearestSock - 4,
+           `s${seed} t${t}: the kerb does not run across the mouth (nearest kerb ${nearestKerb.toFixed(1)} vs socket ${nearestSock.toFixed(1)} from the door)`)
+      }
 
       // ── AND EACH WEDGE ACTUALLY REACHES ITS STONE. Alex ruled *"reach"*, so a wedge that stops
       // three blocks short is the thing he asked against — and it stops AT the frame, so the test
@@ -845,28 +881,47 @@ for (const seed of SEEDS) {
   // lattice and rounds; this file's own hub header measured that giving "a three-cell diagonal
   // staircase with gaps in it" at forty degrees. A frame survives that. A twenty-course shaft ships
   // as a column of holes. Every course must be a solid rectangle in its own (h, d) frame.
+  // ⚠ AND SINCE 09-11 A HOLE HAS TO BE TOLD FROM A WINDOW. The slits are cells deliberately left
+  // out of a filled course; `gateTowerOpenings` names them, so the assert is "every interior gap is
+  // a declared opening" — not "no gaps", which would forbid the windows, and not "skip rows with
+  // gaps", which would forgive the sampling bug this exists to catch. Rows at frame height are the
+  // frame's (sampled, holed at rotated bearings — its own problem, recorded in `frameCells`) and the
+  // merlon row is crenellated on purpose; both are outside the check, by construction not by taste.
   for (const seed of SEEDS) {
     const cfg = plotForTier(1)
+    const lvl = courtLevel(seed, cfg)
     const tower = gateTowerCells(seed, cfg)
-    if (tower.length === 0) continue
+    if (tower.length === 0 || lvl === null) continue
+    const openings = new Set(gateTowerOpenings(seed, cfg).map(c => `${c.x},${c.y},${c.z}`))
+    const lintelTop = lvl + 1 + SOCKET_MAX_HEIGHT - 1
+    const top = Math.max(...tower.map(c => c.y))
     const byY = new Map<number, { x: number; z: number }[]>()
     for (const c of tower) {
+      if (c.y <= lintelTop || c.y === top) continue
       if (!byY.has(c.y)) byY.set(c.y, [])
       byY.get(c.y)!.push({ x: c.x, z: c.z })
     }
-    let holed = 0
-    for (const [, cells] of byY) {
+    let holed = 0, windows = 0
+    for (const [y, cells] of byY) {
       // A filled course has no interior gap: every cell inside the course's own bounding box that
-      // lies between two occupied cells on the same row must itself be occupied.
+      // lies between two occupied cells on the same row must itself be occupied — or be a window.
       const occ = new Set(cells.map(c => `${c.x},${c.z}`))
-      const xs = cells.map(c => c.x), zs = cells.map(c => c.z)
+      const xs = cells.map(c => c.x)
       for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
         const row = cells.filter(c => c.x === x).map(c => c.z)
         if (row.length === 0) continue
-        for (let z = Math.min(...row); z <= Math.max(...row); z++) if (!occ.has(`${x},${z}`)) holed++
+        for (let z = Math.min(...row); z <= Math.max(...row); z++) {
+          if (occ.has(`${x},${z}`)) continue
+          if (openings.has(`${x},${y},${z}`)) windows++; else holed++
+        }
       }
     }
-    ok(holed === 0, `★★ seed ${seed}: the tower is solid at its bearing — ${holed} interior holes`)
+    ok(byY.size >= 10, `★★ seed ${seed}: the shaft has courses to check (${byY.size})`)
+    ok(holed === 0, `★★ seed ${seed}: the tower is solid at its bearing — ${holed} interior holes that are not windows (${windows} windows seen)`)
+    // ⚠ NOT `windows > 0`. That was the first draft and it went red on every axis-aligned bearing,
+    // where a face slit sits at the END of its row and is no interior gap at all. "A slit is a
+    // window and not a notch" is asserted where it can be — adjacency to stone, in the gatehouse
+    // block below — not here, where the row scan cannot see a boundary cell by construction.
   }
 
   // ★ 3. IT NEVER REACHES INTO THE COURT'S WALK. `socketCells` records that extruding along +n once
@@ -890,8 +945,10 @@ for (const seed of SEEDS) {
     const tower = gateTowerCells(2026, cfg)
     if (lvl !== null && tower.length > 0) {
       const lo = Math.min(...tower.map(c => c.y))
-      ok(lo === lvl + 1 + SOCKET_MAX_HEIGHT,
-        `★ the shaft starts on the gate's top course (${lo} vs ${lvl + 1 + SOCKET_MAX_HEIGHT})`)
+      // ⚠ ON THE DAIS, NOT ON THE LINTEL. Rev 7 started the shaft on the lintel's top course and its
+      // lowest box hung over the back of the dais in the air; the gatehouse stands on the floor.
+      ok(lo === lvl + 1,
+        `★ the gatehouse stands on the dais (${lo} vs ${lvl + 1})`)
       ok(Math.max(...tower.map(c => c.y)) - lvl === COURT_MAX_HEIGHT,
         '★ and the court\'s stated max height is the height it actually reaches')
     }
@@ -914,6 +971,119 @@ for (const seed of SEEDS) {
   ok(TOWER_HEIGHT > SOCKET_MAX_HEIGHT,
     `★ and it is the tall thing — ${TOWER_HEIGHT} courses over a ${SOCKET_MAX_HEIGHT}-course frame`)
   ok(COURT_MAX_BACK >= TOWER_BACK, '★ the clear sweep reaches as far back as the tower does')
+}
+
+// ── ★★★ THE GATEHOUSE — Alex, 2026-09-11: *"in desperate need of fixing"* ────────────────────
+// Photographed at tier 1 from 40 blocks: three telescoping boxes of one grey ending in a flat cut,
+// the lowest hanging in the air behind the gate. These hold the shape that replaced it: a block on
+// the floor with the door through it, a crown, string courses, windows, a kerbed plinth, and frames
+// with a cap and a keystone. Every one is a PROPERTY of the cells, never a count of them.
+{
+  for (const t of [0, 1, 2]) {
+    const cfg = plotForTier(t)
+    for (const seed of [1337, 555, 42, 2026]) {
+      const lvl = courtLevel(seed, cfg)
+      const gate = sockets(seed, cfg)[0]
+      const tower = gateTowerCells(seed, cfg)
+      if (lvl === null || !gate || tower.length === 0) continue
+      const key = (c: { x: number; y: number; z: number }) => `${c.x},${c.y},${c.z}`
+      const body = new Set(tower.map(key))
+      const frame = socketCells(gate, lvl)
+      const bands = frame.filter(c => c.role === 'band')
+      const top = Math.max(...tower.map(c => c.y))
+      const lintelTop = lvl + SOCKET_MAX_HEIGHT
+      const baseTop = lintelTop + TOWER_BASE_COURSES
+      const parapetY = top - 1
+      const rows = (y: number) => tower.filter(c => c.y === y)
+      const cols = (y: number) => new Set(rows(y).map(c => `${c.x},${c.z}`))
+
+      // ── 1. A CROWN, NOT A FLAT CUT: merlons on a parapet that overhangs the shaft ───────────
+      ok(top - lvl === COURT_MAX_HEIGHT, `s${seed} t${t}: the crown tops out at the derived height (${top - lvl})`)
+      ok(rows(top).length >= 4 && rows(top).length < rows(parapetY).length,
+         `s${seed} t${t}: the top course is crenellated — ${rows(top).length} merlons on a ${rows(parapetY).length}-cell parapet, not a slab`)
+      ok(rows(top).every(c => cols(parapetY).has(`${c.x},${c.z}`)),
+         `s${seed} t${t}: every merlon stands on the parapet`)
+      // The parapet is corbelled: wider than the shaft course below the band under it.
+      const shaftY = parapetY - 2
+      ok(cols(parapetY).size > cols(shaftY).size,
+         `s${seed} t${t}: the parapet overhangs the shaft (${cols(parapetY).size} vs ${cols(shaftY).size} columns)`)
+      // And the merlons alternate — no run of three along either axis.
+      const mer = cols(top)
+      let run3 = 0
+      for (const k of mer) {
+        const [x, z] = k.split(',').map(Number)
+        if (mer.has(`${x + 1},${z}`) && mer.has(`${x + 2},${z}`)) run3++
+        if (mer.has(`${x},${z + 1}`) && mer.has(`${x},${z + 2}`)) run3++
+      }
+      ok(run3 === 0, `s${seed} t${t}: merlons alternate — ${run3} runs of three`)
+
+      // ── 2. STRING COURSES at the expected rows, in the trim stone, and NOT in the body ─────
+      const want = new Set<number>()
+      for (let y = lintelTop + 1; y < parapetY; y++) if ((y - baseTop) % TOWER_BAND_PITCH === 0) want.add(y)
+      const got = new Set(bands.map(c => c.y))
+      ok(want.size >= 3 && [...want].every(y => got.has(y)) && [...got].every(y => want.has(y)),
+         `s${seed} t${t}: bands at rows ${[...want].map(y => y - lvl).join('/')} above the dais (got ${[...got].map(y => y - lvl).join('/')})`)
+      ok(bands.length > 0 && bands.every(c => rows(c.y).length === 0),
+         `s${seed} t${t}: a band course is left out of the body, not laid under it`)
+      ok(bands.every(c => socketMaterial(c, false) === TRIM_MAT && socketMaterial(c, true) === TRIM_MAT),
+         `s${seed} t${t}: bands are the trim stone, lit or dark`)
+      ok(bands.every(c => !c.doorway && !c.lamp), `s${seed} t${t}: a band is neither a doorway nor a lamp`)
+
+      // ── 3. WINDOWS: air inside the footprint, with stone beside them ──────────────────────
+      const slits = gateTowerOpenings(seed, cfg)
+      const foot = gateTowerFootprint(seed, cfg, 0)
+      ok(slits.length >= 6, `s${seed} t${t}: the shaft has slits (${slits.length})`)
+      ok(slits.every(c => !body.has(key(c))), `s${seed} t${t}: no slit is laid — an opening is AIR`)
+      ok(slits.every(c => !frame.some(f => key(f) === key(c))), `s${seed} t${t}: no slit is a band or frame cell either`)
+      ok(slits.every(c => foot.has(`${c.x},${c.z}`)), `s${seed} t${t}: every slit is inside the tower's footprint`)
+      ok(slits.every(c => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => body.has(`${c.x + dx},${c.y},${c.z + dz}`))),
+         `s${seed} t${t}: every slit has tower stone beside it — a window, not a notch`)
+      ok(slits.every(c => c.y > baseTop && c.y < parapetY), `s${seed} t${t}: slits are in the shaft, between the bands`)
+
+      // ── 4. ONE OWNER PER CELL: body, bands and frame never overlap ────────────────────────
+      const dup = frame.filter(c => body.has(key(c))).length
+      ok(dup === 0, `s${seed} t${t}: the tower body and the gate's socket cells are disjoint (${dup} shared)`)
+      const hubInBlock = courtHubCells(seed, cfg).filter(c => gateTowerFootprint(seed, cfg, 1).has(`${c.x},${c.z}`)).length
+      ok(hubInBlock === 0, `s${seed} t${t}: no hub cell runs into the gatehouse (${hubInBlock} do)`)
+
+      // ── 5. IT STANDS ON THE FLOOR, and the dais is under it ───────────────────────────────
+      const deck = new Set(courtPlatformCells(seed, cfg).map(c => `${c.x},${c.z}`))
+      const floating = rows(lvl + 1).filter(c => !deck.has(`${c.x},${c.z}`) && plotHeight(c.x, c.z, seed, cfg) !== lvl).length
+      ok(rows(lvl + 1).length > 0 && floating === 0,
+         `s${seed} t${t}: every first-course cell of the gatehouse rests on the dais or flush ground (${floating} floating)`)
+
+      // ── 6. THE DOOR GOES THROUGH: the centre line is open front to back at foot and head ──
+      const nx = Math.cos(gate.facing), nz = Math.sin(gate.facing)
+      const solid = new Set(frame.filter(c => !c.doorway).map(key))
+      let sealed = 0
+      for (const dy of [1, 3]) for (let d = 0; d >= -(TOWER_BACK - 1); d--) {
+        const k = `${Math.round(gate.x + nx * d)},${lvl + dy},${Math.round(gate.z + nz * d)}`
+        if (body.has(k) || solid.has(k)) sealed++
+      }
+      ok(sealed === 0, `s${seed} t${t}: the doorway runs through the gatehouse — ${sealed} cells of stone on the centre line`)
+
+      // ── 7. THE FRAMES ARE DRESSED: a cap course and a keystone, in the trim stone ─────────
+      for (const sk of sockets(seed, cfg)) {
+        const cells = socketCells(sk, lvl).filter(c => c.role !== 'band')
+        const ftop = Math.max(...cells.map(c => c.y))
+        const caps = cells.filter(c => c.role === 'cap')
+        const keys = cells.filter(c => c.role === 'keystone')
+        const doorTop = Math.max(...cells.filter(c => c.doorway).map(c => c.y))
+        ok(caps.length > 0 && caps.every(c => c.y === ftop) && cells.filter(c => c.y === ftop).every(c => c.role === 'cap'),
+           `s${seed} t${t} socket ${sk.index}: the cap is exactly the top course`)
+        ok(keys.length >= 1 && keys.every(c => c.y === doorTop + 1),
+           `s${seed} t${t} socket ${sk.index}: the keystone sits directly over the opening (${keys.length} cells)`)
+        ok(new Set(keys.map(c => `${c.x},${c.z}`)).size <= 3,
+           `s${seed} t${t} socket ${sk.index}: the keystone is one column of the face, not a course`)
+        ok(caps.every(c => socketMaterial(c, false) === TRIM_MAT) && keys.every(c => socketMaterial(c, false) === TRIM_MAT),
+           `s${seed} t${t} socket ${sk.index}: cap and keystone are the trim stone`)
+        ok(cells.filter(c => c.role === 'jamb').every(c => socketMaterial(c, false) === MAT.CUT_STONE),
+           `s${seed} t${t} socket ${sk.index}: the jambs are cut stone`)
+      }
+    }
+  }
+  ok(isCourtMaterial(TRIM_MAT), 'the trim stone is one the court sweep will remove')
+  ok(TRIM_MAT !== MAT.CUT_STONE && TRIM_MAT !== PLATFORM_MAT, 'and it is actually a different stone from the body and the deck')
 }
 
 console.log(`crossings: ${pass} passed, ${fails.length} failed`)
