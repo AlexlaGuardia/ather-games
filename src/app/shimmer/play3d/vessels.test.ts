@@ -367,6 +367,13 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   const useAt = src.indexOf('<VesselRack ')
   ok(useAt >= 0 && /onLetters\(\)/.test(src.slice(useAt, useAt + 400)),
      'the tab re-resolves and tells the world (onLetters → runeTick) after an equip')
+  // ★ AND THE HOST'S onLetters MUST REACH runeTick (2026-09-11, driven on the real save): the panel's cast bar said
+  // Forked Bolt while the HUD's Z stayed empty until a reload — the BagPanel's callback refreshed the hotbar and
+  // the panel and nothing else. `loadoutRes` is rebuilt on runeTick; the Passage's onChange already bumped it.
+  const bagMountAt = src.indexOf('<BagPanel ')
+  const bagMount = bagMountAt >= 0 ? src.slice(bagMountAt, bagMountAt + 1600) : ''
+  ok(/onLetters=\{\(\) => \{ refreshHotbar\(\); setCraftTick\(v => v \+ 1\); setRuneTick\(t => t \+ 1\) \}\}/.test(bagMount),
+     '★ the BagPanel\'s onLetters bumps runeTick — an equip on Gear arms Z in the WORLD, not only on the panel')
 
   // ★ Alex's split, asserted as a split: the letters are on the satchel and NOWHERE else.
   ok(/\{tab === 'satchel' && <>\{satchel\}<SatchelLetters /.test(src), '★ the SATCHEL carries the letters card')
