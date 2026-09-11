@@ -11,6 +11,50 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🏰 Shimmer — **THE GATE STATION IS A GATEHOUSE: CROWN, STRING COURSES, SLITS, KEYSTONES, A KERB** (2026-09-11 night, world lane — an agent under hub `be4e612f`) · *Last touched 2026-09-11 — committed `ad3589a`, pushed, **deploy pending** (one build with the editor pass `404ea7c` and Alex's ring). crossings **4001 → 5278**, court-wiring 31, court-preview **19 → 25**, 6 mutations fire. tsc 7 (baseline).*
+
+**Alex: *"plus the home plot gate station.. thats in desperate need of fixing… feel free to use your agents."*** Photographed at tier 1 from 40 blocks first (`court-t1-40.png`): one material top to bottom, three abrupt telescoping steps ending in a flat cut, a sawtooth dais edge, plain 2-deep trilithons. Handed to a general-purpose agent with the module, its three guards, the picture and the constraints (pure math, no new `setVoxel` site, every laid cell sweepable, `courtFits` green, Alex's dials untouched, height derived as before). It iterated with pictures on the world lane's dev port.
+
+### What shipped (`ad3589a`, `voxel3d/crossings.ts` only; `COURT_REV` 7 → 8 so standing courts rebuild)
+- **A gatehouse, not a stack:** a 7×5 block on the dais behind the frame with the doorway running through it as a tunnel, a 5×4 shaft above, and a **crown** inside the unchanged `TOWER_HEIGHT` budget — a full-width corbelled parapet with alternating merlons; the top course sits exactly where the flat cut was.
+- **String courses every 5 courses in sandstone** (warm, against two greys one shade apart) and **slit windows** on the face and flanks between bands.
+- **Frames:** a cap course + keystone in sandstone via a new `SocketCell.role`; the lamp wears the cap's stone.
+- **Dais:** runs under the gatehouse (rev 7 had the tower's lowest box hanging 3 blocks in the air past the dais, hidden from the front — the yaw-90 shot found it) and gets a **kerb**, a cut-stone border course on the arc rim, exported as `courtKerb`. `FLOOR_CLEAR_SLACK` 4 → 6; `isCourtMaterial` gains sandstone (a keeper's own sandstone inside the footprint is swept on re-lay — documented).
+- ★ **Structural note for hub:** the host pins one material per producer, so the tower's bands ride on the gate's `socketCells` (the only per-cell material path) and are left out of `gateTowerCells` — one plan, two disjoint views, disjointness asserted. One host change (the tower loop taking `c.m ?? CUT_STONE`) would let the tower carry its own materials.
+- Guard craft: court-preview gained *no cell drawn twice across lay passes*, and the agent found `await import` kills a suite under tsx CJS (switched to static imports). Its first M6 run had a bash-quoting anchor miss and the green was discarded as an unapplied mutation; re-run properly, it fired.
+
+### Still reads wrong (the agent's own list)
+- The sawtooth dais edge is mostly a preview artifact (no terrain drawn, so the fill to sloped ground shows as steps); in-world those courses are buried. Not changed.
+- Cut stone vs stone brick are near-identical; the sandstone carries all the contrast. `PLATFORM_MAT` is the dial if the deck should read against the frames.
+- Passage caps are the whole 3-deep top course and read as a heavy slab from eye level; easy to narrow to the front layer.
+- **Not seen in the real world at tier 1 yet** — the rev-8 re-lay over Alex's standing rev-7 court is the sweep's job, guarded, not photographed.
+
+### ⛔ ALEX'S CALL
+1. Stand on your plot after the deploy and call it: gatehouse or still a stack? Heavy passage caps? Deck vs frames?
+2. Carried: the lighting pass (opened, A/B running) · Hazel v3 · the five trades · the reach list (R5 sign next).
+
+### Files
+`voxel3d/crossings.ts` · `voxel3d/crossings.test.ts` · `voxel3d/court-wiring.test.ts` · `dev/court/court-preview.test.ts` · pictures `scratchpad/court-agent-{0,1,2}-*.png`
+
+## 🧰 Shimmer — **POPULATING THE EDITOR: THE POST, THE SHINGLES, AND SINK GUESSED FROM THE FLOOR** (2026-09-11 night, hub lane, in parallel with the gate-station agent) · *Last touched 2026-09-11 — committed `404ea7c`, **deploy pending** (ships with the court pass in one build). tsc 7 (baseline).*
+
+**Alex: *"what other structure types we'll need to go ahead and populate the editor"* · *"is it necessary for it to be elevated one block up or could it be flush with the ground?"* · *"your lead lets do it… work on the editor page in parallel."***
+
+### What shipped (`404ea7c`)
+- **R1 closed — the `post` piece** (16th base shape, wood + stone variants → 112 in the palette): a full-cell square timber the height of its cell. Hazel's corners are posts now, not dawnwood planks pretending.
+- **R2 closed — the `SHINGLES` block** (MAT 87): placeable, forestry fast skill, recipe 2 planks → 4 by hand, colour `0x4a3a33`, its own painter (courses of offset tabs with a shadow line under each). Hazel's roof mass + gable ends are shingles. ⚠ TBD-CANON on the item name, like `block_stone`.
+- **Sink is guessed from the bottom layer:** ≥ 60% of the footprint covered → a FLOOR → sink 1 (flush at grade); sparse → footings → sink 0. Holds until the author touches the control; the tooltip says which it guessed. So the answer to "flush or elevated" is: *either, and the panel now guesses right for a floor.*
+- Hazel v3 authored + shot: posts read as posts against the plank infill; the gable end is a different tone from the wall.
+
+### ★★ THE LIGHTING FINDING, SHARPENED
+The shingle block is **(74,58,51)** and renders **pale lavender** on the gable, the same as tan planks and grey stone did. A Lambert face cannot render brighter than albedo × light, so a dark brown coming out pale means the light on vertical faces is **> 2×** — hemisphere 1.5 + ambient 0.4 + the sun's grazing term, no tone mapping. **Vertical faces are OVEREXPOSED, not just tinted**, and every material converges on the light colour. Same finding as the ruins block, now with a number that closes the question of "which palette entry". Still Alex's call; still its own pass.
+
+### Guards
+pieces.test 15 → 16 (with the why) · palette.test 105 → 112 (the tripwire, bumped with its why) · piece-mesh 11 · render-audit · recipes 77 · obtainable 24 · depth · break-fx-spec 55 · atlas-wiring · icon-source · mesh-icon · blueprints 93 · stamps 52 · placed 27.
+
+### Files
+`voxel/pieces.ts` (+test) · `voxel3d/piece-mesh.ts` · `voxel/depth.ts` (MAT 87) · `voxel/registry.ts` · `voxel/recipes.ts` · `voxel3d/attrs.ts` · `voxel3d/tex/tiles.ts` (`paintShingles`) · `voxel3d/palette.test.ts` · `dev/worktable/page.tsx` · `scripts/blueprint-hazel.mts` · `hazel_carpentry.json`
+
 ## 🧱 Shimmer — **THE WORKTABLE PLACES ITS OWN BUILDINGS: "PLACE IN WORLD"** (2026-09-11 late, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID CIdZwPbWJc925cacek6zO`, 184 chunks, from `cfcec9f`**; route 403 without the cookie on the tunnel, served worker 200. Sweep at `cfcec9f` **264 · 263 pass · 1 FAIL** (editor-bands cache stale on the new files, regenerated in the next commit; not a runtime defect) · 0 KILLED. tsc 7 (baseline).*
 
 **Alex: *"could we have a page where i can freely use any block to build it myself.. owner gated.. a dropdown to choose the structure and build"* → it existed (`/shimmer/dev/worktable`, owner-gated, every placeable block + the 15 pieces, load/save). What it lacked: making a saved file STAND somewhere took a row in code. *"yea add the place in world button."***
