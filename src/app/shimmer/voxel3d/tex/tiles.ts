@@ -65,6 +65,8 @@ export const TILE_MATERIALS: number[] = [
   // Batch 2 of the building palette, 2026-09-12: daub, straw, and a stack of logs. Each has its
   // own painter below; the timber stack is per-FACE (ends on the sides, bark on top) like a log.
   MAT.PLASTER, MAT.THATCH, MAT.TIMBER_STACK,
+  // Glass, 2026-09-12: the one tile whose alpha is COVERAGE — the glass pass discards below half.
+  MAT.GLASS,
   // The waymark + the plot's cloud-wall, added 2026-08-15 with the passages layer.
   MAT.WAYMARK, MAT.CLOUD_WALL,
   // The cauldron added 2026-08-18 with brewing — the alchemy station.
@@ -594,6 +596,32 @@ function paintShingles(dst: Layer, size: number, base: [number, number, number],
       if (lip) col = shade(col, 22)
       if (shadow || seam) col = shade(col, -40)
       put(dst, size, x, y, col, 0)
+    }
+  }
+}
+
+/**
+ * Glass: a leaded window. The lead cames are the only opaque texels — a diamond lattice plus a
+ * frame at the tile edge so a run of glass blocks reads as one window with mullions — and the
+ * quarries between them are OPEN (alpha 0), which the glass pass discards: you see the room. A
+ * few pale texels along one edge of each quarry are the glint, opaque so the pane is not
+ * invisible from every angle.
+ *
+ * ⚠ ALPHA IS COVERAGE ON THIS TILE AND NOWHERE ELSE — the atlas convention is emissive. The glass
+ * material is the only program that reads it as coverage, and it draws only glass quads.
+ */
+function paintGlass(dst: Layer, size: number, lead: [number, number, number], seed: number) {
+  const pitch = Math.max(6, Math.round(size / 4))   // diamond pitch
+  const glint: [number, number, number] = [214, 236, 246]
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const frame = x === 0 || y === 0 || x === size - 1 || y === size - 1
+      const d1 = ((x + y) % pitch), d2 = (((x - y) % pitch) + pitch) % pitch
+      const came = frame || d1 === 0 || d2 === 0
+      if (came) { put(dst, size, x, y, shade(lead, (h2(x, y, seed) - 0.5) * 14), 255); continue }
+      // Glint: the texel just inside the upper-left came of each quarry.
+      if (d1 === 1 && h2(Math.floor((x + y) / pitch), Math.floor((x - y + size) / pitch), seed + 3) > 0.45) { put(dst, size, x, y, glint, 255); continue }
+      put(dst, size, x, y, [0, 0, 0], 0)
     }
   }
 }
@@ -1263,6 +1291,7 @@ export function paintFor(material: number, face: number, size: number): Layer {
     case MAT.PLASTER: paintPlaster(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.THATCH: paintThatch(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.TIMBER_STACK: paintTimberStack(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, face); break
+    case MAT.GLASS: paintGlass(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     // ★ THE WEATHERED THREE — base painter first, then the overlay. Same courses as their clean
     // siblings by construction, which is the whole point: mixed into one wall they must line up.
     case MAT.MOSSY_STONE_BRICK: {

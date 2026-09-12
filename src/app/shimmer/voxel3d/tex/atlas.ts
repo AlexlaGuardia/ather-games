@@ -147,7 +147,16 @@ export const DEFAULT_RELIEF = 0.6
  * would darken every surface twice. The geometry still HAS its colour attribute — the flat control
  * material in the same scene reads it — it is simply ignored here.
  */
-export function createTexturedVoxelMaterial(tiles: TileArray, light: LightUniforms = createLightUniforms()): VoxelTexMaterial {
+export function createTexturedVoxelMaterial(
+  tiles: TileArray, light: LightUniforms = createLightUniforms(),
+  /**
+   * `cutout`: the GLASS pass (2026-09-12). Same program, one extra line: a texel whose atlas alpha
+   * is below half is discarded. Alpha is the emissive mask everywhere else in the atlas, which is
+   * safe here because nothing this pass draws emits — the two meanings never meet on one texel.
+   * A second compiled program for the world, the same budget the canopy pays.
+   */
+  opts: { cutout?: boolean } = {},
+): VoxelTexMaterial {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: false })
 
   // `onBeforeCompile` does not run until the first render, so a setter called before that would be
@@ -318,6 +327,7 @@ void tileFrame(vec3 an, out vec3 T, out vec3 B) {
     : (an.x > 0.5 ? vec2(vVoxPos.z, -vVoxPos.y) : vec2(vVoxPos.x, -vVoxPos.y));
   gTileUv = tileUv;
   vec4 tile = texture(uTiles, vec3(tileUv, vLayer));
+${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
   diffuseColor.rgb *= tile.rgb;
   // ── ★★ AMBIENT OCCLUSION, WHICH THIS MATERIAL SPENT A MONTH COMPUTING AND DISCARDING ────────
   // vertexColors is off here for a good reason (see the material note), and the mesher's AO term

@@ -4127,6 +4127,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const flatMaterial = useMemo(() => createVoxelMaterial(lightUniforms), [lightUniforms])
   const textured = useMemo(() => (tiles ? createTexturedVoxelMaterial(tiles, lightUniforms) : null), [tiles, lightUniforms])
   const material = textured?.material ?? flatMaterial
+  // ── ★ THE GLASS PASS (2026-09-12) — the same textured program with one discard. See atlas.ts. ──
+  // Falls back to the main material without tiles (no atlas, no alpha to cut), which draws glass as
+  // an opaque lead-coloured block: honest about the fallback, never invisible.
+  const glassTextured = useMemo(() => (tiles ? createTexturedVoxelMaterial(tiles, lightUniforms, { cutout: true }) : null), [tiles, lightUniforms])
+  const glassMaterial = glassTextured?.material ?? material
   // The world's ONE transparent pass — see mesh-bridge.ts. Shared instance, same rule as above.
   const waterMaterial = useMemo(() => createWaterMaterial(tiles, layerOf(MAT.WATER, 0), lightUniforms), [tiles, lightUniforms])
 
@@ -4193,13 +4198,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // selected by a uniform, so changing style costs nothing and creates no second shader program.
   useEffect(() => {
     applySettings(flatMaterial, settings)
-    textured?.setCartoon({
+    const cartoon = {
       uCartoon: settings.style === 'cartoon' ? 1 : 0,
       uToon: settings.toon,
       uOutline: settings.outline,
       uFaceShading: settings.faceShading,
       uShadowLift: settings.shadowLift,
-    })
+    }
+    textured?.setCartoon(cartoon)
+    glassTextured?.setCartoon(cartoon)   // the window is lit by the same stack as the wall around it
   }, [flatMaterial, textured, settings])
   const scratch = useMemo(() => createMeshScratch(SECTION), [])
   const cols = useRef(new Map<string, Column>())
@@ -5049,6 +5056,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     pieces.dispose()
     flatMaterial.dispose()
     textured?.material.dispose()
+    glassTextured?.material.dispose()
     waterMaterial.dispose()
     // ⚠ THE BODIES' GEOMETRIES GO WITH THEM, ONE EACH. Unlike the old shared primitive, this
     // surface writes its own vertices every frame, so a geometry cannot be shared between bodies
@@ -5654,7 +5662,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // wrong one. Water is a second pass because transparency must blend after opaque, and leaves
     // are a third because they need an alpha cutout the block program must not carry. Neither is
     // about draw-call count, so neither is fixed by counting draw calls.
-    const solids: AttrPart[] = [], waters: AttrPart[] = [], leafParts: AttrPart[] = []
+    const solids: AttrPart[] = [], waters: AttrPart[] = [], leafParts: AttrPart[] = [], glassParts: AttrPart[] = []
     for (const sm of meshColumn(c, {
       negX: cols.current.get(key(cx - 1, cz)) ?? null,
       posX: cols.current.get(key(cx + 1, cz)) ?? null,
@@ -5670,10 +5678,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       posXposZ: cols.current.get(key(cx + 1, cz + 1)) ?? null,
     }, scratch)) {
       // Water splits into its own mesh so it can blend AFTER the opaque pass — see attrs.ts.
-      const { solid, water, leaves } = buildAttrsSplit(sm.mesh, m => m === MAT.WATER, isLeafMat)
+      const { solid, water, leaves, glass } = buildAttrsSplit(sm.mesh, m => m === MAT.WATER, isLeafMat, m => m === MAT.GLASS)
       if (solid) solids.push({ attrs: solid, dy: sm.wy })
       if (water) waters.push({ attrs: water, dy: sm.wy })
       if (leaves) leafParts.push({ attrs: leaves, dy: sm.wy })
+      if (glass) glassParts.push({ attrs: glass, dy: sm.wy })
     }
 
     // ⚠ THE MESH SITS AT THE COLUMN ORIGIN, y=0 — `concatAttrs` already lifted each section's
@@ -5691,7 +5700,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     emit(solids, material, 's')
     emit(waters, waterMaterial, 'w', 1)
     emit(leafParts, leafMaterial, 'l')
-  }, [material, waterMaterial, leafMaterial, scratch])
+    emit(glassParts, glassMaterial, 'g')
+  }, [material, waterMaterial, leafMaterial, glassMaterial, scratch])
 
   /**
    * ── ★ STREAMING MESHES THROUGH A BUDGETED QUEUE, NOT SYNCHRONOUSLY (2026-08-07) ────────────

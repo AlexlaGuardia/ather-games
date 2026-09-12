@@ -33,7 +33,7 @@ import { pieceForItem } from '../../voxel/pieces'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
 import { leafPixels, bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
-import { isPlant, isSapling } from '../../voxel/depth'
+import { isPlant, isSapling, MAT } from '../../voxel/depth'
 import { MATERIAL_COLOR } from '../attrs'
 
 /** Icon edge in CSS pixels. Small enough to stay crisp, large enough for the cube to read. */
@@ -408,7 +408,13 @@ export function iconPixels(material: number, size = ICON, tile = TILE): Uint8Arr
   // ★ A SLAB WEARS ITS BASE MATERIAL'S FACES — `paintFor` is keyed on the full material and a
   // half-block id has no painter of its own, so without this mask every slab icon is the fallback.
   const base = material & 0xFF
-  return rasterIcon(paintFor(base, TOP, tile), paintFor(base, SIDE, tile), size, tile)
+  const top = paintFor(base, TOP, tile), side = paintFor(base, SIDE, tile)
+  // ★ GLASS (2026-09-12): the one tile whose alpha is COVERAGE. The world discards its open
+  // quarries; a cube icon has nothing behind them to show, so they are filled with the pale sky
+  // a window reflects. Icon-only — the atlas texel stays open, or the window would stop being one.
+  if (base === MAT.GLASS) for (const layer of [top, side])
+    for (let o = 0; o < layer.length; o += 4) if (layer[o + 3] < 128) { layer[o] = 196; layer[o + 1] = 224; layer[o + 2] = 238 }
+  return rasterIcon(top, side, size, tile)
 }
 
 /**

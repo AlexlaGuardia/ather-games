@@ -20,6 +20,8 @@ import { STRUCTURE, STRUCTURE_HALF } from './pieces'
 export const LIGHT_PASSES: ReadonlySet<number> = new Set<number>([
   WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES,
   STRUCTURE, STRUCTURE_HALF,
+  // Glass (2026-09-12): the whole point of it.
+  MAT.GLASS,
 ])
 
 /** light.ts's `opaque` contract: air, water, foliage and pieces pass; everything else stops. */

@@ -593,6 +593,16 @@ export const MAT = {
   PLASTER: 88,
   THATCH: 89,
   TIMBER_STACK: 90,
+  /**
+   * ── GLASS (2026-09-12, Hazel's R7: "a window is a frame; whether it glazes is the renderer's
+   * call") ──────────────────────────────────────────────────────────────────────────────────
+   * The first block you can see THROUGH that is not water. Three things make it one, and none of
+   * them is this id: it passes light (`light-passes.ts`), it ranks below opaque in the mesher so
+   * the wall behind it still draws its face (`greedy.ts`, beside WATER), and it draws in its own
+   * cutout pass sampling the same atlas (`atlas.ts` › cutout). Leaded quarries — lead opaque,
+   * panes open — so it needs no blending and no sorting.
+   */
+  GLASS: 91,
 } as const
 
 /**

@@ -96,6 +96,7 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.PLASTER]: 0xe6dac3,       // warm off-white daub — the infill between a timber frame's members
   [MAT.THATCH]: 0xc4a25a,        // dry straw, a second roof beside the shingles
   [MAT.TIMBER_STACK]: 0x8a6a3c,  // goldwood logs lying together; ends on the sides, bark on top
+  [MAT.GLASS]: 0x4a5566,         // the LEAD of a leaded window — the panes are open, so this is what draws
   // ⚠ ROSY, NOT YELLOW-TAN, AND THAT IS A LEGIBILITY FIX RATHER THAN A PREFERENCE. The first pass
   // took sand's own hue a step deeper (0xc6a76c) and landed it squarely between beach sand and
   // GOLDWOOD PLANKING — a warm banded cube beside a warm grained cube, which is the whole point of
@@ -384,21 +385,25 @@ export const attrBuffers = (a: MeshAttrs): ArrayBuffer[] =>
  */
 export function buildAttrsSplit(
   mesh: MeshResult, isWater: (m: number) => boolean, isLeaf: (m: number) => boolean = () => false,
-): { solid: MeshAttrs | null; water: MeshAttrs | null; leaves: MeshAttrs | null } {
+  isGlass: (m: number) => boolean = () => false,
+): { solid: MeshAttrs | null; water: MeshAttrs | null; leaves: MeshAttrs | null; glass: MeshAttrs | null } {
   // ★ LEAVES EARN A THIRD PASS FOR A DIFFERENT REASON THAN WATER. Water splits for ORDER (blend
   // after opaque). Leaves split for MATERIAL: they are crossed quads that need alpha cutout and
   // double-sided lighting, and neither can be a per-chunk uniform on the main program without
   // giving every block a cutout test it does not need. Still one extra program total, which is what
   // the per-chunk-material rule actually forbids — not a second pass.
-  let waterQuads = 0, leafQuads = 0
+  // ★ GLASS EARNS A FOURTH PASS FOR THE LEAVES' REASON (2026-09-12): a cutout test on the main
+  // program would tax every block for the sake of a window. Same atlas, same shader, one discard.
+  let waterQuads = 0, leafQuads = 0, glassQuads = 0
   for (let q = 0; q < mesh.quads; q++) {
     const m = mesh.materials[q * 4]
     if (isWater(m)) waterQuads++
     else if (isLeaf(m)) leafQuads++
+    else if (isGlass(m)) glassQuads++
   }
-  if (waterQuads === 0 && leafQuads === 0) return { solid: buildAttrs(mesh), water: null, leaves: null }
+  if (waterQuads === 0 && leafQuads === 0 && glassQuads === 0) return { solid: buildAttrs(mesh), water: null, leaves: null, glass: null }
 
-  const pick = (want: 'solid' | 'water' | 'leaf', quads: number): MeshAttrs => {
+  const pick = (want: 'solid' | 'water' | 'leaf' | 'glass', quads: number): MeshAttrs => {
     const positions = new Float32Array(quads * 12)
     const normals = new Float32Array(quads * 12)
     const materials = new Uint16Array(quads * 4)
@@ -409,7 +414,7 @@ export function buildAttrsSplit(
     let outQ = 0
     for (let q = 0; q < mesh.quads; q++) {
       const m = mesh.materials[q * 4]
-      const kind = isWater(m) ? 'water' : isLeaf(m) ? 'leaf' : 'solid'
+      const kind = isWater(m) ? 'water' : isLeaf(m) ? 'leaf' : isGlass(m) ? 'glass' : 'solid'
       if (kind !== want) continue
       positions.set(mesh.positions.subarray(q * 12, q * 12 + 12), outQ * 12)
       normals.set(mesh.normals.subarray(q * 12, q * 12 + 12), outQ * 12)
@@ -431,11 +436,12 @@ export function buildAttrsSplit(
       { positions, normals, materials, ao, waterDepth, indices, quads, faces: quads },
       want === 'leaf', want === 'water')
   }
-  const solidQuads = mesh.quads - waterQuads - leafQuads
+  const solidQuads = mesh.quads - waterQuads - leafQuads - glassQuads
   return {
     solid: solidQuads > 0 ? pick('solid', solidQuads) : null,
     water: waterQuads > 0 ? pick('water', waterQuads) : null,
     leaves: leafQuads > 0 ? pick('leaf', leafQuads) : null,
+    glass: glassQuads > 0 ? pick('glass', glassQuads) : null,
   }
 }
 

@@ -155,6 +155,8 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.PLASTER, name: 'Plaster', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'plaster', count: 1 }], fastSkill: 'prospecting', placeable: true },
   { material: MAT.THATCH, name: 'Thatch', hardness: 0.4, skill: null, minTier: 0, drops: [{ itemId: 'thatch', count: 1 }], fastSkill: 'farming', placeable: true },
   { material: MAT.TIMBER_STACK, name: 'Timber Stack', hardness: 1.0, skill: null, minTier: 0, drops: [{ itemId: 'timber_stack', count: 1 }], fastSkill: 'forestry', placeable: true },
+  // Glass (2026-09-12): quick to break, no tool has a claim on it, and it comes back whole.
+  { material: MAT.GLASS, name: 'Glass', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'glass', count: 1 }], placeable: true },
   { material: MAT.SANDSTONE, name: 'Sandstone', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'sandstone', count: 1 }], fastSkill: 'prospecting', placeable: true },
 
   // ── ★ THE WEATHERED MASONRY (2026-08-27) ────────────────────────────────────────────────────

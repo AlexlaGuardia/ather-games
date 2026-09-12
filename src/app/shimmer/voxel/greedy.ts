@@ -583,7 +583,10 @@ export function greedyMesh(
           // ── ★★ RANK = sol + opq: air 0 · water 1 · opaque 2 ──────────────────────────────────
           // Water is `sol` (it occludes, and that is today's approved look — see the block above
           // the mask test) but it is NOT opaque, so it ranks between air and stone.
-          opq[i] = sol[i] === 1 && m !== MAT.WATER ? 1 : 0
+          // Glass (2026-09-12) ranks with water: it occludes for AO and emits its own faces against
+          // air, but an opaque neighbour still draws ITS face against it — which is how you see the
+          // wall through the window. Glass against glass emits nothing: one continuous pane.
+          opq[i] = sol[i] === 1 && m !== MAT.WATER && m !== MAT.GLASS ? 1 : 0
           i++
         }
       }

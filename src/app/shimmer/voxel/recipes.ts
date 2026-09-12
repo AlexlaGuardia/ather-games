@@ -270,6 +270,9 @@ export const RECIPES: RecipeDef[] = [
   // log consumer that is not a refine — `workshop.test.ts` names it as such, with an expiring check.
   { id: 'timber_stack', name: 'Timber Stack', family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'goldwood_log', count: 4 }], output: { itemId: 'timber_stack', count: 1 } },
+  // Glass: sand, fused. Hand work like every material (mining is the gate); the sand is the trip.
+  { id: 'glass', name: 'Glass', station: 'hand', mana: 0,
+    input: [{ itemId: 'block_sand', count: 2 }], output: { itemId: 'glass', count: 2 } },
 
   // ── THE STATION ITSELF ──────────────────────────────────────────────────────────────────────
   // Craftable by hand, and it must stay that way: a crafting table gated behind a crafting table is

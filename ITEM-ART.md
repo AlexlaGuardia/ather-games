@@ -4,11 +4,11 @@
 > registry, the recipe table and the tool table, and it classifies each item by calling the same
 > icon path the game calls. A hand-kept version of this file would be wrong within a week.
 
-Items reachable in voxel3d: **254**
+Items reachable in voxel3d: **256**
 
 | status | count | meaning |
 |---|---|---|
-| 🟦 derived | 53 | wears its own block's faces. Never needs hand art. |
+| 🟦 derived | 55 | wears its own block's faces. Never needs hand art. |
 | 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
 | 🧊 mesh | 2 | rendered from the scatter geometry the world instances. Never needs hand art. |
@@ -139,6 +139,8 @@ source of truth for what that block looks like, and the two drift the first time
 - `garden_bed_dawnwood`
 - `garden_bed_goldwood`
 - `garden_bed_shimmeroak`
+- `glass`
+- `glass_slab`
 - `goldwood_log`
 - `goldwood_plank`
 - `goldwood_plank_slab`
