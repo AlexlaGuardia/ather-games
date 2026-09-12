@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🔨 Shimmer — **A PLACED PIECE IS WORKED LIKE A BLOCK, AND PROSPECTING TRAINS ON SEAMS ONLY** (2026-09-12, hub lane `2f743745`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID GtPYf-nqJQNK81HUgS6hh` from `5a905bb`** (piece-break `D8xcsW1-FzE20mPLHjqPm` from `5f16618` before it), served == disk (chunk md5 match), worker pin unchanged. piece-break.test **994/0, 2 mutations fire**. tsc 7 (baseline).*
+## 🔨 Shimmer — **A PLACED PIECE IS WORKED LIKE A BLOCK; GATHERING XP = SEAMS + LOGS ONLY** (2026-09-12, hub lane `2f743745`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID -TjxvlTisrXjXntORTVxC` from `505d287`** (`GtPYf-nqJQNK81HUgS6hh` from `5a905bb`, (piece-break `D8xcsW1-FzE20mPLHjqPm` from `5f16618` before it), served == disk (chunk md5 match), worker pin unchanged. piece-break.test **994/0, 2 mutations fire**. tsc 7 (baseline).*
 
 **Left off:** Alex: *"the pieces just break instantly if left clicked.. can we bring them up to speed with the other
 blocks."* A piece's cells are `STRUCTURE` (no block def), so the mine loop had nothing to spend seconds against and the
@@ -26,8 +26,11 @@ seams"* → `breakXP(material, skill)` in `voxel/mine.ts`: a prospecting block t
 pays 0 — stone, rubble, cut stone, bricks. The spike still cuts them; it learns nothing. Forestry/farming untouched.
 mine.test 79/0, mutation fires.
 
-**Next:** Alex swings at a beam wall and a glass pane — does thatch feel like thatch, stone like stone? · should
-forestry get the same treatment (logs only, not planks/timber stacks)? Alex's call.
+**Then (`505d287`):** *"do the same for forestry, logs only"* → the four species' logs (`isLogMat`) pay; planks, timber
+stacks, shingles, deck, chest, deadfall (all `fastSkill: forestry`) pay 0. Felling still pays `fellXP` per trunk voxel.
+Farming untouched. mine.test 93/0, both mutations fire.
+
+**Next:** Alex swings at a beam wall and a glass pane — does thatch feel like thatch, stone like stone?
 
 **Files:** `voxel3d/piece-mesh.ts` (`pieceBreakTarget`) · `voxel3d/VoxelWorld.tsx` (piece hit → tickBreak) · `voxel3d/piece-break.test.ts`.
 
