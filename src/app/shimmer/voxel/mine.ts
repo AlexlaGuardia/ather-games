@@ -6,6 +6,7 @@
 import { AIR } from './section'
 import { blockDef, breakSeconds, type BlockSkill } from './registry'
 import { isSeam } from './seams'
+import { isLogMat } from './trees'
 
 export interface RayHit {
   /** The voxel that was hit. */
@@ -173,7 +174,13 @@ export function dropsFor(
  * skill is prospecting pays NOTHING unless it is a seam (`isSeam`: RAW_MANA..ATHER_CRYSTAL). The
  * spike still cuts stone; it just learns nothing from it. Rubble, cut stone and the bricks
  * (`fastSkill: 'prospecting'` or gated on it) all fall under the same rule, since "the block's
- * skill" is what the mine loop asks for either way. Other families are untouched here.
+ * skill" is what the mine loop asks for either way.
+ *
+ * ★ FORESTRY, THE SAME WAY — LOGS ONLY (Alex, same hour: "do the same for forestry, logs only").
+ * A standing trunk teaches (`isLogMat`, the four species' logs; felling pays through `fellXP`,
+ * which is per trunk voxel of exactly this ladder). Planks, timber stacks, shingles, the deck,
+ * chests and deadfall are `fastSkill: 'forestry'` — the blade is the fast tool on them — and pay
+ * nothing. Farming is untouched.
  *
  * Returns 0 for "no award" so the caller can skip the whole level/notify path, never a floor of 4.
  */
@@ -181,5 +188,6 @@ export function breakXP(material: number, skill: BlockSkill): number {
   const def = blockDef(material)
   if (!def || !skill) return 0
   if (skill === 'prospecting' && !isSeam(material)) return 0
+  if (skill === 'forestry' && !isLogMat(material)) return 0
   return Math.max(4, Math.round(def.hardness * 12))
 }

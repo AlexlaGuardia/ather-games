@@ -201,8 +201,16 @@ const world = (x: number, y: number, z: number): number => {
   ok(breakXP(MAT.STONE, 'prospecting') === 0, 'plain stone pays nothing')
   ok(breakXP(SEAM.RAW_MANA, 'prospecting') === 26, 'raw mana seam pays 2.2×12 = 26')
   // other families are untouched by the rule
+  // ★ forestry: logs only (same ruling)
   const logs = BLOCKS.filter(b => b.skill === 'forestry')
-  ok(logs.length > 0 && logs.every(b => breakXP(b.material, 'forestry') > 0), 'forestry still pays per block')
+  const lumber = BLOCKS.filter(b => b.fastSkill === 'forestry')
+  ok(logs.length === 4, `BLIND CHECK: four species' logs (saw ${logs.length})`)
+  ok(lumber.length >= 6, `BLIND CHECK: planks/timber/shingles/deck/chest/deadfall are fastSkill forestry (saw ${lumber.length})`)
+  for (const b of logs) ok(breakXP(b.material, 'forestry') === Math.max(4, Math.round(b.hardness * 12)), `${b.name} log pays the ladder`)
+  for (const b of lumber) ok(breakXP(b.material, 'forestry') === 0, `${b.name} pays NO forestry xp`)
+  // farming untouched
+  const soil = BLOCKS.filter(b => b.fastSkill === 'farming')
+  ok(soil.length > 0 && soil.every(b => breakXP(b.material, 'farming') > 0), 'farming still pays per block')
   ok(breakXP(MAT.STONE, null) === 0, 'no skill, no xp')
 }
 
