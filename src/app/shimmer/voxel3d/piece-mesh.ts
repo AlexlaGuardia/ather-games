@@ -234,6 +234,37 @@ function buildFenceArm(): THREE.BufferGeometry {
   return merged
 }
 
+/**
+ * ── ★ THE WALL IS BEAMS THAT FOUND EACH OTHER (Alex, 2026-09-12: "make a beam connect to
+ * adjacent beams to make a wall that's only half as thick as a regular block") ────────────────
+ * Same derivation as the fence arms — connection is a question asked of the neighbours at sync,
+ * never a thing stored — but the arm is a PANEL: half a cell long, the full cell tall, half a
+ * cell thick, centred on the cell. Two beams side by side each emit their half and the joint is a
+ * continuous wall 0.5 thick; stacked beams make it taller by being taller. A lone beam stays the
+ * upright it always was, which is also the honest ghost. `buildWallCore` is the 0.5 square column
+ * a CONNECTED beam draws at its centre, so an end or a corner is a flush post rather than the
+ * thinner upright peeking out of a 0.5 panel.
+ *
+ * Collision is unchanged: a beam occupies its whole cell (`pieces.ts`, the fence's argument). The
+ * half thickness is the model's business; the cell's job is to stop things.
+ */
+function buildWallArm(): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(0.5, 1, 0.5)
+  g.translate(0.25, 0.5, 0)
+  const merged = buildMergedGeometry([g])
+  g.dispose()
+  merged.computeVertexNormals()
+  return merged
+}
+function buildWallCore(): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(0.5, 1, 0.5)
+  g.translate(0, 0.5, 0)
+  const merged = buildMergedGeometry([g])
+  g.dispose()
+  merged.computeVertexNormals()
+  return merged
+}
+
 /** Concatenate non-indexed box geometries into ONE. Named as a factory because that is what it
  *  is — it constructs and hands back a resource whose caller owns disposal. */
 function buildMergedGeometry(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
@@ -278,6 +309,8 @@ export interface PieceRenderer {
   /** Host-injected "is this voxel solid?" — fence arms reach for terrain and walls through it.
    *  Optional: without it fences still connect to each other, just not to the world. */
   setWorldSolid: (fn: ((x: number, y: number, z: number) => boolean) | null) => void
+  /** What the last `sync` drew — instance counts per base shape and per derived mesh. For the guard. */
+  stats: () => { pieces: Record<string, number>; fenceArms: number; wallPanels: number; wallCores: number }
   dispose: () => void
 }
 
@@ -307,6 +340,12 @@ export function createPieceRenderer(): PieceRenderer {
   armMesh.count = 0
   armMesh.frustumCulled = false
   group.add(armMesh)
+  // The beam wall: panels per connected side + a core per connected beam. Two more draw calls.
+  const wallGeo = buildWallArm(), wallCoreGeo = buildWallCore()
+  const wallMat = new THREE.MeshLambertMaterial({ color: TINT.beam })
+  const wallMesh = new THREE.InstancedMesh(wallGeo, wallMat, MAX_PER_TYPE)
+  const wallCoreMesh = new THREE.InstancedMesh(wallCoreGeo, wallMat, MAX_PER_TYPE)
+  for (const m of [wallMesh, wallCoreMesh]) { m.count = 0; m.frustumCulled = false; group.add(m) }
   let worldSolid: ((x: number, y: number, z: number) => boolean) | null = null
 
   // The ghost reuses a piece geometry but needs its own transparent material — one material total,
@@ -327,13 +366,23 @@ export function createPieceRenderer(): PieceRenderer {
 
   const sync: PieceRenderer['sync'] = (placements) => {
     const counts = new Map<string, number>()
-    const fenceCells = new Set<string>()
-    for (const p of placements) if (p.pieceId === 'fence') fenceCells.add(`${p.x},${p.y},${p.z}`)
-    let arms = 0
+    // ⚠ BY BASE SHAPE, NOT RAW ID (2026-09-12). This read `p.pieceId === 'fence'`, so a stone
+    // fence never joined its neighbours — and, worse, `meshes.get(p.pieceId)` below had no entry
+    // for ANY material variant: six of every seven pieces placed since 08-27 wrote occupancy and
+    // drew nothing, with no ghost either. Found while giving the beam its wall; the switch in
+    // `buildGeometry` learned this lesson two weeks ago and the sync loop never did.
+    const fenceCells = new Set<string>(), beamCells = new Set<string>()
     for (const p of placements) {
-      const inst = meshes.get(p.pieceId)
+      const base = basePieceId(p.pieceId)
+      if (base === 'fence') fenceCells.add(`${p.x},${p.y},${p.z}`)
+      if (base === 'beam') beamCells.add(`${p.x},${p.y},${p.z}`)
+    }
+    let arms = 0, walls = 0, cores = 0
+    for (const p of placements) {
+      const base = basePieceId(p.pieceId)
+      const inst = meshes.get(base)
       if (!inst) continue
-      const i = counts.get(p.pieceId) ?? 0
+      const i = counts.get(base) ?? 0
       if (i >= MAX_PER_TYPE) continue
       // ★ THE VISUAL ROTATION, NOT THE STORED ONE (2026-08-27, the door pass). An open door swings
       // 90° inside its own cell — that turn is the entire visual payload of the feature, and it is
@@ -344,11 +393,11 @@ export function createPieceRenderer(): PieceRenderer {
       q.setFromAxisAngle(Y, -(visualRotation(p, pieceDef(p.pieceId)!) * Math.PI) / 2)
       v.set(p.x, p.y, p.z)
       inst.setMatrixAt(i, m4.compose(v, q, one))
-      counts.set(p.pieceId, i + 1)
+      counts.set(base, i + 1)
       // ── fence arms: derived, never stored (MC's connection model) ──
       // A side grows an arm toward a sibling fence or any solid voxel — walls and hillsides
       // included. Both fences of a pair emit their own half-arm, which is what makes the joint.
-      if (p.pieceId === 'fence') {
+      if (base === 'fence') {
         for (const [dx, dz, yaw] of ARM_DIRS) {
           if (arms >= MAX_PER_TYPE) break
           const nx = p.x + dx, nz = p.z + dz
@@ -359,9 +408,32 @@ export function createPieceRenderer(): PieceRenderer {
           armMesh.setMatrixAt(arms++, m4.compose(v, q, one))
         }
       }
+      // ── beam walls: the same question, a panel for an answer (see `buildWallArm`) ──
+      // A side grows a panel toward a sibling beam or any solid voxel, so a run of beams meets a
+      // doorway or a block wall flush. A beam with at least one panel also draws the 0.5 core.
+      if (base === 'beam') {
+        let linked = false
+        for (const [dx, dz, yaw] of ARM_DIRS) {
+          if (walls >= MAX_PER_TYPE) break
+          const nx = p.x + dx, nz = p.z + dz
+          const link = beamCells.has(`${nx},${p.y},${nz}`) || (worldSolid?.(nx, p.y, nz) ?? false)
+          if (!link) continue
+          linked = true
+          q.setFromAxisAngle(Y, yaw)
+          v.set(p.x + 0.5, p.y, p.z + 0.5)
+          wallMesh.setMatrixAt(walls++, m4.compose(v, q, one))
+        }
+        if (linked && cores < MAX_PER_TYPE) {
+          q.identity()
+          v.set(p.x + 0.5, p.y, p.z + 0.5)
+          wallCoreMesh.setMatrixAt(cores++, m4.compose(v, q, one))
+        }
+      }
     }
     armMesh.count = arms
     armMesh.instanceMatrix.needsUpdate = true
+    wallMesh.count = walls; wallMesh.instanceMatrix.needsUpdate = true
+    wallCoreMesh.count = cores; wallCoreMesh.instanceMatrix.needsUpdate = true
     for (const [id, inst] of meshes) {
       inst.count = counts.get(id) ?? 0
       inst.instanceMatrix.needsUpdate = true
@@ -371,7 +443,7 @@ export function createPieceRenderer(): PieceRenderer {
   return {
     group, ghost, sync,
     setGhost: (pieceId, x, y, z, rot, okToPlace) => {
-      const g = geoms.get(pieceId)
+      const g = geoms.get(basePieceId(pieceId))   // by base: a stone stair ghosts as a stair
       if (!g) { ghost.visible = false; return }
       ghost.geometry = g
       ghostMat.color.setHex(okToPlace ? 0x7fd4ff : 0xff6b6b)
@@ -381,10 +453,15 @@ export function createPieceRenderer(): PieceRenderer {
     },
     hideGhost: () => { ghost.visible = false },
     setWorldSolid: (fn) => { worldSolid = fn },
+    stats: () => ({
+      pieces: Object.fromEntries([...meshes].map(([id, m]) => [id, m.count]).filter(([, n]) => (n as number) > 0)),
+      fenceArms: armMesh.count, wallPanels: wallMesh.count, wallCores: wallCoreMesh.count,
+    }),
     dispose: () => {
       for (const g of geoms.values()) g.dispose()
       for (const m of mats.values()) m.dispose()
       armGeo.dispose(); armMat.dispose()
+      wallGeo.dispose(); wallCoreGeo.dispose(); wallMat.dispose()
       ghostMat.dispose()
     },
   }
