@@ -148,6 +148,13 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.PALE_BRICK, name: 'Pale Bricks', hardness: 1.3, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'pale_brick', count: 1 }], placeable: true },
   // Roofing (2026-09-11, R2): a wood block by trade — the carpenter's — so forestry is the fast skill.
   { material: MAT.SHINGLES, name: 'Shingles', hardness: 0.8, skill: null, minTier: 0, drops: [{ itemId: 'shingle', count: 1 }], fastSkill: 'forestry', placeable: true },
+  // ── Batch 2 (2026-09-12): infill, a second roof, and yard stock ─────────────────────────────
+  // Plaster is earth and sand set hard — masonry by trade, so prospecting is the fast skill and it
+  // comes apart faster than brick. Thatch is straw: soft, farming's. A timber stack is logs lying
+  // together: forestry's, and the one of the three that resists a bare hand a little.
+  { material: MAT.PLASTER, name: 'Plaster', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'plaster', count: 1 }], fastSkill: 'prospecting', placeable: true },
+  { material: MAT.THATCH, name: 'Thatch', hardness: 0.4, skill: null, minTier: 0, drops: [{ itemId: 'thatch', count: 1 }], fastSkill: 'farming', placeable: true },
+  { material: MAT.TIMBER_STACK, name: 'Timber Stack', hardness: 1.0, skill: null, minTier: 0, drops: [{ itemId: 'timber_stack', count: 1 }], fastSkill: 'forestry', placeable: true },
   { material: MAT.SANDSTONE, name: 'Sandstone', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'sandstone', count: 1 }], fastSkill: 'prospecting', placeable: true },
 
   // ── ★ THE WEATHERED MASONRY (2026-08-27) ────────────────────────────────────────────────────

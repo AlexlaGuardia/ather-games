@@ -93,6 +93,9 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.STONE_BRICK]: 0x8a9095,
   [MAT.PALE_BRICK]: 0xcfe0d7,
   [MAT.SHINGLES]: 0x4a3a33,      // dark weathered wood, laid in courses — reads as roof, not wall
+  [MAT.PLASTER]: 0xe6dac3,       // warm off-white daub — the infill between a timber frame's members
+  [MAT.THATCH]: 0xc4a25a,        // dry straw, a second roof beside the shingles
+  [MAT.TIMBER_STACK]: 0x8a6a3c,  // goldwood logs lying together; ends on the sides, bark on top
   // ⚠ ROSY, NOT YELLOW-TAN, AND THAT IS A LEGIBILITY FIX RATHER THAN A PREFERENCE. The first pass
   // took sand's own hue a step deeper (0xc6a76c) and landed it squarely between beach sand and
   // GOLDWOOD PLANKING — a warm banded cube beside a warm grained cube, which is the whole point of

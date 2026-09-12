@@ -62,6 +62,9 @@ export const TILE_MATERIALS: number[] = [
   MAT.STONE_BRICK, MAT.PALE_BRICK, MAT.SANDSTONE,
   // Roofing, 2026-09-11 (R2): its own painter below — courses of overlapping shingles.
   MAT.SHINGLES,
+  // Batch 2 of the building palette, 2026-09-12: daub, straw, and a stack of logs. Each has its
+  // own painter below; the timber stack is per-FACE (ends on the sides, bark on top) like a log.
+  MAT.PLASTER, MAT.THATCH, MAT.TIMBER_STACK,
   // The waymark + the plot's cloud-wall, added 2026-08-15 with the passages layer.
   MAT.WAYMARK, MAT.CLOUD_WALL,
   // The cauldron added 2026-08-18 with brewing — the alchemy station.
@@ -591,6 +594,84 @@ function paintShingles(dst: Layer, size: number, base: [number, number, number],
       if (lip) col = shade(col, 22)
       if (shadow || seam) col = shade(col, -40)
       put(dst, size, x, y, col, 0)
+    }
+  }
+}
+
+/**
+ * Plaster: trowelled daub. Broad soft blotches (the trowel) over a fine grit (the sand in it),
+ * and a rare hairline crack — light, so it reads as a wall surface and not as a stone. No pebbles:
+ * a pebble is what makes soil read as soil, and this must not.
+ */
+function paintPlaster(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const trowel = (vnoise(x, y, size, 4, seed) - 0.5) * 2 * 7
+      const grit = (h2(x, y, seed + 31) - 0.5) * 2 * 4
+      let col = shade(base, trowel + grit)
+      // A crack: one thin wandering line per tile, faint. Derived from the same noise so it does
+      // not tile into a grid across a wall.
+      const crack = Math.abs(vnoise(x, y, size, 6, seed + 9) - 0.5) < 0.012 && vnoise(x, y, size, 3, seed + 21) > 0.58
+      if (crack) col = shade(col, -16)
+      put(dst, size, x, y, col, 0)
+    }
+  }
+}
+
+/**
+ * Thatch: straw laid in courses. Every column is one strand with its own tone so the surface reads
+ * as fibre, not as a flat tan; a darker line under each course is the shadow the bundle above
+ * throws, and courses stagger so the lines never stack into a grid.
+ */
+function paintThatch(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const course = Math.max(4, Math.round(size / 3))
+  for (let y = 0; y < size; y++) {
+    const c = Math.floor(y / course)
+    const inCourse = y % course
+    for (let x = 0; x < size; x++) {
+      const strand = (h2(x + c * 7, 0, seed) - 0.5) * 2 * 18       // per-strand tone, per course
+      const fray = (h2(x, y, seed + 5) - 0.5) * 2 * 6              // fibre noise along the strand
+      let col = shade(base, strand + fray)
+      if (inCourse === course - 1) col = shade(col, -34)            // the shadow under the bundle
+      else if (inCourse === 0) col = shade(col, 12)                 // the lit lip of the bundle
+      put(dst, size, x, y, col, 0)
+    }
+  }
+}
+
+/**
+ * A timber stack: logs lying together. The SIDES show a 2×2 of log ENDS — rings, a dark gap where
+ * the round logs do not meet — which is the one view that says "stacked" at any distance; the
+ * top and bottom show bark running along the stack, two logs wide, a dark seam between them. A
+ * log's own ring/bark vocabulary (`paintRings`, `paintBark`), halved.
+ */
+function paintTimberStack(dst: Layer, size: number, base: [number, number, number], seed: number, face: number) {
+  const half = size / 2
+  if (face === SIDE) {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const lx = x % half, ly = y % half
+        const qx = Math.floor(x / half), qy = Math.floor(y / half)
+        const c = (half - 1) / 2
+        // Octagonal distance, not Chebyshev: a log end is ROUND, and a square ring reads as a
+        // crate. The octagon is the cheapest shape that still darkens the four corners.
+        const dx = Math.abs(lx - c), dy = Math.abs(ly - c)
+        const d = Math.max(Math.max(dx, dy), (dx + dy) * 0.75)
+        const gap = d > half * 0.46                                   // outside the round: the dark between logs
+        const ring = (Math.floor(d / Math.max(1, half / 6)) + (h2(x, y, seed + 3) > 0.85 ? 1 : 0)) % 2 === 0 ? -22 : 8
+        const heart = d < half * 0.16 ? 12 : 0
+        const grit = (h2(x, y, seed + 11 + qx * 3 + qy) - 0.5) * 2 * 6
+        put(dst, size, x, y, gap ? shade(base, -70) : shade(base, ring + heart + grit), 0)
+      }
+    }
+  } else {
+    for (let y = 0; y < size; y++) {
+      const seam = y % half === 0 || y % half === half - 1
+      for (let x = 0; x < size; x++) {
+        const stripe = (vnoise(x, Math.floor(y / half) * 3, size, 8, seed) - 0.5) * 2 * 16
+        const groove = vnoise(x, Math.floor(y / half), size, 16, seed + 7) < 0.3 ? -14 : 0
+        put(dst, size, x, y, seam ? shade(base, -60) : shade(base, stripe + groove), 0)
+      }
     }
   }
 }
@@ -1179,6 +1260,9 @@ export function paintFor(material: number, face: number, size: number): Layer {
     case MAT.STONE_BRICK:
     case MAT.PALE_BRICK: paintAshlar(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, 8, 4); break
     case MAT.SHINGLES: paintShingles(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
+    case MAT.PLASTER: paintPlaster(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
+    case MAT.THATCH: paintThatch(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
+    case MAT.TIMBER_STACK: paintTimberStack(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, face); break
     // ★ THE WEATHERED THREE — base painter first, then the overlay. Same courses as their clean
     // siblings by construction, which is the whole point: mixed into one wall they must line up.
     case MAT.MOSSY_STONE_BRICK: {

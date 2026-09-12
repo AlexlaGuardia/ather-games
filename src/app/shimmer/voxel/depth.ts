@@ -581,6 +581,18 @@ export const MAT = {
    * Ather roofs its houses in something with a name, that is Magii's.
    */
   SHINGLES: 87,
+  /**
+   * ── THE BUILDING PALETTE, BATCH 2 (2026-09-12, Alex: "I want to continue adding different
+   * blocks to the game so I can use them for building these structures") ──────────────────────
+   * Three more hand-placed, never-generated surfaces, in the band that opened at 50. Each is a
+   * reach the four Moonwell building scripts recorded (see their headers): infill for a timber
+   * frame, a second roof beside shingles, and a yard's stock made visible.
+   * ⚠ TBD-CANON on the item names, same as `shingle` — build-side placeholders until the Ather
+   * names what it plasters and thatches with. Glass is 91, added with its render pass.
+   */
+  PLASTER: 88,
+  THATCH: 89,
+  TIMBER_STACK: 90,
 } as const
 
 /**

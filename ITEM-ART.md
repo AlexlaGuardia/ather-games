@@ -4,11 +4,11 @@
 > registry, the recipe table and the tool table, and it classifies each item by calling the same
 > icon path the game calls. A hand-kept version of this file would be wrong within a week.
 
-Items reachable in voxel3d: **248**
+Items reachable in voxel3d: **254**
 
 | status | count | meaning |
 |---|---|---|
-| 🟦 derived | 47 | wears its own block's faces. Never needs hand art. |
+| 🟦 derived | 53 | wears its own block's faces. Never needs hand art. |
 | 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
 | 🧊 mesh | 2 | rendered from the scatter geometry the world instances. Never needs hand art. |
@@ -149,6 +149,8 @@ source of truth for what that block looks like, and the two drift the first time
 - `mossy_stone_brick_slab`
 - `pale_brick`
 - `pale_brick_slab`
+- `plaster`
+- `plaster_slab`
 - `rubble`
 - `rubble_slab`
 - `sandstone`
@@ -163,6 +165,10 @@ source of truth for what that block looks like, and the two drift the first time
 - `stone_brick`
 - `stone_brick_slab`
 - `stonecutter`
+- `thatch`
+- `thatch_slab`
+- `timber_stack`
+- `timber_stack_slab`
 - `waymark`
 
 ## 🎨 Painted, but wearing the generic palette

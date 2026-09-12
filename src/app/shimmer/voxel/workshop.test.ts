@@ -59,7 +59,14 @@ console.log('milled yield')
     bonused.length === 0,
     `a bench does not conjure a third plank out of two, anywhere, ever — ${bonused.map(r => r.id).join(', ')}`)
 
-  const logRefines = RECIPES.filter(r => r.input.some(i => i.itemId.endsWith('_log')))
+  // ★ THE ONE LOG CONSUMER THAT IS NOT A REFINE (2026-09-12): the timber stack puts four logs
+  // TOGETHER, it does not take one apart, so the mill has nothing to pay it for. Exempted BY ID
+  // and the exemption EXPIRES: if the recipe stops consuming several logs at once it is no longer
+  // a stack and the line below goes red rather than quietly exempting a refine.
+  const stack = RECIPES.find(r => r.id === 'timber_stack')
+  check('the timber-stack exemption is live: it exists and consumes several logs at once',
+    !!stack && stack.input.some(i => i.itemId.endsWith('_log') && i.count > 1) && stack.milled === undefined)
+  const logRefines = RECIPES.filter(r => r.id !== 'timber_stack' && r.input.some(i => i.itemId.endsWith('_log')))
   check('every log-refine DOES pay better milled', logRefines.length > 0 &&
     logRefines.every(r => milledYield(r, MILL) > r.output.count),
     logRefines.filter(r => milledYield(r, MILL) <= r.output.count).map(r => r.id).join(', '))

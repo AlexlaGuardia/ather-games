@@ -255,6 +255,22 @@ export const RECIPES: RecipeDef[] = [
   // `registry.ts` › the wooden wall, and `depth.ts` › PLANKS_GOLDWOOD, for the full reasoning.
 
 
+  // ── BATCH 2 OF THE BUILDING PALETTE (2026-09-12) ────────────────────────────────────────────
+  // Plaster: earth and sand, set. Two subsoil to one sand, four blocks a batch — a cottage's walls
+  // take many and both inputs are dug by the stack. Thatch: grass tufts bundled; tufts are the
+  // cheapest thing in the world to gather, and a roof takes a field of them. A timber stack is
+  // four logs lying together — the ONLY thing logs become without a blade, and it is not a block
+  // you build with but a block that shows a yard has stock (Hazel's R6, Sax's R3).
+  { id: 'plaster', name: 'Plaster', station: 'hand', mana: 0,
+    input: [{ itemId: 'block_subsoil', count: 2 }, { itemId: 'block_sand', count: 1 }], output: { itemId: 'plaster', count: 4 } },
+  { id: 'thatch', name: 'Thatch', station: 'hand', mana: 0,
+    input: [{ itemId: 'grass_tuft', count: 3 }], output: { itemId: 'thatch', count: 2 } },
+  // ⚠ `family: 'wood'` because it consumes logs (the mill lists it), and NO `milled`: stacking is
+  // not extraction, a mill does not conjure a second stack from the same four logs. It is the one
+  // log consumer that is not a refine — `workshop.test.ts` names it as such, with an expiring check.
+  { id: 'timber_stack', name: 'Timber Stack', family: 'wood', station: 'hand', mana: 0,
+    input: [{ itemId: 'goldwood_log', count: 4 }], output: { itemId: 'timber_stack', count: 1 } },
+
   // ── THE STATION ITSELF ──────────────────────────────────────────────────────────────────────
   // Craftable by hand, and it must stay that way: a crafting table gated behind a crafting table is
   // the bootstrap that cannot start. Canon has Greg gift one in the starter bag
