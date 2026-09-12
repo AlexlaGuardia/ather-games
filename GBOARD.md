@@ -11,6 +11,20 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 💡 Shimmer — **A POST NO LONGER BLACKS OUT THE GRASS UNDER IT** (2026-09-12 late afternoon, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID zEWN-Tzb-TRMAtDhuBH1A` from `ae772f8`**, served == disk. Sweep **267/267**. light-passes 10/0 (runs the real flood + an opaque control).*
+
+**Left off:** Alex: *"the block under it is still getting that heavy shadow.. its not very realistic."* Not the mesher
+(it has ignored STRUCTURE for faces and AO since 08-08) — the **sky flood**: `opaque` read a piece's `STRUCTURE` cell as
+rock, the column stopped at a fence post, the cell went to 0, and the grass top face under a 0.26 upright was lit as
+if a boulder sat on it. **Pieces now pass light** (`STRUCTURE`, `STRUCTURE_HALF` in `LIGHT_PASSES`), the same call the
+leaves make: every piece is thinner than its cell, and a doorway is literally a hole. The rule moved out of a hand-kept
+set in `VoxelWorld.tsx` (with a copy in `hollow-wind.test.ts`) into **`voxel/light-passes.ts`**, imported by both.
+
+**Next:** 1. A half-thick beam wall casts NO shadow now — the cheaper wrong. If a wall should shade its lee side, that is
+a sub-cell light model, not a set membership. Alex's call whether it matters.
+
+**Files:** `voxel/light-passes.ts` (+ test) · `voxel3d/VoxelWorld.tsx` · `voxel3d/hollow-wind.test.ts`.
+
 ## 🧱 Shimmer — **BEAMS THAT TOUCH ARE A WALL — AND SIX OF EVERY SEVEN PIECES HAD NEVER DRAWN** (2026-09-12 afternoon, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID _u609EKiqRVCoTPVqGnzt` from `8af3fa9`** (beams link to BEAMS ONLY — Alex's first beam against a block grew a panel into it; the fence's solid rule was mine, not the spec's). Served == disk (md5). Sweep **266/266**. beam-wall **18/0**, the old rule mutated back goes red ×3. tsc 7.*
 
 **Left off:** Alex, after taking back and replacing a bench: *"a wall isn't a thing yet although I'd like it to be.. make a
