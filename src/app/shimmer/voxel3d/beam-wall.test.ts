@@ -70,20 +70,20 @@ console.log('\n── 2. ★★ THE REGRESSION: a material variant draws, and gh
   r.dispose()
 }
 
-console.log('\n── 3. ★★ a beam beside the WORLD is still just a beam ──')
-// The first shipped version linked to any solid voxel, the fence's rule. Alex placed ONE beam
-// against a block and got "a wall with a shadow on the block behind it". A beam is a post until a
-// second beam makes it a wall; the world does not count.
+console.log('\n── 3. ★★ the wall meets the world ──')
+// Shipped, reversed, restored on 2026-09-12. The reversal was judged from a render in which the
+// pole sat one cell from its panel (the pivot bug); with the pole honest, Alex asked for the world
+// link back. A run of beams meets a block wall or a doorway flush.
 {
   const solidAt = (sx: number, sz: number) => (x: number, y: number, z: number) => y === 0 && x === sx && z === sz
   const abut = draw([at('beam', 0, 0)], solidAt(1, 0))
-  ok(abut.wallPanels === 0 && abut.wallCores === 0, `★★ a beam beside a solid block grows NOTHING (saw ${abut.wallPanels}/${abut.wallCores})`)
-  const step = draw([at('beam', 0, 0)], () => true)
-  ok(step.wallPanels === 0 && step.wallCores === 0, 'a beam buried in solid on every side is still a post')
+  ok(abut.wallPanels === 1 && abut.wallCores === 1, `★★ a beam beside a solid block grows a panel to meet it flush (saw ${abut.wallPanels}/${abut.wallCores})`)
+  const under = draw([at('beam', 0, 0)], (x, y) => y === -1)
+  ok(under.wallPanels === 0, 'the ground under a beam is not a neighbour — only the four sides count')
+  const boxed = draw([at('beam', 0, 0)], () => true)
+  ok(boxed.wallPanels === 4 && boxed.wallCores === 1, 'solid on all four sides: four panels, one core')
   const fence = draw([at('fence', 0, 0)], solidAt(1, 0))
-  ok(fence.fenceArms === 1, 'the FENCE still reaches for the world — that rule was not touched')
-  const pairInWorld = draw([at('beam', 0, 0), at('beam', 1, 0)], () => true)
-  ok(pairInWorld.wallPanels === 2, 'and two beams still join with solid all around them')
+  ok(fence.fenceArms === 1, 'the fence reaches for the world the same way')
 }
 
 console.log('\n── 4. every base shape still has exactly one mesh ──')
