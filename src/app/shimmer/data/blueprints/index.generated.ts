@@ -4,10 +4,12 @@ import bp_hazel_carpentry from './hazel_carpentry.json'
 import bp_mallow_shop from './mallow_shop.json'
 import bp_sax_stonery from './sax_stonery.json'
 import bp_sparring_ring from './sparring_ring.json'
+import bp_yarrow_apothecary from './yarrow_apothecary.json'
 
 export const BLUEPRINT_FILES: Readonly<Record<string, BlueprintDef>> = {
   "hazel_carpentry": bp_hazel_carpentry as BlueprintDef,
   "mallow_shop": bp_mallow_shop as BlueprintDef,
   "sax_stonery": bp_sax_stonery as BlueprintDef,
   "sparring_ring": bp_sparring_ring as BlueprintDef,
+  "yarrow_apothecary": bp_yarrow_apothecary as BlueprintDef,
 }
