@@ -33,7 +33,8 @@ import { pieceForItem } from '../../voxel/pieces'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
 import { leafPixels, bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
-import { isPlant, isSapling, MAT } from '../../voxel/depth'
+import { isPlant, isSapling, isGlassMat, MAT } from '../../voxel/depth'
+const rgbOf3 = (hex: number): [number, number, number] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255]
 import { MATERIAL_COLOR } from '../attrs'
 
 /** Icon edge in CSS pixels. Small enough to stay crisp, large enough for the cube to read. */
@@ -412,8 +413,11 @@ export function iconPixels(material: number, size = ICON, tile = TILE): Uint8Arr
   // ★ GLASS (2026-09-12): the one tile whose alpha is COVERAGE. The world discards its open
   // quarries; a cube icon has nothing behind them to show, so they are filled with the pale sky
   // a window reflects. Icon-only — the atlas texel stays open, or the window would stop being one.
-  if (base === MAT.GLASS) for (const layer of [top, side])
-    for (let o = 0; o < layer.length; o += 4) if (layer[o + 3] < 128) { layer[o] = 196; layer[o + 1] = 224; layer[o + 2] = 238 }
+  if (isGlassMat(base)) {
+    const fill: [number, number, number] = base === MAT.GLASS ? [196, 224, 238] : rgbOf3(MATERIAL_COLOR[base])
+    for (const layer of [top, side])
+      for (let o = 0; o < layer.length; o += 4) if (layer[o + 3] < 128) { layer[o] = fill[0]; layer[o + 1] = fill[1]; layer[o + 2] = fill[2] }
+  }
   return rasterIcon(top, side, size, tile)
 }
 

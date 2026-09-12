@@ -38,7 +38,7 @@ import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
 import { lightOpaque } from '../voxel/light-passes'
 import { placementRotation } from './piece-facing'
-import { materialAt, MAT, isPlant, isHerb, isScatter, isSapling, isHalfMat, isTopSlab, baseOf, isSolid, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHerb, isScatter, isSapling, isHalfMat, isTopSlab, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState, type RayHit } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -5691,7 +5691,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       posXposZ: cols.current.get(key(cx + 1, cz + 1)) ?? null,
     }, scratch)) {
       // Water splits into its own mesh so it can blend AFTER the opaque pass — see attrs.ts.
-      const { solid, water, leaves, glass } = buildAttrsSplit(sm.mesh, m => m === MAT.WATER, isLeafMat, m => m === MAT.GLASS)
+      const { solid, water, leaves, glass } = buildAttrsSplit(sm.mesh, m => m === MAT.WATER, isLeafMat, isGlassMat)
       if (solid) solids.push({ attrs: solid, dy: sm.wy })
       if (water) waters.push({ attrs: water, dy: sm.wy })
       if (leaves) leafParts.push({ attrs: leaves, dy: sm.wy })
@@ -10801,7 +10801,12 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
    * variant in the chosen material falls back to its base rather than to `undefined`.
    */
   const [pieceMat, setPieceMat] = useState(PIECE_MATERIALS[0].key)
-  const pieceRows = PIECES.map(pc => pieceVariants(pc.id).find(v => pieceMaterial(v.id)?.key === pieceMat) ?? pc)
+  // ★ Only the shapes that list the chosen material's FAMILY (2026-09-13, the glass family): a
+  // pane is never goldwood and a stair is never violetbloom, so the strip must not show a row
+  // that would quietly craft the base instead. The family is read off the table, never guessed.
+  const pieceFamily = PIECE_MATERIALS.find(m => m.key === pieceMat)?.family
+  const pieceRows = PIECES.filter(pc => !!pieceFamily && !!pc.variants?.includes(pieceFamily))
+    .map(pc => pieceVariants(pc.id).find(v => pieceMaterial(v.id)?.key === pieceMat) ?? pc)
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>

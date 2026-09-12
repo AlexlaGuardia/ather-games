@@ -121,7 +121,7 @@ export interface PieceDef {
  * ruled TOOL wood — `world/resources.ts` drops `starwillow_branch` + `starwillow_sap` and there
  * has never been a `starwillow_plank`. Adding one to "complete the set" would contradict canon.
  */
-export type PieceFamily = 'wood' | 'stone'
+export type PieceFamily = 'wood' | 'stone' | 'glass'
 
 export interface PieceMaterial {
   /** Suffix on the derived id — `stair` + `stonebrick` -> `stair_stonebrick`. */
@@ -151,6 +151,16 @@ export const PIECE_MATERIALS: PieceMaterial[] = [
   { key: 'mossycutstone',     name: 'Mossy Cut Stone',     itemId: 'mossy_cut_stone',     family: 'stone' },
   { key: 'cobble',            name: 'Cobblestone',         itemId: 'cobblestone',         family: 'stone' },
   { key: 'plaster',           name: 'Plaster',             itemId: 'plaster',             family: 'stone' },
+  // ── THE GLASS FAMILY (2026-09-13): what a `pane` wears. Clear, and six blooms. A stair does not
+  // list this family and a pane lists only it, so the axis is per shape, not one grid — the
+  // palette guard sums variants per shape rather than multiplying.
+  { key: 'clear',       name: 'Clear',       itemId: 'glass',             family: 'glass' },
+  { key: 'violetbloom', name: 'Violetbloom', itemId: 'glass_violetbloom', family: 'glass' },
+  { key: 'stormgrass',  name: 'Stormgrass',  itemId: 'glass_stormgrass',  family: 'glass' },
+  { key: 'tidepetal',   name: 'Tidepetal',   itemId: 'glass_tidepetal',   family: 'glass' },
+  { key: 'sunpetal',    name: 'Sunpetal',    itemId: 'glass_sunpetal',    family: 'glass' },
+  { key: 'dawncap',     name: 'Dawncap',     itemId: 'glass_dawncap',     family: 'glass' },
+  { key: 'moonvine',    name: 'Moonvine',    itemId: 'glass_moonvine',    family: 'glass' },
 ]
 
 /**
@@ -193,6 +203,15 @@ export const PIECES: PieceDef[] = [
 
   { id: 'window', name: 'Window', w: 1, h: 2, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 4 }], variants: ['wood', 'stone'] },
+
+  // ── ★ THE PANE (Alex, 2026-09-13: "this could be easily solved with window panes.. maybe a
+  // variety of colors") ──────────────────────────────────────────────────────────────────────
+  // A sheet of glass in the wall's plane, one cell, thin. Set one in any hole; two stacked are a
+  // tall window, four are a wide one; the glass tile's own lead frame draws the muntins. It wears
+  // the GLASS family only — clear and the six blooms — and draws through the cutout pass
+  // (`piece-mesh.ts`), so you see the room through it and it blocks the way like a wall does.
+  { id: 'pane', name: 'Pane', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'glass', count: 1 }], variants: ['glass'] },
 
   { id: 'roof_slope', name: 'Roof Slope', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'shimmeroak_plank', count: 3 }], variants: ['wood', 'stone'] },

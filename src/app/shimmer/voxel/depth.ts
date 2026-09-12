@@ -616,7 +616,27 @@ export const MAT = {
   CANVAS: 93,
   STONE_STACK: 94,
   RUBBLE_HEAP: 95,
+  /**
+   * ── STAINED GLASS (Alex, 2026-09-13: "window panes.. maybe a variety of colors") ─────────────
+   * Six colours, and every one is a flower the world already grows — the dye IS the bloom, so no
+   * new name is invented and the palette is the Ather's own. Each is a full block like GLASS, and
+   * the material a `pane` piece can wear. Rendered as a lead lattice over a colour DITHER (half
+   * the quarry texels opaque colour, half open) — a cutout that reads as tinted glass at distance,
+   * because this world blends nothing (`glass.test.ts` › the canopy's argument).
+   */
+  GLASS_VIOLETBLOOM: 96,
+  GLASS_STORMGRASS: 97,
+  GLASS_TIDEPETAL: 98,
+  GLASS_SUNPETAL: 99,
+  GLASS_DAWNCAP: 100,
+  GLASS_MOONVINE: 101,
 } as const
+
+/** Every glass id — the cutout pass, the light pass and the mesher rank all ask this, never `=== GLASS`. */
+export const GLASS_MATS: ReadonlySet<number> = new Set<number>([
+  MAT.GLASS, MAT.GLASS_VIOLETBLOOM, MAT.GLASS_STORMGRASS, MAT.GLASS_TIDEPETAL, MAT.GLASS_SUNPETAL, MAT.GLASS_DAWNCAP, MAT.GLASS_MOONVINE,
+])
+export const isGlassMat = (m: number): boolean => GLASS_MATS.has(m)
 
 /**
  * Ground that GROWS — the one definition of "a plant can stand here", read by the tree planter,

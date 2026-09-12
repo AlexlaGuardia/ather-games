@@ -273,6 +273,13 @@ export const RECIPES: RecipeDef[] = [
   // Glass: sand, fused. Hand work like every material (mining is the gate); the sand is the trip.
   { id: 'glass', name: 'Glass', station: 'hand', mana: 0,
     input: [{ itemId: 'block_sand', count: 2 }], output: { itemId: 'glass', count: 2 } },
+  // Stained glass (2026-09-13): a block of glass and one bloom. The dye is the flower — six the
+  // world grows, no pigment item invented. One-for-one, so a window costs a garden's worth of colour.
+  ...([['violetbloom', 'violetbloom_petal'], ['stormgrass', 'stormgrass_blade'], ['tidepetal', 'tidepetal_bloom'],
+       ['sunpetal', 'sunpetal_bloom'], ['dawncap', 'dawncap_spore'], ['moonvine', 'moonvine_leaf']] as const).map(([k, dye]) => ({
+    id: `glass_${k}`, name: `${k[0].toUpperCase()}${k.slice(1)} Glass`, station: 'hand' as const, mana: 0,
+    input: [{ itemId: 'glass', count: 1 }, { itemId: dye, count: 1 }], output: { itemId: `glass_${k}`, count: 1 },
+  })),
   // ── BATCH 3 (2026-09-12) ────────────────────────────────────────────────────────────────────
   // Cobble: rubble knocked round. Three for two by hand, three for three at the cutter — a milder
   // loss than cut stone (4 → 2 / 3) and break-even at best, because `workshop.test` rules masonry

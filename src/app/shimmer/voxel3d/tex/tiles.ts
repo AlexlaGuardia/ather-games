@@ -67,6 +67,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.PLASTER, MAT.THATCH, MAT.TIMBER_STACK,
   // Glass, 2026-09-12: the one tile whose alpha is COVERAGE — the glass pass discards below half.
   MAT.GLASS,
+  // Stained glass, 2026-09-13: the same lattice over a colour dither. Alpha is coverage on these too.
+  MAT.GLASS_VIOLETBLOOM, MAT.GLASS_STORMGRASS, MAT.GLASS_TIDEPETAL, MAT.GLASS_SUNPETAL, MAT.GLASS_DAWNCAP, MAT.GLASS_MOONVINE,
   // Batch 3, 2026-09-12: cobble, canvas, a stone stack (per-face) and a rubble heap.
   MAT.COBBLESTONE, MAT.CANVAS, MAT.STONE_STACK, MAT.RUBBLE_HEAP,
   // The waymark + the plot's cloud-wall, added 2026-08-15 with the passages layer.
@@ -686,9 +688,14 @@ function paintStoneStack(dst: Layer, size: number, base: [number, number, number
  * ⚠ ALPHA IS COVERAGE ON THIS TILE AND NOWHERE ELSE — the atlas convention is emissive. The glass
  * material is the only program that reads it as coverage, and it draws only glass quads.
  */
-function paintGlass(dst: Layer, size: number, lead: [number, number, number], seed: number) {
+function paintGlass(dst: Layer, size: number, lead: [number, number, number], seed: number, stain?: [number, number, number]) {
   const pitch = Math.max(6, Math.round(size / 4))   // diamond pitch
   const glint: [number, number, number] = [214, 236, 246]
+  // ★ STAINED: the quarries carry a checker of the colour — one texel in two opaque, the rest
+  // open. At a wall's distance the eye averages it to a translucent tint; up close it is a screen
+  // door, which is the honest price of a world that blends nothing. Two tones in the checker so a
+  // pane is not a flat wash.
+  const stainDark = stain ? shade(stain, -22) : null
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const frame = x === 0 || y === 0 || x === size - 1 || y === size - 1
@@ -697,6 +704,7 @@ function paintGlass(dst: Layer, size: number, lead: [number, number, number], se
       if (came) { put(dst, size, x, y, shade(lead, (h2(x, y, seed) - 0.5) * 14), 255); continue }
       // Glint: the texel just inside the upper-left came of each quarry.
       if (d1 === 1 && h2(Math.floor((x + y) / pitch), Math.floor((x - y + size) / pitch), seed + 3) > 0.45) { put(dst, size, x, y, glint, 255); continue }
+      if (stain && (x + y) % 2 === 0) { put(dst, size, x, y, h2(x, y, seed + 5) > 0.5 ? stain : stainDark!, 255); continue }
       put(dst, size, x, y, [0, 0, 0], 0)
     }
   }
@@ -1367,7 +1375,10 @@ export function paintFor(material: number, face: number, size: number): Layer {
     case MAT.PLASTER: paintPlaster(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.THATCH: paintThatch(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.TIMBER_STACK: paintTimberStack(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, face); break
-    case MAT.GLASS: paintGlass(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
+    case MAT.GLASS: paintGlass(dst, size, rgbOf(MATERIAL_COLOR[MAT.GLASS]), seed); break
+    case MAT.GLASS_VIOLETBLOOM: case MAT.GLASS_STORMGRASS: case MAT.GLASS_TIDEPETAL:
+    case MAT.GLASS_SUNPETAL: case MAT.GLASS_DAWNCAP: case MAT.GLASS_MOONVINE:
+      paintGlass(dst, size, rgbOf(MATERIAL_COLOR[MAT.GLASS]), seed, rgbOf(MATERIAL_COLOR[material])); break
     case MAT.COBBLESTONE: paintStones(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, { cells: 4, jitter: 0.35, gap: 0.10, gapShade: -44, tone: 18, mortar: true }); break
     case MAT.CANVAS: paintCanvas(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.STONE_STACK: paintStoneStack(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, face); break

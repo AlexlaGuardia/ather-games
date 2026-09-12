@@ -25,7 +25,7 @@ const at = (pieceId: string, x: number, z: number): Placement => ({ pieceId, x, 
 const stubTiles = { texture: null as unknown as THREE.DataArrayTexture } as unknown as Parameters<typeof createPieceRenderer>[0]
 
 console.log('\n── 1. ★★ every piece material is a block with tile art ──')
-ok(PIECE_MATERIALS.length === 12, `BLIND CHECK: 12 materials on the axis (saw ${PIECE_MATERIALS.length})`)
+ok(PIECE_MATERIALS.length === 19, `BLIND CHECK: 19 materials on the axis — 12 masonry + 7 glass (saw ${PIECE_MATERIALS.length})`)
 for (const m of PIECE_MATERIALS) {
   const mat = materialForItem(m.itemId)
   ok(mat !== undefined && hasTileArt(mat), `${m.key}: ${m.itemId} places as a block with tile art`)

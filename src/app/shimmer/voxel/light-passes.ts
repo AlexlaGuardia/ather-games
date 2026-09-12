@@ -15,13 +15,14 @@ import { AIR } from './section'
 import { MAT } from './depth'
 import { WOOD } from './trees'
 import { STRUCTURE, STRUCTURE_HALF } from './pieces'
+import { GLASS_MATS } from './depth'
 
 /** Non-air materials light still passes through: foliage, and the pieces (see above). */
 export const LIGHT_PASSES: ReadonlySet<number> = new Set<number>([
   WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES,
   STRUCTURE, STRUCTURE_HALF,
-  // Glass (2026-09-12): the whole point of it.
-  MAT.GLASS,
+  // Glass, clear and stained (2026-09-12/13): the whole point of it.
+  ...GLASS_MATS,
 ])
 
 /** light.ts's `opaque` contract: air, water, foliage and pieces pass; everything else stops. */

@@ -17,7 +17,7 @@
 
 import { AIR, Section } from './section'
 import { STRUCTURE, STRUCTURE_HALF } from './pieces'
-import { isPlant, isHalfMat, isTopSlab, isSapling, MAT } from './depth'
+import { isPlant, isHalfMat, isTopSlab, isSapling, isGlassMat, MAT } from './depth'
 import { isLeafMat, isLogMat } from './trees'
 
 /**
@@ -586,7 +586,7 @@ export function greedyMesh(
           // Glass (2026-09-12) ranks with water: it occludes for AO and emits its own faces against
           // air, but an opaque neighbour still draws ITS face against it — which is how you see the
           // wall through the window. Glass against glass emits nothing: one continuous pane.
-          opq[i] = sol[i] === 1 && m !== MAT.WATER && m !== MAT.GLASS ? 1 : 0
+          opq[i] = sol[i] === 1 && m !== MAT.WATER && !isGlassMat(m) ? 1 : 0
           i++
         }
       }

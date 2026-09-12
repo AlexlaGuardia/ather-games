@@ -39,7 +39,7 @@ const solid = () => MAT.STONE
   // counter-image of the Snagbarrows' ring. ⚠ It is the KEEPER's and never a hold's: canon fixes the
   // collar-culture's built vocabulary as an exhaustive list against "anything architectural", and
   // benching a hold's audience would say those people built seating for guests.
-  ok(PIECES.length === 20, `the catalogue is twenty pieces, deliberately — the doorway family + two doors joined 2026-09-13 (${PIECES.length})`)
+  ok(PIECES.length === 21, `the catalogue is twenty-one pieces, deliberately — the doorway family + two doors + the pane joined 2026-09-13 (${PIECES.length})`)
   const ids = PIECES.map(p => p.id)
   ok(!ids.includes('wall') && !ids.includes('floor'),
      '★ walls and floors are BLOCKS, not pieces — that split is the whole design')

@@ -44,6 +44,7 @@ const TINT: Record<string, number> = {
   shutter: 0x7d6440,
   arch: 0x8d8a94,
   door: 0x7a5c30,
+  pane: 0x9fc4d8,
   door_double: 0x7a5c30,
   door_grand: 0x7a5c30,
   gate: 0x6d5433,
@@ -101,8 +102,10 @@ export const pieceTint = (def: PieceDef): number => {
  * ⚠ Geometry-local position and normal, read BEFORE the instance transform: a tile aligns to the
  * piece's own frame, and rotating the piece rotates its grain with it.
  */
-function createPieceMaterial(tiles: TileArray): THREE.MeshLambertMaterial {
-  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff })
+function createPieceMaterial(tiles: TileArray, opts: { cutout?: boolean } = {}): THREE.MeshLambertMaterial {
+  // `cutout`: the pane's program — the glass tiles' alpha is coverage, discarded below half, and
+  // both faces draw because a pane is looked at from the room and from the yard.
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: opts.cutout ? THREE.DoubleSide : THREE.FrontSide })
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTiles = { value: tiles.texture }
     shader.vertexShader = shader.vertexShader
@@ -132,7 +135,11 @@ varying vec3 vPNorm;`)
     ? vPPos.xz
     : (an.x > 0.5 ? vec2(vPPos.z, -vPPos.y) : vec2(vPPos.x, -vPPos.y));
   float layer = an.y > 0.5 ? vLayerTop : vLayerSide;
-  if (layer >= 0.0) diffuseColor.rgb *= texture(uTiles, vec3(tileUv, layer)).rgb;
+  if (layer >= 0.0) {
+    vec4 tile = texture(uTiles, vec3(tileUv, layer));
+${opts.cutout ? '    if (tile.a < 0.5) discard;' : ''}
+    diffuseColor.rgb *= tile.rgb;
+  }
 }`)
   }
   return mat
@@ -218,6 +225,13 @@ function buildGeometry(def: PieceDef, open = false): THREE.BufferGeometry {
   // `basePieceId` is the shipped answer to "what shape is this", built from the piece table rather
   // than by splitting the id (`half_slab` contains an underscore). Never re-derive it here.
   switch (basePieceId(def.id)) {
+    case 'pane': {
+      // A sheet in the wall's plane. Its faces are ±z, so the tile uv is the x/y rule and the
+      // glass lattice lands upright; 0.06 thick so it has an edge to catch light without reading
+      // as a slab. The tile's own frame (every edge texel is lead) is the muntin between panes.
+      box(1, 1, 0.06, 0, 0.5, 0)
+      break
+    }
     case 'doorway': { frame(3, 3); break }
     case 'doorway_double': { frame(4, 3); break }
     case 'doorway_grand': { frame(5, 4); break }
@@ -499,6 +513,9 @@ export function createPieceRenderer(tiles: TileArray | null = null): PieceRender
   const mats = new Map<string, THREE.Material>()
   const layers = new Map<string, { top: THREE.InstancedBufferAttribute; side: THREE.InstancedBufferAttribute }>()
   const textured = tiles ? createPieceMaterial(tiles) : null
+  // The glass-family shapes (the pane) draw through a cutout copy of the same program.
+  const texturedCutout = tiles ? createPieceMaterial(tiles, { cutout: true }) : null
+  const isGlassShape = (def: PieceDef) => !!def.variants && def.variants.length === 1 && def.variants[0] === 'glass'
 
   for (const def of PIECES) {
     // An openable shape gets a second mesh for its OPEN pose, keyed `<id>:open` — see buildGeometry.
@@ -506,7 +523,7 @@ export function createPieceRenderer(tiles: TileArray | null = null): PieceRender
       const g = buildGeometry(def, open)
       const id = open ? `${def.id}:open` : def.id
       layers.set(id, addLayerAttrs(g))
-      const m = textured ?? new THREE.MeshLambertMaterial({ color: TINT[def.id] ?? 0x999999 })
+      const m = (isGlassShape(def) ? texturedCutout : textured) ?? new THREE.MeshLambertMaterial({ color: TINT[def.id] ?? 0x999999, side: isGlassShape(def) ? THREE.DoubleSide : THREE.FrontSide })
       const inst = new THREE.InstancedMesh(g, m, MAX_PER_TYPE)
       inst.count = 0
       inst.frustumCulled = false   // instances span the world; the mesh's own bounds are meaningless
@@ -681,6 +698,7 @@ export function createPieceRenderer(tiles: TileArray | null = null): PieceRender
       armGeo.dispose(); armMat.dispose()
       wallGeo.dispose(); wallCoreGeo.dispose(); wallMat.dispose()
       textured?.dispose()
+      texturedCutout?.dispose()
       ghostMat.dispose()
     },
   }

@@ -8,7 +8,12 @@
 // of the real code — the mesher, the split, the painter — not of a comment.
 import { Section } from '../voxel/section'
 import { greedyMesh } from '../voxel/greedy'
-import { MAT } from '../voxel/depth'
+import { MAT, GLASS_MATS, isGlassMat } from '../voxel/depth'
+import { createPieceRenderer } from './piece-mesh'
+import { pieceDef, pieceVariants } from '../voxel/pieces'
+import { layerOf } from './tex/tiles'
+import { MATERIAL_COLOR } from './attrs'
+import * as THREE from 'three'
 import { lightOpaque } from '../voxel/light-passes'
 import { buildAttrsSplit } from './attrs'
 import { paintFor, TOP, SIDE } from './tex/tiles'
@@ -93,7 +98,7 @@ console.log('\n── 5. the pass exists in the host and the material really dis
 {
   const host = codeOnly(readFileSync(join(process.cwd(), 'src/app/shimmer/voxel3d/VoxelWorld.tsx'), 'utf8'))
   ok(host.includes('createTexturedVoxelMaterial(tiles, lightUniforms, { cutout: true })'), 'the glass material is the textured program in cutout mode')
-  ok(/buildAttrsSplit\(sm\.mesh, m => m === MAT\.WATER, isLeafMat, m => m === MAT\.GLASS\)/.test(host), 'the chunk build hands the glass predicate to the split')
+  ok(/buildAttrsSplit\(sm\.mesh, m => m === MAT\.WATER, isLeafMat, isGlassMat\)/.test(host), 'the chunk build hands the glass SET to the split — stained glass rides the same pass')
   ok(/emit\(glassParts, glassMaterial, /.test(host), 'and emits the glass parts with the glass material')
   ok(/glassTextured\?\.setCartoon\(cartoon\)/.test(host), 'the window is lit by the same cartoon stack as the wall')
   const atlas = readFileSync(join(process.cwd(), 'src/app/shimmer/voxel3d/tex/atlas.ts'), 'utf8')
@@ -104,6 +109,47 @@ console.log('\n── 6. it is craftable and it is a block ──')
 ok(recipeDef('glass')?.input[0].itemId === 'block_sand', 'glass is made from sand')
 ok(materialForItem('glass') === MAT.GLASS, 'the glass item places as glass')
 ok(blockDef(MAT.GLASS)?.placeable === true, 'and it is placeable')
+
+console.log('\n── 7. ★★ stained glass: six blooms, one lattice, a dither for the tint ──')
+{
+  ok(GLASS_MATS.size === 7, `seven glasses (saw ${GLASS_MATS.size})`)
+  for (const m of GLASS_MATS) {
+    ok(!lightOpaque(m), `${blockDef(m)?.name}: passes light`)
+    // the mesher ranks it with water: a stone beside it still draws its face
+    const s = new Section(8); s.set(2, 3, 3, MAT.STONE); s.set(3, 3, 3, m)
+    const r = greedyMesh(s)
+    let stoneFaces = 0
+    for (let q = 0; q < r.quads; q++) if (r.materials[q * 4] === MAT.STONE && r.normals[q * 12] > 0.5) stoneFaces++
+    ok(stoneFaces === 1, `${blockDef(m)?.name}: the wall behind it still draws (${stoneFaces})`)
+    ok(buildAttrsSplit(r, x => x === MAT.WATER, () => false, isGlassMat).glass !== null, `${blockDef(m)?.name}: routed to the glass pass`)
+    if (m === MAT.GLASS) continue
+    const px = paintFor(m, SIDE, 32)
+    let open = 0, tinted = 0
+    const lead = MATERIAL_COLOR[MAT.GLASS], lr = (lead >> 16) & 255
+    for (let o = 0; o < px.length; o += 4) {
+      if (px[o + 3] < 128) open++
+      else if (Math.abs(px[o] - lr) > 40 || Math.abs(px[o + 1] - ((lead >> 8) & 255)) > 40) tinted++
+    }
+    ok(open > 32 * 32 * 0.2 && open < 32 * 32 * 0.6, `${blockDef(m)?.name}: still see-through — ${open}/1024 open texels (a dither, not a wall)`)
+    ok(tinted > 32 * 32 * 0.15, `${blockDef(m)?.name}: carries its colour — ${tinted} tinted texels`)
+    const rec = recipeDef(blockDef(m)!.drops[0].itemId)
+    ok(!!rec && rec.input.some(i => i.itemId === 'glass') && rec.input.length === 2, `${blockDef(m)?.name}: made from glass and one bloom`)
+  }
+  ok(isGlassMat(MAT.STONE) === false, 'stone is not glass')
+}
+
+console.log('\n── 8. the pane: a glass-family piece drawn through the cutout program ──')
+{
+  const r = createPieceRenderer({ texture: null as unknown as THREE.DataArrayTexture } as unknown as Parameters<typeof createPieceRenderer>[0])
+  r.sync([{ pieceId: 'pane_sunpetal', x: 0, y: 0, z: 0, rot: 0 }, { pieceId: 'beam', x: 5, y: 0, z: 5, rot: 0 }])
+  const meshes = r.group.children.filter(c => (c as THREE.InstancedMesh).isInstancedMesh && (c as THREE.InstancedMesh).count === 1) as THREE.InstancedMesh[]
+  const paneMesh = meshes.find(m => (m.material as THREE.Material).side === THREE.DoubleSide)
+  const beamMesh = meshes.find(m => (m.material as THREE.Material).side !== THREE.DoubleSide)
+  ok(!!paneMesh && !!beamMesh && paneMesh.material !== beamMesh.material, '★ the pane draws with its own (double-sided, cutout) program; the beam with the opaque one')
+  ok(r.layersAt('pane', 0).side === layerOf(MAT.GLASS_SUNPETAL, SIDE), `the pane samples its glass's layer (${r.layersAt('pane', 0).side} vs ${layerOf(MAT.GLASS_SUNPETAL, SIDE)})`)
+  ok(pieceDef('pane')!.variants!.join() === 'glass' && pieceVariants('pane').length === 7, 'the pane wears the seven glasses, nothing else')
+  r.dispose()
+}
 
 console.log(`\nglass: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  FAIL ' + f)

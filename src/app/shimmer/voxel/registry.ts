@@ -157,6 +157,13 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.TIMBER_STACK, name: 'Timber Stack', hardness: 1.0, skill: null, minTier: 0, drops: [{ itemId: 'timber_stack', count: 1 }], fastSkill: 'forestry', placeable: true },
   // Glass (2026-09-12): quick to break, no tool has a claim on it, and it comes back whole.
   { material: MAT.GLASS, name: 'Glass', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'glass', count: 1 }], placeable: true },
+  // Stained glass (2026-09-13): the same block, dyed with a bloom. Names are the flowers'.
+  { material: MAT.GLASS_VIOLETBLOOM, name: 'Violetbloom Glass', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'glass_violetbloom', count: 1 }], placeable: true },
+  { material: MAT.GLASS_STORMGRASS, name: 'Stormgrass Glass', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'glass_stormgrass', count: 1 }], placeable: true },
+  { material: MAT.GLASS_TIDEPETAL, name: 'Tidepetal Glass', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'glass_tidepetal', count: 1 }], placeable: true },
+  { material: MAT.GLASS_SUNPETAL, name: 'Sunpetal Glass', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'glass_sunpetal', count: 1 }], placeable: true },
+  { material: MAT.GLASS_DAWNCAP, name: 'Dawncap Glass', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'glass_dawncap', count: 1 }], placeable: true },
+  { material: MAT.GLASS_MOONVINE, name: 'Moonvine Glass', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'glass_moonvine', count: 1 }], placeable: true },
   // ── Batch 3 (2026-09-12): the stone yard and the shop front ─────────────────────────────────
   // Cobble is masonry (prospecting), a little softer than cut stone; canvas is cloth, anyone's;
   // a stone stack is dressed blocks piled — prospecting, and the hardest of the batch; a rubble

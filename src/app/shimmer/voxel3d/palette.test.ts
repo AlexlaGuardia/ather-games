@@ -25,12 +25,12 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // The bug in one assert. Walk the two axes exactly the way the palette does and collect what comes
 // out; it must be the whole catalogue, with nothing left over.
 {
+  // ★ PER SHAPE, NOT ONE GRID (2026-09-13): a pane wears only the glass family and a stair never
+  // does, so each shape's axis is the materials of the families it lists. The craft panel walks
+  // the same derivation (`pieceVariants`), which is why this is still the palette's oracle.
   const reachable = new Set<string>()
   for (let shape = 0; shape < PIECES.length; shape++)
-    for (let mat = 0; mat < PIECE_MATERIALS.length; mat++) {
-      const v = pieceVariants(PIECES[shape].id)[mat]
-      if (v) reachable.add(v.id)
-    }
+    for (const v of pieceVariants(PIECES[shape].id)) reachable.add(v.id)
 
   const all = ALL_PIECES.map(p => p.id)
   const unreachable = all.filter(id => !reachable.has(id))
@@ -44,9 +44,11 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // TRIPWIRE, NOT A CEILING — it fires whenever the catalogue grows so that growth is a decision
   // somebody wrote down, and it caught the bench within the hour. Bumping it without saying WHY is
   // the only way to use it wrongly.
-  ok(reachable.size === 240, `the catalogue is 240 pieces and all 240 are on the axes (saw ${reachable.size})`)   // 240 since 2026-09-13: the doorway family + two doors (20 base × 12)
-  ok(all.length === PIECES.length * PIECE_MATERIALS.length,
-     '14 shapes x 7 materials, with no shape quietly missing a material')
+  ok(reachable.size === 247, `the catalogue is 247 pieces and all 247 are on the axes (saw ${reachable.size})`)   // 247 since 2026-09-13: 20 shapes × 12 masonry + the pane × 7 glass
+  const expected = PIECES.reduce((n, p) => n + PIECE_MATERIALS.filter(m => p.variants?.includes(m.family)).length, 0)
+  ok(all.length === expected, `every shape has every material of the families it lists, and no other (${all.length} vs ${expected})`)
+  ok(pieceVariants('pane').length === 7 && pieceVariants('pane').every(v => pieceMaterial(v.id)?.family === 'glass'), 'the pane wears the seven glasses and nothing else')
+  ok(pieceVariants('stair').every(v => pieceMaterial(v.id)?.family !== 'glass'), 'and a stair is never glass')
 }
 
 // ── 2. ★ THE MATERIAL INDEX MEANS THE SAME MATERIAL ON EVERY SHAPE ──────────────────────────────
@@ -54,10 +56,14 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // any shape. `ALL_PIECES` puts each base first — a `stair` IS the cut-stone one — so an ordering
 // read off THAT array would silently put a different material in slot 0 depending on the shape.
 {
-  for (let mat = 0; mat < PIECE_MATERIALS.length; mat++) {
-    const keys = new Set(PIECES.map(p => pieceMaterial(pieceVariants(p.id)[mat].id)?.key))
-    ok(keys.size === 1 && keys.has(PIECE_MATERIALS[mat].key),
-       `material slot ${mat} is ${PIECE_MATERIALS[mat].key} for every shape (saw ${[...keys].join('/')})`)
+  // Within a family the slot order is the table's order for every shape that lists the family.
+  for (const fam of ['wood', 'stone', 'glass'] as const) {
+    const mats = PIECE_MATERIALS.filter(m => m.family === fam)
+    const shapes = PIECES.filter(p => p.variants?.includes(fam))
+    mats.forEach((m, slot) => {
+      const keys = new Set(shapes.map(p => pieceMaterial(pieceVariants(p.id).filter(v => pieceMaterial(v.id)?.family === fam)[slot].id)?.key))
+      ok(keys.size === 1 && keys.has(m.key), `${fam} slot ${slot} is ${m.key} for every ${fam} shape (saw ${[...keys].join('/')})`)
+    })
   }
 }
 
@@ -67,13 +73,13 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // light up the wrong tile in two places at once and look internally consistent doing it.
 {
   for (const shape of PIECES)
-    for (let mat = 0; mat < PIECE_MATERIALS.length; mat++) {
-      const id = pieceVariants(shape.id)[mat].id
+    for (const v of pieceVariants(shape.id)) {
+      const id = v.id, m = pieceMaterial(id)!
       ok(pieceDef(id) !== undefined, `${id} resolves through pieceDef`)
       ok(basePieceId(id) === shape.id, `${id} reports its shape as ${shape.id}`)
-      ok(pieceMaterial(id)?.key === PIECE_MATERIALS[mat].key, `${id} reports material ${PIECE_MATERIALS[mat].key}`)
-      ok(pieceDef(id)!.cost[0].itemId === PIECE_MATERIALS[mat].itemId,
-         `${id} is paid for in ${PIECE_MATERIALS[mat].itemId}, not its base material`)
+      ok(!!m && shape.variants!.includes(m.family), `${id} reports a material of a family ${shape.id} lists (${m?.key})`)
+      ok(pieceDef(id)!.cost[0].itemId === m.itemId,
+         `${id} is paid for in ${m.itemId}, not its base material`)
     }
 }
 
@@ -87,8 +93,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   const src = readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8')
 
   // 4a. the panel walks the same two axes this file does, and highlights off the material KEY.
-  ok(/const pieceRows = PIECES\.map\(pc => pieceVariants\(pc\.id\)\.find\(v => pieceMaterial\(v\.id\)\?\.key === pieceMat\) \?\? pc\)/.test(src),
-     'the craft panel derives its shape rows through pieceVariants in the chosen material')
+  ok(/const pieceRows = PIECES\.filter\(pc => !!pieceFamily && !!pc\.variants\?\.includes\(pieceFamily\)\)\n\s*\.map\(pc => pieceVariants\(pc\.id\)\.find\(v => pieceMaterial\(v\.id\)\?\.key === pieceMat\) \?\? pc\)/.test(src),
+     'the craft panel derives its shape rows through pieceVariants in the chosen material, over the shapes that list its family')
   ok(/PIECE_MATERIALS\.map\(m => \{\n\s*const on = m\.key === pieceMat/.test(src),
      'the material strip is rendered from the full material table and highlights off the key')
   ok(/onCraft\(pieceItemId\(pc\.id\)\)/.test(src), 'a shape row crafts the resolved variant, not its base')

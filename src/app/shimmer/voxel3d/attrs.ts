@@ -97,6 +97,13 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.THATCH]: 0xc4a25a,        // dry straw, a second roof beside the shingles
   [MAT.TIMBER_STACK]: 0x8a6a3c,  // goldwood logs lying together; ends on the sides, bark on top
   [MAT.GLASS]: 0x4a5566,         // the LEAD of a leaded window — the panes are open, so this is what draws
+  // Stained glass: the COLOUR of the quarries (the lead stays GLASS's grey). Each is its flower's own hue.
+  [MAT.GLASS_VIOLETBLOOM]: 0x8f5fd8,
+  [MAT.GLASS_STORMGRASS]: 0x5f8fbe,
+  [MAT.GLASS_TIDEPETAL]: 0x9fd8d0,
+  [MAT.GLASS_SUNPETAL]: 0xe8c85a,
+  [MAT.GLASS_DAWNCAP]: 0xd8a070,
+  [MAT.GLASS_MOONVINE]: 0x6f7fae,
   [MAT.COBBLESTONE]: 0x807c78,   // rounded field stones in mortar, between STONE and CUT_STONE in value
   [MAT.CANVAS]: 0xe4dac0,        // undyed cloth; stripes are a later ask
   [MAT.STONE_STACK]: 0x9aa0a4,   // cut stone, piled — the same dressed grey, so a yard reads as one material
