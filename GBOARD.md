@@ -31,6 +31,7 @@ and the open door, with 0.1 tolerance for the bracket/hook that sink into their 
 1. **ALEX REBUILDS THE FOUR IN THE EDITOR HIMSELF** (his call, 09-12 evening) — Hazel 75 / Mallow 71 / Sax 34 /
    Yarrow 35 rotated pieces now draw in their real cells, one from where their authors SAW them. Occupancy never moved.
    No agent re-shoot; the editor pass is the review.
+1c. ✅ **Wireframe back while holding a piece** (Alex, 09-12; the 08-08 hiding was the pivot bug wearing a UX story). Live in the next build id below.
 1b. ✅ **Facing is direction AND placement** (`e73808e`, live as `uGXLS4svf-kC3Oo0kVomn`): a vertical hit face decides
    (the piece faces INTO the wall it is set against), yaw decides on the ground, R is a quarter-turn on top. Rule in
    `piece-facing.ts`, 17/0, 2 mutations fire. Sweep 269/269.
