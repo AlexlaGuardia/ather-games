@@ -28,7 +28,8 @@
 // of truth the header above refuses for blocks. One art table, two games.
 
 import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
-import { meshIcon, hasMeshIcon } from './mesh-icon'
+import { meshIcon, hasMeshIcon, pieceIcon } from './mesh-icon'
+import { pieceForItem } from '../../voxel/pieces'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
 import { leafPixels, bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
@@ -423,7 +424,10 @@ export function iconPixels(material: number, size = ICON, tile = TILE): Uint8Arr
  * ★ BLOCK FACES ALWAYS WIN. An item with a real block behind it must wear that block's texture even
  * if other art exists, or the two drift and the icon starts describing last month's stone.
  */
-export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'painted' | 'mesh' | null {
+export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'painted' | 'mesh' | 'piece' | null {
+  // A piece item has no material and no painted sprite; its icon is the geometry the world
+  // instances for it (`pieceIcon`). Asked first because nothing below can answer for it.
+  if (pieceForItem(itemId)) return 'piece'
   const mat = materialForItem(itemId)
   // ★ THE CROSS ARM SITS ABOVE THE BLOCK ARM, and the order is the fix. Block-faces-always-win is
   // still true for everything the world builds out of faces; a cross has none to win with. See
@@ -458,6 +462,7 @@ export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
     }
     case 'flora': return floraIcon(itemId, size)
     case 'mesh': return meshIcon(materialForItem(itemId), size)
+    case 'piece': return pieceIcon(pieceForItem(itemId)!, size)
     case 'painted': return flatIcon(itemId, size)
     default: return null
   }

@@ -24,6 +24,8 @@
 import * as THREE from 'three'
 import { floraLogGeo, floraShroomStemGeo, floraShroomCapGeo, FLORA_COLORS } from '../flora-mesh'
 import { MAT } from '../../voxel/depth'
+import { pieceGeometry, pieceTint } from '../piece-mesh'
+import type { PieceDef } from '../../voxel/pieces'
 
 /** One part of a mesh icon: geometry plus the flat tint the world gives it. */
 interface Part { geo: THREE.BufferGeometry; color: number }
@@ -148,6 +150,17 @@ export function renderParts(parts: Part[], size: number): Uint8Array {
     }
   }
   return out
+}
+
+/**
+ * The icon for a piece item — the shipped placeholder geometry, in the shipped tint, at the same
+ * angle as every cube beside it. Same law as `meshIcon`: render what the world draws, dispose after.
+ */
+export function pieceIcon(def: PieceDef, size: number): Uint8Array {
+  const geo = pieceGeometry(def)
+  const px = renderParts([{ geo, color: pieceTint(def) }], size)
+  geo.dispose()
+  return px
 }
 
 /** The icon for a material the world draws as geometry, or null if it does not. */

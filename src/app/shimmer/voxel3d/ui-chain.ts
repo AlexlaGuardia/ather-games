@@ -100,7 +100,12 @@ export interface UiChainState {
   showSettings: boolean
   cursorUIOpen: boolean
   drawn: boolean
-  build: boolean
+  /**
+   * A piece item is the selected hotbar slot. Replaced `build` on 2026-09-12 when build mode went:
+   * the quarter-turn is the one building verb left, and it is gated on the thing the player can
+   * SEE — the stair in their hand — rather than on a mode they had to enter.
+   */
+  holdsPiece: boolean
 }
 
 /** One thunk per branch body. Named for the verb, not the setter it happens to call. */
@@ -114,21 +119,17 @@ export interface UiChainActions {
   interact(): void
   toggleDrawn(): void
   cycleWeapon(): void
-  toggleBuild(): void
   rotatePiece(): void
-  materialNext(): void
-  materialPrev(): void
 }
 
 /**
  * Keyboard defaults a browser would otherwise act on, suppressed only when the action REALLY RAN.
  *
- * ⚠ `Tab` is the one that matters: unsuppressed it moves focus out of the canvas, so a build-mode
- * toggle would also hand the player's next keystroke to the browser chrome. It is conditional on
- * the step firing because the old handler's `preventDefault` sat INSIDE the branch — with a weapon
- * drawn the chain stops above `ui.build`, and Tab there has always been the browser's.
+ * ⚠ `Tab` used to be the one that mattered (build mode, retired 2026-09-12): unsuppressed it moves
+ * focus out of the canvas. No default binding lands on Tab now, so the set is the chat key alone —
+ * but the rule stays conditional on the step firing, for whatever a player rebinds onto Tab next.
  */
-export const SUPPRESS_DEFAULT: ReadonlySet<ActionId> = new Set<ActionId>(['ui.chat', 'ui.build'])
+export const SUPPRESS_DEFAULT: ReadonlySet<ActionId> = new Set<ActionId>(['ui.chat'])
 
 /** The name of the barrier past which nothing may touch the world. Exported so the guard can cite it. */
 export const GATE_CURSOR_UI = 'cursor-surface-open'
@@ -144,7 +145,7 @@ export const GATE_DRAWN = 'weapon-drawn'
  *
  *   1. **The doors run before the world verbs, and they run with a surface up.** They are how you
  *      get OUT. A world verb under an open menu is a key whose effect the player cannot see, which
- *      is how you flip into build mode from inside the bag and only find out when you close it.
+ *      is how you used to flip into build mode from inside the bag and find out on closing it.
  *   2. **`ui.close` is ungated.** It sits above the draw lock and above the cursor gate, because a
  *      close key that only works when nothing is open is not a close key.
  *   3. **Everything past `GATE_DRAWN` is locked while a weapon is out** — the mode Alex ruled on
@@ -176,10 +177,9 @@ export function uiChain(s: UiChainState, a: UiChainActions): Step[] {
     act('item.draw', true, () => a.toggleDrawn()),
     act('item.cycle', s.drawn, () => a.cycleWeapon()),
     { kind: 'gate', name: GATE_DRAWN, blocked: s.drawn },
-    // ── past here the walk does NOT stop: these were the trailing `if`s with no `return` ────────
-    act('ui.build', true, () => a.toggleBuild(), false),
-    act('build.rotate', true, () => a.rotatePiece(), false),
-    act('build.materialNext', s.build, () => a.materialNext(), false),
-    act('build.materialPrev', s.build, () => a.materialPrev(), false),
+    // ── past here the walk does NOT stop: this was a trailing `if` with no `return` ─────────────
+    // Gated on the held piece: with nothing to turn, R (and LB, which `cast.tactical` shares) is a
+    // key that changes a number nobody can see.
+    act('build.rotate', s.holdsPiece, () => a.rotatePiece(), false),
   ]
 }

@@ -50,6 +50,15 @@ const TINT: Record<string, number> = {
  * the truth about what you are about to occupy — a placeholder that lies about size is worse than a
  * cube, because it teaches the wrong thing about placement.
  */
+/**
+ * The geometry and tint the world gives a piece — exported for the hotbar icon (`tex/mesh-icon.ts`),
+ * so the icon of a stair is the very stair the world instances, never a second opinion about it.
+ * Variants resolve to their base shape here for the same reason the renderer does below: a stone
+ * brick stair is drawn as `stair` today, so its icon is too. Callers own disposing the buffer.
+ */
+export const pieceGeometry = (def: PieceDef): THREE.BufferGeometry => buildGeometry(def)
+export const pieceTint = (def: PieceDef): number => TINT[basePieceId(def.id)] ?? 0x999999
+
 function buildGeometry(def: PieceDef): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = []
   const box = (w: number, h: number, d: number, x: number, y: number, z: number) => {

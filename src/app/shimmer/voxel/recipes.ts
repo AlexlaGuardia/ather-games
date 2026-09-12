@@ -68,6 +68,8 @@ export type Station = 'hand' | 'crafting_table' | 'sawmill' | 'stonecutter'
  */
 export type Family = 'wood' | 'stone'
 
+import { ALL_PIECES, pieceItemId, pieceForItem } from './pieces'
+
 export interface RecipeDef {
   id: string
   name: string
@@ -373,6 +375,27 @@ export const RECIPES: RecipeDef[] = [
     input: [{ itemId: 'goldwood_plank', count: 8 }],
     output: { itemId: 'chest', count: 1 } },
 ]
+
+/**
+ * ── ★ THE PIECES, DERIVED (2026-09-12) ─────────────────────────────────────────────────────────
+ * One row per piece in `ALL_PIECES`, hand work, paid what the piece table already said it costs.
+ * Derived rather than written so a shape added to `pieces.ts` is craftable the same day; hand-listed
+ * rows are how 84 material variants shipped unreachable on 2026-08-27. The id IS the item id, so
+ * `onCraft(recipeId)` and `give(itemId)` agree without a lookup between them.
+ *
+ * ⚠ `station: 'hand'` on purpose — `recipes.test.ts` rules that mining is the gate, not furniture,
+ * and a piece is a material assembled, not refined. No `family`: the sawmill and the cutter list
+ * their speciality by that field, and a stair is bench-general.
+ *
+ * The craft panel does NOT list these among Refine — 98 rows would bury the planks. They have
+ * their own section (materials × shapes), and `isPieceRecipe` is how it tells them apart.
+ */
+export const PIECE_RECIPES: RecipeDef[] = ALL_PIECES.map(def => ({
+  id: pieceItemId(def.id), name: def.name, station: 'hand', mana: 0,
+  input: def.cost.map(c => ({ ...c })), output: { itemId: pieceItemId(def.id), count: 1 },
+}))
+RECIPES.push(...PIECE_RECIPES)
+export const isPieceRecipe = (r: RecipeDef): boolean => pieceForItem(r.output.itemId) !== undefined
 
 const BY_ID = new Map(RECIPES.map(r => [r.id, r]))
 export const recipeDef = (id: string): RecipeDef | undefined => BY_ID.get(id)

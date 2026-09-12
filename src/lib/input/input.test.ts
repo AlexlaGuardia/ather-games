@@ -46,7 +46,7 @@ const SHIPPED: [ActionId, string][] = [
   // shift for anyone who slides with it. Pinned here so the second key cannot be tidied away.
   ['move.slide', 'ShiftRight'],
   ['world.interact', 'KeyE'], ['item.draw', 'KeyF'], ['item.drop', 'KeyQ'],
-  ['ui.craft', 'KeyC'], ['ui.build', 'Tab'], ['ui.map', 'KeyM'], ['ui.inventory', 'KeyI'],
+  ['ui.craft', 'KeyC'], ['ui.map', 'KeyM'], ['ui.inventory', 'KeyI'],
   ['ui.chat', 'KeyT'], ['ui.close', 'Escape'], ['build.rotate', 'KeyR'], ['owner.fly', 'KeyV'],
   ['ui.settings', 'KeyO'],
 ]
@@ -97,7 +97,9 @@ ok(conflicts(clash).some(x => x.input === 'KeyC' && x.actions.length === 2), 'a 
 
 // ── ★ LB CARRIES BOTH ROTATE AND CAST TACTICAL, AND THAT IS THE RULING ────────────────────────
 // Alex, 2026-08-23: "LB's build.rotate context-shares with build mode — a mode the player can SEE,
-// which is the only kind that is safe to overload." Asserted here for the same reason the KeyQ
+// which is the only kind that is safe to overload." Build mode itself went on 2026-09-12; the
+// visible context is now the PIECE IN YOUR HAND (the chain gates rotate on it), and the overlap
+// stands on the same argument. Asserted here for the same reason the KeyQ
 // overlap above is: an unexplained entry in a conflict report is something a future reader deletes.
 ok(conflicts(base).some(x => x.input === 'LB' && x.actions.includes('build.rotate') && x.actions.includes('cast.tactical')),
    'the intentional LB rotate/cast overlap stopped being reported')

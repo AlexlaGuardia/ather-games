@@ -22,10 +22,10 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { c ? pass++ : fails.push(m) }
 
-/** Every gate closed: nothing open, weapon stowed, not in build mode. The ordinary walking state. */
+/** Every gate closed: nothing open, weapon stowed, empty hand. The ordinary walking state. */
 const CALM: UiChainState = {
   consoleOpen: false, dialogueOpen: false, craftOpen: false, bagOpen: false,
-  showSettings: false, cursorUIOpen: false, drawn: false, build: false,
+  showSettings: false, cursorUIOpen: false, drawn: false, holdsPiece: false,
 }
 
 /** Records which thunk fired, so a walk's EFFECT can be compared and not just its return value. */
@@ -39,8 +39,7 @@ function spyActions(): { calls: string[]; actions: UiChainActions } {
       closeSurfaces: hit('closeSurfaces'), toggleSettings: hit('toggleSettings'),
       toggleCraft: hit('toggleCraft'), toggleMap: hit('toggleMap'), toggleBag: hit('toggleBag'),
       interact: hit('interact'), toggleDrawn: hit('toggleDrawn'), cycleWeapon: hit('cycleWeapon'),
-      toggleBuild: hit('toggleBuild'), rotatePiece: hit('rotatePiece'),
-      materialNext: hit('materialNext'), materialPrev: hit('materialPrev'),
+      rotatePiece: hit('rotatePiece'),
     },
   }
 }
@@ -58,8 +57,8 @@ function walk(state: UiChainState, fired: ActionId, seed = '') {
 // finding nothing wrong, which is the failure mode this repo keeps filing. Fail loudly instead.
 const calmChain = uiChain(CALM, spyActions().actions)
 const chainIds = calmChain.flatMap(s => s.kind === 'action' ? [s.id] : [])
-ok(chainIds.length >= 13, `BLIND: the chain built only ${chainIds.length} action steps — asserts below would pass vacuously`)
-for (const id of ['ui.craft', 'ui.build', 'ui.map', 'ui.inventory', 'item.draw', 'ui.close'] as ActionId[]) {
+ok(chainIds.length >= 10, `BLIND: the chain built only ${chainIds.length} action steps — asserts below would pass vacuously`)
+for (const id of ['ui.craft', 'ui.map', 'ui.inventory', 'item.draw', 'ui.close'] as ActionId[]) {
   ok(chainIds.includes(id), `${id} is one of the seven UI verbs and is not in the chain at all`)
 }
 // The gates must EXIST — a chain whose barriers were dropped would let world verbs run under a menu.
@@ -118,16 +117,16 @@ const upState: UiChainState = { ...CALM, cursorUIOpen: true, bagOpen: true }
 ok(walk(upState, 'ui.inventory').calls.includes('toggleBag'), 'the satchel key cannot close the satchel — a door that only works when nothing is open is not a door')
 ok(walk(upState, 'ui.close').calls.includes('closeSurfaces'), 'close does not run with a surface up, which is the only time it matters')
 ok(walk(upState, 'ui.craft').calls.includes('toggleCraft'), 'the craft key stopped being a door')
-const blockedBuild = walk(upState, 'ui.build')
-ok(blockedBuild.blockedBy === GATE_CURSOR_UI, `build mode should be barred by ${GATE_CURSOR_UI} with a menu up, got ${blockedBuild.blockedBy}`)
-ok(!blockedBuild.calls.length, '⚠ build mode toggled from inside an open menu — the player cannot see it happen and finds out on close')
+const blockedRot = walk({ ...upState, holdsPiece: true }, 'build.rotate')
+ok(blockedRot.blockedBy === GATE_CURSOR_UI, `the quarter-turn should be barred by ${GATE_CURSOR_UI} with a menu up, got ${blockedRot.blockedBy}`)
+ok(!blockedRot.calls.length, '⚠ the held piece turned from inside an open menu — the player cannot see it happen and finds out on close')
 
 // ── 4. THE DRAW LOCK ──────────────────────────────────────────────────────────────────────────
 // Alex, 2026-08-07: with a weapon out the hotbar and tools lock up. It is a MODE, not a disable.
 const drawnState: UiChainState = { ...CALM, drawn: true }
 ok(!walk(drawnState, 'ui.craft').calls.length, 'craft opened with a weapon drawn — the draw lock is not holding')
-ok(!walk(drawnState, 'ui.build').calls.length, 'build mode toggled with a weapon drawn')
-ok(walk(drawnState, 'ui.build').blockedBy === GATE_DRAWN, 'build should be barred by the draw lock, not by something else')
+ok(!walk({ ...drawnState, holdsPiece: true }, 'build.rotate').calls.length, 'the held piece turned with a weapon drawn')
+ok(walk({ ...drawnState, holdsPiece: true }, 'build.rotate').blockedBy === GATE_DRAWN, 'rotate should be barred by the draw lock, not by something else')
 // ★ …and the two verbs that must survive it: you can always stow, and you can always close.
 ok(walk(drawnState, 'item.draw').calls.includes('toggleDrawn'), '⚠⚠ CANNOT STOW WHILE DRAWN — the draw lock would trap the player in weapon mode forever')
 ok(walk(drawnState, 'ui.close').calls.includes('closeSurfaces'), 'close stopped working while drawn')
@@ -145,17 +144,19 @@ ok(bothOnY(CALM).ran[0] === 'item.draw', 'pad Y while stowed must draw')
 ok(bothOnY(drawnState).ran[0] === 'item.draw', '⚠⚠ pad Y while drawn no longer stows — a controller can draw a weapon and never put it away')
 ok(!bothOnY(drawnState).calls.includes('cycleWeapon'), 'cycle ran ahead of draw on the shared button')
 
-// ── 6. THE MATERIAL KEYS ARE GATED ON BUILD MODE ──────────────────────────────────────────────
-// Outside the palette they would silently change something with nothing on screen to show it.
-ok(!walk(CALM, 'build.materialNext').calls.length, 'the material key fired outside build mode — it changes something invisible')
-ok(walk({ ...CALM, build: true }, 'build.materialNext').calls.includes('materialNext'), 'the material key stopped working inside build mode')
+// ── 6. THE QUARTER-TURN IS GATED ON THE HELD PIECE ────────────────────────────────────────────
+// Build mode went on 2026-09-12; the thing the player can SEE is now the piece in their hand.
+// With an empty hand R would change a number with nothing on screen to show it — and LB, which
+// `cast.tactical` shares, would turn nothing on the way to a cast.
+ok(!walk(CALM, 'build.rotate').calls.length, 'the rotate key fired with no piece held — it changes something invisible')
+ok(walk({ ...CALM, holdsPiece: true }, 'build.rotate').calls.includes('rotatePiece'), 'the rotate key stopped working with a piece in hand')
+ok(!chainIds.includes('ui.build' as ActionId), '⚠ ui.build is back in the chain — build mode was retired, a piece is an item')
 
-// ── 7. THE TRAILING STEPS DO NOT STOP THE WALK ────────────────────────────────────────────────
-// `ui.build`/`build.rotate` were the old handler's final `if`s with no `return`, and the keyboard
-// adapter runs the hotbar's number row only when the walk did NOT stop. If these ever became
-// stopping steps, a digit bound alongside them would go dead.
-ok(walk({ ...CALM, build: true }, 'build.rotate').stopped === false, '⚠ build.rotate now stops the walk — the number-row hotbar below it would go dead')
-ok(walk(CALM, 'ui.build').stopped === false, '⚠ ui.build now stops the walk — see above')
+// ── 7. THE TRAILING STEP DOES NOT STOP THE WALK ───────────────────────────────────────────────
+// `build.rotate` was the old handler's final `if` with no `return`, and the keyboard adapter runs
+// the hotbar's number row only when the walk did NOT stop. If it ever became a stopping step, a
+// digit bound alongside it would go dead.
+ok(walk({ ...CALM, holdsPiece: true }, 'build.rotate').stopped === false, '⚠ build.rotate now stops the walk — the number-row hotbar below it would go dead')
 ok(walk(CALM, 'ui.craft').stopped === true, 'ui.craft must stop the walk; the old handler returned there')
 
 // ── 8. THE CONSOLE SEED, AND THE SURFACE GATE ABOVE IT ────────────────────────────────────────
@@ -170,7 +171,7 @@ for (const id of SUPPRESS_DEFAULT) {
   ok((ALL_ACTIONS as readonly string[]).includes(id), `SUPPRESS_DEFAULT names '${id}', which is not an action — its preventDefault can never fire`)
   ok(chainIds.includes(id), `SUPPRESS_DEFAULT names '${id}', which is not a step in the chain — nothing can ever run it`)
 }
-ok(SUPPRESS_DEFAULT.has('ui.build'), '⚠ Tab lost its preventDefault — toggling build mode would move focus out of the canvas')
+ok(SUPPRESS_DEFAULT.has('ui.chat'), '⚠ the chat key lost its preventDefault — Enter would submit whatever form the browser thinks it is in')
 
 // ── report ────────────────────────────────────────────────────────────────────────────────────
 console.log(`\nui chain — ${calmChain.length} steps · ${gateNames.length} gates · ${walks} call sites · ${builds} construction site`)

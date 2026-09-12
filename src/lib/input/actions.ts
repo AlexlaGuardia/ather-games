@@ -27,8 +27,8 @@ export type ActionId =
   // pressed — edge-triggered
   | 'world.mine' | 'world.place' | 'world.interact'
   | 'item.draw' | 'item.drop' | 'item.cycle'
-  | 'ui.craft' | 'ui.build' | 'ui.map' | 'ui.inventory' | 'ui.chat' | 'ui.close' | 'ui.settings'
-  | 'build.rotate' | 'build.materialNext' | 'build.materialPrev'
+  | 'ui.craft' | 'ui.map' | 'ui.inventory' | 'ui.chat' | 'ui.close' | 'ui.settings'
+  | 'build.rotate'
   | 'cast.tactical' | 'cast.signature' | 'cast.focus'
   | 'owner.fly'
 
@@ -132,22 +132,17 @@ export const DEFAULTS: Record<ActionId, Binding> = {
   // needs a SECOND button, which is a controls call and Alex's; it is logged on GBOARD.
   'item.cycle':     { keys: ['KeyQ'],                      pad: ['Y'] },
   'ui.craft':       { keys: ['KeyC'],                      pad: ['DLEFT'] },
-  'ui.build':       { keys: ['Tab'],                       pad: ['DRIGHT'] },
   'ui.map':         { keys: ['KeyM'],                      pad: ['SELECT'] },
   'ui.inventory':   { keys: ['KeyI'],                      pad: ['DUP'] },
   'ui.chat':        { keys: ['KeyT', 'Enter'],             pad: [] },
   'ui.close':       { keys: ['Escape'],                    pad: ['B'] },
   'ui.settings':    { keys: ['KeyO'],                      pad: ['START'] },
+  // ★ BUILD MODE IS GONE (Alex, 2026-09-12: "an extra layer we don't really need"). `ui.build`
+  // (Tab / DRIGHT) and the two material keys (`[` `]` / RB) went with it: a piece is a hotbar
+  // item now, crafted at the bench and placed by the same right-click as a block, so the only
+  // building verb left is the quarter-turn. `merge` drops the retired ids from a stored map, the
+  // same way it dropped `build.tierUp`/`tierDown` before them.
   'build.rotate':   { keys: ['KeyR'],                      pad: ['LB'] },
-  // ⚠ THESE TWO KEYS USED TO BE 'build.tierUp'/'build.tierDown' AND THEY DID NOTHING. Tool tier
-  // came off the equipped tool from 2026-08-08 on, but the bindings stayed — so the settings panel
-  // offered "Next tier"/"Previous tier" rows a player could rebind, and rebinding them configured
-  // air. They now walk the MATERIAL axis of the build palette, which is the second half of a
-  // catalogue that had 84 unreachable variants in it. Same keys, so nobody's hands move; `merge`
-  // drops the retired ids from a stored map, so a player who rebound the dead ones lands on these
-  // defaults rather than on an unbound verb.
-  'build.materialNext': { keys: ['BracketRight'],          pad: ['RB'] },
-  'build.materialPrev': { keys: ['BracketLeft'],           pad: [] },
   // ── ★ THE CAST BAR, AND BOTH KEYS ARE DERIVED RATHER THAN CHOSEN ────────────────────────────
   // Alex ruled the castable set is exactly Tactical + Signature (2026-08-23; `moves.md:85` makes
   // Signature the Ultimate band, passives are not cast, combos are pair-casting). This layer is
@@ -181,10 +176,9 @@ export const LABEL: Record<ActionId, string> = {
   'move.jump': 'Jump', 'move.slide': 'Slide',
   'world.mine': 'Mine', 'world.place': 'Place', 'world.interact': 'Interact',
   'item.draw': 'Draw / stow', 'item.drop': 'Drop', 'item.cycle': 'Cycle weapon',
-  'ui.craft': 'Craft', 'ui.build': 'Build mode', 'ui.map': 'Map', 'ui.inventory': 'Inventory',
+  'ui.craft': 'Craft', 'ui.map': 'Map', 'ui.inventory': 'Inventory',
   'ui.chat': 'Chat', 'ui.close': 'Close', 'ui.settings': 'Settings',
-  'build.rotate': 'Rotate piece',
-  'build.materialNext': 'Next material', 'build.materialPrev': 'Previous material',
+  'build.rotate': 'Rotate held piece',
   'cast.tactical': 'Cast tactical', 'cast.signature': 'Cast signature', 'cast.focus': 'Focus (raise shield)',
   'owner.fly': 'Fly (keeper only)',
 }
@@ -222,7 +216,7 @@ export const GROUPS: readonly { title: string; actions: readonly ActionId[] }[] 
   { title: 'Movement', actions: ['move.forward', 'move.back', 'move.left', 'move.right', 'move.jump', 'move.slide'] },
   { title: 'World',    actions: ['world.mine', 'world.place', 'world.interact'] },
   { title: 'Items',    actions: ['item.draw', 'item.drop', 'item.cycle'] },
-  { title: 'Building', actions: ['ui.build', 'build.rotate', 'build.materialNext', 'build.materialPrev'] },
+  { title: 'Building', actions: ['build.rotate'] },
   { title: 'Casting',  actions: ['cast.tactical', 'cast.signature', 'cast.focus'] },
   { title: 'Menus',    actions: ['ui.craft', 'ui.map', 'ui.inventory', 'ui.chat', 'ui.close', 'ui.settings'] },
   { title: 'Keeper',   actions: ['owner.fly'] },

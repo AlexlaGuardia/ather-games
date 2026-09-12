@@ -13,7 +13,9 @@
 
 import { readFileSync } from 'node:fs'
 import { uiChain, runChain } from './ui-chain'
-import { PIECES, ALL_PIECES, PIECE_MATERIALS, pieceVariants, pieceDef, pieceMaterial, basePieceId } from '../voxel/pieces'
+import { PIECES, ALL_PIECES, PIECE_MATERIALS, pieceVariants, pieceDef, pieceMaterial, basePieceId, pieceItemId, pieceForItem } from '../voxel/pieces'
+import { RECIPES, recipeDef, isPieceRecipe } from '../voxel/recipes'
+import { iconSourceFor, iconPixelsFor } from './tex/item-icon'
 
 let pass = 0
 const fails: string[] = []
@@ -76,37 +78,60 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 }
 
 // ── 4. ★★ AND THE GAME HAS TO ACTUALLY USE ALL OF THAT ──────────────────────────────────────────
-// Sections 1-3 would stay green with the build bar still rendering 14 tiles and placing 14 pieces.
+// Sections 1-3 would stay green with a craft panel still rendering 14 rows and 14 recipes.
+// ★ THE CONSUMER MOVED ON 2026-09-12: build mode went, and the two axes now live in the CRAFT
+// PANEL (a material strip picks the column, the shape rows show it) — a piece is crafted into the
+// bag and placed from the hotbar like a block. Same derivation, new host. Sections 4a-4d ask each
+// layer a piece has to cross to be held: the recipe, the item, the icon, and the panel.
 {
   const src = readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8')
 
-  ok(/const pieceId = /.test(src), 'VoxelWorld resolves a single selected piece id')
-  ok(/pieceDef\(pieceId\)/.test(src), 'and places THAT piece — not PIECES[pieceIdx]')
-  ok(!/pieceDef\(PIECES\[pieceIdx\]/.test(src), 'the old shape-only resolution is gone from the placement site')
+  // 4a. the panel walks the same two axes this file does, and highlights off the material KEY.
+  ok(/const pieceRows = PIECES\.map\(pc => pieceVariants\(pc\.id\)\.find\(v => pieceMaterial\(v\.id\)\?\.key === pieceMat\) \?\? pc\)/.test(src),
+     'the craft panel derives its shape rows through pieceVariants in the chosen material')
+  ok(/PIECE_MATERIALS\.map\(m => \{\n\s*const on = m\.key === pieceMat/.test(src),
+     'the material strip is rendered from the full material table and highlights off the key')
+  ok(/onCraft\(pieceItemId\(pc\.id\)\)/.test(src), 'a shape row crafts the resolved variant, not its base')
+  ok(/craftSurface\(have, station\)\.filter\(r => !isPieceRecipe\(r\)\)/.test(src),
+     'Refine excludes the piece rows — 98 of them would bury the planks')
 
-  // ⚠⚠ THIS ASSERT USED TO GREP THIS FILE FOR `build.materialNext` AND IT WENT RED ON 2026-08-28,
-  // CORRECTLY. The two keys' priority and gating moved into `ui-chain.ts` when the UI verbs were
-  // lifted so a controller could reach them, and a text search over `VoxelWorld.tsx` could no
-  // longer see a thing that had not broken. ★ It is rewritten rather than REPOINTED at the new
-  // file, because a regex over ui-chain.ts would be the same standing claim about a file this
-  // test does not own, one move behind again. Ask the chain the game actually walks.
-  ok(!/build\.tierUp|build\.tierDown/.test(src), 'the dead tier branch that occupied those keys is gone')
-  ok(/materialNext: \(\) =>[^\n]*setMatIdx/.test(src), 'the next-material body no longer lives in VoxelWorld')
-  ok(/materialPrev: \(\) =>[^\n]*setMatIdx/.test(src), 'the prev-material body no longer lives in VoxelWorld')
-
-  // ⚠ The palette must highlight off the resolved id. Highlighting off the pair is a SECOND
-  // derivation of "what is selected", and two derivations agree until they do not.
-  ok(/pieceMaterial\(pieceId\)/.test(src), 'the material row highlights off the resolved piece')
-  ok(/basePieceId\(pieceId\)/.test(src), 'the shape row highlights off the resolved piece')
-  ok(!/i === pieceIdx/.test(src), 'no tile is highlighted by index any more')
-
-  // The material row is a row: it renders every material, not the ones one shape happens to have.
-  ok(/PIECE_MATERIALS\.map\(/.test(src), 'the material strip is rendered from the full material table')
+  // 4b. the old consumer is GONE, not merely unwired: no palette state, no mode, no Tab.
+  ok(!/const \[build, setBuild\]/.test(src), 'build mode state survives in the host')
+  ok(!/setPieceIdx|setMatIdx|const pieceId = /.test(src), 'the palette indices survive in the host')
+  ok(!/toggleBuild|materialNext|materialPrev/.test(src), 'a build-mode verb survives in the host')
+  ok(/const heldPiece = selItem \? pieceForItem\(selItem\) : undefined/.test(src),
+     'the world resolves the held piece from the SELECTED SLOT, the way a block is')
+  ok(/intent === 'place' && pieceTarget/.test(src), 'the piece is placed by the same right-click intent a block is')
+  ok(/give\(inv\.current!, pieceItemId\(fdef\.id\), 1\)/.test(src), 'taking a piece back refunds the ITEM, not its planks')
 }
-// ── 4b. ★★ BOTH MATERIAL KEYS REACH THE AXIS, AND ONLY INSIDE BUILD MODE ───────────────────────
-// Asked THROUGH the shared verb chain, in both states, because that is what both the keydown
-// handler and the frame loop walk. Outside the palette these keys would silently change something
-// with nothing on screen to show it, which is the gate this proves is still there.
+
+// ── 4c. ★★ EVERY PIECE IS A RECIPE AND AN ITEM WITH AN ICON SOURCE ───────────────────────────────
+// Derived, so this is the assert that a shape added to `pieces.ts` is craftable the same day.
+{
+  for (const def of ALL_PIECES) {
+    const item = pieceItemId(def.id)
+    const r = recipeDef(item)
+    ok(r !== undefined && r.output.itemId === item && r.output.count === 1, `${def.id} has a recipe that yields one ${item}`)
+    ok(r !== undefined && r.station === 'hand', `${def.id} is hand work — mining is the gate, not furniture`)
+    ok(r !== undefined && r.input.length === def.cost.length && r.input.every((i, k) => i.itemId === def.cost[k].itemId && i.count === def.cost[k].count),
+       `${def.id}'s recipe costs exactly what the piece table says`)
+    ok(pieceForItem(item)?.id === def.id, `${item} resolves back to ${def.id}`)
+    ok(iconSourceFor(item) === 'piece', `${item} has an icon source (saw ${iconSourceFor(item)})`)
+  }
+  ok(pieceForItem('piece_nope') === undefined, 'an unknown piece item resolves to nothing, not a throw')
+  ok(pieceForItem('goldwood_plank') === undefined, 'a plank is not a piece')
+  ok(RECIPES.filter(isPieceRecipe).length === ALL_PIECES.length, 'exactly one piece recipe per piece')
+  // ⚠ Rendered, not merely sourced: a 'piece' source whose renderer returns an empty buffer is an
+  // invisible icon that passes every check above. One real render of the tallest and the flattest.
+  for (const id of ['doorway', 'half_slab']) {
+    const px = iconPixelsFor(pieceItemId(id), 48)
+    ok(!!px && px.some((v, i) => i % 4 === 3 && v > 0), `${id}'s icon has opaque pixels`)
+  }
+}
+
+// ── 4d. ★ THE ONE BUILDING VERB LEFT IS GATED ON THE HELD PIECE ─────────────────────────────────
+// Asked THROUGH the shared verb chain, because that is what both devices walk. With an empty hand
+// R would change a number nobody can see — the same argument the material keys used to make.
 {
   const fired: string[] = []
   const hit = (n: string) => () => { fired.push(n) }
@@ -114,31 +139,26 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     openConsole: hit('openConsole'), closeSurfaces: hit('closeSurfaces'),
     toggleSettings: hit('toggleSettings'), toggleCraft: hit('toggleCraft'), toggleMap: hit('toggleMap'),
     toggleBag: hit('toggleBag'), interact: hit('interact'), toggleDrawn: hit('toggleDrawn'),
-    cycleWeapon: hit('cycleWeapon'), toggleBuild: hit('toggleBuild'), rotatePiece: hit('rotatePiece'),
-    materialNext: hit('materialNext'), materialPrev: hit('materialPrev'),
+    cycleWeapon: hit('cycleWeapon'), rotatePiece: hit('rotatePiece'),
   }
   const base = { consoleOpen: false, dialogueOpen: false, craftOpen: false, bagOpen: false,
                  showSettings: false, cursorUIOpen: false, drawn: false }
-  const press = (id: 'build.materialNext' | 'build.materialPrev', build: boolean) => {
+  const press = (holdsPiece: boolean) => {
     fired.length = 0
-    runChain(uiChain({ ...base, build }, spy), a => a === id, { consoleSeed: '' })
+    runChain(uiChain({ ...base, holdsPiece }, spy), a => a === 'build.rotate', { consoleSeed: '' })
     return [...fired]
   }
-  ok(press('build.materialNext', true).includes('materialNext'), '] does not reach the material axis inside build mode')
-  ok(press('build.materialPrev', true).includes('materialPrev'), '[ does not reach the material axis inside build mode')
-  ok(press('build.materialNext', false).length === 0, '] walks the material axis OUTSIDE build mode — invisible state change')
-  ok(press('build.materialPrev', false).length === 0, '[ walks the material axis OUTSIDE build mode — invisible state change')
+  ok(press(true).includes('rotatePiece'), 'R does not turn the piece in hand')
+  ok(press(false).length === 0, 'R turns something with an empty hand — invisible state change')
 }
 
-// ── 5. THE KEYS EXIST AND NOTHING ELSE CLAIMS THEM ──────────────────────────────────────────────
+// ── 5. THE RETIRED KEYS ARE RETIRED ──────────────────────────────────────────────────────────────
 {
-  const actions = readFileSync(new URL('../../../lib/input/actions.ts', import.meta.url), 'utf8')
-  ok(/'build\.materialNext':\s*\{\s*keys: \['BracketRight'\]/.test(actions), '] is bound to the next material')
-  ok(/'build\.materialPrev':\s*\{\s*keys: \['BracketLeft'\]/.test(actions), '[ is bound to the previous material')
-  ok(!/'build\.tierUp'|'build\.tierDown'/.test(actions.replace(/\/\/[^\n]*/g, '')),
-     'the two bindings that configured nothing are retired from the registry (comments aside)')
-  ok(/'build\.materialNext', 'build\.materialPrev'/.test(actions),
-     'and they appear in the settings panel, so the keys are discoverable')
+  const actions = readFileSync(new URL('../../../lib/input/actions.ts', import.meta.url), 'utf8').replace(/\/\/[^\n]*/g, '')
+  ok(!/'ui\.build'|'build\.materialNext'|'build\.materialPrev'|'build\.tierUp'|'build\.tierDown'/.test(actions),
+     'a build-mode binding survives in the registry (comments aside)')
+  ok(/'build\.rotate':\s*\{\s*keys: \['KeyR'\]/.test(actions), 'R is still the quarter-turn')
+  ok(/actions: \['build\.rotate'\]/.test(actions), 'and it is in the settings panel, so the key is discoverable')
 }
 
 console.log(`palette: ${pass} pass, ${fails.length} fail`)

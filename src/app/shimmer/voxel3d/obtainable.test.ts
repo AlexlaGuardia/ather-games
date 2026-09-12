@@ -6,6 +6,7 @@
 // been built yet, not as a lie.
 import { WORLD_ITEMS, FROM_BLOCKS, FROM_RINNING, FROM_FELLING, FROM_FARMING, cropYieldsFrom, inWorld } from './obtainable'
 import { BLOCKS, materialForItem } from '../voxel/registry'
+import { pieceForItem } from '../voxel/pieces'
 import { RECIPE_OUTPUTS, RECIPES } from '../voxel/recipes'
 import { TREE_NODES } from '../voxel/tree-node'
 import { RIN_TIERS } from '../engine/rin-catch'
@@ -141,7 +142,10 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // and no face — which is precisely what shipped on tiers 2 and 3 of the rinning ladder.
 {
   const known = new Set(ITEMS.map(d => d.id))
-  const nameable = (id: string) => known.has(id) || materialForItem(id) !== undefined
+  // A piece item (2026-09-12) is the third nameable class: no ItemDef, no material, and
+  // `itemLabel` resolves it through `pieceForItem` the way it resolves a material through
+  // `materialForItem`. Consumed by PLACING, which no recipe table records.
+  const nameable = (id: string) => known.has(id) || materialForItem(id) !== undefined || pieceForItem(id) !== undefined
   const consumed = new Set<string>([
     ...RECIPES.flatMap(r => r.input.map(i => i.itemId)),
     ...Object.values(TOOL_DEFS).flatMap(t => t.recipe.map(r => r.itemId)),

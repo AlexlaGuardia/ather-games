@@ -476,6 +476,25 @@ export const canAfford = (def: PieceDef, have: (itemId: string) => number): bool
   def.cost.every(c => have(c.itemId) >= c.count)
 
 /**
+ * ── ★ A PIECE IS AN ITEM (Alex, 2026-09-12: "build mode should go .. it's adding an extra layer
+ * we don't really need") ─────────────────────────────────────────────────────────────────────
+ * Until today a piece was paid straight out of planks by a MODE (Tab) with its own palette and its
+ * own verbs. Now a stair is crafted like a bench is, sits in the hotbar like a block does, and the
+ * one right-click places whatever is in your hand. The id carries a prefix rather than a table so
+ * that every piece — the 14 shapes AND their 84 material variants — is an item the moment it is
+ * in `ALL_PIECES`, with nothing to remember to add.
+ *
+ * ⚠ `pieceForItem` resolves through `BY_ID`, never by splitting the id: `piece_half_slab` has an
+ * underscore in the shape name, and string surgery is the reader this file already refuses above.
+ */
+export const PIECE_ITEM_PREFIX = 'piece_'
+/** The hotbar item that places this piece. `stair_stonebrick` -> `piece_stair_stonebrick`. */
+export const pieceItemId = (pieceId: string): string => PIECE_ITEM_PREFIX + pieceId
+/** The piece an item places, or undefined for every item that is not one. */
+export const pieceForItem = (itemId: string): PieceDef | undefined =>
+  itemId.startsWith(PIECE_ITEM_PREFIX) ? BY_ID.get(itemId.slice(PIECE_ITEM_PREFIX.length)) : undefined
+
+/**
  * Which placement, if any, occupies this world cell.
  *
  * Deconstruction needs to answer "what did I just look at" from a voxel coordinate, and a piece is

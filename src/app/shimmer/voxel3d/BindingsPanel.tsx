@@ -51,7 +51,7 @@ export default function BindingsPanel({ isOwner, padKind, onClose }: {
       setCapture(null)
     }
     // capture-phase + `once` so the game's own listeners never see the keystroke that was meant
-    // for this panel. Without capture phase, rebinding Build would also toggle build mode.
+    // for this panel. Without capture phase, rebinding Craft would also open the craft surface.
     window.addEventListener('keydown', onKey, { capture: true, once: true })
     return () => window.removeEventListener('keydown', onKey, { capture: true })
   }, [capture, map, commit])

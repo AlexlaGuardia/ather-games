@@ -37,7 +37,7 @@ import { iconSourceFor, iconPixelsFor, flatIcon } from '../src/app/shimmer/voxel
 import { WORLD_ITEMS, FROM_FARMING, FROM_RINNING, FROM_FELLING } from '../src/app/shimmer/voxel3d/obtainable'
 import { itemUniverse, UNIVERSE_SOURCES } from '../src/app/shimmer/voxel3d/item-universe'
 
-type Status = 'derived' | 'cross' | 'flora' | 'mesh' | 'painted' | 'missing' | 'blank'
+type Status = 'derived' | 'cross' | 'flora' | 'mesh' | 'piece' | 'painted' | 'missing' | 'blank'
 interface Row { id: string; status: Status; from: string[] }
 
 /**
@@ -96,6 +96,10 @@ const rows: Row[] = [...sources.entries()]
     // arrived, four saplings fell past every branch into `missing` and this report called for hand
     // art that already shipped. Same door, walked through on purpose this time.
     if (src === 'mesh') return { id, status: 'mesh', from: [...from] }
+    // ⚠ 'piece' JOINED THE CHAIN ON 2026-09-12 (build mode retired; a piece is a hotbar item), and
+    // without this line all 112 of them would have landed in `missing`. Third arm through this
+    // door; the lesson has not changed.
+    if (src === 'piece') return { id, status: 'piece', from: [...from] }
     if (src === 'painted') return { id, status: 'painted', from: [...from] }
     // `flatIcon` refuses a blank frame too, so ask ITEM_ICONS separately to tell "nobody drew it"
     // from "somebody wired an empty one" — they need different answers.
@@ -124,6 +128,7 @@ const lines: string[] = [
   `| 🌿 cross | ${of('cross').length} | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |`,
   `| 🌱 flora | ${of('flora').length} | drawn by the world's own ground-cover generator. Never needs hand art. |`,
   `| 🧊 mesh | ${of('mesh').length} | rendered from the scatter geometry the world instances. Never needs hand art. |`,
+  `| 🪜 piece | ${of('piece').length} | rendered from the piece's own placeholder geometry (\`piece-mesh.ts\`). Follows the piece art, never needs its own. |`,
   `| 🟩 painted | ${of('painted').length} | hand-painted flat sprite in \`sprites/items.ts\`. |`,
   `| ⬜ missing | ${of('missing').length} | **needs art** — draws the plain chip today. |`,
   `| 🟥 blank | ${blank.length} | wired to an all-zero frame. Reads as done, renders nothing. |`,
@@ -217,6 +222,7 @@ console.log(`\nitem art — ${rows.length} reachable items`)
 console.log(`  🟦 derived ${bar(of('derived').length)}   (block faces, nothing to draw)`)
 console.log(`  🌿 cross   ${bar(of('cross').length)}   (crossed quads, nothing to draw)`)
 console.log(`  🧊 mesh    ${bar(of('mesh').length)}   (rendered from world geometry, nothing to draw)`)
+console.log(`  🪜 piece   ${bar(of('piece').length)}   (rendered from piece-mesh.ts, follows the piece art)`)
 console.log(`  🟩 painted ${bar(of('painted').length)}   (flat sprite shipping)`)
 console.log(`  ⬜ missing ${bar(of('missing').length)}   (plain chip — needs Alex)`)
 console.log(`  🟥 blank   ${bar(blank.length)}   (wired to an empty frame)`)

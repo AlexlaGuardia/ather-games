@@ -127,7 +127,7 @@ import { keeperKey } from '@/lib/keeper-local'
 const POT_BASE = 'voxel3d:pots:'
 const SAPLING_BASE = 'voxel3d:saplings:'
 const DECAY_BASE = 'voxel3d:leafdecay:'
-import { PIECES, PIECE_MATERIALS, STRUCTURE, STRUCTURE_HALF, pieceDef, pieceVariants, pieceMaterial, basePieceId, cellsOf, canPlace, canAfford, placementAt, type Placement, type Rotation } from '../voxel/pieces'
+import { PIECES, PIECE_MATERIALS, STRUCTURE, STRUCTURE_HALF, pieceDef, pieceVariants, pieceMaterial, pieceItemId, pieceForItem, cellsOf, canPlace, canAfford, placementAt, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
 import { beginRenderLight, stepRenderLight, packForTexture, type RenderLightWork } from '../voxel/render-light'
@@ -163,7 +163,7 @@ import { ensureBasicTools, getEquippedTool, getToolDef, craftTool, canCraft as c
 // everything, and it counts materials across a `BankState` the voxel world does not have. What a
 // block world needs first is the layer the tile world never had: material → material. See the
 // header of `voxel/recipes.ts` for why, including the bug it was already causing.
-import { RECIPES, RECIPE_OUTPUTS, canCraft as canCraftRecipe, craftPlan, type RecipeDef, type Station } from '../voxel/recipes'
+import { RECIPES, RECIPE_OUTPUTS, canCraft as canCraftRecipe, craftPlan, isPieceRecipe, type RecipeDef, type Station } from '../voxel/recipes'
 // ── PORT STEP 3 — the guns (2026-08-07, Alex ruled they cross into the Ather) ─────────────────
 // `engine/weapons.ts` is the shared half: the table, the tuning, the pure ballistics. It was
 // EXTRACTED from Shimmer3D rather than copied, because the thing that could not come across is
@@ -761,6 +761,8 @@ function ItemChip({ itemId, size }: { itemId: string; size: number }) {
 }
 
 export function itemLabel(itemId: string): string {
+  const pc = pieceForItem(itemId)
+  if (pc) return pc.name
   const m = materialForItem(itemId)
   const named = m !== undefined ? blockDef(m)?.name : undefined
   return named ?? itemId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -976,21 +978,19 @@ export default function VoxelWorld() {
     return () => { clearTimeout(fade); clearTimeout(gone) }
   }, [sel, heldItem])
   const [tier, setTier] = useState(1)
-  // ★ BUILD MODE. Blocks build the shell (mine/place, already there); pieces dress it. Tab switches
-  // which verb the mouse means, so the two halves never fight over a click.
-  const [build, setBuild] = useState(false)
-  const [pieceIdx, setPieceIdx] = useState(0)
-  // ★★ THE PALETTE IS TWO AXES, NOT ONE LIST (2026-08-27). 14 shapes x 7 materials is 98 pieces;
-  // 84 of them had no way to be selected at all because the bar read `PIECES`. Shape and material
-  // are separate rows and separate keys, and THE SELECTED PIECE IS RESOLVED HERE, ONCE — the HUD
-  // and the world are both handed the resolved id rather than the pair, so they cannot end up
-  // disagreeing about which piece is in your hand while both look internally consistent.
-  const [matIdx, setMatIdx] = useState(0)
-  const variants = pieceVariants(PIECES[pieceIdx].id)
-  // ⚠ Clamped, not asserted: a shape with fewer materials than the current index must fall back to
-  // one that exists rather than resolve to `undefined` and take the ghost down with it.
-  const pieceId = (variants[matIdx] ?? variants[0] ?? PIECES[pieceIdx]).id
+  // ★ BUILD MODE IS GONE (Alex, 2026-09-12: "an extra layer we don't really need"). Blocks build
+  // the shell and pieces dress it, as before — but a piece is now a hotbar ITEM, crafted at the
+  // bench like a chest is, and the one right-click places whatever is in your hand. What survives
+  // of the mode is the manual quarter-turn on top of auto-facing; the selected piece is simply the
+  // selected slot, resolved once below (`heldPiece`) and handed to the HUD and the world alike.
   const [rot, setRot] = useState<Rotation>(0)
+  /**
+   * The piece in the selected slot, or null. ONE derivation for the HUD line, the chain gate and
+   * the world's ghost — `World` gets `selItem` and resolves the same way, so the two cannot
+   * disagree about what is in your hand. Drawn counts as an empty hand, as it does for `selItem`.
+   */
+  const heldPiece: PieceDef | null = (!drawn && heldItem && pieceForItem(heldItem)) || null
+  const holdsPiece = heldPiece !== null
   const [look, setLook] = useState<{ name: string; progress: number; refused: boolean; channel: boolean } | null>(null)
   /** A still-collared Moglin is on you. Drives the "what to press" line — see `collar-prompt.ts`. */
   const [collarNear, setCollarNear] = useState(false)
@@ -1494,16 +1494,6 @@ export default function VoxelWorld() {
   // value that turns recipes.ts's `Station` field from documentation into a gate.
   const [nearTable, setNearTable] = useState(false)
   const station: Station = nearTable ? 'crafting_table' : 'hand'
-  /**
-   * ★ BUILD MODE IS THE HOME PLOT'S (Alex, 2026-09-12: "build mode should be locked to the
-   * homeplot"). `World` reports the space it is actually streaming — edge-detected off the ref in
-   * its frame loop, so the restore path (which writes `space.current` directly, not through
-   * `enterSpace`) is covered too. Tab in the Wilds says why it did nothing rather than doing
-   * nothing; and a keeper who walks OUT of the fold with the palette up is dropped out of it below,
-   * because a ghost piece over Moonwell is a mode the player did not ask for.
-   */
-  const [onPlot, setOnPlot] = useState(false)
-  useEffect(() => { if (build && !onPlot) setBuild(false) }, [build, onPlot])
 
   // ── the chat console (T / Enter / '/') — MC's chat-is-the-surface model ──────────────────────
   // Chat messages and command output land in ONE log: recent lines float on the HUD and fade
@@ -1935,7 +1925,7 @@ export default function VoxelWorld() {
     if (!plan.take.every(t => countItem(inv.current!, t.itemId) >= t.count)) return
     for (const t of plan.take) removeItems(inv.current!, t.itemId, t.count)
     give(inv.current!, plan.give.itemId, plan.give.count)
-    setCrafted(`${plan.give.count}× ${plan.give.itemId.replace(/_/g, ' ')}`)
+    setCrafted(`${plan.give.count}× ${itemLabel(plan.give.itemId)}`)
     setCraftTick(t => t + 1)
     refreshHotbar()
     // ★ Tutorial 'planks'/'lantern' steps read the CRAFT OUTPUT, not the recipe id — any of the
@@ -2067,7 +2057,7 @@ export default function VoxelWorld() {
    * priority order drifts one branch at a time until the two devices disagree and nothing is red.
    */
   const uiSteps = useMemo(() => uiChain(
-    { consoleOpen, dialogueOpen, craftOpen, bagOpen, showSettings, cursorUIOpen, drawn, build },
+    { consoleOpen, dialogueOpen, craftOpen, bagOpen, showSettings, cursorUIOpen, drawn, holdsPiece },
     {
       // T / Enter / '/' — the chat console (MC's three doors; '/' arrives pre-slashed via the seed).
       // Above the draw lock on purpose: a console you cannot open while your weapon is out is a
@@ -2134,18 +2124,10 @@ export default function VoxelWorld() {
       // Q swaps the model, and ONLY while drawn — with the weapon stowed Q would be a key that
       // silently changes something you cannot see, which is how a player learns not to trust a HUD.
       cycleWeapon: () => setWeaponIdx(i => { const n = (i + 1) % WEAPONS.length; setAmmoUi(WEAPONS[n].clip); return n }),
-      // Tab is still SUPPRESSED off the plot — the step runs and refuses here, rather than being
-      // gated out of the chain, because an unrun `ui.build` hands Tab back to the browser and the
-      // next keystroke leaves the canvas (see `SUPPRESS_DEFAULT`).
-      toggleBuild: () => { if (!onPlot) { say('building is for your Home Plot'); return } setBuild(v => !v) },
       rotatePiece: () => setRot(r => ((r + 1) % 4) as Rotation),
-      // ] and [ walk the material axis. Gated on `build` because outside the palette they would be
-      // keys that silently change something with nothing on screen to show it.
-      materialNext: () => setMatIdx(v => (v + 1) % PIECE_MATERIALS.length),
-      materialPrev: () => setMatIdx(v => (v - 1 + PIECE_MATERIALS.length) % PIECE_MATERIALS.length),
     },
-  ), [consoleOpen, dialogueOpen, craftOpen, bagOpen, showSettings, cursorUIOpen, drawn, build, showMap,
-      openChest, nearGreg, nearTable, nearMist, hasParty, onPlot, say, openCursorUI, closeCursorUI, closeBag,
+  ), [consoleOpen, dialogueOpen, craftOpen, bagOpen, showSettings, cursorUIOpen, drawn, holdsPiece, showMap,
+      openChest, nearGreg, nearTable, nearMist, hasParty, openCursorUI, closeCursorUI, closeBag,
       closeDialogue, startSpar])
 
   /**
@@ -2184,19 +2166,16 @@ export default function VoxelWorld() {
        * synchronously — so the branch taken is the same in both orders.
        */
       const n = Number(e.key)
-      if (n >= 1 && n <= 8) { if (build) setPieceIdx(Math.min(PIECES.length - 1, n - 1)); else setSel(n - 1) }
+      if (n >= 1 && n <= 8) setSel(n - 1)
     }
     // Scroll to change slot — the reason tools are IN the row rather than on their own keys.
-    // In BUILD mode the same wheel walks the piece catalogue (2026-08-08 — it used to dead-end
-    // there, which stranded every piece past the number keys' muscle memory). Drawn still eats
-    // the wheel: a weapon out means neither hand is free.
+    // Drawn still eats the wheel: a weapon out means neither hand is free.
     const onWheel = (e: WheelEvent) => {
       // Same gate as the world verbs: scrolling a menu must not walk the hotbar underneath it, and
       // a bag long enough to scroll is exactly when you would notice.
       if (drawn || cursorUIOpen) return
       const dir = e.deltaY > 0 ? 1 : -1
-      if (build) setPieceIdx(v => (v + dir + PIECES.length) % PIECES.length)
-      else setSel(v => (v + dir + 8) % 8)
+      setSel(v => (v + dir + 8) % 8)
     }
     // ⚠ A pad button held while the window loses focus never reports its release, so the edge
     // detector would treat it as still-down and the NEXT press would produce no edge at all — a
@@ -2209,8 +2188,8 @@ export default function VoxelWorld() {
     // ⚠ THE DEP LIST SHRANK FROM NINETEEN TO FOUR AND THAT IS THE REFACTOR SHOWING ITS WORK.
     // Every gate and body this effect used to close over now hangs off `uiSteps`, which carries
     // its own memo deps — so a stale gate here is no longer possible to write by forgetting a name.
-    // `build`/`drawn`/`cursorUIOpen` remain because the WHEEL handler reads them directly.
-  }, [uiSteps, build, drawn, cursorUIOpen])
+    // `drawn`/`cursorUIOpen` remain because the WHEEL handler reads them directly.
+  }, [uiSteps, drawn, cursorUIOpen])
 
   return (
     <div className="fixed inset-0 bg-[#0b0d14]">
@@ -2276,13 +2255,13 @@ export default function VoxelWorld() {
           }}
           onLook={setLook} onInvChange={refreshHotbar} onCollarNear={setCollarNear}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
-          build={build} pieceId={pieceId} rot={rot}
+          rot={rot}
           tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
           plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut} ctxLostOut={ctxLostOut}
-          onNearTable={setNearTable} onSpace={s => setOnPlot(s === 'plot')} cmdOut={worldCmd} pot={potOps}
+          onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
@@ -2300,7 +2279,7 @@ export default function VoxelWorld() {
         <PointerLockControls selector="#voxel3d-no-autolock" />
       </Canvas>
       <Hud tremor={tremor} stats={stats} diagnostics={settings.showFps} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
-           build={build} pieceId={pieceId} rot={rot} inv={inv} collarNear={collarNear}
+           heldPiece={heldPiece} rot={rot} inv={inv} collarNear={collarNear}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
@@ -2523,14 +2502,14 @@ function Clock() {
  * directly, and leave the component tree alone. 10 Hz is well under a frame and well over the eye.
  */
 
-function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, build, pieceId, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast, collarNear, tremor }: {
+function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, heldPiece, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast, collarNear, tremor }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
   look: { name: string; progress: number; refused: boolean; channel: boolean } | null
   hotbar: (HotbarEntry | null)[]; sel: number; tier: number
   held: { text: string; out: boolean } | null
-  build: boolean; pieceId: string; rot: Rotation
+  heldPiece: PieceDef | null; rot: Rotation
   /** Latest frame-meter window, or null when the meter is off — the gate lives at the CALL site so
    *  this component never has to know a setting exists. */
   perf: PerfSample | null
@@ -2643,10 +2622,10 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
             stopped being true the moment anyone rebound jump, and was never true for a controller.
             These name ACTIONS and let `hintsFor` answer from the player's own map, so a rebind and
             a pad both come out right with nothing here left to go stale.
-            Build mode keeps its own line: it is a MODE with different verbs, not onboarding, and it
-            is entered deliberately by someone who already knows the game. */}
-        {build
-          ? <div className="text-amber-200/80">BUILD · RMB place · LMB deconstruct · R rotate · 1-8 piece · Tab exit</div>
+            A held piece keeps its own line: the verbs are the block's (RMB places, LMB takes
+            back), and the one thing a piece adds — the quarter-turn — is what it names. */}
+        {heldPiece
+          ? <div className="text-amber-200/80">{heldPiece.name} · RMB place · R turn{rot ? ` +${rot * 90}°` : ''} · LMB on a piece takes it back</div>
           : tutorialStage !== 'done' && (
             <div className="mt-1 flex flex-wrap gap-x-3 text-white/45">
               {hintsFor(bindings, STAGE_ACTIONS[tutorialStage], padKind === 'generic' ? 'key' : 'pad', padKind)
@@ -2840,61 +2819,6 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
         )
       })()}
 
-      {/* ★ The build palette REPLACES the hotbar rather than sitting beside it. One bar, whose meaning
-          follows the mode, so there is never a question about which row a number key is talking to. */}
-      {/* ★★ TWO ROWS, TWO AXES. Shape on the bottom (number keys and the wheel, as before), material
-          on the strip above it (the ] and [ keys). 14 x 7 = 98 pieces; as one row this was 14 tiles
-          and 84 pieces you could not reach.
-          ⚠ BOTH ROWS HIGHLIGHT OFF `pieceId`, THE SAME VALUE THE WORLD PLACES — never off the two
-          indices. Highlighting from the pair would be a second derivation of "what is selected",
-          and the failure mode of a second derivation is that it agrees until it doesn't. */}
-      {build && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pointer-events-none">
-          <div className="flex gap-1">
-            {PIECE_MATERIALS.map(m => {
-              const on = pieceMaterial(pieceId)?.key === m.key
-              // A material you cannot pay for still shows: the palette is a catalogue of what the
-              // world HAS, and greying an unaffordable one out is what tells you to go get it.
-              const stock = countItem(inv.current!, m.itemId)
-              return (
-                <div key={m.key} className={`px-2 h-6 rounded border flex items-center gap-1.5 text-[9px] font-mono
-                  ${on ? 'border-amber-300 bg-black/70 text-amber-200' : 'border-white/15 bg-black/40 text-white/55'}`}>
-                  <span>{m.name}</span>
-                  <span className={stock > 0 ? 'text-white/40' : 'text-red-300/70'}>{stock}</span>
-                </div>
-              )
-            })}
-          </div>
-          <div className="flex gap-1.5">
-            {PIECES.map(pc => {
-              // The tile shows the cost of the piece you would actually place — the SHAPE in the
-              // CURRENT material — so the number under `Stair` changes when you walk the strip
-              // above. A tile costed at its base material would quietly lie for six of the seven.
-              const inThisMaterial = pieceVariants(pc.id).find(v => pieceMaterial(v.id)?.key === pieceMaterial(pieceId)?.key) ?? pc
-              const on = basePieceId(pieceId) === pc.id
-              const affordable = inThisMaterial.cost.every(c => countItem(inv.current!, c.itemId) >= c.count)
-              return (
-                <div key={pc.id} className={`w-20 h-14 rounded border-2 px-1 flex flex-col items-center justify-center text-[9px] font-mono
-                  ${on ? 'border-amber-300 bg-black/70' : 'border-white/20 bg-black/45'}`}>
-                  <div className={on ? 'text-amber-200' : 'text-white/70'}>{pc.name}</div>
-                  <div className={affordable ? 'text-white/45' : 'text-red-300/80'}>
-                    {inThisMaterial.cost.map(c => `${c.count}×${c.itemId.replace(/^block_|_plank$/g, '')}`).join(' ')}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-      {build && (
-        <div className="absolute bottom-[6.4rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
-          {/* Pieces face where you look; this is the R key's manual quarter-turn on top of that.
-              The material hint rides along because a key with no on-screen mention is a key nobody
-              presses — the two it replaced sat in the settings panel doing nothing for weeks. */}
-          {(rot === 0 ? 'facing you · R to turn' : `R turn +${rot * 90}°`) + ' · [ ] material'}
-        </div>
-      )}
-
       {/* Item art is DERIVED from each block's own texture (`tex/item-icon.ts`) — an icon can never
           show something the block is not, and a new block gets one the moment it gets a texture.
           ★ The hotbar is 8 FIXED slots, ITEMS ONLY (2026-08-07) — always all 8, occupied or not, so
@@ -2904,7 +2828,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           again when you stow, so drawing reads as "hands full", not "inventory gone".
           The inner div is `relative` so `ToolArc` can anchor itself to this bar's right edge with
           `left-full`, regardless of how much of the row is actually occupied. */}
-      {!build && <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none transition-opacity ${drawn ? 'opacity-35' : 'opacity-100'}`}>
+      {<div className={`absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none transition-opacity ${drawn ? 'opacity-35' : 'opacity-100'}`}>
         {/* The name of what you are holding, over the bar. Always rendered so the row never shifts
             when it appears; a baked shadow because HUD text must never sit raw on the scene. */}
         <div className={`mb-1.5 h-5 text-center text-[13px] font-medium tracking-[0.08em] text-amber-100
@@ -2931,7 +2855,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
         </div>
       </div>}
       {/* The one piece of state the dimmed row cannot show by itself. */}
-      {drawn && !build && (
+      {drawn && (
         <div className="absolute bottom-[4.75rem] left-1/2 -translate-x-1/2 flex items-baseline gap-3 font-mono pointer-events-none">
           <span className="text-[11px] tracking-[.2em] uppercase text-amber-200/85">{WEAPONS[weaponIdx].name}</span>
           {/* tabular-nums so the count does not jitter the layout as it ticks down */}
@@ -2939,14 +2863,14 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           <span className="text-[9px] tracking-[.18em] uppercase text-white/35">RMB aim · Q swap · F stow</span>
         </div>
       )}
-      {!build && <div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
+      {<div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
         spike tier {tier}
       </div>}
       {/* ── the bottom-left column: what you can do, over what you have left ─────────────────────
           Cast gauges ABOVE the bars deliberately. The bars are the readout you glance at while
           something is hitting you and belong closest to the corner; the cooldowns are the thing you
           are waiting on, and sit where a rising eye finds them. */}
-      {!build && (
+      {(
         <div className="absolute bottom-4 left-4 flex flex-col gap-1.5 pointer-events-none">
           <CastGauges cast={cast} />
           <ResourceBars vitals={vitals} />
@@ -2955,7 +2879,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
       {/* Tremor Sense — a ring of contacts around the reticle, drawn only while the keeper wears a
           sense AND something is standing on the ground within it. Renders null otherwise, so the
           cost of not having it is one `rev` comparison per animation frame. */}
-      {!build && <TremorSenseHud tremorRef={tremor} />}
+      {<TremorSenseHud tremorRef={tremor} />}
       {/* ── ★★ THE MANA VESSEL, AND THE FIRST TIME MANA HAS BEEN DRAWN AT ALL (2026-08-26) ──────
           `brewPotion` has subtracted `manaCost` and `engine/mana.ts` has derived the pool and its
           regen for as long as either has existed, and the keeper has been spending a resource with
@@ -2968,7 +2892,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
       {/* The bottom-right cluster lives in `hud-corner.tsx` so `dev/hud` can mount the REAL one
           instead of a replica — see that file's header. Positioning moved with it, deliberately:
           the anchoring is the part that has actually been wrong, so it is the part worth previewing. */}
-      {!build && <HudCorner mana={mana} activeTool={activeTool} tools={tools} skills={skills} />}
+      {<HudCorner mana={mana} activeTool={activeTool} tools={tools} skills={skills} />}
     </>
   )
 }
@@ -4029,7 +3953,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onSpace, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -4069,8 +3993,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   incoming: React.RefObject<{ cx: number; cz: number; voxels: Uint16Array; oIdx?: Uint32Array; oMat?: Uint16Array }[]>
   inflight: React.RefObject<number>
   settings: VoxelSettings
-  build: boolean
-  pieceId: string
+  /** The manual quarter-turn on top of auto-facing (R). Only read while a piece item is held. */
   rot: Rotation
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
@@ -4122,8 +4045,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   sparring: boolean
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
   onNearTable: (near: boolean) => void
-  /** The space being streamed, on every change (crossing OR restore). The parent gates build mode on it. */
-  onSpace: (space: Space) => void
   /** The console's world-verbs, filled on mount — only World can move the walker safely. */
   pot: { clock: () => PotClock; save: () => void; gain: (s: Spirit) => void }
   /**
@@ -4438,7 +4359,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   /** Edge latch for the collar prompt — see the emitter in the foe loop. */
   const lastCollarNear = useRef(false)
   const lastNearTable = useRef(false)
-  const lastSpace = useRef<Space | null>(null)
   // The gate: built (sealed or open, matching whatever `tutorial.current.stage` says at the moment
   // its columns arrive) exactly once, then opened exactly once more if the quest completes later.
   const gateBuilt = useRef(false)
@@ -9475,9 +9395,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       const found = !!hit && voxel(hit.x, hit.y, hit.z) === MAT.CRAFT_TABLE
       if (found !== lastNearTable.current) { lastNearTable.current = found; onNearTable(found) }
     }
-    // Same edge shape for the space. Read off the ref, not off `enterSpace`, so the restore path
-    // (`space.current = savedSpace`, no callback) reports too.
-    if (space.current !== lastSpace.current) { lastSpace.current = space.current; onSpace(space.current) }
     {
       // Aim AND range: `aimed` says the crosshair is on a silhouette, `nearest` says you walked to
       // it. A presence is legible from across the patch on purpose (the consent design), so without
@@ -9507,19 +9424,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
      * Deconstruct lived ONLY inside the build branch, and a piece's cells are `STRUCTURE`, which
      * has no registry row — so outside build mode the mine path read `blockDef(48) === undefined`,
      * `breakSeconds` refused, and the HUD showed no name. A wall you had placed and then Tabbed out
-     * of was unbreakable and unnamed. Now the SAME body runs from the mine path too: what you
-     * placed, you can always take back, in whichever mode you are in.
+     * of was unbreakable and unnamed. Build mode itself went the same day; this body is now the
+     * ONE road back: what you placed, you can always take back.
      *
-     * ⚠ A GENERATED piece is not yours. Build mode tombstones it (the fold's own stamps); the mine
-     * path refuses it by name, so Hazel's door is not something a swing removes. With build mode
-     * locked to the plot, that is the only way a world-made piece in the Wilds can be reached.
+     * ⚠ A GENERATED piece is not yours. The mine path refuses it by name, so Hazel's door is not
+     * something a swing removes. (`gen` tombstoning is kept for the fold's own stamps, should a
+     * caller ever hand one in.)
      */
     const deconstruct = (found: Placement & { gen?: string }) => {
       const fdef = pieceDef(found.pieceId)!
       for (const c of cellsOf(found, fdef)) if (c.solid) setVoxel(c.x, c.y, c.z, AIR)
-      // Full refund while the loop is unproven — consequence-free experimenting is what you want
-      // while judging feel. A dial, not a ruling.
-      for (const c of fdef.cost) give(inv.current!, c.itemId, c.count)
+      // The piece comes back as the ITEM it was placed from — a stair taken down is a stair in the
+      // bag, not six planks. Full refund while the loop is unproven: consequence-free experimenting
+      // is what you want while judging feel. A dial, not a ruling.
+      give(inv.current!, pieceItemId(fdef.id), 1)
       placements.current = placements.current.filter(p => p !== found)
       const fk = colOf(found.x, found.z)
       if (found.gen) {
@@ -9534,12 +9452,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       onInvChange()
     }
 
-    // ── build mode: ghost, place, deconstruct ────────────────────────────────────────────────
-    // ⚠ `space` as well as `build`: the parent drops the mode on a crossing, but that lands a
-    // render later, and a ghost over the Wilds for even one frame is the mode the plot lock says
-    // cannot exist. The frame reads the ref, so the lock holds from the first frame out.
-    if (build && space.current === 'plot') {
-      const def = pieceDef(pieceId)!
+    // ── a piece in hand: the ghost ───────────────────────────────────────────────────────────
+    // Build mode is gone (2026-09-12). What used to be a MODE is now "the selected slot holds a
+    // piece item": the ghost previews every frame one is held, and the placement itself happens in
+    // the right-click branch below, behind the same `rightClickIntent` a block goes through — so a
+    // keeper carrying a stair past a chest still opens the chest. `pieceTarget` carries the
+    // resolved cell from here to there; both halves read it, neither re-derives it.
+    const heldPiece = selItem ? pieceForItem(selItem) : undefined
+    let pieceTarget: { target: Placement; def: PieceDef; fits: boolean } | null = null
+    if (heldPiece) {
+      const def = heldPiece
       // ★ AUTO-FACING (2026-08-08, Alex's ask): pieces orient from where you LOOK, live — turn to
       // face a different wall and the ghost turns with you. `rot` (the R key) is a persistent
       // manual quarter-turn ON TOP of that, not the whole job. The mapping is anchored to the
@@ -9552,53 +9474,21 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // ★ ONE PREVIEW, NOT TWO (Alex, 2026-08-08: "it would preview a block away from the
       // highlighted block"). The wireframe marks the cell your crosshair HITS; the ghost sits in
       // the empty cell you place AGAINST — one apart by design, but showing both reads as the
-      // ghost being offset. In build mode the ghost IS the preview, so the wireframe only stays
-      // up when it means something of its own: aiming at a placed piece, where it marks what LMB
-      // deconstructs (an O(1) occupancy read, not a placement scan).
+      // ghost being offset. With a piece in hand the ghost IS the preview, so the wireframe only
+      // stays up when it means something of its own: aiming at a placed piece, where it marks what
+      // LMB takes back (an O(1) occupancy read, not a placement scan).
       if (hl) {
         const hm = hit ? voxel(hit.x, hit.y, hit.z) : AIR
         hl.visible = hm === STRUCTURE || hm === STRUCTURE_HALF
-        // In build mode the GHOST is the preview and the reticle marks only what LMB deconstructs.
-        // A plant border here would be a third mark competing with both.
         flora.clearHighlight()
       }
       // The ghost sits in the EMPTY cell before what you are looking at — the same `px,py,pz` that
       // block placement uses, so both verbs agree about where "in front of" is.
       const target: Placement | null = hit ? { pieceId: def.id, x: hit.px, y: hit.py, z: hit.pz, rot: face } : null
       const fits = !!target && canPlace(target, def, (x, y, z) => voxel(x, y, z))
-      const afford = canAfford(def, id => countItem(inv.current!, id))
-      if (target) pieces.setGhost(def.id, target.x, target.y, target.z, face, fits && afford)
+      if (target) { pieces.setGhost(def.id, target.x, target.y, target.z, face, fits); pieceTarget = { target, def, fits } }
       else pieces.hideGhost()
-
-      if (target && mouse.current.right && fits && afford) {
-        for (const c of def.cost) removeItems(inv.current!, c.itemId, c.count)
-        // ★ OCCUPANCY INTO THE VOXEL GRID — this is what makes collision free. Only the SOLID cells
-        // are written, so a doorway stays walkable and a stair can be climbed.
-        for (const c of cellsOf(target, def)) if (c.solid) setVoxel(c.x, c.y, c.z, def.halfHeight ? STRUCTURE_HALF : STRUCTURE)
-        placements.current.push(target)
-        const ok = colOf(target.x, target.z)
-        piecesByCol.current.set(ok, [...(piecesByCol.current.get(ok) ?? []), target])
-        dirtySaves.current.add(ok)
-        pieces.sync(placements.current)
-        onInvChange()
-        mouse.current.right = false
-      }
-
-      // Deconstruct: aim at ANY cell the piece occupies, not just its origin.
-      if (hit && mouse.current.left) {
-        const found = placementAt(placements.current, hit.x, hit.y, hit.z)
-        if (found) { deconstruct(found); mouse.current.left = false }
-      }
-
-      onLook(hit ? { name: `${def.name}${!afford ? ' — need materials' : fits ? '' : ' — blocked'}`, progress: 0, refused: !fits || !afford, channel: false } : null)
-      onPos(p, screenHeading(aim.x, aim.z))
-      if (++frame.current % 10 === 0) {
-        const info = gl.info
-        onStats(`${cols.current.size} col · ${placements.current.length} pieces · geo ${info.memory.geometries} prog ${info.programs?.length ?? 0} · BUILD`)
-      }
-      return
-    }
-    pieces.hideGhost()
+    } else pieces.hideGhost()
 
     // ── the channel: Meltbore ────────────────────────────────────────────────────────────────
     /**
@@ -9695,7 +9585,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       }
     }
 
-    // ── a placed piece, outside build mode ───────────────────────────────────────────────────
+    // ── a placed piece: the take-back ────────────────────────────────────────────────────────
     // Above the mine path because a `STRUCTURE` cell has no block definition and would fall
     // straight through it. `pieceLook` carries the name to the HUD line below, which would
     // otherwise read nothing at all for a cell you are plainly looking at.
@@ -10172,6 +10062,23 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
                 + ` · ${got.xpGained} farming xp`)
         }
         mouse.current.right = false
+      } else if (intent === 'place' && pieceTarget) {
+        // ── ★ THE PIECE, PLACED BY THE SAME CLICK A BLOCK IS ─────────────────────────────────
+        // `pieceTarget` was resolved with this frame's aim above; here it is only spent. Occupancy
+        // goes into the voxel grid so collision is free — only the SOLID cells, so a doorway stays
+        // walkable and a stair can be climbed.
+        const { target, def, fits } = pieceTarget
+        if (fits && countItem(inv.current!, selItem!) > 0) {
+          removeItems(inv.current!, selItem!, 1)
+          for (const c of cellsOf(target, def)) if (c.solid) setVoxel(c.x, c.y, c.z, def.halfHeight ? STRUCTURE_HALF : STRUCTURE)
+          placements.current.push(target)
+          const ok = colOf(target.x, target.z)
+          piecesByCol.current.set(ok, [...(piecesByCol.current.get(ok) ?? []), target])
+          dirtySaves.current.add(ok)
+          pieces.sync(placements.current)
+          onInvChange()
+          mouse.current.right = false
+        }
       } else if (intent === 'place') {
       // Placing — and ONLY placing — needs something in your hand, which `place` already asserts.
       const held = selItem!
@@ -10864,7 +10771,18 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
   // it hid the Garden Bed completely (see that file's craft-surface note) — a fixture whose
   // ingredients you have never held is a goal you cannot see. One derivation, and its test imports
   // the same function rather than restating it.
-  const rows = craftSurface(have, station)
+  // ★ Pieces have their own section below; among Refine they would be 98 rows burying the planks.
+  const rows = craftSurface(have, station).filter(r => !isPieceRecipe(r))
+  /**
+   * ── ★ THE PIECES: TWO AXES, NOT ONE LIST (moved here from the HUD palette, 2026-09-12) ──────
+   * 14 shapes × 7 materials is 98 pieces; as one list, 84 of them shipped unreachable once
+   * (2026-08-27). A material strip picks the column, the shape rows show that column — the same
+   * derivation the build palette used, kept because it is the one that reaches every piece.
+   * The state is the material KEY, resolved through `pieceVariants` at render, so a shape with no
+   * variant in the chosen material falls back to its base rather than to `undefined`.
+   */
+  const [pieceMat, setPieceMat] = useState(PIECE_MATERIALS[0].key)
+  const pieceRows = PIECES.map(pc => pieceVariants(pc.id).find(v => pieceMaterial(v.id)?.key === pieceMat) ?? pc)
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
@@ -10911,6 +10829,40 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
                 <Cost items={r.input} />
                 {needsTable && <span className="text-sky-300/60"> · at a crafting table</span>}
               </div>
+            </button>
+          )
+        })}
+
+        {/* ── Pieces: crafted into the bag like a chest is, placed from the hotbar like a block is. ── */}
+        <div className="gx-label text-white/40 text-[9px] mt-4 mb-1.5">Pieces
+          <span className="ml-2 text-white/30 normal-case tracking-normal">hold one · RMB places · R turns</span>
+        </div>
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {PIECE_MATERIALS.map(m => {
+            const on = m.key === pieceMat
+            const stock = have(m.itemId)
+            return (
+              <button key={m.key} onClick={() => setPieceMat(m.key)}
+                      className={`px-2 h-6 rounded border flex items-center gap-1.5 text-[9px] font-mono
+                        ${on ? 'border-amber-300 bg-black/70 text-amber-200' : 'border-white/15 bg-black/40 text-white/55 hover:border-white/40'}`}>
+                <span>{m.name}</span>
+                <span className={stock > 0 ? 'text-white/40' : 'text-red-300/70'}>{stock}</span>
+              </button>
+            )
+          })}
+        </div>
+        {pieceRows.map(pc => {
+          const can = canAfford(pc, have)
+          return (
+            <button key={pc.id} disabled={!can} onClick={() => onCraft(pieceItemId(pc.id))}
+                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
+                      can ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
+                          : 'border-white/5 text-white/30 cursor-not-allowed'}`}>
+              <div className="flex justify-between gap-3">
+                <span>{pc.name}</span>
+                <span className="text-amber-200/70 tabular-nums">1× · {have(pieceItemId(pc.id))} in bag</span>
+              </div>
+              <div className="mt-0.5 text-[10px]"><Cost items={pc.cost} /></div>
             </button>
           )
         })}
