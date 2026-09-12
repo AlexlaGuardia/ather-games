@@ -81,7 +81,7 @@ objects, no GL) and pins all three.
 2. Panel + core are placeholder tint (`TINT.beam`) for every material — same rule as fence arms; follows piece art.
 3. Should a wall of beams also connect UP (a beam above a beam already stacks flush — nothing to do) — nothing to do.
 
-**Decisions:** ~~connect to solids as well as beams, like the fence~~ **REVERSED within the hour** (Alex: *"it also puts a wall with a shadow on the block behind it"*): a beam is a post until a second beam makes it a wall; the world does not count. A run ending at a block wall stops a quarter-cell short, visibly, rather than growing a stub nobody placed. The fence keeps its world rule. ·
+**Decisions:** connect to solids as well as beams, like the fence — **shipped, reversed, RESTORED in one day** (`8af3fa9` → the restore, live in the build id noted here: 09-12 evening). The reversal was judged from a render where the pole sat one cell from its panel (the pivot bug, `fcb76b4`); with the pole honest Alex asked for the world link back. *A rule judged from a wrong render is not a judged rule.* ·
 `stats()` on the renderer exists for the guard; it costs nothing per frame.
 
 **Files:** `voxel3d/piece-mesh.ts` · `voxel3d/beam-wall.test.ts` (new).
