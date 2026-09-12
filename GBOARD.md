@@ -32,8 +32,12 @@ on the first pass and got an octagonal distance.
 **Next:**
 1. ⛔ **ALEX PLACES ALL FOUR** — plaster between beams, thatch on a roof, a stack in Hazel's yard, glass in a window
    frame. The glass is the one to look at from inside and out; the cames are placeholder lead.
-2. Batch 3 candidates from the reach lists, unbuilt: cobblestone · canvas/cloth (Mallow's awning) · a stone stack
-   (Sax's R3, the timber stack's stone sibling) · a rubble HEAP. Alex picks.
+2. ✅ **Batch 3 shipped the same night** (`c512a2d`, live as `Hc6pgJWcK_c7W9LY-ALKu`): **cobblestone** (92; 3 rubble → 2,
+   3 at the cutter — `workshop.test` rules masonry never multiplies, which caught my first 2 → 2/3) · **canvas** (93;
+   4 tufts → 2, plain weave, undyed) · **stone stack** (94; 4 cut stone → 1, per-face, the timber stack's squared
+   sibling) · **rubble heap** (95; 3 rubble → 1, the cobble painter with loose parameters: wide black gaps, tipped
+   not laid). ⚠ The heap is still a cube; a mounded silhouette is a PIECE, and that is the next step if Alex says
+   the cube does not read.
 3. Timber stack is goldwood only; per-wood variants are three more rows + three tints when a yard wants them.
 
 **Decisions:** every new material is hand work — `recipes.test` rules mining is the gate, not furniture. · Glass is a
