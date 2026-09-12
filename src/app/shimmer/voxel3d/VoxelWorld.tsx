@@ -9464,17 +9464,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // `piece-facing.ts` owns the rule; this frame only hands it this frame's aim and hit, so
       // the ghost and the crosshair can never disagree about "forward".
       const face = placementRotation(aim, hit, rot)
-      // ★ ONE PREVIEW, NOT TWO (Alex, 2026-08-08: "it would preview a block away from the
-      // highlighted block"). The wireframe marks the cell your crosshair HITS; the ghost sits in
-      // the empty cell you place AGAINST — one apart by design, but showing both reads as the
-      // ghost being offset. With a piece in hand the ghost IS the preview, so the wireframe only
-      // stays up when it means something of its own: aiming at a placed piece, where it marks what
-      // LMB takes back (an O(1) occupancy read, not a placement scan).
-      if (hl) {
-        const hm = hit ? voxel(hit.x, hit.y, hit.z) : AIR
-        hl.visible = hm === STRUCTURE || hm === STRUCTURE_HALF
-        flora.clearHighlight()
-      }
+      // ★ THE WIREFRAME STAYS UP WITH A PIECE IN HAND (Alex, 2026-09-12: "show the wireframe again
+      // while holding a piece"). It was hidden on 08-08 because "it would preview a block away
+      // from the highlighted block" — and that was the rotation-pivot bug (`pivotOffset`), not two
+      // marks fighting: the ghost really was drawn a cell off. With the ghost honest, the two marks
+      // say two true things — the cell you HIT and the cell you will FILL — exactly as they do for
+      // a block. So nothing is overridden here; the reticle keeps whatever the raycast above gave it.
       // The ghost sits in the EMPTY cell before what you are looking at — the same `px,py,pz` that
       // block placement uses, so both verbs agree about where "in front of" is.
       const target: Placement | null = hit ? { pieceId: def.id, x: hit.px, y: hit.py, z: hit.pz, rot: face } : null
