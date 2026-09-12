@@ -11,6 +11,42 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🪜 Shimmer — **BUILD MODE IS GONE: A PIECE IS A HOTBAR ITEM** (2026-09-12 midday, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID RzKfrNPwjiEwUS5wtjuDj`, 185 chunks, from `a0ed970`** (+ worker repin `56f7404`), served == disk (md5) on chunk `39cd071ed02de5da`, both new strings in, `Tab exit` / `Home Plot` toast gone from the served bytes. Sweep 265 green (two reds fixed: obtainable, hud-type). palette.test.ts 1039/0, **10 mutations fire**. tsc 7 (baseline).*
+
+**Left off:** Alex, an hour after the plot lock shipped: *"build mode should go.. its adding an extra layer we dont really
+need."* Asked one question (where do the pieces live?) → **hotbar items, like blocks.** Built the same session:
+- **`piece_<id>` is an item for every one of the 112 pieces** (`pieceItemId` / `pieceForItem` in `pieces.ts`, prefix +
+  `BY_ID`, never string surgery). **Derived hand recipes** (`PIECE_RECIPES` pushed into `RECIPES`, cost = the piece
+  table's cost, `station: 'hand'` because `recipes.test` rules mining is the gate, not furniture). **Icon = the piece's
+  own placeholder geometry** through `mesh-icon.renderParts` (`pieceGeometry`/`pieceTint` exported from `piece-mesh.ts`;
+  new `'piece'` arm in `iconSourceFor`, and the item-art checklist learned it — 112 would have landed in *missing*).
+- **The craft panel grew a Pieces section**: material strip (stock per material) × shape rows — the SAME two-axis
+  derivation the HUD palette used (`palette.test` §1-3 unchanged), so all 112 stay reachable. Refine filters
+  `isPieceRecipe` out. Crafted output names via `itemLabel` (piece case added).
+- **Hold a piece → the ghost; the same `rightClickIntent` a block goes through places it** (`intent === 'place' &&
+  pieceTarget`, so a stair in hand still opens a chest). LMB on a placed piece takes it back **as the item**. R/LB
+  quarter-turn stays, **gated on the held piece** in the chain (`holdsPiece` replaced `build`).
+- **Retired:** `ui.build` (Tab/DRIGHT), `build.materialNext/Prev` (`[` `]`/RB), the palette HUD, the BUILD stats tag,
+  the number-row/wheel build branches, `SUPPRESS_DEFAULT` down to chat. `merge` drops the ids from stored maps.
+- **The morning's Home Plot lock went with the mode** — `onPlot`/`onSpace`/the effect are gone. Pieces place wherever
+  blocks place. If Alex wants pieces plot-only as ITEMS, that is a new rule, not a leftover.
+
+**Next:**
+1. ⛔ **ALEX HOLDS A STAIR.** Craft one at C, drag it to the hotbar, look at a wall. Does the ghost + one right-click read
+   as *the block verb*? Does the hotbar icon (placeholder geometry, wood tint for every material) read at 48px?
+2. Piece icons are identical across materials because the WORLD draws them identical (placeholder tint by shape). The
+   icon follows the world on purpose; when picaso's piece art lands, both change together.
+3. Instant take-back beside a mined block could eat a fence (carried from the morning block).
+
+**Decisions:** `station: 'hand'` for every piece — the house rule, and a bench-gated stair would have failed `every
+MATERIAL recipe is makeable by hand`. · Rotate gated on the held piece, not `true`: the LB/`cast.tactical` overlap
+ruling (08-23) rests on a VISIBLE context, and the piece in hand is that context now. · Piece items are the third
+*nameable* class in `obtainable.test` (ItemDef / material / piece) — consumed by placing, which no recipe records.
+
+**Files:** `voxel/pieces.ts` · `voxel/recipes.ts` · `voxel3d/VoxelWorld.tsx` · `voxel3d/ui-chain.ts` · `voxel3d/piece-mesh.ts`
+· `voxel3d/tex/{mesh-icon,item-icon}.ts` · `lib/input/actions.ts` · `scripts/item-art.mts` · `palette.test.ts` (owns the
+whole road now; `build-lock.test.ts` deleted with the mode).
+
 ## 🔒 Shimmer — **TAB WAS A DOOR INTO A MODE NOBODY ASKED FOR, AND THE PIECES BEHIND IT WERE NAMELESS** (2026-09-12 AM, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID A8MCysjei7Gu_SMzgsACC`, 184 chunks, from `14324cc`** (+ worker repin `9d6b63d`), served == disk (md5) on chunk `52ad02469644e389`, both new strings in it. Also carries the three trade blueprints (data, none placed) + the shingle yield. build-lock 17/0, 7 mutations fire; sweep 265/266 → 266 after the channel-wiring anchor. tsc 7 (baseline).*
 
 **Left off:** Alex (09-11): Tab flipped him into build mode in the Wilds, and the pieces he placed could not be removed
