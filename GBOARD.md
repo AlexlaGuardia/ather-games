@@ -11,6 +11,32 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🪨 Shimmer — **EXPANSION LITTER: THE NEW RING ARRIVES WITH THINGS IN THE WAY** (2026-09-12 late night, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID EqtECCihp_aTOwt48pcIe` from `e87f714`**, served == disk, worker repinned (carries `litterFrom`). Sweep **271/271**. plot-litter.test **48/0, 6 mutations fire**.*
+
+**Left off:** Alex asked what the rubble heap is FOR; answered: *"keep it for dressing and free matts for the player to
+collect so the home plot can be littered with things like the heap and other obstructions each time they expand."*
+Built as a pure rule in `plot.ts` (`litterAt`, `PlotLitter` on the config): the ring between the previous tier's coast
+and this one's — the ground a widening ADDS — gets rubble heaps (60%) and deadfall (40%) on its surface, clumped
+(24-block cells, dense 1.5% / sparse 0.1% ≈ 1,400 obstructions on the tier-1 ring), the threshold kept clear for 8
+blocks, never in the cave's mouth, **never tier 0**. Same function in the worker and the host, so both derive one ring.
+**★ `litterFrom` on the save gates it:** set ONCE on load — an older save gets `plotTier + 1` (the rings it already built
+on stay clean; the next widening is littered), a new keeper gets 1 — carried on every worker request and in the worker
+cache key. **A GENERATED heap breaks into 3 rubble** (`litterDrops`, "generated" = no edit on the cell, the same
+question `setVoxel`'s baseline asks); a placed heap comes back as itself, so craft → place → break is not a fountain.
+
+**Next:**
+1. ⛔ **ALEX WIDENS THE FOLD** (Greg) and walks the new ring: is ~1,400 obstructions a chore or a littered field? The
+   dials are all on `DEFAULT_PLOT.litter` (density, clump size, heap share, threshold clearing).
+2. "Other obstructions" — boulders (2–3 stone), timber (a deadfall cluster), a thicket? Each is one more kind in
+   `litterAt`; Alex names them.
+3. The rubble heap is a cube; a mounded PIECE if the cube does not read.
+
+**Decisions:** litter lives on the CONFIG, not on a flag in the generator, so a scratch config (a test, a shot) is
+clean by default and the save is the only thing that turns it on. · `litterFrom` is never lowered.
+
+**Files:** `voxel/plot.ts` (`PlotLitter`, `litterAt`, `litterDrops`, `withLitter`) · `voxel/plot-litter.test.ts` (new) ·
+`voxel3d/save.ts` (`litterFrom`) · `voxel3d/VoxelWorld.tsx` · `src/workers/voxel-gen.worker.ts`.
+
 ## 🧱 Shimmer — **THE BUILDING PALETTE, BATCH 2: PLASTER · THATCH · TIMBER STACK · GLASS** (2026-09-12 night, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID FabmIbmwdt1D_8QrIUTFY` from `0a59043`** (three blocks went out first as `j1FrEvf7-chbcrVD3IFmV` from `0bf2beb`), served == disk, worker repinned. Sweep **270/270**. glass.test 25/0 (5 mutations fire). ITEM-ART: 55 derived, 0 missing.*
 
 **Left off:** Alex: *"I want to continue adding different blocks to the game so I can use them for building these
