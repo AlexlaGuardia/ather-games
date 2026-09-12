@@ -36,6 +36,7 @@ import { biomeAt, forestness } from '../voxel/biome'
 import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
+import { lightOpaque } from '../voxel/light-passes'
 import { materialAt, MAT, isPlant, isHerb, isScatter, isSapling, isHalfMat, isTopSlab, baseOf, isSolid, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState, type RayHit } from '../voxel/mine'
@@ -588,11 +589,6 @@ const moveNameOf = (moveId: string): string => MOVE_NAME.get(moveId) ?? moveId
  */
 const SETTLE_PATIENCE = 6
 const key = (cx: number, cz: number) => `${cx},${cz}`
-/** Non-air materials light still passes through — light.ts's "air, water and foliage" contract.
- *  (Water is handled by id in the opaque callback; foliage is enumerated here.) */
-const LIGHT_PASSES = new Set<number>([
-  WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES,
-])
 
 // ── ★ SPAWN MOVES TO MOONWELL GLADE (2026-08-08) ──────────────────────────────────────────────
 // Read off the zone anchor rather than hardcoded, so spawn can never drift out of sync with the
@@ -6662,11 +6658,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // ── phase 2: the flood ────────────────────────────────────────────────────────────────────
     if (!j.work) {
       j.work = beginLight(j.bounds, {
-        // Air, water and foliage pass light; everything else stops it. Matches light.ts's contract.
-        opaque: (x, y, z) => {
-          const m = voxel(x, y, z)
-          return m !== AIR && m !== MAT.WATER && !LIGHT_PASSES.has(m)
-        },
+        // Air, water, foliage and PIECES pass light; everything else stops it. One rule, shared
+        // with the tests that model this flood — see `voxel/light-passes.ts` for why a post no
+        // longer blacks out the grass under it.
+        opaque: (x, y, z) => lightOpaque(voxel(x, y, z)),
         emit: (x, y, z) => emitOf(voxel(x, y, z)),
         // ⚠ COLLISION, NOT OPACITY — see `LightInputs.windBlocks`. Every plant in this world is
         // opaque to light and passable to a body, so borrowing `opaque` here reported no wind

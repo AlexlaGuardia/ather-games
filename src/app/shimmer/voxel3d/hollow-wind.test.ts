@@ -26,17 +26,14 @@
 // generator would produce.
 import { Column, generateColumn, SECTION } from '../voxel/column'
 import { MAT, DEFAULT_DEPTH, isSolid } from '../voxel/depth'
-import { WOOD } from '../voxel/trees'
 import { emitOf } from '../voxel/registry'
 import { computeLight, spawnDark, type LightBounds } from '../voxel/light'
 import { columnHeight } from '../voxel/height'
 import { hollowFoots, hollowEligible, NIGHT_SKY_MAX } from './hollows'
 import { WORLD_SEED } from './world-seed'
+import { lightOpaque } from '../voxel/light-passes'
 
 const SEED = WORLD_SEED, AIR = 0, H = 256
-const LIGHT_PASSES = new Set<number>([
-  WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES,
-])
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
@@ -59,7 +56,7 @@ function apron(cx: number, cz: number) {
   const b: LightBounds = { x0: cx * SECTION - SECTION, y0, z0: cz * SECTION - SECTION,
                            sx: SECTION * 3, sy: Math.min(H, hi + 16) - y0, sz: SECTION * 3 }
   const field = computeLight(b, {
-    opaque: (x, y, z) => { const m = voxel(x, y, z); return m !== AIR && m !== MAT.WATER && !LIGHT_PASSES.has(m) },
+    opaque: (x, y, z) => lightOpaque(voxel(x, y, z)),   // the host's rule, imported, not copied
     emit: (x, y, z) => emitOf(voxel(x, y, z)),
     windBlocks: (x, y, z) => isSolid(voxel(x, y, z)),
     openToSky: (x, z, y) => y > columnHeight(x, z, SEED),
