@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🧱 Shimmer — **BEAMS THAT TOUCH ARE A WALL — AND SIX OF EVERY SEVEN PIECES HAD NEVER DRAWN** (2026-09-12 afternoon, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID bQ71VlxloC24BvIigox_X`, 184 chunks, from `5a3a221`**, served == disk (md5) on chunk `0937f57388d16329`. Sweep **266/266**. beam-wall **16/0, 6 mutations fire**. tsc 7.*
+## 🧱 Shimmer — **BEAMS THAT TOUCH ARE A WALL — AND SIX OF EVERY SEVEN PIECES HAD NEVER DRAWN** (2026-09-12 afternoon, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID _u609EKiqRVCoTPVqGnzt` from `8af3fa9`** (beams link to BEAMS ONLY — Alex's first beam against a block grew a panel into it; the fence's solid rule was mine, not the spec's). Served == disk (md5). Sweep **266/266**. beam-wall **18/0**, the old rule mutated back goes red ×3. tsc 7.*
 
 **Left off:** Alex, after taking back and replacing a bench: *"a wall isn't a thing yet although I'd like it to be.. make a
 beam connect to adjacent beams to make a wall that's only half as thick as a regular block."* Built the fence's way:
@@ -31,7 +31,7 @@ objects, no GL) and pins all three.
 2. Panel + core are placeholder tint (`TINT.beam`) for every material — same rule as fence arms; follows piece art.
 3. Should a wall of beams also connect UP (a beam above a beam already stacks flush — nothing to do) — nothing to do.
 
-**Decisions:** connect to solids as well as beams, like the fence, so a run meets a doorway or block wall flush. ·
+**Decisions:** ~~connect to solids as well as beams, like the fence~~ **REVERSED within the hour** (Alex: *"it also puts a wall with a shadow on the block behind it"*): a beam is a post until a second beam makes it a wall; the world does not count. A run ending at a block wall stops a quarter-cell short, visibly, rather than growing a stub nobody placed. The fence keeps its world rule. ·
 `stats()` on the renderer exists for the guard; it costs nothing per frame.
 
 **Files:** `voxel3d/piece-mesh.ts` · `voxel3d/beam-wall.test.ts` (new).
