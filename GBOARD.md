@@ -11,6 +11,36 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 📐 Shimmer — **EVERY ROTATED PIECE HAS DRAWN ONE CELL AWAY FROM WHERE IT IS, SINCE 08-08** (2026-09-12 evening, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID i-rlphgv4mhY6s8j4QhnI` from `fcb76b4`**, served == disk. Sweep **268/268**. piece-origin **83/0, 4 mutations fire**.*
+
+**Left off:** two photographs from Alex: a post with its black light-cell one cell BESIDE it, and a "wall behind the
+beam". Measured with the live renderer under node: **beam rot 1 mesh x∈[9.37,9.63] against occupancy x∈[10,11].**
+Geometry is min-corner-origin (`+0.5` translate), instances rotate about that corner, `cellsOf` keeps every footprint
+in the +x/+z quadrant — so for rot 1/2/3 the mesh landed one cell west / west+north / north of the cell the piece
+collided and lit in. **Auto-facing (08-08) makes that most placements.** The ghost carried the same offset: the 08-08
+"it would preview a block away from the highlighted block" was THIS, answered then by hiding the wireframe. Today's
+"wall behind the beam" was the panel (centre-origin, correct cell) vs the pole (wrong cell); today's "heavy shadow"
+was the light cell (correct) vs the pole (wrong). Three symptoms, one cause, two of them "explained" first.
+**Fix:** `pivotOffset(def, rot)` — the rotated footprint's min corner relative to the rotated origin — applied to
+instances and the ghost from one function, from the VISUAL rotation so an open door swings inside its own cell. **The
+arch was also authored about its middle cell** and drew a cell west even at rot 0; shifted to the min-corner convention.
+`piece-origin.test.ts` runs the shipped matrices against the shipped geometry for every piece × rotation, the ghost,
+and the open door, with 0.1 tolerance for the bracket/hook that sink into their wall on purpose.
+
+**Next:**
+1. ⛔ **THE BLUEPRINTS WILL LOOK DIFFERENT.** Hazel 75 / Mallow 71 / Sax 34 / Yarrow 35 rotated pieces now draw in
+   their real cells, one cell from where their authors SAW them. Occupancy never moved (`gen-pieces`, `blueprints`
+   guards green), so anything that looked right was a placement compensating for the renderer. **Re-shoot all four
+   before placing the trades** (`$SP/course_watch.py` order: place row → rebuild worker → shoot), Alex judges.
+2. The 08-08 wireframe-hiding fix can be revisited: with the ghost in the right cell, showing both marks may now read
+   fine. Alex's call.
+
+**Decisions:** measured before reasoning — a 12-line tsx script over the real renderer settled in a minute what three
+"explanations" had not. · Tolerance 0.1 in the oracle, not 1e-6: the bracket and hook sink 0.05–0.06 into the wall
+behind them deliberately.
+
+**Files:** `voxel3d/piece-mesh.ts` (`pivotOffset`, the arch) · `voxel3d/piece-origin.test.ts` (new).
+
 ## 💡 Shimmer — **A POST NO LONGER BLACKS OUT THE GRASS UNDER IT** (2026-09-12 late afternoon, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID zEWN-Tzb-TRMAtDhuBH1A` from `ae772f8`**, served == disk. Sweep **267/267**. light-passes 10/0 (runs the real flood + an opaque control).*
 
 **Left off:** Alex: *"the block under it is still getting that heavy shadow.. its not very realistic."* Not the mesher
