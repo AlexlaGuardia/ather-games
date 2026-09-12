@@ -11,6 +11,38 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🌿 Shimmer — **THE THREE TRADES ARE BLUEPRINTS, AND THE AGENT THAT BUILT YARROW NEVER SAW IT** (2026-09-11 late, hub lane `c2019342`) · *Last touched 2026-09-12 — NOT deployed; prod is still `As3kDESXXUwBAti-ZWwG2` from `5c9b751`. HEAD `430bf36` == origin. Guards: blueprints 93/0 · placement 24/0 · placed 28/0. tsc 7 (baseline).*
+
+**Left off:** the previous hub (`be4e612f`) died mid-session — **credits ran out**. Measured from its transcript: the whole
+window + 4 subagents on Fable 5.1, **0 compactions in 5.5h** (context 91K → 628K; every turn re-read it — 195M cache-read
+tokens), the model's own thinking retained and replayed (~57% of context growth), agents inheriting Fable because no `model:`
+was passed. ≈ $173 at API list. This hub ran on Opus 5, the Yarrow agent on Sonnet (278K tok, 65 min).
+Landed tonight: **Sax's stonery** `ce09936` (orphaned by the dead session; its `preview-sax` placement dropped on Alex's word),
+**Mallow's shop** `4cf7af6` + the placed-overlap guard `2ebaae2` (pushed), **Yarrow's apothecary** `91f4d17` + index regen
+`430bf36`. All three trades are blueprints in `data/blueprints/`; **none is placed** — the placed table still holds only the
+sparring ring and Hazel's.
+**★ The Yarrow agent's 13 screenshots were pieces-only.** It esbuilt the scratchpad worker BEFORE its blueprint existed, so the
+worker never stamped a block; the host drew posts/doors/fence under a roof and the agent reported "real brick pillars" it never
+rendered (Hazel's tan wall was in frame and read as its own). The course watchdog (`$SP/course_watch.py`: staged/dirty/commit
+outside the fence, forbidden processes, foreign placement rows) reported 0 violations — it was on course and wrong at once.
+Hub rebuilt the worker AFTER placing the preview row and re-shot: pale-brick cottage on cut stone, eaves-front shingles, hooks
+under the eave, fenced garden with a lantern. Reads as a third building beside Hazel's gable end and Sax's yard.
+
+**Next:**
+1. ⛔ **ALEX'S CALL** — Yarrow passes as a first pass? The roof-cap ridge floats one block above the shingles.
+2. Write the order into the shot script header: **place row → rebuild worker → shoot**. A worker built before the row is the
+   pieces-only trap, and it is invisible from inside the result.
+3. **The Glade handoff (Magii, `dbr` 09-11 18:47):** place the five trades from the worktable (Alex's map call), want-lists +
+   prices, voice-profiles for hazel/sax/yarrow/fennel/mallow. Fennel's cook-house has no blueprint yet.
+4. Deploy when Alex places — `coord build` from any lane.
+
+**Decisions:** every mechanical subagent gets `model: "sonnet"` (memory: economize-model-usage) · hub stays on Opus 5 ·
+`/compact` at ~250K · arm `agent_watchdog.py` (stall) + `course_watch.py` (scope) per dispatch — probe the agent's ARTIFACTS,
+its transcript file does not stream.
+
+**Files:** `scripts/blueprint-{sax,mallow,yarrow}.mts` · `data/blueprints/{sax_stonery,mallow_shop,yarrow_apothecary}.json` ·
+`data/blueprints/index.generated.ts` · shots `$SP/hub-yarrow-{front2,garden}.png` (scratchpad, session `c2019342`).
+
 ## 💡 Shimmer — **THE LIGHTING PASS: ONE DIAL PAINTED EVERY WALL MAUVE, AND THE SHADER EXISTED TWICE** (2026-09-11 night, hub lane) · *Last touched 2026-09-11 — ✅ **DEPLOYED `BUILD_ID As3kDESXXUwBAti-ZWwG2`, 184 chunks, from `5c9b751`**; the fix is in the served chunks. Sweep at `5c9b751` **264 · 1 FAIL** — the shingle recipe (`milled` 2 < hand 4; a station may not pay less than the hand), fixed in the next commit, not yet deployed. cartoon-stack **15** (new), light-glsl 30, atlas-wiring, render-audit, ctxlost 17. tsc 7 (baseline).*
 
 **Alex: *"yea open the lighting pass."*** The finding from the ruins thread: every vertical face of every material rendered one pale colour. Chased with MEASUREMENTS on one sunlit goldwood wall at 6 blocks, noon, texel (155,118,64) → rendered (139,130,135):
