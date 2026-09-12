@@ -11,6 +11,31 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🧱 Shimmer — **BEAMS THAT TOUCH ARE A WALL — AND SIX OF EVERY SEVEN PIECES HAD NEVER DRAWN** (2026-09-12 afternoon, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID bQ71VlxloC24BvIigox_X`, 184 chunks, from `5a3a221`**, served == disk (md5) on chunk `0937f57388d16329`. Sweep **266/266**. beam-wall **16/0, 6 mutations fire**. tsc 7.*
+
+**Left off:** Alex, after taking back and replacing a bench: *"a wall isn't a thing yet although I'd like it to be.. make a
+beam connect to adjacent beams to make a wall that's only half as thick as a regular block."* Built the fence's way:
+connection is asked of the neighbours at `sync`, never stored. A beam side with a sibling beam (any material) **or any
+solid voxel** grows a **0.5 × 1 × 0.5 panel** from the cell centre; a connected beam also draws a **0.5 core** so ends and
+corners are flush columns, not the 0.26 upright peeking out. A lone beam stays the upright (= the honest ghost). Stacked
+beams make a taller wall by being taller. Collision unchanged: full cell (the fence's rule — the cell's job is to stop
+things; the thin look is the model's business).
+**★★ Found on the way: `sync` and `setGhost` looked meshes up by RAW id; the renderer builds one mesh per BASE shape.
+So `stair_stonebrick` and every other material variant placed since 08-27 wrote occupancy and drew NOTHING — no ghost
+either. Fence variants never connected for the same reason.** The `buildGeometry` switch learned `basePieceId` on
+08-27; the sync loop two functions down never did. `beam-wall.test.ts` runs the live renderer under node (three.js
+objects, no GL) and pins all three.
+
+**Next:**
+1. ⛔ **ALEX LAYS A ROW OF BEAMS** — does the panel read as a wall? Half-thick, centred on the cell (0.25 each side).
+2. Panel + core are placeholder tint (`TINT.beam`) for every material — same rule as fence arms; follows piece art.
+3. Should a wall of beams also connect UP (a beam above a beam already stacks flush — nothing to do) — nothing to do.
+
+**Decisions:** connect to solids as well as beams, like the fence, so a run meets a doorway or block wall flush. ·
+`stats()` on the renderer exists for the guard; it costs nothing per frame.
+
+**Files:** `voxel3d/piece-mesh.ts` · `voxel3d/beam-wall.test.ts` (new).
+
 ## 🪜 Shimmer — **BUILD MODE IS GONE: A PIECE IS A HOTBAR ITEM** (2026-09-12 midday, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID RzKfrNPwjiEwUS5wtjuDj`, 185 chunks, from `a0ed970`** (+ worker repin `56f7404`), served == disk (md5) on chunk `39cd071ed02de5da`, both new strings in, `Tab exit` / `Home Plot` toast gone from the served bytes. Sweep 265 green (two reds fixed: obtainable, hud-type). palette.test.ts 1039/0, **10 mutations fire**. tsc 7 (baseline).*
 
 **Left off:** Alex, an hour after the plot lock shipped: *"build mode should go.. its adding an extra layer we dont really
