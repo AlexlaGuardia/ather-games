@@ -18,7 +18,6 @@
     {"pieceId":"fence","x":6,"y":1,"z":2,"rot":0},
     {"pieceId":"shutter","x":7,"y":1,"z":2,"rot":0},
     {"pieceId":"door","x":9,"y":1,"z":2,"rot":0,"open":true},
-    {"pieceId":"doorway","x":9,"y":1,"z":2,"rot":0},
     {"pieceId":"window","x":11,"y":1,"z":2,"rot":0},
     {"pieceId":"post_dawnwood","x":12,"y":1,"z":2,"rot":0},
     {"pieceId":"window","x":0,"y":1,"z":4,"rot":1},

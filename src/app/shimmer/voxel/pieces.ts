@@ -168,9 +168,27 @@ export const PIECE_MATERIALS: PieceMaterial[] = [
 export const PIECES: PieceDef[] = [
   // A doorway is 1x3x1 of occupancy with the middle two cells walkable — the frame is solid, the
   // opening is not. This is the clearest case of footprint ≠ visual bounds in the whole catalogue.
-  { id: 'doorway', name: 'Doorway', w: 1, h: 3, d: 1,
-    cost: [{ itemId: 'goldwood_plank', count: 6 }],
-    passable: [{ x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }],
+  // ── ★ THE DOORWAY FAMILY (Alex, 2026-09-13: "a doorway .. that's like 3x3 with craftable doors
+  // that can be placed in them" → small / double / grand) ─────────────────────────────────────
+  // A doorway is a FRAME: full-cell posts either side, a head over the opening, and the opening
+  // itself — passable cells the matching door snaps into (a door places into AIR, and passable
+  // cells are never written). The frame is 0.5 deep so it sits flush in a beam wall and centred
+  // in a block wall. Three sizes, each one cell wider than its opening on both sides and one
+  // taller: 3×3 around a 1×2 (the cottage), 4×3 around a 2×2 (the shop), 5×4 around a 3×3 (the
+  // hall). ⚠ The old `doorway` was a 1×3 slot — a hole a cell taller than the door hung in it,
+  // in a frame 0.9 deep; it shipped in five blueprint placements, which were dropped (Alex is
+  // rebuilding the four buildings in the editor).
+  { id: 'doorway', name: 'Doorway', w: 3, h: 3, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 8 }],
+    passable: [{ x: 1, y: 0, z: 0 }, { x: 1, y: 1, z: 0 }],
+    variants: ['wood', 'stone'] },
+  { id: 'doorway_double', name: 'Double Doorway', w: 4, h: 3, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 10 }],
+    passable: [{ x: 1, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }, { x: 1, y: 1, z: 0 }, { x: 2, y: 1, z: 0 }],
+    variants: ['wood', 'stone'] },
+  { id: 'doorway_grand', name: 'Grand Doorway', w: 5, h: 4, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 14 }],
+    passable: [1, 2, 3].flatMap(x => [0, 1, 2].map(y => ({ x, y, z: 0 }))),
     variants: ['wood', 'stone'] },
 
   { id: 'window', name: 'Window', w: 1, h: 2, d: 1,
@@ -307,6 +325,14 @@ export const PIECES: PieceDef[] = [
   { id: 'door', name: 'Door', w: 1, h: 2, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 6 }],
     openable: true, variants: ['wood', 'stone'] },
+  // The doors that fit the double and grand doorways: two leaves each, hinged at the outer jambs,
+  // both swinging when opened (the renderer bakes the open pose — see `piece-mesh.ts`).
+  { id: 'door_double', name: 'Double Door', w: 2, h: 2, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 10 }],
+    openable: true, variants: ['wood', 'stone'] },
+  { id: 'door_grand', name: 'Grand Door', w: 3, h: 3, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 18 }],
+    openable: true, variants: ['wood', 'stone'] },
 
   // ★ THE GATE is the fence's door and it is why the holds needed this pass. `holds.ts` punches its
   // gate as a GAP — a hole in a curtain wall, permanently open, which is a breach rather than a
@@ -420,9 +446,12 @@ export interface Placement {
   open?: boolean
 }
 
-/** The rotation a piece is DRAWN at — an open door swings 90° inside its own cell. */
-export const visualRotation = (p: Placement, def: PieceDef): Rotation =>
-  def.openable && p.open ? (((p.rot + 1) % 4) as Rotation) : p.rot
+/**
+ * ⚠ `visualRotation` RETIRED 2026-09-13. An open door used to be drawn by rotating the whole piece
+ * 90°, which only works for a one-leaf, one-cell door. The renderer now bakes an OPEN pose per
+ * openable shape (`piece-mesh.ts › buildGeometry(def, open)`), so a double door swings both
+ * leaves and the stored rotation is the drawn rotation, always. `cellsOf` never read it.
+ */
 
 /** Flip a placement's state. Returns a new object; the host owns where it is stored. */
 export const toggleOpen = (p: Placement, def: PieceDef): Placement =>

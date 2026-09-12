@@ -6,7 +6,6 @@
   "pieces": [
     {"pieceId":"post_dawnwood","x":1,"y":1,"z":0,"rot":0},
     {"pieceId":"window","x":3,"y":1,"z":0,"rot":0},
-    {"pieceId":"doorway","x":5,"y":1,"z":0,"rot":0},
     {"pieceId":"window","x":7,"y":1,"z":0,"rot":0},
     {"pieceId":"post_dawnwood","x":9,"y":1,"z":0,"rot":0},
     {"pieceId":"fence","x":2,"y":1,"z":1,"rot":0},

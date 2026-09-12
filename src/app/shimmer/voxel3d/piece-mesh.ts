@@ -16,7 +16,7 @@
 // fails the build on it, but it should never be written.
 
 import * as THREE from 'three'
-import { PIECES, basePieceId, pieceDef, visualRotation, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
+import { PIECES, basePieceId, pieceDef, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
 import { materialForItem } from '../voxel/registry'
 import { layerOf, TOP, SIDE } from './tex/tiles'
 import { MATERIAL_COLOR } from './attrs'
@@ -25,6 +25,8 @@ import type { TileArray } from './tex/atlas'
 /** Provisional colours — wood-toned so a shed reads as a shed. Not a look call. */
 const TINT: Record<string, number> = {
   doorway: 0x8a6a34,
+  doorway_double: 0x8a6a34,
+  doorway_grand: 0x8a6a34,
   window: 0x9d8552,
   roof_slope: 0x7a4a3a,
   roof_cap: 0x6b3f31,
@@ -42,6 +44,8 @@ const TINT: Record<string, number> = {
   shutter: 0x7d6440,
   arch: 0x8d8a94,
   door: 0x7a5c30,
+  door_double: 0x7a5c30,
+  door_grand: 0x7a5c30,
   gate: 0x6d5433,
   bracket: 0x4a4a52,
   hook: 0x4a4a52,
@@ -164,12 +168,45 @@ export function pivotOffset(def: PieceDef, rot: Rotation): { x: number; z: numbe
   }
 }
 
-function buildGeometry(def: PieceDef): THREE.BufferGeometry {
+/**
+ * @param open the OPEN pose of an openable piece (2026-09-13). An open door used to be the shut
+ *   geometry rotated 90° as a whole, which only works for one leaf in one cell. Now each openable
+ *   shape authors both poses and the renderer keeps a mesh per pose; a double door's two leaves
+ *   swing apart, and a leaf never leaves the plane it is hinged to.
+ */
+function buildGeometry(def: PieceDef, open = false): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = []
   const box = (w: number, h: number, d: number, x: number, y: number, z: number) => {
     const g = new THREE.BoxGeometry(w, h, d)
     g.translate(x, y, z)
     parts.push(g)
+  }
+  /**
+   * A door leaf, hinged at one jamb. Local cell coords: cell i is centred at x = i, the wall's
+   * plane is z = 0 and the FRONT face is z = −0.5. Shut, the leaf lies along the front at
+   * z ≈ −0.43; open, it has swung 90° into the cell (toward +z) about its hinge edge, so it
+   * stands along the jamb it hangs from — inside the footprint, which is the promise
+   * `piece-origin.test.ts` measures. `x0`/`x1` are the leaf's extent; the hinge is whichever end
+   * `hinge` names.
+   */
+  const leaf = (x0: number, x1: number, h: number, hinge: 'left' | 'right', open: boolean, ledges = true) => {
+    const w = x1 - x0, t = 0.1
+    if (!open) {
+      box(w - 0.06, h - 0.08, t, (x0 + x1) / 2, h / 2, -0.43)
+      if (ledges) for (const y of [h * 0.3, h * 0.66]) box(w - 0.14, 0.05, 0.03, (x0 + x1) / 2, y, -0.49)
+      box(0.06, 0.06, 0.06, hinge === 'left' ? x1 - 0.15 : x0 + 0.15, h / 2, -0.5)   // the pull, on the free edge
+    } else {
+      const hx = hinge === 'left' ? x0 + 0.05 : x1 - 0.05          // the hinge line, just inside the jamb
+      box(t, h - 0.08, w - 0.06, hx, h / 2, -0.5 + (w - 0.06) / 2 + 0.03)
+      if (ledges) for (const y of [h * 0.3, h * 0.66]) box(0.03, 0.05, w - 0.14, hx + (hinge === 'left' ? -0.06 : 0.06), y, -0.5 + (w - 0.06) / 2 + 0.03)
+    }
+  }
+  /** A doorway frame: full-cell posts at the outer columns, a one-cell head over the opening. */
+  const frame = (w: number, h: number) => {
+    box(0.5, h, 0.5, 0, h / 2, 0)                  // left post — cell 0, full height, 0.5 square
+    box(0.5, h, 0.5, w - 1, h / 2, 0)              // right post — cell w-1
+    box(w - 2 + 0.5, 1, 0.5, (w - 1) / 2, h - 0.5, 0)   // the head: the top row over the opening, into the posts
+    box(w - 2, 0.12, 0.56, (w - 1) / 2, h - 1.06, 0)     // a lintel lip under the head
   }
 
   // ⚠⚠ KEYED ON THE BASE SHAPE, NOT ON `def.id` (2026-08-27). A piece now comes in seven
@@ -181,13 +218,9 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
   // `basePieceId` is the shipped answer to "what shape is this", built from the piece table rather
   // than by splitting the id (`half_slab` contains an underscore). Never re-derive it here.
   switch (basePieceId(def.id)) {
-    case 'doorway': {
-      // Two jambs and a lintel — a frame with a hole, so the walkable cells are visibly walkable.
-      box(0.18, 3, 0.9, -0.41, 1.5, 0)
-      box(0.18, 3, 0.9, 0.41, 1.5, 0)
-      box(1, 0.22, 0.9, 0, 2.89, 0)
-      break
-    }
+    case 'doorway': { frame(3, 3); break }
+    case 'doorway_double': { frame(4, 3); break }
+    case 'doorway_grand': { frame(5, 4); break }
     case 'window': {
       box(1, 0.16, 0.5, 0, 0.08, 0)      // sill
       box(1, 0.16, 0.5, 0, 1.92, 0)      // head
@@ -243,9 +276,9 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
     case 'shutter': {
       // A thin panel on the face. Thinner than a slab on purpose — that thinness IS the reason
       // builders reach for a trapdoor over a slab, and a "thin" panel drawn at 0.5 is a slab
-      // standing up. ⚠ It SHUTS as of the door pass, so this is the closed leaf; the open state is
-      // the same geometry swung by `visualRotation`, never a second model.
-      box(0.9, 0.9, 0.12, 0, 0.5, -0.44)
+      // standing up. It SHUTS as of the door pass; open, it stands along its left jamb.
+      if (!open) box(0.9, 0.9, 0.12, 0, 0.5, -0.44)
+      else box(0.12, 0.9, 0.9, -0.44, 0.5, 0)
       break
     }
     case 'door': {
@@ -253,17 +286,36 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
       // panel modelled through the middle of the cell rotates about its own centre and reads as a
       // slab spinning in place. Hung at the edge, the same 90° turn reads as a door swinging, and
       // that difference is the entire visual payload of the feature.
-      box(0.94, 2, 0.14, 0, 1, -0.43)
-      box(0.10, 0.10, 0.10, 0.32, 1.05, -0.32)   // the pull
+      leaf(-0.5, 0.5, 2, 'left', open)
+      break
+    }
+    case 'door_double': {
+      // Two leaves, hinged at the outer jambs, meeting in the middle; both swing.
+      leaf(-0.5, 0.5, 2, 'left', open)
+      leaf(0.5, 1.5, 2, 'right', open)
+      break
+    }
+    case 'door_grand': {
+      // Two tall leaves, a cell and a half each, for the hall. ⚠ Open, a leaf is 1.5 long and the
+      // footprint is 1 deep, so it stands half a cell proud of its cells — into the room's air.
+      leaf(-0.5, 1, 3, 'left', open)
+      leaf(1, 2.5, 3, 'right', open)
       break
     }
     case 'gate': {
       // The fence's door: the same rail language as `fence` so a run of fence and its gate read as
       // one thing, hung at the edge like the door so it swings rather than spins.
-      box(0.9, 0.14, 0.12, 0, 0.78, -0.43)
-      box(0.9, 0.14, 0.12, 0, 0.42, -0.43)
-      box(0.14, 0.86, 0.12, -0.38, 0.6, -0.43)
-      box(0.14, 0.86, 0.12, 0.38, 0.6, -0.43)
+      if (!open) {
+        box(0.9, 0.14, 0.12, 0, 0.78, -0.43)
+        box(0.9, 0.14, 0.12, 0, 0.42, -0.43)
+        box(0.14, 0.86, 0.12, -0.38, 0.6, -0.43)
+        box(0.14, 0.86, 0.12, 0.38, 0.6, -0.43)
+      } else {
+        box(0.12, 0.14, 0.9, -0.43, 0.78, 0)
+        box(0.12, 0.14, 0.9, -0.43, 0.42, 0)
+        box(0.12, 0.86, 0.14, -0.43, 0.6, -0.38)
+        box(0.12, 0.86, 0.14, -0.43, 0.6, 0.38)
+      }
       break
     }
     case 'arch': {
@@ -449,14 +501,18 @@ export function createPieceRenderer(tiles: TileArray | null = null): PieceRender
   const textured = tiles ? createPieceMaterial(tiles) : null
 
   for (const def of PIECES) {
-    const g = buildGeometry(def)
-    layers.set(def.id, addLayerAttrs(g))
-    const m = textured ?? new THREE.MeshLambertMaterial({ color: TINT[def.id] ?? 0x999999 })
-    const inst = new THREE.InstancedMesh(g, m, MAX_PER_TYPE)
-    inst.count = 0
-    inst.frustumCulled = false   // instances span the world; the mesh's own bounds are meaningless
-    geoms.set(def.id, g); if (!textured) mats.set(def.id, m); meshes.set(def.id, inst)
-    group.add(inst)
+    // An openable shape gets a second mesh for its OPEN pose, keyed `<id>:open` — see buildGeometry.
+    for (const open of def.openable ? [false, true] : [false]) {
+      const g = buildGeometry(def, open)
+      const id = open ? `${def.id}:open` : def.id
+      layers.set(id, addLayerAttrs(g))
+      const m = textured ?? new THREE.MeshLambertMaterial({ color: TINT[def.id] ?? 0x999999 })
+      const inst = new THREE.InstancedMesh(g, m, MAX_PER_TYPE)
+      inst.count = 0
+      inst.frustumCulled = false   // instances span the world; the mesh's own bounds are meaningless
+      geoms.set(id, g); if (!textured) mats.set(id, m); meshes.set(id, inst)
+      group.add(inst)
+    }
   }
 
   // The fence arms: one extra instanced mesh, same law as everything else. 4096 arms = a
@@ -522,25 +578,24 @@ export function createPieceRenderer(tiles: TileArray | null = null): PieceRender
     let arms = 0, walls = 0, cores = 0
     for (const p of placements) {
       const base = basePieceId(p.pieceId)
-      const inst = meshes.get(base)
+      const pdef0 = pieceDef(p.pieceId)
+      // The pose picks the mesh: an open door is its own geometry, at its STORED rotation.
+      const meshKey = pdef0?.openable && p.open ? `${base}:open` : base
+      const inst = meshes.get(meshKey)
       if (!inst) continue
-      const i = counts.get(base) ?? 0
+      const i = counts.get(meshKey) ?? 0
       if (i >= MAX_PER_TYPE) continue
-      // ★ THE VISUAL ROTATION, NOT THE STORED ONE (2026-08-27, the door pass). An open door swings
-      // 90° inside its own cell — that turn is the entire visual payload of the feature, and it is
-      // the ONLY place the two rotations may differ. `cellsOf` deliberately uses `p.rot` instead,
-      // because the footprint must NOT move; see `PieceDef.openable`. Reading `p.rot` here is what
-      // makes an opened door look shut, and reading `visualRotation` in `cellsOf` is what makes it
-      // swing its collision into rock. They are opposite mistakes on the same pair of values.
-      const pdef = pieceDef(p.pieceId)!
-      const vr = visualRotation(p, pdef)
-      const po = pivotOffset(pdef, vr)   // ★ see `pivotOffset` — without it a rotated piece draws a cell off
-      q.setFromAxisAngle(Y, -(vr * Math.PI) / 2)
+      // ★ THE STORED ROTATION, ALWAYS (2026-09-13). An open door used to be drawn by rotating the
+      // whole piece a quarter-turn (`visualRotation`, retired); the open POSE is its own mesh now,
+      // so the drawn rotation and the footprint rotation are one number and cannot disagree.
+      const pdef = pdef0!
+      const po = pivotOffset(pdef, p.rot)   // ★ see `pivotOffset` — without it a rotated piece draws a cell off
+      q.setFromAxisAngle(Y, -(p.rot * Math.PI) / 2)
       v.set(p.x + po.x, p.y, p.z + po.z)
       inst.setMatrixAt(i, m4.compose(v, q, one))
       const pl = layersOf(p.pieceId)
-      setLayers(layers.get(base)!, i, pl)
-      counts.set(base, i + 1)
+      setLayers(layers.get(meshKey)!, i, pl)
+      counts.set(meshKey, i + 1)
       // ── fence arms: derived, never stored (MC's connection model) ──
       // A side grows an arm toward a sibling fence or any solid voxel — walls and hillsides
       // included. Both fences of a pair emit their own half-arm, which is what makes the joint.

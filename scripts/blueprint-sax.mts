@@ -59,6 +59,10 @@
 //  mossy/cracked — shingles, stonecutter, rubble, path, lantern, table, chest, doorway, door,
 //  window+shutter, post/half_slab/bench in stone, stair, hook. The shell vocabulary is enough; the
 //  yard vocabulary is where the reaches are.)
+// ⚠ 2026-09-13: `doorway` became a 3×3 FRAME (posts + head around a 1×2 opening; see pieces.ts).
+// This script still authors the old 1×3 slot, so re-running it would set a frame three cells wide
+// where a slot was and overlap the wall. The five old placements were dropped from the JSONs by
+// hand; Alex is rebuilding the buildings in the editor, which is the artefact from here on.
 import { writeFileSync } from 'fs'
 import { join } from 'path'
 import { makeBlueprint, blueprintProblems, serializeBlueprint, type BlueprintCell } from '../src/app/shimmer/voxel/blueprints'

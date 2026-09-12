@@ -9,7 +9,7 @@ import { MAT } from './depth'
 import {
   PIECES, ALL_PIECES, PIECE_MATERIALS, basePieceId, pieceMaterial,
   STRUCTURE, pieceDef, rotatedSize, rotateCell, cellsOf, canPlace, canAfford, placementAt,
-  visualRotation, toggleOpen,
+  toggleOpen,
   type Placement, type Rotation, type PieceDef,
 } from './pieces'
 import { blockDef, materialForItem, ALL_BLOCKS } from './registry'
@@ -39,7 +39,7 @@ const solid = () => MAT.STONE
   // counter-image of the Snagbarrows' ring. ⚠ It is the KEEPER's and never a hold's: canon fixes the
   // collar-culture's built vocabulary as an exhaustive list against "anything architectural", and
   // benching a hold's audience would say those people built seating for guests.
-  ok(PIECES.length === 16, `the catalogue is sixteen pieces, deliberately — the post joined 2026-09-11 off reach-list R1 (${PIECES.length})`)
+  ok(PIECES.length === 20, `the catalogue is twenty pieces, deliberately — the doorway family + two doors joined 2026-09-13 (${PIECES.length})`)
   const ids = PIECES.map(p => p.id)
   ok(!ids.includes('wall') && !ids.includes('floor'),
      '★ walls and floors are BLOCKS, not pieces — that split is the whole design')
@@ -136,7 +136,7 @@ const solid = () => MAT.STONE
   ok(openable.length > 0, 'some pieces open')
   // Base shapes only, so this reads as "three things open" rather than a variant count.
   const bases = PIECES.filter(p => p.openable).map(p => p.id).sort()
-  ok(bases.join(',') === 'door,gate,shutter', `door, gate and shutter open (${bases.join(',')})`)
+  ok(bases.join(',') === 'door,door_double,door_grand,gate,shutter', `door, double door, grand door, gate and shutter open (${bases.join(',')})`)
 
   // ★ THE ONE INVARIANT THAT KEEPS `canPlace` HONEST. `canPlace` runs against the CLOSED footprint,
   // once, at placement time. If opening moved the cells, a door could later swing into terrain that
@@ -170,19 +170,18 @@ const solid = () => MAT.STONE
   ok(notFreed === 0, `an open piece blocks nothing (${notFreed} still blocking)`)
   ok(notSolid === 0, `★ a CLOSED piece blocks something — otherwise it is a doorway, not a door (${notSolid} inert)`)
 
-  // The swing is a rotation and it must come back. Four toggles of the visual is not the test;
-  // the test is that open differs from closed and closed is the stored rot.
+  // ★ THE SWING IS A POSE NOW, NOT A ROTATION (2026-09-13). `visualRotation` — the whole piece
+  // turned a quarter for the open state — is retired; `piece-mesh.ts` authors an open geometry per
+  // openable shape (a double door's two leaves swing apart, which no whole-piece turn can draw) and
+  // `piece-origin.test.ts` measures the open pose inside its cells. Here the stored rotation is
+  // simply the rotation, open or shut.
   const d = pieceDef('door')!
   const shut: Placement = { pieceId: 'door', x: 0, y: 0, z: 0, rot: 0 }
-  ok(visualRotation(shut, d) === 0, 'a closed door is drawn at its stored rotation')
-  ok(visualRotation({ ...shut, open: true }, d) === 1, 'an open door is drawn swung 90°')
 
   // ⚠ A STRAY `open` ON SOMETHING THAT DOES NOT OPEN MUST DO NOTHING. Saves are edited by hand, and
   // a future bug could set the flag anywhere; a fence that silently became passable because of a key
   // it does not understand is a hole in a yard nobody can see.
   const f = pieceDef('fence')!
-  ok(visualRotation({ pieceId: 'fence', x: 0, y: 0, z: 0, rot: 2, open: true }, f) === 2,
-     '★ a stray `open` does not rotate a piece that cannot open')
   ok(cellsOf({ pieceId: 'fence', x: 0, y: 0, z: 0, rot: 0, open: true }, f).every(c => c.solid),
      '★★ a stray `open` does not make a solid piece passable')
   ok(toggleOpen({ pieceId: 'fence', x: 0, y: 0, z: 0, rot: 0 }, f).open === undefined,
@@ -203,10 +202,11 @@ const solid = () => MAT.STONE
 // The classic bug: rotating a piece moves it a block sideways, so turning it in the ghost makes it
 // crawl across the ground. Four rotations must return to where they started.
 {
-  const def = pieceDef('doorway')!
+  // `window` is the 1-wide exemplar since 2026-09-13 — the doorway grew to 3 wide (a frame).
+  const def = pieceDef('window')!
   let drift = 0
   for (const rot of [0, 1, 2, 3] as Rotation[]) {
-    const cells = cellsOf({ pieceId: 'doorway', x: 10, y: 20, z: 30, rot }, def)
+    const cells = cellsOf({ pieceId: 'window', x: 10, y: 20, z: 30, rot }, def)
     ok(cells.length === def.w * def.h * def.d, `rotation ${rot} occupies the same cell COUNT`)
     // A 1-wide piece must not move at all under rotation.
     for (const c of cells) if (c.x !== 10 || c.z !== 30) drift++
@@ -244,7 +244,16 @@ const solid = () => MAT.STONE
   const door = cellsOf({ pieceId: 'doorway', x: 0, y: 0, z: 0, rot: 0 }, pieceDef('doorway')!)
   const passable = door.filter(c => !c.solid)
   ok(passable.length === 2, `★ a doorway has 2 walkable cells, so you can walk through it (${passable.length})`)
-  ok(door.filter(c => c.solid).length === 1, 'and one solid cell — the lintel')
+  ok(door.filter(c => c.solid).length === 7, 'and seven solid cells — two full-height posts and the head (3×3 since 2026-09-13)')
+  ok(passable.every(c => c.x === 1 && c.y < 2), 'the opening is the middle column, two tall — where the door goes')
+  // The family: each frame's opening is exactly the matching door's footprint.
+  for (const [frame, door_, w, h] of [['doorway', 'door', 1, 2], ['doorway_double', 'door_double', 2, 2], ['doorway_grand', 'door_grand', 3, 3]] as const) {
+    const open = cellsOf({ pieceId: frame, x: 0, y: 0, z: 0, rot: 0 }, pieceDef(frame)!).filter(c => !c.solid)
+    const dd = pieceDef(door_)!
+    ok(open.length === w * h && dd.w === w && dd.h === h, `★ ${frame}'s opening is ${w}×${h}, and ${door_} is ${dd.w}×${dd.h} — the door fits the frame`)
+    const xs = new Set(open.map(c => c.x)), ys = new Set(open.map(c => c.y))
+    ok(Math.min(...xs) === 1 && Math.max(...xs) === w && Math.min(...ys) === 0 && Math.max(...ys) === h - 1, `${frame}'s opening starts one cell in and sits on the floor`)
+  }
   ok(passable.every(c => c.y < 2), 'the walkable cells are the lower two, not the top')
 
   const stair = cellsOf({ pieceId: 'stair', x: 0, y: 0, z: 0, rot: 0 }, pieceDef('stair')!)
@@ -274,8 +283,9 @@ const solid = () => MAT.STONE
   const def = pieceDef('doorway')!
   ok(canAfford(def, () => 99), 'affordable with plenty')
   ok(!canAfford(def, () => 0), 'not affordable with nothing')
-  ok(!canAfford(def, id => (id === 'goldwood_plank' ? 5 : 99)), 'one short is not affordable')
-  ok(canAfford(def, id => (id === 'goldwood_plank' ? 6 : 0)), 'exactly enough is affordable')
+  const need = def.cost[0].count
+  ok(!canAfford(def, id => (id === 'goldwood_plank' ? need - 1 : 99)), 'one short is not affordable')
+  ok(canAfford(def, id => (id === 'goldwood_plank' ? need : 0)), 'exactly enough is affordable')
 }
 
 // ── 7. deconstruction can find a piece from any cell it occupies ─────────────────────────────

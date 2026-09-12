@@ -48,6 +48,10 @@
 //     half_slab at grade in front of the porch, is what the entrance wants. Left as the plinth.
 // (What was NOT missing: footing, planks ×3, post, doorway + door that opens, window + shutter,
 //  fence, half slab, hook, bench, lantern, chest, pot, shingles, roof slopes.)
+// ⚠ 2026-09-13: `doorway` became a 3×3 FRAME (posts + head around a 1×2 opening; see pieces.ts).
+// This script still authors the old 1×3 slot, so re-running it would set a frame three cells wide
+// where a slot was and overlap the wall. The five old placements were dropped from the JSONs by
+// hand; Alex is rebuilding the buildings in the editor, which is the artefact from here on.
 import { writeFileSync } from 'fs'
 import { join } from 'path'
 import { makeBlueprint, blueprintProblems, serializeBlueprint, type BlueprintCell } from '../src/app/shimmer/voxel/blueprints'

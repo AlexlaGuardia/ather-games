@@ -23,7 +23,7 @@ const L: BlueprintDef = makeBlueprint('l', 'L', [
   ...Array.from({ length: 5 }, (_, z) => ({ x: 0, y: 0, z, m: MAT.CUT_STONE })),
   ...Array.from({ length: 3 }, (_, x) => ({ x, y: 0, z: 0, m: MAT.CUT_STONE })),
   { x: 0, y: 1, z: 0, m: MAT.MANA_LANTERN },
-], [{ pieceId: 'doorway', x: 2, y: 0, z: 2, rot: 0 }])
+], [{ pieceId: 'window', x: 2, y: 1, z: 2, rot: 0 }])   // a 1-wide, 2-tall piece; `doorway` grew to a 3×3 frame on 2026-09-13
 ok(L.w === 3 && L.h === 3 && L.d === 5, `fixture bounds 3x3x5 (got ${L.w}x${L.h}x${L.d})`)
 
 // Sections tall enough for a floor near 128, like the world.
