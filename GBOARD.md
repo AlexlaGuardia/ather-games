@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🔒 Shimmer — **TAB WAS A DOOR INTO A MODE NOBODY ASKED FOR, AND THE PIECES BEHIND IT WERE NAMELESS** (2026-09-12 AM, hub lane `853d8d28`) · *Last touched 2026-09-12 — build-lock 17/0, 7 mutations fire. tsc 7 (baseline).*
+## 🔒 Shimmer — **TAB WAS A DOOR INTO A MODE NOBODY ASKED FOR, AND THE PIECES BEHIND IT WERE NAMELESS** (2026-09-12 AM, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID A8MCysjei7Gu_SMzgsACC`, 184 chunks, from `14324cc`** (+ worker repin `9d6b63d`), served == disk (md5) on chunk `52ad02469644e389`, both new strings in it. Also carries the three trade blueprints (data, none placed) + the shingle yield. build-lock 17/0, 7 mutations fire; sweep 265/266 → 266 after the channel-wiring anchor. tsc 7 (baseline).*
 
 **Left off:** Alex (09-11): Tab flipped him into build mode in the Wilds, and the pieces he placed could not be removed
 afterwards. Two rulings: **build mode is locked to the Home Plot**, and **a placed piece must be removable**. Root of the
