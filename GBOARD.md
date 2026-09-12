@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🔨 Shimmer — **A PLACED PIECE IS WORKED LIKE A BLOCK, NOT CLICKED AWAY** (2026-09-12, hub lane `2f743745`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID D8xcsW1-FzE20mPLHjqPm` from `5f16618`**, served == disk (chunk md5 match), worker pin unchanged. piece-break.test **994/0, 2 mutations fire**. tsc 7 (baseline).*
+## 🔨 Shimmer — **A PLACED PIECE IS WORKED LIKE A BLOCK, AND PROSPECTING TRAINS ON SEAMS ONLY** (2026-09-12, hub lane `2f743745`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID GtPYf-nqJQNK81HUgS6hh` from `5a905bb`** (piece-break `D8xcsW1-FzE20mPLHjqPm` from `5f16618` before it), served == disk (chunk md5 match), worker pin unchanged. piece-break.test **994/0, 2 mutations fire**. tsc 7 (baseline).*
 
 **Left off:** Alex: *"the pieces just break instantly if left clicked.. can we bring them up to speed with the other
 blocks."* A piece's cells are `STRUCTURE` (no block def), so the mine loop had nothing to spend seconds against and the
@@ -21,8 +21,13 @@ stone-brick stair wants the spike), same seconds, same chips, same HUD gauge, th
 bar (origin-keyed, not cell-keyed). `deconstruct` (full refund) is what *broken* means. No XP — taking your own stair down
 is not gathering. Generated pieces still refuse ("not yours to take").
 
-**Next:** Alex swings at a beam wall and a glass pane — does thatch feel like thatch, stone like stone? · whether a
-placed piece should pay XP (currently no).
+**Then (`5a905bb`):** Alex ruled *no XP for taking down your own pieces* and *"tweak prospecting so xp only from mana
+seams"* → `breakXP(material, skill)` in `voxel/mine.ts`: a prospecting block that is not a seam (RAW_MANA..ATHER_CRYSTAL)
+pays 0 — stone, rubble, cut stone, bricks. The spike still cuts them; it learns nothing. Forestry/farming untouched.
+mine.test 79/0, mutation fires.
+
+**Next:** Alex swings at a beam wall and a glass pane — does thatch feel like thatch, stone like stone? · should
+forestry get the same treatment (logs only, not planks/timber stacks)? Alex's call.
 
 **Files:** `voxel3d/piece-mesh.ts` (`pieceBreakTarget`) · `voxel3d/VoxelWorld.tsx` (piece hit → tickBreak) · `voxel3d/piece-break.test.ts`.
 
