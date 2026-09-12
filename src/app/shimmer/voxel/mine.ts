@@ -5,6 +5,7 @@
 
 import { AIR } from './section'
 import { blockDef, breakSeconds, type BlockSkill } from './registry'
+import { isSeam } from './seams'
 
 export interface RayHit {
   /** The voxel that was hit. */
@@ -161,4 +162,24 @@ export function dropsFor(
     out.push({ itemId: d.itemId, count: d.count })
   }
   return out
+}
+
+/**
+ * ── ★ PROSPECTING TRAINS ON MANA SEAMS ONLY (Alex, 2026-09-12: "tweak prospecting so xp only
+ * from mana seams") ─────────────────────────────────────────────────────────────────────────
+ * The per-block award the world pays when a swing lands: `max(4, hardness × 12)`, the ladder the
+ * registry encodes. Every block that asked for a skill paid it, so a keeper levelling prospecting
+ * by chewing through plain stone was the fastest road — and stone is everywhere. Now a block whose
+ * skill is prospecting pays NOTHING unless it is a seam (`isSeam`: RAW_MANA..ATHER_CRYSTAL). The
+ * spike still cuts stone; it just learns nothing from it. Rubble, cut stone and the bricks
+ * (`fastSkill: 'prospecting'` or gated on it) all fall under the same rule, since "the block's
+ * skill" is what the mine loop asks for either way. Other families are untouched here.
+ *
+ * Returns 0 for "no award" so the caller can skip the whole level/notify path, never a floor of 4.
+ */
+export function breakXP(material: number, skill: BlockSkill): number {
+  const def = blockDef(material)
+  if (!def || !skill) return 0
+  if (skill === 'prospecting' && !isSeam(material)) return 0
+  return Math.max(4, Math.round(def.hardness * 12))
 }

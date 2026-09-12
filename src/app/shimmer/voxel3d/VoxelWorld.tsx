@@ -40,7 +40,7 @@ import { lightOpaque } from '../voxel/light-passes'
 import { placementRotation } from './piece-facing'
 import { materialAt, MAT, isPlant, isHerb, isScatter, isSapling, isHalfMat, isTopSlab, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
-import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState, type RayHit } from '../voxel/mine'
+import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState, type RayHit } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
 import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
 import { salvageItems, salvageMessage } from '../voxel/salvage'
@@ -9737,12 +9737,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // ★ XP GOES TO THE BLOCK'S SKILL. Mining ore trains Prospecting, felling a tree trains
         // Forestry — the two halves of gathering finally exist in the same world, which is the whole
         // reason this port was worth doing before combat or NPCs.
-        if (wantSkill && skills.current![wantSkill as keyof SkillSet]) {
+        // ★ PROSPECTING TRAINS ON MANA SEAMS ONLY (Alex, 2026-09-12) — `breakXP` pays 0 for stone,
+        // rubble and the masonry, and a 0 award skips the level/notify path entirely.
+        const xp = felled ? fellXP(felled.start) : breakXP(hit.material, wantSkill)
+        if (wantSkill && xp > 0 && skills.current![wantSkill as keyof SkillSet]) {
           const sk = skills.current![wantSkill as keyof SkillSet]
           // XP scales with hardness, so the deep tiers train faster than topsoil — the ladder the
           // registry already encodes, reused rather than restated.
-          const res = addSkillXP(sk, felled ? fellXP(felled.start)
-            : Math.max(4, Math.round((hitDef?.hardness ?? 1) * 12)))
+          const res = addSkillXP(sk, xp)
           if (res.leveled) {
             onLevel(`${wantSkill} ${res.newLevel}${getMilestone(res.newLevel) ? ' — ' + getMilestone(res.newLevel) : ''}`)
           }

@@ -3,7 +3,7 @@
 import { AIR } from './section'
 import { MAT } from './depth'
 import { SEAM } from './seams'
-import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState } from './mine'
+import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState } from './mine'
 import { breakSeconds, canBreak, blockDef, materialForItem, BLOCKS } from './registry'
 
 let pass = 0
@@ -188,6 +188,22 @@ const world = (x: number, y: number, z: number): number => {
   setBreakRate(1000); ok(getBreakRate() <= 20, 'the dial clamps rather than making a block unbreakable')
   setBreakRate(0);    ok(getBreakRate() > 0, 'and clamps at the fast end rather than dividing by zero')
   setBreakRate(1)
+}
+
+// ── ★ prospecting trains on mana seams only (2026-09-12) ─────────────────────────────────────
+{
+  const seams = BLOCKS.filter(b => b.skill === 'prospecting' && b.material >= SEAM.RAW_MANA && b.material <= SEAM.ATHER_CRYSTAL)
+  const notSeams = BLOCKS.filter(b => (b.skill === 'prospecting' || b.fastSkill === 'prospecting') && !(b.material >= SEAM.RAW_MANA && b.material <= SEAM.ATHER_CRYSTAL))
+  ok(seams.length >= 7, `BLIND CHECK: the seam ladder is 7 blocks (saw ${seams.length})`)
+  ok(notSeams.length >= 5, `BLIND CHECK: stone/rubble/masonry ask prospecting too (saw ${notSeams.length})`)
+  for (const b of seams) ok(breakXP(b.material, 'prospecting') === Math.max(4, Math.round(b.hardness * 12)), `${b.name} pays the hardness ladder`)
+  for (const b of notSeams) ok(breakXP(b.material, 'prospecting') === 0, `${b.name} pays NO prospecting xp`)
+  ok(breakXP(MAT.STONE, 'prospecting') === 0, 'plain stone pays nothing')
+  ok(breakXP(SEAM.RAW_MANA, 'prospecting') === 26, 'raw mana seam pays 2.2×12 = 26')
+  // other families are untouched by the rule
+  const logs = BLOCKS.filter(b => b.skill === 'forestry')
+  ok(logs.length > 0 && logs.every(b => breakXP(b.material, 'forestry') > 0), 'forestry still pays per block')
+  ok(breakXP(MAT.STONE, null) === 0, 'no skill, no xp')
 }
 
 console.log(`\nmining: ${pass} passed, ${fails.length} failed`)
