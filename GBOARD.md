@@ -11,6 +11,34 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🎨 Shimmer — **A PIECE WEARS ITS MATERIAL'S BLOCK — AND THE AXIS IS EVERY MASONRY BLOCK** (2026-09-13 small hours, hub lane `853d8d28`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID i9pbWWqVvzscMi-Ekx3SD` from `3b70bc3`**, served == disk, worker repinned. Sweep **272/272**. piece-texture.test **48/0, 4 mutations fire**. ITEM-ART: 192 piece icons, 0 missing.*
+
+**Left off:** Alex: *"work on the beams textures.. we'll need to make sure we have a version for each of the solid
+blocks we already have."* Two halves. **(1) Texture:** the piece renderer samples the world's tile array per instance —
+two instanced attributes (`aLayerTop`/`aLayerSide`), ONE Lambert program for every shape, the atlas's own UV rule (two
+in-plane axes, v negated on sides so painted tiles land upright). Wall panels, cores and fence arms carry their own
+piece's block. `pieceBlock(id)` = `materialForItem(cost[0])` is the one derivation (the cost IS the material —
+`palette.test` § 3). Icons tint by the block colour, so a stone-brick stair icon is finally not brown. Without an atlas
+the old per-shape tints still draw. **(2) The axis:** `PIECE_MATERIALS` += mossy stone brick · cracked stone brick ·
+mossy cut stone · cobblestone · plaster → **16 shapes × 12 = 192 pieces** (tripwire bumped, reason inline). Soil, sand,
+roofing, cloth deliberately out. A beam in plaster + a beam in plaster = a half-thick plaster wall: the cottage infill.
+
+**Next:**
+1. ⛔ **ALEX LOOKS AT A BEAM IN THREE MATERIALS** — goldwood, stone brick, plaster — and a wall of each. Pieces are lit by
+   scene Lambert, blocks by the light field + cartoon stack: they may read a shade apart. If so, the next step is
+   handing the piece program the same `lightUniforms`/cartoon dials the atlas material gets.
+2. **DOORS AND DOORWAYS** — Alex's next topic. Today: `doorway` (1×3 frame with a hole), `door` (1×2 leaf, swings
+   in-cell), `gate`, `arch` (3 wide). Open questions to bring: does a door hang IN a doorway or replace it; 2-tall
+   doorways; double doors; what `passable`/`openable` should mean for each.
+3. Timber stack / stone stack are one material each; per-material variants are rows, not code.
+
+**Decisions:** one program for all pieces, not one per material — the render-audit rule. · Geometry-local UVs: a
+rotated piece rotates its grain, which is what a beam does. · Arms/panels/cores are centre-authored so their tile is
+offset half a cell; a tile is periodic, so it is invisible.
+
+**Files:** `voxel/pieces.ts` (5 rows) · `voxel3d/piece-mesh.ts` (`createPieceMaterial`, `pieceBlock`, `pieceLayers`,
+`layersAt`) · `voxel3d/piece-texture.test.ts` (new) · `voxel3d/palette.test.ts` (192) · `voxel3d/VoxelWorld.tsx` (one line).
+
 ## 🪨 Shimmer — **EXPANSION LITTER: THE NEW RING ARRIVES WITH THINGS IN THE WAY** (2026-09-12 late night, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID EqtECCihp_aTOwt48pcIe` from `e87f714`**, served == disk, worker repinned (carries `litterFrom`). Sweep **271/271**. plot-litter.test **48/0, 6 mutations fire**.*
 
 **Left off:** Alex asked what the rubble heap is FOR; answered: *"keep it for dressing and free matts for the player to
