@@ -11,6 +11,34 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🪟 Shimmer — **WINDOWS ARE PANES, AND THE PANES ARE DYED WITH BLOOMS** (2026-09-13, hub lane `853d8d28`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID LfE1Dne3aRm43A_BL3M7R` from `1c2fe9b`**, served == disk, worker repinned. Sweep **272/272**. glass.test **69/0, 4 mutations fire**. 21 shapes · 19 materials · 247 pieces.*
+
+**Left off:** Alex: *"lets look at the windows"* → rendered today's empty frame + glazed/wide/square candidates and sent
+the PNG → *"this could be easily solved with window panes.. maybe a variety of colors."* Built exactly that:
+- **Stained glass** (96–101): the glass block + ONE bloom — violetbloom, stormgrass, tidepetal, sunpetal, dawncap,
+  moonvine. The dye IS the flower; the hue is the plant's own `MATERIAL_COLOR`; nothing new is named. Painted as the
+  leaded lattice over a **colour dither** (one texel in two opaque), which averages to a tint at a wall's distance in a
+  world that blends nothing. `GLASS_MATS` / `isGlassMat` replace every `=== GLASS` (light pass, mesher rank, cutout split).
+- **The pane**: a 1×1 thin sheet in the wall's plane, the first piece of a **glass family** on the material axis (clear +
+  six). Drawn through a **double-sided cutout copy** of the piece program (`createPieceMaterial(tiles, { cutout })`). Set
+  one in any hole, stack two for a tall window, four for a wide one; the tile's own lead frame is the muntin. Blocks the
+  way like a wall, passes light like glass.
+- The craft panel's strip now shows only the shapes that list the chosen material's family (a pane is never goldwood).
+- The 1×2 `window` frame and the `shutter` are untouched; the frame is now the empty trim you set panes beside/inside.
+
+**Next:**
+1. ⛔ **ALEX SETS PANES** — a 2-high stack of sunpetal in a beam wall, a single violetbloom in a loft. From inside with
+   the sun behind it is the real test of the dither.
+2. Should the 1×2 `window` frame go now that panes exist, or become a trim that panes sit inside? Alex's call after (1).
+3. Stained glass BLOCKS are placeable too — a full-cell coloured wall for a greenhouse or a shrine. Free with the panes.
+
+**Decisions:** colours from the flora, never a pigment item — the Ather's palette is its garden's. · Dither, not blend:
+the honest cost is a screen door up close. · The pane wears only the glass family; the palette guard sums per shape.
+
+**Files:** `voxel/depth.ts` (`GLASS_MATS`) · `voxel/registry.ts` · `voxel/recipes.ts` · `voxel/light-passes.ts` ·
+`voxel/greedy.ts` · `voxel/pieces.ts` (glass family, `pane`) · `voxel3d/piece-mesh.ts` (cutout program) ·
+`voxel3d/tex/{tiles,item-icon}.ts` · `voxel3d/attrs.ts` · `voxel3d/VoxelWorld.tsx` · `voxel3d/glass.test.ts` · `palette.test.ts`.
+
 ## 🚪 Shimmer — **THE DOORWAY FAMILY: SMALL · DOUBLE · GRAND, AND OPEN IS A POSE** (2026-09-13, hub lane `853d8d28`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID 1w5FlXSMBEbgt1PeUuHlX` from `73dce9f`**, served == disk, worker repinned. Sweep **272/272**. pieces 67/0 · piece-origin 99/0 · palette 2196/0 (240 pieces).*
 
 **Left off:** Alex: *"the doorways we have rn aren't looking too good"* → rendered today's + four candidates in a
