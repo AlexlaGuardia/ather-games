@@ -11,6 +11,36 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🚪 Shimmer — **THE DOORWAY FAMILY: SMALL · DOUBLE · GRAND, AND OPEN IS A POSE** (2026-09-13, hub lane `853d8d28`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID 1w5FlXSMBEbgt1PeUuHlX` from `73dce9f`**, served == disk, worker repinned. Sweep **272/272**. pieces 67/0 · piece-origin 99/0 · palette 2196/0 (240 pieces).*
+
+**Left off:** Alex: *"the doorways we have rn aren't looking too good"* → rendered today's + four candidates in a
+half-thick wall (`$SP/doors.png`) → *"a doorway .. like 3x3 with craftable doors that can be placed in them"* → one
+question, answer: **a family.** A doorway is a **frame** — full-cell posts either side, a one-cell head, **0.5 deep** so
+it sits flush in a beam wall — around an opening of passable cells the matching door snaps into (a door places into
+AIR; passable cells are never written). **`doorway` 3×3 → 1×2 opening (the existing `door`) · `doorway_double` 4×3 →
+2×2 (`door_double`) · `doorway_grand` 5×4 → 3×3 (`door_grand`).** The old `doorway` was a 1×3 slot in a 0.9-deep frame
+— a hole a cell taller than the door hung in it, poking out both faces of the wall.
+**★ Opening is a POSE now.** `visualRotation` (rotate the whole piece a quarter when open) is retired: it could only
+ever draw one leaf in one cell. Every openable shape authors shut + open geometry and the renderer keeps a mesh per
+pose (`door:open`), so a double door's two leaves swing apart and the drawn rotation is the stored one, always.
+The family was rendered shut and open from the SHIPPED renderer before deploy (`$SP/family.png`).
+**Blueprints:** the five old doorway placements (Hazel 1, Mallow 1, Sax 1, Yarrow 2) were dropped from the JSONs by hand;
+the scripts carry a note. Alex is rebuilding the four in the editor anyway.
+
+**Next:**
+1. ⛔ **ALEX CRAFTS A DOORWAY + DOOR** — cut a 3-wide, 3-tall hole in a beam wall, place the frame, place the door in the
+   middle bottom cell, E to swing it. Then the double in a shop front. The leaf's ledges and pull are placeholder.
+2. Door and frame in DIFFERENT materials read best (dark wood leaf, pale posts) — craft them from different blocks.
+3. The grand door's open leaves stand half a cell into the room's air (1.5 long in a 1-deep footprint) — deliberate.
+4. `arch` (3 wide) overlaps this territory now; keep as the roofed passage, or fold it into the family. Alex's call.
+
+**Decisions:** frames are 0.5 deep — the beam wall's thickness — and sit centred in a block wall (recessed 0.25 each
+face) rather than a second, 1-deep set. · Openings start one cell in and sit on the floor; `pieces.test` asserts every
+frame's opening equals its door's footprint. · `window` replaces `doorway` as the 1-wide exemplar in three suites.
+
+**Files:** `voxel/pieces.ts` · `voxel3d/piece-mesh.ts` (`frame`, `leaf`, poses, a mesh per pose) · `voxel/pieces.test.ts` ·
+`voxel/stamps.test.ts` · `voxel3d/palette.test.ts` (240) · `data/blueprints/{hazel,mallow,sax,yarrow}*.json` · the four scripts.
+
 ## 🎨 Shimmer — **A PIECE WEARS ITS MATERIAL'S BLOCK — AND THE AXIS IS EVERY MASONRY BLOCK** (2026-09-13 small hours, hub lane `853d8d28`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID i9pbWWqVvzscMi-Ekx3SD` from `3b70bc3`**, served == disk, worker repinned. Sweep **272/272**. piece-texture.test **48/0, 4 mutations fire**. ITEM-ART: 192 piece icons, 0 missing.*
 
 **Left off:** Alex: *"work on the beams textures.. we'll need to make sure we have a version for each of the solid
