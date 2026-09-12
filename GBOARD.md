@@ -11,6 +11,36 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔒 Shimmer — **TAB WAS A DOOR INTO A MODE NOBODY ASKED FOR, AND THE PIECES BEHIND IT WERE NAMELESS** (2026-09-12 AM, hub lane `853d8d28`) · *Last touched 2026-09-12 — build-lock 17/0, 7 mutations fire. tsc 7 (baseline).*
+
+**Left off:** Alex (09-11): Tab flipped him into build mode in the Wilds, and the pieces he placed could not be removed
+afterwards. Two rulings: **build mode is locked to the Home Plot**, and **a placed piece must be removable**. Root of the
+second: deconstruct lived ONLY inside the build branch; a piece's cells are `STRUCTURE` (48/49), which has no registry
+row, so the mine path read `blockDef === undefined`, `breakSeconds` refused, and the HUD showed no name. Unbreakable and
+unnamed in the same breath.
+**Built:** (1) `onPlot` in the parent, fed by `World` edge-reporting `space.current` per frame (`onSpace`) — off the ref,
+not `enterSpace`, because the restore path writes the ref directly. Tab off the plot toasts *"building is for your Home
+Plot"* and stays suppressed (the refusal is in the THUNK, not the chain's `when` — an unrun `ui.build` hands Tab to the
+browser). Walking out with the palette up drops the mode (effect); the frame branch reads the ref too, so no ghost for
+the render-later gap. (2) `deconstruct(found)` is one closure, called from build mode AND a new piece branch above the
+mine path: **what you placed you can always take back, in either mode; a generated piece (`gen`) is refused by name —
+"not yours to take"** — so Hazel's door is not something a swing removes, and with build mode plot-only there is no
+other road to it. Full refund, instant, matching build mode (a dial).
+
+**Next:**
+1. ⛔ **ALEX'S CALL** — is build mode staying at all? He is "on the fence". If it goes, `deconstruct` from the mine side is
+   the half that survives.
+2. Instant take-back beside a block you are mining could eat a fence by accident. If it reads that way: a short hold, or
+   a `hardness` row for STRUCTURE so it goes through `tickBreak` like everything else.
+3. Gen pieces on the PLOT (the fold's own stamps) are still tombstonable from build mode — unchanged, deliberate.
+
+**Decisions:** the plot gate lives in three layers (thunk, effect, frame ref) because each covers a gap the others
+cannot: key, crossing, and the frame between them. · Gen pieces are refused outside build mode rather than tombstoned —
+"yours" is `!found.gen`, nothing about the space.
+
+**Files:** `voxel3d/VoxelWorld.tsx` (parent `onPlot` + `toggleBuild`, World `onSpace` + `deconstruct` + the piece branch)
+· `voxel3d/build-lock.test.ts` (new).
+
 ## 🌿 Shimmer — **THE THREE TRADES ARE BLUEPRINTS, AND THE AGENT THAT BUILT YARROW NEVER SAW IT** (2026-09-11 late, hub lane `c2019342`) · *Last touched 2026-09-12 — NOT deployed; prod is still `As3kDESXXUwBAti-ZWwG2` from `5c9b751`. HEAD `430bf36` == origin. Guards: blueprints 93/0 · placement 24/0 · placed 28/0. tsc 7 (baseline).*
 
 **Left off:** the previous hub (`be4e612f`) died mid-session — **credits ran out**. Measured from its transcript: the whole

@@ -1494,6 +1494,16 @@ export default function VoxelWorld() {
   // value that turns recipes.ts's `Station` field from documentation into a gate.
   const [nearTable, setNearTable] = useState(false)
   const station: Station = nearTable ? 'crafting_table' : 'hand'
+  /**
+   * ★ BUILD MODE IS THE HOME PLOT'S (Alex, 2026-09-12: "build mode should be locked to the
+   * homeplot"). `World` reports the space it is actually streaming — edge-detected off the ref in
+   * its frame loop, so the restore path (which writes `space.current` directly, not through
+   * `enterSpace`) is covered too. Tab in the Wilds says why it did nothing rather than doing
+   * nothing; and a keeper who walks OUT of the fold with the palette up is dropped out of it below,
+   * because a ghost piece over Moonwell is a mode the player did not ask for.
+   */
+  const [onPlot, setOnPlot] = useState(false)
+  useEffect(() => { if (build && !onPlot) setBuild(false) }, [build, onPlot])
 
   // ── the chat console (T / Enter / '/') — MC's chat-is-the-surface model ──────────────────────
   // Chat messages and command output land in ONE log: recent lines float on the HUD and fade
@@ -2124,7 +2134,10 @@ export default function VoxelWorld() {
       // Q swaps the model, and ONLY while drawn — with the weapon stowed Q would be a key that
       // silently changes something you cannot see, which is how a player learns not to trust a HUD.
       cycleWeapon: () => setWeaponIdx(i => { const n = (i + 1) % WEAPONS.length; setAmmoUi(WEAPONS[n].clip); return n }),
-      toggleBuild: () => setBuild(v => !v),
+      // Tab is still SUPPRESSED off the plot — the step runs and refuses here, rather than being
+      // gated out of the chain, because an unrun `ui.build` hands Tab back to the browser and the
+      // next keystroke leaves the canvas (see `SUPPRESS_DEFAULT`).
+      toggleBuild: () => { if (!onPlot) { say('building is for your Home Plot'); return } setBuild(v => !v) },
       rotatePiece: () => setRot(r => ((r + 1) % 4) as Rotation),
       // ] and [ walk the material axis. Gated on `build` because outside the palette they would be
       // keys that silently change something with nothing on screen to show it.
@@ -2132,7 +2145,7 @@ export default function VoxelWorld() {
       materialPrev: () => setMatIdx(v => (v - 1 + PIECE_MATERIALS.length) % PIECE_MATERIALS.length),
     },
   ), [consoleOpen, dialogueOpen, craftOpen, bagOpen, showSettings, cursorUIOpen, drawn, build, showMap,
-      openChest, nearGreg, nearTable, nearMist, hasParty, openCursorUI, closeCursorUI, closeBag,
+      openChest, nearGreg, nearTable, nearMist, hasParty, onPlot, say, openCursorUI, closeCursorUI, closeBag,
       closeDialogue, startSpar])
 
   /**
@@ -2269,7 +2282,7 @@ export default function VoxelWorld() {
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
           plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut} ctxLostOut={ctxLostOut}
-          onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
+          onNearTable={setNearTable} onSpace={s => setOnPlot(s === 'plot')} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
@@ -4016,7 +4029,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, build, pieceId, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onSpace, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -4109,6 +4122,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   sparring: boolean
   /** Near a placed crafting table — the parent turns this into recipes.ts's `Station`. */
   onNearTable: (near: boolean) => void
+  /** The space being streamed, on every change (crossing OR restore). The parent gates build mode on it. */
+  onSpace: (space: Space) => void
   /** The console's world-verbs, filled on mount — only World can move the walker safely. */
   pot: { clock: () => PotClock; save: () => void; gain: (s: Spirit) => void }
   /**
@@ -4423,6 +4438,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   /** Edge latch for the collar prompt — see the emitter in the foe loop. */
   const lastCollarNear = useRef(false)
   const lastNearTable = useRef(false)
+  const lastSpace = useRef<Space | null>(null)
   // The gate: built (sealed or open, matching whatever `tutorial.current.stage` says at the moment
   // its columns arrive) exactly once, then opened exactly once more if the quest completes later.
   const gateBuilt = useRef(false)
@@ -9459,6 +9475,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       const found = !!hit && voxel(hit.x, hit.y, hit.z) === MAT.CRAFT_TABLE
       if (found !== lastNearTable.current) { lastNearTable.current = found; onNearTable(found) }
     }
+    // Same edge shape for the space. Read off the ref, not off `enterSpace`, so the restore path
+    // (`space.current = savedSpace`, no callback) reports too.
+    if (space.current !== lastSpace.current) { lastSpace.current = space.current; onSpace(space.current) }
     {
       // Aim AND range: `aimed` says the crosshair is on a silhouette, `nearest` says you walked to
       // it. A presence is legible from across the patch on purpose (the consent design), so without
@@ -9482,8 +9501,44 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     }
 
     prof.current.mark('interact')
+    /**
+     * ── ★ TAKING A PIECE BACK, from either mode (Alex, 2026-09-12: "there's no way to break
+     * objects placed in this way") ──────────────────────────────────────────────────────────────
+     * Deconstruct lived ONLY inside the build branch, and a piece's cells are `STRUCTURE`, which
+     * has no registry row — so outside build mode the mine path read `blockDef(48) === undefined`,
+     * `breakSeconds` refused, and the HUD showed no name. A wall you had placed and then Tabbed out
+     * of was unbreakable and unnamed. Now the SAME body runs from the mine path too: what you
+     * placed, you can always take back, in whichever mode you are in.
+     *
+     * ⚠ A GENERATED piece is not yours. Build mode tombstones it (the fold's own stamps); the mine
+     * path refuses it by name, so Hazel's door is not something a swing removes. With build mode
+     * locked to the plot, that is the only way a world-made piece in the Wilds can be reached.
+     */
+    const deconstruct = (found: Placement & { gen?: string }) => {
+      const fdef = pieceDef(found.pieceId)!
+      for (const c of cellsOf(found, fdef)) if (c.solid) setVoxel(c.x, c.y, c.z, AIR)
+      // Full refund while the loop is unproven — consequence-free experimenting is what you want
+      // while judging feel. A dial, not a ruling.
+      for (const c of fdef.cost) give(inv.current!, c.itemId, c.count)
+      placements.current = placements.current.filter(p => p !== found)
+      const fk = colOf(found.x, found.z)
+      if (found.gen) {
+        // A generated piece: what persists is its ABSENCE. The occupancy edit self-erases
+        // (setVoxel's diff against generated AIR is a no-op), so the tombstone is the record.
+        genRemovedByCol.current.set(fk, [...(genRemovedByCol.current.get(fk) ?? []), found.gen])
+      } else {
+        piecesByCol.current.set(fk, (piecesByCol.current.get(fk) ?? []).filter(p => p !== found))
+      }
+      dirtySaves.current.add(fk)
+      pieces.sync(placements.current)
+      onInvChange()
+    }
+
     // ── build mode: ghost, place, deconstruct ────────────────────────────────────────────────
-    if (build) {
+    // ⚠ `space` as well as `build`: the parent drops the mode on a crossing, but that lands a
+    // render later, and a ghost over the Wilds for even one frame is the mode the plot lock says
+    // cannot exist. The frame reads the ref, so the lock holds from the first frame out.
+    if (build && space.current === 'plot') {
       const def = pieceDef(pieceId)!
       // ★ AUTO-FACING (2026-08-08, Alex's ask): pieces orient from where you LOOK, live — turn to
       // face a different wall and the ghost turns with you. `rot` (the R key) is a persistent
@@ -9532,27 +9587,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // Deconstruct: aim at ANY cell the piece occupies, not just its origin.
       if (hit && mouse.current.left) {
         const found = placementAt(placements.current, hit.x, hit.y, hit.z)
-        if (found) {
-          const fdef = pieceDef(found.pieceId)!
-          for (const c of cellsOf(found, fdef)) if (c.solid) setVoxel(c.x, c.y, c.z, AIR)
-          // Full refund while the loop is unproven — consequence-free experimenting is what you want
-          // while judging feel. A dial, not a ruling.
-          for (const c of fdef.cost) give(inv.current!, c.itemId, c.count)
-          placements.current = placements.current.filter(p => p !== found)
-          const fk = colOf(found.x, found.z)
-          const genId = (found as Placement & { gen?: string }).gen
-          if (genId) {
-            // A generated piece: what persists is its ABSENCE. The occupancy edit self-erases
-            // (setVoxel's diff against generated AIR is a no-op), so the tombstone is the record.
-            genRemovedByCol.current.set(fk, [...(genRemovedByCol.current.get(fk) ?? []), genId])
-          } else {
-            piecesByCol.current.set(fk, (piecesByCol.current.get(fk) ?? []).filter(p => p !== found))
-          }
-          dirtySaves.current.add(fk)
-          pieces.sync(placements.current)
-          onInvChange()
-          mouse.current.left = false
-        }
+        if (found) { deconstruct(found); mouse.current.left = false }
       }
 
       onLook(hit ? { name: `${def.name}${!afford ? ' — need materials' : fits ? '' : ' — blocked'}`, progress: 0, refused: !fits || !afford, channel: false } : null)
@@ -9658,6 +9693,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         boreToldAbsolute.current = null
         boreLook.current = null
       }
+    }
+
+    // ── a placed piece, outside build mode ───────────────────────────────────────────────────
+    // Above the mine path because a `STRUCTURE` cell has no block definition and would fall
+    // straight through it. `pieceLook` carries the name to the HUD line below, which would
+    // otherwise read nothing at all for a cell you are plainly looking at.
+    let pieceLook: { name: string; refused: boolean } | null = null
+    if (hit && (hit.material === STRUCTURE || hit.material === STRUCTURE_HALF)) {
+      const found = placementAt(placements.current, hit.x, hit.y, hit.z) as (Placement & { gen?: string }) | undefined
+      const pname = found ? pieceDef(found.pieceId)?.name ?? 'structure' : 'structure'
+      const yours = !!found && !found.gen
+      if (found && yours && mouse.current.left && !weaponDrawn) { deconstruct(found); mouse.current.left = false }
+      pieceLook = { name: yours ? pname : `${pname} — not yours to take`, refused: !yours && mouse.current.left && !weaponDrawn }
     }
 
     // ── mine ─────────────────────────────────────────────────────────────────────────────────
@@ -10419,7 +10467,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // readouts describe the same aimed block, so showing both would be two answers to one question;
     // the held channel is the more specific truth and it is the one the keeper is paying for.
     const bl = boreLook.current
-    onLook(hit && def
+    // A piece first: its cell has no `def`, so the block readout below would say nothing for it.
+    if (pieceLook) onLook({ ...pieceLook, progress: 0, channel: false })
+    else onLook(hit && def
       ? {
           name: bl
             ? bl.absolute
