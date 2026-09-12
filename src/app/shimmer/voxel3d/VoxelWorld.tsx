@@ -37,6 +37,7 @@ import { ZONE_ANCHORS, zoneAt } from '../voxel/zones'
 import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
 import { lightOpaque } from '../voxel/light-passes'
+import { placementRotation } from './piece-facing'
 import { materialAt, MAT, isPlant, isHerb, isScatter, isSapling, isHalfMat, isTopSlab, baseOf, isSolid, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, setBreakRate, getBreakRate, type BreakState, type RayHit } from '../voxel/mine'
@@ -9457,15 +9458,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     let pieceTarget: { target: Placement; def: PieceDef; fits: boolean } | null = null
     if (heldPiece) {
       const def = heldPiece
-      // ★ AUTO-FACING (2026-08-08, Alex's ask): pieces orient from where you LOOK, live — turn to
-      // face a different wall and the ghost turns with you. `rot` (the R key) is a persistent
-      // manual quarter-turn ON TOP of that, not the whole job. The mapping is anchored to the
-      // stair: authored rising toward −Z at rot 0, instanced at −rot·π/2 about Y, so rot 1 rises
-      // toward +X — and "rises AWAY from the player" (walkable the way you're going, doors facing
-      // you) works out to rot = 2 − round(yaw / 90°), mod 4. Quantized from the same `aim` the
-      // raycast uses, so the ghost and the crosshair can never disagree about "forward".
-      const yawRot = (2 - Math.round(Math.atan2(aim.x, aim.z) / (Math.PI / 2)) + 8) % 4
-      const face = ((yawRot + rot) % 4) as Rotation
+      // ★ FACING FROM DIRECTION AND PLACEMENT (08-08 auto-facing, widened 09-12 on Alex's ask):
+      // a vertical hit face decides (the piece goes INTO the wall it is set against), the yaw
+      // decides on the ground, and `rot` (the R key) is a manual quarter-turn on top of either.
+      // `piece-facing.ts` owns the rule; this frame only hands it this frame's aim and hit, so
+      // the ghost and the crosshair can never disagree about "forward".
+      const face = placementRotation(aim, hit, rot)
       // ★ ONE PREVIEW, NOT TWO (Alex, 2026-08-08: "it would preview a block away from the
       // highlighted block"). The wireframe marks the cell your crosshair HITS; the ghost sits in
       // the empty cell you place AGAINST — one apart by design, but showing both reads as the
