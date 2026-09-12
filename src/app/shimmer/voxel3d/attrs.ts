@@ -97,6 +97,10 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.THATCH]: 0xc4a25a,        // dry straw, a second roof beside the shingles
   [MAT.TIMBER_STACK]: 0x8a6a3c,  // goldwood logs lying together; ends on the sides, bark on top
   [MAT.GLASS]: 0x4a5566,         // the LEAD of a leaded window — the panes are open, so this is what draws
+  [MAT.COBBLESTONE]: 0x807c78,   // rounded field stones in mortar, between STONE and CUT_STONE in value
+  [MAT.CANVAS]: 0xe4dac0,        // undyed cloth; stripes are a later ask
+  [MAT.STONE_STACK]: 0x9aa0a4,   // cut stone, piled — the same dressed grey, so a yard reads as one material
+  [MAT.RUBBLE_HEAP]: 0x6e6862,   // rubble's own grey; the painter, not the colour, says "loose"
   // ⚠ ROSY, NOT YELLOW-TAN, AND THAT IS A LEGIBILITY FIX RATHER THAN A PREFERENCE. The first pass
   // took sand's own hue a step deeper (0xc6a76c) and landed it squarely between beach sand and
   // GOLDWOOD PLANKING — a warm banded cube beside a warm grained cube, which is the whole point of

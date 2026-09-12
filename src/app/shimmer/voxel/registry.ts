@@ -157,6 +157,14 @@ export const BLOCKS: BlockDef[] = [
   { material: MAT.TIMBER_STACK, name: 'Timber Stack', hardness: 1.0, skill: null, minTier: 0, drops: [{ itemId: 'timber_stack', count: 1 }], fastSkill: 'forestry', placeable: true },
   // Glass (2026-09-12): quick to break, no tool has a claim on it, and it comes back whole.
   { material: MAT.GLASS, name: 'Glass', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'glass', count: 1 }], placeable: true },
+  // ── Batch 3 (2026-09-12): the stone yard and the shop front ─────────────────────────────────
+  // Cobble is masonry (prospecting), a little softer than cut stone; canvas is cloth, anyone's;
+  // a stone stack is dressed blocks piled — prospecting, and the hardest of the batch; a rubble
+  // heap is loose, so the easiest.
+  { material: MAT.COBBLESTONE, name: 'Cobblestone', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'cobblestone', count: 1 }], placeable: true },
+  { material: MAT.CANVAS, name: 'Canvas', hardness: 0.3, skill: null, minTier: 0, drops: [{ itemId: 'canvas', count: 1 }], placeable: true },
+  { material: MAT.STONE_STACK, name: 'Stone Stack', hardness: 1.6, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'stone_stack', count: 1 }], placeable: true },
+  { material: MAT.RUBBLE_HEAP, name: 'Rubble Heap', hardness: 0.5, skill: null, minTier: 0, drops: [{ itemId: 'rubble_heap', count: 1 }], fastSkill: 'prospecting', placeable: true },
   { material: MAT.SANDSTONE, name: 'Sandstone', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'sandstone', count: 1 }], fastSkill: 'prospecting', placeable: true },
 
   // ── ★ THE WEATHERED MASONRY (2026-08-27) ────────────────────────────────────────────────────

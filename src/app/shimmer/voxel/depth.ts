@@ -603,6 +603,19 @@ export const MAT = {
    * panes open — so it needs no blending and no sorting.
    */
   GLASS: 91,
+  /**
+   * ── BATCH 3 (2026-09-12, same night): the stone yard and the shop front ─────────────────────
+   * Cobble for paths and footings (rounded stones in mortar, the cut stone's rougher cousin), canvas
+   * for Mallow's awning (a colour, not a shape — her script's R2 family), a stone stack for Sax's
+   * yard (the timber stack's sibling), and a rubble HEAP: loose stones, Sax's R4 — a block whose
+   * face says "piled", which the rubble cube's rock texture never did. ⚠ The heap is still a CUBE;
+   * a mounded silhouette is a piece's job (`pieces.ts`), and that is the next step if the cube
+   * does not read.
+   */
+  COBBLESTONE: 92,
+  CANVAS: 93,
+  STONE_STACK: 94,
+  RUBBLE_HEAP: 95,
 } as const
 
 /**

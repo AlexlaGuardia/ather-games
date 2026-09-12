@@ -67,6 +67,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.PLASTER, MAT.THATCH, MAT.TIMBER_STACK,
   // Glass, 2026-09-12: the one tile whose alpha is COVERAGE — the glass pass discards below half.
   MAT.GLASS,
+  // Batch 3, 2026-09-12: cobble, canvas, a stone stack (per-face) and a rubble heap.
+  MAT.COBBLESTONE, MAT.CANVAS, MAT.STONE_STACK, MAT.RUBBLE_HEAP,
   // The waymark + the plot's cloud-wall, added 2026-08-15 with the passages layer.
   MAT.WAYMARK, MAT.CLOUD_WALL,
   // The cauldron added 2026-08-18 with brewing — the alchemy station.
@@ -595,6 +597,80 @@ function paintShingles(dst: Layer, size: number, base: [number, number, number],
       let col = shade(base, tone)
       if (lip) col = shade(col, 22)
       if (shadow || seam) col = shade(col, -40)
+      put(dst, size, x, y, col, 0)
+    }
+  }
+}
+
+/**
+ * Stones: a jittered grid of rounded cells, each its own tone, with a dark gap where two cells
+ * meet — two nearest-centre distances, and the gap is where they are close. One painter, two
+ * looks: COBBLE is tight cells in mortar (a laid surface); a RUBBLE HEAP is loose cells with wide
+ * black gaps and more tone spread (stones that were tipped, not set). The difference between a
+ * yard's path and a yard's pile is the parameters, which is the honest amount of difference.
+ */
+function paintStones(dst: Layer, size: number, base: [number, number, number], seed: number,
+  o: { cells: number; jitter: number; gap: number; gapShade: number; tone: number; mortar: boolean }) {
+  const n = o.cells, cs = size / n
+  const cx = (i: number, j: number) => ((((i % n) + n) % n) + 0.5 + (h2(((i % n) + n) % n, ((j % n) + n) % n, seed) - 0.5) * o.jitter) * cs
+  const cy = (i: number, j: number) => ((((j % n) + n) % n) + 0.5 + (h2(((i % n) + n) % n, ((j % n) + n) % n, seed + 1) - 0.5) * o.jitter) * cs
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const gi = Math.floor(x / cs), gj = Math.floor(y / cs)
+      let d1 = Infinity, d2 = Infinity, id = 0
+      for (let j = gj - 1; j <= gj + 1; j++) for (let i = gi - 1; i <= gi + 1; i++) {
+        // wrap the centre into the tile so the texture tiles seamlessly across a wall
+        let px = cx(i, j) + (i < 0 ? -size : i >= n ? size : 0)
+        let py = cy(i, j) + (j < 0 ? -size : j >= n ? size : 0)
+        const dx = x + 0.5 - px, dy = y + 0.5 - py
+        const d = Math.sqrt(dx * dx + dy * dy)
+        if (d < d1) { d2 = d1; d1 = d; id = ((i % n) + n) % n + n * (((j % n) + n) % n) }
+        else if (d < d2) d2 = d
+      }
+      const edge = (d2 - d1) / cs                      // 0 at a boundary, larger deep in a cell
+      const tone = (h2(id, 7, seed + 3) - 0.5) * 2 * o.tone
+      const dome = Math.min(1, edge * 2.2) * 10 - 5    // a little rounding: lighter in the middle
+      let col = shade(base, tone + dome + (h2(x, y, seed + 9) - 0.5) * 6)
+      if (edge < o.gap) col = shade(o.mortar ? shade(base, -18) : base, o.gapShade)
+      put(dst, size, x, y, col, 0)
+    }
+  }
+}
+
+/**
+ * Canvas: a plain weave. Warp and weft alternate over two-texel threads, so the surface reads as
+ * cloth at the distance a wall is looked at, with a slow blotch so a whole awning is not one
+ * flat tone. Undyed; a striped awning is a second tile, when Mallow asks.
+ */
+function paintCanvas(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const t = Math.max(1, Math.round(size / 16))
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const over = (Math.floor(x / t) + Math.floor(y / t)) % 2 === 0
+      const thread = over ? (y % t === 0 ? -8 : 4) : (x % t === 0 ? -8 : 0)
+      const blotch = (vnoise(x, y, size, 3, seed) - 0.5) * 2 * 5
+      put(dst, size, x, y, shade(base, thread + blotch + (h2(x, y, seed + 2) - 0.5) * 3), 0)
+    }
+  }
+}
+
+/**
+ * A stone stack: dressed blocks piled. The timber stack's sibling, squared: the SIDES show a 2×2
+ * of block ends, each with a chamfer and a dark joint between; the top shows two long blocks and
+ * one seam. Same value as cut stone so a yard reads as one material in two states.
+ */
+function paintStoneStack(dst: Layer, size: number, base: [number, number, number], seed: number, face: number) {
+  const half = size / 2
+  const joint = Math.max(1, Math.round(size / 16))
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const lx = x % half, ly = y % half
+      const qx = Math.floor(x / half), qy = Math.floor(y / half)
+      const onJoint = face === SIDE ? (lx < joint || ly < joint) : (ly < joint)
+      const chamfer = face === SIDE ? (lx === joint || ly === joint) : (ly === joint)
+      const tone = (h2(qx, qy + (face === SIDE ? 0 : 7), seed) - 0.5) * 2 * 10
+      const grit = (h2(x, y, seed + 5) - 0.5) * 2 * 5
+      const col = onJoint ? shade(base, -55) : chamfer ? shade(base, 14) : shade(base, tone + grit)
       put(dst, size, x, y, col, 0)
     }
   }
@@ -1292,6 +1368,10 @@ export function paintFor(material: number, face: number, size: number): Layer {
     case MAT.THATCH: paintThatch(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.TIMBER_STACK: paintTimberStack(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, face); break
     case MAT.GLASS: paintGlass(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
+    case MAT.COBBLESTONE: paintStones(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, { cells: 4, jitter: 0.35, gap: 0.10, gapShade: -44, tone: 18, mortar: true }); break
+    case MAT.CANVAS: paintCanvas(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
+    case MAT.STONE_STACK: paintStoneStack(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, face); break
+    case MAT.RUBBLE_HEAP: paintStones(dst, size, rgbOf(MATERIAL_COLOR[material]), seed, { cells: 3, jitter: 0.5, gap: 0.16, gapShade: -70, tone: 30, mortar: false }); break
     // ★ THE WEATHERED THREE — base painter first, then the overlay. Same courses as their clean
     // siblings by construction, which is the whole point: mixed into one wall they must line up.
     case MAT.MOSSY_STONE_BRICK: {

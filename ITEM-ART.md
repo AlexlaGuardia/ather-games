@@ -4,11 +4,11 @@
 > registry, the recipe table and the tool table, and it classifies each item by calling the same
 > icon path the game calls. A hand-kept version of this file would be wrong within a week.
 
-Items reachable in voxel3d: **256**
+Items reachable in voxel3d: **264**
 
 | status | count | meaning |
 |---|---|---|
-| 🟦 derived | 55 | wears its own block's faces. Never needs hand art. |
+| 🟦 derived | 63 | wears its own block's faces. Never needs hand art. |
 | 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
 | 🧊 mesh | 2 | rendered from the scatter geometry the world instances. Never needs hand art. |
@@ -125,9 +125,13 @@ source of truth for what that block looks like, and the two drift the first time
 - `block_subsoil_slab`
 - `block_topsoil`
 - `block_topsoil_slab`
+- `canvas`
+- `canvas_slab`
 - `cauldron`
 - `chest`
 - `clay_pot`
+- `cobblestone`
+- `cobblestone_slab`
 - `cracked_stone_brick`
 - `cracked_stone_brick_slab`
 - `crafting_table`
@@ -154,6 +158,8 @@ source of truth for what that block looks like, and the two drift the first time
 - `plaster`
 - `plaster_slab`
 - `rubble`
+- `rubble_heap`
+- `rubble_heap_slab`
 - `rubble_slab`
 - `sandstone`
 - `sandstone_slab`
@@ -166,6 +172,8 @@ source of truth for what that block looks like, and the two drift the first time
 - `starwillow_log`
 - `stone_brick`
 - `stone_brick_slab`
+- `stone_stack`
+- `stone_stack_slab`
 - `stonecutter`
 - `thatch`
 - `thatch_slab`

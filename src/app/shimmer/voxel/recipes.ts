@@ -273,6 +273,23 @@ export const RECIPES: RecipeDef[] = [
   // Glass: sand, fused. Hand work like every material (mining is the gate); the sand is the trip.
   { id: 'glass', name: 'Glass', station: 'hand', mana: 0,
     input: [{ itemId: 'block_sand', count: 2 }], output: { itemId: 'glass', count: 2 } },
+  // ── BATCH 3 (2026-09-12) ────────────────────────────────────────────────────────────────────
+  // Cobble: rubble knocked round. Three for two by hand, three for three at the cutter — a milder
+  // loss than cut stone (4 → 2 / 3) and break-even at best, because `workshop.test` rules masonry
+  // never multiplies: stone came from a quarry, and a generous brick would invert the grammar.
+  { id: 'cobblestone', name: 'Cobblestone', milled: 3, family: 'stone', station: 'hand', mana: 0,
+    input: [{ itemId: 'rubble', count: 3 }], output: { itemId: 'cobblestone', count: 2 } },
+  // Canvas: rushes woven. Tufts again — they are the fibre this world gathers by the armful.
+  { id: 'canvas', name: 'Canvas', station: 'hand', mana: 0,
+    input: [{ itemId: 'grass_tuft', count: 4 }], output: { itemId: 'canvas', count: 2 } },
+  // Stone stack: four dressed blocks piled — stacking, not extraction, so no `milled` (the timber
+  // stack's argument). Tagged stone so the cutter lists it beside the rest of the yard.
+  { id: 'stone_stack', name: 'Stone Stack', family: 'stone', station: 'hand', mana: 0,
+    input: [{ itemId: 'cut_stone', count: 4 }], output: { itemId: 'stone_stack', count: 1 } },
+  // Rubble heap: three rubble tipped together. Tagged stone because it eats rubble; no `milled` —
+  // a cutter cannot pile stones better than a hand can.
+  { id: 'rubble_heap', name: 'Rubble Heap', family: 'stone', station: 'hand', mana: 0,
+    input: [{ itemId: 'rubble', count: 3 }], output: { itemId: 'rubble_heap', count: 1 } },
 
   // ── THE STATION ITSELF ──────────────────────────────────────────────────────────────────────
   // Craftable by hand, and it must stay that way: a crafting table gated behind a crafting table is
