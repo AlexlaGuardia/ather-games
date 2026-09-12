@@ -16,7 +16,7 @@
 // fails the build on it, but it should never be written.
 
 import * as THREE from 'three'
-import { PIECES, basePieceId, pieceDef, visualRotation, type PieceDef, type Placement } from '../voxel/pieces'
+import { PIECES, basePieceId, pieceDef, visualRotation, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
 
 /** Provisional colours — wood-toned so a shed reads as a shed. Not a look call. */
 const TINT: Record<string, number> = {
@@ -58,6 +58,36 @@ const TINT: Record<string, number> = {
  */
 export const pieceGeometry = (def: PieceDef): THREE.BufferGeometry => buildGeometry(def)
 export const pieceTint = (def: PieceDef): number => TINT[basePieceId(def.id)] ?? 0x999999
+
+/**
+ * ── ★★ WHERE A ROTATED PIECE'S MESH GOES, SO THAT IT LANDS IN THE CELLS IT OCCUPIES ──────────
+ * (found 2026-09-12; shipping since auto-facing on 08-08)
+ *
+ * Geometry is authored with its origin at the cell's MIN CORNER (`buildGeometry` translates by
+ * +0.5), and an instance rotates about that origin. Rotating a min-corner-origin box by −90° swings
+ * its whole body to −x: a beam at rot 1 drew one cell WEST of the cell it collided and lit in, rot 2
+ * one cell west and north, rot 3 one cell north. `cellsOf` keeps every footprint in the +x/+z
+ * quadrant of the origin at every rotation, so the two disagreed for three rotations out of four.
+ * With auto-facing that is most placements. Measured with the live renderer: beam rot 1 mesh
+ * x∈[9.37,9.63] against occupancy x∈[10,11].
+ *
+ * Every symptom traced back here: the ghost "previewing a block away from the highlighted block"
+ * (08-08, answered by hiding the wireframe), the wall panel "behind" the beam (the panel is
+ * centre-origin and was in the RIGHT cell), the light shadow beside the post instead of under it.
+ *
+ * This is the translation that puts the rotated body back over `cellsOf`: the rotated footprint's
+ * min corner relative to the rotated origin corner. Applied to instances AND the ghost from the
+ * same function, so they cannot disagree again. Taken from the VISUAL rotation so an open door
+ * swings inside its own cell, as `PieceDef.openable` promises.
+ */
+export function pivotOffset(def: PieceDef, rot: Rotation): { x: number; z: number } {
+  switch (rot) {
+    case 1: return { x: def.d, z: 0 }
+    case 2: return { x: def.w, z: def.d }
+    case 3: return { x: 0, z: def.w }
+    default: return { x: 0, z: 0 }
+  }
+}
 
 function buildGeometry(def: PieceDef): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = []
@@ -165,11 +195,15 @@ function buildGeometry(def: PieceDef): THREE.BufferGeometry {
       // Two springings and a stepped head. The steps are what read as a curve at block scale —
       // a true arc modelled at this size averages to a smudge, the same reason the collar badge
       // had to be redrawn to a small-size budget.
-      box(0.9, 3, 0.9, -1, 1.5, 0)
-      box(0.9, 3, 0.9, 1, 1.5, 0)
-      box(0.9, 0.5, 0.9, 0, 2.75, 0)
-      box(0.5, 0.4, 0.9, -0.62, 2.3, 0)
-      box(0.5, 0.4, 0.9, 0.62, 2.3, 0)
+      // ⚠ AUTHORED ABOUT THE MIDDLE CELL, SO SHIFTED +1 TO THE MIN-CORNER CONVENTION EVERY OTHER
+      // ARM USES (2026-09-12). Before this the arch drew one cell west of the three it occupied —
+      // `piece-origin.test.ts` measures every piece against `cellsOf`, and this was the one that
+      // was wrong at rot 0 as well.
+      box(0.9, 3, 0.9, 0, 1.5, 0)
+      box(0.9, 3, 0.9, 2, 1.5, 0)
+      box(0.9, 0.5, 0.9, 1, 2.75, 0)
+      box(0.5, 0.4, 0.9, 0.38, 2.3, 0)
+      box(0.5, 0.4, 0.9, 1.62, 2.3, 0)
       break
     }
     case 'bracket': {
@@ -390,8 +424,11 @@ export function createPieceRenderer(): PieceRenderer {
       // because the footprint must NOT move; see `PieceDef.openable`. Reading `p.rot` here is what
       // makes an opened door look shut, and reading `visualRotation` in `cellsOf` is what makes it
       // swing its collision into rock. They are opposite mistakes on the same pair of values.
-      q.setFromAxisAngle(Y, -(visualRotation(p, pieceDef(p.pieceId)!) * Math.PI) / 2)
-      v.set(p.x, p.y, p.z)
+      const pdef = pieceDef(p.pieceId)!
+      const vr = visualRotation(p, pdef)
+      const po = pivotOffset(pdef, vr)   // ★ see `pivotOffset` — without it a rotated piece draws a cell off
+      q.setFromAxisAngle(Y, -(vr * Math.PI) / 2)
+      v.set(p.x + po.x, p.y, p.z + po.z)
       inst.setMatrixAt(i, m4.compose(v, q, one))
       counts.set(base, i + 1)
       // ── fence arms: derived, never stored (MC's connection model) ──
@@ -451,7 +488,8 @@ export function createPieceRenderer(): PieceRenderer {
       ghost.geometry = g
       ghostMat.color.setHex(okToPlace ? 0x7fd4ff : 0xff6b6b)
       ghost.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -(rot * Math.PI) / 2)
-      ghost.position.set(x, y, z)
+      const po = pivotOffset(pieceDef(pieceId)!, rot as Rotation)   // the same correction the instances get
+      ghost.position.set(x + po.x, y, z + po.z)
       ghost.visible = true
     },
     hideGhost: () => { ghost.visible = false },
