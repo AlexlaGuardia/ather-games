@@ -37,8 +37,11 @@ and the open door, with 0.1 tolerance for the bracket/hook that sink into their 
 2. The 08-08 wireframe-hiding fix can be revisited: with the ghost in the right cell, showing both marks may now read
    fine. Alex's call.
 
-**Decisions:** measured before reasoning — a 12-line tsx script over the real renderer settled in a minute what three
-"explanations" had not. · Tolerance 0.1 in the oracle, not 1e-6: the bracket and hook sink 0.05–0.06 into the wall
+**Decisions:** **R (rotate) stays for now, on probation** (Alex, 09-12 evening: *"not against keeping it in for now
+but its an extra button to try and fit in later for controller"*). On the pad it is LB, shared with `cast.tactical`
+(the 08-23 overlap). If facing-from-placement turns out to cover what R was for, R is the first building key to go
+and the LB overlap goes with it; the chain gate (`holdsPiece`) makes that a one-line removal. · measured before
+reasoning — a 12-line tsx script over the real renderer settled in a minute what three "explanations" had not. · Tolerance 0.1 in the oracle, not 1e-6: the bracket and hook sink 0.05–0.06 into the wall
 behind them deliberately.
 
 **Files:** `voxel3d/piece-mesh.ts` (`pivotOffset`, the arch) · `voxel3d/piece-origin.test.ts` (new).
