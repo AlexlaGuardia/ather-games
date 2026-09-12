@@ -17,6 +17,10 @@
 
 import * as THREE from 'three'
 import { PIECES, basePieceId, pieceDef, visualRotation, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
+import { materialForItem } from '../voxel/registry'
+import { layerOf, TOP, SIDE } from './tex/tiles'
+import { MATERIAL_COLOR } from './attrs'
+import type { TileArray } from './tex/atlas'
 
 /** Provisional colours — wood-toned so a shed reads as a shed. Not a look call. */
 const TINT: Record<string, number> = {
@@ -57,7 +61,78 @@ const TINT: Record<string, number> = {
  * brick stair is drawn as `stair` today, so its icon is too. Callers own disposing the buffer.
  */
 export const pieceGeometry = (def: PieceDef): THREE.BufferGeometry => buildGeometry(def)
-export const pieceTint = (def: PieceDef): number => TINT[basePieceId(def.id)] ?? 0x999999
+/**
+ * ── ★ A PIECE WEARS ITS MATERIAL'S BLOCK (Alex, 2026-09-12: "work on the beams textures.. a
+ * version for each of the solid blocks we already have") ─────────────────────────────────────
+ * Until today every piece drew in a flat tint keyed on its SHAPE: a stone-brick stair and a
+ * goldwood stair were the same brown. Now the block a piece is paid in is the block it looks
+ * like — the same atlas layers the world's own cubes sample, so a beam in plaster and a wall of
+ * plaster cannot disagree about what plaster is, and a new block gets a beam the day it gets a
+ * tile. `pieceBlock` is the one derivation; the layers and the icon tint both come off it.
+ */
+export function pieceBlock(pieceId: string): number | undefined {
+  const def = pieceDef(pieceId)
+  if (!def) return undefined
+  // The cost IS the material: `pieces.ts` overrides every variant's cost to its material's item,
+  // and `palette.test.ts` § 3 asserts it, so there is no second lookup to disagree with this one.
+  const item = def.cost[0]?.itemId
+  return item ? materialForItem(item) : undefined
+}
+/** Atlas layers a piece's faces sample — top for ±y, side for the rest. */
+export function pieceLayers(pieceId: string): { top: number; side: number } {
+  const m = pieceBlock(pieceId)
+  return m === undefined ? { top: -1, side: -1 } : { top: layerOf(m, TOP), side: layerOf(m, SIDE) }
+}
+/** The icon's flat tint: the material's block colour, falling back to the old per-shape placeholder. */
+export const pieceTint = (def: PieceDef): number => {
+  const m = pieceBlock(def.id)
+  return (m !== undefined ? MATERIAL_COLOR[m] : undefined) ?? TINT[basePieceId(def.id)] ?? 0x999999
+}
+
+/**
+ * The textured piece program: one Lambert material for every instanced mesh, sampling the world's
+ * tile array with the world's own UV rule (`atlas.ts` › the UV derivation — the two in-plane axes
+ * of the face, v negated on sides so painted tiles land upright). Two per-INSTANCE attributes
+ * carry the layers, so one draw call per shape covers every material.
+ * ⚠ Geometry-local position and normal, read BEFORE the instance transform: a tile aligns to the
+ * piece's own frame, and rotating the piece rotates its grain with it.
+ */
+function createPieceMaterial(tiles: TileArray): THREE.MeshLambertMaterial {
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff })
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTiles = { value: tiles.texture }
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute float aLayerTop;
+attribute float aLayerSide;
+varying float vLayerTop;
+varying float vLayerSide;
+varying vec3 vPPos;
+varying vec3 vPNorm;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vLayerTop = aLayerTop;
+vLayerSide = aLayerSide;
+vPPos = position;
+vPNorm = normal;`)
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform sampler2DArray uTiles;
+varying float vLayerTop;
+varying float vLayerSide;
+varying vec3 vPPos;
+varying vec3 vPNorm;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec3 an = abs(vPNorm);
+  vec2 tileUv = an.y > 0.5
+    ? vPPos.xz
+    : (an.x > 0.5 ? vec2(vPPos.z, -vPPos.y) : vec2(vPPos.x, -vPPos.y));
+  float layer = an.y > 0.5 ? vLayerTop : vLayerSide;
+  if (layer >= 0.0) diffuseColor.rgb *= texture(uTiles, vec3(tileUv, layer)).rgb;
+}`)
+  }
+  return mat
+}
 
 /**
  * ── ★★ WHERE A ROTATED PIECE'S MESH GOES, SO THAT IT LANDS IN THE CELLS IT OCCUPIES ──────────
@@ -345,41 +420,74 @@ export interface PieceRenderer {
   setWorldSolid: (fn: ((x: number, y: number, z: number) => boolean) | null) => void
   /** What the last `sync` drew — instance counts per base shape and per derived mesh. For the guard. */
   stats: () => { pieces: Record<string, number>; fenceArms: number; wallPanels: number; wallCores: number }
+  /** The atlas layers the i-th instance of a base shape (or 'wall' / 'core' / 'arm') samples. For the guard. */
+  layersAt: (mesh: string, i: number) => { top: number; side: number }
   dispose: () => void
 }
 
 const MAX_PER_TYPE = 4096
 
-export function createPieceRenderer(): PieceRenderer {
+/** The two per-instance layer attributes every textured mesh carries. */
+function addLayerAttrs(g: THREE.BufferGeometry): { top: THREE.InstancedBufferAttribute; side: THREE.InstancedBufferAttribute } {
+  const top = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PER_TYPE).fill(-1), 1)
+  const side = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PER_TYPE).fill(-1), 1)
+  top.setUsage(THREE.DynamicDrawUsage); side.setUsage(THREE.DynamicDrawUsage)
+  g.setAttribute('aLayerTop', top); g.setAttribute('aLayerSide', side)
+  return { top, side }
+}
+
+/**
+ * @param tiles the world's tile array. With it, pieces wear their material's block; without it
+ *   (no atlas — a test, a fallback) they draw in the per-shape placeholder tints as before.
+ */
+export function createPieceRenderer(tiles: TileArray | null = null): PieceRenderer {
   const group = new THREE.Group()
   const geoms = new Map<string, THREE.BufferGeometry>()
   const meshes = new Map<string, THREE.InstancedMesh>()
   const mats = new Map<string, THREE.Material>()
+  const layers = new Map<string, { top: THREE.InstancedBufferAttribute; side: THREE.InstancedBufferAttribute }>()
+  const textured = tiles ? createPieceMaterial(tiles) : null
 
   for (const def of PIECES) {
     const g = buildGeometry(def)
-    const m = new THREE.MeshLambertMaterial({ color: TINT[def.id] ?? 0x999999 })
+    layers.set(def.id, addLayerAttrs(g))
+    const m = textured ?? new THREE.MeshLambertMaterial({ color: TINT[def.id] ?? 0x999999 })
     const inst = new THREE.InstancedMesh(g, m, MAX_PER_TYPE)
     inst.count = 0
     inst.frustumCulled = false   // instances span the world; the mesh's own bounds are meaningless
-    geoms.set(def.id, g); mats.set(def.id, m); meshes.set(def.id, inst)
+    geoms.set(def.id, g); if (!textured) mats.set(def.id, m); meshes.set(def.id, inst)
     group.add(inst)
   }
 
   // The fence arms: one extra instanced mesh, same law as everything else. 4096 arms = a
   // thousand fully-connected fences; the cap is a backstop, not a plan.
   const armGeo = buildFenceArm()
-  const armMat = new THREE.MeshLambertMaterial({ color: TINT.fence })
+  const armLayers = addLayerAttrs(armGeo)
+  const armMat = textured ?? new THREE.MeshLambertMaterial({ color: TINT.fence })
   const armMesh = new THREE.InstancedMesh(armGeo, armMat, MAX_PER_TYPE)
   armMesh.count = 0
   armMesh.frustumCulled = false
   group.add(armMesh)
   // The beam wall: panels per connected side + a core per connected beam. Two more draw calls.
+  // ⚠ Arms, panels and cores are authored about the CELL CENTRE (they rotate about the post), so
+  // their tile uv is offset half a cell from the piece's — the shader reads local position, and
+  // local (0,0) is the middle. Harmless: a tile is periodic, and half a tile is still the tile.
   const wallGeo = buildWallArm(), wallCoreGeo = buildWallCore()
-  const wallMat = new THREE.MeshLambertMaterial({ color: TINT.beam })
+  const wallLayers = addLayerAttrs(wallGeo), coreLayers = addLayerAttrs(wallCoreGeo)
+  const wallMat = textured ?? new THREE.MeshLambertMaterial({ color: TINT.beam })
   const wallMesh = new THREE.InstancedMesh(wallGeo, wallMat, MAX_PER_TYPE)
   const wallCoreMesh = new THREE.InstancedMesh(wallCoreGeo, wallMat, MAX_PER_TYPE)
   for (const m of [wallMesh, wallCoreMesh]) { m.count = 0; m.frustumCulled = false; group.add(m) }
+  /** Per-piece layers, memoised: a sync over thousands of placements asks this per instance. */
+  const layerCache = new Map<string, { top: number; side: number }>()
+  const layersOf = (pieceId: string) => {
+    let l = layerCache.get(pieceId)
+    if (!l) { l = pieceLayers(pieceId); layerCache.set(pieceId, l) }
+    return l
+  }
+  const setLayers = (at: { top: THREE.InstancedBufferAttribute; side: THREE.InstancedBufferAttribute }, i: number, l: { top: number; side: number }) => {
+    at.top.setX(i, l.top); at.side.setX(i, l.side)
+  }
   let worldSolid: ((x: number, y: number, z: number) => boolean) | null = null
 
   // The ghost reuses a piece geometry but needs its own transparent material — one material total,
@@ -430,6 +538,8 @@ export function createPieceRenderer(): PieceRenderer {
       q.setFromAxisAngle(Y, -(vr * Math.PI) / 2)
       v.set(p.x + po.x, p.y, p.z + po.z)
       inst.setMatrixAt(i, m4.compose(v, q, one))
+      const pl = layersOf(p.pieceId)
+      setLayers(layers.get(base)!, i, pl)
       counts.set(base, i + 1)
       // ── fence arms: derived, never stored (MC's connection model) ──
       // A side grows an arm toward a sibling fence or any solid voxel — walls and hillsides
@@ -442,6 +552,7 @@ export function createPieceRenderer(): PieceRenderer {
           if (!link) continue
           q.setFromAxisAngle(Y, yaw)
           v.set(p.x + 0.5, p.y, p.z + 0.5)   // arms rotate about the POST, so centre-origin
+          setLayers(armLayers, arms, pl)
           armMesh.setMatrixAt(arms++, m4.compose(v, q, one))
         }
       }
@@ -464,11 +575,13 @@ export function createPieceRenderer(): PieceRenderer {
           linked = true
           q.setFromAxisAngle(Y, yaw)
           v.set(p.x + 0.5, p.y, p.z + 0.5)
+          setLayers(wallLayers, walls, pl)
           wallMesh.setMatrixAt(walls++, m4.compose(v, q, one))
         }
         if (linked && cores < MAX_PER_TYPE) {
           q.identity()
           v.set(p.x + 0.5, p.y, p.z + 0.5)
+          setLayers(coreLayers, cores, pl)
           wallCoreMesh.setMatrixAt(cores++, m4.compose(v, q, one))
         }
       }
@@ -477,9 +590,11 @@ export function createPieceRenderer(): PieceRenderer {
     armMesh.instanceMatrix.needsUpdate = true
     wallMesh.count = walls; wallMesh.instanceMatrix.needsUpdate = true
     wallCoreMesh.count = cores; wallCoreMesh.instanceMatrix.needsUpdate = true
+    for (const at of [armLayers, wallLayers, coreLayers]) { at.top.needsUpdate = true; at.side.needsUpdate = true }
     for (const [id, inst] of meshes) {
       inst.count = counts.get(id) ?? 0
       inst.instanceMatrix.needsUpdate = true
+      const at = layers.get(id)!; at.top.needsUpdate = true; at.side.needsUpdate = true
     }
   }
 
@@ -497,6 +612,10 @@ export function createPieceRenderer(): PieceRenderer {
     },
     hideGhost: () => { ghost.visible = false },
     setWorldSolid: (fn) => { worldSolid = fn },
+    layersAt: (mesh, i) => {
+      const at = mesh === 'wall' ? wallLayers : mesh === 'core' ? coreLayers : mesh === 'arm' ? armLayers : layers.get(mesh)
+      return at ? { top: at.top.getX(i), side: at.side.getX(i) } : { top: -1, side: -1 }
+    },
     stats: () => ({
       pieces: Object.fromEntries([...meshes].map(([id, m]) => [id, m.count]).filter(([, n]) => (n as number) > 0)),
       fenceArms: armMesh.count, wallPanels: wallMesh.count, wallCores: wallCoreMesh.count,
@@ -506,6 +625,7 @@ export function createPieceRenderer(): PieceRenderer {
       for (const m of mats.values()) m.dispose()
       armGeo.dispose(); armMat.dispose()
       wallGeo.dispose(); wallCoreGeo.dispose(); wallMat.dispose()
+      textured?.dispose()
       ghostMat.dispose()
     },
   }

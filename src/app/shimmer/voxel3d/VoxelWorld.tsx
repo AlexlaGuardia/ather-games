@@ -4248,7 +4248,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // tuft was outlined by the cube of air around it. The 1.002 lives at the call site now (see
   // `fitHighlight`) because only the full-block case wants it.
   const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), [])
-  const pieces = useMemo(() => createPieceRenderer(), [])
+  const pieces = useMemo(() => createPieceRenderer(tiles), [tiles])
   // Greg — built once, positioned once. Static NPC, no per-frame update beyond the aim check
   // below (which reads GREG_X/GREG_Z/GREG_Y, not the mesh, so the mesh itself never moves).
   const greg = useMemo(() => {

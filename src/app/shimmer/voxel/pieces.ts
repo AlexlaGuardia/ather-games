@@ -141,6 +141,16 @@ export const PIECE_MATERIALS: PieceMaterial[] = [
   { key: 'stonebrick', name: 'Stone Brick', itemId: 'stone_brick',      family: 'stone' },
   { key: 'palebrick',  name: 'Pale Brick',  itemId: 'pale_brick',       family: 'stone' },
   { key: 'sandstone',  name: 'Sandstone',   itemId: 'sandstone',        family: 'stone' },
+  // ── Alex, 2026-09-12: "make sure we have a version for each of the solid blocks we already
+  // have." Every building block that reads as MASONRY joins the material axis; a beam in plaster
+  // is the cottage's infill panel once two of them touch (`piece-mesh.ts` › the wall). Soil, sand,
+  // roofing and cloth stay out: a thatch stair is not a thing. Each row is a material the world
+  // already drops or crafts, so the recipe test's reachability rule holds without a new source.
+  { key: 'mossystonebrick',   name: 'Mossy Stone Brick',   itemId: 'mossy_stone_brick',   family: 'stone' },
+  { key: 'crackedstonebrick', name: 'Cracked Stone Brick', itemId: 'cracked_stone_brick', family: 'stone' },
+  { key: 'mossycutstone',     name: 'Mossy Cut Stone',     itemId: 'mossy_cut_stone',     family: 'stone' },
+  { key: 'cobble',            name: 'Cobblestone',         itemId: 'cobblestone',         family: 'stone' },
+  { key: 'plaster',           name: 'Plaster',             itemId: 'plaster',             family: 'stone' },
 ]
 
 /**

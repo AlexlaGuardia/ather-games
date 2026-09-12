@@ -44,7 +44,7 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // TRIPWIRE, NOT A CEILING — it fires whenever the catalogue grows so that growth is a decision
   // somebody wrote down, and it caught the bench within the hour. Bumping it without saying WHY is
   // the only way to use it wrongly.
-  ok(reachable.size === 112, `the catalogue is 112 pieces and all 112 are on the axes (saw ${reachable.size})`)   // 112 since 2026-09-11: the post (16 base × 7)
+  ok(reachable.size === 192, `the catalogue is 192 pieces and all 192 are on the axes (saw ${reachable.size})`)   // 192 since 2026-09-12: five more masonry materials (16 base × 12) — Alex: a version for each solid block
   ok(all.length === PIECES.length * PIECE_MATERIALS.length,
      '14 shapes x 7 materials, with no shape quietly missing a material')
 }
