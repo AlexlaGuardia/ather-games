@@ -130,7 +130,7 @@ const POT_BASE = 'voxel3d:pots:'
 const SAPLING_BASE = 'voxel3d:saplings:'
 const DECAY_BASE = 'voxel3d:leafdecay:'
 import { PIECES, PIECE_MATERIALS, STRUCTURE, STRUCTURE_HALF, pieceDef, pieceVariants, pieceMaterial, pieceItemId, pieceForItem, cellsOf, canPlace, canAfford, placementAt, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
-import { createPieceRenderer } from './piece-mesh'
+import { createPieceRenderer, pieceBreakTarget } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
 import { beginRenderLight, stepRenderLight, packForTexture, type RenderLightWork } from '../voxel/render-light'
 import {
@@ -9605,8 +9605,45 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       const found = placementAt(placements.current, hit.x, hit.y, hit.z) as (Placement & { gen?: string }) | undefined
       const pname = found ? pieceDef(found.pieceId)?.name ?? 'structure' : 'structure'
       const yours = !!found && !found.gen
-      if (found && yours && mouse.current.left && !weaponDrawn) { deconstruct(found); mouse.current.left = false }
-      pieceLook = { name: yours ? pname : `${pname} — not yours to take`, refused: !yours && mouse.current.left && !weaponDrawn }
+      // ★ HELD, NOT CLICKED (Alex, 2026-09-12: "the pieces just break instantly if left clicked").
+      // The piece goes through the same `tickBreak` as a block, against the block it is paid in —
+      // `pieceBreakTarget` — so it asks for the same tool, takes the same seconds, sprays the same
+      // chips and fills the same gauge. `deconstruct` (the refund) is now what `broken` means.
+      // No XP: taking your own stair down is not gathering, and the item comes back whole.
+      let refused = !yours && mouse.current.left && !weaponDrawn
+      if (found && yours && mouse.current.left && !weaponDrawn) {
+        const target = pieceBreakTarget(found)
+        const tDef = target ? blockDef(target.material) : undefined
+        const wantSkill: BlockSkill = tDef?.skill ?? tDef?.fastSkill ?? null
+        const equipped = wantSkill ? getEquippedTool(tools.current!, wantSkill as never) : undefined
+        const eDef = equipped ? getToolDef(equipped) : undefined
+        if (lastTool.current !== wantSkill) { lastTool.current = wantSkill; onTool(wantSkill) }
+        const r = tickBreak(breaking.current, target ?? null, dt, eDef?.tier ?? 0, eDef ? wantSkill : null, eDef?.speedBonus ?? 1)
+        breaking.current = r.state
+        if (r.state && target) {
+          // Chips off the struck cell, in the block's own colour — the same shape the block path
+          // keys off `r.state` below, keyed here on the placement so one wall is one target.
+          const tk = `piece:${found.x},${found.y},${found.z}`
+          if (chipTarget.current !== tk) { chipTarget.current = tk; chipCarry.current = 0 }
+          const bucket = bucketOf(target.material)
+          if (bucket) {
+            chipCarry.current += swingChips(bucket, r.state.progress / r.state.required, dt)
+            const n = Math.floor(chipCarry.current)
+            if (n > 0) {
+              chipCarry.current -= n
+              breakFx.chip(hit.x, hit.y, hit.z, hit.px - hit.x, hit.py - hit.y, hit.pz - hit.z, target.material, n)
+            }
+          }
+        } else chipTarget.current = null
+        if (r.broken) {
+          if (target) breakFx.burst(hit.x, hit.y, hit.z, target.material)
+          deconstruct(found)
+          breaking.current = null
+        }
+        // A refusal the block path would also show: the spike is too weak for the block it wears.
+        refused = !r.state && !r.broken
+      }
+      pieceLook = { name: yours ? pname : `${pname} — not yours to take`, refused }
     }
 
     // ── mine ─────────────────────────────────────────────────────────────────────────────────
@@ -9614,7 +9651,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // matching equipped tool supplies the tier and speed — so a spike cuts rock and a blade cuts
     // wood without the player switching anything. That is the tile game's model, unchanged; it just
     // never had a world where both mattered on the same swing.
-    if (hit && mouse.current.left && !weaponDrawn) {
+    if (hit && !pieceLook && mouse.current.left && !weaponDrawn) {
       const hitDef = blockDef(hit.material)
       // ★ TOOLS ARE NOT SOMETHING YOU SELECT — THE BLOCK CHOOSES (Alex, 2026-08-07, late).
       // This briefly went the other way ("the tool in hand wins, auto-pick is the fallback") the
@@ -9836,7 +9873,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (LOG_MATERIALS.has(hit.material)) onQuestEvent('cut')
         breaking.current = null
       }
-    } else {
+    } else if (!(pieceLook && mouse.current.left && !weaponDrawn)) {
+      // (A piece being worked above is a swing in progress too — it keeps its state and gauge.)
       if (!mouse.current.left) { breaking.current = null; chipTarget.current = null }
       // Not mining this frame (nothing under the reticle, LMB up, or weapon drawn) — clear the
       // gauge glow. Same dedup guard as above, so releasing LMB repeatedly does not spam `onTool`.
@@ -10394,7 +10432,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // the held channel is the more specific truth and it is the one the keeper is paying for.
     const bl = boreLook.current
     // A piece first: its cell has no `def`, so the block readout below would say nothing for it.
-    if (pieceLook) onLook({ ...pieceLook, progress: 0, channel: false })
+    if (pieceLook) onLook({ ...pieceLook, progress: breaking.current ? breaking.current.progress / breaking.current.required : 0, channel: false })
     else onLook(hit && def
       ? {
           name: bl

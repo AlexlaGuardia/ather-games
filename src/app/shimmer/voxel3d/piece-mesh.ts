@@ -83,6 +83,22 @@ export function pieceBlock(pieceId: string): number | undefined {
   const item = def.cost[0]?.itemId
   return item ? materialForItem(item) : undefined
 }
+/**
+ * ── ★ A PIECE BREAKS LIKE ITS BLOCK, NOT LIKE A BUTTON (Alex, 2026-09-12: "the pieces just break
+ * instantly if left clicked.. can we bring them up to speed with the other blocks") ────────────
+ * A placed piece came down on the first frame of a left click — no swing, no chips, no gauge —
+ * because its cells are `STRUCTURE`, which has no block definition, so the mine loop had nothing
+ * to spend seconds against and the piece path short-circuited straight to `deconstruct`. This is
+ * the target the mine loop works on instead: the PLACEMENT ORIGIN (so every cell of one wall
+ * accumulates on one bar rather than restarting per cell) wearing the block the piece is paid
+ * in (`pieceBlock`), so a stone-brick stair asks for the spike and takes stone-brick seconds, and
+ * a thatch roof gives like thatch. `/mine` dials it with everything else. Undefined when the
+ * piece has no block, which `piece-break.test` says never happens for a shipped shape.
+ */
+export function pieceBreakTarget(found: Placement): { x: number; y: number; z: number; material: number } | undefined {
+  const material = pieceBlock(found.pieceId)
+  return material === undefined ? undefined : { x: found.x, y: found.y, z: found.z, material }
+}
 /** Atlas layers a piece's faces sample — top for ±y, side for the rest. */
 export function pieceLayers(pieceId: string): { top: number; side: number } {
   const m = pieceBlock(pieceId)
