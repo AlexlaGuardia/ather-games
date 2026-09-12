@@ -291,6 +291,8 @@ export const PIECES: PieceDef[] = [
   // every hobbit-hole build guide says the same thing: the entrance is ROUNDED, and rounding is
   // what blends a dug hole into a hillside. A square hole in a bank reads as a mineshaft.
   // Three wide so it has springings to stand on; the opening is the middle column.
+  // ★ RULED 2026-09-13: the arch is the ROOFED PASSAGE, not a doorway. It shares the doorway
+  // family's 3-wide footprint and takes no door — a walk-through under stone, left open on purpose.
   { id: 'arch', name: 'Arch', w: 3, h: 3, d: 1,
     cost: [{ itemId: 'cut_stone', count: 5 }],
     passable: [{ x: 1, y: 0, z: 0 }, { x: 1, y: 1, z: 0 }], variants: ['wood', 'stone'] },

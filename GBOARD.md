@@ -32,7 +32,7 @@ the scripts carry a note. Alex is rebuilding the four in the editor anyway.
    middle bottom cell, E to swing it. Then the double in a shop front. The leaf's ledges and pull are placeholder.
 2. Door and frame in DIFFERENT materials read best (dark wood leaf, pale posts) — craft them from different blocks.
 3. The grand door's open leaves stand half a cell into the room's air (1.5 long in a 1-deep footprint) — deliberate.
-4. `arch` (3 wide) overlaps this territory now; keep as the roofed passage, or fold it into the family. Alex's call.
+4. ✅ `arch` stays as the roofed passage (Alex, 09-13) — not a doorway, no door fits it, and that is the point.
 
 **Decisions:** frames are 0.5 deep — the beam wall's thickness — and sit centred in a block wall (recessed 0.25 each
 face) rather than a second, 1-deep set. · Openings start one cell in and sit on the floor; `pieces.test` asserts every
