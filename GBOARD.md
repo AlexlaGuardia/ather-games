@@ -11,6 +11,39 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🧱 Shimmer — **THE BUILDING PALETTE, BATCH 2: PLASTER · THATCH · TIMBER STACK · GLASS** (2026-09-12 night, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID FabmIbmwdt1D_8QrIUTFY` from `0a59043`** (three blocks went out first as `j1FrEvf7-chbcrVD3IFmV` from `0bf2beb`), served == disk, worker repinned. Sweep **270/270**. glass.test 25/0 (5 mutations fire). ITEM-ART: 55 derived, 0 missing.*
+
+**Left off:** Alex: *"I want to continue adding different blocks to the game so I can use them for building these
+structures."* Picked all four from the building scripts' reach lists:
+- **Plaster** (88): 2 subsoil + 1 sand → 4. Trowelled daub, faint cracks. The infill between posts and beam walls.
+- **Thatch** (89): 3 grass tufts → 2. Straw in staggered courses. A second roof beside shingles.
+- **Timber stack** (90): 4 goldwood logs → 1, `family: 'wood'`, no `milled`. Per-face: log ENDS on the sides (octagonal
+  distance so they read round), bark on top. The one log consumer that is not a refine — `workshop.test` exempts it by
+  id with an EXPIRING check (it must keep consuming several logs at once, or the exemption goes red).
+- **Glass** (91): 2 sand → 2. **The first see-through block.** Four mechanisms, none of them the id: passes light
+  (`light-passes.ts`); ranks with water in the mesher so the wall behind a window still draws its face and glass
+  against glass draws nothing; a FOURTH draw pass = the textured program with one `discard` on the sampled alpha
+  (`atlas.ts` › `cutout`); the tile paints lead cames opaque and quarries at alpha 0 — the one tile whose alpha is
+  COVERAGE, read only by the glass program (everywhere else alpha is the emissive mask). Leaded diamond quarries with a
+  frame, so a run of blocks reads as mullioned panes. Icon fills the quarries pale (icon only).
+Each painter was rendered to PNG and looked at before shipping (`$SP/tiles-shot.mts`); the stack's ends were squares
+on the first pass and got an octagonal distance.
+
+**Next:**
+1. ⛔ **ALEX PLACES ALL FOUR** — plaster between beams, thatch on a roof, a stack in Hazel's yard, glass in a window
+   frame. The glass is the one to look at from inside and out; the cames are placeholder lead.
+2. Batch 3 candidates from the reach lists, unbuilt: cobblestone · canvas/cloth (Mallow's awning) · a stone stack
+   (Sax's R3, the timber stack's stone sibling) · a rubble HEAP. Alex picks.
+3. Timber stack is goldwood only; per-wood variants are three more rows + three tints when a yard wants them.
+
+**Decisions:** every new material is hand work — `recipes.test` rules mining is the gate, not furniture. · Glass is a
+CUTOUT, never a blend: no sorting, no order dependence, the canopy's argument. · Alpha-as-coverage exists on exactly one
+tile and one program; that is the whole reason it is safe.
+
+**Files:** `voxel/depth.ts` · `voxel/registry.ts` · `voxel/recipes.ts` · `voxel/workshop.test.ts` · `voxel/greedy.ts` ·
+`voxel/light-passes.ts` · `voxel3d/attrs.ts` · `voxel3d/tex/{tiles,atlas,item-icon}.ts` · `voxel3d/VoxelWorld.tsx` ·
+`voxel3d/glass.test.ts` (new) · `ITEM-ART.md`.
+
 ## 📐 Shimmer — **EVERY ROTATED PIECE HAS DRAWN ONE CELL AWAY FROM WHERE IT IS, SINCE 08-08** (2026-09-12 evening, hub lane `853d8d28`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID i-rlphgv4mhY6s8j4QhnI` from `fcb76b4`**, served == disk. Sweep **268/268**. piece-origin **83/0, 4 mutations fire**.*
 
 **Left off:** two photographs from Alex: a post with its black light-cell one cell BESIDE it, and a "wall behind the
