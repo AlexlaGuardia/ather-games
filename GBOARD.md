@@ -11,6 +11,21 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔨 Shimmer — **A PLACED PIECE IS WORKED LIKE A BLOCK, NOT CLICKED AWAY** (2026-09-12, hub lane `2f743745`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID D8xcsW1-FzE20mPLHjqPm` from `5f16618`**, served == disk (chunk md5 match), worker pin unchanged. piece-break.test **994/0, 2 mutations fire**. tsc 7 (baseline).*
+
+**Left off:** Alex: *"the pieces just break instantly if left clicked.. can we bring them up to speed with the other
+blocks."* A piece's cells are `STRUCTURE` (no block def), so the mine loop had nothing to spend seconds against and the
+piece path went straight to the refund on the first frame. Now the hit is worked through the same `tickBreak` as a block,
+against **the block the piece is paid in** (`pieceBreakTarget` = placement origin + `pieceBlock`): same tool ask (a
+stone-brick stair wants the spike), same seconds, same chips, same HUD gauge, the `/mine` dial included. One wall is one
+bar (origin-keyed, not cell-keyed). `deconstruct` (full refund) is what *broken* means. No XP — taking your own stair down
+is not gathering. Generated pieces still refuse ("not yours to take").
+
+**Next:** Alex swings at a beam wall and a glass pane — does thatch feel like thatch, stone like stone? · whether a
+placed piece should pay XP (currently no).
+
+**Files:** `voxel3d/piece-mesh.ts` (`pieceBreakTarget`) · `voxel3d/VoxelWorld.tsx` (piece hit → tickBreak) · `voxel3d/piece-break.test.ts`.
+
 ## 🪟 Shimmer — **WINDOWS ARE PANES, AND THE PANES ARE DYED WITH BLOOMS** (2026-09-13, hub lane `853d8d28`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID LfE1Dne3aRm43A_BL3M7R` from `1c2fe9b`**, served == disk, worker repinned. Sweep **272/272**. glass.test **69/0, 4 mutations fire**. 21 shapes · 19 materials · 247 pieces.*
 
 **Left off:** Alex: *"lets look at the windows"* → rendered today's empty frame + glazed/wide/square candidates and sent
