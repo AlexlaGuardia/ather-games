@@ -409,15 +409,18 @@ export function createPieceRenderer(): PieceRenderer {
         }
       }
       // ── beam walls: the same question, a panel for an answer (see `buildWallArm`) ──
-      // A side grows a panel toward a sibling beam or any solid voxel, so a run of beams meets a
-      // doorway or a block wall flush. A beam with at least one panel also draws the 0.5 core.
+      // ⚠ BEAMS ONLY — NOT the fence's "or any solid voxel" (Alex, 2026-09-12, first beam placed:
+      // "it also puts a wall with a shadow on the block behind it"). A beam set down against a
+      // block, or on a step, grew a panel into that block and read as a bug, because a single beam
+      // is a post until a SECOND beam makes it a wall. The spec said adjacent beams; that is the
+      // whole rule. A run ending at a block wall stops a quarter-cell short, and that is visible on
+      // purpose rather than a stub nobody placed. A beam with at least one panel draws the core.
       if (base === 'beam') {
         let linked = false
         for (const [dx, dz, yaw] of ARM_DIRS) {
           if (walls >= MAX_PER_TYPE) break
           const nx = p.x + dx, nz = p.z + dz
-          const link = beamCells.has(`${nx},${p.y},${nz}`) || (worldSolid?.(nx, p.y, nz) ?? false)
-          if (!link) continue
+          if (!beamCells.has(`${nx},${p.y},${nz}`)) continue
           linked = true
           q.setFromAxisAngle(Y, yaw)
           v.set(p.x + 0.5, p.y, p.z + 0.5)
