@@ -41,6 +41,17 @@ ok(PLACED_STAMPS.length >= 1, 'the table has at least the pipeline proof in it')
   ok(PLACED_STAMPS.length === PLACED_ROWS.length, `every row resolved to a stamp (${PLACED_STAMPS.length}/${PLACED_ROWS.length}) — an unresolved row is dropped by placed.ts and must be caught here`)
 }
 ok(new Set(PLACED_STAMPS.map(s => s.id)).size === PLACED_STAMPS.length, 'stamp ids are unique (they key the pieces)')
+{
+  // ── no two stamps may overlap (2026-09-12, the village): the later one would clear the earlier's
+  // box above ground and write over it, and nothing else in the pipeline would say so.
+  const overlaps: string[] = []
+  for (let i = 0; i < PLACED_STAMPS.length; i++) for (let j = i + 1; j < PLACED_STAMPS.length; j++) {
+    const a = PLACED_STAMPS[i], b = PLACED_STAMPS[j], ba = stampBox(a), bb = stampBox(b)
+    const apart = a.x + ba.w <= b.x || b.x + bb.w <= a.x || a.z + ba.d <= b.z || b.z + bb.d <= a.z
+    if (!apart) overlaps.push(`${a.id} × ${b.id}`)
+  }
+  ok(overlaps.length === 0, `★ no two placed buildings overlap (${overlaps.join('; ') || 'none'})`)
+}
 
 const glade = ZONE_ANCHORS.find(z => z.id === 'moonwell-glade')!
 const greg = { x: glade.x + 3, z: glade.z + 1 }   // VoxelWorld: GREG_X = SPAWN_X + 3, GREG_Z = SPAWN_Z + 1
