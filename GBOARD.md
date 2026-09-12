@@ -28,10 +28,12 @@ arch was also authored about its middle cell** and drew a cell west even at rot 
 and the open door, with 0.1 tolerance for the bracket/hook that sink into their wall on purpose.
 
 **Next:**
-1. ⛔ **THE BLUEPRINTS WILL LOOK DIFFERENT.** Hazel 75 / Mallow 71 / Sax 34 / Yarrow 35 rotated pieces now draw in
-   their real cells, one cell from where their authors SAW them. Occupancy never moved (`gen-pieces`, `blueprints`
-   guards green), so anything that looked right was a placement compensating for the renderer. **Re-shoot all four
-   before placing the trades** (`$SP/course_watch.py` order: place row → rebuild worker → shoot), Alex judges.
+1. **ALEX REBUILDS THE FOUR IN THE EDITOR HIMSELF** (his call, 09-12 evening) — Hazel 75 / Mallow 71 / Sax 34 /
+   Yarrow 35 rotated pieces now draw in their real cells, one from where their authors SAW them. Occupancy never moved.
+   No agent re-shoot; the editor pass is the review.
+1b. ✅ **Facing is direction AND placement** (`e73808e`, live as `uGXLS4svf-kC3Oo0kVomn`): a vertical hit face decides
+   (the piece faces INTO the wall it is set against), yaw decides on the ground, R is a quarter-turn on top. Rule in
+   `piece-facing.ts`, 17/0, 2 mutations fire. Sweep 269/269.
 2. The 08-08 wireframe-hiding fix can be revisited: with the ghost in the right cell, showing both marks may now read
    fine. Alex's call.
 
