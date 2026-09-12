@@ -58,7 +58,38 @@ export interface PlotMaterials {
   wall: number
 }
 
+/**
+ * ── ★ EXPANSION LITTER (Alex, 2026-09-12: "the home plot can be littered with things like the
+ * heap and other obstructions each time they expand") ────────────────────────────────────────
+ * The ring a widening adds does not arrive clean: rubble heaps and deadfall lie on it, in the way,
+ * and clearing them pays (a generated heap breaks into its rubble — see `litterDrops`). The rule
+ * is a function of the column and the tier, so the worker and the host derive the identical ring.
+ *
+ * ★ `from` IS THE FIRST TIER THAT GETS LITTER, AND IT COMES FROM THE SAVE. Generation is stateless,
+ * so without it a keeper whose fold was ALREADY widened before this shipped would find heaps on
+ * ground they built on — inside a house whose floor is generated turf. The host sets `from` to
+ * the save's `plotTier + 1` the first time an older save loads (rings that exist stay clean; the
+ * next one is littered) and to 1 for a new keeper. Tier 0 — the starting garden — is never
+ * littered: `from` is clamped to ≥ 1.
+ */
+export interface PlotLitter {
+  from: number
+  heap: number
+  deadfall: number
+  /** Litter clumps: the ring is hashed in cells this wide, and only some cells are "dense". */
+  clumpCells: number
+  clumpGate: number
+  /** Per-column chance inside a dense clump / elsewhere. Kept low: a ring is ~200k columns. */
+  dense: number
+  sparse: number
+  /** Of the littered columns, this fraction are heaps; the rest deadfall. */
+  heapShare: number
+  /** No litter within this many blocks of the threshold — the keeper arrives onto clear ground. */
+  clearThreshold: number
+}
+
 export interface PlotConfig {
+  litter: PlotLitter
   /**
    * ★ THE FOLD'S EXTENT — how far the keeper may build, AND where the ground ends, AND where the
    * cloud-wall stands. One number, because since 2026-08-16 they are one edge (see `edgeAt`).
@@ -238,6 +269,10 @@ export const DEFAULT_PLOT: PlotConfig = {
   // tops out level with the wall is a bump you find by walking into it.
   cave: { depth: 13, halfWidth: 12, height: 15, boreHalfWidth: 4, boreHeight: 7 },
   materials: { topsoil: 5, subsoil: 4, stone: 3, floor: 1, wall: 1 },
+  // ⚠ Literal ids like `materials` above (this file does not import MAT); `plot-litter.test.ts`
+  // asserts they are RUBBLE_HEAP and DEADFALL. `from: Infinity` = no ring is littered until the
+  // host says which one, from the save. See `litterAt`.
+  litter: { from: Infinity, heap: 95, deadfall: 69, clumpCells: 24, clumpGate: 0.55, dense: 0.015, sparse: 0.001, heapShare: 0.6, clearThreshold: 8 },
 }
 
 /** Distance from the plot's centre. The plot's own space, so the centre is the origin. */
@@ -284,6 +319,45 @@ export function edgeAt(x: number, z: number, seed: number, cfg: PlotConfig = DEF
 /** Is this column inside the generated island? */
 export const insideCore = (x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT): boolean =>
   distFromCentre(x, z) <= edgeAt(x, z, seed, cfg)
+
+/** The same config with the first littered tier set — the host and the worker both build it this way. */
+export const withLitter = (cfg: PlotConfig, from: number): PlotConfig =>
+  ({ ...cfg, litter: { ...cfg.litter, from: Number.isFinite(from) ? Math.max(1, Math.round(from)) : Infinity } })
+
+/**
+ * What a GENERATED piece of litter breaks into — the "free materials" half of the rule. Only the
+ * heap has an override: it is the one litter block whose registry drop (itself, so it stays
+ * placeable) is not what clearing it should pay. Deadfall already drops its deadwood. Returns
+ * null for anything that is not litter, so the caller falls through to the registry.
+ * ⚠ The caller decides "generated" (no edit on the cell); this only knows materials.
+ */
+export function litterDrops(material: number, cfg: PlotConfig = DEFAULT_PLOT): { itemId: string; count: number }[] | null {
+  if (material === cfg.litter.heap) return [{ itemId: 'rubble', count: 3 }]
+  return null
+}
+
+/** Which tier a config's cap is — or -1 if the cap is not on the ladder (a scratch config). */
+const tierOfCap = (cfg: PlotConfig): number => (PLOT_TIERS as readonly number[]).indexOf(cfg.capRadius)
+
+/**
+ * The litter on this column's surface, or 0. Pure; see `PlotLitter`.
+ * The column must be inside THIS tier's core and outside the PREVIOUS tier's — the ring the last
+ * widening added — and that tier must be at or past `litter.from`.
+ */
+export function litterAt(x: number, z: number, seed: number, cfg: PlotConfig = DEFAULT_PLOT): number {
+  const L = cfg.litter
+  const tier = tierOfCap(cfg)
+  if (tier < Math.max(1, L.from)) return 0
+  if (!insideCore(x, z, seed, cfg)) return 0
+  if (insideCore(x, z, seed, plotForTier(tier - 1, cfg))) return 0
+  const th = plotThreshold(seed, cfg)
+  if (Math.hypot(x - th.x, z - th.z) < L.clearThreshold) return 0
+  const cx = Math.floor(x / L.clumpCells), cz = Math.floor(z / L.clumpCells)
+  const dense = value2(cx + 7919, cz - 104729, seed ^ 0x51ab) > L.clumpGate
+  const roll = value2(x, z, seed ^ 0x1f3d)
+  if (roll >= (dense ? L.dense : L.sparse)) return 0
+  return value2(x - 33, z + 71, seed ^ 0x7e11) < L.heapShare ? L.heap : L.deadfall
+}
 
 /**
  * How close to the coast this column is: **0 deep inland, 1 at the very edge.**
@@ -628,6 +702,11 @@ export function plotMaterialAt(
     const cave = caveAt(x, y, z, seed, cfg)
     if (cave === 'bore') return AIR
     if (cave === 'shell') return m.wall
+    // Litter sits ON the surface, never in the cave's mouth (the checks above returned for those).
+    if (h !== null && y === h + 1) {
+      const l = litterAt(x, z, seed, cfg)
+      if (l) return l
+    }
   }
 
   // 1. The cloud wall — a ring standing on nothing, outside the buildable cap.

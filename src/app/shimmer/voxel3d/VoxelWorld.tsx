@@ -67,7 +67,7 @@ import {
   bedsToSave, bedsFromSave, type PlantedBeds,
 } from './planting'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
-import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
+import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, withLitter, litterDrops, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
 /**
  * How far inside their own fold a keeper lands when they step through — blocks, along the door's
  * bearing. Far enough that the seam is fully in frame, near enough that leaving is one step back.
@@ -1192,7 +1192,14 @@ export default function VoxelWorld() {
    *  the answer has to travel — same outward-ref shape as `lookOut`/`foesOut` above. */
   const waterOut = useRef<((x: number, y: number, z: number) => number | null) | null>(null)
   const plotTier = useRef(0)
-  const plotCfg = useRef<PlotConfig>(plotForTier(0))
+  /**
+   * The first plot tier whose ring is littered — `PlayerSave.litterFrom`, `plot.ts › PlotLitter`.
+   * 1 for a new keeper (tier 0, the starting garden, is never littered). An older save sets it on
+   * load to `plotTier + 1`. Every plot config the host builds goes through `withLitter` with this,
+   * and the worker gets it with every request, so the two derive one ring.
+   */
+  const litterFrom = useRef(1)
+  const plotCfg = useRef<PlotConfig>(withLitter(plotForTier(0), 1))
   /**
    * ── ★ WHICH WORLD THE KEEPER IS IN — HOISTED OUT OF `World` (2026-08-18, the map fix) ─────────
    * It lived inside the scene component, where the frame loop and the worker bridge read it. The
@@ -2004,7 +2011,7 @@ export default function VoxelWorld() {
     const next = Math.min(PLOT_TIERS.length - 1, plotTier.current + 1)
     if (next === plotTier.current) return
     plotTier.current = next
-    plotCfg.current = plotForTier(next)
+    plotCfg.current = withLitter(plotForTier(next), litterFrom.current)
     // Persist immediately rather than waiting for the 5s autosave: this is a once-per-arc event and
     // a refresh in the wrong second would take the ground back, which is the one thing the
     // additive-growth guarantee exists to forbid.
@@ -2257,7 +2264,7 @@ export default function VoxelWorld() {
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
-          plotCfg={plotCfg} plotTier={plotTier} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut} ctxLostOut={ctxLostOut}
+          plotCfg={plotCfg} plotTier={plotTier} litterFrom={litterFrom} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut} ctxLostOut={ctxLostOut}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
@@ -3950,7 +3957,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -4023,6 +4030,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   plotCfg: React.RefObject<PlotConfig>
   /** The tier index, for the worker request — the worker holds no save and cannot infer it. */
   plotTier: React.RefObject<number>
+  /** The first littered plot tier, from the save. See the parent's ref. */
+  litterFrom: React.RefObject<number>
   /** The grimoire's index face. Restored and persisted here because the save lives here. */
   spiritIndex: React.RefObject<SpiritIndex>
   /** Filled with the autosave's `snap()` so a once-per-arc event can persist without waiting 5s. */
@@ -4782,7 +4791,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // originally motivated the note. When a note says an ordering is free, it is describing the
       // consumers that existed the day it was written.
       plotTier.current = Math.max(0, Math.min(PLOT_TIERS.length - 1, Math.round(p.plotTier ?? 0)))
-      plotCfg.current = plotForTier(plotTier.current)
+      // ★ SET ONCE, NEVER LOWERED (see `PlayerSave.litterFrom`): a save from before litter existed
+      // keeps every ring it already has clean and gets litter from the next widening on.
+      litterFrom.current = Math.max(1, Math.round(p.litterFrom ?? (plotTier.current + 1)))
+      plotCfg.current = withLitter(plotForTier(plotTier.current), litterFrom.current)
 
       const stranded = savedSpace === 'wilds' && insideShell(p.x, p.z, SEED, WILDS_BUBBLE)
       if (stranded) {
@@ -4861,6 +4873,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
                // The fold Greg has actually given, and the book he reads to decide. See both fields
                // in `PlayerSave` — the tier is what EXISTS, never what is owed.
                plotTier: plotTier.current,
+               litterFrom: litterFrom.current,
                beds: bedsToSave(beds.current),
                index: indexToSave(spiritIndex.current) }
     }
@@ -8639,7 +8652,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // worker cannot infer it. Without it every plot column would generate at the default radius
         // while the host measured its threshold, its chest cap and its fall line against the
         // keeper's own — a fold whose door stands in a field.
-        w.postMessage({ type: 'request', cx: gx, cz: gz, space: space.current, tier: plotTier.current })
+        w.postMessage({ type: 'request', cx: gx, cz: gz, space: space.current, tier: plotTier.current, litterFrom: litterFrom.current })
       } else {
         // No worker (construction failed): generate here so the world still exists.
         if (performance.now() - t0 > 10) break
@@ -8945,7 +8958,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         }
         // 1 + 2. Every smaller fold's court, in BOTH shapes it may have been laid in.
         for (const { tier: oldTier } of staleCourts(SEED, plotTier.current)) {
-          const oldCfg = plotForTier(oldTier)
+          const oldCfg = withLitter(plotForTier(oldTier), litterFrom.current)
           const oldLevel = courtLevel(SEED, oldCfg)
           for (const sk of courtSockets(SEED, oldCfg)) clearSite(sk, oldCfg, oldLevel)
           for (const sk of legacyRowSockets(SEED, oldCfg)) clearSite(sk, oldCfg, null)
@@ -9732,7 +9745,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           // square with nothing visible to explain it. `clearBed` is a no-op on every other
           // material, so this costs one Map lookup per block broken.
           clearBed(beds.current, hit.x, hit.y, hit.z)
-          for (const d of dropsFor(hit.material)) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
+          // ★ EXPANSION LITTER PAYS (Alex, 2026-09-12: "free matts for the player to collect"). A
+          // rubble heap the WORLD put down breaks into its rubble; one the keeper placed comes back
+          // as the heap it was. "Generated" is exactly "no edit on this cell", which is the same
+          // question `setVoxel`'s baseline asks — and it is what stops the craft-place-break loop
+          // from being a rubble fountain: a placed heap has an edit record, and yields itself.
+          const generated = !edits.current.get(key(Math.floor(hit.x / SECTION), Math.floor(hit.z / SECTION)))
+            ?.has(editIndex(hit.x - Math.floor(hit.x / SECTION) * SECTION, hit.y, hit.z - Math.floor(hit.z / SECTION) * SECTION))
+          const litter = generated ? litterDrops(hit.material, plotCfg.current) : null
+          for (const d of litter ?? dropsFor(hit.material)) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
           // ★ THE FOUND DOOR (vessels are not crafted, 2026-09-04): a rare roll on deep rock turns up a
           // vessel somebody lost — it falls out of the block like any drop and is TAKEN on pickup.
           const dug = rollDig(hit.material)

@@ -25,7 +25,7 @@ import {
   Column, SECTION, makeColumn, DEFAULT_COLUMN,
 } from '../app/shimmer/voxel/column'
 import { generatePlotColumn } from '../app/shimmer/voxel/plot-column'
-import { plotForTier } from '../app/shimmer/voxel/plot'
+import { plotForTier, withLitter } from '../app/shimmer/voxel/plot'
 import { PLACED_STAMPS } from '../app/shimmer/data/blueprints/placed'
 
 /**
@@ -68,7 +68,7 @@ function packVoxels(col: Column): Uint16Array {
 }
 
 self.onmessage = (e: MessageEvent) => {
-  const msg = e.data as { type: string; cx?: number; cz?: number; seed?: number; keep?: string[]; space?: string; tier?: number }
+  const msg = e.data as { type: string; cx?: number; cz?: number; seed?: number; keep?: string[]; space?: string; tier?: number; litterFrom?: number }
 
   if (msg.type === 'init') {
     seed = msg.seed ?? seed
@@ -100,13 +100,16 @@ self.onmessage = (e: MessageEvent) => {
     // correct-looking, with the new ground missing exactly where they were told to go and look.
     // Same failure the space itself had, one field over.
     const tier = space === 'plot' ? Math.max(0, Math.round(Number(msg.tier) || 0)) : 0
-    const k = space === 'wilds' ? key(cx, cz) : `${space}:${tier}:${key(cx, cz)}`
+    // The first littered tier travels with the request and keys the cache for the same reason the
+    // tier does: it is save state the worker cannot see, and it changes what a column IS.
+    const litterFrom = space === 'plot' && Number.isFinite(Number(msg.litterFrom)) ? Math.max(1, Math.round(Number(msg.litterFrom))) : Infinity
+    const k = space === 'wilds' ? key(cx, cz) : `${space}:${tier}:${litterFrom}:${key(cx, cz)}`
     if (!cols.has(k)) {
       cols.set(k, space === 'plot'
         // The world lane's adapter, not a second generator here: it mirrors `generateColumn`'s
         // post-conditions (uniform refreshed, stage Ready) so the switch is one line rather than a
         // mode threaded through seven stages the plot needs none of.
-        ? generatePlotColumn(new Column(cx * SECTION, cz * SECTION, DEFAULT_COLUMN), seed, plotForTier(tier))
+        ? generatePlotColumn(new Column(cx * SECTION, cz * SECTION, DEFAULT_COLUMN), seed, withLitter(plotForTier(tier), litterFrom))
         : makeColumn(cx * SECTION, cz * SECTION, seed, WORLD_COLUMN))
     }
     // ★ ALWAYS answer with the voxels, cached or fresh. The main thread evicts columns it walks

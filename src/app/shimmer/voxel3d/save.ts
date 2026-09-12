@@ -250,6 +250,13 @@ export interface PlayerSave {
    */
   plotTier?: number
   /**
+   * The first plot tier whose ring is littered (heaps and deadfall on expansion — `plot.ts` ›
+   * `PlotLitter`). Set ONCE, the first time a save loads under a build that has litter: an older
+   * save gets `plotTier + 1` so the ground it already built on stays clean; a new keeper gets 1.
+   * Never lowered — lowering it would drop heaps into a ring that has houses on it.
+   */
+  litterFrom?: number
+  /**
    * The keeper's species index — the grimoire's *what a spirit IS* face (`engine/spirit-index.ts`,
    * `indexToSave`/`indexFromSave`).
    *
