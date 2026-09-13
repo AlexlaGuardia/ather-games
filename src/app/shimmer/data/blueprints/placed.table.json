@@ -1,4 +1,7 @@
 [
   {"id":"glade-sparring-ring","blueprint":"sparring_ring","x":-143,"z":-639,"rot":0,"sink":1},
-  {"id":"glade-hazel-carpentry","blueprint":"hazel_carpentry","x":-165,"z":-632,"rot":0}
+  {"id":"glade-hazel-carpentry","blueprint":"hazel_carpentry","x":-165,"z":-632,"rot":0},
+  {"id":"glade-mallow-shop","blueprint":"mallow_shop","x":-164,"z":-602,"rot":1},
+  {"id":"glade-yarrow-apothecary","blueprint":"yarrow_apothecary","x":-141,"z":-621,"rot":3},
+  {"id":"glade-sax-stonery","blueprint":"sax_stonery","x":-136,"z":-608,"rot":0}
 ]
