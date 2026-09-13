@@ -630,6 +630,20 @@ export const MAT = {
   GLASS_SUNPETAL: 99,
   GLASS_DAWNCAP: 100,
   GLASS_MOONVINE: 101,
+  /**
+   * ── ★ THE HEARTH (2026-09-13, Fennel's R1: "the building's whole identity is a fire and there
+   * is no fire block") ───────────────────────────────────────────────────────────────────────
+   * The first WARM emitter. Every light in the world until today was mana — lantern, waymark,
+   * seam, cache — and every one of them is blue-white, so a cook's firebox lit by a lantern read as
+   * a placeholder from across the room. This is a stone firebox with a fire in it: dark mouth on
+   * every side (a block has no facing, so it burns on all four — the alcove it sits in hides three),
+   * embers on top, and the fire texels carry the emissive alpha the lantern's glass does.
+   * ⚠ NEVER GENERATED, only placed. Fuel is not modelled: it burns because it is a hearth, the way
+   * the lantern glows because it is mana. Smoke is R5 and engine-side, not this block's business.
+   * ⚠ TBD-CANON on whether the Ather calls it a hearth — `hearth` is plain English until Magii
+   * names it, same as `shingle` and `plaster`.
+   */
+  HEARTH: 102,
 } as const
 
 /** Every glass id — the cutout pass, the light pass and the mesher rank all ask this, never `=== GLASS`. */

@@ -44,7 +44,9 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // TRIPWIRE, NOT A CEILING — it fires whenever the catalogue grows so that growth is a decision
   // somebody wrote down, and it caught the bench within the hour. Bumping it without saying WHY is
   // the only way to use it wrongly.
-  ok(reachable.size === 247, `the catalogue is 247 pieces and all 247 are on the axes (saw ${reachable.size})`)   // 247 since 2026-09-13: 20 shapes × 12 masonry + the pane × 7 glass
+  // 259 since 2026-09-13 (later the same day): the TABLE — 21 masonry shapes × 12 + the pane × 7.
+  // The reach three Moonwell buildings recorded independently (Hazel R3, Yarrow R4, Fennel R2).
+  ok(reachable.size === 259, `the catalogue is 259 pieces and all 259 are on the axes (saw ${reachable.size})`)   // 259 since 2026-09-13: 21 shapes × 12 masonry + the pane × 7 glass
   const expected = PIECES.reduce((n, p) => n + PIECE_MATERIALS.filter(m => p.variants?.includes(m.family)).length, 0)
   ok(all.length === expected, `every shape has every material of the families it lists, and no other (${all.length} vs ${expected})`)
   ok(pieceVariants('pane').length === 7 && pieceVariants('pane').every(v => pieceMaterial(v.id)?.family === 'glass'), 'the pane wears the seven glasses and nothing else')

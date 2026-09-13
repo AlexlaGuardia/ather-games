@@ -75,6 +75,9 @@ export const TILE_MATERIALS: number[] = [
   MAT.WAYMARK, MAT.CLOUD_WALL,
   // The cauldron added 2026-08-18 with brewing — the alchemy station.
   MAT.CAULDRON,
+  // The hearth added 2026-09-13 — the first WARM emitter. Per-face: a firebox on the sides, embers
+  // on top, soot underneath. Its fire texels carry emissive alpha like the lantern's glass.
+  MAT.HEARTH,
   // ── The grounds, added 2026-08-19 with the character layer ──────────────────────────────────
   // ⚠ Each one NEEDS a `paintFor` case below, exactly as the rubble note above says: the switch's
   // default is the ore painter, so a ground appended here and forgotten there does not render as
@@ -1316,6 +1319,59 @@ function paintCauldron(dst: Layer, size: number, seed: number, face: number) {
   }
 }
 
+/**
+ * The hearth. SIDE is a stone-brick firebox — the block's own masonry (ashlar, four courses) with a
+ * dark mouth cut low in it under a lintel course, and a FIRE in the mouth: a hot core at the bed,
+ * orange over it, dark red licks at the top, every texel flickered by hash so no two hearths share
+ * a flame. The fire carries emissive alpha (core 255, body 200, tips 130) and the soot behind it
+ * carries none, so the mouth reads as light held in a recess — the lantern's argument, warmed.
+ * TOP is the stone rim around a bed of embers: charcoal with glowing cracks. BOTTOM is soot.
+ * ⚠ A block has no facing, so every side is a mouth; the alcove a blueprint sets it in hides three.
+ */
+function paintHearth(dst: Layer, size: number, seed: number, face: number) {
+  const stone = rgbOf(MATERIAL_COLOR[MAT.HEARTH])
+  const soot = rgbOf(0x17130f)
+  const core: [number, number, number] = [255, 236, 150]
+  const body: [number, number, number] = [247, 150, 46]
+  const tip: [number, number, number] = [176, 48, 22]
+  if (face === BOTTOM) { paintGrit(dst, size, shade(stone, -24), 10, 8, seed); return }
+  if (face === TOP) {
+    paintAshlar(dst, size, stone, seed, 2, 2)
+    const rim = Math.max(2, Math.round(size / 5))
+    for (let y = rim; y < size - rim; y++) for (let x = rim; x < size - rim; x++) {
+      // Embers: charcoal lumps with glowing seams between them. The seam is where two lumps do
+      // not meet, and it glows because that is where the fire underneath shows through.
+      const lump = vnoise(x, y, size, 5, seed + 3)
+      const seam = Math.abs(lump - 0.5) < 0.06
+      const grit = (h2(x, y, seed + 9) - 0.5) * 16
+      if (seam) put(dst, size, x, y, mix(body, core, h2(x, y, seed + 4) * 0.5), 190)
+      else put(dst, size, x, y, shade(soot, grit + (lump > 0.6 ? 14 : 0)), 0)
+    }
+    return
+  }
+  // SIDE: the firebox.
+  paintAshlar(dst, size, stone, seed, 4, 2)
+  const mx0 = Math.round(size * 0.2), mx1 = size - mx0                  // mouth, x extent
+  const my0 = Math.round(size * 0.3), my1 = size - Math.max(1, Math.round(size / 16))  // under the lintel course, to the sill
+  const bed = my1 - 1
+  for (let y = my0; y < my1; y++) {
+    for (let x = mx0; x < mx1; x++) {
+      // Height of the flame above the bed, in [0,1], tapered toward the mouth's sides so the fire
+      // is a tongue and not a rectangle. Flicker per column so the tongue's edge is ragged.
+      const cx = (x - mx0 + 0.5) / (mx1 - mx0)                            // 0..1 across the mouth
+      const taper = 1 - Math.pow(Math.abs(cx - 0.5) * 2, 2)               // 1 at centre, 0 at the jambs
+      const flick = (h2(x, 0, seed + 21) - 0.5) * 0.35 + (h2(x, y, seed + 27) - 0.5) * 0.2
+      const h = (bed - y) / (my1 - my0)                                   // 0 at the bed, 1 at the lintel
+      const reach = 0.85 * taper + flick                                  // how high this column burns
+      if (h > reach) { put(dst, size, x, y, shade(soot, (h2(x, y, seed + 5) - 0.5) * 10), 0); continue }
+      const t = h / Math.max(0.05, reach)                                 // 0 at the bed, 1 at the tip
+      if (t < 0.3) put(dst, size, x, y, mix(core, body, t / 0.3), 255)
+      else if (t < 0.7) put(dst, size, x, y, mix(body, tip, (t - 0.3) / 0.4), 200)
+      else put(dst, size, x, y, mix(tip, soot, (t - 0.7) / 0.3 * 0.6), 130)
+    }
+  }
+}
+
 export function paintFor(material: number, face: number, size: number): Layer {
   const dst = new Uint8Array(size * size * 4)
   const seed = material * 1013 + 17
@@ -1548,6 +1604,7 @@ export function paintFor(material: number, face: number, size: number): Layer {
     // ore block you can right-click. `render-audit.test.ts` fails on it, which is the only reason
     // this line is hard to forget.
     case MAT.CAULDRON: paintCauldron(dst, size, seed, face); break
+    case MAT.HEARTH: paintHearth(dst, size, seed, face); break
     case MAT.PATH:
       // Packed earth: subsoil's grit, lightened and calmer, with sparse pale pebbles — reads as
       // WALKED against topsoil's grass without shouting like sand.

@@ -279,6 +279,22 @@ export const PIECES: PieceDef[] = [
   { id: 'bench', name: 'Bench', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 2 }], halfHeight: true, variants: ['wood', 'stone'] },
 
+  // ── ★ THE TABLE (2026-09-13, the reach three buildings recorded: Hazel's R3, Yarrow's R4,
+  // Fennel's R2 — "the building that IS a table") ─────────────────────────────────────────────
+  // Twenty-second piece. A top at the cell's full height on four legs — the counter Hazel sells
+  // across, the bench Yarrow hands the wrong ingredient over, the long table Fennel's household
+  // eats at. Every one of those was a `half_slab` (knee-high, a low bench, not a table you sit at)
+  // or a fence with a slab on it (1.5 high, a workaround that reads as one).
+  //
+  // ★ FULL-CELL OCCUPANCY, NOT HALF, BECAUSE A TABLE IS THE ONE PIECE OF FURNITURE YOU DO NOT
+  // STEP ONTO. The bench is half-height so a keeper steps up onto a seat; a table stops you, which
+  // is what makes a counter a counter — Mallow's loop closes ACROSS it. The top is drawn the full
+  // cell wide so a run of them reads as one long table with no seam, and the legs sit inside the
+  // cell so two runs side by side do not stand their legs through each other.
+  // One cell, like the bench: a run follows a room; a fixed three-long table only fits one.
+  { id: 'table', name: 'Table', w: 1, h: 1, d: 1,
+    cost: [{ itemId: 'goldwood_plank', count: 3 }], variants: ['wood', 'stone'] },
+
   // ── ★ NINE THROUGH TWELVE: THE SUB-CUBE DETAIL (2026-08-27) ─────────────────────────────────
   // The catalogue could build a shape and could not DETAIL one. Every building source says the
   // same thing about what separates a block shed from a building, and it is not more block types:

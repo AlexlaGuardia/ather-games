@@ -298,6 +298,14 @@ export const BLOCKS: BlockDef[] = [
   // full bottle, not of the pot it came out of. If brewing ever grows a clock (the workshop's job
   // model), the glow arrives WITH it and means something.
   { noSlab: true, material: MAT.CAULDRON, name: 'Cauldron', hardness: 1.0, skill: null, minTier: 0, drops: [{ itemId: 'cauldron', count: 1 }], placeable: true },
+  // ── ★ THE HEARTH (2026-09-13) — the first warm light ────────────────────────────────────────
+  // Furniture rules, same as the cauldron: breaks by hand into itself, `skill: null`. Masonry by
+  // trade (a firebox is laid stone), so prospecting is the fast skill, and it is the heaviest thing
+  // in the furniture family — a hearth is a small wall. `emit: 12` sits under the lantern's 14 on
+  // purpose: a fire lights a room, a mana lantern lights a yard, and the lantern stays the block
+  // whose JOB is light. Unlike the cauldron it DOES emit, and honestly — there is no "is it lit"
+  // state to lie about, because it has no fuel and is always burning (`depth.ts` › HEARTH).
+  { noSlab: true, material: MAT.HEARTH, name: 'Hearth', hardness: 1.3, skill: null, minTier: 0, drops: [{ itemId: 'hearth', count: 1 }], fastSkill: 'prospecting', placeable: true, emit: 12 },
   // ★ SOFT AND BARE-HANDED (hardness 0.4, `skill: null`) — a bed is tilled earth, not masonry, and a
   // keeper must be able to pick one up and move it without a tool. It drops ITSELF, so relocating a
   // bed costs nothing and the cap in `garden.ts` counts the same object wherever it ends up.

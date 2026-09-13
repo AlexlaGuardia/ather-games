@@ -382,6 +382,15 @@ export const RECIPES: RecipeDef[] = [
   { id: 'cauldron', name: 'Cauldron', station: 'crafting_table', mana: 0,
     input: [{ itemId: 'block_subsoil', count: 8 }, { itemId: 'cut_stone', count: 4 }],
     output: { itemId: 'cauldron', count: 1 } },
+  // ── THE HEARTH (2026-09-13) — laid stone with a fire in it ─────────────────────────────────
+  // Cobble, because a firebox is the rough stone a cook lays, not the dressed stone a stonewright
+  // sells; six of them is a small wall's worth. No fuel input — the block has no fuel state to
+  // honour (`registry.ts` › HEARTH), and a log in the recipe would be the second log consumer that
+  // is not a refine, which `workshop.test` names as exactly one. Hand-made, like the chest: the
+  // first thing a cold keeper builds should not be gated behind a table.
+  { id: 'hearth', name: 'Hearth', family: 'stone', station: 'hand', mana: 0,
+    input: [{ itemId: 'cobblestone', count: 6 }],
+    output: { itemId: 'hearth', count: 1 } },
 
   // ★ DELIBERATELY THE CHEAPEST STATION ON THE TABLE — soil you are standing on plus two planks.
   // The cauldron costs 8 subsoil + 4 cut stone because brewing is a verb arriving; a garden bed is

@@ -39,7 +39,10 @@ const solid = () => MAT.STONE
   // counter-image of the Snagbarrows' ring. ⚠ It is the KEEPER's and never a hold's: canon fixes the
   // collar-culture's built vocabulary as an exhaustive list against "anything architectural", and
   // benching a hold's audience would say those people built seating for guests.
-  ok(PIECES.length === 21, `the catalogue is twenty-one pieces, deliberately — the doorway family + two doors + the pane joined 2026-09-13 (${PIECES.length})`)
+  // TWENTY-TWO since 2026-09-13 (later the same day) — the TABLE, the reach three Moonwell
+  // buildings recorded independently (Hazel's counter, Yarrow's counter, Fennel's long table).
+  // Full-cell, not half: a table is the furniture you do not step onto.
+  ok(PIECES.length === 22, `the catalogue is twenty-two pieces, deliberately — the doorway family + two doors + the pane, then the table, joined 2026-09-13 (${PIECES.length})`)
   const ids = PIECES.map(p => p.id)
   ok(!ids.includes('wall') && !ids.includes('floor'),
      '★ walls and floors are BLOCKS, not pieces — that split is the whole design')

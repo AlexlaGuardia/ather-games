@@ -52,6 +52,7 @@ const TINT: Record<string, number> = {
   hook: 0x4a4a52,
   fence: 0x8a6a34,
   half_slab: 0xa8834d,
+  table: 0x9a7a48,
 }
 
 /**
@@ -388,6 +389,19 @@ function buildGeometry(def: PieceDef, open = false): THREE.BufferGeometry {
       box(0.10, 0.34, 0.10, 0.36, 0.17, -0.16)
       box(0.10, 0.34, 0.10, -0.36, 0.17, 0.16)
       box(0.10, 0.34, 0.10, 0.36, 0.17, 0.16)
+      break
+    }
+    // ★ A TABLE: a full-width top at the cell's ceiling on four legs, with an apron under the top
+    // so it reads as joinery and not as a slab on sticks. The top spans the whole cell so a run of
+    // tables is one continuous surface; the legs are inset so neighbours' legs never intersect.
+    // Full-cell occupancy (pieces.ts) — a keeper is stopped by it, which is what a counter is for.
+    case 'table': {
+      box(1, 0.12, 1, 0, 0.94, 0)                // the top
+      box(0.84, 0.10, 0.84, 0, 0.83, 0)          // the apron
+      box(0.12, 0.88, 0.12, -0.38, 0.44, -0.38)  // four legs
+      box(0.12, 0.88, 0.12, 0.38, 0.44, -0.38)
+      box(0.12, 0.88, 0.12, -0.38, 0.44, 0.38)
+      box(0.12, 0.88, 0.12, 0.38, 0.44, 0.38)
       break
     }
     default: {   // beam

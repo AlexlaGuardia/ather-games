@@ -186,6 +186,12 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // the one colour the substance law forbids (`design-briefs/shimmer-alchemy-vessels.md`), so the
   // brown is load-bearing — it is what tells a keeper this is Ather craft and not Mint metal.
   [MAT.CAULDRON]: 0x8a5236,
+  // ── ★ THE HEARTH (2026-09-13) — the flat colour is the STONE, not the fire ────────────────
+  // This value tints the whole block and feeds the icon, so it is the firebox's masonry: a soot-
+  // darkened stone brick, greyer and darker than the wall it stands against so the mouth reads as
+  // a recess. The fire is painted, not tinted (`tiles.ts` › paintHearth) — a block whose base colour
+  // was orange would glow on its BACK, which is the lantern-as-cube mistake with a warmer palette.
+  [MAT.HEARTH]: 0x5a5551,
   // ── ★ THE GARDEN BED (2026-08-22) — turned earth, darker and wetter than the ground it sits on ──
   // Read against SUBSOIL's flank brown rather than against topsoil's green: a bed is soil that has
   // been broken open, so it should look like the underside of the turf, not like turf. Darker than
@@ -312,6 +318,10 @@ export const EMISSIVE: Record<number, number> = {
   // ★ Under the lantern's 1.0 on the same reasoning the waymark row gives: a cache is a thing you
   // glimpse and go to, not the light you carry.
   [MAT.CACHE]: 0.7,
+  // The hearth: self-lit, warm, and under the lantern for the same reason its registry `emit` is —
+  // a fire is a thing in a room, the lantern is the light you set out against the dark. Both tables,
+  // as the cache note above insists: registry `emit` lights the floor, this makes the fire read lit.
+  [MAT.HEARTH]: 0.85,
 }
 
 /** An unmapped material must be LOUD, not invisible — magenta says "the registry missed one". */
