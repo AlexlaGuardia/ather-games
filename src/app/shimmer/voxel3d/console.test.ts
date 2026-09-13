@@ -14,7 +14,8 @@
  * Run: `npx tsx src/app/shimmer/voxel3d/console.test.ts`
  */
 import { readFileSync } from 'node:fs'
-import { CONSOLE_CMDS, runConsoleLine, suggestionsFor, type ConsoleCtx } from './console'
+import { CONSOLE_CMDS, runConsoleLine, suggestionsFor, findZone, type ConsoleCtx } from './console'
+import { ZONE_ANCHORS } from '../voxel/zones'
 
 let pass = 0
 const fails: string[] = []
@@ -205,6 +206,32 @@ for (const c of CONSOLE_CMDS.filter(c => c.owner)) {
   runConsoleLine("/market E'xday", ctx(true))
   ok(calls.includes("market:E'xday"), `the day reaches the ctx (recorded: ${calls.join(' ')})`)
   ok(!CONSOLE_CMDS.some(c => c.name === 'passage'), 'the verb is not /passage — that word is a crossing socket in this world')
+}
+
+// ── 11. /goto finds a place by ANY word of its name (2026-09-13) ──────────────────────────────
+// Alex: "i keep getting 'no such place' from the list of places it lists". The lookup was a prefix
+// of the id, and the id's first segment is the adjective — so every noun a person says missed.
+{
+  for (const z of ZONE_ANCHORS) {
+    for (const seg of z.id.split('-')) {
+      if (seg === 'the') continue
+      ok(findZone(seg)?.id === z.id || ZONE_ANCHORS.filter(o => o.id.includes(seg)).length > 1,
+        `'${seg}' (a word of ${z.id}) finds a place`)
+    }
+  }
+  ok(findZone('meadow')?.id === 'spirit-meadow', "'meadow' finds the meadow")
+  ok(findZone('springs')?.id === 'mana-springs', "'springs' finds the springs")
+  ok(findZone('outfields')?.id === 'the-outfields', "'outfields' finds the outfields")
+  ok(findZone('thicket')?.id === 'twilight-thicket', "'thicket' finds the thicket")
+  ok(findZone('glade')?.id === 'moonwell-glade', "'glade' finds the glade")
+  ok(findZone('village')?.id === 'gloview-village', "'village' finds the village")
+  ok(findZone('nowhere') === undefined, 'a word that is nowhere stays nowhere')
+  calls.length = 0
+  const two = runConsoleLine('/goto Spirit Meadow', ctx(true))
+  ok(!/no such place/.test(two.text), `two words are one place: ${two.text}`)
+  const bare = runConsoleLine('/goto', ctx(true)).text
+  ok(ZONE_ANCHORS.every(z => bare.includes(z.id)), 'bare /goto still lists every anchor')
+  // ⚠ the segment sweep above is the guard; the mutation that puts `startsWith` back must go red on it
 }
 
 console.log(`console: ${pass} passed, ${fails.length} failed`)

@@ -341,10 +341,16 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
   // knows where they are. Only the TELEPORT is cheat-grade, checked inside so the compass survives.
   { name: 'goto', usage: 'goto [zone]', help: 'bare: bearings to every ruled place · named: teleport there',
     run: (a, c) => {
-      const q = (a[0] ?? '').toLowerCase()
+      // ★ THE WHOLE LINE IS THE PLACE, AND ANY WORD OF IT FINDS ONE (2026-09-13, Alex: "i keep
+      // getting 'no such place' from the list of places it lists"). The lookup was `id.startsWith`,
+      // so `spirit` found the meadow and `meadow` did not; `springs`, `thicket`, `glade`, `village`,
+      // `outfields` — every word a person actually says — all missed, because the id's first
+      // segment is the adjective. Now: the args join with `-` (so `spirit meadow` and `mana
+      // springs` are the id), then exact → prefix → any segment prefix → substring.
+      const q = a.map(t => t.toLowerCase()).join('-')
       const p = c.pos()
       if (!q) return ZONE_ANCHORS.map(z => `${z.id.padEnd(16)} ${bearing(z.x - p.x, z.z - p.z)}`).join('\n')
-      const z = ZONE_ANCHORS.find(zn => zn.id === q) ?? ZONE_ANCHORS.find(zn => zn.id.startsWith(q))
+      const z = findZone(q)
       if (!z) return `no such place: ${q} — bare /goto lists them`
       if (!c.isOwner) return `${z.id}: ${bearing(z.x - p.x, z.z - p.z)} — teleport is keeper-of-the-realm only`
       // ── ★★ AN ANCHOR INSIDE THE FOLD IS A DOOR, NOT A DESTINATION (2026-08-16) ─────────────────
@@ -673,6 +679,15 @@ export function bearing(dx: number, dz: number): string {
   const k = ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8
   return `${Math.round(d)} blocks ${dirs[k]}`
 }
+/** `/goto` place lookup: exact id, then prefix, then any hyphen-segment prefix, then substring. */
+export function findZone(q: string): (typeof ZONE_ANCHORS)[number] | undefined {
+  const k = q.toLowerCase()
+  return ZONE_ANCHORS.find(z => z.id === k)
+    ?? ZONE_ANCHORS.find(z => z.id.startsWith(k))
+    ?? ZONE_ANCHORS.find(z => z.id.split('-').some(seg => seg.startsWith(k)))
+    ?? ZONE_ANCHORS.find(z => z.id.includes(k))
+}
+
 export function runConsoleLine(line: string, ctx: ConsoleCtx): { text: string; err?: boolean } {
   const parts = line.trim().split(/\s+/)
   const name = (parts[0] ?? '').toLowerCase().replace(/^\//, '')
