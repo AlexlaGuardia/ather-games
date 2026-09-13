@@ -92,8 +92,16 @@ const ROOF0 = WALL + 1
 for (let r = 0; r <= 5; r++) {
   const y = ROOF0 + r, xa = r - 1, xb = W - r
   for (let z = 0; z < D; z++) {
-    if (xa === xb) { piece('roof_cap', xa, y, z, 0); continue }
-    piece('roof_slope', xa, y, z, 3); piece('roof_slope', xb, y, z, 1)
+    // ★ FACING, FIXED 09-13 (Alex: "the roofs are facing the wrong way"; this was the sawtooth
+    // gable in the street shot). The wedge's low edge faces +z at rot 0 and each rot step turns it
+    // −90° (piece-mesh.ts › pivotOffset): rot 1 → −x, rot 2 → −z, rot 3 → +x. This ridge runs
+    // along z, so the WEST eave (xa) faces −x = rot 1 and the EAST eave (xb) +x = rot 3. It was
+    // 3/1 — every wedge pointed up its own slope. The cap is a bar along x at rot 0; a ridge along
+    // z wants rot 1, or the ridge is a comb of short bars. ⚠ Applied to the JSON directly (this
+    // script is stale since the doorway-frame pass and must not be re-run); the line here is so
+    // the intent and the data agree.
+    if (xa === xb) { piece('roof_cap', xa, y, z, 1); continue }
+    piece('roof_slope', xa, y, z, 1); piece('roof_slope', xb, y, z, 3)
     const end = z === 0 || z === D - 1
     for (let x = xa + 1; x < xb; x++) put(x, y, z, MAT.SHINGLES)   // R2 closed: the mass is roofing
   }
