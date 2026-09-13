@@ -40,14 +40,17 @@ once(host, '<SettingsPanel s={settings} update={update} isOwner={isOwner}', 1, '
   const panel = rawHost.indexOf('function SettingsPanel(')
   const dev = rawHost.indexOf('href="/shimmer/dev/worktable"', panel)
   ok(dev > panel, 'the worktable door exists, in the panel')
-  const gate = rawHost.lastIndexOf('{isOwner && (', dev)
-  ok(gate > panel && dev - gate < 600, 'the worktable door is inside an `isOwner &&` block of the panel')
+  const gate = rawHost.lastIndexOf("{isOwner && tab === 'dev' && (", dev)
+  ok(gate > panel && dev - gate < 600, 'the worktable door is inside the `isOwner && tab === dev` block of the panel')
+  // The tab BUTTON is gated too, or a player sees a "Dev" tab that opens onto nothing.
+  ok(rawHost.indexOf("if (isOwner) tabs.push(['dev', 'Dev'])", panel) > panel, 'the Dev tab button itself is owner-only')
+  ok(!/\['dev', 'Dev'\]\]/.test(rawHost.slice(panel)), 'and it is never in the default tab list')
   const hub = rawHost.indexOf('href="/shimmer/dev"', gate)
   ok(hub > gate && hub - gate < 900, 'so is the dev hub door')
   // Nothing in the panel reaches /shimmer/dev outside that block — code OR prose.
   const before = rawHost.slice(panel, gate)
   ok(!before.includes('href="/shimmer/dev'), 'no dev route is linked from the panel above the owner block')
-  const after = rawHost.slice(hub + 20, rawHost.indexOf('\n}\n', hub))
+  const after = rawHost.slice(rawHost.indexOf('</div>', hub), rawHost.indexOf('\n}\n', hub))
   ok(!after.includes('href="/shimmer/dev'), 'nor below it')
 }
 ok(/path\.startsWith\("\/shimmer\/dev"\)/.test(rawProxy), '★ the proxy gates /shimmer/dev — the lock behind the hidden door')

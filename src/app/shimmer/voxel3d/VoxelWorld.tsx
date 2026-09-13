@@ -91,7 +91,7 @@ import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotF
 const arriveStandoff = (cfg: PlotConfig) =>
   cfg.cave ? cfg.thresholdInset + cfg.cave.depth + 3 : 6
 import { foldLedger, foldOwed, foldProgressLine, tierRadius, TIER_NEED } from './fold-ledger'
-import { createSpiritIndex, markSeen, indexToSave, indexFromSave, type SpiritIndex, type IndexSave } from '../engine/spirit-index'
+import { createSpiritIndex, markSeen, markStudied, indexToSave, indexFromSave, type SpiritIndex, type IndexSave } from '../engine/spirit-index'
 // ⚠ `WILDS_BUBBLE` (from column.ts, imported above), NEVER `bubble.ts`'s `DEFAULT_BUBBLE`. The
 // default's door faces bearing 0 and its wall is a placeholder material; the live one is aimed at
 // the glade and made of cloud. Read the default here and the crossing would fire on the far side of
@@ -1876,6 +1876,17 @@ export default function VoxelWorld() {
     // Wounds and what the spar taught outlive the fight, so both go back to the SHARED save — the
     // same party the 2D game and play3d read. Merge-write; see writeParty.
     writeParty()
+    // ★ A SPAR IS HOW A SPIRIT BECOMES STUDIED (2026-09-13, the first stone of Alex's arena design:
+    // "finding a spirit in the mist adds it to a roster of discovered spirits"). The grimoire's
+    // species index already had the rung — `unseen → seen → studied` — and `markStudied` had no
+    // caller anywhere: the mist wrote `seen` on sight and nothing in the world ever wrote the top.
+    // A spar is the one act that reads a wild spirit closely (canon: what practice pays is "the
+    // bond, the reading, the sharpening"), so it is the one act that studies. Win or lose — you
+    // read it either way. Canon-clean because it ACQUIRES nothing: `mist-encounter.ts` still adds no
+    // roster entry, the presence still withdraws; only the KNOWING face of the book fills, which is
+    // the face canon says fills by discovery. Whether a studied-but-unbonded spirit later answers a
+    // ring is the [OPEN] gap in CANON_GAPS, not this line. Rides the snapshot below like `seen`.
+    for (const e of s.enemies) markStudied(spiritIndex.current, e.species, e.element === 'base' ? undefined : e.element)
     mistLedger.current = recordWithdrawal(mistLedger.current, s.patch, Date.now())
     saveMistLedger(SEED, mistLedger.current)
     setNearMist(null)
@@ -11436,123 +11447,144 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
     </label>
   )
 
+  // ── TABS (Alex, 2026-09-13: "organize it better so it opens to game, video, sound, and the
+  // usual game options with a hidden dev tab for me") ──────────────────────────────────────
+  // One panel, five pages. GAME first because it is where you leave from; VIDEO holds every look
+  // and budget (render style, the four cartoon levers, the two radii) plus the frame meter,
+  // which is a video instrument; SOUND and CONTROLS are the player settings that were being read
+  // as developer tooling when they sat under render headings. DEV is a tab, not a section — and
+  // the tab BUTTON is gated the same as its page, so a player's tab row simply has four tabs.
+  const [tab, setTab] = useState<'game' | 'video' | 'sound' | 'controls' | 'dev'>('game')
+  const tabs: [typeof tab, string][] = [['game', 'Game'], ['video', 'Video'], ['sound', 'Sound'], ['controls', 'Controls']]
+  if (isOwner) tabs.push(['dev', 'Dev'])
+  const Row = ({ href, onClick, label, tail }: { href?: string; onClick?: () => void; label: string; tail: string }) => {
+    const cls = 'gx-btn flex w-full items-center justify-between px-2.5 py-1.5 text-[10px]'
+    const body = <><span>{label}</span><span className="gx-value text-white/50">{tail}</span></>
+    return href ? <a href={href} className={cls}>{body}</a> : <button onClick={onClick} className={cls}>{body}</button>
+  }
+
   return (
     // Capped to the viewport and scrolling past it: with the Dev rows the panel outgrew a 760px
     // window and sat on the mana gauge.
     <div className="absolute top-3 right-3 w-72 max-h-[calc(100vh-24px)] overflow-y-auto bg-black/80 border border-white/15 rounded p-3 space-y-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase">Render</span>
+        <span className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase">Options</span>
         <button onClick={onClose} className="text-white/40 hover:text-white/80 text-xs font-mono">esc / O</button>
       </div>
-
-      <div className="flex gap-1.5">
-        {(['natural', 'cartoon'] as RenderStyle[]).map(v => (
-          <button
-            key={v}
-            onClick={() => update(withStyle(s, v))}
-            className={`flex-1 py-1.5 rounded text-[11px] font-mono uppercase tracking-wider border
-              ${s.style === v ? 'border-amber-300 text-amber-200 bg-amber-300/10' : 'border-white/15 text-white/50'}`}
-          >{v}</button>
+      {/* The tab row: the house game-UI signature — near-uniform size, hierarchy by brightness.
+          Inactive ~45%, active amber with a rule under it. */}
+      <div className="flex gap-0.5 border-b border-white/10">
+        {tabs.map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)}
+                  className={`gx-label px-1.5 pb-1.5 text-[9px] tracking-[.08em] uppercase border-b-2 -mb-px whitespace-nowrap
+                    ${tab === id ? 'border-amber-300 text-amber-200' : 'border-transparent text-white/45 hover:text-white/75'}
+                    ${id === 'dev' ? 'ml-auto' : ''}`}>{label}</button>
         ))}
       </div>
 
-      {/* Each lever is exposed so the look can be judged by moving ONE at a time on the real world.
-          A preset is a starting point; the call is Alex's. */}
-      <Slider label="banding" k="toon" />
-      <Slider label="outline" k="outline" />
-      <Slider label="face light" k="faceShading" />
-      <Slider label="shadow lift" k="shadowLift" />
+      {tab === 'game' && (<>
+        {/* Where you leave from. The world autosaves on every change, so a hard nav out never
+            loses progress — the same reason play3d's ☰ could hold these. */}
+        <Row onClick={onClose} label="▶ Resume" tail="esc" />
+        <Row href="/room?wall=0" label="⌂ The Room" tail="leave" />
+        <Row href="/arcade/all" label="▦ All games" tail="arcade" />
+        <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">
+          Your world saves itself as you play. Leaving is never a loss.
+        </p>
+      </>)}
 
-      <div className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase pt-1">World</div>
-      {/* Cost is QUADRATIC in this number (columns, meshes, light fields all scale with r²) —
-          which is why it is a stepped slider with tested bounds, not a free number. */}
-      <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
-        <span className="w-24 shrink-0">view radius</span>
-        <input
-          type="range" min={VIEW_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.viewRadius}
-          onChange={e => update({ viewRadius: Number(e.target.value) })}
-          className="flex-1 accent-amber-300"
-        />
-        <span className="w-14 text-right tabular-nums text-white/50">{s.viewRadius * 16} blk</span>
-      </label>
-      {/* ★ The night's radius, split from the view's (#1113). Clamped to the view radius on read —
-          the label shows the EFFECTIVE value so a slider past the view reads as what it does. */}
-      <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
-        <span className="w-24 shrink-0">sim radius</span>
-        <input
-          type="range" min={SIM_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.simRadius}
-          onChange={e => update({ simRadius: Number(e.target.value) })}
-          className="flex-1 accent-amber-300"
-        />
-        <span className="w-14 text-right tabular-nums text-white/50">{simRadiusOf(s) * 16} blk</span>
-      </label>
+      {tab === 'video' && (<>
+        <div className="gx-label text-[9px] text-white/40">Render</div>
+        <div className="flex gap-1.5">
+          {(['natural', 'cartoon'] as RenderStyle[]).map(v => (
+            <button
+              key={v}
+              onClick={() => update(withStyle(s, v))}
+              className={`flex-1 py-1.5 rounded text-[11px] font-mono uppercase tracking-wider border
+                ${s.style === v ? 'border-amber-300 text-amber-200 bg-amber-300/10' : 'border-white/15 text-white/50'}`}
+            >{v}</button>
+          ))}
+        </div>
+        {/* Each lever is exposed so the look can be judged by moving ONE at a time on the real world.
+            A preset is a starting point; the call is Alex's. */}
+        <Slider label="banding" k="toon" />
+        <Slider label="outline" k="outline" />
+        <Slider label="face light" k="faceShading" />
+        <Slider label="shadow lift" k="shadowLift" />
 
-      {/* ── ★ ITS OWN SECTION, because it is the one setting that changes nothing about the world ──
-          Everything above is a look or a budget; this is an instrument. Keeping it out of Render
-          also keeps it out of PRESETS, so flipping natural↔cartoon mid-measurement cannot switch
-          off the meter you are measuring with. */}
-      {/* ── SOUND ───────────────────────────────────────────────────────────────────────────
-          ★ ITS OWN SECTION, ABOVE DEBUG, FOR THE REASON THE CONTROLS ROW IS: volume is a PLAYER
-          setting. Buried under a debug heading it reads as developer tooling, and the players who
-          most need it are the ones least likely to open that section.
-          ⚠ The value drives `audio/bus.ts`'s single master gain — which is what makes this one
-          slider mean the whole game rather than one module's sounds. Before the bus there were
-          four AudioContexts and nothing a single number could have applied to. */}
-      <div className="gx-label pt-1 text-[9px] text-white/40">Sound</div>
-      <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
-        <span className="w-20 shrink-0">volume</span>
-        <input
-          type="range" min={0} max={1} step={0.05} value={s.volume}
-          onChange={e => update({ volume: Number(e.target.value) })}
-          className="flex-1 accent-amber-300"
-        />
-        <span className="w-14 text-right tabular-nums text-white/50">{Math.round(s.volume * 100)}%</span>
-      </label>
+        <div className="gx-label pt-1 text-[9px] text-white/40">World</div>
+        {/* Cost is QUADRATIC in this number (columns, meshes, light fields all scale with r²) —
+            which is why it is a stepped slider with tested bounds, not a free number. */}
+        <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
+          <span className="w-24 shrink-0">view radius</span>
+          <input
+            type="range" min={VIEW_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.viewRadius}
+            onChange={e => update({ viewRadius: Number(e.target.value) })}
+            className="flex-1 accent-amber-300"
+          />
+          <span className="w-14 text-right tabular-nums text-white/50">{s.viewRadius * 16} blk</span>
+        </label>
+        {/* ★ The night's radius, split from the view's (#1113). Clamped to the view radius on read —
+            the label shows the EFFECTIVE value so a slider past the view reads as what it does. */}
+        <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
+          <span className="w-24 shrink-0">sim radius</span>
+          <input
+            type="range" min={SIM_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.simRadius}
+            onChange={e => update({ simRadius: Number(e.target.value) })}
+            className="flex-1 accent-amber-300"
+          />
+          <span className="w-14 text-right tabular-nums text-white/50">{simRadiusOf(s) * 16} blk</span>
+        </label>
 
-      {/* ── CONTROLS ────────────────────────────────────────────────────────────────────────
-          Above Debug on purpose: rebinding is a PLAYER setting and the frame meter is an
-          instrument. A controls row buried under a debug heading reads as developer tooling and
-          the players who most need it are the ones least likely to open that section. */}
-      <div className="gx-label pt-1 text-[9px] text-white/40">Controls</div>
-      <button onClick={onControls}
-              className="gx-btn flex w-full items-center justify-between px-2.5 py-1.5 text-[10px]">
-        <span>Key &amp; controller bindings</span>
-        <span className="gx-value text-white/50">edit</span>
-      </button>
+        {/* ── ★ THE FRAME METER: an instrument, not a look. Kept out of the Render group so it is
+            out of PRESETS — flipping natural↔cartoon mid-measurement cannot switch off the meter
+            you are measuring with. */}
+        <div className="gx-label pt-1 text-[9px] text-white/40">Diagnostics</div>
+        <label className="flex items-center gap-2 text-[11px] font-mono text-white/70 cursor-pointer">
+          <input
+            type="checkbox" checked={s.showFps}
+            onChange={e => update({ showFps: e.target.checked })}
+            className="accent-amber-300"
+          />
+          <span>frame meter</span>
+          <span className="ml-auto text-white/35">fps · ms · worst · draws</span>
+        </label>
+        <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">
+          Both shading paths live in one shader program and are picked by a uniform, so switching
+          costs nothing. Settings persist.
+        </p>
+      </>)}
 
-      <div className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase pt-1">Debug</div>
-      <label className="flex items-center gap-2 text-[11px] font-mono text-white/70 cursor-pointer">
-        <input
-          type="checkbox" checked={s.showFps}
-          onChange={e => update({ showFps: e.target.checked })}
-          className="accent-amber-300"
-        />
-        <span>diagnostics</span>
-        <span className="ml-auto text-white/35">fps · ms · worst · draw counts</span>
-      </label>
+      {tab === 'sound' && (<>
+        {/* ⚠ The value drives `audio/bus.ts`'s single master gain — which is what makes this one
+            slider mean the whole game rather than one module's sounds. Before the bus there were
+            four AudioContexts and nothing a single number could have applied to. */}
+        <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
+          <span className="w-20 shrink-0">volume</span>
+          <input
+            type="range" min={0} max={1} step={0.05} value={s.volume}
+            onChange={e => update({ volume: Number(e.target.value) })}
+            className="flex-1 accent-amber-300"
+          />
+          <span className="w-14 text-right tabular-nums text-white/50">{Math.round(s.volume * 100)}%</span>
+        </label>
+      </>)}
 
-      <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">
-        Both shading paths live in one shader program and are picked by a uniform, so switching
-        costs nothing. Settings persist.
-      </p>
+      {tab === 'controls' && (<>
+        {/* Alex, 2026-08-23: "in the menu there should be an option to bind keys." */}
+        <Row onClick={onControls} label="Key & controller bindings" tail="edit" />
+      </>)}
 
       {/* ── DEV (owner only) ────────────────────────────────────────────────────────────────
-          Last, under a rule, because everything above it is the player's and nothing here is.
           Plain navigations: the worktable is its own page with its own state, and the world
-          autosaves on every change, so leaving is never a loss. */}
-      {isOwner && (
-        <div className="border-t border-white/10 pt-2 space-y-1">
-          <div className="gx-label text-[9px] text-amber-300/70">Dev · keeper of the realm</div>
-          <a href="/shimmer/dev/worktable"
-             className="gx-btn flex w-full items-center justify-between px-2.5 py-1.5 text-[10px]">
-            <span>⚒ Build structures</span>
-            <span className="gx-value text-white/50">worktable</span>
-          </a>
-          <a href="/shimmer/dev"
-             className="gx-btn flex w-full items-center justify-between px-2.5 py-1.5 text-[10px]">
-            <span>✧ Dev hub</span>
-            <span className="gx-value text-white/50">editors</span>
-          </a>
+          autosaves on every change, so leaving is never a loss. Gated twice: the tab button above
+          and the page here, both on `isOwner`. */}
+      {isOwner && tab === 'dev' && (
+        <div className="space-y-1">
+          <div className="gx-label text-[9px] text-amber-300/70">Keeper of the realm</div>
+          <Row href="/shimmer/dev/worktable" label="⚒ Build structures" tail="worktable" />
+          <Row href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
+          <Row href="/shimmer/play3d" label="❈ play3d" tail="legacy" />
         </div>
       )}
     </div>
