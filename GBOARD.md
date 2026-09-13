@@ -171,9 +171,18 @@ mossy cut stone · cobblestone · plaster → **16 shapes × 12 = 192 pieces** (
 roofing, cloth deliberately out. A beam in plaster + a beam in plaster = a half-thick plaster wall: the cottage infill.
 
 **Next:**
-1. ⛔ **ALEX LOOKS AT A BEAM IN THREE MATERIALS** — goldwood, stone brick, plaster — and a wall of each. Pieces are lit by
-   scene Lambert, blocks by the light field + cartoon stack: they may read a shade apart. If so, the next step is
-   handing the piece program the same `lightUniforms`/cartoon dials the atlas material gets.
+1. ⛔ **ALEX LOOKED (09-13, spirits lane): *"how bad the shading is on the half slab.. a completely black shadow and
+   nothing around them has any."*** ★ THE CAUSE IS THE LIGHT RIG, NOT THE TEXTURE. Pieces are `MeshLambertMaterial`
+   under the scene `HemisphereLight` (`sky-palette.ts` DAY `hemiGround #3b3a4a`, night `#252c47`, nearly black);
+   a face whose normal points DOWN (a slab's underside, a table's soffit, an arch's intrados) collects pure
+   `hemiGround`, and a vertical flank at noon collects half of it with `N·L ≈ 0` from the key — `sky-env.ts:31`
+   measured exactly this on the Hollows. Blocks never go black because they are lit by the light FIELD + the
+   cartoon stack, which has a floor. So a half slab on lit grass wears a black underside beside neighbours that
+   have no shadow at all. **Fix = the thread already named: hand the piece program the world's `lightUniforms`
+   + cartoon dials so a piece and the block it touches are lit by the same field** (the Hollows' env-map answer
+   is the wrong one here — a piece is masonry, not a creature). Until then every piece with a down-facing or
+   shaded face reads as the cheaper wrong.
+   - Still: a beam in three materials — goldwood, stone brick, plaster — and a wall of each, once the light is shared.
 2. **DOORS AND DOORWAYS** — Alex's next topic. Today: `doorway` (1×3 frame with a hole), `door` (1×2 leaf, swings
    in-cell), `gate`, `arch` (3 wide). Open questions to bring: does a door hang IN a doorway or replace it; 2-tall
    doorways; double doors; what `passable`/`openable` should mean for each.
