@@ -11,6 +11,26 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🏘️ Shimmer — **THE GLADE IS A STREET: MALLOW · YARROW · SAX PLACED** (2026-09-13, hub lane `2f743745`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID eH1yOMihTu_7ArTnFsKs8` from `395e80d`** (+ worker repin `0745fdf474`, served == disk). placed.test 49/0 · stamps 52/0.*
+
+**Left off:** Alex: *"lets place the five trades from the worktable"* → rendered a top-down glade map (scratch
+`glade-map.mts`: true top material per column, road, contours, placed footprints, candidate boxes with pad-span +
+tree check) → **the bench rise north of spawn refuses every 13-wide site** (`STAMP_PAD_SPAN` 1; scanned z −658..−645,
+all 2–4). South is flat and the road already runs through it to the fold door, so the glade is a **street, not a
+ring**: the keeper arrives from the fold and walks up past every trade to Greg. Alex: *"place it."* Rows:
+Hazel (−165,−632) r0 · **Mallow (−164,−602) r1** (faces the road) · **Yarrow (−141,−621) r3** (faces the road, herb
+garden east) · **Sax (−136,−608) r0** (faces north, yard east toward the boulders) · ring (−143,−639). Shot from the
+foot looking north (`$SP/street-north.png`): Mallow's porch, Hazel's gable left; Sax's yard, Yarrow's half-timber right.
+
+**Next:**
+1. **Fennel has NO blueprint** — build `scripts/blueprint-fennel.mts` (cook: open-fronted kitchen, hearth + bread
+   oven, long table) and place at ~(−161,−620) r1 (the pink box, 9×12 placeholder; the slot between Hazel and Mallow).
+2. Alex walks the street on prod; Mallow sits ~15 back from the road (closer sites straddle a 2-step) — if it reads
+   far, (−164,−608) r0 facing north is the alternative.
+3. Want-lists + prices, voice-profiles for the five, Beat 0 wiring (Magii's handoff, `shimmer-quests-mainmap.md`).
+
+**Files:** `data/blueprints/placed.table.json` · `src/workers/worker-url.ts` · `public/voxel-gen.worker.0745fdf474.js`.
+
 ## 🔨 Shimmer — **A PLACED PIECE IS WORKED LIKE A BLOCK; GATHERING XP = SEAMS + LOGS ONLY** (2026-09-12, hub lane `2f743745`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID -TjxvlTisrXjXntORTVxC` from `505d287`** (`GtPYf-nqJQNK81HUgS6hh` from `5a905bb`, (piece-break `D8xcsW1-FzE20mPLHjqPm` from `5f16618` before it), served == disk (chunk md5 match), worker pin unchanged. piece-break.test **994/0, 2 mutations fire**. tsc 7 (baseline).*
 
 **Left off:** Alex: *"the pieces just break instantly if left clicked.. can we bring them up to speed with the other
