@@ -171,8 +171,13 @@ mossy cut stone · cobblestone · plaster → **16 shapes × 12 = 192 pieces** (
 roofing, cloth deliberately out. A beam in plaster + a beam in plaster = a half-thick plaster wall: the cottage infill.
 
 **Next:**
-1. ⛔ **ALEX LOOKED (09-13, spirits lane): *"how bad the shading is on the half slab.. a completely black shadow and
-   nothing around them has any."*** ★ THE CAUSE IS THE LIGHT RIG, NOT THE TEXTURE. Pieces are `MeshLambertMaterial`
+1. ✅ **SHIPPED 09-13 (spirits lane, `6a8d80e`, live as `ryQ_zyh2hKWgZEfka8qo4`): pieces run the cartoon stack + the
+   light field through `cartoon-glsl.ts`, the ONE copy (mesh-bridge + atlas import it too; the copies test now
+   asserts one copy, three importers). World pos/normal through the instance matrix. A/B on the Glade: roof wedges,
+   posts and lantern posts read as the walls' material family, the roof is no longer a black mass at night.
+   **Alex judges the half slab's underside and a beam in three materials.** The record of the cause, kept:**
+   ALEX LOOKED (09-13): *"how bad the shading is on the half slab.. a completely black shadow and
+   nothing around them has any."* ★ THE CAUSE WAS THE LIGHT RIG, NOT THE TEXTURE. Pieces are `MeshLambertMaterial`
    under the scene `HemisphereLight` (`sky-palette.ts` DAY `hemiGround #3b3a4a`, night `#252c47`, nearly black);
    a face whose normal points DOWN (a slab's underside, a table's soffit, an arch's intrados) collects pure
    `hemiGround`, and a vertical flank at noon collects half of it with `N·L ≈ 0` from the key — `sky-env.ts:31`
