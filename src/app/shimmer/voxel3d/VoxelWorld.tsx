@@ -235,6 +235,8 @@ import { LANDING_ARRIVAL } from '../world/landing'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
+import { createSmoke } from './smoke'
+import { columnSmokeSources, type SmokeSource } from './smoke-sources'
 import { createSeamShimmer, PLOT_TRIGGER_RADIUS } from './seam'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
 import { createBreakFx } from './break-fx'
@@ -4258,6 +4260,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   }, [])
   // Hot-spring steam (2026-08-08) — sleeps everywhere but the Springs; see steam.ts.
   const steam = useMemo(() => createSteamPoints(SEED), [])
+  // Chimney smoke (2026-09-13, Fennel's R5) — rises from every HEARTH / OVEN in the nearby columns,
+  // born where the stack opens (the chimney cap, or the block's own top). The source list is
+  // rescanned every 2s over the columns around the camera, never per frame; see smoke-sources.ts.
+  const smoke = useMemo(() => createSmoke(SEED), [])
+  const smokeSources = useRef<SmokeSource[]>([])
+  const smokeClock = useRef(0)
   /**
    * Block-break chips (2026-08-28) — the swing's debris and the burst when a block gives.
    * Built once, like every other pass; `break-fx.ts` owns its own budget and drops overflow.
@@ -4302,8 +4310,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // lens introduced it — it is older and it is much larger under ADS.
   useEffect(() => {
     const fov = (camera as THREE.PerspectiveCamera).fov ?? 75
-    breakFx.setPixelScale(size.height / (2 * Math.tan((fov * Math.PI) / 360)))
-  }, [breakFx, size.height, camera])
+    const scale = size.height / (2 * Math.tan((fov * Math.PI) / 360))
+    breakFx.setPixelScale(scale)
+    smoke.setPixelScale(scale)   // the same conversion; smoke puffs are sized in blocks too
+  }, [breakFx, smoke, size.height, camera])
   // The keeper's front door, drawn.
   //
   // ⚠ THE THIRD ARG IS AN ACCESSOR, NOT A CONFIG, AND THAT IS THE 2026-08-27 FOLD-DOOR FIX. Both
@@ -5079,12 +5089,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     tiles?.texture.dispose()
     greg.dispose()
     steam.dispose()
+    smoke.dispose()
     breakFx.dispose()
     seam.dispose()
     mist.dispose()
     ring.dispose()
     flora.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, breakFx, seam, mist, flora])
+  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, smoke, breakFx, seam, mist, flora])
 
   /**
    * Set the instant the context is lost, read by the FRAME LOOP so it stops. A ref and not state:
@@ -7277,6 +7288,21 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     if (!g) return
     const p = camera.position
     steam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
+    // The smoke's source scan: 7×7 columns around the camera (±48 blocks), every 2s. Cheap because
+    // uniform sections skip in O(1) and hearths are rare; honest because every edit path refreshes
+    // the uniform table. A hearth a keeper sets down smokes within two seconds, no wiring needed.
+    smokeClock.current -= dt
+    if (smokeClock.current <= 0) {
+      smokeClock.current = 2
+      const list: SmokeSource[] = []
+      const ccx = Math.floor(p.x / SECTION), ccz = Math.floor(p.z / SECTION)
+      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+        const col = cols.current.get(key(ccx + dx, ccz + dz))
+        if (col) columnSmokeSources(col, voxel, list)
+      }
+      smokeSources.current = list
+    }
+    smoke.tick(dt, state.clock.elapsedTime, smokeSources.current)
     breakFx.tick(dt)
     // ⚠ NEEDS THE CURRENT SPACE — the one argument steam does not take. It draws the Wilds seam
     // only in the Wilds and the plot-side one only in the plot. Hooked but never ticked renders
@@ -10587,6 +10613,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       <primitive object={pieces.group} />
       <primitive object={greg.group} />
       <primitive object={steam.points} />
+      <primitive object={smoke.points} />
       <primitive object={breakFx.points} />
       <primitive object={seam.group} />
       <primitive object={mist.points} />

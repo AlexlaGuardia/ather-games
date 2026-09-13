@@ -37,8 +37,11 @@
 //     jar states (POT/POT_SEEDED/POT_BLOOM) are the only "stuff" the world has. → a few food blocks
 //     or a `platter` piece; the want-list wants to be visible as a spread.
 // R4  A SIGN. Fifth building, same R as the other four.
-// R5  SMOKE. A chimney with nothing coming out of it is a stone column. → a smoke emitter keyed on
-//     a hearth block, engine side, not a blueprint's problem.
+// R5  SMOKE. ✅ CLOSED 09-13 (later): `voxel3d/smoke.ts` + `smoke-sources.ts` — every HEARTH /
+//     OVEN in the columns around the camera smokes from where its stack OPENS (the flue walk
+//     finds this chimney's cap through the lintel + mantel + column; the oven smokes from its own
+//     top). Engine side, keyed on the block, so a keeper's hand-placed hearth smokes too. Was: a
+//     chimney with nothing coming out of it is a stone column.
 // (What was NOT missing: footing, cut stone + stone brick + mossy, dawnwood posts, shingles,
 //  roof_slope/cap, bench, half_slab, hook, doorway+door (the new 3×3 frame), window+shutter,
 //  CAULDRON, CHEST, TIMBER_STACK, MANA_LANTERN, the jar states, garden beds, RUBBLE, PATH.)

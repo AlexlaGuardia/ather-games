@@ -77,7 +77,7 @@ const at = (needle: string, what: string): number => {
   once('breakFx.dispose()', 1, 'disposed with the other passes')
   // ⚠ THE DEP ARRAY IS NOT COSMETIC. The dispose effect lists every pass it tears down; a pass
   // missing from it is disposed against a stale closure on the next dependency change.
-  const dep = at('greg, steam, breakFx, seam, mist, flora]', 'breakFx is in the dispose dep array')
+  const dep = at('greg, steam, smoke, breakFx, seam, mist, flora]', 'breakFx is in the dispose dep array')
   ok(dep > 0, 'dispose dep array names breakFx between steam and seam')
 }
 
@@ -87,13 +87,17 @@ const at = (needle: string, what: string): number => {
 // off, and 55 green asserts could not see it — only a screenshot did.
 {
   once('breakFx.setPixelScale(', 1, 'the scale is set exactly once')
-  ok(/setPixelScale\(size\.height \/ \(2 \* Math\.tan\(/.test(src),
+  // Since 2026-09-13 the scale is computed ONCE into `scale` and handed to both passes that size
+  // in blocks (chips and chimney smoke) — one derivation, two consumers, so they cannot disagree.
+  ok(/const scale = size\.height \/ \(2 \* Math\.tan\(/.test(src),
      'and it is height / (2·tan(fov/2)) — the projection, not a constant')
+  once('breakFx.setPixelScale(scale)', 1, 'the chips take that derived scale')
+  once('smoke.setPixelScale(scale)', 1, 'and so does the smoke — the same number, not a second derivation')
   ok(/\.fov \?\? 75/.test(src), "and the fov falls back to the Canvas's own 75, not a guess")
   // ⚠ AN EFFECT, NOT A FRAME. Recomputing this per frame is a uniform write for a value that
   // changes on resize; doing it ONCE on mount is worse — it freezes the scale at the first
   // viewport and every later resize renders the wrong size.
-  ok(/}, \[breakFx, size\.height, camera\]\)/.test(src),
+  ok(/}, \[breakFx, smoke, size\.height, camera\]\)/.test(src),
      'and it re-runs when the viewport height or the camera changes')
 }
 
