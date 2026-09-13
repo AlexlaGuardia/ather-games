@@ -4,11 +4,11 @@
 > registry, the recipe table and the tool table, and it classifies each item by calling the same
 > icon path the game calls. A hand-kept version of this file would be wrong within a week.
 
-Items reachable in voxel3d: **424**
+Items reachable in voxel3d: **425**
 
 | status | count | meaning |
 |---|---|---|
-| 🟦 derived | 76 | wears its own block's faces. Never needs hand art. |
+| 🟦 derived | 77 | wears its own block's faces. Never needs hand art. |
 | 🌿 cross | 8 | the world draws it as crossed quads, not a cube — the icon projects the same cross. Never needs hand art. |
 | 🌱 flora | 3 | drawn by the world's own ground-cover generator. Never needs hand art. |
 | 🧊 mesh | 2 | rendered from the scatter geometry the world instances. Never needs hand art. |
@@ -166,6 +166,7 @@ source of truth for what that block looks like, and the two drift the first time
 - `mossy_cut_stone_slab`
 - `mossy_stone_brick`
 - `mossy_stone_brick_slab`
+- `oven`
 - `pale_brick`
 - `pale_brick_slab`
 - `plaster`

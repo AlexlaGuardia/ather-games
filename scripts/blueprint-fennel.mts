@@ -27,8 +27,9 @@
 // R1  A HEARTH / FIRE / OVEN. ✅ HALF CLOSED 09-13: `HEARTH` block (registry emit 12, warm; fire
 //     texels emissive; `tiles.ts` › paintHearth) now sits in the firebox where the MANA_LANTERN
 //     was. Was: the building's whole identity is a fire and there was no fire block; a cook lit by
-//     mana-blue read as a placeholder. STILL OPEN: a bread `OVEN` (cut-stone dome with a dark
-//     mouth) — the hearth is one block, not a kitchen.
+//     mana-blue read as a placeholder. ✅ OTHER HALF CLOSED 09-13 (later): `OVEN` block (emit 6,
+//     half the hearth; `tiles.ts` › paintOven — arched sooted mouth, banked coals, domed top with
+//     a smoke hole) on the back wall past the cauldron. R1 is whole.
 // R2  A TABLE. ✅ CLOSED 09-13: `table` piece (full-cell, top at y+1, four legs; wood/stone
 //     variants), a run of six down the eating side. Was: `half_slab` at y=1 — knee-high, a low
 //     bench, not a table you sit at. Same close lands in Hazel (R3) and Yarrow (R4).
@@ -112,6 +113,11 @@ put(HX, ROOF0 + 5, BZ1 - 1, MAT.CRACKED_STONE_BRICK)     // the top course, fire
 // Firewood by the hearth, the cauldron on the fire's other side, the chest in the corner.
 put(1, 1, BZ1 - 1, MAT.TIMBER_STACK)
 put(HX + 2, 1, BZ1 - 1, MAT.CAULDRON)
+// The bread OVEN (R1's other half, closed 09-13 later): a dressed-stone dome against the back
+// wall past the cauldron, at the hearth's level — its mouth lands at a two-block keeper's waist,
+// which is where a bread oven's mouth is. A plinth would have put it at the head. The wall hides
+// its back; every other side is a mouth (a block has no facing).
+put(HX + 4, 1, BZ1 - 1, MAT.OVEN)
 put(BX1 - 1, 1, BZ1 - 1, MAT.CHEST)
 // The work side: a half-slab counter along the west wall with the jars on it (Yarrow's R1
 // workaround), hooks over it for hung pans.

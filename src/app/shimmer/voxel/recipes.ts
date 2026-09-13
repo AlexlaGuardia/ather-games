@@ -391,6 +391,13 @@ export const RECIPES: RecipeDef[] = [
   { id: 'hearth', name: 'Hearth', family: 'stone', station: 'hand', mana: 0,
     input: [{ itemId: 'cobblestone', count: 6 }],
     output: { itemId: 'hearth', count: 1 } },
+  // ── THE OVEN (2026-09-13) — a dome of dressed stone ──────────────────────────────────────
+  // Cut stone, not cobble: a dome has to be laid true or it falls in, so it is the stonewright's
+  // block, and it goes through the table for the same reason. Six, like the hearth — the same
+  // small wall's worth, dressed. No fuel input, same as the hearth (`registry.ts` › OVEN).
+  { id: 'oven', name: 'Oven', family: 'stone', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'cut_stone', count: 6 }],
+    output: { itemId: 'oven', count: 1 } },
 
   // ★ DELIBERATELY THE CHEAPEST STATION ON THE TABLE — soil you are standing on plus two planks.
   // The cauldron costs 8 subsoil + 4 cut stone because brewing is a verb arriving; a garden bed is

@@ -78,6 +78,9 @@ export const TILE_MATERIALS: number[] = [
   // The hearth added 2026-09-13 — the first WARM emitter. Per-face: a firebox on the sides, embers
   // on top, soot underneath. Its fire texels carry emissive alpha like the lantern's glass.
   MAT.HEARTH,
+  // The oven added 2026-09-13, later — the closed fire. Per-face: an arched mouth with banked
+  // coals on the sides, a dome with a smoke hole on top, soot underneath.
+  MAT.OVEN,
   // ── The grounds, added 2026-08-19 with the character layer ──────────────────────────────────
   // ⚠ Each one NEEDS a `paintFor` case below, exactly as the rubble note above says: the switch's
   // default is the ore painter, so a ground appended here and forgotten there does not render as
@@ -200,6 +203,11 @@ type Layer = Uint8Array
 const put = (dst: Layer, size: number, x: number, y: number, c: [number, number, number], a = 0) => {
   const o = (y * size + x) * 4
   dst[o] = c[0]; dst[o + 1] = c[1]; dst[o + 2] = c[2]; dst[o + 3] = a
+}
+/** Read a texel's colour back — for a painter that shades over a base it already laid. */
+const at = (dst: Layer, size: number, x: number, y: number): [number, number, number] => {
+  const o = (y * size + x) * 4
+  return [dst[o], dst[o + 1], dst[o + 2]]
 }
 
 // ── the painters ─────────────────────────────────────────────────────────────────────────────────
@@ -1372,6 +1380,69 @@ function paintHearth(dst: Layer, size: number, seed: number, face: number) {
   }
 }
 
+/**
+ * The oven — the hearth's closed sibling. SIDE is dressed stone (ashlar, finer courses than the
+ * hearth's) with an ARCHED mouth cut low: a round-topped opening, sooted at the crown where the
+ * smoke rolls out, and banked coals along its bed — a low glow, orange at the seams, dark red on
+ * the lumps, nothing licking upward, because an oven's fire is a bed of embers, not a blaze. The
+ * coals carry emissive alpha (seam 210, lump 90) and the mouth's dark carries none. TOP is the
+ * dome: the same stone shaded darker toward the rim so the block reads rounded from above, with
+ * a small black smoke hole at the centre. BOTTOM is soot.
+ * ⚠ A block has no facing, so every side is a mouth; the wall it stands against hides the rest.
+ */
+function paintOven(dst: Layer, size: number, seed: number, face: number) {
+  const stone = rgbOf(MATERIAL_COLOR[MAT.OVEN])
+  const soot = rgbOf(0x17130f)
+  const seamC: [number, number, number] = [247, 150, 46]
+  const lumpC: [number, number, number] = [150, 44, 20]
+  if (face === BOTTOM) { paintGrit(dst, size, shade(stone, -30), 10, 8, seed); return }
+  if (face === TOP) {
+    paintAshlar(dst, size, stone, seed, 3, 3)
+    const c = (size - 1) / 2
+    const hole = Math.max(1, Math.round(size / 8))
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      // Rounded read: darker as the texel nears the rim, so the flat face suggests a dome.
+      const d = Math.hypot(x - c, y - c) / c                                // 0 centre .. ~1 rim
+      const cur = at(dst, size, x, y)
+      if (d <= hole / c) { put(dst, size, x, y, shade(soot, (h2(x, y, seed + 7) - 0.5) * 8), 0); continue }
+      put(dst, size, x, y, shade(cur, -Math.round(d * d * 64)), 0)
+    }
+    return
+  }
+  // SIDE: the mouth.
+  paintAshlar(dst, size, stone, seed, 5, 3)
+  const mx0 = Math.round(size * 0.25), mx1 = size - mx0                 // mouth, x extent
+  const my1 = size - Math.max(1, Math.round(size / 10))                  // the sill
+  const my0 = Math.round(size * 0.42)                                    // the crown of the arch
+  const cx = (mx0 + mx1 - 1) / 2, r = (mx1 - mx0) / 2
+  const bed = my1 - Math.max(1, Math.round(size / 10))                   // coals from here to the sill
+  for (let y = my0; y < my1; y++) {
+    for (let x = mx0; x < mx1; x++) {
+      // Arch: a half-disc over the straight jambs. Above the spring line the opening narrows.
+      const spring = my0 + r
+      if (y < spring && Math.hypot(x + 0.5 - cx, y + 0.5 - spring) > r) continue
+      if (y >= bed) {
+        // Banked coals: lumps with glowing seams, the hearth's ember bed lying in a mouth.
+        const lump = vnoise(x, y, size, 4, seed + 3)
+        const seam = Math.abs(lump - 0.5) < 0.07
+        if (seam) put(dst, size, x, y, mix(seamC, lumpC, h2(x, y, seed + 4) * 0.4), 210)
+        else put(dst, size, x, y, mix(lumpC, soot, 0.5 + (h2(x, y, seed + 9) - 0.5) * 0.3), 90)
+      } else {
+        // The dark of the mouth, warmed faintly just above the coals — the glow on the vault.
+        const up = (bed - y) / Math.max(1, bed - my0)
+        put(dst, size, x, y, mix(mix(lumpC, soot, 0.8), soot, Math.min(1, up * 2.2)), 0)
+      }
+    }
+  }
+  // Soot rolling out over the crown: a smudge above the arch, darker at the centre.
+  for (let y = Math.max(0, my0 - Math.round(size / 8)); y < my0 + 1; y++) for (let x = mx0; x < mx1; x++) {
+    if (y >= my0 && Math.hypot(x + 0.5 - cx, y + 0.5 - (my0 + r)) <= r) continue
+    const w = 1 - Math.abs((x + 0.5 - cx) / r)
+    const s = Math.round(w * (my0 + 1 - y) / (Math.round(size / 8) + 1) * 40)
+    if (s > 4) put(dst, size, x, y, shade(at(dst, size, x, y), -s), 0)
+  }
+}
+
 export function paintFor(material: number, face: number, size: number): Layer {
   const dst = new Uint8Array(size * size * 4)
   const seed = material * 1013 + 17
@@ -1605,6 +1676,7 @@ export function paintFor(material: number, face: number, size: number): Layer {
     // this line is hard to forget.
     case MAT.CAULDRON: paintCauldron(dst, size, seed, face); break
     case MAT.HEARTH: paintHearth(dst, size, seed, face); break
+    case MAT.OVEN: paintOven(dst, size, seed, face); break
     case MAT.PATH:
       // Packed earth: subsoil's grit, lightened and calmer, with sparse pale pebbles — reads as
       // WALKED against topsoil's grass without shouting like sand.

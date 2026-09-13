@@ -192,6 +192,10 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // a recess. The fire is painted, not tinted (`tiles.ts` › paintHearth) — a block whose base colour
   // was orange would glow on its BACK, which is the lantern-as-cube mistake with a warmer palette.
   [MAT.HEARTH]: 0x5a5551,
+  // The oven: dressed stone, paler than the hearth's sooted cobble — a cook keeps the outside of a
+  // bread oven clean, it is the mouth that blackens. The coals are painted, not tinted, for the
+  // same reason as the hearth's fire.
+  [MAT.OVEN]: 0x8a8178,
   // ── ★ THE GARDEN BED (2026-08-22) — turned earth, darker and wetter than the ground it sits on ──
   // Read against SUBSOIL's flank brown rather than against topsoil's green: a bed is soil that has
   // been broken open, so it should look like the underside of the turf, not like turf. Darker than
@@ -322,6 +326,8 @@ export const EMISSIVE: Record<number, number> = {
   // a fire is a thing in a room, the lantern is the light you set out against the dark. Both tables,
   // as the cache note above insists: registry `emit` lights the floor, this makes the fire read lit.
   [MAT.HEARTH]: 0.85,
+  // The oven: a closed fire. Coals seen through a mouth, under the hearth's open blaze.
+  [MAT.OVEN]: 0.6,
 }
 
 /** An unmapped material must be LOUD, not invisible — magenta says "the registry missed one". */

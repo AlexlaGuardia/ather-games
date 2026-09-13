@@ -306,6 +306,12 @@ export const BLOCKS: BlockDef[] = [
   // whose JOB is light. Unlike the cauldron it DOES emit, and honestly — there is no "is it lit"
   // state to lie about, because it has no fuel and is always burning (`depth.ts` › HEARTH).
   { noSlab: true, material: MAT.HEARTH, name: 'Hearth', hardness: 1.3, skill: null, minTier: 0, drops: [{ itemId: 'hearth', count: 1 }], fastSkill: 'prospecting', placeable: true, emit: 12 },
+  // ── ★ THE OVEN (2026-09-13) — the closed fire ───────────────────────────────────────────────
+  // Furniture rules like the hearth: breaks by hand into itself, prospecting is the fast skill,
+  // a shade heavier because a dome is more stone than a firebox. `emit: 6` is HALF the hearth: an
+  // oven's fire is behind a mouth, and a kitchen with both should read hearth-bright, oven-warm —
+  // not two blazes. Always lit for the hearth's reason: there is no fuel state to lie about.
+  { noSlab: true, material: MAT.OVEN, name: 'Oven', hardness: 1.5, skill: null, minTier: 0, drops: [{ itemId: 'oven', count: 1 }], fastSkill: 'prospecting', placeable: true, emit: 6 },
   // ★ SOFT AND BARE-HANDED (hardness 0.4, `skill: null`) — a bed is tilled earth, not masonry, and a
   // keeper must be able to pick one up and move it without a tool. It drops ITSELF, so relocating a
   // bed costs nothing and the cap in `garden.ts` counts the same object wherever it ends up.

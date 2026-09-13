@@ -644,6 +644,17 @@ export const MAT = {
    * names it, same as `shingle` and `plaster`.
    */
   HEARTH: 102,
+  /**
+   * ── ★ THE OVEN (2026-09-13, Fennel's R1, the other half: "the hearth is one block, not a
+   * kitchen") ───────────────────────────────────────────────────────────────────────────────
+   * A bread oven: a cut-stone dome with a dark arched mouth and banked coals low inside it. The
+   * hearth is the open fire you cook OVER; this is the closed fire you bake IN, so it glows less
+   * (registry emit 6 vs 12, emissive 0.6 vs 0.85) — a mouth, not a blaze. Same rules as the hearth:
+   * no facing (every side is a mouth, the wall it stands against hides the rest), no fuel state,
+   * always warm. ⚠ NEVER GENERATED, only placed. ⚠ TBD-CANON on the Ather's word for it, same as
+   * `hearth`.
+   */
+  OVEN: 103,
 } as const
 
 /** Every glass id — the cutout pass, the light pass and the mesher rank all ask this, never `=== GLASS`. */
