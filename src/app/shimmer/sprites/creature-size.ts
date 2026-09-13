@@ -85,8 +85,9 @@ export interface CreatureSize {
 export const SIZES: Readonly<Record<string, CreatureSize>> = Object.freeze(
   Object.assign(Object.create(null) as Record<string, CreatureSize>, {
     // ── measured against one human body, in canon's own words ────────────────────────────────────
-    fox: { height: 0.50, pending: false,
-      source: 'Vulnyx — "hit her at the knees ... arms full of warm spirit" (bk11:71); leans its weight on a leg (bk4:229)' },
+    fox: { height: 0.65, pending: false,
+      source: 'Vulnyx — "hit her at the knees ... arms full of warm spirit" (bk11:71); leans its weight on a leg (bk4:229). '
+        + '★ RE-RULED 0.5 → 0.65 (Alex, 2026-09-13): the number is EAR-TIP to foot, and the knee is the BACK, not the ears.' },
     // ⚠ A WILD DEWBEAR, DELIBERATELY. Gregory\'s bonded Blue has a "broad head" an old man leans on to
     // rise (bk1) — far bigger, and Gregory is a lifelong keeper, so Blue is very likely a grown or
     // second form. That is Q2 of the open gap, not evidence about a base. The meadow Dewbears are.
@@ -99,10 +100,10 @@ export const SIZES: Readonly<Record<string, CreatureSize>> = Object.freeze(
         + 'into the grass" and Brook was "flowing up along" her, which is a climb, not a standing height.' },
 
     // ── measured against a hand, a wrist, a knuckle ───────────────────────────────────────────────
-    owl: { height: 0.30, pending: false,
+    owl: { height: 0.32, pending: false,
       source: 'Athowl — "sat on Benji\'s wrist ... up to his shoulder" (bk11:303, benji-1:69); Strixen "slipping ahead '
         + 'through the arrow-slits" (benji-1:313), which is a narrow slot and bounds it from the other side' },
-    rabbit: { height: 0.28, pending: false,
+    rabbit: { height: 0.29, pending: false,
       source: 'Lepara — "Ember bumped his shins" (benji-1); "climbed halfway into his arms"; "worked the latches a '
         + 'boy\'s hands were too slow for" (otto-1:439)' },
     frog: { height: 0.12, pending: false,
@@ -115,12 +116,12 @@ export const SIZES: Readonly<Record<string, CreatureSize>> = Object.freeze(
 
     // ── ★ THE TWO THAT WERE PENDING, AND WHAT SETTLED THEM (ruled 2026-08-27) ─────────────────────
     // Neither needed a new fact. Both fell out of the young-base-form frame the ruling supplied.
-    bat: { height: 0.24, pending: false,
+    bat: { height: 0.20, pending: false,
       source: 'Noctyx — "folded herself small against Bonn\'s neck", "light as a held breath" (bk11:71, bk11:121). '
         + '★ MOMO IS NOT DOUBLE-BOOKED, HE GREW: "no bigger than a curled fist" is FIRST SIGHT (bk1:255), "a warm '
         + 'round weight in the crook of her arm" is bk1:559, "Cat-sized at rest" is the settled card (bible:63). '
         + 'So "no bigger than Momo" (bk6:215) DATES ITSELF and is read at the moment it is said.' },
-    turtle: { height: 0.30, pending: false,
+    turtle: { height: 0.25, pending: false,
       source: 'Shellmere — "a shell you could carry in both arms" (spirits-species.md, Spirit Scale). No base-form '
         + 'line exists in the books; ruled off the young-kit rule. The "broad across as a cart" Shellmere (bk4:139) '
         + 'is ANCIENT AND EVOLVED (bible:203, 207) — the top of the ladder, not the bottom.' },
