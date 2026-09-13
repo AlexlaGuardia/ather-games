@@ -26,12 +26,20 @@ ok(!ids.some(id => ['runes', 'tools', 'loadout'].includes(id)),
 
 // ── B. the host mounts one body per tab, and nothing for a tab that is not on the list ─────────
 const src = noComments(readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8'))
+// ⚠ THE BODY COUNT IS SCOPED TO `BagPanel` (2026-09-13). It used to read the whole host, and the
+// options panel grew its own `{tab === 'game' && …}` bodies the same day — four mounts that are
+// not keeper tabs and were never on this list. A file-wide count cannot tell one panel's tabs
+// from another's; the function boundary can. The other asserts below still read the whole host.
+const bagAt = src.indexOf('function BagPanel(')
+const bagEnd = src.indexOf('\nfunction ', bagAt + 1)
+ok(bagAt > 0 && bagEnd > bagAt, 'BagPanel is a top-level function of the host, and something follows it')
+const bag = src.slice(bagAt, bagEnd)
 for (const id of ids) {
-  ok(count(src, new RegExp(`\\{tab === '${id}' && `, 'g')) === 1, `one body mounted for '${id}'`)
+  ok(count(bag, new RegExp(`\\{tab === '${id}' && `, 'g')) === 1, `one body mounted for '${id}'`)
 }
 // ⚠ Anchored at LINE START: `hint={tab === 'satchel' ? …}` on the frame is a prop, not a body, and
 // an unanchored `{tab === '` counted it — 4 for 3 tabs on a correct host. Bodies are their own line.
-const bodies = count(src, /^\s*\{tab === '/gm)
+const bodies = count(bag, /^\s*\{tab === '/gm)
 ok(bodies === ids.length, `★ no body for a tab that is not on the list (${bodies} mounts for ${ids.length} tabs)`)
 ok(!/function RunesTab\(|function ToolsTab\(|function LoadoutTab\(/.test(src),
    'the retired tab components are gone from the host, not merely unmounted')
