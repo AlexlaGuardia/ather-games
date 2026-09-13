@@ -23,7 +23,9 @@
 //     a colour standing in for a shape. → a `post` piece (1×1×1, full cell) or a placeable timber.
 // R2  A ROOF FILL THAT READS AS ROOFING. ✅ CLOSED 09-11 late: `SHINGLES` block + painter. Was: `roof_slope` and `roof_cap` are the edges; the gable's mass
 //     between them is planks, which read as WALL. → a shingle/thatch block (material, not shape).
-// R3  A COUNTER. Hazel sells; canon puts the loop's close at a counter (Mallow's). A `half_slab` is
+// R3  A COUNTER. ✅ CLOSED 09-13 (later): `table` piece (full-cell, top at y+1, legs) — the four
+//     bays behind the front posts, swapped in the JSON by hand (this script's doorway is stale, see
+//     the ⚠ below). Was: Hazel sells; canon puts the loop's close at a counter (Mallow's). A `half_slab` is
 //     knee-high, a block is a wall. Here: fence + half_slab = 1.5, a workaround. → a `counter`/`table`
 //     piece, half-height on top of a full cell, or a 1×2 piece.
 // R4  SHELVES. Storage is Hazel's trade and there is nothing to put on a wall but a `hook`. →
@@ -99,8 +101,8 @@ for (let r = 0; r <= 5; r++) {
 // Inside: the sawmill and the table under the roof, a chest, a lantern hung from a hook.
 put(2, 1, 4, MAT.SAWMILL); put(6, 1, 4, MAT.CRAFT_TABLE); put(1, 1, 5, MAT.CHEST)
 piece('hook', 4, 3, 3, 0); put(4, 2, 3, MAT.MANA_LANTERN)
-// The counter (R3: fence + half slab = a 1.5-high workaround), across the front behind the posts.
-for (const x of [1, 2, 6, 7]) { piece('fence', x, 1, 1, 0); piece('half_slab', x, 2, 1, 0) }
+// The counter (R3 closed: a `table` per bay), across the front behind the posts.
+for (const x of [1, 2, 6, 7]) piece('table', x, 1, 1, 0)
 piece('bench', 4, 1, 5, 0)
 // The yard: a squared stack of goldwood planks by the door (the want-list, stacked square), a fence and a gate.
 // The stack stands against the yard's far fence, so the door opens onto path, not into it.

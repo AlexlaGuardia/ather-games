@@ -36,7 +36,10 @@
 // R3  HUNG GOODS ON THE DRYING RACK. The front-eave hook row is the building's signature read
 //     ("a drying rack") and every hook hangs empty — same family as Mallow's R9. A bundle of drying
 //     herbs that draws BELOW a hook would make the rack read as working rather than decorative.
-// R4  A COUNTER. Same open item as Hazel's R3 / Mallow's R3. Canon's "hands you the wrong
+// R4  A COUNTER. ✅ CLOSED 09-13 (later): two `table` pieces across the room's middle at z=3,
+//     x 2..3 — the front door faces them, Yarrow's side is beside the cauldron, the back door is
+//     reached round the east end. Swapped into the JSON by hand (this script is stale, ⚠ below).
+//     Was: same open item as Hazel's R3 / Mallow's R3. Canon's "hands you the wrong
 //     ingredient and waits" wants a counter to hand it across; used the cauldron + shelf as the
 //     interior focal point instead, no counter at all — a keeper who wants Yarrow has to walk in.
 // R5  THE WANT-LIST HAS NO BLOCK. Same shape as Sax's R7. Canon says Yarrow wants herbs, BARK and
@@ -132,6 +135,8 @@ put(1, 1, 2, MAT.CHEST)
 piece('hook', DX, 3, 3, 0); put(DX, 2, 3, MAT.MANA_LANTERN)
 const jars: [number, number][] = [[2, MAT.POT], [3, MAT.POT_SEEDED], [4, MAT.POT_BLOOM]]
 for (const [z, jar] of jars) { piece('half_slab', 5, 1, z, 0); put(5, 2, z, jar) }
+// The counter (R4 closed): two tables across the middle, between the front door and the cauldron.
+for (const x of [2, 3]) piece('table', x, 1, 3, 0)
 
 // ── the herb garden ──────────────────────────────────────────────────────────────────────────
 // A fence perimeter with a gate lined up on the back door, beds of the four element herbs along

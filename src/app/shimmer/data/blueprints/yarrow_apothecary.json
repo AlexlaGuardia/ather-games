@@ -12,6 +12,8 @@
     {"pieceId":"post_dawnwood","x":6,"y":1,"z":1,"rot":0},
     {"pieceId":"half_slab","x":5,"y":1,"z":2,"rot":0},
     {"pieceId":"window","x":0,"y":1,"z":3,"rot":1},
+    {"pieceId":"table","x":2,"y":1,"z":3,"rot":0},
+    {"pieceId":"table","x":3,"y":1,"z":3,"rot":0},
     {"pieceId":"half_slab","x":5,"y":1,"z":3,"rot":0},
     {"pieceId":"window","x":6,"y":1,"z":3,"rot":1},
     {"pieceId":"half_slab","x":5,"y":1,"z":4,"rot":0},

@@ -24,15 +24,14 @@
 // becomes 9 × 12 with the open front facing the road (east).
 //
 // ── ★★ THE REACH LIST (what the hand went for and did not find) ──────────────────────────────
-// R1  A HEARTH / FIRE / OVEN. The building's whole identity is a fire and there is no fire block —
-//     no hearth, no oven, no campfire, no smoke. Used: a stone-brick alcove with a MANA_LANTERN
-//     (emit 14) sitting in the firebox, which glows the right amount and the wrong colour. A cook
-//     lit by mana-blue is a placeholder that reads as one. → a `HEARTH` block (emit, warm) and a
-//     bread `OVEN` (cut-stone dome with a dark mouth).
-// R2  A TABLE. Same gap as Hazel's counter (R3) and Yarrow's (R4), now for the third time and in
-//     the building that IS a table. Used: a run of `half_slab` at y=1 — knee-high, reads as a low
-//     bench, not a table you sit at. Benches either side of it are the same height. → a `table`
-//     piece (1×1, top at y+1, legs).
+// R1  A HEARTH / FIRE / OVEN. ✅ HALF CLOSED 09-13: `HEARTH` block (registry emit 12, warm; fire
+//     texels emissive; `tiles.ts` › paintHearth) now sits in the firebox where the MANA_LANTERN
+//     was. Was: the building's whole identity is a fire and there was no fire block; a cook lit by
+//     mana-blue read as a placeholder. STILL OPEN: a bread `OVEN` (cut-stone dome with a dark
+//     mouth) — the hearth is one block, not a kitchen.
+// R2  A TABLE. ✅ CLOSED 09-13: `table` piece (full-cell, top at y+1, four legs; wood/stone
+//     variants), a run of six down the eating side. Was: `half_slab` at y=1 — knee-high, a low
+//     bench, not a table you sit at. Same close lands in Hazel (R3) and Yarrow (R4).
 // R3  FOOD. Nothing to put ON the table: no bread, bowl, pie, or plate. The table is bare and the
 //     jar states (POT/POT_SEEDED/POT_BLOOM) are the only "stuff" the world has. → a few food blocks
 //     or a `platter` piece; the want-list wants to be visible as a spread.
@@ -42,6 +41,7 @@
 // (What was NOT missing: footing, cut stone + stone brick + mossy, dawnwood posts, shingles,
 //  roof_slope/cap, bench, half_slab, hook, doorway+door (the new 3×3 frame), window+shutter,
 //  CAULDRON, CHEST, TIMBER_STACK, MANA_LANTERN, the jar states, garden beds, RUBBLE, PATH.)
+// 09-13 later: HEARTH block + `table` piece landed (R1 half, R2 whole) — see the two lines above.
 import { writeFileSync } from 'fs'
 import { join } from 'path'
 import { makeBlueprint, blueprintProblems, serializeBlueprint, type BlueprintCell } from '../src/app/shimmer/voxel/blueprints'
@@ -95,13 +95,13 @@ for (let r = 0; r <= 4; r++) {
   }
 }
 // ── the hearth (R1) ──────────────────────────────────────────────────────────────────────────
-// A stone-brick alcove against the back wall, x 2..4: firebox at y=1 (the lantern in it), a
-// mantel row of cut stone at y=2, and a chimney column rising through the roof to one above the
-// ridge. The firebox is open to the room (front face cut), closed on the wall side by the wall.
+// A stone-brick alcove against the back wall, x 2..4: the HEARTH block at y=1 (its own firebox
+// and fire — the alcove's cheeks hide its side mouths, the wall its back), a mantel row of cut
+// stone at y=2, and a chimney column rising through the roof to one above the ridge.
 const HX = 3
 for (const x of [HX - 1, HX + 1]) { put(x, 1, BZ1 - 1, MAT.STONE_BRICK); put(x, 2, BZ1 - 1, MAT.STONE_BRICK) }
 put(HX, 2, BZ1 - 1, MAT.CUT_STONE)                      // lintel over the firebox
-put(HX, 1, BZ1 - 1, MAT.MANA_LANTERN)                    // the fire (R1 — wrong colour, right glow)
+put(HX, 1, BZ1 - 1, MAT.HEARTH)                          // the fire (R1 closed: warm, emit 12)
 for (let x = HX - 1; x <= HX + 1; x++) put(x, 3, BZ1 - 1, MAT.CUT_STONE)   // mantel
 for (let y = 4; y <= ROOF0 + 5; y++) {                   // chimney: through the roof, one above the ridge
   const i = cells.findIndex(c => c.x === HX && c.y === y && c.z === BZ1 - 1); if (i >= 0) cells.splice(i, 1)
@@ -119,9 +119,9 @@ for (let z = 2; z <= 4; z++) piece('half_slab', 1, 1, z, 0)
 put(1, 2, 2, MAT.POT); put(1, 2, 3, MAT.POT_SEEDED); put(1, 2, 4, MAT.POT_BLOOM)
 for (let z = 2; z <= 4; z++) piece('hook', BX0, 3, z, 1)
 // ── the long table (R2) ─────────────────────────────────────────────────────────────────────
-// Down the middle of the eating side, x 5..10 at z=3, benches along both sides. Knee-high, which
-// is the reach.
-for (let x = 5; x <= 10; x++) piece('half_slab', x, 1, 3, 0)
+// Down the middle of the eating side, x 5..10 at z=3, benches along both sides. Six `table`
+// pieces in a run: the top spans each cell, so it reads as one board on twelve legs.
+for (let x = 5; x <= 10; x++) piece('table', x, 1, 3, 0)
 for (let x = 5; x <= 10; x++) { piece('bench', x, 1, 2, 2); piece('bench', x, 1, 4, 0) }
 // A lantern hung over each end of the table.
 for (const x of [6, 9]) { piece('hook', x, 3, 3, 0); put(x, 2, 3, MAT.MANA_LANTERN) }
