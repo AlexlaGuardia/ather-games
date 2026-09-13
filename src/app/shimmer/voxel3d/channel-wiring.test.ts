@@ -120,8 +120,12 @@ chk("★★ ...and pins `absolute` at 0 — `breach.ts` says a bar filling towar
 // ★★ AND IT MUST LIVE INSIDE THE CHANNEL BLOCK. Drifting into a scope of its own would publish a
 // readout for a channel nobody is holding — the original defect wearing the fix's name, which is
 // exactly how `/ctxlost` nearly shipped its trigger onto a canvas with no listeners.
+// The block after the channel is the placed-piece take-back (2026-09-12), then the mine block;
+// the bound is whichever comes first, and BOTH must be found or the guard is blind, not green.
 const chanAt = nc.indexOf('if (channel.current && channelSpec.current) {')
-const mineAt = nc.indexOf('if (hit && mouse.current.left && !weaponDrawn) {')
+const pieceAt = nc.indexOf('if (hit && (hit.material === STRUCTURE || hit.material === STRUCTURE_HALF)) {')
+const mineOnly = nc.indexOf('if (hit && !pieceLook && mouse.current.left && !weaponDrawn) {')
+const mineAt = pieceAt < 0 || mineOnly < 0 ? -1 : Math.min(pieceAt, mineOnly)
 if (chanAt < 0 || mineAt < 0) { blind++; console.log('  BLIND: could not locate the channel/mine block boundary') }
 chk('★★ the publish sits inside the channel block, not in a scope of its own',
   pub.at > 0 && chanAt >= 0 && mineAt > chanAt && pub.at > chanAt && pub.at < mineAt)

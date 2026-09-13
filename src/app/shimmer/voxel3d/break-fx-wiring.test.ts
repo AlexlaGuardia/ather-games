@@ -112,8 +112,16 @@ const at = (needle: string, what: string): number => {
   once('chipCarry.current -= n', 1, 'and the remainder is kept for the next frame')
   // ★ The ramp takes the PROGRESS FRACTION, not elapsed time — that is what makes a tough block and
   // a soft one look the same at the same point in their break.
-  ok(src.includes('swingChips(bucket, r.state.progress / r.state.required, dt)'),
+  // Since 2026-09-13 the loop is ONE closure (`sprayChips`) that both the block path and the
+  // piece path call with their own `r.state` — the piece-break pass had pasted the loop, and the
+  // 1x asserts above are what caught it. So: the closure is fed progress/required, and every
+  // caller hands it the live swing state, never a recomputation.
+  ok(src.includes('swingChips(bucket, s.progress / s.required, dt)'),
      'swingChips is fed progress/required, not elapsed seconds')
+  once('const sprayChips = (', 1, 'the loop is defined once')
+  once('sprayChips(', 2, 'and has exactly two callers (block, piece)')
+  ok(src.includes(', hit.material, r.state)') && src.includes(', target?.material ?? 0, r.state)'),
+     'both callers hand the closure the swing state from tickBreak')
   // The carry resets when the swing moves to another block, the same condition on which
   // `tickBreak` discards progress. Without it a keeper banks chips by flicking between two blocks.
   once('chipTarget.current = tk; chipCarry.current = 0', 1, 'a new target resets the carry')
@@ -124,15 +132,18 @@ const at = (needle: string, what: string): number => {
 // one axis. Handing 0,0,0 is the cheapest wrong answer that still compiles and still draws chips.
 {
   once('breakFx.chip(', 1, 'exactly one mid-swing call site')
-  ok(src.includes('breakFx.chip(hit.x, hit.y, hit.z, hit.px - hit.x, hit.py - hit.y, hit.pz - hit.z, hit.material, n)'),
+  ok(src.includes('breakFx.chip(hit.x, hit.y, hit.z, hit.px - hit.x, hit.py - hit.y, hit.pz - hit.z, material, n)'),
      'chips are born on the struck face, from the raycast normal')
   // ⚠ THE GUARD, NOT THE BRACES. The call must sit under "a swing is in progress" — the two ways
-  // `r.state` is null are the two ways there must be no chips (the block gave; the block refused).
-  const guard = src.lastIndexOf('if (r.state) {', src.indexOf('breakFx.chip('))
+  // the state is null are the two ways there must be no chips (the block gave; the block refused).
+  // In the closure that is the early return on a null `s`, which also clears the carry target.
+  const chipAt = src.indexOf('breakFx.chip(')
+  const defAt = src.lastIndexOf('const sprayChips = (', chipAt)
+  const guard = src.indexOf('if (!s || !tk || !hit) { chipTarget.current = null; return }', defAt)
+  ok(defAt > 0 && guard > defAt && guard < chipAt,
+     'the chip call sits under the null-state early return of the closure')
   const broke = src.indexOf('if (r.broken) {')
-  ok(guard > 0 && guard < src.indexOf('breakFx.chip('),
-     'the chip call sits inside `if (r.state)`')
-  ok(guard < broke, 'and that guard opens before the broken branch, not inside it')
+  ok(defAt < broke, 'and the closure is defined before the first broken branch, not inside one')
 }
 
 // ── 5. ★★★ THE BURST READS THE MATERIAL BEFORE THE WRITE ─────────────────────────────────────
@@ -155,6 +166,7 @@ const at = (needle: string, what: string): number => {
     ['breakFx.burst(c.x, c.y, c.z, voxel(c.x, c.y, c.z))', 'the fell loop, per cell'],
     ['breakFx.burst(hit.x, hit.y, hit.z, hit.material)', 'the single struck block'],
     ['breakFx.burst(target.x, target.y, target.z, hit!.material)', "the bore's spot (Meltbore)"],
+    ['breakFx.burst(hit.x, hit.y, hit.z, target.material)', 'the placed piece, in the block it is paid in (2026-09-12)'],
   ]
   {
     const total = src.split('breakFx.burst(').length - 1

@@ -9596,6 +9596,29 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       }
     }
 
+    // ── the swing's chips — ONE loop for blocks and pieces ─────────────────────────────────
+    // Keyed off `r.state`, which is exactly "a swing is in progress on this target". The two ways
+    // it comes back null are the two ways there should be no chips, and both fall out rather than
+    // being tested for: the target GAVE (the burst is the effect for that), or `breakSeconds`
+    // returned Infinity — refused, not slowed, and a refused block that sprays debris tells the
+    // keeper they are making progress they are not. The face comes from the raycast: `p*` is the
+    // empty cell just before the hit, so the difference is a unit vector on exactly one axis —
+    // `break-fx.ts` documents this as the shape it wants. The piece path (2026-09-12) first pasted
+    // this loop, and `break-fx-wiring.test` — which holds the carry to ONE site — went red for a
+    // day; the guard was right, the copy was the bug.
+    const sprayChips = (tk: string | null, material: number, s: { progress: number; required: number } | null) => {
+      if (!s || !tk || !hit) { chipTarget.current = null; return }
+      if (chipTarget.current !== tk) { chipTarget.current = tk; chipCarry.current = 0 }
+      const bucket = bucketOf(material)
+      if (!bucket) return
+      chipCarry.current += swingChips(bucket, s.progress / s.required, dt)
+      const n = Math.floor(chipCarry.current)
+      if (n > 0) {
+        chipCarry.current -= n
+        breakFx.chip(hit.x, hit.y, hit.z, hit.px - hit.x, hit.py - hit.y, hit.pz - hit.z, material, n)
+      }
+    }
+
     // ── a placed piece: the take-back ────────────────────────────────────────────────────────
     // Above the mine path because a `STRUCTURE` cell has no block definition and would fall
     // straight through it. `pieceLook` carries the name to the HUD line below, which would
@@ -9620,21 +9643,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (lastTool.current !== wantSkill) { lastTool.current = wantSkill; onTool(wantSkill) }
         const r = tickBreak(breaking.current, target ?? null, dt, eDef?.tier ?? 0, eDef ? wantSkill : null, eDef?.speedBonus ?? 1)
         breaking.current = r.state
-        if (r.state && target) {
-          // Chips off the struck cell, in the block's own colour — the same shape the block path
-          // keys off `r.state` below, keyed here on the placement so one wall is one target.
-          const tk = `piece:${found.x},${found.y},${found.z}`
-          if (chipTarget.current !== tk) { chipTarget.current = tk; chipCarry.current = 0 }
-          const bucket = bucketOf(target.material)
-          if (bucket) {
-            chipCarry.current += swingChips(bucket, r.state.progress / r.state.required, dt)
-            const n = Math.floor(chipCarry.current)
-            if (n > 0) {
-              chipCarry.current -= n
-              breakFx.chip(hit.x, hit.y, hit.z, hit.px - hit.x, hit.py - hit.y, hit.pz - hit.z, target.material, n)
-            }
-          }
-        } else chipTarget.current = null
+        // Chips off the struck cell, in the block's own colour — keyed on the PLACEMENT so one
+        // wall is one target, then the same spray as the block path below.
+        sprayChips(target ? `piece:${found.x},${found.y},${found.z}` : null, target?.material ?? 0, r.state)
         if (r.broken) {
           if (target) breakFx.burst(hit.x, hit.y, hit.z, target.material)
           deconstruct(found)
@@ -9697,21 +9708,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // being tested for: the block GAVE (the burst below is the effect for that), or `breakSeconds`
       // returned Infinity — refused, not slowed, and a refused block that sprays debris tells the
       // keeper they are making progress they are not.
-      if (r.state) {
-        // The face, from the raycast: `p*` is the empty cell just before the hit, so the difference
-        // is a unit vector on exactly one axis. `break-fx.ts` documents this as the shape it wants.
-        const tk = `${hit.x},${hit.y},${hit.z},${hit.material}`
-        if (chipTarget.current !== tk) { chipTarget.current = tk; chipCarry.current = 0 }
-        const bucket = bucketOf(hit.material)
-        if (bucket) {
-          chipCarry.current += swingChips(bucket, r.state.progress / r.state.required, dt)
-          const n = Math.floor(chipCarry.current)
-          if (n > 0) {
-            chipCarry.current -= n
-            breakFx.chip(hit.x, hit.y, hit.z, hit.px - hit.x, hit.py - hit.y, hit.pz - hit.z, hit.material, n)
-          }
-        }
-      } else chipTarget.current = null
+      sprayChips(`${hit.x},${hit.y},${hit.z},${hit.material}`, hit.material, r.state)
       if (r.broken) {
         // ── ★ THE FELL VERB — a tree is ONE object (Alex, 2026-08-13) ────────────────────────
         // *"lets make the trees one object that drops rng loot when felled logs included."* A swing
