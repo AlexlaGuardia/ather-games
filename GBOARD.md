@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## 🏘️ Shimmer — **THE GLADE IS A STREET: MALLOW · YARROW · SAX PLACED** (2026-09-13, hub lane `2f743745`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID eH1yOMihTu_7ArTnFsKs8` from `395e80d`** (+ worker repin `0745fdf474`, served == disk). placed.test 49/0 · stamps 52/0.*
+## 🏘️ Shimmer — **THE GLADE IS A STREET: ALL FIVE TRADES PLACED** (2026-09-13, hub lane `2f743745`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID of_OUUPJTL55sKrLKyeQF` from `8fb1773`** (+ worker repin `5648d862da`, served == disk). placed.test 56/0 · stamps 52/0.*
 
 **Left off:** Alex: *"lets place the five trades from the worktable"* → rendered a top-down glade map (scratch
 `glade-map.mts`: true top material per column, road, contours, placed footprints, candidate boxes with pad-span +
@@ -22,14 +22,22 @@ Hazel (−165,−632) r0 · **Mallow (−164,−602) r1** (faces the road) · **
 garden east) · **Sax (−136,−608) r0** (faces north, yard east toward the boulders) · ring (−143,−639). Shot from the
 foot looking north (`$SP/street-north.png`): Mallow's porch, Hazel's gable left; Sax's yard, Yarrow's half-timber right.
 
+**Then (`8fb1773`): FENNEL'S KITCHEN.** Canon says the cook "feeds everyone" and the kitchen is where the folk gather,
+so it is a HALL, not a shop: open front (dawnwood posts, no wall), the long table with benches both sides right in the
+mouth of it, hearth alcove + chimney through the ridge on the back wall, work counter with the jars, firewood, chest,
+two beds + the heap out back through the new 3×3 doorway. 12×10×9, 292 blocks, 175 pieces. **Placed (−161,−620) r1**
+(open front to the road) between Hazel and Mallow. Reach list (`scripts/blueprint-fennel.mts` header): **R1 no
+hearth/fire/oven block** (a mana lantern glows in the firebox — wrong colour, right glow), R2 no table piece (half-slab
+run, knee-high), R3 no food to put on it, R4 sign, R5 smoke. Shot from the road: `$SP/fennel-front.png`.
+
 **Next:**
-1. **Fennel has NO blueprint** — build `scripts/blueprint-fennel.mts` (cook: open-fronted kitchen, hearth + bread
-   oven, long table) and place at ~(−161,−620) r1 (the pink box, 9×12 placeholder; the slot between Hazel and Mallow).
-2. Alex walks the street on prod; Mallow sits ~15 back from the road (closer sites straddle a 2-step) — if it reads
-   far, (−164,−608) r0 facing north is the alternative.
+1. Alex walks the street on prod (fold door → up the road → Greg). Mallow sits ~15 back from the road (closer sites
+   straddle a 2-step) — if it reads far, (−164,−608) r0 facing north is the alternative.
+2. The reach list's first two are now three buildings deep: a **HEARTH block** and a **table piece** would land in
+   Fennel, Hazel and Yarrow at once.
 3. Want-lists + prices, voice-profiles for the five, Beat 0 wiring (Magii's handoff, `shimmer-quests-mainmap.md`).
 
-**Files:** `data/blueprints/placed.table.json` · `src/workers/worker-url.ts` · `public/voxel-gen.worker.0745fdf474.js`.
+**Files:** `data/blueprints/placed.table.json` · `scripts/blueprint-fennel.mts` · `data/blueprints/fennel_kitchen.json` · `src/workers/worker-url.ts` · `public/voxel-gen.worker.5648d862da.js`.
 
 ## 🔨 Shimmer — **A PLACED PIECE IS WORKED LIKE A BLOCK; GATHERING XP = SEAMS + LOGS ONLY** (2026-09-12, hub lane `2f743745`) · *Last touched 2026-09-12 — ✅ **DEPLOYED `BUILD_ID -TjxvlTisrXjXntORTVxC` from `505d287`** (`GtPYf-nqJQNK81HUgS6hh` from `5a905bb`, (piece-break `D8xcsW1-FzE20mPLHjqPm` from `5f16618` before it), served == disk (chunk md5 match), worker pin unchanged. piece-break.test **994/0, 2 mutations fire**. tsc 7 (baseline).*
 
