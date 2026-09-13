@@ -2355,7 +2355,7 @@ export default function VoxelWorld() {
         </div>
       )}
       {settings.showFps && prof && <ProfilePanel p={prof.profile} copiedAt={profCopied} />}
-      {showSettings && <SettingsPanel s={settings} update={update}
+      {showSettings && <SettingsPanel s={settings} update={update} isOwner={isOwner}
         onControls={() => { setShowSettings(false); setShowBindings(true) }}
         onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {/* ⚠ Closing the bindings panel hands the cursor back, exactly as the settings panel does.
@@ -2416,6 +2416,23 @@ export default function VoxelWorld() {
         <VoxelMiniMap seed={SEED} seenRef={seenRef} posRef={mapPos} headingRef={mapHeading}
           spaceRef={space} plotCfg={plotCfg}
           onExpand={() => { openCursorUI(); setShowMap(true) }} />
+      )}
+      {/* ── ☰ THE OPTIONS DOOR, under the minimap (Alex, 2026-09-13: "an ingame options menu,
+          maybe a hamburger under the map") ────────────────────────────────────────────────────
+          It opens the SAME panel `O` does — one options surface, two doors — so a keyboard player
+          and a mouse player land on the same thing, and the owner-only Dev rows live in that
+          panel (SettingsPanel › Dev), not in a second menu. Shown on exactly the minimap's rule:
+          gone whenever a cursor surface is up, so it never sits on top of the bag or the map.
+          Sized and placed off the minimap (148 wide at top 12 / right 12, VoxelMap.tsx) — a
+          small square hanging under its right edge, not a bar, so it reads as a handle. */}
+      {!cursorUIOpen && !showMap && (
+        <button
+          onClick={() => { openCursorUI(); setShowSettings(true) }}
+          title="Options (O)"
+          aria-label="Options"
+          className="gx-btn fixed z-[33] flex items-center justify-center text-[15px] leading-none text-white/75 hover:text-white"
+          style={{ top: 12 + 148 + 6, right: 12, width: 34, height: 30 }}
+        >☰</button>
       )}
       {showMap && (
         <VoxelMap seed={SEED} seenRef={seenRef} seenTick={seenTick} posRef={mapPos} headingRef={mapHeading}
@@ -11392,12 +11409,20 @@ function ProfilePanel({ p, copiedAt }: { p: FrameProfile; copiedAt: number }) {
   )
 }
 
-function SettingsPanel({ s, update, onClose, onControls }: {
+function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
   s: VoxelSettings
   update: (p: Partial<VoxelSettings>) => void
   onClose: () => void
   /** Opens the rebinding panel. Alex, 2026-08-23: "in the menu there should be an option to bind keys." */
   onControls: () => void
+  /**
+   * The keeper of the realm (`/api/owner`). Gates the Dev rows below — Alex, 2026-09-13: "a
+   * (owner gated, so players dont see this) button to go into the dev page for building
+   * structures". ⚠ This flag hides the DOOR; the dev routes themselves are owner-gated in
+   * `proxy.ts`, so a player who types the URL still gets nothing. Two locks, and only the
+   * second one is a lock — this one is so the menu does not advertise a door it will not open.
+   */
+  isOwner: boolean
 }) {
   const Slider = ({ label, k }: { label: string; k: 'toon' | 'outline' | 'faceShading' | 'shadowLift' }) => (
     <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
@@ -11412,7 +11437,9 @@ function SettingsPanel({ s, update, onClose, onControls }: {
   )
 
   return (
-    <div className="absolute top-3 right-3 w-72 bg-black/80 border border-white/15 rounded p-3 space-y-2.5">
+    // Capped to the viewport and scrolling past it: with the Dev rows the panel outgrew a 760px
+    // window and sat on the mana gauge.
+    <div className="absolute top-3 right-3 w-72 max-h-[calc(100vh-24px)] overflow-y-auto bg-black/80 border border-white/15 rounded p-3 space-y-2.5">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase">Render</span>
         <button onClick={onClose} className="text-white/40 hover:text-white/80 text-xs font-mono">esc / O</button>
@@ -11508,6 +11535,26 @@ function SettingsPanel({ s, update, onClose, onControls }: {
         Both shading paths live in one shader program and are picked by a uniform, so switching
         costs nothing. Settings persist.
       </p>
+
+      {/* ── DEV (owner only) ────────────────────────────────────────────────────────────────
+          Last, under a rule, because everything above it is the player's and nothing here is.
+          Plain navigations: the worktable is its own page with its own state, and the world
+          autosaves on every change, so leaving is never a loss. */}
+      {isOwner && (
+        <div className="border-t border-white/10 pt-2 space-y-1">
+          <div className="gx-label text-[9px] text-amber-300/70">Dev · keeper of the realm</div>
+          <a href="/shimmer/dev/worktable"
+             className="gx-btn flex w-full items-center justify-between px-2.5 py-1.5 text-[10px]">
+            <span>⚒ Build structures</span>
+            <span className="gx-value text-white/50">worktable</span>
+          </a>
+          <a href="/shimmer/dev"
+             className="gx-btn flex w-full items-center justify-between px-2.5 py-1.5 text-[10px]">
+            <span>✧ Dev hub</span>
+            <span className="gx-value text-white/50">editors</span>
+          </a>
+        </div>
+      )}
     </div>
   )
 }
