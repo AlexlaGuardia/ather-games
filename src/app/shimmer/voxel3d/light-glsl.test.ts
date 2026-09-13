@@ -86,13 +86,20 @@ ok(!lightApplyHere('c', 'a', 'w').includes('shimmerLight(c'),
     return null
   }
 
-  const surfaces: [string, string, string][] = [
-    ['blocks (flat)', 'mesh-bridge.ts', "lightApply('finalCol'"],
-    ['blocks (textured)', join('tex', 'atlas.ts'), "lightApply('finalCol'"],
-    ['water', 'mesh-bridge.ts', "lightApply('waterCol'"],
-    ['leaves', 'VoxelWorld.tsx', "lightApplyHere('leafCol'"],
+  // ★ THE CARTOON-STACK SURFACES SAMPLE THROUGH `cartoon-glsl.ts` (extracted 2026-09-13, when the
+  // pieces became the third consumer). Their file names the STACK call and the combined decl;
+  // the stack module is then checked ONCE below for the `lightApply('finalCol'` it carries — so a
+  // consumer that stops running the stack goes red on its own row, and a stack that stops
+  // sampling goes red on the module's row. Water and leaves still call the field directly.
+  const surfaces: [string, string, string, string][] = [
+    ['blocks (flat)', 'mesh-bridge.ts', 'cartoonStackGlsl(', 'CARTOON_DECL_GLSL'],
+    ['blocks (textured)', join('tex', 'atlas.ts'), 'cartoonStackGlsl(', 'CARTOON_DECL_GLSL'],
+    ['pieces', 'piece-mesh.ts', 'cartoonStackGlsl(', 'CARTOON_DECL_GLSL'],
+    ['the cartoon stack', 'cartoon-glsl.ts', "lightApply('finalCol'", 'LIGHT_DECL_GLSL'],
+    ['water', 'mesh-bridge.ts', "lightApply('waterCol'", 'LIGHT_DECL_GLSL'],
+    ['leaves', 'VoxelWorld.tsx', "lightApplyHere('leafCol'", 'LIGHT_DECL_GLSL'],
   ]
-  for (const [what, file, call] of surfaces) {
+  for (const [what, file, call, decl] of surfaces) {
     let raw = ''
     try { raw = readFileSync(join(here, file), 'utf8') } catch { /* reported below */ }
     // ⚠⚠ IMPORT LINES ARE STRIPPED, and skipping that let a mutation through. Deleting the
@@ -103,8 +110,8 @@ ok(!lightApplyHere('c', 'a', 'w').includes('shimmerLight(c'),
     // ⚠ BLIND CHECK FIRST. A path that stops resolving would make every assert below pass by
     // finding nothing, which is this file's own subject.
     ok(src.length > 500, `§4 ★★ ${file} was READ (${src.length} bytes) — an unreadable file passes every check below`)
-    ok(src.includes('LIGHT_DECL_GLSL'),
-      `§4 ★★★ ${what} declares the light uniforms — and the import of that name does not count`)
+    ok(src.includes(decl),
+      `§4 ★★★ ${what} declares the light uniforms (${decl}) — and the import of that name does not count`)
     ok(src.includes(call),
       `§4 ★★★ ${what} actually SAMPLES the field — and it is named per surface, because two ` +
       `materials share mesh-bridge.ts and a file-wide check is satisfied by the other one`)
@@ -117,6 +124,7 @@ ok(!lightApplyHere('c', 'a', 'w').includes('shimmerLight(c'),
     ['blocks (flat)', 'createVoxelMaterial('],
     ['blocks (textured)', 'createTexturedVoxelMaterial('],
     ['water', 'createWaterMaterial('],
+    ['pieces', 'createPieceRenderer('],
   ] as const) {
     const args = argsOf(host.slice(host.indexOf('useMemo')), head)
     ok(args !== null, `§4 the host still constructs ${what} — otherwise this row is pointed at nothing`)

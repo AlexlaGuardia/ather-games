@@ -4233,6 +4233,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   }, [lightUniforms])
   useEffect(() => () => { leafMaterial.map?.dispose(); leafMaterial.dispose() }, [leafMaterial])
 
+  // ★ The pieces take the SAME light uniform objects as the world (light-glsl.ts: shared objects,
+  // not shared values) so the ring centre the frame loop writes reaches a beam and its wall alike.
+  const pieces = useMemo(() => createPieceRenderer(tiles, lightUniforms), [tiles, lightUniforms])
   // ★ A VALUE WRITE, NOT A REBUILD. Both shading paths live in the one compiled program and are
   // selected by a uniform, so changing style costs nothing and creates no second shader program.
   useEffect(() => {
@@ -4246,7 +4249,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     }
     textured?.setCartoon(cartoon)
     glassTextured?.setCartoon(cartoon)   // the window is lit by the same stack as the wall around it
-  }, [flatMaterial, textured, settings])
+    pieces.setCartoon(cartoon)           // and so is the beam standing against that wall (09-13)
+  }, [flatMaterial, textured, settings, pieces])
   const scratch = useMemo(() => createMeshScratch(SECTION), [])
   const cols = useRef(new Map<string, Column>())
   const drawn = useRef(new Map<string, THREE.Mesh>())
@@ -4278,7 +4282,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // tuft was outlined by the cube of air around it. The 1.002 lives at the call site now (see
   // `fitHighlight`) because only the full-block case wants it.
   const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), [])
-  const pieces = useMemo(() => createPieceRenderer(tiles), [tiles])
   // Greg — built once, positioned once. Static NPC, no per-frame update beyond the aim check
   // below (which reads GREG_X/GREG_Z/GREG_Y, not the mesh, so the mesh itself never moves).
   const greg = useMemo(() => {

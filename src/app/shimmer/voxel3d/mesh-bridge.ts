@@ -10,7 +10,8 @@
 import * as THREE from 'three'
 import type { MeshAttrs } from './attrs'
 import type { VoxelSettings } from './settings'
-import { LIGHT_DECL_GLSL, lightApply, lightApplyHere, createLightUniforms, type LightUniforms } from './light-glsl'
+import { lightApply, lightApplyHere, LIGHT_DECL_GLSL, createLightUniforms, type LightUniforms } from './light-glsl'
+import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from './cartoon-glsl'
 
 export { MATERIAL_COLOR, EMISSIVE } from './attrs'
 
@@ -54,13 +55,7 @@ export interface VoxelMaterial extends THREE.Material {
  */
 export function createVoxelMaterial(light: LightUniforms = createLightUniforms()): VoxelMaterial {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true }) as VoxelMaterial
-  const u = {
-    uCartoon: { value: 0 },
-    uToon: { value: 0 },
-    uOutline: { value: 0 },
-    uFaceShading: { value: 0.35 },
-    uShadowLift: { value: 0.15 },
-  }
+  const u = cartoonUniforms()
   mat.uniforms = u
 
   mat.onBeforeCompile = (shader) => {
@@ -75,72 +70,15 @@ export function createVoxelMaterial(light: LightUniforms = createLightUniforms()
         + 'vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n'
         + 'vWNorm = normalize(mat3(modelMatrix) * objectNormal);')
 
-    // ── the cartoon stack ────────────────────────────────────────────────────────────────────
+    // ── the cartoon stack — the ONE copy, in cartoon-glsl.ts (since 09-13) ────────────────────
     // Four levers, each independently dialled from settings so the look can be judged by moving
-    // one at a time on the real world rather than argued about in the abstract.
-    const emit = `
-      vec3 nrm = normalize(vWNorm);
-
-      // 1. FIXED BRIGHTNESS PER FACE DIRECTION. Top bright, sides mid, bottom dark — the single
-      //    biggest "stylised block game" signal, and free because axis-aligned quads have exact
-      //    normals. This is most of why Minecraft and Trove read the way they do.
-      float faceLum = nrm.y > 0.5 ? 1.0 : (nrm.y < -0.5 ? 0.52 : 0.76 + 0.05 * abs(nrm.x));
-      float face = mix(1.0, faceLum, uFaceShading);
-
-      // 2. BAND THE LIGHTING. A smooth ramp reads as lit; hard steps read as drawn.
-      // ★★ THE LUMINANCE IS THE LIGHT ON THE FACE, NOT THE COLOUR OF THE FACE (2026-09-11). This
-      //    read dot(outgoingLight, W) — the LIT PIXEL — so a dark material in full sun scored as
-      //    "in shadow" and step 3 poured its blue-lavender lift onto it: tan planks rendered mauve,
-      //    brown shingles lavender, pale stone barely touched, grass tops (bright) not at all. Every
-      //    wall in the world read as one pale colour and a building read as a ruin. Pieces never
-      //    pass through this shader, which is how the fence beside the wall stayed brown and gave
-      //    it away. Dividing out the albedo's luminance leaves the IRRADIANCE, which is what a
-      //    shadow is. Measured at 6 blocks, noon: goldwood planks (155,118,64) rendered (139,130,135)
-      //    before; the A/B for after is in the commit.
-      const vec3 W = vec3(0.2126, 0.7152, 0.0722);
-      float albLum = max(dot(diffuseColor.rgb, W), 0.03);
-      float lum = clamp(dot(outgoingLight, W) / albLum, 0.0, 1.0);
-      float bands = 3.0;
-      float stepped = floor(lum * bands + 0.5) / bands;
-      float shaped = mix(lum, stepped, uToon);
-
-      // 3. LIFT AND TINT THE SHADOWS. Cartoon shadows are never black — they are a cooler, still
-      //    saturated version of the base. Without this, caves read as murk rather than as shade.
-      //    ★★ THE LIFT IS SCALED BY THE MATERIAL AND THE COOLING IS A TINT, NOT AN ADD (2026-09-11).
-      //    This was "+ shade * (1.0 - shaped)": a flat blue-grey ADDED to every face that was not
-      //    fully lit, the same amount whatever the face was made of. A pale stone barely noticed; a
-      //    tan plank or a dark shingle was swamped, and every wall in the world converged on one
-      //    mauve. Bisected on a sunlit goldwood wall at 6 blocks, noon: shadowLift 0 → (88,61,26),
-      //    the default → (139,130,135); the other three dials moved it by single digits. Now the
-      //    cooling multiplies the base (a cooler, still saturated version of the SAME colour — the
-      //    stated intent) and the residual lift is proportional to the material's own luminance,
-      //    so a cave still never reads black and a dark wall in daylight is still a dark wall.
-      vec3 shade = mix(vec3(0.0), vec3(0.22, 0.26, 0.38), uShadowLift);
-      vec3 cool = mix(vec3(1.0), vec3(0.80, 0.86, 1.0), uShadowLift);
-      vec3 lift = shade * (1.0 - shaped) * clamp(albLum * 2.0, 0.15, 1.0);
-      vec3 toonCol = diffuseColor.rgb * face * (0.35 + 0.95 * shaped) * mix(cool, vec3(1.0), shaped) + lift;
-
-      // 4. BLOCK OUTLINES, IN-SHADER. UVs are derived from world position, so the distance to a
-      //    block boundary is already available — no post-process pass, no extra geometry. The axis
-      //    along the normal is masked out so a face is not outlined against its own depth.
-      vec3 fr = fract(vWPos - nrm * 0.002);
-      vec3 dEdge = min(fr, 1.0 - fr);
-      vec3 planar = 1.0 - abs(nrm);
-      float edge = min(mix(1.0, dEdge.x, planar.x),
-                   min(mix(1.0, dEdge.y, planar.y), mix(1.0, dEdge.z, planar.z)));
-      float line = 1.0 - smoothstep(0.0, 0.035, edge);
-      toonCol *= mix(1.0, 0.62, line * uOutline);
-
-      vec3 finalCol = mix(outgoingLight, toonCol, uCartoon);
-      ${lightApply('finalCol', 'diffuseColor.rgb', 'vWPos', 'nrm')}
-      gl_FragColor = vec4(finalCol + diffuseColor.rgb * vEmissive, diffuseColor.a);
-    `
+    // one at a time on the real world rather than argued about in the abstract. The history of the
+    // 09-11 irradiance + tint fixes is on the module.
+    const emit = cartoonStackGlsl('vWNorm', 'vWPos', 'diffuseColor.rgb * vEmissive')
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>',
         '#include <common>\nvarying float vEmissive;\nvarying vec3 vWPos;\nvarying vec3 vWNorm;\n'
-        + 'uniform float uCartoon;\nuniform float uToon;\nuniform float uOutline;\n'
-        + 'uniform float uFaceShading;\nuniform float uShadowLift;'
-        + LIGHT_DECL_GLSL)
+        + CARTOON_DECL_GLSL)
       // Three renamed this chunk around 0.16x; handle both, or a version bump silently unlights
       // every ore in the world with no error anywhere.
       .replace('#include <output_fragment>', emit)

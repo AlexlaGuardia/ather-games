@@ -99,7 +99,7 @@ console.log('\n── 6. the program samples the atlas with the world\'s own UV 
     '★ the side-face uv rule is the atlas\'s, v negated — a painted tile lands upright on a piece as on a block')
   ok(src.includes('float layer = an.y > 0.5 ? vLayerTop : vLayerSide;'), 'top faces take the top layer, the rest the side')
   const host = codeOnly(readFileSync(join(process.cwd(), 'src/app/shimmer/voxel3d/VoxelWorld.tsx'), 'utf8'))
-  ok(host.includes('createPieceRenderer(tiles)'), '★ the host hands the renderer the world\'s tile array')
+  ok(host.includes('createPieceRenderer(tiles, lightUniforms)'), '★ the host hands the renderer the world\'s tile array — and its light (09-13)')
 }
 
 console.log(`\npiece-texture: ${pass} pass, ${fails.length} fail`)

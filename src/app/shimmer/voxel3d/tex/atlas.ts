@@ -14,7 +14,8 @@
 import * as THREE from 'three'
 import { buildTileArray, LAYER_COUNT } from './tiles'
 import { buildReliefArray } from './relief'
-import { LIGHT_DECL_GLSL, lightApply, createLightUniforms, type LightUniforms } from '../light-glsl'
+import { createLightUniforms, type LightUniforms } from '../light-glsl'
+import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from '../cartoon-glsl'
 
 export interface TileArray {
   texture: THREE.DataArrayTexture
@@ -183,12 +184,7 @@ export function createTexturedVoxelMaterial(
     // ★ CARTOON LEVERS LIVE HERE TOO, AS UNIFORMS ON THIS SAME PROGRAM. Switching the world to
     // textures must not lose the look, and a second material per style would be one shader program
     // per style — the allocation shape that got this page blocked from WebGL. See settings.ts.
-    shader.uniforms.uCartoon = { value: 0 }
-    shader.uniforms.uToon = { value: 0 }
-    shader.uniforms.uOutline = { value: 0 }
-    shader.uniforms.uFaceShading = { value: 0.35 }
-    shader.uniforms.uShadowLift = { value: 0.15 }
-    Object.assign(shader.uniforms, light)
+    Object.assign(shader.uniforms, cartoonUniforms(), light)
     liveCartoon = shader.uniforms as Record<string, { value: number }>
     if (pendingCartoon) for (const [k, val] of Object.entries(pendingCartoon)) {
       if (liveCartoon[k]) liveCartoon[k].value = val
@@ -231,13 +227,8 @@ vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`,
     shader.fragmentShader = mustReplace(
       shader.fragmentShader,
       '#include <common>',
-      `uniform float uCartoon;
-uniform float uToon;
-uniform float uOutline;
-uniform float uFaceShading;
-uniform float uShadowLift;
+      `${CARTOON_DECL_GLSL}
 #include <common>
-${LIGHT_DECL_GLSL}
 uniform sampler2DArray uTiles;
 uniform sampler2DArray uRelief;
 uniform float uJitter;
@@ -422,43 +413,15 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
       'fragment shader',
     )
 
-    // ★ THE CARTOON STACK, ON THE TEXTURED PATH. Same four levers as the flat material, so the look
-    // survives the swap to textures. Face brightness uses the exact axis-aligned normal; banding
-    // makes lighting read as drawn rather than lit; the shadow lift stops caves reading as murk; and
-    // the outline is free here because world position is already a varying for the block jitter.
+    // ★ THE CARTOON STACK, ON THE TEXTURED PATH — the ONE copy, in cartoon-glsl.ts (since 09-13;
+    // this file and mesh-bridge.ts carried it twice before, held together by a test). Face
+    // brightness uses the exact axis-aligned normal; banding makes lighting read as drawn rather
+    // than lit; the shadow lift stops caves reading as murk; the outline is free here because
+    // world position is already a varying for the block jitter.
     shader.fragmentShader = mustReplace(
       shader.fragmentShader,
       '#include <opaque_fragment>',
-      `vec3 cnrm = normalize(vVoxNormal);
-       float faceLum = cnrm.y > 0.5 ? 1.0 : (cnrm.y < -0.5 ? 0.52 : 0.76 + 0.05 * abs(cnrm.x));
-       float face = mix(1.0, faceLum, uFaceShading);
-       // ★★ THIS IS THE COPY THE WORLD RENDERS WITH — mesh-bridge.ts's stack is the untextured
-       // fallback. Both carry the 2026-09-11 fix and cartoon-stack.test.ts holds them identical.
-       // (1) luminance is the LIGHT on the face (irradiance = lit ÷ albedo), not the lit pixel, so a
-       // dark material in full sun is not "in shadow"; (2) the shadow lift is scaled by the
-       // material's own luminance and the cooling is a TINT of the base, not a flat blue-grey ADD —
-       // the add was the same amount whatever the face was made of, so tan planks and dark shingles
-       // were swamped and every wall in the world converged on one mauve (bisected on a sunlit
-       // goldwood wall at 6 blocks, noon: shadowLift 0 → (88,61,26), default → (139,130,135)).
-       const vec3 W = vec3(0.2126, 0.7152, 0.0722);
-       float albLum = max(dot(diffuseColor.rgb, W), 0.03);
-       float clum = clamp(dot(outgoingLight, W) / albLum, 0.0, 1.0);
-       float stepped = floor(clum * 3.0 + 0.5) / 3.0;
-       float shaped = mix(clum, stepped, uToon);
-       vec3 shade = mix(vec3(0.0), vec3(0.22, 0.26, 0.38), uShadowLift);
-       vec3 cool = mix(vec3(1.0), vec3(0.80, 0.86, 1.0), uShadowLift);
-       vec3 lift = shade * (1.0 - shaped) * clamp(albLum * 2.0, 0.15, 1.0);
-       vec3 toonCol = diffuseColor.rgb * face * (0.35 + 0.95 * shaped) * mix(cool, vec3(1.0), shaped) + lift;
-       vec3 fr = fract(vWorldPos - cnrm * 0.002);
-       vec3 dEdge = min(fr, 1.0 - fr);
-       vec3 planar = 1.0 - abs(cnrm);
-       float edge = min(mix(1.0, dEdge.x, planar.x),
-                    min(mix(1.0, dEdge.y, planar.y), mix(1.0, dEdge.z, planar.z)));
-       float line = 1.0 - smoothstep(0.0, 0.035, edge);
-       toonCol *= mix(1.0, 0.62, line * uOutline);
-       vec3 finalCol = mix(outgoingLight, toonCol, uCartoon);
-       ${lightApply('finalCol', 'diffuseColor.rgb', 'vWorldPos', 'cnrm')}
-       gl_FragColor = vec4( finalCol + diffuseColor.rgb * vEmissive * gTileEmissive, diffuseColor.a );`,
+      cartoonStackGlsl('vVoxNormal', 'vWorldPos', 'diffuseColor.rgb * vEmissive * gTileEmissive'),
       'fragment shader',
     )
   }

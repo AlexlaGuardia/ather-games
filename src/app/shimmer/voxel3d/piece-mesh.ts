@@ -21,6 +21,8 @@ import { materialForItem } from '../voxel/registry'
 import { layerOf, TOP, SIDE } from './tex/tiles'
 import { MATERIAL_COLOR } from './attrs'
 import type { TileArray } from './tex/atlas'
+import { createLightUniforms, type LightUniforms } from './light-glsl'
+import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from './cartoon-glsl'
 
 /** Provisional colours — wood-toned so a shed reads as a shed. Not a look call. */
 const TINT: Record<string, number> = {
@@ -119,12 +121,28 @@ export const pieceTint = (def: PieceDef): number => {
  * ⚠ Geometry-local position and normal, read BEFORE the instance transform: a tile aligns to the
  * piece's own frame, and rotating the piece rotates its grain with it.
  */
-function createPieceMaterial(tiles: TileArray, opts: { cutout?: boolean } = {}): THREE.MeshLambertMaterial {
+function createPieceMaterial(
+  tiles: TileArray, opts: { cutout?: boolean } = {}, light: LightUniforms = createLightUniforms(),
+): PieceMaterial {
   // `cutout`: the pane's program — the glass tiles' alpha is coverage, discarded below half, and
   // both faces draw because a pane is looked at from the room and from the yard.
   const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: opts.cutout ? THREE.DoubleSide : THREE.FrontSide })
+  // ── ★ A PIECE IS LIT LIKE THE BLOCK IT TOUCHES (2026-09-13) ──────────────────────────────────
+  // Until today this was plain Lambert under the scene lights: a face turned down or away
+  // collected the hemisphere's near-black ground colour and nothing else, so a half slab on lit
+  // grass wore a black underside beside blocks that had no shadow at all (Alex: "a completely
+  // black shadow and nothing around them has any"). Blocks never go black because they run the
+  // cartoon stack (a 0.35 floor, a per-face law) and then the LIGHT FIELD, which knows the cell's
+  // own sky. Same stack, same field, same dials — `cartoon-glsl.ts`, the one copy — so a beam and
+  // the wall it stands against read as one material at noon and under one lantern at night.
+  // ⚠ World position and normal go through the INSTANCE matrix: every piece mesh is instanced,
+  // and a beam at rot 1 has its side facing where its geometry's +x was. The light field steps
+  // half a block along that normal, so the normal has to be the world's or a rotated post reads
+  // the cell beside it.
+  const cartoon = cartoonUniforms()
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTiles = { value: tiles.texture }
+    Object.assign(shader.uniforms, cartoon, light)
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute float aLayerTop;
@@ -132,19 +150,32 @@ attribute float aLayerSide;
 varying float vLayerTop;
 varying float vLayerSide;
 varying vec3 vPPos;
-varying vec3 vPNorm;`)
+varying vec3 vPNorm;
+varying vec3 vPWPos;
+varying vec3 vPWNorm;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vLayerTop = aLayerTop;
 vLayerSide = aLayerSide;
 vPPos = position;
-vPNorm = normal;`)
+vPNorm = normal;
+#ifdef USE_INSTANCING
+vPWPos = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
+vPWNorm = normalize((modelMatrix * instanceMatrix * vec4(normal, 0.0)).xyz);
+#else
+vPWPos = (modelMatrix * vec4(position, 1.0)).xyz;
+vPWNorm = normalize(mat3(modelMatrix) * normal);
+#endif`)
+    const emit = cartoonStackGlsl('vPWNorm', 'vPWPos', 'vec3(0.0)')
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
+${CARTOON_DECL_GLSL}
 uniform sampler2DArray uTiles;
 varying float vLayerTop;
 varying float vLayerSide;
 varying vec3 vPPos;
-varying vec3 vPNorm;`)
+varying vec3 vPNorm;
+varying vec3 vPWPos;
+varying vec3 vPWNorm;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
   vec3 an = abs(vPNorm);
@@ -158,8 +189,21 @@ ${opts.cutout ? '    if (tile.a < 0.5) discard;' : ''}
     diffuseColor.rgb *= tile.rgb;
   }
 }`)
+      // Three renamed this chunk around 0.16x; handle both, exactly as mesh-bridge.ts does.
+      .replace('#include <output_fragment>', emit)
+      .replace('#include <opaque_fragment>', emit)
   }
-  return mat
+  const out = mat as PieceMaterial
+  // The dials are value writes into the SAME objects the compiled program uploads from, so a
+  // setter before first render is not lost: the objects exist from construction, three reads them
+  // at compile.
+  out.setCartoon = (v) => { for (const [k, val] of Object.entries(v)) if (cartoon[k]) cartoon[k].value = val }
+  return out
+}
+
+/** A piece program with the cartoon dials exposed — the same setter the world's atlas material has. */
+export interface PieceMaterial extends THREE.MeshLambertMaterial {
+  setCartoon: (v: Record<string, number>) => void
 }
 
 /**
@@ -518,6 +562,9 @@ export interface PieceRenderer {
   stats: () => { pieces: Record<string, number>; fenceArms: number; wallPanels: number; wallCores: number }
   /** The atlas layers the i-th instance of a base shape (or 'wall' / 'core' / 'arm') samples. For the guard. */
   layersAt: (mesh: string, i: number) => { top: number; side: number }
+  /** The cartoon dials, on both piece programs — the world calls it with the same values it hands
+   *  the atlas material, so a piece and a block never drift a style apart. No-op untextured. */
+  setCartoon: (v: Record<string, number>) => void
   dispose: () => void
 }
 
@@ -536,15 +583,15 @@ function addLayerAttrs(g: THREE.BufferGeometry): { top: THREE.InstancedBufferAtt
  * @param tiles the world's tile array. With it, pieces wear their material's block; without it
  *   (no atlas — a test, a fallback) they draw in the per-shape placeholder tints as before.
  */
-export function createPieceRenderer(tiles: TileArray | null = null): PieceRenderer {
+export function createPieceRenderer(tiles: TileArray | null = null, light?: LightUniforms): PieceRenderer {
   const group = new THREE.Group()
   const geoms = new Map<string, THREE.BufferGeometry>()
   const meshes = new Map<string, THREE.InstancedMesh>()
   const mats = new Map<string, THREE.Material>()
   const layers = new Map<string, { top: THREE.InstancedBufferAttribute; side: THREE.InstancedBufferAttribute }>()
-  const textured = tiles ? createPieceMaterial(tiles) : null
+  const textured = tiles ? createPieceMaterial(tiles, {}, light) : null
   // The glass-family shapes (the pane) draw through a cutout copy of the same program.
-  const texturedCutout = tiles ? createPieceMaterial(tiles, { cutout: true }) : null
+  const texturedCutout = tiles ? createPieceMaterial(tiles, { cutout: true }, light) : null
   const isGlassShape = (def: PieceDef) => !!def.variants && def.variants.length === 1 && def.variants[0] === 'glass'
 
   for (const def of PIECES) {
@@ -714,6 +761,7 @@ export function createPieceRenderer(tiles: TileArray | null = null): PieceRender
     },
     hideGhost: () => { ghost.visible = false },
     setWorldSolid: (fn) => { worldSolid = fn },
+    setCartoon: (v) => { textured?.setCartoon(v); texturedCutout?.setCartoon(v) },
     layersAt: (mesh, i) => {
       const at = mesh === 'wall' ? wallLayers : mesh === 'core' ? coreLayers : mesh === 'arm' ? armLayers : layers.get(mesh)
       return at ? { top: at.top.getX(i), side: at.side.getX(i) } : { top: -1, side: -1 }
