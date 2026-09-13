@@ -67,9 +67,11 @@ import { MAT } from '../src/app/shimmer/voxel/depth'
 // Total 9 × 14. Front = z 0.
 const BX0 = 0, BX1 = 6                      // house x span (7 wide — needed so the front has brick
                                              // pillars beside its openings, not just corner posts)
-const BZ0 = 1, BZ1 = 5                      // house wall z span (eaves at BZ0-1 and BZ1+1)
+const BZ0 = 1, BZ1 = 7                      // house wall z span (eaves at BZ0-1 and BZ1+1).
+// ★ BZ1 was 5 — a 5×3 room. Alex, 2026-09-13: "too cramped, the inside doesn't leave room for
+// even walking in." The house took two rows of the garden's front; the room is 5×5.
 const WALL = 3                              // y 1..3 wall rows; y 0 floor
-const GZ0 = 7, GZ1 = 13, GX1 = 8            // garden z span and x span (wider than the house)
+const GZ0 = 9, GZ1 = 13, GX1 = 8            // garden z span and x span (wider than the house)
 const cells: BlueprintCell[] = []
 const pieces: Placement[] = []
 const put = (x: number, y: number, z: number, m: number) => cells.push({ x, y, z, m })
@@ -98,13 +100,17 @@ cut(BX1, 1, 4); put(BX1, 1, 4, MAT.MOSSY_CUT_STONE)
 // three openings in a row with only corner posts left the first cut skeletal, all frame and no
 // wall), a doorstep stair under the eave.
 const DX = 3
-cut(DX, 1, BZ0); cut(DX, 2, BZ0); cut(DX, 3, BZ0); piece('doorway', DX, 1, BZ0, 0)
-piece('stair', DX, 0, BZ0 - 1, 2)          // rot 2: the tall step is at +z, you climb toward the door
+// ★ THE DOORWAY IS A 3×3 FRAME (since the doorway-frame pass): cut the 3-wide hole and set the
+// frame at DX-1, like blueprint-fennel. This script was STALE against that and failed validation
+// silently until 2026-09-13 — regenerated then, byte-checked against the JSON first.
+for (let x = DX - 1; x <= DX + 1; x++) for (let y = 1; y <= 3; y++) cut(x, y, BZ0)
+piece('doorway', DX - 1, 1, BZ0, 0)
+// (The door stair went 2026-09-13: the buildings sink one so the floor is level with the ground — `placed.table.json` › sink — and a stair at y=0 would be a stepped hole in the path.)
 for (const x of [1, 5]) { cut(x, 1, BZ0); cut(x, 2, BZ0); piece('window', x, 1, BZ0, 0) }
 // The back: a shut door straight out to the garden (Mallow's doorway+door convention), the
 // doorstep stair mirrored the other way.
-cut(DX, 1, BZ1); cut(DX, 2, BZ1); cut(DX, 3, BZ1); piece('doorway', DX, 1, BZ1, 0); piece('door', DX, 1, BZ1, 0)
-piece('stair', DX, 0, BZ1 + 1, 0)          // rot 0: mirrored — the tall step is at −z, toward the door
+for (let x = DX - 1; x <= DX + 1; x++) for (let y = 1; y <= 3; y++) cut(x, y, BZ1)
+piece('doorway', DX - 1, 1, BZ1, 0); piece('door', DX, 1, BZ1, 0)
 // Side windows with shutters (Mallow's convention: window rot stays 1 on both sides, only the
 // shutter's rotation flips so the leaf shows on the outside face).
 for (const [x, rot] of [[BX0, 1], [BX1, 3]] as [number, Rotation][]) {
@@ -117,7 +123,7 @@ for (const [x, rot] of [[BX0, 1], [BX1, 3]] as [number, Rotation][]) {
 // walls for the overhang the drying-rack hooks sit under. Gable ends stay pale brick (the wall
 // climbing on), everything else is shingles.
 const ROOF0 = WALL + 1
-for (let r = 0; r <= 3; r++) {
+for (let r = 0; r <= (BZ1 - BZ0 + 2) / 2; r++) {   // courses until the cap meets itself
   const y = ROOF0 + r, za = BZ0 - 1 + r, zb = BZ1 + 1 - r
   for (let x = BX0; x <= BX1; x++) {
     if (za === zb) { piece('roof_cap', x, y, za, 1); continue }
@@ -132,11 +138,11 @@ for (let x = BX0; x <= BX1; x++) piece('hook', x, WALL, BZ0 - 1, 0)
 // the east wall, a lantern hung from a hook over the middle of the room.
 put(1, 1, 3, MAT.CAULDRON)
 put(1, 1, 2, MAT.CHEST)
-piece('hook', DX, 3, 3, 0); put(DX, 2, 3, MAT.MANA_LANTERN)
+piece('hook', DX, 3, BZ1 - 2, 0); put(DX, 2, BZ1 - 2, MAT.MANA_LANTERN)   // over the counter, not in the walkway (it hangs at head height)
 const jars: [number, number][] = [[2, MAT.POT], [3, MAT.POT_SEEDED], [4, MAT.POT_BLOOM]]
 for (const [z, jar] of jars) { piece('half_slab', 5, 1, z, 0); put(5, 2, z, jar) }
 // The counter (R4 closed): two tables across the middle, between the front door and the cauldron.
-for (const x of [2, 3]) piece('table', x, 1, 3, 0)
+for (const x of [2, 3]) piece('table', x, 1, BZ1 - 2, 0)   // the counter, two rows back from the door now the room is five deep
 
 // ── the herb garden ──────────────────────────────────────────────────────────────────────────
 // A fence perimeter with a gate lined up on the back door, beds of the four element herbs along
@@ -144,12 +150,13 @@ for (const x of [2, 3]) piece('table', x, 1, 3, 0)
 for (let x = BX0; x <= GX1; x++) piece(x === DX ? 'gate' : 'fence', x, 1, GZ0, 0)  // front (the gate)
 for (let x = BX0; x <= GX1; x++) piece('fence', x, 1, GZ1, 0)                      // back
 for (let z = GZ0 + 1; z < GZ1; z++) { piece('fence', BX0, 1, z, 0); piece('fence', GX1, 1, z, 0) }  // sides
-const beds: [number, number][] = [[8, MAT.VIOLETBLOOM], [9, MAT.STORMGRASS], [10, MAT.ROOTVINE], [11, MAT.TIDEPETAL]]
-for (const [z, herb] of beds) { put(1, 0, z, MAT.GARDEN_BED_GOLDWOOD); put(1, 1, z, herb) }
-put(1, 0, 12, MAT.GARDEN_BED_GOLDWOOD)     // a fifth bed, freshly turned, waiting on the next herb
+// The garden is five deep now: beds down BOTH sides of the path instead of one.
+const beds: [number, number, number][] = [[1, 10, MAT.VIOLETBLOOM], [1, 11, MAT.STORMGRASS], [1, 12, MAT.ROOTVINE], [5, 10, MAT.TIDEPETAL]]
+for (const [x, z, herb] of beds) { put(x, 0, z, MAT.GARDEN_BED_GOLDWOOD); put(x, 1, z, herb) }
+put(5, 0, 11, MAT.GARDEN_BED_GOLDWOOD)     // a fifth bed, freshly turned, waiting on the next herb
 for (let z = GZ0; z <= 12; z++) put(DX, 0, z, MAT.PATH)
 piece('post_dawnwood', DX, 1, 12, 0); put(DX, 2, 12, MAT.MANA_LANTERN)
-piece('bench', DX + 1, 1, 9, 0)
+piece('bench', DX + 1, 1, 12, 0)
 
 const bp = makeBlueprint('yarrow_apothecary', "Yarrow's Apothecary", cells, pieces)
 const problems = blueprintProblems(bp)

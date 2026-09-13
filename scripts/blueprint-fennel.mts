@@ -85,7 +85,7 @@ for (const [x, rot] of [[BX0, 1], [BX1, 3]] as [number, Rotation][]) {
 const DX = 8
 for (let x = DX - 1; x <= DX + 1; x++) for (let y = 1; y <= 3; y++) cut(x, y, BZ1)
 piece('doorway', DX - 1, 1, BZ1, 0); piece('door', DX, 1, BZ1, 0)
-piece('stair', DX, 0, BZ1 + 1, 0)
+// (The door stair went 2026-09-13: the buildings sink one so the floor is level with the ground — `placed.table.json` › sink — and a stair at y=0 would be a stepped hole in the path.)
 // Roof: ridge along x, eaves front and back; row 0 stands one cell outside both wall lines. Gable
 // ends are stone brick climbing on; the field is shingles.
 const ROOF0 = WALL + 1
@@ -128,10 +128,14 @@ for (let z = 2; z <= 4; z++) piece('half_slab', 1, 1, z, 0)
 put(1, 2, 2, MAT.POT); put(1, 2, 3, MAT.POT_SEEDED); put(1, 2, 4, MAT.POT_BLOOM)
 for (let z = 2; z <= 4; z++) piece('hook', BX0, 3, z, 1)
 // ── the long table (R2) ─────────────────────────────────────────────────────────────────────
-// Down the middle of the eating side, x 5..10 at z=3, benches along both sides. Six `table`
-// pieces in a run: the top spans each cell, so it reads as one board on twelve legs.
-for (let x = 5; x <= 10; x++) piece('table', x, 1, 3, 0)
-for (let x = 5; x <= 10; x++) { piece('bench', x, 1, 2, 2); piece('bench', x, 1, 4, 0) }
+// ★ ROOM TO WALK (Alex, 2026-09-13: "the inside doesn't leave room for even walking in"). The
+// hall is four deep (z 2..5) and the first cut filled all four rows — bench, table, bench, then
+// the wall furniture — so there was no aisle at all. Now: FOUR tables (x 6..9) with a bench on
+// the FRONT side only. The whole back row z=4 is a clear aisle from the counter to the chest,
+// the west end (x 1..5) is open floor in front of the hearth, and you walk in off the street
+// and around the board instead of climbing over it.
+for (let x = 6; x <= 9; x++) piece('table', x, 1, 3, 0)
+for (let x = 6; x <= 9; x++) piece('bench', x, 1, 2, 2)
 // A lantern hung over each end of the table.
 for (const x of [6, 9]) { piece('hook', x, 3, 3, 0); put(x, 2, 3, MAT.MANA_LANTERN) }
 // ── out back ─────────────────────────────────────────────────────────────────────────────────

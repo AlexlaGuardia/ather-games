@@ -72,7 +72,10 @@ import { MAT } from '../src/app/shimmer/voxel/depth'
 // The house: x 0..6, walls z 1..5 (z 0 and z 6 are the eave rows). The yard: x 7..13, z 0..8.
 // The back lot behind the house: x 0..6, z 6..8. Total 14 × 9. Front = z 0.
 const BW = 7, BX0 = 0, BX1 = BW - 1        // house x span
-const BZ0 = 1, BZ1 = 5                     // house wall z span (eaves at BZ0-1 and BZ1+1)
+const BZ0 = 1, BZ1 = 7                     // house wall z span (eaves at BZ0-1 and BZ1+1).
+// ★ BZ1 was 5 — a 5×3 room. Alex, 2026-09-13: "too cramped, the inside doesn't leave room for
+// even walking in." The house took the back lot (two rows of path and two stone piles nobody
+// needed) and the room is 5×5; the yard is untouched, the lot is still 14×9.
 const WALL = 3                             // y 1..3 wall rows; y 0 floor
 const YX0 = 7, YX1 = 13, YZ1 = 8           // yard x span, back edge
 const cells: BlueprintCell[] = []
@@ -98,8 +101,12 @@ cut(BX0, 1, 4); put(BX0, 1, 4, MAT.MOSSY_CUT_STONE)
 // The front: a wooden doorway in the middle (timber frame in a stone wall is the honest read; the
 // cutstone doorway would be grey-on-grey, R1), a window either side, a doorstep stair under the eave.
 const DX = 3
-cut(DX, 1, BZ0); cut(DX, 2, BZ0); cut(DX, 3, BZ0); piece('doorway', DX, 1, BZ0, 0)
-piece('stair', DX, 0, BZ0 - 1, 2)          // rot 2: the tall step is at +z, you climb toward the door
+// ★ THE DOORWAY IS A 3×3 FRAME (since the doorway-frame pass): cut the 3-wide hole and set the
+// frame at DX-1, like blueprint-fennel. This script was STALE against that and failed validation
+// silently until 2026-09-13 — regenerated then, byte-checked against the JSON first.
+for (let x = DX - 1; x <= DX + 1; x++) for (let y = 1; y <= 3; y++) cut(x, y, BZ0)
+piece('doorway', DX - 1, 1, BZ0, 0)
+// (The door stair went 2026-09-13: the buildings sink one so the floor is level with the ground — `placed.table.json` › sink — and a stair at y=0 would be a stepped hole in the path.)
 for (const x of [1, 5]) { cut(x, 1, BZ0); cut(x, 2, BZ0); piece('window', x, 1, BZ0, 0) }
 // West wall: a shuttered window. East wall: the yard door, opening at the stonecutter.
 cut(BX0, 1, 3); cut(BX0, 2, 3); piece('window', BX0, 1, 3, 1)
@@ -110,7 +117,7 @@ cut(BX1, 1, 3); cut(BX1, 2, 3); piece('door', BX1, 1, 3, 1)
 // back walls — the overhang and the shadow line. The fill between slopes is shingles (R2), except
 // at the two gable ends, where the stone wall keeps climbing as a stone gable.
 const ROOF0 = WALL + 1
-for (let r = 0; r <= 3; r++) {
+for (let r = 0; r <= (BZ1 - BZ0 + 2) / 2; r++) {   // courses until the cap meets itself
   const y = ROOF0 + r, za = BZ0 - 1 + r, zb = BZ1 + 1 - r
   for (let x = BX0; x <= BX1; x++) {
     if (za === zb) { piece('roof_cap', x, y, za, 1); continue }
@@ -120,7 +127,7 @@ for (let r = 0; r <= 3; r++) {
   }
 }
 // Inside: the table and the chest against the back wall, a lantern hung from a hook.
-put(1, 1, 4, MAT.CRAFT_TABLE); put(5, 1, 4, MAT.CHEST)
+put(1, 1, BZ1 - 1, MAT.CRAFT_TABLE); put(5, 1, BZ1 - 1, MAT.CHEST)   // the back wall; the floor between is clear
 piece('hook', 3, 3, 4, 0); put(3, 2, 4, MAT.MANA_LANTERN)
 
 // ── the yard ─────────────────────────────────────────────────────────────────────────────────
@@ -158,7 +165,6 @@ piece('half_slab_cutstone', 12, 3, 6, 0)
 for (let z = 6; z <= 7; z++) for (let x = 8; x <= 9; x++) put(x, 1, z, MAT.RUBBLE)
 put(8, 2, 7, MAT.RUBBLE); put(10, 1, 7, MAT.RUBBLE)
 // A second, smaller stack of stone brick behind the house, and a bench in the yard by the side door.
-put(2, 1, 7, MAT.STONE_BRICK); put(3, 1, 7, MAT.STONE_BRICK); put(2, 2, 7, MAT.STONE_BRICK)
 piece('bench_cutstone', YX0, 1, 1, 1)
 
 const bp = makeBlueprint('sax_stonery', "Sax's Stonery", cells, pieces)
