@@ -15,6 +15,7 @@
 //   WORLD_FPS=1                                               — turn the frame meter on for the shot
 //   WORLD_CLICK='700,430; 730,445'                            — click these viewport points, in order
 //   WORLD_CLICK_WAIT=120                                      — ms between clicks (default 120)
+//   WORLD_KEYS='KeyM; Escape'                                 — press these keys after the clicks (M = the map)
 //
 // It prints the HUD counter line after the shot. `mesh` is geometry BUILT, `draws` is what survived
 // frustum culling this frame — the two are far apart and only the second is the frame's cost.
@@ -127,6 +128,7 @@ const EXE = process.env.CHROME ?? '/usr/bin/chromium-browser'
  * legitimately empty before anything is saved. **Only clicking could ask that question.**
  */
 const CLICK = process.env.WORLD_CLICK ?? ''
+const KEYS = process.env.WORLD_KEYS ?? ''
 /** Milliseconds between clicks — React state and a re-render need a frame to land. */
 const CLICK_WAIT = Number(process.env.WORLD_CLICK_WAIT ?? 120)
 
@@ -310,6 +312,16 @@ const OWNER = process.env.WORLD_OWNER === '1'
       await new Promise(r => setTimeout(r, CLICK_WAIT))
     }
     console.log(`clicked ${pts.length} point(s)`)
+  }
+  // Keys after clicks, for the surfaces a key opens (M the map, I the bag, C the craft panel). Same
+  // real keyboard the console lines go through, so a key the game ignores is a key the game ignores.
+  if (KEYS) {
+    const keys = KEYS.split(';').map(k => k.trim()).filter(Boolean)
+    for (const k of keys) {
+      await page.keyboard.press(k)
+      await new Promise(r => setTimeout(r, CLICK_WAIT * 3))
+    }
+    console.log(`pressed ${keys.length} key(s)`)
   }
 
   await page.screenshot({ path: OUT })

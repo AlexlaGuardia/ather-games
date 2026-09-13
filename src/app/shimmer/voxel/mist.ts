@@ -273,6 +273,25 @@ export function mistPatchesNear(
   return out
 }
 
+/**
+ * Every patch whose heart lies inside a world rectangle — for the MAP, which draws the whole
+ * country at once and has no "here" to reach from. Walks the cell grid the rectangle covers, one
+ * `mistPatchAt` per cell, so a 9000-block map is ~1000 cells and not ~80M columns. Pure; the map
+ * memoizes it per seed.
+ */
+export function mistPatchesIn(
+  x0: number, z0: number, x1: number, z1: number, seed: number, cfg: MistConfig = DEFAULT_MIST,
+): MistPatch[] {
+  const out: MistPatch[] = []
+  for (let cz = mistCellOf(z0, cfg); cz <= mistCellOf(z1, cfg); cz++) {
+    for (let cx = mistCellOf(x0, cfg); cx <= mistCellOf(x1, cfg); cx++) {
+      const p = mistPatchAt(seed, cx, cz, cfg)
+      if (p && p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1) out.push(p)
+    }
+  }
+  return out
+}
+
 /** Blocks a patch can reach from its heart — the quantity the cell-seam inequality is about. */
 export const mistReach = (cfg: MistConfig = DEFAULT_MIST): number => cfg.radius * (1 + EDGE_WARP)
 

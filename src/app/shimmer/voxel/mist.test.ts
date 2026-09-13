@@ -6,7 +6,7 @@
 // coat. A memo that returns a stale answer looks like the field is noisy. Each assert pins one.
 
 import {
-  DEFAULT_MIST, mistPatchAt, mistAt, mistCellOf, mistPatchesNear, mistReach, mistEdgeMargin,
+  DEFAULT_MIST, mistPatchAt, mistAt, mistCellOf, mistPatchesNear, mistPatchesIn, mistReach, mistEdgeMargin,
   clearMistMemo,
 } from './mist'
 import { greyness } from './biome'
@@ -202,4 +202,22 @@ if (fails.length) {
   for (const f of fails.slice(0, 12)) console.error('  - ' + f)
   process.exit(1)
 }
+// ── the map's enumerator agrees with the renderer's (2026-09-13) ──────────────────────────────
+// `mistPatchesIn` walks a rectangle for the map; `mistPatchesNear` walks a radius for the pass.
+// Same cells, same `mistPatchAt`, so every patch one finds the other must find where they overlap.
+{
+  const a = ZONE_ANCHORS.find(z => z.id === 'spirit-meadow')!
+  const R = 600
+  const near = mistPatchesNear(a.x, a.z, SEED, R)
+  const inn = mistPatchesIn(a.x - R, a.z - R, a.x + R, a.z + R, SEED)
+  const key = (p: { x: number; z: number }) => `${p.x},${p.z}`
+  const inKeys = new Set(inn.map(key))
+  ok(near.length > 0, `the meadow has patches to compare (near ${near.length})`)
+  ok(near.every(p => inKeys.has(key(p))), 'every patch within the radius is inside the square that contains it')
+  ok(inn.every(p => p.x >= a.x - R && p.x <= a.x + R && p.z >= a.z - R && p.z <= a.z + R), 'the rectangle returns nothing outside itself')
+  ok(inn.length >= near.length, `a square holds at least its inscribed circle (in ${inn.length}, near ${near.length})`)
+  const empty = mistPatchesIn(a.x, a.z, a.x - 1, a.z - 1, SEED)
+  ok(empty.length === 0, 'an inverted rectangle holds nothing')
+}
+
 console.log(`✅ the mist pools where it should — ${pass} passed`)

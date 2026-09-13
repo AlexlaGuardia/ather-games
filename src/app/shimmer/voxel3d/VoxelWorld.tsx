@@ -10616,6 +10616,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       <primitive object={smoke.points} />
       <primitive object={breakFx.points} />
       <primitive object={seam.group} />
+      <primitive object={mist.pools} />
       <primitive object={mist.points} />
       <primitive object={mist.residents} />
       {/* Ring 2 sits beside the mist residents on purpose: same kind of thing (a body standing in

@@ -36,6 +36,7 @@ import { DEFAULT_PLOT, plotHeight, plotMaterialAt, inWall, plotThreshold, type P
 import { caveAnchor } from '../voxel/bubble'
 import { WILDS_BUBBLE } from '../voxel/column'
 import type { Space } from './save'
+import { mistPatchesIn, mistReach, type MistPatch } from '../voxel/mist'
 
 /** Blocks per sampled pixel of the terrain plate. One plate pixel per fog cell keeps the two
  *  layers in lockstep, so the cloud can never sit half a pixel off the ground it hides. */
@@ -469,6 +470,43 @@ function drawCloud(ctx: CanvasRenderingContext2D, seen: Seen, cellPx: number, ox
  * rotated by `-yaw`, which is two conventions fighting: it came out exactly 180° backwards, and
  * every single-axis spot check you would think to write still passed. See `map-heading.test.ts`.
  */
+// ── ★ THE MIST ON THE MAP (2026-09-13, Alex: "it's pretty frustrating chasing the mist around...
+// maybe we can add like an area marker for it in the map") ─────────────────────────────────────
+// A patch is a fixed place in the ground (`mist.ts`: the layer "belongs to the place, so it stays
+// put when you walk through it"), so it is a thing a map may mark. Drawn as the patch's own reach
+// (`mistReach()` blocks, the far edge of the warp band) in the mist's gold, hollow, so the ground
+// under it still reads. Two passes, one rule: what the cloud hides stays hidden, and what the EYE
+// can see the map may show — `mist-pass.ts` renders a patch from `REACH` (150) blocks, so a patch
+// within that of the keeper is drawn OVER the cloud; every other patch is drawn under it and the
+// weather rubs out the ones never walked to. Not a spawner map: nothing is drawn that the world
+// does not already show or the keeper has not already stood in.
+const MIST_SEEN_REACH = 150
+const mistMemo = new Map<number, MistPatch[]>()
+function mistPatchesForMap(seed: number): MistPatch[] {
+  let v = mistMemo.get(seed)
+  if (!v) { v = mistPatchesIn(BOUNDS.x0, BOUNDS.z0, BOUNDS.x0 + BOUNDS.w, BOUNDS.z0 + BOUNDS.h, seed); mistMemo.set(seed, v) }
+  return v
+}
+/** `keeper` = draw only patches within `MIST_SEEN_REACH` of it (the over-the-cloud pass); absent = all. */
+function drawMist(ctx: CanvasRenderingContext2D, seed: number, cellPx: number, ox = 0, oy = 0,
+  keeper?: { x: number; z: number }) {
+  // At the full map's scale (~1px a cell) a patch's true reach is a 4px ring, which is a speck; a
+  // marker has a floor so it stays a marker. On the minimap the true size wins.
+  const r = Math.max(6, (mistReach() / SAMPLE) * cellPx)
+  ctx.save()
+  ctx.lineWidth = Math.max(1.5, cellPx * 0.35)
+  for (const p of mistPatchesForMap(seed)) {
+    if (keeper && Math.hypot(p.x - keeper.x, p.z - keeper.z) > MIST_SEEN_REACH) continue
+    const { lx, lz } = toLocal(p.x, p.z)
+    const x = ox + (lx / SAMPLE) * cellPx, y = oy + (lz / SAMPLE) * cellPx
+    ctx.fillStyle = 'rgba(255,233,184,0.16)'
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = 'rgba(255,225,150,0.75)'
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke()
+  }
+  ctx.restore()
+}
+
 function drawKeeper(ctx: CanvasRenderingContext2D, x: number, y: number, heading: number, r: number) {
   ctx.save()
   ctx.translate(x, y)
@@ -533,12 +571,14 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
     cv.width = MAP_W * px; cv.height = MAP_H * px
     ctx.imageSmoothingEnabled = false
     ctx.drawImage(terrainPlate(seed), 0, 0, cv.width, cv.height)
+    drawMist(ctx, seed, px)                       // under the cloud: walked patches survive it
     // ⚠ AFTER the cloud, never before: the fog is painted over the plate, so a mark drawn first is
     // a mark the weather rubs out — and the one thing this map exists to point at would be the first
     // thing hidden.
     drawWildsDoor(ctx, seed, px)
     if (seen) {
       drawCloud(ctx, seen, px)
+      drawMist(ctx, seed, px, 0, 0, posRef.current ?? undefined)  // over it: what the eye can see from here
       drawWildsDoor(ctx, seed, px)
       let on = 0
       for (let y = 0; y < seen.ch; y++) for (let x = 0; x < seen.cw; x++) if (isSeen(seen, x, y)) on++
@@ -676,7 +716,9 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
       const ox = -((lx - MINI_REACH) / SAMPLE) * cellPx
       const oy = -((lz - MINI_REACH) / SAMPLE) * cellPx
       ctx.drawImage(terrainPlate(seed), ox, oy, MAP_W * cellPx, MAP_H * cellPx)
+      drawMist(ctx, seed, cellPx, ox, oy)
       if (seen) drawCloud(ctx, seen, cellPx, ox, oy)
+      drawMist(ctx, seed, cellPx, ox, oy, p)
       drawWildsDoor(ctx, seed, cellPx, ox, oy, cv.width, cv.height)
       drawKeeper(ctx, cv.width / 2, cv.height / 2, headingRef.current, 5)
     }

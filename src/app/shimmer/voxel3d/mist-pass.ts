@@ -40,7 +40,7 @@
 
 import * as THREE from 'three'
 import { columnHeight } from '../voxel/height'
-import { mistAt, mistPatchesNear, DEFAULT_MIST, type MistPatch } from '../voxel/mist'
+import { mistAt, mistPatchesNear, mistReach, DEFAULT_MIST, type MistPatch } from '../voxel/mist'
 import { zoneAt } from '../voxel/zones'
 import { residentAt, type MistLedger, type Resident, type ResidentForm } from './mist-encounter'
 import { createCreatureBody, type CreatureBody } from './creature-billboard'
@@ -77,6 +77,8 @@ export interface MistPass {
   points: THREE.Points
   /** Residents live in their own group so the caller can add one object to the scene. */
   residents: THREE.Group
+  /** The pools — one ground sheet per near patch, the mist's BODY seen from outside (09-13). */
+  pools: THREE.Group
   /** The patch the camera is standing in, 0..1 thick — the fog/light lever reads this. */
   thickness(): number
   /** The presence within spar range, or null. The range half of the prompt gate. */
@@ -218,7 +220,11 @@ void main() {
   p.z += cos(uTime * 0.13 + aSeed * 1.7) * 2.6 + cos(uTime * 0.05 + aSeed * 3.1) * 1.4;
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   // Born WIDE and swelling only a little: mist does not plume, it spreads.
-  gl_PointSize = (58.0 + 26.0 * aT) * (160.0 / max(1.0, -mv.z));
+  // ⚠ CAPPED (2026-09-13). Uncapped, a sprite two blocks off was 4600px — the GPU clamps it to its
+  // max (1023 here) and the cubic falloff leaves a screen-wide blob with alpha in its middle third
+  // only: the layer thinned out exactly as you walked into it. Alex: "the mist evaporates as you
+  // get closer." A sprite stays a puff you can see the edge of.
+  gl_PointSize = min(300.0, (58.0 + 26.0 * aT) * (160.0 / max(1.0, -mv.z)));
   gl_Position = projectionMatrix * mv;
 }`,
     fragmentShader: /* glsl */ `
@@ -239,6 +245,115 @@ void main() {
   points.frustumCulled = false
   points.renderOrder = 1
   points.visible = false
+
+  // ── the pool: the mist's BODY, seen from outside ─────────────────────────────────────────────
+  // ★ WHY THIS EXISTS (2026-09-13). Alex: *"it's pretty frustrating chasing the mist around.. the
+  // mist evaporates as you get closer to it and then comes back once you're far enough away, so
+  // it's hard to even tell when you're in it."* Shot from the heart and from 45 blocks out, noon
+  // and midnight: from OUTSIDE a patch had no body at all. The sprites spawn only for the nearest
+  // patch at 0.13 alpha (invisible over sunlit gold ground), and the fog lever samples the CAMERA,
+  // so its gold only ever painted the horizon — the mist was always "over there", from inside as
+  // well as out. The consent design *requires* a patch to be read from outside (the resident as a
+  // silhouette you walk toward); it had nothing to be read against.
+  //
+  // So: one flat sheet per near patch, lying a hand above the spar floor, the patch's own reach
+  // across, mist-gold, with a slow two-octave drift so it lies like fog and not like paint. From
+  // 150 blocks it is a gold pool in the grass — the thing the map now marks. From inside it is the
+  // sheet around your own feet, which is the tell the fog lever could never give. Depth-tested and
+  // never written, so ground that rises through it simply hides that part, and the sprites and the
+  // presence draw over it. Density follows the same edge band `mistAt` uses.
+  const POOL_LIE = 0.35
+  const POOL_SEGS = 26
+  /**
+   * ★ THE SHEET FOLLOWS THE GROUND, PER VERTEX. The first cut was a flat disc at the heart's floor,
+   * and from 50 blocks out and 16 up it was invisible: the meadow ROLLS (`swellAmp` 7), so a flat
+   * sheet at one height is buried under every rise and floats over every dip, and only the flat
+   * yard around the heart ever showed. A patch passes a dell test at its heart, not across its
+   * reach. So each pool is its own grid, every vertex stood on the column under it (the same
+   * `groundAt`/`columnHeight` rule the residents and the sprites stand on) plus a hand — built once
+   * when the patch comes into reach, disposed when it leaves. Coordinates stay LOCAL to the heart
+   * so the shader's edge and noise are unchanged; only y is per-vertex.
+   */
+  const poolGeoFor = (p: MistPatch, reach: number): THREE.BufferGeometry => {
+    const g = new THREE.PlaneGeometry(2, 2, POOL_SEGS, POOL_SEGS)
+    g.rotateX(-Math.PI / 2)                        // XY → XZ; the disc is the unit square's inscribed circle
+    const pos = g.attributes.position as THREE.BufferAttribute
+    const floor = standAt(p)
+    for (let i = 0; i < pos.count; i++) {
+      const lx = pos.getX(i), lz = pos.getZ(i)
+      const wx = Math.round(p.x + lx * reach), wz = Math.round(p.z + lz * reach)
+      const gen = columnHeight(wx, wz, seed)
+      const y = (groundAt ? groundAt(wx, wz, gen + 2) : gen) + 1
+      pos.setY(i, y - floor)                       // the mesh sits at `floor`; vertices carry the difference
+    }
+    pos.needsUpdate = true
+    return g
+  }
+  const poolMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide,
+    blending: THREE.NormalBlending,
+    uniforms: { uTime: { value: 0 }, uAlpha: { value: 1.0 } },
+    vertexShader: /* glsl */ `
+varying vec2 vLocal;
+varying vec3 vWorld;
+void main() {
+  vLocal = position.xz;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorld = wp.xyz;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`,
+    fragmentShader: /* glsl */ `
+uniform float uTime;
+uniform float uAlpha;
+varying vec2 vLocal;
+varying vec3 vWorld;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+void main() {
+  float d = length(vLocal);                       // 0 at the heart, 1 at the reach
+  // The same shape as mist.ts's edge band: full through the middle, thinning to nothing at the reach.
+  if (d > 1.0) discard;                           // the grid is square; the pool is its circle
+  float edge = 1.0 - smoothstep(0.45, 1.0, d);
+  // Two octaves, drifting at different rates and directions so the sheet creeps rather than slides.
+  // ⚠ LOCAL coordinates, not world: a sin-hash fed x ≈ 2400 loses its fraction in float and the
+  // sheet came out flat red-uniform in the first shot. The disc's own 0..1 frame × its reach is the
+  // same scale in blocks, and every patch sharing one pattern is hidden by the drift.
+  vec2 q = vLocal * 31.0;
+  float n = 0.6 * vnoise(q * 0.11 + vec2(uTime * 0.05, -uTime * 0.03))
+          + 0.4 * vnoise(q * 0.27 + vec2(-uTime * 0.04, uTime * 0.06));
+  float body = smoothstep(0.25, 0.8, n);
+  // ★ A SHEET IS A VOLUME SEEN FROM ABOVE. Fog reads by the path light takes through it: looking
+  // straight down through a hand of mist you see the grass; looking along it you see mist. So the
+  // sheet thickens toward the grazing angle — which is exactly what makes it a pool from 100
+  // blocks out and a haze around your own feet from inside, and lets the ground under your boots
+  // stay readable. Without this it was a pale wash the eye slid off (shot 09-13).
+  vec3 v = normalize(cameraPosition - vWorld);
+  float graze = 1.0 - abs(v.y);
+  float dens = mix(0.3, 1.0, graze * graze);
+  // Paler than the mist gold on purpose: the meadow's own grass IS gold, and a gold sheet on gold
+  // grass was invisible (shot 09-13). Cream reads as fog against grass and as warm against sky.
+  gl_FragColor = vec4(0.93, 0.965, 1.0, edge * (0.35 + 0.65 * body) * dens * uAlpha);
+}`,
+  })
+  const pools = new THREE.Group()
+  const poolOf = new Map<string, THREE.Mesh>()
+  // `window.__mist()` — where the pools are, read off the running world (the `__hollows()` shape).
+  // A pool that the eye cannot find is either not there, or there and buried; only the world knows.
+  // ⚠ Bound from `tick`, not here: React StrictMode runs `useMemo` factories twice in dev, and a
+  // hook registered at construction belonged to the orphan — it answered `[]` while the live pass
+  // drew red across the whole meadow (09-13). The instance that ticks is the instance that answers.
+  const mistReadout = () => [...poolOf.entries()].map(([k, m]) => {
+    m.geometry.computeBoundingBox()
+    const b = m.geometry.boundingBox!
+    return { patch: k, at: [m.position.x, +m.position.y.toFixed(2), m.position.z], yRange: [+(b.min.y + m.position.y).toFixed(1), +(b.max.y + m.position.y).toFixed(1)], inScene: !!pools.parent, culled: m.frustumCulled, vis: m.visible && pools.visible && poolMat.visible, layers: m.layers.mask, verts: m.geometry.attributes.position.count, world: m.matrixWorld.elements.slice(12, 15).map(v => +v.toFixed(1)) }
+  })
 
   // ── the presence ──────────────────────────────────────────────────────────────────────────────
   // A spindle: narrow at the ground, full through the middle, tapering to nothing. Read as a
@@ -337,6 +452,7 @@ void main() {
   return {
     points,
     residents,
+    pools,
     thickness: () => thick,
     nearest: () => closest,
 
@@ -370,7 +486,9 @@ void main() {
 
     tick(px, py, pz, dt, elapsed) {
       void py
+      if (typeof window !== 'undefined') (window as unknown as { __mist?: () => unknown }).__mist = mistReadout
       ;(mat.uniforms.uTime as { value: number }).value = elapsed
+      ;(poolMat.uniforms.uTime as { value: number }).value = elapsed
       for (const e of ELEMENTS) (residentMats[e].uniforms.uTime as { value: number }).value = elapsed
 
       // ── which patches are in play ───────────────────────────────────────────────────────────
@@ -384,6 +502,23 @@ void main() {
         for (const p of near) {
           const d = Math.hypot(p.x - px, p.z - pz)
           if (d < best) { best = d; current = p }
+        }
+        // ── the pools follow `near`: add what came into reach, drop what left it ───────────────
+        const nearKeys = new Set(near.map(keyOf))
+        for (const [k, m] of poolOf) {
+          if (nearKeys.has(k)) continue
+          pools.remove(m); m.geometry.dispose(); poolOf.delete(k)
+        }
+        for (const p of near) {
+          const k = keyOf(p)
+          if (poolOf.has(k)) continue
+          const reach = mistReach()                     // the far edge of the warp band, the map's ring
+          const m = new THREE.Mesh(poolGeoFor(p, reach), poolMat)
+          m.scale.set(reach, 1, reach)
+          m.position.set(p.x, standAt(p) + POOL_LIE, p.z)
+          m.frustumCulled = false
+          m.renderOrder = 0
+          pools.add(m); poolOf.set(k, m)
         }
         // ── who is actually standing in each patch ─────────────────────────────────────────────
         // A patch has a presence only if its zone was RULED (unruled fails closed → nothing) and
@@ -531,6 +666,9 @@ void main() {
     dispose() {
       geo.dispose()
       mat.dispose()
+      for (const [, m] of poolOf) m.geometry.dispose()
+      poolMat.dispose()
+      pools.clear(); poolOf.clear()
       residentGeo.dispose()
       for (const e of ELEMENTS) residentMats[e].dispose()
       for (const [, e] of live) e.body?.dispose()
