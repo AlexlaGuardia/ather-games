@@ -507,6 +507,48 @@ function drawMist(ctx: CanvasRenderingContext2D, seed: number, cellPx: number, o
   ctx.restore()
 }
 
+/**
+ * ★ THE NEAREST PATCH IS PINNED TO THE MINIMAP'S EDGE (2026-09-13). Alex, after the rings shipped:
+ * *"I've been wandering around for a while now and still can't seem to find it.. I hit /mist and
+ * start running in that direction but when I hit it again it seems like a whole new set."* The
+ * rings only draw inside the crop (240 blocks) and a patch can be 800 away, so between one `/mist`
+ * and the next there was nothing on screen to run at. Same shape as the Wilds door: when the
+ * nearest patch is outside the crop, a mist-gold chevron sits on the edge, on the line to it, and
+ * stays there while you run. Reach is the scale of a region, not the whole country — past it the
+ * answer is `/goto`, and a compass to a patch three regions away would be a leash, not a guide.
+ */
+const MIST_PIN_REACH = 500
+function drawMistPinned(ctx: CanvasRenderingContext2D, seed: number, cellPx: number, ox: number, oy: number,
+  w: number, h: number, keeper: { x: number; z: number }) {
+  let best: MistPatch | null = null, bd = MIST_PIN_REACH
+  for (const p of mistPatchesForMap(seed)) {
+    const d = Math.hypot(p.x - keeper.x, p.z - keeper.z)
+    if (d < bd) { bd = d; best = p }
+  }
+  if (!best) return
+  const { lx, lz } = toLocal(best.x, best.z)
+  const x = ox + (lx / SAMPLE) * cellPx, y = oy + (lz / SAMPLE) * cellPx
+  const pad = 14
+  const cx = Math.min(Math.max(x, pad), w - pad), cy = Math.min(Math.max(y, pad), h - pad)
+  if (cx === x && cy === y) return                 // in the crop: the ring already says it
+  const dx = x - w / 2, dy = y - h / 2
+  const len = Math.hypot(dx, dy) || 1
+  const ux = dx / len, uy = dy / len
+  ctx.save()
+  ctx.fillStyle = 'rgba(8,6,20,0.55)'
+  ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = 'rgba(255,225,150,0.9)'; ctx.lineWidth = 1.5
+  ctx.beginPath(); ctx.arc(cx, cy, 4.5, 0, Math.PI * 2); ctx.stroke()
+  const t = 6
+  ctx.fillStyle = '#ffe9b0'
+  ctx.beginPath()
+  ctx.moveTo(cx + ux * (7 + t), cy + uy * (7 + t))
+  ctx.lineTo(cx + ux * 7 - uy * t * 0.75, cy + uy * 7 + ux * t * 0.75)
+  ctx.lineTo(cx + ux * 7 + uy * t * 0.75, cy + uy * 7 - ux * t * 0.75)
+  ctx.closePath(); ctx.fill()
+  ctx.restore()
+}
+
 function drawKeeper(ctx: CanvasRenderingContext2D, x: number, y: number, heading: number, r: number) {
   ctx.save()
   ctx.translate(x, y)
@@ -719,6 +761,7 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
       drawMist(ctx, seed, cellPx, ox, oy)
       if (seen) drawCloud(ctx, seen, cellPx, ox, oy)
       drawMist(ctx, seed, cellPx, ox, oy, p)
+      drawMistPinned(ctx, seed, cellPx, ox, oy, cv.width, cv.height, p)
       drawWildsDoor(ctx, seed, cellPx, ox, oy, cv.width, cv.height)
       drawKeeper(ctx, cv.width / 2, cv.height / 2, headingRef.current, 5)
     }

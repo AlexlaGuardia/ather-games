@@ -600,12 +600,17 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       // the difficulty choice, so the compass has to carry the number.
       const ledger = c.mistLedger()
       const now = Date.now()
-      return found.slice(0, 5).map(m => {
+      // ★ EVERY LINE NAMES ITS PATCH (2026-09-13, Alex: "when I hit it again it seems like a whole
+      // new set"). Five anonymous "mist patch" rows re-sorted by distance as he ran read as five
+      // different patches each time. The heart's coordinates are the name — stable across runs,
+      // and the same string `/tp` takes. Nearest first; the minimap pins that one to its edge.
+      return found.slice(0, 5).map((m, i) => {
         const r = residentAt(m, zoneAt(m.x, m.z, SEED).zone?.id, ledger, now)
         const who = r
           ? `${r.name} lv ${r.level}${r.second ? ` + ${r.second.name} lv ${r.second.level}` : ''}`
           : quietMinutes(ledger, m, now) > 0 ? `quiet ${quietMinutes(ledger, m, now)}m` : 'no answer'
-        return `mist patch      ${bearing(m.x - p.x, m.z - p.z)}      ${who}`
+        const at = `${m.x} ${m.z}`.padEnd(12)
+        return `${i === 0 ? '▸' : ' '} mist ${at} ${bearing(m.x - p.x, m.z - p.z).padEnd(16)} ${who}`
       }).join('\n')
     },
     suggest: () => ['go'] },
