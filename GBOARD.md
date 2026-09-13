@@ -11,6 +11,44 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🔥 Shimmer — **THE HEARTH BLOCK AND THE TABLE PIECE: THREE REACHES CLOSED IN ONE PASS** (2026-09-13 AM, hub lane `61bfc231`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID KiHQltvKoAERQrZraPNBM` from `dd04d0d`** (+ worker repin `54feb335db`), served == disk (Hearth / Table / worker pin all in the served chunks, worker 200 with HEARTH in it). palette 2376/0 · pieces ✅ · piece-mesh 11/0 · piece-break 1042/0 · blueprints 93/0 · placed 56/0 · recipes 77/0 · light 67/0 · canon gate clean.*
+
+**Left off:** the two reaches at the top of last night's list, built and landed. **HEARTH (`f5daced`, MAT 102):** the first
+WARM emitter in a world where every light was mana-blue — registry `emit 12` (under the lantern's 14 on purpose),
+`EMISSIVE 0.85`, its own per-face painter: stone-brick firebox with a flickered fire on every side (a block has no
+facing; the alcove hides three), embers on top, soot below; fire texels carry emissive alpha like the lantern's glass.
+Hand recipe 6 cobblestone, no fuel input (no fuel state to honour; a log would be the second non-refine log consumer
+`workshop.test` names as exactly one). **`table` (same commit):** 22nd piece — full-cell (a table is the furniture you
+do NOT step onto; the bench is half so you step up), full-width top so a run is one board, inset legs + apron,
+wood/stone variants, 3 planks. Tripwires bumped with the reason written: pieces 21→22, palette 247→259.
+**Landed (`dd04d0d`):** Fennel — HEARTH in the firebox, six tables down the eating side (script regenerated; it
+reproduced its JSON byte-for-byte first). Hazel — the four fence+half_slab counter bays → tables. Yarrow — a two-table
+counter across the room facing the front door, beside the cauldron. ⚠ Hazel/Yarrow were edited in the JSON through
+`makeBlueprint`/`blueprintProblems` (bounds + cells asserted unchanged), NOT regenerated: their scripts still author
+the pre-frame doorway and re-running them would overlap the wall. Shots on the play devwin (`$SP/fennel-wide.png`,
+`fennel-hearth.png`): the hall reads as a kitchen now — fire on the back wall, a long board on twelve legs.
+
+**⚠ Found, not mine, not fixed:** the sweep is **270/273** at HEAD — `break-fx-wiring` (7 asserts: "exactly one
+`breakFx.chip(` call site, found 2") and `channel-wiring` ("the publish sits inside the channel block") both read
+`VoxelWorld.tsx`, which the piece-break pass (`5f16618`, last night) duplicated the chip loop in. Guards that stopped
+reaching their subject, not a code bug (INSTRUMENTS.md) — re-aim them at the piece path or fold the two loops.
+
+**Next:**
+1. Re-aim `break-fx-wiring` + `channel-wiring` at the piece-break call site (or dedupe the chip loop) → sweep green.
+2. Fennel R1's other half: a bread **OVEN** (cut-stone dome, dark mouth); R5 **smoke** keyed on a HEARTH (engine-side).
+   R3 food on the table. R4 the SIGN — five buildings, still no way to say whose door is whose.
+3. Alex walks the street on prod (fold door → road → Greg): Mallow's setback, and now the hearth's fire at ground level.
+4. Want-lists + prices, voice-profiles for the five, Beat 0 wiring (Magii's handoff, `shimmer-quests-mainmap.md`).
+
+**Decisions:** hearth emits under the lantern (a fire lights a room; the lantern is the light you set against the
+dark) · the block's flat colour is the STONE, the fire is painted (an orange base would glow on its back) · table is
+full-cell not half (counter = the thing you hand across, not step onto) · Hazel/Yarrow JSON is the artefact, scripts are
+docs until Alex's editor rebuild.
+
+**Files:** `voxel/depth.ts` · `voxel/registry.ts` · `voxel/recipes.ts` · `voxel/pieces.ts` · `voxel3d/attrs.ts` ·
+`voxel3d/tex/tiles.ts` (paintHearth) · `voxel3d/piece-mesh.ts` · `scripts/blueprint-{fennel,hazel,yarrow}.mts` ·
+`data/blueprints/{fennel_kitchen,hazel_carpentry,yarrow_apothecary}.json` · `public/voxel-gen.worker.54feb335db.js`.
+
 ## 🏘️ Shimmer — **THE GLADE IS A STREET: ALL FIVE TRADES PLACED** (2026-09-13, hub lane `2f743745`) · *Last touched 2026-09-13 — ✅ **DEPLOYED `BUILD_ID of_OUUPJTL55sKrLKyeQF` from `8fb1773`** (+ worker repin `5648d862da`, served == disk). placed.test 56/0 · stamps 52/0.*
 
 **Left off:** Alex: *"lets place the five trades from the worktable"* → rendered a top-down glade map (scratch
