@@ -3,6 +3,7 @@ import { Cormorant_Garamond, Inter, Chakra_Petch } from "next/font/google";
 import "./globals.css";
 import "./gameui.css";
 import SaveOwnerBoot from "./_components/SaveOwnerBoot";
+import AnalyticsBoot from "./_components/AnalyticsBoot";
 
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
@@ -70,6 +71,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             player's on every page rather than only inside Shimmer's two boot gates. Renders
             nothing; deliberately not a cookie read, which would make every static page dynamic. */}
         <SaveOwnerBoot />
+        {/* PostHog pageviews + DOM-layer replay; renders nothing, no-op without a key. */}
+        <AnalyticsBoot />
         <main>{children}</main>
       </body>
     </html>
