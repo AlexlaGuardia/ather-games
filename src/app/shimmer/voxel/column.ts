@@ -810,6 +810,22 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefi
   // written ten lines above the adoption code, and this is its second costume.
   const corners = new Map<number, number>()
   if (seed === undefined) return { tops, corners, depths }
+  // ── ★★ THE CORNER IS THE TABLE, CLAMPED INTO THE BLOCK THE WATER IS ACTUALLY IN (2026-09-14) ──
+  // Alex found a pond floating ~17 blocks above its bed near (-3552, 224..240). The cells were
+  // right: `waterSurfaceAt` drops a body to its lowest shore bank when the table sits above the
+  // banks, and that basin lies 18 blocks under a table that is a 480-block mean. But the sheet
+  // was drawn from the RAW table at every corner, so it hung where the table said, not where the
+  // water was. Measured on the real seed: water top cell 100, sheet vertices at 118.
+  //
+  // The clamp is per CORNER, from the tops of the (up to four) water cells touching it — all fixed
+  // in world space and all inside the ring both sharing columns read — so a corner stays a pure
+  // function of position and the continuity `greedy.ts`'s `cornerY` rests on is untouched. It is
+  // NOT the per-quad clamp that note warns about: that one made the answer depend on who asked.
+  // Band: [hi − 1, hi], hi = the highest touching block plane. A real table lands inside it
+  // (cells fill to floor(table), so the plane is above the table by less than a block); a table
+  // above the band collapses to the plane — the old flat sheet, which is right for a basin the
+  // table knows nothing about — and a table below it (a body dropped to its bank) rises to the
+  // bed's own surface instead of sinking into the rock.
   for (const key of tops.keys()) {
     // Recover the cell this top belongs to, then sample its four corners.
     const kx = (key % (SECTION + 2)) - 1, kz = ((key / (SECTION + 2)) | 0) - 1
@@ -818,7 +834,17 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefi
         const cx = kx + dx, cz = kz + dz
         const ck = waterTopKey(cx, cz, SECTION)
         if (corners.has(ck)) continue
-        corners.set(ck, waterTableAt(col.wx + cx, col.wz + cz, seed, cfg))
+        let hi = -Infinity
+        for (let tz = cz - 1; tz <= cz; tz++) {
+          for (let tx = cx - 1; tx <= cx; tx++) {
+            if (tx < -1 || tx > SECTION || tz < -1 || tz > SECTION) continue   // waterTopKey's domain
+            const t = tops.get(waterTopKey(tx, tz, SECTION))
+            if (t !== undefined && t > hi) hi = t
+          }
+        }
+        let v = waterTableAt(col.wx + cx, col.wz + cz, seed, cfg)
+        if (Number.isFinite(hi)) v = Math.min(Math.max(v, hi - 1), hi)
+        corners.set(ck, v)
       }
     }
   }
