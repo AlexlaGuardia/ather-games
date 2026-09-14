@@ -39,7 +39,7 @@ import { AIR } from '../voxel/section'
 import { lightOpaque } from '../voxel/light-passes'
 import { placementRotation } from './piece-facing'
 import { materialAt, MAT, isPlant, isHerb, isScatter, isSapling, isHalfMat, isTopSlab, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
-import { FLORA, plantVariant } from '../voxel/flora'
+import { FLORA, plantVariant, flowerForm } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState, type RayHit } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
 import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
@@ -5267,7 +5267,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       : m === MAT.LOOSE_ROCK ? FLORA.ROCK
       : m === MAT.DEADFALL ? FLORA.DEADFALL
       : m === MAT.MUSHROOM ? FLORA.MUSHROOM
-      : isHerb(m) ? FLORA.HERB : FLORA.FLOWER
+      // A wildflower is ONE material and THREE draw kinds (mat / bush / single) — `flowerForm`
+      // is position-pure like `plantVariant`, so nothing about the form is stored.
+      : isHerb(m) ? FLORA.HERB : flowerForm(fx, fz, SEED)
     // ★ A LOG'S AXIS COMES FROM THE NEIGHBOURING VOXEL, NOT FROM THE FIELD. The world already
     // holds the answer — the run was written into it — so re-deriving it would mean resolving
     // the land blend at ten neighbour columns to learn something the save knows for free. If

@@ -53,7 +53,20 @@ export const FLORA = {
   // to know "a crop stands here", and WHICH crop is a lookup on the ground. A swaying alpha card,
   // so it joins the tuft/tall/flower/herb family, not the solid scatter one.
   CROP: 8,
+
+  // ── ★ A FLOWER HAS THREE FORMS, AND THEY ARE DRAW KINDS, NOT MATERIALS (2026-09-14) ──────────
+  // Alex: *"there are far too many generating .. flowers should vary into variations like ground
+  // cover, bushes and singles."* One voxel material (`MAT.WILD_FLOWER`) still stands in the cell —
+  // one thing to break, one thing to drop, one save record — but the PROBE resolves it to one of
+  // three renderer kinds by `flowerForm`, a pure function of position, exactly as `variant` is.
+  // `FLOWER` itself is the SINGLE: one stem, one head, the one you notice.
+  BLOOM_MAT: 9,    // ground cover — a flat leaf pad with small blooms in it; what a drift core is
+  BLOOM_BUSH: 10,  // a clump — a leafy body with several heads; drift edges and the odd loner
 } as const
+
+/** The three renderer kinds a wildflower cell can draw as. */
+export const isFlowerKind = (k: number): boolean =>
+  k === FLORA.FLOWER || k === FLORA.BLOOM_MAT || k === FLORA.BLOOM_BUSH
 
 export interface FloraSpot {
   kind: number
@@ -70,10 +83,20 @@ export const DRIFT_SCALE = 90
 // into should still be a carpet, so `FLOWER_DENSITY` stays high and the FIELD gets pickier. Measured
 // on seed 1337: 30% of ground → 9.4% drift.
 export const DRIFT_EDGE = 0.72   // drift field above this = flowers allowed
+/** Inside a drift, above this the ground is a MAT (ground cover); between edge and core, bushes. */
+export const DRIFT_CORE = 0.80
 /** Base per-cell densities on healthy open ground (multiplied by zone character below). */
 export const TUFT_DENSITY = 0.13
 export const TALL_DENSITY = 0.035
-export const FLOWER_DENSITY = 0.26   // inside a drift — dense on purpose, drifts are the rarity
+// ★ THREE DENSITIES FOR THREE FORMS (2026-09-14). Before this there was one, 0.26, and a drift was
+// a wall of identical stems. A mat COVERS its cell (a flat pad), so a drift core reads fuller at
+// 0.18 than the stems did at 0.26; bushes are a walk-around thing, so the edge band is sparse; and
+// a single is the rare one that grows ANYWHERE green — it is the first flower that ever has.
+export const MAT_DENSITY = 0.3       // drift core — ground cover; pads touch and read as one carpet
+export const BUSH_DENSITY = 0.05     // drift edge band — clumps
+export const SINGLE_DENSITY = 0.006  // open ground, outside every drift
+/** The largest of the three; what the cheap gate and MAX_FLOWER_K are sized against. */
+export const FLOWER_DENSITY = MAT_DENSITY
 /** Fraction of a mist patch's tufts that give way to bloom at full mist. */
 export const MIST_TUFT_YIELD = 0.75
 /** Flower share mist raises on OPEN ground (outside a drift) — a patch blooms with or without one. */
@@ -363,6 +386,25 @@ export function cropAt(x: number, z: number, seed: number, ground: BiomeId): num
   return crop
 }
 
+/** The drift field — ONE definition, read by the selection below, by `flowerForm`, and by tests. */
+export const driftAt = (x: number, z: number, seed: number): number =>
+  value2(x / DRIFT_SCALE, z / DRIFT_SCALE, seed ^ 0xd21f7)
+
+/**
+ * Which form a wildflower at (x, z) draws as. Pure, position-only, so it needs no storage and the
+ * probe can answer it from the voxel alone — the same contract `plantVariant` keeps.
+ *
+ * Drift core → mat. Drift edge → bush. Open ground → single. ★ MIST OVERRIDES TO MAT: a charged
+ * patch blooms without a drift (see the mist block in `floraAt`), and a patch of lone singles at
+ * carpet density would be the exact wall of stems this split exists to remove.
+ */
+export function flowerForm(x: number, z: number, seed: number): number {
+  const drift = driftAt(x, z, seed)
+  if (drift > DRIFT_CORE) return FLORA.BLOOM_MAT
+  if (drift > DRIFT_EDGE) return FLORA.BLOOM_BUSH
+  return mistAt(x, z, seed) > 0.5 ? FLORA.BLOOM_MAT : FLORA.FLOWER
+}
+
 /**
  * The flora at (x, z), or null. Deterministic; costs one hash for most columns (the early outs are
  * ordered by how much of the world they cover). Grey ground grows nothing — the greying is drained
@@ -399,9 +441,10 @@ export function floraAt(x: number, z: number, seed: number): FloraSpot | null {
   // guttering to read; ground that greys first and loses its grass after would read backwards.
   const life = 1 - greyness(x, z, seed)
   if (life <= 0.15) return null
-  const drift = value2(x / DRIFT_SCALE, z / DRIFT_SCALE, seed ^ 0xd21f7)
+  const drift = driftAt(x, z, seed)
   const inDrift = drift > DRIFT_EDGE
-  const flowerBase = inDrift ? FLOWER_DENSITY * lc.flowerK * (zid === 'spirit-meadow' ? 1 + 0.6 * zn.t : 1) : 0
+  const formDensity = drift > DRIFT_CORE ? MAT_DENSITY : inDrift ? BUSH_DENSITY : SINGLE_DENSITY
+  const flowerBase = formDensity * lc.flowerK * (zid === 'spirit-meadow' ? 1 + 0.6 * zn.t : 1)
 
   // ★ MIST BLOOMS WHAT IS ALREADY THERE — it does not add. Inside a patch (mist.ts) the flower
   // share climbs and the tufts give way to it, so charged ground reads as charged without the
@@ -532,7 +575,7 @@ export function plantVariant(x: number, z: number, seed: number, kind: number): 
   // two plants having been placed by one hand. Cosmetic, invisible in a test, and free to prevent.
   const salt = kind === FLORA.HERB ? 0x4e2b
     : kind === FLORA.CROP ? 0x2c19
-    : kind === FLORA.FLOWER ? 0x77e : kind === FLORA.TUFT ? 0x3b1 : 0x9c5
+    : isFlowerKind(kind) ? 0x77e : kind === FLORA.TUFT ? 0x3b1 : 0x9c5
   return hash01(x, z, seed ^ salt)
 }
 

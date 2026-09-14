@@ -17,7 +17,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { bladePixels, headPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
+import { bladePixels, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
 import { FLORA } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
@@ -134,7 +134,7 @@ export const FLORA_COLORS = {
  * over when it was 66% under. Agreement between a copy and its original is not evidence about
  * either; import this instead of restating it.
  */
-export const CAP = { tuft: 24000, tall: 9000, flower: 9000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000 } as const
+export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000 } as const
 
 /**
  * ★★★ A POOL THAT OVERFLOWS SAYS SO — ONCE, PER POOL, WITH THE NUMBER.
@@ -313,6 +313,29 @@ function buildCrossGeometry(width: number, height: number, yBase = 0): THREE.Buf
   return g
 }
 
+/** A single 1×1 quad lying FLAT at yBase, normal up — the ground-cover pad. `uv.y` runs along
+ *  +z, so the sway (weighted by uv.y) would lift one edge; the mat's amp is tiny for that reason. */
+function buildFlatGeometry(width: number, yBase: number): THREE.BufferGeometry {
+  const hw = width / 2
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute([
+    -hw, yBase, -hw, hw, yBase, -hw, hw, yBase, hw, -hw, yBase, hw,
+  ], 3))
+  g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2))
+  g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3))
+  // ⚠ WOUND TO FACE +Y. The material is DoubleSide, so a wrong winding still DRAWS — but Lambert
+  // flips the normal on a back face, and a pad lit from underneath is a black disc on the grass.
+  // That is exactly what the first shot showed; the fix is the index order, not the material.
+  g.setIndex([0, 2, 1, 0, 3, 2])
+  return g
+}
+
+/** ONE builder for a part, read by the renderer AND by `vertsFor` — a flat part and a star part
+ *  must be measured by the same code that draws them or the outline lies about one of them. */
+export interface FloraPart { w: number; h: number; yBase?: number; flat?: boolean }
+const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
+  p.flat ? buildFlatGeometry(p.w, p.yBase ?? 0) : buildCrossGeometry(p.w, p.h, p.yBase ?? 0)
+
 /**
  * ── ★★★ THE SHAPE OF A PLANT, IN ONE PLACE, BECAUSE A SECOND CONSUMER ARRIVED ────────────────
  * (2026-09-09, Alex: *"when grass, flowers or some other misc item block is selected its outlining
@@ -337,12 +360,20 @@ function buildCrossGeometry(width: number, height: number, yBase = 0): THREE.Buf
  * `sync` composes its instance matrices with. Change a width and the outline moves with it; there
  * is no second place to forget.
  */
-export const FLORA_PARTS: Record<number, ReadonlyArray<{ w: number; h: number; yBase?: number }>> = {
+export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
   // Widths chosen against the jitter so a blade can never overhang its cell (w/2 + 0.15 <= 0.5).
   [FLORA.TUFT]: [{ w: 0.7, h: 0.55 }],
   [FLORA.TALL]: [{ w: 0.7, h: 1.05 }],
-  // Stem plus a small cross riding near its top — the head carries the colour.
-  [FLORA.FLOWER]: [{ w: 0.5, h: 0.62 }, { w: 0.3, h: 0.3, yBase: 0.55 }],
+  // ── The three flower forms (2026-09-14). `FLOWER` is the SINGLE: one stem, one big head, the
+  // tallest of the three. The mat is a flat pad (leaves, then blooms over it) plus a low star so
+  // it has SOME side profile; the bush is a leafy body with a bloom cluster riding its shoulders.
+  [FLORA.FLOWER]: [{ w: 0.5, h: 0.82 }, { w: 0.42, h: 0.42, yBase: 0.68 }],
+  [FLORA.BLOOM_MAT]: [
+    { w: 0.98, h: 0, yBase: 0.05, flat: true },     // leaf pad, ground-multiplied
+    { w: 0.98, h: 0, yBase: 0.07, flat: true },     // bloom dots, tinted
+    { w: 0.6, h: 0.2 },                             // low star of blooms, tinted — the side view
+  ],
+  [FLORA.BLOOM_BUSH]: [{ w: 0.85, h: 0.7 }, { w: 0.7, h: 0.45, yBase: 0.4 }],
   // A herb stands taller than a wildflower and shorter than tall grass: findable at a few blocks
   // without hiding what is behind it. Body plus tip.
   [FLORA.HERB]: [{ w: 0.55, h: 0.8 }, { w: 0.34, h: 0.34, yBase: 0.72 }],
@@ -361,7 +392,9 @@ export const FLORA_SWAY: Record<number, number> = {
   // the lean at the tip is roughly `amp` blocks downwind at a full gust.
   [FLORA.TUFT]: 0.09,
   [FLORA.TALL]: 0.18,
-  [FLORA.FLOWER]: 0.12,
+  [FLORA.FLOWER]: 0.14,
+  [FLORA.BLOOM_MAT]: 0.015,   // a pad lying on the ground barely moves; uv.y is its far edge
+  [FLORA.BLOOM_BUSH]: 0.06,
   [FLORA.HERB]: 0.1,
   [FLORA.CROP]: 0.08,
 }
@@ -376,6 +409,8 @@ export const FLORA_PLACE: Record<number, { root: number; jitter: number }> = {
   [FLORA.TUFT]: { root: 0.97, jitter: 0.3 },
   [FLORA.TALL]: { root: 0.97, jitter: 0.3 },
   [FLORA.FLOWER]: { root: 0.97, jitter: 0.3 },
+  [FLORA.BLOOM_MAT]: { root: 0.97, jitter: 0.04 },   // a pad covers its cell; it does not wander
+  [FLORA.BLOOM_BUSH]: { root: 0.97, jitter: 0.2 },
   [FLORA.HERB]: { root: 0.97, jitter: 0.3 },
   [FLORA.CROP]: { root: 0.97, jitter: 0.3 },
   [FLORA.ROCK]: { root: 1.06, jitter: 0.5 },
@@ -420,6 +455,11 @@ export function floraMatrix(
     off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
     const sz = floraScatterScale(variant)
     scl.set(sz, sz, sz)
+  } else if (kind === FLORA.BLOOM_MAT) {
+    // A pad has no height to roll; a quarter-turn is enough variety and keeps its square on the cell.
+    off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
+    quat.setFromAxisAngle(Y_UP, Math.floor(variant * 4) * (Math.PI / 2))
+    scl.set(1, 1, 1)
   } else {
     off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
     quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
@@ -436,7 +476,7 @@ function vertsFor(kind: number): Float32Array[] {
     for (const k of Object.keys(FLORA_PARTS)) {
       const kind2 = Number(k)
       partVerts.set(kind2, FLORA_PARTS[kind2].map(p => {
-        const g = buildCrossGeometry(p.w, p.h, p.yBase ?? 0)
+        const g = partGeometry(p)
         const a = (g.getAttribute('position').array as Float32Array).slice()
         g.dispose()
         return a
@@ -636,18 +676,24 @@ export function createFloraRenderer(): FloraRenderer {
   const bladeTex = makeBladeTexture(TUFT_SEED, TUFT_BLADES)
   const tallTex = makeBladeTexture(TALL_SEED, TALL_BLADES)
   const headTex = makeHeadTexture()
+  const bushTex = toTexture(bushPixels(), 32)
+  const clusterTex = toTexture(bloomClusterPixels(), 32)
+  const matLeafTex = toTexture(matLeafPixels(), 32)
+  const matBloomTex = toTexture(matBloomPixels(), 32)
 
   // ★ EVERY WIDTH AND HEIGHT COMES FROM `FLORA_PARTS`, WHICH THE RETICLE'S OUTLINE ALSO MEASURES.
   // The reasoning behind each number lives on the table; restating one here would give the outline
   // and the plant two sources that agree until somebody re-tunes exactly one of them.
-  const crossGeo = (kind: number, part = 0): THREE.BufferGeometry => {
-    const p = FLORA_PARTS[kind][part]
-    return buildCrossGeometry(p.w, p.h, p.yBase ?? 0)
-  }
+  const crossGeo = (kind: number, part = 0): THREE.BufferGeometry => partGeometry(FLORA_PARTS[kind][part])
   const tuftGeo = crossGeo(FLORA.TUFT)
   const tallGeo = crossGeo(FLORA.TALL)
   const stemGeo = crossGeo(FLORA.FLOWER)
   const headGeo = crossGeo(FLORA.FLOWER, 1)
+  const matLeafGeo = crossGeo(FLORA.BLOOM_MAT)
+  const matBloomGeo = crossGeo(FLORA.BLOOM_MAT, 1)
+  const matStarGeo = crossGeo(FLORA.BLOOM_MAT, 2)
+  const bushGeo = crossGeo(FLORA.BLOOM_BUSH)
+  const bushHeadGeo = crossGeo(FLORA.BLOOM_BUSH, 1)
   const herbGeo = crossGeo(FLORA.HERB)
   const cropGeo = crossGeo(FLORA.CROP)
   // The head rides at the top of a full-height stalk. Scaled with the stalk by the instance matrix,
@@ -700,6 +746,11 @@ export function createFloraRenderer(): FloraRenderer {
   const tallMat = swayMaterial(tallTex, FLORA_SWAY[FLORA.TALL])
   const stemMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.FLOWER])
   const headMat = swayMaterial(headTex, FLORA_SWAY[FLORA.FLOWER])
+  const matLeafMat = swayMaterial(matLeafTex, FLORA_SWAY[FLORA.BLOOM_MAT])
+  const matBloomMat = swayMaterial(matBloomTex, FLORA_SWAY[FLORA.BLOOM_MAT])
+  const matStarMat = swayMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_MAT])
+  const bushMat = swayMaterial(bushTex, FLORA_SWAY[FLORA.BLOOM_BUSH])
+  const bushHeadMat = swayMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_BUSH])
 
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, CAP.tuft)
   const talls = new THREE.InstancedMesh(tallGeo, tallMat, CAP.tall)
@@ -709,6 +760,18 @@ export function createFloraRenderer(): FloraRenderer {
   const stems = new THREE.InstancedMesh(stemGeo, stemMat, CAP.flower)
   const heads = new THREE.InstancedMesh(headGeo, headMat, CAP.flower)
   heads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.flower * 3), 3)
+  // The mat: leaves take the ground's green (a multiplier, like a blade), both bloom layers take
+  // the head tint. The bush: body ground-green, cluster tinted. Same two arithmetics as the flower.
+  const matLeaves = new THREE.InstancedMesh(matLeafGeo, matLeafMat, CAP.mat)
+  const matBlooms = new THREE.InstancedMesh(matBloomGeo, matBloomMat, CAP.mat)
+  const matStars = new THREE.InstancedMesh(matStarGeo, matStarMat, CAP.mat)
+  matLeaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.mat * 3), 3)
+  matBlooms.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.mat * 3), 3)
+  matStars.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.mat * 3), 3)
+  const bushes = new THREE.InstancedMesh(bushGeo, bushMat, CAP.bush)
+  const bushHeads = new THREE.InstancedMesh(bushHeadGeo, bushHeadMat, CAP.bush)
+  bushes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.bush * 3), 3)
+  bushHeads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.bush * 3), 3)
   const herbs = new THREE.InstancedMesh(herbGeo, herbMat, CAP.herb)
   const tips = new THREE.InstancedMesh(tipGeo, tipMat, CAP.herb)
   const crops = new THREE.InstancedMesh(cropGeo, cropMat, CAP.crop)
@@ -731,7 +794,7 @@ export function createFloraRenderer(): FloraRenderer {
   shroomStems.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
   shroomCaps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
 
-  for (const m of [tufts, talls, stems, heads, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps]) {
+  for (const m of [tufts, talls, stems, heads, matLeaves, matBlooms, matStars, bushes, bushHeads, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -739,7 +802,7 @@ export function createFloraRenderer(): FloraRenderer {
   }
 
   const group = new THREE.Group()
-  group.add(tufts, talls, stems, heads, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps)
+  group.add(tufts, talls, stems, heads, matLeaves, matBlooms, matStars, bushes, bushHeads, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
   // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
@@ -755,6 +818,11 @@ export function createFloraRenderer(): FloraRenderer {
     { kind: FLORA.TALL, geo: tallGeo, mat: outlineMaterial(tallTex, FLORA_SWAY[FLORA.TALL]), grow: 1 },
     { kind: FLORA.FLOWER, geo: stemGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.FLOWER]), grow: 1 },
     { kind: FLORA.FLOWER, geo: headGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.FLOWER]), grow: 1 },
+    { kind: FLORA.BLOOM_MAT, geo: matLeafGeo, mat: outlineMaterial(matLeafTex, FLORA_SWAY[FLORA.BLOOM_MAT]), grow: 1 },
+    { kind: FLORA.BLOOM_MAT, geo: matBloomGeo, mat: outlineMaterial(matBloomTex, FLORA_SWAY[FLORA.BLOOM_MAT]), grow: 1 },
+    { kind: FLORA.BLOOM_MAT, geo: matStarGeo, mat: outlineMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_MAT]), grow: 1 },
+    { kind: FLORA.BLOOM_BUSH, geo: bushGeo, mat: outlineMaterial(bushTex, FLORA_SWAY[FLORA.BLOOM_BUSH]), grow: 1 },
+    { kind: FLORA.BLOOM_BUSH, geo: bushHeadGeo, mat: outlineMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_BUSH]), grow: 1 },
     { kind: FLORA.HERB, geo: herbGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
     { kind: FLORA.HERB, geo: tipGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
     { kind: FLORA.CROP, geo: cropGeo, mat: outlineMaterial(cropStalkTex, FLORA_SWAY[FLORA.CROP]), grow: 1 },
@@ -831,11 +899,11 @@ export function createFloraRenderer(): FloraRenderer {
   return {
     group,
     sync(cols, seed, probe) {
-      let nT = 0, nL = 0, nF = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0
+      let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0
       // ⚠ WANTED IS COUNTED SEPARATELY FROM DRAWN, and that separation is the whole instrument.
       // The `n*` counters stop at the cap by construction, so they can never report an overrun —
       // they are the truncated number. These count what the world ASKED for.
-      let wT = 0, wL = 0, wF = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0
+      let wT = 0, wL = 0, wF = 0, wM = 0, wB = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0
       for (const c of cols) {
         for (const s of spotsFor(c.key, c.x0, c.z0, seed, probe)) {
           // ★ ONE PLACEMENT DERIVATION, SHARED WITH THE RETICLE'S OUTLINE. Jitter, turn, root
@@ -898,6 +966,29 @@ export function createFloraRenderer(): FloraRenderer {
               nH++
             }
           }
+          else if (s.kind === FLORA.BLOOM_MAT) {
+            wM++
+            if (nM < CAP.mat) {
+              matLeaves.setMatrixAt(nM, mtx)
+              matBlooms.setMatrixAt(nM, mtx)
+              matStars.setMatrixAt(nM, mtx)
+              matLeaves.setColorAt(nM, grassTint(s.ground))
+              tint.set(HEAD_TINTS[Math.floor(s.variant * 977) % HEAD_TINTS.length])
+              matBlooms.setColorAt(nM, tint)
+              matStars.setColorAt(nM, tint)
+              nM++
+            }
+          }
+          else if (s.kind === FLORA.BLOOM_BUSH) {
+            wB++
+            if (nB < CAP.bush) {
+              bushes.setMatrixAt(nB, mtx)
+              bushHeads.setMatrixAt(nB, mtx)
+              bushes.setColorAt(nB, grassTint(s.ground))
+              bushHeads.setColorAt(nB, tint.set(HEAD_TINTS[Math.floor(s.variant * 977) % HEAD_TINTS.length]))
+              nB++
+            }
+          }
           else {
             wF++
             if (nF < CAP.flower) {
@@ -910,12 +1001,15 @@ export function createFloraRenderer(): FloraRenderer {
         }
       }
       tufts.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
+      matLeaves.count = nM; matBlooms.count = nM; matStars.count = nM
+      bushes.count = nB; bushHeads.count = nB
       herbs.count = nH; tips.count = nH
       crops.count = nC; cropHeads.count = nC
       // ★ REPORT DEMAND, NOT JUST WHAT FIT. A pool at 100% of cap and a pool at 199% of cap draw
       // exactly the same picture; only these numbers tell them apart.
       for (const [pool, wanted, cap] of [
         ['tuft', wT, CAP.tuft], ['tall', wL, CAP.tall], ['flower', wF, CAP.flower],
+        ['mat', wM, CAP.mat], ['bush', wB, CAP.bush],
         ['herb', wH, CAP.herb], ['crop', wC, CAP.crop],
         ['rock', wR, CAP.rock], ['log', wG, CAP.log], ['shroom', wS, CAP.shroom],
       ] as [string, number, number][]) {
@@ -933,6 +1027,10 @@ export function createFloraRenderer(): FloraRenderer {
       if (talls.instanceColor) talls.instanceColor.needsUpdate = true
       stems.instanceMatrix.needsUpdate = true
       heads.instanceMatrix.needsUpdate = true
+      for (const m of [matLeaves, matBlooms, matStars, bushes, bushHeads]) {
+        m.instanceMatrix.needsUpdate = true
+        if (m.instanceColor) m.instanceColor.needsUpdate = true
+      }
       herbs.instanceMatrix.needsUpdate = true
       tips.instanceMatrix.needsUpdate = true
       if (heads.instanceColor) heads.instanceColor.needsUpdate = true

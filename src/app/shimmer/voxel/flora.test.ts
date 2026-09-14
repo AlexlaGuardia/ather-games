@@ -5,8 +5,7 @@
 // sparse, greyfield cores grow NOTHING, and the whole thing is deterministic. Densities are build
 // dials — the bounds here are wide enough to retune without touching the test.
 
-import { floraAt, FLORA, DRIFT_SCALE, DRIFT_EDGE } from './flora'
-import { value2 } from './noise'
+import { floraAt, flowerForm, driftAt, FLORA, DRIFT_EDGE, DRIFT_CORE } from './flora'
 import { greyness } from './biome'
 
 let pass = 0
@@ -38,20 +37,34 @@ function census(cx: number, cz: number, half: number, step = 1) {
   ok(n.tuft > n.tall * 2, `tufts are the filler, tall grass the accent (${n.tuft} vs ${n.tall})`)
 }
 
-// ── 2. flowers live in drifts ───────────────────────────────────────────────────────────────────
+// ── 2. flowers live in drifts — and a drift has a CORE (mats) and an EDGE (bushes) ────────────
 {
-  let inDrift = 0, inDriftN = 0, outDrift = 0, outDriftN = 0
+  let core = 0, coreN = 0, edge = 0, edgeN = 0, outDrift = 0, outDriftN = 0
+  let coreMats = 0, edgeBushes = 0, outSingles = 0
   for (let dz = -400; dz <= 400; dz += 2) for (let dx = -400; dx <= 400; dx += 2) {
     const x = 300 + dx, z = 2600 + dz
     if (greyness(x, z, SEED) > 0.05) continue
-    const drifty = value2(x / DRIFT_SCALE, z / DRIFT_SCALE, SEED ^ 0xd21f7) > DRIFT_EDGE
+    const d = driftAt(x, z, SEED)
     const f = floraAt(x, z, SEED)
     const isFlower = f?.kind === FLORA.FLOWER ? 1 : 0
-    if (drifty) { inDrift += isFlower; inDriftN++ } else { outDrift += isFlower; outDriftN++ }
+    const form = isFlower ? flowerForm(x, z, SEED) : 0
+    if (d > DRIFT_CORE) { core += isFlower; coreN++; if (form === FLORA.BLOOM_MAT) coreMats++ }
+    else if (d > DRIFT_EDGE) { edge += isFlower; edgeN++; if (form === FLORA.BLOOM_BUSH) edgeBushes++ }
+    else { outDrift += isFlower; outDriftN++; if (form === FLORA.FLOWER) outSingles++ }
   }
-  ok(inDriftN > 500, `the sample actually crosses drifts (${inDriftN} drift cells)`)
-  ok(inDrift / inDriftN > 0.15, `drifts are dense with flowers (${((inDrift / inDriftN) * 100).toFixed(1)}%)`)
-  ok(outDrift === 0, `no flowers outside a drift (${outDrift} strays in ${outDriftN})`)
+  ok(coreN > 200 && edgeN > 200, `the sample actually crosses drifts (${coreN} core, ${edgeN} edge cells)`)
+  // A mat covers its cell, so a core at a quarter of cells reads as a carpet; stems needed more.
+  ok(core / coreN > 0.2, `drift cores are carpeted (${((core / coreN) * 100).toFixed(1)}%)`)
+  ok(edge / edgeN > 0.01 && edge / edgeN < core / coreN, `drift edges are sparser than cores (${((edge / edgeN) * 100).toFixed(1)}%)`)
+  // ★ SINGLES (2026-09-14): a lone wildflower may grow ANYWHERE green now — that is the third
+  // form — but it is the rare one. Under 2% of open cells, or the drift stopped being a place.
+  ok(outDrift > 0, `singles exist outside drifts (${outDrift} in ${outDriftN})`)
+  ok(outDrift / outDriftN < 0.02, `and they are rare (${((outDrift / outDriftN) * 100).toFixed(2)}%)`)
+  // The form follows the field: every core flower is a mat, every edge flower a bush, every
+  // open-ground flower a single (mist can promote open ground to mat, so that one is ≥, not ==).
+  ok(coreMats === core, `every core flower is a mat (${coreMats}/${core})`)
+  ok(edgeBushes === edge, `every edge flower is a bush (${edgeBushes}/${edge})`)
+  ok(outSingles >= outDrift * 0.8, `open-ground flowers are singles (${outSingles}/${outDrift})`)
 }
 
 // ── 3. zone character: Meadows bloom, the Thicket floor is dim and sparse ───────────────────────

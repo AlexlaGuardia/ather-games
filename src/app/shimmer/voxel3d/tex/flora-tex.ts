@@ -161,3 +161,121 @@ export function leafPixels(size = 16, seed = 0x1eaf): Uint8Array {
   }
   return data
 }
+
+// ── ★ THE THREE FLOWER FORMS' TILES (2026-09-14) ────────────────────────────────────────────────
+// One wildflower material, three looks: a MAT (ground cover), a BUSH (a clump), a SINGLE (the old
+// stem + head, drawn bigger). Same contract as the blade and head tiles above — green parts are
+// painted around `BLADE_GREEN` so the ground multiplier tints them, bloom parts are painted WHITE
+// so a `HEAD_TINTS` colour is the whole hue — and the same reason for living here: both the world
+// and the icon derive from these, so the flower in the bag is the flower the world grows.
+
+/** A shared LCG so every tile is deterministic — same seed, same pixels, forever. */
+const lcg = (seed: number) => {
+  let s = seed
+  return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 4294967296 }
+}
+
+/**
+ * Bush body: a rounded leafy mass with a ragged rim and cutout corners, painted green. Darker at
+ * the bottom (the clump's own shade), lit on top. Reads as a shrub-let, not a card, because of the
+ * chewed silhouette — the leaf tile's lesson, one plant along.
+ */
+export function bushPixels(size = 32, seed = 0xb054): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  const rnd = lcg(seed)
+  const cx = size / 2, cy = size * 0.42, rx = size * 0.46, ry = size * 0.44
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry
+    const d = Math.hypot(dx, dy)
+    // Rim noise: the edge wanders ±10% so no two sides of the mass are the same curve.
+    if (d > 0.9 + (rnd() - 0.5) * 0.2) continue
+    if (y < 2 && Math.abs(dx) > 0.35) continue     // the base narrows to a stem cluster
+    const o = (y * size + x) * 4
+    const t = y / size
+    const shade = -30 + t * 44 + (rnd() - 0.5) * 22
+    const warm = t * t * 10
+    data[o] = Math.max(0, Math.min(255, BLADE_GREEN[0] + shade + warm))
+    data[o + 1] = Math.max(0, Math.min(255, BLADE_GREEN[1] + shade + warm * 0.7))
+    data[o + 2] = Math.max(0, Math.min(255, BLADE_GREEN[2] + shade * 0.6 - warm * 0.5))
+    data[o + 3] = 255
+  }
+  // Leaf gaps: punch a few holes so the inside has texture and light shows through.
+  for (let i = 0; i < 9; i++) {
+    const hx = Math.floor(rnd() * size), hy = Math.floor(size * 0.15 + rnd() * size * 0.7)
+    for (let y = hy; y < hy + 2; y++) for (let x = hx; x < hx + 2; x++)
+      if (x < size && y < size) data[(y * size + x) * 4 + 3] = 0
+  }
+  return data
+}
+
+/**
+ * A cluster of small blooms, painted white, cutout elsewhere: rides on top of a bush body.
+ * Each bloom is the head tile's shape at a third of the size, scattered across the upper half.
+ */
+export function bloomClusterPixels(size = 32, seed = 0xc1a5, blooms = 5): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  const rnd = lcg(seed)
+  for (let b = 0; b < blooms; b++) {
+    const bx = size * (0.15 + rnd() * 0.7), by = size * (0.35 + rnd() * 0.55)
+    const r = size * (0.09 + rnd() * 0.05)
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x + 0.5 - bx, y + 0.5 - by) / r
+      if (d > 1) continue
+      const o = (y * size + x) * 4
+      const core = d < 0.35
+      data[o] = core ? 232 : 255; data[o + 1] = core ? 206 : 255; data[o + 2] = core ? 120 : 255
+      data[o + 3] = 255
+    }
+  }
+  return data
+}
+
+/**
+ * Ground-cover leaf pad, drawn FLAT on the ground: overlapping round leaves filling the tile with
+ * a ragged outer edge and the corners chewed off, so a run of mats reads as one creeping carpet
+ * with soft edges rather than a grid of green squares. Green, ground-multiplied.
+ */
+export function matLeafPixels(size = 32, seed = 0x1ea5): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  const rnd = lcg(seed)
+  const leaves = 44
+  for (let l = 0; l < leaves; l++) {
+    const lx = rnd() * size, ly = rnd() * size, r = size * (0.11 + rnd() * 0.09)
+    const tone = -26 + rnd() * 40
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      if (Math.hypot(x + 0.5 - lx, y + 0.5 - ly) > r) continue
+      const o = (y * size + x) * 4
+      const shade = tone + (rnd() - 0.5) * 8
+      data[o] = Math.max(0, Math.min(255, BLADE_GREEN[0] + shade))
+      data[o + 1] = Math.max(0, Math.min(255, BLADE_GREEN[1] + shade))
+      data[o + 2] = Math.max(0, Math.min(255, BLADE_GREEN[2] + shade * 0.6))
+      data[o + 3] = 255
+    }
+  }
+  // Chew the corners hard and the edges lightly: a mat is round-ish, never a tile.
+  const c = (size - 1) / 2
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - c, y - c) / (size / 2)
+    if (d > 1.02 || (d > 0.92 && rnd() < 0.5)) data[(y * size + x) * 4 + 3] = 0
+  }
+  return data
+}
+
+/** Small blooms scattered over the mat, white on cutout — the layer the tint colours. */
+export function matBloomPixels(size = 32, seed = 0x5b10, blooms = 7): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  const rnd = lcg(seed)
+  for (let b = 0; b < blooms; b++) {
+    const bx = size * (0.12 + rnd() * 0.76), by = size * (0.12 + rnd() * 0.76)
+    const r = size * (0.055 + rnd() * 0.03)
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x + 0.5 - bx, y + 0.5 - by) / r
+      if (d > 1) continue
+      const o = (y * size + x) * 4
+      const core = d < 0.4
+      data[o] = core ? 232 : 255; data[o + 1] = core ? 206 : 255; data[o + 2] = core ? 120 : 255
+      data[o + 3] = 255
+    }
+  }
+  return data
+}
