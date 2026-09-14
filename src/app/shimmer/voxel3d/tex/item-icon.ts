@@ -31,7 +31,7 @@ import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
 import { meshIcon, hasMeshIcon, pieceIcon } from './mesh-icon'
 import { pieceForItem } from '../../voxel/pieces'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
-import { leafPixels, bladePixels, headPixels, HEAD_TINTS, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
+import { leafPixels, bladePixels, headPixels, HEAD_TINTS, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
 import { isPlant, isSapling, isGlassMat, MAT } from '../../voxel/depth'
 const rgbOf3 = (hex: number): [number, number, number] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255]
@@ -354,8 +354,8 @@ export function crossIcon(side: Uint8Array, size = ICON, tile = TILE): Uint8Arra
  * that Alex caught on sight in the world mesh. `flip` undoes it for surfaces that draw downward.
  */
 const FLORA: Record<string, { pixels: () => Uint8Array; src: number; tint?: number }> = {
-  grass_tuft: { pixels: () => bladePixels(TUFT_SEED, TUFT_BLADES, 16), src: 16 },
-  tall_grass: { pixels: () => bladePixels(TALL_SEED, TALL_BLADES, 16), src: 16 },
+  grass_tuft: { pixels: () => bladePixels(TUFT_SEED, TUFT_BLADES, BLADE_TILE), src: BLADE_TILE },
+  tall_grass: { pixels: () => bladePixels(TALL_SEED, TALL_BLADES, BLADE_TILE), src: BLADE_TILE },
   // The heads are painted white so a tint carries the whole hue; the icon takes the first bloom
   // colour rather than inventing one, so it is a flower the world actually grows.
   wild_flower: { pixels: () => headPixels(8), src: 8, tint: HEAD_TINTS[3] },

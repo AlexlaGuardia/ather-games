@@ -17,7 +17,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { bladePixels, headPixels, HEAD_TINTS, BLADE_GREEN, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
+import { bladePixels, headPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
 import { FLORA } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
@@ -281,7 +281,11 @@ export interface FloraRenderer {
   dispose(): void
 }
 
-/** A crossed pair of 1×1 quads, base at y=0, uv.y 0 at the root — the sway weight rides on it.
+/** THREE quads in a star (0°, 60°, 120°), base at y=0, uv.y 0 at the root — the sway weight rides
+ *  on it. Was a two-quad cross until 2026-09-14: seen along either quad's plane a cross collapses
+ *  to a single card edge-on and the tuft flickers thin from half the walk angles; a 60° star never
+ *  has a view that catches all its cards edge-on. Two more triangles per plant; the meadow is still
+ *  one draw per kind.
  *  Normals point UP so a blade lights like the ground it grows from (the standard grass-card
  *  trick; a real face normal would moonlight one side of every blade). */
 function buildCrossGeometry(width: number, height: number, yBase = 0): THREE.BufferGeometry {
@@ -297,8 +301,10 @@ function buildCrossGeometry(width: number, height: number, yBase = 0): THREE.Buf
     nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0)
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3)
   }
-  quad(-hw, 0, hw, 0)
-  quad(0, -hw, 0, hw)
+  for (let k = 0; k < 3; k++) {
+    const a = (k * Math.PI) / 3
+    quad(-hw * Math.cos(a), -hw * Math.sin(a), hw * Math.cos(a), hw * Math.sin(a))
+  }
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
@@ -351,11 +357,13 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<{ w: number; h: number; y
  * amount the dark border walks off the blade. Two call sites, one number.
  */
 export const FLORA_SWAY: Record<number, number> = {
-  [FLORA.TUFT]: 0.05,
-  [FLORA.TALL]: 0.1,
-  [FLORA.FLOWER]: 0.08,
-  [FLORA.HERB]: 0.07,
-  [FLORA.CROP]: 0.05,
+  // Since the weight is height² (see `injectSway`) only the top of a blade carries the number:
+  // the lean at the tip is roughly `amp` blocks downwind at a full gust.
+  [FLORA.TUFT]: 0.09,
+  [FLORA.TALL]: 0.18,
+  [FLORA.FLOWER]: 0.12,
+  [FLORA.HERB]: 0.1,
+  [FLORA.CROP]: 0.08,
 }
 
 /**
@@ -508,7 +516,7 @@ function toTexture(data: Uint8Array, size: number): THREE.DataTexture {
   return t
 }
 
-const makeBladeTexture = (seed: number, blades: number, size = 16): THREE.DataTexture =>
+const makeBladeTexture = (seed: number, blades: number, size = BLADE_TILE): THREE.DataTexture =>
   toTexture(bladePixels(seed, blades, size), size)
 
 const makeHeadTexture = (size = 8): THREE.DataTexture => toTexture(headPixels(size), size)
@@ -533,10 +541,22 @@ export function createFloraRenderer(): FloraRenderer {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + [
         '{',
         '  #ifdef USE_INSTANCING',
-        '  float ph = (instanceMatrix[3].x + instanceMatrix[3].z) * 0.35;',
-        '  float w = uv.y * ' + amp.toFixed(3) + ';',
-        '  transformed.x += sin(uTime * 1.5 + ph) * w;',
-        '  transformed.z += cos(uTime * 1.1 + ph * 1.3) * w * 0.7;',
+        // ★ WIND, NOT WATER (2026-09-14, Alex: "looking a bit like sea weed"). The old sway was
+        // sin on x + cos on z at two frequencies — a Lissajous circle, weighted linearly by height:
+        // every tip drew a slow loop, which is exactly how kelp moves in a swell. Wind is different
+        // on three counts, and each one is a line below: it has ONE direction (a blade leans
+        // downwind and springs back, it does not orbit); a blade is stiff at the root and bends at
+        // the tip (weight is height SQUARED, not height); and it comes in GUSTS — a slow envelope
+        // rolling across the meadow with a quick flutter riding on it, not a metronome.
+        '  float ph = (instanceMatrix[3].x * 0.83 + instanceMatrix[3].z * 0.55) * 0.35;',
+        '  float w = uv.y * uv.y * ' + amp.toFixed(3) + ';',
+        '  float gust = 0.55 + 0.45 * sin(uTime * 0.7 - ph);',
+        '  float flutter = 0.22 * sin(uTime * 3.3 + ph * 2.7) + 0.1 * sin(uTime * 5.1 - ph * 1.9);',
+        '  float bend = gust + flutter;',
+        '  transformed.x += 0.83 * bend * w;',
+        '  transformed.z += 0.55 * bend * w;',
+        // A bent blade is not a longer blade: dip the tip a little so the lean reads as a bow.
+        '  transformed.y -= bend * bend * w * 0.35;',
         '  #endif',
         '}',
       ].join('\n'))
