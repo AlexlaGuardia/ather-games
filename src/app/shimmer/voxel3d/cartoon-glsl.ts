@@ -51,6 +51,12 @@ export function cartoonUniforms(): Record<string, { value: number }> {
  *   `wpos`     the world position varying
  *   `emissive` a vec3 expression added after lighting (the ore glow); `vec3(0.0)` for none
  *
+ * (0) THE HOUR (2026-09-14): `clum` is the light on the face relative to what THIS HOUR puts on an
+ * up face (`uHourLight`, hour-light.ts), not to a fixed 1.0 — so "fully lit" at midnight means "as
+ * lit as midnight gets", the shape keeps working, and the whole result is then multiplied by the
+ * hour's own colour. Before this the stack had no hour in it at all: the NIGHT rig still put ~0.85
+ * on an up face, the clamp read that as 85% lit, and the blocks kept 80% of noon at midnight while
+ * the Lambert canopy beside them kept 25%. `uToonHour` 0 reproduces that render exactly.
  * (1) luminance is the LIGHT on the face (irradiance = lit ÷ albedo), not the lit pixel, so a
  * dark material in full sun is not "in shadow"; (2) the shadow lift is scaled by the material's
  * own luminance and the cooling is a TINT of the base, not a flat blue-grey ADD — the add was the
@@ -64,7 +70,9 @@ export function cartoonStackGlsl(nrm: string, wpos: string, emissive: string): s
        float face = mix(1.0, faceLum, uFaceShading);
        const vec3 W = vec3(0.2126, 0.7152, 0.0722);
        float albLum = max(dot(diffuseColor.rgb, W), 0.03);
-       float clum = clamp(dot(outgoingLight, W) / albLum, 0.0, 1.0);
+       vec3 hourCol = mix(vec3(1.0), uHourLight, uToonHour);
+       float hourLum = max(dot(hourCol, W), 0.02);
+       float clum = clamp(dot(outgoingLight, W) / (albLum * hourLum), 0.0, 1.0);
        float stepped = floor(clum * 3.0 + 0.5) / 3.0;
        float shaped = mix(clum, stepped, uToon);
        vec3 shade = mix(vec3(0.0), vec3(0.22, 0.26, 0.38), uShadowLift);
@@ -77,6 +85,7 @@ export function cartoonStackGlsl(nrm: string, wpos: string, emissive: string): s
        float edge = min(mix(1.0, dEdge.x, planar.x),
                     min(mix(1.0, dEdge.y, planar.y), mix(1.0, dEdge.z, planar.z)));
        float line = 1.0 - smoothstep(0.0, 0.035, edge);
+       toonCol *= hourCol;
        toonCol *= mix(1.0, 0.62, line * uOutline);
        vec3 finalCol = mix(outgoingLight, toonCol, uCartoon);
        ${lightApply('finalCol', 'diffuseColor.rgb', wpos, 'cnrm')}

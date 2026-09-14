@@ -1134,6 +1134,9 @@ export default function VoxelWorld() {
   /** Tremor Sense: the scene posts what the keeper feels, the HUD draws it. Same outward-ref
    *  shape as `lookOut`/`foesOut` — the scene knows where bodies are, the HUD knows how to draw. */
   const tremor = useRef<TremorReadout>(emptyReadout())
+  /** The hour for the cartoon stack — ONE vector, written by the rig, read as the stack's uniform
+   *  (hour-light.ts). Both sit under this component and neither may reach the other's internals. */
+  const hourLight = useMemo(() => new THREE.Vector3(1, 1, 1), [])
   /**
    * ── ★ MANA — the cost side of casting, and it needed no new design ──────────────────────────
    * `engine/mana.ts` already derives pool and regen from `skills.mana.level`, which this world
@@ -2247,6 +2250,7 @@ export default function VoxelWorld() {
             return c * c * (3 - 2 * c)
           }}
           mistAt={(x, z) => mistAt(x, z, SEED)}
+          hourLightOut={hourLight}
           /* Underwater (2026-08-20): the rig samples the CAMERA, so this answers about the EYE and
              not the body — `locomotion`'s `submerged` is chest+feet and disagrees for the whole of
              treading. Null means the column has not generated; the rig holds rather than blinking
@@ -2283,7 +2287,7 @@ export default function VoxelWorld() {
           onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
           onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
-          uiOpen={cursorUIOpenRef} uiSteps={uiStepsRef} owner={isOwnerRef} foesOut={foesRef} tremorOut={tremor} pressOut={pressRef}
+          uiOpen={cursorUIOpenRef} uiSteps={uiStepsRef} owner={isOwnerRef} foesOut={foesRef} tremorOut={tremor} pressOut={pressRef} hourLight={hourLight}
           waterOut={waterOut}
         />
         {/* selector: deliberately matches NOTHING. Without it drei binds click-to-lock on the whole
@@ -3987,7 +3991,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -4120,6 +4124,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   foesOut: React.RefObject<null | (() => { posture: string; dist: number; collar: number }[])>
   /** Tremor Sense readout — written here each ~100ms, drained by `TremorSenseHud`. */
   tremorOut: React.MutableRefObject<TremorReadout>
+  /** The rig's up-face irradiance over a clear noon, written per frame by VoxelDayNight. */
+  hourLight: THREE.Vector3
   /** True while a still-collared Moglin is close enough that the keeper needs to know the verb. */
   onCollarNear: (near: boolean) => void
   /** The keeper's spirits. A REF, like `plotCfg` and `spiritIndex` — ring 2 reads it every frame
@@ -4161,8 +4167,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   useEffect(() => {
     lightUniforms.uLightTex.value = lightTex.texture
     lightUniforms.uLightMix.value = LIGHT_LOOK.mix
+    lightUniforms.uHourLight.value = hourLight   // the rig's vector IS the uniform's value
     return () => { lightTex.dispose() }
-  }, [lightTex, lightUniforms])
+  }, [lightTex, lightUniforms, hourLight])
   const flatMaterial = useMemo(() => createVoxelMaterial(lightUniforms), [lightUniforms])
   const textured = useMemo(() => (tiles ? createTexturedVoxelMaterial(tiles, lightUniforms) : null), [tiles, lightUniforms])
   const material = textured?.material ?? flatMaterial
@@ -4250,7 +4257,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     textured?.setCartoon(cartoon)
     glassTextured?.setCartoon(cartoon)   // the window is lit by the same stack as the wall around it
     pieces.setCartoon(cartoon)           // and so is the beam standing against that wall (09-13)
-  }, [flatMaterial, textured, settings, pieces])
+    lightUniforms.uToonHour.value = settings.toonHour
+  }, [flatMaterial, textured, settings, pieces, lightUniforms])
   const scratch = useMemo(() => createMeshScratch(SECTION), [])
   const cols = useRef(new Map<string, Column>())
   const drawn = useRef(new Map<string, THREE.Mesh>())
@@ -11438,7 +11446,7 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
    */
   isOwner: boolean
 }) {
-  const Slider = ({ label, k }: { label: string; k: 'toon' | 'outline' | 'faceShading' | 'shadowLift' }) => (
+  const Slider = ({ label, k }: { label: string; k: 'toon' | 'outline' | 'faceShading' | 'shadowLift' | 'toonHour' }) => (
     <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
       <span className="w-24 shrink-0">{label}</span>
       <input
@@ -11514,6 +11522,7 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
         <Slider label="outline" k="outline" />
         <Slider label="face light" k="faceShading" />
         <Slider label="shadow lift" k="shadowLift" />
+        <Slider label="night" k="toonHour" />
 
         <div className="gx-label pt-1 text-[9px] text-white/40">World</div>
         {/* Cost is QUADRATIC in this number (columns, meshes, light fields all scale with r²) —

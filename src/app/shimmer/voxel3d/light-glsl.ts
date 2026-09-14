@@ -79,6 +79,8 @@ uniform float uSkyCurve;
 uniform float uBlockCurve;
 uniform float uBlockGain;
 uniform vec3  uBlockTint;
+uniform vec3  uHourLight;
+uniform float uToonHour;
 
 // The whole model, given a CELL CENTRE. Split out because not every surface wants the same cell:
 // a block face wants the air in front of it, a cross-quad wants the cell it stands in. See below.
@@ -149,6 +151,13 @@ export interface LightUniforms {
   uBlockCurve: { value: number }
   uBlockGain: { value: number }
   uBlockTint: { value: THREE.Vector3 }
+  /** The hour, for the CARTOON STACK (not for the field): the rig's up-face irradiance over a clear
+   *  noon's, per channel — (1,1,1) at noon, silver ~0.28 at midnight. See hour-light.ts. It rides
+   *  on the light uniforms because they are the ONE set of objects every stack consumer already
+   *  shares; the host writes it once per frame from the live lights. */
+  uHourLight: { value: THREE.Vector3 }
+  /** Mix of the hour into the stack. 0 = the render before 2026-09-14 (the A/B control). */
+  uToonHour: { value: number }
 }
 
 /**
@@ -175,5 +184,7 @@ export function createLightUniforms(): LightUniforms {
     uBlockCurve: { value: LIGHT_LOOK.blockCurve },
     uBlockGain: { value: LIGHT_LOOK.blockGain },
     uBlockTint: { value: new THREE.Vector3(...LIGHT_LOOK.blockTint) },
+    uHourLight: { value: new THREE.Vector3(1, 1, 1) },
+    uToonHour: { value: 0 },
   }
 }

@@ -20,6 +20,10 @@ export interface VoxelSettings {
   faceShading: number
   /** 0..1 — lifts shadows off black and tints them, which is what stops caves reading as murk. */
   shadowLift: number
+  /** 0..1 — how much of the HOUR the cartoon stack carries (hour-light.ts). 0 is the render before
+   *  2026-09-14, where blocks kept 80% of noon at midnight; 1 is the rig's own night, silver-tinted,
+   *  the same night the Lambert canopy already shows. The A/B dial; Alex rules the number. */
+  toonHour: number
   /** Tile size for the texture array. Ruled 64 by Alex 2026-08-06. */
   tileSize: 32 | 64
   /**
@@ -84,8 +88,8 @@ export const simColumns = (r: number): number => Math.round(Math.PI * r * r)
  * switch off is worse than no instrument.
  */
 export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize' | 'viewRadius' | 'simRadius' | 'showFps' | 'volume'>> = {
-  natural: { toon: 0, outline: 0, faceShading: 0.35, shadowLift: 0.15 },
-  cartoon: { toon: 0.85, outline: 0.6, faceShading: 0.9, shadowLift: 0.5 },
+  natural: { toon: 0, outline: 0, faceShading: 0.35, shadowLift: 0.15, toonHour: 0 },
+  cartoon: { toon: 0.85, outline: 0.6, faceShading: 0.9, shadowLift: 0.5, toonHour: 1 },
 }
 
 export const DEFAULT_SETTINGS: VoxelSettings = {

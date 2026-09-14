@@ -21,7 +21,7 @@ const glsl = cartoonStackGlsl('vN', 'vP', 'vec3(0.0)')
 const lines = glsl.split('\n').map(l => l.trim())
 const KEY_LINES = [
   'float albLum = max(dot(diffuseColor.rgb, W), 0.03);',
-  'float clum = clamp(dot(outgoingLight, W) / albLum, 0.0, 1.0);',
+  'float clum = clamp(dot(outgoingLight, W) / (albLum * hourLum), 0.0, 1.0);',
   'vec3 shade = mix(vec3(0.0), vec3(0.22, 0.26, 0.38), uShadowLift);',
   'vec3 cool = mix(vec3(1.0), vec3(0.80, 0.86, 1.0), uShadowLift);',
   'vec3 lift = shade * (1.0 - shaped) * clamp(albLum * 2.0, 0.15, 1.0);',

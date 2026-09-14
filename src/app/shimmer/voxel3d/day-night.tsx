@@ -34,6 +34,7 @@ import * as THREE from 'three'
 import { dayProgress, daylight, sunElevation, sunAzimuth } from '../engine/day-cycle'
 import { UNDER, fogUnder, domeVeil, stepUnder, newUnderState } from './underwater'
 import { SKY, DAY, NIGHT } from './sky-palette'
+import { irradianceUp, hourLight, sunPosition, SILVER_POSITION } from './hour-light'
 
 // ── The sky dome (2026-08-08, Alex: "add a sky background… sun cycle but no moon in the Ather") ──
 // A camera-following inverted sphere with the whole sky in ONE fragment shader: vertical gradient
@@ -171,7 +172,7 @@ function makePairs() {
 const lerpInto = (p: { d: THREE.Color; n: THREE.Color; out: THREE.Color }, t: number) => p.out.copy(p.d).lerp(p.n, t)
 
 export function VoxelDayNight(
-  { gloomAt, mistAt, underwaterAt }: {
+  { gloomAt, mistAt, underwaterAt, hourLightOut }: {
     gloomAt?: (x: number, z: number) => number
     /** Mist thickness 0..1 at a position — same prop shape as `gloomAt`, and the world supplies it
      *  so this file stays ignorant of worldgen. Sampled EVERY frame, unlike gloom: a patch is ~52
@@ -183,6 +184,10 @@ export function VoxelDayNight(
      *  the body are different questions. Same ignorance contract as the two above — the world
      *  supplies it, this file never learns what a water block is. */
     underwaterAt?: (x: number, y: number, z: number) => number | null
+    /** Written every frame with what the rig puts on an UP face, over a clear noon (hour-light.ts).
+     *  The world hands in its `uHourLight` uniform value so the cartoon stack reads the same lights
+     *  the Lambert canopy does. Optional: a dev page without a stack passes nothing. */
+    hourLightOut?: THREE.Vector3
   } = {},
 ) {
   const { scene, camera } = useThree()
@@ -201,6 +206,7 @@ export function VoxelDayNight(
   const sunRef = useRef<THREE.DirectionalLight>(null)
   const nightRef = useRef<THREE.DirectionalLight>(null)
   const ambRef = useRef<THREE.AmbientLight>(null)
+  const irrScratch = useRef(new THREE.Color())
   const fogRef = useRef<THREE.Fog | null>(null)
   const skyRef = useRef<THREE.Mesh>(null)
 
@@ -321,8 +327,7 @@ export function VoxelDayNight(
     if (sun) {
       // Real path: rises east (06:00), overhead at noon, sets west — dawn light RAKES, which is
       // most of what makes a morning read as a morning on axis-aligned blocks.
-      const e = sunElevation(p)
-      sun.position.set(sunAzimuth(p) * 220, 30 + Math.max(0, e) * 240, 90)
+      sunPosition(sun.position, p)   // the reference in hour-light.ts is built from this same rule
       // Mist scatters sun rather than blocking it: shadows go soft, the ground does not go dark.
       // A surface scatters direct sun rather than blocking it — shadows soften, they do not black out.
       sun.intensity = DAY.sunIntensity * dl * (1 - GLOOM.sunCut * gd) * (1 - MIST.sunCut * md)
@@ -332,6 +337,16 @@ export function VoxelDayNight(
     if (night) night.intensity = NIGHT.silverIntensity * sv
     const amb = ambRef.current
     if (amb) amb.intensity = mix(DAY.ambient, NIGHT.ambient, sv) * (1 - GLOOM.ambCut * gd)
+    // ── the hour, for the cartoon stack — read from the lights just written, never re-derived ──
+    if (hourLightOut && hemi && sun && night && amb) {
+      hourLight(hourLightOut, irradianceUp(
+        irrScratch.current,
+        hemi.color, hemi.intensity,
+        sun.color, sun.intensity, sun.position,
+        night.color, night.intensity, SILVER_POSITION,
+        amb.color, amb.intensity,
+      ))
+    }
   })
 
   return (
