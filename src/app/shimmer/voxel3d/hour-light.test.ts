@@ -71,7 +71,7 @@ ok(dn.includes('sunPosition(sun.position, p)'), '§5 the rig places the sun by t
 ok(vw.includes('hourLightOut={hourLight}') && vw.includes('hourLight={hourLight}') && vw.includes('lightUniforms.uHourLight.value = hourLight'),
   '§5 the outer component owns ONE vector; the rig writes it and the World installs it as the uniform value')
 ok(vw.includes('lightUniforms.uToonHour.value = settings.toonHour'), '§5 the dial reaches the uniform from settings')
-ok(/toonHour: number/.test(st) && /cartoon: \{[^}]*toonHour: 1/.test(st) && /natural: \{[^}]*toonHour: 0/.test(st), '§5 settings carry the dial; the cartoon preset turns it on, natural (plain Lambert) leaves it off')
+ok(/toonHour: number/.test(st) && /cartoon: \{[^}]*toonHour: 0\.9/.test(st) && /natural: \{[^}]*toonHour: 0/.test(st), '§5 settings carry the dial; the cartoon preset turns it on (Alex ruled 0.95, 09-14), natural (plain Lambert) leaves it off')
 ok(vw.includes('<Slider label="night" k="toonHour" />'), '§5 the dial is on the settings panel so Alex can move it on his own GPU')
 ok(/const cartoonOnly = s\.style !== 'cartoon'/.test(vw) && /disabled=\{cartoonOnly\}/.test(vw) && vw.includes('Natural is plain light and ignores them'),
   '§5 on natural the cartoon levers are DISABLED and say why — a live slider wired to nothing read as a broken feature (Alex, 09-14)')

@@ -89,7 +89,11 @@ export const simColumns = (r: number): number => Math.round(Math.PI * r * r)
  */
 export const PRESETS: Record<RenderStyle, Omit<VoxelSettings, 'style' | 'tileSize' | 'viewRadius' | 'simRadius' | 'showFps' | 'volume'>> = {
   natural: { toon: 0, outline: 0, faceShading: 0.35, shadowLift: 0.15, toonHour: 0 },
-  cartoon: { toon: 0.85, outline: 0.6, faceShading: 0.9, shadowLift: 0.5, toonHour: 1 },
+  // Alex's own numbers, read off his live settings and baked 2026-09-14 ("we are good on both
+  // calls"): hard banding, almost no outline, a soft face law, shadows barely lifted, the hour
+  // nearly full. The old preset (0.85 / 0.6 / 0.9 / 0.5) was the 08-06 starting point, not a look
+  // anyone had judged on the world.
+  cartoon: { toon: 0.95, outline: 0.15, faceShading: 0.45, shadowLift: 0.1, toonHour: 0.95 },
 }
 
 export const DEFAULT_SETTINGS: VoxelSettings = {
