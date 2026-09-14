@@ -13,6 +13,7 @@
 //   WORLD_EVAL='(() => document.title)'                       — run an expression in the page, print it
 //   WORLD_RADIUS=10                                           — load ring, in columns (default: the app's 6)
 //   WORLD_FPS=1                                               — turn the frame meter on for the shot
+//   WORLD_SETTINGS='{"shadowLift":0.1}'                       — seed render settings (partial; merged over defaults)
 //   WORLD_CLICK='700,430; 730,445'                            — click these viewport points, in order
 //   WORLD_CLICK_WAIT=120                                      — ms between clicks (default 120)
 //   WORLD_KEYS='KeyM; Escape'                                 — press these keys after the clicks (M = the map)
@@ -148,7 +149,7 @@ try {
   await page.setViewport({ width: 1280, height: 760 })
 
   // Seed BEFORE any page script: born, with the epoch already current.
-  await page.evaluateOnNewDocument((R: number, FPS: boolean) => {
+  await page.evaluateOnNewDocument((R: number, FPS: boolean, SETTINGS: string) => {
     localStorage.setItem('ather:epoch', '2')
     // ⚠ 'ember' IS NOT A RUNE ID, and this seeded it for weeks (fixed 2026-08-12). The real ids are
     // in `play3d/birth/runes.data.ts` — manalic/barrier/star/life/enchant/lightning/… — so every
@@ -162,11 +163,13 @@ try {
     // panel. `loadSettings` merges over the defaults, so a lone `viewRadius` is a safe partial.
     // WORLD_FPS=1 turns the frame meter on for the shot. The RATE it reports from this box is
     // meaningless (SwiftShader), but whether the meter renders and publishes at all is not.
-    const st: Record<string, unknown> = {}
+    // WORLD_SETTINGS='{"shadowLift":0.1,...}' seeds any render setting the same way (2026-09-14:
+    // shooting a wall under Alex's OWN dials, not the preset's — the two differed in every number).
+    const st: Record<string, unknown> = SETTINGS ? JSON.parse(SETTINGS) : {}
     if (R) st.viewRadius = R
     if (FPS) st.showFps = true
-    if (R || FPS) localStorage.setItem('shimmer.voxel.settings.v1', JSON.stringify(st))
-  }, Number(process.env.WORLD_RADIUS ?? 0), process.env.WORLD_FPS === '1')
+    if (R || FPS || SETTINGS) localStorage.setItem('shimmer.voxel.settings.v1', JSON.stringify(st))
+  }, Number(process.env.WORLD_RADIUS ?? 0), process.env.WORLD_FPS === '1', process.env.WORLD_SETTINGS ?? '')
 
   const errors: string[] = []
   const LOG = process.env.WORLD_LOG ? new RegExp(process.env.WORLD_LOG) : null
