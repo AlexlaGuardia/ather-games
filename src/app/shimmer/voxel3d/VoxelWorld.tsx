@@ -11446,13 +11446,18 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
    */
   isOwner: boolean
 }) {
+  /** Every one of these levers is a uniform on the CARTOON path (`uCartoon` mixes the stack in),
+   *  so on `natural` they are wired to nothing. Alex dragged `night` end to end on natural and saw
+   *  no change (2026-09-14) — a live slider that does nothing reads as a broken feature, so on
+   *  natural they are disabled and say why, rather than merely dimmed. */
+  const cartoonOnly = s.style !== 'cartoon'
   const Slider = ({ label, k }: { label: string; k: 'toon' | 'outline' | 'faceShading' | 'shadowLift' | 'toonHour' }) => (
-    <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
+    <label className={`flex items-center gap-2 text-[11px] font-mono ${cartoonOnly ? 'text-white/30' : 'text-white/70'}`}>
       <span className="w-24 shrink-0">{label}</span>
       <input
-        type="range" min={0} max={1} step={0.05} value={s[k]}
+        type="range" min={0} max={1} step={0.05} value={s[k]} disabled={cartoonOnly}
         onChange={e => update({ [k]: Number(e.target.value) } as Partial<VoxelSettings>)}
-        className="flex-1 accent-amber-300"
+        className="flex-1 accent-amber-300 disabled:opacity-40"
       />
       <span className="w-8 text-right tabular-nums text-white/50">{s[k].toFixed(2)}</span>
     </label>
@@ -11518,6 +11523,11 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
         </div>
         {/* Each lever is exposed so the look can be judged by moving ONE at a time on the real world.
             A preset is a starting point; the call is Alex's. */}
+        {cartoonOnly && (
+          <p className="text-[10px] leading-relaxed text-white/35 font-mono">
+            These levers shape the cartoon render. Natural is plain light and ignores them.
+          </p>
+        )}
         <Slider label="banding" k="toon" />
         <Slider label="outline" k="outline" />
         <Slider label="face light" k="faceShading" />

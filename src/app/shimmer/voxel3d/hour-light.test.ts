@@ -73,6 +73,8 @@ ok(vw.includes('hourLightOut={hourLight}') && vw.includes('hourLight={hourLight}
 ok(vw.includes('lightUniforms.uToonHour.value = settings.toonHour'), '§5 the dial reaches the uniform from settings')
 ok(/toonHour: number/.test(st) && /cartoon: \{[^}]*toonHour: 1/.test(st) && /natural: \{[^}]*toonHour: 0/.test(st), '§5 settings carry the dial; the cartoon preset turns it on, natural (plain Lambert) leaves it off')
 ok(vw.includes('<Slider label="night" k="toonHour" />'), '§5 the dial is on the settings panel so Alex can move it on his own GPU')
+ok(/const cartoonOnly = s\.style !== 'cartoon'/.test(vw) && /disabled=\{cartoonOnly\}/.test(vw) && vw.includes('Natural is plain light and ignores them'),
+  '§5 on natural the cartoon levers are DISABLED and say why — a live slider wired to nothing read as a broken feature (Alex, 09-14)')
 
 console.log(`hour-light: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  FAIL', f)
