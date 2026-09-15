@@ -612,8 +612,15 @@ export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
  * is the check the 08-22 mirror lesson asks for: compare the derivations, and fail on the EVENT
  * (a kind was added) rather than on the symptom (something rendered wrong).
  */
+// ⚠ AND THE TWO FLOWER FORMS ARE SUBTRACTED, WITH THE REASON (2026-09-15). BLOOM_MAT / BLOOM_BUSH
+// are DRAW kinds the probe resolves from ONE material (MAT.FLOWER, see `flowerForm`) — three kinds,
+// one voxel, one drop. This guard went red for a day when they were added (19 vs 17) and the
+// window that added them only ran the tests it had chosen. It was right to go red: a kind that is
+// not a material is exactly the case this count exists to make someone say out loud.
+export const FLORA_DRAW_ONLY_KINDS = 2                // BLOOM_MAT, BLOOM_BUSH — forms of FLOWER
 export const FLORA_KIND_COUNT =
   (Object.keys(FLORA).length - 3)            // every FLORA kind except NONE, HERB and CROP...
+  - FLORA_DRAW_ONLY_KINDS                    // ...minus the forms that share FLOWER's material
   + Object.keys(HERB_OF_GROUND).length       // ...HERB expands to one material per ruled ground
   + Object.keys(CROP_OF_GROUND).length       // ...and CROP to one per crop's ground (2026-08-22)
 
