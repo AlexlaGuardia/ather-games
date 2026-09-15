@@ -14,11 +14,12 @@
 // every path off it (collect, salvage, refusing to overwrite) is a place inventory can be silently
 // destroyed or duplicated. `conservation` sweeps that.
 
+import { MAT } from './depth'
 import { RECIPES, recipeDef, type RecipeDef } from './recipes'
 import {
   RUN_MS, stationKey, milledYield, runsReady, runProgress, isSpent,
   jobCost, loadJob, collect, salvage, stationRecipes, maxRuns, MAX_RUNS,
-  STATIONS, STATION_ITEMS, STATION_MAT, worksOn, paysBonus, payingStations,
+  STATIONS, STATION_ITEMS, STATION_MAT, worksOn, paysBonus, payingStations, stationOf,
   type Workshop,
 } from './workshop'
 
@@ -503,6 +504,26 @@ console.log('conservation')
   check('every station recipe conserves runs across a salvage at any point', conserved, offender)
 
   check('salvaging an empty station is a no-op', salvage({}, KEY, T0, BENCH).drops.length === 0)
+}
+
+// ── ★ THE KILN — the materials fire (2026-09-15, Alex: "the oven should be for food and the hearth
+//    for materials"). Canon (08-29): the station that fires clay and works glass is a KILN. Three
+//    fires, three jobs: oven bakes, hearth roasts (both on the alchemy table), kiln fires (here). ──
+console.log('the kiln')
+{
+  const KILN = STATIONS.kiln
+  check('the kiln is a workshop station, on the cutter\'s axis (sells material)', KILN.accepts === 'fire' && KILN.pays === 'fire')
+  check('MAT.KILN answers to it', stationOf(MAT.KILN) === 'kiln')
+  const glass = recipeDef('glass')!
+  check('glass is hand work still — the kiln is not a gate', glass.station === 'hand')
+  check('2 sand → 2 glass in the hand, 3 at the kiln', milledYield(glass, BENCH) === 2 && milledYield(glass, KILN) === 3)
+  check('the bench does NOT pay the kiln\'s bonus', !paysBonus(BENCH, glass))
+  check('the kiln lists glass and the six stained rows', stationRecipes('kiln').length === 7 && stationRecipes('kiln').every(r => r.family === 'fire'))
+  check('stained glass is assembly: the kiln runs it at no bonus', stationRecipes('kiln').filter(r => r.id.startsWith('glass_')).every(r => milledYield(r, KILN) === r.output.count))
+  check('the kiln is slower than the bench (a thing you load and leave)', KILN.runMs > BENCH.runMs)
+  // The three fires do not overlap: the oven and the hearth are NOT workshop stations, the kiln is
+  // NOT an alchemy station. One block, one table.
+  check('the oven and hearth are not on this table', stationOf(MAT.OVEN) === null && stationOf(MAT.HEARTH) === null)
 }
 
 console.log(`\nworkshop: ${pass} passed, ${fail} failed`)

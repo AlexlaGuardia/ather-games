@@ -51,6 +51,13 @@ infusion earns the whole chain through a mixed base; tier 1 is held at two stati
    three verbs — cauldron boils, oven bakes, hearth roasts. Rows: Roast Rinn = 1 Shimmerscale (+40 hp), Roasted
    Glowroot = 1 bulb (+20 hp), 12s; Glowfin/Moonkoi are spirit food and never roast. Roast icons = the raw icon browned.
    *hearth* / *oven* are the Ather's own words (no coinage owed).
+   **THE KILN (09-15 PM, Alex: "the oven should be for food and the hearth for materials.. no?"):** not backwards by
+   canon (hearth + oven are both home-fire cooking words, 08-29) — the hole was the MATERIALS fire, which canon had
+   already named a **kiln** and nobody built. `MAT.KILN` 110: clay dome, damper on top, low mouth with a damped glow
+   slit, ash band + ash underneath. Bench recipe 8 subsoil + 2 cut stone. Workshop station on the cutter's axis:
+   `accepts/pays 'fire'` — 2 sand → **3** glass at the kiln vs 2 by hand (still hand-makeable; mining is the gate),
+   lists the six stained rows at no bonus. Three fires, three jobs: **oven bakes · hearth roasts · kiln fires.**
+   Alex judges the kiln's look (first pass, generated).
 4. ~~Magii's ruling → rename~~ done 09-15. Alex judges the three block looks — the mortar tile still paints a TURNING stone (a quern look); a mortar wants a pestle, which the ALIVE pass (pestle circles) draws anyway.
 
 **Decisions:** four verbs, not four hoops — the word routes, so tier 1 stays a short walk · a bulb and a fruit are

@@ -60,7 +60,7 @@ import { MAT } from './depth'
 export const RUN_MS = 12_000
 
 /** The kinds of station that exist. Matches the `MAT.*` blocks and the item ids that place them. */
-export type StationId = 'crafting_table' | 'sawmill' | 'stonecutter'
+export type StationId = 'crafting_table' | 'sawmill' | 'stonecutter' | 'kiln'
 
 /**
  * A body of work a station can be built around — the same vocabulary the recipe table uses.
@@ -180,6 +180,10 @@ export const STATIONS: Record<StationId, StationDef> = {
   crafting_table: { id: 'crafting_table', name: 'The Bench',       runMs: RUN_MS, accepts: 'any',   pays: 'wood'   },
   sawmill:        { id: 'sawmill',        name: 'The Sawmill',     runMs: 5_000,  accepts: 'wood',  pays: 'wood'   },
   stonecutter:    { id: 'stonecutter',    name: 'The Stonecutter', runMs: 18_000, accepts: 'stone', pays: 'stone' },
+  // ★ THE KILN (2026-09-15) — the cutter's axis, for heat: sells MATERIAL on what fire works (glass
+  // today; fired clay when a row wants it). Slow like the cutter, because a kiln is a thing you load
+  // and leave. `accepts: 'fire'` so it runs the stained-glass rows too, at no bonus (assembly).
+  kiln:           { id: 'kiln',           name: 'The Kiln',        runMs: 15_000, accepts: 'fire',  pays: 'fire'  },
 }
 
 /** Item ids that place a station. Used by `recipes.test.ts` to state the gate rule. */
@@ -199,6 +203,7 @@ export const STATION_MAT: Readonly<Record<number, StationId>> = {
   [MAT.CRAFT_TABLE]: 'crafting_table',
   [MAT.SAWMILL]: 'sawmill',
   [MAT.STONECUTTER]: 'stonecutter',
+  [MAT.KILN]: 'kiln',
 }
 
 export const stationOf = (mat: number): StationId | null => STATION_MAT[mat] ?? null

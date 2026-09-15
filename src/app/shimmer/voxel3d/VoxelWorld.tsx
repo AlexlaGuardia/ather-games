@@ -11158,6 +11158,7 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
 const SPECIALITY_NOTE: Record<Exclude<StationDef['accepts'], 'any'>, string> = {
   wood: 'a sawmill takes timber, nothing else — stone and fittings are bench work',
   stone: 'a stonecutter takes masonry, nothing else — it is slower than the bench and wastes less',
+  fire: 'a kiln takes what fire works — sand to glass, glass to colour — and makes the sand go further',
 }
 
 /**

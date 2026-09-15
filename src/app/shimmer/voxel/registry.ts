@@ -312,6 +312,11 @@ export const BLOCKS: BlockDef[] = [
   // oven's fire is behind a mouth, and a kitchen with both should read hearth-bright, oven-warm —
   // not two blazes. Always lit for the hearth's reason: there is no fuel state to lie about.
   { noSlab: true, material: MAT.OVEN, name: 'Oven', hardness: 1.5, skill: null, minTier: 0, drops: [{ itemId: 'oven', count: 1 }], fastSkill: 'prospecting', placeable: true, emit: 6 },
+  // ── ★ THE KILN (2026-09-15) — the materials fire ─────────────────────────────────────────────
+  // Furniture rules like the oven. Clay-bodied, so it is the potter's block: FARMING is the fast
+  // skill (the earth it is made of is the earth a keeper digs), not prospecting. `emit: 4` is the
+  // lowest of the three fires — a damped dome shows a slit of glow at the mouth and no more.
+  { noSlab: true, material: MAT.KILN, name: 'Kiln', hardness: 1.2, skill: null, minTier: 0, drops: [{ itemId: 'kiln', count: 1 }], fastSkill: 'farming', placeable: true, emit: 4 },
   // ── THE ALCHEMY CHAIN (2026-09-14) — three stations beside the cauldron, see `depth.ts` ────────
   // Furniture rules like the cauldron: breaks by hand into itself. The grinder is stone and a shade
   // heavier; the still is glass and the lightest thing on the shelf. No `emit` — nothing here is a

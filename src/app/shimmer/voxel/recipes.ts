@@ -66,7 +66,7 @@ export type Station = 'hand' | 'crafting_table' | 'sawmill' | 'stonecutter'
  * `stone`. A forgotten tag on the cases we CAN derive still fails loudly; the cases we cannot are
  * the reason the field exists.
  */
-export type Family = 'wood' | 'stone'
+export type Family = 'wood' | 'stone' | 'fire'   // 'fire' = worked by heat: the kiln's speciality (2026-09-15)
 
 import { ALL_PIECES, pieceItemId, pieceForItem } from './pieces'
 
@@ -271,13 +271,17 @@ export const RECIPES: RecipeDef[] = [
   { id: 'timber_stack', name: 'Timber Stack', family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'goldwood_log', count: 4 }], output: { itemId: 'timber_stack', count: 1 } },
   // Glass: sand, fused. Hand work like every material (mining is the gate); the sand is the trip.
-  { id: 'glass', name: 'Glass', station: 'hand', mana: 0,
+  // ★ `family: 'fire'` + `milled: 3` (2026-09-15): the KILN is the fire that works glass (canon,
+  // 08-29), and it sells MATERIAL the way the cutter does — 2 sand buys 2 panes in the hand and 3
+  // at the kiln. Not a gate: a keeper on a lake bed can still fuse a pane on the spot.
+  { id: 'glass', name: 'Glass', milled: 3, family: 'fire', station: 'hand', mana: 0,
     input: [{ itemId: 'block_sand', count: 2 }], output: { itemId: 'glass', count: 2 } },
   // Stained glass (2026-09-13): a block of glass and one bloom. The dye is the flower — six the
   // world grows, no pigment item invented. One-for-one, so a window costs a garden's worth of colour.
   ...([['violetbloom', 'violetbloom_petal'], ['stormgrass', 'stormgrass_blade'], ['tidepetal', 'tidepetal_bloom'],
        ['sunpetal', 'sunpetal_bloom'], ['dawncap', 'dawncap_spore'], ['moonvine', 'moonvine_leaf']] as const).map(([k, dye]) => ({
-    id: `glass_${k}`, name: `${k[0].toUpperCase()}${k.slice(1)} Glass`, station: 'hand' as const, mana: 0,
+    // `family: 'fire'` so the kiln LISTS them (colour is set in the fire); no `milled`, it is assembly.
+    id: `glass_${k}`, name: `${k[0].toUpperCase()}${k.slice(1)} Glass`, family: 'fire' as const, station: 'hand' as const, mana: 0,
     input: [{ itemId: 'glass', count: 1 }, { itemId: dye, count: 1 }], output: { itemId: `glass_${k}`, count: 1 },
   })),
   // ── BATCH 3 (2026-09-12) ────────────────────────────────────────────────────────────────────
@@ -412,6 +416,13 @@ export const RECIPES: RecipeDef[] = [
   { id: 'oven', name: 'Oven', family: 'stone', station: 'crafting_table', mana: 0,
     input: [{ itemId: 'cut_stone', count: 6 }],
     output: { itemId: 'oven', count: 1 } },
+  // ── THE KILN (2026-09-15) — a dome of the earth it fires ──────────────────────────────────
+  // Canon (`world/ather.md`, 08-29): clay-bodied, *"a low round dome of the very material it
+  // fires"* — so mostly subsoil, with two cut stone for the sill the mouth sits on. Through the
+  // table like the oven: a dome has to be laid true. No fuel input, same as the other two fires.
+  { id: 'kiln', name: 'Kiln', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'block_subsoil', count: 8 }, { itemId: 'cut_stone', count: 2 }],
+    output: { itemId: 'kiln', count: 1 } },
 
   // ★ DELIBERATELY THE CHEAPEST STATION ON THE TABLE — soil you are standing on plus two planks.
   // The cauldron costs 8 subsoil + 4 cut stone because brewing is a verb arriving; a garden bed is

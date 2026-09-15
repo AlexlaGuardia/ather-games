@@ -206,6 +206,9 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.STILL]: 0x9b6a4a,
   [MAT.MIXER]: 0x9c5f42,
   [MAT.CAULDRON_LIT]: 0x8a5236,
+  // The kiln: fired earth, a shade darker and redder than the bowl — a dome that has been through
+  // its own fire many times. Soot and ash are painted, not tinted.
+  [MAT.KILN]: 0x8b5638,
   // ── ★ THE GARDEN BED (2026-08-22) — turned earth, darker and wetter than the ground it sits on ──
   // Read against SUBSOIL's flank brown rather than against topsoil's green: a bed is soil that has
   // been broken open, so it should look like the underside of the turf, not like turf. Darker than
@@ -343,6 +346,8 @@ export const EMISSIVE: Record<number, number> = {
   [MAT.HEARTH]: 0.85,
   // The oven: a closed fire. Coals seen through a mouth, under the hearth's open blaze.
   [MAT.OVEN]: 0.6,
+  // The kiln: damped. A slit of glow at the mouth; the lowest of the three fires.
+  [MAT.KILN]: 0.45,
   // The running cauldron: the brew's own light, on its top face only (`tiles.ts` paints the sides
   // as plain clay, so the emissive reads as the surface). Under the hearth — a pot, not a fire.
   [MAT.CAULDRON_LIT]: 0.7,

@@ -84,6 +84,9 @@ export const TILE_MATERIALS: number[] = [
   // The alchemy chain, 2026-09-14: a stone quern, a glass still on clay, a wide clay mixing
   // vessel, and the cauldron's lit twin (its top is the brew — emissive alpha on the surface).
   MAT.GRINDER, MAT.STILL, MAT.MIXER, MAT.CAULDRON_LIT,
+  // The kiln, 2026-09-15 — the materials fire. Per-face: a clay dome with a damper on top, a low
+  // mouth with a glow slit and an ash band on the sides, ash underneath.
+  MAT.KILN,
   // ── The grounds, added 2026-08-19 with the character layer ──────────────────────────────────
   // ⚠ Each one NEEDS a `paintFor` case below, exactly as the rubble note above says: the switch's
   // default is the ore painter, so a ground appended here and forgotten there does not render as
@@ -1553,6 +1556,68 @@ function paintOven(dst: Layer, size: number, seed: number, face: number) {
   }
 }
 
+/**
+ * The kiln: a clay-bodied dome (canon, 08-29 — *"a low round dome of the very material it fires,
+ * soot-darkened at the mouth, ash beneath it, a clay damper"*). TOP is the dome read as a rounded
+ * clay disc with a raised clay DAMPER at the crown (a plug, not a hole — a kiln is closed while it
+ * works). SIDE is the clay body with a LOW, WIDE mouth: a slit of glow where the damped fire shows,
+ * soot rolling up over the crown of the mouth, and a pale ASH band along the foot where it spills.
+ * BOTTOM is ash. ⚠ No facing, like the oven: every side is a mouth.
+ */
+function paintKiln(dst: Layer, size: number, seed: number, face: number) {
+  const clay = rgbOf(MATERIAL_COLOR[MAT.KILN])
+  const ash = rgbOf(0xb8b0a4)
+  const soot = rgbOf(0x1a1512)
+  const glowC: [number, number, number] = [236, 120, 36]
+  if (face === BOTTOM) { paintGrit(dst, size, shade(ash, -20), 12, 7, seed); return }
+  if (face === TOP) {
+    paintGrit(dst, size, clay, 10, 8, seed)
+    const c = (size - 1) / 2
+    const damper = Math.max(2, Math.round(size / 5))
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x - c, y - c) / c
+      const cur = at(dst, size, x, y)
+      if (d * c <= damper) {
+        // The damper: a raised clay plug, lit from the top-left, a soot ring where it seats.
+        const rim = d * c > damper - 1
+        const lit = (c - x) + (c - y)
+        put(dst, size, x, y, rim ? mix(soot, clay, 0.35) : shade(clay, Math.round(18 + lit * 2)), 0)
+        continue
+      }
+      put(dst, size, x, y, shade(cur, -Math.round(d * d * 56)), 0)
+    }
+    return
+  }
+  // SIDE.
+  paintGrit(dst, size, clay, 12, 9, seed)
+  const foot = Math.max(1, Math.round(size / 8))                        // the ash band at the base
+  const mx0 = Math.round(size * 0.2), mx1 = size - mx0                   // a wide mouth
+  const my1 = size - foot                                                // sits on the ash
+  const my0 = Math.round(size * 0.62)                                    // low: a kiln's mouth is a stoke hole
+  const cx = (mx0 + mx1 - 1) / 2, r = (mx1 - mx0) / 2
+  for (let y = my0; y < my1; y++) for (let x = mx0; x < mx1; x++) {
+    const spring = my0 + Math.round(r * 0.5)
+    if (y < spring && Math.hypot((x + 0.5 - cx) / 2, y + 0.5 - spring) > r / 2) continue   // a flattened arch
+    const slit = y >= my1 - Math.max(1, Math.round(size / 12)) && Math.abs(x + 0.5 - cx) < r * 0.5   // damped: a slit, not a bed
+    if (slit) { put(dst, size, x, y, mix(glowC, [140, 40, 18], h2(x, y, seed + 5) * 0.5), 170); continue }
+    const up = (my1 - y) / Math.max(1, my1 - my0)
+    put(dst, size, x, y, mix([70, 30, 14], soot, Math.min(1, up * 1.6)), 0)
+  }
+  // Soot over the crown of the mouth, and a smudge climbing the dome above it.
+  for (let y = Math.max(0, my0 - Math.round(size / 5)); y < my0 + 1; y++) for (let x = mx0; x < mx1; x++) {
+    const w = 1 - Math.abs((x + 0.5 - cx) / r)
+    const t = (my0 + 1 - y) / (Math.round(size / 5) + 1)
+    const sv = Math.round(w * (1 - t) * 48 + h2(x, y, seed + 8) * 6)
+    if (sv > 4) put(dst, size, x, y, mix(at(dst, size, x, y), soot, Math.min(1, sv / 60)), 0)
+  }
+  // The ash band: pale, spilled from the mouth, thinning to the corners.
+  for (let y = my1; y < size; y++) for (let x = 0; x < size; x++) {
+    const w = 1 - Math.abs((x + 0.5 - cx) / (size / 2))
+    const a = Math.min(1, 0.35 + w * 0.65)
+    put(dst, size, x, y, mix(at(dst, size, x, y), shade(ash, Math.round((h2(x, y, seed + 13) - 0.5) * 20)), a), 0)
+  }
+}
+
 export function paintFor(material: number, face: number, size: number): Layer {
   const dst = new Uint8Array(size * size * 4)
   const seed = material * 1013 + 17
@@ -1791,6 +1856,7 @@ export function paintFor(material: number, face: number, size: number): Layer {
     case MAT.MIXER: paintMixer(dst, size, seed, face); break
     case MAT.HEARTH: paintHearth(dst, size, seed, face); break
     case MAT.OVEN: paintOven(dst, size, seed, face); break
+    case MAT.KILN: paintKiln(dst, size, seed, face); break
     case MAT.PATH:
       // Packed earth: subsoil's grit, lightened and calmer, with sparse pale pebbles — reads as
       // WALKED against topsoil's grass without shouting like sand.

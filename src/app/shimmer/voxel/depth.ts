@@ -706,6 +706,17 @@ export const MAT = {
    */
   SUNFRUIT_BUSH: 108,
   MOONBERRY_BUSH: 109,
+  /**
+   * ── ★ THE KILN (2026-09-15, Alex: "the oven should be for food and the hearth for materials")
+   * ── the materials fire, RULED 2026-08-29 (`world/ather.md` › *What heat is here*): *"the station
+   * is a kiln, and it fires clay and works glass both. Clay-bodied: a low round dome of the very
+   * material it fires, soot-darkened at the mouth, ash beneath it, a clay damper. No iron door, no
+   * grate, no metal flue, no chain."* Three fires, three jobs: oven bakes, hearth roasts, kiln fires.
+   * A kiln is the potter's word (homely register); *furnace* is the Citadel's and never appears.
+   * ⚠ 110 is NOT Stonemelon after all (the 108-109 note above reserved it loosely); the melon takes
+   * the next free id when it comes. ⚠ NEVER GENERATED, only placed. No fuel state, always warm.
+   */
+  KILN: 110,
 } as const
 
 /** Every glass id — the cutout pass, the light pass and the mesher rank all ask this, never `=== GLASS`. */
