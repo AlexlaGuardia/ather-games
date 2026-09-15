@@ -63,6 +63,13 @@ infusion earns the whole chain through a mixed base; tier 1 is held at two stati
    `station-models/{workshop,alchemy,fires,decor}.ts`; the shelf at `/shimmer/dev/stations` (owner) is where a look is judged.
    The program lights a part by `EMISSIVE × tile alpha` like the block program, so fire/brew/lantern glass glow. Alex's
    first calls: cauldron rebuilt as a bellied pot (was a crate), the Mana Lantern modelled as a standing post-lamp.
+   **THE CRAFT GRID (09-15 PM, Alex: "really difficult to find the item i want to craft"):** `craft-grid.tsx` — tabs
+   Materials · Blocks · Furniture · Pieces · Tools, icon tiles craftable-first, stock count on the tile, find box, one
+   card for the pick (have/need, yield, craft ×1/×5/×10). Stations use the same grid (Own work / Shared) with 1 / 5 /
+   all-N runs. **THE GATE FLIPPED:** planks/bark/branches/shingles = sawmill-only, cut stone/bricks/sandstone =
+   stonecutter-only (cobble, glass, saps stay hand); bootstrap re-costed to RAW drops — table 4 logs, sawmill 10 logs
+   + 4 rubble, cutter 8 rubble + 6 logs. `recipes.test` asserts the gate + that the chain terminates. **Not built:**
+   the per-station in/out grids (9+9) Alex floated — a station model change; play the gate first, then decide.
 4. ~~Magii's ruling → rename~~ done 09-15. Alex judges the three block looks — the mortar tile still paints a TURNING stone (a quern look); a mortar wants a pestle, which the ALIVE pass (pestle circles) draws anyway.
 
 **Decisions:** four verbs, not four hoops — the word routes, so tier 1 stays a short walk · a bulb and a fruit are

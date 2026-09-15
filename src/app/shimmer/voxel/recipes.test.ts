@@ -77,11 +77,30 @@ console.log('bootstrap')
   // agree until they do not, and agreement between a copy and its original is not evidence about
   // either — so the panel, this sweep and the craft surface now all import the one function.
   const isFurniture = isFixture
-  const gatedMaterials = RECIPES.filter(r => !isFurniture(r.output.itemId) && r.station !== 'hand')
-  check('every MATERIAL recipe is makeable by hand',
-    gatedMaterials.length === 0,
-    'refining is deliberately station-free; mining is the gate, not furniture — '
-    + gatedMaterials.map(r => r.id).join(', '))
+  // ── ★★ THE RULE FLIPPED 2026-09-15 (Alex: "the planks and bricks should be exclusive to their
+  //    station"). For six weeks this asserted every MATERIAL recipe is hand-makeable. Now the wood
+  //    refines are the sawmill's and the stone refines the cutter's, BY DESIGN, and the assert says
+  //    which: a gated material must be gated to the station of its own family, and the rough work
+  //    (cobble, glass, the saps) must stay hand — so the gate cannot creep onto a plank's neighbour
+  //    by accident. The bootstrap assert below is what keeps the gate from deadlocking the game.
+  const gatedMaterials = RECIPES.filter(r => !isFurniture(r.output.itemId) && r.station !== 'hand' && r.station !== 'crafting_table')
+  check('every gated material is gated to the station of its own family',
+    gatedMaterials.every(r => (r.family === 'wood' && r.station === 'sawmill') || (r.family === 'stone' && r.station === 'stonecutter')),
+    gatedMaterials.filter(r => !((r.family === 'wood' && r.station === 'sawmill') || (r.family === 'stone' && r.station === 'stonecutter'))).map(r => `${r.id}@${r.station}`).join(', '))
+  check('the gate is the planks and the bricks, and nothing rougher',
+    ['goldwood_planks', 'shimmeroak_planks', 'dawnwood_planks', 'goldwood_bark', 'starwillow_branches', 'shingle'].every(id => recipeDef(id)?.station === 'sawmill')
+    && ['cut_stone', 'stone_brick', 'pale_brick', 'sandstone'].every(id => recipeDef(id)?.station === 'stonecutter')
+    && ['cobblestone', 'glass', 'amber_sap', 'starwillow_sap'].every(id => recipeDef(id)?.station === 'hand'))
+  // ★ NO STATION MAY COST A GATED OUTPUT — the table and both mills are built from raw drops, or the
+  // first table can never be made (planks need the mill, the mill needs the table).
+  const gatedOut = new Set(gatedMaterials.map(r => r.output.itemId))
+  // The chain that has to terminate: the table and the two mills that MAKE the gated materials. A
+  // later station (the kiln) may cost cut stone — you own the cutter by then; that is a progression.
+  const bootstrap = ['crafting_table', 'sawmill', 'stonecutter']
+  const stationsCostingGated = RECIPES.filter(r => bootstrap.includes(r.output.itemId) && r.input.some(i => gatedOut.has(i.itemId)))
+  check('the table and the two mills cost no station-gated material (the bootstrap terminates)', stationsCostingGated.length === 0, stationsCostingGated.map(r => r.id).join(', '))
+  check('…and the mill that makes planks is not itself behind planks: a keeper with logs and rubble reaches both mills',
+    recipeDef('sawmill')!.input.every(i => ['goldwood_log', 'rubble'].includes(i.itemId)) && recipeDef('stonecutter')!.input.every(i => ['goldwood_log', 'rubble'].includes(i.itemId)))
   // ...and the derivation must actually SEE the furniture, or the rule above passes by being blind.
   check('the furniture set is non-empty and holds the things it should',
     ['crafting_table', 'sawmill', 'stonecutter', 'waymark', 'chest', 'clay_pot', 'mana_lantern'].every(isFurniture),
@@ -112,19 +131,22 @@ console.log('mana')
   // world's blanket toll — read the note on RecipeDef.mana before "fixing" it.
   check('no refine step charges mana', RECIPES.every(r => r.mana === 0))
   check('a zero-mana recipe is craftable with zero mana',
-    canCraft('goldwood_planks', bag({ goldwood_log: 1 }), 'hand', 0))
+    canCraft('goldwood_planks', bag({ goldwood_log: 1 }), 'sawmill', 0))
 }
 
 // ── canCraft ──────────────────────────────────────────────────────────────────
 console.log('canCraft')
 {
-  check('enough materials → yes', canCraft('goldwood_planks', bag({ goldwood_log: 3 })))
-  check('exactly enough → yes', canCraft('goldwood_planks', bag({ goldwood_log: 1 })))
+  // (glass, not planks: planks are sawmill work since 2026-09-15 — see the gate section below)
+  check('enough materials → yes', canCraft('glass', bag({ block_sand: 5 })))
+  check('exactly enough → yes', canCraft('glass', bag({ block_sand: 2 })))
   check('one short → no', canCraft('crafting_table', bag({ goldwood_plank: 3 })) === false)
-  check('empty bag → no', canCraft('goldwood_planks', bag({})) === false)
+  check('empty bag → no', canCraft('glass', bag({})) === false)
   check('unknown recipe → no, not a throw', canCraft('nope', bag({ goldwood_log: 99 })) === false)
   // Station gating: `hand` recipes work anywhere, so standing at a table must never LOSE you options.
-  check('hand recipes work at a table too', canCraft('goldwood_planks', bag({ goldwood_log: 1 }), 'crafting_table'))
+  check('hand recipes work at a table too', canCraft('glass', bag({ block_sand: 2 }), 'crafting_table'))
+  check('a sawmill row is NOT craftable by hand or at the table', !canCraft('goldwood_planks', bag({ goldwood_log: 9 })) && !canCraft('goldwood_planks', bag({ goldwood_log: 9 }), 'crafting_table'))
+  check('…and IS at the sawmill', canCraft('goldwood_planks', bag({ goldwood_log: 1 }), 'sawmill'))
 }
 
 // ── craftPlan ─────────────────────────────────────────────────────────────────
@@ -145,9 +167,11 @@ console.log('availableRecipes')
 {
   check('empty bag → nothing', availableRecipes(bag({})).length === 0)
   const withLog = availableRecipes(bag({ goldwood_log: 1 })).map(r => r.id)
-  check('one goldwood log opens both goldwood options',
-    withLog.includes('goldwood_planks') && withLog.includes('goldwood_bark'),
+  check('one goldwood log opens NOTHING by hand — planks and bark are the sawmill\'s (2026-09-15)',
+    !withLog.includes('goldwood_planks') && !withLog.includes('goldwood_bark'),
     `got ${JSON.stringify(withLog)}`)
+  const atMill = availableRecipes(bag({ goldwood_log: 1 }), 'sawmill').map(r => r.id)
+  check('…and opens both at the sawmill', atMill.includes('goldwood_planks') && atMill.includes('goldwood_bark'), `got ${JSON.stringify(atMill)}`)
   check('a log does not open the table', withLog.includes('crafting_table') === false)
 }
 

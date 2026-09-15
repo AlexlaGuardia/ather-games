@@ -101,7 +101,7 @@ import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '.
 import { rinSpotAt } from '../voxel/rin-water'
 import { newCast, phaseAt, passed, answer, type RinCast, type RinPhase } from '../engine/rin-cast'
 import { rinCatch, type RinWater } from '../engine/rin-catch'
-import { WORLD_ITEMS, craftSurface } from './obtainable'
+import { WORLD_ITEMS, craftSurface, isFixture } from './obtainable'
 import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
@@ -277,6 +277,7 @@ import {
   STATIONS, stationOf, payingStations, type StationDef, type StationId, type StationJob, type Workshop,
 } from '../voxel/workshop'
 import { itemIcon } from './tex/item-icon'
+import { CraftGrid, CardButton, type GridTile } from './craft-grid'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { normalizeRoster, activeSpirits, MAX_PARTY } from '../engine/spirit-health'
@@ -10991,20 +10992,19 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
   onCraftTool: (id: string) => void
   onClose: () => void
 }) {
-  const label = (id: string) => id.replace(/_/g, ' ')
-  const Cost = ({ items }: { items: { itemId: string; count: number }[] }) => (
-    <span className="text-white/45">
-      {items.map((c, i) => (
-        <span key={c.itemId} className={have(c.itemId) >= c.count ? 'text-emerald-300/70' : 'text-rose-300/60'}>
-          {i > 0 && <span className="text-white/25"> · </span>}
-          {label(c.itemId)} {have(c.itemId)}/{c.count}
-        </span>
-      ))}
-    </span>
-  )
+  void tick
+  // ── ★ A GRID OF ICONS IN TABS, CRAFTABLE FIRST (2026-09-15, Alex) — see `craft-grid.tsx` ──────
+  // Five tabs, DERIVED from what a recipe makes rather than kept by hand: a tool is a tool, a piece
+  // is a piece, a fixture (chest, station, lantern) is Furniture, a placeable block is Blocks, and
+  // what is left is a Material. A row gated to a mill still shows here (as a goal, with "at the
+  // sawmill" on its card) so a keeper learns where planks come from instead of concluding they are
+  // gone — `craftSurface` decides what is shown, unchanged.
+  const [picked, setPicked] = useState<string | null>(null)
+  const [pieceMat, setPieceMat] = useState(PIECE_MATERIALS[0].key)
+  const pieceFamily = PIECE_MATERIALS.find(m => m.key === pieceMat)?.family
+  const pieceRows = PIECES.filter(pc => !!pieceFamily && !!pc.variants?.includes(pieceFamily))
+    .map(pc => pieceVariants(pc.id).find(v => pieceMaterial(v.id)?.key === pieceMat) ?? pc)
 
-  // The next unearned tier per skill. Showing all nine at once buries the one you are working
-  // toward; showing only what you can afford is what hid the bug in the first place.
   const nextTools = (['forestry', 'prospecting'] as const).flatMap((skillId) => {
     const held = getEquippedTool(tools.current!, skillId)
     const heldTier = held ? (getToolDef(held)?.tier ?? 0) : 0
@@ -11014,27 +11014,37 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
     return next ? [next] : []
   })
 
-  // ⚠ THE FILTER LIVES IN `voxel/obtainable.ts`, NOT HERE. It used to be inlined on this line and
-  // it hid the Garden Bed completely (see that file's craft-surface note) — a fixture whose
-  // ingredients you have never held is a goal you cannot see. One derivation, and its test imports
-  // the same function rather than restating it.
-  // ★ Pieces have their own section below; among Refine they would be 98 rows burying the planks.
-  const rows = craftSurface(have, station).filter(r => !isPieceRecipe(r))
-  /**
-   * ── ★ THE PIECES: TWO AXES, NOT ONE LIST (moved here from the HUD palette, 2026-09-12) ──────
-   * 14 shapes × 7 materials is 98 pieces; as one list, 84 of them shipped unreachable once
-   * (2026-08-27). A material strip picks the column, the shape rows show that column — the same
-   * derivation the build palette used, kept because it is the one that reaches every piece.
-   * The state is the material KEY, resolved through `pieceVariants` at render, so a shape with no
-   * variant in the chosen material falls back to its base rather than to `undefined`.
-   */
-  const [pieceMat, setPieceMat] = useState(PIECE_MATERIALS[0].key)
-  // ★ Only the shapes that list the chosen material's FAMILY (2026-09-13, the glass family): a
-  // pane is never goldwood and a stair is never violetbloom, so the strip must not show a row
-  // that would quietly craft the base instead. The family is read off the table, never guessed.
-  const pieceFamily = PIECE_MATERIALS.find(m => m.key === pieceMat)?.family
-  const pieceRows = PIECES.filter(pc => !!pieceFamily && !!pc.variants?.includes(pieceFamily))
-    .map(pc => pieceVariants(pc.id).find(v => pieceMaterial(v.id)?.key === pieceMat) ?? pc)
+  const tabOf = (r: RecipeDef): string => {
+    const out = r.output.itemId
+    if (isFixture(out)) return 'Furniture'
+    const m = materialForItem(out)
+    if (m !== undefined && blockDef(m)?.placeable) return 'Blocks'
+    return 'Materials'
+  }
+  const whereTag = (r: RecipeDef): string | undefined =>
+    r.station === 'hand' || r.station === station ? undefined : `at a ${STATIONS[r.station as StationId]?.name.toLowerCase().replace(/^the /, '') ?? r.station.replace(/_/g, ' ')}`
+  const tiles: GridTile[] = [
+    ...craftSurface(have, station).filter(r => !isPieceRecipe(r)).map((r): GridTile => {
+      const pays = payingStations(r)
+      const at = pays[0]
+      return {
+        id: `r:${r.id}`, name: r.name, itemId: r.output.itemId, tab: tabOf(r),
+        can: canCraftRecipe(r.id, have, station), cost: r.input, tag: whereTag(r),
+        yields: `${r.output.count}× ${itemLabel(r.output.itemId).toLowerCase()}${at && r.station === 'hand' ? ` · ${milledYield(r, at)}× at ${at.name.toLowerCase()}` : ''}`,
+      }
+    }),
+    ...pieceRows.map((pc): GridTile => ({
+      id: `p:${pc.id}`, name: pc.name, itemId: pieceItemId(pc.id), tab: 'Pieces',
+      can: canAfford(pc, have), cost: pc.cost, yields: `1× · ${have(pieceItemId(pc.id))} in bag`,
+      tag: 'hold one · RMB places · R turns',
+    })),
+    ...nextTools.map((d): GridTile => ({
+      id: `t:${d.id}`, name: d.name, itemId: d.id, tab: 'Tools',
+      can: station === 'crafting_table' && d.recipe.every(i => have(i.itemId) >= i.count),
+      cost: d.recipe, yields: `tier ${d.tier} ${d.skillId}`,
+      tag: station === 'crafting_table' ? undefined : 'bench work — stand at a crafting table',
+    })),
+  ]
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
@@ -11046,103 +11056,37 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
           </span>
           <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
-
-        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">Refine</div>
-        {rows.length === 0 && <div className="text-white/35 mb-3">nothing to refine — go cut a tree</div>}
-        {rows.map((r: RecipeDef) => {
-          const can = canCraftRecipe(r.id, have, station)
-          // A row locked by WHERE you are must say so — greyed-with-costs-green reads as a bug.
-          const needsTable = r.station === 'crafting_table' && station !== 'crafting_table'
-          return (
-            <button key={r.id} disabled={!can} onClick={() => onCraft(r.id)}
-                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
-                      can ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
-                          : 'border-white/5 text-white/30 cursor-not-allowed'}`}>
-              <div className="flex justify-between gap-3">
-                <span>{r.name}</span>
-                {/* Both numbers, always — the same honesty the bench panel owes. A player who
-                    refines in the field should be able to see what a station would have given him
-                    at the moment he decides, not discover it later.
-                    ★ AND IT NAMES THE STATION NOW, because with three of them "milled" stopped
-                    being an answer: the mill's bonus is not the cutter's, and a bare "3× milled"
-                    beside a stone row would send a player to whichever bench he owns to find the
-                    number is 2. `payingStations` is empty for assembly rows, which stay silent. */}
-                {(() => {
-                  const pays = payingStations(r)
-                  const at = pays[0]
-                  return (
-                    <span className="text-amber-200/70 tabular-nums">{r.output.count}× {label(r.output.itemId)}
-                      {at && <span className="text-white/30"> · {milledYield(r, at)}× at {at.name.toLowerCase()}</span>}
-                    </span>
-                  )
-                })()}
-              </div>
-              <div className="mt-0.5 text-[10px]">
-                <Cost items={r.input} />
-                {needsTable && <span className="text-sky-300/60"> · at a crafting table</span>}
-              </div>
-            </button>
-          )
-        })}
-
-        {/* ── Pieces: crafted into the bag like a chest is, placed from the hotbar like a block is. ── */}
-        <div className="gx-label text-white/40 text-[9px] mt-4 mb-1.5">Pieces
-          <span className="ml-2 text-white/30 normal-case tracking-normal">hold one · RMB places · R turns</span>
-        </div>
-        <div className="flex flex-wrap gap-1 mb-1.5">
-          {PIECE_MATERIALS.map(m => {
-            const on = m.key === pieceMat
-            const stock = have(m.itemId)
-            return (
-              <button key={m.key} onClick={() => setPieceMat(m.key)}
-                      className={`px-2 h-6 rounded border flex items-center gap-1.5 text-[9px] font-mono
-                        ${on ? 'border-amber-300 bg-black/70 text-amber-200' : 'border-white/15 bg-black/40 text-white/55 hover:border-white/40'}`}>
-                <span>{m.name}</span>
-                <span className={stock > 0 ? 'text-white/40' : 'text-red-300/70'}>{stock}</span>
-              </button>
-            )
-          })}
-        </div>
-        {pieceRows.map(pc => {
-          const can = canAfford(pc, have)
-          return (
-            <button key={pc.id} disabled={!can} onClick={() => onCraft(pieceItemId(pc.id))}
-                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
-                      can ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
-                          : 'border-white/5 text-white/30 cursor-not-allowed'}`}>
-              <div className="flex justify-between gap-3">
-                <span>{pc.name}</span>
-                <span className="text-amber-200/70 tabular-nums">1× · {have(pieceItemId(pc.id))} in bag</span>
-              </div>
-              <div className="mt-0.5 text-[10px]"><Cost items={pc.cost} /></div>
-            </button>
-          )
-        })}
-
-        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mt-4 mb-1.5">Tools
-          {station !== 'crafting_table' && <span className="ml-2 text-sky-300/60 normal-case tracking-normal">bench work — stand at a crafting table</span>}
-        </div>
-        {nextTools.length === 0 && <div className="text-white/35">every tier earned</div>}
-        {nextTools.map((d) => {
-          // Counted through `have` rather than `canCraftTool`, which wants a whole Inventory (and a
-          // BankState) — the panel only ever needs counts, and faking an Inventory to ask a
-          // yes/no question is how a display drifts from the thing that actually spends.
-          // `onCraftTool` still calls the real `canCraftTool` before spending; this only greys a row.
-          // Tools are bench work: away from a table the whole section shows as goals, not buttons.
-          const can = station === 'crafting_table' && d.recipe.every(i => have(i.itemId) >= i.count)
-          return (
-            <button key={d.id} disabled={!can} onClick={() => onCraftTool(d.id)}
-                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
-                      can ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
-                          : 'border-white/5 text-white/30 cursor-not-allowed'}`}>
-              <div className="flex justify-between gap-3">
-                <span>{d.name}</span>
-                <span className="text-white/45">tier {d.tier} {d.skillId}</span>
-              </div>
-              <div className="mt-0.5 text-[10px]"><Cost items={d.recipe} /></div>
-            </button>
-          )
-        })}
+        <CraftGrid tiles={tiles} tabs={['Materials', 'Blocks', 'Furniture', 'Pieces', 'Tools']} have={have} label={itemLabel}
+                   pickedId={picked} onPick={setPicked}
+                   action={(t) => {
+                     if (t.id.startsWith('t:')) return <CardButton on disabled={!t.can} onClick={() => onCraftTool(t.id.slice(2))}>craft</CardButton>
+                     const id = t.id.startsWith('p:') ? pieceItemId(t.id.slice(2)) : t.id.slice(2)
+                     const rid = t.id.startsWith('p:') ? pieceItemId(t.id.slice(2)) : t.id.slice(2)
+                     void id
+                     // ×1 / ×5 / ×10: each press is one honest craft through the same spend path.
+                     return (<>
+                       <CardButton on disabled={!t.can} onClick={() => onCraft(rid)}>craft</CardButton>
+                       <CardButton disabled={!t.can} onClick={() => { for (let i = 0; i < 5; i++) onCraft(rid) }}>×5</CardButton>
+                       <CardButton disabled={!t.can} onClick={() => { for (let i = 0; i < 10; i++) onCraft(rid) }}>×10</CardButton>
+                     </>)
+                   }}
+                   footer={(tab) => tab !== 'Pieces' ? null : (
+                     <div className="mt-3 flex flex-wrap gap-1 items-center">
+                       <span className="text-white/35 text-[9px] tracking-[.14em] uppercase mr-1">pieces in</span>
+                       {PIECE_MATERIALS.map(m => {
+                         const on = m.key === pieceMat
+                         const stock = have(m.itemId)
+                         return (
+                           <button key={m.key} onClick={() => setPieceMat(m.key)}
+                                   className={`px-2 h-6 rounded border flex items-center gap-1.5 text-[9px] font-mono
+                                     ${on ? 'border-amber-300 bg-black/70 text-amber-200' : 'border-white/15 bg-black/40 text-white/55 hover:border-white/40'}`}>
+                             <span>{m.name}</span>
+                             <span className={stock > 0 ? 'text-white/40' : 'text-red-300/70'}>{stock}</span>
+                           </button>
+                         )
+                       })}
+                     </div>
+                   )} />
       </div>
     </div>
   )
@@ -11388,6 +11332,7 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
 
   const busy = !!job && job.runs > 0
   const rows = stationRecipes(st.kind)
+  const [pickedRecipe, setPickedRecipe] = useState<string | null>(null)
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
@@ -11443,29 +11388,30 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
         <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">
           Set to work {busy && <span className="ml-2 text-sky-300/60 normal-case tracking-normal">finish the current job first</span>}
         </div>
-        {rows.map((rec) => {
-          const n = maxRuns(rec, have)
-          const can = !busy && n > 0
-          const bonus = milledYield(rec, def) > rec.output.count
-          return (
-            <button key={rec.id} disabled={!can} onClick={() => doLoad(rec.id, n)}
-                    className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
-                      can ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
-                          : 'border-white/5 text-white/30 cursor-not-allowed'}`}>
-              <div className="flex justify-between gap-3">
-                <span>{rec.name}</span>
-                <span className="tabular-nums">
-                  <span className={bonus ? 'text-amber-200/80' : 'text-white/45'}>{milledYield(rec, def)}×</span>
-                  {bonus && <span className="text-white/25"> (by hand {rec.output.count}×)</span>}
-                </span>
-              </div>
-              <div className="mt-0.5 text-[10px] text-white/40">
-                {n > 0 ? `${n} run${n === 1 ? '' : 's'} from ${st.feeds.length ? 'your bag and the chests beside it' : 'your bag'}` : `no ${label(rec.input[0].itemId)}`}
-                {n >= MAX_RUNS && <span className="text-white/25"> · {def.name.toLowerCase()} holds no more</span>}
-              </div>
-            </button>
-          )
-        })}
+        {/* ★ THE SAME GRID THE BENCH USES (2026-09-15): icons in tabs, runnable first; the card's
+            action loads RUNS (1 / 5 / all you can afford) instead of crafting on the spot. */}
+        <CraftGrid tiles={rows.map((rec): GridTile => {
+                     const n = maxRuns(rec, have)
+                     const bonus = milledYield(rec, def) > rec.output.count
+                     return {
+                       id: rec.id, name: rec.name, itemId: rec.output.itemId,
+                       tab: rec.station === st.kind ? 'Own work' : 'Shared',
+                       can: !busy && n > 0, cost: rec.input,
+                       yields: `${milledYield(rec, def)}× ${label(rec.output.itemId)}${bonus && rec.station === 'hand' ? ` (by hand ${rec.output.count}×)` : ''}`,
+                       tag: n > 0 ? `${n} run${n === 1 ? '' : 's'} from ${st.feeds.length ? 'your bag and the chests beside it' : 'your bag'}${n >= MAX_RUNS ? ` · ${def.name.toLowerCase()} holds no more` : ''}` : `no ${label(rec.input[0].itemId)}`,
+                     }
+                   })}
+                   tabs={['Own work', 'Shared']} have={have} label={itemLabel}
+                   pickedId={pickedRecipe} onPick={setPickedRecipe}
+                   action={(t) => {
+                     const rec = RECIPES.find(x => x.id === t.id)!
+                     const n = maxRuns(rec, have)
+                     return (<>
+                       <CardButton on disabled={busy || n < 1} onClick={() => doLoad(rec.id, 1)}>1 run</CardButton>
+                       <CardButton disabled={busy || n < 5} onClick={() => doLoad(rec.id, 5)}>5 runs</CardButton>
+                       <CardButton disabled={busy || n < 1} onClick={() => doLoad(rec.id, n)}>all {n}</CardButton>
+                     </>)
+                   }} />
       </div>
     </div>
   )

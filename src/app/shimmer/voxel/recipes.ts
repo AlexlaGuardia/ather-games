@@ -94,10 +94,17 @@ export interface RecipeDef {
    * reason to exist that a click cannot beat, and the honest one is the fiction: a bench splits a
    * log cleanly, a blade across your thigh wastes half the wood.
    *
-   * ⚠ THIS IS NOT A GATE AND MUST NEVER BECOME ONE. Every recipe stays hand-makeable anywhere —
-   * `recipes.test.ts` asserts it and the header above says why. What a station sells is efficiency,
-   * never access. A player refining in the field is making a fair trade (I need it now, my bag is
-   * full), and the craft panel prints both numbers so it is a decision rather than a trap.
+   * ── ★★ OVERTURNED 2026-09-15 (Alex: "the planks and bricks should be exclusive to their
+   *    station") — PLANKS AND BRICKS ARE A GATE NOW. ────────────────────────────────────────────
+   * This paragraph used to read "THIS IS NOT A GATE AND MUST NEVER BECOME ONE. Every recipe stays
+   * hand-makeable anywhere; what a station sells is efficiency, never access." That was the design
+   * for six weeks and it is reversed on purpose: the wood refines (planks, bark, branches, shingles)
+   * are `station: 'sawmill'` and the stone refines (cut stone, bricks, sandstone) are
+   * `station: 'stonecutter'`. What survives of the old rule: RAW drops and the rough refines stay
+   * hand work (cobble from rubble, glass from sand, the saps tapped from a log), and the bootstrap
+   * chain terminates — the table costs LOGS, the two mills cost logs and rubble, never their own
+   * output. `recipes.test.ts` › bootstrap asserts exactly that. `milled` on a gated row is simply
+   * its yield at the station; there is no hand yield to compare against any more.
    *
    * ⚠ ONLY ON TAKING RAW MATERIAL APART. Extraction is what a purpose-built station does better.
    * Assembly is not — nailing planks into a fitting is not extraction and a bench does not conjure
@@ -143,25 +150,25 @@ export interface RecipeDef {
  */
 export const RECIPES: RecipeDef[] = [
   // Goldwood — the day-one tree. Tier-1 forestry.
-  { id: 'goldwood_planks', name: 'Goldwood Planks', milled: 6, family: 'wood', station: 'hand', mana: 0,
+  { id: 'goldwood_planks', name: 'Goldwood Planks', milled: 6, family: 'wood', station: 'sawmill', mana: 0,
     input: [{ itemId: 'goldwood_log', count: 1 }], output: { itemId: 'goldwood_plank', count: 4 } },
-  { id: 'goldwood_bark', name: 'Strip Goldwood Bark', milled: 3, family: 'wood', station: 'hand', mana: 0,
+  { id: 'goldwood_bark', name: 'Strip Goldwood Bark', milled: 3, family: 'wood', station: 'sawmill', mana: 0,
     input: [{ itemId: 'goldwood_log', count: 1 }], output: { itemId: 'goldwood_bark', count: 2 } },
 
   // Shimmeroak — tier-2 forestry. Sap is tapped from the log, not rolled off a node.
-  { id: 'shimmeroak_planks', name: 'Shimmeroak Planks', milled: 6, family: 'wood', station: 'hand', mana: 0,
+  { id: 'shimmeroak_planks', name: 'Shimmeroak Planks', milled: 6, family: 'wood', station: 'sawmill', mana: 0,
     input: [{ itemId: 'shimmeroak_log', count: 1 }], output: { itemId: 'shimmeroak_plank', count: 4 } },
   { id: 'amber_sap', name: 'Tap Amber Sap', milled: 3, family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'shimmeroak_log', count: 1 }], output: { itemId: 'amber_sap', count: 2 } },
 
   // Starwillow — tier-3 forestry. The branch is the structural piece here, not a plank.
-  { id: 'starwillow_branches', name: 'Starwillow Branches', milled: 6, family: 'wood', station: 'hand', mana: 0,
+  { id: 'starwillow_branches', name: 'Starwillow Branches', milled: 6, family: 'wood', station: 'sawmill', mana: 0,
     input: [{ itemId: 'starwillow_log', count: 1 }], output: { itemId: 'starwillow_branch', count: 4 } },
   { id: 'starwillow_sap', name: 'Tap Starwillow Sap', milled: 3, family: 'wood', station: 'hand', mana: 0,
     input: [{ itemId: 'starwillow_log', count: 1 }], output: { itemId: 'starwillow_sap', count: 2 } },
 
   // Dawnwood — the deep-forest tree. No tool tier claims it yet; it is building timber.
-  { id: 'dawnwood_planks', name: 'Dawnwood Planks', milled: 6, family: 'wood', station: 'hand', mana: 0,
+  { id: 'dawnwood_planks', name: 'Dawnwood Planks', milled: 6, family: 'wood', station: 'sawmill', mana: 0,
     input: [{ itemId: 'dawnwood_log', count: 1 }], output: { itemId: 'dawnwood_plank', count: 4 } },
 
   // ── ★ STONE: RUBBLE → CUT STONE (2026-08-13) ────────────────────────────────────────────────
@@ -190,7 +197,7 @@ export const RECIPES: RecipeDef[] = [
   // old granularity the only bonus the data shape could express was 2 rubble → 2 stone, i.e. the
   // loss erased entirely — the one outcome the ruling above forbids. Written 4→2, the cutter pays
   // 3 and stone keeps a loss it can never dress away.
-  { id: 'cut_stone', name: 'Cut Stone', milled: 3, family: 'stone', station: 'hand', mana: 0,
+  { id: 'cut_stone', name: 'Cut Stone', milled: 3, family: 'stone', station: 'stonecutter', mana: 0,
     input: [{ itemId: 'rubble', count: 4 }], output: { itemId: 'cut_stone', count: 2 } },
 
   // ── ★ THE MASONRY PALETTE (2026-08-15, Alex: "3 other stone types.. different colors and
@@ -226,15 +233,15 @@ export const RECIPES: RecipeDef[] = [
 
   // Fine grey courses against cut stone's big ashlar blocks — the "somebody BUILT this" read that
   // a wall of dressed slabs does not give you. The one Alex actually asked for.
-  { id: 'stone_brick', name: 'Stone Bricks', milled: 3, family: 'stone', station: 'hand', mana: 0,
+  { id: 'stone_brick', name: 'Stone Bricks', milled: 3, family: 'stone', station: 'stonecutter', mana: 0,
     input: [{ itemId: 'cut_stone', count: 3 }], output: { itemId: 'stone_brick', count: 2 } },
 
   // Pale mint-white, from the hot springs' terrace shell. The colour is already in the world and
   // already quarryable; this is what makes a trip to the Springs worth a cart.
-  { id: 'pale_brick', name: 'Pale Bricks', milled: 3, family: 'stone', station: 'hand', mana: 0,
+  { id: 'pale_brick', name: 'Pale Bricks', milled: 3, family: 'stone', station: 'stonecutter', mana: 0,
     input: [{ itemId: 'block_spring_crust', count: 3 }], output: { itemId: 'pale_brick', count: 2 } },
   // Shingles (2026-09-11, R2): split from planks — four to the plank pair by hand, six at the sawmill (`milled` is the STATION yield and must beat the hand; workshop.test caught it at 2).
-  { id: 'shingle', name: 'Shingles', milled: 6, family: 'wood', station: 'hand', mana: 0,
+  { id: 'shingle', name: 'Shingles', milled: 6, family: 'wood', station: 'sawmill', mana: 0,
     input: [{ itemId: 'goldwood_plank', count: 2 }], output: { itemId: 'shingle', count: 4 } },
 
   // Warm tan, from beach sand — and the texture is BANDED rather than coursed, because sedimentary
@@ -242,7 +249,7 @@ export const RECIPES: RecipeDef[] = [
   // ⚠ Sand is spade work, not prospecting, so this is the one masonry row whose raw material a
   // fresh keeper can dig bare-handed. That is on purpose: it is the cheap warm surface you can
   // build with on day one, against stone's tier-1 pick and the Springs' walk.
-  { id: 'sandstone', name: 'Sandstone', milled: 3, family: 'stone', station: 'hand', mana: 0,
+  { id: 'sandstone', name: 'Sandstone', milled: 3, family: 'stone', station: 'stonecutter', mana: 0,
     input: [{ itemId: 'block_sand', count: 3 }], output: { itemId: 'sandstone', count: 2 } },
 
   // ── ★ THE `planking` TIER WAS CUT HERE (2026-08-22) ─────────────────────────────────────────
@@ -306,8 +313,9 @@ export const RECIPES: RecipeDef[] = [
   // Craftable by hand, and it must stay that way: a crafting table gated behind a crafting table is
   // the bootstrap that cannot start. Canon has Greg gift one in the starter bag
   // (`shimmer-quests-mainmap.md`), so this is the REPLACEMENT path, not the only one.
+  // ★ LOGS, NOT PLANKS (2026-09-15): planks are sawmill work now, and the sawmill needs the table.
   { id: 'crafting_table', name: 'Crafting Table', station: 'hand', mana: 0,
-    input: [{ itemId: 'goldwood_plank', count: 4 }], output: { itemId: 'crafting_table', count: 1 } },
+    input: [{ itemId: 'goldwood_log', count: 4 }], output: { itemId: 'crafting_table', count: 1 } },
 
   // ── ★ THE SAWMILL — the second station (2026-08-13) ─────────────────────────────────────────
   // Bench work, unlike the bench itself: the table is the bootstrap and must stay hand-makeable,
@@ -317,8 +325,9 @@ export const RECIPES: RecipeDef[] = [
   //
   // ~5 goldwood logs all in. Expensive enough to be a decision, cheap enough to reach in the
   // session you first notice you are refining a lot of wood.
+  // ★ RAW DROPS ONLY (2026-09-15): the mill is what MAKES planks and bark, so it cannot cost them.
   { id: 'sawmill', name: 'Sawmill', station: 'crafting_table', mana: 0,
-    input: [{ itemId: 'goldwood_plank', count: 12 }, { itemId: 'goldwood_bark', count: 4 }],
+    input: [{ itemId: 'goldwood_log', count: 10 }, { itemId: 'rubble', count: 4 }],
     output: { itemId: 'sawmill', count: 1 } },
 
   // ── ★ THE STONECUTTER — the third station, and it pays in MATERIAL (2026-08-15) ─────────────
@@ -330,8 +339,9 @@ export const RECIPES: RecipeDef[] = [
   // Deliberately NOT costing a blade material (the mill takes bark for its edge). A cutter works
   // stone down by abrasion against a heavy bed; the mass IS the tool, which is also why it is the
   // slowest thing on the plot.
+  // ★ RAW DROPS ONLY (2026-09-15): the cutter is what MAKES cut stone, so it cannot cost it.
   { id: 'stonecutter', name: 'Stonecutter', station: 'crafting_table', mana: 0,
-    input: [{ itemId: 'cut_stone', count: 6 }, { itemId: 'goldwood_plank', count: 8 }],
+    input: [{ itemId: 'rubble', count: 8 }, { itemId: 'goldwood_log', count: 6 }],
     output: { itemId: 'stonecutter', count: 1 } },
 
   // ── ★ THE WAYMARK — a passage you plant (2026-08-15) ────────────────────────────────────────

@@ -67,7 +67,10 @@ console.log('milled yield')
   const stack = RECIPES.find(r => r.id === 'timber_stack')
   check('the timber-stack exemption is live: it exists and consumes several logs at once',
     !!stack && stack.input.some(i => i.itemId.endsWith('_log') && i.count > 1) && stack.milled === undefined)
-  const logRefines = RECIPES.filter(r => r.id !== 'timber_stack' && r.input.some(i => i.itemId.endsWith('_log')))
+  // ★ A STATION IS NOT A REFINE (2026-09-15): the table and both mills cost LOGS now (they cannot cost
+  // their own output), and assembly pays no bonus. The oracle excludes `STATION_ITEMS` outputs.
+  const isStationBuild = (r: RecipeDef) => STATION_ITEMS.has(r.output.itemId)
+  const logRefines = RECIPES.filter(r => r.id !== 'timber_stack' && !isStationBuild(r) && r.input.some(i => i.itemId.endsWith('_log')))
   check('every log-refine DOES pay better milled', logRefines.length > 0 &&
     logRefines.every(r => milledYield(r, MILL) > r.output.count),
     logRefines.filter(r => milledYield(r, MILL) <= r.output.count).map(r => r.id).join(', '))
@@ -87,11 +90,11 @@ console.log('family tags')
   const untagged = (pred: (r: RecipeDef) => boolean, want: string) =>
     RECIPES.filter(r => pred(r) && r.family !== want).map(r => r.id)
 
-  const logs = untagged(r => r.input.some(i => i.itemId.endsWith('_log')), 'wood')
+  const logs = untagged(r => !STATION_ITEMS.has(r.output.itemId) && r.input.some(i => i.itemId.endsWith('_log')), 'wood')
   check('every recipe consuming a log is tagged wood', logs.length === 0,
     `${logs.join(', ')} — a fifth tree species needs family: 'wood' on its row`)
 
-  const stone = untagged(r => r.input.some(i => i.itemId === 'rubble'), 'stone')
+  const stone = untagged(r => !STATION_ITEMS.has(r.output.itemId) && r.input.some(i => i.itemId === 'rubble'), 'stone')
   check('every recipe consuming rubble is tagged stone', stone.length === 0, stone.join(', '))
 
   // A family nobody claims is a tag that does nothing — either a station is missing or the tag is.
@@ -189,8 +192,9 @@ console.log('station recipes')
 {
   const rows = stationRecipes()
   check('a station offers something at all', rows.length > 0)
-  // The invariant `recipes.ts` refuses to give up: furniture never gates access.
-  check('every station recipe is also hand-makeable', rows.every(r => r.station === 'hand'))
+  // ★ FLIPPED 2026-09-15: the bench runs hand rows only; a mill ALSO runs the rows gated to it.
+  check('every bench recipe is hand-makeable (the bench gates nothing)', rows.every(r => r.station === 'hand'))
+  check('the sawmill runs its gated rows and the bench does not', stationRecipes('sawmill').some(r => r.station === 'sawmill') && !rows.some(r => r.station === 'sawmill'))
   check('nothing input-less sneaks in', rows.every(r => r.input.length > 0))
 }
 
@@ -216,9 +220,10 @@ console.log('station kinds')
       `bench=${bench.length} ${st.id}=${rows.length}`)
     // ...and a station that accepts NOTHING is furniture with a panel.
     check(`${st.id} has something to work on at all`, rows.length > 0)
-    // A SUBSET, never a divergent list — a recipe a specialist runs must be one the bench runs too,
-    // or the two tables have drifted into separate hand-kept lists.
-    check(`everything ${st.id} runs, the bench runs`, rows.every(m => bench.some(b => b.id === m.id)))
+    // The HAND rows a specialist runs must be ones the bench runs too (no divergent hand-kept lists);
+    // its GATED rows are its own by design (2026-09-15) and the bench must NOT have them.
+    check(`every hand row ${st.id} runs, the bench runs`, rows.filter(m => m.station === 'hand').every(m => bench.some(b => b.id === m.id)))
+    check(`every gated row ${st.id} runs is gated to IT, and the bench does not run it`, rows.filter(m => m.station !== 'hand').every(m => m.station === st.id && !bench.some(b => b.id === m.id)))
     // Every row it offers is genuinely inside its speciality.
     check(`${st.id} only offers its own speciality`, rows.every(r => worksOn(st, r)))
   }

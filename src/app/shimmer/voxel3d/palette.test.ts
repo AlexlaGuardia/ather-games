@@ -99,7 +99,10 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
      'the craft panel derives its shape rows through pieceVariants in the chosen material, over the shapes that list its family')
   ok(/PIECE_MATERIALS\.map\(m => \{\n\s*const on = m\.key === pieceMat/.test(src),
      'the material strip is rendered from the full material table and highlights off the key')
-  ok(/onCraft\(pieceItemId\(pc\.id\)\)/.test(src), 'a shape row crafts the resolved variant, not its base')
+  // 2026-09-15: the rows became grid TILES. A tile's id carries the RESOLVED variant (`p:<pc.id>`), and
+  // the card crafts `pieceItemId` of exactly that id — never the base shape.
+  ok(/id: `p:\$\{pc\.id\}`, name: pc\.name, itemId: pieceItemId\(pc\.id\)/.test(src) && /pieceItemId\(t\.id\.slice\(2\)\)/.test(src),
+     'a shape tile carries the resolved variant and crafts pieceItemId of it, not its base')
   ok(/craftSurface\(have, station\)\.filter\(r => !isPieceRecipe\(r\)\)/.test(src),
      'Refine excludes the piece rows — 98 of them would bury the planks')
 

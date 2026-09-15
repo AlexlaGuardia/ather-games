@@ -425,5 +425,10 @@ export function salvage(
 export function stationRecipes(at: StationId = 'crafting_table'): RecipeDef[] {
   const def = STATIONS[at]
   // `worksOn` asks the recipe's own inputs, never a list — see `Speciality`.
-  return RECIPES.filter(r => r.station === 'hand' && r.input.length > 0 && worksOn(def, r))
+  // ★ A row GATED to this station is its own (2026-09-15: planks are the sawmill's, bricks the
+  // cutter's); a hand row is shared work the station will do unattended if it is in its speciality.
+  // ⚠ The bench's own `station: 'crafting_table'` rows are ASSEMBLY you do standing there (the craft
+  // panel), never a job the bench runs unattended — so the bench's job list stays the hand refines.
+  const gated = (r: RecipeDef) => r.station === at && at !== 'crafting_table'
+  return RECIPES.filter(r => r.input.length > 0 && (gated(r) || (r.station === 'hand' && worksOn(def, r))))
 }
