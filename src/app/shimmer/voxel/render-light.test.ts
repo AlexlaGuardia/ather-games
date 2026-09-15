@@ -14,7 +14,8 @@ import {
   newBorders, li, MAX_LIGHT, SPAN, HEIGHT, OPPOSITE,
   FACE_XM, FACE_XP,
 } from './render-light'
-import { MAT } from './depth'
+import { MAT, HALF_BIT } from './depth'
+import { STRUCTURE } from './pieces'
 import { WOOD } from './trees'
 import { AIR } from './section'
 
@@ -347,6 +348,33 @@ ok(blk(12, 79, 12) === 13, `§5 ★ block light decays one per step and NEVER fa
   ok(at(2, G + 1, 7) > at(7, G + 1, 7),
     `§11 ★ the canopy edge is brighter than its middle — light comes in from the side ` +
     `(edge ${at(2, G + 1, 7)}, middle ${at(7, G + 1, 7)})`)
+}
+
+// ── §12 half slabs, pieces and glass are not rock (Alex, 2026-09-15: a black wall beside a slab)
+// The shader samples a face half a block along its normal, so the cell a slab or a beam OCCUPIES
+// is the cell the wall beside it and the ground under it read. Flood it as rock and every one of
+// those faces wears the cave floor in daylight. Flat ground at G; a lower slab at (5,G+1,5), a beam
+// cell at (9,G+1,9), a glass block at (12,G+1,12); the ground cell BESIDE each is open.
+{
+  const G = 40
+  const slab = (x: number, y: number, z: number): number => {
+    if (y <= G) return MAT.STONE
+    if (y === G + 1 && x === 5 && z === 5) return MAT.STONE | HALF_BIT
+    if (y === G + 1 && x === 9 && z === 9) return STRUCTURE
+    if (y === G + 1 && x === 12 && z === 12) return MAT.GLASS
+    return AIR
+  }
+  const S = computeRenderLight(0, 0, slab, null)
+  const at = (x: number, y: number, z: number) => S.sky[li(x, y, z)]
+  ok(at(5, G + 1, 5) > 0, `§12 ★★★ the slab's own cell is LIT, not rock (got ${at(5, G + 1, 5)}) — this is the cell the wall beside it samples`)
+  ok(at(5, G + 1, 5) >= MAX_LIGHT - 1, `§12 …and nearly full: a slab ends the free fall, it does not wall the sky (got ${at(5, G + 1, 5)})`)
+  ok(at(9, G + 1, 9) > 0 && at(9, G + 1, 9) >= MAX_LIGHT - 1, `§12 ★★ a piece's cell is lit the same way (got ${at(9, G + 1, 9)}) — the ground under a beam is not a hole`)
+  ok(at(12, G + 1, 12) === MAX_LIGHT, `§12 ★ glass passes the sky UNTOUCHED — free fall continues through a pane (got ${at(12, G + 1, 12)})`)
+  ok(at(4, G + 1, 5) === MAX_LIGHT && at(8, G + 1, 9) === MAX_LIGHT, '§12 open ground beside each is still 15')
+  // The negative control: a FULL stone block in the same place is still rock.
+  const full = (x: number, y: number, z: number): number => (y <= G ? MAT.STONE : (y === G + 1 && x === 5 && z === 5 ? MAT.STONE : AIR))
+  const F = computeRenderLight(0, 0, full, null)
+  ok(F.sky[li(5, G + 1, 5)] === 0, `§12 negative control: a full block's cell is 0 (got ${F.sky[li(5, G + 1, 5)]})`)
 }
 
 if (fails.length) {

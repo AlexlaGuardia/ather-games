@@ -316,6 +316,24 @@ const OWNER = process.env.WORLD_OWNER === '1'
     }
     console.log(`clicked ${pts.length} point(s)`)
   }
+  // WORLD_HOLD='x,y,ms[; x,y,ms]' — press and HOLD the left button, for the things a click cannot do
+  // (mining is a hold; `mine 0.05` on the console makes a block break inside one). Added 2026-09-15
+  // to dig a pit headless and read its floor, after a phone shot of black pit floors at night.
+  if (process.env.WORLD_HOLD) {
+    const holds = process.env.WORLD_HOLD.split(';').map(p => p.trim()).filter(Boolean)
+      .map(p => p.split(',').map(n => Number(n.trim())))
+    const bad = holds.filter(p => p.length !== 3 || p.some(n => !Number.isFinite(n)))
+    if (bad.length) { console.error(`WORLD_HOLD: ${bad.length} malformed entries; expected 'x,y,ms'`); process.exit(2) }
+    for (const [x, y, ms] of holds) {
+      await page.mouse.move(x, y)
+      await page.mouse.down()
+      await new Promise(r => setTimeout(r, ms))
+      await page.mouse.up()
+      await new Promise(r => setTimeout(r, CLICK_WAIT))
+    }
+    console.log(`held ${holds.length} time(s)`)
+  }
+  if (process.env.WORLD_AFTER) await new Promise(r => setTimeout(r, Number(process.env.WORLD_AFTER)))
   // Keys after clicks, for the surfaces a key opens (M the map, I the bag, C the craft panel). Same
   // real keyboard the console lines go through, so a key the game ignores is a key the game ignores.
   if (KEYS) {

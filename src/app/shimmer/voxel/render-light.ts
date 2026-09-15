@@ -48,8 +48,10 @@
 // A column therefore settles after a bounded number of passes and the host can drive it with a
 // dirty queue. Nothing here decides that cadence; this module is one pass.
 import { AIR } from './section'
-import { isSolid, MAT } from './depth'
+import { isSolid, isHalfMat, MAT } from './depth'
 import { isLeafMat } from './trees'
+import { LIGHT_PASSES } from './light-passes'
+import { STRUCTURE, STRUCTURE_HALF } from './pieces'
 import { emitOf } from './registry'
 
 /**
@@ -76,9 +78,21 @@ import { emitOf } from './registry'
  * ⚠ AND WATER IS NOT IN `dimsSky` YET, though Minecraft treats it the same way. Today a lake bottom
  * is lit as though it were open ground. That is a look nobody has judged, not a decision.
  */
-export const blocksLight = (m: number): boolean => isSolid(m) && !isLeafMat(m)
-/** Passes light, but full-strength sky stops falling free here. Leaves, today. */
-export const dimsSky = (m: number): boolean => isLeafMat(m)
+// ── ★★ HALF SLABS, PIECES AND GLASS ARE NOT ROCK (2026-09-15) ─────────────────────────────────
+// Alex: "it's failing to render behind the halfblocks, similar to the pieces" — a pitch-black
+// wall face beside a slab, in daylight, and black ground under a beam. `isSolid` says a slab is
+// solid (collision wants that), so this flood marked the whole cell 0/0, and every face whose
+// sample cell IS that cell (`shimmerLight` steps half a block along the normal — the wall beside
+// the slab, the ground the slab sits on) read sky 0 → the cave floor → black. ae772f8 (09-12)
+// taught the SPAWN flood that pieces pass (`light-passes.ts`) and never taught this one, which
+// is the flood the SHADER reads. One list now, and a slab rides with it: it passes, and like a
+// leaf it ends the free fall, so the ground under a slab or a roof piece is shade, not a hole.
+export const blocksLight = (m: number): boolean =>
+  isSolid(m) && !isLeafMat(m) && !isHalfMat(m) && !LIGHT_PASSES.has(m)
+/** Passes light, but full-strength sky stops falling free here: leaves, slabs, pieces. Glass does
+ *  NOT dim — a pane is the one thing whose whole job is to let the sky through untouched. */
+export const dimsSky = (m: number): boolean =>
+  isLeafMat(m) || isHalfMat(m) || m === STRUCTURE || m === STRUCTURE_HALF
 
 export const MAX_LIGHT = 15
 /** Column footprint. Kept local rather than imported so this file stays independent of column.ts. */
