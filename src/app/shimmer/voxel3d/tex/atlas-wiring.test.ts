@@ -127,7 +127,11 @@ check(glslBlocks.length >= 4,
   const calls = [...atlasCode.matchAll(/mustReplace\(\s*(\w+)\.(\w+),\s*('[^']*'),\s*([^,]*),/g)]
   check(calls.length >= 6, `expected at least 6 mustReplace call sites, parsed ${calls.length}`)
   for (const [, , , anchor, third] of calls) {
-    check(third.trim() === '@LIT@',
+    // ★ THE STACK MOVED OUT (2026-09-13, `cartoon-glsl.ts`): the opaque_fragment site is handed a
+    // CALL that returns the one shared copy, not a literal of its own — the design the
+    // one-copy-three-importers guard protects, so it passes here by name; anything else must
+    // still be one whole literal.
+    check(third.trim() === '@LIT@' || third.trim().startsWith('cartoonStackGlsl('),
       `mustReplace at ${anchor} is not being handed one whole template literal (got "${third.trim()}") ` +
       `— a backtick in prose has split the shader string`)
   }
@@ -219,8 +223,12 @@ check(glslBlocks.length >= 4,
 {
   // ⚠ Reads the LITERALS, not the stripped code: this call sits inside a `${...}` interpolation in
   // the shader string, so it is absent from the code half by construction.
-  const shaderText = scanned.literals.join('\n')
-  check(/lightApply\('finalCol',\s*'diffuseColor\.rgb',\s*'vWorldPos',\s*'cnrm'\)/.test(shaderText),
+  // The stack's tail lives in `cartoon-glsl.ts` since 09-13; the atlas hands it 'vWorldPos' and the
+  // stack names the normal 'cnrm' itself. Read both: the atlas must still pass its world position,
+  // the stack must still hand lightApply the GEOMETRIC normal.
+  const stack = readFileSync(join(ROOT, 'src/app/shimmer/voxel3d/cartoon-glsl.ts'), 'utf8')
+  check(/cartoonStackGlsl\('vVoxNormal',\s*'vWorldPos'/.test(atlasCode) &&
+        /lightApply\('finalCol',\s*'diffuseColor\.rgb',\s*wpos,\s*'cnrm'\)/.test(stack),
     "the block program no longer passes 'cnrm' (the geometric normal) to lightApply — a perturbed " +
     'normal there samples the wrong cell of the light field')
   const reliefBlock = glslBlocks.find(b => b.includes('#include <normal_fragment_maps>')) ?? ''
@@ -250,7 +258,10 @@ check(glslBlocks.length >= 4,
   // statements replacing <opaque_fragment>. So the toon quantiser, the very thing this section
   // measures relief AGAINST, is filtered out of it: the first version of this check reported a
   // correct ordering as violated because its extraction could not see one of the two subjects.
-  const glslCode = scanned.literals.map(b => b.replace(/\/\/[^\n]*/g, '')).join('\n')
+  // The quantiser is in `cartoon-glsl.ts` now and runs at the opaque_fragment site — AFTER every
+  // literal in the atlas — so the atlas's literals followed by the stack is the true order.
+  const stackText = readFileSync(join(ROOT, 'src/app/shimmer/voxel3d/cartoon-glsl.ts'), 'utf8')
+  const glslCode = [...scanned.literals, stackText].map(b => b.replace(/\/\/[^\n]*/g, '')).join('\n')
   const reliefOnAlbedo = /diffuseColor\.rgb\s*\*=[^;]*uReliefShade/.test(glslCode)
   check(reliefOnAlbedo,
     'relief never multiplies diffuseColor — it rides only the light, which the toon stack posterises away')
