@@ -184,6 +184,13 @@ export const DEV_PAGES: DevPage[] = [
     group: 'bench',
     keywords: ['structure', 'house', 'build', 'blocks', 'pad'],
   },
+  {
+    path: '/shimmer/dev/stations',
+    title: 'Station shelf',
+    blurb: 'Every modelled station side by side, drawn by the shipped renderer. Judge the shapes here.',
+    group: 'bench',
+    keywords: ['station', 'model', 'cauldron', 'oven', 'hearth', 'kiln', 'bench', 'shelf'],
+  },
 
   // ── Editors with their own route ────────────────────────────────────────────────────────────
   {

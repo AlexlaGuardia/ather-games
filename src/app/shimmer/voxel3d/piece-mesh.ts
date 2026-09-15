@@ -121,7 +121,7 @@ export const pieceTint = (def: PieceDef): number => {
  * ⚠ Geometry-local position and normal, read BEFORE the instance transform: a tile aligns to the
  * piece's own frame, and rotating the piece rotates its grain with it.
  */
-function createPieceMaterial(
+export function createPieceMaterial(
   tiles: TileArray, opts: { cutout?: boolean } = {}, light: LightUniforms = createLightUniforms(),
 ): PieceMaterial {
   // `cutout`: the pane's program — the glass tiles' alpha is coverage, discarded below half, and

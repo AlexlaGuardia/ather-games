@@ -719,6 +719,26 @@ export const MAT = {
   KILN: 110,
 } as const
 
+/**
+ * ── ★ THE MODELLED BLOCKS (2026-09-15, Alex: "they don't have to make it a block.. take a look at
+ * how minecraft does theirs") ─────────────────────────────────────────────────────────────────
+ * A station is a BLOCK for every rule that matters — its material is its identity (`stationOf`,
+ * `alchemyStationOf`), its job rides the column save keyed by its cell, it is mined, placed, salvaged
+ * and lit by the registry — and it is a MODEL for the eye: the mesher emits no cube faces for these
+ * ids and `station-mesh.ts` draws box-built geometry at each such cell instead (a cauldron with legs,
+ * a mortar with a pestle, a still with a bulb), textured from the block's own tiles. Same split the
+ * flora crosses and the deadfall log already use: the id is the truth, the renderer is the look.
+ * ⚠ Collision is unchanged — the cell is still `isSolid`. ⚠ A modelled id with no model registered
+ * draws as a plain cube from its tiles (`station-models.ts` › fallback), so adding an id here can
+ * never make a station vanish; it only moves who draws it.
+ */
+export const MODELLED_MATS: ReadonlySet<number> = new Set<number>([
+  MAT.CRAFT_TABLE, MAT.SAWMILL, MAT.STONECUTTER,
+  MAT.GRINDER, MAT.STILL, MAT.MIXER, MAT.CAULDRON, MAT.CAULDRON_LIT,
+  MAT.OVEN, MAT.HEARTH, MAT.KILN,
+])
+export const isModelled = (m: number): boolean => MODELLED_MATS.has(m)
+
 /** Every glass id — the cutout pass, the light pass and the mesher rank all ask this, never `=== GLASS`. */
 export const GLASS_MATS: ReadonlySet<number> = new Set<number>([
   MAT.GLASS, MAT.GLASS_VIOLETBLOOM, MAT.GLASS_STORMGRASS, MAT.GLASS_TIDEPETAL, MAT.GLASS_SUNPETAL, MAT.GLASS_DAWNCAP, MAT.GLASS_MOONVINE,

@@ -396,6 +396,7 @@ import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer } from './flora-mesh'
+import { createStationRenderer } from './station-mesh'
 
 /**
  * A chest the player has opened: where it stands, its LIVE contents array, and the call that marks
@@ -4279,6 +4280,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // ★ The pieces take the SAME light uniform objects as the world (light-glsl.ts: shared objects,
   // not shared values) so the ring centre the frame loop writes reaches a beam and its wall alike.
   const pieces = useMemo(() => createPieceRenderer(tiles, lightUniforms), [tiles, lightUniforms])
+  // ★ THE MODELLED STATIONS (2026-09-15) — the mesher emits no cube for a station id; this draws its
+  // model at every such cell, on the pieces' program (same tiles, same stack, same light field).
+  // Invalidated where flora is (edit + adoption), synced where flora is (after the streaming burst).
+  const stations = useMemo(() => tiles ? createStationRenderer(tiles, lightUniforms) : null, [tiles, lightUniforms])
   // ★ A VALUE WRITE, NOT A REBUILD. Both shading paths live in the one compiled program and are
   // selected by a uniform, so changing style costs nothing and creates no second shader program.
   useEffect(() => {
@@ -4293,8 +4298,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     textured?.setCartoon(cartoon)
     glassTextured?.setCartoon(cartoon)   // the window is lit by the same stack as the wall around it
     pieces.setCartoon(cartoon)           // and so is the beam standing against that wall (09-13)
+    stations?.setCartoon(cartoon)        // and the cauldron on the floor (09-15)
     lightUniforms.uToonHour.value = settings.toonHour
-  }, [flatMaterial, textured, settings, pieces, lightUniforms])
+  }, [flatMaterial, textured, settings, pieces, stations, lightUniforms])
   const scratch = useMemo(() => createMeshScratch(SECTION), [])
   const cols = useRef(new Map<string, Column>())
   const drawn = useRef(new Map<string, THREE.Mesh>())
@@ -5605,6 +5611,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // inherits the Wilds' flora for it. Clearing the cache is what makes the two spaces disagree
     // properly. Same hazard `save.ts` namespaces its column records against.
     flora.invalidateAll()
+    stations?.invalidateAll()       // same key collision, same fix (09-15)
     floraDirty.current = true
     // The keeper lands at the plot's derived threshold, or back at spawn in the Wilds. ★ DERIVED,
     // never stored: a coordinate saved before a generator change returns a keeper into rock, and
@@ -6116,6 +6123,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     c.sections[s].set(lx, wy - s * SECTION, lz, mat)
     refreshUniform(c)
     flora.invalidate(k)             // the ground changed — this column's tufts re-derive
+    stations?.invalidate(k)         // and its stations re-scan (a placed or mined cauldron)
     floraDirty.current = true
     remesh(cx, cz)
     if (lx === 0) remesh(cx - 1, cz)
@@ -8728,7 +8736,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           const m = unpackEdits(saved.edits)
           edits.current.set(ek, m)
           const c = cols.current.get(ek)
-          if (c && m.size) { applyEdits(c, m); refreshUniform(c); queueRemesh(gx, gz); flora.invalidate(ek); floraDirty.current = true }
+          if (c && m.size) { applyEdits(c, m); refreshUniform(c); queueRemesh(gx, gz); flora.invalidate(ek); stations?.invalidate(ek); floraDirty.current = true }
           // Pieces come back with their blocks. Occupancy is NOT re-written here — it is already in
           // the block diff, because placing a piece wrote STRUCTURE through `setVoxel`, which is a
           // recorded edit. Writing it twice would be harmless but would double the save.
@@ -8890,6 +8898,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         list.push({ key: kk, x0: gx * SECTION, z0: gz * SECTION })
       }
       flora.sync(list, SEED, plantProbe)
+      // The stations ride the same beat: their cells are a scan of the same columns.
+      stations?.sync(list.map(c => ({ ...c, ySpan: H })), voxel)
     }
 
     // Until the spawn column exists every lookup returns AIR, so gravity would drop the player
@@ -10769,6 +10779,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       <group ref={group} />
       <group ref={dropGroup} />
       <primitive object={pieces.group} />
+      {stations && <primitive object={stations.group} />}
       <primitive object={greg.group} />
       <primitive object={steam.points} />
       <primitive object={smoke.points} />
