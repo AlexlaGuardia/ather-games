@@ -68,11 +68,14 @@ export const MODELS: Readonly<Record<number, StationModel>> = {
       { box: [0.66, 0.18, 0.66, 0, 0.23, 0] },            // lower belly
       { box: [0.82, 0.36, 0.82, 0, 0.50, 0] },            // the wide belly
       { box: [0.70, 0.18, 0.70, 0, 0.77, 0] },            // neck
-      { box: [0.76, 0.14, 0.08, 0, 0.93, -0.34] },                                          // rim, four walls — the tile's rim band
-      { box: [0.76, 0.14, 0.08, 0, 0.93, 0.34] },
-      { box: [0.08, 0.14, 0.76, -0.34, 0.93, 0] },
-      { box: [0.08, 0.14, 0.76, 0.34, 0.93, 0] },
-      { box: [0.60, 0.02, 0.60, 0, 0.87, 0] },                            // the water, recessed inside the rim (top = the cauldron's own dark disc)
+      // Rim walls: sides in the cauldron's own rim band; TOPS in plain clay (the kiln's dome tile away
+      // from its damper) — the cauldron's top tile is the water disc, and a rim wearing it showed the
+      // disc's dark edge as crescents on the lip (Alex's shot, 09-15).
+      { box: [0.76, 0.14, 0.08, 0, 0.93, -0.34], top: MAT.KILN },                          // rim, four walls
+      { box: [0.76, 0.14, 0.08, 0, 0.93, 0.34], top: MAT.KILN },
+      { box: [0.08, 0.14, 0.76, -0.34, 0.93, 0], top: MAT.KILN },
+      { box: [0.08, 0.14, 0.76, 0.34, 0.93, 0], top: MAT.KILN },
+      { box: [0.62, 0.02, 0.62, 0, 0.88, 0] },                            // the water, recessed inside the rim (top = the cauldron's own dark disc)
     ],
   },
 
@@ -87,11 +90,11 @@ export const MODELS: Readonly<Record<number, StationModel>> = {
       { box: [0.66, 0.18, 0.66, 0, 0.23, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
       { box: [0.82, 0.36, 0.82, 0, 0.50, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
       { box: [0.70, 0.18, 0.70, 0, 0.77, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.76, 0.14, 0.08, 0, 0.93, -0.34], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.76, 0.14, 0.08, 0, 0.93, 0.34], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.08, 0.14, 0.76, -0.34, 0.93, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.08, 0.14, 0.76, 0.34, 0.93, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.60, 0.02, 0.60, 0, 0.90, 0], top: MAT.CAULDRON_LIT, side: MAT.CAULDRON },   // the brew, a touch higher — it is boiling
+      { box: [0.76, 0.14, 0.08, 0, 0.93, -0.34], top: MAT.KILN, side: MAT.CAULDRON },
+      { box: [0.76, 0.14, 0.08, 0, 0.93, 0.34], top: MAT.KILN, side: MAT.CAULDRON },
+      { box: [0.08, 0.14, 0.76, -0.34, 0.93, 0], top: MAT.KILN, side: MAT.CAULDRON },
+      { box: [0.08, 0.14, 0.76, 0.34, 0.93, 0], top: MAT.KILN, side: MAT.CAULDRON },
+      { box: [0.62, 0.02, 0.62, 0, 0.90, 0], top: MAT.CAULDRON_LIT, side: MAT.CAULDRON },   // the brew, a touch higher — it is boiling
     ],
   },
 }
