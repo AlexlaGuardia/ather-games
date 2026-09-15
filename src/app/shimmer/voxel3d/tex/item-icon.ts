@@ -31,7 +31,7 @@ import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
 import { meshIcon, hasMeshIcon, pieceIcon } from './mesh-icon'
 import { pieceForItem } from '../../voxel/pieces'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
-import { leafPixels, bladePixels, headPixels, HEAD_TINTS, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
+import { leafPixels, bladePixels, tallBladePixels, TALL_TILE_H, headPixels, HEAD_TINTS, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
 import { isPlant, isSapling, isGlassMat, MAT } from '../../voxel/depth'
 const rgbOf3 = (hex: number): [number, number, number] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255]
@@ -353,9 +353,11 @@ export function crossIcon(side: Uint8Array, size = ICON, tile = TILE): Uint8Arra
  * top-down icon it draws grass hanging from the ceiling — the same mistake, in the same texture,
  * that Alex caught on sight in the world mesh. `flip` undoes it for surfaces that draw downward.
  */
-const FLORA: Record<string, { pixels: () => Uint8Array; src: number; tint?: number }> = {
+const FLORA: Record<string, { pixels: () => Uint8Array; src: number; srcH?: number; tint?: number }> = {
   grass_tuft: { pixels: () => bladePixels(TUFT_SEED, TUFT_BLADES, BLADE_TILE), src: BLADE_TILE },
-  tall_grass: { pixels: () => bladePixels(TALL_SEED, TALL_BLADES, BLADE_TILE), src: BLADE_TILE },
+  // The tall tile is 32×64 (`srcH`); the icon squashes it into its square, which is the right
+  // read for a bag slot — a knee-high stand seen as a thumbnail, not a cropped half of one.
+  tall_grass: { pixels: () => tallBladePixels(TALL_SEED, TALL_BLADES), src: BLADE_TILE, srcH: TALL_TILE_H },
   // The heads are painted white so a tint carries the whole hue; the icon takes the first bloom
   // colour rather than inventing one, so it is a flower the world actually grows.
   wild_flower: { pixels: () => headPixels(8), src: 8, tint: HEAD_TINTS[3] },
@@ -365,14 +367,14 @@ const FLORA: Record<string, { pixels: () => Uint8Array; src: number; tint?: numb
 function floraIcon(itemId: string, size = ICON): Uint8Array | null {
   const f = FLORA[itemId]
   if (!f) return null
-  const src = f.pixels(), n = f.src
+  const src = f.pixels(), n = f.src, nh = f.srcH ?? n
   const tr = f.tint === undefined ? 1 : ((f.tint >> 16) & 255) / 255
   const tg = f.tint === undefined ? 1 : ((f.tint >> 8) & 255) / 255
   const tb = f.tint === undefined ? 1 : (f.tint & 255) / 255
   const out = new Uint8Array(size * size * 4)
   for (let y = 0; y < size; y++) {
     // ★ THE FLIP: destination row 0 is the TOP, source row 0 is the BOTTOM.
-    const sy = Math.min(n - 1, n - 1 - (((y * n) / size) | 0))
+    const sy = Math.min(nh - 1, nh - 1 - (((y * nh) / size) | 0))
     for (let x = 0; x < size; x++) {
       const sx = Math.min(n - 1, ((x * n) / size) | 0)
       const si = (sy * n + sx) * 4

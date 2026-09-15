@@ -24,9 +24,18 @@ export const BLADE_GREEN: [number, number, number] = [86, 158, 66]
 /** The five bloom hues the flower heads are tinted with. `wild_flower`'s icon takes the first. */
 export const HEAD_TINTS = [0xf2f4ee, 0xe8c95a, 0xb08ae0, 0x8ec7e8, 0xe8a0b4]
 
+/** A shared LCG so every tile is deterministic — same seed, same pixels, forever. */
+const lcg = (seed: number) => {
+  let s = seed
+  return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 4294967296 }
+}
+
 /** The two blade tiles the world actually instances — seeds fixed so a tuft looks like THE tuft. */
 export const TUFT_SEED = 0x5eaf, TUFT_BLADES = 9
-export const TALL_SEED = 0x77c1, TALL_BLADES = 7
+export const TALL_SEED = 0x77c1, TALL_BLADES = 13
+/** The tall tile is twice as high as it is wide — a knee-high stand drawn on a square tile was
+ *  stretched 1.5× and every blade came out a thick dark spike. Width `BLADE_TILE`, height this. */
+export const TALL_TILE_H = 64
 /** Tile edge. 32, not 16: a blade needs room to be 3 texels wide at the root and 1 at the tip, and
  *  at 16 the taper has one step in it and reads as a bar. Both consumers read this, not a literal. */
 export const BLADE_TILE = 32
@@ -101,6 +110,56 @@ export function bladePixels(seed: number, blades: number, size = BLADE_TILE): Ui
   return data
 }
 
+/**
+ * Tall grass: a knee-high stand of THIN blades that arch over at the top, on a 32×64 tile.
+ *
+ * ── ★ WHY IT IS NOT `bladePixels` AT A BIGGER SIZE (2026-09-15, Alex: "next up the tall grass") ──
+ * The tuft painter on a square tile, drawn 1.05 blocks tall, came out as a fan of thick dark
+ * spikes — a yucca, not grass. Three things separate a stand of tall grass from a tuft, and each
+ * is a line below: the blades are THIN for their height (2 texels at the root on a 64-tall tile,
+ * where the tuft is 3–4 on 32); they ARCH — the curve is cubic, so a blade rises nearly straight
+ * and then bends over in its top third, the way a long blade gives under its own weight; and the
+ * stand is LIGHTER and goes to straw at the tips, because tall grass is what the sun reaches first
+ * and what dries first. Painted around `BLADE_GREEN` so the ground multiplier still applies.
+ *
+ * ⚠ ROW 0 IS THE BOTTOM, same as every tile here.
+ */
+export function tallBladePixels(seed: number, blades: number, w = BLADE_TILE, h = TALL_TILE_H): Uint8Array {
+  const data = new Uint8Array(w * h * 4)
+  const rnd = lcg(seed)
+  const put = (x: number, y: number, shade: number, warm: number) => {
+    if (x < 0 || x >= w || y < 0 || y >= h) return
+    const o = (y * w + x) * 4
+    data[o] = Math.max(0, Math.min(255, BLADE_GREEN[0] + shade + warm))
+    data[o + 1] = Math.max(0, Math.min(255, BLADE_GREEN[1] + shade + warm * 0.75))
+    data[o + 2] = Math.max(0, Math.min(255, BLADE_GREEN[2] + shade * 0.6 - warm * 0.6))
+    data[o + 3] = 255
+  }
+  const rootSpan = w * 0.7
+  for (let b = 0; b < blades; b++) {
+    const depth = b / Math.max(1, blades - 1)
+    const rx = w / 2 + (rnd() - 0.5) * rootSpan
+    const bh = h * (0.5 + rnd() * 0.45 + (1 - depth) * 0.05)
+    const off = (rx - w / 2) / (rootSpan / 2)
+    const side = Math.abs(off) < 0.25 ? (rnd() < 0.5 ? -0.5 : 0.5) : Math.sign(off)
+    // Cubic: almost no lean for the first half, then the top arches over — up to a third of the
+    // tile's width, which is what makes a stand read as heavy-headed rather than bristling.
+    const arch = side * w * (0.22 + rnd() * 0.3) + (rnd() - 0.5) * w * 0.05
+    const baseW = 1.6 + rnd() * 1.0
+    const depthShade = -26 + depth * 34 + 8                    // a shade lighter than the tuft
+    for (let y = 0; y < bh; y++) {
+      const t = y / bh
+      const cx = Math.max(1, Math.min(w - 2, rx + arch * t * t * t))
+      const wd = Math.max(1, Math.round(baseW * (1 - t * 0.6)))
+      const shade = depthShade + t * 28 + (rnd() - 0.5) * 8
+      const warm = t * t * t * 34                                // straw at the very tip
+      const x0 = Math.round(cx - wd / 2)
+      for (let dx = 0; dx < wd; dx++) put(x0 + dx, y, shade, warm)
+    }
+  }
+  return data
+}
+
 /** Flower head: a white bloom (petal ring + warm core) that a tint colours. */
 export function headPixels(size = 8): Uint8Array {
   const data = new Uint8Array(size * size * 4)
@@ -168,12 +227,6 @@ export function leafPixels(size = 16, seed = 0x1eaf): Uint8Array {
 // painted around `BLADE_GREEN` so the ground multiplier tints them, bloom parts are painted WHITE
 // so a `HEAD_TINTS` colour is the whole hue — and the same reason for living here: both the world
 // and the icon derive from these, so the flower in the bag is the flower the world grows.
-
-/** A shared LCG so every tile is deterministic — same seed, same pixels, forever. */
-const lcg = (seed: number) => {
-  let s = seed
-  return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 4294967296 }
-}
 
 /**
  * Bush body: a rounded leafy mass with a ragged rim and cutout corners, painted green. Darker at

@@ -17,7 +17,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { bladePixels, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
+import { bladePixels, tallBladePixels, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
 import { FLORA } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
@@ -551,8 +551,8 @@ export function floraBounds(
  * what a tuft looks like, which is exactly what `item-icon.ts` refuses for blocks. The fills are
  * three-free now; all that lives here is the GPU wrapper.
  */
-function toTexture(data: Uint8Array, size: number): THREE.DataTexture {
-  const t = new THREE.DataTexture(data, size, size)
+function toTexture(data: Uint8Array, size: number, height = size): THREE.DataTexture {
+  const t = new THREE.DataTexture(data, size, height)
   t.magFilter = THREE.NearestFilter
   t.minFilter = THREE.NearestFilter
   t.colorSpace = THREE.SRGBColorSpace
@@ -678,7 +678,7 @@ export function createFloraRenderer(): FloraRenderer {
     new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, depthWrite: false })
 
   const bladeTex = makeBladeTexture(TUFT_SEED, TUFT_BLADES)
-  const tallTex = makeBladeTexture(TALL_SEED, TALL_BLADES)
+  const tallTex = toTexture(tallBladePixels(TALL_SEED, TALL_BLADES), BLADE_TILE, TALL_TILE_H)
   const headTex = makeHeadTexture()
   const bushTex = toTexture(bushPixels(), 32)
   const clusterTex = toTexture(bloomClusterPixels(), 32)
