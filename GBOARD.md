@@ -45,8 +45,8 @@ infusion earns the whole chain through a mixed base; tier 1 is held at two stati
    salve +50 hp, crystal elixir +75 shield, bread +30 hp, harvest brew jumps crops 3m, the 8 buffs set a wall-
    clock timer (saved in `PlayerSave.buffs`, chips bottom-left). **WIRED hooks:** fleetfoot/dawn speed
    (`LocoState.speedMult`), ather_flow regen, starlight/dawn XP at mining + rinning, angler's eye rise time.
-   **NOT wired (chip dims, line says "not felt here yet"):** kindred (no companion assist here), deepsight (no
-   gather bonus-find here), dreamwalk (mist encounters do not read it yet). The four elemental infusions REFUSE
+   **dreamwalk** = `mist.setCalm` (no presence steps out of a patch; the mist body stays). **NOT wired (chip dims, line
+   says "not felt here yet"):** kindred (no companion assist here), deepsight (no gather bonus-find here). The four elemental infusions REFUSE
    (they go on a spirit; nothing applies them). **Hearth** still has no verb: an open-fire dish needs an
    Ather-side recipe canon has not named (cuisine.md's roster is mortal-side) → gap queued.
 4. ~~Magii's ruling → rename~~ done 09-15. Alex judges the three block looks — the mortar tile still paints a TURNING stone (a quern look); a mortar wants a pestle, which the ALIVE pass (pestle circles) draws anyway.

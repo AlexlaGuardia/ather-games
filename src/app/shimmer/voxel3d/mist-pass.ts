@@ -103,6 +103,13 @@ export interface MistPass {
   ): Resident | null
   /** Swap the withdrawal ledger in (after a spar) so the sparred presence leaves at once. */
   setLedger(l: MistLedger): void
+  /**
+   * Dreamwalk (2026-09-15): while calm, no presence steps out of any patch — the mist itself stays
+   * (it is the PLACE, and the pools are how you find it), but nothing in it acknowledges you, so
+   * there is no prompt and no spar. The host reads the buff each frame and hands the answer here,
+   * the same way it hands the ledger; this file never asks what a potion is.
+   */
+  setCalm(calm: boolean): void
   tick(px: number, py: number, pz: number, dt: number, elapsed: number): void
   dispose(): void
 }
@@ -442,6 +449,7 @@ void main() {
   let current: MistPatch | null = null
   let thick = 0
   let ledger: MistLedger = ledger0
+  let calm = false                     // Dreamwalk — see `setCalm`
   /** Every present resident this rescan, and the closest one within SPAR_RANGE. */
   let present: Resident[] = []
   let closest: Resident | null = null
@@ -483,6 +491,7 @@ void main() {
     // A spar just happened: take the new ledger and force a rescan on the next tick so the spirit
     // that withdrew is GONE immediately rather than lingering until the 0.8s clock comes round.
     setLedger(l) { ledger = l; rescan = 0 },
+    setCalm(c) { if (c !== calm) { calm = c; rescan = 0 } },   // re-diff at once: presences leave, or return
 
     tick(px, py, pz, dt, elapsed) {
       void py
@@ -526,7 +535,10 @@ void main() {
         // difference is exactly the two canon rules.
         const now = Date.now()
         present = []
-        for (const p of near) {
+        // ★ Dreamwalk: a calm keeper meets nobody. The gate sits HERE, on the list every other
+        // read derives from (`nearest`, `aimed`, the meshes), so a calm mist cannot prompt, cannot
+        // spar and shows no silhouette — one rule, not three.
+        if (!calm) for (const p of near) {
           const r = residentAt(p, zoneAt(p.x, p.z, seed).zone?.id, ledger, now)
           if (r) present.push(r)
         }

@@ -45,9 +45,10 @@ export interface ConsumeEffect {
  *   starlight   — mining + rinning XP
  *   anglers_eye — a cast's rise time
  *   dawn        — its speed and XP halves (the find half has no gather-bonus to add to here)
+ *   dreamwalk   — `mist.setCalm`: no presence steps out of a patch while it runs (09-15)
  * ⚠ Extend this ONLY by wiring a hook; `consume.test.ts` reads the host to check each name.
  */
-export const WIRED_BUFFS: ReadonlySet<BuffId> = new Set<BuffId>(['fleetfoot', 'ather_flow', 'starlight', 'anglers_eye', 'dawn'])
+export const WIRED_BUFFS: ReadonlySet<BuffId> = new Set<BuffId>(['fleetfoot', 'ather_flow', 'starlight', 'anglers_eye', 'dawn', 'dreamwalk'])
 
 /** Is this a thing you can swallow at all? Null for everything else, INCLUDING the four infusions. */
 export function consumeEffect(itemId: string): ConsumeEffect | null {

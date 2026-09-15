@@ -56,7 +56,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     ather_flow:  ['manaRegenMult(buffs.current'],
     starlight:   ['gatherXpMult(buffs.current'],
     anglers_eye: ['rinTune(buffs.current'],
-    kindred: [], deepsight: [], dreamwalk: [],
+    dreamwalk:   ['mist.setCalm(suppressEncounters(buffs.current'],
+    kindred: [], deepsight: [],
   }
   for (const b of WIRED_BUFFS) {
     const needles = hooks[b]
@@ -74,6 +75,10 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // The locomotion hook is a real multiplier on the walk/run target and nothing else.
   const loco = codeOnly(readFileSync(new URL('./locomotion.ts', import.meta.url), 'utf8'))
   ok(loco.includes('* s.speedMult'), '§3 locomotion scales the ramped target by speedMult')
+  // The mist gate: the calm flag sits on the ONE list every presence read derives from.
+  const mistSrc = codeOnly(readFileSync(new URL('./mist-pass.ts', import.meta.url), 'utf8'))
+  ok(mistSrc.includes('if (!calm) for (const p of near) {'), '§3 ★ dreamwalk gates the present list itself, not a symptom of it')
+  ok(mistSrc.includes('setCalm(c) { if (c !== calm) { calm = c; rescan = 0 } }'), '§3 and a change re-diffs at once (presences leave or return the same tick)')
   ok(!loco.includes('CROUCH_SPEED * s.speedMult') && !loco.includes('DRAINED_SPEED * s.speedMult'), '§3 and never the crouch or the drain cap')
 }
 

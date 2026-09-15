@@ -262,7 +262,7 @@ import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
 import { rightClickIntent } from './interact'
 import { consumeEffect, consumeRefusal, consumeLine, isConsumable } from './consume'
-import { drinkBuff, pruneBuffs, manaRegenMult, gatherXpMult, speedMult, rinTune, type ActiveBuffs } from '../engine/potion-effects'
+import { drinkBuff, pruneBuffs, manaRegenMult, gatherXpMult, speedMult, rinTune, suppressEncounters, type ActiveBuffs } from '../engine/potion-effects'
 import { BuffChips } from './buff-chips'
 import { alchemyStationOf, alchemySalvage, ALCHEMY_STATIONS, intermediateLabel, type AlchemyStationId } from './alchemy-chain'
 import { AlchemyPanel } from './alchemy-panel'
@@ -7417,6 +7417,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // NOTHING and throws nothing (the meshes start hidden), so suspect this line before the shader.
     seam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime, space.current)
     if (ledgerSeen.current !== mistLedger.current) { ledgerSeen.current = mistLedger.current; mist.setLedger(mistLedger.current) }
+    mist.setCalm(suppressEncounters(buffs.current, Date.now()))   // Dreamwalk: no presence steps out while it runs
     mist.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
     // ── ★★★ RING 2 — the keeper's resting spirits, wandering the fold ──────────────────────────
     // ⚠ PLOT SPACE ONLY. These are the spirits at HOME; ticking them in the Wilds would scatter the
