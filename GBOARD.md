@@ -11,6 +11,40 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⚗️ Shimmer — **THE ALCHEMY CHAIN: GRIND · DISTIL · MIX · BREW, AND THE WORD PICKS THE ROUTE** (2026-09-14 late, hub lane `417e69be`, beside a spirits window on flora) · *Last touched 2026-09-15 — ✅ **DEPLOYED `BUILD_ID iVAPM7_2YINDsSdCTE26m` from `6531790`** (worker repin `743c844`), served == disk; superseded the same night by spirits' `LBRhO2E-ThoqVdgRSnvIx` from `f4e8c1f` (fruit bushes), which carries it. alchemy-chain 172/0 · recipes 77/0 · brew 52/0 · interact 47 · console 159/0 · workshop 96/0 · atlas-wiring 49/0 (stale reads fixed, `69bf1ef`). tsc 7 (baseline).*
+
+**Left off:** Alex: *"break the process down into steps to make a potion.. like grinding up a powder, distilling, mixing,
+and brewing as different stations."* Built the night he said it. The vessels brief already rules **the word is the method**,
+so the stations are the four verbs and the LAST WORD of a potion's name routes it: every ingredient is prepped by kind
+(dry → powder at the grinder, wet → extract at the still), then the word names the finish — cauldron
+(draught/brew/cordial/infusion) · mixing vessel (tonic/salve/philter, no fire) · still (elixir/tincture/essence). The
+infusion earns the whole chain through a mixed base; tier 1 is held at two stations by the test.
+- `voxel3d/alchemy-chain.ts` = the pure model (stations, kinds, derived rows per station, routes, job maths on the
+  workshop's `StationJob` so runs persist with the column). NOT `RECIPES` rows — that table's law is hand-makeable
+  anywhere. `alchemy-panel.tsx` = the station UI; mana on load, XP on take, chests beside it feed it.
+- Blocks `GRINDER` / `STILL` / `MIXER` (craftable at the table) + **`CAULDRON_LIT`** — the running cauldron as a STATE
+  (unplaceable, drops the cauldron, emit 9, gold brew top with emissive alpha, steams). Swapped on load / last take;
+  `setVoxel`'s job cleanup knows the two are one station; breaking any station mid-run salvages.
+- Intermediates (`powder_*` / `extract_*` / `base_*`) get **generated icons** at the source's own tint (mound / drop /
+  bowl). `/give` knows them. Spirits' fruit bushes (`f4e8c1f`) made sunfruit + moonberry real, so every row is reachable.
+- ⚠ **Names are placeholders.** Canon names only the cauldron. `CANON_GAPS` `[OPEN]` 2026-09-14 (athernyx `0f04afe`),
+  dbr to magii queued: what the Ather calls the three vessels and what each is made of.
+
+**Next:**
+1. ⛔ **ALEX WALKS THE CHAIN** — craft the three, grind 5 shards, brew a Mana Draught; call the run times (grind 3s ·
+   distil 8s · mix 5s · brew 12s · cordial 30s) and the lit-cauldron look.
+2. **The alive pass:** grinding as a HELD action (pestle circles, progress ring); the still drips over real time;
+   bubbles on the running cauldron beyond the painted dots.
+3. Magii's ruling → rename `ALCHEMY_STATIONS[*].name` + the recipe names; Alex judges the three block looks.
+
+**Decisions:** four verbs, not four hoops — the word routes, so tier 1 stays a short walk · a bulb and a fruit are
+'dry' for the WALK (harvest brew / salve at two stations), the test decided · the lit cauldron is a material because
+the render flood keys emission off the material · the instant brew list survives only behind the owner's `/brew`.
+
+**Files:** `voxel3d/alchemy-chain.ts` + `.test.ts` · `voxel3d/alchemy-panel.tsx` · `voxel/depth.ts` (104–107) ·
+`voxel/registry.ts` · `voxel/recipes.ts` · `voxel3d/attrs.ts` · `voxel3d/tex/tiles.ts` (four painters) ·
+`voxel3d/tex/item-icon.ts` (`alchemyIcon`) · `voxel3d/interact.ts` · `voxel3d/smoke-sources.ts` · `VoxelWorld.tsx`.
+
 ## 🪟 Shimmer — **THE LIT WINDOW: A PANE GLOWS AT NIGHT WITH THE ROOM BEHIND IT** (2026-09-14 PM, hub lane `417e69be`, beside a spirits window on flora) · *Last touched 2026-09-14 — ✅ **PROD `BUILD_ID cdR6sEunoFEYFgyK0k8BP` from `78ef0f0`** (carries spirits' `6f7c256`), served == disk on the glow chunk. light-glsl 51/0 (§5 new, 3 mutations fire) · console 159/0 · glass 69/0 · cartoon-stack 30/0. tsc 7 (baseline).*
 
 **Left off:** research #2 built. The pane's cutout program adds an emissive = the light field's BLOCK channel one cell
