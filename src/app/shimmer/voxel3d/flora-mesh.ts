@@ -17,9 +17,9 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
+import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, fruitClusterPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
-import { FLORA } from '../voxel/flora'
+import { FLORA, FRUIT_MATS } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
 import { MAT } from '../voxel/depth'
 
@@ -134,7 +134,7 @@ export const FLORA_COLORS = {
  * over when it was 66% under. Agreement between a copy and its original is not evidence about
  * either; import this instead of restating it.
  */
-export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000 } as const
+export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, fruit: 3000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000 } as const
 
 /**
  * ★★★ A POOL THAT OVERFLOWS SAYS SO — ONCE, PER POOL, WITH THE NUMBER.
@@ -195,6 +195,12 @@ const CROP_HEAD: Readonly<Record<number, number>> = {
   [MAT.SHIMMERBLOOM]: 0xfff0d0,  // sun on a shore petal
   [MAT.ATHERWHEAT]: 0xf0d890,    // ripe grain, the one everybody recognises
   [MAT.DAWNCAP]: 0xffc890,       // first light, warmest note in the world
+}
+
+/** The FRUIT on each bush — canon's own words: a warm golden fruit; cool blue berries. */
+const FRUIT_TINT: Readonly<Record<number, number>> = {
+  [MAT.SUNFRUIT_BUSH]: 0xf2b23a,
+  [MAT.MOONBERRY_BUSH]: 0x6cb8f0,
 }
 
 const HERB_TIP: Readonly<Record<number, number>> = {
@@ -381,6 +387,8 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
     { w: 1.0, h: 0, yBase: 0.04, flat: true },
   ],
   [FLORA.BLOOM_BUSH]: [{ w: 0.85, h: 0.7 }, { w: 0.7, h: 0.45, yBase: 0.4 }],
+  // A fruit bush is the bloom bush's shape a little bigger, with fruit where the blooms were.
+  [FLORA.FRUIT]: [{ w: 0.9, h: 0.78 }, { w: 0.74, h: 0.46, yBase: 0.28 }],
   // A herb stands taller than a wildflower and shorter than tall grass: findable at a few blocks
   // without hiding what is behind it. Body plus tip.
   [FLORA.HERB]: [{ w: 0.55, h: 0.8 }, { w: 0.34, h: 0.34, yBase: 0.72 }],
@@ -402,6 +410,7 @@ export const FLORA_SWAY: Record<number, number> = {
   [FLORA.FLOWER]: 0.14,
   [FLORA.BLOOM_MAT]: 0.015,   // a pad lying on the ground barely moves; uv.y is its far edge
   [FLORA.BLOOM_BUSH]: 0.06,
+  [FLORA.FRUIT]: 0.05,
   [FLORA.HERB]: 0.1,
   [FLORA.CROP]: 0.08,
 }
@@ -418,6 +427,7 @@ export const FLORA_PLACE: Record<number, { root: number; jitter: number }> = {
   [FLORA.FLOWER]: { root: 0.97, jitter: 0.3 },
   [FLORA.BLOOM_MAT]: { root: 0.97, jitter: 0.04 },   // a pad covers its cell; it does not wander
   [FLORA.BLOOM_BUSH]: { root: 0.97, jitter: 0.2 },
+  [FLORA.FRUIT]: { root: 0.97, jitter: 0.15 },
   [FLORA.HERB]: { root: 0.97, jitter: 0.3 },
   [FLORA.CROP]: { root: 0.97, jitter: 0.3 },
   [FLORA.ROCK]: { root: 1.06, jitter: 0.5 },
@@ -718,6 +728,13 @@ export function createFloraRenderer(): FloraRenderer {
   const matLeafTex = toTexture(matLeafPixels(), 32)
   const matBloomTex = toTexture(matBloomPixels(), 32)
   const matShadowTex = toTexture(matShadowPixels(), 32)
+  // ★ ONE TEXTURE, TWO COLUMNS, ONE MESH: a sunfruit bush carries a few big fruit, a moonberry
+  // bush many small berries — the same atlas trick the grasses use, with the column chosen by
+  // MATERIAL rather than by roll (see `FRUIT_COL`). The fruit card has no per-card spread.
+  const fruitTex = toTexture(
+    bladeAtlasPixels(0xf7a1, FRUIT_MATS.length, 32, 32,
+      (sd, col) => col === 0 ? fruitClusterPixels(32, sd, 4, 0.13) : fruitClusterPixels(32, sd, 9, 0.07)),
+    32 * FRUIT_MATS.length, 32)
 
   // ★ EVERY WIDTH AND HEIGHT COMES FROM `FLORA_PARTS`, WHICH THE RETICLE'S OUTLINE ALSO MEASURES.
   // The reasoning behind each number lives on the table; restating one here would give the outline
@@ -733,6 +750,8 @@ export function createFloraRenderer(): FloraRenderer {
   const matShadowGeo = crossGeo(FLORA.BLOOM_MAT, 3)
   const bushGeo = crossGeo(FLORA.BLOOM_BUSH)
   const bushHeadGeo = crossGeo(FLORA.BLOOM_BUSH, 1)
+  const fruitBushGeo = crossGeo(FLORA.FRUIT)
+  const fruitGeo = crossGeo(FLORA.FRUIT, 1)
   const herbGeo = crossGeo(FLORA.HERB)
   const cropGeo = crossGeo(FLORA.CROP)
   // The head rides at the top of a full-height stalk. Scaled with the stalk by the instance matrix,
@@ -798,6 +817,8 @@ export function createFloraRenderer(): FloraRenderer {
   })
   const bushMat = swayMaterial(bushTex, FLORA_SWAY[FLORA.BLOOM_BUSH])
   const bushHeadMat = swayMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_BUSH])
+  const fruitBushMat = swayMaterial(bushTex, FLORA_SWAY[FLORA.FRUIT])
+  const fruitMat = swayMaterial(fruitTex, FLORA_SWAY[FLORA.FRUIT], FRUIT_MATS.length)
 
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, CAP.tuft)
   const talls = new THREE.InstancedMesh(tallGeo, tallMat, CAP.tall)
@@ -829,6 +850,16 @@ export function createFloraRenderer(): FloraRenderer {
   const bushHeads = new THREE.InstancedMesh(bushHeadGeo, bushHeadMat, CAP.bush)
   bushes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.bush * 3), 3)
   bushHeads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.bush * 3), 3)
+  // The fruit bush: body in the bush's own leaf colour (a multiplier over the green tile, like a
+  // blade over its ground), fruit in FRUIT_TINT. Same two arithmetics as everything above.
+  const fruitBushes = new THREE.InstancedMesh(fruitBushGeo, fruitBushMat, CAP.fruit)
+  const fruits = new THREE.InstancedMesh(fruitGeo, fruitMat, CAP.fruit)
+  fruitBushes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
+  fruits.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
+  const fruitTile = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit), 1).setUsage(THREE.DynamicDrawUsage)
+  fruitGeo.setAttribute('aTile', fruitTile)
+  /** The atlas column for a fruit material — the order `FRUIT_MATS` lists them in. */
+  const FRUIT_COL = new Map<number, number>(FRUIT_MATS.map((m, i) => [m, i]))
   const herbs = new THREE.InstancedMesh(herbGeo, herbMat, CAP.herb)
   const tips = new THREE.InstancedMesh(tipGeo, tipMat, CAP.herb)
   const crops = new THREE.InstancedMesh(cropGeo, cropMat, CAP.crop)
@@ -851,7 +882,7 @@ export function createFloraRenderer(): FloraRenderer {
   shroomStems.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
   shroomCaps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
 
-  for (const m of [tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps]) {
+  for (const m of [tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -859,7 +890,7 @@ export function createFloraRenderer(): FloraRenderer {
   }
 
   const group = new THREE.Group()
-  group.add(tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps)
+  group.add(tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
   // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
@@ -887,6 +918,9 @@ export function createFloraRenderer(): FloraRenderer {
     { kind: FLORA.BLOOM_MAT, geo: matStarGeo, mat: outlineMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_MAT]), grow: 1 },
     { kind: FLORA.BLOOM_BUSH, geo: bushGeo, mat: outlineMaterial(bushTex, FLORA_SWAY[FLORA.BLOOM_BUSH]), grow: 1 },
     { kind: FLORA.BLOOM_BUSH, geo: bushHeadGeo, mat: outlineMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_BUSH]), grow: 1 },
+    // The fruit card's column is chosen by MATERIAL and `setHighlight` is handed a kind, not a
+    // material — so the border marks the bush body only. A bush's silhouette IS the body.
+    { kind: FLORA.FRUIT, geo: fruitBushGeo, mat: outlineMaterial(bushTex, FLORA_SWAY[FLORA.FRUIT]), grow: 1 },
     { kind: FLORA.HERB, geo: herbGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
     { kind: FLORA.HERB, geo: tipGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
     { kind: FLORA.CROP, geo: cropGeo, mat: outlineMaterial(cropStalkTex, FLORA_SWAY[FLORA.CROP]), grow: 1 },
@@ -963,11 +997,11 @@ export function createFloraRenderer(): FloraRenderer {
   return {
     group,
     sync(cols, seed, probe) {
-      let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0
+      let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0
       // ⚠ WANTED IS COUNTED SEPARATELY FROM DRAWN, and that separation is the whole instrument.
       // The `n*` counters stop at the cap by construction, so they can never report an overrun —
       // they are the truncated number. These count what the world ASKED for.
-      let wT = 0, wL = 0, wF = 0, wM = 0, wB = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0
+      let wT = 0, wL = 0, wF = 0, wM = 0, wB = 0, wFr = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0
       for (const c of cols) {
         for (const s of spotsFor(c.key, c.x0, c.z0, seed, probe)) {
           // ★ ONE PLACEMENT DERIVATION, SHARED WITH THE RETICLE'S OUTLINE. Jitter, turn, root
@@ -1044,6 +1078,20 @@ export function createFloraRenderer(): FloraRenderer {
               nM++
             }
           }
+          else if (s.kind === FLORA.FRUIT) {
+            wFr++
+            if (nFr < CAP.fruit) {
+              fruitBushes.setMatrixAt(nFr, mtx)
+              fruits.setMatrixAt(nFr, mtx)
+              // Leaf colour over the green tile — the blade arithmetic (target / BLADE_GREEN).
+              const leaf = MATERIAL_COLOR[s.mat] ?? 0x569e42
+              fruitBushes.setColorAt(nFr, tint.setRGB(
+                ((leaf >> 16) & 255) / BLADE_GREEN[0], ((leaf >> 8) & 255) / BLADE_GREEN[1], (leaf & 255) / BLADE_GREEN[2]))
+              fruits.setColorAt(nFr, tint.set(FRUIT_TINT[s.mat] ?? 0xffffff))
+              fruitTile.setX(nFr, FRUIT_COL.get(s.mat) ?? 0)
+              nFr++
+            }
+          }
           else if (s.kind === FLORA.BLOOM_BUSH) {
             wB++
             if (nB < CAP.bush) {
@@ -1068,13 +1116,14 @@ export function createFloraRenderer(): FloraRenderer {
       tufts.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
       matLeaves.count = nM; matBlooms.count = nM; matStars.count = nM; matShadows.count = nM
       bushes.count = nB; bushHeads.count = nB
+      fruitBushes.count = nFr; fruits.count = nFr
       herbs.count = nH; tips.count = nH
       crops.count = nC; cropHeads.count = nC
       // ★ REPORT DEMAND, NOT JUST WHAT FIT. A pool at 100% of cap and a pool at 199% of cap draw
       // exactly the same picture; only these numbers tell them apart.
       for (const [pool, wanted, cap] of [
         ['tuft', wT, CAP.tuft], ['tall', wL, CAP.tall], ['flower', wF, CAP.flower],
-        ['mat', wM, CAP.mat], ['bush', wB, CAP.bush],
+        ['mat', wM, CAP.mat], ['bush', wB, CAP.bush], ['fruit', wFr, CAP.fruit],
         ['herb', wH, CAP.herb], ['crop', wC, CAP.crop],
         ['rock', wR, CAP.rock], ['log', wG, CAP.log], ['shroom', wS, CAP.shroom],
       ] as [string, number, number][]) {
@@ -1090,11 +1139,12 @@ export function createFloraRenderer(): FloraRenderer {
       talls.instanceMatrix.needsUpdate = true
       tuftTile.needsUpdate = true
       tallTile.needsUpdate = true
+      fruitTile.needsUpdate = true
       if (tufts.instanceColor) tufts.instanceColor.needsUpdate = true
       if (talls.instanceColor) talls.instanceColor.needsUpdate = true
       stems.instanceMatrix.needsUpdate = true
       heads.instanceMatrix.needsUpdate = true
-      for (const m of [matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads]) {
+      for (const m of [matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits]) {
         m.instanceMatrix.needsUpdate = true
         if (m.instanceColor) m.instanceColor.needsUpdate = true
       }
@@ -1154,9 +1204,9 @@ export function createFloraRenderer(): FloraRenderer {
       // its plant's, which is disposed above.
       for (const h of hlMeshes) if (h.kind === FLORA.TUFT || h.kind === FLORA.TALL) h.geo.dispose()
       // The flower forms (2026-09-14/15): geometry, material, texture — same three each.
-      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo]) g.dispose()
-      for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat]) m.dispose()
-      for (const t of [bushTex, clusterTex, matLeafTex, matBloomTex, matShadowTex]) t.dispose()
+      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, fruitGeo]) g.dispose()
+      for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat]) m.dispose()
+      for (const t of [bushTex, clusterTex, matLeafTex, matBloomTex, matShadowTex, fruitTex]) t.dispose()
     },
   }
 }

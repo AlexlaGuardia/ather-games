@@ -100,10 +100,12 @@ const full = () => 0
   ok(brewBlocker(draught, 1, 0, rich, inWorld, full) === 'room',
     'and a full bag outranks empty mana for the same reason')
   // ⚠ THESE THREE USED TO BE ASKED OF `mana_infusion`, WHOSE HERB THIS WORLD DID NOT GROW. Canon
-  // ruled the herbs wild on 2026-08-18 and that row went live, so the question moved to a brew that
-  // is still stranded — `shimmer_salve` (shimmerscale + sunfruit, both play3d's). The RULE being
-  // asserted has not changed by a word; only the row that can still demonstrate it has.
-  const stranded = POTION_DEFS.shimmer_salve   // tier 1, alchemy 3, and unreachable here
+  // ruled the herbs wild on 2026-08-18 and that row went live, so the question moved to
+  // `shimmer_salve` — and on 2026-09-15 the fruit bushes went live and THAT row opened too. There
+  // is no stranded brew left in the table to ask this of, so the rule is asked of a brew that
+  // cannot exist: a synthetic def naming an ingredient no registry row will ever drop. The RULE
+  // being asserted has not changed by a word; only the fixture that can still demonstrate it has.
+  const stranded = { ...POTION_DEFS.shimmer_salve, id: 'never_brew', recipe: [{ itemId: 'ingredient_from_nowhere', count: 1 }] }
   ok(brewBlocker(stranded, 99, 99, rich, inWorld, roomy) === 'absent',
     'an absent ingredient outranks everything a keeper could fix — a maxed keeper with a full bag '
     + 'and full mana still cannot brew what this world does not contain')
@@ -143,24 +145,23 @@ const full = () => 0
     'and the crystals and the sap they brew with were already here')
 }
 
-// ── 4b. ★ THE `absent` MACHINERY IS STILL LOAD-BEARING — the herbs were not the only gap ────────
-// Fishing, the Exchange Booth and the crop roster are still play3d's, so most of canon's table names
-// something this world cannot produce. The refusal that saved the Infusions from a lying red `0/2`
-// is the same one still speaking for those rows.
+// ── 4b. ★★ EVERY BREW IN THE TABLE IS REACHABLE HERE (2026-09-15) ──────────────────────────────
+// This section used to assert the opposite — that stranded brews still existed and the `absent`
+// refusal still spoke for them. The list shrank one world-change at a time: the herbs (08-18),
+// the catches (rinning), and last the two fruit bushes (09-15, Sunfruit for the salve, Moonberry
+// for the philter). It is now empty, and THAT is the claim: the day a registry row goes missing
+// and a brew goes dark again, this names the brew and the ingredient instead of a count.
 {
   const stranded = ALL_BREWS.map(id => POTION_DEFS[id]).filter(d => absentInputs(d, inWorld).length > 0)
-  ok(stranded.length > 0, `brews still unreachable here (${stranded.length}) keep the refusal honest`)
+  ok(stranded.length === 0,
+    `no brew is stranded in this world (${stranded.map(d => `${d.id}: ${absentInputs(d, inWorld).join('+')}`).join('; ') || 'none'})`)
   const salve = POTION_DEFS.shimmer_salve
-  ok(brewBlocker(salve, 99, 99, rich, inWorld, roomy) === 'absent',
-    'the tier-1 salve still says "in these lands" — sunfruit has no source here')
-  // ⚠ THIS USED TO ASSERT A COUNT OF 2, AND ADDING THE CATCHES TURNED IT RED — correctly.
-  // `shimmerscale` is rinning's tier-1 catch, so it became reachable the moment the honesty gate
-  // learned about casts; only `sunfruit` is still missing. Naming the input rather than counting
-  // inputs is the point: a count goes red when the world changes and tells you nothing about why,
-  // and the fix for a red count is too easily "make it 1".
-  ok(absentInputs(salve, inWorld).join(',') === 'sunfruit',
-    `the salve is now blocked on sunfruit alone (got ${absentInputs(salve, inWorld).join(',') || 'nothing'})`)
-  ok(inWorld('shimmerscale'), 'and shimmerscale IS reachable now — a cast lands it at tier 1')
+  ok(brewBlocker(salve, 99, 99, rich, inWorld, roomy) !== 'absent',
+    'the tier-1 salve no longer says "in these lands" — a sunfruit bush grows in the meadow')
+  ok(brewBlocker(POTION_DEFS.bond_philter, 99, 99, rich, inWorld, roomy) !== 'absent',
+    'and the philter no longer does — a moonberry bush grows under the canopy')
+  ok(inWorld('shimmerscale'), 'shimmerscale is reachable — a cast lands it at tier 1')
+  // The machinery itself is still exercised in section 3 above, on a def that can never be brewed.
 }
 
 // ── 5. ★ SOMETHING IS ACTUALLY BREWABLE — this is not a shelf with nothing on it ───────────────

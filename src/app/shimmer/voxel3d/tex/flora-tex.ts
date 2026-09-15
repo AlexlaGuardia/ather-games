@@ -46,11 +46,11 @@ export const GRASS_VARIANTS = 4
 
 /** `n` tiles of `w`×`h`, painted by `paint(seed)` per column, laid left to right in one buffer. */
 export function bladeAtlasPixels(
-  seed: number, n: number, w: number, h: number, paint: (seed: number) => Uint8Array,
+  seed: number, n: number, w: number, h: number, paint: (seed: number, column: number) => Uint8Array,
 ): Uint8Array {
   const out = new Uint8Array(n * w * h * 4)
   for (let i = 0; i < n; i++) {
-    const tile = paint((seed ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0)
+    const tile = paint((seed ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0, i)
     for (let y = 0; y < h; y++) out.set(tile.subarray(y * w * 4, (y + 1) * w * 4), (y * n * w + i * w) * 4)
   }
   return out
@@ -379,6 +379,33 @@ export function matBloomPixels(size = 32, seed = 0x5b10, blooms = 7): Uint8Array
       const o = (y * size + x) * 4
       const core = d < 0.4
       data[o] = core ? 232 : 255; data[o + 1] = core ? 206 : 255; data[o + 2] = core ? 120 : 255
+      data[o + 3] = 255
+    }
+  }
+  return data
+}
+
+/**
+ * A cluster of FRUIT, painted white on cutout — the fruit bushes' second card (2026-09-15). Fewer
+ * and bigger than the bloom cluster, each with a highlight dot high-left so a berry reads as a
+ * round thing catching light rather than a flat disc; a tint (`FRUIT_TINT` in flora-mesh) makes it
+ * a sunfruit or a moonberry. Sits across the bush's shoulders, like the bloom cluster does.
+ */
+export function fruitClusterPixels(size = 32, seed = 0xf7a1, fruit = 5, radius = 0.11): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  const rnd = lcg(seed)
+  for (let b = 0; b < fruit; b++) {
+    const bx = size * (0.18 + rnd() * 0.64), by = size * (0.3 + rnd() * 0.55)
+    const r = size * (radius + rnd() * radius * 0.35)
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const dx = x + 0.5 - bx, dy = y + 0.5 - by
+      const d = Math.hypot(dx, dy) / r
+      if (d > 1) continue
+      const o = (y * size + x) * 4
+      // Shaded toward the lower-right so the ball has a dark side; a highlight near the top-left.
+      const hi = Math.hypot(dx + r * 0.35, dy - r * 0.35) / r < 0.3
+      const v = hi ? 255 : Math.round(255 * (0.72 + 0.28 * (1 - d)) * (dx - dy > 0 ? 1 : 0.86))
+      data[o] = v; data[o + 1] = v; data[o + 2] = v
       data[o + 3] = 255
     }
   }

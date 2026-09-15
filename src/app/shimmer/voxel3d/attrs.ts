@@ -238,6 +238,11 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.STORMGRASS]: 0x5f8fbe,
   [MAT.ROOTVINE]: 0x4a5f34,
   [MAT.TIDEPETAL]: 0x9fd8d0,
+  // ── ★ THE TWO FRUIT BUSHES (2026-09-15) — the LEAF colour; the fruit tint is the renderer's ──
+  // Read off canon's fruit, not the fruit's element: a sunfruit bush is a warm yellow-green (the
+  // fruit glows warm, and the leaves catch it), a moonberry bush a cool blue-green (low light).
+  [MAT.SUNFRUIT_BUSH]: 0x7fb448,
+  [MAT.MOONBERRY_BUSH]: 0x62a892,
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — read the plant, not the lookup ────────────────────
   // Same discipline as the herbs directly above: each colour is derived from what canon and the
   // item text say the thing IS, not picked to fill a palette slot. These are STALK/BODY colours;

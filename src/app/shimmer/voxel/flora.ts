@@ -62,6 +62,11 @@ export const FLORA = {
   // `FLOWER` itself is the SINGLE: one stem, one head, the one you notice.
   BLOOM_MAT: 9,    // ground cover — a flat leaf pad with small blooms in it; what a drift core is
   BLOOM_BUSH: 10,  // a clump — a leafy body with several heads; drift edges and the odd loner
+
+  // ★ ONE KIND, TWO MATERIALS — the herb shape again (2026-09-15): the renderer needs to know "a
+  // fruit bush stands here", and WHICH fruit is the material. A swaying alpha card on the bush
+  // form, so it joins the tuft/tall/flower/herb family, not the solid scatter one.
+  FRUIT: 11,
 } as const
 
 /** The three renderer kinds a wildflower cell can draw as. */
@@ -237,6 +242,39 @@ export function herbAt(x: number, z: number, seed: number, ground: BiomeId): num
   if (greyness(x, z, seed) >= 0.35) return 0
   const patch = value2(x / HERB_SCALE, z / HERB_SCALE, seed ^ 0x8be31)
   return patch > tune.edge ? herb : 0
+}
+
+// ── ★ THE TWO WILD FRUIT AND THEIR GROUND (2026-09-15, a build call — canon says "common") ──────
+// `world/cuisine.md` › *★ ATHER FRUIT* adopts Sunfruit (*"warm golden fruit that glows faintly"*)
+// and Moonberry (*"cool blue berries that shimmer in low light"*) and says nothing about where.
+// So the ground is read off the description the way the herbs' colours were: a thing that glows
+// warm grows where the sun is, a thing that shimmers in low light grows where the light is low.
+// Two grounds each, because canon calls them COMMON and a one-ground fruit is a herb's rarity.
+// Flagged FYI in `CANON_GAPS.md`; if Magii moves one, this table is the only line that moves.
+//
+//   Sunfruit  → meadow, basin      open sun, the low warm country
+//   Moonberry → woodland, shore    under the canopy and on the damp edge
+export const FRUIT_OF_GROUND: Readonly<Record<string, number>> = {
+  meadow: MAT.SUNFRUIT_BUSH,
+  basin: MAT.SUNFRUIT_BUSH,
+  woodland: MAT.MOONBERRY_BUSH,
+  shore: MAT.MOONBERRY_BUSH,
+}
+/** The distinct fruit materials — what `FLORA_MATERIALS` and the kind count are sized by. */
+export const FRUIT_MATS: ReadonlyArray<number> = [...new Set(Object.values(FRUIT_OF_GROUND))]
+// A berry PATCH, at its own scale: rarer than a flower drift, commoner than a herb patch. Inside a
+// patch the bushes stand a few cells apart — you find a thicket, not a hedge and not one bush.
+export const FRUIT_SCALE = 120
+export const FRUIT_EDGE = 0.80
+export const FRUIT_DENSITY = 0.07
+
+export function fruitAt(x: number, z: number, seed: number, ground: BiomeId): number {
+  const fruit = FRUIT_OF_GROUND[ground]
+  if (!fruit) return 0
+  const roll = hash01(x, z, seed ^ 0x6f2a)
+  if (roll > FRUIT_DENSITY) return 0
+  if (greyness(x, z, seed) >= 0.35) return 0
+  return value2(x / FRUIT_SCALE, z / FRUIT_SCALE, seed ^ 0x5a1c9) > FRUIT_EDGE ? fruit : 0
 }
 
 // ── ★★ THE SEVEN TIER-2+ CROPS AND THEIR GROUND (ruled 2026-08-22, /magii + Alex) ──────────────
@@ -518,6 +556,13 @@ export function plantMaterialAt(x: number, z: number, seed: number, ground?: Bio
     const crop = cropAt(x, z, seed, ground)
     if (crop) return crop
 
+    // ── ★ THE FRUIT BUSH SITS BELOW THE CROP AND ABOVE SCATTER (2026-09-15) ────────────────────
+    // Same rule as the two above it — order by what breaks when the cell is lost. A fruit feeds
+    // two brews; a crop feeds a whole farmed line and four of them share ground with an Infusion
+    // herb. So the bush yields to both, and takes its cell from a stone, a log or a tuft.
+    const fruit = fruitAt(x, z, seed, ground)
+    if (fruit) return fruit
+
   // ── ★★ SCATTER SITS BELOW THE HERB AND ABOVE THE GRASS (2026-08-19, slice ③) ─────────────────
   // BELOW the herb, and that ordering is load-bearing far past looks: the four element herbs'
   // densities were compensated per-ground against a MEASURED land share, so anything that wins
@@ -575,6 +620,7 @@ export function plantVariant(x: number, z: number, seed: number, kind: number): 
   // two plants having been placed by one hand. Cosmetic, invisible in a test, and free to prevent.
   const salt = kind === FLORA.HERB ? 0x4e2b
     : kind === FLORA.CROP ? 0x2c19
+    : kind === FLORA.FRUIT ? 0x6f2a
     : isFlowerKind(kind) ? 0x77e : kind === FLORA.TUFT ? 0x3b1 : 0x9c5
   return hash01(x, z, seed ^ salt)
 }
@@ -600,6 +646,7 @@ export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
   MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER,          // FLORA.TUFT / TALL / FLOWER — the swaying cards
   ...Object.values(HERB_OF_GROUND),              // FLORA.HERB — derived, one per ruled ground
   ...Object.values(CROP_OF_GROUND),              // FLORA.CROP — derived, one per crop's ruled ground
+  ...FRUIT_MATS,                                 // FLORA.FRUIT — derived, one per fruit (2026-09-15)
   MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,    // SCATTER.ROCK / DEADFALL / MUSHROOM — solid
 ])
 
@@ -619,10 +666,11 @@ export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
 // not a material is exactly the case this count exists to make someone say out loud.
 export const FLORA_DRAW_ONLY_KINDS = 2                // BLOOM_MAT, BLOOM_BUSH — forms of FLOWER
 export const FLORA_KIND_COUNT =
-  (Object.keys(FLORA).length - 3)            // every FLORA kind except NONE, HERB and CROP...
+  (Object.keys(FLORA).length - 4)            // every FLORA kind except NONE, HERB, CROP and FRUIT...
   - FLORA_DRAW_ONLY_KINDS                    // ...minus the forms that share FLOWER's material
   + Object.keys(HERB_OF_GROUND).length       // ...HERB expands to one material per ruled ground
-  + Object.keys(CROP_OF_GROUND).length       // ...and CROP to one per crop's ground (2026-08-22)
+  + Object.keys(CROP_OF_GROUND).length       // ...CROP to one per crop's ground (2026-08-22)
+  + FRUIT_MATS.length                        // ...and FRUIT to one per fruit, NOT per ground (09-15)
 
 // ⚠ SCATTER IS NOT ADDED, AND THE FIRST CUT OF THIS ADDED IT AND WAS RED (13 against a set of 10).
 // `FLORA` already absorbs the scatter kinds into its own slot space — that is exactly what the

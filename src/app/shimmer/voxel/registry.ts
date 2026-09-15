@@ -465,6 +465,14 @@ export const BLOCKS: BlockDef[] = [
   { noSlab: true, material: MAT.ROOTVINE, name: 'Rootvine', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'rootvine_coil', count: 1 }], fastSkill: 'farming', placeable: true },
   { noSlab: true, material: MAT.TIDEPETAL, name: 'Tidepetal', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tidepetal_bloom', count: 1 }], fastSkill: 'farming', placeable: true },
 
+  // ── ★ THE TWO WILD FRUIT BUSHES (2026-09-15) — the fruit canon adopted on 08-22 ──────────────
+  // Sunfruit feeds `shimmer_salve`, Moonberry feeds `bond_philter`; neither existed in this world
+  // before these rows. Two fruit per bush: a salve wants two and a philter three, and bushes grow
+  // in patches (`flora.ts` › `fruitAt`), so one patch is one brew. NOT placeable — the drop is the
+  // fruit, and a fruit set on the ground is not a bush; the plant is met where it grows.
+  { noSlab: true, material: MAT.SUNFRUIT_BUSH, name: 'Sunfruit Bush', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'sunfruit', count: 2 }], fastSkill: 'farming', placeable: false },
+  { noSlab: true, material: MAT.MOONBERRY_BUSH, name: 'Moonberry Bush', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'moonberry', count: 2 }], fastSkill: 'farming', placeable: false },
+
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — a ground grows a PLANT ────────────────────────────
   // RULED (/magii): the grass-tuft ruling and these were never in tension. Canon had already drawn
   // the line the herbs have used since 08-18 — *a tuft yields a SEED, a ground grows a PLANT* — so

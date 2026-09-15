@@ -119,9 +119,21 @@ export const CROP_MIN = 76
 export const CROP_MAX = 82
 export const isCrop = (m: number): boolean => m >= CROP_MIN && m <= CROP_MAX
 
+/**
+ * The wild fruit bushes (2026-09-15) — the two Ather fruit canon adopted on 08-22 that no brew
+ * could reach because nothing in this world grew them. A fifth plant range, at the END of MAT
+ * (the plant spans at 24/58/68/76 are all full and a material id is written into every save).
+ *
+ * ⚠ KEEP 108-109 CONTIGUOUS — a third fruit goes at 110, never in a gap elsewhere.
+ */
+export const FRUIT_MIN = 108
+export const FRUIT_MAX = 109
+export const isFruit = (m: number): boolean => m >= FRUIT_MIN && m <= FRUIT_MAX
+
 export const isPlant = (m: number): boolean =>
   (m >= PLANT_MIN && m <= PLANT_MAX) || (m >= HERB_MIN && m <= HERB_MAX)
   || (m >= SCATTER_MIN && m <= SCATTER_MAX) || (m >= CROP_MIN && m <= CROP_MAX)
+  || (m >= FRUIT_MIN && m <= FRUIT_MAX)
 
 /**
  * Saplings, as a contiguous range — the same shape `isPlant` uses, and for the same reason: the
@@ -677,6 +689,23 @@ export const MAT = {
    * The vessels brief: *the liquid is the light source* — this is that, on the block.
    */
   CAULDRON_LIT: 107,
+
+  /**
+   * ── ★ THE WILD FRUIT BUSHES (2026-09-15, Alex: "work a few [alchemy ingredients] into the
+   * flora") ─────────────────────────────────────────────────────────────────────────────────────
+   * Canon adopted Sunfruit, Moonberry and Stonemelon as named Ather fruit on 08-22
+   * (`world/cuisine.md` › *★ ATHER FRUIT*) and sent the two brews that need them back to Jin
+   * unblocked — and until today NOTHING in this world produced either, so `shimmer_salve` and
+   * `bond_philter` sat behind the cauldron's "not in this world" refusal. These are the bushes.
+   * A picked bush drops its fruit; `obtainable.ts` derives the world's item set from the registry
+   * drops, so both brews go live by construction the moment these rows exist.
+   *
+   * ⚠ 108-109 IS THE `isFruit` RANGE and it answers `isPlant`. Stonemelon is not here: no brew
+   * needs it and a ground melon wants the flat pad, not the bush — it can be 110 when it comes.
+   * ⚠ WHERE THEY GROW IS A BUILD CALL, flagged FYI in CANON_GAPS — canon says "common" and no more.
+   */
+  SUNFRUIT_BUSH: 108,
+  MOONBERRY_BUSH: 109,
 } as const
 
 /** Every glass id — the cutout pass, the light pass and the mesher rank all ask this, never `=== GLASS`. */
