@@ -252,11 +252,41 @@ export function matLeafPixels(size = 32, seed = 0x1ea5): Uint8Array {
       data[o + 3] = 255
     }
   }
-  // Chew the corners hard and the edges lightly: a mat is round-ish, never a tile.
+  // Chew the corners hard and the edges lightly: a mat is round-ish, never a tile. And the outer
+  // band sits in its own shade — the leaves at the rim curl down toward the ground, so they are
+  // the ones the light does not reach. Without this the pad is one flat value edge to edge.
   const c = (size - 1) / 2
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const d = Math.hypot(x - c, y - c) / (size / 2)
-    if (d > 1.02 || (d > 0.92 && rnd() < 0.5)) data[(y * size + x) * 4 + 3] = 0
+    const o = (y * size + x) * 4
+    if (d > 1.02 || (d > 0.92 && rnd() < 0.5)) { data[o + 3] = 0; continue }
+    if (d > 0.7 && data[o + 3]) {
+      const k = 1 - (d - 0.7) / 0.32 * 0.45          // 1.0 at the band's start → 0.55 at the rim
+      data[o] = data[o] * k; data[o + 1] = data[o + 1] * k; data[o + 2] = data[o + 2] * k
+    }
+  }
+  return data
+}
+
+/**
+ * The pad's CONTACT SHADOW: a soft dark disc drawn under the mat, a hair wider than it, fading to
+ * nothing at the edge. Alex, 2026-09-15: *"the mat pads read like stickers, add a rim shadow."*
+ * A sticker is a shape with no contact — the ground reads the same one texel outside the pad as
+ * one texel inside it. This is the one flora tile with SOFT alpha, which is why its material is
+ * transparent rather than cutout (see `matShadowMat`): an alphaTest would turn the fade into a
+ * second hard rim, which is the sticker again with a black border.
+ */
+export function matShadowPixels(size = 32): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  const c = (size - 1) / 2
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - c, y - c) / (size / 2)
+    if (d > 1) continue
+    const o = (y * size + x) * 4
+    // Solid under the pad, fading over the last 30% — the visible rim outside the leaves.
+    const a = d < 0.7 ? 1 : 1 - (d - 0.7) / 0.3
+    data[o] = 0; data[o + 1] = 0; data[o + 2] = 0
+    data[o + 3] = Math.round(255 * a)
   }
   return data
 }
