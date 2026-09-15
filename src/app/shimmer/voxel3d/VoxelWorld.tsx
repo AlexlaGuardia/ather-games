@@ -24,7 +24,7 @@ import * as THREE from 'three'
 import { saveKey } from '@/lib/save-slot'
 import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel, WILDS_BUBBLE, wildsSwallows } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
-import { createMeshScratch, saplingBounds } from '../voxel/greedy'
+import { createMeshScratch } from '../voxel/greedy'
 import { columnHeight, holdPadLevel } from '../voxel/height'
 import { flatFightSpot } from '../voxel/footing'
 import { slumpMask } from '../voxel/slump'
@@ -38,7 +38,7 @@ import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
 import { lightOpaque } from '../voxel/light-passes'
 import { placementRotation } from './piece-facing'
-import { materialAt, MAT, isPlant, isHerb, isScatter, isSapling, isHalfMat, isTopSlab, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHerb, isScatter, isSapling, isHalfMat, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant, flowerForm } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState, type RayHit } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -390,7 +390,7 @@ import { loadSeen, saveSeen, see, CELL, type Seen } from './discovery'
 import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
-import { createFloraRenderer, floraBounds, type FloraBox } from './flora-mesh'
+import { createFloraRenderer } from './flora-mesh'
 
 /**
  * A chest the player has opened: where it stands, its LIVE contents array, and the call that marks
@@ -471,9 +471,6 @@ const SEED = WORLD_SEED
 const H = DEFAULT_COLUMN.worldHeight
 // Load-ring radius lives in settings now (viewRadius, O panel) — the World loops read it live.
 const REACH = 6            // how far you can mine or place, in voxels
-/** How far the reticle's outline stands off the thing it outlines, in world units. Flat, not a
- *  ratio: it has to clear an alpha card, and a fraction of a 0.55-tall tuft is not clearance. */
-const HL_PAD = 0.02
 /**
  * How far outside a hold's curtain wall its patrol comes out to meet you, in blocks.
  *
@@ -4143,7 +4140,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
-  const highlight = useRef<THREE.LineSegments>(null)
   // ★ THE TEXTURE ARRAY, WIRED INTO THE MAIN WORLD (texture lane handoff, 406d492).
   //
   // One material for the whole world and ONE tile array — both keyed to `tileSize` so changing it
@@ -4286,10 +4282,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
    */
   const dropGeo = useMemo(() => new THREE.BoxGeometry(0.28, 0.28, 0.28), [])
   const dropMats = useRef(new Map<number, THREE.Material>())
-  // ★ A UNIT BOX, SCALED PER FRAME — it was a fixed 1.002 cube until 2026-09-09, which is why a
-  // tuft was outlined by the cube of air around it. The 1.002 lives at the call site now (see
-  // `fitHighlight`) because only the full-block case wants it.
-  const highlightGeo = useMemo(() => new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), [])
   // Greg — built once, positioned once. Static NPC, no per-frame update beyond the aim check
   // below (which reads GREG_X/GREG_Z/GREG_Y, not the mesh, so the mesh itself never moves).
   const greg = useMemo(() => {
@@ -5114,7 +5106,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     for (const m of dropMats.current.values()) m.dispose()
     dropMats.current.clear()
     dropGeo.dispose()
-    highlightGeo.dispose()
     pieces.dispose()
     flatMaterial.dispose()
     textured?.material.dispose()
@@ -5134,7 +5125,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     mist.dispose()
     ring.dispose()
     flora.dispose()
-  }, [dropGeo, highlightGeo, flatMaterial, textured, tiles, pieces, greg, steam, smoke, breakFx, seam, mist, flora])
+  }, [dropGeo, flatMaterial, textured, tiles, pieces, greg, steam, smoke, breakFx, seam, mist, flora])
 
   /**
    * Set the instant the context is lost, read by the FRAME LOOP so it stops. A ref and not state:
@@ -5285,69 +5276,30 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   }, [voxel])
 
   /**
-   * ── ★★ THE RETICLE OUTLINES WHAT IS DRAWN, NOT THE CELL IT SITS IN (2026-09-09) ──────────────
-   * Alex: *"when grass, flowers or some other misc item block is selected its outlining the whole
-   * block instead of just the item."* It was a fixed 1.002 cube at the cell centre, so a grass tuft
-   * — 0.7 wide, 0.55 tall, rooted 0.03 BELOW the cell floor — was wrapped in a box it shares no
-   * face with. Same defect as the sapling icon that drew a cube while the mesher drew a cross: two
-   * consumers of one source disagreeing about a property the source does not carry.
+   * ── ★★ THE BLOCK WIREFRAME IS GONE; ONLY GROUND COVER MARKS ITSELF (2026-09-15) ─────────────
+   * Alex: *"remove the outline on selected block its not fitting in."* The reticle used to draw a
+   * black `EdgesGeometry` box around whatever the crosshair hit — a 1.002 cube on a block, a
+   * measured box on a slab or sapling (2026-09-09) — and a wire box on a hand-painted voxel world
+   * reads as an editor gizmo, not as the world. The crosshair is the mark; the mine cracks, the
+   * placement ghost and the prompt already say what the cell will do.
    *
-   * ⚠ EVERY BOX BELOW IS MEASURED FROM THE THING THAT DRAWS IT, never restated here. Ground cover
-   * goes through `floraBounds`, which pushes the renderer's real vertices through the renderer's
-   * real instance matrix; a sapling goes through `saplingBounds`, which the mesher's own test holds
-   * against the vertices the mesher emitted. A hand-written table of per-kind boxes would have been
-   * a third of the work and would have gone stale, silently, the first time anyone re-tuned a
-   * width — a slightly-wrong outline is not something a test notices or a player reports.
+   * What STAYS is the one mark Alex asked for by name (09-09: *"just darken the border of the
+   * item"*): ground cover darkens its own edge texels through `flora.setHighlight`, drawn on the
+   * plant's silhouette with no box. Everything else under the crosshair is unmarked on purpose.
    *
-   * ★ AND IT FAILS TOWARD THE OLD BEHAVIOUR. Anything this cannot measure — a piece, an ordinary
-   * block, a plant whose column the probe cannot resolve — falls through to the cube, which is
-   * exactly what shipped before. The new path can be wrong about a plant; it cannot be wrong about
-   * a wall.
+   * ⚠ CLEARED FIRST, ON EVERY PATH. Only the ground-cover branch re-sets it, so looking from a
+   * tuft to a stone wall retracts the border in the same frame. A clear that lives only on the
+   * "no hit" path leaves the last plant lit while you stare at something else.
    */
-  const fitHighlight = useCallback((hl: THREE.LineSegments, hit: RayHit): boolean => {
-    const m = hit.material
-    let b: FloraBox | null = null
-    // ⚠ CLEARED FIRST, ON EVERY PATH. Only the ground-cover branch below re-sets it, so looking
-    // from a tuft to a stone wall retracts the border in the same frame. A clear that lives only
-    // on the "no hit" path leaves the last plant lit while you stare at something else.
+  const markLookedAt = useCallback((hit: RayHit): void => {
     flora.clearHighlight()
-    if (isPlant(m)) {
-      // ⚠ THE PROBE ANSWERS ABOUT A COLUMN, NOT ABOUT A CELL — it walks to the live ground and
-      // reports what stands on it. That is this cell only when the two agree, and `spot.y` is a
-      // GROUND height (fractional on a slumped lip, hence `ceil`), not a cell index. Without this
-      // check a reticle on a plant the probe did not pick would be handed another cell's box and
-      // outline something a block away from what you are pointing at.
-      const spot = plantProbe(hit.x, hit.z)
-      if (spot && Math.ceil(spot.y) + 1 === hit.y) {
-        // ── ★★ THE BORDER REPLACES THE BOX WHERE THERE IS A BORDER TO DRAW (2026-09-09) ────────
-        // Alex, on the fitted box: *"is there no way to just darken the border of the item when
-        // looking at it?"* For ground cover there is, and `flora.setHighlight` draws it on the
-        // plant's own silhouette. When it takes the mark the wireframe stands down entirely —
-        // showing both would be a box around an outlined plant, which is worse than either.
-        //
-        // ⚠ IT RETURNS FALSE FOR A KIND IT CANNOT MARK, and that is the whole safety of this
-        // branch: an unhandled kind falls through to the fitted box below rather than to no
-        // reticle at all. Nothing under the crosshair is ever unmarked.
-        if (flora.setHighlight(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX)) return false
-        b = floraBounds(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX)
-      }
-    } else if (isSapling(m)) {
-      b = saplingBounds(hit.x, hit.y, hit.z)
-    } else if (isHalfMat(m)) {
-      // A slab is half a cell of the block it is made from, and the bit says which half.
-      const y0 = isTopSlab(m) ? hit.y + 0.5 : hit.y
-      b = { x0: hit.x, x1: hit.x + 1, y0, y1: y0 + 0.5, z0: hit.z, z1: hit.z + 1 }
-    }
-    if (b) {
-      // A flat pad rather than a ratio: the outline has to clear an alpha card it is nearly
-      // coplanar with, and 0.2% of a 0.55-tall tuft is not clearance, it is z-fighting.
-      hl.position.set((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2)
-      hl.scale.set(b.x1 - b.x0 + HL_PAD, b.y1 - b.y0 + HL_PAD, b.z1 - b.z0 + HL_PAD)
-    } else {
-      hl.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5)
-      hl.scale.setScalar(1.002)
-    }
-    return true
+    if (!isPlant(hit.material)) return
+    // ⚠ THE PROBE ANSWERS ABOUT A COLUMN, NOT ABOUT A CELL — it walks to the live ground and
+    // reports what stands on it. That is this cell only when the two agree, and `spot.y` is a
+    // GROUND height (fractional on a slumped lip, hence `ceil`), not a cell index. Without this
+    // check a reticle on a plant the probe did not pick would mark another cell's plant.
+    const spot = plantProbe(hit.x, hit.z)
+    if (spot && Math.ceil(spot.y) + 1 === hit.y) flora.setHighlight(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX)
   }, [plantProbe, flora])
 
   /**
@@ -9448,14 +9400,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     prof.current.mark('look')
     // ── what are we looking at ───────────────────────────────────────────────────────────────
     const hit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, voxel)
-    const hl = highlight.current
-    if (hl) {
-      // ⚠ CLEARED ON EVERY FRAME THAT DOES NOT SET IT. The border is a mesh with its own lifetime,
-      // not a property of the reticle, so looking away from a plant has to retract it explicitly —
-      // state whose only retractor is the thing that stopped running stays on screen.
-      if (!hit) { flora.clearHighlight(); hl.visible = false }
-      else hl.visible = fitHighlight(hl, hit)
-    }
+    // ⚠ CLEARED ON EVERY FRAME THAT DOES NOT SET IT. The border is a mesh with its own lifetime,
+    // not a property of the reticle, so looking away from a plant has to retract it explicitly —
+    // state whose only retractor is the thing that stopped running stays on screen.
+    if (!hit) flora.clearHighlight()
+    else markLookedAt(hit)
 
     // ── ★ THE THREE AIMED VERBS (2026-08-13, Alex: "only work when on the item/person you are
     //    currently looking at or highlighting") ───────────────────────────────────────────────
@@ -10664,12 +10613,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           the world), same lifetime, and the pass keeps its own visibility. */}
       <primitive object={ring.group} />
       <primitive object={flora.group} />
-      {/* ⚠ Memoised. Inline `args={[new THREE.BoxGeometry(...)]}` builds a fresh geometry on EVERY
-          React render and leaks the previous one — same family as the per-drop material that got
-          the page's WebGL context blocked. */}
-      <lineSegments ref={highlight} visible={false} geometry={highlightGeo}>
-        <lineBasicMaterial color="#000000" transparent opacity={0.55} />
-      </lineSegments>
     </>
   )
 }
