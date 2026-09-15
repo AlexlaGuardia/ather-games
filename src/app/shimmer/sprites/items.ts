@@ -3146,6 +3146,7 @@ export const TOOL_SPRITES: Record<string, SpriteAnim> = {
   moonkoi_rinstick:  { frames: [MOONKOI_RINSTICK], rate: 4 },
   // placeholders — see the STARTER + FARMING TOOL SPRITES block
   worn_blade:        { frames: [WORN_BLADE], rate: 4 },
+  hazels_blade:      { frames: [WORN_BLADE], rate: 4 },   // lent by Hazel (voxel3d/tutorial.ts); her wood-handled cousin of the worn blade until art
   worn_spike:        { frames: [WORN_SPIKE], rate: 4 },
   worn_rinstick:     { frames: [WORN_RINSTICK], rate: 4 },
   goldwood_spade:    { frames: [GOLDWOOD_SPADE], rate: 4 },
@@ -3480,6 +3481,7 @@ export const ITEM_PALETTES: Record<string, string[]> = {
   shimmeroak_spade:  ['#6f5a3f', '#4b3d2a', '#a2896a', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   starwillow_spade:  ['#b3a690', '#7d7362', '#ded4c0', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   worn_blade:        ['#8a7f6a', '#5a5145', '#9aa0a6', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
+  hazels_blade:      ['#9a6b2f', '#5a3f1a', '#c9c0a6', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   worn_spike:        ['#8a7f6a', '#5a5145', '#9aa0a6', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   worn_rinstick:     ['#8a7f6a', '#5a5145', '#cfe6f0', '#1a1a2e', '#d06040', '#50a040', '#4080c0', '#8060b0'],
   // ── the three that rendered the magenta sentinel until 2026-09-04 (item-art listed them for weeks).
@@ -4071,6 +4073,7 @@ export const ITEM_ICONS: Record<string, SpriteAnim> = {
   moonkoi_rinstick:  { frames: [MOONKOI_RINSTICK], rate: 1 },
   // placeholders — see the STARTER + FARMING TOOL SPRITES block
   worn_blade:        { frames: [WORN_BLADE], rate: 1 },
+  hazels_blade:      { frames: [WORN_BLADE], rate: 1 },
   worn_spike:        { frames: [WORN_SPIKE], rate: 1 },
   worn_rinstick:     { frames: [WORN_RINSTICK], rate: 1 },
   vessel_bracelet_t1: { frames: [VESSEL_BRACELET_T1], rate: 1 },

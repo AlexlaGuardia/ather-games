@@ -223,7 +223,12 @@ import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
 // `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
 // where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
 // Greg's placeholder figure. This file only wires all three into the render loop.
-import { loadTutorial, saveTutorial, GREG_LINE, OBJECTIVE_LABEL, STAGE_ACTIONS, type TutorialStage, type TutorialState } from './tutorial'
+import { loadTutorial, saveTutorial, talkGreg, talkFolk, answerChoice, speakerOf, objectiveLabel, stageActions, HAZELS_BLADE,
+         type TutorialStage, type TutorialState, type Talk, type Progress } from './tutorial'
+import { folkSites, folkDef, type FolkId } from './folk'
+import { SCRIPT, type Beat } from './folk-lines'
+/** Greg's `lit` line, said across the glade as a toast when the lantern lands (see `onQuestEvent`). */
+const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in b ? [b.text] : [])
 import { GREG_LINES } from './greg-lines'
 import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
@@ -232,7 +237,7 @@ import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMat
          gateTowerCells } from './crossings'
 import { depart, LANDING_LABEL } from './crossing-out'
 import { LANDING_ARRIVAL } from '../world/landing'
-import { createGregMesh, GREG_BOUNDS } from './greg'
+import { createGregMesh, createFigures, GREG_BOUNDS } from './greg'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
@@ -624,16 +629,11 @@ const GREG_CZ = GREG_Z + 0.5
 const GREG_Y = columnHeight(GREG_X, GREG_Z, SEED) + 1
 /** How far down the ray you can reach him. Was a radius; now a distance to the box's near face. */
 const GREG_TALK_RANGE = 3
+/** How far from Greg a placed mana lantern still counts as "a light on the path" (blocks). */
+const GLADE_LIGHT_RADIUS = 64
 /** Greg's body in WORLD space — `greg.ts`'s own part dimensions, lifted to where he stands. */
 const GREG_BOX = bodyBox(GREG_CX, GREG_CZ, GREG_Y + GREG_BOUNDS.y0, GREG_Y + GREG_BOUNDS.y1, GREG_BOUNDS.halfW)
 
-/** Every log a blade can fell — the 'cut' step reads the whole set, not one species; Greg never
- *  said which tree.
- *  ⚠ Must stay exactly the set `isLogMat` (trees.ts) describes. Kept as a literal Set only because
- *  the quest step wants `.has`; if a fifth species is ever ruled, both change or neither does. */
-const LOG_MATERIALS = new Set<number>([
-  WOOD.GOLDWOOD_LOG, WOOD.SHIMMEROAK_LOG, WOOD.STARWILLOW_LOG, WOOD.DAWNWOOD_LOG,
-])
 
 /** Column keys the gate's whole footprint touches — checked before the first build so a 5-wide arch
  *  straddling a SECTION seam does not silently drop whichever half lands in an unloaded neighbour. */
@@ -1098,22 +1098,30 @@ export default function VoxelWorld() {
   const toolTier = useRef(1)
   const toolSkill = useRef<BlockSkill>('prospecting')
   const inv = useRef<Inventory>(createInventory())
+  // ★ THE TUTORIAL. `tutorial` is a ref (mutated in place, like `inv`/`tools`) so World can read the
+  // current stage every frame with no re-render; `tutorialTick` is the counter that forces a HUD
+  // re-render on the rare frames the stage actually changes — same split `craftTick` uses one level
+  // up for the inventory ref. Declared ABOVE the tools because the tools depend on it (below).
+  const tutorial = useRef<TutorialState>(loadTutorial(SEED))
+  const [, setTutorialTick] = useState(0)
   // ★ Greg's basic tools, exactly as the tile game hands them out — `ensureBasicTools` fills any
   // missing skill with its never-breaking starter (worn_spike, worn_blade, worn_rinstick). The
   // debug tier lever is gone: tier now comes from what you are actually holding.
-  const tools = useRef<EquippedTools>(ensureBasicTools({}))
+  // ⚠ AND NOT BEFORE THE FOLD (2026-09-15, canon Beat 0½ / Beat 1): the bag is Greg's gift AFTER
+  // the keeper says they are staying. Until then the only blade in the Glade is the one Hazel lends
+  // (`tutorial.ts` › `lend_blade`), which is what makes her errand's return real.
+  const tools = useRef<EquippedTools>(tutorial.current.stage === 'done' ? ensureBasicTools({}) : {})
   const skills = useRef<SkillSet>(createSkillSet())
   /** What the keeper has drunk that is still running — buffId → epoch ms it ends. Saved with the keeper. */
   const buffs = useRef<ActiveBuffs>({})
   const [skillHud, setSkillHud] = useState<{ id: string; level: number; xp: number; next: number } | null>(null)
-  // ★ THE TUTORIAL. `tutorial` is a ref (mutated in place, like `inv`/`tools`) so World can read the
-  // current stage every frame with no re-render; `tutorialTick` is the counter that forces a HUD
-  // re-render on the rare frames the stage actually changes — same split `craftTick` uses one level
-  // up for the inventory ref.
-  const tutorial = useRef<TutorialState>(loadTutorial(SEED))
-  const [, setTutorialTick] = useState(0)
-  const [dialogueOpen, setDialogueOpen] = useState(false)
+  /** The conversation on screen: who, and the pure `Talk` computed when E opened it. Closing
+   *  APPLIES the talk (next state + effect) — see `closeDialogue`. */
+  const [dialogue, setDialogue] = useState<{ who: 'greg' | FolkId; talk: Talk } | null>(null)
+  const dialogueOpen = dialogue !== null
   const [nearGreg, setNearGreg] = useState(false)
+  /** The folk the crosshair is on, in reach — World's per-frame aim test, same as Greg's. */
+  const [nearFolk, setNearFolk] = useState<FolkId | null>(null)
   // ── The mist spar (2026-08-09) ──────────────────────────────────────────────────────────────
   // The presence you are standing in front of, the withdrawal ledger, and the fight in progress.
   const [nearMist, setNearMist] = useState<Resident | null>(null)
@@ -1609,7 +1617,7 @@ export default function VoxelWorld() {
     },
     // Same console→panel handoff as `brew` above: the console closes itself and does NOT re-claim
     // the cursor, or the pointer re-locks with the dialogue still up. See that entry for the autopsy.
-    greg: () => { setConsoleOpen(false); setDialogueOpen(true); return 'he looks up from the book' },
+    greg: () => { setConsoleOpen(false); setDialogue({ who: 'greg', talk: talkGreg(tutorial.current) }); return 'he looks up from the book' },
     look: (deg) => lookOut.current ? lookOut.current(deg) : 'the world is still waking',
     ctxLost: () => ctxLostOut.current ? ctxLostOut.current() : 'the world is still waking',
     radius: () => settings.viewRadius,
@@ -1920,34 +1928,72 @@ export default function VoxelWorld() {
     setTutorialTick(v => v + 1)
   }, [])
 
+  /** What the keeper is holding, as the folk conversations and the objective chip read it. */
+  const progress = useCallback((): Progress => {
+    let logs = 0
+    for (const slot of inv.current!.slots) if (slot && slot.itemId.endsWith('_log')) logs += slot.count
+    return { logs, planks: countItem(inv.current!, 'goldwood_plank'), hasHazelsBlade: tools.current.forestry?.toolId === HAZELS_BLADE }
+  }, [])
+
+  /** E on Greg or one of the five: compute the talk NOW, from the live refs, and show it. */
+  const openTalk = useCallback((who: 'greg' | FolkId) => {
+    const talk = who === 'greg' ? talkGreg(tutorial.current) : talkFolk(tutorial.current, who, progress())
+    openCursorUI()
+    setDialogue({ who, talk })
+  }, [openCursorUI, progress])
+
   /**
-   * E on Greg closes the dialogue that just opened. The two stages that ACT on close (greet's gift,
-   * report's gate-opening talk) are handled here rather than on open — showing the line for the
-   * stage you were in when you pressed E, then acting once you dismiss it, is what makes "the
-   * current tutorial line" and "advancing quest state on close" both true at the same time.
+   * ★ A TALK IS APPLIED WHEN THE BOX CLOSES, NOT WHEN IT OPENS. Showing the line for the state you
+   * were in when you pressed E, then acting once you dismiss it, is what makes "the current line"
+   * and "advancing quest state" both true at the same time — and it is why a keeper who reads
+   * Hazel's lend and closes the box is holding her blade, not one who has to open it twice.
+   * The effects are the four the pure machine names (`tutorial.ts` › `TutorialEffect`); the gate's
+   * own open/close write happens in World, reading the same ref — see the gate block in the loop.
    */
-  const closeDialogue = useCallback(() => {
-    setDialogueOpen(false)
-    closeCursorUI()
-    const t = tutorial.current
-    if (t.stage === 'greet') {
-      give(inv.current!, 'raw_mana_shard', 1)
-      // The starter bag, delivered incrementally — canon (shimmer-quests-mainmap.md quest 1) has
-      // Greg gift "crafting table, pot, grimoire, tools"; the table is the piece that exists.
-      // The hand-craft recipe in voxel/recipes.ts stays as the REPLACEMENT path, per its header.
-      give(inv.current!, 'crafting_table', 1)
-      refreshHotbar()
-      t.stage = 'cut'
-      saveTutorial(SEED, t)
-      setTutorialTick(v => v + 1)
-    } else if (t.stage === 'report') {
-      // The gate's own open/close write happens in World, reading this same ref — see the gate
-      // block in the render loop. This only flips the stage the ref (and the save) hold.
-      t.stage = 'done'
-      saveTutorial(SEED, t)
-      setTutorialTick(v => v + 1)
+  const applyTalk = useCallback((t: Talk) => {
+    tutorial.current = t.next
+    switch (t.effect) {
+      case 'lend_blade':
+        tools.current.forestry = { toolId: HAZELS_BLADE, usesRemaining: 999999, speedBonus: 1, xpBonus: 1 }
+        break
+      case 'take_blade':
+        if (tools.current.forestry?.toolId === HAZELS_BLADE) delete tools.current.forestry
+        break
+      case 'give_shard':
+        give(inv.current!, 'raw_mana_shard', 1)
+        break
+      case 'fold':
+        // The starter bag — canon Beat 1 gi_5 "Here. Take this." has Greg gift "crafting table, pot,
+        // grimoire, tools"; the tools and the table are the pieces that exist. The hand-craft table
+        // recipe in voxel/recipes.ts stays as the REPLACEMENT path, per its header.
+        ensureBasicTools(tools.current)
+        give(inv.current!, 'crafting_table', 1)
+        break
     }
-  }, [refreshHotbar, closeCursorUI])
+    if (t.effect) {
+      refreshHotbar()
+      // The tools ride in the keeper save, which autosaves every 5s — a lent blade lost to a refresh
+      // in the wrong second is a keeper who cannot cut and a Hazel who says she is owed. Same reason
+      // `widenFold` persists at once.
+      const snap = playerSnapRef.current
+      if (snap) void savePlayer(SEED, snap())
+    }
+    saveTutorial(SEED, tutorial.current)
+    setTutorialTick(v => v + 1)
+  }, [refreshHotbar])
+
+  const closeDialogue = useCallback(() => {
+    const d = dialogue
+    setDialogue(null)
+    closeCursorUI()
+    if (d) applyTalk(d.talk)
+  }, [dialogue, closeCursorUI, applyTalk])
+
+  /** The stay choice answered inside the box: the answer's beats replace the question's, and
+   *  closing applies what the answer decided (the fold, or nothing). */
+  const onAnswer = useCallback((answer: 'staying' | 'not-yet') => {
+    setDialogue(d => d ? { who: d.who, talk: answerChoice(tutorial.current, answer) } : d)
+  }, [])
 
   /** Refine/build a recipe. The core hands back a plan; the host applies it. */
   const doCraft = useCallback((id: string) => {
@@ -1961,9 +2007,8 @@ export default function VoxelWorld() {
     setCrafted(`${plan.give.count}× ${itemLabel(plan.give.itemId)}`)
     setCraftTick(t => t + 1)
     refreshHotbar()
-    // ★ Tutorial 'planks'/'lantern' steps read the CRAFT OUTPUT, not the recipe id — any of the
+    // ★ The tutorial's 'lantern' step reads the CRAFT OUTPUT, not the recipe id — any of the
     // three plank recipes satisfies 'planks' (Greg said "a tree", not which one).
-    if (plan.give.itemId.endsWith('_plank')) advanceTutorial('planks', 'lantern')
     if (plan.give.itemId === 'mana_lantern') advanceTutorial('lantern', 'light')
   }, [have, refreshHotbar, advanceTutorial, station])
 
@@ -2071,12 +2116,15 @@ export default function VoxelWorld() {
     refreshHotbar()
   }, [refreshHotbar, station])
 
-  /** The two tutorial facts World cannot resolve itself because they are mid-mining/mid-placement
-   *  events, not craft calls — 'planks'/'lantern' are handled inline in `doCraft` above instead. */
-  const onQuestEvent = useCallback((event: 'cut' | 'light') => {
-    if (event === 'cut') advanceTutorial('cut', 'planks')
-    else advanceTutorial('light', 'report')
-  }, [advanceTutorial])
+  /** The one tutorial fact World cannot resolve itself because it is a mid-placement event, not a
+   *  craft call: the lantern set on the glade path. Greg's `lit` line is his, said from across the
+   *  glade (a toast, not a box — the keeper is mid-placement), and the choice is armed by it. Hazel's
+   *  cut/mill steps are read off the inventory (`progress`), so a felled log needs no event. */
+  const onQuestEvent = useCallback((event: 'light') => {
+    if (event !== 'light' || tutorial.current.stage !== 'light') return
+    advanceTutorial('light', 'choice')
+    say(`Gregory: ${SCRIPT_LIT.join(' ')}`)
+  }, [advanceTutorial, say])
 
   /**
    * ── ★★★ THE UI VERB CHAIN, LIFTED SO A CONTROLLER CAN WALK IT (2026-08-28) ──────────────────
@@ -2136,7 +2184,8 @@ export default function VoxelWorld() {
       interact: () => {
         if (dialogueOpen) closeDialogue()   // hands the cursor back itself
         else if (cursorUIOpen) { /* a surface is up and E is not its door — do nothing */ }
-        else if (nearGreg) { openCursorUI(); setDialogueOpen(true) }
+        else if (nearGreg) openTalk('greg')
+        else if (nearFolk) openTalk(nearFolk)
         // E is the interact key everywhere else too: at the bench it opens the craft surface —
         // the MC muscle memory — with Greg taking priority when you're near both. C still works.
         else if (nearTable) { openCursorUI(); setCraftOpen(true) }
@@ -2160,8 +2209,8 @@ export default function VoxelWorld() {
       rotatePiece: () => setRot(r => ((r + 1) % 4) as Rotation),
     },
   ), [consoleOpen, dialogueOpen, craftOpen, bagOpen, showSettings, cursorUIOpen, drawn, holdsPiece, showMap,
-      openChest, nearGreg, nearTable, nearMist, hasParty, openCursorUI, closeCursorUI, closeBag,
-      closeDialogue, startSpar])
+      openChest, nearGreg, nearFolk, nearTable, nearMist, hasParty, openCursorUI, closeCursorUI, closeBag,
+      closeDialogue, openTalk, startSpar])
 
   /**
    * The chain as a ref, because `World`'s frame loop is a different component and reads it per
@@ -2291,7 +2340,7 @@ export default function VoxelWorld() {
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
           rot={rot}
           tools={tools} skills={skills} buffs={buffs} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
-          tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
+          tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg} onNearFolk={setNearFolk}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
           plotCfg={plotCfg} plotTier={plotTier} litterFrom={litterFrom} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut} ctxLostOut={ctxLostOut}
@@ -2318,7 +2367,7 @@ export default function VoxelWorld() {
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
            bindings={bindings.current} padKind={padRef.current?.kind ?? 'generic'}
-           tutorialStage={tutorial.current.stage} nearGreg={nearGreg} dialogueOpen={dialogueOpen}
+           tutorial={tutorial.current} progress={progress()} nearGreg={nearGreg} nearFolk={nearFolk} dialogueOpen={dialogueOpen}
            nearTable={nearTable} craftOpen={craftOpen} nearMist={nearMist} hasParty={hasParty}
            sparLedger={sparLedger} vitals={vitals} mana={mana} cast={castOut} />
       {/* ★★★ THE ONE MESSAGE THAT MUST OUTLIVE THE FRAME LOOP.
@@ -2491,14 +2540,17 @@ export default function VoxelWorld() {
           onClose={() => { setShowMap(false); closeCursorUI() }} />
       )}
 
-      {dialogueOpen && (() => {
+      {dialogue && dialogue.who === 'greg' && tutorial.current.stage === 'done' && (() => {
         // Read at OPEN time, from the live refs — the party and the index are both refs, so a
         // panel that captured them in state would show yesterday's book.
         const led = foldLedger(spiritIndex.current, party.current)
-        return <GregDialogue stage={tutorial.current.stage} ledger={led}
+        return <GregDialogue ledger={led}
                              owed={foldOwed(led, plotTier.current)} onWiden={widenFold}
                              onClose={closeDialogue} />
       })()}
+      {dialogue && !(dialogue.who === 'greg' && tutorial.current.stage === 'done') && (
+        <ScriptDialogue who={dialogue.who} talk={dialogue.talk} onAnswer={onAnswer} onClose={closeDialogue} />
+      )}
 
       {/* ★ THE SPAR. The SAME real-time arena every other fight runs (`engine/arena.ts` via
           ArenaBattle) — the spirit fights on its own instinct and the Keeper coaches. That is not a
@@ -2576,7 +2628,7 @@ function Clock() {
  * directly, and leave the component tree alone. 10 Hz is well under a frame and well over the eye.
  */
 
-function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, heldPiece, rot, inv, skill, levelUp, crafted, tools, skills, buffs, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast, collarNear, tremor }: {
+function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, heldPiece, rot, inv, skill, levelUp, crafted, tools, skills, buffs, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorial, progress, nearGreg, nearFolk, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast, collarNear, tremor }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
@@ -2612,11 +2664,15 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
   bindings: BindingMap
   /** Which controller family is in hand, so a hint says ✕ to a DualSense player and A to an Xbox one. */
   padKind: PadKind
-  tutorialStage: TutorialStage
+  /** The tutorial as it stands, plus what the keeper holds — the objective chip is derived from both. */
+  tutorial: TutorialState
+  progress: Progress
   /** The crosshair is on Greg, in reach, unoccluded — World's per-frame aim test. Drives "E — talk".
    *  The prompt appearing IS the highlight: there is no outline on him, so this is how a player
    *  learns the verb is armed. Which is why it must never show for someone he is not looking at. */
   nearGreg: boolean
+  /** Same test, for the five folk: the one the crosshair is on, or null. */
+  nearFolk: FolkId | null
   dialogueOpen: boolean
   /** The presence in spar range, or null — names itself in the prompt before you commit. */
   nearMist: Resident | null
@@ -2701,9 +2757,9 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
             back), and the one thing a piece adds — the quarter-turn — is what it names. */}
         {heldPiece
           ? <div className="text-amber-200/80">{heldPiece.name} · RMB place · R turn{rot ? ` +${rot * 90}°` : ''} · LMB on a piece takes it back</div>
-          : tutorialStage !== 'done' && (
+          : tutorial.stage !== 'done' && (
             <div className="mt-1 flex flex-wrap gap-x-3 text-white/45">
-              {hintsFor(bindings, STAGE_ACTIONS[tutorialStage], padKind === 'generic' ? 'key' : 'pad', padKind)
+              {hintsFor(bindings, stageActions(tutorial, progress), padKind === 'generic' ? 'key' : 'pad', padKind)
                 .map(h => (
                   <span key={h.id}>
                     <span className="gx-label text-[9px] text-white/35">{h.input}</span>{' '}
@@ -2756,10 +2812,10 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           that true. All three of these ASK `.gx-label`/`.gx-value` rather than restating a tracking
           value — this chip's hand-rolled `tracking-[.16em]` was a second spelling of the layer's
           0.22em. Hidden once the gate is open: there is no more objective to chase. */}
-      {tutorialStage !== 'done' && (
+      {tutorial.stage !== 'done' && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-mono bg-black/45 rounded px-2.5 py-1 pointer-events-none">
           <span className="gx-label text-white/40">objective</span>{' '}
-          <span className="gx-value text-amber-200/90">{OBJECTIVE_LABEL[tutorialStage]}</span>
+          <span className="gx-value text-amber-200/90">{objectiveLabel(tutorial, progress)}</span>
         </div>
       )}
 
@@ -2771,7 +2827,12 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           <div className="text-[11px] font-mono tracking-wide text-white/85">E — talk</div>
         </div>
       )}
-      {!nearGreg && nearTable && !craftOpen && (
+      {!nearGreg && nearFolk && !dialogueOpen && (
+        <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
+          <div className="text-[11px] font-mono tracking-wide text-white/85">E — talk to {folkDef(nearFolk).name}</div>
+        </div>
+      )}
+      {!nearGreg && !nearFolk && nearTable && !craftOpen && (
         <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
           <div className="text-[11px] font-mono tracking-wide text-white/85">E — craft</div>
         </div>
@@ -4029,7 +4090,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearFolk, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -4083,11 +4144,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    *  round-trip. World only READS `.stage` — every write to it happens in the parent
    *  (`advanceTutorial`/`closeDialogue`), which is also what owns `saveTutorial`. */
   tutorial: React.RefObject<TutorialState>
-  /** The two tutorial facts World alone can see — a block breaking under the pick, a block landing
-   *  under the cursor. Crafting is detected in the parent's `doCraft` instead. */
-  onQuestEvent: (event: 'cut' | 'light') => void
+  /** The one tutorial fact World alone can see — a lantern landing under the cursor, in the glade.
+   *  Crafting is detected in the parent's `doCraft`; Hazel's cut is read off the inventory. */
+  onQuestEvent: (event: 'light') => void
   /** Fires only on change, same dedup shape as `onTool`. */
   onNearGreg: (near: boolean) => void
+  onNearFolk: (id: FolkId | null) => void
   /** The withdrawal ledger, by ref — the pass reads it, the spar's end writes it. */
   mistLedger: React.MutableRefObject<MistLedger>
   onNearMist: (r: Resident | null) => void
@@ -4336,6 +4398,21 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     g.group.position.set(GREG_CX, GREG_Y, GREG_CZ)
     return g
   }, [])
+  // The five folk (2026-09-15, Magii's sheet) — Greg's figure in a trade colour each, standing on
+  // a floor cell of their own stamped building (`folk.ts`). Same surface the stamps were floored
+  // on (`stampGenPiecesForCol` below reads the same `columnHeight`), so feet meet floor by
+  // construction. Static, like Greg; the aim test below reads their boxes, never the meshes.
+  const folk = useMemo(() => {
+    const sites = folkSites(PLACED_STAMPS, (x, z) => columnHeight(x, z, SEED))
+    const figs = createFigures(sites.map(site => { const d = folkDef(site.id); return { name: d.name, robe: d.robe, skin: d.skin } }))
+    return sites.map((site, i) => {
+      const fig = figs[i]
+      fig.group.position.set(site.cx, site.y, site.cz)
+      fig.group.rotation.y = site.yaw
+      const box = bodyBox(site.cx, site.cz, site.y + GREG_BOUNDS.y0, site.y + GREG_BOUNDS.y1, GREG_BOUNDS.halfW)
+      return { id: site.id, fig, box }
+    })
+  }, [])
   // Hot-spring steam (2026-08-08) — sleeps everywhere but the Springs; see steam.ts.
   const steam = useMemo(() => createSteamPoints(SEED), [])
   // Chimney smoke (2026-09-13, Fennel's R5) — rises from every HEARTH / OVEN in the nearby columns,
@@ -4457,6 +4534,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     try { saplingClock.current = JSON.parse(localStorage.getItem(SAPLING_KEY) ?? '{}') } catch { saplingClock.current = {} }
   }, [SAPLING_KEY])
   const lastNearGreg = useRef(false)
+  const lastNearFolk = useRef<FolkId | null>(null)
   /** Edge latch for the collar prompt — see the emitter in the foe loop. */
   const lastCollarNear = useRef(false)
   const lastNearTable = useRef(false)
@@ -4863,8 +4941,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         }
       }
       // ensureBasicTools over the SAVED set: a future tool family added to the game arrives in
-      // an old save as its basic tier instead of as undefined.
-      if (p.tools) tools.current = ensureBasicTools(p.tools as EquippedTools)
+      // an old save as its basic tier instead of as undefined. Only once the fold has given the
+      // bag — before it, the saved set is whatever Hazel lent (see the host's `tools` header).
+      if (p.tools) tools.current = tutorial.current.stage === 'done' ? ensureBasicTools(p.tools as EquippedTools) : (p.tools as EquippedTools)
       if (p.skills) skills.current = p.skills as SkillSet
       // Shape-checked, and pruned on the way in: a timer that ended while the tab was shut is gone.
       if (p.buffs && typeof p.buffs === 'object' && !Array.isArray(p.buffs)) {
@@ -5217,6 +5296,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     disposeHollowMeshes()
     tiles?.texture.dispose()
     greg.dispose()
+    for (const f of folk) f.fig.dispose()
     steam.dispose()
     smoke.dispose()
     breakFx.dispose()
@@ -5224,7 +5304,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     mist.dispose()
     ring.dispose()
     flora.dispose()
-  }, [dropGeo, flatMaterial, textured, tiles, pieces, greg, steam, smoke, breakFx, seam, mist, flora])
+  }, [dropGeo, flatMaterial, textured, tiles, pieces, folk, greg, steam, smoke, breakFx, seam, mist, flora])
 
   /**
    * Set the instant the context is lost, read by the FRAME LOOP so it stops. A ref and not state:
@@ -9563,6 +9643,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     {
       const near = aimedAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, GREG_BOX, GREG_TALK_RANGE, blockDist)
       if (near !== lastNearGreg.current) { lastNearGreg.current = near; onNearGreg(near) }
+      // The folk share Greg's test and his reach; the buildings occlude through `blockDist` like
+      // any wall, so there is no talking to Hazel through her own roof.
+      let on: FolkId | null = null
+      for (const f of folk) if (aimedAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, f.box, GREG_TALK_RANGE, blockDist)) { on = f.id; break }
+      if (on !== lastNearFolk.current) { lastNearFolk.current = on; onNearFolk(on) }
     }
     {
       // The bench is a BLOCK, so it needs no box of its own — "the cell the reticle is on is a
@@ -10040,8 +10125,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // not open an air pocket. Read BEFORE the write — the question is about the neighbours.
           setVoxel(hit.x, hit.y, hit.z, afterBreak(hit.x, hit.y, hit.z, voxel))
         }
-        // ★ Tutorial 'cut' step — any log, not one species (see LOG_MATERIALS's header).
-        if (LOG_MATERIALS.has(hit.material)) onQuestEvent('cut')
         breaking.current = null
       }
     } else if (!(pieceLook && mouse.current.left && !weaponDrawn)) {
@@ -10454,8 +10537,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           give(inv.current!, held, 1)
           onSay(`your fold holds as many chests as it can keep (${chestCap(plotCfg.current)}) — a wider fold keeps more`)
         }
-        // ★ Tutorial 'light' step — placing IS the objective, not just holding a lantern.
-        if (mat === MAT.MANA_LANTERN) onQuestEvent('light')
+        // ★ Tutorial 'light' step — placing IS the objective, not just holding a lantern. Greg asked
+        // for a light on HIS path ("set it where the dark sits thickest"), so a lantern carried out
+        // past the glade does not answer him; the radius is the glade's, generous, not the path's
+        // exact cells — where on the path is the keeper's call (Magii's sheet leaves it to us).
+        if (mat === MAT.MANA_LANTERN && Math.hypot(hit.px - GREG_CX, hit.pz - GREG_CZ) <= GLADE_LIGHT_RADIUS) onQuestEvent('light')
         onInvChange()
         mouse.current.right = false   // one block per click, not a firehose
       }
@@ -10782,6 +10868,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       <primitive object={pieces.group} />
       {stations && <primitive object={stations.group} />}
       <primitive object={greg.group} />
+      {folk.map(f => <primitive key={f.id} object={f.fig.group} />)}
       <primitive object={steam.points} />
       <primitive object={smoke.points} />
       <primitive object={breakFx.points} />
@@ -10898,6 +10985,64 @@ function ChatConsole({ open, seed, log, ctx, onSubmit, onClose }: {
 }
 
 /**
+ * ── ★ THE SCRIPT BOX (2026-09-15) — the locked Beat 0½ lines, Greg's and the five folk's ──────────
+ * One box for every conversation before the fold. It shows what the pure machine handed the host
+ * at open (`Talk.beats`): spoken lines in the speaker's voice, stage directions dim and italic, and
+ * — on the choice — the script's two answers as buttons. It writes nothing itself; closing it is
+ * what applies the talk (`applyTalk`), and an answer swaps the beats for the answer's before that.
+ * `data-panel` is the harness's handle (greg-check.mts and its kin pick a box out by it).
+ */
+function ScriptDialogue({ who, talk, onAnswer, onClose }: {
+  who: 'greg' | FolkId
+  talk: Talk
+  onAnswer: (answer: 'staying' | 'not-yet') => void
+  onClose: () => void
+}) {
+  const name = who === 'greg' ? 'Gregory' : folkDef(who).name
+  const speaker = speakerOf(talk.beats)
+  const options = talk.beats.filter((b): b is { option: string } => 'option' in b)
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
+      <div data-panel={who === 'greg' ? 'greg' : `folk-${who}`}
+           className="w-[440px] max-w-[92vw] bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-baseline justify-between mb-3">
+          <span className="gx-label text-white/95">{name}</span>
+          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
+        </div>
+        <div className="text-white/85 leading-relaxed space-y-1.5 max-h-[60vh] overflow-y-auto">
+          {talk.beats.map((b, i) =>
+            'scene' in b ? <div key={i} className="text-white/40 italic">{b.scene}</div>
+            : 'who' in b ? (
+              <div key={i}>
+                {/* The name is repeated only when the speaker changes mid-box (never today, the
+                    script keeps one voice per trigger) — the header already says who this is. */}
+                {b.who !== speaker && <span className="text-white/50">{b.who[0] + b.who.slice(1).toLowerCase()}: </span>}
+                {b.text}
+              </div>
+            ) : null)}
+        </div>
+        {talk.choice && options.length > 0 && (
+          <div className="mt-3 pt-2 border-t border-white/8 flex flex-col gap-1.5">
+            {options.map(o => {
+              const answer = /not yet/i.test(o.option) ? 'not-yet' : 'staying'
+              return (
+                <button key={o.option} onClick={() => onAnswer(answer)}
+                        className="w-full px-2 py-1.5 rounded border border-amber-200/40 text-amber-100/90 text-left
+                                   hover:border-amber-200/70 hover:bg-white/5 transition-colors">
+                  {o.option}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {!talk.choice && <div className="gx-label mt-3 text-white/40 text-[10px]">E / esc — close</div>}
+      </div>
+    </div>
+  )
+}
+
+/**
  * ── ★★ AND ONCE THE TUTORIAL IS DONE, GREG IS THE MAN WHO WIDENS YOUR FOLD (2026-08-18) ─────────
  * Canon gives him exactly this job (`shimmer-geography.md` › *THE GRIMOIRE IS WHAT GREG READS*):
  * he folds what the keeper cannot, **the book is how he sees they are ready**, and nothing is
@@ -10912,19 +11057,18 @@ function ChatConsole({ open, seed, log, ctx, onSubmit, onClose }: {
  * approach would spend the one moment the arc is built around while the keeper was reading the
  * first line, and a keeper who closed the panel early would never learn what happened.
  */
-function GregDialogue({ stage, ledger, owed, onWiden, onClose }: {
-  stage: TutorialStage
+function GregDialogue({ ledger, owed, onWiden, onClose }: {
   ledger: ReturnType<typeof foldLedger>
   owed: boolean
   onWiden: () => void
   onClose: () => void
 }) {
   const [widened, setWidened] = useState(false)
-  // Before the tutorial ends he is still teaching; the fold talk would land on a keeper who has not
-  // met a single spirit and does not yet know what a grimoire is.
-  const fold = stage === 'done' || stage === 'report'
-  const lines = !fold ? GREG_LINE[stage]
-    : widened ? GREG_LINES.foldReady[GREG_LINES.foldReady.length - 1]
+  // Before the tutorial ends he is still teaching (`ScriptDialogue`, the locked Beat 0½ lines);
+  // the host only opens THIS box once the fold has happened, so the fold talk never lands on a
+  // keeper who has not met a single spirit and does not yet know what a grimoire is.
+  const fold = true
+  const lines = widened ? GREG_LINES.foldReady[GREG_LINES.foldReady.length - 1]
     : owed ? GREG_LINES.foldReady.join('\n')
     : ledger.atTop ? GREG_LINES.foldTop.join('\n')
     : GREG_LINES.foldWaiting.join('\n')

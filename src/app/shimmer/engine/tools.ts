@@ -26,6 +26,13 @@ export const TOOL_DEFS: Record<string, ToolDef> = {
   worn_blade:    { id: 'worn_blade',    name: 'Worn Blade',    skillId: 'forestry',    tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
   worn_spike:    { id: 'worn_spike',    name: 'Worn Spike',    skillId: 'prospecting', tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
   worn_rinstick: { id: 'worn_rinstick', name: 'Worn Rinstick', skillId: 'rinning',     tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
+  // ── ★ HAZEL'S BLADE — LENT, NOT OWNED (2026-09-15, canon shimmer-quests-mainmap.md › Beat 0½) ──
+  // The Glade tutorial's keeper has no tool until the fold (the bag is Beat 1's gi_5), so Hazel
+  // lends hers for her errand and takes it back at the turn-in. `basic: true` for the one reason
+  // the worn set has it: infinite, uncraftable, unrepairable, never listed as a next tier. It is
+  // NOT in `BASIC_TOOL_ID`, so `ensureBasicTools` never hands it out — only Hazel does
+  // (voxel3d/tutorial.ts `lend_blade` / `take_blade`).
+  hazels_blade:  { id: 'hazels_blade',  name: "Hazel's Blade", skillId: 'forestry',    tier: 1, durability: 999999, xpBonus: 1, speedBonus: 1, recipe: [], basic: true },
 
   // Forestry — Blades
   goldwood_blade: {

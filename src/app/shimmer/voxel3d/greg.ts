@@ -51,7 +51,7 @@ export const GREG_BOUNDS = {
  * camera by construction, so this is the "always-facing" name label the brief asks for with no
  * per-frame code at all.
  */
-function buildNameSprite(): THREE.Sprite {
+function buildNameSprite(name: string): THREE.Sprite {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 64
@@ -62,7 +62,7 @@ function buildNameSprite(): THREE.Sprite {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillStyle = '#fefaf0'
-  ctx.fillText('Gregory', canvas.width / 2, canvas.height / 2)
+  ctx.fillText(name, canvas.width / 2, canvas.height / 2)
   const texture = new THREE.CanvasTexture(canvas)
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false })
   const sprite = new THREE.Sprite(material)
@@ -71,15 +71,54 @@ function buildNameSprite(): THREE.Sprite {
   return sprite
 }
 
-/**
- * Build Greg once. ONE shared unit-cube geometry, scaled per part (body, head, two arms) via each
- * mesh's own `.scale` — the geometry itself never changes — plus two materials (robe / skin).
- */
-export function createGregMesh(): GregMesh {
-  const geo = new THREE.BoxGeometry(1, 1, 1)
-  const bodyMat = new THREE.MeshLambertMaterial({ color: BODY_COLOR })
-  const headMat = new THREE.MeshLambertMaterial({ color: HEAD_COLOR })
+/** A figure's look: the label over its head and its two placeholder colours. */
+export interface FigureLook {
+  name: string
+  robe?: number
+  skin?: number
+}
 
+/** Build Greg once — the same figure as every folk, in his own colours (`createFigure`). */
+export function createGregMesh(): GregMesh {
+  return createFigure({ name: 'Gregory' })
+}
+
+/**
+ * Build one standing figure. ONE shared unit-cube geometry, scaled per part (body, head, two arms)
+ * via each mesh's own `.scale` — the geometry itself never changes — plus two materials (robe /
+ * skin). The five Glade folk (`folk.ts`) are this same body in a trade colour each, until art:
+ * Magii's sheet says "Greg's mesh tinted", and one factory means one hitbox (`GREG_BOUNDS`) for all.
+ */
+export function createFigure(look: FigureLook): GregMesh {
+  return createFigures([look])[0]
+}
+
+/**
+ * Several figures from ONE call — the five folk. One shared cube geometry across all of them, and
+ * the materials CACHED BY COLOUR: two folk in the same skin share a material, and the count is
+ * bounded by the palette, not the population (the render audit's rule; `dispose` releases the
+ * cache once, when the last figure goes).
+ */
+export function createFigures(looks: readonly FigureLook[]): GregMesh[] {
+  const geo = new THREE.BoxGeometry(1, 1, 1)
+  const mats = new Map<number, THREE.MeshLambertMaterial>()
+  for (const colour of looks.flatMap(l => [l.robe ?? BODY_COLOR, l.skin ?? HEAD_COLOR])) {
+    if (mats.has(colour)) continue
+    mats.set(colour, new THREE.MeshLambertMaterial({ color: colour }))
+  }
+  let alive = looks.length
+  // The shared geometry and the material cache go when the LAST figure has been disposed.
+  const release = () => {
+    if (--alive > 0) return
+    geo.dispose()
+    for (const m of mats.values()) m.dispose()
+    mats.clear()
+  }
+  return looks.map(look => buildFigure(geo, mats.get(look.robe ?? BODY_COLOR)!, mats.get(look.skin ?? HEAD_COLOR)!, look.name, release))
+}
+
+/** One figure from shared parts. Constructs no material of its own — only the name label's. */
+function buildFigure(geo: THREE.BufferGeometry, bodyMat: THREE.Material, headMat: THREE.Material, name: string, release: () => void): GregMesh {
   const group = new THREE.Group()
 
   const body = new THREE.Mesh(geo, bodyMat)
@@ -102,15 +141,13 @@ export function createGregMesh(): GregMesh {
   armR.position.set(PART.arm.x, PART.arm.y, 0)
   group.add(armR)
 
-  const label = buildNameSprite()
+  const label = buildNameSprite(name)
   group.add(label)
 
   return {
     group,
     dispose: () => {
-      geo.dispose()
-      bodyMat.dispose()
-      headMat.dispose()
+      release()
       const labelMat = label.material as THREE.SpriteMaterial
       labelMat.map?.dispose()
       labelMat.dispose()
