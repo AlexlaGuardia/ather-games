@@ -1,4 +1,4 @@
-// The alchemy station panel — one component for the grinder, the still, the mixing vessel and
+// The alchemy station panel — one component for the mortar, the still, the bowl and
 // the cauldron. Sibling of `StationPanel` (VoxelWorld.tsx) and shaped like it on purpose: a job
 // card while the station runs, a recipe list while it is idle, the chests beside it as extra
 // pockets. What differs is the table (`alchemy-chain.ts`, not `RECIPES`), the mana a finishing run

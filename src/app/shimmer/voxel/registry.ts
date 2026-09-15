@@ -316,9 +316,9 @@ export const BLOCKS: BlockDef[] = [
   // Furniture rules like the cauldron: breaks by hand into itself. The grinder is stone and a shade
   // heavier; the still is glass and the lightest thing on the shelf. No `emit` — nothing here is a
   // fire, and the still stands ON a hearth for its heat rather than carrying one.
-  { noSlab: true, material: MAT.GRINDER, name: 'Grinder', hardness: 1.2, skill: null, minTier: 0, drops: [{ itemId: 'grinder', count: 1 }], placeable: true },
+  { noSlab: true, material: MAT.GRINDER, name: 'Mortar', hardness: 1.2, skill: null, minTier: 0, drops: [{ itemId: 'grinder', count: 1 }], placeable: true },
   { noSlab: true, material: MAT.STILL, name: 'Still', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'still', count: 1 }], placeable: true },
-  { noSlab: true, material: MAT.MIXER, name: 'Mixing Vessel', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'mixer', count: 1 }], placeable: true },
+  { noSlab: true, material: MAT.MIXER, name: 'Bowl', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'mixer', count: 1 }], placeable: true },
   // The running cauldron. `placeable: false` — a keeper never sets a lit one, the world swaps it in;
   // it DROPS the plain cauldron so breaking a running one gives back the block you placed. `emit`
   // under the hearth's 12: a brew glows, a fire blazes.

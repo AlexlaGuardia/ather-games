@@ -33,10 +33,10 @@
 // law is *every recipe stays hand-makeable anywhere* (`recipes.ts`), and a potion cannot be boiled
 // on your knee. Two tables, one job shape.
 //
-// ⚠ NAMES ARE PLACEHOLDERS PENDING MAGII. The cauldron is canon's word; *grinder*, *still* and
-// *mixing vessel* are not — `CANON_GAPS.md` holds the `[OPEN]` block (2026-09-14) asking what the
-// Ather calls them and what they are made of (no metal: stone, fired clay, hand-blown glass). When
-// the ruling lands, `ALCHEMY_STATIONS[*].name` is the one place the word lives.
+// THE WORDS ARE CANON'S. Shipped 09-14 under placeholders (grinder / mixing vessel) with an `[OPEN]`
+// gap; RULED 2026-09-15 (athernyx b3a3979): Mortar (stone) · Still (glass on a fired-clay foot) · Bowl (fired
+// clay, wide and shallow, cold) · Cauldron. Ids stay as the code key; `ALCHEMY_STATIONS[*].name` is
+// the one place the word lives. Barred: quern (miller's word), alembic (Citadel copper), basin (a Wilds ground).
 import { POTION_DEFS, type PotionDef } from '../engine/alchemy'
 import { MAT } from '../voxel/depth'
 import type { StationJob, Workshop } from '../voxel/workshop'
@@ -68,9 +68,9 @@ export const ALCHEMY_RUN_MS = {
 } as const
 
 export const ALCHEMY_STATIONS: Record<AlchemyStationId, AlchemyStationDef> = {
-  grinder:  { id: 'grinder',  name: 'Grinder',        step: 'grind',  runMs: ALCHEMY_RUN_MS.grind,  materials: [MAT.GRINDER] },
+  grinder:  { id: 'grinder',  name: 'Mortar',         step: 'grind',  runMs: ALCHEMY_RUN_MS.grind,  materials: [MAT.GRINDER] },
   still:    { id: 'still',    name: 'Still',          step: 'distil', runMs: ALCHEMY_RUN_MS.distil, materials: [MAT.STILL] },
-  mixer:    { id: 'mixer',    name: 'Mixing Vessel',  step: 'mix',    runMs: ALCHEMY_RUN_MS.mix,    materials: [MAT.MIXER] },
+  mixer:    { id: 'mixer',    name: 'Bowl',           step: 'mix',    runMs: ALCHEMY_RUN_MS.mix,    materials: [MAT.MIXER] },
   cauldron: { id: 'cauldron', name: 'Cauldron',       step: 'brew',   runMs: ALCHEMY_RUN_MS.brew,   materials: [MAT.CAULDRON, MAT.CAULDRON_LIT] },
 }
 

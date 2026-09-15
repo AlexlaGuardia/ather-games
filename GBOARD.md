@@ -11,7 +11,7 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
-## ⚗️ Shimmer — **THE ALCHEMY CHAIN: GRIND · DISTIL · MIX · BREW, AND THE WORD PICKS THE ROUTE** (2026-09-14 late, hub lane `417e69be`, beside a spirits window on flora) · *Last touched 2026-09-15 — ✅ **DEPLOYED `BUILD_ID iVAPM7_2YINDsSdCTE26m` from `6531790`** (worker repin `743c844`), served == disk; superseded the same night by spirits' `LBRhO2E-ThoqVdgRSnvIx` from `f4e8c1f` (fruit bushes), which carries it. alchemy-chain 172/0 · recipes 77/0 · brew 52/0 · interact 47 · console 159/0 · workshop 96/0 · atlas-wiring 49/0 (stale reads fixed, `69bf1ef`). tsc 7 (baseline).*
+## ⚗️ Shimmer — **THE ALCHEMY CHAIN: GRIND · DISTIL · MIX · BREW, AND THE WORD PICKS THE ROUTE** (2026-09-14 late, hub lane `417e69be`, beside a spirits window on flora) · *Last touched 2026-09-15 AM (names ruled) — ✅ **DEPLOYED `BUILD_ID iVAPM7_2YINDsSdCTE26m` from `6531790`** (worker repin `743c844`), served == disk; superseded the same night by spirits' `LBRhO2E-ThoqVdgRSnvIx` from `f4e8c1f` (fruit bushes), which carries it. alchemy-chain 172/0 · recipes 77/0 · brew 52/0 · interact 47 · console 159/0 · workshop 96/0 · atlas-wiring 49/0 (stale reads fixed, `69bf1ef`). tsc 7 (baseline).*
 
 **Left off:** Alex: *"break the process down into steps to make a potion.. like grinding up a powder, distilling, mixing,
 and brewing as different stations."* Built the night he said it. The vessels brief already rules **the word is the method**,
@@ -27,15 +27,16 @@ infusion earns the whole chain through a mixed base; tier 1 is held at two stati
   `setVoxel`'s job cleanup knows the two are one station; breaking any station mid-run salvages.
 - Intermediates (`powder_*` / `extract_*` / `base_*`) get **generated icons** at the source's own tint (mound / drop /
   bowl). `/give` knows them. Spirits' fruit bushes (`f4e8c1f`) made sunfruit + moonberry real, so every row is reachable.
-- ⚠ **Names are placeholders.** Canon names only the cauldron. `CANON_GAPS` `[OPEN]` 2026-09-14 (athernyx `0f04afe`),
-  dbr to magii queued: what the Ather calls the three vessels and what each is made of.
+- ✅ **Names RULED 2026-09-15** (athernyx `b3a3979`): **Mortar** (stone) · **Still** (glass bulb on a fired-clay foot) ·
+  **Bowl** (fired clay, wide and shallow, cold) · Cauldron. Renamed in `ALCHEMY_STATIONS`, `recipes.ts`, `registry.ts`;
+  ids (`grinder`/`mixer`) stay as the code key so placed blocks + saves survive. Barred: quern, alembic, basin.
 
 **Next:**
 1. ⛔ **ALEX WALKS THE CHAIN** — craft the three, grind 5 shards, brew a Mana Draught; call the run times (grind 3s ·
    distil 8s · mix 5s · brew 12s · cordial 30s) and the lit-cauldron look.
 2. **The alive pass:** grinding as a HELD action (pestle circles, progress ring); the still drips over real time;
    bubbles on the running cauldron beyond the painted dots.
-3. Magii's ruling → rename `ALCHEMY_STATIONS[*].name` + the recipe names; Alex judges the three block looks.
+3. ~~Magii's ruling → rename~~ done 09-15. Alex judges the three block looks — the mortar tile still paints a TURNING stone (a quern look); a mortar wants a pestle, which the ALIVE pass (pestle circles) draws anyway.
 
 **Decisions:** four verbs, not four hoops — the word routes, so tier 1 stays a short walk · a bulb and a fruit are
 'dry' for the WALK (harvest brew / salve at two stations), the test decided · the lit cauldron is a material because

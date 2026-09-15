@@ -145,7 +145,7 @@ export function rightClickIntent(
   // same day. A hand-kept `=== CRAFT_TABLE || === SAWMILL` here is how a new station ships as a
   // block you can place, look at, and not open — a dead click, which this file exists to prevent.
   if (stationOf(aimed)) return 'work'
-  // ★ THE ALCHEMY CHAIN (2026-09-14) — grinder, still, mixing vessel and the cauldron (lit or not)
+  // ★ THE ALCHEMY CHAIN (2026-09-14; words ruled 09-15) — mortar, still, bowl and the cauldron (lit or not)
   // are stations too, with their own table (`alchemy-chain.ts`), and open the same way. The
   // cauldron used to answer `'brew'` here and open an instant panel; the chain replaced that, and
   // the `'brew'` intent below it stays reachable only by the owner's `/brew` console door.
