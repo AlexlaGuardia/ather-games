@@ -163,8 +163,11 @@ ok(!lightApplyHere('c', 'a', 'w').includes('shimmerLight(c'),
   const pm = readFileSync(join(new URL('.', import.meta.url).pathname, 'piece-mesh.ts'), 'utf8')
   ok(pm.includes("opts.cutout ? '    paneGlow = shimmerPaneGlow(tile.rgb, vPWPos, vPWNorm, gl_FrontFacing);' : ''"),
     '§5 ★★ the cutout (pane) program calls the glow with the TILE colour, the world position/normal and gl_FrontFacing')
-  ok(pm.includes("cartoonStackGlsl('vPWNorm', 'vPWPos', opts.cutout ? 'paneGlow' : 'vec3(0.0)')"),
-    '§5 ★★ the glow is the pane program\'s EMISSIVE (added after the field, so the yard\'s night cannot darken the room\'s lamp) and the solid program emits nothing')
+  // 2026-09-15: a third variant joined — the station models' EMISSIVE program (`emissive: true`,
+  // per-vertex glow × tile alpha, the block program's own rule). The plain solid piece program still
+  // emits nothing; the pane still emits its glow. Three arms, each named.
+  ok(pm.includes("cartoonStackGlsl('vPWNorm', 'vPWPos', opts.cutout ? 'paneGlow' : opts.emissive ? 'diffuseColor.rgb * vPEmissive * gPieceTileA' : 'vec3(0.0)')"),
+    '§5 ★★ the glow is the pane program\'s EMISSIVE (added after the field, so the yard\'s night cannot darken the room\'s lamp); the model program emits its parts\' glow × tile alpha; the plain solid program emits nothing')
   ok(/^vec3 paneGlow = vec3\(0\.0\);$/m.test(pm), '§5 paneGlow is declared before the tile block, so the solid program still compiles')
 }
 

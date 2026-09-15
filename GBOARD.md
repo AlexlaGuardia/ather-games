@@ -58,6 +58,11 @@ infusion earns the whole chain through a mixed base; tier 1 is held at two stati
    `accepts/pays 'fire'` — 2 sand → **3** glass at the kiln vs 2 by hand (still hand-makeable; mining is the gate),
    lists the six stained rows at no bonus. Three fires, three jobs: **oven bakes · hearth roasts · kiln fires.**
    Alex judges the kiln's look (first pass, generated).
+   **STATIONS ARE MODELS NOW (09-15 PM):** `MODELLED_MATS` + `station-mesh.ts` draw a box-built shape per station on the
+   block's own tiles (mesher emits no cube for those ids; identity/jobs/mining/saves untouched; CUBE fallback). Models in
+   `station-models/{workshop,alchemy,fires,decor}.ts`; the shelf at `/shimmer/dev/stations` (owner) is where a look is judged.
+   The program lights a part by `EMISSIVE × tile alpha` like the block program, so fire/brew/lantern glass glow. Alex's
+   first calls: cauldron rebuilt as a bellied pot (was a crate), the Mana Lantern modelled as a standing post-lamp.
 4. ~~Magii's ruling → rename~~ done 09-15. Alex judges the three block looks — the mortar tile still paints a TURNING stone (a quern look); a mortar wants a pestle, which the ALIVE pass (pestle circles) draws anyway.
 
 **Decisions:** four verbs, not four hoops — the word routes, so tier 1 stays a short walk · a bulb and a fruit are

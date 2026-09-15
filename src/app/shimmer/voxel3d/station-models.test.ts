@@ -15,13 +15,23 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // ── §1 the set: every station is modelled, and only stations are ─────────────────────────────
 {
   const stationMats = [...MODELLED_MATS]
-  ok(stationMats.every(m => stationOf(m) !== null || alchemyStationOf(m) !== null), '§1 every modelled id is a station')
+  // Decor that took a model — not stations, and the list is deliberate (a lantern, 09-15).
+  const DECOR = new Set<number>([MAT.MANA_LANTERN])
+  ok(stationMats.every(m => stationOf(m) !== null || alchemyStationOf(m) !== null || DECOR.has(m)), '§1 every modelled id is a station or named decor')
+  ok([...DECOR].every(m => isModelled(m) && (m in STATION_MODELS)), '§1 the named decor is modelled AND has a model (a cube lantern would be a regression)')
   const allStations = new Set<number>()
   for (const m of TILE_MATERIALS) if (stationOf(m) || alchemyStationOf(m)) allStations.add(m)
   const missing = [...allStations].filter(m => !isModelled(m))
   ok(missing.length === 0, `§1 ★ every station is modelled — missing: ${missing.map(m => blockDef(m)?.name).join(', ') || 'none'}`)
   ok(stationMats.every(m => TILE_MATERIALS.includes(m)), '§1 every modelled id has tile art to wear')
   ok(!isModelled(MAT.STONE) && !isModelled(MAT.CHEST), '§1 a wall and a chest are not modelled')
+  // The glow contract: a lit block's model glows where its tile does, and a dead part is told so.
+  const lantern = modelOf(MAT.MANA_LANTERN)
+  ok(lantern.parts.some(p => p.glow === undefined && p.side === undefined) && lantern.parts.filter(p => p.glow === 0).length >= 2,
+    '§1 the lantern: the head wears its own glowing tile, the post and cap are told glow: 0')
+  const host = codeOnly(readFileSync(new URL('./station-mesh.ts', import.meta.url), 'utf8'))
+  ok(host.includes("createPieceMaterial(tiles, { emissive: true }, light)") && host.includes("p.glow ?? (EMISSIVE[p.side ?? mat] ?? 0)"),
+    '§1 ★ the renderer runs the EMISSIVE program and defaults a part\'s glow to the worn block\'s own')
 }
 
 // ── §2 the contract: every model fits its cell, every tile it names exists ───────────────────

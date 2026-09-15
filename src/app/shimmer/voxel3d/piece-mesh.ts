@@ -122,8 +122,12 @@ export const pieceTint = (def: PieceDef): number => {
  * piece's own frame, and rotating the piece rotates its grain with it.
  */
 export function createPieceMaterial(
-  tiles: TileArray, opts: { cutout?: boolean } = {}, light: LightUniforms = createLightUniforms(),
+  tiles: TileArray, opts: { cutout?: boolean; emissive?: boolean } = {}, light: LightUniforms = createLightUniforms(),
 ): PieceMaterial {
+  // `emissive` (2026-09-15, the station models): the world's block program lights a lantern's glass
+  // and a hearth's fire by `EMISSIVE[mat] × tile.a` — the tile's alpha IS its glow mask. A model
+  // that wears those tiles must do the same or the lantern goes dark the day it stops being a cube.
+  // Per-VERTEX `aEmissive` (a model's parts glow differently); pieces never set it and stay unlit.
   // `cutout`: the pane's program — the glass tiles' alpha is coverage, discarded below half, and
   // both faces draw because a pane is looked at from the room and from the yard.
   const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: opts.cutout ? THREE.DoubleSide : THREE.FrontSide })
@@ -147,6 +151,7 @@ export function createPieceMaterial(
       .replace('#include <common>', `#include <common>
 attribute float aLayerTop;
 attribute float aLayerSide;
+${opts.emissive ? 'attribute float aEmissive;\nvarying float vPEmissive;' : ''}
 varying float vLayerTop;
 varying float vLayerSide;
 varying vec3 vPPos;
@@ -156,6 +161,7 @@ varying vec3 vPWNorm;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vLayerTop = aLayerTop;
 vLayerSide = aLayerSide;
+${opts.emissive ? 'vPEmissive = aEmissive;' : ''}
 vPPos = position;
 vPNorm = normal;
 #ifdef USE_INSTANCING
@@ -169,11 +175,13 @@ vPWNorm = normalize(mat3(modelMatrix) * normal);
     // and the field, so the room's lamp is never darkened by the yard's night. `gl_FrontFacing`
     // is what tells a double-sided sheet which side the viewer stands on — the varying normal
     // is the geometry's and does not flip with the face.
-    const emit = cartoonStackGlsl('vPWNorm', 'vPWPos', opts.cutout ? 'paneGlow' : 'vec3(0.0)')
+    const emit = cartoonStackGlsl('vPWNorm', 'vPWPos', opts.cutout ? 'paneGlow' : opts.emissive ? 'diffuseColor.rgb * vPEmissive * gPieceTileA' : 'vec3(0.0)')
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 ${CARTOON_DECL_GLSL}
 uniform sampler2DArray uTiles;
+${opts.emissive ? 'varying float vPEmissive;' : ''}
+float gPieceTileA = 0.0;
 varying float vLayerTop;
 varying float vLayerSide;
 varying vec3 vPPos;
@@ -192,6 +200,7 @@ vec3 paneGlow = vec3(0.0);
     vec4 tile = texture(uTiles, vec3(tileUv, layer));
 ${opts.cutout ? '    if (tile.a < 0.5) discard;' : ''}
     diffuseColor.rgb *= tile.rgb;
+    gPieceTileA = tile.a;
 ${opts.cutout ? '    paneGlow = shimmerPaneGlow(tile.rgb, vPWPos, vPWNorm, gl_FrontFacing);' : ''}
   }
 }`)

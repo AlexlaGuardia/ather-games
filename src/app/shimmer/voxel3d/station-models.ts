@@ -21,6 +21,8 @@
 //   · `top` / `side` name the MATERIAL whose tile a box wears on its up-face / other faces. Default
 //     is the station's own tiles. Any `TILE_MATERIALS` id is valid — the still's bulb wears GLASS,
 //     the mortar's pestle wears the stonecutter's grey, the cauldron's brew wears CAULDRON_LIT's top.
+//   · `glow` scales the tile's alpha into light, defaulting to the worn block's own EMISSIVE — so a
+//     hearth's flame box glows and its cobble cheek does not, with nothing written. Set 0 to kill it.
 //   · No facing: a station is looked at from every side, like the oven and hearth tiles already are.
 //   · Read something before you write: the tile it wears is painted in `tex/tiles.ts` and its
 //     substance is ruled (no metal anywhere — `world/ather.md`; the alchemy vessels in
@@ -34,6 +36,7 @@ import { MAT } from '../voxel/depth'
 import { MODELS as WORKSHOP } from './station-models/workshop'
 import { MODELS as ALCHEMY } from './station-models/alchemy'
 import { MODELS as FIRES } from './station-models/fires'
+import { MODELS as DECOR } from './station-models/decor'
 
 /** `[w, h, d, cx, cy, cz]` — size and centre, cell-local. */
 export type Box = readonly [number, number, number, number, number, number]
@@ -44,6 +47,12 @@ export interface ModelPart {
   top?: number
   /** Material whose SIDE tile the other faces wear. Default: the station's own. */
   side?: number
+  /**
+   * Glow strength, multiplied by the tile's alpha (the tile's own glow mask — a lantern's glass, a
+   * hearth's fire, the brew). Default: `EMISSIVE[side ?? the station]`, i.e. the part glows exactly
+   * as the block it wears did. 0 for a part that must stay dead (a lantern's wooden post).
+   */
+  glow?: number
 }
 
 export interface StationModel {
@@ -63,7 +72,8 @@ export const STATION_MODELS: Readonly<Record<number, StationModel>> = {
   // One file per group so three hands can model at once without touching one another's lines:
   //   workshop.ts — bench, sawmill, stonecutter · alchemy.ts — mortar, still, bowl, cauldron (+lit)
   //   fires.ts — oven, hearth, kiln
-  ...WORKSHOP, ...ALCHEMY, ...FIRES,
+  //   decor.ts — the lantern (not a station; the first decor block to take a model)
+  ...WORKSHOP, ...ALCHEMY, ...FIRES, ...DECOR,
 }
 
 export const modelOf = (material: number): StationModel => STATION_MODELS[material] ?? CUBE

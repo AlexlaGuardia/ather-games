@@ -736,6 +736,8 @@ export const MODELLED_MATS: ReadonlySet<number> = new Set<number>([
   MAT.CRAFT_TABLE, MAT.SAWMILL, MAT.STONECUTTER,
   MAT.GRINDER, MAT.STILL, MAT.MIXER, MAT.CAULDRON, MAT.CAULDRON_LIT,
   MAT.OVEN, MAT.HEARTH, MAT.KILN,
+  // Not a station — the first DECOR block to take a model (Alex, 09-15: "the lantern as well").
+  MAT.MANA_LANTERN,
 ])
 export const isModelled = (m: number): boolean => MODELLED_MATS.has(m)
 

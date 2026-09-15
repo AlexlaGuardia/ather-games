@@ -20,6 +20,7 @@ import { MODELLED_MATS } from '../voxel/depth'
 import { modelOf, type StationModel } from './station-models'
 import { createPieceMaterial, type PieceMaterial } from './piece-mesh'
 import { layerOf, TOP, SIDE } from './tex/tiles'
+import { EMISSIVE } from './attrs'
 import type { TileArray } from './tex/atlas'
 import type { LightUniforms } from './light-glsl'
 
@@ -57,8 +58,11 @@ export function buildStationGeometry(mat: number, model: StationModel): THREE.Bu
     const n = g.attributes.position.count
     const top = new Float32Array(n).fill(layerOf(p.top ?? mat, TOP))
     const side = new Float32Array(n).fill(layerOf(p.side ?? mat, SIDE))
+    // The part glows as the block it wears did (× the tile's alpha in the shader), unless told otherwise.
+    const glow = new Float32Array(n).fill(p.glow ?? (EMISSIVE[p.side ?? mat] ?? 0))
     g.setAttribute('aLayerTop', new THREE.BufferAttribute(top, 1))
     g.setAttribute('aLayerSide', new THREE.BufferAttribute(side, 1))
+    g.setAttribute('aEmissive', new THREE.BufferAttribute(glow, 1))
     parts.push(g)
   }
   return mergeGeometries(parts)
@@ -66,7 +70,7 @@ export function buildStationGeometry(mat: number, model: StationModel): THREE.Bu
 
 /** A minimal merge (position / normal / uv / the two layer attrs) — no examples import. */
 function mergeGeometries(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const names = ['position', 'normal', 'uv', 'aLayerTop', 'aLayerSide'] as const
+  const names = ['position', 'normal', 'uv', 'aLayerTop', 'aLayerSide', 'aEmissive'] as const
   const out = new THREE.BufferGeometry()
   const chunks: Record<string, number[]> = {}
   const index: number[] = []
@@ -83,7 +87,7 @@ function mergeGeometries(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
     base += g.attributes.position.count
     g.dispose()
   }
-  const sizes: Record<string, number> = { position: 3, normal: 3, uv: 2, aLayerTop: 1, aLayerSide: 1 }
+  const sizes: Record<string, number> = { position: 3, normal: 3, uv: 2, aLayerTop: 1, aLayerSide: 1, aEmissive: 1 }
   for (const name of names) if (chunks[name]) out.setAttribute(name, new THREE.Float32BufferAttribute(chunks[name], sizes[name]))
   out.setIndex(index)
   return out
@@ -91,7 +95,7 @@ function mergeGeometries(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 
 export function createStationRenderer(tiles: TileArray, light?: LightUniforms): StationRenderer {
   const group = new THREE.Group()
-  const material: PieceMaterial = createPieceMaterial(tiles, {}, light)
+  const material: PieceMaterial = createPieceMaterial(tiles, { emissive: true }, light)
   const meshes = new Map<number, THREE.InstancedMesh>()
   for (const mat of MODELLED_MATS) {
     const g = buildStationGeometry(mat, modelOf(mat))

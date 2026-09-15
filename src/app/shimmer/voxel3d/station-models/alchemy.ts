@@ -49,36 +49,49 @@ export const MODELS: Readonly<Record<number, StationModel>> = {
     ],
   },
 
-  // ── CAULDRON (MAT.CAULDRON) — clay feet + an open-topped basin, hollow inside ───────────────────
+  // ── CAULDRON (MAT.CAULDRON) — a bellied clay pot on four feet, a rim, the water seen from above ──
+  // ★ REBUILT 09-15 PM (Alex: "the cauldron looks off, fix the walls"). The first pass was four thin
+  // walls on a floor slab — a crate. A cauldron is a BELLY: the pot swells at the middle and narrows to
+  // a neck and a rim. The tile helps and hurts: `paintCauldron`'s side is rim band (top ~12%) · clay
+  // belly · a dark stone hearth course (bottom ~25%), sampled by local height — so thin walls wore the
+  // stone course as a grey skirt and the feet wore it whole. Now the tiers sit where the bands are:
+  // the wide belly and neck in the plain clay rows, the lower belly and feet down in the stone course
+  // (a pot standing on its hearth ring), the rim in the top 14% where the tile's rim band is. The open top is a recessed disc wearing the cauldron's own top tile (dark
+  // water); the lit twin swaps that one face for the brew.
   [MAT.CAULDRON]: {
-    note: 'clay cauldron on four short feet, an open-topped basin (floor + four thin walls), no lid',
+    note: 'a bellied clay pot on four feet: lower belly, wide belly, neck, a rim you can see the water inside',
     parts: [
-      { box: [0.15, 0.15, 0.15, 0.3, 0.075, 0.3] },     // foot, front-right
-      { box: [0.15, 0.15, 0.15, 0.3, 0.075, -0.3] },    // foot, back-right
-      { box: [0.15, 0.15, 0.15, -0.3, 0.075, 0.3] },    // foot, front-left
-      { box: [0.15, 0.15, 0.15, -0.3, 0.075, -0.3] },   // foot, back-left
-      { box: [0.70, 0.06, 0.70, 0, 0.18, 0] },          // basin floor, resting on the feet
-      { box: [0.70, 0.65, 0.08, 0, 0.475, -0.35] },     // basin wall, north
-      { box: [0.70, 0.65, 0.08, 0, 0.475, 0.35] },      // basin wall, south
-      { box: [0.08, 0.65, 0.70, 0.35, 0.475, 0] },      // basin wall, east
-      { box: [0.08, 0.65, 0.70, -0.35, 0.475, 0] },     // basin wall, west — top open, ~0.8 wide
+      { box: [0.14, 0.14, 0.14, 0.28, 0.07, 0.28] },      // feet
+      { box: [0.14, 0.14, 0.14, 0.28, 0.07, -0.28] },
+      { box: [0.14, 0.14, 0.14, -0.28, 0.07, 0.28] },
+      { box: [0.14, 0.14, 0.14, -0.28, 0.07, -0.28] },
+      { box: [0.66, 0.18, 0.66, 0, 0.23, 0] },            // lower belly
+      { box: [0.82, 0.36, 0.82, 0, 0.50, 0] },            // the wide belly
+      { box: [0.70, 0.18, 0.70, 0, 0.77, 0] },            // neck
+      { box: [0.76, 0.14, 0.08, 0, 0.93, -0.34] },                                          // rim, four walls — the tile's rim band
+      { box: [0.76, 0.14, 0.08, 0, 0.93, 0.34] },
+      { box: [0.08, 0.14, 0.76, -0.34, 0.93, 0] },
+      { box: [0.08, 0.14, 0.76, 0.34, 0.93, 0] },
+      { box: [0.60, 0.02, 0.60, 0, 0.87, 0] },                            // the water, recessed inside the rim (top = the cauldron's own dark disc)
     ],
   },
 
-  // ── CAULDRON_LIT (MAT.CAULDRON_LIT) — the same cauldron, plus the brew surface at the rim ─────
+  // ── CAULDRON_LIT (MAT.CAULDRON_LIT) — the same pot, the brew where the water was ─────────────
   [MAT.CAULDRON_LIT]: {
-    note: 'the cauldron with clay walls/feet plus a brew slab under the rim wearing the golden top tile',
+    note: 'the same bellied pot, the golden brew standing in the rim',
     parts: [
-      { box: [0.15, 0.15, 0.15, 0.3, 0.075, 0.3], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.15, 0.15, 0.15, 0.3, 0.075, -0.3], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.15, 0.15, 0.15, -0.3, 0.075, 0.3], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.15, 0.15, 0.15, -0.3, 0.075, -0.3], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.70, 0.06, 0.70, 0, 0.18, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.70, 0.65, 0.08, 0, 0.475, -0.35], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.70, 0.65, 0.08, 0, 0.475, 0.35], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.08, 0.65, 0.70, 0.35, 0.475, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.08, 0.65, 0.70, -0.35, 0.475, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.60, 0.04, 0.60, 0, 0.7, 0], top: MAT.CAULDRON_LIT, side: MAT.CAULDRON }, // the brew, just under the rim
+      { box: [0.14, 0.14, 0.14, 0.28, 0.07, 0.28], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.14, 0.14, 0.14, 0.28, 0.07, -0.28], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.14, 0.14, 0.14, -0.28, 0.07, 0.28], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.14, 0.14, 0.14, -0.28, 0.07, -0.28], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.66, 0.18, 0.66, 0, 0.23, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.82, 0.36, 0.82, 0, 0.50, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.70, 0.18, 0.70, 0, 0.77, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.76, 0.14, 0.08, 0, 0.93, -0.34], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.76, 0.14, 0.08, 0, 0.93, 0.34], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.08, 0.14, 0.76, -0.34, 0.93, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.08, 0.14, 0.76, 0.34, 0.93, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
+      { box: [0.60, 0.02, 0.60, 0, 0.90, 0], top: MAT.CAULDRON_LIT, side: MAT.CAULDRON },   // the brew, a touch higher — it is boiling
     ],
   },
 }

@@ -171,6 +171,16 @@ cmd_claim() {
 # has NO claim is an ORPHAN — a window that wrapped and released without stopping its preview. The
 # 09-15 case: two days on :3205 at ~600MB, and the next build OOMed against it.
 devwin_pid()   { sed -n 's/^pid=//p' "$DEVWINS_DIR/$1" 2>/dev/null; }
+# A devwin is OWNED if its lane is claimed, or if the SESSION that started it holds any claim — a hub
+# window previewing on the play port (it may not run a hub dev server) is not an orphan.
+devwin_owned() {
+  local lane="$1" sess f
+  [ -f "$CLAIMS_DIR/$lane" ] && return 0
+  sess=$(sed -n 's/^session=//p' "$DEVWINS_DIR/$lane" 2>/dev/null)
+  [ -n "$sess" ] || return 1
+  for f in "$CLAIMS_DIR"/*; do [ -e "$f" ] || continue; [ "$(sed -n 's/^session=//p' "$f")" = "$sess" ] && return 0; done
+  return 1
+}
 devwin_alive() { local p; p=$(devwin_pid "$1"); [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
 kill_tree() {
   # children first, then the process — next-server and its postcss workers hang off the npx wrapper
@@ -199,9 +209,9 @@ cmd_reap() {
   for f in "$DEVWINS_DIR"/*; do
     [ -e "$f" ] || continue
     lane=$(basename "$f")
-    if [ -f "$CLAIMS_DIR/$lane" ]; then continue; fi
+    if devwin_owned "$lane"; then continue; fi
     any=1
-    reap_devwin "$lane" "lane has no claim"
+    reap_devwin "$lane" "no claim on the lane and none by its session"
   done
   [ "$any" = 1 ] || echo "no orphan devwins"
 }
@@ -528,7 +538,7 @@ cmd_status() {
       dsess=$(sed -n 's/^session=//p' "$f"); dts=$(sed -n 's/^ts=//p' "$f")
       dep=$(iso_to_epoch "$dts"); if [ "$dep" -gt 0 ]; then dage="$(age_human $(( $(now_epoch) - dep ))) ago"; else dage="?"; fi
       if ! kill -0 "$dp" 2>/dev/null; then state="DEAD (stale record)"
-      elif [ ! -f "$CLAIMS_DIR/$dl" ]; then state="⚠ ORPHAN — lane has no claim; 'coord reap' stops it"
+      elif ! devwin_owned "$dl"; then state="⚠ ORPHAN — no claim on the lane and none by its session; 'coord reap' stops it"
       else state="live"
       fi
       printf "  %-8s pid %-8s :%-5s %-9s %-16s %s\n" "$dl" "${dp:-?}" "$dport" "$dage" "${dsess:+session ${dsess:0:8}}" "$state"
