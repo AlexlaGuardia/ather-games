@@ -47,8 +47,10 @@ infusion earns the whole chain through a mixed base; tier 1 is held at two stati
    (`LocoState.speedMult`), ather_flow regen, starlight/dawn XP at mining + rinning, angler's eye rise time.
    **dreamwalk** = `mist.setCalm` (no presence steps out of a patch; the mist body stays). **NOT wired (chip dims, line
    says "not felt here yet"):** kindred (no companion assist here), deepsight (no gather bonus-find here). The four elemental infusions REFUSE
-   (they go on a spirit; nothing applies them). **Hearth** still has no verb: an open-fire dish needs an
-   Ather-side recipe canon has not named (cuisine.md's roster is mortal-side) → gap queued.
+   (they go on a spirit; nothing applies them). **Hearth ROASTS (RULED 09-15, athernyx `99e6e29`):** three fires,
+   three verbs — cauldron boils, oven bakes, hearth roasts. Rows: Roast Rinn = 1 Shimmerscale (+40 hp), Roasted
+   Glowroot = 1 bulb (+20 hp), 12s; Glowfin/Moonkoi are spirit food and never roast. Roast icons = the raw icon browned.
+   *hearth* / *oven* are the Ather's own words (no coinage owed).
 4. ~~Magii's ruling → rename~~ done 09-15. Alex judges the three block looks — the mortar tile still paints a TURNING stone (a quern look); a mortar wants a pestle, which the ALIVE pass (pestle circles) draws anyway.
 
 **Decisions:** four verbs, not four hoops — the word routes, so tier 1 stays a short walk · a bulb and a fruit are

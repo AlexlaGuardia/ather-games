@@ -488,13 +488,16 @@ export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
 
 // ── the intermediates' icons ─────────────────────────────────────────────────────────────────────
 /** The ingredient (or potion) an intermediate id was made from, or null for anything else. */
-export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 'base' | 'loaf'; source: string } | null {
+export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 'base' | 'loaf' | 'roast'; source: string } | null {
   if (itemId.startsWith('powder_')) return { kind: 'powder', source: itemId.slice(7) }
   if (itemId.startsWith('extract_')) return { kind: 'extract', source: itemId.slice(8) }
   if (itemId.startsWith('base_')) return { kind: 'base', source: itemId.slice(5) }
   // The oven's loaf (2026-09-15): same argument as the intermediates — generic filler is code. It
   // borrows the grain's tint, warmed, so the loaf reads as the wheat it was.
   if (itemId === 'bread') return { kind: 'loaf', source: 'shimmerwheat_grain' }
+  // The hearth's roasts (09-15): the raw thing's own icon, browned — a roast keeps its silhouette.
+  if (itemId === 'roast_rinn') return { kind: 'roast', source: 'shimmerscale' }
+  if (itemId === 'roasted_glowroot') return { kind: 'roast', source: 'glowroot_bulb' }
   return null
 }
 
@@ -531,7 +534,32 @@ export function alchemyIcon(itemId: string, size = ICON): Uint8Array | null {
   const sh = (col: [number, number, number], d: number): [number, number, number] =>
     [Math.max(0, Math.min(255, col[0] + d)), Math.max(0, Math.min(255, col[1] + d)), Math.max(0, Math.min(255, col[2] + d))]
   const hash = (x: number, y: number) => { const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return v - Math.floor(v) }
-  if (what.kind === 'powder') {
+  if (what.kind === 'roast') {
+    // The source's own pixels, pulled toward a roast brown and darkened at the edges (the char),
+    // so a roast rinn is still visibly a rinn. No source icon = a plain browned oval.
+    const src = iconPixelsFor(what.source, size)
+    const brown: [number, number, number] = [150, 84, 38]
+    if (src) {
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const o = (y * size + x) * 4
+        if (src[o + 3] < 128) continue
+        const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([ex, ez]) => {
+          const nx = x + ex, ny = y + ez
+          return nx < 0 || ny < 0 || nx >= size || ny >= size || src[(ny * size + nx) * 4 + 3] < 128
+        })
+        const mix = (v: number, t: number) => Math.round(v * 0.45 + t * 0.55)
+        const col: [number, number, number] = [mix(src[o], brown[0]), mix(src[o + 1], brown[1]), mix(src[o + 2], brown[2])]
+        set(x, y, edge ? sh(col, -50) : sh(col, Math.round((hash(x, y) - 0.5) * 16)))
+      }
+    } else {
+      const cy = size * 0.55, rx = size * 0.38, ry = size * 0.24
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const dx = (x - c) / rx, dy = (y - cy) / ry
+        if (dx * dx + dy * dy > 1) continue
+        set(x, y, sh(brown, dx * dx + dy * dy > 0.7 ? -50 : Math.round((hash(x, y) - 0.5) * 16)))
+      }
+    }
+  } else if (what.kind === 'powder') {
     // A mound: a half-ellipse sitting on the lower third, grainy, lighter on top.
     const baseY = size * 0.78, rx = size * 0.36, ry = size * 0.30
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {

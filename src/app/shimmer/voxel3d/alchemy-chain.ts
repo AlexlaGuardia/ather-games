@@ -42,8 +42,8 @@ import { MAT } from '../voxel/depth'
 import type { StationJob, Workshop } from '../voxel/workshop'
 
 // ── the steps ───────────────────────────────────────────────────────────────────────────────────
-export type AlchemyStep = 'grind' | 'distil' | 'mix' | 'brew' | 'bake'
-export type AlchemyStationId = 'grinder' | 'still' | 'mixer' | 'cauldron' | 'oven'
+export type AlchemyStep = 'grind' | 'distil' | 'mix' | 'brew' | 'bake' | 'roast'
+export type AlchemyStationId = 'grinder' | 'still' | 'mixer' | 'cauldron' | 'oven' | 'hearth'
 
 export interface AlchemyStationDef {
   id: AlchemyStationId
@@ -78,6 +78,8 @@ export const ALCHEMY_RUN_MS = {
   age: 30_000,
   /** A loaf. Slow on purpose: an oven is a thing you set going and come back to. */
   bake: 20_000,
+  /** A rinn on a spit, a root in the coals. Quicker than a loaf — you stand at a hearth. */
+  roast: 12_000,
 } as const
 
 export const ALCHEMY_STATIONS: Record<AlchemyStationId, AlchemyStationDef> = {
@@ -86,6 +88,7 @@ export const ALCHEMY_STATIONS: Record<AlchemyStationId, AlchemyStationDef> = {
   mixer:    { id: 'mixer',    name: 'Bowl',           step: 'mix',    runMs: ALCHEMY_RUN_MS.mix,    materials: [MAT.MIXER], craft: 'alchemy' },
   cauldron: { id: 'cauldron', name: 'Cauldron',       step: 'brew',   runMs: ALCHEMY_RUN_MS.brew,   materials: [MAT.CAULDRON, MAT.CAULDRON_LIT], craft: 'alchemy' },
   oven:     { id: 'oven',     name: 'Oven',           step: 'bake',   runMs: ALCHEMY_RUN_MS.bake,   materials: [MAT.OVEN], craft: 'cooking' },
+  hearth:   { id: 'hearth',   name: 'Hearth',         step: 'roast',  runMs: ALCHEMY_RUN_MS.roast,  materials: [MAT.HEARTH], craft: 'cooking' },
 }
 
 // ── the oven's own rows: hand-written, not derived — there is no potion table behind a loaf ──────
@@ -94,9 +97,20 @@ export const ALCHEMY_STATIONS: Record<AlchemyStationId, AlchemyStationDef> = {
 // ⚠ Bread has no eater yet: nothing in voxel3d drinks a potion or eats a loaf (the `use` verb is
 // unbuilt on this surface — `engine/potion-effects.ts` is play3d's). The oven is interactable and
 // the loaf is real; what it DOES is the next piece, and it is the same piece the 17 potions wait on.
+// ★ THE HEARTH ROASTS (RULED 2026-09-15, athernyx 99e6e29): three fires, three verbs — cauldron boils,
+// oven bakes, hearth roasts. *1 rinn → 1 roast rinn* spends a use canon wrote at the skill's birth
+// (Shimmerscale's row: "basic food") and nothing ever cashed; the tier-1 rinn is the tier-1 row.
+// Glowfin / Moonkoi are SPIRIT food and stay raw — never a roast row. Roasted Glowroot is the ruling's
+// own optional second row. Heal / time / look are mine.
 export const COOK_ROWS: readonly Omit<AlchemyRecipe, 'runMs'>[] = [
   { id: 'bake:bread', name: 'Bread', step: 'bake', station: 'oven',
     input: [{ itemId: 'shimmerwheat_grain', count: 3 }], output: { itemId: 'bread', count: 1 },
+    mana: 0, xp: 0, minLevel: 1 },
+  { id: 'roast:shimmerscale', name: 'Roast Rinn', step: 'roast', station: 'hearth',
+    input: [{ itemId: 'shimmerscale', count: 1 }], output: { itemId: 'roast_rinn', count: 1 },
+    mana: 0, xp: 0, minLevel: 1 },
+  { id: 'roast:glowroot', name: 'Roasted Glowroot', step: 'roast', station: 'hearth',
+    input: [{ itemId: 'glowroot_bulb', count: 1 }], output: { itemId: 'roasted_glowroot', count: 1 },
     mana: 0, xp: 0, minLevel: 1 },
 ]
 

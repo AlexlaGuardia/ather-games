@@ -76,7 +76,7 @@ for (const st of Object.values(ALCHEMY_STATIONS)) {
     ok(rightClickIntent(m, 'cauldron', false) === 'work', `§3 ★★ ${st.id}: aiming at material ${m} OPENS it (intent 'work')`)
   }
 }
-ok(ALCHEMY_MATS.size === 6, `§3 six materials across five stations — the cauldron has its lit twin, the oven joined 09-15 (${ALCHEMY_MATS.size})`)
+ok(ALCHEMY_MATS.size === 7, `§3 seven materials across six stations — the cauldron has its lit twin; the oven and the hearth joined 09-15 (${ALCHEMY_MATS.size})`)
 {
   const lit = blockDef(MAT.CAULDRON_LIT)!
   ok(lit.placeable === false, '§3 ★★ the lit cauldron is a STATE, never placed')
@@ -132,17 +132,28 @@ for (const id of ['grinder', 'still', 'mixer']) {
 // oven shipped 09-13 as a lit block with no verb; it now rides this table as `craft: 'cooking'`.
 {
   const oven = ALCHEMY_STATIONS.oven
-  ok(oven.craft === 'cooking' && Object.values(ALCHEMY_STATIONS).filter(s => s.craft === 'cooking').length === 1,
-    '§5 the oven is the one cooking station; every other station is alchemy')
+  const hearth = ALCHEMY_STATIONS.hearth
+  ok(oven.craft === 'cooking' && hearth.craft === 'cooking' && Object.values(ALCHEMY_STATIONS).filter(s => s.craft === 'cooking').length === 2,
+    '§5 the oven and the hearth are the two cooking stations; every other station is alchemy')
   ok(Object.values(ALCHEMY_STATIONS).every(s => s.craft === 'alchemy' || s.craft === 'cooking'), '§5 every station names its trade')
   ok(alchemyStationOf(MAT.OVEN) === 'oven', '§5 MAT.OVEN answers to the oven')
   ok(rightClickIntent(MAT.OVEN, 'cauldron', false) === 'work', '§5 ★★ aiming at the oven OPENS it')
   const rows = alchemyStationRecipes('oven')
-  ok(rows.length >= 1 && rows.length === COOK_ROWS.length, `§5 the oven lists exactly the cooking rows (${rows.length})`)
-  ok(rows.every(r => r.step === 'bake' && r.mana === 0 && r.xp === 0 && r.minLevel <= 1),
+  const roasts = alchemyStationRecipes('hearth')
+  ok(rows.length + roasts.length === COOK_ROWS.length && rows.length >= 1 && roasts.length >= 1, `§5 the oven and hearth list exactly the cooking rows between them (${rows.length} + ${roasts.length})`)
+  ok([...rows, ...roasts].every(r => (r.step === 'bake' || r.step === 'roast') && r.mana === 0 && r.xp === 0 && r.minLevel <= 1),
     '§5 ★ a cooking row channels no mana, pays no alchemy XP and has no level gate')
-  ok(ALCHEMY_RECIPES.filter(r => r.station !== 'oven').every(r => r.step !== 'bake'), '§5 no bake row sits on an alchemy station')
-  ok(rows.every(r => r.runMs === oven.runMs), '§5 a bake runs at the oven\'s own time')
+  ok(ALCHEMY_RECIPES.filter(r => r.station !== 'oven' && r.station !== 'hearth').every(r => r.step !== 'bake' && r.step !== 'roast'), '§5 no bake or roast row sits on an alchemy station')
+  ok(rows.every(r => r.runMs === oven.runMs) && roasts.every(r => r.runMs === hearth.runMs), '§5 a bake runs at the oven\'s time, a roast at the hearth\'s')
+  // The hearth ROASTS (ruled 09-15): three fires, three verbs; the keeper's dish, never the spirits'.
+  ok(alchemyStationOf(MAT.HEARTH) === 'hearth' && rightClickIntent(MAT.HEARTH, 'cauldron', false) === 'work', '§5 ★★ aiming at the hearth OPENS it')
+  ok(roasts.every(r => r.step === 'roast') && rows.every(r => r.step === 'bake'), '§5 the oven bakes, the hearth roasts — the word is the method')
+  const rr = alchemyRecipe('roast:shimmerscale')
+  ok(!!rr && rr.input.length === 1 && rr.input[0].itemId === 'shimmerscale' && rr.input[0].count === 1 && rr.output.itemId === 'roast_rinn' && rr.output.count === 1,
+    '§5 1 rinn → 1 roast rinn, and the tier-1 rinn is Shimmerscale (its row said "basic food")')
+  ok(!ALCHEMY_RECIPES.some(r => r.input.some(i => i.itemId === 'glowfin' || i.itemId === 'moonkoi') && r.step === 'roast'), '§5 ★ Glowfin and Moonkoi are spirit food and are never roasted')
+  ok(!!alchemyRecipe('roast:glowroot') && alchemyRecipe('roast:glowroot')!.output.itemId === 'roasted_glowroot', '§5 roasted Glowroot is the ruling\'s own second row')
+  ok(roasts.every(r => r.input.every(i => WORLD_ITEMS.has(i.itemId))), '§5 ★ every roast input is something the world puts in your hands')
   const bread = alchemyRecipe('bake:bread')
   ok(!!bread && bread.station === 'oven' && bread.output.itemId === 'bread', '§5 bread is baked at the oven')
   ok(!!bread && bread.input.every(i => WORLD_ITEMS.has(i.itemId)), `§5 ★ every loaf input is something the world puts in your hands (${bread?.input.map(i => i.itemId).join(', ')})`)

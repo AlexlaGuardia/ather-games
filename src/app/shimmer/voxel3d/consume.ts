@@ -21,7 +21,11 @@ import {
 } from '../engine/potion-effects'
 
 /** What a loaf does. A first number for the feel: bread mends, it does not buff. */
-export const FOOD: Readonly<Record<string, { hp: number }>> = { bread: { hp: 30 } }
+export const FOOD: Readonly<Record<string, { hp: number }>> = {
+  bread: { hp: 30 },
+  roast_rinn: { hp: 40 },          // a meal — the hearth's dish outdoes the loaf (ruled 09-15: the hearth roasts)
+  roasted_glowroot: { hp: 20 },    // a root in the coals — the ruling's own second row
+}
 
 export type ConsumeKind = 'drink' | 'eat'
 

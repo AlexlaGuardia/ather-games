@@ -652,8 +652,8 @@ export const MAT = {
    * embers on top, and the fire texels carry the emissive alpha the lantern's glass does.
    * ⚠ NEVER GENERATED, only placed. Fuel is not modelled: it burns because it is a hearth, the way
    * the lantern glows because it is mana. Smoke is R5 and engine-side, not this block's business.
-   * ⚠ TBD-CANON on whether the Ather calls it a hearth — `hearth` is plain English until Magii
-   * names it, same as `shingle` and `plaster`.
+   * ★ RULED 2026-09-15 (athernyx 99e6e29): *hearth* IS the Ather's word (the homely register,
+   * `world/ather.md` › What heat is here), and the hearth ROASTS — `alchemy-chain.ts` › COOK_ROWS.
    */
   HEARTH: 102,
   /**
@@ -663,8 +663,8 @@ export const MAT = {
    * hearth is the open fire you cook OVER; this is the closed fire you bake IN, so it glows less
    * (registry emit 6 vs 12, emissive 0.6 vs 0.85) — a mouth, not a blaze. Same rules as the hearth:
    * no facing (every side is a mouth, the wall it stands against hides the rest), no fuel state,
-   * always warm. ⚠ NEVER GENERATED, only placed. ⚠ TBD-CANON on the Ather's word for it, same as
-   * `hearth`.
+   * always warm. ⚠ NEVER GENERATED, only placed. ★ *oven* is the Ather's own word (ruled 09-15
+   * with the hearth, the homely register); it BAKES — `alchemy-chain.ts` › COOK_ROWS.
    */
   OVEN: 103,
   /**
