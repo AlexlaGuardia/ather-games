@@ -9479,7 +9479,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
 
     prof.current.mark('look')
     // ── what are we looking at ───────────────────────────────────────────────────────────────
-    const hit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, voxel)
+    // ★ UNDER THE SURFACE, WATER IS NOT IN YOUR WAY (2026-09-15, Alex could not find sand for the
+    // still). The world's only sand is a lake bed or a beach band, and within 200 blocks of the
+    // glade every grain is under water — while the ray stopped at the first non-air voxel, which
+    // from an eye in the lake was the water itself (distance 0: you aimed at nothing, forever).
+    // Rule: when the EYE voxel is water, the pick reads water as air, so a diver digs the bed. Read
+    // off the eye and not `lc.swimming` (chest-in), because a surface swimmer's eye is in air and
+    // must still aim AT the water — that is the rinstick's cast (`aimed === MAT.WATER`), untouched.
+    const eyeInWater = voxel(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) === MAT.WATER
+    const pickVoxel = eyeInWater
+      ? (x: number, y: number, z: number) => { const m = voxel(x, y, z); return m === MAT.WATER ? AIR : m }
+      : voxel
+    const hit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, pickVoxel)
     // ⚠ CLEARED ON EVERY FRAME THAT DOES NOT SET IT. The border is a mesh with its own lifetime,
     // not a property of the reticle, so looking away from a plant has to retract it explicitly —
     // state whose only retractor is the thing that stopped running stays on screen.
