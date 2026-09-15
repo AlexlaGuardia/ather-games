@@ -18,8 +18,9 @@ import {
   ALCHEMY_STATIONS, ALCHEMY_MATS, ALCHEMY_RECIPES, ALCHEMY_INTERMEDIATES, INGREDIENT_KIND, FINISH_AT,
   alchemyStationOf, craftWordOf, routeOf, prepOf, alchemyStationRecipes, alchemyRecipe, intermediateLabel,
   alchemyRunsReady, alchemyRunProgress, alchemyLoadJob, alchemyCollect, alchemySalvage, alchemyMaxRuns, alchemyBusy,
-  ALCHEMY_MAX_RUNS,
+  ALCHEMY_MAX_RUNS, COOK_ROWS, COOKED,
 } from './alchemy-chain'
+import { WORLD_ITEMS } from './obtainable'
 
 let pass = 0
 const fails: string[] = []
@@ -75,7 +76,7 @@ for (const st of Object.values(ALCHEMY_STATIONS)) {
     ok(rightClickIntent(m, 'cauldron', false) === 'work', `§3 ★★ ${st.id}: aiming at material ${m} OPENS it (intent 'work')`)
   }
 }
-ok(ALCHEMY_MATS.size === 5, `§3 five materials across four stations — the cauldron has its lit twin (${ALCHEMY_MATS.size})`)
+ok(ALCHEMY_MATS.size === 6, `§3 six materials across five stations — the cauldron has its lit twin, the oven joined 09-15 (${ALCHEMY_MATS.size})`)
 {
   const lit = blockDef(MAT.CAULDRON_LIT)!
   ok(lit.placeable === false, '§3 ★★ the lit cauldron is a STATE, never placed')
@@ -124,6 +125,33 @@ for (const id of ['grinder', 'still', 'mixer']) {
   const fin = alchemyRecipe('finish:mana_draught')!
   ok(alchemyMaxRuns(fin, () => 50, 12) === 2, `§4 ★ a finishing row is capped by MANA too (12 mana / ${fin.mana} per run = 2)`)
   ok(alchemyMaxRuns(fin, (id) => id === 'powder_raw_mana_shard' ? 7 : 0, 999) === 1, '§4 and by the inputs')
+}
+
+// ── §5 the oven — a cooking station on the chain's machinery (2026-09-15) ───────────────────────
+// Alex: "we need to make sure all of our stations are interactable.. starting with the oven". The
+// oven shipped 09-13 as a lit block with no verb; it now rides this table as `craft: 'cooking'`.
+{
+  const oven = ALCHEMY_STATIONS.oven
+  ok(oven.craft === 'cooking' && Object.values(ALCHEMY_STATIONS).filter(s => s.craft === 'cooking').length === 1,
+    '§5 the oven is the one cooking station; every other station is alchemy')
+  ok(Object.values(ALCHEMY_STATIONS).every(s => s.craft === 'alchemy' || s.craft === 'cooking'), '§5 every station names its trade')
+  ok(alchemyStationOf(MAT.OVEN) === 'oven', '§5 MAT.OVEN answers to the oven')
+  ok(rightClickIntent(MAT.OVEN, 'cauldron', false) === 'work', '§5 ★★ aiming at the oven OPENS it')
+  const rows = alchemyStationRecipes('oven')
+  ok(rows.length >= 1 && rows.length === COOK_ROWS.length, `§5 the oven lists exactly the cooking rows (${rows.length})`)
+  ok(rows.every(r => r.step === 'bake' && r.mana === 0 && r.xp === 0 && r.minLevel <= 1),
+    '§5 ★ a cooking row channels no mana, pays no alchemy XP and has no level gate')
+  ok(ALCHEMY_RECIPES.filter(r => r.station !== 'oven').every(r => r.step !== 'bake'), '§5 no bake row sits on an alchemy station')
+  ok(rows.every(r => r.runMs === oven.runMs), '§5 a bake runs at the oven\'s own time')
+  const bread = alchemyRecipe('bake:bread')
+  ok(!!bread && bread.station === 'oven' && bread.output.itemId === 'bread', '§5 bread is baked at the oven')
+  ok(!!bread && bread.input.every(i => WORLD_ITEMS.has(i.itemId)), `§5 ★ every loaf input is something the world puts in your hands (${bread?.input.map(i => i.itemId).join(', ')})`)
+  ok(COOKED.includes('bread') && COOKED.every(id => !ALCHEMY_INTERMEDIATES.includes(id)), '§5 the loaf is COOKED, never an intermediate')
+  ok(intermediateLabel('bread') === null, '§5 and it keeps its own name')
+  // The panel drops the alchemy line for a cooking station — a textual guard on the one place it renders.
+  const panel = readFileSync(join(__dirname, 'alchemy-panel.tsx'), 'utf8')
+  ok(panel.includes("def.craft === 'cooking'") && panel.includes("cooking ? 'the fire is always lit'"), '§5 ★ the panel reads `craft` and hides the alchemy line on the oven')
+  ok(panel.includes('xp > 0 ? addSkillXP'), '§5 ★ take pays alchemy XP only when there is any — a loaf never touches the skill')
 }
 
 if (fails.length) {

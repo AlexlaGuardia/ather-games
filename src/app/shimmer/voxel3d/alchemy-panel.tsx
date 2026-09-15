@@ -1,5 +1,6 @@
-// The alchemy station panel — one component for the mortar, the still, the bowl and
-// the cauldron. Sibling of `StationPanel` (VoxelWorld.tsx) and shaped like it on purpose: a job
+// The alchemy station panel — one component for the mortar, the still, the bowl, the cauldron
+// and (2026-09-15) the oven, which rides the same table with `craft: 'cooking'`: no alchemy line
+// in the header, no level gate, no XP — a job you set going and take from. Sibling of `StationPanel` (VoxelWorld.tsx) and shaped like it on purpose: a job
 // card while the station runs, a recipe list while it is idle, the chests beside it as extra
 // pockets. What differs is the table (`alchemy-chain.ts`, not `RECIPES`), the mana a finishing run
 // channels, the alchemy XP paid on TAKE, and the level gate.
@@ -50,6 +51,7 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
   }, [])
 
   const def = ALCHEMY_STATIONS[st.kind]
+  const cooking = def.craft === 'cooking'
   const key = `${st.x},${st.y},${st.z}`
   const [job, setJob] = useState<StationJob | undefined>(st.job)
   const now = Date.now()
@@ -68,7 +70,8 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
     st.touchFeeds()
     setJob(shop[key])
     st.setLit?.(alchemyBusy(shop[key]))
-    const res = addSkillXP(skills.current.alchemy, xp)
+    // A loaf pays no alchemy: `xp` is 0 on every cooking row and the skill is not touched at all.
+    const res = xp > 0 ? addSkillXP(skills.current.alchemy, xp) : { leveled: false as const, newLevel: 0 }
     if (res.leveled) onLevel(`alchemy ${res.newLevel}${getMilestone(res.newLevel) ? ' — ' + getMilestone(res.newLevel) : ''}`)
     onChange()
     onSay(lost > 0
@@ -100,7 +103,7 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between mb-3">
           <span className="text-white/95 font-semibold tracking-[.18em] uppercase">{def.name}</span>
-          <span className="text-white/35">alchemy {level} · mana {Math.floor(mana.current.cur)}</span>
+          <span className="text-white/35">{cooking ? 'the fire is always lit' : `alchemy ${level} · mana ${Math.floor(mana.current.cur)}`}</span>
           <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
 

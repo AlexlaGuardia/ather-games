@@ -488,10 +488,13 @@ export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
 
 // ── the intermediates' icons ─────────────────────────────────────────────────────────────────────
 /** The ingredient (or potion) an intermediate id was made from, or null for anything else. */
-export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 'base'; source: string } | null {
+export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 'base' | 'loaf'; source: string } | null {
   if (itemId.startsWith('powder_')) return { kind: 'powder', source: itemId.slice(7) }
   if (itemId.startsWith('extract_')) return { kind: 'extract', source: itemId.slice(8) }
   if (itemId.startsWith('base_')) return { kind: 'base', source: itemId.slice(5) }
+  // The oven's loaf (2026-09-15): same argument as the intermediates — generic filler is code. It
+  // borrows the grain's tint, warmed, so the loaf reads as the wheat it was.
+  if (itemId === 'bread') return { kind: 'loaf', source: 'shimmerwheat_grain' }
   return null
 }
 
@@ -548,6 +551,19 @@ export function alchemyIcon(itemId: string, size = ICON): Uint8Array | null {
       if (!inBall && !inTip) continue
       const hi = Math.hypot(x - (c - r * 0.35), y - (cy - r * 0.35)) < r * 0.28
       set(x, y, hi ? sh(tint, 70) : sh(tint, Math.round(((y - tipY) / (cy + r - tipY)) * -30 + 10)))
+    }
+  } else if (what.kind === 'loaf') {
+    // A loaf: a rounded oblong on the lower half, crust darker on top, pale cut face below, two
+    // score lines across the crown. The grain's tint pushed warm so it bakes rather than sits raw.
+    const crust: [number, number, number] = [Math.min(255, tint[0] * 0.9 + 60), Math.min(255, tint[1] * 0.7 + 30), Math.max(0, tint[2] * 0.5)]
+    const cy = size * 0.60, rx = size * 0.42, ry = size * 0.26
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const dx = (x - c) / rx, dy = (y - cy) / ry
+      if (dx * dx + dy * dy > 1) continue
+      const crown = dy < -0.15                                    // the domed top is crust
+      const score = crown && ((Math.abs(x - c + rx * 0.3) < 0.6) || (Math.abs(x - c - rx * 0.3) < 0.6))
+      const grain = (hash(x, y) - 0.5) * 14
+      set(x, y, score ? sh(crust, -45) : crown ? sh(crust, Math.round(-dy * 25 + grain)) : sh(crust, Math.round(55 + grain)))
     }
   } else {
     // A base: a shallow clay bowl (the mixing vessel's own colour) holding the tint.

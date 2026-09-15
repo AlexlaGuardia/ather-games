@@ -17,6 +17,7 @@ import { RECIPES } from '../voxel/recipes'
 import { TOOL_DEFS } from '../engine/tools'
 import { WORLD_ITEMS, FROM_FARMING, FROM_RINNING, FROM_FELLING } from './obtainable'
 import { POTION_DEFS } from '../engine/alchemy'
+import { COOKED } from './alchemy-chain'
 
 /** Every reachable item id, mapped to the places it can come from. */
 export function itemUniverse(): Map<string, Set<string>> {
@@ -75,6 +76,9 @@ export function itemUniverse(): Map<string, Set<string>> {
   // answer a different question with the same set and could make a recipe wanting a brew read as
   // craftable. Same trap as `materialForItem`: two questions, one map. Give the second one its own.
   for (const id of Object.keys(POTION_DEFS)) note(id, 'brewed')
+  // The oven's loaves (2026-09-15) — off a station, like a brew, and outside `WORLD_ITEMS` for the
+  // same reason: the world does not put bread in your hands, the oven does.
+  for (const id of COOKED) note(id, 'baked')
 
   // ⚠ AND THE OPPOSITE ERROR IS REAL: this universe is "reachable IN VOXEL3D", so joining a table the
   // live surface does not use would INFLATE it and invent art debt for items nobody can hold. Five
@@ -89,4 +93,4 @@ export function itemUniverse(): Map<string, Set<string>> {
 
 /** The tables this universe is joined from — printed by the checklist, shown on the page. */
 export const UNIVERSE_SOURCES =
-  'blocks · recipes · tools · farming · rinning · felling · WORLD_ITEMS · potions'
+  'blocks · recipes · tools · farming · rinning · felling · WORLD_ITEMS · potions · baked'

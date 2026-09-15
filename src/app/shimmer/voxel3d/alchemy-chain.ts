@@ -42,8 +42,8 @@ import { MAT } from '../voxel/depth'
 import type { StationJob, Workshop } from '../voxel/workshop'
 
 // ── the steps ───────────────────────────────────────────────────────────────────────────────────
-export type AlchemyStep = 'grind' | 'distil' | 'mix' | 'brew'
-export type AlchemyStationId = 'grinder' | 'still' | 'mixer' | 'cauldron'
+export type AlchemyStep = 'grind' | 'distil' | 'mix' | 'brew' | 'bake'
+export type AlchemyStationId = 'grinder' | 'still' | 'mixer' | 'cauldron' | 'oven'
 
 export interface AlchemyStationDef {
   id: AlchemyStationId
@@ -55,6 +55,17 @@ export interface AlchemyStationDef {
   runMs: number
   /** Every material that IS this station — the cauldron has a lit twin while it runs. */
   materials: readonly number[]
+  /**
+   * ── ★ THE OVEN RIDES THIS TABLE, AND THE WORD SAYS WHICH TRADE IT IS (2026-09-15, Alex: "we need
+   * to make sure all of our stations are interactable.. starting with the oven") ─────────────────
+   * The oven shipped 09-13 as a lit block with no verb. What it needs is exactly what the chain
+   * already has — a timed job on the column save, a panel, a salvage on break, chests beside it —
+   * and none of what makes alchemy alchemy: no mana channelled, no alchemy level, no alchemy XP.
+   * So it is a row here rather than a fourth job system, and `craft` is the flag the panel reads to
+   * drop the alchemy line. Bread is canon's (Greg feeds Bonn *"fruits, bread, honey-like things"*,
+   * spirit-tales-bible); what the Ather CALLS the oven is still TBD-canon (`depth.ts` › OVEN).
+   */
+  craft: 'alchemy' | 'cooking'
 }
 
 /** How long a run takes at each station. First guesses, 2026-09-14; Alex judges the feel. */
@@ -65,14 +76,29 @@ export const ALCHEMY_RUN_MS = {
   brew: 12_000,
   /** A cordial is AGED — the one word whose method is time. Brewed on the cauldron, slowly. */
   age: 30_000,
+  /** A loaf. Slow on purpose: an oven is a thing you set going and come back to. */
+  bake: 20_000,
 } as const
 
 export const ALCHEMY_STATIONS: Record<AlchemyStationId, AlchemyStationDef> = {
-  grinder:  { id: 'grinder',  name: 'Mortar',         step: 'grind',  runMs: ALCHEMY_RUN_MS.grind,  materials: [MAT.GRINDER] },
-  still:    { id: 'still',    name: 'Still',          step: 'distil', runMs: ALCHEMY_RUN_MS.distil, materials: [MAT.STILL] },
-  mixer:    { id: 'mixer',    name: 'Bowl',           step: 'mix',    runMs: ALCHEMY_RUN_MS.mix,    materials: [MAT.MIXER] },
-  cauldron: { id: 'cauldron', name: 'Cauldron',       step: 'brew',   runMs: ALCHEMY_RUN_MS.brew,   materials: [MAT.CAULDRON, MAT.CAULDRON_LIT] },
+  grinder:  { id: 'grinder',  name: 'Mortar',         step: 'grind',  runMs: ALCHEMY_RUN_MS.grind,  materials: [MAT.GRINDER], craft: 'alchemy' },
+  still:    { id: 'still',    name: 'Still',          step: 'distil', runMs: ALCHEMY_RUN_MS.distil, materials: [MAT.STILL], craft: 'alchemy' },
+  mixer:    { id: 'mixer',    name: 'Bowl',           step: 'mix',    runMs: ALCHEMY_RUN_MS.mix,    materials: [MAT.MIXER], craft: 'alchemy' },
+  cauldron: { id: 'cauldron', name: 'Cauldron',       step: 'brew',   runMs: ALCHEMY_RUN_MS.brew,   materials: [MAT.CAULDRON, MAT.CAULDRON_LIT], craft: 'alchemy' },
+  oven:     { id: 'oven',     name: 'Oven',           step: 'bake',   runMs: ALCHEMY_RUN_MS.bake,   materials: [MAT.OVEN], craft: 'cooking' },
 }
+
+// ── the oven's own rows: hand-written, not derived — there is no potion table behind a loaf ──────
+// Shimmerwheat because it is the tier-1 grain (`crops.ts`; atherwheat is the level-20 master crop).
+// Three grain to a loaf is a first guess for the feel, same licence as every run time above.
+// ⚠ Bread has no eater yet: nothing in voxel3d drinks a potion or eats a loaf (the `use` verb is
+// unbuilt on this surface — `engine/potion-effects.ts` is play3d's). The oven is interactable and
+// the loaf is real; what it DOES is the next piece, and it is the same piece the 17 potions wait on.
+export const COOK_ROWS: readonly Omit<AlchemyRecipe, 'runMs'>[] = [
+  { id: 'bake:bread', name: 'Bread', step: 'bake', station: 'oven',
+    input: [{ itemId: 'shimmerwheat_grain', count: 3 }], output: { itemId: 'bread', count: 1 },
+    mana: 0, xp: 0, minLevel: 1 },
+]
 
 const STATION_BY_MAT: ReadonlyMap<number, AlchemyStationId> = new Map(
   Object.values(ALCHEMY_STATIONS).flatMap(s => s.materials.map(m => [m, s.id] as const)),
@@ -193,6 +219,7 @@ function buildRecipes(): AlchemyRecipe[] {
       runMs: word === 'cordial' ? ALCHEMY_RUN_MS.age : ALCHEMY_STATIONS[finishAt].runMs,
     })
   }
+  for (const c of COOK_ROWS) rows.push({ ...c, runMs: ALCHEMY_STATIONS[c.station].runMs })
   return rows
 }
 
@@ -208,6 +235,9 @@ export function alchemyStationRecipes(station: AlchemyStationId): AlchemyRecipe[
     .sort((a, b) => Number(a.step !== prepStepOf(a)) - Number(b.step !== prepStepOf(b)) || a.minLevel - b.minLevel)
 }
 const prepStepOf = (r: AlchemyRecipe): AlchemyStep | null => r.id.startsWith('grind:') ? 'grind' : r.id.startsWith('distil:') ? 'distil' : null
+
+/** Everything the oven turns out — so the world's item set knows a loaf exists. */
+export const COOKED: readonly string[] = [...new Set(COOK_ROWS.map(r => r.output.itemId))]
 
 /** Every intermediate the chain can produce — so the world's item set and labels know them. */
 export const ALCHEMY_INTERMEDIATES: readonly string[] = [...new Set(

@@ -36,7 +36,13 @@ infusion earns the whole chain through a mixed base; tier 1 is held at two stati
    distil 8s · mix 5s · brew 12s · cordial 30s) and the lit-cauldron look.
 2. **The alive pass:** grinding as a HELD action (pestle circles, progress ring); the still drips over real time;
    bubbles on the running cauldron beyond the painted dots.
-3. ~~Magii's ruling → rename~~ done 09-15. Alex judges the three block looks — the mortar tile still paints a TURNING stone (a quern look); a mortar wants a pestle, which the ALIVE pass (pestle circles) draws anyway.
+3. **THE OVEN IS INTERACTABLE (09-15, Alex: "make sure all of our stations are interactable.. starting with the
+   oven").** It rides the alchemy table as `craft: 'cooking'` (`ALCHEMY_STATIONS.oven`, `COOK_ROWS`): Bread = 3
+   Shimmerwheat Grain, 20s, no mana / XP / gate; panel header reads *the fire is always lit*; generated loaf icon.
+   ⚠ **Nothing on this surface EATS or DRINKS yet** — bread and all 17 potions are inert in the bag; the `use`
+   verb + `engine/potion-effects.ts` (play3d's) is the next piece. **Hearth** still has no verb: an open-fire
+   dish needs an Ather-side recipe canon has not named (cuisine.md's roster is mortal-side) → gap queued.
+4. ~~Magii's ruling → rename~~ done 09-15. Alex judges the three block looks — the mortar tile still paints a TURNING stone (a quern look); a mortar wants a pestle, which the ALIVE pass (pestle circles) draws anyway.
 
 **Decisions:** four verbs, not four hoops — the word routes, so tier 1 stays a short walk · a bulb and a fruit are
 'dry' for the WALK (harvest brew / salve at two stations), the test decided · the lit cauldron is a material because
