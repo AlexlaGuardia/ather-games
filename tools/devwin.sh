@@ -96,8 +96,35 @@ restore_tsconfig() {
   fi
   rm -f "$TSBACKUP"
 }
-trap restore_tsconfig EXIT INT TERM
+trap restore_tsconfig EXIT INT TERM   # replaced below once the dev server is registered
+
+# ── ★ THE DEV SERVER REGISTERS ITSELF ON THE BOARD (2026-09-15) ─────────────────────────────────
+# A window that wrapped and released its lane left `next dev` running on :3205 for two days at
+# ~600MB, and the next hub build OOMed against it. The claim said nobody was here; the process said
+# otherwise, and nothing joined the two. So a devwin writes `$COORD_DIR/devwins/<lane>` (pid, port,
+# session, ts) while it runs and removes it on exit; `coord release` reaps the lane's devwin, `coord
+# status` lists devwins whose lane has no claim, and `coord reap` kills those orphans. The pid is
+# the `npx` wrapper's; the reaper kills the whole tree under it (next-server, postcss workers).
+COORD_DIR="${COORD_DIR:-$REPO/.coord}"
+DEVWINS_DIR="$COORD_DIR/devwins"
+mkdir -p "$DEVWINS_DIR"
+REG="$DEVWINS_DIR/$LANE"
 
 echo ">> lane '$LANE'  dist=$DIST  port=$PORT"
 echo ">> preview: http://localhost:$PORT  (production stays on :3200, untouched)"
-env NEXT_DIST_DIR="$DIST" npx next dev -p "$PORT"
+env NEXT_DIST_DIR="$DIST" npx next dev -p "$PORT" &
+DEV_PID=$!
+printf 'lane=%s\npid=%s\nport=%s\nsession=%s\nts=%s\n' "$LANE" "$DEV_PID" "$PORT" "${COORD_SESSION:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$REG"
+echo ">> registered on the board: $REG (pid $DEV_PID) — 'coord release $LANE' or 'coord reap' stops it"
+cleanup_devwin() {
+  # Take the tree down with us on a clean exit or a signal; a SIGKILL of this shell leaves the
+  # record behind, which is exactly what `coord reap` is for.
+  if kill -0 "$DEV_PID" 2>/dev/null; then
+    pkill -TERM -P "$DEV_PID" 2>/dev/null || true
+    kill -TERM "$DEV_PID" 2>/dev/null || true
+  fi
+  rm -f "$REG"
+  restore_tsconfig
+}
+trap cleanup_devwin EXIT INT TERM
+wait "$DEV_PID"

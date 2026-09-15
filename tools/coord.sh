@@ -23,7 +23,8 @@
 #       timestamp keeps updating) while its content rots, and a peer reasoning correctly from it
 #       force-took a live lane (2026-08-25). Write something a reader can check in one command:
 #       "live hub — HEAD=<sha>, tree clean 0 unpushed (verify: git status)".
-#   coord status                show all claims + build-lock state
+#   coord status                show all claims + registered dev servers + build-lock state
+#   coord reap                  stop every dev server whose lane has no claim (orphans)
 #   coord build [msg]           acquire build lock -> build -> pm2 restart -> release
 #   coord sweep [args]          acquire the SAME lock -> run the full suite -> release
 #     ★ `npm run sweep` routes here on purpose (2026-09-04). The guard belongs where the habit
@@ -37,6 +38,7 @@ set -euo pipefail
 REPO="/root/ather-games"
 COORD_DIR="${COORD_DIR:-$REPO/.coord}"   # overridable so the tool can be tested on a scratch board
 CLAIMS_DIR="$COORD_DIR/claims"
+DEVWINS_DIR="$COORD_DIR/devwins"   # dev servers registered by tools/devwin.sh (2026-09-15)
 LOCKDIR="$COORD_DIR/build.lock"        # mkdir is atomic -> our mutex
 STALE_LOCK_SECS="${STALE_LOCK_SECS:-900}"   # 15m: a build that outlives this is dead, steal it
 # ⚠ SIZED AGAINST A SWEEP, NOT A BUILD (raised 240 -> 1200 on 2026-09-04, measured not guessed).
@@ -57,7 +59,7 @@ MCP_URL="https://mcp.guardiacontent.com/mcp/call?key=${CORTEX_MCP_KEY:-}"
 WIN="${COORD_WIN:-$(hostname)-$$}"
 SESSION="${COORD_SESSION:-}"
 
-mkdir -p "$CLAIMS_DIR"
+mkdir -p "$CLAIMS_DIR" "$DEVWINS_DIR"
 
 now_epoch() { date +%s; }
 now_iso()   { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -163,6 +165,47 @@ cmd_claim() {
   signal "$WIN claims lane '$lane'${note:+ — $note}"
 }
 
+# ── devwins: the dev servers on the board (2026-09-15) ─────────────────────────────────────────
+# `tools/devwin.sh <lane>` writes `$DEVWINS_DIR/<lane>` (lane/pid/port/session/ts) while it runs.
+# A record whose pid is dead is stale (the shell was SIGKILLed before its trap); a record whose lane
+# has NO claim is an ORPHAN — a window that wrapped and released without stopping its preview. The
+# 09-15 case: two days on :3205 at ~600MB, and the next build OOMed against it.
+devwin_pid()   { sed -n 's/^pid=//p' "$DEVWINS_DIR/$1" 2>/dev/null; }
+devwin_alive() { local p; p=$(devwin_pid "$1"); [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
+kill_tree() {
+  # children first, then the process — next-server and its postcss workers hang off the npx wrapper
+  local p="$1" c
+  for c in $(pgrep -P "$p" 2>/dev/null); do kill_tree "$c"; done
+  kill -TERM "$p" 2>/dev/null || true
+}
+reap_devwin() {
+  local lane="$1" why="${2:-}"
+  [ -f "$DEVWINS_DIR/$lane" ] || return 0
+  local p port; p=$(devwin_pid "$lane"); port=$(sed -n 's/^port=//p' "$DEVWINS_DIR/$lane")
+  if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
+    kill_tree "$p"
+    sleep 1
+    kill -0 "$p" 2>/dev/null && kill -KILL "$p" 2>/dev/null || true
+    echo "reaped devwin '$lane' (pid $p, :$port)${why:+ — $why}"
+    signal "$WIN reaps devwin '$lane' (pid $p, :$port)${why:+ — $why}"
+  else
+    echo "cleared stale devwin record '$lane' (pid ${p:-?} not running)"
+  fi
+  rm -f "$DEVWINS_DIR/$lane"
+}
+cmd_reap() {
+  # Kill every devwin whose lane has no claim. A claimed lane's devwin is someone's live preview.
+  local f lane any=0
+  for f in "$DEVWINS_DIR"/*; do
+    [ -e "$f" ] || continue
+    lane=$(basename "$f")
+    if [ -f "$CLAIMS_DIR/$lane" ]; then continue; fi
+    any=1
+    reap_devwin "$lane" "lane has no claim"
+  done
+  [ "$any" = 1 ] || echo "no orphan devwins"
+}
+
 cmd_release() {
   local lane="${1:-$WIN}"
   if [ -f "$CLAIMS_DIR/$lane" ]; then
@@ -183,6 +226,8 @@ cmd_release() {
   else
     echo "no claim on lane '$lane'"
   fi
+  # The lane's preview goes with the lane: a released lane with a live dev server is the orphan.
+  reap_devwin "$lane" "lane released"
 }
 
 lock_owner_info() {
@@ -475,6 +520,22 @@ cmd_status() {
   else
     echo "  (none)"
   fi
+  echo "--- dev servers ---"
+  if ls "$DEVWINS_DIR"/* >/dev/null 2>&1; then
+    local f dl dp dport dsess dts dep dage state
+    for f in "$DEVWINS_DIR"/*; do
+      dl=$(basename "$f"); dp=$(devwin_pid "$dl"); dport=$(sed -n 's/^port=//p' "$f")
+      dsess=$(sed -n 's/^session=//p' "$f"); dts=$(sed -n 's/^ts=//p' "$f")
+      dep=$(iso_to_epoch "$dts"); if [ "$dep" -gt 0 ]; then dage="$(age_human $(( $(now_epoch) - dep ))) ago"; else dage="?"; fi
+      if ! kill -0 "$dp" 2>/dev/null; then state="DEAD (stale record)"
+      elif [ ! -f "$CLAIMS_DIR/$dl" ]; then state="⚠ ORPHAN — lane has no claim; 'coord reap' stops it"
+      else state="live"
+      fi
+      printf "  %-8s pid %-8s :%-5s %-9s %-16s %s\n" "$dl" "${dp:-?}" "$dport" "$dage" "${dsess:+session ${dsess:0:8}}" "$state"
+    done
+  else
+    echo "  (none registered)"
+  fi
   echo "--- build lock ---"
   if [ -d "$LOCKDIR" ]; then
     echo "  HELD — $(lock_owner_info | tr '\n' ' ')  age=$(lock_age)s"
@@ -491,5 +552,6 @@ case "${1:-status}" in
   lock)    cmd_lock ;;
   unlock)  cmd_unlock ;;
   status)  cmd_status ;;
-  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | lock | unlock}"; exit 1 ;;
+  reap)    cmd_reap ;;
+  *) echo "usage: coord {claim <lane> [note] | status | build [msg] | sweep [args] | release [lane] | reap | lock | unlock}"; exit 1 ;;
 esac
