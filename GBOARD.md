@@ -11,6 +11,18 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🚪 Shimmer — **THE FIVE DOORS: MAGII'S TUTORIAL SHEET WIRED — HAZEL LENDS, GREG ASKS, THE CHOICE, THE FOLD** (2026-09-15 PM, hub lane `04e0ba76`, solo) · *Last touched 2026-09-15 — ✅ **PROD `BUILD_ID CoDaHRX93A_OU_J6a19mT` from `fec8534`** (+ harness `17163ff`), served == disk. tutorial 51/0 · folk 64/0 · folk-lines 160/0 (verbatim vs canon) · render-audit 216/0 · hud-type ratchet 17 · voxel3d sweep 98/98 · engine 29/29 · voxel 64/64. **`scripts/glade-walk.mts` walks the whole chain in the live page, green twice.***
+
+**Left off:** Magii's wiring sheet (athernyx `17e2223`) built, no locked line moved. Two tutorials had grown up apart — canon's economy (five doors, want/give, the stay choice) and the build's hands (cut → planks → lantern → light) under raven placeholders. Now one: **greet** = Greg's warning + offer (hands NOTHING) → **doors** = knock on five; only **Hazel's** want is an errand: she LENDS her blade on first talk (`hazels_blade`, the only blade in the Glade), the keeper cuts a log, mills 4 planks at HER sawmill, brings the stack square + the blade back (`bark:owed` until both) → **ask** = five met → Greg asks for a light and hands the raw shard THERE → **lantern / light** (any placement within 64 of Greg; his `lit` line is a toast across the glade) → **choice** ('Not yet' re-arms) → **fold** = the gate opens AND the starter bag (worn tools + crafting table) is handed out — canon Beat 1's gi_5. ★ **The keeper has no tool of their own until the fold**; that is what makes Hazel's return real. Five bodies = Greg's figure tinted, each on a floor cell of their own stamped building (`folk.ts`, cell in the blueprint frame, rotated with the stamp; `folk.test` proves open floor). `folk-lines.ts` is generated from the canon file (`scripts/folk-lines-gen.py`) and `folk-lines.test` fails on one changed character. Old saves migrate on read (`done` stays done). `look <deg> [pitch]` console verb (harness aim).
+
+**Next:**
+- **Alex walks it fresh** (clear `voxel3d:tutorial:1337` or a new keeper): the five bodies at their doors · Hazel's box · cutting with her blade · the empty tool corner before the fold · Greg's toast when the lantern lands · the choice buttons.
+- The folk LOOK: five tinted Gregs is the sheet's placeholder — art is Alex's call. A bent-over Hazel pose, Sax's stone, Fennel's Dewbear (scene line) are all unbuilt.
+- Build calls made here, Magii informed: stack = 4 planks (one log) · turn-in takes only the blade, planks stay (the lantern needs them and there is no blade to cut more) · lantern anywhere in the glade radius, not the path's exact cells.
+- Carried: Act I½ Folds gating + Beats 9/10 triggers (ruled, mine) · ring build · item icons for modelled stations · kindred/deepsight hooks.
+
+---
+
 ## ⚗️ Shimmer — **THE ALCHEMY CHAIN: GRIND · DISTIL · MIX · BREW, AND THE WORD PICKS THE ROUTE** (2026-09-14 late, hub lane `417e69be`, beside a spirits window on flora) · *Last touched 2026-09-15 AM (names ruled) — ✅ **DEPLOYED `BUILD_ID iVAPM7_2YINDsSdCTE26m` from `6531790`** (worker repin `743c844`), served == disk; superseded the same night by spirits' `LBRhO2E-ThoqVdgRSnvIx` from `f4e8c1f` (fruit bushes), which carries it. alchemy-chain 172/0 · recipes 77/0 · brew 52/0 · interact 47 · console 159/0 · workshop 96/0 · atlas-wiring 49/0 (stale reads fixed, `69bf1ef`). tsc 7 (baseline).*
 
 **Left off:** Alex: *"break the process down into steps to make a potion.. like grinding up a powder, distilling, mixing,
