@@ -1177,6 +1177,20 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
   ok(wadeHops === 1, `wading with Space held is one jump, not a pogo (${wadeHops})`)
 }
 
+// ── a drink's pace — speedMult scales the run, never the crouch (2026-09-15) ─────────────────
+{
+  const solid = world()
+  const a = createLoco(0.5, 10, 0.5); settle(a, solid)
+  const b = createLoco(0.5, 10, 0.5); settle(b, solid); b.speedMult = 1.12
+  for (let i = 0; i < 300; i++) { tickLocomotion(a, input({ mvX: 1 }), solid); tickLocomotion(b, input({ mvX: 1 }), solid) }
+  const va = Math.hypot(a.hvx, a.hvz), vb = Math.hypot(b.hvx, b.hvz)
+  ok(vb > va * 1.10 && vb < va * 1.14, `speedMult 1.12 runs 12% faster (${va.toFixed(2)} → ${vb.toFixed(2)})`)
+  const c = createLoco(0.5, 10, 0.5); settle(c, solid)
+  const d = createLoco(0.5, 10, 0.5); settle(d, solid); d.speedMult = 1.12
+  for (let i = 0; i < 300; i++) { tickLocomotion(c, input({ mvX: 1, crouchKey: true }), solid); tickLocomotion(d, input({ mvX: 1, crouchKey: true }), solid) }
+  ok(Math.abs(Math.hypot(c.hvx, c.hvz) - Math.hypot(d.hvx, d.hvz)) < 0.01, 'a crouch is not sped up by a drink')
+}
+
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

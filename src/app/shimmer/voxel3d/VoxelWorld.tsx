@@ -261,6 +261,9 @@ import { applySparPayout, sparLedgerLines } from './spar-reward'
 import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
 import { rightClickIntent } from './interact'
+import { consumeEffect, consumeRefusal, consumeLine, isConsumable } from './consume'
+import { drinkBuff, pruneBuffs, manaRegenMult, gatherXpMult, speedMult, rinTune, type ActiveBuffs } from '../engine/potion-effects'
+import { BuffChips } from './buff-chips'
 import { alchemyStationOf, alchemySalvage, ALCHEMY_STATIONS, intermediateLabel, type AlchemyStationId } from './alchemy-chain'
 import { AlchemyPanel } from './alchemy-panel'
 import {
@@ -1098,6 +1101,8 @@ export default function VoxelWorld() {
   // debug tier lever is gone: tier now comes from what you are actually holding.
   const tools = useRef<EquippedTools>(ensureBasicTools({}))
   const skills = useRef<SkillSet>(createSkillSet())
+  /** What the keeper has drunk that is still running — buffId → epoch ms it ends. Saved with the keeper. */
+  const buffs = useRef<ActiveBuffs>({})
   const [skillHud, setSkillHud] = useState<{ id: string; level: number; xp: number; next: number } | null>(null)
   // ★ THE TUTORIAL. `tutorial` is a ref (mutated in place, like `inv`/`tools`) so World can read the
   // current stage every frame with no re-render; `tutorialTick` is the counter that forces a HUD
@@ -2283,7 +2288,7 @@ export default function VoxelWorld() {
           onLook={setLook} onInvChange={refreshHotbar} onCollarNear={setCollarNear}
           worker={worker} incoming={incoming} inflight={inflight} settings={settings}
           rot={rot}
-          tools={tools} skills={skills} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
+          tools={tools} skills={skills} buffs={buffs} onSkill={setSkillHud} onLevel={setLevelUp} onTool={setActiveTool}
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
@@ -2307,7 +2312,7 @@ export default function VoxelWorld() {
       </Canvas>
       <Hud tremor={tremor} stats={stats} diagnostics={settings.showFps} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
            heldPiece={heldPiece} rot={rot} inv={inv} collarNear={collarNear}
-           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills}
+           skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills} buffs={buffs}
            activeTool={activeTool}
            isOwner={isOwner} drawn={drawn} weaponIdx={weaponIdx} ammoUi={ammoUi}
            bindings={bindings.current} padKind={padRef.current?.kind ?? 'generic'}
@@ -2569,7 +2574,7 @@ function Clock() {
  * directly, and leave the component tree alone. 10 Hz is well under a frame and well over the eye.
  */
 
-function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, heldPiece, rot, inv, skill, levelUp, crafted, tools, skills, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast, collarNear, tremor }: {
+function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, hotbar, sel, tier, held, heldPiece, rot, inv, skill, levelUp, crafted, tools, skills, buffs, activeTool, isOwner, drawn, weaponIdx, ammoUi, tutorialStage, nearGreg, dialogueOpen, nearTable, craftOpen, nearMist, hasParty, sparLedger, vitals, mana, cast, collarNear, tremor }: {
   stats: string; pos: string
   /** The say line — player-addressed, held ~4s. See the SAY CHANNEL note on VoxelWorld. */
   toast: { text: string; at: number } | null
@@ -2588,6 +2593,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
   /** Full skill set (all 6, level+xp), for the tool gauges — `skill` above is only the last-trained
    *  one and can't drive four gauges at once. */
   skills: React.RefObject<SkillSet>
+  buffs: React.RefObject<ActiveBuffs>
   /** Which family is mining right now, from the mining block's onTool signal. Drives gauge glow. */
   activeTool: string | null
   isOwner: boolean
@@ -2960,6 +2966,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           instead of a replica — see that file's header. Positioning moved with it, deliberately:
           the anchoring is the part that has actually been wrong, so it is the part worth previewing. */}
       {<HudCorner mana={mana} activeTool={activeTool} tools={tools} skills={skills} />}
+      <BuffChips buffs={buffs} />
     </>
   )
 }
@@ -4020,7 +4027,7 @@ function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove, onSpli
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -4064,6 +4071,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   rot: Rotation
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
+  buffs: React.RefObject<ActiveBuffs>
   onSkill: (s: { id: string; level: number; xp: number; next: number } | null) => void
   onLevel: (s: string | null) => void
   /** Which family is actively mining, or null — fires only on change (see the ref beside the
@@ -4517,6 +4525,26 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   const edits = useRef(new Map<string, ColumnEdits>())
   /** What is growing in each garden bed. Keyed by voxel — see `voxel/planting.ts`. */
   const beds = useRef<PlantedBeds>(new Map())
+
+  /**
+   * ── ★ EAT / DRINK (2026-09-15, Alex: "do the eat/drink verb next") ─────────────────────────────
+   * One bottle (or loaf) leaves the bag, and `consume.ts` says what it does; this applies it. The
+   * order is the brew's: take first, then give, so a refusal costs nothing and a spend always lands.
+   * Effects are the engine's tables (play3d drinks from the same ones) — only the verb is new here.
+   */
+  const doConsume = useCallback((itemId: string) => {
+    if (!inv.current || countItem(inv.current, itemId) <= 0) return
+    const eff = consumeEffect(itemId)
+    if (!eff) { const why = consumeRefusal(itemId); if (why) onSay(why); return }
+    removeItems(inv.current, itemId, 1)
+    const now = Date.now()
+    if (eff.mana) mana.current.cur = Math.min(mana.current.max, mana.current.cur + eff.mana)
+    if (eff.hp || eff.sh) vitals.current = heal(vitals.current, eff.hp ?? 0, eff.sh ?? 0)
+    if (eff.buff) drinkBuff(buffs.current, itemId, now)
+    if (eff.advanceCropsMs) for (const c of beds.current.values()) c.plantedAt -= eff.advanceCropsMs
+    onSay(consumeLine(itemId, eff, itemLabel(itemId)))
+    onInvChange()
+  }, [inv, mana, vitals, buffs, onSay, onInvChange])
   const dirtySaves = useRef(new Set<string>())
   /**
    * ── ★ THE STALE-SAVE WARNING FIRES ONCE PER GENERATOR VERSION, NOT ONCE PER PAGE LOAD ────────
@@ -4831,6 +4859,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // an old save as its basic tier instead of as undefined.
       if (p.tools) tools.current = ensureBasicTools(p.tools as EquippedTools)
       if (p.skills) skills.current = p.skills as SkillSet
+      // Shape-checked, and pruned on the way in: a timer that ended while the tab was shut is gone.
+      if (p.buffs && typeof p.buffs === 'object' && !Array.isArray(p.buffs)) {
+        const b: ActiveBuffs = {}
+        for (const [id, until] of Object.entries(p.buffs)) if (typeof until === 'number' && Number.isFinite(until)) b[id] = until
+        buffs.current = pruneBuffs(b, Date.now())
+      }
       // ⚠ SHAPE-CHECKED, NOT TRUSTED. An older save has no `waymarks` at all and a hand-edited one
       // could have anything; a malformed net would throw inside the travel panel, which is the
       // worst possible place for it. Anything that is not recognisably a net loads as an empty one.
@@ -4968,6 +5002,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
                // re-collars someone the keeper already freed. ⚠ NOT the old `patrolled` list: that
                // one also erased holds the keeper lost at, permanently.
                freedAt: { ...foeFreed.current },
+               buffs: pruneBuffs(buffs.current, Date.now()),
                // The fold Greg has actually given, and the book he reads to decide. See both fields
                // in `PlayerSave` — the tier is what EXISTS, never what is owed.
                plotTier: plotTier.current,
@@ -7443,7 +7478,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       // smaller. Free passives leave it at 1 and this line is a no-op for them.
       {
         const m = mana.current
-        if (m) m.cur = Math.min(m.max, m.cur + m.regen * (stance.current?.regenMult ?? 1) * dt)
+        // ★ A drink's regen (Ather Flow) multiplies the same line the stance does — one rate, two dials.
+        if (m) m.cur = Math.min(m.max, m.cur + m.regen * (stance.current?.regenMult ?? 1) * manaRegenMult(buffs.current, Date.now()) * dt)
         const nowMs = performance.now()
         if (surge.current && nowMs >= surge.current.until) surge.current = null
         if (infusion.current && nowMs >= infusion.current.until) infusion.current = null
@@ -9368,6 +9404,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
       lc.px = p.x; lc.py = p.y - lc.eye; lc.pz = p.z
       lc.vy = 0; lc.airborne = true; lc.hvx = 0; lc.hvz = 0
     } else {
+      // A drink's pace (Fleetfoot / Dawn): read once per frame off the live buffs, 1 when nothing is drunk.
+      lc.speedMult = speedMult(buffs.current, Date.now())
       tickLocomotion(lc, {
         mvX: wish.x, mvZ: wish.z,
         fwdX: fwd.x, fwdZ: fwd.z, rightX: right.x, rightZ: right.z,
@@ -9847,8 +9885,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         if (wantSkill && xp > 0 && skills.current![wantSkill as keyof SkillSet]) {
           const sk = skills.current![wantSkill as keyof SkillSet]
           // XP scales with hardness, so the deep tiers train faster than topsoil — the ladder the
-          // registry already encodes, reused rather than restated.
-          const res = addSkillXP(sk, xp)
+          // registry already encodes, reused rather than restated. A drink (Starlight / Dawn)
+          // multiplies it here, at the one gather site mining has.
+          const res = addSkillXP(sk, Math.round(xp * gatherXpMult(buffs.current, Date.now())))
           if (res.leveled) {
             onLevel(`${wantSkill} ${res.newLevel}${getMilestone(res.newLevel) ? ' — ' + getMilestone(res.newLevel) : ''}`)
           }
@@ -10052,6 +10091,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // a phantom click, which is a worse bug than the missed one this fixes.
     const rightNow = mouse.current.right || rightPress.current
     rightPress.current = false
+    // ★ DRINKING WANTS NO TARGET. A bottle raised at the sky is still a drink, so the consume verb
+    // is answered here, before the aimed block is even asked — but only when there is NO block, so
+    // a chest or a station under the reticle keeps its own answer (`interact.ts` › 'use').
+    if (!hit && rightNow && !weaponDrawn && selItem && isConsumable(selItem)) {
+      doConsume(selItem)
+      mouse.current.right = false
+    }
     if (hit && rightNow && !weaponDrawn) {
       const potMat = voxel(hit.x, hit.y, hit.z)
       // ★ `holdsSeed` now answers for BOTH seed kinds: the pot wants a Mana Seed, a bed wants a crop
@@ -10065,7 +10111,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // the day a rod can be lost, the click answers `'none'` instead of casting with nothing.
         !!getEquippedTool(tools.current!, 'rinning'),
         cropAt(beds.current, hit.x, hit.y, hit.z) !== undefined,
-        readyAt(beds.current, hit.x, hit.y, hit.z))
+        readyAt(beds.current, hit.x, hit.y, hit.z),
+        false,
+        !!selItem && isConsumable(selItem))
       // ── ★ THE CHEST OPENS ON RIGHT-CLICK, and is answered FIRST ────────────────────────────
       // A chest is a thing you USE, and the block in your hand must not be dropped onto it by the
       // same click that opens it. Handing the whole panel upward (rather than opening one down
@@ -10095,8 +10143,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
             // water the deeper you aimed, which is exactly backwards and would have looked like the
             // ladder being stingy rather than like a bad measurement.
             const bed = columnHeight(hit.x, hit.z, SEED)
+            // Angler's Eye shortens the rise (`rinTune.bite`); the window half needs the float that
+            // is not drawn yet, so it is not applied — `consume.ts` › WIRED_BUFFS says which halves are.
+            const cast = newCast(performance.now(), Math.random, spot.lively)
+            cast.riseAt *= rinTune(buffs.current, Date.now()).bite
             rinning.current = {
-              cast: newCast(performance.now(), Math.random, spot.lively),
+              cast,
               water: { kind: spot.kind, depth: Math.max(0, spot.surfaceY - bed), lively: spot.lively },
               x: hit.x, y: spot.surfaceY, z: hit.z,
               outMs: performance.now(), phase: 'waiting',
@@ -10110,7 +10162,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           const caught = rinCatch(r.water, skills.current!.rinning.level, performance.now() - r.outMs, Math.random)
           drops.current.push(spawnDrop(caught.itemId, 1, r.x, r.y + 1, r.z))
           const sk = skills.current!.rinning
-          const res = addSkillXP(sk, caught.xp)
+          const res = addSkillXP(sk, Math.round(caught.xp * gatherXpMult(buffs.current, Date.now())))
           if (res.leveled) {
             onLevel(`rinning ${res.newLevel}${getMilestone(res.newLevel) ? ' — ' + getMilestone(res.newLevel) : ''}`)
           }
@@ -10245,6 +10297,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           onSay(got.items.map(i => `${i.count}× ${itemLabel(i.itemId).toLowerCase()}`).join(', ')
                 + ` · ${got.xpGained} farming xp`)
         }
+        mouse.current.right = false
+      } else if (intent === 'use' && selItem) {
+        doConsume(selItem)
         mouse.current.right = false
       } else if (intent === 'place' && pieceTarget) {
         // ── ★ THE PIECE, PLACED BY THE SAME CLICK A BLOCK IS ─────────────────────────────────

@@ -226,6 +226,12 @@ export interface PlayerSave {
    */
   freedAt?: Record<string, number>
   /**
+   * What the keeper has drunk that is still running (2026-09-15): buffId → epoch ms it ends. Wall-
+   * clock, like a crop, so a Fleetfoot keeps ticking while the tab is shut — that is the honest
+   * reading of "6 minutes". Pruned on write; optional so every older save loads unchanged.
+   */
+  buffs?: Record<string, number>
+  /**
    * ⚠ LEGACY, READ BY NOBODY (2026-08-16). It cannot be migrated: it says a patrol was *met* and
    * says nothing about whether it was *resolved*, so reading it as `freedAt` would permanently
    * delete the encounter for anyone who had merely walked past a hold, and reading it as nothing

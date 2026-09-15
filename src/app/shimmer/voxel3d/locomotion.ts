@@ -329,6 +329,9 @@ export interface LocoState {
   /** Set by a swimming tick, spent by the first treading tick after it: a held jump that carried
    *  the body UP to the surface kicks once more there instead of dying as a stale hold. */
   kickArmed: boolean
+  /** A drink's pace (2026-09-15): scales the walk/run target only, never a crouch, a backpedal or
+   *  the drain cap. Set by the host each frame from the live buffs; 1 when nothing is drunk. */
+  speedMult: number
   /** How far the EYE is still below the feet after a step-up, draining to 0. Render only —
    *  read it through `eyeY()`, never in collision. */
   stepSmooth: number
@@ -391,7 +394,7 @@ export function createLoco(px: number, feetY: number, pz: number): LocoState {
     mantleT: 0, mantleDur: MANTLE_TIME, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
     vaulting: false, carryVX: 0, carryVZ: 0,
     justWallJumped: false, justHopped: false, sliding: false, crouching: false, climbing: false,
-    swimming: false, kickArmed: false, stepSmooth: 0, drainT: 0,
+    swimming: false, kickArmed: false, speedMult: 1, stepSmooth: 0, drainT: 0,
   }
 }
 
@@ -654,7 +657,7 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
   const sprinting = hasInput && !backpedal && !s.crouching
   if (!s.airborne && !s.sliding) s.sprintT = sprinting ? Math.min(SPRINT_RAMP, s.sprintT + dt) : 0
   // Linear in the target; GROUND_ACCEL's first-order lag is what smooths it.
-  const ramped = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * (s.sprintT / SPRINT_RAMP)
+  const ramped = (WALK_SPEED + (RUN_SPEED - WALK_SPEED) * (s.sprintT / SPRINT_RAMP)) * s.speedMult
   // ── ★ THE HOLLOW'S DRAIN (2026-08-11) — a CAP, not a multiplier ─────────────────────────
   // Applied with `min` so it can only ever take speed away. A multiplier would silently SPEED
   // UP a crouch (2.6 x anything < 1 is still a slow-down, but the sliding branch below runs at

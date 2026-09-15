@@ -39,9 +39,16 @@ infusion earns the whole chain through a mixed base; tier 1 is held at two stati
 3. **THE OVEN IS INTERACTABLE (09-15, Alex: "make sure all of our stations are interactable.. starting with the
    oven").** It rides the alchemy table as `craft: 'cooking'` (`ALCHEMY_STATIONS.oven`, `COOK_ROWS`): Bread = 3
    Shimmerwheat Grain, 20s, no mana / XP / gate; panel header reads *the fire is always lit*; generated loaf icon.
-   ⚠ **Nothing on this surface EATS or DRINKS yet** — bread and all 17 potions are inert in the bag; the `use`
-   verb + `engine/potion-effects.ts` (play3d's) is the next piece. **Hearth** still has no verb: an open-fire
-   dish needs an Ather-side recipe canon has not named (cuisine.md's roster is mortal-side) → gap queued.
+   **EAT / DRINK (09-15, same day):** right-click with a bottle or loaf in hand swallows it — aimed at nothing,
+   or at any plain block (a chest / station under the reticle still opens; `interact.ts` › `'use'`). Effects are
+   the engine's own tables (`consume.ts` reads `potion-effects.ts`): Mana Draught +40 / Shard Tonic +65 mana,
+   salve +50 hp, crystal elixir +75 shield, bread +30 hp, harvest brew jumps crops 3m, the 8 buffs set a wall-
+   clock timer (saved in `PlayerSave.buffs`, chips bottom-left). **WIRED hooks:** fleetfoot/dawn speed
+   (`LocoState.speedMult`), ather_flow regen, starlight/dawn XP at mining + rinning, angler's eye rise time.
+   **NOT wired (chip dims, line says "not felt here yet"):** kindred (no companion assist here), deepsight (no
+   gather bonus-find here), dreamwalk (mist encounters do not read it yet). The four elemental infusions REFUSE
+   (they go on a spirit; nothing applies them). **Hearth** still has no verb: an open-fire dish needs an
+   Ather-side recipe canon has not named (cuisine.md's roster is mortal-side) → gap queued.
 4. ~~Magii's ruling → rename~~ done 09-15. Alex judges the three block looks — the mortar tile still paints a TURNING stone (a quern look); a mortar wants a pestle, which the ALIVE pass (pestle circles) draws anyway.
 
 **Decisions:** four verbs, not four hoops — the word routes, so tier 1 stays a short walk · a bulb and a fruit are

@@ -94,6 +94,13 @@ export type Intent =
   | 'rinn'
   /** Put the block in your hand into the world. */
   | 'place'
+  /**
+   * Swallow the thing in your hand (2026-09-15). Answered AFTER every aimed-thing rule and BEFORE
+   * the place fall-through, so a potion in hand still opens a chest and still works a station, and
+   * only a click that would otherwise have tried to PLACE a bottle drinks it instead. The host
+   * also asks for it with no block under the reticle at all — drinking wants no target.
+   */
+  | 'use'
   /** Empty hand, ordinary block — the click means nothing, and that is correct. */
   /**
    * An empty bed, and an empty hand — say what the bed WANTS.
@@ -121,7 +128,7 @@ export type Intent =
  */
 export function rightClickIntent(
   aimed: number, selItem: string | null, holdsSeed: boolean, hasRinstick = false,
-  bedPlanted = false, bedReady = false, openablePiece = false,
+  bedPlanted = false, bedReady = false, openablePiece = false, consumable = false,
 ): Intent {
   // ── ★★ A PIECE THAT OPENS, ANSWERED BEFORE EVERYTHING ───────────────────────────────────────
   // ⚠ IT CANNOT BE DECIDED FROM `aimed` AND THAT IS WHY IT IS A PARAMETER. Every piece writes the
@@ -201,5 +208,6 @@ export function rightClickIntent(
   // ⚠ AFTER the place fall-through's condition, not before it: an empty HAND is the only case that
   // was silent, and it is the only one this may claim.
   if (isGardenBed(aimed) && !bedPlanted && !selItem) return 'needs-seed'
+  if (selItem && consumable) return 'use'
   return selItem ? 'place' : 'none'
 }
