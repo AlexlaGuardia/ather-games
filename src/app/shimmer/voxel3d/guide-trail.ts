@@ -23,7 +23,7 @@ export const GUIDE_LOOK = {
   lead: 1.5,
   /** the lantern's gold */
   colour: [1.0, 0.84, 0.48] as const,
-  alpha: 0.7,
+  alpha: 0.55,
 } as const
 
 export interface GuidePass {
@@ -67,7 +67,9 @@ void main() {
   vT = aT;
   vTw = 0.75 + 0.25 * sin(uTime * 3.0 + aSeed * 5.0);
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_PointSize = 9.0 * (120.0 / max(1.0, -mv.z));
+  // ~a quarter block across: 0.25 blocks × (viewport height / 2 tan(fov/2)) ≈ 130 px·blocks at
+  // 760 px / 75°. Clamped so a mote at the feet is a mote, not a sun.
+  gl_PointSize = clamp(130.0 / max(1.0, -mv.z), 2.0, 34.0);
   gl_Position = projectionMatrix * mv;
 }`,
     fragmentShader: /* glsl */ `
@@ -81,7 +83,7 @@ void main() {
   if (d > 1.0) discard;
   float soft = (1.0 - d) * (1.0 - d);
   float along = sqrt(sin(3.14159 * vT));
-  gl_FragColor = vec4(uColour * (0.6 + 0.6 * soft), soft * along * vTw * uAlpha);
+  gl_FragColor = vec4(uColour * (0.5 + 0.5 * soft), soft * along * vTw * uAlpha);
 }`,
   })
   const points = new THREE.Points(geo, mat)
