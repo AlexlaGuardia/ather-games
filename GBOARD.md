@@ -11,6 +11,35 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🪟 Shimmer — **THE LIT WINDOW: A PANE GLOWS AT NIGHT WITH THE ROOM BEHIND IT** (2026-09-14 PM, hub lane `417e69be`, beside a spirits window on flora) · *Last touched 2026-09-14 — ✅ **PROD `BUILD_ID cdR6sEunoFEYFgyK0k8BP` from `78ef0f0`** (carries spirits' `6f7c256`), served == disk on the glow chunk. light-glsl 51/0 (§5 new, 3 mutations fire) · console 159/0 · glass 69/0 · cartoon-stack 30/0. tsc 7 (baseline).*
+
+**Left off:** research #2 built. The pane's cutout program adds an emissive = the light field's BLOCK channel one cell
+**away from the viewer** (`gl_FrontFacing` picks the side — the varying normal is the geometry's and does not flip), through
+the pane's own tile colour (sunpetal glows gold, the lead stays lead), × `LIGHT_LOOK.paneGlow` 1.2 × `(1 − hour luminance)`.
+`shimmerFieldAt` is the one decode of the field now; `shimmerLightCell` reads through it. Measured headless, hour pinned:
+midnight pane with a lantern two cells behind **(152,147,98)** vs no lantern (110,101,55) vs before (66,65,39); noon within 5%.
+- ⚠ **The first four shots showed NOTHING and the code was right.** A software-GL tab runs ~1 fps; the render-light ring
+  filled 7 of 81 columns in a minute ("never-built beats re-settling" means an edited column is re-served LAST), so every
+  night shot photographed the unbuilt fallback — fully lit, no lantern — which reads as *the feature does nothing*.
+  `window.__renderlight()` said so in one call (`built 7 · dirty 79 · shown 0`). ★ Ask the generator before the picture.
+- Instruments kept: **`/put <block|piece> <x> <y> <z> [rot]`** (owner-only; `~` on all three axes, y = feet) stands a
+  test in a headless world through the click path's own writes · **`window.__renderlightFill(capMs)`** drives the ring
+  to completion · **`WORLD_PRE_EVAL`** on `world-shot.mts` runs it before the shot.
+
+**Next:**
+1. ⛔ **ALEX JUDGES** — a pane with a lantern in the room, seen from the yard at night. Dial `paneGlow`; the gate curve
+   (`1 − lum`, linear) is the other lever if dusk glows too early.
+2. The **halo sprite** (research #4) — a soft quad in front of a glowing pane, only once the glow itself reads right.
+3. Rim light · height fog · greying desat — the rest of the research order.
+
+**Decisions:** the cell BEHIND, never the pane's own — the room's lamp, not the glass's · sky NOT consulted (a lit yard
+seen through glass from the room is a lit yard) · emissive added AFTER the field so the yard's night cannot darken the
+room's lamp · `/put` skips `canPlace` and the inventory on purpose — it stands tests where the rules would not.
+
+**Files:** `voxel3d/light-glsl.ts` (`shimmerFieldAt`, `shimmerPaneGlow`, `uPaneGlow`) · `voxel3d/piece-mesh.ts` (the cutout
+program's emissive) · `voxel3d/console.ts` + `VoxelWorld.tsx` (`/put`, `__renderlightFill`) · `scripts/world-shot.mts`
+(`WORLD_PRE_EVAL`) · `voxel3d/light-glsl.test.ts` §5 · `console.test.ts` §12.
+
 ## 💡 Shimmer — **SHADERS: THE RESEARCH, THE HOUR, THE FLOATING POND, THE BLACK FACES** (2026-09-14 → 09-15, hub lane `034112f4`, beside a spirits window on flora) · *Last touched 2026-09-15 — ✅ **PROD `BUILD_ID _Bw70RnHyWfBjqWH981rI` from `9f835cf`**, served == disk on every chunk checked. hour-light 22/0 · water-sheet-band 5/0 (mutation +17.99) · render-light 67/0 (§12 fires 4) · cartoon-stack 30/0. tsc 7 (baseline).*
 
 **Left off:** four Sonnet research reports + `research/shaders-2026-09-14/SYNTHESIS.md` (architecture right; no post pass / shadow maps / RGB flood). The cartoon stack carries the hour (`hour-light.ts`; noon byte-identical; `night` slider, Alex 0.95). Alex's dials baked as the `cartoon` preset; levers disabled on `natural`. Pond sheet clamped into its block (a table 18 blocks over a basin). ★ The render flood treated slabs/pieces/glass as rock → black faces in daylight — fixed (`bd4d407`); the spawn flood had been fixed 09-12, this one never was. Crossings arrive facing away from the portal (reverses 08-19).
