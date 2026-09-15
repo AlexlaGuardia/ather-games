@@ -223,9 +223,11 @@ import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
 // `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
 // where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
 // Greg's placeholder figure. This file only wires all three into the render loop.
-import { loadTutorial, saveTutorial, talkGreg, talkFolk, answerChoice, speakerOf, objectiveLabel, stageActions, HAZELS_BLADE,
+import { loadTutorial, saveTutorial, talkGreg, talkFolk, answerChoice, speakerOf, objectiveLabel, stageActions, HAZELS_BLADE, HAZEL_STACK,
          type TutorialStage, type TutorialState, type Talk, type Progress } from './tutorial'
-import { folkSites, folkDef, type FolkId } from './folk'
+import { folkSites, folkDef, stationCellOf, type FolkId } from './folk'
+import { guideTarget, type GuideWorld, type GuideTarget } from './guide-target'
+import { createGuideTrail } from './guide-trail'
 import { SCRIPT, type Beat } from './folk-lines'
 /** Greg's `lit` line, said across the glade as a toast when the lantern lands (see `onQuestEvent`). */
 const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in b ? [b.text] : [])
@@ -4410,9 +4412,21 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       fig.group.position.set(site.cx, site.y, site.cz)
       fig.group.rotation.y = site.yaw
       const box = bodyBox(site.cx, site.cz, site.y + GREG_BOUNDS.y0, site.y + GREG_BOUNDS.y1, GREG_BOUNDS.halfW)
-      return { id: site.id, fig, box }
+      return { id: site.id, fig, box, x: site.cx, z: site.cz }
     })
   }, [])
+  // ── ★ THE GUIDE TRAIL (2026-09-15, Alex: "a glow trail on the ground for quick tasks like the
+  //    tutorial") — gold motes from the feet to the objective; `guide-target.ts` decides where,
+  //    `guide-trail.ts` draws it. Tutorial only: the resolver returns null after the fold. ────────
+  const guide = useMemo(() => createGuideTrail(), [])
+  const guideWorld = useMemo((): GuideWorld => ({
+    greg: { x: GREG_CX, z: GREG_CZ },
+    folk: Object.fromEntries(folk.map(f => [f.id, { x: f.x, z: f.z }])),
+    sawmill: stationCellOf(PLACED_STAMPS, folkDef('hazel').placement, MAT.SAWMILL),
+    nearestLog: null,
+  }), [folk])
+  const guideLogClock = useRef(0)
+  const guideTargetRef = useRef<GuideTarget | null>(null)
   // Hot-spring steam (2026-08-08) — sleeps everywhere but the Springs; see steam.ts.
   const steam = useMemo(() => createSteamPoints(SEED), [])
   // Chimney smoke (2026-09-13, Fennel's R5) — rises from every HEARTH / OVEN in the nearby columns,
@@ -5297,6 +5311,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     tiles?.texture.dispose()
     greg.dispose()
     for (const f of folk) f.fig.dispose()
+    guide.dispose()
     steam.dispose()
     smoke.dispose()
     breakFx.dispose()
@@ -5304,7 +5319,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     mist.dispose()
     ring.dispose()
     flora.dispose()
-  }, [dropGeo, flatMaterial, textured, tiles, pieces, folk, greg, steam, smoke, breakFx, seam, mist, flora])
+  }, [dropGeo, flatMaterial, textured, tiles, pieces, folk, guide, greg, steam, smoke, breakFx, seam, mist, flora])
 
   /**
    * Set the instant the context is lost, read by the FRAME LOOP so it stops. A ref and not state:
@@ -5381,6 +5396,39 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     const c = cols.current.get(key(cx, cz))
     if (!c) return AIR
     return c.get(wx - cx * SECTION, wy, wz - cz * SECTION)
+  }, [])
+
+  /** The live ground at a column — the top non-air cell near the generated height, +1 — or null
+   *  when the column is not loaded. For the guide trail: a mote on a slope is on the slope, a
+   *  mote over an unloaded column is parked. */
+  const surfaceTopAt = useCallback((x: number, z: number): number | null => {
+    if (!cols.current.has(key(Math.floor(x / SECTION), Math.floor(z / SECTION)))) return null
+    const h = columnHeight(x, z, SEED)
+    for (let y = h + 8; y >= h - 8; y--) if (voxel(x, y, z) !== AIR) return y + 1
+    return h + 1
+  }, [voxel])
+
+  /** The nearest standing log within ±2 sections — Hazel's "cut a log" needs a tree to point at.
+   *  Every 2s, only while wanted; a uniform section (no trunk anywhere) is skipped in O(1). */
+  const nearestLogTo = useCallback((px: number, pz: number): { x: number; z: number } | null => {
+    const ccx = Math.floor(px / SECTION), ccz = Math.floor(pz / SECTION)
+    let best: { x: number; z: number } | null = null, bd = Infinity
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const cx = ccx + dx, cz = ccz + dz
+      const col = cols.current.get(key(cx, cz))
+      if (!col) continue
+      for (let lz = 0; lz < SECTION; lz++) for (let lx = 0; lx < SECTION; lx++) {
+        const wx = cx * SECTION + lx, wz = cz * SECTION + lz
+        const h = columnHeight(wx, wz, SEED)
+        for (let y = h + 1; y <= h + 10; y++) {
+          if (!isLogMat(col.get(lx, y, lz))) continue
+          const d = Math.hypot(wx + 0.5 - px, wz + 0.5 - pz)
+          if (d < bd) { bd = d; best = { x: wx + 0.5, z: wz + 0.5 } }
+          break
+        }
+      }
+    }
+    return best
   }, [])
 
   /**
@@ -7488,6 +7536,27 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     if (!g) return
     const p = camera.position
     steam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
+    // The guide trail: the target is re-resolved every frame (five hypots and a bag count), the
+    // nearest-log scan every 2s and only while Hazel is owed a log. Wilds space only — the
+    // tutorial lives at the Glade, and a fold has no doors to knock on.
+    {
+      const ts = tutorial.current
+      let target: GuideTarget | null = null
+      if (ts.stage !== 'done' && space.current !== 'plot') {
+        let logs = 0
+        for (const slot of inv.current!.slots) if (slot && slot.itemId.endsWith('_log')) logs += slot.count
+        const planks = countItem(inv.current!, 'goldwood_plank')
+        const wantLog = ts.hazel === 'owed' && logs === 0 && planks < HAZEL_STACK
+        guideLogClock.current -= dt
+        if (wantLog && guideLogClock.current <= 0) {
+          guideLogClock.current = 2
+          guideWorld.nearestLog = nearestLogTo(p.x, p.z)
+        }
+        target = guideTarget(ts, { logs, planks, hasHazelsBlade: tools.current!.forestry?.toolId === HAZELS_BLADE }, { x: p.x, z: p.z }, guideWorld)
+      }
+      guideTargetRef.current = target
+      guide.tick(p.x, p.z, target, dt, state.clock.elapsedTime, surfaceTopAt)
+    }
     // The smoke's source scan: 7×7 columns around the camera (±48 blocks), every 2s. Cheap because
     // uniform sections skip in O(1) and hearths are rare; honest because every edit path refreshes
     // the uniform table. A hearth a keeper sets down smokes within two seconds, no wiring needed.
@@ -10872,6 +10941,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       {stations && <primitive object={stations.group} />}
       <primitive object={greg.group} />
       {folk.map(f => <primitive key={f.id} object={f.fig.group} />)}
+      <primitive object={guide.points} />
       <primitive object={steam.points} />
       <primitive object={smoke.points} />
       <primitive object={breakFx.points} />

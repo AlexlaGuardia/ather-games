@@ -19,6 +19,7 @@
 
 import type { Rotation } from '../voxel/pieces'
 import { rotateLocal, stampFloor, type Stamp } from '../voxel/stamps'
+import { blueprintCells } from '../voxel/blueprints'
 
 export const FOLK_IDS = ['hazel', 'sax', 'yarrow', 'fennel', 'mallow'] as const
 export type FolkId = (typeof FOLK_IDS)[number]
@@ -74,4 +75,19 @@ export function folkSites(stamps: readonly Stamp[], surfaceAt: (x: number, z: nu
     out.push({ id: f.id, cx: s.x + r.x + 0.5, y: floor + 1, cz: s.z + r.z + 0.5, yaw: yawOf(((f.face + s.rot) & 3) as Rotation) })
   }
   return out
+}
+
+/**
+ * The first cell of material `mat` in a placed building, as a world block centre — Hazel's sawmill
+ * for the guide trail. Null if the building is not placed or has no such block.
+ */
+export function stationCellOf(stamps: readonly Stamp[], placement: string, mat: number): { x: number; z: number } | null {
+  const s = stamps.find(st => st.id === placement)
+  if (!s) return null
+  for (const c of blueprintCells(s.bp)) {
+    if (c.m !== mat) continue
+    const r = rotateLocal(c.x, c.z, s.bp, s.rot)
+    return { x: s.x + r.x + 0.5, z: s.z + r.z + 0.5 }
+  }
+  return null
 }
