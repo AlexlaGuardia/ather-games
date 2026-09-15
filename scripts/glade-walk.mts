@@ -151,12 +151,22 @@ try {
   await page.keyboard.press('Escape'); await sleep(400)
   await page.keyboard.press(`Digit${slot + 1}`); await sleep(300)
   ok(/Set the lantern/.test(await objective()), `objective: ${await objective()}`)
-  await cmd('/look 0 50'); await sleep(800)                   // the ground two blocks out, under the reticle
-  await page.mouse.click(640, 380, { button: 'right' }); await sleep(900)
+  await cmd('/look 0 60'); await sleep(800)                   // the ground a block and a half out, under the reticle
+  // A real click earns the pointer lock (the verbs only count while locked), then the right-click
+  // places. Under software GL the lock is granted on its own schedule, so this is tried up to three
+  // times and judged by the state, not by the click having happened.
+  let lit = false
+  for (let attempt = 0; attempt < 3 && !lit; attempt++) {
+    await page.mouse.click(640, 380); await sleep(700)
+    await page.mouse.click(640, 380, { button: 'right' }); await sleep(700)
+    // The toast lives 4.2s and a software-GL screenshot can eat most of that — read the text NOW.
+    lit = /There now. Look at that/.test(await page.evaluate(() => document.body.innerText))
+    if (!lit) await sleep(1200)
+  }
+  ok(lit, "Greg's lit line is said across the glade")
   if (process.env.GLADE_SHOT) await page.screenshot({ path: process.env.GLADE_SHOT.replace(/\.png$/, '-place.png') })
   s = await state()
   ok(s?.stage === 'choice', `placing the lantern arms the choice (${JSON.stringify(s)})`)
-  ok(/There now. Look at that/.test(await page.evaluate(() => document.body.innerText)), "Greg's lit line is said")
   await page.keyboard.press('Escape'); await sleep(400)
 
   // ── 5. the choice and the fold ─────────────────────────────────────────────────────────────
