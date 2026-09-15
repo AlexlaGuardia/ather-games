@@ -33,6 +33,28 @@ const lcg = (seed: number) => {
 /** The two blade tiles the world actually instances — seeds fixed so a tuft looks like THE tuft. */
 export const TUFT_SEED = 0x5eaf, TUFT_BLADES = 9
 export const TALL_SEED = 0x77c1, TALL_BLADES = 13
+/**
+ * ── ★ VARIETY IS AN ATLAS, NOT A SECOND MESH (2026-09-15, Alex: "so it doesnt look like copy
+ * paste") ─────────────────────────────────────────────────────────────────────────────────────
+ * One tile per kind meant every tuft in the world was the same fan turned a little. Each kind
+ * now paints `GRASS_VARIANTS` tiles side by side in ONE texture (`bladeAtlasPixels`); the star
+ * geometry gives each of its three cards a DIFFERENT column, and each instance rotates which —
+ * so a plant is three of four silhouettes, and the plant next to it is another three. Still one
+ * draw per kind: the variety costs one float per instance, not a mesh.
+ */
+export const GRASS_VARIANTS = 4
+
+/** `n` tiles of `w`×`h`, painted by `paint(seed)` per column, laid left to right in one buffer. */
+export function bladeAtlasPixels(
+  seed: number, n: number, w: number, h: number, paint: (seed: number) => Uint8Array,
+): Uint8Array {
+  const out = new Uint8Array(n * w * h * 4)
+  for (let i = 0; i < n; i++) {
+    const tile = paint((seed ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0)
+    for (let y = 0; y < h; y++) out.set(tile.subarray(y * w * 4, (y + 1) * w * 4), (y * n * w + i * w) * 4)
+  }
+  return out
+}
 /** The tall tile is twice as high as it is wide — a knee-high stand drawn on a square tile was
  *  stretched 1.5× and every blade came out a thick dark spike. Width `BLADE_TILE`, height this. */
 export const TALL_TILE_H = 64

@@ -17,7 +17,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { bladePixels, tallBladePixels, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
+import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
 import { FLORA } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
@@ -288,22 +288,25 @@ export interface FloraRenderer {
  *  one draw per kind.
  *  Normals point UP so a blade lights like the ground it grows from (the standard grass-card
  *  trick; a real face normal would moonlight one side of every blade). */
-function buildCrossGeometry(width: number, height: number, yBase = 0): THREE.BufferGeometry {
+function buildCrossGeometry(width: number, height: number, yBase = 0, tiles = 1): THREE.BufferGeometry {
   const hw = width / 2
   const pos: number[] = []
   const uv: number[] = []
   const nrm: number[] = []
   const idx: number[] = []
-  const quad = (ax: number, az: number, bx: number, bz: number) => {
+  // `col` is the card's ATLAS COLUMN, carried in uv.x's integer part: card k of a `tiles`-wide
+  // atlas gets uv.x in [k, k+1). The shader adds the instance's own offset and wraps (see
+  // `injectAtlas`), so the three cards of one plant show three different tiles. `tiles` = 1 → 0.
+  const quad = (ax: number, az: number, bx: number, bz: number, col: number) => {
     const base = pos.length / 3
     pos.push(ax, yBase, az, bx, yBase, bz, bx, yBase + height, bz, ax, yBase + height, az)
-    uv.push(0, 0, 1, 0, 1, 1, 0, 1)
+    uv.push(col, 0, col + 1, 0, col + 1, 1, col, 1)
     nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0)
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3)
   }
   for (let k = 0; k < 3; k++) {
     const a = (k * Math.PI) / 3
-    quad(-hw * Math.cos(a), -hw * Math.sin(a), hw * Math.cos(a), hw * Math.sin(a))
+    quad(-hw * Math.cos(a), -hw * Math.sin(a), hw * Math.cos(a), hw * Math.sin(a), k % tiles)
   }
   const g = new THREE.BufferGeometry()
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
@@ -332,9 +335,9 @@ function buildFlatGeometry(width: number, yBase: number): THREE.BufferGeometry {
 
 /** ONE builder for a part, read by the renderer AND by `vertsFor` — a flat part and a star part
  *  must be measured by the same code that draws them or the outline lies about one of them. */
-export interface FloraPart { w: number; h: number; yBase?: number; flat?: boolean }
+export interface FloraPart { w: number; h: number; yBase?: number; flat?: boolean; tiles?: number }
 const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
-  p.flat ? buildFlatGeometry(p.w, p.yBase ?? 0) : buildCrossGeometry(p.w, p.h, p.yBase ?? 0)
+  p.flat ? buildFlatGeometry(p.w, p.yBase ?? 0) : buildCrossGeometry(p.w, p.h, p.yBase ?? 0, p.tiles ?? 1)
 
 /**
  * ── ★★★ THE SHAPE OF A PLANT, IN ONE PLACE, BECAUSE A SECOND CONSUMER ARRIVED ────────────────
@@ -362,8 +365,8 @@ const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
  */
 export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
   // Widths chosen against the jitter so a blade can never overhang its cell (w/2 + 0.15 <= 0.5).
-  [FLORA.TUFT]: [{ w: 0.7, h: 0.55 }],
-  [FLORA.TALL]: [{ w: 0.7, h: 1.05 }],
+  [FLORA.TUFT]: [{ w: 0.7, h: 0.55, tiles: GRASS_VARIANTS }],
+  [FLORA.TALL]: [{ w: 0.7, h: 1.05, tiles: GRASS_VARIANTS }],
   // ── The three flower forms (2026-09-14). `FLOWER` is the SINGLE: one stem, one big head, the
   // tallest of the three. The mat is a flat pad (leaves, then blooms over it) plus a low star so
   // it has SOME side profile; the bush is a leafy body with a bloom cluster riding its shoulders.
@@ -467,7 +470,12 @@ export function floraMatrix(
   } else {
     off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
     quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
-    scl.set(1, floraGrow(variant), 1)
+    // The two grasses also roll their WIDTH (2026-09-15, "copy paste"): a stand a fifth wider or
+    // narrower than its neighbour is the cheapest difference the eye still catches. Bounded so
+    // w/2 · 1.15 + jitter stays inside the cell (0.35 · 1.15 + 0.15 = 0.55 > 0.5 by a hair — a
+    // blade tip past the cell line is what the old cross did on every rotation and nobody saw).
+    const sw = kind === FLORA.TUFT || kind === FLORA.TALL ? 0.85 + ((variant * 11.7) % 1) * 0.3 : 1
+    scl.set(sw, floraGrow(variant), sw)
   }
   return out.compose(off, quat, scl)
 }
@@ -606,11 +614,28 @@ export function createFloraRenderer(): FloraRenderer {
       ].join('\n'))
   }
 
+  /**
+   * ★ THE ATLAS COLUMN, per instance. `aTile` is an instanced float on the geometry; the card's
+   * own column rides in uv.x's integer part (see `buildCrossGeometry`). Wrapped so any pairing
+   * lands on a real column, then divided down to atlas space. Only kinds with `tiles > 1` get
+   * this — a one-tile material keeps the stock uv path and no attribute.
+   */
+  const injectAtlas = (shader: { vertexShader: string }, tiles: number): void => {
+    if (tiles <= 1) return
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\n#ifdef USE_INSTANCING\nattribute float aTile;\n#endif')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n' + [
+        '#ifdef USE_INSTANCING',
+        '  vMapUv.x = mod(uv.x + aTile, ' + tiles.toFixed(1) + ') / ' + tiles.toFixed(1) + ';',
+        '#endif',
+      ].join('\n'))
+  }
+
   /** Lambert so flora lives under the same day-night lights as the pieces; the sway is injected
    *  and the material stays ONE compiled program per mesh (audit's whole point). */
-  const swayMaterial = (map: THREE.Texture, amp: number): THREE.MeshLambertMaterial => {
+  const swayMaterial = (map: THREE.Texture, amp: number, tiles = 1): THREE.MeshLambertMaterial => {
     const m = new THREE.MeshLambertMaterial({ map, alphaTest: 0.4, side: THREE.DoubleSide })
-    m.onBeforeCompile = (shader) => injectSway(shader, amp)
+    m.onBeforeCompile = (shader) => { injectSway(shader, amp); injectAtlas(shader, tiles) }
     return m
   }
 
@@ -637,7 +662,7 @@ export function createFloraRenderer(): FloraRenderer {
    * double on the other. Reading it off the texture also means a re-paint at a new resolution keeps
    * a one-texel border by construction. Pixel art with NearestFilter: one texel is the convention.
    */
-  const outlineMaterial = (map: THREE.Texture, amp: number): THREE.MeshBasicMaterial => {
+  const outlineMaterial = (map: THREE.Texture, amp: number, tiles = 1): THREE.MeshBasicMaterial => {
     const m = new THREE.MeshBasicMaterial({
       map, alphaTest: 0.4, side: THREE.DoubleSide, color: 0x000000,
       // Same geometry at the same matrix as the plant means identical depth: without an offset the
@@ -646,6 +671,8 @@ export function createFloraRenderer(): FloraRenderer {
     })
     m.onBeforeCompile = (shader) => {
       injectSway(shader, amp)
+      injectAtlas(shader, tiles)
+      // ⚠ Read off the ATLAS width for an atlas texture: one texel is one texel of the whole strip.
       const texel = 1 / ((map.image as { width?: number })?.width || 16)
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <map_fragment>', '#include <map_fragment>\n' + [
@@ -677,8 +704,14 @@ export function createFloraRenderer(): FloraRenderer {
   const outlineHullMaterial = (): THREE.MeshBasicMaterial =>
     new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, depthWrite: false })
 
+  // The two grasses are ATLASES of GRASS_VARIANTS tiles; the flower stem keeps a plain tile.
   const bladeTex = makeBladeTexture(TUFT_SEED, TUFT_BLADES)
-  const tallTex = toTexture(tallBladePixels(TALL_SEED, TALL_BLADES), BLADE_TILE, TALL_TILE_H)
+  const tuftTex = toTexture(
+    bladeAtlasPixels(TUFT_SEED, GRASS_VARIANTS, BLADE_TILE, BLADE_TILE, sd => bladePixels(sd, TUFT_BLADES)),
+    BLADE_TILE * GRASS_VARIANTS, BLADE_TILE)
+  const tallTex = toTexture(
+    bladeAtlasPixels(TALL_SEED, GRASS_VARIANTS, BLADE_TILE, TALL_TILE_H, sd => tallBladePixels(sd, TALL_BLADES)),
+    BLADE_TILE * GRASS_VARIANTS, TALL_TILE_H)
   const headTex = makeHeadTexture()
   const bushTex = toTexture(bushPixels(), 32)
   const clusterTex = toTexture(bloomClusterPixels(), 32)
@@ -748,8 +781,8 @@ export function createFloraRenderer(): FloraRenderer {
   const cropMat = swayMaterial(cropStalkTex, FLORA_SWAY[FLORA.CROP])
   const cropHeadMat = swayMaterial(cropHeadTex, FLORA_SWAY[FLORA.CROP])
   const tipMat = swayMaterial(headTex, FLORA_SWAY[FLORA.HERB])
-  const tuftMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.TUFT])
-  const tallMat = swayMaterial(tallTex, FLORA_SWAY[FLORA.TALL])
+  const tuftMat = swayMaterial(tuftTex, FLORA_SWAY[FLORA.TUFT], GRASS_VARIANTS)
+  const tallMat = swayMaterial(tallTex, FLORA_SWAY[FLORA.TALL], GRASS_VARIANTS)
   const stemMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.FLOWER])
   const headMat = swayMaterial(headTex, FLORA_SWAY[FLORA.FLOWER])
   const matLeafMat = swayMaterial(matLeafTex, FLORA_SWAY[FLORA.BLOOM_MAT])
@@ -771,6 +804,15 @@ export function createFloraRenderer(): FloraRenderer {
   // Slice ②: the blades take the colour of the ground under them (see GRASS_OF_GROUND).
   tufts.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tuft * 3), 3)
   talls.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tall * 3), 3)
+  // The atlas column per instance lives on the GEOMETRY (that is where three reads instanced
+  // attributes from), so the outline meshes below get their own clone with a one-slot copy.
+  const tuftTile = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tuft), 1).setUsage(THREE.DynamicDrawUsage)
+  const tallTile = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tall), 1).setUsage(THREE.DynamicDrawUsage)
+  tuftGeo.setAttribute('aTile', tuftTile)
+  tallGeo.setAttribute('aTile', tallTile)
+  /** Which atlas column an instance starts on — a slice of the variant roll the jitter and the
+   *  turn do not already read, so column and turn are not correlated. */
+  const tileOf = (variant: number): number => Math.floor(((variant * 613.7) % 1) * GRASS_VARIANTS)
   const stems = new THREE.InstancedMesh(stemGeo, stemMat, CAP.flower)
   const heads = new THREE.InstancedMesh(headGeo, headMat, CAP.flower)
   heads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.flower * 3), 3)
@@ -828,9 +870,16 @@ export function createFloraRenderer(): FloraRenderer {
   // `grow` is 1 for the cards — their border is drawn IN PLACE by darkening edge texels, so
   // growing them would be wrong twice over — and slightly above 1 for the solids, whose back-face
   // hull has to peek out past the silhouette to be seen at all.
+  // An outline mesh sharing an atlas kind's geometry would read `aTile` from the POOL's slot 0 —
+  // some other plant's column. Its own clone carries a one-slot `aTile` that `setHighlight` fills.
+  const hlAtlasGeo = (g: THREE.BufferGeometry): THREE.BufferGeometry => {
+    const c = g.clone()
+    c.setAttribute('aTile', new THREE.InstancedBufferAttribute(new Float32Array(1), 1).setUsage(THREE.DynamicDrawUsage))
+    return c
+  }
   const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number }[] = [
-    { kind: FLORA.TUFT, geo: tuftGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.TUFT]), grow: 1 },
-    { kind: FLORA.TALL, geo: tallGeo, mat: outlineMaterial(tallTex, FLORA_SWAY[FLORA.TALL]), grow: 1 },
+    { kind: FLORA.TUFT, geo: hlAtlasGeo(tuftGeo), mat: outlineMaterial(tuftTex, FLORA_SWAY[FLORA.TUFT], GRASS_VARIANTS), grow: 1 },
+    { kind: FLORA.TALL, geo: hlAtlasGeo(tallGeo), mat: outlineMaterial(tallTex, FLORA_SWAY[FLORA.TALL], GRASS_VARIANTS), grow: 1 },
     { kind: FLORA.FLOWER, geo: stemGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.FLOWER]), grow: 1 },
     { kind: FLORA.FLOWER, geo: headGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.FLOWER]), grow: 1 },
     { kind: FLORA.BLOOM_MAT, geo: matLeafGeo, mat: outlineMaterial(matLeafTex, FLORA_SWAY[FLORA.BLOOM_MAT]), grow: 1 },
@@ -950,11 +999,11 @@ export function createFloraRenderer(): FloraRenderer {
           }
           else if (s.kind === FLORA.TUFT) {
             wT++
-            if (nT < CAP.tuft) { tufts.setMatrixAt(nT, mtx); tufts.setColorAt(nT, grassTint(s.ground)); nT++ }
+            if (nT < CAP.tuft) { tufts.setMatrixAt(nT, mtx); tufts.setColorAt(nT, grassTint(s.ground)); tuftTile.setX(nT, tileOf(s.variant)); nT++ }
           }
           else if (s.kind === FLORA.TALL) {
             wL++
-            if (nL < CAP.tall) { talls.setMatrixAt(nL, mtx); talls.setColorAt(nL, grassTint(s.ground)); nL++ }
+            if (nL < CAP.tall) { talls.setMatrixAt(nL, mtx); talls.setColorAt(nL, grassTint(s.ground)); tallTile.setX(nL, tileOf(s.variant)); nL++ }
           }
           else if (s.kind === FLORA.CROP) {
             wC++
@@ -1039,6 +1088,8 @@ export function createFloraRenderer(): FloraRenderer {
       }
       tufts.instanceMatrix.needsUpdate = true
       talls.instanceMatrix.needsUpdate = true
+      tuftTile.needsUpdate = true
+      tallTile.needsUpdate = true
       if (tufts.instanceColor) tufts.instanceColor.needsUpdate = true
       if (talls.instanceColor) talls.instanceColor.needsUpdate = true
       stems.instanceMatrix.needsUpdate = true
@@ -1078,6 +1129,9 @@ export function createFloraRenderer(): FloraRenderer {
         if (h.grow === 1) h.mesh.setMatrixAt(0, hlMtx)
         else h.mesh.setMatrixAt(0, mtx.copy(hlMtx).scale(hlGrow.setScalar(h.grow)))
         h.mesh.instanceMatrix.needsUpdate = true
+        // An atlas kind: the border must show the SAME columns as the plant under it.
+        const tileAttr = h.geo.getAttribute('aTile') as THREE.InstancedBufferAttribute | undefined
+        if (tileAttr) { tileAttr.setX(0, tileOf(variant)); tileAttr.needsUpdate = true }
         h.mesh.count = 1
         drew = true
       }
@@ -1095,7 +1149,10 @@ export function createFloraRenderer(): FloraRenderer {
       herbGeo.dispose(); tipGeo.dispose()
       tuftMat.dispose(); tallMat.dispose(); stemMat.dispose(); headMat.dispose()
       herbMat.dispose(); tipMat.dispose()
-      bladeTex.dispose(); tallTex.dispose(); headTex.dispose()
+      bladeTex.dispose(); tuftTex.dispose(); tallTex.dispose(); headTex.dispose()
+      // The two atlas outlines own a CLONED geometry (see `hlAtlasGeo`); every other outline shares
+      // its plant's, which is disposed above.
+      for (const h of hlMeshes) if (h.kind === FLORA.TUFT || h.kind === FLORA.TALL) h.geo.dispose()
       // The flower forms (2026-09-14/15): geometry, material, texture — same three each.
       for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo]) g.dispose()
       for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat]) m.dispose()
