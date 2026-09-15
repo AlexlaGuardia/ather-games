@@ -152,7 +152,7 @@ export interface ConsoleCtx {
    *
    * 0 is north (-Z), 90 east (+X) — the compass the map and `/goto` already speak.
    */
-  look: (deg: number) => string
+  look: (deg: number, pitch?: number) => string
   /**
    * ★ THE RUNES A KEEPER HOLDS. Bare `/rune` is VIEW-GRADE — reading your own hand is not a cheat,
    * and it is the one thing that explains why a cast key does nothing. GRANTING is cheat-grade and
@@ -654,8 +654,8 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
     run: (_a, c) => c.brew() },
   { name: 'greg', usage: 'greg', help: 'talk to Gregory from here (owner)', owner: true,
     run: (_a, c) => c.greg() },
-  { name: 'look', usage: 'look <deg>  (0 = north, 90 = east)', help: 'point the camera (owner)', owner: true,
-    run: (a, c) => c.look(Number(a[0]) || 0) },
+  { name: 'look', usage: 'look <deg> [pitch]  (0 = north, 90 = east; pitch + looks down)', help: 'point the camera (owner)', owner: true,
+    run: (a, c) => c.look(Number(a[0]) || 0, a[1] === undefined ? undefined : Number(a[1]) || 0) },
   // ⚠ NAMED `waymark`, NOT `gate`, AND CANON RULED THAT BEFORE ANYONE ASKED. Alex's words for this
   // were "extensions"/"extension gate rune", and `world/gates.md` (08-12) answers his phrasing
   // directly: *"What Alex's 'extension gate rune' actually is: a HOMEWARD WAYMARK… A rune is never

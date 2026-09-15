@@ -1206,7 +1206,7 @@ export default function VoxelWorld() {
    */
   const playerSnapRef = useRef<(() => PlayerSave) | null>(null)
   /** Filled by the scene: the camera is three's and only the component holding it can turn it. */
-  const lookOut = useRef<((deg: number) => string) | null>(null)
+  const lookOut = useRef<((deg: number, pitch?: number) => string) | null>(null)
   /** Filled by the scene: only the component holding the renderer can ask the browser to drop its
    *  context. Same outward-ref shape as `lookOut` — and the same reason, that the verb has to run
    *  where the thing lives. See `ConsoleCtx.ctxLost` for why this throws the REAL context away
@@ -1618,7 +1618,7 @@ export default function VoxelWorld() {
     // Same console→panel handoff as `brew` above: the console closes itself and does NOT re-claim
     // the cursor, or the pointer re-locks with the dialogue still up. See that entry for the autopsy.
     greg: () => { setConsoleOpen(false); setDialogue({ who: 'greg', talk: talkGreg(tutorial.current) }); return 'he looks up from the book' },
-    look: (deg) => lookOut.current ? lookOut.current(deg) : 'the world is still waking',
+    look: (deg, pitch) => lookOut.current ? lookOut.current(deg, pitch) : 'the world is still waking',
     ctxLost: () => ctxLostOut.current ? ctxLostOut.current() : 'the world is still waking',
     radius: () => settings.viewRadius,
     setRadius: (r) => update({ viewRadius: r }),
@@ -4180,7 +4180,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    */
   space: React.RefObject<Space>
   /** Filled with a camera-yaw setter for `/look` — see that entry on why it has to exist. */
-  lookOut: React.RefObject<((deg: number) => string) | null>
+  lookOut: React.RefObject<((deg: number, pitch?: number) => string) | null>
   ctxLostOut: React.RefObject<(() => string) | null>
   /** The arena owns the screen while true; the world keeps streaming but stops reporting prompts. */
   sparring: boolean
@@ -5843,10 +5843,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // (-sin yaw, 0, -cos yaw), so compass north (-Z) is yaw 0 and east (+X) is yaw -90°. Getting this
   // backwards points the instrument at exactly the thing you were not checking.
   useEffect(() => {
-    lookOut.current = (deg: number) => {
+    lookOut.current = (deg: number, pitch?: number) => {
       const eul = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
-      camera.quaternion.setFromEuler(new THREE.Euler(eul.x, -deg * Math.PI / 180, 0, 'YXZ'))
-      return `looking ${Math.round(((deg % 360) + 360) % 360)}°`
+      // pitch (2026-09-15): a harness has no pointer lock to drag, and placing a block needs the
+      // reticle on the ground. + looks down, like the mouse; clamped short of straight up/down.
+      const px = pitch === undefined ? eul.x : -Math.max(-89, Math.min(89, pitch)) * Math.PI / 180
+      camera.quaternion.setFromEuler(new THREE.Euler(px, -deg * Math.PI / 180, 0, 'YXZ'))
+      return `looking ${Math.round(((deg % 360) + 360) % 360)}°${pitch === undefined ? '' : `, pitch ${Math.round(pitch)}°`}`
     }
   }, [camera, lookOut])
 /* eslint-enable react-hooks/exhaustive-deps */
