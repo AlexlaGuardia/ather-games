@@ -45,6 +45,28 @@ the render flood keys emission off the material · the instant brew list survive
 `voxel/registry.ts` · `voxel/recipes.ts` · `voxel3d/attrs.ts` · `voxel3d/tex/tiles.ts` (four painters) ·
 `voxel3d/tex/item-icon.ts` (`alchemyIcon`) · `voxel3d/interact.ts` · `voxel3d/smoke-sources.ts` · `VoxelWorld.tsx`.
 
+## 🌿 Shimmer — **THE FLORA DAY: GRASS, THREE FLOWER FORMS, TALL GRASS, VARIETY, THE FRUIT BUSHES** (2026-09-14 PM → 09-15, spirits lane `b5ed0159`, second window beside hub `034112f4` → `417e69be`) · *Last touched 2026-09-15 — ✅ **PROD `BUILD_ID LBRhO2E-ThoqVdgRSnvIx` from `f4e8c1f`** (+ worker repin `cf398c2`), served == disk; a sunfruit bush photographed generating on prod. Six spirits deploys/rides. flora 15/0 · fruit 24/0 · brew 52/0 · flora-outline 153/0 · flora-bounds 602/0 · icon-source 522/0 · wild-crops 35/0 · render-audit ✅ · voxel sweep 156/156.*
+
+**Left off:** Alex: *"rn its looking a bit like sea weed lol."* In order, every one rendered and sent before it shipped:
+- **Grass** (`ac3d487`): the tile was five 1-texel strands with one kink, darker than the turf; the sway was a Lissajous loop weighted by height; the geometry a 2-quad cross. Now a 32px fan of tapered curved blades (back dark/tall, front short/lit, warm tips), a WIND (one direction, height² weight, gust envelope + flutter, tip dips), a 3-quad star.
+- **Flower forms** (`be74021`): *"far too many .. ground cover, bushes and singles."* ONE material, THREE draw kinds by position (`flowerForm`): mat = flat leaf pad + blooms in a drift core (0.30/cell), bush = body + cluster on the edge band (0.05), single = stem + head anywhere green (0.006 — the first flower ever outside a drift). Meadow census 2.3 / 0.6 / 0.7% vs ~9% stems. Pads read as stickers → **rim shade + contact shadow** (`d65ec9c`, the one transparent flora material). Alex: *"cushions are good."*
+- **Reticle** (`b146fb6`): the block wireframe is GONE (Alex: *"not fitting in"*); only ground cover marks itself.
+- **Tall grass** (`d17f16c`): its own painter on a 32×64 tile — thin, cubic arch, lighter, straw tips. Was the tuft painter stretched 1.5× = a yucca.
+- **Variety** (`6f7c256`): four tiles per grass in one atlas, three cards of a plant show three columns, per-instance offset + width roll. Still one draw per kind.
+- **Alchemy × flora** (`f4e8c1f`): audit — 15/17 brews sourceable; `shimmer_salve` + `bond_philter` stranded on Sunfruit/Moonberry (canon-adopted 08-22, grown nowhere). Two wild fruit bushes on the bush form (MAT 108/109 = `isFruit`, answers `isPlant`; drop 2, not placeable; Sunfruit → meadow+basin, Moonberry → woodland+shore — build call, FYI in CANON_GAPS veto-only). **Every brew in the table is reachable now**; brew.test 4b asserts zero stranded.
+- ⚠ Two guard tests (kind count vs material set) sat red for a day after the flower forms because the window ran only the tests it chose (`87e0083`). Run `npx tsx scripts/sweep.mts voxel` before a build, every time.
+- ⚠ Shipped two of hub's uncommitted files once (`Mtr8Chg9`): `git status` read clean, hub edited between the read and the build. Harmless that time. Read coord build's own dirty-tree line BEFORE the compile, or ask hub for go/hold — did that for every build after.
+
+**Next:**
+- **Alex walks:** the tall grass stand (too pale?) · a sunfruit patch (`/tp -598 -1192`) and a moonberry patch (`/tp 872 -1188`): do the bushes read as fruit at walking distance, is 0.07-in-patch right · drift core density 0.30 → one carpet?
+- **Flora on the world's light** — tufts/pads/bushes are plain Lambert, the ground runs the light field + cartoon stack; they read a shade apart at distance. Hand flora the `cartoon-glsl.ts` stack (hub closed this for pieces 09-14).
+- Tuft density dial (`TUFT_DENSITY` 0.13) if the meadow should carpet, not clump · Stonemelon on the flat-pad form (MAT 110) if the third fruit is wanted (no brew needs it) · the `dewdrop` favourite-food orphan (08-22 entry) · Magii's veto window on `FRUIT_OF_GROUND`.
+- Carried from the spirits lane: the ring floor + daily cadence (Magii RULED bonded roster only, 09-14) — untouched tonight.
+
+**Decisions:** variety is an ATLAS + per-card column, never a second mesh (one draw per kind is the rule) · a flower form is a DRAW kind over one material (one thing to break/drop/save) · fruit placement is Jin's for a *common* fruit, flagged not parked · the reticle box is gone for good; the flora edge-darken is the only mark.
+
+**Files:** `voxel3d/flora-mesh.ts` · `voxel3d/tex/flora-tex.ts` · `voxel/flora.ts` (+ `fruit.test.ts`) · `voxel/depth.ts` (FRUIT range) · `voxel/registry.ts` · `voxel3d/attrs.ts` · `voxel3d/VoxelWorld.tsx` (probe + wireframe removal) · `voxel3d/brew.test.ts`.
+
 ## 🪟 Shimmer — **THE LIT WINDOW: A PANE GLOWS AT NIGHT WITH THE ROOM BEHIND IT** (2026-09-14 PM, hub lane `417e69be`, beside a spirits window on flora) · *Last touched 2026-09-14 — ✅ **PROD `BUILD_ID cdR6sEunoFEYFgyK0k8BP` from `78ef0f0`** (carries spirits' `6f7c256`), served == disk on the glow chunk. light-glsl 51/0 (§5 new, 3 mutations fire) · console 159/0 · glass 69/0 · cartoon-stack 30/0. tsc 7 (baseline).*
 
 **Left off:** research #2 built. The pane's cutout program adds an emissive = the light field's BLOCK channel one cell
