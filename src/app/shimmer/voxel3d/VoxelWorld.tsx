@@ -5588,6 +5588,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // ⚠ Keep this next to the body move. A future space (the Sea of Folds) will land here too, and
     // any altitude difference between two spaces re-arms exactly this.
     camera.position.set(lc.px, eyeY(lc), lc.pz)
+    // ── ★★★ REVERSED 2026-09-15 (Alex): THE KEEPER ARRIVES FACING AWAY FROM THE PORTAL ──────────
+    // *"when the player walks through gates or passages … the player should be facing away from
+    // the portal so they don't get disoriented."* Everything below computes the bearing TO the
+    // door, exactly as before (the sign notes still hold); the last line turns it by π. The 08-19
+    // argument — face the seam so you learn where the exit is — lost to the felt experience: you
+    // walked forward through a door and the world spun you round to look at it. Continuity of
+    // motion wins; the door is one step behind you, where you left it.
+    //
     // ── ★★ AND THE KEEPER ARRIVES LOOKING AT THEIR OWN DOOR (2026-08-19) ────────────────────────
     // Alex: *"in the homeplot you dont even start off in front of the passage."* The body landed on
     // the threshold correctly — what nobody set was the EYE'S DIRECTION, so a keeper stepped through
@@ -5620,7 +5628,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // to be looking at it is the moment they arrive. Facing them at it teaches the landmark every
     // single time, at the cost of one turn before they walk off into the country.
     {
-      let yaw: number | null = null
+      let yaw: number
       if (to === 'plot') {
         const t = plotThreshold(SEED, plotCfg.current)
         const dx = (t.x + 0.5) - lc.px, dz = (t.z + 0.5) - lc.pz
@@ -5637,6 +5645,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         const b = WILDS_BUBBLE.passageBearing
         yaw = Math.atan2(Math.cos(b), Math.sin(b))
       }
+      yaw += Math.PI                                  // 09-15: back to the door, not nose to it
       const eul = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
       camera.quaternion.setFromEuler(new THREE.Euler(eul.x, yaw, 0, 'YXZ'))
     }
