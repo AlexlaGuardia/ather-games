@@ -7071,6 +7071,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const lastLightField = useRef<{ cx: number; cz: number; packed: Uint8Array } | null>(null)
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
+    // The guide trail, read back: where it points, whether it draws, and the first mote's place.
+    // A trail that is not on screen has three ways to be absent (no target, in reach, parked over
+    // an unloaded column), and a screenshot cannot say which.
+    w.__guide = () => {
+      const a = guide.points.geometry.getAttribute('position') as THREE.BufferAttribute
+      return { target: guideTargetRef.current, visible: guide.points.visible, stage: tutorial.current.stage, space: space.current,
+               mote0: [a.getX(0), a.getY(0), a.getZ(0)], at: [camera.position.x, camera.position.z] }
+    }
     w.__renderlight = () => {
       const r = lightRing.current
       let built = 0, shown = 0
@@ -7107,8 +7115,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       while (lightRing.current.dirty.size > 0 && performance.now() - t0 < capMs) advanceRenderLight(50)
       return (w.__renderlight as () => unknown)()
     }
-    return () => { delete w.__renderlight; delete w.__renderlightFill }
-  }, [lightUniforms, advanceRenderLight])
+    return () => { delete w.__renderlight; delete w.__renderlightFill; delete w.__guide }
+  }, [lightUniforms, advanceRenderLight, guide, camera, space, tutorial])
   // ── ★ THREE SILHOUETTES, ONE GEOMETRY EACH, SHARED ACROSS EVERY BODY OF THAT FORM ──────────
   // ⚠ BLOCKOUT, same standing as the single body it replaces: the locked look is owed a
   // design-brief + /picaso pass (hollows.ts says so in writing) and these are read-at-a-glance
