@@ -40,7 +40,7 @@ import { lightOpaque } from '../voxel/light-passes'
 import { placementRotation } from './piece-facing'
 import { materialAt, MAT, isPlant, isHerb, isFruit, isScatter, isSapling, isHalfMat, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
 import { FLORA, plantVariant, flowerForm } from '../voxel/flora'
-import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState, type RayHit } from '../voxel/mine'
+import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState, type RayHit, afterBreak } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
 import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
 import { salvageItems, salvageMessage } from '../voxel/salvage'
@@ -9985,7 +9985,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
           }
         } else {
           breakFx.burst(hit.x, hit.y, hit.z, hit.material)
-          setVoxel(hit.x, hit.y, hit.z, AIR)
+          // Water over or beside the cell takes it (`afterBreak`): a dug pond bed fills, it does
+          // not open an air pocket. Read BEFORE the write — the question is about the neighbours.
+          setVoxel(hit.x, hit.y, hit.z, afterBreak(hit.x, hit.y, hit.z, voxel))
         }
         // ★ Tutorial 'cut' step — any log, not one species (see LOG_MATERIALS's header).
         if (LOG_MATERIALS.has(hit.material)) onQuestEvent('cut')

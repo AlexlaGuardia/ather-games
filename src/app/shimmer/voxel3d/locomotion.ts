@@ -326,6 +326,9 @@ export interface LocoState {
   sliding: boolean; crouching: boolean; climbing: boolean
   /** Body submerged — the swim physics own this tick. The host reads it for HUD/FX. */
   swimming: boolean
+  /** Set by a swimming tick, spent by the first treading tick after it: a held jump that carried
+   *  the body UP to the surface kicks once more there instead of dying as a stale hold. */
+  kickArmed: boolean
   /** How far the EYE is still below the feet after a step-up, draining to 0. Render only —
    *  read it through `eyeY()`, never in collision. */
   stepSmooth: number
@@ -388,7 +391,7 @@ export function createLoco(px: number, feetY: number, pz: number): LocoState {
     mantleT: 0, mantleDur: MANTLE_TIME, mFromX: 0, mFromY: 0, mFromZ: 0, mToX: 0, mToY: 0, mToZ: 0,
     vaulting: false, carryVX: 0, carryVZ: 0,
     justWallJumped: false, justHopped: false, sliding: false, crouching: false, climbing: false,
-    swimming: false, stepSmooth: 0, drainT: 0,
+    swimming: false, kickArmed: false, stepSmooth: 0, drainT: 0,
   }
 }
 
@@ -593,13 +596,27 @@ export function tickLocomotion(s: LocoState, input: LocoInput, probe: CellProbe)
     const ny = s.py + s.vy * dt
     if (bodyFree(probe, s.px, s.pz, ny)) s.py = ny; else s.vy = 0
     s.jumpHeld = jumpKey; s.landGrace = 0; s.coyoteT = 0
+    s.kickArmed = true
     s.eye += (EYE_STAND - s.eye) * 0.25
     return
   }
   if (feetIn) {
     if (s.vy < -TREAD_SINK_CAP) s.vy = -TREAD_SINK_CAP        // the water catches the fall
     if (s.vy <= 0) s.coyoteT = COYOTE_TIME                    // water is jumpable ground, always
+    // ── ★ THE SURFACE KICK (2026-09-15, Alex dug a pond bed and could not get back out) ─────────
+    // Underwater, Space is a HOLD verb (swim up). The moment the chest clears the surface the body
+    // is treading, where Space is an EDGE verb (jump) — and a key held through that boundary is
+    // `jumpHeld`, so it fires nothing. The result: hold Space in a pit under a pond and you bob at
+    // the rim forever, every frame either swimming (rise) or treading (sink), never jumping. Read
+    // as "stuck in place". The rule: the swim-up that brought you to the surface is spent as ONE
+    // kick there — the held key is forgotten for this tick so the coyote jump below sees an edge.
+    // Armed only by a swimming tick, so wading feet-deep with Space held does not pogo. ⚠ Not
+    // gated on `vy <= 0`: the body arrives at the surface RISING (the swim-up's own velocity), and
+    // a kick that waits for the fall never comes — the fall re-submerges the chest, which is a
+    // swim tick again. The kick takes the coyote it would have earned a frame later.
+    if (s.kickArmed && jumpKey) { s.jumpHeld = false; s.coyoteT = COYOTE_TIME }
   }
+  s.kickArmed = false
 
   // ── crouch / slide ──────────────────────────────────────────────────────────────────────────
   const curSpeed = Math.hypot(s.hvx, s.hvz)

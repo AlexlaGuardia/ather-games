@@ -4,6 +4,7 @@
 // rendering concern, so it lives here and is testable without a browser.
 
 import { AIR } from './section'
+import { MAT } from './depth'
 import { blockDef, breakSeconds, type BlockSkill } from './registry'
 import { isSeam } from './seams'
 import { isLogMat } from './trees'
@@ -190,4 +191,24 @@ export function breakXP(material: number, skill: BlockSkill): number {
   if (skill === 'prospecting' && !isSeam(material)) return 0
   if (skill === 'forestry' && !isLogMat(material)) return 0
   return Math.max(4, Math.round(def.hardness * 12))
+}
+
+/**
+ * What a broken block leaves behind: AIR, unless water stands over or beside the cell, in which
+ * case the water takes it (2026-09-15, Alex dug a pond bed for sand and dropped into an air pocket
+ * at the bottom of the pond). An air pocket under a lake is wrong twice — it reads as nothing
+ * (the water above it is drawn, the hole is not) and it strands the body: feet in air, chest in
+ * water, neither swimming nor standing anywhere you can see. Water rushing into a dug bed is the
+ * thing a keeper expects to happen, so it does. Sideways counts as well as above: a bank dug from
+ * the shore is under the same surface. Below does NOT count — a hole over a buried pocket stays a
+ * hole, water does not climb.
+ */
+export function afterBreak(
+  x: number, y: number, z: number,
+  voxel: (x: number, y: number, z: number) => number,
+): number {
+  if (voxel(x, y + 1, z) === MAT.WATER) return MAT.WATER
+  if (voxel(x + 1, y, z) === MAT.WATER || voxel(x - 1, y, z) === MAT.WATER) return MAT.WATER
+  if (voxel(x, y, z + 1) === MAT.WATER || voxel(x, y, z - 1) === MAT.WATER) return MAT.WATER
+  return AIR
 }

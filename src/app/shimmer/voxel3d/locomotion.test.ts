@@ -1151,6 +1151,32 @@ const settle = (s: ReturnType<typeof createLoco>, solid: any, frames = 30) => {
      '⚠ the speed lens runs ABOVE the context-loss gate — it will keep animating on a dead canvas')
 }
 
+// ── the surface kick — a held Space that swam you up kicks you OUT (2026-09-15) ──────────────
+// Alex dug four sand out of a knee-deep pond bed, dropped into the pit and held Space to "swim
+// back up": every frame was either a swim tick (chest under, rise) or a tread tick (chest clear,
+// sink) and the held key was `jumpHeld` in the one that could jump. A bob at the rim, forever.
+{
+  // The real pond: solid to y=120 with a 1x1 pit dug at cell 120; ONE water cell at 121; air above.
+  const pit = (x: number, y: number, z: number): number =>
+    (y === 120 && x === 0 && z === 0) ? CELL_EMPTY : y <= 120 ? CELL_SOLID : y === 121 ? CELL_WATER : CELL_EMPTY
+  const s = createLoco(0.5, 120, 0.5); settle(s, pit)
+  ok(!s.swimming && !s.airborne, 'in the pit: feet in air, chest in water — standing, not swimming')
+  let hops = 0, peak = 0
+  for (let i = 0; i < 240; i++) { const v0 = s.vy; tickLocomotion(s, input({ jumpKey: true }), pit); if (v0 < 5 && s.vy > 5) hops++; peak = Math.max(peak, s.py) }
+  ok(hops >= 3, `holding Space in the pit keeps kicking at the surface (${hops} kicks in 4s)`)
+  ok(peak >= 122, `and a kick clears the rim (peak ${peak.toFixed(2)}, rim 121)`)
+  // With a direction held, the first kick is the way out.
+  const t = createLoco(0.5, 120, 0.5); settle(t, pit)
+  for (let i = 0; i < 240; i++) tickLocomotion(t, input({ jumpKey: true, mvX: 1 }), pit)
+  ok(t.px > 2 && t.py >= 121, `Space + forward walks out of the pit (px ${t.px.toFixed(1)}, py ${t.py.toFixed(2)})`)
+  // Wading feet-deep with Space held never swam, so it never pogos: the one edge and nothing more.
+  const wade = (x: number, y: number, z: number): number => y <= 120 ? CELL_SOLID : y === 121 ? CELL_WATER : CELL_EMPTY
+  const w = createLoco(0.5, 121, 0.5); settle(w, wade)
+  let wadeHops = 0
+  for (let i = 0; i < 240; i++) { const v0 = w.vy; tickLocomotion(w, input({ jumpKey: true }), wade); if (v0 < 5 && w.vy > 5) wadeHops++ }
+  ok(wadeHops === 1, `wading with Space held is one jump, not a pogo (${wadeHops})`)
+}
+
 console.log(`\nlocomotion: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)
 if (fails.length) process.exit(1)

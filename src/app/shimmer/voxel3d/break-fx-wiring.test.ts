@@ -200,7 +200,9 @@ const at = (needle: string, what: string): number => {
      'the fell loop does not paint the whole tree in the struck material')
 
   const one = at('breakFx.burst(hit.x, hit.y, hit.z, hit.material)', 'the single block bursts once')
-  const oneWrite = at('setVoxel(hit.x, hit.y, hit.z, AIR)', 'the single block writes AIR')
+  // 2026-09-15: the single write asks `afterBreak` what the cell becomes (AIR, or WATER when water
+  // stands over or beside it — a dug pond bed fills). The burst still reads the cell BEFORE it.
+  const oneWrite = at('setVoxel(hit.x, hit.y, hit.z, afterBreak(hit.x, hit.y, hit.z, voxel))', 'the single block writes what afterBreak says')
   ok(one > 0 && oneWrite > 0 && one < oneWrite, 'and it too fires before the write')
 }
 

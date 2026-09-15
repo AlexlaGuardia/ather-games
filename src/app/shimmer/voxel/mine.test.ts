@@ -3,7 +3,7 @@
 import { AIR } from './section'
 import { MAT } from './depth'
 import { SEAM } from './seams'
-import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState } from './mine'
+import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, afterBreak, type BreakState } from './mine'
 import { breakSeconds, canBreak, blockDef, materialForItem, BLOCKS } from './registry'
 
 let pass = 0
@@ -212,6 +212,20 @@ const world = (x: number, y: number, z: number): number => {
   const soil = BLOCKS.filter(b => b.fastSkill === 'farming')
   ok(soil.length > 0 && soil.every(b => breakXP(b.material, 'farming') > 0), 'farming still pays per block')
   ok(breakXP(MAT.STONE, null) === 0, 'no skill, no xp')
+}
+
+// ── afterBreak — water takes a dug cell (2026-09-15) ──────────────────────────────────────────
+{
+  // A pond: bed at y<=4 (sand at 4), one water cell at 5, air above.
+  const pond = (x: number, y: number, z: number) => y === 5 && Math.abs(x) < 8 && Math.abs(z) < 8 ? MAT.WATER : y <= 4 ? MAT.SAND : AIR
+  ok(afterBreak(0, 4, 0, pond) === MAT.WATER, 'a dug pond bed fills with the water above it')
+  // The bank: dry surface at y=5 beside the pond's water at (8,5).
+  const bank = (x: number, y: number, z: number) => y === 5 && x >= 8 ? MAT.WATER : y <= 5 ? MAT.SUBSOIL : AIR
+  ok(afterBreak(7, 5, 0, bank) === MAT.WATER, 'a bank cell dug beside water is taken sideways')
+  ok(afterBreak(3, 5, 0, bank) === AIR, 'a dry cell with no water touching it stays air')
+  // Water does not climb: a cell with water only BELOW it stays a hole.
+  const pocket = (x: number, y: number, z: number) => y === 3 ? MAT.WATER : y <= 4 ? MAT.SUBSOIL : AIR
+  ok(afterBreak(0, 4, 0, pocket) === AIR, 'water below does not rise into the hole')
 }
 
 console.log(`\nmining: ${pass} passed, ${fails.length} failed`)
