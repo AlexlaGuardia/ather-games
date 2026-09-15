@@ -312,6 +312,17 @@ export const BLOCKS: BlockDef[] = [
   // oven's fire is behind a mouth, and a kitchen with both should read hearth-bright, oven-warm —
   // not two blazes. Always lit for the hearth's reason: there is no fuel state to lie about.
   { noSlab: true, material: MAT.OVEN, name: 'Oven', hardness: 1.5, skill: null, minTier: 0, drops: [{ itemId: 'oven', count: 1 }], fastSkill: 'prospecting', placeable: true, emit: 6 },
+  // ── THE ALCHEMY CHAIN (2026-09-14) — three stations beside the cauldron, see `depth.ts` ────────
+  // Furniture rules like the cauldron: breaks by hand into itself. The grinder is stone and a shade
+  // heavier; the still is glass and the lightest thing on the shelf. No `emit` — nothing here is a
+  // fire, and the still stands ON a hearth for its heat rather than carrying one.
+  { noSlab: true, material: MAT.GRINDER, name: 'Grinder', hardness: 1.2, skill: null, minTier: 0, drops: [{ itemId: 'grinder', count: 1 }], placeable: true },
+  { noSlab: true, material: MAT.STILL, name: 'Still', hardness: 0.7, skill: null, minTier: 0, drops: [{ itemId: 'still', count: 1 }], placeable: true },
+  { noSlab: true, material: MAT.MIXER, name: 'Mixing Vessel', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'mixer', count: 1 }], placeable: true },
+  // The running cauldron. `placeable: false` — a keeper never sets a lit one, the world swaps it in;
+  // it DROPS the plain cauldron so breaking a running one gives back the block you placed. `emit`
+  // under the hearth's 12: a brew glows, a fire blazes.
+  { noSlab: true, material: MAT.CAULDRON_LIT, name: 'Cauldron', hardness: 1.0, skill: null, minTier: 0, drops: [{ itemId: 'cauldron', count: 1 }], placeable: false, emit: 9 },
   // ★ SOFT AND BARE-HANDED (hardness 0.4, `skill: null`) — a bed is tilled earth, not masonry, and a
   // keeper must be able to pick one up and move it without a tool. It drops ITSELF, so relocating a
   // bed costs nothing and the cap in `garden.ts` counts the same object wherever it ends up.

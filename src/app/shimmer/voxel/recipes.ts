@@ -382,6 +382,20 @@ export const RECIPES: RecipeDef[] = [
   { id: 'cauldron', name: 'Cauldron', station: 'crafting_table', mana: 0,
     input: [{ itemId: 'block_subsoil', count: 8 }, { itemId: 'cut_stone', count: 4 }],
     output: { itemId: 'cauldron', count: 1 } },
+  // ── THE ALCHEMY CHAIN (2026-09-14) — the three stations beside the cauldron ──────────────────
+  // Same argument as the cauldron's: none of these gates a verb the keeper had — grinding,
+  // distilling and mixing arrive with the blocks. Priced under the cauldron (it is the pot the
+  // chain ends in and the one a tier-1 keeper builds first). Grinder = stone, dressed; still =
+  // glass on clay; mixing vessel = the cauldron's clay, less of it.
+  { id: 'grinder', name: 'Grinder', family: 'stone', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'cut_stone', count: 4 }],
+    output: { itemId: 'grinder', count: 1 } },
+  { id: 'still', name: 'Still', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'glass', count: 3 }, { itemId: 'block_subsoil', count: 4 }],
+    output: { itemId: 'still', count: 1 } },
+  { id: 'mixer', name: 'Mixing Vessel', station: 'crafting_table', mana: 0,
+    input: [{ itemId: 'block_subsoil', count: 6 }, { itemId: 'cut_stone', count: 2 }],
+    output: { itemId: 'mixer', count: 1 } },
   // ── THE HEARTH (2026-09-13) — laid stone with a fire in it ─────────────────────────────────
   // Cobble, because a firebox is the rough stone a cook lays, not the dressed stone a stonewright
   // sells; six of them is a small wall's worth. No fuel input — the block has no fuel state to

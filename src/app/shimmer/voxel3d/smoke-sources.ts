@@ -26,8 +26,10 @@ import { MAT } from '../voxel/depth'
 import { SECTION, type Column } from '../voxel/column'
 import { AIR } from '../voxel/section'
 
-/** Blocks that smoke. Both are "always burning" in the registry; neither has a fuel state. */
-export const SMOKE_MATS: ReadonlySet<number> = new Set<number>([MAT.HEARTH, MAT.OVEN])
+/** Blocks that smoke. The hearth and the oven are "always burning" in the registry, no fuel state;
+ *  the RUNNING cauldron (2026-09-14) steams — its material is its state, so it joins and leaves this
+ *  set by being swapped in and out (`alchemy-chain.ts`). One plume look for all three today. */
+export const SMOKE_MATS: ReadonlySet<number> = new Set<number>([MAT.HEARTH, MAT.OVEN, MAT.CAULDRON_LIT])
 
 /** How far up a flue may run before the smoke gives up and is born on the source. */
 export const FLUE_MAX = 32

@@ -271,7 +271,10 @@ console.log('building grammar')
     // (depth.ts), and breaking a planted pot must hand back the pot you made. That is a state
     // machine over one crafted item, not a second way to obtain it. Anything else appearing here
     // is the real bug.
-    const POT_STATES = new Set<number>([MAT.POT_SEEDED, MAT.POT_BLOOM])
+    // The lit cauldron (2026-09-14) is the same shape: CAULDRON_LIT is the cauldron WHILE IT RUNS,
+    // swapped in by the world and never placed (`placeable: false`), and breaking it hands back the
+    // cauldron you made. `alchemy-chain.test.ts` asserts it is unplaceable and shares the drop.
+    const POT_STATES = new Set<number>([MAT.POT_SEEDED, MAT.POT_BLOOM, MAT.CAULDRON_LIT])
     const dugCrafted = ALL_BLOCKS.filter(b => !POT_STATES.has(b.material) &&
       b.drops.some(d => RECIPE_OUTPUTS.has(d.itemId) && materialForItem(d.itemId) !== b.material))
     check('no terrain block drops a crafted surface', dugCrafted.length === 0,

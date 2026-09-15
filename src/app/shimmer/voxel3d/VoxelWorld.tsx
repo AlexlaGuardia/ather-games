@@ -261,6 +261,8 @@ import { applySparPayout, sparLedgerLines } from './spar-reward'
 import ArenaBattle from '../components/ArenaBattle'
 import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit'
 import { rightClickIntent } from './interact'
+import { alchemyStationOf, alchemySalvage, ALCHEMY_STATIONS, intermediateLabel, type AlchemyStationId } from './alchemy-chain'
+import { AlchemyPanel } from './alchemy-panel'
 import {
   chestKey, createChest, adoptChest, moveBetween, moveCount, halfOf, quickMove, addToGrid,
   takeFromGrid, attachedChests, countIn as countInChest, isEmpty as isChestEmpty,
@@ -417,12 +419,16 @@ export interface OpenWaymark {
   rename: (name: string) => void
 }
 
-interface OpenStation {
+export interface OpenStation {
   x: number; y: number; z: number
-  /** Which station this block is — decides the rate and the recipe list. */
-  kind: StationId
+  /** Which station this block is — decides the rate and the recipe list. An alchemy id opens
+   *  `AlchemyPanel` (its own table); a workshop id opens `StationPanel`. */
+  kind: StationId | AlchemyStationId
   job: StationJob | undefined
   commit: (shop: Workshop) => void
+  /** The cauldron's lit twin: the panel says whether the block is running and the world swaps the
+   *  material (`depth.ts` › CAULDRON_LIT). No-op for every other station. */
+  setLit?: (lit: boolean) => void
   /**
    * ★ THE CHESTS STANDING AGAINST THIS BENCH — LIVE GRIDS, BY REFERENCE (2026-08-15).
    *
@@ -759,6 +765,8 @@ function ItemChip({ itemId, size }: { itemId: string; size: number }) {
 export function itemLabel(itemId: string): string {
   const pc = pieceForItem(itemId)
   if (pc) return pc.name
+  const mid = intermediateLabel(itemId)          // the alchemy chain's powders, extracts, bases
+  if (mid) return mid
   const m = materialForItem(itemId)
   const named = m !== undefined ? blockDef(m)?.name : undefined
   return named ?? itemId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -2403,8 +2411,31 @@ export default function VoxelWorld() {
                    onBrew={doBrew}
                    onClose={() => { setBrewOpen(false); closeCursorUI() }} />
       )}
-      {openStation && (
-        <StationPanel st={openStation} inv={inv}
+      {openStation && openStation.kind in ALCHEMY_STATIONS && (
+        <AlchemyPanel st={openStation as OpenStation & { kind: AlchemyStationId }} inv={inv} skills={skills} mana={mana}
+                      ops={{
+                        // The bag, then the chests against the block — the StationPanel's own rule.
+                        have: (id) => countItem(inv.current!, id) + openStation.feeds.reduce((n, g) => n + countInChest(g, id), 0),
+                        spend: (id, n) => {
+                          const fromBag = Math.min(countItem(inv.current!, id), n)
+                          if (fromBag > 0) removeItems(inv.current!, id, fromBag)
+                          let left = n - fromBag
+                          for (const g of openStation.feeds) { if (left <= 0) break; left = takeFromGrid(g, id, left) }
+                        },
+                        payout: (id, n) => {
+                          let left = give(inv.current!, id, n)
+                          for (const g of openStation.feeds) { if (left <= 0) break; left = addToGrid(g, id, left, maxStackOf) }
+                          return left
+                        },
+                        label: itemLabel,
+                      }}
+                      onChange={() => { setCraftTick(v => v + 1); refreshHotbar() }}
+                      onLevel={(line) => setLevelUp(line)}
+                      onSay={say}
+                      onClose={() => { setOpenStation(null); closeCursorUI() }} />
+      )}
+      {openStation && !(openStation.kind in ALCHEMY_STATIONS) && (
+        <StationPanel st={openStation as OpenStation & { kind: StationId }} inv={inv}
                       onChange={() => { setCraftTick(v => v + 1); refreshHotbar() }}
                       onSay={say}
                       onClose={() => { setOpenStation(null); closeCursorUI() }} />
@@ -6036,7 +6067,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
     // already SALVAGED it into drops by the time this runs; this is the record cleanup, not the
     // payout. Same `prevMat !== mat` guard: re-writing CRAFT_TABLE over CRAFT_TABLE must not
     // silently void the job of a bench the player is standing at.
-    if (prevMat !== mat && (stationOf(prevMat) || stationOf(mat))) {
+    // The alchemy stations join the rule — EXCEPT the cauldron's lit swap, which is the same
+    // station changing state and must keep its job (`alchemyStationOf` answers `cauldron` for both).
+    if (prevMat !== mat && (stationOf(prevMat) || stationOf(mat) || alchemyStationOf(prevMat) !== alchemyStationOf(mat))) {
       const rec = jobsByCol.current.get(k)
       if (rec) {
         delete rec[stationKey(wx, wy, wz)]
@@ -9896,6 +9929,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
             onSay('the waymark comes up')
           }
         }
+        // An alchemy station broken mid-run: finished runs pay out, unfinished runs hand their
+        // inputs back (`alchemySalvage`). The mana a finishing run channelled is not refunded.
+        const brokeAlchemy = alchemyStationOf(hit.material)
+        if (brokeAlchemy) {
+          const k = colOf(hit.x, hit.z)
+          const shop = jobsByCol.current.get(k)
+          if (shop?.[stationKey(hit.x, hit.y, hit.z)]) {
+            const { drops: owed } = alchemySalvage(shop, stationKey(hit.x, hit.y, hit.z), Date.now())
+            for (const d of owed) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
+            if (owed.length) onSay(`the ${ALCHEMY_STATIONS[brokeAlchemy].name.toLowerCase()} gives up its work — ${owed.reduce((n: number, d: { count: number }) => n + d.count, 0)} things`)
+          }
+        }
         const brokeStation = stationOf(hit.material)
         if (brokeStation) {
           const k = colOf(hit.x, hit.z)
@@ -10100,18 +10145,25 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         // pure functions, so the only thing the host owes it is where the bench is.
         // The KIND travels with the position: the panel must never re-derive which station this
         // is from anything but the block that was actually aimed at.
-        const kind = stationOf(potMat)
+        const kind = stationOf(potMat) ?? alchemyStationOf(potMat)
         if (kind) {
           // The chests set around this bench, resolved through the host's own voxel read so there
           // is exactly one definition of "there is a chest here". `chestAt` is lazy, so asking for
           // a neighbour's grid costs nothing until something is actually put in it.
           const beside = attachedChests(hit.x, hit.y, hit.z, (x, y, z) => voxel(x, y, z) === MAT.CHEST)
+          const { x: sx, y: sy, z: sz } = hit
           onOpenStation({
-            x: hit.x, y: hit.y, z: hit.z, kind,
-            job: jobAt(hit.x, hit.y, hit.z),
-            commit: (shop: Workshop) => setJob(hit.x, hit.y, hit.z, shop),
+            x: sx, y: sy, z: sz, kind,
+            job: jobAt(sx, sy, sz),
+            commit: (shop: Workshop) => setJob(sx, sy, sz, shop),
             feeds: beside.map(c => chestAt(c.x, c.y, c.z)),
             touchFeeds: () => { for (const c of beside) touchChest(c.x, c.z) },
+            // ★ The running cauldron IS a different material (the render flood keys light off the
+            // material). The swap goes through `setVoxel` like any edit, so it saves, re-lights and
+            // re-meshes — and `setVoxel`'s job cleanup knows the two are one station.
+            setLit: kind === 'cauldron'
+              ? (lit) => { const want = lit ? MAT.CAULDRON_LIT : MAT.CAULDRON; if (voxel(sx, sy, sz) !== want) setVoxel(sx, sy, sz, want) }
+              : undefined,
           })
         }
         mouse.current.right = false
@@ -11165,7 +11217,7 @@ function WaymarkPanel({ wm, onSay, onClose }: {
  * while you are away, which is the only reason to build one.
  */
 function StationPanel({ st, inv, onChange, onSay, onClose }: {
-  st: OpenStation
+  st: OpenStation & { kind: StationId }
   inv: React.RefObject<Inventory>
   onChange: () => void
   onSay: (t: string) => void

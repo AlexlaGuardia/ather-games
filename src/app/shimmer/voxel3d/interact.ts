@@ -18,6 +18,7 @@
 
 import { MAT } from '../voxel/depth'
 import { stationOf } from '../voxel/workshop'
+import { alchemyStationOf } from './alchemy-chain'
 // ⚠ THE SET, NOT A MATERIAL. There are three bed woods and each of these three lines is a place a
 // two-of-three fix would read as a whole fix — sow works on goldwood and a dawnwood bed is scenery.
 import { isGardenBed } from './garden'
@@ -144,6 +145,11 @@ export function rightClickIntent(
   // same day. A hand-kept `=== CRAFT_TABLE || === SAWMILL` here is how a new station ships as a
   // block you can place, look at, and not open — a dead click, which this file exists to prevent.
   if (stationOf(aimed)) return 'work'
+  // ★ THE ALCHEMY CHAIN (2026-09-14) — grinder, still, mixing vessel and the cauldron (lit or not)
+  // are stations too, with their own table (`alchemy-chain.ts`), and open the same way. The
+  // cauldron used to answer `'brew'` here and open an instant panel; the chain replaced that, and
+  // the `'brew'` intent below it stays reachable only by the owner's `/brew` console door.
+  if (alchemyStationOf(aimed)) return 'work'
   // Above the place fallback for the same reason the bench is: a keeper standing at their cauldron
   // holding a second one must OPEN it. And it is deliberately NOT in `STATION_MAT` — see `'brew'`.
   if (aimed === MAT.CAULDRON) return 'brew'

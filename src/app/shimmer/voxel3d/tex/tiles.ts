@@ -81,6 +81,9 @@ export const TILE_MATERIALS: number[] = [
   // The oven added 2026-09-13, later — the closed fire. Per-face: an arched mouth with banked
   // coals on the sides, a dome with a smoke hole on top, soot underneath.
   MAT.OVEN,
+  // The alchemy chain, 2026-09-14: a stone quern, a glass still on clay, a wide clay mixing
+  // vessel, and the cauldron's lit twin (its top is the brew — emissive alpha on the surface).
+  MAT.GRINDER, MAT.STILL, MAT.MIXER, MAT.CAULDRON_LIT,
   // ── The grounds, added 2026-08-19 with the character layer ──────────────────────────────────
   // ⚠ Each one NEEDS a `paintFor` case below, exactly as the rubble note above says: the switch's
   // default is the ore painter, so a ground appended here and forgotten there does not render as
@@ -1296,11 +1299,14 @@ function paintChest(dst: Layer, size: number, seed: number, face: number) {
  * a dark stone hearth course at the bottom, so the silhouette says *basin standing on a fire*.
  * BOTTOM is plain soot — nobody sees it.
  */
-function paintCauldron(dst: Layer, size: number, seed: number, face: number) {
+function paintCauldron(dst: Layer, size: number, seed: number, face: number, lit = false) {
   const clay = rgbOf(MATERIAL_COLOR[MAT.CAULDRON])
   const hearth = shade(rgbOf(MATERIAL_COLOR[MAT.STONE]), -18)
   const soot = shade(clay, -52)
-  const brew = rgbOf(0x2e3b46)                                  // still, dark, unlit water
+  // ★ LIT (2026-09-14): the running cauldron's surface is the BREW — the vessels brief's *"the
+  // liquid is the light source"*, on the block. A warm mana-gold with emissive alpha, so it is the
+  // one bright thing on a dim pot; the idle pot keeps its dark water and promises nothing.
+  const brew = lit ? rgbOf(0xd9a437) : rgbOf(0x2e3b46)           // still, dark, unlit water when idle
   const hearthH = Math.max(2, Math.round(size / 4))             // the fire bed it stands on
   const rimH = Math.max(1, size >> 3)
   if (face === BOTTOM) { paintGrit(dst, size, soot, 10, 8, seed); return }
@@ -1323,7 +1329,111 @@ function paintCauldron(dst: Layer, size: number, seed: number, face: number) {
     if (d > r) continue
     const grit = (h2(x, y, seed + 7) - 0.5) * 10
     const sheen = Math.abs(d - r * 0.62) < 0.9 && x < c            // one arc, left of centre
-    put(dst, size, x, y, sheen ? shade(brew, 34) : shade(brew, grit), 0)
+    // Lit: the whole surface glows (alpha 200), brighter at the sheen; bubbles are a few bright
+    // dots that a running pot has and a still one does not.
+    const bubble = lit && h2(x, y, seed + 43) > 0.93
+    put(dst, size, x, y, sheen ? shade(brew, 34) : bubble ? shade(brew, 50) : shade(brew, grit),
+        lit ? (sheen || bubble ? 240 : 200) : 0)
+  }
+}
+
+/**
+ * ── THE ALCHEMY CHAIN'S THREE STATIONS (2026-09-14) — placeholders INSIDE the substance law ─────
+ * Stone, glass, fired clay: the three things the Ather's craft is made of and nothing else. Each is
+ * a 16px read-at-a-glance: what matters is that the three tell apart across a plot and none of
+ * them reads as metal. Alex judges the final look; the names are a canon gap (`alchemy-chain.ts`).
+ */
+
+/** The grinder: a quern. TOP is a stone dish with a round hollow and a darker turning stone in it;
+ *  SIDE is worked stone, a band at the rim; BOTTOM plain stone. */
+function paintGrinder(dst: Layer, size: number, seed: number, face: number) {
+  const stone = rgbOf(MATERIAL_COLOR[MAT.GRINDER])
+  if (face === BOTTOM) { paintGrit(dst, size, shade(stone, -20), 10, 8, seed); return }
+  if (face === SIDE) {
+    paintGrit(dst, size, stone, 12, 10, seed)
+    const rimH = Math.max(1, size >> 3)
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const grit = (h2(x, y, seed + 31) - 0.5) * 12
+      if (y < rimH) put(dst, size, x, y, shade(stone, 18 + grit * 0.5), 0)
+      else if (y >= size - rimH) put(dst, size, x, y, shade(stone, -26 + grit * 0.5), 0)
+    }
+    return
+  }
+  paintGrit(dst, size, stone, 10, 8, seed)
+  const c = (size - 1) / 2, r = size * 0.40, r2 = size * 0.18
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - c, y - c)
+    if (d > r) continue
+    const grit = (h2(x, y, seed + 7) - 0.5) * 10
+    if (d <= r2) { put(dst, size, x, y, shade(stone, -34 + grit), 0); continue }   // the turning stone
+    // The hollow: darker toward the turning stone, a faint dusting (ground powder) near the rim.
+    const t = (d - r2) / (r - r2)
+    put(dst, size, x, y, shade(stone, -18 + t * 22 + grit * 0.6), 0)
+  }
+}
+
+/** The still: hand-blown glass over a clay base. SIDE is the clay base with a glass bulb above it
+ *  (pale, a highlight, a dark neck); TOP is the clay base with a glass ring seen from above. */
+function paintStill(dst: Layer, size: number, seed: number, face: number) {
+  const clay = rgbOf(MATERIAL_COLOR[MAT.STILL])
+  const glass = rgbOf(0xbfd6de)
+  const dark = rgbOf(0x3a4a52)
+  if (face === BOTTOM) { paintGrit(dst, size, shade(clay, -40), 10, 8, seed); return }
+  if (face === TOP) {
+    paintGrit(dst, size, clay, 10, 8, seed)
+    const c = (size - 1) / 2, r = size * 0.34
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x - c, y - c)
+      if (d > r) continue
+      const ring = Math.abs(d - r * 0.8) < 1.0
+      put(dst, size, x, y, ring ? glass : shade(dark, (h2(x, y, seed + 9) - 0.5) * 12), 0)
+    }
+    return
+  }
+  // SIDE: base below, bulb above, a neck between.
+  paintGrit(dst, size, clay, 12, 10, seed)
+  const baseY = Math.round(size * 0.62)
+  const c = (size - 1) / 2, bulbR = size * 0.30, bulbCy = size * 0.36
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    if (y >= baseY) continue
+    const d = Math.hypot(x - c, y - bulbCy)
+    if (d <= bulbR) {
+      // Hand-blown: an off-centre highlight, a darker lower half where the liquid sits.
+      const hi = Math.hypot(x - (c - bulbR * 0.4), y - (bulbCy - bulbR * 0.4)) < bulbR * 0.28
+      const liquid = y > bulbCy + bulbR * 0.15
+      put(dst, size, x, y, hi ? shade(glass, 40) : liquid ? shade(dark, 18) : glass, 0)
+    } else if (Math.abs(x - c) <= Math.max(1, size / 12) && y > bulbCy) {
+      put(dst, size, x, y, shade(glass, -20), 0)                      // the neck down into the base
+    } else {
+      put(dst, size, x, y, shade(clay, -30 + (h2(x, y, seed + 3) - 0.5) * 10), 0)   // the wall behind
+    }
+  }
+}
+
+/** The mixing vessel: a wide shallow clay bowl. TOP is a clay rim around a pale, pasty surface
+ *  with a stirring track; SIDE is a low clay belly with a rim band; BOTTOM clay. */
+function paintMixer(dst: Layer, size: number, seed: number, face: number) {
+  const clay = rgbOf(MATERIAL_COLOR[MAT.MIXER])
+  const paste = rgbOf(0xc9b58a)
+  if (face === BOTTOM) { paintGrit(dst, size, shade(clay, -40), 10, 8, seed); return }
+  if (face === SIDE) {
+    paintGrit(dst, size, clay, 12, 10, seed)
+    const rimH = Math.max(1, size >> 3), lip = Math.round(size * 0.55)
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const grit = (h2(x, y, seed + 31) - 0.5) * 12
+      if (y < lip - rimH) put(dst, size, x, y, shade(clay, -38 + grit * 0.4), 0)         // the wall behind a low bowl
+      else if (y < lip) put(dst, size, x, y, shade(clay, 22 + grit * 0.5), 0)            // the rim
+    }
+    return
+  }
+  paintGrit(dst, size, clay, 10, 8, seed)
+  const c = (size - 1) / 2, r = size * 0.44
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - c, y - c)
+    if (d > r) continue
+    const grit = (h2(x, y, seed + 7) - 0.5) * 10
+    const track = Math.abs(d - r * 0.55) < 0.8                       // where the paddle went round
+    put(dst, size, x, y, track ? shade(paste, -22) : shade(paste, grit), 0)
   }
 }
 
@@ -1675,6 +1785,10 @@ export function paintFor(material: number, face: number, size: number): Layer {
     // ore block you can right-click. `render-audit.test.ts` fails on it, which is the only reason
     // this line is hard to forget.
     case MAT.CAULDRON: paintCauldron(dst, size, seed, face); break
+    case MAT.CAULDRON_LIT: paintCauldron(dst, size, seed, face, true); break
+    case MAT.GRINDER: paintGrinder(dst, size, seed, face); break
+    case MAT.STILL: paintStill(dst, size, seed, face); break
+    case MAT.MIXER: paintMixer(dst, size, seed, face); break
     case MAT.HEARTH: paintHearth(dst, size, seed, face); break
     case MAT.OVEN: paintOven(dst, size, seed, face); break
     case MAT.PATH:

@@ -196,6 +196,16 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // bread oven clean, it is the mouth that blackens. The coals are painted, not tinted, for the
   // same reason as the hearth's fire.
   [MAT.OVEN]: 0x8a8178,
+  // ── THE ALCHEMY CHAIN (2026-09-14) — stone, glass, clay; the three substances the law allows ──
+  // The grinder is a quern: pale worked stone, lighter than the stonecutter's grey so the two
+  // stone stations read apart. The still is glass over clay — the tint is the clay base, the glass
+  // is painted (`tiles.ts`). The mixing vessel is the cauldron's fired earth, a touch redder and
+  // paler: the same kiln, a shallower pot. The lit cauldron keeps the cauldron's clay exactly —
+  // it is the same block; only its top is painted as a brew.
+  [MAT.GRINDER]: 0xa9a49a,
+  [MAT.STILL]: 0x9b6a4a,
+  [MAT.MIXER]: 0x9c5f42,
+  [MAT.CAULDRON_LIT]: 0x8a5236,
   // ── ★ THE GARDEN BED (2026-08-22) — turned earth, darker and wetter than the ground it sits on ──
   // Read against SUBSOIL's flank brown rather than against topsoil's green: a bed is soil that has
   // been broken open, so it should look like the underside of the turf, not like turf. Darker than
@@ -328,6 +338,9 @@ export const EMISSIVE: Record<number, number> = {
   [MAT.HEARTH]: 0.85,
   // The oven: a closed fire. Coals seen through a mouth, under the hearth's open blaze.
   [MAT.OVEN]: 0.6,
+  // The running cauldron: the brew's own light, on its top face only (`tiles.ts` paints the sides
+  // as plain clay, so the emissive reads as the surface). Under the hearth — a pot, not a fire.
+  [MAT.CAULDRON_LIT]: 0.7,
 }
 
 /** An unmapped material must be LOUD, not invisible — magenta says "the registry missed one". */

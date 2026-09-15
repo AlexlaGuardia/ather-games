@@ -28,6 +28,7 @@ import { DEFAULT_COLUMN, SECTION } from '../voxel/column'
 import { WORLD_SEED as SEED } from './world-seed'
 import { WORLD_ITEMS } from './obtainable'
 import { POTION_IDS } from '../engine/alchemy'
+import { ALCHEMY_INTERMEDIATES } from './alchemy-chain'
 import { VIEW_RADIUS_MAX, VIEW_RADIUS_MIN } from './settings'
 import { MistLedger, quietMinutes, residentAt } from './mist-encounter'
 import { dayProgress, getDisplayTime, isTimePinned, setTimePin } from '../engine/day-cycle'
@@ -47,7 +48,7 @@ import { RUNES } from '../play3d/birth/runes.data'
  * remembering this line — the alternative is a hand-kept mirror, and a mirror reads as
  * corroboration right up until it goes stale.
  */
-export const KNOWN_ITEMS: ReadonlySet<string> = new Set([...WORLD_ITEMS, ...POTION_IDS])
+export const KNOWN_ITEMS: ReadonlySet<string> = new Set([...WORLD_ITEMS, ...POTION_IDS, ...ALCHEMY_INTERMEDIATES])
 
 
 export interface ConsoleCtx {

@@ -50,12 +50,16 @@ const full = () => 0
 // The dead-click family, third time: a chest that would not open empty-handed, a bench that stacked
 // a second bench, and now a cauldron. A keeper standing at their cauldron is very likely holding
 // another one (they stack to 16), which is exactly the hand that would have placed one on top.
+// ★ 2026-09-14: the answer is 'work', not 'brew' — the cauldron became the last station of the
+// alchemy CHAIN (`alchemy-chain.ts`) and opens the same panel family the bench does. The instant
+// brew list this file's ladder feeds is now the owner's `/brew` console door only. What these three
+// asserts guard is unchanged: the cauldron OPENS, whatever is in the hand, and never stacks.
 {
-  ok(rightClickIntent(MAT.CAULDRON, null, false) === 'brew',
-    'an EMPTY HAND at a cauldron opens the brew list — the normal way anyone uses a station')
-  ok(rightClickIntent(MAT.CAULDRON, 'cauldron', false) === 'brew',
+  ok(rightClickIntent(MAT.CAULDRON, null, false) === 'work',
+    'an EMPTY HAND at a cauldron opens it — the normal way anyone uses a station')
+  ok(rightClickIntent(MAT.CAULDRON, 'cauldron', false) === 'work',
     'holding ANOTHER cauldron opens the one you aimed at rather than stacking a second onto it')
-  ok(rightClickIntent(MAT.CAULDRON, 'block_stone', false) === 'brew',
+  ok(rightClickIntent(MAT.CAULDRON, 'block_stone', false) === 'work',
     'and a fistful of stone does not turn the cauldron into a floor tile')
   // ★ THE ONE THAT PROTECTS THE STATION MODEL. `'work'` opens a workshop JOB panel — queued runs on
   // a wall clock. Brewing spends the keeper's mana and pays the keeper's XP, neither of which a

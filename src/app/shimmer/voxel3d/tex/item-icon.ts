@@ -436,10 +436,15 @@ export function iconPixels(material: number, size = ICON, tile = TILE): Uint8Arr
  * ★ BLOCK FACES ALWAYS WIN. An item with a real block behind it must wear that block's texture even
  * if other art exists, or the two drift and the icon starts describing last month's stone.
  */
-export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'painted' | 'mesh' | 'piece' | null {
+export function iconSourceFor(itemId: string): 'block' | 'cross' | 'flora' | 'painted' | 'mesh' | 'piece' | 'alchemy' | null {
   // A piece item has no material and no painted sprite; its icon is the geometry the world
   // instances for it (`pieceIcon`). Asked first because nothing below can answer for it.
   if (pieceForItem(itemId)) return 'piece'
+  // ★ THE ALCHEMY CHAIN'S INTERMEDIATES (2026-09-14) — a powder, an extract, a base — are made by
+  // code from the SOURCE ingredient's own icon (its average colour on a mound / a drop / a bowl
+  // stencil), so thirty-odd generated items do not become thirty-odd sprites on Alex's desk. The
+  // memory this tree keeps: generic filler is code; hero art is Alex.
+  if (alchemySourceOf(itemId)) return 'alchemy'
   const mat = materialForItem(itemId)
   // ★ THE CROSS ARM SITS ABOVE THE BLOCK ARM, and the order is the fix. Block-faces-always-win is
   // still true for everything the world builds out of faces; a cross has none to win with. See
@@ -476,8 +481,89 @@ export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
     case 'mesh': return meshIcon(materialForItem(itemId), size)
     case 'piece': return pieceIcon(pieceForItem(itemId)!, size)
     case 'painted': return flatIcon(itemId, size)
+    case 'alchemy': return alchemyIcon(itemId, size)
     default: return null
   }
+}
+
+// ── the intermediates' icons ─────────────────────────────────────────────────────────────────────
+/** The ingredient (or potion) an intermediate id was made from, or null for anything else. */
+export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 'base'; source: string } | null {
+  if (itemId.startsWith('powder_')) return { kind: 'powder', source: itemId.slice(7) }
+  if (itemId.startsWith('extract_')) return { kind: 'extract', source: itemId.slice(8) }
+  if (itemId.startsWith('base_')) return { kind: 'base', source: itemId.slice(5) }
+  return null
+}
+
+/** The average opaque colour of an item's icon — the one number an intermediate borrows. */
+function iconTint(itemId: string, size: number): [number, number, number] {
+  const px = iconPixelsFor(itemId, size)
+  let r = 0, g = 0, b = 0, n = 0
+  if (px) for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < 128) continue
+    r += px[i]; g += px[i + 1]; b += px[i + 2]; n++
+  }
+  // No icon to borrow from (an ingredient still wearing the chip): a neutral craft-grey, so the
+  // intermediate is at least a SHAPE rather than a second chip.
+  return n ? [r / n, g / n, b / n] : [150, 140, 125]
+}
+
+/**
+ * A powder is a low mound of the source's colour with a sprinkle of lighter grains; an extract is
+ * a drop of it (a rounded bottom, a point at the top, a highlight); a base is a shallow bowl holding
+ * it. All three at the source's tint so a shard powder is violet and a sap extract is amber, and
+ * a keeper can read the shelf without a label.
+ */
+export function alchemyIcon(itemId: string, size = ICON): Uint8Array | null {
+  const what = alchemySourceOf(itemId)
+  if (!what) return null
+  const tint = iconTint(what.source, size)
+  const out = new Uint8Array(size * size * 4)
+  const c = (size - 1) / 2
+  const set = (x: number, y: number, col: [number, number, number], a = 255) => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return
+    const o = (y * size + x) * 4
+    out[o] = col[0]; out[o + 1] = col[1]; out[o + 2] = col[2]; out[o + 3] = a
+  }
+  const sh = (col: [number, number, number], d: number): [number, number, number] =>
+    [Math.max(0, Math.min(255, col[0] + d)), Math.max(0, Math.min(255, col[1] + d)), Math.max(0, Math.min(255, col[2] + d))]
+  const hash = (x: number, y: number) => { const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return v - Math.floor(v) }
+  if (what.kind === 'powder') {
+    // A mound: a half-ellipse sitting on the lower third, grainy, lighter on top.
+    const baseY = size * 0.78, rx = size * 0.36, ry = size * 0.30
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const dx = (x - c) / rx, dy = (baseY - y) / ry
+      if (dy < 0 || dx * dx + dy * dy > 1) continue
+      const grain = (hash(x, y) - 0.5) * 36
+      set(x, y, sh(tint, Math.round(dy * 30 - 10 + grain)))
+    }
+    for (let i = 0; i < 6; i++) set(Math.round(c + (hash(i, 3) - 0.5) * rx * 2.2), Math.round(baseY - hash(i, 7) * 2), sh(tint, -20))
+  } else if (what.kind === 'extract') {
+    // A drop: a circle low with a tapered tip above it; one highlight off-centre.
+    const cy = size * 0.62, r = size * 0.24, tipY = size * 0.18
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const inBall = Math.hypot(x - c, y - cy) <= r
+      const t = (y - tipY) / (cy - tipY)                   // 0 at the tip, 1 at the ball's centre
+      const inTip = y >= tipY && y < cy && Math.abs(x - c) <= r * Math.max(0, t) * 0.98
+      if (!inBall && !inTip) continue
+      const hi = Math.hypot(x - (c - r * 0.35), y - (cy - r * 0.35)) < r * 0.28
+      set(x, y, hi ? sh(tint, 70) : sh(tint, Math.round(((y - tipY) / (cy + r - tipY)) * -30 + 10)))
+    }
+  } else {
+    // A base: a shallow clay bowl (the mixing vessel's own colour) holding the tint.
+    const clay: [number, number, number] = [156, 95, 66]
+    const top = size * 0.42, bottom = size * 0.80, rx = size * 0.40
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      if (y < top || y > bottom) continue
+      const t = (y - top) / (bottom - top)
+      const half = rx * (1 - t * 0.45)
+      if (Math.abs(x - c) > half) continue
+      const rim = y - top < size * 0.06
+      const liquid = y - top >= size * 0.06 && y - top < size * 0.16 && Math.abs(x - c) < half - size * 0.06
+      set(x, y, rim ? sh(clay, 30) : liquid ? sh(tint, 10) : sh(clay, Math.round(-t * 40)))
+    }
+  }
+  return out
 }
 
 const cache = new Map<string, string | null>()

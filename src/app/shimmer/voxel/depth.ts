@@ -655,6 +655,28 @@ export const MAT = {
    * `hearth`.
    */
   OVEN: 103,
+  /**
+   * ── ★ THE ALCHEMY CHAIN (2026-09-14, Alex: "grinding up a powder, distilling, mixing, and
+   * brewing as different stations") ─────────────────────────────────────────────────────────
+   * Three more stations beside the cauldron, one per verb; `voxel3d/alchemy-chain.ts` says which
+   * potion visits which. All under the substance law (no metal): the grinder is STONE (a quern —
+   * a hollowed stone and a stone to turn in it), the still is hand-blown GLASS on a fired-clay
+   * base, the mixing vessel is FIRED CLAY like the cauldron, wider and shallower, unfired below.
+   * ⚠ NAMES ARE PLACEHOLDERS — the words are a canon gap (`CANON_GAPS.md` 2026-09-14); these ids
+   * are build ids and stay whatever Magii rules. ⚠ NEVER GENERATED, only placed.
+   */
+  GRINDER: 104,
+  STILL: 105,
+  MIXER: 106,
+  /**
+   * The cauldron WHILE IT RUNS. Same block, same drop (`registry.ts` maps its drop back to
+   * `cauldron`); the only differences are that it emits into the light field and its top face is
+   * painted as a brew, not still water. Swapped in by the world when a job is loaded and out when
+   * the last run is taken — the furnace-lit pattern, because the render flood keys emission off
+   * the MATERIAL and a per-block "running" flag would need a second channel it does not have.
+   * The vessels brief: *the liquid is the light source* — this is that, on the block.
+   */
+  CAULDRON_LIT: 107,
 } as const
 
 /** Every glass id — the cutout pass, the light pass and the mesher rank all ask this, never `=== GLASS`. */

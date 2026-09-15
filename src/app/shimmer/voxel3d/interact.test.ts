@@ -193,7 +193,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
      '★★ a piece that does NOT open never swings — the flag decides, not the STRUCTURE material')
   // The pre-existing answers must be undisturbed: `openablePiece` defaults false everywhere.
   ok(rightClickIntent(MAT.CHEST, null, false) === 'open', 'the chest still opens')
-  ok(rightClickIntent(MAT.CAULDRON, null, false) === 'brew', 'the cauldron still brews')
+  // 'work' since 2026-09-14 — the cauldron is a chain station now (alchemy-chain.ts); it opens, never stacks.
+  ok(rightClickIntent(MAT.CAULDRON, null, false) === 'work', 'the cauldron still opens')
 }
 
 console.log(fails.length ? `interact: ${pass} pass, ${fails.length} FAIL` : `interact oracle ${pass} CLEAN`)
