@@ -11,6 +11,16 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 💡 Shimmer — **SHADERS: THE RESEARCH, THE HOUR, THE FLOATING POND, THE BLACK FACES** (2026-09-14 → 09-15, hub lane `034112f4`, beside a spirits window on flora) · *Last touched 2026-09-15 — ✅ **PROD `BUILD_ID _Bw70RnHyWfBjqWH981rI` from `9f835cf`**, served == disk on every chunk checked. hour-light 22/0 · water-sheet-band 5/0 (mutation +17.99) · render-light 67/0 (§12 fires 4) · cartoon-stack 30/0. tsc 7 (baseline).*
+
+**Left off:** four Sonnet research reports + `research/shaders-2026-09-14/SYNTHESIS.md` (architecture right; no post pass / shadow maps / RGB flood). The cartoon stack carries the hour (`hour-light.ts`; noon byte-identical; `night` slider, Alex 0.95). Alex's dials baked as the `cartoon` preset; levers disabled on `natural`. Pond sheet clamped into its block (a table 18 blocks over a basin). ★ The render flood treated slabs/pieces/glass as rock → black faces in daylight — fixed (`bd4d407`); the spawn flood had been fixed 09-12, this one never was. Crossings arrive facing away from the portal (reverses 08-19).
+
+**Next:** lit window at night (pane emissive from the light field one cell behind) · rim light · height fog · greying desat.
+
+**Decisions:** night = 0.95 as shipped; preset = Alex's numbers; portals face away (continuity over teaching the exit); the "night floor" dial was dropped — the black was a sampling bug, not a look.
+
+**Files:** `voxel3d/hour-light.ts` (+test) · `cartoon-glsl.ts` · `light-glsl.ts` · `day-night.tsx` · `settings.ts` · `voxel/column.ts` (`buildWaterSurface` corners) · `voxel/water-sheet-band.test.ts` · `voxel/render-light.ts` (+test §12) · `scripts/world-shot.mts` (WORLD_SETTINGS / WORLD_HOLD / WORLD_AFTER).
+
 ## 🏠 Shimmer — **A DAY ON THE STREET: OVEN · SMOKE · ROOFS · LEVEL FLOORS · ROOM TO WALK · THE ☰** (2026-09-13 PM, hub lane `49b192af`, in parallel with a spirits window) · *Last touched 2026-09-14 — ✅ **PROD `BUILD_ID ryQ_zyh2hKWgZEfka8qo4` from `6a8d80e`** (the spirits window's build, carrying every hub commit under it; "Keeper of the realm" + the smoke shader + the oven all verified in the served chunks). Six hub deploys/rides today. Sweep 277/277 at the last hub-swept head. tsc 7 (baseline). smoke-sources 15/0 (3 mutations fire) · smoke 12/0 (2 fire) · smoke-wiring 14/0 · options-door 13/0 (gate-off fires) · break-fx-wiring 49/0 · channel-wiring 23/0.*
 
 **Left off:** the day started at the two red guards and ended at the options panel. In order:
