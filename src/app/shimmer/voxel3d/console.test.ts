@@ -40,7 +40,7 @@ const ctx = (isOwner: boolean): ConsoleCtx => new Proxy({}, {
   get(_t, prop: string) {
     if (prop === 'isOwner') return isOwner
     if (prop === 'radius') return () => 8
-    if (prop === 'pos') return () => ({ x: 0, z: 0 })
+    if (prop === 'pos') return () => ({ x: 0, y: 0, z: 0 })
     return (...args: unknown[]) => {
       calls.push(`${prop}:${args.map(a => String(a ?? '')).join(',')}`)
       return `${prop} ok`
@@ -232,6 +232,25 @@ for (const c of CONSOLE_CMDS.filter(c => c.owner)) {
   const bare = runConsoleLine('/goto', ctx(true)).text
   ok(ZONE_ANCHORS.every(z => bare.includes(z.id)), 'bare /goto still lists every anchor')
   // ⚠ the segment sweep above is the guard; the mutation that puts `startsWith` back must go red on it
+}
+
+// ── 12. /put: a block or a piece at coordinates — owner-only, `~` on all three axes (2026-09-14) ─
+{
+  const row = CONSOLE_CMDS.find(c => c.name === 'put')
+  ok(!!row?.owner, '/put is owner-gated — it writes the world without a hand or a cost')
+  calls.length = 0
+  runConsoleLine('/put mana_lantern 3 4 5', ctx(false))
+  ok(!calls.some(c => c.startsWith('put:')), '★ a non-owner never reaches the ctx')
+  calls.length = 0
+  runConsoleLine('/put mana_lantern 3 4 5', ctx(true))
+  ok(calls.includes('put:mana_lantern,3,4,5,0'), `absolute coordinates pass through, rot defaults to 0 (${calls.join(' | ')})`)
+  calls.length = 0
+  runConsoleLine('/put pane_sunpetal ~-4 ~1 ~-6 2', ctx(true))
+  ok(calls.includes('put:pane_sunpetal,-4,1,-6,2'),
+    `★ ~ is relative on x, Y and z — the headless shot has no way to learn the ground height otherwise (${calls.join(' | ')})`)
+  calls.length = 0
+  const short = runConsoleLine('/put plaster 1 2', ctx(true))
+  ok(!calls.some(c => c.startsWith('put:')) && /three coordinates/.test(short.text), 'a missing coordinate is refused before the ctx is asked')
 }
 
 console.log(`console: ${pass} passed, ${fails.length} failed`)

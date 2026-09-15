@@ -11,6 +11,7 @@
 //   WORLD_YAW=180                                             — degrees, + turns right (spawn faces -Z)
 //   WORLD_LOG='\\[canopy\\]'                                     — forward matching console lines to stdout
 //   WORLD_EVAL='(() => document.title)'                       — run an expression in the page, print it
+//   WORLD_PRE_EVAL='window.__renderlightFill(30000)'           — same, but BEFORE the shot (fill the light ring)
 //   WORLD_RADIUS=10                                           — load ring, in columns (default: the app's 6)
 //   WORLD_FPS=1                                               — turn the frame meter on for the shot
 //   WORLD_SETTINGS='{"shadowLift":0.1}'                       — seed render settings (partial; merged over defaults)
@@ -343,6 +344,23 @@ const OWNER = process.env.WORLD_OWNER === '1'
       await new Promise(r => setTimeout(r, CLICK_WAIT * 3))
     }
     console.log(`pressed ${keys.length} key(s)`)
+  }
+
+  // ── ★ WORLD_PRE_EVAL — run an expression BEFORE the shot (2026-09-14) ─────────────────────────
+  // `WORLD_EVAL` below answers a question after the picture; this one changes what the picture
+  // is of. The occasion: the render-light ring fills at ~7 columns a minute in a software-GL tab,
+  // so every night shot photographed the unbuilt fallback (fully lit, no lantern) until something
+  // drove the ring to completion first — `window.__renderlightFill()`. Printed, so a hook that
+  // throws or returns nothing is visible rather than a picture that quietly means something else.
+  const PRE = process.env.WORLD_PRE_EVAL
+  if (PRE) {
+    const out = await page.evaluate(`(() => { try {
+        const _e = (${PRE});
+        const _v = typeof _e === 'function' ? _e() : _e;
+        return _v === undefined ? 'PRE_EVAL RETURNED undefined' : JSON.stringify(_v)
+      } catch (e) { return 'PRE_EVAL THREW: ' + e.message } })()`)
+    console.log(`pre-eval  · ${out}`)
+    await new Promise(r => setTimeout(r, 1500))   // let the frames after it draw
   }
 
   await page.screenshot({ path: OUT })

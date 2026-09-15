@@ -1516,7 +1516,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => {
     // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
     // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
@@ -1607,10 +1607,11 @@ export default function VoxelWorld() {
     },
     hollow: (form, n) => worldCmd.current ? worldCmd.current.hollow(form, n) : 'the world is still waking',
     tp: (x, z) => worldCmd.current ? worldCmd.current.tp(x, z) : 'the world is still waking',
-    pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, z: 0 },
+    pos: () => worldCmd.current ? worldCmd.current.pos() : { x: 0, y: 0, z: 0 },
     space: (to) => worldCmd.current ? worldCmd.current.space(to) : 'the world is still waking',
     waymark: (arg) => worldCmd.current ? worldCmd.current.waymark(arg) : 'the world is still waking',
     hostiles: () => worldCmd.current ? worldCmd.current.hostiles() : 'the world is still waking',
+    put: (id, x, y, z, rot) => worldCmd.current ? worldCmd.current.put(id, x, y, z, rot) : 'the world is still waking',
     party: partyOps,
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
@@ -4136,7 +4137,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -4517,6 +4518,31 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
   // of dropping the walker through a world that has not generated yet.
   useEffect(() => {
     cmdOut.current = {
+      // ★ `/put` (2026-09-14) — set ONE block or piece at world coordinates, no hand, no cost, no
+      // aim. A dev instrument, owner-gated at the console row like `/tp`: the lit-window shader
+      // needed a pane with a lantern behind it in a HEADLESS world, and the page had no mover for
+      // a block the way `/goto` is the mover for the keeper — every earlier shader A/B was shot on
+      // whatever the blueprints happened to place. Writes exactly what the click path writes
+      // (occupancy through `setVoxel`, the placement into the column's list, the column dirtied),
+      // so what it puts down saves and reloads like a placed thing; it skips `canPlace` and the
+      // inventory on purpose, since the point is to stand a test where the rules would not.
+      put: (id: string, x: number, y: number, z: number, rot = 0) => {
+        const def = pieceDef(id)
+        if (def) {
+          const target: Placement = { pieceId: id, x, y, z, rot: ((rot % 4) + 4) % 4 as Rotation }
+          for (const c of cellsOf(target, def)) if (c.solid) setVoxel(c.x, c.y, c.z, def.halfHeight ? STRUCTURE_HALF : STRUCTURE)
+          placements.current.push(target)
+          const ok = colOf(target.x, target.z)
+          piecesByCol.current.set(ok, [...(piecesByCol.current.get(ok) ?? []), target])
+          dirtySaves.current.add(ok)
+          pieces.sync(placements.current)
+          return `put ${id} at (${x}, ${y}, ${z}) rot ${target.rot}`
+        }
+        const mat = (MAT as Record<string, number | undefined>)[id.toUpperCase()]
+        if (mat === undefined) return `no such block or piece: ${id}`
+        setVoxel(x, y, z, mat)
+        return `put ${id.toUpperCase()} at (${x}, ${y}, ${z})`
+      },
       // ★ `/hostiles` (#1112, 2026-09-11) — what the ground under the keeper can yield, read off the
       // same roster the sweep asks. An instrument like `/foes`: a Thicket night that produces only
       // stalkers is indistinguishable from a broken caster roll unless something prints the roster.
@@ -4557,7 +4583,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         settled.current = false
         return `off to ${x}, ${z} (ground ${h}) — the land is catching up`
       },
-      pos: () => ({ x: camera.position.x, z: camera.position.z }),
+      pos: () => ({ x: camera.position.x, y: Math.floor(loco.current.py), z: camera.position.z }),
       // ★ SLICE 1 OF THE PLOT IS REACHED BY CONSOLE, ON PURPOSE. The canon door is a passage
       // through the bubble's shell, and that is slice 2. Shipping the coordinate-space half behind
       // an owner command means it gets WALKED before travel depends on it — and it is the half
@@ -6861,8 +6887,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, selItem,
         meter: { ...lightMeter.current, ms: +lightMeter.current.ms.toFixed(0) },
       }
     }
-    return () => { delete w.__renderlight }
-  }, [lightUniforms])
+    // ★ `window.__renderlightFill(capMs)` — DRIVE the ring to completion, for a headless shot.
+    // A software-GL tab runs the page at ~1 fps (measured 2026-09-14: 112 frames in ~100 s), so
+    // the per-frame slice fills 7 of 81 columns in a minute and every shot photographs the
+    // unbuilt fallback — fully lit, no lantern, which reads as "the feature does nothing". This
+    // runs the same slicer the frame loop runs, synchronously, until nothing is dirty or the cap
+    // is spent. Returns the readout above so the caller can see what it got.
+    w.__renderlightFill = (capMs = 20_000) => {
+      const t0 = performance.now()
+      while (lightRing.current.dirty.size > 0 && performance.now() - t0 < capMs) advanceRenderLight(50)
+      return (w.__renderlight as () => unknown)()
+    }
+    return () => { delete w.__renderlight; delete w.__renderlightFill }
+  }, [lightUniforms, advanceRenderLight])
   // ── ★ THREE SILHOUETTES, ONE GEOMETRY EACH, SHARED ACROSS EVERY BODY OF THAT FORM ──────────
   // ⚠ BLOCKOUT, same standing as the single body it replaces: the locked look is owed a
   // design-brief + /picaso pass (hollows.ts says so in writing) and these are read-at-a-glance

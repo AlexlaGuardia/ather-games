@@ -165,7 +165,11 @@ vPWNorm = normalize((modelMatrix * instanceMatrix * vec4(normal, 0.0)).xyz);
 vPWPos = (modelMatrix * vec4(position, 1.0)).xyz;
 vPWNorm = normalize(mat3(modelMatrix) * normal);
 #endif`)
-    const emit = cartoonStackGlsl('vPWNorm', 'vPWPos', 'vec3(0.0)')
+    // The pane's program adds the lit window (light-glsl.ts › shimmerPaneGlow) after the stack
+    // and the field, so the room's lamp is never darkened by the yard's night. `gl_FrontFacing`
+    // is what tells a double-sided sheet which side the viewer stands on — the varying normal
+    // is the geometry's and does not flip with the face.
+    const emit = cartoonStackGlsl('vPWNorm', 'vPWPos', opts.cutout ? 'paneGlow' : 'vec3(0.0)')
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 ${CARTOON_DECL_GLSL}
@@ -177,6 +181,7 @@ varying vec3 vPNorm;
 varying vec3 vPWPos;
 varying vec3 vPWNorm;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
+vec3 paneGlow = vec3(0.0);
 {
   vec3 an = abs(vPNorm);
   vec2 tileUv = an.y > 0.5
@@ -187,6 +192,7 @@ varying vec3 vPWNorm;`)
     vec4 tile = texture(uTiles, vec3(tileUv, layer));
 ${opts.cutout ? '    if (tile.a < 0.5) discard;' : ''}
     diffuseColor.rgb *= tile.rgb;
+${opts.cutout ? '    paneGlow = shimmerPaneGlow(tile.rgb, vPWPos, vPWNorm, gl_FrontFacing);' : ''}
   }
 }`)
       // Three renamed this chunk around 0.16x; handle both, exactly as mesh-bridge.ts does.

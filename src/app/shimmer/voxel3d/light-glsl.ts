@@ -51,6 +51,9 @@ export const LIGHT_LOOK = {
   blockGain: 0.95,
   /** ⚠ A LOOK, NOT A CANON FACT — warm because a flame is, and Alex judges it. */
   blockTint: [1.0, 0.88, 0.68] as const,
+  /** How bright a pane glows at midnight with a full-strength lantern in the room behind it, in
+   *  units of the pane's own colour (1.0 = the glass at its noon albedo). See `shimmerPaneGlow`. */
+  paneGlow: 1.2,
 }
 
 /**
@@ -81,23 +84,37 @@ uniform float uBlockGain;
 uniform vec3  uBlockTint;
 uniform vec3  uHourLight;
 uniform float uToonHour;
+uniform float uPaneGlow;
 
-// The whole model, given a CELL CENTRE. Split out because not every surface wants the same cell:
-// a block face wants the air in front of it, a cross-quad wants the cell it stands in. See below.
-vec3 shimmerLightCell(vec3 col, vec3 albedo, vec3 cell) {
-  if (uLightMix <= 0.0) return col;
+// The field, read at a CELL CENTRE: x = sky level, y = block level (both 0..1), z = the weight
+// this cell carries (the master mix, faded over the ring's last column). Split out 2026-09-14 so a
+// surface can ask about a cell OTHER than the one it is lit by — the lit window reads the room
+// behind the glass — without a second copy of the decode.
+vec3 shimmerFieldAt(vec3 cell) {
+  if (uLightMix <= 0.0) return vec3(0.0);
   vec2 dcol = floor(cell.xz / ${SPAN}.0) - uLightCentre;
   float ring = max(abs(dcol.x), abs(dcol.y));
   // ★ FADED OUT OVER THE LAST SAMPLED COLUMN, never cut. A hard edge is a visible square drawn on
   // the ground around the keeper that MOVES WITH THEM, which is far more noticeable than the
   // slightly-wrong lighting it would be hiding.
   float w = uLightMix * (1.0 - smoothstep(uLightSampleR - 1.0, uLightSampleR, ring));
-  if (w <= 0.0) return col;
+  if (w <= 0.0) return vec3(0.0);
   // The texture is a torus; RepeatWrapping does the modulo, including for negative world
   // coordinates, which is most of the map.
   float b = floor(texture(uLightTex, cell / uLightDim).r * 255.0 + 0.5);
   float skyL = floor(b / 16.0) / 15.0;
   float blkL = (b - floor(b / 16.0) * 16.0) / 15.0;
+  return vec3(skyL, blkL, w);
+}
+
+// The whole model, given a CELL CENTRE. Split out because not every surface wants the same cell:
+// a block face wants the air in front of it, a cross-quad wants the cell it stands in. See below.
+vec3 shimmerLightCell(vec3 col, vec3 albedo, vec3 cell) {
+  vec3 f = shimmerFieldAt(cell);
+  float w = f.z;
+  if (w <= 0.0) return col;
+  float skyL = f.x;
+  float blkL = f.y;
   float skyShade = pow(skyL, uSkyCurve);
   // ★★ THE BLOCK TERM IS SCALED BY THE DARK IT IS FILLING. Additive light is what makes a lantern
   // able to brighten a midnight cave at all — a multiplier cannot, since scene * 0.93 in the dark
@@ -127,6 +144,25 @@ vec3 shimmerLight(vec3 col, vec3 albedo, vec3 wpos, vec3 nrm) {
 // only end the sky's free fall), so there is something there to read.
 vec3 shimmerLightHere(vec3 col, vec3 albedo, vec3 wpos) {
   return shimmerLightCell(col, albedo, floor(wpos) + 0.5);
+}
+
+// ── ★ THE LIT WINDOW (2026-09-14): what a pane ADDS, read from the room BEHIND it ─────────────
+// A pane is a sheet in the wall's plane, looked at from the yard and from the room. What makes a
+// window read as lit at night is not the light falling ON the glass — that is the yard's — but the
+// light in the room behind it. So the emissive is the BLOCK channel of the cell one step away from
+// the viewer (front-facing: minus the normal; back-facing: plus), through the pane's own colour so
+// a sunpetal window glows gold and the lead between panes stays lead. Gated by the hour: at noon a
+// lantern behind glass adds nothing (a window in daylight is a hole, not a lamp), at midnight the
+// full amount. The sky channel is NOT consulted — a lantern-lit yard seen through a pane from the
+// room is a lit yard, which is the honest picture. Anything outside the ring is 0 (w = 0), so a
+// bench with no field draws the pane exactly as before.
+vec3 shimmerPaneGlow(vec3 tint, vec3 wpos, vec3 nrm, bool front) {
+  vec3 away = front ? -nrm : nrm;
+  vec3 f = shimmerFieldAt(floor(wpos + away) + 0.5);
+  if (f.z <= 0.0) return vec3(0.0);
+  const vec3 W = vec3(0.2126, 0.7152, 0.0722);
+  float night = clamp(1.0 - dot(uHourLight, W), 0.0, 1.0);
+  return tint * uPaneGlow * pow(f.y, uBlockCurve) * night * f.z;
 }
 `
 
@@ -158,6 +194,8 @@ export interface LightUniforms {
   uHourLight: { value: THREE.Vector3 }
   /** Mix of the hour into the stack. 0 = the render before 2026-09-14 (the A/B control). */
   uToonHour: { value: number }
+  /** The lit window's gain (`LIGHT_LOOK.paneGlow`). 0 = no pane ever glows (the A/B control). */
+  uPaneGlow: { value: number }
 }
 
 /**
@@ -186,5 +224,6 @@ export function createLightUniforms(): LightUniforms {
     uBlockTint: { value: new THREE.Vector3(...LIGHT_LOOK.blockTint) },
     uHourLight: { value: new THREE.Vector3(1, 1, 1) },
     uToonHour: { value: 0 },
+    uPaneGlow: { value: LIGHT_LOOK.paneGlow },
   }
 }

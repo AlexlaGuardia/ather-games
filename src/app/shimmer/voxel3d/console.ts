@@ -56,6 +56,9 @@ export interface ConsoleCtx {
   radius: () => number
   give: (id: string, n: number) => string
   tp: (x: number, z: number) => string
+  /** Set one block (a MAT name) or one piece (a piece id) at world coordinates. Owner-gated dev
+   *  instrument — see the `/put` row. */
+  put: (id: string, x: number, y: number, z: number, rot?: number) => string
   /**
    * Put a Hollow in front of the keeper. A TEST HARNESS — the same standing warning `/rune` and
    * `/waymark` carry: this is not how the dark arrives. The night's own rules (`hollowNight`,
@@ -64,7 +67,7 @@ export interface ConsoleCtx {
    */
   hollow: (form?: string, n?: number) => string
   /** Player position, for `~` relative coordinates (MC's convention, ported with the chat). */
-  pos: () => { x: number; z: number }
+  pos: () => { x: number; y: number; z: number }
   /** Cross between the Wilds and the Home Plot. Owner-gated — see the `/space` row. */
   space: (to?: string) => string
   /**
@@ -334,6 +337,18 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.tp(Math.floor(x), Math.floor(z))
     },
     suggest: () => ['~'] },
+  // ★ /put (2026-09-14) — a block or a piece at coordinates, for standing a test in a headless
+  // world (the lit window wanted a pane with a lantern behind it and the blueprints had neither).
+  // Owner-only for the reason /tp is: it writes the world without a hand or a cost.
+  { name: 'put', usage: 'put <block|piece> <x> <y> <z> [rot]  (~ = here; ~ on y = your feet)', help: 'set one block or piece', owner: true,
+    run: (a, c) => {
+      if (!a[0] || !a[1] || !a[2] || !a[3]) return 'put needs an id and three coordinates'
+      const p = c.pos()
+      const x = parseCoord(a[1], p.x), y = parseCoord(a[2], p.y), z = parseCoord(a[3], p.z)
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return `not coordinates: ${a[1]} ${a[2]} ${a[3]}`
+      return c.put(a[0], Math.floor(x), Math.floor(y), Math.floor(z), a[4] ? Number(a[4]) : 0)
+    },
+    suggest: () => ['mana_lantern', 'pane_sunpetal'] },
   // ★ /goto (2026-08-08, Alex: "I wasn't able to locate the springs.. its a big map lol").
   // Bare /goto is the compass: every ruled place with distance and bearing from where you stand.
   // That half is VIEW-GRADE (this file's own rule) and gates nothing — the zones are islands in a
