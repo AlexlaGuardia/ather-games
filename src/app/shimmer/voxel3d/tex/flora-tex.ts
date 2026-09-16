@@ -453,3 +453,49 @@ export function mossPixels(size = 32, seed = 0x90a5): Uint8Array {
   }
   return data
 }
+
+/**
+ * ── ★ THE TUFT'S CAP: A CLUMP SEEN FROM ABOVE (2026-09-16) ─────────────────────────────────────
+ * Alex: *"a lot of the flora is a flat line."* Then, after the cards were tilted: *"they seem
+ * tilted now, and still flat."* Right both times, and the second read names the cause: the
+ * three cards are a fan of THIN blades, so from above each one is a row of texels however it is
+ * tilted. A tuft seen from above is not a tilted fan — it is a ROSETTE: blades radiating from
+ * the root, foreshortened into a star. So the tuft gets a second card, lying FLAT at knee height
+ * inside the fan, wearing this: blades radiating from the centre, tapered outward, curling a
+ * little, lit at the tips. From above it is the clump; from the side it is edge-on and gone,
+ * hidden in the fan. Painted around BLADE_GREEN so the ground multiplier still applies.
+ */
+export const ROSETTE_SEED = 0x70ca, ROSETTE_BLADES = 13
+export function rosettePixels(seed = ROSETTE_SEED, blades = ROSETTE_BLADES, size = BLADE_TILE): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  const rnd = lcg(seed)
+  const c = size / 2
+  const put = (x: number, y: number, shade: number, warm: number) => {
+    if (x < 0 || x >= size || y < 0 || y >= size) return
+    const o = (y * size + x) * 4
+    data[o] = Math.max(0, Math.min(255, BLADE_GREEN[0] + shade + warm))
+    data[o + 1] = Math.max(0, Math.min(255, BLADE_GREEN[1] + shade + warm * 0.7))
+    data[o + 2] = Math.max(0, Math.min(255, BLADE_GREEN[2] + shade * 0.6 - warm * 0.5))
+    data[o + 3] = 255
+  }
+  // Evenly spread with jitter, so the star has no gap and no two blades lie on one line.
+  for (let b = 0; b < blades; b++) {
+    const a0 = (b / blades) * Math.PI * 2 + (rnd() - 0.5) * 0.5
+    const len = size * (0.28 + rnd() * 0.18)
+    const curl = (rnd() - 0.5) * 0.9              // radians of bend over the blade's length
+    const baseW = 2.4 + rnd() * 1.4
+    const under = b % 2 === 0 ? -18 : 0           // every other blade sits under its neighbours
+    for (let r = size * 0.04; r < len; r += 0.5) {
+      const t = r / len
+      const a = a0 + curl * t * t
+      const x = c + Math.cos(a) * r, y = c + Math.sin(a) * r
+      const w = Math.max(1, baseW * (1 - t) + 0.4)
+      const shade = under - 10 + t * 42 + (rnd() - 0.5) * 8
+      const warm = t * t * 20
+      // A short stroke across the blade's direction, w texels wide.
+      const px = -Math.sin(a), py = Math.cos(a)
+      for (let d = -w / 2; d <= w / 2; d += 0.5) put(Math.round(x + px * d), Math.round(y + py * d), shade - (d < -w / 2 + 0.6 ? 8 : 0), warm)
+    }
+  }
+  return data
+}

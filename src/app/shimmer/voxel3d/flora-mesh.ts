@@ -17,7 +17,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, fruitClusterPixels, mossPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
+import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, fruitClusterPixels, mossPixels, rosettePixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
 import { FLORA, FRUIT_MATS } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
@@ -396,8 +396,14 @@ export interface FloraPart { w: number; h: number; yBase?: number; flat?: boolea
  * tall. No extra triangles; the meadow is still one draw per kind. The alternative (fold each card
  * into two outward-splayed halves) reads a touch better from above and doubles the tuft budget.
  * Radians. 0 for a part that must stay a true star (a bloom head, a round bush).
+ *
+ * ⚠ TRIED AT 0.4 AND TURNED OFF THE SAME NIGHT. Alex: *"they seem tilted now, and still flat."*
+ * Right: a tilted card of thin blades is still a row of texels from above — the lean moves the
+ * line, it does not fill it. The fix that works is the CAP (see `rosettePixels`): a flat card at
+ * knee height wearing the clump seen from above. The lean stays as a dial at 0 so the experiment
+ * is a number, not a memory.
  */
-export const CARD_LEAN = 0.4
+export const CARD_LEAN = 0
 const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
   p.flat ? buildFlatGeometry(p.w, p.yBase ?? 0) : buildCrossGeometry(p.w, p.h, p.yBase ?? 0, p.tiles ?? 1, p.lean ?? 0)
 
@@ -427,7 +433,9 @@ const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
  */
 export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
   // Widths chosen against the jitter so a blade can never overhang its cell (w/2 + 0.15 <= 0.5).
-  [FLORA.TUFT]: [{ w: 0.7, h: 0.55, tiles: GRASS_VARIANTS, lean: CARD_LEAN }],
+  // The tuft is a fan of three cards AND a flat rosette at knee height (2026-09-16): the rosette
+  // is what a clump looks like from above, and from the side it is edge-on inside the fan.
+  [FLORA.TUFT]: [{ w: 0.7, h: 0.55, tiles: GRASS_VARIANTS, lean: CARD_LEAN }, { w: 0.5, h: 0, yBase: 0.2, flat: true }],   // 0.5: its diagonal + the jitter must stay inside the cell
   [FLORA.TALL]: [{ w: 0.7, h: 1.05, tiles: GRASS_VARIANTS, lean: CARD_LEAN * 0.6 }],
   // ── The three flower forms (2026-09-14). `FLOWER` is the SINGLE: one stem, one big head, the
   // tallest of the three. The mat is a flat pad (leaves, then blooms over it) plus a low star so
@@ -798,6 +806,7 @@ export function createFloraRenderer(): FloraRenderer {
   const matBloomTex = toTexture(matBloomPixels(), 32)
   const matShadowTex = toTexture(matShadowPixels(), 32)
   const mossTex = toTexture(mossPixels(), 32)
+  const rosetteTex = toTexture(rosettePixels(), BLADE_TILE)
   // ★ ONE TEXTURE, TWO COLUMNS, ONE MESH: a sunfruit bush carries a few big fruit, a moonberry
   // bush many small berries — the same atlas trick the grasses use, with the column chosen by
   // MATERIAL rather than by roll (see `FRUIT_COL`). The fruit card has no per-card spread.
@@ -877,6 +886,10 @@ export function createFloraRenderer(): FloraRenderer {
   const cropHeadMat = swayMaterial(cropHeadTex, FLORA_SWAY[FLORA.CROP])
   const tipMat = swayMaterial(headTex, FLORA_SWAY[FLORA.HERB])
   const tuftMat = swayMaterial(tuftTex, FLORA_SWAY[FLORA.TUFT], GRASS_VARIANTS)
+  // The cap sways with the fan (same amp, so the outline rule holds): uv.y is its far edge, so the
+  // far blades of the rosette move with the fan's tips — the clump leans as one thing.
+  const tuftCapGeo = crossGeo(FLORA.TUFT, 1)
+  const tuftCapMat = swayMaterial(rosetteTex, FLORA_SWAY[FLORA.TUFT])
   const tallMat = swayMaterial(tallTex, FLORA_SWAY[FLORA.TALL], GRASS_VARIANTS)
   const stemMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.FLOWER])
   const headMat = swayMaterial(headTex, FLORA_SWAY[FLORA.FLOWER])
@@ -905,6 +918,8 @@ export function createFloraRenderer(): FloraRenderer {
   mossMat.emissiveIntensity = MOSS_EMISSIVE
 
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, CAP.tuft)
+  const tuftCaps = new THREE.InstancedMesh(tuftCapGeo, tuftCapMat, CAP.tuft)
+  tuftCaps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tuft * 3), 3)
   const talls = new THREE.InstancedMesh(tallGeo, tallMat, CAP.tall)
   // Slice ②: the blades take the colour of the ground under them (see GRASS_OF_GROUND).
   tufts.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tuft * 3), 3)
@@ -972,7 +987,7 @@ export function createFloraRenderer(): FloraRenderer {
   puffs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.puff * 3), 3)
   mosses.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.moss * 3), 3)
 
-  for (const m of [tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
+  for (const m of [tufts, tuftCaps, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -980,7 +995,7 @@ export function createFloraRenderer(): FloraRenderer {
   }
 
   const group = new THREE.Group()
-  group.add(tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses)
+  group.add(tufts, tuftCaps, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
   // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
@@ -1000,6 +1015,7 @@ export function createFloraRenderer(): FloraRenderer {
   }
   const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number }[] = [
     { kind: FLORA.TUFT, geo: hlAtlasGeo(tuftGeo), mat: outlineMaterial(tuftTex, FLORA_SWAY[FLORA.TUFT], GRASS_VARIANTS), grow: 1 },
+    { kind: FLORA.TUFT, geo: tuftCapGeo, mat: outlineMaterial(rosetteTex, FLORA_SWAY[FLORA.TUFT]), grow: 1 },
     { kind: FLORA.TALL, geo: hlAtlasGeo(tallGeo), mat: outlineMaterial(tallTex, FLORA_SWAY[FLORA.TALL], GRASS_VARIANTS), grow: 1 },
     { kind: FLORA.FLOWER, geo: stemGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.FLOWER]), grow: 1 },
     { kind: FLORA.FLOWER, geo: headGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.FLOWER]), grow: 1 },
@@ -1134,7 +1150,11 @@ export function createFloraRenderer(): FloraRenderer {
           }
           else if (s.kind === FLORA.TUFT) {
             wT++
-            if (nT < CAP.tuft) { tufts.setMatrixAt(nT, mtx); tufts.setColorAt(nT, grassTint(s.ground)); tuftTile.setX(nT, tileOf(s.variant)); nT++ }
+            if (nT < CAP.tuft) {
+              tufts.setMatrixAt(nT, mtx); tufts.setColorAt(nT, grassTint(s.ground)); tuftTile.setX(nT, tileOf(s.variant))
+              tuftCaps.setMatrixAt(nT, mtx); tuftCaps.setColorAt(nT, grassTint(s.ground))
+              nT++
+            }
           }
           else if (s.kind === FLORA.TALL) {
             wL++
@@ -1222,7 +1242,7 @@ export function createFloraRenderer(): FloraRenderer {
           }
         }
       }
-      tufts.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
+      tufts.count = nT; tuftCaps.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
       matLeaves.count = nM; matBlooms.count = nM; matStars.count = nM; matShadows.count = nM
       bushes.count = nB; bushHeads.count = nB
       fruitBushes.count = nFr; fruits.count = nFr
@@ -1247,6 +1267,8 @@ export function createFloraRenderer(): FloraRenderer {
         if (m.instanceColor) m.instanceColor.needsUpdate = true
       }
       tufts.instanceMatrix.needsUpdate = true
+      tuftCaps.instanceMatrix.needsUpdate = true
+      if (tuftCaps.instanceColor) tuftCaps.instanceColor.needsUpdate = true
       talls.instanceMatrix.needsUpdate = true
       tuftTile.needsUpdate = true
       tallTile.needsUpdate = true
@@ -1306,7 +1328,7 @@ export function createFloraRenderer(): FloraRenderer {
     },
     dispose() {
       for (const h of hlMeshes) { h.mesh.dispose(); (h.mat as THREE.Material).dispose() }
-      tuftGeo.dispose(); tallGeo.dispose(); stemGeo.dispose(); headGeo.dispose()
+      tuftGeo.dispose(); tuftCapGeo.dispose(); tuftCapMat.dispose(); rosetteTex.dispose(); tallGeo.dispose(); stemGeo.dispose(); headGeo.dispose()
       herbGeo.dispose(); tipGeo.dispose()
       tuftMat.dispose(); tallMat.dispose(); stemMat.dispose(); headMat.dispose()
       herbMat.dispose(); tipMat.dispose()
