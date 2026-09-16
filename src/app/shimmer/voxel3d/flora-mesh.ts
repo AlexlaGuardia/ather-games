@@ -17,7 +17,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, fruitClusterPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
+import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, fruitClusterPixels, mossPixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
 import { FLORA, FRUIT_MATS } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
@@ -53,6 +53,13 @@ const DEADFALL_COLOR = 0x6b5c47
 const SHROOM_STEM_COLOR = 0xe0d6bd
 /** Placeholder caps. Generic build vocabulary — canon names no fungus, so neither do we. */
 const SHROOM_CAPS = [0xa8503c, 0xc08a45, 0x8f6f9e, 0xb8ab86] as const
+/** The puff cluster's body — `MATERIAL_COLOR[PUFF_CLUSTER]` so the icon, the bag and the ground agree. */
+const PUFF_COLOR = MATERIAL_COLOR[MAT.PUFF_CLUSTER] ?? 0xe6dcc4
+/**
+ * How hard the moss glows. Lambert emissive is added AFTER the lights, so this is what survives
+ * the night: at 0.45 a ribbon reads at midnight and is a soft cushion by day, not a lamp.
+ */
+export const MOSS_EMISSIVE = 0.45
 
 /**
  * ── ★ THE SCATTER GEOMETRY, EXPORTED SO THE ICON WEARS THE SAME SHAPE (2026-08-26) ─────────────
@@ -86,12 +93,38 @@ export const floraShroomCapGeo = (): THREE.BufferGeometry => {
   return g
 }
 export const floraRockGeo = (): THREE.BufferGeometry => new THREE.IcosahedronGeometry(0.21, 0)
+/**
+ * A puff cluster (2026-09-16): three puffballs huddled on the ground, ONE buffer. Merged by hand
+ * (position + normal, non-indexed) rather than via a utils import, the same way `station-mesh`
+ * does it — three spheres of two subdivisions is 240 triangles, the size of a mushroom pair. Sizes
+ * differ on purpose: a huddle of equals is a pattern, a big one with two small is a family.
+ */
+export const floraPuffGeo = (): THREE.BufferGeometry => {
+  const balls: [number, number, number, number][] = [
+    [0.00, 0.13, 0.02, 0.14],
+    [-0.17, 0.09, -0.12, 0.10],
+    [0.15, 0.08, -0.14, 0.09],
+  ]
+  const pos: number[] = [], nrm: number[] = []
+  for (const [x, y, z, r] of balls) {
+    const g = new THREE.IcosahedronGeometry(r, 1).toNonIndexed()
+    g.translate(x, y, z)
+    pos.push(...(g.getAttribute('position').array as Float32Array))
+    nrm.push(...(g.getAttribute('normal').array as Float32Array))
+    g.dispose()
+  }
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3))
+  return out
+}
 
 /** The scatter's own colours, exported for the same reason the geometry is. */
 export const FLORA_COLORS = {
   deadfall: DEADFALL_COLOR,
   shroomStem: SHROOM_STEM_COLOR,
   shroomCaps: SHROOM_CAPS,
+  puff: PUFF_COLOR,
 } as const
 
 /**
@@ -134,7 +167,7 @@ export const FLORA_COLORS = {
  * over when it was 66% under. Agreement between a copy and its original is not evidence about
  * either; import this instead of restating it.
  */
-export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, fruit: 3000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000 } as const
+export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, fruit: 3000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000, puff: 2000, moss: 6000 } as const
 
 /**
  * ★★★ A POOL THAT OVERFLOWS SAYS SO — ONCE, PER POOL, WITH THE NUMBER.
@@ -395,6 +428,9 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
   // Chest-high: a stand of grain has to read as CULTIVATED, and that silhouette is what separates a
   // field from a meadow. Unit height, because the planted feed scales it per growth phase.
   [FLORA.CROP]: [{ w: 0.62, h: 1.0 }, { w: 0.42, h: 0.30, yBase: 0.72 }],
+  // Glow-moss is a pad and only a pad (2026-09-16): no blooms, no side star, and no contact
+  // shadow — a thing that lights the ground does not darken it. The whole plant is one flat card.
+  [FLORA.MOSS]: [{ w: 0.98, h: 0, yBase: 0.05, flat: true }],
 }
 
 /**
@@ -413,6 +449,7 @@ export const FLORA_SWAY: Record<number, number> = {
   [FLORA.FRUIT]: 0.05,
   [FLORA.HERB]: 0.1,
   [FLORA.CROP]: 0.08,
+  [FLORA.MOSS]: 0.01,         // a cushion on the ground; the sway is only so the program compiles alike
 }
 
 /**
@@ -433,6 +470,8 @@ export const FLORA_PLACE: Record<number, { root: number; jitter: number }> = {
   [FLORA.ROCK]: { root: 1.06, jitter: 0.5 },
   [FLORA.DEADFALL]: { root: 1.12, jitter: 0 },
   [FLORA.MUSHROOM]: { root: 0.99, jitter: 0.55 },
+  [FLORA.PUFF]: { root: 0.99, jitter: 0.4 },
+  [FLORA.MOSS]: { root: 0.97, jitter: 0.04 },        // covers its cell, like a bloom mat
 }
 
 /** A stalk's height roll. Y only — a wider blade would thin the texture, not grow the plant. */
@@ -467,12 +506,12 @@ export function floraMatrix(
     off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
     const sz = floraScatterScale(variant)
     scl.set(sz, sz * 0.75, sz)    // squat: a stone lies ON the ground, it does not stand
-  } else if (kind === FLORA.MUSHROOM) {
+  } else if (kind === FLORA.MUSHROOM || kind === FLORA.PUFF) {
     quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
     off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
     const sz = floraScatterScale(variant)
     scl.set(sz, sz, sz)
-  } else if (kind === FLORA.BLOOM_MAT) {
+  } else if (kind === FLORA.BLOOM_MAT || kind === FLORA.MOSS) {
     // A pad has no height to roll; a quarter-turn is enough variety and keeps its square on the cell.
     off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
     quat.setFromAxisAngle(Y_UP, Math.floor(variant * 4) * (Math.PI / 2))
@@ -516,6 +555,7 @@ function vertsFor(kind: number): Float32Array[] {
     partVerts.set(FLORA.ROCK, [grab(floraRockGeo())])
     partVerts.set(FLORA.DEADFALL, [grab(floraLogGeo())])
     partVerts.set(FLORA.MUSHROOM, [grab(floraShroomStemGeo()), grab(floraShroomCapGeo())])
+    partVerts.set(FLORA.PUFF, [grab(floraPuffGeo())])
   }
   return partVerts.get(kind) ?? []
 }
@@ -728,6 +768,7 @@ export function createFloraRenderer(): FloraRenderer {
   const matLeafTex = toTexture(matLeafPixels(), 32)
   const matBloomTex = toTexture(matBloomPixels(), 32)
   const matShadowTex = toTexture(matShadowPixels(), 32)
+  const mossTex = toTexture(mossPixels(), 32)
   // ★ ONE TEXTURE, TWO COLUMNS, ONE MESH: a sunfruit bush carries a few big fruit, a moonberry
   // bush many small berries — the same atlas trick the grasses use, with the column chosen by
   // MATERIAL rather than by roll (see `FRUIT_COL`). The fruit card has no per-card spread.
@@ -791,6 +832,8 @@ export function createFloraRenderer(): FloraRenderer {
   const logMat = solidMaterial()
   const shroomStemMat = solidMaterial()
   const shroomCapMat = solidMaterial()
+  const puffGeo = floraPuffGeo()
+  const puffMat = solidMaterial()
 
   const herbMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.HERB])
   // Sway a touch stiffer than a herb: a laden crop is heavier and a field that ripples like grass
@@ -819,6 +862,14 @@ export function createFloraRenderer(): FloraRenderer {
   const bushHeadMat = swayMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_BUSH])
   const fruitBushMat = swayMaterial(bushTex, FLORA_SWAY[FLORA.FRUIT])
   const fruitMat = swayMaterial(fruitTex, FLORA_SWAY[FLORA.FRUIT], FRUIT_MATS.length)
+  // ★ THE ONE FLORA MATERIAL THAT GLOWS. The pad is painted near-white and the tint is the moss
+  // colour, so the emissive is that same colour scaled — one row in `MATERIAL_COLOR` drives the
+  // day look, the night glow and the item icon. The block behind it carries the light channel
+  // that actually lights the ground (registry `emit`); this is the plant's own body lit from within.
+  const mossGeo = crossGeo(FLORA.MOSS)
+  const mossMat = swayMaterial(mossTex, FLORA_SWAY[FLORA.MOSS])
+  mossMat.emissive = new THREE.Color(MATERIAL_COLOR[MAT.GLOW_MOSS] ?? 0x7fe0b8)
+  mossMat.emissiveIntensity = MOSS_EMISSIVE
 
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, CAP.tuft)
   const talls = new THREE.InstancedMesh(tallGeo, tallMat, CAP.tall)
@@ -881,8 +932,14 @@ export function createFloraRenderer(): FloraRenderer {
   logs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.log * 3), 3)
   shroomStems.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
   shroomCaps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
+  // The forage (2026-09-16). A puff is tinted per instance so a huddle is not four identical
+  // creams; the moss takes its colour as a tint over the near-white pad, like a bloom head.
+  const puffs = new THREE.InstancedMesh(puffGeo, puffMat, CAP.puff)
+  const mosses = new THREE.InstancedMesh(mossGeo, mossMat, CAP.moss)
+  puffs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.puff * 3), 3)
+  mosses.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.moss * 3), 3)
 
-  for (const m of [tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps]) {
+  for (const m of [tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -890,7 +947,7 @@ export function createFloraRenderer(): FloraRenderer {
   }
 
   const group = new THREE.Group()
-  group.add(tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps)
+  group.add(tufts, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
   // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
@@ -929,6 +986,8 @@ export function createFloraRenderer(): FloraRenderer {
     { kind: FLORA.DEADFALL, geo: logGeo, mat: outlineHullMaterial(), grow: 1.1 },
     { kind: FLORA.MUSHROOM, geo: shroomStemGeo, mat: outlineHullMaterial(), grow: 1.12 },
     { kind: FLORA.MUSHROOM, geo: shroomCapGeo, mat: outlineHullMaterial(), grow: 1.12 },
+    { kind: FLORA.PUFF, geo: puffGeo, mat: outlineHullMaterial(), grow: 1.12 },
+    { kind: FLORA.MOSS, geo: mossGeo, mat: outlineMaterial(mossTex, FLORA_SWAY[FLORA.MOSS]), grow: 1 },
   ]
   const hlMeshes = hlDefs.map(d => {
     const im = new THREE.InstancedMesh(d.geo, d.mat, 1)
@@ -997,11 +1056,11 @@ export function createFloraRenderer(): FloraRenderer {
   return {
     group,
     sync(cols, seed, probe) {
-      let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0
+      let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0
       // ⚠ WANTED IS COUNTED SEPARATELY FROM DRAWN, and that separation is the whole instrument.
       // The `n*` counters stop at the cap by construction, so they can never report an overrun —
       // they are the truncated number. These count what the world ASKED for.
-      let wT = 0, wL = 0, wF = 0, wM = 0, wB = 0, wFr = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0
+      let wT = 0, wL = 0, wF = 0, wM = 0, wB = 0, wFr = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0, wP = 0, wMo = 0
       for (const c of cols) {
         for (const s of spotsFor(c.key, c.x0, c.z0, seed, probe)) {
           // ★ ONE PLACEMENT DERIVATION, SHARED WITH THE RETICLE'S OUTLINE. Jitter, turn, root
@@ -1014,8 +1073,17 @@ export function createFloraRenderer(): FloraRenderer {
           // which is the pebble bug rebuilt in the renderer after the field went to the trouble of
           // avoiding it. A STONE may turn freely (it has no axis) but must be scaled on all three,
           // not stretched vertically into a menhir.
-          if (s.kind === FLORA.ROCK || s.kind === FLORA.DEADFALL || s.kind === FLORA.MUSHROOM) {
-            if (s.kind === FLORA.DEADFALL) {
+          if (s.kind === FLORA.ROCK || s.kind === FLORA.DEADFALL || s.kind === FLORA.MUSHROOM || s.kind === FLORA.PUFF) {
+            if (s.kind === FLORA.PUFF) {
+              wP++
+              if (nP < CAP.puff) {
+                puffs.setMatrixAt(nP, mtx)
+                // A hair of warmth or cool per cluster, off the variant, so a patch is not one cream.
+                const k = 0.92 + ((s.variant * 431.3) % 1) * 0.12
+                puffs.setColorAt(nP, tint.set(PUFF_COLOR).multiplyScalar(k))
+                nP++
+              }
+            } else if (s.kind === FLORA.DEADFALL) {
               wG++
               if (nG < CAP.log) { logs.setMatrixAt(nG, mtx); logs.setColorAt(nG, tint.set(DEADFALL_COLOR)); nG++ }
             } else if (s.kind === FLORA.ROCK) {
@@ -1062,6 +1130,14 @@ export function createFloraRenderer(): FloraRenderer {
               herbs.setColorAt(nH, tint.set(MATERIAL_COLOR[s.mat] ?? 0x6f8f4a))
               tips.setColorAt(nH, tint.set(HERB_TIP[s.mat] ?? 0xffffff))
               nH++
+            }
+          }
+          else if (s.kind === FLORA.MOSS) {
+            wMo++
+            if (nMo < CAP.moss) {
+              mosses.setMatrixAt(nMo, mtx)
+              mosses.setColorAt(nMo, tint.set(MATERIAL_COLOR[s.mat] ?? 0x7fe0b8))
+              nMo++
             }
           }
           else if (s.kind === FLORA.BLOOM_MAT) {
@@ -1126,12 +1202,14 @@ export function createFloraRenderer(): FloraRenderer {
         ['mat', wM, CAP.mat], ['bush', wB, CAP.bush], ['fruit', wFr, CAP.fruit],
         ['herb', wH, CAP.herb], ['crop', wC, CAP.crop],
         ['rock', wR, CAP.rock], ['log', wG, CAP.log], ['shroom', wS, CAP.shroom],
+        ['puff', wP, CAP.puff], ['moss', wMo, CAP.moss],
       ] as [string, number, number][]) {
         floraDemand[pool] = { wanted, cap }
         if (wanted > cap) noteOverflow(pool, wanted, cap)
       }
       rocks.count = nR; logs.count = nG; shroomStems.count = nS; shroomCaps.count = nS
-      for (const m of [rocks, logs, shroomStems, shroomCaps]) {
+      puffs.count = nP; mosses.count = nMo
+      for (const m of [rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
         m.instanceMatrix.needsUpdate = true
         if (m.instanceColor) m.instanceColor.needsUpdate = true
       }
@@ -1204,9 +1282,9 @@ export function createFloraRenderer(): FloraRenderer {
       // its plant's, which is disposed above.
       for (const h of hlMeshes) if (h.kind === FLORA.TUFT || h.kind === FLORA.TALL) h.geo.dispose()
       // The flower forms (2026-09-14/15): geometry, material, texture — same three each.
-      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, fruitGeo]) g.dispose()
-      for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat]) m.dispose()
-      for (const t of [bushTex, clusterTex, matLeafTex, matBloomTex, matShadowTex, fruitTex]) t.dispose()
+      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, fruitGeo, mossGeo, puffGeo]) g.dispose()
+      for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat, mossMat, puffMat]) m.dispose()
+      for (const t of [bushTex, clusterTex, matLeafTex, matBloomTex, matShadowTex, fruitTex, mossTex]) t.dispose()
     },
   }
 }

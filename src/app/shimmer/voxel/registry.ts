@@ -478,6 +478,16 @@ export const BLOCKS: BlockDef[] = [
   { noSlab: true, material: MAT.SUNFRUIT_BUSH, name: 'Sunfruit Bush', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'sunfruit', count: 2 }], fastSkill: 'farming', placeable: false },
   { noSlab: true, material: MAT.MOONBERRY_BUSH, name: 'Moonberry Bush', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'moonberry', count: 2 }], fastSkill: 'farming', placeable: false },
 
+  // ── ★ THE WILD FORAGE (2026-09-16) — canon's alchemy undergrowth, `world/flora.md` ──────────
+  // A puff cluster is *"released spores when disturbed"*, so picking it IS the disturbance and the
+  // spores are the drop (canon: *"base for many potions"*). Glow-moss is *"bioluminescent ground
+  // cover, marks paths at night"* — so it EMITS (the one plant with a light channel; dimmer than a
+  // waymark's 7, enough to read the ground beside it after dark) and drops itself for the mana
+  // potions canon points it at. Both NOT placeable, for the fruit bushes' reason: the drop is the
+  // ingredient, and the plant is met where it grows (`flora.ts` › `forageAt`).
+  { noSlab: true, material: MAT.PUFF_CLUSTER, name: 'Puff Cluster', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'puff_spores', count: 2 }], fastSkill: 'farming', placeable: false },
+  { noSlab: true, material: MAT.GLOW_MOSS, name: 'Glow-moss', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'glow_moss', count: 1 }], fastSkill: 'farming', placeable: false, emit: 4 },
+
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — a ground grows a PLANT ────────────────────────────
   // RULED (/magii): the grass-tuft ruling and these were never in tension. Canon had already drawn
   // the line the herbs have used since 08-18 — *a tuft yields a SEED, a ground grows a PLANT* — so

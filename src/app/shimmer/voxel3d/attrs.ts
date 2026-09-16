@@ -246,6 +246,13 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // fruit glows warm, and the leaves catch it), a moonberry bush a cool blue-green (low light).
   [MAT.SUNFRUIT_BUSH]: 0x7fb448,
   [MAT.MOONBERRY_BUSH]: 0x62a892,
+  // ── ★ THE WILD FORAGE (2026-09-16) — read off canon's line for each ────────────────────────
+  // A puff cluster is a pale fungal thing on a forest floor: bone-cream, warmed a touch so it is
+  // not a stone. Glow-moss is the moss colour with the light IN it — a cool luminous green-teal,
+  // the same family as the mana lantern's spill so a glowing path and a lit doorway read as one
+  // light. Both feed the item icon and the renderer's tint from this one row.
+  [MAT.PUFF_CLUSTER]: 0xe6dcc4,
+  [MAT.GLOW_MOSS]: 0x7fe0b8,
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — read the plant, not the lookup ────────────────────
   // Same discipline as the herbs directly above: each colour is derived from what canon and the
   // item text say the thing IS, not picked to fill a palette slot. These are STALK/BODY colours;

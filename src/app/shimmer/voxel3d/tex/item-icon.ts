@@ -31,7 +31,7 @@ import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
 import { meshIcon, hasMeshIcon, pieceIcon } from './mesh-icon'
 import { pieceForItem } from '../../voxel/pieces'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
-import { leafPixels, bladePixels, tallBladePixels, TALL_TILE_H, headPixels, HEAD_TINTS, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
+import { leafPixels, bladePixels, tallBladePixels, TALL_TILE_H, headPixels, mossPixels, HEAD_TINTS, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
 import { isPlant, isSapling, isGlassMat, MAT } from '../../voxel/depth'
 const rgbOf3 = (hex: number): [number, number, number] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255]
@@ -361,6 +361,9 @@ const FLORA: Record<string, { pixels: () => Uint8Array; src: number; srcH?: numb
   // The heads are painted white so a tint carries the whole hue; the icon takes the first bloom
   // colour rather than inventing one, so it is a flower the world actually grows.
   wild_flower: { pixels: () => headPixels(8), src: 8, tint: HEAD_TINTS[3] },
+  // Glow-moss (2026-09-16): the pad the world lays on the ground, tinted from the same row the
+  // renderer and the block read — one colour, three places, by construction.
+  glow_moss: { pixels: () => mossPixels(32), src: 32, tint: MATERIAL_COLOR[MAT.GLOW_MOSS] },
 }
 
 /** Nearest-neighbour scale an RGBA tile to `size`, flipping it upright, with an optional tint. */

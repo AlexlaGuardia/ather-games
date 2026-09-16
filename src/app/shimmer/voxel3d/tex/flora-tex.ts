@@ -411,3 +411,45 @@ export function fruitClusterPixels(size = 32, seed = 0xf7a1, fruit = 5, radius =
   }
   return data
 }
+
+/**
+ * Glow-moss pad, drawn FLAT on the ground (2026-09-16): a cushion of tiny overlapping tufts with a
+ * ragged round rim, painted WHITE-ish so the material's tint carries the whole hue — the same deal
+ * the bloom heads make. The moss is mostly mid-tone with a scatter of brighter beads, which is the
+ * half of "bioluminescent" the texture can do; the material's emissive does the other half.
+ * Cutout alpha, like the leaf pad.
+ */
+export function mossPixels(size = 32, seed = 0x90a5): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  const rnd = lcg(seed)
+  const c = (size - 1) / 2
+  // A dense field of small tufts so the pad reads as a cushion, not as leaves.
+  for (let t = 0; t < 120; t++) {
+    const tx = rnd() * size, ty = rnd() * size, r = size * (0.05 + rnd() * 0.05)
+    const tone = 150 + rnd() * 50
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      if (Math.hypot(x + 0.5 - tx, y + 0.5 - ty) > r) continue
+      const o = (y * size + x) * 4
+      const v = Math.max(0, Math.min(255, tone + (rnd() - 0.5) * 14))
+      data[o] = v; data[o + 1] = v; data[o + 2] = v; data[o + 3] = 255
+    }
+  }
+  // The beads: a few full-white points, the ones that catch first at dusk.
+  for (let b = 0; b < 14; b++) {
+    const bx = Math.floor(rnd() * size), by = Math.floor(rnd() * size)
+    const o = (by * size + bx) * 4
+    if (!data[o + 3]) continue
+    data[o] = 255; data[o + 1] = 255; data[o + 2] = 255
+  }
+  // Round it and chew the rim, as the leaf pad does; the rim darkens toward the ground.
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - c, y - c) / (size / 2)
+    const o = (y * size + x) * 4
+    if (d > 1.0 || (d > 0.88 && rnd() < 0.5)) { data[o + 3] = 0; continue }
+    if (d > 0.72 && data[o + 3]) {
+      const k = 1 - (d - 0.72) / 0.28 * 0.4
+      data[o] = data[o] * k; data[o + 1] = data[o + 1] * k; data[o + 2] = data[o + 2] * k
+    }
+  }
+  return data
+}

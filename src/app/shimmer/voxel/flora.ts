@@ -67,6 +67,14 @@ export const FLORA = {
   // fruit bush stands here", and WHICH fruit is the material. A swaying alpha card on the bush
   // form, so it joins the tuft/tall/flower/herb family, not the solid scatter one.
   FRUIT: 11,
+
+  // ── ★ THE WILD FORAGE (2026-09-16) — two kinds, two families, one material each ──────────────
+  // A PUFF cluster is a huddle of round puffballs: closed solids, no sway, so it joins the
+  // rock/log/mushroom family (`flora-mesh` gives it geometry and the hull outline). GLOW-MOSS is a
+  // pad lying on the ground like a bloom mat, so it joins the card family — but it is the one
+  // card that EMITS: its material glows, and the block behind it carries a light channel.
+  PUFF: 12,
+  MOSS: 13,
 } as const
 
 /** The three renderer kinds a wildflower cell can draw as. */
@@ -275,6 +283,58 @@ export function fruitAt(x: number, z: number, seed: number, ground: BiomeId): nu
   if (roll > FRUIT_DENSITY) return 0
   if (greyness(x, z, seed) >= 0.35) return 0
   return value2(x / FRUIT_SCALE, z / FRUIT_SCALE, seed ^ 0x5a1c9) > FRUIT_EDGE ? fruit : 0
+}
+
+// ── ★ THE WILD FORAGE AND ITS GROUND (2026-09-16, a build call — canon names the plant, not the place)
+// `world/flora.md` › *Undergrowth*: a puff cluster is undergrowth that *"releases spores when
+// disturbed"*, glow-moss is *"bioluminescent ground cover, marks paths at night"*. Neither line
+// names a ground, so it is read off the description the way the fruit's was:
+//
+//   Puff cluster → woodland, basin    a puffball is damp shade and leaf litter — the forest floor,
+//                                     and the low sheltered ground the mist pools in
+//   Glow-moss    → woodland, shore    it glows where the dark is: under the canopy, and along the
+//                                     damp margin where the water arrives and withdraws
+//
+// ★ THE MOSS GROWS IN LINES, NOT PATCHES, AND THAT IS THE CANON LINE MADE MECHANICAL. *"Marks paths
+// at night"* is a shape: a thin winding band through the dark, not a blob. So its field is a
+// CONTOUR — cells where a low-frequency value sits within a hair of a level — which draws as a
+// wandering ribbon a cell or two wide. Walk it after dark and it is a path. Puffballs clump the
+// way mushrooms do: a patch field at its own scale, dense inside, nothing outside.
+export const FORAGE_OF_GROUND: Readonly<Record<string, readonly number[]>> = {
+  woodland: [MAT.PUFF_CLUSTER, MAT.GLOW_MOSS],
+  basin: [MAT.PUFF_CLUSTER],
+  shore: [MAT.GLOW_MOSS],
+}
+/** The distinct forage materials — what `FLORA_MATERIALS` and the kind count are sized by. */
+export const FORAGE_MATS: ReadonlyArray<number> = [...new Set(Object.values(FORAGE_OF_GROUND).flat())]
+export const PUFF_SCALE = 70
+export const PUFF_EDGE = 0.78
+export const PUFF_DENSITY = 0.09
+export const MOSS_SCALE = 48
+/** The level the ribbon follows. ⚠ NOT 0.5: value noise piles up at its midpoint, so the 0.5
+ *  contour is the commonest line in the field (measured 5% of the woodland at 0.025); 0.62 sits
+ *  on the shoulders of the field's hills, where a contour is a rarer, longer wander. */
+export const MOSS_LEVEL = 0.62
+/** Half-width of the contour band, in field units. 0.012 ≈ a ribbon one to two cells wide. */
+export const MOSS_BAND = 0.012
+export const MOSS_DENSITY = 0.6
+
+export function forageAt(x: number, z: number, seed: number, ground: BiomeId): number {
+  const here = FORAGE_OF_GROUND[ground]
+  if (!here) return 0
+  // ⚠ A GREYFIELD GROWS NONE — canon, the herbs' rule, and the fringe greys before the label flips.
+  if (greyness(x, z, seed) >= 0.35) return 0
+  // The moss is asked first: it is the rarer shape (a ribbon is a small share of any ground) and
+  // the one whose continuity a displaced cell would break. A puffball can sit anywhere in its patch.
+  if (here.includes(MAT.GLOW_MOSS)) {
+    const v = value2(x / MOSS_SCALE, z / MOSS_SCALE, seed ^ 0x910c)
+    if (Math.abs(v - MOSS_LEVEL) < MOSS_BAND && hash01(x, z, seed ^ 0x3a55) < MOSS_DENSITY) return MAT.GLOW_MOSS
+  }
+  if (here.includes(MAT.PUFF_CLUSTER)) {
+    if (hash01(x, z, seed ^ 0x7f0b) > PUFF_DENSITY) return 0
+    if (value2(x / PUFF_SCALE, z / PUFF_SCALE, seed ^ 0x44e1) > PUFF_EDGE) return MAT.PUFF_CLUSTER
+  }
+  return 0
 }
 
 // ── ★★ THE SEVEN TIER-2+ CROPS AND THEIR GROUND (ruled 2026-08-22, /magii + Alex) ──────────────
@@ -563,6 +623,14 @@ export function plantMaterialAt(x: number, z: number, seed: number, ground?: Bio
     const fruit = fruitAt(x, z, seed, ground)
     if (fruit) return fruit
 
+    // ── ★ THE FORAGE SITS BELOW THE FRUIT AND ABOVE SCATTER (2026-09-16) ──────────────────────
+    // Same rule again — order by what breaks when the cell is lost. Nothing in the potion table
+    // takes a spore or a moss yet (canon points them at bases and mana potions; the recipes are
+    // Jin's and pending), so they yield to every ingredient a brew already needs, and take their
+    // cell from a stone, a log or a tuft.
+    const forage = forageAt(x, z, seed, ground)
+    if (forage) return forage
+
   // ── ★★ SCATTER SITS BELOW THE HERB AND ABOVE THE GRASS (2026-08-19, slice ③) ─────────────────
   // BELOW the herb, and that ordering is load-bearing far past looks: the four element herbs'
   // densities were compensated per-ground against a MEASURED land share, so anything that wins
@@ -621,6 +689,8 @@ export function plantVariant(x: number, z: number, seed: number, kind: number): 
   const salt = kind === FLORA.HERB ? 0x4e2b
     : kind === FLORA.CROP ? 0x2c19
     : kind === FLORA.FRUIT ? 0x6f2a
+    : kind === FLORA.PUFF ? 0x5d07
+    : kind === FLORA.MOSS ? 0x1e33
     : isFlowerKind(kind) ? 0x77e : kind === FLORA.TUFT ? 0x3b1 : 0x9c5
   return hash01(x, z, seed ^ salt)
 }
@@ -647,6 +717,7 @@ export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
   ...Object.values(HERB_OF_GROUND),              // FLORA.HERB — derived, one per ruled ground
   ...Object.values(CROP_OF_GROUND),              // FLORA.CROP — derived, one per crop's ruled ground
   ...FRUIT_MATS,                                 // FLORA.FRUIT — derived, one per fruit (2026-09-15)
+  ...FORAGE_MATS,                                // FLORA.PUFF / MOSS — derived, one each (2026-09-16)
   MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,    // SCATTER.ROCK / DEADFALL / MUSHROOM — solid
 ])
 
@@ -667,6 +738,7 @@ export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
 export const FLORA_DRAW_ONLY_KINDS = 2                // BLOOM_MAT, BLOOM_BUSH — forms of FLOWER
 export const FLORA_KIND_COUNT =
   (Object.keys(FLORA).length - 4)            // every FLORA kind except NONE, HERB, CROP and FRUIT...
+                                             // (PUFF and MOSS are one material each and count as themselves)
   - FLORA_DRAW_ONLY_KINDS                    // ...minus the forms that share FLOWER's material
   + Object.keys(HERB_OF_GROUND).length       // ...HERB expands to one material per ruled ground
   + Object.keys(CROP_OF_GROUND).length       // ...CROP to one per crop's ground (2026-08-22)

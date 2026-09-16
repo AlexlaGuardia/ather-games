@@ -22,7 +22,7 @@
 // factories). Nothing here touches a renderer or a GL context, which is why it runs under node.
 
 import * as THREE from 'three'
-import { floraLogGeo, floraShroomStemGeo, floraShroomCapGeo, FLORA_COLORS } from '../flora-mesh'
+import { floraLogGeo, floraShroomStemGeo, floraShroomCapGeo, floraPuffGeo, FLORA_COLORS } from '../flora-mesh'
 import { MAT } from '../../voxel/depth'
 import { pieceGeometry, pieceTint } from '../piece-mesh'
 import type { PieceDef } from '../../voxel/pieces'
@@ -49,6 +49,8 @@ const MESH_PARTS: Record<number, () => Part[]> = {
     { geo: floraShroomStemGeo(), color: FLORA_COLORS.shroomStem },
     { geo: floraShroomCapGeo(), color: FLORA_COLORS.shroomCaps[0] },
   ],
+  // The puff cluster is ONE merged buffer in the world, so it is one part here (2026-09-16).
+  [MAT.PUFF_CLUSTER]: () => [{ geo: floraPuffGeo(), color: FLORA_COLORS.puff }],
 }
 
 export const hasMeshIcon = (material: number | undefined): boolean =>

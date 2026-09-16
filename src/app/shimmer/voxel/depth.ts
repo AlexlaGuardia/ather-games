@@ -130,10 +130,22 @@ export const FRUIT_MIN = 108
 export const FRUIT_MAX = 109
 export const isFruit = (m: number): boolean => m >= FRUIT_MIN && m <= FRUIT_MAX
 
+/**
+ * The wild FORAGE (2026-09-16) — canon's own alchemy undergrowth from `world/flora.md` › *Flora in
+ * Alchemy*: a puff cluster (*"release spores when disturbed, used in Alchemy"* → puff spores, *"base
+ * for many potions"*) and glow-moss (*"bioluminescent ground cover, marks paths at night"* → mana
+ * potions). A sixth plant range, after the kiln; `isPlant` answers for it.
+ *
+ * ⚠ KEEP 111-112 CONTIGUOUS — the next forage (shelf fungi → shelf slices) goes at 113.
+ */
+export const FORAGE_MIN = 111
+export const FORAGE_MAX = 112
+export const isForage = (m: number): boolean => m >= FORAGE_MIN && m <= FORAGE_MAX
+
 export const isPlant = (m: number): boolean =>
   (m >= PLANT_MIN && m <= PLANT_MAX) || (m >= HERB_MIN && m <= HERB_MAX)
   || (m >= SCATTER_MIN && m <= SCATTER_MAX) || (m >= CROP_MIN && m <= CROP_MAX)
-  || (m >= FRUIT_MIN && m <= FRUIT_MAX)
+  || (m >= FRUIT_MIN && m <= FRUIT_MAX) || (m >= FORAGE_MIN && m <= FORAGE_MAX)
 
 /**
  * Saplings, as a contiguous range — the same shape `isPlant` uses, and for the same reason: the
@@ -717,6 +729,17 @@ export const MAT = {
    * the next free id when it comes. ⚠ NEVER GENERATED, only placed. No fuel state, always warm.
    */
   KILN: 110,
+  /**
+   * ── ★ THE WILD FORAGE (2026-09-16, Alex: "start on puff clusters and glow-moss") ──────────────
+   * The two alchemy undergrowths canon names in `world/flora.md` › *Undergrowth* / *Flora in
+   * Alchemy* and nothing in this world grew. Both are picked, not placed (the drop is the spore /
+   * the moss, and a spore set on the ground is not a cluster). See `flora.ts` › `forageAt` for the
+   * ground each takes and why; `FORAGE_MIN..MAX` above is the range `isPlant` answers for.
+   * ⚠ GLOW_MOSS EMITS (registry `emit`) — it is the one plant that lights the ground around it, and
+   * that is canon's *"marks paths at night"* made mechanical rather than a render-only glow.
+   */
+  PUFF_CLUSTER: 111,
+  GLOW_MOSS: 112,
 } as const
 
 /**

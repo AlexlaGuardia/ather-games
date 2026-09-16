@@ -274,6 +274,9 @@ export const ITEMS: ItemDef[] = [
   // --- Gathering Resources (Tier 1) ---
   // Forestry
   { id: 'goldwood_plank', name: 'Goldwood Plank', type: 'resource', rarity: 'common', description: 'Light, warm-toned wood. Easy to work with.', stackable: true, maxStack: 50, sellPrice: 3, tradeable: true },
+  // ── the wild forage (2026-09-16) — canon's alchemy undergrowth, `world/flora.md` › Flora in Alchemy
+  { id: 'puff_spores', name: 'Puff Spores', type: 'resource', rarity: 'common', description: 'A pinch of pale spores shaken from a puff cluster. A base for many potions.', stackable: true, maxStack: 50, sellPrice: 2, tradeable: true },
+  { id: 'glow_moss', name: 'Glow-moss', type: 'resource', rarity: 'common', description: 'A soft tuft of moss that keeps its own faint light. Marks a path at night.', stackable: true, maxStack: 50, sellPrice: 3, tradeable: true },
   { id: 'goldwood_bark', name: 'Goldwood Bark', type: 'resource', rarity: 'common', description: 'Papery golden bark, mildly aromatic.', stackable: true, maxStack: 50, sellPrice: 2, tradeable: true },
   // Prospecting
   { id: 'raw_mana_shard', name: 'Raw Mana Shard', type: 'resource', rarity: 'common', description: 'Common, unrefined crystal. The foundation of every potion.', stackable: true, maxStack: 50, sellPrice: 5, tradeable: true },
