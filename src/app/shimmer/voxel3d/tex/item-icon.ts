@@ -36,6 +36,8 @@ import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
 import { isPlant, isSapling, isGlassMat, MAT } from '../../voxel/depth'
 const rgbOf3 = (hex: number): [number, number, number] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255]
 import { MATERIAL_COLOR } from '../attrs'
+import { POTION_DEFS } from '../../engine/alchemy'
+import { roadOf } from '../alchemy-chain'
 
 /** Icon edge in CSS pixels. Small enough to stay crisp, large enough for the cube to read. */
 const ICON = 48
@@ -492,6 +494,16 @@ export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
 // ── the intermediates' icons ─────────────────────────────────────────────────────────────────────
 /** The ingredient (or potion) an intermediate id was made from, or null for anything else. */
 export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 'base' | 'loaf' | 'roast'; source: string } | null {
+  // ★ THE ROAD'S STAGES (09-16): `stage_<potion>_<k>` is the batch after step k — drawn as the
+  // step's shape (a mound for ground, a phial for distilled, a bowl for mixed) in the tint of the
+  // potion's first ingredient, so a Mana Infusion ground still reads as the crystal it came from.
+  const stage = /^stage_(.+)_(\d+)$/.exec(itemId)
+  if (stage) {
+    const def = POTION_DEFS[stage[1]]
+    const step = roadOf(stage[1])[Number(stage[2]) - 1]
+    const source = def?.recipe[0]?.itemId ?? stage[1]
+    return { kind: step === 'grind' ? 'powder' : step === 'distil' ? 'extract' : 'base', source }
+  }
   if (itemId.startsWith('powder_')) return { kind: 'powder', source: itemId.slice(7) }
   if (itemId.startsWith('extract_')) return { kind: 'extract', source: itemId.slice(8) }
   if (itemId.startsWith('base_')) return { kind: 'base', source: itemId.slice(5) }

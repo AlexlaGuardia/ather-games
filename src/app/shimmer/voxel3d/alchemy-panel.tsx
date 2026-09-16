@@ -21,7 +21,7 @@ import type { StationJob, Workshop } from '../voxel/workshop'
 import {
   ALCHEMY_STATIONS, alchemyStationRecipes, alchemyRecipe, alchemyRunsReady, alchemyRunProgress,
   alchemySecondsToNext, alchemyMaxRuns, alchemyJobCost, alchemyLoadJob, alchemyCollect, alchemyBusy,
-  routeOf, type AlchemyStationId, type AlchemyRecipe,
+  routeOf, jobOf, JOB_LINE, type AlchemyStationId, type AlchemyRecipe,
 } from './alchemy-chain'
 import type { OpenStation } from './VoxelWorld'
 
@@ -95,7 +95,9 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
 
   const busy = alchemyBusy(job)
   const rows = alchemyStationRecipes(st.kind)
-  const potionId = (rec: AlchemyRecipe) => rec.id.startsWith('finish:') ? rec.id.slice(7) : rec.id.startsWith('mix:') ? rec.id.slice(4) : null
+  // Every road row and every finish names its potion (09-16); the cook rows name none.
+  const potionId = (rec: AlchemyRecipe) => rec.potionId ?? null
+  const isPour = (rec: AlchemyRecipe | undefined) => !!rec && rec.id.startsWith('finish:')
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
@@ -121,11 +123,13 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
               <span className="text-white/40 tabular-nums">
                 {ready > 0 ? `${ready * r.output.count}× ${ops.label(r.output.itemId)} waiting` : `${alchemySecondsToNext(job, now)}s to the next`}
               </span>
+              {/* ★ THE POUR (ruled 09-16): the liquid leaves the cauldron into its vessel and takes its
+                  word — the reward moment. Every other station's run is simply taken. */}
               <button disabled={ready <= 0} onClick={doTake}
                       className={`px-2.5 py-1 rounded border transition-colors ${
                         ready > 0 ? 'border-amber-200/50 text-amber-100/90 hover:bg-amber-200/10'
                                   : 'border-white/5 text-white/25 cursor-not-allowed'}`}>
-                take
+                {isPour(r) ? 'pour' : 'take'}
               </button>
             </div>
           </div>
@@ -165,7 +169,14 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
                 </div>
                 {route && (
                   <div className="mt-0.5 text-white/25">
-                    {route.map(s => ALCHEMY_STATIONS[s].name.toLowerCase()).join(' → ')}
+                    {/* The whole road, this station's step lit, the pour at the end — always. */}
+                    {route.map((s, i) => (
+                      <span key={i} className={s === st.kind ? 'text-amber-100/70' : ''}>
+                        {i > 0 ? ' → ' : ''}{ALCHEMY_STATIONS[s].name.toLowerCase()}
+                      </span>
+                    ))}
+                    <span> → pour</span>
+                    {pid && jobOf(pid) && <span className="ml-2 text-white/20">· {JOB_LINE[jobOf(pid)!]}</span>}
                   </div>
                 )}
                 {!locked && !busy && (
