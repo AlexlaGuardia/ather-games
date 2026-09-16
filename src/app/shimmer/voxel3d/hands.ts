@@ -46,8 +46,11 @@ export const HANDS_ORDER = 1000
  * toward the centre: yaw turns the fingers inward (−x), pitch lifts them (+y), roll turns the back
  * of the glove to the lens. The elbow end is nearest the camera and biggest, as it should be.
  */
-export const REST = { x: 0.20, y: -0.25, z: -0.56, yaw: -0.85, pitch: 0.62, roll: 0.35 } as const
-export const LEFT_REST = { x: -0.22, y: -0.60, z: -0.54, up: 0.42 } as const
+// ⚠ YAW SIGN (Alex, 09-16: "the hand is facing the wrong direction"): a NEGATIVE yaw here sent the
+// fingers to +x — the right edge — so the arm read as climbing out of the frame instead of into it.
+// Positive yaw turns −z (the fingers) toward −x, the crosshair, and +z (the elbow) to the corner.
+export const REST = { x: 0.30, y: -0.27, z: -0.56, yaw: 0.80, pitch: 0.55, roll: -0.30 } as const
+export const LEFT_REST = { x: -0.30, y: -0.60, z: -0.54, up: 0.42 } as const
 
 /** Proportions, camera units. The arm reads at fov 75 from 0.6 away; these were eyeballed there. */
 const P = {
@@ -210,12 +213,16 @@ export function createHands(): Hands {
     // pose from the camera
     group.position.copy(camera.position)
     group.quaternion.copy(camera.quaternion)
-    // speed from the camera's own travel — no coupling to the walker
-    let speed = 0
-    if (Number.isFinite(last.x) && dt > 0) speed = Math.hypot(camera.position.x - last.x, camera.position.z - last.z) / dt
-    if (speed > 40) speed = 0   // a teleport is not a sprint
+    // speed from the camera's own travel — no coupling to the walker. Horizontal AND vertical: the
+    // clock needs to know when the feet have left the ground (a jump is not a run).
+    let speed = 0, vy = 0
+    if (Number.isFinite(last.x) && dt > 0) {
+      speed = Math.hypot(camera.position.x - last.x, camera.position.z - last.z) / dt
+      vy = (camera.position.y - last.y) / dt
+    }
+    if (speed > 40 || Math.abs(vy) > 40) { speed = 0; vy = 0 }   // a teleport is not a sprint
     last.copy(camera.position)
-    const input: HandsInput = { t, now: performance.now(), speed, breaking: sig.breaking, placeAt: sig.placeAt, castAt: sig.castAt, hidden: sig.hidden }
+    const input: HandsInput = { t, now: performance.now(), speed, vy, breaking: sig.breaking, placeAt: sig.placeAt, castAt: sig.castAt, hidden: sig.hidden }
     const pose = stepHands(state, input, dt)
     sig.last = pose
     arm.position.set(REST.x + pose.dx, REST.y + pose.dy, REST.z + pose.dz)

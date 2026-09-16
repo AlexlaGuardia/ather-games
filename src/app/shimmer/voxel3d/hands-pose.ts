@@ -47,6 +47,8 @@ export interface HandsInput {
   now: number
   /** Horizontal speed, blocks/s. */
   speed: number
+  /** Vertical speed, blocks/s. Airborne = the feet are not falling in step. */
+  vy: number
   /** A block or piece is being worked this frame. */
   breaking: boolean
   /** `now` when the last block was placed; -Infinity for never. */
@@ -67,9 +69,18 @@ export interface HandsState {
   swingOn: number
   /** Distance walked, in bob cycles — advances by speed so the bob freezes when the feet do. */
   stride: number
+  /** Eased horizontal speed — the raw camera delta is spiky frame to frame. */
+  speed: number
+  /** Eased 0..1 "the feet are on the ground". */
+  ground: number
 }
 
-export const newHandsState = (): HandsState => ({ lower: 0, swing: 0, swingOn: 0, stride: 0 })
+export const newHandsState = (): HandsState => ({ lower: 0, swing: 0, swingOn: 0, stride: 0, speed: 0, ground: 1 })
+
+/** Above this vertical speed the feet have left the ground: no footfalls, the hand floats. */
+export const AIRBORNE_VY = 1.5
+/** The stride never advances faster than a full run's cadence — a slide is not a sprint of tiny steps. */
+export const STRIDE_SPEED_CAP = RUN_SPEED
 
 export interface HandsPose {
   /** Rig offset from its rest position, camera units. */
@@ -93,11 +104,18 @@ export function stepHands(s: HandsState, i: HandsInput, dt: number): HandsPose {
   // ── the walk bob: driven by DISTANCE, not time, so it stops with the feet and never drifts ──
   // Cycles per block = STEP_HZ_RUN / RUN_SPEED; at a walk the same stride length gives fewer cycles
   // per second, which is what feet do.
-  const gait = clamp01(i.speed / WALK_SPEED)
-  s.stride += i.speed * (STEP_HZ_RUN / RUN_SPEED) * dt
+  // ⚠ THREE GUARDS, ALL FROM ONE SLIDE-JUMP (Alex, 09-16: "shaking violently"). The raw camera
+  // delta is spiky, so the speed is EASED; a slide runs at 10 blocks/s, so the stride rate is CAPPED
+  // at the run's cadence; and in the air there are no footfalls at all, so `ground` eases to 0 and
+  // takes the bob with it — the hand floats until the feet land.
+  s.speed = approach(s.speed, i.speed, 14, dt)
+  if (s.speed < 0.02) s.speed = 0   // an ease never reaches zero on its own, and a creeping stride is a hand that never quite stands still
+  s.ground = approach(s.ground, Math.abs(i.vy) > AIRBORNE_VY ? 0 : 1, 12, dt)
+  const gait = clamp01(s.speed / WALK_SPEED) * s.ground
+  s.stride += Math.min(s.speed, STRIDE_SPEED_CAP) * (STEP_HZ_RUN / RUN_SPEED) * dt * s.ground
   const ph = s.stride * Math.PI * 2
-  // Amplitude scales with speed past a walk, capped at the run.
-  const amp = clamp01(i.speed / RUN_SPEED)
+  // Amplitude scales with speed past a walk, capped at the run, and only on the ground.
+  const amp = clamp01(s.speed / RUN_SPEED) * s.ground
   let dy = -Math.abs(Math.sin(ph)) * BOB_Y * amp        // a footfall is a DIP, twice per cycle
   let dx = Math.sin(ph) * BOB_X * amp                     // and the sway is once per cycle
   // Breathing shows through when the feet are still.

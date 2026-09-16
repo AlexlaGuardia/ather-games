@@ -9,7 +9,7 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 const DT = 1 / 60
-const base = (over: Partial<HandsInput> = {}): HandsInput => ({ t: 0, now: 0, speed: 0, breaking: false, placeAt: -Infinity, castAt: -Infinity, hidden: false, ...over })
+const base = (over: Partial<HandsInput> = {}): HandsInput => ({ t: 0, now: 0, speed: 0, vy: 0, breaking: false, placeAt: -Infinity, castAt: -Infinity, hidden: false, ...over })
 /** Run `n` frames from t=0, returning every pose. `f` shapes the input per frame. */
 const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState()) => {
   const out = []
@@ -32,11 +32,25 @@ const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState
   ok(ps.every(p => p.dy <= BREATH_Y + 1e-9), 'running: a footfall is a DIP, never a rise past the breath')
   const s = newHandsState()
   run(30, () => ({ speed: RUN_SPEED }), s)
-  const strideMoving = s.stride
+  run(30, () => ({ speed: 0 }), s)          // the eased speed settles inside this half second
+  const strideStill = s.stride
   run(30, () => ({ speed: 0 }), s)
-  ok(s.stride === strideMoving, '★ standing still, the stride does not advance — the bob freezes with the feet (a time-driven bob keeps walking while you stand)')
+  ok(s.stride === strideStill, '★ standing still, the stride does not advance — the bob freezes with the feet (a time-driven bob keeps walking while you stand)')
   const slow = run(120, () => ({ speed: RUN_SPEED * 0.3 }))
   ok(Math.min(...slow.map(p => p.dy)) > -BOB_Y * 0.5, 'a slow walk bobs less than a run')
+  // ★ the slide-jump (09-16): a slide at 10 blocks/s must not hammer the stride, and in the air
+  // there are no footfalls at all
+  const s2 = newHandsState(); run(60, () => ({ speed: RUN_SPEED }), s2); const perRun = s2.stride
+  const s3 = newHandsState(); run(60, () => ({ speed: RUN_SPEED * 1.6 }), s3)
+  ok(s3.stride < perRun * 1.12, `★ a slide (${(RUN_SPEED * 1.6).toFixed(1)} b/s) strides at the RUN'S cadence, not 1.6× it (${s3.stride.toFixed(2)} vs ${perRun.toFixed(2)}; the ease-in is the few % over)`)
+  const air = run(90, () => ({ speed: RUN_SPEED, vy: 6 }))
+  ok(Math.min(...air.slice(30).map(p => p.dy)) > -BOB_Y * 0.15, '★ airborne (vy 6): no footfalls — the hand floats')
+  const s4 = newHandsState(); run(30, () => ({ speed: RUN_SPEED, vy: 6 }), s4); const st = s4.stride
+  run(30, () => ({ speed: RUN_SPEED, vy: 6 }), s4)
+  ok(s4.stride - st < 0.05, '★ airborne: the stride does not advance either')
+  // the raw delta is spiky: a single-frame speed spike barely moves the eased speed
+  const s5 = newHandsState(); stepHands(s5, base({ speed: 30 }), DT)
+  ok(s5.speed < 30 * 0.3, `a one-frame spike is eased (${s5.speed.toFixed(2)} of 30)`)
 }
 
 // ── the chop ──
