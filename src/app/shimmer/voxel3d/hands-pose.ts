@@ -39,6 +39,8 @@ export const RAISE_RAD = 0.45
 export const LOWER_RATE = 6
 /** The whole rig sinks this far when lowered — enough to leave the frame at fov 75. */
 export const LOWER_Y = 0.55
+/** On a wall the raise fights the drop; this much more takes the hands clean out of frame. */
+export const WALL_DROP_EXTRA = 0.45
 
 export interface HandsInput {
   /** Seconds, monotonic. */
@@ -92,6 +94,8 @@ export interface HandsState {
   speed: number
   /** Eased 0..1 "the feet are on the ground". */
   ground: number
+  /** Extra drop on a wall (climb / hang / mantle / catch), over `lower`. */
+  wallDrop: number
   /** Eased weights, one per verb, so a pose BLENDS in and out instead of snapping. */
   w: { air: number; slide: number; crouch: number; climb: number; wallCatch: number; hang: number; swim: number; hold: number }
   /** The climb's and the stroke's own clocks. */
@@ -100,7 +104,7 @@ export interface HandsState {
 }
 
 export const newHandsState = (): HandsState => ({
-  lower: 0, swing: 0, swingOn: 0, stride: 0, speed: 0, ground: 1,
+  lower: 0, swing: 0, swingOn: 0, stride: 0, speed: 0, ground: 1, wallDrop: 0,
   w: { air: 0, slide: 0, crouch: 0, climb: 0, wallCatch: 0, hang: 0, swim: 0, hold: 0 },
   climbPh: 0, swimPh: 0,
 })
@@ -139,8 +143,17 @@ const approach = (v: number, target: number, rate: number, dt: number) => v + (t
 
 /** One frame of the clock. Mutates `s`, returns the pose to apply. */
 export function stepHands(s: HandsState, i: HandsInput, dt: number): HandsPose {
-  // ── lowered? ──
-  s.lower = approach(s.lower, i.hidden ? 1 : 0, LOWER_RATE, dt)
+  // ── lowered? ── The UI owning the screen, the weapon out — and THE WALL (Alex, 09-16, on the
+  // climb pose: "the hand looks like climbing sticks when scaling a wall, that's not going to
+  // work"). A stick reaching hand-over-hand is a ski pole; a placeholder rig cannot sell a grip,
+  // and on a wall you are looking at the wall. So climb, hang, mantle and the catch take the
+  // hands out of frame, and they come back when the feet land. The wall poses below still
+  // compute (they are tested, and a real hand mesh will want them) but ride under the drop.
+  const onWall = i.climbing || i.hanging || i.mantle >= 0 || i.wallCatch
+  s.lower = approach(s.lower, i.hidden || onWall ? 1 : 0, LOWER_RATE, dt)
+  // The wall poses RAISE the hands by up to 0.28 while the drop sinks them 0.55 — not enough on its
+  // own. The wall gets its own extra drop, eased on the same clock, so the raise never peeks back in.
+  s.wallDrop = approach(s.wallDrop, onWall ? 1 : 0, LOWER_RATE, dt)
 
   // ── the walk bob: driven by DISTANCE, not time, so it stops with the feet and never drifts ──
   // Cycles per block = STEP_HZ_RUN / RUN_SPEED; at a walk the same stride length gives fewer cycles
@@ -236,6 +249,7 @@ export function stepHands(s: HandsState, i: HandsInput, dt: number): HandsPose {
   // holding: the fist comes up a touch so the thing in it can be seen
   pitch += w.hold * 0.18; dy += w.hold * 0.02
 
-  dy -= s.lower * LOWER_Y
+  dy -= s.lower * LOWER_Y + s.wallDrop * WALL_DROP_EXTRA
+  leftDy -= s.wallDrop * WALL_DROP_EXTRA
   return { dx, dy, dz, pitch, left, leftDy, leftPitch }
 }

@@ -2,7 +2,7 @@
 //
 // Mutation-swept 2026-09-16: stride driven by time instead of distance (the bob-freezes assert) ·
 // chop sign flipped · PLACE window off-by-one · cast env never released · lower not eased.
-import { stepHands, newHandsState, BOB_Y, BREATH_Y, SWING_HZ, SWING_RAD, PLACE_MS, CAST_MS, LOWER_Y, LAND_DIP, type HandsInput } from './hands-pose'
+import { stepHands, newHandsState, BOB_Y, BREATH_Y, SWING_HZ, SWING_RAD, PLACE_MS, CAST_MS, LOWER_Y, WALL_DROP_EXTRA, LAND_DIP, type HandsInput } from './hands-pose'
 import { RUN_SPEED } from './locomotion'
 
 let pass = 0
@@ -109,16 +109,16 @@ const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState
   const settle = (over: Partial<HandsInput>) => { const s = newHandsState(); return run(60, () => over, s)[59] }
   const rest = settle({})
   const hang = settle({ hanging: true, airborne: true })
-  ok(hang.pitch > 1.0 && hang.dy > 0.2 && hang.left > 0.99 && hang.leftPitch > 0.8, `hang: both hands up on the lip (pitch ${hang.pitch.toFixed(2)}, dy ${hang.dy.toFixed(2)}, left ${hang.left.toFixed(2)})`)
+  ok(hang.pitch > 1.0 && hang.dy + LOWER_Y + WALL_DROP_EXTRA > 0.2 && hang.left > 0.99 && hang.leftPitch > 0.8, `hang: both hands up on the lip (pitch ${hang.pitch.toFixed(2)}, dy+drop ${(hang.dy + LOWER_Y + WALL_DROP_EXTRA).toFixed(2)}, left ${hang.left.toFixed(2)})`)
   const mantleEnd = settle({ mantle: 1 })
-  ok(mantleEnd.pitch < hang.pitch - 0.5 && mantleEnd.dy < hang.dy - 0.2, 'mantle done: the hands have pressed the lip DOWN from the hang')
+  ok(mantleEnd.pitch < hang.pitch - 0.5 && mantleEnd.dy < hang.dy - 0.2, 'mantle done: the hands have pressed the lip DOWN from the hang (under the drop)')
   const climb = run(120, () => ({ climbing: true, airborne: true }))
   const cp = climb.slice(30).map(p => p.pitch)
   ok(Math.max(...cp) - Math.min(...cp) > 0.5 && Math.min(...cp) > 0.4, 'climb: the reach ALTERNATES (pitch swings > 0.5 rad) and stays raised')
-  const cl = climb.slice(30).map(p => p.leftDy)
-  ok(Math.max(...cl) > 0.05 && Math.min(...cl) < -0.05, 'climb: the left hand pulls while the right reaches (opposite phase)')
+  const cl = climb.slice(30).map(p => p.leftDy + WALL_DROP_EXTRA)   // read above the wall drop
+  ok(Math.max(...cl) > 0.05 && Math.min(...cl) < -0.05, 'climb: the left hand pulls while the right reaches (opposite phase, under the drop)')
   const catchP = settle({ wallCatch: true, airborne: true })
-  ok(catchP.pitch > 0.8 && catchP.dz < -0.1 && catchP.left > 0.99, 'wall catch: the hand is flat on the wall in front, the other up to it')
+  ok(catchP.pitch > 0.8 && catchP.dz < -0.1 && catchP.left > 0.99, 'wall catch: the hand is flat on the wall in front, the other up to it (under the drop)')
   const air = settle({ airborne: true })
   ok(air.dy > rest.dy + 0.01 && air.pitch > 0.08, 'airborne: floaty — up and open')
   const slide = settle({ sliding: true })
@@ -138,6 +138,12 @@ const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState
   ok(first.pitch < hang.pitch * 0.5, `★ a verb BLENDS in (first frame ${first.pitch.toFixed(2)} of ${hang.pitch.toFixed(2)})`)
   // and hanging outranks airborne: no floaty drift on top of a grip
   ok(Math.abs(hang.dy - (settle({ hanging: true }).dy)) < 1e-6, '★ hanging outranks airborne — the air pose does not stack on the grip')
+  // ★ the wall takes the hands OUT OF FRAME (09-16): a stick reaching hand-over-hand read as ski poles
+  for (const [name, over] of [['climb', { climbing: true, airborne: true }], ['hang', { hanging: true, airborne: true }], ['mantle', { mantle: 0.5 }], ['catch', { wallCatch: true, airborne: true }]] as const) {
+    const p = settle(over as Partial<HandsInput>)
+    ok(p.dy < -LOWER_Y * 0.8 && p.leftDy < -0.3, `${name}: both hands leave the frame (dy ${p.dy.toFixed(2)}, leftDy ${p.leftDy.toFixed(2)})`)
+  }
+  ok(settle({ airborne: true }).dy > -LOWER_Y * 0.2, 'a plain jump does NOT drop them — only the wall does')
   // release: everything off → back to rest within a beat
   const s2 = newHandsState(); run(60, () => ({ hanging: true, airborne: true, sliding: true, swimming: true }), s2)
   const back = run(60, () => ({}), s2)[59]
