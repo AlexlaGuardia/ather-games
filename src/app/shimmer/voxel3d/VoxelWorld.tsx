@@ -243,6 +243,7 @@ import { depart, LANDING_LABEL } from './crossing-out'
 import { LANDING_ARRIVAL } from '../world/landing'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { createMoglinFigures, MOGLIN_BOUNDS } from './moglin-figure'
+import { createHands } from './hands'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
@@ -3259,6 +3260,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   //    tutorial") — gold motes from the feet to the objective; `guide-target.ts` decides where,
   //    `guide-trail.ts` draws it. Tutorial only: the resolver returns null after the fold. ────────
   const guide = useMemo(() => createGuideTrail(), [])
+  // ── ★ THE KEEPER'S HANDS (2026-09-16, play lane; Alex: "giving our players hands") — the glove
+  //    on the lens, the focus the aimed block asks for in it, the bracelet on a cast. `hands.ts`
+  //    owns the rig and the depth trick; `hands-pose.ts` owns every motion. This file only writes
+  //    the signal (below, at the HUD mark) and stamps the place / cast events. ─────────────────
+  const hands = useMemo(() => createHands(), [])
   const guideWorld = useMemo((): GuideWorld => ({
     greg: { x: GREG_CX, z: GREG_CZ },
     folk: Object.fromEntries(folk.map(f => [f.id, { x: f.x, z: f.z }])),
@@ -4161,6 +4167,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     tiles?.texture.dispose()
     greg.dispose()
     for (const f of folk) f.fig.dispose()
+    hands.dispose()
     guide.dispose()
     steam.dispose()
     smoke.dispose()
@@ -6135,6 +6142,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
 
     // One apply, no archetype branching — every effect field is neutral when it does not apply,
     // which is the entire point of the outcome being a description rather than an action.
+    hands.sig.castAt = performance.now()
     m.cur = Math.max(0, m.cur - out.manaCost)
     if (out.cooldownUntil !== null) castCd.current[slot] = out.cooldownUntil
     if (out.stanceChange) stance.current = out.stanceChange.to
@@ -9405,6 +9413,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           dirtySaves.current.add(ok)
           pieces.sync(placements.current)
           onInvChange()
+          hands.sig.placeAt = performance.now()
           mouse.current.right = false
         }
       } else if (intent === 'place') {
@@ -9439,6 +9448,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         removeItems(inv.current!, held, 1)
         setVoxel(hit.x, hit.y, hit.z, baseOf(aimed))
         onInvChange()
+        hands.sig.placeAt = performance.now()
         mouse.current.right = false
       } else if (bedWhy !== 'ok') {
         // ── ★★ THE BED CAP (2026-08-22, Alex) — refuse, and say which of four things is wrong ──
@@ -9484,6 +9494,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           }
         }
         setVoxel(hit.px, hit.py, hit.pz, put)
+        hands.sig.placeAt = performance.now()
         // The material is the state; the clock holds the one thing it cannot — WHEN.
         if (isSaplingMat(put)) {
           saplingClock.current[saplingKey(hit.px, hit.py, hit.pz)] = Date.now()
@@ -9701,6 +9712,17 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     prof.current.mark('hud')
     // ── HUD ──────────────────────────────────────────────────────────────────────────────────
     const def = hit ? blockDef(hit.material) : undefined
+    // The hands: the focus in the fist is the one the AIMED block asks for and the keeper has —
+    // the block-picks-the-tool model, visible. Bare when nothing is asked or nothing is equipped.
+    {
+      const fam = (breaking.current ? lastTool.current : (def?.skill ?? def?.fastSkill ?? null)) as BlockSkill
+      const eq = fam ? getEquippedTool(tools.current!, fam as never) : undefined
+      hands.sig.family = eq ? fam : null
+      hands.sig.tier = eq ? (getToolDef(eq)?.tier ?? 0) : 0
+      hands.sig.breaking = !!breaking.current
+      hands.sig.hidden = uiOpen.current || weaponDrawn
+      hands.tick(camera, state.clock.elapsedTime, dt)
+    }
     // ★★ THE BORE OWNS THIS LINE WHILE IT RUNS, and that is a choice rather than a merge. Both
     // readouts describe the same aimed block, so showing both would be two answers to one question;
     // the held channel is the more specific truth and it is the one the keeper is paying for.
@@ -9863,6 +9885,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       {stations && <primitive object={stations.group} />}
       <primitive object={greg.group} />
       {folk.map(f => <primitive key={f.id} object={f.fig.group} />)}
+      <primitive object={hands.group} />
       <primitive object={guide.points} />
       <primitive object={steam.points} />
       <primitive object={smoke.points} />
