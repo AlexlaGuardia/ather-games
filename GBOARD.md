@@ -58,6 +58,13 @@ play3d's in `Shimmer3D.tsx` + `HotBar.tsx`. The rule that makes it hold is `hud-
   `zIndexRange [20,0]` (a gate name floated over the satchel). Shots: scratchpad `stage2.png`, `stage2-bag.png`.
   Guards: the five source-readers (imbue/vessels/gems/keeper-chrome/keeper-tabs) read host + satchel as one text;
   hud-type reads host + hud/*; tokens worklist drops the retired file.
+- **Stage 3 SHIPPED (`1d8a2d3`, PROD `Fm4oPUkUGtZV3zV49At75`):** `hud/say-line.tsx` · `hud/prompt.tsx` ·
+  `hud/dialogue-box.tsx` (frame: dimmed world, plate, speaker header, esc; `onPlate` tap-to-advance, `onBackdrop`
+  click-outside). Voxel's ScriptDialogue + GregDialogue + three prompts ride them; play3d's bottom-docked dialogue,
+  "✦ Talk to" pill, harvest toast and milestone banner are the same objects now (banner wins the say line). hud-type
+  ratchet 16 → 14. **The port is complete for what a keeper reads in play**; what stays engine-owned on purpose:
+  voxel's cast gauges / vitals / buff chips / tremor ring (mortal side has its own weapons HUD), the minimaps (two
+  world models), the birth screen (already shared via play3d/birth).
 - **Not shared yet, on purpose:** the Clock sits LEFT of the minimap in play3d (in voxel it is drawn under the minimap's
   z and only shows when the map is up — pre-existing; decide where the dial lives when stage 2 lands).
 
@@ -65,8 +72,8 @@ play3d's in `Shimmer3D.tsx` + `HotBar.tsx`. The rule that makes it hold is `hud-
 1. ✅ Stage 2 shipped (above). Alex walks the mortal-side satchel: drag between slots, right-drag one-per-slot, the
    Gear tab with `BAND_KEYS`, the tool arc's four sockets against the worn kit. `activeTool` is null on play3d
    (the arc never glows while harvesting) — wire it to the channel's skill.
-2. **Stage 3 — the middle:** the say line, the dialogue box (`ScriptDialogue`), the look/interact prompt, the objective
-   chip. Then delete play3d's old copies.
+2. ✅ Stage 3 shipped (above). Alex walks Rune Hold: Greg's two lines in the shared frame (tap the plate to advance),
+   the "E — talk to Gregory" prompt, a harvest/banner line above the bar.
 3. `O` toggles the panel in play3d as it does in voxel (unbound today; check the key is free).
 4. Rothenburg (block below) waits on the look calls; wire only after stage 2 so the new town is not seen under old chrome.
 
