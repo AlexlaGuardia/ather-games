@@ -52,20 +52,44 @@ export const HANDS_ORDER = 1000
  * The frame at fov 75, z = 0.5: half-height 0.38, half-width 0.55 (16:9). Everything below
  * y = −0.38 at that depth is off-screen.
  */
-export const WRIST = { x: 0.20, y: -0.20, z: -0.50 } as const
-export const ELBOW = { x: 0.46, y: -0.62, z: -0.34 } as const
-export const ROLL = -0.35
+export interface HandsTune { wx: number; wy: number; wz: number; ex: number; ey: number; ez: number; roll: number }
+export const DEFAULT_TUNE: HandsTune = { wx: 0.20, wy: -0.20, wz: -0.50, ex: 0.46, ey: -0.62, ez: -0.34, roll: -0.35 }
 /** The left wrist rests below the frame and rises `up` on a cast; its elbow mirrors the right's. */
-export const LEFT_WRIST = { x: -0.20, y: -0.58, z: -0.50, up: 0.40 } as const
-export const LEFT_ELBOW = { x: -0.46, y: -0.98, z: -0.34 } as const
+export const LEFT_UP = 0.40
+export const LEFT_DROP = 0.38
+
+// ── ★ THE TUNE IS ALEX'S (09-16: "I wish there was a way for me to position it") ─────────────
+// A module store the Dev tab's tuner writes and every rig reads: seven numbers, saved in
+// localStorage so a reload keeps them, and a readout he can paste back so the default gets baked.
+// The rig re-aims when the version moves — no prop plumbing from the HUD down into the World.
+const TUNE_KEY = 'shimmer:hands-tune'
+export const handsTune: { tune: HandsTune; version: number } = { tune: { ...DEFAULT_TUNE }, version: 0 }
+export function loadHandsTune(): HandsTune {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(TUNE_KEY) : null
+    if (raw) { const t = JSON.parse(raw) as Partial<HandsTune>; handsTune.tune = { ...DEFAULT_TUNE, ...t }; handsTune.version++ }
+  } catch { /* a blocked store is the default tune */ }
+  return handsTune.tune
+}
+export function setHandsTune(patch: Partial<HandsTune>): HandsTune {
+  handsTune.tune = { ...handsTune.tune, ...patch }; handsTune.version++
+  try { localStorage.setItem(TUNE_KEY, JSON.stringify(handsTune.tune)) } catch { /* fine */ }
+  return handsTune.tune
+}
+export function resetHandsTune(): HandsTune {
+  handsTune.tune = { ...DEFAULT_TUNE }; handsTune.version++
+  try { localStorage.removeItem(TUNE_KEY) } catch { /* fine */ }
+  return handsTune.tune
+}
+/** One line Alex can paste: the seven numbers as they would sit in DEFAULT_TUNE. */
+export const tuneReadout = (t: HandsTune) =>
+  `wrist ${t.wx.toFixed(2)}, ${t.wy.toFixed(2)}, ${t.wz.toFixed(2)} · elbow ${t.ex.toFixed(2)}, ${t.ey.toFixed(2)}, ${t.ez.toFixed(2)} · roll ${t.roll.toFixed(2)}`
 
 /** Proportions, camera units. The arm reads at fov 75 from 0.6 away; these were eyeballed there. */
 const P = {
   forearm: { w: 0.062, h: 0.056, l: 0.60 },   // long: the cut end lives below the frame, always
   cuff:    { w: 0.082, h: 0.076, l: 0.04 },
-  glove:   { w: 0.10, h: 0.052, l: 0.12 },
-  finger:  { w: 0.021, h: 0.024, l: 0.06, curl: -1.2 },
-  thumb:   { w: 0.028, h: 0.028, l: 0.06 },
+  glove:   { w: 0.10, h: 0.052, l: 0.14 },   // a plain STICK end (Alex, 09-16: "remove the fingers and thumb")
   seat:    { r: 0.018 },
   band:    { w: 0.10, h: 0.09, l: 0.028 },
 } as const
@@ -163,22 +187,19 @@ export function createHands(): Hands {
     pivot.lookAt(elbow.x, elbow.y, elbow.z)
     pivot.rotateZ(roll)
   }
-  aim(armPivot, WRIST, ELBOW, ROLL)
+  const tuneSeen = { v: -1 }
+  const reaim = () => {
+    const t = handsTune.tune
+    aim(armPivot, { x: t.wx, y: t.wy, z: t.wz }, { x: t.ex, y: t.ey, z: t.ez }, t.roll)
+    aim(leftPivot, { x: -t.wx, y: t.wy - LEFT_DROP, z: t.wz }, { x: -t.ex, y: t.ey - LEFT_DROP, z: t.ez }, -t.roll)
+    tuneSeen.v = handsTune.version
+  }
   // Local frame: +z is toward the lens (the elbow), −z is away (the fingers).
   part(arm, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 - 0.02)
   part(arm, cube, COLOUR.cord, P.cuff.w, P.cuff.h, P.cuff.l, 0, 0, 0)
   const glove = part(arm, cube, COLOUR.glove, P.glove.w, P.glove.h, P.glove.l, 0, -0.005, -P.glove.l / 2 - P.cuff.l / 2)
-  // pale palm (a thin plate under the glove), four fingers curled into a grip off the far edge,
-  // and the thumb tucked to the inside — a fist, which is what a hand holding a focus is
+  // the pale palm: a thin plate on the glove's −y face — the INSIDE, where the held thing sits
   part(arm, cube, COLOUR.palm, P.glove.w * 0.92, 0.006, P.glove.l * 0.9, 0, -P.glove.h / 2 - 0.002, glove.position.z)
-  for (let i = 0; i < 4; i++) {
-    const knuckle = new THREE.Group()
-    knuckle.position.set(-P.glove.w / 2 + P.finger.w * 0.6 + i * (P.glove.w - P.finger.w * 1.2) / 3, 0, glove.position.z - P.glove.l / 2)
-    knuckle.rotation.x = P.finger.curl
-    arm.add(knuckle)
-    part(knuckle, cube, COLOUR.glove, P.finger.w, P.finger.h, P.finger.l, 0, 0, -P.finger.l / 2)
-  }
-  part(arm, cube, COLOUR.glove, P.thumb.w, P.thumb.h, P.thumb.l, -P.glove.w / 2 - P.thumb.w / 2 + 0.008, 0.006, glove.position.z + 0.01)
   // the seat on the back of the hand: one, dark — the tier-0 word is one seat, unwritten
   part(arm, sphere, COLOUR.seat, P.seat.r, P.seat.r * 0.6, P.seat.r, 0.012, P.glove.h / 2, glove.position.z + 0.01)
 
@@ -225,7 +246,8 @@ export function createHands(): Hands {
   const left = new THREE.Group()
   leftPivot.add(left)
   group.add(leftPivot)
-  aim(leftPivot, LEFT_WRIST, LEFT_ELBOW, -ROLL)
+  loadHandsTune()
+  reaim()
   part(left, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 + 0.03)
   part(left, cube, COLOUR.band, P.band.w, P.band.h, P.band.l, 0, 0, 0.01)
   part(left, sphere, COLOUR.bead, 0.014, 0.014, 0.014, 0, P.band.h / 2, 0.01)
@@ -236,7 +258,8 @@ export function createHands(): Hands {
   const heldMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true })
   const held = new THREE.Mesh(cube, heldMat)
   held.renderOrder = HANDS_ORDER; held.frustumCulled = false; held.visible = false
-  held.position.set(0, 0.035, glove.position.z - 0.02)
+  // on the INSIDE of the palm (−y), sitting against the plate, out toward the fingers' end
+  held.position.set(0, -P.glove.h / 2 - 0.045, glove.position.z - 0.02)
   arm.add(held)
 
   const sig: HandsSignal = {
@@ -271,10 +294,12 @@ export function createHands(): Hands {
     }
     const pose = stepHands(state, input, dt)
     sig.last = pose
+    if (tuneSeen.v !== handsTune.version) reaim()
+    const tn = handsTune.tune
     // Offsets move the whole arm in CAMERA space (the pivot); the pitch bends at the wrist.
-    armPivot.position.set(WRIST.x + pose.dx, WRIST.y + pose.dy, WRIST.z + pose.dz)
+    armPivot.position.set(tn.wx + pose.dx, tn.wy + pose.dy, tn.wz + pose.dz)
     arm.rotation.x = pose.pitch
-    leftPivot.position.y = LEFT_WRIST.y + pose.left * LEFT_WRIST.up + pose.leftDy
+    leftPivot.position.y = tn.wy - LEFT_DROP + pose.left * LEFT_UP + pose.leftDy
     left.rotation.x = pose.leftPitch
     leftPivot.visible = pose.left > 0.01
     // the focus in the fist, or the thing being carried

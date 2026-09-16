@@ -326,6 +326,7 @@ import { Hotbar, type HotbarEntry } from '../hud/hotbar'
 import { ItemChip, itemLabel, tierLabel, BagPanel, GearTab, type SlotRef, type Lift, type LiftMode, type OpenChest } from '../hud/satchel'
 import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/options-panel'
 import { OptionsDoor } from '../hud/options-door'
+import { HandsTuner } from '../hud/hands-tuner'
 import { ResourceBars } from './resource-bars'
 import { CastGauges, type CastHud } from './cast-gauges'
 import { getMaxPool, getRegenRate } from '../engine/mana'
@@ -942,6 +943,8 @@ export default function VoxelWorld() {
   const [collarNear, setCollarNear] = useState(false)
   const [settings, setSettings] = useState<VoxelSettings>(() => loadSettings())
   const [showSettings, setShowSettings] = useState(false)
+  /** The owner's hands tuner (Dev tab). Not a cursor surface: the hands must stay in frame. */
+  const [handsTuner, setHandsTuner] = useState(false)
   const update = useCallback((patch: Partial<VoxelSettings>) => {
     setSettings(prev => { const next = { ...prev, ...patch }; saveSettings(next); return next })
   }, [])
@@ -2379,7 +2382,9 @@ export default function VoxelWorld() {
         </div>
       )}
       {settings.showFps && prof && <ProfilePanel p={prof.profile} copiedAt={profCopied} />}
+      {handsTuner && <HandsTuner onClose={() => { setHandsTuner(false); closeCursorUI() }} />}
       {showSettings && <SettingsPanel s={settings} update={update} isOwner={isOwner}
+        onHandsTuner={() => { setShowSettings(false); setHandsTuner(true) }}
         onControls={() => { setShowSettings(false); setShowBindings(true) }}
         onClose={() => { setShowSettings(false); closeCursorUI() }} />}
       {/* ⚠ Closing the bindings panel hands the cursor back, exactly as the settings panel does.
@@ -10698,12 +10703,14 @@ function ProfilePanel({ p, copiedAt }: { p: FrameProfile; copiedAt: number }) {
   )
 }
 
-function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
+function SettingsPanel({ s, update, onClose, onControls, onHandsTuner, isOwner }: {
   s: VoxelSettings
   update: (p: Partial<VoxelSettings>) => void
   onClose: () => void
   /** Opens the rebinding panel. Alex, 2026-08-23: "in the menu there should be an option to bind keys." */
   onControls: () => void
+  /** Opens the hands tuner (Dev tab). Alex, 2026-09-16: "I wish there was a way for me to position it." */
+  onHandsTuner: () => void
   /** The keeper of the realm — gates the Dev tab. See `OptionsPanel` for the two-locks note. */
   isOwner: boolean
 }) {
@@ -10792,6 +10799,8 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
           <OptionRow href="/shimmer/dev/worktable?load=gate_station" label="⌂ Gate station" tail="worktable" />
           <OptionRow href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
           <OptionRow href="/shimmer/play3d" label="❈ Rune Hold" tail="play3d" />
+          <OptionHead tone="text-amber-300/70">Look</OptionHead>
+          <OptionRow onClick={onHandsTuner} label="🧤 Hands tuner" tail="position the arm" />
         </div>
       }
     />
