@@ -49,15 +49,22 @@ play3d's in `Shimmer3D.tsx` + `HotBar.tsx`. The rule that makes it hold is `hud-
   GfxPanel from Video, ONE keeper volume from Sound (voxel settings + audio bus), keys under Controls, rune grid +
   worktable + The Ather under Dev. Minimap at the voxel rule (top 12 / right 12), door under it, both hidden under the
   panel. Shot: scratchpad `fresh2-options.png`. Guards re-aimed: options-door 14/0, hud-type baseline 17→16.
+- **Stage 2 SHIPPED (`d436a29` → `71fca25`):** `hud/satchel.tsx` (BagPanel + GearTab + SatchelLetters + VesselRack +
+  ItemChip/itemLabel + the slot-lift types, 1000 lines moved verbatim; `castKeys` is the one engine fact turned prop),
+  `hud/hotbar.tsx` (8 fixed slots, ItemChip art, held name; `onSelect` for touch). play3d mounts Hotbar + HudCorner
+  (mana via a getter adapter over ManaPool + skill + affinity) + BagPanel over its own 24-slot grid (movers via
+  `voxel3d/chest` moveBetween/moveCount + engine `getMaxStack`; no chest on the mortal side). **`play3d/HotBar.tsx`
+  is deleted.** 1-8 + wheel select; a tap on the selected slot uses it. Every in-world `<Html>` label now pins
+  `zIndexRange [20,0]` (a gate name floated over the satchel). Shots: scratchpad `stage2.png`, `stage2-bag.png`.
+  Guards: the five source-readers (imbue/vessels/gems/keeper-chrome/keeper-tabs) read host + satchel as one text;
+  hud-type reads host + hud/*; tokens worklist drops the retired file.
 - **Not shared yet, on purpose:** the Clock sits LEFT of the minimap in play3d (in voxel it is drawn under the minimap's
   z and only shows when the map is up — pre-existing; decide where the dial lives when stage 2 lands).
 
 **Next:**
-1. **Stage 2 — the bottom:** replace `play3d/HotBar.tsx` (hotbar + bag + tool gauges + mana vial) wholesale with the
-   voxel hotbar (`ItemChip` icons off `tex/item-icon.ts`), `BagPanel` + `GearTab`/`SatchelLetters`/`VesselRack` (already
-   exported from VoxelWorld), and `HudCorner` (mana adapter: play3d `ManaPool{current}` + `getMaxPool` → `{cur,max,regen}`
-   ref). Same `engine/inventory`/`tools`/`skills` types on both sides, so the panels port as-is; extract them from
-   VoxelWorld into `hud/` first, then mount. ~half a day.
+1. ✅ Stage 2 shipped (above). Alex walks the mortal-side satchel: drag between slots, right-drag one-per-slot, the
+   Gear tab with `BAND_KEYS`, the tool arc's four sockets against the worn kit. `activeTool` is null on play3d
+   (the arc never glows while harvesting) — wire it to the channel's skill.
 2. **Stage 3 — the middle:** the say line, the dialogue box (`ScriptDialogue`), the look/interact prompt, the objective
    chip. Then delete play3d's old copies.
 3. `O` toggles the panel in play3d as it does in voxel (unbound today; check the key is free).
