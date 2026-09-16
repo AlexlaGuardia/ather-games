@@ -32,9 +32,16 @@
 // flatters a model and answers a question the world never asks. Both are toggles, because "what does
 // this look like unfogged at noon" is also a real question, just a different one.
 //
-// Run: tools/devwin.sh hub → http://localhost:3200/shimmer/dev/worktable
+// ★★ CREATIVE MODE IS THE DEFAULT STANCE (2026-09-16, Alex: *"id like it to feel like minecraft
+// creative mode"*). `creative.tsx` owns it: pointer lock, a crosshair whose ray is a grid walk, the
+// looked-at cell outlined, LEFT BREAKS / RIGHT PLACES / MIDDLE PICKS, a hotbar of nine on the wheel
+// and the digits, E for the inventory (this panel). Orbit and keeper-eye stay as the two LOOKING
+// stances — the mouse-pointer click-to-place survives only in orbit, and there a right-drag orbits
+// and never removes (it did both, which was the first bug on Alex's list).
+//
+// Run: tools/devwin.sh play → http://localhost:3203/shimmer/dev/worktable  (the hub has no devwin)
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { ALL_BLOCKS, blockDef, type BlockSkill } from '../../voxel/registry'
 import { MAT, isHalfMat } from '../../voxel/depth'
@@ -47,6 +54,8 @@ import {
   type BlueprintCell, type BlueprintDef, type BlueprintPiece,
 } from '../../voxel/blueprints'
 import { PIECES, type Rotation } from '../../voxel/pieces'
+import { CreativeRig, Crosshair, Hotbar, HOTBAR_SIZE, Swatch, slotLabel, type Slot } from './creative'
+import type { Vec3 } from './creative-ray'
 import { createPieceRenderer } from '../../voxel3d/piece-mesh'
 import { STATION_BP_ID, STATION_LAYOUT } from '../../voxel3d/court-blueprint'
 import type { StationLayout } from '../../voxel/blueprints'
@@ -98,6 +107,13 @@ const familyOf = (m: number): BlockSkill | null => {
   const d = blockDef(m)
   return d ? (d.skill ?? d.fastSkill ?? null) : null
 }
+
+/** A builder's first nine. A default that stops being placeable is dropped at boot, not shipped as a slot that refuses. */
+const HOTBAR_SEED: Slot[] = [
+  { kind: 'block', m: MAT.CUT_STONE }, { kind: 'block', m: MAT.COBBLESTONE }, { kind: 'block', m: MAT.STONE_BRICK },
+  { kind: 'block', m: MAT.PLANKS_GOLDWOOD }, { kind: 'block', m: MAT.SHINGLES }, { kind: 'block', m: MAT.GLASS },
+  { kind: 'block', m: MAT.PLASTER }, { kind: 'piece', id: 'doorway' }, { kind: 'piece', id: 'window' },
+]
 
 type Cells = Map<string, number>
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`
@@ -160,7 +176,10 @@ function MaterialMesh({ mat, cells, tex, onHit }: {
       onPointerDown={e => {
         e.stopPropagation()
         const n = e.face?.normal ? e.face.normal.clone() : new THREE.Vector3(0, 1, 0)
-        onHit({ point: e.point, normal: n, shift: e.shiftKey, alt: e.altKey || e.button === 2 })
+        // ⚠ THE RIGHT BUTTON ORBITS. It used to ALSO remove (`e.button === 2` counted as alt), so every
+        // right-drag to look around started by deleting the block under the cursor.
+        if (e.button !== 0) return
+        onHit({ point: e.point, normal: n, shift: e.shiftKey, alt: e.altKey })
       }}
     />
   )
@@ -177,7 +196,8 @@ function Pad({ onHit }: { onHit: (e: { point: THREE.Vector3; normal: THREE.Vecto
       onPointerDown={e => {
         e.stopPropagation()
         const n = e.face?.normal ? e.face.normal.clone() : new THREE.Vector3(0, 1, 0)
-        onHit({ point: e.point, normal: n, shift: e.shiftKey, alt: e.altKey || e.button === 2 })
+        if (e.button !== 0) return
+        onHit({ point: e.point, normal: n, shift: e.shiftKey, alt: e.altKey })
       }}
     >
       <boxGeometry args={[PAD, 1, PAD]} />
@@ -216,57 +236,25 @@ function Keeper({ at }: { at: [number, number, number] }) {
   )
 }
 
-/** Drag to orbit, wheel to zoom. The current view is published back so it can be written down. */
 /**
- * ── ★ FLY (Alex, 2026-09-16: "make it so the camera in this build mode can fly freely") ────────
- * A third stance beside orbit and keeper-eye: the camera is a free body. Right/middle-drag turns it
- * (same buttons that orbit, so a left click still places a block), W/A/S/D move along the look,
- * Space rises, Shift sinks, the wheel sets the speed. It starts FROM the orbit's last position and
- * facing so switching does not jump the view; the orbit is untouched underneath and comes back the
- * moment fly is left. Keys are ignored while an input has focus — the id box is a text field.
+ * Drag to orbit, wheel to zoom. The current view is published back so it can be written down.
+ * (The 09-16 "fly" stance that lived here became creative mode — `creative.tsx` — the same day.)
  */
-function Rig({ yaw, pitch, dist, eye, fly, target, onView }: {
-  yaw: number; pitch: number; dist: number; eye: boolean; fly: boolean; target: THREE.Vector3
+function Rig({ yaw, pitch, dist, eye, target, onView }: {
+  yaw: number; pitch: number; dist: number; eye: boolean; target: THREE.Vector3
   onView: (v: { yaw: number; pitch: number; dist: number }) => void
 }) {
   const { camera, gl } = useThree()
-  const state = useRef({ yaw, pitch, dist, eye, fly, dragging: false, lx: 0, ly: 0,
-    // the free body: its own facing (YXZ), a speed in blocks/s, and the keys held this frame
-    fyaw: 0, fpitch: 0, speed: 12, held: new Set<string>() })
+  const state = useRef({ yaw, pitch, dist, eye, dragging: false, lx: 0, ly: 0 })
   useEffect(() => {
     const s = state.current
-    if (fly && !s.fly) {
-      // Enter where the orbit left the camera, facing the way it faced.
-      const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
-      s.fyaw = e.y; s.fpitch = e.x
-    }
-    s.yaw = yaw; s.pitch = pitch; s.dist = dist; s.eye = eye; s.fly = fly
-  }, [yaw, pitch, dist, eye, fly, camera])
-
-  useFrame((_, dt) => {
-    const s = state.current
-    if (!s.fly) return
-    camera.quaternion.setFromEuler(new THREE.Euler(s.fpitch, s.fyaw, 0, 'YXZ'))
-    const k = s.held
-    if (!k.size) return
-    const step = s.speed * Math.min(dt, 0.1)
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)
-    const m = new THREE.Vector3()
-    if (k.has('KeyW')) m.add(fwd)
-    if (k.has('KeyS')) m.sub(fwd)
-    if (k.has('KeyD')) m.add(right)
-    if (k.has('KeyA')) m.sub(right)
-    if (k.has('Space')) m.y += 1
-    if (k.has('ShiftLeft') || k.has('ShiftRight')) m.y -= 1
-    if (m.lengthSq() > 0) camera.position.addScaledVector(m.normalize(), step)
-  })
+    s.yaw = yaw; s.pitch = pitch; s.dist = dist; s.eye = eye
+  }, [yaw, pitch, dist, eye])
 
   useEffect(() => {
     const el = gl.domElement
     const apply = () => {
       const s = state.current
-      if (s.fly) return                     // the free body is driven per frame above
       if (s.eye) {
         // ── ★★ STANDING ON THE PAD, NOT ORBITING CLOSE TO IT ────────────────────────────────
         // The orbit's height is `target.y + sin(pitch) * dist` — it is a function of the DISTANCE,
@@ -275,7 +263,7 @@ function Rig({ yaw, pitch, dist, eye, fly, target, onView }: {
         // built look like to somebody standing in front of it.* Height comes from the pad and
         // `EYE_STAND`; `dist` only says how far back the keeper is standing; the look is LEVEL.
         //
-        // ⚠ CLAMPED TO THE PAD. `dist` runs to 300 and the pad is 24 across, so an unclamped
+        // ⚠ CLAMPED TO THE PAD. `dist` runs to 300 and the pad is 40 across, so an unclamped
         // stance walks off the edge and hangs in the void — which still RENDERS, and reads as a
         // low orbit rather than as a keeper. Stand at the edge instead and stay honest.
         const back = Math.min(s.dist, PAD / 2 - 1)
@@ -294,8 +282,8 @@ function Rig({ yaw, pitch, dist, eye, fly, target, onView }: {
       camera.lookAt(target)
     }
     apply()
-    // ⚠ Only a drag with the middle button or with space/right held orbits; a plain left drag must
-    // stay available for placing blocks, or building becomes impossible the moment you want to aim.
+    // ⚠ Only a drag with the middle or right button orbits; a plain left drag must stay available
+    // for placing blocks, or building becomes impossible the moment you want to aim.
     const down = (e: PointerEvent) => {
       if (e.button !== 1 && e.button !== 2) return
       state.current.dragging = true; state.current.lx = e.clientX; state.current.ly = e.clientY
@@ -303,13 +291,6 @@ function Rig({ yaw, pitch, dist, eye, fly, target, onView }: {
     const move = (e: PointerEvent) => {
       const s = state.current
       if (!s.dragging) return
-      if (s.fly) {
-        // Mouse look: drag right turns right, drag down looks down — the world's own feel.
-        s.fyaw -= (e.clientX - s.lx) * 0.004
-        s.fpitch = Math.max(-1.5, Math.min(1.5, s.fpitch - (e.clientY - s.ly) * 0.004))
-        s.lx = e.clientX; s.ly = e.clientY
-        return
-      }
       s.yaw += (e.clientX - s.lx) * 0.006
       // Clamped short of the poles: straight down gives `lookAt` an ambiguous up vector and the view rolls.
       s.pitch = Math.max(-1.45, Math.min(1.45, s.pitch + (e.clientY - s.ly) * 0.006))
@@ -317,18 +298,9 @@ function Rig({ yaw, pitch, dist, eye, fly, target, onView }: {
       apply(); onView({ yaw: s.yaw, pitch: s.pitch, dist: s.dist })
     }
     const up = () => { state.current.dragging = false }
-    const typing = () => { const t = document.activeElement; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') }
-    const keyDown = (e: KeyboardEvent) => {
-      if (!state.current.fly || typing()) return
-      if (e.code === 'Space') e.preventDefault()      // the page must not scroll under the canvas
-      state.current.held.add(e.code)
-    }
-    const keyUp = (e: KeyboardEvent) => { state.current.held.delete(e.code) }
-    const blur = () => { state.current.held.clear() }   // a key released over another window never arrives
     const wheel = (e: WheelEvent) => {
       e.preventDefault()
       const s = state.current
-      if (s.fly) { s.speed = Math.max(2, Math.min(80, s.speed * (e.deltaY > 0 ? 0.85 : 1.18))); return }
       s.dist = Math.max(4, Math.min(300, s.dist * (e.deltaY > 0 ? 1.1 : 0.9)))
       apply(); onView({ yaw: s.yaw, pitch: s.pitch, dist: s.dist })
     }
@@ -336,19 +308,13 @@ function Rig({ yaw, pitch, dist, eye, fly, target, onView }: {
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     el.addEventListener('wheel', wheel, { passive: false })
-    window.addEventListener('keydown', keyDown)
-    window.addEventListener('keyup', keyUp)
-    window.addEventListener('blur', blur)
     return () => {
       el.removeEventListener('pointerdown', down)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       el.removeEventListener('wheel', wheel)
-      window.removeEventListener('keydown', keyDown)
-      window.removeEventListener('keyup', keyUp)
-      window.removeEventListener('blur', blur)
     }
-  }, [camera, gl, target.x, target.y, target.z, eye, fly, onView])
+  }, [camera, gl, target.x, target.y, target.z, eye, onView])
   return null
 }
 
@@ -387,11 +353,41 @@ function StationGhosts({ layout }: { layout: StationLayout }) {
 
 export default function WorktablePage() {
   const [cells, setCells] = useState<Cells>(new Map())
-  const [material, setMaterial] = useState<number>(MAT.CUT_STONE)
-  /** What a click places. Blocks build the mass; pieces are the vocabulary that makes it a building. */
-  const [mode, setMode] = useState<'block' | 'piece'>('block')
-  const [pieceId, setPieceId] = useState<string>('doorway')
+  /**
+   * ★ THE HOTBAR IS THE ONE SELECTION. Nine slots, each a block or a piece; the digits and the wheel
+   * pick a slot, the inventory (this panel, behind E) fills the picked one, and what a click places —
+   * in creative or in orbit — is whatever the picked slot holds. `material` / `mode` / `pieceId` are
+   * derived from it below, so there is no second selection for the two stances to disagree about.
+   * Seeded with a builder's first nine and kept in localStorage; a default that stops being placeable
+   * is dropped at boot rather than shipped as an empty-looking slot that refuses.
+   */
+  const [slots, setSlots] = useState<Slot[]>(HOTBAR_SEED)
+  const [slot, setSlot] = useState(0)
+  // ⚠ localStorage is read AFTER hydration, never in the initializer: the server renders the seed
+  // and a client that disagrees on the first render gets its attributes left as the server sent them.
+  const hotbarLoaded = useRef(false)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('worktable.hotbar')
+      if (raw) {
+        const got = JSON.parse(raw)
+        if (Array.isArray(got) && got.length === HOTBAR_SIZE)
+          setSlots(got.map((sl: Slot) => (sl?.kind === 'block' && !PALETTE.includes(sl.m)) || (sl?.kind === 'piece' && !PIECES.some(p => p.id === sl.id)) ? null : sl))
+      }
+    } catch { /* a private window or a bad value: the seed */ }
+    hotbarLoaded.current = true
+  }, [])
+  useEffect(() => { if (hotbarLoaded.current) try { localStorage.setItem('worktable.hotbar', JSON.stringify(slots)) } catch { /* ignore */ } }, [slots])
+  const held = slots[slot]
+  const material = held?.kind === 'block' ? held.m : MAT.CUT_STONE
+  const mode: 'block' | 'piece' = held?.kind === 'piece' ? 'piece' : 'block'
+  const pieceId = held?.kind === 'piece' ? held.id : 'doorway'
+  const setMaterial = (m: number) => setSlots(sl => sl.map((x, i) => i === slot ? { kind: 'block', m } : x))
+  const setPieceId = (id: string) => setSlots(sl => sl.map((x, i) => i === slot ? { kind: 'piece', id } : x))
   const [rot, setRot] = useState<Rotation>(0)
+  /** Which inventory list the panel shows. Follows the held slot's kind; the tabs override. */
+  const [invPick, setInv] = useState<'block' | 'piece' | null>(null)
+  const inv = invPick ?? mode
   const [placements, setPlacements] = useState<BlueprintPiece[]>([])
   const [id, setId] = useState('untitled')
   const [name, setName] = useState('Untitled')
@@ -400,8 +396,13 @@ export default function WorktablePage() {
   const [fog, setFog] = useState(true)
   const [hour, setHour] = useState(12)
   const [showKeeper, setShowKeeper] = useState(true)
-  const [eye, setEye] = useState(false)
-  const [fly, setFly] = useState(false)
+  /** creative = the body with the crosshair (default) · orbit = drag the view, click to place · eye = a keeper's level look. */
+  const [stance, setStance] = useState<'creative' | 'orbit' | 'eye'>('creative')
+  const creative = stance === 'creative'
+  const eye = stance === 'eye'
+  /** Pointer locked = the panel is away and the mouse is the crosshair. */
+  const [locked, setLocked] = useState(false)
+  const readout = useRef<HTMLDivElement>(null)
   /** The station's crossings, in the editor's frame — loaded with the file, shifted with the blocks on save. */
   const [station, setStation] = useState<StationLayout | null>(null)
   const [view, setView] = useState({ yaw: -0.9, pitch: 0.5, dist: 34 })
@@ -413,6 +414,7 @@ export default function WorktablePage() {
    * ⚠ Both collections, because undoing a door and leaving the wall it punched is not an undo.
    */
   const undo = useRef<{ cells: Cells; placements: BlueprintPiece[] }[]>([])
+  const redo = useRef<{ cells: Cells; placements: BlueprintPiece[] }[]>([])
 
   useEffect(() => { setTimePin(hour) }, [hour])
   // `?load=<id>` opens a saved structure on arrival — the Dev tab's "gate station" link lands here.
@@ -434,14 +436,33 @@ export default function WorktablePage() {
   }, [])
   useEffect(() => { void refresh() }, [refresh])
 
-  const push = (next: Cells, nextPieces: BlueprintPiece[] = placements) => {
-    undo.current.push({ cells: new Map(cells), placements })
-    if (undo.current.length > 100) undo.current.shift()
+  // ★ Edits go through refs as well as state. A held button repeats from inside a frame loop, and
+  // several places can land between React renders — read the LIVE collections or the second
+  // repeat overwrites the first.
+  const live = useRef({ cells, placements }); live.current = { cells, placements }
+  const push = (next: Cells, nextPieces: BlueprintPiece[] = live.current.placements) => {
+    undo.current.push({ cells: new Map(live.current.cells), placements: live.current.placements })
+    if (undo.current.length > 200) undo.current.shift()
+    redo.current = []
+    live.current = { cells: next, placements: nextPieces }
     setCells(next)
     setPlacements(nextPieces)
   }
+  const doUndo = () => {
+    const p = undo.current.pop(); if (!p) return
+    redo.current.push({ cells: new Map(live.current.cells), placements: live.current.placements })
+    live.current = p; setCells(p.cells); setPlacements(p.placements)
+  }
+  const doRedo = () => {
+    const p = redo.current.pop(); if (!p) return
+    undo.current.push({ cells: new Map(live.current.cells), placements: live.current.placements })
+    live.current = p; setCells(p.cells); setPlacements(p.placements)
+  }
 
   const onHit = useCallback((e: { point: THREE.Vector3; normal: THREE.Vector3; shift: boolean; alt: boolean }) => {
+    // ⚠ In creative the crosshair places, not the pointer. A locked pointer still delivers R3F
+    // pointer events at its frozen position, so without this gate every click would place TWICE.
+    if (creative) return
     // ★ ONE RULE FOR THE PAD AND FOR EVERY BLOCK: step half a cell along the hit normal to place,
     // against it to remove. The pad is a real box for exactly this reason — a ground PLANE would
     // have needed its own branch, and a second placement rule is a second set of off-by-ones.
@@ -466,7 +487,8 @@ export default function WorktablePage() {
     if (removing) next.delete(key(c.x, c.y, c.z))
     else next.set(key(c.x, c.y, c.z), material)
     push(next)
-  }, [cells, material, mode, pieceId, rot, placements])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cells, material, mode, pieceId, rot, placements, creative])
 
   const asCells = useMemo((): BlueprintCell[] =>
     [...cells.entries()].map(([k, m]) => ({ ...unkey(k), m })), [cells])
@@ -571,6 +593,82 @@ export default function WorktablePage() {
   /** ★ The blueprint's own blocks, as the "is this solid?" the fence arms ask. */
   const solid = useCallback((x: number, y: number, z: number) => cells.has(key(x, y, z)), [cells])
 
+  // ── ★ CREATIVE MODE'S ACTIONS ─────────────────────────────────────────────────────────────────
+  // The crosshair's walk sees blocks, piece FOOTPRINTS and the pad as solid, so a doorway can be
+  // looked at (and broken) like the wall it sits in, and the pad's top face is a place to build.
+  /** cell key → index of the placement whose footprint covers it. */
+  const pieceAt = useMemo(() => {
+    const m = new Map<string, number>()
+    placements.forEach((p, i) => { for (const c of pieceFootprint(p)) m.set(key(c.x, c.y, c.z), i) })
+    return m
+  }, [placements])
+  const pieceAtRef = useRef(pieceAt); pieceAtRef.current = pieceAt
+  const inPad = (c: Vec3) => c.x >= 0 && c.z >= 0 && c.x < PAD && c.z < PAD
+  const creativeActions = {
+    solid: (x: number, y: number, z: number) =>
+      (y === -1 && x >= 0 && z >= 0 && x < PAD && z < PAD) || live.current.cells.has(key(x, y, z)) || pieceAtRef.current.has(key(x, y, z)),
+    ghost: (at: Vec3) => {
+      if (at.y < 0 || !inPad(at)) return null
+      if (mode === 'piece') return pieceFootprint({ pieceId, x: at.x, y: at.y, z: at.z, rot })
+      return live.current.cells.has(key(at.x, at.y, at.z)) ? null : [at]
+    },
+    onBreak: (c: Vec3) => {
+      const k = key(c.x, c.y, c.z)
+      if (live.current.cells.has(k)) { const next = new Map(live.current.cells); next.delete(k); push(next); return }
+      const pi = pieceAtRef.current.get(k)
+      if (pi !== undefined) push(new Map(live.current.cells), live.current.placements.filter((_, i) => i !== pi))
+    },
+    onPlace: (at: Vec3) => {
+      if (at.y < 0 || !inPad(at)) return
+      const k = key(at.x, at.y, at.z)
+      if (mode === 'piece') {
+        // A piece whose footprint already has a block or another piece in it is refused, not stacked.
+        const fp = pieceFootprint({ pieceId, x: at.x, y: at.y, z: at.z, rot })
+        if (fp.some(c => live.current.cells.has(key(c.x, c.y, c.z)) || pieceAtRef.current.has(key(c.x, c.y, c.z)))) return
+        push(new Map(live.current.cells), [...live.current.placements, { pieceId, x: at.x, y: at.y, z: at.z, rot }])
+        return
+      }
+      if (live.current.cells.has(k) || pieceAtRef.current.has(k)) return
+      const next = new Map(live.current.cells); next.set(k, material); push(next)
+    },
+    onPick: (c: Vec3) => {
+      // Middle click: the looked-at thing goes in the hand — into a slot that already holds it, else the picked one.
+      const k = key(c.x, c.y, c.z)
+      const m = live.current.cells.get(k)
+      const pi = pieceAtRef.current.get(k)
+      const want: Slot = m !== undefined ? { kind: 'block', m } : pi !== undefined ? { kind: 'piece', id: live.current.placements[pi].pieceId } : null
+      if (!want) return
+      const have = slots.findIndex(x => x && x.kind === want.kind && (x.kind === 'block' ? x.m === (want as { m: number }).m : x.id === (want as { id: string }).id))
+      if (have >= 0) setSlot(have); else setSlots(sl => sl.map((x, i) => i === slot ? want : x))
+    },
+    onScroll: (d: 1 | -1) => setSlot(i => (i + d + HOTBAR_SIZE) % HOTBAR_SIZE),
+    onLocked: setLocked,
+    describe: (c: Vec3) => {
+      const m = live.current.cells.get(key(c.x, c.y, c.z))
+      if (m !== undefined) return `${blockDef(m)?.name ?? `#${m}`} · ${c.x},${c.y},${c.z}`
+      const pi = pieceAtRef.current.get(key(c.x, c.y, c.z))
+      if (pi !== undefined) { const p = live.current.placements[pi]; return `${PIECES.find(x => x.id === p.pieceId)?.name ?? p.pieceId} · rot ${p.rot} · ${p.x},${p.y},${p.z}` }
+      return `pad · ${c.x},${c.z}`
+    },
+  }
+
+  // ── keys the whole page answers (every stance, never while typing) ──────────────────────────
+  // 1–9 pick a slot · R turns the piece · Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) undo / redo.
+  const keys = useRef({ doUndo, doRedo }); keys.current = { doUndo, doRedo }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = document.activeElement
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) keys.current.doRedo(); else keys.current.doUndo(); return }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') { e.preventDefault(); keys.current.doRedo(); return }
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (/^Digit[1-9]$/.test(e.code)) { setSlot(Number(e.code.slice(5)) - 1); return }
+      if (e.code === 'KeyR') { setRot(r => ((r + 1) % 4) as Rotation); return }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const target = useMemo(
     () => new THREE.Vector3(PAD / 2, Math.min(8, Math.max(2, bounds.h / 2)), PAD / 2),
     [bounds.h])
@@ -586,7 +684,13 @@ export default function WorktablePage() {
             `VoxelDayNight` owns the world's fog and a second way to disable it would be a second
             dialect of the same switch. */}
         {!fog && <fog attach="fog" args={[DAY.bg, 5000, 6000]} />}
-        <Rig yaw={view.yaw} pitch={view.pitch} dist={view.dist} eye={eye} fly={fly} target={target} onView={setView} />
+        {!creative && <Rig yaw={view.yaw} pitch={view.pitch} dist={view.dist} eye={eye} target={target} onView={setView} />}
+        {/* The body's first stance: the orbit's bearing, but within REACH of the structure's centre,
+            so the page opens with a block under the crosshair rather than a view of nothing in range. */}
+        <CreativeRig active={creative} actions={creativeActions} readout={readout} start={(() => {
+          const d = Math.min(view.dist, 9)
+          return { position: { x: target.x + Math.cos(view.yaw) * Math.cos(view.pitch) * d, y: target.y + Math.sin(view.pitch) * d, z: target.z + Math.sin(view.yaw) * Math.cos(view.pitch) * d },
+                   lookAt: { x: target.x, y: target.y, z: target.z } } })()} />
         <Pad onHit={onHit} />
         {byMaterial.map(([mat, list]) => (
           <MaterialMesh key={mat} mat={mat} cells={list} tex={tex} onHit={onHit} />
@@ -596,10 +700,25 @@ export default function WorktablePage() {
         {id === STATION_BP_ID && station && <StationGhosts layout={station} />}
       </Canvas>
 
-      {/* ── the panel ─────────────────────────────────────────────────────────────────────── */}
+      {/* ── the HUD: crosshair, the looked-at line, the hotbar ───────────────────────────────── */}
+      {creative && locked && <Crosshair />}
+      {creative && (
+        <div ref={readout} style={{ position: 'absolute', left: '50%', top: 'calc(50% + 18px)', transform: 'translateX(-50%)',
+                                    pointerEvents: 'none', color: '#fff', textShadow: '0 1px 2px #000, 0 0 6px #000',
+                                    fontSize: 11, opacity: 0.85, whiteSpace: 'nowrap' }} />
+      )}
+      <Hotbar slots={slots} index={slot} onSelect={setSlot} pieceRot={rot} dim={!creative} />
+      {creative && !locked && (
+        <div style={{ position: 'absolute', left: '50%', bottom: 104, transform: 'translateX(-50%)', pointerEvents: 'none',
+                      color: '#fff', textShadow: '0 1px 2px #000, 0 0 6px #000', fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap' }}>
+          click the view to build · E closes the inventory
+        </div>
+      )}
+
+      {/* ── the panel — the inventory, behind E while the pointer is locked ──────────────────── */}
       <div style={{ position: 'absolute', top: 8, left: 8, width: 300, maxHeight: 'calc(100vh - 16px)',
                     overflowY: 'auto', background: 'rgba(8,12,16,0.86)', border: '1px solid rgba(150,180,210,0.22)',
-                    borderRadius: 6, padding: '9px 11px' }}>
+                    borderRadius: 6, padding: '9px 11px', display: locked ? 'none' : 'block' }}>
         <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10 }}>
           structure worktable
         </div>
@@ -610,7 +729,9 @@ export default function WorktablePage() {
         </div>
 
         <div style={{ opacity: 0.65, fontSize: 11, marginBottom: 6 }}>
-          click to place · shift-click or right-click to remove · middle/right-drag to orbit · wheel to zoom
+          {creative
+            ? <>left breaks · right places · middle picks · wheel / 1–9 hotbar · R turns a piece · W A S D fly, Space up, Shift down, double-tap W sprint, − / = speed · E inventory · Ctrl+Z undo</>
+            : <>click to place · shift-click to remove · middle/right-drag to orbit · wheel to zoom · 1–9 hotbar · R turns a piece · Ctrl+Z undo</>}
         </div>
         {id === STATION_BP_ID && (
           <div style={{ opacity: 0.8, fontSize: 11, marginBottom: 6, borderLeft: '2px solid #ffd27a', paddingLeft: 6 }}>
@@ -628,18 +749,22 @@ export default function WorktablePage() {
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
           <button style={btn} onClick={save}>save</button>
-          <button style={btn} onClick={() => { const p = undo.current.pop(); if (p) { setCells(p.cells); setPlacements(p.placements) } }}>undo</button>
+          <button style={btn} onClick={doUndo}>undo</button>
+          <button style={btn} onClick={doRedo}>redo</button>
           <button style={btn} onClick={() => push(new Map(), [])}>clear</button>
           <button style={btn} onClick={() => setFog(f => !f)}>fog {fog ? 'on' : 'off'}</button>
           <button style={btn} onClick={() => setShowKeeper(k => !k)}>keeper</button>
-          <button style={btn} onClick={() => setEye(e => !e)}>{eye ? 'keeper eye' : 'from above'}</button>
-          <button style={{ ...btn, ...(fly ? { borderColor: '#ffd27a', color: '#ffd27a' } : {}) }} onClick={() => setFly(f => !f)}>{fly ? 'fly: on' : 'fly'}</button>
         </div>
-        {fly && (
-          <div style={{ opacity: 0.7, fontSize: 11, marginBottom: 8 }}>
-            fly — W/A/S/D move · Space up · Shift down · right-drag to look · wheel = speed · click still places
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+          {([['creative', 'build'], ['orbit', 'orbit'], ['eye', 'keeper eye']] as const).map(([st, lab]) => (
+            <button key={st} onClick={() => setStance(st)}
+              style={{ ...btn, flex: 1, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10,
+                       borderColor: stance === st ? '#ffd27a' : 'rgba(150,180,210,0.25)',
+                       color: stance === st ? '#ffd27a' : '#cfd8e0' }}>
+              {lab}
+            </button>
+          ))}
+        </div>
         <label style={{ display: 'block', opacity: 0.7, marginBottom: 8 }}>
           hour {hour}
           <input type="range" min={0} max={23} value={hour} onChange={e => setHour(Number(e.target.value))}
@@ -696,20 +821,24 @@ export default function WorktablePage() {
           </div>
         )}
 
-        {/* ★★ WHAT A CLICK PLACES. Blocks are the mass; the 14 pieces are the building vocabulary —
-            without them a blueprint is a box with a hole where a door goes. */}
-        <div style={{ display: 'flex', gap: 4, margin: '10px 0 6px' }}>
+        {/* ★★ THE INVENTORY. Blocks are the mass; the pieces are the building vocabulary — without
+            them a blueprint is a box with a hole where a door goes. Picking either writes it into
+            the SELECTED hotbar slot (highlighted below); the tab only chooses which list shows. */}
+        <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10, margin: '10px 0 4px' }}>
+          inventory → slot {slot + 1}{held ? ` (${slotLabel(held)})` : ' (empty)'}
+        </div>
+        <div style={{ display: 'flex', gap: 4, margin: '0 0 6px' }}>
           {(['block', 'piece'] as const).map(m => (
-            <button key={m} onClick={() => setMode(m)}
+            <button key={m} onClick={() => setInv(m)}
               style={{ ...btn, flex: 1, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10,
-                       borderColor: mode === m ? '#ffcf8a' : 'rgba(150,180,210,0.25)',
-                       color: mode === m ? '#ffcf8a' : '#cfd8e0' }}>
+                       borderColor: inv === m ? '#ffcf8a' : 'rgba(150,180,210,0.25)',
+                       color: inv === m ? '#ffcf8a' : '#cfd8e0' }}>
               {m}s
             </button>
           ))}
         </div>
 
-        {mode === 'piece' && (
+        {inv === 'piece' && (
           <>
             <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10, margin: '4px 0' }}>
               piece — <span style={{ color: '#ffcf8a' }}>{pieceId}</span>
@@ -735,8 +864,9 @@ export default function WorktablePage() {
           </>
         )}
 
-        <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10, margin: '10px 0 4px' }}>
-          material — <span style={{ color: '#ffcf8a' }}>{label(material)}</span>
+        {inv === 'block' && <>
+        <div style={{ textTransform: 'uppercase', letterSpacing: '0.09em', opacity: 0.6, fontSize: 10, margin: '4px 0 4px' }}>
+          material — <span style={{ color: '#ffcf8a' }}>{mode === 'block' ? label(material) : '—'}</span>
         </div>
         {/* ⚠ ITS OWN SCROLL BOX WITH A BOUNDED HEIGHT. The palette grows every time a block is added,
             and an unbounded list pushes whatever follows it out of reach — which is exactly what it
@@ -762,10 +892,11 @@ export default function WorktablePage() {
                     {sorted.map(m => (
                       <button key={m} onClick={() => setMaterial(m)} title={`${label(m)} (${m})`}
                         style={{ ...btn, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis',
-                                 whiteSpace: 'nowrap', fontSize: 10,
-                                 borderColor: m === material ? '#ffcf8a' : 'rgba(150,180,210,0.25)',
-                                 color: m === material ? '#ffcf8a' : '#cfd8e0' }}>
-                        {label(m)}
+                                 whiteSpace: 'nowrap', fontSize: 10, display: 'flex', alignItems: 'center', gap: 5, padding: '2px 5px',
+                                 borderColor: mode === 'block' && m === material ? '#ffcf8a' : 'rgba(150,180,210,0.25)',
+                                 color: mode === 'block' && m === material ? '#ffcf8a' : '#cfd8e0' }}>
+                        <Swatch m={m} size={22} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label(m)}</span>
                       </button>
                     ))}
                   </div>
@@ -774,6 +905,8 @@ export default function WorktablePage() {
             )
           })}
         </div>
+
+        </>}
 
         <div style={{ marginTop: 10, opacity: 0.45, fontSize: 10 }}>
           view: yaw {view.yaw.toFixed(2)} · pitch {view.pitch.toFixed(2)} · dist {view.dist.toFixed(0)}
