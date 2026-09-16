@@ -31,7 +31,7 @@ ok(!isSolid(MAT.PUFF_CLUSTER) && !isSolid(MAT.GLOW_MOSS), 'neither is walk-into 
 ok(!isForage(MAT.KILN), 'the range starts after the kiln')
 ok(FORAGE_MATS.every(m => FLORA_MATERIALS.has(m)), 'both forage materials are in the atlas exemption')
 ok(FLORA_KIND_COUNT === FLORA_MATERIALS.size, `kind count and material set agree (${FLORA_KIND_COUNT} vs ${FLORA_MATERIALS.size})`)
-ok(FLORA.PUFF !== FLORA.MOSS && FLORA.PUFF > FLORA.FRUIT && FLORA.MOSS > FLORA.FRUIT, 'the two kinds have their own slots after FRUIT')
+ok((FLORA.PUFF as number) !== (FLORA.MOSS as number) && FLORA.PUFF > FLORA.FRUIT && FLORA.MOSS > FLORA.FRUIT, 'the two kinds have their own slots after FRUIT')
 
 // ── 3. the moss emits; the puff does not ───────────────────────────────────────────────────────
 const row = (m: number) => BLOCKS.find(b => b.material === m)
