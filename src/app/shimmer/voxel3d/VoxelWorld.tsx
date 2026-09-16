@@ -315,6 +315,9 @@ import { tickRecovery } from '../engine/spirit-health'
 import { HudCorner } from '../hud/hud-corner'
 import { Clock } from '../hud/clock'
 import { ObjectiveChip } from '../hud/objective-chip'
+import { SayLine } from '../hud/say-line'
+import { Prompt } from '../hud/prompt'
+import { DialogueBox } from '../hud/dialogue-box'
 import { Hotbar, type HotbarEntry } from '../hud/hotbar'
 import { ItemChip, itemLabel, tierLabel, BagPanel, GearTab, type SlotRef, type Lift, type LiftMode, type OpenChest } from '../hud/satchel'
 import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/options-panel'
@@ -2694,16 +2697,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           not in the debug corner it used to die in. Plated, because this file's own UI law says text
           never sits raw on a scene, and a refusal read over bright canopy is the case that matters.
           `pointer-events-none` throughout: it must never eat a click meant for the world. */}
-      {toast && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[19%] z-30 flex justify-center px-4">
-          <div key={toast.at}
-               className="max-w-[34rem] rounded border border-white/15 bg-black/70 px-3.5 py-2 text-center
-                          text-[13px] leading-snug text-amber-100/90 shadow-lg backdrop-blur-[2px]
-                          motion-safe:animate-[fadeSlideIn_140ms_ease-out]">
-            {toast.text}
-          </div>
-        </div>
-      )}
+      {toast && <SayLine text={toast.text} at={toast.at} />}
 
       {/* The tutorial objective chip — dim caps label, bright value, the house game-UI signature.
           ⚠ THIS COMMENT USED TO CLAIM the tool row above and the hotbar counts "already follow" the
@@ -2719,21 +2713,9 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
       {/* "E — talk" — shown while the crosshair is on Greg. Hidden while the box he opens is already up.
           The bench borrows the same prompt slot ("E — craft"); Greg wins when both are near,
           mirroring the KeyE handler's priority. */}
-      {nearGreg && !dialogueOpen && (
-        <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
-          <div className="text-[11px] font-mono tracking-wide text-white/85">E — talk</div>
-        </div>
-      )}
-      {!nearGreg && nearFolk && !dialogueOpen && (
-        <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
-          <div className="text-[11px] font-mono tracking-wide text-white/85">E — talk to {folkDef(nearFolk).name}</div>
-        </div>
-      )}
-      {!nearGreg && !nearFolk && nearTable && !craftOpen && (
-        <div className="absolute left-1/2 top-[63%] -translate-x-1/2 text-center pointer-events-none">
-          <div className="text-[11px] font-mono tracking-wide text-white/85">E — craft</div>
-        </div>
-      )}
+      {nearGreg && !dialogueOpen && <Prompt text="E — talk" />}
+      {!nearGreg && nearFolk && !dialogueOpen && <Prompt text={`E — talk to ${folkDef(nearFolk).name}`} />}
+      {!nearGreg && !nearFolk && nearTable && !craftOpen && <Prompt text="E — craft" />}
       {/* ★ The presence names itself before you commit — the whole consent design. You are told
           WHICH spirit answered this ground and can walk away. A keeper with no spirits is told the
           truth rather than being given a dead key: canon's own order is that Greg's seed sleeps a
@@ -9938,14 +9920,8 @@ function ScriptDialogue({ who, talk, onAnswer, onClose }: {
   const speaker = speakerOf(talk.beats)
   const options = talk.beats.filter((b): b is { option: string } => 'option' in b)
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      <div data-panel={who === 'greg' ? 'greg' : `folk-${who}`}
-           className="w-[440px] max-w-[92vw] bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
-           onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-baseline justify-between mb-3">
-          <span className="gx-label text-white/95">{name}</span>
-          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
-        </div>
+    <DialogueBox name={name} panelId={who === 'greg' ? 'greg' : `folk-${who}`} onBackdrop={onClose}
+                 footer={!talk.choice ? <div className="gx-label mt-3 text-white/40 text-[10px]">E / esc — close</div> : null}>
         <div className="text-white/85 leading-relaxed space-y-1.5 max-h-[60vh] overflow-y-auto">
           {talk.beats.map((b, i) =>
             'scene' in b ? <div key={i} className="text-white/40 italic">{b.scene}</div>
@@ -9972,9 +9948,7 @@ function ScriptDialogue({ who, talk, onAnswer, onClose }: {
             })}
           </div>
         )}
-        {!talk.choice && <div className="gx-label mt-3 text-white/40 text-[10px]">E / esc — close</div>}
-      </div>
-    </div>
+    </DialogueBox>
   )
 }
 
@@ -10009,17 +9983,11 @@ function GregDialogue({ ledger, owed, onWiden, onClose }: {
     : ledger.atTop ? GREG_LINES.foldTop.join('\n')
     : GREG_LINES.foldWaiting.join('\n')
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      {/* `data-panel` is the harness's handle, same as the brew plate's — picking this box out by
-          its text finds the HEADER row (shortest match, "Gregoryesc") and every assert downstream
-          then describes a two-word string instead of the conversation. */}
-      <div data-panel="greg"
-           className="w-[420px] bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
-           onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-baseline justify-between mb-3">
-          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Gregory</span>
-          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
-        </div>
+    // `data-panel="greg"` is the harness's handle, same as the brew plate's — picking this box out by
+    // its text finds the HEADER row (shortest match, "Gregoryesc") and every assert downstream
+    // then describes a two-word string instead of the conversation.
+    <DialogueBox name="Gregory" panelId="greg" width="w-[420px]" onBackdrop={onClose}
+                 footer={<div className="gx-label mt-3 text-white/40 text-[10px]">E / esc — close</div>}>
         <div className="text-white/85 leading-relaxed whitespace-pre-line">{lines}</div>
         {fold && (
           <div className="mt-3 pt-2 border-t border-white/8">
@@ -10040,9 +10008,7 @@ function GregDialogue({ ledger, owed, onWiden, onClose }: {
             )}
           </div>
         )}
-        <div className="mt-3 text-white/40 text-[10px] uppercase tracking-[.14em]">E / esc — close</div>
-      </div>
-    </div>
+    </DialogueBox>
   )
 }
 

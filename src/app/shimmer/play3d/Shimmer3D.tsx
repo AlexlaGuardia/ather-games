@@ -19,6 +19,9 @@ import { ALL_ZONES } from '../world/all-zones'
 import { consumeArrival } from '../engine/crossing'
 import { Clock } from '../hud/clock'
 import { ObjectiveChip } from '../hud/objective-chip'
+import { SayLine } from '../hud/say-line'
+import { Prompt } from '../hud/prompt'
+import { DialogueBox } from '../hud/dialogue-box'
 import { createGuideTrail } from '../voxel3d/guide-trail'
 import type { GuideTarget } from '../voxel3d/guide-target'
 import { forkTarget, forkObjective, forkFlags, MET_GREG_FLAG, STATION_FLAG } from './fork'
@@ -4573,6 +4576,8 @@ export default function Shimmer3D() {
   // done — but the link breaks if you walk out of range or run dry of mana. Toggle on/off with 🪓/E. ──
   const CHANNEL_RANGE = 1.8
   const [harvestToast, setHarvestToast] = useState<string | null>(null)
+  // Re-keys the say line so a new sentence replays its slide (the Ather's `toast.at`).
+  const sayAt = useMemo(() => Date.now(), [banner, harvestToast])
   const [harvestPop, setHarvestPop] = useState<{ x: number; y: number; z: number; glyph: string; key: number } | null>(null) // transient node-pop
   const popKeyRef = useRef(0)
   useEffect(() => { if (!harvestToast) return; const t = setTimeout(() => setHarvestToast(null), 2400); return () => clearTimeout(t) }, [harvestToast])
@@ -7029,13 +7034,7 @@ export default function Shimmer3D() {
       {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => { setShowMap(false); closeCursorUI() }} />}
 
       {/* talk prompt when standing by an NPC */}
-      {nearNpc && !dialogue && !battle && !editMode && (
-        <div style={{
-          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
-          padding: '7px 14px', borderRadius: 999, background: 'rgba(16,14,32,0.92)', border: '1px solid #d4a84366',
-          color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>✦ Talk to {nearNpc.name} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap ✦' : 'E'})</span></div>
-      )}
+      {nearNpc && !dialogue && !battle && !editMode && <Prompt text={`${isTouch ? 'tap ✦' : 'E'} — talk to ${nearNpc.name}`} />}
 
       {/* rinning prompt — locked at the pool: watch, then strike when the `!` pops (early/late slips) */}
       {fish && !editMode && (
@@ -7105,13 +7104,9 @@ export default function Shimmer3D() {
       )}
 
       {/* harvest toast — the drops + XP you just collected */}
-      {harvestToast && !battle && (
-        <div style={{
-          position: 'fixed', left: '50%', top: 118, transform: 'translateX(-50%)', zIndex: 36,
-          padding: '8px 16px', borderRadius: 12, background: 'rgba(11,21,19,0.94)', border: '1px solid #4fc79a', whiteSpace: 'nowrap',
-          color: '#eafff6', font: '700 13px ui-monospace, monospace', pointerEvents: 'none', boxShadow: '0 6px 20px #0008',
-        }}>{harvestToast}</div>
-      )}
+      {/* THE SAY LINE (`hud/say-line.tsx`): the harvest readout and the milestone banner were two plates
+          in two places; the Ather has one line for everything the world says. Banner wins when both. */}
+      {(banner || (harvestToast && !battle)) && <SayLine text={(banner ?? harvestToast)!} at={sayAt} />}
 
       {/* ── TOP-RIGHT COLUMN: what only the mortal side has, plus the panels the options open ──
           ★ THE KEEPER'S CHROME IS SHARED (2026-09-16, HUD port stage 1): the dial, the ☰ door and
@@ -7232,19 +7227,14 @@ export default function Shimmer3D() {
       )}
 
       {/* dialogue box — tap/click anywhere on it (or A / E) to advance; last line closes */}
+      {/* The same frame the Ather reads its script in (`hud/dialogue-box.tsx`); here one line per tap. */}
       {dialogue && (
-        <div
-          onPointerDown={(e) => { e.stopPropagation(); advanceDialogue() }}
-          style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 45, display: 'flex', justifyContent: 'center', padding: '0 16px 20px' }}
-        >
-          <div style={{ width: 'min(680px, 94vw)', background: 'rgba(12,10,24,0.95)', border: '1px solid #d4a84366', borderRadius: 12, padding: '14px 18px', cursor: 'pointer' }}>
-            <div style={{ color: '#ffd98a', font: '800 13px ui-monospace, monospace', marginBottom: 6, letterSpacing: '0.04em' }}>{dialogue.speakers?.[dialogue.idx] ?? dialogue.name}</div>
-            <div style={{ color: '#ece3d0', font: '600 15px/1.55 ui-monospace, monospace' }}>{dialogue.lines[dialogue.idx]}</div>
-            <div style={{ color: '#ffffff5e', font: '600 11px ui-monospace, monospace', marginTop: 9, textAlign: 'right' }}>
-              {dialogue.idx >= dialogue.lines.length - 1 ? 'tap to close' : 'tap to continue ▸'}
-            </div>
-          </div>
-        </div>
+        <DialogueBox name={dialogue.speakers?.[dialogue.idx] ?? dialogue.name} panelId="talk" onPlate={advanceDialogue}
+                     footer={<div className="gx-label mt-3 text-white/40 text-[10px] text-right">
+                       {dialogue.idx >= dialogue.lines.length - 1 ? 'tap to close' : 'tap to continue ▸'}
+                     </div>}>
+          <div className="text-white/85 text-[13px] leading-relaxed">{dialogue.lines[dialogue.idx]}</div>
+        </DialogueBox>
       )}
 
       {/* Birth Rune gate — opened by New Game; choose a rune, then reset into a fresh run carrying it */}
@@ -7276,13 +7266,6 @@ export default function Shimmer3D() {
       {/* milestone toast (evolution-ready, new game) */}
       {transit && <RegionTransition label={transit.label} phase={transit.phase} />}
 
-      {banner && (
-        <div style={{
-          position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 40,
-          padding: '8px 16px', borderRadius: 999, background: 'rgba(20,16,40,0.92)', border: '1px solid #d4a84366',
-          color: '#ffe9b0', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>{banner}</div>
-      )}
 
 
       {editMode && (
