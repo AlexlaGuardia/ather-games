@@ -54,7 +54,7 @@ try {
   const talkTo = async (id: string) => {
     const a = AT[id]
     await cmd(`/tp ${a.x} ${a.z}`); await sleep(1200)
-    await cmd(`/look ${a.yaw}`); await sleep(1200)
+    await cmd(`/look ${a.yaw} 22`); await sleep(1200)   // a Moglin is three feet tall: look down at them
     await page.keyboard.press('KeyE'); await sleep(700)
     let p = await panel()
     // A software-GL tab streams columns slowly; the aim test needs the building's blocks to have
