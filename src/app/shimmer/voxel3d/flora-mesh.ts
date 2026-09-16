@@ -328,8 +328,11 @@ export interface FloraRenderer {
  *  one draw per kind.
  *  Normals point UP so a blade lights like the ground it grows from (the standard grass-card
  *  trick; a real face normal would moonlight one side of every blade). */
-function buildCrossGeometry(width: number, height: number, yBase = 0, tiles = 1): THREE.BufferGeometry {
+function buildCrossGeometry(width: number, height: number, yBase = 0, tiles = 1, lean = 0): THREE.BufferGeometry {
   const hw = width / 2
+  // The top edge's swing along the card's normal (see CARD_LEAN). The card's base line stays put,
+  // so the root still meets the ground where the probe said it does.
+  const swing = height * Math.tan(lean)
   const pos: number[] = []
   const uv: number[] = []
   const nrm: number[] = []
@@ -339,7 +342,10 @@ function buildCrossGeometry(width: number, height: number, yBase = 0, tiles = 1)
   // `injectAtlas`), so the three cards of one plant show three different tiles. `tiles` = 1 → 0.
   const quad = (ax: number, az: number, bx: number, bz: number, col: number) => {
     const base = pos.length / 3
-    pos.push(ax, yBase, az, bx, yBase, bz, bx, yBase + height, bz, ax, yBase + height, az)
+    // The card's in-plane normal, unit length: the direction its top swings when it leans.
+    const len = Math.hypot(bx - ax, bz - az) || 1
+    const nx = -(bz - az) / len * swing, nz = (bx - ax) / len * swing
+    pos.push(ax, yBase, az, bx, yBase, bz, bx + nx, yBase + height, bz + nz, ax + nx, yBase + height, az + nz)
     uv.push(col, 0, col + 1, 0, col + 1, 1, col, 1)
     nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0)
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3)
@@ -375,9 +381,25 @@ function buildFlatGeometry(width: number, yBase: number): THREE.BufferGeometry {
 
 /** ONE builder for a part, read by the renderer AND by `vertsFor` — a flat part and a star part
  *  must be measured by the same code that draws them or the outline lies about one of them. */
-export interface FloraPart { w: number; h: number; yBase?: number; flat?: boolean; tiles?: number }
+export interface FloraPart { w: number; h: number; yBase?: number; flat?: boolean; tiles?: number; lean?: number }
+
+/**
+ * ── ★ THE LEAN: A STAR OF VERTICAL CARDS IS A STAR OF LINES FROM ABOVE (2026-09-16) ─────────────
+ * Alex: *"a lot of the flora is a flat line."* The 60° star (below) fixed the SIDE view — no walk
+ * angle catches all three cards edge-on — but a keeper stands 1.8 blocks tall and looks DOWN at
+ * grass, and from above every vertical card is a line no matter how many of them there are. The
+ * tuft you see most is the one at your feet, and that one was three pencil strokes.
+ *
+ * So the cards LEAN: each one tilts about its base line by this angle, and the top edge swings out
+ * along the card's own normal. From above a leaning card presents `w × h·sin(lean)` of texture —
+ * a pinwheel of three leaves instead of an asterisk — and from the side it is still `h·cos(lean)`
+ * tall. No extra triangles; the meadow is still one draw per kind. The alternative (fold each card
+ * into two outward-splayed halves) reads a touch better from above and doubles the tuft budget.
+ * Radians. 0 for a part that must stay a true star (a bloom head, a round bush).
+ */
+export const CARD_LEAN = 0.4
 const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
-  p.flat ? buildFlatGeometry(p.w, p.yBase ?? 0) : buildCrossGeometry(p.w, p.h, p.yBase ?? 0, p.tiles ?? 1)
+  p.flat ? buildFlatGeometry(p.w, p.yBase ?? 0) : buildCrossGeometry(p.w, p.h, p.yBase ?? 0, p.tiles ?? 1, p.lean ?? 0)
 
 /**
  * ── ★★★ THE SHAPE OF A PLANT, IN ONE PLACE, BECAUSE A SECOND CONSUMER ARRIVED ────────────────
@@ -405,12 +427,12 @@ const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
  */
 export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
   // Widths chosen against the jitter so a blade can never overhang its cell (w/2 + 0.15 <= 0.5).
-  [FLORA.TUFT]: [{ w: 0.7, h: 0.55, tiles: GRASS_VARIANTS }],
-  [FLORA.TALL]: [{ w: 0.7, h: 1.05, tiles: GRASS_VARIANTS }],
+  [FLORA.TUFT]: [{ w: 0.7, h: 0.55, tiles: GRASS_VARIANTS, lean: CARD_LEAN }],
+  [FLORA.TALL]: [{ w: 0.7, h: 1.05, tiles: GRASS_VARIANTS, lean: CARD_LEAN * 0.6 }],
   // ── The three flower forms (2026-09-14). `FLOWER` is the SINGLE: one stem, one big head, the
   // tallest of the three. The mat is a flat pad (leaves, then blooms over it) plus a low star so
   // it has SOME side profile; the bush is a leafy body with a bloom cluster riding its shoulders.
-  [FLORA.FLOWER]: [{ w: 0.5, h: 0.82 }, { w: 0.42, h: 0.42, yBase: 0.68 }],
+  [FLORA.FLOWER]: [{ w: 0.5, h: 0.82, lean: CARD_LEAN * 0.5 }, { w: 0.42, h: 0.42, yBase: 0.68 }],
   [FLORA.BLOOM_MAT]: [
     { w: 0.98, h: 0, yBase: 0.05, flat: true },     // leaf pad, ground-multiplied
     { w: 0.98, h: 0, yBase: 0.07, flat: true },     // bloom dots, tinted
@@ -425,13 +447,18 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
   [FLORA.FRUIT]: [{ w: 0.9, h: 0.78 }, { w: 0.74, h: 0.46, yBase: 0.28 }],
   // A herb stands taller than a wildflower and shorter than tall grass: findable at a few blocks
   // without hiding what is behind it. Body plus tip.
-  [FLORA.HERB]: [{ w: 0.55, h: 0.8 }, { w: 0.34, h: 0.34, yBase: 0.72 }],
+  [FLORA.HERB]: [{ w: 0.55, h: 0.8, lean: CARD_LEAN * 0.6 }, { w: 0.34, h: 0.34, yBase: 0.72 }],
   // Chest-high: a stand of grain has to read as CULTIVATED, and that silhouette is what separates a
   // field from a meadow. Unit height, because the planted feed scales it per growth phase.
   [FLORA.CROP]: [{ w: 0.62, h: 1.0 }, { w: 0.42, h: 0.30, yBase: 0.72 }],
   // Glow-moss is a pad and only a pad (2026-09-16): no blooms, no side star, and no contact
   // shadow — a thing that lights the ground does not darken it. The whole plant is one flat card.
-  [FLORA.MOSS]: [{ w: 0.98, h: 0, yBase: 0.05, flat: true }],
+  [FLORA.MOSS]: [
+    { w: 0.98, h: 0, yBase: 0.05, flat: true },
+    // A pad seen from eye level is a line (the bloom mat's lesson) — a low star gives it a cushion's
+    // side profile. Same texture, so it reads as the same moss standing up a little.
+    { w: 0.6, h: 0.14 },
+  ],
 }
 
 /**
