@@ -728,7 +728,7 @@ export function shortRowLabel(name: string): string {
 }
 
 export function snapshotText(p: FrameProfile, ctx: {
-  space: 'wilds' | 'plot'
+  space: 'wilds' | 'plot' | 'glade'
   x: number; y: number; z: number
   viewRadius: number
   cols: number; meshes: number; draws: number; tris: number; geometries: number; programs: number
@@ -753,7 +753,7 @@ export function snapshotText(p: FrameProfile, ctx: {
 }): string {
   const n = (v: number, d = 1) => v.toFixed(d)
   const L: string[] = []
-  L.push(`shimmer frame profile — ${ctx.space === 'plot' ? 'HOME PLOT (fold)' : 'wilds'}`)
+  L.push(`shimmer frame profile — ${ctx.space === 'plot' ? 'HOME PLOT (fold)' : ctx.space === 'glade' ? 'MOONWELL GLADE (island)' : 'wilds'}`)
   L.push(`at ${Math.round(ctx.x)},${Math.round(ctx.y)},${Math.round(ctx.z)}  ·  view radius ${ctx.viewRadius}`)
   if (ctx.renderer) L.push(`gpu ${ctx.renderer}`)
   L.push(`${p.fps} fps  ·  ${n(p.ms)} ms mean  ·  ${n(p.worst)} ms worst  ·  ${p.frames} frames in window`)

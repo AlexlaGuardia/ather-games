@@ -42,6 +42,7 @@
 import * as THREE from 'three'
 import { shellRadiusAt, type BubbleConfig } from '../voxel/bubble'
 import { DEFAULT_PLOT, plotThreshold, type PlotConfig } from '../voxel/plot'
+import { DEFAULT_GLADE, gladeSeamSpot, type GladeConfig } from '../voxel/glade'
 import { columnHeight } from '../voxel/height'
 import type { Space } from './save'
 
@@ -209,6 +210,29 @@ export function wildsSeamRibbon(seed: number, cfg: BubbleConfig): SeamRib[] {
  */
 export const PLOT_TRIGGER_RADIUS = PLOT_NEAR_RADIUS
 
+/**
+ * ── ★ THE GLADE'S SEAM — Greg's fold, seen from Moonwell (2026-09-16) ─────────────────────────
+ * Moonwell Glade is an island (`voxel/glade.ts`), and the one way off it is the fold Greg makes at
+ * the choice: *"Greg folds your pocket… sends you home to the pocket he just folded."* So this seam
+ * is drawn ONLY once the tutorial is done — before the fold there is no plot to step into, and a
+ * shimmer that led nowhere would be the dead-end panel the plot side already retired. Same look,
+ * same size and same trigger as the plot's own threshold: it IS a threshold, the keeper's, standing
+ * on Greg's ground. Derived from the island's coast, never stored.
+ */
+export const GLADE_TRIGGER_RADIUS = PLOT_NEAR_RADIUS
+
+export function gladeSeamAnchor(seed: number, cfg: GladeConfig = DEFAULT_GLADE): SeamAnchor {
+  const t = gladeSeamSpot(seed, (x, z) => columnHeight(x, z, seed), cfg)
+  return {
+    x: t.x + 0.5,
+    z: t.z + 0.5,
+    y: t.y,
+    bearing: t.bearing,
+    halfWidth: PLOT_NEAR_RADIUS * PLOT_WIDTH_FRAC,
+    height: PLOT_HEIGHT,
+  }
+}
+
 export function plotSeamAnchor(seed: number, cfg: PlotConfig = DEFAULT_PLOT): SeamAnchor {
   const t = plotThreshold(seed, cfg)
   return {
@@ -254,7 +278,8 @@ const WILDS_DRAW = 90, PLOT_DRAW = 420
 export interface SeamPass {
   group: THREE.Group
   /** Advance the pass. Allocates nothing; only one of the two seams is ever visible. */
-  tick(px: number, py: number, pz: number, dt: number, elapsed: number, space: Space): void
+  /** `gladeOpen` = the fold has been made (tutorial done); until then the Glade draws no seam. */
+  tick(px: number, py: number, pz: number, dt: number, elapsed: number, space: Space, gladeOpen?: boolean): void
   dispose(): void
 }
 
@@ -370,6 +395,16 @@ void main() {
   plot.visible = false
   plot.renderOrder = 2
 
+  // The Glade's threshold: a third mesh in a third coordinate space. The material-sharing rule
+  // above still holds — only one of the three is ever visible, because only one space is ever
+  // stood in. Its anchor is fixed (the island never grows), so it is placed once.
+  const gladeA = gladeSeamAnchor(seed)
+  const glade = new THREE.Mesh(geo, mat)
+  glade.visible = false
+  glade.renderOrder = 2
+  glade.scale.set(gladeA.halfWidth * 2, gladeA.height, 1)
+  glade.position.set(gladeA.x, gladeA.y + gladeA.height / 2, gladeA.z)
+
   /**
    * ── ⚠⚠ THE PLOT SEAM IS RE-DERIVED WHEN THE FOLD GROWS, AND IT USED TO BE FROZEN AT BIRTH ─────
    * Alex, 2026-08-27: *"when i got the first upgrade from greg to extend the fold.. the outer wall
@@ -406,13 +441,23 @@ void main() {
   syncPlot()
 
   const group = new THREE.Group()
-  group.add(wilds, plot)
+  group.add(wilds, plot, glade)
 
   return {
     group,
-    tick(px, py, pz, dt, elapsed, space) {
+    tick(px, py, pz, dt, elapsed, space, gladeOpen = false) {
       mat.uniforms.uTime.value = elapsed
-      if (space === 'plot') {
+      if (space === 'glade') {
+        wilds.visible = false
+        plot.visible = false
+        const dist = Math.hypot(px - gladeA.x, pz - gladeA.z)
+        glade.visible = gladeOpen && dist < PLOT_DRAW
+        if (glade.visible) {
+          glade.rotation.y = Math.atan2(px - gladeA.x, pz - gladeA.z)
+          mat.uniforms.uNear.value = seamNearness(dist, PLOT_SHUT, PLOT_OPEN)
+        }
+      } else if (space === 'plot') {
+        glade.visible = false
         wilds.visible = false
         // ⚠ BEFORE THE DISTANCE, NOT AFTER — a widening that landed between two ticks would
         // otherwise measure this frame's keeper against last tier's door.
@@ -425,6 +470,7 @@ void main() {
           mat.uniforms.uNear.value = seamNearness(dist, PLOT_SHUT, PLOT_OPEN)
         }
       } else {
+        glade.visible = false
         plot.visible = false
         const dist = Math.hypot(px - wildsA.x, pz - wildsA.z)
         wilds.visible = dist < WILDS_DRAW

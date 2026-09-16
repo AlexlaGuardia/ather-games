@@ -25,6 +25,7 @@ import {
   Column, SECTION, makeColumn, DEFAULT_COLUMN,
 } from '../app/shimmer/voxel/column'
 import { generatePlotColumn } from '../app/shimmer/voxel/plot-column'
+import { generateGladeColumn } from '../app/shimmer/voxel/glade-column'
 import { plotForTier, withLitter } from '../app/shimmer/voxel/plot'
 import { PLACED_STAMPS } from '../app/shimmer/data/blueprints/placed'
 
@@ -91,7 +92,10 @@ self.onmessage = (e: MessageEvent) => {
     // ⚠ AND IT MUST RIDE THE CACHE KEY TOO. `cols` is keyed by chunk coords; without the space in
     // the key, walking into the garden at 0,0 would be served the Wilds column the keeper had just
     // been standing in — cached, correct-looking, and completely the wrong world.
-    const space: string = msg.space === 'plot' ? 'plot' : 'wilds'
+    // ★ THREE SINCE 2026-09-16: Moonwell Glade is its own island (`voxel/glade.ts`) — the Wilds'
+    // generator masked to a disc, so it rides the SAME world config (stamps and all) under its own
+    // key. The Wilds still generates the zone underneath; the Glade is what a keeper stands in.
+    const space: string = msg.space === 'plot' ? 'plot' : msg.space === 'glade' ? 'glade' : 'wilds'
     // ── ★★ AND THE FOLD'S TIER RIDES IT TOO (2026-08-18, Greg's upgrade) ────────────────────────
     // A keeper's garden has a size now, stored per save, so "the plot column at 3,4" is no longer a
     // single answer — it is one answer per radius. The tier therefore has to arrive with the request
@@ -110,6 +114,8 @@ self.onmessage = (e: MessageEvent) => {
         // post-conditions (uniform refreshed, stage Ready) so the switch is one line rather than a
         // mode threaded through seven stages the plot needs none of.
         ? generatePlotColumn(new Column(cx * SECTION, cz * SECTION, DEFAULT_COLUMN), seed, withLitter(plotForTier(tier), litterFrom))
+        : space === 'glade'
+        ? generateGladeColumn(new Column(cx * SECTION, cz * SECTION, WORLD_COLUMN), seed, WORLD_COLUMN)
         : makeColumn(cx * SECTION, cz * SECTION, seed, WORLD_COLUMN))
     }
     // ★ ALWAYS answer with the voxels, cached or fresh. The main thread evicts columns it walks

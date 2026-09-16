@@ -181,6 +181,17 @@ export type TravelRefusal = 'unknown-mark' | 'at-plot-pick-one'
 export const DOOR_ID = '@door'
 
 /**
+ * ── ★ MOONWELL GLADE IS ALWAYS A DESTINATION FROM THE PLOT (2026-09-16) ────────────────────────
+ * Canon: *"Moonwell Glade is a pocket, and it is a PERMANENT HUB — never visit-once… where a keeper
+ * begins and where they keep coming back"* (`game/shimmer-geography.md`). The Glade is an island
+ * (`voxel/glade.ts`) and the passage to it is garden-to-garden — Greg's fold, the same one that let
+ * the keeper out to their plot — so it is NEVER a waymark: not planted, not pulled, not counted
+ * against `MAX_MARKS`, no home-cost. Same shape as `DOOR_ID` for the same three reasons, and the
+ * same prefix so it can never collide with a minted id.
+ */
+export const GLADE_ID = '@glade'
+
+/**
  * Where does stepping into a passage let out?
  *
  * ★ THE WHOLE HUB-AND-SPOKE RULE IS THIS ONE FUNCTION, so there is exactly one place to argue with
@@ -218,12 +229,13 @@ export const DOOR_ID = '@door'
  */
 export function destination(
   net: WaymarkNet, opts: { fromPlot: true; toId?: string } | { fromPlot: false; fromId: string },
-): { to: Waymark } | { toPlot: true } | { toDoor: true } | { refused: TravelRefusal } {
+): { to: Waymark } | { toPlot: true } | { toDoor: true } | { toGlade: true } | { refused: TravelRefusal } {
   if (!opts.fromPlot) {
     if (!net.marks.some((m) => m.id === opts.fromId)) return { refused: 'unknown-mark' }
     return { toPlot: true }
   }
   if (opts.toId === DOOR_ID) return { toDoor: true }
+  if (opts.toId === GLADE_ID) return { toGlade: true }
   // Nothing planted: the door is the only way out, so there is nothing to ask about.
   if (net.marks.length === 0) return { toDoor: true }
   if (!opts.toId) return { refused: 'at-plot-pick-one' }

@@ -232,7 +232,7 @@ import { SCRIPT, type Beat } from './folk-lines'
 /** Greg's `lit` line, said across the glade as a toast when the lantern lands (see `onQuestEvent`). */
 const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in b ? [b.text] : [])
 import { GREG_LINES } from './greg-lines'
-import { GATE_X, GATE_Z, GATE_SPANS_X, gateCells } from './gate'
+import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
          legacyRowSockets, courtClearCells, COURT_REV,
          courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells,
@@ -244,7 +244,7 @@ import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
 import { columnSmokeSources, type SmokeSource } from './smoke-sources'
-import { createSeamShimmer, PLOT_TRIGGER_RADIUS } from './seam'
+import { createSeamShimmer, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, gladeSeamAnchor } from './seam'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
 import { createBreakFx } from './break-fx'
 import { bucketOf, swingChips } from './break-fx-spec'
@@ -333,7 +333,7 @@ import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured 
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
          type StatusBag } from '../engine/statuses'
 import { emptyNet, plant as plantMark, pull as pullMark, destination as markDestination,
-         rename as renameMark, spokesOf, markAt, arrivalOf, MAX_MARKS, DOOR_ID,
+         rename as renameMark, spokesOf, markAt, arrivalOf, MAX_MARKS, DOOR_ID, GLADE_ID,
          type WaymarkNet, type Waymark } from '../voxel/waymark'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 import { senseGround, type SensedBody } from '../play3d/tremor-sense'
@@ -612,16 +612,6 @@ const GLADE_LIGHT_RADIUS = 64
 /** Greg's body in WORLD space — `greg.ts`'s own part dimensions, lifted to where he stands. */
 const GREG_BOX = bodyBox(GREG_CX, GREG_CZ, GREG_Y + GREG_BOUNDS.y0, GREG_Y + GREG_BOUNDS.y1, GREG_BOUNDS.halfW)
 
-
-/** Column keys the gate's whole footprint touches — checked before the first build so a 5-wide arch
- *  straddling a SECTION seam does not silently drop whichever half lands in an unloaded neighbour. */
-const GATE_COLS: string[] = (() => {
-  const half = 2
-  const pts: [number, number][] = GATE_SPANS_X
-    ? [[GATE_X - half, GATE_Z], [GATE_X + half, GATE_Z]]
-    : [[GATE_X, GATE_Z - half], [GATE_X, GATE_Z + half]]
-  return [...new Set(pts.map(([x, z]) => key(Math.floor(x / SECTION), Math.floor(z / SECTION))))]
-})()
 
 interface Slot { itemId: string; count: number }
 
@@ -1176,7 +1166,10 @@ export default function VoxelWorld() {
    * out here, mirrored) is two sources of truth about the one fact this codebase has already been
    * bitten by twice (`PlayerSave.space`, the worker's cache key).
    */
-  const space = useRef<Space>('wilds')
+  // ★ THE GLADE IS THE VOXEL WORLD'S FRONT DOOR (2026-09-16). A keeper with no saved position — the
+  // first minute, or a wiped store — stands at Moonwell: canon's *where a keeper begins and where
+  // they keep coming back*. The plot is reached by the seam Greg folds, never by default.
+  const space = useRef<Space>('glade')
   // ⚠ NO `tierTick` STATE HERE, DELIBERATELY. The first cut bumped a counter on every discovery and
   // every widening to "refresh the UI" — which re-rendered the whole world tree every time a keeper
   // walked past a mist patch, for nothing: the dialogue reads the ledger from these refs at OPEN
@@ -1911,6 +1904,13 @@ export default function VoxelWorld() {
         // recipe in voxel/recipes.ts stays as the REPLACEMENT path, per its header.
         ensureBasicTools(tools.current)
         give(inv.current!, 'crafting_table', 1)
+        // ── ★ THE FOLD IS THE CROSSING (2026-09-16) ─────────────────────────────────────────
+        // Canon: Greg folds the keeper's pocket and *"sends you home to the pocket he just
+        // folded"*. The Glade is an island now, so there is no road to walk — the fold itself puts
+        // the keeper in front of their own seam with the bag in hand. Through the same verb the
+        // console's `/space plot` uses, because World owns the teardown and this component does
+        // not; Moonwell keeps its own threshold back (`seam.ts` › `gladeSeamAnchor`) for the visits.
+        worldCmd.current?.space('plot')
         break
     }
     if (t.effect) {
@@ -3389,10 +3389,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   /** Edge latch for the collar prompt — see the emitter in the foe loop. */
   const lastCollarNear = useRef(false)
   const lastNearTable = useRef(false)
-  // The gate: built (sealed or open, matching whatever `tutorial.current.stage` says at the moment
-  // its columns arrive) exactly once, then opened exactly once more if the quest completes later.
-  const gateBuilt = useRef(false)
-  const gateOpened = useRef(false)
   /** Which plot tier's crossing court is currently standing in the world; -1 = none built.
    *  ⚠ NOT A BOOLEAN, because the court MOVES when Greg widens the fold. A `courtBuilt`
    *  flag would build once and leave the old cut stone stranded inland forever. */
@@ -3584,11 +3580,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // an owner command means it gets WALKED before travel depends on it — and it is the half
       // where a mistake costs a save, so it should be the half that gets played first.
       space: (to?: string) => {
-        const want: Space = to === 'plot' ? 'plot' : to === 'wilds' ? 'wilds'
+        const want: Space = to === 'plot' ? 'plot' : to === 'wilds' ? 'wilds' : to === 'glade' ? 'glade'
           : space.current === 'plot' ? 'wilds' : 'plot'
         if (want === space.current) return `already in the ${want}`
         enterSpaceRef.current?.(want)
-        return want === 'plot' ? 'stepping into your garden' : 'stepping out into the Wilds'
+        return want === 'plot' ? 'stepping into your garden' : want === 'glade' ? 'the fold lets you out at Moonwell' : 'stepping out into the Wilds'
       },
       /**
        * ── ★ THE GRANT GOES THROUGH THE SHIPPED PATH, BLOCK AND ALL ─────────────────────────────
@@ -3822,7 +3818,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // A save written before `space` existed says nothing about which world its numbers are in,
       // and the old default was "the Wilds" — which is how a keeper who logged out in their garden
       // woke up at the world's origin.
-      const savedSpace: Space = p.space === 'plot' ? 'plot' : 'wilds'
+      // ★ AND A KEEPER STILL IN THE TUTORIAL WHO SAVED IN THE OLD WILDS-GLADE WAKES IN THE ISLAND
+      // (2026-09-16): the Glade's coordinates did not move when it became a space, so the stored
+      // position is valid there — only its space label was wrong. A finished keeper's Wilds
+      // position is left alone; the continent is still theirs to walk.
+      const savedSpace: Space = p.space === 'plot' ? 'plot'
+        : p.space === 'glade' ? 'glade'
+        : tutorial.current.stage !== 'done' ? 'glade'
+        : 'wilds'
 
       // ── ★★ AND THE RESCUE, FOR SAVES ALREADY POISONED (Alex, 2026-08-15: "my player walked to
       // the passage to the home plot and now he's just stuck in a void") ─────────────────────────
@@ -3867,7 +3870,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
 
       const stranded = savedSpace === 'wilds' && insideShell(p.x, p.z, SEED, WILDS_BUBBLE)
       if (stranded) {
-        space.current = 'wilds'
+        space.current = 'glade'
         lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
         lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
         // Said out loud. A keeper silently moved across the world would read it as a second bug.
@@ -4638,6 +4641,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       lc.px = a.x + 0.5; lc.pz = a.z + 0.5
       lc.py = columnHeight(a.x, a.z, SEED) + 1
     }
+    if (to === 'glade') {
+      // ★ THE GLADE'S LANDING IS GREG'S GROUND, not its seam: the passage from the plot is Greg's
+      // fold and it lets you out where he stands — the same spot a fresh keeper first stands on.
+      lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
+      lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+    }
     lc.hvx = 0; lc.hvz = 0; lc.vy = 0; lc.airborne = true
     // ── ★★ THE CAMERA HAS TO CROSS TOO, AND IT IS THE SAME BUG AS THE FLORA (2026-08-15) ────────
     // Every other teleport in this file moves the camera the instant it moves the body — `tp` does
@@ -4711,6 +4720,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const b = WILDS_BUBBLE.passageBearing
         yaw = Math.atan2(Math.cos(b), Math.sin(b))
       }
+      // Moonwell: nose to Greg (he stands +x of spawn), so the first thing seen is the man. The
+      // `+ Math.PI` below is the door-side rule and does not apply here, so it is pre-cancelled.
+      if (to === 'glade') yaw = Math.atan2(-(GREG_CX - lc.px), -(GREG_CZ - lc.pz)) - Math.PI
       yaw += Math.PI                                  // 09-15: back to the door, not nose to it
       const eul = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
       camera.quaternion.setFromEuler(new THREE.Euler(eul.x, yaw, 0, 'YXZ'))
@@ -4721,7 +4733,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // out, and the round trip would look like the door randomly not working. The latch clears when
     // they walk off it.
     crossLatched.current = true
-    onSay(to === 'plot' ? 'you step through into your garden' : 'you step out into the Wilds')
+    onSay(to === 'plot' ? 'you step through into your garden' : to === 'glade' ? 'the fold lets you out at Moonwell' : 'you step out into the Wilds')
   }, [flushSaves, onSay])
   useEffect(() => { enterSpaceRef.current = enterSpace }, [enterSpace])
   // ⚠ SAME SIGN CONVENTION AS THE ARRIVAL FACING, AND FOR THE SAME REASON: a YXZ camera looks along
@@ -5048,6 +5060,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // generated — one space over and much larger.
     const generated = space.current === 'plot'
       ? plotGeneratedVoxel(c, lx, wy, lz, SEED, plotCfg.current)
+      : space.current === 'glade'
+      ? gladeGeneratedVoxel(c, lx, wy, lz, SEED)
       : generatedVoxel(c, lx, wy, lz, SEED)
     let e = edits.current.get(k)
     if (!e) { e = new Map(); edits.current.set(k, e) }
@@ -5581,6 +5595,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * populated by the time anything can call it.
    */
   const enterSpaceRef = useRef<((to: Space) => void) | null>(null)
+  /** Moonwell's threshold, derived once: the island never grows, so its coast never moves. */
+  const gladeSeamAnchorRef = useRef(gladeSeamAnchor(SEED))
   /**
    * ⚠ THE CROSSING LATCH — without it the two ends face each other and the keeper ping-pongs.
    *
@@ -5619,6 +5635,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // that knows how (flush, flip, evict eight caches), so travel calls it rather than doing any
     // part of that itself.
     if ('toPlot' in r) { enterSpaceRef.current?.('plot'); return }
+    // Moonwell: Greg's fold, garden to garden. Lands on Greg's ground (`enterSpace`), never a mark.
+    if ('toGlade' in r) { enterSpaceRef.current?.('glade'); return }
     enterSpaceRef.current?.('wilds')
 
     // ── ★★ OUT THROUGH THE KEEPER'S OWN DOOR (Alex, 2026-08-16: "the fold seam is two-way") ──────
@@ -6387,7 +6405,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     {
       const ts = tutorial.current
       let target: GuideTarget | null = null
-      if (ts.stage !== 'done' && space.current !== 'plot') {
+      if (ts.stage !== 'done' && space.current === 'glade') {
         let logs = 0
         for (const slot of inv.current!.slots) if (slot && slot.itemId.endsWith('_log')) logs += slot.count
         const planks = countItem(inv.current!, 'goldwood_plank')
@@ -6421,7 +6439,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // ⚠ NEEDS THE CURRENT SPACE — the one argument steam does not take. It draws the Wilds seam
     // only in the Wilds and the plot-side one only in the plot. Hooked but never ticked renders
     // NOTHING and throws nothing (the meshes start hidden), so suspect this line before the shader.
-    seam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime, space.current)
+    seam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime, space.current, tutorial.current.stage === 'done')
     if (ledgerSeen.current !== mistLedger.current) { ledgerSeen.current = mistLedger.current; mist.setLedger(mistLedger.current) }
     mist.setCalm(suppressEncounters(buffs.current, Date.now()))   // Dreamwalk: no presence steps out while it runs
     mist.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
@@ -7806,6 +7824,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // the tell. Rare path, silent failure, and the save would have recorded the difference.
         cols.current.set(key(gx, gz), space.current === 'plot'
           ? generatePlotColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), SEED, plotCfg.current)
+          : space.current === 'glade'
+          ? generateGladeColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), SEED)
           : makeColumn(gx * SECTION, gz * SECTION, SEED))
         queueRemesh(gx, gz)
         for (const [ddx, ddz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const)
@@ -7988,39 +8008,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     }
 
     prof.current.mark('move')
-    // ── the gate ──────────────────────────────────────────────────────────────────────────────
-    // Built once its footprint's columns are all loaded (see GATE_COLS's header for why "all", not
-    // just the centre one) — sealed or already open depending on what the save says at that moment,
-    // so a returning keeper who finished the tutorial elsewhere never sees it reseal. Opened exactly
-    // once more if the quest completes later in this same session.
-    if (!gateBuilt.current && GATE_COLS.every(ck => cols.current.has(ck))) {
-      const baseY = columnHeight(GATE_X, GATE_Z, SEED)
-      const done = tutorial.current.stage === 'done'
-      // ⚠ THE RETIRED BURIED COURSE, PUT BACK (2026-08-27). The arch used to lay its first course
-      // AT `columnHeight` rather than one above it, so a world built before today has cut stone
-      // sitting in the topsoil where grass belongs — a 5-block grey line through the glade that
-      // would read as a new bug rather than an old one. Restoring the GENERATED voxel is the only
-      // correct undo: setting it to air would leave a trench, and setting it to grass would guess
-      // at what the terrain wanted there.
-      for (let h = -2; h <= 2; h++) {
-        const rx = GATE_SPANS_X ? GATE_X + h : GATE_X
-        const rz = GATE_SPANS_X ? GATE_Z : GATE_Z + h
-        if (voxel(rx, baseY, rz) === MAT.STONE) {
-          const c = cols.current.get(colOf(rx, rz))
-          if (c) setVoxel(rx, baseY, rz, generatedVoxel(c, ((rx % SECTION) + SECTION) % SECTION, baseY, ((rz % SECTION) + SECTION) % SECTION, SEED))
-        }
-      }
-      for (const c of gateCells(baseY)) {
-        const mat = c.doorway ? (done ? AIR : MAT.STONE) : MAT.STONE
-        if (voxel(c.x, c.y, c.z) !== mat) setVoxel(c.x, c.y, c.z, mat)
-      }
-      gateBuilt.current = true
-      gateOpened.current = done
-    } else if (gateBuilt.current && !gateOpened.current && tutorial.current.stage === 'done') {
-      const baseY = columnHeight(GATE_X, GATE_Z, SEED)
-      for (const c of gateCells(baseY)) if (c.doorway) setVoxel(c.x, c.y, c.z, AIR)
-      gateOpened.current = true
-    }
+    // ── the gate: RETIRED (2026-09-16) ──────────────────────────────────────────────────────────
+    // Moonwell's stone arch was the tutorial's only exit, opening after the fold onto 500 blocks of
+    // open country to the plot's seam. The Glade is an island now (`voxel/glade.ts`): its way out is
+    // the seam Greg's fold opens, drawn by `seam.ts` and crossed in the loop below, and the fold
+    // itself is the crossing (`applyTalk` › 'fold'). Old Wilds saves keep the arch's stone as edits
+    // in the Wilds-glade that no longer runs the tutorial; that footprint is the islands pass's.
 
     // ── the crossing court ────────────────────────────────────────────────────────────────────
     // The keeper's ways OUT, standing together on their own ground. `crossings.ts` owns WHERE and
@@ -8063,8 +8056,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // material as the frames: the tower is the gate continuing upward, not an object beside it.
       const tower = level === null ? [] : gateTowerCells(SEED, cfg)
       // Every footprint column loaded first — a 5-wide frame straddling a SECTION seam would
-      // otherwise drop whichever half landed in a neighbour that has not arrived. Same reason
-      // GATE_COLS checks all of them rather than the centre.
+      // otherwise drop whichever half landed in a neighbour that has not arrived.
       //
       // ⚠ AND THE DAIS IS THE PART THAT MAKES THIS BITE. A frame is 7 wide; the apron reaches
       // COURT_RADIUS + PLATFORM_MARGIN out from the focus, so it crosses section seams the frames
@@ -8500,6 +8492,22 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           }
           if (!near) crossLatched.current = false
         }
+      } else if (space.current === 'glade') {
+        // ── ★ MOONWELL'S WAY OUT IS THE FOLD GREG MADE (2026-09-16) ──────────────────────────
+        // The island has no arch and no road off it. Once the tutorial is done, the keeper's own
+        // threshold stands on Greg's ground at the coast facing their plot (`seam.ts` ›
+        // `gladeSeamAnchor`, drawn only when `done`), and stepping into it is the same crossing as
+        // the plot's own seam — one trigger radius, one latch. Before the fold there is nothing to
+        // cross into, so the volume is simply not there.
+        if (tutorial.current.stage === 'done') {
+          const a = gladeSeamAnchorRef.current
+          const near = Math.hypot(lc.px - a.x, lc.pz - a.z) < GLADE_TRIGGER_RADIUS && Math.abs(lc.py - a.y) < 2.5
+          if (near && !crossLatched.current) {
+            crossLatched.current = true
+            enterSpaceRef.current?.('plot')
+          }
+          if (!near) crossLatched.current = false
+        }
       } else {
         // ★ THE WILDS SIDE IS A THRESHOLD YOU STEP INTO, AND THE SHELL IS NEVER PIERCED. Canon:
         // a threshold is *"a soft seam in the cloud… no gates, no locks, no keep-out"*, and *"a
@@ -8516,7 +8524,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         if (!inSeam) crossLatched.current = false
       }
 
-      if (lc.py < -20 && space.current === 'wilds') {
+      if (lc.py < -20 && (space.current === 'wilds' || space.current === 'glade')) {
         const feet = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
         lc.px = SPAWN_X + 0.5; lc.py = feet; lc.pz = SPAWN_Z + 0.5; lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
         p.set(lc.px, eyeY(lc), lc.pz)
@@ -8558,12 +8566,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // `hit.distance` is the occluder: no talking through the gate wall.
     const blockDist = hit ? hit.distance : Infinity
     {
-      const near = aimedAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, GREG_BOX, GREG_TALK_RANGE, blockDist)
+      // ★ GREG AND THE FOLK ARE MOONWELL'S (2026-09-16). Their coordinates are the Glade's, and the
+      // Wilds still generates the old glade footprint at those same numbers — so without this gate
+      // a keeper walking the continent would meet six bodies standing in empty houses, a second
+      // Moonwell with nobody home. Visibility and the aim test both key on the space, here, in the
+      // one place per frame that reads it.
+      const atGlade = space.current === 'glade'
+      if (greg.group.visible !== atGlade) { greg.group.visible = atGlade; for (const f of folk) f.fig.group.visible = atGlade }
+      const near = atGlade && aimedAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, GREG_BOX, GREG_TALK_RANGE, blockDist)
       if (near !== lastNearGreg.current) { lastNearGreg.current = near; onNearGreg(near) }
       // The folk share Greg's test and his reach; the buildings occlude through `blockDist` like
       // any wall, so there is no talking to Hazel through her own roof.
       let on: FolkId | null = null
-      for (const f of folk) if (aimedAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, f.box, GREG_TALK_RANGE, blockDist)) { on = f.id; break }
+      if (atGlade) for (const f of folk) if (aimedAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, f.box, GREG_TALK_RANGE, blockDist)) { on = f.id; break }
       if (on !== lastNearFolk.current) { lastNearFolk.current = on; onNearFolk(on) }
     }
     {
@@ -10246,6 +10261,15 @@ function WaymarkPanel({ wm, onSay, onClose }: {
               <div className="flex justify-between gap-3">
                 <span>your own door</span>
                 <span className="text-amber-200/70">back to the Wilds</span>
+              </div>
+            </button>
+            {/* Moonwell is the permanent hub — Greg's fold back to the glade, always listed, never a
+                waymark (`waymark.ts` › GLADE_ID). Second row, under the keeper's own door. */}
+            <button onClick={() => { wm.go(GLADE_ID); onClose() }}
+                    className="w-full text-left mb-1 px-2 py-1.5 rounded border border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90 transition-colors">
+              <div className="flex justify-between gap-3">
+                <span>Moonwell Glade</span>
+                <span className="text-white/35">Greg's fold</span>
               </div>
             </button>
             {wm.net.marks.length === 0 && (

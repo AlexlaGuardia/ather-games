@@ -87,7 +87,9 @@ function open(): Promise<IDBDatabase> {
  * Wilds column (0,0) are two different places wearing one name, and without a namespace the first
  * edit in the garden would overwrite whatever the keeper had built at the world's centre.
  */
-export type Space = 'wilds' | 'plot'
+export type Space = 'wilds' | 'plot' | 'glade'
+/** Every space that is NOT the bare Wilds carries its name as a key prefix; the Wilds keeps the bare keys. */
+export const NAMED_SPACES: readonly Exclude<Space, 'wilds'>[] = ['plot', 'glade']
 
 /**
  * ── ★★ WHO THE RECORD BELONGS TO (2026-08-23, #692 — the IndexedDB half of #682) ────────────────
@@ -306,9 +308,13 @@ export const ownsColumn = (seed: number, owner: string | null = saveOwner()) =>
 
 /** Columns of ONE space. The wilds carry no marker of their own, so they are what is left over. */
 export const ownsColumnIn = (seed: number, space: Space, owner: string | null = saveOwner()) => {
-  const plot = `${seedPrefix(seed, owner)}${'plot' satisfies Space}:`
+  const marks = NAMED_SPACES.map(sp => `${seedPrefix(seed, owner)}${sp}:`)
   const col = ownsColumn(seed, owner)
-  return space === 'plot' ? (k: string) => k.startsWith(plot) : (k: string) => col(k) && !k.startsWith(plot)
+  if (space !== 'wilds') {
+    const mine = `${seedPrefix(seed, owner)}${space}:`
+    return (k: string) => k.startsWith(mine)
+  }
+  return (k: string) => col(k) && !marks.some(m => k.startsWith(m))
 }
 
 export async function loadPlayer(seed: number): Promise<PlayerSave | null> {
