@@ -29,6 +29,39 @@ the Arcade frame.
 **Files:** `voxel3d/hands.ts` · `voxel3d/hands-pose.ts` · `voxel3d/hands.test.ts` · `voxel3d/hands-pose.test.ts` · `voxel3d/VoxelWorld.tsx` (mount + signal).
 
 ---
+## ⑂ Shimmer — **ALCHEMY: THE ROAD, THE POUR, THE BREWING LEDGER** (2026-09-16 night, hub lane `e7f98ee0`) · *Last touched 2026-09-16 — ✅ **PROD `0mqgX-jUTLmL1-2rNZUOW` from `829854a`***
+
+**Left off:** Magii's 09-16 rulings (athernyx `fc63a33`, `game/alchemy.md` › THE BREWING'S PARTS) built.
+- **The road** (`alchemy-chain.ts`): the craft-word names the VESSEL, never the road; every potion has its own
+  step-list over mortar/still/bowl; **the cauldron is always last**; the pour wraps it. The road is the BATCH's
+  (`stage_<potion>_<k>`), not per ingredient. `DEFAULT_ROAD` per word (draught = cauldron alone · salve = bowl → pot,
+  the ruling's example · infusion = the whole chain · essence = still twice), `ROADS` per potion (shard tonic short
+  for tier 1; dreamroot bowl-before-still). Road XP sliced to the hands; the pour pays the rest. 329 checks.
+- **SPIRIT / HAND / PLOT** (`jobOf`): infusions+philters · tonics/draughts/elixirs/tinctures/essences/cordials ·
+  brews+salves. Glowfin **Brew → Tonic** (a fishing dose is a tonic; the word carries the class).
+- **The brewing ledger** (`brewing.ts`, pure): host starts; hands join, bring, step; the host lights the pot only
+  once the road is walked; the pour pays every contributing hand ≥1 bottle (`yieldFor(n)=1+0.65√(n−1)`, flattening
+  near four), the host the remainder; road XP by steps done, the pour's XP to the host; **no recipe for anyone**.
+  Solo reduces to the solo potion exactly (asserted over every potion, 101 checks).
+- **Panel:** the cauldron's take says **pour**; every row shows the whole road with this station lit, `→ pour`, and
+  the job line. Stage icons: the step's shape in the first ingredient's tint. Old `powder_/extract_/base_` items in
+  saves still label; nothing makes them.
+
+**Next:**
+- **Guests on a plot** — the presence layer is what fills the ledger with hands other than the keeper's; the ledger
+  is done, the wiring isn't. (`shimmer-multiplayer.md`, "holding the fold open".)
+- **The recipe ladder** — canon: recipes unlock on the keeper's own road, Yarrow teaches the first. Today the ladder
+  is `minAlchemyLevel`. Build: a `known` set per keeper; Yarrow's greet grants the tier-1 recipe; the rest by level.
+- Run times (`ALCHEMY_RUN_MS`) and yield numbers are first guesses — Alex judges the feel at a real pot.
+- Alex look-calls a road on prod: mortar → still → bowl → cauldron → pour for a Mana Infusion.
+
+**Decisions:** the road is the batch's, not per ingredient (one stage, one step, one pair of hands — that is what
+lets a brewing count hands) · the word classes the job (canon's table), so a mis-worded potion is renamed rather
+than special-cased · bottle-only enforced by the ledger's return type (`recipes: Record<string, never>`).
+
+**Files:** `voxel3d/alchemy-chain.ts` (+test) · `voxel3d/brewing.ts` (+test) · `voxel3d/alchemy-panel.tsx` ·
+`engine/alchemy.ts` (Glowfin) · `voxel3d/tex/item-icon.ts` · `sprites/items.ts`.
+
 ## ⑂ Shimmer — **THE GATE STATION IS A STRUCTURE, AND ITS DOORWAYS ARE PORTALS** (2026-09-16 evening, hub lane `e7f98ee0`) · *Last touched 2026-09-16 — ✅ **PROD from `c4cdc70`** (later builds by play/world carry it); Alex: "those gates are perfect"*
 
 **Left off:** Alex: *"add the homeplot gate station to the dev structure worktable so i can finish that build… this is how
