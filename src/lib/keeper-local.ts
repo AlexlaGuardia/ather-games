@@ -59,6 +59,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   // ── the character itself: cleared by the epoch today, by literal, and that is settled ──────────
   { base: 'ather:shimmer:birthRune', worldTied: true },   // ★ the ritual, and the affinity a keeper is born with
   { base: 'ather:shimmer:runes',     worldTied: true },   // what they have collected since
+  { base: 'ather:shimmer:side',      worldTied: true },   // which dimension they last stood in — the front door reads it (2026-09-15)
   { base: 'ather:shimmer:book',      worldTied: false },  // the moves they have learned — deliberately survives
   { base: 'ather:shimmer:loadout',   worldTied: false },  // the cast slots they have set
   { base: 'ather:shimmer:gems',      worldTied: false },  // the rune-gems in the bag — letters, counted (2026-09-03)

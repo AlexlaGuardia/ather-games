@@ -2707,7 +2707,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
             ported across, so it stays reachable — just not to anyone who wandered in. */}
         <div className="flex gap-2 text-white/45 pointer-events-auto">
           <a href="/room?wall=0" className="hover:text-white/85 underline decoration-white/20">⌂ room</a>
-          {isOwner && <a href="/shimmer/play3d" className="hover:text-white/85 underline decoration-white/20">❈ play3d (legacy)</a>}
+          {isOwner && <a href="/shimmer/play3d" className="hover:text-white/85 underline decoration-white/20">❈ Rune Hold (play3d)</a>}
         </div>
         <div>{pos}</div>
         {/* ── ★ THE FRAME METER ────────────────────────────────────────────────────────────────
@@ -11903,7 +11903,7 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
           <div className="gx-label text-[9px] text-amber-300/70">Keeper of the realm</div>
           <Row href="/shimmer/dev/worktable" label="⚒ Build structures" tail="worktable" />
           <Row href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
-          <Row href="/shimmer/play3d" label="❈ play3d" tail="legacy" />
+          <Row href="/shimmer/play3d" label="❈ Rune Hold" tail="play3d" />
         </div>
       )}
     </div>

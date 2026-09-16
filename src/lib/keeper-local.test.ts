@@ -372,6 +372,7 @@ function fakeStore(initial: Record<string, string>) {
 // matches prose either fires on honest documentation or gets loosened until it sees nothing.
 const OWNERS: Record<string, string> = {
   'ather:shimmer:birthRune': 'play3d/rune-inventory.ts', 'ather:shimmer:runes': 'play3d/rune-inventory.ts',
+  'ather:shimmer:side': 'engine/front-door.ts',
   'ather:shimmer:book': 'play3d/book.ts', 'ather:shimmer:loadout': 'play3d/loadout.ts',
   'ather:shimmer:gems': 'play3d/gems.ts', 'ather:shimmer:vessels': 'play3d/gems.ts',
   'ather:shimmer:stowed': 'play3d/vessels.ts', 'ather:shimmer:parked': 'play3d/vessels.ts',

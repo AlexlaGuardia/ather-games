@@ -22,6 +22,7 @@ import BirthScreen from '../play3d/birth/BirthScreen'
 import { loadRuneInventory, saveRuneInventory } from '../play3d/rune-inventory'
 import { resetIfStale } from '@/lib/ather-epoch'
 import { setSaveOwner } from '@/lib/save-slot'
+import { recordSide } from '../engine/front-door'
 import { adoptAnonKeeperState } from '@/lib/keeper-local'
 import { adoptAnonWorld } from './save'
 import { WORLD_SEED } from './world-seed'
@@ -92,6 +93,7 @@ export default function VoxelPage() {
     resetIfStale()   // ⚠ must precede the read below — see ather-epoch.ts
     void (async () => {
       await resolveKeeper()
+      recordSide(localStorage, 'ather')   // the front door reads this — owner is resolved by now
       setPhase(loadRuneInventory().birth ? 'world' : 'birth')
     })()
   }, [])

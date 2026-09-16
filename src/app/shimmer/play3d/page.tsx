@@ -20,6 +20,7 @@
 // happens HERE, before the decision, and the decision is made once against settled storage. Same
 // shape as voxel3d/page.tsx: born first, world second.
 import dynamic from 'next/dynamic'
+import { recordSide } from '../engine/front-door'
 import { useEffect, useState } from 'react'
 import { applyLiveWorldData, registerGardenWorld } from '../world/garden-world'
 import { applyLiveRegionData } from '../world/region-maps'
@@ -205,6 +206,7 @@ export default function Play3DPage() {
     ]).finally(() => {
       if (!alive) return
       registerGardenWorld()
+      recordSide(localStorage, 'town')   // the front door reads this — owner is resolved by now
       setPhase(birthOwed() ? 'birth' : 'world')
     })
     return () => { alive = false; window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej) }
