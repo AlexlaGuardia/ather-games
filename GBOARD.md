@@ -11,6 +11,56 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⑂ Shimmer — **MOONWELL GLADE IS AN ISLAND: CROSSING IN, FOLD OUT** (2026-09-16 afternoon, hub lane `e7f98ee0`) · *Last touched 2026-09-16 — ✅ **PROD `BVK9XFiTV9src1LxQCi3q` from `a20171f`**, glade-walk 42/42 on the served page*
+
+**Left off:** Alex: *"moonwell glade is supposed to be an example of what the home plot could look like, but as it is
+now its just a settlement at the start of the story path… walk into the spirit cafe gate and land in the moonwell
+glade plot then once they finish the tutorial there they are taken to the homeplot."* Canon already said it twice
+(`shimmer-geography.md` › the garden is POCKETS: *"every arrow is a PASSAGE through a cloud-wall, never open ground"*;
+*"Moonwell Glade is a pocket, and a PERMANENT HUB"*; storyline Beat 0: Greg *"sends you home to the pocket he just
+folded"*). The build had the Glade as a zone of the Wilds continent with a stone arch that opened after the fold onto
+500 blocks of open country to the plot's seam.
+- **Built:** `Space` gains `'glade'`. `voxel/glade.ts` = the ring math (disc r300 on the zone anchor, bearing-only
+  wobble that cuts in, cloud-wall ring, keel lens of pressed cloud under the Wilds' OWN ground, void past the reach);
+  `glade-column.ts` runs the continent generator with **`NO_BUBBLE`** (`ColumnConfig.bubble`, new — the plot's
+  shell at ~540 from the origin reached 180 blocks into the disc and stood inside Greg's garden on the first build)
+  and masks it, so every authored coordinate (Greg, the pool, the five buildings, the harness) is unchanged.
+  Baseline `gladeGeneratedVoxel` proven cell-for-cell on mid/lip/void/shell-band columns (`glade.test.ts`, 59).
+- **The flow:** the voxel world's front door is the Glade (fresh keepers, wiped stores, mid-tutorial saves from the
+  old Wilds-glade all wake on Greg's ground; finished Wilds saves untouched). *"I am staying"* → the bag →
+  `enterSpace('plot')`, in front of your own seam. The arch (`gate.ts`) is retired. Moonwell's own threshold
+  (`seam.ts` › `gladeSeamAnchor`, drawn only once done, at the coast facing the origin) crosses to the plot; the
+  plot's threshold panel lists **Moonwell Glade — Greg's fold** as a permanent row (`waymark.ts` › `GLADE_ID`, never a
+  mark, no home-cost). `/space glade` for the console. Greg and the folk render + answer E only in the glade space.
+- **Seen:** `$SP/turn-grid.png` (the cloud wall along the coast, the seam parting drawn on it, the island interior),
+  `spawn-grid.png` (Greg from spawn). Harness `scripts/glade-walk.mts` now asserts the fold lands on the plot's
+  coast and the plot's seam offers Moonwell.
+- **Deliberately NOT done (the islands pass):** the Wilds still generates the old Moonwell footprint at
+  (-150,-640) — empty houses now, no Greg, the approach road still ends there, old saves keep the arch's stone as
+  edits. Canon says the whole loop is islands; that is one pass, not a tail on this one.
+
+**Next:**
+- Alex walks it: `/shimmer` fresh → the square → Greg's door → **the island** (the coast, the wall, the keel from the
+  lip) → five doors → lantern → *"I am staying"* → **arrive on your plot** → the threshold panel → Moonwell row → back
+  on Greg's ground. Call: does the Glade read as *a garden you could have*, and is r300 the right size next to a
+  tier-0 plot (also r300)?
+- CANON_GAPS `[OPEN] Where Moonwell sits on the gate station` — the 08-24 table has no Moonwell socket; today it is
+  a row on the seam panel. Magii rules whether it earns a right-arc socket.
+- The islands pass: the Wilds' Moonwell footprint → a bubble (its outside), the approach road re-aimed at Gloview.
+- Log regrowth at the Glade: the tutorial's one log is cut once per shared save; the second keeper on one store finds
+  no log by Hazel's path. Pre-existing (the Wilds were shared too), now visible.
+
+**Decisions:** the Glade is its own space, not `plot.ts` with a centre (the plot's growth invariants have no use
+here; ~60 lines of ring math restated, tested alone) · the Glade's ground is the Wilds' own (so nothing authored
+moves) · the fold IS the crossing (no walk, no arch) · Moonwell is a seam-panel row, not a waymark and not yet a
+court socket (canon has no row for it) · the Wilds keep the old footprint this pass (blast radius; the islands pass
+owns it).
+
+**Files:** `voxel/glade.ts` · `voxel/glade-column.ts` · `voxel/glade.test.ts` · `voxel/column.ts` (`ColumnConfig.bubble`,
+`NO_BUBBLE`) · `voxel3d/save.ts` (`Space`, `NAMED_SPACES`) · `voxel3d/seam.ts` (`gladeSeamAnchor`, third mesh) ·
+`voxel/waymark.ts` (`GLADE_ID`) · `voxel3d/VoxelWorld.tsx` · `workers/voxel-gen.worker.ts` · `scripts/glade-walk.mts` ·
+deleted `voxel3d/gate.ts` + test.
+
 ## ⑂ Shimmer — **THE FORK ON THE SQUARE: TRAIL TO GREG, BEAT 0 AT THE DOOR, THE STATION BY WALKING** (2026-09-16 early, hub lane `28308fe6`) · *Last touched 2026-09-16 — ✅ **PROD from `2aa5297`***
 
 **Left off:** Alex: *"from here in the tutorial they should have the trail to greg and he can lead them to the moonwell
