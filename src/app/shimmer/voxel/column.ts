@@ -81,6 +81,14 @@ export interface ColumnConfig {
    * worker hands it in. An oracle calling `generateColumn` with `DEFAULT_COLUMN` sees no stamps.
    */
   stamps: readonly Stamp[]
+  /**
+   * The fold's OUTSIDE as this space sees it (`bubble.ts`). Absent = `WILDS_BUBBLE`, the plot's
+   * shell at the origin. ★ A space that is NOT the Wilds continent passes its own — Moonwell Glade
+   * (`glade-column.ts`) is an island whose disc overlaps the shell's reach by 180 blocks on the
+   * plot-facing side, and without this the plot's cloud shell, mound and cave would stand inside
+   * Greg's garden. `NO_BUBBLE` puts the shell a billion blocks away, which is the same as none.
+   */
+  bubble?: BubbleConfig
 }
 
 export const DEFAULT_COLUMN: ColumnConfig = {
@@ -194,6 +202,9 @@ export const WILDS_BUBBLE: BubbleConfig = {
   passageBearing: Math.atan2(GLADE.z - DEFAULT_BUBBLE.cz, GLADE.x - DEFAULT_BUBBLE.cx),
   materials: { wall: MAT.CLOUD_WALL },
 }
+
+/** No shell anywhere a column can be: the cheap reject in `bubbleMaterialAt` answers `null` on every call. */
+export const NO_BUBBLE: BubbleConfig = { ...WILDS_BUBBLE, cx: 1e9, cz: 1e9 }
 
 /**
  * ── ★ IS THIS WILDS COORDINATE SOMEWHERE A KEEPER CAN STAND? (2026-08-19) ──────────────────────
@@ -358,7 +369,7 @@ export function generateColumn(
         const h = col.surface[z * SECTION + x]
         for (let y = 0; y < cfg.worldHeight; y++) {
           const s = (y / SECTION) | 0
-          let m = generatedAt(wx + x, y, wz + z, seed, h, cfg.depth, cfg.height)
+          let m = generatedAt(wx + x, y, wz + z, seed, h, cfg.depth, cfg.height, cfg.bubble ?? WILDS_BUBBLE)
           // A slumping lip is written as a SLAB, not as a full block a mask will later draw short.
           if (y === h && m !== AIR && col.slump[z * SECTION + x]) m |= HALF_BIT
           col.sections[s].set(x, y - s * SECTION, z, m)
@@ -489,8 +500,9 @@ export function generateColumn(
   // `bare` has, so `diffOverrides` sees no difference and records no override — the world is fixed
   // and the diff stays empty. Writing the same truth twice is the cheap half of a bargain whose
   // expensive half would be teaching five stages about a shell.
+  const bubble = cfg.bubble ?? WILDS_BUBBLE
   if (col.stage >= Stage.Vegetation && upTo >= Stage.Ready
-      && columnTouchesBubble(wx, wz, SECTION, WILDS_BUBBLE)) {
+      && columnTouchesBubble(wx, wz, SECTION, bubble)) {
     // ⚠ THE BUBBLE IS ASKED ONCE PER (x,z), NOT ONCE PER VOXEL. Its answer varies with `y` only at
     // the shell's top and bottom caps, and `shellRadiusAt` — the expensive half — does not depend on
     // `y` at all. Asking per cell meant 65,536 fbm evaluations per column and was slow enough to
@@ -500,8 +512,8 @@ export function generateColumn(
         const h = col.surface[z * SECTION + x]
         // One probe decides this whole vertical: mid-shell, where the caps cannot confuse the
         // answer. `null` here means the bubble has no opinion about this column at all.
-        const probeY = Math.floor((WILDS_BUBBLE.bottomY + WILDS_BUBBLE.topY) / 2)
-        const mine = bubbleMaterialAt(wx + x, probeY, wz + z, seed, h, WILDS_BUBBLE)
+        const probeY = Math.floor((bubble.bottomY + bubble.topY) / 2)
+        const mine = bubbleMaterialAt(wx + x, probeY, wz + z, seed, h, bubble)
         if (mine === null) continue
         // AIR is the fold's interior and spans the FULL height (there is no ground in there at all).
         // The wall stands only between its caps, so it still has to respect them.
@@ -509,8 +521,8 @@ export function generateColumn(
         // and each column crowns to its own height. Filling to the mean would build the wall and
         // shave every crown flat in the same pass, putting back the dead-level 3km skyline the
         // crowns exist to break, and it would look like nothing at all from the ground.
-        const y0 = mine === AIR ? 0 : WILDS_BUBBLE.bottomY
-        const top = shellCapTop(wx + x, wz + z, seed, WILDS_BUBBLE)
+        const y0 = mine === AIR ? 0 : bubble.bottomY
+        const top = shellCapTop(wx + x, wz + z, seed, bubble)
         const y1 = mine === AIR ? cfg.worldHeight - 1 : Math.min(top, cfg.worldHeight - 1)
         for (let y = y0; y <= y1; y++) {
           const s = (y / SECTION) | 0
@@ -558,11 +570,12 @@ function diffOverrides(col: Column, bare: Uint16Array[]): Map<number, number> {
 export function generatedVoxel(
   col: Column, lx: number, y: number, lz: number, seed: number,
   depthCfg: DepthConfig = DEFAULT_DEPTH, heightCfg: HeightConfig = DEFAULT_HEIGHT,
+  bubbleCfg: BubbleConfig = WILDS_BUBBLE,
 ): number {
   const o = col.overrides?.get(packIndex(lx, y, lz))
   if (o !== undefined) return o
   const h = col.heightAt(lx, lz)
-  const m = generatedAt(col.wx + lx, y, col.wz + lz, seed, h, depthCfg, heightCfg)
+  const m = generatedAt(col.wx + lx, y, col.wz + lz, seed, h, depthCfg, heightCfg, bubbleCfg)
   // Same slab rule the terrain stage applies — one place, so the save's diff cannot disagree with
   // what was generated (that disagreement is what made chopped trees regrow).
   return (y === h && m !== AIR && col.slump[lz * SECTION + lx]) ? m | HALF_BIT : m

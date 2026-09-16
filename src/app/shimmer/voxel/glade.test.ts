@@ -121,5 +121,33 @@ console.log('the column and its baseline')
   }
 }
 
+console.log("the plot's shell stays out of Greg's garden")
+{
+  // 507 from the origin on the plot-facing bearing: inside the island (r≈150), and inside the band
+  // where the continent raises WILDS_BUBBLE's cloud shell (~500). The Wilds column has shell there;
+  // the Glade's must not — the pale mass with trees on it across the seam, 2026-09-16.
+  const SEED = 1337
+  const b = G.seamBearing
+  const px = Math.floor((G.cx + Math.cos(b) * 150) / SECTION) * SECTION
+  const pz = Math.floor((G.cz + Math.sin(b) * 150) / SECTION) * SECTION
+  const wilds = makeColumn(px, pz, SEED)
+  const glade = generateGladeColumn(new Column(px, pz), SEED)
+  const count = (c: Column, mat: number) => {
+    let n = 0
+    const H = c.sections.length * SECTION
+    for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) for (let y = 0; y < H; y++) if (c.get(x, y, z) === mat) n++
+    return n
+  }
+  const CLOUD_WALL = 56
+  check('the Wilds raise the shell there (sanity: the test can see its subject)', count(wilds, CLOUD_WALL) > 0, `${count(wilds, CLOUD_WALL)} cells`)
+  check('the Glade raises none of it', count(glade, CLOUD_WALL) === 0, `${count(glade, CLOUD_WALL)} cells`)
+  // And the baseline agrees, cell for cell, in this column too.
+  let wrong = 0
+  const H = glade.sections.length * SECTION
+  for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) for (let y = 0; y < H; y++)
+    if (glade.get(x, y, z) !== gladeGeneratedVoxel(glade, x, y, z, SEED)) wrong++
+  check('shell-band column matches its baseline', wrong === 0, `${wrong} cells`)
+}
+
 console.log(`glade: ${pass} passed, ${fail} failed`)
 if (fail) process.exit(1)

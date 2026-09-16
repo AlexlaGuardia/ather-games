@@ -13,7 +13,7 @@
 // cells the mask actually changes — a column deep inside the island costs one keel band, a column
 // in the void costs a clear.
 
-import { Column, Stage, SECTION, refreshUniform, generateColumn, generatedVoxel, type ColumnConfig, DEFAULT_COLUMN } from './column'
+import { Column, Stage, SECTION, refreshUniform, generateColumn, generatedVoxel, NO_BUBBLE, type ColumnConfig, DEFAULT_COLUMN } from './column'
 import { DEFAULT_GLADE, gladePlanAt, gladeBandAt, gladeMaskAt, type GladeConfig } from './glade'
 
 /**
@@ -23,7 +23,11 @@ import { DEFAULT_GLADE, gladePlanAt, gladeBandAt, gladeMaskAt, type GladeConfig 
 export function generateGladeColumn(
   col: Column, seed: number, colCfg: ColumnConfig = DEFAULT_COLUMN, cfg: GladeConfig = DEFAULT_GLADE,
 ): Column {
-  generateColumn(col, seed, colCfg)
+  // ⚠ WITHOUT THE PLOT'S SHELL. The island's disc reaches 180 blocks into `WILDS_BUBBLE`'s reach on
+  // the plot-facing side (the Glade is 657 from the origin, the shell stands at ~540), and the
+  // continent generator would raise that shell, its mound and its cave inside Greg's garden. Seen
+  // on the served page 2026-09-16 as a pale cloud mass with trees on it across the seam.
+  generateColumn(col, seed, { ...colCfg, bubble: NO_BUBBLE })
   const H = col.sections.length * SECTION
   for (let z = 0; z < SECTION; z++) {
     for (let x = 0; x < SECTION; x++) {
@@ -56,5 +60,5 @@ export function gladeGeneratedVoxel(
 ): number {
   const m = gladeMaskAt(col.wx + lx, y, col.wz + lz, seed, col.heightAt(lx, lz), cfg)
   if (m !== null) return m
-  return generatedVoxel(col, lx, y, lz, seed)
+  return generatedVoxel(col, lx, y, lz, seed, undefined, undefined, NO_BUBBLE)
 }
