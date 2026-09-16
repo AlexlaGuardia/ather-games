@@ -72,3 +72,6 @@ shots/
 !/public/vtuber/visemes/
 /public/vtuber/visemes/*
 !/public/vtuber/visemes/fixture-*
+
+# hub previews for Alex to look at (rasterized maps, shots) — served, never committed
+/public/scratch/
