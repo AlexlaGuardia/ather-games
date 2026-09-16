@@ -29,6 +29,42 @@ the Arcade frame.
 **Files:** `voxel3d/hands.ts` · `voxel3d/hands-pose.ts` · `voxel3d/hands.test.ts` · `voxel3d/hands-pose.test.ts` · `voxel3d/VoxelWorld.tsx` (mount + signal).
 
 ---
+## ⑂ Shimmer — **THE GATE STATION IS A STRUCTURE, AND ITS DOORWAYS ARE PORTALS** (2026-09-16 evening, hub lane `e7f98ee0`) · *Last touched 2026-09-16 — ✅ **PROD from `c4cdc70`** (later builds by play/world carry it); Alex: "those gates are perfect"*
+
+**Left off:** Alex: *"add the homeplot gate station to the dev structure worktable so i can finish that build… this is how
+the player is to fast travel to and from moonwell glade and runehold, not to mention the ather wilds checkpoints."*
+- **Built:** `voxel3d/court-blueprint.ts` — the station's LOOK is the blueprint `gate_station` (worktable-authored);
+  its MEANING is a `StationLayout` carried IN the file (`BlueprintDef.station`: anchor, floor, 4 sockets, 4 lamps),
+  shifted on save by the same offset the blocks are (`normalize` reports its shift; the first cut froze it in code and
+  refused a save whose corner moved — Alex hit it in minutes). `stationStamp` lands the anchor on `courtAnchor` at
+  `courtLevel`, rot snapped to a quarter turn (exact in practice). The plot stamps it; old stamps restore to generated
+  on rebuild; the arc court is the fallback for a tree with no file. `COURT_REV` 9.
+- **Wired:** socket 0 = the Rune Hold gate · **socket 1 = Moonwell** (Greg's fold, always lit; Alex placed it on the
+  station — CANON_GAPS entry stays for Magii's record) · sockets 2–3 = waymark slots (the Wilds checkpoints), dark
+  until planted. Moonwell's row left the threshold panel. Lamps: `socketLitBy`.
+- **Portals:** `seam.ts` › `createSocketShimmers` + `PORTAL_FRAG` — a spiral disc in every LIT doorway (canon: *bare
+  spiral = untuned; framed = kept*), gold gate / mana-green passages, opens as you approach. Dark = nothing drawn.
+- **Worktable:** `?load=<id>`, PAD 40, station ghosts (gold/blue doorways, wire lamp cells, anchor ring), **fly**
+  (WASD · Space/Shift · right-drag look · wheel = speed). Dev tab: ⌂ Gate station. Starter dumped once by
+  `scripts/gen-station-starter.mts` (never re-run: the file is Alex's). Alex's first pass: four squared frames, tower
+  struck, 555 blocks.
+- **Seen:** `$SP/socket-grid.png` (the swirls in the frames), `alex-station.png` (worktable), `station-plot.png`.
+
+**Next:**
+- Alex keeps building the station on the worktable; every save needs a `coord build` to go live.
+- A fifth frame if all three waymarks should stand on the station (MAX_MARKS 3, two slots today).
+- The gate's tower is gone with Alex's pass — `dev/court`'s landmark math (`TOWER_HEIGHT`) now describes nothing
+  shipped; retire or re-aim that page (it still previews the arc court).
+- Portal tuning is four numbers in `PORTAL_FRAG` (arm speeds, eye, rim pulse) — only if Alex asks.
+
+**Decisions:** layout in the file, not code (a socket is measured against the structure's corner) · the station is
+the one dialect for the ways off the plot (threshold panel keeps the Wilds door + marks only) · portals reuse the
+seam's shader family, not a new system · rotation snaps (thresholdBearing is 0 for every keeper).
+
+**Files:** `voxel3d/court-blueprint.ts` (+test) · `voxel/blueprints.ts` (`StationLayout`, `shiftStation`) ·
+`data/blueprints/gate_station.json` · `voxel3d/seam.ts` · `voxel3d/VoxelWorld.tsx` (court passes) · `dev/worktable/page.tsx` ·
+`scripts/gen-station-starter.mts`.
+
 ## ⑂ Shimmer — **MOONWELL GLADE IS AN ISLAND: CROSSING IN, FOLD OUT** (2026-09-16 afternoon, hub lane `e7f98ee0`) · *Last touched 2026-09-16 — ✅ **PROD `BVK9XFiTV9src1LxQCi3q` from `a20171f`**, glade-walk 42/42 on the served page*
 
 **Left off:** Alex: *"moonwell glade is supposed to be an example of what the home plot could look like, but as it is
