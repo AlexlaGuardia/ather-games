@@ -53,14 +53,17 @@ function classify(path: string): "tool" | "gated-game" | null {
   // with it. Everything that MUTATES SOURCE is caught by the tool check above, which runs first —
   // that is the gate that matters, and it is independent of any game's tier.
   //
-  // ── ★ FLIPPED 2026-08-07 (Alex): play3d is the LEGACY route, voxel3d is Shimmer ──────────────
-  // `/shimmer` and the room's Shimmer wall both land on `/shimmer/voxel3d` now. play3d keeps the
-  // systems being ported across (PLAY3D-MIGRATION.md: 16 of 23 port untouched), so it stays
-  // REACHABLE — but owner-only, so nothing wanders back onto the world model we are leaving.
-  // Gated here and not merely unlinked: the voxel HUD hides its play3d link for non-owners, and a
-  // hidden link is not a permission.
+  // ── ★ SETTLED 2026-09-15 (Alex): THE ENGINE IS THE DIMENSION ─────────────────────────────
+  // play3d is the MORTAL SIDE — Rune Hold, the Crucible, the expeditions — and voxel3d is the
+  // Ather. Neither is legacy. Beat 0 lives in Rune Hold, and `/shimmer` (the front door,
+  // `engine/front-door.ts`) sends every unborn keeper there first. From 08-07 to today this branch
+  // owner-gated play3d and 307'd everyone else to `/room`, whose Shimmer wall pointed at voxel3d —
+  // so Alex's incognito walk on 09-15 went front door → Rune Hold → gate → room → the Ather, and
+  // read as "the front door does nothing". A public dimension behind an owner gate is a locked
+  // front door with the key inside. Both worlds are public; everything that MUTATES SOURCE is
+  // still caught by the tool check above, which runs first.
   if (path === "/shimmer/play3d" || path.startsWith("/shimmer/play3d/")) {
-    return "gated-game";
+    return null;
   }
   // The voxel world is PUBLIC — it is the game now. Its in-page editors and the save-* endpoints
   // stay owner-only via the tool check above, which runs first.

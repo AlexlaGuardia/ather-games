@@ -29,7 +29,7 @@ export const OAUTH_COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'lax'
  * have bounced every non-owner who signed in straight to /room — a sign-in that silently fails to
  * return you to the game. A gated route can never be a default landing.
  */
-export const DEFAULT_RETURN = '/shimmer/voxel3d'
+export const DEFAULT_RETURN = '/shimmer'   // the front door decides the dimension (2026-09-15)
 
 /** Only ever return to a path on this site — an absolute or protocol-relative URL is an open redirect. */
 export function safeReturnPath(raw: string | null | undefined): string {
