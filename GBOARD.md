@@ -70,11 +70,12 @@ play3d's in `Shimmer3D.tsx` + `HotBar.tsx`. The rule that makes it hold is `hud-
 
 **Next:**
 1. ✅ Stage 2 shipped (above). Alex walks the mortal-side satchel: drag between slots, right-drag one-per-slot, the
-   Gear tab with `BAND_KEYS`, the tool arc's four sockets against the worn kit. `activeTool` is null on play3d
-   (the arc never glows while harvesting) — wire it to the channel's skill.
+   Gear tab with `BAND_KEYS`, the tool arc's four sockets against the worn kit. ✅ `activeTool` wired on play3d
+   (`554bc40`, play lane 09-16): the channel's family, or rinning while the line is out — the socket glows while you harvest.
 2. ✅ Stage 3 shipped (above). Alex walks Rune Hold: Greg's two lines in the shared frame (tap the plate to advance),
    the "E — talk to Gregory" prompt, a harvest/banner line above the bar.
-3. `O` toggles the panel in play3d as it does in voxel (unbound today; check the key is free).
+3. ✅ `O` / Esc toggle the panel in play3d (`554bc40`): same pointer handoff as I/M; refused under birth, battle, dialogue,
+   edit, bag. The ☰ door and Resume go through the same pair. Served under the hub's `BVK9XFiTV9src1LxQCi3q`.
 4. Rothenburg (block below) waits on the look calls; wire only after stage 2 so the new town is not seen under old chrome.
 
 **Files:** `src/app/shimmer/hud/{clock,options-door,options-panel,hud-corner,mana-gauge}.tsx` ·
