@@ -6816,7 +6816,7 @@ export default function Shimmer3D() {
       )}
 
       {/* minimap — persistent, click (or M) expands to the full map */}
-      {!battle && !editMode && !showMap && (
+      {!battle && !editMode && !showMap && !menuOpen && (
         <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => { openCursorUI(); setShowMap(true) }} />
       )}
       {/* The ☰ under the minimap, on the minimap's own rule; `hud/options-door.tsx`. */}
@@ -6987,7 +6987,7 @@ export default function Shimmer3D() {
             its LEFT and holds what only the mortal side has (companion, wounded, buffs) plus the
             panels the options Game tab opens. Marks and the mana pie left with it — one HUD, and the
             Ather shows neither up here (mana is the vessel at bottom-right; stage 2 brings it). */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && (
+      {!battle && !approach && !rewards && !editMode && !dialogue && !menuOpen && (
         <div data-ct={companionTick} style={{ position: 'fixed', top: 12, right: 12 + 148 + 10, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
           <Clock placed={false} note={<DayNotes zoneId={zoneId} />} />
 
