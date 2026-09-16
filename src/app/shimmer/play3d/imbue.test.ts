@@ -57,7 +57,11 @@ const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 // are kept verbatim and re-aimed; only the ARRANGEMENT assert changed, because the arrangement is
 // what was ruled. Deleting them to clear the red would have been the cheapest lie available.
 {
+  // ★ 2026-09-16 (HUD port, stage 2): the satchel/gear/letters cards moved to `hud/satchel.tsx`, shared by both
+  // dimensions; the host wiring stays in VoxelWorld. This guard asks its questions of BOTH files as one text —
+  // every 'exactly one mount' count is a count across the pair, exactly as it was when they were one file.
   const src = noComments(readFileSync(new URL('../voxel3d/VoxelWorld.tsx', import.meta.url), 'utf8'))
+    + '\n' + noComments(readFileSync(new URL('../hud/satchel.tsx', import.meta.url), 'utf8'))
   const at = declAt(src, 'SatchelLetters')
   const cardEnd = declAfter(src, 'VesselRack', at)
   ok(at >= 0 && cardEnd > at, 'the card slice has BOTH anchors — my first version sliced to the file tail when the end anchor missed, and passed for the wrong reason')

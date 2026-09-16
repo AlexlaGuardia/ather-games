@@ -356,7 +356,11 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
 
 // ── F. the hosts: the rack equips, the satchel carries the letters, the Passage sells one ───
 {
+  // ★ 2026-09-16 (HUD port, stage 2): the satchel/gear/letters cards moved to `hud/satchel.tsx`, shared by both
+  // dimensions; the host wiring stays in VoxelWorld. This guard asks its questions of BOTH files as one text —
+  // every 'exactly one mount' count is a count across the pair, exactly as it was when they were one file.
   const src = noComments(readFileSync(new URL('../voxel3d/VoxelWorld.tsx', import.meta.url), 'utf8'))
+    + '\n' + noComments(readFileSync(new URL('../hud/satchel.tsx', import.meta.url), 'utf8'))
   const at = declAt(src, 'VesselRack')
   const end = declAfter(src, 'GearTab', at)
   ok(at >= 0 && end > at, 'VoxelWorld has a VesselRack, sliced on both anchors')

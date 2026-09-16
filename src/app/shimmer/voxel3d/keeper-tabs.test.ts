@@ -25,7 +25,12 @@ ok(!ids.some(id => ['runes', 'tools', 'loadout'].includes(id)),
    '★ none of the retired ids came back — Runes retired, Tools folded, Loadout renamed (2026-09-04)')
 
 // ── B. the host mounts one body per tab, and nothing for a tab that is not on the list ─────────
-const src = noComments(readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8'))
+// ★ 2026-09-16 (HUD port, stage 2): the satchel/gear/letters cards moved to `hud/satchel.tsx`, shared by both
+// dimensions; the host wiring stays in VoxelWorld. This guard asks its questions of BOTH files as one text —
+// every 'exactly one mount' count is a count across the pair, exactly as it was when they were one file.
+// Satchel FIRST so `BagPanel` (the satchel's last function) is followed by the host's functions.
+const src = noComments(readFileSync(new URL('../hud/satchel.tsx', import.meta.url), 'utf8'))
+  + '\n' + noComments(readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8'))
 // ⚠ THE BODY COUNT IS SCOPED TO `BagPanel` (2026-09-13). It used to read the whole host, and the
 // options panel grew its own `{tab === 'game' && …}` bodies the same day — four mounts that are
 // not keeper tabs and were never on this list. A file-wide count cannot tell one panel's tabs

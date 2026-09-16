@@ -37,7 +37,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { KeeperFrame, TabEmpty, type KeeperTab } from '../../voxel3d/keeper-panel'
-import { GearTab, SatchelLetters } from '../../voxel3d/VoxelWorld'
+import { GearTab, SatchelLetters } from '../../hud/satchel'
 import { PANEL_SCENARIOS, planPanel, seedPanel, type PanelPlan, type PanelScenarioId } from '../../play3d/panel-fixture'
 import { VESSEL_CAP, VESSELS } from '../../play3d/gems'
 import { BAND_FOR_VESSEL, ownedCount, seatCount } from '../../play3d/vessels'
@@ -146,7 +146,7 @@ export default function PanelDevPage() {
         {!mounted ? null : <KeeperFrame key={`${scenario}:${gen}`} tab={tab} setTab={setTab} onClose={() => {}}
                      hint={<span className="text-white/40">dev bench · nothing here is saved to a real keeper</span>}>
           {tab === 'satchel' && <SatchelLetters owned={plan.owned} birth={plan.birth} items={items} onChange={() => setGen(n => n + 1)} />}
-          {tab === 'gear' && look === 'shipped' && <GearTab items={items} onLetters={() => setGen(n => n + 1)} tools={tools} skills={skills} />}
+          {tab === 'gear' && look === 'shipped' && <GearTab items={items} onLetters={() => setGen(n => n + 1)} tools={tools} skills={skills} castKeys={['z', 'b']} />}
           {tab === 'gear' && look === 'item' && (
             <div className="flex flex-col gap-2">
               <div className="gx-label text-[9px] text-emerald-200/60">proposal · not what ships · built against CANON/design-briefs/shimmer-casting-vessels.md</div>

@@ -44,7 +44,11 @@ ok(/className="gx-label /.test(head), 'SectionHead asks gx-label for its title')
 ok(/h-px/.test(head), 'SectionHead draws the hairline — bodies must not draw their own')
 
 // ── 3. the host's panel region ─────────────────────────────────────────────────────────────
-const HOST = noComments(read('./VoxelWorld.tsx'))
+// ★ 2026-09-16 (HUD port, stage 2): the satchel/gear/letters cards moved to `hud/satchel.tsx`, shared by both
+// dimensions; the host wiring stays in VoxelWorld. This guard asks its questions of BOTH files as one text —
+// every 'exactly one mount' count is a count across the pair, exactly as it was when they were one file.
+// Satchel FIRST: the BirthLean … World window below spans the cards and then the host's World.
+const HOST = noComments(read('../hud/satchel.tsx')) + '\n' + noComments(read('./VoxelWorld.tsx'))
 const from = declAt(HOST, 'BirthLean')
 const to = declAfter(HOST, 'World', from)
 ok(from >= 0 && to > from, 'BirthLean … World anchors present, in that order (the region below needs both)')

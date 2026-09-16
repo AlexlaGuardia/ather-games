@@ -176,7 +176,11 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
 
 // ── F. the host: /gems and the picker read the same letters, and the panel names what is short ─
 {
+  // ★ 2026-09-16 (HUD port, stage 2): the satchel/gear/letters cards moved to `hud/satchel.tsx`, shared by both
+  // dimensions; the host wiring stays in VoxelWorld. This guard asks its questions of BOTH files as one text —
+  // every 'exactly one mount' count is a count across the pair, exactly as it was when they were one file.
   const src = noComments(readFileSync(new URL('../voxel3d/VoxelWorld.tsx', import.meta.url), 'utf8'))
+    + '\n' + noComments(readFileSync(new URL('../hud/satchel.tsx', import.meta.url), 'utf8'))
   const at = src.indexOf('gems: (arg, n) =>')
   ok(at >= 0, 'VoxelWorld has the gems op')
   const op = at >= 0 ? src.slice(at, src.indexOf('\n    },\n', at)) : ''
