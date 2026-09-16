@@ -34,20 +34,28 @@
 
 import * as THREE from 'three'
 import type { SkillId } from '../engine/skills'
-import { stepHands, newHandsState, type HandsInput, type HandsState } from './hands-pose'
+import { stepHands, newHandsState, type HandsInput, type HandsState, type HandsPose } from './hands-pose'
 
 export const HANDS_ORDER = 1000
 
-/** Where the arm rests in camera space, and where the left wrist rests (below the frame). */
-export const REST = { x: 0.34, y: -0.30, z: -0.62, yaw: -0.35, pitch: 0.18, roll: 0.10 } as const
-export const LEFT_REST = { x: -0.34, y: -0.62, z: -0.60, up: 0.28 } as const
+/**
+ * Where the arm rests in camera space: the WRIST is the origin, the forearm runs +z (toward the
+ * elbow) and the fingers −z. ⚠ THE ARM RUNS ALONG THE SCREEN, NOT INTO IT. The first two cuts
+ * pointed the forearm down the view axis and every shot showed the elbow's end face — a square.
+ * A hand reads when the elbow is off the bottom-right corner and the forearm climbs the diagonal
+ * toward the centre: yaw turns the fingers inward (−x), pitch lifts them (+y), roll turns the back
+ * of the glove to the lens. The elbow end is nearest the camera and biggest, as it should be.
+ */
+export const REST = { x: 0.20, y: -0.25, z: -0.56, yaw: -0.85, pitch: 0.62, roll: 0.35 } as const
+export const LEFT_REST = { x: -0.22, y: -0.60, z: -0.54, up: 0.42 } as const
 
 /** Proportions, camera units. The arm reads at fov 75 from 0.6 away; these were eyeballed there. */
 const P = {
-  forearm: { w: 0.075, h: 0.07, l: 0.30 },
-  cuff:    { w: 0.092, h: 0.086, l: 0.05 },
-  glove:   { w: 0.10, h: 0.055, l: 0.13 },
-  thumb:   { w: 0.032, h: 0.03, l: 0.06 },
+  forearm: { w: 0.062, h: 0.056, l: 0.22 },
+  cuff:    { w: 0.082, h: 0.076, l: 0.04 },
+  glove:   { w: 0.10, h: 0.052, l: 0.12 },
+  finger:  { w: 0.021, h: 0.024, l: 0.06, curl: -1.2 },
+  thumb:   { w: 0.028, h: 0.028, l: 0.06 },
   seat:    { r: 0.018 },
   band:    { w: 0.10, h: 0.09, l: 0.028 },
 } as const
@@ -58,7 +66,7 @@ const P = {
  * grey*). Tool wood + horn per family below.
  */
 const COLOUR = {
-  sleeve: 0x6f6a56,   // undyed cloth
+  sleeve: 0x8a7a5c,   // undyed cloth, warm — the first cut was 0x6f6a56 and read GREY under a roof
   cord:   0xb59a6a,   // whipped cord at the cuff
   glove:  0x8a6a48,   // the vessel's hide, tier 0
   palm:   0xc9b08c,
@@ -80,6 +88,8 @@ export interface HandsSignal {
   placeAt: number
   castAt: number
   hidden: boolean
+  /** The last pose applied — a readout for the harness and the doctor, written every tick. */
+  last?: HandsPose
 }
 
 export interface Hands {
@@ -128,9 +138,17 @@ export function createHands(): Hands {
   part(arm, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 - 0.02)
   part(arm, cube, COLOUR.cord, P.cuff.w, P.cuff.h, P.cuff.l, 0, 0, 0)
   const glove = part(arm, cube, COLOUR.glove, P.glove.w, P.glove.h, P.glove.l, 0, -0.005, -P.glove.l / 2 - P.cuff.l / 2)
-  // pale palm (a thin plate under the glove) and the thumb tucked to the inside
+  // pale palm (a thin plate under the glove), four fingers curled into a grip off the far edge,
+  // and the thumb tucked to the inside — a fist, which is what a hand holding a focus is
   part(arm, cube, COLOUR.palm, P.glove.w * 0.92, 0.006, P.glove.l * 0.9, 0, -P.glove.h / 2 - 0.002, glove.position.z)
-  part(arm, cube, COLOUR.glove, P.thumb.w, P.thumb.h, P.thumb.l, -P.glove.w / 2 - P.thumb.w / 2 + 0.006, 0.004, glove.position.z + 0.02)
+  for (let i = 0; i < 4; i++) {
+    const knuckle = new THREE.Group()
+    knuckle.position.set(-P.glove.w / 2 + P.finger.w * 0.6 + i * (P.glove.w - P.finger.w * 1.2) / 3, 0, glove.position.z - P.glove.l / 2)
+    knuckle.rotation.x = P.finger.curl
+    arm.add(knuckle)
+    part(knuckle, cube, COLOUR.glove, P.finger.w, P.finger.h, P.finger.l, 0, 0, -P.finger.l / 2)
+  }
+  part(arm, cube, COLOUR.glove, P.thumb.w, P.thumb.h, P.thumb.l, -P.glove.w / 2 - P.thumb.w / 2 + 0.008, 0.006, glove.position.z + 0.01)
   // the seat on the back of the hand: one, dark — the tier-0 word is one seat, unwritten
   part(arm, sphere, COLOUR.seat, P.seat.r, P.seat.r * 0.6, P.seat.r, 0.012, P.glove.h / 2, glove.position.z + 0.01)
 
@@ -171,12 +189,11 @@ export function createHands(): Hands {
     part(g, cube, COLOUR.wood, 0.03, 0.03, 0.30, 0, 0, -0.06)
     part(g, cube, COLOUR.horn, 0.07, 0.012, 0.11, 0, 0.0, -0.26)
   }
-  const heads = [...tools.values()].flatMap(g => g.children.filter(c => (c as THREE.Mesh).material === mat(COLOUR.horn) || (c as THREE.Mesh).material === mat(COLOUR.stone)) as THREE.Mesh[])
 
   // ── the left wrist: the bracelet, below the frame until a cast ──
   const left = new THREE.Group()
   left.position.set(LEFT_REST.x, LEFT_REST.y, LEFT_REST.z)
-  left.rotation.set(0.25, 0.4, -0.15)
+  left.rotation.set(REST.pitch, -REST.yaw, -REST.roll)   // the mirror of the right arm
   group.add(left)
   part(left, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 + 0.03)
   part(left, cube, COLOUR.band, P.band.w, P.band.h, P.band.l, 0, 0, 0.01)
@@ -187,6 +204,7 @@ export function createHands(): Hands {
   const state: HandsState = newHandsState()
   const last = new THREE.Vector3(NaN, NaN, NaN)
   const tierTint = [0xd8cdb2, 0xe2d6b8, 0xe9dcc0, 0xf0e4c8]   // horn, a step clearer per tier
+  let lastTier = -1
 
   const tick = (camera: THREE.Camera, t: number, dt: number) => {
     // pose from the camera
@@ -199,14 +217,15 @@ export function createHands(): Hands {
     last.copy(camera.position)
     const input: HandsInput = { t, now: performance.now(), speed, breaking: sig.breaking, placeAt: sig.placeAt, castAt: sig.castAt, hidden: sig.hidden }
     const pose = stepHands(state, input, dt)
+    sig.last = pose
     arm.position.set(REST.x + pose.dx, REST.y + pose.dy, REST.z + pose.dz)
     arm.rotation.x = REST.pitch + pose.pitch
     left.position.y = LEFT_REST.y + pose.left * LEFT_REST.up
     left.visible = pose.left > 0.01
     // the focus in the fist
     for (const [fam, g] of tools) g.visible = fam === sig.family
-    const tint = tierTint[Math.max(0, Math.min(3, sig.tier))]
-    for (const h of heads) if (h.material === mat(COLOUR.horn)) (h.material as THREE.MeshLambertMaterial).color.setHex(tint)
+    // the head's material is SHARED by every horn part, so the tier tint is one write, on change
+    if (sig.tier !== lastTier) { lastTier = sig.tier; mat(COLOUR.horn).color.setHex(tierTint[Math.max(0, Math.min(3, sig.tier))]) }
   }
 
   return {

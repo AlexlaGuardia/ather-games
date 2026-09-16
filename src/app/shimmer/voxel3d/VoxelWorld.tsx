@@ -5987,8 +5987,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       while (lightRing.current.dirty.size > 0 && performance.now() - t0 < capMs) advanceRenderLight(50)
       return (w.__renderlight as () => unknown)()
     }
-    return () => { delete w.__renderlight; delete w.__renderlightFill; delete w.__guide }
-  }, [lightUniforms, advanceRenderLight, guide, camera, space, tutorial])
+    // `__hands`: the harness stamps a cast / reads the pose. ⚠ From this EFFECT, not the useMemo —
+    // StrictMode runs a memo factory twice and keeps the FIRST result, so a window assignment made
+    // inside the factory hands the harness the orphan. Cost an hour on 09-16.
+    w.__hands = hands.sig
+    return () => { delete w.__renderlight; delete w.__renderlightFill; delete w.__guide; delete w.__hands }
+  }, [lightUniforms, advanceRenderLight, guide, camera, space, tutorial, hands])
   // ── ★ THREE SILHOUETTES, ONE GEOMETRY EACH, SHARED ACROSS EVERY BODY OF THAT FORM ──────────
   // ⚠ BLOCKOUT, same standing as the single body it replaces: the locked look is owed a
   // design-brief + /picaso pass (hollows.ts says so in writing) and these are read-at-a-glance
