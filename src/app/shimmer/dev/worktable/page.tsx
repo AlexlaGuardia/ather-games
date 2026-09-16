@@ -34,7 +34,7 @@
 //
 // Run: tools/devwin.sh hub → http://localhost:3200/shimmer/dev/worktable
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { ALL_BLOCKS, blockDef, type BlockSkill } from '../../voxel/registry'
 import { MAT, isHalfMat } from '../../voxel/depth'
@@ -216,20 +216,56 @@ function Keeper({ at }: { at: [number, number, number] }) {
 }
 
 /** Drag to orbit, wheel to zoom. The current view is published back so it can be written down. */
-function Rig({ yaw, pitch, dist, eye, target, onView }: {
-  yaw: number; pitch: number; dist: number; eye: boolean; target: THREE.Vector3
+/**
+ * ── ★ FLY (Alex, 2026-09-16: "make it so the camera in this build mode can fly freely") ────────
+ * A third stance beside orbit and keeper-eye: the camera is a free body. Right/middle-drag turns it
+ * (same buttons that orbit, so a left click still places a block), W/A/S/D move along the look,
+ * Space rises, Shift sinks, the wheel sets the speed. It starts FROM the orbit's last position and
+ * facing so switching does not jump the view; the orbit is untouched underneath and comes back the
+ * moment fly is left. Keys are ignored while an input has focus — the id box is a text field.
+ */
+function Rig({ yaw, pitch, dist, eye, fly, target, onView }: {
+  yaw: number; pitch: number; dist: number; eye: boolean; fly: boolean; target: THREE.Vector3
   onView: (v: { yaw: number; pitch: number; dist: number }) => void
 }) {
   const { camera, gl } = useThree()
-  const state = useRef({ yaw, pitch, dist, eye, dragging: false, lx: 0, ly: 0 })
+  const state = useRef({ yaw, pitch, dist, eye, fly, dragging: false, lx: 0, ly: 0,
+    // the free body: its own facing (YXZ), a speed in blocks/s, and the keys held this frame
+    fyaw: 0, fpitch: 0, speed: 12, held: new Set<string>() })
   useEffect(() => {
-    state.current.yaw = yaw; state.current.pitch = pitch; state.current.dist = dist; state.current.eye = eye
-  }, [yaw, pitch, dist, eye])
+    const s = state.current
+    if (fly && !s.fly) {
+      // Enter where the orbit left the camera, facing the way it faced.
+      const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ')
+      s.fyaw = e.y; s.fpitch = e.x
+    }
+    s.yaw = yaw; s.pitch = pitch; s.dist = dist; s.eye = eye; s.fly = fly
+  }, [yaw, pitch, dist, eye, fly, camera])
+
+  useFrame((_, dt) => {
+    const s = state.current
+    if (!s.fly) return
+    camera.quaternion.setFromEuler(new THREE.Euler(s.fpitch, s.fyaw, 0, 'YXZ'))
+    const k = s.held
+    if (!k.size) return
+    const step = s.speed * Math.min(dt, 0.1)
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)
+    const m = new THREE.Vector3()
+    if (k.has('KeyW')) m.add(fwd)
+    if (k.has('KeyS')) m.sub(fwd)
+    if (k.has('KeyD')) m.add(right)
+    if (k.has('KeyA')) m.sub(right)
+    if (k.has('Space')) m.y += 1
+    if (k.has('ShiftLeft') || k.has('ShiftRight')) m.y -= 1
+    if (m.lengthSq() > 0) camera.position.addScaledVector(m.normalize(), step)
+  })
 
   useEffect(() => {
     const el = gl.domElement
     const apply = () => {
       const s = state.current
+      if (s.fly) return                     // the free body is driven per frame above
       if (s.eye) {
         // ── ★★ STANDING ON THE PAD, NOT ORBITING CLOSE TO IT ────────────────────────────────
         // The orbit's height is `target.y + sin(pitch) * dist` — it is a function of the DISTANCE,
@@ -266,6 +302,13 @@ function Rig({ yaw, pitch, dist, eye, target, onView }: {
     const move = (e: PointerEvent) => {
       const s = state.current
       if (!s.dragging) return
+      if (s.fly) {
+        // Mouse look: drag right turns right, drag down looks down — the world's own feel.
+        s.fyaw -= (e.clientX - s.lx) * 0.004
+        s.fpitch = Math.max(-1.5, Math.min(1.5, s.fpitch - (e.clientY - s.ly) * 0.004))
+        s.lx = e.clientX; s.ly = e.clientY
+        return
+      }
       s.yaw += (e.clientX - s.lx) * 0.006
       // Clamped short of the poles: straight down gives `lookAt` an ambiguous up vector and the view rolls.
       s.pitch = Math.max(-1.45, Math.min(1.45, s.pitch + (e.clientY - s.ly) * 0.006))
@@ -273,9 +316,18 @@ function Rig({ yaw, pitch, dist, eye, target, onView }: {
       apply(); onView({ yaw: s.yaw, pitch: s.pitch, dist: s.dist })
     }
     const up = () => { state.current.dragging = false }
+    const typing = () => { const t = document.activeElement; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') }
+    const keyDown = (e: KeyboardEvent) => {
+      if (!state.current.fly || typing()) return
+      if (e.code === 'Space') e.preventDefault()      // the page must not scroll under the canvas
+      state.current.held.add(e.code)
+    }
+    const keyUp = (e: KeyboardEvent) => { state.current.held.delete(e.code) }
+    const blur = () => { state.current.held.clear() }   // a key released over another window never arrives
     const wheel = (e: WheelEvent) => {
       e.preventDefault()
       const s = state.current
+      if (s.fly) { s.speed = Math.max(2, Math.min(80, s.speed * (e.deltaY > 0 ? 0.85 : 1.18))); return }
       s.dist = Math.max(4, Math.min(300, s.dist * (e.deltaY > 0 ? 1.1 : 0.9)))
       apply(); onView({ yaw: s.yaw, pitch: s.pitch, dist: s.dist })
     }
@@ -283,13 +335,19 @@ function Rig({ yaw, pitch, dist, eye, target, onView }: {
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     el.addEventListener('wheel', wheel, { passive: false })
+    window.addEventListener('keydown', keyDown)
+    window.addEventListener('keyup', keyUp)
+    window.addEventListener('blur', blur)
     return () => {
       el.removeEventListener('pointerdown', down)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       el.removeEventListener('wheel', wheel)
+      window.removeEventListener('keydown', keyDown)
+      window.removeEventListener('keyup', keyUp)
+      window.removeEventListener('blur', blur)
     }
-  }, [camera, gl, target.x, target.y, target.z, eye, onView])
+  }, [camera, gl, target.x, target.y, target.z, eye, fly, onView])
   return null
 }
 
@@ -342,6 +400,7 @@ export default function WorktablePage() {
   const [hour, setHour] = useState(12)
   const [showKeeper, setShowKeeper] = useState(true)
   const [eye, setEye] = useState(false)
+  const [fly, setFly] = useState(false)
   const [view, setView] = useState({ yaw: -0.9, pitch: 0.5, dist: 34 })
   /** Which palette families are expanded. Seeded from `FAMILY`, then the keeper's own choice. */
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -525,7 +584,7 @@ export default function WorktablePage() {
             `VoxelDayNight` owns the world's fog and a second way to disable it would be a second
             dialect of the same switch. */}
         {!fog && <fog attach="fog" args={[DAY.bg, 5000, 6000]} />}
-        <Rig yaw={view.yaw} pitch={view.pitch} dist={view.dist} eye={eye} target={target} onView={setView} />
+        <Rig yaw={view.yaw} pitch={view.pitch} dist={view.dist} eye={eye} fly={fly} target={target} onView={setView} />
         <Pad onHit={onHit} />
         {byMaterial.map(([mat, list]) => (
           <MaterialMesh key={mat} mat={mat} cells={list} tex={tex} onHit={onHit} />
@@ -572,7 +631,13 @@ export default function WorktablePage() {
           <button style={btn} onClick={() => setFog(f => !f)}>fog {fog ? 'on' : 'off'}</button>
           <button style={btn} onClick={() => setShowKeeper(k => !k)}>keeper</button>
           <button style={btn} onClick={() => setEye(e => !e)}>{eye ? 'keeper eye' : 'from above'}</button>
+          <button style={{ ...btn, ...(fly ? { borderColor: '#ffd27a', color: '#ffd27a' } : {}) }} onClick={() => setFly(f => !f)}>{fly ? 'fly: on' : 'fly'}</button>
         </div>
+        {fly && (
+          <div style={{ opacity: 0.7, fontSize: 11, marginBottom: 8 }}>
+            fly — W/A/S/D move · Space up · Shift down · right-drag to look · wheel = speed · click still places
+          </div>
+        )}
         <label style={{ display: 'block', opacity: 0.7, marginBottom: 8 }}>
           hour {hour}
           <input type="range" min={0} max={23} value={hour} onChange={e => setHour(Number(e.target.value))}
