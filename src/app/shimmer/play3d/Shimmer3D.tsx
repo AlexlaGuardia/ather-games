@@ -24,7 +24,7 @@ import { SayLine } from '../hud/say-line'
 import { Prompt } from '../hud/prompt'
 import { DialogueBox } from '../hud/dialogue-box'
 import { createGuideTrail } from '../voxel3d/guide-trail'
-import { createHands, type Hands } from '../voxel3d/hands'
+import { createHands, GLOVE_MODEL_URL, type Hands } from '../voxel3d/hands'
 import type { GuideTarget } from '../voxel3d/guide-target'
 import { forkTarget, forkObjective, forkFlags, MET_GREG_FLAG, STATION_FLAG } from './fork'
 import { OptionsPanel, OptionRow, OptionHead, OptionSlider } from '../hud/options-panel'
@@ -3933,7 +3933,7 @@ export default function Shimmer3D() {
   //    verbs — a channel instead of a swing, the walker's `bodyOut`, a placeable in the palm. ────
   const hands = useMemo(() => createHands(), [])
   const bodyOut = useRef(newBodyOut())
-  useEffect(() => () => hands.dispose(), [hands])
+  useEffect(() => { void hands.loadGlove(GLOVE_MODEL_URL); return () => hands.dispose() }, [hands])
   const [invSlots, setInvSlots] = useState<(ItemStack | null)[]>(() => invRef.current.slots)
   const [manaFrac, setManaFrac] = useState(1)
   const [forestry, setForestry] = useState(() => ({ level: 1, xp: 0, next: xpForSkillLevel(1), pulse: 0 }))

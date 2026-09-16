@@ -17,7 +17,7 @@ const parts = meshes.filter(m => m !== sentinel)
 ok(parts.length >= 16, `a rig of ${parts.length} parts`)   // a stick glove, no fingers (Alex 09-16)
 ok(parts.every(m => m.renderOrder === HANDS_ORDER), 'every part draws at HANDS_ORDER, after the sentinel')
 ok(parts.every(m => (m.material as THREE.Material).transparent), 'every part is in the transparent list (so the clear lands before it and after the world)')
-ok(parts.every(m => m.material instanceof THREE.MeshLambertMaterial), 'no metal: every material is Lambert (no metalness slider to reach for)')
+ok(parts.every(m => m.material instanceof THREE.MeshLambertMaterial || (m.material instanceof THREE.MeshStandardMaterial && m.material.metalness === 0)), 'no metal: every material is Lambert, or Standard with metalness 0 (a loaded glove is forced there by `adopt`)')
 ok(parts.every(m => m.frustumCulled === false), 'nothing culls — a camera-space rig has no world-space bounds worth trusting')
 
 // the focus follows the signal

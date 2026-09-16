@@ -244,7 +244,7 @@ import { consumeEntry } from '../engine/crossing'
 import { LANDING_ARRIVAL, SHOPFRONT_ARRIVAL, SHOPFRONT_LABEL } from '../world/landing'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { createMoglinFigures, MOGLIN_BOUNDS } from './moglin-figure'
-import { createHands } from './hands'
+import { createHands, GLOVE_MODEL_URL } from './hands'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
@@ -3283,6 +3283,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   //    owns the rig and the depth trick; `hands-pose.ts` owns every motion. This file only writes
   //    the signal (below, at the HUD mark) and stamps the place / cast events. ─────────────────
   const hands = useMemo(() => createHands(), [])
+  useEffect(() => { void hands.loadGlove(GLOVE_MODEL_URL) }, [hands])
   const handsWasAirborne = useRef(false)
   const handsLastVy = useRef(0)
   const guideWorld = useMemo((): GuideWorld => ({

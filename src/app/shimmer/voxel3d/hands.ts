@@ -33,10 +33,13 @@
 // Bench: none yet — shot on the play devwin. Alex judges the look; this is placeholder craft.
 
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { SkillId } from '../engine/skills'
 import { stepHands, newHandsState, type HandsInput, type HandsState, type HandsPose } from './hands-pose'
 
 export const HANDS_ORDER = 1000
+/** The modelled tier-0 glove (picaso, off the locked ref). Absent = the stick stays. */
+export const GLOVE_MODEL_URL = '/models/hands/glove-t0.glb'
 
 /**
  * ★★ THE ARM IS TWO POINTS, NOT THREE ANGLES (third look, Alex 09-16, with a photo: "I can't get
@@ -141,6 +144,14 @@ export interface Hands {
   sig: HandsSignal
   /** Once per frame, after the camera has moved. `t` seconds, `dt` seconds. */
   tick: (camera: THREE.Camera, t: number, dt: number) => void
+  /**
+   * Swap the stick for a modelled glove: a GLB with two meshes, `glove_fist` and `glove_open`,
+   * built to the rig's frame (origin at the wrist, fingers −z, back of the hand +y, thumb −x —
+   * `public/models/hands/README.md`). The stick stays until the file lands, and stays for good if
+   * it does not — a missing model is a placeholder, never a missing hand. Resolves to whether it
+   * swapped. Called by the host, never at build, so a node test never fetches.
+   */
+  loadGlove: (url: string) => Promise<boolean>
   dispose: () => void
 }
 
@@ -223,7 +234,7 @@ export function createHands(): Hands {
   part(arm, cube, COLOUR.cord, P.cuff.w, P.cuff.h, P.cuff.l, 0, 0, 0)
   const glove = part(arm, cube, COLOUR.glove, P.glove.w, P.glove.h, P.glove.l, 0, -0.005, -P.glove.l / 2 - P.cuff.l / 2)
   // the pale palm: a thin plate on the glove's −y face — the INSIDE, where the held thing sits
-  part(arm, cube, COLOUR.palm, P.glove.w * 0.92, 0.006, P.glove.l * 0.9, 0, -P.glove.h / 2 - 0.002, glove.position.z)
+  const palm = part(arm, cube, COLOUR.palm, P.glove.w * 0.92, 0.006, P.glove.l * 0.9, 0, -P.glove.h / 2 - 0.002, glove.position.z)
   // the seat on the back of the hand: one, dark — the tier-0 word is one seat, unwritten
   part(arm, sphere, COLOUR.seat, P.seat.r, P.seat.r * 0.6, P.seat.r, 0.012, P.glove.h / 2, glove.position.z + 0.01)
 
@@ -286,6 +297,37 @@ export function createHands(): Hands {
   held.position.set(0, -P.glove.h / 2 - 0.045, glove.position.z - 0.02)
   arm.add(held)
 
+  // ── the modelled glove, when one is loaded: the stick parts hide, these show ──
+  const stickParts: THREE.Object3D[] = [glove, palm]
+  let gloveFist: THREE.Object3D | null = null, gloveOpen: THREE.Object3D | null = null
+  /** The depth trick and the ambient floor, applied to any mesh that joins the rig later. */
+  const adopt = (o: THREE.Object3D) => {
+    o.traverse(m => {
+      if (!(m instanceof THREE.Mesh)) return
+      m.renderOrder = HANDS_ORDER; m.frustumCulled = false
+      const mats = Array.isArray(m.material) ? m.material : [m.material]
+      for (const mm of mats) {
+        mm.transparent = true
+        if (mm instanceof THREE.MeshStandardMaterial) {
+          mm.metalness = 0   // ⛔ no metal — the vessel card's law, enforced on whatever the file says
+          mm.emissive.copy(mm.color); mm.emissiveIntensity = 0.16
+        }
+      }
+    })
+  }
+  const loadGlove = (url: string) => new Promise<boolean>(resolve => {
+    new GLTFLoader().load(url, gltf => {
+      const fist = gltf.scene.getObjectByName('glove_fist'), open = gltf.scene.getObjectByName('glove_open')
+      if (!fist || !open) { resolve(false); return }
+      adopt(fist); adopt(open)
+      fist.position.set(0, 0, 0); open.position.set(0, 0, 0)
+      arm.add(fist); arm.add(open)
+      gloveFist = fist; gloveOpen = open
+      for (const p of stickParts) p.visible = false
+      resolve(true)
+    }, undefined, () => resolve(false))
+  })
+
   const sig: HandsSignal = {
     family: null, tier: 0, breaking: false, placeAt: -Infinity, castAt: -Infinity, hidden: false,
     held: null, airborne: false, sliding: false, crouching: false, climbing: false,
@@ -327,6 +369,11 @@ export function createHands(): Hands {
     leftPivot.position.y = tn.wy - LEFT_DROP + pose.left * LEFT_UP + pose.leftDy
     left.rotation.x = pose.leftPitch
     leftPivot.visible = pose.left > 0.01
+    // the modelled glove: an OPEN hand to aim a cast or take a wall, a fist for everything else
+    if (gloveFist && gloveOpen) {
+      const open = pose.left > 0.5 && sig.castAt > sig.placeAt || sig.hanging || sig.climbing || sig.wallCatch
+      gloveFist.visible = !open; gloveOpen.visible = open
+    }
     // the focus in the fist, or the thing being carried
     for (const [fam, g] of tools) g.visible = fam === sig.family
     held.visible = showHeld
@@ -339,8 +386,9 @@ export function createHands(): Hands {
   }
 
   return {
-    group, sig, tick,
+    group, sig, tick, loadGlove,
     dispose: () => {
+      for (const g of [gloveFist, gloveOpen]) g?.traverse(m => { if (m instanceof THREE.Mesh) { m.geometry.dispose(); (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => x.dispose()) } })
       cube.dispose(); sphere.dispose()
       for (const m of mats.values()) m.dispose()
       mats.clear()
