@@ -11,6 +11,34 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🚪 Shimmer — **THE FRONT DOOR: THE ENGINE IS THE DIMENSION** (2026-09-15 late, hub lane `28308fe6`, solo) · *Last touched 2026-09-15 — ✅ **PROD `BUILD_ID zekyjSSlMD39PSKGUsSpe` from `d8d938a`***
+
+**Left off:** Alex, on last night's "Rune Hold is missing on the voxel side": *"the ather dimension is in voxel, but runehold,
+the crucible and expeditions are more like play3d."* That is the frame, and the code already agreed with it — one keeper
+(`save-slot` / `keeper-local`), a crossing contract both ways (`engine/crossing.ts`, Rune Hold's THE LANDING gate → voxel3d,
+a lit waymark socket → `depart()` → play3d). Only the FRONT DOOR was wrong: `/shimmer` redirected blind to voxel3d (08-07),
+so a new keeper never met Beat 0. **Retracted:** last night's P1 "Rune Hold on the voxel side". Not built, not needed.
+- `engine/front-door.ts` (pure, 14/0) + `/shimmer/page.tsx` is a client front door now: **unborn → play3d** (birth → Rune
+  Hold → Greg → the doorway) · **born → the side you last stood on** (`ather:shimmer:side`, keeper-scoped, world-tied, written
+  by each world route on mount — never by the crossing, which keeps its one-write rule) · **born, no record → the Ather**
+  (every keeper alive before today). Menu labels: "play3d (legacy)" → "Rune Hold (play3d)". Walked in Alex's Chrome:
+  `/shimmer` → voxel3d, stand in town → `/shimmer` → play3d, back → `ather`. His record left as it was.
+- **The arena is a SCENE, not a place.** `components/ArenaBattle` mounts over whichever world the keeper stands in (mist-patch
+  spar in the Ather; patrols + the Crucible on the mortal side). It never decides the dimension. That overlay is where
+  "which side does Rune Hold belong to" got blurry. `/shimmer/arena` is a cold harness, not a door.
+
+**Decisions:** two engines, one keeper, the page load at the gate IS the crossing beat · play3d is the mortal side, not legacy ·
+**the Crucible opens from Rune Hold only** (Alex) · anything carried across lives in keeper keys, never in an engine's own refs.
+
+**Next:**
+- ⛔ **Alex walks it fresh (incognito):** `/shimmer` → birth → Rune Hold → Greg's warning + shop → THE LANDING → Glade `arrival`
+  → the five doors. The seam to feel is the controls changing at the door.
+- ⚠ A signed-in keeper on a NEW browser has no local rune until play3d hydrates from the cloud, so the front door sends them to
+  Rune Hold once; the gate takes them home. Acceptable; fix = read birth from the cloud save in the front door if it grates.
+- Carried from the block below: Moglin figure · folk look · Rune Hold's own Moglin scale · Act I½ / Beats 9-10 · ring build.
+
+---
+
 ## 🚪 Shimmer — **THE FIVE DOORS: MAGII'S TUTORIAL SHEET WIRED — HAZEL LENDS, GREG ASKS, THE CHOICE, THE FOLD** (2026-09-15 PM, hub lane `04e0ba76`, solo) · *Last touched 2026-09-15 — ✅ **PROD `BUILD_ID CoDaHRX93A_OU_J6a19mT` from `fec8534`** (+ harness `17163ff`), served == disk. tutorial 51/0 · folk 64/0 · folk-lines 160/0 (verbatim vs canon) · render-audit 216/0 · hud-type ratchet 17 · voxel3d sweep 98/98 · engine 29/29 · voxel 64/64. **`scripts/glade-walk.mts` walks the whole chain in the live page, green twice.***
 
 **Left off:** Magii's wiring sheet (athernyx `17e2223`) built, no locked line moved. Two tutorials had grown up apart — canon's economy (five doors, want/give, the stay choice) and the build's hands (cut → planks → lantern → light) under raven placeholders. Now one: **greet** = Greg's warning + offer (hands NOTHING) → **doors** = knock on five; only **Hazel's** want is an errand: she LENDS her blade on first talk (`hazels_blade`, the only blade in the Glade), the keeper cuts a log, mills 4 planks at HER sawmill, brings the stack square + the blade back (`bark:owed` until both) → **ask** = five met → Greg asks for a light and hands the raw shard THERE → **lantern / light** (any placement within 64 of Greg; his `lit` line is a toast across the glade) → **choice** ('Not yet' re-arms) → **fold** = the gate opens AND the starter bag (worn tools + crafting table) is handed out — canon Beat 1's gi_5. ★ **The keeper has no tool of their own until the fold**; that is what makes Hazel's return real. Five bodies = Greg's figure tinted, each on a floor cell of their own stamped building (`folk.ts`, cell in the blueprint frame, rotated with the stamp; `folk.test` proves open floor). `folk-lines.ts` is generated from the canon file (`scripts/folk-lines-gen.py`) and `folk-lines.test` fails on one changed character. Old saves migrate on read (`done` stays done). `look <deg> [pitch]` console verb (harness aim).
