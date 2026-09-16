@@ -48,10 +48,13 @@ import {
 } from '../../voxel/blueprints'
 import { PIECES, type Rotation } from '../../voxel/pieces'
 import { createPieceRenderer } from '../../voxel3d/piece-mesh'
+import { STATION_BP_ID, STATION_LAYOUT } from '../../voxel3d/court-blueprint'
 
 const TILE = 16
 /** The build pad, in blocks. Big enough for a cottage and a yard; not a world. */
-const PAD = 24
+// 24 → 40 (2026-09-16): the gate station is 26×26 on the ground and 29 tall, and it is now a
+// structure this table opens (`?load=gate_station`). A cottage still sits in the middle of it.
+const PAD = 40
 /**
  * The face a keeper stands on. The pad mesh is a 1-deep box centred at `-0.5`, so its top is 0 —
  * which is also why a block at `c.y` sits directly on it. ⚠ Named rather than typed at the two use
@@ -290,6 +293,39 @@ function Rig({ yaw, pitch, dist, eye, target, onView }: {
   return null
 }
 
+/**
+ * ── ★ THE STATION'S SOCKETS, AS GHOSTS (2026-09-16) ────────────────────────────────────────────
+ * When the loaded structure is the gate station, the four crossings the world READS
+ * (`court-blueprint.ts` › `STATION_LAYOUT`, frozen) are drawn where they stand in the blueprint's
+ * frame — a translucent 3×3 doorway at the floor row, a marker at each lamp cell — so the frames
+ * get built AROUND them. Nothing here is saved; it is the one thing on this table the author cannot
+ * move by clicking, and it is drawn so that fact is visible instead of remembered.
+ */
+function StationGhosts() {
+  const f = STATION_LAYOUT.floor
+  return (
+    <group>
+      {STATION_LAYOUT.sockets.map(sk => (
+        <mesh key={`s${sk.index}`} position={[sk.x + 0.5, f + 1.5, sk.z + 0.5]}>
+          <boxGeometry args={[3, 3, 3]} />
+          <meshBasicMaterial color={sk.kind === 'gate' ? '#ffd27a' : '#7ad7ff'} transparent opacity={0.22} depthWrite={false} />
+        </mesh>
+      ))}
+      {STATION_LAYOUT.lamps.map(l => (
+        <mesh key={`l${l.index}`} position={[l.x + 0.5, l.y + 0.5, l.z + 0.5]}>
+          <boxGeometry args={[1.1, 1.1, 1.1]} />
+          <meshBasicMaterial color="#ffe66b" wireframe />
+        </mesh>
+      ))}
+      {/* the anchor: where `courtAnchor` lands, the focus the sockets face */}
+      <mesh position={[STATION_LAYOUT.anchor.x + 0.5, f + 0.05, STATION_LAYOUT.anchor.z + 0.5]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.4, 0.6, 24]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.6} depthWrite={false} />
+      </mesh>
+    </group>
+  )
+}
+
 export default function WorktablePage() {
   const [cells, setCells] = useState<Cells>(new Map())
   const [material, setMaterial] = useState<number>(MAT.CUT_STONE)
@@ -317,6 +353,12 @@ export default function WorktablePage() {
   const undo = useRef<{ cells: Cells; placements: BlueprintPiece[] }[]>([])
 
   useEffect(() => { setTimePin(hour) }, [hour])
+  // `?load=<id>` opens a saved structure on arrival — the Dev tab's "gate station" link lands here.
+  useEffect(() => {
+    const want = new URLSearchParams(window.location.search).get('load')
+    if (want) void load(want)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const refresh = useCallback(async () => {
     const r = await fetch('/shimmer/save-blueprint').then(x => x.json()).catch(() => null)
@@ -381,6 +423,18 @@ export default function WorktablePage() {
   const bounds = useMemo(() => boundsOf(normalizeCells(asCells), placements), [asCells, placements])
 
   const save = async () => {
+    // ★ THE STATION'S FRAME IS ANCHORED AT (0,0,0). `makeBlueprint` re-bases every structure to its
+    // own min corner, and the world reads the station's sockets as FIXED offsets from that corner
+    // (`court-blueprint.ts`). Remove the outermost dais row and every crossing would land a block
+    // off, silently. So the station may not be saved unless something still stands on the x=0 and
+    // z=0 edges and the bottom row — the ghosts on the pad are where they are because of this.
+    if (id.trim() === STATION_BP_ID) {
+      const minX = Math.min(...asCells.map(c => c.x)), minY = Math.min(...asCells.map(c => c.y)), minZ = Math.min(...asCells.map(c => c.z))
+      if (minX !== 0 || minY !== 0 || minZ !== 0) {
+        setStatus(`SAVE REFUSED: the station's frame is measured from (0,0,0) and its min corner is now (${minX},${minY},${minZ}) — keep a block on the x=0 and z=0 edges and the bottom row, or the sockets move`)
+        return
+      }
+    }
     const s = makeBlueprint(id.trim(), name.trim() || id.trim(), asCells, placements)
     const r = await fetch('/shimmer/save-blueprint', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s),
@@ -478,6 +532,7 @@ export default function WorktablePage() {
         ))}
         <Pieces placements={placements} solid={solid} />
         {showKeeper && <Keeper at={[PAD / 2 - 3, PAD_TOP, PAD / 2 + 4]} />}
+        {id === STATION_BP_ID && <StationGhosts />}
       </Canvas>
 
       {/* ── the panel ─────────────────────────────────────────────────────────────────────── */}
@@ -496,6 +551,13 @@ export default function WorktablePage() {
         <div style={{ opacity: 0.65, fontSize: 11, marginBottom: 6 }}>
           click to place · shift-click or right-click to remove · middle/right-drag to orbit · wheel to zoom
         </div>
+        {id === STATION_BP_ID && (
+          <div style={{ opacity: 0.8, fontSize: 11, marginBottom: 6, borderLeft: '2px solid #ffd27a', paddingLeft: 6 }}>
+            <b>gate station</b> — the ghosts are the crossings the world reads: gold = the Rune Hold gate, blue =
+            passage sockets, wire cubes = lamp cells (lit when the way is earned). Build the frames around them;
+            they do not move. The dais edge at x=0 / z=0 must stay, or every socket shifts.
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <input value={id} onChange={e => setId(e.target.value)} placeholder="id"

@@ -7051,6 +7051,7 @@ export default function Shimmer3D() {
                 </div>
             )}
             <OptionRow href="/shimmer/dev/worktable" label="⚒ Build structures" tail="worktable" />
+          <OptionRow href="/shimmer/dev/worktable?load=gate_station" label="⌂ Gate station" tail="worktable" />
             <OptionRow href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
             <OptionRow href="/shimmer/voxel3d" label="◈ The Ather" tail="voxel3d" />
           </div>}

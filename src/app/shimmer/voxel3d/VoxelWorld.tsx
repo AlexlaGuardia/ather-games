@@ -234,6 +234,7 @@ const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in 
 import { GREG_LINES } from './greg-lines'
 import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
 import { insideGlade } from '../voxel/glade'
+import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps } from './court-blueprint'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
          legacyRowSockets, courtClearCells, COURT_REV,
          courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells,
@@ -8072,9 +8073,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // never came near. Checking only the sockets would lay whichever half of the floor happened
       // to have arrived and leave the rest as a hole the keeper walks into — and the build pass is
       // keyed on the tier, so it would never come back to finish it.
+      // ── ★★ THE STATION AS A STRUCTURE (2026-09-16) ─────────────────────────────────────────
+      // If Alex has saved `gate_station` on the worktable, THAT is the court: stamped at the same
+      // anchor, its frozen sockets and lamps read by the passes below (`court-blueprint.ts`). The
+      // arc court is the fallback for a tree with no blueprint. Readiness covers the stamp's whole
+      // box for the same reason the dais made it cover the apron: a half-arrived footprint lays
+      // half a building and never comes back.
+      const stationBp = stationBlueprint()
+      const station = stationBp && level !== null ? stationStamp(stationBp, a, level) : null
+      const stationLaid = station ? stationCells(station) : []
       const ready = a.y !== null && level !== null
         && socks.every(sk => cols.current.has(colOf(sk.x, sk.z)))
         && dais.every(c => cols.current.has(colOf(c.x, c.z)))
+        && stationLaid.every(c => cols.current.has(colOf(c.x, c.z)))
       if (fit.ok && ready && level !== null) {
         // Clear first: an older court's stone may stand where the new one goes, and laying the new
         // court before clearing would then delete cells it had just placed.
@@ -8133,6 +8144,23 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // rev stacked another floor on the last. A tier change already got this treatment; a rev
         // change at the SAME SITE did not, and that is the case that fires on every ship.
         for (const c of courtFloorClearCells(SEED, cfg)) sweep(c)
+        // 5. ★ AND EVERY STATION STAMP THIS FOLD HAS EVER WORN — smaller tiers' sites and this one's
+        // — back to the generated ground. A blueprint may use any material Alex likes, so the
+        // material sweeps above cannot find it; the stamp's own cells can, exactly.
+        if (stationBp) {
+          const tiers = [...staleCourts(SEED, plotTier.current).map(t => t.tier), plotTier.current]
+          for (const oldTier of tiers) {
+            const oldCfg = withLitter(plotForTier(oldTier), litterFrom.current)
+            const oldA = courtAnchor(SEED, oldCfg), oldLevel = courtLevel(SEED, oldCfg)
+            if (oldA.y === null || oldLevel === null) continue
+            for (const c of stationCells(stationStamp(stationBp, oldA, oldLevel))) {
+              const col = cols.current.get(colOf(c.x, c.z))
+              if (!col) continue
+              const gen = plotGeneratedVoxel(col, ((c.x % SECTION) + SECTION) % SECTION, c.y, ((c.z % SECTION) + SECTION) % SECTION, SEED, cfg)
+              if (voxel(c.x, c.y, c.z) !== gen) setVoxel(c.x, c.y, c.z, gen)
+            }
+          }
+        }
         // ★★ EVERY SOCKET STANDS, EARNED OR NOT — canon 08-24: Greg PRE-PLACES them, one lit and
         // the rest dark, and *"the station grants nothing — it displays reach the keeper has
         // already earned."* This used to lay a socket's stone only once its waymark was held, so
@@ -8143,6 +8171,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // ★ THE FLOOR GOES DOWN FIRST. It fills each column from that column's own terrain up to
         // the shared level, so it meets the ground wherever the ground is — and laying it after the
         // frames would bury their first course in it.
+        if (station) {
+          // The structure, as saved; then the lamps by reach. The blueprint's own material at a
+          // lamp cell IS its dark state, so an unearned way shows whatever Alex built there.
+          for (const c of stationLaid) if (voxel(c.x, c.y, c.z) !== c.m) setVoxel(c.x, c.y, c.z, c.m)
+          for (const l of stationLamps(station)) {
+            const want = held >= l.index ? MAT.MANA_LANTERN : l.dark
+            if (voxel(l.x, l.y, l.z) !== want) setVoxel(l.x, l.y, l.z, want)
+          }
+          courtTier.current = plotTier.current
+          courtRev.current = COURT_REV
+          courtMarks.current = held
+        } else {
         for (const c of dais) if (voxel(c.x, c.y, c.z) !== PLATFORM_MAT) setVoxel(c.x, c.y, c.z, PLATFORM_MAT)
         for (const c of hub) if (voxel(c.x, c.y, c.z) !== MAT.CUT_STONE) setVoxel(c.x, c.y, c.z, MAT.CUT_STONE)
         // After the frames would be tidier to read; it goes BEFORE them for the same reason the
@@ -8159,6 +8199,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         courtTier.current = plotTier.current
         courtRev.current = COURT_REV
         courtMarks.current = held
+        }
       }
     }
 
@@ -8180,11 +8221,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       const level = courtLevel(SEED, cfg)
       if (a.y !== null && level !== null) {
         const held = waymarks.current.marks.length
-        for (const sk of courtSockets(SEED, cfg)) {
-          const lit = socketLit(sk, held)
-          for (const c of socketCells(sk, level))
-            if (c.lamp && voxel(c.x, c.y, c.z) !== socketMaterial(c, lit))
-              setVoxel(c.x, c.y, c.z, socketMaterial(c, lit))
+        const bp = stationBlueprint()
+        if (bp) {
+          for (const l of stationLamps(stationStamp(bp, a, level))) {
+            const want = held >= l.index ? MAT.MANA_LANTERN : l.dark
+            if (voxel(l.x, l.y, l.z) !== want) setVoxel(l.x, l.y, l.z, want)
+          }
+        } else {
+          for (const sk of courtSockets(SEED, cfg)) {
+            const lit = socketLit(sk, held)
+            for (const c of socketCells(sk, level))
+              if (c.lamp && voxel(c.x, c.y, c.z) !== socketMaterial(c, lit))
+                setVoxel(c.x, c.y, c.z, socketMaterial(c, lit))
+          }
         }
         courtMarks.current = held
       }
@@ -8206,7 +8255,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       const a = courtAnchor(SEED, cfg)
       let standing: number | null = null
       if (a.y !== null) {
-        for (const sk of courtSockets(SEED, cfg)) {
+        // The station's sockets are the blueprint's frozen cells when one is saved, the arc's otherwise.
+        const level = courtLevel(SEED, cfg)
+        const bp = stationBlueprint()
+        const socks = bp && level !== null ? stationSockets(stationStamp(bp, a, level)) : courtSockets(SEED, cfg)
+        for (const sk of socks) {
           // The doorway is the middle 3 of a 5-wide frame; 1.6 covers it with the keeper's own body.
           if (Math.hypot(p.x - (sk.x + 0.5), p.z - (sk.z + 0.5)) < 1.6) { standing = sk.index; break }
         }
@@ -10673,6 +10726,7 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
         <div className="space-y-1">
           <OptionHead tone="text-amber-300/70">Keeper of the realm</OptionHead>
           <OptionRow href="/shimmer/dev/worktable" label="⚒ Build structures" tail="worktable" />
+          <OptionRow href="/shimmer/dev/worktable?load=gate_station" label="⌂ Gate station" tail="worktable" />
           <OptionRow href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
           <OptionRow href="/shimmer/play3d" label="❈ Rune Hold" tail="play3d" />
         </div>

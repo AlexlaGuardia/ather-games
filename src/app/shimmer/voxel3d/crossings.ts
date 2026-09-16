@@ -714,7 +714,7 @@ export function courtClearCells(
  *     `TRIM_MAT`; the dais gets a kerb and extends under the tower. A rev-7 tower is a stack of
  *     three boxes floating on the lintel, and its lowest box hangs over the back of the dais.
  */
-export const COURT_REV = 8
+export const COURT_REV = 9   // 9: the station may be a blueprint (`court-blueprint.ts`); every fold re-lays
 
 /** Why the court could not stand where it was derived. Every one is a placement bug, not a refusal. */
 export type CourtMisfit =
