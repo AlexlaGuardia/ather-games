@@ -483,15 +483,18 @@ export function rosettePixels(seed = ROSETTE_SEED, blades = ROSETTE_BLADES, size
     const a0 = (b / blades) * Math.PI * 2 + (rnd() - 0.5) * 0.5
     const len = size * (0.28 + rnd() * 0.18)
     const curl = (rnd() - 0.5) * 0.9              // radians of bend over the blade's length
-    const baseW = 2.4 + rnd() * 1.4
-    const under = b % 2 === 0 ? -18 : 0           // every other blade sits under its neighbours
+    const baseW = 2.8 + rnd() * 1.6
+    // ⚠ DARKER THAN THE TURF ON PURPOSE. The first cut sat around BLADE_GREEN like the fan, and
+    // from above a ground-tinted rosette on ground-tinted turf was invisible (shot 09-16). A clump
+    // seen from above is its own shadow: the blades shade each other and the ground under them.
+    const under = b % 2 === 0 ? -26 : -8          // every other blade sits under its neighbours
     for (let r = size * 0.04; r < len; r += 0.5) {
       const t = r / len
       const a = a0 + curl * t * t
       const x = c + Math.cos(a) * r, y = c + Math.sin(a) * r
       const w = Math.max(1, baseW * (1 - t) + 0.4)
-      const shade = under - 10 + t * 42 + (rnd() - 0.5) * 8
-      const warm = t * t * 20
+      const shade = under - 30 + t * 40 + (rnd() - 0.5) * 8
+      const warm = t * t * 16
       // A short stroke across the blade's direction, w texels wide.
       const px = -Math.sin(a), py = Math.cos(a)
       for (let d = -w / 2; d <= w / 2; d += 0.5) put(Math.round(x + px * d), Math.round(y + py * d), shade - (d < -w / 2 + 0.6 ? 8 : 0), warm)
