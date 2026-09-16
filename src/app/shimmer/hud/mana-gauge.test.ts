@@ -1,4 +1,4 @@
-// Mana-gauge audit. Run: npx tsx src/app/shimmer/voxel3d/mana-gauge.test.ts
+// Mana-gauge audit. Run: npx tsx src/app/shimmer/hud/mana-gauge.test.ts
 //
 // ★ WHY A TEST FOR SOMETHING NOT YET WIRED. The gauge is built and the mount lives in
 // `VoxelWorld.tsx`, which the hub lane owns — so it will sit unmounted for a while, and an

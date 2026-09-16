@@ -21,7 +21,7 @@
 // Run: tools/devwin.sh <lane> → /shimmer/dev/hud
 
 import { useEffect, useRef, useState } from 'react'
-import { HudCorner } from '../../voxel3d/hud-corner'
+import { HudCorner } from '../../hud/hud-corner'
 import { ResourceBars } from '../../voxel3d/resource-bars'
 import { CastGauges, type CastHud } from '../../voxel3d/cast-gauges'
 import { ALL_BANDS, castForMove } from '../../play3d/cast'

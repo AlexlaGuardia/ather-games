@@ -17,6 +17,11 @@ import { ALL_ZONES } from '../world/all-zones'
 // The far end of the Ather crossing. `engine/crossing.ts` holds the contract and the reasoning;
 // this file is the half that receives. See the boot effect for why the read lives where it does.
 import { consumeArrival } from '../engine/crossing'
+import { Clock } from '../hud/clock'
+import { OptionsPanel, OptionRow, OptionHead, OptionSlider } from '../hud/options-panel'
+import { OptionsDoor } from '../hud/options-door'
+import { loadSettings, saveSettings } from '../voxel3d/settings'
+import { setMasterVolume } from '../audio/bus'
 import { LANDING_LABEL } from '../world/landing'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
@@ -3222,12 +3227,23 @@ const PHASE_GLYPH: Record<string, { g: string; c: string }> = {
   night: { g: '☾', c: '#a9c8ff' },
 }
 
-function DayClock({ zoneId }: { zoneId: string }) {
+// ── THE CLOCK IS SHARED NOW (`hud/clock.tsx`, 2026-09-16 HUD port). What stays here is what only
+// the mortal side knows: its zones re-deal on a timer, and the board can be pinned. Those chips
+// ride under the dial as its `note`.
+/** The Sound tab. ONE master volume for the keeper: read and written through the same persisted
+ *  settings the Ather uses (`voxel3d/settings.ts`, a device key), driving `audio/bus.ts`'s single
+ *  master gain — so a level set in Rune Hold is the level in the Glade. */
+function PlaySound() {
+  const [v, setV] = useState(() => loadSettings().volume)
+  return (
+    <OptionSlider label="volume" value={v} format={x => `${Math.round(x * 100)}%`}
+      onChange={x => { setV(x); setMasterVolume(x); saveSettings({ ...loadSettings(), volume: x }) }} />
+  )
+}
+
+function DayNotes({ zoneId }: { zoneId: string }) {
   const [, bump] = useState(0)
   useEffect(() => { const id = setInterval(() => bump(n => n + 1), 4000); return () => clearInterval(id) }, [])
-  const p = dayProgress()
-  const phase = getPhase(p)
-  const look = PHASE_GLYPH[phase]
   // The world-reset tell. Only shown once the re-deal is inside the fade window, so it is a warning
   // rather than permanent furniture — and it is what makes a dimming tree read as "the garden is
   // about to turn over" instead of as a graphical fault. The chip refreshes every 4s, so this
@@ -3236,28 +3252,18 @@ function DayClock({ zoneId }: { zoneId: string }) {
   // turn over, so a countdown to a re-deal that will not happen is just a lie on the HUD.
   const toReset = msUntilZoneReset(Date.now(), regionSpawnConfig(zoneId))
   const renewing = !isBoardPinned && toReset < FADE_OUT_MS
-  return (
-    <div title={`${phase} — a full day is ${Math.round(CYCLE_MS / 60000)} real minutes`} style={{
-      display: 'flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999,
-      background: 'rgba(20,20,14,0.82)', border: `1px solid ${look.c}40`,
-    }}>
-      <span style={{ font: '13px serif', lineHeight: 1, color: look.c }}>{look.g}</span>
-      <span style={{ font: '800 12px ui-monospace, monospace', color: '#eafff6', fontVariantNumeric: 'tabular-nums' }}>{getDisplayTime(p)}</span>
-      <span style={{ font: '700 8.5px ui-monospace, monospace', color: look.c, letterSpacing: '0.12em' }}>{phase.toUpperCase()}</span>
-      {isTimePinned() && <span title="clock pinned by ?hour= — drop the param for live time" style={{ font: '700 8.5px ui-monospace, monospace', color: '#e0a0d0' }}>PIN</span>}
-      {isBoardPinned && <span title="spawn board pinned by ?window= — drop the param for the live board" style={{ font: '700 8.5px ui-monospace, monospace', color: '#9fe0c0' }}>BOARD</span>}
-      {/* ★ Loud on purpose, and in a warning colour. `?fadetest=1` cycles EVERY node through the
-          dissolve on a 12s loop, which is indistinguishable from the world being broken — the first
-          person to load a tab with it left on reported the game as buggy, correctly. `?hour=` had
-          shipped a PIN chip for exactly this reason and this flag went out without one. */}
-      {isFadeTest && <span title="?fadetest=1 is ON — every node is cycling the fade for inspection. Drop the param for the real world." style={{ font: '700 8.5px ui-monospace, monospace', color: '#f0a526', letterSpacing: '0.1em' }}>⚠ FADETEST</span>}
-      {renewing && (
-        <span title="the garden is re-dealing — fading resources are on their way out" style={{ font: '700 8.5px ui-monospace, monospace', color: '#9fe0c0', letterSpacing: '0.08em' }}>
-          🍃 {toReset < 60_000 ? 'RENEWING' : `${Math.ceil(toReset / 60_000)}m`}
-        </span>
-      )}
-    </div>
-  )
+  const chip = 'mt-1 px-1.5 py-0.5 rounded border border-white/15 bg-black/45 text-[9px] font-mono whitespace-nowrap'
+  return (<>
+    {isBoardPinned && <div title="spawn board pinned by ?window= — drop the param for the live board" className={`${chip} text-fuchsia-300/80`}>BOARD PINNED</div>}
+    {/* ★ Loud on purpose, and in a warning colour. `?fadetest=1` cycles EVERY node through the
+        dissolve on a 12s loop, which is indistinguishable from the world being broken. */}
+    {isFadeTest && <div title="?fadetest=1 is ON — every node is cycling the fade for inspection. Drop the param for the real world." className={`${chip} text-red-300`}>FADE TEST</div>}
+    {renewing && (
+      <div title="the garden is re-dealing — fading resources are on their way out" className={`${chip} text-emerald-200/80`}>
+        🍃 {toReset < 60_000 ? 'RENEWING' : `${Math.ceil(toReset / 60_000)}m`}
+      </div>
+    )}
+  </>)
 }
 
 // ── The sun, and the moon it becomes ────────────────────────────────────────
@@ -6813,6 +6819,80 @@ export default function Shimmer3D() {
       {!battle && !editMode && !showMap && (
         <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => { openCursorUI(); setShowMap(true) }} />
       )}
+      {/* The ☰ under the minimap, on the minimap's own rule; `hud/options-door.tsx`. */}
+      {!battle && !editMode && !showMap && !menuOpen && (
+        <OptionsDoor onOpen={() => { setMenuOpen(true); setSkillsOpen(false); setMpOpen(false); setGfxOpen(false); setBookOpen(false) }} />
+      )}
+      {menuOpen && (
+        <OptionsPanel isOwner={isOwner} onClose={() => { setMenuOpen(false); setConfirmNew(false) }}
+          game={<>
+            <OptionRow onClick={() => { setMenuOpen(false); setMpOpen(true) }} label="👥 Play together" tail="party" />
+            <OptionRow onClick={() => { setMenuOpen(false); setSkillsOpen(true) }} label="⬡ Skills" tail="levels" />
+            <OptionRow onClick={() => { setMenuOpen(false); setBookOpen(true) }} label="✦ The book" tail="your rune" />
+            {confirmNew ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono text-white/80">reset?</span>
+                <button onClick={() => { setConfirmNew(false); setMenuOpen(false); setBirthCancelable(true); setBirthOpen(true) }} className="gx-btn px-2 py-1 text-[10px] text-red-200">Yes, start over</button>
+                <button onClick={() => setConfirmNew(false)} className="gx-btn px-2 py-1 text-[10px]">No</button>
+              </div>
+            ) : <OptionRow onClick={() => setConfirmNew(true)} label="↺ New Game" tail="rebirth" />}
+          </>}
+          video={<>
+            {/* play3d's levers live in `GfxPanel` (quality toggles + the live frame readout). It is a
+                surface of its own, so the Video tab opens it rather than nesting one frame in another. */}
+            <OptionRow onClick={() => { setMenuOpen(false); setGfxOpen(true) }} label="⚙ Graphics & frame meter" tail="open" />
+          </>}
+          sound={<PlaySound />}
+          controls={<>
+            <OptionHead>Keyboard</OptionHead>
+            {([['WASD', 'move'], ['mouse', 'look (click to lock)'], ['E / A', 'talk · advance'], ['I', 'satchel'], ['M', 'map'], ['Z', 'cast the worn word'], ['Esc', 'release the cursor']] as const).map(([k, v]) => (
+              <div key={k} className="flex items-center justify-between text-[10px] font-mono text-white/70"><span className="gx-value">{k}</span><span className="text-white/45">{v}</span></div>
+            ))}
+          </>}
+          dev={<div className="space-y-1">
+            <OptionHead tone="text-amber-300/70">Keeper of the realm</OptionHead>
+            <OptionRow onClick={() => { setMenuOpen(false); setEditMode(true) }} label="✎ Edit terrain" tail="this map" />
+            <OptionRow onClick={() => setRuneDevOpen(o => !o)} label="✦ Rune (dev)" tail={runeDevOpen ? 'hide' : 'show'} />
+            {runeDevOpen && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2, maxWidth: 268, borderTop: '1px solid #ffffff20', paddingTop: 6 }}>
+                  <span style={{ color: '#8fd9c4', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right' }}>BIRTH RUNE — click to be born of it</span>
+                  {['mana', 'storm', 'earth', 'water'].map(el => (
+                    <div key={el} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
+                      {RUNES.filter(r => r.element === el).map(r => (
+                        <button key={r.id} onClick={() => setDevRune(r.id)} title={`${r.name} — ${r.essence}`}
+                          style={{ ...menuBtn, padding: '2px 6px', fontSize: 9, color: r.glow, border: birthRuneRef.current === r.id ? `1px solid ${r.glow}` : '1px solid #ffffff20' }}>{r.name}</button>
+                      ))}
+                    </div>
+                  ))}
+                  {/* ⚠ Rune acquisition is RULED (trained off the birth rune, never bought) but not
+                      BUILT — nothing in the game walks a keeper along their lane yet. This grants one
+                      anyway so the cross-hatch (two-rune moves like Healing Grove, Cordon, Flame
+                      Barrage) is playable meanwhile. Owner-only, and it ignores the lane law. */}
+                  <span style={{ color: '#e0a34a', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right', marginTop: 4 }}>+ DEVELOPED RUNES — unbuilt path, dev-only</span>
+                  {['mana', 'storm', 'earth', 'water'].map(el => (
+                    <div key={`dev-${el}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
+                      {RUNES.filter(r => r.element === el).map(r => {
+                        const held = runeInvRef.current.owned.includes(r.id)
+                        const isBirth = birthRuneRef.current === r.id
+                        return (
+                          <button key={r.id} onClick={() => toggleDevRune(r.id)} disabled={isBirth}
+                            title={isBirth ? `${r.name} — your birth rune` : `${held ? 'drop' : 'develop'} ${r.name}`}
+                            style={{ ...menuBtn, padding: '2px 6px', fontSize: 9, opacity: isBirth ? 0.35 : 1,
+                              color: held ? r.glow : '#ffffff66', border: held ? `1px solid ${r.glow}` : '1px solid #ffffff14' }}>
+                            {held ? '✦' : '+'}{r.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+            )}
+            <OptionRow href="/shimmer/dev/worktable" label="⚒ Build structures" tail="worktable" />
+            <OptionRow href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
+            <OptionRow href="/shimmer/voxel3d" label="◈ The Ather" tail="voxel3d" />
+          </div>}
+        />
+      )}
       {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => { setShowMap(false); closeCursorUI() }} />}
 
       {/* talk prompt when standing by an NPC */}
@@ -6900,26 +6980,16 @@ export default function Shimmer3D() {
         }}>{harvestToast}</div>
       )}
 
-      {/* ── TOP-RIGHT HUD: mana pie gauge · ☰ menu (edit/new game) · skills panel ── */}
+      {/* ── TOP-RIGHT COLUMN: what only the mortal side has, plus the panels the options open ──
+          ★ THE KEEPER'S CHROME IS SHARED (2026-09-16, HUD port stage 1): the dial, the ☰ door and
+            the options frame come from `shimmer/hud/`, the same objects the Ather mounts. The minimap
+            sits at the voxel rule (top 12 / right 12) with the door under it; this column hangs to
+            its LEFT and holds what only the mortal side has (companion, wounded, buffs) plus the
+            panels the options Game tab opens. Marks and the mana pie left with it — one HUD, and the
+            Ather shows neither up here (mana is the vessel at bottom-right; stage 2 brings it). */}
       {!battle && !approach && !rewards && !editMode && !dialogue && (
-        <div data-ct={companionTick} style={{ position: 'fixed', top: 12, right: 12, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
-          <DayClock zoneId={zoneId} />
-          {/* marks wallet — moved here from the (now-removed) top-left box */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, background: 'rgba(20,20,14,0.82)', border: '1px solid #d4a84340' }}>
-            <span style={{ font: '800 14px ui-monospace, monospace', color: '#ffe08a', lineHeight: 1 }}>✦ {wallet.marks}</span>
-            <span style={{ font: '700 9px ui-monospace, monospace', color: '#c8b06a', letterSpacing: '0.12em' }}>MARKS</span>
-          </div>
-          {/* mana pie — 1-100% of the pool; drains live while channeling */}
-          <div style={{
-            width: 104, height: 104, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: `conic-gradient(#4aa3e6 ${manaFrac * 360}deg, rgba(10,20,28,0.72) ${manaFrac * 360}deg)`,
-            border: '2px solid #2f5c4f', boxShadow: '0 3px 16px #0008',
-          }}>
-            <div style={{ width: 74, height: 74, borderRadius: '50%', background: '#0b1513', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px solid #ffffff12' }}>
-              <span style={{ font: '800 22px ui-monospace, monospace', color: '#bfe0ff', lineHeight: 1 }}>{Math.round(manaFrac * 100)}</span>
-              <span style={{ font: '700 8px ui-monospace, monospace', color: '#7fa8c8', letterSpacing: '0.14em', marginTop: 2 }}>MANA</span>
-            </div>
-          </div>
+        <div data-ct={companionTick} style={{ position: 'fixed', top: 12, right: 12 + 148 + 10, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
+          <Clock placed={false} note={<DayNotes zoneId={zoneId} />} />
 
           {/* Companion chip — active Mana'mal + its @15 perk; tap to switch (when you own >1) */}
           {beastsRef.current.length > 0 && (() => {
@@ -6978,74 +7048,7 @@ export default function Shimmer3D() {
             </div>
           ))}
 
-          {/* ☰ menu button */}
-          <button onClick={() => { setMenuOpen(o => !o); setSkillsOpen(false); setMpOpen(false); setGfxOpen(false) }} style={{
-            width: 40, height: 40, borderRadius: 10, border: `1px solid ${menuOpen ? '#d4a843' : '#ffffff33'}`,
-            background: menuOpen ? '#241d10' : 'rgba(16,20,32,0.86)', color: '#e9dfc8', font: '800 18px ui-monospace, monospace', cursor: 'pointer',
-          }}>☰</button>
-          {menuOpen && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', background: 'rgba(12,16,26,0.94)', border: '1px solid #ffffff20', borderRadius: 10, padding: 8 }}>
-              {/* site nav folded into the walker's own menu — play3d had no exit before this
-                  (autosave persists on every change, so a hard nav out never loses progress) */}
-              <button onClick={() => { window.location.href = '/room?wall=0' }} style={menuBtn}>⌂ The Room</button>
-              <button onClick={() => { window.location.href = '/arcade/all' }} style={menuBtn}>▦ All games</button>
-              {isOwner && <button onClick={() => { setMenuOpen(false); setEditMode(true) }} style={menuBtn}>✎ Edit terrain</button>}
-              {/* ★ The day arrived 2026-08-07: the voxel world IS Shimmer, and this route is the
-                  legacy one. The old comment here said to delete this line when that happened —
-                  the opposite is right. This is now the way BACK to the game, so it is no longer
-                  owner-gated and no longer reads as a side trip. What became owner-only is play3d
-                  itself (proxy.ts), which is how anyone gets to this menu at all. */}
-              <button onClick={() => { window.location.href = '/shimmer/voxel3d' }} style={menuBtn}>◈ Shimmer (the world)</button>
-              {isOwner && <button onClick={() => setRuneDevOpen(o => !o)} style={menuBtn}>✦ Rune (dev)</button>}
-              {isOwner && runeDevOpen && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2, maxWidth: 268, borderTop: '1px solid #ffffff20', paddingTop: 6 }}>
-                  <span style={{ color: '#8fd9c4', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right' }}>BIRTH RUNE — click to be born of it</span>
-                  {['mana', 'storm', 'earth', 'water'].map(el => (
-                    <div key={el} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
-                      {RUNES.filter(r => r.element === el).map(r => (
-                        <button key={r.id} onClick={() => setDevRune(r.id)} title={`${r.name} — ${r.essence}`}
-                          style={{ ...menuBtn, padding: '2px 6px', fontSize: 9, color: r.glow, border: birthRuneRef.current === r.id ? `1px solid ${r.glow}` : '1px solid #ffffff20' }}>{r.name}</button>
-                      ))}
-                    </div>
-                  ))}
-                  {/* ⚠ Rune acquisition is RULED (trained off the birth rune, never bought) but not
-                      BUILT — nothing in the game walks a keeper along their lane yet. This grants one
-                      anyway so the cross-hatch (two-rune moves like Healing Grove, Cordon, Flame
-                      Barrage) is playable meanwhile. Owner-only, and it ignores the lane law. */}
-                  <span style={{ color: '#e0a34a', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right', marginTop: 4 }}>+ DEVELOPED RUNES — unbuilt path, dev-only</span>
-                  {['mana', 'storm', 'earth', 'water'].map(el => (
-                    <div key={`dev-${el}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
-                      {RUNES.filter(r => r.element === el).map(r => {
-                        const held = runeInvRef.current.owned.includes(r.id)
-                        const isBirth = birthRuneRef.current === r.id
-                        return (
-                          <button key={r.id} onClick={() => toggleDevRune(r.id)} disabled={isBirth}
-                            title={isBirth ? `${r.name} — your birth rune` : `${held ? 'drop' : 'develop'} ${r.name}`}
-                            style={{ ...menuBtn, padding: '2px 6px', fontSize: 9, opacity: isBirth ? 0.35 : 1,
-                              color: held ? r.glow : '#ffffff66', border: held ? `1px solid ${r.glow}` : '1px solid #ffffff14' }}>
-                            {held ? '✦' : '+'}{r.name}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {confirmNew ? (
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <span style={{ color: '#e9dfc8', font: '700 11px ui-monospace, monospace' }}>reset?</span>
-                  <button onClick={() => { setConfirmNew(false); setMenuOpen(false); setBirthCancelable(true); setBirthOpen(true) }} style={{ ...menuBtn, background: '#b9483f', color: '#fff' }}>Yes</button>
-                  <button onClick={() => setConfirmNew(false)} style={menuBtn}>No</button>
-                </div>
-              ) : <button onClick={() => setConfirmNew(true)} style={menuBtn}>↺ New Game</button>}
-            </div>
-          )}
 
-          {/* skills button */}
-          <button onClick={() => { setSkillsOpen(o => !o); setMenuOpen(false); setMpOpen(false); setGfxOpen(false) }} style={{
-            width: 40, height: 40, borderRadius: 10, border: `1px solid ${skillsOpen ? '#4fc79a' : '#ffffff33'}`,
-            background: skillsOpen ? '#12261f' : 'rgba(16,20,32,0.86)', color: '#cfeee2', font: '800 16px ui-monospace, monospace', cursor: 'pointer',
-          }}>⬡</button>
           {skillsOpen && (
             <div style={{ width: 168, background: 'rgba(11,21,19,0.96)', border: '1px solid #2f5c4f', borderRadius: 11, padding: 10 }}>
               <div style={{ font: '800 10px ui-monospace, monospace', color: '#8fd9c4', letterSpacing: '0.12em', marginBottom: 8, textAlign: 'center' }}>SKILLS</div>
@@ -7067,11 +7070,6 @@ export default function Shimmer3D() {
             </div>
           )}
 
-          {/* 👥 play together — party / invite / roster */}
-          <button onClick={() => { setMpOpen(o => !o); setMenuOpen(false); setSkillsOpen(false); setGfxOpen(false) }} style={{
-            width: 40, height: 40, borderRadius: 10, border: `1px solid ${mpOpen ? '#4aa3e6' : '#ffffff33'}`,
-            background: mpOpen ? '#101c2b' : 'rgba(16,20,32,0.86)', color: '#bfe0ff', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
-          }} title="Play together">👥</button>
           {mpOpen && (
             <PlayTogetherPanel
               name={mpName} onName={setMpName}
@@ -7082,19 +7080,8 @@ export default function Shimmer3D() {
             />
           )}
 
-          {/* ⚙ graphics — quality toggles + live frame readout */}
-          <button onClick={() => { setGfxOpen(o => !o); setMenuOpen(false); setSkillsOpen(false); setMpOpen(false) }} style={{
-            width: 40, height: 40, borderRadius: 10, border: `1px solid ${gfxOpen ? '#7fe3c8' : '#ffffff33'}`,
-            background: gfxOpen ? '#12352c' : 'rgba(16,20,32,0.86)', color: '#bfe0ff', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
-          }} title="Graphics">⚙</button>
           {gfxOpen && <GfxPanel gfx={gfx} onGfx={setGfx} statsRef={frameStats} saveRef={saveStatsRef} />}
 
-          {/* ✦ the book — the moves written for YOUR rune. Catalogue only: acquisition is an open
-              canon gap, so nothing here claims to be learned, and the lane grid is owner-only. */}
-          <button onClick={() => { setBookOpen(o => !o); setMenuOpen(false); setSkillsOpen(false); setMpOpen(false); setGfxOpen(false) }} style={{
-            width: 40, height: 40, borderRadius: 10, border: `1px solid ${bookOpen ? '#e8c46a' : '#ffffff33'}`,
-            background: bookOpen ? '#2a2312' : 'rgba(16,20,32,0.86)', color: '#f0dda6', font: '800 15px ui-monospace, monospace', cursor: 'pointer',
-          }} title="The book — your rune's moves">✦</button>
           {/* The book is handed what the keeper has LEARNED and what they CARRY, so each row can
               say where it stands instead of stamping one status on all of them. Both come off refs
               that `applyLoadout` rewrites, and every path that changes either (birth, a Passage

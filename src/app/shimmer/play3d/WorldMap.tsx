@@ -240,7 +240,10 @@ export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand }: {
   }, [zoneId, gridRef, posRef, yawRef])
   return (
     <canvas ref={canvas} onClick={onExpand} title="World map (M)" style={{
-      position: 'fixed', top: 12, right: 130, zIndex: 33, width: 148, height: 148,
+      // top 12 / right 12 is the VOXEL rule (VoxelMap.tsx) and the ☰ door hangs under it — one
+      // placement in both dimensions (2026-09-16 HUD port). It sat at right 130 to clear the old
+      // icon column, which is gone.
+      position: 'fixed', top: 12, right: 12, zIndex: 33, width: 148, height: 148,
       borderRadius: 10, border: '1px solid #ffffff3a', background: '#0b0918',
       boxShadow: '0 3px 14px #0008', cursor: 'pointer', imageRendering: 'pixelated',
     }} />

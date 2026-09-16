@@ -312,7 +312,10 @@ import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
 import { hpRegenTick, focusTick } from '../engine/recovery'
 import { tickRecovery } from '../engine/spirit-health'
-import { HudCorner } from './hud-corner'
+import { HudCorner } from '../hud/hud-corner'
+import { Clock } from '../hud/clock'
+import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/options-panel'
+import { OptionsDoor } from '../hud/options-door'
 import { ResourceBars } from './resource-bars'
 import { CastGauges, type CastHud } from './cast-gauges'
 import { getMaxPool, getRegenRate } from '../engine/mana'
@@ -662,7 +665,7 @@ interface Slot { itemId: string; count: number }
  * "three steps backwards") — level, equipped tier, XP-ring, driven by `activeTool` (see the mining
  * block) rather than by anything the player selects.
  */
-import { TOOL_FAMILIES } from './hud-corner'
+import { TOOL_FAMILIES } from '../hud/hud-corner'
 type HotbarEntry = { itemId: string; count: number }
 
 /**
@@ -2527,15 +2530,7 @@ export default function VoxelWorld() {
           gone whenever a cursor surface is up, so it never sits on top of the bag or the map.
           Sized and placed off the minimap (148 wide at top 12 / right 12, VoxelMap.tsx) — a
           small square hanging under its right edge, not a bar, so it reads as a handle. */}
-      {!cursorUIOpen && !showMap && (
-        <button
-          onClick={() => { openCursorUI(); setShowSettings(true) }}
-          title="Options (O)"
-          aria-label="Options"
-          className="gx-btn fixed z-[33] flex items-center justify-center text-[15px] leading-none text-white/75 hover:text-white"
-          style={{ top: 12 + 148 + 6, right: 12, width: 34, height: 30 }}
-        >☰</button>
-      )}
+      {!cursorUIOpen && !showMap && <OptionsDoor onOpen={() => { openCursorUI(); setShowSettings(true) }} />}
       {showMap && (
         <VoxelMap seed={SEED} seenRef={seenRef} seenTick={seenTick} posRef={mapPos} headingRef={mapHeading}
           space={space.current} plotCfg={plotCfg}
@@ -2590,36 +2585,6 @@ export default function VoxelWorld() {
  * pinned tab must never read as a broken cycle) move to the small rectangle directly below the
  * dial, matching the board.
  */
-function Clock() {
-  const [now, setNow] = useState(() => dayProgress())
-  useEffect(() => {
-    const t = setInterval(() => setNow(dayProgress()), 1000)
-    return () => clearInterval(t)
-  }, [])
-  const phase = getPhase(now)
-  // ✦ not ☾ at night: the Ather has NO MOON (Alex ruling 2026-08-08, CANON_GAPS has the open
-  // "what silvers the night" question). A crescent on the HUD would assert a body the sky refuses.
-  const glyph = phase === 'night' ? '✦' : phase === 'day' ? '☀' : phase === 'dawn' ? '🌅' : '🌇'
-  const DIAL = 60             // dial diameter, px
-  const R = DIAL / 2 - 9      // marker orbit radius — kept inside the rim
-  const theta = now * 2 * Math.PI
-  const markerTop = DIAL / 2 + R * Math.cos(theta) - 7   // -7 centers the ~14px glyph
-  const markerLeft = DIAL / 2 + R * Math.sin(theta) - 7
-  return (
-    <div className="absolute top-3 right-3 flex flex-col items-center pointer-events-none">
-      <div className="relative rounded-full border border-white/20 bg-black/45" style={{ width: DIAL, height: DIAL }}>
-        <span className="absolute text-[13px] leading-none" style={{ top: markerTop, left: markerLeft }}>{glyph}</span>
-        <div className="absolute inset-0 flex items-center justify-center text-[10px] font-mono tabular-nums text-white/85">
-          {getDisplayTime(now)}
-        </div>
-      </div>
-      <div className="mt-1 px-1.5 py-0.5 rounded border border-white/15 bg-black/45 text-[9px] font-mono text-white/60 whitespace-nowrap">
-        {phase}
-        {isTimePinned() && <span className="ml-1.5 text-amber-300/90">PINNED</span>}
-      </div>
-    </div>
-  )
-}
 
 /**
  * The keeper's two bars — shield over health, Apex-style, because that is the order they empty in.
@@ -11734,80 +11699,23 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
   onClose: () => void
   /** Opens the rebinding panel. Alex, 2026-08-23: "in the menu there should be an option to bind keys." */
   onControls: () => void
-  /**
-   * The keeper of the realm (`/api/owner`). Gates the Dev rows below — Alex, 2026-09-13: "a
-   * (owner gated, so players dont see this) button to go into the dev page for building
-   * structures". ⚠ This flag hides the DOOR; the dev routes themselves are owner-gated in
-   * `proxy.ts`, so a player who types the URL still gets nothing. Two locks, and only the
-   * second one is a lock — this one is so the menu does not advertise a door it will not open.
-   */
+  /** The keeper of the realm — gates the Dev tab. See `OptionsPanel` for the two-locks note. */
   isOwner: boolean
 }) {
+  // ── THE FRAME IS `hud/options-panel.tsx` (2026-09-16, HUD port). This composes the VOXEL levers
+  // into it: what a Video tab holds is a fact about this renderer, the tab row is not.
   /** Every one of these levers is a uniform on the CARTOON path (`uCartoon` mixes the stack in),
    *  so on `natural` they are wired to nothing. Alex dragged `night` end to end on natural and saw
    *  no change (2026-09-14) — a live slider that does nothing reads as a broken feature, so on
    *  natural they are disabled and say why, rather than merely dimmed. */
   const cartoonOnly = s.style !== 'cartoon'
   const Slider = ({ label, k }: { label: string; k: 'toon' | 'outline' | 'faceShading' | 'shadowLift' | 'toonHour' }) => (
-    <label className={`flex items-center gap-2 text-[11px] font-mono ${cartoonOnly ? 'text-white/30' : 'text-white/70'}`}>
-      <span className="w-24 shrink-0">{label}</span>
-      <input
-        type="range" min={0} max={1} step={0.05} value={s[k]} disabled={cartoonOnly}
-        onChange={e => update({ [k]: Number(e.target.value) } as Partial<VoxelSettings>)}
-        className="flex-1 accent-amber-300 disabled:opacity-40"
-      />
-      <span className="w-8 text-right tabular-nums text-white/50">{s[k].toFixed(2)}</span>
-    </label>
+    <OptionSlider label={label} value={s[k]} disabled={cartoonOnly} onChange={v => update({ [k]: v } as Partial<VoxelSettings>)} />
   )
-
-  // ── TABS (Alex, 2026-09-13: "organize it better so it opens to game, video, sound, and the
-  // usual game options with a hidden dev tab for me") ──────────────────────────────────────
-  // One panel, five pages. GAME first because it is where you leave from; VIDEO holds every look
-  // and budget (render style, the four cartoon levers, the two radii) plus the frame meter,
-  // which is a video instrument; SOUND and CONTROLS are the player settings that were being read
-  // as developer tooling when they sat under render headings. DEV is a tab, not a section — and
-  // the tab BUTTON is gated the same as its page, so a player's tab row simply has four tabs.
-  const [tab, setTab] = useState<'game' | 'video' | 'sound' | 'controls' | 'dev'>('game')
-  const tabs: [typeof tab, string][] = [['game', 'Game'], ['video', 'Video'], ['sound', 'Sound'], ['controls', 'Controls']]
-  if (isOwner) tabs.push(['dev', 'Dev'])
-  const Row = ({ href, onClick, label, tail }: { href?: string; onClick?: () => void; label: string; tail: string }) => {
-    const cls = 'gx-btn flex w-full items-center justify-between px-2.5 py-1.5 text-[10px]'
-    const body = <><span>{label}</span><span className="gx-value text-white/50">{tail}</span></>
-    return href ? <a href={href} className={cls}>{body}</a> : <button onClick={onClick} className={cls}>{body}</button>
-  }
-
   return (
-    // Capped to the viewport and scrolling past it: with the Dev rows the panel outgrew a 760px
-    // window and sat on the mana gauge.
-    <div className="absolute top-3 right-3 w-72 max-h-[calc(100vh-24px)] overflow-y-auto bg-black/80 border border-white/15 rounded p-3 space-y-2.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase">Options</span>
-        <button onClick={onClose} className="text-white/40 hover:text-white/80 text-xs font-mono">esc / O</button>
-      </div>
-      {/* The tab row: the house game-UI signature — near-uniform size, hierarchy by brightness.
-          Inactive ~45%, active amber with a rule under it. */}
-      <div className="flex gap-0.5 border-b border-white/10">
-        {tabs.map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)}
-                  className={`gx-label px-1.5 pb-1.5 text-[9px] tracking-[.08em] uppercase border-b-2 -mb-px whitespace-nowrap
-                    ${tab === id ? 'border-amber-300 text-amber-200' : 'border-transparent text-white/45 hover:text-white/75'}
-                    ${id === 'dev' ? 'ml-auto' : ''}`}>{label}</button>
-        ))}
-      </div>
-
-      {tab === 'game' && (<>
-        {/* Where you leave from. The world autosaves on every change, so a hard nav out never
-            loses progress — the same reason play3d's ☰ could hold these. */}
-        <Row onClick={onClose} label="▶ Resume" tail="esc" />
-        <Row href="/room?wall=0" label="⌂ The Room" tail="leave" />
-        <Row href="/arcade/all" label="▦ All games" tail="arcade" />
-        <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">
-          Your world saves itself as you play. Leaving is never a loss.
-        </p>
-      </>)}
-
-      {tab === 'video' && (<>
-        <div className="gx-label text-[9px] text-white/40">Render</div>
+    <OptionsPanel onClose={onClose} isOwner={isOwner}
+      video={<>
+        <OptionHead>Render</OptionHead>
         <div className="flex gap-1.5">
           {(['natural', 'cartoon'] as RenderStyle[]).map(v => (
             <button
@@ -11831,34 +11739,20 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
         <Slider label="shadow lift" k="shadowLift" />
         <Slider label="night" k="toonHour" />
 
-        <div className="gx-label pt-1 text-[9px] text-white/40">World</div>
+        <OptionHead>World</OptionHead>
         {/* Cost is QUADRATIC in this number (columns, meshes, light fields all scale with r²) —
             which is why it is a stepped slider with tested bounds, not a free number. */}
-        <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
-          <span className="w-24 shrink-0">view radius</span>
-          <input
-            type="range" min={VIEW_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.viewRadius}
-            onChange={e => update({ viewRadius: Number(e.target.value) })}
-            className="flex-1 accent-amber-300"
-          />
-          <span className="w-14 text-right tabular-nums text-white/50">{s.viewRadius * 16} blk</span>
-        </label>
+        <OptionSlider label="view radius" min={VIEW_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.viewRadius}
+          onChange={v => update({ viewRadius: v })} format={v => `${v * 16} blk`} />
         {/* ★ The night's radius, split from the view's (#1113). Clamped to the view radius on read —
             the label shows the EFFECTIVE value so a slider past the view reads as what it does. */}
-        <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
-          <span className="w-24 shrink-0">sim radius</span>
-          <input
-            type="range" min={SIM_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.simRadius}
-            onChange={e => update({ simRadius: Number(e.target.value) })}
-            className="flex-1 accent-amber-300"
-          />
-          <span className="w-14 text-right tabular-nums text-white/50">{simRadiusOf(s) * 16} blk</span>
-        </label>
+        <OptionSlider label="sim radius" min={SIM_RADIUS_MIN} max={VIEW_RADIUS_MAX} step={1} value={s.simRadius}
+          onChange={v => update({ simRadius: v })} format={() => `${simRadiusOf(s) * 16} blk`} />
 
         {/* ── ★ THE FRAME METER: an instrument, not a look. Kept out of the Render group so it is
             out of PRESETS — flipping natural↔cartoon mid-measurement cannot switch off the meter
             you are measuring with. */}
-        <div className="gx-label pt-1 text-[9px] text-white/40">Diagnostics</div>
+        <OptionHead>Diagnostics</OptionHead>
         <label className="flex items-center gap-2 text-[11px] font-mono text-white/70 cursor-pointer">
           <input
             type="checkbox" checked={s.showFps}
@@ -11872,40 +11766,28 @@ function SettingsPanel({ s, update, onClose, onControls, isOwner }: {
           Both shading paths live in one shader program and are picked by a uniform, so switching
           costs nothing. Settings persist.
         </p>
-      </>)}
-
-      {tab === 'sound' && (<>
+      </>}
+      sound={<>
         {/* ⚠ The value drives `audio/bus.ts`'s single master gain — which is what makes this one
             slider mean the whole game rather than one module's sounds. Before the bus there were
             four AudioContexts and nothing a single number could have applied to. */}
-        <label className="flex items-center gap-2 text-[11px] font-mono text-white/70">
-          <span className="w-20 shrink-0">volume</span>
-          <input
-            type="range" min={0} max={1} step={0.05} value={s.volume}
-            onChange={e => update({ volume: Number(e.target.value) })}
-            className="flex-1 accent-amber-300"
-          />
-          <span className="w-14 text-right tabular-nums text-white/50">{Math.round(s.volume * 100)}%</span>
-        </label>
-      </>)}
-
-      {tab === 'controls' && (<>
+        <OptionSlider label="volume" value={s.volume} onChange={v => update({ volume: v })} format={v => `${Math.round(v * 100)}%`} />
+      </>}
+      controls={<>
         {/* Alex, 2026-08-23: "in the menu there should be an option to bind keys." */}
-        <Row onClick={onControls} label="Key & controller bindings" tail="edit" />
-      </>)}
-
-      {/* ── DEV (owner only) ────────────────────────────────────────────────────────────────
-          Plain navigations: the worktable is its own page with its own state, and the world
-          autosaves on every change, so leaving is never a loss. Gated twice: the tab button above
-          and the page here, both on `isOwner`. */}
-      {isOwner && tab === 'dev' && (
+        <OptionRow onClick={onControls} label="Key & controller bindings" tail="edit" />
+      </>}
+      dev={
+        // ── DEV (owner only) ───────────────────────────────────────────────
+        // Plain navigations: the worktable is its own page with its own state, and the world
+        // autosaves on every change, so leaving is never a loss.
         <div className="space-y-1">
-          <div className="gx-label text-[9px] text-amber-300/70">Keeper of the realm</div>
-          <Row href="/shimmer/dev/worktable" label="⚒ Build structures" tail="worktable" />
-          <Row href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
-          <Row href="/shimmer/play3d" label="❈ Rune Hold" tail="play3d" />
+          <OptionHead tone="text-amber-300/70">Keeper of the realm</OptionHead>
+          <OptionRow href="/shimmer/dev/worktable" label="⚒ Build structures" tail="worktable" />
+          <OptionRow href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
+          <OptionRow href="/shimmer/play3d" label="❈ Rune Hold" tail="play3d" />
         </div>
-      )}
-    </div>
+      }
+    />
   )
 }

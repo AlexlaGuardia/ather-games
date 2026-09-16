@@ -94,7 +94,7 @@ for (const [i, m] of pairs.entries()) {
 // So the ratchet stays exactly as designed and the REPORT changes: every offender is printed with
 // its line number and the tracking value it hand-rolls, and the spellings are tallied, because
 // "one role spelled nine ways" is the actual defect and a bare total cannot show it.
-const HAND_ROLLED_BASELINE = 17   // 18 → 17 on 2026-09-15: the craft panel's Refine/Tools heads left with the list (the grid's tabs live in craft-grid.tsx)
+const HAND_ROLLED_BASELINE = 16   // 17 → 16 on 2026-09-16: the options panel's section heads are `OptionHead` (.gx-label) in hud/options-panel.tsx · 18 → 17 on 2026-09-15: the craft panel's Refine/Tools heads left with the list (the grid's tabs live in craft-grid.tsx)
 const hudLines = HUD.split('\n')
 const handRolled = [...block.matchAll(/className="[^"]*\buppercase\b[^"]*"/g)]
   .filter(m => !m[0].includes('gx-label'))
