@@ -275,6 +275,61 @@ const PLOT_SHUT = 120, PLOT_OPEN = 3
 // the door would fade in and then vanish as you walked toward it.
 const WILDS_DRAW = 90, PLOT_DRAW = 420
 
+const SEAM_VERT = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`
+const SEAM_FRAG = /* glsl */ `
+varying vec2 vUv;
+uniform float uTime;
+uniform float uNear;
+uniform vec3 uLip;
+
+void main() {
+  float u = vUv.x * 2.0 - 1.0;   // -1..1 across the ribbon
+  float y = vUv.y;               // 0 at the ground
+
+  // ★ THE TAPER IS THE SILHOUETTE, AND IT REPLACED A SEPARATE ENVELOPE. The parting is widest at
+  // chest height and closes to nothing at both ends, so what is drawn is a lens-shaped crease — not
+  // a stripe with its ends faded, which still reads as a rectangle someone dimmed. It also enforces
+  // "ground that simply continues" and "no lintel" by construction: width IS zero at y=0 and y=1.
+  float taper = pow(sin(3.14159 * clamp(y, 0.0, 1.0)), 0.75);
+
+  // The crease WANDERS. A ruled vertical line is a laser or a UI element; cloud parts unevenly, and
+  // two slow incommensurate waves never repeat visibly.
+  float wob = sin(y * 4.1 + uTime * 0.35) * 0.05 + sin(y * 9.3 - uTime * 0.23) * 0.025;
+  float d = abs(u - wob);
+
+  // Shut it is a hairline; open it is a hand's width. This is the fold answering the keeper.
+  // Widened with the same pass: at 150 blocks the ribbon is a few pixels across, and a hairline
+  // parting inside it rounds away to nothing on screen.
+  float w = mix(0.020, 0.055, uNear) * taper + 1e-4;
+
+  // ⚠⚠ THE LIPS ARE OFFSET AND NARROW, AND THE FIRST VERSION GOT THIS WRONG IN THE ONE WAY THAT
+  // COSTS THE WHOLE LOOK. Their Gaussian was wide enough to still be at 0.67 in the middle of the
+  // seam, so the bright flanks painted over the dark parting they were supposed to flank and the
+  // whole thing rendered as a pale fog smear — no crease, no depth, no door. Rendered and looked at,
+  // which is the only reason it was caught: it reads fine in the source. Offset 2.2w, width 1.0w
+  // puts the lips at ~0.007 in the centre, so the slit survives.
+  float slit  = exp(-pow(d / w, 2.0));                     // the parting: dark, narrow, sees INTO the fold
+  float lip   = exp(-pow((d - w * 2.2) / w, 2.0));         // two bright lips either side of it
+  float bloom = exp(-pow(d / (w * 9.0), 2.0));             // the wall disturbed for a hand's width around
+
+  // Cloud grain drifting up the crease, so it is stuff rather than light.
+  float g = 0.85 + 0.15 * sin(y * 18.0 - uTime * 0.8 + sin(u * 5.0 + uTime * 0.3) * 1.3);
+
+  vec3 col = mix(vec3(0.13, 0.20, 0.28), uLip, clamp(lip + bloom * 0.25, 0.0, 1.0));
+  // ⚠ THE FLOOR WAS THE OTHER HALF OF "IT BLENDS TOO WELL": 0.35 meant that at any real distance the
+  // seam drew at a third of an already-quiet alpha, against a wall that is itself pale cloud. 0.60
+  // keeps the near/far difference (the fold still answers you as you approach) without making the
+  // far state a rumour.
+  float a = g * (slit * 0.85 + lip * 0.80 + bloom * 0.10) * (0.60 + 0.40 * uNear);
+  if (a < 0.004) discard;        // cheaper than blending a thousand invisible fragments
+  gl_FragColor = vec4(col, a);
+}`
+
 export interface SeamPass {
   group: THREE.Group
   /** Advance the pass. Allocates nothing; only one of the two seams is ever visible. */
@@ -289,6 +344,64 @@ export interface SeamPass {
  * write in `tick` is unambiguous. If a third seam ever appears in the SAME space as another, this
  * becomes wrong and each needs its own material instance.
  */
+/**
+ * ── ★ THE STATION'S DOORWAYS SHIMMER WHEN THEY ARE EARNED (2026-09-16) ─────────────────────────
+ * Alex: *"do we need to design the portals look?"* The look already exists: the parting the seam
+ * draws is what a kept crossing looks like in this world (`world/gates.md`: framed = tuned and
+ * kept). So a lit socket gets the same parting, hung across its doorway and tinted — gold for the
+ * one gate that leaves the Ather, the seam's own cool white for the passages. A dark socket draws
+ * nothing: the frame stands, the way is not earned, and the absence IS the information. One mesh
+ * per socket with its own material, because the tint differs per socket.
+ */
+export interface SocketShimmer {
+  group: THREE.Group
+  /** Rebuild the set: one plane per LIT socket, facing `facing` (radians, the direction a keeper walks through it). */
+  set(sockets: { x: number; z: number; y: number; facing: number; tint: 'gate' | 'passage' }[]): void
+  tick(px: number, pz: number, elapsed: number): void
+  dispose(): void
+}
+
+export function createSocketShimmers(): SocketShimmer {
+  const group = new THREE.Group()
+  const geo = new THREE.PlaneGeometry(1, 1)
+  const items: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; x: number; z: number }[] = []
+  const clear = () => { for (const it of items) { group.remove(it.mesh); it.mat.dispose() } items.length = 0 }
+  return {
+    group,
+    set(sockets) {
+      clear()
+      for (const s of sockets) {
+        const mat = seamMaterial(s.tint === 'gate' ? new THREE.Vector3(1.0, 0.86, 0.5) : new THREE.Vector3(0.90, 0.98, 1.0))
+        const mesh = new THREE.Mesh(geo, mat)
+        mesh.renderOrder = 2
+        // The doorway is 3 wide and 3 tall; the plane fills it and faces along the walk.
+        mesh.scale.set(3, 3, 1)
+        mesh.position.set(s.x + 0.5, s.y + 1.5, s.z + 0.5)
+        mesh.rotation.y = Math.atan2(Math.cos(s.facing), Math.sin(s.facing)) + Math.PI / 2
+        group.add(mesh)
+        items.push({ mesh, mat, x: s.x + 0.5, z: s.z + 0.5 })
+      }
+    },
+    tick(px, pz, elapsed) {
+      for (const it of items) {
+        it.mat.uniforms.uTime.value = elapsed
+        it.mat.uniforms.uNear.value = seamNearness(Math.hypot(px - it.x, pz - it.z), PLOT_SHUT, PLOT_OPEN)
+      }
+    },
+    dispose() { clear(); geo.dispose() },
+  }
+}
+
+/** The seam's parting as a material, tinted. Shared shader source with `createSeamShimmer` below. */
+function seamMaterial(lip: THREE.Vector3): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide,
+    uniforms: { uTime: { value: 0 }, uNear: { value: 0 }, uLip: { value: lip } },
+    vertexShader: SEAM_VERT,
+    fragmentShader: SEAM_FRAG,
+  })
+}
+
 export function createSeamShimmer(
   seed: number, cfg: BubbleConfig, plotCfgOf: () => PlotConfig,
 ): SeamPass {
@@ -326,60 +439,9 @@ export function createSeamShimmer(
     depthWrite: false,          // one soft layer; it must not punch a hole in what is behind it
     depthTest: true,
     side: THREE.DoubleSide,     // the keeper walks THROUGH it — a back face that vanishes reads as a hole
-    uniforms: { uTime: { value: 0 }, uNear: { value: 0 } },
-    vertexShader: /* glsl */ `
-varying vec2 vUv;
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`,
-    fragmentShader: /* glsl */ `
-varying vec2 vUv;
-uniform float uTime;
-uniform float uNear;
-
-void main() {
-  float u = vUv.x * 2.0 - 1.0;   // -1..1 across the ribbon
-  float y = vUv.y;               // 0 at the ground
-
-  // ★ THE TAPER IS THE SILHOUETTE, AND IT REPLACED A SEPARATE ENVELOPE. The parting is widest at
-  // chest height and closes to nothing at both ends, so what is drawn is a lens-shaped crease — not
-  // a stripe with its ends faded, which still reads as a rectangle someone dimmed. It also enforces
-  // "ground that simply continues" and "no lintel" by construction: width IS zero at y=0 and y=1.
-  float taper = pow(sin(3.14159 * clamp(y, 0.0, 1.0)), 0.75);
-
-  // The crease WANDERS. A ruled vertical line is a laser or a UI element; cloud parts unevenly, and
-  // two slow incommensurate waves never repeat visibly.
-  float wob = sin(y * 4.1 + uTime * 0.35) * 0.05 + sin(y * 9.3 - uTime * 0.23) * 0.025;
-  float d = abs(u - wob);
-
-  // Shut it is a hairline; open it is a hand's width. This is the fold answering the keeper.
-  // Widened with the same pass: at 150 blocks the ribbon is a few pixels across, and a hairline
-  // parting inside it rounds away to nothing on screen.
-  float w = mix(0.020, 0.055, uNear) * taper + 1e-4;
-
-  // ⚠⚠ THE LIPS ARE OFFSET AND NARROW, AND THE FIRST VERSION GOT THIS WRONG IN THE ONE WAY THAT
-  // COSTS THE WHOLE LOOK. Their Gaussian was wide enough to still be at 0.67 in the middle of the
-  // seam, so the bright flanks painted over the dark parting they were supposed to flank and the
-  // whole thing rendered as a pale fog smear — no crease, no depth, no door. Rendered and looked at,
-  // which is the only reason it was caught: it reads fine in the source. Offset 2.2w, width 1.0w
-  // puts the lips at ~0.007 in the centre, so the slit survives.
-  float slit  = exp(-pow(d / w, 2.0));                     // the parting: dark, narrow, sees INTO the fold
-  float lip   = exp(-pow((d - w * 2.2) / w, 2.0));         // two bright lips either side of it
-  float bloom = exp(-pow(d / (w * 9.0), 2.0));             // the wall disturbed for a hand's width around
-
-  // Cloud grain drifting up the crease, so it is stuff rather than light.
-  float g = 0.85 + 0.15 * sin(y * 18.0 - uTime * 0.8 + sin(u * 5.0 + uTime * 0.3) * 1.3);
-
-  vec3 col = mix(vec3(0.13, 0.20, 0.28), vec3(0.90, 0.98, 1.0), clamp(lip + bloom * 0.25, 0.0, 1.0));
-  // ⚠ THE FLOOR WAS THE OTHER HALF OF "IT BLENDS TOO WELL": 0.35 meant that at any real distance the
-  // seam drew at a third of an already-quiet alpha, against a wall that is itself pale cloud. 0.60
-  // keeps the near/far difference (the fold still answers you as you approach) without making the
-  // far state a rumour.
-  float a = g * (slit * 0.85 + lip * 0.80 + bloom * 0.10) * (0.60 + 0.40 * uNear);
-  if (a < 0.004) discard;        // cheaper than blending a thousand invisible fragments
-  gl_FragColor = vec4(col, a);
-}`,
+    uniforms: { uTime: { value: 0 }, uNear: { value: 0 }, uLip: { value: new THREE.Vector3(0.90, 0.98, 1.0) } },
+    vertexShader: SEAM_VERT,
+    fragmentShader: SEAM_FRAG,
   })
 
   const wildsA = wildsSeamAnchor(seed, cfg)

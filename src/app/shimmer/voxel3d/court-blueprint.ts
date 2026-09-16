@@ -103,6 +103,21 @@ export function stationSockets(s: StationStamp): StationSocket[] {
   })
 }
 
+/**
+ * ── ★ WHAT EACH SOCKET IS (Alex, 2026-09-16: "wire up the gates to moonwell and runehold") ─────
+ * Index 0 is the one GATE — the crossing out to Rune Hold square, Greg's gift, lit from the first
+ * minute. Index 1 is MOONWELL — Greg's fold back to the glade, garden to garden, a passage the
+ * keeper has earned by standing there on day one, so it is lit from the first minute too. Every
+ * socket after that is a WAYMARK slot: lit once the keeper has planted that many marks out in the
+ * Wilds (the checkpoints), dark until then. ⚠ Canon's 08-24 station table has no Moonwell row and
+ * CANON_GAPS carries the question; Alex placed it here on the day, which is the world-owner's call.
+ */
+export type SocketWay = { to: 'runehold' } | { to: 'moonwell' } | { to: 'mark'; slot: number }
+export const socketWay = (index: number): SocketWay =>
+  index === 0 ? { to: 'runehold' } : index === 1 ? { to: 'moonwell' } : { to: 'mark', slot: index - 2 }
+/** Lit = the way is earned: the gate and Moonwell always, a mark slot once that mark is held. */
+export const socketLitBy = (index: number, marksHeld: number): boolean => index <= 1 || marksHeld >= index - 1
+
 /** The lamp cell of each socket, in world cells, with the material the blueprint holds there (its DARK state). */
 export function stationLamps(s: StationStamp): { index: number; x: number; y: number; z: number; dark: number }[] {
   const cells = blueprintCells(s.bp)

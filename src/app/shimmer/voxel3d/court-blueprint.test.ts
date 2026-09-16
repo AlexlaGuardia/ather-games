@@ -6,7 +6,7 @@
 // quarter-turn snap can account for).
 
 import { courtAnchor, sockets, socketCells, courtLevel } from './crossings'
-import { STATION_LAYOUT, stationBlueprint, stationStamp, stationSockets, stationLamps, stationCells, stationRot } from './court-blueprint'
+import { STATION_LAYOUT, layoutOf, stationBlueprint, stationStamp, stationSockets, stationLamps, stationCells, stationRot } from './court-blueprint'
 import { plotForTier, PLOT_TIERS } from '../voxel/plot'
 import { WORLD_SEED } from './world-seed'
 import { MAT } from '../voxel/depth'
@@ -42,7 +42,7 @@ console.log('the frozen layout is the generator\'s')
   const cells = stationCells(st)
   check('the stamp lays the arc\'s cell count', cells.length === bp.cells.length / 4, `${cells.length}`)
   // The dais top is the level: some cell sits at level-1 (the platform) under the anchor.
-  check('the floor row lands on the court level', st.floorY + STATION_LAYOUT.floor === level)
+  check('the floor row lands on the court level', st.floorY + layoutOf(bp).floor === level)
 }
 
 console.log('every tier')
@@ -53,9 +53,9 @@ for (let t = 0; t < PLOT_TIERS.length; t++) {
   const st = stationStamp(bp, a, level)
   const r = stationSockets(st)
   // The anchor cell lands on the anchor.
-  const ax = st.x + (st.rot === 0 ? STATION_LAYOUT.anchor.x : -1)
+  const lay = layoutOf(bp)
   check(`tier ${t}: rot 0`, st.rot === 0)
-  check(`tier ${t}: the anchor lands on the anchor`, ax === a.x && st.z + STATION_LAYOUT.anchor.z === a.z)
+  check(`tier ${t}: the anchor lands on the anchor`, st.x + lay.anchor.x === a.x && st.z + lay.anchor.z === a.z)
   // The blueprint's sockets stand within a block or so of where the arc put them at this tier.
   let worst = 0
   for (const s of sockets(WORLD_SEED, cfg)) {
@@ -79,7 +79,7 @@ console.log('the snap')
   const r = rotatedAnchor(st.rot)
   check('turned: the anchor lands on the anchor', st.x + r.x === a.x && st.z + r.z === a.z)
   function rotatedAnchor(rot: number) {
-    const { x, z } = STATION_LAYOUT.anchor
+    const { x, z } = layoutOf(bp!).anchor
     switch (rot) { case 1: return { x: bp!.d - 1 - z, z: x }; case 2: return { x: bp!.w - 1 - x, z: bp!.d - 1 - z }; case 3: return { x: z, z: bp!.w - 1 - x }; default: return { x, z } }
   }
 }

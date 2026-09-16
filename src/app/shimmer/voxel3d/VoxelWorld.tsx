@@ -234,7 +234,7 @@ const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in 
 import { GREG_LINES } from './greg-lines'
 import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
 import { insideGlade } from '../voxel/glade'
-import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps } from './court-blueprint'
+import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps, socketWay, socketLitBy } from './court-blueprint'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
          legacyRowSockets, courtClearCells, COURT_REV,
          courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells,
@@ -248,7 +248,7 @@ import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
 import { columnSmokeSources, type SmokeSource } from './smoke-sources'
-import { createSeamShimmer, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, gladeSeamAnchor } from './seam'
+import { createSeamShimmer, createSocketShimmers, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, gladeSeamAnchor } from './seam'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
 import { createBreakFx } from './break-fx'
 import { bucketOf, swingChips } from './break-fx-spec'
@@ -337,7 +337,7 @@ import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured 
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget,
          type StatusBag } from '../engine/statuses'
 import { emptyNet, plant as plantMark, pull as pullMark, destination as markDestination,
-         rename as renameMark, spokesOf, markAt, arrivalOf, MAX_MARKS, DOOR_ID, GLADE_ID,
+         rename as renameMark, spokesOf, markAt, arrivalOf, MAX_MARKS, DOOR_ID,
          type WaymarkNet, type Waymark } from '../voxel/waymark'
 import type { CastSpec, CastArchetype } from '../play3d/cast'
 import { senseGround, type SensedBody } from '../play3d/tremor-sense'
@@ -3338,6 +3338,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // memo runs once, the fold grows at tier 1, and the drawn door stays 90 blocks inland of the
   // trigger. The closure reads the ref, so the seam re-derives itself on the tick after a widening.
   const seam = useMemo(() => createSeamShimmer(SEED, WILDS_BUBBLE, () => plotCfg.current), [])
+  /** The station's lit doorways — set on every court lay and lamp pass, ticked with the seam. */
+  const socketShimmers = useMemo(() => createSocketShimmers(), [])
   // Mist patches (2026-08-09) — the lying mist plus the presence standing in it; see mist-pass.ts.
   // Sleeps everywhere but inside a patch's reach, the same way steam sleeps outside the Springs.
   // ⚠ THE THIRD ARG IS A CLOSURE, NOT `groundTopNear` ITSELF, AND THAT IS A TEMPORAL-DEAD-ZONE
@@ -4173,6 +4175,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     smoke.dispose()
     breakFx.dispose()
     seam.dispose()
+    socketShimmers.dispose()
     mist.dispose()
     ring.dispose()
     flora.dispose()
@@ -6462,6 +6465,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // only in the Wilds and the plot-side one only in the plot. Hooked but never ticked renders
     // NOTHING and throws nothing (the meshes start hidden), so suspect this line before the shader.
     seam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime, space.current, tutorial.current.stage === 'done')
+    socketShimmers.group.visible = space.current === 'plot'
+    if (socketShimmers.group.visible) socketShimmers.tick(p.x, p.z, state.clock.elapsedTime)
     if (ledgerSeen.current !== mistLedger.current) { ledgerSeen.current = mistLedger.current; mist.setLedger(mistLedger.current) }
     mist.setCalm(suppressEncounters(buffs.current, Date.now()))   // Dreamwalk: no presence steps out while it runs
     mist.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
@@ -8188,9 +8193,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // lamp cell IS its dark state, so an unearned way shows whatever Alex built there.
           for (const c of stationLaid) if (voxel(c.x, c.y, c.z) !== c.m) setVoxel(c.x, c.y, c.z, c.m)
           for (const l of stationLamps(station)) {
-            const want = held >= l.index ? MAT.MANA_LANTERN : l.dark
+            const want = socketLitBy(l.index, held) ? MAT.MANA_LANTERN : l.dark
             if (voxel(l.x, l.y, l.z) !== want) setVoxel(l.x, l.y, l.z, want)
           }
+          socketShimmers.set(stationSockets(station).filter(sk => socketLitBy(sk.index, held))
+            .map(sk => ({ x: sk.x, z: sk.z, y: level, facing: Math.atan2(a.z - sk.z, a.x - sk.x), tint: sk.kind })))
           courtTier.current = plotTier.current
           courtRev.current = COURT_REV
           courtMarks.current = held
@@ -8235,10 +8242,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const held = waymarks.current.marks.length
         const bp = stationBlueprint()
         if (bp) {
-          for (const l of stationLamps(stationStamp(bp, a, level))) {
-            const want = held >= l.index ? MAT.MANA_LANTERN : l.dark
+          const st = stationStamp(bp, a, level)
+          for (const l of stationLamps(st)) {
+            const want = socketLitBy(l.index, held) ? MAT.MANA_LANTERN : l.dark
             if (voxel(l.x, l.y, l.z) !== want) setVoxel(l.x, l.y, l.z, want)
           }
+          socketShimmers.set(stationSockets(st).filter(sk => socketLitBy(sk.index, held))
+            .map(sk => ({ x: sk.x, z: sk.z, y: level, facing: Math.atan2(a.z - sk.z, a.x - sk.x), tint: sk.kind })))
         } else {
           for (const sk of courtSockets(SEED, cfg)) {
             const lit = socketLit(sk, held)
@@ -8320,6 +8330,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           } else {
             onSay(`stepping through the ${out.via.toLowerCase()} — Rune Hold`)
             window.location.href = '/shimmer/play3d'
+          }
+        } else if (standing !== null && stationBlueprint()) {
+          // ── ★ THE STATION'S WAYS (2026-09-16, `court-blueprint.ts` › socketWay) ─────────────
+          // Socket 1 is Moonwell — Greg's fold back to the glade, always earned. Every later
+          // socket is a waymark slot: lit and crossable once that mark stands out in the Wilds.
+          const way = socketWay(standing)
+          if (way.to === 'moonwell') {
+            onSay('stepping through — Moonwell Glade')
+            enterSpaceRef.current?.('glade')
+          } else if (way.to === 'mark') {
+            const mark = marks[way.slot]
+            if (mark) { onSay(`stepping through to ${mark.name}`); travelTo(null, mark.id) }
+            else onSay('a dark passage socket — plant a waymark out in the Wilds and it lights here')
           }
         } else if (standing !== null) {
           // ⚠ DARK AND UNBUILT ARE DIFFERENT STATES AND MUST NOT SHARE A SENTENCE — the whole point
@@ -9895,6 +9918,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       <primitive object={smoke.points} />
       <primitive object={breakFx.points} />
       <primitive object={seam.group} />
+      <primitive object={socketShimmers.group} />
       <primitive object={mist.pools} />
       <primitive object={mist.points} />
       <primitive object={mist.residents} />
@@ -10353,15 +10377,10 @@ function WaymarkPanel({ wm, onSay, onClose }: {
                 <span className="text-amber-200/70">back to the Wilds</span>
               </div>
             </button>
-            {/* Moonwell is the permanent hub — Greg's fold back to the glade, always listed, never a
-                waymark (`waymark.ts` › GLADE_ID). Second row, under the keeper's own door. */}
-            <button onClick={() => { wm.go(GLADE_ID); onClose() }}
-                    className="w-full text-left mb-1 px-2 py-1.5 rounded border border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90 transition-colors">
-              <div className="flex justify-between gap-3">
-                <span>Moonwell Glade</span>
-                <span className="text-white/35">Greg's fold</span>
-              </div>
-            </button>
+            {/* Moonwell's row moved to the STATION the same day it arrived here (socket 1,
+                `court-blueprint.ts`): Alex wired the gates to Moonwell and Rune Hold, and one
+                dialect for "the ways off this plot" beats two. `GLADE_ID` stays the destination
+                the socket resolves through. */}
             {wm.net.marks.length === 0 && (
               <div className="mt-2 mb-1 text-white/30 text-[10px]">
                 plant a waymark out in the Wilds and it will stand here too
