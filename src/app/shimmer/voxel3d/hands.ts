@@ -53,7 +53,9 @@ export const HANDS_ORDER = 1000
  * y = −0.38 at that depth is off-screen.
  */
 export interface HandsTune { wx: number; wy: number; wz: number; ex: number; ey: number; ez: number; roll: number }
-export const DEFAULT_TUNE: HandsTune = { wx: 0.20, wy: -0.20, wz: -0.50, ex: 0.46, ey: -0.62, ez: -0.34, roll: -0.35 }
+// Alex, 09-16, on the first default: "turn it about 15 degrees to the right and bring it down a
+// bit" — the elbow→wrist line rotated 15° clockwise about the elbow, then the whole arm 0.05 lower.
+export const DEFAULT_TUNE: HandsTune = { wx: 0.32, wy: -0.20, wz: -0.50, ex: 0.46, ey: -0.67, ez: -0.34, roll: -0.35 }
 /** The left wrist rests below the frame and rises `up` on a cast; its elbow mirrors the right's. */
 export const LEFT_UP = 0.40
 export const LEFT_DROP = 0.38
