@@ -4584,7 +4584,7 @@ export default function Shimmer3D() {
   useEffect(() => { if (!harvestPop) return; const t = setTimeout(() => setHarvestPop(null), 850); return () => clearTimeout(t) }, [harvestPop])
   const channelRef = useRef<{ node: ResourceNode; progress: number; durSec: number; manaCost: number } | null>(null)
   const chopClockRef = useRef(0) // accumulates dt to space out the chop/mine tick sound
-  const [channel, setChannel] = useState<{ nodeId: string; label: string; hp: number } | null>(null)
+  const [channel, setChannel] = useState<{ nodeId: string; label: string; hp: number; family: string } | null>(null)
 
   // ★ A re-deal replaces every runtime node object, and the harvest link holds one by REFERENCE.
   // Left alone, a channel that spans a boundary would keep chopping an orphan: mana would drain,
@@ -4668,7 +4668,7 @@ export default function Shimmer3D() {
     const durSec = nodeChannelSec(node.type) * (toolDef?.speedBonus ?? 1) / (1 + getSpeedBonus(speedBeast))
     channelRef.current = { node, progress: 0, durSec, manaCost }
     chopClockRef.current = 0.42 // fire the first thunk on the next tick (immediate feedback)
-    setChannel({ nodeId: node.id, label: prettyItem(node.type), hp: 1 })
+    setChannel({ nodeId: node.id, label: prettyItem(node.type), hp: 1, family: skillId })
   }, [])
 
   // ── Build placement: double-tap a placeable → ghost on the tile in front → rotate → confirm/cancel ──
@@ -5187,7 +5187,7 @@ export default function Shimmer3D() {
         grantHarvest(ch.node)
         channelRef.current = null; setChannel(null)
       } else {
-        setChannel({ nodeId: ch.node.id, label: prettyItem(ch.node.type), hp: 1 - ch.progress })
+        setChannel({ nodeId: ch.node.id, label: prettyItem(ch.node.type), hp: 1 - ch.progress, family: getNodeSkill(ch.node.type) })
       }
     }, dt * 1000)
     return () => clearInterval(id)
@@ -5918,6 +5918,31 @@ export default function Shimmer3D() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [toggleBag])
+  // ── The options frame (O / Esc / the ☰ door). The panel's own close button reads "esc / O", and
+  // on this side neither key did anything — the frame was click-only, and it never borrowed the
+  // mouse, so opening it by the door left the pointer wherever the last surface had put it. Same
+  // handoff as the bag now. ⚠ The rows that hand off to a SUB-PANEL (skills / party / book / gfx)
+  // keep a plain `setMenuOpen(false)` on purpose: closeOptions relocks the pointer, and a relock under
+  // a panel that is just opening is a panel you cannot click.
+  const menuOpenRef = useRef(false); menuOpenRef.current = menuOpen
+  const birthOpenRef = useRef(false); birthOpenRef.current = birthOpen  // the rune choice owns the screen
+  const openOptions = useCallback(() => {
+    setMenuOpen(true); setSkillsOpen(false); setMpOpen(false); setGfxOpen(false); setBookOpen(false)
+    openCursorUI()
+  }, [openCursorUI])
+  const closeOptions = useCallback(() => { setMenuOpen(false); setConfirmNew(false); closeCursorUI() }, [closeCursorUI])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase()
+      if (k === 'o') {
+        if (menuOpenRef.current) { e.preventDefault(); closeOptions(); return }
+        if (editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current || bagOpenRef.current || birthOpenRef.current) return
+        e.preventDefault(); openOptions()
+      } else if (k === 'escape' && menuOpenRef.current) { e.preventDefault(); closeOptions() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openOptions, closeOptions])
   // ── Party panel (P) — the lineup. Same ownership rule as the bag: state lives here so the key,
   // the pointer-lock handoff and the HotBar button can never disagree about whether it's open.
   // partyTick forces a re-render after a mend, since the party is a ref mutated in place.
@@ -6959,10 +6984,10 @@ export default function Shimmer3D() {
       {forkChip && !battle && !editMode && !dialogue && !menuOpen && <ObjectiveChip value={forkChip} />}
       {/* The ☰ under the minimap, on the minimap's own rule; `hud/options-door.tsx`. */}
       {!battle && !editMode && !showMap && !menuOpen && (
-        <OptionsDoor onOpen={() => { setMenuOpen(true); setSkillsOpen(false); setMpOpen(false); setGfxOpen(false); setBookOpen(false) }} />
+        <OptionsDoor onOpen={openOptions} />
       )}
       {menuOpen && (
-        <OptionsPanel isOwner={isOwner} onClose={() => { setMenuOpen(false); setConfirmNew(false) }}
+        <OptionsPanel isOwner={isOwner} onClose={closeOptions}
           game={<>
             <OptionRow onClick={() => { setMenuOpen(false); setMpOpen(true) }} label="👥 Play together" tail="party" />
             <OptionRow onClick={() => { setMenuOpen(false); setSkillsOpen(true) }} label="⬡ Skills" tail="levels" />
@@ -7632,7 +7657,10 @@ export default function Shimmer3D() {
         {/* The bar + the corner: `shimmer/hud/`, the Ather's own. `onSelect` because the mortal side has
             touch play; the name over the bar is the registry's label for what is selected. */}
         <Hotbar entries={hotbarEntries} sel={hotSel} held={heldName} dimmed={false} onSelect={selectSlot} />
-        <HudCorner mana={manaCornerRef} activeTool={(void toolTick, null)} tools={equippedToolsRef} skills={skillsRef} />
+        {/* `activeTool` is the Ather's "which family is mining right now" — here it is the channel's
+            family, or rinning while the line is out. `toolTick` is read so a break re-renders the arch. */}
+        <HudCorner mana={manaCornerRef} activeTool={(void toolTick, channel?.family ?? (fish ? 'rinning' : null))}
+                   tools={equippedToolsRef} skills={skillsRef} />
       </>)}
       {bagOpen && (
         <BagPanel inv={invRef} spiritIndex={spiritIndexRef} chest={null} tick={bagTick} sel={hotSel}
