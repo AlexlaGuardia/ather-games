@@ -1,4 +1,5 @@
-// The Glade tutorial, walked in the real page — Magii's wiring sheet (athernyx 17e2223) end to end.
+// The Glade tutorial, walked in the real page — Magii's wiring sheet (athernyx 17e2223) end to end,
+// on Moonwell as an island (2026-09-16): the fold lands the keeper on their own plot.
 //
 // ★ THE PURE ORACLE CANNOT REACH THIS. `tutorial.test.ts` proves the machine; it cannot prove the
 // five bodies stand where E can reach them, that the box shows the locked lines, that closing it
@@ -8,6 +9,7 @@
 //
 // Run: set -a; . ./.env; set +a; npx tsx scripts/glade-walk.mts        (owner-gated: tp/look/give)
 import puppeteer from 'puppeteer-core'
+import { plotThreshold, plotForTier } from '../src/app/shimmer/voxel/plot'
 
 const PAGE = process.env.WORLD_URL ?? 'http://localhost:3200/shimmer/voxel3d?hour=12'
 const EXE = process.env.CHROME ?? '/usr/bin/chromium-browser'
@@ -198,9 +200,21 @@ try {
   ok(s?.stage === 'done', 'folded')
   ok(/Worn Blade/i.test(await corner()), `the bag arrives with the fold (${await corner()})`)
   ok((await objective()) === '', 'no objective once the gate is open')
-  await cmd('/greg', false); await sleep(900)
+  // ── ★ THE FOLD IS THE CROSSING (2026-09-16): Moonwell is an island and the fold puts the keeper on
+  //    their own plot, in front of their seam, with the bag. Greg stays at Moonwell — the plot's seam
+  //    panel lists him as a destination, which the pure `waymark.test.ts` proves.
+  await sleep(14000)   // the plot streams in under the keeper
+  const hud = await page.evaluate(() => document.body.innerText.match(/x (-?\d+) y (-?\d+) z (-?\d+)/))
+  const px = Number(hud?.[1]), pz = Number(hud?.[3])
+  ok(Number.isFinite(px) && Math.hypot(px, pz) < 320 && Math.hypot(px, pz) > 200,
+    `the fold set the keeper down on their own plot, at its coast (${hud?.[0]})`)
+  ok(!(await panel()).id, 'no box is open on arrival')
+  // And the way back: the plot's own seam lists Moonwell as a standing destination.
+  const t = plotThreshold(1337, plotForTier(0))
+  await cmd(`/tp ${t.x} ${t.z}`); await sleep(9000)
   p = await panel()
-  ok(/entries/.test(p.text), 'post-fold Greg reads the book')
+  if (!p.id) { await sleep(6000); p = await panel() }
+  ok(/Moonwell Glade/.test(p.text), `the plot's seam offers Moonwell (${p.id ?? 'no box'})`)
   await closeBox()
 } finally {
   await browser.close()

@@ -10199,7 +10199,8 @@ function WaymarkPanel({ wm, onSay, onClose }: {
 
   return (
     <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      <div className="w-[420px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
+      <div data-panel={atPlot ? 'threshold' : 'waymark'}
+           className="w-[420px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between mb-3">
           <span className="text-white/95 font-semibold tracking-[.18em] uppercase">
