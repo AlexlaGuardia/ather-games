@@ -181,20 +181,42 @@ export function createHands(): Hands {
   const arm = new THREE.Group()
   armPivot.add(arm)
   group.add(armPivot)
-  /** Point a pivot's +z from `wrist` at `elbow`, then roll about that axis. Called at build time,
-   *  while `group` is still at the origin with no rotation, so local space IS camera space and
-   *  `lookAt`'s world-space target is the camera-space elbow. The forearm then rides `group`. */
+  /** Point a pivot's +z from `wrist` at `elbow` (both in the rig's own camera space), then roll
+   *  about that axis. ⚠ `lookAt` takes a WORLD point, and after the first tick the rig wears the
+   *  camera's pose — so the elbow is pushed through the rig's transform first. The first cut
+   *  passed the camera-space elbow raw: right at build time (the rig still at the origin), wrong on
+   *  every re-aim after it — the tuner's sliders, and play3d's fov scale on its first tick — which
+   *  aimed the forearm at a point out in the WORLD and drew it reversed. */
+  //  ⚠ AND `lookAt` TWISTS ABOUT WORLD UP, so even a world-converted target rolls the arm with the
+  //  camera's pose. The orientation is therefore built entirely in the rig's local space:
+  //  `Matrix4.lookAt(elbow, wrist, +y)` (object semantics: +z toward the first argument), which
+  //  the parent's pose can never touch.
+  const M = new THREE.Matrix4(), A = new THREE.Vector3(), B = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0)
   const aim = (pivot: THREE.Group, wrist: { x: number; y: number; z: number }, elbow: { x: number; y: number; z: number }, roll: number) => {
     pivot.position.set(wrist.x, wrist.y, wrist.z)
-    pivot.lookAt(elbow.x, elbow.y, elbow.z)
+    M.lookAt(A.set(elbow.x, elbow.y, elbow.z), B.set(wrist.x, wrist.y, wrist.z), UP)
+    pivot.quaternion.setFromRotationMatrix(M)
     pivot.rotateZ(roll)
   }
-  const tuneSeen = { v: -1 }
-  const reaim = () => {
+  // ★ THE TUNE IS IN FRAME UNITS, NOT CAMERA UNITS. The numbers were tuned at fov 75 (the Ather);
+  // play3d looks through fov 45, where the same camera-space rig sat at the right edge, 1.7×
+  // magnified, with the bracelet never entering frame. The projection: screen_x = (x/−z)/tan(f/2)
+  // and apparent size ∝ s/(−z·tan(f/2)). Keeping BOTH across lenses solves to x' = x, y' = y,
+  // z' = z · tan(75°/2)/tan(f/2) — only DEPTH moves: a narrower lens holds the rig further out.
+  // ⚠ Two wrong answers first: scaling x,y alone changes the arm's direction and leaves the
+  // magnification; scaling all three uniformly preserves x/z, which is exactly the thing that has
+  // to change. `k` is read off the camera each tick; a change re-aims.
+  const TUNED_FOV = 75
+  const tuneSeen = { v: -1, k: 1 }
+  const fovScale = (camera: THREE.Camera) => {
+    const fov = (camera as THREE.PerspectiveCamera).fov
+    return typeof fov === 'number' && fov > 0 ? Math.tan(TUNED_FOV * Math.PI / 360) / Math.tan(fov * Math.PI / 360) : 1
+  }
+  const reaim = (k = tuneSeen.k) => {
     const t = handsTune.tune
-    aim(armPivot, { x: t.wx, y: t.wy, z: t.wz }, { x: t.ex, y: t.ey, z: t.ez }, t.roll)
-    aim(leftPivot, { x: -t.wx, y: t.wy - LEFT_DROP, z: t.wz }, { x: -t.ex, y: t.ey - LEFT_DROP, z: t.ez }, -t.roll)
-    tuneSeen.v = handsTune.version
+    aim(armPivot, { x: t.wx, y: t.wy, z: t.wz * k }, { x: t.ex, y: t.ey, z: t.ez * k }, t.roll)
+    aim(leftPivot, { x: -t.wx, y: t.wy - LEFT_DROP, z: t.wz * k }, { x: -t.ex, y: t.ey - LEFT_DROP, z: t.ez * k }, -t.roll)
+    tuneSeen.v = handsTune.version; tuneSeen.k = k
   }
   // Local frame: +z is toward the lens (the elbow), −z is away (the fingers).
   part(arm, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 - 0.02)
@@ -296,10 +318,11 @@ export function createHands(): Hands {
     }
     const pose = stepHands(state, input, dt)
     sig.last = pose
-    if (tuneSeen.v !== handsTune.version) reaim()
+    const k = fovScale(camera)
+    if (tuneSeen.v !== handsTune.version || Math.abs(k - tuneSeen.k) > 1e-4) reaim(k)
     const tn = handsTune.tune
     // Offsets move the whole arm in CAMERA space (the pivot); the pitch bends at the wrist.
-    armPivot.position.set(tn.wx + pose.dx, tn.wy + pose.dy, tn.wz + pose.dz)
+    armPivot.position.set(tn.wx + pose.dx, tn.wy + pose.dy, (tn.wz + pose.dz) * k)
     arm.rotation.x = pose.pitch
     leftPivot.position.y = tn.wy - LEFT_DROP + pose.left * LEFT_UP + pose.leftDy
     left.rotation.x = pose.leftPitch

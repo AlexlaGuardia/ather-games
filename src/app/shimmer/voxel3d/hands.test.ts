@@ -1,7 +1,7 @@
 // The hands' rig: it draws over the world by the transparent-list trick, it is metal-free, the focus
 // in the fist is the one the signal names, and a teleport is not a sprint.
 import * as THREE from 'three'
-import { createHands, HANDS_ORDER } from './hands'
+import { createHands, HANDS_ORDER, setHandsTune, resetHandsTune, DEFAULT_TUNE } from './hands'
 
 let pass = 0
 const fails: string[] = []
@@ -47,6 +47,20 @@ cam.position.set(300, 130, 400); h.tick(cam, 6 / 60, 1 / 60)   // a /tp: 498 blo
 // guard exists. Without the guard the stride jumps ~199 cycles and this frame is a full footfall.
 ok(Math.abs(s.last!.dy) <= 0.005, `on the teleport frame the hand does not footfall as if at a sprint (dy ${s.last!.dy.toFixed(4)}; a run dips to ${running.toFixed(4)})`)
 
+// ★ a re-aim under a POSED rig keeps the arm's local orientation (lookAt takes world points; the
+// tuner and play3d's fov scale both re-aim after the rig wears the camera). Compare the pivot's
+// local quaternion before and after the tune version bumps with the rig posed.
+{
+  const h2 = createHands()
+  const armPivot = h2.group.children.find(c => c instanceof THREE.Group && c.children.length === 1) as THREE.Group
+  const q0 = armPivot.quaternion.clone()
+  const cam2 = new THREE.PerspectiveCamera(75); cam2.position.set(50, 120, 70)   // fov 75 = the tuned lens, so k = 1 and only the pose differs; cam2.rotation.set(-0.3, 2.1, 0.6); cam2.updateMatrixWorld()   // a banked camera: world-up twist would show here
+  h2.tick(cam2, 0, 1 / 60)
+  setHandsTune({ roll: DEFAULT_TUNE.roll })   // a no-op change that still bumps the version → re-aim while posed
+  h2.tick(cam2, 1 / 60, 1 / 60)
+  ok(armPivot.quaternion.angleTo(q0) < 1e-6, `★ re-aiming under a posed rig keeps the local orientation (drift ${armPivot.quaternion.angleTo(q0).toFixed(4)} rad)`)
+  resetHandsTune(); h2.dispose()
+}
 h.dispose()
 ok(true, 'dispose runs')
 console.log(`hands: ${pass} passed, ${fails.length} failed`)

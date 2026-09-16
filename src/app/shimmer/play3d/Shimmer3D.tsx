@@ -4,7 +4,7 @@
 // from the on-screen palette, click/drag the terrain, then Save. Height tools edit the per-zone
 // height grid; cell tools edit the tile grid (so you can remove water/walls). Save persists both
 // (heights→/shimmer/save-heights, grid→/shimmer/save-map). Warps/collision reuse the 2D engine.
-import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Html, PerformanceMonitor } from '@react-three/drei'
 import { useRef, useEffect, useLayoutEffect, useMemo, useState, useCallback, memo, Component, type ReactNode } from 'react'
 import * as THREE from 'three'
@@ -24,6 +24,7 @@ import { SayLine } from '../hud/say-line'
 import { Prompt } from '../hud/prompt'
 import { DialogueBox } from '../hud/dialogue-box'
 import { createGuideTrail } from '../voxel3d/guide-trail'
+import { createHands, type Hands } from '../voxel3d/hands'
 import type { GuideTarget } from '../voxel3d/guide-target'
 import { forkTarget, forkObjective, forkFlags, MET_GREG_FLAG, STATION_FLAG } from './fork'
 import { OptionsPanel, OptionRow, OptionHead, OptionSlider } from '../hud/options-panel'
@@ -1203,7 +1204,18 @@ function npcInWorld(n: NPC3D, defeated: Record<string, boolean>, flags: Record<s
   return true
 }
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, weaponMoveRef, dreamwalkRef, conjuredRef }: {
+/** The hands' seat inside the Canvas: fill the signal from the host, tick the rig after the camera moved. */
+function HandsMount({ hands, feed }: { hands: Hands; feed: () => void }) {
+  const { camera } = useThree()
+  useFrame((st, dt) => { feed(); hands.tick(camera, st.clock.elapsedTime, Math.min(dt, 0.1)) })
+  return <primitive object={hands.group} />
+}
+
+/** What the walker's body is doing this frame — read by the hands (`voxel3d/hands.ts`), written here. */
+export interface BodyOut { airborne: boolean; sliding: boolean; crouching: boolean; climbing: boolean; hanging: boolean; mantle: number; vy: number }
+export const newBodyOut = (): BodyOut => ({ airborne: false, sliding: false, crouching: false, climbing: false, hanging: false, mantle: -1, vy: 0 })
+
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, weaponMoveRef, dreamwalkRef, conjuredRef, bodyOut }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -1218,6 +1230,8 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   stationsRef: React.RefObject<PlacedStruct[]>; onNearStation: (s: PlacedStruct | null) => void
   eyeRef: React.RefObject<number>
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
+  /** The hands read this; the walker writes it. Optional so a harness need not care. */
+  bodyOut?: BodyOut
   // potion-buff mirrors (walker updates on its coarse tick): ground-speed mult + calm-mist flag
   speedMultRef: React.RefObject<number>; dreamwalkRef: React.RefObject<boolean>
   conjuredRef: React.MutableRefObject<Conjured[]>  // SYSTEM 2 — a conjured slab is solid to the walker
@@ -1353,6 +1367,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       const sliding = slideT.current > 0 && !airborne.current
       if (sliding) slideT.current -= dt
       const crouching = crouchKey && !sliding && !airborne.current  // slow crouch-walk (not a slide)
+      if (bodyOut) { bodyOut.sliding = sliding; bodyOut.crouching = crouching }
 
       // ── WALL CONTACT (climb + wall-jump): pressed into a climbable wall in the direction we're
       //    pushing? Probe a body-radius ahead in the input dir at our current height. The post-kick
@@ -1394,6 +1409,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // auto-climbs just because you tapped-jumped into it. onWall already requires pushing forward into the
       // face — so you only climb forward.
       const climbing = airborne.current && onWall.current && climbActive && climbRise.current < CLIMB_MAX_RISE
+      if (bodyOut) bodyOut.climbing = climbing
 
       // ── HORIZONTAL VELOCITY — auto-run with an accel RAMP (the flow), momentum through slide + air ──
       if (hanging.current || mantleT.current > 0) {
@@ -1614,6 +1630,11 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (stId !== lastStation.current) { lastStation.current = stId; onNearStation(nearSt) }
     }
 
+    // The body's verbs for the hands — the ones that resolve at the end of the tick.
+    if (bodyOut) {
+      bodyOut.airborne = airborne.current; bodyOut.hanging = hanging.current; bodyOut.vy = vy.current
+      bodyOut.mantle = mantleT.current > 0 ? 1 - mantleT.current / MANTLE_TIME : -1
+    }
     const g = group.current!
     // First-person: camera lives at the eye, so the avatar would clip the lens — hide it (still shown
     // in edit/spectator and third-person).
@@ -3412,6 +3433,8 @@ const Scene = memo(function Scene(props: {
   onWarp: (w: Warp) => void; yawRef: React.RefObject<number>; editRef: React.RefObject<boolean>
   eyeRef: React.RefObject<number>
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
+  /** The hands read this; the walker writes it. Optional so a harness need not care. */
+  bodyOut?: BodyOut
   speedMultRef: React.RefObject<number>; dreamwalkRef: React.RefObject<boolean>
   weaponMoveRef: React.RefObject<number>; weaponIdxRef: React.RefObject<number>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
@@ -3581,7 +3604,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} conjuredRef={props.conjuredRef} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} conjuredRef={props.conjuredRef} bodyOut={props.bodyOut} />
       {/* presence: other players in this zone (socket lives in the page comp — shared with the panel) */}
       <RemotePlayers peers={props.mpPeers} hideAt={plotHide} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
@@ -3905,6 +3928,12 @@ export default function Shimmer3D() {
   const skillsRef = useRef<SkillSet>(createSkillSet())
   const manaRef = useRef<ManaPool>(createManaPool(1))
   const invRef = useRef<Inventory>(createInventory())
+  // ── THE KEEPER'S HANDS CROSS THE DOOR (2026-09-16, play lane). One rig, one tune, both engines:
+  //    `voxel3d/hands.ts` copies the camera pose so it mounts anywhere; this side feeds it its own
+  //    verbs — a channel instead of a swing, the walker's `bodyOut`, a placeable in the palm. ────
+  const hands = useMemo(() => createHands(), [])
+  const bodyOut = useRef(newBodyOut())
+  useEffect(() => () => hands.dispose(), [hands])
   const [invSlots, setInvSlots] = useState<(ItemStack | null)[]>(() => invRef.current.slots)
   const [manaFrac, setManaFrac] = useState(1)
   const [forestry, setForestry] = useState(() => ({ level: 1, xp: 0, next: xpForSkillLevel(1), pulse: 0 }))
@@ -4835,6 +4864,7 @@ export default function Shimmer3D() {
     if (blocked) { setHarvestToast('Can’t build there'); return }
     if (countItem(invRef.current, pl.itemId) < 1) { cancelPlacing(); return }
     removeItems(invRef.current, pl.itemId, 1)
+    hands.sig.placeAt = performance.now()
     setStructures(prev => [...prev, logicalStruct({ itemId: pl.itemId, tileX: t.x, tileY: t.y, facing: pl.facing, zoneId: zoneIdRef.current })])
     setInvSlots([...invRef.current.slots])
     setHarvestToast(`Placed ${PLACEABLES[pl.itemId].name}`)
@@ -6164,6 +6194,28 @@ export default function Shimmer3D() {
   // shared handoff, same as the range console / stations.
   const [benchOpen, setBenchOpen] = useState(false)
   const benchOpenRef = useRef(false); benchOpenRef.current = benchOpen
+  // ── the hands' signal, from this side's own verbs. Refs only, so the callback is stable and the
+  //    Canvas child never re-renders for it. The focus comes up only while a channel runs (the
+  //    Ather's rule: a tool with the work, never on aim); the rod stays out while the line is. ──
+  const handsWasAirborne = useRef(false); const handsLastVy = useRef(0)
+  const feedHands = useCallback(() => {
+    const sg = hands.sig, b = bodyOut.current
+    const ch = channelRef.current, fs = fishRef.current
+    sg.family = ch ? getNodeSkill(ch.node.type) : fs ? 'rinning' : null
+    sg.tier = 0
+    sg.breaking = !!ch
+    sg.hidden = editRef.current || !!curBattleRef.current || !!dialogueRef.current || bagOpenRef.current || menuOpenRef.current
+      || birthOpenRef.current || !!openMenuRef.current || rangeOpenRef.current || benchOpenRef.current
+    // the fist: a placeable being placed, else the selected slot if it is one
+    const pl = placingRef.current?.itemId ?? invRef.current.slots[selSlotRef.current]?.itemId
+    const pdef = pl ? PLACEABLES[pl] : undefined
+    sg.held = pdef ? { colour: parseInt(pdef.color.slice(1), 16), piece: true } : null
+    // the body, and the landing edge
+    if (handsWasAirborne.current && !b.airborne && !b.hanging) { sg.landAt = performance.now(); sg.landVy = Math.max(0, -handsLastVy.current) }
+    handsWasAirborne.current = b.airborne; handsLastVy.current = b.vy
+    sg.airborne = b.airborne; sg.sliding = b.sliding; sg.crouching = b.crouching; sg.climbing = b.climbing
+    sg.hanging = b.hanging; sg.mantle = b.mantle; sg.wallCatch = false; sg.swimming = false
+  }, [hands])
   const [nearBench, setNearBench] = useState(false)
   const nearBenchRef = useRef(false); nearBenchRef.current = nearBench
   const [benchSlot, setBenchSlot] = useState(0)  // which loadout slot the bench is assigning into
@@ -6273,6 +6325,7 @@ export default function Shimmer3D() {
       setCastHud((h) => ({ ...h, stance: s?.moveId ?? null }))
     }
 
+    hands.sig.castAt = performance.now()
     switch (spec.archetype) {
       case 'stance': {
         // Canon (runes.md, the mana economy): holding a passive PAUSES mana recovery. That pause is
@@ -6951,6 +7004,7 @@ export default function Shimmer3D() {
           infusionRef={infusionRef}
           fieldsRef={fieldsRef}
           conjuredRef={conjuredRef}
+          bodyOut={bodyOut.current}
           statusRef={statusRef}
           onHeal={healPlayer}
           onNeedReload={startReload}
@@ -6961,6 +7015,9 @@ export default function Shimmer3D() {
           mpPeers={mpPeers}
           shadowMap={SHADOW_MAP_SIZE[gfx.shadows]}
         />
+        {/* ⚠ AFTER the Scene, so its useFrame subscribes after the walker's and ticks once the camera
+            has moved this frame — before it, the hands wore last frame's pose and lagged on the walk. */}
+        <HandsMount hands={hands} feed={feedHands} />
       </Canvas>
       </CanvasBoundary>
 
