@@ -12,7 +12,7 @@
 // exactly on block boundaries. The only attribute added is one float: which layer to sample.
 
 import * as THREE from 'three'
-import { buildTileArray, LAYER_COUNT } from './tiles'
+import { buildTileArray, buildVariationFlags, LAYER_COUNT } from './tiles'
 import { buildReliefArray } from './relief'
 import { createLightUniforms, type LightUniforms } from '../light-glsl'
 import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from '../cartoon-glsl'
@@ -28,6 +28,12 @@ export interface TileArray {
    * site, one size, one layer order, no second lookup table.
    */
   relief: THREE.DataArrayTexture
+  /**
+   * Per-layer orientation grade (`tiles.ts` › `buildVariationFlags`), a LAYER_COUNT×1 byte strip
+   * the shader reads at `vLayer`: 0 fixed · 1 mirror only · 2 all eight orientations. Built here
+   * with the other two for the same reason the relief is — one call, one layer order.
+   */
+  variation: THREE.DataTexture
   size: number
   /** The raw bytes, kept so the HUD can draw a reference swatch at true pixel size. */
   data: Uint8Array
@@ -83,7 +89,18 @@ export function makeTileArray(size: number, renderer?: THREE.WebGLRenderer): Til
   relief.anisotropy = tex.anisotropy
   relief.needsUpdate = true
 
-  return { texture: tex, relief, size, data }
+  // The orientation grades, one byte per layer. NEAREST and unmipped: it is a lookup, not a picture.
+  const flags = buildVariationFlags()
+  const rgba = new Uint8Array(LAYER_COUNT * 4)
+  for (let i = 0; i < LAYER_COUNT; i++) rgba[i * 4] = flags[i]
+  const variation = new THREE.DataTexture(rgba, LAYER_COUNT, 1, THREE.RGBAFormat, THREE.UnsignedByteType)
+  variation.colorSpace = THREE.NoColorSpace
+  variation.magFilter = THREE.NearestFilter
+  variation.minFilter = THREE.NearestFilter
+  variation.generateMipmaps = false
+  variation.needsUpdate = true
+
+  return { texture: tex, relief, variation, size, data }
 }
 
 /**
@@ -115,6 +132,8 @@ export interface VoxelTexMaterial {
   setAo: (amount: number) => void
   /** Per-texel relief strength, 0 = flat faces. Alex's dial. */
   setRelief: (amount: number) => void
+  /** Per-block tile orientation (turn + mirror), 1 = on, 0 = every block wears the tile the same way. */
+  setVariation: (on: boolean) => void
   /** Cartoon levers — uniform writes, never a recompile. See settings.ts. */
   setCartoon: (v: Record<string, number>) => void
 }
@@ -167,11 +186,13 @@ export function createTexturedVoxelMaterial(
     uAo: { value: number }
     uReliefAmt: { value: number }
     uReliefShade: { value: number }
+    uVariation: { value: number }
   } | null = null
   let liveCartoon: Record<string, { value: number }> | null = null
   let jitter = DEFAULT_JITTER
   let ao = DEFAULT_AO
   let relief = DEFAULT_RELIEF
+  let variation = 1
   let pendingCartoon: Record<string, number> | null = null
 
   mat.onBeforeCompile = (shader) => {
@@ -181,6 +202,9 @@ export function createTexturedVoxelMaterial(
     shader.uniforms.uRelief = { value: tiles.relief }
     shader.uniforms.uReliefAmt = { value: relief }
     shader.uniforms.uReliefShade = { value: relief }
+    shader.uniforms.uVarFlags = { value: tiles.variation }
+    shader.uniforms.uLayerCount = { value: LAYER_COUNT }
+    shader.uniforms.uVariation = { value: variation }
     // ★ CARTOON LEVERS LIVE HERE TOO, AS UNIFORMS ON THIS SAME PROGRAM. Switching the world to
     // textures must not lose the look, and a second material per style would be one shader program
     // per style — the allocation shape that got this page blocked from WebGL. See settings.ts.
@@ -235,6 +259,9 @@ uniform float uJitter;
 uniform float uAo;
 uniform float uReliefAmt;
 uniform float uReliefShade;
+uniform sampler2D uVarFlags;
+uniform float uLayerCount;
+uniform float uVariation;
 /** Where the painted light comes from, in a tile's tangent frame: up and slightly left, the pixel
  *  artist's convention this world's art is already drawn to.
  *  Written PRE-NORMALISED from vec3(-0.45, 0.62, 0.64) rather than wrapped in normalize(): a const
@@ -281,6 +308,39 @@ float gTileEmissive = 0.0;
 // later. Same reason as gTileEmissive above: produced and consumed within one fragment, and the two
 // MUST be the same value or the normal map and the colour describe different points on the tile.
 vec2 gTileUv = vec2(0.0);
+// ── ★ THE TILE'S ORIENTATION ON THIS BLOCK (2026-09-16) ──────────────────────────────────────
+// The orientation is a 2×2 orthogonal map applied to the block-local UV (tileOrient), and three
+// things downstream must all see the SAME map or the surface lies: the colour sample, the relief
+// sample, and the relief NORMAL — a tangent-space normal read from a turned tile points along the
+// tile's turned axes, so it is mapped back through the transpose (= inverse, the map is
+// orthogonal) before it meets the world's tangent frame. Miss that one and a mirrored block is
+// lit from the opposite side of its bumps: the sun appears to come from two directions at once,
+// block by block, which reads as a lighting bug nobody can name. gDx/gDy are the screen-space
+// derivatives of the ORIGINAL uv mapped through the same matrix, handed to textureGrad — the
+// per-block fract() is a discontinuity, and a plain texture() there picks the smallest mip along
+// every block edge, a hairline of wrong texels on every seam.
+mat2 gOrient = mat2(1.0, 0.0, 0.0, 1.0);
+vec2 gDx = vec2(0.0), gDy = vec2(0.0);
+
+// Which of the eight orientations this block's face wears, as a matrix. grade is the layer's
+// byte from uVarFlags: 0 never turns, 1 mirrors only, 2 turns and mirrors.
+mat2 tileOrient(float grade, vec3 cell) {
+  mat2 M = mat2(1.0, 0.0, 0.0, 1.0);
+  if (grade < 0.5 || uVariation < 0.5) return M;
+  // Decorrelated from the value jitter's hash by an offset, so a mirrored block is not also the
+  // brighter one — two variations that always travel together read as one.
+  int o = int(hashBlock(cell + vec3(17.0, 5.0, 29.0)) * 7.999);
+  if ((o & 4) != 0) M = mat2(-1.0, 0.0, 0.0, 1.0);
+  if (grade > 1.5) {
+    int rot = o & 3;
+    // A quarter turn, column-major: (x, y) -> (-y, x). Applied rot times.
+    mat2 Q = mat2(0.0, 1.0, -1.0, 0.0);
+    if (rot >= 1) M = Q * M;
+    if (rot >= 2) M = Q * M;
+    if (rot >= 3) M = Q * M;
+  }
+  return M;
+}
 
 // ── ★ THE TANGENT FRAME, FREE ON AXIS-ALIGNED FACES ──────────────────────────────────────────
 // A normal map is in tangent space, so it needs u and v as world directions. The usual cost is a
@@ -316,8 +376,17 @@ void tileFrame(vec3 an, out vec3 T, out vec3 B) {
   vec2 tileUv = an.y > 0.5
     ? vVoxPos.xz
     : (an.x > 0.5 ? vec2(vVoxPos.z, -vVoxPos.y) : vec2(vVoxPos.x, -vVoxPos.y));
+  // Derivatives of the CONTINUOUS uv, taken before the per-block fract below breaks it.
+  vec2 dTx = dFdx(tileUv), dTy = dFdy(tileUv);
+  {
+    float grade = texture(uVarFlags, vec2((vLayer + 0.5) / uLayerCount, 0.5)).r * 255.0;
+    gOrient = tileOrient(grade, blockCoord());
+    // Turn about the block's own centre: the tile stays on its block, only its facing changes.
+    tileUv = gOrient * (fract(tileUv) - 0.5) + 0.5;
+    gDx = gOrient * dTx; gDy = gOrient * dTy;
+  }
   gTileUv = tileUv;
-  vec4 tile = texture(uTiles, vec3(tileUv, vLayer));
+  vec4 tile = textureGrad(uTiles, vec3(tileUv, vLayer), gDx, gDy);
 ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
   diffuseColor.rgb *= tile.rgb;
   // ── ★★ AMBIENT OCCLUSION, WHICH THIS MATERIAL SPENT A MONTH COMPUTING AND DISCARDING ────────
@@ -356,7 +425,8 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
   // constant per axis. A sun-dependent term here would make surface detail swim as the day turns,
   // which is the one thing a painted texture must not do.
   if (uReliefShade > 0.0) {
-    vec3 rn = normalize(texture(uRelief, vec3(tileUv, vLayer)).xyz * 2.0 - 1.0);
+    vec3 rn = normalize(textureGrad(uRelief, vec3(tileUv, vLayer), gDx, gDy).xyz * 2.0 - 1.0);
+    rn.xy = transpose(gOrient) * rn.xy;   // back from the turned tile's axes (see gOrient)
     // Subtracting KEY.z makes this EXACTLY neutral on a flat texel. Without it the dial would
     // darken or brighten the whole world as it turns up, which reads as a brightness bug rather
     // than as relief, and would send the next person to LIGHT_LOOK.
@@ -401,7 +471,8 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
     vec3 an = abs(vVoxNormal);
     vec3 T, B;
     tileFrame(an, T, B);
-    vec3 nmap = texture(uRelief, vec3(gTileUv, vLayer)).xyz * 2.0 - 1.0;
+    vec3 nmap = textureGrad(uRelief, vec3(gTileUv, vLayer), gDx, gDy).xyz * 2.0 - 1.0;
+    nmap.xy = transpose(gOrient) * nmap.xy;   // back from the turned tile's axes (see gOrient)
     // The dial scales the TANGENT components and the vector is renormalised, so 0 is exactly flat
     // and 1 is exactly what relief.ts baked — a lerp of the whole vector toward (0,0,1) would do
     // the same thing more slowly and read as if the depth constant had moved.
@@ -449,6 +520,10 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
       // style can show) and `uReliefShade` is the albedo term (which the cartoon style can). A
       // toggle that moved only the first is exactly the switch that told Alex relief does nothing.
       if (live) { live.uReliefAmt.value = amount; live.uReliefShade.value = amount }
+    },
+    setVariation: (on: boolean) => {
+      variation = on ? 1 : 0
+      if (live) live.uVariation.value = variation
     },
     setCartoon: (v: Record<string, number>) => {
       // Held until compile for the same reason as the jitter: `onBeforeCompile` has not run before

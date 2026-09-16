@@ -16,8 +16,8 @@
 // The wrong economy here would be saving half a megabyte and buying a renumbering.
 
 import { MAT } from '../../voxel/depth'
-import { SEAM } from '../../voxel/seams'
-import { WOOD } from '../../voxel/trees'
+import { SEAM, isSeam } from '../../voxel/seams'
+import { WOOD, isLeafMat } from '../../voxel/trees'
 import { MATERIAL_COLOR } from '../attrs'
 import { baseOf } from '../../voxel/depth'
 
@@ -1938,6 +1938,74 @@ export function buildTileArray(size: number): Uint8Array {
     }
   }
   out.set(paintFallback(size), FALLBACK_LAYER * per)
+  return out
+}
+
+// ── ★ PER-BLOCK ORIENTATION: HOW MUCH A TILE MAY BE TURNED (2026-09-16) ────────────────────────
+// Alex: *"what if every block in the game were to have a few variations in textures to avoid the
+// copy-paste that's showing up in the world."* The honest way to get variations is to paint them,
+// and painting is what this file already cannot afford: `buildTileArray(64)` is ~3s on the main
+// thread at mount, so three painted variants would be a nine-second hang on the very first frame.
+//
+// So the variation is FREE instead. The atlas shader recovers the block coordinate per fragment
+// (`atlas.ts` › `blockCoord`) and already uses it for a value jitter; now it also picks one of
+// EIGHT ORIENTATIONS of the tile — four quarter-turns × a mirror — per block, per face. Eight looks
+// from one painted tile, no memory, no mount cost, and the mesher never learns anything happened.
+//
+// ⚠ BUT A TILE IS NOT ALWAYS TURNABLE, and this table is what says so. A grass side has its green
+// strip at the top; a log's bark runs up; planks have a grain and bricks have courses; a station's
+// top is a picture of a station. Turning any of those is not variation, it is a bug you can see
+// from across the meadow. Three grades:
+//   FIXED  — drawn things: stations, containers, lights, glass, saplings, water. Never turned.
+//   MIRROR — grained things: a left-right flip only, which no grain, strip or course can tell.
+//   FULL   — grainless things: stone, soil, sand, crust, ore, leaves, any ground's top. All eight.
+// Turf is the one material graded BY FACE: its top is a grainless meadow (FULL), its side wears
+// the strip (MIRROR). The default for anything unlisted is MIRROR — the flip is safe on every
+// tile that is not a picture, and a new material gets variation on the day it lands.
+export const VAR_FIXED = 0
+export const VAR_MIRROR = 1
+export const VAR_FULL = 2
+
+const VAR_FIXED_SET: ReadonlySet<number> = new Set<number>([
+  MAT.WATER, MAT.MANA_LANTERN, MAT.WAYMARK, MAT.CACHE, MAT.CHEST,
+  MAT.CRAFT_TABLE, MAT.SAWMILL, MAT.STONECUTTER,
+  MAT.CAULDRON, MAT.CAULDRON_LIT, MAT.HEARTH, MAT.OVEN, MAT.GRINDER, MAT.STILL, MAT.MIXER, MAT.KILN,
+  MAT.POT, MAT.POT_SEEDED, MAT.POT_BLOOM,
+  MAT.GLASS, MAT.GLASS_VIOLETBLOOM, MAT.GLASS_STORMGRASS, MAT.GLASS_TIDEPETAL, MAT.GLASS_SUNPETAL, MAT.GLASS_DAWNCAP, MAT.GLASS_MOONVINE,
+  MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
+  MAT.CONJURED,
+])
+/** Grainless on every face. */
+const VAR_FULL_SET: ReadonlySet<number> = new Set<number>([
+  MAT.PACKED_CLOUD, MAT.DEEP_STONE, MAT.STONE, MAT.SUBSOIL, MAT.SAND, MAT.SPRING_CRUST,
+  MAT.RUBBLE, MAT.RUBBLE_HEAP, MAT.COBBLESTONE, MAT.SCREE, MAT.MARSH_MUD, MAT.CLOUD_WALL, MAT.PATH,
+])
+/** Grainless on top and underneath, striped on the side. */
+const VAR_TURF_SET: ReadonlySet<number> = new Set<number>([
+  MAT.TOPSOIL, MAT.GREY_SOIL, MAT.FOREST_LOAM, MAT.LUSH_TURF, MAT.DRY_GRASS, MAT.HIGHLAND_TURF,
+  MAT.GARDEN_BED_GOLDWOOD, MAT.GARDEN_BED_SHIMMEROAK, MAT.GARDEN_BED_DAWNWOOD,
+])
+
+/** How far a material's face may be turned per block. Asked per (material, face), like `paintFor`. */
+export function variationOf(material: number, face: number): number {
+  const m = baseOf(material)
+  if (VAR_FIXED_SET.has(m)) return VAR_FIXED
+  if (VAR_FULL_SET.has(m) || isSeam(m) || isLeafMat(m)) return VAR_FULL
+  if (VAR_TURF_SET.has(m)) return face === SIDE ? VAR_MIRROR : VAR_FULL
+  return VAR_MIRROR
+}
+
+/**
+ * The per-layer grade, in the SAME layer order as `buildTileArray`, one byte each — what the shader
+ * reads at `vLayer` to decide how far it may turn the tile. Built beside the colour and the relief
+ * (`atlas.ts` › `makeTileArray`) for the reason the relief is: three arrays that must agree about
+ * layer indexing are built by one call, or one of them quietly describes another's block.
+ */
+export function buildVariationFlags(): Uint8Array {
+  const out = new Uint8Array(LAYER_COUNT)
+  for (let slot = 0; slot < TILE_MATERIALS.length; slot++)
+    for (let face = 0; face < 3; face++) out[slot * 3 + face] = variationOf(TILE_MATERIALS[slot], face)
+  out[FALLBACK_LAYER] = VAR_FIXED
   return out
 }
 

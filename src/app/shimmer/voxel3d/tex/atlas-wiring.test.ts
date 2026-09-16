@@ -212,7 +212,7 @@ check(glslBlocks.length >= 4,
   const colourBlock = glslBlocks.find(b => b.includes('#include <color_fragment>'))
   const reliefBlock = glslBlocks.find(b => b.includes('#include <normal_fragment_maps>'))
   check(!!colourBlock && /gTileUv\s*=/.test(colourBlock), 'the colour block never assigns gTileUv')
-  check(!!reliefBlock && /texture\(uRelief,\s*vec3\(gTileUv/.test(reliefBlock),
+  check(!!reliefBlock && /texture(?:Grad)?\(uRelief,\s*vec3\(gTileUv/.test(reliefBlock),
     'the relief block does not sample uRelief at gTileUv — it is reading some other coordinate')
 }
 
