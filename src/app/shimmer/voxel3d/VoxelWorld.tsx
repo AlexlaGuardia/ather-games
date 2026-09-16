@@ -233,13 +233,15 @@ import { SCRIPT, type Beat } from './folk-lines'
 const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in b ? [b.text] : [])
 import { GREG_LINES } from './greg-lines'
 import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
+import { insideGlade } from '../voxel/glade'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
          legacyRowSockets, courtClearCells, COURT_REV,
          courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells,
          gateTowerCells } from './crossings'
 import { depart, LANDING_LABEL } from './crossing-out'
 import { LANDING_ARRIVAL } from '../world/landing'
-import { createGregMesh, createFigures, GREG_BOUNDS, MOGLIN_SCALE } from './greg'
+import { createGregMesh, GREG_BOUNDS } from './greg'
+import { createMoglinFigures, MOGLIN_BOUNDS } from './moglin-figure'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
@@ -3236,19 +3238,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     g.group.position.set(GREG_CX, GREG_Y, GREG_CZ)
     return g
   }, [])
-  // The five folk (2026-09-15, Magii's sheet) — Greg's figure in a trade colour each, standing on
-  // a floor cell of their own stamped building (`folk.ts`). Same surface the stamps were floored
-  // on (`stampGenPiecesForCol` below reads the same `columnHeight`), so feet meet floor by
-  // construction. Static, like Greg; the aim test below reads their boxes, never the meshes.
+  // The five folk (2026-09-15, Magii's sheet) — free Moglins off the locked brief (`moglin-figure.ts`,
+  // 09-16; they were Greg's figure tinted and halved), standing on a floor cell of their own stamped
+  // building (`folk.ts`). Same surface the stamps were floored on (`stampGenPiecesForCol` below
+  // reads the same `columnHeight`), so feet meet floor by construction. Static, like Greg; the aim
+  // test below reads their boxes, never the meshes — and the box is the figure's own bounds.
   const folk = useMemo(() => {
     const sites = folkSites(PLACED_STAMPS, (x, z) => columnHeight(x, z, SEED))
-    // Moglin-sized: half of Greg (three feet beside a 1.70 m keeper), and the hitbox with them.
-    const figs = createFigures(sites.map(site => { const d = folkDef(site.id); return { name: d.name, robe: d.robe, skin: d.skin, scale: MOGLIN_SCALE } }))
+    const figs = createMoglinFigures(sites.map(site => { const d = folkDef(site.id); return { name: d.name, coat: d.coat, apron: d.apron } }))
     return sites.map((site, i) => {
       const fig = figs[i]
       fig.group.position.set(site.cx, site.y, site.cz)
       fig.group.rotation.y = site.yaw
-      const box = bodyBox(site.cx, site.cz, site.y + GREG_BOUNDS.y0 * MOGLIN_SCALE, site.y + GREG_BOUNDS.y1 * MOGLIN_SCALE, GREG_BOUNDS.halfW * MOGLIN_SCALE)
+      const box = bodyBox(site.cx, site.cz, site.y + MOGLIN_BOUNDS.y0, site.y + MOGLIN_BOUNDS.y1, MOGLIN_BOUNDS.halfW)
       return { id: site.id, fig, box, x: site.cx, z: site.cz }
     })
   }, [])
@@ -3822,9 +3824,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // (2026-09-16): the Glade's coordinates did not move when it became a space, so the stored
       // position is valid there — only its space label was wrong. A finished keeper's Wilds
       // position is left alone; the continent is still theirs to walk.
+      // ⚠ AND A FINISHED KEEPER STANDING IN THE OLD FOOTPRINT TOO (Alex, 2026-09-16, an hour after
+      // the island shipped: "i think my player is in a stale world"). His save was `done`, in the
+      // Wilds, AT the glade — so the first rule below left him on the continent's leftover
+      // footprint: houses, no Greg, no folk, the arch gone. A Wilds position inside Moonwell's
+      // coast is a Glade position; the continent's copy of that ground is a ghost nobody should
+      // wake up in.
       const savedSpace: Space = p.space === 'plot' ? 'plot'
         : p.space === 'glade' ? 'glade'
         : tutorial.current.stage !== 'done' ? 'glade'
+        : insideGlade(p.x, p.z, SEED) ? 'glade'
         : 'wilds'
 
       // ── ★★ AND THE RESCUE, FOR SAVES ALREADY POISONED (Alex, 2026-08-15: "my player walked to
