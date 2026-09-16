@@ -59,7 +59,7 @@ const PUFF_COLOR = MATERIAL_COLOR[MAT.PUFF_CLUSTER] ?? 0xe6dcc4
  * How hard the moss glows. Lambert emissive is added AFTER the lights, so this is what survives
  * the night: at 0.45 a ribbon reads at midnight and is a soft cushion by day, not a lamp.
  */
-export const MOSS_EMISSIVE = 0.45
+export const MOSS_EMISSIVE = 0.28
 
 /**
  * ── ★ THE SCATTER GEOMETRY, EXPORTED SO THE ICON WEARS THE SAME SHAPE (2026-08-26) ─────────────

@@ -318,6 +318,13 @@ export const MOSS_LEVEL = 0.62
 /** Half-width of the contour band, in field units. 0.012 ≈ a ribbon one to two cells wide. */
 export const MOSS_BAND = 0.012
 export const MOSS_DENSITY = 0.6
+/**
+ * The ribbon needs SLOPE. Where the field is flat near the level, the band is not a line but a
+ * plateau — measured on the first shot as a mossy clearing thirty cells wide, a carpet where a
+ * path was promised. Cells whose field barely changes across three blocks are refused, so only a
+ * true contour survives: the line where the field CROSSES the level, never where it rests on it.
+ */
+export const MOSS_MIN_SLOPE = 0.018
 
 export function forageAt(x: number, z: number, seed: number, ground: BiomeId): number {
   const here = FORAGE_OF_GROUND[ground]
@@ -328,7 +335,11 @@ export function forageAt(x: number, z: number, seed: number, ground: BiomeId): n
   // the one whose continuity a displaced cell would break. A puffball can sit anywhere in its patch.
   if (here.includes(MAT.GLOW_MOSS)) {
     const v = value2(x / MOSS_SCALE, z / MOSS_SCALE, seed ^ 0x910c)
-    if (Math.abs(v - MOSS_LEVEL) < MOSS_BAND && hash01(x, z, seed ^ 0x3a55) < MOSS_DENSITY) return MAT.GLOW_MOSS
+    if (Math.abs(v - MOSS_LEVEL) < MOSS_BAND && hash01(x, z, seed ^ 0x3a55) < MOSS_DENSITY) {
+      const gx = value2((x + 3) / MOSS_SCALE, z / MOSS_SCALE, seed ^ 0x910c) - v
+      const gz = value2(x / MOSS_SCALE, (z + 3) / MOSS_SCALE, seed ^ 0x910c) - v
+      if (Math.hypot(gx, gz) >= MOSS_MIN_SLOPE) return MAT.GLOW_MOSS
+    }
   }
   if (here.includes(MAT.PUFF_CLUSTER)) {
     if (hash01(x, z, seed ^ 0x7f0b) > PUFF_DENSITY) return 0
