@@ -11,6 +11,19 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+
+## 🧤 Shimmer — **THE KEEPER'S HANDS: THE GLOVE ON THE LENS, THE FOCUS IN THE FIST, THE BRACELET ON A CAST** (2026-09-16 PM, play lane `1b2f8f6b`, second window beside the hub) · *Last touched 2026-09-16 — ✅ **PROD `BUILD_ID uwFokMrcxnf7uwZ4kUrcG` from `f80b3e6`**, served == disk (`2211e10f…`, md5 match, `clearDepth()` in the chunk). hands-pose 21/0 (5 mutations fire) · hands 14/0 (3 fire) · render-audit clean · tsc 7 (baseline).*
+
+**Left off:** Alex: *"giving our players hands — is this something for meshy or one of our agents/shadows?"* Neither Meshy nor a shadow: **the motion is the product**, and canon already names the hand — `shimmer-casting-vessels.md` › *"the glove is the hand, the thing you raise and aim"*; the bracelet *"on you whether or not you reached for it."* So the viewmodel is the GLOVE (tier-0, one dark seat, cord cuff, no skin, no metal), the **gathering focus the AIMED block asks for** in the fist (blade / spike / rinstick / spade, horn + wood, shown only when the block-picks-the-tool model has picked one — aim at planks and the blade comes up), and the LEFT wrist's woven band rising only on a cast. `voxel3d/hands-pose.ts` = every motion, pure (breath · distance-driven footfall dip that freezes with the feet · chop lands fast, eases back · place tap · cast raise + wrist · eased drop when UI/weapon owns the screen). `voxel3d/hands.ts` = the rig: rigid parts on one cube + one sphere, camera pose copied per frame (R3F's camera is not in the scene graph), and **the transparent-list depth trick** — every part `transparent` at `HANDS_ORDER`, one invisible sentinel at `HANDS_ORDER−1` clearing depth in `onBeforeRender`, so the clear lands after the world's own transparents (water, smoke, the trail) and before the hand. ⚠ An OPAQUE sentinel would let smoke draw through walls; the test asserts the list. VoxelWorld: signal at the HUD mark, `placeAt` at the three place commits, `castAt` after an un-refused cast, `__hands` from the debug-handle EFFECT. ★ **StrictMode runs a `useMemo` factory twice and keeps the FIRST result** — a `window.__x =` inside the factory hands a harness the orphan; cost an hour. ⚠ Headless swiftshader runs ~3 fps: a 640 ms animation cannot be caught by screenshot timing — slow `performance.now` 25× in the harness instead.
+
+**Next:**
+- **Alex judges** on `/shimmer/voxel3d`: the angle (three passes: end-on box → arm along the diagonal), the glove's size in frame, the sleeve colour, whether the fist reads as a fist, the chop's speed (`SWING_HZ` 2.2), whether the bracelet should show at rest too.
+- `pixel` polish once judged: per-family grips (the rinstick is held wrong for a cast-and-catch), a sway on look-turn, the seat lighting when a word is written, tier-material looks off the vessel card (crude → clear crystal).
+- The Moglin folk and the hands are both code-built; if either reads wrong in motion, Meshy off the canon PNGs is the upgrade path, not a redraw.
+
+**Files:** `voxel3d/hands.ts` · `voxel3d/hands-pose.ts` · `voxel3d/hands.test.ts` · `voxel3d/hands-pose.test.ts` · `voxel3d/VoxelWorld.tsx` (mount + signal).
+
+---
 ## ⑂ Shimmer — **MOONWELL GLADE IS AN ISLAND: CROSSING IN, FOLD OUT** (2026-09-16 afternoon, hub lane `e7f98ee0`) · *Last touched 2026-09-16 — ✅ **PROD `BVK9XFiTV9src1LxQCi3q` from `a20171f`**, glade-walk 42/42 on the served page*
 
 **Left off:** Alex: *"moonwell glade is supposed to be an example of what the home plot could look like, but as it is
