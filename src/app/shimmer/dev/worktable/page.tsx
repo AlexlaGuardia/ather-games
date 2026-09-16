@@ -49,6 +49,7 @@ import {
 import { PIECES, type Rotation } from '../../voxel/pieces'
 import { createPieceRenderer } from '../../voxel3d/piece-mesh'
 import { STATION_BP_ID, STATION_LAYOUT } from '../../voxel3d/court-blueprint'
+import type { StationLayout } from '../../voxel/blueprints'
 
 const TILE = 16
 /** The build pad, in blocks. Big enough for a cottage and a yard; not a world. */
@@ -359,24 +360,24 @@ function Rig({ yaw, pitch, dist, eye, fly, target, onView }: {
  * get built AROUND them. Nothing here is saved; it is the one thing on this table the author cannot
  * move by clicking, and it is drawn so that fact is visible instead of remembered.
  */
-function StationGhosts() {
-  const f = STATION_LAYOUT.floor
+function StationGhosts({ layout }: { layout: StationLayout }) {
+  const f = layout.floor
   return (
     <group>
-      {STATION_LAYOUT.sockets.map(sk => (
+      {layout.sockets.map(sk => (
         <mesh key={`s${sk.index}`} position={[sk.x + 0.5, f + 1.5, sk.z + 0.5]}>
           <boxGeometry args={[3, 3, 3]} />
           <meshBasicMaterial color={sk.kind === 'gate' ? '#ffd27a' : '#7ad7ff'} transparent opacity={0.22} depthWrite={false} />
         </mesh>
       ))}
-      {STATION_LAYOUT.lamps.map(l => (
+      {layout.lamps.map(l => (
         <mesh key={`l${l.index}`} position={[l.x + 0.5, l.y + 0.5, l.z + 0.5]}>
           <boxGeometry args={[1.1, 1.1, 1.1]} />
           <meshBasicMaterial color="#ffe66b" wireframe />
         </mesh>
       ))}
       {/* the anchor: where `courtAnchor` lands, the focus the sockets face */}
-      <mesh position={[STATION_LAYOUT.anchor.x + 0.5, f + 0.05, STATION_LAYOUT.anchor.z + 0.5]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[layout.anchor.x + 0.5, f + 0.05, layout.anchor.z + 0.5]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.4, 0.6, 24]} />
         <meshBasicMaterial color="#ffffff" transparent opacity={0.6} depthWrite={false} />
       </mesh>
@@ -401,6 +402,8 @@ export default function WorktablePage() {
   const [showKeeper, setShowKeeper] = useState(true)
   const [eye, setEye] = useState(false)
   const [fly, setFly] = useState(false)
+  /** The station's crossings, in the editor's frame — loaded with the file, shifted with the blocks on save. */
+  const [station, setStation] = useState<StationLayout | null>(null)
   const [view, setView] = useState({ yaw: -0.9, pitch: 0.5, dist: 34 })
   /** Which palette families are expanded. Seeded from `FAMILY`, then the keeper's own choice. */
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -482,19 +485,12 @@ export default function WorktablePage() {
   const bounds = useMemo(() => boundsOf(normalizeCells(asCells), placements), [asCells, placements])
 
   const save = async () => {
-    // ★ THE STATION'S FRAME IS ANCHORED AT (0,0,0). `makeBlueprint` re-bases every structure to its
-    // own min corner, and the world reads the station's sockets as FIXED offsets from that corner
-    // (`court-blueprint.ts`). Remove the outermost dais row and every crossing would land a block
-    // off, silently. So the station may not be saved unless something still stands on the x=0 and
-    // z=0 edges and the bottom row — the ghosts on the pad are where they are because of this.
-    if (id.trim() === STATION_BP_ID) {
-      const minX = Math.min(...asCells.map(c => c.x)), minY = Math.min(...asCells.map(c => c.y)), minZ = Math.min(...asCells.map(c => c.z))
-      if (minX !== 0 || minY !== 0 || minZ !== 0) {
-        setStatus(`SAVE REFUSED: the station's frame is measured from (0,0,0) and its min corner is now (${minX},${minY},${minZ}) — keep a block on the x=0 and z=0 edges and the bottom row, or the sockets move`)
-        return
-      }
-    }
-    const s = makeBlueprint(id.trim(), name.trim() || id.trim(), asCells, placements)
+    // ★ THE STATION'S CROSSINGS ARE SAVED WITH IT, SHIFTED AS THE BLOCKS ARE. `makeBlueprint`
+    // re-bases every structure to its own min corner and moves the layout by the same offset, so
+    // trimming a dais edge moves the file's frame and the sockets together — the ghosts keep
+    // standing on the same blocks. (The first cut refused the save instead; Alex hit it in minutes.)
+    const st = id.trim() === STATION_BP_ID ? (station ?? STATION_LAYOUT) : undefined
+    const s = makeBlueprint(id.trim(), name.trim() || id.trim(), asCells, placements, st)
     const r = await fetch('/shimmer/save-blueprint', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s),
     }).then(x => x.json()).catch(e => ({ error: String(e) }))
@@ -502,6 +498,10 @@ export default function WorktablePage() {
     // collapsing them into "save failed" is what makes an author guess.
     setStatus(r?.ok ? `saved ${r.id} — ${r.blocks} blocks` : `SAVE REFUSED: ${(r?.problems ?? [r?.error]).join(' · ')}`)
     if (r?.ok) void refresh()
+    // ★ AND THE EDITOR'S OWN FRAME FOLLOWS THE SAVE: after a re-base the file's blocks start at
+    // (0,0,0) again, so reload what was written rather than keep editing in a frame that no longer
+    // matches the ghosts. Same reason a load pushes fresh cells.
+    if (r?.ok) void load(s.id)
   }
 
   // ── ★ PLACE IN WORLD (2026-09-11, Alex: "add the place in world button") ─────────────────────
@@ -563,6 +563,8 @@ export default function WorktablePage() {
     const m: Cells = new Map()
     for (const c of blueprintCells(s)) m.set(key(c.x, c.y, c.z), c.m)
     push(m, s.pieces ?? []); setId(s.id); setName(s.name)
+    // The station's crossings ride the file; a starter saved before they did gets the frozen ones.
+    setStation(s.station ?? (s.id === STATION_BP_ID ? STATION_LAYOUT : null))
     setStatus(`loaded ${s.id} — ${m.size} blocks, ${(s.pieces ?? []).length} pieces`)
   }
 
@@ -591,7 +593,7 @@ export default function WorktablePage() {
         ))}
         <Pieces placements={placements} solid={solid} />
         {showKeeper && <Keeper at={[PAD / 2 - 3, PAD_TOP, PAD / 2 + 4]} />}
-        {id === STATION_BP_ID && <StationGhosts />}
+        {id === STATION_BP_ID && station && <StationGhosts layout={station} />}
       </Canvas>
 
       {/* ── the panel ─────────────────────────────────────────────────────────────────────── */}
@@ -614,7 +616,7 @@ export default function WorktablePage() {
           <div style={{ opacity: 0.8, fontSize: 11, marginBottom: 6, borderLeft: '2px solid #ffd27a', paddingLeft: 6 }}>
             <b>gate station</b> — the ghosts are the crossings the world reads: gold = the Rune Hold gate, blue =
             passage sockets, wire cubes = lamp cells (lit when the way is earned). Build the frames around them;
-            they do not move. The dais edge at x=0 / z=0 must stay, or every socket shifts.
+            they are saved with the structure and stay on the same blocks whatever you trim or add.
           </div>
         )}
 

@@ -83,6 +83,37 @@ export interface BlueprintDef {
    * or a default of `[]`, would change the meaning of stored data on read.
    */
   pieces?: BlueprintPiece[]
+  /**
+   * ── ★ THE GATE STATION'S CROSSINGS TRAVEL WITH THE STRUCTURE (2026-09-16) ──────────────────
+   * Where the keeper stands to cross, and which cell lights when a way is earned — in the
+   * blueprint's own frame, so `makeBlueprint` shifts them by the SAME offset it shifts the blocks.
+   * The first cut froze these in code and refused any save whose min corner moved; Alex removed a
+   * dais edge and could not save (*"im getting this error… but i dont get it"*). A socket is a
+   * place the game reads; it belongs with the data it is measured against. Optional, and omitted
+   * from the file when absent, for the same save-compat reason `pieces` is.
+   */
+  station?: StationLayout
+}
+
+export interface StationLayout {
+  /** Where `courtAnchor` lands inside the box. */
+  anchor: { x: number; z: number }
+  /** The local row of `courtLevel` — the floor the keeper stands on. */
+  floor: number
+  /** Index order is the arc's: 0 = the Rune Hold gate, then the passage sockets. */
+  sockets: { index: number; kind: 'gate' | 'passage'; x: number; z: number }[]
+  /** One cell per socket that carries its light. */
+  lamps: { index: number; x: number; y: number; z: number }[]
+}
+
+/** The layout, moved by (dx, dy, dz) — the normalization's own shift, applied to the crossings. */
+export function shiftStation(st: StationLayout, dx: number, dy: number, dz: number): StationLayout {
+  return {
+    anchor: { x: st.anchor.x + dx, z: st.anchor.z + dz },
+    floor: st.floor + dy,
+    sockets: st.sockets.map(s => ({ ...s, x: s.x + dx, z: s.z + dz })),
+    lamps: st.lamps.map(l => ({ ...l, x: l.x + dx, y: l.y + dy, z: l.z + dz })),
+  }
 }
 
 /** Characters allowed in an id — it becomes a filename, so this is a path guard as much as a style. */
@@ -152,10 +183,10 @@ export function normalizeCells(cells: BlueprintCell[]): BlueprintCell[] {
  * the blocks but which overhangs below them would otherwise be re-based to a negative y.
  */
 export function normalize(cells: BlueprintCell[], pieces: BlueprintPiece[]):
-  { cells: BlueprintCell[]; pieces: BlueprintPiece[] } {
+  { cells: BlueprintCell[]; pieces: BlueprintPiece[]; shift: { x: number; y: number; z: number } } {
   const solid = cells.filter(c => c.m !== MAT.AIR)
   const pts = [...solid, ...pieces.flatMap(pieceFootprint)]
-  if (!pts.length) return { cells: [], pieces: [] }
+  if (!pts.length) return { cells: [], pieces: [], shift: { x: 0, y: 0, z: 0 } }
   const minX = Math.min(...pts.map(c => c.x))
   const minY = Math.min(...pts.map(c => c.y))
   const minZ = Math.min(...pts.map(c => c.z))
@@ -170,6 +201,9 @@ export function normalize(cells: BlueprintCell[], pieces: BlueprintPiece[]):
     pieces: pieces
       .map(p => ({ ...p, x: p.x - minX, y: p.y - minY, z: p.z - minZ }))
       .sort((a, b) => a.y - b.y || a.z - b.z || a.x - b.x || a.pieceId.localeCompare(b.pieceId)),
+    // ★ REPORTED, so anything else measured in the editor's frame (the station's crossings) can
+    // be moved by exactly the offset the blocks were.
+    shift: { x: -minX, y: -minY, z: -minZ },
   }
 }
 
@@ -188,11 +222,12 @@ export function boundsOf(cells: BlueprintCell[], pieces: BlueprintPiece[] = []):
 
 /** Build a `BlueprintDef` from loose cells. The bounds come out of the cells, so they cannot lie. */
 export function makeBlueprint(
-  id: string, name: string, cells: BlueprintCell[], pieces: BlueprintPiece[] = [],
+  id: string, name: string, cells: BlueprintCell[], pieces: BlueprintPiece[] = [], station?: StationLayout,
 ): BlueprintDef {
   const n = normalize(cells, pieces)
   const b = boundsOf(n.cells, n.pieces)
   const out: BlueprintDef = { id, name, w: b.w, h: b.h, d: b.d, cells: packCells(n.cells) }
+  if (station) out.station = shiftStation(station, n.shift.x, n.shift.y, n.shift.z)
   // ⚠ THE KEY IS OMITTED WHEN EMPTY, not written as []. See `BlueprintDef.pieces`: a blueprint saved
   // before pieces existed must round-trip byte for byte, and `{...s, pieces: []}` is a different file.
   if (n.pieces.length) out.pieces = n.pieces
@@ -303,6 +338,24 @@ export function blueprintProblems(s: unknown): string[] {
       solidAt.set(k, q.pieceId)
     }
   }
+
+  // ★ THE STATION'S CROSSINGS MUST STAND INSIDE THE BOX. A socket outside the structure is one the
+  // world would place in the void beside it; a lamp cell with no block is a light nobody can see.
+  if (d.station !== undefined) {
+    const st = d.station as Partial<StationLayout>
+    const b = boundsOf(cells, d.pieces ?? [])
+    const inBox = (x: number, y: number, z: number) => x >= 0 && x < b.w && y >= 0 && y < b.h && z >= 0 && z < b.d
+    if (!st || typeof st !== 'object' || !st.anchor || !Array.isArray(st.sockets) || !Array.isArray(st.lamps) || typeof st.floor !== 'number') {
+      p.push('station must carry anchor, floor, sockets and lamps')
+    } else {
+      if (!inBox(st.anchor.x, 0, st.anchor.z)) p.push(`station anchor (${st.anchor.x},${st.anchor.z}) is outside the box`)
+      for (const sk of st.sockets) if (!inBox(sk.x, 0, sk.z)) p.push(`station socket ${sk.index} (${sk.x},${sk.z}) is outside the box`)
+      for (const l of st.lamps) {
+        if (!inBox(l.x, l.y, l.z)) p.push(`station lamp ${l.index} (${l.x},${l.y},${l.z}) is outside the box`)
+        else if (!cells.some(c => c.x === l.x && c.y === l.y && c.z === l.z)) p.push(`station lamp ${l.index} (${l.x},${l.y},${l.z}) has no block to light`)
+      }
+    }
+  }
   return p
 }
 
@@ -356,6 +409,7 @@ export function serializeBlueprint(s: BlueprintDef): string {
   const pieces = (s.pieces ?? []).length
     ? `,\n  "pieces": [\n${(s.pieces ?? []).map(p => `    ${JSON.stringify(p)}`).join(',\n')}\n  ]`
     : ''
+  const station = s.station ? `,\n  "station": ${JSON.stringify(s.station)}` : ''
   return `{\n  "id": ${JSON.stringify(s.id)},\n  "name": ${JSON.stringify(s.name)},\n` +
-    `  "w": ${s.w}, "h": ${s.h}, "d": ${s.d},\n  "cells": [${s.cells.join(',')}]${pieces}\n}\n`
+    `  "w": ${s.w}, "h": ${s.h}, "d": ${s.d},\n  "cells": [${s.cells.join(',')}]${pieces}${station}\n}\n`
 }

@@ -10,6 +10,7 @@ import { STATION_LAYOUT, stationBlueprint, stationStamp, stationSockets, station
 import { plotForTier, PLOT_TIERS } from '../voxel/plot'
 import { WORLD_SEED } from './world-seed'
 import { MAT } from '../voxel/depth'
+import { makeBlueprint, blueprintCells, blueprintProblems } from '../voxel/blueprints'
 
 let pass = 0, fail = 0
 const check = (l: string, ok: boolean, d = '') => { if (ok) pass++; else { fail++; console.error(`  ✗ ${l}${d ? ` — ${d}` : ''}`) } }
@@ -81,6 +82,24 @@ console.log('the snap')
     const { x, z } = STATION_LAYOUT.anchor
     switch (rot) { case 1: return { x: bp!.d - 1 - z, z: x }; case 2: return { x: bp!.w - 1 - x, z: bp!.d - 1 - z }; case 3: return { x: z, z: bp!.w - 1 - x }; default: return { x, z } }
   }
+}
+
+console.log('the crossings travel with the file')
+{
+  // Alex's case: a dais edge trimmed, the editor's frame now starts at (1,0,2). The save re-bases
+  // the blocks and must move the layout by the same offset, so the sockets stay on the same blocks.
+  const shifted = blueprintCells(bp).filter(c => c.x >= 1 && c.z >= 2)
+  const out = makeBlueprint('gate_station', 'Gate Station', shifted, [], bp.station)
+  check('the file carries a station', !!out.station)
+  check('the layout shifted with the blocks', out.station!.anchor.x === bp.station!.anchor.x - 1 && out.station!.anchor.z === bp.station!.anchor.z - 2
+    && out.station!.sockets.every((sk, i) => sk.x === bp.station!.sockets[i].x - 1 && sk.z === bp.station!.sockets[i].z - 2)
+    && out.station!.lamps.every((l, i) => l.x === bp.station!.lamps[i].x - 1 && l.y === bp.station!.lamps[i].y && l.z === bp.station!.lamps[i].z - 2))
+  check('the re-based file is valid', blueprintProblems(out).length === 0, blueprintProblems(out).join(' · '))
+  // A lamp with no block under it is refused by the format itself.
+  const bad = { ...out, station: { ...out.station!, lamps: out.station!.lamps.map(l => ({ ...l, y: l.y + 40 })) } }
+  check('a lamp cell outside the box is refused', blueprintProblems(bad).some(m => /lamp/.test(m)))
+  // The starter on disk is self-describing and valid.
+  check('the starter on disk carries its layout', !!bp.station && blueprintProblems(bp).length === 0)
 }
 
 console.log(`court-blueprint: ${pass} passed, ${fail} failed`)

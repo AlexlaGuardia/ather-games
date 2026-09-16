@@ -52,7 +52,7 @@ const layout = {
 console.log(JSON.stringify({ w, h, d, cells: local.length, bearing: a.bearing, layout }, null, 1))
 
 if (process.argv.includes('--write')) {
-  const bp = { id: 'gate_station', name: 'Gate Station', w, h, d, cells: packCells(local) }
+  const bp = { id: 'gate_station', name: 'Gate Station', w, h, d, cells: packCells(local), station: { anchor: layout.anchor, floor: layout.floor, sockets: layout.sockets, lamps: layout.lamp } }
   writeFileSync('src/app/shimmer/data/blueprints/gate_station.json', JSON.stringify(bp) + '\n')
   console.log(`wrote gate_station.json — ${local.length} blocks, ${w}×${h}×${d}`)
 }
