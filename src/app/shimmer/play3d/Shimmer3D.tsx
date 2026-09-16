@@ -18,6 +18,10 @@ import { ALL_ZONES } from '../world/all-zones'
 // this file is the half that receives. See the boot effect for why the read lives where it does.
 import { consumeArrival } from '../engine/crossing'
 import { Clock } from '../hud/clock'
+import { ObjectiveChip } from '../hud/objective-chip'
+import { createGuideTrail } from '../voxel3d/guide-trail'
+import type { GuideTarget } from '../voxel3d/guide-target'
+import { forkTarget, forkObjective, forkFlags, MET_GREG_FLAG, STATION_FLAG } from './fork'
 import { OptionsPanel, OptionRow, OptionHead, OptionSlider } from '../hud/options-panel'
 import { OptionsDoor } from '../hud/options-door'
 import { loadSettings, saveSettings } from '../voxel3d/settings'
@@ -90,7 +94,7 @@ import type { AITier } from '../engine/battle-ai'
 import ArenaBattle from '../components/ArenaBattle'
 import PartyPanel from './PartyPanel'
 import HotBar from './HotBar'
-import { NPCS_3D, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { keeperBook, saveBook } from './book'
@@ -180,6 +184,8 @@ const ALL_NPCS = allNpcs()
 // front door delivered a new keeper to the mortal side and this constant walked them straight back
 // into a plot that is not the plot. The town is the pivot now; the Ather is the other route.
 const START_ZONE = 'rune-hold'
+const GREG_SQUARE = NPCS_3D.find(n => n.id === 'gregory-square')!
+const SPIRIT_CORNER_STEP = { x: 23, z: 49 } as const
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 // The mortal side's wall. Clouds and mist are ATHER-only — a town built out of cloud reads as
 // sky, which is the tonal wall canon splits on. Solid like a cloud, drawn brown.
@@ -3363,6 +3369,30 @@ function HubGateMarkers({ heights }: { heights: number[][] }) {
   )
 }
 
+// ── THE GUIDE TRAIL, on the mortal side (2026-09-16). The SAME motes the Ather draws
+// (`voxel3d/guide-trail.ts`); only the aim differs — `play3d/fork.ts` decides where, from the
+// save's flags, and this ticks the points each frame with the tile heights as the surface. The
+// target ref is written by the host on every render (cheap: a few comparisons), read here at 60Hz.
+function GuideTrail({ posRef, heightsRef, targetRef }: {
+  posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; targetRef: React.RefObject<GuideTarget | null>
+}) {
+  const guide = useMemo(() => createGuideTrail(), [])
+  useEffect(() => () => guide.dispose(), [guide])
+  const last = useRef(performance.now() / 1000)
+  const surfaceY = useCallback((x: number, z: number) => {
+    const h = heightsRef.current?.[z]?.[x]
+    return h === undefined ? null : h * STEP
+  }, [heightsRef])
+  useFrame(() => {
+    const now = performance.now() / 1000
+    const dt = Math.min(0.1, now - last.current); last.current = now
+    const p = posRef.current
+    if (!p) return
+    guide.tick(p.x, p.z, targetRef.current, dt, now, surfaceY)
+  })
+  return <primitive object={guide.points} />
+}
+
 const Scene = memo(function Scene(props: {
   zone: Zone; gridRef: React.RefObject<number[][]>; heights: number[][]; version: number; dims: string
   posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
@@ -3380,6 +3410,7 @@ const Scene = memo(function Scene(props: {
   onNearChange: (n: NPC3D | null) => void
   defeatedRef: React.RefObject<Record<string, boolean>>; defeated: Record<string, boolean>
   flagsRef: React.RefObject<Record<string, boolean>>
+  guideTargetRef: React.RefObject<GuideTarget | null>
   nodes: ResourceNode[]
   spawners: SpawnerPlacement[]; spawnerReady: (sp: SpawnerPlacement) => boolean
   spawnerKeyFor: (sp: SpawnerPlacement) => string
@@ -3520,6 +3551,7 @@ const Scene = memo(function Scene(props: {
       <SkyLight shadowMap={props.shadowMap} />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
+      <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
@@ -4028,6 +4060,9 @@ export default function Shimmer3D() {
   const equippedToolsRef = useRef<EquippedTools>(ensureBasicTools({}))
   const [toolTick, setToolTick] = useState(0)  // HUD refresh when a tool breaks / changes
   const flagsRef = useRef<Record<string, boolean>>({})
+  // ── THE FORK (`play3d/fork.ts`): where the guide trail points on the square. Recomputed on every
+  // render of the host (zone changes and the two flags all re-render), read by the trail at 60Hz.
+  const guideTargetRef = useRef<GuideTarget | null>(null)
   const battleRef = useRef(false)
   const talkingRef = useRef(false)
   const [hasStarter, setHasStarter] = useState(false) // reactive mirror of "party has ≥1 spirit" for HUD
@@ -4188,6 +4223,22 @@ export default function Shimmer3D() {
       persistTimerRef.current = setTimeout(run, 250)
     }
   }, [flushPersist])
+  // ★ THE STATION IS CHOSEN BY WALKING. First step into the Travelers Station flips the branch
+  // flag; the trail stops pointing back at Greg's corner (fork.ts). Nothing is barred by it.
+  const [forkTick, setForkTick] = useState(0)
+  useEffect(() => {
+    if (zoneId === 'travelers-station' && !flagsRef.current[STATION_FLAG]) {
+      flagsRef.current[STATION_FLAG] = true
+      setForkTick(t => t + 1)
+      persist()
+    }
+  }, [zoneId, persist])
+  // The fork, resolved on every host render (zone changes, Greg's flag via setDefeated, the
+  // station via forkTick all re-render). The door spot is the tile the keeper steps INTO the Spirit
+  // Corner from — the warp block's east face is (22-23, 48-49), so (23,49) is the threshold.
+  const fork = forkFlags(flagsRef.current); void forkTick
+  guideTargetRef.current = forkTarget(zoneId, fork, { x: GREG_SQUARE.tileX, z: GREG_SQUARE.tileY }, SPIRIT_CORNER_STEP)
+  const forkChip = forkObjective(zoneId, fork)
 
   // Another tab wrote the same save — our mirror is stale, so drop it and re-read before the next
   // merge. Without this we would happily clobber whatever that tab saved with our own `...prev`.
@@ -5538,6 +5589,16 @@ export default function Shimmer3D() {
       } })
       return
     }
+    if (npc.id === 'gregory-square') {
+      // Beat 0. He speaks, he goes in, the door is the way after him. The flag persists so a reload
+      // finds him gone and the trail on the door; nothing locks the door before he has spoken.
+      setDialogue({ name: 'Gregory', lines: GREG_SQUARE_LINES, idx: 0, onDone: () => {
+        flagsRef.current[MET_GREG_FLAG] = true
+        setDefeated((d) => ({ ...d, 'gregory-square': true }))
+        persist()
+      } })
+      return
+    }
     if (npc.id === 'gregory') {
       if (!hasSpirit) setDialogue({ name: 'Gregory', lines: [...GREG_INTRO_LINES, GREG_NUDGE], idx: 0, grantAt: GREG_INTRO_LINES.length, onDone: () => {} })
       else setDialogue({ name: 'Gregory', lines: [GREG_RETURN], idx: 0, onDone: () => {} })
@@ -5551,7 +5612,7 @@ export default function Shimmer3D() {
     } else if (npc.id === 'brack') {
       setDialogue({ name: 'Brack', lines: BRACK_PREFIGHT, idx: 0, onDone: startBrackBattle })
     }
-  }, [startThistleBattle, startVetchBattle, startBrackBattle])
+  }, [startThistleBattle, startVetchBattle, startBrackBattle, persist])
 
   const [version, setVersion] = useState(0)
   const [confirmNew, setConfirmNew] = useState(false)
@@ -6741,6 +6802,7 @@ export default function Shimmer3D() {
           />
         )}
         <Scene
+          guideTargetRef={guideTargetRef}
           zone={zone} gridRef={gridRef} heights={heightsRef.current} version={version} dims={dims}
           posRef={posRef as React.RefObject<THREE.Vector3>} heightsRef={heightsRef} zoneIdRef={zoneIdRef}
           editFocusRef={editFocusRef}
@@ -6819,6 +6881,8 @@ export default function Shimmer3D() {
       {!battle && !editMode && !showMap && !menuOpen && (
         <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => { openCursorUI(); setShowMap(true) }} />
       )}
+      {/* The fork's objective — the same chip the Ather's tutorial wears (`hud/objective-chip.tsx`). */}
+      {forkChip && !battle && !editMode && !dialogue && !menuOpen && <ObjectiveChip value={forkChip} />}
       {/* The ☰ under the minimap, on the minimap's own rule; `hud/options-door.tsx`. */}
       {!battle && !editMode && !showMap && !menuOpen && (
         <OptionsDoor onOpen={() => { setMenuOpen(true); setSkillsOpen(false); setMpOpen(false); setGfxOpen(false); setBookOpen(false) }} />

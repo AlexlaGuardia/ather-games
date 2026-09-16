@@ -314,6 +314,7 @@ import { hpRegenTick, focusTick } from '../engine/recovery'
 import { tickRecovery } from '../engine/spirit-health'
 import { HudCorner } from '../hud/hud-corner'
 import { Clock } from '../hud/clock'
+import { ObjectiveChip } from '../hud/objective-chip'
 import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/options-panel'
 import { OptionsDoor } from '../hud/options-door'
 import { ResourceBars } from './resource-bars'
@@ -2779,12 +2780,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           that true. All three of these ASK `.gx-label`/`.gx-value` rather than restating a tracking
           value — this chip's hand-rolled `tracking-[.16em]` was a second spelling of the layer's
           0.22em. Hidden once the gate is open: there is no more objective to chase. */}
-      {tutorial.stage !== 'done' && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 text-[10px] font-mono bg-black/45 rounded px-2.5 py-1 pointer-events-none">
-          <span className="gx-label text-white/40">objective</span>{' '}
-          <span className="gx-value text-amber-200/90">{objectiveLabel(tutorial, progress)}</span>
-        </div>
-      )}
+      {tutorial.stage !== 'done' && <ObjectiveChip value={objectiveLabel(tutorial, progress)} />}
 
       {/* "E — talk" — shown while the crosshair is on Greg. Hidden while the box he opens is already up.
           The bench borrows the same prompt slot ("E — craft"); Greg wins when both are near,

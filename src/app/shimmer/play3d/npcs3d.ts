@@ -17,6 +17,13 @@ export interface NPC3D {
 export const NPCS_3D: NPC3D[] = [
   // Gregory — mentor keeper, stands by his house in Moonwell Glade (matches 2D npcs.ts placement).
   { id: 'gregory', name: 'Gregory', zone: 'moonwell-glade', tileX: 24, tileY: 18, color: '#caa46a', kind: 'keeper' },
+  // ── ★ GREG AT THE CORNER DOOR — Beat 0, the mortal side's first scene (2026-09-16) ──────────
+  // Canon (`shimmer-quests-mainmap.md` › Beat 0): "an old man stands in its doorway with his hands
+  // in his pockets, watching the square the way you watch weather." The Spirit Corner's warp tiles
+  // are (22-23, 48-49) on the shop's east face; he stands on the dirt just outside, south-east, so
+  // the doorway itself stays open to walk into. `defeatedFlag` is not a defeat: once his two lines
+  // are said he has gone in ahead ("after me"), and the door is where the keeper follows.
+  { id: 'gregory-square', name: 'Gregory', zone: 'rune-hold', tileX: 24, tileY: 50, color: '#caa46a', kind: 'keeper', defeatedFlag: 'metGregSquare' },
   // Thistle — Hold 1. A borrowed-swagger Moglin in Spirit Meadows with a collared spirit. You free it
   // (a Reach battle), he deflates and retreats east. Removed from the world once freed.
   { id: 'thistle', name: 'Thistle', zone: 'spirit-meadow', tileX: 55, tileY: 30, color: '#9a6aaa', kind: 'moglin', defeatedFlag: 'freedThistle' },
@@ -66,6 +73,13 @@ for (const f of Object.values(REGION_FILES)) {
 }
 
 // ── Gregory's first-quest dialogue (raven-voiced, his deep/warm/measured keeper register). ──
+// ── Beat 0 at the corner door — LOCKED (canon `game/shimmer-quests-mainmap.md` › Beat 0, Lark +
+// Alex, 09-11). Verbatim; the em dashes are the locked text's own. Two lines, then he goes in.
+export const GREG_SQUARE_LINES: string[] = [
+  'Hm. You are not here for the veilbrew.',
+  'No. I thought not. Come on, then — after me. Mind the step. It is a long one.',
+]
+
 export const GREG_INTRO_LINES: string[] = [
   'You found the glade. Good. Most folk walk right past it.',
   'But you have come empty-handed. No spirit at your side. That is no way for a Keeper to start.',
