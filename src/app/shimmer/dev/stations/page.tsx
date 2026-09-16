@@ -20,7 +20,7 @@ import { createLightUniforms } from '../../voxel3d/light-glsl'
 import { modelOf, STATION_MODELS } from '../../voxel3d/station-models'
 import { MODELLED_MATS } from '../../voxel/depth'
 import { blockDef } from '../../voxel/registry'
-import { BODY_H, BODY_R } from '../../voxel3d/locomotion'
+import { BODY_H, BODY_R, EYE_STAND } from '../../voxel3d/locomotion'
 
 const TILE = 32
 const GAP = 2
@@ -45,15 +45,26 @@ function Shelf({ only }: { only: number | null }) {
   return <primitive object={renderer.group} />
 }
 
-/** Drag to orbit (any button), wheel to zoom. The current view is published so it can be written down. */
-function Rig({ target, view, onView }: { target: THREE.Vector3; view: { yaw: number; pitch: number; dist: number }; onView: (v: { yaw: number; pitch: number; dist: number }) => void }) {
+/**
+ * Drag to orbit (any button), wheel to zoom. The current view is published so it can be written down.
+ * ★ `eye` is a KEEPER'S stance (2026-09-16, `dev-eye.test`): the height is `EYE_STAND`, the look is
+ * level, `dist` only says how far back the keeper stands — the question this shelf exists to answer
+ * is how a station reads to somebody standing at it, and an orbit lifts you off the ground the
+ * moment you back away. Same split `dev/worktable` draws.
+ */
+function Rig({ target, view, eye, onView }: { target: THREE.Vector3; view: { yaw: number; pitch: number; dist: number }; eye: boolean; onView: (v: { yaw: number; pitch: number; dist: number }) => void }) {
   const { camera, gl } = useThree()
-  const s = useRef({ ...view, dragging: false, lx: 0, ly: 0 })
-  useEffect(() => { s.current.yaw = view.yaw; s.current.pitch = view.pitch; s.current.dist = view.dist }, [view])
+  const s = useRef({ ...view, eye, dragging: false, lx: 0, ly: 0 })
+  useEffect(() => { s.current.yaw = view.yaw; s.current.pitch = view.pitch; s.current.dist = view.dist; s.current.eye = eye }, [view, eye])
   useEffect(() => {
     const el = gl.domElement
     const apply = () => {
       const c = s.current
+      if (c.eye) {
+        camera.position.set(target.x + Math.cos(c.yaw) * c.dist, EYE_STAND, target.z + Math.sin(c.yaw) * c.dist)
+        camera.lookAt(target.x, EYE_STAND, target.z)
+        return
+      }
       const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch)
       camera.position.set(target.x + Math.cos(c.yaw) * cp * c.dist, target.y + sp * c.dist, target.z + Math.sin(c.yaw) * cp * c.dist)
       camera.lookAt(target)
@@ -71,7 +82,7 @@ function Rig({ target, view, onView }: { target: THREE.Vector3; view: { yaw: num
     el.addEventListener('pointerdown', down); window.addEventListener('pointerup', up); window.addEventListener('pointermove', move)
     el.addEventListener('wheel', wheel, { passive: false })
     return () => { el.removeEventListener('pointerdown', down); window.removeEventListener('pointerup', up); window.removeEventListener('pointermove', move); el.removeEventListener('wheel', wheel) }
-  }, [camera, gl, target, onView])
+  }, [camera, gl, target, eye, onView])
   return null
 }
 
@@ -79,6 +90,8 @@ export default function StationsPage() {
   const q = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
   const only = q?.get('mat') ? Number(q.get('mat')) : null
   const [view, setView] = useState({ yaw: Number(q?.get('yaw') ?? -0.9), pitch: Number(q?.get('pitch') ?? 0.42), dist: Number(q?.get('dist') ?? (only !== null ? 3 : 14)) })
+  /** `?eye=1` opens at a keeper's eye; the button flips it. */
+  const [eye, setEye] = useState(q?.get('eye') === '1')
   const n = only !== null ? 1 : ORDER.length
   const target = useMemo(() => new THREE.Vector3(((n - 1) * GAP) / 2 + 0.5, 0.5, 0.5), [n])
   const mats = only !== null ? [only] : ORDER
@@ -88,7 +101,7 @@ export default function StationsPage() {
         <color attach="background" args={['#1a1d24']} />
         <hemisphereLight args={[0xffffff, 0x445566, 1.1]} />
         <directionalLight position={[5, 10, 3]} intensity={0.8} />
-        <Rig target={target} view={view} onView={setView} />
+        <Rig target={target} view={view} eye={eye} onView={setView} />
         <Shelf only={only} />
         {/* the floor, and a keeper for scale */}
         <mesh position={[target.x, -0.01, target.z]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[n * GAP + 6, 8]} /><meshLambertMaterial color="#3a4a34" /></mesh>
@@ -96,7 +109,8 @@ export default function StationsPage() {
       </Canvas>
       <div className="absolute top-3 left-3 space-y-1 pointer-events-none">
         <div className="text-white/95 tracking-[.18em] uppercase">the station shelf</div>
-        <div className="text-white/40">drag to orbit · wheel to zoom · ?mat=&lt;id&gt; isolates one · view: yaw {view.yaw.toFixed(2)} pitch {view.pitch.toFixed(2)} dist {view.dist.toFixed(1)}</div>
+        <div className="text-white/40">drag to orbit · wheel to zoom · ?mat=&lt;id&gt; isolates one · ?eye=1 stands a keeper · view: yaw {view.yaw.toFixed(2)} pitch {view.pitch.toFixed(2)} dist {view.dist.toFixed(1)}</div>
+        <button onClick={() => setEye(e => !e)} className="pointer-events-auto border border-white/25 rounded px-2 py-0.5 text-white/80 hover:border-amber-300">{eye ? 'keeper eye' : 'from above'}</button>
         {mats.map((m, i) => (
           <div key={m} className="text-white/60">
             <span className="text-white/85">{i * GAP}</span> · {blockDef(m)?.name} <span className="text-white/35">(mat {m})</span> — {modelOf(m).note}{m in STATION_MODELS ? '' : ' ⚠ no model yet'}

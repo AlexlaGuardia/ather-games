@@ -69,7 +69,10 @@ const once = (needle: string, n: number, what: string) => {
   once('socketCells(sk, level)', 2, 'and both take courtLevel')
   ok(!/socketCells\(sk, h\)/.test(src), 'never a socket\'s own ground — that embeds the frame in the dais')
   // 2 → 3 on 2026-09-16: the crossing pass derives it too, to place the station blueprint's sockets.
-  once('courtLevel(SEED, cfg)', 3, 'each pass derives the level from the same seed and fold')
+  // 3 → 4 the same evening: the RESTORE derives it, to stand a keeper who loads inside a socket
+  // back out into the court (`socketStandOut`) — the same sockets the trigger reads, so it must
+  // derive the level the same way or the two disagree about where the doorway is.
+  once('courtLevel(SEED, cfg)', 4, 'each pass derives the level from the same seed and fold')
 }
 
 // ── 2. THE DAIS IS ACTUALLY LAID, IN ITS OWN MATERIAL ────────────────────────────────────────

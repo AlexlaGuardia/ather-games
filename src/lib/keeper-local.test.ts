@@ -126,6 +126,9 @@ const DEVICE_KEYS = [
                                   // editor is owner-gated, so there is one author per box.
   'shimmer-clipboard-',           // the sprite editors' copy buffer. Dev tool, owner-gated.
   'shimmer-inspector-collapsed',  // a dev panel remembering it was collapsed
+  'worktable.hotbar',             // the structure worktable's nine slots (creative mode, 09-16).
+                                  // A builder's tool layout, owner-gated dev page, one author per
+                                  // box — a device convenience, not progress anyone earned.
 ]
 function walk(dir: string): string[] {
   const out: string[] = []

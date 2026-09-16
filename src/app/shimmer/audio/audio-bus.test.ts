@@ -188,7 +188,12 @@ const FILES = walk(SHIMMER).filter(f => !/\.test\.tsx?$/.test(f))
   ok(/setMasterVolume\(settings\.volume\)/.test(world), 'the world applies the saved volume to the bus')
   ok(/useEffect\(\(\) => \{ setMasterVolume\(settings\.volume\) \}, \[settings\.volume\]\)/.test(world),
      '★ from an EFFECT, so it runs on MOUNT too — inside `update` it would only fire when someone moves the slider, and a saved 20% would read as 90% until touched')
-  ok(/update\(\{ volume: Number\(e\.target\.value\) \}\)/.test(world), 'and the slider writes it back')
+  // ★ RE-AIMED 2026-09-16: the HUD port moved the slider into the shared `OptionSlider`
+  // (`hud/options-panel.tsx`), which owns the `Number(e.target.value)` parse; the world hands it
+  // the write. Two halves, both asserted, so neither can go missing quietly.
+  const panel = readFileSync(join(SHIMMER, 'hud/options-panel.tsx'), 'utf8')
+  ok(/<OptionSlider label="volume" value=\{s\.volume\} onChange=\{v => update\(\{ volume: v \}\)\}/.test(world), 'and the slider writes it back')
+  ok(/onChange=\{e => onChange\(Number\(e\.target\.value\)\)\}/.test(panel), '★ through the shared slider, which parses the input to a NUMBER (a string gain is a NaN gain)')
 }
 
 console.log(`audio-bus: ${pass} pass, ${fails.length} fail`)

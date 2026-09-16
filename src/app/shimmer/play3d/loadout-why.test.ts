@@ -132,8 +132,13 @@ chk('★ every refusal says what the engine said',
   once('refused block repeats the engine', /kind === 'refused'\) \{\s*onSay\(out\.message\)\s*return\s*\}/, nc))
 chk('★★ the panel key is read from the live bindings, never spelled as a literal',
   once('hintFor call', /hintFor\(bindings\.current, 'ui\.inventory', 'key'\)/, nc))
+// ★ RE-AIMED 2026-09-16: the HUD port moved the loadout panel out of the host into the shared
+// satchel (`hud/satchel.tsx`), so the sentence under an empty slot is read THERE — the same
+// literal, one file over. The host keeps the /rune readout (asserted below), which is the other
+// consumer of the same reason.
+const satchel = noComments(readFileSync(join(process.cwd(), 'src/app/shimmer/hud/satchel.tsx'), 'utf8'))
 chk('★ the loadout panel shows a reason under an empty slot',
-  once('panel reason', /emptySlotWhy\(initial\.why\[i\] \?\? 'cleared'\)/, nc))
+  once('panel reason', /emptySlotWhy\(initial\.why\[i\] \?\? 'cleared'\)/, satchel))
 chk('★★ the /rune readout names the empty slots, so the one diagnostic reports cause not symptom',
   /empties\.length \? ` · \$\{empties\.join\(' · '\)\}` : ''/.test(nc))
 
