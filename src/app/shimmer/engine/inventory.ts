@@ -85,7 +85,7 @@ export function countChestsInInventory(inv: Inventory): number {
 
 // --- Slot operations ---
 
-function getMaxStack(itemId: string): number {
+export function getMaxStack(itemId: string): number {
   return ITEMS.find(i => i.id === itemId)?.maxStack
     ?? FURNITURE.find(f => f.id === itemId)?.maxStack
     ?? 1

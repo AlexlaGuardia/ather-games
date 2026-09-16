@@ -315,6 +315,7 @@ import { tickRecovery } from '../engine/spirit-health'
 import { HudCorner } from '../hud/hud-corner'
 import { Clock } from '../hud/clock'
 import { ObjectiveChip } from '../hud/objective-chip'
+import { Hotbar, type HotbarEntry } from '../hud/hotbar'
 import { ItemChip, itemLabel, tierLabel, BagPanel, GearTab, type SlotRef, type Lift, type LiftMode, type OpenChest } from '../hud/satchel'
 import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/options-panel'
 import { OptionsDoor } from '../hud/options-door'
@@ -635,7 +636,6 @@ interface Slot { itemId: string; count: number }
  * block) rather than by anything the player selects.
  */
 import { TOOL_FAMILIES } from '../hud/hud-corner'
-type HotbarEntry = { itemId: string; count: number }
 
 /**
  * ── ★ VOXEL ITEMS STACK (2026-08-11) ────────────────────────────────────────────────────────────
@@ -2852,41 +2852,9 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
         )
       })()}
 
-      {/* Item art is DERIVED from each block's own texture (`tex/item-icon.ts`) — an icon can never
-          show something the block is not, and a new block gets one the moment it gets a texture.
-          ★ The hotbar is 8 FIXED slots, ITEMS ONLY (2026-08-07) — always all 8, occupied or not, so
-          number keys 1-8 always mean the same physical position. The four tool families live in the
-          round arc off its right end (`ToolArc`, below), not in this row.
-          ★ DRAWN dims the whole row rather than hiding it: you keep seeing what you will be holding
-          again when you stow, so drawing reads as "hands full", not "inventory gone".
-          The inner div is `relative` so `ToolArc` can anchor itself to this bar's right edge with
-          `left-full`, regardless of how much of the row is actually occupied. */}
-      {<div className={`absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none transition-opacity ${drawn ? 'opacity-35' : 'opacity-100'}`}>
-        {/* The name of what you are holding, over the bar. Always rendered so the row never shifts
-            when it appears; a baked shadow because HUD text must never sit raw on the scene. */}
-        <div className={`mb-1.5 h-5 text-center text-[13px] font-medium tracking-[0.08em] text-amber-100
-          [text-shadow:0_1px_3px_rgba(0,0,0,0.9)] transition-opacity duration-500
-          ${held && !held.out ? 'opacity-100' : 'opacity-0'}`}>
-          {held?.text ?? ''}
-        </div>
-        <div className="relative inline-flex items-end gap-1.5">
-          {Array.from({ length: 8 }, (_, i) => {
-            const e = hotbar[i]
-            const selected = i === sel && !drawn
-            return (
-              <div key={i} className={`w-12 h-12 rounded border-2 flex flex-col items-center justify-center text-[9px] font-mono
-                ${selected ? 'border-amber-300 bg-black/60' : 'border-white/20 bg-black/40'}`}>
-                {e ? (
-                  <>
-                    <ItemChip itemId={e.itemId} size={24} />
-                    <div className="text-white/80 mt-0.5 tabular-nums">{e.count}</div>
-                  </>
-                ) : <span className="text-white/25">{i + 1}</span>}
-              </div>
-            )
-          })}
-        </div>
-      </div>}
+      {/* The bar lives in `hud/hotbar.tsx` (HUD port, stage 2) — the same object the mortal side mounts.
+          Selection is by key here (1-8), so no `onSelect`: the row stays pointer-through. */}
+      <Hotbar entries={hotbar} sel={sel} held={held} dimmed={drawn} />
       {/* The one piece of state the dimmed row cannot show by itself. */}
       {drawn && (
         <div className="absolute bottom-[4.75rem] left-1/2 -translate-x-1/2 flex items-baseline gap-3 font-mono pointer-events-none">

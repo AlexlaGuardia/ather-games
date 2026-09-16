@@ -80,7 +80,7 @@ import { RUNES } from './birth/runes.data'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet, type SkillId } from '../engine/skills'
 import { WEAPONS } from '../engine/weapons'
 import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
-import { createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
+import { getMaxStack, createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
 import { createBank, bankFromSave, bankToSave, bankUsed, bankCapacity, bankDeposit, bankWithdraw, bankForceDeposit, bankReachable, isChestFurniture, migrateChestsToBank, CHEST_CAPACITY, type BankState, type BankSave } from '../engine/bank'
 import { ITEMS, NODE_TYPE_LABELS } from '../sprites/items'
 import { startPerfLog, mark, logPerf } from './perflog'
@@ -93,7 +93,11 @@ import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFrom
 import type { AITier } from '../engine/battle-ai'
 import ArenaBattle from '../components/ArenaBattle'
 import PartyPanel from './PartyPanel'
-import HotBar from './HotBar'
+import { Hotbar, HOTBAR_SLOTS, type HotbarEntry } from '../hud/hotbar'
+import { BagPanel, itemLabel, type SlotRef, type Lift } from '../hud/satchel'
+import { HudCorner } from '../hud/hud-corner'
+import { moveBetween, moveCount, halfOf } from '../voxel3d/chest'
+import { createSpiritIndex } from '../engine/spirit-index'
 import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
@@ -101,7 +105,7 @@ import { keeperBook, saveBook } from './book'
 import { PassagePanel } from './PassagePanel'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
-import { prettyItem, menuBtn, TOOL_HUD } from './ui'
+import { prettyItem, menuBtn } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
@@ -1760,7 +1764,7 @@ function CameraRig({ posRef, editFocusRef, yawRef, editRef, eyeRef, adsRef, reco
       lx = e.clientX; ly = e.clientY
     }
     const up = () => { dragging = false }
-    const wh = (e: WheelEvent) => { if (editRef.current) dist.current = Math.max(4, Math.min(40, dist.current + e.deltaY * 0.012)) }  // edit-only orbit zoom; in play the wheel is the hotbar's (HotBar)
+    const wh = (e: WheelEvent) => { if (editRef.current) dist.current = Math.max(4, Math.min(40, dist.current + e.deltaY * 0.012)) }  // edit-only orbit zoom; in play the wheel is the hotbar's (the hud bar's wheel listener)
     const ctx = (e: Event) => { if (editRef.current || e.target instanceof HTMLCanvasElement) e.preventDefault() } // no browser menu on the play/edit canvas (right-click is use-item)
     const kd = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = true }
     const ku = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false }
@@ -4661,7 +4665,7 @@ export default function Shimmer3D() {
   // ── Build placement: double-tap a placeable → ghost on the tile in front → rotate → confirm/cancel ──
   const [placing, setPlacing] = useState<{ itemId: string; facing: number } | null>(null)
   const placingRef = useRef(placing); placingRef.current = placing
-  const selSlotRef = useRef(0)  // live hotbar slot (HotBar drives it via onSelect); right-click uses this item
+  const selSlotRef = useRef(0)  // live hotbar slot (the hud bar drives it via onSelect / 1-8 / wheel); right-click uses this item
   const placeTargetRef = useRef<{ x: number; y: number } | null>(null)     // front tile, updated by the ghost
   const [structures, setStructures] = useState<PlacedStruct[]>([])
   const structuresRef = useRef(structures); structuresRef.current = structures
@@ -4952,7 +4956,7 @@ export default function Shimmer3D() {
   }, [persist])
 
   // ── Hotbar/satchel drag-reorder → swap the REAL inventory slots so it persists and survives
-  // the next inventory update (otherwise HotBar only reorders a local mirror and it reverts). ──
+  // the next inventory update. (Kept for the party panel's drag; the satchel moves slots via moveSlot.) ──
   const reorderSlots = useCallback((from: number, to: number) => {
     const s = invRef.current.slots
     if (from < 0 || to < 0 || from >= s.length || to >= s.length || from === to) return
@@ -4960,6 +4964,67 @@ export default function Shimmer3D() {
     setInvSlots([...s])
     persist()
   }, [persist])
+
+  // ── ★ THE BOTTOM IS THE KEEPER'S, NOT THE ENGINE'S (2026-09-16, HUD port stage 2) ─────────────
+  // `hud/hotbar.tsx` + `hud/satchel.tsx` + `hud/hud-corner.tsx` — the same objects the Ather mounts
+  // — replace `HotBar.tsx` (6 emoji slots, its own tool gauges and mana vial). The satchel's slot-lift
+  // model (click-then-click, half/one splits) needs three movers over the SAME 24-slot grid the bar
+  // reads; there is no chest on the mortal side, so the chest half of each is inert here.
+  const [hotSel, setHotSel] = useState(0)
+  const selectSlot = useCallback((i: number) => {
+    // A tap on the slot already selected is the old double-tap: use what is in it.
+    if (selSlotRef.current === i) { useItem(invRef.current.slots[i]?.itemId); return }
+    selSlotRef.current = i; setHotSel(i)
+  }, [useItem])
+  // 1-8 select, as the Ather does — not while a text field or a blocking overlay owns the keys.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (editRef.current || curBattleRef.current || dialogueRef.current) return
+      const n = parseInt(e.key, 10)
+      if (n >= 1 && n <= HOTBAR_SLOTS) { selSlotRef.current = n - 1; setHotSel(n - 1) }
+    }
+    // The wheel cycles the bar in play (the old HotBar's listener went with it); in edit it zooms.
+    const onWheel = (e: WheelEvent) => {
+      if (editRef.current || bagOpenRef.current || curBattleRef.current || dialogueRef.current) return
+      if (Math.abs(e.deltaY) < 1) return
+      const next = (selSlotRef.current + (e.deltaY > 0 ? 1 : -1) + HOTBAR_SLOTS) % HOTBAR_SLOTS
+      selSlotRef.current = next; setHotSel(next)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('wheel', onWheel, { passive: true })
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('wheel', onWheel) }
+  }, [])
+  const [bagTick, setBagTick] = useState(0)
+  const [dragFrom, setDragFrom] = useState<Lift | null>(null)
+  const moveSlot = useCallback((from: SlotRef, to: SlotRef) => {
+    if (from.g !== 'bag' || to.g !== 'bag') return
+    moveBetween(invRef.current.slots, from.i, invRef.current.slots, to.i, getMaxStack)
+    setInvSlots([...invRef.current.slots]); setBagTick(t => t + 1); persist()
+  }, [persist])
+  const splitSlot = useCallback((from: SlotRef, to: SlotRef, mode: 'half' | 'one') => {
+    if (from.g !== 'bag' || to.g !== 'bag') return
+    const src = invRef.current.slots
+    const stack = src[from.i]
+    if (!stack) { setDragFrom(null); return }
+    const moved = moveCount(src, from.i, src, to.i, mode === 'one' ? 1 : halfOf(stack.count), getMaxStack)
+    if (moved > 0) { setInvSlots([...src]); setBagTick(t => t + 1); persist() }
+    if (mode === 'half' || !src[from.i]) setDragFrom(null)
+  }, [persist])
+  // The corner's gauge polls a `{cur,max,regen}` ref; the mortal side keeps a `ManaPool` + a skill
+  // level + an affinity bonus. A getter is the adapter — read live, never copied.
+  const manaCornerRef = useMemo(() => ({
+    get current() { return { cur: manaRef.current.current, max: getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus, regen: 1 } },
+  }), [])
+  const partyForBag = useMemo(() => ({ get current() { return partyRef.current ?? [] } }), [])
+  const spiritIndexRef = useRef(createSpiritIndex())
+  const hotbarEntries: (HotbarEntry | null)[] = Array.from({ length: HOTBAR_SLOTS }, (_, i) => {
+    const st = invSlots[i]
+    return st ? { itemId: st.itemId, count: st.count } : null
+  })
+  const heldName = invSlots[hotSel] ? { text: itemLabel(invSlots[hotSel]!.itemId), out: false } : null
 
   // ── Exchange Booth (open at a placed booth) — buy/sell vs the single shared GE market ──
   const [tradeToast, setTradeToast] = useState<string | null>(null)
@@ -6311,7 +6376,7 @@ export default function Shimmer3D() {
   // SLOT_KEYS: SLOT_KEYS covers the CAST BAR ONLY, so indexing with it silently makes G unbindable
   // and the held stance unreachable — the exact orphaning the stance band exists to prevent.
   // Digits are NOT usable here — the
-  // HotBar owns 1-6 for item quick-slots and its listener is global. Same input-ownership guard as
+  // hud bar owns 1-8 for item quick-slots and its listener is global. Same input-ownership guard as
   // the weapon keys. Holstered is fine: casting is your magic, not the weapon.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -7576,14 +7641,21 @@ export default function Shimmer3D() {
         />
       )}
 
-      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && <HotBar items={invSlots} bagOpen={bagOpen} onBagChange={toggleBag}
-        partyOpen={partyOpen} onPartyChange={toggleParty} partyHurt={(void partyTick, activeSpirits(partyRef.current ?? []).filter(sp => hpFracOf(sp) < 1).length)} onUse={useItem} onReorder={reorderSlots} onSelect={(i) => { selSlotRef.current = i }} usable={USE_HINTS}
-        tools={(void toolTick, (['forestry', 'prospecting', 'rinning'] as const).map(skill => {
-          const t = equippedToolsRef.current[skill]
-          const def = t ? TOOL_DEFS[t.toolId] : null
-          const infinite = !!def?.basic
-          return { id: skill, label: def?.name ?? TOOL_HUD[skill].label, glyph: TOOL_HUD[skill].glyph, tint: TOOL_HUD[skill].tint, infinite, dur: def && !infinite ? t!.usesRemaining / def.durability : 1 }
-        }))} />}
+      {!battle && !approach && !rewards && !editMode && !dialogue && !placing && (<>
+        {/* The bar + the corner: `shimmer/hud/`, the Ather's own. `onSelect` because the mortal side has
+            touch play; the name over the bar is the registry's label for what is selected. */}
+        <Hotbar entries={hotbarEntries} sel={hotSel} held={heldName} dimmed={false} onSelect={selectSlot} />
+        <HudCorner mana={manaCornerRef} activeTool={(void toolTick, null)} tools={equippedToolsRef} skills={skillsRef} />
+      </>)}
+      {bagOpen && (
+        <BagPanel inv={invRef} spiritIndex={spiritIndexRef} chest={null} tick={bagTick} sel={hotSel}
+                  dragFrom={dragFrom} setDragFrom={setDragFrom}
+                  onMove={moveSlot} onSplit={splitSlot} onQuick={() => {}}
+                  onClose={() => toggleBag(false)} tools={equippedToolsRef} skills={skillsRef}
+                  party={partyForBag} onParty={() => { persist(); setBagTick(t => t + 1) }}
+                  onLetters={() => { setBagTick(t => t + 1); applyLoadout() }}
+                  castKeys={BAND_KEYS} />
+      )}
 
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
       {isTouch && !battle && !editMode && !placing && (

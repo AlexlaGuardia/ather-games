@@ -68,7 +68,7 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
     // window and sat on the mana gauge.
     <div className="absolute top-3 right-3 w-72 max-h-[calc(100vh-24px)] overflow-y-auto bg-black/80 border border-white/15 rounded p-3 space-y-2.5 z-[40]">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-mono font-semibold tracking-wider text-white/90 uppercase">Options</span>
+        <span className="gx-label text-[11px] text-white/90">Options</span>
         <button onClick={onClose} className="text-white/40 hover:text-white/80 text-xs font-mono">esc / O</button>
       </div>
       {/* The tab row: the house game-UI signature — near-uniform size, hierarchy by brightness.

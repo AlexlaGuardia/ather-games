@@ -26,7 +26,13 @@ import { join } from 'node:path'
 
 const ROOT = process.cwd()
 const CSS = readFileSync(join(ROOT, 'src/app/gameui.css'), 'utf8')
+// ★ 2026-09-16 (HUD port): the chrome the keeper reads is `shimmer/hud/*` now, mounted by BOTH
+// dimensions; the host keeps what only the Ather has. The rule is HUD-wide, so the subject is the
+// host plus every shared piece — a pair that moved into hud/ is still a pair this guard owns.
+import { readdirSync } from 'node:fs'
+const HUD_DIR = join(ROOT, 'src/app/shimmer/hud')
 const HUD = readFileSync(join(ROOT, 'src/app/shimmer/voxel3d/VoxelWorld.tsx'), 'utf8')
+  + readdirSync(HUD_DIR).filter(f => f.endsWith('.tsx')).map(f => '\n' + readFileSync(join(HUD_DIR, f), 'utf8')).join('')
 
 let pass = 0
 const fails: string[] = []

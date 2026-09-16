@@ -40,7 +40,7 @@ const CONVERTED = ['PassagePanel.tsx', 'TremorRing.tsx', 'ui.tsx', 'vessel-art.t
  * Delete a name from here the moment its file is clean.
  */
 const PENDING = [
-  'GfxPanel.tsx', 'HotBar.tsx', 'MoveBook.tsx',
+  'GfxPanel.tsx', 'MoveBook.tsx',   // HotBar.tsx left the worklist by being RETIRED (2026-09-16, HUD port stage 2) — its job is hud/hotbar.tsx now
   // ⚠ Arrived by MOVING, not by being written: the three moglin fur/collar literals were already
   // raw inside Shimmer3D.tsx and were extracted to a leaf module so the clay bench could import
   // them instead of retyping them. The count on this worklist went up and the repo's actual drift
