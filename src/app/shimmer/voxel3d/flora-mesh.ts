@@ -834,7 +834,11 @@ export function createFloraRenderer(): FloraRenderer {
   const shroomStemMat = solidMaterial()
   const shroomCapMat = solidMaterial()
   const puffGeo = floraPuffGeo()
+  // A puffball is a sphere, and a Lambert sphere is two-thirds shadow — at noon the first shot
+  // read as a huddle of round grey stones. A warm lift on the shaded side keeps it fungus-pale
+  // without lighting the ground (it is the body's own paleness, not a light channel).
   const puffMat = solidMaterial()
+  puffMat.emissive = new THREE.Color(0x4a4236)
 
   const herbMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.HERB])
   // Sway a touch stiffer than a herb: a laden crop is heavier and a field that ripples like grass

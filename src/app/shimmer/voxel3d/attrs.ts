@@ -251,7 +251,7 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // not a stone. Glow-moss is the moss colour with the light IN it — a cool luminous green-teal,
   // the same family as the mana lantern's spill so a glowing path and a lit doorway read as one
   // light. Both feed the item icon and the renderer's tint from this one row.
-  [MAT.PUFF_CLUSTER]: 0xe6dcc4,
+  [MAT.PUFF_CLUSTER]: 0xf2ead6,   // 0xe6dcc4 read as a warm STONE at noon — a puffball is paler than that
   [MAT.GLOW_MOSS]: 0x7fe0b8,
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — read the plant, not the lookup ────────────────────
   // Same discipline as the herbs directly above: each colour is derived from what canon and the
