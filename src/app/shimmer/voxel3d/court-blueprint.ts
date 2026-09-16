@@ -127,3 +127,36 @@ export function stationLamps(s: StationStamp): { index: number; x: number; y: nu
     return { index: l.index, x: s.x + r.x, y: s.floorY + l.y, z: s.z + r.z, dark: here?.m ?? 0 }
   })
 }
+
+// ── ★★ WAKING UP IN A DOORWAY (Alex, 2026-09-16) ──────────────────────────────────────────────
+// *"if i go into the spirit cafe its spawning me inside the runehold gate.. and that ends up sending
+// me right back to runehold."* Leaving through the gate deliberately leaves the Ather record standing
+// IN socket 0 (`VoxelWorld` › "no committed middle"), and the socket trigger is an edge against
+// `inSocket = null` — so the first frame after `/shimmer/voxel3d` loads reads "now standing in the
+// gate" and fires the crossing back. The in-world doors (fold, seam) already land the keeper facing
+// away from the door; the page-load arrival never had that rule. This is it: a restored position
+// inside any socket steps OUT into the court along the socket's own way, facing the way it walked.
+
+/** A body counts as standing in a socket within this many blocks of the doorway's centre cell. */
+export const SOCKET_RADIUS = 1.6
+/** How far into the court the keeper is stood — past the trigger, past a frame a few blocks deep. */
+export const SOCKET_STAND_OUT = 3.5
+
+/**
+ * If (x, z) stands in one of `socks`, where to stand instead and which way to face, else null.
+ * The way is socket → anchor (the direction a keeper walks THROUGH the doorway into the court —
+ * the same bearing the portal planes face). `yaw` is the camera's YXZ heading for that direction:
+ * three.js looks along (-sin yaw, 0, -cos yaw), so facing (dx, dz) is `atan2(-dx, -dz)`.
+ */
+export function socketStandOut(socks: { index: number; x: number; z: number }[], anchor: { x: number; z: number }, x: number, z: number):
+  { index: number; x: number; z: number; yaw: number } | null {
+  for (const sk of socks) {
+    const cx = sk.x + 0.5, cz = sk.z + 0.5
+    if (Math.hypot(x - cx, z - cz) >= SOCKET_RADIUS) continue
+    let dx = anchor.x - cx, dz = anchor.z - cz
+    const len = Math.hypot(dx, dz)
+    if (len < 1e-6) { dx = 1; dz = 0 } else { dx /= len; dz /= len }
+    return { index: sk.index, x: cx + dx * SOCKET_STAND_OUT, z: cz + dz * SOCKET_STAND_OUT, yaw: Math.atan2(-dx, -dz) }
+  }
+  return null
+}

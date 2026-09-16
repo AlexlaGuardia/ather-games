@@ -11,12 +11,13 @@ import * as THREE from 'three'
 import { walkable } from '../engine/player'
 import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
 import { SOLID } from '../world/tiles'
-import { getZone, checkWarp, type Zone, type Warp, type Gate } from '../world/zones'
+import { getZone, checkWarp, gateFootprint, type Zone, type Warp, type Gate } from '../world/zones'
 import { CHUNK, DEFAULT_RADIUS, chunkOf, sameChunk, chunkVisible, viewFar, fogNear, type ChunkCoord } from '../world/chunk-stream'
 import { ALL_ZONES } from '../world/all-zones'
 // The far end of the Ather crossing. `engine/crossing.ts` holds the contract and the reasoning;
 // this file is the half that receives. See the boot effect for why the read lives where it does.
 import { consumeArrival } from '../engine/crossing'
+import { landingGate } from '../voxel3d/crossing-out'
 import { Clock } from '../hud/clock'
 import { ObjectiveChip } from '../hud/objective-chip'
 import { SayLine } from '../hud/say-line'
@@ -4469,6 +4470,17 @@ export default function Shimmer3D() {
           posRef.current!.set(staged.x, posRef.current!.y, staged.y)
           setZoneId(staged.zone)
           landed = staged.zone
+          // ★ AND FACING AWAY FROM THE DOOR (Alex, 2026-09-16: "when exiting a gate it spawns us
+          // facing away from the entry point"). The tile is beside the landing; the heading is
+          // gate → tile, so the square is ahead and the door one step behind. Same YXZ convention
+          // as the warps' `DIR_YAW`: looking along (-sin yaw, -cos yaw), so facing (dx, dy) is
+          // `atan2(-dx, -dy)` — "down" (+y) is π, which is what a door on the north side gives.
+          const g = landingGate()
+          if (g) {
+            const { w, h } = gateFootprint(g)
+            const dx = staged.x + 0.5 - (g.x + w / 2), dy = staged.y + 0.5 - (g.y + h / 2)
+            if (Math.hypot(dx, dy) > 0.1) camYaw.current = Math.atan2(-dx, -dy)
+          }
         }
       }
       // ★ THE LOAD-PATH STARTER GRANT IS GONE, ON PURPOSE. It used to backfill stations and mats

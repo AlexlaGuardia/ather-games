@@ -234,7 +234,7 @@ const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in 
 import { GREG_LINES } from './greg-lines'
 import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
 import { insideGlade } from '../voxel/glade'
-import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps, socketWay, socketLitBy } from './court-blueprint'
+import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps, socketWay, socketLitBy, socketStandOut, SOCKET_RADIUS } from './court-blueprint'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
          legacyRowSockets, courtClearCells, COURT_REV,
          courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells,
@@ -3894,6 +3894,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       plotCfg.current = withLitter(plotForTier(plotTier.current), litterFrom.current)
 
       const stranded = savedSpace === 'wilds' && insideShell(p.x, p.z, SEED, WILDS_BUBBLE)
+      /** Set only by a doorway arrival (below); every other restore keeps the saved heading. */
+      let arrivedYaw: number | null = null
       if (stranded) {
         space.current = 'glade'
         lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
@@ -3910,6 +3912,25 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const clear = savedSpace === 'plot'
           ? plotCaveStand(p.x, p.y, p.z, SEED, plotCfg.current)
           : { x: p.x, z: p.z }
+        // ── ★★ AND OUT OF THE DOORWAY THEY LEFT BY (Alex, 2026-09-16: "if i go into the spirit
+        // cafe its spawning me inside the runehold gate.. and that ends up sending me right back")
+        // Leaving through a socket leaves the record IN it on purpose (the gate block below: no
+        // committed middle), and the socket trigger is an edge against `inSocket = null` — so a
+        // load standing in the gate fired the crossing back on its first frame. Coming back through
+        // the same door is an ARRIVAL, and an arrival lands outside the door facing away from it,
+        // exactly as the fold and the seam already do. Derived from the same sockets the trigger
+        // reads, so the two cannot disagree about what "in the doorway" means.
+        if (savedSpace === 'plot') {
+          const cfg = plotCfg.current
+          const a = courtAnchor(SEED, cfg)
+          const level = courtLevel(SEED, cfg)
+          const bp = stationBlueprint()
+          const socks = a.y !== null
+            ? (bp && level !== null ? stationSockets(stationStamp(bp, a, level)) : courtSockets(SEED, cfg))
+            : []
+          const out = socketStandOut(socks, a, clear.x, clear.z)
+          if (out) { clear.x = out.x; clear.z = out.z; arrivedYaw = out.yaw }
+        }
         lc.px = clear.x; lc.pz = clear.z
         // ⚠ The surface clamp is the CONTINENT's and would drag a plot position up to Wilds
         // altitude (~130 against the garden's 96) — so the garden does NOT take this one. What it
@@ -3933,7 +3954,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       }
       lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
       camera.position.set(lc.px, eyeY(lc), lc.pz)
-      camera.quaternion.setFromEuler(new THREE.Euler(p.rx, p.ry, 0, 'YXZ'))
+      // Yaw only on a doorway arrival — pitch stays the keeper's, as every other arrival leaves it.
+      camera.quaternion.setFromEuler(new THREE.Euler(p.rx, arrivedYaw ?? p.ry, 0, 'YXZ'))
       settled.current = false
       // ⚠ MUTATED IN PLACE, NEVER REASSIGNED — the outer component and the dialogue both hold this
       // same ref object, and swapping the `.current` from in here is fine, but a save whose index is
@@ -8292,7 +8314,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const socks = bp && level !== null ? stationSockets(stationStamp(bp, a, level)) : courtSockets(SEED, cfg)
         for (const sk of socks) {
           // The doorway is the middle 3 of a 5-wide frame; 1.6 covers it with the keeper's own body.
-          if (Math.hypot(p.x - (sk.x + 0.5), p.z - (sk.z + 0.5)) < 1.6) { standing = sk.index; break }
+          if (Math.hypot(p.x - (sk.x + 0.5), p.z - (sk.z + 0.5)) < SOCKET_RADIUS) { standing = sk.index; break }
         }
       }
       if (standing !== inSocket.current) {

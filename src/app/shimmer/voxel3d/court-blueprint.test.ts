@@ -6,7 +6,7 @@
 // quarter-turn snap can account for).
 
 import { courtAnchor, sockets, socketCells, courtLevel } from './crossings'
-import { STATION_LAYOUT, layoutOf, stationBlueprint, stationStamp, stationSockets, stationLamps, stationCells, stationRot } from './court-blueprint'
+import { STATION_LAYOUT, layoutOf, stationBlueprint, stationStamp, stationSockets, stationLamps, stationCells, stationRot, socketStandOut, SOCKET_RADIUS, SOCKET_STAND_OUT } from './court-blueprint'
 import { plotForTier, PLOT_TIERS } from '../voxel/plot'
 import { WORLD_SEED } from './world-seed'
 import { MAT } from '../voxel/depth'
@@ -100,6 +100,33 @@ console.log('the crossings travel with the file')
   check('a lamp cell outside the box is refused', blueprintProblems(bad).some(m => /lamp/.test(m)))
   // The starter on disk is self-describing and valid.
   check('the starter on disk carries its layout', !!bp.station && blueprintProblems(bp).length === 0)
+}
+
+// ── ★★ WAKING UP IN A DOORWAY steps out into the court, facing the court ──────────────────────
+{
+  console.log('waking up in a doorway')
+  const socks = [{ index: 0, x: 10, z: 10 }, { index: 1, x: 30, z: 10 }]
+  const anchor = { x: 20.5, z: 20.5 }
+  // Standing dead centre of socket 0: out along socket→anchor, past the trigger radius.
+  const o = socketStandOut(socks, anchor, 10.5, 10.5)
+  check('a body in socket 0 is stood out of socket 0', !!o && o.index === 0)
+  check(`and lands OUTSIDE the trigger (${o && Math.hypot(o.x - 10.5, o.z - 10.5).toFixed(2)} > ${SOCKET_RADIUS})`, !!o && Math.hypot(o.x - 10.5, o.z - 10.5) > SOCKET_RADIUS + 1)
+  check('toward the anchor, not away from it', !!o && o.x > 10.5 && o.z > 10.5)
+  check('by exactly SOCKET_STAND_OUT', !!o && Math.abs(Math.hypot(o.x - 10.5, o.z - 10.5) - SOCKET_STAND_OUT) < 1e-9)
+  // The yaw faces the way walked: the camera's look vector (-sin, -cos) points from the socket to the anchor.
+  if (o) {
+    const lx = -Math.sin(o.yaw), lz = -Math.cos(o.yaw)
+    const wx = (anchor.x - 10.5), wz = (anchor.z - 10.5), wl = Math.hypot(wx, wz)
+    check(`the yaw looks INTO the court (dot ${(lx * wx / wl + lz * wz / wl).toFixed(3)})`, lx * wx / wl + lz * wz / wl > 0.999)
+    // And the socket is behind: the same look vector dotted with anchor→socket is negative.
+    check('the doorway is behind the keeper', lx * -wx + lz * -wz < 0)
+  }
+  // Just past the radius: not in a socket, nothing to do.
+  check('a body outside every socket is left alone', socketStandOut(socks, anchor, 10.5 + SOCKET_RADIUS + 0.01, 10.5) === null)
+  check('and so is one standing on the anchor', socketStandOut(socks, anchor, 20.5, 20.5) === null)
+  // The second socket resolves to itself, not to the first.
+  const o1 = socketStandOut(socks, anchor, 30.2, 10.7)
+  check('socket 1 steps out toward the anchor (−x here)', !!o1 && o1.index === 1 && o1.x < 30.5)
 }
 
 console.log(`court-blueprint: ${pass} passed, ${fail} failed`)
