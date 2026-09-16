@@ -107,7 +107,8 @@ export const floraPuffGeo = (): THREE.BufferGeometry => {
   ]
   const pos: number[] = [], nrm: number[] = []
   for (const [x, y, z, r] of balls) {
-    const g = new THREE.IcosahedronGeometry(r, 1).toNonIndexed()
+    // An IcosahedronGeometry is already non-indexed (three warns if you ask), so the arrays concat.
+    const g = new THREE.IcosahedronGeometry(r, 1)
     g.translate(x, y, z)
     pos.push(...(g.getAttribute('position').array as Float32Array))
     nrm.push(...(g.getAttribute('normal').array as Float32Array))
