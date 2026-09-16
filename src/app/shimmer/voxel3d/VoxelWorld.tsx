@@ -418,7 +418,7 @@ import { loadSeen, saveSeen, see, CELL, type Seen } from './discovery'
 import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
-import { createFloraRenderer } from './flora-mesh'
+import { createFloraRenderer, floraDemand } from './flora-mesh'
 import { createStationRenderer } from './station-mesh'
 
 
@@ -6027,6 +6027,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       return { target: guideTargetRef.current, visible: guide.points.visible, stage: tutorial.current.stage, space: space.current,
                mote0: [a.getX(0), a.getY(0), a.getZ(0)], at: [camera.position.x, camera.position.z] }
     }
+    // The flora pools, read back: what each pool ASKED for vs its cap (`floraDemand`) and what each
+    // InstancedMesh is drawing right now. A ground cover that is there, breakable and not drawn has
+    // no other symptom (2026-09-16: a 13% meadow photographed bare from above).
+    w.__flora = () => ({
+      demand: floraDemand,
+      pools: flora.group.children.map((o, i) => [i, (o as THREE.InstancedMesh).count, o.visible]),
+    })
     w.__renderlight = () => {
       const r = lightRing.current
       let built = 0, shown = 0
