@@ -68,7 +68,8 @@ const once = (needle: string, n: number, what: string) => {
   once('socketCells(', 2, 'both court passes')
   once('socketCells(sk, level)', 2, 'and both take courtLevel')
   ok(!/socketCells\(sk, h\)/.test(src), 'never a socket\'s own ground — that embeds the frame in the dais')
-  once('courtLevel(SEED, cfg)', 2, 'each pass derives the level from the same seed and fold')
+  // 2 → 3 on 2026-09-16: the crossing pass derives it too, to place the station blueprint's sockets.
+  once('courtLevel(SEED, cfg)', 3, 'each pass derives the level from the same seed and fold')
 }
 
 // ── 2. THE DAIS IS ACTUALLY LAID, IN ITS OWN MATERIAL ────────────────────────────────────────
@@ -130,13 +131,17 @@ const once = (needle: string, n: number, what: string) => {
   // which reads as *the court lays nothing at all*. The guard failed loudly instead of passing, and
   // that is the only reason it cost a minute. `blockAt` returns `.code` already stripped, so the
   // count still asks what the block DOES.
-  const { at, code: block } = blockAt(raw, '// ── the crossing court', 'courtMarks.current = held')
+  // Anchored on the NEXT section header, not on `courtMarks.current = held` — since 2026-09-16 the
+  // block assigns that twice (the station branch and the arc branch) and the first cut the block short.
+  const { at, code: block } = blockAt(raw, '// ── the crossing court', '// ── the lamps follow the keeper')
   ok(at > 0, 'the court build block is findable')
   ok(block.length > 500, `and substantial (${block.length} chars of code)`)
   const writes = (block.match(/setVoxel\(/g) ?? []).length
   // sweep() carries its own setVoxel — the clear path — so the lay writes are the rest.
-  ok(writes === 5,
-     `the court block writes voxels in exactly 5 places: sweep + deck + hub + tower + frames (found ${writes}). ` +
+  // 5 → 8 on 2026-09-16: + the station's stamp-restore (its cells back to generated), its lay, its lamps.
+  // The station's cells are removed by the restore, not by material — see `court-blueprint.ts`.
+  ok(writes === 8,
+     `the court block writes voxels in exactly 8 places: sweep + station-restore + station-lay + station-lamps + deck + hub + tower + frames (found ${writes}). ` +
      `A new one must be added to crossings.test.ts's laid-set before it ships, or it becomes stone nobody can remove.`)
 }
 

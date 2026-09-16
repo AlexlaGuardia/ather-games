@@ -364,14 +364,19 @@ export interface SocketShimmer {
 export function createSocketShimmers(): SocketShimmer {
   const group = new THREE.Group()
   const geo = new THREE.PlaneGeometry(1, 1)
+  // ★ TWO MATERIALS, MADE ONCE — one per tint — shared by every doorway (render-audit's rule: a
+  // material per object is the context-loss bug). `uNear` is therefore per TINT, read as the
+  // nearest doorway of that colour; it only widens the swirl a little, so sharing costs nothing
+  // a keeper can see.
+  const mats = { gate: seamMaterial(new THREE.Vector3(1.0, 0.80, 0.38)), passage: seamMaterial(new THREE.Vector3(0.45, 1.0, 0.72)) }
   const items: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; x: number; z: number }[] = []
-  const clear = () => { for (const it of items) { group.remove(it.mesh); it.mat.dispose() } items.length = 0 }
+  const clear = () => { for (const it of items) group.remove(it.mesh); items.length = 0 }
   return {
     group,
     set(sockets) {
       clear()
       for (const s of sockets) {
-        const mat = seamMaterial(s.tint === 'gate' ? new THREE.Vector3(1.0, 0.80, 0.38) : new THREE.Vector3(0.45, 1.0, 0.72))
+        const mat = mats[s.tint]
         const mesh = new THREE.Mesh(geo, mat)
         mesh.renderOrder = 2
         // The doorway is 3 wide and 3 tall; the plane fills it and faces along the walk.
@@ -386,12 +391,17 @@ export function createSocketShimmers(): SocketShimmer {
       }
     },
     tick(px, pz, elapsed) {
+      const near = { gate: Infinity, passage: Infinity }
       for (const it of items) {
-        it.mat.uniforms.uTime.value = elapsed
-        it.mat.uniforms.uNear.value = seamNearness(Math.hypot(px - it.x, pz - it.z), PLOT_SHUT, PLOT_OPEN)
+        const k = it.mat === mats.gate ? 'gate' : 'passage'
+        near[k] = Math.min(near[k], Math.hypot(px - it.x, pz - it.z))
+      }
+      for (const k of ['gate', 'passage'] as const) {
+        mats[k].uniforms.uTime.value = elapsed
+        mats[k].uniforms.uNear.value = seamNearness(near[k], PLOT_SHUT, PLOT_OPEN)
       }
     },
-    dispose() { clear(); geo.dispose() },
+    dispose() { clear(); geo.dispose(); mats.gate.dispose(); mats.passage.dispose() },
   }
 }
 
