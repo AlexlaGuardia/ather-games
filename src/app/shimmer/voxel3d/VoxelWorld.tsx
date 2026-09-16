@@ -240,6 +240,7 @@ import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMat
          courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells,
          gateTowerCells } from './crossings'
 import { depart, LANDING_LABEL } from './crossing-out'
+import { consumeEntry } from '../engine/crossing'
 import { LANDING_ARRIVAL } from '../world/landing'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { createMoglinFigures, MOGLIN_BOUNDS } from './moglin-figure'
@@ -3777,6 +3778,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   useEffect(() => {
     let live = true
     void loadPlayer(SEED).then(p => {
+      // ── ★★ WHICH MORTAL DOOR DID THEY COME THROUGH? (Alex, 2026-09-16: "the spirit corner should
+      // lead to moonwell glade tutorial area.. no?") Consumed FIRST, before any early return, so a
+      // fresh keeper's staged entry is never left to re-fire on a later load. Greg's door lets out
+      // on his ground in the Glade; the square's landing lets out at the station's centre socket
+      // in the court (`engine/crossing.ts` › AtherEntry, canon `world/gates.md` › the crossing
+      // table). A keeper with no Ather record spawns in the Glade anyway, so 'glade' costs them
+      // nothing and 'court' is a door they cannot have used.
+      const entry = live ? consumeEntry(localStorage) : null
       if (!p || !live) return
       if (p.inv) {
         inv.current = p.inv as Inventory
@@ -3846,7 +3855,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // footprint: houses, no Greg, no folk, the arch gone. A Wilds position inside Moonwell's
       // coast is a Glade position; the continent's copy of that ground is a ghost nobody should
       // wake up in.
-      const savedSpace: Space = p.space === 'plot' ? 'plot'
+      const savedSpace: Space = entry === 'court' ? 'plot'   // the civic gate lets out in the court; a keeper reaches it only from a plot
+        : p.space === 'plot' ? 'plot'
         : p.space === 'glade' ? 'glade'
         : tutorial.current.stage !== 'done' ? 'glade'
         : insideGlade(p.x, p.z, SEED) ? 'glade'
@@ -3896,7 +3906,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       const stranded = savedSpace === 'wilds' && insideShell(p.x, p.z, SEED, WILDS_BUBBLE)
       /** Set only by a doorway arrival (below); every other restore keeps the saved heading. */
       let arrivedYaw: number | null = null
-      if (stranded) {
+      if (entry === 'glade') {
+        // Through the Spirit Corner: Greg's ground, nose to Greg — the same landing and the same
+        // heading `enterSpace('glade')` gives the fold's passage (the man is the first thing seen).
+        space.current = 'glade'
+        lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
+        lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+        arrivedYaw = Math.atan2(-(GREG_CX - lc.px), -(GREG_CZ - lc.pz))
+      } else if (stranded) {
         space.current = 'glade'
         lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
         lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
@@ -3928,7 +3945,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           const socks = a.y !== null
             ? (bp && level !== null ? stationSockets(stationStamp(bp, a, level)) : courtSockets(SEED, cfg))
             : []
-          const out = socketStandOut(socks, a, clear.x, clear.z)
+          // Through the square's landing the destination is socket 0 whatever the record says —
+          // the civic gate lets out at the station's centre, not wherever you last stood.
+          const gate = entry === 'court' ? socks.find(sk => sk.index === 0) : undefined
+          const out = gate ? socketStandOut(socks, a, gate.x + 0.5, gate.z + 0.5) : socketStandOut(socks, a, clear.x, clear.z)
           if (out) { clear.x = out.x; clear.z = out.z; arrivedYaw = out.yaw }
         }
         lc.px = clear.x; lc.pz = clear.z

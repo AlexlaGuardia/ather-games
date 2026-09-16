@@ -16,7 +16,7 @@ import { CHUNK, DEFAULT_RADIUS, chunkOf, sameChunk, chunkVisible, viewFar, fogNe
 import { ALL_ZONES } from '../world/all-zones'
 // The far end of the Ather crossing. `engine/crossing.ts` holds the contract and the reasoning;
 // this file is the half that receives. See the boot effect for why the read lives where it does.
-import { consumeArrival } from '../engine/crossing'
+import { consumeArrival, stageEntry } from '../engine/crossing'
 import { landingGate } from '../voxel3d/crossing-out'
 import { Clock } from '../hud/clock'
 import { ObjectiveChip } from '../hud/objective-chip'
@@ -6785,6 +6785,12 @@ export default function Shimmer3D() {
     // left standing on a warp tile.
     if (w.gate?.toUpperCase() === LANDING_LABEL || w.gate?.toUpperCase() === 'THE SPIRIT CORNER') {
       performWarp(w)
+      // ★ TWO DOORS, TWO DESTINATIONS (Alex, 2026-09-16: "the spirit corner should lead to moonwell
+      // glade tutorial area.. no?"). Canon's crossing table (`world/gates.md`, 08-12): Greg's door is
+      // private and lets out on his ground in the Glade; the square's landing is the town's civic
+      // gate and lets out at the station's centre socket in the court. Staged as a one-shot the
+      // Ather consumes on restore; without it both doors led to wherever the keeper last stood.
+      stageEntry(localStorage, w.gate.toUpperCase() === 'THE SPIRIT CORNER' ? 'glade' : 'court')
       window.location.href = '/shimmer/voxel3d'
       return
     }

@@ -84,3 +84,29 @@ export function arrivalFor(
   if (saved) return { at: saved, why: 'returning' }
   return { at: landing, why: 'first-visit' }
 }
+
+// ── ★★ THE OTHER DIRECTION HAS A DESTINATION TOO (Alex, 2026-09-16) ──────────────────────────
+// *"the spirit corner should lead to moonwell glade tutorial area.. no?"* Yes — canon has TWO doors
+// out of the town and they do not let out in the same place (`world/gates.md` › the crossing table,
+// 08-12): the Spirit Corner is Gregory's private door and lets out on Greg's ground in the Glade;
+// the square's public LANDING is the town's civic gate and lets out at the gate station's centre
+// socket in the keeper's court. Both mortal doors used to navigate to the Ather with no destination
+// at all, so the Ather restored the last position stood on — the plot, for anyone who had earned
+// one — and Greg's door "led" to the court. Same shape as `stageArrival`: a one-shot, read-and-clear,
+// nothing else touched. A malformed or stale value is a missing one: the Ather restores as before.
+
+/** Where a mortal door lets out in the Ather. */
+export type AtherEntry = 'glade' | 'court'
+const ENTER = 'shimmer:crossing:enter'
+
+export function stageEntry(store: Store, to: AtherEntry): void {
+  store.setItem(ENTER, to)
+}
+
+/** Take the staged entry, if any. Cleared BEFORE it is returned — see `consumeArrival`. */
+export function consumeEntry(store: Store): AtherEntry | null {
+  const raw = store.getItem(ENTER)
+  if (raw === null) return null
+  store.removeItem(ENTER)
+  return raw === 'glade' || raw === 'court' ? raw : null
+}

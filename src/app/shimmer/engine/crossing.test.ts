@@ -8,7 +8,7 @@
  *
  * Run: `npx tsx src/app/shimmer/engine/crossing.test.ts`
  */
-import { stageArrival, consumeArrival, arrivalFor, type Store, type TilePos } from './crossing'
+import { stageArrival, consumeArrival, arrivalFor, stageEntry, consumeEntry, type Store, type TilePos } from './crossing'
 
 let pass = 0
 const fails: string[] = []
@@ -108,6 +108,25 @@ for (const junk of ['not json', '{}', '{"zone":"rune-hold"}', '{"zone":1,"x":0,"
   const legit = arrivalFor(null, { zone: 'rune-hold', x: 0, y: 0 }, LANDING)
   ok(legit.at.x === 0 && legit.why === 'returning',
      'but a keeper whose real saved position IS (0,0) still returns there — the ban is on the FALLBACK, not the value')
+}
+
+// ── ★★ the Ather-side entry: which mortal door you came through decides where you stand up ────
+{
+  const mem = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v) }, removeItem: (k: string) => { m.delete(k) } } as Store }
+  const s = mem()
+  ok(consumeEntry(s) === null, 'no entry staged reads as null')
+  stageEntry(s, 'glade')
+  ok(consumeEntry(s) === 'glade', 'the Spirit Corner stages the Glade')
+  ok(consumeEntry(s) === null, 'and it is a one-shot — consumed once, gone')
+  stageEntry(s, 'court')
+  ok(consumeEntry(s) === 'court', 'the square landing stages the court')
+  s.setItem('shimmer:crossing:enter', 'the-void')
+  ok(consumeEntry(s) === null, 'a value that is not a destination is a missing one')
+  ok(s.getItem('shimmer:crossing:enter') === null, 'and it was cleared on the way, not left to re-fire')
+  // The two one-shots do not share a key: staging a town arrival never sets an Ather entry.
+  stageArrival(s, { zone: 'rune-hold', x: 49, y: 51 })
+  ok(consumeEntry(s) === null, 'a staged town ARRIVAL is not an Ather ENTRY')
+  ok(consumeArrival(s)?.zone === 'rune-hold', 'and the arrival is still there for the town to take')
 }
 
 console.log(`crossing: ${pass} passed, ${fails.length} failed`)
