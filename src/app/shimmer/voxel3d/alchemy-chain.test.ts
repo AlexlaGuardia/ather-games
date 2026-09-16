@@ -1,9 +1,10 @@
-// The alchemy chain: the potion's craft-word decides its route through four stations.
+// The alchemy chain: every potion has its own ROAD across mortar / still / bowl, and the cauldron is
+// always last (RULED 2026-09-16, `game/alchemy.md` › THE BREWING'S PARTS).
 // Run: npx tsx src/app/shimmer/voxel3d/alchemy-chain.test.ts
 //
-// Three families of guard. (1) TOTALITY — every potion has a route and every ingredient a kind, so
-// a new potion cannot silently get "no prep, straight to the cauldron". (2) THE SHAPE — tier 1 is a
-// short walk, the infusion earns the whole chain, the word goes where canon's method says.
+// Three families of guard. (1) TOTALITY — every potion has a craft-word, a road and a finishing row,
+// and every road ends at the cauldron. (2) THE SHAPE — the road is the batch's (stage feeds stage),
+// tier 1 is a short walk, the infusion earns the whole chain, the words class SPIRIT/HAND/PLOT.
 // (3) THE WORLD — the four blocks are registered, painted and openable, the lit cauldron is a
 // state not an item, and the job maths pays what it says.
 import { readFileSync } from 'node:fs'
@@ -15,8 +16,8 @@ import { recipeDef } from '../voxel/recipes'
 import { TILE_MATERIALS } from './tex/tiles'
 import { rightClickIntent } from './interact'
 import {
-  ALCHEMY_STATIONS, ALCHEMY_MATS, ALCHEMY_RECIPES, ALCHEMY_INTERMEDIATES, INGREDIENT_KIND, FINISH_AT,
-  alchemyStationOf, craftWordOf, routeOf, prepOf, alchemyStationRecipes, alchemyRecipe, intermediateLabel,
+  ALCHEMY_STATIONS, ALCHEMY_MATS, ALCHEMY_RECIPES, ALCHEMY_INTERMEDIATES, CRAFT_WORDS, DEFAULT_ROAD, ROADS,
+  alchemyStationOf, craftWordOf, routeOf, roadOf, stageOf, jobOf, alchemyStationRecipes, alchemyRecipe, intermediateLabel,
   alchemyRunsReady, alchemyRunProgress, alchemyLoadJob, alchemyCollect, alchemySalvage, alchemyMaxRuns, alchemyBusy,
   ALCHEMY_MAX_RUNS, COOK_ROWS, COOKED,
 } from './alchemy-chain'
@@ -30,42 +31,56 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 for (const def of Object.values(POTION_DEFS)) {
   const word = craftWordOf(def)
   ok(word !== null, `§1 ★★ ${def.id}: its name ends in a craft-word canon ruled on (${def.name})`)
-  for (const r of def.recipe) ok(r.itemId in INGREDIENT_KIND, `§1 ★★ ${def.id}: ingredient ${r.itemId} has a kind (dry/wet) — else it gets no prep step`)
-  ok(routeOf(def.id).length >= 2, `§1 ${def.id}: a route of at least a prep and a finish (${routeOf(def.id).join('→')})`)
+  ok(routeOf(def.id).at(-1) === 'cauldron', `§1 ★★★ ${def.id}: the cauldron is ALWAYS the last station (${routeOf(def.id).join('→')})`)
+  ok(routeOf(def.id).filter(s => s === 'cauldron').length === 1, `§1 ${def.id}: exactly one cauldron, at the end`)
   ok(!!alchemyRecipe(`finish:${def.id}`), `§1 ${def.id}: has a finishing row`)
+  ok(jobOf(def.id) !== null, `§1 ${def.id}: is for the spirit, the hand or the plot`)
+  // The road is a chain: step k's input is step k-1's output, the finish takes the last stage.
+  const road = roadOf(def.id)
+  road.forEach((_, i) => {
+    const r = alchemyRecipe(`road:${def.id}:${i + 1}`)!
+    ok(!!r, `§1 ${def.id}: road step ${i + 1} exists`)
+    if (i > 0) ok(r.input.length === 1 && r.input[0].itemId === stageOf(def.id, i), `§1 ${def.id}: step ${i + 1} takes stage ${i}`)
+    else ok(r.input.every((x, j) => x.itemId === def.recipe[j].itemId && x.count === def.recipe[j].count), `§1 ${def.id}: step 1 takes the raw ingredients, counts kept`)
+  })
+  const fin = alchemyRecipe(`finish:${def.id}`)!
+  if (road.length) ok(fin.input.length === 1 && fin.input[0].itemId === stageOf(def.id, road.length), `§1 ${def.id}: the cauldron takes the last stage`)
+  else ok(fin.input.length === def.recipe.length, `§1 ${def.id}: no road — the cauldron takes the raw ingredients`)
+  ok(fin.mana === def.manaCost, `§1 ${def.id}: only the finish channels mana`)
+  ok(road.every((_, i) => alchemyRecipe(`road:${def.id}:${i + 1}`)!.mana === 0), `§1 ${def.id}: the road is free of mana`)
+  const xp = road.reduce((n, _, i) => n + alchemyRecipe(`road:${def.id}:${i + 1}`)!.xp, 0) + fin.xp
+  ok(xp === def.xpGrant, `§1 ${def.id}: the road's XP and the pour's XP sum to the potion's (${xp} vs ${def.xpGrant})`)
 }
-ok(Object.keys(FINISH_AT).length === 10, '§1 the ten craft-words of the vessels brief all route somewhere')
+ok(CRAFT_WORDS.length === 10 && CRAFT_WORDS.every(w => w in DEFAULT_ROAD), '§1 the ten craft-words of the vessels brief each have a default road')
+ok(Object.keys(ROADS).every(id => id in POTION_DEFS), '§1 every per-potion road names a real potion')
 
 // ── §2 the shape ────────────────────────────────────────────────────────────────────────────────
-ok(routeOf('mana_draught').join('→') === 'grinder→cauldron', `§2 ★★ the tier-1 draught is TWO stations — grind, brew (${routeOf('mana_draught').join('→')})`)
-ok(routeOf('shard_tonic').join('→') === 'grinder→mixer', `§2 ★ a tonic never sees fire — grind, mix (${routeOf('shard_tonic').join('→')})`)
+ok(routeOf('mana_draught').join('→') === 'cauldron', `§2 ★★ the simplest potion is cauldron, pour (${routeOf('mana_draught').join('→')})`)
+ok(routeOf('shard_tonic').join('→') === 'grinder→cauldron', `§2 a tier-1 tonic is one station and the pot (${routeOf('shard_tonic').join('→')})`)
+ok(routeOf('shimmer_salve').join('→') === 'mixer→cauldron', `§2 ★ a salve is WORKED in the bowl and finished warm — the ruling's own example (${routeOf('shimmer_salve').join('→')})`)
 ok(routeOf('mana_infusion').join('→') === 'grinder→still→mixer→cauldron',
-  `§2 ★★★ the infusion earns the whole chain — grind the crystal, distil the herb, mix the base, brew (${routeOf('mana_infusion').join('→')})`)
-ok(routeOf('crystal_elixir').at(-1) === 'still', '§2 an elixir is "distilled and refined" — it finishes at the still')
+  `§2 ★★★ the infusion earns the whole chain (${routeOf('mana_infusion').join('→')})`)
+ok(routeOf('crystal_elixir').join('→') === 'grinder→still→cauldron', '§2 an elixir is distilled and refined, then finished in the pot')
+ok(routeOf('deep_essence').filter(s => s === 'still').length === 2, '§2 an essence is concentrated — the still twice')
+ok(routeOf('dreamroot_elixir').join('→') === 'grinder→mixer→still→cauldron', '§2 a per-potion road can put the bowl before the still — the word does not fix the order')
 ok(routeOf('dawn_cordial').at(-1) === 'cauldron' && alchemyRecipe('finish:dawn_cordial')!.runMs > ALCHEMY_STATIONS.cauldron.runMs,
   '§2 ★ a cordial is AGED — brewed on the cauldron, slower than any brew')
 for (const def of Object.values(POTION_DEFS)) {
   if (def.tier === 1) ok(routeOf(def.id).length <= 2, `§2 ★★ tier 1 stays a short walk: ${def.id} = ${routeOf(def.id).length} stations`)
 }
-ok(prepOf('raw_mana_shard') === 'powder_raw_mana_shard' && prepOf('amber_sap') === 'extract_amber_sap', '§2 dry → powder, wet → extract')
-ok(prepOf('crystallized_sap') === 'powder_crystallized_sap', '§2 ★ crystallized sap is a CRYSTAL (kind, not name) — the table beats a regex')
-{
-  const fin = alchemyRecipe('finish:mana_draught')!
-  ok(fin.input.length === 1 && fin.input[0].itemId === 'powder_raw_mana_shard' && fin.input[0].count === 5,
-    '§2 counts are preserved 1:1 — five shards want five shard-powder')
-  ok(fin.mana === POTION_DEFS.mana_draught.manaCost && fin.xp === POTION_DEFS.mana_draught.xpGrant, '§2 the finishing run carries the potion\'s own mana and XP')
-  ok(alchemyRecipe('grind:raw_mana_shard')!.mana === 0, '§2 prep channels no mana')
-  const mix = alchemyRecipe('mix:mana_infusion')!, brew = alchemyRecipe('finish:mana_infusion')!
-  ok(mix.output.itemId === 'base_mana_infusion' && brew.input[0].itemId === 'base_mana_infusion', '§2 the infusion\'s mix feeds its brew through the base')
-}
-ok(ALCHEMY_INTERMEDIATES.every(id => intermediateLabel(id) !== null), '§2 every intermediate has a readable name')
-ok(intermediateLabel('powder_raw_mana_shard') === 'Raw Mana Shard Powder' && intermediateLabel('base_mana_infusion') === 'Mana Infusion Base', '§2 the names read')
+ok(jobOf('mana_infusion') === 'spirit' && jobOf('bond_philter') === 'spirit', '§2 infusions and philters are for the SPIRIT')
+ok(jobOf('shard_tonic') === 'hand' && jobOf('moonvine_tonic') === 'hand' && jobOf('glowfin_brew') === 'hand', '§2 tonics are for the HAND (Glowfin is a fishing dose: a tonic, not a brew)')
+ok(jobOf('harvest_brew') === 'plot' && jobOf('shimmer_salve') === 'plot', '§2 brews and salves are for the PLOT')
+ok(ALCHEMY_INTERMEDIATES.every(id => intermediateLabel(id) !== null), '§2 every stage has a readable name')
+ok(intermediateLabel('stage_mana_infusion_1') === 'Mana Infusion — ground' && intermediateLabel('stage_mana_infusion_3') === 'Mana Infusion — mixed', '§2 the names read')
+ok(intermediateLabel('powder_raw_mana_shard') === 'Raw Mana Shard Powder' && intermediateLabel('base_mana_infusion') === 'Mana Infusion Base', '§2 the 09-14 intermediates in old saves still read')
 ok(intermediateLabel('cauldron') === null, '§2 and nothing else is claimed')
 for (const id of Object.keys(ALCHEMY_STATIONS) as (keyof typeof ALCHEMY_STATIONS)[]) {
   const rows = alchemyStationRecipes(id)
   ok(rows.length > 0 && rows.every(r => r.station === id), `§2 ${id} lists only its own rows (${rows.length})`)
 }
-ok(alchemyStationRecipes('grinder').every(r => r.step === 'grind'), '§2 the grinder only grinds')
+ok(alchemyStationRecipes('grinder').every(r => r.step === 'grind'), '§2 the mortar only grinds')
+ok(alchemyStationRecipes('cauldron').filter(r => r.potionId).length === Object.keys(POTION_DEFS).length, '§2 the cauldron lists every potion — every road ends there')
 
 // ── §3 the world ────────────────────────────────────────────────────────────────────────────────
 for (const st of Object.values(ALCHEMY_STATIONS)) {
@@ -104,7 +119,7 @@ for (const id of ['grinder', 'still', 'mixer']) {
 
 // ── §4 the job maths ────────────────────────────────────────────────────────────────────────────
 {
-  const rec = alchemyRecipe('grind:raw_mana_shard')!
+  const rec = alchemyRecipe('road:shard_tonic:1')!   // grind 3 shards + 2 bark → stage 1
   const t0 = 1_000_000
   const shop = alchemyLoadJob({}, 'k', rec.id, 5, t0)
   ok(!!shop.k && shop.k.runs === 5, '§4 a job loads')
@@ -114,17 +129,17 @@ for (const id of ['grinder', 'still', 'mixer']) {
   ok(alchemyRunsReady(shop.k, t0) === 0 && alchemyRunsReady(shop.k, t0 + rec.runMs * 2 + 10) === 2, '§4 runs land on the clock')
   ok(alchemyRunProgress(shop.k, t0 + rec.runMs / 2) > 0.45 && alchemyRunProgress(shop.k, t0 + rec.runMs / 2) < 0.55, '§4 progress is the CURRENT run')
   const c = alchemyCollect(shop, 'k', t0 + rec.runMs * 2 + 10)
-  ok(c.payout?.itemId === 'powder_raw_mana_shard' && c.payout.count === 2 && c.xp === rec.xp * 2 && c.runsTaken === 2, '§4 take pays the ready runs and their XP')
+  ok(c.payout?.itemId === 'stage_shard_tonic_1' && c.payout.count === 2 && c.xp === rec.xp * 2 && c.runsTaken === 2, '§4 take pays the ready runs and their XP')
   ok(c.shop.k!.runs === 3 && c.shop.k!.since === t0 + rec.runMs * 2, '§4 ★ the rest keep their clock from the run that landed, not from now')
   ok(alchemyBusy(c.shop.k), '§4 still busy with runs left')
   const done = alchemyCollect(c.shop, 'k', t0 + rec.runMs * 10)
   ok(done.shop.k === undefined && done.payout!.count === 3 && !alchemyBusy(done.shop.k), '§4 the last take clears the slot — the cauldron goes dark here')
   const s = alchemySalvage(shop, 'k', t0 + rec.runMs + 5)
-  ok(s.shop.k === undefined && s.drops.some(d => d.itemId === 'powder_raw_mana_shard' && d.count === 1) && s.drops.some(d => d.itemId === 'raw_mana_shard' && d.count === 4),
+  ok(s.shop.k === undefined && s.drops.some(d => d.itemId === 'stage_shard_tonic_1' && d.count === 1) && s.drops.some(d => d.itemId === 'raw_mana_shard' && d.count === 12),
     `§4 ★ salvage pays the finished run and returns the unfinished inputs (${JSON.stringify(s.drops)})`)
   const fin = alchemyRecipe('finish:mana_draught')!
   ok(alchemyMaxRuns(fin, () => 50, 12) === 2, `§4 ★ a finishing row is capped by MANA too (12 mana / ${fin.mana} per run = 2)`)
-  ok(alchemyMaxRuns(fin, (id) => id === 'powder_raw_mana_shard' ? 7 : 0, 999) === 1, '§4 and by the inputs')
+  ok(alchemyMaxRuns(fin, (id) => id === 'raw_mana_shard' ? 7 : 0, 999) === 1, '§4 and by the inputs')
 }
 
 // ── §5 the oven — a cooking station on the chain's machinery (2026-09-15) ───────────────────────

@@ -329,7 +329,7 @@ export const ITEMS: ItemDef[] = [
   { id: 'mana_draught', name: 'Mana Draught', type: 'consumable', rarity: 'common', description: 'A cloudy blue vial. Restores a burst of mana.', stackable: true, maxStack: 5, sellPrice: 8, tradeable: true, effect: { stat: 'mana', amount: 30 } },
   { id: 'shard_tonic', name: 'Shard Tonic', type: 'consumable', rarity: 'common', description: 'Gritty crystal-infused tonic. Hands move faster.', stackable: true, maxStack: 5, sellPrice: 10, tradeable: true, effect: { stat: 'harvest_speed', amount: 0.15, duration: 60 } },
   { id: 'shimmer_salve', name: 'Shimmer Salve', type: 'consumable', rarity: 'common', description: 'Warm shimmering paste. Spirits brighten when they smell it.', stackable: true, maxStack: 5, sellPrice: 12, tradeable: true, effect: { stat: 'happiness', amount: 25 } },
-  { id: 'glowfin_brew', name: 'Glowfin Brew', type: 'consumable', rarity: 'uncommon', description: 'Bioluminescent brew. Knowledge sinks in faster.', stackable: true, maxStack: 5, sellPrice: 20, tradeable: true, effect: { stat: 'xp_boost', amount: 0.2, duration: 90 } },
+  { id: 'glowfin_brew', name: 'Glowfin Tonic', type: 'consumable', rarity: 'uncommon', description: 'Bioluminescent brew. Knowledge sinks in faster.', stackable: true, maxStack: 5, sellPrice: 20, tradeable: true, effect: { stat: 'xp_boost', amount: 0.2, duration: 90 } },
   { id: 'mana_infusion', name: 'Mana Infusion', type: 'consumable', rarity: 'rare', description: 'Deep purple, lit from within. Feeds a spirit the Mana element.', stackable: true, maxStack: 10, sellPrice: 60, tradeable: true },
   { id: 'storm_infusion', name: 'Storm Infusion', type: 'consumable', rarity: 'rare', description: 'Pale blue, sparks crossing the glass. Feeds a spirit the Storm element.', stackable: true, maxStack: 10, sellPrice: 60, tradeable: true },
   { id: 'earth_infusion', name: 'Earth Infusion', type: 'consumable', rarity: 'rare', description: 'Brown-amber and heavier than it looks. Feeds a spirit the Earth element.', stackable: true, maxStack: 10, sellPrice: 60, tradeable: true },
@@ -2885,7 +2885,7 @@ const SHIMMER_SALVE = px(S, S, `
   00000000000000000000000000000000
 `)
 
-// Glowfin Brew — round flask (purple glow)
+// Glowfin Tonic — round flask (purple glow)
 const GLOWFIN_BREW = px(S, S, `
   00000000000000000000000000000000
   00000000000000000000000000000000

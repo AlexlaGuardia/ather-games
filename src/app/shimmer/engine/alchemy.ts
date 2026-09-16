@@ -43,7 +43,7 @@ export const POTION_DEFS: Record<string, PotionDef> = {
 
   // Tier 2 — Intermediate
   glowfin_brew: {
-    id: 'glowfin_brew', name: 'Glowfin Brew', tier: 2,
+    id: 'glowfin_brew', name: 'Glowfin Tonic', tier: 2,
     minAlchemyLevel: 5, manaCost: 15, xpGrant: 40, resultCount: 1,
     recipe: [{ itemId: 'glowfin', count: 3 }, { itemId: 'ribboneel', count: 2 }, { itemId: 'raw_mana_shard', count: 3 }],
   },

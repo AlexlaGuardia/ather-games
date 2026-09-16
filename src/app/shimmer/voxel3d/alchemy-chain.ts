@@ -22,9 +22,10 @@
 //      An infusion is the flagship (canon: *"THE money maker"*) and earns the whole chain — its
 //      preps are MIXED to a base first, and the base is brewed. Everything else goes preps → finish.
 //
-// So a Mana Draught (five shards) is grind → brew, two stations; a tier-1 potion must stay a short
-// walk or the chain is friction rather than craft (the objection this design had to answer before
-// it was allowed to exist). The infusions are four.
+// ★★ SUPERSEDED 2026-09-16 — the shape above was the 09-14 chain. The ruling of 09-16 (see THE
+// ROAD below) makes every potion's step-list its own and the cauldron always last; the prep-by-kind
+// and word-picks-the-finish rules are gone. The header is kept because the stations and the job
+// shape it describes are unchanged.
 //
 // ★ PURE. No world, no React, no inventory: this file says what the steps ARE and what each station
 // lists; `alchemy-panel.tsx` spends and pays, `VoxelWorld.tsx` owns the blocks. The job record is
@@ -124,113 +125,146 @@ export const alchemyStationOf = (material: number): AlchemyStationId | null => S
 /** Every material that is an alchemy station, for the interact rule and the registry oracle. */
 export const ALCHEMY_MATS: ReadonlySet<number> = new Set(STATION_BY_MAT.keys())
 
-// ── the ingredients: dry is ground, wet is distilled ────────────────────────────────────────────
-// A kind per ingredient id, not a rule over its name: `crystallized_sap` has *sap* in it and is a
-// crystal, `glowroot_bulb` is a juicy root, and a fish is neither a plant nor a stone. The table is
-// asserted complete against `POTION_DEFS` in `alchemy-chain.test.ts`, so a new potion with a new
-// ingredient fails a test rather than silently getting no prep step.
-export type IngredientKind = 'dry' | 'wet'
-export const INGREDIENT_KIND: Readonly<Record<string, IngredientKind>> = {
-  raw_mana_shard: 'dry', goldwood_bark: 'dry', shimmerscale: 'dry',
-  violet_crystal: 'dry', water_crystal: 'dry', storm_crystal: 'dry', earth_crystal: 'dry', ather_crystal: 'dry',
-  rootvine_coil: 'dry', stormgrass_blade: 'dry', pure_mana_core: 'dry', pearlshell: 'dry',
-  starwillow_branch: 'dry', crystallized_sap: 'dry', dawnwood_plank: 'dry', crystal_rinn: 'dry',
-  shimmerwheat_grain: 'dry', moonvine_leaf: 'dry', crystalcap_spore: 'dry',
-  // ⚠ Two tier-1 calls made for the WALK, not the botany: a root bulb and a fruit are ground,
-  // because harvest brew and shimmer salve are tier-1 potions and a third station on a
-  // beginner's route is friction (§2 of the test holds tier 1 at two stations). A bulb is a
-  // root and a salve is a paste, so both readings are honest; the test is what decided.
-  glowroot_bulb: 'dry', sunfruit: 'dry',
-  glowfin: 'wet', ribboneel: 'wet', amber_sap: 'wet', moonberry: 'wet',
-  violetbloom_petal: 'wet', tidepetal_bloom: 'wet', starwillow_sap: 'wet', moonkoi: 'wet',
-  sunpetal_bloom: 'wet', dreamroot_essence: 'wet',
-}
+// ── THE ROAD: every potion has its own step-list, and the cauldron is always last ────────────────
+// RULED 2026-09-16 (athernyx fc63a33, `game/alchemy.md` › THE BREWING'S PARTS). The 09-14 chain
+// prepped each INGREDIENT by its kind (dry → mortar, wet → still) and let the craft-word pick the
+// finishing station — tonics finished cold in the bowl, elixirs in the still. Alex refused the box:
+// *"some potions have a step list like mixing and then still, and the cauldron should always go
+// last, with the potion pour wrapping it up… I don't want to box any of this up as some potions can
+// be simpler than others."* So:
+//   · **the craft-word names the VESSEL** (what is poured, what the shelf reads) — never the road;
+//   · **each potion has its OWN road**: mortar / still / bowl in any order and count, or none;
+//   · **the cauldron is ALWAYS the last station** — heat is what finishes, even a salve is worked
+//     in the bowl and then finished warm;
+//   · **the POUR wraps it** — the liquid leaves the cauldron into its vessel and takes its word;
+//     the pour is the reward moment (`brewing.ts` pays the hands there).
+// The road is a road for the BATCH, not per ingredient: step 1 takes the raw ingredients and turns
+// out one working stage (`stage_<potion>_1`), every later step turns the stage 1 → 1, and the
+// cauldron takes the last stage plus the potion's mana. That is what lets a brewing count hands —
+// one stage, one step, one pair of hands.
+//
+// ⚖ THE ROADS BELOW ARE JIN'S DESIGN, as the ruling says. The defaults read the craft-word for a
+// sensible shape (a draught is the simplest thing: cauldron, pour); `ROADS` overrides per potion.
+// ⚠ The old per-ingredient intermediates (`powder_*`, `extract_*`, `base_*`) still label, so a
+// save holding them keeps readable items; nothing makes them any more.
+export type RoadStep = Extract<AlchemyStep, 'grind' | 'distil' | 'mix'>
+export const ROAD_STATION: Readonly<Record<RoadStep, AlchemyStationId>> = { grind: 'grinder', distil: 'still', mix: 'mixer' }
 
-/** The intermediate an ingredient becomes. A powder for a dry thing, an extract for a wet one. */
-export const prepOf = (ingredientId: string): string =>
-  INGREDIENT_KIND[ingredientId] === 'wet' ? `extract_${ingredientId}` : `powder_${ingredientId}`
-
-export const prepStep = (ingredientId: string): AlchemyStep =>
-  INGREDIENT_KIND[ingredientId] === 'wet' ? 'distil' : 'grind'
-
-/** The mixed, unbrewed infusion — the one intermediate that is a potion-in-waiting. */
-export const baseOf = (potionId: string): string => `base_${potionId}`
-
-// ── the craft-word decides the finishing station ────────────────────────────────────────────────
-// Read off the LAST WORD OF THE NAME, which is the word canon ruled on. Asserted total over
-// `POTION_DEFS` in the test: a potion whose name ends in a word this table does not know has no
-// route, and that must be red rather than "goes to the cauldron by default".
 export type CraftWord = 'draught' | 'tonic' | 'brew' | 'elixir' | 'philter' | 'tincture' | 'essence' | 'infusion' | 'cordial' | 'salve'
-export const FINISH_AT: Readonly<Record<CraftWord, AlchemyStationId>> = {
-  draught: 'cauldron', brew: 'cauldron', cordial: 'cauldron', infusion: 'cauldron',
-  tonic: 'mixer', salve: 'mixer', philter: 'mixer',
-  elixir: 'still', tincture: 'still', essence: 'still',
-}
+export const CRAFT_WORDS: readonly CraftWord[] = ['draught', 'tonic', 'brew', 'elixir', 'philter', 'tincture', 'essence', 'infusion', 'cordial', 'salve']
 
 export const craftWordOf = (def: PotionDef): CraftWord | null => {
   const last = def.name.trim().split(/\s+/).pop()?.toLowerCase() ?? ''
-  return last in FINISH_AT ? (last as CraftWord) : null
+  return (CRAFT_WORDS as readonly string[]).includes(last) ? (last as CraftWord) : null
 }
 
-// ── recipes, one table per station, DERIVED from the potion list ────────────────────────────────
+/**
+ * The default road for a craft-word — the shape the word suggests, before the cauldron:
+ *   draught   nothing              the simplest potion: cauldron, pour
+ *   brew      mortar               boiled in quantity — coarse-ground, then the pot
+ *   tonic     mortar → bowl        a fast dose: ground fine, mixed cold, then warmed
+ *   salve     bowl                 worked in the bowl, finished warm (the ruling's own example)
+ *   philter   still → bowl         steeped for feeling: the extract, then the mixing
+ *   elixir    mortar → still       distilled and refined
+ *   tincture  still                an extract taken in drops
+ *   essence   still → still        concentrated — distilled twice
+ *   infusion  mortar → still → bowl the flagship earns the whole chain
+ *   cordial   bowl                 aged: mixed, then the slow pot (`ALCHEMY_RUN_MS.age`)
+ */
+export const DEFAULT_ROAD: Readonly<Record<CraftWord, readonly RoadStep[]>> = {
+  draught: [], brew: ['grind'], tonic: ['grind', 'mix'], salve: ['mix'], philter: ['distil', 'mix'],
+  elixir: ['grind', 'distil'], tincture: ['distil'], essence: ['distil', 'distil'],
+  infusion: ['grind', 'distil', 'mix'], cordial: ['mix'],
+}
+
+/** Per-potion roads that differ from their word's default. The place a potion gets its own character. */
+export const ROADS: Readonly<Record<string, readonly RoadStep[]>> = {
+  // Shard Tonic is a tier-1 mana dose: one station before the pot keeps a beginner's walk short.
+  shard_tonic: ['grind'],
+  // Moonvine's leaf is steeped, not ground — a fleetfoot dose that starts at the still.
+  moonvine_tonic: ['distil', 'mix'],
+  // Dreamroot's essence is already an extract: it is mixed with the ground crystals, then refined.
+  dreamroot_elixir: ['grind', 'mix', 'distil'],
+}
+
+/** The steps before the cauldron, for one potion. */
+export function roadOf(potionId: string): readonly RoadStep[] {
+  const def = POTION_DEFS[potionId]
+  const word = def ? craftWordOf(def) : null
+  if (!def || !word) return []
+  return ROADS[potionId] ?? DEFAULT_ROAD[word]
+}
+
+/** The working batch after step `k` (1-based) of a potion's road. */
+export const stageOf = (potionId: string, k: number): string => `stage_${potionId}_${k}`
+
+const STEP_PAST: Readonly<Record<RoadStep, string>> = { grind: 'ground', distil: 'distilled', mix: 'mixed' }
+
+// ── what a keeper drinks for: SPIRIT · HAND · PLOT (ruled 09-16, the vessels brief's own words) ──
+export type PotionJob = 'spirit' | 'hand' | 'plot'
+export const JOB_OF_WORD: Readonly<Record<CraftWord, PotionJob>> = {
+  infusion: 'spirit', philter: 'spirit',
+  tonic: 'hand', draught: 'hand', elixir: 'hand', tincture: 'hand', essence: 'hand', cordial: 'hand',
+  brew: 'plot', salve: 'plot',
+}
+export const JOB_LINE: Readonly<Record<PotionJob, string>> = {
+  spirit: 'for the spirit — the bond, a second form',
+  hand: 'for the hand — taken on the job',
+  plot: 'for the plot — ground and tools',
+}
+export function jobOf(potionId: string): PotionJob | null {
+  const def = POTION_DEFS[potionId]
+  const word = def ? craftWordOf(def) : null
+  return word ? JOB_OF_WORD[word] : null
+}
+
+// ── recipes, one table per station, DERIVED from the potion list and its roads ─────────────────
 export interface AlchemyRecipe {
-  /** `grind:<ingredient>` · `distil:<ingredient>` · `mix:<potion>` · `finish:<potion>` */
+  /** `road:<potion>:<k>` · `finish:<potion>` · the cook rows' own ids */
   id: string
   name: string
   step: AlchemyStep
   station: AlchemyStationId
   input: { itemId: string; count: number }[]
   output: { itemId: string; count: number }
-  /** Mana per run. Only a finishing run channels mana (the potion's own `manaCost`); prep is free. */
+  /** Mana per run. Only the finishing run channels mana (the potion's own `manaCost`); the road is free. */
   mana: number
-  /** Alchemy XP per run, paid when the bottle is TAKEN. Prep pays a sliver so the walk is not unpaid. */
+  /** Alchemy XP per run, paid when the run is TAKEN — to the hand that did it (`brewing.ts`). */
   xp: number
-  /** The keeper's alchemy level the row asks for. Prep inherits the lowest potion that wants it. */
+  /** The keeper's alchemy level the row asks for. Every step of a road asks the potion's. */
   minLevel: number
-  /** Milliseconds per run at this row — the station's, except a cordial ages. */
+  /** Milliseconds per run at this row — the station's, except a cordial ages in the pot. */
   runMs: number
+  /** The potion this row is a step of; the cook rows have none. */
+  potionId?: string
 }
 
 function buildRecipes(): AlchemyRecipe[] {
   const rows: AlchemyRecipe[] = []
-  const prepMin = new Map<string, number>()
-  for (const def of Object.values(POTION_DEFS)) {
-    for (const r of def.recipe) prepMin.set(r.itemId, Math.min(prepMin.get(r.itemId) ?? Infinity, def.minAlchemyLevel))
-  }
-  // Preps: one row per ingredient any potion uses, 1 → 1, at the station its kind names.
-  for (const [ing, minLevel] of prepMin) {
-    const step = prepStep(ing)
-    const station = step === 'grind' ? 'grinder' : 'still'
-    rows.push({
-      id: `${step}:${ing}`, name: `${step === 'grind' ? 'Grind' : 'Distil'} ${label(ing)}`,
-      step, station, input: [{ itemId: ing, count: 1 }], output: { itemId: prepOf(ing), count: 1 },
-      mana: 0, xp: 1, minLevel, runMs: ALCHEMY_STATIONS[station].runMs,
-    })
-  }
-  // Finishes (and the infusion's mix), one per potion, from the craft-word.
   for (const def of Object.values(POTION_DEFS)) {
     const word = craftWordOf(def)
     if (!word) continue                      // the test makes this loud; the runtime stays honest
-    const preps = def.recipe.map(r => ({ itemId: prepOf(r.itemId), count: r.count }))
-    const finishAt = FINISH_AT[word]
-    if (word === 'infusion') {
+    const road = roadOf(def.id)
+    const raw = def.recipe.map(r => ({ itemId: r.itemId, count: r.count }))
+    // Each road step pays a slice of the potion's XP, so a hand that only ground is still paid; the
+    // pour pays the rest. Slices are equal and the finish takes the remainder.
+    const slice = road.length ? Math.max(1, Math.round(def.xpGrant * 0.15)) : 0
+    road.forEach((step, i) => {
+      const k = i + 1
+      const station = ROAD_STATION[step]
       rows.push({
-        id: `mix:${def.id}`, name: `Mix ${def.name} base`, step: 'mix', station: 'mixer',
-        input: preps, output: { itemId: baseOf(def.id), count: 1 },
-        mana: 0, xp: Math.round(def.xpGrant * 0.25), minLevel: def.minAlchemyLevel, runMs: ALCHEMY_STATIONS.mixer.runMs,
+        id: `road:${def.id}:${k}`, name: `${def.name} — ${STEP_PAST[step]}`, step, station,
+        input: k === 1 ? raw : [{ itemId: stageOf(def.id, k - 1), count: 1 }],
+        output: { itemId: stageOf(def.id, k), count: 1 },
+        mana: 0, xp: slice, minLevel: def.minAlchemyLevel, runMs: ALCHEMY_STATIONS[station].runMs, potionId: def.id,
       })
-      rows.push({
-        id: `finish:${def.id}`, name: def.name, step: 'brew', station: 'cauldron',
-        input: [{ itemId: baseOf(def.id), count: 1 }], output: { itemId: def.id, count: def.resultCount },
-        mana: def.manaCost, xp: def.xpGrant, minLevel: def.minAlchemyLevel, runMs: ALCHEMY_STATIONS.cauldron.runMs,
-      })
-      continue
-    }
+    })
     rows.push({
-      id: `finish:${def.id}`, name: def.name, step: ALCHEMY_STATIONS[finishAt].step, station: finishAt,
-      input: preps, output: { itemId: def.id, count: def.resultCount },
-      mana: def.manaCost, xp: def.xpGrant, minLevel: def.minAlchemyLevel,
-      runMs: word === 'cordial' ? ALCHEMY_RUN_MS.age : ALCHEMY_STATIONS[finishAt].runMs,
+      id: `finish:${def.id}`, name: def.name, step: 'brew', station: 'cauldron',
+      input: road.length ? [{ itemId: stageOf(def.id, road.length), count: 1 }] : raw,
+      output: { itemId: def.id, count: def.resultCount },
+      mana: def.manaCost, xp: Math.max(1, def.xpGrant - slice * road.length), minLevel: def.minAlchemyLevel,
+      runMs: word === 'cordial' ? ALCHEMY_RUN_MS.age : ALCHEMY_STATIONS.cauldron.runMs, potionId: def.id,
     })
   }
   for (const c of COOK_ROWS) rows.push({ ...c, runMs: ALCHEMY_STATIONS[c.station].runMs })
@@ -243,23 +277,28 @@ export const ALCHEMY_RECIPES: readonly AlchemyRecipe[] = buildRecipes()
 const BY_ID = new Map(ALCHEMY_RECIPES.map(r => [r.id, r]))
 export const alchemyRecipe = (id: string): AlchemyRecipe | undefined => BY_ID.get(id)
 
-/** What one station lists, in canon's order (prep rows first, then potions by level). */
+/** What one station lists: by level, then by the potion's road order. */
 export function alchemyStationRecipes(station: AlchemyStationId): AlchemyRecipe[] {
-  return ALCHEMY_RECIPES.filter(r => r.station === station)
-    .sort((a, b) => Number(a.step !== prepStepOf(a)) - Number(b.step !== prepStepOf(b)) || a.minLevel - b.minLevel)
+  return ALCHEMY_RECIPES.filter(r => r.station === station).sort((a, b) => a.minLevel - b.minLevel || a.id.localeCompare(b.id))
 }
-const prepStepOf = (r: AlchemyRecipe): AlchemyStep | null => r.id.startsWith('grind:') ? 'grind' : r.id.startsWith('distil:') ? 'distil' : null
 
 /** Everything the oven turns out — so the world's item set knows a loaf exists. */
 export const COOKED: readonly string[] = [...new Set(COOK_ROWS.map(r => r.output.itemId))]
 
 /** Every intermediate the chain can produce — so the world's item set and labels know them. */
 export const ALCHEMY_INTERMEDIATES: readonly string[] = [...new Set(
-  ALCHEMY_RECIPES.map(r => r.output.itemId).filter(id => id.startsWith('powder_') || id.startsWith('extract_') || id.startsWith('base_')),
+  ALCHEMY_RECIPES.map(r => r.output.itemId).filter(id => id.startsWith('stage_')),
 )]
 
 /** A readable name for an intermediate; null for anything else (the caller keeps its own label). */
 export function intermediateLabel(itemId: string): string | null {
+  const m = /^stage_(.+)_(\d+)$/.exec(itemId)
+  if (m) {
+    const def = POTION_DEFS[m[1]]
+    const step = roadOf(m[1])[Number(m[2]) - 1]
+    return `${def?.name ?? label(m[1])} — ${step ? STEP_PAST[step] : 'working'}`
+  }
+  // The 09-14 chain's intermediates: nothing makes them now, but a save may still hold them.
   if (itemId.startsWith('powder_')) return `${label(itemId.slice(7))} Powder`
   if (itemId.startsWith('extract_')) return `${label(itemId.slice(8))} Extract`
   if (itemId.startsWith('base_')) return `${POTION_DEFS[itemId.slice(5)]?.name ?? label(itemId.slice(5))} Base`
@@ -268,18 +307,12 @@ export function intermediateLabel(itemId: string): string | null {
 
 /**
  * The whole route for one potion, for the panel's "how do I make this" line and the tests:
- * the stations in order, deduplicated (two dry ingredients are one trip to the grinder).
+ * the road's stations in order, then the cauldron — always — and the pour is implicit.
  */
 export function routeOf(potionId: string): AlchemyStationId[] {
   const def = POTION_DEFS[potionId]
-  const word = def ? craftWordOf(def) : null
-  if (!def || !word) return []
-  const out: AlchemyStationId[] = []
-  const push = (s: AlchemyStationId) => { if (out[out.length - 1] !== s) out.push(s) }
-  for (const r of def.recipe) push(prepStep(r.itemId) === 'grind' ? 'grinder' : 'still')
-  if (word === 'infusion') push('mixer')
-  push(FINISH_AT[word])
-  return out
+  if (!def || !craftWordOf(def)) return []
+  return [...roadOf(potionId).map(s => ROAD_STATION[s]), 'cauldron']
 }
 
 // ── the job, on the workshop's record ───────────────────────────────────────────────────────────
