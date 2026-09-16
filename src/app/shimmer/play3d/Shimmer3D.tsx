@@ -17,7 +17,7 @@ import { ALL_ZONES } from '../world/all-zones'
 // The far end of the Ather crossing. `engine/crossing.ts` holds the contract and the reasoning;
 // this file is the half that receives. See the boot effect for why the read lives where it does.
 import { consumeArrival, stageEntry } from '../engine/crossing'
-import { landingGate } from '../voxel3d/crossing-out'
+import { nearestGate } from '../voxel3d/crossing-out'
 import { Clock } from '../hud/clock'
 import { ObjectiveChip } from '../hud/objective-chip'
 import { SayLine } from '../hud/say-line'
@@ -4500,11 +4500,13 @@ export default function Shimmer3D() {
           setZoneId(staged.zone)
           landed = staged.zone
           // ★ AND FACING AWAY FROM THE DOOR (Alex, 2026-09-16: "when exiting a gate it spawns us
-          // facing away from the entry point"). The tile is beside the landing; the heading is
-          // gate → tile, so the square is ahead and the door one step behind. Same YXZ convention
+          // facing away from the entry point"). The tile is beside a door; the heading is
+          // door → tile, so the square is ahead and the door one step behind. Same YXZ convention
           // as the warps' `DIR_YAW`: looking along (-sin yaw, -cos yaw), so facing (dx, dy) is
           // `atan2(-dx, -dy)` — "down" (+y) is π, which is what a door on the north side gives.
-          const g = landingGate()
+          // ⚠ THE NEAREST DOOR, NOT THE LANDING: two doors let out on this square now (the landing
+          // and Greg's shopfront), and the arrival tile is beside whichever one was used.
+          const g = nearestGate(staged.zone, staged.x, staged.y)
           if (g) {
             const { w, h } = gateFootprint(g)
             const dx = staged.x + 0.5 - (g.x + w / 2), dy = staged.y + 0.5 - (g.y + h / 2)

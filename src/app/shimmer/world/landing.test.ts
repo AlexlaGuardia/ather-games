@@ -13,11 +13,12 @@
 // constant against itself is the hand-kept mirror this repo has paid for twice — a copy agrees with
 // its original forever, including after both go stale. The bbox below is computed from the grid.
 import { RUNE_HOLD } from './tilemap'
+import { SOLID } from './tiles'
 import { ALL_ZONES } from './all-zones'
 import { getZone, gateFootprint, type Gate, type Zone } from './zones'
 import {
   PLAZA, PLAZA_FLOOR, PIER_TILE, DOOR_TILE, PIERS, LANDING, LANDING_ARRIVAL, LANDING_LABEL,
-  inPlaza, landingCells,
+  inPlaza, landingCells, SHOPFRONT_ARRIVAL,
 } from './landing'
 import { arrivalBlockedBy } from '../voxel3d/crossing-out'
 
@@ -143,6 +144,15 @@ const gates: Gate[] = town?.gates ?? []
     ok(arrivalBlockedBy(g.toX, g.toY) === null,
        'and that fallback tile is itself not a gate — the degraded case cannot bounce')
   }
+}
+
+// ── 4. THE SHOPFRONT ARRIVAL — beside Greg's door, never on it (2026-09-16) ────────────────────
+{
+  const { x, y } = SHOPFRONT_ARRIVAL
+  ok(arrivalBlockedBy(x, y) === null, `the shopfront arrival (${x},${y}) is on no door — no instant re-warp`)
+  ok(arrivalBlockedBy(23, 49) !== null, 'positive control: the trail\'s step tile (23,49) IS on the Spirit Corner door')
+  // ★ The SHIPPED solidity table, never a copy of it — a hand-kept mirror reads as corroboration.
+  ok(!SOLID[RUNE_HOLD[y][x]], `and it is walkable floor (tile ${RUNE_HOLD[y][x]})`)
 }
 
 console.log(fails.length

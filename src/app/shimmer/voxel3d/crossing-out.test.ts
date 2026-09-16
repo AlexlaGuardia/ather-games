@@ -9,10 +9,10 @@ import { ALL_ZONES } from '../world/all-zones'
 import { getZone, gateFootprint, type Gate, type Zone } from '../world/zones'
 import {
   LANDING_ZONE, LANDING_LABEL, ARRIVAL_KEY,
-  landingGate, crossingReady, arrivalBlockedBy, packArrival, depart,
+  landingGate, nearestGate, crossingReady, arrivalBlockedBy, packArrival, depart,
 } from './crossing-out'
 import { consumeArrival, arrivalFor, type Store } from '../engine/crossing'
-import { LANDING_ARRIVAL } from '../world/landing'
+import { LANDING_ARRIVAL, SHOPFRONT_ARRIVAL, SHOPFRONT_LABEL } from '../world/landing'
 
 /** The landing exactly as Alex will paint it: 1×2, the map's first non-square gate. */
 const LANDING: Gate = { x: 4, y: 4, w: 1, h: 2, toZone: 'x', toX: 1, toY: 1, label: LANDING_LABEL }
@@ -121,6 +121,19 @@ ok(gates.length > 0, `the town has doors to reason about (${gates.length})`)
   ok('staged' in live && live.staged.zone === LANDING_ZONE
      && live.staged.x === LANDING_ARRIVAL.x && live.staged.y === LANDING_ARRIVAL.y,
      'and it stages the anchor beside the door, not the door')
+
+  // ── ★ THE OTHER DOOR (2026-09-16): the Glade sends an unstayed visitor back through Greg's
+  // shopfront. Same call, naming his door; the arrival is beside it, on the shipped map.
+  ops.length = 0
+  const shop = depart(store, SHOPFRONT_ARRIVAL, undefined, SHOPFRONT_LABEL)
+  ok(!('refused' in shop), `the shopfront departs for real on the shipped map (${JSON.stringify(shop)})`)
+  ok('staged' in shop && shop.via.toUpperCase() === SHOPFRONT_LABEL && shop.staged.x === SHOPFRONT_ARRIVAL.x && shop.staged.y === SHOPFRONT_ARRIVAL.y,
+     'and names Greg\'s door, staging the tile beside it')
+  ok('refused' in depart(store, { x: 23, y: 49 }, undefined, SHOPFRONT_LABEL), 'the trail\'s step tile (23,49) is ON the door and is refused as an arrival')
+  ok('refused' in depart(store, SHOPFRONT_ARRIVAL, undefined, 'THE BACK DOOR'), 'a door label the map does not carry refuses by name')
+  // The town-side facing asks for the NEAREST door to the tile it stood up on.
+  ok(nearestGate(LANDING_ZONE, SHOPFRONT_ARRIVAL.x, SHOPFRONT_ARRIVAL.y)?.label.toUpperCase() === SHOPFRONT_LABEL, 'beside the shopfront, the nearest door is the shopfront')
+  ok(nearestGate(LANDING_ZONE, LANDING_ARRIVAL.x, LANDING_ARRIVAL.y)?.label.toUpperCase() === 'THE LANDING', 'beside the landing, the nearest door is the landing')
 
   // (b) painted but the anchor bounces — refused, and again nothing is written.
   ops.length = 0

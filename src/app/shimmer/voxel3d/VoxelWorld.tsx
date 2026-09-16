@@ -241,7 +241,7 @@ import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMat
          gateTowerCells } from './crossings'
 import { depart, LANDING_LABEL } from './crossing-out'
 import { consumeEntry } from '../engine/crossing'
-import { LANDING_ARRIVAL } from '../world/landing'
+import { LANDING_ARRIVAL, SHOPFRONT_ARRIVAL, SHOPFRONT_LABEL } from '../world/landing'
 import { createGregMesh, GREG_BOUNDS } from './greg'
 import { createMoglinFigures, MOGLIN_BOUNDS } from './moglin-figure'
 import { createHands } from './hands'
@@ -613,6 +613,18 @@ const GREG_CZ = GREG_Z + 0.5
 const GREG_Y = columnHeight(GREG_X, GREG_Z, SEED) + 1
 /** How far down the ray you can reach him. Was a radius; now a distance to the box's near face. */
 const GREG_TALK_RANGE = 3
+// ── ★ GREG'S DOOR, SEEN FROM THE GLADE (2026-09-16) ─────────────────────────────────────────────
+// Canon (`rune-hold.md` › the fork): *"a visitor who lands in the glade and does not stay walks back
+// out through the shopfront to the square… the crossing is his door and it swings both ways."* The
+// Spirit Corner lets a keeper out on Greg's ground FACING GREG (the restore's 'glade' entry), so
+// the door they came through stands behind them — four blocks back along that line, a bare gold
+// spiral (no frame on this side: `world/gates.md` › the raw form is the note standing in the air).
+// Walking into it is the crossing out; the arrival tile is `SHOPFRONT_ARRIVAL`, beside his door.
+const GLADE_DOOR_X = SPAWN_X - 4
+const GLADE_DOOR_Z = SPAWN_Z
+const GLADE_DOOR_Y = columnHeight(GLADE_DOOR_X, GLADE_DOOR_Z, SEED) + 1
+/** The direction a keeper walks THROUGH it: toward Greg (+x). */
+const GLADE_DOOR_FACING = 0
 /** How far from Greg a placed mana lantern still counts as "a light on the path" (blocks). */
 const GLADE_LIGHT_RADIUS = 64
 /** Greg's body in WORLD space — `greg.ts`'s own part dimensions, lifted to where he stands. */
@@ -3348,6 +3360,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const seam = useMemo(() => createSeamShimmer(SEED, WILDS_BUBBLE, () => plotCfg.current), [])
   /** The station's lit doorways — set on every court lay and lamp pass, ticked with the seam. */
   const socketShimmers = useMemo(() => createSocketShimmers(), [])
+  /** Greg's door from the Glade side: one gold spiral, set once, shown only in the glade. */
+  const gladeDoor = useMemo(() => {
+    const s = createSocketShimmers()
+    s.set([{ x: GLADE_DOOR_X, z: GLADE_DOOR_Z, y: GLADE_DOOR_Y, facing: GLADE_DOOR_FACING, tint: 'gate' }])
+    s.group.visible = false
+    return s
+  }, [])
+  /** Standing in Greg's door this frame — an edge, so arriving beside it never fires it. */
+  const inGladeDoor = useRef(false)
   // Mist patches (2026-08-09) — the lying mist plus the presence standing in it; see mist-pass.ts.
   // Sleeps everywhere but inside a patch's reach, the same way steam sleeps outside the Springs.
   // ⚠ THE THIRD ARG IS A CLOSURE, NOT `groundTopNear` ITSELF, AND THAT IS A TEMPORAL-DEAD-ZONE
@@ -4225,6 +4246,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     breakFx.dispose()
     seam.dispose()
     socketShimmers.dispose()
+    gladeDoor.dispose()
     mist.dispose()
     ring.dispose()
     flora.dispose()
@@ -6518,6 +6540,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     seam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime, space.current, tutorial.current.stage === 'done')
     socketShimmers.group.visible = space.current === 'plot'
     if (socketShimmers.group.visible) socketShimmers.tick(p.x, p.z, state.clock.elapsedTime)
+    gladeDoor.group.visible = space.current === 'glade'
+    if (gladeDoor.group.visible) gladeDoor.tick(p.x, p.z, state.clock.elapsedTime)
     if (ledgerSeen.current !== mistLedger.current) { ledgerSeen.current = mistLedger.current; mist.setLedger(mistLedger.current) }
     mist.setCalm(suppressEncounters(buffs.current, Date.now()))   // Dreamwalk: no presence steps out while it runs
     mist.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime)
@@ -8641,6 +8665,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           if (!near) crossLatched.current = false
         }
       } else if (space.current === 'glade') {
+        // ── ★ THE SHOPFRONT SWINGS BOTH WAYS (2026-09-16) — see `GLADE_DOOR_*` ────────────────
+        // A visitor who does not stay walks back out through Greg's door to the square. Same
+        // depart as the station's gate, naming his door; the arrival is beside it, on his side.
+        // An edge, latched while standing in it, so nothing re-fires while the page turns.
+        {
+          const near = Math.hypot(lc.px - (GLADE_DOOR_X + 0.5), lc.pz - (GLADE_DOOR_Z + 0.5)) < SOCKET_RADIUS && Math.abs(lc.py - GLADE_DOOR_Y) < 2.5
+          if (near && !inGladeDoor.current) {
+            inGladeDoor.current = true
+            const out = depart(localStorage, SHOPFRONT_ARRIVAL, undefined, SHOPFRONT_LABEL)
+            if ('refused' in out) onSay(out.refused === 'unpainted' ? "Greg's door — nobody has painted the Spirit Corner on the square" : "Greg's door — no clear tile to stand up on outside it")
+            else { onSay('back out through the Spirit Corner — Rune Hold'); window.location.href = '/shimmer/play3d' }
+          }
+          if (!near) inGladeDoor.current = false
+        }
         // ── ★ MOONWELL'S WAY OUT IS THE FOLD GREG MADE (2026-09-16) ──────────────────────────
         // The island has no arch and no road off it. Once the tutorial is done, the keeper's own
         // threshold stands on Greg's ground at the coast facing their plot (`seam.ts` ›
@@ -9983,6 +10021,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       <primitive object={breakFx.points} />
       <primitive object={seam.group} />
       <primitive object={socketShimmers.group} />
+      <primitive object={gladeDoor.group} />
       <primitive object={mist.pools} />
       <primitive object={mist.points} />
       <primitive object={mist.residents} />

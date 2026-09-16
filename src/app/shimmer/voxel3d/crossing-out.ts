@@ -66,12 +66,26 @@ export interface Arrival {
   via: string
 }
 
-/** The landing gate as the shipped map has it, or null while nobody has painted one. */
-export function landingGate(zones: Zone[] = ALL_ZONES): Gate | null {
+/** A door on the town square by its label, or null while nobody has painted one. */
+export function gateByLabel(label: string, zones: Zone[] = ALL_ZONES): Gate | null {
   const town = getZone(zones, LANDING_ZONE)
   const gates: Gate[] = (town as (Zone & { gates?: Gate[] }) | undefined)?.gates ?? []
-  return gates.find(g => g.label.toUpperCase() === LANDING_LABEL) ?? null
+  return gates.find(g => g.label.toUpperCase() === label.toUpperCase()) ?? null
 }
+/** The door whose footprint centre is nearest (x, y) in `zone` — the one an arrival tile stands beside. */
+export function nearestGate(zone: string, x: number, y: number, zones: Zone[] = ALL_ZONES): Gate | null {
+  const z = getZone(zones, zone)
+  const gates: Gate[] = (z as (Zone & { gates?: Gate[] }) | undefined)?.gates ?? []
+  let best: Gate | null = null, bd = Infinity
+  for (const g of gates) {
+    const { w, h } = gateFootprint(g)
+    const d = Math.hypot(x + 0.5 - (g.x + w / 2), y + 0.5 - (g.y + h / 2))
+    if (d < bd) { bd = d; best = g }
+  }
+  return best
+}
+/** The landing gate as the shipped map has it, or null while nobody has painted one. */
+export const landingGate = (zones: Zone[] = ALL_ZONES): Gate | null => gateByLabel(LANDING_LABEL, zones)
 
 /** Is there anywhere to cross to? Asked of the MAP, never of a constant someone must remember. */
 export const crossingReady = (zones: Zone[] = ALL_ZONES): boolean => landingGate(zones) !== null
@@ -144,9 +158,11 @@ export function packArrival(
  * is a field the far side can come to depend on, and the contract's shape is the hub's to widen.
  */
 export function depart(
-  store: Store, anchor: { x: number; y: number }, zones: Zone[] = ALL_ZONES,
+  store: Store, anchor: { x: number; y: number }, zones: Zone[] = ALL_ZONES, via: string = LANDING_LABEL,
 ): { staged: TilePos; via: string } | { refused: 'unpainted' | 'blocked' } {
-  const g = landingGate(zones)
+  // ★ WHICH DOOR: the square's landing by default; Greg's shopfront when the Glade sends a visitor
+  // back (2026-09-16). Same refusals, same one-shot — only the tile and the name differ.
+  const g = gateByLabel(via, zones)
   if (!g) return { refused: 'unpainted' }
   const packed = packArrival(g, anchor.x, anchor.y, zones)
   if (!packed) return { refused: 'blocked' }

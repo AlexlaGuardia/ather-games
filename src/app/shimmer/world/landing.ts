@@ -106,6 +106,18 @@ export const PIERS: ReadonlyArray<readonly [number, number]> = [
  */
 export const LANDING_ARRIVAL = { x: 49, y: 51 } as const
 
+/** The label `expandGate` stamps on Gregory's door. The other door out of the town. */
+export const SHOPFRONT_LABEL = 'THE SPIRIT CORNER'
+/**
+ * Where a keeper stands up coming back OUT through Greg's shopfront (canon, `rune-hold.md` › the
+ * fork: *"a visitor who lands in the glade and does not stay walks back out through the shopfront
+ * to the square"*). One tile south of the door's 2×2 footprint (22–23, 48–49), the side Greg
+ * himself stands on (his square spot is 24,50) — beside the door, never on it, for the same reason
+ * `LANDING_ARRIVAL` is. ⚠ The trail's target for the fork (`SPIRIT_CORNER_STEP`, 23,49) is a tile
+ * OF the door and must never be reused as an arrival: it re-warps on the first frame.
+ */
+export const SHOPFRONT_ARRIVAL = { x: 23, y: 50 } as const
+
 /** Is (x,y) inside the plaza the placements above are all asserted against? */
 export const inPlaza = (x: number, y: number): boolean =>
   x >= PLAZA.x0 && x <= PLAZA.x1 && y >= PLAZA.y0 && y <= PLAZA.y1
