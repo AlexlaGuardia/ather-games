@@ -168,7 +168,13 @@ const ALL_NPCS = allNpcs()
 // a route that resolves nothing. A doc that claims a CAPABILITY is worse than one that claims a
 // fact — you do not verify a capability, you build on it. Restoring the param is a decision and is
 // not taken here; the claim is retired so the next person scopes from what exists.
-const START_ZONE = 'r-home-plot' // the world pivot: players live in the region maps
+// ── ★ THE FRESH KEEPER STANDS IN THE SQUARE (2026-09-15, Alex: the engine is the dimension) ──
+// play3d is the MORTAL SIDE, and Beat 0 (`shimmer-quests-mainmap.md`: "on first load, keeper
+// standing on the crossroads square") is its first scene. A fresh save used to boot into
+// `r-home-plot`, the tile Home Plot — the OLD Ather side, which the voxel world replaced. So the
+// front door delivered a new keeper to the mortal side and this constant walked them straight back
+// into a plot that is not the plot. The town is the pivot now; the Ather is the other route.
+const START_ZONE = 'rune-hold'
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 // The mortal side's wall. Clouds and mist are ATHER-only — a town built out of cloud reads as
 // sky, which is the tonal wall canon splits on. Solid like a cloud, drawn brown.
@@ -6540,7 +6546,13 @@ export default function Shimmer3D() {
     // the 2026-08-15 space-less save autopsy cost a day of — a record whose own value re-triggers
     // the thing that wrote it. The contract's rule 1 permits this: neither record is cleared, and
     // *"a keeper has a real position in BOTH"*. Standing next to the door you just used is true.
-    if (w.gate?.toUpperCase() === LANDING_LABEL) {
+    // ★ GREG'S DOOR IS THE SAME CROSSING (2026-09-15). Canon (`rune-hold.md` › NO INTERIOR OPENS,
+    // `rune-hold-doors.test` › THE SPIRIT CORNER: "stepping through IS the crossing") — the shop
+    // doorway "does not go where a doorway should". It led to the tile Home Plot, i.e. play3d's
+    // own copy of the Ather; under the ruling the Ather is voxel3d, so both doors leave the route.
+    // `performWarp` still runs first for the same reason as below: the town record must not be
+    // left standing on a warp tile.
+    if (w.gate?.toUpperCase() === LANDING_LABEL || w.gate?.toUpperCase() === 'THE SPIRIT CORNER') {
       performWarp(w)
       window.location.href = '/shimmer/voxel3d'
       return
