@@ -11,6 +11,40 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## 🎛 Shimmer — **THE HUD PORT: ONE KEEPER, ONE CHROME OVER BOTH ENGINES** (2026-09-16 early, hub lane `28308fe6`, solo) · *Last touched 2026-09-16 — ✅ **PROD from `402b35d`***
+
+**Left off:** Alex, walking Rune Hold fresh: *"is there any way to update the ui to the voxel version, this is the stale
+ui from ages ago."* Yes, and it is a port, not a switch: the voxel HUD was inline in `VoxelWorld.tsx` (12k lines) and
+play3d's in `Shimmer3D.tsx` + `HotBar.tsx`. The rule that makes it hold is `hud-corner.tsx`'s, applied to the whole HUD:
+**`shimmer/hud/` is the keeper layer; both engines import the same object; nothing to drift.**
+- **Stage 1 SHIPPED (`fd67dbb`, `402b35d`):** `hud/clock.tsx` (voxel Clock, verbatim, + `note` slot for the mortal
+  side's re-deal chips) · `hud/options-door.tsx` (the ☰ under the minimap) · `hud/options-panel.tsx` (the frame: tab
+  row Game/Video/Sound/Controls/owner-gated Dev, the Game exits, `OptionRow`/`OptionSlider`/`OptionHead`) · `hud-corner`
+  + `mana-gauge` moved in. Voxel's `SettingsPanel` composes the frame with its levers as slots. play3d's icon column
+  (☰ dropdown · ⬡ · 👥 · ⚙ · ✦ · marks · mana pie) is gone; the same door + frame open its existing panels from Game,
+  GfxPanel from Video, ONE keeper volume from Sound (voxel settings + audio bus), keys under Controls, rune grid +
+  worktable + The Ather under Dev. Minimap at the voxel rule (top 12 / right 12), door under it, both hidden under the
+  panel. Shot: scratchpad `fresh2-options.png`. Guards re-aimed: options-door 14/0, hud-type baseline 17→16.
+- **Not shared yet, on purpose:** the Clock sits LEFT of the minimap in play3d (in voxel it is drawn under the minimap's
+  z and only shows when the map is up — pre-existing; decide where the dial lives when stage 2 lands).
+
+**Next:**
+1. **Stage 2 — the bottom:** replace `play3d/HotBar.tsx` (hotbar + bag + tool gauges + mana vial) wholesale with the
+   voxel hotbar (`ItemChip` icons off `tex/item-icon.ts`), `BagPanel` + `GearTab`/`SatchelLetters`/`VesselRack` (already
+   exported from VoxelWorld), and `HudCorner` (mana adapter: play3d `ManaPool{current}` + `getMaxPool` → `{cur,max,regen}`
+   ref). Same `engine/inventory`/`tools`/`skills` types on both sides, so the panels port as-is; extract them from
+   VoxelWorld into `hud/` first, then mount. ~half a day.
+2. **Stage 3 — the middle:** the say line, the dialogue box (`ScriptDialogue`), the look/interact prompt, the objective
+   chip. Then delete play3d's old copies.
+3. `O` toggles the panel in play3d as it does in voxel (unbound today; check the key is free).
+4. Rothenburg (block below) waits on the look calls; wire only after stage 2 so the new town is not seen under old chrome.
+
+**Files:** `src/app/shimmer/hud/{clock,options-door,options-panel,hud-corner,mana-gauge}.tsx` ·
+`play3d/Shimmer3D.tsx` (DayNotes, PlaySound, the column) · `play3d/WorldMap.tsx` (minimap placement) ·
+`voxel3d/VoxelWorld.tsx` (SettingsPanel composes the frame) · `voxel3d/{options-door,hud-type}.test.ts`.
+
+---
+
 ## 🚪 Shimmer — **THE FRONT DOOR: THE ENGINE IS THE DIMENSION** (2026-09-15 late, hub lane `28308fe6`, solo) · *Last touched 2026-09-15 — ✅ **PROD `BUILD_ID zekyjSSlMD39PSKGUsSpe` from `d8d938a`***
 
 **Left off:** Alex, on last night's "Rune Hold is missing on the voxel side": *"the ather dimension is in voxel, but runehold,
