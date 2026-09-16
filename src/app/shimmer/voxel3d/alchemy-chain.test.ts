@@ -139,7 +139,7 @@ for (const id of ['grinder', 'still', 'mixer']) {
     `§4 ★ salvage pays the finished run and returns the unfinished inputs (${JSON.stringify(s.drops)})`)
   const fin = alchemyRecipe('finish:mana_draught')!
   ok(alchemyMaxRuns(fin, () => 50, 12) === 2, `§4 ★ a finishing row is capped by MANA too (12 mana / ${fin.mana} per run = 2)`)
-  ok(alchemyMaxRuns(fin, (id) => id === 'raw_mana_shard' ? 7 : 0, 999) === 1, '§4 and by the inputs')
+  ok(alchemyMaxRuns(fin, (id) => id === 'raw_mana_shard' ? 7 : id === 'glow_moss' ? 9 : 0, 999) === 1, '§4 and by the inputs (7 shards at 4 a run = 1; the moss is plentiful)')
 }
 
 // ── §5 the oven — a cooking station on the chain's machinery (2026-09-15) ───────────────────────

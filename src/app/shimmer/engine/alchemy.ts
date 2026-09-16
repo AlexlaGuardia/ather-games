@@ -28,7 +28,10 @@ export const POTION_DEFS: Record<string, PotionDef> = {
   mana_draught: {
     id: 'mana_draught', name: 'Mana Draught', tier: 1,
     minAlchemyLevel: 1, manaCost: 5, xpGrant: 15, resultCount: 2,
-    recipe: [{ itemId: 'raw_mana_shard', count: 5 }],
+    // Glow-moss (2026-09-16): canon's `world/flora.md` points it at mana potions, and the draught is
+    // the mana potion. One moss for one shard — the moss is common on woodland and shore, so the
+    // first brew stays a short walk; it just has a second thing to find.
+    recipe: [{ itemId: 'raw_mana_shard', count: 4 }, { itemId: 'glow_moss', count: 1 }],
   },
   shard_tonic: {
     id: 'shard_tonic', name: 'Shard Tonic', tier: 1,
@@ -38,7 +41,9 @@ export const POTION_DEFS: Record<string, PotionDef> = {
   shimmer_salve: {
     id: 'shimmer_salve', name: 'Shimmer Salve', tier: 1,
     minAlchemyLevel: 3, manaCost: 10, xpGrant: 25, resultCount: 1,
-    recipe: [{ itemId: 'shimmerscale', count: 4 }, { itemId: 'sunfruit', count: 2 }],
+    // Puff spores (2026-09-16): canon's "base for many potions" — the PLOT class (brews, salves)
+    // takes a pinch, worked in at the first station of the road (hub's call on THE ROAD).
+    recipe: [{ itemId: 'shimmerscale', count: 4 }, { itemId: 'sunfruit', count: 2 }, { itemId: 'puff_spores', count: 1 }],
   },
 
   // Tier 2 — Intermediate
@@ -106,7 +111,8 @@ export const POTION_DEFS: Record<string, PotionDef> = {
   harvest_brew: {
     id: 'harvest_brew', name: 'Harvest Brew', tier: 1,
     minAlchemyLevel: 2, manaCost: 6, xpGrant: 18, resultCount: 2,
-    recipe: [{ itemId: 'shimmerwheat_grain', count: 5 }, { itemId: 'glowroot_bulb', count: 3 }],
+    // Puff spores at the mortar (2026-09-16) — see shimmer_salve; the brew's road starts with a grind.
+    recipe: [{ itemId: 'shimmerwheat_grain', count: 5 }, { itemId: 'glowroot_bulb', count: 3 }, { itemId: 'puff_spores', count: 2 }],
   },
   moonvine_tonic: {
     id: 'moonvine_tonic', name: 'Moonvine Tonic', tier: 2,
