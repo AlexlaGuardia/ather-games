@@ -2,14 +2,18 @@
 //
 // Mutation-swept 2026-09-16: stride driven by time instead of distance (the bob-freezes assert) ·
 // chop sign flipped · PLACE window off-by-one · cast env never released · lower not eased.
-import { stepHands, newHandsState, BOB_Y, BREATH_Y, SWING_HZ, SWING_RAD, PLACE_MS, CAST_MS, LOWER_Y, type HandsInput } from './hands-pose'
+import { stepHands, newHandsState, BOB_Y, BREATH_Y, SWING_HZ, SWING_RAD, PLACE_MS, CAST_MS, LOWER_Y, LAND_DIP, type HandsInput } from './hands-pose'
 import { RUN_SPEED } from './locomotion'
 
 let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 const DT = 1 / 60
-const base = (over: Partial<HandsInput> = {}): HandsInput => ({ t: 0, now: 0, speed: 0, vy: 0, breaking: false, placeAt: -Infinity, castAt: -Infinity, hidden: false, ...over })
+const base = (over: Partial<HandsInput> = {}): HandsInput => ({
+  t: 0, now: 0, speed: 0, vy: 0, breaking: false, placeAt: -Infinity, castAt: -Infinity, hidden: false,
+  airborne: false, sliding: false, crouching: false, climbing: false, wallCatch: false, hanging: false, mantle: -1,
+  swimming: false, landAt: -Infinity, landVy: 0, holding: false, ...over,
+})
 /** Run `n` frames from t=0, returning every pose. `f` shapes the input per frame. */
 const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState()) => {
   const out = []
@@ -97,6 +101,47 @@ const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState
   ok(down[89].dy < -LOWER_Y * 0.95, 'hidden: and it is gone within 1.5s')
   const up = run(90, () => ({ hidden: false }), s)
   ok(Math.abs(up[89].dy) < BREATH_Y + 0.01, 'shown again: it comes back')
+}
+
+// ── the body's verbs (09-16, Alex: "climbing, grabbing a ledge, holding an item, anything else") ──
+// Each verb: on → its pose is there; off → it is gone; and it BLENDS (no single-frame snap).
+{
+  const settle = (over: Partial<HandsInput>) => { const s = newHandsState(); return run(60, () => over, s)[59] }
+  const rest = settle({})
+  const hang = settle({ hanging: true, airborne: true })
+  ok(hang.pitch > 1.0 && hang.dy > 0.2 && hang.left > 0.99 && hang.leftPitch > 0.8, `hang: both hands up on the lip (pitch ${hang.pitch.toFixed(2)}, dy ${hang.dy.toFixed(2)}, left ${hang.left.toFixed(2)})`)
+  const mantleEnd = settle({ mantle: 1 })
+  ok(mantleEnd.pitch < hang.pitch - 0.5 && mantleEnd.dy < hang.dy - 0.2, 'mantle done: the hands have pressed the lip DOWN from the hang')
+  const climb = run(120, () => ({ climbing: true, airborne: true }))
+  const cp = climb.slice(30).map(p => p.pitch)
+  ok(Math.max(...cp) - Math.min(...cp) > 0.5 && Math.min(...cp) > 0.4, 'climb: the reach ALTERNATES (pitch swings > 0.5 rad) and stays raised')
+  const cl = climb.slice(30).map(p => p.leftDy)
+  ok(Math.max(...cl) > 0.05 && Math.min(...cl) < -0.05, 'climb: the left hand pulls while the right reaches (opposite phase)')
+  const catchP = settle({ wallCatch: true, airborne: true })
+  ok(catchP.pitch > 0.8 && catchP.dz < -0.1 && catchP.left > 0.99, 'wall catch: the hand is flat on the wall in front, the other up to it')
+  const air = settle({ airborne: true })
+  ok(air.dy > rest.dy + 0.01 && air.pitch > 0.08, 'airborne: floaty — up and open')
+  const slide = settle({ sliding: true })
+  ok(slide.dy < -0.05 && slide.pitch < -0.2 && slide.dx > 0.04, 'slide: braced low and out')
+  const crouch = settle({ crouching: true })
+  ok(crouch.dy < -0.03 && crouch.dy > slide.dy, 'crouch: low, but not the slide\'s brace')
+  const swim = run(180, () => ({ swimming: true }))
+  const sp = swim.slice(60).map(p => p.pitch)
+  ok(Math.max(...sp) - Math.min(...sp) > 0.7, 'swim: a slow full stroke')
+  const hold = settle({ holding: true })
+  ok(hold.pitch > 0.15 && hold.pitch < 0.25, 'holding: the fist comes up a touch, no more')
+  // the landing dip, sized by the fall
+  const soft = run(20, () => ({ landAt: 0, landVy: 3 })), hard = run(20, () => ({ landAt: 0, landVy: 12 }))
+  ok(Math.min(...hard.map(p => p.dy)) < -LAND_DIP * 0.9 && Math.min(...soft.map(p => p.dy)) > -LAND_DIP * 0.35, 'landing: a hard fall dips deep, a hop barely')
+  // blending: the first frame of a hang is not the settled hang
+  const s = newHandsState(); const first = stepHands(s, base({ hanging: true, airborne: true }), DT)
+  ok(first.pitch < hang.pitch * 0.5, `★ a verb BLENDS in (first frame ${first.pitch.toFixed(2)} of ${hang.pitch.toFixed(2)})`)
+  // and hanging outranks airborne: no floaty drift on top of a grip
+  ok(Math.abs(hang.dy - (settle({ hanging: true }).dy)) < 1e-6, '★ hanging outranks airborne — the air pose does not stack on the grip')
+  // release: everything off → back to rest within a beat
+  const s2 = newHandsState(); run(60, () => ({ hanging: true, airborne: true, sliding: true, swimming: true }), s2)
+  const back = run(60, () => ({}), s2)[59]
+  ok(Math.abs(back.pitch) < 0.02 && Math.abs(back.dy - rest.dy) < 0.02 && back.left < 0.02, 'every verb off: back at rest within a second')
 }
 
 console.log(`hands-pose: ${pass} passed, ${fails.length} failed`)

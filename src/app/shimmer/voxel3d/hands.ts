@@ -49,8 +49,11 @@ export const HANDS_ORDER = 1000
 // ⚠ YAW SIGN (Alex, 09-16: "the hand is facing the wrong direction"): a NEGATIVE yaw here sent the
 // fingers to +x — the right edge — so the arm read as climbing out of the frame instead of into it.
 // Positive yaw turns −z (the fingers) toward −x, the crosshair, and +z (the elbow) to the corner.
-export const REST = { x: 0.30, y: -0.27, z: -0.56, yaw: 0.80, pitch: 0.55, roll: -0.30 } as const
-export const LEFT_REST = { x: -0.30, y: -0.60, z: -0.54, up: 0.42 } as const
+// Second look (Alex, 09-16): "tilt it a bit more to the right so it looks connected to the body,
+// not a floating prop" — more yaw and more roll lean the forearm toward the corner it comes from,
+// and the wrist sits further right so the elbow is unambiguously OFF the frame, where a shoulder is.
+export const REST = { x: 0.31, y: -0.17, z: -0.56, yaw: 1.0, pitch: 0.50, roll: -0.55 } as const
+export const LEFT_REST = { x: -0.34, y: -0.62, z: -0.54, up: 0.42 } as const
 
 /** Proportions, camera units. The arm reads at fov 75 from 0.6 away; these were eyeballed there. */
 const P = {
@@ -82,8 +85,16 @@ const COLOUR = {
 } as const
 
 export interface HandsSignal {
-  /** The family the aimed block asks for (and has a tool equipped for), or null for an empty hand. */
+  /** The family being SWUNG right now (the host names it only while a block is worked), else null. */
   family: SkillId | null
+  /** What is in the fist when no focus is: a block or a piece, as its flat colour; null for nothing.
+   *  A focus outranks it — you cannot hold a block and swing a blade with one hand. */
+  held: { colour: number; piece: boolean } | null
+  /** The body's verbs, copied off `LocoState` each frame by the host. */
+  airborne: boolean; sliding: boolean; crouching: boolean; climbing: boolean
+  wallCatch: boolean; hanging: boolean; mantle: number; swimming: boolean
+  /** Stamped by the host on the airborne→ground edge, with the fall speed. */
+  landAt: number; landVy: number
   /** Equipped tier for that family; tints the head. */
   tier: number
   breaking: boolean
@@ -203,7 +214,19 @@ export function createHands(): Hands {
   part(left, sphere, COLOUR.bead, 0.014, 0.014, 0.014, 0, P.band.h / 2, 0.01)
   part(left, cube, COLOUR.glove, P.glove.w * 0.9, P.glove.h * 1.2, P.glove.l * 0.6, 0, 0, -P.glove.l * 0.3 - 0.01)  // a closed fist
 
-  const sig: HandsSignal = { family: null, tier: 0, breaking: false, placeAt: -Infinity, castAt: -Infinity, hidden: false }
+  // ── the held thing: one cube in the fist, tinted per frame from the signal (a block reads as a
+  //    small block; a piece as a flatter slab of its material). One mesh, one material of its own.
+  const heldMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true })
+  const held = new THREE.Mesh(cube, heldMat)
+  held.renderOrder = HANDS_ORDER; held.frustumCulled = false; held.visible = false
+  held.position.set(0, 0.035, glove.position.z - 0.02)
+  arm.add(held)
+
+  const sig: HandsSignal = {
+    family: null, tier: 0, breaking: false, placeAt: -Infinity, castAt: -Infinity, hidden: false,
+    held: null, airborne: false, sliding: false, crouching: false, climbing: false,
+    wallCatch: false, hanging: false, mantle: -1, swimming: false, landAt: -Infinity, landVy: 0,
+  }
   const state: HandsState = newHandsState()
   const last = new THREE.Vector3(NaN, NaN, NaN)
   const tierTint = [0xd8cdb2, 0xe2d6b8, 0xe9dcc0, 0xf0e4c8]   // horn, a step clearer per tier
@@ -222,15 +245,27 @@ export function createHands(): Hands {
     }
     if (speed > 40 || Math.abs(vy) > 40) { speed = 0; vy = 0 }   // a teleport is not a sprint
     last.copy(camera.position)
-    const input: HandsInput = { t, now: performance.now(), speed, vy, breaking: sig.breaking, placeAt: sig.placeAt, castAt: sig.castAt, hidden: sig.hidden }
+    const showHeld = !sig.family && !!sig.held
+    const input: HandsInput = {
+      t, now: performance.now(), speed, vy, breaking: sig.breaking, placeAt: sig.placeAt, castAt: sig.castAt, hidden: sig.hidden,
+      airborne: sig.airborne, sliding: sig.sliding, crouching: sig.crouching, climbing: sig.climbing,
+      wallCatch: sig.wallCatch, hanging: sig.hanging, mantle: sig.mantle, swimming: sig.swimming,
+      landAt: sig.landAt, landVy: sig.landVy, holding: showHeld,
+    }
     const pose = stepHands(state, input, dt)
     sig.last = pose
     arm.position.set(REST.x + pose.dx, REST.y + pose.dy, REST.z + pose.dz)
     arm.rotation.x = REST.pitch + pose.pitch
-    left.position.y = LEFT_REST.y + pose.left * LEFT_REST.up
+    left.position.y = LEFT_REST.y + pose.left * LEFT_REST.up + pose.leftDy
+    left.rotation.x = REST.pitch + pose.leftPitch
     left.visible = pose.left > 0.01
-    // the focus in the fist
+    // the focus in the fist, or the thing being carried
     for (const [fam, g] of tools) g.visible = fam === sig.family
+    held.visible = showHeld
+    if (showHeld) {
+      heldMat.color.setHex(sig.held!.colour)
+      if (sig.held!.piece) held.scale.set(0.11, 0.035, 0.11); else held.scale.set(0.085, 0.085, 0.085)
+    }
     // the head's material is SHARED by every horn part, so the tier tint is one write, on change
     if (sig.tier !== lastTier) { lastTier = sig.tier; mat(COLOUR.horn).color.setHex(tierTint[Math.max(0, Math.min(3, sig.tier))]) }
   }
@@ -241,6 +276,7 @@ export function createHands(): Hands {
       cube.dispose(); sphere.dispose()
       for (const m of mats.values()) m.dispose()
       mats.clear()
+      heldMat.dispose()
       ;(sentinel.material as THREE.Material).dispose()
     },
   }

@@ -57,6 +57,25 @@ export interface HandsInput {
   castAt: number
   /** UI owns the screen, or the weapon is out — the hands leave the frame. */
   hidden: boolean
+  /** ── the body's verbs, straight off `LocoState` (2026-09-16, Alex: "animations? climbing,
+   *  grabbing a ledge, holding an item, anything else that comes up") ── */
+  airborne: boolean
+  sliding: boolean
+  crouching: boolean
+  /** Wall climb in progress — the alternating reach. */
+  climbing: boolean
+  /** Pinned on a wall in the catch beat — one hand flat on it. */
+  wallCatch: boolean
+  /** Hanging from a ledge — both hands on the lip. */
+  hanging: boolean
+  /** Mantle progress 0..1 while pulling up over a ledge; -1 when not. Hands press the lip down. */
+  mantle: number
+  swimming: boolean
+  /** `now` of the last landing and how hard (blocks/s downward). The hand dips with the knees. */
+  landAt: number
+  landVy: number
+  /** Something is in the fist (a block or a piece): the hand carries it a little raised. */
+  holding: boolean
 }
 
 /** Eased state the clock carries between frames. `newHandsState()` makes one. */
@@ -73,9 +92,28 @@ export interface HandsState {
   speed: number
   /** Eased 0..1 "the feet are on the ground". */
   ground: number
+  /** Eased weights, one per verb, so a pose BLENDS in and out instead of snapping. */
+  w: { air: number; slide: number; crouch: number; climb: number; wallCatch: number; hang: number; swim: number; hold: number }
+  /** The climb's and the stroke's own clocks. */
+  climbPh: number
+  swimPh: number
 }
 
-export const newHandsState = (): HandsState => ({ lower: 0, swing: 0, swingOn: 0, stride: 0, speed: 0, ground: 1 })
+export const newHandsState = (): HandsState => ({
+  lower: 0, swing: 0, swingOn: 0, stride: 0, speed: 0, ground: 1,
+  w: { air: 0, slide: 0, crouch: 0, climb: 0, wallCatch: 0, hang: 0, swim: 0, hold: 0 },
+  climbPh: 0, swimPh: 0,
+})
+
+/** How fast a verb's pose blends in (per second). A grab is quick; a swim stroke settles. */
+export const BLEND_RATE = 10
+/** Reaches per second on a wall climb, and strokes per second in the water. */
+export const CLIMB_HZ = 1.6
+export const SWIM_HZ = 0.8
+/** A landing: the dip's length and how deep a hard one goes. */
+export const LAND_MS = 260
+export const LAND_DIP = 0.07
+export const LAND_HARD_VY = 12
 
 /** Above this vertical speed the feet have left the ground: no footfalls, the hand floats. */
 export const AIRBORNE_VY = 1.5
@@ -91,6 +129,9 @@ export interface HandsPose {
   pitch: number
   /** 0..1, the left wrist's rise into frame. */
   left: number
+  /** The left arm's own offset and pitch on top of its rise — a grip, a stroke, a press. */
+  leftDy: number
+  leftPitch: number
 }
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
@@ -145,6 +186,56 @@ export function stepHands(s: HandsState, i: HandsInput, dt: number): HandsPose {
     left = env
   }
 
+  // ── the body's verbs, blended ──────────────────────────────────────────────────────────────
+  // Each verb has an eased weight; the pose is the rest pose plus each verb's offset times its
+  // weight. So a hang that ends in a mantle CROSSFADES from "hands on the lip" to "hands pressing
+  // it down" instead of cutting, and a slide into a jump lets go of the brace over a tenth of a
+  // second rather than on one frame. Priority is by exclusion at the INPUT, not by order here:
+  // hanging outranks airborne (you are in the air, but your hands are on the lip).
+  const w = s.w
+  const hangOn = i.hanging || i.mantle >= 0
+  const target = {
+    hang: hangOn ? 1 : 0,
+    climb: !hangOn && i.climbing ? 1 : 0,
+    wallCatch: !hangOn && !i.climbing && i.wallCatch ? 1 : 0,
+    swim: i.swimming ? 1 : 0,
+    air: !hangOn && !i.climbing && !i.wallCatch && !i.swimming && i.airborne ? 1 : 0,
+    slide: i.sliding ? 1 : 0,
+    crouch: !i.sliding && i.crouching ? 1 : 0,
+    hold: i.holding ? 1 : 0,
+  }
+  for (const k of Object.keys(target) as (keyof typeof target)[]) w[k] = approach(w[k], target[k], BLEND_RATE, dt)
+  let leftDy = 0, leftPitch = 0
+
+  // airborne: the hand drifts up and open — floaty, nothing to brace against
+  dy += w.air * 0.02; pitch += w.air * 0.12
+  // landing: a dip with the knees, deeper the harder you came down
+  const lu = (i.now - i.landAt) / LAND_MS
+  if (lu >= 0 && lu < 1) dy -= Math.sin(lu * Math.PI) * LAND_DIP * clamp01(i.landVy / LAND_HARD_VY)
+  // slide: braced low and out to the side; crouch: just low
+  dy -= w.slide * 0.06; dx += w.slide * 0.05; pitch -= w.slide * 0.25
+  dy -= w.crouch * 0.035
+  // wall catch: one hand flat on the wall in front, the other coming up to it
+  pitch += w.wallCatch * 0.95; dz -= w.wallCatch * 0.14; dy += w.wallCatch * 0.16
+  left = Math.max(left, w.wallCatch); leftPitch += w.wallCatch * 0.7
+  // wall climb: the alternating reach — one hand up while the other pulls
+  if (target.climb) s.climbPh += CLIMB_HZ * dt
+  const cph = Math.sin(s.climbPh * Math.PI * 2)
+  pitch += w.climb * (0.9 + 0.35 * cph); dy += w.climb * (0.14 + 0.09 * cph); dz -= w.climb * 0.1
+  left = Math.max(left, w.climb); leftDy += w.climb * 0.09 * -cph; leftPitch += w.climb * (0.8 - 0.3 * cph)
+  // hang: both hands on the lip, high and close to centre; mantle: pressing the lip down and past
+  const mp = i.mantle >= 0 ? clamp01(i.mantle) : 0
+  const press = Math.sin(mp * Math.PI)         // rises then settles as the body comes over
+  pitch += w.hang * (1.2 - 0.9 * mp); dy += w.hang * (0.28 - 0.30 * mp - 0.05 * press); dx -= w.hang * 0.12
+  left = Math.max(left, w.hang); leftDy += w.hang * (0.12 - 0.30 * mp); leftPitch += w.hang * (1.0 - 0.8 * mp)
+  // swim: a slow alternating stroke, both arms
+  if (target.swim) s.swimPh += SWIM_HZ * dt
+  const sph = Math.sin(s.swimPh * Math.PI * 2)
+  pitch += w.swim * (0.45 + 0.5 * sph); dz -= w.swim * (0.08 + 0.06 * sph); dy += w.swim * 0.06
+  left = Math.max(left, w.swim); leftDy += w.swim * 0.08 * -sph; leftPitch += w.swim * (0.45 - 0.5 * sph)
+  // holding: the fist comes up a touch so the thing in it can be seen
+  pitch += w.hold * 0.18; dy += w.hold * 0.02
+
   dy -= s.lower * LOWER_Y
-  return { dx, dy, dz, pitch, left }
+  return { dx, dy, dz, pitch, left, leftDy, leftPitch }
 }

@@ -130,7 +130,7 @@ const POT_BASE = 'voxel3d:pots:'
 const SAPLING_BASE = 'voxel3d:saplings:'
 const DECAY_BASE = 'voxel3d:leafdecay:'
 import { PIECES, PIECE_MATERIALS, STRUCTURE, STRUCTURE_HALF, pieceDef, pieceVariants, pieceMaterial, pieceItemId, pieceForItem, cellsOf, canPlace, canAfford, placementAt, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
-import { createPieceRenderer, pieceBreakTarget } from './piece-mesh'
+import { createPieceRenderer, pieceBreakTarget, pieceTint } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
 import { beginRenderLight, stepRenderLight, packForTexture, type RenderLightWork } from '../voxel/render-light'
 import {
@@ -3265,6 +3265,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   //    owns the rig and the depth trick; `hands-pose.ts` owns every motion. This file only writes
   //    the signal (below, at the HUD mark) and stamps the place / cast events. ─────────────────
   const hands = useMemo(() => createHands(), [])
+  const handsWasAirborne = useRef(false)
+  const handsLastVy = useRef(0)
   const guideWorld = useMemo((): GuideWorld => ({
     greg: { x: GREG_CX, z: GREG_CZ },
     folk: Object.fromEntries(folk.map(f => [f.id, { x: f.x, z: f.z }])),
@@ -9739,15 +9741,28 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     prof.current.mark('hud')
     // ── HUD ──────────────────────────────────────────────────────────────────────────────────
     const def = hit ? blockDef(hit.material) : undefined
-    // The hands: the focus in the fist is the one the AIMED block asks for and the keeper has —
-    // the block-picks-the-tool model, visible. Bare when nothing is asked or nothing is equipped.
+    // The hands: the focus comes up in the fist only WHILE a block is being worked (Alex, 09-16:
+    // the tool showing on aim "is not the look I'm going for") — the hand reaches for the family
+    // the block asks for as the swing starts, and is bare again when it stops.
     {
-      const fam = (breaking.current ? lastTool.current : (def?.skill ?? def?.fastSkill ?? null)) as BlockSkill
+      const fam = (breaking.current ? lastTool.current : null) as BlockSkill
       const eq = fam ? getEquippedTool(tools.current!, fam as never) : undefined
       hands.sig.family = eq ? fam : null
       hands.sig.tier = eq ? (getToolDef(eq)?.tier ?? 0) : 0
       hands.sig.breaking = !!breaking.current
       hands.sig.hidden = uiOpen.current || weaponDrawn
+      // what the fist carries when no focus is up: the selected block or piece, as its flat colour
+      const hp = selItem ? pieceForItem(selItem) : undefined
+      const hm = !hp && selItem ? materialForItem(selItem) : undefined
+      hands.sig.held = hp ? { colour: pieceTint(hp), piece: true } : hm !== undefined ? { colour: MATERIAL_COLOR[baseOf(hm)] ?? 0x8a7a5c, piece: false } : null
+      // the body's verbs, off the walker — and the landing edge, stamped with the fall speed
+      const lc = loco.current
+      if (handsWasAirborne.current && !lc.airborne && !lc.hanging) { hands.sig.landAt = performance.now(); hands.sig.landVy = Math.max(0, -handsLastVy.current) }
+      handsWasAirborne.current = lc.airborne; handsLastVy.current = lc.vy
+      hands.sig.airborne = lc.airborne; hands.sig.sliding = lc.sliding; hands.sig.crouching = lc.crouching
+      hands.sig.climbing = lc.climbing; hands.sig.wallCatch = lc.wallCatchT > 0; hands.sig.hanging = lc.hanging
+      hands.sig.mantle = lc.mantleT > 0 && lc.mantleDur > 0 ? Math.min(1, lc.mantleT / lc.mantleDur) : -1
+      hands.sig.swimming = lc.swimming
       hands.tick(camera, state.clock.elapsedTime, dt)
     }
     // ★★ THE BORE OWNS THIS LINE WHILE IT RUNS, and that is a choice rather than a merge. Both
