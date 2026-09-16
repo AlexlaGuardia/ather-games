@@ -17,8 +17,12 @@ the Arcade frame.
 
 **+ THE GUIDE TRAIL (same evening, `86b7d10` → `3ca1c92`, live `BUILD_ID` from `3ca1c92`):** Alex: *"a glow trail on the ground for quick tasks like the tutorial"* → `guide-target.ts` (pure, 22/0) resolves WHERE from the tutorial state + the bag: Greg / the NEAREST unmet door / Hazel's errand stepped through (nearest log → her sawmill → her door) / Greg's path for the light; null while crafting, null forever after the fold. `guide-trail.ts` = one additive `Points` pass, lantern gold, motes FLOW toward the target on the live ground (`surfaceTopAt`), start a step ahead of the feet, go dark inside reach. First shot was a supernova (point size 8× — `9*120/dist`); a mote is a quarter block now, from the projection, clamped. `window.__guide()` readout. Dials `GUIDE_LOOK`.
 
+**Alex's incognito walk (late, `b0136a0`):** (1) a new keeper does NOT start in Rune Hold — `/shimmer` → `voxel3d`, which has no Rune Hold; Beat 0 lives only in legacy `play3d`. (2) The folk were Greg-sized humans; Moglins are three feet → `MOGLIN_SCALE` 0.5 on the pill, hitbox + label with it (Alex: placeholder pills scaled to size for now). glade-walk green (looks down at them).
+
 **Next:**
-- **Alex walks it fresh** (clear `voxel3d:tutorial:1337` or a new keeper): the five bodies at their doors · Hazel's box · cutting with her blade · the empty tool corner before the fold · Greg's toast when the lantern lands · the choice buttons · **the trail**: density / speed / colour / whether it should hug the story road rather than run straight.
+- **Rune Hold, voxel side (P1, the real arc):** Beat 0 = an authored square + Greg's shop as a stamp + the crossing ("the doorway does not go where a doorway should") landing at the Glade `arrival`. A day.
+- **Alex finishes the walk**: Hazel's box · cutting with her blade · the empty tool corner before the fold · Greg's toast when the lantern lands · the choice buttons · **the trail**: density / speed / colour / straight vs hugging the story road.
+- A Moglin figure against `design-briefs/moglins.md` (generated model, Alex judges) replaces the scaled pill.
 - The folk LOOK: five tinted Gregs is the sheet's placeholder — art is Alex's call. A bent-over Hazel pose, Sax's stone, Fennel's Dewbear (scene line) are all unbuilt.
 - Build calls made here, Magii informed: stack = 4 planks (one log) · turn-in takes only the blade, planks stay (the lantern needs them and there is no blade to cut more) · lantern anywhere in the glade radius, not the path's exact cells.
 - Carried: Act I½ Folds gating + Beats 9/10 triggers (ruled, mine) · ring build · item icons for modelled stations · kindred/deepsight hooks.
