@@ -6,8 +6,10 @@
 // ── WHO ─────────────────────────────────────────────────────────────────────────────────────
 // Canon (`shimmer-storyline.md`, the Glade cast; `shimmer-quests-mainmap.md` › Beat 0½): Hazel the
 // carpenter, Sax the stonemason, Yarrow the apothecary, Fennel the cook, Mallow who keeps the shop.
-// Their words are Magii's (`folk-lines.ts`). Their LOOK is not settled — the figures are Greg's
-// placeholder body in a trade colour each, and "Greg's mesh tinted until art" is on the sheet.
+// Their words are Magii's (`folk-lines.ts`). Their bodies are `moglin-figure.ts` — the free Moglin
+// off the locked brief (`design-briefs/moglins.md`), one earth coat each and the trade's colour worn
+// as an apron. It replaced "Greg's mesh tinted, scaled to size" on 2026-09-16; the LOOK is still
+// Alex's to judge, and the brief is what he judges it against.
 //
 // ── WHERE ───────────────────────────────────────────────────────────────────────────────────
 // Each stands INSIDE their stamped building (`data/blueprints/placed.table.json`), on a floor cell
@@ -20,6 +22,7 @@
 import type { Rotation } from '../voxel/pieces'
 import { rotateLocal, stampFloor, type Stamp } from '../voxel/stamps'
 import { blueprintCells } from '../voxel/blueprints'
+import type { MoglinCoat } from './moglin-figure'
 
 export const FOLK_IDS = ['hazel', 'sax', 'yarrow', 'fennel', 'mallow'] as const
 export type FolkId = (typeof FOLK_IDS)[number]
@@ -34,17 +37,18 @@ export interface FolkDef {
   lz: number
   /** Which way they face, in the blueprint's frame, as `rotateCell` turns +x: 0=+x 1=+z 2=−x 3=−z. */
   face: Rotation
-  /** Placeholder trade colours — robe, then skin. Art is Alex's call. */
-  robe: number
-  skin: number
+  /** The coat — one of the brief's earth tones, five folk in five so they read apart at a glance. */
+  coat: MoglinCoat
+  /** The trade's colour, worn as an apron. The fur never carries it (never grey, never a hue). */
+  apron: number
 }
 
 export const FOLK: readonly FolkDef[] = [
-  { id: 'hazel',  name: 'Hazel',  placement: 'glade-hazel-carpentry',   lx: 4, lz: 4, face: 2, robe: 0x9a6b2f, skin: 0xd9a066 },
-  { id: 'sax',    name: 'Sax',    placement: 'glade-sax-stonery',       lx: 9, lz: 3, face: 2, robe: 0x6f7378, skin: 0xc8905a },
-  { id: 'yarrow', name: 'Yarrow', placement: 'glade-yarrow-apothecary', lx: 2, lz: 3, face: 2, robe: 0x4f6b4a, skin: 0xe0b07a },
-  { id: 'fennel', name: 'Fennel', placement: 'glade-fennel-kitchen',    lx: 4, lz: 4, face: 1, robe: 0xb8553a, skin: 0xd9a066 },
-  { id: 'mallow', name: 'Mallow', placement: 'glade-mallow-shop',       lx: 2, lz: 5, face: 3, robe: 0x7a4f8a, skin: 0xd9a066 },
+  { id: 'hazel',  name: 'Hazel',  placement: 'glade-hazel-carpentry',   lx: 4, lz: 4, face: 2, coat: 'moss',  apron: 0x9a6b2f },
+  { id: 'sax',    name: 'Sax',    placement: 'glade-sax-stonery',       lx: 9, lz: 3, face: 2, coat: 'dun',   apron: 0x8a7a63 },
+  { id: 'yarrow', name: 'Yarrow', placement: 'glade-yarrow-apothecary', lx: 2, lz: 3, face: 2, coat: 'clay',  apron: 0x4f6b4a },
+  { id: 'fennel', name: 'Fennel', placement: 'glade-fennel-kitchen',    lx: 4, lz: 4, face: 1, coat: 'fawn',  apron: 0xb8553a },
+  { id: 'mallow', name: 'Mallow', placement: 'glade-mallow-shop',       lx: 2, lz: 5, face: 3, coat: 'honey', apron: 0x7a4f8a },
 ]
 
 export const folkDef = (id: FolkId): FolkDef => FOLK.find(f => f.id === id)!

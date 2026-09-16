@@ -51,7 +51,7 @@ export const GREG_BOUNDS = {
  * camera by construction, so this is the "always-facing" name label the brief asks for with no
  * per-frame code at all.
  */
-function buildNameSprite(name: string): THREE.Sprite {
+export function buildNameSprite(name: string): THREE.Sprite {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 64
@@ -75,17 +75,10 @@ export interface FigureLook {
   name: string
   robe?: number
   skin?: number
-  /** Whole-body scale. 1 = Greg (a mortal); `MOGLIN_SCALE` for the folk (Alex, 2026-09-15:
-   *  "placeholder pills just scaled to size for now like we did greg"). The label stays readable. */
+  /** Whole-body scale. 1 = Greg (a mortal). The folk wore 0.5 of this from 09-15 to 09-16, until
+   *  `moglin-figure.ts` gave them a body of their own. The label never scales. */
   scale?: number
 }
-
-/**
- * A Moglin is child-sized — "about 3 feet tall, NOT shin-high" (`design-briefs/moglins.md`, ruled
- * 2026-06-24) — beside a 1.70 m keeper. Greg's figure is 1.82 blocks to the crown; half of that is
- * 0.91, which is three feet in a world where a block is a metre.
- */
-export const MOGLIN_SCALE = 0.5
 
 /** Build Greg once — the same figure as every folk, in his own colours (`createFigure`). */
 export function createGregMesh(): GregMesh {
@@ -95,15 +88,14 @@ export function createGregMesh(): GregMesh {
 /**
  * Build one standing figure. ONE shared unit-cube geometry, scaled per part (body, head, two arms)
  * via each mesh's own `.scale` — the geometry itself never changes — plus two materials (robe /
- * skin). The five Glade folk (`folk.ts`) are this same body in a trade colour each, until art:
- * Magii's sheet says "Greg's mesh tinted", and one factory means one hitbox (`GREG_BOUNDS`) for all.
+ * skin). Greg is the only one today; the five Glade folk are `moglin-figure.ts` since 09-16.
  */
 export function createFigure(look: FigureLook): GregMesh {
   return createFigures([look])[0]
 }
 
 /**
- * Several figures from ONE call — the five folk. One shared cube geometry across all of them, and
+ * Several figures from ONE call. One shared cube geometry across all of them, and
  * the materials CACHED BY COLOUR: two folk in the same skin share a material, and the count is
  * bounded by the palette, not the population (the render audit's rule; `dispose` releases the
  * cache once, when the last figure goes).
