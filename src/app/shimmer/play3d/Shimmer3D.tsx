@@ -830,7 +830,7 @@ function NodeMarkers({ nodes, heights, editing, channel, zoneId }: { nodes: Reso
           <group key={n.id} position={[n.tileX, y, n.tileY]}>
             {/* channel HP bar — drains as the mana-powered tool chops it down */}
             {chan && (
-              <Html position={[0, s + 1.55, 0]} center distanceFactor={11} pointerEvents="none">
+              <Html zIndexRange={[20, 0]} position={[0, s + 1.55, 0]} center distanceFactor={11} pointerEvents="none">
                 <div style={{ width: 60, textAlign: 'center', userSelect: 'none' }}>
                   <div style={{ font: '800 9px ui-monospace, monospace', color: '#bfe0ff', textShadow: '0 1px 2px #000', marginBottom: 2, whiteSpace: 'nowrap' }}>⚡ {prettyItem(n.type)}</div>
                   <div style={{ height: 6, background: '#0009', borderRadius: 3, border: '1px solid #0007', overflow: 'hidden' }}>
@@ -881,7 +881,7 @@ function NodeMarkers({ nodes, heights, editing, channel, zoneId }: { nodes: Reso
             </>}
             </NodeFade>
             {editing && (
-              <Html position={[0, s + 1.2, 0]} center distanceFactor={12} pointerEvents="none">
+              <Html zIndexRange={[20, 0]} position={[0, s + 1.2, 0]} center distanceFactor={12} pointerEvents="none">
                 <div style={{ font: '700 10px ui-monospace, monospace', color: '#0d1a17', background: '#eafff6d0', border: '1px solid #2f5c4f', borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>{n.type}</div>
               </Html>
             )}
@@ -1687,7 +1687,7 @@ function FishTell({ posRef, heightsRef, bite }: {
   })
   return (
     <group ref={group}>
-      <Html center distanceFactor={9} pointerEvents="none">
+      <Html zIndexRange={[20, 0]} center distanceFactor={9} pointerEvents="none">
         <style>{`@keyframes fishBang{0%,100%{transform:scale(1) translateY(0)}50%{transform:scale(1.28) translateY(-3px)}}
           @keyframes fishWait{0%,100%{transform:translateY(0);opacity:.55}50%{transform:translateY(4px);opacity:.9}}`}</style>
         <div style={{
@@ -1705,7 +1705,7 @@ function HarvestPop({ pop }: { pop: { x: number; y: number; z: number; glyph: st
   if (!pop) return null
   return (
     <group key={pop.key} position={[pop.x, pop.y + 1.1, pop.z]}>
-      <Html center distanceFactor={9} pointerEvents="none">
+      <Html zIndexRange={[20, 0]} center distanceFactor={9} pointerEvents="none">
         <style>{`@keyframes gpop{0%{transform:translateY(8px) scale(.4);opacity:0}28%{opacity:1}100%{transform:translateY(-28px) scale(1.1);opacity:0}}`}</style>
         <div style={{ fontSize: 26, lineHeight: 1, userSelect: 'none', animation: 'gpop .85s ease-out forwards', filter: 'drop-shadow(0 0 6px #ffe9b0)' }}>{pop.glyph}</div>
       </Html>
@@ -3154,7 +3154,7 @@ function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] })
               <cylinderGeometry args={[0.3, 0.42, 2.8, 6]} />
               <meshStandardMaterial color="#5fe0a0" emissive="#5fe0a0" emissiveIntensity={0.85} transparent opacity={0.55} />
             </mesh>
-            <Html position={[0, 3.2, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+            <Html zIndexRange={[20, 0]} position={[0, 3.2, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
               <div style={{ font: '800 11px ui-monospace, monospace', color: '#7fffc0', background: 'rgba(8,14,10,0.7)', padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', border: '1px solid #5fe0a066' }}>EXIT</div>
             </Html>
           </group>
@@ -3164,6 +3164,10 @@ function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] })
   )
 }
 
+// ⚠ EVERY IN-WORLD `<Html>` LABEL PINS `zIndexRange={[20, 0]}` (2026-09-16). drei's default range
+// starts at 16,777,271, so a gate name floated over the satchel the day the shared panel landed
+// (`hud/satchel.tsx` sits at z-30, as it does in the Ather). The HUD is above the world, always;
+// a label is part of the world.
 /**
  * A GATE — one 2x2 (or NxN) door, drawn once, with its name over it.
  *
@@ -3206,7 +3210,7 @@ function GateMarkers({ gates, heights, isOwner }: { gates: Gate[]; heights: numb
                 <meshStandardMaterial color={tint} emissive={glow} emissiveIntensity={0.9} transparent opacity={0.65} />
               </mesh>
             ))}
-            <Html position={[0, 4.1, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+            <Html zIndexRange={[20, 0]} position={[0, 4.1, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
               <div style={{
                 font: '800 26px ui-monospace, monospace', color: glow, letterSpacing: '0.08em',
                 background: 'rgba(8,14,10,0.78)', padding: '7px 18px', borderRadius: 10,
@@ -3363,7 +3367,7 @@ function HubGateMarkers({ heights }: { heights: number[][] }) {
               <cylinderGeometry args={[0.32, 0.5, 3, 6]} />
               <meshStandardMaterial color={g.color} emissive={g.color} emissiveIntensity={0.9} transparent opacity={0.5} />
             </mesh>
-            <Html position={[0, 3.4, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
+            <Html zIndexRange={[20, 0]} position={[0, 3.4, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
               <div style={{ font: '800 12px ui-monospace, monospace', color: g.color, background: 'rgba(8,8,14,0.7)', padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', border: `1px solid ${g.color}66` }}>{g.label}</div>
             </Html>
           </group>
