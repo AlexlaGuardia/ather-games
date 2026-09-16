@@ -11,6 +11,30 @@ real **gimmick** (not watch-and-wait) · **canon-parallel** (serves Athernyx, no
 black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin under
 the Arcade frame.
 
+## ⑂ Shimmer — **THE FORK ON THE SQUARE: TRAIL TO GREG, BEAT 0 AT THE DOOR, THE STATION BY WALKING** (2026-09-16 early, hub lane `28308fe6`) · *Last touched 2026-09-16 — ✅ **PROD from `2aa5297`***
+
+**Left off:** Alex: *"from here in the tutorial they should have the trail to greg and he can lead them to the moonwell
+glade tutorial or if they go into the travelers station the crucible and expeditions tutorial can kick off."* Canon
+already rules the fork (`rune-hold.md` › THE SQUARE IS THE FORK, 09-11: chosen by walking, never a menu, never a lock).
+- **Built:** `play3d/fork.ts` (pure, 13/0) aims the voxel guide trail (`voxel3d/guide-trail.ts`, the same motes) on the
+  mortal side: Greg's corner until he has spoken → the Spirit Corner threshold (23,49) → nothing. **Greg stands at
+  (24,50)** in rune-hold as `gregory-square` with **Beat 0's two locked lines**; `defeatedFlag: metGregSquare` = "he
+  went in ahead". Stepping into the Travelers Station sets `stationEntered` and the trail leaves Greg. The chip is
+  `hud/objective-chip.tsx`, now the one chip both worlds wear. Shot: scratchpad `fork.png` (trail from the feet to the
+  old man in the doorway, chip on top, shared clock + ☰).
+- **Not built, filed:** the station-side tutorial has no script — CANON_GAPS `[OPEN] The mortal branch of the fork`
+  (athernyx `0105347`), magii pinged by dbr. Until ruled: branch flag + chip in canon nouns, Crucible door stays
+  owner-only, the practice range is open.
+
+**Next:**
+- Alex walks it: `/shimmer` fresh → the trail → Greg's two lines → the door → the Glade greet (Beat 1). Does the seam
+  hold? Is (24,50) the right spot for him, and should he be IN the doorway once folk are modelled?
+- Magii's ruling on the station branch → lark's lines → wire the Center greeter + first objective.
+- The trail is a straight line (voxel's shape); on the square that is fine. If a later target sits behind a building
+  it needs a tile path (play3d has BFS for beasts).
+
+---
+
 ## 🎛 Shimmer — **THE HUD PORT: ONE KEEPER, ONE CHROME OVER BOTH ENGINES** (2026-09-16 early, hub lane `28308fe6`, solo) · *Last touched 2026-09-16 — ✅ **PROD from `402b35d`***
 
 **Left off:** Alex, walking Rune Hold fresh: *"is there any way to update the ui to the voxel version, this is the stale
