@@ -432,32 +432,33 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
   // ── The three flower forms (2026-09-14). `FLOWER` is the SINGLE: one stem, one big head, the
   // tallest of the three. The mat is a flat pad (leaves, then blooms over it) plus a low star so
   // it has SOME side profile; the bush is a leafy body with a bloom cluster riding its shoulders.
-  [FLORA.FLOWER]: [{ w: 0.5, h: 0.82, lean: CARD_LEAN * 0.5 }, { w: 0.42, h: 0.42, yBase: 0.68 }],
+  [FLORA.FLOWER]: [{ w: 0.5, h: 0.82, lean: CARD_LEAN * 0.5 }, { w: 0.42, h: 0.42, yBase: 0.68, lean: CARD_LEAN * 0.5 }],
   [FLORA.BLOOM_MAT]: [
     { w: 0.98, h: 0, yBase: 0.05, flat: true },     // leaf pad, ground-multiplied
     { w: 0.98, h: 0, yBase: 0.07, flat: true },     // bloom dots, tinted
-    { w: 0.6, h: 0.2 },                             // low star of blooms, tinted — the side view
+    { w: 0.6, h: 0.2, lean: CARD_LEAN * 0.5 },      // low star of blooms, tinted — the side view
     // The contact shadow, UNDER the leaves (2026-09-15, "stickers"). A hair wider than the pad so
     // the soft rim shows past the leaf edge; 0.04 over the root puts it 0.01 above the ground
     // plane (root is 0.97), clear of z-fighting and below the pad's 0.05.
     { w: 1.0, h: 0, yBase: 0.04, flat: true },
   ],
-  [FLORA.BLOOM_BUSH]: [{ w: 0.85, h: 0.7 }, { w: 0.7, h: 0.45, yBase: 0.4 }],
+  // Bushes lean too (the noon shot from above: a bush was three dark lines and a fruit plate).
+  [FLORA.BLOOM_BUSH]: [{ w: 0.85, h: 0.7, lean: CARD_LEAN * 0.5 }, { w: 0.7, h: 0.45, yBase: 0.4, lean: CARD_LEAN * 0.5 }],
   // A fruit bush is the bloom bush's shape a little bigger, with fruit where the blooms were.
-  [FLORA.FRUIT]: [{ w: 0.9, h: 0.78 }, { w: 0.74, h: 0.46, yBase: 0.28 }],
+  [FLORA.FRUIT]: [{ w: 0.9, h: 0.78, lean: CARD_LEAN * 0.5 }, { w: 0.74, h: 0.46, yBase: 0.28, lean: CARD_LEAN * 0.5 }],
   // A herb stands taller than a wildflower and shorter than tall grass: findable at a few blocks
   // without hiding what is behind it. Body plus tip.
-  [FLORA.HERB]: [{ w: 0.55, h: 0.8, lean: CARD_LEAN * 0.6 }, { w: 0.34, h: 0.34, yBase: 0.72 }],
+  [FLORA.HERB]: [{ w: 0.55, h: 0.8, lean: CARD_LEAN * 0.6 }, { w: 0.34, h: 0.34, yBase: 0.72, lean: CARD_LEAN * 0.5 }],
   // Chest-high: a stand of grain has to read as CULTIVATED, and that silhouette is what separates a
   // field from a meadow. Unit height, because the planted feed scales it per growth phase.
-  [FLORA.CROP]: [{ w: 0.62, h: 1.0 }, { w: 0.42, h: 0.30, yBase: 0.72 }],
+  [FLORA.CROP]: [{ w: 0.62, h: 1.0, lean: CARD_LEAN * 0.4 }, { w: 0.42, h: 0.30, yBase: 0.72, lean: CARD_LEAN * 0.4 }],
   // Glow-moss is a pad and only a pad (2026-09-16): no blooms, no side star, and no contact
   // shadow — a thing that lights the ground does not darken it. The whole plant is one flat card.
   [FLORA.MOSS]: [
     { w: 0.98, h: 0, yBase: 0.05, flat: true },
     // A pad seen from eye level is a line (the bloom mat's lesson) — a low star gives it a cushion's
     // side profile. Same texture, so it reads as the same moss standing up a little.
-    { w: 0.6, h: 0.14 },
+    { w: 0.6, h: 0.14, lean: CARD_LEAN * 0.5 },
   ],
 }
 
