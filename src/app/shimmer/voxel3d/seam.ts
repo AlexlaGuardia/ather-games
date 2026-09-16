@@ -377,7 +377,10 @@ export function createSocketShimmers(): SocketShimmer {
         // The doorway is 3 wide and 3 tall; the plane fills it and faces along the walk.
         mesh.scale.set(3, 3, 1)
         mesh.position.set(s.x + 0.5, s.y + 1.5, s.z + 0.5)
-        mesh.rotation.y = Math.atan2(Math.cos(s.facing), Math.sin(s.facing)) + Math.PI / 2
+        // A PlaneGeometry faces +z; rotation.y = θ turns its normal to (sin θ, 0, cos θ). The normal
+        // must lie ALONG the walk (cos f, sin f), so θ = atan2(cos f, sin f) — no extra quarter turn
+        // (the first cut had one and Moonwell's portal stood edge-on, a slit again).
+        mesh.rotation.y = Math.atan2(Math.cos(s.facing), Math.sin(s.facing))
         group.add(mesh)
         items.push({ mesh, mat, x: s.x + 0.5, z: s.z + 0.5 })
       }
