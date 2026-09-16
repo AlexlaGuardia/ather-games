@@ -239,7 +239,7 @@ import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMat
          gateTowerCells } from './crossings'
 import { depart, LANDING_LABEL } from './crossing-out'
 import { LANDING_ARRIVAL } from '../world/landing'
-import { createGregMesh, createFigures, GREG_BOUNDS } from './greg'
+import { createGregMesh, createFigures, GREG_BOUNDS, MOGLIN_SCALE } from './greg'
 import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
@@ -4406,12 +4406,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // construction. Static, like Greg; the aim test below reads their boxes, never the meshes.
   const folk = useMemo(() => {
     const sites = folkSites(PLACED_STAMPS, (x, z) => columnHeight(x, z, SEED))
-    const figs = createFigures(sites.map(site => { const d = folkDef(site.id); return { name: d.name, robe: d.robe, skin: d.skin } }))
+    // Moglin-sized: half of Greg (three feet beside a 1.70 m keeper), and the hitbox with them.
+    const figs = createFigures(sites.map(site => { const d = folkDef(site.id); return { name: d.name, robe: d.robe, skin: d.skin, scale: MOGLIN_SCALE } }))
     return sites.map((site, i) => {
       const fig = figs[i]
       fig.group.position.set(site.cx, site.y, site.cz)
       fig.group.rotation.y = site.yaw
-      const box = bodyBox(site.cx, site.cz, site.y + GREG_BOUNDS.y0, site.y + GREG_BOUNDS.y1, GREG_BOUNDS.halfW)
+      const box = bodyBox(site.cx, site.cz, site.y + GREG_BOUNDS.y0 * MOGLIN_SCALE, site.y + GREG_BOUNDS.y1 * MOGLIN_SCALE, GREG_BOUNDS.halfW * MOGLIN_SCALE)
       return { id: site.id, fig, box, x: site.cx, z: site.cz }
     })
   }, [])

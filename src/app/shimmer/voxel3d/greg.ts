@@ -67,7 +67,6 @@ function buildNameSprite(name: string): THREE.Sprite {
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false })
   const sprite = new THREE.Sprite(material)
   sprite.scale.set(1.6, 0.4, 1)
-  sprite.position.set(0, 2.3, 0)
   return sprite
 }
 
@@ -76,7 +75,17 @@ export interface FigureLook {
   name: string
   robe?: number
   skin?: number
+  /** Whole-body scale. 1 = Greg (a mortal); `MOGLIN_SCALE` for the folk (Alex, 2026-09-15:
+   *  "placeholder pills just scaled to size for now like we did greg"). The label stays readable. */
+  scale?: number
 }
+
+/**
+ * A Moglin is child-sized — "about 3 feet tall, NOT shin-high" (`design-briefs/moglins.md`, ruled
+ * 2026-06-24) — beside a 1.70 m keeper. Greg's figure is 1.82 blocks to the crown; half of that is
+ * 0.91, which is three feet in a world where a block is a metre.
+ */
+export const MOGLIN_SCALE = 0.5
 
 /** Build Greg once — the same figure as every folk, in his own colours (`createFigure`). */
 export function createGregMesh(): GregMesh {
@@ -114,34 +123,40 @@ export function createFigures(looks: readonly FigureLook[]): GregMesh[] {
     for (const m of mats.values()) m.dispose()
     mats.clear()
   }
-  return looks.map(look => buildFigure(geo, mats.get(look.robe ?? BODY_COLOR)!, mats.get(look.skin ?? HEAD_COLOR)!, look.name, release))
+  return looks.map(look => buildFigure(geo, mats.get(look.robe ?? BODY_COLOR)!, mats.get(look.skin ?? HEAD_COLOR)!, look.name, look.scale ?? 1, release))
 }
 
 /** One figure from shared parts. Constructs no material of its own — only the name label's. */
-function buildFigure(geo: THREE.BufferGeometry, bodyMat: THREE.Material, headMat: THREE.Material, name: string, release: () => void): GregMesh {
+function buildFigure(geo: THREE.BufferGeometry, bodyMat: THREE.Material, headMat: THREE.Material, name: string, scale: number, release: () => void): GregMesh {
   const group = new THREE.Group()
+  // The BODY scales; the label does not (a name you cannot read is not a label). So the parts sit
+  // in a scaled child group and the sprite rides above it at the scaled crown.
+  const parts = new THREE.Group()
+  parts.scale.setScalar(scale)
+  group.add(parts)
 
   const body = new THREE.Mesh(geo, bodyMat)
   body.scale.set(PART.body.w, PART.body.h, PART.body.d)
   body.position.set(0, PART.body.y, 0)
-  group.add(body)
+  parts.add(body)
 
   const head = new THREE.Mesh(geo, headMat)
   head.scale.set(PART.head.s, PART.head.s, PART.head.s)
   head.position.set(0, PART.head.y, 0)
-  group.add(head)
+  parts.add(head)
 
   const armL = new THREE.Mesh(geo, bodyMat)
   armL.scale.set(PART.arm.w, PART.arm.h, PART.arm.d)
   armL.position.set(-PART.arm.x, PART.arm.y, 0)
-  group.add(armL)
+  parts.add(armL)
 
   const armR = new THREE.Mesh(geo, bodyMat)
   armR.scale.set(PART.arm.w, PART.arm.h, PART.arm.d)
   armR.position.set(PART.arm.x, PART.arm.y, 0)
-  group.add(armR)
+  parts.add(armR)
 
   const label = buildNameSprite(name)
+  label.position.y = GREG_BOUNDS.y1 * scale + 0.45
   group.add(label)
 
   return {
