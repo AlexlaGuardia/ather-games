@@ -158,7 +158,7 @@ so a new keeper never met Beat 0. **Retracted:** last night's P1 "Rune Hold on t
   → the five doors. The seam to feel is the controls changing at the door.
 - ⚠ A signed-in keeper on a NEW browser has no local rune until play3d hydrates from the cloud, so the front door sends them to
   Rune Hold once; the gate takes them home. Acceptable; fix = read birth from the cloud save in the front door if it grates.
-- Carried from the block below: Moglin figure · folk look · Rune Hold's own Moglin scale · Act I½ / Beats 9-10 · ring build.
+- Carried from the block below: folk look (the Moglin figure landed 09-16, Alex judges) · Rune Hold's own Moglin scale · Act I½ / Beats 9-10 · ring build.
 
 ---
 
@@ -173,7 +173,13 @@ so a new keeper never met Beat 0. **Retracted:** last night's P1 "Rune Hold on t
 **Next:**
 - **Rune Hold, voxel side (P1, the real arc):** Beat 0 = an authored square + Greg's shop as a stamp + the crossing ("the doorway does not go where a doorway should") landing at the Glade `arrival`. A day.
 - **Alex finishes the walk**: Hazel's box · cutting with her blade · the empty tool corner before the fold · Greg's toast when the lantern lands · the choice buttons · **the trail**: density / speed / colour / straight vs hugging the story road.
-- A Moglin figure against `design-briefs/moglins.md` (generated model, Alex judges) replaces the scaled pill.
+- ✅ **A Moglin figure replaces the scaled pill** (`2507944`, play lane 09-16, LIVE in the hub's `l0cCiVAQdgEq9yMT1XGW9`):
+  `voxel3d/moglin-figure.ts`, rigid parts on one shared sphere off the locked brief — three feet to the crown, egg body,
+  big dark eyes, lighter muzzle, six whiskers, rounded ears, paws held close, tail; trade colour as an APRON, fur in the
+  brief's five earth coats (never grey / no metal are ASSERTS, 475/0, four mutations fire). `MOGLIN_BOUNDS` derived, the
+  E-ray reads it. ⚠ Coats sit a step lighter than the words: the first cut read near-black under a roof. **Alex judges**
+  (`/shimmer/voxel3d`, Mallow in the shop is the clean front view; Hazel is over her sawmill). Not a generated model —
+  code, like the Hollow rig; Meshy off `moglin-canon.png` stays the upgrade path if the read is wrong.
 - The folk LOOK: five tinted Gregs is the sheet's placeholder — art is Alex's call. A bent-over Hazel pose, Sax's stone, Fennel's Dewbear (scene line) are all unbuilt.
 - Build calls made here, Magii informed: stack = 4 planks (one log) · turn-in takes only the blade, planks stay (the lantern needs them and there is no blade to cut more) · lantern anywhere in the glade radius, not the path's exact cells.
 - Carried: Act I½ Folds gating + Beats 9/10 triggers (ruled, mine) · ring build · item icons for modelled stations · kindred/deepsight hooks.
