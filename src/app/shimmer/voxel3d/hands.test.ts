@@ -25,7 +25,8 @@ const cam = new THREE.PerspectiveCamera()
 cam.position.set(10, 130, -5)
 cam.rotation.set(0.1, 0.4, 0)
 cam.updateMatrixWorld()
-const visibleTools = () => { let n = 0; h.group.traverse(o => { if (o instanceof THREE.Group && o.parent && o.children.length >= 2 && o.visible && o !== h.group && o.parent !== h.group && o.children.every(c => c instanceof THREE.Mesh)) n++ }); return n }
+// a focus is a group of 2+ meshes under the arm; the left wrist is the only other such group and it is invisible at rest
+const visibleTools = () => { let n = 0; h.group.traverseVisible(o => { if (o instanceof THREE.Group && o.children.length >= 2 && o !== h.group && o.children.every(c => c instanceof THREE.Mesh)) n++ }); return n }
 h.tick(cam, 0, 1 / 60)
 ok(h.group.position.equals(cam.position) && h.group.quaternion.equals(cam.quaternion), 'the rig copies the camera pose')
 ok(visibleTools() === 0, 'family null: an empty glove')

@@ -39,25 +39,29 @@ import { stepHands, newHandsState, type HandsInput, type HandsState, type HandsP
 export const HANDS_ORDER = 1000
 
 /**
- * Where the arm rests in camera space: the WRIST is the origin, the forearm runs +z (toward the
- * elbow) and the fingers −z. ⚠ THE ARM RUNS ALONG THE SCREEN, NOT INTO IT. The first two cuts
- * pointed the forearm down the view axis and every shot showed the elbow's end face — a square.
- * A hand reads when the elbow is off the bottom-right corner and the forearm climbs the diagonal
- * toward the centre: yaw turns the fingers inward (−x), pitch lifts them (+y), roll turns the back
- * of the glove to the lens. The elbow end is nearest the camera and biggest, as it should be.
+ * ★★ THE ARM IS TWO POINTS, NOT THREE ANGLES (third look, Alex 09-16, with a photo: "I can't get
+ * over this floating arm thing"). Four passes of hand-composed Euler angles each fixed one read
+ * and broke another — end-on box, climbing out of frame, lying flat along the bottom with the cut
+ * elbow showing at the right edge. The honest construction: say WHERE THE WRIST IS and WHERE THE
+ * ELBOW IS, in camera space, and aim the forearm down that line with `lookAt`. The elbow sits
+ * BELOW the frame's bottom edge and to the right — where a shoulder puts it — so the forearm
+ * rises steeply INTO the frame, foreshortened, and its cut end can never be on screen (the sleeve
+ * is long enough to pass the bottom edge with room to spare). `roll` is the one remaining angle:
+ * about the forearm's own axis, to turn the back of the glove toward the lens.
+ *
+ * The frame at fov 75, z = 0.5: half-height 0.38, half-width 0.55 (16:9). Everything below
+ * y = −0.38 at that depth is off-screen.
  */
-// ⚠ YAW SIGN (Alex, 09-16: "the hand is facing the wrong direction"): a NEGATIVE yaw here sent the
-// fingers to +x — the right edge — so the arm read as climbing out of the frame instead of into it.
-// Positive yaw turns −z (the fingers) toward −x, the crosshair, and +z (the elbow) to the corner.
-// Second look (Alex, 09-16): "tilt it a bit more to the right so it looks connected to the body,
-// not a floating prop" — more yaw and more roll lean the forearm toward the corner it comes from,
-// and the wrist sits further right so the elbow is unambiguously OFF the frame, where a shoulder is.
-export const REST = { x: 0.31, y: -0.17, z: -0.56, yaw: 1.0, pitch: 0.50, roll: -0.55 } as const
-export const LEFT_REST = { x: -0.34, y: -0.62, z: -0.54, up: 0.42 } as const
+export const WRIST = { x: 0.20, y: -0.20, z: -0.50 } as const
+export const ELBOW = { x: 0.46, y: -0.62, z: -0.34 } as const
+export const ROLL = -0.35
+/** The left wrist rests below the frame and rises `up` on a cast; its elbow mirrors the right's. */
+export const LEFT_WRIST = { x: -0.20, y: -0.58, z: -0.50, up: 0.40 } as const
+export const LEFT_ELBOW = { x: -0.46, y: -0.98, z: -0.34 } as const
 
 /** Proportions, camera units. The arm reads at fov 75 from 0.6 away; these were eyeballed there. */
 const P = {
-  forearm: { w: 0.062, h: 0.056, l: 0.22 },
+  forearm: { w: 0.062, h: 0.056, l: 0.60 },   // long: the cut end lives below the frame, always
   cuff:    { w: 0.082, h: 0.076, l: 0.04 },
   glove:   { w: 0.10, h: 0.052, l: 0.12 },
   finger:  { w: 0.021, h: 0.024, l: 0.06, curl: -1.2 },
@@ -120,7 +124,9 @@ export function createHands(): Hands {
   const mats = new Map<number, THREE.MeshLambertMaterial>()
   const mat = (colour: number) => {
     let m = mats.get(colour)
-    if (!m) { m = new THREE.MeshLambertMaterial({ color: colour, transparent: true }); mats.set(colour, m) }
+    // ★ An ambient FLOOR (the night photo: the sleeve went black). A hand a foot from your face is
+    // the one thing the world's light does not get to erase — a sixth of its own colour, always.
+    if (!m) { m = new THREE.MeshLambertMaterial({ color: colour, transparent: true, emissive: colour, emissiveIntensity: 0.16 }); mats.set(colour, m) }
     return m
   }
   const part = (parent: THREE.Object3D, geo: THREE.BufferGeometry, colour: number, sx: number, sy: number, sz: number, x: number, y: number, z: number) => {
@@ -143,11 +149,21 @@ export function createHands(): Hands {
   sentinel.onBeforeRender = (renderer) => { renderer.clearDepth() }
   group.add(sentinel)
 
-  // ── the right arm: pivot at the shoulder-ish end, the forearm hangs toward the lens ──
+  // ── the right arm: the WRIST is the pivot; `aim` below points its +z at the elbow. The pose's
+  //    pitch (chop / raise) is applied on an inner group so it rotates about the wrist's own x. ──
+  const armPivot = new THREE.Group()
   const arm = new THREE.Group()
-  arm.position.set(REST.x, REST.y, REST.z)
-  arm.rotation.set(REST.pitch, REST.yaw, REST.roll)
-  group.add(arm)
+  armPivot.add(arm)
+  group.add(armPivot)
+  /** Point a pivot's +z from `wrist` at `elbow`, then roll about that axis. Called at build time,
+   *  while `group` is still at the origin with no rotation, so local space IS camera space and
+   *  `lookAt`'s world-space target is the camera-space elbow. The forearm then rides `group`. */
+  const aim = (pivot: THREE.Group, wrist: { x: number; y: number; z: number }, elbow: { x: number; y: number; z: number }, roll: number) => {
+    pivot.position.set(wrist.x, wrist.y, wrist.z)
+    pivot.lookAt(elbow.x, elbow.y, elbow.z)
+    pivot.rotateZ(roll)
+  }
+  aim(armPivot, WRIST, ELBOW, ROLL)
   // Local frame: +z is toward the lens (the elbow), −z is away (the fingers).
   part(arm, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 - 0.02)
   part(arm, cube, COLOUR.cord, P.cuff.w, P.cuff.h, P.cuff.l, 0, 0, 0)
@@ -204,11 +220,12 @@ export function createHands(): Hands {
     part(g, cube, COLOUR.horn, 0.07, 0.012, 0.11, 0, 0.0, -0.26)
   }
 
-  // ── the left wrist: the bracelet, below the frame until a cast ──
+  // ── the left wrist: the bracelet, below the frame until a cast. Same construction, mirrored. ──
+  const leftPivot = new THREE.Group()
   const left = new THREE.Group()
-  left.position.set(LEFT_REST.x, LEFT_REST.y, LEFT_REST.z)
-  left.rotation.set(REST.pitch, -REST.yaw, -REST.roll)   // the mirror of the right arm
-  group.add(left)
+  leftPivot.add(left)
+  group.add(leftPivot)
+  aim(leftPivot, LEFT_WRIST, LEFT_ELBOW, -ROLL)
   part(left, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 + 0.03)
   part(left, cube, COLOUR.band, P.band.w, P.band.h, P.band.l, 0, 0, 0.01)
   part(left, sphere, COLOUR.bead, 0.014, 0.014, 0.014, 0, P.band.h / 2, 0.01)
@@ -254,11 +271,12 @@ export function createHands(): Hands {
     }
     const pose = stepHands(state, input, dt)
     sig.last = pose
-    arm.position.set(REST.x + pose.dx, REST.y + pose.dy, REST.z + pose.dz)
-    arm.rotation.x = REST.pitch + pose.pitch
-    left.position.y = LEFT_REST.y + pose.left * LEFT_REST.up + pose.leftDy
-    left.rotation.x = REST.pitch + pose.leftPitch
-    left.visible = pose.left > 0.01
+    // Offsets move the whole arm in CAMERA space (the pivot); the pitch bends at the wrist.
+    armPivot.position.set(WRIST.x + pose.dx, WRIST.y + pose.dy, WRIST.z + pose.dz)
+    arm.rotation.x = pose.pitch
+    leftPivot.position.y = LEFT_WRIST.y + pose.left * LEFT_WRIST.up + pose.leftDy
+    left.rotation.x = pose.leftPitch
+    leftPivot.visible = pose.left > 0.01
     // the focus in the fist, or the thing being carried
     for (const [fam, g] of tools) g.visible = fam === sig.family
     held.visible = showHeld
