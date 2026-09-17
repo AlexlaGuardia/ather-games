@@ -66,6 +66,7 @@ import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
   bedsToSave, bedsFromSave, type PlantedBeds,
 } from './planting'
+import { plantedSpots, plantedSignature } from './planted-feed'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
 import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, withLitter, litterDrops, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
 /**
@@ -3412,6 +3413,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const flora = useMemo(() => createFloraRenderer(), [])
   /** Set whenever loaded ground changes (adopt, edit, evict); the frame loop syncs once quiet. */
   const floraDirty = useRef(true)
+  // The planted feed's last picture — see the beat below the flora sync (2026-09-16).
+  const plantedSig = useRef('')
+  const plantedAt = useRef(0)
   /** Next wall-clock ms at which planted pots are checked for coming due. */
   const potTick = useRef(0)
   /** Next wall-clock ms at which planted saplings are checked for coming up. */
@@ -8052,6 +8056,21 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // adopted column. The probe walks from the generated surface to the ACTUAL one (edits move
     // it), then demands topsoil with air above — which is what keeps tufts off roads, crust,
     // grey dither, placed blocks and dug holes without flora.ts knowing materials exist.
+    // ── the planted feed's beat: the crops in the beds change on a clock, not on an edit ─────
+    // A stage is minutes apart and a full flora sync is milliseconds, so neither is paid per
+    // frame: every ~1.5s the beds are read into spots, and ONLY a changed signature (a plant, a
+    // harvest, a stage crossed, a load) hands the renderer the list and marks flora dirty. The
+    // wild sync below then draws them in the same pass — one renderer, two feeds.
+    if (state.clock.elapsedTime - plantedAt.current > 1.5) {
+      plantedAt.current = state.clock.elapsedTime
+      const spots = plantedSpots(beds.current)
+      const sig = plantedSignature(spots)
+      if (sig !== plantedSig.current) {
+        plantedSig.current = sig
+        flora.setPlanted(spots)
+        floraDirty.current = true
+      }
+    }
     if (floraDirty.current && incoming.current!.length === 0) {
       floraDirty.current = false
       const list: { key: string; x0: number; z0: number }[] = []

@@ -19,6 +19,7 @@
 import * as THREE from 'three'
 import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, fruitClusterPixels, mossPixels, rosettePixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
+import { plantedLook, STAGE_GROW, STAGE_RIPE, type PlantedSpot } from './planted-feed'
 import { FLORA, FRUIT_MATS } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
 import { MAT } from '../voxel/depth'
@@ -168,7 +169,34 @@ export const FLORA_COLORS = {
  * over when it was 66% under. Agreement between a copy and its original is not evidence about
  * either; import this instead of restating it.
  */
-export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, fruit: 3000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000, puff: 2000, moss: 6000 } as const
+/** The ripe glint's card size, its float above the crown, its texture size and its colour. */
+const GLINT_SIZE = 0.34
+const GLINT_LIFT = 0.12
+const GLINT_TEX = 16
+const GLINT_COLOR = 0xfff1b8
+/** A collapsed instance: the head pool is 1:1 with the stalk pool, so an unripe crop's head is
+ *  written as nothing rather than skipped. Scale 0 is degenerate and rasterises no fragment. */
+const ZERO_MTX = new THREE.Matrix4().makeScale(0, 0, 0)
+
+/** A four-point star, white, soft-edged: the additive material tints it. */
+function glintPixels(size: number): Uint8Array {
+  const data = new Uint8Array(size * size * 4)
+  const c = (size - 1) / 2
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const dx = Math.abs(x - c) / (size / 2), dy = Math.abs(y - c) / (size / 2)
+    // A star is where one axis is near zero: the product of the two distances is small along
+    // both spokes and large in the quadrants. Softened so the additive blend has a falloff.
+    const spoke = Math.max(0, 1 - (dx * dy) * 14 - Math.max(dx, dy) * 0.9)
+    const core = Math.max(0, 1 - Math.hypot(dx, dy) * 2.2)
+    const a = Math.min(1, spoke + core)
+    if (a <= 0.02) continue
+    const o = (y * size + x) * 4
+    data[o] = 255; data[o + 1] = 255; data[o + 2] = 255; data[o + 3] = Math.round(a * 255)
+  }
+  return data
+}
+
+export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, fruit: 3000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000, glint: 64, puff: 2000, moss: 6000 } as const
 
 /**
  * ★★★ A POOL THAT OVERFLOWS SAYS SO — ONCE, PER POOL, WITH THE NUMBER.
@@ -309,6 +337,14 @@ export interface FloraRenderer {
    * two-spaces-one-name hazard `save.ts` namespaces its records against.
    */
   invalidateAll(): void
+  /**
+   * The PLANTED feed — the crops standing in garden beds (2026-09-16, `planted-feed.ts`).
+   * Stored, and written into the crop / herb pools on the next `sync` AFTER the wild spots, so
+   * a bed's crop is the same pixels, tint and sway as the wild plant of its kind — one renderer
+   * over one plant, which is what CROP_HEAD's header asked for. The host owns WHEN this moves
+   * (a stage is minutes apart); this only remembers the list.
+   */
+  setPlanted(spots: ReadonlyArray<PlantedSpot>): void
   tick(elapsed: number): void
   /**
    * Draw the selection border on ONE plant — the reticle's whole job for ground cover.
@@ -849,6 +885,14 @@ export function createFloraRenderer(): FloraRenderer {
   // so a half-grown planted crop carries a half-height head rather than a floating one.
   const cropHeadGeo = crossGeo(FLORA.CROP, 1)
   const tipGeo = crossGeo(FLORA.HERB, 1)
+  // ── ★ THE RIPE GLINT — canon's "sparkle hints" on a ready crop (2026-09-16) ─────────────────
+  // A small star of three cards floating over a crop that `isCropReady`, additive, unlit, pulsing
+  // in the vertex program off the same `uTime` the sway reads. It is the one thing in the feed
+  // that is not a plant: a keeper scanning a row of twenty beds needs to see WHICH ones want them
+  // from the far end of the plot, and a ripe head alone is a hue change at that distance.
+  // ⚠ NOT a FLORA kind: no material, no probe, never picked, never outlined. `count` is 0 unless
+  // something is ripe, so the bounds and outline tests see nothing new.
+  const glintGeo = buildCrossGeometry(GLINT_SIZE, GLINT_SIZE, GLINT_LIFT)
 
   // ── ★★ SCATTER IS SOLID AND DOES NOT SWAY (2026-08-19, slice ③) ──────────────────────────────
   // Every material above injects a sway into its vertex shader, and that is correct for an alpha
@@ -896,6 +940,28 @@ export function createFloraRenderer(): FloraRenderer {
   const cropHeadTex = toTexture(cropHeadPixels(8), 8)
   const cropMat = swayMaterial(cropStalkTex, FLORA_SWAY[FLORA.CROP])
   const cropHeadMat = swayMaterial(cropHeadTex, FLORA_SWAY[FLORA.CROP])
+  const glintTex = toTexture(glintPixels(GLINT_TEX), GLINT_TEX)
+  const glintMat = new THREE.MeshBasicMaterial({
+    map: glintTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide, color: GLINT_COLOR,
+  })
+  glintMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = uTime
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + [
+        '{',
+        '  #ifdef USE_INSTANCING',
+        // Each bed twinkles on its own beat (phase off its position), breathing in size and
+        // bobbing a hair — a glint that pulses in lockstep across a row reads as a UI effect.
+        '  float gp = instanceMatrix[3].x * 1.7 + instanceMatrix[3].z * 2.3;',
+        '  float pulse = 0.7 + 0.3 * sin(uTime * 2.6 + gp);',
+        '  transformed.xz *= pulse;',
+        '  transformed.y += 0.06 * sin(uTime * 1.4 + gp);',
+        '  #endif',
+        '}',
+      ].join('\n'))
+  }
   const tipMat = swayMaterial(headTex, FLORA_SWAY[FLORA.HERB])
   const tuftMat = swayMaterial(tuftTex, FLORA_SWAY[FLORA.TUFT], GRASS_VARIANTS)
   // The cap sways with the fan (same amp, so the outline rule holds): uv.y is its far edge, so the
@@ -977,6 +1043,8 @@ export function createFloraRenderer(): FloraRenderer {
   const tips = new THREE.InstancedMesh(tipGeo, tipMat, CAP.herb)
   const crops = new THREE.InstancedMesh(cropGeo, cropMat, CAP.crop)
   const cropHeads = new THREE.InstancedMesh(cropHeadGeo, cropHeadMat, CAP.crop)
+  const glints = new THREE.InstancedMesh(glintGeo, glintMat, CAP.glint)
+  glints.renderOrder = 2          // after the cards it floats among; additive over them, never under
   crops.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.crop * 3), 3)
   cropHeads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.crop * 3), 3)
   // BOTH halves are tinted, unlike the flower (whose stem stays green): a herb's body colour is
@@ -1001,7 +1069,7 @@ export function createFloraRenderer(): FloraRenderer {
   puffs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.puff * 3), 3)
   mosses.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.moss * 3), 3)
 
-  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
+  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -1009,7 +1077,7 @@ export function createFloraRenderer(): FloraRenderer {
   }
 
   const group = new THREE.Group()
-  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses)
+  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
   // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
@@ -1077,6 +1145,7 @@ export function createFloraRenderer(): FloraRenderer {
   const scl = new THREE.Vector3()
   const off = new THREE.Vector3()
   const tint = new THREE.Color()
+  let planted: ReadonlyArray<PlantedSpot> = []
 
   // target / BLADE_GREEN, memoised per ground — one divide per material ever, not per blade.
   const grassMul = new Map<number, THREE.Color>()
@@ -1257,6 +1326,54 @@ export function createFloraRenderer(): FloraRenderer {
           }
         }
       }
+      // ── ★ THE PLANTED FEED, appended after the wild spots (2026-09-16) ─────────────────────
+      // Same pools, same tints, same sway; only the matrix differs. A bed's crop stands CENTRED
+      // in its cell (no jitter — it was put there) at a turn off the bed's own position, and its
+      // height is the STAGE, not `floraGrow`'s random size. The ripe head is the ripeness signal
+      // and is drawn only at STAGE_RIPE; before that the head instance is collapsed to nothing
+      // (the two pools are 1:1 by index, so it cannot simply be skipped). Caps are shared with the
+      // wild feed and counted into the same demand row, so a plot cannot overflow silently.
+      let nGl = 0
+      for (const s of planted) {
+        const look = plantedLook(s.cropId)
+        if (!look) continue
+        const place = FLORA_PLACE[look.pool === 'herb' ? FLORA.HERB : FLORA.CROP]
+        off.set(s.x + 0.5, s.y + place.root, s.z + 0.5)
+        quat.setFromAxisAngle(Y_UP, s.variant * Math.PI * 2)
+        const grow = STAGE_GROW[s.stage]
+        scl.set(1, grow, 1)
+        mtx.compose(off, quat, scl)
+        const ripe = s.stage === STAGE_RIPE
+        if (look.pool === 'crop') {
+          wC++
+          if (nC < CAP.crop) {
+            crops.setMatrixAt(nC, mtx)
+            crops.setColorAt(nC, tint.set(look.body ?? MATERIAL_COLOR[look.mat] ?? 0x8f9f5a))
+            cropHeads.setMatrixAt(nC, ripe ? mtx : ZERO_MTX)
+            cropHeads.setColorAt(nC, tint.set(look.head ?? CROP_HEAD[look.mat] ?? 0xffffff))
+            nC++
+          }
+        } else {
+          wH++
+          if (nH < CAP.herb) {
+            herbs.setMatrixAt(nH, mtx)
+            herbs.setColorAt(nH, tint.set(MATERIAL_COLOR[look.mat] ?? 0x6f8f4a))
+            tips.setMatrixAt(nH, ripe ? mtx : ZERO_MTX)
+            tips.setColorAt(nH, tint.set(HERB_TIP[look.mat] ?? 0xffffff))
+            nH++
+          }
+        }
+        if (ripe && nGl < CAP.glint) {
+          // The glint sits over the crop's crown: full-height crop, so the lift is the unit
+          // height plus GLINT_LIFT, unscaled — a star should not stretch with the stalk.
+          scl.set(1, 1, 1)
+          off.y = s.y + place.root + 1.0
+          glints.setMatrixAt(nGl, mtx.compose(off, quat, scl))
+          nGl++
+        }
+      }
+      glints.count = nGl
+      glints.instanceMatrix.needsUpdate = true
       tufts.count = nT; tuftCaps.count = nT; tuftShadows.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
       matLeaves.count = nM; matBlooms.count = nM; matStars.count = nM; matShadows.count = nM
       bushes.count = nB; bushHeads.count = nB
@@ -1315,6 +1432,7 @@ export function createFloraRenderer(): FloraRenderer {
     },
     invalidate(colKey) { cache.delete(colKey) },
     invalidateAll() { cache.clear() },
+    setPlanted(spots) { planted = spots },
     tick(elapsed) { uTime.value = elapsed },
 
     setHighlight(kind, x, y, z, variant, alongX) {
@@ -1346,6 +1464,7 @@ export function createFloraRenderer(): FloraRenderer {
       for (const h of hlMeshes) { h.mesh.dispose(); (h.mat as THREE.Material).dispose() }
       tuftGeo.dispose(); tuftCapGeo.dispose(); tuftShadowGeo.dispose(); tuftCapMat.dispose(); rosetteTex.dispose(); tallGeo.dispose(); stemGeo.dispose(); headGeo.dispose()
       herbGeo.dispose(); tipGeo.dispose()
+      glintGeo.dispose(); glintMat.dispose(); glintTex.dispose()
       tuftMat.dispose(); tallMat.dispose(); stemMat.dispose(); headMat.dispose()
       herbMat.dispose(); tipMat.dispose()
       bladeTex.dispose(); tuftTex.dispose(); tallTex.dispose(); headTex.dispose()
