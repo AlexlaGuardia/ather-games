@@ -5,7 +5,7 @@
 // by a grade table nobody re-reads, so this pins the grades that carry the argument, and pins the
 // three shader sites that must agree about the orientation (colour, relief sample, relief normal).
 import fs from 'node:fs'
-import { variationOf, buildVariationFlags, VAR_FIXED, VAR_MIRROR, VAR_FULL, TOP, SIDE, BOTTOM, LAYER_COUNT, TILE_MATERIALS, FALLBACK_LAYER, layerOf } from './tiles'
+import { variationOf, buildVariationFlags, VAR_FIXED, VAR_MIRROR, VAR_FULL, TOP, SIDE, BOTTOM, LAYER_COUNT, TILE_MATERIALS, FALLBACK_LAYER, VARIANT_BASE, layerOf } from './tiles'
 import { MAT } from '../../voxel/depth'
 import { SEAM } from '../../voxel/seams'
 import { WOOD } from '../../voxel/trees'
@@ -36,13 +36,13 @@ ok(flags[layerOf(MAT.TOPSOIL, SIDE)] === VAR_MIRROR && flags[layerOf(MAT.TOPSOIL
   'the strip is indexed by the same layerOf the mesher writes')
 const counts = [0, 0, 0]; for (const v of flags) counts[v]++
 ok(counts[0] > 0 && counts[1] > 0 && counts[2] > 0, `all three grades are in use (${counts.join('/')})`)
-ok(TILE_MATERIALS.length * 3 + 1 === LAYER_COUNT, 'layer count is still slots×3 + fallback')
+ok(TILE_MATERIALS.length * 3 + 1 === VARIANT_BASE, 'the base layout is still slots×3 + fallback; variants sit past it')
 
 // ── 3. the three shader sites agree ────────────────────────────────────────────────────────────
 const src = fs.readFileSync(new URL('./atlas.ts', import.meta.url), 'utf8')
 ok(src.includes('uniform sampler2D uVarFlags;') && src.includes("shader.uniforms.uVarFlags = { value: tiles.variation }"),
   'the grade strip is declared and bound')
-ok(/textureGrad\(uTiles, vec3\(tileUv, vLayer\), gDx, gDy\)/.test(src), 'the colour sample uses the mapped derivatives (no mip seam at block edges)')
+ok(/textureGrad\(uTiles, vec3\(tileUv, gLayer\), gDx, gDy\)/.test(src), 'the colour sample uses the mapped derivatives (no mip seam at block edges)')
 ok((src.match(/textureGrad\(uRelief,/g) ?? []).length === 2, 'both relief samples use textureGrad')
 ok((src.match(/transpose\(gOrient\) \* (rn|nmap)\.xy/g) ?? []).length === 2, 'both relief normals are mapped back through the orientation')
 ok(/vec2 dTx = dFdx\(tileUv\), dTy = dFdy\(tileUv\);[\s\S]*fract\(tileUv\)/.test(src), 'derivatives are taken BEFORE the per-block fract breaks continuity')

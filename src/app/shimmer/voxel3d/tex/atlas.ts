@@ -12,7 +12,7 @@
 // exactly on block boundaries. The only attribute added is one float: which layer to sample.
 
 import * as THREE from 'three'
-import { buildTileArray, buildVariationFlags, LAYER_COUNT } from './tiles'
+import { buildTileArray, buildLayerTable, LAYER_COUNT } from './tiles'
 import { buildReliefArray } from './relief'
 import { createLightUniforms, type LightUniforms } from '../light-glsl'
 import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from '../cartoon-glsl'
@@ -89,11 +89,9 @@ export function makeTileArray(size: number, renderer?: THREE.WebGLRenderer): Til
   relief.anisotropy = tex.anisotropy
   relief.needsUpdate = true
 
-  // The orientation grades, one byte per layer. NEAREST and unmipped: it is a lookup, not a picture.
-  const flags = buildVariationFlags()
-  const rgba = new Uint8Array(LAYER_COUNT * 4)
-  for (let i = 0; i < LAYER_COUNT; i++) rgba[i * 4] = flags[i]
-  const variation = new THREE.DataTexture(rgba, LAYER_COUNT, 1, THREE.RGBAFormat, THREE.UnsignedByteType)
+  // The layer table (`tiles.ts` › `buildLayerTable`): orientation grade + weather in r, the painted
+  // variants in g/b/a. NEAREST and unmipped: it is a lookup, not a picture.
+  const variation = new THREE.DataTexture(buildLayerTable(), LAYER_COUNT, 1, THREE.RGBAFormat, THREE.UnsignedByteType)
   variation.colorSpace = THREE.NoColorSpace
   variation.magFilter = THREE.NearestFilter
   variation.minFilter = THREE.NearestFilter
@@ -132,8 +130,11 @@ export interface VoxelTexMaterial {
   setAo: (amount: number) => void
   /** Per-texel relief strength, 0 = flat faces. Alex's dial. */
   setRelief: (amount: number) => void
-  /** Per-block tile orientation (turn + mirror), 1 = on, 0 = every block wears the tile the same way. */
+  /** Per-block tile orientation (turn + mirror) AND the painted variants, 1 = on, 0 = every block
+   *  wears the base tile the same way. */
   setVariation: (on: boolean) => void
+  /** The macro tint — patches of ground shaded and warmed/cooled over ~12 blocks. 0 = off. */
+  setWeather: (amount: number) => void
   /** Cartoon levers — uniform writes, never a recompile. See settings.ts. */
   setCartoon: (v: Record<string, number>) => void
 }
@@ -141,6 +142,14 @@ export interface VoxelTexMaterial {
 /** How much a block's brightness may drift from its neighbours. Small on purpose — this is meant to
  *  read as "stone is not uniform", not as a checkerboard. */
 export const DEFAULT_JITTER = 0.07
+
+/**
+ * Strength of the macro tint: how far a patch of ground may drift from its neighbours in value,
+ * with a third of that again as a warm/cool lean (dry rises warmer, damp hollows cooler). The
+ * noise is ~12 blocks across, so it reads as PATCHES, which per-block jitter never can. Natural
+ * materials only (`tiles.ts` › `weatherOf`). ⚠ A look call, Alex's — 0.08 is the opening position.
+ */
+export const DEFAULT_WEATHER = 0.08
 
 /** How much of the mesher's ambient-occlusion term reaches the pixels. 1 = all of it, 0 = the flat
  *  look this material shipped with while the term was being discarded. */
@@ -187,12 +196,14 @@ export function createTexturedVoxelMaterial(
     uReliefAmt: { value: number }
     uReliefShade: { value: number }
     uVariation: { value: number }
+    uWeather: { value: number }
   } | null = null
   let liveCartoon: Record<string, { value: number }> | null = null
   let jitter = DEFAULT_JITTER
   let ao = DEFAULT_AO
   let relief = DEFAULT_RELIEF
   let variation = 1
+  let weather = DEFAULT_WEATHER
   let pendingCartoon: Record<string, number> | null = null
 
   mat.onBeforeCompile = (shader) => {
@@ -205,6 +216,7 @@ export function createTexturedVoxelMaterial(
     shader.uniforms.uVarFlags = { value: tiles.variation }
     shader.uniforms.uLayerCount = { value: LAYER_COUNT }
     shader.uniforms.uVariation = { value: variation }
+    shader.uniforms.uWeather = { value: weather }
     // ★ CARTOON LEVERS LIVE HERE TOO, AS UNIFORMS ON THIS SAME PROGRAM. Switching the world to
     // textures must not lose the look, and a second material per style would be one shader program
     // per style — the allocation shape that got this page blocked from WebGL. See settings.ts.
@@ -262,6 +274,7 @@ uniform float uReliefShade;
 uniform sampler2D uVarFlags;
 uniform float uLayerCount;
 uniform float uVariation;
+uniform float uWeather;
 /** Where the painted light comes from, in a tile's tangent frame: up and slightly left, the pixel
  *  artist's convention this world's art is already drawn to.
  *  Written PRE-NORMALISED from vec3(-0.45, 0.62, 0.64) rather than wrapped in normalize(): a const
@@ -321,6 +334,39 @@ vec2 gTileUv = vec2(0.0);
 // every block edge, a hairline of wrong texels on every seam.
 mat2 gOrient = mat2(1.0, 0.0, 0.0, 1.0);
 vec2 gDx = vec2(0.0), gDy = vec2(0.0);
+// ── ★ THE LAYER THIS BLOCK ACTUALLY SAMPLES (2026-09-17) ─────────────────────────────────────
+// vLayer is the BASE layer the mesher attributed. A material with painted variants (table g > 0)
+// resolves per block to the base or one of its variants, and every sample downstream — colour,
+// relief, relief normal — reads gLayer, not vLayer, or the bumps would belong to another tile.
+// Weighting: the base keeps half the blocks; the variants share the rest, and the LAST variant
+// (the dressed one, tiles.ts › dress) is held to ~15% so its feature reads as an event.
+float gLayer = 0.0;
+// Whether this layer takes the macro tint (table r ≥ 16).
+float gWeather = 0.0;
+
+float pickLayer(vec4 tbl, vec3 cell) {
+  float n = tbl.g;
+  if (n < 0.5 || uVariation < 0.5) return vLayer;
+  float r = hashBlock(cell + vec3(3.0, 41.0, 7.0));
+  if (r < 0.5) return vLayer;
+  float t = (r - 0.5) * 2.0;
+  float base = tbl.b + tbl.a * 256.0;
+  float k = n < 1.5 ? 0.0 : (t < 0.7 ? floor(t / 0.7 * (n - 1.0)) : n - 1.0);
+  return base + k;
+}
+
+// A value noise on the block lattice, about wl blocks across. Trilinear over hashBlock corners; it
+// only has to be smooth enough that neighbouring blocks share a tint, which is what a patch is.
+float patchNoise(vec3 p, float wl) {
+  vec3 q = p / wl;
+  vec3 i = floor(q), f = fract(q);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hashBlock(i + vec3(0.0, 0.0, 0.0)), b = hashBlock(i + vec3(1.0, 0.0, 0.0));
+  float c = hashBlock(i + vec3(0.0, 1.0, 0.0)), d = hashBlock(i + vec3(1.0, 1.0, 0.0));
+  float e = hashBlock(i + vec3(0.0, 0.0, 1.0)), g = hashBlock(i + vec3(1.0, 0.0, 1.0));
+  float h = hashBlock(i + vec3(0.0, 1.0, 1.0)), k = hashBlock(i + vec3(1.0, 1.0, 1.0));
+  return mix(mix(mix(a, b, f.x), mix(c, d, f.x), f.y), mix(mix(e, g, f.x), mix(h, k, f.x), f.y), f.z);
+}
 
 // Which of the eight orientations this block's face wears, as a matrix. grade is the layer's
 // byte from uVarFlags: 0 never turns, 1 mirrors only, 2 turns and mirrors.
@@ -379,14 +425,18 @@ void tileFrame(vec3 an, out vec3 T, out vec3 B) {
   // Derivatives of the CONTINUOUS uv, taken before the per-block fract below breaks it.
   vec2 dTx = dFdx(tileUv), dTy = dFdy(tileUv);
   {
-    float grade = texture(uVarFlags, vec2((vLayer + 0.5) / uLayerCount, 0.5)).r * 255.0;
-    gOrient = tileOrient(grade, blockCoord());
+    vec4 tbl = texture(uVarFlags, vec2((vLayer + 0.5) / uLayerCount, 0.5)) * 255.0;
+    float grade = mod(tbl.r, 16.0);
+    gWeather = floor(tbl.r / 16.0);
+    vec3 cell = blockCoord();
+    gLayer = pickLayer(tbl, cell);
+    gOrient = tileOrient(grade, cell);
     // Turn about the block's own centre: the tile stays on its block, only its facing changes.
     tileUv = gOrient * (fract(tileUv) - 0.5) + 0.5;
     gDx = gOrient * dTx; gDy = gOrient * dTy;
   }
   gTileUv = tileUv;
-  vec4 tile = textureGrad(uTiles, vec3(tileUv, vLayer), gDx, gDy);
+  vec4 tile = textureGrad(uTiles, vec3(tileUv, gLayer), gDx, gDy);
 ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
   diffuseColor.rgb *= tile.rgb;
   // ── ★★ AMBIENT OCCLUSION, WHICH THIS MATERIAL SPENT A MONTH COMPUTING AND DISCARDING ────────
@@ -425,7 +475,7 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
   // constant per axis. A sun-dependent term here would make surface detail swim as the day turns,
   // which is the one thing a painted texture must not do.
   if (uReliefShade > 0.0) {
-    vec3 rn = normalize(textureGrad(uRelief, vec3(tileUv, vLayer), gDx, gDy).xyz * 2.0 - 1.0);
+    vec3 rn = normalize(textureGrad(uRelief, vec3(tileUv, gLayer), gDx, gDy).xyz * 2.0 - 1.0);
     rn.xy = transpose(gOrient) * rn.xy;   // back from the turned tile's axes (see gOrient)
     // Subtracting KEY.z makes this EXACTLY neutral on a flat texel. Without it the dial would
     // darken or brighten the whole world as it turns up, which reads as a brightness bug rather
@@ -439,6 +489,18 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
   // rather than as natural variation, and its whole job is to be recognisable at a glance.
   if (uJitter > 0.0 && tile.a < 0.5) {
     diffuseColor.rgb *= 1.0 + (hashBlock(blockCoord()) - 0.5) * 2.0 * uJitter;
+  }
+  // ── ★ THE MACRO TINT (2026-09-17) — patches, where the jitter above is confetti ──────────
+  // A slow noise over the block lattice shades whole regions: darker and a touch cooler in the
+  // hollows, lighter and warmer on the rises. Natural materials only (table r ≥ 16) and never
+  // the emissive texels, for the reason the jitter skips them. Two octaves so a patch has an
+  // edge and not just a gradient. Per BLOCK (blockCoord, not world pos): a tint that slides
+  // across one face would read as a smudge, and a block being one colour is the voxel look.
+  if (uWeather > 0.0 && gWeather > 0.5 && tile.a < 0.5) {
+    vec3 cell = blockCoord() + vec3(11.0, 3.0, 23.0);
+    float n = patchNoise(cell, 12.0) * 0.7 + patchNoise(cell + vec3(50.0), 5.0) * 0.3;
+    float m = (n - 0.5) * 2.0 * uWeather;
+    diffuseColor.rgb *= (1.0 + m) * vec3(1.0 + m * 0.35, 1.0, 1.0 - m * 0.35);
   }
 }`,
       'fragment shader',
@@ -471,7 +533,7 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
     vec3 an = abs(vVoxNormal);
     vec3 T, B;
     tileFrame(an, T, B);
-    vec3 nmap = textureGrad(uRelief, vec3(gTileUv, vLayer), gDx, gDy).xyz * 2.0 - 1.0;
+    vec3 nmap = textureGrad(uRelief, vec3(gTileUv, gLayer), gDx, gDy).xyz * 2.0 - 1.0;
     nmap.xy = transpose(gOrient) * nmap.xy;   // back from the turned tile's axes (see gOrient)
     // The dial scales the TANGENT components and the vector is renormalised, so 0 is exactly flat
     // and 1 is exactly what relief.ts baked — a lerp of the whole vector toward (0,0,1) would do
@@ -524,6 +586,10 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
     setVariation: (on: boolean) => {
       variation = on ? 1 : 0
       if (live) live.uVariation.value = variation
+    },
+    setWeather: (amount: number) => {
+      weather = amount
+      if (live) live.uWeather.value = amount
     },
     setCartoon: (v: Record<string, number>) => {
       // Held until compile for the same reason as the jitter: `onBeforeCompile` has not run before

@@ -17,7 +17,7 @@
 
 import { MAT } from '../../voxel/depth'
 import { SEAM, isSeam } from '../../voxel/seams'
-import { WOOD, isLeafMat } from '../../voxel/trees'
+import { WOOD, isLeafMat, isLogMat } from '../../voxel/trees'
 import { MATERIAL_COLOR } from '../attrs'
 import { baseOf } from '../../voxel/depth'
 
@@ -138,7 +138,46 @@ export const TILE_MATERIALS: number[] = [
 
 /** One spare layer past the end: an unmapped material samples magenta rather than layer 0's stone. */
 export const FALLBACK_LAYER = TILE_MATERIALS.length * 3
-export const LAYER_COUNT = FALLBACK_LAYER + 1
+
+// ── ★ PAINTED VARIANTS, FOR THE MATERIALS ORIENTATION CANNOT SAVE (2026-09-17) ──────────────────
+// The eight-way turn gives eight looks of ONE tile, and after a day in the meadow Alex could still
+// see the same pebble cluster and the same vein coming round again, turned. That is what "free"
+// bought. Variants are the other half: the same painter run again with a different seed, so the
+// FEATURES differ block to block, not just their facing. Two extra layers per material × face,
+// appended PAST the fallback so no base slot moves (the array above stays append-only and the
+// fallback keeps its address). The shader picks per block from the same hash that turns the tile.
+//
+// ⚠ Only the grainless natural set. A painted variant of a brick wall would be a second brick wall,
+// and every extra layer here is paint time at mount (`buildTileArray(64)` ≈ 0.8s for 256 layers;
+// this adds 120 ≈ +0.4s). Built things vary by what you build them into, not by their tiles.
+//
+// ★ THE LAST VARIANT IS DRESSED. Variant 1 is a re-seed; variant 2 is a re-seed with a feature on it
+// (a crack across a stone, a worn patch in the turf, a couple of pebbles in the sand) and the
+// shader gives it ~15% of blocks, so it reads as an event rather than a pattern. See `dress`.
+export const VARIANTS_PER = 2
+export const VARIANT_MATERIALS: number[] = [
+  MAT.PACKED_CLOUD, MAT.DEEP_STONE, MAT.STONE, MAT.SUBSOIL, MAT.SAND,
+  MAT.RUBBLE, MAT.SCREE, MAT.MARSH_MUD, MAT.COBBLESTONE, MAT.PATH,
+  MAT.TOPSOIL, MAT.GREY_SOIL, MAT.FOREST_LOAM, MAT.LUSH_TURF, MAT.DRY_GRASS, MAT.HIGHLAND_TURF,
+  WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES,
+]
+export const VARIANT_BASE = FALLBACK_LAYER + 1
+export const LAYER_COUNT = VARIANT_BASE + VARIANT_MATERIALS.length * 3 * VARIANTS_PER
+
+const VARIANT_SLOT = (() => {
+  const max = Math.max(...VARIANT_MATERIALS, ...TILE_MATERIALS)
+  const s = new Int16Array(max + 1).fill(-1)
+  VARIANT_MATERIALS.forEach((m, i) => { s[m] = i })
+  return s
+})()
+
+/** First variant layer of a (material, face), or -1 when it has none. Variants of one face sit
+ *  consecutively: `variantLayerOf(m, f) + k - 1` is variant k (1-based; 0 is the base layer). */
+export function variantLayerOf(material: number, face: number): number {
+  const m = baseOf(material)
+  const slot = m >= 0 && m < VARIANT_SLOT.length ? VARIANT_SLOT[m] : -1
+  return slot < 0 ? -1 : VARIANT_BASE + (slot * 3 + face) * VARIANTS_PER
+}
 
 const SLOT = (() => {
   const max = Math.max(...TILE_MATERIALS)
@@ -1618,9 +1657,16 @@ function paintKiln(dst: Layer, size: number, seed: number, face: number) {
   }
 }
 
-export function paintFor(material: number, face: number, size: number): Layer {
+export function paintFor(material: number, face: number, size: number, variant = 0): Layer {
   const dst = new Uint8Array(size * size * 4)
-  const seed = material * 1013 + 17
+  // Variant 0 is byte-identical to what shipped; a variant re-seeds every painter it reaches.
+  const seed = material * 1013 + 17 + variant * 7919
+  paintBase(dst, material, face, size, seed)
+  if (variant === VARIANTS_PER) dress(dst, material, face, size, seed)
+  return dst
+}
+
+function paintBase(dst: Layer, material: number, face: number, size: number, seed: number): void {
   switch (material) {
     case MAT.PACKED_CLOUD: paintPackedCloud(dst, size, seed); break
     case MAT.DEEP_STONE: paintRock(dst, size, rgbOf(MATERIAL_COLOR[material]), { speckle: 10, blotch: 16, vein: 22, seed }); break
@@ -1912,7 +1958,100 @@ export function paintFor(material: number, face: number, size: number): Layer {
         paintLeaves(dst, size, rgbOf(MATERIAL_COLOR[material]), seed)
       else writeOre(dst, size, material, seed)
   }
-  return dst
+}
+
+// ── ★ THE DRESSED VARIANT (2026-09-17) ───────────────────────────────────────────────────────
+// One feature on top of a re-seeded base, per family. These are events, not patterns: the shader
+// hands this layer ~15% of a material's blocks, so a crack shows up every seven stones or so and
+// a worn patch every seventh block of turf. Everything here is placeholder-grade like the rest of
+// the file — the look call is Alex's — but the MECHANISM (rare feature layer) is what a painted
+// set would want too.
+const ROCK_FAMILY: ReadonlySet<number> = new Set([MAT.STONE, MAT.DEEP_STONE, MAT.RUBBLE, MAT.SCREE])
+const GRIT_FAMILY: ReadonlySet<number> = new Set([MAT.SUBSOIL, MAT.SAND, MAT.MARSH_MUD, MAT.PATH])
+const TURF_FAMILY: ReadonlySet<number> = new Set([MAT.TOPSOIL, MAT.GREY_SOIL, MAT.FOREST_LOAM, MAT.LUSH_TURF, MAT.DRY_GRASS, MAT.HIGHLAND_TURF])
+
+function dress(dst: Layer, material: number, face: number, size: number, seed: number): void {
+  const m = material
+  if (ROCK_FAMILY.has(m)) dressCrack(dst, size, seed)
+  else if (GRIT_FAMILY.has(m)) dressPebbles(dst, size, seed, m === MAT.SAND ? 2 : 3)
+  else if (TURF_FAMILY.has(m)) { if (face === TOP) dressWornPatch(dst, size, seed) }
+  else if (m === MAT.COBBLESTONE) dressPit(dst, size, seed)
+  else if (LEAF_SET.has(m)) dressCanopyGap(dst, size, seed)
+  // PACKED_CLOUD: a re-seed is dressing enough — a feature on a cloud reads as a picture.
+}
+
+/** A crack wandering across the tile: a dark hairline with a lit lip on one side, so it reads as a
+ *  split and not a drawn line. Walks from one edge, drifting on the noise, 1–2 texels wide. */
+function dressCrack(dst: Layer, size: number, seed: number): void {
+  const vertical = h2(1, 2, seed) > 0.5
+  let p = Math.floor(size * (0.25 + 0.5 * h2(3, 4, seed)))
+  for (let t = 0; t < size; t++) {
+    const drift = h2(t, 9, seed + 5)
+    if (drift > 0.72) p += 1
+    else if (drift < 0.28) p -= 1
+    p = Math.max(1, Math.min(size - 2, p))
+    const wide = h2(t, 11, seed) > 0.6
+    for (let w = 0; w <= (wide ? 1 : 0); w++) {
+      const x = vertical ? p + w : t, y = vertical ? t : p + w
+      put(dst, size, x, y, shade(at(dst, size, x, y), -48))
+    }
+    const lx = vertical ? p - 1 : t, ly = vertical ? t : p - 1
+    put(dst, size, lx, ly, shade(at(dst, size, lx, ly), 14))
+  }
+}
+
+/** A few stones lying on loose ground — a darker disc with a lit crown. */
+function dressPebbles(dst: Layer, size: number, seed: number, count: number): void {
+  const r = Math.max(2, Math.round(size / 14))
+  for (let i = 0; i < count; i++) {
+    const cx = Math.floor(r + h2(i, 1, seed) * (size - 2 * r)), cy = Math.floor(r + h2(i, 2, seed) * (size - 2 * r))
+    for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
+      if (x * x + y * y > r * r) continue
+      const lit = y < -r * 0.3
+      put(dst, size, cx + x, cy + y, shade(at(dst, size, cx + x, cy + y), lit ? 10 : -30))
+    }
+  }
+}
+
+/** Worn turf: a ragged patch where the grass has thinned to earth. Not a disc: the edge comes off
+ *  the noise, the earth is lifted toward the turf's own dark so it sits IN the meadow rather than
+ *  on it, and grass texels survive inside the patch thinning toward its centre. */
+function dressWornPatch(dst: Layer, size: number, seed: number): void {
+  const earth = mix(rgbOf(MATERIAL_COLOR[MAT.SUBSOIL]), at(dst, size, 0, 0), 0.35)
+  const cx = size * (0.3 + 0.4 * h2(7, 1, seed)), cy = size * (0.3 + 0.4 * h2(7, 2, seed))
+  const R = size * 0.24
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - cx, y - cy) / R
+    const edge = 1 + (vnoise(x, y, size, 5, seed + 3) - 0.5) * 1.1
+    if (d >= edge) continue
+    const t = d / edge                               // 0 centre → 1 edge
+    if (h2(x, y, seed + 9) < t * 0.75) continue      // grass survives, more of it toward the edge
+    put(dst, size, x, y, shade(earth, (h2(x, y, seed + 8) - 0.5) * 22))
+  }
+}
+
+/** A cobble gone: one stone-sized dark hollow. */
+function dressPit(dst: Layer, size: number, seed: number): void {
+  const r = Math.max(3, Math.round(size / 9))
+  const cx = Math.floor(r + h2(5, 1, seed) * (size - 2 * r)), cy = Math.floor(r + h2(5, 2, seed) * (size - 2 * r))
+  for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
+    if (x * x + y * y > r * r) continue
+    put(dst, size, cx + x, cy + y, shade(at(dst, size, cx + x, cy + y), y > r * 0.4 ? -20 : -52))
+  }
+}
+
+/** A gap in the canopy: a ragged dark hole with leaves catching the light along its lip. The edge
+ *  comes off the noise so it reads as a hole between clumps, not a drawn ring. */
+function dressCanopyGap(dst: Layer, size: number, seed: number): void {
+  const cx = size * (0.3 + 0.4 * h2(6, 1, seed)), cy = size * (0.3 + 0.4 * h2(6, 2, seed))
+  const R = size * 0.18
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const d = Math.hypot(x - cx, y - cy) / R
+    const edge = 1 + (vnoise(x, y, size, 5, seed + 3) - 0.5) * 1.2
+    const t = d / edge
+    if (t < 1) put(dst, size, x, y, shade(at(dst, size, x, y), -50 + 22 * t))
+    else if (t < 1.3 && h2(x, y, seed + 4) > 0.45) put(dst, size, x, y, shade(at(dst, size, x, y), 20))
+  }
 }
 
 /** A loud checker so an unmapped material is a bug you SEE, not a block that quietly looks like stone. */
@@ -1938,6 +2077,13 @@ export function buildTileArray(size: number): Uint8Array {
     }
   }
   out.set(paintFallback(size), FALLBACK_LAYER * per)
+  for (let i = 0; i < VARIANT_MATERIALS.length; i++) {
+    for (let face = 0; face < 3; face++) {
+      const base = variantLayerOf(VARIANT_MATERIALS[i], face)
+      for (let v = 1; v <= VARIANTS_PER; v++)
+        out.set(paintFor(VARIANT_MATERIALS[i], face, size, v), (base + v - 1) * per)
+    }
+  }
   return out
 }
 
@@ -1993,6 +2139,45 @@ export function variationOf(material: number, face: number): number {
   if (VAR_FULL_SET.has(m) || isSeam(m) || isLeafMat(m)) return VAR_FULL
   if (VAR_TURF_SET.has(m)) return face === SIDE ? VAR_MIRROR : VAR_FULL
   return VAR_MIRROR
+}
+
+// ── ★ WEATHER: WHICH MATERIALS TAKE THE MACRO TINT (2026-09-17) ────────────────────────────────
+// The third lever, above the per-block ones: a slow world-space noise (~12 blocks across) that
+// shades and warms/cools whole PATCHES of ground, so a meadow has damp hollows and dry rises the
+// way real ground does, instead of every block equally lit. It is for the natural world only — a
+// plaster wall with damp patches would be a look, but not one to hand out by default, and a
+// station or a lantern with it would be a bug. Grounds, rocks, sand, mud, ore hosts, leaves, bark.
+export function weatherOf(material: number): boolean {
+  const m = baseOf(material)
+  if (VAR_FIXED_SET.has(m)) return false
+  return VAR_FULL_SET.has(m) || VAR_TURF_SET.has(m) || isSeam(m) || isLeafMat(m) || isLogMat(m)
+}
+
+/**
+ * ★ THE LAYER TABLE — one RGBA texel per layer, in the SAME layer order as `buildTileArray`, read
+ * by the shader at `vLayer`:
+ *   r = orientation grade (0/1/2, `variationOf`) + 16 × weather (`weatherOf`)
+ *   g = variant count (0 = this layer has no painted variants)
+ *   b, a = first variant layer, low byte then high byte (layers pass 255)
+ * Three arrays that must agree about layer indexing — the tiles, the relief, this — are built
+ * beside one another in `atlas.ts` › `makeTileArray` for the reason the relief is.
+ */
+export function buildLayerTable(): Uint8Array {
+  const out = new Uint8Array(LAYER_COUNT * 4)
+  for (let slot = 0; slot < TILE_MATERIALS.length; slot++) {
+    const m = TILE_MATERIALS[slot]
+    for (let face = 0; face < 3; face++) {
+      const L = slot * 3 + face
+      out[L * 4] = variationOf(m, face) + (weatherOf(m) ? 16 : 0)
+      const vb = variantLayerOf(m, face)
+      if (vb >= 0) { out[L * 4 + 1] = VARIANTS_PER; out[L * 4 + 2] = vb & 255; out[L * 4 + 3] = vb >> 8 }
+      // The variant layers carry the base's grade + weather so a fragment on one turns and
+      // weathers like its base; their own variant count is 0 (a variant never re-selects).
+      for (let v = 0; v < (vb >= 0 ? VARIANTS_PER : 0); v++) out[(vb + v) * 4] = out[L * 4]
+    }
+  }
+  out[FALLBACK_LAYER * 4] = VAR_FIXED
+  return out
 }
 
 /**
