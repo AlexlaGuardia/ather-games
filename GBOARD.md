@@ -12,6 +12,21 @@ black, CRT bloom). Mana'nana went glossy-modern; each game gets its own skin und
 the Arcade frame.
 
 
+## 💡 Shimmer — **FLORA ON THE WORLD'S LIGHT: THE LAST SEAM** (2026-09-17 night, world lane `a31d0bf8`, beside hub `b42fa02a`) · *Last touched 2026-09-17 — ✅ **PROD `xBpQH4w8wamIX-yRV6lQ8` from `c3d2207`** (`vFWNorm` in three served chunks), pushed. cartoon-stack 30/0 · flora-bounds ✅ · flora-outline ✅ · render-audit 258/0.*
+
+**Left off:** the carried item from the flora day — *"flora on the world's light (cartoon stack into the flora programs) — the visible seam now that everything else matches."*
+- Every plant material was plain Lambert under the scene lights: no cartoon stack (the blocks' three-step banding, the 0.35 floor, the hour) and no LIGHT FIELD — a lantern lit the ground and not the grass standing on it; at noon a tuft shaded smoothly on a block that shaded in bands. Pieces joined the stack 09-13, the canopy the field 09-08; flora was the last.
+- **`cartoonStackGlsl(nrm, wpos, emissive, { here, noOutline })`** — the one module grows two options instead of a second copy: `here` samples the field at the fragment's OWN cell (`lightApplyHere`; a card stands inside its air cell and its normal flips halfway through the sheet, so stepping along it lands in the ground under a tuft), `noOutline` drops the block-edge line (on a card it is a dark stripe wherever the card crosses a block boundary). Defaults unchanged.
+- **`flora-mesh.ts` › `injectStack`**: the sway cards take `{here, noOutline}`, the solids (rock, log, mushroom, puff) take it exactly as a piece. World position/normal go through `instanceMatrix` AFTER the sway edits `transformed`, so the field is read where the bent blade is. **Emissive rides past the stack:** three folds it into `outgoingLight`, so it is subtracted before the stack and added after (the ore-glow slot) — otherwise glow-moss reads "fully lit" to the banding and is then put out by the night field it exists to light. One shared `cartoonUniforms()` set; `FloraRenderer.setCartoon`; `createFloraRenderer(lightUniforms)` (a fresh default set for tests and dev pages).
+- VoxelWorld: the flora memo moved up beside `lightUniforms` (the settings effect hands it the dials); `flora.setCartoon(cartoon)`.
+- Verified: programs LINK (tufts / tall / rocks draw at the Glade — a stray backtick draws nothing with no error, so this was the check); at midnight with a `/put mana_lantern` and the ring filled, the tufts sit in the ground's darkness and pick up the lamp's pool.
+
+**Next:**
+- **Alex judges:** plants at noon (banded like the blocks now — too flat? the 0.35 floor on a tuft) · under a lantern at night · glow-moss at midnight (its glow should hold in the dark).
+- The leaf canopy still skips the toon BANDING (`leaf-material.ts` takes the field only) — join it if the plants read right.
+
+**Files:** `voxel3d/cartoon-glsl.ts` (`CartoonStackOpts`) · `voxel3d/flora-mesh.ts` (`injectStack`, `setCartoon`) · `VoxelWorld.tsx` (two lines).
+
 ## 🌼 Shimmer — **GOLDLEAF, AND THE TILE PAINT LEAVES THE MAIN THREAD** (2026-09-17 evening, world lane `a31d0bf8`, beside hub `b42fa02a` + play `65dbc2af`) · *Last touched 2026-09-17 — ✅ **PROD `PkrgJ5u7nGryW528u75uy` from `a9a3aa9`** (goldleaf; the worker shipped earlier inside hub's `RPTUSXs6O1rd9fXemdlTp`), all pushed. tile-worker 396/0 · forage 62/0 · meadow-seed 48/0 · farming 68/0 · obtainable ✅ · icon-source 534/0 · render-audit 258/0 · flora-bounds ✅ · purity ✅ · worker-fresh ✅ · canon gate 13 clean.*
 
 **Left off:** Alex: *"lets keep it going"* → the carried tile-paint cost; then hub handed over canon's missing tier-1 herb.
