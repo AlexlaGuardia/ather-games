@@ -212,5 +212,16 @@ function ok(name: string, cond: boolean) {
   ok('a mote refills more than a quarter tank', MOTE_CHARGE >= BOOST_MAX / 4)
 }
 
+// 14. the fallen linger FALL_TIME for the dissolve, then go
+{
+  const w = makeWorld(1, 0)
+  const p = player(w)!
+  p.x = ARENA_R0 + 60; p.y = 0; p.angle = 0; steer(w, 0)
+  tick(w, 0.01)
+  ok('a death leaves one fallen body with its trail', w.fallen.length === 1 && w.fallen[0].trail.length >= 2 && p.alive === false)
+  for (let i = 0; i < 12; i++) tick(w, 0.1)
+  ok('the fallen body is culled after FALL_TIME', w.fallen.length === 0)
+}
+
 console.log(`\nVORANYX sim: ${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

@@ -25,6 +25,7 @@ import {
   loadBest,
   saveBest,
   bodyRadius,
+  FALL_TIME,
   SWALLOW_BULGE,
   segCount,
   BOOST_MAX,
@@ -39,6 +40,7 @@ import DailyLeaderboard from '../_components/DailyLeaderboard'
 import ArcadeControls from '../_components/ArcadeControls'
 
 const ATHER = '#37e6ff'
+const OVER_DELAY_MS = 700 // the game-over overlay holds while your body dissolves
 const HOT = '#e8feff'
 const VOID_EDGE = '#c86bff'
 const MAGNET_COL = '#ff5cc8' // magnet power-up (pull)
@@ -145,11 +147,12 @@ export default function VoranyxPage() {
         if (ev.killed) sfx.play('kill')
         if (ev.died) {
           sfx.play('death')
-          overRef.current = true
+          overRef.current = true // the sim stops now; the overlay waits for the body to dissolve
           if (modeRef.current === 'daily') setDailyBest(saveDailyBest('voranyx', score(w)))
           else setBest(saveBest(score(w)))
           setLen(score(w))
-          setOver(true)
+          const dead = w
+          window.setTimeout(() => { if (worldRef.current === dead) setOver(true) }, OVER_DELAY_MS)
         }
         const p = player(w)
         if (p && p.boosting && p.boost > 0) sfx.play('boost')
@@ -391,6 +394,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
   ctx.fill('evenodd')
   ctx.restore()
 
+  const bw0 = 40 // cull margin for the fallen
   // food
   for (const f of w.food) {
     const fx = toX(f.x), fy = toY(f.y)
@@ -415,6 +419,30 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
     } else {
       ctx.fillStyle = '#9fb6c8'; ctx.shadowBlur = 5; ctx.shadowColor = '#9fb6c8'
       dot(ctx, fx, fy, 1.7)
+    }
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0
+
+  // the fallen — a white flash, then the body scatters into the spill it left (wall-clock aged, so
+  // the player's own death still plays out under a frozen sim)
+  for (const f of w.fallen) {
+    if (f._ts === undefined) f._ts = ts
+    const k = (ts - f._ts) / 1000 / FALL_TIME
+    if (k >= 1 || f.trail.length < 4) continue
+    const col = f.element ? ELEM_COLOR[f.element] : BLANK
+    const br = bodyRadius(f.grown)
+    const pts = slitherPoints({ trail: f.trail, dist: 0, boosting: false, boost: 0, swallows: [] }, br, zoom, toX, toY, cw, ch)
+    const flash = k < 0.18
+    ctx.fillStyle = flash ? HOT : col
+    ctx.shadowBlur = flash ? 22 : 10; ctx.shadowColor = flash ? HOT : col
+    ctx.globalAlpha = flash ? 1 : 0.9 * (1 - k)
+    const scatter = k * k * br * 3 // beads drift apart as the body lets go
+    for (let i = 0; i < pts.length; i += 3) {
+      const j = Math.sin(i * 12.9898) * 43758.5453
+      const jit = j - Math.floor(j) - 0.5
+      const x = pts[i] + jit * scatter, y = pts[i + 1] + (Math.cos(j) * 0.5) * scatter
+      if (x < -bw0 || x > cw + bw0 || y < -bw0 || y > ch + bw0) continue
+      dot(ctx, x, y, pts[i + 2] * (flash ? 1.15 : 1 - 0.6 * k))
     }
   }
   ctx.globalAlpha = 1; ctx.shadowBlur = 0

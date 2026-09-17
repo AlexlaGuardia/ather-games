@@ -95,8 +95,19 @@ export interface Wyrm {
 
 export type GameState = 'playing' | 'over'
 
+// a fallen wyrm's last shape, kept FALL_TIME so the render can dissolve it into its spill
+export interface Fallen {
+  trail: number[]
+  element: Element | null
+  grown: number
+  t0: number // world time it fell
+  _ts?: number // render-owned: wall-clock ms of its first frame (the sim never reads it)
+}
+export const FALL_TIME = 0.9 // s a fallen body lingers
+
 export interface World {
   wyrms: Wyrm[]
+  fallen: Fallen[]
   food: FoodItem[]
   radius: number // current void-ring radius
   t: number
@@ -180,6 +191,7 @@ export function makeWorld(seed: number, aiCount = 6): World {
   const w: World = {
     wyrms: [],
     food: [],
+    fallen: [],
     radius: ARENA_R0,
     t: 0,
     nextId: 0,
@@ -246,6 +258,7 @@ function turnToward(a: number, target: number, maxStep: number): number {
 // a fallen wyrm drops ALL of its points as food, spilled along its body where it fell (Alex 2026-07-11) —
 // so felling a fat rival is a real jackpot: eat the whole ribbon and take everything it carried.
 function burst(w: World, victim: Wyrm) {
+  w.fallen.push({ trail: victim.trail.slice(), element: victim.element, grown: victim.grown, t0: w.t })
   const points = Math.max(0, victim.mass - BASE_MASS) // what it had grown = what it drops
   const n = Math.min(240, Math.round(points / DROSS_MASS)) // one dross per point (capped for perf)
   const tl = victim.trail.length
@@ -474,6 +487,7 @@ export function tick(w: World, dt: number): TickEvents {
 
   // cull dead, respawn AI to keep the Silt crowded, restock food
   w.wyrms = w.wyrms.filter((s) => s.alive || s.isPlayer)
+  if (w.fallen.length) w.fallen = w.fallen.filter((f) => w.t - f.t0 < FALL_TIME)
   const aiAlive = w.wyrms.filter((s) => !s.isPlayer && s.alive).length
   if (aiAlive < 6 && w.rng() < 0.04) w.wyrms.push(spawnWyrm(w, false))
   const foodGoal = foodTarget(w.radius)
