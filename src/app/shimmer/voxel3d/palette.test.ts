@@ -46,7 +46,9 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // the only way to use it wrongly.
   // 259 since 2026-09-13 (later the same day): the TABLE — 21 masonry shapes × 12 + the pane × 7.
   // The reach three Moonwell buildings recorded independently (Hazel R3, Yarrow R4, Fennel R2).
-  ok(reachable.size === 259, `the catalogue is 259 pieces and all 259 are on the axes (saw ${reachable.size})`)   // 259 since 2026-09-13: 21 shapes × 12 masonry + the pane × 7 glass
+  // 268 since 2026-09-17: the WELL — stone only (there is no wooden well), so + the 9 masonry
+  // materials and nothing on the wood axis. Farming ②'s water source on the plot.
+  ok(reachable.size === 268, `the catalogue is 268 pieces and all 268 are on the axes (saw ${reachable.size})`)   // 268 since 2026-09-17: 21 shapes × 12 + the pane × 7 + the well × 9
   const expected = PIECES.reduce((n, p) => n + PIECE_MATERIALS.filter(m => p.variants?.includes(m.family)).length, 0)
   ok(all.length === expected, `every shape has every material of the families it lists, and no other (${all.length} vs ${expected})`)
   ok(pieceVariants('pane').length === 7 && pieceVariants('pane').every(v => pieceMaterial(v.id)?.family === 'glass'), 'the pane wears the seven glasses and nothing else')
