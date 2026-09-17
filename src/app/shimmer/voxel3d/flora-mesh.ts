@@ -270,6 +270,7 @@ const HERB_TIP: Readonly<Record<number, number>> = {
   [MAT.STORMGRASS]: 0x9fe4ff,    // canon's blue tip, verbatim
   [MAT.ROOTVINE]: 0x7f8f4a,      // a pale crown over dark root-green; the plant is the STEM here
   [MAT.TIDEPETAL]: 0xeafffb,     // beaded — near white, wet
+  [MAT.GOLDLEAF]: 0xf2dc78,      // the gold: a pale yellow crown over the green-gold body (09-17)
 }
 
 /** Placeholder palette, tiles.ts's register: greens off TOPSOIL, heads in mana-adjacent pastels. */

@@ -87,6 +87,15 @@ export const CROP_DEFS: Record<string, CropDef> = {
     seedItemId: 'seed_shimmerwheat', yieldBonusPerLevel: 0.02,
     yields: [{ itemId: 'shimmerwheat_grain', count: 2, chance: 1.0 }],
   },
+  // Goldleaf (2026-09-17) — canon's own tier-1 base herb (shimmer-skilling.md › Farming tier 1:
+  // 5 min, "base alchemy herb"). Grows wild on every ground as a forage (flora.ts); this row is the
+  // bed's version, and the reason a tuft drops its seed (meadow-seed.ts reads tier 1 off this table).
+  goldleaf: {
+    id: 'goldleaf', name: 'Goldleaf', tier: 1,
+    minFarmingLevel: 1, manaCost: 2, plantXp: 4, xpGrant: 16, growthMs: 5 * 60 * 1000,
+    seedItemId: 'seed_goldleaf', yieldBonusPerLevel: 0.02,
+    yields: [{ itemId: 'goldleaf', count: 2, chance: 1.0 }],
+  },
   glowroot: {
     id: 'glowroot', name: 'Glowroot', tier: 1,
     minFarmingLevel: 1, manaCost: 3, plantXp: 5, xpGrant: 20, growthMs: 5 * 60 * 1000,

@@ -253,6 +253,7 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // light. Both feed the item icon and the renderer's tint from this one row.
   [MAT.PUFF_CLUSTER]: 0xf2ead6,   // 0xe6dcc4 read as a warm STONE at noon — a puffball is paler than that
   [MAT.GLOW_MOSS]: 0x7fe0b8,
+  [MAT.GOLDLEAF]: 0xb9b44e,     // a golden-green weed: yellow enough to read as gold in a meadow
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — read the plant, not the lookup ────────────────────
   // Same discipline as the herbs directly above: each colour is derived from what canon and the
   // item text say the thing IS, not picked to fill a palette slot. These are STALK/BODY colours;

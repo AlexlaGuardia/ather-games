@@ -139,7 +139,7 @@ export const isFruit = (m: number): boolean => m >= FRUIT_MIN && m <= FRUIT_MAX
  * ⚠ KEEP 111-112 CONTIGUOUS — the next forage (shelf fungi → shelf slices) goes at 113.
  */
 export const FORAGE_MIN = 111
-export const FORAGE_MAX = 112
+export const FORAGE_MAX = 113
 export const isForage = (m: number): boolean => m >= FORAGE_MIN && m <= FORAGE_MAX
 
 export const isPlant = (m: number): boolean =>
@@ -740,6 +740,14 @@ export const MAT = {
    */
   PUFF_CLUSTER: 111,
   GLOW_MOSS: 112,
+  /**
+   * ★ GOLDLEAF (2026-09-17) — canon's tier-1 base herb (`game/shimmer-skilling.md` › Farming, tier
+   * 1: *"Hardy golden herb, grows anywhere. The bread and butter of alchemy"*; the glossary calls it
+   * *the humblest Ather weed*). "Grows anywhere" is why it is a FORAGE and not an eighth row of the
+   * wild-crop ladder (one crop per ground): a weed is met on every ground, sparse, and picked for
+   * the herb itself. It is also a crop (`crops.ts`), so a bed grows it from tuft-dropped seed.
+   */
+  GOLDLEAF: 113,
 } as const
 
 /**

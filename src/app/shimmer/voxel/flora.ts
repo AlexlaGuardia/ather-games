@@ -300,11 +300,24 @@ export function fruitAt(x: number, z: number, seed: number, ground: BiomeId): nu
 // CONTOUR — cells where a low-frequency value sits within a hair of a level — which draws as a
 // wandering ribbon a cell or two wide. Walk it after dark and it is a path. Puffballs clump the
 // way mushrooms do: a patch field at its own scale, dense inside, nothing outside.
+// ★ GOLDLEAF GROWS ANYWHERE (2026-09-17) — canon's words, and the reason it is on every ground
+// but the greyfield rather than being the ladder's eighth row. It is asked LAST in `forageAt`,
+// after the moss and the puffs, so a weed never displaces the rarer shapes; it takes a loose
+// patch field so it clumps the way a weed does, thin between, never a carpet.
 export const FORAGE_OF_GROUND: Readonly<Record<string, readonly number[]>> = {
-  woodland: [MAT.PUFF_CLUSTER, MAT.GLOW_MOSS],
-  basin: [MAT.PUFF_CLUSTER],
-  shore: [MAT.GLOW_MOSS],
+  woodland: [MAT.PUFF_CLUSTER, MAT.GLOW_MOSS, MAT.GOLDLEAF],
+  basin: [MAT.PUFF_CLUSTER, MAT.GOLDLEAF],
+  shore: [MAT.GLOW_MOSS, MAT.GOLDLEAF],
+  river: [MAT.GOLDLEAF],
+  crag: [MAT.GOLDLEAF],
+  highland: [MAT.GOLDLEAF],
+  meadow: [MAT.GOLDLEAF],
 }
+export const GOLDLEAF_SCALE = 36
+export const GOLDLEAF_EDGE = 0.56
+export const GOLDLEAF_DENSITY = 0.035
+/** The draw kind a forage material takes — the puff a solid, the moss a pad, goldleaf the herb card. */
+export const forageKind = (m: number): number => m === MAT.GLOW_MOSS ? FLORA.MOSS : m === MAT.GOLDLEAF ? FLORA.HERB : FLORA.PUFF
 /** The distinct forage materials — what `FLORA_MATERIALS` and the kind count are sized by. */
 export const FORAGE_MATS: ReadonlyArray<number> = [...new Set(Object.values(FORAGE_OF_GROUND).flat())]
 export const PUFF_SCALE = 70
@@ -341,9 +354,15 @@ export function forageAt(x: number, z: number, seed: number, ground: BiomeId): n
       if (Math.hypot(gx, gz) >= MOSS_MIN_SLOPE) return MAT.GLOW_MOSS
     }
   }
-  if (here.includes(MAT.PUFF_CLUSTER)) {
-    if (hash01(x, z, seed ^ 0x7f0b) > PUFF_DENSITY) return 0
-    if (value2(x / PUFF_SCALE, z / PUFF_SCALE, seed ^ 0x44e1) > PUFF_EDGE) return MAT.PUFF_CLUSTER
+  // ⚠ No early `return 0` on the density roll (09-17): it used to, and that returned before the
+  // weed below was asked on 91% of every puff ground — goldleaf grew at 0.1% in the woodland and
+  // 1.5% in the meadow with one table saying they were the same.
+  if (here.includes(MAT.PUFF_CLUSTER)
+    && hash01(x, z, seed ^ 0x7f0b) <= PUFF_DENSITY
+    && value2(x / PUFF_SCALE, z / PUFF_SCALE, seed ^ 0x44e1) > PUFF_EDGE) return MAT.PUFF_CLUSTER
+  if (here.includes(MAT.GOLDLEAF)) {
+    if (hash01(x, z, seed ^ 0x601d) < GOLDLEAF_DENSITY
+      && value2(x / GOLDLEAF_SCALE, z / GOLDLEAF_SCALE, seed ^ 0x1eaf) > GOLDLEAF_EDGE) return MAT.GOLDLEAF
   }
   return 0
 }
@@ -747,13 +766,17 @@ export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
 // window that added them only ran the tests it had chosen. It was right to go red: a kind that is
 // not a material is exactly the case this count exists to make someone say out loud.
 export const FLORA_DRAW_ONLY_KINDS = 2                // BLOOM_MAT, BLOOM_BUSH — forms of FLOWER
+// ⚠ AND A FORAGE THAT BORROWS A KIND IS COUNTED AS A MATERIAL, NOT A KIND (2026-09-17). Goldleaf
+// is the third forage material and draws on the HERB card (`forageKind`), so PUFF and MOSS are
+// no longer "one material each" — the forage is `FORAGE_MATS.length` materials on two kinds. This
+// guard went red the moment it was added (21 vs 22), which is the event it exists to announce.
 export const FLORA_KIND_COUNT =
-  (Object.keys(FLORA).length - 4)            // every FLORA kind except NONE, HERB, CROP and FRUIT...
-                                             // (PUFF and MOSS are one material each and count as themselves)
+  (Object.keys(FLORA).length - 6)            // every FLORA kind except NONE, HERB, CROP, FRUIT, PUFF and MOSS...
   - FLORA_DRAW_ONLY_KINDS                    // ...minus the forms that share FLOWER's material
   + Object.keys(HERB_OF_GROUND).length       // ...HERB expands to one material per ruled ground
   + Object.keys(CROP_OF_GROUND).length       // ...CROP to one per crop's ground (2026-08-22)
-  + FRUIT_MATS.length                        // ...and FRUIT to one per fruit, NOT per ground (09-15)
+  + FRUIT_MATS.length                        // ...FRUIT to one per fruit, NOT per ground (09-15)
+  + FORAGE_MATS.length                       // ...and the forage to one per material, whatever kind draws it (09-17)
 
 // ⚠ SCATTER IS NOT ADDED, AND THE FIRST CUT OF THIS ADDED IT AND WAS RED (13 against a set of 10).
 // `FLORA` already absorbs the scatter kinds into its own slot space — that is exactly what the

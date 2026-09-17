@@ -31,7 +31,7 @@ import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
 import { meshIcon, hasMeshIcon, pieceIcon } from './mesh-icon'
 import { pieceForItem } from '../../voxel/pieces'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
-import { leafPixels, leafPixelsFor, leafSpeciesOf, bladePixels, tallBladePixels, TALL_TILE_H, headPixels, mossPixels, HEAD_TINTS, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
+import { leafPixels, leafPixelsFor, leafSpeciesOf, rosettePixels, bladePixels, tallBladePixels, TALL_TILE_H, headPixels, mossPixels, HEAD_TINTS, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
 import { isPlant, isSapling, isGlassMat, MAT } from '../../voxel/depth'
 const rgbOf3 = (hex: number): [number, number, number] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255]
@@ -370,6 +370,8 @@ const FLORA: Record<string, { pixels: () => Uint8Array; src: number; srcH?: numb
   // Glow-moss (2026-09-16): the pad the world lays on the ground, tinted from the same row the
   // renderer and the block read — one colour, three places, by construction.
   glow_moss: { pixels: () => mossPixels(32), src: 32, tint: MATERIAL_COLOR[MAT.GLOW_MOSS] },
+  // Goldleaf (2026-09-17): a rosette of leaves in the plant's own gold-green — the humblest weed.
+  goldleaf: { pixels: () => rosettePixels(), src: BLADE_TILE, tint: MATERIAL_COLOR[MAT.GOLDLEAF] },
 }
 
 /** Nearest-neighbour scale an RGBA tile to `size`, flipping it upright, with an optional tint. */

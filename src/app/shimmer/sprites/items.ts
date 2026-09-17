@@ -343,6 +343,7 @@ export const ITEMS: ItemDef[] = [
   // --- Crop Seeds (planted for harvestable items, not spirits) ---
   { id: 'seed_shimmerwheat', name: 'Shimmerwheat Seed', type: 'crop_seed', rarity: 'common', description: 'Golden grain that thrives in mana-rich soil.', stackable: true, maxStack: 20, sellPrice: 3, buyPrice: 8, tradeable: true },
   { id: 'seed_glowroot', name: 'Glowroot Seed', type: 'crop_seed', rarity: 'common', description: 'A bulb that pulses faintly underground as it grows.', stackable: true, maxStack: 20, sellPrice: 3, buyPrice: 8, tradeable: true },
+  { id: 'seed_goldleaf', name: 'Goldleaf Seed', type: 'crop_seed', rarity: 'common', description: 'A pinch of tiny gold-flecked seed. It will take in anything.', stackable: true, maxStack: 20, sellPrice: 2, buyPrice: 5, tradeable: true },
   { id: 'seed_sunpetal', name: 'Sunpetal Seed', type: 'crop_seed', rarity: 'common', description: 'Tiny golden seed. Blooms into warm petals.', stackable: true, maxStack: 20, sellPrice: 5, buyPrice: 12, tradeable: true },
   { id: 'seed_moonvine', name: 'Moonvine Seed', type: 'crop_seed', rarity: 'uncommon', description: 'Grows best at night. Pale tendrils reach toward starlight.', stackable: true, maxStack: 20, sellPrice: 8, buyPrice: 20, tradeable: true },
   { id: 'seed_crystalcap', name: 'Crystalcap Spore', type: 'crop_seed', rarity: 'uncommon', description: 'Crystalline mushroom spore. Hums when warm.', stackable: true, maxStack: 20, sellPrice: 10, buyPrice: 25, tradeable: true },
@@ -360,6 +361,7 @@ export const ITEMS: ItemDef[] = [
   // --- Crop Harvest Items (produced by farming) ---
   { id: 'shimmerwheat_grain', name: 'Shimmerwheat Grain', type: 'resource', rarity: 'common', description: 'Warm golden grain with mild mana resonance.', stackable: true, maxStack: 50, sellPrice: 4, tradeable: true },
   { id: 'glowroot_bulb', name: 'Glowroot Bulb', type: 'resource', rarity: 'common', description: 'Soft-glowing root bulb. Faintly bioluminescent.', stackable: true, maxStack: 50, sellPrice: 4, tradeable: true },
+  { id: 'goldleaf', name: 'Goldleaf', type: 'resource', rarity: 'common', description: 'Hardy golden herb, grows anywhere. The bread and butter of alchemy.', stackable: true, maxStack: 50, sellPrice: 2, tradeable: true },
   { id: 'sunpetal_bloom', name: 'Sunpetal Bloom', type: 'resource', rarity: 'common', description: 'Golden petal that holds warmth long after picking.', stackable: true, maxStack: 50, sellPrice: 6, tradeable: true },
   { id: 'moonvine_leaf', name: 'Moonvine Leaf', type: 'resource', rarity: 'uncommon', description: 'Pale silver leaf. Cool to the touch even in sunlight.', stackable: true, maxStack: 50, sellPrice: 10, tradeable: true },
   { id: 'crystalcap_spore', name: 'Crystalcap Spore', type: 'resource', rarity: 'uncommon', description: 'Translucent mushroom cap fragment. Refracts light.', stackable: true, maxStack: 50, sellPrice: 12, tradeable: true },
@@ -3622,6 +3624,7 @@ export const ITEM_FRAME_MAP: Record<string, string[]> = {
   // Crop seeds
   seed_shimmerwheat:   ['CROP_SEED_ICON'],
   seed_glowroot:       ['CROP_SEED_ICON'],
+  seed_goldleaf:       ['CROP_SEED_ICON'],
   seed_sunpetal:       ['CROP_SEED_ICON'],
   seed_moonvine:       ['CROP_SEED_ICON'],
   seed_crystalcap:     ['CROP_SEED_ICON'],
@@ -4104,6 +4107,7 @@ export const ITEM_ICONS: Record<string, SpriteAnim> = {
   // Crop seeds (all share same icon for now)
   seed_shimmerwheat:   { frames: [CROP_SEED_ICON], rate: 1 },
   seed_glowroot:       { frames: [CROP_SEED_ICON], rate: 1 },
+  seed_goldleaf:       { frames: [CROP_SEED_ICON], rate: 1 },
   seed_sunpetal:       { frames: [CROP_SEED_ICON], rate: 1 },
   seed_moonvine:       { frames: [CROP_SEED_ICON], rate: 1 },
   seed_crystalcap:     { frames: [CROP_SEED_ICON], rate: 1 },

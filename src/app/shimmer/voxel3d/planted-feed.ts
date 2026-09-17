@@ -71,6 +71,7 @@ export const SEED_CROP_LOOK: Readonly<Record<string, { body: number; head: numbe
   shimmerwheat: { body: 0xa8b86a, head: 0xf6e2a0 },   // paler, silvered grain beside atherwheat's
   glowroot:     { body: 0x6f9a4a, head: 0xd6ffb0 },   // the bulb's glow shows at the crown
   sunpetal:     { body: 0x6d8f48, head: 0xffb347 },   // sun-gold petal
+  goldleaf:     { body: 0xb9b44e, head: 0xf2dc78 },   // MATERIAL_COLOR[GOLDLEAF] + HERB_TIP, the wild plant's own two (09-17)
 }
 
 export function plantedLook(cropId: string): PlantedLook | null {

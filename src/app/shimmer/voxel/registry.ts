@@ -487,6 +487,8 @@ export const BLOCKS: BlockDef[] = [
   // ingredient, and the plant is met where it grows (`flora.ts` › `forageAt`).
   { noSlab: true, material: MAT.PUFF_CLUSTER, name: 'Puff Cluster', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'puff_spores', count: 2 }], fastSkill: 'farming', placeable: false },
   { noSlab: true, material: MAT.GLOW_MOSS, name: 'Glow-moss', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'glow_moss', count: 1 }], fastSkill: 'farming', placeable: false, emit: 4 },
+  // Goldleaf (2026-09-17): canon's base herb, the humblest weed — picked anywhere, drops itself.
+  { noSlab: true, material: MAT.GOLDLEAF, name: 'Goldleaf', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'goldleaf', count: 1 }], fastSkill: 'farming', placeable: false },
 
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — a ground grows a PLANT ────────────────────────────
   // RULED (/magii): the grass-tuft ruling and these were never in tension. Canon had already drawn

@@ -7,11 +7,12 @@
 // so a ground-table edit that strands one shows up here — and so the moss's RIBBON shape, which is
 // canon's *"marks paths at night"* made mechanical, cannot quietly become a blob.
 import { inWorld } from '../voxel3d/obtainable'
-import { forageAt, FORAGE_OF_GROUND, FORAGE_MATS, PUFF_DENSITY, plantMaterialAt, FLORA_MATERIALS, FLORA_KIND_COUNT, FLORA } from './flora'
+import { forageAt, FORAGE_OF_GROUND, FORAGE_MATS, PUFF_DENSITY, GOLDLEAF_DENSITY, forageKind, plantMaterialAt, FLORA_MATERIALS, FLORA_KIND_COUNT, FLORA } from './flora'
 import { MAT, isForage, isPlant, isSolid, DEFAULT_DEPTH } from './depth'
 import { greyness, biomeAt, type BiomeId } from './biome'
 import { columnHeight } from './height'
 import { BLOCKS } from './registry'
+import { CROP_DEFS } from './crops'
 import { ITEMS } from '../sprites/items'
 
 let pass = 0
@@ -53,7 +54,11 @@ for (const g of grounds) {
   }
   const wrong = [...seen.keys()].filter(m => !want.has(m))
   ok(wrong.length === 0, `${g} grows only its own forage (wrong: ${wrong.join(',')})`)
-  for (const m of want) ok((seen.get(m) ?? 0) > 0, `${g} actually grows ${m === MAT.GLOW_MOSS ? 'glow-moss' : 'puff clusters'}`)
+  for (const m of want) ok((seen.get(m) ?? 0) > 0, `${g} actually grows ${m === MAT.GLOW_MOSS ? 'glow-moss' : m === MAT.GOLDLEAF ? 'goldleaf' : 'puff clusters'}`)
+  if (want.has(MAT.GOLDLEAF)) {
+    const n = seen.get(MAT.GOLDLEAF) ?? 0
+    ok(n / N > 0.002 && n / N < GOLDLEAF_DENSITY, `${g}: goldleaf is a sparse weed (${((100 * n) / N).toFixed(2)}% of cells; the patch field thins ${GOLDLEAF_DENSITY * 100}% to under that)`)
+  }
   if (want.has(MAT.PUFF_CLUSTER)) {
     const n = seen.get(MAT.PUFF_CLUSTER) ?? 0
     ok(n / N < PUFF_DENSITY * 0.5, `${g}: patches keep puffs rare (${((100 * n) / N).toFixed(2)}% of cells)`)
@@ -63,6 +68,14 @@ for (const g of grounds) {
     ok(n / N < 0.05, `${g}: the moss is a ribbon, not a carpet (${((100 * n) / N).toFixed(2)}% of cells)`)
   }
 }
+// ── 4b. goldleaf: everywhere but the greyfield, on the herb card, a crop and a drop (2026-09-17) ──
+ok((['meadow', 'basin', 'woodland', 'shore', 'highland', 'crag', 'river'] as const).every(g => (FORAGE_OF_GROUND[g] ?? []).includes(MAT.GOLDLEAF)), 'goldleaf is on every living ground — canon: grows anywhere')
+ok(!(FORAGE_OF_GROUND['greyfield'] ?? []).includes(MAT.GOLDLEAF), 'and not on the greyfield')
+ok(forageKind(MAT.GOLDLEAF) === FLORA.HERB && forageKind(MAT.GLOW_MOSS) === FLORA.MOSS && forageKind(MAT.PUFF_CLUSTER) === FLORA.PUFF, 'the forage kinds: goldleaf on the herb card, moss a pad, puffs solids')
+ok(row(MAT.GOLDLEAF)?.drops?.[0]?.itemId === 'goldleaf' && row(MAT.GOLDLEAF)?.placeable === false, 'goldleaf drops itself and is not placeable')
+ok(ITEMS.some(i => i.id === 'goldleaf') && ITEMS.some(i => i.id === 'seed_goldleaf'), 'the herb and its seed are items')
+ok(CROP_DEFS.goldleaf?.tier === 1 && CROP_DEFS.goldleaf.growthMs === 5 * 60 * 1000 && CROP_DEFS.goldleaf.seedItemId === 'seed_goldleaf', 'goldleaf is canon\'s tier-1 five-minute crop')
+ok(isForage(MAT.GOLDLEAF) && isPlant(MAT.GOLDLEAF), 'goldleaf is a forage and a plant')
 let greyN = 0, greyForage = 0
 for (let z = -1500; z < 2500; z += 8) for (let x = -2500; x < 1500; x += 8) {
   if (greyness(x, z, SEED) < 0.35) continue
