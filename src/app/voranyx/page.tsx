@@ -40,6 +40,7 @@ import DailyLeaderboard from '../_components/DailyLeaderboard'
 import ArcadeControls from '../_components/ArcadeControls'
 
 const ATHER = '#37e6ff'
+const VOID_WARN = 520 // world units from the void edge at which the cue starts
 const OVER_DELAY_MS = 700 // the game-over overlay holds while your body dissolves
 const HOT = '#e8feff'
 const VOID_EDGE = '#c86bff'
@@ -478,6 +479,27 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
       ctx.strokeStyle = 'rgba(4,4,10,0.4)'; ctx.lineWidth = Math.max(0.8, r * 0.14); ctx.stroke()
       ctx.fillStyle = hot ? HOT : 'rgba(255,255,255,0.3)'; dot(ctx, x - r * 0.3, y - r * 0.3, r * 0.38)
     }
+    // boosting: a hot core down the spine (the light is INSIDE the worm now) and speed streaks
+    // shed behind the head — readable from across the screen, so a rival's dash is a tell
+    if (hot) {
+      ctx.strokeStyle = HOT; ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1, bw * 0.28)
+      ctx.shadowBlur = 12; ctx.shadowColor = HOT
+      ctx.beginPath(); ctx.moveTo(pts[0], pts[1])
+      for (let i = 3; i < pts.length; i += 3) ctx.lineTo(pts[i], pts[i + 1])
+      ctx.stroke()
+      // streaks: three short lines behind the head, fanned off the heading, flickering with time
+      const ang = s.angle, sl = bw * 2.6
+      ctx.lineWidth = Math.max(1, bw * 0.12); ctx.shadowBlur = 0
+      for (let j = -1; j <= 1; j++) {
+        const a = ang + Math.PI + j * 0.28
+        const off = bw * 0.55 * j
+        const nx = -Math.sin(ang) * off, ny = Math.cos(ang) * off
+        const sx = pts[0] + nx + Math.cos(a) * bw * 0.8, sy = pts[1] + ny + Math.sin(a) * bw * 0.8
+        const len = sl * (0.7 + 0.3 * Math.sin(t * 31 + j * 2.1))
+        ctx.globalAlpha = 0.35 + 0.25 * Math.sin(t * 23 + j)
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(a) * len, sy + Math.sin(a) * len); ctx.stroke()
+      }
+    }
     // head
     const hx = pts[0], hy = pts[1]
     ctx.globalAlpha = 1
@@ -499,6 +521,21 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
       ctx.lineWidth = 2; ctx.setLineDash([5, 7])
       ctx.beginPath(); ctx.arc(hx, hy, MAGNET_R * zoom, 0, Math.PI * 2); ctx.stroke()
       ctx.setLineDash([]); ctx.globalAlpha = 1
+    }
+    // the void-edge cue: the ring is 6400 across, and at zoom ~1 a small worm can be a screen from the
+    // edge with no warning. A dashed arc glows on the screen edge facing the void, brightening as
+    // it nears (from VOID_WARN units out), so the edge kill stops being a surprise.
+    const dEdge = w.radius - Math.hypot(pl.x, pl.y)
+    if (dEdge < VOID_WARN) {
+      const k = 1 - Math.max(0, dEdge) / VOID_WARN // 0 far → 1 at the edge
+      const ang = Math.atan2(pl.y, pl.x) // outward, toward the void
+      const hx = toX(pl.x), hy = toY(pl.y)
+      const R = Math.min(cw, ch) * 0.46
+      ctx.strokeStyle = VOID_EDGE; ctx.shadowBlur = 14 + 10 * k; ctx.shadowColor = VOID_EDGE
+      ctx.globalAlpha = (0.18 + 0.55 * k) * (0.8 + 0.2 * Math.sin(t * (4 + 6 * k)))
+      ctx.lineWidth = 2 + 2 * k; ctx.setLineDash([6, 8])
+      ctx.beginPath(); ctx.arc(hx, hy, R, ang - 0.5 - 0.4 * k, ang + 0.5 + 0.4 * k); ctx.stroke()
+      ctx.setLineDash([]); ctx.shadowBlur = 0; ctx.globalAlpha = 1
     }
     // active-effect badges (screen-fixed, top-left) with a live countdown
     let by = 22
