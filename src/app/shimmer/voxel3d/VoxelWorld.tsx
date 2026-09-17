@@ -1514,7 +1514,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => {
     // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
     // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
@@ -1723,7 +1723,11 @@ export default function VoxelWorld() {
       pushChat(`<keeper> ${line}`, 'you')
     }
   }, [consoleCtx, pushChat])
-  const have = useCallback((itemId: string) => countItem(inv.current!, itemId), [])
+  // The bag, and on the plot the bank behind it — see `craftPool` on the world's verbs.
+  const have = useCallback((itemId: string) => {
+    const pool = worldCmd.current?.craftPool() ?? null
+    return countItem(inv.current!, itemId) + (pool ? countInChest(pool, itemId) : 0)
+  }, [])
 
   // ── THE MOUSE HANDOFF (play3d's contract, ported verbatim) ──────────────────────────────────
   // Overlays own the cursor; play owns the look. Every cursor surface (craft, settings, Greg's
@@ -1986,8 +1990,14 @@ export default function VoxelWorld() {
     if (!plan || !canCraftRecipe(id, have, station)) return
     // Take everything BEFORE giving, and only give if every take succeeded — a partial spend that
     // still yields the output is a duplication bug, which is the one economy bug you cannot undo.
-    if (!plan.take.every(t => countItem(inv.current!, t.itemId) >= t.count)) return
-    for (const t of plan.take) removeItems(inv.current!, t.itemId, t.count)
+    // Bag first, then the plot bank (the station panel's own order) — `have` counted both.
+    const pool = worldCmd.current?.craftPool() ?? null
+    if (!plan.take.every(t => have(t.itemId) >= t.count)) return
+    for (const t of plan.take) {
+      const fromBag = Math.min(countItem(inv.current!, t.itemId), t.count)
+      if (fromBag > 0) removeItems(inv.current!, t.itemId, fromBag)
+      if (t.count - fromBag > 0 && pool) takeFromGrid(pool, t.itemId, t.count - fromBag)
+    }
     give(inv.current!, plan.give.itemId, plan.give.count)
     setCrafted(`${plan.give.count}× ${itemLabel(plan.give.itemId)}`)
     setCraftTick(t => t + 1)
@@ -2434,7 +2444,7 @@ export default function VoxelWorld() {
           setShowBindings(false); closeCursorUI()
         }} />}
       {craftOpen && (
-        <CraftPanel have={have} tools={tools} tick={craftTick} station={station}
+        <CraftPanel have={have} tools={tools} tick={craftTick} station={station} pooled={!!worldCmd.current?.craftPool()}
                     onCraft={doCraft} onCraftTool={doCraftTool} onClose={() => { setCraftOpen(false); closeCursorUI() }} />
       )}
       {openWaymark && (
@@ -3122,7 +3132,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -3656,6 +3666,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // ★ `/water` (2026-09-17, farming ②) — damp a bed, no jug, no walk; `hours` backdates the
       // pour so the fade can be judged at any point of the day. Writes the SAME record `waterBed`
       // writes, so it settles, saves and dries like one. Bare = every bed the world can see.
+      // ★ THE BENCH DRAWS ON THE BANK (2026-09-17, Alex: "some are even greyed out even tho i have
+      // the materials"). The plot bank (09-16) made every plot STATION work out of one pool — and
+      // the `C` crafter, which lives one component up and never sees `bank`, kept counting the bag
+      // alone, so a keeper whose planks were in the bank saw every plank recipe grey. This hands the
+      // fitted pool up (the same array the stations borrow; `fitBank` sizes it to the chest census),
+      // or null off the plot, where there is no bank to draw on.
+      craftPool: () => space.current === 'plot' && bankCapacity(plotChests.current) > 0 ? fitBank(bank.current, bankCapacity(plotChests.current)) : null,
       water: (x, y, z, hours, kind) => {
         const now = Date.now(), at = now - hours * 3_600_000
         const damp = (bx: number, by: number, bz: number) => {
@@ -10507,8 +10524,10 @@ function GregDialogue({ ledger, owed, onWiden, onClose }: {
  * `tick` is the re-render handle: the inventory is a ref that crafting mutates in place, so this
  * panel has no other way to know its counts changed.
  */
-function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose }: {
+function CraftPanel({ have, tools, tick, station, pooled, onCraft, onCraftTool, onClose }: {
   have: (itemId: string) => number
+  /** On the plot: the counts include the bank, and a craft draws on it after the bag. */
+  pooled?: boolean
   tools: React.RefObject<EquippedTools>
   tick: number
   /** 'crafting_table' when standing near a placed one — station-gated recipes light up. */
@@ -10580,6 +10599,7 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
         <div className="flex items-baseline justify-between mb-3">
           <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Crafting
             {station === 'crafting_table' && <span className="ml-2 text-amber-200/70 normal-case tracking-normal font-normal">at table</span>}
+            {pooled && <span className="ml-2 text-white/35 normal-case tracking-normal font-normal">· drawing on the bank</span>}
           </span>
           <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>

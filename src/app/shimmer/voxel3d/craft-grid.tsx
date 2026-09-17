@@ -124,21 +124,27 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
           </div>
         )}
       </div>
-      <div className="grid grid-cols-8 gap-1 mb-2">
+      {/* ★ A TILE CARRIES ITS NAME (2026-09-17, Alex: "rn its just a confusing grid of items").
+          Twenty-one pieces in one wood are twenty-one brown icons; without the word under each, the
+          grid is a guessing game and every guess is a click. Six across instead of eight buys the
+          two lines the name needs. The name is dim on a tile you cannot make, bright on one you can —
+          the split the card then explains in red and green. */}
+      <div className="grid grid-cols-6 gap-1 mb-2">
         {shown.map(t => {
           const on = t.id === pickedId
           return (
             <button key={t.id} title={t.name} onClick={() => onPick(on ? null : t.id)}
-                    className={`relative aspect-square rounded border grid place-items-center transition-colors ${
+                    className={`relative rounded border flex flex-col items-center gap-1 pt-1.5 pb-1 px-0.5 transition-colors ${
                       on ? 'border-amber-300 bg-amber-200/10'
                          : t.can ? 'border-white/20 bg-white/[0.04] hover:border-amber-200/60'
-                                 : 'border-white/8 bg-transparent opacity-40 hover:opacity-70'}`}>
+                                 : 'border-white/8 bg-transparent opacity-45 hover:opacity-75'}`}>
               <CraftIcon itemId={t.itemId} size={28} />
-              {have(t.itemId) > 0 && <span className="absolute bottom-0 right-0.5 text-[8px] text-white/50 tabular-nums">{have(t.itemId)}</span>}
+              <span className={`text-[8px] leading-[10px] text-center line-clamp-2 break-words w-full ${t.can ? 'text-white/75' : 'text-white/45'}`}>{t.name}</span>
+              {have(t.itemId) > 0 && <span className="absolute top-0 right-0.5 text-[8px] text-white/50 tabular-nums">{have(t.itemId)}</span>}
             </button>
           )
         })}
-        {shown.length === 0 && <div className="col-span-8 text-white/35 py-3">nothing here{q ? ` for "${q}"` : ''}</div>}
+        {shown.length === 0 && <div className="col-span-6 text-white/35 py-3">nothing here{q ? ` for "${q}"` : ''}</div>}
       </div>
     </div>
   )
