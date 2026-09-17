@@ -231,12 +231,12 @@ export function createHands(): Hands {
   }
   // Local frame: +z is toward the lens (the elbow), −z is away (the fingers).
   part(arm, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 - 0.02)
-  part(arm, cube, COLOUR.cord, P.cuff.w, P.cuff.h, P.cuff.l, 0, 0, 0)
+  const cuff = part(arm, cube, COLOUR.cord, P.cuff.w, P.cuff.h, P.cuff.l, 0, 0, 0)
   const glove = part(arm, cube, COLOUR.glove, P.glove.w, P.glove.h, P.glove.l, 0, -0.005, -P.glove.l / 2 - P.cuff.l / 2)
   // the pale palm: a thin plate on the glove's −y face — the INSIDE, where the held thing sits
   const palm = part(arm, cube, COLOUR.palm, P.glove.w * 0.92, 0.006, P.glove.l * 0.9, 0, -P.glove.h / 2 - 0.002, glove.position.z)
   // the seat on the back of the hand: one, dark — the tier-0 word is one seat, unwritten
-  part(arm, sphere, COLOUR.seat, P.seat.r, P.seat.r * 0.6, P.seat.r, 0.012, P.glove.h / 2, glove.position.z + 0.01)
+  const seat = part(arm, sphere, COLOUR.seat, P.seat.r, P.seat.r * 0.6, P.seat.r, 0.012, P.glove.h / 2, glove.position.z + 0.01)
 
   // ── the held focus: one group per family, only one visible ──
   const tools = new Map<SkillId, THREE.Group>()
@@ -298,7 +298,7 @@ export function createHands(): Hands {
   arm.add(held)
 
   // ── the modelled glove, when one is loaded: the stick parts hide, these show ──
-  const stickParts: THREE.Object3D[] = [glove, palm]
+  const stickParts: THREE.Object3D[] = [glove, palm, cuff, seat]   // the modelled glove brings its own cuff and seat
   let gloveFist: THREE.Object3D | null = null, gloveOpen: THREE.Object3D | null = null
   /** The depth trick and the ambient floor, applied to any mesh that joins the rig later. */
   const adopt = (o: THREE.Object3D) => {
@@ -310,7 +310,11 @@ export function createHands(): Hands {
         mm.transparent = true
         if (mm instanceof THREE.MeshStandardMaterial) {
           mm.metalness = 0   // ⛔ no metal — the vessel card's law, enforced on whatever the file says
-          mm.emissive.copy(mm.color); mm.emissiveIntensity = 0.16
+          // ★ The ambient floor for a VERTEX-COLOURED mesh: its base colour is white (the colour
+          // lives per vertex), so copying it into emissive blew the glove out to paper. A fixed dim
+          // warm emissive gives the same "never black" floor without whitening anything.
+          mm.emissive.setHex(0x1c1610); mm.emissiveIntensity = 1
+          mm.roughness = Math.max(mm.roughness, 0.85)   // cloth, not plastic
         }
       }
     })
