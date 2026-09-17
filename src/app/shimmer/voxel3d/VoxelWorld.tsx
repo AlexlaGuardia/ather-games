@@ -10579,10 +10579,13 @@ function CraftPanel({ have, tools, tick, station, pooled, onCraft, onCraftTool, 
         yields: `${r.output.count}× ${itemLabel(r.output.itemId).toLowerCase()}${at && r.station === 'hand' ? ` · ${milledYield(r, at)}× at ${at.name.toLowerCase()}` : ''}`,
       }
     }),
+    // The tile says the SHAPE; the strip above it already says the material, so "Cut Stone Door"
+    // twenty-two times over is twenty-two tiles that all start with the same two words. The card's
+    // tag carries the material for the one you picked.
     ...pieceRows.map((pc): GridTile => ({
-      id: `p:${pc.id}`, name: pc.name, itemId: pieceItemId(pc.id), tab: 'Pieces',
+      id: `p:${pc.id}`, name: pieceDef(basePieceId(pc.id))?.name ?? pc.name, itemId: pieceItemId(pc.id), tab: 'Pieces',
       can: canAfford(pc, have), cost: pc.cost, yields: `1× · ${have(pieceItemId(pc.id))} in bag`,
-      tag: 'hold one · RMB places · R turns',
+      tag: `in ${(pieceMaterial(pc.id)?.name ?? PIECE_MATERIALS.find(m => m.itemId === pc.cost[0]?.itemId)?.name ?? '').toLowerCase()} · hold one · RMB places · R turns`,
     })),
     ...nextTools.map((d): GridTile => ({
       id: `t:${d.id}`, name: d.name, itemId: d.id, tab: 'Tools',
