@@ -305,22 +305,15 @@ export function createHands(): Hands {
     o.traverse(m => {
       if (!(m instanceof THREE.Mesh)) return
       m.renderOrder = HANDS_ORDER; m.frustumCulled = false
-      const mats = Array.isArray(m.material) ? m.material : [m.material]
-      for (const mm of mats) {
-        mm.transparent = true
-        if (mm instanceof THREE.MeshStandardMaterial) {
-          mm.metalness = 0   // ⛔ no metal — the vessel card's law, enforced on whatever the file says
-          // ★ The ambient floor for a VERTEX-COLOURED mesh: its base colour is white (the colour
-          // lives per vertex), so copying it into emissive blew the glove out to paper. A fixed dim
-          // warm emissive gives the same "never black" floor without whitening anything.
-          mm.emissive.setHex(0x1c1610); mm.emissiveIntensity = 1
-          mm.roughness = 1   // cloth, not plastic
-          // ★ And the world's sun is far stronger than a studio light: the ref's cream (#c9b48a) read
-          // as PAPER on prod. `color` multiplies the vertex colours, so this is a global tint down
-          // toward the ref's shadow tone, not a repaint.
-          mm.color.setScalar(0.68)
-        }
-      }
+      // ★ LAMBERT, LIKE EVERYTHING ELSE THAT READS RIGHT HERE. The file's material is physical
+      // (Standard/Physical + KHR_materials_specular), and under the voxel sun — lights tuned for
+      // this world's Lambert shaders — it blew out to paper through two tint passes. So the file's
+      // material is replaced, not tuned: Lambert, vertex colours, the same dim emissive floor the
+      // stick parts carry, a tint toward the ref's shadow tone. Metalness cannot exist on it — the
+      // vessel card's law by construction, not by a slider set to zero.
+      const old = Array.isArray(m.material) ? m.material : [m.material]
+      m.material = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0xb8ab90, emissive: 0x1c1610, transparent: true })
+      for (const mm of old) mm.dispose()
     })
   }
   const loadGlove = (url: string) => new Promise<boolean>(resolve => {
