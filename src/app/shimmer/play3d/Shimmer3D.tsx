@@ -3206,49 +3206,85 @@ function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] })
  * edit in `zones.ts` and never a change in here. Owner-only gates are dimmed and tagged rather
  * than hidden: the owner should be able to see at a glance which doors the players cannot use.
  */
-function GateMarkers({ gates, heights, isOwner }: { gates: Gate[]; heights: number[][]; isOwner: boolean }) {
+function GateMarkers({ gates, heights, isOwner, posRef }: { gates: Gate[]; heights: number[][]; isOwner: boolean; posRef: React.RefObject<THREE.Vector3> }) {
   return (
     <>
-      {gates.map((g, i) => {
-        if (g.ownerOnly && !isOwner) return null
-        const size = g.size ?? 2
-        // Anchor is the footprint's top-left TILE; the visual centre is half a footprint in, minus
-        // the half-tile that separates a tile's corner from its middle.
-        const cx = g.x + size / 2 - 0.5
-        const cz = g.y + size / 2 - 0.5
-        const y = (heights[g.y]?.[g.x] ?? 0) * STEP
-        const tint = g.ownerOnly ? '#d8a24a' : '#5fe0a0'
-        const glow = g.ownerOnly ? '#ffcf7a' : '#7fffc0'
-        // corner posts sit on the footprint's outline, offset from the centre we're grouped at
-        const half = size / 2
-        const corners: Array<[number, number]> = [[-half, -half], [-half, half], [half, -half], [half, half]]
-        return (
-          <group key={`gate-${i}`} position={[cx, y, cz]}>
-            {/* the threshold — a lit pad covering the whole footprint, so the door reads as one thing */}
-            <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <planeGeometry args={[size, size]} />
-              <meshStandardMaterial color={tint} emissive={glow} emissiveIntensity={0.5} transparent opacity={0.4} />
-            </mesh>
-            {corners.map(([dx, dz], k) => (
-              <mesh key={k} position={[dx, 1.6, dz]}>
-                <cylinderGeometry args={[0.16, 0.24, 3.2, 6]} />
-                <meshStandardMaterial color={tint} emissive={glow} emissiveIntensity={0.9} transparent opacity={0.65} />
-              </mesh>
-            ))}
-            <Html zIndexRange={[20, 0]} position={[0, 4.1, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
-              <div style={{
-                font: '800 26px ui-monospace, monospace', color: glow, letterSpacing: '0.08em',
-                background: 'rgba(8,14,10,0.78)', padding: '7px 18px', borderRadius: 10,
-                whiteSpace: 'nowrap', border: `2px solid ${tint}88`, textShadow: `0 0 12px ${glow}66`,
-              }}>
-                {g.label}
-                {g.ownerOnly && <div style={{ font: '700 11px ui-monospace, monospace', color: '#ffcf7a', opacity: 0.8, letterSpacing: '0.14em', marginTop: 2 }}>OWNER ONLY</div>}
-              </div>
-            </Html>
-          </group>
-        )
-      })}
+      {gates.map((g, i) => (g.ownerOnly && !isOwner) ? null : <GateMarker key={`gate-${i}`} g={g} heights={heights} posRef={posRef} />)}
     </>
+  )
+}
+
+/**
+ * ── ★ THE NAME SHOWS WHEN YOU LOOK AT THE DOOR, OR STAND IN IT (Alex, 2026-09-17) ──────────────
+ * Same rule as the Ather's gate station (`voxel3d/seam.ts` › tick): an always-on nameplate over
+ * every door was a signpost, not a hint. Each frame the eye's ray is cast at an invisible box
+ * the size of the door's footprint and the posts' height — the volume a walker reads as "that
+ * door" — within `GATE_TAG_REACH`; the nearest hit shows its plate. Standing on the threshold pad
+ * shows it too: you are choosing it. React state flips only on change, so the walker never
+ * re-renders at 60Hz for this.
+ */
+const GATE_TAG_REACH = 30
+function GateMarker({ g, heights, posRef }: { g: Gate; heights: number[][]; posRef: React.RefObject<THREE.Vector3> }) {
+  const { w: fw, h: fh } = gateFootprint(g)
+  // Anchor is the footprint's top-left TILE; the visual centre is half a footprint in, minus
+  // the half-tile that separates a tile's corner from its middle.
+  const cx = g.x + fw / 2 - 0.5
+  const cz = g.y + fh / 2 - 0.5
+  const y = (heights[g.y]?.[g.x] ?? 0) * STEP
+  const tint = g.ownerOnly ? '#d8a24a' : '#5fe0a0'
+  const glow = g.ownerOnly ? '#ffcf7a' : '#7fffc0'
+  // corner posts sit on the footprint's outline, offset from the centre we're grouped at
+  const hw = fw / 2, hh = fh / 2
+  const corners: Array<[number, number]> = [[-hw, -hh], [-hw, hh], [hw, -hh], [hw, hh]]
+  const hit = useRef<THREE.Mesh>(null)
+  const [shown, setShown] = useState(false)
+  const camera = useThree(s => s.camera)
+  const ray = useMemo(() => new THREE.Raycaster(), [])
+  const dir = useMemo(() => new THREE.Vector3(), [])
+  useFrame(() => {
+    const p = posRef.current
+    const standing = !!p && Math.abs(p.x - cx) <= hw + 0.3 && Math.abs(p.z - cz) <= hh + 0.3
+    let looked = false
+    if (!standing && hit.current) {
+      camera.getWorldDirection(dir)
+      ray.set(camera.position, dir)
+      ray.far = GATE_TAG_REACH
+      looked = ray.intersectObject(hit.current, false).length > 0
+    }
+    const next = standing || looked
+    if (next !== shown) setShown(next)
+  })
+  return (
+    <group position={[cx, y, cz]}>
+      {/* the threshold — a lit pad covering the whole footprint, so the door reads as one thing */}
+      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[fw, fh]} />
+        <meshStandardMaterial color={tint} emissive={glow} emissiveIntensity={0.5} transparent opacity={0.4} />
+      </mesh>
+      {corners.map(([dx, dz], k) => (
+        <mesh key={k} position={[dx, 1.6, dz]}>
+          <cylinderGeometry args={[0.16, 0.24, 3.2, 6]} />
+          <meshStandardMaterial color={tint} emissive={glow} emissiveIntensity={0.9} transparent opacity={0.65} />
+        </mesh>
+      ))}
+      {/* the look-box: never drawn, only cast at */}
+      <mesh ref={hit} position={[0, 1.6, 0]} visible={false}>
+        <boxGeometry args={[fw + 0.4, 3.2, fh + 0.4]} />
+        <meshBasicMaterial />
+      </mesh>
+      {shown && (
+        <Html zIndexRange={[20, 0]} position={[0, 4.1, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+          <div style={{
+            font: '800 26px ui-monospace, monospace', color: glow, letterSpacing: '0.08em',
+            background: 'rgba(8,14,10,0.78)', padding: '7px 18px', borderRadius: 10,
+            whiteSpace: 'nowrap', border: `2px solid ${tint}88`, textShadow: `0 0 12px ${glow}66`,
+          }}>
+            {g.label}
+            {g.ownerOnly && <div style={{ font: '700 11px ui-monospace, monospace', color: '#ffcf7a', opacity: 0.8, letterSpacing: '0.14em', marginTop: 2 }}>OWNER ONLY</div>}
+          </div>
+        </Html>
+      )}
+    </group>
   )
 }
 
@@ -3594,7 +3630,7 @@ const Scene = memo(function Scene(props: {
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
           Ather has doors worth naming too. ExitMarkers stays outside-only — it is a fallback for
           zones whose warps were never painted into the grid. */}
-      {!!props.zone.gates?.length && <GateMarkers gates={props.zone.gates} heights={props.heights} isOwner={props.isOwner} />}
+      {!!props.zone.gates?.length && <GateMarkers gates={props.zone.gates} heights={props.heights} isOwner={props.isOwner} posRef={props.posRef} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
       <BurrowMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} gridRef={props.gridRef} keyFor={props.spawnerKeyFor} />
       {/* the plot ring: resting spirits wander the Home Plot, visible + greetable */}
