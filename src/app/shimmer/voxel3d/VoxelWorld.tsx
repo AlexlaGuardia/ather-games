@@ -10525,7 +10525,9 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
   // sawmill" on its card) so a keeper learns where planks come from instead of concluding they are
   // gone — `craftSurface` decides what is shown, unchanged.
   const [picked, setPicked] = useState<string | null>(null)
-  const [pieceMat, setPieceMat] = useState(PIECE_MATERIALS[0].key)
+  // Opens on the first material the bag actually holds, so the pieces tab shows something craftable.
+  const [pieceMat, setPieceMat] = useState(() => (PIECE_MATERIALS.find(m => have(m.itemId) > 0) ?? PIECE_MATERIALS[0]).key)
+  const [allMats, setAllMats] = useState(false)
   const pieceFamily = PIECE_MATERIALS.find(m => m.key === pieceMat)?.family
   const pieceRows = PIECES.filter(pc => !!pieceFamily && !!pc.variants?.includes(pieceFamily))
     .map(pc => pieceVariants(pc.id).find(v => pieceMaterial(v.id)?.key === pieceMat) ?? pc)
@@ -10596,9 +10598,13 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
                      </>)
                    }}
                    footer={(tab) => tab !== 'Pieces' ? null : (
+                     // ★ THE STRIP SHOWS WHAT YOU HAVE (2026-09-17, Alex: "the crafter … still pretty
+                     // messy"). Seventeen materials is five rows of chips, fifteen of them at 0, before
+                     // the first tile — so the chips are the materials in the bag (and the chosen one),
+                     // and the rest sit behind "more". A keeper with planks and cut stone sees two.
                      <div className="mb-2 flex flex-wrap gap-1 items-center">
                        <span className="text-white/35 text-[9px] tracking-[.14em] uppercase mr-1">pieces in</span>
-                       {PIECE_MATERIALS.map(m => {
+                       {PIECE_MATERIALS.filter(m => allMats || have(m.itemId) > 0 || m.key === pieceMat).map(m => {
                          const on = m.key === pieceMat
                          const stock = have(m.itemId)
                          return (
@@ -10610,6 +10616,15 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
                            </button>
                          )
                        })}
+                       {(() => {
+                         const hidden = PIECE_MATERIALS.filter(m => !(have(m.itemId) > 0 || m.key === pieceMat)).length
+                         return hidden > 0 && (
+                           <button onClick={() => setAllMats(v => !v)}
+                                   className="px-2 h-6 rounded border border-dashed border-white/15 text-[9px] font-mono text-white/40 hover:border-white/40">
+                             {allMats ? 'fewer' : `${hidden} more`}
+                           </button>
+                         )
+                       })()}
                      </div>
                    )} />
       </div>
