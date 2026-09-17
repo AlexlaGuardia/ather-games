@@ -188,6 +188,34 @@ export function setBoost(w: World, on: boolean) {
   if (p && p.alive) p.boosting = on
 }
 
+// ── desktop input, pure ──────────────────────────────────────────────────────
+// the camera's zoom for a worm of this mass — one formula, shared by the renderer and the cursor
+// steer (which has to project the head to the screen the same way the renderer does)
+export function zoomFor(mass: number | undefined): number {
+  return mass === undefined ? 0.9 : Math.max(0.5, Math.min(0.95, 1.0 - mass * 0.0052))
+}
+export const CURSOR_DEAD = 14 // px: a cursor sitting on the head has no direction to give
+
+// heading from the worm's head toward the cursor, both in screen px; null inside the deadzone
+// (an ease-following camera puts the head near, not at, centre — so steer off the HEAD, never centre)
+export function cursorHeading(head: { x: number; y: number }, cursor: { x: number; y: number }): number | null {
+  const dx = cursor.x - head.x, dy = cursor.y - head.y
+  if (Math.hypot(dx, dy) < CURSOR_DEAD) return null
+  return Math.atan2(dy, dx)
+}
+
+// heading from a held-key set (WASD / arrows, y+ = down); null when nothing directional is held.
+// opposite keys cancel to nothing, so the worm keeps its heading instead of snapping to 0 rad.
+export function keysHeading(k: ReadonlySet<string>): number | null {
+  let kx = 0, ky = 0
+  if (k.has('a') || k.has('arrowleft')) kx -= 1
+  if (k.has('d') || k.has('arrowright')) kx += 1
+  if (k.has('w') || k.has('arrowup')) ky -= 1
+  if (k.has('s') || k.has('arrowdown')) ky += 1
+  if (kx === 0 && ky === 0) return null
+  return Math.atan2(ky, kx)
+}
+
 function turnToward(a: number, target: number, maxStep: number): number {
   let d = target - a
   while (d > Math.PI) d -= Math.PI * 2

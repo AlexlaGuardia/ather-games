@@ -16,6 +16,9 @@ import {
   makeWorld,
   player,
   steer,
+  zoomFor,
+  cursorHeading,
+  keysHeading,
   setBoost,
   tick,
   score,
@@ -68,6 +71,7 @@ export default function VoranyxPage() {
   const overRef = useRef(false)
   const camRef = useRef({ x: 0, y: 0 })
   const syncT = useRef(0)
+  const keysRef = useRef<Set<string>>(new Set()) // WASD / arrows held right now (desktop)
 
   const [started, setStarted] = useState(false)
   const [over, setOver] = useState(false)
@@ -130,6 +134,10 @@ export default function VoranyxPage() {
       last = ts
 
       if (startedRef.current && !overRef.current) {
+        // keyboard steer is sampled per frame (a held key keeps pulling the heading around, like the
+        // stick held at its rim); the cursor and the stick steer on their own events. Last input wins.
+        const kh = keysHeading(keysRef.current)
+        if (kh !== null) steer(w, kh)
         const ev = tick(w, dt)
         if (ev.ate) sfx.play('eat')
         if (ev.seed) sfx.play('seed')
@@ -175,11 +183,38 @@ export default function VoranyxPage() {
   const boostOn = useCallback(() => { if (!startedRef.current || overRef.current) return; if (worldRef.current) setBoost(worldRef.current, true) }, [])
   const boostOff = useCallback(() => { if (worldRef.current) setBoost(worldRef.current, false) }, [])
   useEffect(() => {
-    const kd = (e: KeyboardEvent) => { if (e.code === 'Space') { e.preventDefault(); boostOn() } }
-    const ku = (e: KeyboardEvent) => { if (e.code === 'Space') boostOff() }
-    window.addEventListener('keydown', kd); window.addEventListener('keyup', ku)
-    return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku) }
+    const kd = (e: KeyboardEvent) => {
+      if (e.code === 'Space') { e.preventDefault(); boostOn(); return }
+      const k = e.key.toLowerCase()
+      if (k.startsWith('arrow')) e.preventDefault() // arrows would scroll the page under the cabinet
+      keysRef.current.add(k)
+    }
+    const ku = (e: KeyboardEvent) => { if (e.code === 'Space') boostOff(); else keysRef.current.delete(e.key.toLowerCase()) }
+    const blur = () => keysRef.current.clear() // a key released in another window never sends keyup here
+    window.addEventListener('keydown', kd); window.addEventListener('keyup', ku); window.addEventListener('blur', blur)
+    return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); window.removeEventListener('blur', blur) }
   }, [boostOn, boostOff])
+
+  // CURSOR steering (desktop): the worm chases the mouse, measured from its HEAD on screen (the camera
+  // eases, so the head is near centre, not at it). Mouse only — a phone steers from the deck stick, and
+  // a thumb on the screen must not fight it. Holding the button boosts, like Space.
+  const onCanvasMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType !== 'mouse' || !startedRef.current || overRef.current) return
+    const w = worldRef.current, p = w && player(w)
+    if (!w || !p) return
+    const r = e.currentTarget.getBoundingClientRect()
+    const zoom = zoomFor(p.mass), cam = camRef.current
+    const head = { x: (p.x - cam.x) * zoom + r.width / 2, y: (p.y - cam.y) * zoom + r.height / 2 }
+    const h = cursorHeading(head, { x: e.clientX - r.left, y: e.clientY - r.top })
+    if (h !== null) steer(w, h)
+  }, [])
+  const onCanvasDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType !== 'mouse') return
+    e.preventDefault()
+    onCanvasMove(e)
+    boostOn()
+  }, [onCanvasMove, boostOn])
+  const onCanvasUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => { if (e.pointerType === 'mouse') boostOff() }, [boostOff])
 
   const restart = useCallback(() => { sfx.ensure(); boot() }, [boot])
   const toggleMute = () => { sfx.ensure(); const m = !sfx.isMuted(); sfx.setMuted(m); setMuted(m) }
@@ -210,7 +245,11 @@ export default function VoranyxPage() {
       <div className="gx-chrome relative w-full" style={{ maxWidth: screenMaxW(360, 480), aspectRatio: '3 / 4', ['--gx-accent' as string]: '#37e6ff' } as React.CSSProperties}>
         <canvas
           ref={canvasRef}
-          className="w-full h-full block rounded-md pointer-events-none"
+          className="w-full h-full block rounded-md touch-none cursor-crosshair"
+          onPointerMove={onCanvasMove}
+          onPointerDown={onCanvasDown}
+          onPointerUp={onCanvasUp}
+          onPointerLeave={onCanvasUp}
         />
         <div className="pointer-events-none absolute inset-0 rounded-md vx-crt" />
 
@@ -221,7 +260,7 @@ export default function VoranyxPage() {
             <div className="absolute inset-0 -z-10 bg-[#04040a]/62" />
             <div className="gx-title text-[#37e6ff] text-2xl tracking-[0.3em] uppercase" style={{ textShadow: '0 0 18px #37e6ff' }}>Voranyx</div>
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
-              drag to steer (cursor on desktop). graze the dross, swallow a seed to take its colour, gather motes to boost. keep eating or you fade — and never put your head into another worm.
+              drag the stick to steer (WASD or your cursor on desktop). graze the dross, swallow a seed to take its colour, gather motes to boost. keep eating or you fade — and never put your head into another worm.
             </p>
             <div className="gx-label pointer-events-auto flex items-center gap-1.5 mt-0.5 text-[10px]">
               {(['endless', 'daily'] as const).map((m) => (
@@ -269,7 +308,7 @@ export default function VoranyxPage() {
         onPress={boostOn}
         onRelease={boostOff}
         hint="drag the stick to steer · hold boost to surge"
-        keyLegend={[{ keys: 'W A S D', label: 'steer' }, { keys: 'Space', label: 'boost' }]}
+        keyLegend={[{ keys: 'W A S D / mouse', label: 'steer' }, { keys: 'Space / click', label: 'boost' }]}
       />
 
 
@@ -313,7 +352,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
   // zoom out harder as you grow so a mid-game worm sees room ahead of it (was 0.95 - mass*0.0019,
   // which barely backed off — 0.855 at mass 50). Steeper slope + lower floor: ~0.74 at mass 50,
   // floors at 0.5 (whole closing ring in view) from ~mass 96 up.
-  const zoom = p ? Math.max(0.5, Math.min(0.95, 1.0 - p.mass * 0.0052)) : 0.9
+  const zoom = zoomFor(p?.mass)
   const toX = (wx: number) => (wx - cam.x) * zoom + cw / 2
   const toY = (wy: number) => (wy - cam.y) * zoom + ch / 2
 

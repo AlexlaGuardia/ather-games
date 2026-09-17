@@ -3,6 +3,10 @@ import {
   makeWorld,
   player,
   steer,
+  zoomFor,
+  cursorHeading,
+  keysHeading,
+  CURSOR_DEAD,
   setBoost,
   tick,
   score,
@@ -130,6 +134,21 @@ function ok(name: string, cond: boolean) {
   const bAi = b.wyrms.find((x) => !x.isPlayer)!
   ok('same seed → same first AI spawn', aAi.x === bAi.x && aAi.y === bAi.y)
   ok('score reads player mass', score(a) === Math.round(player(a)!.mass))
+}
+
+// 10. desktop input helpers (the deck rollout left desktop with no steer at all — 2026-09-16)
+{
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-9
+  ok('keys: nothing held → null (heading kept, never snaps to 0)', keysHeading(new Set()) === null)
+  ok('keys: opposite keys cancel → null', keysHeading(new Set(['a', 'd'])) === null)
+  ok('keys: d → 0 rad, s → +π/2 (y down), w → -π/2', near(keysHeading(new Set(['d']))!, 0) && near(keysHeading(new Set(['s']))!, Math.PI / 2) && near(keysHeading(new Set(['w']))!, -Math.PI / 2))
+  ok('keys: arrows alias WASD', near(keysHeading(new Set(['arrowleft']))!, Math.PI))
+  ok('keys: diagonal w+d → -π/4', near(keysHeading(new Set(['w', 'd']))!, -Math.PI / 4))
+  const head = { x: 200, y: 300 }
+  ok('cursor: on the head → null (deadzone)', cursorHeading(head, { x: 200 + CURSOR_DEAD - 1, y: 300 }) === null)
+  ok('cursor: right of head → 0, below → +π/2', near(cursorHeading(head, { x: 400, y: 300 })!, 0) && near(cursorHeading(head, { x: 200, y: 500 })!, Math.PI / 2))
+  ok('cursor: measured from the HEAD, not the centre', near(cursorHeading({ x: 100, y: 100 }, { x: 100, y: 0 })!, -Math.PI / 2))
+  ok('zoom: same curve as the renderer — 0.9 unborn, floors 0.5, caps 0.95', zoomFor(undefined) === 0.9 && zoomFor(1000) === 0.5 && zoomFor(0) === 0.95 && near(zoomFor(50), 0.74))
 }
 
 console.log(`\nVORANYX sim: ${pass} passed, ${fail} failed`)
