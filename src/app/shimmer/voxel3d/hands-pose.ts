@@ -29,6 +29,14 @@ export const BREATH_Y = 0.004
 export const SWING_HZ = 2.2
 /** How far the chop pitches the arm, radians. Down-and-in, the way a blade or a spike lands. */
 export const SWING_RAD = 0.55
+/** ★ THE REACH (Alex, 09-17: "for mining it should extend the fingers forward as if reaching for
+ *  it"). A bare hand does not chop a block; it reaches for it, fingers open, and grasps in a rhythm.
+ *  How far forward the hand goes (camera units), and how far the grasp pulse adds on top. The chop
+ *  stays for a TOOL in the fist — a blade needs its swing. */
+export const REACH = 0.16
+export const REACH_PULSE = 0.05
+/** Holding a hotbar item: the palm turns UP (a roll about the fingers) and the thing floats over it. */
+export const PRESENT_ROLL = Math.PI
 /** A placed block: a short forward push, this long. */
 export const PLACE_MS = 220
 export const PLACE_PUSH = 0.05
@@ -53,6 +61,9 @@ export interface HandsInput {
   vy: number
   /** A block or piece is being worked this frame. */
   breaking: boolean
+  /** A gathering focus is in the fist (the host names a family while a block is worked). With a
+   *  tool the break is a CHOP; bare-handed it is a REACH. */
+  tool: boolean
   /** `now` when the last block was placed; -Infinity for never. */
   placeAt: number
   /** `now` when the last cast landed; -Infinity for never. */
@@ -97,7 +108,7 @@ export interface HandsState {
   /** Extra drop on a wall (climb / hang / mantle / catch), over `lower`. */
   wallDrop: number
   /** Eased weights, one per verb, so a pose BLENDS in and out instead of snapping. */
-  w: { air: number; slide: number; crouch: number; climb: number; wallCatch: number; hang: number; swim: number; hold: number }
+  w: { air: number; slide: number; crouch: number; climb: number; wallCatch: number; hang: number; swim: number; hold: number; reach: number }
   /** The climb's and the stroke's own clocks. */
   climbPh: number
   swimPh: number
@@ -105,7 +116,7 @@ export interface HandsState {
 
 export const newHandsState = (): HandsState => ({
   lower: 0, swing: 0, swingOn: 0, stride: 0, speed: 0, ground: 1, wallDrop: 0,
-  w: { air: 0, slide: 0, crouch: 0, climb: 0, wallCatch: 0, hang: 0, swim: 0, hold: 0 },
+  w: { air: 0, slide: 0, crouch: 0, climb: 0, wallCatch: 0, hang: 0, swim: 0, hold: 0, reach: 0 },
   climbPh: 0, swimPh: 0,
 })
 
@@ -131,6 +142,10 @@ export interface HandsPose {
   dz: number
   /** Right arm pitch, radians. Negative = the chop (down and in). Positive = the raise. */
   pitch: number
+  /** Right hand roll about its own fingers, radians. π = palm up, presenting. */
+  roll: number
+  /** 0..1, how OPEN the right hand is (the rig shows the open glove past 0.5, the fist under). */
+  open: number
   /** 0..1, the left wrist's rise into frame. */
   left: number
   /** The left arm's own offset and pitch on top of its rise — a grip, a stroke, a press. */
@@ -175,13 +190,14 @@ export function stepHands(s: HandsState, i: HandsInput, dt: number): HandsPose {
   // Breathing shows through when the feet are still.
   dy += Math.sin(i.t * Math.PI * 2 * BREATH_HZ) * BREATH_Y * (1 - gait)
 
-  // ── the chop ──
-  s.swingOn = approach(s.swingOn, i.breaking ? 1 : 0, 10, dt)
+  // ── the chop (a tool in the fist) / the reach (a bare hand) — one clock, two shapes ──
+  const chopping = i.breaking && i.tool
+  s.swingOn = approach(s.swingOn, chopping ? 1 : 0, 10, dt)
   if (i.breaking) s.swing = (s.swing + SWING_HZ * dt) % 1
   else if (s.swing > 0) { s.swing = s.swing + SWING_HZ * dt; if (s.swing >= 1) s.swing = 0 }  // finish the arc, then rest
   // A chop is fast down, slower back: sin over the first 40%, ease over the rest.
   const chop = s.swing < 0.4 ? Math.sin((s.swing / 0.4) * Math.PI / 2) : Math.cos(((s.swing - 0.4) / 0.6) * Math.PI / 2)
-  let pitch = -chop * SWING_RAD * Math.max(s.swingOn, s.swing > 0 ? 1 : 0)
+  let pitch = -chop * SWING_RAD * Math.max(s.swingOn, s.swing > 0 && s.swingOn > 0 ? 1 : 0)
 
   // ── the place tap ──
   const pu = (i.now - i.placeAt) / PLACE_MS
@@ -215,7 +231,9 @@ export function stepHands(s: HandsState, i: HandsInput, dt: number): HandsPose {
     air: !hangOn && !i.climbing && !i.wallCatch && !i.swimming && i.airborne ? 1 : 0,
     slide: i.sliding ? 1 : 0,
     crouch: !i.sliding && i.crouching ? 1 : 0,
-    hold: i.holding ? 1 : 0,
+    // a bare-handed break REACHES; a held thing gives way to the reach (you cannot present and grab)
+    reach: i.breaking && !i.tool ? 1 : 0,
+    hold: i.holding && !i.breaking ? 1 : 0,
   }
   for (const k of Object.keys(target) as (keyof typeof target)[]) w[k] = approach(w[k], target[k], BLEND_RATE, dt)
   let leftDy = 0, leftPitch = 0
@@ -246,10 +264,19 @@ export function stepHands(s: HandsState, i: HandsInput, dt: number): HandsPose {
   const sph = Math.sin(s.swimPh * Math.PI * 2)
   pitch += w.swim * (0.45 + 0.5 * sph); dz -= w.swim * (0.08 + 0.06 * sph); dy += w.swim * 0.06
   left = Math.max(left, w.swim); leftDy += w.swim * 0.08 * -sph; leftPitch += w.swim * (0.45 - 0.5 * sph)
-  // holding: the fist comes up a touch so the thing in it can be seen
-  pitch += w.hold * 0.18; dy += w.hold * 0.02
+  // the reach: fingers forward toward the block at the crosshair — in, up, and OUT — with a grasp
+  // that closes and opens on the swing clock (the pulse is what says "working", not a chop)
+  const grasp = 0.5 - 0.5 * Math.cos(s.swing * Math.PI * 2)
+  dz -= w.reach * (REACH + REACH_PULSE * grasp); dx -= w.reach * 0.10; dy += w.reach * 0.06; pitch += w.reach * 0.10
+  // holding: the palm turns up and the hand lifts a touch toward centre so the thing over it is seen
+  const roll = w.hold * PRESENT_ROLL
+  // ⚠ after the π roll the pitch axis is reversed: a NEGATIVE pitch here tips the fingers forward,
+  // a waiter's tray, so the thing sits ABOVE the palm rather than in front of a raised hand
+  pitch -= w.hold * 0.35; dy += w.hold * 0.05; dx -= w.hold * 0.04
+  // how open the hand is: a reach, a presented palm, a cast's aim, any hand on a wall
+  const open = Math.max(w.reach, w.hold, left, w.wallCatch, w.climb, w.hang)
 
   dy -= s.lower * LOWER_Y + s.wallDrop * WALL_DROP_EXTRA
   leftDy -= s.wallDrop * WALL_DROP_EXTRA
-  return { dx, dy, dz, pitch, left, leftDy, leftPitch }
+  return { dx, dy, dz, pitch, roll, open, left, leftDy, leftPitch }
 }

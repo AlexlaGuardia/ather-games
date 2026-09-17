@@ -2,7 +2,7 @@
 //
 // Mutation-swept 2026-09-16: stride driven by time instead of distance (the bob-freezes assert) ·
 // chop sign flipped · PLACE window off-by-one · cast env never released · lower not eased.
-import { stepHands, newHandsState, BOB_Y, BREATH_Y, SWING_HZ, SWING_RAD, PLACE_MS, CAST_MS, LOWER_Y, WALL_DROP_EXTRA, LAND_DIP, type HandsInput } from './hands-pose'
+import { stepHands, newHandsState, BOB_Y, BREATH_Y, SWING_HZ, SWING_RAD, REACH, PRESENT_ROLL, PLACE_MS, CAST_MS, LOWER_Y, WALL_DROP_EXTRA, LAND_DIP, type HandsInput } from './hands-pose'
 import { RUN_SPEED } from './locomotion'
 
 let pass = 0
@@ -12,7 +12,7 @@ const DT = 1 / 60
 const base = (over: Partial<HandsInput> = {}): HandsInput => ({
   t: 0, now: 0, speed: 0, vy: 0, breaking: false, placeAt: -Infinity, castAt: -Infinity, hidden: false,
   airborne: false, sliding: false, crouching: false, climbing: false, wallCatch: false, hanging: false, mantle: -1,
-  swimming: false, landAt: -Infinity, landVy: 0, holding: false, ...over,
+  swimming: false, landAt: -Infinity, landVy: 0, holding: false, tool: false, ...over,
 })
 /** Run `n` frames from t=0, returning every pose. `f` shapes the input per frame. */
 const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState()) => {
@@ -57,9 +57,24 @@ const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState
   ok(s5.speed < 30 * 0.3, `a one-frame spike is eased (${s5.speed.toFixed(2)} of 30)`)
 }
 
-// ── the chop ──
+// ── the reach (a bare hand breaking): fingers forward, open, a grasp pulse, no chop ──
 {
   const ps = run(60, () => ({ breaking: true }))
+  const settled = ps.slice(20)
+  ok(settled.every(p => p.dz < -REACH * 0.8), `reach: the hand goes OUT toward the block (dz ${Math.max(...settled.map(p => p.dz)).toFixed(3)})`)
+  ok(settled.every(p => p.open > 0.9), 'reach: the hand is OPEN')
+  ok(ps.every(p => p.pitch >= -1e-9), 'reach: a bare hand never chops down')
+  const dzs = settled.map(p => p.dz)
+  ok(Math.max(...dzs) - Math.min(...dzs) > 0.02, 'reach: the grasp PULSES (dz moves on the swing clock)')
+  const s = newHandsState()
+  run(20, () => ({ breaking: true }), s)
+  const after = run(60, () => ({ breaking: false }), s)
+  ok(Math.abs(after[after.length - 1].dz) < 0.01 && after[after.length - 1].open < 0.05, 'released: the hand comes back and closes')
+}
+
+// ── the chop (a tool in the fist) ──
+{
+  const ps = run(60, () => ({ breaking: true, tool: true }))
   const minPitch = Math.min(...ps.map(p => p.pitch))
   ok(minPitch < -SWING_RAD * 0.8, `breaking: the arm chops DOWN (min pitch ${minPitch.toFixed(3)}, SWING_RAD ${SWING_RAD})`)
   ok(ps.every(p => p.pitch <= 1e-9), 'breaking: a chop never pitches the arm UP')
@@ -68,8 +83,8 @@ const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState
   ok(firstMin * DT <= 0.4 / SWING_HZ + DT, `the first stroke lands by ${(0.4 / SWING_HZ).toFixed(2)}s (landed at ${(firstMin * DT).toFixed(2)}s)`)
   // release: after breaking stops the arm finishes its arc and rests within one swing period
   const s = newHandsState()
-  run(20, () => ({ breaking: true }), s)
-  const after = run(Math.ceil(1.2 / SWING_HZ / DT), () => ({ breaking: false }), s)
+  run(20, () => ({ breaking: true, tool: true }), s)
+  const after = run(Math.ceil(1.2 / SWING_HZ / DT), () => ({ breaking: false, tool: true }), s)
   ok(Math.abs(after[after.length - 1].pitch) < 1e-6, `released: the arm is at rest within a swing (${after[after.length - 1].pitch.toFixed(4)})`)
 }
 
@@ -129,7 +144,9 @@ const run = (n: number, f: (i: number) => Partial<HandsInput>, s = newHandsState
   const sp = swim.slice(60).map(p => p.pitch)
   ok(Math.max(...sp) - Math.min(...sp) > 0.7, 'swim: a slow full stroke')
   const hold = settle({ holding: true })
-  ok(hold.pitch > 0.15 && hold.pitch < 0.25, 'holding: the fist comes up a touch, no more')
+  ok(hold.pitch < -0.25 && hold.pitch > -0.5 && Math.abs(hold.roll - PRESENT_ROLL) < 0.02 && hold.open > 0.95, `holding: palm UP (roll ${hold.roll.toFixed(2)}), tipped forward like a tray (pitch ${hold.pitch.toFixed(2)}), open`)
+  const holdBreak = settle({ holding: true, breaking: true })
+  ok(holdBreak.roll < 0.05 && holdBreak.dz < -REACH * 0.8, 'holding + breaking: the reach wins, the palm is not presented')
   // the landing dip, sized by the fall
   const soft = run(20, () => ({ landAt: 0, landVy: 3 })), hard = run(20, () => ({ landAt: 0, landVy: 12 }))
   ok(Math.min(...hard.map(p => p.dy)) < -LAND_DIP * 0.9 && Math.min(...soft.map(p => p.dy)) > -LAND_DIP * 0.35, 'landing: a hard fall dips deep, a hop barely')

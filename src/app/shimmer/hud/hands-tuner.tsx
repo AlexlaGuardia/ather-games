@@ -11,11 +11,14 @@
 
 import React, { useState } from 'react'
 import { OptionSlider, OptionHead } from './options-panel'
-import { handsTune, setHandsTune, resetHandsTune, tuneReadout, type HandsTune } from '../voxel3d/hands'
+import { handsTune, setHandsTune, resetHandsTune, tuneReadout, type HandsTune, type HandsPreview } from '../voxel3d/hands'
 
 export function HandsTuner({ onClose }: { onClose: () => void }) {
   const [t, setT] = useState<HandsTune>(() => ({ ...handsTune.tune }))
   const [copied, setCopied] = useState(false)
+  const [pv, setPv] = useState<HandsPreview>(handsTune.preview)
+  const preview = (p: HandsPreview) => { handsTune.preview = p; setPv(p) }
+  React.useEffect(() => () => { handsTune.preview = 'none' }, [])   // closing the tuner ends the preview
   const set = (k: keyof HandsTune) => (v: number) => setT(setHandsTune({ [k]: v }))
   const line = tuneReadout(t)
   const copy = () => { try { void navigator.clipboard?.writeText(line); setCopied(true); setTimeout(() => setCopied(false), 1400) } catch { /* the readout is selectable */ } }
@@ -35,6 +38,12 @@ export function HandsTuner({ onClose }: { onClose: () => void }) {
       <OptionSlider label="elbow z" value={t.ez} min={-1.0} max={0.2} step={0.01} onChange={set('ez')} />
       <OptionHead>roll — turn the back of the glove to the lens</OptionHead>
       <OptionSlider label="roll" value={t.roll} min={-3.14} max={3.14} step={0.01} onChange={set('roll')} format={v => `${(v * 180 / Math.PI).toFixed(0)}°`} />
+      <OptionHead>preview — force a pose to judge it (ends when this closes)</OptionHead>
+      <div className="flex items-center gap-1">
+        {(['none', 'present', 'reach', 'cast'] as HandsPreview[]).map(p => (
+          <button key={p} onClick={() => preview(p)} className={`gx-btn px-2 py-1 text-[10px] ${pv === p ? 'opacity-100' : 'opacity-50'}`}>{p === 'none' ? 'rest' : p}</button>
+        ))}
+      </div>
       <div className="flex items-center gap-2 pt-1">
         <button onClick={() => setT({ ...resetHandsTune() })} className="gx-btn px-2 py-1 text-[10px]">reset</button>
         <button onClick={copy} className="gx-btn px-2 py-1 text-[10px]">{copied ? 'copied' : 'copy readout'}</button>

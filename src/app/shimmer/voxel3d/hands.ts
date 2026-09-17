@@ -76,7 +76,10 @@ export const LEFT_DROP = 0.38
 // v2: the floating-hand default is a different object from the arm's; a saved arm tune must not
 // outrank it, so the key moved and the old one is ignored.
 const TUNE_KEY = 'shimmer:hands-tune.v2'
-export const handsTune: { tune: HandsTune; version: number } = { tune: { ...DEFAULT_TUNE }, version: 0 }
+/** A pose forced on the rig for judging it without hunting a block: the tuner's buttons set it.
+ *  Never saved — a preview that survived a reload would be a bug nobody could find. */
+export type HandsPreview = 'none' | 'present' | 'reach' | 'cast'
+export const handsTune: { tune: HandsTune; version: number; preview: HandsPreview } = { tune: { ...DEFAULT_TUNE }, version: 0, preview: 'none' }
 export function loadHandsTune(): HandsTune {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(TUNE_KEY) : null
@@ -164,6 +167,9 @@ export interface Hands {
 }
 
 export function createHands(): Hands {
+  // the tune store on the window for a harness / the console: it is one module object, so the
+  // StrictMode double-factory that orphaned `__hands` cannot orphan this (same handle either run)
+  if (typeof window !== 'undefined') (window as unknown as { __handsTune: typeof handsTune }).__handsTune = handsTune
   const cube = new THREE.BoxGeometry(1, 1, 1)
   const sphere = new THREE.SphereGeometry(1, 10, 8)
   const mats = new Map<number, THREE.MeshLambertMaterial>()
@@ -301,8 +307,9 @@ export function createHands(): Hands {
   const heldMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true })
   const held = new THREE.Mesh(cube, heldMat)
   held.renderOrder = HANDS_ORDER; held.frustumCulled = false; held.visible = false
-  // on the INSIDE of the palm (−y), sitting against the plate, out toward the fingers' end
-  held.position.set(0, -P.glove.h / 2 - 0.045, glove.position.z - 0.02)
+  // on the PALM side (−y), which the present pose turns skyward; hovering, mid-palm
+  const HELD_Y = -0.054                       // palm surface −0.016, a 5 cm block, a finger's hover
+  held.position.set(0.003, HELD_Y, -0.055)
   arm.add(held)
 
   // ── the modelled glove, when one is loaded: the stick parts hide, these show ──
@@ -372,12 +379,14 @@ export function createHands(): Hands {
     }
     if (speed > 40 || Math.abs(vy) > 40) { speed = 0; vy = 0 }   // a teleport is not a sprint
     last.copy(camera.position)
-    const showHeld = !sig.family && !!sig.held
+    const pv = handsTune.preview
+    const showHeld = (!sig.family && !!sig.held) || pv === 'present'
+    if (pv === 'cast' && performance.now() - sig.castAt > 900) sig.castAt = performance.now()   // a cast every 0.9 s
     const input: HandsInput = {
-      t, now: performance.now(), speed, vy, breaking: sig.breaking, placeAt: sig.placeAt, castAt: sig.castAt, hidden: sig.hidden,
+      t, now: performance.now(), speed, vy, breaking: sig.breaking || pv === 'reach', placeAt: sig.placeAt, castAt: sig.castAt, hidden: sig.hidden,
       airborne: sig.airborne, sliding: sig.sliding, crouching: sig.crouching, climbing: sig.climbing,
       wallCatch: sig.wallCatch, hanging: sig.hanging, mantle: sig.mantle, swimming: sig.swimming,
-      landAt: sig.landAt, landVy: sig.landVy, holding: showHeld,
+      landAt: sig.landAt, landVy: sig.landVy, holding: showHeld, tool: !!sig.family && pv !== 'reach',
     }
     const pose = stepHands(state, input, dt)
     sig.last = pose
@@ -387,20 +396,28 @@ export function createHands(): Hands {
     // Offsets move the whole arm in CAMERA space (the pivot); the pitch bends at the wrist.
     armPivot.position.set(tn.wx + pose.dx, tn.wy + pose.dy, (tn.wz + pose.dz) * k)
     arm.rotation.x = pose.pitch
+    arm.rotation.z = pose.roll   // π = palm up, presenting the held thing
     leftPivot.position.y = tn.wy - LEFT_DROP + pose.left * LEFT_UP + pose.leftDy
     left.rotation.x = pose.leftPitch
     leftPivot.visible = pose.left > 0.01
-    // the modelled glove: an OPEN hand to aim a cast or take a wall, a fist for everything else
+    // the modelled glove: OPEN for a reach, a presented palm, a cast's aim, a hand on a wall;
+    // a fist for everything else. The pose clock says how open; the rig picks the mesh.
     if (gloveFist && gloveOpen) {
-      const open = pose.left > 0.5 && sig.castAt > sig.placeAt || sig.hanging || sig.climbing || sig.wallCatch
+      const open = pose.open > 0.5
       gloveFist.visible = !open; gloveOpen.visible = open
     }
-    // the focus in the fist, or the thing being carried
-    for (const [fam, g] of tools) g.visible = fam === sig.family
-    held.visible = showHeld
-    if (showHeld) {
-      heldMat.color.setHex(sig.held!.colour)
-      if (sig.held!.piece) held.scale.set(0.11, 0.035, 0.11); else held.scale.set(0.085, 0.085, 0.085)
+    // the focus in the fist — never in a reaching hand (a bare reach is the whole point of it)
+    for (const [fam, g] of tools) g.visible = fam === sig.family && pose.open <= 0.5
+    // ★ the held thing FLOATS over the open palm (Alex, 09-17: "an open palm with the hotbar item
+    // floating above it"): the palm is up (roll π puts local −y skyward), the thing hovers a
+    // finger's width over it, bobbing slowly and turning, and it fades in with the present pose.
+    held.visible = showHeld && pose.open > 0.5
+    if (held.visible) {
+      const h = sig.held ?? { colour: 0x8b5a2b, piece: false }   // the preview presents a dirt-coloured block
+      heldMat.color.setHex(h.colour)
+      if (h.piece) held.scale.set(0.07, 0.022, 0.07); else held.scale.set(0.05, 0.05, 0.05)
+      held.position.y = HELD_Y - Math.sin(t * 2.4) * 0.006
+      held.rotation.y = t * 0.9
     }
     // the head's material is SHARED by every horn part, so the tier tint is one write, on change
     if (sig.tier !== lastTier) { lastTier = sig.tier; mat(COLOUR.horn).color.setHex(tierTint[Math.max(0, Math.min(3, sig.tier))]) }
