@@ -200,8 +200,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // ── FARMING ② (2026-09-17): the jug at the pond, the water on the bed ──────────────────────────
 {
   const BED = MAT.GARDEN_BED_GOLDWOOD
-  const I = (aimed: number, sel: string | null, o: Partial<{ seed: boolean; rod: boolean; planted: boolean; ready: boolean; jug: boolean; water: boolean }> = {}) =>
-    rightClickIntent(aimed, sel, !!o.seed, o.rod ?? true, !!o.planted, !!o.ready, false, false, !!o.jug, !!o.water)
+  const I = (aimed: number, sel: string | null, o: Partial<{ seed: boolean; rod: boolean; planted: boolean; ready: boolean; jug: boolean; water: boolean; feed: boolean }> = {}) =>
+    rightClickIntent(aimed, sel, !!o.seed, o.rod ?? true, !!o.planted, !!o.ready, false, false, !!o.jug, !!o.water, !!o.feed)
   ok(I(MAT.WATER, 'clay_jug', { jug: true }) === 'fill', 'water + an empty jug in hand fills it')
   ok(I(MAT.WATER, 'clay_jug', { jug: false }) === 'place', '★ a jug the bag cannot back is not a fill — the hand claims, the bag decides')
   ok(I(MAT.WATER, null, { rod: true }) === 'rinn', 'an empty hand at water still rinns')
@@ -212,6 +212,10 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(I(BED, 'clay_jug_water', { water: false, planted: true }) === 'none', 'water the bag cannot back over a planted bed: silent, never a place')
   ok(I(BED, 'clay_jug', { jug: true }) === 'place', 'an EMPTY jug over a bed is just a thing in hand')
   ok(I(MAT.STONE, 'clay_jug_water', { water: true }) === 'place', 'water over a stone block is a place, not a pour')
+  ok(I(BED, 'bed_brew', { feed: true }) === 'feed' && I(BED, 'bed_brew', { feed: true, planted: true }) === 'feed', 'a bed brew over a bed, empty or planted, spreads')
+  ok(I(BED, 'bed_brew', { feed: true, planted: true, ready: true }) === 'reap', 'a ripe bed is picked before it is fed')
+  ok(I(BED, 'bed_brew', { feed: false, planted: true }) === 'none', 'a brew the bag cannot back over a planted bed: silent')
+  ok(I(MAT.STONE, 'bed_brew', { feed: true }) === 'place', 'a brew over stone is a place — the consume gate refuses it upstream')
 }
 
 console.log(fails.length ? `interact: ${pass} pass, ${fails.length} FAIL` : `interact oracle ${pass} CLEAN`)

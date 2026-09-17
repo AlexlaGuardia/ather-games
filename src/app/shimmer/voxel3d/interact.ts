@@ -107,6 +107,8 @@ export type Intent =
    * `sow` and the planted-bed `none`, so a keeper carrying water over their own beds waters them.
    */
   | 'water'
+  /** A garden bed, with a BED BREW in hand: spread it (farming ②b). The pour's twin, same rules. */
+  | 'feed'
   /** Put the block in your hand into the world. */
   | 'place'
   /**
@@ -144,7 +146,7 @@ export type Intent =
 export function rightClickIntent(
   aimed: number, selItem: string | null, holdsSeed: boolean, hasRinstick = false,
   bedPlanted = false, bedReady = false, openablePiece = false, consumable = false,
-  holdsJug = false, holdsWater = false,
+  holdsJug = false, holdsWater = false, holdsFeed = false,
 ): Intent {
   // ── ★★ A PIECE THAT OPENS, ANSWERED BEFORE EVERYTHING ───────────────────────────────────────
   // ⚠ IT CANNOT BE DECIDED FROM `aimed` AND THAT IS WHY IT IS A PARAMETER. Every piece writes the
@@ -216,6 +218,7 @@ export function rightClickIntent(
   // Water in hand over any bed that is not ripe — see `'water'`. Before `sow` and the planted
   // `none`, so watering is never blocked by what is (or is not) growing.
   if (isGardenBed(aimed) && holdsWater) return 'water'
+  if (isGardenBed(aimed) && holdsFeed) return 'feed'
   if (isGardenBed(aimed) && !bedPlanted && holdsSeed) return 'sow'
   // ⚠⚠ A BED WITH SOMETHING GROWING IN IT IS NOT A FACE TO BUILD ON. Without this the click falls
   // through to `place` and a keeper buries their own crop under whatever they were carrying — the

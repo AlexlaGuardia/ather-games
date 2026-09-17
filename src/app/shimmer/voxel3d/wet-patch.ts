@@ -20,7 +20,8 @@ import * as THREE from 'three'
 /** Beds the plot can hold at once; canon caps a plot at 8, a keeper can stack more — plenty. */
 export const WET_BUDGET = 64
 
-export interface WetSpot { x: number; y: number; z: number; fraction: number }
+/** `fraction` = water left [0,1]; `fed` = feed left [0,1]. Either alone draws a patch. */
+export interface WetSpot { x: number; y: number; z: number; fraction: number; fed?: number }
 
 export interface WetPatches {
   group: THREE.Group
@@ -33,6 +34,8 @@ export interface WetPatches {
 const WET = new THREE.Color(0x2a1d12)
 /** Nearly dry: the patch is barely there. Lerp target, then the instance drops out at 0. */
 const DRY = new THREE.Color(0x5a4630)
+/** Just-fed: a rich black loam with a green cast — the brew worked in. Reads apart from wet's brown. */
+const FED = new THREE.Color(0x1c2416)
 
 export function createWetPatches(): WetPatches {
   const group = new THREE.Group()
@@ -58,12 +61,14 @@ export function createWetPatches(): WetPatches {
       let n = 0
       for (const s of spots) {
         if (n >= WET_BUDGET) break
-        if (s.fraction <= 0) continue
+        const fed = s.fed ?? 0
+        if (s.fraction <= 0 && fed <= 0) continue
         m.makeTranslation(s.x + 0.5, s.y + 1.004, s.z + 0.5)
         mesh.setMatrixAt(n, m)
         // The colour is the clock: wet → dry as the fraction falls. Squared, so the first hours
-        // stay visibly dark and the last hours do the fading.
-        c.copy(DRY).lerp(WET, s.fraction * s.fraction)
+        // stay visibly dark and the last hours do the fading. The feed pulls the same patch toward
+        // a green-black loam by ITS fraction, so damp+fed reads darker and greener than either.
+        c.copy(DRY).lerp(WET, s.fraction * s.fraction).lerp(FED, fed * fed * 0.8)
         mesh.setColorAt(n, c)
         n++
       }

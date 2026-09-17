@@ -114,6 +114,22 @@ export const POTION_DEFS: Record<string, PotionDef> = {
     // Puff spores at the mortar (2026-09-16) — see shimmer_salve; the brew's road starts with a grind.
     recipe: [{ itemId: 'shimmerwheat_grain', count: 5 }, { itemId: 'glowroot_bulb', count: 3 }, { itemId: 'puff_spores', count: 2 }],
   },
+  // ── ★ FERTILIZER IS A BED BREW (2026-09-17, farming ②b) ──────────────────────────────────────
+  // Canon (`shimmer-skilling.md` › Alchemy tier 2): *Fertilizer — Goldleaf ×2 + Shimmerscale ×1 +
+  // Goldwood Bark ×1 — "Spread on farming plots. Stacks with watering."* Its cross-skill shape is
+  // the canon fact honoured here: a HERB (farming) + a FISH (rinning) + BARK (forestry). Magii's
+  // 09-16 brewing ruling makes it a PLOT-class brew by definition (*"a brew you water a bed with"*),
+  // so the craft-word is `brew` and the road is the mortar, like harvest_brew.
+  // ⚠ GOLDLEAF IS NOT IN THIS WORLD YET (the wild-crop ladder grows one crop per ground; canon's
+  // "grows anywhere" herb is a world-lane slice). Recipe rows are build-side (Magii, 09-16), so the
+  // herb slot takes GLOW-MOSS — common on woodland and shore, the base herb this world has — and
+  // swaps to goldleaf the day it lands. Puff spores as the PLOT base, per the same ruling.
+  bed_brew: {
+    id: 'bed_brew', name: 'Bed Brew', tier: 2,
+    minAlchemyLevel: 4, manaCost: 10, xpGrant: 30, resultCount: 2,
+    recipe: [{ itemId: 'glow_moss', count: 2 }, { itemId: 'shimmerscale', count: 1 },
+             { itemId: 'goldwood_bark', count: 1 }, { itemId: 'puff_spores', count: 1 }],
+  },
   moonvine_tonic: {
     id: 'moonvine_tonic', name: 'Moonvine Tonic', tier: 2,
     minAlchemyLevel: 6, manaCost: 12, xpGrant: 35, resultCount: 1,

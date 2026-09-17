@@ -69,7 +69,9 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(src.split('gatherXpMult(buffs.current').length - 1 === 2, '§3 XP is multiplied at both gather sites (mining, rinning)')
   ok(src.includes('buffs: pruneBuffs(buffs.current, Date.now())'), '§3 ★ the save carries the timers, pruned')
   ok(src.includes('buffs.current = pruneBuffs(b, Date.now())'), '§3 ★ and the load reads them back, pruned')
-  ok(src.includes('if (!hit && rightNow && !weaponDrawn && selItem && isConsumable(selItem))'), '§3 ★ a bottle raised at the sky is a drink (no-target path)')
+  // Widened 2026-09-17: a bottle that is NOT for drinking (an infusion, a bed brew) takes the same
+  // path so `consumeRefusal` can be heard — before this, the refusal had no route to the keeper.
+  ok(src.includes('if (!hit && rightNow && !weaponDrawn && selItem && (isConsumable(selItem) || consumeRefusal(selItem)))'), '§3 ★ a bottle raised at the sky is a drink — or its refusal (no-target path)')
   ok(raw.includes("} else if (intent === 'use' && selItem) {"), '§3 ★ and the aimed path answers the intent')   // raw: codeOnly strips string bodies
   ok(src.includes('<BuffChips buffs={buffs} />'), '§3 the chips are mounted')
   // The locomotion hook is a real multiplier on the walk/run target and nothing else.

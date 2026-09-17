@@ -65,7 +65,7 @@ export interface ConsoleCtx {
   /** Put a crop (id or seed id) in the bed at world coordinates, skipping seed/mana/level. Owner-gated dev instrument. */
   plant: (crop: string, x: number, y: number, z: number) => string
   /** Water the bed at world coordinates (or every bed, with no coordinates), no jug spent; `hours` = how far into the day it already is. Owner-gated dev instrument. */
-  water: (x: number | null, y: number | null, z: number | null, hours: number) => string
+  water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string
   /**
    * Put a Hollow in front of the keeper. A TEST HARNESS — the same standing warning `/rune` and
    * `/waymark` carry: this is not how the dark arrives. The night's own rules (`hollowNight`,
@@ -354,21 +354,26 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
   // ★ /water (2026-09-17, farming ②) — damp a bed without the jug or the walk, to look at the wet
   // skin at any point of its day. `[hours]` backdates the pour so the fade can be judged without
   // waiting a day for it. Bare = every bed, fresh.
-  { name: 'water', usage: 'water [x y z] [hours-in]  (~ = here; bare = every bed)', help: 'damp a bed (or all beds), no jug spent — to look at the wet skin and its fade', owner: true,
+  // ★ /water and /feed (2026-09-17, farming ②) — damp or feed a bed without the jug / the brew, to
+  // look at the skin at any point of its day. `[hours-in]` backdates the act so the fade can be
+  // judged without waiting a day for it. Bare = every bed, fresh. One row builder, two verbs.
+  ...(['water', 'feed'] as const).map((kind): ConsoleCmd => ({
+    name: kind, usage: `${kind} [x y z] [hours-in]  (~ = here; bare = every bed)`,
+    help: `${kind} a bed (or all beds), nothing spent — to look at the ${kind === 'feed' ? 'fed' : 'wet'} skin and its fade`, owner: true,
     run: (a, c) => {
       const here = c.pos()
       if (a.length >= 3) {
         const x = Math.floor(parseCoord(a[0], here.x)), y = Math.floor(parseCoord(a[1], here.y)), z = Math.floor(parseCoord(a[2], here.z))
-        if (![x, y, z].every(Number.isFinite)) return 'water where? three numbers (~ allowed), then optional hours-in'
+        if (![x, y, z].every(Number.isFinite)) return `${kind} where? three numbers (~ allowed), then optional hours-in`
         const h = a[3] === undefined ? 0 : Number(a[3])
         if (!Number.isFinite(h) || h < 0) return `not hours: ${a[3]}`
-        return c.water(x, y, z, h)
+        return c.water(x, y, z, h, kind)
       }
       const h = a[0] === undefined ? 0 : Number(a[0])
       if (!Number.isFinite(h) || h < 0) return `not hours: ${a[0]}`
-      return c.water(null, null, null, h)
+      return c.water(null, null, null, h, kind)
     },
-    suggest: (i) => i === 0 ? ['~', '0', '12', '23'] : [] },
+    suggest: (i) => i === 0 ? ['~', '0', '12', '23'] : [] })),
   { name: 'tp', usage: 'tp <x> <z>  (~ = here, ~-20 = 20 west)', help: 'teleport to ground level', owner: true,
     run: (a, c) => {
       if (!a[0] || !a[1]) return 'tp needs two coordinates'

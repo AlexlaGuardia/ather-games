@@ -16,7 +16,7 @@
 // promise, and the MoveBook's rule stands: name the gap, never hide it.
 import { POTION_DEFS, elementForInfusion } from '../engine/alchemy'
 import {
-  MANA_POTIONS, HEAL_POTIONS, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS,
+  MANA_POTIONS, HEAL_POTIONS, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, BED_POTIONS,
   type BuffId,
 } from '../engine/potion-effects'
 
@@ -80,6 +80,7 @@ export const isConsumable = (itemId: string): boolean => consumeEffect(itemId) !
 export function consumeRefusal(itemId: string): string | null {
   const el = elementForInfusion(itemId)
   if (el) return `a ${el} infusion goes on a spirit, not in you — and nothing applies it yet`
+  if (itemId in BED_POTIONS) return 'that goes on a bed, not in you — aim at the soil'
   return null
 }
 

@@ -3,6 +3,7 @@ import {
   JUG_ITEM, JUG_WATER_ITEM, JUG_POURS, WATER_HOLD_MS, WATER_RATE,
   waterBlocker, waterRefusalLine, waterBed, fillJug, settleWatering, isDamp, dampFraction, dampLeftLine,
   clearDamp, wateringToSave, wateringFromSave, wateringLabel, type WateredBeds, type Give,
+  FEED_ITEM, FEED_RATE, feedBlocker, feedRefusalLine, feedBed, isFed, fedFraction, fedLeftLine,
 } from './watering'
 import { bedKey, plantInBed, cropAt, type PlantedBeds } from './planting'
 import { CROP_DEFS } from '../engine/farming'
@@ -162,6 +163,68 @@ const rig = () => {
   // The pour must not be re-derived: a bag whose water was removed behind the blocker still refuses.
   fillJug(r.inv, r.give); removeItems(r.inv, JUG_WATER_ITEM, countItem(r.inv, JUG_WATER_ITEM))
   ok(!waterBed(r.watered, r.beds, 7, 7, 7, r.inv, T0, r.give) && !r.watered.has(bedKey(7, 7, 7)), 'a refused pour writes nothing')
+}
+
+// ── 10. ★★ FERTILIZER: the bed brew rides the same integrator, and the two STACK ────────────────
+{
+  const ripensAt = (water: boolean, feed: boolean): number => {
+    const r = rig()
+    if (water) { fillJug(r.inv, r.give); waterBed(r.watered, r.beds, 0, 0, 0, r.inv, T0, r.give) }
+    if (feed) { r.give(FEED_ITEM, 1); ok(feedBed(r.watered, r.beds, 0, 0, 0, r.inv, T0), 'the feed lands') }
+    r.sow(0, 0, 0, T0)
+    let t = T0
+    const c = cropAt(r.beds, 0, 0, 0)!
+    while (t - c.plantedAt < c.growthDuration) { t += 1500; settleWatering(r.watered, r.beds, t) }
+    return (t - T0) / WHEAT.growthMs
+  }
+  const plain = ripensAt(false, false), w = ripensAt(true, false), f = ripensAt(false, true), both = ripensAt(true, true)
+  ok(Math.abs(plain - 1) < 0.01, `unaided ripens at nominal (${plain.toFixed(3)})`)
+  ok(Math.abs(w - 0.75) < 0.01, `watered ripens at 75% (${w.toFixed(3)})`)
+  ok(Math.abs(f - 0.75) < 0.01, `★ fed ripens at 75% — canon's own 25% (${f.toFixed(3)})`)
+  ok(Math.abs(both - 1 / (4 / 3 * FEED_RATE)) < 0.01, `★★ watered AND fed ripens at 56% — the rates multiply, never sum to half (${both.toFixed(3)})`)
+}
+
+// ── 11. feed refusals, one bottle a day, the other window survives ──────────────────────────────
+{
+  const r = rig()
+  ok(feedBlocker(r.watered, 1, 1, 1, r.inv, T0) === 'no-brew' && feedRefusalLine('no-brew', r.watered, 1, 1, 1, T0).includes('cauldron'), 'no brew → says where one comes from')
+  r.give(FEED_ITEM, 2)
+  ok(feedBed(r.watered, r.beds, 1, 1, 1, r.inv, T0) && countItem(r.inv, FEED_ITEM) === 1, 'one bottle spent')
+  ok(feedBlocker(r.watered, 1, 1, 1, r.inv, T0 + H) === 'still-fed', 'an hour later: still fed')
+  ok(feedRefusalLine('still-fed', r.watered, 1, 1, 1, T0 + H) === 'the soil is still fed — spent in 23h', 'the refusal names the hour')
+  ok(!feedBed(r.watered, r.beds, 1, 1, 1, r.inv, T0 + H) && countItem(r.inv, FEED_ITEM) === 1, 'a refused spread costs nothing')
+  // Water at dawn, feed at noon: the water window is untouched by the feed.
+  fillJug(r.inv, r.give)
+  waterBed(r.watered, r.beds, 2, 2, 2, r.inv, T0, r.give)
+  feedBed(r.watered, r.beds, 2, 2, 2, r.inv, T0 + 6 * H)
+  const d = r.watered.get(bedKey(2, 2, 2))!
+  ok(d.wateredUntil === T0 + WATER_HOLD_MS && d.fedUntil === T0 + 6 * H + WATER_HOLD_MS, '★ feeding a damp bed keeps its water')
+  ok(isDamp(r.watered, 2, 2, 2, T0 + 23 * H) && isFed(r.watered, 2, 2, 2, T0 + 23 * H), 'both live at hour 23')
+  ok(!isDamp(r.watered, 2, 2, 2, T0 + 25 * H) && isFed(r.watered, 2, 2, 2, T0 + 25 * H), 'at hour 25 the water is gone, the feed is not')
+  settleWatering(r.watered, r.beds, T0 + 25 * H)
+  ok(r.watered.has(bedKey(2, 2, 2)), 'a bed with one window still open is not swept')
+  settleWatering(r.watered, r.beds, T0 + 31 * H)
+  ok(!r.watered.has(bedKey(2, 2, 2)), '…and is swept once both have closed')
+  ok(Math.abs(fedFraction({ wateredUntil: 0, fedUntil: T0 + WATER_HOLD_MS, creditedTo: T0 }, T0 + WATER_HOLD_MS / 4) - 0.75) < 1e-9, 'fedFraction')
+  ok(fedLeftLine(r.watered, 9, 9, 9, T0) === 'unfed', 'an unfed bed says so')
+}
+
+// ── 12. the overlap is paid once: a crop under a partial overlap gets exactly the closed form ────
+{
+  const r = rig()
+  fillJug(r.inv, r.give); r.give(FEED_ITEM, 1)
+  waterBed(r.watered, r.beds, 0, 0, 0, r.inv, T0, r.give)                       // water: [T0, T0+24h)
+  const c = r.sow(0, 0, 0, T0 + WATER_HOLD_MS - 2 * 60_000)                     // sown 2m before the water ends
+  feedBed(r.watered, r.beds, 0, 0, 0, r.inv, T0 + WATER_HOLD_MS - 60_000)      // fed 1m before the water ends
+  settleWatering(r.watered, r.beds, T0 + WATER_HOLD_MS + 3 * 60_000)           // 3m after the water ended
+  // water alone 1m (1/3) · both 1m (1/3 + 1/3 + 1/9 — each single AND the stack's extra) · feed alone 3m (3/3)
+  const want = 60_000 * (1 / 3 + (1 / 3 + 1 / 3 + 1 / 9) + 3 / 3)
+  const paid = (T0 + WATER_HOLD_MS - 2 * 60_000) - c.plantedAt
+  ok(Math.abs(paid - want) < 2, `★★ partial overlap pays the closed form (paid ${paid.toFixed(0)}, want ${want.toFixed(0)})`)
+  // and a save/load in the middle would not change that
+  const back = wateringFromSave(JSON.parse(JSON.stringify(wateringToSave(r.watered))))
+  ok(back.get(bedKey(0, 0, 0))!.fedUntil === r.watered.get(bedKey(0, 0, 0))!.fedUntil, 'fedUntil round-trips')
+  ok(wateringFromSave([{ x: 1, y: 2, z: 3, until: T0 + 5, creditedTo: T0 }]).get(bedKey(1, 2, 3))!.wateredUntil === T0 + 5, "the morning's `until` row loads as water")
 }
 
 console.log(`\nwatering: ${pass} passed, ${fails.length} failed`)

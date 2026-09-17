@@ -4,7 +4,7 @@ import {
   gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters,
   BUFF_DEFS, POTION_BUFFS, MANA_POTIONS, HEAL_POTIONS,
   STARLIGHT_XP, DAWN_XP, DEEPSIGHT_FIND, DAWN_FIND, KINDRED_MULT, FLEETFOOT_SPEED, DAWN_SPEED, ATHER_REGEN,
-  type ActiveBuffs,
+  BED_POTIONS, type ActiveBuffs,
 } from './potion-effects'
 import { POTION_DEFS, elementForInfusion, INFUSION_BREWS } from './alchemy'
 
@@ -27,7 +27,8 @@ const close = (a: number, b: number) => Math.abs(a - b) < 1e-9
 // effect line says out loud on the hotbar rather than implying a drink that goes nowhere.
 for (const id of Object.keys(POTION_DEFS)) {
   const drinkable = id in POTION_BUFFS || id in MANA_POTIONS || id in HEAL_POTIONS || id === 'harvest_brew'
-  const covered = drinkable || elementForInfusion(id) !== null
+  // The third class (2026-09-17): a brew that goes on a BED. Earned by the table, never the spelling.
+  const covered = drinkable || elementForInfusion(id) !== null || id in BED_POTIONS
   chk(`${id} does something when drunk`, covered)
   chk(`${id} has a menu effect line`, potionEffectLine(id) !== null)
 }

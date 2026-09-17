@@ -69,6 +69,7 @@ import {
 import {
   JUG_ITEM, JUG_WATER_ITEM, JUG_POURS, waterBlocker, waterRefusalLine, waterBed, fillJug, settleWatering,
   isDamp, dampLeftLine, dampFraction, clearDamp, wateringToSave, wateringFromSave, WATER_HOLD_MS, type WateredBeds,
+  FEED_ITEM, feedBlocker, feedRefusalLine, feedBed, isFed, fedLeftLine, fedFraction,
 } from './watering'
 import { plantedSpots, plantedSignature } from './planted-feed'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
@@ -1513,7 +1514,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number) => string } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => {
     // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
     // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
@@ -1611,7 +1612,7 @@ export default function VoxelWorld() {
     put: (id, x, y, z, rot) => worldCmd.current ? worldCmd.current.put(id, x, y, z, rot) : 'the world is still waking',
     grow: (progress) => worldCmd.current ? worldCmd.current.grow(progress) : 'the world is still waking',
     plant: (crop, x, y, z) => worldCmd.current ? worldCmd.current.plant(crop, x, y, z) : 'the world is still waking',
-    water: (x, y, z, hours) => worldCmd.current ? worldCmd.current.water(x, y, z, hours) : 'the world is still waking',
+    water: (x, y, z, hours, kind) => worldCmd.current ? worldCmd.current.water(x, y, z, hours, kind) : 'the world is still waking',
     party: partyOps,
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
@@ -3121,7 +3122,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number) => string } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -3652,13 +3653,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // ★ `/water` (2026-09-17, farming ②) — damp a bed, no jug, no walk; `hours` backdates the
       // pour so the fade can be judged at any point of the day. Writes the SAME record `waterBed`
       // writes, so it settles, saves and dries like one. Bare = every bed the world can see.
-      water: (x, y, z, hours) => {
+      water: (x, y, z, hours, kind) => {
         const now = Date.now(), at = now - hours * 3_600_000
-        const damp = (bx: number, by: number, bz: number) => watered.current.set(bedKey(bx, by, bz), { until: at + WATER_HOLD_MS, creditedTo: now })
+        const damp = (bx: number, by: number, bz: number) => {
+          const k = bedKey(bx, by, bz)
+          const d = watered.current.get(k) ?? { wateredUntil: 0, fedUntil: 0, creditedTo: now }
+          if (kind === 'feed') d.fedUntil = at + WATER_HOLD_MS; else d.wateredUntil = at + WATER_HOLD_MS
+          watered.current.set(k, d)
+        }
         if (x !== null && y !== null && z !== null) {
           if (!isGardenBed(voxel(x, y, z))) return `no bed at ${x} ${y} ${z}`
           damp(x, y, z); wetDirty.current = true
-          return `watered the bed at ${x} ${y} ${z}${hours ? ` — ${hours}h into its day` : ''}`
+          return `${kind === 'feed' ? 'fed' : 'watered'} the bed at ${x} ${y} ${z}${hours ? ` — ${hours}h into its day` : ''}`
         }
         // Beds are craft-only, so every one is an EDIT (`countBeds` rests on the same fact).
         let n = 0
@@ -3671,7 +3677,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           }
         }
         wetDirty.current = true
-        return n ? `${n} bed${n === 1 ? '' : 's'} watered${hours ? ` — ${hours}h into the day` : ''}` : 'no beds in reach'
+        return n ? `${n} bed${n === 1 ? '' : 's'} ${kind === 'feed' ? 'fed' : 'watered'}${hours ? ` — ${hours}h into the day` : ''}` : 'no beds in reach'
       },
       space: (to?: string) => {
         const want: Space = to === 'plot' ? 'plot' : to === 'wilds' ? 'wilds' : to === 'glade' ? 'glade'
@@ -8137,7 +8143,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const wet: WetSpot[] = []
         for (const [k, d] of watered.current) {
           const [x, y, z] = k.split(',').map(Number)
-          wet.push({ x, y, z, fraction: dampFraction(d, now) })
+          wet.push({ x, y, z, fraction: dampFraction(d, now), fed: fedFraction(d, now) })
         }
         wetPatches.set(wet)
       }
@@ -9454,7 +9460,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // ★ DRINKING WANTS NO TARGET. A bottle raised at the sky is still a drink, so the consume verb
     // is answered here, before the aimed block is even asked — but only when there is NO block, so
     // a chest or a station under the reticle keeps its own answer (`interact.ts` › 'use').
-    if (!hit && rightNow && !weaponDrawn && selItem && isConsumable(selItem)) {
+    // …and a bottle that is NOT for drinking (an infusion, a bed brew) gets its sentence here too —
+    // `doConsume` speaks `consumeRefusal` but was only ever reached by a consumable, so the refusal
+    // had no path to the keeper (found 2026-09-17 wiring the bed brew).
+    if (!hit && rightNow && !weaponDrawn && selItem && (isConsumable(selItem) || consumeRefusal(selItem))) {
       doConsume(selItem)
       mouse.current.right = false
     }
@@ -9476,7 +9485,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         !!selItem && isConsumable(selItem),
         // The jug, both states, backed by the bag like the seed is.
         selItem === JUG_ITEM && countItem(inv.current!, JUG_ITEM) > 0,
-        selItem === JUG_WATER_ITEM && countItem(inv.current!, JUG_WATER_ITEM) > 0)
+        selItem === JUG_WATER_ITEM && countItem(inv.current!, JUG_WATER_ITEM) > 0,
+        selItem === FEED_ITEM && countItem(inv.current!, FEED_ITEM) > 0)
       // ── ★ THE CHEST OPENS ON RIGHT-CLICK, and is answered FIRST ────────────────────────────
       // A chest is a thing you USE, and the block in your hand must not be dropped onto it by the
       // same click that opens it. Handing the whole panel upward (rather than opening one down
@@ -9671,13 +9681,35 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
                 + (left ? ` · ${left} pour${left === 1 ? '' : 's'} left` : ' · the jug is empty'))
         }
         mouse.current.right = false
+      } else if (intent === 'feed') {
+        // ── ★ FARMING ②b: THE SPREAD — the pour's twin, same ask-first shape ─────────────────────
+        const now = Date.now()
+        const why = feedBlocker(watered.current, hit.x, hit.y, hit.z, inv.current!, now)
+        if (why !== 'ok') {
+          onSay(feedRefusalLine(why, watered.current, hit.x, hit.y, hit.z, now))
+        } else if (feedBed(watered.current, beds.current, hit.x, hit.y, hit.z, inv.current!, now)) {
+          onInvChange()
+          hands.sig.placeAt = performance.now()
+          wetDirty.current = true
+          const crop = cropAt(beds.current, hit.x, hit.y, hit.z)
+          const damp = isDamp(watered.current, hit.x, hit.y, hit.z, now)
+          onSay((crop ? `fed — ${CROP_DEFS[crop.cropId].name.toLowerCase()} grows a quarter faster today` : 'fed — the bed is rich for the day')
+                + (damp ? ' · and it is damp, so nearly half again' : ''))
+        }
+        mouse.current.right = false
       } else if (intent === 'needs-seed') {
         // ★ THE BED SAYS WHAT IT WANTS. Naming the SOURCE, not just the lack — "you have no seed"
         // is the message a keeper can already infer from the fact that nothing happened. The whole
         // value is the second half of the sentence.
-        onSay(isDamp(watered.current, hit.x, hit.y, hit.z, Date.now())
-          ? `this bed is damp (${dampLeftLine(watered.current, hit.x, hit.y, hit.z, Date.now())}) and wants a common crop seed — grass tufts carry them`
-          : 'this bed wants a common crop seed — grass tufts carry them')
+        {
+          const now = Date.now()
+          const care = [
+            isDamp(watered.current, hit.x, hit.y, hit.z, now) ? `damp (${dampLeftLine(watered.current, hit.x, hit.y, hit.z, now)})` : '',
+            isFed(watered.current, hit.x, hit.y, hit.z, now) ? `fed (${fedLeftLine(watered.current, hit.x, hit.y, hit.z, now)})` : '',
+          ].filter(Boolean).join(' and ')
+          onSay(care ? `this bed is ${care} and wants a common crop seed — grass tufts carry them`
+                     : 'this bed wants a common crop seed — grass tufts carry them')
+        }
         mouse.current.right = false
       } else if (intent === 'sow') {
         // ── ★★ SOW: a crop seed into an empty bed ──────────────────────────────────────────────

@@ -23,6 +23,14 @@ export const DAWN_XP = 1.25            // dawn_cordial — the master's brew: a 
 export const DAWN_FIND = 0.10
 export const DAWN_SPEED = 1.06
 export const HARVEST_BREW_ADVANCE_MS = 3 * 60_000  // harvest_brew — planted crops jump 3 min of growth
+/**
+ * Brews that go ON A BED, not down the keeper (farming ②b, 2026-09-17). The third class beside
+ * "drunk" and "goes on a spirit": `consume.ts` refuses to drink them, `voxel3d/watering.ts` spreads
+ * them. The value is the LINE — the effect itself is the bed's rate, owned there.
+ */
+export const BED_POTIONS: Readonly<Record<string, string>> = {
+  bed_brew: 'spread on a bed — its crops grow a quarter faster for a day · stacks with water',
+}
 
 export type BuffId =
   | 'fleetfoot'   // moonvine_tonic    — move speed
@@ -88,6 +96,7 @@ export function potionEffectLine(potionId: string): string | null {
   const heal = HEAL_POTIONS[potionId]
   if (heal) return heal.hp ? `mends +${heal.hp} HP (outside the Ather)` : `re-forms +${heal.sh} shield (outside the Ather)`
   if (potionId === 'harvest_brew') return 'planted crops jump 3m of growth'
+  if (potionId in BED_POTIONS) return BED_POTIONS[potionId]
   // ── ★ THE FOUR ELEMENTAL INFUSIONS — AND THEY SAY THE HONEST THING (2026-08-18, #262 slice ②) ──
   // An infusion is not a player buff. It goes on a SPIRIT, and canon makes it the only road to an
   // evolved form. The brews ship now; the application site (`addInfusion`, still zero callers) is
