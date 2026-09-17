@@ -358,7 +358,13 @@ export interface SocketShimmer {
   group: THREE.Group
   /** Rebuild the set: one plane per LIT socket, facing `facing` (radians, the direction a keeper walks through it). */
   set(sockets: { x: number; z: number; y: number; facing: number; tint: 'gate' | 'passage'; label?: string | null }[]): void
-  tick(px: number, pz: number, elapsed: number): void
+  /**
+   * `camera` is the keeper's eye: the nametag shows only for the doorway the reticle is on (the
+   * view ray crossing its 3×3 face, within `TAG_REACH`) or the one the keeper stands in. Alex,
+   * 2026-09-17: *"make it so the name appears when the player is selecting it or highlighting by
+   * looking at it"* — an always-on tag through every wall was a signpost, not a hint.
+   */
+  tick(px: number, pz: number, elapsed: number, camera?: THREE.Camera): void
   dispose(): void
 }
 
@@ -370,7 +376,13 @@ export function createSocketShimmers(): SocketShimmer {
   // nearest doorway of that colour; it only widens the swirl a little, so sharing costs nothing
   // a keeper can see.
   const mats = { gate: seamMaterial(new THREE.Vector3(1.0, 0.80, 0.38)), passage: seamMaterial(new THREE.Vector3(0.45, 1.0, 0.72)) }
-  const items: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; x: number; z: number }[] = []
+  const items: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; x: number; z: number; tag?: THREE.Sprite }[] = []
+  const ray = new THREE.Raycaster()
+  const eyeDir = new THREE.Vector3()
+  /** How far a doorway's name is readable by looking, in blocks. Past this the frame is a frame. */
+  const TAG_REACH = 28
+  /** Standing in the doorway (from the socket cell's centre) also shows its name — you are choosing it. */
+  const TAG_STAND = 1.8
   // ── ★ THE NAMETAG (Alex, 2026-09-17): the folk's own label, hung over the lintel ──────────────
   // One sprite per LABELLED socket, so a keeper reads where a doorway leads before walking into
   // it. A dark socket passes no label and gets none — the absence is still the information. The
@@ -412,23 +424,41 @@ export function createSocketShimmers(): SocketShimmer {
         // (the first cut had one and Moonwell's portal stood edge-on, a slit again).
         mesh.rotation.y = Math.atan2(Math.cos(s.facing), Math.sin(s.facing))
         group.add(mesh)
-        items.push({ mesh, mat, x: s.x + 0.5, z: s.z + 0.5 })
+        const item: typeof items[number] = { mesh, mat, x: s.x + 0.5, z: s.z + 0.5 }
+        items.push(item)
         if (s.label) {
           const tag = new THREE.Sprite(tagMaterial(s.label))
           // Over the lintel (the doorway is 3 tall), a little wider than a folk's tag: it is read
-          // from across the court, not from a handshake away.
+          // from across the court, not from a handshake away. Hidden until looked at (see tick).
           tag.position.set(s.x + 0.5, s.y + 3.7, s.z + 0.5)
           tag.scale.set(2.4, 0.6, 1)
+          tag.visible = false
           group.add(tag)
           tags.push(tag)
+          item.tag = tag
         }
       }
     },
-    tick(px, pz, elapsed) {
+    tick(px, pz, elapsed, camera) {
       const near = { gate: Infinity, passage: Infinity }
       for (const it of items) {
         const k = it.mat === mats.gate ? 'gate' : 'passage'
         near[k] = Math.min(near[k], Math.hypot(px - it.x, pz - it.z))
+      }
+      // The nametag: on for the doorway under the reticle or under the keeper's feet, off otherwise.
+      // The doorway's own shimmer plane is the thing the ray tests — the exact face a keeper reads
+      // as "that door" — so aiming through an empty arch at the grass beyond still counts.
+      let looked: typeof items[number] | null = null
+      if (camera && items.length) {
+        camera.getWorldDirection(eyeDir)
+        ray.set(camera.position, eyeDir)
+        ray.far = TAG_REACH
+        const hit = ray.intersectObjects(items.map(it => it.mesh), false)[0]
+        if (hit) looked = items.find(it => it.mesh === hit.object) ?? null
+      }
+      for (const it of items) {
+        if (!it.tag) continue
+        it.tag.visible = it === looked || Math.hypot(px - it.x, pz - it.z) < TAG_STAND
       }
       for (const k of ['gate', 'passage'] as const) {
         mats[k].uniforms.uTime.value = elapsed

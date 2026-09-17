@@ -10,7 +10,8 @@
 // REAL predicates (`inPassageVolume`, `plotThreshold`) rather than against copies of their numbers,
 // which is what makes a future retune of `passageWidth` show up here instead of in a playtest.
 
-import { wildsSeamAnchor, wildsSeamRibbon, plotSeamAnchor, seamNearness, PLOT_TRIGGER_RADIUS, createSeamShimmer } from './seam'
+import { wildsSeamAnchor, wildsSeamRibbon, plotSeamAnchor, seamNearness, PLOT_TRIGGER_RADIUS, createSeamShimmer, createSocketShimmers } from './seam'
+import * as THREE from 'three'
 import { DEFAULT_BUBBLE, inPassage, inPassageVolume, shellRadiusAt, distFromAxis, bubbleCaveAt } from '../voxel/bubble'
 import { WILDS_BUBBLE } from '../voxel/column'
 import { DEFAULT_PLOT, plotThreshold, plotForTier, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
@@ -314,4 +315,44 @@ function quadPoints(a: { x: number; z: number; y: number; bearing: number; halfW
       `★ the mound tops out ABOVE the wall (${c.height} vs ${wallOverGround} over the ground) — ` +
       'level with it is a bump you find by walking into it')
   }
+}
+
+
+// ── 9. the nametag shows for the doorway you look at or stand in, and for no other (2026-09-17) ──
+// `buildNameSprite` paints a DOM canvas; give it the one call it makes, so the test stays pure.
+{
+  const g = globalThis as unknown as { document?: unknown }
+  const hadDoc = 'document' in g
+  if (!hadDoc) g.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ({ fillRect() {}, fillText() {} }) }) }
+  const s = createSocketShimmers()
+  // Two doorways 10 blocks apart on the x axis, both facing +x (a keeper walks through along x).
+  s.set([
+    { x: 10, z: 0, y: 0, facing: 0, tint: 'gate', label: 'Rune Hold' },
+    { x: 20, z: 0, y: 0, facing: 0, tint: 'passage', label: 'Moonwell' },
+    { x: 30, z: 0, y: 0, facing: 0, tint: 'passage', label: null },
+  ])
+  const sprites = s.group.children.filter(c => (c as THREE.Sprite).isSprite) as THREE.Sprite[]
+  ok(sprites.length === 2, `two tags for two labels, none for the dark socket (${sprites.length})`)
+  ok(sprites.every(t => !t.visible), 'tags start HIDDEN — an always-on tag is a signpost, not a hint')
+  // A camera at x=0, eye height, looking down +x through both doorways: the NEAR one's tag shows.
+  const cam = new THREE.PerspectiveCamera(60, 1, 0.1, 100)
+  cam.position.set(0, 1.5, 0.5)
+  cam.lookAt(50, 1.5, 0.5)
+  cam.updateMatrixWorld()
+  s.group.updateMatrixWorld(true)
+  s.tick(0, 0.5, 1, cam)
+  const byX = (x: number) => sprites.find(t => Math.abs(t.position.x - (x + 0.5)) < 0.01)!
+  ok(byX(10).visible && !byX(20).visible, 'looking down the row shows the nearest doorway\'s name only')
+  // Look away: nothing shows.
+  cam.lookAt(0, 1.5, -50); cam.updateMatrixWorld()
+  s.tick(0, 0.5, 2, cam)
+  ok(!byX(10).visible && !byX(20).visible, 'looking away hides every tag')
+  // Standing in the far doorway shows its name without looking at it.
+  s.tick(20.5, 0.5, 3, cam)
+  ok(byX(20).visible && !byX(10).visible, 'standing in a doorway shows its name — you are choosing it')
+  // No camera at all (the old call shape) leaves the look-rule off but the stand-rule on.
+  s.tick(0, 0.5, 4)
+  ok(!byX(10).visible && !byX(20).visible, 'without a camera nothing is looked at')
+  s.dispose()
+  if (!hadDoc) delete g.document
 }

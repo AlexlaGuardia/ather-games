@@ -6547,7 +6547,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // NOTHING and throws nothing (the meshes start hidden), so suspect this line before the shader.
     seam.tick(p.x, p.y, p.z, dt, state.clock.elapsedTime, space.current, tutorial.current.stage === 'done')
     socketShimmers.group.visible = space.current === 'plot'
-    if (socketShimmers.group.visible) socketShimmers.tick(p.x, p.z, state.clock.elapsedTime)
+    if (socketShimmers.group.visible) socketShimmers.tick(p.x, p.z, state.clock.elapsedTime, state.camera)
     gladeDoor.group.visible = space.current === 'glade'
     if (gladeDoor.group.visible) gladeDoor.tick(p.x, p.z, state.clock.elapsedTime)
     if (ledgerSeen.current !== mistLedger.current) { ledgerSeen.current = mistLedger.current; mist.setLedger(mistLedger.current) }
@@ -8333,7 +8333,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             if (voxel(l.x, l.y, l.z) !== want) setVoxel(l.x, l.y, l.z, want)
           }
           socketShimmers.set(stationSockets(st).filter(sk => socketLitBy(sk.index, held))
-            .map(sk => ({ x: sk.x, z: sk.z, y: level, facing: Math.atan2(a.z - sk.z, a.x - sk.x), tint: sk.kind })))
+            .map(sk => ({ x: sk.x, z: sk.z, y: level, facing: Math.atan2(a.z - sk.z, a.x - sk.x), tint: sk.kind,
+              label: socketLabel(sk.index, waymarks.current.marks) })))
         } else {
           for (const sk of courtSockets(SEED, cfg)) {
             const lit = socketLit(sk, held)
