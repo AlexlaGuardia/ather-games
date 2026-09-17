@@ -25,6 +25,7 @@ import {
   loadBest,
   saveBest,
   bodyRadius,
+  SWALLOW_BULGE,
   segCount,
   BOOST_MAX,
   MAGNET_R,
@@ -422,7 +423,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
   for (const s of w.wyrms) {
     if (!s.alive || s.trail.length < 4) continue
     const col = s.element ? ELEM_COLOR[s.element] : BLANK
-    const br = bodyRadius(s.mass) // world units
+    const br = bodyRadius(s.grown) // world units — what the swallow has landed, not what you scored
     const bw = br * 2 * zoom
     const pts = slitherPoints(s, br, zoom, toX, toY, cw, ch)
     // the glow: one blurred stroke through the waved spine (blur once, not per bead)
@@ -519,8 +520,9 @@ const SLITHER_LAMBDA = 9 // wavelength, in body radii
 const SLITHER_NECK = 5 // radii over which the wave ramps in from the head
 const BEAD_STEP = 0.55 // bead spacing, in body radii
 const TAIL_TAPER = 0.3 // last fraction of the body that thins
+const SWALLOW_W = (br: number) => Math.max(14, br * 2.2) // half-width of a swallow bulge, world units
 function slitherPoints(
-  s: { trail: number[]; dist: number; boosting: boolean; boost: number },
+  s: { trail: number[]; dist: number; boosting: boolean; boost: number; swallows: number[] },
   br: number, zoom: number,
   toX: (x: number) => number, toY: (y: number) => number, cw: number, ch: number,
 ): number[] {
@@ -561,7 +563,14 @@ function slitherPoints(
     const ramp = Math.min(1, d / (SLITHER_NECK * br))
     const amp = SLITHER_AMP * br * ramp * Math.sin(k * (s.dist - d))
     const taper = total > 0 ? Math.min(1, 0.3 + 0.7 * ((total - d) / (TAIL_TAPER * total))) : 1
-    out.push(toX(x - ty * amp), toY(y + tx * amp), Math.max(1.2, br * zoom * taper))
+    // the swallow bulges: each meal is a lump riding down the body (a parabolic bump ~2 radii wide)
+    let bulge = 0
+    for (let j = 0; j < s.swallows.length; j += 2) {
+      const u = Math.abs(d - s.swallows[j]) / SWALLOW_W(br)
+      if (u < 1) bulge += s.swallows[j + 1] * (1 - u * u)
+    }
+    const swell = 1 + Math.min(0.6, SWALLOW_BULGE * bulge)
+    out.push(toX(x - ty * amp), toY(y + tx * amp), Math.max(1.2, br * zoom * taper * swell))
   }
   return out
 }

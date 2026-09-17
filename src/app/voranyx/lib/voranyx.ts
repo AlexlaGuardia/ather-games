@@ -25,8 +25,18 @@ export const BOOST_SPEED = 172
 export const TURN_RATE = 3.4 // rad/sec the heading chases your target
 
 export const BOOST_MAX = 100
-export const BOOST_DRAIN = 46 // charge/sec while boosting
-export const MOTE_CHARGE = 22 // charge per mote eaten
+// the boost economy, retuned 2026-09-16 for the big Silt (ring 6400 across): a full tank used to be
+// 2.2s / ~380 units — a panic button. Now ~4.5s / ~780 units, a mote is a real refill, and cruising
+// trickles charge back (empty → full in ~33s) so a dash across the silt can be PLANNED, not hoarded.
+export const BOOST_DRAIN = 24 // charge/sec while boosting
+export const BOOST_REGEN = 3 // charge/sec while not boosting
+export const MOTE_CHARGE = 28 // charge per mote eaten
+
+// the swallow: what you eat lands in `mass` at once (score, metabolism, what you drop), but the
+// BODY grows only when the bulge reaches the tail — `grown` is the mass the length and radius show.
+// Growth is seen at the tail, where a snake's growth reads as growth, not as the head fattening.
+export const SWALLOW_SPEED = 260 // units/sec the bulge travels down the body
+export const SWALLOW_BULGE = 0.22 // of radius, per unit of mass in the bulge (capped in the render)
 
 // metabolism: bigger worms burn faster, so growth has a ceiling you must feed —
 // gentle enough that steady eating WINS, harsh enough that idling shrinks you
@@ -72,6 +82,8 @@ export interface Wyrm {
   element: Element | null // null = blank/elementless (white)
   boost: number // boost charge
   boosting: boolean
+  grown: number // the mass the body's length + radius reflect (lags `mass` by the swallow; never above it)
+  swallows: number[] // flat [distFromHead, massInBulge, ...], head-first — render draws the bulges
   alive: boolean
   trail: number[] // flat [x0,y0,x1,y1,...], head-first
   magnetT: number // seconds of magnet left (pulls nearby motes)
@@ -122,7 +134,7 @@ function spawnWyrm(w: World, isPlayer: boolean): Wyrm {
     if (dx * dx + dy * dy >= SPAWN_CLEAR * SPAWN_CLEAR) break // far enough from you → no ambush
   }
   const ang = w.rng() * Math.PI * 2
-  return {
+  const s: Wyrm = {
     id: w.nextId++,
     isPlayer,
     x,
@@ -133,6 +145,8 @@ function spawnWyrm(w: World, isPlayer: boolean): Wyrm {
     element: null,
     boost: BOOST_MAX,
     boosting: false,
+    grown: 0, // set below — equals mass at birth
+    swallows: [],
     alive: true,
     trail: [x, y],
     magnetT: 0,
@@ -141,6 +155,8 @@ function spawnWyrm(w: World, isPlayer: boolean): Wyrm {
     dist: 0,
     _wander: 0,
   }
+  s.grown = s.mass
+  return s
 }
 
 function scatterFood(w: World, n: number) {
@@ -303,7 +319,7 @@ function aiThink(w: World, s: Wyrm, dt: number) {
 }
 
 function eatFoodNear(w: World, s: Wyrm): { ate: number; seed: boolean; motes: number } {
-  const r = bodyRadius(s.mass) + 9
+  const r = bodyRadius(s.grown) + 9
   const r2 = r * r
   let ate = 0
   let seed = false
@@ -324,11 +340,13 @@ function eatFoodNear(w: World, s: Wyrm): { ate: number; seed: boolean; motes: nu
       motes++
     } else if (f.kind === 'seed') {
       s.mass += SEED_MASS
+      s.swallows.push(0, SEED_MASS)
       if (!s.element && f.element) s.element = f.element // first seed paints you
       seed = true
       ate++
     } else {
       s.mass += DROSS_MASS
+      s.swallows.push(0, DROSS_MASS)
       ate++
     }
     w.food[i] = w.food[w.food.length - 1]
@@ -339,7 +357,7 @@ function eatFoodNear(w: World, s: Wyrm): { ate: number; seed: boolean; motes: nu
 
 // does point (px,py) hit wyrm s's body (excluding the very neck)? returns true/false
 function hitsBody(s: Wyrm, px: number, py: number, headR: number): boolean {
-  const br = bodyRadius(s.mass)
+  const br = bodyRadius(s.grown)
   const rr = (br + headR) * (br + headR)
   // skip the first few trail points (the neck) so you don't clip yourself / adjacents
   for (let i = 10; i < s.trail.length; i += 2) {
@@ -367,6 +385,7 @@ export function tick(w: World, dt: number): TickEvents {
     const canBoost = s.boosting && s.boost > 0 && s.mass > BASE_MASS + 2
     const spd = canBoost ? BOOST_SPEED : SPEED
     if (canBoost) s.boost = Math.max(0, s.boost - BOOST_DRAIN * dt)
+    else s.boost = Math.min(BOOST_MAX, s.boost + BOOST_REGEN * dt)
     s.x += Math.cos(s.angle) * spd * dt
     s.y += Math.sin(s.angle) * spd * dt
 
@@ -394,6 +413,20 @@ export function tick(w: World, dt: number): TickEvents {
       if (s.mass <= BASE_MASS + 0.01) s.element = null // reverted to blank
     }
 
+    // the swallow: bulges ride down the body; one that reaches the tail lands its mass in `grown`.
+    // Shrinking (metabolism) shows at once — `grown` never sits above `mass`.
+    if (s.swallows.length) {
+      const bodyLen = segCount(s.grown) * SEG_SPACING
+      let wr = 0
+      for (let i = 0; i < s.swallows.length; i += 2) {
+        const d = s.swallows[i] + SWALLOW_SPEED * dt
+        if (d >= bodyLen) s.grown = Math.min(s.mass, s.grown + s.swallows[i + 1])
+        else { s.swallows[wr++] = d; s.swallows[wr++] = s.swallows[i + 1] }
+      }
+      s.swallows.length = wr
+    }
+    if (s.grown > s.mass) s.grown = s.mass
+
     // trail sampling — trail[0..1] is always the LIVE head; samples behind it sit exactly SEG_SPACING
     // apart. A sample lands where the head crossed the mark, not where the head is now (the overshoot
     // is carried, not dropped) — otherwise spacing wobbles by up to a frame's travel, worst at boost,
@@ -408,7 +441,7 @@ export function tick(w: World, dt: number): TickEvents {
     }
     s.trail[0] = s.x
     s.trail[1] = s.y
-    const maxLen = segCount(s.mass) * 2
+    const maxLen = segCount(s.grown) * 2
     if (s.trail.length > maxLen) s.trail.length = maxLen
 
     // eat
@@ -417,7 +450,7 @@ export function tick(w: World, dt: number): TickEvents {
   }
 
   // collisions — a head into any other living body kills the head's owner
-  const headR = (s: Wyrm) => bodyRadius(s.mass) * 0.8
+  const headR = (s: Wyrm) => bodyRadius(s.grown) * 0.8
   for (const s of w.wyrms) {
     if (!s.alive) continue
     // void edge is lethal

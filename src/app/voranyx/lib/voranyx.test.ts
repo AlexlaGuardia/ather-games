@@ -8,6 +8,12 @@ import {
   keysHeading,
   CURSOR_DEAD,
   SEG_SPACING,
+  SWALLOW_SPEED,
+  BOOST_DRAIN,
+  BOOST_REGEN,
+  MOTE_CHARGE,
+  SEED_MASS,
+  segCount,
   setBoost,
   tick,
   score,
@@ -166,6 +172,44 @@ function ok(name: string, cond: boolean) {
   ok('boosted straight run: every sample gap == SEG_SPACING (worst drift ' + worst.toFixed(4) + ')', worst < 1e-6 && p.trail.length > 20)
   const headGap = Math.hypot(p.trail[2] - p.trail[0], p.trail[3] - p.trail[1])
   ok('head → first sample is under one spacing (the live head leads the samples)', headGap >= 0 && headGap < SEG_SPACING)
+}
+
+// 12. the swallow: eating scores at once, the body grows when the bulge reaches the tail
+{
+  const w = makeWorld(3, 0)
+  const p = player(w)!
+  p.x = 0; p.y = 0; p.angle = 0; steer(w, 0); p.stasisT = 600 // no metabolism noise
+  w.food = [{ x: 4, y: 0, kind: 'seed', element: 'storm' }]
+  const g0 = p.grown, len0 = segCount(p.grown)
+  tick(w, 0.016)
+  ok('seed: mass lands at once', p.mass === START_MASS + SEED_MASS)
+  ok('seed: the body has NOT grown yet — a bulge is queued at the head', p.grown === g0 && p.swallows.length === 2 && p.swallows[0] < 10)
+  ok('length reads grown, not mass', segCount(p.grown) === len0)
+  const bodyLen = segCount(p.grown) * SEG_SPACING
+  const need = Math.ceil(bodyLen / SWALLOW_SPEED / 0.016) + 2
+  for (let i = 0; i < need; i++) tick(w, 0.016)
+  ok('the bulge reaches the tail and grown catches mass', p.grown === p.mass && p.swallows.length === 0)
+  ok('the body is longer now', segCount(p.grown) > len0)
+  // shrinking is immediate: grown never sits above mass
+  p.stasisT = 0; p.mass = 60; p.grown = 60
+  tick(w, 1)
+  ok('starving: grown tracks mass down at once', p.grown === p.mass && p.mass < 60)
+}
+
+// 13. boost economy: a tank lasts BOOST_MAX/BOOST_DRAIN, cruising trickles it back
+{
+  const w = makeWorld(1, 0)
+  const p = player(w)!
+  w.food = []; p.mass = 40; p.grown = 40; p.boost = BOOST_MAX; p.stasisT = 600
+  setBoost(w, true)
+  let t = 0
+  while (p.boost > 0 && t < 30) { tick(w, 0.05); t += 0.05 }
+  ok('a full tank lasts ~' + (BOOST_MAX / BOOST_DRAIN).toFixed(1) + 's (measured ' + t.toFixed(2) + ')', Math.abs(t - BOOST_MAX / BOOST_DRAIN) < 0.11)
+  ok('that is at least 4s of boost (the ring is 6400 across)', t >= 4)
+  setBoost(w, false)
+  tick(w, 1)
+  ok('cruising regains charge', p.boost > 0 && Math.abs(p.boost - BOOST_REGEN) < 1e-6)
+  ok('a mote refills more than a quarter tank', MOTE_CHARGE >= BOOST_MAX / 4)
 }
 
 console.log(`\nVORANYX sim: ${pass} passed, ${fail} failed`)
