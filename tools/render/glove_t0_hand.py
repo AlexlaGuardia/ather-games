@@ -1,41 +1,31 @@
-# ── THE KEEPER'S RIGHT GLOVE — real-time hand mesh, replaces the "stick" placeholder ──────────
-# Built against the LOCKED look: /root/athernyx/CANON/design-briefs/refs/vessel-glove-t0-1.png
-# (flat-lay: cream/tan stitched cloth, seam lines down each finger, a plain dark-brown leather
-# strap across the wrist, a folded cuff) and the family law in
-# /root/athernyx/CANON/design-briefs/shimmer-casting-vessels.md — NO METAL anywhere, tier-0 has
-# ONE dark unlit "seat" (a crude cloudy crystal) on the back of the hand, embedded flush (never a
-# bezel/rim — "the vessel closed around it"), craft does not grey (warm tones only).
+# Tier-0 casting glove — the REAL-TIME hand mesh for the first-person rig (`voxel3d/hands.ts`).
 #
-# ★★ DRAFT 2 (2026-09-17) — coordinator's numeric spec, after draft 1 read as a DIAGRAM not a
-# glove ("five thin tentacles on a flat slab", "a jumble of pegs", "a mushroom cap"). Every
-# dimension below is a NUMBER from that brief, not an adjective — see the constants block.
-# ★★★ DRAFT 3 (2026-09-17) — draft 2 shipped to prod for Alex to judge; ONE more fix asked before
-# then: fingers/thumb still read as "bamboo" because each phalanx was a SEPARATE capsule object,
-# and two separate rounded ends butted together always shows a waist/pinch at the joint no matter
-# how good the angles are. Fixed: each finger and the thumb is now ONE continuous tube — a Bezier
-# curve run through the joint points with a per-point tapered radius and a round bevel — so the
-# curl is a single continuous bend and only the seam ridge marks the back. Also killed a real bug
-# the palm-side renders showed: the "back dome" sphere was oversized/mis-centred and bulged
-# through to the PALM side too (the "oval pad" the ref doesn't show) — rebuilt flat/shallow so it
-# never crosses to -Y.
-# ⚠ Writes to tools/render/out/hands-draft3/ ONLY. public/ stays clean for builds; nothing here
-# touches public/ until this pass is approved.
+# ★ DRAFT 4 (2026-09-16, play lane): THE HAND IS ONE SKINNED BODY, NOT TUBES ON A BRICK.
+# Drafts 1–3 built a beveled box palm, a 7.5cm forearm cylinder with an 8.5cm ring on it, and
+# four swept tubes for fingers. Alex, in-game: *"the arm is looking like a hammer with the fingers
+# all disfigured."* The turntable agreed — the fist curled its fingertips INTO the palm block, the
+# open fingers were four parallel sticks, and from the player's own eye the forearm+ring were the
+# nearest and largest thing on screen: a handle with a head on it. Joint tuning cannot fix a
+# construction that has no knuckles, no heel, no taper and no blend between palm and digit.
 #
-# This is NOT the inventory-icon sprite pipeline (vessel_glove.py / vessel_common.py, which render
-# a flat 2D panel icon in camera-unit space). This is a REAL-TIME MESH for the first-person rig in
-# `src/app/shimmer/voxel3d/hands.ts`, which mounts its placeholder glove with these conventions
-# (read from the file's own local frame, `hands.ts` L178-228): the `arm` group's local +Z points
-# toward the ELBOW (camera side), local -Z points toward the FINGERS, local +Y is the back of the
-# hand (the seat sits at +y), and the wrist sits at local z≈0 (the cuff is centred there). The
-# rig's numbers are already in METRES so this mesh is built to real scale and should drop in
-# without rescaling — origin at the wrist centre, fingers along -Z, back of hand +Y, thumb -X.
+# So: a vertex TREE (forearm → wrist → heel → knuckle row → five digits) run through Blender's
+# Skin modifier with a per-joint radius pair (wide/flat at the palm, round at the fingers) and one
+# subdivision. One continuous surface: the palm is a padded loaf that thins toward the knuckles,
+# each finger grows out of it, the fist balls into a single rounded mass with the knuckles bulging
+# where the bend is, and the forearm is a NARROWER oval than the hand it feeds — the arm reads as
+# an arm because the hand is the wide end. The ref (`refs/vessel-glove-t0-1.png`) is a plump quilted
+# work glove whose fingers touch at the base; the base radii here are chosen so they do.
 #
-# Run:  RENDER_OUT=tools/render/out/hands-draft2 /opt/blender/blender -b -P tools/render/glove_t0_hand.py
-# Out:  $RENDER_OUT/glove-t0.glb
-#       $RENDER_OUT/turntable/*.png       (8 frames, contact sheet)
-#       $RENDER_OUT/turntable/player-pov.png  (the 9th frame — in-game HUD framing)
+# Contract with `hands.ts` (unchanged since draft 2): objects `glove_fist` + `glove_open`, metres,
+# origin at the WRIST centre, fingers along −Z, back of hand +Y, thumb −X, vertex colours in `Col`.
+# The rig replaces the file's material with Lambert + vertex colours; only the colour survives.
+#
+# Run:  RENDER_OUT=tools/render/out/hands-draft4 /opt/blender/blender -b -P tools/render/glove_t0_hand.py
+#       (NO_RENDER=1 for the GLB alone · SAMPLES/RES for the review renders)
+# Out:  $RENDER_OUT/glove-t0.glb · $RENDER_OUT/turntable/*.png · turntable/player-pov.png
+# ⚠ Never write under public/ from here — an untracked public file blocks every lane's coord build.
 import bpy, bmesh, math, os
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 OUT = os.environ.get("RENDER_OUT", "/tmp/glove_hand")
 TT_DIR = os.path.join(OUT, "turntable")
@@ -44,134 +34,86 @@ RES = int(os.environ.get("RES", "640"))
 SAMPLES = int(os.environ.get("SAMPLES", "48"))
 DO_RENDER = os.environ.get("NO_RENDER", "0") != "1"
 
-# ── palette (Alex's hex, converted to 0..1) — NO metal, ever: Metallic stays 0.0 on the one material.
+# ── palette — NO metal, ever (the vessel card's law; the rig's Lambert cannot carry it anyway) ──
 CLOTH        = (0xC9/255, 0xB4/255, 0x8A/255)   # lit cloth
-CLOTH_SHADOW = (0xA8/255, 0x90/255, 0x5F/255)   # shadow cloth / cuff fold
-SEAM         = tuple(c * 0.72 for c in CLOTH)   # a shade darker than the cloth
-STRAP        = (0x5A/255, 0x3A/255, 0x22/255)   # plain dark-brown strap, sewn not buckled
+CLOTH_SHADOW = (0xA8/255, 0x90/255, 0x5F/255)   # the hem's fold
+STRAP        = (0x5A/255, 0x3A/255, 0x22/255)   # plain dark-brown wrap, sewn not buckled
 SEAT         = (0x4A/255, 0x46/255, 0x38/255)   # crude cloudy crystal, dormant, unlit
 
-
-# ═══════════════════════════════════════════════════════════════════════════════════════════
-# GEOMETRY CONSTANTS — every number here is FROM THE COORDINATOR'S SPEC (cm converted to m),
-# not eyeballed. Origin = wrist centre, +Z = toward elbow, -Z = fingers, +Y = back of hand.
-# ═══════════════════════════════════════════════════════════════════════════════════════════
-
-# PALM: 10cm wrist->knuckles, 9cm wide at knuckles / 7cm at wrist, 3.2cm thick, >=1.2cm edge
-# round, slight dome on the back.
-PALM_LEN = 0.100
-KNUCKLE_Z = -PALM_LEN
-PALM_WRIST_HALF_W = 0.035
-PALM_KNUCKLE_HALF_W = 0.045
-PALM_THICK = 0.032
-PALM_Y_TOP = PALM_THICK / 2      # back of hand
-PALM_Y_BOT = -PALM_THICK / 2     # palm side
-PALM_BEVEL = 0.012
-PALM_DOME_R = 0.030              # the "slight dome on the back" — a low flattened bulge
-PALM_DOME_HEIGHT = 0.006
-
-# FINGERS: index/middle/ring/pinky. Knuckle spacing 2.1cm centre-to-centre. Lengths 7.0/7.8/7.2/
-# 5.8cm. Base diameter 2.0cm tapering to 1.6cm at the tip (same for all four). 3 segments each.
-FINGER_SPACING = 0.021
-FINGER_BASE_R = 0.020 / 2
-FINGER_TIP_R = 0.016 / 2
-FINGERS = [  # name, x at knuckle, total length, splay_deg (open pose, <=8 deg from middle)
-    ("index",  -1.5 * FINGER_SPACING, 0.070, -6.0),
-    ("middle", -0.5 * FINGER_SPACING, 0.078,  0.0),
-    ("ring",    0.5 * FINGER_SPACING, 0.072,  5.0),
-    ("pinky",   1.5 * FINGER_SPACING, 0.058,  8.0),
+# ── the hand, in metres. A right hand, wrist at the origin. ─────────────────────────────────────
+# Skin radii are (half-width along X, half-thickness along Y) at each joint.
+# The glove ends at the wrist with a hem, like the ref. Past it is the keeper's SLEEVE — plain
+# tunic cloth, baggier than the wrist, long enough to leave the player's frame instead of ending
+# in mid-air (draft 3's forearm stopped 7cm out and floated).
+FOREARM = [  # (pos, radii) from the elbow end down to the wrist
+    (Vector((0.000, 0.003, 0.125)), (0.035, 0.028)),   # ⚠ the rig aims the elbow end TOWARD the eye, so
+    (Vector((0.000, 0.002, 0.060)), (0.034, 0.027)),   # perspective fattens the sleeve — keep it lean
+    (Vector((0.000, 0.001, 0.030)), (0.031, 0.023)),
 ]
-KNUCKLE_Y = 0.004          # fingers root near the dorsal side of the palm block, not its centre
-SEG_FRAC = (0.42, 0.32, 0.26)  # proximal / middle / distal, fraction of total finger length
+SLEEVE = (0x7C/255, 0x74/255, 0x62/255)          # undyed tunic cloth, a shade darker than the glove
+SLEEVE_Z = 0.034                                 # above this the tree wears the sleeve colour
+WRIST   = (Vector((0.000, 0.000, 0.000)), (0.030, 0.021))
+HEEL    = (Vector((0.002, -0.001, -0.038)), (0.041, 0.018))   # the padded heel: widest, thickest
+KNUCKLE = (Vector((0.004, 0.001, -0.078)), (0.044, 0.014))    # the knuckle row: wide, thin
+PALM_BACK_Y = KNUCKLE[0].y + KNUCKLE[1][1]                    # where the seat sits
 
-# THUMB: 6cm in two segments, 2.3cm diameter, root at -X side of palm 3cm from the wrist.
-THUMB_LEN = 0.060
-THUMB_RB = 0.0115
-THUMB_RT = 0.0100
+# fingers: (name, knuckle x, knuckle z, length, open splay deg). Knuckle z follows the arc of a
+# real hand (middle longest and furthest); lengths are a padded glove's, not a skeleton's.
+FINGERS = [
+    ("index",  -0.033, -0.094, 0.070, -5.0),
+    ("middle", -0.011, -0.099, 0.077,  0.0),
+    ("ring",    0.011, -0.095, 0.072,  4.0),
+    ("pinky",   0.032, -0.086, 0.057,  8.0),
+]
+KNUCKLE_Y = 0.001
+SEG_FRAC = (0.42, 0.32, 0.26)               # proximal / middle / distal
+FINGER_R = (0.0118, 0.0110, 0.0100, 0.0090)  # radius at knuckle / PIP / DIP / tip — plump, 2.2cm spacing
+                                             # means they TOUCH at the base like the ref's
+THUMB_INNER = Vector((-0.020, -0.004, -0.032))   # the thumb's root, buried in the heel
+THUMB_ROOT = Vector((-0.040, -0.006, -0.036))    # where it leaves the palm
+THUMB_LEN = 0.062
 THUMB_FRAC = (0.55, 0.45)
-THUMB_Z = -0.030
-_palm_w_at_thumb = PALM_WRIST_HALF_W + (PALM_KNUCKLE_HALF_W - PALM_WRIST_HALF_W) * (-THUMB_Z / PALM_LEN)
-THUMB_X = -(_palm_w_at_thumb - 0.002)   # just inside the palm edge at that z — guarantees overlap
-THUMB_Y = -0.004
+THUMB_R = (0.0135, 0.0120, 0.0105)
 
-# FIST joint angles, anatomical (MCP / PIP / DIP), converted to this rig's CUMULATIVE phi
-# (phi=0 -> straight -Z extended; phi=90 -> straight -Y into the palm; phi=180 -> +Z, curled
-# back under). Cumulative = MCP, MCP+PIP, MCP+PIP+DIP.
-_MCP, _PIP, _DIP = 85.0, 95.0, 50.0
-FIST_PHI = (_MCP, _MCP + _PIP, _MCP + _PIP + _DIP)  # (85, 180, 230)
-
-# THUMB open-pose direction: 45 deg "out" (elevation off the palm plane, toward +Y) and 20 deg
-# "forward" (azimuth from -X toward -Z). Applied to BOTH segments — the open thumb is straight.
-_el, _az = math.radians(45.0), math.radians(20.0)
-THUMB_OPEN_DIR = Vector((-math.cos(_el) * math.cos(_az), math.sin(_el), -math.cos(_el) * math.sin(_az))).normalized()
-
+# joint angles, cumulative "phi": 0 = straight on along −Z, 90 = straight into the palm (−Y),
+# 180 = back toward the wrist (+Z). The fist is a RELAXED fist — tips resting on the palm, not
+# driven through it (draft 3 buried them 4mm inside the block).
 POSE = {
-    "open": dict(finger_phi=(5, 8, 12), splay_scale=1.0),
-    "fist": dict(finger_phi=FIST_PHI, splay_scale=0.0),
+    "open": dict(phi=(8.0, 14.0, 18.0), splay=1.0,
+                 thumb=(Vector((-0.58, 0.26, -0.77)), Vector((-0.42, 0.18, -0.89)))),
+    "fist": dict(phi=(80.0, 175.0, 205.0), splay=0.0,
+                 # across the curled index+middle: sweeps from −X toward −Z, leaning to the palm side
+                 thumb=(Vector((-0.55, -0.30, -0.78)), Vector((0.30, -0.45, -0.84)))),
 }
-# fist thumb: "lies across the curled index + middle" — a crossing sweep (psi=0 -> -X, psi=90 ->
-# -Z), tuned so the tip lands over the index/middle's curled first knuckle, not out past them.
-FIST_THUMB_PSI = (60.0, 118.0)
-FIST_THUMB_YLIFT = (-0.10, -0.32)   # ★ fix: positive ylift swung the thumb up to the DORSAL
-# side, burying its tip near the back of the palm where the curled fingers already sat — from
-# the palm-view render it was invisible. "Lies across the curled index+middle" means across
-# their FRONT (palm-facing) surface, so it needs to lean -Y, not +Y — and less cumulative sweep
-# keeps more of its own length visibly crossing rather than curling away under itself.
 
-# CUFF: 8.5cm outer diameter, "1.0cm thick" = 8.5cm outer vs the 7.5cm forearm it sits on (0.5cm
-# proud all round), 1.5cm tall. STRAP: flat band 2.0cm wide (along Z) x 0.4cm thick, dark brown,
-# just DISTAL of the cuff (closer to the hand). SEAT: 1.2cm gem, 2cm distal of the strap.
-FOREARM_LEN = 0.080
-FOREARM_R = 0.0375           # 7.5cm diameter
-CUFF_OUTER_R = 0.0425        # 8.5cm outer diameter
-CUFF_Z = 0.045
-CUFF_TALL = 0.015
-STRAP_OUTER_R = FOREARM_R + 0.004   # 0.4cm thick, proud of the forearm
-STRAP_Z = 0.014
-STRAP_WIDE = 0.020            # 2.0cm wide, along Z
-SEAT_R = 0.012 / 2
-SEAT_Z = STRAP_Z - 0.020
+# the cloth extras: hem at the far end, the wrap at the wrist, the seat on the back
+HEM_Z = (0.020, 0.034)                          # the glove's folded edge, just past the wrist-bone
+HEM_PROUD = 0.004
+WRAP_Z = (-0.058, -0.044)                        # across the hand, where the ref's strap crosses
+WRAP_PROUD = 0.003
+SEAT_Z = -0.070          # on the knuckle arc, centred — the card's "one seat, on that same arc"
+SEAT_R = 0.0075
 
 
-def curl_dir(phi_deg, lean_x=0.0):
-    """Direction a finger segment points. phi=0 -> straight -Z (extended); phi=90 -> straight -Y
-    (curled flat toward the palm); phi=180 -> +Z (curled all the way back under, toward the
-    wrist) — the hook a fist's fingers make. `lean_x` fans the direction sideways (open pose
-    splay); it is a small azimuthal nudge, not a real 3rd angle."""
+def curl_dir(phi_deg, splay_deg=0.0):
     phi = math.radians(phi_deg)
-    return Vector((lean_x, -math.sin(phi), -math.cos(phi))).normalized()
+    d = Vector((0.0, -math.sin(phi), -math.cos(phi)))
+    a = math.radians(splay_deg)
+    return Vector((d.x * math.cos(a) + d.z * math.sin(a), d.y, -d.x * math.sin(a) + d.z * math.cos(a))).normalized()
 
 
-def rotate_y_deg(v, deg):
-    """Rotate a direction about the world/local Y axis (back-of-hand axis) — a true azimuthal
-    fan in the X-Z plane, so the OPEN pose's <=8 deg splay is an actual measured angle, not an
-    eyeballed offset."""
-    a = math.radians(deg)
-    ca, sa = math.cos(a), math.sin(a)
-    return Vector((v.x * ca + v.z * sa, v.y, -v.x * sa + v.z * ca))
-
-
-def chain_points(base, total_len, fracs, dirs):
-    pts = [Vector(base)]
-    p = Vector(base)
-    for frac, d in zip(fracs, dirs):
-        p = p + d * (total_len * frac)
-        pts.append(p.copy())
-    return pts
-
-
-def set_vcol(obj, rgb):
+def set_vcol(obj, rgb, above_z=None, above_rgb=None):
+    """One colour per corner; with `above_z`, corners whose vertex sits past that z take `above_rgb`
+    (the sleeve on the one continuous skin body)."""
     mesh = obj.data
     attr = mesh.color_attributes.get("Col")
     if attr is None:
         attr = mesh.color_attributes.new(name="Col", type='FLOAT_COLOR', domain='CORNER')
-    for d in attr.data:
-        d.color = (rgb[0], rgb[1], rgb[2], 1.0)
-
-
-def add(prim, **kw):
-    prim(**kw)
-    return bpy.context.active_object
+    for loop, d in zip(mesh.loops, attr.data):
+        c = rgb
+        if above_z is not None and mesh.vertices[loop.vertex_index].co.z > above_z:
+            c = above_rgb
+        d.color = (c[0], c[1], c[2], 1.0)
 
 
 def assign(obj, mat):
@@ -179,88 +121,6 @@ def assign(obj, mat):
         obj.data.materials.append(mat)
     else:
         obj.data.materials[0] = mat
-    return obj
-
-
-# ── DRAFT 3: the "bamboo" fix — ONE continuous tube per finger/thumb/seam, not a stack of
-# separate capsule segments. Draft 2 built each phalanx as its OWN beveled cone with its own
-# rounded cap, then butted the next segment's own rounded base against it — two separate round
-# ends meeting always shows a waist/pinch at the joint, no matter how good the bend angle is.
-# A curve's bevel is ONE continuous swept surface along the whole path, so a bend shows as a
-# bend, never a seam. Per-point `radius` gives the 2.0->1.6cm taper without needing per-segment
-# radii; VECTOR handles keep the path itself the same straight-segment polyline the joint
-# angles already describe (a real knuckle crease reads better as a crisp bend than an
-# over-rounded Auto-handle curve, which tended to overshoot on the fist's 85/95/50 deg bends).
-def make_tapered_tube(name, pts, radii, mat, vcol, bevel_res=8, resolution_u=2, cap_end=True):
-    """pts: list of Vector world points (the joint chain, base..tip). radii: matching list of
-    physical radii (metres) at each point — the curve's bevel_depth is fixed at 1.0 so a point's
-    `radius` attribute IS the swept radius, no separate scale factor to keep in sync."""
-    # POLY (not Bezier) — a plain piecewise-linear path between the joint points, which is what
-    # we want anyway (a real knuckle is a crisp bend, not a smoothed-over curve, and the joint
-    # ANGLES already come straight from the coordinator's MCP/PIP/DIP numbers). This also sidesteps
-    # Bezier handle bookkeeping entirely: a fresh bezier point's handles default to zero-length
-    # (coincident with its own co) unless explicitly positioned, which would have produced a
-    # degenerate/undefined tangent at every joint — POLY has no handles to get wrong.
-    cd = bpy.data.curves.new(name, type='CURVE')
-    cd.dimensions = '3D'
-    cd.resolution_u = resolution_u
-    spline = cd.splines.new('POLY')
-    spline.points.add(len(pts) - 1)
-    for i, p in enumerate(pts):
-        cp = spline.points[i]
-        cp.co = (p.x, p.y, p.z, 1.0)
-        cp.radius = radii[i]
-    cd.bevel_depth = 1.0
-    cd.bevel_resolution = bevel_res
-    cd.fill_mode = 'FULL'
-    obj = bpy.data.objects.new(name, cd)
-    bpy.context.collection.objects.link(obj)
-    bpy.ops.object.select_all(action='DESELECT')
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.convert(target='MESH')
-    bpy.ops.object.shade_smooth()
-    assign(obj, mat)
-    set_vcol(obj, vcol)
-    parts = [obj]
-    if cap_end:
-        tip = pts[-1]
-        cap = add(bpy.ops.mesh.primitive_uv_sphere_add, segments=6, ring_count=4,
-                  radius=radii[-1] * 0.98, location=(tip.x, tip.y, tip.z))
-        bpy.ops.object.shade_smooth()
-        assign(cap, mat)
-        set_vcol(cap, vcol)
-        parts.append(cap)
-    return parts
-
-
-def flat_solid(name, pts_xz, y_top, thickness, bevel=0.003, bevel_segments=3):
-    """A hand-authored (x,z) silhouette at a fixed y_top, solidified toward -Y (into the palm)
-    and bevelled round. Auto-corrects winding so the top face normal always faces +Y."""
-    verts = [(x, y_top, z) for x, z in pts_xz]
-    faces = [list(range(len(verts)))]
-    mesh = bpy.data.meshes.new(name)
-    mesh.from_pydata(verts, [], faces)
-    mesh.update()
-    if mesh.polygons[0].normal.y < 0:
-        faces = [list(reversed(faces[0]))]
-        mesh.clear_geometry()
-        mesh.from_pydata(verts, [], faces)
-        mesh.update()
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.collection.objects.link(obj)
-    bpy.context.view_layer.objects.active = obj
-    obj.select_set(True)
-    sol = obj.modifiers.new("sol", 'SOLIDIFY')
-    sol.thickness = thickness
-    sol.offset = -1
-    bpy.ops.object.modifier_apply(modifier="sol")
-    bev = obj.modifiers.new("bev", 'BEVEL')
-    bev.width = bevel
-    bev.segments = bevel_segments
-    bev.limit_method = 'ANGLE'
-    bpy.ops.object.modifier_apply(modifier="bev")
-    bpy.ops.object.shade_smooth()
     return obj
 
 
@@ -280,211 +140,150 @@ def make_material():
     return m
 
 
-def build_palm(mat):
-    # (x, z) — 7cm wide at the wrist, 9cm at the knuckles, 10cm long. Symmetric; the thumb
-    # overlaps the -X edge well inside its own volume (checked below), so no notch is cut.
-    pts = [
-        (-PALM_WRIST_HALF_W, 0.0), (PALM_WRIST_HALF_W, 0.0),
-        (0.040, -0.035), (0.044, -0.075), (PALM_KNUCKLE_HALF_W, -PALM_LEN),
-        (0.018, -PALM_LEN - 0.007), (-0.018, -PALM_LEN - 0.007),
-        (-PALM_KNUCKLE_HALF_W, -PALM_LEN), (-0.044, -0.075), (-0.040, -0.035),
-    ]
-    obj = flat_solid("palm", pts, PALM_Y_TOP, PALM_THICK, bevel=PALM_BEVEL, bevel_segments=4)
-    assign(obj, mat)
-    set_vcol(obj, CLOTH)
-    # ★ DRAFT 3 FIX: the old center/scale math put this dome's centre at y=-0.008 with a real
-    # (post-scale) half-height of ~0.013 — i.e. spanning roughly y[-0.021, +0.005], almost
-    # entirely on the PALM (-Y) side and barely reaching the back surface at all. That is
-    # exactly the "oval pad on the palm side" the ref doesn't show. Rebuilt so its FLOOR sits at
-    # the back surface (y=PALM_Y_TOP) and it only rises PALM_DOME_HEIGHT above that — it can
-    # never cross to -Y because its lowest point is pinned at the surface, not derived from a
-    # radius/scale combo that has to be re-solved by hand.
-    dome = add(bpy.ops.mesh.primitive_ico_sphere_add, subdivisions=2, radius=PALM_DOME_R,
-               location=(0.0, PALM_Y_TOP, -PALM_LEN * 0.55))
-    dome.scale = (1.35, PALM_DOME_HEIGHT / PALM_DOME_R, 1.0)
-    bpy.ops.object.shade_smooth()
-    assign(dome, mat)
-    set_vcol(dome, CLOTH)
-    return [obj, dome]
+# ── the skin tree ────────────────────────────────────────────────────────────────────────────────
+class Tree:
+    def __init__(self):
+        self.verts, self.radii, self.edges = [], [], []
+
+    def add(self, pos, radii, parent=None):
+        i = len(self.verts)
+        self.verts.append(Vector(pos)); self.radii.append(tuple(radii))
+        if parent is not None:
+            self.edges.append((parent, i))
+        return i
+
+    def chain(self, parent, pts, radii, subdiv=2):
+        """Walk `pts` from `parent`'s position, inserting `subdiv` rings per segment so a bend is a
+        curve of rings rather than one kinked ring. Radii interpolate along the walk."""
+        prev = parent
+        p0 = self.verts[parent]; r0 = self.radii[parent]
+        for p1, r1 in zip(pts, radii):
+            for s in range(1, subdiv + 1):
+                t = s / subdiv
+                prev = self.add(p0.lerp(p1, t), (r0[0] + (r1[0] - r0[0]) * t, r0[1] + (r1[1] - r0[1]) * t), prev)
+            p0, r0 = p1, r1
+        return prev
 
 
-def build_forearm_stub(mat):
-    obj = add(bpy.ops.mesh.primitive_cone_add, vertices=16, radius1=FOREARM_R, radius2=FOREARM_R * 0.97,
-              depth=FOREARM_LEN, location=(0, -0.001, FOREARM_LEN / 2))
-    obj.rotation_euler = (math.radians(90), 0, 0)
-    bpy.ops.object.shade_smooth()
-    assign(obj, mat)
-    set_vcol(obj, CLOTH_SHADOW)
+def digit_points(base, total, fracs, dirs):
+    pts, p = [], Vector(base)
+    for f, d in zip(fracs, dirs):
+        p = p + d * (total * f)
+        pts.append(p.copy())
+    return pts
+
+
+def build_skin_hand(pose_name):
+    pose = POSE[pose_name]
+    t = Tree()
+    root = t.add(*FOREARM[0])
+    prev = t.chain(root, [FOREARM[1][0], FOREARM[2][0], WRIST[0]], [FOREARM[1][1], FOREARM[2][1], WRIST[1]], subdiv=2)
+    prev = t.chain(prev, [HEEL[0], KNUCKLE[0]], [HEEL[1], KNUCKLE[1]], subdiv=3)
+    knuckle = prev
+    for name, x, z, length, splay in FINGERS:
+        base = Vector((x, KNUCKLE_Y, z))
+        dirs = [curl_dir(pose["phi"][i], splay * pose["splay"] * (0.5 + 0.25 * i)) for i in range(3)]
+        pts = digit_points(base, length, SEG_FRAC, dirs)
+        # a short stalk from the knuckle row to the finger's own knuckle, then the three phalanges
+        k = t.add(base, (FINGER_R[0], FINGER_R[0]), knuckle)
+        t.chain(k, pts, [(r, r) for r in FINGER_R[1:]], subdiv=2)
+    body = skin_to_mesh(t, root, f"body_{pose_name}")
+
+    # ★ THE THUMB IS ITS OWN SKINNED BODY. Branching it off the wide flat heel vertex made the Skin
+    # modifier hull the heel + thumb radii into one convex wedge — a flat shelf under the thumb and
+    # a collar at the wrist (draft 4a). Rooted INSIDE the palm and overlapping it instead, the
+    # thumb grows out of the loaf with no hull to bridge. Overlap is invisible on a one-colour cloth.
+    th = Tree()
+    troot = th.add(THUMB_INNER, (THUMB_R[0], THUMB_R[0] * 0.8))
+    tdirs = [d.normalized() for d in pose["thumb"]]
+    tpts = digit_points(THUMB_ROOT, THUMB_LEN, THUMB_FRAC, tdirs)
+    tr = th.chain(troot, [THUMB_ROOT], [(THUMB_R[0], THUMB_R[0])], subdiv=2)
+    th.chain(tr, tpts, [(r, r) for r in THUMB_R[1:]], subdiv=2)
+    thumb = skin_to_mesh(th, troot, f"thumb_{pose_name}")
+    return join_all([body, thumb], f"hand_{pose_name}")
+
+
+def skin_to_mesh(t, root, name):
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata([tuple(v) for v in t.verts], t.edges, [])
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    skin = obj.modifiers.new("Skin", 'SKIN')
+    skin.use_smooth_shade = True
+    sv = mesh.skin_vertices[0].data
+    for i, (rx, ry) in enumerate(t.radii):
+        sv[i].radius = (rx, ry)
+        sv[i].use_root = (i == root)
+    sub = obj.modifiers.new("Sub", 'SUBSURF')
+    sub.levels = sub.render_levels = 1
+    # bake the modifiers into a plain mesh
+    dg = bpy.context.evaluated_depsgraph_get()
+    baked = bpy.data.meshes.new_from_object(obj.evaluated_get(dg))
+    obj.modifiers.clear()
+    obj.data = baked
+    baked.name = name
+    for p in baked.polygons:
+        p.use_smooth = True
     return obj
 
 
-def build_cuff_and_strap(mat):
-    """CUFF: a short squat RING (cylinder, not a torus donut — the torus was the 'mushroom cap'
-    bug) — 8.5cm outer diameter, 1.5cm tall, sitting ~0.5cm proud of the 7.5cm forearm all
-    round. STRAP: a flatter band, 2cm wide along Z, 0.4cm proud, just distal of (closer to the
-    hand than) the cuff."""
-    parts = []
-    cuff = add(bpy.ops.mesh.primitive_cylinder_add, vertices=16, radius=CUFF_OUTER_R, depth=CUFF_TALL,
-               location=(0, 0, CUFF_Z))
-    cuff.rotation_euler = (math.radians(90), 0, 0)
-    bev = cuff.modifiers.new("b", 'BEVEL')
-    bev.width = 0.003
-    bev.segments = 1
-    bpy.ops.object.modifier_apply(modifier="b")
-    bpy.ops.object.shade_smooth()
-    assign(cuff, mat)
-    set_vcol(cuff, CLOTH)  # lit cream, NOT shadow — it must read as a distinct ring against the
-    # darker forearm stub underneath it, not blend into one shapeless mass (self-critique below)
-    parts.append(cuff)
+# ── the cloth extras ────────────────────────────────────────────────────────────────────────────
+def oval_band(name, z0, z1, rx, ry, segs=24, cx=0.0):
+    """A closed ring of cloth between z0 and z1, an oval rx×ry — open at both ends, two-sided."""
+    bm = bmesh.new()
+    rings = []
+    for z in (z0, z1):
+        ring = [bm.verts.new((cx + rx * math.cos(2 * math.pi * i / segs), ry * math.sin(2 * math.pi * i / segs), z)) for i in range(segs)]
+        rings.append(ring)
+    for i in range(segs):
+        a, b = rings[0][i], rings[0][(i + 1) % segs]
+        c, d = rings[1][(i + 1) % segs], rings[1][i]
+        bm.faces.new((a, b, c, d))
+    # cap the band's thickness with a second, inner shell so it has an edge to read
+    inner = []
+    for z in (z0, z1):
+        inner.append([bm.verts.new((cx + (rx - 0.002) * math.cos(2 * math.pi * i / segs), (ry - 0.002) * math.sin(2 * math.pi * i / segs), z)) for i in range(segs)])
+    for i in range(segs):
+        for outer, inr in ((rings[0], inner[0]), (rings[1], inner[1])):
+            a, b = outer[i], outer[(i + 1) % segs]
+            c, d = inr[(i + 1) % segs], inr[i]
+            bm.faces.new((a, b, c, d))
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh); bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    for p in mesh.polygons:
+        p.use_smooth = True
+    return obj
 
-    strap = add(bpy.ops.mesh.primitive_cylinder_add, vertices=16, radius=STRAP_OUTER_R, depth=STRAP_WIDE,
-                location=(0, 0, STRAP_Z))
-    strap.rotation_euler = (math.radians(90), 0, 0)
-    bev2 = strap.modifiers.new("b", 'BEVEL')
-    bev2.width = 0.002
-    bev2.segments = 1
-    bpy.ops.object.modifier_apply(modifier="b")
-    bpy.ops.object.shade_smooth()
-    assign(strap, mat)
-    set_vcol(strap, STRAP)
-    parts.append(strap)
+
+def build_extras(mat):
+    parts = []
+    # the hem: a flared fold of cloth at the far end of the forearm, a shade darker
+    rx, ry = FOREARM[2][1]
+    hem = oval_band("hem", HEM_Z[0], HEM_Z[1], rx + HEM_PROUD, ry + HEM_PROUD)
+    assign(hem, mat); set_vcol(hem, CLOTH_SHADOW); parts.append(hem)
+    # the wrap: a dark band around the wrist, just past the heel
+    zc = (WRAP_Z[0] + WRAP_Z[1]) / 2
+    f = (zc - HEEL[0].z) / (KNUCKLE[0].z - HEEL[0].z)          # the palm's own oval at that z
+    rx = HEEL[1][0] + (KNUCKLE[1][0] - HEEL[1][0]) * f
+    ry = HEEL[1][1] + (KNUCKLE[1][1] - HEEL[1][1]) * f
+    wrap = oval_band("wrap", WRAP_Z[0], WRAP_Z[1], rx + WRAP_PROUD, ry + WRAP_PROUD, cx=KNUCKLE[0].x * f + HEEL[0].x * (1 - f))
+    assign(wrap, mat); set_vcol(wrap, STRAP); parts.append(wrap)
+    # the seat: a crude cloudy crystal sunk into the back of the hand on the knuckle arc
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=SEAT_R, location=(KNUCKLE[0].x, PALM_BACK_Y + SEAT_R * 0.35, SEAT_Z))
+    seat = bpy.context.active_object
+    seat.name = "seat"
+    seat.scale = (1.0, 0.75, 1.0)
+    assign(seat, mat); set_vcol(seat, SEAT); parts.append(seat)
     return parts
 
 
-def build_seat(mat):
-    """The one dark, dormant seat — flush cabochon, never a rim/bezel (canon: 'the vessel closed
-    around it', never a socket). 1.2cm across, sunk half into the cloth."""
-    parts = []
-    r = SEAT_R
-    loc = (0.0, PALM_Y_TOP - 0.001, SEAT_Z)
-    disc = add(bpy.ops.mesh.primitive_cylinder_add, vertices=20, radius=r, depth=r * 0.5,
-               location=loc)
-    disc.rotation_euler = (math.radians(90), 0, 0)
-    bev = disc.modifiers.new("b", 'BEVEL')
-    bev.width = r * 0.3
-    bev.segments = 3
-    bpy.ops.object.modifier_apply(modifier="b")
-    bpy.ops.object.shade_smooth()
-    assign(disc, mat)
-    set_vcol(disc, SEAT)
-    parts.append(disc)
-    dome = add(bpy.ops.mesh.primitive_ico_sphere_add, subdivisions=2, radius=r * 0.85,
-               location=(loc[0], loc[1] + r * 0.35, loc[2]))
-    dome.scale.y = 0.55
-    bpy.ops.object.shade_smooth()
-    assign(dome, mat)
-    set_vcol(dome, SEAT)
-    parts.append(dome)
-    return parts
-
-
-def finger_chain(pose, x, total, splay_deg):
-    """Returns (pts[4], radii[4], dirs[3]) for one finger under a given pose — the single source
-    both the finger geometry AND its seam ridge are built from, so a seam always rides the same
-    curl the finger uses."""
-    phis = pose["finger_phi"]
-    scale = pose["splay_scale"]
-    dirs = []
-    for i in range(3):
-        d = curl_dir(phis[i])
-        d = rotate_y_deg(d, splay_deg * scale * (0.4 + 0.3 * i))  # splay grows slightly out along the finger
-        dirs.append(d)
-    base = (x, KNUCKLE_Y, KNUCKLE_Z)
-    pts = chain_points(base, total, SEG_FRAC, dirs)
-    cum = [0.0]
-    for f in SEG_FRAC:
-        cum.append(cum[-1] + f)
-    radii = [FINGER_BASE_R + (FINGER_TIP_R - FINGER_BASE_R) * c for c in cum]
-    return pts, radii, dirs
-
-
-def thumb_chain(pose_name):
-    tbase = (THUMB_X, THUMB_Y, THUMB_Z)
-    if pose_name == "open":
-        tdirs = [THUMB_OPEN_DIR, THUMB_OPEN_DIR]   # straight thumb — one measured direction
-    else:
-        tdirs = [
-            Vector((-math.cos(math.radians(FIST_THUMB_PSI[0])), FIST_THUMB_YLIFT[0],
-                     -math.sin(math.radians(FIST_THUMB_PSI[0])))).normalized(),
-            Vector((-math.cos(math.radians(FIST_THUMB_PSI[1])), FIST_THUMB_YLIFT[1],
-                     -math.sin(math.radians(FIST_THUMB_PSI[1])))).normalized(),
-        ]
-    tpts = chain_points(tbase, THUMB_LEN, THUMB_FRAC, tdirs)
-    tcum = [0.0, THUMB_FRAC[0], 1.0]
-    tradii = [THUMB_RB + (THUMB_RT - THUMB_RB) * c for c in tcum]
-    return tpts, tradii, tdirs
-
-
-def _seam_offset_points(pts, dirs, radii, extra=0.0018):
-    """One offset point per joint (len(pts)), each pushed out from the finger's own centreline
-    along the local 'outward' normal at that joint — a continuous parallel path the seam tube
-    follows, instead of 3 separately-aimed straight segments."""
-    out = [None] * len(pts)
-    for i in range(len(pts)):
-        d = dirs[min(i, len(dirs) - 1)] if i < len(dirs) else dirs[-1]
-        d2 = dirs[i - 1] if i > 0 else dirs[0]
-        # average the incoming/outgoing segment direction at interior joints so the offset
-        # normal doesn't kink at every control point
-        davg = (d + d2)
-        if davg.length < 1e-6:
-            davg = d
-        davg.normalize()
-        perp = Vector((0.0, -davg.z, davg.y))
-        if perp.length < 1e-5:
-            perp = Vector((0, 0, 1))
-        perp.normalize()
-        r = radii[i] * 0.85 + extra
-        out[i] = pts[i] + perp * r
-    return out
-
-
-def build_seams(pose_name, mat):
-    """Visible relief the way the ref reads it — ONE continuous raised stitch ridge down each
-    finger (riding the same curl the finger itself uses), plus one across the palm. This is the
-    only relief that should mark a joint now that the finger itself is a single smooth tube."""
-    pose = POSE[pose_name]
-    parts = []
-    for (name, x, total, splay_deg) in FINGERS:
-        pts, radii, dirs = finger_chain(pose, x, total, splay_deg)
-        seam_pts = _seam_offset_points(pts, dirs, radii)
-        seam_r = [0.0035, 0.0032, 0.0027, 0.0020]
-        parts += make_tapered_tube(f"seam-{name}", seam_pts, seam_r, mat, SEAM,
-                                    bevel_res=4, resolution_u=2, cap_end=False)
-    ridge = add(bpy.ops.mesh.primitive_cylinder_add, vertices=8, radius=0.0035,
-                depth=PALM_KNUCKLE_HALF_W * 1.7, location=(0, PALM_Y_TOP - 0.001, -PALM_LEN * 0.42))
-    ridge.rotation_euler = (0, math.radians(90), 0)
-    bpy.ops.object.shade_smooth()
-    assign(ridge, mat)
-    set_vcol(ridge, SEAM)
-    parts.append(ridge)
-    return parts
-
-
-def build_digits(pose_name, mat):
-    pose = POSE[pose_name]
-    parts = []
-    fingertips = []
-    for (name, x, total, splay_deg) in FINGERS:
-        pts, radii, dirs = finger_chain(pose, x, total, splay_deg)
-        parts += make_tapered_tube(name, pts, radii, mat, CLOTH, bevel_res=8, resolution_u=2, cap_end=True)
-        fingertips.append(pts[-1])
-    tpts, tradii, tdirs = thumb_chain(pose_name)
-    parts += make_tapered_tube("thumb", tpts, tradii, mat, CLOTH, bevel_res=8, resolution_u=2, cap_end=True)
-    if pose_name == "fist":
-        ys = [p.y for p in fingertips]
-        zs = [p.z for p in fingertips]
-        xs = [p.x for p in fingertips]
-        print(f"FIST fingertip envelope: x[{min(xs):.3f},{max(xs):.3f}] "
-              f"y[{min(ys):.3f},{max(ys):.3f}] z[{min(zs):.3f},{max(zs):.3f}]  "
-              f"(palm surface y in [{PALM_Y_BOT:.3f},{PALM_Y_TOP:.3f}])")
-    return parts
-
-
-def join_all(parts, name, active=None):
+def join_all(parts, name):
     bpy.ops.object.select_all(action='DESELECT')
     for p in parts:
         p.select_set(True)
-    bpy.context.view_layer.objects.active = active or parts[0]
+    bpy.context.view_layer.objects.active = parts[0]
     bpy.ops.object.join()
     obj = bpy.context.active_object
     obj.name = name
@@ -502,13 +301,14 @@ def tri_count(obj):
 
 
 def build_hand(pose_name, mat):
-    parts = list(build_palm(mat))
-    parts.append(build_forearm_stub(mat))
-    parts += build_cuff_and_strap(mat)
-    parts += build_seat(mat)
-    parts += build_seams(pose_name, mat)
-    parts += build_digits(pose_name, mat)
+    hand = build_skin_hand(pose_name)
+    assign(hand, mat); set_vcol(hand, CLOTH, above_z=SLEEVE_Z, above_rgb=SLEEVE)
+    parts = [hand] + build_extras(mat)
     obj = join_all(parts, f"glove_{pose_name}")
+    # sanity: the hand must be wider than the forearm, and the fist's fingertips must stay outside the palm
+    xs = [v.co.x for v in obj.data.vertices]
+    ys = [v.co.y for v in obj.data.vertices]
+    print(f"{obj.name}: x[{min(xs):.3f},{max(xs):.3f}] y[{min(ys):.3f},{max(ys):.3f}]")
     return obj
 
 
@@ -578,16 +378,11 @@ def cam_at(scene, loc, target=(0, 0, -0.06)):
 
 
 VIEWS = [
-    ("back",       (0.0, 0.30, -0.09)),    # dorsal — the seat, the seams
-    ("palm",       (0.0, -0.30, -0.06)),   # palmar
-    ("thumb-side", (-0.32, 0.05, -0.06)),  # profile from -X, thumb toward camera
-    ("3q-behind",  (0.16, 0.20, 0.16)),    # three-quarter, behind + above
+    ("back",       (0.0, 0.30, -0.09)),
+    ("palm",       (0.0, -0.30, -0.06)),
+    ("thumb-side", (-0.32, 0.05, -0.06)),
+    ("3q-behind",  (0.16, 0.20, 0.16)),
 ]
-_only = os.environ.get("VIEWS_ONLY")
-if _only:
-    _names = set(_only.split(","))
-    VIEWS = [v for v in VIEWS if v[0] in _names]
-_poses_only = os.environ.get("POSES_ONLY")
 
 
 def clear_lights_and_cameras(scene):
@@ -597,11 +392,7 @@ def clear_lights_and_cameras(scene):
 
 
 def render_turntable_all(scene, fist, open_):
-    pairs = [(fist, "fist"), (open_, "open")]
-    if _poses_only:
-        keep = set(_poses_only.split(","))
-        pairs = [p for p in pairs if p[1] in keep]
-    for obj, pose_name in pairs:
+    for obj, pose_name in ((fist, "fist"), (open_, "open")):
         fist.hide_render = (obj is not fist)
         open_.hide_render = (obj is not open_)
         for vname, loc in VIEWS:
@@ -616,86 +407,51 @@ def render_turntable_all(scene, fist, open_):
     open_.hide_render = False
 
 
-# ── the 9th frame: THE PLAYER'S OWN VIEW ───────────────────────────────────────────────────────
-# Camera fixed at the world origin, looking down world -Z, +Y up, 75 deg VERTICAL fov — exactly
-# `hands.ts`'s own tuned frame (fov 75, DEFAULT_TUNE wrist = 0.32, -0.20, -0.50). The hand's
-# local -Z (its fingers) is aimed along the given relative vector; `to_track_quat('-Z','Y')`
-# points local -Z there while keeping local +Y as close to world +Y as this allows — i.e. the
-# rig's own "aim, then roll" logic, done as a single quaternion instead of the two-point
-# lookAt the live rig uses (the RESULT is the same rest pose; this is a static render, not the
-# runtime rig).
+# ── the 9th frame: THE PLAYER'S OWN VIEW — hands.ts's frame (fov 75 vertical, DEFAULT_TUNE wrist) ──
 POV_CAM_FOV_V = 75.0
 POV_HAND_POS = Vector((0.32, -0.20, -0.50))
 POV_AIM_REL = Vector((-0.14, 0.27, -0.16))
 
 
 def render_player_pov(scene, fist, open_):
-    clear_lights_and_cameras(scene)
-    # hide the two originals from render (do NOT delete them — main() still needs to select them
-    # for the glTF export after this) and add a throwaway object sharing the POSE's mesh DATA,
-    # posed at the rig's rest transform.
-    fist.hide_render = True
-    open_.hide_render = True
-    # ★ OPEN reads far better here than fist: at this fixed rest-pose angle (the forearm/cuff
-    # end is closest to camera and largest by perspective, the hand itself is smallest and
-    # farthest) a closed fist balls into a small mass that gets lost against the bigger nearer
-    # cuff; the open hand's spread fingers + thumb give it enough silhouette area to read
-    # clearly as "a gloved hand" at a glance. Both poses ship in the GLB either way.
-    pov_pose = os.environ.get("POV_POSE", "open")
-    src = open_ if pov_pose == "open" else fist
-
-    hand = bpy.data.objects.new("pov_hand", src.data)
-    scene.collection.objects.link(hand)
-    hand.location = POV_HAND_POS
-
-    # ★ `to_track_quat('-Z','Y')` is degenerate here: the given aim direction is 79% world +Y
-    # (the forearm "rises steeply into the frame" per hands.ts's own comment on this exact rest
-    # pose), so trying to also keep local +Y close to world +Y leaves the roll about the aim
-    # axis almost unconstrained — the first cut picked an arbitrary one and the palm/cuff ended
-    # up facing the lens face-on (the "big round blob" in the first render). The real rig names
-    # what roll is FOR: "turn the back of the glove toward the lens." So: build the basis
-    # directly, choosing local +Y (back of hand) to lean toward the CAMERA as much as the fixed
-    # aim direction allows, instead of toward world up.
-    from mathutils import Matrix
-    f = POV_AIM_REL.normalized()               # local -Z (fingers), fixed by the brief
-    to_cam = (Vector((0, 0, 0)) - POV_HAND_POS).normalized()
-    up_ref = to_cam - f * to_cam.dot(f)         # component of "toward camera" perpendicular to f
-    if up_ref.length < 1e-4:
-        up_ref = Vector((0, 1, 0)) - f * f.y
-    up_ref.normalize()
-    right = f.cross(up_ref).normalized()        # local +X candidate
-    true_up = right.cross(f).normalized()        # local +Y, perpendicular to f, leaning toward camera
-    # world = basis @ local ; columns are local axes expressed in world space. Local -Z = f, so
-    # local +Z = -f. thumb is -X, so local +X = -right if `right` lands on the thumb side —
-    # checked against the render; the sign here matched on the first try.
-    basis = Matrix((right, true_up, -f)).transposed()
-    hand.rotation_mode = 'QUATERNION'
-    hand.rotation_quaternion = basis.to_quaternion()
-
-    # warm key from above-left of the CAMERA (world -X, +Y, slightly in front toward -Z)
-    add_area(scene, (-0.35, 0.45, -0.30), 3.0, (1.0, 0.90, 0.75), 0.5, target=tuple(POV_HAND_POS), name="povkey")
-    add_area(scene, (0.4, -0.1, -0.2), 0.6, (0.75, 0.82, 0.95), 0.4, target=tuple(POV_HAND_POS), name="povfill")
-
-    world = scene.world
-    world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.05, 0.06, 0.09, 1)
-    world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.6
-
-    cd = bpy.data.cameras.new("povcam")
-    cd.sensor_fit = 'VERTICAL'
-    cd.angle_y = math.radians(POV_CAM_FOV_V)
-    cam = bpy.data.objects.new("povcam", cd)
-    cam.location = (0, 0, 0)
-    cam.rotation_euler = (0, 0, 0)   # default Blender cam looks down -Z, +Y up — exactly the spec
-    scene.collection.objects.link(cam)
-    scene.camera = cam
-
-    scene.render.resolution_x = 960
-    scene.render.resolution_y = 540
-    path = os.path.join(TT_DIR, "player-pov.png")
-    scene.render.filepath = path
-    bpy.ops.render.render(write_still=True)
-    print(f"RENDERED {path}  (hand at {tuple(POV_HAND_POS)}, aimed at rel {tuple(POV_AIM_REL)})")
-    bpy.data.objects.remove(hand, do_unlink=True)
+    for pov_pose, src in (("open", open_), ("fist", fist)):
+        clear_lights_and_cameras(scene)
+        fist.hide_render = True
+        open_.hide_render = True
+        hand = bpy.data.objects.new("pov_hand", src.data)
+        scene.collection.objects.link(hand)
+        hand.location = POV_HAND_POS
+        f = POV_AIM_REL.normalized()
+        to_cam = (Vector((0, 0, 0)) - POV_HAND_POS).normalized()
+        up_ref = to_cam - f * to_cam.dot(f)
+        if up_ref.length < 1e-4:
+            up_ref = Vector((0, 1, 0)) - f * f.y
+        up_ref.normalize()
+        right = f.cross(up_ref).normalized()
+        true_up = right.cross(f).normalized()
+        basis = Matrix((right, true_up, -f)).transposed()
+        hand.rotation_mode = 'QUATERNION'
+        hand.rotation_quaternion = basis.to_quaternion()
+        add_area(scene, (-0.35, 0.45, -0.30), 3.0, (1.0, 0.90, 0.75), 0.5, target=tuple(POV_HAND_POS), name="povkey")
+        add_area(scene, (0.4, -0.1, -0.2), 0.6, (0.75, 0.82, 0.95), 0.4, target=tuple(POV_HAND_POS), name="povfill")
+        world = scene.world
+        world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.05, 0.06, 0.09, 1)
+        world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.6
+        cd = bpy.data.cameras.new("povcam")
+        cd.sensor_fit = 'VERTICAL'
+        cd.angle_y = math.radians(POV_CAM_FOV_V)
+        cam = bpy.data.objects.new("povcam", cd)
+        cam.location = (0, 0, 0)
+        cam.rotation_euler = (0, 0, 0)
+        scene.collection.objects.link(cam)
+        scene.camera = cam
+        scene.render.resolution_x = 960
+        scene.render.resolution_y = 540
+        path = os.path.join(TT_DIR, f"player-pov-{pov_pose}.png")
+        scene.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+        print(f"RENDERED {path}")
+        bpy.data.objects.remove(hand, do_unlink=True)
     fist.hide_render = False
     open_.hide_render = False
 
@@ -706,33 +462,33 @@ def main():
     mat = make_material()
     fist = build_hand("fist", mat)
     open_ = build_hand("open", mat)
-    fist.name = "glove_fist"; fist.data.name = "glove_fist"
-    open_.name = "glove_open"; open_.data.name = "glove_open"
-
     for o in (fist, open_):
-        n = tri_count(o)
-        print(f"TRIS {o.name}: {n}")
+        print(f"TRIS {o.name}: {tri_count(o)}")
 
     if DO_RENDER:
         configure_render(scene)
         render_turntable_all(scene, fist, open_)
         render_player_pov(scene, fist, open_)
 
+    # ★★ THE EXPORT FRAME. The glTF exporter converts Blender's Z-up to glTF's Y-up: file (x,y,z) =
+    # blender (x, z, −y). Drafts 1–3 built in the RIG's frame (fingers −Z, back +Y) and exported it
+    # raw, so the file's fingers pointed along −Y and its forearm along +Y — the glove hung 90°
+    # off the stick forearm in-game, a head on a handle. THAT was the hammer. So: rotate the
+    # finished meshes +90° about X (build fingers −Z → blender +Y → file −Z; build back +Y →
+    # blender +Z → file +Y) AFTER the review renders, which look at the build frame. Verified by
+    # reading the file's POSITION accessor bounds back: fingers must be the long −Z extent.
+    rot = Matrix.Rotation(math.radians(90.0), 4, 'X')
+    for o in (fist, open_):
+        o.data.transform(rot)
+        o.data.update()
     bpy.ops.object.select_all(action='DESELECT')
     fist.select_set(True)
     open_.select_set(True)
     glb_path = os.path.join(OUT, "glove-t0.glb")
     bpy.ops.export_scene.gltf(
-        filepath=glb_path,
-        export_format='GLB',
-        use_selection=True,
-        export_apply=True,
-        export_yup=True,
-        export_materials='EXPORT',
-        export_vertex_color='MATERIAL',
-        export_normals=True,
-        export_cameras=False,
-        export_lights=False,
+        filepath=glb_path, export_format='GLB', use_selection=True, export_apply=True, export_yup=True,
+        export_materials='EXPORT', export_vertex_color='MATERIAL', export_normals=True,
+        export_cameras=False, export_lights=False,
     )
     print(f"GLB {glb_path}")
 

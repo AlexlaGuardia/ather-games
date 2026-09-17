@@ -230,7 +230,7 @@ export function createHands(): Hands {
     tuneSeen.v = handsTune.version; tuneSeen.k = k
   }
   // Local frame: +z is toward the lens (the elbow), −z is away (the fingers).
-  part(arm, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 - 0.02)
+  const forearm = part(arm, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 - 0.02)
   const cuff = part(arm, cube, COLOUR.cord, P.cuff.w, P.cuff.h, P.cuff.l, 0, 0, 0)
   const glove = part(arm, cube, COLOUR.glove, P.glove.w, P.glove.h, P.glove.l, 0, -0.005, -P.glove.l / 2 - P.cuff.l / 2)
   // the pale palm: a thin plate on the glove's −y face — the INSIDE, where the held thing sits
@@ -298,7 +298,10 @@ export function createHands(): Hands {
   arm.add(held)
 
   // ── the modelled glove, when one is loaded: the stick parts hide, these show ──
-  const stickParts: THREE.Object3D[] = [glove, palm, cuff, seat]   // the modelled glove brings its own cuff and seat
+  // ★ The box forearm hides too (09-16): the file's sleeve runs from the glove's hem past the frame
+  // edge. Left showing, the box was the HANDLE of the hammer Alex saw — the glove hung 90° off its
+  // end (the file's frame was wrong; fixed in the producer) and the box read as the arm's shaft.
+  const stickParts: THREE.Object3D[] = [glove, palm, cuff, seat, forearm]   // the modelled glove brings its own sleeve, hem and seat
   let gloveFist: THREE.Object3D | null = null, gloveOpen: THREE.Object3D | null = null
   /** The depth trick and the ambient floor, applied to any mesh that joins the rig later. */
   const adopt = (o: THREE.Object3D) => {
