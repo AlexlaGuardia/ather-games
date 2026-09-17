@@ -81,6 +81,12 @@ export type CreativeActions = {
   ghost: (at: Vec3 | null, eye: Vec3) => Vec3[]
   onBreak: (cell: Vec3) => void
   onPlace: (cell: Vec3, normal: Vec3, eye: Vec3) => void
+  /**
+   * ★ BOX FILL (F). Two corners, inclusive, and what to do with every cell between: `fill` with the
+   * held block (cells already taken, off the pad or in the body are skipped, not refused), `clear`
+   * every block (pieces are left standing — clearing a wall should not eat its door).
+   */
+  onFill: (a: Vec3, b: Vec3, op: 'fill' | 'clear', eye: Vec3) => void
   onPick: (cell: Vec3) => void
   /** Wheel over the hotbar: +1 down, -1 up. */
   onScroll: (delta: 1 | -1) => void
@@ -112,6 +118,8 @@ export function CreativeRig({ active, actions, readout, start }: {
     yaw: 0, pitch: 0, speed: BASE_SPEED, sprint: false, lastW: -1, held: new Set<string>(),
     locked: false, button: -1 as number, nextAt: 0, lastFired: '', swept: 0,
     target: null as null | { cell: Vec3; normal: Vec3; dist: number }, ghostKey: '', readoutText: '',
+    // the fill tool: armed by F; `a` is the first corner once a click has set it
+    fill: false, a: null as Vec3 | null, aClear: false, fillKey: '',
   })
 
   // The outlines: the looked-at cell (dark, thin) and the cells a place would fill (gold, faint).
@@ -123,13 +131,27 @@ export function CreativeRig({ active, actions, readout, start }: {
     g.add(outline)
     const ghost = new THREE.Group(); ghost.name = 'ghost'
     g.add(ghost)
+    // the fill box: ONE unit box + its edges, scaled to the span — a 20×20×10 fill is one mesh, not
+    // four thousand
+    const fillBox = new THREE.Group(); fillBox.name = 'fill'; fillBox.visible = false
+    g.add(fillBox)
     return g
   }, [])
   const ghostMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.22, depthWrite: false }), [])
   const ghostEdge = useMemo(() => new THREE.LineBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.7 }), [])
   const unitBox = useMemo(() => new THREE.BoxGeometry(0.98, 0.98, 0.98), [])
   const unitEdges = useMemo(() => new THREE.EdgesGeometry(unitBox), [unitBox])
-  useEffect(() => () => { unitBox.dispose(); unitEdges.dispose(); ghostMat.dispose(); ghostEdge.dispose() }, [unitBox, unitEdges, ghostMat, ghostEdge])
+  const fillMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0x7ad7ff, transparent: true, opacity: 0.18, depthWrite: false }), [])
+  const fillEdge = useMemo(() => new THREE.LineBasicMaterial({ color: 0x7ad7ff, transparent: true, opacity: 0.9 }), [])
+  const oneBox = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
+  const oneEdges = useMemo(() => new THREE.EdgesGeometry(oneBox), [oneBox])
+  useEffect(() => {
+    const fb = group.getObjectByName('fill') as THREE.Group
+    fb.add(new THREE.Mesh(oneBox, fillMat), new THREE.LineSegments(oneEdges, fillEdge))
+    return () => { fb.clear() }
+  }, [group, oneBox, oneEdges, fillMat, fillEdge])
+  useEffect(() => () => { unitBox.dispose(); unitEdges.dispose(); ghostMat.dispose(); ghostEdge.dispose(); oneBox.dispose(); oneEdges.dispose(); fillMat.dispose(); fillEdge.dispose() },
+    [unitBox, unitEdges, ghostMat, ghostEdge, oneBox, oneEdges, fillMat, fillEdge])
 
   // Enter where the previous stance left the camera, facing the way it faced. The FIRST entry has no
   // previous stance — creative is the default and the Canvas camera sits at its own origin — so it
@@ -153,7 +175,9 @@ export function CreativeRig({ active, actions, readout, start }: {
   useEffect(() => {
     const el = gl.domElement
     const st = s.current
-    const setLocked = (v: boolean) => { st.locked = v; if (!v) { st.held.clear(); st.button = -1 } act.current.onLocked(v) }
+    // Losing the lock disarms the fill too — Esc is the browser's own exit, and it is also the key
+    // every hand reaches for to cancel a tool.
+    const setLocked = (v: boolean) => { st.locked = v; if (!v) { st.held.clear(); st.button = -1; st.fill = false; st.a = null } act.current.onLocked(v) }
     const lockChange = () => setLocked(document.pointerLockElement === el)
     const lock = () => {
       if (document.pointerLockElement === el) return
@@ -172,6 +196,16 @@ export function CreativeRig({ active, actions, readout, start }: {
     const fire = (button: number) => {
       const t = st.target
       if (!t) return
+      if (st.fill) {
+        // a corner: right names the cell a block would go in, left the solid cell under the crosshair
+        const c = button === 2 ? ((t.normal.x || t.normal.y || t.normal.z) ? { x: t.cell.x + t.normal.x, y: t.cell.y + t.normal.y, z: t.cell.z + t.normal.z } : null)
+                : button === 0 ? t.cell : null
+        if (!c) return
+        if (!st.a) { st.a = c; st.aClear = button === 0; return }
+        act.current.onFill(st.a, c, button === 0 ? 'clear' : 'fill', camera.position)
+        st.fill = false; st.a = null
+        return
+      }
       st.lastFired = `${t.cell.x},${t.cell.y},${t.cell.z}`; st.swept = 0
       if (button === 0) act.current.onBreak(t.cell)
       else if (button === 2) { if (t.normal.x || t.normal.y || t.normal.z) act.current.onPlace({ x: t.cell.x + t.normal.x, y: t.cell.y + t.normal.y, z: t.cell.z + t.normal.z }, t.normal, camera.position) }
@@ -185,7 +219,7 @@ export function CreativeRig({ active, actions, readout, start }: {
       // ⚠ WALL TIME, NOT THE FRAME CLOCK. `clock.elapsedTime` is the LAST frame's stamp; a press that
       // lands late in a frame read a stale clock and the repeat fired on the very next frame — one
       // click, two blocks. Invisible at 60 fps (≤16 ms stale), a certainty at the harness's 3 fps.
-      if (e.button === 0 || e.button === 2) { st.button = e.button; st.nextAt = performance.now() / 1000 + REPEAT * 1.6 }
+      if ((e.button === 0 || e.button === 2) && !st.fill) { st.button = e.button; st.nextAt = performance.now() / 1000 + REPEAT * 1.6 }
     }
     const mouseUp = () => { st.button = -1 }
     const wheel = (e: WheelEvent) => {
@@ -214,6 +248,11 @@ export function CreativeRig({ active, actions, readout, start }: {
         case 'KeyE':
           e.preventDefault()
           if (st.locked) document.exitPointerLock(); else lock()
+          return
+        case 'KeyF':
+          // arm the fill (or disarm it, corner and all); only while locked — a fill needs a crosshair
+          if (!st.locked) return
+          st.fill = !st.fill; st.a = null; st.button = -1
           return
       }
     }
@@ -291,15 +330,38 @@ export function CreativeRig({ active, actions, readout, start }: {
         const ln = new THREE.LineSegments(unitEdges, ghostEdge); ln.position.copy(box.position); ghost.add(ln)
       }
     }
+    // ── the fill box ──────────────────────────────────────────────────────────────────────────
+    // From the first corner to the cell the crosshair would build in now (a block's place cell);
+    // before a corner is set, nothing but the readout's "fill: pick a corner".
+    const fb = group.getObjectByName('fill') as THREE.Group
+    let fillText = ''
+    if (st.fill) {
+      // the first corner's button says which cell the second is: a clear reaches to the solid cell
+      // under the crosshair, a fill to the cell a block would go in
+      const b = st.aClear ? (hit ? hit.cell : null) : (at ?? (hit ? hit.cell : null))
+      if (st.a && b) {
+        const lo = { x: Math.min(st.a.x, b.x), y: Math.min(st.a.y, b.y), z: Math.min(st.a.z, b.z) }
+        const hi = { x: Math.max(st.a.x, b.x), y: Math.max(st.a.y, b.y), z: Math.max(st.a.z, b.z) }
+        const w = hi.x - lo.x + 1, h = hi.y - lo.y + 1, d = hi.z - lo.z + 1
+        const fk = `${lo.x},${lo.y},${lo.z}|${w},${h},${d}`
+        if (fk !== st.fillKey) {
+          st.fillKey = fk
+          fb.position.set(lo.x + w / 2, lo.y + h / 2, lo.z + d / 2); fb.scale.set(w + 0.01, h + 0.01, d + 0.01)
+        }
+        fb.visible = true
+        fillText = `fill ${w}×${h}×${d} = ${w * h * d} · right fills, left clears · `
+      } else if (st.a) {
+        fb.position.set(st.a.x + 0.5, st.a.y + 0.5, st.a.z + 0.5); fb.scale.set(1.01, 1.01, 1.01); fb.visible = true; st.fillKey = ''
+        fillText = 'fill: corner set · look at the other · '
+      } else { fb.visible = false; st.fillKey = ''; fillText = 'fill: click a corner (right = a place, left = a block) · F cancels · ' }
+    } else if (fb.visible) { fb.visible = false; st.fillKey = '' }
+
     if (hit) {
       outline.visible = true
       outline.position.set(hit.cell.x + 0.5, hit.cell.y + 0.5, hit.cell.z + 0.5)
-      const text = act.current.describe(hit.cell)
-      if (text !== st.readoutText && readout.current) { st.readoutText = text; readout.current.textContent = text }
-    } else {
-      outline.visible = false
-      if (st.readoutText && readout.current) { st.readoutText = ''; readout.current.textContent = '' }
-    }
+    } else outline.visible = false
+    const text = fillText + (hit ? act.current.describe(hit.cell) : '')
+    if (text !== st.readoutText && readout.current) { st.readoutText = text; readout.current.textContent = text }
 
     // ── held-button repeat ────────────────────────────────────────────────────────────────────
     if (st.button >= 0 && st.locked) {

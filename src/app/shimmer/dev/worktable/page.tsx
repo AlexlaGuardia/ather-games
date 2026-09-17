@@ -71,6 +71,8 @@ const PAD = 40
  * sites: `dev/hold` had 91 figures a block under the ground for exactly the want of one of these.
  */
 const PAD_TOP = 0
+/** The most cells one box fill may touch. */
+const FILL_MAX = 8192
 
 /**
  * The palette, DERIVED. `placeable` is the registry's own answer to "can a player put this down",
@@ -682,6 +684,25 @@ export default function WorktablePage() {
       if (!canFill([at], eye)) return
       const next = new Map(live.current.cells); next.set(key(at.x, at.y, at.z), material); push(next)
     },
+    onFill: (a: Vec3, b: Vec3, op: 'fill' | 'clear', eye: Vec3) => {
+      const lo = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) }
+      const hi = { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) }
+      const n = (hi.x - lo.x + 1) * (hi.y - lo.y + 1) * (hi.z - lo.z + 1)
+      // ⚠ A CEILING, SAID OUT LOUD. The undo stack snapshots whole maps; a fill the size of the pad
+      // cubed is 64k cells per snapshot, and the span ceiling already refuses to save a structure
+      // that big. Refused with the number rather than silently trimmed.
+      if (n > FILL_MAX) { setStatus(`FILL REFUSED: ${n} cells — the ceiling is ${FILL_MAX}`); return }
+      const next = new Map(live.current.cells)
+      let did = 0
+      for (let y = lo.y; y <= hi.y; y++) for (let z = lo.z; z <= hi.z; z++) for (let x = lo.x; x <= hi.x; x++) {
+        const c = { x, y, z }, k = key(x, y, z)
+        if (op === 'clear') { if (next.delete(k)) did++ }
+        else if (mode === 'block' && canFill([c], eye)) { next.set(k, material); did++ }
+      }
+      if (!did) { setStatus(op === 'fill' ? (mode === 'block' ? 'fill: nothing to fill there' : 'fill: hold a BLOCK to fill with') : 'clear: no blocks in that box'); return }
+      push(next)
+      setStatus(`${op === 'fill' ? 'filled' : 'cleared'} ${did} — ${hi.x - lo.x + 1}×${hi.y - lo.y + 1}×${hi.z - lo.z + 1}`)
+    },
     onPick: (c: Vec3) => {
       // Middle click: the looked-at thing goes in the hand — into a slot that already holds it, else the picked one.
       const k = key(c.x, c.y, c.z)
@@ -781,7 +802,7 @@ export default function WorktablePage() {
 
         <div style={{ opacity: 0.65, fontSize: 11, marginBottom: 6 }}>
           {creative
-            ? <>left breaks · right places · middle picks · wheel / 1–9 hotbar · R turns a piece · W A S D fly, Space up, Shift down, double-tap W sprint, − / = speed · E inventory · Ctrl+Z undo</>
+            ? <>left breaks · right places · middle picks · <b>F</b> box fill (corner, corner: right fills, left clears) · wheel / 1–9 hotbar · R turns a piece · W A S D fly, Space up, Shift down, double-tap W sprint, − / = speed · E inventory · Ctrl+Z undo</>
             : <>click to place · shift-click to remove · middle/right-drag to orbit · wheel to zoom · 1–9 hotbar · R turns a piece · Ctrl+Z undo</>}
         </div>
         {id === STATION_BP_ID && (
