@@ -62,6 +62,8 @@ export interface ConsoleCtx {
   put: (id: string, x: number, y: number, z: number, rot?: number) => string
   /** Move every planted bed's clock to a growth fraction (1 = ripe). Owner-gated dev instrument. */
   grow: (progress: number) => string
+  /** Put a crop (id or seed id) in the bed at world coordinates, skipping seed/mana/level. Owner-gated dev instrument. */
+  plant: (crop: string, x: number, y: number, z: number) => string
   /**
    * Put a Hollow in front of the keeper. A TEST HARNESS — the same standing warning `/rune` and
    * `/waymark` carry: this is not how the dark arrives. The night's own rules (`hollowNight`,
@@ -339,6 +341,15 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.grow(Math.min(pct, 100) / 100)
     },
     suggest: (i) => i === 0 ? ['ripe', '0', '30', '60', '90'] : [] },
+  { name: 'plant', usage: 'plant <crop|seed> <x> <y> <z>  (~ = here; ~ on y = your feet)', help: 'put a crop in the bed at those coordinates, no seed spent — to stand a row and look', owner: true,
+    run: (a, c) => {
+      if (!a[0] || a.length < 4) return 'plant what, where? plant <crop> <x> <y> <z>'
+      const here = c.pos()
+      const rel = (t: string, base: number) => t.startsWith('~') ? base + (Number(t.slice(1)) || 0) : Number(t)
+      const x = Math.floor(rel(a[1], here.x)), y = Math.floor(rel(a[2], here.y)), z = Math.floor(rel(a[3], here.z))
+      if (![x, y, z].every(Number.isFinite)) return 'plant where? three numbers (~ allowed)'
+      return c.plant(a[0], x, y, z)
+    } },
   { name: 'tp', usage: 'tp <x> <z>  (~ = here, ~-20 = 20 west)', help: 'teleport to ground level', owner: true,
     run: (a, c) => {
       if (!a[0] || !a[1]) return 'tp needs two coordinates'

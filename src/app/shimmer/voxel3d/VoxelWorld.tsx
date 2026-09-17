@@ -64,7 +64,7 @@ import BindingsPanel from './BindingsPanel'
 import { hintsFor, hintFor } from '@/lib/input/hints'
 import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
-  bedsToSave, bedsFromSave, type PlantedBeds,
+  bedsToSave, bedsFromSave, bedKey, bedZoneId, type PlantedBeds,
 } from './planting'
 import { plantedSpots, plantedSignature } from './planted-feed'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
@@ -1503,7 +1503,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => {
     // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
     // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
@@ -1600,6 +1600,7 @@ export default function VoxelWorld() {
     hostiles: () => worldCmd.current ? worldCmd.current.hostiles() : 'the world is still waking',
     put: (id, x, y, z, rot) => worldCmd.current ? worldCmd.current.put(id, x, y, z, rot) : 'the world is still waking',
     grow: (progress) => worldCmd.current ? worldCmd.current.grow(progress) : 'the world is still waking',
+    plant: (crop, x, y, z) => worldCmd.current ? worldCmd.current.plant(crop, x, y, z) : 'the world is still waking',
     party: partyOps,
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
@@ -3109,7 +3110,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -3653,6 +3654,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         let n = 0
         for (const c of beds.current.values()) { c.plantedAt = Date.now() - progress * c.growthDuration; n++ }
         return n ? `${n} bed${n === 1 ? '' : 's'} set to ${Math.round(progress * 100)}%` : 'nothing planted'
+      },
+      // ★ `/plant` (2026-09-16) — put a crop in the bed at world coordinates, no seed, no mana, no
+      // level. `/put`'s sibling for the planted feed: stands a row of every crop to look at, which
+      // by the rules would mean growing fifteen seeds first. Refuses anything that is not a bed,
+      // and writes the SAME record `plantInBed` writes, so it saves, grows and harvests like one.
+      plant: (crop: string, x: number, y: number, z: number) => {
+        const def = CROP_DEFS[crop] ?? CROP_DEFS[cropForSeed(crop) ?? '']
+        if (!def) return `no such crop or seed: ${crop}`
+        if (!isGardenBed(voxel(x, y, z))) return `no bed at ${x} ${y} ${z}`
+        beds.current.set(bedKey(x, y, z), {
+          id: `bed-${x},${y},${z}`, cropId: def.id, tileX: x, tileY: z, zoneId: bedZoneId(y),
+          plantedAt: Date.now(), growthDuration: def.growthMs,
+        })
+        return `${def.name} in the bed at ${x} ${y} ${z}`
       },
       space: (to?: string) => {
         const want: Space = to === 'plot' ? 'plot' : to === 'wilds' ? 'wilds' : to === 'glade' ? 'glade'
