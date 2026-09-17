@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto'
 import { stationBlocker, absentAt, type StationDef, type StationRecipe } from './station'
 import { CAULDRON, brewBlocker } from './brew'
 import { STATIONS, stationFor } from './station-registry'
-import { POTION_DEFS } from '../engine/alchemy'
+import type { PotionDef } from '../engine/alchemy'
 import { blockDef } from '../voxel/registry'
 
 let pass = 0
@@ -26,7 +26,52 @@ function ok(cond: boolean, label: string) { if (cond) pass++; else fails.push(la
 // the world — a summary statistic that survives the change it exists to detect. Only a hash carries
 // the claim. The histogram is printed below purely so a reader can see the grid reaches every branch.
 {
-  const defs = Object.values(POTION_DEFS).sort((a, b) => a.id.localeCompare(b.id))
+  // ★★ THE GRID RUNS OVER A FROZEN DEF SET, NOT THE LIVE `POTION_DEFS` (2026-09-16). The hash was
+  // recorded over the live table and the live table is DATA: when the forage landed (`ed2bd09`,
+  // glow-moss into the draught, puff spores into two more) the hash moved and this guard went red
+  // with the ladder untouched. A behaviour guard that keys off a recipe row fails for the wrong
+  // reason, and a guard that fails for the wrong reason gets re-pinned without a look — which is
+  // how it stops guarding. These rows are `POTION_DEFS` as they stood at the pinning commit
+  // (`d37138d`, 08-29), the five fields `CAULDRON.toRecipe` reads and nothing else; the ORIGINAL
+  // hash still reproduces over them, so the claim in the label is the claim that was made. Edit a
+  // recipe in `engine/alchemy.ts` freely; touch these rows and you are re-pinning, say so.
+  const FROZEN: PotionDef[] = ([
+  { id: 'ather_infusion', minAlchemyLevel: 20, manaCost: 50, resultCount: 1,
+    recipe: [{ itemId: 'ather_crystal', count: 1 }, { itemId: 'crystallized_sap', count: 2 }, { itemId: 'pure_mana_core', count: 3 }] },
+  { id: 'bond_philter', minAlchemyLevel: 8, manaCost: 18, resultCount: 1,
+    recipe: [{ itemId: 'ribboneel', count: 3 }, { itemId: 'moonberry', count: 3 }, { itemId: 'amber_sap', count: 2 }] },
+  { id: 'crystal_elixir', minAlchemyLevel: 7, manaCost: 20, resultCount: 1,
+    recipe: [{ itemId: 'violet_crystal', count: 2 }, { itemId: 'water_crystal', count: 2 }, { itemId: 'amber_sap', count: 3 }] },
+  { id: 'dawn_cordial', minAlchemyLevel: 25, manaCost: 60, resultCount: 1,
+    recipe: [{ itemId: 'dawnwood_plank', count: 2 }, { itemId: 'crystal_rinn', count: 1 }, { itemId: 'crystallized_sap', count: 2 }] },
+  { id: 'deep_essence', minAlchemyLevel: 15, manaCost: 35, resultCount: 1,
+    recipe: [{ itemId: 'moonkoi', count: 2 }, { itemId: 'pearlshell', count: 2 }, { itemId: 'starwillow_branch', count: 3 }] },
+  { id: 'dreamroot_elixir', minAlchemyLevel: 14, manaCost: 28, resultCount: 1,
+    recipe: [{ itemId: 'dreamroot_essence', count: 3 }, { itemId: 'crystalcap_spore', count: 2 }] },
+  { id: 'earth_infusion', minAlchemyLevel: 10, manaCost: 25, resultCount: 1,
+    recipe: [{ itemId: 'earth_crystal', count: 1 }, { itemId: 'rootvine_coil', count: 2 }, { itemId: 'amber_sap', count: 1 }] },
+  { id: 'glowfin_brew', minAlchemyLevel: 5, manaCost: 15, resultCount: 1,
+    recipe: [{ itemId: 'glowfin', count: 3 }, { itemId: 'ribboneel', count: 2 }, { itemId: 'raw_mana_shard', count: 3 }] },
+  { id: 'harvest_brew', minAlchemyLevel: 2, manaCost: 6, resultCount: 2,
+    recipe: [{ itemId: 'shimmerwheat_grain', count: 5 }, { itemId: 'glowroot_bulb', count: 3 }] },
+  { id: 'mana_draught', minAlchemyLevel: 1, manaCost: 5, resultCount: 2,
+    recipe: [{ itemId: 'raw_mana_shard', count: 5 }] },
+  { id: 'mana_infusion', minAlchemyLevel: 10, manaCost: 25, resultCount: 1,
+    recipe: [{ itemId: 'violet_crystal', count: 1 }, { itemId: 'violetbloom_petal', count: 2 }, { itemId: 'amber_sap', count: 1 }] },
+  { id: 'moonvine_tonic', minAlchemyLevel: 6, manaCost: 12, resultCount: 1,
+    recipe: [{ itemId: 'moonvine_leaf', count: 4 }, { itemId: 'sunpetal_bloom', count: 2 }] },
+  { id: 'shard_tonic', minAlchemyLevel: 1, manaCost: 8, resultCount: 1,
+    recipe: [{ itemId: 'raw_mana_shard', count: 3 }, { itemId: 'goldwood_bark', count: 2 }] },
+  { id: 'shimmer_salve', minAlchemyLevel: 3, manaCost: 10, resultCount: 1,
+    recipe: [{ itemId: 'shimmerscale', count: 4 }, { itemId: 'sunfruit', count: 2 }] },
+  { id: 'starlight_tincture', minAlchemyLevel: 12, manaCost: 30, resultCount: 1,
+    recipe: [{ itemId: 'starwillow_sap', count: 3 }, { itemId: 'pure_mana_core', count: 2 }, { itemId: 'glowfin', count: 2 }] },
+  { id: 'storm_infusion', minAlchemyLevel: 10, manaCost: 25, resultCount: 1,
+    recipe: [{ itemId: 'storm_crystal', count: 1 }, { itemId: 'stormgrass_blade', count: 2 }, { itemId: 'amber_sap', count: 1 }] },
+  { id: 'water_infusion', minAlchemyLevel: 10, manaCost: 25, resultCount: 1,
+    recipe: [{ itemId: 'water_crystal', count: 1 }, { itemId: 'tidepetal_bloom', count: 2 }, { itemId: 'amber_sap', count: 1 }] },
+  ] satisfies Pick<PotionDef, 'id' | 'minAlchemyLevel' | 'manaCost' | 'resultCount' | 'recipe'>[]).map(d => ({ ...d, name: d.id, tier: 1 as const, xpGrant: 0 }))
+  const defs = FROZEN
   const rows: string[] = []
   const tally: Record<string, number> = {}
   for (const d of defs)
