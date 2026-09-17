@@ -306,6 +306,10 @@ export function createHands(): Hands {
   //    small block; a piece as a flatter slab of its material). One mesh, one material of its own.
   const heldMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true })
   const held = new THREE.Mesh(cube, heldMat)
+  // ★ ONE material for every mesh the glove file brings in (render-audit, 09-17): the swap below
+  // used to build a Lambert per adopted mesh — a GPU resource per object, the context-loss shape.
+  // Every glove mesh wants the same params, so they share this one; it dies with the rig.
+  const gloveMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0xb8ab90, emissive: 0x1c1610, transparent: true })
   held.renderOrder = HANDS_ORDER; held.frustumCulled = false; held.visible = false
   // on the PALM side (−y), which the present pose turns skyward; hovering, mid-palm
   const HELD_Y = -0.054                       // palm surface −0.016, a 5 cm block, a finger's hover
@@ -333,7 +337,7 @@ export function createHands(): Hands {
       // stick parts carry, a tint toward the ref's shadow tone. Metalness cannot exist on it — the
       // vessel card's law by construction, not by a slider set to zero.
       const old = Array.isArray(m.material) ? m.material : [m.material]
-      m.material = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0xb8ab90, emissive: 0x1c1610, transparent: true })
+      m.material = gloveMat
       for (const mm of old) mm.dispose()
     })
   }
@@ -426,7 +430,8 @@ export function createHands(): Hands {
   return {
     group, sig, tick, loadGlove,
     dispose: () => {
-      for (const g of [gloveFist, gloveOpen]) g?.traverse(m => { if (m instanceof THREE.Mesh) { m.geometry.dispose(); (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => x.dispose()) } })
+      for (const g of [gloveFist, gloveOpen]) g?.traverse(m => { if (m instanceof THREE.Mesh) m.geometry.dispose() })
+      gloveMat.dispose()   // shared by every glove mesh (fist, open, the mirrored left) — once
       cube.dispose(); sphere.dispose()
       for (const m of mats.values()) m.dispose()
       mats.clear()
