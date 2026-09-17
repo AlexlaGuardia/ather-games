@@ -10596,7 +10596,7 @@ function CraftPanel({ have, tools, tick, station, onCraft, onCraftTool, onClose 
                      </>)
                    }}
                    footer={(tab) => tab !== 'Pieces' ? null : (
-                     <div className="mt-3 flex flex-wrap gap-1 items-center">
+                     <div className="mb-2 flex flex-wrap gap-1 items-center">
                        <span className="text-white/35 text-[9px] tracking-[.14em] uppercase mr-1">pieces in</span>
                        {PIECE_MATERIALS.map(m => {
                          const on = m.key === pieceMat

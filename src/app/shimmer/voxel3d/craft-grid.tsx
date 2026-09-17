@@ -57,7 +57,7 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
   onPick: (id: string | null) => void
   /** The card's action row for the picked tile — the bench crafts, a station loads runs. */
   action: (tile: GridTile) => React.ReactNode
-  /** Rendered under the grid for the ACTIVE tab only — the pieces' material strip belongs to Pieces. */
+  /** Rendered in the head, under the tabs, for the ACTIVE tab only — the pieces' material strip belongs to Pieces. */
   footer?: (tab: string) => React.ReactNode
 }) {
   const [tab, setTab] = useState<string>(() => tabs.find(t => tiles.some(x => x.tab === t)) ?? tabs[0])
@@ -72,18 +72,57 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
   }, [tiles, tab, q])
   const picked = pickedId ? tiles.find(t => t.id === pickedId) ?? null : null
 
+  // ── ★ THE CARD SITS ON TOP, AND THE HEAD STAYS PUT (2026-09-17, Alex: "when you pick something
+  //    to craft it should show at the top of the grid not the bottom") ──────────────────────────
+  // The first cut put the card UNDER the grid, which on the pieces tab is thirteen rows down: you
+  // pick a tile at the top and the card lands below the fold, so the pick reads as nothing
+  // happening. Now tabs, search, the tab's material strip and the card are one head that is
+  // STICKY inside the panel's scroll, and the grid runs under it — wherever you are in a long
+  // tab, the thing you picked is in front of you with its costs and its button. An unpicked head
+  // holds a one-line hint at the card's height so the grid does not jump when a pick lands.
   return (
     <div>
-      <div className="flex items-center gap-1 mb-2 flex-wrap">
-        {live.map(t => (
-          <button key={t} onClick={() => { setTab(t); setQ('') }}
-                  className={`px-2 h-6 rounded border text-[9px] tracking-[.14em] uppercase ${
-                    t === tab && !q ? 'border-amber-300 bg-black/70 text-amber-200' : 'border-white/15 bg-black/40 text-white/55 hover:border-white/40'}`}>
-            {t} <span className="text-white/30 tracking-normal">{tiles.filter(x => x.tab === t && x.can).length}</span>
-          </button>
-        ))}
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="find…"
-               className="ml-auto w-24 h-6 px-2 rounded border border-white/15 bg-black/40 text-white/80 text-[10px] outline-none focus:border-amber-300/60" />
+      <div className="sticky top-0 z-10 -mx-4 px-4 pt-1 pb-2 bg-[#0e1018]">
+        <div className="flex items-center gap-1 mb-2 flex-wrap">
+          {live.map(t => (
+            <button key={t} onClick={() => { setTab(t); setQ('') }}
+                    className={`px-2 h-6 rounded border text-[9px] tracking-[.14em] uppercase ${
+                      t === tab && !q ? 'border-amber-300 bg-black/70 text-amber-200' : 'border-white/15 bg-black/40 text-white/55 hover:border-white/40'}`}>
+              {t} <span className="text-white/30 tracking-normal">{tiles.filter(x => x.tab === t && x.can).length}</span>
+            </button>
+          ))}
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="find…"
+                 className="ml-auto w-24 h-6 px-2 rounded border border-white/15 bg-black/40 text-white/80 text-[10px] outline-none focus:border-amber-300/60" />
+        </div>
+        {footer?.(q ? '' : tab)}
+        {picked ? (
+          <div className={`rounded border px-3 py-2.5 ${picked.can ? 'border-amber-200/30 bg-amber-100/[0.03]' : 'border-white/10'}`}>
+            <div className="flex items-center gap-2.5">
+              <CraftIcon itemId={picked.itemId} size={36} />
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between gap-2 items-baseline">
+                  <span className="text-white/90">{picked.name}</span>
+                  <span className="text-amber-200/70 tabular-nums whitespace-nowrap">{picked.yields}</span>
+                </div>
+                <div className="text-[10px] text-white/45 mt-0.5">
+                  {picked.cost.map((c, i) => (
+                    <span key={c.itemId} className={have(c.itemId) >= c.count ? 'text-emerald-300/70' : 'text-rose-300/60'}>
+                      {i > 0 && <span className="text-white/25"> · </span>}
+                      {label(c.itemId).toLowerCase()} {have(c.itemId)}/{c.count}
+                    </span>
+                  ))}
+                  {picked.tag && <span className="text-sky-300/60"> · {picked.tag}</span>}
+                </div>
+              </div>
+              <div className="flex gap-1.5 shrink-0">{action(picked)}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded border border-dashed border-white/10 px-3 py-2.5 text-white/30 flex items-center gap-2.5" style={{ minHeight: 58 }}>
+            <span className="w-9 h-9 rounded-sm border border-white/10 shrink-0" />
+            <span>pick a tile — its cost and what it makes show here, and the button to make it</span>
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-8 gap-1 mb-2">
         {shown.map(t => {
@@ -101,30 +140,6 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
         })}
         {shown.length === 0 && <div className="col-span-8 text-white/35 py-3">nothing here{q ? ` for "${q}"` : ''}</div>}
       </div>
-      {picked && (
-        <div className={`rounded border px-3 py-2.5 ${picked.can ? 'border-amber-200/30 bg-amber-100/[0.03]' : 'border-white/10'}`}>
-          <div className="flex items-center gap-2.5">
-            <CraftIcon itemId={picked.itemId} size={36} />
-            <div className="flex-1 min-w-0">
-              <div className="flex justify-between gap-2 items-baseline">
-                <span className="text-white/90">{picked.name}</span>
-                <span className="text-amber-200/70 tabular-nums whitespace-nowrap">{picked.yields}</span>
-              </div>
-              <div className="text-[10px] text-white/45 mt-0.5">
-                {picked.cost.map((c, i) => (
-                  <span key={c.itemId} className={have(c.itemId) >= c.count ? 'text-emerald-300/70' : 'text-rose-300/60'}>
-                    {i > 0 && <span className="text-white/25"> · </span>}
-                    {label(c.itemId).toLowerCase()} {have(c.itemId)}/{c.count}
-                  </span>
-                ))}
-                {picked.tag && <span className="text-sky-300/60"> · {picked.tag}</span>}
-              </div>
-            </div>
-          </div>
-          <div className="mt-2 flex justify-end gap-1.5">{action(picked)}</div>
-        </div>
-      )}
-      {footer?.(q ? '' : tab)}
     </div>
   )
 }
