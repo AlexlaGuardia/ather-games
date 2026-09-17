@@ -18,6 +18,8 @@
 //   WORLD_CLICK='700,430; 730,445'                            — click these viewport points, in order
 //   WORLD_CLICK_WAIT=120                                      — ms between clicks (default 120)
 //   WORLD_KEYS='KeyM; Escape'                                 — press these keys after the clicks (M = the map)
+//   WORLD_NAV_TIMEOUT=240000                                  — ms for each navigation (default 60000; a loaded box or a cold devwin needs more)
+//   WORLD_PRE_WAIT=10000                                      — ms to let frames draw after WORLD_PRE_EVAL (default 1500; ~1 fps under software GL)
 //
 // It prints the HUD counter line after the shot. `mesh` is geometry BUILT, `draws` is what survived
 // frustum culling this frame — the two are far apart and only the second is the frame's cost.
@@ -96,6 +98,8 @@
 // threshold and Playwright's bundled browser is ~400MB.
 
 import puppeteer from 'puppeteer-core'
+const NAV_TIMEOUT = Number(process.env.WORLD_NAV_TIMEOUT ?? 60_000)
+const PRE_WAIT = Number(process.env.WORLD_PRE_WAIT ?? 1500)
 
 const OUT = process.argv[2] ?? 'world.png'
 const SETTLE = Number(process.argv[3] ?? 12)
@@ -197,10 +201,10 @@ const OWNER = process.env.WORLD_OWNER === '1'
       process.exit(2)
     }
     // ⚠ `globalThis.URL` — this module's own `const URL` shadows the constructor.
-    await page.goto(`${new globalThis.URL(URL).origin}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'networkidle2', timeout: 30_000 })
+    await page.goto(`${new globalThis.URL(URL).origin}/owner?key=${encodeURIComponent(KEY)}`, { waitUntil: 'networkidle2', timeout: NAV_TIMEOUT / 2 })
   }
 
-  const resp = await page.goto(URL, { waitUntil: 'networkidle2', timeout: 60_000 })
+  const resp = await page.goto(URL, { waitUntil: 'networkidle2', timeout: NAV_TIMEOUT })
   // ★★ REFUSE RATHER THAN REPORT, AND THIS TOOL ALREADY KNEW THE RULE — its own header says a shot
   // "only shows you that something is wrong, never why". A 403 is worse than that: the page renders
   // the words "Forbidden — owner only", the canvas never mounts, and the run reports **canvas NONE
@@ -360,7 +364,7 @@ const OWNER = process.env.WORLD_OWNER === '1'
         return _v === undefined ? 'PRE_EVAL RETURNED undefined' : JSON.stringify(_v)
       } catch (e) { return 'PRE_EVAL THREW: ' + e.message } })()`)
     console.log(`pre-eval  · ${out}`)
-    await new Promise(r => setTimeout(r, 1500))   // let the frames after it draw
+    await new Promise(r => setTimeout(r, PRE_WAIT))   // let the frames after it draw
   }
 
   await page.screenshot({ path: OUT })
