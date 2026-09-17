@@ -45,7 +45,7 @@ import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
 import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
 import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
-import { editIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
+import { editIndex, unpackIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
 import { cropForSeed, CROP_DEFS } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
 import { createProfiler, snapshotText, shortRowLabel, type FrameProfile, gpuTrusted } from './profile'
@@ -68,7 +68,7 @@ import {
 } from './planting'
 import {
   JUG_ITEM, JUG_WATER_ITEM, JUG_POURS, waterBlocker, waterRefusalLine, waterBed, fillJug, settleWatering,
-  isDamp, dampLeftLine, dampFraction, clearDamp, wateringToSave, wateringFromSave, type WateredBeds,
+  isDamp, dampLeftLine, dampFraction, clearDamp, wateringToSave, wateringFromSave, WATER_HOLD_MS, type WateredBeds,
 } from './watering'
 import { plantedSpots, plantedSignature } from './planted-feed'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
@@ -1511,7 +1511,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => {
     // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
     // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
@@ -1609,6 +1609,7 @@ export default function VoxelWorld() {
     put: (id, x, y, z, rot) => worldCmd.current ? worldCmd.current.put(id, x, y, z, rot) : 'the world is still waking',
     grow: (progress) => worldCmd.current ? worldCmd.current.grow(progress) : 'the world is still waking',
     plant: (crop, x, y, z) => worldCmd.current ? worldCmd.current.plant(crop, x, y, z) : 'the world is still waking',
+    water: (x, y, z, hours) => worldCmd.current ? worldCmd.current.water(x, y, z, hours) : 'the world is still waking',
     party: partyOps,
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
@@ -3118,7 +3119,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number) => string } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -3682,6 +3683,30 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           plantedAt: Date.now(), growthDuration: def.growthMs,
         })
         return `${def.name} in the bed at ${x} ${y} ${z}`
+      },
+      // ★ `/water` (2026-09-17, farming ②) — damp a bed, no jug, no walk; `hours` backdates the
+      // pour so the fade can be judged at any point of the day. Writes the SAME record `waterBed`
+      // writes, so it settles, saves and dries like one. Bare = every bed the world can see.
+      water: (x, y, z, hours) => {
+        const now = Date.now(), at = now - hours * 3_600_000
+        const damp = (bx: number, by: number, bz: number) => watered.current.set(bedKey(bx, by, bz), { until: at + WATER_HOLD_MS, creditedTo: now })
+        if (x !== null && y !== null && z !== null) {
+          if (!isGardenBed(voxel(x, y, z))) return `no bed at ${x} ${y} ${z}`
+          damp(x, y, z); wetDirty.current = true
+          return `watered the bed at ${x} ${y} ${z}${hours ? ` — ${hours}h into its day` : ''}`
+        }
+        // Beds are craft-only, so every one is an EDIT (`countBeds` rests on the same fact).
+        let n = 0
+        for (const [ck, col] of edits.current) {
+          const [gx, gz] = ck.split(',').map(Number)
+          for (const [i, mat] of col) {
+            if (!isGardenBed(mat)) continue
+            const l = unpackIndex(i)
+            damp(gx * SECTION + l.x, l.y, gz * SECTION + l.z); n++
+          }
+        }
+        wetDirty.current = true
+        return n ? `${n} bed${n === 1 ? '' : 's'} watered${hours ? ` — ${hours}h into the day` : ''}` : 'no beds in reach'
       },
       space: (to?: string) => {
         const want: Space = to === 'plot' ? 'plot' : to === 'wilds' ? 'wilds' : to === 'glade' ? 'glade'
