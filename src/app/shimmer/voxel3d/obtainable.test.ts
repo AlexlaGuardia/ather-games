@@ -14,6 +14,7 @@ import { POTION_DEFS, POTION_IDS } from '../engine/alchemy'
 import { TOOL_DEFS } from '../engine/tools'
 import { CROP_DEFS } from '../engine/farming'
 import { ITEMS } from '../sprites/items'
+import { wateringLabel } from './watering'
 
 let pass = 0
 const fails: string[] = []
@@ -145,7 +146,10 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // A piece item (2026-09-12) is the third nameable class: no ItemDef, no material, and
   // `itemLabel` resolves it through `pieceForItem` the way it resolves a material through
   // `materialForItem`. Consumed by PLACING, which no recipe table records.
-  const nameable = (id: string) => known.has(id) || materialForItem(id) !== undefined || pieceForItem(id) !== undefined
+  // The jug (2026-09-17, farming ②) is the fourth: no ItemDef, no material, no piece — `itemLabel`
+  // resolves it through `wateringLabel`, and it is consumed by FILLING at a pond, a host verb no
+  // recipe table records, exactly as a piece is consumed by placing.
+  const nameable = (id: string) => known.has(id) || materialForItem(id) !== undefined || pieceForItem(id) !== undefined || wateringLabel(id) !== null
   const consumed = new Set<string>([
     ...RECIPES.flatMap(r => r.input.map(i => i.itemId)),
     ...Object.values(TOOL_DEFS).flatMap(t => t.recipe.map(r => r.itemId)),
