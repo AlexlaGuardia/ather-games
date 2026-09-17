@@ -129,6 +129,9 @@ const DEVICE_KEYS = [
   'worktable.hotbar',             // the structure worktable's nine slots (creative mode, 09-16).
                                   // A builder's tool layout, owner-gated dev page, one author per
                                   // box — a device convenience, not progress anyone earned.
+  'shimmer:hands-tune',           // the Dev-tab hands tuner's arm offsets (play, 09-16). A pose
+                                  // dialled in against THIS screen and THIS eye, like the bindings:
+                                  // two keepers on one desktop want the same arm.
 ]
 function walk(dir: string): string[] {
   const out: string[] = []
