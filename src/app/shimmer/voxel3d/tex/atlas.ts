@@ -147,9 +147,9 @@ export const DEFAULT_JITTER = 0.07
  * Strength of the macro tint: how far a patch of ground may drift from its neighbours in value,
  * with a third of that again as a warm/cool lean (dry rises warmer, damp hollows cooler). The
  * noise is ~12 blocks across, so it reads as PATCHES, which per-block jitter never can. Natural
- * materials only (`tiles.ts` › `weatherOf`). ⚠ A look call, Alex's — 0.08 is the opening position.
+ * materials only (`tiles.ts` › `weatherOf`). ⚠ A look call, Alex's — 0.15 is the opening position.
  */
-export const DEFAULT_WEATHER = 0.08
+export const DEFAULT_WEATHER = 0.15
 
 /** How much of the mesher's ambient-occlusion term reaches the pixels. 1 = all of it, 0 = the flat
  *  look this material shipped with while the term was being discarded. */
@@ -498,9 +498,15 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
   // across one face would read as a smudge, and a block being one colour is the voxel look.
   if (uWeather > 0.0 && gWeather > 0.5 && tile.a < 0.5) {
     vec3 cell = blockCoord() + vec3(11.0, 3.0, 23.0);
-    float n = patchNoise(cell, 12.0) * 0.7 + patchNoise(cell + vec3(50.0), 5.0) * 0.3;
-    float m = (n - 0.5) * 2.0 * uWeather;
-    diffuseColor.rgb *= (1.0 + m) * vec3(1.0 + m * 0.35, 1.0, 1.0 - m * 0.35);
+    // 8 blocks, not 12: from standing height a keeper sees ~20 blocks deep, and a 12-block
+    // wavelength put ONE gradient in the frame (probed 09-17: smooth, correct, and invisible).
+    float n = patchNoise(cell, 8.0) * 0.7 + patchNoise(cell + vec3(50.0), 3.0) * 0.3;
+    // ⚠ Value noise PILES AT ITS MIDPOINT (std ≈ 0.13 here; the moss ribbon hit the same wall on
+    // 09-16), so (n - 0.5) * 2 would spend the dial on a ±0.3 swing and the tint would measure as
+    // invisible at any setting. Stretched ×3.5 and clamped: uWeather is now the swing at a patch's
+    // deepest, and a typical block sits at about half of it.
+    float m = clamp((n - 0.5) * 3.5, -1.0, 1.0) * uWeather;
+    diffuseColor.rgb *= (1.0 + m) * vec3(1.0 + m * 0.25, 1.0, 1.0 - m * 0.25);
   }
 }`,
       'fragment shader',
@@ -559,7 +565,7 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
     )
   }
 
-  return {
+  const api: VoxelTexMaterial = {
     material: mat,
     setMipmapped: (on: boolean) => {
       tiles.texture.minFilter = on ? THREE.NearestMipmapLinearFilter : THREE.NearestFilter
@@ -600,5 +606,28 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
         if (liveCartoon[k]) liveCartoon[k].value = val
       }
     },
+  }
+  registerTexDial(api)
+  return api
+}
+
+// ── `window.__tex` — the look dials, from the console, for every textured material alive ──────
+// Every dial in this file is a uniform write and none of them had a way in from a running page:
+// judging the macro tint meant a rebuild per value. This hangs a setter on the window that fans a
+// value out to every material this factory has made (the world's, the glass pass's, the pieces').
+// `__tex.weather(0)` is the A, `__tex.weather(0.12)` the B, on the same frame of the same meadow.
+const TEX_DIALS = new Set<VoxelTexMaterial>()
+function registerTexDial(m: VoxelTexMaterial): void {
+  TEX_DIALS.add(m)
+  if (typeof window === 'undefined') return
+  const w = window as unknown as Record<string, unknown>
+  if (w.__tex) return
+  const all = (f: (m: VoxelTexMaterial) => void) => { for (const t of TEX_DIALS) f(t); return TEX_DIALS.size }
+  w.__tex = {
+    weather: (v: number) => all(t => t.setWeather(v)),
+    jitter: (v: number) => all(t => t.setJitter(v)),
+    relief: (v: number) => all(t => t.setRelief(v)),
+    variation: (on: boolean) => all(t => t.setVariation(on)),
+    ao: (v: number) => all(t => t.setAo(v)),
   }
 }
