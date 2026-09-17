@@ -272,14 +272,17 @@ interface RockOpts { speckle: number; blotch: number; vein: number; seed: number
 function paintRock(dst: Layer, size: number, base: [number, number, number], o: RockOpts) {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
+      // Two blotch octaves (09-17): the 8-cell one is the grain; a 3-cell one at ~60% is the
+      // BROAD tone a stone keeps at twenty blocks, where the grain and the vein have both gone.
       const blot = (vnoise(x, y, size, 8, o.seed) - 0.5) * 2 * o.blotch
+        + (vnoise(x, y, size, 3, o.seed + 404) - 0.5) * 2 * o.blotch * 0.6
       const grit = (h2(x, y, o.seed + 77) - 0.5) * 2 * o.speckle
       let c = shade(base, blot + grit)
-      // A thin darker vein network. At 32 it lands as a chunky crack, at 64 as a hairline — which is
-      // exactly the kind of detail the density table says you cannot keep past a few blocks out.
+      // A darker vein network. Widened 0.045 → 0.055 (09-17) so at 64 it is a crack and not a
+      // hairline the mip chain erases two blocks out; shaded a little less to pay for the width.
       if (o.vein > 0) {
         const v = vnoise(x, y, size, 4, o.seed + 991)
-        if (Math.abs(v - 0.5) < 0.045) c = shade(c, -o.vein)
+        if (Math.abs(v - 0.5) < 0.055) c = shade(c, -o.vein * 0.85)
       }
       put(dst, size, x, y, c)
     }
@@ -315,6 +318,30 @@ function paintGrit(dst: Layer, size: number, base: [number, number, number], amp
 /** Grass crown — the face you spend the whole game looking down at. `crown` defaults to living
  *  turf; GREY_SOIL passes its own desaturated base and a flatter contrast (drained ground gutters,
  *  it does not sparkle — the bright blade-catch is halved so nothing glints). */
+/** Sand — wind ripples: soft crests running one way, lit on the windward face, shadowed in the
+ *  trough, over the grain. The crest line wanders so a dune face is not corduroy. */
+function paintSand(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const period = size / 5
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const wander = (vnoise(x, y, size, 4, seed + 5) - 0.5) * period * 0.9
+    const t = (((y + wander) % period) + period) % period / period      // 0..1 across a ripple
+    const crest = Math.sin(t * Math.PI * 2)                             // +1 crest, -1 trough
+    const grit = (h2(x, y, seed + 31) - 0.5) * 2 * 7
+    const blot = (vnoise(x, y, size, 8, seed) - 0.5) * 2 * 5
+    put(dst, size, x, y, shade(base, crest * 9 + grit + blot))
+  }
+}
+/** Marsh mud — wet and cracked: soft plates with thin dark seams between, a sheen where it is
+ *  wettest. `paintStones` does the plates; the sheen is laid over. */
+function paintMud(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  paintStones(dst, size, base, seed, { cells: 5, jitter: 0.55, gap: 0.07, gapShade: -40, tone: 8, mortar: false })
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const wet = vnoise(x, y, size, 6, seed + 17)
+    if (wet > 0.62) put(dst, size, x, y, shade(at(dst, size, x, y), (wet - 0.62) * 60))
+    else if (h2(x, y, seed + 41) > 0.9) put(dst, size, x, y, shade(at(dst, size, x, y), -10))   // grit
+  }
+}
+
 function paintGrassTop(dst: Layer, size: number, seed: number,
   crown: number = MATERIAL_COLOR[MAT.TOPSOIL], contrast = 1) {
   const base = rgbOf(crown)
@@ -585,14 +612,108 @@ function paintBark(dst: Layer, size: number, base: [number, number, number], see
   }
 }
 
+// ── ★ A BARK PER WOOD (2026-09-17) ───────────────────────────────────────────────────────────
+// `paintBark` above is one bark in four browns. Canon (`shimmer-skilling.md` › the woods,
+// `design-briefs/shimmer-resources.md` › the wood rows) gives each trunk a surface: goldwood
+// *papery golden bark* (a birch — peels, lenticels); shimmeroak *harder bark, rich rippled grain
+// that catches light* (deep furrows, a sheen down the ridges); starwillow *pale, flexible*
+// (smooth, fine striations, a knot); dawnwood *ancient, thick trunk* (old plated bark, tall
+// plates with dark seams). Same rule as the leaves: one painter per wood, the tint stays the hue.
+
+/** Goldwood — papery: horizontal peel bands with a lit lip and a dark underside, short dark
+ *  lenticel dashes, only a whisper of vertical grain. */
+function paintBarkGoldwood(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const bandH = Math.max(3, Math.round(size / 8))
+  for (let y = 0; y < size; y++) {
+    const band = Math.floor(y / bandH)
+    const peel = h2(band, 1, seed + 3) > 0.45                      // this band is a curl
+    const row = y % bandH
+    for (let x = 0; x < size; x++) {
+      const grain = (vnoise(x, 0, size, 16, seed) - 0.5) * 2 * 5
+      const grit = (h2(x, y, seed + 21) - 0.5) * 2 * 6
+      let d = grain + grit
+      if (peel) { if (row === 0) d += 16; else if (row === bandH - 1) d -= 22; else d += 4 }
+      // Lenticels: short dark horizontal dashes, sparse, never on a peel's lip.
+      const dash = h2(x >> 2, y, seed + 53) > 0.94 && row > 0 && row < bandH - 1
+      if (dash) d -= 24
+      put(dst, size, x, y, shade(base, d))
+    }
+  }
+}
+/** Shimmeroak — furrowed: wide dark grooves between ridges, and a ripple sheen that runs down
+ *  each ridge slightly out of phase with its neighbour, which is what "catches light" looks like. */
+function paintBarkShimmeroak(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  for (let x = 0; x < size; x++) {
+    const g = vnoise(x, 0, size, 6, seed + 7)
+    const groove = Math.abs(g - 0.5) < 0.10 ? -30 : 0
+    const ridge = (vnoise(x, 0, size, 6, seed) - 0.5) * 2 * 12
+    const phase = h2(x >> 2, 0, seed + 5) * Math.PI * 2
+    for (let y = 0; y < size; y++) {
+      // The sheen: a slow wave down the ridge, per ridge phase — reads as a ripple across the trunk.
+      const sheen = groove ? 0 : Math.sin((y / size) * Math.PI * 4 + phase) * 9
+      const grit = (h2(x, y, seed + 21) - 0.5) * 2 * 7
+      const nick = h2(x >> 1, y, seed + 53) > 0.95 ? -12 : 0
+      put(dst, size, x, y, shade(base, groove + ridge + sheen + grit + nick))
+    }
+  }
+}
+/** Starwillow — pale and smooth: fine striations, a soft diagonal shadow, one knot. */
+function paintBarkStarwillow(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  const kx = size * (0.25 + h2(1, 1, seed) * 0.5), ky = size * (0.25 + h2(2, 2, seed) * 0.5)
+  const kr = size * 0.09
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const stria = (vnoise(x, 0, size, 24, seed) - 0.5) * 2 * 6
+      const drift = (vnoise(x + y * 0.4, y, size, 5, seed + 9) - 0.5) * 2 * 8   // the soft diagonal
+      const grit = (h2(x, y, seed + 21) - 0.5) * 2 * 4
+      let d = stria + drift + grit
+      const dk = Math.hypot(x + 0.5 - kx, (y + 0.5 - ky) * 0.7) / kr
+      if (dk < 1) d += dk < 0.35 ? -28 : dk < 0.7 ? -8 : 10   // a knot: dark eye, lit ring
+      put(dst, size, x, y, shade(base, d))
+    }
+  }
+}
+/** Dawnwood — ancient: tall plates of old bark with dark seams between, each plate its own tone. */
+function paintBarkDawnwood(dst: Layer, size: number, base: [number, number, number], seed: number) {
+  // Voronoi on a squashed y so the cells are tall — bark plates run with the trunk.
+  const n = 4, cs = size / n
+  const cx = (i: number, j: number) => (((i % n) + n) % n + 0.5 + (h2(((i % n) + n) % n, ((j % n) + n) % n, seed) - 0.5) * 0.5) * cs
+  const cy = (i: number, j: number) => (((j % n) + n) % n + 0.5 + (h2(((i % n) + n) % n, ((j % n) + n) % n, seed + 1) - 0.5) * 0.5) * cs
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const gi = Math.floor(x / cs), gj = Math.floor(y / cs)
+    let d1 = Infinity, d2 = Infinity, id = 0
+    for (let j = gj - 1; j <= gj + 1; j++) for (let i = gi - 1; i <= gi + 1; i++) {
+      const px = cx(i, j) + (i < 0 ? -size : i >= n ? size : 0), py = cy(i, j) + (j < 0 ? -size : j >= n ? size : 0)
+      const dx = (x + 0.5 - px) * 1.8, dy = (y + 0.5 - py) * 0.6     // squash: tall plates
+      const dd = Math.sqrt(dx * dx + dy * dy)
+      if (dd < d1) { d2 = d1; d1 = dd; id = ((i % n) + n) % n + n * (((j % n) + n) % n) } else if (dd < d2) d2 = dd
+    }
+    const edge = (d2 - d1) / cs
+    const tone = (h2(id, 7, seed + 3) - 0.5) * 2 * 14
+    const grit = (h2(x, y, seed + 21) - 0.5) * 2 * 7
+    const grain = (vnoise(x, 0, size, 12, seed + 4) - 0.5) * 2 * 5
+    put(dst, size, x, y, edge < 0.035 ? shade(base, -34) : shade(base, tone + grit + grain + Math.min(1, edge * 3) * 6 - 3))
+  }
+}
+function paintBarkFor(material: number, dst: Layer, size: number, base: [number, number, number], seed: number) {
+  if (material === WOOD.GOLDWOOD_LOG) paintBarkGoldwood(dst, size, base, seed)
+  else if (material === WOOD.SHIMMEROAK_LOG) paintBarkShimmeroak(dst, size, base, seed)
+  else if (material === WOOD.STARWILLOW_LOG) paintBarkStarwillow(dst, size, base, seed)
+  else if (material === WOOD.DAWNWOOD_LOG) paintBarkDawnwood(dst, size, base, seed)
+  else paintBark(dst, size, base, seed)
+}
+
 /** End grain — concentric SQUARE rings. Square, not round: at tile size a circle reads as a target;
  *  square rings read as cut wood, the same shape-language call as the ore's Manhattan diamonds. */
-function paintRings(dst: Layer, size: number, base: [number, number, number], seed: number) {
+function paintRings(dst: Layer, size: number, base: [number, number, number], seed: number, every = 3, depth = 18) {
   const c = (size - 1) / 2
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const d = Math.max(Math.abs(x - c), Math.abs(y - c))
-      const ring = ((d + (h2(x, y, seed + 3) > 0.85 ? 1 : 0)) % 3) === 0 ? -18 : 6
+      // ⚠ ROUNDED (09-17). `c` is a half-integer, so `d` was one too, and a half-integer is never
+      // ≡ 0 mod 3 — no ring had ever drawn; every log end was grit and a faint heart. Found by
+      // rendering the tile sheet, the day the rings were given per-wood spacing.
+      const d = Math.round(Math.max(Math.abs(x - c), Math.abs(y - c)))
+      const ring = ((d + (h2(x, y, seed + 3) > 0.85 ? 1 : 0)) % every) === 0 ? -depth : 6
       const heart = d < size * 0.14 ? 10 : 0
       const grit = (h2(x, y, seed + 11) - 0.5) * 2 * 6
       put(dst, size, x, y, shade(base, ring + heart + grit))
@@ -1672,7 +1793,7 @@ function paintBase(dst: Layer, material: number, face: number, size: number, see
     case MAT.DEEP_STONE: paintRock(dst, size, rgbOf(MATERIAL_COLOR[material]), { speckle: 10, blotch: 16, vein: 22, seed }); break
     case MAT.STONE: paintRock(dst, size, rgbOf(MATERIAL_COLOR[material]), { speckle: 11, blotch: 14, vein: 16, seed }); break
     case MAT.SUBSOIL: paintGrit(dst, size, rgbOf(MATERIAL_COLOR[material]), 18, 22, seed); break
-    case MAT.SAND: paintGrit(dst, size, rgbOf(MATERIAL_COLOR[material]), 10, 0, seed); break
+    case MAT.SAND: paintSand(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.WATER: paintWater(dst, size, seed); break
     case MAT.SPRING_CRUST: paintCrust(dst, size, seed); break
     case MAT.TOPSOIL:
@@ -1705,7 +1826,7 @@ function paintBase(dst: Layer, material: number, face: number, size: number, see
     // ⚠ MUD AND SCREE ARE NOT TURF AND MUST NOT WEAR THE GRASS PAINTER. A grass crown on either
     // one is the whole reason a marsh would still read as a meadow: the top face is what you see
     // from standing height, so it is the face that has to say "nothing grows here".
-    case MAT.MARSH_MUD: paintGrit(dst, size, rgbOf(MATERIAL_COLOR[material]), 14, 26, seed); break
+    case MAT.MARSH_MUD: paintMud(dst, size, rgbOf(MATERIAL_COLOR[material]), seed); break
     case MAT.SCREE: paintRock(dst, size, rgbOf(MATERIAL_COLOR[material]), { speckle: 30, blotch: 24, vein: 0, seed }); break
     // ── ★ THE BUILDING GRAMMAR'S TWO STONES (2026-08-13) ────────────────────────────────────
     // They must read apart ACROSS A ROOM, because the whole point of the ruling is that a player
@@ -1951,8 +2072,12 @@ function paintBase(dst: Layer, material: number, face: number, size: number, see
     default:
       if (LOG_SET.has(material)) {
         const c = rgbOf(MATERIAL_COLOR[material])
-        if (face === SIDE) paintBark(dst, size, c, seed)
-        else paintRings(dst, size, c, seed)
+        if (face === SIDE) paintBarkFor(material, dst, size, c, seed)
+        // End grain per wood: dawnwood's rings are dense (canon: *dense growth rings*), the
+        // willow's pale and wide, the oak's deep.
+        else paintRings(dst, size, c, seed,
+          material === WOOD.DAWNWOOD_LOG ? 2 : material === WOOD.STARWILLOW_LOG ? 4 : 3,
+          material === WOOD.SHIMMEROAK_LOG ? 24 : material === WOOD.STARWILLOW_LOG ? 12 : 18)
       }
       else if (LEAF_SET.has(material) || SAPLING_SET.has(material))
         paintLeaves(dst, size, rgbOf(MATERIAL_COLOR[material]), seed)
