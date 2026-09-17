@@ -7,6 +7,7 @@ import {
   cursorHeading,
   keysHeading,
   CURSOR_DEAD,
+  SEG_SPACING,
   setBoost,
   tick,
   score,
@@ -149,6 +150,22 @@ function ok(name: string, cond: boolean) {
   ok('cursor: right of head → 0, below → +π/2', near(cursorHeading(head, { x: 400, y: 300 })!, 0) && near(cursorHeading(head, { x: 200, y: 500 })!, Math.PI / 2))
   ok('cursor: measured from the HEAD, not the centre', near(cursorHeading({ x: 100, y: 100 }, { x: 100, y: 0 })!, -Math.PI / 2))
   ok('zoom: same curve as the renderer — 0.9 unborn, floors 0.5, caps 0.95', zoomFor(undefined) === 0.9 && zoomFor(1000) === 0.5 && zoomFor(0) === 0.95 && near(zoomFor(50), 0.74))
+}
+
+// 11. trail samples sit exactly SEG_SPACING apart, boosting or not (the lumps + boost jank of 09-16)
+{
+  const w = makeWorld(7, 0)
+  const p = player(w)!
+  p.x = 0; p.y = 0; p.angle = 0.7; steer(w, 0.7); p.boost = 100; p.boosting = true; p.stasisT = 60
+  for (let i = 0; i < 60; i++) tick(w, 0.0173) // an odd dt so the overshoot is never zero
+  let worst = 0
+  for (let i = 2; i + 3 < p.trail.length; i += 2) {
+    const d = Math.hypot(p.trail[i + 2] - p.trail[i], p.trail[i + 3] - p.trail[i + 1])
+    worst = Math.max(worst, Math.abs(d - SEG_SPACING))
+  }
+  ok('boosted straight run: every sample gap == SEG_SPACING (worst drift ' + worst.toFixed(4) + ')', worst < 1e-6 && p.trail.length > 20)
+  const headGap = Math.hypot(p.trail[2] - p.trail[0], p.trail[3] - p.trail[1])
+  ok('head → first sample is under one spacing (the live head leads the samples)', headGap >= 0 && headGap < SEG_SPACING)
 }
 
 console.log(`\nVORANYX sim: ${pass} passed, ${fail} failed`)

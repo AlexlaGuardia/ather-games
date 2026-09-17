@@ -25,7 +25,6 @@ import {
   loadBest,
   saveBest,
   bodyRadius,
-  SEG_SPACING,
   segCount,
   BOOST_MAX,
   MAGNET_R,
@@ -525,19 +524,38 @@ function slitherPoints(
   br: number, zoom: number,
   toX: (x: number) => number, toY: (y: number) => number, cw: number, ch: number,
 ): number[] {
+  // Resample the spine (live head + samples) at an EXACT arc-length step, continuous in the radius.
+  // Stepping by trail INDEX lumps twice over: the head→first-sample gap breathes 0→6 units as the
+  // worm moves, and a rounded index step pops between 1 and 2 as the worm grows. Walking the
+  // polyline by distance makes bead spacing, the wave's phase and the taper all true arc length.
   const tr = s.trail
   const n = tr.length / 2
-  const total = (n - 1) * SEG_SPACING
-  const out: number[] = []
+  // arc length of the spine
+  let total = 0
+  for (let i = 1; i < n; i++) total += Math.hypot(tr[i * 2] - tr[i * 2 - 2], tr[i * 2 + 1] - tr[i * 2 - 1])
+  const stepLen = Math.max(1.5, BEAD_STEP * br)
   const lambda = Math.max(48, SLITHER_LAMBDA * br)
-  const step = Math.max(1, Math.round((BEAD_STEP * br) / SEG_SPACING))
   const k = (Math.PI * 2) / lambda
-  for (let i = 0; i < n; i += step) {
-    const d = i * SEG_SPACING
-    const x = tr[i * 2], y = tr[i * 2 + 1]
-    // tangent from the neighbours (forward-difference at the ends)
-    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1)
-    let tx = tr[b * 2] - tr[a * 2], ty = tr[b * 2 + 1] - tr[a * 2 + 1]
+  const pts: number[] = [] // world-space [x, y, d] along the spine at even d
+  let seg = 1, segStart = 0
+  let sx = tr[0], sy = tr[1], ex = tr[2] ?? tr[0], ey = tr[3] ?? tr[1]
+  let segLen = Math.hypot(ex - sx, ey - sy)
+  for (let d = 0; d <= total; d += stepLen) {
+    while (seg < n - 1 && d > segStart + segLen) {
+      segStart += segLen; seg++
+      sx = ex; sy = ey; ex = tr[seg * 2]; ey = tr[seg * 2 + 1]
+      segLen = Math.hypot(ex - sx, ey - sy)
+    }
+    const u = segLen > 0 ? Math.min(1, (d - segStart) / segLen) : 0
+    pts.push(sx + (ex - sx) * u, sy + (ey - sy) * u, d)
+  }
+  const out: number[] = []
+  const m = pts.length / 3
+  for (let i = 0; i < m; i++) {
+    const x = pts[i * 3], y = pts[i * 3 + 1], d = pts[i * 3 + 2]
+    // tangent from the resampled neighbours (they are evenly spaced, so this is smooth)
+    const a = Math.max(0, i - 1), b = Math.min(m - 1, i + 1)
+    let tx = pts[b * 3] - pts[a * 3], ty = pts[b * 3 + 1] - pts[a * 3 + 1]
     const tl = Math.hypot(tx, ty) || 1
     tx /= tl; ty /= tl
     const ramp = Math.min(1, d / (SLITHER_NECK * br))

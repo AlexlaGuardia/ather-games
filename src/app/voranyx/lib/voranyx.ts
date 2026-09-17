@@ -394,16 +394,20 @@ export function tick(w: World, dt: number): TickEvents {
       if (s.mass <= BASE_MASS + 0.01) s.element = null // reverted to blank
     }
 
-    // trail sampling
-    s._acc += spd * dt
-    s.dist += spd * dt
-    if (s._acc >= SEG_SPACING) {
-      s._acc = 0
-      s.trail.unshift(s.x, s.y)
-    } else {
-      s.trail[0] = s.x
-      s.trail[1] = s.y
+    // trail sampling — trail[0..1] is always the LIVE head; samples behind it sit exactly SEG_SPACING
+    // apart. A sample lands where the head crossed the mark, not where the head is now (the overshoot
+    // is carried, not dropped) — otherwise spacing wobbles by up to a frame's travel, worst at boost,
+    // and every renderer that assumes even spacing lumps.
+    const moved = spd * dt
+    s._acc += moved
+    s.dist += moved
+    while (s._acc >= SEG_SPACING) {
+      const over = s._acc - SEG_SPACING // how far past the mark the head is now
+      s.trail.splice(2, 0, s.x - Math.cos(s.angle) * over, s.y - Math.sin(s.angle) * over)
+      s._acc = over
     }
+    s.trail[0] = s.x
+    s.trail[1] = s.y
     const maxLen = segCount(s.mass) * 2
     if (s.trail.length > maxLen) s.trail.length = maxLen
 
