@@ -120,14 +120,13 @@ export const POTION_DEFS: Record<string, PotionDef> = {
   // the canon fact honoured here: a HERB (farming) + a FISH (rinning) + BARK (forestry). Magii's
   // 09-16 brewing ruling makes it a PLOT-class brew by definition (*"a brew you water a bed with"*),
   // so the craft-word is `brew` and the road is the mortar, like harvest_brew.
-  // ⚠ GOLDLEAF IS NOT IN THIS WORLD YET (the wild-crop ladder grows one crop per ground; canon's
-  // "grows anywhere" herb is a world-lane slice). Recipe rows are build-side (Magii, 09-16), so the
-  // herb slot takes GLOW-MOSS — common on woodland and shore, the base herb this world has — and
-  // swaps to goldleaf the day it lands. Puff spores as the PLOT base, per the same ruling.
+  // Goldleaf ×2 is canon's row exactly — it entered the world the same day (`a9a3aa9`, a forage on
+  // every living ground, "grows anywhere"); the first cut took glow-moss for the hour it was
+  // absent. Puff spores as the PLOT base, per the 09-16 ruling.
   bed_brew: {
     id: 'bed_brew', name: 'Bed Brew', tier: 2,
     minAlchemyLevel: 4, manaCost: 10, xpGrant: 30, resultCount: 2,
-    recipe: [{ itemId: 'glow_moss', count: 2 }, { itemId: 'shimmerscale', count: 1 },
+    recipe: [{ itemId: 'goldleaf', count: 2 }, { itemId: 'shimmerscale', count: 1 },
              { itemId: 'goldwood_bark', count: 1 }, { itemId: 'puff_spores', count: 1 }],
   },
   moonvine_tonic: {
