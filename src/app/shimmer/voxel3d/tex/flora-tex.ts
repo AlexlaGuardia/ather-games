@@ -25,6 +25,8 @@ export const BLADE_GREEN: [number, number, number] = [86, 158, 66]
 export const HEAD_TINTS = [0xf2f4ee, 0xe8c95a, 0xb08ae0, 0x8ec7e8, 0xe8a0b4]
 
 /** A shared LCG so every tile is deterministic — same seed, same pixels, forever. */
+import { WOOD } from '../../voxel/trees'
+
 const lcg = (seed: number) => {
   let s = seed
   return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 4294967296 }
@@ -242,6 +244,171 @@ export function leafPixels(size = 16, seed = 0x1eaf): Uint8Array {
   }
   return data
 }
+
+// ── ★ A LEAF PER WOOD (2026-09-17) ──────────────────────────────────────────────────────────────
+// Alex: *"lets do the leaves per wood next."* One white clump served all four species and the
+// tint did the whole job, so a starwillow and a goldwood were the same tree in two greens. Canon
+// (`game/shimmer-skilling.md` › the woods) gives each a silhouette: goldwood *round canopy*;
+// shimmeroak *larger, harder* (an oak — lobed, dense); starwillow *weeping golden branches,
+// glowing tips*; dawnwood *ancient, amber-gold leaves* (broad, layered). Four painters, one
+// STRIP (`leafStripPixels`), and the leaf material picks a tile from the quad's `aLayer` — the
+// species id the mesher already writes for the atlas, read for a second purpose.
+//
+// ★ STILL A LUMINANCE MASK, like `leafPixels`: painted near-white so `MATERIAL_COLOR` × the
+// canopy-depth shade stays the whole hue, and a retune of a green needs no new texture. The one
+// liberty is a CAST on the highlights (warm on goldwood/dawnwood, cool on starwillow) — a cast
+// multiplied by a green leans it, which is what a lit leaf does, without fighting the tint.
+//
+// ★ ALPHA CARRIES ONE MORE BIT: `LEAF_GLOW_ALPHA` (200) marks a starwillow strand's TIP — canon's
+// *"glows faintly at the tips"*. Above `alphaTest` (0.5 → 127) so the cutout keeps it; below the
+// shader's 0.9 so `leaf-material.ts` can read it as "lit". A second channel would cost a second
+// texture; the cutout's alpha has a whole spare range and this uses one value of it.
+export const LEAF_TILE = 32
+export const LEAF_GLOW_ALPHA = 200
+export type LeafSpecies = 'goldwood' | 'shimmeroak' | 'starwillow' | 'dawnwood'
+/** Tile order in the strip. ⚠ `leaf-material.ts` maps a species' atlas layer to this index. */
+export const LEAF_SPECIES: readonly LeafSpecies[] = ['goldwood', 'shimmeroak', 'starwillow', 'dawnwood']
+/** Leaf material → species, or null for a leaf the strip does not know. Same order as the strip. */
+/** Species → leaf material, in `LEAF_SPECIES` order (the strip's tile order). */
+export const LEAF_MATS: readonly number[] = [WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES]
+export function leafSpeciesOf(material: number): LeafSpecies | null {
+  const i = LEAF_MATS.indexOf(material)
+  return i < 0 ? null : LEAF_SPECIES[i]
+}
+
+type Px = Uint8Array
+const setPx = (d: Px, size: number, x: number, y: number, r: number, g: number, b: number, a = 255) => {
+  if (x < 0 || y < 0 || x >= size || y >= size) return
+  const o = (y * size + x) * 4; d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = a
+}
+const getA = (d: Px, size: number, x: number, y: number) => (x < 0 || y < 0 || x >= size || y >= size) ? 0 : d[(y * size + x) * 4 + 3]
+/** A filled ellipse of leaf, lit toward the top-left (`lit` cast on the lit texels). */
+function leafBlob(d: Px, size: number, cx: number, cy: number, rx: number, ry: number, ang: number, rnd: () => number,
+  value: [number, number], lit: [number, number, number], vein = 0) {
+  const ca = Math.cos(ang), sa = Math.sin(ang)
+  const R = Math.max(rx, ry) + 1
+  for (let y = Math.floor(cy - R); y <= Math.ceil(cy + R); y++) for (let x = Math.floor(cx - R); x <= Math.ceil(cx + R); x++) {
+    const dx = x + 0.5 - cx, dy = y + 0.5 - cy
+    const u = (dx * ca + dy * sa) / rx, v = (-dx * sa + dy * ca) / ry
+    const q = u * u + v * v
+    if (q > 1) continue
+    // Lit side: the top-left of the blob, and its rim more than its middle.
+    const litness = (-u * 0.4 - v * 0.6 + 1) * 0.5 * (0.6 + 0.4 * q)
+    const vv = value[0] + (value[1] - value[0]) * litness + (rnd() - 0.5) * 18
+    if (vein > 0 && Math.abs(v) * ry < 0.6 && q < 0.85) { setPx(d, size, x, y, vv * vein | 0, vv * vein | 0, vv * vein | 0); continue }
+    if (litness > 0.72) setPx(d, size, x, y, Math.min(255, vv * lit[0] / 255) | 0, Math.min(255, vv * lit[1] / 255) | 0, Math.min(255, vv * lit[2] / 255) | 0)
+    else setPx(d, size, x, y, vv | 0, vv | 0, vv | 0)
+  }
+}
+/** Jittered-grid positions: `g`×`g` cells, one point each. Pure random placement leaves a bare
+ *  corner one tile in three, and a bare corner on a cutout quad is a hole in the canopy. */
+function scatter(size: number, g: number, rnd: () => number): [number, number][] {
+  const out: [number, number][] = []
+  const cell = size / g
+  for (let j = 0; j < g; j++) for (let i = 0; i < g; i++) out.push([(i + 0.15 + rnd() * 0.7) * cell, (j + 0.15 + rnd() * 0.7) * cell])
+  return out
+}
+/** Chew the border so no quad ends in a straight edge — the 08-12 lesson, kept. */
+function chewBorder(d: Px, size: number, rnd: () => number) {
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const edge = Math.min(x, y, size - 1 - x, size - 1 - y)
+    if (edge === 0 || (edge === 1 && rnd() < 0.6)) d[(y * size + x) * 4 + 3] = 0
+  }
+}
+
+/** Goldwood — the common round canopy: plump round leaves in overlapping clumps, warm-lit. */
+function goldwoodLeaf(d: Px, size: number, rnd: () => number) {
+  for (const [x, y] of scatter(size, 4, rnd)) {
+    const r = size * (0.10 + rnd() * 0.07)
+    leafBlob(d, size, x, y, r, r * (0.8 + rnd() * 0.2), rnd() * Math.PI, rnd, [190, 250], [255, 244, 200])
+  }
+  // A few small ones in the gaps so the clumps touch.
+  for (let i = 0; i < size / 4; i++) {
+    const r = size * (0.05 + rnd() * 0.04)
+    leafBlob(d, size, rnd() * size, rnd() * size, r, r, 0, rnd, [190, 250], [255, 244, 200])
+  }
+}
+/** Shimmeroak — the harder, larger wood: small lobed leaves packed dense, deep shade between. */
+function shimmeroakLeaf(d: Px, size: number, rnd: () => number) {
+  const n = Math.round(size * 0.9)
+  for (let i = 0; i < n; i++) {
+    const cx = rnd() * size, cy = rnd() * size, ang = rnd() * Math.PI, r = size * (0.06 + rnd() * 0.045)
+    // A lobed leaf = a spine blob with two side lobes, all one value band so it reads as one leaf.
+    leafBlob(d, size, cx, cy, r * 1.6, r * 0.8, ang, rnd, [150, 232], [240, 255, 225])
+    const ca = Math.cos(ang), sa = Math.sin(ang)
+    leafBlob(d, size, cx - sa * r * 0.8, cy + ca * r * 0.8, r * 0.7, r * 0.6, ang, rnd, [150, 232], [240, 255, 225])
+    leafBlob(d, size, cx + sa * r * 0.8, cy - ca * r * 0.8, r * 0.7, r * 0.6, ang, rnd, [150, 232], [240, 255, 225])
+  }
+}
+/** Starwillow — weeping strands: narrow leaflets down a wobbling stem, the tips lit. */
+function starwillowLeaf(d: Px, size: number, rnd: () => number) {
+  // A crown of small leaves across the top third — a willow is dense where the branches start —
+  // then the strands fall out of it. Without the crown a canopy of strands is a see-through
+  // curtain, which is the 08-13 "you can see the trunk" bug with a prettier name.
+  const crown = Math.round(size * 0.35)
+  for (let i = 0; i < crown; i++) {
+    const r = size * (0.05 + rnd() * 0.04)
+    leafBlob(d, size, rnd() * size, rnd() * size * 0.3, r * 1.4, r, rnd() * Math.PI, rnd, [190, 245], [235, 255, 245])
+  }
+  const strands = Math.max(4, Math.round(size / 5))
+  for (let i = 0; i < strands; i++) {
+    let x = (i + 0.2 + rnd() * 0.6) * (size / strands)
+    const len = size * (0.6 + rnd() * 0.4)
+    const lw = Math.max(1, Math.round(size / 12))
+    for (let y = 0; y < len; y++) {
+      x += (rnd() - 0.5) * 0.9
+      const xi = Math.round(x)
+      const v = 180 + Math.floor(rnd() * 40)
+      setPx(d, size, xi, y, v, v, v)
+      // Leaflets alternate sides every other texel, slim and slanting down.
+      if (y % 2 === 0) {
+        const side = (y / 2) % 2 === 0 ? 1 : -1
+        for (let k = 1; k <= lw; k++) setPx(d, size, xi + side * k, y + (k > 1 ? 1 : 0), 235, 250, 240)
+      }
+    }
+    // The tip: two lit texels the material reads as glow (alpha 200).
+    const ty = Math.min(size - 1, Math.round(len)), tx = Math.round(x)
+    setPx(d, size, tx, ty, 255, 255, 235, LEAF_GLOW_ALPHA)
+    setPx(d, size, tx, ty - 1, 250, 255, 240, LEAF_GLOW_ALPHA)
+  }
+}
+/** Dawnwood — ancient, amber-gold: a few broad leaves, each with a dark midrib, layered. */
+function dawnwoodLeaf(d: Px, size: number, rnd: () => number) {
+  for (const [x, y] of scatter(size, 4, rnd)) {
+    const ang = rnd() * Math.PI
+    leafBlob(d, size, x, y, size * (0.14 + rnd() * 0.06), size * (0.07 + rnd() * 0.03), ang, rnd, [175, 245], [255, 236, 190], 0.68)
+  }
+}
+
+/** One species' leaf tile at `size`, white luminance + cutout alpha (+ the glow bit on starwillow). */
+export function leafPixelsFor(species: LeafSpecies, size = LEAF_TILE, seed = 0x1eaf): Uint8Array {
+  const d = new Uint8Array(size * size * 4)
+  const rnd = lcg(seed ^ (LEAF_SPECIES.indexOf(species) + 1) * 0x9e3779b1)
+  if (species === 'goldwood') goldwoodLeaf(d, size, rnd)
+  else if (species === 'shimmeroak') shimmeroakLeaf(d, size, rnd)
+  else if (species === 'starwillow') starwillowLeaf(d, size, rnd)
+  else dawnwoodLeaf(d, size, rnd)
+  chewBorder(d, size, rnd)
+  return d
+}
+
+/** The four tiles side by side, `LEAF_SPECIES` order: a (4·size)×size RGBA strip. */
+export function leafStripPixels(size = LEAF_TILE, seed = 0x1eaf): Uint8Array {
+  const W = size * LEAF_SPECIES.length
+  const out = new Uint8Array(W * size * 4)
+  LEAF_SPECIES.forEach((sp, t) => {
+    const tile = leafPixelsFor(sp, size, seed)
+    for (let y = 0; y < size; y++) out.set(tile.subarray(y * size * 4, (y + 1) * size * 4), (y * W + t * size) * 4)
+  })
+  return out
+}
+/** Alpha coverage of a tile, 0..1 — what a test pins so a painter cannot go blank or solid. */
+export function leafCoverage(d: Uint8Array): number {
+  let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] >= 128) n++
+  return n / (d.length / 4)
+}
+// `getA` is kept for the next painter that wants to read a neighbour's alpha.
+void getA
 
 // ── ★ THE THREE FLOWER FORMS' TILES (2026-09-14) ────────────────────────────────────────────────
 // One wildflower material, three looks: a MAT (ground cover), a BUSH (a clump), a SINGLE (the old

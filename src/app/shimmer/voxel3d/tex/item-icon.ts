@@ -31,7 +31,7 @@ import { ALL_BLOCKS, materialForItem } from '../../voxel/registry'
 import { meshIcon, hasMeshIcon, pieceIcon } from './mesh-icon'
 import { pieceForItem } from '../../voxel/pieces'
 import { ITEM_ICONS, paletteForItem } from '../../sprites/items'
-import { leafPixels, bladePixels, tallBladePixels, TALL_TILE_H, headPixels, mossPixels, HEAD_TINTS, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
+import { leafPixels, leafPixelsFor, leafSpeciesOf, bladePixels, tallBladePixels, TALL_TILE_H, headPixels, mossPixels, HEAD_TINTS, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './flora-tex'
 import { paintFor, TILE_MATERIALS, TOP, SIDE } from './tiles'
 import { isPlant, isSapling, isGlassMat, MAT } from '../../voxel/depth'
 const rgbOf3 = (hex: number): [number, number, number] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255]
@@ -278,7 +278,11 @@ export function leafCutout(material: number, tile = TILE): Uint8Array | null {
   // No guessed colour, ever — the rule this whole file is built on. A material the world tints and
   // this table does not know is a real gap, and a blank icon says so where a green smear would not.
   if (tint === undefined) return null
-  const src = leafPixels(tile)
+  // The species' own tile since 09-17 (goldwood clumps, oak lobes, willow strands, dawnwood
+  // leaves): the icon derives from the same strip the canopy samples, so the leaf in the bag is
+  // the leaf on the tree. A leaf material the strip does not know falls back to the shared clump.
+  const sp = leafSpeciesOf(material & 0xFF)
+  const src = sp ? leafPixelsFor(sp, tile) : leafPixels(tile)
   const out = new Uint8Array(src.length)
   const tr = (tint >> 16) & 255, tg = (tint >> 8) & 255, tb = tint & 255
   for (let i = 0; i < src.length; i += 4) {
