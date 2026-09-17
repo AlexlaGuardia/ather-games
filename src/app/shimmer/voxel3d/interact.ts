@@ -146,7 +146,7 @@ export type Intent =
 export function rightClickIntent(
   aimed: number, selItem: string | null, holdsSeed: boolean, hasRinstick = false,
   bedPlanted = false, bedReady = false, openablePiece = false, consumable = false,
-  holdsJug = false, holdsWater = false, holdsFeed = false,
+  holdsJug = false, holdsWater = false, holdsFeed = false, atWell = false,
 ): Intent {
   // ── ★★ A PIECE THAT OPENS, ANSWERED BEFORE EVERYTHING ───────────────────────────────────────
   // ⚠ IT CANNOT BE DECIDED FROM `aimed` AND THAT IS WHY IT IS A PARAMETER. Every piece writes the
@@ -198,7 +198,11 @@ export function rightClickIntent(
   // true today (Greg's starter), and it is a parameter anyway so that the day a rod can be lost,
   // this answers `'none'` rather than casting with nothing.
   // The jug, passed like `holdsSeed`: the hand claims it AND the bag backs it. Above `rinn`.
+  // ★ THE WELL (2026-09-17): a piece, so `aimed` is `STRUCTURE` and says nothing — `atWell` is the
+  // host's `placementAt` answer, exactly like `openablePiece`. Answered before the door for the
+  // same reason the door is before the hand: a keeper at their well holding a jug must fill it.
   if (aimed === MAT.WATER && holdsJug) return 'fill'
+  if (atWell && holdsJug) return 'fill'
   if (aimed === MAT.WATER && !selItem && hasRinstick) return 'rinn'
   // ── ★★ A GARDEN BED (2026-08-22) — SOW and REAP, deliberately NOT `plant`/`harvest` ──────────
   // Those two already mean the POT: Gregory's clay pot taking a Mana Seed and blooming a spirit.

@@ -135,7 +135,7 @@ import { keeperKey } from '@/lib/keeper-local'
 const POT_BASE = 'voxel3d:pots:'
 const SAPLING_BASE = 'voxel3d:saplings:'
 const DECAY_BASE = 'voxel3d:leafdecay:'
-import { PIECES, PIECE_MATERIALS, STRUCTURE, STRUCTURE_HALF, pieceDef, pieceVariants, pieceMaterial, pieceItemId, pieceForItem, cellsOf, canPlace, canAfford, placementAt, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
+import { PIECES, PIECE_MATERIALS, STRUCTURE, STRUCTURE_HALF, pieceDef, pieceVariants, pieceMaterial, pieceItemId, pieceForItem, cellsOf, canPlace, canAfford, placementAt, basePieceId, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer, pieceBreakTarget, pieceTint } from './piece-mesh'
 import { toGeometry, createVoxelMaterial, createWaterMaterial, applySettings } from './mesh-bridge'
 import { beginRenderLight, stepRenderLight, packForTexture, type RenderLightWork } from '../voxel/render-light'
@@ -9486,7 +9486,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // The jug, both states, backed by the bag like the seed is.
         selItem === JUG_ITEM && countItem(inv.current!, JUG_ITEM) > 0,
         selItem === JUG_WATER_ITEM && countItem(inv.current!, JUG_WATER_ITEM) > 0,
-        selItem === FEED_ITEM && countItem(inv.current!, FEED_ITEM) > 0)
+        selItem === FEED_ITEM && countItem(inv.current!, FEED_ITEM) > 0,
+        // The well is a piece: the grid says STRUCTURE, the placement says which. Asked only when
+        // the material could be one, so a block click costs nothing here.
+        (potMat === STRUCTURE || potMat === STRUCTURE_HALF)
+          && basePieceId(placementAt(placements.current, hit.x, hit.y, hit.z)?.pieceId ?? '') === 'well')
       // ── ★ THE CHEST OPENS ON RIGHT-CLICK, and is answered FIRST ────────────────────────────
       // A chest is a thing you USE, and the block in your hand must not be dropped onto it by the
       // same click that opens it. Handing the whole panel upward (rather than opening one down
@@ -9652,7 +9656,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // and a puddle the keeper dug beside the beds would make the carry free. A real body of
         // water — pond, stream, lake — fills the jug; anything else says so, because silence at the
         // shore reads as "the jug does nothing".
-        if (!rinSpotAt(hit.x, hit.z, SEED)) {
+        // ★ THE WELL fills it too (2026-09-17, Alex: the plot has no pond) — a piece, so it is
+        // asked by placement, not by the material the ray met. The pond gate stays for open water.
+        const atWell = potMat !== MAT.WATER
+        if (!atWell && !rinSpotAt(hit.x, hit.z, SEED)) {
           onSay('too small to fill a jug from — find a pond, a stream or a lake')
         } else {
           const got = fillJug(inv.current!, (id, n) => give(inv.current!, id, n))
@@ -9660,7 +9667,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           else {
             onInvChange()
             hands.sig.placeAt = performance.now()
-            onSay(got === JUG_POURS ? `the jug fills — ${got} pours` : `the jug fills, but only ${got} pours fit in the bag`)
+            onSay((got === JUG_POURS ? `the jug fills — ${got} pours` : `the jug fills, but only ${got} pours fit in the bag`)
+                  + (atWell ? ' · drawn from the well' : ''))
           }
         }
         mouse.current.right = false

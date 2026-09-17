@@ -42,7 +42,9 @@ const solid = () => MAT.STONE
   // TWENTY-TWO since 2026-09-13 (later the same day) — the TABLE, the reach three Moonwell
   // buildings recorded independently (Hazel's counter, Yarrow's counter, Fennel's long table).
   // Full-cell, not half: a table is the furniture you do not step onto.
-  ok(PIECES.length === 22, `the catalogue is twenty-two pieces, deliberately — the doorway family + two doors + the pane, then the table, joined 2026-09-13 (${PIECES.length})`)
+  // TWENTY-THREE since 2026-09-17 — the WELL (Alex: "we need a well to draw the water"), the plot's
+  // own water source for farming ②, so the daily watering is not a daily trip through the fold.
+  ok(PIECES.length === 23, `the catalogue is twenty-three pieces, deliberately — the doorway family + two doors + the pane, the table, then the well joined 2026-09-17 (${PIECES.length})`)
   const ids = PIECES.map(p => p.id)
   ok(!ids.includes('wall') && !ids.includes('floor'),
      '★ walls and floors are BLOCKS, not pieces — that split is the whole design')

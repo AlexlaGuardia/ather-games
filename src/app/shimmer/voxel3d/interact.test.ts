@@ -200,8 +200,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // ── FARMING ② (2026-09-17): the jug at the pond, the water on the bed ──────────────────────────
 {
   const BED = MAT.GARDEN_BED_GOLDWOOD
-  const I = (aimed: number, sel: string | null, o: Partial<{ seed: boolean; rod: boolean; planted: boolean; ready: boolean; jug: boolean; water: boolean; feed: boolean }> = {}) =>
-    rightClickIntent(aimed, sel, !!o.seed, o.rod ?? true, !!o.planted, !!o.ready, false, false, !!o.jug, !!o.water, !!o.feed)
+  const I = (aimed: number, sel: string | null, o: Partial<{ seed: boolean; rod: boolean; planted: boolean; ready: boolean; jug: boolean; water: boolean; feed: boolean; well: boolean }> = {}) =>
+    rightClickIntent(aimed, sel, !!o.seed, o.rod ?? true, !!o.planted, !!o.ready, false, false, !!o.jug, !!o.water, !!o.feed, !!o.well)
   ok(I(MAT.WATER, 'clay_jug', { jug: true }) === 'fill', 'water + an empty jug in hand fills it')
   ok(I(MAT.WATER, 'clay_jug', { jug: false }) === 'place', '★ a jug the bag cannot back is not a fill — the hand claims, the bag decides')
   ok(I(MAT.WATER, null, { rod: true }) === 'rinn', 'an empty hand at water still rinns')
@@ -216,6 +216,10 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(I(BED, 'bed_brew', { feed: true, planted: true, ready: true }) === 'reap', 'a ripe bed is picked before it is fed')
   ok(I(BED, 'bed_brew', { feed: false, planted: true }) === 'none', 'a brew the bag cannot back over a planted bed: silent')
   ok(I(MAT.STONE, 'bed_brew', { feed: true }) === 'place', 'a brew over stone is a place — the consume gate refuses it upstream')
+  ok(I(STRUCTURE, 'clay_jug', { jug: true, well: true }) === 'fill', '★ the WELL: an empty jug at the well fills — the plot has no pond')
+  ok(I(STRUCTURE, 'clay_jug', { jug: true, well: false }) === 'place', 'a jug at any other piece is a thing in hand')
+  ok(I(STRUCTURE, 'goldwood_plank', { well: true }) === 'place', 'a plank at the well still places — the well is not a station')
+  ok(I(STRUCTURE, null, { well: true }) === 'none', 'an empty hand at the well: nothing (no bucket verb yet)')
 }
 
 console.log(fails.length ? `interact: ${pass} pass, ${fails.length} FAIL` : `interact oracle ${pass} CLEAN`)

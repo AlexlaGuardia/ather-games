@@ -381,6 +381,17 @@ export const PIECES: PieceDef[] = [
   { id: 'gate', name: 'Gate', w: 1, h: 1, d: 1,
     cost: [{ itemId: 'goldwood_plank', count: 2 }],
     openable: true, variants: ['wood', 'stone'] },
+
+  // ── ★ THE WELL (2026-09-17, Alex: "we need a well to draw the water since the plot doesn't
+  // really have a pond and running out to the Ather every time they need a bit of water…") ────
+  // Twenty-third piece. Farming ②'s jug fills at a pond, stream or lake (`voxel3d/watering.ts`),
+  // and the plot has none — so the daily watering canon asks for was a daily trip through the
+  // fold. A well is the plot's own water: a stone ring under a little roof, two tall, filled by
+  // right-clicking it with the empty jug (`interact.ts` › 'fill', the `atWell` half). Stone only:
+  // a well is masonry; there is no wooden well. Six cut stone — a real build, not a click, so
+  // the pond stays the beginner's answer and the well is the plot growing up.
+  { id: 'well', name: 'Well', w: 1, h: 2, d: 1,
+    cost: [{ itemId: 'cut_stone', count: 6 }], variants: ['stone'] },
 ]
 
 /**

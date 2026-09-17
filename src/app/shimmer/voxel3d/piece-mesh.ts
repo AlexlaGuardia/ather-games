@@ -55,6 +55,7 @@ const TINT: Record<string, number> = {
   fence: 0x8a6a34,
   half_slab: 0xa8834d,
   table: 0x9a7a48,
+  well: 0x7e7a72,     // weathered stone, a shade cooler than the arch so the two read apart
 }
 
 /**
@@ -461,6 +462,21 @@ function buildGeometry(def: PieceDef, open = false): THREE.BufferGeometry {
       box(0.12, 0.88, 0.12, 0.38, 0.44, -0.38)
       box(0.12, 0.88, 0.12, -0.38, 0.44, 0.38)
       box(0.12, 0.88, 0.12, 0.38, 0.44, 0.38)
+      break
+    }
+    // ★ THE WELL (2026-09-17): a stone ring you can see down into, two posts, a small cap. Two
+    // cells tall (pieces.ts). The ring is four walls, not a box, so the mouth is open — a keeper
+    // standing at it looks into a dark hole, which is what makes it a well and not a plinth. The
+    // cap sits low and wide over the posts so the silhouette reads from across the plot.
+    case 'well': {
+      box(1, 0.7, 0.16, 0, 0.35, -0.42)          // the ring: four walls
+      box(1, 0.7, 0.16, 0, 0.35, 0.42)
+      box(0.16, 0.7, 0.68, -0.42, 0.35, 0)
+      box(0.16, 0.7, 0.68, 0.42, 0.35, 0)
+      box(0.12, 1.1, 0.12, -0.4, 1.25, 0)        // two posts, up from the ring
+      box(0.12, 1.1, 0.12, 0.4, 1.25, 0)
+      box(1.04, 0.14, 0.7, 0, 1.87, 0)           // the cap
+      box(0.84, 0.1, 0.1, 0, 1.6, 0)             // the beam the bucket would hang from
       break
     }
     default: {   // beam
