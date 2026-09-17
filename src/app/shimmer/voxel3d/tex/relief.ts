@@ -148,6 +148,14 @@ export function normalLayer(tile: Uint8Array, size: number, out: Uint8Array, at:
  * second call into the painter would drift the first time a painter took a parameter, and drift
  * silently, because both halves would still be internally consistent.
  */
+/** A flat relief for a flat placeholder: every normal straight out, (128,128,255,255). Filled,
+ *  not derived — deriving it from flat colour costs 156ms for an answer known in advance. */
+export function flatReliefArray(bytes: number): Uint8Array {
+  const out = new Uint8Array(bytes)
+  for (let i = 0; i < bytes; i += 4) { out[i] = 128; out[i + 1] = 128; out[i + 2] = 255; out[i + 3] = 255 }
+  return out
+}
+
 export function buildReliefArray(tiles: Uint8Array, size: number): Uint8Array {
   const per = size * size
   const layers = tiles.length / (per * STRIDE)

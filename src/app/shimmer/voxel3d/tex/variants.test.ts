@@ -88,7 +88,7 @@ ok(/gLayer = pickLayer\(tbl, cell\)/.test(src) && /gOrient = tileOrient\(grade, 
 ok(/float grade = mod\(tbl\.r, 16\.0\)/.test(src) && /gWeather = floor\(tbl\.r \/ 16\.0\)/.test(src), 'the r byte is decoded as grade + weather')
 ok(/uniform float uWeather;/.test(src) && /shader\.uniforms\.uWeather = \{ value: weather \}/.test(src), 'uWeather declared and bound')
 ok(/gWeather > 0\.5 && tile\.a < 0\.5/.test(src), 'the tint skips emissive texels and non-weather layers')
-ok(src.includes("import { buildTileArray, buildLayerTable, LAYER_COUNT } from './tiles'"), 'the atlas builds the table, not the old grade strip')
+ok(/import \{[^}]*buildLayerTable[^}]*\} from '\.\/tiles'/.test(src) && !/buildVariationFlags/.test(src), 'the atlas builds the table, not the old grade strip')
 
 console.log(`\nvariants: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)

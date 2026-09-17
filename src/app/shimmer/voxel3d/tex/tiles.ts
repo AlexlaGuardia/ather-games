@@ -2179,6 +2179,33 @@ function dressCanopyGap(dst: Layer, size: number, seed: number): void {
   }
 }
 
+/** The material a layer belongs to — base slots, the fallback (-1), and the variant layers. */
+export function materialOfLayer(layer: number): number {
+  if (layer < FALLBACK_LAYER) return TILE_MATERIALS[(layer / 3) | 0]
+  if (layer === FALLBACK_LAYER) return -1
+  return VARIANT_MATERIALS[((layer - VARIANT_BASE) / (3 * VARIANTS_PER)) | 0] ?? -1
+}
+
+/**
+ * The stand-in the world wears while the worker paints (2026-09-17): every layer filled with its
+ * material's flat `MATERIAL_COLOR` — the same tone the painters start from — so the first frames
+ * are the flat-material look and the detail arrives on top. A few milliseconds for the whole set,
+ * against the ~1s the real paint costs. The fallback layer stays magenta here too: an unmapped
+ * material is a bug at any stage of the load.
+ */
+export function buildPlaceholderArray(size: number): Uint8Array {
+  const per = size * size * 4
+  const out = new Uint8Array(per * LAYER_COUNT)
+  for (let L = 0; L < LAYER_COUNT; L++) {
+    const m = materialOfLayer(L)
+    const c = m < 0 ? 0xff00ff : (MATERIAL_COLOR[m] ?? 0xff00ff)
+    const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255
+    const o = L * per
+    for (let i = 0; i < per; i += 4) { out[o + i] = r; out[o + i + 1] = g; out[o + i + 2] = b }
+  }
+  return out
+}
+
 /** A loud checker so an unmapped material is a bug you SEE, not a block that quietly looks like stone. */
 function paintFallback(size: number): Layer {
   const dst = new Uint8Array(size * size * 4)

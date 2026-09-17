@@ -12,8 +12,9 @@
 // exactly on block boundaries. The only attribute added is one float: which layer to sample.
 
 import * as THREE from 'three'
-import { buildTileArray, buildLayerTable, LAYER_COUNT } from './tiles'
-import { buildReliefArray } from './relief'
+import { buildTileArray, buildPlaceholderArray, buildLayerTable, LAYER_COUNT } from './tiles'
+import { TILE_WORKER_URL } from '../../../../workers/worker-url'
+import { buildReliefArray, flatReliefArray } from './relief'
 import { createLightUniforms, type LightUniforms } from '../light-glsl'
 import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from '../cartoon-glsl'
 
@@ -29,15 +30,26 @@ export interface TileArray {
    */
   relief: THREE.DataArrayTexture
   /**
-   * Per-layer orientation grade (`tiles.ts` › `buildVariationFlags`), a LAYER_COUNT×1 byte strip
-   * the shader reads at `vLayer`: 0 fixed · 1 mirror only · 2 all eight orientations. Built here
-   * with the other two for the same reason the relief is — one call, one layer order.
+   * The layer table (`tiles.ts` › `buildLayerTable`), a LAYER_COUNT×1 RGBA strip the shader reads
+   * at `vLayer`: r = orientation grade (0 fixed · 1 mirror · 2 all eight) + 16·weather, g = painted
+   * variant count, b/a = first variant layer. Built here with the other two for the same reason
+   * the relief is — one call, one layer order.
    */
   variation: THREE.DataTexture
   size: number
-  /** The raw bytes, kept so the HUD can draw a reference swatch at true pixel size. */
+  /** The raw bytes, kept so the HUD can draw a reference swatch at true pixel size. ⚠ Until
+   *  `painted` is true these are the flat placeholder; read them after `ready`. */
   data: Uint8Array
+  /** True once the real tiles are in the texture (worker reply, or the main-thread fallback). */
+  painted: boolean
+  /** Resolves when `painted` flips. Never rejects: a worker that fails or stalls falls back to
+   *  painting on the main thread, which is exactly what every load did before 2026-09-17. */
+  ready: Promise<void>
 }
+
+/** How long to wait on the worker before painting on the main thread instead. A 404'd hash (see
+ *  build-worker.mjs) constructs a Worker that never replies, so silence has to be a case. */
+export const TILE_WORKER_TIMEOUT_MS = 20_000
 
 /**
  * Build the array texture for one tile size.
@@ -51,8 +63,23 @@ export interface TileArray {
  * materials at any level. This is the second thing the array buys, and it is the one an atlas can
  * never fix.
  */
+/**
+ * ── ★ PROGRESSIVE SINCE 2026-09-17: THE PAINT LEFT THE MAIN THREAD ──────────────────────────────
+ * `buildTileArray(64)` was ~0.8s on the first frame of every load and grew 25% the morning the
+ * painted variants landed; every future variant made it worse. Now this returns at once with a
+ * flat-colour stand-in per layer (`buildPlaceholderArray`, a few ms), asks the tile-paint worker
+ * for the real bytes, and swaps them into the SAME textures when they arrive — the materials,
+ * the meshes and the layer table never learn anything happened. The first frames wear the flat
+ * look the world had before textures; the detail lands ~1s later, off-thread.
+ *
+ * ⚠ THE FALLBACK IS THE OLD PATH, NOT A BLANK WORLD. No `Worker` (node, a test), a worker error,
+ * or `TILE_WORKER_TIMEOUT_MS` of silence (the 404'd-hash shape build-worker.mjs documents) all
+ * paint on the main thread exactly as before. Under node the fallback runs synchronously inside
+ * this call, so every existing test reads painted bytes from `data` as it always did.
+ */
 export function makeTileArray(size: number, renderer?: THREE.WebGLRenderer): TileArray {
-  const data = buildTileArray(size)
+  const canWork = typeof Worker !== 'undefined' && typeof window !== 'undefined'
+  const data = canWork ? buildPlaceholderArray(size) : buildTileArray(size)
   const tex = new THREE.DataArrayTexture(data, size, size, LAYER_COUNT)
   tex.format = THREE.RGBAFormat
   tex.type = THREE.UnsignedByteType
@@ -77,7 +104,9 @@ export function makeTileArray(size: number, renderer?: THREE.WebGLRenderer): Til
   // ⚠ `NoColorSpace`, not sRGB. These bytes are a direction, not a colour; letting three apply the
   // sRGB transfer curve would bend every normal toward the flat end non-linearly — a world that is
   // subtly under-lit in shadow and over-lit in highlight, with nothing anywhere to point at.
-  const relief = new THREE.DataArrayTexture(buildReliefArray(data, size), size, size, LAYER_COUNT)
+  // A flat placeholder's relief is flat: every normal straight out. Filled, not derived — the
+  // derivation is ~170ms of its own, a cost the old path paid on top of the paint.
+  const relief = new THREE.DataArrayTexture(canWork ? flatReliefArray(data.length) : buildReliefArray(data, size), size, size, LAYER_COUNT)
   relief.format = THREE.RGBAFormat
   relief.type = THREE.UnsignedByteType
   relief.colorSpace = THREE.NoColorSpace
@@ -98,7 +127,44 @@ export function makeTileArray(size: number, renderer?: THREE.WebGLRenderer): Til
   variation.generateMipmaps = false
   variation.needsUpdate = true
 
-  return { texture: tex, relief, variation, size, data }
+  const out: TileArray = { texture: tex, relief, variation, size, data, painted: !canWork, ready: Promise.resolve() }
+  if (!canWork) return out
+
+  // ── the worker round-trip, with the main-thread paint as the floor ─────────────────────────
+  out.ready = new Promise<void>((resolve) => {
+    let done = false
+    let worker: Worker | null = null
+    const swap = (bytes: Uint8Array, normals: Uint8Array) => {
+      if (done) return
+      done = true
+      out.data = bytes
+      tex.image.data = bytes; tex.needsUpdate = true
+      relief.image.data = normals; relief.needsUpdate = true
+      out.painted = true
+      worker?.terminate()
+      resolve()
+    }
+    const fallback = (why: string) => {
+      if (done) return
+      console.warn(`[tiles] painting on the main thread — ${why}`)
+      const bytes = buildTileArray(size)
+      swap(bytes, buildReliefArray(bytes, size))
+    }
+    try {
+      worker = new Worker(TILE_WORKER_URL)
+      worker.onmessage = (e: MessageEvent) => {
+        const msg = e.data as { type: string; size: number; data: Uint8Array; relief: Uint8Array }
+        if (msg.type !== 'tiles' || msg.size !== size) return
+        swap(msg.data, msg.relief)
+      }
+      worker.onerror = () => fallback('worker error')
+      worker.postMessage({ type: 'tiles', size })
+      setTimeout(() => fallback(`no reply in ${TILE_WORKER_TIMEOUT_MS}ms`), TILE_WORKER_TIMEOUT_MS)
+    } catch (err) {
+      fallback(`worker construct threw: ${(err as Error).message}`)
+    }
+  })
+  return out
 }
 
 /**
@@ -607,7 +673,7 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
       }
     },
   }
-  registerTexDial(api)
+  registerTexDial(api, tiles)
   return api
 }
 
@@ -617,8 +683,10 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
 // value out to every material this factory has made (the world's, the glass pass's, the pieces').
 // `__tex.weather(0)` is the A, `__tex.weather(0.12)` the B, on the same frame of the same meadow.
 const TEX_DIALS = new Set<VoxelTexMaterial>()
-function registerTexDial(m: VoxelTexMaterial): void {
+const TEX_ARRAYS = new Set<TileArray>()
+function registerTexDial(m: VoxelTexMaterial, tiles: TileArray): void {
   TEX_DIALS.add(m)
+  TEX_ARRAYS.add(tiles)
   if (typeof window === 'undefined') return
   const w = window as unknown as Record<string, unknown>
   if (w.__tex) return
@@ -629,5 +697,7 @@ function registerTexDial(m: VoxelTexMaterial): void {
     relief: (v: number) => all(t => t.setRelief(v)),
     variation: (on: boolean) => all(t => t.setVariation(on)),
     ao: (v: number) => all(t => t.setAo(v)),
+    /** Whether every tile array alive has its real bytes yet (the worker replied, or the fallback ran). */
+    painted: () => [...TEX_ARRAYS].map(t => t.painted),
   }
 }

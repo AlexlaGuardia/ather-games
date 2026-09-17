@@ -25,43 +25,47 @@ import { join } from 'path'
 
 const URL_MODULE = 'src/workers/worker-url.ts'
 const tracked = readFileSync(URL_MODULE, 'utf8')
-const trackedHash = tracked.match(/voxel-gen\.worker\.([0-9a-f]{10})\.js/)?.[1]
-
-// ⚠ "I could not look" and "I looked and it is fine" must not share an exit code.
-if (!trackedHash) {
-  console.error(`✗ BLIND — no hashed worker URL found in ${URL_MODULE}. The generator's format changed,`)
-  console.error('  or the file was hand-edited. This check cannot answer, so it is not answering yes.')
-  process.exit(1)
-}
-
-const dir = mkdtempSync(join(tmpdir(), 'worker-fresh-'))
-const outfile = join(dir, 'probe.js')
-let freshHash
-try {
-  // ★ THE SAME OPTIONS THE REAL BUILD USES. If these drift apart the guard measures a bundle nobody
-  // ships — the mirror trap, where a copy and its original agree until one of them is edited.
-  await build({
-    entryPoints: ['src/workers/voxel-gen.worker.ts'],
-    outfile, bundle: true, format: 'iife', platform: 'browser',
-    target: 'es2022', minify: true, sourcemap: false, external: [], logLevel: 'silent',
-  })
-  freshHash = createHash('sha256').update(readFileSync(outfile)).digest('hex').slice(0, 10)
-} finally {
-  rmSync(dir, { recursive: true, force: true })
-}
-
-const artifact = `public/voxel-gen.worker.${trackedHash}.js`
+// One row per worker — the same list `build-worker.mjs` builds from (2026-09-17: + the tile painter).
+const WORKERS = [
+  { entry: 'src/workers/voxel-gen.worker.ts', base: 'voxel-gen.worker' },
+  { entry: 'src/workers/tile-paint.worker.ts', base: 'tile-paint.worker' },
+]
 const problems = []
-if (!existsSync(artifact))
-  problems.push(`${URL_MODULE} points at ${artifact}, which does not exist — the deployed page would 404 the worker, construct it, and never get a reply. No console error, no terrain.`)
-if (freshHash !== trackedHash)
-  problems.push(`the tracked worker is ${trackedHash} but the current source builds to ${freshHash} — voxel source changed and nothing rebuilt. The next build in ANY lane will regenerate it and deploy from a dirty tree.`)
+for (const w of WORKERS) {
+  const trackedHash = tracked.match(new RegExp(`${w.base.replace('.', '\\.')}\\.([0-9a-f]{10})\\.js`))?.[1]
+  // ⚠ "I could not look" and "I looked and it is fine" must not share an exit code.
+  if (!trackedHash) {
+    console.error(`✗ BLIND — no hashed ${w.base} URL found in ${URL_MODULE}. The generator's format changed,`)
+    console.error('  or the file was hand-edited. This check cannot answer, so it is not answering yes.')
+    process.exit(1)
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'worker-fresh-'))
+  const outfile = join(dir, 'probe.js')
+  let freshHash
+  try {
+    // ★ THE SAME OPTIONS THE REAL BUILD USES. If these drift apart the guard measures a bundle nobody
+    // ships — the mirror trap, where a copy and its original agree until one of them is edited.
+    await build({
+      entryPoints: [w.entry],
+      outfile, bundle: true, format: 'iife', platform: 'browser',
+      target: 'es2022', minify: true, sourcemap: false, external: [], logLevel: 'silent',
+    })
+    freshHash = createHash('sha256').update(readFileSync(outfile)).digest('hex').slice(0, 10)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+  const artifact = `public/${w.base}.${trackedHash}.js`
+  if (!existsSync(artifact))
+    problems.push(`${URL_MODULE} points at ${artifact}, which does not exist — the deployed page would 404 the worker, construct it, and never get a reply. No console error, no terrain.`)
+  if (freshHash !== trackedHash)
+    problems.push(`the tracked ${w.base} is ${trackedHash} but the current source builds to ${freshHash} — its source changed and nothing rebuilt. The next build in ANY lane will regenerate it and deploy from a dirty tree.`)
+}
 
 if (problems.length) {
   console.error('\n✗ the voxel worker artifact is out of date:')
   for (const p of problems) console.error('  · ' + p)
-  console.error('\n  Fix: npm run build:worker, then commit the new public/voxel-gen.worker.*.js')
+  console.error('\n  Fix: npm run build:worker, then commit the new public/*.worker.*.js')
   console.error(`  AND ${URL_MODULE} together — they must travel in one commit.`)
   process.exit(1)
 }
-console.log(`✅ worker artifact is current — source builds to ${freshHash}, tracked and present.`)
+console.log(`✅ worker artifacts are current — ${WORKERS.map(w => w.base).join(' + ')} tracked, present, and built from the current source.`)

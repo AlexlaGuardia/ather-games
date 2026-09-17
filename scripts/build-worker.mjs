@@ -50,75 +50,90 @@ import { build } from 'esbuild'
 import { createHash } from 'crypto'
 import { writeFileSync, readFileSync, readdirSync, unlinkSync } from 'fs'
 
-const result = await build({
-  entryPoints: ['src/workers/voxel-gen.worker.ts'],
-  outfile: 'public/voxel-gen.worker.js',
-  bundle: true,
-  format: 'iife',
-  platform: 'browser',
-  target: 'es2022',
-  minify: true,
-  sourcemap: false,
-  // The voxel core is pure — no react, no three, no DOM — so nothing here should ever pull one in.
-  // If that changes, this build fails loudly rather than shipping a broken worker.
-  external: [],
-  logLevel: 'info',
-  metafile: true,
-})
+// ── ★ TWO WORKERS, ONE PIPELINE (2026-09-17) ──────────────────────────────────────────────────
+// The tile painter joined the generation worker as a SECOND entry rather than a second message
+// on the first: the gen worker's own header says the generation thread has no business reaching
+// into render code, and `tex/tiles.ts` is render code. Same bundling, same hash, same prune, same
+// URL module — one more row here is the whole cost of a worker.
+const WORKERS = [
+  { entry: 'src/workers/voxel-gen.worker.ts', base: 'voxel-gen.worker', exportName: 'VOXEL_WORKER_URL' },
+  { entry: 'src/workers/tile-paint.worker.ts', base: 'tile-paint.worker', exportName: 'TILE_WORKER_URL' },
+]
 
-const out = result.metafile.outputs['public/voxel-gen.worker.js']
-const inputs = Object.keys(out?.inputs ?? {})
-const banned = inputs.filter(f => /node_modules\/(react|three|@react-three)\//.test(f))
-if (banned.length) {
-  console.error('\n✗ the worker bundle pulled in host-only dependencies:\n  ' + banned.join('\n  '))
-  console.error('  The voxel core must stay pure — see purity.test.ts and VOXEL-WORLD-MODEL § 6 rule 4.')
-  process.exit(1)
-}
-// ── content-hash the output and publish the URL as a module ────────────────────────────────
-const code = readFileSync('public/voxel-gen.worker.js')
-const hash = createHash('sha256').update(code).digest('hex').slice(0, 10)
-const name = `voxel-gen.worker.${hash}.js`
-
-// ── ★★★ THE PRUNE KEEPS WHATEVER THE DEPLOYED BUNDLE IS STILL ASKING FOR (2026-08-28) ─────────
-// The header above documents this hazard exactly — *"a commit that rebuilds the worker DELETES the
-// previous hash from /public"* — and states the check a human should run afterwards. It had never
-// been PERFORMED by anything, and on 2026-08-28 it bit for real: a rebuild run on its own, purely
-// to verify the rename resolved, unlinked the hash live prod was serving. `/voxel-gen.worker.
-// ecc155dbbd.js` went 500 while the app kept answering 200, which is precisely the silent shape the
-// header warns about — a Worker that constructs, accepts postMessage and never replies, so no
-// terrain arrives and nothing throws.
-//
-// ⚠ THE HAZARD IS NOT THE DEPLOY, IT IS RUNNING THIS SCRIPT WITHOUT ONE. Inside `coord build` the
-// window is a few seconds and the new bundle lands asking for the new hash. Run standalone — a
-// verification, a typecheck of the worker graph, a curious `npm run build:worker` — and prod stays
-// broken for as long as nobody deploys, with every instrument reading healthy.
-//
-// So: read the hash the SERVED bundle asks for and keep that file, whatever it is. Asking the
-// thing that is running rather than the thing we have is the header's own rule; this is it, in
-// code, where it cannot be forgotten. A stray extra artifact costs 61KB. The alternative costs a
-// world that does not generate.
+// The hashes the DEPLOYED bundle asks for — read once, for every worker.
 const deployed = new Set()
 try {
   for (const f of readdirSync('.next/static/chunks')) {
     if (!f.endsWith('.js')) continue
-    const m = readFileSync(`.next/static/chunks/${f}`, 'utf8').match(/voxel-gen\.worker\.[0-9a-f]{10}\.js/g)
+    const m = readFileSync(`.next/static/chunks/${f}`, 'utf8').match(/(?:voxel-gen|tile-paint)\.worker\.[0-9a-f]{10}\.js/g)
     for (const hit of m ?? []) deployed.add(hit)
   }
 } catch { /* no .next yet — nothing is deployed, so nothing needs keeping */ }
 if (deployed.size) console.log(`   deployed bundle asks for: ${[...deployed].join(', ')} — keeping`)
 
-// Drop previous builds so /public does not accumulate a worker per deploy.
-for (const f of readdirSync('public')) {
-  if (/^voxel-gen\.worker\.[0-9a-f]{10}\.js$/.test(f) && f !== name && !deployed.has(f)) unlinkSync(`public/${f}`)
+const urlLines = []
+for (const w of WORKERS) {
+  const outfile = `public/${w.base}.js`
+  const result = await build({
+    entryPoints: [w.entry],
+    outfile,
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: 'es2022',
+    minify: true,
+    sourcemap: false,
+    // The voxel core is pure — no react, no three, no DOM — so nothing here should ever pull one in.
+    // If that changes, this build fails loudly rather than shipping a broken worker.
+    external: [],
+    logLevel: 'info',
+    metafile: true,
+  })
+
+  const out = result.metafile.outputs[outfile]
+  const inputs = Object.keys(out?.inputs ?? {})
+  const banned = inputs.filter(f => /node_modules\/(react|three|@react-three)\//.test(f))
+  if (banned.length) {
+    console.error(`\n✗ the ${w.base} bundle pulled in host-only dependencies:\n  ` + banned.join('\n  '))
+    console.error('  A worker must stay pure — see purity.test.ts and VOXEL-WORLD-MODEL § 6 rule 4.')
+    process.exit(1)
+  }
+  // ── content-hash the output and publish the URL as a module ────────────────────────────────
+  const code = readFileSync(outfile)
+  const hash = createHash('sha256').update(code).digest('hex').slice(0, 10)
+  const name = `${w.base}.${hash}.js`
+
+  // ── ★★★ THE PRUNE KEEPS WHATEVER THE DEPLOYED BUNDLE IS STILL ASKING FOR (2026-08-28) ───────
+  // The header above documents this hazard exactly — *"a commit that rebuilds the worker DELETES the
+  // previous hash from /public"* — and states the check a human should run afterwards. It had never
+  // been PERFORMED by anything, and on 2026-08-28 it bit for real: a rebuild run on its own, purely
+  // to verify the rename resolved, unlinked the hash live prod was serving. `/voxel-gen.worker.
+  // ecc155dbbd.js` went 500 while the app kept answering 200, which is precisely the silent shape the
+  // header warns about — a Worker that constructs, accepts postMessage and never replies, so no
+  // terrain arrives and nothing throws.
+  //
+  // ⚠ THE HAZARD IS NOT THE DEPLOY, IT IS RUNNING THIS SCRIPT WITHOUT ONE. Inside `coord build` the
+  // window is a few seconds and the new bundle lands asking for the new hash. Run standalone — a
+  // verification, a typecheck of the worker graph, a curious `npm run build:worker` — and prod stays
+  // broken for as long as nobody deploys, with every instrument reading healthy.
+  //
+  // So: read the hash the SERVED bundle asks for and keep that file, whatever it is. Asking the
+  // thing that is running rather than the thing we have is the header's own rule; this is it, in
+  // code, where it cannot be forgotten. A stray extra artifact costs 61KB. The alternative costs a
+  // world that does not generate.
+  const pattern = new RegExp(`^${w.base.replace('.', '\\.')}\\.[0-9a-f]{10}\\.js$`)
+  for (const f of readdirSync('public')) {
+    if (pattern.test(f) && f !== name && !deployed.has(f)) unlinkSync(`public/${f}`)
+  }
+  writeFileSync(`public/${name}`, code)
+  unlinkSync(outfile)
+  urlLines.push(`export const ${w.exportName} = '/${name}'`)
+  console.log(`\n✅ ${w.base} bundled: ${(out.bytes / 1024).toFixed(1)}KB from ${inputs.length} modules, no host deps`)
+  console.log(`   → public/${name}  (hash pinned in src/workers/worker-url.ts)`)
 }
-writeFileSync(`public/${name}`, code)
-unlinkSync('public/voxel-gen.worker.js')
 
 // Generated, not hand-written: the app imports this so the URL and the bundle can never disagree.
 writeFileSync('src/workers/worker-url.ts',
   `// GENERATED by scripts/build-worker.mjs — do not edit.\n` +
   `// Content-hashed so a deployed worker can never be served from a stale cache entry.\n` +
-  `export const VOXEL_WORKER_URL = '/${name}'\n`)
-
-console.log(`\n✅ worker bundled: ${(out.bytes / 1024).toFixed(1)}KB from ${inputs.length} modules, no host deps`)
-console.log(`   → public/${name}  (hash pinned in src/workers/worker-url.ts)`)
+  urlLines.join('\n') + '\n')
