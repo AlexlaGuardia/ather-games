@@ -7941,6 +7941,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             // gets filed.
             let moved = 0
             for (const g of Object.values(saved.chests)) moved += pourInto(bank.current, adoptChest(g), maxStackOf)
+            // ⚠ THE BANK IS WRITTEN BEFORE THE COLUMN IS. The column flush runs every second and the
+            // keeper's autosave every five; a hard kill inside that gap would have dropped the old
+            // record from disk with the pool never written — the one order that loses things. The
+            // other order (bank saved, column still holding the record) pours again on the next
+            // load — a duplicate, only reachable through a crash, and the generous direction.
+            if (moved > 0 && snapOut.current) void savePlayer(SEED, snapOut.current())
             dirtySaves.current.add(ek)
             if (moved > 0) onSay(`${moved} things moved from your chests into the bank`)
           } else if (saved.chests) {
