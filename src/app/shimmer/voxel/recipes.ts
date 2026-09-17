@@ -375,6 +375,14 @@ export const RECIPES: RecipeDef[] = [
   { id: 'clay_pot', name: 'Clay Pot', station: 'hand', mana: 0,
     input: [{ itemId: 'block_subsoil', count: 3 }],
     output: { itemId: 'clay_pot', count: 1 } },
+  // ── FARMING ② (2026-09-17): the jug that carries pond water to a bed (`voxel3d/watering.ts`).
+  // Fired earth like the pot and two subsoil against its three: it is a vessel you carry, not one
+  // you set down. Hand work — the pot is, and canon puts the cost of watering in the WALK to the
+  // pond, not in the crafting. ⚠ The NAME is a placeholder pending Magii (`CANON_GAPS.md` › the
+  // water vessel); the id is a save key and stays.
+  { id: 'clay_jug', name: 'Clay Jug', station: 'hand', mana: 0,
+    input: [{ itemId: 'block_subsoil', count: 2 }],
+    output: { itemId: 'clay_jug', count: 1 } },
 
   // ── ★ BREWING — THE CAULDRON (2026-08-18) ───────────────────────────────────────────────────
   // Fired earth like the pot, and eight subsoil against its three because it is a BASIN, not a pot:

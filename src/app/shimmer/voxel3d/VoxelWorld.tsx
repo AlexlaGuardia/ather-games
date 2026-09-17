@@ -66,6 +66,10 @@ import {
   plantBlocker, plantRefusalLine, plantInBed, harvestBed, cropAt, readyAt, clearBed,
   bedsToSave, bedsFromSave, bedKey, bedZoneId, type PlantedBeds,
 } from './planting'
+import {
+  JUG_ITEM, JUG_WATER_ITEM, JUG_POURS, waterBlocker, waterRefusalLine, waterBed, fillJug, settleWatering,
+  isDamp, dampLeftLine, dampFraction, clearDamp, wateringToSave, wateringFromSave, type WateredBeds,
+} from './watering'
 import { plantedSpots, plantedSignature } from './planted-feed'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
 import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, withLitter, litterDrops, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
@@ -251,6 +255,7 @@ import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
 import { columnSmokeSources, type SmokeSource } from './smoke-sources'
 import { createSeamShimmer, createSocketShimmers, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, gladeSeamAnchor } from './seam'
+import { createWetPatches, type WetSpot } from './wet-patch'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
 import { createBreakFx } from './break-fx'
 import { bucketOf, swingChips } from './break-fx-spec'
@@ -695,6 +700,9 @@ const STACK_OVERRIDE: Record<string, number> = {
   crafting_table: 16,
   chest: 16,
   cauldron: 16,
+  // Farming ②: a slot of water IS one jug — `count` is pours left, so the stack is the jug's size.
+  [JUG_ITEM]: JUG_POURS,
+  [JUG_WATER_ITEM]: JUG_POURS,
   // ── ★ A POTION STACKS TO ONE SPIRIT'S WORTH (2026-08-18, brewing) ──────────────────────────
   // Derived from the infusion cap, not chosen: the most any single spirit can take of ONE element is
   // `MAX_INFUSIONS_PER_ELEMENT` (9), so a full stack is exactly one spirit's capacity with a bottle
@@ -3371,6 +3379,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const seam = useMemo(() => createSeamShimmer(SEED, WILDS_BUBBLE, () => plotCfg.current), [])
   /** The station's lit doorways — set on every court lay and lamp pass, ticked with the seam. */
   const socketShimmers = useMemo(() => createSocketShimmers(), [])
+  /** The damp skin on watered beds (farming ②). Rewritten on the planted beat when `wetDirty`. */
+  const wetPatches = useMemo(() => createWetPatches(), [])
+  const wetDirty = useRef(true)
+  const wetFadeAt = useRef(0)
   /** Greg's door from the Glade side: one gold spiral, set once, shown only in the glade. */
   const gladeDoor = useMemo(() => {
     const s = createSocketShimmers()
@@ -3524,6 +3536,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const edits = useRef(new Map<string, ColumnEdits>())
   /** What is growing in each garden bed. Keyed by voxel — see `voxel/planting.ts`. */
   const beds = useRef<PlantedBeds>(new Map())
+  /** Which beds are damp, and until when — farming ② (`voxel3d/watering.ts`). Same key as `beds`. */
+  const watered = useRef<WateredBeds>(new Map())
 
   /**
    * ── ★ EAT / DRINK (2026-09-15, Alex: "do the eat/drink verb next") ─────────────────────────────
@@ -4056,6 +4070,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // unchanged. `bedsFromSave` also refuses crops carrying a play3d zone id, so a shared save
       // cannot drop farm-zone crops into voxel beds at coordinates that mean something else.
       beds.current = bedsFromSave(p.beds as never)
+      // ★ SETTLED ONCE ON LOAD: the damp window and the crop clock are both wall-time, so the whole
+      // interval the tab was shut is paid here, as if the beat had run — see `settleWatering`.
+      watered.current = wateringFromSave(p.watered)
+      settleWatering(watered.current, beds.current, Date.now())
       // The pool comes back compact (no free slots); it is fitted to the chest census at the door.
       bank.current = bankFromSave(p.bank)
       onInvChange()
@@ -4088,6 +4106,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
                plotTier: plotTier.current,
                litterFrom: litterFrom.current,
                beds: bedsToSave(beds.current),
+               watered: wateringToSave(watered.current),
                bank: bankToSave(bank.current),
                index: indexToSave(spiritIndex.current) }
     }
@@ -4299,6 +4318,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     breakFx.dispose()
     seam.dispose()
     socketShimmers.dispose()
+    wetPatches.dispose()
     gladeDoor.dispose()
     mist.dispose()
     ring.dispose()
@@ -8102,6 +8122,23 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // headless: 12 → 22 columns queued while the beds sat empty). One renderer, two feeds, two beats.
     if (state.clock.elapsedTime - plantedAt.current > 1.5) {
       plantedAt.current = state.clock.elapsedTime
+      // Farming ②: pay the damp beds' growth bonus BEFORE the spots are read, so a stage crossed
+      // by the bonus shows on this beat, not the next. Sweeping a dried bed changes the wet patches.
+      const before = watered.current.size
+      settleWatering(watered.current, beds.current, Date.now())
+      if (watered.current.size !== before) wetDirty.current = true
+      // The patches: on a change, and otherwise every ~60s so the fade creeps (it is the clock).
+      if (wetDirty.current || state.clock.elapsedTime - wetFadeAt.current > 60) {
+        wetDirty.current = false
+        wetFadeAt.current = state.clock.elapsedTime
+        const now = Date.now()
+        const wet: WetSpot[] = []
+        for (const [k, d] of watered.current) {
+          const [x, y, z] = k.split(',').map(Number)
+          wet.push({ x, y, z, fraction: dampFraction(d, now) })
+        }
+        wetPatches.set(wet)
+      }
       const spots = plantedSpots(beds.current)
       const sig = plantedSignature(spots)
       if (sig !== plantedSig.current) {
@@ -9244,6 +9281,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // square with nothing visible to explain it. `clearBed` is a no-op on every other
           // material, so this costs one Map lookup per block broken.
           clearBed(beds.current, hit.x, hit.y, hit.z)
+          clearDamp(watered.current, hit.x, hit.y, hit.z)
           // ★ EXPANSION LITTER PAYS (Alex, 2026-09-12: "free matts for the player to collect"). A
           // rubble heap the WORLD put down breaks into its rubble; one the keeper placed comes back
           // as the heap it was. "Generated" is exactly "no edit on this cell", which is the same
@@ -9433,7 +9471,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         cropAt(beds.current, hit.x, hit.y, hit.z) !== undefined,
         readyAt(beds.current, hit.x, hit.y, hit.z),
         false,
-        !!selItem && isConsumable(selItem))
+        !!selItem && isConsumable(selItem),
+        // The jug, both states, backed by the bag like the seed is.
+        selItem === JUG_ITEM && countItem(inv.current!, JUG_ITEM) > 0,
+        selItem === JUG_WATER_ITEM && countItem(inv.current!, JUG_WATER_ITEM) > 0)
       // ── ★ THE CHEST OPENS ON RIGHT-CLICK, and is answered FIRST ────────────────────────────
       // A chest is a thing you USE, and the block in your hand must not be dropped onto it by the
       // same click that opens it. Handing the whole panel upward (rather than opening one down
@@ -9593,11 +9634,48 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         setVoxel(hit.x, hit.y, hit.z, MAT.POT)
         onSay(`✦ a young ${speciesDisplayName(born.species)} chose you!`)
         mouse.current.right = false
+      } else if (intent === 'fill') {
+        // ── ★ FARMING ②: THE JUG AT THE POND (`voxel3d/watering.ts`) ────────────────────────────
+        // Gated on the same field query rinning uses: canon says the water comes from *Ather ponds*,
+        // and a puddle the keeper dug beside the beds would make the carry free. A real body of
+        // water — pond, stream, lake — fills the jug; anything else says so, because silence at the
+        // shore reads as "the jug does nothing".
+        if (!rinSpotAt(hit.x, hit.z, SEED)) {
+          onSay('too small to fill a jug from — find a pond, a stream or a lake')
+        } else {
+          const got = fillJug(inv.current!, (id, n) => give(inv.current!, id, n))
+          if (got === 0) onSay('no room in the bag for the water')
+          else {
+            onInvChange()
+            hands.sig.placeAt = performance.now()
+            onSay(got === JUG_POURS ? `the jug fills — ${got} pours` : `the jug fills, but only ${got} pours fit in the bag`)
+          }
+        }
+        mouse.current.right = false
+      } else if (intent === 'water') {
+        // ── ★ FARMING ②: THE POUR. Asked through `waterBlocker`, then `waterBed` — the host wants
+        // the REASON for a sentence, the module wants the verdict; two callers, one rule.
+        const now = Date.now()
+        const why = waterBlocker(watered.current, hit.x, hit.y, hit.z, inv.current!, now)
+        if (why !== 'ok') {
+          onSay(waterRefusalLine(why, watered.current, hit.x, hit.y, hit.z, now))
+        } else if (waterBed(watered.current, beds.current, hit.x, hit.y, hit.z, inv.current!, now, (id, n) => give(inv.current!, id, n))) {
+          onInvChange()
+          hands.sig.placeAt = performance.now()
+          wetDirty.current = true
+          const left = countItem(inv.current!, JUG_WATER_ITEM)
+          const crop = cropAt(beds.current, hit.x, hit.y, hit.z)
+          onSay((crop ? `watered — ${CROP_DEFS[crop.cropId].name.toLowerCase()} grows a quarter faster today` : 'watered — the bed is damp for the day')
+                + (left ? ` · ${left} pour${left === 1 ? '' : 's'} left` : ' · the jug is empty'))
+        }
+        mouse.current.right = false
       } else if (intent === 'needs-seed') {
         // ★ THE BED SAYS WHAT IT WANTS. Naming the SOURCE, not just the lack — "you have no seed"
         // is the message a keeper can already infer from the fact that nothing happened. The whole
         // value is the second half of the sentence.
-        onSay('this bed wants a common crop seed — grass tufts carry them')
+        onSay(isDamp(watered.current, hit.x, hit.y, hit.z, Date.now())
+          ? `this bed is damp (${dampLeftLine(watered.current, hit.x, hit.y, hit.z, Date.now())}) and wants a common crop seed — grass tufts carry them`
+          : 'this bed wants a common crop seed — grass tufts carry them')
         mouse.current.right = false
       } else if (intent === 'sow') {
         // ── ★★ SOW: a crop seed into an empty bed ──────────────────────────────────────────────
@@ -10141,6 +10219,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       <primitive object={breakFx.points} />
       <primitive object={seam.group} />
       <primitive object={socketShimmers.group} />
+      <primitive object={wetPatches.group} />
       <primitive object={gladeDoor.group} />
       <primitive object={mist.pools} />
       <primitive object={mist.points} />

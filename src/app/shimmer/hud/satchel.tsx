@@ -28,6 +28,7 @@ import { type Spirit } from '../spirits/spirit'
 import { pieceForItem } from '../voxel/pieces'
 import { blockDef, materialForItem } from '../voxel/registry'
 import { intermediateLabel } from '../voxel3d/alchemy-chain'
+import { wateringLabel } from '../voxel3d/watering'
 import { MATERIAL_COLOR } from '../voxel3d/attrs'
 import { CHEST_BAGFULS, CHEST_COLS, CHEST_SLOTS, halfOf, type Slots } from '../voxel3d/chest'
 import { BANK_TABS, bankCategory, bankFreeSlots, bankUsed, bankView, type BankTab } from '../voxel3d/bank'
@@ -128,6 +129,8 @@ export function itemLabel(itemId: string): string {
   if (pc) return pc.name
   const mid = intermediateLabel(itemId)          // the alchemy chain's powders, extracts, bases
   if (mid) return mid
+  const jug = wateringLabel(itemId)              // the jug, empty and carrying (farming ②)
+  if (jug) return jug
   const m = materialForItem(itemId)
   const named = m !== undefined ? blockDef(m)?.name : undefined
   return named ?? itemId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())

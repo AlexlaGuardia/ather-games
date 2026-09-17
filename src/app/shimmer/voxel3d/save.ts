@@ -175,6 +175,8 @@ export interface PlayerSave {
    * every crop the moment a keeper closed the game.
    */
   beds?: unknown
+  /** Which beds are damp and until when — farming ② (`voxel3d/watering.ts`). Optional for the same reason `beds` is. */
+  watered?: unknown
   /**
    * ★ THE WAYMARK NETWORK (2026-08-15) — and it belongs HERE rather than in `ColumnSave`, which is
    * the opposite of where chests and station jobs live.

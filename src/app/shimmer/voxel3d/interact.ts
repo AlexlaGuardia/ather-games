@@ -92,6 +92,21 @@ export type Intent =
    * whether that means throw the line, take it, or reel in.
    */
   | 'rinn'
+  /**
+   * ── FARMING ② (2026-09-17): the jug at the pond, the water on the bed ──────────────────────
+   * Water, with an EMPTY JUG in hand: fill it (`voxel3d/watering.ts`). Answered before `rinn`,
+   * which wants an empty hand anyway, and before `place` for the reason every use-verb is: a keeper
+   * holding a jug at the shore must fill it, not drop it in. Whether the water is a real pond is
+   * the host's call (`rinSpotAt`), like the rinning spot — this file says "this click is about
+   * the jug".
+   */
+  | 'fill'
+  /**
+   * A garden bed, with WATER in hand: pour. Empty or planted alike — a bed is watered, not a crop
+   * — and answered after `reap` (a ripe bed wants picking, water would be wasted on it) but before
+   * `sow` and the planted-bed `none`, so a keeper carrying water over their own beds waters them.
+   */
+  | 'water'
   /** Put the block in your hand into the world. */
   | 'place'
   /**
@@ -129,6 +144,7 @@ export type Intent =
 export function rightClickIntent(
   aimed: number, selItem: string | null, holdsSeed: boolean, hasRinstick = false,
   bedPlanted = false, bedReady = false, openablePiece = false, consumable = false,
+  holdsJug = false, holdsWater = false,
 ): Intent {
   // ── ★★ A PIECE THAT OPENS, ANSWERED BEFORE EVERYTHING ───────────────────────────────────────
   // ⚠ IT CANNOT BE DECIDED FROM `aimed` AND THAT IS WHY IT IS A PARAMETER. Every piece writes the
@@ -179,6 +195,8 @@ export function rightClickIntent(
   // lives in `engine/tools.ts` and this file has no business importing it. It is effectively always
   // true today (Greg's starter), and it is a parameter anyway so that the day a rod can be lost,
   // this answers `'none'` rather than casting with nothing.
+  // The jug, passed like `holdsSeed`: the hand claims it AND the bag backs it. Above `rinn`.
+  if (aimed === MAT.WATER && holdsJug) return 'fill'
   if (aimed === MAT.WATER && !selItem && hasRinstick) return 'rinn'
   // ── ★★ A GARDEN BED (2026-08-22) — SOW and REAP, deliberately NOT `plant`/`harvest` ──────────
   // Those two already mean the POT: Gregory's clay pot taking a Mana Seed and blooming a spirit.
@@ -195,6 +213,9 @@ export function rightClickIntent(
   // wall-clock state living in `voxel/planting.ts`, and this file reads no state and imports no
   // engine. It answers from what it is told.
   if (isGardenBed(aimed) && bedReady) return 'reap'
+  // Water in hand over any bed that is not ripe — see `'water'`. Before `sow` and the planted
+  // `none`, so watering is never blocked by what is (or is not) growing.
+  if (isGardenBed(aimed) && holdsWater) return 'water'
   if (isGardenBed(aimed) && !bedPlanted && holdsSeed) return 'sow'
   // ⚠⚠ A BED WITH SOMETHING GROWING IN IT IS NOT A FACE TO BUILD ON. Without this the click falls
   // through to `place` and a keeper buries their own crop under whatever they were carrying — the
