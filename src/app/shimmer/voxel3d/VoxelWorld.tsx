@@ -4633,7 +4633,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         offItsFloor: +(aboveStanding - hover).toFixed(2),
       }
     })
-    return () => { delete w.__hollows }
+    // `window.__planted()` — the planted feed as the renderer last saw it, plus the crop pool's
+    // demand row, so "the bed shows nothing" can be split into "no spot" / "spot, no draw".
+    w.__planted = () => !owner.current ? 'owner only' : {
+      sig: plantedSig.current, spots: plantedSpots(beds.current),
+      demand: { crop: floraDemand.crop, herb: floraDemand.herb },
+      dirty: floraDirty.current, incoming: incoming.current?.length ?? -1,
+    }
+    return () => { delete w.__hollows; delete w.__planted }
   }, [owner, groundTopNear])
 
 
@@ -8088,10 +8095,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // it), then demands topsoil with air above — which is what keeps tufts off roads, crust,
     // grey dither, placed blocks and dug holes without flora.ts knowing materials exist.
     // ── the planted feed's beat: the crops in the beds change on a clock, not on an edit ─────
-    // A stage is minutes apart and a full flora sync is milliseconds, so neither is paid per
-    // frame: every ~1.5s the beds are read into spots, and ONLY a changed signature (a plant, a
-    // harvest, a stage crossed, a load) hands the renderer the list and marks flora dirty. The
-    // wild sync below then draws them in the same pass — one renderer, two feeds.
+    // A stage is minutes apart, so this is not paid per frame: every ~1.5s the beds are read into
+    // spots, and ONLY a changed signature (a plant, a harvest, a stage crossed, a load) hands the
+    // renderer the list. `setPlanted` writes the planted tail at once — it does NOT ride the wild
+    // sync below, whose `incoming` gate can stay shut for a long time on a slow device (measured
+    // headless: 12 → 22 columns queued while the beds sat empty). One renderer, two feeds, two beats.
     if (state.clock.elapsedTime - plantedAt.current > 1.5) {
       plantedAt.current = state.clock.elapsedTime
       const spots = plantedSpots(beds.current)
@@ -8099,7 +8107,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       if (sig !== plantedSig.current) {
         plantedSig.current = sig
         flora.setPlanted(spots)
-        floraDirty.current = true
       }
     }
     if (floraDirty.current && incoming.current!.length === 0) {

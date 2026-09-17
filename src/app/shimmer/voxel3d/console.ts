@@ -345,8 +345,7 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
     run: (a, c) => {
       if (!a[0] || a.length < 4) return 'plant what, where? plant <crop> <x> <y> <z>'
       const here = c.pos()
-      const rel = (t: string, base: number) => t.startsWith('~') ? base + (Number(t.slice(1)) || 0) : Number(t)
-      const x = Math.floor(rel(a[1], here.x)), y = Math.floor(rel(a[2], here.y)), z = Math.floor(rel(a[3], here.z))
+      const x = Math.floor(parseCoord(a[1], here.x)), y = Math.floor(parseCoord(a[2], here.y)), z = Math.floor(parseCoord(a[3], here.z))
       if (![x, y, z].every(Number.isFinite)) return 'plant where? three numbers (~ allowed)'
       return c.plant(a[0], x, y, z)
     } },

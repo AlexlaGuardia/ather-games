@@ -170,8 +170,8 @@ export const FLORA_COLORS = {
  * either; import this instead of restating it.
  */
 /** The ripe glint's card size, its float above the crown, its texture size and its colour. */
-const GLINT_SIZE = 0.34
-const GLINT_LIFT = 0.12
+const GLINT_SIZE = 0.26
+const GLINT_LIFT = 0.04
 const GLINT_TEX = 16
 const GLINT_COLOR = 0xfff1b8
 /** A collapsed instance: the head pool is 1:1 with the stalk pool, so an unripe crop's head is
@@ -1185,6 +1185,72 @@ export function createFloraRenderer(): FloraRenderer {
     return out
   }
 
+  // ── ★ THE PLANTED FEED, written after the wild spots — and on its OWN beat (2026-09-16) ────
+  // The wild sync waits for the streaming queue to go quiet (`incoming` in the host), which on a
+  // slow device or a headless box can be a long wait; the first cut hung the planted crops on that
+  // same gate and a keeper's beds sat empty while columns trickled in. The planted tail does not
+  // need a rebuild: it starts where the wild feed stopped (`baseC`/`baseH`, remembered from the
+  // last sync) and rewrites only itself. `sync` calls it at the end; `setPlanted` calls it at once.
+  let baseC = 0, baseH = 0
+  let demandC = 0, demandH = 0
+  const writePlanted = (): void => {
+    // ── ★ THE PLANTED FEED, appended after the wild spots (2026-09-16) ─────────────────────
+    // Same pools, same tints, same sway; only the matrix differs. A bed's crop stands CENTRED
+    // in its cell (no jitter — it was put there) at a turn off the bed's own position, and its
+    // height is the STAGE, not `floraGrow`'s random size. The ripe head is the ripeness signal
+    // and is drawn only at STAGE_RIPE; before that the head instance is collapsed to nothing
+    // (the two pools are 1:1 by index, so it cannot simply be skipped). Caps are shared with the
+    // wild feed and counted into the same demand row, so a plot cannot overflow silently.
+    let nC = baseC, nH = baseH, nGl = 0
+    for (const s of planted) {
+      const look = plantedLook(s.cropId)
+      if (!look) continue
+      const place = FLORA_PLACE[look.pool === 'herb' ? FLORA.HERB : FLORA.CROP]
+      off.set(s.x + 0.5, s.y + place.root, s.z + 0.5)
+      quat.setFromAxisAngle(Y_UP, s.variant * Math.PI * 2)
+      const grow = STAGE_GROW[s.stage]
+      scl.set(1, grow, 1)
+      mtx.compose(off, quat, scl)
+      const ripe = s.stage === STAGE_RIPE
+      if (look.pool === 'crop') {
+        demandC++
+        if (nC < CAP.crop) {
+          crops.setMatrixAt(nC, mtx)
+          crops.setColorAt(nC, tint.set(look.body ?? MATERIAL_COLOR[look.mat] ?? 0x8f9f5a))
+          cropHeads.setMatrixAt(nC, ripe ? mtx : ZERO_MTX)
+          cropHeads.setColorAt(nC, tint.set(look.head ?? CROP_HEAD[look.mat] ?? 0xffffff))
+          nC++
+        }
+      } else {
+        demandH++
+        if (nH < CAP.herb) {
+          herbs.setMatrixAt(nH, mtx)
+          herbs.setColorAt(nH, tint.set(MATERIAL_COLOR[look.mat] ?? 0x6f8f4a))
+          tips.setMatrixAt(nH, ripe ? mtx : ZERO_MTX)
+          tips.setColorAt(nH, tint.set(HERB_TIP[look.mat] ?? 0xffffff))
+          nH++
+        }
+      }
+      if (ripe && nGl < CAP.glint) {
+        // The glint sits ON the crown, not over it — the first shot had it a whole plant
+        // above the head, reading as weather. The head part tops out at 1.02 of the unit stalk;
+        // the star's base rides just under that so it overlaps the head's tip. Unscaled: a star
+        // should not stretch with the stalk.
+        scl.set(1, 1, 1)
+        off.y = s.y + place.root + 0.88
+        glints.setMatrixAt(nGl, mtx.compose(off, quat, scl))
+        nGl++
+      }
+    }
+    glints.count = nGl
+    glints.instanceMatrix.needsUpdate = true
+    crops.count = nC; cropHeads.count = nC; herbs.count = nH; tips.count = nH
+    for (const m of [crops, cropHeads, herbs, tips]) {
+      m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+    }
+  }
+
   return {
     group,
     sync(cols, seed, probe) {
@@ -1326,60 +1392,17 @@ export function createFloraRenderer(): FloraRenderer {
           }
         }
       }
-      // ── ★ THE PLANTED FEED, appended after the wild spots (2026-09-16) ─────────────────────
-      // Same pools, same tints, same sway; only the matrix differs. A bed's crop stands CENTRED
-      // in its cell (no jitter — it was put there) at a turn off the bed's own position, and its
-      // height is the STAGE, not `floraGrow`'s random size. The ripe head is the ripeness signal
-      // and is drawn only at STAGE_RIPE; before that the head instance is collapsed to nothing
-      // (the two pools are 1:1 by index, so it cannot simply be skipped). Caps are shared with the
-      // wild feed and counted into the same demand row, so a plot cannot overflow silently.
-      let nGl = 0
-      for (const s of planted) {
-        const look = plantedLook(s.cropId)
-        if (!look) continue
-        const place = FLORA_PLACE[look.pool === 'herb' ? FLORA.HERB : FLORA.CROP]
-        off.set(s.x + 0.5, s.y + place.root, s.z + 0.5)
-        quat.setFromAxisAngle(Y_UP, s.variant * Math.PI * 2)
-        const grow = STAGE_GROW[s.stage]
-        scl.set(1, grow, 1)
-        mtx.compose(off, quat, scl)
-        const ripe = s.stage === STAGE_RIPE
-        if (look.pool === 'crop') {
-          wC++
-          if (nC < CAP.crop) {
-            crops.setMatrixAt(nC, mtx)
-            crops.setColorAt(nC, tint.set(look.body ?? MATERIAL_COLOR[look.mat] ?? 0x8f9f5a))
-            cropHeads.setMatrixAt(nC, ripe ? mtx : ZERO_MTX)
-            cropHeads.setColorAt(nC, tint.set(look.head ?? CROP_HEAD[look.mat] ?? 0xffffff))
-            nC++
-          }
-        } else {
-          wH++
-          if (nH < CAP.herb) {
-            herbs.setMatrixAt(nH, mtx)
-            herbs.setColorAt(nH, tint.set(MATERIAL_COLOR[look.mat] ?? 0x6f8f4a))
-            tips.setMatrixAt(nH, ripe ? mtx : ZERO_MTX)
-            tips.setColorAt(nH, tint.set(HERB_TIP[look.mat] ?? 0xffffff))
-            nH++
-          }
-        }
-        if (ripe && nGl < CAP.glint) {
-          // The glint sits over the crop's crown: full-height crop, so the lift is the unit
-          // height plus GLINT_LIFT, unscaled — a star should not stretch with the stalk.
-          scl.set(1, 1, 1)
-          off.y = s.y + place.root + 1.0
-          glints.setMatrixAt(nGl, mtx.compose(off, quat, scl))
-          nGl++
-        }
-      }
-      glints.count = nGl
-      glints.instanceMatrix.needsUpdate = true
       tufts.count = nT; tuftCaps.count = nT; tuftShadows.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
       matLeaves.count = nM; matBlooms.count = nM; matStars.count = nM; matShadows.count = nM
       bushes.count = nB; bushHeads.count = nB
       fruitBushes.count = nFr; fruits.count = nFr
       herbs.count = nH; tips.count = nH
       crops.count = nC; cropHeads.count = nC
+      // The planted tail starts where the wild feed stopped; it sets the crop/herb counts itself.
+      baseC = nC; baseH = nH
+      demandC = 0; demandH = 0
+      writePlanted()
+      wC += demandC; wH += demandH
       // ★ REPORT DEMAND, NOT JUST WHAT FIT. A pool at 100% of cap and a pool at 199% of cap draw
       // exactly the same picture; only these numbers tell them apart.
       for (const [pool, wanted, cap] of [
@@ -1432,7 +1455,7 @@ export function createFloraRenderer(): FloraRenderer {
     },
     invalidate(colKey) { cache.delete(colKey) },
     invalidateAll() { cache.clear() },
-    setPlanted(spots) { planted = spots },
+    setPlanted(spots) { planted = spots; writePlanted() },
     tick(elapsed) { uTime.value = elapsed },
 
     setHighlight(kind, x, y, z, variant, alongX) {
