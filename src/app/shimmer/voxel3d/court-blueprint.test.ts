@@ -6,7 +6,7 @@
 // quarter-turn snap can account for).
 
 import { courtAnchor, sockets, socketCells, courtLevel } from './crossings'
-import { STATION_LAYOUT, layoutOf, stationBlueprint, stationStamp, stationSockets, stationLamps, stationCells, stationRot, socketStandOut, SOCKET_RADIUS, SOCKET_STAND_OUT } from './court-blueprint'
+import { STATION_LAYOUT, layoutOf, stationBlueprint, stationStamp, stationSockets, stationLamps, stationCells, stationRot, socketStandOut, SOCKET_RADIUS, SOCKET_STAND_OUT, socketLabel, socketLitBy, socketWay } from './court-blueprint'
 import { plotForTier, PLOT_TIERS } from '../voxel/plot'
 import { WORLD_SEED } from './world-seed'
 import { MAT } from '../voxel/depth'
@@ -127,6 +127,27 @@ console.log('the crossings travel with the file')
   // The second socket resolves to itself, not to the first.
   const o1 = socketStandOut(socks, anchor, 30.2, 10.7)
   check('socket 1 steps out toward the anchor (−x here)', !!o1 && o1.index === 1 && o1.x < 30.5)
+}
+
+// ── the nametag over a doorway (2026-09-17): derived from socketWay, silent on a dark socket ───
+{
+  const marks = [{ name: 'Old Mill', x: 40, z: -12 }, { name: '  ', x: -7, z: 99 }]
+  check('socket 0 is the gate out — Rune Hold', socketLabel(0, []) === 'Rune Hold')
+  check('socket 1 is the fold back — Moonwell', socketLabel(1, []) === 'Moonwell')
+  check('a dark waymark slot has NO tag (the absence is the information)', socketLabel(2, []) === null)
+  check('a held mark names its slot', socketLabel(2, marks) === 'Old Mill')
+  check('an unnamed mark reads as its coordinates, the panel\'s rule', socketLabel(3, marks) === '-7, 99')
+  check('the slot past the held marks stays dark', socketLabel(4, marks) === null)
+  // The tag can never name a doorway the crossing would not take: lit ⇔ tagged, for every index.
+  for (let i = 0; i < 8; i++) {
+    const lit = socketLitBy(i, marks.length)
+    const tag = socketLabel(i, marks)
+    check(`socket ${i}: tagged exactly when lit (${lit} / ${tag})`, lit === (tag !== null))
+    if (tag && i >= 2) {
+      const m = marks[(socketWay(i) as { slot: number }).slot]
+      check(`socket ${i}'s tag is the mark socketWay routes to`, tag === (m.name.trim() || `${m.x}, ${m.z}`))
+    }
+  }
 }
 
 console.log(`court-blueprint: ${pass} passed, ${fail} failed`)

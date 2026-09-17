@@ -45,6 +45,7 @@ import { DEFAULT_PLOT, plotThreshold, type PlotConfig } from '../voxel/plot'
 import { DEFAULT_GLADE, gladeSeamSpot, type GladeConfig } from '../voxel/glade'
 import { columnHeight } from '../voxel/height'
 import type { Space } from './save'
+import { buildNameSprite } from './greg'
 
 /** Where a seam stands, how big it is drawn, and which way it faces. Blocks and radians. */
 export interface SeamAnchor {
@@ -356,7 +357,7 @@ export interface SeamPass {
 export interface SocketShimmer {
   group: THREE.Group
   /** Rebuild the set: one plane per LIT socket, facing `facing` (radians, the direction a keeper walks through it). */
-  set(sockets: { x: number; z: number; y: number; facing: number; tint: 'gate' | 'passage' }[]): void
+  set(sockets: { x: number; z: number; y: number; facing: number; tint: 'gate' | 'passage'; label?: string | null }[]): void
   tick(px: number, pz: number, elapsed: number): void
   dispose(): void
 }
@@ -370,11 +371,35 @@ export function createSocketShimmers(): SocketShimmer {
   // a keeper can see.
   const mats = { gate: seamMaterial(new THREE.Vector3(1.0, 0.80, 0.38)), passage: seamMaterial(new THREE.Vector3(0.45, 1.0, 0.72)) }
   const items: { mesh: THREE.Mesh; mat: THREE.ShaderMaterial; x: number; z: number }[] = []
-  const clear = () => { for (const it of items) group.remove(it.mesh); items.length = 0 }
+  // ── ★ THE NAMETAG (Alex, 2026-09-17): the folk's own label, hung over the lintel ──────────────
+  // One sprite per LABELLED socket, so a keeper reads where a doorway leads before walking into
+  // it. A dark socket passes no label and gets none — the absence is still the information. The
+  // sprite owns a canvas texture and a material each (that is what `buildNameSprite` builds), so
+  // `clear` disposes both; the set is bounded by the station's sockets, never per frame.
+  const tags: THREE.Sprite[] = []
+  // ★ ONE MATERIAL PER DISTINCT LABEL, cached by the text (render-audit's rule: a resource per
+  // object is the context-loss bug; a resource per distinct NAME is bounded by the station's
+  // sockets). `buildNameSprite` paints the canvas — greg.ts stays the one painter — and the
+  // material it made is kept; the throwaway sprite is not. Entries that no set() names any more
+  // are disposed, so a renamed waymark does not leak its old tag forever.
+  const tagMats = new Map<string, THREE.SpriteMaterial>()
+  const tagMaterial = (label: string): THREE.SpriteMaterial => {
+    let m = tagMats.get(label)
+    if (!m) { m = buildNameSprite(label).material; tagMats.set(label, m) }
+    return m
+  }
+  const clear = () => {
+    for (const it of items) group.remove(it.mesh)
+    items.length = 0
+    for (const t of tags) group.remove(t)
+    tags.length = 0
+  }
   return {
     group,
     set(sockets) {
       clear()
+      const live = new Set(sockets.map(s => s.label).filter((l): l is string => !!l))
+      for (const [label, m] of tagMats) if (!live.has(label)) { m.map?.dispose(); m.dispose(); tagMats.delete(label) }
       for (const s of sockets) {
         const mat = mats[s.tint]
         const mesh = new THREE.Mesh(geo, mat)
@@ -388,6 +413,15 @@ export function createSocketShimmers(): SocketShimmer {
         mesh.rotation.y = Math.atan2(Math.cos(s.facing), Math.sin(s.facing))
         group.add(mesh)
         items.push({ mesh, mat, x: s.x + 0.5, z: s.z + 0.5 })
+        if (s.label) {
+          const tag = new THREE.Sprite(tagMaterial(s.label))
+          // Over the lintel (the doorway is 3 tall), a little wider than a folk's tag: it is read
+          // from across the court, not from a handshake away.
+          tag.position.set(s.x + 0.5, s.y + 3.7, s.z + 0.5)
+          tag.scale.set(2.4, 0.6, 1)
+          group.add(tag)
+          tags.push(tag)
+        }
       }
     },
     tick(px, pz, elapsed) {
@@ -401,7 +435,11 @@ export function createSocketShimmers(): SocketShimmer {
         mats[k].uniforms.uNear.value = seamNearness(near[k], PLOT_SHUT, PLOT_OPEN)
       }
     },
-    dispose() { clear(); geo.dispose(); mats.gate.dispose(); mats.passage.dispose() },
+    dispose() {
+      clear(); geo.dispose(); mats.gate.dispose(); mats.passage.dispose()
+      for (const m of tagMats.values()) { m.map?.dispose(); m.dispose() }
+      tagMats.clear()
+    },
   }
 }
 

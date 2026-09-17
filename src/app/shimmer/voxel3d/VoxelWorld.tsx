@@ -234,7 +234,7 @@ const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in 
 import { GREG_LINES } from './greg-lines'
 import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
 import { insideGlade } from '../voxel/glade'
-import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps, socketWay, socketLitBy, socketStandOut, SOCKET_RADIUS } from './court-blueprint'
+import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps, socketWay, socketLitBy, socketLabel, socketStandOut, SOCKET_RADIUS } from './court-blueprint'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
          legacyRowSockets, courtClearCells, COURT_REV,
          courtLevel, courtPlatformCells, isCourtMaterial, PLATFORM_MAT, courtHubCells, courtFloorClearCells,
@@ -8280,7 +8280,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             if (voxel(l.x, l.y, l.z) !== want) setVoxel(l.x, l.y, l.z, want)
           }
           socketShimmers.set(stationSockets(station).filter(sk => socketLitBy(sk.index, held))
-            .map(sk => ({ x: sk.x, z: sk.z, y: level, facing: Math.atan2(a.z - sk.z, a.x - sk.x), tint: sk.kind })))
+            .map(sk => ({ x: sk.x, z: sk.z, y: level, facing: Math.atan2(a.z - sk.z, a.x - sk.x), tint: sk.kind,
+              // The nametag over the lintel — where this doorway leads (court-blueprint › socketLabel).
+              label: socketLabel(sk.index, waymarks.current.marks) })))
           courtTier.current = plotTier.current
           courtRev.current = COURT_REV
           courtMarks.current = held

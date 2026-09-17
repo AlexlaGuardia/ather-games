@@ -118,6 +118,24 @@ export const socketWay = (index: number): SocketWay =>
 /** Lit = the way is earned: the gate and Moonwell always, a mark slot once that mark is held. */
 export const socketLitBy = (index: number, marksHeld: number): boolean => index <= 1 || marksHeld >= index - 1
 
+/**
+ * ── ★ THE NAMETAG OVER A DOORWAY (Alex, 2026-09-17: "give nametags to the gates so the player has
+ * a hint as to where they lead") ─────────────────────────────────────────────────────────────────
+ * The text hung over a socket's lintel, or null for a DARK socket — a dark doorway says "a way
+ * exists here that you have not earned", and naming where it goes would spend the reveal. Derived
+ * from `socketWay` so the tag and the crossing can never name different places; a waymark with no
+ * name reads as its coordinates, which is the waymark panel's own rule (`voxel/waymark.ts`).
+ */
+export function socketLabel(index: number, marks: readonly { name: string; x: number; z: number }[]): string | null {
+  if (!socketLitBy(index, marks.length)) return null
+  const way = socketWay(index)
+  if (way.to === 'runehold') return 'Rune Hold'
+  if (way.to === 'moonwell') return 'Moonwell'
+  const m = marks[way.slot]
+  if (!m) return null
+  return m.name.trim() || `${m.x}, ${m.z}`
+}
+
 /** The lamp cell of each socket, in world cells, with the material the blueprint holds there (its DARK state). */
 export function stationLamps(s: StationStamp): { index: number; x: number; y: number; z: number; dark: number }[] {
   const cells = blueprintCells(s.bp)
