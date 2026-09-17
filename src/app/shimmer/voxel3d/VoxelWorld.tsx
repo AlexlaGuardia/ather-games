@@ -150,6 +150,8 @@ import { createTexturedVoxelMaterial } from './tex/atlas'
 import { loadSettings, saveSettings, withStyle, VIEW_RADIUS_MIN, VIEW_RADIUS_MAX, type VoxelSettings, type RenderStyle , SIM_RADIUS_MIN, simRadiusOf, simColumns } from './settings'
 import { buildAttrsSplit, concatAttrs, MATERIAL_COLOR, type AttrPart } from './attrs'
 import { createLeafMaterial } from './tex/leaf-material'
+import { createLeafFall, dropLeaf, stepLeafFall, LEAF_FALL } from './leaf-fall'
+import { createLeafFallRenderer } from './leaf-fall-mesh'
 import { isLeafMat, isLogMat } from '../voxel/trees'
 import { treeOwning, fellTree, fellXP } from '../voxel/tree-node'
 import { growTreeCells, type TreeStart } from '../voxel/trees'
@@ -3284,6 +3286,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * Built once, like every other pass; `break-fx.ts` owns its own budget and drops overflow.
    */
   const breakFx = useMemo(() => createBreakFx(SEED), [])
+  // ★ FALLING LEAVES (2026-09-17): an orphaned leaf drops from where it stood and bursts on the
+  // ground — the decay tick feeds it, the frame loop steps it. On the canopy's own material, so a
+  // falling leaf is the species' tile in the species' tint. See leaf-fall.ts.
+  const leafFall = useRef(createLeafFall())
+  const leafFallMesh = useMemo(() => createLeafFallRenderer(leafMaterial), [leafMaterial])
   /**
    * Fractional chips owed by the swing in progress.
    *
@@ -6093,6 +6100,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // The flora pools, read back: what each pool ASKED for vs its cap (`floraDemand`) and what each
     // InstancedMesh is drawing right now. A ground cover that is there, breakable and not drawn has
     // no other symptom (2026-09-16: a 13% meadow photographed bare from above).
+    // Falling leaves: how many are in the air, and the tuning object (mutable — a harness sets
+    // gravity/terminal to 0 to hold a shower mid-air for a shot).
+    w.__leafFall = () => ({ n: leafFall.current.leaves.length, tune: LEAF_FALL })
     w.__flora = () => ({
       demand: floraDemand,
       pools: flora.group.children.map((o, i) => [i, (o as THREE.InstancedMesh).count, o.visible]),
@@ -6137,7 +6147,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // StrictMode runs a memo factory twice and keeps the FIRST result, so a window assignment made
     // inside the factory hands the harness the orphan. Cost an hour on 09-16.
     w.__hands = hands.sig
-    return () => { delete w.__renderlight; delete w.__renderlightFill; delete w.__guide; delete w.__hands }
+    return () => { delete w.__renderlight; delete w.__renderlightFill; delete w.__guide; delete w.__hands; delete w.__leafFall }
   }, [lightUniforms, advanceRenderLight, guide, camera, space, tutorial, hands])
   // ── ★ THREE SILHOUETTES, ONE GEOMETRY EACH, SHARED ACROSS EVERY BODY OF THAT FORM ──────────
   // ⚠ BLOCKOUT, same standing as the single body it replaces: the locked look is owed a
@@ -6604,6 +6614,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     }
     smoke.tick(dt, state.clock.elapsedTime, smokeSources.current)
     breakFx.tick(dt)
+    if (leafFall.current.leaves.length) {
+      // A leaf lands on whatever solid is under it; unloaded space reads AIR and it lands at
+      // maxLife. The burst is the same leaf chips a broken leaf throws — a landing, not a loot.
+      // ⚠ Through LEAVES, not onto them: the canopy is a solid to the mesher, and a leaf that
+      // landed on the leaf under it burst inside the crown with nothing seen to fall (first shot).
+      const landed = stepLeafFall(leafFall.current, dt, (x, y, z) => { const m = voxel(x, y, z); return isSolid(m) && !isLeafMat(m) })
+      for (const l of landed) breakFx.burst(Math.floor(l.x), Math.floor(l.y), Math.floor(l.z), l.material)
+      leafFallMesh.sync(leafFall.current)
+    } else if (leafFallMesh.mesh.visible) leafFallMesh.sync(leafFall.current)
     // ⚠ NEEDS THE CURRENT SPACE — the one argument steam does not take. It draws the Wilds seam
     // only in the Wilds and the plot-side one only in the plot. Hooked but never ticked renders
     // NOTHING and throws nothing (the meshes start hidden), so suspect this line before the shader.
@@ -9910,8 +9929,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           if (!cols.current.has(key(cx, cz))) continue
           // Leaves drop nothing (registry), so this is a removal and not a loot event — no
           // spawnDrop, and felling a wood cannot be farmed for items.
-          if (isLeafMat(voxel(d.x, d.y, d.z))) {
+          const leafMat = voxel(d.x, d.y, d.z)
+          if (isLeafMat(leafMat)) {
             setVoxel(d.x, d.y, d.z, AIR)
+            // The block is gone; a leaf of its kind starts falling from its centre (leaf-fall.ts).
+            dropLeaf(leafFall.current, d.x, d.y, d.z, leafMat, Math.random)
             fell.push(d)
             break                      // ← the cap. One remesh per frame, same as a pick swing.
           }
@@ -10200,6 +10222,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       <primitive object={steam.points} />
       <primitive object={smoke.points} />
       <primitive object={breakFx.points} />
+      <primitive object={leafFallMesh.mesh} />
       <primitive object={seam.group} />
       <primitive object={socketShimmers.group} />
       <primitive object={wetPatches.group} />

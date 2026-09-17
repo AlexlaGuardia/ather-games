@@ -49,12 +49,16 @@ export interface DecayConfig {
   delayJitter: number
 }
 
+// Tightened 2026-09-17 with the falling leaves (voxel3d/leaf-fall.ts): each leaf now visibly
+// DROPS when its turn comes, so the stagger only has to say "outward from the trunk" — 0.6/0.35/0.7
+// put the far rim at ~3.8s of hanging, which Alex read as *"they still float there and slowly
+// break down"*. The crown now unravels in ~2.5s and every leaf takes ~2s more to reach the ground.
 export const DEFAULT_DECAY: DecayConfig = {
   maxDist: 7,
   span: 10,
-  delayBase: 0.6,
-  delayPerStep: 0.35,
-  delayJitter: 0.7,
+  delayBase: 0.35,
+  delayPerStep: 0.22,
+  delayJitter: 0.5,
 }
 
 /**
