@@ -56,7 +56,7 @@ import {
 import { PIECES, type Rotation } from '../../voxel/pieces'
 import { CreativeRig, Crosshair, Hotbar, HOTBAR_SIZE, Swatch, slotLabel, type Slot } from './creative'
 import type { Vec3 } from './creative-ray'
-import { createPieceRenderer } from '../../voxel3d/piece-mesh'
+import { createPieceRenderer, type PieceRenderer } from '../../voxel3d/piece-mesh'
 import { STATION_BP_ID, STATION_LAYOUT } from '../../voxel3d/court-blueprint'
 import type { StationLayout } from '../../voxel/blueprints'
 
@@ -190,9 +190,34 @@ function MaterialMesh({ mat, cells, tex, onHit }: {
  * and the blocks: step half a cell along the hit normal to place, against it to remove.
  */
 function Pad({ onHit }: { onHit: (e: { point: THREE.Vector3; normal: THREE.Vector3; shift: boolean; alt: boolean }) => void }) {
+  // ★ THE PAD IS RULED (09-17). A plain green slab has no cell read: Minecraft's ground is a texture
+  // per block, and that is what lets a builder count "three over, two back" without a coordinate. A
+  // hairline per cell, a heavier line every five, the axis lines through the centre — drawn once
+  // into one canvas the size of the pad, so every cell is exactly one grid square with no repeat seam.
+  const top = useMemo(() => {
+    if (typeof document === 'undefined') return null
+    const px = 16, c = document.createElement('canvas'); c.width = c.height = PAD * px
+    const g = c.getContext('2d')!
+    g.fillStyle = '#5d6b52'; g.fillRect(0, 0, c.width, c.height)
+    for (let i = 0; i <= PAD; i++) {
+      const heavy = i % 5 === 0, axis = i === PAD / 2
+      g.fillStyle = axis ? 'rgba(255,220,140,0.55)' : heavy ? 'rgba(0,0,0,0.30)' : 'rgba(0,0,0,0.14)'
+      g.fillRect(i * px, 0, 1, c.height); g.fillRect(0, i * px, c.width, 1)
+    }
+    const t = new THREE.CanvasTexture(c)
+    t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.LinearMipmapLinearFilter
+    return t
+  }, [])
+  const materials = useMemo(() => {
+    const side = new THREE.MeshLambertMaterial({ color: '#4a5642' })
+    // box face order +x −x +y −y +z −z: only the top wears the grid
+    return [side, side, new THREE.MeshLambertMaterial({ map: top, color: top ? '#ffffff' : '#5d6b52' }), side, side, side]
+  }, [top])
+  useEffect(() => () => { top?.dispose(); for (const m of new Set(materials)) m.dispose() }, [top, materials])
   return (
     <mesh
       position={[PAD / 2, -0.5, PAD / 2]}
+      material={materials}
       onPointerDown={e => {
         e.stopPropagation()
         const n = e.face?.normal ? e.face.normal.clone() : new THREE.Vector3(0, 1, 0)
@@ -201,7 +226,6 @@ function Pad({ onHit }: { onHit: (e: { point: THREE.Vector3; normal: THREE.Vecto
       }}
     >
       <boxGeometry args={[PAD, 1, PAD]} />
-      <meshLambertMaterial color="#5d6b52" />
     </mesh>
   )
 }
@@ -218,9 +242,13 @@ function Pad({ onHit }: { onHit: (e: { point: THREE.Vector3; normal: THREE.Vecto
  * without it a fence built against a wall renders unconnected here and connected in the world, which
  * is exactly the kind of small lie that sends someone rebuilding a fence that was already right.
  */
-function Pieces({ placements, solid }: { placements: BlueprintPiece[]; solid: (x: number, y: number, z: number) => boolean }) {
+function Pieces({ placements, solid, expose }: {
+  placements: BlueprintPiece[]; solid: (x: number, y: number, z: number) => boolean
+  /** The renderer, handed up so creative's crosshair can drive ITS ghost — the world's own preview. */
+  expose: React.MutableRefObject<PieceRenderer | null>
+}) {
   const renderer = useMemo(() => createPieceRenderer(), [])
-  useEffect(() => () => renderer.dispose(), [renderer])
+  useEffect(() => { expose.current = renderer; return () => { expose.current = null; renderer.dispose() } }, [renderer, expose])
   useEffect(() => { renderer.setWorldSolid(solid) }, [renderer, solid])
   useEffect(() => { renderer.sync(placements) }, [renderer, placements])
   return <primitive object={renderer.group} />
@@ -604,13 +632,37 @@ export default function WorktablePage() {
   }, [placements])
   const pieceAtRef = useRef(pieceAt); pieceAtRef.current = pieceAt
   const inPad = (c: Vec3) => c.x >= 0 && c.z >= 0 && c.x < PAD && c.z < PAD
+  const piecesRef = useRef<PieceRenderer | null>(null)
+  // The piece ghost is the rig's business only while creative is the stance; the other two never call
+  // `ghost`, so a preview left standing when the stance changed would stay standing.
+  useEffect(() => { if (!creative) piecesRef.current?.hideGhost() }, [creative])
+  /**
+   * ★ ONE ANSWER TO "CAN THIS GO HERE", asked by the preview and by the place. Off the pad, below
+   * it, into a block, into another piece's footprint — or INTO THE BODY: Minecraft refuses a block
+   * where the player stands, and without that rule a builder backing up with the right button held
+   * walls their own head in. The body is the eye's cell and the one under it, a keeper's height.
+   */
+  const canFill = (fp: Vec3[], eye: Vec3): boolean => {
+    const ex = Math.floor(eye.x), ey = Math.floor(eye.y), ez = Math.floor(eye.z)
+    return fp.every(c => c.y >= 0 && inPad(c) && !live.current.cells.has(key(c.x, c.y, c.z)) && !pieceAtRef.current.has(key(c.x, c.y, c.z))
+                         && !(c.x === ex && c.z === ez && (c.y === ey || c.y === ey - 1)))
+  }
   const creativeActions = {
     solid: (x: number, y: number, z: number) =>
       (y === -1 && x >= 0 && z >= 0 && x < PAD && z < PAD) || live.current.cells.has(key(x, y, z)) || pieceAtRef.current.has(key(x, y, z)),
-    ghost: (at: Vec3) => {
-      if (at.y < 0 || !inPad(at)) return null
-      if (mode === 'piece') return pieceFootprint({ pieceId, x: at.x, y: at.y, z: at.z, rot })
-      return live.current.cells.has(key(at.x, at.y, at.z)) ? null : [at]
+    ghost: (at: Vec3 | null, eye: Vec3): Vec3[] => {
+      const pr = piecesRef.current
+      if (!at) { pr?.hideGhost(); return [] }
+      if (mode === 'piece') {
+        // ★ THE SHIPPED GHOST, NOT GOLD BOXES (GBOARD's ask). A doorway's rotation is a facing — the
+        // preview is the actual piece turned the way R left it, blue where it can stand, red where it
+        // cannot, exactly what the world shows a keeper placing the same piece.
+        const fp = pieceFootprint({ pieceId, x: at.x, y: at.y, z: at.z, rot })
+        pr?.setGhost(pieceId, at.x, at.y, at.z, rot, canFill(fp, eye))
+        return []
+      }
+      pr?.hideGhost()
+      return canFill([at], eye) ? [at] : []
     },
     onBreak: (c: Vec3) => {
       const k = key(c.x, c.y, c.z)
@@ -618,18 +670,17 @@ export default function WorktablePage() {
       const pi = pieceAtRef.current.get(k)
       if (pi !== undefined) push(new Map(live.current.cells), live.current.placements.filter((_, i) => i !== pi))
     },
-    onPlace: (at: Vec3) => {
-      if (at.y < 0 || !inPad(at)) return
-      const k = key(at.x, at.y, at.z)
+    onPlace: (at: Vec3, _normal: Vec3, eye: Vec3) => {
       if (mode === 'piece') {
-        // A piece whose footprint already has a block or another piece in it is refused, not stacked.
+        // Refused (a block or another piece in the footprint, off the pad, into the body), not stacked —
+        // the same predicate the red ghost drew a frame ago.
         const fp = pieceFootprint({ pieceId, x: at.x, y: at.y, z: at.z, rot })
-        if (fp.some(c => live.current.cells.has(key(c.x, c.y, c.z)) || pieceAtRef.current.has(key(c.x, c.y, c.z)))) return
+        if (!canFill(fp, eye)) return
         push(new Map(live.current.cells), [...live.current.placements, { pieceId, x: at.x, y: at.y, z: at.z, rot }])
         return
       }
-      if (live.current.cells.has(k) || pieceAtRef.current.has(k)) return
-      const next = new Map(live.current.cells); next.set(k, material); push(next)
+      if (!canFill([at], eye)) return
+      const next = new Map(live.current.cells); next.set(key(at.x, at.y, at.z), material); push(next)
     },
     onPick: (c: Vec3) => {
       // Middle click: the looked-at thing goes in the hand — into a slot that already holds it, else the picked one.
@@ -695,7 +746,7 @@ export default function WorktablePage() {
         {byMaterial.map(([mat, list]) => (
           <MaterialMesh key={mat} mat={mat} cells={list} tex={tex} onHit={onHit} />
         ))}
-        <Pieces placements={placements} solid={solid} />
+        <Pieces placements={placements} solid={solid} expose={piecesRef} />
         {showKeeper && <Keeper at={[PAD / 2 - 3, PAD_TOP, PAD / 2 + 4]} />}
         {id === STATION_BP_ID && station && <StationGhosts layout={station} />}
       </Canvas>

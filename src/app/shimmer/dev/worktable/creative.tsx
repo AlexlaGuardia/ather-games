@@ -49,10 +49,15 @@ const REPEAT = 0.22
 export type CreativeActions = {
   /** Cells the crosshair's walk treats as solid: blocks, piece footprints, the pad. */
   solid: (x: number, y: number, z: number) => boolean
-  /** The cells a place would fill at `at` (a block: one; a piece: its footprint), or null if refused. */
-  ghost: (at: Vec3) => Vec3[] | null
+  /**
+   * The cells to outline in gold at `at` — a block: one; refused or nothing in range (`at` null): none.
+   * Called EVERY frame, with `at` null when the crosshair looks at nothing it can build on, so the
+   * page can show its own preview (the shipped piece ghost) and hide it again when the look leaves.
+   * `eye` is where the body stands — the page refuses to build into it, Minecraft's rule.
+   */
+  ghost: (at: Vec3 | null, eye: Vec3) => Vec3[]
   onBreak: (cell: Vec3) => void
-  onPlace: (cell: Vec3, normal: Vec3) => void
+  onPlace: (cell: Vec3, normal: Vec3, eye: Vec3) => void
   onPick: (cell: Vec3) => void
   /** Wheel over the hotbar: +1 down, -1 up. */
   onScroll: (delta: 1 | -1) => void
@@ -78,7 +83,7 @@ export function CreativeRig({ active, actions, readout, start }: {
   /** Where the body stands the FIRST time creative is entered — the orbit's pose, so the structure is in view. */
   start: { position: Vec3; lookAt: Vec3 }
 }) {
-  const { camera, gl, clock } = useThree()
+  const { camera, gl } = useThree()
   const act = useRef(actions); act.current = actions
   const s = useRef({
     yaw: 0, pitch: 0, speed: BASE_SPEED, sprint: false, lastW: -1, held: new Set<string>(),
@@ -144,7 +149,7 @@ export function CreativeRig({ active, actions, readout, start }: {
       const t = st.target
       if (!t) return
       if (button === 0) act.current.onBreak(t.cell)
-      else if (button === 2) { if (t.normal.x || t.normal.y || t.normal.z) act.current.onPlace({ x: t.cell.x + t.normal.x, y: t.cell.y + t.normal.y, z: t.cell.z + t.normal.z }, t.normal) }
+      else if (button === 2) { if (t.normal.x || t.normal.y || t.normal.z) act.current.onPlace({ x: t.cell.x + t.normal.x, y: t.cell.y + t.normal.y, z: t.cell.z + t.normal.z }, t.normal, camera.position) }
       else if (button === 1) act.current.onPick(t.cell)
     }
     const mouseDown = (e: MouseEvent) => {
@@ -152,7 +157,10 @@ export function CreativeRig({ active, actions, readout, start }: {
       if (!st.locked) { lock(); return }
       e.preventDefault()
       fire(e.button)
-      if (e.button === 0 || e.button === 2) { st.button = e.button; st.nextAt = clock.elapsedTime + REPEAT * 1.6 }
+      // ⚠ WALL TIME, NOT THE FRAME CLOCK. `clock.elapsedTime` is the LAST frame's stamp; a press that
+      // lands late in a frame read a stale clock and the repeat fired on the very next frame — one
+      // click, two blocks. Invisible at 60 fps (≤16 ms stale), a certainty at the harness's 3 fps.
+      if (e.button === 0 || e.button === 2) { st.button = e.button; st.nextAt = performance.now() / 1000 + REPEAT * 1.6 }
     }
     const mouseUp = () => { st.button = -1 }
     const wheel = (e: WheelEvent) => {
@@ -197,7 +205,12 @@ export function CreativeRig({ active, actions, readout, start }: {
     window.addEventListener('keydown', keyDown)
     window.addEventListener('keyup', keyUp)
     window.addEventListener('blur', blur)
+    // A readout for a harness: where the body is and what it looks at. Dev page, dev handle.
+    ;(window as unknown as { __worktable?: unknown }).__worktable = {
+      eye: () => camera.position.toArray(), target: () => st.target, locked: () => st.locked,
+    }
     return () => {
+      delete (window as unknown as { __worktable?: unknown }).__worktable
       document.removeEventListener('pointerlockchange', lockChange)
       el.removeEventListener('mousedown', mouseDown)
       window.removeEventListener('mouseup', mouseUp)
@@ -208,7 +221,7 @@ export function CreativeRig({ active, actions, readout, start }: {
       window.removeEventListener('blur', blur)
       if (document.pointerLockElement === el) document.exitPointerLock()
     }
-  }, [active, gl, clock])
+  }, [active, gl, camera])
 
   useFrame((_, dt) => {
     if (!active) return
@@ -238,36 +251,39 @@ export function CreativeRig({ active, actions, readout, start }: {
     st.target = hit ? { cell: hit.cell, normal: hit.normal } : null
     const outline = group.getObjectByName('outline')!
     const ghost = group.getObjectByName('ghost') as THREE.Group
+    // The page hears about the looked-at place every frame — a null when there is none — so its own
+    // preview (the piece ghost) tracks the crosshair and leaves with it. The gold boxes are only what
+    // it returns; the outline meshes below are reused per distinct set, not rebuilt per frame.
+    const at = hit && (hit.normal.x || hit.normal.y || hit.normal.z)
+      ? { x: hit.cell.x + hit.normal.x, y: hit.cell.y + hit.normal.y, z: hit.cell.z + hit.normal.z } : null
+    const cells = act.current.ghost(at, camera.position)
+    const gk = cells.map(c => `${c.x},${c.y},${c.z}`).join('|')
+    if (gk !== st.ghostKey) {
+      st.ghostKey = gk
+      ghost.clear()
+      for (const c of cells) {
+        const box = new THREE.Mesh(unitBox, ghostMat); box.position.set(c.x + 0.5, c.y + 0.5, c.z + 0.5); ghost.add(box)
+        const ln = new THREE.LineSegments(unitEdges, ghostEdge); ln.position.copy(box.position); ghost.add(ln)
+      }
+    }
     if (hit) {
       outline.visible = true
       outline.position.set(hit.cell.x + 0.5, hit.cell.y + 0.5, hit.cell.z + 0.5)
-      const at = { x: hit.cell.x + hit.normal.x, y: hit.cell.y + hit.normal.y, z: hit.cell.z + hit.normal.z }
-      const cells = (hit.normal.x || hit.normal.y || hit.normal.z) ? act.current.ghost(at) : null
-      const gk = cells ? cells.map(c => `${c.x},${c.y},${c.z}`).join('|') : ''
-      if (gk !== st.ghostKey) {
-        st.ghostKey = gk
-        ghost.clear()
-        for (const c of cells ?? []) {
-          const box = new THREE.Mesh(unitBox, ghostMat); box.position.set(c.x + 0.5, c.y + 0.5, c.z + 0.5); ghost.add(box)
-          const ln = new THREE.LineSegments(unitEdges, ghostEdge); ln.position.copy(box.position); ghost.add(ln)
-        }
-      }
       const text = act.current.describe(hit.cell)
       if (text !== st.readoutText && readout.current) { st.readoutText = text; readout.current.textContent = text }
     } else {
       outline.visible = false
-      if (st.ghostKey) { st.ghostKey = ''; ghost.clear() }
       if (st.readoutText && readout.current) { st.readoutText = ''; readout.current.textContent = '' }
     }
 
     // ── held-button repeat ────────────────────────────────────────────────────────────────────
-    if (st.button >= 0 && st.locked && clock.elapsedTime >= st.nextAt) {
+    if (st.button >= 0 && st.locked && performance.now() / 1000 >= st.nextAt) {
       const t = st.target
       if (t) {
         if (st.button === 0) act.current.onBreak(t.cell)
-        else if (t.normal.x || t.normal.y || t.normal.z) act.current.onPlace({ x: t.cell.x + t.normal.x, y: t.cell.y + t.normal.y, z: t.cell.z + t.normal.z }, t.normal)
+        else if (t.normal.x || t.normal.y || t.normal.z) act.current.onPlace({ x: t.cell.x + t.normal.x, y: t.cell.y + t.normal.y, z: t.cell.z + t.normal.z }, t.normal, camera.position)
       }
-      st.nextAt = clock.elapsedTime + REPEAT
+      st.nextAt = performance.now() / 1000 + REPEAT
     }
   })
 
