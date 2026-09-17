@@ -1118,7 +1118,8 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
         const used = bankUsed(chest.slots)
         const free = chest.bank.cap - used
         const view = bankView(chest.slots, bankTab, itemLabel)
-        const holes = bankFreeSlots(chest.slots, Math.max(0, Math.min(CHEST_COLS, free)))
+        // Enough holes to finish the last row (never a second, stray one), and never more than are free.
+        const holes = bankFreeSlots(chest.slots, Math.max(0, Math.min(CHEST_COLS - (view.length % CHEST_COLS), free)))
         const counts = new Map<BankTab, number>()
         for (const s of chest.slots) if (s && s.count > 0) { const c = bankCategory(s.itemId); counts.set(c, (counts.get(c) ?? 0) + 1) }
         return (
