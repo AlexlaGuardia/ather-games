@@ -30,6 +30,7 @@ import { blockDef, materialForItem } from '../voxel/registry'
 import { intermediateLabel } from '../voxel3d/alchemy-chain'
 import { MATERIAL_COLOR } from '../voxel3d/attrs'
 import { CHEST_BAGFULS, CHEST_COLS, CHEST_SLOTS, halfOf, type Slots } from '../voxel3d/chest'
+import { BANK_TABS, bankCategory, bankFreeSlots, bankUsed, bankView, type BankTab } from '../voxel3d/bank'
 import { GrimoireTab } from '../voxel3d/grimoire-tab'
 import { KeeperFrame, SectionHead, TabEmpty, type KeeperTab } from '../voxel3d/keeper-panel'
 import { itemIcon } from '../voxel3d/tex/item-icon'
@@ -87,7 +88,15 @@ const LIFT_BADGE: Record<LiftMode, string> = {
  * its column dirty. The array is shared with the world's own record by reference — one array, one
  * truth, so a panel that shows 40 stone and a save that holds 40 stone cannot come apart.
  */
-export interface OpenChest { x: number; y: number; z: number; slots: Slots; touch: () => void }
+export interface OpenChest {
+  x: number; y: number; z: number; slots: Slots; touch: () => void
+  /**
+   * Present when this chest is a door into the PLOT BANK (`voxel3d/bank.ts`): `slots` is then the
+   * whole pool, not this block's grid, and the panel draws it through category tabs. `cap` is the
+   * capacity the host read from its chest census at open time; `used` is derived from `slots` live.
+   */
+  bank?: { cap: number; chests: number; chestCap: number }
+}
 
 /**
  * What to CALL an item on screen.
@@ -883,6 +892,9 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
   // theirs: they decide what `SatchelLetters` may imbue, and neither can change while this is open.
   const [runesHeld] = useState(() => loadRuneInventory().owned)
   const [birthRune] = useState(() => loadRuneInventory().birth)
+  // The bank's lens. Pinned per mount like the keeper tab: a chest opened fresh opens on All,
+  // because the thing you walked up to put away is not known to be in any one category.
+  const [bankTab, setBankTab] = useState<BankTab>('all')
   const bag = inv.current?.slots ?? []
   const slotKey = (r: SlotRef) => `${r.g}${r.i}`
 
@@ -1085,7 +1097,7 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
     <>
       {/* The chest's own grid, above the bag and separated by a rule — the same relationship the
           satchel and the hotbar already have, one level out. */}
-      {chest && (
+      {chest && !chest.bank && (
         <div className="mb-4 border-b border-white/10 pb-4">
           {/* The capacity is stated in BAGFULS, not slots — the number means something that way
               ("two of these") and 48 does not. Derived from the grid so the sentence cannot drift
@@ -1097,6 +1109,51 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
           </div>
         </div>
       )}
+      {chest && chest.bank && (() => {
+        /* ── ★ THE BANK: ONE POOL, SEVEN LENSES (2026-09-16) ──────────────────────────────────
+           `chest.slots` is the whole plot's store. A tab is a filter over it, never a pocket; the
+           cells still address pool INDICES so every drag verb the chest already had works
+           unchanged (`bankView`'s header). The free row is the first few holes, capped at one row:
+           the cap is a NUMBER on the header, not four hundred grey squares. */
+        const used = bankUsed(chest.slots)
+        const free = chest.bank.cap - used
+        const view = bankView(chest.slots, bankTab, itemLabel)
+        const holes = bankFreeSlots(chest.slots, Math.max(0, Math.min(CHEST_COLS, free)))
+        const counts = new Map<BankTab, number>()
+        for (const s of chest.slots) if (s && s.count > 0) { const c = bankCategory(s.itemId); counts.set(c, (counts.get(c) ?? 0) + 1) }
+        return (
+          <div className="mb-4 border-b border-white/10 pb-4">
+            <SectionHead label={`the bank · ${chest.bank.chests} of ${chest.bank.chestCap} chests`}
+                         note={<><span className={`gx-value ${free < 0 ? 'text-red-300/80' : 'text-white/40'}`}>{used}</span> / {chest.bank.cap} slots</>} />
+            <div className="mb-2 flex flex-wrap gap-1">
+              {BANK_TABS.map(t => {
+                const n = t.id === 'all' ? used : (counts.get(t.id) ?? 0)
+                const on = t.id === bankTab
+                return (
+                  <button key={t.id} type="button" onClick={() => setBankTab(t.id)}
+                          className={`rounded-[2px] border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] transition-colors
+                            ${on ? 'border-amber-300/70 bg-amber-300/10 text-amber-100' : 'border-white/10 text-white/40 hover:border-white/30 hover:text-white/70'}`}>
+                    {t.label}{n > 0 && <span className="gx-value ml-1 text-[9px] opacity-70">{n}</span>}
+                  </button>
+                )
+              })}
+            </div>
+            {free < 0 && (
+              <div className="mb-2 text-[11px] text-red-200/70">over by {-free} — a chest came down; nothing more goes in until it drains</div>
+            )}
+            {chest.bank.cap === 0 && used === 0 && (
+              <div className="mb-2 text-[11px] text-white/40">no chest stands on the plot — place one and the bank has room</div>
+            )}
+            {view.length === 0 && holes.length === 0 && chest.bank.cap > 0 && (
+              <div className="mb-2 text-[11px] text-white/30">nothing here yet</div>
+            )}
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 1fr))` }}>
+              {view.map(i => cell({ g: 'chest', i }))}
+              {holes.map(i => cell({ g: 'chest', i }))}
+            </div>
+          </div>
+        )
+      })()}
       {/* Satchel: slots 8-23, the 16 that are not the bar. */}
       <SectionHead label="Satchel" note={<><span className="gx-value text-white/40">16</span> slots</>} />
       <div className="grid grid-cols-8 gap-1.5">
@@ -1122,7 +1179,7 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
    */
   if (chest) {
     return (
-      <KeeperFrame tab="satchel" setTab={() => {}} title="Chest" tall hint={hint} onClose={onClose}>
+      <KeeperFrame tab="satchel" setTab={() => {}} title={chest.bank ? 'Bank' : 'Chest'} tall hint={hint} onClose={onClose}>
         {satchel}
       </KeeperFrame>
     )

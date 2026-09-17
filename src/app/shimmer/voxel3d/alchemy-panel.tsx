@@ -137,7 +137,9 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
           <div className="mb-4 text-white/35">
             {def.name.toLowerCase()} is idle — give it something to work on
             <span className="block mt-1 text-white/25">
-              {st.feeds.length
+              {st.fromBank
+                ? 'drawing on the bank'
+                : st.feeds.length
                 ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it`
                 : 'set a chest against it and it will work out of that too'}
             </span>

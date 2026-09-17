@@ -234,6 +234,18 @@ export interface PlayerSave {
    */
   buffs?: Record<string, number>
   /**
+   * ── ★ THE PLOT BANK (2026-09-16) — `voxel3d/bank.ts` ────────────────────────────────────────
+   * Every chest on the keeper's land is one door into this pool; the stacks, compact, no free
+   * slots (capacity is a fact about the chests standing on the plot and is re-read at every door,
+   * never stored — a stored cap is the copy that disagrees the day a chest breaks with the tab
+   * shut). HERE and not in a column for the waymark's reason: it must be readable from ANY chest.
+   * The per-column `chests` records still exist for chests OFF the plot; a plot column that still
+   * carries one is a pre-bank save and is poured in on load.
+   *
+   * Optional, so every older save loads with an empty bank and the pour fills it.
+   */
+  bank?: unknown
+  /**
    * ⚠ LEGACY, READ BY NOBODY (2026-08-16). It cannot be migrated: it says a patrol was *met* and
    * says nothing about whether it was *resolved*, so reading it as `freedAt` would permanently
    * delete the encounter for anyone who had merely walked past a hold, and reading it as nothing

@@ -283,6 +283,7 @@ import {
   takeFromGrid, attachedChests, countIn as countInChest, isEmpty as isChestEmpty,
   spill as spillChest, CHEST_COLS, CHEST_SLOTS, CHEST_BAGFULS, type Slots,
 } from './chest'
+import { bankCapacity, bankFromSave, bankToSave, fitBank, pourInto } from './bank'
 import {
   stationKey, loadJob as loadStationJob, collect as collectStation, salvage as salvageStation,
   runsReady, runProgress, stationRecipes, maxRuns, jobCost, milledYield, MAX_RUNS,
@@ -464,6 +465,12 @@ export interface OpenStation {
   feeds: Slots[]
   /** Mark every feeding chest's column dirty. ⚠ Call after ANY spend or payout that touched them. */
   touchFeeds: () => void
+  /**
+   * On the plot, `feeds` is the ONE pool (`bank.ts`), not the chests beside the bench — every
+   * station on the keeper's land works out of the bank. The panel says which, because an invisible
+   * rule that spends your storage is worse than no rule.
+   */
+  fromBank?: boolean
 }
 
 
@@ -3460,6 +3467,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    */
   const chestsByCol = useRef(new Map<string, Record<string, Slots>>())
   /**
+   * ── ★ THE PLOT BANK (2026-09-16) ──────────────────────────────────────────────────────────────
+   * One pool for every chest on the keeper's land (`bank.ts`). Lives in the PLAYER record, not a
+   * column, for the waymark's reason: it has to be reachable from any chest on the plot, and a
+   * column is invisible until you walk to it. Its LENGTH is its capacity — `bankCap()` reads the
+   * live chest census and `fitBank` fits the array to it at every door (open, station, place/break).
+   * A chest opened anywhere else keeps its own grid in `chestsByCol`.
+   */
+  const bank = useRef<Slots>([])
+  const bankCap = useCallback((): number =>
+    // `plotChests` is set from an async disk scan on entry; if a chest is being OPENED, at least one
+    // stands, so the floor of 1 keeps the first open from reading "no chest on the plot".
+    bankCapacity(Math.max(1, plotChests.current)), [])
+  /**
    * ── ★ STATION JOBS, PER COLUMN (2026-08-13, the workshop pass) ───────────────────────────────
    * Same shape and same reasoning as `chestsByCol` above: a job holds input the player already
    * paid, so it rides in the block's own record rather than a global sidecar. See save.ts.
@@ -4007,6 +4027,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // unchanged. `bedsFromSave` also refuses crops carrying a play3d zone id, so a shared save
       // cannot drop farm-zone crops into voxel beds at coordinates that mean something else.
       beds.current = bedsFromSave(p.beds as never)
+      // The pool comes back compact (no free slots); it is fitted to the chest census at the door.
+      bank.current = bankFromSave(p.bank)
       onInvChange()
     })
     return () => { live = false }
@@ -4037,6 +4059,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
                plotTier: plotTier.current,
                litterFrom: litterFrom.current,
                beds: bedsToSave(beds.current),
+               bank: bankToSave(bank.current),
                index: indexToSave(spiritIndex.current) }
     }
     snapOut.current = snap
@@ -7880,7 +7903,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // slots long and this build's grid is 48. A raw hand-off would give the panel a grid whose
           // back three rows are `undefined` rather than empty — indistinguishable from a slot until
           // something writes to it.
-          if (saved.chests) {
+          if (saved.chests && space.current === 'plot') {
+            // ★ THE ONE-WAY POUR (2026-09-16). On the plot a chest's block no longer holds its
+            // own grid — the pool does — so a column arriving with per-chest contents is a save
+            // from before the bank. Everything goes in (forced, over-cap tolerated, `pourInto`),
+            // the column is marked dirty so its next flush drops the old record, and the keeper is
+            // told the number. Silent migration of someone's storage is how "my chest is empty"
+            // gets filed.
+            let moved = 0
+            for (const g of Object.values(saved.chests)) moved += pourInto(bank.current, adoptChest(g), maxStackOf)
+            dirtySaves.current.add(ek)
+            if (moved > 0) onSay(`${moved} things moved from your chests into the bank`)
+          } else if (saved.chests) {
             const have = chestsByCol.current.get(ek) ?? {}
             for (const [ck, g] of Object.entries(saved.chests)) if (!have[ck]) have[ck] = adoptChest(g)
             chestsByCol.current.set(ek, have)
@@ -9182,7 +9216,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // It spills rather than refusing to break: the pile is visible, `tickDrops`' capacity gate
         // already leaves what will not fit lying on the ground, and a container you cannot pick up
         // without emptying it by hand first is a trap, not a rule.
-        if (hit.material === MAT.CHEST) {
+        // ★ ON THE PLOT NOTHING SPILLS — the block held nothing; the pool did. The cap drops by a
+        // chest's worth at the next door and the pool sits over it until it drains (`bank.ts`).
+        if (hit.material === MAT.CHEST && space.current === 'plot') {
+          const over = bank.current.filter(Boolean).length - bankCapacity(plotChests.current - 1)
+          if (over > 0) onSay(`the bank keeps ${over} stack${over === 1 ? '' : 's'} more than its chests can hold now — nothing more goes in until it drains`)
+        } else if (hit.material === MAT.CHEST) {
           const held = spillChest(chestAt(hit.x, hit.y, hit.z))
           for (const d of held) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
           if (held.length) onSay(`the chest spills — ${held.reduce((n, d) => n + d.count, 0)} items on the ground`)
@@ -9404,11 +9443,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       } else if (intent === 'open') {
         // `touch` is bound to THIS chest's column rather than handed up as a coordinate the caller
         // has to remember — the one call that must not be forgotten cannot then be made wrong.
-        onOpenChest({
-          x: hit.x, y: hit.y, z: hit.z,
-          slots: chestAt(hit.x, hit.y, hit.z),
-          touch: () => touchChest(hit.x, hit.z),
-        })
+        if (space.current === 'plot') {
+          // Every chest on the plot is a door into the one pool. Fitted to the census here, so a
+          // chest placed or broken since the last open has already moved the cap. `touch` is a
+          // no-op: the pool rides the keeper's 5s autosave (and the hide/pagehide saves).
+          const cap = bankCap()
+          onOpenChest({ x: hit.x, y: hit.y, z: hit.z, slots: fitBank(bank.current, cap), touch: () => {},
+                        bank: { cap, chests: Math.max(1, plotChests.current), chestCap: chestCap(plotCfg.current) } })
+        } else {
+          onOpenChest({
+            x: hit.x, y: hit.y, z: hit.z,
+            slots: chestAt(hit.x, hit.y, hit.z),
+            touch: () => touchChest(hit.x, hit.z),
+          })
+        }
         mouse.current.right = false
       } else if (intent === 'travel') {
         // The panel needs the whole network (to list where you may go) plus WHICH mark you are
@@ -9440,14 +9488,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // The chests set around this bench, resolved through the host's own voxel read so there
           // is exactly one definition of "there is a chest here". `chestAt` is lazy, so asking for
           // a neighbour's grid costs nothing until something is actually put in it.
-          const beside = attachedChests(hit.x, hit.y, hit.z, (x, y, z) => voxel(x, y, z) === MAT.CHEST)
+          // On the plot the bench works out of the bank — the whole point of one pool is that a
+          // station never again depends on which box is standing where.
+          const onPlot = space.current === 'plot'
+          const beside = onPlot ? [] : attachedChests(hit.x, hit.y, hit.z, (x, y, z) => voxel(x, y, z) === MAT.CHEST)
           const { x: sx, y: sy, z: sz } = hit
           onOpenStation({
             x: sx, y: sy, z: sz, kind,
             job: jobAt(sx, sy, sz),
             commit: (shop: Workshop) => setJob(sx, sy, sz, shop),
-            feeds: beside.map(c => chestAt(c.x, c.y, c.z)),
+            feeds: onPlot ? [fitBank(bank.current, bankCapacity(plotChests.current))] : beside.map(c => chestAt(c.x, c.y, c.z)),
             touchFeeds: () => { for (const c of beside) touchChest(c.x, c.z) },
+            fromBank: onPlot,
             // ★ The running cauldron IS a different material (the render flood keys light off the
             // material). The swap goes through `setVoxel` like any edit, so it saves, re-lights and
             // re-meshes — and `setVoxel`'s job cleanup knows the two are one station.
@@ -10671,7 +10723,9 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
             {/* Said out loud, because an invisible rule that silently spends your storage is worse
                 than no rule. Absence is worth saying too — it is the hint that builds the workshop. */}
             <span className="block mt-1 text-white/25">
-              {st.feeds.length
+              {st.fromBank
+                ? 'drawing on the bank'
+                : st.feeds.length
                 ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it`
                 : 'set a chest against it and it will work out of that too'}
             </span>
@@ -10691,7 +10745,7 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
                        tab: rec.station === st.kind ? 'Own work' : 'Shared',
                        can: !busy && n > 0, cost: rec.input,
                        yields: `${milledYield(rec, def)}× ${label(rec.output.itemId)}${bonus && rec.station === 'hand' ? ` (by hand ${rec.output.count}×)` : ''}`,
-                       tag: n > 0 ? `${n} run${n === 1 ? '' : 's'} from ${st.feeds.length ? 'your bag and the chests beside it' : 'your bag'}${n >= MAX_RUNS ? ` · ${def.name.toLowerCase()} holds no more` : ''}` : `no ${label(rec.input[0].itemId)}`,
+                       tag: n > 0 ? `${n} run${n === 1 ? '' : 's'} from ${st.fromBank ? 'your bag and the bank' : st.feeds.length ? 'your bag and the chests beside it' : 'your bag'}${n >= MAX_RUNS ? ` · ${def.name.toLowerCase()} holds no more` : ''}` : `no ${label(rec.input[0].itemId)}`,
                      }
                    })}
                    tabs={['Own work', 'Shared']} have={have} label={itemLabel}
