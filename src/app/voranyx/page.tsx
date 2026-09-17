@@ -25,6 +25,7 @@ import {
   loadBest,
   saveBest,
   bodyRadius,
+  SEG_SPACING,
   segCount,
   BOOST_MAX,
   MAGNET_R,
@@ -262,6 +263,13 @@ export default function VoranyxPage() {
             <p className="text-[11px] leading-relaxed text-[#9fd6e0]/80 max-w-[290px]">
               drag the stick to steer (WASD or your cursor on desktop). graze the dross, swallow a seed to take its colour, gather motes to boost. keep eating or you fade — and never put your head into another worm.
             </p>
+            {/* the finds, in the glyphs the silt draws them with — learn them here, read them out there */}
+            <div className="flex items-center gap-3 text-[9px] font-mono tracking-wider text-[#9fd6e0]/70 -mt-1">
+              <span className="flex items-center gap-1"><Glyph kind="seed" /> seed · colour</span>
+              <span className="flex items-center gap-1"><Glyph kind="mote" /> mote · boost</span>
+              <span className="flex items-center gap-1"><Glyph kind="magnet" /> magnet · pulls</span>
+              <span className="flex items-center gap-1"><Glyph kind="stasis" /> stasis · no fade</span>
+            </div>
             <div className="gx-label pointer-events-auto flex items-center gap-1.5 mt-0.5 text-[10px]">
               {(['endless', 'daily'] as const).map((m) => (
                 <button key={m} onClick={() => pickMode(m)}
@@ -392,16 +400,18 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
       ctx.fillStyle = c; ctx.shadowBlur = 10; ctx.shadowColor = c
       diamond(ctx, fx, fy, 4 + 0.6 * Math.sin(t * 4 + f.x))
     } else if (f.kind === 'mote') {
+      // a mote is a spark: four points, slowly turning — it reads as ENERGY, not as a fat dross
       ctx.fillStyle = ATHER; ctx.shadowBlur = 9; ctx.shadowColor = ATHER
-      dot(ctx, fx, fy, 2.4 + 0.5 * Math.sin(t * 6 + f.y))
+      spark(ctx, fx, fy, 3.6 + 0.5 * Math.sin(t * 6 + f.y), t * 0.9 + f.x)
     } else if (f.kind === 'magnet' || f.kind === 'stasis') {
-      // rare power-ups — bright, pulsing, with a ring so they pop against the dross
+      // rare power-ups — the glyph says WHAT it does (horseshoe pulls, ∞ never drains), the ring says RARE
       const col = f.kind === 'magnet' ? MAGNET_COL : STASIS_COL
       const p = 0.5 + 0.5 * Math.sin(t * 5 + f.x)
-      ctx.fillStyle = col; ctx.shadowBlur = 16; ctx.shadowColor = col
-      dot(ctx, fx, fy, 4.2)
-      ctx.strokeStyle = col; ctx.globalAlpha = 0.45 + 0.4 * p; ctx.lineWidth = 1.5
-      ctx.beginPath(); ctx.arc(fx, fy, 7.5 + p * 3, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1
+      ctx.shadowBlur = 14; ctx.shadowColor = col
+      if (f.kind === 'magnet') magnet(ctx, fx, fy, 6.5, col)
+      else infinity(ctx, fx, fy, 7, col)
+      ctx.strokeStyle = col; ctx.globalAlpha = 0.35 + 0.35 * p; ctx.lineWidth = 1.2
+      ctx.beginPath(); ctx.arc(fx, fy, 10 + p * 3, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1
     } else {
       ctx.fillStyle = '#9fb6c8'; ctx.shadowBlur = 5; ctx.shadowColor = '#9fb6c8'
       dot(ctx, fx, fy, 1.7)
@@ -413,23 +423,32 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
   for (const s of w.wyrms) {
     if (!s.alive || s.trail.length < 4) continue
     const col = s.element ? ELEM_COLOR[s.element] : BLANK
-    const bw = bodyRadius(s.mass) * 2 * zoom
-    // body
+    const br = bodyRadius(s.mass) // world units
+    const bw = br * 2 * zoom
+    const pts = slitherPoints(s, br, zoom, toX, toY, cw, ch)
+    // the glow: one blurred stroke through the waved spine (blur once, not per bead)
     ctx.strokeStyle = col
-    ctx.globalAlpha = s.isPlayer ? 0.95 : 0.8
+    ctx.globalAlpha = s.isPlayer ? 0.55 : 0.4
     ctx.lineWidth = Math.max(2, bw)
     ctx.shadowBlur = s.isPlayer ? 14 : 9
     ctx.shadowColor = col
     ctx.beginPath()
-    ctx.moveTo(toX(s.trail[0]), toY(s.trail[1]))
-    for (let i = 2; i < s.trail.length; i += 2) ctx.lineTo(toX(s.trail[i]), toY(s.trail[i + 1]))
+    ctx.moveTo(pts[0], pts[1])
+    for (let i = 3; i < pts.length; i += 3) ctx.lineTo(pts[i], pts[i + 1])
     ctx.stroke()
-    // boosting shimmer
-    if (s.boosting && s.boost > 0) {
-      ctx.strokeStyle = HOT; ctx.globalAlpha = 0.4; ctx.lineWidth = Math.max(1, bw * 0.4); ctx.stroke()
+    ctx.shadowBlur = 0
+    // the scales: overlapping beads tail→head so each scale sits on the one behind it, lit from
+    // the upper-left so the body reads as a tube; the boost shimmer is a hot core down the spine
+    const hot = s.boosting && s.boost > 0
+    ctx.globalAlpha = s.isPlayer ? 0.95 : 0.8
+    for (let i = pts.length - 3; i >= 3; i -= 3) {
+      const x = pts[i], y = pts[i + 1], r = pts[i + 2]
+      if (x < -bw || x > cw + bw || y < -bw || y > ch + bw) continue
+      ctx.fillStyle = col; dot(ctx, x, y, r)
+      ctx.fillStyle = hot ? HOT : 'rgba(255,255,255,0.28)'; dot(ctx, x - r * 0.3, y - r * 0.3, r * 0.42)
     }
     // head
-    const hx = toX(s.trail[0]), hy = toY(s.trail[1])
+    const hx = pts[0], hy = pts[1]
     ctx.globalAlpha = 1
     ctx.fillStyle = HOT; ctx.shadowBlur = 14; ctx.shadowColor = col
     dot(ctx, hx, hy, Math.max(2.5, bw * 0.62))
@@ -452,18 +471,116 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
     }
     // active-effect badges (screen-fixed, top-left) with a live countdown
     let by = 22
-    const badge = (label: string, col: string) => {
+    const badge = (kind: 'magnet' | 'stasis', label: string, col: string) => {
+      ctx.shadowBlur = 6; ctx.shadowColor = col
+      if (kind === 'magnet') magnet(ctx, 18, by - 4, 5, col); else infinity(ctx, 18, by - 4, 5.5, col)
       ctx.font = '600 11px ui-monospace, monospace'; ctx.textAlign = 'left'
-      ctx.fillStyle = col; ctx.shadowBlur = 6; ctx.shadowColor = col
-      ctx.fillText(label, 12, by); ctx.shadowBlur = 0; by += 17
+      ctx.fillStyle = col
+      ctx.fillText(label, 30, by); ctx.shadowBlur = 0; by += 17
     }
-    if (pl.stasisT > 0) badge('∞ STASIS ' + Math.ceil(pl.stasisT) + 's', STASIS_COL)
-    if (pl.magnetT > 0) badge('✦ MAGNET ' + Math.ceil(pl.magnetT) + 's', MAGNET_COL)
+    if (pl.stasisT > 0) badge('stasis', 'STASIS ' + Math.ceil(pl.stasisT) + 's', STASIS_COL)
+    if (pl.magnetT > 0) badge('magnet', 'MAGNET ' + Math.ceil(pl.magnetT) + 's', MAGNET_COL)
   }
+}
+
+// the same four glyphs as the canvas draws, for the intro legend (SVG so they sit in the HTML overlay)
+function Glyph({ kind }: { kind: 'seed' | 'mote' | 'magnet' | 'stasis' }) {
+  const col = kind === 'seed' ? BLANK : kind === 'mote' ? ATHER : kind === 'magnet' ? MAGNET_COL : STASIS_COL
+  return (
+    <svg width="14" height="14" viewBox="-8 -8 16 16" aria-hidden="true" style={{ filter: `drop-shadow(0 0 3px ${col})` }}>
+      {kind === 'seed' && <path d="M0 -6 L6 0 L0 6 L-6 0 Z" fill={col} />}
+      {kind === 'mote' && <path d="M0 -6 L1.8 -1.8 L6 0 L1.8 1.8 L0 6 L-1.8 1.8 L-6 0 L-1.8 -1.8 Z" fill={col} />}
+      {kind === 'magnet' && (
+        <g fill="none" stroke={col} strokeWidth="3">
+          <path d="M-4.5 -1 A4.5 4.5 0 0 1 4.5 -1 M-4.5 -1 V3.5 M4.5 -1 V3.5" />
+          <path d="M-4.5 4.5 V6 M4.5 4.5 V6" stroke={HOT} strokeWidth="3.4" />
+        </g>
+      )}
+      {kind === 'stasis' && <path d="M0 0 C2 -4 6.5 -4 6.5 0 C6.5 4 2 4 0 0 C-2 -4 -6.5 -4 -6.5 0 C-6.5 4 -2 4 0 0 Z" fill="none" stroke={col} strokeWidth="1.8" />}
+    </svg>
+  )
 }
 
 function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
   ctx.beginPath(); ctx.arc(x, y, Math.max(0.5, r), 0, Math.PI * 2); ctx.fill()
+}
+
+// ── the slither ──────────────────────────────────────────────────────────────────
+// The sim's trail is a breadcrumb of head positions, so the body already follows the path you
+// steered — but a polyline through it is a ribbon, not a snake. The render adds a lateral wave that
+// travels BACKWARD along the body at the worm's own speed (phase = dist travelled − distance from
+// the head), which is what a snake's undulation looks like from above; it grows from nothing at the
+// neck (the head goes where you aim) to SLITHER_AMP of the radius, and the beads taper to the tail.
+// Render-only: the sim's collision reads the unwaved trail, and the offset stays inside the body.
+const SLITHER_AMP = 0.28 // of body radius
+const SLITHER_LAMBDA = 9 // wavelength, in body radii
+const SLITHER_NECK = 5 // radii over which the wave ramps in from the head
+const BEAD_STEP = 0.55 // bead spacing, in body radii
+const TAIL_TAPER = 0.3 // last fraction of the body that thins
+function slitherPoints(
+  s: { trail: number[]; dist: number; boosting: boolean; boost: number },
+  br: number, zoom: number,
+  toX: (x: number) => number, toY: (y: number) => number, cw: number, ch: number,
+): number[] {
+  const tr = s.trail
+  const n = tr.length / 2
+  const total = (n - 1) * SEG_SPACING
+  const out: number[] = []
+  const lambda = Math.max(48, SLITHER_LAMBDA * br)
+  const step = Math.max(1, Math.round((BEAD_STEP * br) / SEG_SPACING))
+  const k = (Math.PI * 2) / lambda
+  for (let i = 0; i < n; i += step) {
+    const d = i * SEG_SPACING
+    const x = tr[i * 2], y = tr[i * 2 + 1]
+    // tangent from the neighbours (forward-difference at the ends)
+    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1)
+    let tx = tr[b * 2] - tr[a * 2], ty = tr[b * 2 + 1] - tr[a * 2 + 1]
+    const tl = Math.hypot(tx, ty) || 1
+    tx /= tl; ty /= tl
+    const ramp = Math.min(1, d / (SLITHER_NECK * br))
+    const amp = SLITHER_AMP * br * ramp * Math.sin(k * (s.dist - d))
+    const taper = total > 0 ? Math.min(1, 0.3 + 0.7 * ((total - d) / (TAIL_TAPER * total))) : 1
+    out.push(toX(x - ty * amp), toY(y + tx * amp), Math.max(1.2, br * zoom * taper))
+  }
+  return out
+}
+
+// ── glyphs (phosphor vector, house look) ──────────────────────────────────────────
+// a four-point spark — the energy mote
+function spark(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number) {
+  ctx.beginPath()
+  for (let i = 0; i < 8; i++) {
+    const a = rot + (i * Math.PI) / 4
+    const rr = i % 2 === 0 ? r : r * 0.32
+    const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py)
+  }
+  ctx.closePath(); ctx.fill()
+}
+// a horseshoe magnet, open at the bottom, hot tips — it PULLS
+function magnet(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, col: string) {
+  ctx.strokeStyle = col; ctx.lineWidth = r * 0.55; ctx.lineCap = 'butt'
+  ctx.beginPath(); ctx.arc(x, y - r * 0.15, r * 0.7, Math.PI, 0); ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(x - r * 0.7, y - r * 0.15); ctx.lineTo(x - r * 0.7, y + r * 0.55)
+  ctx.moveTo(x + r * 0.7, y - r * 0.15); ctx.lineTo(x + r * 0.7, y + r * 0.55)
+  ctx.stroke()
+  ctx.fillStyle = HOT
+  ctx.fillRect(x - r * 0.7 - r * 0.275, y + r * 0.55, r * 0.55, r * 0.3)
+  ctx.fillRect(x + r * 0.7 - r * 0.275, y + r * 0.55, r * 0.55, r * 0.3)
+  ctx.lineCap = 'round'
+}
+// a lemniscate — stasis, the infinity: your points stop draining
+function infinity(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, col: string) {
+  ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.2, r * 0.3)
+  ctx.beginPath()
+  for (let i = 0; i <= 40; i++) {
+    const t = (i / 40) * Math.PI * 2
+    const den = 1 + Math.sin(t) * Math.sin(t)
+    const px = x + (r * Math.cos(t)) / den, py = y + (r * Math.sin(t) * Math.cos(t)) / den
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py)
+  }
+  ctx.closePath(); ctx.stroke()
 }
 function diamond(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
   ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill()

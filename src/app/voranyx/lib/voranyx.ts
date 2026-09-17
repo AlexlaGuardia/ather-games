@@ -48,7 +48,7 @@ export const DROSS_MASS = 1.0
 export const SEED_MASS = 3.0
 export const BUBBLE_MASS = 1.1
 
-const SEG_SPACING = 6 // trail point spacing (world units)
+export const SEG_SPACING = 6 // trail point spacing (world units)
 const FOOD_TARGET = 1500 // ambient food at the FULL ring — dense enough the big Silt never feels empty
 export const SPAWN_CLEAR = 780 // min distance a rival may spawn from the player's head (no ambushes)
 // hold food DENSITY constant as the ring is bigger now and shrinks — target scales with area
@@ -77,6 +77,7 @@ export interface Wyrm {
   magnetT: number // seconds of magnet left (pulls nearby motes)
   stasisT: number // seconds of stasis left ("infinity": points don't drain)
   _acc: number // distance accumulator for trail sampling
+  dist: number // total distance travelled (render-only: phases the slither wave; no gameplay reads it)
   _wander: number // ai wander timer
 }
 
@@ -137,6 +138,7 @@ function spawnWyrm(w: World, isPlayer: boolean): Wyrm {
     magnetT: 0,
     stasisT: 0,
     _acc: 0,
+    dist: 0,
     _wander: 0,
   }
 }
@@ -394,6 +396,7 @@ export function tick(w: World, dt: number): TickEvents {
 
     // trail sampling
     s._acc += spd * dt
+    s.dist += spd * dt
     if (s._acc >= SEG_SPACING) {
       s._acc = 0
       s.trail.unshift(s.x, s.y)
