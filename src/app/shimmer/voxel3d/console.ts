@@ -60,6 +60,8 @@ export interface ConsoleCtx {
   /** Set one block (a MAT name) or one piece (a piece id) at world coordinates. Owner-gated dev
    *  instrument — see the `/put` row. */
   put: (id: string, x: number, y: number, z: number, rot?: number) => string
+  /** Move every planted bed's clock to a growth fraction (1 = ripe). Owner-gated dev instrument. */
+  grow: (progress: number) => string
   /**
    * Put a Hollow in front of the keeper. A TEST HARNESS — the same standing warning `/rune` and
    * `/waymark` carry: this is not how the dark arrives. The night's own rules (`hollowNight`,
@@ -329,6 +331,14 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.hollow(form, n)
     },
     suggest: () => ['warden', 'stalker', 'caster'] },
+  { name: 'grow', usage: 'grow [0-100 | ripe]  (bare = ripe)', help: 'set every planted bed to that growth % — to look at a stage without waiting for it', owner: true,
+    run: (a, c) => {
+      const arg = (a[0] ?? 'ripe').toLowerCase()
+      const pct = arg === 'ripe' ? 100 : Number(arg)
+      if (!Number.isFinite(pct) || pct < 0) return 'grow how much? 0-100, or ripe'
+      return c.grow(Math.min(pct, 100) / 100)
+    },
+    suggest: (i) => i === 0 ? ['ripe', '0', '30', '60', '90'] : [] },
   { name: 'tp', usage: 'tp <x> <z>  (~ = here, ~-20 = 20 west)', help: 'teleport to ground level', owner: true,
     run: (a, c) => {
       if (!a[0] || !a[1]) return 'tp needs two coordinates'
