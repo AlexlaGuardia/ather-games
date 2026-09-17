@@ -43,8 +43,31 @@ const BASE_SPEED = 10
 const SPRINT = 2.5
 /** Mouse look, radians per locked pixel. */
 const LOOK = 0.0022
-/** Held-button repeat, seconds — Minecraft's creative cadence. */
+/** Held-button repeat, seconds — Minecraft's creative cadence — when the crosshair stays on ONE cell. */
 const REPEAT = 0.22
+/**
+ * ★ DRAG-PLACING (GBOARD's "hold-to-place along a line"). With a button held, moving the crosshair
+ * onto a NEW cell fires at once rather than waiting out the repeat: sweep the crosshair along a wall
+ * and every cell it crosses gets a block, no gaps at any hand speed. The repeat only paces the case
+ * where the target has not moved (a tower toward you, a hole straight down). Minecraft's own
+ * creative break works this way — a fresh block under the crosshair breaks immediately.
+ *
+ * ⚠ THE HAND MUST HAVE MOVED, and the world changing under the crosshair does not count: a place
+ * puts a new block where the eye is looking, so "the target changed" is true after every place
+ * with the hand dead still, and firing on it towers toward the camera at 25 blocks a second. The
+ * evidence is the LOOK swept since the last fire, in radians, against half a cell's angle at the
+ * hit distance — jitter is a hundredth of that; a sweep that actually crossed to the next cell is
+ * at least that by construction.
+ */
+const DRAG_MIN = 0.04
+/**
+ * And the repeat is for a STILL hand only: a sweeping hand fires on cell crossings and nothing
+ * else, so a drag draws a line rather than Minecraft's line-with-lumps (its repeat keeps firing
+ * while you sweep, stacking a second block wherever the tick lands on one you just placed). Under
+ * this much look per repeat interval the hand counts as still — 0.02 rad is ~9 px, above a
+ * resting hand's tremor and far below any sweep.
+ */
+const STILL = 0.02
 
 export type CreativeActions = {
   /** Cells the crosshair's walk treats as solid: blocks, piece footprints, the pad. */
@@ -87,8 +110,8 @@ export function CreativeRig({ active, actions, readout, start }: {
   const act = useRef(actions); act.current = actions
   const s = useRef({
     yaw: 0, pitch: 0, speed: BASE_SPEED, sprint: false, lastW: -1, held: new Set<string>(),
-    locked: false, button: -1 as number, nextAt: 0,
-    target: null as null | { cell: Vec3; normal: Vec3 }, ghostKey: '', readoutText: '',
+    locked: false, button: -1 as number, nextAt: 0, lastFired: '', swept: 0,
+    target: null as null | { cell: Vec3; normal: Vec3; dist: number }, ghostKey: '', readoutText: '',
   })
 
   // The outlines: the looked-at cell (dark, thin) and the cells a place would fill (gold, faint).
@@ -144,10 +167,12 @@ export function CreativeRig({ active, actions, readout, start }: {
       if (!active || !st.locked) return
       st.yaw -= e.movementX * LOOK
       st.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, st.pitch - e.movementY * LOOK))
+      st.swept += Math.hypot(e.movementX, e.movementY) * LOOK
     }
     const fire = (button: number) => {
       const t = st.target
       if (!t) return
+      st.lastFired = `${t.cell.x},${t.cell.y},${t.cell.z}`; st.swept = 0
       if (button === 0) act.current.onBreak(t.cell)
       else if (button === 2) { if (t.normal.x || t.normal.y || t.normal.z) act.current.onPlace({ x: t.cell.x + t.normal.x, y: t.cell.y + t.normal.y, z: t.cell.z + t.normal.z }, t.normal, camera.position) }
       else if (button === 1) act.current.onPick(t.cell)
@@ -248,7 +273,7 @@ export function CreativeRig({ active, actions, readout, start }: {
     // ── the crosshair's walk ──────────────────────────────────────────────────────────────────
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
     const hit = voxelRay(camera.position, dir, act.current.solid, REACH)
-    st.target = hit ? { cell: hit.cell, normal: hit.normal } : null
+    st.target = hit ? { cell: hit.cell, normal: hit.normal, dist: hit.dist } : null
     const outline = group.getObjectByName('outline')!
     const ghost = group.getObjectByName('ghost') as THREE.Group
     // The page hears about the looked-at place every frame — a null when there is none — so its own
@@ -277,13 +302,25 @@ export function CreativeRig({ active, actions, readout, start }: {
     }
 
     // ── held-button repeat ────────────────────────────────────────────────────────────────────
-    if (st.button >= 0 && st.locked && performance.now() / 1000 >= st.nextAt) {
+    if (st.button >= 0 && st.locked) {
       const t = st.target
-      if (t) {
+      const now = performance.now() / 1000
+      const k = t ? `${t.cell.x},${t.cell.y},${t.cell.z}` : ''
+      const go = () => {
+        if (!t) return
+        st.lastFired = k
         if (st.button === 0) act.current.onBreak(t.cell)
         else if (t.normal.x || t.normal.y || t.normal.z) act.current.onPlace({ x: t.cell.x + t.normal.x, y: t.cell.y + t.normal.y, z: t.cell.z + t.normal.z }, t.normal, camera.position)
       }
-      st.nextAt = performance.now() / 1000 + REPEAT
+      // a new cell the HAND swept to fires now (drag-placing) …
+      if (t && k !== st.lastFired && st.swept >= 0.5 / Math.max(1, t.dist) && now >= st.nextAt - REPEAT + DRAG_MIN) {
+        go(); st.nextAt = now + REPEAT; st.swept = 0
+      } else if (now >= st.nextAt) {
+        // … and the repeat tick fires only if the hand was still for its whole interval — the same
+        // cell (a tower toward you, a hole straight down), never a lump on a line being drawn
+        if (st.swept < STILL) go()
+        st.nextAt = now + REPEAT; st.swept = 0
+      }
     }
   })
 
