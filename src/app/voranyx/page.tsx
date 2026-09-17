@@ -264,11 +264,11 @@ export default function VoranyxPage() {
               drag the stick to steer (WASD or your cursor on desktop). graze the dross, swallow a seed to take its colour, gather motes to boost. keep eating or you fade — and never put your head into another worm.
             </p>
             {/* the finds, in the glyphs the silt draws them with — learn them here, read them out there */}
-            <div className="flex items-center gap-3 text-[9px] font-mono tracking-wider text-[#9fd6e0]/70 -mt-1">
-              <span className="flex items-center gap-1"><Glyph kind="seed" /> seed · colour</span>
-              <span className="flex items-center gap-1"><Glyph kind="mote" /> mote · boost</span>
-              <span className="flex items-center gap-1"><Glyph kind="magnet" /> magnet · pulls</span>
-              <span className="flex items-center gap-1"><Glyph kind="stasis" /> stasis · no fade</span>
+            <div className="flex flex-wrap justify-center items-center gap-x-3 gap-y-1 text-[9px] font-mono tracking-wider text-[#9fd6e0]/70 -mt-1 max-w-[300px]">
+              <span className="flex items-center gap-1 whitespace-nowrap"><Glyph kind="seed" /> seed · colour</span>
+              <span className="flex items-center gap-1 whitespace-nowrap"><Glyph kind="mote" /> mote · boost</span>
+              <span className="flex items-center gap-1 whitespace-nowrap"><Glyph kind="magnet" /> magnet · pulls</span>
+              <span className="flex items-center gap-1 whitespace-nowrap"><Glyph kind="stasis" /> stasis · no fade</span>
             </div>
             <div className="gx-label pointer-events-auto flex items-center gap-1.5 mt-0.5 text-[10px]">
               {(['endless', 'daily'] as const).map((m) => (
@@ -445,7 +445,10 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
       const x = pts[i], y = pts[i + 1], r = pts[i + 2]
       if (x < -bw || x > cw + bw || y < -bw || y > ch + bw) continue
       ctx.fillStyle = col; dot(ctx, x, y, r)
-      ctx.fillStyle = hot ? HOT : 'rgba(255,255,255,0.28)'; dot(ctx, x - r * 0.3, y - r * 0.3, r * 0.42)
+      // a dark rim is what separates one scale from the one it overlaps — on the blank worm a white
+      // highlight alone vanishes into a white body
+      ctx.strokeStyle = 'rgba(4,4,10,0.4)'; ctx.lineWidth = Math.max(0.8, r * 0.14); ctx.stroke()
+      ctx.fillStyle = hot ? HOT : 'rgba(255,255,255,0.3)'; dot(ctx, x - r * 0.3, y - r * 0.3, r * 0.38)
     }
     // head
     const hx = pts[0], hy = pts[1]
