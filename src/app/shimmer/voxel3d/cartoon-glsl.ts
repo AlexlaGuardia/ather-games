@@ -19,7 +19,7 @@
 //
 // ⚠ NO BACKTICKS INSIDE THE GLSL STRINGS — see light-glsl.ts; a stray one ships a program that
 // fails to link and draws nothing with no console error.
-import { lightApply, LIGHT_DECL_GLSL } from './light-glsl'
+import { lightApply, lightApplyHere, LIGHT_DECL_GLSL } from './light-glsl'
 
 /** The five uniform declarations. Insert once per program, before `#include <common>`. */
 export const CARTOON_UNIFORMS_GLSL = `uniform float uCartoon;
@@ -64,7 +64,19 @@ export function cartoonUniforms(): Record<string, { value: number }> {
  * (bisected on a sunlit goldwood wall at 6 blocks, noon: shadowLift 0 → (88,61,26), the old
  * default → (139,130,135)). Both fixes date 2026-09-11.
  */
-export function cartoonStackGlsl(nrm: string, wpos: string, emissive: string): string {
+/**
+ * ★ THE FLORA'S TWO DEPARTURES (2026-09-17), as options so the stack stays ONE text:
+ *   `here`      — sample the light field at the fragment's OWN cell (`lightApplyHere`) instead of
+ *                 half a block along the normal. A card stands INSIDE its air cell and its normal
+ *                 flips halfway through the sheet; stepping along it lands in the ground block
+ *                 under a tuft (dark) or the neighbour beside a blade. The leaves learned this on
+ *                 09-08; flora is the same shape.
+ *   `noOutline` — the block-edge line comes from world position on a FACE; on a card that is a
+ *                 dark stripe wherever the card crosses a block boundary. Off for plants.
+ */
+export interface CartoonStackOpts { here?: boolean; noOutline?: boolean }
+
+export function cartoonStackGlsl(nrm: string, wpos: string, emissive: string, opts: CartoonStackOpts = {}): string {
   return `vec3 cnrm = normalize(${nrm});
        float faceLum = cnrm.y > 0.5 ? 1.0 : (cnrm.y < -0.5 ? 0.52 : 0.76 + 0.05 * abs(cnrm.x));
        float face = mix(1.0, faceLum, uFaceShading);
@@ -86,8 +98,8 @@ export function cartoonStackGlsl(nrm: string, wpos: string, emissive: string): s
                     min(mix(1.0, dEdge.y, planar.y), mix(1.0, dEdge.z, planar.z)));
        float line = 1.0 - smoothstep(0.0, 0.035, edge);
        toonCol *= hourCol;
-       toonCol *= mix(1.0, 0.62, line * uOutline);
+       toonCol *= mix(1.0, 0.62, line * ${opts.noOutline ? '0.0' : 'uOutline'});
        vec3 finalCol = mix(outgoingLight, toonCol, uCartoon);
-       ${lightApply('finalCol', 'diffuseColor.rgb', wpos, 'cnrm')}
+       ${opts.here ? lightApplyHere('finalCol', 'diffuseColor.rgb', wpos) : lightApply('finalCol', 'diffuseColor.rgb', wpos, 'cnrm')}
        gl_FragColor = vec4(finalCol + ${emissive}, diffuseColor.a);`
 }

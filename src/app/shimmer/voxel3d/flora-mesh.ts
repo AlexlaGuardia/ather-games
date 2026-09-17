@@ -23,6 +23,8 @@ import { plantedLook, STAGE_GROW, STAGE_RIPE, type PlantedSpot } from './planted
 import { FLORA, FRUIT_MATS } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
 import { MAT } from '../voxel/depth'
+import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from './cartoon-glsl'
+import { createLightUniforms, type LightUniforms } from './light-glsl'
 
 const SECTION = 16
 
@@ -347,6 +349,8 @@ export interface FloraRenderer {
    */
   setPlanted(spots: ReadonlyArray<PlantedSpot>): void
   tick(elapsed: number): void
+  /** The cartoon dials — the same value writes the world's blocks take (settings.ts). */
+  setCartoon(v: Record<string, number>): void
   /**
    * Draw the selection border on ONE plant — the reticle's whole job for ground cover.
    * Same geometry, same texture, same sway as the plant it marks; see `outlineMaterial`.
@@ -709,8 +713,45 @@ const makeBladeTexture = (seed: number, blades: number, size = BLADE_TILE): THRE
 
 const makeHeadTexture = (size = 8): THREE.DataTexture => toTexture(headPixels(size), size)
 
-export function createFloraRenderer(): FloraRenderer {
+export function createFloraRenderer(light: LightUniforms = createLightUniforms()): FloraRenderer {
   const uTime = { value: 0 }
+  // ── ★★ FLORA ON THE WORLD'S LIGHT (2026-09-17) ─────────────────────────────────────────────
+  // Every plant material was plain Lambert under the scene lights: no cartoon stack (the blocks'
+  // three-step banding, the 0.35 floor, the hour) and no LIGHT FIELD — a lantern lit the ground
+  // and not the grass standing on it, and at noon a tuft shaded smoothly on a block that shaded
+  // in bands. The last visible seam once the pieces (09-13) and the canopy (09-08) had joined.
+  // Now both flora families take the stack from the one module: the cards sample the field at
+  // their OWN cell (`here`) with the block-edge outline off, the solids (rock, log, mushroom,
+  // puff) take it exactly as a piece does. One uniform set, shared, so `setCartoon` is one write.
+  // ⚠ The light uniforms default to a fresh set when none is passed (tests, dev pages) — the
+  // field then reads as unbuilt (fully lit), which is what those pages showed before.
+  const cartoon = cartoonUniforms()
+  const injectStack = (shader: { uniforms: Record<string, unknown>; vertexShader: string; fragmentShader: string }, card: boolean): void => {
+    Object.assign(shader.uniforms, cartoon, light)
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFWPos;\nvarying vec3 vFWNorm;')
+      // ⚠ AFTER the sway, which edits `transformed` at begin_vertex — the field must be read where
+      // the bent blade actually is, and the injections are applied in order (sway first below).
+      .replace('#include <project_vertex>', [
+        '#ifdef USE_INSTANCING',
+        'vFWPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;',
+        'vFWNorm = normalize((modelMatrix * instanceMatrix * vec4(normal, 0.0)).xyz);',
+        '#else',
+        'vFWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+        'vFWNorm = normalize(mat3(modelMatrix) * normal);',
+        '#endif',
+        '#include <project_vertex>',
+      ].join('\n'))
+    // ★ The material's EMISSIVE rides past the stack and the field (the ore-glow slot): three has
+    // already folded it into outgoingLight, so it is taken back out first — or a glow-moss would
+    // read as "fully lit" to the banding and then be put out by the night field it exists to light.
+    const emit = 'outgoingLight -= totalEmissiveRadiance;\n'
+      + cartoonStackGlsl('vFWNorm', 'vFWPos', 'totalEmissiveRadiance', card ? { here: true, noOutline: true } : {})
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + CARTOON_DECL_GLSL + 'varying vec3 vFWPos;\nvarying vec3 vFWNorm;')
+      .replace('#include <output_fragment>', emit)
+      .replace('#include <opaque_fragment>', emit)
+  }
 
   /**
    * ★ THE SWAY INJECTION, SHARED BY THE PLANT AND ITS SELECTION OUTLINE (2026-09-09).
@@ -771,7 +812,7 @@ export function createFloraRenderer(): FloraRenderer {
    *  and the material stays ONE compiled program per mesh (audit's whole point). */
   const swayMaterial = (map: THREE.Texture, amp: number, tiles = 1): THREE.MeshLambertMaterial => {
     const m = new THREE.MeshLambertMaterial({ map, alphaTest: 0.4, side: THREE.DoubleSide })
-    m.onBeforeCompile = (shader) => { injectSway(shader, amp); injectAtlas(shader, tiles) }
+    m.onBeforeCompile = (shader) => { injectSway(shader, amp); injectAtlas(shader, tiles); injectStack(shader, true) }
     return m
   }
 
@@ -906,8 +947,11 @@ export function createFloraRenderer(): FloraRenderer {
   // corked bottle was an infusion vessel: honest, readable at range, and waiting for Alex's call on
   // what the Ather's ground furniture actually looks like. Silhouette is what is being fixed here —
   // that a rock reads as a lump, a log as a long low bar, a mushroom as a stalk with a cap.
-  const solidMaterial = (): THREE.MeshLambertMaterial =>
-    new THREE.MeshLambertMaterial({ side: THREE.FrontSide })
+  const solidMaterial = (): THREE.MeshLambertMaterial => {
+    const m = new THREE.MeshLambertMaterial({ side: THREE.FrontSide })
+    m.onBeforeCompile = (shader) => injectStack(shader, false)
+    return m
+  }
 
   // A stone: low, angular, wider than tall so it reads as lying ON the ground rather than set INTO
   // it. Flattened on Y by the instance scale below rather than in the geometry, so one buffer
@@ -1458,6 +1502,7 @@ export function createFloraRenderer(): FloraRenderer {
     invalidateAll() { cache.clear() },
     setPlanted(spots) { planted = spots; writePlanted() },
     tick(elapsed) { uTime.value = elapsed },
+    setCartoon(v) { for (const [k, val] of Object.entries(v)) if (cartoon[k]) cartoon[k].value = val },
 
     setHighlight(kind, x, y, z, variant, alongX) {
       // ★ THE SAME PLACEMENT DERIVATION THE PLANT ITSELF USES. If this composed its own matrix the

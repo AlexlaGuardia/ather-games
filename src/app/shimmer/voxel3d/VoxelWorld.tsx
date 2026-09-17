@@ -3145,6 +3145,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // than inside either material because there is one ring for the world and two programs reading
   // it, and a second copy is a second thing to keep in step with the frame loop.
   const lightUniforms = useMemo(() => createLightUniforms(), [])
+  // The flora renderer is built beside the light uniforms it samples (09-17), and before the
+  // settings effect below that hands it the cartoon dials.
+  const flora = useMemo(() => createFloraRenderer(lightUniforms), [lightUniforms])
   const lightTex = useMemo(() => createLightTexture(), [])
   useEffect(() => {
     lightUniforms.uLightTex.value = lightTex.texture
@@ -3202,8 +3205,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     glassTextured?.setCartoon(cartoon)   // the window is lit by the same stack as the wall around it
     pieces.setCartoon(cartoon)           // and so is the beam standing against that wall (09-13)
     stations?.setCartoon(cartoon)        // and the cauldron on the floor (09-15)
+    flora.setCartoon(cartoon)            // and the grass on the ground beside it (09-17)
     lightUniforms.uToonHour.value = settings.toonHour
-  }, [flatMaterial, textured, settings, pieces, stations, lightUniforms])
+  }, [flatMaterial, textured, settings, pieces, stations, flora, lightUniforms])
   const scratch = useMemo(() => createMeshScratch(SECTION), [])
   const cols = useRef(new Map<string, Column>())
   const drawn = useRef(new Map<string, THREE.Mesh>())
@@ -3391,7 +3395,6 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    *  the spirit you just sparred would keep standing there until the world reloaded. */
   const ledgerSeen = useRef<MistLedger | null>(null)
   // Ground cover (2026-08-08) — flora.ts selects, the live-voxel probe verifies, four draws total.
-  const flora = useMemo(() => createFloraRenderer(), [])
   /** Set whenever loaded ground changes (adopt, edit, evict); the frame loop syncs once quiet. */
   const floraDirty = useRef(true)
   // The planted feed's last picture — see the beat below the flora sync (2026-09-16).
