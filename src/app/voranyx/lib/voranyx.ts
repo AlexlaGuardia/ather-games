@@ -30,6 +30,8 @@ export const BOOST_MAX = 100
 // trickles charge back (empty → full in ~33s) so a dash across the silt can be PLANNED, not hoarded.
 export const BOOST_DRAIN = 24 // charge/sec while boosting
 export const BOOST_REGEN = 3 // charge/sec while not boosting
+export const BOOST_MIN_START = 8 // charge needed to START a surge (a running one goes to empty) — without this the
+// trickle refills 0.05/frame and a held boost on an empty tank flickers on and off every frame
 export const MOTE_CHARGE = 28 // charge per mote eaten
 
 // the swallow: what you eat lands in `mass` at once (score, metabolism, what you drop), but the
@@ -81,7 +83,8 @@ export interface Wyrm {
   mass: number
   element: Element | null // null = blank/elementless (white)
   boost: number // boost charge
-  boosting: boolean
+  boosting: boolean // the INPUT: boost is held
+  surging: boolean // the RESULT this tick: actually moving at BOOST_SPEED (the render reads this)
   grown: number // the mass the body's length + radius reflect (lags `mass` by the swallow; never above it)
   swallows: number[] // flat [distFromHead, massInBulge, ...], head-first — render draws the bulges
   alive: boolean
@@ -156,6 +159,7 @@ function spawnWyrm(w: World, isPlayer: boolean): Wyrm {
     element: null,
     boost: BOOST_MAX,
     boosting: false,
+    surging: false,
     grown: 0, // set below — equals mass at birth
     swallows: [],
     alive: true,
@@ -395,7 +399,8 @@ export function tick(w: World, dt: number): TickEvents {
 
     // turn + move
     s.angle = turnToward(s.angle, s.target, TURN_RATE * dt)
-    const canBoost = s.boosting && s.boost > 0 && s.mass > BASE_MASS + 2
+    const canBoost = s.boosting && s.mass > BASE_MASS + 2 && (s.surging ? s.boost > 0 : s.boost >= BOOST_MIN_START)
+    s.surging = canBoost
     const spd = canBoost ? BOOST_SPEED : SPEED
     if (canBoost) s.boost = Math.max(0, s.boost - BOOST_DRAIN * dt)
     else s.boost = Math.min(BOOST_MAX, s.boost + BOOST_REGEN * dt)

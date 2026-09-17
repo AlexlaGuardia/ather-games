@@ -156,7 +156,7 @@ export default function VoranyxPage() {
           window.setTimeout(() => { if (worldRef.current === dead) setOver(true) }, OVER_DELAY_MS)
         }
         const p = player(w)
-        if (p && p.boosting && p.boost > 0) sfx.play('boost')
+        if (p && p.surging) sfx.play('boost')
         syncT.current += dt
         if (syncT.current >= 0.1) { syncT.current = 0; setLen(score(w)); if (p) setBoostPct((p.boost / BOOST_MAX) * 100) }
       }
@@ -468,7 +468,7 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
     ctx.shadowBlur = 0
     // the scales: overlapping beads tail→head so each scale sits on the one behind it, lit from
     // the upper-left so the body reads as a tube; the boost shimmer is a hot core down the spine
-    const hot = s.boosting && s.boost > 0
+    const hot = s.surging
     ctx.globalAlpha = s.isPlayer ? 0.95 : 0.8
     for (let i = pts.length - 3; i >= 3; i -= 3) {
       const x = pts[i], y = pts[i + 1], r = pts[i + 2]
@@ -479,26 +479,15 @@ function render(canvas: HTMLCanvasElement, w: World, ts: number, cam: { x: numbe
       ctx.strokeStyle = 'rgba(4,4,10,0.4)'; ctx.lineWidth = Math.max(0.8, r * 0.14); ctx.stroke()
       ctx.fillStyle = hot ? HOT : 'rgba(255,255,255,0.3)'; dot(ctx, x - r * 0.3, y - r * 0.3, r * 0.38)
     }
-    // boosting: a hot core down the spine (the light is INSIDE the worm now) and speed streaks
-    // shed behind the head — readable from across the screen, so a rival's dash is a tell
+    // surging: a hot core down the spine — the light is INSIDE the worm — with a brighter glow;
+    // no streaks (they read as a different game). The wave itself already quickens with speed.
     if (hot) {
-      ctx.strokeStyle = HOT; ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1, bw * 0.28)
-      ctx.shadowBlur = 12; ctx.shadowColor = HOT
+      ctx.strokeStyle = HOT; ctx.globalAlpha = 0.5 + 0.12 * Math.sin(t * 14); ctx.lineWidth = Math.max(1, bw * 0.3)
+      ctx.shadowBlur = 16; ctx.shadowColor = HOT
       ctx.beginPath(); ctx.moveTo(pts[0], pts[1])
       for (let i = 3; i < pts.length; i += 3) ctx.lineTo(pts[i], pts[i + 1])
       ctx.stroke()
-      // streaks: three short lines behind the head, fanned off the heading, flickering with time
-      const ang = s.angle, sl = bw * 2.6
-      ctx.lineWidth = Math.max(1, bw * 0.12); ctx.shadowBlur = 0
-      for (let j = -1; j <= 1; j++) {
-        const a = ang + Math.PI + j * 0.28
-        const off = bw * 0.55 * j
-        const nx = -Math.sin(ang) * off, ny = Math.cos(ang) * off
-        const sx = pts[0] + nx + Math.cos(a) * bw * 0.8, sy = pts[1] + ny + Math.sin(a) * bw * 0.8
-        const len = sl * (0.7 + 0.3 * Math.sin(t * 31 + j * 2.1))
-        ctx.globalAlpha = 0.35 + 0.25 * Math.sin(t * 23 + j)
-        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(a) * len, sy + Math.sin(a) * len); ctx.stroke()
-      }
+      ctx.shadowBlur = 0
     }
     // head
     const hx = pts[0], hy = pts[1]

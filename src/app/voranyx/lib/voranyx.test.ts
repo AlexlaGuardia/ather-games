@@ -11,6 +11,7 @@ import {
   SWALLOW_SPEED,
   BOOST_DRAIN,
   BOOST_REGEN,
+  BOOST_MIN_START,
   MOTE_CHARGE,
   SEED_MASS,
   segCount,
@@ -224,6 +225,23 @@ function ok(name: string, cond: boolean) {
   ok('a rival death leaves one fallen body with its trail', w.fallen.length === 1 && w.fallen[0].trail.length >= 2 && ai.alive === false && p.alive)
   for (let i = 0; i < 12; i++) tick(w, 0.1)
   ok('the fallen body is culled after FALL_TIME (' + FALL_TIME + 's)', w.fallen.length === 0)
+}
+
+// 15. an empty tank does not flicker: holding boost at 0 charge stays at cruise (the regen trickle
+// must not re-arm the surge every other frame), and a surge that started runs down to empty
+{
+  const w = makeWorld(1, 0)
+  const p = player(w)!
+  w.food = []; p.mass = 40; p.grown = 40; p.stasisT = 600; p.x = 0; p.y = 0; p.angle = 0; steer(w, 0)
+  p.boost = 0; setBoost(w, true)
+  let surged = 0
+  for (let i = 0; i < 90; i++) { tick(w, 0.016); if (p.surging) surged++ }
+  ok('held boost on an empty tank: never surges while the trickle is under BOOST_MIN_START', surged === 0 && p.boost > 0 && p.boost < BOOST_MIN_START)
+  p.boost = BOOST_MIN_START
+  tick(w, 0.016)
+  ok('at BOOST_MIN_START the surge starts', p.surging)
+  tick(w, 0.016)
+  ok('…and keeps going below the start threshold (hysteresis)', p.surging && p.boost < BOOST_MIN_START)
 }
 
 console.log(`\nVORANYX sim: ${pass} passed, ${fail} failed`)
