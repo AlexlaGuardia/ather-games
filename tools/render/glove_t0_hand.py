@@ -42,14 +42,21 @@ SEAT         = (0x4A/255, 0x46/255, 0x38/255)   # crude cloudy crystal, dormant,
 
 # ── the hand, in metres. A right hand, wrist at the origin. ─────────────────────────────────────
 # Skin radii are (half-width along X, half-thickness along Y) at each joint.
-# The glove ends at the wrist with a hem, like the ref. Past it is the keeper's SLEEVE — plain
-# tunic cloth, baggier than the wrist, long enough to leave the player's frame instead of ending
-# in mid-air (draft 3's forearm stopped 7cm out and floated).
-FOREARM = [  # (pos, radii) from the elbow end down to the wrist
-    (Vector((0.000, 0.003, 0.125)), (0.035, 0.028)),   # ⚠ the rig aims the elbow end TOWARD the eye, so
-    (Vector((0.000, 0.002, 0.060)), (0.034, 0.027)),   # perspective fattens the sleeve — keep it lean
+# ★ RAYMAN (Alex, 09-17 ~02:00: "what if we went for a rayman type feel and just did the hands?").
+# The glove ends at the wrist with a hem, like the ref — and NOTHING past it. No sleeve, no
+# forearm: a floating glove, its wrist end a closed rounded stump under the hem, designed to
+# float rather than look cut. Every arm problem (the elbow, the sleeve fattening under
+# perspective, "the floating prop") was about drawing a limb the camera cannot see attached to
+# a body it cannot see; a floating hand skips the question, as VR games do. The tree's root is
+# the stump itself. (The sleeve version is one commit back — `FLOAT=0` rebuilds it.)
+FLOAT = os.environ.get("FLOAT", "1") != "0"
+FOREARM = ([  # the stump: the skin closes it with a rounded hull; the hem rings it
+    (Vector((0.000, 0.001, 0.036)), (0.031, 0.023)),
+] if FLOAT else [  # (pos, radii) from the elbow end down to the wrist — the sleeve version
+    (Vector((0.000, 0.003, 0.125)), (0.035, 0.028)),
+    (Vector((0.000, 0.002, 0.060)), (0.034, 0.027)),
     (Vector((0.000, 0.001, 0.030)), (0.031, 0.023)),
-]
+])
 SLEEVE = (0x7C/255, 0x74/255, 0x62/255)          # undyed tunic cloth, a shade darker than the glove
 SLEEVE_Z = 0.034                                 # above this the tree wears the sleeve colour
 WRIST   = (Vector((0.000, 0.000, 0.000)), (0.030, 0.021))
@@ -177,7 +184,7 @@ def build_skin_hand(pose_name):
     pose = POSE[pose_name]
     t = Tree()
     root = t.add(*FOREARM[0])
-    prev = t.chain(root, [FOREARM[1][0], FOREARM[2][0], WRIST[0]], [FOREARM[1][1], FOREARM[2][1], WRIST[1]], subdiv=2)
+    prev = t.chain(root, [f[0] for f in FOREARM[1:]] + [WRIST[0]], [f[1] for f in FOREARM[1:]] + [WRIST[1]], subdiv=2)
     prev = t.chain(prev, [HEEL[0], KNUCKLE[0]], [HEEL[1], KNUCKLE[1]], subdiv=3)
     knuckle = prev
     for name, x, z, length, splay in FINGERS:
@@ -260,7 +267,7 @@ def oval_band(name, z0, z1, rx, ry, segs=24, cx=0.0):
 def build_extras(mat):
     parts = []
     # the hem: a flared fold of cloth at the far end of the forearm, a shade darker
-    rx, ry = FOREARM[2][1]
+    rx, ry = FOREARM[-1][1]
     hem = oval_band("hem", HEM_Z[0], HEM_Z[1], rx + HEM_PROUD, ry + HEM_PROUD)
     assign(hem, mat); set_vcol(hem, CLOTH_SHADOW); parts.append(hem)
     # the wrap: a dark band around the wrist, just past the heel

@@ -1,4 +1,12 @@
-# Tier-0 casting glove — real-time hand mesh — DRAFT 4 (2026-09-16, play lane)
+# Tier-0 casting glove — real-time hand mesh — DRAFT 5, RAYMAN (2026-09-17, play lane)
+
+**Draft 5:** Alex — *"what if we went for a rayman type feel and just did the hands?"* The glove
+now ends at its hem with a closed rounded stump: no sleeve, no forearm, a floating hand. Both
+stick sleeves hide in the rig; the left wrist wears the same glove mirrored; the hands'
+orientation follows the camera on a spring (`LAG_RATE` 14/s) so a head-turn swings them a beat
+behind. `FLOAT=0` rebuilds the draft-4 sleeve version. Tune key moved to `shimmer:hands-tune.v2`
+with a forward-facing default. Draft 4 notes follow.
+
 
 `glove-t0.glb` · objects `glove_fist` + `glove_open` · metres · origin at the WRIST centre ·
 fingers −Z, back of hand +Y, thumb −X, sleeve +Z · vertex colours in `Col` (the rig replaces

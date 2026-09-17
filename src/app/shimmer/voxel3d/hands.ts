@@ -58,16 +58,24 @@ export const GLOVE_MODEL_URL = '/models/hands/glove-t0.glb'
 export interface HandsTune { wx: number; wy: number; wz: number; ex: number; ey: number; ez: number; roll: number }
 // Alex, 09-16, on the first default: "turn it about 15 degrees to the right and bring it down a
 // bit" — the elbow→wrist line rotated 15° clockwise about the elbow, then the whole arm 0.05 lower.
-export const DEFAULT_TUNE: HandsTune = { wx: 0.32, wy: -0.20, wz: -0.50, ex: 0.46, ey: -0.67, ez: -0.34, roll: -0.35 }
+// ★ RAYMAN default (09-17): with no arm to justify a steep angle, the aim point sits behind and a
+// little below the wrist, so the fingers point FORWARD into the world with a touch of lift — a
+// hand in front of you, not a limb reaching off the frame. (The arm's tune was wrist 0.32,−0.20,
+// −0.50 · elbow 0.46,−0.67,−0.34.)
+export const DEFAULT_TUNE: HandsTune = { wx: 0.30, wy: -0.24, wz: -0.50, ex: 0.36, ey: -0.42, ez: -0.18, roll: -0.35 }
 /** The left wrist rests below the frame and rises `up` on a cast; its elbow mirrors the right's. */
 export const LEFT_UP = 0.40
+/** The hands' orientation follows the camera on a spring at this rate (1/s). */
+export const LAG_RATE = 14
 export const LEFT_DROP = 0.38
 
 // ── ★ THE TUNE IS ALEX'S (09-16: "I wish there was a way for me to position it") ─────────────
 // A module store the Dev tab's tuner writes and every rig reads: seven numbers, saved in
 // localStorage so a reload keeps them, and a readout he can paste back so the default gets baked.
 // The rig re-aims when the version moves — no prop plumbing from the HUD down into the World.
-const TUNE_KEY = 'shimmer:hands-tune'
+// v2: the floating-hand default is a different object from the arm's; a saved arm tune must not
+// outrank it, so the key moved and the old one is ignored.
+const TUNE_KEY = 'shimmer:hands-tune.v2'
 export const handsTune: { tune: HandsTune; version: number } = { tune: { ...DEFAULT_TUNE }, version: 0 }
 export function loadHandsTune(): HandsTune {
   try {
@@ -283,10 +291,10 @@ export function createHands(): Hands {
   group.add(leftPivot)
   loadHandsTune()
   reaim()
-  part(left, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 + 0.03)
+  const leftSleeve = part(left, cube, COLOUR.sleeve, P.forearm.w, P.forearm.h, P.forearm.l, 0, 0, P.forearm.l / 2 + 0.03)
   part(left, cube, COLOUR.band, P.band.w, P.band.h, P.band.l, 0, 0, 0.01)
   part(left, sphere, COLOUR.bead, 0.014, 0.014, 0.014, 0, P.band.h / 2, 0.01)
-  part(left, cube, COLOUR.glove, P.glove.w * 0.9, P.glove.h * 1.2, P.glove.l * 0.6, 0, 0, -P.glove.l * 0.3 - 0.01)  // a closed fist
+  const leftFist = part(left, cube, COLOUR.glove, P.glove.w * 0.9, P.glove.h * 1.2, P.glove.l * 0.6, 0, 0, -P.glove.l * 0.3 - 0.01)  // a closed fist
 
   // ── the held thing: one cube in the fist, tinted per frame from the signal (a block reads as a
   //    small block; a piece as a flatter slab of its material). One mesh, one material of its own.
@@ -301,7 +309,10 @@ export function createHands(): Hands {
   // ★ The box forearm hides too (09-16): the file's sleeve runs from the glove's hem past the frame
   // edge. Left showing, the box was the HANDLE of the hammer Alex saw — the glove hung 90° off its
   // end (the file's frame was wrong; fixed in the producer) and the box read as the arm's shaft.
-  const stickParts: THREE.Object3D[] = [glove, palm, cuff, seat, forearm]   // the modelled glove brings its own sleeve, hem and seat
+  // ★ RAYMAN (Alex, 09-17): "what if we went for a rayman type feel and just did the hands?" The
+  // file is now a floating glove — hem, closed stump, no sleeve — so BOTH sleeves hide, and the
+  // left wrist wears the same glove mirrored (three flips the winding for a negative scale).
+  const stickParts: THREE.Object3D[] = [glove, palm, cuff, seat, forearm, leftSleeve, leftFist]
   let gloveFist: THREE.Object3D | null = null, gloveOpen: THREE.Object3D | null = null
   /** The depth trick and the ambient floor, applied to any mesh that joins the rig later. */
   const adopt = (o: THREE.Object3D) => {
@@ -327,6 +338,8 @@ export function createHands(): Hands {
       fist.position.set(0, 0, 0); open.position.set(0, 0, 0)
       arm.add(fist); arm.add(open)
       gloveFist = fist; gloveOpen = open
+      const mirror = fist.clone(); mirror.scale.x = -1; mirror.name = 'glove_left'
+      left.add(mirror)
       for (const p of stickParts) p.visible = false
       resolve(true)
     }, undefined, () => resolve(false))
@@ -343,9 +356,13 @@ export function createHands(): Hands {
   let lastTier = -1
 
   const tick = (camera: THREE.Camera, t: number, dt: number) => {
-    // pose from the camera
+    // pose from the camera — the position exactly, the ORIENTATION on a spring. A floating hand
+    // that snaps with the eye is a HUD element; one that swings a beat behind a head-turn and
+    // settles is a thing in the world (the Rayman feel). Rate 14/s: a fast turn lags the hands a
+    // few degrees and they catch up in ~0.2 s; standing still they sit exactly.
     group.position.copy(camera.position)
-    group.quaternion.copy(camera.quaternion)
+    if (Number.isNaN(last.x)) group.quaternion.copy(camera.quaternion)
+    else group.quaternion.slerp(camera.quaternion, 1 - Math.exp(-LAG_RATE * dt))
     // speed from the camera's own travel — no coupling to the walker. Horizontal AND vertical: the
     // clock needs to know when the feet have left the ground (a jump is not a run).
     let speed = 0, vy = 0

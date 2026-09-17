@@ -29,7 +29,7 @@ export function HandsTuner({ onClose }: { onClose: () => void }) {
       <OptionSlider label="wrist x" value={t.wx} min={-0.6} max={0.8} step={0.01} onChange={set('wx')} />
       <OptionSlider label="wrist y" value={t.wy} min={-0.7} max={0.3} step={0.01} onChange={set('wy')} />
       <OptionSlider label="wrist z" value={t.wz} min={-1.0} max={-0.2} step={0.01} onChange={set('wz')} />
-      <OptionHead>elbow — where the arm comes from (off the frame is right)</OptionHead>
+      <OptionHead>aim — the point the wrist faces away from (where an elbow would be; the hands float, Rayman-style)</OptionHead>
       <OptionSlider label="elbow x" value={t.ex} min={-0.6} max={1.2} step={0.01} onChange={set('ex')} />
       <OptionSlider label="elbow y" value={t.ey} min={-1.4} max={0.3} step={0.01} onChange={set('ey')} />
       <OptionSlider label="elbow z" value={t.ez} min={-1.0} max={0.2} step={0.01} onChange={set('ez')} />
