@@ -18,6 +18,9 @@
 // that hid the dead chest click. Two functions, each total over its own inputs.
 //
 // ── ★ WHERE THE CONTENTS LIVE (host side, stated here because this file is where you'll look) ──
+// ⚠ OFF THE PLOT ONLY, since 2026-09-16. On the keeper's own land every chest is a door into ONE
+// pool (`bank.ts`, saved in the player record) and the per-block grid below is never created; the
+// rest of this note is the Wilds / Moonwell case, where a chest is still a cache that stands alone.
 // In the COLUMN's save record, beside its block edits and pieces — not in a global sidecar like the
 // pot clock. A chest is a thing you built at a place: its block and its contents have to arrive and
 // leave together, or a refresh lands between the two loads and a break in that window destroys what
