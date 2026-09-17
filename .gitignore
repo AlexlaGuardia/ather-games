@@ -75,3 +75,4 @@ shots/
 
 # hub previews for Alex to look at (rasterized maps, shots) — served, never committed
 /public/scratch/
+tools/render/out/
