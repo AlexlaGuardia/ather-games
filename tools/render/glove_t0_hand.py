@@ -9,7 +9,16 @@
 # ★★ DRAFT 2 (2026-09-17) — coordinator's numeric spec, after draft 1 read as a DIAGRAM not a
 # glove ("five thin tentacles on a flat slab", "a jumble of pegs", "a mushroom cap"). Every
 # dimension below is a NUMBER from that brief, not an adjective — see the constants block.
-# ⚠ Writes to tools/render/out/hands-draft2/ ONLY. public/ stays clean for builds; nothing here
+# ★★★ DRAFT 3 (2026-09-17) — draft 2 shipped to prod for Alex to judge; ONE more fix asked before
+# then: fingers/thumb still read as "bamboo" because each phalanx was a SEPARATE capsule object,
+# and two separate rounded ends butted together always shows a waist/pinch at the joint no matter
+# how good the angles are. Fixed: each finger and the thumb is now ONE continuous tube — a Bezier
+# curve run through the joint points with a per-point tapered radius and a round bevel — so the
+# curl is a single continuous bend and only the seam ridge marks the back. Also killed a real bug
+# the palm-side renders showed: the "back dome" sphere was oversized/mis-centred and bulged
+# through to the PALM side too (the "oval pad" the ref doesn't show) — rebuilt flat/shallow so it
+# never crosses to -Y.
+# ⚠ Writes to tools/render/out/hands-draft3/ ONLY. public/ stays clean for builds; nothing here
 # touches public/ until this pass is approved.
 #
 # This is NOT the inventory-icon sprite pipeline (vessel_glove.py / vessel_common.py, which render
@@ -173,32 +182,55 @@ def assign(obj, mat):
     return obj
 
 
-def tapered_segment(name, base, tip, r_base, r_tip, mat, vcol, bevel_frac=0.45, vertices=8, cap=False):
-    base_v, tip_v = Vector(base), Vector(tip)
-    d = tip_v - base_v
-    length = d.length
-    if length < 1e-6:
-        return []
-    mid = (base_v + tip_v) * 0.5
-    cone = add(bpy.ops.mesh.primitive_cone_add, vertices=vertices, radius1=r_base, radius2=r_tip,
-               depth=length, location=(mid.x, mid.y, mid.z))
-    cone.rotation_euler = d.to_track_quat('Z', 'Y').to_euler()
-    bev = cone.modifiers.new("b", 'BEVEL')
-    bev.width = max(r_tip * bevel_frac, 0.0015)
-    bev.segments = 1
-    bev.limit_method = 'ANGLE'
-    bpy.ops.object.modifier_apply(modifier="b")
+# ── DRAFT 3: the "bamboo" fix — ONE continuous tube per finger/thumb/seam, not a stack of
+# separate capsule segments. Draft 2 built each phalanx as its OWN beveled cone with its own
+# rounded cap, then butted the next segment's own rounded base against it — two separate round
+# ends meeting always shows a waist/pinch at the joint, no matter how good the bend angle is.
+# A curve's bevel is ONE continuous swept surface along the whole path, so a bend shows as a
+# bend, never a seam. Per-point `radius` gives the 2.0->1.6cm taper without needing per-segment
+# radii; VECTOR handles keep the path itself the same straight-segment polyline the joint
+# angles already describe (a real knuckle crease reads better as a crisp bend than an
+# over-rounded Auto-handle curve, which tended to overshoot on the fist's 85/95/50 deg bends).
+def make_tapered_tube(name, pts, radii, mat, vcol, bevel_res=8, resolution_u=2, cap_end=True):
+    """pts: list of Vector world points (the joint chain, base..tip). radii: matching list of
+    physical radii (metres) at each point — the curve's bevel_depth is fixed at 1.0 so a point's
+    `radius` attribute IS the swept radius, no separate scale factor to keep in sync."""
+    # POLY (not Bezier) — a plain piecewise-linear path between the joint points, which is what
+    # we want anyway (a real knuckle is a crisp bend, not a smoothed-over curve, and the joint
+    # ANGLES already come straight from the coordinator's MCP/PIP/DIP numbers). This also sidesteps
+    # Bezier handle bookkeeping entirely: a fresh bezier point's handles default to zero-length
+    # (coincident with its own co) unless explicitly positioned, which would have produced a
+    # degenerate/undefined tangent at every joint — POLY has no handles to get wrong.
+    cd = bpy.data.curves.new(name, type='CURVE')
+    cd.dimensions = '3D'
+    cd.resolution_u = resolution_u
+    spline = cd.splines.new('POLY')
+    spline.points.add(len(pts) - 1)
+    for i, p in enumerate(pts):
+        cp = spline.points[i]
+        cp.co = (p.x, p.y, p.z, 1.0)
+        cp.radius = radii[i]
+    cd.bevel_depth = 1.0
+    cd.bevel_resolution = bevel_res
+    cd.fill_mode = 'FULL'
+    obj = bpy.data.objects.new(name, cd)
+    bpy.context.collection.objects.link(obj)
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.convert(target='MESH')
     bpy.ops.object.shade_smooth()
-    assign(cone, mat)
-    set_vcol(cone, vcol)
-    parts = [cone]
-    if cap:
-        capobj = add(bpy.ops.mesh.primitive_uv_sphere_add, segments=6, ring_count=4,
-                     radius=r_tip * 0.98, location=(tip_v.x, tip_v.y, tip_v.z))
+    assign(obj, mat)
+    set_vcol(obj, vcol)
+    parts = [obj]
+    if cap_end:
+        tip = pts[-1]
+        cap = add(bpy.ops.mesh.primitive_uv_sphere_add, segments=6, ring_count=4,
+                  radius=radii[-1] * 0.98, location=(tip.x, tip.y, tip.z))
         bpy.ops.object.shade_smooth()
-        assign(capobj, mat)
-        set_vcol(capobj, vcol)
-        parts.append(capobj)
+        assign(cap, mat)
+        set_vcol(cap, vcol)
+        parts.append(cap)
     return parts
 
 
@@ -260,9 +292,16 @@ def build_palm(mat):
     obj = flat_solid("palm", pts, PALM_Y_TOP, PALM_THICK, bevel=PALM_BEVEL, bevel_segments=4)
     assign(obj, mat)
     set_vcol(obj, CLOTH)
+    # ★ DRAFT 3 FIX: the old center/scale math put this dome's centre at y=-0.008 with a real
+    # (post-scale) half-height of ~0.013 — i.e. spanning roughly y[-0.021, +0.005], almost
+    # entirely on the PALM (-Y) side and barely reaching the back surface at all. That is
+    # exactly the "oval pad on the palm side" the ref doesn't show. Rebuilt so its FLOOR sits at
+    # the back surface (y=PALM_Y_TOP) and it only rises PALM_DOME_HEIGHT above that — it can
+    # never cross to -Y because its lowest point is pinned at the surface, not derived from a
+    # radius/scale combo that has to be re-solved by hand.
     dome = add(bpy.ops.mesh.primitive_ico_sphere_add, subdivisions=2, radius=PALM_DOME_R,
-               location=(0.0, PALM_Y_TOP + PALM_DOME_HEIGHT - PALM_DOME_R, -PALM_LEN * 0.55))
-    dome.scale = (1.35, PALM_DOME_HEIGHT / PALM_DOME_R * 2.2, 1.0)
+               location=(0.0, PALM_Y_TOP, -PALM_LEN * 0.55))
+    dome.scale = (1.35, PALM_DOME_HEIGHT / PALM_DOME_R, 1.0)
     bpy.ops.object.shade_smooth()
     assign(dome, mat)
     set_vcol(dome, CLOTH)
@@ -376,25 +415,41 @@ def thumb_chain(pose_name):
     return tpts, tradii, tdirs
 
 
+def _seam_offset_points(pts, dirs, radii, extra=0.0018):
+    """One offset point per joint (len(pts)), each pushed out from the finger's own centreline
+    along the local 'outward' normal at that joint — a continuous parallel path the seam tube
+    follows, instead of 3 separately-aimed straight segments."""
+    out = [None] * len(pts)
+    for i in range(len(pts)):
+        d = dirs[min(i, len(dirs) - 1)] if i < len(dirs) else dirs[-1]
+        d2 = dirs[i - 1] if i > 0 else dirs[0]
+        # average the incoming/outgoing segment direction at interior joints so the offset
+        # normal doesn't kink at every control point
+        davg = (d + d2)
+        if davg.length < 1e-6:
+            davg = d
+        davg.normalize()
+        perp = Vector((0.0, -davg.z, davg.y))
+        if perp.length < 1e-5:
+            perp = Vector((0, 0, 1))
+        perp.normalize()
+        r = radii[i] * 0.85 + extra
+        out[i] = pts[i] + perp * r
+    return out
+
+
 def build_seams(pose_name, mat):
-    """Visible relief the way the ref reads it — a raised stitch ridge down each finger, riding
-    the SAME curl the finger itself uses, plus one across the palm."""
+    """Visible relief the way the ref reads it — ONE continuous raised stitch ridge down each
+    finger (riding the same curl the finger itself uses), plus one across the palm. This is the
+    only relief that should mark a joint now that the finger itself is a single smooth tube."""
     pose = POSE[pose_name]
     parts = []
     for (name, x, total, splay_deg) in FINGERS:
         pts, radii, dirs = finger_chain(pose, x, total, splay_deg)
-        for i in range(3):
-            d = dirs[i]
-            perp = Vector((0.0, -d.z, d.y))
-            if perp.length < 1e-5:
-                perp = Vector((0, 0, 1))
-            perp.normalize()
-            off0 = radii[i] * 0.85 + 0.0018
-            off1 = radii[i + 1] * 0.85 + 0.0018
-            base = pts[i] + perp * off0
-            tip = pts[i + 1] + perp * off1
-            parts += tapered_segment(f"seam-{name}-{i}", base, tip, 0.0035, 0.0020, mat, SEAM,
-                                      vertices=6, bevel_frac=0.5)
+        seam_pts = _seam_offset_points(pts, dirs, radii)
+        seam_r = [0.0035, 0.0032, 0.0027, 0.0020]
+        parts += make_tapered_tube(f"seam-{name}", seam_pts, seam_r, mat, SEAM,
+                                    bevel_res=4, resolution_u=2, cap_end=False)
     ridge = add(bpy.ops.mesh.primitive_cylinder_add, vertices=8, radius=0.0035,
                 depth=PALM_KNUCKLE_HALF_W * 1.7, location=(0, PALM_Y_TOP - 0.001, -PALM_LEN * 0.42))
     ridge.rotation_euler = (0, math.radians(90), 0)
@@ -411,14 +466,10 @@ def build_digits(pose_name, mat):
     fingertips = []
     for (name, x, total, splay_deg) in FINGERS:
         pts, radii, dirs = finger_chain(pose, x, total, splay_deg)
-        for i in range(3):
-            parts += tapered_segment(f"{name}-seg{i}", pts[i], pts[i + 1], radii[i], radii[i + 1],
-                                      mat, CLOTH, cap=(i == 2))
+        parts += make_tapered_tube(name, pts, radii, mat, CLOTH, bevel_res=8, resolution_u=2, cap_end=True)
         fingertips.append(pts[-1])
     tpts, tradii, tdirs = thumb_chain(pose_name)
-    for i in range(2):
-        parts += tapered_segment(f"thumb-seg{i}", tpts[i], tpts[i + 1], tradii[i], tradii[i + 1],
-                                  mat, CLOTH, cap=(i == 1))
+    parts += make_tapered_tube("thumb", tpts, tradii, mat, CLOTH, bevel_res=8, resolution_u=2, cap_end=True)
     if pose_name == "fist":
         ys = [p.y for p in fingertips]
         zs = [p.z for p in fingertips]

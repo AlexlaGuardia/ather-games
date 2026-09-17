@@ -314,7 +314,11 @@ export function createHands(): Hands {
           // lives per vertex), so copying it into emissive blew the glove out to paper. A fixed dim
           // warm emissive gives the same "never black" floor without whitening anything.
           mm.emissive.setHex(0x1c1610); mm.emissiveIntensity = 1
-          mm.roughness = Math.max(mm.roughness, 0.85)   // cloth, not plastic
+          mm.roughness = 1   // cloth, not plastic
+          // ★ And the world's sun is far stronger than a studio light: the ref's cream (#c9b48a) read
+          // as PAPER on prod. `color` multiplies the vertex colours, so this is a global tint down
+          // toward the ref's shadow tone, not a repaint.
+          mm.color.setScalar(0.68)
         }
       }
     })
