@@ -14,6 +14,7 @@ import {
   MOTE_CHARGE,
   SEED_MASS,
   segCount,
+  FALL_TIME,
   setBoost,
   tick,
   score,
@@ -214,13 +215,15 @@ function ok(name: string, cond: boolean) {
 
 // 14. the fallen linger FALL_TIME for the dissolve, then go
 {
-  const w = makeWorld(1, 0)
+  const w = makeWorld(1, 1)
   const p = player(w)!
-  p.x = ARENA_R0 + 60; p.y = 0; p.angle = 0; steer(w, 0)
+  const ai = w.wyrms.find((x) => !x.isPlayer)!
+  p.x = 0; p.y = 0; w.food = []; p.stasisT = 600
+  ai.x = ARENA_R0 + 60; ai.y = 0 // a rival over the void edge
   tick(w, 0.01)
-  ok('a death leaves one fallen body with its trail', w.fallen.length === 1 && w.fallen[0].trail.length >= 2 && p.alive === false)
+  ok('a rival death leaves one fallen body with its trail', w.fallen.length === 1 && w.fallen[0].trail.length >= 2 && ai.alive === false && p.alive)
   for (let i = 0; i < 12; i++) tick(w, 0.1)
-  ok('the fallen body is culled after FALL_TIME', w.fallen.length === 0)
+  ok('the fallen body is culled after FALL_TIME (' + FALL_TIME + 's)', w.fallen.length === 0)
 }
 
 console.log(`\nVORANYX sim: ${pass} passed, ${fail} failed`)
