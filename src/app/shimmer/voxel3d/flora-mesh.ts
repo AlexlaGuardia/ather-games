@@ -381,7 +381,12 @@ function buildFlatGeometry(width: number, yBase: number): THREE.BufferGeometry {
 
 /** ONE builder for a part, read by the renderer AND by `vertsFor` — a flat part and a star part
  *  must be measured by the same code that draws them or the outline lies about one of them. */
-export interface FloraPart { w: number; h: number; yBase?: number; flat?: boolean; tiles?: number; lean?: number }
+export interface FloraPart {
+  w: number; h: number; yBase?: number; flat?: boolean; tiles?: number; lean?: number
+  /** A contact SHADOW under the plant: drawn with the soft shadow material, never tinted, never
+   *  outlined (a border on a soft disc is a black ring). `flora-outline.test` skips these. */
+  shadow?: boolean
+}
 
 /**
  * ── ★ THE LEAN: A STAR OF VERTICAL CARDS IS A STAR OF LINES FROM ABOVE (2026-09-16) ─────────────
@@ -435,7 +440,14 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
   // Widths chosen against the jitter so a blade can never overhang its cell (w/2 + 0.15 <= 0.5).
   // The tuft is a fan of three cards AND a flat rosette at knee height (2026-09-16): the rosette
   // is what a clump looks like from above, and from the side it is edge-on inside the fan.
-  [FLORA.TUFT]: [{ w: 0.7, h: 0.55, tiles: GRASS_VARIANTS, lean: CARD_LEAN }, { w: 0.5, h: 0, yBase: 0.2, flat: true }],   // 0.5: its diagonal + the jitter must stay inside the cell
+  [FLORA.TUFT]: [
+    { w: 0.7, h: 0.55, tiles: GRASS_VARIANTS, lean: CARD_LEAN },
+    { w: 0.5, h: 0, yBase: 0.2, flat: true },   // the cap; 0.5: its diagonal + the jitter must stay inside the cell
+    // The clump's contact shadow, the bloom mat's trick (2026-09-15 "stickers"): from above a
+    // ground-tinted rosette on ground-tinted turf was camouflage; the dark disc under it is what
+    // makes a clump read as a THING on the ground rather than a pattern in it.
+    { w: 0.6, h: 0, yBase: 0.04, flat: true, shadow: true },
+  ],
   [FLORA.TALL]: [{ w: 0.7, h: 1.05, tiles: GRASS_VARIANTS, lean: CARD_LEAN * 0.6 }],
   // ── The three flower forms (2026-09-14). `FLOWER` is the SINGLE: one stem, one big head, the
   // tallest of the three. The mat is a flat pad (leaves, then blooms over it) plus a low star so
@@ -448,7 +460,7 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
     // The contact shadow, UNDER the leaves (2026-09-15, "stickers"). A hair wider than the pad so
     // the soft rim shows past the leaf edge; 0.04 over the root puts it 0.01 above the ground
     // plane (root is 0.97), clear of z-fighting and below the pad's 0.05.
-    { w: 1.0, h: 0, yBase: 0.04, flat: true },
+    { w: 1.0, h: 0, yBase: 0.04, flat: true, shadow: true },
   ],
   // Bushes lean too (the noon shot from above: a bush was three dark lines and a fruit plate).
   [FLORA.BLOOM_BUSH]: [{ w: 0.85, h: 0.7, lean: CARD_LEAN * 0.5 }, { w: 0.7, h: 0.45, yBase: 0.4, lean: CARD_LEAN * 0.5 }],
@@ -920,6 +932,8 @@ export function createFloraRenderer(): FloraRenderer {
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, CAP.tuft)
   const tuftCaps = new THREE.InstancedMesh(tuftCapGeo, tuftCapMat, CAP.tuft)
   tuftCaps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tuft * 3), 3)
+  const tuftShadowGeo = crossGeo(FLORA.TUFT, 2)
+  const tuftShadows = new THREE.InstancedMesh(tuftShadowGeo, matShadowMat, CAP.tuft)
   const talls = new THREE.InstancedMesh(tallGeo, tallMat, CAP.tall)
   // Slice ②: the blades take the colour of the ground under them (see GRASS_OF_GROUND).
   tufts.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.tuft * 3), 3)
@@ -987,7 +1001,7 @@ export function createFloraRenderer(): FloraRenderer {
   puffs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.puff * 3), 3)
   mosses.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.moss * 3), 3)
 
-  for (const m of [tufts, tuftCaps, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
+  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -995,7 +1009,7 @@ export function createFloraRenderer(): FloraRenderer {
   }
 
   const group = new THREE.Group()
-  group.add(tufts, tuftCaps, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses)
+  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, rocks, logs, shroomStems, shroomCaps, puffs, mosses)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
   // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
@@ -1153,6 +1167,7 @@ export function createFloraRenderer(): FloraRenderer {
             if (nT < CAP.tuft) {
               tufts.setMatrixAt(nT, mtx); tufts.setColorAt(nT, grassTint(s.ground)); tuftTile.setX(nT, tileOf(s.variant))
               tuftCaps.setMatrixAt(nT, mtx); tuftCaps.setColorAt(nT, grassTint(s.ground))
+              tuftShadows.setMatrixAt(nT, mtx)
               nT++
             }
           }
@@ -1242,7 +1257,7 @@ export function createFloraRenderer(): FloraRenderer {
           }
         }
       }
-      tufts.count = nT; tuftCaps.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
+      tufts.count = nT; tuftCaps.count = nT; tuftShadows.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
       matLeaves.count = nM; matBlooms.count = nM; matStars.count = nM; matShadows.count = nM
       bushes.count = nB; bushHeads.count = nB
       fruitBushes.count = nFr; fruits.count = nFr
@@ -1268,6 +1283,7 @@ export function createFloraRenderer(): FloraRenderer {
       }
       tufts.instanceMatrix.needsUpdate = true
       tuftCaps.instanceMatrix.needsUpdate = true
+      tuftShadows.instanceMatrix.needsUpdate = true
       if (tuftCaps.instanceColor) tuftCaps.instanceColor.needsUpdate = true
       talls.instanceMatrix.needsUpdate = true
       tuftTile.needsUpdate = true
@@ -1328,7 +1344,7 @@ export function createFloraRenderer(): FloraRenderer {
     },
     dispose() {
       for (const h of hlMeshes) { h.mesh.dispose(); (h.mat as THREE.Material).dispose() }
-      tuftGeo.dispose(); tuftCapGeo.dispose(); tuftCapMat.dispose(); rosetteTex.dispose(); tallGeo.dispose(); stemGeo.dispose(); headGeo.dispose()
+      tuftGeo.dispose(); tuftCapGeo.dispose(); tuftShadowGeo.dispose(); tuftCapMat.dispose(); rosetteTex.dispose(); tallGeo.dispose(); stemGeo.dispose(); headGeo.dispose()
       herbGeo.dispose(); tipGeo.dispose()
       tuftMat.dispose(); tallMat.dispose(); stemMat.dispose(); headMat.dispose()
       herbMat.dispose(); tipMat.dispose()

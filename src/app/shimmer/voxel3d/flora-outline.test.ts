@@ -69,7 +69,8 @@ const meshes = () => r.group.children.filter(c =>
     const lit = meshes().filter(m => m.count > 0)
     ok(lit.length > 0, `kind ${kind}: nothing was marked`)
     // Two-part kinds (flower/herb/crop stems+heads, mushroom stem+cap) light both parts.
-    const expected = kind === FLORA.MUSHROOM ? 2 : (FLORA_PARTS[kind]?.length ?? 1)
+    // A shadow part has no border on purpose (see FloraPart.shadow).
+    const expected = kind === FLORA.MUSHROOM ? 2 : (FLORA_PARTS[kind]?.filter(p => !p.shadow).length ?? 1)
     ok(lit.length === expected,
       `kind ${kind}: ${lit.length} outline mesh(es) lit, expected ${expected}`)
   }
