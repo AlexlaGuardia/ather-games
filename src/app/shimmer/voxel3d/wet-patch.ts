@@ -41,7 +41,10 @@ export function createWetPatches(): WetPatches {
   const group = new THREE.Group()
   // A unit quad, laid flat (+y normal), sitting a hair over the bed's top face so it never z-fights
   // the soil and sits under a crop's root (`FLORA_PLACE.CROP.root` = 0.97 — the crop stands ON it).
-  const geo = new THREE.PlaneGeometry(0.92, 0.92)
+  // ★ THE FULL CELL, not 0.92 (2026-09-18): beds merge now, and a pour spreads, so damp squares
+  // sit side by side — at 0.92 they showed as a grid of dry seams across one wet bed. The rim
+  // (`bed-rim.ts`) stands over the edge of a lone bed, so nothing pokes out past the frame.
+  const geo = new THREE.PlaneGeometry(1, 1)
   geo.rotateX(-Math.PI / 2)
   const mat = new THREE.MeshLambertMaterial({
     vertexColors: false, transparent: true, opacity: 0.85, depthWrite: false,

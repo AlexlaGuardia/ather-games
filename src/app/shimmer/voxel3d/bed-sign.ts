@@ -138,7 +138,7 @@ export function createBedSigns(): BedSigns {
   const group = new THREE.Group()
   // 1. the sown patch — same flat quad as the wet patch, one step above it in the offset stack
   //    (the wet tint draws OVER the sown earth: a watered sown bed is dark on dark, as it should be).
-  const sownGeo = new THREE.PlaneGeometry(0.9, 0.9); sownGeo.rotateX(-Math.PI / 2)
+  const sownGeo = new THREE.PlaneGeometry(1, 1); sownGeo.rotateX(-Math.PI / 2)   // the full cell — sown squares side by side are one seedbed
   const sownTex = sownTexture()
   const sownMat = new THREE.MeshLambertMaterial({ map: sownTex, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
   const sown = new THREE.InstancedMesh(sownGeo, sownMat, SIGN_BUDGET)
