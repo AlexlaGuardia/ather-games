@@ -57,14 +57,17 @@ function sownTexture(): THREE.DataTexture {
     const crest = rel === -1 || rel === 0 ? 14 : rel === -2 || rel === 1 ? 6 : 0
     const trough = rel === 3 || rel === 4 ? -12 : rel === 5 || rel === -5 ? -6 : 0
     const grit = (h(x, y) - 0.5) * 8
-    // ⚠ TUNED AGAINST THE LIT WORLD (first prod shot 09-18): 58 came out PALER than the bare bed —
-    // the lighting lifts a top face ~3.6×, the same lesson `tiles.ts` wrote on the bed tile. 38 sits
-    // beside the wet patch's 0x2a1d12 and reads as worked, damp earth next to the dry furrows.
-    const v = 38 + crest + trough + grit
+    // ⚠ THESE ARE sRGB BYTES, AND THE TEXTURE SAYS SO (second prod shot 09-18): a DataTexture is
+    // linear by default, so 58 — and then 38 — both came out PALER than the bare bed: three read
+    // them as linear light and the swapchain re-encoded them, lifting 38/255 to ~105/255 before
+    // any lamp touched it. `colorSpace = SRGBColorSpace` below makes these the same kind of number
+    // as the wet patch's `0x2a1d12` (a THREE.Color is sRGB-managed) — 56 sits a shade above it.
+    const v = 56 + crest + trough + grit
     const i = (y * ICON + x) * 4
     px[i] = Math.max(0, Math.min(255, v * 1.12)); px[i + 1] = Math.max(0, Math.min(255, v * 0.94)); px[i + 2] = Math.max(0, Math.min(255, v * 0.74)); px[i + 3] = 255
   }
   const t = new THREE.DataTexture(px, ICON, ICON)
+  t.colorSpace = THREE.SRGBColorSpace
   t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.needsUpdate = true
   return t
 }
@@ -93,6 +96,7 @@ function iconAtlas(items: ReadonlyArray<string>): { tex: THREE.DataTexture; cell
     cell.set(item, i)
   })
   const tex = new THREE.DataTexture(px, ATLAS_PX, ATLAS_PX)
+  tex.colorSpace = THREE.SRGBColorSpace   // painted sprite bytes are sRGB, like every icon on the HUD
   tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.needsUpdate = true
   return { tex, cell }
 }
