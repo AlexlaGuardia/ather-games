@@ -1879,14 +1879,13 @@ function paintBase(dst: Layer, material: number, face: number, size: number, see
     // `diffuseColor.rgb *= tile.rgb` — the tile is a MULTIPLIER over the material colour, not a
     // replacement. A frame painted in the wood's own absolute hue would come out wood x soil.
     //
-    // ⚠ AND THE FRAME MUST SURVIVE THE MERGE. When beds learn to join, the border is edge geometry
-    // emitted only on the outside of a run, and this painted frame becomes the thing it agrees
-    // with. Keep the band a whole number of texels wide or the two will not line up at 16px.
+    // ★ THE MERGE LANDED (2026-09-18): the top face's frame is `bed-rim.ts` now — rails + posts on
+    // the OUTSIDE edges of a run, wearing this block's SIDE tile. The top tile is bare soil, so
+    // touching beds read as one. The SIDE tile stays the timber: it is what the rails wear.
     case MAT.GARDEN_BED_GOLDWOOD:
     case MAT.GARDEN_BED_SHIMMEROAK:
     case MAT.GARDEN_BED_DAWNWOOD: {
       const wood = rgbOf(bedFrame(material))
-      const band = Math.max(1, size >> 3)          // 2 texels at 16px — the frame's width
       if (face === BOTTOM) { paintGrit(dst, size, shade(wood, -34), 10, 10, seed); break }
       if (face === SIDE) {
         // From the side a bed is its timber, with the soil showing as a dark line along the top.
@@ -1904,16 +1903,15 @@ function paintBase(dst: Layer, material: number, face: number, size: number, see
       // ⚠ NEUTRAL GREY ON PURPOSE. All the HUE comes from the material colour, which is what makes
       // the three woods' beds differ without three copies of this painter.
       paintGrit(dst, size, [96, 90, 84], 16, 12, seed)
-      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-        const edge = x < band || y < band || x >= size - band || y >= size - band
-        if (edge) put(dst, size, x, y, shade(wood, (h2(x, y, seed) - 0.5) * 16), 0)
-      }
-      // Two furrows across the soil — what says "turned" rather than "a brown square", and the cue
-      // a keeper reads from standing height when deciding which squares are still bare.
+      // ★ NO PAINTED FRAME ANY MORE (2026-09-18) — the day the note above foresaw. The frame is now
+      // `bed-rim.ts`'s rails + posts, emitted only on a bed's OUTSIDE edges, so beds that touch
+      // merge into one rectangle of soil. A band painted here would draw the grid back in.
+      // Two furrows across the soil, EDGE TO EDGE so they run on across a merged bed — what says
+      // "turned" rather than "a brown square", and the cue a keeper reads from standing height.
       const furrow = Math.max(1, size >> 4)
       for (const fy of [Math.floor(size * 0.38), Math.floor(size * 0.66)])
         for (let y = fy; y < fy + furrow; y++)
-          for (let x = band + 1; x < size - band - 1; x++) put(dst, size, x, y, [62, 58, 54], 0)
+          for (let x = 0; x < size; x++) put(dst, size, x, y, [62, 58, 54], 0)
       break
     }
     // ── conjured matter (2026-08-22) — mana in the shape of a wall ──────────────────────────
