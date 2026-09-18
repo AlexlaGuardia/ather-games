@@ -102,6 +102,15 @@ export type Intent =
    */
   | 'fill'
   /**
+   * The well, with no empty jug in hand — say what the well WANTS. Same rule as `needs-seed`, for
+   * the same reason: Alex built the well, filled the jug, right-clicked the well again with the
+   * full jug and got silence (2026-09-18: *"i wasnt able to interract with it"*). An empty hand or
+   * a full jug at the well are the two states a keeper is most likely to be in while standing at
+   * it, and neither had a sentence. A BLOCK in hand still places — the well is not a station, and
+   * building beside it is real.
+   */
+  | 'well-hint'
+  /**
    * A garden bed, with WATER in hand: pour. Empty or planted alike — a bed is watered, not a crop
    * — and answered after `reap` (a ripe bed wants picking, water would be wasted on it) but before
    * `sow` and the planted-bed `none`, so a keeper carrying water over their own beds waters them.
@@ -203,6 +212,7 @@ export function rightClickIntent(
   // same reason the door is before the hand: a keeper at their well holding a jug must fill it.
   if (aimed === MAT.WATER && holdsJug) return 'fill'
   if (atWell && holdsJug) return 'fill'
+  if (atWell && (!selItem || holdsWater)) return 'well-hint'
   if (aimed === MAT.WATER && !selItem && hasRinstick) return 'rinn'
   // ── ★★ A GARDEN BED (2026-08-22) — SOW and REAP, deliberately NOT `plant`/`harvest` ──────────
   // Those two already mean the POT: Gregory's clay pot taking a Mana Seed and blooming a spirit.

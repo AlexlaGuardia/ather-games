@@ -2342,7 +2342,13 @@ export default function VoxelWorld() {
           plotCfg={plotCfg} plotTier={plotTier} litterFrom={litterFrom} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut} ctxLostOut={ctxLostOut}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
-          onOpenStation={(st) => { openCursorUI(); setOpenStation(st) }}
+          // ★ THE BENCH OPENS THE TABBED CRAFTER (2026-09-18, Alex: "the crafting table shows
+          //   different menus randomly.. the one with tabs is really nice"). Three doors led to two
+          //   panels — E and C opened the grid, a right-click on the block opened the standing-job
+          //   StationPanel — and which one you got depended on which door you took. One block, one
+          //   panel. The bench's standing job (a wood bonus the sawmill also pays) has no door now;
+          //   the sawmill / stonecutter / kiln keep theirs, since a queue is what THEY are.
+          onOpenStation={(st) => { openCursorUI(); if (st.kind === 'crafting_table') setCraftOpen(true); else setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
           onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
           uiOpen={cursorUIOpenRef} uiSteps={uiStepsRef} owner={isOwnerRef} foesOut={foesRef} tremorOut={tremor} pressOut={pressRef} hourLight={hourLight}
@@ -9692,6 +9698,17 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
                   + (atWell ? ' · drawn from the well' : ''))
           }
         }
+        mouse.current.right = false
+      } else if (intent === 'well-hint') {
+        // The well's own voice — what it wants, in the state the keeper is in (`interact.ts` › 'well-hint').
+        const carrying = countItem(inv.current!, JUG_WATER_ITEM)
+        onSay(selItem === JUG_WATER_ITEM
+          ? `the jug is already full — ${carrying} pour${carrying === 1 ? '' : 's'} left · pour it on a garden bed (RMB), or feed it a bed brew after`
+          : countItem(inv.current!, JUG_ITEM) > 0
+            ? 'the well is full — hold the clay jug and right-click to draw water'
+            : carrying > 0
+              ? 'the well is full — your jug already is too; pour it on a bed first'
+              : 'the well is full — craft a clay jug (C · Materials) to draw from it')
         mouse.current.right = false
       } else if (intent === 'water') {
         // ── ★ FARMING ②: THE POUR. Asked through `waterBlocker`, then `waterBed` — the host wants

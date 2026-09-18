@@ -219,7 +219,10 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(I(STRUCTURE, 'clay_jug', { jug: true, well: true }) === 'fill', '★ the WELL: an empty jug at the well fills — the plot has no pond')
   ok(I(STRUCTURE, 'clay_jug', { jug: true, well: false }) === 'place', 'a jug at any other piece is a thing in hand')
   ok(I(STRUCTURE, 'goldwood_plank', { well: true }) === 'place', 'a plank at the well still places — the well is not a station')
-  ok(I(STRUCTURE, null, { well: true }) === 'none', 'an empty hand at the well: nothing (no bucket verb yet)')
+  ok(I(STRUCTURE, null, { well: true }) === 'well-hint', '★ an empty hand at the well SPEAKS — silence at a thing you built reads as broken (Alex, 09-18)')
+  ok(I(STRUCTURE, 'clay_jug_water', { water: true, well: true }) === 'well-hint', 'a FULL jug at the well speaks too — it is already full, go pour it')
+  ok(I(STRUCTURE, 'clay_jug_water', { water: true, well: false }) === 'place', 'a full jug at any other piece is a thing in hand')
+  ok(I(STRUCTURE, null, { well: false }) === 'none', 'an empty hand at any other piece stays silent')
 }
 
 console.log(fails.length ? `interact: ${pass} pass, ${fails.length} FAIL` : `interact oracle ${pass} CLEAN`)
