@@ -13,14 +13,15 @@
 // prints the model note under each station so an agent's screenshot names what it shows.
 import { Canvas, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { makeTileArray } from '../../voxel3d/tex/atlas'
 import { createStationRenderer } from '../../voxel3d/station-mesh'
 import { createLightUniforms } from '../../voxel3d/light-glsl'
 import { modelOf, STATION_MODELS } from '../../voxel3d/station-models'
 import { MODELLED_MATS } from '../../voxel/depth'
 import { blockDef } from '../../voxel/registry'
-import { BODY_H, BODY_R, EYE_STAND } from '../../voxel3d/locomotion'
+import { BODY_H, BODY_R } from '../../voxel3d/locomotion'
+import { Rig } from '../shelf-rig'
 
 const TILE = 32
 const GAP = 2
@@ -43,47 +44,6 @@ function Shelf({ only }: { only: number | null }) {
     renderer.sync(Array.from({ length: cols }, (_, i) => ({ key: `shelf-${i}`, x0: i * 16, z0: 0, ySpan: 1 })), read)
   }, [renderer, only])
   return <primitive object={renderer.group} />
-}
-
-/**
- * Drag to orbit (any button), wheel to zoom. The current view is published so it can be written down.
- * ★ `eye` is a KEEPER'S stance (2026-09-16, `dev-eye.test`): the height is `EYE_STAND`, the look is
- * level, `dist` only says how far back the keeper stands — the question this shelf exists to answer
- * is how a station reads to somebody standing at it, and an orbit lifts you off the ground the
- * moment you back away. Same split `dev/worktable` draws.
- */
-function Rig({ target, view, eye, onView }: { target: THREE.Vector3; view: { yaw: number; pitch: number; dist: number }; eye: boolean; onView: (v: { yaw: number; pitch: number; dist: number }) => void }) {
-  const { camera, gl } = useThree()
-  const s = useRef({ ...view, eye, dragging: false, lx: 0, ly: 0 })
-  useEffect(() => { s.current.yaw = view.yaw; s.current.pitch = view.pitch; s.current.dist = view.dist; s.current.eye = eye }, [view, eye])
-  useEffect(() => {
-    const el = gl.domElement
-    const apply = () => {
-      const c = s.current
-      if (c.eye) {
-        camera.position.set(target.x + Math.cos(c.yaw) * c.dist, EYE_STAND, target.z + Math.sin(c.yaw) * c.dist)
-        camera.lookAt(target.x, EYE_STAND, target.z)
-        return
-      }
-      const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch)
-      camera.position.set(target.x + Math.cos(c.yaw) * cp * c.dist, target.y + sp * c.dist, target.z + Math.sin(c.yaw) * cp * c.dist)
-      camera.lookAt(target)
-    }
-    apply()
-    const down = (e: PointerEvent) => { s.current.dragging = true; s.current.lx = e.clientX; s.current.ly = e.clientY }
-    const up = () => { s.current.dragging = false; onView({ yaw: s.current.yaw, pitch: s.current.pitch, dist: s.current.dist }) }
-    const move = (e: PointerEvent) => {
-      const c = s.current
-      if (!c.dragging) return
-      c.yaw += (e.clientX - c.lx) * 0.008; c.pitch = Math.max(-1.4, Math.min(1.4, c.pitch + (e.clientY - c.ly) * 0.008))
-      c.lx = e.clientX; c.ly = e.clientY; apply()
-    }
-    const wheel = (e: WheelEvent) => { s.current.dist = Math.max(1.5, Math.min(40, s.current.dist * (e.deltaY > 0 ? 1.1 : 0.9))); apply(); e.preventDefault() }
-    el.addEventListener('pointerdown', down); window.addEventListener('pointerup', up); window.addEventListener('pointermove', move)
-    el.addEventListener('wheel', wheel, { passive: false })
-    return () => { el.removeEventListener('pointerdown', down); window.removeEventListener('pointerup', up); window.removeEventListener('pointermove', move); el.removeEventListener('wheel', wheel) }
-  }, [camera, gl, target, eye, onView])
-  return null
 }
 
 export default function StationsPage() {

@@ -64,12 +64,30 @@ const EXEMPT: Record<string, { why: string; premise: (src: string) => boolean }>
   },
 }
 
+/**
+ * A page's rig may live in a SHARED helper (`dev/shelf-rig.tsx`, 2026-09-18 — the orbit + keeper-eye
+ * rig the shelves share). The derivation is then in the helper, not the page, so the page's source
+ * is read WITH the dev-level helpers it imports (`from '../<name>'`), one hop, no deeper — a page
+ * that reaches its eye through a helper is still a page that can reach it, and a helper that
+ * re-types 1.62 is still a defect on every page that mounts it.
+ */
+function withDevHelpers(src: string): string {
+  const extra: string[] = []
+  for (const m of src.matchAll(/from '\.\.\/([\w-]+)'/g)) {
+    for (const ext of ['.tsx', '.ts']) {
+      const f = join(DEV, m[1] + ext)
+      if (existsSync(f)) { extra.push(readFileSync(f, 'utf8')); break }
+    }
+  }
+  return src + '\n' + extra.join('\n')
+}
+
 /** Every dev page that puts a 3D scene on the screen. Discovered, never listed. */
 const pages = readdirSync(DEV, { withFileTypes: true })
   .filter(d => d.isDirectory())
   .map(d => d.name)
   .filter(n => existsSync(join(DEV, n, 'page.tsx')))
-  .map(n => ({ name: n, src: readFileSync(join(DEV, n, 'page.tsx'), 'utf8') }))
+  .map(n => ({ name: n, src: withDevHelpers(readFileSync(join(DEV, n, 'page.tsx'), 'utf8')) }))
   .filter(p => p.src.includes('<Canvas'))
   .sort((a, b) => a.name.localeCompare(b.name))
 

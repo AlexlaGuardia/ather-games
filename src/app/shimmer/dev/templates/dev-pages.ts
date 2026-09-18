@@ -185,6 +185,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['structure', 'house', 'build', 'blocks', 'pad'],
   },
   {
+    path: '/shimmer/dev/beds',
+    title: 'Bed shelf',
+    blurb: 'One garden bed at every growth stage — rim, sown patch, sign, crop — drawn by the shipped renderers, from any angle. Judge the beds here, not from one prod screenshot.',
+    group: 'bench',
+    keywords: ['bed', 'garden', 'crop', 'stage', 'sign', 'rim', 'farming', 'shelf'],
+  },
+  {
     path: '/shimmer/dev/stations',
     title: 'Station shelf',
     blurb: 'Every modelled station side by side, drawn by the shipped renderer. Judge the shapes here.',
