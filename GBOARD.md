@@ -37,8 +37,9 @@ the Arcade frame.
 - **`engine/farming.ts` › SEED_BACK:** `harvestCrop` hands the crop's own seed back — **one always** (a bad roll never kills the loop), a **second at 25%**, +2% per farming level above the crop's own, cap 60%; never the Mana Bloom (it pays a spirit; canon mints those). The seed rides `items` LAST so the toast reads produce-then-seed. `roll` is injectable; the oracle pins both branches for every bed crop.
 - The empty bed's hint now names both doors: *"grass tufts carry them, and a ripe crop gives its own back."*
 - **CANON_GAPS `[OPEN]` (athernyx `ab481e5`):** canon's Open Questions still lists seed acquisition. Jin shipped the seed-back as BALANCE on the ruling's own reason (*one body fruiting twice*), not as a new source; what stays Magii's: a seed SELLER (Mallow's counter? the Passage?), spirit drops, and whether tier-2 seeds come only from the wild plant.
+- **Alex's calls, same evening** (`ff8455a`, PROD + gen repin `4e8bb1b281`): the rates *"are good as is"*; and *"if i break tufts it shouldnt be dropping the tufts anymore to reduce the clutter"* → a tuft drops ONLY its seed roll (a losing roll leaves nothing), `placeable: false` (no identity drop, nothing to place it from — `BY_ITEM` derives). Thatch + canvas take **tall grass** now (the straw, ~¼ as common — `TALL_DENSITY` 0.035 vs 0.13 — so a roof is a longer walk at the same counts; the counts are the dial). Old `grass_tuft` items in a bag are junk. meadow-seed 48/0 · plants 51/0.
 **Next:**
-- Alex farms a cycle: tuft → seed → bed → ripe → reap (seed back) → replant, and calls the second-seed rate (25% → 60%).
+- Alex walks a meadow: no litter, seeds when they land; and prices a thatch roof off tall grass.
 - If Magii rules a seller, it lands on Mallow's counter or the Passage panel — both have a UI already.
 **Decisions:** one seed guaranteed (a loop that can die on a roll is a loop a new keeper falls out of); the bonus scales with mastery so a practised field EXPANDS. Never a fourth source invented here.
 **Files:** `engine/farming.ts` · `engine/seed-back.test.ts` (new) · `voxel3d/VoxelWorld.tsx` (the hint) · athernyx `CANON_GAPS.md`.
