@@ -1126,11 +1126,12 @@ const bedFrame = (material: number): number => ({
 }[material] ?? MATERIAL_COLOR[MAT.PLANKS_GOLDWOOD])
 
 /** A bed's flank: milled boards with the dark soil line along the top edge. */
+// ★ NO SOIL LIP ALONG THE TOP ANY MORE (2026-09-18): the bed's rim (`bed-rim.ts`) now stands on the
+// block, and the painted lip showed through under it as a grey stripe between two timbers on the
+// first prod shot. The rail says where the soil is; the side is planks to the top.
 function paintPlankFrame(dst: Layer, size: number, wood: [number, number, number], seed: number): void {
   const strip = Math.max(2, Math.round(size / 3))
-  const soilLip = Math.max(1, size >> 3)
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    if (y < soilLip) { put(dst, size, x, y, [120, 112, 104], 0); continue }
     const seam = x % strip === 0
     put(dst, size, x, y, seam ? shade(wood, -46) : shade(wood, (h2(x, y, seed) - 0.5) * 20), 0)
   }
@@ -1888,7 +1889,7 @@ function paintBase(dst: Layer, material: number, face: number, size: number, see
       const wood = rgbOf(bedFrame(material))
       if (face === BOTTOM) { paintGrit(dst, size, shade(wood, -34), 10, 10, seed); break }
       if (face === SIDE) {
-        // From the side a bed is its timber, with the soil showing as a dark line along the top.
+        // From the side a bed is its timber, to the top — the rim above it says where the soil is.
         paintPlankFrame(dst, size, wood, seed)
         break
       }
