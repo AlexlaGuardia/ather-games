@@ -162,7 +162,18 @@ export function biomeAt(
 ): BiomeId {
   if (h <= seaLevel) return 'basin'
   if (h <= seaLevel + 2) return 'shore'
-  if (riverness(riverField(x, z, seed, hcfg)) >= 0.5) return 'river'
+  // ── ★★ THE RIVER GROUND IS THE BANK, NOT THE CHANNEL (2026-09-18) ────────────────────────────
+  // This read `>= 0.5` — mid-channel — and mid-channel is UNDER WATER by construction (`columnHeight`
+  // hangs the bed below the table; water fills to it from `SHORE_RN` = 0.35 outward). So the one
+  // ground canon hands the river (Starbean: *"a river SCOURS — and a dense pod is exactly what
+  // survives it"*) and the goldleaf forage's river row had no dry cell to stand on, ever: every
+  // wild Starbean the world has generated stood in the surface water cell, invisible, punching a
+  // hole in the sheet (see `generatedAt`'s 09-18 note). The ground a river actually offers a plant
+  // is its BANK — the ribbon where the field is already carving (`riverness > 0`, |w| < RIVER_EDGE)
+  // but the water has not yet arrived (rn < SHORE_RN): scoured at every flood, dry between, the
+  // sentence canon wrote. Wet cells keep the label (a swimmer's HUD says "river"), and grow nothing.
+  // ⚠ `> 0`, not a second threshold: the field's own edge IS the bank's edge.
+  if (riverness(riverField(x, z, seed, hcfg)) > 0) return 'river'
   // A ruled place outranks every generic label once you are properly inside it — water beats it
   // (a pond in the Meadows is still a pond), the grey does not (zones are tended; only the
   // Outfields lets grey through, and there the grey label speaks for itself below).

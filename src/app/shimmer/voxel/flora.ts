@@ -473,8 +473,13 @@ export const isWildCrop = (m: number): boolean => m in GROUND_OF_CROP
  * editing; never edit one of these to make a test pass.
  */
 export const WILD_TARGET_BY_TIER: Readonly<Record<number, number>> = { 2: 60, 3: 30, 4: 15 }
+// ★ `river` RE-MEASURED 2026-09-18 (4274 → 2516) when the river ground moved from the channel to
+// the bank — the old 4274 counted cells UNDER the river (the sea-level gate never saw a channel),
+// which is to say it counted Starbeans nobody could ever pick. Same sweep, same seed; the other six
+// reproduced within 2% by the same script (`scripts/.scratch/free-cells.mts`'s shape: biome ×
+// generator-AIR-above × not grey × not the herb's cell) and were left as they stood.
 export const GROUND_FREE_CELLS: Readonly<Record<string, number>> = {
-  basin: 105, river: 4274, crag: 1392, woodland: 20283, shore: 625, highland: 2711, meadow: 53347,
+  basin: 105, river: 2516, crag: 1392, woodland: 20283, shore: 625, highland: 2711, meadow: 53347,
 }
 
 /**

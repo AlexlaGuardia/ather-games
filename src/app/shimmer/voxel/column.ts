@@ -298,7 +298,25 @@ export function generatedAt(
   // sheltered, **the air standing**"*). With it, a basin's Violetbloom grows on the dry rim at the
   // waterline: the sheltered margin of a pool, which is the sentence canon actually wrote.
   const dry = h >= depthCfg.seaLevel
-  if (y === h + 1 && dry) {
+  // ── ★★ AND THE SEA WAS ONLY HALF OF THE WATER (2026-09-18, Alex: the flora "generating on the
+  // river beds") ──────────────────────────────────────────────────────────────────────────────
+  // `dry` reads the SEA level, and a river channel sits above it: every channel cell (rn ≥ SHORE_RN,
+  // wet by construction — `columnHeight` hangs the bed under the table and `waterSurfaceAt` fills
+  // to it) kept walking into the plant branch. Measured through this function on seed 1337, a
+  // 192×48 stretch of the river by the meadow: **1531 wet river cells, 846 of them (55%) with a
+  // plant voxel standing IN the surface water cell** — tufts, wildflowers, tall grass, starbean,
+  // goldleaf, plus scatter. Same invisibility as the 08-18 note: the probe refuses sand, so nobody
+  // saw a plant. What they saw was the WATER: a plant voxel is not `MAT.WATER`, so the mesher
+  // treated every one of those cells as dry — a hole in the sheet, a rim face around it, and the
+  // depth blur's shore taper pulling the alpha down around each — and a river read as a mosaic of
+  // squares with the sand showing through. Hot-spring pools and a bridge deck's cells are the
+  // same story one rule over.
+  //
+  // ★ SO THE QUESTION IS THE GENERATOR'S OWN, NOT A SECOND WATER RULE: *what would `materialAt` put
+  // at h+1?* If it is anything but AIR — water, a deck, a hold's wall — nothing grows there. One
+  // extra `materialAt` on exactly one voxel per column, and it cannot drift from the fill rules
+  // because it IS the fill rules. `river-bed.test.ts` holds it from both sides.
+  if (y === h + 1 && dry && materialAt(x, y, z, seed, h, depthCfg, heightCfg) === AIR) {
     // ★ THE GROUND IS RESOLVED HERE BECAUSE THIS IS WHERE `h` LIVES (2026-08-18, the herbs).
     // `biomeAt` needs the column's height and the sea level, and `flora.ts` has neither — it is a
     // pure selection field over (x, z). So the generator, which holds both, answers "what ground is
