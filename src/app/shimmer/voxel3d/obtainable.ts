@@ -29,6 +29,7 @@
 import { BLOCKS, ALL_BLOCKS, materialForItem } from '../voxel/registry'
 import { RECIPE_OUTPUTS, RECIPES, canCraft, type RecipeDef, type Station } from '../voxel/recipes'
 import { STATIONS, type StationId } from '../voxel/workshop'
+import { JUG_WATER_ITEM } from './watering'
 import { TREE_NODES, saplingItem, logItem } from '../voxel/tree-node'
 import { SPECIES } from '../voxel/trees'
 import { RIN_TIERS } from '../engine/rin-catch'
@@ -133,9 +134,18 @@ export const FROM_FARMING: readonly string[] = cropYieldsFrom(BEFORE_FARMING)
  * in the table takes a potion as an INPUT, so leaving them out costs nothing and keeps this from
  * needing a fixpoint. `obtainable.test.ts` asserts that premise rather than trusting it.
  */
+/**
+ * What the water gives: the FULL jug (2026-09-18). `clay_jug_water` is obtained by dipping the
+ * empty jug at a pond or the well (`watering.ts` › fillJug) — no recipe, no block, no crop — so
+ * the honesty gate could not see it and `/give clay_jug_water` said "no such item" in the middle
+ * of a harness. It is an item a keeper holds; it belongs in the set.
+ */
+export const FROM_WATER: readonly string[] = [JUG_WATER_ITEM]
+
 export const WORLD_ITEMS: ReadonlySet<string> = new Set<string>([
   ...BEFORE_FARMING,
   ...FROM_FARMING,
+  ...FROM_WATER,
 ])
 
 /** The cauldron's honesty gate, as the panel wants it. */
