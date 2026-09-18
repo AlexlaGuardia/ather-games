@@ -9762,14 +9762,22 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const why = waterBlocker(watered.current, hit.x, hit.y, hit.z, inv.current!, now)
         if (why !== 'ok') {
           onSay(waterRefusalLine(why, watered.current, hit.x, hit.y, hit.z, now))
-        } else if (waterBed(watered.current, beds.current, hit.x, hit.y, hit.z, inv.current!, now, (id, n) => give(inv.current!, id, n))) {
+        } else {
+          // The splash stops at the bed's edge: a neighbour counts when it is a bed of the SAME wood,
+          // the rule the rim draws by (`bed-rim.ts`) — one bed, one pour, one frame.
+          const bedMat = potMat
+          const n = waterBed(watered.current, beds.current, hit.x, hit.y, hit.z, inv.current!, now, (id, k) => give(inv.current!, id, k),
+                             (qx, qy, qz) => voxel(qx, qy, qz) === bedMat)
+          if (n > 0) {
           onInvChange()
           hands.sig.placeAt = performance.now()
           wetDirty.current = true
           const left = countItem(inv.current!, JUG_WATER_ITEM)
           const crop = cropAt(beds.current, hit.x, hit.y, hit.z)
           onSay((crop ? `watered — ${CROP_DEFS[crop.cropId].name.toLowerCase()} grows a quarter faster today` : 'watered — the bed is damp for the day')
+                + (n > 1 ? ` · ${n} squares` : '')
                 + (left ? ` · ${left} pour${left === 1 ? '' : 's'} left` : ' · the jug is empty'))
+          }
         }
         mouse.current.right = false
       } else if (intent === 'feed') {

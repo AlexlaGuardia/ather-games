@@ -157,15 +157,51 @@ const fraction = (until: number, now: number): number => Math.max(0, Math.min(1,
  * ★ ASKED THROUGH `waterBlocker`, never re-deriving the conditions — the host asks it for the
  * sentence, this asks it for the verdict.
  */
+/**
+ * ── ★ A POUR SPREADS (2026-09-18, the day after beds learned to merge) ────────────────────────
+ * One pour was one square. A 3×6 bed is eighteen squares, the jug is four pours: five trips to the
+ * well for one rectangle, the morning after Alex built the well so the walk would be short. A pour
+ * now dampens the aimed square AND every bed square touching it — the 3×3 splash a jug actually
+ * makes — and the bed's own edge stops it: `sameBed` is the host's word on which neighbours are
+ * this bed (a garden bed of the same wood, `bed-rim.ts`'s merge rule), so water never crosses to
+ * the lawn or to a stranger's timber. Squares already damp are skipped, not refused: the REFUSAL
+ * stays on the aimed square alone ("aim at a dry one"), which keeps the rule sayable.
+ * The canon number (−25%, one day) is untouched; how far a jug splashes is the build's.
+ */
+export const WATER_SPREAD = 1
+export type SameBed = (x: number, y: number, z: number) => boolean
+
+/** Every square a pour at (x,y,z) reaches: the aimed one first, then its same-bed neighbours. Pure. */
+export function pourSquares(x: number, y: number, z: number, sameBed: SameBed): { x: number; y: number; z: number }[] {
+  const out = [{ x, y, z }]
+  for (let dz = -WATER_SPREAD; dz <= WATER_SPREAD; dz++) for (let dx = -WATER_SPREAD; dx <= WATER_SPREAD; dx++) {
+    if (dx === 0 && dz === 0) continue
+    if (sameBed(x + dx, y, z + dz)) out.push({ x: x + dx, y, z: z + dz })
+  }
+  return out
+}
+
+/**
+ * Pour on a bed. Returns the number of squares that took water (0 = refused, see `waterBlocker`).
+ * `sameBed` decides the spread; the default — no neighbours — is the one-square pour, which is
+ * what every caller that has no world to read (the oracle) still gets.
+ */
 export function waterBed(
   watered: WateredBeds, beds: PlantedBeds, x: number, y: number, z: number, inv: Inventory, now: number, give: Give,
-): boolean {
-  if (waterBlocker(watered, x, y, z, inv, now) !== 'ok') return false
+  sameBed: SameBed = () => false,
+): number {
+  if (waterBlocker(watered, x, y, z, inv, now) !== 'ok') return 0
   removeItems(inv, JUG_WATER_ITEM, 1)
   // The pour freed the slot the last of the water sat in, so the empty jug always fits.
   if (countItem(inv, JUG_WATER_ITEM) === 0) give(JUG_ITEM, 1)
-  open(watered, beds, x, y, z, now).wateredUntil = now + WATER_HOLD_MS
-  return true
+  let n = 0
+  for (const q of pourSquares(x, y, z, sameBed)) {
+    // A neighbour still damp keeps its window; only the aimed square was promised dry.
+    if (n > 0 && isDamp(watered, q.x, q.y, q.z, now)) continue
+    open(watered, beds, q.x, q.y, q.z, now).wateredUntil = now + WATER_HOLD_MS
+    n++
+  }
+  return n
 }
 
 /** Spread the brew. Same shape as the pour; one bottle, one bed, one day. */

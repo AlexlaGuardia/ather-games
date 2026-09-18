@@ -1,7 +1,7 @@
 // The watering oracle. Run: npx tsx src/app/shimmer/voxel3d/watering.test.ts
 import {
   JUG_ITEM, JUG_WATER_ITEM, JUG_POURS, WATER_HOLD_MS, WATER_RATE,
-  waterBlocker, waterRefusalLine, waterBed, fillJug, settleWatering, isDamp, dampFraction, dampLeftLine,
+  waterBlocker, waterRefusalLine, waterBed, pourSquares, fillJug, settleWatering, isDamp, dampFraction, dampLeftLine,
   clearDamp, wateringToSave, wateringFromSave, wateringLabel, type WateredBeds, type Give,
   FEED_ITEM, FEED_RATE, feedBlocker, feedRefusalLine, feedBed, isFed, fedFraction, fedLeftLine,
 } from './watering'
@@ -43,7 +43,7 @@ const rig = () => {
   ok(countItem(r.inv, JUG_ITEM) === 0 && countItem(r.inv, JUG_WATER_ITEM) === JUG_POURS, 'the empty jug became the water')
   ok(fillJug(r.inv, r.give) === 0, 'no empty jug → no fill, nothing spent')
   ok(countItem(r.inv, JUG_WATER_ITEM) === JUG_POURS, '…and the water is untouched')
-  for (let i = 0; i < JUG_POURS; i++) ok(waterBed(r.watered, r.beds, i, 0, 0, r.inv, T0, r.give), `pour ${i + 1} lands`)
+  for (let i = 0; i < JUG_POURS; i++) ok(waterBed(r.watered, r.beds, i, 0, 0, r.inv, T0, r.give) === 1, `pour ${i + 1} lands`)
   ok(countItem(r.inv, JUG_WATER_ITEM) === 0, 'the water is spent')
   ok(countItem(r.inv, JUG_ITEM) === 1, '★ the last pour hands the empty jug back')
   ok(waterBlocker(r.watered, 9, 0, 0, r.inv, T0) === 'no-water', 'a fifth pour is refused: no water')
@@ -64,7 +64,7 @@ const rig = () => {
 {
   const r = rig()
   fillJug(r.inv, r.give)
-  ok(waterBed(r.watered, r.beds, 1, 2, 3, r.inv, T0, r.give), 'first pour')
+  ok(waterBed(r.watered, r.beds, 1, 2, 3, r.inv, T0, r.give) === 1, 'first pour')
   ok(waterBlocker(r.watered, 1, 2, 3, r.inv, T0 + H) === 'still-damp', 'an hour later the bed refuses a second')
   ok(waterRefusalLine('still-damp', r.watered, 1, 2, 3, T0 + H) === 'the soil is still damp — dries in 23h', 'the refusal names the hour')
   ok(dampLeftLine(r.watered, 1, 2, 3, T0 + WATER_HOLD_MS - 10 * 60_000) === 'dries in 10m', 'under an hour it names minutes')
@@ -145,7 +145,7 @@ const rig = () => {
   waterBed(r.watered, r.beds, 0, 0, 0, r.inv, T0, r.give)
   const c = r.sow(0, 0, 0, T0 + WATER_HOLD_MS - 60_000)     // sown a minute before it dries
   const again = T0 + WATER_HOLD_MS + 5 * H                   // five hours dry, no beat ran
-  ok(waterBed(r.watered, r.beds, 0, 0, 0, r.inv, again, r.give), 're-water lands')
+  ok(waterBed(r.watered, r.beds, 0, 0, 0, r.inv, again, r.give) === 1, 're-water lands')
   const paid = (T0 + WATER_HOLD_MS - 60_000) - c.plantedAt
   ok(Math.abs(paid - 60_000 * (WATER_RATE - 1)) < 1, '★ the old day\'s last minute was paid, the five dry hours were not')
   ok(r.watered.get(bedKey(0, 0, 0))!.creditedTo === again, 'the new day\'s cursor starts now')
@@ -225,6 +225,32 @@ const rig = () => {
   const back = wateringFromSave(JSON.parse(JSON.stringify(wateringToSave(r.watered))))
   ok(back.get(bedKey(0, 0, 0))!.fedUntil === r.watered.get(bedKey(0, 0, 0))!.fedUntil, 'fedUntil round-trips')
   ok(wateringFromSave([{ x: 1, y: 2, z: 3, until: T0 + 5, creditedTo: T0 }]).get(bedKey(1, 2, 3))!.wateredUntil === T0 + 5, "the morning's `until` row loads as water")
+}
+
+// ── ★ A POUR SPREADS OVER THE SAME BED (2026-09-18) — the 3×3 splash, stopped by the bed's edge ──
+{
+  const r = rig()
+  fillJug(r.inv, r.give)
+  // a 3×6 bed on the x/z plane at y=0: x 0..5, z 0..2 — `sameBed` is the host's word
+  const inBed = (x: number, y: number, z: number) => y === 0 && x >= 0 && x <= 5 && z >= 0 && z <= 2
+  ok(pourSquares(2, 0, 1, inBed).length === 9, 'a pour on an inner square reaches all nine')
+  ok(pourSquares(0, 0, 0, inBed).length === 4, 'a pour on a corner reaches four — the splash stops at the edge')
+  ok(pourSquares(2, 0, 1, () => false).length === 1, 'with no neighbours it is the one-square pour it always was')
+  ok(pourSquares(2, 0, 1, inBed)[0].x === 2 && pourSquares(2, 0, 1, inBed)[0].z === 1, 'the aimed square is first')
+  const n = waterBed(r.watered, r.beds, 1, 0, 1, r.inv, T0, r.give, inBed)
+  ok(n === 9, `★ one pour dampens nine squares of a 3×6 (${n})`)
+  ok(countItem(r.inv, JUG_WATER_ITEM) === JUG_POURS - 1, 'and costs ONE pour')
+  for (let x = 0; x <= 2; x++) for (let z = 0; z <= 2; z++) ok(isDamp(r.watered, x, 0, z, T0 + 1), `(${x},${z}) is damp`)
+  ok(!isDamp(r.watered, 3, 0, 1, T0 + 1), 'the square past the splash is dry')
+  // a second pour beside it: the overlap is skipped, not refused, and the toast's count says what was new
+  const n2 = waterBed(r.watered, r.beds, 3, 0, 1, r.inv, T0 + 1, r.give, inBed)   // x 2..4: the x=2 column is already damp
+  ok(n2 === 6, `the next pour over the seam dampens only the six dry squares (${n2})`)
+  ok(waterBed(r.watered, r.beds, 1, 0, 1, r.inv, T0 + 2, r.give, inBed) === 0, 'aiming at a damp square still refuses — the rule stays on the square you aim at')
+  ok(countItem(r.inv, JUG_WATER_ITEM) === JUG_POURS - 2, 'a refusal spends nothing')
+  // never across to the lawn: a neighbour the host says is not this bed is not touched
+  const r2 = rig(); fillJug(r2.inv, r2.give)
+  waterBed(r2.watered, r2.beds, 0, 0, 0, r2.inv, T0, r2.give, (x, y, z) => x === 1 && y === 0 && z === 0)
+  ok(isDamp(r2.watered, 1, 0, 0, T0 + 1) && !isDamp(r2.watered, 0, 0, 1, T0 + 1) && !isDamp(r2.watered, -1, 0, 0, T0 + 1), 'only the square the host called this bed took water')
 }
 
 console.log(`\nwatering: ${pass} passed, ${fails.length} failed`)
