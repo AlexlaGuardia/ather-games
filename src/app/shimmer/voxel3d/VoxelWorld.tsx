@@ -4687,8 +4687,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       demand: { crop: floraDemand.crop, herb: floraDemand.herb },
       dirty: floraDirty.current, incoming: incoming.current?.length ?? -1,
     }
-    return () => { delete w.__hollows; delete w.__planted }
-  }, [owner, groundTopNear])
+    // `window.__bedRims()` — rails/posts the rim renderer drew at its last sync, and whether the
+    // beat that feeds it is being held (the wild sync's `incoming` gate — see `__planted`).
+    w.__bedRims = () => !owner.current ? 'owner only' : { ...(bedRims?.counts() ?? { rails: -1, posts: -1 }), dirty: floraDirty.current, incoming: incoming.current?.length ?? -1 }
+    return () => { delete w.__hollows; delete w.__planted; delete w.__bedRims }
+  }, [owner, groundTopNear, bedRims])
 
 
   /**
