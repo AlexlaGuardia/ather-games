@@ -54,10 +54,13 @@ function sownTexture(): THREE.DataTexture {
   for (let y = 0; y < ICON; y++) for (let x = 0; x < ICON; x++) {
     // Three mounds: rows centred at 5, 16, 27 — crest above centre, trough below.
     const rel = ((y + 6) % 11) - 5          // −5..5 across a mound, 0 at its centre line
-    const crest = rel === -1 || rel === 0 ? 16 : rel === -2 || rel === 1 ? 6 : 0
-    const trough = rel === 3 || rel === 4 ? -18 : rel === 5 || rel === -5 ? -8 : 0
-    const grit = (h(x, y) - 0.5) * 14
-    const v = 58 + crest + trough + grit
+    const crest = rel === -1 || rel === 0 ? 14 : rel === -2 || rel === 1 ? 6 : 0
+    const trough = rel === 3 || rel === 4 ? -12 : rel === 5 || rel === -5 ? -6 : 0
+    const grit = (h(x, y) - 0.5) * 8
+    // ⚠ TUNED AGAINST THE LIT WORLD (first prod shot 09-18): 58 came out PALER than the bare bed —
+    // the lighting lifts a top face ~3.6×, the same lesson `tiles.ts` wrote on the bed tile. 38 sits
+    // beside the wet patch's 0x2a1d12 and reads as worked, damp earth next to the dry furrows.
+    const v = 38 + crest + trough + grit
     const i = (y * ICON + x) * 4
     px[i] = Math.max(0, Math.min(255, v * 1.12)); px[i + 1] = Math.max(0, Math.min(255, v * 0.94)); px[i + 2] = Math.max(0, Math.min(255, v * 0.74)); px[i + 3] = 255
   }
@@ -96,7 +99,7 @@ function iconAtlas(items: ReadonlyArray<string>): { tex: THREE.DataTexture; cell
 
 /** Where the stake stands in its cell, and how tall: the near-left corner, clear of the crop's root. */
 const STAKE = { x: 0.16, z: 0.16, h: 0.46, w: 0.05 }
-const CARD = 0.34
+const CARD = 0.42
 
 export function createBedSigns(): BedSigns {
   const group = new THREE.Group()
@@ -128,7 +131,7 @@ export function createBedSigns(): BedSigns {
     g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3))
     g.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
     g.setIndex(idx)
-    g.translate(0, STAKE.h + CARD * 0.42, 0)
+    g.translate(0, STAKE.h + CARD * 0.36, 0)   // the card's foot sits on the stake's top
     a.dispose(); b.dispose()
     return g
   })()
