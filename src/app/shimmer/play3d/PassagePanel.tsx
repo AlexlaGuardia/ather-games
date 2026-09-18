@@ -29,6 +29,7 @@ import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { saveLetters, VESSELS, type Vessel } from './gems'
 import { buyVessel, ownedCount, loadStowed, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, TIER_MATERIAL } from './vessels'
+import { CloseX } from '../voxel3d/panel-frame'
 import { eligibleMoves, ALL_BANDS } from './cast'
 import { lettersOf } from './gems'
 import { rawLoadout } from './loadout'
@@ -135,13 +136,13 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40" onPointerDown={onClose}>
-      <div onPointerDown={e => e.stopPropagation()}
-           className="gx-card gx-scan gx-chrome w-[520px] max-h-[82vh] overflow-y-auto p-4 font-mono text-[11px]">
-        <div className="mb-3 flex items-baseline gap-2">
+      <div className="relative w-[520px]" onPointerDown={e => e.stopPropagation()}>
+      <CloseX onClick={onClose} />
+      <div className="gx-card gx-scan gx-chrome w-full max-h-[82vh] overflow-y-auto p-4 font-mono text-[11px]">
+        <div className="mb-3 flex items-baseline gap-2 pr-6">
           <span className="gx-label text-[13px] font-semibold text-white/95">The Passage</span>
           <span className="gx-label text-[10px] text-white/40">{day}{dayOverride ? ' · dev preview' : ''}</span>
           <span className="gx-value ml-auto text-[11px] text-amber-200/80">{marks} Marks</span>
-          <button onClick={onClose} className="gx-btn px-2 py-0.5 text-[10px]">esc</button>
         </div>
         <div className="mb-3 text-[10px] leading-snug text-white/35">
           Rotating spots. One leaves, another takes their place. Merchants ride on {MARKET_DAY} ({inDays(MARKET_DAY)}); the masters hold on {TEACHING_DAY} ({inDays(TEACHING_DAY)}). The week: {WEEK.join(' · ')}.
@@ -275,6 +276,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
 
         {note && <div className="mt-2 rounded border border-amber-200/20 bg-amber-200/[0.06] px-2.5 py-1.5 text-[10px] text-amber-100/80">{note}</div>}
         <div className="mt-2 text-[10px] text-white/25">Ultimates are never on the shelves.</div>
+      </div>
       </div>
     </div>
   )

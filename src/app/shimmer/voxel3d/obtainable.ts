@@ -28,6 +28,7 @@
 // instead of three.
 import { BLOCKS, ALL_BLOCKS, materialForItem } from '../voxel/registry'
 import { RECIPE_OUTPUTS, RECIPES, canCraft, type RecipeDef, type Station } from '../voxel/recipes'
+import { STATIONS, type StationId } from '../voxel/workshop'
 import { TREE_NODES, saplingItem, logItem } from '../voxel/tree-node'
 import { SPECIES } from '../voxel/trees'
 import { RIN_TIERS } from '../engine/rin-catch'
@@ -189,4 +190,22 @@ export function craftSurface(
     isFixture(r.output.itemId)
     || r.input.every(i => have(i.itemId) > 0)
     || canCraft(r.id, have, station))
+}
+
+/**
+ * Where a missing input is MADE, in the card's words — `"at the stonecutter"`, `"at a bench"`,
+ * `"craft it here"` — or nothing for a raw drop (rubble, a log), which is found, not made.
+ *
+ * ── ★ WHY (2026-09-18) ── the well costs six cut stone; cut stone comes off the stonecutter; the
+ * stonecutter is bench work off rubble and logs. Three hops, and the card at the top of that chain
+ * said only `cut stone 0/6` in red. Every hop is in the recipe table already — this reads it back
+ * so the card names the NEXT station instead of leaving the keeper to search the tabs for a word
+ * they do not know yet. One recipe per output is the table's rule (`RECIPE_OUTPUTS` is a set).
+ */
+export function madeAtLabel(itemId: string): string | undefined {
+  const r = RECIPES.find(x => x.output.itemId === itemId)
+  if (!r) return undefined
+  if (r.station === 'hand') return 'craft it here'
+  const name = STATIONS[r.station as StationId]?.name
+  return name ? `at ${name.toLowerCase()}` : `at the ${r.station.replace(/_/g, ' ')}`
 }

@@ -4,7 +4,7 @@
 // Every assert here is a way of asking that question, because the bug it exists for shipped five
 // times in four days and was silent every time — a greyed brew row reads as content that has not
 // been built yet, not as a lie.
-import { WORLD_ITEMS, FROM_BLOCKS, FROM_RINNING, FROM_FELLING, FROM_FARMING, cropYieldsFrom, inWorld } from './obtainable'
+import { WORLD_ITEMS, FROM_BLOCKS, FROM_RINNING, FROM_FELLING, FROM_FARMING, cropYieldsFrom, inWorld, madeAtLabel } from './obtainable'
 import { BLOCKS, materialForItem } from '../voxel/registry'
 import { pieceForItem } from '../voxel/pieces'
 import { RECIPE_OUTPUTS, RECIPES } from '../voxel/recipes'
@@ -190,6 +190,15 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ].filter(id => potions.has(id))
   ok(potionInputs.length === 0,
     `★ no recipe takes a potion as an input, so excluding brews from the set costs nothing (found: ${potionInputs.join(', ') || 'none'})`)
+}
+
+// ── the card names the next hop (2026-09-18) — the well's cut stone, the stonecutter's bench ──────
+{
+  ok(madeAtLabel('cut_stone') === 'at the stonecutter', `cut stone is made at the stonecutter (${madeAtLabel('cut_stone')})`)
+  ok(madeAtLabel('stonecutter') === 'at the bench', `the stonecutter is bench work (${madeAtLabel('stonecutter')})`)
+  ok(madeAtLabel('goldwood_plank') === 'at the sawmill', `planks come off the sawmill (${madeAtLabel('goldwood_plank')})`)
+  ok(madeAtLabel('rubble') === undefined, 'a raw drop is found, not made — no hint')
+  ok(RECIPES.filter(r => r.station === 'hand').every(r => madeAtLabel(r.output.itemId) === 'craft it here'), 'a hand recipe says craft it here')
 }
 
 if (fails.length) {

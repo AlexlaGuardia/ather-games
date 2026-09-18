@@ -47,7 +47,7 @@ export function CraftIcon({ itemId, size }: { itemId: string; size: number }) {
   )
 }
 
-export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, footer }: {
+export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, footer, madeAt }: {
   tiles: GridTile[]
   /** Tab order; a tab with no tiles is hidden. */
   tabs: string[]
@@ -59,6 +59,8 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
   action: (tile: GridTile) => React.ReactNode
   /** Rendered in the head, under the tabs, for the ACTIVE tab only — the pieces' material strip belongs to Pieces. */
   footer?: (tab: string) => React.ReactNode
+  /** Where a SHORT input is made ("at the stonecutter") — the card names the next hop of the chain. */
+  madeAt?: (itemId: string) => string | undefined
 }) {
   // Opens on the first tab with something you can MAKE, not the first with something in it — a
   // keeper with planks lands on Pieces, not on a Materials tab of greyed refines (Alex, 09-17:
@@ -87,7 +89,7 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
   return (
     <div>
       <div className="sticky top-0 z-10 -mx-4 px-4 pt-1 pb-2 bg-[#0e1018]">
-        <div className="flex items-center gap-1 mb-2 flex-wrap">
+        <div className="flex items-center gap-1 mb-2 flex-wrap pr-6">
           {live.map(t => (
             <button key={t} onClick={() => { setTab(t); setQ('') }}
                     className={`px-2 h-6 rounded border text-[9px] tracking-[.14em] uppercase ${
@@ -95,8 +97,8 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
               {t} <span className="text-white/30 tracking-normal">{tiles.filter(x => x.tab === t && x.can).length}</span>
             </button>
           ))}
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="find…"
-                 className="ml-auto w-24 h-6 px-2 rounded border border-white/15 bg-black/40 text-white/80 text-[10px] outline-none focus:border-amber-300/60" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="find… (stonecutter)"
+                 className="ml-auto w-32 h-6 px-2 rounded border border-white/15 bg-black/40 text-white/80 text-[10px] outline-none focus:border-amber-300/60" />
         </div>
         {footer?.(q ? '' : tab)}
         {picked ? (
@@ -113,6 +115,7 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
                     <span key={c.itemId} className={have(c.itemId) >= c.count ? 'text-emerald-300/70' : 'text-rose-300/60'}>
                       {i > 0 && <span className="text-white/25"> · </span>}
                       {label(c.itemId).toLowerCase()} {have(c.itemId)}/{c.count}
+                      {have(c.itemId) < c.count && madeAt?.(c.itemId) && <span className="text-sky-300/60"> ({madeAt(c.itemId)})</span>}
                     </span>
                   ))}
                   {picked.tag && <span className="text-sky-300/60"> · {picked.tag}</span>}

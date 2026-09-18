@@ -107,7 +107,7 @@ import { inPassageVolume, insideShell, bubbleSwallows, passageApproach } from '.
 import { rinSpotAt } from '../voxel/rin-water'
 import { newCast, phaseAt, passed, answer, type RinCast, type RinPhase } from '../engine/rin-cast'
 import { rinCatch, type RinWater } from '../engine/rin-catch'
-import { WORLD_ITEMS, craftSurface, isFixture } from './obtainable'
+import { WORLD_ITEMS, craftSurface, isFixture, madeAtLabel } from './obtainable'
 import { HOLDS } from '../voxel/holds'
 import {
   spawnFoe, stepFoe, strike, hostile, foeDef, pickPosture, collarFrac, answerCollar,
@@ -300,6 +300,7 @@ import {
 } from '../voxel/workshop'
 import { itemIcon } from './tex/item-icon'
 import { CraftGrid, CardButton, type GridTile } from './craft-grid'
+import { PanelFrame } from './panel-frame'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
 import { normalizeRoster, activeSpirits, MAX_PARTY } from '../engine/spirit-health'
@@ -10560,10 +10561,16 @@ function CraftPanel({ have, tools, tick, station, pooled, onCraft, onCraftTool, 
     return next ? [next] : []
   })
 
+  // ★ STATIONS ARE THEIR OWN TAB (2026-09-18, Alex, hunting the stonecutter for the well: "i simply
+  // cant find the stone cutter"). It sat in Furniture between a chest and a lantern, dim under the
+  // seam because it is bench work, while the Pieces tab offered a "Cut Stone Table" that reads as
+  // the same thing. A station is not furniture — it is where the next material comes from — so the
+  // tab is named for the question the keeper is asking. Membership is DERIVED from the two station
+  // maps, so the kiln and the alchemy chain landed here without a list.
   const tabOf = (r: RecipeDef): string => {
     const out = r.output.itemId
-    if (isFixture(out)) return 'Furniture'
     const m = materialForItem(out)
+    if (isFixture(out)) return m !== undefined && (stationOf(m) || alchemyStationOf(m)) ? 'Stations' : 'Furniture'
     if (m !== undefined && blockDef(m)?.placeable) return 'Blocks'
     return 'Materials'
   }
@@ -10596,17 +10603,15 @@ function CraftPanel({ have, tools, tick, station, pooled, onCraft, onCraftTool, 
   ]
 
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      <div className="w-[440px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
-           onClick={(e) => e.stopPropagation()}>
+    <PanelFrame width="w-[440px]" onClose={onClose}>
         <div className="flex items-baseline justify-between mb-3">
           <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Crafting
             {station === 'crafting_table' && <span className="ml-2 text-amber-200/70 normal-case tracking-normal font-normal">at table</span>}
             {pooled && <span className="ml-2 text-white/35 normal-case tracking-normal font-normal">· drawing on the bank</span>}
           </span>
-          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
-        <CraftGrid tiles={tiles} tabs={['Materials', 'Blocks', 'Furniture', 'Pieces', 'Tools']} have={have} label={itemLabel}
+        <CraftGrid tiles={tiles} tabs={['Materials', 'Blocks', 'Stations', 'Furniture', 'Pieces', 'Tools']} have={have} label={itemLabel}
+                   madeAt={madeAtLabel}
                    pickedId={picked} onPick={setPicked}
                    action={(t) => {
                      if (t.id.startsWith('t:')) return <CardButton on disabled={!t.can} onClick={() => onCraftTool(t.id.slice(2))}>craft</CardButton>
@@ -10650,8 +10655,7 @@ function CraftPanel({ have, tools, tick, station, pooled, onCraft, onCraftTool, 
                        })()}
                      </div>
                    )} />
-      </div>
-    </div>
+    </PanelFrame>
   )
 }
 
@@ -10700,15 +10704,11 @@ function WaymarkPanel({ wm, onSay, onClose }: {
   const rows = wm.net.marks.filter((m) => m.id !== wm.fromId)
 
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      <div data-panel={atPlot ? 'threshold' : 'waymark'}
-           className="w-[420px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
-           onClick={(e) => e.stopPropagation()}>
+    <PanelFrame width="w-[420px]" dataPanel={atPlot ? 'threshold' : 'waymark'} onClose={onClose}>
         <div className="flex items-baseline justify-between mb-3">
           <span className="text-white/95 font-semibold tracking-[.18em] uppercase">
             {atPlot ? 'Your Threshold' : 'Waymark'}
           </span>
-          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
 
         {/* Renaming lives on the waymark's own face because this is the only surface that ever shows
@@ -10790,8 +10790,7 @@ function WaymarkPanel({ wm, onSay, onClose }: {
         <div className="mt-3 text-[10px] text-white/25">
           {wm.net.marks.length} of {MAX_MARKS} passages · break a waymark to take it up
         </div>
-      </div>
-    </div>
+    </PanelFrame>
   )
 }
 
@@ -10903,12 +10902,9 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
   const [pickedRecipe, setPickedRecipe] = useState<string | null>(null)
 
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      <div className="w-[460px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
-           onClick={(e) => e.stopPropagation()}>
+    <PanelFrame width="w-[460px]" onClose={onClose}>
         <div className="flex items-baseline justify-between mb-3">
           <span className="text-white/95 font-semibold tracking-[.18em] uppercase">{def.name}</span>
-          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
 
         {busy && r ? (
@@ -10982,8 +10978,7 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
                        <CardButton disabled={busy || n < 1} onClick={() => doLoad(rec.id, n)}>all {n}</CardButton>
                      </>)
                    }} />
-      </div>
-    </div>
+    </PanelFrame>
   )
 }
 

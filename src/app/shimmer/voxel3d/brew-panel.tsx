@@ -21,6 +21,7 @@ import { elementForInfusion, type PotionDef } from '../engine/alchemy'
 import { countItem, type Inventory } from '../engine/inventory'
 import type { SkillSet } from '../engine/skills'
 import { brewBlocker, absentInputs, cauldronMenu, isInfusionBrew, type BrewBlock } from './brew'
+import { CloseX } from './panel-frame'
 
 /** Tint per element — the grimoire's own four, so a row and a pour read as the same thing. */
 const ELEMENT_TINT: Record<string, string> = {
@@ -79,6 +80,8 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
       {/* `data-panel` is the harness's only handle on this plate. Without it `brew-check.mts` has to
           guess which div is the panel, and both guesses are wrong in a way that still looks green:
           the outermost match drags the chat log in with it, the innermost is the title line alone. */}
+      <div className="relative w-[460px]" onClick={(e) => e.stopPropagation()}>
+      <CloseX onClick={onClose} />
       <div data-panel="brew"
            /* ── ★ THE HOUSE PLATE (2026-08-26). `gx-card` brings the framed background, the accent
               border and the inset shadows; `gx-scan` lays the CRT texture over it; `gx-chrome`
@@ -87,9 +90,8 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
               as THE web-card tell, and `gx-card` sets its own near-sharp 3px.
               ⚠ `overflow-y-auto` is kept AFTER the layer classes and is load-bearing: `gx-card`
               sets `overflow: hidden`, and a 460px plate holding the full cauldron menu scrolls. */
-           className="gx-card gx-scan gx-chrome w-[460px] max-h-[80vh] overflow-y-auto p-4 font-mono text-[11px]"
-           onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-baseline justify-between mb-1">
+           className="gx-card gx-scan gx-chrome w-full max-h-[80vh] overflow-y-auto p-4 font-mono text-[11px]">
+        <div className="flex items-baseline justify-between mb-1 pr-6">
           {/* ★ `gx-label`, not a hand-rolled `uppercase tracking-[.18em]`. The layer already owns
               "short string, caps, wide tracking, squared face" — restating it is how one role ends
               up spelled nine different ways, which is exactly what `hud-type.test.ts` found in the
@@ -98,7 +100,6 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
           <span className="gx-label text-[13px] font-semibold text-white/95">Brewing
             <span className="ml-2 font-mono text-[11px] text-amber-200/70 normal-case tracking-normal font-normal">at the cauldron</span>
           </span>
-          <button onClick={onClose} className="gx-btn px-2 py-0.5 text-[10px]">esc</button>
         </div>
 
         {/* Mana and level on one line, because they are the two numbers every row is measured
@@ -174,6 +175,7 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
             farm crops — nothing in these lands grows them yet.
           </div>
         )}
+      </div>
       </div>
     </div>
   )

@@ -24,6 +24,7 @@ import {
   routeOf, jobOf, JOB_LINE, type AlchemyStationId, type AlchemyRecipe,
 } from './alchemy-chain'
 import type { OpenStation } from './VoxelWorld'
+import { PanelFrame } from './panel-frame'
 
 export interface AlchemyOps {
   have: (itemId: string) => number
@@ -100,13 +101,10 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
   const isPour = (rec: AlchemyRecipe | undefined) => !!rec && rec.id.startsWith('finish:')
 
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      <div className="w-[480px] max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px]"
-           onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-baseline justify-between mb-3">
+    <PanelFrame width="w-[480px]" onClose={onClose}>
+        <div className="flex items-baseline justify-between mb-3 pr-6">
           <span className="text-white/95 font-semibold tracking-[.18em] uppercase">{def.name}</span>
           <span className="text-white/35">{cooking ? 'the fire is always lit' : `alchemy ${level} · mana ${Math.floor(mana.current.cur)}`}</span>
-          <button onClick={onClose} className="text-white/40 hover:text-white/80">esc</button>
         </div>
 
         {busy && job && r ? (
@@ -200,8 +198,7 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
             )
           })}
         </div>
-      </div>
-    </div>
+    </PanelFrame>
   )
 }
 
