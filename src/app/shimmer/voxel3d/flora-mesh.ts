@@ -17,7 +17,7 @@
 // in sync), weighted by uv.y so roots stay planted. CPU never touches a standing instance.
 
 import * as THREE from 'three'
-import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, fruitClusterPixels, mossPixels, rosettePixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
+import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, fruitClusterPixels, mossPixels, rosettePixels, reedPixels, wakePixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
 import { plantedLook, STAGE_GROW, STAGE_RIPE, type PlantedSpot } from './planted-feed'
 import { FLORA, FRUIT_MATS } from '../voxel/flora'
@@ -199,7 +199,7 @@ function glintPixels(size: number): Uint8Array {
   return data
 }
 
-export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, fruit: 3000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000, glint: 64, puff: 2000, moss: 6000 } as const
+export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, fruit: 3000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000, glint: 64, puff: 2000, moss: 6000, reed: 1500 } as const
 
 /**
  * ★★★ A POOL THAT OVERFLOWS SAYS SO — ONCE, PER POOL, WITH THE NUMBER.
@@ -360,6 +360,8 @@ export interface FloraRenderer {
   tick(elapsed: number): void
   /** The cartoon dials — the same value writes the world's blocks take (settings.ts). */
   setCartoon(v: Record<string, number>): void
+  /** The reed's tip lean in blocks (`REED_LEAN` default) — a dial for Alex at the river. */
+  setReedLean(v: number): void
   /**
    * Draw the selection border on ONE plant — the reticle's whole job for ground cover.
    * Same geometry, same texture, same sway as the plant it marks; see `outlineMaterial`.
@@ -436,6 +438,10 @@ export interface FloraPart {
   /** A contact SHADOW under the plant: drawn with the soft shadow material, never tinted, never
    *  outlined (a border on a soft disc is a black ring). `flora-outline.test` skips these. */
   shadow?: boolean
+  /** The reed's WAKE (2026-09-18): a flat quad running +z from the root for `h` blocks, `w` wide,
+   *  that the wake material turns to the flow in the vertex program. Never outlined — it is water,
+   *  not plant — and the bounds it contributes are the unturned quad's (the turn is the GPU's). */
+  wake?: boolean
 }
 
 /**
@@ -459,8 +465,23 @@ export interface FloraPart {
  * is a number, not a memory.
  */
 export const CARD_LEAN = 0
+/** The wake: a flat quad from the root running +z for `len`, `width` wide, uv.y along the run so
+ *  row 0 of `wakePixels` (the apex) sits under the stalk. Faces +Y; the wake material is
+ *  DoubleSide with no lighting, so the winding only has to agree with the flat pad's. */
+function buildWakeGeometry(width: number, len: number, yBase: number): THREE.BufferGeometry {
+  const hw = width / 2
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute([
+    -hw, yBase, 0, hw, yBase, 0, hw, yBase, len, -hw, yBase, len,
+  ], 3))
+  g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2))
+  g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3))
+  g.setIndex([0, 2, 1, 0, 3, 2])
+  return g
+}
 const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
-  p.flat ? buildFlatGeometry(p.w, p.yBase ?? 0) : buildCrossGeometry(p.w, p.h, p.yBase ?? 0, p.tiles ?? 1, p.lean ?? 0)
+  p.wake ? buildWakeGeometry(p.w, p.h, p.yBase ?? 0)
+  : p.flat ? buildFlatGeometry(p.w, p.yBase ?? 0) : buildCrossGeometry(p.w, p.h, p.yBase ?? 0, p.tiles ?? 1, p.lean ?? 0)
 
 /**
  * ── ★★★ THE SHAPE OF A PLANT, IN ONE PLACE, BECAUSE A SECOND CONSUMER ARRIVED ────────────────
@@ -530,6 +551,16 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
     // side profile. Same texture, so it reads as the same moss standing up a little.
     { w: 0.6, h: 0.14, lean: CARD_LEAN * 0.5 },
   ],
+  // ── ★ WAKEREED (2026-09-18, RULED). Rooted on the WATER SURFACE (the probe reports the sheet's
+  // plane as its ground): the card runs 0.45 under the sheet — the drowned quarter of the tile —
+  // and 1.35 over it, reed-tall against a 1.8 keeper on the bank a block up. Narrow: a stand of
+  // three hollow stalks, not a fan. Then the wake, a flat decal on the sheet running downstream
+  // from the root: 0.7 wide, 1.9 long. The reed's lean is the shader's (see `injectSway`'s
+  // `reed` mode); no card lean, so the flow is the only thing that bends it.
+  [FLORA.REED]: [
+    { w: 0.4, h: 1.8, yBase: -0.45 },
+    { w: 0.7, h: 1.9, yBase: 0.02, wake: true },
+  ],
 }
 
 /**
@@ -549,6 +580,7 @@ export const FLORA_SWAY: Record<number, number> = {
   [FLORA.HERB]: 0.1,
   [FLORA.CROP]: 0.08,
   [FLORA.MOSS]: 0.01,         // a cushion on the ground; the sway is only so the program compiles alike
+  [FLORA.REED]: 0.03,         // the wind barely reaches a stalk the river already holds; the flow does the bending
 }
 
 /**
@@ -571,6 +603,9 @@ export const FLORA_PLACE: Record<number, { root: number; jitter: number }> = {
   [FLORA.MUSHROOM]: { root: 0.99, jitter: 0.55 },
   [FLORA.PUFF]: { root: 0.99, jitter: 0.4 },
   [FLORA.MOSS]: { root: 0.97, jitter: 0.04 },        // covers its cell, like a bloom mat
+  // The reed's ground IS the sheet's plane (probe: surface − 1), so the root sits exactly on it —
+  // the stalk's drowned quarter hides any seam a 0.97 would have been for.
+  [FLORA.REED]: { root: 1.0, jitter: 0.28 },
 }
 
 /** A stalk's height roll. Y only — a wider blade would thin the texture, not grow the plant. */
@@ -623,7 +658,9 @@ export function floraMatrix(
     // w/2 · 1.15 + jitter stays inside the cell (0.35 · 1.15 + 0.15 = 0.55 > 0.5 by a hair — a
     // blade tip past the cell line is what the old cross did on every rotation and nobody saw).
     const sw = kind === FLORA.TUFT || kind === FLORA.TALL ? 0.85 + ((variant * 11.7) % 1) * 0.3 : 1
-    scl.set(sw, floraGrow(variant), sw)
+    // The reed's grow is narrower (0.85..1.15): a stand is reed-tall or it is not a reed, and the
+    // wake rides the same matrix — a 0.75 wake behind a 1.25 one would read as two currents.
+    scl.set(sw, kind === FLORA.REED ? 0.85 + variant * 0.3 : floraGrow(variant), sw)
   }
   return out.compose(off, quat, scl)
 }
@@ -740,6 +777,11 @@ const makeHeadTexture = (size = 8): THREE.DataTexture => toTexture(headPixels(si
 export const LEAN_TEXEL = 2
 /** Tip lean at full strength, in blocks — beside the tuft's 0.09 gust, a steady 0.16 reads as bent. */
 export const LEAN_AMP = 0.16
+/** The reed's lean at the tip, in blocks — most of a 1.35 stalk's height: combed nearly flat at full
+ *  tug. A uniform (`setReedLean`), so `__flora().reedLean(v)` moves it on a running page. */
+export const REED_LEAN = 0.85
+/** The slack cycle's rate (rad/s): 0.48 ≈ 13s from combed to standing and back. */
+export const REED_SLACK_RATE = 0.48
 /** Off-map (and a fresh renderer) is 128 = no lean. */
 const LEAN_ZERO = 128
 
@@ -817,6 +859,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const uLean = { value: lean.texture as THREE.Texture }
   const uLeanOrigin = { value: lean.origin }
   const uLeanSize = { value: lean.size }
+  const uReedLean = { value: REED_LEAN }
   // ── ★★ FLORA ON THE WORLD'S LIGHT (2026-09-17) ─────────────────────────────────────────────
   // Every plant material was plain Lambert under the scene lights: no cartoon stack (the blocks'
   // three-step banding, the 0.35 floor, the hour) and no LIGHT FIELD — a lantern lit the ground
@@ -865,13 +908,14 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
    * InstancedMesh and not as a plain Mesh. A plain Mesh compiles without that define, stands
    * perfectly still, and detaches from a swaying plant — correct-looking code, wrong-looking world.
    */
-  const injectSway = (shader: { uniforms: Record<string, unknown>; vertexShader: string }, amp: number): void => {
+  const injectSway = (shader: { uniforms: Record<string, unknown>; vertexShader: string }, amp: number, reed = false): void => {
     shader.uniforms.uTime = uTime
     shader.uniforms.uLean = uLean
     shader.uniforms.uLeanOrigin = uLeanOrigin
     shader.uniforms.uLeanSize = uLeanSize
+    shader.uniforms.uReedLean = uReedLean
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform sampler2D uLean;\nuniform vec2 uLeanOrigin;\nuniform vec2 uLeanSize;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform sampler2D uLean;\nuniform vec2 uLeanOrigin;\nuniform vec2 uLeanSize;\nuniform float uReedLean;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + [
         '{',
         '  #ifdef USE_INSTANCING',
@@ -880,9 +924,20 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         // program cannot do it anywhere else. A mat's amp is tiny so its pad does not slide.
         '  vec2 leanUv = (instanceMatrix[3].xz - uLeanOrigin) / uLeanSize;',
         '  vec2 lean = (texture2D(uLean, leanUv).rg - 128.0 / 255.0) * (255.0 / 127.0);',
-        '  float lw = uv.y * uv.y * ' + LEAN_AMP.toFixed(3) + ' * min(1.0, ' + amp.toFixed(3) + ' / 0.09);',
+        // ── ★ THE REED IS IN THE WATER, NOT BESIDE IT (2026-09-18). The bank's lean is a tug the
+        // river's wind gives dry grass: LEAN_AMP at the tip, 0.8 steady with a breath. The reed
+        // stands in the current itself, and canon says what that does: *"combed flat by the flow
+        // and standing up again when it slacks."* So its lean is REED_LEAN (most of a block at the
+        // tip, which on a 1.35 stalk is nearly flat) and its tug is a SLACK CYCLE — a slow swing
+        // between a third and full, ~13s round, phased by position so a stand combs together and
+        // the river's stands do not. The wind term below still runs, at the reed's tiny amp.
+        reed
+          ? '  float lw = uv.y * uv.y * uReedLean;'
+          : '  float lw = uv.y * uv.y * ' + LEAN_AMP.toFixed(3) + ' * min(1.0, ' + amp.toFixed(3) + ' / 0.09);',
         // A current tugs and eases: 0.8 steady with a slow 0.2 breath, never the wind's gust shape.
-        '  float tug = 0.8 + 0.2 * sin(uTime * 1.1 + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.4);',
+        reed
+          ? '  float tug = 0.34 + 0.66 * (0.5 + 0.5 * sin(uTime * ' + REED_SLACK_RATE.toFixed(3) + ' + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.4));'
+          : '  float tug = 0.8 + 0.2 * sin(uTime * 1.1 + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.4);',
         '  transformed.x += lean.x * lw * tug;',
         '  transformed.z += lean.y * lw * tug;',
         '  transformed.y -= dot(lean, lean) * lw * tug * 0.35;',
@@ -955,7 +1010,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
    * double on the other. Reading it off the texture also means a re-paint at a new resolution keeps
    * a one-texel border by construction. Pixel art with NearestFilter: one texel is the convention.
    */
-  const outlineMaterial = (map: THREE.Texture, amp: number, tiles = 1): THREE.MeshBasicMaterial => {
+  const outlineMaterial = (map: THREE.Texture, amp: number, tiles = 1, reed = false): THREE.MeshBasicMaterial => {
     const m = new THREE.MeshBasicMaterial({
       map, alphaTest: 0.4, side: THREE.DoubleSide, color: 0x000000,
       // Same geometry at the same matrix as the plant means identical depth: without an offset the
@@ -963,7 +1018,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     })
     m.onBeforeCompile = (shader) => {
-      injectSway(shader, amp)
+      injectSway(shader, amp, reed)
       injectAtlas(shader, tiles)
       // ⚠ Read off the ATLAS width for an atlas texture: one texel is one texel of the whole strip.
       const texel = 1 / ((map.image as { width?: number })?.width || 16)
@@ -996,6 +1051,63 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
    */
   const outlineHullMaterial = (): THREE.MeshBasicMaterial =>
     new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, depthWrite: false })
+
+  /**
+   * ── ★ THE WAKE'S PROGRAM (2026-09-18): TURN TO THE FLOW, BREATHE WITH THE SLACK ──────────────
+   * The wake quad is built running local +z from the root (`buildWakeGeometry`). The instance
+   * matrix gives the reed a random yaw like every card, so the quad has to be turned TWICE in the
+   * vertex program: the world heading is the lean map's vector at the instance cell (the same
+   * texel the stalk leans by, so stalk and wake can never disagree), and it is first brought into
+   * the instance's local frame by the inverse of that yaw — read straight off `instanceMatrix[0]`,
+   * the local x axis in world space — then the quad's +z is rotated onto it.
+   *
+   * ⚠ NO LEAN IS NO WAKE. A still pond, the Glade (whose lean map is cleared), a texel outside the
+   * map: the vector is zero, and the quad collapses to nothing rather than pointing +z. Canon is
+   * exact about this: *"a still pond has no wake."* The alpha also rides the reed's slack cycle at
+   * the SAME phase, so the wake is whitest when the stalk is combed flattest.
+   */
+  const injectWake = (shader: { uniforms: Record<string, unknown>; vertexShader: string; fragmentShader: string }): void => {
+    shader.uniforms.uTime = uTime
+    shader.uniforms.uLean = uLean
+    shader.uniforms.uLeanOrigin = uLeanOrigin
+    shader.uniforms.uLeanSize = uLeanSize
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform sampler2D uLean;\nuniform vec2 uLeanOrigin;\nuniform vec2 uLeanSize;\nvarying float vWake;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + [
+        'vWake = 0.0;',
+        '{',
+        '  #ifdef USE_INSTANCING',
+        '  vec2 leanUv = (instanceMatrix[3].xz - uLeanOrigin) / uLeanSize;',
+        '  vec2 lean = (texture2D(uLean, leanUv).rg - 128.0 / 255.0) * (255.0 / 127.0);',
+        '  float L = length(lean);',
+        '  if (L < 0.02) { transformed = vec3(0.0); } else {',
+        '    vec2 dW = lean / L;',
+        // instanceMatrix[0].xz = (cos φ, −sin φ) for a yaw φ about Y; the inverse yaw on (x, z).
+        '    vec2 ax = normalize(instanceMatrix[0].xz);',
+        '    float c = ax.x, s = -ax.y;',
+        '    vec2 dL = vec2(c * dW.x - s * dW.y, s * dW.x + c * dW.y);',
+        '    float x = transformed.x, z = transformed.z;',
+        '    transformed.x = x * dL.y + z * dL.x;',
+        '    transformed.z = -x * dL.x + z * dL.y;',
+        // The stalk's own slack cycle, same phase — whitest when combed flattest; never fully out.
+        '    float tug = 0.34 + 0.66 * (0.5 + 0.5 * sin(uTime * ' + REED_SLACK_RATE.toFixed(3) + ' + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.4));',
+        '    vWake = min(1.0, L * 1.4) * (0.45 + 0.55 * tug);',
+        '  }',
+        '  #endif',
+        '}',
+      ].join('\n'))
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying float vWake;')
+      // Foam moves: a ripple runs down the wake (uv.y is the run) so the decal is not a sticker on
+      // a river that scrolls under it. Multiplicative on the tile's own alpha; the V stays a V.
+      .replace('#include <map_fragment>', '#include <map_fragment>\n'
+        + 'diffuseColor.a *= vWake * (0.7 + 0.3 * sin(vMapUv.y * 22.0 - uTime * 3.2));')
+  }
+  const wakeMaterial = (map: THREE.Texture): THREE.MeshLambertMaterial => {
+    const m = new THREE.MeshLambertMaterial({ map, transparent: true, depthWrite: false, alphaTest: 0.04, side: THREE.DoubleSide })
+    m.onBeforeCompile = (shader) => { injectWake(shader); injectStack(shader, true) }
+    return m
+  }
 
   // The two grasses are ATLASES of GRASS_VARIANTS tiles; the flower stem keeps a plain tile.
   const bladeTex = makeBladeTexture(TUFT_SEED, TUFT_BLADES)
@@ -1155,6 +1267,16 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const mossMat = swayMaterial(mossTex, FLORA_SWAY[FLORA.MOSS])
   mossMat.emissive = new THREE.Color(MATERIAL_COLOR[MAT.GLOW_MOSS] ?? 0x7fe0b8)
   mossMat.emissiveIntensity = MOSS_EMISSIVE
+  // ── ★ WAKEREED (2026-09-18): the stalk on the reed sway (comb + slack), the wake on its own
+  // program. The stalk is tinted from MATERIAL_COLOR like the moss (painted near-white); the wake
+  // is white foam and takes no tint.
+  const reedTex = toTexture(reedPixels(), BLADE_TILE, TALL_TILE_H)
+  const wakeTex = toTexture(wakePixels(), BLADE_TILE, TALL_TILE_H)
+  const reedGeo = crossGeo(FLORA.REED)
+  const wakeGeo = crossGeo(FLORA.REED, 1)
+  const reedMat = new THREE.MeshLambertMaterial({ map: reedTex, alphaTest: 0.4, side: THREE.DoubleSide })
+  reedMat.onBeforeCompile = (shader) => { injectSway(shader, FLORA_SWAY[FLORA.REED], true); injectStack(shader, true) }
+  const wakeMat = wakeMaterial(wakeTex)
 
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, CAP.tuft)
   const tuftCaps = new THREE.InstancedMesh(tuftCapGeo, tuftCapMat, CAP.tuft)
@@ -1229,8 +1351,14 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const mosses = new THREE.InstancedMesh(mossGeo, mossMat, CAP.moss)
   puffs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.puff * 3), 3)
   mosses.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.moss * 3), 3)
+  const reeds = new THREE.InstancedMesh(reedGeo, reedMat, CAP.reed)
+  const wakes = new THREE.InstancedMesh(wakeGeo, wakeMat, CAP.reed)
+  reeds.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.reed * 3), 3)
+  // The wake is transparent and lies a hair over the sheet: drawn after the cards (like the
+  // glints) so it is never sorted behind the water it decorates.
+  wakes.renderOrder = 2
 
-  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
+  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -1238,7 +1366,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   }
 
   const group = new THREE.Group()
-  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses)
+  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
   // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
@@ -1280,6 +1408,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     { kind: FLORA.MUSHROOM, geo: shroomCapGeo, mat: outlineHullMaterial(), grow: 1.12 },
     { kind: FLORA.PUFF, geo: puffGeo, mat: outlineHullMaterial(), grow: 1.12 },
     { kind: FLORA.MOSS, geo: mossGeo, mat: outlineMaterial(mossTex, FLORA_SWAY[FLORA.MOSS]), grow: 1 },
+    // The reed's border is the stalk's; the wake is water and gets none (FloraPart.wake).
+    { kind: FLORA.REED, geo: reedGeo, mat: outlineMaterial(reedTex, FLORA_SWAY[FLORA.REED], 1, true), grow: 1 },
   ]
   const hlMeshes = hlDefs.map(d => {
     const im = new THREE.InstancedMesh(d.geo, d.mat, 1)
@@ -1418,11 +1548,11 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       // The lean map first: the same columns, the same seed, one pass — see `createLeanMap`.
       leanLive = river ? lean.fill(cols, seed) : lean.clear()
       uLean.value = lean.texture
-      let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0
+      let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0, nRe = 0
       // ⚠ WANTED IS COUNTED SEPARATELY FROM DRAWN, and that separation is the whole instrument.
       // The `n*` counters stop at the cap by construction, so they can never report an overrun —
       // they are the truncated number. These count what the world ASKED for.
-      let wT = 0, wL = 0, wF = 0, wM = 0, wB = 0, wFr = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0, wP = 0, wMo = 0
+      let wT = 0, wL = 0, wF = 0, wM = 0, wB = 0, wFr = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0, wP = 0, wMo = 0, wRe = 0
       for (const c of cols) {
         for (const s of spotsFor(c.key, c.x0, c.z0, seed, probe)) {
           // ★ ONE PLACEMENT DERIVATION, SHARED WITH THE RETICLE'S OUTLINE. Jitter, turn, root
@@ -1507,6 +1637,15 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
               nMo++
             }
           }
+          else if (s.kind === FLORA.REED) {
+            wRe++
+            if (nRe < CAP.reed) {
+              reeds.setMatrixAt(nRe, mtx)
+              wakes.setMatrixAt(nRe, mtx)
+              reeds.setColorAt(nRe, tint.set(MATERIAL_COLOR[s.mat] ?? 0xb4d49a))
+              nRe++
+            }
+          }
           else if (s.kind === FLORA.BLOOM_MAT) {
             wM++
             if (nM < CAP.mat) {
@@ -1574,14 +1713,14 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         ['mat', wM, CAP.mat], ['bush', wB, CAP.bush], ['fruit', wFr, CAP.fruit],
         ['herb', wH, CAP.herb], ['crop', wC, CAP.crop],
         ['rock', wR, CAP.rock], ['log', wG, CAP.log], ['shroom', wS, CAP.shroom],
-        ['puff', wP, CAP.puff], ['moss', wMo, CAP.moss],
+        ['puff', wP, CAP.puff], ['moss', wMo, CAP.moss], ['reed', wRe, CAP.reed],
       ] as [string, number, number][]) {
         floraDemand[pool] = { wanted, cap }
         if (wanted > cap) noteOverflow(pool, wanted, cap)
       }
       rocks.count = nR; logs.count = nG; shroomStems.count = nS; shroomCaps.count = nS
-      puffs.count = nP; mosses.count = nMo
-      for (const m of [rocks, logs, shroomStems, shroomCaps, puffs, mosses]) {
+      puffs.count = nP; mosses.count = nMo; reeds.count = nRe; wakes.count = nRe
+      for (const m of [rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes]) {
         m.instanceMatrix.needsUpdate = true
         if (m.instanceColor) m.instanceColor.needsUpdate = true
       }
@@ -1622,6 +1761,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     setPlanted(spots) { planted = spots; writePlanted() },
     tick(elapsed) { uTime.value = elapsed },
     setCartoon(v) { for (const [k, val] of Object.entries(v)) if (cartoon[k]) cartoon[k].value = val },
+    setReedLean(v) { uReedLean.value = v },
 
     setHighlight(kind, x, y, z, variant, alongX) {
       // ★ THE SAME PLACEMENT DERIVATION THE PLANT ITSELF USES. If this composed its own matrix the

@@ -136,10 +136,10 @@ export const isFruit = (m: number): boolean => m >= FRUIT_MIN && m <= FRUIT_MAX
  * for many potions"*) and glow-moss (*"bioluminescent ground cover, marks paths at night"* → mana
  * potions). A sixth plant range, after the kiln; `isPlant` answers for it.
  *
- * ⚠ KEEP 111-112 CONTIGUOUS — the next forage (shelf fungi → shelf slices) goes at 113.
+ * ⚠ KEEP 111-114 CONTIGUOUS — the next forage (shelf fungi → shelf slices) goes at 115.
  */
 export const FORAGE_MIN = 111
-export const FORAGE_MAX = 113
+export const FORAGE_MAX = 114
 export const isForage = (m: number): boolean => m >= FORAGE_MIN && m <= FORAGE_MAX
 
 export const isPlant = (m: number): boolean =>
@@ -748,6 +748,16 @@ export const MAT = {
    * the herb itself. It is also a crop (`crops.ts`), so a bed grows it from tuft-dropped seed.
    */
   GOLDLEAF: 113,
+  /**
+   * ★ WAKEREED (2026-09-18, RULED — `game/shimmer-geography.md` › *The plant that stands in the
+   * current*) — the one plant that stands IN a running river: a hollow stalk on a deep root, on
+   * the SHALLOW SHOULDER (one water cell deep) where the water moves, *combed flat by the flow and
+   * standing up again when it slacks*, wearing a wake. Forage-only by the fold's own law (no bed
+   * can make a current). ⚠ THE ONLY PLANT VOXEL THAT STANDS AT h+2: its cell is the AIR above the
+   * surface water cell, never the water cell itself — a plant IN the water cell is a hole in the
+   * sheet (the 09-18 mosaic-river finding, `column.ts › generatedAt`). Its ground is WATER.
+   */
+  WAKEREED: 114,
 } as const
 
 /**

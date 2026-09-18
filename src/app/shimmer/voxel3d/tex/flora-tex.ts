@@ -669,3 +669,102 @@ export function rosettePixels(seed = ROSETTE_SEED, blades = ROSETTE_BLADES, size
   }
   return data
 }
+
+/**
+ * ── ★ WAKEREED: THE STALKS (2026-09-18, RULED — `game/shimmer-geography.md`) ────────────────────
+ * Canon's one line: *"a hollow stalk on a deep Network root, reed-tall ... pale green, a paler seam
+ * down the downstream side where the water combs it."* Not a true reed (*they LOOK like plants,
+ * they ARE fungi*), so no seed-head and no leaves — a hollow tube is the whole shape. Painted
+ * near-white and TINTED by `MATERIAL_COLOR[WAKEREED]` (the moss's arrangement), so the block, the
+ * bag and the plant read one colour from one row.
+ *
+ * Three stalks on the tall tile (32×64), each nearly straight — a reed does not arch the way tall
+ * grass does; the LEAN is the shader's, and it is the flow's — with knuckles every so often (a
+ * darker band, the hollow's joints) and the paler seam as a one-texel bright line up the RIGHT
+ * side of every stalk. ⚠ The seam is on one side of the TILE, not of the plant: the star's three
+ * cards turn it three ways, which at this size reads as light on a round stem from one side and
+ * is the honest amount of "downstream" a 32-wide sprite can carry.
+ *
+ * ⚠ ROW 0 IS THE BOTTOM, as every tile here. The bottom quarter is the part under the water, so
+ * it is painted a shade darker: the stalk sinks, it does not stop at the sheet.
+ */
+export const REED_SEED = 0x3ee0, REED_STALKS = 3
+export function reedPixels(seed = REED_SEED, stalks = REED_STALKS, w = BLADE_TILE, h = TALL_TILE_H): Uint8Array {
+  const data = new Uint8Array(w * h * 4)
+  const rnd = lcg(seed)
+  const put = (x: number, y: number, v: number) => {
+    if (x < 0 || x >= w || y < 0 || y >= h) return
+    const o = (y * w + x) * 4
+    const c = Math.max(0, Math.min(255, v))
+    data[o] = c; data[o + 1] = c; data[o + 2] = c; data[o + 3] = 255
+  }
+  const span = w * 0.55
+  for (let s = 0; s < stalks; s++) {
+    // Spread across the middle, tallest in the middle: a stand, not a fence.
+    const rx = w / 2 + (s - (stalks - 1) / 2) * (span / Math.max(1, stalks - 1)) + (rnd() - 0.5) * 3
+    const sh = h * (0.78 + rnd() * 0.2) - Math.abs(s - (stalks - 1) / 2) * h * 0.08
+    const drift = (rnd() - 0.5) * w * 0.12          // a hair of lean baked in, so no two are parallel
+    const sw = 2 + (rnd() < 0.5 ? 1 : 0)             // 2–3 texels wide: hollow, not a blade
+    const joint = 9 + Math.floor(rnd() * 5)          // knuckle spacing
+    for (let y = 0; y < sh; y++) {
+      const t = y / sh
+      const cx = Math.max(1, Math.min(w - 2, rx + drift * t * t))
+      const wd = t > 0.85 ? Math.max(1, sw - 1) : sw   // the open end tapers a texel
+      const x0 = Math.round(cx - sw / 2)
+      const under = y < h * 0.25 ? -38 : 0           // the drowned quarter
+      const knuckle = y % joint === 0 && y > 0 ? -22 : 0
+      const tip = t > 0.92 ? -18 : 0                 // the open end darkens a little
+      for (let dx = 0; dx < wd; dx++) {
+        // The body is a mid-light tone that the tint turns pale green; the right edge is the seam.
+        const seam = dx === wd - 1 && wd > 1 ? 46 : dx === 0 && wd > 1 ? -22 : 12
+        put(x0 + dx, y, 196 + seam + under + knuckle + tip + (rnd() - 0.5) * 8)
+      }
+    }
+  }
+  return data
+}
+
+/**
+ * ── ★ WAKEREED: THE WAKE (2026-09-18) ──────────────────────────────────────────────────────────
+ * *"Where it stands the water wears a wake — that is the name."* A flat decal laid on the water
+ * downstream of the stalk: a V opening from the apex (row 0, the stalk) with its two arms fading
+ * as they run, and a thin trail of broken foam between them. White, cutout by alpha, so the water
+ * material's own colour and the tile scrolling under it stay visible; `flora-mesh` turns the quad
+ * to the flow and slides it a little downstream over time so the wake is not a painted sticker.
+ * The width is the tile's (32); the length the tall tile's (64) — a wake is longer than it is wide.
+ *
+ * ⚠ ROW 0 IS THE APEX, at the stalk. The renderer's wake quad runs +z from its origin with uv.y
+ * along it, so row 0 lands under the stalk and the V opens downstream by construction.
+ */
+export function wakePixels(seed = 0x9a4e, w = BLADE_TILE, h = TALL_TILE_H): Uint8Array {
+  const data = new Uint8Array(w * h * 4)
+  const rnd = lcg(seed)
+  const put = (x: number, y: number, a: number) => {
+    if (x < 0 || x >= w || y < 0 || y >= h) return
+    const o = (y * w + x) * 4
+    const v = Math.max(0, Math.min(255, a))
+    if (v <= data[o + 3]) return
+    data[o] = 255; data[o + 1] = 255; data[o + 2] = 255; data[o + 3] = v
+  }
+  const c = (w - 1) / 2
+  for (let y = 0; y < h; y++) {
+    const t = y / h
+    // The arms open at ~20° and fade over the length; the last quarter is broken foam only.
+    const half = 1.5 + t * (w * 0.42)
+    const fade = 1 - t
+    const armA = 230 * fade * fade + 20
+    for (const side of [-1, 1]) {
+      const ax = c + side * half
+      const x0 = Math.round(ax)
+      put(x0, y, armA + (rnd() - 0.5) * 40)
+      // A second texel inward, weaker, so the arm is a soft line and not a hairline.
+      put(x0 - side, y, armA * 0.55 + (rnd() - 0.5) * 30)
+    }
+    // Between the arms: a scatter of foam texels, densest just behind the stalk.
+    const n = Math.round((1 - t) * 4 * rnd())
+    for (let i = 0; i < n; i++) put(Math.round(c + (rnd() - 0.5) * half * 1.6), y, 90 + rnd() * 100 * fade)
+  }
+  // The apex: a bright bead where the current hits the stalk.
+  for (let y = 0; y < 3; y++) for (let dx = -1; dx <= 1; dx++) put(Math.round(c + dx), y, 240)
+  return data
+}

@@ -41,7 +41,7 @@ import { digDens, digAdits, type DenConfig, type AditConfig, DEFAULT_DENS, DEFAU
 import { placeSites } from './sites'
 import { placeStamps, type Stamp } from './stamps'
 import { slumpMask } from './slump'
-import { plantMaterialAt } from './flora'
+import { plantMaterialAt, wakereedAt } from './flora'
 import { biomeAt, DEFAULT_BIOME } from './biome'
 import { greedyMesh, createMeshScratch, halfKey, type MeshScratch, type MeshResult, type HalfCells, waterTopKey, type WaterSurface } from './greedy'
 
@@ -327,6 +327,20 @@ export function generatedAt(
     const p = plantMaterialAt(x, z, seed, biomeAt(x, z, seed, h, depthCfg.seaLevel, DEFAULT_BIOME, heightCfg))
     if (p !== AIR) return p
   }
+  // ── ★ THE ONE PLANT THAT STANDS IN THE WATER STANDS AT h+2 (2026-09-18, RULED: WAKEREED) ────
+  // The gate above is the whole reason this is a SECOND branch and not a widening of the first:
+  // a plant voxel written INTO the surface water cell is a hole in the sheet (the mosaic river).
+  // So the Wakereed's voxel is the AIR cell above the water — the sheet under it stays whole, the
+  // mesher reads a plant as air so the water's top face still draws, and the renderer roots the
+  // stalk on the surface plane and runs it down under the sheet. The cells decide "shallow": one
+  // water cell over the bed and air over that is the shoulder by construction; `wakereedAt` then
+  // asks the river's half (the carve depth, the roll, the flow). Two `materialAt` reads on one
+  // voxel per column, and only after the cheap `y === h + 2` test — the hot path pays nothing.
+  // ⚠ `wakereedAt` is asked BEFORE the two cell reads because `riverCarve` is one field read and
+  // rejects ~every column in the world; `materialAt` is the fill rules and is not free.
+  if (y === h + 2 && dry && wakereedAt(x, z, seed, heightCfg) !== 0
+    && materialAt(x, h + 1, z, seed, h, depthCfg, heightCfg) === MAT.WATER
+    && materialAt(x, y, z, seed, h, depthCfg, heightCfg) === AIR) return MAT.WAKEREED
   return materialAt(x, y, z, seed, h, depthCfg, heightCfg)
 }
 

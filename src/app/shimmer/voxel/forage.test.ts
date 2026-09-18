@@ -7,10 +7,10 @@
 // so a ground-table edit that strands one shows up here — and so the moss's RIBBON shape, which is
 // canon's *"marks paths at night"* made mechanical, cannot quietly become a blob.
 import { inWorld } from '../voxel3d/obtainable'
-import { forageAt, FORAGE_OF_GROUND, FORAGE_MATS, PUFF_DENSITY, GOLDLEAF_DENSITY, forageKind, plantMaterialAt, FLORA_MATERIALS, FLORA_KIND_COUNT, FLORA } from './flora'
+import { forageAt, FORAGE_OF_GROUND, FORAGE_MATS, WATER_FORAGE_MATS, PUFF_DENSITY, GOLDLEAF_DENSITY, forageKind, wakereedAt, plantMaterialAt, FLORA_MATERIALS, FLORA_KIND_COUNT, FLORA } from './flora'
 import { MAT, isForage, isPlant, isSolid, DEFAULT_DEPTH } from './depth'
 import { greyness, biomeAt, type BiomeId } from './biome'
-import { columnHeight } from './height'
+import { columnHeight, riverCarve, riverFlowAt } from './height'
 import { BLOCKS } from './registry'
 import { CROP_DEFS } from './crops'
 import { ITEMS } from '../sprites/items'
@@ -114,6 +114,39 @@ for (let z = -1200; z <= 2800; z += 6) for (let x = -2600; x <= 1200; x += 6) {
 }
 ok(puff > 20 && moss > 20, `both stand in the world (${puff} puff clusters, ${moss} moss in ${cells} sampled cells)`)
 ok(puff / cells < 0.01 && moss / cells < 0.02, 'and neither is common enough to be filler')
+
+// ── 5. wakereed: the water forage (2026-09-18, RULED) ─────────────────────────────────────────
+// Not a ground's forage: never from `forageAt` on any ground, only from `wakereedAt` on the
+// river's shallow shoulder where the water moves. The generator's half (one water cell, air
+// above) is held in river-bed.test; this holds the field's half and the wiring.
+{
+  ok(isForage(MAT.WAKEREED) && isPlant(MAT.WAKEREED), 'wakereed is a forage and a plant')
+  ok(WATER_FORAGE_MATS.includes(MAT.WAKEREED) && FORAGE_MATS.includes(MAT.WAKEREED), 'wakereed is a forage material (via the water list)')
+  ok(!Object.values(FORAGE_OF_GROUND).flat().includes(MAT.WAKEREED), 'wakereed is on NO ground table — its ground is the water')
+  ok(forageKind(MAT.WAKEREED) === FLORA.REED, 'wakereed draws on the reed kind')
+  ok(row(MAT.WAKEREED)?.drops?.[0]?.itemId === 'wakereed' && row(MAT.WAKEREED)?.placeable === false, 'wakereed drops itself and is not placeable')
+  ok(ITEMS.some(i => i.id === 'wakereed'), 'the stalk is an item')
+  ok(!Object.keys(CROP_DEFS).includes('wakereed'), '★ forage-only: no bed grows it (canon: the fold has no water)')
+  let dry = 0, dryReed = 0
+  for (const g of Object.keys(FORAGE_OF_GROUND) as BiomeId[]) for (let z = 0; z < 200; z++) for (let x = 0; x < 200; x++) {
+    dry++
+    if (forageAt(x, z, SEED, g) === MAT.WAKEREED) dryReed++
+  }
+  ok(dry > 0 && dryReed === 0, `forageAt never answers wakereed on any ground (${dryReed} of ${dry})`)
+  // The field: only where the carve is exactly 1 (the shoulder), and every hit has a flow.
+  let hits = 0, offShoulder = 0, still = 0
+  for (let z = 1900; z < 2200; z++) for (let x = 200; x < 500; x++) {
+    const m = wakereedAt(x, z, SEED)
+    if (m !== MAT.WAKEREED) continue
+    hits++
+    if (riverCarve(x, z, SEED) !== 1) offShoulder++
+    const [fx, fz] = riverFlowAt(x, z, SEED)
+    if (fx === 0 && fz === 0) still++
+  }
+  ok(hits > 50, `the shoulder grows wakereed (${hits} on a 300² stretch of the meadow river)`)
+  ok(offShoulder === 0, `★ never mid-channel, never on the bank: every hit is riverCarve === 1 (${offShoulder} were not)`)
+  ok(still === 0, `★ never in still water: every hit has a flow (${still} did not)`)
+}
 
 console.log(`\nforage: ${pass} passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)

@@ -489,6 +489,9 @@ export const BLOCKS: BlockDef[] = [
   { noSlab: true, material: MAT.GLOW_MOSS, name: 'Glow-moss', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'glow_moss', count: 1 }], fastSkill: 'farming', placeable: false, emit: 4 },
   // Goldleaf (2026-09-17): canon's base herb, the humblest weed — picked anywhere, drops itself.
   { noSlab: true, material: MAT.GOLDLEAF, name: 'Goldleaf', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'goldleaf', count: 1 }], fastSkill: 'farming', placeable: false },
+  // Wakereed (2026-09-18, RULED): the plant that stands IN the current — forage-only (no bed can
+  // make a wake), picked from the shallow shoulder of a running river. Drops the stalk itself.
+  { noSlab: true, material: MAT.WAKEREED, name: 'Wakereed', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wakereed', count: 1 }], fastSkill: 'farming', placeable: false },
 
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — a ground grows a PLANT ────────────────────────────
   // RULED (/magii): the grass-tuft ruling and these were never in tension. Canon had already drawn

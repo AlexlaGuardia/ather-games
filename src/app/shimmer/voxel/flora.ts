@@ -25,6 +25,7 @@ import { zoneAt } from './zones'
 import { floraCharacterAt } from './character'
 import { mistAt } from './mist'
 import { MAT, LAND_DRESS } from './depth'
+import { riverCarve, riverFlowAt, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { scatterAt, scatterCharacterAt, SCATTER } from './scatter'
 import { CROP_DEFS } from './crops'
 
@@ -75,6 +76,11 @@ export const FLORA = {
   // card that EMITS: its material glows, and the block behind it carries a light channel.
   PUFF: 12,
   MOSS: 13,
+  // ── ★ THE REED (2026-09-18, RULED: WAKEREED) — the card family's one plant that stands in WATER.
+  // A tall thin card rooted on the river's surface plane (its stalk runs on under the sheet), the
+  // river lean at full strength with a slack cycle instead of the bank's steady tug, and a WAKE:
+  // a flat decal on the water downstream of the stalk. One material (`MAT.WAKEREED`), one kind.
+  REED: 14,
 } as const
 
 /** The three renderer kinds a wildflower cell can draw as. */
@@ -316,10 +322,43 @@ export const FORAGE_OF_GROUND: Readonly<Record<string, readonly number[]>> = {
 export const GOLDLEAF_SCALE = 36
 export const GOLDLEAF_EDGE = 0.56
 export const GOLDLEAF_DENSITY = 0.035
-/** The draw kind a forage material takes — the puff a solid, the moss a pad, goldleaf the herb card. */
-export const forageKind = (m: number): number => m === MAT.GLOW_MOSS ? FLORA.MOSS : m === MAT.GOLDLEAF ? FLORA.HERB : FLORA.PUFF
+/** The draw kind a forage material takes — the puff a solid, the moss a pad, goldleaf the herb card, the reed its own. */
+export const forageKind = (m: number): number =>
+  m === MAT.GLOW_MOSS ? FLORA.MOSS : m === MAT.GOLDLEAF ? FLORA.HERB : m === MAT.WAKEREED ? FLORA.REED : FLORA.PUFF
+/**
+ * ── ★ THE WATER FORAGE — WAKEREED (2026-09-18, RULED) ────────────────────────────────────────
+ * `game/shimmer-geography.md` › *The plant that stands in the current*: *"a hollow stalk on a deep
+ * Network root, reed-tall, standing in ones and threes on the shallow shoulder, combed flat by the
+ * flow and standing up again when it slacks. Where it stands the water wears a wake."* Never
+ * mid-channel, never a still pond — *"a still pond has no wake, and the Wakereed without its wake
+ * is just a stalk."* Common tier, every running river.
+ *
+ * ⚠ NOT IN `FORAGE_OF_GROUND` AND NOT ASKED BY `forageAt`. Those are the DRY forage, resolved at
+ * h+1 on a ground; this plant's ground is the water itself, so it is asked by the generator on the
+ * cell ABOVE the surface water (`column.ts › generatedAt`, the h+2 branch) after the cells have
+ * said "one water cell deep, air above". This field answers only the river's half of the question:
+ * is this the shallow shoulder (`riverCarve === 1`), does the water MOVE here, and did the roll
+ * land. The depth-by-cells half stays in the generator, where `h` and `materialAt` live.
+ *
+ * "Ones and threes": a cheap per-cell roll first (most shoulder cells fail it, and pay one field
+ * read), then a fine patch field so the survivors clump into small stands rather than a
+ * checkerboard — the puff's shape at a smaller scale. `riverFlowAt` is the expensive read (four
+ * terrain evaluations) and is asked LAST, only of cells the roll and the patch already chose.
+ */
+export const WAKEREED_DENSITY = 0.28
+export const WAKEREED_SCALE = 7
+export const WAKEREED_EDGE = 0.5
+export function wakereedAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): number {
+  if (riverCarve(x, z, seed, cfg) !== 1) return 0
+  if (hash01(x, z, seed ^ 0x3ee0) >= WAKEREED_DENSITY) return 0
+  if (value2(x / WAKEREED_SCALE, z / WAKEREED_SCALE, seed ^ 0x5a4e) <= WAKEREED_EDGE) return 0
+  const [fx, fz] = riverFlowAt(x, z, seed, cfg)
+  return fx !== 0 || fz !== 0 ? MAT.WAKEREED : 0
+}
+/** The forage that stands in water — resolved at h+2 by the generator, not on a ground. */
+export const WATER_FORAGE_MATS: ReadonlyArray<number> = [MAT.WAKEREED]
 /** The distinct forage materials — what `FLORA_MATERIALS` and the kind count are sized by. */
-export const FORAGE_MATS: ReadonlyArray<number> = [...new Set(Object.values(FORAGE_OF_GROUND).flat())]
+export const FORAGE_MATS: ReadonlyArray<number> = [...new Set([...Object.values(FORAGE_OF_GROUND).flat(), ...WATER_FORAGE_MATS])]
 export const PUFF_SCALE = 70
 export const PUFF_EDGE = 0.78
 export const PUFF_DENSITY = 0.09
@@ -752,7 +791,7 @@ export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
   ...Object.values(HERB_OF_GROUND),              // FLORA.HERB — derived, one per ruled ground
   ...Object.values(CROP_OF_GROUND),              // FLORA.CROP — derived, one per crop's ruled ground
   ...FRUIT_MATS,                                 // FLORA.FRUIT — derived, one per fruit (2026-09-15)
-  ...FORAGE_MATS,                                // FLORA.PUFF / MOSS — derived, one each (2026-09-16)
+  ...FORAGE_MATS,                                // FLORA.PUFF / MOSS / HERB(goldleaf) / REED — derived, one per forage material (2026-09-16)
   MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,    // SCATTER.ROCK / DEADFALL / MUSHROOM — solid
 ])
 
@@ -775,8 +814,11 @@ export const FLORA_DRAW_ONLY_KINDS = 2                // BLOOM_MAT, BLOOM_BUSH �
 // is the third forage material and draws on the HERB card (`forageKind`), so PUFF and MOSS are
 // no longer "one material each" — the forage is `FORAGE_MATS.length` materials on two kinds. This
 // guard went red the moment it was added (21 vs 22), which is the event it exists to announce.
+// ⚠ AND THE REED IS THE SAME SHAPE THE OTHER WAY ROUND (2026-09-18): a kind of its own drawn from
+// ONE forage material (`MAT.WAKEREED`, in `FORAGE_MATS` via `WATER_FORAGE_MATS`), so it is excluded
+// from the enum count like PUFF and MOSS and counted once through the forage.
 export const FLORA_KIND_COUNT =
-  (Object.keys(FLORA).length - 6)            // every FLORA kind except NONE, HERB, CROP, FRUIT, PUFF and MOSS...
+  (Object.keys(FLORA).length - 7)            // every FLORA kind except NONE, HERB, CROP, FRUIT, PUFF, MOSS and REED...
   - FLORA_DRAW_ONLY_KINDS                    // ...minus the forms that share FLOWER's material
   + Object.keys(HERB_OF_GROUND).length       // ...HERB expands to one material per ruled ground
   + Object.keys(CROP_OF_GROUND).length       // ...CROP to one per crop's ground (2026-08-22)

@@ -25,7 +25,7 @@ import { saveKey } from '@/lib/save-slot'
 import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel, WILDS_BUBBLE, wildsSwallows } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
-import { columnHeight, holdPadLevel } from '../voxel/height'
+import { columnHeight, holdPadLevel, waterTableAt } from '../voxel/height'
 import { flatFightSpot } from '../voxel/footing'
 import { slumpMask } from '../voxel/slump'
 import { holdGenPiecesForCol, type GenPiece } from '../voxel/holds'
@@ -4494,6 +4494,19 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     const ground = voxel(fx, y, fz)
     const m = voxel(fx, y + 1, fz)
     if (!isPlant(m)) return null
+    // ── ★ THE REED'S GROUND IS THE WATER (2026-09-18, RULED: WAKEREED) ─────────────────────
+    // The walk above climbs through the surface WATER cell (not clear) and stops under the reed
+    // voxel at h+2, so `ground` is WATER here — the one plant for which that is right, and the
+    // TURF gate below would refuse it. Its reported `y` is the SHEET'S PLANE minus one, not the
+    // cell: the sheet sits on the water table inside the block (column.ts clamps each corner
+    // into [hi−1, hi]), so the root goes where the water actually is, not a cell top up to a
+    // block above it. Kept strictly inside (y, y+1] so `ceil(y) + 1` is still the reed's cell,
+    // which `markLookedAt` relies on.
+    if (m === MAT.WAKEREED) {
+      if (ground !== MAT.WATER) return null
+      const surface = Math.min(Math.max(waterTableAt(fx + 0.5, fz + 0.5, SEED), y + 1e-3), y + 1)
+      return { y: surface - 1, kind: FLORA.REED, variant: plantVariant(fx, fz, SEED, FLORA.REED), mat: m, ground, alongX: false }
+    }
     // ⚠ SCATTER IS EXEMPT FROM THE TURF GATE, AND THIS IS THE PICKING HALF OF A DECISION THE
     // GENERATOR ALREADY MADE (slice ③). `TURF` answers "can a plant GROW here"; a stone and a
     // fallen branch LIE on whatever is beneath them, and a mushroom comes up on wet mud — which
@@ -6153,6 +6166,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     w.__flora = () => ({
       demand: floraDemand,
       lean: leanLive,
+      reedLean: (v: number) => flora.setReedLean(v),
       pools: flora.group.children.map((o, i) => [i, (o as THREE.InstancedMesh).count, o.visible]),
     })
     w.__renderlight = () => {

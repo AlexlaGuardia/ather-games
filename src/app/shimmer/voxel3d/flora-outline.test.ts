@@ -26,7 +26,7 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, msg: string) => { if (c) pass++; else fails.push(msg) }
 
-const CARDS = [FLORA.TUFT, FLORA.TALL, FLORA.FLOWER, FLORA.HERB, FLORA.CROP]
+const CARDS = [FLORA.TUFT, FLORA.TALL, FLORA.FLOWER, FLORA.HERB, FLORA.CROP, FLORA.REED]
 const SOLIDS = [FLORA.ROCK, FLORA.DEADFALL, FLORA.MUSHROOM]
 const ALL = [...CARDS, ...SOLIDS]
 
@@ -69,8 +69,8 @@ const meshes = () => r.group.children.filter(c =>
     const lit = meshes().filter(m => m.count > 0)
     ok(lit.length > 0, `kind ${kind}: nothing was marked`)
     // Two-part kinds (flower/herb/crop stems+heads, mushroom stem+cap) light both parts.
-    // A shadow part has no border on purpose (see FloraPart.shadow).
-    const expected = kind === FLORA.MUSHROOM ? 2 : (FLORA_PARTS[kind]?.filter(p => !p.shadow).length ?? 1)
+    // A shadow part has no border on purpose (see FloraPart.shadow); the reed's wake is water.
+    const expected = kind === FLORA.MUSHROOM ? 2 : (FLORA_PARTS[kind]?.filter(p => !p.shadow && !p.wake).length ?? 1)
     ok(lit.length === expected,
       `kind ${kind}: ${lit.length} outline mesh(es) lit, expected ${expected}`)
   }
