@@ -416,6 +416,8 @@ export interface MeshAttrs {
    * every block face to serve it would be the whole world subsidising the rivers.
    */
   depth?: Float32Array
+  /** Water only, like `depth`: per-vertex river flow (x, z), two floats per vertex (2026-09-18). */
+  flow?: Float32Array
   indices: Uint32Array
   quads: number
 }
@@ -425,7 +427,8 @@ export const attrBuffers = (a: MeshAttrs): ArrayBuffer[] =>
   [a.positions.buffer, a.normals.buffer, a.colors.buffer, a.ao.buffer, a.emissive.buffer,
    a.layers.buffer, a.indices.buffer,
    ...(a.uv ? [a.uv.buffer] : []),
-   ...(a.depth ? [a.depth.buffer] : [])] as ArrayBuffer[]
+   ...(a.depth ? [a.depth.buffer] : []),
+   ...(a.flow ? [a.flow.buffer] : [])] as ArrayBuffer[]
 
 /**
  * ── ★ WATER IS ITS OWN DRAW, AND THIS IS WHERE IT SPLITS (2026-08-07 late) ─────────────────────
@@ -468,6 +471,7 @@ export function buildAttrsSplit(
     const ao = new Uint8Array(quads * 4)
     // Only the water half ever reads this, so only the water half allocates it.
     const waterDepth = want === 'water' ? new Float32Array(quads * 4) : EMPTY_DEPTH
+    const waterFlow = want === 'water' ? new Float32Array(quads * 8) : EMPTY_DEPTH
     const indices = new Uint32Array(quads * 6)
     let outQ = 0
     for (let q = 0; q < mesh.quads; q++) {
@@ -485,13 +489,14 @@ export function buildAttrsSplit(
       // only place that knows which output quad an input quad became, so anything keyed by quad
       // index has to be remapped here or it silently reads another quad's value.
       if (want === 'water' && mesh.waterDepth) waterDepth.set(mesh.waterDepth.subarray(q * 4, q * 4 + 4), outQ * 4)
+      if (want === 'water' && mesh.waterFlow) waterFlow.set(mesh.waterFlow.subarray(q * 8, q * 8 + 8), outQ * 8)
       // Remap the quad's OWN indices rather than assuming a triangulation: winding is what makes a
       // face face outward, and the mesher owns that decision, not this split.
       for (let i = 0; i < 6; i++) indices[outQ * 6 + i] = mesh.indices[q * 6 + i] - q * 4 + outQ * 4
       outQ++
     }
     return buildAttrs(
-      { positions, normals, materials, ao, waterDepth, indices, quads, faces: quads },
+      { positions, normals, materials, ao, waterDepth, waterFlow, indices, quads, faces: quads },
       want === 'leaf', want === 'water')
   }
   const solidQuads = mesh.quads - waterQuads - leafQuads - glassQuads
@@ -536,13 +541,14 @@ export interface AttrPart {
 export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
   if (parts.length === 0) return null
 
-  let verts = 0, idxLen = 0, quads = 0, anyUV = false, anyDepth = false
+  let verts = 0, idxLen = 0, quads = 0, anyUV = false, anyDepth = false, anyFlow = false
   for (const p of parts) {
     verts += p.attrs.positions.length / 3
     idxLen += p.attrs.indices.length
     quads += p.attrs.quads
     if (p.attrs.uv) anyUV = true
     if (p.attrs.depth) anyDepth = true
+    if (p.attrs.flow) anyFlow = true
   }
 
   const positions = new Float32Array(verts * 3)
@@ -554,6 +560,8 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
   const indices = new Uint32Array(idxLen)
   const uv = anyUV ? new Float32Array(verts * 2) : undefined
   const depth = anyDepth ? new Float32Array(verts) : undefined
+  // Zero IS the right fill for a part without flow: still water, the look before the field existed.
+  const flow = anyFlow ? new Float32Array(verts * 2) : undefined
 
   let v = 0, i = 0
   for (const p of parts) {
@@ -576,6 +584,7 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
     // A mixed list means some sections were meshed without a water surface, and the honest result
     // for those is the previous look rather than a river you can see straight through.
     if (depth) { if (a.depth) depth.set(a.depth, v); else depth.fill(-1, v, v + n) }
+    if (flow && a.flow) flow.set(a.flow, v * 2)
     // ⚠ UV IS ALL-OR-NOTHING PER PASS BY CONSTRUCTION — only the leaf partition asks for it, and it
     // asks for every part. If a mixed list ever arrives anyway, derive the missing corners rather
     // than zero-filling: zeros would pin a whole section to one texel and read as a smear, which is
@@ -594,7 +603,7 @@ export function concatAttrs(parts: AttrPart[]): MeshAttrs | null {
     i += a.indices.length
   }
 
-  return { positions, normals, colors, ao, emissive, layers, uv, depth, indices, quads }
+  return { positions, normals, colors, ao, emissive, layers, uv, depth, flow, indices, quads }
 }
 
 /**
@@ -664,6 +673,7 @@ export function buildAttrs(mesh: MeshResult, withUV = false, withDepth = false):
     layers,
     uv,
     depth: withDepth && mesh.waterDepth ? mesh.waterDepth.slice() : undefined,
+    flow: withDepth && mesh.waterFlow ? mesh.waterFlow.slice() : undefined,
     indices: mesh.indices.slice(),
     quads: mesh.quads,
   }

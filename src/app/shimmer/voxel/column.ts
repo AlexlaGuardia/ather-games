@@ -26,7 +26,7 @@
 // dependency gate, and it must not become one.**
 
 import { Section, AIR } from './section'
-import { columnHeight, waterTableAt, type HeightConfig, DEFAULT_HEIGHT } from './height'
+import { columnHeight, waterTableAt, riverCarve, riverFlowAt, type HeightConfig, DEFAULT_HEIGHT } from './height'
 import { materialAt, MAT, isPlant, isHalfMat, HALF_BIT, type DepthConfig, DEFAULT_DEPTH } from './depth'
 import {
   bubbleMaterialAt, distFromAxis, DEFAULT_BUBBLE, maxShellRadius, maxBubbleReach, shellCapTop, type BubbleConfig,
@@ -841,6 +841,11 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefi
   // written ten lines above the adoption code, and this is its second costume.
   const corners = new Map<number, number>()
   if (seed === undefined) return { tops, corners, depths }
+  // The flow, on the same corners and with the same seed dependency: see `riverFlowAt`. Gated
+  // behind `riverCarve > 0` per corner so a pond, a pool or the sea pays one field read and no
+  // table samples — the same gate every water-table caller stands behind.
+  const flowX = new Map<number, number>()
+  const flowZ = new Map<number, number>()
   // ── ★★ THE CORNER IS THE TABLE, CLAMPED INTO THE BLOCK THE WATER IS ACTUALLY IN (2026-09-14) ──
   // Alex found a pond floating ~17 blocks above its bed near (-3552, 224..240). The cells were
   // right: `waterSurfaceAt` drops a body to its lowest shore bank when the table sits above the
@@ -876,10 +881,14 @@ function buildWaterSurface(col: Column, neigh: Neighbours, seed: number | undefi
         let v = waterTableAt(col.wx + cx, col.wz + cz, seed, cfg)
         if (Number.isFinite(hi)) v = Math.min(Math.max(v, hi - 1), hi)
         corners.set(ck, v)
+        if (riverCarve(col.wx + cx, col.wz + cz, seed, cfg) > 0) {
+          const [fx, fz] = riverFlowAt(col.wx + cx, col.wz + cz, seed, cfg)
+          if (fx !== 0 || fz !== 0) { flowX.set(ck, fx); flowZ.set(ck, fz) }
+        }
       }
     }
   }
-  return { tops, corners, depths }
+  return { tops, corners, depths, flowX, flowZ }
 }
 
 export function meshColumn(
@@ -1000,6 +1009,7 @@ export function meshColumn(
         // overwritten by the next section. A field added upstream and forgotten here is invisible
         // — the mesher's own tests pass because they read the scratch directly.
         waterDepth: mesh.waterDepth.slice(),
+        waterFlow: mesh.waterFlow.slice(),
         indices: mesh.indices.slice(),
         quads: mesh.quads,
         faces: mesh.faces,

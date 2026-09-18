@@ -97,7 +97,9 @@ ok(!lightApplyHere('c', 'a', 'w').includes('shimmerLight(c'),
     ['pieces', 'piece-mesh.ts', 'cartoonStackGlsl(', 'CARTOON_DECL_GLSL'],
     ['the cartoon stack', 'cartoon-glsl.ts', "lightApply('finalCol'", 'LIGHT_DECL_GLSL'],
     ['water', 'mesh-bridge.ts', "lightApply('waterCol'", 'LIGHT_DECL_GLSL'],
-    ['leaves', 'VoxelWorld.tsx', "lightApplyHere('leafCol'", 'LIGHT_DECL_GLSL'],
+    // ⚠ The leaf program left VoxelWorld for `tex/leaf-material.ts` on 09-17 (leaves per wood) and
+    // this row kept pointing at the host for a day: three reds that were the guard, not the leaves.
+    ['leaves', join('tex', 'leaf-material.ts'), "lightApplyHere('leafCol'", 'LIGHT_DECL_GLSL'],
   ]
   for (const [what, file, call, decl] of surfaces) {
     let raw = ''
@@ -131,8 +133,13 @@ ok(!lightApplyHere('c', 'a', 'w').includes('shimmerLight(c'),
     ok(!!args && args.includes('lightUniforms'),
       `§4 ★★ the host passes its one uniform set to ${what} (args: ${args?.trim() ?? 'NOT FOUND'})`)
   }
-  ok(/Object\.assign\(shader\.uniforms, lightUniforms\)/.test(host),
-    '§4 ★ the leaf program is given them too — it is built inline rather than by a factory')
+  // The leaf factory takes the same set: the host passes `lightUniforms` in, the factory assigns it.
+  const leafSrc = readFileSync(join(here, 'tex', 'leaf-material.ts'), 'utf8')
+  ok(/Object\.assign\(shader\.uniforms, lightUniforms\)/.test(leafSrc),
+    '§4 ★ the leaf program is given them too — inside its factory (tex/leaf-material.ts)')
+  const leafArgs = argsOf(host.slice(host.indexOf('useMemo')), 'createLeafMaterial(')
+  ok(!!leafArgs && leafArgs.includes('lightUniforms'),
+    `§4 ★★ the host passes its one uniform set to leaves (args: ${leafArgs?.trim() ?? 'NOT FOUND'})`)
 }
 
 // ── §5 the lit window (2026-09-14) ─────────────────────────────────────────────────────────────

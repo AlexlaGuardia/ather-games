@@ -20,6 +20,7 @@
 //   WORLD_KEYS='KeyM; Escape'                                 — press these keys after the clicks (M = the map)
 //   WORLD_NAV_TIMEOUT=240000                                  — ms for each navigation (default 60000; a loaded box or a cold devwin needs more)
 //   WORLD_PRE_WAIT=10000                                      — ms to let frames draw after WORLD_PRE_EVAL (default 1500; ~1 fps under software GL)
+//   WORLD_SECOND=4000                                         — a second frame of the same page N ms later, saved as <out>.2.png (motion needs two stills)
 //
 // It prints the HUD counter line after the shot. `mesh` is geometry BUILT, `draws` is what survived
 // frustum culling this frame — the two are far apart and only the second is the frame's cost.
@@ -368,6 +369,16 @@ const OWNER = process.env.WORLD_OWNER === '1'
   }
 
   await page.screenshot({ path: OUT })
+  // ── WORLD_SECOND=<ms> — a second frame of the SAME page, that long after the first, saved beside
+  // it as `<out>.2.png`. A still cannot show motion; two stills can. Added 2026-09-18 to judge the
+  // river's current: diff the water between the frames and a scroll shows as a shift, a static
+  // texture as nothing. Under software GL the clock still runs at wall speed, so the shift is real.
+  if (process.env.WORLD_SECOND) {
+    await new Promise(r => setTimeout(r, Number(process.env.WORLD_SECOND)))
+    const out2 = OUT.replace(/\.png$/, '') + '.2.png'
+    await page.screenshot({ path: out2 })
+    console.log(`shot → ${out2}  (second frame, +${process.env.WORLD_SECOND}ms)`)
+  }
   const canvas = await page.evaluate(() => {
     const c = document.querySelector('canvas')
     return c ? { w: c.width, h: c.height } : null

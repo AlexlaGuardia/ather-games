@@ -68,6 +68,13 @@ export interface MeshResult {
    * `cornerDepth`, and `Neighbours`' diagonals for what "exactly" costs.
    */
   waterDepth: Float32Array
+  /**
+   * Per-vertex river flow (x, z), two floats per vertex, zero on every non-water vertex and on
+   * every water vertex the surface had no flow for. Rides the same way `waterDepth` does and for
+   * the same reason: one merged quad can span a bend, and four corner vectors interpolate across it
+   * for free while meeting a neighbour's exactly. Consumed by the water shader alone (2026-09-18).
+   */
+  waterFlow: Float32Array
   /** 6 indices per quad (two triangles). */
   indices: Uint32Array
   quads: number
@@ -172,6 +179,20 @@ export interface WaterSurface {
    * noise field knows about.
    */
   depths: Map<number, number>
+  /**
+   * Lattice CORNER `(x, z)` → the river's flow there, DOWNSTREAM, as two maps (x and z parts)
+   * keyed like `corners`. Magnitude is riverness: 0 on still water, 1 mid-channel. See
+   * `height.ts › riverFlowAt` for how a direction is read off the field and the table.
+   *
+   * ★ OPTIONAL, AND ABSENCE IS "STILL", NOT AN ERROR. Every fixture in `greedy.test.ts` and every
+   * `WaterSurface` built without a seed (the live path's fail-soft branch) carries none, and the
+   * renderer's still-water drift is exactly what water looked like before this existed — so a
+   * missed hand-off degrades to the old look, the same contract `depths` has with its -1.
+   * Sampled by position, like `corners`, so two columns sharing a corner agree exactly and the
+   * flow never seams at a chunk edge (2026-09-18).
+   */
+  flowX?: Map<number, number>
+  flowZ?: Map<number, number>
 }
 
 /** Key for either map. Accepts the one-cell ring, so -1 and S are legal on both axes. */
@@ -200,6 +221,8 @@ export interface MeshScratch {
   ao: Uint8Array
   /** Per-vertex water depth, written only where a water quad is emitted. See `MeshResult`. */
   waterDepth: Float32Array
+  /** Per-vertex water flow (x, z), two per vertex. See `MeshResult`. */
+  waterFlow: Float32Array
   /**
    * ── ★ TWO CACHED SLICES, AND THEY MADE AO CHEAPER THAN NOT HAVING IT ────────────────────────
    * A plane sits between two slices of cells. The sweep used to `sample()` both sides of every cell
@@ -241,6 +264,7 @@ export function createMeshScratch(size: number): MeshScratch {
     mask: new Int32Array(size * size),
     ao: new Uint8Array(maxQuads * 4),
     waterDepth: new Float32Array(maxQuads * 4),
+    waterFlow: new Float32Array(maxQuads * 8),
     sliceMatA: new Int32Array((size + 2) * (size + 2)),
     sliceMatB: new Int32Array((size + 2) * (size + 2)),
     sliceSolA: new Uint8Array((size + 2) * (size + 2)),
@@ -406,7 +430,7 @@ export function greedyMesh(
 ): MeshResult {
   const S = sec.size
   const sc = scratch && scratch.size === S ? scratch : createMeshScratch(S)
-  const { positions, normals, materials, indices, mask, ao, waterDepth } = sc
+  const { positions, normals, materials, indices, mask, ao, waterDepth, waterFlow } = sc
   // `let` because the two slices SWAP each plane — see MeshScratch.
   let sliceMatA = sc.sliceMatA, sliceMatB = sc.sliceMatB
   let sliceSolA = sc.sliceSolA, sliceSolB = sc.sliceSolB
@@ -491,6 +515,28 @@ export function greedyMesh(
       }
     }
     return count === 0 ? 0 : sum / count
+  }
+
+  /**
+   * The flow at one lattice corner, from the surface's maps — `(0, 0)` when the surface carries
+   * none. A corner is a lattice position, so unlike `cornerDepth` there is nothing to average: the
+   * value was sampled AT the corner, by position, and is already the same for every quad touching it.
+   */
+  const hasFlow = waterTops !== null && waterTops.flowX !== undefined && waterTops.flowZ !== undefined
+  const cornerFlowX = (cx: number, cz: number): number => waterTops!.flowX!.get(waterTopKey(cx, cz, S)) ?? 0
+  const cornerFlowZ = (cx: number, cz: number): number => waterTops!.flowZ!.get(waterTopKey(cx, cz, S)) ?? 0
+
+  /**
+   * Zero the water channels of a NON-water quad. The scratch is reused for every section of every
+   * column forever, and the lip / half-cell / cross emitters below never touched these slots — so a
+   * plant quad meshed after a river carried that river's depth and flow in its unread lanes. Unread
+   * today (only the water partition reads them), and cleared anyway: `river-flow.test.ts` asserts
+   * every non-water vertex is still, so the day something reads them it reads zeros, not a river.
+   */
+  const clearWaterLanes = (q: number): void => {
+    const wd = q * 4, wf = q * 8
+    waterDepth[wd] = 0; waterDepth[wd + 1] = 0; waterDepth[wd + 2] = 0; waterDepth[wd + 3] = 0
+    for (let k = 0; k < 8; k++) waterFlow[wf + k] = 0
   }
 
   mask.fill(0)
@@ -834,13 +880,25 @@ export function greedyMesh(
           // Same reasoning that split `tops` from `corners` a day earlier, and the same lesson: a
           // dependency you can miss must fail toward the previous behaviour.
           const wd = quads * 4
+          const wf = quads * 8
           if (mat === MAT.WATER) {
             if (!hasDepths) { waterDepth[wd] = -1; waterDepth[wd + 1] = -1; waterDepth[wd + 2] = -1; waterDepth[wd + 3] = -1 }
             else for (let k = 0; k < 4; k++) waterDepth[wd + k] = cornerDepth(positions[p + k * 3], positions[p + k * 3 + 2])
+            // The flow rides only on the SHEET (the +y face): a rim face is the water's edge
+            // against ground and scrolls nothing. Same fail-soft as depth: no maps, no flow.
+            if (hasFlow && d === 1 && !back) {
+              for (let k = 0; k < 4; k++) {
+                waterFlow[wf + k * 2] = cornerFlowX(positions[p + k * 3], positions[p + k * 3 + 2])
+                waterFlow[wf + k * 2 + 1] = cornerFlowZ(positions[p + k * 3], positions[p + k * 3 + 2])
+              }
+            } else {
+              for (let k = 0; k < 8; k++) waterFlow[wf + k] = 0
+            }
           } else {
             // Written every time rather than cleared once: the scratch is reused for every section
             // of every column forever, so an unwritten slot holds another column's water.
             waterDepth[wd] = 0; waterDepth[wd + 1] = 0; waterDepth[wd + 2] = 0; waterDepth[wd + 3] = 0
+            for (let k = 0; k < 8; k++) waterFlow[wf + k] = 0
           }
 
           const nx = d === 0 ? (back ? -1 : 1) : 0
@@ -949,7 +1007,9 @@ export function greedyMesh(
       const ii = quads * 6
       indices[ii + 0] = base; indices[ii + 1] = base + 1; indices[ii + 2] = base + 2
       indices[ii + 3] = base; indices[ii + 4] = base + 2; indices[ii + 5] = base + 3
+      clearWaterLanes(quads)
       quads++
+
       faces++
     }
     // Winding rule, the same one the sweep obeys: cross(u, v) must equal the face normal.
@@ -1028,7 +1088,9 @@ export function greedyMesh(
       const ii = quads * 6
       indices[ii + 0] = base; indices[ii + 1] = base + 1; indices[ii + 2] = base + 2
       indices[ii + 3] = base; indices[ii + 4] = base + 2; indices[ii + 5] = base + 3
+      clearWaterLanes(quads)
       quads++
+
       faces++
     }
     let full = false
@@ -1247,7 +1309,9 @@ export function greedyMesh(
             const base = quads * 4, ii = quads * 6
             indices[ii + 0] = base; indices[ii + 1] = base + 1; indices[ii + 2] = base + 2
             indices[ii + 3] = base; indices[ii + 4] = base + 2; indices[ii + 5] = base + 3
+            clearWaterLanes(quads)
             quads++
+
             faces++
           }
         }
@@ -1261,6 +1325,7 @@ export function greedyMesh(
     materials: materials.subarray(0, quads * 4),
     ao: ao.subarray(0, quads * 4),
     waterDepth: waterDepth.subarray(0, quads * 4),
+    waterFlow: waterFlow.subarray(0, quads * 8),
     indices: indices.subarray(0, quads * 6),
     quads,
     faces,

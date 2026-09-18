@@ -464,6 +464,48 @@ export function waterLevelAt(x: number, z: number, seed: number, cfg: HeightConf
 }
 
 /**
+ * ── ★★ WHICH WAY THE RIVER RUNS (2026-09-18, Alex: "the way it flows") ─────────────────────────
+ * The flow at (x, z): a vector in the xz plane, DOWNSTREAM along the channel, with magnitude the
+ * riverness there (0 on dry land and on still water; 1 mid-channel). Two readings the world
+ * already holds, combined:
+ *
+ *   1. THE CHANNEL'S LINE is the river field's level-set — the channel is where |w| is small, so
+ *      its tangent is perpendicular to ∇w. Central differences at one block; the field is smooth
+ *      at that scale (riverScale 650), so the tangent is stable and the same on both banks.
+ *   2. WHICH WAY IS DOWN is the WATER TABLE: `waterTableAt` is the sloped sheet the water is drawn
+ *      on, so its fall along the tangent is, by definition, the direction the surface descends.
+ *      Read ±FLOW_REACH blocks along the tangent, not at the cell — the table is a 96-block
+ *      lattice bilerp and at one block the difference is noise-sized.
+ *
+ * ★ PURE IN POSITION, like `waterTableAt`, and for the same reason: the mesher samples it at
+ * lattice CORNERS shared by two columns, and two columns must agree exactly or the flow direction
+ * seams at every chunk edge. Nothing here reads a neighbourhood of cells.
+ *
+ * ⚠ ZERO WHERE THE TABLE IS FLAT ALONG THE CHANNEL (a lake a river widens into, a basin): still
+ * water is the honest answer there and the renderer keeps its two-heading drift, which is what
+ * still water looked like before this existed. Sea and hot-spring pools are zero by the riverness
+ * gate. Returns a tuple, allocated — callers on a hot path gate it behind `riverCarve > 0`, which
+ * kills ~97% of columns with one field read, exactly as the water table's callers do.
+ */
+export const FLOW_REACH = 8
+export function riverFlowAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): [number, number] {
+  const rn = riverness(riverField(x, z, seed, cfg))
+  if (rn < SHORE_RN) return [0, 0]
+  const gx = riverField(x + 1, z, seed, cfg) - riverField(x - 1, z, seed, cfg)
+  const gz = riverField(x, z + 1, seed, cfg) - riverField(x, z - 1, seed, cfg)
+  const len = Math.hypot(gx, gz)
+  if (len < 1e-9) return [0, 0]
+  // The tangent: ∇w turned a quarter. Which quarter is settled by the table below.
+  let tx = -gz / len, tz = gx / len
+  const ahead = waterTableAt(x + tx * FLOW_REACH, z + tz * FLOW_REACH, seed, cfg)
+  const behind = waterTableAt(x - tx * FLOW_REACH, z - tz * FLOW_REACH, seed, cfg)
+  const fall = behind - ahead
+  if (Math.abs(fall) < 1e-6) return [0, 0]
+  if (fall < 0) { tx = -tx; tz = -tz }
+  return [tx * rn, tz * rn]
+}
+
+/**
  * ── ★ THE LAND GENERATES AROUND THE WATER (2026-08-07 late — the third water model, and the one
  * that holds) ──────────────────────────────────────────────────────────────────────────────────
  * History, because each model failed for a reason worth keeping:

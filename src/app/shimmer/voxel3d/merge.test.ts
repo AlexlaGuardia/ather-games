@@ -43,6 +43,8 @@ function quadAt(x: number, y: number, z: number, mat: number): MeshResult {
     // No water surface behind this fixture, so the no-data sentinel — which is what a real mesh
     // carries in the same situation, and what keeps the flat opacity rather than clear water.
     waterDepth: new Float32Array([-1, -1, -1, -1]),
+    // And no flow field: zero is still water, the honest fill (see greedy.ts › WaterSurface.flowX).
+    waterFlow: new Float32Array(8),
     indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
     quads: 1,
     faces: 1,

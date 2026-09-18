@@ -32,6 +32,7 @@ export function toGeometry(a: MeshAttrs): THREE.BufferGeometry {
   if (a.uv) g.setAttribute('uv', new THREE.BufferAttribute(a.uv, 2))
   // Water only — depth attenuation. Absent on the solid and leaf passes by design (see attrs.ts).
   if (a.depth) g.setAttribute('aDepth', new THREE.BufferAttribute(a.depth, 1))
+  if (a.flow) g.setAttribute('aFlow', new THREE.BufferAttribute(a.flow, 2))
   g.setIndex(new THREE.BufferAttribute(a.indices, 1))
   g.computeBoundingSphere()
   return g
@@ -105,7 +106,29 @@ export function createVoxelMaterial(light: LightUniforms = createLightUniforms()
 export interface WaterMaterial extends THREE.Material {
   /** Call once per frame with the clock — drives ripple and scroll. Safe before compile. */
   tick: (seconds: number) => void
+  /** The flow dials from a running page (`window.__water`): speed in blocks/s at full riverness,
+   *  and the travelling wave's height in blocks. Safe before compile. */
+  setFlow: (speed: number, wave: number) => void
+  getFlow: () => { speed: number; wave: number }
 }
+
+/**
+ * ── ★ THE RIVER RUNS DOWNSTREAM (2026-09-18, Alex: "the way it flows") ─────────────────────────
+ * Until this the sheet scrolled on ONE fixed heading everywhere — the two-sample drift below,
+ * which reads as water shimmering but not as water GOING anywhere: every river in the world slid
+ * toward the same compass point, ponds included. `aFlow` is the per-vertex flow the mesher reads
+ * off `riverFlowAt` (channel tangent, signed by the table's fall, magnitude riverness), so the
+ * scroll follows the channel round its bends and slows to the old drift at the banks and on still
+ * water, where the vector is zero. Two speeds, not one: the second sample scrolls at 0.55× on a
+ * slight offset, because one texture on one heading is a conveyor belt and two are a current.
+ *
+ * ★ THE NUMBER IS IN BLOCKS PER SECOND AND SMALL ON PURPOSE. The tile repeats every block, so a
+ * scroll much faster than ~0.5 tiles/s strobes rather than flows. 0.32 at mid-channel; the banks
+ * taper with riverness. A dial (`window.__water.flow(v)`) so Alex can call it from the bank.
+ */
+export const WATER_FLOW_SPEED = 0.32
+/** Height of the travelling wave along the flow, in blocks — under the standing ripple's 0.05. */
+export const WATER_FLOW_WAVE = 0.03
 
 /**
  * ── ★★ DEPTH ATTENUATION: WHERE THE NUMBERS COME FROM (2026-08-21) ────────────────────────────
@@ -142,6 +165,25 @@ const WATER_BASE_ALPHA = 0.78
 /** Solves `1 - exp(-k*3) = 0.78` — the median depth keeps the opacity that shipped before this. */
 const WATER_ABSORB = 0.505
 
+// ── `window.__water` — the flow dials from a running page, the `__tex` shape ─────────────────
+// `__water.flow(0.5)` sets the scroll speed at mid-channel (blocks/s), `__water.wave(0.06)` the
+// travelling crest's height, `__water.get()` reads both. Alex judges the current from the bank
+// without a rebuild per value. Fans out to every water material alive (the world's, and the
+// devwin's second instance after an HMR).
+const WATER_DIALS = new Set<WaterMaterial>()
+function registerWaterDial(m: WaterMaterial): void {
+  WATER_DIALS.add(m)
+  if (typeof window === 'undefined') return
+  const w = window as unknown as Record<string, unknown>
+  if (w.__water) return
+  const all = (f: (m: WaterMaterial) => void) => { for (const t of WATER_DIALS) f(t); return WATER_DIALS.size }
+  w.__water = {
+    flow: (v: number) => all(t => t.setFlow(v, t.getFlow().wave)),
+    wave: (v: number) => all(t => t.setFlow(t.getFlow().speed, v)),
+    get: () => [...WATER_DIALS].map(t => t.getFlow()),
+  }
+}
+
 export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } | null, waterLayer: number, light: LightUniforms = createLightUniforms()): WaterMaterial {
   const mat = new THREE.MeshLambertMaterial({
     vertexColors: !tiles, transparent: true, opacity: WATER_BASE_ALPHA, depthWrite: false,
@@ -158,15 +200,24 @@ export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } |
     // behind, every other water face keeps exactly the front-only behaviour it has today.
     side: THREE.DoubleSide,
   }) as unknown as WaterMaterial
-  let live: { uTime: { value: number } } | null = null
+  let live: { uTime: { value: number }; uFlowSpeed: { value: number }; uFlowWave: { value: number } } | null = null
   let now = 0
+  let flowSpeed = WATER_FLOW_SPEED, flowWave = WATER_FLOW_WAVE
   mat.tick = (s: number) => { now = s; if (live) live.uTime.value = s }
+  mat.setFlow = (speed: number, wave: number) => {
+    flowSpeed = speed; flowWave = wave
+    if (live) { live.uFlowSpeed.value = speed; live.uFlowWave.value = wave }
+  }
+  mat.getFlow = () => ({ speed: flowSpeed, wave: flowWave })
+  registerWaterDial(mat)
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = { value: now }
+    shader.uniforms.uFlowSpeed = { value: flowSpeed }
+    shader.uniforms.uFlowWave = { value: flowWave }
     if (tiles) shader.uniforms.uTiles = { value: tiles.texture }
     Object.assign(shader.uniforms, light)
-    live = shader.uniforms as { uTime: { value: number } }
+    live = shader.uniforms as { uTime: { value: number }; uFlowSpeed: { value: number }; uFlowWave: { value: number } }
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>',
@@ -174,12 +225,16 @@ export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } |
         // ⚠ DECLARED WITH A DEFAULT, because the attribute is absent on any geometry that predates
         // it and an undeclared attribute is a link error, not a zero. `-1` is the no-data sentinel,
         // so a geometry without the buffer lands on the flat-opacity branch rather than vanishing.
-        + 'attribute float aDepth;\nvarying float vDepth;\nvarying vec3 vWaterWPos;')
+        + 'attribute float aDepth;\nvarying float vDepth;\nvarying vec3 vWaterWPos;\n'
+        // Same default story as aDepth: absent on a geometry meshed without a flow field, and an
+        // absent attribute reads as zero — still water, the old look — not as a link error.
+        + 'attribute vec2 aFlow;\nvarying vec2 vFlow;\nuniform float uFlowWave;')
       .replace('#include <begin_vertex>',
         `#include <begin_vertex>
 vVoxPos = position;
 vVoxNormal = normal;
 vDepth = aDepth;
+vFlow = aFlow;
 // ⚠ TAKEN BEFORE THE RIPPLE AND THE RECESS BELOW MOVE IT. The light field is indexed by CELL, and
 // the surface is displaced by up to 0.15 of a block — enough to fall into the cell above or below
 // at a boundary and make a sheet of water flicker between two light levels as it waves.
@@ -190,6 +245,14 @@ if (normal.y > 0.5) {
   // reads as a marching grid; amplitude is small because the tide is a read, not a mechanic.
   transformed.y -= 0.1;
   transformed.y += sin(wp.x * 0.9 + uTime * 1.4) * cos(wp.z * 0.7 + uTime * 1.1) * 0.05;
+  // The current: a wave TRAVELLING downstream, on top of the standing ripple. Its phase runs
+  // along the flow direction so crests cross the channel and march with it; amplitude scales
+  // with riverness, so it is gone at the bank and on still water.
+  float fl = length(aFlow);
+  if (fl > 0.001) {
+    vec2 dir = aFlow / fl;
+    transformed.y += sin(dot(wp.xz, dir) * 2.2 - uTime * 2.6) * uFlowWave * fl;
+  }
 }`)
 
     // ⚠ THE DEPTH RAMP IS DECLARED AND APPLIED WHETHER OR NOT THE ATLAS IS PRESENT. The tile
@@ -204,6 +267,7 @@ if (normal.y > 0.5) {
       .replace('#include <common>',
         '#include <common>\nvarying float vDepth;\nvarying vec3 vVoxNormal;\nvarying vec3 vWaterWPos;\n'
         + (tiles ? 'uniform sampler2DArray uTiles;\nuniform float uTime;\nvarying vec3 vVoxPos;\n' : '')
+        + 'varying vec2 vFlow;\nuniform float uFlowSpeed;\n'
         + LIGHT_DECL_GLSL)
       .replace('#include <color_fragment>',
         `#include <color_fragment>
@@ -217,9 +281,15 @@ ${tiles ? `{
     ? vVoxPos.xz
     : (an.x > 0.5 ? vec2(vVoxPos.z, -vVoxPos.y) : vec2(vVoxPos.x, -vVoxPos.y));
   // The scroll IS the flow. Two samples drifting on unrelated headings, blended — one scrolling
-  // texture reads as a conveyor belt; two read as water.
-  vec4 a = texture(uTiles, vec3(tileUv + vec2(uTime * 0.021, uTime * 0.013), ${waterLayer.toFixed(1)}));
-  vec4 b = texture(uTiles, vec3(tileUv * 1.31 + vec2(-uTime * 0.017, uTime * 0.024), ${waterLayer.toFixed(1)}));
+  // texture reads as a conveyor belt; two read as water. The river's own vector is ADDED to both:
+  // the still-water drift stays as the shimmer, the current is the going. Only the sheet carries
+  // a flow (rims are zero), and the tile UV on the sheet is xz, so the vector maps straight on.
+  // The second sample at 0.55× on a slight skew — same heading, different speed, so the two
+  // layers slide over each other the way a surface slides over the water under it.
+  vec2 run = vFlow * uFlowSpeed * uTime;
+  vec2 skew = vec2(-vFlow.y, vFlow.x) * 0.12;
+  vec4 a = texture(uTiles, vec3(tileUv + vec2(uTime * 0.021, uTime * 0.013) + run, ${waterLayer.toFixed(1)}));
+  vec4 b = texture(uTiles, vec3(tileUv * 1.31 + vec2(-uTime * 0.017, uTime * 0.024) + (run + skew * uFlowSpeed * uTime) * 0.55, ${waterLayer.toFixed(1)}));
   diffuseColor.rgb *= mix(a.rgb, b.rgb, 0.5) * 1.25;
 }` : ''}
 {
