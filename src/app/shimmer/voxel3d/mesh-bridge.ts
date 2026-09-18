@@ -129,6 +129,8 @@ export interface WaterMaterial extends THREE.Material {
 export const WATER_FLOW_SPEED = 0.32
 /** Height of the travelling wave along the flow, in blocks — under the standing ripple's 0.05. */
 export const WATER_FLOW_WAVE = 0.03
+/** Seconds one flow-map phase scrolls before it resets — see the fragment note. Bounds the shear. */
+export const WATER_FLOW_CYCLE = 3.0
 
 /**
  * ── ★★ DEPTH ATTENUATION: WHERE THE NUMBERS COME FROM (2026-08-21) ────────────────────────────
@@ -286,10 +288,25 @@ ${tiles ? `{
   // a flow (rims are zero), and the tile UV on the sheet is xz, so the vector maps straight on.
   // The second sample at 0.55× on a slight skew — same heading, different speed, so the two
   // layers slide over each other the way a surface slides over the water under it.
-  vec2 run = vFlow * uFlowSpeed * uTime;
-  vec2 skew = vec2(-vFlow.y, vFlow.x) * 0.12;
-  vec4 a = texture(uTiles, vec3(tileUv + vec2(uTime * 0.021, uTime * 0.013) + run, ${waterLayer.toFixed(1)}));
-  vec4 b = texture(uTiles, vec3(tileUv * 1.31 + vec2(-uTime * 0.017, uTime * 0.024) + (run + skew * uFlowSpeed * uTime) * 0.55, ${waterLayer.toFixed(1)}));
+  // ⚠⚠ NOT \`vFlow * uTime\`. The flow is INTERPOLATED across a quad and differs between its corners
+  // (the bank taper, a bend), so an offset that grows with time shears the texture by a larger
+  // amount every second — measured top-down at flow 0.5 after ~40s: the water was long diagonal
+  // streaks, not water. The flow-map answer (Valve, 2010): two phases half a cycle apart, each
+  // scrolling for one FLOW_CYCLE then snapping back, cross-faded so a phase is invisible at the
+  // instant it resets. The shear is then bounded by one cycle's travel, which is under a block.
+  float ph0 = fract(uTime / ${WATER_FLOW_CYCLE.toFixed(1)});
+  float ph1 = fract(ph0 + 0.5);
+  float blend = abs(ph0 * 2.0 - 1.0);            // 1 when phase 0 resets, 0 when phase 1 does
+  vec2 step0 = vFlow * (uFlowSpeed * ${WATER_FLOW_CYCLE.toFixed(1)}) * ph0;
+  vec2 step1 = vFlow * (uFlowSpeed * ${WATER_FLOW_CYCLE.toFixed(1)}) * (ph1 - 0.5);
+  vec2 drift = vec2(uTime * 0.021, uTime * 0.013);
+  vec2 driftB = vec2(-uTime * 0.017, uTime * 0.024);
+  vec4 a = mix(
+    texture(uTiles, vec3(tileUv + drift + step0, ${waterLayer.toFixed(1)})),
+    texture(uTiles, vec3(tileUv + drift + step1, ${waterLayer.toFixed(1)})), blend);
+  vec4 b = mix(
+    texture(uTiles, vec3(tileUv * 1.31 + driftB + step0 * 0.55, ${waterLayer.toFixed(1)})),
+    texture(uTiles, vec3(tileUv * 1.31 + driftB + step1 * 0.55, ${waterLayer.toFixed(1)})), blend);
   diffuseColor.rgb *= mix(a.rgb, b.rgb, 0.5) * 1.25;
 }` : ''}
 {
