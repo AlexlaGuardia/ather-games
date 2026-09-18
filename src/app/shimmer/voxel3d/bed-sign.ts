@@ -176,10 +176,12 @@ export function createBedSigns(): BedSigns {
     const g = boardGeo.clone()
     const uv = g.attributes.uv as THREE.BufferAttribute
     const ox = (c % ATLAS_COLS) / ATLAS_COLS, oy = 1 - (Math.floor(c / ATLAS_COLS) + 1) / ATLAS_COLS
-    for (const grp of g.groups.slice(4)) for (let i = grp.start; i < grp.start + grp.count; i++) {
-      const vi = g.index!.getX(i)
-      uv.setXY(vi, ox + uv.getX(vi) / ATLAS_COLS, oy + uv.getY(vi) / ATLAS_COLS)
-    }
+    // ⚠ ONCE PER VERTEX, not once per index entry — a face's four vertices sit in six index slots,
+    // and remapping through the index scaled the shared ones twice (the first board wore a
+    // diagonal smear of its icon). Collect the vertex ids first.
+    const seen = new Set<number>()
+    for (const grp of g.groups.slice(4)) for (let i = grp.start; i < grp.start + grp.count; i++) seen.add(g.index!.getX(i))
+    for (const vi of seen) uv.setXY(vi, ox + uv.getX(vi) / ATLAS_COLS, oy + uv.getY(vi) / ATLAS_COLS)
     uv.needsUpdate = true
     cardGeos.push(g)
     const m = new THREE.InstancedMesh(g, boardMats, SIGN_BUDGET)
