@@ -9327,7 +9327,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // square with nothing visible to explain it. `clearBed` is a no-op on every other
           // material, so this costs one Map lookup per block broken.
           clearBed(beds.current, hit.x, hit.y, hit.z)
-          clearDamp(watered.current, hit.x, hit.y, hit.z)
+          // ⚠ AND THE PATCH GOES WITH THE RECORD. `clearDamp` deleted the entry but nothing told the
+          // renderer, which only redraws on its own beat's size delta or a 60 s fade — so a broken
+          // bed left its dark wet square floating on the grass for up to a minute (Alex, 09-18:
+          // *"the shading from the watering… got left behind even after i removed the beds"*).
+          if (clearDamp(watered.current, hit.x, hit.y, hit.z)) wetDirty.current = true
           // ★ EXPANSION LITTER PAYS (Alex, 2026-09-12: "free matts for the player to collect"). A
           // rubble heap the WORLD put down breaks into its rubble; one the keeper placed comes back
           // as the heap it was. "Generated" is exactly "no edit on this cell", which is the same

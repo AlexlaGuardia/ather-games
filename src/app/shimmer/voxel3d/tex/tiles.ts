@@ -160,6 +160,11 @@ export const VARIANT_MATERIALS: number[] = [
   MAT.RUBBLE, MAT.SCREE, MAT.MARSH_MUD, MAT.COBBLESTONE, MAT.PATH,
   MAT.TOPSOIL, MAT.GREY_SOIL, MAT.FOREST_LOAM, MAT.LUSH_TURF, MAT.DRY_GRASS, MAT.HIGHLAND_TURF,
   WOOD.GOLDWOOD_LEAVES, WOOD.SHIMMEROAK_LEAVES, WOOD.STARWILLOW_LEAVES, WOOD.DAWNWOOD_LEAVES,
+  // ★ THE GARDEN BEDS (2026-09-18): a merged bed is one soil, and it is VAR_FIXED so its furrows
+  // run one way — which left every block the SAME tile, and Alex read the repeat as a grid again
+  // (*"the texture is not blending as the border does"*). Variants are the half of variety that
+  // orientation cannot give here: the grit re-seeds per block, the furrow rows stay put.
+  MAT.GARDEN_BED_GOLDWOOD, MAT.GARDEN_BED_SHIMMEROAK, MAT.GARDEN_BED_DAWNWOOD,
 ]
 export const VARIANT_BASE = FALLBACK_LAYER + 1
 export const LAYER_COUNT = VARIANT_BASE + VARIANT_MATERIALS.length * 3 * VARIANTS_PER
@@ -1909,8 +1914,10 @@ function paintBase(dst: Layer, material: number, face: number, size: number, see
       // merge into one rectangle of soil. A band painted here would draw the grid back in.
       // Two furrows across the soil, EDGE TO EDGE so they run on across a merged bed — what says
       // "turned" rather than "a brown square", and the cue a keeper reads from standing height.
+      // ⚠ AT 1/4 AND 3/4, NOT 0.38 / 0.66: the rows must be EVENLY spaced across a block seam or the
+      // pairing (0.28 apart inside a block, 0.72 across the seam) draws the grid back in rows.
       const furrow = Math.max(1, size >> 4)
-      for (const fy of [Math.floor(size * 0.38), Math.floor(size * 0.66)])
+      for (const fy of [Math.floor(size * 0.25), Math.floor(size * 0.75)])
         for (let y = fy; y < fy + furrow; y++)
           for (let x = 0; x < size; x++) put(dst, size, x, y, [62, 58, 54], 0)
       break
