@@ -259,6 +259,7 @@ import { createSmoke } from './smoke'
 import { columnSmokeSources, type SmokeSource } from './smoke-sources'
 import { createSeamShimmer, createSocketShimmers, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, gladeSeamAnchor } from './seam'
 import { createWetPatches, type WetSpot } from './wet-patch'
+import { createBedSigns } from './bed-sign'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
 import { createBreakFx } from './break-fx'
 import { bucketOf, swingChips } from './break-fx-spec'
@@ -3373,6 +3374,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const socketShimmers = useMemo(() => createSocketShimmers(), [])
   /** The damp skin on watered beds (farming ②). Rewritten on the planted beat when `wetDirty`. */
   const wetPatches = useMemo(() => createWetPatches(), [])
+  // The sown patch + the crop sign on every planted cell (`bed-sign.ts`), fed by the planted beat.
+  const bedSigns = useMemo(() => createBedSigns(), [])
   const wetDirty = useRef(true)
   const wetFadeAt = useRef(0)
   /** Greg's door from the Glade side: one gold spiral, set once, shown only in the glade. */
@@ -4346,6 +4349,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     seam.dispose()
     socketShimmers.dispose()
     wetPatches.dispose()
+    bedSigns.dispose()
     gladeDoor.dispose()
     mist.dispose()
     ring.dispose()
@@ -4689,9 +4693,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     }
     // `window.__bedRims()` — rails/posts the rim renderer drew at its last sync, and whether the
     // beat that feeds it is being held (the wild sync's `incoming` gate — see `__planted`).
+    w.__bedSigns = () => !owner.current ? 'owner only' : bedSigns.counts()
     w.__bedRims = () => !owner.current ? 'owner only' : { ...(bedRims?.counts() ?? { rails: -1, posts: -1 }), dirty: floraDirty.current, incoming: incoming.current?.length ?? -1 }
-    return () => { delete w.__hollows; delete w.__planted; delete w.__bedRims }
-  }, [owner, groundTopNear, bedRims])
+    return () => { delete w.__hollows; delete w.__planted; delete w.__bedRims; delete w.__bedSigns }
+  }, [owner, groundTopNear, bedRims, bedSigns])
 
 
   /**
@@ -8189,6 +8194,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       if (sig !== plantedSig.current) {
         plantedSig.current = sig
         flora.setPlanted(spots)
+        bedSigns.set(spots)
       }
     }
     if (floraDirty.current && incoming.current!.length === 0) {
@@ -10320,6 +10326,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       <primitive object={seam.group} />
       <primitive object={socketShimmers.group} />
       <primitive object={wetPatches.group} />
+      <primitive object={bedSigns.group} />
       <primitive object={gladeDoor.group} />
       <primitive object={mist.pools} />
       <primitive object={mist.points} />
