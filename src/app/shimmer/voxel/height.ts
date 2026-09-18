@@ -488,21 +488,47 @@ export function waterLevelAt(x: number, z: number, seed: number, cfg: HeightConf
  * kills ~97% of columns with one field read, exactly as the water table's callers do.
  */
 export const FLOW_REACH = 8
-export function riverFlowAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): [number, number] {
-  const rn = riverness(riverField(x, z, seed, cfg))
-  if (rn < SHORE_RN) return [0, 0]
+/** The unit downstream heading of the channel at (x, z), or null where the table is flat along it. */
+function channelHeading(x: number, z: number, seed: number, cfg: HeightConfig): [number, number] | null {
   const gx = riverField(x + 1, z, seed, cfg) - riverField(x - 1, z, seed, cfg)
   const gz = riverField(x, z + 1, seed, cfg) - riverField(x, z - 1, seed, cfg)
   const len = Math.hypot(gx, gz)
-  if (len < 1e-9) return [0, 0]
+  if (len < 1e-9) return null
   // The tangent: ∇w turned a quarter. Which quarter is settled by the table below.
   let tx = -gz / len, tz = gx / len
   const ahead = waterTableAt(x + tx * FLOW_REACH, z + tz * FLOW_REACH, seed, cfg)
   const behind = waterTableAt(x - tx * FLOW_REACH, z - tz * FLOW_REACH, seed, cfg)
   const fall = behind - ahead
-  if (Math.abs(fall) < 1e-6) return [0, 0]
+  if (Math.abs(fall) < 1e-6) return null
   if (fall < 0) { tx = -tx; tz = -tz }
-  return [tx * rn, tz * rn]
+  return [tx, tz]
+}
+export function riverFlowAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): [number, number] {
+  const rn = riverness(riverField(x, z, seed, cfg))
+  if (rn < SHORE_RN) return [0, 0]
+  const h = channelHeading(x, z, seed, cfg)
+  return h ? [h[0] * rn, h[1] * rn] : [0, 0]
+}
+
+/**
+ * ── ★ THE CURRENT REACHES THE BANK (2026-09-18, Alex: "the way it flows TO the flora") ────────
+ * What a plant on the river ribbon feels: the same downstream heading as `riverFlowAt`, but on
+ * the DRY bank — full strength at the waterline, fading to nothing at the field's edge where the
+ * meadow takes over. Wet cells return full strength too (nothing stands there; a reed would).
+ * Zero everywhere the river field is silent, so a meadow tuft is untouched.
+ *
+ * ⚠ A LEAN, NOT A PHYSICS CLAIM. Dry grass does not bend to a current it is not in; it bends to
+ * the river's wind, the spray, the bank's own slope toward the water — and what it READS as is
+ * the river tugging the country it runs through. The magnitude ramp is the bank's width by the
+ * field's own edge, the same `> 0` that makes the bank the river's ground in biome.ts.
+ */
+export function bankLeanAt(x: number, z: number, seed: number, cfg: HeightConfig = DEFAULT_HEIGHT): [number, number] {
+  const rn = riverness(riverField(x, z, seed, cfg))
+  if (rn <= 0) return [0, 0]
+  const h = channelHeading(x, z, seed, cfg)
+  if (!h) return [0, 0]
+  const k = Math.min(1, rn / SHORE_RN)
+  return [h[0] * k, h[1] * k]
 }
 
 /**

@@ -429,7 +429,7 @@ import { loadSeen, saveSeen, see, CELL, type Seen } from './discovery'
 import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
-import { createFloraRenderer, floraDemand } from './flora-mesh'
+import { createFloraRenderer, floraDemand, leanLive } from './flora-mesh'
 import { createStationRenderer } from './station-mesh'
 import { createBedRims } from './bed-rim'
 
@@ -6147,6 +6147,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     w.__leafFall = () => ({ n: leafFall.current.leaves.length, tune: LEAF_FALL })
     w.__flora = () => ({
       demand: floraDemand,
+      lean: leanLive,
       pools: flora.group.children.map((o, i) => [i, (o as THREE.InstancedMesh).count, o.visible]),
     })
     w.__renderlight = () => {
@@ -8197,7 +8198,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const [gx, gz] = kk.split(',').map(Number)
         list.push({ key: kk, x0: gx * SECTION, z0: gz * SECTION })
       }
-      flora.sync(list, SEED, plantProbe)
+      flora.sync(list, SEED, plantProbe, space.current === 'wilds')
       // The stations ride the same beat: their cells are a scan of the same columns.
       stations?.sync(list.map(c => ({ ...c, ySpan: H })), voxel)
       bedRims?.sync(list.map(c => ({ ...c, ySpan: H })), voxel)

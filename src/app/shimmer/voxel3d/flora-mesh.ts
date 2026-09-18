@@ -25,6 +25,7 @@ import { MATERIAL_COLOR } from './attrs'
 import { MAT } from '../voxel/depth'
 import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from './cartoon-glsl'
 import { createLightUniforms, type LightUniforms } from './light-glsl'
+import { bankLeanAt } from '../voxel/height'
 
 const SECTION = 16
 
@@ -221,6 +222,8 @@ function noteOverflow(pool: string, wanted: number, cap: number): void {
 
 /** What each pool wanted at the last sync, whether or not it fit. Readable by a test or a HUD. */
 export const floraDemand: Record<string, { wanted: number; cap: number }> = {}
+/** How many lean-map texels carried a river lean at the last sync — `__flora().lean` reads it. */
+export let leanLive = 0
 
 /**
  * ── ★ THE FOUR ELEMENT HERBS, AS ONE SHAPE IN FOUR COLOURS (2026-08-18) ────────────────────────
@@ -327,7 +330,13 @@ export type PlantProbe = (x: number, z: number) => { y: number; kind: number; va
 export interface FloraRenderer {
   group: THREE.Group
   /** Rebuild buffers from the loaded columns. Column spot lists are cached until invalidated. */
-  sync(cols: { key: string; x0: number; z0: number }[], seed: number, probe: PlantProbe): void
+  /**
+   * `river` — whether this space carves rivers (the Wilds), so the lean map is built; the Glade
+   * and the plot generate from their own columns and the river field means nothing there, yet
+   * `bankLeanAt` would still answer for it (measured: 723 live texels on the Glade island, every
+   * one a lie). Off = the map is zeroed and the bank flora stands straight.
+   */
+  sync(cols: { key: string; x0: number; z0: number }[], seed: number, probe: PlantProbe, river?: boolean): void
   /** Drop a column's cached spots (its ground changed — an edit landed). */
   invalidate(colKey: string): void
   /**
@@ -713,8 +722,101 @@ const makeBladeTexture = (seed: number, blades: number, size = BLADE_TILE): THRE
 
 const makeHeadTexture = (size = 8): THREE.DataTexture => toTexture(headPixels(size), size)
 
+/**
+ * ── ★ THE CURRENT REACHES THE FLORA: THE LEAN MAP (2026-09-18) ────────────────────────────────
+ * Alex: *"the way it flows to the flora"*. A plant on the river ribbon leans downstream — full at
+ * the waterline, nothing where the meadow takes over — and every card material bends by the same
+ * vector, so the bank reads as one country tugged by one river rather than a row of tufts each
+ * with an opinion. `bankLeanAt` (height.ts) is the field; this is how it reaches ~fourteen
+ * instanced meshes without fourteen attributes: ONE 2D texture over the loaded window, two blocks
+ * per texel, RG = the lean vector packed around 128, and the shared sway samples it at the
+ * instance's world xz. A texture rather than an instanced attribute for the same reason the
+ * light ring is a torus and not a per-chunk uniform (light-texture.ts): one sampler, one program
+ * per kind, no per-mesh write site to forget. Rebuilt on every `sync`, which already runs once
+ * per settled load ring — the cheap `riverField` gate answers "no river" for most texels.
+ * ⚠ LINEAR-filtered on purpose: a 2-block texel read NEAREST is a step in the lean at every
+ * other block, which the eye catches on a row of tall grass.
+ */
+export const LEAN_TEXEL = 2
+/** Tip lean at full strength, in blocks — beside the tuft's 0.09 gust, a steady 0.16 reads as bent. */
+export const LEAN_AMP = 0.16
+/** Off-map (and a fresh renderer) is 128 = no lean. */
+const LEAN_ZERO = 128
+
+export interface LeanMap {
+  texture: THREE.DataTexture
+  /** World xz of texel (0, 0)'s corner and the map's extent in blocks — the shader's sampling frame. */
+  origin: THREE.Vector2
+  size: THREE.Vector2
+  /** Rebuild over the loaded columns. Returns how many texels carried a lean (the instrument). */
+  fill: (cols: { x0: number; z0: number }[], seed: number) => number
+  /** Zero the map (a space without rivers). Returns 0, so the call reads like `fill`'s. */
+  clear: () => number
+  dispose: () => void
+}
+
+export function createLeanMap(): LeanMap {
+  let w = 4, h = 4
+  let data = new Uint8Array(w * h * 4).fill(LEAN_ZERO)
+  let texture = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.UnsignedByteType)
+  const setup = (t: THREE.DataTexture) => {
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter
+    t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.ClampToEdgeWrapping
+    t.generateMipmaps = false; t.needsUpdate = true
+  }
+  setup(texture)
+  const origin = new THREE.Vector2(0, 0)
+  const size = new THREE.Vector2(w * LEAN_TEXEL, h * LEAN_TEXEL)
+  const map: LeanMap = {
+    texture, origin, size,
+    fill(cols, seed) {
+      if (cols.length === 0) return 0
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity
+      for (const c of cols) { x0 = Math.min(x0, c.x0); z0 = Math.min(z0, c.z0); x1 = Math.max(x1, c.x0 + SECTION); z1 = Math.max(z1, c.z0 + SECTION) }
+      // One texel of margin so the clamp reads zero at the map's edge, never the last real value.
+      x0 -= LEAN_TEXEL; z0 -= LEAN_TEXEL; x1 += LEAN_TEXEL; z1 += LEAN_TEXEL
+      const nw = Math.ceil((x1 - x0) / LEAN_TEXEL), nh = Math.ceil((z1 - z0) / LEAN_TEXEL)
+      if (nw !== w || nh !== h) {
+        w = nw; h = nh
+        data = new Uint8Array(w * h * 4)
+        texture.dispose()
+        texture = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.UnsignedByteType)
+        setup(texture)
+        map.texture = texture
+      }
+      data.fill(LEAN_ZERO)
+      origin.set(x0, z0)
+      size.set(w * LEAN_TEXEL, h * LEAN_TEXEL)
+      let live = 0
+      // The margin ring stays zero: only interior texels are asked (the clamp's whole point).
+      for (let j = 1; j < h - 1; j++) {
+        for (let i = 1; i < w - 1; i++) {
+          // Texel centre, so a plant at the cell's middle reads its own value under LINEAR.
+          const [lx, lz] = bankLeanAt(x0 + (i + 0.5) * LEAN_TEXEL, z0 + (j + 0.5) * LEAN_TEXEL, seed)
+          if (lx === 0 && lz === 0) continue
+          const o = (j * w + i) * 4
+          data[o] = Math.round(LEAN_ZERO + lx * 127)
+          data[o + 1] = Math.round(LEAN_ZERO + lz * 127)
+          live++
+        }
+      }
+      texture.needsUpdate = true
+      return live
+    },
+    clear() { data.fill(LEAN_ZERO); texture.needsUpdate = true; return 0 },
+    dispose() { texture.dispose() },
+  }
+  return map
+}
+
 export function createFloraRenderer(light: LightUniforms = createLightUniforms()): FloraRenderer {
   const uTime = { value: 0 }
+  const lean = createLeanMap()
+  // ⚠ `value` is re-pointed when the map grows (a new DataTexture); the uniform object is shared
+  // by every program, so one write lands everywhere — same shape as `cartoon`/`light` below.
+  const uLean = { value: lean.texture as THREE.Texture }
+  const uLeanOrigin = { value: lean.origin }
+  const uLeanSize = { value: lean.size }
   // ── ★★ FLORA ON THE WORLD'S LIGHT (2026-09-17) ─────────────────────────────────────────────
   // Every plant material was plain Lambert under the scene lights: no cartoon stack (the blocks'
   // three-step banding, the 0.35 floor, the hour) and no LIGHT FIELD — a lantern lit the ground
@@ -765,11 +867,25 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
    */
   const injectSway = (shader: { uniforms: Record<string, unknown>; vertexShader: string }, amp: number): void => {
     shader.uniforms.uTime = uTime
+    shader.uniforms.uLean = uLean
+    shader.uniforms.uLeanOrigin = uLeanOrigin
+    shader.uniforms.uLeanSize = uLeanSize
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform sampler2D uLean;\nuniform vec2 uLeanOrigin;\nuniform vec2 uLeanSize;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + [
         '{',
         '  #ifdef USE_INSTANCING',
+        // ── the river's lean: steady, downstream, off the lean map at the instance's own cell.
+        // Sampled per VERTEX (the instance xz is the same for all of them) — cheap, and a vertex
+        // program cannot do it anywhere else. A mat's amp is tiny so its pad does not slide.
+        '  vec2 leanUv = (instanceMatrix[3].xz - uLeanOrigin) / uLeanSize;',
+        '  vec2 lean = (texture2D(uLean, leanUv).rg - 128.0 / 255.0) * (255.0 / 127.0);',
+        '  float lw = uv.y * uv.y * ' + LEAN_AMP.toFixed(3) + ' * min(1.0, ' + amp.toFixed(3) + ' / 0.09);',
+        // A current tugs and eases: 0.8 steady with a slow 0.2 breath, never the wind's gust shape.
+        '  float tug = 0.8 + 0.2 * sin(uTime * 1.1 + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.4);',
+        '  transformed.x += lean.x * lw * tug;',
+        '  transformed.z += lean.y * lw * tug;',
+        '  transformed.y -= dot(lean, lean) * lw * tug * 0.35;',
         // ★ WIND, NOT WATER (2026-09-14, Alex: "looking a bit like sea weed"). The old sway was
         // sin on x + cos on z at two frequencies — a Lissajous circle, weighted linearly by height:
         // every tip drew a slow loop, which is exactly how kelp moves in a swell. Wind is different
@@ -1298,7 +1414,10 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
 
   return {
     group,
-    sync(cols, seed, probe) {
+    sync(cols, seed, probe, river = true) {
+      // The lean map first: the same columns, the same seed, one pass — see `createLeanMap`.
+      leanLive = river ? lean.fill(cols, seed) : lean.clear()
+      uLean.value = lean.texture
       let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0
       // ⚠ WANTED IS COUNTED SEPARATELY FROM DRAWN, and that separation is the whole instrument.
       // The `n*` counters stop at the cap by construction, so they can never report an overrun —
@@ -1530,6 +1649,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       for (const h of hlMeshes) h.mesh.count = 0
     },
     dispose() {
+      lean.dispose()
       for (const h of hlMeshes) { h.mesh.dispose(); (h.mat as THREE.Material).dispose() }
       tuftGeo.dispose(); tuftCapGeo.dispose(); tuftShadowGeo.dispose(); tuftCapMat.dispose(); rosetteTex.dispose(); tallGeo.dispose(); stemGeo.dispose(); headGeo.dispose()
       herbGeo.dispose(); tipGeo.dispose()
