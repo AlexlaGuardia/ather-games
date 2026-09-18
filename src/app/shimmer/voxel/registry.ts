@@ -415,7 +415,13 @@ export const BLOCKS: BlockDef[] = [
   // enough to exist. It was briefly 1/1,000,000, which measured out at ~11.6 DAYS of continuous
   // breaking for an even chance: a drop no player would ever meet. `mana-seed.test.ts` proves the
   // roll is wired at ANY rate, so this stays a dial rather than a leap of faith.
-  { noSlab: true, material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'grass_tuft', count: 1 }, ...meadowSeedDrops()], fastSkill: 'farming', placeable: true },
+  // ★ A TUFT DROPS ONLY ITS SEED ROLL (2026-09-18, Alex: "if i break tufts it shouldnt be dropping
+  // the tufts anymore to reduce the clutter"). Every cut used to pop a tuft item; the seed was the
+  // point and the tuft was litter. The fibre the recipes want (thatch, canvas) is TALL grass now —
+  // the straw, which still drops itself. `grass_tuft` is no longer an item anything yields.
+  // `placeable: false` follows: with no identity drop there is no item to place it from (`BY_ITEM`
+  // reverses placeable blocks by `drops[0]`), and a tuft the world grows is not a thing you carry.
+  { noSlab: true, material: MAT.TUFT, name: 'Grass Tuft', hardness: 0.05, skill: null, minTier: 0, drops: [...meadowSeedDrops()], fastSkill: 'farming', placeable: false },
   { noSlab: true, material: MAT.TALL_GRASS, name: 'Tall Grass', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'tall_grass', count: 1 }, ...meadowSeedDrops()], fastSkill: 'farming', placeable: true },
   { noSlab: true, material: MAT.FLOWER, name: 'Wildflower', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wild_flower', count: 1 }], fastSkill: 'farming', placeable: true },
 

@@ -270,8 +270,11 @@ export const RECIPES: RecipeDef[] = [
   // you build with but a block that shows a yard has stock (Hazel's R6, Sax's R3).
   { id: 'plaster', name: 'Plaster', station: 'hand', mana: 0,
     input: [{ itemId: 'block_subsoil', count: 2 }, { itemId: 'block_sand', count: 1 }], output: { itemId: 'plaster', count: 4 } },
+  // ★ TALL grass, not the tuft (2026-09-18): the tuft drops only its seed roll now, and thatch is
+  // long straw anyway. Tall grass is ~a quarter as common (TALL_DENSITY 0.035 vs 0.13), so a roof
+  // costs a longer walk — the counts are unchanged and are Alex's dial.
   { id: 'thatch', name: 'Thatch', station: 'hand', mana: 0,
-    input: [{ itemId: 'grass_tuft', count: 3 }], output: { itemId: 'thatch', count: 2 } },
+    input: [{ itemId: 'tall_grass', count: 3 }], output: { itemId: 'thatch', count: 2 } },
   // ⚠ `family: 'wood'` because it consumes logs (the mill lists it), and NO `milled`: stacking is
   // not extraction, a mill does not conjure a second stack from the same four logs. It is the one
   // log consumer that is not a refine — `workshop.test.ts` names it as such, with an expiring check.
@@ -297,9 +300,9 @@ export const RECIPES: RecipeDef[] = [
   // never multiplies: stone came from a quarry, and a generous brick would invert the grammar.
   { id: 'cobblestone', name: 'Cobblestone', milled: 3, family: 'stone', station: 'hand', mana: 0,
     input: [{ itemId: 'rubble', count: 3 }], output: { itemId: 'cobblestone', count: 2 } },
-  // Canvas: rushes woven. Tufts again — they are the fibre this world gathers by the armful.
+  // Canvas: rushes woven. Tall grass again — the long fibre this world gathers by the armful.
   { id: 'canvas', name: 'Canvas', station: 'hand', mana: 0,
-    input: [{ itemId: 'grass_tuft', count: 4 }], output: { itemId: 'canvas', count: 2 } },
+    input: [{ itemId: 'tall_grass', count: 4 }], output: { itemId: 'canvas', count: 2 } },
   // Stone stack: four dressed blocks piled — stacking, not extraction, so no `milled` (the timber
   // stack's argument). Tagged stone so the cutter lists it beside the rest of the yard.
   { id: 'stone_stack', name: 'Stone Stack', family: 'stone', station: 'hand', mana: 0,

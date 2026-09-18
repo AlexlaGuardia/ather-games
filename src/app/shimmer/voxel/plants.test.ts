@@ -45,7 +45,16 @@ const garden = ZONE_ANCHORS.find(a => a.id === 'moonwell-glade')!
 
 // ── 1. the three plants are real, cheap, collectable blocks ─────────────────────────────────────
 {
-  for (const m of [MAT.TUFT, MAT.TALL_GRASS, MAT.FLOWER]) {
+  // ★ THE TUFT IS THE EXCEPTION (2026-09-18, Alex): it pays its seed roll and nothing else, so it
+  // is neither collectable nor placeable — the seed is loot, the tuft was litter. Tall grass and
+  // the flower stay collectable blocks.
+  {
+    const d = blockDef(MAT.TUFT)
+    ok(!!d && d.hardness <= 0.1, `the tuft breaks instantly (${d?.hardness})`)
+    ok(!!d && !d.placeable, 'the tuft cannot be put back down — nothing drops it')
+    ok(dropsFor(MAT.TUFT, () => 0.999999).length === 0, 'a tuft on a losing roll drops NOTHING')
+  }
+  for (const m of [MAT.TALL_GRASS, MAT.FLOWER]) {
     const d = blockDef(m)
     ok(!!d, `plant ${m} has a block definition`)
     ok(!!d && d.hardness <= 0.1, `plant ${m} breaks instantly (${d?.hardness})`)
@@ -72,7 +81,7 @@ const garden = ZONE_ANCHORS.find(a => a.id === 'moonwell-glade')!
   ok(clash === 0, `★ no two placeable blocks share an identity drop (${clash} clashes)`)
   // ★ A Mana Seed pays out a SPIRIT. It must never be placeable as the grass it came from.
   ok(materialForItem('mana_seed') === undefined, '★ a bonus drop is loot, never a placeable block')
-  ok(materialForItem('grass_tuft') === MAT.TUFT, 'a collected tuft places a tuft')
+  ok(materialForItem('grass_tuft') === undefined, 'a tuft is not collected any more — it pays its seed roll and nothing else (09-18)')
   ok(materialForItem('tall_grass') === MAT.TALL_GRASS, 'collected tall grass places tall grass')
   ok(materialForItem('wild_flower') === MAT.FLOWER, 'a picked flower can be replanted')
 }

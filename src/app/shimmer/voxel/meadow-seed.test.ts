@@ -91,13 +91,13 @@ const GRASSES = [MAT.TUFT, MAT.TALL_GRASS]
 {
   const lucky = dropsFor(MAT.TUFT, () => 0)
   for (const seed of MEADOW_SEEDS) ok(lucky.some(d => d.itemId === seed), `★ a winning roll yields ${seed}`)
-  ok(lucky.some(d => d.itemId === 'grass_tuft'), 'and the tuft still comes with it')
+  ok(!lucky.some(d => d.itemId === 'grass_tuft'), '★ and NO tuft item comes with it — the seed is the point, the tuft was litter (Alex, 09-18)')
 
   // The assert that catches an inverted comparison — the bug that hands out a seed EVERY time and
   // looks like generosity rather than like a defect.
   const unlucky = dropsFor(MAT.TUFT, () => 0.999999999)
   ok(!MEADOW_SEEDS.some(s => unlucky.some(d => d.itemId === s)), '★ a losing roll yields no seed')
-  ok(unlucky.length === 1 && unlucky[0].itemId === 'grass_tuft', 'a losing roll still drops the tuft')
+  ok(unlucky.length === 0, 'a losing roll drops NOTHING — a cut tuft that pays no seed leaves no litter')
 
   // `rng() >= chance` fails, so a roll exactly AT the rate must lose.
   ok(!MEADOW_SEEDS.some(s => dropsFor(MAT.TUFT, () => MEADOW_SEED_CHANCE).some(d => d.itemId === s)),
@@ -114,7 +114,7 @@ const GRASSES = [MAT.TUFT, MAT.TALL_GRASS]
 // It must never round-trip into a placeable voxel just because the block that dropped it is placeable.
 {
   for (const seed of MEADOW_SEEDS) ok(materialForItem(seed) === undefined, `★ ${seed} is not placeable as grass`)
-  ok(materialForItem('grass_tuft') === MAT.TUFT, 'the identity drop still places its own block')
+  ok(materialForItem('grass_tuft') === undefined, 'the tuft has no identity drop any more, so nothing places one (09-18)')
 }
 
 // ── 5. only grass gives seeds ───────────────────────────────────────────────────────────────────
