@@ -3421,6 +3421,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // Ground cover (2026-08-08) — flora.ts selects, the live-voxel probe verifies, four draws total.
   /** Set whenever loaded ground changes (adopt, edit, evict); the frame loop syncs once quiet. */
   const floraDirty = useRef(true)
+  /** Harness only: bypass the `incoming` gate on the next flora sync (see the beat). */
+  const floraForce = useRef(false)
   // The planted feed's last picture — see the beat below the flora sync (2026-09-16).
   const plantedSig = useRef('')
   const plantedAt = useRef(0)
@@ -6167,6 +6169,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       demand: floraDemand,
       lean: leanLive,
       reedLean: (v: number) => flora.setReedLean(v),
+      // Force the next beat to sync the pools even while columns are still streaming in (harness).
+      sync: () => { floraDirty.current = true; floraForce.current = true },
       pools: flora.group.children.map((o, i) => [i, (o as THREE.InstancedMesh).count, o.visible]),
     })
     w.__renderlight = () => {
@@ -8211,8 +8215,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         bedSigns.set(spots)
       }
     }
-    if (floraDirty.current && incoming.current!.length === 0) {
+    // ★ `floraForce` (2026-09-18): the harness's way past the `incoming` gate. At ~1 fps under
+    // software GL the stream never drains, so the Wilds' ground cover was never drawn in a shot —
+    // three windows wrote "generator-proven only; Alex walks it" for three different plants.
+    // `window.__flora().sync()` sets it; one beat later the pools are filled from whatever columns
+    // exist. Never set by the game itself.
+    if (floraDirty.current && (incoming.current!.length === 0 || floraForce.current)) {
       floraDirty.current = false
+      floraForce.current = false
       const list: { key: string; x0: number; z0: number }[] = []
       for (const kk of cols.current.keys()) {
         const [gx, gz] = kk.split(',').map(Number)

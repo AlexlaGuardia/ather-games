@@ -559,7 +559,7 @@ export const FLORA_PARTS: Record<number, ReadonlyArray<FloraPart>> = {
   // `reed` mode); no card lean, so the flow is the only thing that bends it.
   [FLORA.REED]: [
     { w: 0.4, h: 1.8, yBase: -0.45 },
-    { w: 0.7, h: 1.9, yBase: 0.02, wake: true },
+    { w: 0.8, h: 2.2, yBase: 0.02, wake: true },
   ],
 }
 
@@ -924,6 +924,15 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         // program cannot do it anywhere else. A mat's amp is tiny so its pad does not slide.
         '  vec2 leanUv = (instanceMatrix[3].xz - uLeanOrigin) / uLeanSize;',
         '  vec2 lean = (texture2D(uLean, leanUv).rg - 128.0 / 255.0) * (255.0 / 127.0);',
+        // ── ⚠ THE LEAN IS A WORLD VECTOR AND `transformed` IS LOCAL (found 2026-09-18 by the reed).
+        // `begin_vertex` runs BEFORE the instance matrix, and every card carries a random yaw
+        // (`floraMatrix`), so a downstream vector added here was turned by that yaw: each plant
+        // leaned the right AMOUNT in its own random direction, and the bank shipped that way for a
+        // day — it read as "tugged" because the tug phase is by world position. A reed combed
+        // upstream is not a reed, so the vector is brought into the instance's frame first: the
+        // inverse yaw, read off `instanceMatrix[0]` (the local x axis in world space, (cos φ, −sin φ)).
+        '  vec2 axL = normalize(instanceMatrix[0].xz);',
+        '  lean = vec2(axL.x * lean.x + axL.y * lean.y, -axL.y * lean.x + axL.x * lean.y);',
         // ── ★ THE REED IS IN THE WATER, NOT BESIDE IT (2026-09-18). The bank's lean is a tug the
         // river's wind gives dry grass: LEAN_AMP at the tip, 0.8 steady with a breath. The reed
         // stands in the current itself, and canon says what that does: *"combed flat by the flow
@@ -1091,7 +1100,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         '    transformed.z = -x * dL.x + z * dL.y;',
         // The stalk's own slack cycle, same phase — whitest when combed flattest; never fully out.
         '    float tug = 0.34 + 0.66 * (0.5 + 0.5 * sin(uTime * ' + REED_SLACK_RATE.toFixed(3) + ' + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.4));',
-        '    vWake = min(1.0, L * 1.4) * (0.45 + 0.55 * tug);',
+        '    vWake = min(1.0, L * 1.4) * (0.6 + 0.4 * tug);',
         '  }',
         '  #endif',
         '}',

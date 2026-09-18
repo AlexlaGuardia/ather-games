@@ -171,6 +171,9 @@ const at = (needle: string, what: string): number => {
     ['breakFx.burst(hit.x, hit.y, hit.z, hit.material)', 'the single struck block'],
     ['breakFx.burst(target.x, target.y, target.z, hit!.material)', "the bore's spot (Meltbore)"],
     ['breakFx.burst(hit.x, hit.y, hit.z, target.material)', 'the placed piece, in the block it is paid in (2026-09-12)'],
+    // The fifth (world lane, 2026-09-17): a fallen leaf LANDING — the same chips a broken leaf
+    // throws, at the cell it came to rest in. Not a break and not a loot; named so the set stays a set.
+    ['breakFx.burst(Math.floor(l.x), Math.floor(l.y), Math.floor(l.z), l.material)', 'a fallen leaf landing (leaf-fall.ts)'],
   ]
   {
     const total = src.split('breakFx.burst(').length - 1

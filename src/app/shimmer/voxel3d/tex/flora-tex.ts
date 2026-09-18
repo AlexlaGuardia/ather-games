@@ -752,7 +752,7 @@ export function wakePixels(seed = 0x9a4e, w = BLADE_TILE, h = TALL_TILE_H): Uint
     // The arms open at ~20° and fade over the length; the last quarter is broken foam only.
     const half = 1.5 + t * (w * 0.42)
     const fade = 1 - t
-    const armA = 230 * fade * fade + 20
+    const armA = 255 * Math.pow(fade, 1.4)
     for (const side of [-1, 1]) {
       const ax = c + side * half
       const x0 = Math.round(ax)
@@ -764,7 +764,7 @@ export function wakePixels(seed = 0x9a4e, w = BLADE_TILE, h = TALL_TILE_H): Uint
     const n = Math.round((1 - t) * 4 * rnd())
     for (let i = 0; i < n; i++) put(Math.round(c + (rnd() - 0.5) * half * 1.6), y, 90 + rnd() * 100 * fade)
   }
-  // The apex: a bright bead where the current hits the stalk.
-  for (let y = 0; y < 3; y++) for (let dx = -1; dx <= 1; dx++) put(Math.round(c + dx), y, 240)
+  // The apex: a small bright bead where the current hits the stalk — soft, or it is a sticker.
+  for (let y = 0; y < 3; y++) for (let dx = -1; dx <= 1; dx++) put(Math.round(c + dx), y, 200 - y * 40 - Math.abs(dx) * 50)
   return data
 }
