@@ -132,7 +132,7 @@ export default function BedsPage() {
         <color attach="background" args={['#1a1d24']} />
         <hemisphereLight args={[0xffffff, 0x445566, 1.1]} />
         <directionalLight position={[5, 10, 3]} intensity={0.8} />
-        <Rig target={target} view={view} eye={eye} onView={setView} />
+        <Rig target={target} view={view} eye={eye} onView={setView} floor={BED_Y} />
         <Shelf crop={crop} wood={wood} wet={wet} gap={gap} />
         {/* a keeper for scale, standing on the turf before the first bed */}
         <mesh position={[0.5, BED_Y + BODY_H / 2, (SEC >> 1) + 0.5]}><capsuleGeometry args={[BODY_R, Math.max(0.01, BODY_H - BODY_R * 2), 4, 8]} /><meshLambertMaterial color="#d98f3c" /></mesh>

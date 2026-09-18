@@ -16,7 +16,9 @@ export interface ShelfView { yaw: number; pitch: number; dist: number }
  * is how a station reads to somebody standing at it, and an orbit lifts you off the ground the
  * moment you back away. Same split `dev/worktable` draws.
  */
-export function Rig({ target, view, eye, onView }: { target: THREE.Vector3; view: { yaw: number; pitch: number; dist: number }; eye: boolean; onView: (v: { yaw: number; pitch: number; dist: number }) => void }) {
+export function Rig({ target, view, eye, onView, floor = 0 }: { target: THREE.Vector3; view: { yaw: number; pitch: number; dist: number }; eye: boolean; onView: (v: { yaw: number; pitch: number; dist: number }) => void
+  /** The y the keeper STANDS on — a shelf whose turf is a block up hands 1 here, or the eye is in the ground. */
+  floor?: number }) {
   const { camera, gl } = useThree()
   const s = useRef({ ...view, eye, dragging: false, lx: 0, ly: 0 })
   useEffect(() => { s.current.yaw = view.yaw; s.current.pitch = view.pitch; s.current.dist = view.dist; s.current.eye = eye }, [view, eye])
@@ -25,8 +27,8 @@ export function Rig({ target, view, eye, onView }: { target: THREE.Vector3; view
     const apply = () => {
       const c = s.current
       if (c.eye) {
-        camera.position.set(target.x + Math.cos(c.yaw) * c.dist, EYE_STAND, target.z + Math.sin(c.yaw) * c.dist)
-        camera.lookAt(target.x, EYE_STAND, target.z)
+        camera.position.set(target.x + Math.cos(c.yaw) * c.dist, floor + EYE_STAND, target.z + Math.sin(c.yaw) * c.dist)
+        camera.lookAt(target.x, floor + EYE_STAND, target.z)
         return
       }
       const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch)
@@ -46,7 +48,7 @@ export function Rig({ target, view, eye, onView }: { target: THREE.Vector3; view
     el.addEventListener('pointerdown', down); window.addEventListener('pointerup', up); window.addEventListener('pointermove', move)
     el.addEventListener('wheel', wheel, { passive: false })
     return () => { el.removeEventListener('pointerdown', down); window.removeEventListener('pointerup', up); window.removeEventListener('pointermove', move); el.removeEventListener('wheel', wheel) }
-  }, [camera, gl, target, eye, onView])
+  }, [camera, gl, target, eye, onView, floor])
   return null
 }
 
