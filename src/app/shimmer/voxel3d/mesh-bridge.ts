@@ -8,7 +8,8 @@
 // the one shared material.
 
 import * as THREE from 'three'
-import type { MeshAttrs } from './attrs'
+import { MATERIAL_COLOR, type MeshAttrs } from './attrs'
+import { MAT } from '../voxel/depth'
 import type { VoxelSettings } from './settings'
 import { lightApply, lightApplyHere, LIGHT_DECL_GLSL, createLightUniforms, type LightUniforms } from './light-glsl'
 import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from './cartoon-glsl'
@@ -108,8 +109,8 @@ export interface WaterMaterial extends THREE.Material {
   tick: (seconds: number) => void
   /** The flow dials from a running page (`window.__water`): speed in blocks/s at full riverness,
    *  and the travelling wave's height in blocks. Safe before compile. */
-  setFlow: (speed: number, wave: number) => void
-  getFlow: () => { speed: number; wave: number }
+  setFlow: (speed: number, wave: number, foam?: number) => void
+  getFlow: () => { speed: number; wave: number; foam: number }
 }
 
 /**
@@ -169,7 +170,7 @@ const WATER_ABSORB = 0.505
 
 // ── `window.__water` — the flow dials from a running page, the `__tex` shape ─────────────────
 // `__water.flow(0.5)` sets the scroll speed at mid-channel (blocks/s), `__water.wave(0.06)` the
-// travelling crest's height, `__water.get()` reads both. Alex judges the current from the bank
+// travelling crest's height, `__water.foam(2)` the shore foam's strength, `__water.get()` reads all. Alex judges the current from the bank
 // without a rebuild per value. Fans out to every water material alive (the world's, and the
 // devwin's second instance after an HMR).
 const WATER_DIALS = new Set<WaterMaterial>()
@@ -182,6 +183,8 @@ function registerWaterDial(m: WaterMaterial): void {
   w.__water = {
     flow: (v: number) => all(t => t.setFlow(v, t.getFlow().wave)),
     wave: (v: number) => all(t => t.setFlow(t.getFlow().speed, v)),
+    /** Shore-foam strength multiplier (1 = shipped; 0 = off; 2 = twice the white). */
+    foam: (v: number) => all(t => t.setFlow(t.getFlow().speed, t.getFlow().wave, v)),
     get: () => [...WATER_DIALS].map(t => t.getFlow()),
   }
 }
@@ -202,24 +205,27 @@ export function createWaterMaterial(tiles: { texture: THREE.DataArrayTexture } |
     // behind, every other water face keeps exactly the front-only behaviour it has today.
     side: THREE.DoubleSide,
   }) as unknown as WaterMaterial
-  let live: { uTime: { value: number }; uFlowSpeed: { value: number }; uFlowWave: { value: number } } | null = null
+  let live: { uTime: { value: number }; uFlowSpeed: { value: number }; uFlowWave: { value: number }; uFoam: { value: number } } | null = null
   let now = 0
-  let flowSpeed = WATER_FLOW_SPEED, flowWave = WATER_FLOW_WAVE
+  let flowSpeed = WATER_FLOW_SPEED, flowWave = WATER_FLOW_WAVE, foam = 1
   mat.tick = (s: number) => { now = s; if (live) live.uTime.value = s }
-  mat.setFlow = (speed: number, wave: number) => {
-    flowSpeed = speed; flowWave = wave
-    if (live) { live.uFlowSpeed.value = speed; live.uFlowWave.value = wave }
+  mat.setFlow = (speed: number, wave: number, f = foam) => {
+    flowSpeed = speed; flowWave = wave; foam = f
+    if (live) { live.uFlowSpeed.value = speed; live.uFlowWave.value = wave; live.uFoam.value = f }
   }
-  mat.getFlow = () => ({ speed: flowSpeed, wave: flowWave })
+  mat.getFlow = () => ({ speed: flowSpeed, wave: flowWave, foam })
   registerWaterDial(mat)
 
+  // The water tile's base green in 0..1, for the foam's relative threshold (see the fragment).
+  const waterBaseG = ((MATERIAL_COLOR[MAT.WATER] >> 8) & 255) / 255
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = { value: now }
     shader.uniforms.uFlowSpeed = { value: flowSpeed }
     shader.uniforms.uFlowWave = { value: flowWave }
+    shader.uniforms.uFoam = { value: foam }
     if (tiles) shader.uniforms.uTiles = { value: tiles.texture }
     Object.assign(shader.uniforms, light)
-    live = shader.uniforms as { uTime: { value: number }; uFlowSpeed: { value: number }; uFlowWave: { value: number } }
+    live = shader.uniforms as { uTime: { value: number }; uFlowSpeed: { value: number }; uFlowWave: { value: number }; uFoam: { value: number } }
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>',
@@ -269,7 +275,7 @@ if (normal.y > 0.5) {
       .replace('#include <common>',
         '#include <common>\nvarying float vDepth;\nvarying vec3 vVoxNormal;\nvarying vec3 vWaterWPos;\n'
         + (tiles ? 'uniform sampler2DArray uTiles;\nuniform float uTime;\nvarying vec3 vVoxPos;\n' : '')
-        + 'varying vec2 vFlow;\nuniform float uFlowSpeed;\n'
+        + 'varying vec2 vFlow;\nuniform float uFlowSpeed;\nuniform float uFoam;\n'
         + LIGHT_DECL_GLSL)
       .replace('#include <color_fragment>',
         `#include <color_fragment>
@@ -277,6 +283,9 @@ if (normal.y > 0.5) {
 // seen from behind. Cheaper than a second mesh, and it cannot drift out of step with the material
 // because it lives in the same function as the flag it corrects.
 if (!gl_FrontFacing && vVoxNormal.y < 0.5) discard;
+// The shore foam's strength, set inside the tiles block (it needs the scrolled sample) and
+// applied after the depth ramp below (it has to beat the shallow edge's near-zero alpha).
+float foamK = 0.0;
 ${tiles ? `{
   vec3 an = abs(vVoxNormal);
   vec2 tileUv = an.y > 0.5
@@ -308,6 +317,22 @@ ${tiles ? `{
     texture(uTiles, vec3(tileUv * 1.31 + driftB + step0 * 0.55, ${waterLayer.toFixed(1)})),
     texture(uTiles, vec3(tileUv * 1.31 + driftB + step1 * 0.55, ${waterLayer.toFixed(1)})), blend);
   diffuseColor.rgb *= mix(a.rgb, b.rgb, 0.5) * 1.25;
+  // ── ★ SHORE FOAM: where the current meets the bank (2026-09-18) ──────────────────────────
+  // The depth taper puts the shallowest water against the shore, and that is exactly where a
+  // river shows its speed: a moving edge is white, a still edge is clear. So: shallow × flowing,
+  // patterned by the bright part of the scrolled tile (which already travels with the current),
+  // so the foam streaks run downstream and no second texture exists. Zero on still water — a
+  // pond's edge stays the clear waterline it was. Sheet only; the rims carry no flow.
+  // ⚠ The tile is its base colour ± 16/255 (tiles.ts › paintWater), so the streak threshold is
+  // RELATIVE to the base green, not an absolute — an absolute 0.5 was never crossed and the foam
+  // shipped invisible for one build. The blurred depth puts the last two blocks at the bank under
+  // ~1.7, which is the band the foam lives in.
+  float fl = length(vFlow);
+  if (fl > 0.001 && vDepth >= 0.0 && vVoxNormal.y > 0.5) {
+    float shallow = smoothstep(1.7, 0.3, vDepth);
+    float streak = smoothstep(0.025, 0.06, a.g - ${waterBaseG.toFixed(4)});
+    foamK = clamp(shallow * min(1.0, fl * 1.6) * streak * uFoam, 0.0, 1.0);
+  }
 }` : ''}
 {
   // Beer-Lambert. See WATER_ABSORB for why the constant is pinned to the median depth and not to
@@ -331,6 +356,13 @@ ${tiles ? `{
     // Real depth also eats light, so the same term darkens it — gently, and floored well short of
     // black so a basin still reads as water rather than as a hole in the terrain.
     diffuseColor.rgb *= mix(1.0, 0.72, clamp(att, 0.0, 1.0));
+  }
+  // The foam is applied last: it whitens the colour and LIFTS the alpha, because the shallow
+  // edge it lives on is the most transparent water there is and a white that fades with it
+  // would never be seen. 0.85 of white at full foam, never opaque — it is still water.
+  if (foamK > 0.0) {
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.97, 1.0), foamK * 0.85);
+    diffuseColor.a = max(diffuseColor.a, foamK * 0.8);
   }
 }`)
 
