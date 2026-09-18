@@ -9,8 +9,8 @@
 //
 //   1. THE SOWN PATCH — a mounded, raked seedbed drawn over the furrows of every planted cell, so
 //      "sown" reads from across the plot, before the sprout and at night.
-//   2. THE CROP SIGN — a stake at the cell's corner carrying the crop's YIELD icon on a cross of
-//      two cards (readable from every side, like a flora tuft). The yield, not the seed: a seed
+//   2. THE CROP SIGN — a short post at the cell's corner with a plank BOARD on it, the crop's
+//      YIELD icon painted on the board, turned 45° so no side of the bed sees it edge-on. The yield, not the seed: a seed
 //      packet is what you put in, the grain is what you are waiting for, and every yield item has
 //      hand-painted art (`item-icon.ts` › painted) while the seeds all look like seeds.
 //
@@ -76,22 +76,49 @@ function sownTexture(): THREE.DataTexture {
 const ATLAS_COLS = 4
 const ATLAS_PX = ICON * ATLAS_COLS
 
+/** The board's plank, sRGB — a pale timber the painted icons sit on. */
+const PLANK: [number, number, number] = [206, 176, 128]
+
 /**
  * ONE texture holding every crop's icon — the render audit's rule (a GPU resource per object is
  * the context-loss bug), and also just the right shape: sixteen signs share one material and
- * differ only in which cell their card's UVs point at. Rows are flipped so +v is up.
+ * differ only in which cell their board's UVs point at. Rows are flipped so +v is up.
+ *
+ * ★ EACH CELL IS A PAINTED BOARD, NOT A CUT-OUT (2026-09-18, Alex read the first sign as a stem
+ * "glitched to the border, disconnected from the green scruff"): the sprite's transparent margin
+ * left the glyph floating a hand above the post. Now the icon is TRIMMED to its ink, scaled to fill
+ * the cell, and laid over a plank ground — so the board is a solid thing with a picture on it.
  */
 function iconAtlas(items: ReadonlyArray<string>): { tex: THREE.DataTexture; cell: Map<string, number> } {
   const px = new Uint8Array(ATLAS_PX * ATLAS_PX * 4)
   const cell = new Map<string, number>()
+  const grain = (x: number, y: number) => { let n = (x * 92821) ^ (y * 68917) ^ 0x1234567; n = Math.imul(n ^ (n >>> 13), 0x27d4eb2d); return ((n ^ (n >>> 15)) >>> 0) / 4294967296 }
+  const PAD = 3
   items.forEach((item, i) => {
     if (i >= ATLAS_COLS * ATLAS_COLS) return
     const src = iconPixelsFor(item, ICON)
     if (!src) return
+    // the ink's bounding box
+    let x0 = ICON, y0 = ICON, x1 = -1, y1 = -1
+    for (let y = 0; y < ICON; y++) for (let x = 0; x < ICON; x++) if (src[(y * ICON + x) * 4 + 3] > 0) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y) }
+    if (x1 < 0) return
+    const bw = x1 - x0 + 1, bh = y1 - y0 + 1
+    const fit = (ICON - PAD * 2) / Math.max(bw, bh)
+    const ox = Math.floor((ICON - bw * fit) / 2), oy = Math.floor((ICON - bh * fit) / 2)
     const cx = (i % ATLAS_COLS) * ICON, cy = Math.floor(i / ATLAS_COLS) * ICON
-    for (let y = 0; y < ICON; y++) {
-      const row = src.subarray(y * ICON * 4, (y + 1) * ICON * 4)
-      px.set(row, ((ATLAS_PX - 1 - (cy + y)) * ATLAS_PX + cx) * 4)
+    for (let y = 0; y < ICON; y++) for (let x = 0; x < ICON; x++) {
+      // plank ground with a little grain, a darker rim so the board has an edge
+      const rim = x === 0 || y === 0 || x === ICON - 1 || y === ICON - 1
+      const g = (grain(x + cx, y) - 0.5) * 18 - (rim ? 46 : 0)
+      let r = PLANK[0] + g, gg = PLANK[1] + g, b = PLANK[2] + g
+      // the icon, nearest-sampled from its trimmed box
+      const sx = Math.floor((x - ox) / fit) + x0, sy = Math.floor((y - oy) / fit) + y0
+      if (x >= ox && y >= oy && sx <= x1 && sy <= y1 && sx >= x0 && sy >= y0) {
+        const k = (sy * ICON + sx) * 4
+        if (src[k + 3] > 0) { r = src[k]; gg = src[k + 1]; b = src[k + 2] }
+      }
+      const o = ((ATLAS_PX - 1 - (cy + y)) * ATLAS_PX + (cx + x)) * 4
+      px[o] = Math.max(0, Math.min(255, r)); px[o + 1] = Math.max(0, Math.min(255, gg)); px[o + 2] = Math.max(0, Math.min(255, b)); px[o + 3] = 255
     }
     cell.set(item, i)
   })
@@ -101,9 +128,11 @@ function iconAtlas(items: ReadonlyArray<string>): { tex: THREE.DataTexture; cell
   return { tex, cell }
 }
 
-/** Where the stake stands in its cell, and how tall: the near-left corner, clear of the crop's root. */
-const STAKE = { x: 0.16, z: 0.16, h: 0.46, w: 0.05 }
-const CARD = 0.42
+/** The post: the cell's near-left corner, clear of the crop's root; short, so the board is the thing. */
+const STAKE = { x: 0.18, z: 0.18, h: 0.30, w: 0.05 }
+/** The board: a plank the icon is painted on, standing on the post, turned 45° to the cell so no
+ *  side of the bed sees it edge-on (a marker faces the path; a bed has four paths). */
+const BOARD = { w: 0.40, h: 0.34, d: 0.035 }
 
 export function createBedSigns(): BedSigns {
   const group = new THREE.Group()
@@ -121,41 +150,39 @@ export function createBedSigns(): BedSigns {
   const stakes = new THREE.InstancedMesh(stakeGeo, stakeMat, SIGN_BUDGET)
   stakes.count = 0; stakes.frustumCulled = false
   group.add(stakes)
-  // 3. the cards — a cross of two planes per crop, wearing that crop's yield icon
-  const crossGeo = (() => {
-    const a = new THREE.PlaneGeometry(CARD, CARD)
-    const b = new THREE.PlaneGeometry(CARD, CARD); b.rotateY(Math.PI / 2)
-    const pos = new Float32Array([...a.attributes.position.array, ...b.attributes.position.array])
-    const nrm = new Float32Array([...a.attributes.normal.array, ...b.attributes.normal.array])
-    const uv = new Float32Array([...a.attributes.uv.array, ...b.attributes.uv.array])
-    const ia = a.getIndex()!, ib = b.getIndex()!
-    const idx = [...Array.from(ia.array), ...Array.from(ib.array).map(i => i + a.attributes.position.count)]
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-    g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3))
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
-    g.setIndex(idx)
-    g.translate(0, STAKE.h + CARD * 0.36, 0)   // the card's foot sits on the stake's top
-    a.dispose(); b.dispose()
+  // 3. the boards — one box per crop, its FRONT and BACK faces wearing that crop's atlas cell,
+  //    the four edges plain plank. Box face order in three: +x, −x, +y, −y, +z, −z; groups 4 and 5
+  //    are the two faces the picture is on.
+  const boardGeo = (() => {
+    const g = new THREE.BoxGeometry(BOARD.w, BOARD.h, BOARD.d)
+    g.translate(0, STAKE.h + BOARD.h / 2 - 0.02, 0)
+    g.rotateY(Math.PI / 4)
     return g
   })()
   const cards = new Map<string, THREE.InstancedMesh>()
   const unsigned: string[] = []
   const atlas = iconAtlas(CROP_IDS.map(signItemOf).filter((x): x is string => !!x))
-  const cardMat = new THREE.MeshLambertMaterial({ map: atlas.tex, alphaTest: 0.5, side: THREE.DoubleSide })
+  const faceMat = new THREE.MeshLambertMaterial({ map: atlas.tex })
+  const edgeMat = new THREE.MeshLambertMaterial({ color: 0xb89a6a })
+  // groups 0..3 = the edges, 4..5 = front/back — one material array, shared by every board
+  const boardMats = [edgeMat, edgeMat, edgeMat, edgeMat, faceMat, faceMat]
   const cardGeos: THREE.BufferGeometry[] = []
   for (const cropId of CROP_IDS) {
     const item = signItemOf(cropId)
     const c = item ? atlas.cell.get(item) : undefined
     if (c === undefined) { unsigned.push(cropId); continue }
-    // The cross, with its UVs moved onto this crop's atlas cell. Geometry per crop, texture shared.
-    const g = crossGeo.clone()
+    // The board, with the front/back faces' UVs moved onto this crop's atlas cell. Geometry per
+    // crop, texture and materials shared. BoxGeometry lays each face's UVs over 0..1.
+    const g = boardGeo.clone()
     const uv = g.attributes.uv as THREE.BufferAttribute
     const ox = (c % ATLAS_COLS) / ATLAS_COLS, oy = 1 - (Math.floor(c / ATLAS_COLS) + 1) / ATLAS_COLS
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, ox + uv.getX(i) / ATLAS_COLS, oy + uv.getY(i) / ATLAS_COLS)
+    for (const grp of g.groups.slice(4)) for (let i = grp.start; i < grp.start + grp.count; i++) {
+      const vi = g.index!.getX(i)
+      uv.setXY(vi, ox + uv.getX(vi) / ATLAS_COLS, oy + uv.getY(vi) / ATLAS_COLS)
+    }
     uv.needsUpdate = true
     cardGeos.push(g)
-    const m = new THREE.InstancedMesh(g, cardMat, SIGN_BUDGET)
+    const m = new THREE.InstancedMesh(g, boardMats, SIGN_BUDGET)
     m.count = 0; m.frustumCulled = false
     cards.set(cropId, m); group.add(m)
   }
@@ -184,9 +211,9 @@ export function createBedSigns(): BedSigns {
     },
     counts: () => ({ ...last, unsigned: [...unsigned] }),
     dispose() {
-      sownGeo.dispose(); stakeGeo.dispose(); crossGeo.dispose(); sownMat.dispose(); stakeMat.dispose()
+      sownGeo.dispose(); stakeGeo.dispose(); boardGeo.dispose(); sownMat.dispose(); stakeMat.dispose()
       for (const g of cardGeos) g.dispose()
-      cardMat.dispose(); sownTex.dispose(); atlas.tex.dispose()
+      faceMat.dispose(); edgeMat.dispose(); sownTex.dispose(); atlas.tex.dispose()
     },
   }
 }
