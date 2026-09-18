@@ -2270,6 +2270,10 @@ const VAR_FIXED_SET: ReadonlySet<number> = new Set<number>([
   MAT.GLASS, MAT.GLASS_VIOLETBLOOM, MAT.GLASS_STORMGRASS, MAT.GLASS_TIDEPETAL, MAT.GLASS_SUNPETAL, MAT.GLASS_DAWNCAP, MAT.GLASS_MOONVINE,
   MAT.SAPLING_GOLDWOOD, MAT.SAPLING_SHIMMEROAK, MAT.SAPLING_STARWILLOW, MAT.SAPLING_DAWNWOOD,
   MAT.CONJURED,
+  // ★ THE GARDEN BEDS ARE PICTURES (2026-09-18): the furrows on the top tile must run ONE way across
+  // a merged bed, and a crafted timber frame takes no weather. They sat in the turf set (turned per
+  // block) and a 3×6 showed its furrows as dashes at four angles — the grid drawn back by rotation.
+  MAT.GARDEN_BED_GOLDWOOD, MAT.GARDEN_BED_SHIMMEROAK, MAT.GARDEN_BED_DAWNWOOD,
 ])
 /** Grainless on every face. */
 const VAR_FULL_SET: ReadonlySet<number> = new Set<number>([
@@ -2279,7 +2283,6 @@ const VAR_FULL_SET: ReadonlySet<number> = new Set<number>([
 /** Grainless on top and underneath, striped on the side. */
 const VAR_TURF_SET: ReadonlySet<number> = new Set<number>([
   MAT.TOPSOIL, MAT.GREY_SOIL, MAT.FOREST_LOAM, MAT.LUSH_TURF, MAT.DRY_GRASS, MAT.HIGHLAND_TURF,
-  MAT.GARDEN_BED_GOLDWOOD, MAT.GARDEN_BED_SHIMMEROAK, MAT.GARDEN_BED_DAWNWOOD,
 ])
 
 /** How far a material's face may be turned per block. Asked per (material, face), like `paintFor`. */

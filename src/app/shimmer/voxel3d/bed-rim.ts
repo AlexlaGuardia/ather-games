@@ -20,7 +20,7 @@
 // The pure half (`rimMask`) is exported for the oracle; it reads no three and no host state.
 import * as THREE from 'three'
 import { createPieceMaterial, type PieceMaterial } from './piece-mesh'
-import { layerOf, SIDE } from './tex/tiles'
+import { layerOf, SIDE, BOTTOM } from './tex/tiles'
 import { isGardenBed, GARDEN_BEDS } from './garden'
 import type { TileArray } from './tex/atlas'
 import type { LightUniforms } from './light-glsl'
@@ -61,13 +61,18 @@ const RAIL = { w: 1.0, h: 0.2, d: 0.14 }
 /** Post: the corner at (0,0), a hair taller than the rail so the frame's corners read from a distance. */
 const POST = { w: 0.2, h: 0.28, d: 0.2 }
 
-/** One box, built about the cell's min corner, wearing the bed's SIDE tile (its plank frame) all over. */
+/**
+ * One box, built about the cell's min corner. Sides wear the bed's SIDE tile (its plank frame); the
+ * TOP wears the bed's BOTTOM tile — dark wood grit. ⚠ NOT the side tile on top: `tiles.ts` tunes a
+ * top tile dark because the lighting lifts a top face ~3.6×, and the plank tile painted at full
+ * wood brightness came out as a pale grey band on the first prod shot (09-18).
+ */
 function boxFor(mat: number, w: number, h: number, d: number, cx: number, cy: number, cz: number): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(w, h, d)
   g.translate(cx, cy, cz)
   const n = g.attributes.position.count
   const side = layerOf(mat, SIDE)
-  g.setAttribute('aLayerTop', new THREE.BufferAttribute(new Float32Array(n).fill(side), 1))
+  g.setAttribute('aLayerTop', new THREE.BufferAttribute(new Float32Array(n).fill(layerOf(mat, BOTTOM)), 1))
   g.setAttribute('aLayerSide', new THREE.BufferAttribute(new Float32Array(n).fill(side), 1))
   g.setAttribute('aEmissive', new THREE.BufferAttribute(new Float32Array(n).fill(0), 1))
   return g
