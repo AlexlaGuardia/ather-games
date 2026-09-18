@@ -60,7 +60,11 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
   /** Rendered in the head, under the tabs, for the ACTIVE tab only — the pieces' material strip belongs to Pieces. */
   footer?: (tab: string) => React.ReactNode
 }) {
-  const [tab, setTab] = useState<string>(() => tabs.find(t => tiles.some(x => x.tab === t)) ?? tabs[0])
+  // Opens on the first tab with something you can MAKE, not the first with something in it — a
+  // keeper with planks lands on Pieces, not on a Materials tab of greyed refines (Alex, 09-17:
+  // "prioritize the grid by craftable").
+  const [tab, setTab] = useState<string>(() =>
+    tabs.find(t => tiles.some(x => x.tab === t && x.can)) ?? tabs.find(t => tiles.some(x => x.tab === t)) ?? tabs[0])
   const [q, setQ] = useState('')
   const live = tabs.filter(t => tiles.some(x => x.tab === t))
   const shown = useMemo(() => {
@@ -130,10 +134,14 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
           two lines the name needs. The name is dim on a tile you cannot make, bright on one you can —
           the split the card then explains in red and green. */}
       <div className="grid grid-cols-6 gap-1 mb-2">
-        {shown.map(t => {
+        {shown.map((t, i) => {
           const on = t.id === pickedId
-          return (
-            <button key={t.id} title={t.name} onClick={() => onPick(on ? null : t.id)}
+          // The seam between what you can make and what you cannot, said once: craftable first is
+          // the sort, and this row is what makes the sort READ as a priority rather than a shuffle.
+          const seam = i > 0 && !t.can && shown[i - 1].can
+          return (<React.Fragment key={t.id}>
+            {seam && <div className="col-span-6 mt-1 mb-0.5 text-[8px] tracking-[.14em] uppercase text-white/30 border-t border-white/10 pt-1">need materials</div>}
+            <button title={t.name} onClick={() => onPick(on ? null : t.id)}
                     className={`relative rounded border flex flex-col items-center gap-1 pt-1.5 pb-1 px-0.5 transition-colors ${
                       on ? 'border-amber-300 bg-amber-200/10'
                          : t.can ? 'border-white/20 bg-white/[0.04] hover:border-amber-200/60'
@@ -142,7 +150,7 @@ export function CraftGrid({ tiles, tabs, have, label, pickedId, onPick, action, 
               <span className={`text-[8px] leading-[10px] text-center line-clamp-2 break-words w-full ${t.can ? 'text-white/75' : 'text-white/45'}`}>{t.name}</span>
               {have(t.itemId) > 0 && <span className="absolute top-0 right-0.5 text-[8px] text-white/50 tabular-nums">{have(t.itemId)}</span>}
             </button>
-          )
+          </React.Fragment>)
         })}
         {shown.length === 0 && <div className="col-span-6 text-white/35 py-3">nothing here{q ? ` for "${q}"` : ''}</div>}
       </div>
