@@ -10,8 +10,9 @@
 // world mounts — `createBedRims`, `createBedSigns`, `createWetPatches`, `createFloraRenderer` —
 // over a fake column, lays the five stages in a row beside an empty bed, and lets the camera orbit.
 // What you see is what the world draws, minus the light field (flat noon here), the same caveat
-// `dev/stations` carries. The bed BLOCKS themselves are cubes wearing the shipped tiles × the
-// material colour, the block program's own multiply, so the soil reads the colour it reads in-world.
+// `dev/stations` carries. The bed BLOCKS and the turf under them are ONE small section run through
+// the shipped greedy mesher and drawn by the shipped textured block program — tiles, material
+// colour, AO, variants — so the soil reads exactly the colour it reads in-world.
 //
 // `?crop=<id>` picks the crop · `?wood=goldwood|shimmeroak|dawnwood` the frame · `?wet=1` waters
 // the row · `?gap=1` puts the six beds SHOULDER TO SHOULDER so the merged rim is judged here too ·
@@ -20,8 +21,13 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useEffect, useMemo, useState } from 'react'
-import { makeTileArray } from '../../voxel3d/tex/atlas'
-import { buildTileArray, sliceLayer, layerOf, TOP, SIDE, BOTTOM } from '../../voxel3d/tex/tiles'
+import { makeTileArray, createTexturedVoxelMaterial } from '../../voxel3d/tex/atlas'
+import { Section } from '../../voxel/section'
+import { greedyMesh } from '../../voxel/greedy'
+import { buildAttrsSplit } from '../../voxel3d/attrs'
+import { toGeometry } from '../../voxel3d/mesh-bridge'
+import { isLeafMat } from '../../voxel/trees'
+import { isGlassMat } from '../../voxel/depth'
 import { createLightUniforms } from '../../voxel3d/light-glsl'
 import { createBedRims } from '../../voxel3d/bed-rim'
 import { createBedSigns } from '../../voxel3d/bed-sign'
@@ -29,7 +35,6 @@ import { createWetPatches } from '../../voxel3d/wet-patch'
 import { createFloraRenderer } from '../../voxel3d/flora-mesh'
 import { BED_CROP_IDS, bedVariant, type PlantedSpot, type PlantedStage } from '../../voxel3d/planted-feed'
 import { BED_WOODS } from '../../voxel3d/garden'
-import { MATERIAL_COLOR } from '../../voxel3d/attrs'
 import { MAT } from '../../voxel/depth'
 import { CROP_DEFS } from '../../voxel/crops'
 import { BODY_H, BODY_R } from '../../voxel3d/locomotion'
@@ -41,28 +46,27 @@ const STAGE_NAME = ['mound', 'sprout', 'growing', 'grown', 'ripe']
 /** Cells along +x: the empty bed first, then the five stages. */
 const CELLS = 1 + STAGES.length
 
-/** Box face order is +x, −x, +y, −y, +z, −z. */
-const FACE_ORDER = [SIDE, SIDE, TOP, BOTTOM, SIDE, SIDE]
+/** The section the shelf lives in: turf at y=0 everywhere, the beds at y=1. */
+const SEC = 16
+const BED_Y = 1
 
-/** A cube wearing a block's own three tiles × its material colour — the block program's multiply. */
-function BlockCubes({ mat, cells }: { mat: number; cells: { x: number; y: number; z: number }[] }) {
-  const all = useMemo(() => buildTileArray(TILE), [])
-  const materials = useMemo(() => {
-    const tint = new THREE.Color(MATERIAL_COLOR[mat] ?? 0xffffff)
-    return FACE_ORDER.map(face => {
-      const t = new THREE.DataTexture(sliceLayer(all, TILE, layerOf(mat, face)), TILE, TILE, THREE.RGBAFormat)
-      t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.needsUpdate = true
-      return new THREE.MeshLambertMaterial({ map: t, color: tint })
-    })
-  }, [all, mat])
-  const geo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
-  const mesh = useMemo(() => new THREE.InstancedMesh(geo, materials, Math.max(1, cells.length)), [geo, materials, cells.length])
-  useEffect(() => {
-    const d = new THREE.Object3D()
-    cells.forEach((c, i) => { d.position.set(c.x + 0.5, c.y + 0.5, c.z + 0.5); d.updateMatrix(); mesh.setMatrixAt(i, d.matrix) })
-    mesh.count = cells.length; mesh.instanceMatrix.needsUpdate = true
-  }, [mesh, cells])
-  return <primitive object={mesh} />
+/**
+ * The ground and the beds as the world draws them: a section, the shipped mesher, the shipped
+ * textured block material. One mesh, rebuilt when the wood or the row changes.
+ */
+function Ground({ tiles, light, cells, wood }: { tiles: ReturnType<typeof makeTileArray>; light: ReturnType<typeof createLightUniforms>; cells: { x: number; y: number; z: number }[]; wood: number }) {
+  const textured = useMemo(() => createTexturedVoxelMaterial(tiles, light), [tiles, light])
+  useEffect(() => () => textured.material.dispose(), [textured])
+  const geo = useMemo(() => {
+    const sec = new Section(SEC)
+    for (let x = 0; x < SEC; x++) for (let z = 0; z < SEC; z++) sec.set(x, 0, z, MAT.LUSH_TURF)
+    for (const c of cells) sec.set(c.x, c.y, c.z, wood)
+    const mesh = greedyMesh(sec)
+    const { solid } = buildAttrsSplit(mesh, m => m === MAT.WATER, isLeafMat, isGlassMat)
+    return solid ? toGeometry(solid) : new THREE.BufferGeometry()
+  }, [cells, wood])
+  useEffect(() => () => geo.dispose(), [geo])
+  return <mesh geometry={geo} material={textured.material} />
 }
 
 function Shelf({ crop, wood, wet, gap }: { crop: string; wood: number; wet: boolean; gap: number }) {
@@ -76,12 +80,13 @@ function Shelf({ crop, wood, wet, gap }: { crop: string; wood: number; wet: bool
   useEffect(() => () => { rims.dispose(); signs.dispose(); wetPatches.dispose(); flora.dispose() }, [rims, signs, wetPatches, flora])
   useFrame(s => flora.tick(s.clock.elapsedTime))
 
-  const cells = useMemo(() => Array.from({ length: CELLS }, (_, i) => ({ x: i * gap, y: 0, z: 0 })), [gap])
+  // Along +x from x=2 (a margin of turf before the first bed), on the turf at y=1, mid-section in z.
+  const cells = useMemo(() => Array.from({ length: CELLS }, (_, i) => ({ x: 2 + i * gap, y: BED_Y, z: SEC >> 1 })), [gap])
   useEffect(() => {
     const at = new Map<string, number>(cells.map(c => [`${c.x},${c.y},${c.z}`, wood]))
     const read = (x: number, y: number, z: number) => at.get(`${x},${y},${z}`) ?? 0
     rims.invalidateAll()
-    rims.sync([{ key: 'shelf', x0: 0, z0: 0, ySpan: 1 }], read)
+    rims.sync([{ key: 'shelf', x0: 0, z0: 0, ySpan: BED_Y + 1 }], read)
     // cell 0 is the empty bed; cells 1..5 carry the crop at stages 0..4
     const spots: PlantedSpot[] = STAGES.map((stage, i) => {
       const c = cells[i + 1]
@@ -94,7 +99,7 @@ function Shelf({ crop, wood, wet, gap }: { crop: string; wood: number; wet: bool
 
   return (
     <>
-      <BlockCubes mat={wood} cells={cells} />
+      <Ground tiles={tiles} light={light} cells={cells} wood={wood} />
       <primitive object={rims.group} />
       <primitive object={signs.group} />
       <primitive object={wetPatches.group} />
@@ -112,7 +117,7 @@ export default function BedsPage() {
   const [eye, setEye] = useState(q?.get('eye') === '1')
   const [view, setView] = useState<ShelfView>({ yaw: Number(q?.get('yaw') ?? -0.9), pitch: Number(q?.get('pitch') ?? 0.42), dist: Number(q?.get('dist') ?? 12) })
   const wood = BED_WOODS.find(w => w.wood === woodId)!.material
-  const target = useMemo(() => new THREE.Vector3(((CELLS - 1) * gap) / 2 + 0.5, 0.8, 0.5), [gap])
+  const target = useMemo(() => new THREE.Vector3(2 + ((CELLS - 1) * gap) / 2 + 0.5, BED_Y + 0.8, (SEC >> 1) + 0.5), [gap])
   // The address names the view, so a screenshot can be re-shot.
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -129,9 +134,8 @@ export default function BedsPage() {
         <directionalLight position={[5, 10, 3]} intensity={0.8} />
         <Rig target={target} view={view} eye={eye} onView={setView} />
         <Shelf crop={crop} wood={wood} wet={wet} gap={gap} />
-        {/* the floor at the beds' feet, and a keeper for scale */}
-        <mesh position={[target.x, -0.01, target.z]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[CELLS * gap + 8, 10]} /><meshLambertMaterial color={'#' + (MATERIAL_COLOR[MAT.LUSH_TURF] ?? 0x3a4a34).toString(16).padStart(6, '0')} /></mesh>
-        <mesh position={[-gap, BODY_H / 2, 0.5]}><capsuleGeometry args={[BODY_R, Math.max(0.01, BODY_H - BODY_R * 2), 4, 8]} /><meshLambertMaterial color="#d98f3c" /></mesh>
+        {/* a keeper for scale, standing on the turf before the first bed */}
+        <mesh position={[0.5, BED_Y + BODY_H / 2, (SEC >> 1) + 0.5]}><capsuleGeometry args={[BODY_R, Math.max(0.01, BODY_H - BODY_R * 2), 4, 8]} /><meshLambertMaterial color="#d98f3c" /></mesh>
       </Canvas>
       <div className="absolute top-3 left-3 space-y-1.5 pointer-events-none">
         <div className="text-white/95 tracking-[.18em] uppercase">the bed shelf</div>
@@ -149,7 +153,7 @@ export default function BedsPage() {
           <button onClick={() => setEye(e => !e)} className={btn(eye)}>{eye ? 'keeper eye' : 'from above'}</button>
         </div>
         <div className="text-white/60">
-          {['empty', ...STAGE_NAME].map((n, i) => <span key={n} className="mr-3"><span className="text-white/85">{i * gap}</span> · {n}</span>)}
+          {['empty', ...STAGE_NAME].map((n, i) => <span key={n} className="mr-3"><span className="text-white/85">x{2 + i * gap}</span> · {n}</span>)}
         </div>
       </div>
     </div>
