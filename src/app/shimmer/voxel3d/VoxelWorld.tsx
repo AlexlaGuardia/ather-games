@@ -9788,8 +9788,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             isDamp(watered.current, hit.x, hit.y, hit.z, now) ? `damp (${dampLeftLine(watered.current, hit.x, hit.y, hit.z, now)})` : '',
             isFed(watered.current, hit.x, hit.y, hit.z, now) ? `fed (${fedLeftLine(watered.current, hit.x, hit.y, hit.z, now)})` : '',
           ].filter(Boolean).join(' and ')
-          onSay(care ? `this bed is ${care} and wants a common crop seed — grass tufts carry them`
-                     : 'this bed wants a common crop seed — grass tufts carry them')
+          // Both doors, because the second is the one that keeps a farm alive: a ripe crop hands
+          // its seed back (`engine/farming.ts` › SEED_BACK), so the first tuft is the only one you need.
+          onSay(care ? `this bed is ${care} and wants a crop seed — grass tufts carry them, and a ripe crop gives its own back`
+                     : 'this bed wants a crop seed — grass tufts carry them, and a ripe crop gives its own back')
         }
         mouse.current.right = false
       } else if (intent === 'sow') {

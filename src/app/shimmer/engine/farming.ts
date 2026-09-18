@@ -139,11 +139,33 @@ export interface HarvestCropResult {
   bloomed?: BloomSpecies
 }
 
+// ── ★ THE SEED COMES BACK (2026-09-18, Alex: "how the player can go about getting more seeds") ──
+// Before this a keeper's own harvest returned NO seed: every planting spent one and the bed paid
+// out produce only, so a farm was a seed SINK fed by cutting grass (1/12 a tuft, tier 1 only) and
+// by finding wild plants (25%). The loop could not close on itself — and the sown-bed sign made it
+// visible: you could see exactly which seed you were about to lose.
+//
+// Canon's own reason says the fix: all Ather plant life is one fungal body (`world/flora.md`), and
+// a tuft handing over a wheat seed is *"one body fruiting twice"* (`meadow-seed.ts`). A ripe crop
+// fruiting its own seed again is the same fact one step closer. So: ONE seed back, always — the
+// loop never dies on a bad roll — and a chance of a SECOND that grows with farming level past the
+// crop's own, so a practised keeper's field expands and a novice's merely holds. Never for the
+// Mana Bloom (it pays a spirit; canon mints those ceremonially). The wider question — a seed seller,
+// a spirit that drops them — stays canon's open item (`shimmer-skilling.md` › Open Questions).
+export const SEED_BACK_BASE = 1
+/** Chance of the second seed at the crop's own level; +2% a level above it, capped. */
+export const SEED_BACK_BONUS = 0.25
+export const SEED_BACK_BONUS_PER_LEVEL = 0.02
+export const SEED_BACK_BONUS_CAP = 0.6
+export const seedBackBonusChance = (levelAboveMin: number): number =>
+  Math.min(SEED_BACK_BONUS_CAP, SEED_BACK_BONUS + Math.max(0, levelAboveMin) * SEED_BACK_BONUS_PER_LEVEL)
+
 /**
- * Harvest a ready crop — rolls yields with level bonus, adds items, grants farming XP.
+ * Harvest a ready crop — rolls yields with level bonus, adds items, grants farming XP, and hands
+ * the crop's own seed back (see above). `roll` is injectable so the oracle can pin both branches.
  * bonusFindChance: companion Tuberfind perk (Dustwhisker @15) — a chance for one bonus crop.
  */
-export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet, bonusFindChance = 0, xpMult = 1): HarvestCropResult {
+export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet, bonusFindChance = 0, xpMult = 1, roll: () => number = Math.random): HarvestCropResult {
   const def = CROP_DEFS[crop.cropId]
   if (!def) return { items: [], xpGained: 0 }
 
@@ -160,14 +182,18 @@ export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet,
 
   const items: { itemId: string; count: number }[] = []
   for (const y of def.yields) {
-    if (Math.random() < y.chance) {
+    if (roll() < y.chance) {
       let count = Math.max(1, Math.round(y.count * yieldMult))
       // Companion perk (Tuberfind @15) — a chance for a bonus crop on top.
-      if (bonusFindChance > 0 && Math.random() < bonusFindChance) count += 1
+      if (bonusFindChance > 0 && roll() < bonusFindChance) count += 1
       addItems(inv, y.itemId, count)
       items.push({ itemId: y.itemId, count })
     }
   }
+  // The seed back — after the produce so the toast reads "2× goldleaf, 1× goldleaf seed".
+  const seeds = SEED_BACK_BASE + (roll() < seedBackBonusChance(levelAboveMin) ? 1 : 0)
+  addItems(inv, def.seedItemId, seeds)
+  items.push({ itemId: def.seedItemId, count: seeds })
 
   const xp = Math.round(def.xpGrant * xpMult)
   addSkillXP(skills.farming, xp)
