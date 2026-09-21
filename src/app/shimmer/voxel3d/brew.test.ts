@@ -15,7 +15,7 @@
 // genuinely unreachable here. Do not read the diff as the rule being relaxed.
 
 import { brewBlocker, absentInputs, cauldronMenu, isInfusionBrew, ALL_BREWS } from './brew'
-import { POTION_DEFS, INFUSION_BREWS } from '../engine/alchemy'
+import { POTION_DEFS, INFUSION_BREWS, POTENT_INFUSION_BREWS } from '../engine/alchemy'
 import { MAX_INFUSIONS_PER_ELEMENT } from '../spirits/spirit'
 import { BLOCKS } from '../voxel/registry'
 import { RECIPE_OUTPUTS, RECIPES } from '../voxel/recipes'
@@ -199,7 +199,7 @@ const full = () => 0
   ok(POTION_DEFS.ather_infusion !== undefined, 'the trap still exists in the table (if it is gone, delete this)')
   ok(!isInfusionBrew('ather_infusion'), 'ather_infusion is NOT labelled as a spirit infusion')
   ok(Object.values(INFUSION_BREWS).every(isInfusionBrew), 'and all four real ones are')
-  ok(ALL_BREWS.filter(isInfusionBrew).length === 4, 'exactly four rows wear the spirit label')
+  ok(ALL_BREWS.filter(isInfusionBrew).length === 4 + Object.keys(POTENT_INFUSION_BREWS).length, 'the four plain rows and each potent form wear the spirit label — no others')
 }
 
 // ── 8. ★ THE REACHABILITY PREMISE `WORLD_ITEMS` RESTS ON ───────────────────────────────────────

@@ -79,7 +79,7 @@ export const isConsumable = (itemId: string): boolean => consumeEffect(itemId) !
 /** Why a right-click with this in hand did nothing — or null when it is simply not a consumable. */
 export function consumeRefusal(itemId: string): string | null {
   const el = elementForInfusion(itemId)
-  if (el) return `a ${el} infusion goes on a spirit, not in you — and nothing applies it yet`
+  if (el) return `a ${el} infusion goes on a spirit, not in you — pour it from the Grimoire (I)`
   if (itemId in BED_POTIONS) return 'that goes on a bed, not in you — aim at the soil'
   return null
 }

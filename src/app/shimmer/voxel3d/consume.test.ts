@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { MAT } from '../voxel/depth'
 import { codeOnly } from '../testing/guard'
-import { POTION_DEFS, elementForInfusion } from '../engine/alchemy'
+import { POTION_DEFS, elementForInfusion, INFUSION_BREWS, POTENT_INFUSION_BREWS } from '../engine/alchemy'
 import { BUFF_DEFS, POTION_BUFFS, type BuffId } from '../engine/potion-effects'
 import { consumeEffect, consumeRefusal, consumeLine, isConsumable, FOOD, WIRED_BUFFS } from './consume'
 import { rightClickIntent } from './interact'
@@ -16,9 +16,11 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 {
   const inert = Object.keys(POTION_DEFS).filter(id => !isConsumable(id) && !consumeRefusal(id))
   ok(inert.length === 0, `§1 ★★ every potion is drinkable or refused with a reason — inert: ${inert.join(', ') || 'none'}`)
+  // Four plain + the potent forms (09-21: one, earth) — derived from the two maps, never a literal.
   const infusions = Object.keys(POTION_DEFS).filter(id => elementForInfusion(id))
-  ok(infusions.length === 4 && infusions.every(id => !isConsumable(id) && consumeRefusal(id)!.includes('spirit')),
-    `§1 the four elemental infusions are refused, not drunk (${infusions.length})`)
+  const expected = Object.keys(INFUSION_BREWS).length + Object.keys(POTENT_INFUSION_BREWS).length
+  ok(infusions.length === expected && infusions.every(id => !isConsumable(id) && consumeRefusal(id)!.includes('spirit')),
+    `§1 every elemental infusion, plain or potent, is refused, not drunk (${infusions.length} of ${expected})`)
   ok(consumeEffect('mana_draught')?.mana === 40 && consumeEffect('mana_draught')?.kind === 'drink', '§1 a Mana Draught restores 40 mana')
   ok(consumeEffect('shimmer_salve')?.hp === 50, '§1 a salve mends 50 hp')
   ok(consumeEffect('crystal_elixir')?.sh === 75, '§1 an elixir re-forms 75 shield')

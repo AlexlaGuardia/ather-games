@@ -9,7 +9,7 @@
 //
 // The infusions are canon's ONLY road to an evolved form, so a broken join here costs ten of the
 // forty ruled second forms per element, with nothing on screen to say so.
-import { POTION_DEFS, INFUSION_BREWS, elementForInfusion, canBrew, brewPotion, applyInfusion } from './alchemy'
+import { POTION_DEFS, INFUSION_BREWS, POTENT_INFUSION_BREWS, POTENT_POINTS, elementForInfusion, infusionPointsOf, canBrew, brewPotion, applyInfusion } from './alchemy'
 import { ELEMENT_HERBS } from './farming'
 import { ITEMS } from '../sprites/items'
 import { createInventory, countItem, addItems } from './inventory'
@@ -213,6 +213,46 @@ console.log('\nand it survives a reload')
   check('the poured points come back', back.infusions.earth === 2, `got ${back?.infusions?.earth}`)
   check('the total comes back', infusionTotal(back.infusions) === 2)
   check('and the lean the threshold reads comes back', dominantInfusion(back.infusions) === 'earth')
+}
+
+// ── ★ THE POTENT INFUSION — the potency axis (2026-09-21) ────────────────────────────────────────
+console.log('\npotent infusions')
+{
+  for (const [el, id] of Object.entries(POTENT_INFUSION_BREWS)) {
+    check(`potent ${el} resolves in POTION_DEFS`, !!POTION_DEFS[id!])
+    check(`potent ${el} carries its element`, elementForInfusion(id!) === el)
+    check(`potent ${el} pours ${POTENT_POINTS}`, infusionPointsOf(id!) === POTENT_POINTS)
+    check(`potent ${el} wants every plain ingredient plus its additive`, POTION_DEFS[INFUSION_BREWS[el as 'earth']].recipe.every(r => POTION_DEFS[id!].recipe.some(x => x.itemId === r.itemId && x.count === r.count)) && POTION_DEFS[id!].recipe.length > POTION_DEFS[INFUSION_BREWS[el as 'earth']].recipe.length)
+    check(`potent ${el} costs more than the plain (tier, level, mana)`, POTION_DEFS[id!].tier > POTION_DEFS[INFUSION_BREWS[el as 'earth']].tier && POTION_DEFS[id!].minAlchemyLevel > POTION_DEFS[INFUSION_BREWS[el as 'earth']].minAlchemyLevel)
+  }
+  check('a plain infusion pours one', infusionPointsOf(INFUSION_BREWS.earth) === 1)
+  check('an ordinary potion pours nothing', infusionPointsOf('mana_draught') === 0 && infusionPointsOf('ather_infusion') === 0)
+  check('POTENT_POINTS is a real lengthening', POTENT_POINTS > 1)
+  const potent = POTENT_INFUSION_BREWS.earth!
+  {
+    const inv = createInventory(); addItems(inv, potent, 2)
+    const s = createSpirit('fox', 'Potent', 0, 0)
+    const r = applyInfusion(inv, s, potent)
+    check('a potent pour lands both points', r.ok && r.points === POTENT_POINTS && s.infusions.earth === POTENT_POINTS && infusionTotal(s.infusions) === POTENT_POINTS, JSON.stringify(r))
+    check('and spends one bottle', countItem(inv, potent) === 1)
+  }
+  {
+    // room for one earth point only: the potent bottle refuses whole, spends nothing
+    const inv = createInventory(); addItems(inv, potent, 1)
+    const s = createSpirit('fox', 'Nearly', 0, 0)
+    s.infusions.earth = MAX_INFUSIONS_PER_ELEMENT - 1
+    const r = applyInfusion(inv, s, potent)
+    check('★ a potent bottle pours every point or none — one slot left refuses element-full', !r.ok && r.reason === 'element-full', JSON.stringify(r))
+    check('and the bottle is still in the bag', countItem(inv, potent) === 1 && s.infusions.earth === MAX_INFUSIONS_PER_ELEMENT - 1)
+  }
+  {
+    // room for one point in TOTAL: the same refusal, the other cap
+    const inv = createInventory(); addItems(inv, potent, 1)
+    const s = createSpirit('fox', 'Full', 0, 0)
+    s.infusions.storm = MAX_INFUSIONS_TOTAL - 1
+    const r = applyInfusion(inv, s, potent)
+    check('one slot left in total refuses spirit-full', !r.ok && r.reason === 'spirit-full' && countItem(inv, potent) === 1, JSON.stringify(r))
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

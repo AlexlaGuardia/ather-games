@@ -9,7 +9,7 @@
 // Effect NAMES/flavor lean on the potions' canon names; magnitudes/durations are build-side
 // feel dials (Jin's lane, per SHIMMER-CANON-BOUNDARY) — tune them at the top of this file.
 
-import { elementForInfusion } from './alchemy'
+import { elementForInfusion, infusionPointsOf } from './alchemy'
 
 // ── feel dials ─────────────────────────────────────────────────────────────────────────────
 export const FLEETFOOT_SPEED = 1.12    // moonvine_tonic — ground speed mult (matches slide-hop's ×1.12 feel step)
@@ -135,8 +135,10 @@ export function potionEffectLine(potionId: string): string | null {
   // ⚠ AND IT ASKS `INFUSION_BREWS`, NEVER THE ID'S SPELLING. `ather_infusion` is a tier-4 player
   // buff and already has a real line above; a `/_infusion$/` test would steal it and tell the
   // keeper their mana potion belonged on a spirit.
+  // (The "NOT BUILT YET" that stood here was true until slice ③ — `applyInfusion` — and the
+  // grimoire's pour landed; it then stood for a month as a lie. Fixed 09-21 with the potent row.)
   const el = elementForInfusion(potionId)
-  if (el) return `+1 ${el} infusion for a spirit · NOT BUILT YET — nothing applies it`
+  if (el) return `+${infusionPointsOf(potionId)} ${el} infusion for a spirit · pour it from the Grimoire`
   return null
 }
 

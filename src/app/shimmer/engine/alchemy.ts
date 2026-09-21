@@ -90,6 +90,19 @@ export const POTION_DEFS: Record<string, PotionDef> = {
     minAlchemyLevel: 10, manaCost: 25, xpGrant: 60, resultCount: 1,
     recipe: [{ itemId: 'earth_crystal', count: 1 }, { itemId: 'rootvine_coil', count: 2 }, { itemId: 'amber_sap', count: 1 }],
   },
+  // ── ★ THE FIRST POTENT INFUSION — the potency axis opens (2026-09-21, world's row by dbr) ────
+  // Canon: shelf fungus is *"a spirit infusion ingredient"* (`world/flora.md`) and infusion QUALITY
+  // is set by ingredients — *weak → potent; potent = faster evolution* (`game/alchemy.md`); costs
+  // and points are the build's. The earth brew plus two shelf slices (the trunk fungus is the
+  // growth element's additive) grants TWO earth points where the plain brew grants one
+  // (`POTENT_INFUSION_BREWS`). Tier 3, above the four peers on purpose: it is not a fifth element,
+  // it is the same element poured harder. The other three get their potent form when their
+  // additive exists; the map below is Partial so nothing pretends they do.
+  potent_earth_infusion: {
+    id: 'potent_earth_infusion', name: 'Potent Earth Infusion', tier: 3,
+    minAlchemyLevel: 14, manaCost: 30, xpGrant: 80, resultCount: 1,
+    recipe: [{ itemId: 'earth_crystal', count: 1 }, { itemId: 'rootvine_coil', count: 2 }, { itemId: 'amber_sap', count: 1 }, { itemId: 'shelf_slices', count: 2 }],
+  },
   water_infusion: {
     id: 'water_infusion', name: 'Water Infusion', tier: 2,
     minAlchemyLevel: 10, manaCost: 25, xpGrant: 60, resultCount: 1,
@@ -198,17 +211,36 @@ export const INFUSION_BREWS: Record<Exclude<Element, 'base'>, string> = {
 }
 
 /**
+ * The POTENT form of an element's infusion, where one exists (09-21). Partial on purpose: an
+ * element without an additive in the world has no potent brew, and the grimoire's pour falls back
+ * to the plain bottle. Points per bottle: `POTENT_POINTS`; the plain bottle is always one.
+ */
+export const POTENT_INFUSION_BREWS: Partial<Record<Exclude<Element, 'base'>, string>> = {
+  earth: 'potent_earth_infusion',
+}
+export const POTENT_POINTS = 2
+
+/**
  * The element an infusion brew grants, or null for an ordinary potion.
  *
- * ⚠ Asked of `INFUSION_BREWS`, never of the id's spelling. `ather_infusion` is a tier-4 player buff
- * that has nothing to do with the elemental spine, and any rule that reads "…_infusion" would sweep
- * it in and hand spirits an element canon never ruled.
+ * ⚠ Asked of `INFUSION_BREWS` (and its potent twin), never of the id's spelling. `ather_infusion`
+ * is a tier-4 player buff that has nothing to do with the elemental spine, and any rule that reads
+ * "…_infusion" would sweep it in and hand spirits an element canon never ruled.
  */
 export function elementForInfusion(potionId: string): Exclude<Element, 'base'> | null {
   for (const [el, id] of Object.entries(INFUSION_BREWS) as [Exclude<Element, 'base'>, string][]) {
     if (id === potionId) return el
   }
+  for (const [el, id] of Object.entries(POTENT_INFUSION_BREWS) as [Exclude<Element, 'base'>, string][]) {
+    if (id === potionId) return el
+  }
   return null
+}
+
+/** Infusion points one bottle pours: 2 for a potent brew, 1 for the plain one, 0 for anything else. */
+export function infusionPointsOf(potionId: string): number {
+  if (Object.values(POTENT_INFUSION_BREWS).includes(potionId)) return POTENT_POINTS
+  return elementForInfusion(potionId) ? 1 : 0
 }
 
 /**
@@ -243,7 +275,7 @@ export function elementForInfusion(potionId: string): Exclude<Element, 'base'> |
  * a panel ends up saying nothing at all.
  */
 export type InfusionResult =
-  | { ok: true; element: Exclude<Element, 'base'>; total: number; inElement: number }
+  | { ok: true; element: Exclude<Element, 'base'>; points: number; total: number; inElement: number }
   | { ok: false; reason: 'not-an-infusion' | 'none-in-bag' | 'element-full' | 'spirit-full' }
 
 export function applyInfusion(inv: Inventory, spirit: Spirit, potionId: string): InfusionResult {
@@ -252,11 +284,14 @@ export function applyInfusion(inv: Inventory, spirit: Spirit, potionId: string):
   if (countItem(inv, potionId) < 1) return { ok: false, reason: 'none-in-bag' }
   // ⚠ Asked BEFORE the bottle is spent — see the header. The two caps are distinguished here rather
   // than inside `addInfusion` because only the caller knows which element was aimed at.
-  if (spirit.infusions[element] >= MAX_INFUSIONS_PER_ELEMENT) return { ok: false, reason: 'element-full' }
-  if (infusionTotal(spirit.infusions) >= MAX_INFUSIONS_TOTAL) return { ok: false, reason: 'spirit-full' }
-  if (!addInfusion(spirit.infusions, element)) return { ok: false, reason: 'spirit-full' }
+  // ★ A potent bottle pours EVERY point or none (09-21): a spirit with room for one earth point
+  // does not take half a potent brew and lose the rest — the caller pours the plain bottle instead.
+  const points = infusionPointsOf(potionId)
+  if (spirit.infusions[element] + points > MAX_INFUSIONS_PER_ELEMENT) return { ok: false, reason: 'element-full' }
+  if (infusionTotal(spirit.infusions) + points > MAX_INFUSIONS_TOTAL) return { ok: false, reason: 'spirit-full' }
+  for (let i = 0; i < points; i++) if (!addInfusion(spirit.infusions, element)) return { ok: false, reason: 'spirit-full' }
   removeItems(inv, potionId, 1)
-  return { ok: true, element, total: infusionTotal(spirit.infusions), inElement: spirit.infusions[element] }
+  return { ok: true, element, points, total: infusionTotal(spirit.infusions), inElement: spirit.infusions[element] }
 }
 
 /** Check if player can brew a potion (has materials, level, mana) */

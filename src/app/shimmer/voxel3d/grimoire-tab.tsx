@@ -66,7 +66,7 @@ import { Portrait, Cube } from './spirit-portrait'
 import { AWAKENED_FORM_NAMES, INFUSION_CAPS } from '../spirits/evolution-config'
 import { infusionTotal, dominantInfusion } from '../spirits/spirit'
 import { evolveSpirit, evolutionBlocker } from '../spirits/evolution'
-import { INFUSION_BREWS, applyInfusion } from '../engine/alchemy'
+import { INFUSION_BREWS, POTENT_INFUSION_BREWS, POTENT_POINTS, applyInfusion } from '../engine/alchemy'
 import { countItem } from '../engine/inventory'
 import type { Inventory } from '../engine/inventory'
 
@@ -142,10 +142,16 @@ function YoursFace({ party, inv, onChange }: {
   const pour = (s: Spirit, element: Exclude<Element, 'base'>) => {
     const bag = inv?.current
     if (!bag) return
-    const r = applyInfusion(bag, s, INFUSION_BREWS[element])
+    // ★ THE POTENT BOTTLE FIRST, IF IT FITS (09-21): a potent brew pours two points or none, so it
+    // is offered only when the spirit has room for both; else the plain bottle, as before.
+    const potent = POTENT_INFUSION_BREWS[element]
+    const fitsPotent = !!potent && countItem(bag, potent) > 0
+      && s.infusions[element] + POTENT_POINTS <= INFUSION_CAPS.perElementCap
+      && infusionTotal(s.infusions) + POTENT_POINTS <= INFUSION_CAPS.totalCap
+    const r = applyInfusion(bag, s, fitsPotent ? potent! : INFUSION_BREWS[element])
     setNote(
       r.ok
-        ? `${s.name} takes the ${element} infusion — ${r.inElement} ${element}, ${r.total}/${INFUSION_CAPS.totalCap} in all`
+        ? `${s.name} takes the ${r.points > 1 ? 'potent ' : ''}${element} infusion — +${r.points} · ${r.inElement} ${element}, ${r.total}/${INFUSION_CAPS.totalCap} in all`
         : r.reason === 'none-in-bag' ? `no ${element} infusion in your satchel — brew one first`
         : r.reason === 'element-full' ? `${s.name} will hold no more ${element}`
         : r.reason === 'spirit-full' ? `${s.name} has taken all the infusion they can hold`
@@ -231,7 +237,9 @@ function YoursFace({ party, inv, onChange }: {
           </span>
           <span className="ml-auto flex gap-1">
             {ELEMENT_POUR.map(el => {
-              const held = inv?.current ? countItem(inv.current, INFUSION_BREWS[el]) : 0
+              const plainHeld = inv?.current ? countItem(inv.current, INFUSION_BREWS[el]) : 0
+              const potentHeld = inv?.current && POTENT_INFUSION_BREWS[el] ? countItem(inv.current, POTENT_INFUSION_BREWS[el]!) : 0
+              const held = plainHeld + potentHeld
               // ⚠ A SETTLED SPIRIT TAKES NO MORE, and that is not a cap — it is that the pour has
               // nothing left to decide. Canon makes the infusions the road to an evolved FORM; once
               // the form is taken, another bottle changes nothing a keeper can see, so offering it
@@ -244,7 +252,7 @@ function YoursFace({ party, inv, onChange }: {
               return (
                 <button key={el} type="button" disabled={dead}
                         onPointerDown={() => !dead && pour(s, el)}
-                        title={`${el} · ${s.infusions[el]} in this spirit · ${held} in your satchel`}
+                        title={`${el} · ${s.infusions[el]} in this spirit · ${held} in your satchel${potentHeld ? ` (${potentHeld} potent)` : ''}`}
                         className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] tabular-nums transition-colors ${
                           dead ? 'cursor-default text-white/20' : 'text-white/70 hover:bg-white/10'}`}>
                   <Cube color={ELEMENT_COLORS[el]} lit={!dead} size={9} />
