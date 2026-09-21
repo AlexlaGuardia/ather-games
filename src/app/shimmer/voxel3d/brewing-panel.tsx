@@ -20,7 +20,7 @@
 import { useEffect, useState } from 'react'
 import { POTION_DEFS, type PotionDef } from '../engine/alchemy'
 import { addSkillXP, getMilestone, type SkillSet } from '../engine/skills'
-import { ALCHEMY_STATIONS, routeOf, jobOf, JOB_LINE, type AlchemyStationId } from './alchemy-chain'
+import { ALCHEMY_STATIONS, ROAD_STATION, roadOf, jobOf, JOB_LINE, type AlchemyStationId } from './alchemy-chain'
 import { cauldronMenu } from './brew'
 import {
   startBrewing, beginStep, settle, light, pour, pourReady, brewProgress, runProgress, stepMs, brewMs,
@@ -197,7 +197,7 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
               const locked = level < d.minAlchemyLevel
               const missing = d.recipe.filter(r => ops.have(r.itemId) < r.count)
               const can = !locked && missing.length === 0
-              const route = routeOf(d.id)
+              const road = roadOf(d.id)
               return (
                 <div key={d.id} className={`rounded border px-3 py-2 ${locked ? 'border-white/5 opacity-40' : can ? 'border-white/12' : 'border-white/8'}`}>
                   <div className="flex justify-between items-baseline gap-2">
@@ -213,8 +213,9 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
                     <span className="text-white/25">→ {d.resultCount}× {d.name}</span>
                   </div>
                   <div className="mt-0.5 text-white/25">
-                    {route.map((s, i) => <span key={i}>{i > 0 ? ' → ' : ''}{ALCHEMY_STATIONS[s].name.toLowerCase()}</span>)}
-                    <span> → pour</span>
+                    {/* The road as the pot will say it: its stations, then the pour — the same words `roadLine` uses. */}
+                    {road.map((st, i) => <span key={i}>{ALCHEMY_STATIONS[ROAD_STATION[st]].name.toLowerCase()} → </span>)}
+                    <span>pour</span>
                     {jobOf(d.id) && <span className="ml-2 text-white/20">· {JOB_LINE[jobOf(d.id)!]}</span>}
                   </div>
                   {!locked && (

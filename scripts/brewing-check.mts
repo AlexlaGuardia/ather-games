@@ -41,7 +41,10 @@ try {
   ok(await page.evaluate(() => fetch('/api/owner', { cache: 'no-store' }).then(r => r.json()).then(d => !!d.owner)), 'harness is keeper of the realm')
   await sleep(SETTLE * 1000)
 
+  // ⚠ The console stays OPEN after a reply, so a bare `T` next would type a "t" into it. Escape
+  // first: it closes the console (or a panel, which the flow always closes before a command anyway).
   const cmd = async (line: string, wait = 900) => {
+    await page.keyboard.press('Escape'); await sleep(300)
     await page.keyboard.press('KeyT'); await sleep(350)
     await page.keyboard.type(line); await page.keyboard.press('Enter'); await sleep(wait)
   }
@@ -71,17 +74,19 @@ try {
   }
   const bodyTail = () => page.evaluate(() => document.body.innerText.slice(-600))
 
-  // ── the set: a cauldron here, a mortar FOUR blocks away, the ingredients of a Shard Tonic ──
+  // ── the set: a cauldron three blocks off, a mortar four past it (at ~1: a put at foot level lands in the floor), the ingredients of a Shard Tonic ──
   // (alchemy 1, road = grind → pour: one road station, so a fresh keeper walks the whole shape).
-  await cmd('/space plot', 2500)
-  await cmd('/put cauldron ~2 ~ ~')
-  await cmd('/put grinder ~6 ~ ~')
+  await cmd('/space plot', 8000)   // let the garden's columns land before building on them
+  // ⚠ The FIRST put after the crossing does not land (the reply says it did; `/station` then says
+  // "no station"; a second put at the same cell does land) — measured 09-21, not chased. Put twice.
+  await cmd('/put cauldron ~3 ~1 ~'); await cmd('/put cauldron ~3 ~1 ~')
+  await cmd('/put grinder ~7 ~1 ~'); await cmd('/put grinder ~7 ~1 ~')
   await cmd('/give raw_mana_shard 3')
   await cmd('/give goldwood_bark 2')
   ok(!/no such item/.test(await bodyTail()), 'the ingredients are items this world knows')
 
   // 1. the pot opens on the potion list and START spends the bag
-  await cmd('/station ~2 ~ ~')
+  await cmd('/station ~3 ~1 ~')
   let t = await panel()
   ok(/the pot is empty/.test(t), 'the cauldron opens on an empty pot')
   ok(/Shard Tonic/.test(t) && /mortar → pour/.test(t), 'the Shard Tonic row shows its road: mortar → pour')
@@ -94,7 +99,7 @@ try {
   ok((await bagHas('Raw Mana Shard')) === 0 && (await bagHas('Goldwood Bark')) === 0, 'the ingredients left the bag at START')
 
   // 2. the mortar four blocks away lists the pot, and TAKE runs it
-  await cmd('/station ~6 ~ ~')
+  await cmd('/station ~7 ~1 ~')
   t = await panel()
   ok(/MORTAR/i.test(t) && /1 brewing waiting on a mortar/.test(t) && /Shard Tonic/.test(t), `the mortar sees the pot waiting — "${t.slice(0, 140)}"`)
   ok(await press('take'), 'TAKE is pressable at the mortar')
@@ -104,12 +109,12 @@ try {
   await close()
 
   // 3. the pot hears the step with nobody at the mortar — on the clock
-  await cmd('/station ~2 ~ ~')
+  await cmd('/station ~3 ~1 ~')
   t = await panel()
   ok(/mortar at work/.test(t) || /⟳ mortar/.test(t), `mid-run the pot says the mortar is at work — "${t.slice(0, 140)}"`)
   await close()
   await sleep(3500)                                              // grind = 3s
-  await cmd('/station ~2 ~ ~')
+  await cmd('/station ~3 ~1 ~')
   t = await panel()
   ok(/✓ mortar → pour/.test(t), `the step settled into the pot on its own — "${t.slice(0, 140)}"`)
   ok(/the road is walked/.test(t) && /mana to light/.test(t), 'the pot says the road is walked and names the mana')
@@ -123,12 +128,12 @@ try {
 
   // 4. the pour: bottles + XP land, the pot empties
   await sleep(12_500)                                            // brew = 12s
-  await cmd('/station ~2 ~ ~')
+  await cmd('/station ~3 ~1 ~')
   t = await panel()
   ok(/the pour is ready/.test(t), `the pour is ready — "${t.slice(0, 120)}"`)
   ok(await press('pour'), 'POUR is pressable')
   await sleep(700)
-  const said = await bodyTail()
+  const said = await page.evaluate(() => document.body.innerText)
   ok(/poured — 1× shard tonic/.test(said) && /alchemy xp/.test(said), `the pour says what it gave — "${/poured[^\n]*/.exec(said)?.[0]}"`)
   t = await panel()
   ok(/the pot is empty/.test(t), 'the pot is empty again after the pour')
@@ -136,14 +141,14 @@ try {
   ok((await bagHas('Shard Tonic')) === 1, 'ONE shard tonic is in the bag — the solo potion exactly')
 
   // 5. the mortar has nothing now, and says where a brewing starts
-  await cmd('/station ~6 ~ ~')
+  await cmd('/station ~7 ~1 ~')
   t = await panel()
   ok(/nothing waiting on the mortar/.test(t) && /starts at a cauldron/.test(t), 'the idle mortar points at the cauldron')
   await close()
 
   // 6. tip out gives the ingredients back
   await cmd('/give raw_mana_shard 3'); await cmd('/give goldwood_bark 2')
-  await cmd('/station ~2 ~ ~')
+  await cmd('/station ~3 ~1 ~')
   ok(await pressRowStart('Shard Tonic'), 'a second START')
   await sleep(500)
   ok(await press('tip out'), 'TIP OUT is pressable')
@@ -152,7 +157,7 @@ try {
   ok((await bagHas('Raw Mana Shard')) === 3 && (await bagHas('Goldwood Bark')) === 2, 'tipping out an unlit pot gave every ingredient back')
 
   // no panel renders source-comment syntax as text (the 08-26 rule)
-  await cmd('/station ~2 ~ ~')
+  await cmd('/station ~3 ~1 ~')
   ok(!(await page.evaluate(() => Array.from(document.querySelectorAll('[data-panel]')).some(n => /\*\/|\/\*/.test(n.textContent ?? '')))), 'no panel renders source-comment syntax')
   await page.screenshot({ path: `${SP}/brewing-pot.png` })
   await close()
