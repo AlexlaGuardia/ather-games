@@ -83,7 +83,7 @@ try {
     for (let i = 0; i < 6; i++) {
       await cmd(line, 1200)
       const tail = await bodyTail()
-      if (/put [A-Z_]+ at/.test(tail.slice(-160))) return true
+      if (/put [A-Z_]+ at/.test(tail.slice(-160))) { if (i > 0) console.log(`    (landed on try ${i + 1}: ${/nothing at[^\n]*/.exec(tail)?.[0] ?? ''})`); return true }
     }
     return false
   }
@@ -108,7 +108,7 @@ try {
   // the look-label: aim at the pot (east, 20° down from where the keeper stands) and read it
   // (the pitch that lands on the block moves with the spawn's exact feet; scan a few)
   let label = ''
-  for (const pitch of [20, 16, 24, 12, 28]) {
+  for (const pitch of [20, 18, 22, 16, 24, 14, 26, 12, 28, 10, 30, 8, 32]) {
     await cmd(`/look 90 ${pitch}`, 1200)
     label = /Cauldron[^\n]*/.exec(await page.evaluate(() => document.body.innerText))?.[0] ?? ''
     if (/Cauldron ·/.test(label)) break
