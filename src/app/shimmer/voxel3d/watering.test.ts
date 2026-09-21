@@ -170,7 +170,7 @@ const rig = () => {
   const ripensAt = (water: boolean, feed: boolean): number => {
     const r = rig()
     if (water) { fillJug(r.inv, r.give); waterBed(r.watered, r.beds, 0, 0, 0, r.inv, T0, r.give) }
-    if (feed) { r.give(FEED_ITEM, 1); ok(feedBed(r.watered, r.beds, 0, 0, 0, r.inv, T0), 'the feed lands') }
+    if (feed) { r.give(FEED_ITEM, 1); ok(feedBed(r.watered, r.beds, 0, 0, 0, r.inv, T0) === 1, 'the feed lands') }
     r.sow(0, 0, 0, T0)
     let t = T0
     const c = cropAt(r.beds, 0, 0, 0)!
@@ -189,10 +189,10 @@ const rig = () => {
   const r = rig()
   ok(feedBlocker(r.watered, 1, 1, 1, r.inv, T0) === 'no-brew' && feedRefusalLine('no-brew', r.watered, 1, 1, 1, T0).includes('cauldron'), 'no brew → says where one comes from')
   r.give(FEED_ITEM, 2)
-  ok(feedBed(r.watered, r.beds, 1, 1, 1, r.inv, T0) && countItem(r.inv, FEED_ITEM) === 1, 'one bottle spent')
+  ok(feedBed(r.watered, r.beds, 1, 1, 1, r.inv, T0) === 1 && countItem(r.inv, FEED_ITEM) === 1, 'one bottle spent')
   ok(feedBlocker(r.watered, 1, 1, 1, r.inv, T0 + H) === 'still-fed', 'an hour later: still fed')
   ok(feedRefusalLine('still-fed', r.watered, 1, 1, 1, T0 + H) === 'the soil is still fed — spent in 23h', 'the refusal names the hour')
-  ok(!feedBed(r.watered, r.beds, 1, 1, 1, r.inv, T0 + H) && countItem(r.inv, FEED_ITEM) === 1, 'a refused spread costs nothing')
+  ok(feedBed(r.watered, r.beds, 1, 1, 1, r.inv, T0 + H) === 0 && countItem(r.inv, FEED_ITEM) === 1, 'a refused spread costs nothing')
   // Water at dawn, feed at noon: the water window is untouched by the feed.
   fillJug(r.inv, r.give)
   waterBed(r.watered, r.beds, 2, 2, 2, r.inv, T0, r.give)
@@ -251,6 +251,26 @@ const rig = () => {
   const r2 = rig(); fillJug(r2.inv, r2.give)
   waterBed(r2.watered, r2.beds, 0, 0, 0, r2.inv, T0, r2.give, (x, y, z) => x === 1 && y === 0 && z === 0)
   ok(isDamp(r2.watered, 1, 0, 0, T0 + 1) && !isDamp(r2.watered, 0, 0, 1, T0 + 1) && !isDamp(r2.watered, -1, 0, 0, T0 + 1), 'only the square the host called this bed took water')
+}
+
+// ── ★ THE BREW SPREADS LIKE THE POUR (2026-09-21) — same 3×3, same edge, same skip ──────────────
+{
+  const r = rig()
+  const inBed = (x: number, y: number, z: number) => y === 0 && x >= 0 && x <= 5 && z >= 0 && z <= 2
+  r.give(FEED_ITEM, 3)
+  const n = feedBed(r.watered, r.beds, 1, 0, 1, r.inv, T0, inBed)
+  ok(n === 9, `★ one bottle feeds nine squares of a 3×6 (${n})`)
+  ok(countItem(r.inv, FEED_ITEM) === 2, 'and costs ONE bottle')
+  for (let x = 0; x <= 2; x++) for (let z = 0; z <= 2; z++) ok(isFed(r.watered, x, 0, z, T0 + 1), `(${x},${z}) is fed`)
+  ok(!isFed(r.watered, 3, 0, 1, T0 + 1), 'the square past the spread is not')
+  ok(!isDamp(r.watered, 1, 0, 1, T0 + 1), 'feeding does not water — the two windows stay separate')
+  const n2 = feedBed(r.watered, r.beds, 3, 0, 1, r.inv, T0 + 1, inBed)
+  ok(n2 === 6, `the next bottle over the seam feeds only the six unfed squares (${n2})`)
+  ok(feedBed(r.watered, r.beds, 1, 0, 1, r.inv, T0 + 2, inBed) === 0 && countItem(r.inv, FEED_ITEM) === 1, 'aiming at a fed square refuses, and a refusal spends nothing')
+  ok(feedBed(r.watered, r.beds, 5, 0, 0, r.inv, T0 + 3) === 1, 'with no host word it is the one-square feed it always was')
+  const r2 = rig(); r2.give(FEED_ITEM, 1)
+  feedBed(r2.watered, r2.beds, 0, 0, 0, r2.inv, T0, (x, y, z) => x === 1 && y === 0 && z === 0)
+  ok(isFed(r2.watered, 1, 0, 0, T0 + 1) && !isFed(r2.watered, 0, 0, 1, T0 + 1), 'only the square the host called this bed took the brew')
 }
 
 console.log(`\nwatering: ${pass} passed, ${fails.length} failed`)

@@ -204,14 +204,28 @@ export function waterBed(
   return n
 }
 
-/** Spread the brew. Same shape as the pour; one bottle, one bed, one day. */
+/**
+ * Spread the brew. The pour's twin in every way since 09-21: one bottle reaches the aimed square
+ * AND its same-bed neighbours (`pourSquares`, the same 3×3, the same edge), neighbours already fed
+ * are skipped not refused, and the count comes back for the toast. It shipped 09-17 as one bottle
+ * per square while the pour was one square too; when the pour learned to spread (09-18) the brew
+ * did not, and a keeper fed a 3×6 with eighteen bottles the morning a jug did it in two pours.
+ * Canon: *"Spread on farming plots. Stacks with watering."* — SPREAD is canon's own verb.
+ * Returns the number of squares fed (0 = refused, see `feedBlocker`).
+ */
 export function feedBed(
   watered: WateredBeds, beds: PlantedBeds, x: number, y: number, z: number, inv: Inventory, now: number,
-): boolean {
-  if (feedBlocker(watered, x, y, z, inv, now) !== 'ok') return false
+  sameBed: SameBed = () => false,
+): number {
+  if (feedBlocker(watered, x, y, z, inv, now) !== 'ok') return 0
   removeItems(inv, FEED_ITEM, 1)
-  open(watered, beds, x, y, z, now).fedUntil = now + WATER_HOLD_MS
-  return true
+  let n = 0
+  for (const q of pourSquares(x, y, z, sameBed)) {
+    if (n > 0 && isFed(watered, q.x, q.y, q.z, now)) continue
+    open(watered, beds, q.x, q.y, q.z, now).fedUntil = now + WATER_HOLD_MS
+    n++
+  }
+  return n
 }
 
 /**

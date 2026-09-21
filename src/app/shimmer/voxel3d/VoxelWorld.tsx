@@ -9846,14 +9846,21 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const why = feedBlocker(watered.current, hit.x, hit.y, hit.z, inv.current!, now)
         if (why !== 'ok') {
           onSay(feedRefusalLine(why, watered.current, hit.x, hit.y, hit.z, now))
-        } else if (feedBed(watered.current, beds.current, hit.x, hit.y, hit.z, inv.current!, now)) {
-          onInvChange()
-          hands.sig.placeAt = performance.now()
-          wetDirty.current = true
-          const crop = cropAt(beds.current, hit.x, hit.y, hit.z)
-          const damp = isDamp(watered.current, hit.x, hit.y, hit.z, now)
-          onSay((crop ? `fed — ${CROP_DEFS[crop.cropId].name.toLowerCase()} grows a quarter faster today` : 'fed — the bed is rich for the day')
-                + (damp ? ' · and it is damp, so nearly half again' : ''))
+        } else {
+          // The spread stops at the bed's edge, the pour's rule: same wood = same bed (`bed-rim.ts`).
+          const bedMat = potMat
+          const n = feedBed(watered.current, beds.current, hit.x, hit.y, hit.z, inv.current!, now,
+                            (qx, qy, qz) => voxel(qx, qy, qz) === bedMat)
+          if (n > 0) {
+            onInvChange()
+            hands.sig.placeAt = performance.now()
+            wetDirty.current = true
+            const crop = cropAt(beds.current, hit.x, hit.y, hit.z)
+            const damp = isDamp(watered.current, hit.x, hit.y, hit.z, now)
+            onSay((crop ? `fed — ${CROP_DEFS[crop.cropId].name.toLowerCase()} grows a quarter faster today` : 'fed — the bed is rich for the day')
+                  + (n > 1 ? ` · ${n} squares` : '')
+                  + (damp ? ' · and it is damp, so nearly half again' : ''))
+          }
         }
         mouse.current.right = false
       } else if (intent === 'needs-seed') {
