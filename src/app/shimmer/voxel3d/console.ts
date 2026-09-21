@@ -701,12 +701,14 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
     run: (_a, c) => c.brew() },
   // ★ `/station` (09-21): the one door a headless harness has to a station panel — a right-click
   // needs pointer lock, which headless Chrome never grants. Same panel, same props as the click.
-  { name: 'station', usage: 'station <x> <y> <z>', help: 'open the station block there (owner)', owner: true,
+  { name: 'station', usage: 'station <x> <y> <z>  (~ = here; ~ on y = your feet)', help: 'open the station block there (owner)', owner: true,
     run: (a, c) => {
-      const [x, y, z] = [Number(a[0]), Number(a[1]), Number(a[2])]
+      const p = c.pos()
+      const [x, y, z] = [parseCoord(a[0] ?? '', p.x), parseCoord(a[1] ?? '', p.y), parseCoord(a[2] ?? '', p.z)]
       if (![x, y, z].every(Number.isFinite)) return 'station takes x y z'
-      return c.station(x, y, z)
-    } },
+      return c.station(Math.floor(x), Math.floor(y), Math.floor(z))
+    },
+    suggest: () => ['~'] },
   { name: 'greg', usage: 'greg', help: 'talk to Gregory from here (owner)', owner: true,
     run: (_a, c) => c.greg() },
   { name: 'look', usage: 'look <deg> [pitch]  (0 = north, 90 = east; pitch + looks down)', help: 'point the camera (owner)', owner: true,
