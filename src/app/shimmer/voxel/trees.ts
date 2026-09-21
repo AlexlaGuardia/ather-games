@@ -580,6 +580,78 @@ export function trunkCells(start: TreeStart, groundY: number): { x: number; y: n
 }
 
 /**
+ * ── ★ SHELF FUNGI: THE PLANT THAT STANDS ON A TRUNK (2026-09-21) ────────────────────────────────
+ * Canon `world/flora.md`: *"Shelf fungi climbing trunks — layered, harvestable"* → shelf slices.
+ * One in `SHELF_TREE_CHANCE` trunks carries a STACK — two or three brackets up one face of the
+ * stem, one block apart — and the stack is a pure function of the tree's own seed, so a column
+ * and its neighbour agree about a bracket that hangs across their border exactly as they agree
+ * about the trunk (the cell's column writes it; the other column computes the same answer and
+ * clips). Straight species stack on the trunk below the crown; forking species on the stem below
+ * the fork. A short stem (`top < SHELF_MIN_STEM`) carries none: a bracket needs a wall.
+ *
+ * ⚠ THE BRACKET NEVER STANDS AT A NEIGHBOUR'S ANKLE. `placeShelves` refuses any cell that is the
+ * neighbouring column's h+1 — the one cell the ground probe reports — so a shelf fungus is never
+ * mistaken for ground cover on a slope (it would draw as a puff on the turf). It also refuses a
+ * cell that is not AIR: another trunk, a leaf, a structure all win over a fungus.
+ */
+export const SHELF_TREE_CHANCE = 0.2
+export const SHELF_MIN_STEM = 5
+/** The highest trunk block a bracket may hang on (i, counted from the root block = 0). */
+export const SHELF_TOP = 5
+const SHELF_SIDES: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+
+export interface ShelfStack { dx: number; dz: number; i0: number; n: number }
+
+/** The stack this tree carries, or null. `top` = the straight run of stem the brackets may use. */
+export function shelfStackFor(start: TreeStart): ShelfStack | null {
+  const top = start.species.trunk === 'straight' ? start.height : FORK_AT(start.height)
+  if (top < SHELF_MIN_STEM) return null
+  const r = rng(mixSeed(start.seed, 0x5e1f))
+  if (r() >= SHELF_TREE_CHANCE) return null
+  const [dx, dz] = SHELF_SIDES[Math.floor(r() * 4) & 3]
+  const n = r() < 0.4 ? 3 : 2      // wanted; `fit` below is what the stem allows
+  // Brackets live on the BARE stem, at walking height: i ∈ [1, min(top − 2 − ⌈radius⌉, SHELF_TOP)].
+  // Never the root block; never inside the crown — a blob crown centred at top − 1 reaches down
+  // ⌈radius⌉ blocks, and the first cut capped at top − 2 and hung the stack in the leaves, where a
+  // shot from the ground showed a tan smudge and no fungus. `SHELF_TOP` keeps it where a keeper
+  // on foot looks: a bracket nine blocks up is a bracket nobody picks.
+  // A forking species carries its crowns on the LIMBS, so its stem is bare to the fork: only the
+  // block under the fork is kept clear there.
+  const straight = start.species.trunk === 'straight'
+  const high = Math.min(straight ? top - 2 - Math.ceil(start.species.radius) : top - 2, SHELF_TOP)
+  // A stack of three that does not fit becomes a stack of two; canon says layered, not tall.
+  const fit = high - 1 >= 1 ? Math.min(n, high) : 0
+  if (fit < 2) return null
+  const span = high - (fit - 1)
+  const i0 = 1 + Math.floor(r() * span)
+  return { dx, dz, i0, n: fit }
+}
+
+function placeShelves(
+  c: Ctx, start: TreeStart, baseY: number, surfaceAt: (x: number, z: number) => number,
+): void {
+  const st = shelfStackFor(start)
+  if (!st) return
+  const x = start.x + st.dx, z = start.z + st.dz
+  const neighbourTop = surfaceAt(x, z)
+  for (let k = 0; k < st.n; k++) {
+    const y = baseY + st.i0 + k
+    if (y <= neighbourTop + 1) continue          // the neighbour's h+1 is the ground probe's cell
+    if (getAt(c, x, y, z) !== AIR) continue        // a trunk, a leaf or a wall wins over a fungus
+    put(c, x, y, z, MAT.SHELF_FUNGUS, false)
+  }
+}
+
+/** Read a cell of the stack being written; AIR when it lies outside it (so a clipped cell is skipped, not overwritten). */
+function getAt(c: Ctx, wx: number, wy: number, wz: number): number {
+  if (wx < c.ox || wx >= c.ox + c.size || wz < c.oz || wz >= c.oz + c.size) return AIR
+  if (wy < c.oy0 || wy >= c.yTop) return AIR
+  const si = ((wy - c.oy0) / c.size) | 0
+  const sec = c.sections[si]
+  return sec ? sec.data[sec.idx(wx - c.ox, wy - c.oy0 - si * c.size, wz - c.oz)] : AIR
+}
+
+/**
  * Grow one tree into whatever part of this stack it touches.
  *
  * The whole tree is generated every time regardless of how much lands here — it is a few hundred
@@ -588,6 +660,10 @@ export function trunkCells(start: TreeStart, groundY: number): { x: number; y: n
  */
 export function growTree(
   c: Ctx, start: TreeStart, groundY: number,
+  // The neighbouring ground, for the shelf fungi (see `placeShelves`). Absent = no shelves: a
+  // sapling-grown tree (`growTreeCells`) has no neighbour reader and carries none, which is the
+  // right answer anyway — a bracket is a wild thing.
+  surfaceAt?: (x: number, z: number) => number,
 ): void {
   const sp = start.species
   const g = rng(start.seed ^ 0x5bf0)
@@ -595,6 +671,7 @@ export function growTree(
 
   if (sp.trunk === 'straight') {
     for (let i = 0; i < start.height; i++) put(c, start.x, baseY + i, start.z, sp.log, false)
+    if (surfaceAt) placeShelves(c, start, baseY, surfaceAt)
     // ★ THE GENERATOR READS THE SAME `crownAt` THE RENDERER DOES — see the note above. A blob crown
     // has exactly one description of where it is, and this is the code that consumes it.
     const crown = crownAt(start, groundY)
@@ -612,6 +689,7 @@ export function growTree(
   // makes the silhouette read as a different SPECIES rather than a taller version of the same one.
   const forkAt = FORK_AT(start.height)
   for (let i = 0; i < forkAt; i++) put(c, start.x, baseY + i, start.z, sp.log, false)
+  if (surfaceAt) placeShelves(c, start, baseY, surfaceAt)
 
   let limbNo = 0
   for (const { x: tipX, z: tipZ, dx, dz } of forkLimbs(start)) {
@@ -772,7 +850,7 @@ export function plantTrees(
         const h = surfaceAt(st.x, st.z)
         if (h >= cfg.maxAltitude) continue                        // above the treeline
         if (!PLANTABLE.has(groundMaterialAt(st.x, st.z, h))) continue   // sand, stone and water stay bare
-        growTree(c, st, h)
+        growTree(c, st, h, surfaceAt)
         planted++
       }
     }

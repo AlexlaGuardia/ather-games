@@ -498,6 +498,10 @@ export const BLOCKS: BlockDef[] = [
   // Wakereed (2026-09-18, RULED): the plant that stands IN the current — forage-only (no bed can
   // make a wake), picked from the shallow shoulder of a running river. Drops the stalk itself.
   { noSlab: true, material: MAT.WAKEREED, name: 'Wakereed', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'wakereed', count: 1 }], fastSkill: 'farming', placeable: false },
+  // Shelf fungus (2026-09-21): canon's *"shelf fungi climbing trunks — layered, harvestable"*. The
+  // harvest is the SLICES (canon's table names them: a spirit infusion ingredient), two off a
+  // bracket. Forage-only, for the wakereed's reason turned round: no bed can grow a trunk.
+  { noSlab: true, material: MAT.SHELF_FUNGUS, name: 'Shelf Fungus', hardness: 0.05, skill: null, minTier: 0, drops: [{ itemId: 'shelf_slices', count: 2 }], fastSkill: 'farming', placeable: false },
 
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — a ground grows a PLANT ────────────────────────────
   // RULED (/magii): the grass-tuft ruling and these were never in tension. Canon had already drawn

@@ -255,6 +255,7 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.GLOW_MOSS]: 0x7fe0b8,
   [MAT.GOLDLEAF]: 0xb9b44e,     // a golden-green weed: yellow enough to read as gold in a meadow
   [MAT.WAKEREED]: 0xb4d49a,     // canon: pale green; the stalk's body, the seam is painted paler on the tile
+  [MAT.SHELF_FUNGUS]: 0xb08a4e, // a bracket fungus: ochre-tan, banded darker per instance in the renderer
   // ── ★★ THE SEVEN WILD CROPS (2026-08-22) — read the plant, not the lookup ────────────────────
   // Same discipline as the herbs directly above: each colour is derived from what canon and the
   // item text say the thing IS, not picked to fill a palette slot. These are STALK/BODY colours;

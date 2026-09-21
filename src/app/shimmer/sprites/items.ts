@@ -278,6 +278,7 @@ export const ITEMS: ItemDef[] = [
   { id: 'puff_spores', name: 'Puff Spores', type: 'resource', rarity: 'common', description: 'A pinch of pale spores shaken from a puff cluster. A base for many potions.', stackable: true, maxStack: 50, sellPrice: 2, tradeable: true },
   { id: 'glow_moss', name: 'Glow-moss', type: 'resource', rarity: 'common', description: 'A soft tuft of moss that keeps its own faint light. Marks a path at night.', stackable: true, maxStack: 50, sellPrice: 3, tradeable: true },
   { id: 'wakereed', name: 'Wakereed', type: 'resource', rarity: 'common', description: 'A hollow pale stalk from a river\'s shallows. It stood in the current by not rushing. Steeped for a bond that will not settle.', stackable: true, maxStack: 50, sellPrice: 3, tradeable: true },
+  { id: 'shelf_slices', name: 'Shelf Slices', type: 'resource', rarity: 'common', description: 'Slices cut from a bracket fungus that climbed a trunk. Layered like the years it took. For a spirit infusion.', stackable: true, maxStack: 50, sellPrice: 3, tradeable: true },
   { id: 'goldwood_bark', name: 'Goldwood Bark', type: 'resource', rarity: 'common', description: 'Papery golden bark, mildly aromatic.', stackable: true, maxStack: 50, sellPrice: 2, tradeable: true },
   // Prospecting
   { id: 'raw_mana_shard', name: 'Raw Mana Shard', type: 'resource', rarity: 'common', description: 'Common, unrefined crystal. The foundation of every potion.', stackable: true, maxStack: 50, sellPrice: 5, tradeable: true },

@@ -136,10 +136,10 @@ export const isFruit = (m: number): boolean => m >= FRUIT_MIN && m <= FRUIT_MAX
  * for many potions"*) and glow-moss (*"bioluminescent ground cover, marks paths at night"* → mana
  * potions). A sixth plant range, after the kiln; `isPlant` answers for it.
  *
- * ⚠ KEEP 111-114 CONTIGUOUS — the next forage (shelf fungi → shelf slices) goes at 115.
+ * ⚠ KEEP 111-115 CONTIGUOUS — the next forage goes at 116.
  */
 export const FORAGE_MIN = 111
-export const FORAGE_MAX = 114
+export const FORAGE_MAX = 115
 export const isForage = (m: number): boolean => m >= FORAGE_MIN && m <= FORAGE_MAX
 
 export const isPlant = (m: number): boolean =>
@@ -758,6 +758,17 @@ export const MAT = {
    * sheet (the 09-18 mosaic-river finding, `column.ts › generatedAt`). Its ground is WATER.
    */
   WAKEREED: 114,
+  /**
+   * ★ SHELF FUNGUS (2026-09-21) — canon `world/flora.md` › *Undergrowth*: *"Shelf fungi climbing
+   * trunks"*, the harvest table: *"Climb tree trunks, layered, harvestable"* → *shelf slices*, a
+   * spirit infusion ingredient. The first plant that stands on a TRUNK, not on a ground: its cell
+   * is the AIR beside a log, at height, and it is planted by the tree (`trees.ts › growTree`), not
+   * by the column's ground pass. ⚠ INVISIBLE TO THE GROUND PROBE BY DESIGN — a plant at ground+3
+   * is not "what stands on the cell above the ground", so the renderer finds it with its own scan
+   * (`voxel3d/shelf-scan.ts`) and derives the face it hangs from off the log beside it, the way a
+   * deadfall log derives its axis. Forage-only (a bed cannot grow a trunk).
+   */
+  SHELF_FUNGUS: 115,
 } as const
 
 /**

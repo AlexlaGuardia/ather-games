@@ -81,6 +81,13 @@ export const FLORA = {
   // river lean at full strength with a slack cycle instead of the bank's steady tug, and a WAKE:
   // a flat decal on the water downstream of the stalk. One material (`MAT.WAKEREED`), one kind.
   REED: 14,
+  // ── ★ THE SHELF (2026-09-21) — the solid family's one plant that stands on a TRUNK, not a ground.
+  // Canon: *"shelf fungi climbing trunks — layered, harvestable"*. A stack of brackets hanging off
+  // one face of a log at height; closed geometry, no sway, the hull outline (it joins rock/log/
+  // mushroom/puff). ⚠ NOT REPORTED BY THE GROUND PROBE — its cell is beside a log at ground+2 or
+  // higher, so `plantProbe` never reaches it; `voxel3d/shelf-scan.ts` finds it and the face it hangs
+  // from. One material (`MAT.SHELF_FUNGUS`), one kind, planted by `trees.ts › growTree`.
+  SHELF: 15,
 } as const
 
 /** The three renderer kinds a wildflower cell can draw as. */
@@ -322,9 +329,9 @@ export const FORAGE_OF_GROUND: Readonly<Record<string, readonly number[]>> = {
 export const GOLDLEAF_SCALE = 36
 export const GOLDLEAF_EDGE = 0.56
 export const GOLDLEAF_DENSITY = 0.035
-/** The draw kind a forage material takes — the puff a solid, the moss a pad, goldleaf the herb card, the reed its own. */
+/** The draw kind a forage material takes — the puff a solid, the moss a pad, goldleaf the herb card, the reed and the shelf their own. */
 export const forageKind = (m: number): number =>
-  m === MAT.GLOW_MOSS ? FLORA.MOSS : m === MAT.GOLDLEAF ? FLORA.HERB : m === MAT.WAKEREED ? FLORA.REED : FLORA.PUFF
+  m === MAT.GLOW_MOSS ? FLORA.MOSS : m === MAT.GOLDLEAF ? FLORA.HERB : m === MAT.WAKEREED ? FLORA.REED : m === MAT.SHELF_FUNGUS ? FLORA.SHELF : FLORA.PUFF
 /**
  * ── ★ THE WATER FORAGE — WAKEREED (2026-09-18, RULED) ────────────────────────────────────────
  * `game/shimmer-geography.md` › *The plant that stands in the current*: *"a hollow stalk on a deep
@@ -357,8 +364,10 @@ export function wakereedAt(x: number, z: number, seed: number, cfg: HeightConfig
 }
 /** The forage that stands in water — resolved at h+2 by the generator, not on a ground. */
 export const WATER_FORAGE_MATS: ReadonlyArray<number> = [MAT.WAKEREED]
+/** The forage that stands on a TRUNK — planted by the tree (`trees.ts › shelfStackFor`), not on a ground. */
+export const TRUNK_FORAGE_MATS: ReadonlyArray<number> = [MAT.SHELF_FUNGUS]
 /** The distinct forage materials — what `FLORA_MATERIALS` and the kind count are sized by. */
-export const FORAGE_MATS: ReadonlyArray<number> = [...new Set([...Object.values(FORAGE_OF_GROUND).flat(), ...WATER_FORAGE_MATS])]
+export const FORAGE_MATS: ReadonlyArray<number> = [...new Set([...Object.values(FORAGE_OF_GROUND).flat(), ...WATER_FORAGE_MATS, ...TRUNK_FORAGE_MATS])]
 export const PUFF_SCALE = 70
 export const PUFF_EDGE = 0.78
 export const PUFF_DENSITY = 0.09
@@ -791,7 +800,7 @@ export const FLORA_MATERIALS: ReadonlySet<number> = new Set<number>([
   ...Object.values(HERB_OF_GROUND),              // FLORA.HERB — derived, one per ruled ground
   ...Object.values(CROP_OF_GROUND),              // FLORA.CROP — derived, one per crop's ruled ground
   ...FRUIT_MATS,                                 // FLORA.FRUIT — derived, one per fruit (2026-09-15)
-  ...FORAGE_MATS,                                // FLORA.PUFF / MOSS / HERB(goldleaf) / REED — derived, one per forage material (2026-09-16)
+  ...FORAGE_MATS,                                // FLORA.PUFF / MOSS / HERB(goldleaf) / REED / SHELF — derived, one per forage material (2026-09-16)
   MAT.LOOSE_ROCK, MAT.DEADFALL, MAT.MUSHROOM,    // SCATTER.ROCK / DEADFALL / MUSHROOM — solid
 ])
 
@@ -817,8 +826,10 @@ export const FLORA_DRAW_ONLY_KINDS = 2                // BLOOM_MAT, BLOOM_BUSH �
 // ⚠ AND THE REED IS THE SAME SHAPE THE OTHER WAY ROUND (2026-09-18): a kind of its own drawn from
 // ONE forage material (`MAT.WAKEREED`, in `FORAGE_MATS` via `WATER_FORAGE_MATS`), so it is excluded
 // from the enum count like PUFF and MOSS and counted once through the forage.
+// ⚠ AND THE SHELF IS THE REED'S SHAPE AGAIN (2026-09-21): one kind, one forage material
+// (`MAT.SHELF_FUNGUS`, in `FORAGE_MATS` via `TRUNK_FORAGE_MATS`), excluded here, counted through the forage.
 export const FLORA_KIND_COUNT =
-  (Object.keys(FLORA).length - 7)            // every FLORA kind except NONE, HERB, CROP, FRUIT, PUFF, MOSS and REED...
+  (Object.keys(FLORA).length - 8)            // every FLORA kind except NONE, HERB, CROP, FRUIT, PUFF, MOSS, REED and SHELF...
   - FLORA_DRAW_ONLY_KINDS                    // ...minus the forms that share FLOWER's material
   + Object.keys(HERB_OF_GROUND).length       // ...HERB expands to one material per ruled ground
   + Object.keys(CROP_OF_GROUND).length       // ...CROP to one per crop's ground (2026-08-22)

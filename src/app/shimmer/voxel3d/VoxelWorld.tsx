@@ -433,6 +433,7 @@ import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer, floraDemand, leanLive } from './flora-mesh'
+import { scanShelves } from './shelf-scan'
 import { createStationRenderer } from './station-mesh'
 import { createBedRims } from './bed-rim'
 
@@ -8320,7 +8321,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const [gx, gz] = kk.split(',').map(Number)
         list.push({ key: kk, x0: gx * SECTION, z0: gz * SECTION })
       }
-      flora.sync(list, SEED, plantProbe, space.current === 'wilds')
+      // The trunk-side reader (2026-09-21): a shelf fungus hangs at height beside a log, where
+      // `plantProbe` never looks. `shelf-scan.ts` reads the column's cells; the face comes from
+      // the log beside it, read through `voxel` so a border bracket finds a trunk next door.
+      flora.sync(list, SEED, plantProbe, space.current === 'wilds', (x0, z0) => {
+        const c = cols.current.get(key(Math.floor(x0 / SECTION), Math.floor(z0 / SECTION)))
+        return c ? scanShelves(c, x0, z0, voxel) : []
+      })
       // The stations ride the same beat: their cells are a scan of the same columns.
       stations?.sync(list.map(c => ({ ...c, ySpan: H })), voxel)
       bedRims?.sync(list.map(c => ({ ...c, ySpan: H })), voxel)

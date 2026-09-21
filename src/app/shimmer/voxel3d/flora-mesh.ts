@@ -23,6 +23,7 @@ import { plantedLook, STAGE_GROW, STAGE_RIPE, type PlantedSpot } from './planted
 import { FLORA, FRUIT_MATS } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
 import { MAT } from '../voxel/depth'
+import { SHELF_FACES, type ShelfCell } from './shelf-scan'
 import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from './cartoon-glsl'
 import { createLightUniforms, type LightUniforms } from './light-glsl'
 import { bankLeanAt } from '../voxel/height'
@@ -124,12 +125,44 @@ export const floraPuffGeo = (): THREE.BufferGeometry => {
   return out
 }
 
+/**
+ * ── ★ THE SHELF FUNGUS (2026-09-21): a stack of brackets hanging off a trunk face ─────────────
+ * Canon: *"layered"*. Three half-discs, ONE buffer (merged like the puff): the largest at the
+ * bottom, each one a hair smaller and set a little higher, so the stack reads as a bracket fungus
+ * and not as three coins. Each is a HALF cylinder (theta 0..π) — the flat cut sits on the plane
+ * x = 0 and the curve bulges toward +x, so local +x is "away from the trunk" and `floraMatrix`
+ * turns the instance so that axis points off the face it hangs on. The cut face is left open on
+ * purpose: it is pressed against the log and never seen. Closed on top and bottom (the cylinder's
+ * caps follow the arc), so the hull outline has a silhouette to draw. Sized to sit inside its
+ * cell: radius 0.42 toward the trunk's face, half-width 0.42 across it, 0.6 tall over the stack.
+ */
+export const floraShelfGeo = (): THREE.BufferGeometry => {
+  // [radius, thickness, y-centre] per bracket, bottom first.
+  const tiers: [number, number, number][] = [[0.42, 0.09, 0.18], [0.36, 0.08, 0.36], [0.28, 0.07, 0.52]]
+  const pos: number[] = [], nrm: number[] = []
+  for (const [r, t, y] of tiers) {
+    // A little wider at the top than the underside (rTop > rBottom): the shelf's lip.
+    const g = new THREE.CylinderGeometry(r, r * 0.86, t, 9, 1, false, 0, Math.PI).toNonIndexed()
+    g.translate(0, y, 0)
+    pos.push(...(g.getAttribute('position').array as Float32Array))
+    nrm.push(...(g.getAttribute('normal').array as Float32Array))
+    g.dispose()
+  }
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3))
+  return out
+}
+/** The bracket's body — `MATERIAL_COLOR[SHELF_FUNGUS]` so the icon, the block row and the trunk agree. */
+const SHELF_COLOR = MATERIAL_COLOR[MAT.SHELF_FUNGUS] ?? 0xb08a4e
+
 /** The scatter's own colours, exported for the same reason the geometry is. */
 export const FLORA_COLORS = {
   deadfall: DEADFALL_COLOR,
   shroomStem: SHROOM_STEM_COLOR,
   shroomCaps: SHROOM_CAPS,
   puff: PUFF_COLOR,
+  shelf: SHELF_COLOR,
 } as const
 
 /**
@@ -199,7 +232,7 @@ function glintPixels(size: number): Uint8Array {
   return data
 }
 
-export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, fruit: 3000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000, glint: 64, puff: 2000, moss: 6000, reed: 1500 } as const
+export const CAP = { tuft: 24000, tall: 9000, flower: 4000, mat: 9000, bush: 4000, fruit: 3000, herb: 12000, rock: 5000, log: 4000, shroom: 3000, crop: 6000, glint: 64, puff: 2000, moss: 6000, reed: 1500, shelf: 1500 } as const
 
 /**
  * ★★★ A POOL THAT OVERFLOWS SAYS SO — ONCE, PER POOL, WITH THE NUMBER.
@@ -311,7 +344,7 @@ const GRASS_OF_GROUND: Readonly<Record<number, number>> = {
   [MAT.HIGHLAND_TURF]: 0x74a06a,  // cooler and greyer, hardy turf at altitude
 }
 
-interface Spot { x: number; y: number; z: number; kind: number; variant: number; mat: number; ground: number; alongX?: boolean }
+interface Spot { x: number; y: number; z: number; kind: number; variant: number; mat: number; ground: number; alongX?: boolean; face?: number }
 
 /**
  * ── ★ THE VOXEL DECIDES WHETHER A PLANT IS THERE (2026-08-11) ──────────────────────────────────
@@ -336,7 +369,12 @@ export interface FloraRenderer {
    * `bankLeanAt` would still answer for it (measured: 723 live texels on the Glade island, every
    * one a lie). Off = the map is zeroed and the bank flora stands straight.
    */
-  sync(cols: { key: string; x0: number; z0: number }[], seed: number, probe: PlantProbe, river?: boolean): void
+  /**
+   * `shelves` — the trunk-side scan (`shelf-scan.ts`) for a column, or absent (a host with no
+   * columns to scan, or a test of the ground family). The ground probe cannot reach a bracket at
+   * height, so this is the SECOND reader; cached per column beside the ground spots.
+   */
+  sync(cols: { key: string; x0: number; z0: number }[], seed: number, probe: PlantProbe, river?: boolean, shelves?: (x0: number, z0: number) => ShelfCell[]): void
   /** Drop a column's cached spots (its ground changed — an edit landed). */
   invalidate(colKey: string): void
   /**
@@ -606,6 +644,9 @@ export const FLORA_PLACE: Record<number, { root: number; jitter: number }> = {
   // The reed's ground IS the sheet's plane (probe: surface − 1), so the root sits exactly on it —
   // the stalk's drowned quarter hides any seam a 0.97 would have been for.
   [FLORA.REED]: { root: 1.0, jitter: 0.28 },
+  // The shelf's `y` is its CELL (it hangs at height, there is no ground under it): the stack's
+  // bottom bracket sits a little up the cell, and it never wanders — its back is on the trunk.
+  [FLORA.SHELF]: { root: 0.08, jitter: 0 },
 }
 
 /** A stalk's height roll. Y only — a wider blade would thin the texture, not grow the plant. */
@@ -624,12 +665,23 @@ const Y_UP = new THREE.Vector3(0, 1, 0)
 export function floraMatrix(
   kind: number, x: number, y: number, z: number, variant: number, alongX: boolean | undefined,
   out: THREE.Matrix4, off: THREE.Vector3, quat: THREE.Quaternion, scl: THREE.Vector3,
+  face?: number,
 ): THREE.Matrix4 {
   // Deterministic per-spot jitter off the variant roll: offset within the cell, a turn, a little
   // size. Same spot, same blades, forever.
   const jx = (variant * 7.13) % 1 - 0.5, jz = (variant * 3.71) % 1 - 0.5
   const place = FLORA_PLACE[kind] ?? FLORA_PLACE[FLORA.TUFT]
-  if (kind === FLORA.DEADFALL) {
+  if (kind === FLORA.SHELF) {
+    // ★ THE BRACKET'S BACK IS ON THE TRUNK. `face` is the unit step from the cell TOWARD the log
+    // (`shelf-scan`), so the geometry's flat cut (local x = 0) goes on that face of the cell and
+    // its local +x (the curve) points the other way. Rotating (1,0,0) by θ about Y gives
+    // (cos θ, 0, −sin θ); we want that to be −face.
+    const [fx, fz] = SHELF_FACES[face ?? 0]
+    quat.setFromAxisAngle(Y_UP, Math.atan2(fz, -fx))
+    off.set(x + 0.5 + fx * 0.5, y + place.root, z + 0.5 + fz * 0.5)
+    const sz = 0.85 + ((variant * 5.31) % 1) * 0.3
+    scl.set(sz, sz, sz)
+  } else if (kind === FLORA.DEADFALL) {
     // Quarter turn for a Z-run; no jitter along the log's own axis or the run gaps show.
     quat.setFromAxisAngle(Y_UP, alongX ? 0 : Math.PI / 2)
     off.set(x + 0.5, y + place.root, z + 0.5)
@@ -692,6 +744,7 @@ function vertsFor(kind: number): Float32Array[] {
     partVerts.set(FLORA.DEADFALL, [grab(floraLogGeo())])
     partVerts.set(FLORA.MUSHROOM, [grab(floraShroomStemGeo()), grab(floraShroomCapGeo())])
     partVerts.set(FLORA.PUFF, [grab(floraPuffGeo())])
+    partVerts.set(FLORA.SHELF, [grab(floraShelfGeo())])
   }
   return partVerts.get(kind) ?? []
 }
@@ -1214,6 +1267,11 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // without lighting the ground (it is the body's own paleness, not a light channel).
   const puffMat = solidMaterial()
   puffMat.emissive = new THREE.Color(0x4a4236)
+  // The shelf fungus (2026-09-21): a bracket's underside is all shadow (it faces down, on the
+  // shaded side of a trunk), so the same warm lift as the puff, a touch browner.
+  const shelfGeo = floraShelfGeo()
+  const shelfMat = solidMaterial()
+  shelfMat.emissive = new THREE.Color(0x3e3020)
 
   const herbMat = swayMaterial(bladeTex, FLORA_SWAY[FLORA.HERB])
   // Sway a touch stiffer than a herb: a laden crop is heavier and a field that ripples like grass
@@ -1360,6 +1418,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const mosses = new THREE.InstancedMesh(mossGeo, mossMat, CAP.moss)
   puffs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.puff * 3), 3)
   mosses.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.moss * 3), 3)
+  const shelves = new THREE.InstancedMesh(shelfGeo, shelfMat, CAP.shelf)
+  shelves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shelf * 3), 3)
   const reeds = new THREE.InstancedMesh(reedGeo, reedMat, CAP.reed)
   const wakes = new THREE.InstancedMesh(wakeGeo, wakeMat, CAP.reed)
   reeds.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.reed * 3), 3)
@@ -1367,7 +1427,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // glints) so it is never sorted behind the water it decorates.
   wakes.renderOrder = 2
 
-  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes]) {
+  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes, shelves]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -1375,7 +1435,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   }
 
   const group = new THREE.Group()
-  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes)
+  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes, shelves)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
   // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
@@ -1416,6 +1476,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     { kind: FLORA.MUSHROOM, geo: shroomStemGeo, mat: outlineHullMaterial(), grow: 1.12 },
     { kind: FLORA.MUSHROOM, geo: shroomCapGeo, mat: outlineHullMaterial(), grow: 1.12 },
     { kind: FLORA.PUFF, geo: puffGeo, mat: outlineHullMaterial(), grow: 1.12 },
+    { kind: FLORA.SHELF, geo: shelfGeo, mat: outlineHullMaterial(), grow: 1.12 },
     { kind: FLORA.MOSS, geo: mossGeo, mat: outlineMaterial(mossTex, FLORA_SWAY[FLORA.MOSS]), grow: 1 },
     // The reed's border is the stalk's; the wake is water and gets none (FloraPart.wake).
     { kind: FLORA.REED, geo: reedGeo, mat: outlineMaterial(reedTex, FLORA_SWAY[FLORA.REED], 1, true), grow: 1 },
@@ -1482,6 +1543,23 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       out.push({ x, y: p.y, z, kind: p.kind, variant: p.variant, mat: p.mat, ground: p.ground, alongX: p.alongX })
     }
     cache.set(k, out)
+    return out
+  }
+
+  // ── ★ THE SHELF SPOTS — the trunk-side reader, cached like the ground spots (2026-09-21) ──
+  // Same key, a second map: `invalidate(colKey)` drops both, because an edit that moves a bracket
+  // (a felled trunk, a picked shelf) lands on the same column the ground edit does. The variant
+  // folds `y` in: three brackets stacked at one (x, z) must not be three identical sizes.
+  const shelfCache = new Map<string, Spot[]>()
+  const shelfSpotsFor = (k: string, x0: number, z0: number, seed: number, scan: (x0: number, z0: number) => ShelfCell[]): Spot[] => {
+    const hit = shelfCache.get(k)
+    if (hit) return hit
+    const out: Spot[] = scan(x0, z0).map(c => ({
+      x: c.x, y: c.y, z: c.z, kind: FLORA.SHELF,
+      variant: ((c.x * 0.618 + c.z * 0.382 + c.y * 0.137 + seed * 1e-4) % 1 + 1) % 1,
+      mat: MAT.SHELF_FUNGUS, ground: 0, face: c.face,
+    }))
+    shelfCache.set(k, out)
     return out
   }
 
@@ -1553,17 +1631,37 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
 
   return {
     group,
-    sync(cols, seed, probe, river = true) {
+    sync(cols, seed, probe, river = true, shelfScan) {
       // The lean map first: the same columns, the same seed, one pass — see `createLeanMap`.
       leanLive = river ? lean.fill(cols, seed) : lean.clear()
       uLean.value = lean.texture
-      let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0, nRe = 0
+      let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0, nRe = 0, nSh = 0, wSh = 0
+      // ── ★ THE TRUNK-SIDE PLANTS, from their own reader (2026-09-21) ───────────────────────
+      // Written first, before the ground loop, on their own pool: a shelf never appears in the
+      // ground spots (the probe stops at h+1), and the ground loop below `continue`s on the kind
+      // in case an edit ever exposes one at ankle height — the generator refuses that cell.
+      if (shelfScan) for (const c of cols) {
+        for (const s of shelfSpotsFor(c.key, c.x0, c.z0, seed, shelfScan)) {
+          wSh++
+          if (nSh >= CAP.shelf) continue
+          floraMatrix(s.kind, s.x, s.y, s.z, s.variant, false, mtx, off, quat, scl, s.face)
+          shelves.setMatrixAt(nSh, mtx)
+          // Ochre to tan across the stack, off the variant: a bracket fungus is banded, not one brown.
+          const k = 0.88 + ((s.variant * 613.7) % 1) * 0.24
+          shelves.setColorAt(nSh, tint.set(SHELF_COLOR).multiplyScalar(k))
+          nSh++
+        }
+      }
+      shelves.count = nSh
+      shelves.instanceMatrix.needsUpdate = true
+      if (shelves.instanceColor) shelves.instanceColor.needsUpdate = true
       // ⚠ WANTED IS COUNTED SEPARATELY FROM DRAWN, and that separation is the whole instrument.
       // The `n*` counters stop at the cap by construction, so they can never report an overrun —
       // they are the truncated number. These count what the world ASKED for.
       let wT = 0, wL = 0, wF = 0, wM = 0, wB = 0, wFr = 0, wH = 0, wR = 0, wG = 0, wS = 0, wC = 0, wP = 0, wMo = 0, wRe = 0
       for (const c of cols) {
         for (const s of spotsFor(c.key, c.x0, c.z0, seed, probe)) {
+          if (s.kind === FLORA.SHELF) continue      // the trunk-side reader owns it (above)
           // ★ ONE PLACEMENT DERIVATION, SHARED WITH THE RETICLE'S OUTLINE. Jitter, turn, root
           // height and grow all live in `floraMatrix`; see its header for why they are not here.
           floraMatrix(s.kind, s.x, s.y, s.z, s.variant, s.alongX, mtx, off, quat, scl)
@@ -1722,7 +1820,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         ['mat', wM, CAP.mat], ['bush', wB, CAP.bush], ['fruit', wFr, CAP.fruit],
         ['herb', wH, CAP.herb], ['crop', wC, CAP.crop],
         ['rock', wR, CAP.rock], ['log', wG, CAP.log], ['shroom', wS, CAP.shroom],
-        ['puff', wP, CAP.puff], ['moss', wMo, CAP.moss], ['reed', wRe, CAP.reed],
+        ['puff', wP, CAP.puff], ['moss', wMo, CAP.moss], ['reed', wRe, CAP.reed], ['shelf', wSh, CAP.shelf],
       ] as [string, number, number][]) {
         floraDemand[pool] = { wanted, cap }
         if (wanted > cap) noteOverflow(pool, wanted, cap)
@@ -1763,10 +1861,11 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       if (cache.size > cols.length * 2 + 64) {
         const live = new Set(cols.map(c => c.key))
         for (const k of [...cache.keys()]) if (!live.has(k)) cache.delete(k)
+        for (const k of [...shelfCache.keys()]) if (!live.has(k)) shelfCache.delete(k)
       }
     },
-    invalidate(colKey) { cache.delete(colKey) },
-    invalidateAll() { cache.clear() },
+    invalidate(colKey) { cache.delete(colKey); shelfCache.delete(colKey) },
+    invalidateAll() { cache.clear(); shelfCache.clear() },
     setPlanted(spots) { planted = spots; writePlanted() },
     tick(elapsed) { uTime.value = elapsed },
     setCartoon(v) { for (const [k, val] of Object.entries(v)) if (cartoon[k]) cartoon[k].value = val },
@@ -1810,8 +1909,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       // its plant's, which is disposed above.
       for (const h of hlMeshes) if (h.kind === FLORA.TUFT || h.kind === FLORA.TALL) h.geo.dispose()
       // The flower forms (2026-09-14/15): geometry, material, texture — same three each.
-      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, fruitGeo, mossGeo, puffGeo]) g.dispose()
-      for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat, mossMat, puffMat]) m.dispose()
+      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, fruitGeo, mossGeo, puffGeo, shelfGeo]) g.dispose()
+      for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat, mossMat, puffMat, shelfMat]) m.dispose()
       for (const t of [bushTex, clusterTex, matLeafTex, matBloomTex, matShadowTex, fruitTex, mossTex]) t.dispose()
     },
   }
