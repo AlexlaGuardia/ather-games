@@ -289,7 +289,7 @@ import { BuffChips } from './buff-chips'
 import { alchemyStationOf, alchemySalvage, ALCHEMY_STATIONS, intermediateLabel, type AlchemyStationId } from './alchemy-chain'
 import { AlchemyPanel } from './alchemy-panel'
 import { BrewingPanel } from './brewing-panel'
-import { brewingsFromSave, brewingKey, abandonRefund, type Brewings } from './brewing'
+import { brewingsFromSave, brewingKey, abandonRefund, lookLine as brewLine, type Brewings } from './brewing'
 import {
   chestKey, createChest, adoptChest, moveBetween, moveCount, halfOf, quickMove, addToGrid,
   takeFromGrid, attachedChests, countIn as countInChest, isEmpty as isChestEmpty,
@@ -10252,6 +10252,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // readouts describe the same aimed block, so showing both would be two answers to one question;
     // the held channel is the more specific truth and it is the one the keeper is paying for.
     const bl = boreLook.current
+    // ★ A station says what it is doing (09-21): the pot names its brewing and where the road
+    // stands; a mortar says what it grinds or how many pots wait on it. `lookLine` is null for an
+    // idle station, so the plain name stands and nothing else on this line changes.
+    const brewLook = hit && def && !bl ? (() => {
+      const ak = alchemyStationOf(hit.material)
+      return ak && ALCHEMY_STATIONS[ak].craft === 'alchemy' ? brewLine(brewings.current, ak, space.current, hit.x, hit.y, hit.z, Date.now()) : null
+    })() : null
     // A piece first: its cell has no `def`, so the block readout below would say nothing for it.
     if (pieceLook) onLook({ ...pieceLook, progress: breaking.current ? breaking.current.progress / breaking.current.required : 0, channel: false })
     else onLook(hit && def
@@ -10260,7 +10267,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             ? bl.absolute
               ? `${def.name} — this is not matter`
               : `${def.name} — ${channelSpec.current?.label ?? 'channel'}`
-            : def.name,
+            : brewLook ? `${def.name} · ${brewLook}` : def.name,
           progress: bl ? bl.progress : breaking.current ? breaking.current.progress / breaking.current.required : 0,
           // ⚠⚠ NEVER `refused` FOR A BORE, however much an absolute block looks like a refusal. The
           // render appends "— spike too weak" to a refused line: that is a sentence about a TOOL,

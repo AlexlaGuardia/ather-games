@@ -282,6 +282,38 @@ export function pour(b: Brewing): Pour | null {
   return { bottles, xp, recipes: {} }
 }
 
+/**
+ * The look-label's suffix for a station block, or null when there is nothing to say (an empty
+ * pot, an idle mortar with no pot waiting). A plot with three pots is readable from the path:
+ *   `Holding Philter — waiting on a still` · `— still at work, 4s` · `— lit, 8s to the pour` ·
+ *   `— the pour is ready` · a road station: `grinding the Shard Tonic, 2s` · `2 waiting`.
+ * Pure; the host settles nothing here (a label reads, the panel writes) — `settle` is applied
+ * to a copy so a finished run reads as finished the frame it finishes.
+ */
+export function lookLine(all: Brewings, kind: AlchemyStationId, space: string, x: number, y: number, z: number, now: number): string | null {
+  const secs = (ms: number) => `${Math.max(0, Math.ceil(ms / 1000))}s`
+  if (kind === 'cauldron') {
+    const raw = all[brewingKey({ space, x, y, z })]
+    if (!raw) return null
+    const b = settle(raw, now)
+    const name = POTION_DEFS[b.potionId]?.name ?? b.potionId
+    if (b.lit) return pourReady(b, now) ? `${name} — the pour is ready` : `${name} — lit, ${secs(brewMs(b) - (now - (b.litAt ?? now)))} to the pour`
+    const want = nextStation(b)
+    if (!want) return `${name} — the road is walked, light it`
+    const st = ALCHEMY_STATIONS[want].name.toLowerCase()
+    return b.run ? `${name} — ${st} at work, ${secs(stepMs(b) - (now - b.run.since))}` : `${name} — waiting on a ${st}`
+  }
+  const key = stationKeyOf(x, y, z)
+  const mine = Object.values(all).find(b => b.run?.station === key)
+  if (mine) {
+    const b = settle(mine, now)
+    if (b.run) return `${STEP_ING[nextStep(b)!]} the ${POTION_DEFS[b.potionId]?.name ?? b.potionId}, ${secs(stepMs(b) - (now - b.run.since))}`
+  }
+  const n = openFor(all, kind, space, x, z).length
+  return n > 0 ? `${n} waiting` : null
+}
+const STEP_ING: Readonly<Record<RoadStep, string>> = { grind: 'grinding', distil: 'distilling', mix: 'mixing' }
+
 // ── the save ─────────────────────────────────────────────────────────────────────────────────
 /**
  * The record back from `PlayerSave.brewings`. Shape-checked per entry: a pot whose potion no

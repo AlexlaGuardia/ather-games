@@ -6,7 +6,7 @@ import { roadOf, alchemyRecipe } from './alchemy-chain'
 import {
   startBrewing, join, bring, step, light, pour, yieldFor, contributed,
   nextStep, nextStation, inReach, openFor, runningAt, beginStep, runProgress, settle, stepMs, brewMs,
-  pourReady, brewProgress, abandonRefund, roadLine, brewingsFromSave, brewingKey, REACH_BLOCKS,
+  pourReady, brewProgress, abandonRefund, roadLine, brewingsFromSave, brewingKey, REACH_BLOCKS, lookLine,
   type Brewings,
 } from './brewing'
 import { ALCHEMY_STATIONS, ROAD_STATION, ALCHEMY_RUN_MS } from './alchemy-chain'
@@ -152,6 +152,21 @@ ok(startBrewing('not_a_potion', host, 0) === null, 'an unknown potion starts not
   ok(back[brewingKey(w0.at!)].lit && back[brewingKey(w0.at!)].litAt === 9000 && back[brewingKey(w0.at!)].stage === 2, 'a lit pot comes back lit at its time')
   ok(Object.keys(brewingsFromSave(undefined)).length === 0 && Object.keys(brewingsFromSave('x')).length === 0, 'absent and malformed load empty')
   ok(brewingsFromSave({ [brewingKey(at)]: { ...b0, stage: 99 } })[brewingKey(at)].stage === road.length, 'a stage past the road is clamped to it')
+
+  // the look-label: what a station says from the path, and when it says nothing
+  ok(lookLine({}, 'cauldron', 'plot', 10, 5, 10, 0) === null && lookLine({}, 'still', 'plot', 0, 0, 0, 0) === null, 'an empty pot and an idle still say nothing')
+  ok(lookLine({ [brewingKey(at)]: b0 }, 'cauldron', 'plot', 10, 5, 10, 2000) === 'Holding Philter — waiting on a still', `a fresh pot: ${lookLine({ [brewingKey(at)]: b0 }, 'cauldron', 'plot', 10, 5, 10, 2000)}`)
+  ok(lookLine({ [brewingKey(at)]: b0 }, 'still', 'plot', 0, 0, 0, 2000) === '1 waiting' && lookLine({ [brewingKey(at)]: b0 }, 'grinder', 'plot', 0, 0, 0, 2000) === null, 'a still says 1 waiting; a mortar says nothing')
+  ok(lookLine({ [brewingKey(at)]: r1 }, 'cauldron', 'plot', 10, 5, 10, 5000 + 1000) === `Holding Philter — still at work, ${Math.ceil((stepMs(r1) - 1000) / 1000)}s`, `mid-run the pot names the still: ${lookLine({ [brewingKey(at)]: r1 }, 'cauldron', 'plot', 10, 5, 10, 6000)}`)
+  ok(lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 3, 5, 3, 6000)?.startsWith('distilling the Holding Philter, ') === true, `the running still says what it distils: ${lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 3, 5, 3, 6000)}`)
+  ok(lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 4, 5, 4, 6000) === null, 'a second still says nothing while the first runs (the pot is not open)')
+  ok(lookLine({ [brewingKey(at)]: r1 }, 'cauldron', 'plot', 10, 5, 10, 5000 + stepMs(r1)) === 'Holding Philter — waiting on a bowl', 'the label reads a finished run as finished the frame it finishes (settle on a copy)')
+  ok(lookLine({ [brewingKey(at)]: r1 }, 'still', 'plot', 3, 5, 3, 5000 + stepMs(r1)) === null, 'and the still that ran it goes quiet the same frame')
+  ok(lookLine({ [brewingKey(at)]: s2 }, 'cauldron', 'plot', 10, 5, 10, 8000) === 'Holding Philter — the road is walked, light it', 'a walked road says light it')
+  ok(lookLine({ [brewingKey(at)]: lit }, 'cauldron', 'plot', 10, 5, 10, 9000 + 2000) === `Holding Philter — lit, ${Math.ceil((brewMs(lit) - 2000) / 1000)}s to the pour`, 'a lit pot counts to the pour')
+  ok(lookLine({ [brewingKey(at)]: lit }, 'cauldron', 'plot', 10, 5, 10, 9000 + brewMs(lit)) === 'Holding Philter — the pour is ready', 'a ready pot says so')
+  ok(lookLine({ a: b0, b: later }, 'still', 'plot', 0, 0, 0, 3000) === '2 waiting', 'two pots on the plot: 2 waiting')
+  ok(lookLine({ a: b0 }, 'still', 'wilds', 0, 0, 0, 3000) === null, 'a still in another space sees no plot pot')
 
   // every station's step name is the road station's — the line and the panel read the same table
   for (const st of Object.keys(ROAD_STATION) as (keyof typeof ROAD_STATION)[]) ok(ALCHEMY_STATIONS[ROAD_STATION[st]].step === st, `${st} runs at the ${ROAD_STATION[st]}`)
