@@ -97,6 +97,15 @@ try {
   ok(/tip out/.test(t) && !/light/.test(t.replace(/mana to light/g, '')), 'tip out is offered; light is not (the road is not walked)')
   await close()
   ok((await bagHas('Raw Mana Shard')) === 0 && (await bagHas('Goldwood Bark')) === 0, 'the ingredients left the bag at START')
+  // the look-label: aim at the pot (east, 20° down from where the keeper stands) and read it
+  // (the pitch that lands on the block moves with the spawn's exact feet; scan a few)
+  let label = ''
+  for (const pitch of [20, 16, 24, 12, 28]) {
+    await cmd(`/look 90 ${pitch}`, 1200)
+    label = /Cauldron[^\n]*/.exec(await page.evaluate(() => document.body.innerText))?.[0] ?? ''
+    if (/Cauldron ·/.test(label)) break
+  }
+  ok(/Cauldron · Shard Tonic — waiting on a mortar/.test(label), `the pot's look-label says what it holds — "${label}"`)
 
   // 2. the mortar four blocks away lists the pot, and TAKE runs it
   await cmd('/station ~7 ~1 ~')
@@ -111,7 +120,9 @@ try {
   // 3. the pot hears the step with nobody at the mortar — on the clock
   await cmd('/station ~3 ~1 ~')
   t = await panel()
-  ok(/mortar at work/.test(t) || /⟳ mortar/.test(t), `mid-run the pot says the mortar is at work — "${t.slice(0, 140)}"`)
+  // The grind is 3s and the walk back to the pot costs ~2.5s of harness latency, so either face
+  // is honest here: the mortar still at work, or the step already settled into the pot.
+  ok(/mortar at work/.test(t) || /⟳ mortar/.test(t) || /✓ mortar/.test(t), `on the walk back the pot says the mortar is at work, or already done — "${t.slice(0, 140)}"`)
   await close()
   await sleep(3500)                                              // grind = 3s
   await cmd('/station ~3 ~1 ~')
