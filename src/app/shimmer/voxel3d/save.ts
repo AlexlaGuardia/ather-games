@@ -248,6 +248,14 @@ export interface PlayerSave {
    */
   bank?: unknown
   /**
+   * ── ★ THE OPEN BREWINGS (2026-09-21) — `voxel3d/brewing.ts` ─────────────────────────────────
+   * Every pot the keeper has started, keyed by the cauldron (`space:x,y,z`): the potion, the
+   * road's stage, the station running the current step and since when, whether it is lit. HERE
+   * and not in a column for the bank's reason: a still on the far side of the plot must be able
+   * to ask "what is waiting on me" without walking to the pot. Optional; older saves load empty.
+   */
+  brewings?: unknown
+  /**
    * ⚠ LEGACY, READ BY NOBODY (2026-08-16). It cannot be migrated: it says a patrol was *met* and
    * says nothing about whether it was *resolved*, so reading it as `freedAt` would permanently
    * delete the encounter for anyone who had merely walked past a hold, and reading it as nothing

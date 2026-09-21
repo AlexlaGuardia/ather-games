@@ -109,8 +109,14 @@ for (const id of ['grinder', 'still', 'mixer']) {
 {
   const here = new URL('.', import.meta.url).pathname
   const host = readFileSync(join(here, 'VoxelWorld.tsx'), 'utf8')
-  ok(host.includes('openStation.kind in ALCHEMY_STATIONS && (') && host.includes('<AlchemyPanel'), '§3 ★★ the host mounts AlchemyPanel for an alchemy kind')
-  ok(host.includes("stationOf(potMat) ?? alchemyStationOf(potMat)"), '§3 ★★ the work branch resolves an alchemy station — else the click is dead')
+  // 09-21: the alchemy craft opens the BREWING panel (the plot's event); `AlchemyPanel` keeps the
+  // cooking stations and any station still carrying a legacy road job. Both mounts pinned, and
+  // the split is on `craft === 'alchemy'` + `!openStation.job`, never on a station id list.
+  ok(host.includes("ALCHEMY_STATIONS[openStation.kind as AlchemyStationId].craft === 'alchemy' && !openStation.job && (") && host.includes('<BrewingPanel'), '§3 ★★ the host mounts BrewingPanel for an alchemy-craft station with no legacy job')
+  ok(host.includes("!(ALCHEMY_STATIONS[openStation.kind as AlchemyStationId].craft === 'alchemy' && !openStation.job) && (") && host.includes('<AlchemyPanel'), '§3 ★★ the host still mounts AlchemyPanel for cooking, and for a legacy job')
+  ok(/alchemyStationOf\(prevMat\) === 'cauldron' && alchemyStationOf\(mat\) !== 'cauldron'/.test(host) && host.includes('abandonRefund(b)'), '§3 ★★ a mined cauldron drops its brewing and refunds an unlit pot')
+  // 09-21: the work branch calls `openStationAt`, which resolves the kind off the block it reads.
+  ok(host.includes("const kind = stationOf(m) ?? alchemyStationOf(m)") && /intent === 'work'\) \{\n(\s*\/\/[^\n]*\n)*\s*openStationAt\(hit\.x, hit\.y, hit\.z\)/.test(host), '§3 ★★ the work branch resolves an alchemy station — else the click is dead')
   ok(/alchemyStationOf\(prevMat\) !== alchemyStationOf\(mat\)/.test(host), '§3 ★★ the lit swap keeps the job (same station, different material)')
   ok(host.includes('alchemySalvage(shop, stationKey(hit.x, hit.y, hit.z), Date.now())'), '§3 ★ breaking a station mid-run salvages it')
   const con = readFileSync(join(here, 'console.ts'), 'utf8')

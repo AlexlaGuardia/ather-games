@@ -288,6 +288,8 @@ import { drinkBuff, pruneBuffs, manaRegenMult, gatherXpMult, speedMult, rinTune,
 import { BuffChips } from './buff-chips'
 import { alchemyStationOf, alchemySalvage, ALCHEMY_STATIONS, intermediateLabel, type AlchemyStationId } from './alchemy-chain'
 import { AlchemyPanel } from './alchemy-panel'
+import { BrewingPanel } from './brewing-panel'
+import { brewingsFromSave, brewingKey, abandonRefund, type Brewings } from './brewing'
 import {
   chestKey, createChest, adoptChest, moveBetween, moveCount, halfOf, quickMove, addToGrid,
   takeFromGrid, attachedChests, countIn as countInChest, isEmpty as isChestEmpty,
@@ -1212,6 +1214,9 @@ export default function VoxelWorld() {
   // first minute, or a wiped store — stands at Moonwell: canon's *where a keeper begins and where
   // they keep coming back*. The plot is reached by the seam Greg folds, never by default.
   const space = useRef<Space>('glade')
+  /** The open brewings — the keeper's, keyed by cauldron (`PlayerSave.brewings`). Held here, beside
+   *  `space`, because the panel that edits it mounts here and the world that saves it is handed both. */
+  const brewings = useRef<Brewings>({})
   // ⚠ NO `tierTick` STATE HERE, DELIBERATELY. The first cut bumped a counter on every discovery and
   // every widening to "refresh the UI" — which re-rendered the whole world tree every time a keeper
   // walked past a mist patch, for nothing: the dialogue reads the ledger from these refs at OPEN
@@ -1517,7 +1522,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => {
     // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
     // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
@@ -1616,6 +1621,7 @@ export default function VoxelWorld() {
     grow: (progress) => worldCmd.current ? worldCmd.current.grow(progress) : 'the world is still waking',
     plant: (crop, x, y, z) => worldCmd.current ? worldCmd.current.plant(crop, x, y, z) : 'the world is still waking',
     water: (x, y, z, hours, kind) => worldCmd.current ? worldCmd.current.water(x, y, z, hours, kind) : 'the world is still waking',
+    station: (x, y, z) => { if (!worldCmd.current) return 'the world is still waking'; const r = worldCmd.current.station(x, y, z); if (r.startsWith('opened')) setConsoleOpen(false); return r },
     party: partyOps,
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
@@ -2353,6 +2359,7 @@ export default function VoxelWorld() {
           onOpenStation={(st) => { openCursorUI(); if (st.kind === 'crafting_table') setCraftOpen(true); else setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
           onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
+          brewings={brewings}
           uiOpen={cursorUIOpenRef} uiSteps={uiStepsRef} owner={isOwnerRef} foesOut={foesRef} tremorOut={tremor} pressOut={pressRef} hourLight={hourLight}
           waterOut={waterOut}
         />
@@ -2473,7 +2480,34 @@ export default function VoxelWorld() {
                    onBrew={doBrew}
                    onClose={() => { setBrewOpen(false); closeCursorUI() }} />
       )}
-      {openStation && openStation.kind in ALCHEMY_STATIONS && (
+      {/* ★ THE BREWING PANEL (09-21): the four alchemy stations open on the plot's brewings, not on a
+          per-station recipe list. The old `AlchemyPanel` still answers for the cooking stations and
+          for a station carrying a LEGACY job (a still mid-run from before) — take that and it is gone. */}
+      {openStation && openStation.kind in ALCHEMY_STATIONS && ALCHEMY_STATIONS[openStation.kind as AlchemyStationId].craft === 'alchemy' && !openStation.job && (
+        <BrewingPanel st={openStation as OpenStation & { kind: AlchemyStationId }} space={space.current}
+                      keeper={{ id: 'keeper', name: 'you' }} brewings={brewings} skills={skills} mana={mana}
+                      ops={{
+                        have: (id) => countItem(inv.current!, id) + openStation.feeds.reduce((n, g) => n + countInChest(g, id), 0),
+                        spend: (id, n) => {
+                          const fromBag = Math.min(countItem(inv.current!, id), n)
+                          if (fromBag > 0) removeItems(inv.current!, id, fromBag)
+                          let left = n - fromBag
+                          for (const g of openStation.feeds) { if (left <= 0) break; left = takeFromGrid(g, id, left) }
+                        },
+                        payout: (id, n) => {
+                          let left = give(inv.current!, id, n)
+                          for (const g of openStation.feeds) { if (left <= 0) break; left = addToGrid(g, id, left, maxStackOf) }
+                          return left
+                        },
+                        label: itemLabel,
+                      }}
+                      onBrewings={() => { if (playerSnapRef.current) void savePlayer(SEED, playerSnapRef.current()) }}
+                      onChange={() => { setCraftTick(v => v + 1); refreshHotbar() }}
+                      onLevel={(line) => setLevelUp(line)}
+                      onSay={say}
+                      onClose={() => { setOpenStation(null); closeCursorUI() }} />
+      )}
+      {openStation && openStation.kind in ALCHEMY_STATIONS && !(ALCHEMY_STATIONS[openStation.kind as AlchemyStationId].craft === 'alchemy' && !openStation.job) && (
         <AlchemyPanel st={openStation as OpenStation & { kind: AlchemyStationId }} inv={inv} skills={skills} mana={mana}
                       ops={{
                         // The bag, then the chests against the block — the StationPanel's own rule.
@@ -2991,7 +3025,7 @@ const LIFT_BADGE: Record<LiftMode, string> = {
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearFolk, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearFolk, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, brewings, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3099,6 +3133,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   onOpenStation: (s: OpenStation) => void
   /** A cauldron was right-clicked. No payload — a cauldron holds nothing; see `brewOpen`. */
   onOpenBrew: () => void
+  /** The open brewings (the keeper's record) — so a mined cauldron can drop its pot. */
+  brewings: React.RefObject<Brewings>
   onOpenWaymark: (w: OpenWaymark) => void
   /**
    * Is a cursor surface up? A REF, not a boolean prop, on purpose: opening the bag must not
@@ -3141,7 +3177,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -3689,6 +3725,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // fitted pool up (the same array the stations borrow; `fitBank` sizes it to the chest census),
       // or null off the plot, where there is no bank to draw on.
       craftPool: () => space.current === 'plot' && bankCapacity(plotChests.current) > 0 ? fitBank(bank.current, bankCapacity(plotChests.current)) : null,
+      // ★ `/station x y z` (09-21) — open the station block there, exactly as a right-click would.
+      station: (x, y, z) => openStationAt(x, y, z) ? `opened the station at ${x} ${y} ${z}` : `no station at ${x} ${y} ${z}`,
       water: (x, y, z, hours, kind) => {
         const now = Date.now(), at = now - hours * 3_600_000
         const damp = (bx: number, by: number, bz: number) => {
@@ -4108,6 +4146,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       settleWatering(watered.current, beds.current, Date.now())
       // The pool comes back compact (no free slots); it is fitted to the chest census at the door.
       bank.current = bankFromSave(p.bank)
+      brewings.current = brewingsFromSave(p.brewings)
       onInvChange()
     })
     return () => { live = false }
@@ -4140,6 +4179,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
                beds: bedsToSave(beds.current),
                watered: wateringToSave(watered.current),
                bank: bankToSave(bank.current),
+               brewings: brewings.current,
                index: indexToSave(spiritIndex.current) }
     }
     snapOut.current = snap
@@ -5247,6 +5287,41 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   }, [colOf])
 
   /**
+   * Open the station block at (x, y, z) — the right-click's `'work'` branch, factored (09-21) so
+   * the owner's `/station x y z` console door raises the SAME panel with the SAME props, and a
+   * headless harness can drive a station without pointer lock. Same shape as the chest: the bench
+   * hands its POSITION and a bound `touch` upward, never a copy of the job; the panel edits through
+   * `workshop.ts`'s pure functions. The KIND travels with the position, read off the block itself.
+   */
+  const openStationAt = useCallback((sx: number, sy: number, sz: number): boolean => {
+    const m = voxel(sx, sy, sz)
+    const kind = stationOf(m) ?? alchemyStationOf(m)
+    if (!kind) return false
+    // The chests set around this bench, resolved through the host's own voxel read so there is
+    // exactly one definition of "there is a chest here". `chestAt` is lazy. On the plot the bench
+    // works out of the bank — the whole point of one pool is that a station never again depends
+    // on which box is standing where.
+    const onPlot = space.current === 'plot'
+    const beside = onPlot ? [] : attachedChests(sx, sy, sz, (x, y, z) => voxel(x, y, z) === MAT.CHEST)
+    onOpenStation({
+      x: sx, y: sy, z: sz, kind,
+      job: jobAt(sx, sy, sz),
+      commit: (shop: Workshop) => setJob(sx, sy, sz, shop),
+      feeds: onPlot ? [fitBank(bank.current, bankCapacity(plotChests.current))] : beside.map(c => chestAt(c.x, c.y, c.z)),
+      touchFeeds: () => { for (const c of beside) touchChest(c.x, c.z) },
+      fromBank: onPlot,
+      // ★ The running cauldron IS a different material (the render flood keys light off the
+      // material). The swap goes through `setVoxel` like any edit, so it saves, re-lights and
+      // re-meshes — and `setVoxel`'s job cleanup knows the two are one station.
+      setLit: kind === 'cauldron'
+        ? (lit) => { const want = lit ? MAT.CAULDRON_LIT : MAT.CAULDRON; if (voxel(sx, sy, sz) !== want) setVoxel(sx, sy, sz, want) }
+        : undefined,
+    })
+    return true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voxel, jobAt, setJob, chestAt, touchChest, onOpenStation])
+
+  /**
    * Write one voxel and repair the geometry.
    *
    * ★ THE NEIGHBOUR RE-MESH IS NOT OPTIONAL. Editing a voxel on a column's edge changes which faces
@@ -5324,6 +5399,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       if (rec) {
         delete rec[stationKey(wx, wy, wz)]
         if (!Object.keys(rec).length) jobsByCol.current.delete(k)
+      }
+      // ★ AND THE POT GOES WITH THE CAULDRON (09-21). A brewing is the keeper's record keyed by
+      // this block; a mined cauldron hands back what an un-lit pot held (the ingredients) and
+      // keeps nothing of a lit one — the same refund rule the panel's "tip out" uses.
+      if (alchemyStationOf(prevMat) === 'cauldron' && alchemyStationOf(mat) !== 'cauldron') {
+        const bk = brewingKey({ space: space.current, x: wx, y: wy, z: wz })
+        const b = brewings.current[bk]
+        if (b) {
+          for (const r of abandonRefund(b)) give(inv.current!, r.itemId, r.count)
+          delete brewings.current[bk]
+          onInvChange()
+        }
       }
     }
 
@@ -9664,36 +9751,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         }
         mouse.current.right = false
       } else if (intent === 'work') {
-        // Same shape as the chest above and for the same reason: the bench hands its POSITION and a
-        // bound `touch` upward, never a copy of the job. The panel edits through `workshop.ts`'s
-        // pure functions, so the only thing the host owes it is where the bench is.
-        // The KIND travels with the position: the panel must never re-derive which station this
-        // is from anything but the block that was actually aimed at.
-        const kind = stationOf(potMat) ?? alchemyStationOf(potMat)
-        if (kind) {
-          // The chests set around this bench, resolved through the host's own voxel read so there
-          // is exactly one definition of "there is a chest here". `chestAt` is lazy, so asking for
-          // a neighbour's grid costs nothing until something is actually put in it.
-          // On the plot the bench works out of the bank — the whole point of one pool is that a
-          // station never again depends on which box is standing where.
-          const onPlot = space.current === 'plot'
-          const beside = onPlot ? [] : attachedChests(hit.x, hit.y, hit.z, (x, y, z) => voxel(x, y, z) === MAT.CHEST)
-          const { x: sx, y: sy, z: sz } = hit
-          onOpenStation({
-            x: sx, y: sy, z: sz, kind,
-            job: jobAt(sx, sy, sz),
-            commit: (shop: Workshop) => setJob(sx, sy, sz, shop),
-            feeds: onPlot ? [fitBank(bank.current, bankCapacity(plotChests.current))] : beside.map(c => chestAt(c.x, c.y, c.z)),
-            touchFeeds: () => { for (const c of beside) touchChest(c.x, c.z) },
-            fromBank: onPlot,
-            // ★ The running cauldron IS a different material (the render flood keys light off the
-            // material). The swap goes through `setVoxel` like any edit, so it saves, re-lights and
-            // re-meshes — and `setVoxel`'s job cleanup knows the two are one station.
-            setLit: kind === 'cauldron'
-              ? (lit) => { const want = lit ? MAT.CAULDRON_LIT : MAT.CAULDRON; if (voxel(sx, sy, sz) !== want) setVoxel(sx, sy, sz, want) }
-              : undefined,
-          })
-        }
+        // `openStationAt` (09-21): the bench hands its POSITION up, the kind is read off the block
+        // that was aimed at, and the owner's `/station` door raises the same panel.
+        openStationAt(hit.x, hit.y, hit.z)
         mouse.current.right = false
       } else if (intent === 'brew') {
         // Nothing is handed up. The brew list is a function of the KEEPER (bag, mana, alchemy level),

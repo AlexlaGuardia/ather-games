@@ -66,6 +66,8 @@ export interface ConsoleCtx {
   plant: (crop: string, x: number, y: number, z: number) => string
   /** Water the bed at world coordinates (or every bed, with no coordinates), no jug spent; `hours` = how far into the day it already is. Owner-gated dev instrument. */
   water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string
+  /** Open the station block at world coordinates, as a right-click would (owner). */
+  station: (x: number, y: number, z: number) => string
   /**
    * Put a Hollow in front of the keeper. A TEST HARNESS — the same standing warning `/rune` and
    * `/waymark` carry: this is not how the dark arrives. The night's own rules (`hollowNight`,
@@ -697,6 +699,14 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
     suggest: (i) => i === 0 ? ['lend', 'heal', 'clear'] : i === 1 ? ['1', '2', '3', '4'] : ['5', '10', '20', '30'] },
   { name: 'brew', usage: 'brew', help: 'open the cauldron here (owner)', owner: true,
     run: (_a, c) => c.brew() },
+  // ★ `/station` (09-21): the one door a headless harness has to a station panel — a right-click
+  // needs pointer lock, which headless Chrome never grants. Same panel, same props as the click.
+  { name: 'station', usage: 'station <x> <y> <z>', help: 'open the station block there (owner)', owner: true,
+    run: (a, c) => {
+      const [x, y, z] = [Number(a[0]), Number(a[1]), Number(a[2])]
+      if (![x, y, z].every(Number.isFinite)) return 'station takes x y z'
+      return c.station(x, y, z)
+    } },
   { name: 'greg', usage: 'greg', help: 'talk to Gregory from here (owner)', owner: true,
     run: (_a, c) => c.greg() },
   { name: 'look', usage: 'look <deg> [pitch]  (0 = north, 90 = east; pitch + looks down)', help: 'point the camera (owner)', owner: true,
