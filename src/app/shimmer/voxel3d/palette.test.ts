@@ -99,11 +99,17 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // 4a. the panel walks the same two axes this file does, and highlights off the material KEY.
   ok(/const pieceRows = PIECES\.filter\(pc => !!pieceFamily && !!pc\.variants\?\.includes\(pieceFamily\)\)\n\s*\.map\(pc => pieceVariants\(pc\.id\)\.find\(v => pieceMaterial\(v\.id\)\?\.key === pieceMat\) \?\? pc\)/.test(src),
      'the craft panel derives its shape rows through pieceVariants in the chosen material, over the shapes that list its family')
-  ok(/PIECE_MATERIALS\.map\(m => \{\n\s*const on = m\.key === pieceMat/.test(src),
-     'the material strip is rendered from the full material table and highlights off the key')
+  // 2026-09-18 (hub): the strip shows the materials IN THE BAG plus the chosen one, the rest behind
+  // "N more" (`allMats`) — still the full table, filtered by stock, still highlighted off the key.
+  // The filter's three clauses are pinned because dropping `m.key === pieceMat` would hide the
+  // chosen column the moment its last plank is spent.
+  ok(/PIECE_MATERIALS\.filter\(m => allMats \|\| have\(m\.itemId\) > 0 \|\| m\.key === pieceMat\)\.map\(m => \{\n\s*const on = m\.key === pieceMat/.test(src),
+     'the material strip is rendered from the full material table (stocked + chosen, rest behind "more") and highlights off the key')
   // 2026-09-15: the rows became grid TILES. A tile's id carries the RESOLVED variant (`p:<pc.id>`), and
   // the card crafts `pieceItemId` of exactly that id — never the base shape.
-  ok(/id: `p:\$\{pc\.id\}`, name: pc\.name, itemId: pieceItemId\(pc\.id\)/.test(src) && /pieceItemId\(t\.id\.slice\(2\)\)/.test(src),
+  // 09-18: the tile's NAME is the base shape's (twenty-two "Goldwood …" tiles all started with the
+  // same two words); the material moved to the tag. The id and itemId still carry the resolved variant.
+  ok(/id: `p:\$\{pc\.id\}`, name: pieceDef\(basePieceId\(pc\.id\)\)\?\.name \?\? pc\.name, itemId: pieceItemId\(pc\.id\)/.test(src) && /pieceItemId\(t\.id\.slice\(2\)\)/.test(src),
      'a shape tile carries the resolved variant and crafts pieceItemId of it, not its base')
   ok(/craftSurface\(have, station\)\.filter\(r => !isPieceRecipe\(r\)\)/.test(src),
      'Refine excludes the piece rows — 98 of them would bury the planks')
