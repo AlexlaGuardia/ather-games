@@ -502,7 +502,7 @@ export function iconPixelsFor(itemId: string, size = ICON): Uint8Array | null {
 
 // ── the intermediates' icons ─────────────────────────────────────────────────────────────────────
 /** The ingredient (or potion) an intermediate id was made from, or null for anything else. */
-export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 'base' | 'loaf' | 'roast'; source: string } | null {
+export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 'base' | 'loaf' | 'roast' | 'bottle'; source: string } | null {
   // ★ THE ROAD'S STAGES (09-16): `stage_<potion>_<k>` is the batch after step k — drawn as the
   // step's shape (a mound for ground, a phial for distilled, a bowl for mixed) in the tint of the
   // potion's first ingredient, so a Mana Infusion ground still reads as the crystal it came from.
@@ -522,6 +522,12 @@ export function alchemySourceOf(itemId: string): { kind: 'powder' | 'extract' | 
   // The hearth's roasts (09-15): the raw thing's own icon, browned — a roast keeps its silhouette.
   if (itemId === 'roast_rinn') return { kind: 'roast', source: 'shimmerscale' }
   if (itemId === 'roasted_glowroot') return { kind: 'roast', source: 'glowroot_bulb' }
+  // ★ A BOTTLE FOR A POTION NOBODY PAINTED (2026-09-21). `bed_brew` shipped 09-17 as a magenta chip
+  // and the holding philter would have been the second; the same argument as every arm above —
+  // generic filler is code, hero art is Alex. A hand-painted flask in `ITEM_ICONS` always wins
+  // (`iconSourceFor` asks this arm first, so the gate is here, not there); the rest get a glass
+  // flask holding the first ingredient's tint, which is what a potion IS on a shelf.
+  if (itemId in POTION_DEFS && !ITEM_ICONS[itemId]) return { kind: 'bottle', source: POTION_DEFS[itemId].recipe[0]?.itemId ?? itemId }
   return null
 }
 
@@ -603,6 +609,33 @@ export function alchemyIcon(itemId: string, size = ICON): Uint8Array | null {
       if (!inBall && !inTip) continue
       const hi = Math.hypot(x - (c - r * 0.35), y - (cy - r * 0.35)) < r * 0.28
       set(x, y, hi ? sh(tint, 70) : sh(tint, Math.round(((y - tipY) / (cy + r - tipY)) * -30 + 10)))
+    }
+  } else if (what.kind === 'bottle') {
+    // A flask: a cork, a narrow neck, a round body — glass at the rim, the tint's liquid filling
+    // the body to a level with a meniscus line, one highlight up the left. Reads as "a potion" at
+    // 16px and as "the wakereed one" by colour, which is all a shelf asks of it.
+    const glass: [number, number, number] = [196, 214, 226]
+    const cork: [number, number, number] = [150, 108, 62]
+    const cy = size * 0.66, r = size * 0.28                      // the body
+    const neckHalf = size * 0.10, neckTop = size * 0.20, neckBot = cy - r * 0.75
+    const corkTop = size * 0.12
+    const level = cy - r * 0.35                                   // the liquid's surface
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const inBody = Math.hypot(x - c, y - cy) <= r
+      const inNeck = y >= neckTop && y < neckBot + 1 && Math.abs(x - c) <= neckHalf
+      const inCork = y >= corkTop && y < neckTop && Math.abs(x - c) <= neckHalf * 0.8
+      if (inCork) { set(x, y, sh(cork, y === Math.floor(corkTop) ? 25 : 0)); continue }
+      if (!inBody && !inNeck) continue
+      const edge = inBody && !inNeck && Math.hypot(x - c, y - cy) > r - 1.2
+      const lip = inNeck && Math.abs(Math.abs(x - c) - neckHalf) < 0.8
+      const hi = inBody && Math.hypot(x - (c - r * 0.45), y - (cy - r * 0.2)) < r * 0.22
+      if (edge || lip) { set(x, y, sh(glass, -60)); continue }
+      if (y >= level) {
+        const surface = y - level < 1
+        set(x, y, hi ? sh(tint, 80) : surface ? sh(tint, 40) : sh(tint, Math.round((y - level) / (cy + r - level) * -28 + (hash(x, y) - 0.5) * 8)))
+      } else {
+        set(x, y, sh(glass, hi ? 30 : 0), 150)
+      }
     }
   } else if (what.kind === 'loaf') {
     // A loaf: a rounded oblong on the lower half, crust darker on top, pale cut face below, two

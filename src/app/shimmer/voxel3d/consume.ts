@@ -16,7 +16,7 @@
 // promise, and the MoveBook's rule stands: name the gap, never hide it.
 import { POTION_DEFS, elementForInfusion } from '../engine/alchemy'
 import {
-  MANA_POTIONS, HEAL_POTIONS, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, BED_POTIONS,
+  MANA_POTIONS, HEAL_POTIONS, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, BED_POTIONS, potionBuffLine,
   type BuffId,
 } from '../engine/potion-effects'
 
@@ -93,7 +93,8 @@ export function consumeLine(itemId: string, eff: ConsumeEffect, name: string): s
   if (eff.advanceCropsMs) parts.push(`your crops jump ${Math.round(eff.advanceCropsMs / 60_000)}m`)
   if (eff.buff) {
     const b = BUFF_DEFS[eff.buff]
-    parts.push(WIRED_BUFFS.has(eff.buff) ? `${b.name} — ${b.line}` : `${b.name} (not felt here yet)`)
+    // The line at THIS bottle's span — a holding philter keeps Kindred twice as long as the buff's row says.
+    parts.push(WIRED_BUFFS.has(eff.buff) ? `${b.name} — ${potionBuffLine(itemId) ?? b.line}` : `${b.name} (not felt here yet)`)
   }
   const verb = eff.kind === 'eat' ? 'you eat' : 'you drink'
   return `${verb} the ${name.toLowerCase()}: ${parts.join(' · ')}`

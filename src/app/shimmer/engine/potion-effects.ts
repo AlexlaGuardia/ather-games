@@ -45,15 +45,19 @@ export type BuffId =
 /** buffId → untilMs (epoch). Drinking the same potion refreshes, never stacks. */
 export type ActiveBuffs = Record<string, number>
 
-export const BUFF_DEFS: Record<BuffId, { name: string; glyph: string; color: string; durationMs: number; line: string }> = {
-  fleetfoot:   { name: 'Fleetfoot',     glyph: '🌿', color: '#8fd06a', durationMs: 6 * 60_000,  line: `move +${Math.round((FLEETFOOT_SPEED - 1) * 100)}% · 6m` },
-  anglers_eye: { name: "Angler's Eye",  glyph: '🎣', color: '#6ac6d0', durationMs: 8 * 60_000,  line: 'bites come sooner, linger longer · 8m' },
-  kindred:     { name: 'Kindred',       glyph: '🐾', color: '#d0a86a', durationMs: 8 * 60_000,  line: `companion assist ×${KINDRED_MULT} · 8m` },
-  starlight:   { name: 'Starlight',     glyph: '✨', color: '#c8b8ff', durationMs: 8 * 60_000,  line: `gathering XP ×${STARLIGHT_XP} · 8m` },
-  deepsight:   { name: 'Deepsight',     glyph: '🔮', color: '#8a9fe6', durationMs: 8 * 60_000,  line: `+${Math.round(DEEPSIGHT_FIND * 100)}% bonus finds · 8m` },
-  dreamwalk:   { name: 'Dreamwalk',     glyph: '🌙', color: '#b08ae6', durationMs: 8 * 60_000,  line: 'wild spirits stay calm · 8m' },
-  ather_flow:  { name: 'Ather Flow',    glyph: '◈',  color: '#4aa3e6', durationMs: 10 * 60_000, line: `mana regen ×${ATHER_REGEN} · 10m` },
-  dawn:        { name: 'Dawn',          glyph: '🌅', color: '#ffd98a', durationMs: 15 * 60_000, line: 'XP · finds · speed, all lifted · 15m' },
+// `effect` is the words without a clock; `line` is `effect · Nm` at the buff's OWN duration. A potion
+// that holds the same buff for a different span (`POTION_BUFF_MS`) says its span via `potionBuffLine`.
+const buffDef = (name: string, glyph: string, color: string, minutes: number, effect: string) =>
+  ({ name, glyph, color, durationMs: minutes * 60_000, effect, line: `${effect} · ${minutes}m` })
+export const BUFF_DEFS: Record<BuffId, { name: string; glyph: string; color: string; durationMs: number; effect: string; line: string }> = {
+  fleetfoot:   buffDef('Fleetfoot',    '🌿', '#8fd06a', 6,  `move +${Math.round((FLEETFOOT_SPEED - 1) * 100)}%`),
+  anglers_eye: buffDef("Angler's Eye", '🎣', '#6ac6d0', 8,  'bites come sooner, linger longer'),
+  kindred:     buffDef('Kindred',      '🐾', '#d0a86a', 8,  `companion assist ×${KINDRED_MULT}`),
+  starlight:   buffDef('Starlight',    '✨', '#c8b8ff', 8,  `gathering XP ×${STARLIGHT_XP}`),
+  deepsight:   buffDef('Deepsight',    '🔮', '#8a9fe6', 8,  `+${Math.round(DEEPSIGHT_FIND * 100)}% bonus finds`),
+  dreamwalk:   buffDef('Dreamwalk',    '🌙', '#b08ae6', 8,  'wild spirits stay calm'),
+  ather_flow:  buffDef('Ather Flow',   '◈',  '#4aa3e6', 10, `mana regen ×${ATHER_REGEN}`),
+  dawn:        buffDef('Dawn',         '🌅', '#ffd98a', 15, 'XP · finds · speed, all lifted'),
 }
 
 /** potionId → the timed buff drinking it grants. */
@@ -61,11 +65,33 @@ export const POTION_BUFFS: Record<string, BuffId> = {
   moonvine_tonic: 'fleetfoot',
   glowfin_brew: 'anglers_eye',
   bond_philter: 'kindred',
+  holding_philter: 'kindred',
   starlight_tincture: 'starlight',
   deep_essence: 'deepsight',
   dreamroot_elixir: 'dreamwalk',
   ather_infusion: 'ather_flow',
   dawn_cordial: 'dawn',
+}
+
+/**
+ * ★ A POTION THAT HOLDS ITS BUFF LONGER THAN THE BUFF'S OWN CLOCK (2026-09-21). The Holding Philter
+ * (`alchemy.ts`) is the Wakereed steeped for a restless bond — canon says *holding, not hurry*, so
+ * it grants the bond philter's Kindred and simply keeps it twice as long. The buff table stays one
+ * row per effect; this is the one place a bottle may lengthen the span. Drinking either philter
+ * refreshes the same timer — the longer one wins only by being drunk last, as any refresh does.
+ */
+export const HOLDING_MULT = 2
+export const POTION_BUFF_MS: Readonly<Record<string, number>> = {
+  holding_philter: BUFF_DEFS.kindred.durationMs * HOLDING_MULT,
+}
+/** How long THIS bottle holds its buff — the potion's own span, else the buff's. */
+export const potionBuffMs = (potionId: string): number =>
+  POTION_BUFF_MS[potionId] ?? BUFF_DEFS[POTION_BUFFS[potionId]].durationMs
+/** The buff's line at THIS bottle's span — `companion assist ×2 · 16m` for the holding philter. */
+export function potionBuffLine(potionId: string): string | null {
+  const buff = POTION_BUFFS[potionId]
+  if (!buff) return null
+  return `${BUFF_DEFS[buff].effect} · ${Math.round(potionBuffMs(potionId) / 60_000)}m`
 }
 
 // Instant restores — moved here from the walker (2026-07-22) so every drink effect lives in one
@@ -88,8 +114,8 @@ export const MEND_POTION_ID = 'shimmer_salve'
 
 /** One-line "what drinking does" for the Alchemy menu — covers all 13 potions. */
 export function potionEffectLine(potionId: string): string | null {
-  const buff = POTION_BUFFS[potionId]
-  if (buff) return BUFF_DEFS[buff].line
+  const buffLine = potionBuffLine(potionId)
+  if (buffLine) return buffLine
   if (potionId in MANA_POTIONS) return `restores ${MANA_POTIONS[potionId]} mana`
   const mend = SPIRIT_MEND_POTIONS[potionId]
   if (mend) return `mends a spirit +${mend} HP · or your own out in the Crucible`
@@ -118,7 +144,7 @@ export function potionEffectLine(potionId: string): string | null {
 export function drinkBuff(buffs: ActiveBuffs, potionId: string, nowMs: number): BuffId | null {
   const id = POTION_BUFFS[potionId]
   if (!id) return null
-  buffs[id] = nowMs + BUFF_DEFS[id].durationMs
+  buffs[id] = nowMs + potionBuffMs(potionId)
   return id
 }
 

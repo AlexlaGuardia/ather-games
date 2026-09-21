@@ -91,7 +91,7 @@ import { ITEMS, NODE_TYPE_LABELS } from '../sprites/items'
 import { startPerfLog, mark, logPerf } from './perflog'
 import { createManaPool, manaToSave, manaFromSave, getMaxPool, type ManaPool } from '../engine/mana'
 import { brewPotion, POTION_DEFS, elementForInfusion, applyInfusion, INFUSION_BREWS } from '../engine/alchemy'
-import { MANA_POTIONS, HEAL_POTIONS, SPIRIT_MEND_POTIONS, MEND_POTION_ID, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, type ActiveBuffs } from '../engine/potion-effects'
+import { MANA_POTIONS, HEAL_POTIONS, SPIRIT_MEND_POTIONS, MEND_POTION_ID, POTION_BUFFS, BUFF_DEFS, HARVEST_BREW_ADVANCE_MS, drinkBuff, activeBuffList, pruneBuffs, gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters, potionEffectLine, potionBuffLine, type ActiveBuffs } from '../engine/potion-effects'
 import { canCraft, craftItem, RECIPE_DEFS } from '../engine/crafting'
 import { createGEState, buyFromGE, sellToGE, tickPriceDrift, GE_ITEM_IDS, geToSave, geFromSave, type GEMarketState, type GESave } from '../engine/exchange'
 import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFromSave, isCropReady, MANA_SEED_ITEM, type PlantedCrop } from '../engine/farming'
@@ -4863,7 +4863,7 @@ export default function Shimmer3D() {
       const buff = drinkBuff(buffsRef.current, itemId, Date.now())!
       setBuffHud(activeBuffList(buffsRef.current, Date.now()))
       setInvSlots([...invRef.current.slots])
-      setHarvestToast(`${BUFF_DEFS[buff].glyph} ${BUFF_DEFS[buff].name} — ${BUFF_DEFS[buff].line}`)
+      setHarvestToast(`${BUFF_DEFS[buff].glyph} ${BUFF_DEFS[buff].name} — ${potionBuffLine(itemId) ?? BUFF_DEFS[buff].line}`)
       persist()
       return
     }

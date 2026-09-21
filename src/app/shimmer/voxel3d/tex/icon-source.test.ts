@@ -28,6 +28,7 @@ import { isPlant, isSapling } from '../../voxel/depth'
 import { isLeafMat } from '../../voxel/trees'
 import { iconSourceFor, iconPixelsFor, iconPixels, hasTileArt, crossIcon, leafCutout, blockWornBy, flatIcon } from './item-icon'
 import { ITEM_ICONS } from '../../sprites/items'
+import { POTION_DEFS } from '../../engine/alchemy'
 
 const fails: string[] = []
 let pass = 0
@@ -215,6 +216,25 @@ for (const id of Object.keys(ITEM_ICONS)) {
   fails.push(`${id} is wired to an all-zero frame — the editor calls it drawn and the bag draws the `
     + `plain chip. Draw it, or remove the ITEM_ICONS entry so the chip is the honest answer.`)
 }
+
+// ── ④ EVERY BOTTLE THE CAULDRON POURS HAS AN ICON (2026-09-21) ─────────────────────────────────
+// `bed_brew` shipped 09-17 as a magenta chip because nothing asked. Now a potion with no painted
+// sprite gets the code-drawn flask (`alchemySourceOf` › 'bottle') in its first ingredient's tint,
+// and a painted one keeps its art — both directions pinned, so neither arm can quietly take the
+// other's bottles. Zero-baseline ratchet, like ③: a new brew with no icon fails the day it lands.
+for (const id of Object.keys(POTION_DEFS)) {
+  const src = iconSourceFor(id)
+  const painted = !!ITEM_ICONS[id]
+  if (painted && src !== 'painted') { fails.push(`${id} is painted but the chain answers '${src}'`); continue }
+  if (!painted && src !== 'alchemy') { fails.push(`${id} has no painted sprite and no bottle — it would ship as the chip`); continue }
+  const px = iconPixelsFor(id)
+  let opaque = 0
+  if (px) for (let i = 3; i < px.length; i += 4) if (px[i] > 128) opaque++
+  if (opaque < 40) { fails.push(`${id}'s icon is ${opaque} opaque px — not a bottle anyone can see`); continue }
+  pass++
+}
+// And the arm is earned by the TABLE, not the spelling: a non-potion id with no art stays a chip.
+if (iconSourceFor('not_a_potion_at_all') !== null) fails.push('the bottle arm answers for an id no cauldron pours'); else pass++
 
 console.log(`\nicon-source audit: ${pass} checks passed, ${fails.length} failed`)
 for (const f of fails) console.log('  ✗ ' + f)

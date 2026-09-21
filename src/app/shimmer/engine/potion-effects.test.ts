@@ -4,7 +4,7 @@ import {
   gatherXpMult, bonusFind, kindredMult, speedMult, manaRegenMult, rinTune, suppressEncounters,
   BUFF_DEFS, POTION_BUFFS, MANA_POTIONS, HEAL_POTIONS,
   STARLIGHT_XP, DAWN_XP, DEEPSIGHT_FIND, DAWN_FIND, KINDRED_MULT, FLEETFOOT_SPEED, DAWN_SPEED, ATHER_REGEN,
-  BED_POTIONS, type ActiveBuffs,
+  BED_POTIONS, POTION_BUFF_MS, HOLDING_MULT, potionBuffMs, potionBuffLine, type ActiveBuffs,
 } from './potion-effects'
 import { POTION_DEFS, elementForInfusion, INFUSION_BREWS } from './alchemy'
 
@@ -93,6 +93,34 @@ for (const [el, id] of Object.entries(INFUSION_BREWS)) {
   chk(`${id} is not a mana potion`, !(id in MANA_POTIONS))
   chk(`${id} is not a heal potion`, !(id in HEAL_POTIONS))
   chk(`${id} reports its element`, elementForInfusion(id) === el)
+}
+
+// ── the holding philter: the same Kindred, held twice as long (2026-09-21) ─────────────────────
+// Canon's Wakereed is steeped for HOLDING, so the bottle lengthens a span rather than adding a
+// row. Pinned from both sides: the span IS longer, and it is the bond philter's × HOLDING_MULT
+// (not a number someone fitted), and every line that names a clock names THIS bottle's.
+{
+  chk('holding philter grants kindred', POTION_BUFFS.holding_philter === 'kindred')
+  chk('holding span = bond span × HOLDING_MULT', potionBuffMs('holding_philter') === potionBuffMs('bond_philter') * HOLDING_MULT)
+  chk('HOLDING_MULT is a real lengthening', HOLDING_MULT > 1)
+  chk('the bond philter keeps the buff\'s own span', potionBuffMs('bond_philter') === BUFF_DEFS.kindred.durationMs)
+  for (const pid of Object.keys(POTION_BUFF_MS)) chk(`${pid} (a span override) is a buff potion`, pid in POTION_BUFFS)
+  const h: ActiveBuffs = {}
+  drinkBuff(h, 'holding_philter', now)
+  chk('kindred live past the bond philter\'s clock', hasBuff(h, 'kindred', now + BUFF_DEFS.kindred.durationMs + 1))
+  chk('kindred live at the last instant of the held span', hasBuff(h, 'kindred', now + potionBuffMs('holding_philter') - 1))
+  chk('and gone after it', !hasBuff(h, 'kindred', now + potionBuffMs('holding_philter')))
+  chk('kindred doubles assist under the holding philter too', kindredMult(h, now + 1) === KINDRED_MULT)
+  const bondLine = potionBuffLine('bond_philter'), holdLine = potionBuffLine('holding_philter')
+  chk('bond line names 8m', bondLine !== null && / 8m$/.test(bondLine), bondLine ?? '')
+  chk('holding line names 16m', holdLine !== null && / 16m$/.test(holdLine), holdLine ?? '')
+  chk('holding line carries the same effect words', holdLine !== null && holdLine.startsWith(BUFF_DEFS.kindred.effect))
+  chk('the menu line is the bottle\'s line', potionEffectLine('holding_philter') === holdLine)
+  chk('every BUFF_DEFS line is its effect at its own clock', (Object.values(BUFF_DEFS)).every(d => d.line === `${d.effect} · ${d.durationMs / 60_000}m`))
+  // Drinking the shorter after the longer REFRESHES to the shorter — that is what refresh means,
+  // and this pins it so nobody later "fixes" it into a max() without a test noticing.
+  drinkBuff(h, 'bond_philter', now + 1000)
+  chk('a later bond philter refreshes to its own span', !hasBuff(h, 'kindred', now + 1000 + BUFF_DEFS.kindred.durationMs + 1))
 }
 
 console.log(`\npotion-effects: ${ok} ok, ${bad} failed`)

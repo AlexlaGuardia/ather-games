@@ -62,6 +62,19 @@ export const POTION_DEFS: Record<string, PotionDef> = {
     minAlchemyLevel: 8, manaCost: 18, xpGrant: 45, resultCount: 1,
     recipe: [{ itemId: 'ribboneel', count: 3 }, { itemId: 'moonberry', count: 3 }, { itemId: 'amber_sap', count: 2 }],
   },
+  // ── ★ THE HOLDING PHILTER — the river's ingredient, steeped for a bond that will not settle ──
+  // Canon (`game/alchemy.md` › Wakereed, ruled 2026-09-18): the one thing in the river that does not
+  // rush is steeped for the SPIRIT class — a philter for a restless bond — and never for hurry.
+  // The word is `philter` so the chain routes it still → bowl and `jobOf` says "for the spirit"
+  // without a row here saying so. Recipe / tier / duration are the build's: wakereed ×3 (forage-only,
+  // a walk to a running river every time — the walk IS the price), moonberry ×2 (the bond philter's
+  // own fruit, so the two bottles read as kin), shard ×2. What it grants is the bond philter's
+  // effect held twice as long (`potion-effects.ts › POTION_BUFF_MS`): holding, not more.
+  holding_philter: {
+    id: 'holding_philter', name: 'Holding Philter', tier: 2,
+    minAlchemyLevel: 8, manaCost: 18, xpGrant: 45, resultCount: 1,
+    recipe: [{ itemId: 'wakereed', count: 3 }, { itemId: 'moonberry', count: 2 }, { itemId: 'raw_mana_shard', count: 2 }],
+  },
   mana_infusion: {
     id: 'mana_infusion', name: 'Mana Infusion', tier: 2,
     minAlchemyLevel: 10, manaCost: 25, xpGrant: 60, resultCount: 1,
