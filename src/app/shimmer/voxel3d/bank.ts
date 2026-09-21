@@ -172,12 +172,27 @@ export function bankCategory(itemId: string): BankCategory {
  * same item always stands in the same place across opens. Stability by index last keeps two
  * partial stacks of one item in a fixed order rather than swapping under the pointer.
  */
-export function bankView(bank: Slots, tab: BankTab, label: (itemId: string) => string): number[] {
+/**
+ * ★ A SEARCH BOX ON THE POOL (2026-09-21, Alex's pick once the pool was big enough to want one).
+ * Every whitespace-separated token of the query must appear in the item's label OR its id (with
+ * `_` read as a space, so `mana shard` and `raw_mana` both find the shard). Case-free. A live query
+ * searches the WHOLE pool regardless of the tab — the crafter's rule (`craft-grid.tsx`): typing is
+ * a stronger statement of what you want than the tab you happened to be on.
+ */
+export function bankMatches(itemId: string, label: string, query: string): boolean {
+  const q = query.trim().toLowerCase().replace(/_/g, ' ')
+  if (!q) return true
+  const hay = `${label.toLowerCase()} ${itemId.replace(/_/g, ' ').toLowerCase()}`
+  return q.split(/\s+/).every(tok => hay.includes(tok))
+}
+
+export function bankView(bank: Slots, tab: BankTab, label: (itemId: string) => string, query = ''): number[] {
   const out: number[] = []
+  const searching = query.trim().length > 0
   for (let i = 0; i < bank.length; i++) {
     const s = bank[i]
     if (!s || s.count <= 0) continue
-    if (tab !== 'all' && bankCategory(s.itemId) !== tab) continue
+    if (searching ? !bankMatches(s.itemId, label(s.itemId), query) : tab !== 'all' && bankCategory(s.itemId) !== tab) continue
     out.push(i)
   }
   const key = (i: number) => {

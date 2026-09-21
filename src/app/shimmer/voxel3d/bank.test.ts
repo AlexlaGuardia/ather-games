@@ -7,7 +7,7 @@
 
 import {
   SLOTS_PER_CHEST, bankCapacity, bankUsed, bankFree, fitBank, pourInto, bankCategory, bankView,
-  bankFreeSlots, bankCount, bankToSave, bankFromSave, BANK_TABS, type BankCategory,
+  bankFreeSlots, bankCount, bankToSave, bankFromSave, bankMatches, BANK_TABS, type BankCategory,
 } from './bank'
 import { CHEST_SLOTS, createChest, addToGrid, type Slots } from './chest'
 import { itemUniverse } from './item-universe'
@@ -121,6 +121,24 @@ const label = (id: string) => id
   ok(back.length === 2 && back[0]!.itemId === 'glass' && (back[1] as { vesselData?: unknown }).vesselData !== undefined, 'stacks and their unique data survive')
   ok(bankFromSave(undefined).length === 0 && bankFromSave('nope').length === 0, 'absent or junk = empty')
   ok(bankFromSave([{ itemId: 'glass', count: NaN }, { itemId: 3, count: 1 }, { itemId: 'glass', count: 2.9 }]).map(s => s!.count).join() === '2', 'malformed dropped, fractions floored')
+}
+
+// ── ★ THE SEARCH BOX (2026-09-21) — a query searches the whole pool, the tab steps aside ───────
+{
+  const g: Slots = Array.from({ length: 12 }, () => null)
+  addToGrid(g, 'raw_mana_shard', 5, MAX); addToGrid(g, 'goldwood_plank', 3, MAX); addToGrid(g, 'goldwood_log', 2, MAX)
+  addToGrid(g, 'holding_philter', 1, MAX); addToGrid(g, 'seed_goldleaf', 4, MAX)
+  const pretty = (id: string) => id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  const ids = (v: number[]) => v.map(i => g[i]!.itemId)
+  ok(bankMatches('raw_mana_shard', 'Raw Mana Shard', 'shard') && bankMatches('raw_mana_shard', 'Raw Mana Shard', 'MANA sh'), 'a token matches the label, case-free, any order of tokens')
+  ok(bankMatches('raw_mana_shard', 'Raw Mana Shard', 'raw_mana'), 'the id matches too, with its underscores read as spaces')
+  ok(!bankMatches('raw_mana_shard', 'Raw Mana Shard', 'shard plank'), 'every token must match — one miss is a miss')
+  ok(bankMatches('anything', 'Anything', '   '), 'a blank query matches everything')
+  ok(ids(bankView(g, 'all', pretty, 'goldwood')).sort().join() === 'goldwood_log,goldwood_plank', 'the view under a query is the matching stacks')
+  ok(ids(bankView(g, 'brews', pretty, 'goldwood')).sort().join() === 'goldwood_log,goldwood_plank', '★ a query searches the WHOLE pool — the Brews tab does not hide the planks')
+  ok(ids(bankView(g, 'brews', pretty, '')).join() === 'holding_philter', 'and with no query the tab filters as before')
+  ok(bankView(g, 'all', pretty, 'nothing like this').length === 0, 'no match, no rows')
+  ok(ids(bankView(g, 'all', pretty, 'gold')).join() === 'goldwood_plank,goldwood_log,seed_goldleaf', 'results keep the rail order (the plank is a block, the log a material, the seed garden)')
 }
 
 console.log(`bank: ${pass} pass, ${fails.length} fail`)

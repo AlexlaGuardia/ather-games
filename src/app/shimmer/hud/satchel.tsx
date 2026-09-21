@@ -898,6 +898,10 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
   // The bank's lens. Pinned per mount like the keeper tab: a chest opened fresh opens on All,
   // because the thing you walked up to put away is not known to be in any one category.
   const [bankTab, setBankTab] = useState<BankTab>('all')
+  // The bank's search box (09-21). A live query searches the whole pool and un-lights the tabs; a
+  // tab click clears it. Reset whenever the bank is opened, so yesterday's query is not today's filter.
+  const [bankQuery, setBankQuery] = useState('')
+  useEffect(() => { setBankQuery('') }, [chest?.bank])
   const bag = inv.current?.slots ?? []
   const slotKey = (r: SlotRef) => `${r.g}${r.i}`
 
@@ -1120,27 +1124,35 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
            the cap is a NUMBER on the header, not four hundred grey squares. */
         const used = bankUsed(chest.slots)
         const free = chest.bank.cap - used
-        const view = bankView(chest.slots, bankTab, itemLabel)
+        const view = bankView(chest.slots, bankTab, itemLabel, bankQuery)
+        const searching = bankQuery.trim().length > 0
         // Enough holes to finish the last row (never a second, stray one), and never more than are free.
-        const holes = bankFreeSlots(chest.slots, Math.max(0, Math.min(CHEST_COLS - (view.length % CHEST_COLS), free)))
+        // No free row under a search: the result is an answer, not a place to put things.
+        const holes = searching ? [] : bankFreeSlots(chest.slots, Math.max(0, Math.min(CHEST_COLS - (view.length % CHEST_COLS), free)))
         const counts = new Map<BankTab, number>()
         for (const s of chest.slots) if (s && s.count > 0) { const c = bankCategory(s.itemId); counts.set(c, (counts.get(c) ?? 0) + 1) }
         return (
           <div className="mb-4 border-b border-white/10 pb-4">
             <SectionHead label={`the bank · ${chest.bank.chests} of ${chest.bank.chestCap} chests`}
                          note={<><span className={`gx-value ${free < 0 ? 'text-red-300/80' : 'text-white/40'}`}>{used}</span> / {chest.bank.cap} slots</>} />
-            <div className="mb-2 flex flex-wrap gap-1">
+            <div className="mb-2 flex flex-wrap items-center gap-1">
               {BANK_TABS.map(t => {
                 const n = t.id === 'all' ? used : (counts.get(t.id) ?? 0)
-                const on = t.id === bankTab
+                const on = t.id === bankTab && !searching
                 return (
-                  <button key={t.id} type="button" onClick={() => setBankTab(t.id)}
+                  <button key={t.id} type="button" onClick={() => { setBankTab(t.id); setBankQuery('') }}
                           className={`rounded-[2px] border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] transition-colors
                             ${on ? 'border-amber-300/70 bg-amber-300/10 text-amber-100' : 'border-white/10 text-white/40 hover:border-white/30 hover:text-white/70'}`}>
                     {t.label}{n > 0 && <span className="gx-value ml-1 text-[9px] opacity-70">{n}</span>}
                   </button>
                 )
               })}
+              {/* Keys typed here must not reach the world (I closes the bag, T opens the console): the
+                  world's listeners skip INPUT targets, and the stop below covers the frame's own. */}
+              <input value={bankQuery} onChange={e => setBankQuery(e.target.value)} placeholder="find…"
+                     data-bank-search
+                     onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape' && bankQuery) { e.preventDefault(); setBankQuery('') } }}
+                     className="ml-auto h-6 w-28 rounded-[2px] border border-white/10 bg-black/40 px-2 text-[10px] text-white/80 outline-none placeholder:text-white/25 focus:border-amber-300/60" />
             </div>
             {free < 0 && (
               <div className="mb-2 text-[11px] text-red-200/70">over by {-free} — a chest came down; nothing more goes in until it drains</div>
@@ -1148,8 +1160,11 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
             {chest.bank.cap === 0 && used === 0 && (
               <div className="mb-2 text-[11px] text-white/40">no chest stands on the plot — place one and the bank has room</div>
             )}
-            {view.length === 0 && holes.length === 0 && chest.bank.cap > 0 && (
+            {view.length === 0 && holes.length === 0 && chest.bank.cap > 0 && !searching && (
               <div className="mb-2 text-[11px] text-white/30">nothing here yet</div>
+            )}
+            {searching && view.length === 0 && (
+              <div className="mb-2 text-[11px] text-white/30">nothing in the bank matches “{bankQuery.trim()}”</div>
             )}
             <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 1fr))` }}>
               {view.map(i => cell({ g: 'chest', i }))}
