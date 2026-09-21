@@ -3644,7 +3644,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         }
         const mat = (MAT as Record<string, number | undefined>)[id.toUpperCase()]
         if (mat === undefined) return `no such block or piece: ${id}`
+        // ★ SAY WHAT LANDED (09-21). `setVoxel` returns silently when the column is not loaded yet —
+        // right after a crossing, the first `/put` did nothing and this line still said "put". A
+        // dev instrument that reports a write it did not make is how a harness builds a false
+        // negative on top of it (brewing-check put twice for a day). Read the cell back.
         setVoxel(x, y, z, mat)
+        if (voxel(x, y, z) !== mat) return `nothing at (${x}, ${y}, ${z}) — that column is not loaded yet, try again in a moment`
         return `put ${id.toUpperCase()} at (${x}, ${y}, ${z})`
       },
       // ★ `/hostiles` (#1112, 2026-09-11) — what the ground under the keeper can yield, read off the

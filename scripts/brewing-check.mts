@@ -77,10 +77,18 @@ try {
   // ── the set: a cauldron three blocks off, a mortar four past it (at ~1: a put at foot level lands in the floor), the ingredients of a Shard Tonic ──
   // (alchemy 1, road = grind → pour: one road station, so a fresh keeper walks the whole shape).
   await cmd('/space plot', 8000)   // let the garden's columns land before building on them
-  // ⚠ The FIRST put after the crossing does not land (the reply says it did; `/station` then says
-  // "no station"; a second put at the same cell does land) — measured 09-21, not chased. Put twice.
-  await cmd('/put cauldron ~3 ~1 ~'); await cmd('/put cauldron ~3 ~1 ~')
-  await cmd('/put grinder ~7 ~1 ~'); await cmd('/put grinder ~7 ~1 ~')
+  // The first put after a crossing can land before the column does; `/put` now says so instead of
+  // lying, so put until the reply confirms (the column is seconds away under software GL).
+  const putUntilLanded = async (line: string) => {
+    for (let i = 0; i < 6; i++) {
+      await cmd(line, 1200)
+      const tail = await bodyTail()
+      if (/put [A-Z_]+ at/.test(tail.slice(-160))) return true
+    }
+    return false
+  }
+  ok(await putUntilLanded('/put cauldron ~3 ~1 ~'), 'the cauldron landed (the put reply confirms the cell)')
+  ok(await putUntilLanded('/put grinder ~7 ~1 ~'), 'the mortar landed')
   await cmd('/give raw_mana_shard 3')
   await cmd('/give goldwood_bark 2')
   ok(!/no such item/.test(await bodyTail()), 'the ingredients are items this world knows')
