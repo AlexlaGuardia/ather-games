@@ -3768,7 +3768,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
               const mesh = o as THREE.Mesh
               if (!mesh.isMesh) return
               const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld)
-              if (/fruit/i.test(mesh.name)) fruit = geo; else if (!leaves) leaves = geo
+              if (/fruit/i.test(mesh.name)) { fruit = geo; return }
+              if (leaves) return
+              // ★ OUR OWN UVs, NOT THE GLB'S. The modeller's projection spread one copy of the tile
+              // over each lump, so half a bush wore the tile's highlight as a cream slab (Alex's
+              // first look). A cylindrical wrap at the stand-in's density — the tile ~2× round the
+              // bush and ~2× up it — puts the card's pixels on the sculpt at the card's scale.
+              const pos = geo.getAttribute('position')
+              const uv = new Float32Array(pos.count * 2)
+              for (let i = 0; i < pos.count; i++) {
+                const ang = Math.atan2(pos.getZ(i), pos.getX(i)) / (Math.PI * 2) + 0.5
+                uv[i * 2] = (ang * 2) % 1; uv[i * 2 + 1] = (pos.getY(i) * 2.2) % 1
+              }
+              geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+              leaves = geo
             })
             if (!leaves) { onSay('the glb has no Leaves mesh'); return }
             flora.setSculpt(leaves, fruit)
