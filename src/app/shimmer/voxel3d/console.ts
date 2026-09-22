@@ -713,9 +713,9 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
     suggest: () => ['~'] },
   // ★ `/bushtest` (2026-09-22): Alex's "3d models for bushes" question, answered with his eyes — a
   // card bush and a low-poly model bush side by side, three blocks ahead. A showcase, never saved.
-  { name: 'bushtest', usage: 'bushtest [sunfruit|moonberry|clear]', help: 'stand a card bush beside a model bush ahead (owner)', owner: true,
+  { name: 'bushtest', usage: 'bushtest [sunfruit|moonberry|sculpt|clear]', help: 'stand a card bush beside a model bush ahead; sculpt adds the glb (owner)', owner: true,
     run: (a, c) => c.bushtest(a[0]),
-    suggest: () => ['sunfruit', 'moonberry', 'clear'] },
+    suggest: () => ['sunfruit', 'moonberry', 'sculpt', 'clear'] },
   { name: 'greg', usage: 'greg', help: 'talk to Gregory from here (owner)', owner: true,
     run: (_a, c) => c.greg() },
   { name: 'look', usage: 'look <deg> [pitch]  (0 = north, 90 = east; pitch + looks down)', help: 'point the camera (owner)', owner: true,

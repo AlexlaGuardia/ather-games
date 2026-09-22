@@ -435,6 +435,7 @@ import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer, floraDemand, leanLive } from './flora-mesh'
 import { scanShelves } from './shelf-scan'
 import { createStationRenderer } from './station-mesh'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { createBedRims } from './bed-rim'
 
 
@@ -3204,6 +3205,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const lightUniforms = useMemo(() => createLightUniforms(), [])
   // The flora renderer is built beside the light uniforms it samples (09-17), and before the
   // settings effect below that hands it the cartoon dials.
+  /** `/bushtest sculpt` loaded its glb once this session. */
+  const sculptLoaded = useRef(false)
   const flora = useMemo(() => createFloraRenderer(lightUniforms), [lightUniforms])
   const lightTex = useMemo(() => createLightTexture(), [])
   useEffect(() => {
@@ -3738,6 +3741,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // on the right, three blocks ahead on the live ground; `clear` takes them down. Never saved.
       bushtest: (arg) => {
         if (arg === 'clear') { flora.showcase([]); return 'the showcase is down' }
+        const sculpt = arg === 'sculpt'
         const which = arg === 'moonberry' ? MAT.MOONBERRY_BUSH : MAT.SUNFRUIT_BUSH
         const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
         const right = new THREE.Vector3(-fwd.z, 0, fwd.x)
@@ -3748,6 +3752,31 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // asks the continent's height and is wrong on the Glade and the plot).
           for (let y = Math.floor(p.py) + 2; y >= Math.floor(p.py) - 12; y--) if (voxel(x, y, z) !== AIR) return { x, y: y + 1, z }
           return null
+        }
+        // ★ `/bushtest sculpt` (09-22): THREE in a row — card · code stand-in · picaso's sculpted glb
+        // (`/models/flora/sunfruit-bush.glb`, objects `Leaves` + `Fruit`, base at origin). Loaded
+        // once, handed to the renderer's showcase slot; the same card tile/tint/stack as the stand-in.
+        if (sculpt) {
+          const l = spot(-2), m = spot(0), r = spot(2)
+          if (!l || !m || !r) return 'the ground ahead is not loaded yet'
+          const stand = () => flora.showcase([{ ...l, kind: 'card', mat: which }, { ...m, kind: 'model', mat: which }, { ...r, kind: 'sculpt', mat: which }])
+          if (sculptLoaded.current) { stand(); return 'card · stand-in · SCULPT, left to right — walk round them · /bushtest clear' }
+          new GLTFLoader().load('/models/flora/sunfruit-bush.glb', (g) => {
+            let leaves: THREE.BufferGeometry | null = null, fruit: THREE.BufferGeometry | null = null
+            g.scene.updateMatrixWorld(true)
+            g.scene.traverse(o => {
+              const mesh = o as THREE.Mesh
+              if (!mesh.isMesh) return
+              const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld)
+              if (/fruit/i.test(mesh.name)) fruit = geo; else if (!leaves) leaves = geo
+            })
+            if (!leaves) { onSay('the glb has no Leaves mesh'); return }
+            flora.setSculpt(leaves, fruit)
+            sculptLoaded.current = true
+            stand()
+            onSay('sculpted bush loaded — card · stand-in · SCULPT, left to right')
+          }, undefined, () => onSay('no sculpted bush at /models/flora/sunfruit-bush.glb yet'))
+          return 'loading the sculpted bush…'
         }
         const l = spot(-1), r = spot(1)
         if (!l || !r) return 'the ground ahead is not loaded yet'

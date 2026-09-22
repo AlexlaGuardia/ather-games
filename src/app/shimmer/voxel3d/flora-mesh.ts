@@ -442,7 +442,13 @@ export interface FloraRenderer {
    * The SHOWCASE (2026-09-22): stand a card bush and/or a model bush at exact spots, outside the
    * pools — `/bushtest`'s A/B. Rewrites the whole set each call; `[]` clears it. Never saved.
    */
-  showcase(entries: { x: number; y: number; z: number; kind: 'card' | 'model'; mat: number }[]): void
+  showcase(entries: { x: number; y: number; z: number; kind: 'card' | 'model' | 'sculpt'; mat: number }[]): void
+  /**
+   * Hand the showcase a SCULPTED bush (a glTF's `Leaves` + `Fruit` geometries, base at the origin,
+   * blocks as units). Until this is called a `'sculpt'` entry draws nothing. The glb is loaded by
+   * the host (`/bushtest sculpt`) — the renderer never fetches.
+   */
+  setSculpt(leaves: THREE.BufferGeometry, fruit: THREE.BufferGeometry | null): void
   /** Drop a column's cached spots (its ground changed — an edit landed). */
   invalidate(colKey: string): void
   /**
@@ -1543,6 +1549,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const showBerries = new THREE.InstancedMesh(modelGeo.fruit, showFruitMat, SHOW_CAP)
   showLeaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
   showBerries.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
+  // The sculpted bush (picaso's glb) — same materials as the stand-in, so only the shape differs.
+  let sculptLeaves: THREE.InstancedMesh | null = null, sculptFruit: THREE.InstancedMesh | null = null
   showCard.count = 0; showFruit.count = 0; showLeaves.count = 0; showBerries.count = 0
   // Same as every pool: the geometry's bounds sit at the origin, so the default culling would
   // hide the pair unless world (0,0,0) happened to be on screen (it did not; two blank shots).
@@ -1743,8 +1751,22 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
 
   return {
     group,
+    setSculpt(leaves, fruit) {
+      if (sculptLeaves) { group.remove(sculptLeaves); sculptLeaves.dispose() }
+      if (sculptFruit) { group.remove(sculptFruit); sculptFruit.dispose() }
+      sculptLeaves = new THREE.InstancedMesh(leaves, showModelMat, SHOW_CAP)
+      sculptLeaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
+      sculptLeaves.count = 0; sculptLeaves.frustumCulled = false
+      group.add(sculptLeaves)
+      if (fruit) {
+        sculptFruit = new THREE.InstancedMesh(fruit, showFruitMat, SHOW_CAP)
+        sculptFruit.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
+        sculptFruit.count = 0; sculptFruit.frustumCulled = false
+        group.add(sculptFruit)
+      } else sculptFruit = null
+    },
     showcase(entries) {
-      let nc = 0, nm = 0
+      let nc = 0, nm = 0, ns = 0
       for (const e of entries) {
         mtx.compose(off.set(e.x + 0.5, e.y, e.z + 0.5), quat.setFromAxisAngle(Y_UP, (e.x * 7 + e.z * 3) % 6), scl.set(1, 1, 1))
         if (e.kind === 'card') {
@@ -1755,6 +1777,13 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
           showFruit.setColorAt(nc, tint.set(FRUIT_TINT[e.mat] ?? 0xffffff))
           showFruitTile.setX(nc, FRUIT_COL.get(e.mat) ?? 0)
           nc++
+        } else if (e.kind === 'sculpt') {
+          if (!sculptLeaves || ns >= SHOW_CAP) continue
+          const leaf = MATERIAL_COLOR[e.mat] ?? 0x569e42
+          sculptLeaves.setMatrixAt(ns, mtx)
+          sculptLeaves.setColorAt(ns, tint.setRGB(((leaf >> 16) & 255) / BLADE_GREEN[0], ((leaf >> 8) & 255) / BLADE_GREEN[1], (leaf & 255) / BLADE_GREEN[2]))
+          if (sculptFruit) { sculptFruit.setMatrixAt(ns, mtx); sculptFruit.setColorAt(ns, tint.set(FRUIT_TINT[e.mat] ?? 0xffffff)) }
+          ns++
         } else {
           if (nm >= SHOW_CAP) continue
           showLeaves.setMatrixAt(nm, mtx); showBerries.setMatrixAt(nm, mtx)
@@ -1766,7 +1795,9 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         }
       }
       showCard.count = nc; showFruit.count = nc; showLeaves.count = nm; showBerries.count = nm
-      for (const m of [showCard, showFruit, showLeaves, showBerries]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true }
+      if (sculptLeaves) sculptLeaves.count = ns
+      if (sculptFruit) sculptFruit.count = ns
+      for (const m of [showCard, showFruit, showLeaves, showBerries, sculptLeaves, sculptFruit]) { if (!m) continue; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true }
       showFruitTile.needsUpdate = true
     },
     sync(cols, seed, probe, river = true, shelfScan) {
