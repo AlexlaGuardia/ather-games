@@ -1544,13 +1544,19 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // and on the model they drew as black blotches (Alex's first look at the sculpt). The solids wear
   // a FILLED copy — every clear texel takes the tile's mean opaque colour — so the skin is the
   // card's pixels where the card has pixels and the card's average everywhere else.
+  // And the card's tile is DRAWN AS A BUSH — a highlight blob on one side, shadow on the other —
+  // so wrapped round a solid, one flank wore the highlight as a cream slab (Alex's second look).
+  // The solids wear the tile's PIXELS in a scrambled order: every opaque texel, dealt over the
+  // 32×32 by a fixed hash. Same colours, same mean, same spread as the card; no region larger
+  // than a texel. At nearest filtering that is fine leafy noise, which is what a bush's skin is.
   const solidBushTex = (() => {
-    const px = bushPixels(), out = new Uint8Array(px.length), m = [0, 0, 0]; let n = 0
-    for (let i = 0; i < px.length; i += 4) if (px[i + 3] >= 128) { m[0] += px[i]; m[1] += px[i + 1]; m[2] += px[i + 2]; n++ }
-    const mean = n ? m.map(v => Math.round(v / n)) : [86, 158, 66]
-    for (let i = 0; i < px.length; i += 4) {
-      const solid = px[i + 3] >= 128
-      out[i] = solid ? px[i] : mean[0]; out[i + 1] = solid ? px[i + 1] : mean[1]; out[i + 2] = solid ? px[i + 2] : mean[2]; out[i + 3] = 255
+    const px = bushPixels(), out = new Uint8Array(px.length)
+    const opaque: number[] = []
+    for (let i = 0; i < px.length; i += 4) if (px[i + 3] >= 128) opaque.push(i)
+    for (let t = 0; t < px.length / 4; t++) {
+      const v = Math.sin(t * 12.9898 + 78.233) * 43758.5453
+      const src = opaque[Math.floor((v - Math.floor(v)) * opaque.length)] ?? 0
+      out[t * 4] = px[src]; out[t * 4 + 1] = px[src + 1]; out[t * 4 + 2] = px[src + 2]; out[t * 4 + 3] = 255
     }
     return toTexture(out, 32)
   })()
