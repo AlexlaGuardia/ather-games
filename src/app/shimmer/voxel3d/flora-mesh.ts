@@ -1540,7 +1540,21 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // the model wears the CARD'S OWN TILE as its map, tinted by the card's own arithmetic
   // (leaf / BLADE_GREEN), through the card's stack — albedo and light are the card's by
   // construction; only the shape differs. No sway (amp 0), no alpha cut (a solid has no holes).
-  const showModelMat = new THREE.MeshLambertMaterial({ map: bushTex, side: THREE.FrontSide, flatShading: true })
+  // ⚠ THE CARD TILE HAS HOLES, AND A SOLID HAS NO ALPHA CUT: its transparent texels are black RGB,
+  // and on the model they drew as black blotches (Alex's first look at the sculpt). The solids wear
+  // a FILLED copy — every clear texel takes the tile's mean opaque colour — so the skin is the
+  // card's pixels where the card has pixels and the card's average everywhere else.
+  const solidBushTex = (() => {
+    const px = bushPixels(), out = new Uint8Array(px.length), m = [0, 0, 0]; let n = 0
+    for (let i = 0; i < px.length; i += 4) if (px[i + 3] >= 128) { m[0] += px[i]; m[1] += px[i + 1]; m[2] += px[i + 2]; n++ }
+    const mean = n ? m.map(v => Math.round(v / n)) : [86, 158, 66]
+    for (let i = 0; i < px.length; i += 4) {
+      const solid = px[i + 3] >= 128
+      out[i] = solid ? px[i] : mean[0]; out[i + 1] = solid ? px[i + 1] : mean[1]; out[i + 2] = solid ? px[i + 2] : mean[2]; out[i + 3] = 255
+    }
+    return toTexture(out, 32)
+  })()
+  const showModelMat = new THREE.MeshLambertMaterial({ map: solidBushTex, side: THREE.FrontSide, flatShading: true })
   showModelMat.onBeforeCompile = (shader) => injectStack(shader, true)
   const showFruitMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
   showFruitMat.onBeforeCompile = (shader) => injectStack(shader, true)
