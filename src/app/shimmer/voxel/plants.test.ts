@@ -17,8 +17,8 @@
 import { generatedAt, generatedVoxel, makeColumn, meshColumn, SECTION } from './column'
 import { columnHeight } from './height'
 import { materialAt, MAT, isPlant, isSapling, isSolid, SOLID_EXCEPT, PLANT_MIN, PLANT_MAX } from './depth'
-import { isLeafMat } from './trees'
-import { plantMaterialAt, plantVariant, FLORA } from './flora'
+import { isLeafMat, isLogMat } from './trees'
+import { plantMaterialAt, plantVariant, FLORA, TRUNK_FORAGE_MATS } from './flora'
 import { BLOCKS, blockDef, materialForItem } from './registry'
 import { dropsFor } from './mine'
 import { recordEdit, editIndex } from './edits'
@@ -117,24 +117,59 @@ const garden = ZONE_ANCHORS.find(a => a.id === 'moonwell-glade')!
 {
   const gx = Math.floor(garden.x / SECTION) * SECTION, gz = Math.floor(garden.z / SECTION) * SECTION
   let found = 0, floating = 0, buried = 0, drowned = 0, shaded = 0
+  // ── ★★ A TRUNK-BORNE PLANT BREAKS BOTH RULES BY DESIGN (2026-09-22) ───────────────────────
+  // The shelf fungus (shipped 09-21) HANGS on a log face: `flora-mesh` says *"it hangs at height,
+  // there is no ground under it"*, and a stack of brackets puts one directly above another. So air
+  // below it and a bracket above it are its definition, not a defect — and this section failed for
+  // a day reporting a broken world, because its model of "a plant" predated the first plant that
+  // does not stand on anything. ⚠ The membership is read from `TRUNK_FORAGE_MATS`, the same list
+  // the generator and the forage use, so the NEXT hanging plant is exempt the day it ships rather
+  // than red for a day first.
+  // ★ AND THE EXEMPTION IS ITSELF A CHECK. A bracket is excused the ground rule because it hangs
+  // on a TRUNK; if it is not beside one it is floating in exactly the sense that matters, so it is
+  // asserted against its log rather than simply skipped.
+  let hanging = 0, unattached = 0, underHanging = 0
   for (let cz = 0; cz < 4; cz++) for (let cx = 0; cx < 4; cx++) {
     const col = makeColumn(gx + cx * SECTION, gz + cz * SECTION, SEED)
     for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) {
       for (let y = 1; y < 250; y++) {
         if (!isPlant(col.get(x, y, z))) continue
         found++
+        const m = col.get(x, y, z)
+        if (TRUNK_FORAGE_MATS.includes(m)) {
+          hanging++
+          // Its own rule: a hanging plant must have a log beside it, in one of the four faces.
+          const beside = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => isLogMat(col.get(x + dx, y, z + dz)))
+          if (!beside) unattached++
+          continue
+        }
         const below = col.get(x, y - 1, z)
         if (below === AIR) floating++
         if (below === MAT.WATER) drowned++
         // ⚠ FOLIAGE ABOVE A PLANT IS LEGAL; TERRAIN ABOVE ONE IS NOT. See the note on `buried`.
         const up = col.get(x, y + 1, z)
-        if (up !== AIR && !isLeafMat(up)) buried++
-        if (isLeafMat(up)) shaded++
+        // ★ A HANGING PLANT OVERHEAD IS THE LEAF CASE AGAIN (2026-09-22). This assert's own note
+        // below says what it was written to catch: *"a STONE over a tuft is ground cover buried by
+        // terrain"*. A bracket fungus on the trunk above a tuft of tall grass is not terrain — it
+        // is the same dappled-shade situation the canopy relaxation already allows, one storey up.
+        // ⚠ Relaxed the same way rather than deleted: the hazard stays asserted at ZERO and the
+        // harmless case is COUNTED AND BOUNDED, so a generator that starts dropping brackets all
+        // over the ground cover still fails here.
+        if (up !== AIR && !isLeafMat(up) && !TRUNK_FORAGE_MATS.includes(up)) buried++
+        if (isLeafMat(up) || TRUNK_FORAGE_MATS.includes(up)) shaded++
+        if (TRUNK_FORAGE_MATS.includes(up)) underHanging++
       }
     }
   }
   ok(found > 200, `the garden really grows plant voxels (${found})`)
+  // ⚠ POSITIVE CONTROL FOR THE EXEMPTION. If the trunk-borne branch ever swallowed everything — a
+  // widened `TRUNK_FORAGE_MATS`, a mis-read material — `floating` and `buried` would be 0 because
+  // nothing reached them, and this section would pass by testing nothing.
+  ok(found - hanging > 200, `most plants are still GROUND plants and were actually checked (${found - hanging} of ${found})`)
+  ok(unattached === 0, `a trunk-borne plant is hanging on nothing (${unattached} of ${hanging}) — excused the ground rule, so it owes its log`)
   ok(floating === 0, 'no plant floats in the air')
+  ok(underHanging <= Math.max(4, found * 0.01),
+    `ground cover under a trunk plant is RARE (${underHanging} of ${found}) — above this it is not dappled shade, it is brackets raining on the meadow`)
   ok(drowned === 0, 'no plant grows out of water')
   // ── ★ THIS ASSERT WAS RELAXED ON 2026-08-13 AND THE REASON MATTERS ────────────────────────
   // It read `col.get(x, y + 1, z) !== AIR`, i.e. NOTHING may sit above ground cover. That was true
