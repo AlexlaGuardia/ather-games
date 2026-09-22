@@ -19,7 +19,7 @@
 // exist, that the injection CHANGED the source, that both programs bend by the same number, and
 // that the border's matrix is the plant's matrix. The pixels are Alex's call and always were.
 import * as THREE from 'three'
-import { createFloraRenderer, floraMatrix, floraFruitLeavesGeo, floraFruitBerriesGeo, FLORA_SWAY, FLORA_PARTS } from './flora-mesh'
+import { createFloraRenderer, floraMatrix, floraFruitLeavesGeo, floraFruitBerriesGeo, partGeometry, FLORA_SWAY, FLORA_PARTS } from './flora-mesh'
 import { FLORA } from '../voxel/flora'
 import { MAT } from '../voxel/depth'
 
@@ -116,6 +116,60 @@ const meshes = () => r.group.children.filter(c =>
   r.clearHighlight()
 }
 
+// ── 2c. ★★ EVERY SWAYING MESH CARRIES THE WEIGHT ITS SHADER READS (2026-09-22) ────────────────
+// Alex: *"the flower patches are doing some weird motion... and they end up going underground."*
+// The sway weighted itself by `uv.y²` — "how far from the root" — which `uv.y` only IS on a card
+// that stands up. On a flat pad `uv.y` is the FAR EDGE, so two corners were driven and pushed down
+// through a pad that clears the ground by 0.02. The weight is now an explicit `aSway` attribute.
+//
+// ⚠ AND THAT FIX INTRODUCED A SILENT FAILURE MODE, WHICH IS WHAT THIS GUARD IS FOR. An attribute
+// a shader declares but a geometry does not supply reads as **0** in WebGL — no error, no warning.
+// So a new swaying mesh whose builder forgets `aSway` does not break: it just stops moving, and a
+// plant that has quietly stopped swaying is not something anyone reports. The check is exact
+// rather than by-name: COMPILE each material against THREE's real source, ask whether the vertex
+// program actually references `aSway`, and if it does, require the attribute on that geometry.
+{
+  const swayers: string[] = []
+  for (const m of meshes()) {
+    const mat = m.material as THREE.Material
+    let usesSway = false
+    try { usesSway = compiled(mat).shader.vertexShader.includes('aSway') } catch { usesSway = false }
+    if (!usesSway) continue
+    swayers.push(m.geometry.uuid)
+    ok(!!m.geometry.getAttribute('aSway'),
+      `a mesh whose shader reads aSway has no such attribute — it will silently stand still`)
+  }
+  // ⚠ A POSITIVE CONTROL. If `compiled()` ever stops finding the injection (a three rename, an
+  // injection reordered), the loop above runs zero times and passes vacuously — the exact shape of
+  // green-with-no-subject this file keeps catching elsewhere.
+  ok(swayers.length > 0, 'no mesh compiled a sway program at all — this guard had no subject')
+}
+
+// ── 2d. ★ A CARD BENDS FROM ITS ROOT; A PAD DOES NOT BEND AT ALL ──────────────────────────────
+// The values, not just the presence. A cross must run 0 at the base to 1 at the tip (or the wind
+// stops being weighted by height), and every flat part must be all-zero (or the pad shears and
+// sinks again). Read off the SHIPPED builders through `FLORA_PARTS`, never restated.
+{
+  for (const [kind, parts] of Object.entries(FLORA_PARTS)) {
+    parts.forEach((p, i) => {
+      const g = partGeometry(p)
+      const a = g.getAttribute('aSway')
+      ok(!!a, `FLORA_PARTS[${kind}][${i}] builds a geometry with no aSway`)
+      if (!a) { g.dispose(); return }
+      const arr = Array.from(a.array as Float32Array)
+      const lo = Math.min(...arr), hi = Math.max(...arr)
+      if (p.flat || p.wake) {
+        ok(lo === 0 && hi === 0,
+          `FLORA_PARTS[${kind}][${i}] is flat but its aSway runs ${lo}..${hi} — a pad that bends is the sink bug`)
+      } else {
+        ok(lo === 0 && hi === 1,
+          `FLORA_PARTS[${kind}][${i}] is a card but its aSway runs ${lo}..${hi} — expected 0 at the root, 1 at the tip`)
+      }
+      g.dispose()
+    })
+  }
+}
+
 // ── 3. ★ THE BORDER SITS EXACTLY ON THE PLANT ─────────────────────────────────────────────────
 // The outline for a CARD is not grown at all — its border comes from darkening edge texels, so its
 // matrix must equal the plant's to the bit. Compared against `floraMatrix`, which is what `sync`
@@ -150,7 +204,10 @@ const meshes = () => r.group.children.filter(c =>
   for (const kind of CARDS) {
     const amp = FLORA_SWAY[kind]
     ok(typeof amp === 'number' && amp > 0, `kind ${kind} has no sway amplitude in FLORA_SWAY`)
-    const needle = 'uv.y * ' + amp.toFixed(3)
+    // ⚠ `aSway`, NOT `uv.y`, SINCE 2026-09-22 — the weight became an explicit attribute when the
+    // pads turned out to be shearing and sinking (see §2c/§2d). This needle is the reason the
+    // rename could not quietly half-land: it red-flagged every card the moment the shader changed.
+    const needle = 'aSway * ' + amp.toFixed(3)
     r.clearHighlight()
     r.setHighlight(kind, 5, 40, 7, 0.42, true)
     for (const m of meshes().filter(x => x.count > 0)) {

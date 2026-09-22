@@ -585,6 +585,7 @@ function buildCrossGeometry(width: number, height: number, yBase = 0, tiles = 1,
   const pos: number[] = []
   const uv: number[] = []
   const nrm: number[] = []
+  const swy: number[] = []
   const idx: number[] = []
   // `col` is the card's ATLAS COLUMN, carried in uv.x's integer part: card k of a `tiles`-wide
   // atlas gets uv.x in [k, k+1). The shader adds the instance's own offset and wraps (see
@@ -597,6 +598,10 @@ function buildCrossGeometry(width: number, height: number, yBase = 0, tiles = 1,
     pos.push(ax, yBase, az, bx, yBase, bz, bx + nx, yBase + height, bz + nz, ax + nx, yBase + height, az + nz)
     uv.push(col, 0, col + 1, 0, col + 1, 1, col, 1)
     nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0)
+    // ★ HOW FAR THIS VERTEX IS FROM THE ROOT — the sway's weight, stated rather than inferred.
+    // See `aSway`'s note on `buildFlatGeometry`: this used to be read off `uv.y`, which is only
+    // "height" on a card that happens to stand up.
+    swy.push(0, 0, 1, 1)
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3)
   }
   for (let k = 0; k < 3; k++) {
@@ -607,6 +612,7 @@ function buildCrossGeometry(width: number, height: number, yBase = 0, tiles = 1,
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3))
+  g.setAttribute('aSway', new THREE.Float32BufferAttribute(swy, 1))
   g.setIndex(idx)
   return g
 }
@@ -621,6 +627,27 @@ function buildFlatGeometry(width: number, yBase: number): THREE.BufferGeometry {
   ], 3))
   g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2))
   g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3))
+  /**
+   * ── ★★ `aSway` = 0: A PAD IS PRESSED TO THE EARTH AND DOES NOT BEND (fixed 2026-09-22) ───────
+   * Alex: *"the flower patches are doing some weird motion when waving in the wind and they end up
+   * going underground."* Both halves were one bug, and it was a wrong MODEL rather than a bad
+   * number. The sway weights itself by `uv.y²`, meaning *how far this vertex is from the root* —
+   * which `uv.y` only is on a card that stands UP. This quad is horizontal and its uv is
+   * `[0,0, 1,0, 1,1, 0,1]`, so `uv.y` was the pad's FAR EDGE: two corners pinned, two corners
+   * driven. That sheared the pad like a flag (the weird motion) and, because the same weight also
+   * feeds `transformed.y -= bend² · w · 0.35`, pushed those corners DOWN — through a pad that
+   * clears the ground by 0.02, against ~0.009 of wind dip plus ~0.009 of river lean. Underground.
+   *
+   * ⚠ AND IT HAD ALREADY BEEN SEEN AND MIS-DIAGNOSED: `FLORA_SWAY[BLOOM_MAT]`'s own comment reads
+   * *"a pad lying on the ground barely moves; uv.y is its far edge"* — the fact was known and the
+   * response was to shrink the amplitude, which makes a wrong weighting SMALL instead of absent.
+   * A patch still sheared and still sank, just slowly enough to look like something else.
+   *
+   * So the weight is now an attribute the builder states outright, and for a pad it is 0. The
+   * patch keeps its life from the BLOOM_MAT's third part — a low star of real cross geometry that
+   * sways properly — which is also what a flower patch does: the blooms move, the mat does not.
+   */
+  g.setAttribute('aSway', new THREE.Float32BufferAttribute([0, 0, 0, 0], 1))
   // ⚠ WOUND TO FACE +Y. The material is DoubleSide, so a wrong winding still DRAWS — but Lambert
   // flips the normal on a back face, and a pad lit from underneath is a black disc on the grass.
   // That is exactly what the first shot showed; the fix is the index order, not the material.
@@ -675,10 +702,13 @@ function buildWakeGeometry(width: number, len: number, yBase: number): THREE.Buf
   ], 3))
   g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2))
   g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3))
+  // Flat on the sheet, like the pad above — no bend weight. (Its own material does not sway, but
+  // an attribute the shader might read must exist on every geometry that could meet it.)
+  g.setAttribute('aSway', new THREE.Float32BufferAttribute([0, 0, 0, 0], 1))
   g.setIndex([0, 2, 1, 0, 3, 2])
   return g
 }
-const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
+export const partGeometry = (p: FloraPart): THREE.BufferGeometry =>
   p.wake ? buildWakeGeometry(p.w, p.h, p.yBase ?? 0)
   : p.flat ? buildFlatGeometry(p.w, p.yBase ?? 0) : buildCrossGeometry(p.w, p.h, p.yBase ?? 0, p.tiles ?? 1, p.lean ?? 0)
 
@@ -1175,7 +1205,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     shader.uniforms.uLeanSize = uLeanSize
     shader.uniforms.uReedLean = uReedLean
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform sampler2D uLean;\nuniform vec2 uLeanOrigin;\nuniform vec2 uLeanSize;\nuniform float uReedLean;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform sampler2D uLean;\nuniform vec2 uLeanOrigin;\nuniform vec2 uLeanSize;\nuniform float uReedLean;\nattribute float aSway;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + [
         '{',
         '  #ifdef USE_INSTANCING',
@@ -1201,8 +1231,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         // between a third and full, ~13s round, phased by position so a stand combs together and
         // the river's stands do not. The wind term below still runs, at the reed's tiny amp.
         reed
-          ? '  float lw = uv.y * uv.y * uReedLean;'
-          : '  float lw = uv.y * uv.y * ' + LEAN_AMP.toFixed(3) + ' * min(1.0, ' + amp.toFixed(3) + ' / 0.09);',
+          ? '  float lw = aSway * aSway * uReedLean;'
+          : '  float lw = aSway * aSway * ' + LEAN_AMP.toFixed(3) + ' * min(1.0, ' + amp.toFixed(3) + ' / 0.09);',
         // A current tugs and eases: 0.8 steady with a slow 0.2 breath, never the wind's gust shape.
         reed
           ? '  float tug = 0.34 + 0.66 * (0.5 + 0.5 * sin(uTime * ' + REED_SLACK_RATE.toFixed(3) + ' + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.4));'
@@ -1218,7 +1248,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         // the tip (weight is height SQUARED, not height); and it comes in GUSTS — a slow envelope
         // rolling across the meadow with a quick flutter riding on it, not a metronome.
         '  float ph = (instanceMatrix[3].x * 0.83 + instanceMatrix[3].z * 0.55) * 0.35;',
-        '  float w = uv.y * uv.y * ' + amp.toFixed(3) + ';',
+        '  float w = aSway * aSway * ' + amp.toFixed(3) + ';',
         '  float gust = 0.55 + 0.45 * sin(uTime * 0.7 - ph);',
         '  float flutter = 0.22 * sin(uTime * 3.3 + ph * 2.7) + 0.1 * sin(uTime * 5.1 - ph * 1.9);',
         '  float bend = gust + flutter;',
