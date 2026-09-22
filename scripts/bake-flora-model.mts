@@ -26,6 +26,18 @@
 //   npx tsx scripts/bake-flora-model.mts public/models/flora/sunfruit-bush.glb \
 //     --out src/app/shimmer/voxel3d/models/sunfruit-bush.ts --name sunfruitBush
 //
+// ⚠⚠ WHAT COMES OUT OF HERE IS NON-INDEXED, AND THAT IS A TRAP FOR WHOEVER MERGES IT.
+// `bakeNode` flattens the glb's indices into plain vertices (three draws these flat-shaded, so an
+// index would only be undone). Nothing in `flora-mesh.ts` merges today — the pools instance each
+// buffer as-is, and the hand-merged scatter (`floraPuffGeo`, `floraShelfGeo`) concatenates
+// non-indexed icospheres on BOTH sides — so the hazard is in the future tense. But the `assets`
+// lane hit its exact cousin on 2026-09-22: `station-mesh`'s merge built ONE index and silently
+// SKIPPED parts that had none, so an all-sculpt station drew NOTHING, with no error anywhere.
+// ★ So: if a flora sculpt is ever combined with a generated geometry (a `crossGeo`, a
+// `BoxGeometry`, anything from `partGeometry`), the two disagree about indexing and the sculpt is
+// the half that vanishes. Merge non-indexed on both sides, or index both. The bloom bush is the
+// next sculpt and the first plausible place for this to happen.
+//
 // Quantisation: int16 over the model's own measured box, so the step is (extent / 65535) — about
 // 2e-5 blocks on a 1.2-block bush, four orders under a texel. The box itself ships as floats.
 
