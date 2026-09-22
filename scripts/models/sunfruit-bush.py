@@ -32,6 +32,15 @@ FRUIT_R_MIN = float(os.environ.get('FRUIT_R_MIN', '0.05'))
 FRUIT_R_MAX = float(os.environ.get('FRUIT_R_MAX', '0.07'))
 TARGET_W = float(os.environ.get('TARGET_W', '1.0'))   # x/z footprint (blender x/y)
 TARGET_H = float(os.environ.get('TARGET_H', '0.9'))   # height (blender z)
+# ── ★ DECIMATE_TRIS — A BUDGET DIAL, NOT A LOOK DIAL (added 2026-09-22 by jin/hub) ──────────
+# The showcase at /bushtest stands ONE bush in front of you and 720 leaf triangles is free there.
+# The WILD pool carries 284 of them at radius 6 and up to CAP.fruit = 3000 — measured on prod the
+# day it shipped, the undecimated sculpt was 261k of a 397k-triangle frame, i.e. two thirds of
+# everything drawn, for a plant a few percent of the screen. Alex's desktop is an Intel UHD 630.
+# So the leaf lump gets collapsed to a triangle budget BEFORE the UV projection (after it would
+# shred the uvs) and before the fruit BVH (so fruit lands on the surface that actually ships).
+# 0 = off, which is exactly the mesh picaso approved — the default changes nothing.
+DECIMATE_TRIS = int(os.environ.get('DECIMATE_TRIS', '0'))
 PREVIEW_ONLY = os.environ.get('PREVIEW_ONLY', '') == '1'  # skip glb export, just re-render
 STATS_ONLY = os.environ.get('STATS_ONLY', '') == '1'      # export + print stats, skip renders (fast tri-budget tuning)
 
@@ -126,6 +135,17 @@ bm.to_mesh(leaves.data)
 bm.free()
 leaves.data.update()
 tri_pre = len(leaves.data.polygons)
+
+# The budget collapse (see DECIMATE_TRIS). Collapse rather than un-subdivide: it keeps the lumpy
+# silhouette, which is the entire reason the model beat the card, while a lower ico subdivision
+# would trade the lumps for facets and win the A/B back for nobody.
+if DECIMATE_TRIS and tri_pre > DECIMATE_TRIS:
+    bpy.context.view_layer.objects.active = leaves
+    mod = leaves.modifiers.new('budget', 'DECIMATE')
+    mod.decimate_type = 'COLLAPSE'
+    mod.ratio = DECIMATE_TRIS / float(tri_pre)
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    leaves.data.update()
 
 bpy.ops.object.shade_flat()
 
