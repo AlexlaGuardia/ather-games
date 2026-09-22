@@ -42,7 +42,7 @@
 import * as THREE from 'three'
 import { shellRadiusAt, type BubbleConfig } from '../voxel/bubble'
 import { DEFAULT_PLOT, plotThreshold, type PlotConfig } from '../voxel/plot'
-import { DEFAULT_GLADE, gladeSeamSpot, type GladeConfig } from '../voxel/glade'
+import { DEFAULT_GLADE, gladeSeamSpot, GLADE_SEAMS, type GladeConfig, type GladeSeam } from '../voxel/glade'
 import { columnHeight } from '../voxel/height'
 import type { Space } from './save'
 import { buildNameSprite } from './greg'
@@ -222,8 +222,8 @@ export const PLOT_TRIGGER_RADIUS = PLOT_NEAR_RADIUS
  */
 export const GLADE_TRIGGER_RADIUS = PLOT_NEAR_RADIUS
 
-export function gladeSeamAnchor(seed: number, cfg: GladeConfig = DEFAULT_GLADE): SeamAnchor {
-  const t = gladeSeamSpot(seed, (x, z) => columnHeight(x, z, seed), cfg)
+export function gladeSeamAnchor(seed: number, cfg: GladeConfig = DEFAULT_GLADE, which: GladeSeam = 'plot'): SeamAnchor {
+  const t = gladeSeamSpot(seed, (x, z) => columnHeight(x, z, seed), cfg, which)
   return {
     x: t.x + 0.5,
     z: t.z + 0.5,
@@ -233,6 +233,14 @@ export function gladeSeamAnchor(seed: number, cfg: GladeConfig = DEFAULT_GLADE):
     height: PLOT_HEIGHT,
   }
 }
+
+/**
+ * ★ BOTH OF THE ISLAND'S WAYS OUT (2026-09-22) — the plot's fold and where the story road leaves.
+ * Returned together and keyed, so a caller that checks "am I at a seam" cannot check one and
+ * forget the other: that omission is exactly what made the spine run to a wall for six weeks.
+ */
+export const gladeSeamAnchors = (seed: number, cfg: GladeConfig = DEFAULT_GLADE): { which: GladeSeam; anchor: SeamAnchor }[] =>
+  GLADE_SEAMS.map(which => ({ which, anchor: gladeSeamAnchor(seed, cfg, which) }))
 
 export function plotSeamAnchor(seed: number, cfg: PlotConfig = DEFAULT_PLOT): SeamAnchor {
   const t = plotThreshold(seed, cfg)
@@ -589,12 +597,17 @@ export function createSeamShimmer(
   // The Glade's threshold: a third mesh in a third coordinate space. The material-sharing rule
   // above still holds — only one of the three is ever visible, because only one space is ever
   // stood in. Its anchor is fixed (the island never grows), so it is placed once.
-  const gladeA = gladeSeamAnchor(seed)
-  const glade = new THREE.Mesh(geo, mat)
-  glade.visible = false
-  glade.renderOrder = 2
-  glade.scale.set(gladeA.halfWidth * 2, gladeA.height, 1)
-  glade.position.set(gladeA.x, gladeA.y + gladeA.height / 2, gladeA.z)
+  // ★ ONE MESH PER SEAM (2026-09-22): the island has two ways out now, so it needs two thresholds
+  // drawn. Built from `gladeSeamAnchors` rather than two hand-placed meshes — a second seam added
+  // later appears without anyone remembering this line exists.
+  const gladeSeams = gladeSeamAnchors(seed).map(({ which, anchor }) => {
+    const m = new THREE.Mesh(geo, mat)
+    m.visible = false
+    m.renderOrder = 2
+    m.scale.set(anchor.halfWidth * 2, anchor.height, 1)
+    m.position.set(anchor.x, anchor.y + anchor.height / 2, anchor.z)
+    return { which, anchor, mesh: m }
+  })
 
   /**
    * ── ⚠⚠ THE PLOT SEAM IS RE-DERIVED WHEN THE FOLD GROWS, AND IT USED TO BE FROZEN AT BIRTH ─────
@@ -632,7 +645,7 @@ export function createSeamShimmer(
   syncPlot()
 
   const group = new THREE.Group()
-  group.add(wilds, plot, glade)
+  group.add(wilds, plot, ...gladeSeams.map(g => g.mesh))
 
   return {
     group,
@@ -641,14 +654,24 @@ export function createSeamShimmer(
       if (space === 'glade') {
         wilds.visible = false
         plot.visible = false
-        const dist = Math.hypot(px - gladeA.x, pz - gladeA.z)
-        glade.visible = gladeOpen && dist < PLOT_DRAW
-        if (glade.visible) {
-          glade.rotation.y = Math.atan2(px - gladeA.x, pz - gladeA.z)
-          mat.uniforms.uNear.value = seamNearness(dist, PLOT_SHUT, PLOT_OPEN)
+        // ★ BOTH THRESHOLDS, AND THE NEARER ONE OWNS THE SHADER (2026-09-22). `uNear` is a single
+        // uniform on a shared material, so two visible seams would fight over it; the closer one
+        // wins, which is also the one the keeper is walking at.
+        // ⚠ `gladeOpen` GATES ONLY THE PLOT SEAM. That threshold IS Greg's fold and cannot exist
+        // before he makes it; the ROAD is just a road and was always there — gating it on the
+        // tutorial would re-create the dead end for every new keeper, which is the bug.
+        let best = Infinity
+        for (const g of gladeSeams) {
+          const d = Math.hypot(px - g.anchor.x, pz - g.anchor.z)
+          const allowed = g.which === 'road' || gladeOpen
+          g.mesh.visible = allowed && d < PLOT_DRAW
+          if (g.mesh.visible) {
+            g.mesh.rotation.y = Math.atan2(px - g.anchor.x, pz - g.anchor.z)
+            if (d < best) { best = d; mat.uniforms.uNear.value = seamNearness(d, PLOT_SHUT, PLOT_OPEN) }
+          }
         }
       } else if (space === 'plot') {
-        glade.visible = false
+        for (const g of gladeSeams) g.mesh.visible = false
         wilds.visible = false
         // ⚠ BEFORE THE DISTANCE, NOT AFTER — a widening that landed between two ticks would
         // otherwise measure this frame's keeper against last tier's door.
@@ -661,7 +684,7 @@ export function createSeamShimmer(
           mat.uniforms.uNear.value = seamNearness(dist, PLOT_SHUT, PLOT_OPEN)
         }
       } else {
-        glade.visible = false
+        for (const g of gladeSeams) g.mesh.visible = false
         plot.visible = false
         const dist = Math.hypot(px - wildsA.x, pz - wildsA.z)
         wilds.visible = dist < WILDS_DRAW

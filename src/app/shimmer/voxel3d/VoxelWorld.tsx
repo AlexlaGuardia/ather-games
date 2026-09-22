@@ -257,7 +257,8 @@ import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
 import { columnSmokeSources, type SmokeSource } from './smoke-sources'
-import { createSeamShimmer, createSocketShimmers, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, gladeSeamAnchor } from './seam'
+import { createSeamShimmer, createSocketShimmers, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, gladeSeamAnchors } from './seam'
+import { GLADE_SEAM_TO } from '../voxel/glade'
 import { createWetPatches, type WetSpot } from './wet-patch'
 import { createBedSigns } from './bed-sign'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
@@ -6052,7 +6053,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    */
   const enterSpaceRef = useRef<((to: Space) => void) | null>(null)
   /** Moonwell's threshold, derived once: the island never grows, so its coast never moves. */
-  const gladeSeamAnchorRef = useRef(gladeSeamAnchor(SEED))
+  const gladeSeamAnchorRef = useRef(gladeSeamAnchors(SEED))
   /**
    * ⚠ THE CROSSING LATCH — without it the two ends face each other and the keeper ping-pongs.
    *
@@ -9147,15 +9148,33 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // `gladeSeamAnchor`, drawn only when `done`), and stepping into it is the same crossing as
         // the plot's own seam — one trigger radius, one latch. Before the fold there is nothing to
         // cross into, so the volume is simply not there.
-        if (tutorial.current.stage === 'done') {
-          const a = gladeSeamAnchorRef.current
-          const near = Math.hypot(lc.px - a.x, lc.pz - a.z) < GLADE_TRIGGER_RADIUS && Math.abs(lc.py - a.y) < 2.5
-          if (near && !crossLatched.current) {
-            crossLatched.current = true
-            enterSpaceRef.current?.('plot')
+        // ── ★★ TWO WAYS OFF THE ISLAND (2026-09-22) ──────────────────────────────────────────
+        // Alex walked the story road out of Moonwell and hit the wall: *"after the first bridge i
+        // find a wall like the homeplot has."* He was right that something was wrong and wrong
+        // about what — the Wilds is infinite (ground generates at ten million blocks out) and both
+        // bubbles are intentional. The defect was that the island's ONE seam bears on the origin
+        // and crosses to the PLOT, while the story road leaves at the opposite bearing into a
+        // solid wall. Two correct decisions composing into a road to nowhere.
+        //
+        // ⚠ THE ROAD SEAM IS NOT GATED ON THE TUTORIAL and the plot's still is. Greg's fold cannot
+        // exist before Greg makes it; the road was always a road, and gating it would hand every
+        // new keeper the same dead end this fixes.
+        // ⚠ THE LATCH IS CLEARED ON *NO* SEAM BEING NEAR, NOT PER SEAM. The first cut cleared it
+        // inside the loop, so standing in one threshold un-latched on the OTHER's iteration and the
+        // crossing re-fired every frame. One answer across both, then one latch.
+        let entered: 'plot' | 'wilds' | null = null
+        for (const { which, anchor: a } of gladeSeamAnchorRef.current) {
+          if (which === 'plot' && tutorial.current.stage !== 'done') continue
+          if (Math.hypot(lc.px - a.x, lc.pz - a.z) < GLADE_TRIGGER_RADIUS && Math.abs(lc.py - a.y) < 2.5) {
+            entered = GLADE_SEAM_TO[which]
+            break
           }
-          if (!near) crossLatched.current = false
         }
+        if (entered && !crossLatched.current) {
+          crossLatched.current = true
+          enterSpaceRef.current?.(entered)
+        }
+        if (!entered) crossLatched.current = false
       } else {
         // ★ THE WILDS SIDE IS A THRESHOLD YOU STEP INTO, AND THE SHELL IS NEVER PIERCED. Canon:
         // a threshold is *"a soft seam in the cloud… no gates, no locks, no keep-out"*, and *"a

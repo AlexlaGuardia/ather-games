@@ -8,7 +8,8 @@
 import { Column, SECTION, Stage, makeColumn } from './column'
 import { columnHeight } from './height'
 import { generateGladeColumn, gladeGeneratedVoxel } from './glade-column'
-import { DEFAULT_GLADE, gladeDist, gladeEdgeAt, gladePlanAt, gladeSeamSpot, insideGlade, inGladeWall, gladeReach } from './glade'
+import { DEFAULT_GLADE, gladeDist, gladeEdgeAt, gladePlanAt, gladeSeamSpot, insideGlade, inGladeWall, gladeReach, GLADE_SEAMS, GLADE_SEAM_TO, type GladeSeam } from './glade'
+import { STORY_NODES } from './story-path'
 import { AIR } from './section'
 import { ZONE_ANCHORS } from './zones'
 
@@ -147,6 +148,48 @@ console.log("the plot's shell stays out of Greg's garden")
   for (let z = 0; z < SECTION; z++) for (let x = 0; x < SECTION; x++) for (let y = 0; y < H; y++)
     if (glade.get(x, y, z) !== gladeGeneratedVoxel(glade, x, y, z, SEED)) wrong++
   check('shell-band column matches its baseline', wrong === 0, `${wrong} cells`)
+}
+
+// ── ★★★ THE SPINE MUST LEAVE THROUGH A DOOR (2026-09-22) ─────────────────────────────────────
+// Alex: *"i went to walk the story road to see if i see a few dif biomes and after the first bridge
+// i find a wall like the homeplot has."* He was right that something was wrong and wrong about
+// what — the Wilds generates ground at ten million blocks out, and both bubbles are deliberate.
+//
+// ★ THE DEFECT WAS A COMPOSITION OF TWO CORRECT DECISIONS, which is why nothing caught it for six
+// weeks. The island's seam bears on the ORIGIN (correct: it is Greg's fold, and the plot's own
+// passage bears back at the glade). The story road leaves toward Gloview (correct: that is where
+// the spine goes). Each is right alone. Together they put the one thing in the glade that says
+// *this way out* at 180° from the only door, so a keeper who follows it walks into the wall.
+//
+// ⚠ NO TEST COULD HAVE SEEN IT, because every existing assert was about ONE of the two facts. This
+// is the assert about their RELATIONSHIP: wherever the spine crosses the island's coast, a seam
+// must be standing there. It is deliberately not "there are two seams" — a count would pass the
+// day someone adds a second seam somewhere useless.
+for (const SEED of SEEDS) {
+  const cfg = DEFAULT_GLADE
+  // Where does the spine cross the coast? Walk the leg the road actually takes out of the glade.
+  const from = STORY_NODES[0], to = STORY_NODES[1]
+  const ux = (to.x - from.x) / Math.hypot(to.x - from.x, to.z - from.z)
+  const uz = (to.z - from.z) / Math.hypot(to.x - from.x, to.z - from.z)
+  let crossX = 0, crossZ = 0, found = false
+  for (let d = 0; d <= cfg.radius + 40; d += 1) {
+    const x = Math.round(cfg.cx + ux * d), z = Math.round(cfg.cz + uz * d)
+    if (!insideGlade(x, z, SEED, cfg)) { crossX = x; crossZ = z; found = true; break }
+  }
+  check(`seed ${SEED}: the spine reaches the island coast at all (the test can see its subject)`, found, `${crossX},${crossZ}`)
+  if (found) {
+    let best = Infinity, bestWhich = ''
+    for (const which of GLADE_SEAMS) {
+      const t = gladeSeamSpot(SEED, (x, z) => columnHeight(x, z, SEED), cfg, which)
+      const d = Math.hypot(t.x - crossX, t.z - crossZ)
+      if (d < best) { best = d; bestWhich = which }
+    }
+    // Generous: the seam only has to be somewhere a keeper walking the road would meet it.
+    check(`seed ${SEED}: ★ a seam stands where the STORY ROAD leaves the island — the spine is not a dead end`,
+      best <= 48, `nearest seam '${bestWhich}' is ${best.toFixed(0)} blocks from the road's crossing at ${crossX},${crossZ}`)
+    check(`seed ${SEED}: and it crosses into the WILDS, not back home`, GLADE_SEAM_TO[bestWhich as GladeSeam] === 'wilds',
+      `road-side seam goes to ${GLADE_SEAM_TO[bestWhich as GladeSeam]}`)
+  }
 }
 
 console.log(`glade: ${pass} passed, ${fail} failed`)

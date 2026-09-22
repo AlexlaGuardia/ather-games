@@ -37,13 +37,16 @@
 //   · outside it, a ring of cloud-wall standing on nothing, `wallWidth` thick, from `wallSkirt`
 //     under the ground to `wallHeight` over it; past the ring, the void. Cloud, then dark, then
 //     stars — canon forbids dressing it.
-//   · one seam, at `seamBearing`: the bearing from the Glade to the plot's fold. It is the way
-//     Greg's fold lets a keeper out to their own ground and it is drawn by `seam.ts`, never cut
-//     through the wall (a hole in a cloud-wall is the locked gate canon refuses, from the other side).
+//   · TWO seams, and neither is cut through the wall (a hole in a cloud-wall is the locked gate
+//     canon refuses, from the other side) — both are thresholds `seam.ts` draws and a keeper walks
+//     INTO. At `seamBearing`, toward the plot's fold: the way Greg's fold lets a keeper out to
+//     their own ground. At `roadSeamBearing`, where the STORY ROAD leaves: the way out into the
+//     Wilds, added 2026-09-22 because the spine ran to the wall and stopped (see that field).
 
 import { fbm2 } from './noise'
 import { AIR } from './section'
 import { ZONE_ANCHORS } from './zones'
+import { STORY_NODES } from './story-path'
 
 const ANCHOR = ZONE_ANCHORS.find(z => z.id === 'moonwell-glade')!
 
@@ -67,6 +70,25 @@ export interface GladeConfig {
   wallSkirt: number
   /** Bearing (radians, +x = 0) from the centre to the seam — toward the plot's fold at the origin. */
   seamBearing: number
+  /**
+   * ── ★★ THE SECOND SEAM: WHERE THE STORY ROAD LEAVES (2026-09-22) ───────────────────────────
+   * Alex, walking out of Moonwell: *"i went to walk the story road to see if i see a few dif
+   * biomes and after the first bridge i find a wall like the homeplot has."* Measured, and the
+   * island was working exactly as built — this file's own header said *"its only ways out are
+   * seams"* and `VoxelWorld` said *"the island has no arch and no road off it."* The one seam
+   * bears on the ORIGIN and crosses to the PLOT.
+   *
+   * ★ THE DEFECT WAS A COMPOSITION, NOT A MISTAKE. The seam faces the plot on purpose (the plot's
+   * own passage bears on the glade, symmetrically), and the story road heads outward to Gloview on
+   * purpose. Both correct alone. Together they put the spine **180° from the only door**, so
+   * following the road — the one thing in the glade that says *this way out* — walks a keeper into
+   * the wall at ~290 blocks and reads as "the world is fenced."
+   *
+   * ⚠ DERIVED FROM THE ROAD, NEVER PINNED. The bearing is taken from the first OUTWARD story node,
+   * so if the spine is ever re-routed the door follows it. A literal here would be the `/goto
+   * garden` failure again: a coordinate that was correct on the day it was written.
+   */
+  roadSeamBearing: number
   /** How far inside the coast the seam's floor cell stands, in blocks. */
   seamInset: number
   materials: { floor: number; wall: number }
@@ -87,9 +109,18 @@ export const DEFAULT_GLADE: GladeConfig = {
   wallHeight: 12,
   wallSkirt: 40,
   seamBearing: Math.atan2(0 - ANCHOR.z, 0 - ANCHOR.x),
+  // The first node the spine leaves for. `STORY_NODES[0]` IS the glade, so [1] is where it goes.
+  roadSeamBearing: Math.atan2(STORY_NODES[1].z - ANCHOR.z, STORY_NODES[1].x - ANCHOR.x),
   seamInset: 2,
   materials: { floor: 1, wall: 56 },   // PACKED_CLOUD, CLOUD_WALL — literal ids, as plot.ts does
 }
+
+/** The island's two ways out. `'plot'` is Greg's fold; `'road'` is where the story spine leaves. */
+export type GladeSeam = 'plot' | 'road'
+/** Both, in the order a keeper meets them: home first, then onward. */
+export const GLADE_SEAMS: readonly GladeSeam[] = ['plot', 'road']
+/** Which space each seam crosses into — the destination is the seam's whole point. */
+export const GLADE_SEAM_TO: Readonly<Record<GladeSeam, 'plot' | 'wilds'>> = { plot: 'plot', road: 'wilds' }
 
 export const gladeDist = (x: number, z: number, cfg: GladeConfig = DEFAULT_GLADE): number =>
   Math.hypot(x - cfg.cx, z - cfg.cz)
@@ -177,8 +208,10 @@ export const gladeMaskAt = (
  */
 export function gladeSeamSpot(
   seed: number, groundAt: (x: number, z: number) => number, cfg: GladeConfig = DEFAULT_GLADE,
+  /** Which of the island's two ways out — the plot's fold, or where the story road leaves. */
+  which: GladeSeam = 'plot',
 ): { x: number; z: number; y: number; bearing: number } {
-  const b = cfg.seamBearing
+  const b = which === 'road' ? cfg.roadSeamBearing : cfg.seamBearing
   // One evaluation: the edge depends on bearing alone, so any point along it gives the same answer.
   const e = gladeEdgeAt(cfg.cx + Math.cos(b) * cfg.radius, cfg.cz + Math.sin(b) * cfg.radius, seed, cfg)
   const r = e - cfg.seamInset
