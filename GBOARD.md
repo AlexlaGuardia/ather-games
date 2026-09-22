@@ -22,7 +22,8 @@ the Arcade frame.
 - Shot: `/space wilds; /tp 325 1813`, look west (yaw −90) and up (pitch −40): two brackets on the trunk's east face at y 124–125.
 **Next:**
 - **Alex look-calls the bracket** — size (0.42 radius), colour (ochre-tan), three tiers, height on the trunk, ~1 in 6 trunks: enough / too many?
-- **Recipe → hub** (dbr'd): `potent_earth_infusion` with shelf_slices ×2 as the potency additive granting two earth points — the row that opens canon's "quality = ingredients" axis; hub's numbers.
+- ~~Recipe → hub~~ → landed by hub (`524c4fa`, PROD `QeeODuUqql9LfEwTCUrJX`): `potent_earth_infusion`, shelf_slices ×2, two earth points every-or-none.
+- **Outline shade shipped the same night** (`2787ad1`, PROD `XYt7h3J1zGgMVQR3Gh6YI`): a looked-at tall grass was solid black (1px blades = all edge texels); edge texels now paint at `OUTLINE_SHADE` 0.22 of their own colour, solids keep the black hull. Alex judges it at eye level; and whether TALL wants a knee-height cap for the from-above read (blades radiate from the feet — perspective on edge-on cards, not a bug).
 - **Felling cleanup:** a mined log leaves its bracket floating (still pickable; the scan reports it on the default face). Drop it in `setVoxel` (hub's VoxelWorld).
 - **Reticle border:** `markLookedAt` asks `plantProbe`, which never reports a shelf, so a bracket under the crosshair is unmarked. Needs a cell-aware lookup; the hull outline entry is already in `hlDefs`.
 **Decisions:** a second READER, not a second kind space — the probe stays one-plant-per-column and the shelf gets its own scan, because widening the probe to "any plant in the column" would have to invent a rule for two plants in one column that nothing else needs. The bracket is placed by the TREE, not the ground pass, because it is a fact about the trunk (its face, its height); `plantMaterialAt` never learns of it. Forage-only: no bed can grow a trunk.
