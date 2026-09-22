@@ -150,17 +150,22 @@ export function floraModelBushGeo(seed = 1): { leaves: THREE.BufferGeometry; fru
   // corner shared by five faces is five vertices — five independent rolls tear the mesh open
   // (the first shot was a shredded ball). A hash of (x,y,z) moves all five copies together.
   const h = (a: number, b: number, c: number, k: number) => { const v = Math.sin(a * 127.1 + b * 311.7 + c * 74.7 + k * 19.3 + seed) * 43758.5453; return v - Math.floor(v) - 0.5 }
+  const uv: number[] = []
   for (const [x, y, z, r] of balls) {
     const g = new THREE.IcosahedronGeometry(r, 1)
     const p = g.getAttribute('position') as THREE.BufferAttribute
+    const u = g.getAttribute('uv') as THREE.BufferAttribute
     for (let i = 0; i < p.count; i++) {
       const ox = p.getX(i), oy = p.getY(i), oz = p.getZ(i)
       pos.push(ox + h(ox, oy, oz, 1) * 0.07 + x, oy * 0.78 + h(ox, oy, oz, 2) * 0.05 + y, oz + h(ox, oy, oz, 3) * 0.07 + z)
+      // The bush tile wrapped round each ball twice — the card's own pixels on the model's skin.
+      uv.push((u.getX(i) * 2) % 1, (u.getY(i) * 2) % 1)
     }
     g.dispose()
   }
   const leaves = new THREE.BufferGeometry()
   leaves.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  leaves.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
   leaves.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length), 3))
   // Flat facets: per-face normals on the non-indexed buffer — the low-poly look itself.
   leaves.computeVertexNormals()
@@ -1525,16 +1530,17 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // field sampled by normal, no `here`) and a FLAT leaf colour where the card's painted tile is
   // mostly darker than its tint. So: the card's own stack mode, and the tint scaled by the bush
   // tile's mean brightness — the model's average albedo IS the card's, by construction.
-  const showModelMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
+  // Second pass (the first — the card's stack mode over a flat colour — still read pale at night):
+  // the model wears the CARD'S OWN TILE as its map, tinted by the card's own arithmetic
+  // (leaf / BLADE_GREEN), through the card's stack — albedo and light are the card's by
+  // construction; only the shape differs. No sway (amp 0), no alpha cut (a solid has no holes).
+  const showModelMat = new THREE.MeshLambertMaterial({ map: bushTex, side: THREE.FrontSide, flatShading: true })
   showModelMat.onBeforeCompile = (shader) => injectStack(shader, true)
-  const bushTileMean = (() => {
-    const px = bushPixels(), m = [0, 0, 0]; let n = 0
-    for (let i = 0; i < px.length; i += 4) { if (px[i + 3] < 128) continue; m[0] += px[i]; m[1] += px[i + 1]; m[2] += px[i + 2]; n++ }
-    return n ? [m[0] / n / BLADE_GREEN[0], m[1] / n / BLADE_GREEN[1], m[2] / n / BLADE_GREEN[2]] : [1, 1, 1]
-  })()
+  const showFruitMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
+  showFruitMat.onBeforeCompile = (shader) => injectStack(shader, true)
   const modelGeo = floraModelBushGeo(7)
   const showLeaves = new THREE.InstancedMesh(modelGeo.leaves, showModelMat, SHOW_CAP)
-  const showBerries = new THREE.InstancedMesh(modelGeo.fruit, showModelMat, SHOW_CAP)
+  const showBerries = new THREE.InstancedMesh(modelGeo.fruit, showFruitMat, SHOW_CAP)
   showLeaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
   showBerries.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
   showCard.count = 0; showFruit.count = 0; showLeaves.count = 0; showBerries.count = 0
@@ -1752,10 +1758,9 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         } else {
           if (nm >= SHOW_CAP) continue
           showLeaves.setMatrixAt(nm, mtx); showBerries.setMatrixAt(nm, mtx)
-          // The leaf colour as the FINAL colour (scatter arithmetic — no map to multiply into),
-          // scaled to the card tile's mean so the two bushes share an average brightness.
+          // The card's tint arithmetic over the card's tile: leaf / BLADE_GREEN (a multiplier).
           const leaf = MATERIAL_COLOR[e.mat] ?? 0x569e42
-          showLeaves.setColorAt(nm, tint.setRGB(((leaf >> 16) & 255) / 255 * bushTileMean[0], ((leaf >> 8) & 255) / 255 * bushTileMean[1], (leaf & 255) / 255 * bushTileMean[2]))
+          showLeaves.setColorAt(nm, tint.setRGB(((leaf >> 16) & 255) / BLADE_GREEN[0], ((leaf >> 8) & 255) / BLADE_GREEN[1], (leaf & 255) / BLADE_GREEN[2]))
           showBerries.setColorAt(nm, tint.set(FRUIT_TINT[e.mat] ?? 0xffffff))
           nm++
         }
