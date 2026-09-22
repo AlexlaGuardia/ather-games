@@ -1528,6 +1528,9 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   showLeaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
   showBerries.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
   showCard.count = 0; showFruit.count = 0; showLeaves.count = 0; showBerries.count = 0
+  // Same as every pool: the geometry's bounds sit at the origin, so the default culling would
+  // hide the pair unless world (0,0,0) happened to be on screen (it did not; two blank shots).
+  for (const m of [showCard, showFruit, showLeaves, showBerries]) m.frustumCulled = false
   group.add(showCard, showFruit, showLeaves, showBerries)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
