@@ -31,12 +31,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 BLENDER=${BLENDER:-/opt/blender/blender}
-OUT=public/models/stations
+OUT=${OUT:-public/models/stations}   # the KEEPER path — vessel.py alone defaults to scratch
 
-echo "── cauldron: a thrown clay pot, wide at the hearth band, mass low"
-NAME=cauldron SEED=3 SEGMENTS=24 WOBBLE=0.016 LEAN=0.008 FEET=0 OUT=$OUT \
-  "$BLENDER" -b -P scripts/models/cauldron.py | grep -E 'bounds|worst wall|TRIS|WROTE'
+echo "── the alchemy vessels: cauldron (brews) · mortar (grinds) · bowl (mixes cold) · still (distils)"
+for V in cauldron mortar bowl still; do
+  NAME=$V OUT=$OUT "$BLENDER" -b -P scripts/models/vessel.py | grep -E 'bounds|worst wall|TRIS|WROTE'
+done
 
 echo "── baking to a synchronous module"
-npx tsx scripts/bake-flora-model.mts $OUT/cauldron.glb \
-  --out src/app/shimmer/voxel3d/models/cauldron.ts --name cauldron --via "npm run bake:props"
+for V in cauldron mortar bowl still; do
+  npx tsx scripts/bake-flora-model.mts $OUT/$V.glb \
+    --out src/app/shimmer/voxel3d/models/$V.ts --name $V --via "npm run bake:props"
+done

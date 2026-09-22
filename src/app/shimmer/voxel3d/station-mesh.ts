@@ -19,6 +19,9 @@ import * as THREE from 'three'
 import { MODELLED_MATS } from '../voxel/depth'
 import { modelOf, type StationModel } from './station-models'
 import { cauldronBodyGeo, cauldronBrewGeo } from './models/cauldron'
+import { mortarBodyGeo } from './models/mortar'
+import { bowlBodyGeo, bowlPasteGeo } from './models/bowl'
+import { stillBaseGeo, stillBulbGeo } from './models/still'
 import { createPieceMaterial, type PieceMaterial } from './piece-mesh'
 import { layerOf, TOP, SIDE } from './tex/tiles'
 import { EMISSIVE } from './attrs'
@@ -41,6 +44,9 @@ const MAX_PER_MAT = 4096
  */
 export const SCULPTS: Readonly<Record<string, Readonly<Record<string, () => THREE.BufferGeometry>>>> = {
   cauldron: { Body: cauldronBodyGeo, Brew: cauldronBrewGeo },
+  mortar: { Body: mortarBodyGeo },
+  bowl: { Body: bowlBodyGeo, Paste: bowlPasteGeo },
+  still: { Base: stillBaseGeo, Bulb: stillBulbGeo },
 }
 
 export interface StationRenderer {

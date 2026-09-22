@@ -6,47 +6,67 @@ import type { StationModel } from '../station-models'
 import { MAT } from '../../voxel/depth'
 
 export const MODELS: Readonly<Record<number, StationModel>> = {
-  // ── MORTAR (MAT.GRINDER) — a stone bowl on a narrow foot, a pestle leaning off-centre ─────────
+  // ── MORTAR (MAT.GRINDER) — stone, and it GRINDS ──────────────────────────────────────────────
+  // ★ THE HOLLOW IS THE TOOL, so the profile spends its height on a deep dish over a narrow turned
+  // foot. `paintGrinder`'s TOP tile IS that hollow's picture — a dusted bowl with a darker turning
+  // stone at r 0.18 — which is why this body names GRINDER as its own `top` rather than borrowing a
+  // plain clay one the way the cauldron does: here a facet that tips past the 60-degree cone SHOULD
+  // wear the hollow. That is also why the script's cone budget is 0.80 for this vessel and 0.50 for
+  // the others; the outer wall still obeys it, only the dish does not.
+  // The pestle leans off-centre out of the hollow, merged into the same node — canon's hand tool at
+  // rest, not a second object (`design-briefs/shimmer-alchemy-vessels.md`: stone, no metal).
   [MAT.GRINDER]: {
-    note: 'stone mortar: foot/body/rim bowl stack with a pestle leaning off-centre above the rim',
-    parts: [
-      { box: [0.35, 0.12, 0.35, 0, 0.06, 0] },   // narrow foot
-      { box: [0.50, 0.15, 0.50, 0, 0.195, 0] },  // lower body, widening
-      { box: [0.62, 0.15, 0.62, 0, 0.345, 0] },  // upper body, widening again
-      { box: [0.70, 0.13, 0.70, 0, 0.485, 0] },  // rim, ~0.55 tall total, ~0.7 wide
-      { box: [0.09, 0.50, 0.09, 0.18, 0.65, 0.12] },  // pestle shaft, off-centre, well clear of the rim (0.55)
-      { box: [0.13, 0.10, 0.13, 0.18, 0.92, 0.12] },  // pestle head, the rounded striking tip
-    ],
+    note: 'a turned stone mortar: narrow foot, a deep dusted hollow, the pestle leaning on its rim',
+    parts: [],
+    sculpt: { model: 'mortar', parts: [{ node: 'Body', top: MAT.GRINDER }] },
   },
 
-  // ── STILL (MAT.STILL) — fired-clay foot + neck, a hand-blown glass bulb with a spout and cup ──
+  // ── STILL (MAT.STILL) — a hand-blown glass bulb on a fired-clay foot ─────────────────────────
+  // ★ TWO NODES BECAUSE THE TILE HAS TWO HALVES, AND HEIGHT IS WHAT SELECTS THEM. `paintStill`'s
+  // side face paints clay below `baseY` (0.62 of the tile) and a pale GLASS BULB above it, centred
+  // ~0.64 local y with radius ~0.30 — and a side face samples row (1 - local y). So the bulb is
+  // glass because it LIVES high in the cell, exactly as the box model's "y 0.55-1.0, measured on the
+  // shelf" note recorded. Drop it and it comes out clay.
+  // ⚠ The bulb wears the STILL's own tiles, never MAT.GLASS: the pane tile is a dark leaded lattice
+  // and a bulb of it reads as coal (hub, at the 09-15 merge).
   [MAT.STILL]: {
-    note: 'brewing-stand silhouette: clay foot and neck, the glass bulb at the crown, a spout and a catch-cup',
-    parts: [
-      { box: [0.50, 0.16, 0.50, 0, 0.08, 0] },              // fired-clay foot
-      { box: [0.32, 0.06, 0.32, 0, 0.19, 0] },               // stepped foot cap
-      { box: [0.12, 0.34, 0.12, 0, 0.39, 0] },               // clay neck up to the bulb
-      // ★ THE BULB WEARS THE STILL'S OWN TILE, NOT `MAT.GLASS` (hub, at merge): the window pane's tile is a
-      // dark leaded lattice and a cube of it reads as coal. `paintStill`'s side tile is the clay base with
-      // a PALE glass bulb painted in its UPPER rows — and a side face samples tile row (1 − local y), so
-      // the glass shows on a box that lives in the top of the cell: y 0.55–1.0, measured on the shelf.
-      { box: [0.45, 0.45, 0.45, 0, 0.775, 0] },  // the glass bulb — the still's own pale glass, at the crown
-      { box: [0.14, 0.07, 0.08, 0.24, 0.62, 0] }, // spout off the bulb's foot
-      { box: [0.13, 0.09, 0.13, 0.24, 0.07, 0] },            // tiny clay cup catching the drip, under 1.0 tall
-    ],
+    note: 'a blown glass bulb on a fired-clay foot: turned base, a drawn neck, the bulb at the crown',
+    parts: [],
+    sculpt: {
+      model: 'still',
+      parts: [
+        // Plain clay on the flips: the foot's shoulder and the collar under the bulb both point up,
+        // and the still's own top tile is a dark disc that would read as a hole punched in the clay.
+        { node: 'Base', top: MAT.KILN },
+        // The bulb keeps its OWN top on purpose — that dark disc with a glass ring at r 0.27 is
+        // what looking down the bulb's neck should look like.
+        { node: 'Bulb', top: MAT.STILL },
+      ],
+    },
   },
 
-  // ── BOWL (MAT.MIXER) — a wide shallow clay dish, cold, sits flat on the floor ──────────────────
+  // ── BOWL (MAT.MIXER) — fired clay, wide and shallow, cold ────────────────────────────────────
+  // ★ IT IS 0.42 TALL AND THE BOX MODEL WAS 0.30, AND THAT IS A FIX NOT A DRIFT. `paintMixer` puts
+  // a bright rim band just under `lip` (0.55 of the tile) with a dark "wall behind a low bowl" above
+  // it; at 0.30 the shipped bowl sat entirely in the plain-clay rows and never reached its own rim
+  // band, so the tile's whole rim/lip story went unused. At 0.42 the lip lands in it.
+  // ⚠ A WIDE SHALLOW DISH CANNOT OBEY THE 60-DEGREE CONE AND IS NOT MEANT TO — `dz` is in CELL
+  // units, so a 0.42-tall vessel multiplies every profile rise by 2.4. The body therefore declares a
+  // PLAIN CLAY top (KILN, 0x8b5638 against the mixer's 0x9c5f42 — the nearest plain clay in the
+  // set), because the mixer's own top tile is the PASTE and a flipped outer wall would wear ground
+  // paste down its side. The paste belongs on one surface only, which is the next node.
   [MAT.MIXER]: {
-    note: 'wide shallow clay bowl: a two-tier disc base with a thin rim ring on four edges',
-    parts: [
-      { box: [0.70, 0.06, 0.70, 0, 0.03, 0] },     // lower disc
-      { box: [0.80, 0.08, 0.80, 0, 0.10, 0] },     // upper disc, the dish floor
-      { box: [0.80, 0.16, 0.09, 0, 0.22, -0.355] }, // rim, north edge
-      { box: [0.80, 0.16, 0.09, 0, 0.22, 0.355] },  // rim, south edge
-      { box: [0.09, 0.16, 0.80, 0.355, 0.22, 0] },  // rim, east edge
-      { box: [0.09, 0.16, 0.80, -0.355, 0.22, 0] }, // rim, west edge — ~0.3 tall total
-    ],
+    note: 'a wide shallow clay dish: low foot, a swelling wall, the lip in its own rim band, paste inside',
+    parts: [],
+    sculpt: {
+      model: 'bowl',
+      parts: [
+        { node: 'Body', top: MAT.KILN },
+        // The mixing surface, and the ONLY part that wears the mixer's own top — paste with the
+        // track where the paddle went round. Sits just above the inner floor and hides it.
+        { node: 'Paste' },
+      ],
+    },
   },
 
   // ── CAULDRON (MAT.CAULDRON) — a THROWN POT, the lane's first sculpt ──────────────────────────
