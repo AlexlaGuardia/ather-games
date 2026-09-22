@@ -64,6 +64,13 @@ const meshes = () => r.group.children.filter(c =>
     'THREE basic vertex no longer has <begin_vertex> — the sway injection is a silent no-op')
   ok(THREE.ShaderLib.lambert.vertexShader.includes('#include <begin_vertex>'),
     'THREE lambert vertex no longer has <begin_vertex> — the PLANT sway is a silent no-op')
+  // The moonberry's shimmer multiplies `totalEmissiveRadiance` after this anchor (2026-09-22).
+  // Without the positive control a three rename turns canon's "shimmer in low light" into a
+  // silent no-op: the berries would simply stop breathing and nothing would fail.
+  ok(THREE.ShaderLib.lambert.fragmentShader.includes('#include <emissivemap_fragment>'),
+    'THREE lambert fragment no longer has <emissivemap_fragment> — the berry shimmer is a silent no-op')
+  ok(THREE.ShaderLib.lambert.fragmentShader.includes('totalEmissiveRadiance'),
+    'THREE lambert fragment no longer declares totalEmissiveRadiance — the berry shimmer would not compile')
 }
 
 // ── 2. setHighlight marks exactly one kind, and clearHighlight retracts all of it ──────────────

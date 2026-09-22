@@ -427,6 +427,30 @@ const FRUIT_TINT: Readonly<Record<number, number>> = {
   [MAT.MOONBERRY_BUSH]: 0x6cb8f0,
 }
 
+/**
+ * ── ★★ CANON GIVES EACH FRUIT A LIGHT, AND THEY ARE NOT THE SAME LIGHT (2026-09-22) ───────────
+ * `CANON/world/cuisine.md` › *★ ATHER FRUIT*, ruled 2026-08-22, two entries and two verbs:
+ *   Sunfruit  — *"A warm golden fruit that **glows faintly**."*
+ *   Moonberry — *"Cool blue berries that **shimmer in low light**."*
+ * A glow is steady; a shimmer is not. So the sunfruit takes a faint constant emissive and the
+ * moonberry takes a stronger one that BREATHES, on a phase off its own world position — the same
+ * trick the wind and the ripe glint use, and for the same reason: a whole thicket pulsing in
+ * lockstep reads as a UI effect, not as a plant.
+ *
+ * ★ "IN LOW LIGHT" NEEDS NO GATE, AND THAT IS WHY IT IS AN EMISSIVE AND NOT A LAMP. Lambert adds
+ * emissive AFTER the lights (the glow-moss entry says it outright), so the same constant is a
+ * barely-there warmth at noon and the only thing left after dusk. The condition canon states is a
+ * property of the arithmetic, not something to branch on.
+ *
+ * ⚠ DIALS. `shimmer` 0 = a steady glow. These are the numbers Alex judges at night, and they are
+ * the reason the two bushes read as different plants from across a clearing rather than at arm's
+ * length, where shape alone already tells them apart.
+ */
+const FRUIT_GLOW: Readonly<Record<number, { emissive: number; shimmer: number }>> = {
+  [MAT.SUNFRUIT_BUSH]: { emissive: 0.16, shimmer: 0 },
+  [MAT.MOONBERRY_BUSH]: { emissive: 0.42, shimmer: 0.45 },
+}
+
 const HERB_TIP: Readonly<Record<number, number>> = {
   [MAT.VIOLETBLOOM]: 0xd9b0ff,   // the hum, made visible — the one that glows a little
   [MAT.STORMGRASS]: 0x9fe4ff,    // canon's blue tip, verbatim
@@ -1566,8 +1590,48 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // ⚠ NO ALPHA CUT, `FrontSide`: a solid has no holes and never shows its interior.
   const bushLeafMat = new THREE.MeshLambertMaterial({ map: solidBushTex, side: THREE.FrontSide, flatShading: true })
   bushLeafMat.onBeforeCompile = (shader) => injectStack(shader, true)
-  const bushBerryMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
-  bushBerryMat.onBeforeCompile = (shader) => injectStack(shader, true)
+  /**
+   * One berry material PER SPECIES, because canon gives them different light (see `FRUIT_GLOW`).
+   * `shimmer` > 0 breathes the emissive on a per-instance phase; 0 leaves it steady and the
+   * injection costs one multiply by 1.0.
+   */
+  const berryMaterialFor = (fmat: number): THREE.MeshLambertMaterial => {
+    const glow = FRUIT_GLOW[fmat] ?? { emissive: 0, shimmer: 0 }
+    const m = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
+    m.emissive = new THREE.Color(FRUIT_TINT[fmat] ?? 0xffffff)
+    m.emissiveIntensity = glow.emissive
+    m.onBeforeCompile = (shader) => {
+      injectStack(shader, true)
+      if (glow.emissive <= 0) return
+      shader.uniforms.uTime = uTime
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying float vShim;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + [
+          '{',
+          '  #ifdef USE_INSTANCING',
+          // Phase off world xz, exactly as the sway and the glint do — neighbours breathe apart.
+          '  float bp = instanceMatrix[3].x * 1.7 + instanceMatrix[3].z * 2.3;',
+          `  vShim = 1.0 - ${glow.shimmer.toFixed(3)} + ${glow.shimmer.toFixed(3)} * (0.5 + 0.5 * sin(uTime * 1.5 + bp));`,
+          '  #else',
+          '  vShim = 1.0;',
+          '  #endif',
+          '}',
+        ].join('\n'))
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vShim;')
+        // ⚠ AFTER the emissive is assembled, never before — `totalEmissiveRadiance` is declared
+        // and set by the includes above this anchor, so an earlier injection would not compile.
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vShim;')
+    }
+    return m
+  }
+  // ⚠ BUILT ONCE PER SPECIES, UP FRONT, NOT INSIDE THE POOL LOOP. A `berryMaterialFor(...)` call
+  // in the loop is two materials today and one-per-object the day the loop iterates over anything
+  // else — `render-audit` refuses the shape rather than the count, and it is right to: that is the
+  // WebGL-context-loss bug this file's header opens with. (It caught exactly this, 2026-09-22.)
+  const berryMats = new Map<number, THREE.MeshLambertMaterial>(BUSH_MODEL_MATS.map(m => [m, berryMaterialFor(m)]))
+  // The default pair's berry material (the showcase and the reticle's fallback species).
+  const bushBerryMat = berryMats.get(MAT.SUNFRUIT_BUSH) ?? berryMats.values().next().value as THREE.MeshLambertMaterial
   // ★ THE ONE FLORA MATERIAL THAT GLOWS. The pad is painted near-white and the tint is the moss
   // colour, so the emissive is that same colour scaled — one row in `MATERIAL_COLOR` drives the
   // day look, the night glow and the item icon. The block behind it carries the light channel
@@ -1635,10 +1699,11 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
    */
   const bushPools = bushGeos.map(g => {
     const leaves = new THREE.InstancedMesh(g.leaf, bushLeafMat, CAP.fruit)
-    const berries = new THREE.InstancedMesh(g.berry, bushBerryMat, CAP.fruit)
+    const berryMat = berryMats.get(g.mat) ?? bushBerryMat
+    const berries = new THREE.InstancedMesh(g.berry, berryMat, CAP.fruit)
     leaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
     berries.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
-    return { mat: g.mat, leaves, berries, n: 0 }
+    return { mat: g.mat, leaves, berries, berryMat, n: 0 }
   })
   const bushPoolOf = new Map(bushPools.map(b => [b.mat, b]))
   const bushMeshes = bushPools.flatMap(b => [b.leaves, b.berries])
@@ -2267,7 +2332,9 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       // The flower forms (2026-09-14/15): geometry, material, texture — same three each.
       for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, ...bushGeos.flatMap(g2 => [g2.leaf, g2.berry]), mossGeo, puffGeo, shelfGeo]) g.dispose()
       // `showModelMat`/`showFruitMat` are aliases of the two bush materials, not a second pair.
-      for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat, bushLeafMat, bushBerryMat, solidBushTex, mossMat, puffMat, shelfMat]) m.dispose()
+      // ⚠ `bushPools[].berryMat` — one per species (canon gives each fruit its own light), and the
+      // sunfruit's IS `bushBerryMat`, so the Set is what stops a double dispose.
+      for (const m of new Set<{ dispose(): void }>([matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat, bushLeafMat, bushBerryMat, ...berryMats.values(), solidBushTex, mossMat, puffMat, shelfMat])) m.dispose()
       for (const t of [bushTex, clusterTex, matLeafTex, matBloomTex, matShadowTex, fruitTex, mossTex]) t.dispose()
     },
   }
