@@ -68,6 +68,8 @@ export interface ConsoleCtx {
   water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string
   /** Open the station block at world coordinates, as a right-click would (owner). */
   station: (x: number, y: number, z: number) => string
+  /** The card-vs-model bush A/B, three blocks ahead (owner). `clear` takes it down. */
+  bushtest: (arg?: string) => string
   /**
    * Put a Hollow in front of the keeper. A TEST HARNESS — the same standing warning `/rune` and
    * `/waymark` carry: this is not how the dark arrives. The night's own rules (`hollowNight`,
@@ -709,6 +711,11 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.station(Math.floor(x), Math.floor(y), Math.floor(z))
     },
     suggest: () => ['~'] },
+  // ★ `/bushtest` (2026-09-22): Alex's "3d models for bushes" question, answered with his eyes — a
+  // card bush and a low-poly model bush side by side, three blocks ahead. A showcase, never saved.
+  { name: 'bushtest', usage: 'bushtest [sunfruit|moonberry|clear]', help: 'stand a card bush beside a model bush ahead (owner)', owner: true,
+    run: (a, c) => c.bushtest(a[0]),
+    suggest: () => ['sunfruit', 'moonberry', 'clear'] },
   { name: 'greg', usage: 'greg', help: 'talk to Gregory from here (owner)', owner: true,
     run: (_a, c) => c.greg() },
   { name: 'look', usage: 'look <deg> [pitch]  (0 = north, 90 = east; pitch + looks down)', help: 'point the camera (owner)', owner: true,

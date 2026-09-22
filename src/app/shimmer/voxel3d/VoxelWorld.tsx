@@ -1523,7 +1523,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string; bushtest: (arg?: string) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => {
     // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
     // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
@@ -1623,6 +1623,7 @@ export default function VoxelWorld() {
     plant: (crop, x, y, z) => worldCmd.current ? worldCmd.current.plant(crop, x, y, z) : 'the world is still waking',
     water: (x, y, z, hours, kind) => worldCmd.current ? worldCmd.current.water(x, y, z, hours, kind) : 'the world is still waking',
     station: (x, y, z) => { if (!worldCmd.current) return 'the world is still waking'; const r = worldCmd.current.station(x, y, z); if (r.startsWith('opened')) setConsoleOpen(false); return r },
+    bushtest: (arg) => worldCmd.current ? worldCmd.current.bushtest(arg) : 'the world is still waking',
     party: partyOps,
     mistLedger: () => mistLedger.current,
     rune: (arg) => {
@@ -3178,7 +3179,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string; bushtest: (arg?: string) => string } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -3733,6 +3734,24 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       craftPool: () => space.current === 'plot' && bankCapacity(plotChests.current) > 0 ? fitBank(bank.current, bankCapacity(plotChests.current)) : null,
       // ★ `/station x y z` (09-21) — open the station block there, exactly as a right-click would.
       station: (x, y, z) => openStationAt(x, y, z) ? `opened the station at ${x} ${y} ${z}` : `no station at ${x} ${y} ${z}`,
+      // ★ `/bushtest` (09-22) — the card-vs-model A/B: a card bush on the keeper's left, a model bush
+      // on the right, three blocks ahead on the live ground; `clear` takes them down. Never saved.
+      bushtest: (arg) => {
+        if (arg === 'clear') { flora.showcase([]); return 'the showcase is down' }
+        const which = arg === 'moonberry' ? MAT.MOONBERRY_BUSH : MAT.SUNFRUIT_BUSH
+        const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
+        const right = new THREE.Vector3(-fwd.z, 0, fwd.x)
+        const p = loco.current
+        const spot = (side: number) => {
+          const x = Math.floor(p.px + fwd.x * 3 + right.x * 1.6 * side), z = Math.floor(p.pz + fwd.z * 3 + right.z * 1.6 * side)
+          const y = surfaceTopAt(x, z)
+          return y === null ? null : { x, y, z }
+        }
+        const l = spot(-1), r = spot(1)
+        if (!l || !r) return 'the ground ahead is not loaded yet'
+        flora.showcase([{ ...l, kind: 'card', mat: which }, { ...r, kind: 'model', mat: which }])
+        return `card bush on your LEFT, model bush on your RIGHT (${which === MAT.SUNFRUIT_BUSH ? 'sunfruit' : 'moonberry'}) — walk round them · /bushtest clear`
+      },
       water: (x, y, z, hours, kind) => {
         const now = Date.now(), at = now - hours * 3_600_000
         const damp = (bx: number, by: number, bz: number) => {
