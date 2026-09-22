@@ -44,5 +44,5 @@ NAME=moonberry-bush SEED=7 \
   "$BLENDER" -b -P scripts/models/sunfruit-bush.py | grep -E 'TIERS|tris|FRUIT count|WROTE'
 
 echo "── baking both to synchronous modules"
-npx tsx scripts/bake-flora-model.mts $OUT/sunfruit-bush.glb  --out src/app/shimmer/voxel3d/models/sunfruit-bush.ts  --name sunfruitBush
-npx tsx scripts/bake-flora-model.mts $OUT/moonberry-bush.glb --out src/app/shimmer/voxel3d/models/moonberry-bush.ts --name moonberryBush
+npx tsx scripts/bake-flora-model.mts $OUT/sunfruit-bush.glb  --out src/app/shimmer/voxel3d/models/sunfruit-bush.ts  --name sunfruitBush  --via "npm run bake:flora"
+npx tsx scripts/bake-flora-model.mts $OUT/moonberry-bush.glb --out src/app/shimmer/voxel3d/models/moonberry-bush.ts --name moonberryBush --via "npm run bake:flora"
