@@ -27,6 +27,7 @@ import { SHELF_FACES, type ShelfCell } from './shelf-scan'
 import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from './cartoon-glsl'
 import { createLightUniforms, type LightUniforms } from './light-glsl'
 import { bankLeanAt } from '../voxel/height'
+import { sunfruitBushLeavesGeo, sunfruitBushFruitGeo, sunfruitBushBox } from './models/sunfruit-bush'
 
 const SECTION = 16
 
@@ -124,6 +125,38 @@ export const floraPuffGeo = (): THREE.BufferGeometry => {
   out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3))
   return out
 }
+
+/**
+ * ── ★★ THE FRUIT BUSH IS A SCULPT, AND IT IS A FACTORY LIKE EVERY OTHER SOLID (2026-09-22) ─────
+ * Alex walked the A/B at `/bushtest sculpt` — card · code stand-in · picaso's glb — and the model
+ * won. So the WILD fruit pool draws the sculpt, and the two cards it used to draw stay only in the
+ * showcase, which is what an A/B is for.
+ *
+ * ★ THE GLB IS BAKED, NOT FETCHED, AND THE REASON IS NOT SPEED. Three consumers of a plant's shape
+ * do not run in a browser — `floraBounds` (the reticle's box), `mesh-icon`'s software raster, and
+ * the node checks that read both. Handed an async geometry they would each go on measuring the CARD
+ * while the world drew the sculpt: a loose outline, a wrong icon, and every guard green, because a
+ * guard that cannot see its subject reports on nothing. `scripts/bake-flora-model.mts` turns the
+ * glb into `models/sunfruit-bush.ts` — quantised positions and uvs, one `npm run bake:flora` after
+ * every picaso pass. The `.glb` in `public/` is untouched and still what `/bushtest sculpt` loads.
+ *
+ * ★ NORMALISED THROUGH THE MODEL'S OWN MEASURED BOX, so picaso can re-bake at any `TARGET_W` and
+ * the game's footprint does not move. The widest horizontal extent becomes exactly one cell and the
+ * base sits on y = 0 — a derivation, not a number anyone has to keep in step. (Today the model is
+ * already 1.0 wide and based at 0, so the fit is the identity; that is the point — it stays the
+ * identity by measurement rather than by luck.)
+ */
+const fitBush = (g: THREE.BufferGeometry): THREE.BufferGeometry => {
+  const [mnx, mny, mnz] = sunfruitBushBox.min, [mxx, , mxz] = sunfruitBushBox.max
+  const k = 1 / Math.max(mxx - mnx, mxz - mnz)
+  g.translate(-(mnx + mxx) / 2, -mny, -(mnz + mxz) / 2)
+  g.scale(k, k, k)
+  return g
+}
+/** The sculpted leafy body — 720 faceted triangles, wearing the card's own pixels (see `solidBushTex`). */
+export const floraFruitLeavesGeo = (): THREE.BufferGeometry => fitBush(sunfruitBushLeavesGeo())
+/** The fruit riding its crown — its own buffer so it takes its own tint, the puff's pattern. */
+export const floraFruitBerriesGeo = (): THREE.BufferGeometry => fitBush(sunfruitBushFruitGeo())
 
 /**
  * ── ★ THE MODEL BUSH — an A/B against the card bush (2026-09-22, Alex: "3d models for bushes,
@@ -709,7 +742,11 @@ export const FLORA_PLACE: Record<number, { root: number; jitter: number }> = {
   [FLORA.FLOWER]: { root: 0.97, jitter: 0.3 },
   [FLORA.BLOOM_MAT]: { root: 0.97, jitter: 0.04 },   // a pad covers its cell; it does not wander
   [FLORA.BLOOM_BUSH]: { root: 0.97, jitter: 0.2 },
-  [FLORA.FRUIT]: { root: 0.97, jitter: 0.15 },
+  // ★ TIGHTENED FROM 0.15 WHEN THE BUSH BECAME A SOLID (2026-09-22). A card's reach is its
+  // half-width only on the one rotation that points it at you; a sculpt's is its half-width
+  // always. 0.5 (fitted half-width) x 1.06 (the biggest size roll) + 0.05 = 0.58, which is the
+  // same reach the rotated 0.9-wide card already had — so the meadow's spacing does not move.
+  [FLORA.FRUIT]: { root: 0.97, jitter: 0.1 },
   [FLORA.HERB]: { root: 0.97, jitter: 0.3 },
   [FLORA.CROP]: { root: 0.97, jitter: 0.3 },
   [FLORA.ROCK]: { root: 1.06, jitter: 0.5 },
@@ -729,6 +766,14 @@ export const FLORA_PLACE: Record<number, { root: number; jitter: number }> = {
 export const floraGrow = (variant: number): number => 0.75 + variant * 0.5
 /** Scatter's size roll. All three axes for a stone; length is held at 1.0 for a log (see below). */
 export const floraScatterScale = (variant: number): number => 0.8 + variant * 0.45
+/**
+ * The fruit bush's size roll — UNIFORM, and that is the whole difference from `floraGrow`.
+ * A card is a picture of a plant, so stretching it on Y alone reads as a taller plant. A sculpt is
+ * a plant, and the same stretch reads as a plant someone pulled. Narrower than the scatter roll
+ * (0.8..1.25) because a stone may be a pebble or a boulder and a bush of a species may not.
+ * ⚠ A DIAL, and the one to move if Alex says the bushes are too samey or too big.
+ */
+export const floraBushScale = (variant: number): number => 0.82 + variant * 0.24
 
 const Y_UP = new THREE.Vector3(0, 1, 0)
 
@@ -772,6 +817,15 @@ export function floraMatrix(
     quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
     off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
     const sz = floraScatterScale(variant)
+    scl.set(sz, sz, sz)
+  } else if (kind === FLORA.FRUIT) {
+    // The sculpt (2026-09-22). Turned and jittered like everything else, but scaled UNIFORMLY —
+    // see `floraBushScale`. The turn is doing more work here than it does for a card: a card's
+    // rotation only changes which way its picture faces, while a lumpy solid presents a different
+    // silhouette at every angle, which is most of why a stand of these does not read as copy-paste.
+    quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
+    off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
+    const sz = floraBushScale(variant)
     scl.set(sz, sz, sz)
   } else if (kind === FLORA.BLOOM_MAT || kind === FLORA.MOSS) {
     // A pad has no height to roll; a quarter-turn is enough variety and keeps its square on the cell.
@@ -821,6 +875,11 @@ function vertsFor(kind: number): Float32Array[] {
     partVerts.set(FLORA.MUSHROOM, [grab(floraShroomStemGeo()), grab(floraShroomCapGeo())])
     partVerts.set(FLORA.PUFF, [grab(floraPuffGeo())])
     partVerts.set(FLORA.SHELF, [grab(floraShelfGeo())])
+    // ★ THE FRUIT BUSH OVERRIDES ITS OWN `FLORA_PARTS` ROW, WHICH IS STILL THERE ON PURPOSE.
+    // The pool draws the sculpt; the row survives because `/bushtest`'s card half still builds
+    // from it, and an A/B whose control quietly disappears is not an A/B. So this set() must come
+    // AFTER the FLORA_PARTS loop above, or the reticle would go on boxing the control.
+    partVerts.set(FLORA.FRUIT, [grab(floraFruitLeavesGeo()), grab(floraFruitBerriesGeo())])
   }
   return partVerts.get(kind) ?? []
 }
@@ -1266,6 +1325,36 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     BLADE_TILE * GRASS_VARIANTS, TALL_TILE_H)
   const headTex = makeHeadTexture()
   const bushTex = toTexture(bushPixels(), 32)
+  // ★ LIT LIKE THE CARD, NOT LIKE A ROCK (Alex, 09-22: "the model bush looks too bright, can we
+  // match the card's lighting"). Two things made it bright: the solid family's light path (the
+  // field sampled by normal, no `here`) and a FLAT leaf colour where the card's painted tile is
+  // mostly darker than its tint. So: the card's own stack mode, and the tint scaled by the bush
+  // tile's mean brightness — the model's average albedo IS the card's, by construction.
+  // Second pass (the first — the card's stack mode over a flat colour — still read pale at night):
+  // the model wears the CARD'S OWN TILE as its map, tinted by the card's own arithmetic
+  // (leaf / BLADE_GREEN), through the card's stack — albedo and light are the card's by
+  // construction; only the shape differs. No sway (amp 0), no alpha cut (a solid has no holes).
+  // ⚠ THE CARD TILE HAS HOLES, AND A SOLID HAS NO ALPHA CUT: its transparent texels are black RGB,
+  // and on the model they drew as black blotches (Alex's first look at the sculpt). The solids wear
+  // a FILLED copy — every clear texel takes the tile's mean opaque colour — so the skin is the
+  // card's pixels where the card has pixels and the card's average everywhere else.
+  // And the card's tile is DRAWN AS A BUSH — a highlight blob on one side, shadow on the other —
+  // so wrapped round a solid, one flank wore the highlight as a cream slab (Alex's second look).
+  // The solids wear the tile's PIXELS in a scrambled order: every opaque texel, dealt over the
+  // 32×32 by a fixed hash. Same colours, same mean, same spread as the card; no region larger
+  // than a texel. At nearest filtering that is fine leafy noise, which is what a bush's skin is.
+  const solidBushTex = (() => {
+    const px = bushPixels(), out = new Uint8Array(px.length)
+    const opaque: number[] = []
+    for (let i = 0; i < px.length; i += 4) if (px[i + 3] >= 128) opaque.push(i)
+    for (let t = 0; t < px.length / 4; t++) {
+      const v = Math.sin(t * 12.9898 + 78.233) * 43758.5453
+      const src = opaque[Math.floor((v - Math.floor(v)) * opaque.length)] ?? 0
+      out[t * 4] = px[src]; out[t * 4 + 1] = px[src + 1]; out[t * 4 + 2] = px[src + 2]; out[t * 4 + 3] = 255
+    }
+    return toTexture(out, 32)
+  })()
+
   const clusterTex = toTexture(bloomClusterPixels(), 32)
   const matLeafTex = toTexture(matLeafPixels(), 32)
   const matBloomTex = toTexture(matBloomPixels(), 32)
@@ -1294,8 +1383,13 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const matShadowGeo = crossGeo(FLORA.BLOOM_MAT, 3)
   const bushGeo = crossGeo(FLORA.BLOOM_BUSH)
   const bushHeadGeo = crossGeo(FLORA.BLOOM_BUSH, 1)
+  // ★ THE FRUIT BUSH'S CARDS SURVIVE FOR THE SHOWCASE ONLY (2026-09-22). The wild pool draws
+  // `bushLeafGeo`/`bushBerryGeo` below; these two are `/bushtest`'s control and nothing else reads
+  // them. Deleting them would win a few hundred bytes and cost the ability to re-run the A/B.
   const fruitBushGeo = crossGeo(FLORA.FRUIT)
-  const fruitGeo = crossGeo(FLORA.FRUIT, 1)
+  // The sculpt (picaso's glb, baked). The pool's two parts — a leafy body and the fruit on it.
+  const bushLeafGeo = floraFruitLeavesGeo()
+  const bushBerryGeo = floraFruitBerriesGeo()
   const herbGeo = crossGeo(FLORA.HERB)
   const cropGeo = crossGeo(FLORA.CROP)
   // The head rides at the top of a full-height stalk. Scaled with the stalk by the instance matrix,
@@ -1411,6 +1505,18 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const bushHeadMat = swayMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_BUSH])
   const fruitBushMat = swayMaterial(bushTex, FLORA_SWAY[FLORA.FRUIT])
   const fruitMat = swayMaterial(fruitTex, FLORA_SWAY[FLORA.FRUIT], FRUIT_MATS.length)
+  // ── ★ THE SCULPT'S TWO MATERIALS, AND THE SHOWCASE SHARES THEM ────────────────────────────
+  // Lit like the card and not like a rock: the card's own stack mode, the card's own pixels (the
+  // scrambled `solidBushTex`), the card's own tint arithmetic. Only the shape differs — which is
+  // what made the A/B a fair one, and is why the winner ships with the loser's skin.
+  // ⚠ NO SWAY. A card on a stalk bends; a leafy solid the size of a cell does not, and the same
+  // vertex program applied to a closed volume shears it. If a fruit bush ever needs to breathe in
+  // the wind it wants its own gentle whole-body lean, not the blade's tip-weighted one.
+  // ⚠ NO ALPHA CUT, `FrontSide`: a solid has no holes and never shows its interior.
+  const bushLeafMat = new THREE.MeshLambertMaterial({ map: solidBushTex, side: THREE.FrontSide, flatShading: true })
+  bushLeafMat.onBeforeCompile = (shader) => injectStack(shader, true)
+  const bushBerryMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
+  bushBerryMat.onBeforeCompile = (shader) => injectStack(shader, true)
   // ★ THE ONE FLORA MATERIAL THAT GLOWS. The pad is painted near-white and the tint is the moss
   // colour, so the emissive is that same colour scaled — one row in `MATERIAL_COLOR` drives the
   // day look, the night glow and the item icon. The block behind it carries the light channel
@@ -1466,13 +1572,17 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   bushHeads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.bush * 3), 3)
   // The fruit bush: body in the bush's own leaf colour (a multiplier over the green tile, like a
   // blade over its ground), fruit in FRUIT_TINT. Same two arithmetics as everything above.
-  const fruitBushes = new THREE.InstancedMesh(fruitBushGeo, fruitBushMat, CAP.fruit)
-  const fruits = new THREE.InstancedMesh(fruitGeo, fruitMat, CAP.fruit)
+  const fruitBushes = new THREE.InstancedMesh(bushLeafGeo, bushLeafMat, CAP.fruit)
+  const fruits = new THREE.InstancedMesh(bushBerryGeo, bushBerryMat, CAP.fruit)
   fruitBushes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
   fruits.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
-  const fruitTile = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit), 1).setUsage(THREE.DynamicDrawUsage)
-  fruitGeo.setAttribute('aTile', fruitTile)
-  /** The atlas column for a fruit material — the order `FRUIT_MATS` lists them in. */
+  /**
+   * The atlas column for a fruit material — the order `FRUIT_MATS` lists them in.
+   * ⚠ THE WILD POOL NO LONGER READS THIS. The sculpt carries one fruit cluster for every species
+   * and tells sunfruit from moonberry by TINT alone, so the two-column atlas (four big fruit /
+   * nine small) is now a card-only idea and lives on for `/bushtest`'s control. The shape half of
+   * that distinction comes back when picaso bakes the moonberry — same script, different seed.
+   */
   const FRUIT_COL = new Map<number, number>(FRUIT_MATS.map((m, i) => [m, i]))
   const herbs = new THREE.InstancedMesh(herbGeo, herbMat, CAP.herb)
   const tips = new THREE.InstancedMesh(tipGeo, tipMat, CAP.herb)
@@ -1531,39 +1641,12 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const showFruit = new THREE.InstancedMesh(showFruitGeo, fruitMat, SHOW_CAP)
   showCard.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
   showFruit.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
-  // ★ LIT LIKE THE CARD, NOT LIKE A ROCK (Alex, 09-22: "the model bush looks too bright, can we
-  // match the card's lighting"). Two things made it bright: the solid family's light path (the
-  // field sampled by normal, no `here`) and a FLAT leaf colour where the card's painted tile is
-  // mostly darker than its tint. So: the card's own stack mode, and the tint scaled by the bush
-  // tile's mean brightness — the model's average albedo IS the card's, by construction.
-  // Second pass (the first — the card's stack mode over a flat colour — still read pale at night):
-  // the model wears the CARD'S OWN TILE as its map, tinted by the card's own arithmetic
-  // (leaf / BLADE_GREEN), through the card's stack — albedo and light are the card's by
-  // construction; only the shape differs. No sway (amp 0), no alpha cut (a solid has no holes).
-  // ⚠ THE CARD TILE HAS HOLES, AND A SOLID HAS NO ALPHA CUT: its transparent texels are black RGB,
-  // and on the model they drew as black blotches (Alex's first look at the sculpt). The solids wear
-  // a FILLED copy — every clear texel takes the tile's mean opaque colour — so the skin is the
-  // card's pixels where the card has pixels and the card's average everywhere else.
-  // And the card's tile is DRAWN AS A BUSH — a highlight blob on one side, shadow on the other —
-  // so wrapped round a solid, one flank wore the highlight as a cream slab (Alex's second look).
-  // The solids wear the tile's PIXELS in a scrambled order: every opaque texel, dealt over the
-  // 32×32 by a fixed hash. Same colours, same mean, same spread as the card; no region larger
-  // than a texel. At nearest filtering that is fine leafy noise, which is what a bush's skin is.
-  const solidBushTex = (() => {
-    const px = bushPixels(), out = new Uint8Array(px.length)
-    const opaque: number[] = []
-    for (let i = 0; i < px.length; i += 4) if (px[i + 3] >= 128) opaque.push(i)
-    for (let t = 0; t < px.length / 4; t++) {
-      const v = Math.sin(t * 12.9898 + 78.233) * 43758.5453
-      const src = opaque[Math.floor((v - Math.floor(v)) * opaque.length)] ?? 0
-      out[t * 4] = px[src]; out[t * 4 + 1] = px[src + 1]; out[t * 4 + 2] = px[src + 2]; out[t * 4 + 3] = 255
-    }
-    return toTexture(out, 32)
-  })()
-  const showModelMat = new THREE.MeshLambertMaterial({ map: solidBushTex, side: THREE.FrontSide, flatShading: true })
-  showModelMat.onBeforeCompile = (shader) => injectStack(shader, true)
-  const showFruitMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
-  showFruitMat.onBeforeCompile = (shader) => injectStack(shader, true)
+  // ★ THE SHOWCASE WEARS THE POOL'S OWN MATERIALS (`bushLeafMat` / `bushBerryMat`). It used to
+  // build its own identical pair, which was harmless while the model was only ever a showcase and
+  // became a trap the moment the pool shipped one: two materials that agree perfectly today and
+  // diverge the first time anyone tunes exactly one of them — and the one you would tune is the
+  // one you can SEE, which is the showcase. Then the A/B stops measuring what the world draws.
+  const showModelMat = bushLeafMat, showFruitMat = bushBerryMat
   const modelGeo = floraModelBushGeo(7)
   const showLeaves = new THREE.InstancedMesh(modelGeo.leaves, showModelMat, SHOW_CAP)
   const showBerries = new THREE.InstancedMesh(modelGeo.fruit, showFruitMat, SHOW_CAP)
@@ -1604,9 +1687,13 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     { kind: FLORA.BLOOM_MAT, geo: matStarGeo, mat: outlineMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_MAT]), grow: 1 },
     { kind: FLORA.BLOOM_BUSH, geo: bushGeo, mat: outlineMaterial(bushTex, FLORA_SWAY[FLORA.BLOOM_BUSH]), grow: 1 },
     { kind: FLORA.BLOOM_BUSH, geo: bushHeadGeo, mat: outlineMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_BUSH]), grow: 1 },
-    // The fruit card's column is chosen by MATERIAL and `setHighlight` is handed a kind, not a
-    // material — so the border marks the bush body only. A bush's silhouette IS the body.
-    { kind: FLORA.FRUIT, geo: fruitBushGeo, mat: outlineMaterial(bushTex, FLORA_SWAY[FLORA.FRUIT]), grow: 1 },
+    // ★ THE FRUIT BUSH MOVED FROM A CARD BORDER TO A HULL when it became a sculpt (2026-09-22).
+    // A card's border is painted IN PLACE by darkening its own edge texels; a solid has no edge
+    // texels to darken, so it takes the grown back-face hull the rock and the puff take. Both
+    // parts get one — the fruit sits proud of the crown, and a hull round the body alone would
+    // leave the berries outside their own outline.
+    { kind: FLORA.FRUIT, geo: bushLeafGeo, mat: outlineHullMaterial(), grow: 1.12 },
+    { kind: FLORA.FRUIT, geo: bushBerryGeo, mat: outlineHullMaterial(), grow: 1.12 },
     { kind: FLORA.HERB, geo: herbGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
     { kind: FLORA.HERB, geo: tipGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
     { kind: FLORA.CROP, geo: cropGeo, mat: outlineMaterial(cropStalkTex, FLORA_SWAY[FLORA.CROP]), grow: 1 },
@@ -1966,7 +2053,6 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
               fruitBushes.setColorAt(nFr, tint.setRGB(
                 ((leaf >> 16) & 255) / BLADE_GREEN[0], ((leaf >> 8) & 255) / BLADE_GREEN[1], (leaf & 255) / BLADE_GREEN[2]))
               fruits.setColorAt(nFr, tint.set(FRUIT_TINT[s.mat] ?? 0xffffff))
-              fruitTile.setX(nFr, FRUIT_COL.get(s.mat) ?? 0)
               nFr++
             }
           }
@@ -2027,7 +2113,6 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       talls.instanceMatrix.needsUpdate = true
       tuftTile.needsUpdate = true
       tallTile.needsUpdate = true
-      fruitTile.needsUpdate = true
       if (tufts.instanceColor) tufts.instanceColor.needsUpdate = true
       if (talls.instanceColor) talls.instanceColor.needsUpdate = true
       stems.instanceMatrix.needsUpdate = true
@@ -2098,8 +2183,9 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       // its plant's, which is disposed above.
       for (const h of hlMeshes) if (h.kind === FLORA.TUFT || h.kind === FLORA.TALL) h.geo.dispose()
       // The flower forms (2026-09-14/15): geometry, material, texture — same three each.
-      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, fruitGeo, mossGeo, puffGeo, shelfGeo]) g.dispose()
-      for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat, mossMat, puffMat, shelfMat]) m.dispose()
+      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, bushLeafGeo, bushBerryGeo, mossGeo, puffGeo, shelfGeo]) g.dispose()
+      // `showModelMat`/`showFruitMat` are aliases of the two bush materials, not a second pair.
+      for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat, bushLeafMat, bushBerryMat, solidBushTex, mossMat, puffMat, shelfMat]) m.dispose()
       for (const t of [bushTex, clusterTex, matLeafTex, matBloomTex, matShadowTex, fruitTex, mossTex]) t.dispose()
     },
   }

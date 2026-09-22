@@ -12,6 +12,7 @@
     "canon": "node scripts/canon-drift.mjs",
     "gx": "npx tsx scripts/gx-adoption.mts",
     "item:art": "npx tsx scripts/item-art.mts",
+    "bake:flora": "npx tsx scripts/bake-flora-model.mts public/models/flora/sunfruit-bush.glb --out src/app/shimmer/voxel3d/models/sunfruit-bush.ts --name sunfruitBush",
     "item:art:sheet": "npx tsx scripts/item-art.mts --sheet",
     "canon:report": "node scripts/canon-drift.mjs --report",
     "build:worker": "npx tsx scripts/gen-blueprints.mts && node scripts/build-worker.mjs",

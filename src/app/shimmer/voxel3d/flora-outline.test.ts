@@ -27,7 +27,11 @@ const fails: string[] = []
 const ok = (c: boolean, msg: string) => { if (c) pass++; else fails.push(msg) }
 
 const CARDS = [FLORA.TUFT, FLORA.TALL, FLORA.FLOWER, FLORA.HERB, FLORA.CROP, FLORA.REED]
-const SOLIDS = [FLORA.ROCK, FLORA.DEADFALL, FLORA.MUSHROOM]
+// ⚠ FRUIT joined on 2026-09-22, when its pool stopped being two cards and became picasso's baked
+// sculpt — it moved from a card border (edge texels darkened in place) to a grown back-face hull,
+// and this file was green either way because it had never named the kind. PUFF, SHELF, BLOOM_BUSH,
+// BLOOM_MAT and MOSS are still unnamed here; that is a gap, written down rather than left silent.
+const SOLIDS = [FLORA.ROCK, FLORA.DEADFALL, FLORA.MUSHROOM, FLORA.FRUIT]
 const ALL = [...CARDS, ...SOLIDS]
 
 /** Compile-time surface of a material: run its onBeforeCompile against THREE's REAL shader source
@@ -70,7 +74,12 @@ const meshes = () => r.group.children.filter(c =>
     ok(lit.length > 0, `kind ${kind}: nothing was marked`)
     // Two-part kinds (flower/herb/crop stems+heads, mushroom stem+cap) light both parts.
     // A shadow part has no border on purpose (see FloraPart.shadow); the reed's wake is water.
-    const expected = kind === FLORA.MUSHROOM ? 2 : (FLORA_PARTS[kind]?.filter(p => !p.shadow && !p.wake).length ?? 1)
+    // ⚠ `FLORA_PARTS` IS NOT THE AUTHORITY FOR A SCULPTED KIND. The fruit bush still HAS a
+    // two-row `FLORA_PARTS` entry — `/bushtest`'s card control builds from it — but the pool and
+    // its outline are the glb's two buffers, and the two counts agreeing at 2 today is a
+    // coincidence, not a derivation. Named outright, next to the mushroom, for the same reason.
+    const expected = kind === FLORA.MUSHROOM || kind === FLORA.FRUIT
+      ? 2 : (FLORA_PARTS[kind]?.filter(p => !p.shadow && !p.wake).length ?? 1)
     ok(lit.length === expected,
       `kind ${kind}: ${lit.length} outline mesh(es) lit, expected ${expected}`)
   }

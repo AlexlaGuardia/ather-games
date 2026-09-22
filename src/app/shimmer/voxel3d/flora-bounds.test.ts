@@ -72,6 +72,16 @@ const KINDS: [string, number][] = [
   ['tuft', FLORA.TUFT], ['tall grass', FLORA.TALL], ['flower', FLORA.FLOWER],
   ['herb', FLORA.HERB], ['crop', FLORA.CROP],
   ['rock', FLORA.ROCK], ['deadfall', FLORA.DEADFALL], ['mushroom', FLORA.MUSHROOM],
+  // ★ THE FRUIT BUSH JOINED THE TABLE THE DAY IT BECAME A SCULPT (2026-09-22), AND IT HAD BEEN
+  // MISSING THE WHOLE TIME. Its pool swapped from two cards to a baked glb with its own scale
+  // roll and its own `floraMatrix` branch, and this file stayed 602-green through the change —
+  // which is not a guard holding, it is a guard that was never pointed at the subject. The one
+  // kind whose bounds could silently go on describing the retired card is exactly the one that
+  // had no row here.
+  // ⚠ STILL UNCOVERED AND KNOWINGLY SO: BLOOM_BUSH, BLOOM_MAT, PUFF, MOSS, REED, SHELF. The last
+  // two need a probe this harness does not build (a water plane; a trunk scan), the others would
+  // cost only a row each — this comment is so that the gap is a decision rather than a silence.
+  ['fruit bush', FLORA.FRUIT],
 ]
 // Spread across the roll: jitter, turn and height all ride on `variant`, so one value would test
 // one plant rather than the family. 0 and ~1 are the ends the jitter reaches furthest at.
