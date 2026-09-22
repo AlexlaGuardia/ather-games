@@ -49,52 +49,59 @@ export const MODELS: Readonly<Record<number, StationModel>> = {
     ],
   },
 
-  // ── CAULDRON (MAT.CAULDRON) — a bellied clay pot on four feet, a rim, the water seen from above ──
-  // ★ REBUILT 09-15 PM (Alex: "the cauldron looks off, fix the walls"). The first pass was four thin
-  // walls on a floor slab — a crate. A cauldron is a BELLY: the pot swells at the middle and narrows to
-  // a neck and a rim. The tile helps and hurts: `paintCauldron`'s side is rim band (top ~12%) · clay
-  // belly · a dark stone hearth course (bottom ~25%), sampled by local height — so thin walls wore the
-  // stone course as a grey skirt and the feet wore it whole. Now the tiers sit where the bands are:
-  // the wide belly and neck in the plain clay rows, the lower belly and feet down in the stone course
-  // (a pot standing on its hearth ring), the rim in the top 14% where the tile's rim band is. The open top is a recessed disc wearing the cauldron's own top tile (dark
-  // water); the lit twin swaps that one face for the brew.
+  // ── CAULDRON (MAT.CAULDRON) — a THROWN POT, the lane's first sculpt ──────────────────────────
+  // ★ WAS TWELVE BOXES UNTIL 2026-09-22, AND THE BOXES WERE NEVER A STYLE CHOICE. The 09-15
+  // rebuild (Alex: "the cauldron looks off, fix the walls") stacked four tiers — lower belly, wide
+  // belly, neck, rim — hand-fitted to the horizontal BANDS of `paintCauldron`'s side tile, which
+  // is rim in the top 12.5% (`size >> 3`), plain clay through the middle, and a dark stone HEARTH
+  // COURSE in the bottom 25% (`size / 4`), sampled by local height. A lathe gets that continuously
+  // and for free: the pot darkens into its hearth ring at the foot and brightens at the lip with
+  // no step where one tier ends. `scripts/models/cauldron.py`, `npm run bake:props`.
+  //
+  // ★ `top: MAT.KILN` ON THE BODY IS LOAD-BEARING, NOT A DETAIL. The piece program picks its tile
+  // with a HARD branch — `an.y > 0.5 ? vLayerTop : vLayerSide` — and `an.y > 0.5` is a 60-degree
+  // cone about vertical, not a dominant-axis test. So the rim's annulus, the inner floor, the base
+  // underside and any facet whose wall tips past ~30 degrees off plumb all read `top`. The
+  // cauldron's OWN top tile is the dark water disc, so leaving it default paints water across the
+  // pot's shoulder and lip. KILN's top is plain fired clay — the same fix the box rim walls used.
+  // (The profile keeps every wall under the cone anyway; this is the belt to that braces.)
   [MAT.CAULDRON]: {
-    note: 'a bellied clay pot on four feet: lower belly, wide belly, neck, a rim you can see the water inside',
-    parts: [
-      { box: [0.14, 0.14, 0.14, 0.28, 0.07, 0.28] },      // feet
-      { box: [0.14, 0.14, 0.14, 0.28, 0.07, -0.28] },
-      { box: [0.14, 0.14, 0.14, -0.28, 0.07, 0.28] },
-      { box: [0.14, 0.14, 0.14, -0.28, 0.07, -0.28] },
-      { box: [0.66, 0.18, 0.66, 0, 0.23, 0] },            // lower belly
-      { box: [0.82, 0.36, 0.82, 0, 0.50, 0] },            // the wide belly
-      { box: [0.70, 0.18, 0.70, 0, 0.77, 0] },            // neck
-      // Rim walls: sides in the cauldron's own rim band; TOPS in plain clay (the kiln's dome tile away
-      // from its damper) — the cauldron's top tile is the water disc, and a rim wearing it showed the
-      // disc's dark edge as crescents on the lip (Alex's shot, 09-15).
-      { box: [0.76, 0.14, 0.08, 0, 0.93, -0.34], top: MAT.KILN },                          // rim, four walls
-      { box: [0.76, 0.14, 0.08, 0, 0.93, 0.34], top: MAT.KILN },
-      { box: [0.08, 0.14, 0.76, -0.34, 0.93, 0], top: MAT.KILN },
-      { box: [0.08, 0.14, 0.76, 0.34, 0.93, 0], top: MAT.KILN },
-      { box: [0.62, 0.02, 0.62, 0, 0.88, 0] },                            // the water, recessed inside the rim (top = the cauldron's own dark disc)
-    ],
+    note: 'a thrown clay pot: a hearth-wide foot, the belly low, a flared lip and dark water inside',
+    parts: [],
+    sculpt: {
+      model: 'cauldron',
+      parts: [
+        { node: 'Body', top: MAT.KILN },
+        // No `side`, no `glow`: both default to the station itself, so the idle pot's water wears
+        // MAT.CAULDRON's dark disc and glows at EMISSIVE[CAULDRON] — which is unset, i.e. 0. The
+        // idle cauldron promises no brew, and `alchemy-chain.test` asserts exactly that.
+        { node: 'Brew' },
+      ],
+    },
   },
 
   // ── CAULDRON_LIT (MAT.CAULDRON_LIT) — the same pot, the brew where the water was ─────────────
+  // ★ AND THE BREW GLOWS AGAIN. The box model wrote `{ top: MAT.CAULDRON_LIT, side: MAT.CAULDRON }`
+  // on its brew slab, and a part's glow defaults to `EMISSIVE[p.side ?? mat]` — so naming CAULDRON
+  // as the side ALSO silenced the glow: EMISSIVE[CAULDRON] is unset, 0. The running cauldron's
+  // brew has been rendering dead since the cauldron stopped being a cube on 09-15, while
+  // `EMISSIVE[CAULDRON_LIT] = 0.7` sat right there and `paintCauldron` kept painting the emissive
+  // alpha the shader multiplies by. Exactly the failure `piece-mesh.ts`'s own header warns of:
+  // *"a model that wears those tiles must do the same or the lantern goes dark the day it stops
+  // being a cube."* Leaving `side` OFF the brew fixes it with no hardcoded number — the part falls
+  // through to the station itself (CAULDRON_LIT) for tile AND glow, and the lit side tile is the
+  // same clay as the idle one (`paintCauldron`'s `lit` flag only changes the TOP face's liquid).
   [MAT.CAULDRON_LIT]: {
-    note: 'the same bellied pot, the golden brew standing in the rim',
-    parts: [
-      { box: [0.14, 0.14, 0.14, 0.28, 0.07, 0.28], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.14, 0.14, 0.14, 0.28, 0.07, -0.28], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.14, 0.14, 0.14, -0.28, 0.07, 0.28], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.14, 0.14, 0.14, -0.28, 0.07, -0.28], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.66, 0.18, 0.66, 0, 0.23, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.82, 0.36, 0.82, 0, 0.50, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.70, 0.18, 0.70, 0, 0.77, 0], top: MAT.CAULDRON, side: MAT.CAULDRON },
-      { box: [0.76, 0.14, 0.08, 0, 0.93, -0.34], top: MAT.KILN, side: MAT.CAULDRON },
-      { box: [0.76, 0.14, 0.08, 0, 0.93, 0.34], top: MAT.KILN, side: MAT.CAULDRON },
-      { box: [0.08, 0.14, 0.76, -0.34, 0.93, 0], top: MAT.KILN, side: MAT.CAULDRON },
-      { box: [0.08, 0.14, 0.76, 0.34, 0.93, 0], top: MAT.KILN, side: MAT.CAULDRON },
-      { box: [0.62, 0.02, 0.62, 0, 0.90, 0], top: MAT.CAULDRON_LIT, side: MAT.CAULDRON },   // the brew, a touch higher — it is boiling
-    ],
+    note: 'the same thrown pot, the golden brew standing in it and lit like the block it replaces',
+    parts: [],
+    sculpt: {
+      model: 'cauldron',
+      parts: [
+        // The pot is clay whether or not it is running: name CAULDRON so the body neither wears
+        // the lit tile nor inherits its 0.7 glow. A glowing POT would be the opposite regression.
+        { node: 'Body', top: MAT.KILN, side: MAT.CAULDRON },
+        { node: 'Brew' },
+      ],
+    },
   },
 }

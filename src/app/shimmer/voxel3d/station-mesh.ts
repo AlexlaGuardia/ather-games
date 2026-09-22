@@ -18,6 +18,7 @@
 import * as THREE from 'three'
 import { MODELLED_MATS } from '../voxel/depth'
 import { modelOf, type StationModel } from './station-models'
+import { cauldronBodyGeo, cauldronBrewGeo } from './models/cauldron'
 import { createPieceMaterial, type PieceMaterial } from './piece-mesh'
 import { layerOf, TOP, SIDE } from './tex/tiles'
 import { EMISSIVE } from './attrs'
@@ -26,6 +27,21 @@ import type { LightUniforms } from './light-glsl'
 
 const SECTION = 16
 const MAX_PER_MAT = 4096
+
+/**
+ * The BAKED SCULPTS, by the name a `StationModel.sculpt.model` uses — node name → geometry.
+ *
+ * ★ THE HOST SIDE OWNS THIS AND station-models.ts CANNOT. That file is pure (no three) and a baked
+ * module hands back a `BufferGeometry`, so the model table names a sculpt and this map resolves
+ * it. Adding a prop is a bake (`npm run bake:props`), an import, and one row here.
+ *
+ * ⚠ The baked factories are NOT indexed and already call `computeVertexNormals()` — see
+ * `mergeGeometries` for why the first of those matters, and `scripts/bake-flora-model.mts` for why
+ * normals are derived rather than shipped.
+ */
+export const SCULPTS: Readonly<Record<string, Readonly<Record<string, () => THREE.BufferGeometry>>>> = {
+  cauldron: { Body: cauldronBodyGeo, Brew: cauldronBrewGeo },
+}
 
 export interface StationRenderer {
   group: THREE.Group
@@ -65,6 +81,25 @@ export function buildStationGeometry(mat: number, model: StationModel): THREE.Bu
     g.setAttribute('aEmissive', new THREE.BufferAttribute(glow, 1))
     parts.push(g)
   }
+  for (const sp of model.sculpt?.parts ?? []) {
+    const make = SCULPTS[model.sculpt!.model]?.[sp.node]
+    // Loud, not silent: a renamed node in a re-bake would otherwise drop a part of the object and
+    // leave a pot with no lid, or no pot — and every guard would stay green about the rest.
+    if (!make) throw new Error(`station ${mat}: sculpt '${model.sculpt!.model}' has no node '${sp.node}'`)
+    const g = make()
+    // Authored about the cell CENTRE like a box, built about its MIN corner like a box — the same
+    // half-cell shift, and for the same reason (the piece program samples a face's tile by local
+    // position, so the tile's centre must land at local 0.5).
+    g.translate(0.5, 0, 0.5)
+    const n = g.attributes.position.count
+    const top = new Float32Array(n).fill(layerOf(sp.top ?? mat, TOP))
+    const side = new Float32Array(n).fill(layerOf(sp.side ?? mat, SIDE))
+    const glow = new Float32Array(n).fill(sp.glow ?? (EMISSIVE[sp.side ?? mat] ?? 0))
+    g.setAttribute('aLayerTop', new THREE.BufferAttribute(top, 1))
+    g.setAttribute('aLayerSide', new THREE.BufferAttribute(side, 1))
+    g.setAttribute('aEmissive', new THREE.BufferAttribute(glow, 1))
+    parts.push(g)
+  }
   return mergeGeometries(parts)
 }
 
@@ -77,7 +112,13 @@ function mergeGeometries(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   let base = 0
   for (const g of parts) {
     const ng = g.getIndex()
+    // ★★ A NON-INDEXED PART GETS AN IDENTITY INDEX, AND SKIPPING THIS DROPS IT SILENTLY.
+    // `BoxGeometry` is indexed; a baked sculpt is NOT (the bake de-indexes so every triangle owns
+    // its vertices and shades flat). The merged geometry has ONE index, so a part that contributed
+    // no entries contributes no TRIANGLES either — its vertices ride along, referenced by nothing.
+    // A model that is all sculpt would have drawn nothing at all, with no error anywhere.
     if (ng) for (let i = 0; i < ng.count; i++) index.push(ng.getX(i) + base)
+    else for (let i = 0; i < g.attributes.position.count; i++) index.push(i + base)
     for (const name of names) {
       const a = g.getAttribute(name) as THREE.BufferAttribute | undefined
       if (!a) continue
@@ -88,7 +129,21 @@ function mergeGeometries(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
     g.dispose()
   }
   const sizes: Record<string, number> = { position: 3, normal: 3, uv: 2, aLayerTop: 1, aLayerSide: 1, aEmissive: 1 }
-  for (const name of names) if (chunks[name]) out.setAttribute(name, new THREE.Float32BufferAttribute(chunks[name], sizes[name]))
+  // ★★ AN ATTRIBUTE ONLY SHIPS IF EVERY PART HAD IT. A box carries `uv`; a baked sculpt does not
+  // (nothing gives a lathe a UV map, and the piece program never reads one — it derives the tile
+  // uv from local POSITION and normal). Concatenating a present-for-some attribute yields a buffer
+  // SHORTER than the vertex count, which three reads as a misaligned attribute: every vertex past
+  // the first part's would sample someone else's uv. Dropping it is free and exact, because the
+  // program does not read it; padding would only add 2 floats per vertex to be ignored.
+  for (const name of names) {
+    const chunk = chunks[name]
+    if (!chunk) continue
+    if (chunk.length !== base * sizes[name]) continue
+    out.setAttribute(name, new THREE.Float32BufferAttribute(chunk, sizes[name]))
+  }
+  if (!out.getAttribute('position') || !out.getAttribute('normal')) {
+    throw new Error('station geometry: every part must carry position and normal')
+  }
   out.setIndex(index)
   return out
 }

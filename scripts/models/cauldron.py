@@ -53,14 +53,30 @@ SEED       = int(os.environ.get('SEED', '3'))
 SEGMENTS   = int(os.environ.get('SEGMENTS', '24'))    # radial divisions — the silhouette's roundness
 WOBBLE     = float(os.environ.get('WOBBLE', '0.016')) # out-of-round, in blocks, at the belly
 LEAN       = float(os.environ.get('LEAN', '0.008'))   # the throw is a hair off plumb
+FEET       = int(os.environ.get('FEET', '0'))         # 0 = the pot stands on its hearth-wide foot
+FOOT_H     = float(os.environ.get('FOOT_H', '0.125'))  # only read when FEET > 0
 BREW_Z     = float(os.environ.get('BREW_Z', '0.875')) # the liquid surface (the box model's 0.88)
 BREW_R     = float(os.environ.get('BREW_R', '0.275'))
 RES        = int(os.environ.get('RES', '560'))
 OUT        = os.environ.get('OUT', 'public/models/props')
+# ⚠ PREVIEWS DO NOT GO NEXT TO THE GLB. A bake writes them every run, and an untracked file under
+# `public/` fails `coord build` for EVERY lane — it blocked hub's deploy the first time this ran.
+# The glb is a committed source artifact; a preview is evidence for one look call and is scratch.
+PREVIEW_OUT = os.environ.get('PREVIEW_OUT', 'scripts/.scratch/props')
 PREVIEW_ONLY = os.environ.get('PREVIEW_ONLY') == '1'
 STATS_ONLY   = os.environ.get('STATS_ONLY') == '1'
 
 os.makedirs(OUT, exist_ok=True)
+os.makedirs(PREVIEW_OUT, exist_ok=True)
+
+# PROFILE is authored in POT SPACE (z from 0 at the pot's own floor to 1 at its lip) and mapped
+# into the cell. With feet the pot starts above them and the whole profile COMPRESSES, which
+# steepens every wall — so the 30-degree check below runs on the MAPPED rings, never on PROFILE.
+BASE_Z = FOOT_H if FEET > 0 else 0.0
+
+
+def cell_z(z_pot):
+    return BASE_Z + z_pot * (1.0 - BASE_Z)
 
 
 # crc32 over a joined string: stable across processes, machines and Python versions, which is the
@@ -74,6 +90,18 @@ def unit(*parts):
     return (shash(SEED, *parts) % 2000 - 1000) / 1000.0
 
 
+# ── ★ THE HEARTH BAND — WHY THIS POT IS WIDE AT THE FLOOR ─────────────────────────────────────
+# `paintCauldron` spends the side tile's BOTTOM 25% (`hearthH = size / 4`) on a dark stone course
+# and calls it, in its own comment, *"the fire bed it stands on"*; `alchemy.ts` reads it the same
+# way — *"a pot standing on its hearth ring"*. So the bottom quarter of this model is not the pot,
+# it is the FIRE the pot sits in, and it wants to be wide, solid and low. The first cut ignored
+# that: it tapered to r=0.215 at the floor and propped the result on four small feet, and the
+# render was unmistakably an URN on pegs — narrow-footed, teetering, mass in the wrong half. The
+# foot is now nearly as wide as the belly, the waist sits where the stone course ends (0.235
+# against 0.25), and the widest point moved DOWN to 0.53, because a cauldron carries its mass low
+# and a vase carries it high. The feet survive behind `FEET=4` rather than being deleted, because
+# which of the two reads better on prod is Alex's call and not the script's.
+#
 # ── THE PROFILE ────────────────────────────────────────────────────────────────────────────────
 # (radius, height) in CELL UNITS, traversed as one continuous outline: out along the base, up the
 # outside, in across the rim, down the inside, in along the inner floor. That single traversal is
@@ -85,27 +113,27 @@ def unit(*parts):
 # belly takes it all.
 #                r      z      w
 PROFILE = [
-    (0.000, 0.100, 0.00),  # base, centre  (the pot sits on its feet, so the floor is at z=0.10)
-    (0.215, 0.100, 0.15),  # base, edge            — normal DOWN, under the pot
-    (0.247, 0.180, 0.30),  # the foot lifts        rise 0.400
-    (0.285, 0.275, 0.50),  #                       rise 0.400
-    (0.325, 0.375, 0.70),  #                       rise 0.400
-    (0.360, 0.470, 0.88),  #                       rise 0.368
-    (0.383, 0.560, 1.00),  #                       rise 0.256
-    (0.392, 0.645, 1.00),  # the widest            rise 0.106   <- the belly
-    (0.378, 0.725, 0.95),  #                       rise 0.175
-    (0.350, 0.805, 0.80),  # the shoulder draws in rise 0.350
-    (0.328, 0.872, 0.55),  # the neck              rise 0.328
-    (0.332, 0.920, 0.35),  # the lip flares        rise 0.083
-    (0.350, 0.965, 0.18),  #                       rise 0.400
-    (0.349, 1.000, 0.15),  # rim, outer edge       rise 0.029
+    (0.000, 0.000, 0.00),  # base, centre          — normal DOWN, on the floor
+    (0.375, 0.000, 0.10),  # base, edge: WIDE. See THE HEARTH BAND above.
+    (0.392, 0.055, 0.20),  # the foot swells       rise 0.309
+    (0.368, 0.150, 0.35),  #                       rise 0.253
+    (0.352, 0.235, 0.55),  # the waist             rise 0.188   <- the hearth band ends here (0.25)
+    (0.378, 0.330, 0.75),  # the clay belly begins rise 0.274
+    (0.408, 0.435, 0.92),  #                       rise 0.286
+    (0.420, 0.530, 1.00),  # the widest, and LOW   rise 0.126   <- the belly
+    (0.412, 0.620, 1.00),  #                       rise 0.089
+    (0.385, 0.710, 0.95),  #                       rise 0.300
+    (0.350, 0.795, 0.80),  # the shoulder draws in rise 0.412
+    (0.326, 0.868, 0.55),  # the neck              rise 0.329
+    (0.330, 0.918, 0.35),  # the lip flares        rise 0.080
+    (0.348, 0.968, 0.18),  #                       rise 0.360
+    (0.347, 1.000, 0.15),  # rim, outer edge       rise 0.031
     (0.295, 1.000, 0.15),  # rim, inner edge       — normal UP, the lip you look over
     (0.287, 0.930, 0.20),  # inside the lip
     (0.283, 0.870, 0.25),  # the inner wall
     (0.285, 0.820, 0.25),  # the inner wall's foot
     (0.000, 0.805, 0.00),  # inner floor, centre   — normal UP, under the brew
 ]
-
 
 MAX_RISE = 0.5   # |dr/dz| — see THE 30-DEGREE WALL above. 0.577 is the cliff; 0.5 is the margin.
 
@@ -119,15 +147,16 @@ def smoothed_wobble():
 WOB = smoothed_wobble()
 
 
-def ring(r, z, w):
-    """One ring of the lathe, wobbled and leaned."""
+def ring(r, z_pot, w):
+    """One ring of the lathe, wobbled and leaned. `z_pot` is pot space; the cell height is mapped."""
+    z = cell_z(z_pot)
     out = []
     for j in range(SEGMENTS):
         th = 2.0 * math.pi * j / SEGMENTS
         rr = r + WOBBLE * w * WOB[j]
         # the lean grows with height and is a translation, not a shear: the pot is off plumb, not
         # squashed. Squared so the base stays put.
-        t = ((z - 0.10) / 0.90) ** 2
+        t = z_pot ** 2
         out.append((rr * math.cos(th) + LEAN * t, rr * math.sin(th) + LEAN * 0.6 * t, z))
     return out
 
@@ -136,13 +165,14 @@ def lathe(profile):
     """Revolve the profile. Poles (r == 0) become fans; everything else becomes quads."""
     verts, faces = [], []
     rings = []
-    for (r, z, w) in profile:
+    for (r, z_pot, w) in profile:
+        z = cell_z(z_pot)
         if r <= 1e-6:
-            verts.append((LEAN * (((z - 0.10) / 0.90) ** 2), 0.0, z))
+            verts.append((LEAN * (z_pot ** 2), 0.0, z))
             rings.append(('pole', len(verts) - 1))
         else:
             base = len(verts)
-            verts.extend(ring(r, z, w))
+            verts.extend(ring(r, z_pot, w))
             rings.append(('ring', base))
     for i in range(len(rings) - 1):
         (ka, a), (kb, b) = rings[i], rings[i + 1]
@@ -164,7 +194,7 @@ def foot(cx, cy, k):
     r_lo = 0.082 + 0.010 * unit('foot-lo', k)
     r_hi = 0.066 + 0.008 * unit('foot-hi', k)
     spin = 0.22 * unit('foot-spin', k)
-    top = 0.118
+    top = FOOT_H * 1.04   # a hair into the pot's floor, so no seam opens between them
     for (r, z) in ((r_lo, 0.0), (r_hi, top)):
         for j in range(6):
             th = 2.0 * math.pi * j / 6 + spin
@@ -214,8 +244,8 @@ def merge(*pieces):
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
 pot = lathe(PROFILE)
-feet = [foot(0.25 * math.cos(math.pi / 4 + k * math.pi / 2),
-             0.25 * math.sin(math.pi / 4 + k * math.pi / 2), k) for k in range(4)]
+feet = [foot(0.24 * math.cos(math.pi / 4 + k * math.pi / 2),
+             0.24 * math.sin(math.pi / 4 + k * math.pi / 2), k) for k in range(FEET)]
 body = mesh_object('Body', *merge(pot, *feet))
 brew = mesh_object('Brew', *disc(BREW_R, BREW_Z, SEGMENTS))
 
@@ -238,7 +268,8 @@ for ob in (body, brew):
 #    profile alone says. Checked against the real rings, not against PROFILE's nominal radii.
 worst = (0.0, None)
 for i in range(len(PROFILE) - 1):
-    (r0, z0, w0), (r1, z1, w1) = PROFILE[i], PROFILE[i + 1]
+    (r0, zp0, w0), (r1, zp1, w1) = PROFILE[i], PROFILE[i + 1]
+    z0, z1 = cell_z(zp0), cell_z(zp1)
     if r0 <= 1e-6 or r1 <= 1e-6 or abs(z1 - z0) < 1e-6:
         continue                                  # a pole fan, or a horizontal face that MEANS to face up
     for j in range(SEGMENTS):
@@ -322,12 +353,12 @@ bpy.context.object.data.energy = 180
 
 # Standing over it — the angle a player actually brews from.
 scn.camera = add_cam('CamQuarter', (1.35, -1.7, 1.45))
-scn.render.filepath = os.path.join(OUT, NAME + '_preview.png')
+scn.render.filepath = os.path.join(PREVIEW_OUT, NAME + '_preview.png')
 bpy.ops.render.render(write_still=True)
 print('WROTE preview (3/4)')
 
 # Eye level, straight on — the silhouette test.
 scn.camera = add_cam('CamSide', (0.02, -1.9, 0.52))
-scn.render.filepath = os.path.join(OUT, NAME + '_preview_side.png')
+scn.render.filepath = os.path.join(PREVIEW_OUT, NAME + '_preview_side.png')
 bpy.ops.render.render(write_still=True)
 print('WROTE preview (side)')

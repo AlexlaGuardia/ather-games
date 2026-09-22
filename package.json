@@ -45,7 +45,8 @@
     "read:tree": "npx tsx scripts/tree-profile.mts",
     "read:leaves": "npx tsx scripts/leaf-census.mts",
     "gen:bands": "npx tsx scripts/dev-bands.mts",
-    "check:bands": "npx tsx scripts/dev-bands.mts --check"
+    "check:bands": "npx tsx scripts/dev-bands.mts --check",
+    "bake:props": "scripts/models/bake-props.sh"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",

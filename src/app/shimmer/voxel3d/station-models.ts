@@ -55,8 +55,38 @@ export interface ModelPart {
   glow?: number
 }
 
+/**
+ * One mesh NODE of a baked sculpt, wearing tiles exactly as a box does.
+ *
+ * ── ★ WHY A NODE NAME AND NOT A GEOMETRY ──────────────────────────────────────────────────────
+ * This file is PURE (no three, see the header), and a baked model module imports three to hand
+ * back a `BufferGeometry`. So the model table declares a sculpt as DATA — which bake, which node,
+ * which tiles — and `station-mesh.ts` (the host side) owns the map from name to geometry. The
+ * names are the glb's own object names, and `scripts/bake-flora-model.mts` emits one factory per
+ * mesh node, which is what makes a node the natural unit: one node = one ModelPart.
+ */
+export interface SculptPart {
+  /** The glb mesh node's name, exactly as the bake emitted it (`Body`, `Brew`). */
+  node: string
+  /** Material whose TOP tile an up-facing facet wears. Default: the station's own. */
+  top?: number
+  /** Material whose SIDE tile the rest wear. Default: the station's own. */
+  side?: number
+  /** Glow strength × the tile's alpha. Default: `EMISSIVE[side ?? the station]`, as a box's. */
+  glow?: number
+}
+
 export interface StationModel {
   parts: readonly ModelPart[]
+  /**
+   * A baked sculpt, instead of (or beside) the boxes. `model` names the entry in
+   * `station-mesh.ts` › `SCULPTS`; each part assigns one mesh node its tiles.
+   *
+   * ⚠ A sculpt's containment is NOT checked by `modelFits` — that function reads boxes and a
+   * sculpt has none, so a model that is all sculpt would pass it VACUOUSLY. The real vertices are
+   * measured in `station-sculpt.test.ts` instead. See `modelFits`'s own note.
+   */
+  sculpt?: { model: string; parts: readonly SculptPart[] }
   /** One line on what the model is, for the readout. */
   note: string
 }
@@ -78,8 +108,16 @@ export const STATION_MODELS: Readonly<Record<number, StationModel>> = {
 
 export const modelOf = (material: number): StationModel => STATION_MODELS[material] ?? CUBE
 
-/** Is every box of the model inside the unit cell? The one invariant the renderer relies on. */
-export function modelFits(m: StationModel, eps = 1e-6): { ok: boolean; bad: number[] } {
+/**
+ * Is every BOX of the model inside the unit cell? The one invariant the renderer relies on.
+ *
+ * ⚠ IT READS BOXES AND NOTHING ELSE, AND `ok` ON A SCULPT MEANS "NOTHING TO CHECK". A model whose
+ * shape is entirely a baked sculpt has `parts: []`, so every loop below runs zero times and this
+ * returns `{ ok: true }` — a guard reporting on nothing, which is the failure INSTRUMENTS.md is
+ * about. `boxes` is returned so a caller can tell a real pass from an empty one, and the sculpt's
+ * own vertices are measured against the cell in `station-sculpt.test.ts`.
+ */
+export function modelFits(m: StationModel, eps = 1e-6): { ok: boolean; bad: number[]; boxes: number } {
   const bad: number[] = []
   m.parts.forEach((p, i) => {
     const [w, h, d, x, y, z] = p.box
@@ -88,7 +126,7 @@ export function modelFits(m: StationModel, eps = 1e-6): { ok: boolean; bad: numb
     if (y - h / 2 < 0 - eps || y + h / 2 > 1 + eps) { bad.push(i); return }
     if (z - d / 2 < -0.5 - eps || z + d / 2 > 0.5 + eps) { bad.push(i); return }
   })
-  return { ok: bad.length === 0, bad }
+  return { ok: bad.length === 0, bad, boxes: m.parts.length }
 }
 
 // Re-exported so a model file can name tiles without a second import path.

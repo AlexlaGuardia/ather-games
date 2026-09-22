@@ -40,11 +40,23 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
     const model = modelOf(m)
     const fit = modelFits(model)
     ok(fit.ok, `§2 ${blockDef(m)?.name}: every box inside the cell (bad parts: ${fit.bad.join(',')})`)
-    ok(model.parts.length >= 1, `§2 ${blockDef(m)?.name}: at least one box`)
-    ok(model.parts.every(p => (p.top === undefined || TILE_MATERIALS.includes(p.top)) && (p.side === undefined || TILE_MATERIALS.includes(p.side))),
+    // ★ A MODEL HAS BOXES OR A SCULPT, AND `modelFits` ONLY SEES THE FIRST. It was `parts.length
+    // >= 1` until the cauldron became a sculpt on 09-22, and that assert is what CAUGHT the
+    // switch — the alternative was `modelFits` quietly returning ok over an empty list. The
+    // sculpt's real vertices are measured against the cell in `station-sculpt.test.ts`; this line
+    // only refuses a model with no shape at all.
+    const sculptParts = model.sculpt?.parts ?? []
+    ok(model.parts.length >= 1 || sculptParts.length >= 1, `§2 ${blockDef(m)?.name}: boxes or a sculpt, never neither`)
+    ok(fit.boxes === model.parts.length, `§2 ${blockDef(m)?.name}: the fit check reports how much it actually read`)
+    const named = [...model.parts, ...sculptParts]
+    ok(named.every(p => (p.top === undefined || TILE_MATERIALS.includes(p.top)) && (p.side === undefined || TILE_MATERIALS.includes(p.side))),
       `§2 ${blockDef(m)?.name}: every named tile exists`)
   }
   ok(modelFits(CUBE).ok && modelFits({ parts: [{ box: [1, 1, 1, 0.3, 0.5, 0] }], note: '' }).ok === false, '§2 the fit check bites on a leaked box')
+  // ★ AND IT SAYS SO WHEN IT READ NOTHING. An all-sculpt model has no boxes, so `ok` is vacuous —
+  // the one thing a guard must never report as a pass without saying what it looked at.
+  ok(modelFits({ parts: [], note: '', sculpt: { model: 'x', parts: [{ node: 'A' }] } }).boxes === 0,
+    '§2 ★ the fit check reports boxes: 0 on an all-sculpt model rather than an unqualified ok')
   ok(modelOf(MAT.STONE) === CUBE, '§2 an unmodelled id is the cube, never nothing')
   const unmodelled = [...MODELLED_MATS].filter(m => !(m in STATION_MODELS))
   console.log(`   (still a cube: ${unmodelled.map(m => blockDef(m)?.name).join(', ') || 'none'})`)
