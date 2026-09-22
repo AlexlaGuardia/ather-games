@@ -4863,6 +4863,28 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     })
     // `window.__planted()` — the planted feed as the renderer last saw it, plus the crop pool's
     // demand row, so "the bed shows nothing" can be split into "no spot" / "spot, no draw".
+    /**
+     * ── ★ THE PICKING HARNESS HOOK (2026-09-22) ──────────────────────────────────────────────
+     * `/pick` is a CONSOLE command, and `WORLD_CMD` fires immediately after navigation — before a
+     * single column has loaded — so a harness that picks through the console picks nothing and
+     * then photographs a fully fruited thicket. ⚠ That reads exactly like a successful regrow,
+     * which is how the first verification of this feature "passed" while proving nothing: a no-op
+     * and a working regrow are indistinguishable from the outside. So the ring pick is reachable
+     * from JS, to be called AFTER the world has settled, and it reports the count rather than a
+     * sentence — a number a test can assert on instead of a string it has to parse.
+     */
+    w.__picked = () => !owner.current ? 'owner only' : {
+      /** How many bushes are currently recorded as picked (the self-pruning store's size). */
+      count: picked.current.size,
+      /** Pick every loaded bush, optionally backdated, exactly as `/pick` does. Returns the count. */
+      pickRing: (hoursAgo = 0) => {
+        const before = picked.current.size
+        cmdOut.current?.pick(null, null, null, hoursAgo)
+        return picked.current.size - before
+      },
+      /** Forget every pick — so one page can be photographed in both states. */
+      clear: () => { const n = picked.current.size; picked.current.clear(); floraDirty.current = true; floraForce.current = true; return n },
+    }
     w.__planted = () => !owner.current ? 'owner only' : {
       sig: plantedSig.current, spots: plantedSpots(beds.current),
       demand: { crop: floraDemand.crop, herb: floraDemand.herb },
