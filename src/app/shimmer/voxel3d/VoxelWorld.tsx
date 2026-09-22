@@ -432,7 +432,7 @@ import { loadSeen, saveSeen, see, CELL, type Seen } from './discovery'
 import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
-import { createFloraRenderer, floraDemand, leanLive } from './flora-mesh'
+import { createFloraRenderer, floraDemand, floraSync, leanLive } from './flora-mesh'
 import { scanShelves } from './shelf-scan'
 import { createStationRenderer } from './station-mesh'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -6322,7 +6322,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // gravity/terminal to 0 to hold a shower mid-air for a shot).
     w.__leafFall = () => ({ n: leafFall.current.leaves.length, tune: LEAF_FALL })
     w.__flora = () => ({
-      demand: floraDemand,
+      // ⚠ THE COLUMN COUNT RIDES INSIDE `demand`, NOT BESIDE IT, AND THAT IS THE POINT. A sibling
+      // field is one a reader can leave out of the dump; these cannot be, because
+      // `JSON.stringify(__flora().demand)` — the thing people actually paste — carries them.
+      // See `floraSync`: a 0 measured over 84 columns is not a finding, and used to look like one.
+      demand: { ...floraDemand, _syncedColumns: floraSync.cols, _syncSerial: floraSync.serial },
       lean: leanLive,
       reedLean: (v: number) => flora.setReedLean(v),
       // Force the next beat to sync the pools even while columns are still streaming in (harness).

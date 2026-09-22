@@ -379,6 +379,22 @@ function noteOverflow(pool: string, wanted: number, cap: number): void {
 
 /** What each pool wanted at the last sync, whether or not it fit. Readable by a test or a HUD. */
 export const floraDemand: Record<string, { wanted: number; cap: number }> = {}
+
+/**
+ * ── ★★ THE DENOMINATOR, BECAUSE A 0 WITHOUT ONE IS NOT A READING (2026-09-22) ─────────────────
+ * `floraDemand` reports whatever the LAST sync wrote, and it carried no indication of whether that
+ * sync had its subject loaded. **A pool at 0 and a pool nobody has filled yet are byte-identical**,
+ * and on 2026-09-22 that cost a peer window most of an afternoon: `fruit/herb/crop 0` was reported
+ * as a prod defect, with the generator proved to be writing the voxels (250/250 cells). It was not
+ * a defect. Measured at the SAME spot: `meadow · 84 col` → fruit 0; `meadow · 108 col` → fruit 276.
+ *
+ * ⚠ THE READOUT WAS THE BUG, NOT THE READER. Nothing about `{"fruit":{"wanted":0,"cap":3000}}`
+ * says "ask me again when the ring has settled", so the honest move is to make the number
+ * impossible to quote without its denominator — `__flora()` spreads these INTO the demand object
+ * it hands out, so a `JSON.stringify(demand)` dump carries them whether the reader thought to look
+ * or not. (Suggested in exactly this form by the window that hit it.)
+ */
+export const floraSync = { cols: 0, serial: 0 }
 /** How many lean-map texels carried a river lean at the last sync — `__flora().lean` reads it. */
 export let leanLive = 0
 
@@ -2266,6 +2282,10 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       demandC = 0; demandH = 0
       writePlanted()
       wC += demandC; wH += demandH
+      // ★ AND REPORT WHAT THE DEMAND WAS MEASURED OVER. See `floraSync`: the same numbers mean
+      // different things over 84 columns and over 108, and without this they read identically.
+      floraSync.cols = cols.length
+      floraSync.serial++
       // ★ REPORT DEMAND, NOT JUST WHAT FIT. A pool at 100% of cap and a pool at 199% of cap draw
       // exactly the same picture; only these numbers tell them apart.
       for (const [pool, wanted, cap] of [
