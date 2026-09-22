@@ -503,6 +503,8 @@ export interface FloraPart {
  * is a number, not a memory.
  */
 export const CARD_LEAN = 0
+/** How dark the selection border paints an edge texel: a fraction of the texel's own colour (see `outlineMaterial`). */
+export const OUTLINE_SHADE = 0.22
 /** The wake: a flat quad from the root running +z for `len`, `width` wide, uv.y along the run so
  *  row 0 of `wakePixels` (the apex) sits under the stalk. Faces +Y; the wake material is
  *  DoubleSide with no lighting, so the winding only has to agree with the flat pad's. */
@@ -1072,9 +1074,18 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
    * double on the other. Reading it off the texture also means a re-paint at a new resolution keeps
    * a one-texel border by construction. Pixel art with NearestFilter: one texel is the convention.
    */
+  // ── ★ THE BORDER IS A DARK SHADE OF THE TEXEL, NOT BLACK (2026-09-22) ─────────────────────
+  // Alex, from inside a stand of tall grass on prod: a solid black plant under the crosshair. On a
+  // blade tile the blades are ONE texel wide, so every opaque texel touches a transparent one and
+  // the "one-texel border" is the entire sprite — a black rim around a 1px line is a black line.
+  // The rule stays (edge texels, interior discarded); what an edge texel is painted changes: its
+  // own colour at `OUTLINE_SHADE`, so a wide leaf keeps a dark rim and a thin blade reads as a
+  // shaded stand of grass rather than a silhouette. Pixel art's own convention (a selout is a
+  // darker shade of the fill, not #000). Unlit (MeshBasic), so at night it can only ever be as dark
+  // as the shade of the unlit texel: dark enough by day, near-invisible by moonlight, never a glow.
   const outlineMaterial = (map: THREE.Texture, amp: number, tiles = 1, reed = false): THREE.MeshBasicMaterial => {
     const m = new THREE.MeshBasicMaterial({
-      map, alphaTest: 0.4, side: THREE.DoubleSide, color: 0x000000,
+      map, alphaTest: 0.4, side: THREE.DoubleSide, color: 0xffffff,
       // Same geometry at the same matrix as the plant means identical depth: without an offset the
       // two z-fight and the border strobes. depthWrite off so the border never occludes the plant.
       depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
@@ -1097,7 +1108,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
           '    float nU = texture2D(map, vMapUv + vec2(0.0,  aT)).a;',
           // An interior texel is surrounded by opaque neighbours: drop it and let the plant show.
           '    if (min(min(nL, nR), min(nD, nU)) >= 0.4) discard;',
-          '    diffuseColor.rgb = vec3(0.0);',
+          '    diffuseColor.rgb *= ' + OUTLINE_SHADE.toFixed(3) + ';',
           '  }',
           '}',
         ].join('\n'))
