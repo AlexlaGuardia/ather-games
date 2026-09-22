@@ -448,7 +448,12 @@ const FRUIT_TINT: Readonly<Record<number, number>> = {
  */
 const FRUIT_GLOW: Readonly<Record<number, { emissive: number; shimmer: number }>> = {
   [MAT.SUNFRUIT_BUSH]: { emissive: 0.16, shimmer: 0 },
-  [MAT.MOONBERRY_BUSH]: { emissive: 0.42, shimmer: 0.45 },
+  // ⚠ 0.42 → 0.30 (Alex, 2026-09-22, looking at it on his own screen at 22:00). At 0.42 the
+  // berries read MILKY — nearer white than `FRUIT_TINT`'s cool blue — because the emissive lands
+  // on a surface the moon has ALREADY lit. My own night check had been against a headless render
+  // far darker than the real game (swiftshader under-lights badly), so 0.42 was tuned against the
+  // wrong reference: the instrument, not the number, was the mistake.
+  [MAT.MOONBERRY_BUSH]: { emissive: 0.30, shimmer: 0.45 },
 }
 
 const HERB_TIP: Readonly<Record<number, number>> = {
