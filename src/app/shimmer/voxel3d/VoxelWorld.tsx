@@ -6328,6 +6328,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // Force the next beat to sync the pools even while columns are still streaming in (harness).
       sync: () => { floraDirty.current = true; floraForce.current = true },
       pools: flora.group.children.map((o, i) => [i, (o as THREE.InstancedMesh).count, o.visible]),
+      // The group itself, for a harness that must read a pool's material or geometry (09-22).
+      group: flora.group,
     })
     w.__renderlight = () => {
       const r = lightRing.current
