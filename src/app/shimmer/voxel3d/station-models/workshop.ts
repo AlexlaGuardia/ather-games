@@ -4,21 +4,45 @@ import type { StationModel } from '../station-models'
 import { MAT } from '../../voxel/depth'
 
 export const MODELS: Readonly<Record<number, StationModel>> = {
-  // The Bench — a real workbench, not Minecraft's cube: thick top, apron, four legs, tools left on
-  // top. Built in the same box-table style as `piece-mesh.ts`'s `case 'table'`, just heavier and
-  // carrying a mallet head + a chisel so it reads as WORKED, not as furniture.
+  // ── THE BENCH (MAT.CRAFT_TABLE) — the box-frame lane's first sculpt ─────────────────────────
+  // ★ WAS EIGHT BOXES UNTIL 2026-09-22, AND ITS LEGS WERE STANDING IN THE WRONG STRIPE. A side
+  // face samples tile u from LOCAL position and local = cell + 0.5, so the vertical stripe a tile
+  // paints at u < 1/8 lands at cell x < -0.375 and nowhere else. `paintCraftTable`'s SIDE tile is a
+  // rail band across the top quarter, CORNER LEGS at the outer eighth (`x < b || x >= size - b`,
+  // b = size/8) and a recessed panel between them. The box model's legs sat at cx ±0.30, spanning
+  // cell 0.25..0.35 — local 0.75..0.85, which is PANEL: the legs wore the recessed shading and the
+  // dark leg stripes the tile paints landed on the slab and the apron instead. The sculpt's legs
+  // are at ±0.4325 (local 0.885..0.980), so a leg wears the leg. Same family as the cauldron's
+  // hearth course — the picture was already right and the geometry was not standing in it.
+  //
+  // What else the sculpt buys over the boxes: every upright corner is chamfered (a vertical
+  // chamfer's normal is HORIZONTAL, so it cannot flip past the 60-degree cone — it is free), the
+  // legs are shaved to 0.82 at the foot, the slab's top edge is rolled, two stretchers brace the
+  // legs where a bench is braced, and each stick sits a few thousandths off square so two benches
+  // on a plot are siblings rather than one bench drawn twice.
+  // `scripts/models/frame.py`, `npm run bake:props`. 352 tris.
   [MAT.CRAFT_TABLE]: {
-    parts: [
-      { box: [0.86, 0.14, 0.86, 0, 0.87, 0] },      // the top slab
-      { box: [0.70, 0.10, 0.70, 0, 0.75, 0] },       // the apron, flush under the top
-      { box: [0.10, 0.70, 0.10, -0.30, 0.35, -0.30] }, // four square legs, flush under the apron
-      { box: [0.10, 0.70, 0.10, 0.30, 0.35, -0.30] },
-      { box: [0.10, 0.70, 0.10, -0.30, 0.35, 0.30] },
-      { box: [0.10, 0.70, 0.10, 0.30, 0.35, 0.30] },
-      { box: [0.16, 0.05, 0.10, 0.20, 0.965, -0.15] }, // mallet head, left on the bench
-      { box: [0.24, 0.025, 0.045, -0.18, 0.9525, 0.18] }, // chisel, laid flat
-    ],
-    note: 'thick-topped workbench with an apron, four legs, and a mallet + chisel left on top',
+    note: 'a made workbench: chamfered slab on shaved corner legs, braced, a mallet and chisel left on top',
+    parts: [],
+    sculpt: {
+      model: 'bench',
+      // ★ EVERY NODE NAMES `top: MAT.CRAFT_TABLE`, WHICH IS THE DEFAULT, AND SAYING IT IS THE
+      // POINT. `station-sculpt.test.ts` §2 refuses a mixed part that leaves its top tile unnamed,
+      // because the default is the STATION'S OWN and a cauldron's own top is dark water — a pot
+      // that defaults gets water painted across its shoulder. Here the default is genuinely right:
+      // the bench's top tile is the worked plank surface with the etched work-square, which is
+      // what a bench's up-faces should be, including the slab's rolled edge (it reads as the top
+      // turning over) and the leg tops the slab hides. A frame is made of sticks and every stick
+      // has a cap, so these nodes run 43-64% up-facing — high enough that the guard is right to
+      // ask, and the answer is written here rather than left to a default that means something
+      // else three blocks away. The tools wear the same wood, which is also the canon-safe answer
+      // (`world/ather.md`: no metal anywhere).
+      parts: [
+        { node: 'Top', top: MAT.CRAFT_TABLE },
+        { node: 'Frame', top: MAT.CRAFT_TABLE },
+        { node: 'Tools', top: MAT.CRAFT_TABLE },
+      ],
+    },
   },
 
   // The Sawmill — the stonecutter's shape, not the cube: a low plinth carrying a thin vertical

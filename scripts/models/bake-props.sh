@@ -38,8 +38,17 @@ for V in cauldron mortar bowl still; do
   NAME=$V OUT=$OUT "$BLENDER" -b -P scripts/models/vessel.py | grep -E 'bounds|worst wall|TRIS|WROTE'
 done
 
+# ── THE BOX-FRAMES — a second idiom, a second script, and deliberately not entries in `vessel.py`.
+# A vessel is a solid of revolution whose whole recipe is one profile; a frame is slabs, posts and
+# rails. `frame.py` carries the stick primitive and its own guard (the cone budget counts facets
+# that flip to the TOP tile, where the lathe's counts wall rise).
+echo "── the box-frames: bench (the workshop family's first sculpt)"
+for V in bench; do
+  NAME=$V OUT=$OUT "$BLENDER" -b -P scripts/models/frame.py | grep -E 'bounds|cone|TRIS|WROTE'
+done
+
 echo "── baking to a synchronous module"
-for V in cauldron mortar bowl still; do
+for V in cauldron mortar bowl still bench; do
   npx tsx scripts/bake-flora-model.mts $OUT/$V.glb \
     --out src/app/shimmer/voxel3d/models/$V.ts --name $V --via "npm run bake:props"
 done
