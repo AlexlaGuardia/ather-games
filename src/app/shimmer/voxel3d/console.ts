@@ -66,6 +66,7 @@ export interface ConsoleCtx {
   plant: (crop: string, x: number, y: number, z: number) => string
   /** Water the bed at world coordinates (or every bed, with no coordinates), no jug spent; `hours` = how far into the day it already is. Owner-gated dev instrument. */
   water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string
+  pick: (x: number | null, y: number | null, z: number | null, hoursAgo: number) => string
   /** Open the station block at world coordinates, as a right-click would (owner). */
   station: (x: number, y: number, z: number) => string
   /** The card-vs-model bush A/B, three blocks ahead (owner). `clear` takes it down. */
@@ -378,6 +379,27 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
       return c.water(null, null, null, h, kind)
     },
     suggest: (i) => i === 0 ? ['~', '0', '12', '23'] : [] })),
+  // ★ /pick (2026-09-22, the picking pass) — take a bush's fruit without walking to it, and
+  // `[hours-ago]` BACKDATES the pick so the regrow can be judged without waiting a day. That
+  // backdating is the whole reason this door exists rather than just right-clicking: the feature's
+  // interesting states are "picked bare" and "fruited again", and one of them is 24h away.
+  // Bare = every fruit bush in the loaded ring, which is what makes a thicket legible in one shot.
+  { name: 'pick', usage: 'pick [x y z] [hours-ago]  (~ = here; bare = every bush in the ring)',
+    help: 'pick a fruit bush (or all of them), nothing walked — to look at a bare bush and its regrow', owner: true,
+    run: (a, c) => {
+      const here = c.pos()
+      if (a.length >= 3) {
+        const x = Math.floor(parseCoord(a[0], here.x)), y = Math.floor(parseCoord(a[1], here.y)), z = Math.floor(parseCoord(a[2], here.z))
+        if (![x, y, z].every(Number.isFinite)) return 'pick where? three numbers (~ allowed), then optional hours-ago'
+        const h = a[3] === undefined ? 0 : Number(a[3])
+        if (!Number.isFinite(h) || h < 0) return `not hours: ${a[3]}`
+        return c.pick(x, y, z, h)
+      }
+      const h = a[0] === undefined ? 0 : Number(a[0])
+      if (!Number.isFinite(h) || h < 0) return `not hours: ${a[0]}`
+      return c.pick(null, null, null, h)
+    },
+    suggest: (i) => i === 0 ? ['~', '0', '12', '24'] : [] },
   { name: 'tp', usage: 'tp <x> <z>  (~ = here, ~-20 = 20 west)', help: 'teleport to ground level', owner: true,
     run: (a, c) => {
       if (!a[0] || !a[1]) return 'tp needs two coordinates'

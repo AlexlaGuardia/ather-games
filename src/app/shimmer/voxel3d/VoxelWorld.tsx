@@ -1525,7 +1525,7 @@ export default function VoxelWorld() {
   }, [])
   /** World fills this with the verbs only it can perform (teleport needs the walker + the clock
    *  of loaded columns). Null until the world mounts; commands degrade to a message, never throw. */
-  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string; bushtest: (arg?: string) => string } | null>(null)
+  const worldCmd = useRef<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; pick: (x: number | null, y: number | null, z: number | null, hoursAgo: number) => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string; bushtest: (arg?: string) => string } | null>(null)
   const consoleCtx = useMemo<ConsoleCtx>(() => {
     // Shared by /rune and /reborn: the hand readout. Hoisted 2026-09-03 so a rebirth reports
     // through the SAME resolve as the hand it just replaced — two readouts would be two claims.
@@ -1624,6 +1624,7 @@ export default function VoxelWorld() {
     grow: (progress) => worldCmd.current ? worldCmd.current.grow(progress) : 'the world is still waking',
     plant: (crop, x, y, z) => worldCmd.current ? worldCmd.current.plant(crop, x, y, z) : 'the world is still waking',
     water: (x, y, z, hours, kind) => worldCmd.current ? worldCmd.current.water(x, y, z, hours, kind) : 'the world is still waking',
+    pick: (x, y, z, hoursAgo) => worldCmd.current ? worldCmd.current.pick(x, y, z, hoursAgo) : 'the world is still waking',
     station: (x, y, z) => { if (!worldCmd.current) return 'the world is still waking'; const r = worldCmd.current.station(x, y, z); if (r.startsWith('opened')) setConsoleOpen(false); return r },
     bushtest: (arg) => worldCmd.current ? worldCmd.current.bushtest(arg) : 'the world is still waking',
     party: partyOps,
@@ -3181,7 +3182,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   vitals: React.RefObject<Vitals>
   /** The cast pool. `regen` is per second, derived from the Mana skill. */
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
-  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string; bushtest: (arg?: string) => string } | null>
+  cmdOut: React.RefObject<{ hollow: (form?: string, n?: number) => string; tp: (x: number, z: number) => string; pos: () => { x: number; y: number; z: number }; space: (to?: string) => string; waymark: (arg?: string) => string; hostiles: () => string; put: (id: string, x: number, y: number, z: number, rot?: number) => string; grow: (progress: number) => string; plant: (crop: string, x: number, y: number, z: number) => string; water: (x: number | null, y: number | null, z: number | null, hours: number, kind: 'water' | 'feed') => string; pick: (x: number | null, y: number | null, z: number | null, hoursAgo: number) => string; craftPool: () => Slots | null; station: (x: number, y: number, z: number) => string; bushtest: (arg?: string) => string } | null>
 }) {
   const { camera, size } = useThree()
   const group = useRef<THREE.Group>(null)
@@ -3803,6 +3804,40 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         if (!l || !r) return 'the ground ahead is not loaded yet'
         flora.showcase([{ ...l, kind: 'card', mat: which }, { ...r, kind: 'model', mat: which }])
         return `card bush on your LEFT, model bush on your RIGHT (${which === MAT.SUNFRUIT_BUSH ? 'sunfruit' : 'moonberry'}) — walk round them · /bushtest clear`
+      },
+      // ── ★ /pick (2026-09-22) — the picking pass's own door, and `hours-ago` is the point ─────
+      // The feature's two interesting states are "picked bare" and "fruited again", and one of
+      // them is a day away. Backdating the pick is the only way to look at the second without
+      // waiting for it, which is the same reason `/water` takes `hours-in`.
+      // ⚠ GOES THROUGH `pickBush`, NOT STRAIGHT INTO THE MAP, so the console cannot drift from
+      // what a right-click does — the refusal, the key and the yield are all the shipped ones.
+      pick: (x, y, z, hoursAgo) => {
+        const at = Date.now() - hoursAgo * 3_600_000
+        const refresh = () => { floraDirty.current = true; floraForce.current = true }
+        if (x !== null && y !== null && z !== null) {
+          const mat = voxel(x, y, z)
+          if (!isFruitBush(mat)) return `no fruit bush at ${x} ${y} ${z}`
+          const got = pickBush(picked.current, mat, space.current, x, y, z, at)
+          refresh()
+          return got
+            ? `picked the bush at ${x} ${y} ${z}${hoursAgo ? ` — ${hoursAgo}h ago` : ''}`
+            : pickRefusalLine(pickBlocker(picked.current, mat, space.current, x, y, z, at), picked.current, space.current, x, y, z, at)
+        }
+        // Every bush in the loaded ring. Bushes are GENERATED, never edits, so this walks the
+        // loaded columns and asks the same probe the renderer does rather than reading `edits`.
+        let n = 0
+        for (const ck of cols.current.keys()) {
+          const [gx, gz] = ck.split(',').map(Number)
+          if (!Number.isFinite(gx) || !Number.isFinite(gz)) continue
+          for (let lx = 0; lx < SECTION; lx++) for (let lz = 0; lz < SECTION; lz++) {
+            const wx = gx * SECTION + lx, wz = gz * SECTION + lz
+            const spot = plantProbe(wx, wz)
+            if (!spot || !isFruitBush(spot.mat)) continue
+            if (pickBush(picked.current, spot.mat, space.current, wx, Math.ceil(spot.y) + 1, wz, at)) n++
+          }
+        }
+        refresh()
+        return n ? `picked ${n} bush${n === 1 ? '' : 'es'} in the ring${hoursAgo ? ` — ${hoursAgo}h ago` : ''}` : 'no fruit bushes loaded'
       },
       water: (x, y, z, hours, kind) => {
         const now = Date.now(), at = now - hours * 3_600_000
