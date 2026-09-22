@@ -131,17 +131,14 @@ export const floraPuffGeo = (): THREE.BufferGeometry => {
  * Not a FLORA kind and not generated: a SHOWCASE geometry the owner's `/bushtest` stands beside a
  * card bush so Alex can walk round both. It is what a low-poly sculpted bush is — a cluster of
  * flattened, jittered icospheres (~700 tris, the size a Meshy/Blender bush would be after decimation)
- * with VERTEX COLOURS (dark at the foot, light at the crown, a hair of variation per ball) and the
- * fruit as small balls sitting on the surface, in one buffer. Drawn faceted (`flatShading`) through
- * the same Lambert + toon stack as a rock, so the comparison is about SHAPE, not shading. If the
- * look wins, a real `.glb` slots into the same path (geometry + vertex colours + this material);
- * if it loses, this and the command go.
+ * tinted per instance like a puff (leaves in the bush's leaf colour, the fruit in its fruit colour,
+ * two buffers), drawn faceted (`flatShading`) through the same Lambert + toon stack as a rock, so
+ * the comparison is about SHAPE, not shading. If the look wins, a real `.glb` slots into the same
+ * path (a geometry + this material); if it loses, this and the command go.
  */
-export function floraModelBushGeo(leaf: number, fruit: number, seed = 1): THREE.BufferGeometry {
+export function floraModelBushGeo(seed = 1): { leaves: THREE.BufferGeometry; fruit: THREE.BufferGeometry } {
   const rnd = (() => { let t = seed * 9301 + 49297; return () => { t = (t * 9301 + 49297) % 233280; return t / 233280 } })()
-  const pos: number[] = [], nrm: number[] = [], col: number[] = []
-  const lr = ((leaf >> 16) & 255) / 255, lg = ((leaf >> 8) & 255) / 255, lb = (leaf & 255) / 255
-  const fr = ((fruit >> 16) & 255) / 255, fg = ((fruit >> 8) & 255) / 255, fb = (fruit & 255) / 255
+  const pos: number[] = [], nrm: number[] = []
   // Seven balls: one big at the heart, six around it, each squashed on Y and jittered per vertex.
   const balls: [number, number, number, number][] = [[0, 0.42, 0, 0.44]]
   for (let i = 0; i < 6; i++) {
@@ -149,45 +146,41 @@ export function floraModelBushGeo(leaf: number, fruit: number, seed = 1): THREE.
     const d = 0.26 + rnd() * 0.14
     balls.push([Math.cos(a) * d, 0.28 + rnd() * 0.22, Math.sin(a) * d, 0.24 + rnd() * 0.12])
   }
+  // ⚠ JITTER BY THE VERTEX'S OWN POSITION, NOT PER INDEX: the icosphere is non-indexed, so a
+  // corner shared by five faces is five vertices — five independent rolls tear the mesh open
+  // (the first shot was a shredded ball). A hash of (x,y,z) moves all five copies together.
+  const h = (a: number, b: number, c: number, k: number) => { const v = Math.sin(a * 127.1 + b * 311.7 + c * 74.7 + k * 19.3 + seed) * 43758.5453; return v - Math.floor(v) - 0.5 }
   for (const [x, y, z, r] of balls) {
     const g = new THREE.IcosahedronGeometry(r, 1)
     const p = g.getAttribute('position') as THREE.BufferAttribute
-    const shade = 0.9 + rnd() * 0.2                      // a hair of variation per ball
-    // ⚠ JITTER BY THE VERTEX'S OWN POSITION, NOT PER INDEX: the icosphere is non-indexed, so a
-    // corner shared by five faces is five vertices — five independent rolls tear the mesh open
-    // (the first shot was a shredded ball). A hash of (x,y,z) moves all five copies together.
-    const h = (a: number, b: number, c: number, k: number) => { const v = Math.sin(a * 127.1 + b * 311.7 + c * 74.7 + k * 19.3 + seed) * 43758.5453; return v - Math.floor(v) - 0.5 }
     for (let i = 0; i < p.count; i++) {
       const ox = p.getX(i), oy = p.getY(i), oz = p.getZ(i)
-      const jx = h(ox, oy, oz, 1) * 0.07, jy = h(ox, oy, oz, 2) * 0.05, jz = h(ox, oy, oz, 3) * 0.07
-      const vx = ox + jx + x, vy = oy * 0.78 + jy + y, vz = oz + jz + z
-      pos.push(vx, vy, vz)
-      // Foot dark, crown light: the shading a sculpted bush carries in its paint.
-      const k = shade * (0.62 + Math.max(0, Math.min(1, vy / 0.95)) * 0.55)
-      col.push(lr * k, lg * k, lb * k)
+      pos.push(ox + h(ox, oy, oz, 1) * 0.07 + x, oy * 0.78 + h(ox, oy, oz, 2) * 0.05 + y, oz + h(ox, oy, oz, 3) * 0.07 + z)
     }
-    g.computeVertexNormals()
-    nrm.push(...(g.getAttribute('normal').array as Float32Array))
     g.dispose()
   }
-  // The fruit: small balls on the crown's surface, flat colour.
+  const leaves = new THREE.BufferGeometry()
+  leaves.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  leaves.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length), 3))
+  // Flat facets: per-face normals on the non-indexed buffer — the low-poly look itself.
+  leaves.computeVertexNormals()
+  // The fruit: small balls on the crown's surface. Its own buffer so it takes its own tint
+  // (`instanceColor`, the puff's pattern) — a vertex-colour attribute did not survive the stack.
+  const fp: number[] = []
   for (let i = 0; i < 9; i++) {
     const a = rnd() * Math.PI * 2, e = 0.25 + rnd() * 0.9
     const bx = Math.cos(a) * Math.cos(e) * 0.5, by = 0.42 + Math.sin(e) * 0.36, bz = Math.sin(a) * Math.cos(e) * 0.5
     const g = new THREE.IcosahedronGeometry(0.055 + rnd() * 0.02, 0)
     g.translate(bx, by, bz)
-    const p = g.getAttribute('position') as THREE.BufferAttribute
-    for (let k = 0; k < p.count; k++) { pos.push(p.getX(k), p.getY(k), p.getZ(k)); col.push(fr, fg, fb) }
-    nrm.push(...(g.getAttribute('normal').array as Float32Array))
+    fp.push(...(g.getAttribute('position').array as Float32Array))
     g.dispose()
   }
-  const out = new THREE.BufferGeometry()
-  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3))
-  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
-  // Flat facets come from recomputing normals per (non-indexed) face — the low-poly look itself.
-  out.computeVertexNormals()
-  return out
+  const fruit = new THREE.BufferGeometry()
+  fruit.setAttribute('position', new THREE.Float32BufferAttribute(fp, 3))
+  fruit.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(fp.length), 3))
+  fruit.computeVertexNormals()
+  void nrm
+  return { leaves, fruit }
 }
 
 /**
@@ -1527,11 +1520,15 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const showFruit = new THREE.InstancedMesh(showFruitGeo, fruitMat, SHOW_CAP)
   showCard.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
   showFruit.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
-  const showModelMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, vertexColors: true, flatShading: true })
+  const showModelMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
   showModelMat.onBeforeCompile = (shader) => injectStack(shader, false)
-  const showModels = new Map<number, THREE.InstancedMesh>()   // one mesh per fruit material (its own colours are baked)
-  showCard.count = 0; showFruit.count = 0
-  group.add(showCard, showFruit)
+  const modelGeo = floraModelBushGeo(7)
+  const showLeaves = new THREE.InstancedMesh(modelGeo.leaves, showModelMat, SHOW_CAP)
+  const showBerries = new THREE.InstancedMesh(modelGeo.fruit, showModelMat, SHOW_CAP)
+  showLeaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
+  showBerries.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
+  showCard.count = 0; showFruit.count = 0; showLeaves.count = 0; showBerries.count = 0
+  group.add(showCard, showFruit, showLeaves, showBerries)
 
   // ── ★★ THE SELECTION OUTLINE'S OWN MESHES — ONE INSTANCE EACH, COUNT 0 UNTIL AIMED AT ────────
   // One InstancedMesh per (kind, part), capacity 1. ⚠ INSTANCED ON PURPOSE, not a plain Mesh: the
@@ -1728,8 +1725,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   return {
     group,
     showcase(entries) {
-      let nc = 0
-      const perModel = new Map<number, THREE.Matrix4[]>()
+      let nc = 0, nm = 0
       for (const e of entries) {
         mtx.compose(off.set(e.x + 0.5, e.y, e.z + 0.5), quat.setFromAxisAngle(Y_UP, (e.x * 7 + e.z * 3) % 6), scl.set(1, 1, 1))
         if (e.kind === 'card') {
@@ -1741,25 +1737,17 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
           showFruitTile.setX(nc, FRUIT_COL.get(e.mat) ?? 0)
           nc++
         } else {
-          if (!perModel.has(e.mat)) perModel.set(e.mat, [])
-          perModel.get(e.mat)!.push(mtx.clone())
+          if (nm >= SHOW_CAP) continue
+          showLeaves.setMatrixAt(nm, mtx); showBerries.setMatrixAt(nm, mtx)
+          // The leaf colour as the FINAL colour (scatter arithmetic — no map to multiply into).
+          showLeaves.setColorAt(nm, tint.set(MATERIAL_COLOR[e.mat] ?? 0x569e42))
+          showBerries.setColorAt(nm, tint.set(FRUIT_TINT[e.mat] ?? 0xffffff))
+          nm++
         }
       }
-      showCard.count = nc; showFruit.count = nc
-      showCard.instanceMatrix.needsUpdate = true; showFruit.instanceMatrix.needsUpdate = true
-      if (showCard.instanceColor) showCard.instanceColor.needsUpdate = true
-      if (showFruit.instanceColor) showFruit.instanceColor.needsUpdate = true
+      showCard.count = nc; showFruit.count = nc; showLeaves.count = nm; showBerries.count = nm
+      for (const m of [showCard, showFruit, showLeaves, showBerries]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true }
       showFruitTile.needsUpdate = true
-      for (const [mat, m] of showModels) if (!perModel.has(mat)) m.count = 0
-      for (const [mat, list] of perModel) {
-        let m = showModels.get(mat)
-        if (!m) {
-          m = new THREE.InstancedMesh(floraModelBushGeo(MATERIAL_COLOR[mat] ?? 0x569e42, FRUIT_TINT[mat] ?? 0xffffff, mat), showModelMat, SHOW_CAP)
-          showModels.set(mat, m); group.add(m)
-        }
-        list.slice(0, SHOW_CAP).forEach((mm, i) => m!.setMatrixAt(i, mm))
-        m.count = Math.min(list.length, SHOW_CAP); m.instanceMatrix.needsUpdate = true
-      }
     },
     sync(cols, seed, probe, river = true, shelfScan) {
       // The lean map first: the same columns, the same seed, one pass — see `createLeanMap`.
