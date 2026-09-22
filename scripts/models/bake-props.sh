@@ -18,11 +18,20 @@
 # every run and an untracked file under `public/` fails `coord build` for every lane on this tree
 # — it blocked hub's deploy the first time this script's python ran. Commit the glb; never the png.
 #
+# ── ★ WHY `models/stations/` AND NOT `models/props/` ──────────────────────────────────────────
+# `public/models/props/` belongs to a DIFFERENT, live pipeline: `world/prop-models.tsx` fetches
+# those glbs at runtime with `useGLTF`, by id, for play3d's StructureMarkers — Meshy-produced,
+# Draco-compressed, keyed off `PROP_MODELS`. Seven of the eight July files there are wired in
+# (only `vault_door.glb` is a genuine orphan). Dropping a bake-to-module glb into that folder
+# invites someone to add a `PROP_MODELS` row for it and load an untextured 900-triangle lathe
+# into a scene that expects a finished Meshy asset. Two pipelines, two namespaces; this one is a
+# sibling of `models/flora/`, which is the other bake-to-module lane.
+#
 #   ./scripts/models/bake-props.sh          # the glb, the previews, and the TS module
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 BLENDER=${BLENDER:-/opt/blender/blender}
-OUT=public/models/props
+OUT=public/models/stations
 
 echo "── cauldron: a thrown clay pot, wide at the hearth band, mass low"
 NAME=cauldron SEED=3 SEGMENTS=24 WOBBLE=0.016 LEAN=0.008 FEET=0 OUT=$OUT \
@@ -30,4 +39,4 @@ NAME=cauldron SEED=3 SEGMENTS=24 WOBBLE=0.016 LEAN=0.008 FEET=0 OUT=$OUT \
 
 echo "── baking to a synchronous module"
 npx tsx scripts/bake-flora-model.mts $OUT/cauldron.glb \
-  --out src/app/shimmer/voxel3d/models/cauldron.ts --name cauldron
+  --out src/app/shimmer/voxel3d/models/cauldron.ts --name cauldron --via "npm run bake:props"
