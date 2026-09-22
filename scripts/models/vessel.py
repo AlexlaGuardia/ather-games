@@ -236,18 +236,61 @@ def pestle():
     """The mortar's pestle: a leaning shaft with a rounded striking head. Not a solid of
     revolution, so it is built and TILTED — canon's hand tool, resting against the rim."""
     verts, faces = [], []
-    seg, shaft_r, head_r = 8, 0.048, 0.072
-    lo, hi = 0.02, 0.62
-    tilt, ax = 0.30, 0.80                              # radians off plumb, and which way it leans
-    ox, oy = 0.13, 0.09                                # where its foot sits inside the hollow
+    # ⚠ `hi` IS WHY THE FIRST CUT READ AS A POURING SPOUT. At 0.62 against a 0.60-tall mortar the
+    # whole shaft sat INSIDE the hollow and only the head cleared the rim, so the render showed a
+    # nub on the lip and nothing else. A pestle is read by the length standing OUT of the bowl —
+    # the box model ran its head to 0.97 for the same reason. Tilt came down with it, because the
+    # same lean over a taller shaft walks the head toward the cell wall.
+    seg, shaft_r, head_r = 8, 0.046, 0.070
+    lo, hi = 0.26, 0.955
+    tilt, ax = 0.21, 0.80                              # radians off plumb, and which way it leans
+    ox, oy = 0.10, 0.07                                # where its foot sits inside the hollow
     def at(z, r):
         dx = math.sin(tilt) * z * math.cos(ax)
         dy = math.sin(tilt) * z * math.sin(ax)
         return [(ox + dx + r * math.cos(2 * math.pi * j / seg),
                  oy + dy + r * math.sin(2 * math.pi * j / seg), z) for j in range(seg)]
-    rows = [(lo, shaft_r * 0.9), (0.30, shaft_r), (hi - 0.10, shaft_r),
-            (hi - 0.045, head_r), (hi, head_r * 0.72)]
+    rows = [(lo, shaft_r * 0.85), (lo + 0.16, shaft_r), (hi - 0.13, shaft_r),
+            (hi - 0.060, head_r), (hi, head_r * 0.70)]
     for (z, r) in rows: verts.extend(at(z, r))
+    for i in range(len(rows) - 1):
+        a, b = i * seg, (i + 1) * seg
+        for j in range(seg):
+            j2 = (j + 1) % seg
+            faces.append((a + j, a + j2, b + j2)); faces.append((a + j, b + j2, b + j))
+    top = (len(rows) - 1) * seg
+    for j in range(1, seg - 1): faces.append((top, top + j, top + j + 1))
+    for j in range(1, seg - 1): faces.append((0, j + 1, j))
+    return verts, faces
+
+
+def tube(pts, radii, seg=7):
+    """A tapered tube through a list of points — the still's spout, and its catch-cup."""
+    verts, faces = [], []
+    for (px, py, pz), r in zip(pts, radii):
+        for j in range(seg):
+            th = 2.0 * math.pi * j / seg
+            verts.append((px + r * math.cos(th), py + r * math.sin(th) * 0.85, pz + r * math.sin(th) * 0.55))
+    for i in range(len(pts) - 1):
+        a, b = i * seg, (i + 1) * seg
+        for j in range(seg):
+            j2 = (j + 1) % seg
+            faces.append((a + j, a + j2, b + j2)); faces.append((a + j, b + j2, b + j))
+    top = (len(pts) - 1) * seg
+    for j in range(1, seg - 1): faces.append((top, top + j, top + j + 1))
+    for j in range(1, seg - 1): faces.append((0, j + 1, j))
+    return verts, faces
+
+
+def upright(cx, cy, rows, seg=9):
+    """An upright prism through (z, radius) rows — the still's catch-cup.
+    ⚠ NOT `tube`: that helper lays its cross-section in y/z for a HORIZONTAL run, so reusing it for
+    a vertical part swung the rim to z = -0.039, under the floor. The cell check caught it."""
+    verts, faces = [], []
+    for (z, r) in rows:
+        for j in range(seg):
+            th = 2.0 * math.pi * j / seg
+            verts.append((cx + r * math.cos(th), cy + r * math.sin(th), z))
     for i in range(len(rows) - 1):
         a, b = i * seg, (i + 1) * seg
         for j in range(seg):
@@ -295,9 +338,20 @@ pieces += [foot(0.24 * math.cos(math.pi / 4 + k * math.pi / 2),
                 0.24 * math.sin(math.pi / 4 + k * math.pi / 2), k) for k in range(FEET)]
 if NAME == 'mortar':
     pieces.append(pestle())
+if NAME == 'still':
+    # the fired-clay cup that catches the drip, stood under the spout's fall
+    pieces.append(upright(0.335, 0.0, [(0.0, 0.070), (0.055, 0.079), (0.112, 0.073)]))
 objs = [mesh_object(body_name, *merge(*pieces))]
 if V.get('bulb'):
-    objs.append(mesh_object('Bulb', *lathe(bulb_profile(V['bulb']))))
+    # ★ THE SPOUT IS NOT DECORATION — IT IS THE WORD "STILL". Without it the silhouette is a bulb
+    # on a foot, which reads as a lamp or a mushroom; the drawn-out spout falling to a catch-cup is
+    # what makes it an alembic, and the box model carried both for the same reason. It rides the
+    # BULB node so it wears the glass rows of `paintStill`'s side tile, as blown glass should.
+    bulb_parts = [lathe(bulb_profile(V['bulb']))]
+    bulb_parts.append(tube([(0.19, 0.0, 0.640), (0.27, 0.0, 0.600), (0.325, 0.0, 0.520),
+                            (0.335, 0.0, 0.430)],
+                           [0.052, 0.040, 0.031, 0.026]))
+    objs.append(mesh_object('Bulb', *merge(*bulb_parts)))
 if V.get('disc'):
     dn, dr, dz = V['disc']
     objs.append(mesh_object(dn, *disc(dr, dz, SEGMENTS)))
