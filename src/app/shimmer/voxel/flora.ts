@@ -108,7 +108,11 @@ export const DRIFT_SCALE = 90
 // is also the overdraw profile that swamps a GPU. The fix is rarity, not dilution: a drift you walk
 // into should still be a carpet, so `FLOWER_DENSITY` stays high and the FIELD gets pickier. Measured
 // on seed 1337: 30% of ground → 9.4% drift.
-export const DRIFT_EDGE = 0.72   // drift field above this = flowers allowed
+// ★ 0.72 → 0.75 (2026-09-22, the same look). This narrows the BUSH BAND specifically — the core
+// is still > DRIFT_CORE so carpets are untouched — taking the band from 0.72..0.80 to 0.75..0.80,
+// about a third narrower. Two dials rather than one because they do different things: the density
+// thins a clump patch, the field makes patches rarer, and "uncommon" wanted both.
+export const DRIFT_EDGE = 0.75   // drift field above this = flowers allowed
 /** Inside a drift, above this the ground is a MAT (ground cover); between edge and core, bushes. */
 export const DRIFT_CORE = 0.80
 /** Base per-cell densities on healthy open ground (multiplied by zone character below). */
@@ -119,7 +123,12 @@ export const TALL_DENSITY = 0.035
 // 0.18 than the stems did at 0.26; bushes are a walk-around thing, so the edge band is sparse; and
 // a single is the rare one that grows ANYWHERE green — it is the first flower that ever has.
 export const MAT_DENSITY = 0.3       // drift core — ground cover; pads touch and read as one carpet
-export const BUSH_DENSITY = 0.05     // drift edge band — clumps
+// ★ 0.05 → 0.028 (2026-09-22, Alex on prod the hour the sculpt shipped: *"its a bit crowded can
+// they be more sparse and uncommon"*). Measured at the woodland ring he was standing in: 612 bloom
+// bushes over 441 columns. A clump is a walk-around thing and there is no point sculpting one
+// nobody stops at — at 0.05 the edge band read as hedging. Same lesson as DRIFT_EDGE's own note
+// one screen up (*"the fix is rarity, not dilution"*), applied to the form rather than the field.
+export const BUSH_DENSITY = 0.028    // drift edge band — clumps
 export const SINGLE_DENSITY = 0.006  // open ground, outside every drift
 /** The largest of the three; what the cheap gate and MAX_FLOWER_K are sized against. */
 export const FLOWER_DENSITY = MAT_DENSITY

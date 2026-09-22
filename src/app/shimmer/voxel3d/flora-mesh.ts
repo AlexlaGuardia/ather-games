@@ -453,6 +453,38 @@ const CROP_HEAD: Readonly<Record<number, number>> = {
   [MAT.DAWNCAP]: 0xffc890,       // first light, warmest note in the world
 }
 
+/**
+ * ── ★★ A COUNTRY'S FLOWERS ARE ITS OWN (2026-09-22) ──────────────────────────────────────────
+ * Alex, standing in the woodland the hour the bloom sculpt shipped: *"can they be more sparse and
+ * uncommon plus we can seperate them by biome."* The rarity half is two dials in `flora.ts`; this
+ * is the other half, and it was the more interesting gap — **`HEAD_TINTS` was picked at random per
+ * instance, everywhere**, so a meadow, a marsh and a highland grew exactly the same five pastels
+ * in the same proportions. Density already varied by ground (`character.ts` › `flowerK`); COLOUR
+ * never did, which is why every drift read as the same drift wherever you found it.
+ *
+ * ★ SUBSETS OF THE EXISTING FIVE, NOT NEW COLOURS. Two per ground, so a drift still has variety
+ * inside it while a country still has a signature you could name — and inventing new hues here
+ * would be inventing flower species, which is world vocabulary and not mine. `HEAD_TINTS` stays
+ * the single palette; this only says which of it grows where.
+ *
+ * ⚠ A GROUND MISSING FROM THIS TABLE GETS THE WHOLE PALETTE, never an empty list — the old
+ * behaviour, so a ground added later looks unremarkable rather than losing its flowers entirely.
+ */
+const FLOWERS_OF_GROUND: Readonly<Record<number, readonly number[]>> = {
+  [MAT.TOPSOIL]: [HEAD_TINTS[0], HEAD_TINTS[1]],          // meadow — white and yellow, open sun
+  [MAT.LUSH_TURF]: [HEAD_TINTS[4], HEAD_TINTS[0]],        // the dells — pink over white
+  [MAT.FOREST_LOAM]: [HEAD_TINTS[2], HEAD_TINTS[0]],      // woodland — violet in the shade
+  [MAT.MARSH_MUD]: [HEAD_TINTS[3], HEAD_TINTS[2]],        // marsh — blue and violet, cold water
+  [MAT.DRY_GRASS]: [HEAD_TINTS[1], HEAD_TINTS[0]],        // dry country — yellow, sun-bleached
+  [MAT.HIGHLAND_TURF]: [HEAD_TINTS[3], HEAD_TINTS[0]],    // highland — alpine blue and white
+  [MAT.SCREE]: [HEAD_TINTS[0]],                           // stone — one white, and few of them
+}
+/** Which bloom this spot wears: its ground's palette, indexed by the spot's own variant roll. */
+const flowerTint = (ground: number, variant: number): number => {
+  const pal = FLOWERS_OF_GROUND[ground] ?? HEAD_TINTS
+  return pal[Math.floor(variant * 977) % pal.length]
+}
+
 /** The FRUIT on each bush — canon's own words: a warm golden fruit; cool blue berries. */
 const FRUIT_TINT: Readonly<Record<number, number>> = {
   [MAT.SUNFRUIT_BUSH]: 0xf2b23a,
@@ -2283,7 +2315,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
               matStars.setMatrixAt(nM, mtx)
               matShadows.setMatrixAt(nM, mtx)
               matLeaves.setColorAt(nM, grassTint(s.ground))
-              tint.set(HEAD_TINTS[Math.floor(s.variant * 977) % HEAD_TINTS.length])
+              tint.set(flowerTint(s.ground, s.variant))
               matBlooms.setColorAt(nM, tint)
               matStars.setColorAt(nM, tint)
               nM++
@@ -2321,7 +2353,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
               bushes.setMatrixAt(nB, mtx)
               bushHeads.setMatrixAt(nB, mtx)
               bushes.setColorAt(nB, grassTint(s.ground))
-              bushHeads.setColorAt(nB, tint.set(HEAD_TINTS[Math.floor(s.variant * 977) % HEAD_TINTS.length]))
+              bushHeads.setColorAt(nB, tint.set(flowerTint(s.ground, s.variant)))
               nB++
             }
           }
@@ -2330,7 +2362,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
             if (nF < CAP.flower) {
               stems.setMatrixAt(nF, mtx)
               heads.setMatrixAt(nF, mtx)
-              heads.setColorAt(nF, tint.set(HEAD_TINTS[Math.floor(s.variant * 977) % HEAD_TINTS.length]))
+              heads.setColorAt(nF, tint.set(flowerTint(s.ground, s.variant)))
               nF++
             }
           }
