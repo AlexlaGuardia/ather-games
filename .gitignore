@@ -76,3 +76,6 @@ shots/
 # hub previews for Alex to look at (rasterized maps, shots) — served, never committed
 /public/scratch/
 tools/render/out/
+
+# lane scratch: one-off probe scripts (.mts) written during a session, never shipped
+/scripts/.scratch/
