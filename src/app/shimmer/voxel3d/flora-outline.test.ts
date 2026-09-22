@@ -32,7 +32,7 @@ const CARDS = [FLORA.TUFT, FLORA.TALL, FLORA.FLOWER, FLORA.HERB, FLORA.CROP, FLO
 // sculpt — it moved from a card border (edge texels darkened in place) to a grown back-face hull,
 // and this file was green either way because it had never named the kind. PUFF, SHELF, BLOOM_BUSH,
 // BLOOM_MAT and MOSS are still unnamed here; that is a gap, written down rather than left silent.
-const SOLIDS = [FLORA.ROCK, FLORA.DEADFALL, FLORA.MUSHROOM, FLORA.FRUIT]
+const SOLIDS = [FLORA.ROCK, FLORA.DEADFALL, FLORA.MUSHROOM, FLORA.FRUIT, FLORA.BLOOM_BUSH]
 const ALL = [...CARDS, ...SOLIDS]
 
 /** Compile-time surface of a material: run its onBeforeCompile against THREE's REAL shader source
@@ -86,7 +86,7 @@ const meshes = () => r.group.children.filter(c =>
     // two-row `FLORA_PARTS` entry — `/bushtest`'s card control builds from it — but the pool and
     // its outline are the glb's two buffers, and the two counts agreeing at 2 today is a
     // coincidence, not a derivation. Named outright, next to the mushroom, for the same reason.
-    const expected = kind === FLORA.MUSHROOM || kind === FLORA.FRUIT
+    const expected = kind === FLORA.MUSHROOM || kind === FLORA.FRUIT || kind === FLORA.BLOOM_BUSH
       ? 2 : (FLORA_PARTS[kind]?.filter(p => !p.shadow && !p.wake).length ?? 1)
     ok(lit.length === expected,
       `kind ${kind}: ${lit.length} outline mesh(es) lit, expected ${expected}`)

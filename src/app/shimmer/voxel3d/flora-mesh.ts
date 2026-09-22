@@ -29,6 +29,7 @@ import { createLightUniforms, type LightUniforms } from './light-glsl'
 import { bankLeanAt } from '../voxel/height'
 import { sunfruitBushLeavesGeo, sunfruitBushFruitGeo, sunfruitBushBox } from './models/sunfruit-bush'
 import { moonberryBushLeavesGeo, moonberryBushFruitGeo, moonberryBushBox } from './models/moonberry-bush'
+import { bloomBushLeavesGeo, bloomBushFruitGeo, bloomBushBox } from './models/bloom-bush'
 
 const SECTION = 16
 
@@ -185,6 +186,21 @@ export const floraFruitBerriesGeo = (mat: number = MAT.SUNFRUIT_BUSH): THREE.Buf
 }
 /** Every fruit material that has its own sculpt — the pool builds one instanced pair per entry. */
 export const BUSH_MODEL_MATS: ReadonlyArray<number> = Object.keys(BUSH_MODELS).map(Number)
+
+/**
+ * ── ★ THE BLOOM BUSH IS A SCULPT TOO (2026-09-22) — and it is NOT a species ──────────────────
+ * `BLOOM_BUSH` is one of three DRAW FORMS of a single material (`flora.ts` › `flowerForm`): a
+ * drift's core draws a carpet, its EDGE draws this clump, open ground draws a lone stem. One
+ * voxel, one drop, three looks. So unlike the sunfruit/moonberry split there is exactly ONE bake,
+ * tinted per instance — body from the ground's green, heads from `HEAD_TINTS` — and no material
+ * map: a second bloom bush would be a second FORM, not a second species.
+ *
+ * ★ ITS HEADS ARE FLATTENED BALLS (`FRUIT_FLATTEN` 0.3 in the recipe), which is the whole
+ * difference between this and a berry bush: a fruit is a ball, a flower head is a face turned at
+ * the sky. Same script, same pipeline, one env var.
+ */
+export const floraBloomLeavesGeo = (): THREE.BufferGeometry => fitBush(bloomBushLeavesGeo(), bloomBushBox)
+export const floraBloomHeadsGeo = (): THREE.BufferGeometry => fitBush(bloomBushFruitGeo(), bloomBushBox)
 
 /**
  * ── ★ THE MODEL BUSH — an A/B against the card bush (2026-09-22, Alex: "3d models for bushes,
@@ -848,7 +864,10 @@ export const FLORA_PLACE: Record<number, { root: number; jitter: number }> = {
   [FLORA.TALL]: { root: 0.97, jitter: 0.3 },
   [FLORA.FLOWER]: { root: 0.97, jitter: 0.3 },
   [FLORA.BLOOM_MAT]: { root: 0.97, jitter: 0.04 },   // a pad covers its cell; it does not wander
-  [FLORA.BLOOM_BUSH]: { root: 0.97, jitter: 0.2 },
+  // Tightened from 0.2 when it became a solid (2026-09-22), the fruit bush's reason: a card only
+  // reaches its half-width on the rotation that points at you, a sculpt reaches it always.
+  // 0.5 x 0.92 (biggest roll) + 0.06 = 0.52, inside the reach the rotated 0.85-wide card had.
+  [FLORA.BLOOM_BUSH]: { root: 0.97, jitter: 0.12 },
   // ★ TIGHTENED FROM 0.15 WHEN THE BUSH BECAME A SOLID (2026-09-22). A card's reach is its
   // half-width only on the one rotation that points it at you; a sculpt's is its half-width
   // always. 0.5 (fitted half-width) x 1.06 (the biggest size roll) + 0.05 = 0.58, which is the
@@ -881,6 +900,16 @@ export const floraScatterScale = (variant: number): number => 0.8 + variant * 0.
  * ⚠ A DIAL, and the one to move if Alex says the bushes are too samey or too big.
  */
 export const floraBushScale = (variant: number): number => 0.82 + variant * 0.24
+/**
+ * The bloom bush's own roll, and it is SMALLER on purpose.
+ * ⚠ `fitBush` normalises every sculpt's widest horizontal extent to exactly one cell, which is a
+ * derivation worth keeping (picaso can re-bake at any `TARGET_W` without the game's footprint
+ * moving). The cost is that it also erases how big a plant was MEANT to be relative to its
+ * neighbours — so that lives here instead, where the fruit bush's size roll already does. A
+ * flowering clump at a drift edge is a smaller thing than a fruiting shrub, and this is where the
+ * game says so.
+ */
+export const floraBloomScale = (variant: number): number => 0.7 + variant * 0.22
 
 const Y_UP = new THREE.Vector3(0, 1, 0)
 
@@ -924,6 +953,13 @@ export function floraMatrix(
     quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
     off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
     const sz = floraScatterScale(variant)
+    scl.set(sz, sz, sz)
+  } else if (kind === FLORA.BLOOM_BUSH) {
+    // A sculpt, so the scale is uniform for the fruit bush's reason (`floraBushScale`) — a Y-only
+    // stretch reads as a plant somebody pulled once the thing has volume.
+    quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
+    off.set(x + 0.5 + jx * place.jitter, y + place.root, z + 0.5 + jz * place.jitter)
+    const sz = floraBloomScale(variant)
     scl.set(sz, sz, sz)
   } else if (kind === FLORA.FRUIT) {
     // The sculpt (2026-09-22). Turned and jittered like everything else, but scaled UNIFORMLY —
@@ -1007,6 +1043,7 @@ function vertsFor(kind: number, mat?: number): Float32Array[] {
     // from it, and an A/B whose control quietly disappears is not an A/B. So this set() must come
     // AFTER the FLORA_PARTS loop above, or the reticle would go on boxing the control.
     partVerts.set(FLORA.FRUIT, [grab(floraFruitLeavesGeo()), grab(floraFruitBerriesGeo())])
+    partVerts.set(FLORA.BLOOM_BUSH, [grab(floraBloomLeavesGeo()), grab(floraBloomHeadsGeo())])
   }
   return partVerts.get(kind) ?? []
 }
@@ -1508,8 +1545,13 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const matBloomGeo = crossGeo(FLORA.BLOOM_MAT, 1)
   const matStarGeo = crossGeo(FLORA.BLOOM_MAT, 2)
   const matShadowGeo = crossGeo(FLORA.BLOOM_MAT, 3)
+  // ★ THE BLOOM BUSH'S CARDS, kept defined for the same reason the fruit bush's are: they are the
+  // control if the A/B is ever re-run, and a comparison whose control has been deleted is not one.
+  // The POOL draws `bloomLeafGeo`/`bloomHeadGeo` below.
   const bushGeo = crossGeo(FLORA.BLOOM_BUSH)
   const bushHeadGeo = crossGeo(FLORA.BLOOM_BUSH, 1)
+  const bloomLeafGeo = floraBloomLeavesGeo()
+  const bloomHeadGeo = floraBloomHeadsGeo()
   // ★ THE FRUIT BUSH'S CARDS SURVIVE FOR THE SHOWCASE ONLY (2026-09-22). The wild pool draws
   // `bushLeafGeo`/`bushBerryGeo` below; these two are `/bushtest`'s control and nothing else reads
   // them. Deleting them would win a few hundred bytes and cost the ability to re-run the A/B.
@@ -1686,6 +1728,13 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // WebGL-context-loss bug this file's header opens with. (It caught exactly this, 2026-09-22.)
   const berryMats = new Map<number, THREE.MeshLambertMaterial>(BUSH_MODEL_MATS.map(m => [m, berryMaterialFor(m)]))
   // The default pair's berry material (the showcase and the reticle's fallback species).
+  /**
+   * The bloom bush's heads: the berry material's shape with NO emissive. Canon gives the two fruit
+   * a light each (`FRUIT_GLOW`); it gives a wildflower nothing, and a glowing flower would quietly
+   * claim a canon property this plant does not have.
+   */
+  const bloomHeadMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
+  bloomHeadMat.onBeforeCompile = (shader) => injectStack(shader, true)
   const bushBerryMat = berryMats.get(MAT.SUNFRUIT_BUSH) ?? berryMats.values().next().value as THREE.MeshLambertMaterial
   // ★ THE ONE FLORA MATERIAL THAT GLOWS. The pad is painted near-white and the tint is the moss
   // colour, so the emissive is that same colour scaled — one row in `MATERIAL_COLOR` drives the
@@ -1736,8 +1785,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   matLeaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.mat * 3), 3)
   matBlooms.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.mat * 3), 3)
   matStars.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.mat * 3), 3)
-  const bushes = new THREE.InstancedMesh(bushGeo, bushMat, CAP.bush)
-  const bushHeads = new THREE.InstancedMesh(bushHeadGeo, bushHeadMat, CAP.bush)
+  const bushes = new THREE.InstancedMesh(bloomLeafGeo, bushLeafMat, CAP.bush)
+  const bushHeads = new THREE.InstancedMesh(bloomHeadGeo, bloomHeadMat, CAP.bush)
   bushes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.bush * 3), 3)
   bushHeads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.bush * 3), 3)
   // The fruit bush: body in the bush's own leaf colour (a multiplier over the green tile, like a
@@ -1873,8 +1922,10 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     { kind: FLORA.BLOOM_MAT, geo: matLeafGeo, mat: outlineMaterial(matLeafTex, FLORA_SWAY[FLORA.BLOOM_MAT]), grow: 1 },
     { kind: FLORA.BLOOM_MAT, geo: matBloomGeo, mat: outlineMaterial(matBloomTex, FLORA_SWAY[FLORA.BLOOM_MAT]), grow: 1 },
     { kind: FLORA.BLOOM_MAT, geo: matStarGeo, mat: outlineMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_MAT]), grow: 1 },
-    { kind: FLORA.BLOOM_BUSH, geo: bushGeo, mat: outlineMaterial(bushTex, FLORA_SWAY[FLORA.BLOOM_BUSH]), grow: 1 },
-    { kind: FLORA.BLOOM_BUSH, geo: bushHeadGeo, mat: outlineMaterial(clusterTex, FLORA_SWAY[FLORA.BLOOM_BUSH]), grow: 1 },
+    // A sculpt takes the grown back-face hull, like the fruit bush and every other solid — a card's
+    // border is painted by darkening its own edge texels and a volume has none to darken.
+    { kind: FLORA.BLOOM_BUSH, geo: bloomLeafGeo, mat: outlineHullMaterial(), grow: 1.12 },
+    { kind: FLORA.BLOOM_BUSH, geo: bloomHeadGeo, mat: outlineHullMaterial(), grow: 1.12 },
     // ★ THE FRUIT BUSH MOVED FROM A CARD BORDER TO A HULL when it became a sculpt (2026-09-22).
     // A card's border is painted IN PLACE by darkening its own edge texels; a solid has no edge
     // texels to darken, so it takes the grown back-face hull the rock and the puff take. Both
@@ -2402,11 +2453,11 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       // its plant's, which is disposed above.
       for (const h of hlMeshes) if (h.kind === FLORA.TUFT || h.kind === FLORA.TALL) h.geo.dispose()
       // The flower forms (2026-09-14/15): geometry, material, texture — same three each.
-      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, ...bushGeos.flatMap(g2 => [g2.leaf, g2.berry]), mossGeo, puffGeo, shelfGeo]) g.dispose()
+      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, bloomLeafGeo, bloomHeadGeo, fruitBushGeo, ...bushGeos.flatMap(g2 => [g2.leaf, g2.berry]), mossGeo, puffGeo, shelfGeo]) g.dispose()
       // `showModelMat`/`showFruitMat` are aliases of the two bush materials, not a second pair.
       // ⚠ `bushPools[].berryMat` — one per species (canon gives each fruit its own light), and the
       // sunfruit's IS `bushBerryMat`, so the Set is what stops a double dispose.
-      for (const m of new Set<{ dispose(): void }>([matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat, bushLeafMat, bushBerryMat, ...berryMats.values(), solidBushTex, mossMat, puffMat, shelfMat])) m.dispose()
+      for (const m of new Set<{ dispose(): void }>([matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, bloomHeadMat, fruitBushMat, fruitMat, bushLeafMat, bushBerryMat, ...berryMats.values(), solidBushTex, mossMat, puffMat, shelfMat])) m.dispose()
       for (const t of [bushTex, clusterTex, matLeafTex, matBloomTex, matShadowTex, fruitTex, mossTex]) t.dispose()
     },
   }

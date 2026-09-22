@@ -85,6 +85,11 @@ const KINDS: [string, number, number?][] = [
   // ★ AND THE TWO FRUIT BUSHES ARE ONE KIND WITH TWO MESHES (2026-09-22), so the material is part
   // of the question. A row for the kind alone would test the sunfruit twice and call the moonberry
   // covered — the same shape of lie as having no row at all, one level down.
+  // ★ AND THE BLOOM BUSH, the day it became a sculpt too (2026-09-22). It had never been named
+  // here either — the third kind in a row whose bounds could have gone on describing a retired
+  // card while this file stayed green. It takes no material: `BLOOM_BUSH` is a draw FORM of
+  // MAT.FLOWER, not a species (`flora.ts` › flowerForm).
+  ['bloom bush', FLORA.BLOOM_BUSH],
   ['sunfruit bush', FLORA.FRUIT, MAT.SUNFRUIT_BUSH],
   ['moonberry bush', FLORA.FRUIT, MAT.MOONBERRY_BUSH],
 ]

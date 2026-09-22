@@ -27,6 +27,8 @@ OUT=public/models/flora
 # 360 leaf triangles, not 720: the wild pool carries hundreds of these (measured 261k tris of a
 # 397k frame undecimated) and Alex's desktop is an Intel UHD 630. See GBOARD's budget rule.
 BUDGET=${DECIMATE_TRIS:-360}
+# ⚠ The bloom bush is smaller than a fruit bush and carries 12 flat heads, so it takes a tighter
+# leaf budget of its own — see its recipe below.
 
 echo "── sunfruit: a compact dome, few big fruit on the crown"
 NAME=sunfruit-bush SEED=1 \
@@ -43,6 +45,20 @@ NAME=moonberry-bush SEED=7 \
   TARGET_W=1.0 TARGET_H=0.62 DECIMATE_TRIS=$BUDGET OUT=$OUT \
   "$BLENDER" -b -P scripts/models/sunfruit-bush.py | grep -E 'TIERS|tris|FRUIT count|WROTE'
 
-echo "── baking both to synchronous modules"
+echo "── bloom bush: a flowering clump at a drift edge, blooms as flat faces"
+# ⚠ NOT A FRUIT BUSH, AND NOT A SPECIES EITHER. `BLOOM_BUSH` is one of three DRAW FORMS of
+# `MAT.FLOWER` (`flora.ts` › flowerForm): drift core -> a carpet, drift EDGE -> this clump, open
+# ground -> a single stem. So it is one bake tinted per instance (body = the ground's green, heads
+# = HEAD_TINTS), never a per-material pair like the sunfruit/moonberry split.
+# FRUIT_FLATTEN 0.3 is what makes it flower rather than fruit: a berry is a ball, a bloom is a face.
+NAME=bloom-bush SEED=3 \
+  TIERS='[[5,0.22,0.14,0.30],[3,0.16,0.26,0.25]]' \
+  N_FRUIT=12 FRUIT_R_MIN=0.075 FRUIT_R_MAX=0.095 FRUIT_FLATTEN=0.3 FRUIT_DROOP=0.15 FRUIT_FROM_TIER=0 \
+  LEAF_RGB=0.26,0.52,0.20 FRUIT_RGB=0.92,0.82,0.98 \
+  TARGET_W=0.85 TARGET_H=0.55 DECIMATE_TRIS=300 OUT=$OUT \
+  "$BLENDER" -b -P scripts/models/sunfruit-bush.py | grep -E 'TIERS|tris|FRUIT count|WROTE'
+
+echo "── baking all three to synchronous modules"
 npx tsx scripts/bake-flora-model.mts $OUT/sunfruit-bush.glb  --out src/app/shimmer/voxel3d/models/sunfruit-bush.ts  --name sunfruitBush  --via "npm run bake:flora"
 npx tsx scripts/bake-flora-model.mts $OUT/moonberry-bush.glb --out src/app/shimmer/voxel3d/models/moonberry-bush.ts --name moonberryBush --via "npm run bake:flora"
+npx tsx scripts/bake-flora-model.mts $OUT/bloom-bush.glb     --out src/app/shimmer/voxel3d/models/bloom-bush.ts     --name bloomBush     --via "npm run bake:flora"

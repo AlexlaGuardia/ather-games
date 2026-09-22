@@ -64,6 +64,8 @@ FRUIT_DROOP = float(os.environ.get('FRUIT_DROOP', '0'))
 # FRUIT_FROM_TIER: the lowest lump tier fruit may ride. The sunfruit uses the crown (tier >= 1);
 # a hanging berry wants the wide shoulders too, so the moonberry drops this to 0.
 FRUIT_FROM_TIER = int(os.environ.get('FRUIT_FROM_TIER', '1'))
+# 1.0 = a round berry. Below 1 squashes it into a blossom disc — see the note at the ball itself.
+FRUIT_FLATTEN = float(os.environ.get('FRUIT_FLATTEN', '1.0'))
 PREVIEW_ONLY = os.environ.get('PREVIEW_ONLY', '') == '1'  # skip glb export, just re-render
 STATS_ONLY = os.environ.get('STATS_ONLY', '') == '1'      # export + print stats, skip renders (fast tri-budget tuning)
 
@@ -280,6 +282,16 @@ while len(fruit_objs) < N_FRUIT and tries < N_FRUIT * 80:
     bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=fr, location=pos)
     fo = bpy.context.object
     fo.name = f'fruit_{len(fruit_objs)}'
+    # ── ★ FRUIT_FLATTEN — the difference between a BERRY and a BLOOM (2026-09-22) ─────────────
+    # A fruit is a ball; a flower head is a face turned toward the sky. At 1.0 this is the berry
+    # the sunfruit and moonberry want; at ~0.35 the same ball becomes a blossom disc sitting on
+    # the crown, which is what makes the bloom bush read as flowering rather than as fruiting.
+    # ⚠ Squashed on Z (blender is Z-up here; the exporter turns it Y-up), so a bloom flattens
+    # toward the ground plane rather than in some arbitrary direction — and it is applied before
+    # the join, so the flattening rides in the mesh rather than in an object scale the export drops.
+    if FRUIT_FLATTEN != 1.0:
+        fo.scale = (1.0, 1.0, FRUIT_FLATTEN)
+        bpy.ops.object.transform_apply(scale=True)
     fruit_objs.append(fo)
     fruit_positions.append(loc.copy())
 
