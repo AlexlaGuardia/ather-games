@@ -543,7 +543,11 @@ export interface FloraRenderer {
    * columns to scan, or a test of the ground family). The ground probe cannot reach a bracket at
    * height, so this is the SECOND reader; cached per column beside the ground spots.
    */
-  sync(cols: { key: string; x0: number; z0: number }[], seed: number, probe: PlantProbe, river?: boolean, shelves?: (x0: number, z0: number) => ShelfCell[]): void
+  /**
+   * `fruited` — whether the fruit bush at this CELL still carries its fruit (`picking.ts`). Absent
+   * means every bush is fruited, which is what a harness and any space with no picking should see.
+   */
+  sync(cols: { key: string; x0: number; z0: number }[], seed: number, probe: PlantProbe, river?: boolean, shelves?: (x0: number, z0: number) => ShelfCell[], fruited?: (x: number, y: number, z: number) => boolean): void
   /**
    * The SHOWCASE (2026-09-22): stand a card bush and/or a model bush at exact spots, outside the
    * pools — `/bushtest`'s A/B. Rewrites the whole set each call; `[]` clears it. Never saved.
@@ -585,7 +589,7 @@ export interface FloraRenderer {
    * Same geometry, same texture, same sway as the plant it marks; see `outlineMaterial`.
    * `y` is the spot's GROUND height, exactly as `PlantProbe` reports it.
    */
-  setHighlight(kind: number, x: number, y: number, z: number, variant: number, alongX?: boolean, mat?: number): boolean
+  setHighlight(kind: number, x: number, y: number, z: number, variant: number, alongX?: boolean, mat?: number, hasFruit?: boolean): boolean
   /** No plant under the reticle. */
   clearHighlight(): void
   dispose(): void
@@ -1754,7 +1758,9 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     const berries = new THREE.InstancedMesh(g.berry, berryMat, CAP.fruit)
     leaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
     berries.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
-    return { mat: g.mat, leaves, berries, berryMat, n: 0 }
+    // `n` counts BODIES, `f` counts FRUITED bodies — a picked bush draws its leaves and no fruit
+    // (`picking.ts`), so the two meshes no longer share a count.
+    return { mat: g.mat, leaves, berries, berryMat, n: 0, f: 0 }
   })
   const bushPoolOf = new Map(bushPools.map(b => [b.mat, b]))
   const bushMeshes = bushPools.flatMap(b => [b.leaves, b.berries])
@@ -1858,7 +1864,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     c.setAttribute('aTile', new THREE.InstancedBufferAttribute(new Float32Array(1), 1).setUsage(THREE.DynamicDrawUsage))
     return c
   }
-  const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number; fmat?: number }[] = [
+  const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number; fmat?: number; berryHull?: boolean }[] = [
     { kind: FLORA.TUFT, geo: hlAtlasGeo(tuftGeo), mat: outlineMaterial(tuftTex, FLORA_SWAY[FLORA.TUFT], GRASS_VARIANTS), grow: 1 },
     { kind: FLORA.TUFT, geo: tuftCapGeo, mat: outlineMaterial(rosetteTex, FLORA_SWAY[FLORA.TUFT]), grow: 1 },
     { kind: FLORA.TALL, geo: hlAtlasGeo(tallGeo), mat: outlineMaterial(tallTex, FLORA_SWAY[FLORA.TALL], GRASS_VARIANTS), grow: 1 },
@@ -1878,7 +1884,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     // sunfruit is a dome (0.95), so one hull for both is loose by a third on whichever it is not.
     ...bushGeos.flatMap(g => ([
       { kind: FLORA.FRUIT, fmat: g.mat, geo: g.leaf, mat: outlineHullMaterial(), grow: 1.12 },
-      { kind: FLORA.FRUIT, fmat: g.mat, geo: g.berry, mat: outlineHullMaterial(), grow: 1.12 },
+      { kind: FLORA.FRUIT, fmat: g.mat, geo: g.berry, mat: outlineHullMaterial(), grow: 1.12, berryHull: true },
     ])),
     { kind: FLORA.HERB, geo: herbGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
     { kind: FLORA.HERB, geo: tipGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
@@ -2093,14 +2099,14 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       for (const m of [showCard, showFruit, showLeaves, showBerries, sculptLeaves, sculptFruit]) { if (!m) continue; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true }
       showFruitTile.needsUpdate = true
     },
-    sync(cols, seed, probe, river = true, shelfScan) {
+    sync(cols, seed, probe, river = true, shelfScan, fruited) {
       // The lean map first: the same columns, the same seed, one pass — see `createLeanMap`.
       leanLive = river ? lean.fill(cols, seed) : lean.clear()
       uLean.value = lean.texture
       let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0, nRe = 0, nSh = 0, wSh = 0
       // ⚠ RESET BESIDE `nFr`, NOT INSIDE THE LOOP: these are per-species slot counters and a
       // sync that forgot them would append to the last sync's instances until the cap ate it.
-      for (const b of bushPools) b.n = 0
+      for (const b of bushPools) { b.n = 0; b.f = 0 }
       // ── ★ THE TRUNK-SIDE PLANTS, from their own reader (2026-09-21) ───────────────────────
       // Written first, before the ground loop, on their own pool: a shelf never appears in the
       // ground spots (the probe stops at h+1), and the ground loop below `continue`s on the kind
@@ -2240,13 +2246,21 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
             const b = bushPoolOf.get(s.mat) ?? bushPools[0]
             if (nFr < CAP.fruit) {
               b.leaves.setMatrixAt(b.n, mtx)
-              b.berries.setMatrixAt(b.n, mtx)
               // Leaf colour over the green tile — the blade arithmetic (target / BLADE_GREEN).
               const leaf = MATERIAL_COLOR[s.mat] ?? 0x569e42
               b.leaves.setColorAt(b.n, tint.setRGB(
                 ((leaf >> 16) & 255) / BLADE_GREEN[0], ((leaf >> 8) & 255) / BLADE_GREEN[1], (leaf & 255) / BLADE_GREEN[2]))
-              b.berries.setColorAt(b.n, tint.set(FRUIT_TINT[s.mat] ?? 0xffffff))
               b.n++
+              // ★ A PICKED BUSH IS THE SAME BODY WITH NO FRUIT ON IT, AND THAT COST NOTHING TO
+              // BUILD because the sculpt already ships leaves and fruit as two buffers: "bare" is
+              // simply not writing this instance into the berry mesh. `fruited` is the host's
+              // question to answer (`picking.ts` holds the state); absent = every bush fruited,
+              // which is what a test harness and any space without picking should see.
+              if (!fruited || fruited(s.x, Math.ceil(s.y) + 1, s.z)) {
+                b.berries.setMatrixAt(b.f, mtx)
+                b.berries.setColorAt(b.f, tint.set(FRUIT_TINT[s.mat] ?? 0xffffff))
+                b.f++
+              }
               nFr++
             }
           }
@@ -2274,7 +2288,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       tufts.count = nT; tuftCaps.count = nT; tuftShadows.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
       matLeaves.count = nM; matBlooms.count = nM; matStars.count = nM; matShadows.count = nM
       bushes.count = nB; bushHeads.count = nB
-      for (const b of bushPools) { b.leaves.count = b.n; b.berries.count = b.n }
+      for (const b of bushPools) { b.leaves.count = b.n; b.berries.count = b.f }
       herbs.count = nH; tips.count = nH
       crops.count = nC; cropHeads.count = nC
       // The planted tail starts where the wild feed stopped; it sets the crop/herb counts itself.
@@ -2343,7 +2357,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     setCartoon(v) { for (const [k, val] of Object.entries(v)) if (cartoon[k]) cartoon[k].value = val },
     setReedLean(v) { uReedLean.value = v },
 
-    setHighlight(kind, x, y, z, variant, alongX, mat) {
+    setHighlight(kind, x, y, z, variant, alongX, mat, hasFruit = true) {
       // ★ THE SAME PLACEMENT DERIVATION THE PLANT ITSELF USES. If this composed its own matrix the
       // border would be a second opinion about where the plant is, and the two would disagree the
       // first time anyone re-tuned a jitter.
@@ -2353,7 +2367,10 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         // ⚠ A SPECIES-KEYED DEF ONLY LIGHTS FOR ITS OWN MATERIAL, and with no material named it
         // falls back to the FIRST (the sunfruit) rather than lighting both or neither — two hulls
         // at once would read as a double border, none as a broken reticle.
-        const wrongBush = h.fmat !== undefined && h.fmat !== (mat ?? BUSH_MODEL_MATS[0])
+        // A picked bush has no berries to outline, and a hull round fruit that is not drawn is a
+        // border floating in the air. `berryHull` marks the second def of each species' pair.
+        const wrongBush = h.fmat !== undefined
+          && (h.fmat !== (mat ?? BUSH_MODEL_MATS[0]) || (h.berryHull === true && !hasFruit))
         if (h.kind !== kind || wrongBush) { h.mesh.count = 0; continue }
         if (h.grow === 1) h.mesh.setMatrixAt(0, hlMtx)
         else h.mesh.setMatrixAt(0, mtx.copy(hlMtx).scale(hlGrow.setScalar(h.grow)))

@@ -17,6 +17,7 @@
 // container, not an edge case.
 
 import { MAT } from '../voxel/depth'
+import { isFruitBush } from './picking'
 import { stationOf } from '../voxel/workshop'
 import { alchemyStationOf } from './alchemy-chain'
 // ⚠ THE SET, NOT A MATERIAL. There are three bed woods and each of these three lines is a place a
@@ -66,6 +67,17 @@ export type Intent =
   | 'sow'
   /** A garden bed whose crop is ready. Not `'harvest'`, which is the pot's bloom. */
   | 'reap'
+  /**
+   * A WILD fruit bush that still carries its fruit: take the fruit and leave the plant standing
+   * (`voxel3d/picking.ts`).
+   *
+   * ★ ITS OWN INTENT, NOT `'reap'`, AND THE DIFFERENCE IS THE WHOLE FEATURE. `'reap'` empties a
+   * garden bed the keeper planted and the bed goes back to being bare soil. This takes fruit off a
+   * plant that was already there, leaves it alive, and it fruits again tomorrow — so the reticle
+   * verb has to say "pick", or a keeper reads it as the destructive harvest that breaking a bush
+   * still is. Both verbs remain: pick what you want to come back for, break what you want gone.
+   */
+  | 'pick'
   /**
    * A cauldron: open the brew list (`voxel3d/brew.ts`).
    *
@@ -156,6 +168,13 @@ export function rightClickIntent(
   aimed: number, selItem: string | null, holdsSeed: boolean, hasRinstick = false,
   bedPlanted = false, bedReady = false, openablePiece = false, consumable = false,
   holdsJug = false, holdsWater = false, holdsFeed = false, atWell = false,
+  /**
+   * Whether the aimed fruit bush still carries fruit. Host state (`picking.ts` holds the map), so
+   * it arrives as a parameter for the same reason `bedPlanted` does — this file stays pure.
+   * ⚠ DEFAULTS TRUE: a caller that has not wired picking yet gets the old, correct behaviour for a
+   * world where no bush has ever been picked, rather than a world where none can be.
+   */
+  bushHasFruit = true,
 ): Intent {
   // ── ★★ A PIECE THAT OPENS, ANSWERED BEFORE EVERYTHING ───────────────────────────────────────
   // ⚠ IT CANNOT BE DECIDED FROM `aimed` AND THAT IS WHY IT IS A PARAMETER. Every piece writes the
@@ -228,6 +247,12 @@ export function rightClickIntent(
   // ★ `bedReady` and `bedPlanted` are PASSED, not derived, exactly like `hasRinstick`: growth is
   // wall-clock state living in `voxel/planting.ts`, and this file reads no state and imports no
   // engine. It answers from what it is told.
+  // ── ★ A WILD FRUIT BUSH (2026-09-22) ────────────────────────────────────────────────────────
+  // Above the `place`/`use` fallbacks for the bench's reason: a keeper standing at a bush holding
+  // a stack of anything must PICK it, not have the click fall through to placing. A bush that has
+  // already been picked answers `'none'` rather than falling through — its fruit is gone, and the
+  // alternative is a dead click that drops a block onto a plant.
+  if (isFruitBush(aimed)) return bushHasFruit ? 'pick' : 'none'
   if (isGardenBed(aimed) && bedReady) return 'reap'
   // Water in hand over any bed that is not ripe — see `'water'`. Before `sow` and the planted
   // `none`, so watering is never blocked by what is (or is not) growing.

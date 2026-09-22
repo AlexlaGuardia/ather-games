@@ -178,6 +178,20 @@ export interface PlayerSave {
   /** Which beds are damp and until when — farming ② (`voxel3d/watering.ts`). Optional for the same reason `beds` is. */
   watered?: unknown
   /**
+   * Which WILD fruit bushes have been picked bare and when (`voxel3d/picking.ts`).
+   *
+   * ★ HERE AND NOT IN `ColumnSave`, by this file's own rule three entries down: a thing that HOLDS
+   * GOODS must arrive and leave with its block in one transaction, which is why chests and station
+   * jobs are per-column. A picked bush holds nothing — all it stores is a timestamp, the pot
+   * clock's case. Losing one costs a day of regrow, not a satchel.
+   *
+   * ⚠ THE LIST IS SELF-LIMITING AND THAT IS WHAT MAKES IT SAFE HERE. A player-wide blob of wild
+   * cells would grow forever; this one cannot, because a fully regrown bush is indistinguishable
+   * from one nobody ever touched, so its record carries no information and is dropped on the way
+   * both in and out. What is stored is only ever "bushes picked in the last day".
+   */
+  picked?: unknown
+  /**
    * ★ THE WAYMARK NETWORK (2026-08-15) — and it belongs HERE rather than in `ColumnSave`, which is
    * the opposite of where chests and station jobs live.
    *

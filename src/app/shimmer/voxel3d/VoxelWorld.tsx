@@ -433,6 +433,7 @@ import { screenHeading } from './map-heading'
 import { applyFightResult } from '../engine/spirit-health'
 import type { BattleResult } from '../engine/arena'
 import { createFloraRenderer, floraDemand, floraSync, leanLive } from './flora-mesh'
+import { pickBush, pickBlocker, pickLine, pickRefusalLine, isFruited, isFruitBush, pruneRegrown, pickedToSave, pickedFromSave, type PickedBushes } from './picking'
 import { scanShelves } from './shelf-scan'
 import { createStationRenderer } from './station-mesh'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -3575,6 +3576,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const beds = useRef<PlantedBeds>(new Map())
   /** Which beds are damp, and until when — farming ② (`voxel3d/watering.ts`). Same key as `beds`. */
   const watered = useRef<WateredBeds>(new Map())
+  /**
+   * Which wild fruit bushes have been picked bare and when (`picking.ts`). Beside `watered` because
+   * it is the same class of thing: per-cell, wall-clock, holds no goods, and lives in the player
+   * sidecar rather than in a column record.
+   * ⚠ It prunes itself — a regrown record changes no answer, so it is deleted (see `pruneRegrown`).
+   */
+  const picked = useRef<PickedBushes>(new Map())
 
   /**
    * ── ★ EAT / DRINK (2026-09-15, Alex: "do the eat/drink verb next") ─────────────────────────────
@@ -4213,6 +4221,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // interval the tab was shut is paid here, as if the beat had run — see `settleWatering`.
       watered.current = wateringFromSave(p.watered)
       settleWatering(watered.current, beds.current, Date.now())
+      // ★ Same settle-on-load rule, and for a picked bush it IS the whole mechanic: the regrow is
+      // wall-clock, so a tab shut overnight loads back with every bush already fruiting again and
+      // the records gone (`pickedFromSave` prunes as it reads).
+      picked.current = pickedFromSave(p.picked, Date.now())
       // The pool comes back compact (no free slots); it is fitted to the chest census at the door.
       bank.current = bankFromSave(p.bank)
       brewings.current = brewingsFromSave(p.brewings)
@@ -4247,6 +4259,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
                litterFrom: litterFrom.current,
                beds: bedsToSave(beds.current),
                watered: wateringToSave(watered.current),
+               // Picked bushes prune themselves on the way out — a regrown record is not worth a byte.
+               picked: pickedToSave(picked.current, Date.now()),
                bank: bankToSave(bank.current),
                brewings: brewings.current,
                index: indexToSave(spiritIndex.current) }
@@ -4688,7 +4702,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // GROUND height (fractional on a slumped lip, hence `ceil`), not a cell index. Without this
     // check a reticle on a plant the probe did not pick would mark another cell's plant.
     const spot = plantProbe(hit.x, hit.z)
-    if (spot && Math.ceil(spot.y) + 1 === hit.y) flora.setHighlight(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX, spot.mat)
+    if (spot && Math.ceil(spot.y) + 1 === hit.y) {
+      flora.setHighlight(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX, spot.mat,
+        // A picked bush draws no fruit, so it must not wear a hull around fruit (`picking.ts`).
+        !isFruitBush(spot.mat) || isFruited(picked.current, space.current, hit.x, hit.y, hit.z, Date.now()))
+    }
   }, [plantProbe, flora])
 
   /**
@@ -8390,13 +8408,17 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const [gx, gz] = kk.split(',').map(Number)
         list.push({ key: kk, x0: gx * SECTION, z0: gz * SECTION })
       }
+      const syncNow = Date.now()
       // The trunk-side reader (2026-09-21): a shelf fungus hangs at height beside a log, where
       // `plantProbe` never looks. `shelf-scan.ts` reads the column's cells; the face comes from
       // the log beside it, read through `voxel` so a border bracket finds a trunk next door.
       flora.sync(list, SEED, plantProbe, space.current === 'wilds', (x0, z0) => {
         const c = cols.current.get(key(Math.floor(x0 / SECTION), Math.floor(z0 / SECTION)))
         return c ? scanShelves(c, x0, z0, voxel) : []
-      })
+      // A picked bush draws its body and no fruit (`picking.ts`). One `Date.now()` for the whole
+      // sync rather than per spot: a ring of bushes must not be able to straddle the regrow
+      // instant and come out half-fruited in one pass.
+      }, (x, y, z) => isFruited(picked.current, space.current, x, y, z, syncNow))
       // The stations ride the same beat: their cells are a scan of the same columns.
       stations?.sync(list.map(c => ({ ...c, ySpan: H })), voxel)
       bedRims?.sync(list.map(c => ({ ...c, ySpan: H })), voxel)
@@ -9730,7 +9752,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // The well is a piece: the grid says STRUCTURE, the placement says which. Asked only when
         // the material could be one, so a block click costs nothing here.
         (potMat === STRUCTURE || potMat === STRUCTURE_HALF)
-          && basePieceId(placementAt(placements.current, hit.x, hit.y, hit.z)?.pieceId ?? '') === 'well')
+          && basePieceId(placementAt(placements.current, hit.x, hit.y, hit.z)?.pieceId ?? '') === 'well',
+        // Whether this bush still carries fruit (`picking.ts`). Asked only when the material could
+        // be one, so an ordinary block click costs nothing here — the station branch's own rule.
+        !isFruitBush(potMat) || isFruited(picked.current, space.current, hit.x, hit.y, hit.z, Date.now()))
       // ── ★ THE CHEST OPENS ON RIGHT-CLICK, and is answered FIRST ────────────────────────────
       // A chest is a thing you USE, and the block in your hand must not be dropped onto it by the
       // same click that opens it. Handing the whole panel upward (rather than opening one down
@@ -9990,6 +10015,31 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
                     xp: skills.current!.farming.xp, next: xpForSkillLevel(skills.current!.farming.level) })
           onSay(got.items.map(i => `${i.count}× ${itemLabel(i.itemId).toLowerCase()}`).join(', ')
                 + ` · ${got.xpGained} farming xp`)
+        }
+        mouse.current.right = false
+      } else if (intent === 'pick') {
+        // ── ★ PICK: the fruit comes off, the bush stays, it fruits again tomorrow ──────────────
+        // ⚠ THE BLOCK IS NOT TOUCHED. Breaking a bush still removes it for good (that is how a
+        // keeper clears ground); this verb exists so harvesting does not have to be destruction.
+        // Before it, the ONLY way to get fruit was to delete the plant, and nothing ever put one
+        // back — see `picking.ts`'s header for what that was quietly doing to the world's supply.
+        const now = Date.now()
+        const why = pickBlocker(picked.current, potMat, space.current, hit.x, hit.y, hit.z, now)
+        if (why !== 'ok') {
+          onSay(pickRefusalLine(why, picked.current, space.current, hit.x, hit.y, hit.z, now))
+        } else {
+          const got = pickBush(picked.current, potMat, space.current, hit.x, hit.y, hit.z, now)
+          if (got) {
+            // ⚠ IT SPILLS ONTO THE GROUND, NOT INTO THE SATCHEL — the grammar every other yield in
+            // this world uses, and the reason is the cap case: `tickDrops` refuses at capacity and
+            // the fruit stays lying there, yours, instead of being silently destroyed by a full bag.
+            drops.current.push(spawnDrop(got.itemId, got.count, hit.x, hit.y, hit.z, 'pick'))
+            onSay(pickLine(potMat, got.count))
+            // The berries have to leave the pool now, not on the next chunk edit — the flora sync
+            // is what draws the bare bush, and nothing else in this click marks it dirty.
+            floraDirty.current = true
+            floraForce.current = true
+          }
         }
         mouse.current.right = false
       } else if (intent === 'use' && selItem) {

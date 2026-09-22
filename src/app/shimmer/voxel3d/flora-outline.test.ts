@@ -145,6 +145,27 @@ const meshes = () => r.group.children.filter(c =>
   ok(swayers.length > 0, 'no mesh compiled a sway program at all — this guard had no subject')
 }
 
+// ── 2b-ii. ★ A PICKED BUSH GETS NO BERRY HULL (2026-09-22, the picking pass) ─────────────────
+// A bush whose fruit has been taken still draws its body and draws NO fruit (`picking.ts`), so a
+// hull around berries that are not there is a border floating in mid-air. The failure this catches
+// is the quiet one: the body hull still lights, so the reticle looks like it works.
+{
+  for (const [name, fmat] of [['sunfruit', MAT.SUNFRUIT_BUSH], ['moonberry', MAT.MOONBERRY_BUSH]] as [string, number][]) {
+    r.clearHighlight()
+    r.setHighlight(FLORA.FRUIT, 5, 40, 7, 0.42, true, fmat, false)
+    const lit = meshes().filter(m => m.count > 0)
+    ok(lit.length === 1, `${name} picked bare: ${lit.length} hulls lit, expected exactly 1 (the body, no fruit)`)
+    const berryVerts = floraFruitBerriesGeo(fmat).getAttribute('position').count
+    ok(lit.every(m => m.geometry.getAttribute('position').count !== berryVerts),
+      `${name} picked bare: the BERRY hull is lit around fruit that is not drawn`)
+    // And with fruit it is still two — or this assert would pass by lighting nothing at all.
+    r.clearHighlight()
+    r.setHighlight(FLORA.FRUIT, 5, 40, 7, 0.42, true, fmat, true)
+    ok(meshes().filter(m => m.count > 0).length === 2, `${name} fruited: expected 2 hulls`)
+  }
+  r.clearHighlight()
+}
+
 // ── 2d. ★ A CARD BENDS FROM ITS ROOT; A PAD DOES NOT BEND AT ALL ──────────────────────────────
 // The values, not just the presence. A cross must run 0 at the base to 1 at the tip (or the wind
 // stops being weighted by height), and every flat part must be all-zero (or the pad shears and
