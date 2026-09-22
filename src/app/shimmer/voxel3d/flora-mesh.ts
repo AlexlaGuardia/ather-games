@@ -153,9 +153,14 @@ export function floraModelBushGeo(leaf: number, fruit: number, seed = 1): THREE.
     const g = new THREE.IcosahedronGeometry(r, 1)
     const p = g.getAttribute('position') as THREE.BufferAttribute
     const shade = 0.9 + rnd() * 0.2                      // a hair of variation per ball
+    // ⚠ JITTER BY THE VERTEX'S OWN POSITION, NOT PER INDEX: the icosphere is non-indexed, so a
+    // corner shared by five faces is five vertices — five independent rolls tear the mesh open
+    // (the first shot was a shredded ball). A hash of (x,y,z) moves all five copies together.
+    const h = (a: number, b: number, c: number, k: number) => { const v = Math.sin(a * 127.1 + b * 311.7 + c * 74.7 + k * 19.3 + seed) * 43758.5453; return v - Math.floor(v) - 0.5 }
     for (let i = 0; i < p.count; i++) {
-      const jx = (rnd() - 0.5) * 0.06, jy = (rnd() - 0.5) * 0.05, jz = (rnd() - 0.5) * 0.06
-      const vx = p.getX(i) + jx + x, vy = p.getY(i) * 0.78 + jy + y, vz = p.getZ(i) + jz + z
+      const ox = p.getX(i), oy = p.getY(i), oz = p.getZ(i)
+      const jx = h(ox, oy, oz, 1) * 0.07, jy = h(ox, oy, oz, 2) * 0.05, jz = h(ox, oy, oz, 3) * 0.07
+      const vx = ox + jx + x, vy = oy * 0.78 + jy + y, vz = oz + jz + z
       pos.push(vx, vy, vz)
       // Foot dark, crown light: the shading a sculpted bush carries in its paint.
       const k = shade * (0.62 + Math.max(0, Math.min(1, vy / 0.95)) * 0.55)

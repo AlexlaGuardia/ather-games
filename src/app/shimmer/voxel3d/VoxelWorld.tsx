@@ -3743,7 +3743,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const right = new THREE.Vector3(-fwd.z, 0, fwd.x)
         const p = loco.current
         const spot = (side: number) => {
-          const x = Math.floor(p.px + fwd.x * 3 + right.x * 1.6 * side), z = Math.floor(p.pz + fwd.z * 3 + right.z * 1.6 * side)
+          const x = Math.floor(p.px + fwd.x * 4 + right.x * 1.3 * side), z = Math.floor(p.pz + fwd.z * 4 + right.z * 1.3 * side)
           const y = surfaceTopAt(x, z)
           return y === null ? null : { x, y, z }
         }
