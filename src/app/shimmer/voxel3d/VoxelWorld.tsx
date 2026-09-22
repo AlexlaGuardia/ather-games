@@ -3744,8 +3744,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         const p = loco.current
         const spot = (side: number) => {
           const x = Math.floor(p.px + fwd.x * 4 + right.x * 1.3 * side), z = Math.floor(p.pz + fwd.z * 4 + right.z * 1.3 * side)
-          const y = surfaceTopAt(x, z)
-          return y === null ? null : { x, y, z }
+          // The ground under the keeper's feet, read off the LIVE cells (every space; `surfaceTopAt`
+          // asks the continent's height and is wrong on the Glade and the plot).
+          for (let y = Math.floor(p.py) + 2; y >= Math.floor(p.py) - 12; y--) if (voxel(x, y, z) !== AIR) return { x, y: y + 1, z }
+          return null
         }
         const l = spot(-1), r = spot(1)
         if (!l || !r) return 'the ground ahead is not loaded yet'
