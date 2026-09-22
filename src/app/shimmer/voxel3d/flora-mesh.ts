@@ -28,6 +28,7 @@ import { cartoonStackGlsl, cartoonUniforms, CARTOON_DECL_GLSL } from './cartoon-
 import { createLightUniforms, type LightUniforms } from './light-glsl'
 import { bankLeanAt } from '../voxel/height'
 import { sunfruitBushLeavesGeo, sunfruitBushFruitGeo, sunfruitBushBox } from './models/sunfruit-bush'
+import { moonberryBushLeavesGeo, moonberryBushFruitGeo, moonberryBushBox } from './models/moonberry-bush'
 
 const SECTION = 16
 
@@ -146,17 +147,44 @@ export const floraPuffGeo = (): THREE.BufferGeometry => {
  * already 1.0 wide and based at 0, so the fit is the identity; that is the point — it stays the
  * identity by measurement rather than by luck.)
  */
-const fitBush = (g: THREE.BufferGeometry): THREE.BufferGeometry => {
-  const [mnx, mny, mnz] = sunfruitBushBox.min, [mxx, , mxz] = sunfruitBushBox.max
+type BushBox = { min: readonly [number, number, number]; max: readonly [number, number, number] }
+const fitBush = (g: THREE.BufferGeometry, box: BushBox): THREE.BufferGeometry => {
+  const [mnx, mny, mnz] = box.min, [mxx, , mxz] = box.max
+  // ⚠ WIDTH ONLY. Normalising HEIGHT too would erase the one difference canon actually states
+  // between the two bushes' bodies: the sunfruit is a compact dome (0.95 tall) and the moonberry
+  // is low and broad (0.62), because one grows in open sun and the other in shade. A fit that
+  // makes every bush the same box makes every bush the same plant.
   const k = 1 / Math.max(mxx - mnx, mxz - mnz)
   g.translate(-(mnx + mxx) / 2, -mny, -(mnz + mxz) / 2)
   g.scale(k, k, k)
   return g
 }
-/** The sculpted leafy body — 720 faceted triangles, wearing the card's own pixels (see `solidBushTex`). */
-export const floraFruitLeavesGeo = (): THREE.BufferGeometry => fitBush(sunfruitBushLeavesGeo())
-/** The fruit riding its crown — its own buffer so it takes its own tint, the puff's pattern. */
-export const floraFruitBerriesGeo = (): THREE.BufferGeometry => fitBush(sunfruitBushFruitGeo())
+/**
+ * ── ★ TWO BUSHES, AND THE DIFFERENCE IS CANON'S (2026-09-22) ─────────────────────────────────
+ * `CANON/world/cuisine.md` › *★ ATHER FRUIT* (ruled 2026-08-22): Sunfruit is *"a warm golden
+ * FRUIT"* — singular, few, big, sitting on the crown — and Moonberry is *"cool blue BERRIES"* —
+ * plural, many, small, hanging. The CARD ATLAS already encoded exactly that (four big fruit in
+ * column 0, nine small in column 1) and the first sculpt pass threw it away by drawing one mesh
+ * for both, which left a moonberry as a sunfruit painted blue. This is that split, restored in
+ * geometry: two bakes off one script (`scripts/models/bake-bushes.sh` holds the recipes).
+ * ⚠ KEYED ON MATERIAL, NOT ON A BOOLEAN. An unknown material falls back to the sunfruit rather
+ * than to nothing — a bush that fails to draw reads as a hole in the world, not as a missing case.
+ */
+const BUSH_MODELS: Readonly<Record<number, { leaves: () => THREE.BufferGeometry; fruit: () => THREE.BufferGeometry; box: BushBox }>> = {
+  [MAT.SUNFRUIT_BUSH]: { leaves: sunfruitBushLeavesGeo, fruit: sunfruitBushFruitGeo, box: sunfruitBushBox },
+  [MAT.MOONBERRY_BUSH]: { leaves: moonberryBushLeavesGeo, fruit: moonberryBushFruitGeo, box: moonberryBushBox },
+}
+const bushModel = (mat: number) => BUSH_MODELS[mat] ?? BUSH_MODELS[MAT.SUNFRUIT_BUSH]
+/** The sculpted leafy body, wearing the card's own pixels (see `solidBushTex`). */
+export const floraFruitLeavesGeo = (mat: number = MAT.SUNFRUIT_BUSH): THREE.BufferGeometry => {
+  const m = bushModel(mat); return fitBush(m.leaves(), m.box)
+}
+/** The fruit on it — its own buffer so it takes its own tint, the puff's pattern. */
+export const floraFruitBerriesGeo = (mat: number = MAT.SUNFRUIT_BUSH): THREE.BufferGeometry => {
+  const m = bushModel(mat); return fitBush(m.fruit(), m.box)
+}
+/** Every fruit material that has its own sculpt — the pool builds one instanced pair per entry. */
+export const BUSH_MODEL_MATS: ReadonlyArray<number> = Object.keys(BUSH_MODELS).map(Number)
 
 /**
  * ── ★ THE MODEL BUSH — an A/B against the card bush (2026-09-22, Alex: "3d models for bushes,
@@ -512,7 +540,7 @@ export interface FloraRenderer {
    * Same geometry, same texture, same sway as the plant it marks; see `outlineMaterial`.
    * `y` is the spot's GROUND height, exactly as `PlantProbe` reports it.
    */
-  setHighlight(kind: number, x: number, y: number, z: number, variant: number, alongX?: boolean): boolean
+  setHighlight(kind: number, x: number, y: number, z: number, variant: number, alongX?: boolean, mat?: number): boolean
   /** No plant under the reticle. */
   clearHighlight(): void
   dispose(): void
@@ -849,7 +877,27 @@ export function floraMatrix(
 
 /** Local vertex positions per kind, built ONCE from the same buffers the renderer draws. */
 let partVerts: Map<number, Float32Array[]> | null = null
-function vertsFor(kind: number): Float32Array[] {
+/**
+ * ⚠ KEYED ON `kind` FOR EVERY PLANT BUT ONE. The two fruit bushes are one FLORA kind and two
+ * different meshes (see `BUSH_MODELS`), so FRUIT is measured per MATERIAL and stored under a
+ * composite key. Without this the reticle would box a low sprawling moonberry with the tall
+ * sunfruit's dome — a box that is loose by a third, and loose in a way no test notices unless it
+ * names the material.
+ */
+const fruitKey = (mat: number) => -mat
+function vertsFor(kind: number, mat?: number): Float32Array[] {
+  if (kind === FLORA.FRUIT && mat !== undefined) {
+    const k = fruitKey(mat)
+    if (!partVerts?.has(k)) {
+      vertsFor(FLORA.TUFT)          // force the one-time build below
+      const m = bushModel(mat)
+      const grab1 = (g: THREE.BufferGeometry): Float32Array => {
+        const a = (g.getAttribute('position').array as Float32Array).slice(); g.dispose(); return a
+      }
+      partVerts!.set(k, [grab1(fitBush(m.leaves(), m.box)), grab1(fitBush(m.fruit(), m.box))])
+    }
+    return partVerts!.get(k) ?? []
+  }
   if (!partVerts) {
     partVerts = new Map()
     for (const k of Object.keys(FLORA_PARTS)) {
@@ -905,9 +953,9 @@ const bVec = new THREE.Vector3()
  * `y` is the spot's GROUND height, exactly as `PlantProbe` reports it.
  */
 export function floraBounds(
-  kind: number, x: number, y: number, z: number, variant: number, alongX?: boolean,
+  kind: number, x: number, y: number, z: number, variant: number, alongX?: boolean, mat?: number,
 ): FloraBox | null {
-  const parts = vertsFor(kind)
+  const parts = vertsFor(kind, mat)
   if (!parts.length) return null
   floraMatrix(kind, x, y, z, variant, alongX, bMtx, bOff, bQuat, bScl)
   let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity
@@ -1388,8 +1436,11 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // them. Deleting them would win a few hundred bytes and cost the ability to re-run the A/B.
   const fruitBushGeo = crossGeo(FLORA.FRUIT)
   // The sculpt (picaso's glb, baked). The pool's two parts — a leafy body and the fruit on it.
-  const bushLeafGeo = floraFruitLeavesGeo()
-  const bushBerryGeo = floraFruitBerriesGeo()
+  // The sculpts — ONE PAIR PER FRUIT MATERIAL (see `BUSH_MODELS`). `bushLeafGeo`/`bushBerryGeo`
+  // stay as the sunfruit's, because the reticle's default and the icon path want a single answer
+  // when nobody has said which bush; the pools below index by material.
+  const bushGeos = BUSH_MODEL_MATS.map(mat => ({ mat, leaf: floraFruitLeavesGeo(mat), berry: floraFruitBerriesGeo(mat) }))
+  const bushLeafGeo = bushGeos[0].leaf, bushBerryGeo = bushGeos[0].berry
   const herbGeo = crossGeo(FLORA.HERB)
   const cropGeo = crossGeo(FLORA.CROP)
   // The head rides at the top of a full-height stalk. Scaled with the stalk by the instance matrix,
@@ -1572,10 +1623,25 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   bushHeads.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.bush * 3), 3)
   // The fruit bush: body in the bush's own leaf colour (a multiplier over the green tile, like a
   // blade over its ground), fruit in FRUIT_TINT. Same two arithmetics as everything above.
-  const fruitBushes = new THREE.InstancedMesh(bushLeafGeo, bushLeafMat, CAP.fruit)
-  const fruits = new THREE.InstancedMesh(bushBerryGeo, bushBerryMat, CAP.fruit)
-  fruitBushes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
-  fruits.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
+  /**
+   * ── ★ THE FRUIT POOL IS NOW ONE PAIR PER SPECIES, ON ONE SHARED BUDGET ──────────────────────
+   * Two sculpts means two geometries means two instanced meshes; there is no atlas trick that
+   * saves a draw here, because what differs is the MESH, not the pixels on it. Four draws for the
+   * world's fruit bushes.
+   * ⚠ `CAP.fruit` IS THE TOTAL, NOT THE PER-SPECIES ALLOWANCE. Each mesh is sized to the cap so
+   * either species may fill the ring alone (they grow on different grounds, so a woodland really
+   * can be all moonberry), but `sync` stops at `CAP.fruit` ACROSS both — otherwise adding a
+   * species would silently double the worst case the budget was measured against.
+   */
+  const bushPools = bushGeos.map(g => {
+    const leaves = new THREE.InstancedMesh(g.leaf, bushLeafMat, CAP.fruit)
+    const berries = new THREE.InstancedMesh(g.berry, bushBerryMat, CAP.fruit)
+    leaves.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
+    berries.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.fruit * 3), 3)
+    return { mat: g.mat, leaves, berries, n: 0 }
+  })
+  const bushPoolOf = new Map(bushPools.map(b => [b.mat, b]))
+  const bushMeshes = bushPools.flatMap(b => [b.leaves, b.berries])
   /**
    * The atlas column for a fruit material — the order `FRUIT_MATS` lists them in.
    * ⚠ THE WILD POOL NO LONGER READS THIS. The sculpt carries one fruit cluster for every species
@@ -1622,7 +1688,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // glints) so it is never sorted behind the water it decorates.
   wakes.renderOrder = 2
 
-  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes, shelves]) {
+  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes, shelves]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -1630,7 +1696,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   }
 
   const group = new THREE.Group()
-  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes, shelves)
+  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes, shelves)
 
   // ── the showcase (2026-09-22): a few card bushes and model bushes at exact spots, off the pools ──
   const SHOW_CAP = 8
@@ -1676,7 +1742,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     c.setAttribute('aTile', new THREE.InstancedBufferAttribute(new Float32Array(1), 1).setUsage(THREE.DynamicDrawUsage))
     return c
   }
-  const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number }[] = [
+  const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number; fmat?: number }[] = [
     { kind: FLORA.TUFT, geo: hlAtlasGeo(tuftGeo), mat: outlineMaterial(tuftTex, FLORA_SWAY[FLORA.TUFT], GRASS_VARIANTS), grow: 1 },
     { kind: FLORA.TUFT, geo: tuftCapGeo, mat: outlineMaterial(rosetteTex, FLORA_SWAY[FLORA.TUFT]), grow: 1 },
     { kind: FLORA.TALL, geo: hlAtlasGeo(tallGeo), mat: outlineMaterial(tallTex, FLORA_SWAY[FLORA.TALL], GRASS_VARIANTS), grow: 1 },
@@ -1692,8 +1758,12 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     // texels to darken, so it takes the grown back-face hull the rock and the puff take. Both
     // parts get one — the fruit sits proud of the crown, and a hull round the body alone would
     // leave the berries outside their own outline.
-    { kind: FLORA.FRUIT, geo: bushLeafGeo, mat: outlineHullMaterial(), grow: 1.12 },
-    { kind: FLORA.FRUIT, geo: bushBerryGeo, mat: outlineHullMaterial(), grow: 1.12 },
+    // ⚠ AND ONE PAIR PER SPECIES, keyed by `fmat`: a moonberry is low and broad (0.62 tall) and a
+    // sunfruit is a dome (0.95), so one hull for both is loose by a third on whichever it is not.
+    ...bushGeos.flatMap(g => ([
+      { kind: FLORA.FRUIT, fmat: g.mat, geo: g.leaf, mat: outlineHullMaterial(), grow: 1.12 },
+      { kind: FLORA.FRUIT, fmat: g.mat, geo: g.berry, mat: outlineHullMaterial(), grow: 1.12 },
+    ])),
     { kind: FLORA.HERB, geo: herbGeo, mat: outlineMaterial(bladeTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
     { kind: FLORA.HERB, geo: tipGeo, mat: outlineMaterial(headTex, FLORA_SWAY[FLORA.HERB]), grow: 1 },
     { kind: FLORA.CROP, geo: cropGeo, mat: outlineMaterial(cropStalkTex, FLORA_SWAY[FLORA.CROP]), grow: 1 },
@@ -1912,6 +1982,9 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       leanLive = river ? lean.fill(cols, seed) : lean.clear()
       uLean.value = lean.texture
       let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0, nRe = 0, nSh = 0, wSh = 0
+      // ⚠ RESET BESIDE `nFr`, NOT INSIDE THE LOOP: these are per-species slot counters and a
+      // sync that forgot them would append to the last sync's instances until the cap ate it.
+      for (const b of bushPools) b.n = 0
       // ── ★ THE TRUNK-SIDE PLANTS, from their own reader (2026-09-21) ───────────────────────
       // Written first, before the ground loop, on their own pool: a shelf never appears in the
       // ground spots (the probe stops at h+1), and the ground loop below `continue`s on the kind
@@ -2045,14 +2118,19 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
           }
           else if (s.kind === FLORA.FRUIT) {
             wFr++
+            // ★ THE BUDGET IS SHARED (`nFr`), THE SLOT IS THE SPECIES' OWN (`b.n`). An unknown
+            // fruit material falls back to the sunfruit's pair rather than vanishing — a bush that
+            // fails to draw reads as a hole in the world, not as a missing case.
+            const b = bushPoolOf.get(s.mat) ?? bushPools[0]
             if (nFr < CAP.fruit) {
-              fruitBushes.setMatrixAt(nFr, mtx)
-              fruits.setMatrixAt(nFr, mtx)
+              b.leaves.setMatrixAt(b.n, mtx)
+              b.berries.setMatrixAt(b.n, mtx)
               // Leaf colour over the green tile — the blade arithmetic (target / BLADE_GREEN).
               const leaf = MATERIAL_COLOR[s.mat] ?? 0x569e42
-              fruitBushes.setColorAt(nFr, tint.setRGB(
+              b.leaves.setColorAt(b.n, tint.setRGB(
                 ((leaf >> 16) & 255) / BLADE_GREEN[0], ((leaf >> 8) & 255) / BLADE_GREEN[1], (leaf & 255) / BLADE_GREEN[2]))
-              fruits.setColorAt(nFr, tint.set(FRUIT_TINT[s.mat] ?? 0xffffff))
+              b.berries.setColorAt(b.n, tint.set(FRUIT_TINT[s.mat] ?? 0xffffff))
+              b.n++
               nFr++
             }
           }
@@ -2080,7 +2158,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       tufts.count = nT; tuftCaps.count = nT; tuftShadows.count = nT; talls.count = nL; stems.count = nF; heads.count = nF
       matLeaves.count = nM; matBlooms.count = nM; matStars.count = nM; matShadows.count = nM
       bushes.count = nB; bushHeads.count = nB
-      fruitBushes.count = nFr; fruits.count = nFr
+      for (const b of bushPools) { b.leaves.count = b.n; b.berries.count = b.n }
       herbs.count = nH; tips.count = nH
       crops.count = nC; cropHeads.count = nC
       // The planted tail starts where the wild feed stopped; it sets the crop/herb counts itself.
@@ -2117,7 +2195,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       if (talls.instanceColor) talls.instanceColor.needsUpdate = true
       stems.instanceMatrix.needsUpdate = true
       heads.instanceMatrix.needsUpdate = true
-      for (const m of [matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, fruitBushes, fruits]) {
+      for (const m of [matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes]) {
         m.instanceMatrix.needsUpdate = true
         if (m.instanceColor) m.instanceColor.needsUpdate = true
       }
@@ -2145,14 +2223,18 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     setCartoon(v) { for (const [k, val] of Object.entries(v)) if (cartoon[k]) cartoon[k].value = val },
     setReedLean(v) { uReedLean.value = v },
 
-    setHighlight(kind, x, y, z, variant, alongX) {
+    setHighlight(kind, x, y, z, variant, alongX, mat) {
       // ★ THE SAME PLACEMENT DERIVATION THE PLANT ITSELF USES. If this composed its own matrix the
       // border would be a second opinion about where the plant is, and the two would disagree the
       // first time anyone re-tuned a jitter.
       floraMatrix(kind, x, y, z, variant, alongX, hlMtx, off, quat, scl)
       let drew = false
       for (const h of hlMeshes) {
-        if (h.kind !== kind) { h.mesh.count = 0; continue }
+        // ⚠ A SPECIES-KEYED DEF ONLY LIGHTS FOR ITS OWN MATERIAL, and with no material named it
+        // falls back to the FIRST (the sunfruit) rather than lighting both or neither — two hulls
+        // at once would read as a double border, none as a broken reticle.
+        const wrongBush = h.fmat !== undefined && h.fmat !== (mat ?? BUSH_MODEL_MATS[0])
+        if (h.kind !== kind || wrongBush) { h.mesh.count = 0; continue }
         if (h.grow === 1) h.mesh.setMatrixAt(0, hlMtx)
         else h.mesh.setMatrixAt(0, mtx.copy(hlMtx).scale(hlGrow.setScalar(h.grow)))
         h.mesh.instanceMatrix.needsUpdate = true
@@ -2183,7 +2265,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       // its plant's, which is disposed above.
       for (const h of hlMeshes) if (h.kind === FLORA.TUFT || h.kind === FLORA.TALL) h.geo.dispose()
       // The flower forms (2026-09-14/15): geometry, material, texture — same three each.
-      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, bushLeafGeo, bushBerryGeo, mossGeo, puffGeo, shelfGeo]) g.dispose()
+      for (const g of [matLeafGeo, matBloomGeo, matStarGeo, matShadowGeo, bushGeo, bushHeadGeo, fruitBushGeo, ...bushGeos.flatMap(g2 => [g2.leaf, g2.berry]), mossGeo, puffGeo, shelfGeo]) g.dispose()
       // `showModelMat`/`showFruitMat` are aliases of the two bush materials, not a second pair.
       for (const m of [matLeafMat, matBloomMat, matStarMat, matShadowMat, bushMat, bushHeadMat, fruitBushMat, fruitMat, bushLeafMat, bushBerryMat, solidBushTex, mossMat, puffMat, shelfMat]) m.dispose()
       for (const t of [bushTex, clusterTex, matLeafTex, matBloomTex, matShadowTex, fruitTex, mossTex]) t.dispose()

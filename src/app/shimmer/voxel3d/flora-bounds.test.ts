@@ -28,6 +28,7 @@
 import * as THREE from 'three'
 import { createFloraRenderer, floraBounds, FLORA_PARTS } from './flora-mesh'
 import { FLORA } from '../voxel/flora'
+import { MAT } from '../voxel/depth'
 
 let pass = 0
 const fails: string[] = []
@@ -39,11 +40,11 @@ const SPOT_X = 5, SPOT_Z = 7, GROUND_Y = 40, SEED = 1234
 
 /** The box the renderer ACTUALLY draws for one spot: every instance matrix in the group, applied
  *  to that mesh's real vertices. No knowledge of any width, height or offset. */
-function drawnBox(kind: number, variant: number, alongX = true) {
+function drawnBox(kind: number, variant: number, alongX = true, mat = 0) {
   const r = createFloraRenderer()
   r.sync([{ key: '0,0', x0: 0, z0: 0 }], SEED, (x, z) =>
     x === SPOT_X && z === SPOT_Z
-      ? { y: GROUND_Y, kind, variant, mat: 0, ground: 0, alongX }
+      ? { y: GROUND_Y, kind, variant, mat, ground: 0, alongX }
       : null)
 
   const mtx = new THREE.Matrix4()
@@ -68,7 +69,7 @@ function drawnBox(kind: number, variant: number, alongX = true) {
   return { x0, y0, z0, x1, y1, z1, instances }
 }
 
-const KINDS: [string, number][] = [
+const KINDS: [string, number, number?][] = [
   ['tuft', FLORA.TUFT], ['tall grass', FLORA.TALL], ['flower', FLORA.FLOWER],
   ['herb', FLORA.HERB], ['crop', FLORA.CROP],
   ['rock', FLORA.ROCK], ['deadfall', FLORA.DEADFALL], ['mushroom', FLORA.MUSHROOM],
@@ -81,7 +82,11 @@ const KINDS: [string, number][] = [
   // ⚠ STILL UNCOVERED AND KNOWINGLY SO: BLOOM_BUSH, BLOOM_MAT, PUFF, MOSS, REED, SHELF. The last
   // two need a probe this harness does not build (a water plane; a trunk scan), the others would
   // cost only a row each — this comment is so that the gap is a decision rather than a silence.
-  ['fruit bush', FLORA.FRUIT],
+  // ★ AND THE TWO FRUIT BUSHES ARE ONE KIND WITH TWO MESHES (2026-09-22), so the material is part
+  // of the question. A row for the kind alone would test the sunfruit twice and call the moonberry
+  // covered — the same shape of lie as having no row at all, one level down.
+  ['sunfruit bush', FLORA.FRUIT, MAT.SUNFRUIT_BUSH],
+  ['moonberry bush', FLORA.FRUIT, MAT.MOONBERRY_BUSH],
 ]
 // Spread across the roll: jitter, turn and height all ride on `variant`, so one value would test
 // one plant rather than the family. 0 and ~1 are the ends the jitter reaches furthest at.
@@ -89,11 +94,11 @@ const VARIANTS = [0, 0.17, 0.33, 0.5, 0.66, 0.83, 0.999]
 
 // ── 1. every face of the box sits on the drawn extreme ────────────────────────────────────────
 {
-  for (const [name, kind] of KINDS) {
+  for (const [name, kind, fmat] of KINDS) {
     for (const variant of VARIANTS) {
       {
         const at = `${name} @ variant ${variant}`
-        const drawn = drawnBox(kind, variant)
+        const drawn = drawnBox(kind, variant, true, fmat ?? 0)
         // ⚠ A POSITIVE CONTROL FIRST. If `sync` drew nothing — a kind that fell through its chain,
         // a pool at cap, a probe the loop never called — `drawn` is all Infinity and every
         // comparison below is vacuously true. An empty measurement window can only return one
@@ -101,7 +106,7 @@ const VARIANTS = [0, 0.17, 0.33, 0.5, 0.66, 0.83, 0.999]
         ok(drawn.instances > 0, `${at}: the renderer drew nothing to measure against`)
         ok(Number.isFinite(drawn.x0), `${at}: drawn box is not finite`)
 
-        const b = floraBounds(kind, SPOT_X, GROUND_Y, SPOT_Z, variant, true)
+        const b = floraBounds(kind, SPOT_X, GROUND_Y, SPOT_Z, variant, true, fmat)
         ok(b !== null, `${at}: floraBounds returned null`)
         if (!b) continue
         // ⚠ THE TOLERANCE IS FLOAT32, AND IT IS A MEASUREMENT OF THE INSTRUMENT, NOT A CONCESSION.
@@ -115,6 +120,20 @@ const VARIANTS = [0, 0.17, 0.33, 0.5, 0.66, 0.83, 0.999]
         near(b.y1, drawn.y1, 1e-5, `${at} y1`); near(b.z1, drawn.z1, 1e-5, `${at} z1`)
       }
     }
+  }
+}
+
+// ── 1b. ★ THE TWO FRUIT BUSHES MEASURE DIFFERENT BOXES ────────────────────────────────────────
+// Canon gives the sunfruit a compact dome and the moonberry a low broad sprawl, and §1 above only
+// proves each box matches what the renderer drew FOR THAT MATERIAL. If `floraBounds` ever went
+// back to ignoring the material, both would match the sunfruit's drawing and §1 would still pass
+// for the sunfruit rows — so this is the assert that the split exists at all.
+{
+  for (const variant of VARIANTS) {
+    const sun = floraBounds(FLORA.FRUIT, SPOT_X, GROUND_Y, SPOT_Z, variant, true, MAT.SUNFRUIT_BUSH)!
+    const moon = floraBounds(FLORA.FRUIT, SPOT_X, GROUND_Y, SPOT_Z, variant, true, MAT.MOONBERRY_BUSH)!
+    ok(sun.y1 - moon.y1 > 0.15,
+      `the two bushes are the same height @ ${variant} (sun ${(sun.y1 - sun.y0).toFixed(3)}, moon ${(moon.y1 - moon.y0).toFixed(3)}) — is floraBounds reading the material?`)
   }
 }
 

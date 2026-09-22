@@ -19,8 +19,9 @@
 // exist, that the injection CHANGED the source, that both programs bend by the same number, and
 // that the border's matrix is the plant's matrix. The pixels are Alex's call and always were.
 import * as THREE from 'three'
-import { createFloraRenderer, floraMatrix, FLORA_SWAY, FLORA_PARTS } from './flora-mesh'
+import { createFloraRenderer, floraMatrix, floraFruitLeavesGeo, floraFruitBerriesGeo, FLORA_SWAY, FLORA_PARTS } from './flora-mesh'
 import { FLORA } from '../voxel/flora'
+import { MAT } from '../voxel/depth'
 
 let pass = 0
 const fails: string[] = []
@@ -85,6 +86,27 @@ const meshes = () => r.group.children.filter(c =>
   }
   r.clearHighlight()
   ok(meshes().every(m => m.count === 0), 'clearHighlight left an outline mesh still drawing')
+}
+
+// ── 2b. ★ THE FRUIT BUSH'S BORDER FOLLOWS THE SPECIES, NOT JUST THE KIND (2026-09-22) ─────────
+// Two sculpts share FLORA.FRUIT, so `setHighlight` takes a material. The failure this catches is
+// not "no border" — it is TWO borders (both species' hulls lit at once, a double outline) or the
+// wrong one (a moonberry wearing the sunfruit's taller dome). Both look like a rendering glitch
+// and neither trips a count-only assert that expects "at least one".
+{
+  for (const [name, fmat] of [['sunfruit', MAT.SUNFRUIT_BUSH], ['moonberry', MAT.MOONBERRY_BUSH]] as [string, number][]) {
+    r.clearHighlight()
+    ok(r.setHighlight(FLORA.FRUIT, 5, 40, 7, 0.42, true, fmat), `${name}: setHighlight returned false`)
+    const lit = meshes().filter(m => m.count > 0)
+    ok(lit.length === 2, `${name}: ${lit.length} outline meshes lit, expected exactly 2 (body + fruit of ONE species)`)
+    // And they must be that species' own buffers — the only thing that tells the hulls apart.
+    const want = new Set([floraFruitLeavesGeo(fmat).getAttribute('position').count, floraFruitBerriesGeo(fmat).getAttribute('position').count])
+    for (const m of lit) {
+      ok(want.has(m.geometry.getAttribute('position').count),
+        `${name}: a lit hull has ${m.geometry.getAttribute('position').count} verts, which is not this species' geometry`)
+    }
+  }
+  r.clearHighlight()
 }
 
 // ── 3. ★ THE BORDER SITS EXACTLY ON THE PLANT ─────────────────────────────────────────────────

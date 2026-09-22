@@ -4688,7 +4688,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // GROUND height (fractional on a slumped lip, hence `ceil`), not a cell index. Without this
     // check a reticle on a plant the probe did not pick would mark another cell's plant.
     const spot = plantProbe(hit.x, hit.z)
-    if (spot && Math.ceil(spot.y) + 1 === hit.y) flora.setHighlight(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX)
+    if (spot && Math.ceil(spot.y) + 1 === hit.y) flora.setHighlight(spot.kind, hit.x, spot.y, hit.z, spot.variant, spot.alongX, spot.mat)
   }, [plantProbe, flora])
 
   /**
