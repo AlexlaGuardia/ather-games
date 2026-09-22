@@ -16,6 +16,7 @@ import { drainMana } from './mana'
 import {
   CropDef, CROP_DEFS, CROP_IDS, ELEMENT_HERBS, MANA_SEED_ITEM, MANA_BLOOM_CROP, type HerbElement,
 } from '../voxel/crops'
+import { isPrimeSeed, baseSeedId, primeSeedId, primeSeedChance, primeSeedsBack, primeYield } from './seed-quality'
 export { CROP_DEFS, CROP_IDS, ELEMENT_HERBS, MANA_SEED_ITEM, MANA_BLOOM_CROP }
 export type { CropDef, HerbElement }
 
@@ -43,6 +44,11 @@ export interface PlantedCrop {
   zoneId: string
   plantedAt: number       // Date.now()
   growthDuration: number  // ms, copied from CropDef
+  /**
+   * Grown from a PRIME seed (`seed-quality.ts`). Optional so every save written before the prime
+   * line existed loads unchanged and reads as an ordinary planting, which it was.
+   */
+  prime?: boolean
 }
 
 export type CropGrowthPhase = 0 | 1 | 2 | 3  // seed | sprout | growth | ready
@@ -108,20 +114,28 @@ export function canPlantCrop(cropId: string, inv: Inventory, farmingLevel: numbe
 export function plantCrop(
   cropId: string, inv: Inventory, skills: SkillSet, mana: ManaPool,
   tileX: number, tileY: number, zoneId: string,
+  /** Which seed to spend — a prime one or the ordinary one. Defaults to the crop's ordinary seed,
+   *  so every existing caller keeps its exact behaviour. */
+  usedSeedItemId?: string,
 ): PlantedCrop | null {
   const def = CROP_DEFS[cropId]
   if (!def) return null
   if (skills.farming.level < def.minFarmingLevel) return null
   if (!drainMana(mana, def.manaCost)) return null
-  if (countItem(inv, def.seedItemId) < 1) return null
+  // ★ THE SEED THE KEEPER CHOSE, not the crop's default — a prime seed and an ordinary one plant
+  // the same crop, and which was spent is the whole difference in what the bed pays back.
+  const seedId = usedSeedItemId ?? def.seedItemId
+  if (baseSeedId(seedId) !== def.seedItemId) return null
+  if (countItem(inv, seedId) < 1) return null
 
-  removeItems(inv, def.seedItemId, 1)
+  removeItems(inv, seedId, 1)
   addSkillXP(skills.farming, def.plantXp)
 
   return {
     id: `crop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     cropId,
     tileX, tileY, zoneId,
+    ...(isPrimeSeed(seedId) ? { prime: true } : {}),
     plantedAt: Date.now(),
     growthDuration: def.growthMs,
   }
@@ -165,7 +179,13 @@ export const seedBackBonusChance = (levelAboveMin: number): number =>
  * the crop's own seed back (see above). `roll` is injectable so the oracle can pin both branches.
  * bonusFindChance: companion Tuberfind perk (Dustwhisker @15) — a chance for one bonus crop.
  */
-export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet, bonusFindChance = 0, xpMult = 1, roll: () => number = Math.random): HarvestCropResult {
+export function harvestCrop(
+  crop: PlantedCrop, inv: Inventory, skills: SkillSet, bonusFindChance = 0, xpMult = 1,
+  roll: () => number = Math.random,
+  /** Was the bed FED when this was taken (`watering.ts`)? The prime line's only input — trailing
+   *  and defaulting false so every existing caller and test keeps its behaviour exactly. */
+  fed = false,
+): HarvestCropResult {
   const def = CROP_DEFS[crop.cropId]
   if (!def) return { items: [], xpGained: 0 }
 
@@ -184,6 +204,9 @@ export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet,
   for (const y of def.yields) {
     if (roll() < y.chance) {
       let count = Math.max(1, Math.round(y.count * yieldMult))
+      // ★ A PRIME PLANTING IS FELT AS ABUNDANCE, not as a different item — see `PRIME_YIELD_MULT`
+      // for why premium PRODUCE waits on the ingredient checks learning to accept it.
+      if (crop.prime) count = primeYield(count)
       // Companion perk (Tuberfind @15) — a chance for a bonus crop on top.
       if (bonusFindChance > 0 && roll() < bonusFindChance) count += 1
       addItems(inv, y.itemId, count)
@@ -191,9 +214,28 @@ export function harvestCrop(crop: PlantedCrop, inv: Inventory, skills: SkillSet,
     }
   }
   // The seed back — after the produce so the toast reads "2× goldleaf, 1× goldleaf seed".
-  const seeds = SEED_BACK_BASE + (roll() < seedBackBonusChance(levelAboveMin) ? 1 : 0)
-  addItems(inv, def.seedItemId, seeds)
-  items.push({ itemId: def.seedItemId, count: seeds })
+  if (crop.prime) {
+    // ── ★ A PRIME LINE BREEDS TRUE, AND ONLY GROWS IF IT IS FED (`seed-quality.ts`) ───────────
+    // The kind is guaranteed (a line can never be lost to bad luck) and the COUNT is what tending
+    // buys: unfed returns 1 and the line stays flat for ever, fed returns 2 and it multiplies.
+    // Without that split, one prime seed would be prime for ever and tending would stop mattering.
+    const primeId = primeSeedId(def.seedItemId)
+    const n = primeSeedsBack(fed)
+    addItems(inv, primeId, n)
+    items.push({ itemId: primeId, count: n })
+  } else {
+    const seeds = SEED_BACK_BASE + (roll() < seedBackBonusChance(levelAboveMin) ? 1 : 0)
+    addItems(inv, def.seedItemId, seeds)
+    items.push({ itemId: def.seedItemId, count: seeds })
+    // ★ AND THE LINE CAN BEGIN HERE: a FED ordinary crop may hand back a prime seed on top. Keyed
+    // to feeding rather than to "how well tended" because a care fraction has no gradient in this
+    // game — one pour covers a 5–16 minute crop's whole life. See `seed-quality.ts`'s header.
+    if (roll() < primeSeedChance(fed, levelAboveMin)) {
+      const primeId = primeSeedId(def.seedItemId)
+      addItems(inv, primeId, 1)
+      items.push({ itemId: primeId, count: 1 })
+    }
+  }
 
   const xp = Math.round(def.xpGrant * xpMult)
   addSkillXP(skills.farming, xp)
@@ -210,8 +252,12 @@ export function getVisibleCrops(farmingLevel: number): CropDef[] {
 
 /** Find which cropId a seed item plants */
 export function cropForSeed(seedItemId: string): string | null {
+  // ★ A PRIME SEED PLANTS THE SAME CROP, so it resolves through its base. Every caller of this —
+  // the sow intent, the seed check, the hotbar — then accepts a prime seed for free, which is the
+  // point of carrying quality in the id rather than in a parallel table.
+  const base = baseSeedId(seedItemId)
   for (const def of Object.values(CROP_DEFS)) {
-    if (def.seedItemId === seedItemId) return def.id
+    if (def.seedItemId === base) return def.id
   }
   return null
 }

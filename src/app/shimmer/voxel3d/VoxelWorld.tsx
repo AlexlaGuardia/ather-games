@@ -10065,7 +10065,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         mouse.current.right = false
       } else if (intent === 'reap') {
         // ── ★ REAP: take a ripe crop. `harvestBed` refuses an unripe one and LEAVES IT PLANTED ──
-        const got = harvestBed(beds.current, hit.x, hit.y, hit.z, inv.current!, skills.current!)
+        // ★ FED, not "well tended": a care FRACTION has no gradient in this game (one pour covers a
+        // 5-16 minute crop's whole 24h window), so the prime line keys to the scarce act — the bed
+        // brew, one bottle per bed per day. See `seed-quality.ts`.
+        const got = harvestBed(beds.current, hit.x, hit.y, hit.z, inv.current!, skills.current!,
+          isFed(watered.current, hit.x, hit.y, hit.z, Date.now()))
         if (got) {
           onInvChange()
           onSkill({ id: 'farming', level: skills.current!.farming.level,

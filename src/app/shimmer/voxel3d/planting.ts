@@ -26,6 +26,7 @@ import type { Inventory } from '../engine/inventory'
 import { countItem } from '../engine/inventory'
 import { addSkillXP, type SkillSet } from '../engine/skills'
 import { removeItems } from '../engine/inventory'
+import { isPrimeSeed } from '../engine/seed-quality'
 
 /** One bed's address. The only key anything here uses. */
 export const bedKey = (x: number, y: number, z: number): string => `${x},${y},${z}`
@@ -124,6 +125,10 @@ export function plantInBed(
     id: `bed-${x},${y},${z}`,
     cropId: def.id,
     tileX: x, tileY: z, zoneId: bedZoneId(y),
+    // ★ WHICH SEED WENT IN, remembered on the planting (`seed-quality.ts`). `removeItems` above
+    // already spends the exact id the keeper selected, so a prime sowing is simply the same act
+    // with a different seed — the bed does not need a second notion of quality.
+    ...(isPrimeSeed(seedItemId) ? { prime: true } : {}),
     plantedAt: now(),
     growthDuration: def.growthMs,
   }
@@ -156,11 +161,18 @@ export function readyAt(beds: PlantedBeds, x: number, y: number, z: number): boo
  */
 export function harvestBed(
   beds: PlantedBeds, x: number, y: number, z: number, inv: Inventory, skills: SkillSet,
+  /**
+   * Was the bed FED when this was taken? The prime seed line's only input (`seed-quality.ts`) —
+   * trailing and defaulting false so every existing caller keeps its behaviour exactly.
+   * ⚠ The HOST answers it, because the fed window lives in `watering.ts`'s map and this file has
+   * no access to it — the same shape `bedPlanted` and `holdsSeed` take into `rightClickIntent`.
+   */
+  fed = false,
 ): HarvestCropResult | null {
   const key = bedKey(x, y, z)
   const crop = beds.get(key)
   if (!crop || !isCropReady(crop)) return null
-  const result = harvestCrop(crop, inv, skills)
+  const result = harvestCrop(crop, inv, skills, 0, 1, Math.random, fed)
   beds.delete(key)
   return result
 }

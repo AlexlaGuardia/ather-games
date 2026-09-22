@@ -36,6 +36,7 @@ import { GrimoireTab } from '../voxel3d/grimoire-tab'
 import { KeeperFrame, SectionHead, TabEmpty, type KeeperTab } from '../voxel3d/keeper-panel'
 import { itemIcon } from '../voxel3d/tex/item-icon'
 import React, { useEffect, useRef, useState } from 'react'
+import { isPrimeSeed, baseSeedId } from '../engine/seed-quality'
 
 // ── The slot-lift model (moved with the panel; VoxelWorld imports it back) ──────────────────────
 /**
@@ -125,6 +126,11 @@ export function ItemChip({ itemId, size }: { itemId: string; size: number }) {
 }
 
 export function itemLabel(itemId: string): string {
+  // ★ A PRIME SEED IS LABELLED FROM ITS BASE, not from its own entry — so a crop added next month
+  // gets a readable prime name for free, and a ruling on the word (`prime` is a build placeholder;
+  // the adjective a keeper reads is Magii's) changes ONE string rather than one per crop.
+  // ⚠ Cannot recurse: the recursive call is on the BASE id, which is never itself prime.
+  if (isPrimeSeed(itemId)) return `Prime ${itemLabel(baseSeedId(itemId))}`
   const pc = pieceForItem(itemId)
   if (pc) return pc.name
   const mid = intermediateLabel(itemId)          // the alchemy chain's powders, extracts, bases
