@@ -1520,8 +1520,18 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const showFruit = new THREE.InstancedMesh(showFruitGeo, fruitMat, SHOW_CAP)
   showCard.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
   showFruit.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SHOW_CAP * 3), 3)
+  // ★ LIT LIKE THE CARD, NOT LIKE A ROCK (Alex, 09-22: "the model bush looks too bright, can we
+  // match the card's lighting"). Two things made it bright: the solid family's light path (the
+  // field sampled by normal, no `here`) and a FLAT leaf colour where the card's painted tile is
+  // mostly darker than its tint. So: the card's own stack mode, and the tint scaled by the bush
+  // tile's mean brightness — the model's average albedo IS the card's, by construction.
   const showModelMat = new THREE.MeshLambertMaterial({ side: THREE.FrontSide, flatShading: true })
-  showModelMat.onBeforeCompile = (shader) => injectStack(shader, false)
+  showModelMat.onBeforeCompile = (shader) => injectStack(shader, true)
+  const bushTileMean = (() => {
+    const px = bushPixels(), m = [0, 0, 0]; let n = 0
+    for (let i = 0; i < px.length; i += 4) { if (px[i + 3] < 128) continue; m[0] += px[i]; m[1] += px[i + 1]; m[2] += px[i + 2]; n++ }
+    return n ? [m[0] / n / BLADE_GREEN[0], m[1] / n / BLADE_GREEN[1], m[2] / n / BLADE_GREEN[2]] : [1, 1, 1]
+  })()
   const modelGeo = floraModelBushGeo(7)
   const showLeaves = new THREE.InstancedMesh(modelGeo.leaves, showModelMat, SHOW_CAP)
   const showBerries = new THREE.InstancedMesh(modelGeo.fruit, showModelMat, SHOW_CAP)
@@ -1742,8 +1752,10 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         } else {
           if (nm >= SHOW_CAP) continue
           showLeaves.setMatrixAt(nm, mtx); showBerries.setMatrixAt(nm, mtx)
-          // The leaf colour as the FINAL colour (scatter arithmetic — no map to multiply into).
-          showLeaves.setColorAt(nm, tint.set(MATERIAL_COLOR[e.mat] ?? 0x569e42))
+          // The leaf colour as the FINAL colour (scatter arithmetic — no map to multiply into),
+          // scaled to the card tile's mean so the two bushes share an average brightness.
+          const leaf = MATERIAL_COLOR[e.mat] ?? 0x569e42
+          showLeaves.setColorAt(nm, tint.setRGB(((leaf >> 16) & 255) / 255 * bushTileMean[0], ((leaf >> 8) & 255) / 255 * bushTileMean[1], (leaf & 255) / 255 * bushTileMean[2]))
           showBerries.setColorAt(nm, tint.set(FRUIT_TINT[e.mat] ?? 0xffffff))
           nm++
         }
