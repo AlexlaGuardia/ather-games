@@ -11179,6 +11179,10 @@ function ChatConsole({ open, seed, log, ctx, onSubmit, onClose }: {
   const hist = useRef<string[]>([])
   const histAt = useRef(-1)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Sits ABOVE the hotbar band, never on it: bottom-left at a fixed 460px landed on the phone's bar
+  // (and the keyboard pushed it there while typing). Same clearance every other low HUD line uses.
+  const hudSize = useHudSize()
+  const place: React.CSSProperties = { bottom: HUD_BAR_CLEAR[hudSize] + 8, width: 'min(460px, calc(100vw - 24px))' }
   // Re-seed on each open ('/' arrives pre-slashed); the component stays mounted for the feed.
   useEffect(() => { if (open) { setLine(seed); histAt.current = -1 } }, [open, seed])
   useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight }, [log, open])
@@ -11198,7 +11202,7 @@ function ChatConsole({ open, seed, log, ctx, onSubmit, onClose }: {
     const recent = log.filter(m => m.at > cutoff).slice(-8)
     if (recent.length === 0) return null
     return (
-      <div className="absolute left-3 bottom-3 w-[460px] font-mono text-[11px] pointer-events-none">
+      <div className="absolute left-3 font-mono text-[11px] pointer-events-none" style={place}>
         <style>{`@keyframes shimmerchatfade { to { opacity: 0 } }`}</style>
         {recent.map(m => (
           <div key={m.id} className={`px-2 py-0.5 bg-black/45 rounded-sm whitespace-pre-wrap ${CHAT_KIND_CLASS[m.kind]}`}
@@ -11211,9 +11215,9 @@ function ChatConsole({ open, seed, log, ctx, onSubmit, onClose }: {
   }
 
   return (
-    <div className="absolute left-3 bottom-3 w-[460px] font-mono text-[11px] pointer-events-auto">
+    <div className="absolute left-3 font-mono text-[11px] pointer-events-auto" style={place}>
       {log.length > 0 && (
-        <div ref={scrollRef} className="mb-1 px-2 py-1.5 bg-black/70 border border-white/10 rounded max-h-52 overflow-y-auto">
+        <div ref={scrollRef} className="mb-1 px-2 py-1.5 bg-black/70 border border-white/10 rounded max-h-[min(13rem,28vh)] overflow-y-auto">
           {log.map(m => (
             <div key={m.id} className={`whitespace-pre-wrap ${CHAT_KIND_CLASS[m.kind]}`}>{m.text}</div>
           ))}
