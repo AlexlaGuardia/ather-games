@@ -13,43 +13,6 @@
 .hearth-root { -webkit-tap-highlight-color: transparent }
 @media (prefers-reduced-motion: reduce) { .hearth-open, .hearth-card, .hearth-tile { animation: none } }
 
-/* ── ⚠ THE INK BRIDGE — TRANSITIONAL, DELETE AT ZERO (rollout Phase 2, 2026-09-22) ─────────────
-   PanelFrame now wears the hearth, but the panels inside it were written for a dark plate: white
-   text, white hairlines, black fills. On parchment those are invisible. This block re-reads those
-   utilities as ink INSIDE `.hearth-ink` only, so every framed panel is legible the day the frame
-   flips, and each one is then rewritten onto the kit properly. `hearth-bridge.test.ts` counts the
-   panels still leaning on it; when that count is 0 this whole block and the class are deleted.
-   An exemption that does not expire is a second style system. */
-.hearth-ink [class~="text-white/5"],.hearth-ink [class~="text-white/8"],.hearth-ink [class~="text-white/10"],.hearth-ink [class~="text-white/15"],.hearth-ink [class~="text-white/20"],.hearth-ink [class~="text-white/25"],.hearth-ink [class~="text-white/30"],.hearth-ink [class~="text-white/35"],.hearth-ink [class~="text-white/40"],.hearth-ink [class~="text-white/45"] { color: #9a8163 }
-.hearth-ink [class~="text-white/50"],.hearth-ink [class~="text-white/55"],.hearth-ink [class~="text-white/60"],.hearth-ink [class~="text-white/65"],.hearth-ink [class~="text-white/70"],.hearth-ink [class~="text-white/75"] { color: #6b5238 }
-.hearth-ink [class~="text-white/80"],.hearth-ink [class~="text-white/85"],.hearth-ink [class~="text-white/90"],.hearth-ink [class~="text-white/95"],.hearth-ink [class~="text-white/100"], .hearth-ink [class~="text-white"] { color: #3a2716 }
-.hearth-ink [class~="hover:text-white"]:hover, .hearth-ink [class*="hover:text-white/"]:hover { color: #3a2716 }
-.hearth-ink [class*="text-amber-"], .hearth-ink [class*="text-orange-"], .hearth-ink [class*="text-yellow-"] { color: #a4501f }
-.hearth-ink [class*="text-emerald-"], .hearth-ink [class*="text-green-"], .hearth-ink [class*="text-lime-"] { color: #5f7d45 }
-.hearth-ink [class*="text-rose-"], .hearth-ink [class*="text-red-"] { color: #a8482f }
-.hearth-ink [class*="text-sky-"], .hearth-ink [class*="text-cyan-"], .hearth-ink [class*="text-blue-"] { color: #4f7690 }
-.hearth-ink [class*="text-violet-"], .hearth-ink [class*="text-purple-"], .hearth-ink [class*="text-fuchsia-"] { color: #6d4f8a }
-.hearth-ink [class*="border-white"] { border-color: rgba(58,39,22,.22) }
-.hearth-ink [class*="border-amber-"], .hearth-ink [class*="border-orange-"] { border-color: #c8642a }
-.hearth-ink [class*="hover:border-"]:hover { border-color: rgba(200,100,42,.6) }
-.hearth-ink [class*="border-emerald-"] { border-color: rgba(95,125,69,.5) } .hearth-ink [class*="border-rose-"], .hearth-ink [class*="border-red-"] { border-color: rgba(168,72,47,.5) }
-.hearth-ink [class*="bg-black"] { background-color: rgba(58,39,22,.06) }
-.hearth-ink [class*="bg-white/"] { background-color: rgba(58,39,22,.05) }
-.hearth-ink [class*="bg-amber-"], .hearth-ink [class*="bg-orange-"] { background-color: rgba(200,100,42,.12) }
-.hearth-ink [class*="bg-emerald-"] { background-color: rgba(95,125,69,.14) } .hearth-ink [class*="bg-rose-"], .hearth-ink [class*="bg-red-"] { background-color: rgba(168,72,47,.12) }
-.hearth-ink [class*="bg-[#0"], .hearth-ink [class*="bg-[#1"] { background: #f5ebd5 }
-.hearth-ink [class*="uppercase"] { text-transform: none; letter-spacing: 0 }
-.hearth-ink .font-mono, .hearth-ink[class*="font-mono"] { font-family: var(--font-hearth-body), system-ui, sans-serif }
-.hearth-ink input { color: #3a2716 }
-/* the arcade layer's own classes (gameui.css), re-read on parchment — the keeper tabs lean on these */
-.hearth-ink .gx-card, .hearth-ink .gx-plate { background: rgba(255,250,238,.55); border-color: rgba(58,39,22,.18); border-radius: 10px; box-shadow: 0 1px 3px rgba(58,39,22,.15) }
-.hearth-ink .gx-plate.is-lit, .hearth-ink .gx-card.is-lit { box-shadow: inset 0 0 0 1.5px #c8642a, 0 1px 3px rgba(58,39,22,.15) }
-.hearth-ink .gx-scan::before { display: none }
-.hearth-ink .gx-label, .hearth-ink .gx-title { font-family: var(--font-hearth-display), Georgia, serif; text-transform: none; letter-spacing: 0; font-weight: 600 }
-.hearth-ink .gx-btn { font-family: var(--font-hearth-body), system-ui, sans-serif; text-transform: none; letter-spacing: 0; font-weight: 800; border-radius: 999px; color: #3a2716; border-color: rgba(58,39,22,.25); background: linear-gradient(180deg, #f6ead2, #e7d5b2) }
-.hearth-ink .gx-btn:hover { border-color: #c8642a; box-shadow: none }
-.hearth-ink .gx-inactive { opacity: .55 }
-/* ── end of the ink bridge ── */
 
 /* ── the keeper's slot: a carved well that takes a drag (satchel, chest, bank, rack, hotbar) ── */
 .hearth-slot { background: radial-gradient(circle at 50% 40%, #e9d7b4, #d6bf95); border-radius: 10px;
@@ -61,3 +24,25 @@
 .hearth-slot[data-lift="half"] { box-shadow: inset 0 0 0 2.5px #4f7690, 0 3px 8px rgba(79,118,144,.35); transform: translateY(-2px) }
 .hearth-slot[data-lift="one"] { box-shadow: inset 0 0 0 2.5px #5f7d45, 0 3px 8px rgba(95,125,69,.35); transform: translateY(-2px) }
 .hearth-slot-sel { border-radius: 12px; box-shadow: 0 0 0 2px #c8642a, 0 0 10px rgba(200,100,42,.35) }
+
+/* ── the hearth's utility vocabulary (Phase 6, 2026-09-22) ─────────────────────────────────────
+   Permanent, and named by MEANING, not by colour: a panel says "this is faint", "this is the act",
+   "this is short". Phase 6 moved every keeper/passage/brew/bindings panel from the dark plate's
+   `text-white/40` / `gx-plate` spellings onto these, which is what let the ink bridge be deleted. */
+.hk-ink { color: #3a2716 } .hk-soft { color: #6b5238 } .hk-faint { color: #9a8163 }
+.hk-ember { color: #a4501f } .hk-moss { color: #5f7d45 } .hk-rust { color: #a8482f } .hk-sky { color: #4f7690 } .hk-violet { color: #6d4f8a }
+.hk-hover-ink:hover { color: #3a2716 } .hk-hover-ember:hover { color: #a4501f }
+.hk-rule { border-color: rgba(58,39,22,.22) } .hk-rule-ember { border-color: rgba(200,100,42,.7) } .hk-rule-moss { border-color: rgba(95,125,69,.55) }
+.hk-rule-rust { border-color: rgba(168,72,47,.55) } .hk-rule-sky { border-color: rgba(79,118,144,.55) } .hk-rule-violet { border-color: rgba(109,79,138,.5) }
+.hk-hover-edge:hover { border-color: rgba(200,100,42,.6) }
+.hk-fill { background-color: rgba(58,39,22,.06) } .hk-fill-ember { background-color: rgba(200,100,42,.12) } .hk-fill-moss { background-color: rgba(95,125,69,.14) }
+.hk-fill-rust { background-color: rgba(168,72,47,.12) } .hk-fill-sky { background-color: rgba(79,118,144,.12) } .hk-fill-violet { background-color: rgba(109,79,138,.12) }
+.hk-hover-fill:hover { background-color: rgba(200,100,42,.08) }
+.hk-ring { --tw-ring-color: rgba(58,39,22,.25) } .hk-ring-ember { --tw-ring-color: #c8642a } .hk-ring-moss { --tw-ring-color: #5f7d45 } .hk-ring-sky { --tw-ring-color: #4f7690 } .hk-ring-rust { --tw-ring-color: #a8482f } .hk-ring-violet { --tw-ring-color: #6d4f8a }
+.hk-plate { position: relative; border-radius: 10px; background: rgba(255,250,238,.55); border: 1px solid rgba(58,39,22,.16); box-shadow: 0 1px 3px rgba(58,39,22,.15) }
+.hk-plate.is-lit { box-shadow: inset 0 0 0 1.5px #c8642a, 0 1px 3px rgba(58,39,22,.15) }
+.hk-label, .hk-title { font-family: var(--font-hearth-display), Georgia, serif; font-weight: 600 }
+.hk-btn { font-family: var(--font-hearth-body), system-ui, sans-serif; font-weight: 800; border-radius: 999px; color: #3a2716; border: 1px solid rgba(58,39,22,.25);
+  background: linear-gradient(180deg, #f6ead2, #e7d5b2); box-shadow: 0 1px 0 #b99a6c; transition: transform .12s ease, border-color .15s ease }
+.hk-btn:hover { border-color: #c8642a } .hk-btn:active { transform: translateY(1px) }
+.hk-dim { opacity: .55 }

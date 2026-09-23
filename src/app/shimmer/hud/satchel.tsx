@@ -191,18 +191,18 @@ export function BirthLean({ birth }: { birth: string | null }) {
   const essence = essenceOf(aff)
 
   return (
-    <div className="gx-plate is-lit mb-1.5 px-3 py-2">
+    <div className="hk-plate is-lit mb-1.5 px-3 py-2">
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <span className="gx-label text-[10px] text-amber-200/50">Birth lean</span>
-        <span className="gx-label text-[9px] text-white/25">{aff.lean}</span>
+        <span className="hk-label text-[12px] hk-ember">Birth lean</span>
+        <span className="hk-label text-[12px] hk-faint">{aff.lean}</span>
       </div>
-      <div className="gx-title text-[11px] leading-snug text-white/80">{essence}</div>
+      <div className="hk-title text-[12px] leading-snug hk-ink">{essence}</div>
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
         {effects.map(e => (
-          <span key={e} className="gx-value text-[10px] text-amber-200/75">{e}</span>
+          <span key={e} className="tabular-nums text-[12px] hk-ember">{e}</span>
         ))}
       </div>
-      <div className="mt-1 text-[9px] leading-snug text-white/25">
+      <div className="mt-1 text-[12px] leading-snug hk-faint">
         Always on, and it costs nothing to hold — it is not a passive, and it needs no slot.
       </div>
     </div>
@@ -281,10 +281,10 @@ export function GemStone({ glow, lit, size = 18, title }: { glow: string; lit?: 
 export function GemChip({ id, n }: { id: string; n?: number }) {
   const r = RUNES.find(x => x.id === id)
   return (
-    <span className="inline-flex items-center gap-1 rounded-[2px] py-0.5 pl-1 pr-1.5 text-[10px]"
+    <span className="inline-flex items-center gap-1 rounded-[2px] py-0.5 pl-1 pr-1.5 text-[12px]"
           style={{ color: r?.glow ?? '#fff', background: `${r?.glow ?? '#fff'}18` }}>
       <GemStone glow={r?.glow ?? '#fff'} size={14} />
-      <span className="gx-label">{r?.name ?? id}</span>
+      <span className="hk-label">{r?.name ?? id}</span>
       {/* the count is the same glow, dimmed — not a white value beside a coloured label */}
       {n !== undefined && n > 1 && <span className="ml-0.5 tabular-nums opacity-60">×{n}</span>}
     </span>
@@ -319,7 +319,7 @@ export function Seats({ gems, seats = VESSEL_CAP, need }: { gems: readonly strin
               <GemStone glow={r?.glow ?? '#fff'} lit title={r?.name ?? id} />
             </span>
           : <span key={`dark-${k}`} role="img" aria-label="empty seat" title={want ? `needs ${want.name}` : 'empty seat'}
-                  className="inline-flex h-[18px] w-[26px] items-center justify-center rounded-full bg-black/35 shadow-[inset_0_2px_5px_rgba(0,0,0,0.85),inset_0_-1px_0_rgba(255,255,255,0.03)]">
+                  className="inline-flex h-[18px] w-[26px] items-center justify-center rounded-full hk-fill shadow-[inset_0_2px_5px_rgba(0,0,0,0.85),inset_0_-1px_0_rgba(255,255,255,0.03)]">
               {/* the required gem, as a ghost in the void — what goes here, not what is here */}
               {want && <span className="opacity-30"><GemStone glow={want.glow} size={12} /></span>}
             </span>
@@ -403,7 +403,7 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
   const loose = Object.entries(l.bag)
   const set = VESSELS.reduce((a, k) => a + l.vessels[k].length, 0)
   const runeOf = (id: string) => RUNES.find(x => x.id === id)
-  const cellCls = 'relative flex h-12 w-12 flex-col items-center justify-center rounded-[2px] border text-[9px] font-mono shadow-[inset_0_0_8px_rgba(0,0,0,0.6)] transition-colors'
+  const cellCls = 'hearth-slot relative flex h-12 w-12 flex-col items-center justify-center border text-[12px]'
   const COLS = 8
   // ★ TWO GRIDS, NOT ONE (Alex, 2026-09-10, opening the real satchel: *"this should be reserved for the
   // gems hence the name.. the vessels can be held in the inventory until equipt"*). Gems is the LETTERS
@@ -420,27 +420,27 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
     <div className="mt-4">
       <SectionHead label="Gems" note={cells === 0
         ? <>none yet · the Passage sells letters · a crystal imbues into one</>
-        : <><span className="gx-value text-white/50">{loose.reduce((a, [, n]) => a + n, 0)}</span> loose · <span className="gx-value text-white/50">{set}</span> set</>} />
+        : <><span className="tabular-nums hk-soft">{loose.reduce((a, [, n]) => a + n, 0)}</span> loose · <span className="tabular-nums hk-soft">{set}</span> set</>} />
       <div className="grid grid-cols-8 gap-1.5">
         {loose.map(([id, n]) => {
           const r = runeOf(id)
           return (
             <div key={`g-${id}`} title={`${r?.name ?? id} ×${n} — a letter; drag it onto a vessel cut for a word that needs it`}
                  onPointerDown={e => { if (e.button === 0) lift(id, e) }}
-                 className={`${cellCls} touch-none select-none cursor-grab border-amber-200/[0.14] bg-black/45 ${dragGem === id ? 'border-amber-300 bg-amber-300/15' : 'hover:border-amber-200/50'}`}>
+                 className={`${cellCls} touch-none select-none cursor-grab hk-rule-ember hk-fill ${dragGem === id ? 'hk-rule-ember hk-fill-ember' : 'hk-hover-edge'}`}>
               <GemStone glow={r?.glow ?? '#fff'} size={24} />
-              <span className="gx-value mt-0.5 text-white/85">{n}</span>
+              <span className="tabular-nums mt-0.5 hk-ink">{n}</span>
             </div>
           )
         })}
         {Array.from({ length: pad }, (_, k) => (
-          <div key={`e-${k}`} className={`${cellCls} border-white/[0.06] bg-black/30`}><span className="text-white/15">·</span></div>
+          <div key={`e-${k}`} className={`${cellCls} hk-rule hk-fill`}><span className="hk-faint">·</span></div>
         ))}
       </div>
       {/* ── IMBUE, as cells: a crystal of the element and a rune you hold → one gem. Refusal on the tooltip. ── */}
       {owned.length > 0 && (
         <div className="mt-2 flex items-center gap-1.5">
-          <span className="gx-label mr-1 text-[9px] text-white/30">imbue</span>
+          <span className="hk-label mr-1 text-[12px] hk-faint">imbue</span>
           {owned.map(id => {
             const r = runeOf(id)
             const crystal = crystalFor(id)
@@ -450,10 +450,10 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
             return (
               <button key={id} type="button" disabled={!can} onPointerDown={() => doImbue(id)}
                       title={can ? `imbue: one ${crystal?.replace(/_/g, ' ')} → one ${r?.name ?? id} gem` : imbueSentence(why!, id)}
-                      className={`${cellCls} h-10 w-10 ${can ? 'border-amber-200/45 bg-black/45 hover:border-amber-200/80' : 'border-white/[0.06] bg-black/30 opacity-50'}`}>
+                      className={`${cellCls} h-10 w-10 ${can ? 'hk-rule-ember hk-fill hk-hover-edge' : 'hk-rule hk-fill opacity-50'}`}>
                 {crystal ? <ItemChip itemId={crystal} size={18} /> : null}
                 <span className="absolute -right-1 -top-1"><GemStone glow={r?.glow ?? '#fff'} size={12} /></span>
-                <span className="gx-value absolute bottom-0.5 right-1 text-[8px] text-white/70">{have}</span>
+                <span className="tabular-nums absolute bottom-0.5 right-1 text-[12px] hk-soft">{have}</span>
               </button>
             )
           })}
@@ -463,7 +463,7 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
           moves to Gear the moment every seat holds its letter; dismantling a worn one sends it back. ── */}
       <SectionHead label="Vessels" note={stowed.length === 0
         ? <>none yet · cut at the Passage · Greg's underneath</>
-        : <><span className="gx-value text-white/50">{stowed.length}</span> carried · <span className="gx-value text-white/50">{written}</span> written · drag a gem onto one to set it</>} />
+        : <><span className="tabular-nums hk-soft">{stowed.length}</span> carried · <span className="tabular-nums hk-soft">{written}</span> written · drag a gem onto one to set it</>} />
       <div className="grid grid-cols-8 gap-1.5">
         {stowed.map((v, i) => {
           const seats = seatCount(v, birth)
@@ -476,23 +476,23 @@ export function SatchelLetters({ owned, birth, items, onChange }: {
                     onPointerEnter={() => { if (dragRef.current) overVessel.current = i }}
                     onPointerLeave={() => { if (overVessel.current === i) overVessel.current = null }}
                     title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ` · needs ${shortOf(v, birth).map(id => RUNES.find(x => x.id === id)?.name ?? id).join(', ')}`} · drag a gem here to set it` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; no one-letter word on your lane yet' : 'never cut for a word'}`}
-                    className={`${cellCls} ${wants ? 'border-amber-300 bg-amber-300/25 shadow-[0_0_10px_-2px_#d4a843]' : dragGem !== null ? 'border-white/[0.06] bg-black/30 opacity-50' : sel === i ? 'border-amber-300 bg-amber-300/15' : written ? 'border-amber-200/45 bg-black/45' : 'border-amber-200/[0.14] bg-black/45'} hover:border-amber-200/60`}>
+                    className={`${cellCls} ${wants ? 'hk-rule-ember hk-fill-ember shadow-[0_0_10px_-2px_#d4a843]' : dragGem !== null ? 'hk-rule hk-fill opacity-50' : sel === i ? 'hk-rule-ember hk-fill-ember' : written ? 'hk-rule-ember hk-fill' : 'hk-rule-ember hk-fill'} hk-hover-edge`}>
               <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={26} />
-              <span className="gx-value absolute right-1 top-0.5 text-[8px] text-white/40">{tierMark(v.tier)}</span>
+              <span className="tabular-nums absolute right-1 top-0.5 text-[12px] hk-soft">{tierMark(v.tier)}</span>
               {/* the seats as dots — the word's count, lit where a letter sits */}
               <span className="absolute bottom-1 flex gap-[3px]">
                 {Array.from({ length: Math.min(VESSEL_CAP, seats) }, (_, k) => (
-                  <span key={k} className={`h-[5px] w-[5px] rounded-full ${v.gems[k] ? 'bg-amber-200 shadow-[0_0_4px_#d4a843]' : 'bg-black/60 shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]'}`} />
+                  <span key={k} className={`h-[5px] w-[5px] rounded-full ${v.gems[k] ? 'hk-fill-ember shadow-[0_0_4px_#d4a843]' : 'hk-fill shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]'}`} />
                 ))}
               </span>
             </button>
           )
         })}
         {Array.from({ length: vpad }, (_, k) => (
-          <div key={`ve-${k}`} className={`${cellCls} border-white/[0.06] bg-black/30`}><span className="text-white/15">·</span></div>
+          <div key={`ve-${k}`} className={`${cellCls} hk-rule hk-fill`}><span className="hk-faint">·</span></div>
         ))}
       </div>
-      {dropNote && <div className="mt-1 text-[10px] leading-snug text-amber-100/70">{dropNote}</div>}
+      {dropNote && <div className="mt-1 text-[12px] leading-snug hk-ember">{dropNote}</div>}
       {sel !== null && stowed[sel] && (
         <VesselParts owned={owned} birth={birth} index={sel} onChange={() => { onChange(); if (!loadStowed()[sel]) setSel(null) }} />
       )}
@@ -537,24 +537,24 @@ export function VesselParts({ owned, birth, index, onChange }: {
   const doDismantle = () => { saveLetters(dismantle(index, l)); setNote('Taken apart. The letters are back in your bag.'); onChange() }
   const doWord = (word: string) => { if (setWord(index, word, birth)) { setNote(`Cut for ${wordOf(word)}.`); onChange() } }
   return (
-    <div className={`gx-plate mt-1.5 flex flex-wrap items-center gap-2 px-2.5 py-1.5 ${written ? 'is-lit' : ''}`}>
+    <div className={`hk-plate mt-1.5 flex flex-wrap items-center gap-2 px-2.5 py-1.5 ${written ? 'is-lit' : ''}`}>
       <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={22} />
-      <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[v.kind]}</span>
-      <span className="gx-label text-[9px] text-white/30">{tierLabel(v.kind, v.tier)}</span>
+      <span className="hk-title text-[12px] hk-ember">{VESSEL_NOUN[v.kind]}</span>
+      <span className="hk-label text-[12px] hk-faint">{tierLabel(v.kind, v.tier)}</span>
       {v.move
-        ? <span className="gx-title text-[11px] text-white/80">for {wordOf(v.move)}</span>
-        : <span className="gx-label text-[9px] text-white/30">{isFloor(v) ? 'one seat · never lost' : 'never cut for a word'}</span>}
+        ? <span className="hk-title text-[12px] hk-ink">for {wordOf(v.move)}</span>
+        : <span className="hk-label text-[12px] hk-faint">{isFloor(v) ? 'one seat · never lost' : 'never cut for a word'}</span>}
       {v.move ? <Seats gems={v.gems} seats={seats} need={seatLetters(v, birth)} /> : null}
-      <span className="gx-value text-[10px] text-white/45">{v.gems.length}/{seats}</span>
+      <span className="tabular-nums text-[12px] hk-soft">{v.gems.length}/{seats}</span>
       {/* ★ a written vessel is gear, but the WORD is learned from a scroll (the Passage) — said here so the
           keeper does not watch the Gear dropdown unbind a word they hold the letters for and cannot yet read */}
       {written
-        ? <span className="gx-label text-[9px] text-amber-200/70">{hasLearned(keeperBook(owned), v.move!) ? 'written · on Gear' : 'written · learn the word at the Passage to wear it'}</span>
+        ? <span className="hk-label text-[12px] hk-ember">{hasLearned(keeperBook(owned), v.move!) ? 'written · on Gear' : 'written · learn the word at the Passage to wear it'}</span>
         : v.move
-          ? short.length > 0 && <span className="text-[9px] text-white/35">needs {short.map(runeName).join(', ')}</span>
+          ? short.length > 0 && <span className="text-[12px] hk-faint">needs {short.map(runeName).join(', ')}</span>
           : (
             <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
-                    className="gx-btn bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal">
+                    className="hk-btn bg-transparent px-2 py-0.5 text-[12px] normal-case tracking-normal">
               <option value="">{isFloor(v) ? 'cut it for a one-letter word you hold… (none on your lane yet)' : 'cut it for a word you hold…'}</option>
               {/* ★ the floor bears ONE seat (ruled): a two-letter word is not offered to Greg's paper */}
               {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
@@ -565,16 +565,16 @@ export function VesselParts({ owned, birth, index, onChange }: {
       <span className="ml-auto flex items-center gap-1.5">
         {!written && v.move && (
           <button type="button" disabled={!placeable} onPointerDown={doPlace}
-                  className={`gx-btn px-2 py-0.5 text-[10px] ${placeable ? '' : 'gx-inactive'}`}>
+                  className={`hk-btn px-2 py-0.5 text-[12px] ${placeable ? '' : 'hk-dim'}`}>
             {placeable ? `place ${placeable}` : 'no letters for it'}
           </button>
         )}
         {v.gems.length > 0 && (
           <button type="button" onPointerDown={doDismantle}
-                  className="gx-btn gx-inactive px-2 py-0.5 text-[10px] hover:opacity-100">dismantle</button>
+                  className="hk-btn hk-dim px-2 py-0.5 text-[12px] hover:opacity-100">dismantle</button>
         )}
       </span>
-      {note && <span className="w-full text-[10px] leading-snug text-amber-100/70">{note}</span>}
+      {note && <span className="w-full text-[12px] leading-snug hk-ember">{note}</span>}
     </div>
   )
 }
@@ -593,7 +593,7 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
   return (
     <div className="mb-3 flex flex-col gap-1">
       <SectionHead label="Vessels" note={<>
-        <span className="gx-value text-white/50">{VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(' · ')}</span>
+        <span className="tabular-nums hk-soft">{VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(' · ')}</span>
         {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · cut at the Passage' : ''} · Greg's underneath
       </>} />
       {/* ★ ONLY WRITTEN VESSELS ARE GEAR (Alex, 2026-09-04). The rack shows what is WORN, and a dropdown of the
@@ -611,7 +611,7 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
         const seats = seatsOfWorn(word)
         const spares = completeVessels(kind, birth)
         return (
-          <div key={kind} className={`gx-plate px-2.5 py-1.5 ${worn ? 'is-lit' : ''}`}>
+          <div key={kind} className={`hk-plate px-2.5 py-1.5 ${worn ? 'is-lit' : ''}`}>
             <div className="flex items-center gap-3">
               {/* ★ THE OBJECT, NOT A CHIP (Alex, 2026-09-09, after judging both renders on the bench): the
                   vessel's own render with its letters drawn over the voids — `VesselArt`, one drawing for
@@ -624,31 +624,31 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
                          gems={l.vessels[kind]} size={72} dim={!worn} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="gx-title text-[11px] text-amber-200/80">{VESSEL_NOUN[kind]}</span>
+                  <span className="hk-title text-[12px] hk-ember">{VESSEL_NOUN[kind]}</span>
                   {/* the MATERIAL of what is worn — the tier, read the way canon says it reads */}
-                  {worn && wornPresent(kind) ? <span className="gx-label text-[9px] text-amber-200/50">{tierLabel(kind, wornTier(kind))}</span> : null}
-                  <span className="gx-label text-[9px] text-white/25">{VESSEL_LANE_LABEL[kind]}</span>
-                  <span className="gx-value ml-auto text-[10px] text-white/45">{l.vessels[kind].length}/{seats}</span>
+                  {worn && wornPresent(kind) ? <span className="hk-label text-[12px] hk-ember">{tierLabel(kind, wornTier(kind))}</span> : null}
+                  <span className="hk-label text-[12px] hk-faint">{VESSEL_LANE_LABEL[kind]}</span>
+                  <span className="tabular-nums ml-auto text-[12px] hk-soft">{l.vessels[kind].length}/{seats}</span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1">
-                  <span className="gx-label rounded-[2px] border border-amber-200/45 bg-amber-200/10 px-1.5 py-0.5 text-[9px] text-amber-200/90">
+                  <span className="hk-label rounded-[2px] border hk-rule-ember hk-fill-ember px-1.5 py-0.5 text-[12px] hk-ember">
                     {kind === 'bracelet' ? 'wrist' : 'hand'}
                   </span>
                   {worn
-                    ? <><span className="gx-title ml-1 text-[11px] text-white/80">{wordOf(worn)}</span>
+                    ? <><span className="hk-title ml-1 text-[12px] hk-ink">{wordOf(worn)}</span>
                         <button type="button" onPointerDown={() => doDismantle(kind)}
-                                className="gx-btn gx-inactive ml-auto px-2 py-0.5 text-[10px] hover:opacity-100">dismantle</button></>
-                    : <span className="gx-title ml-1 text-[11px] text-white/30">nothing worn · your birth move needs no vessel</span>}
+                                className="hk-btn hk-dim ml-auto px-2 py-0.5 text-[12px] hover:opacity-100">dismantle</button></>
+                    : <span className="hk-title ml-1 text-[12px] hk-faint">nothing worn · your birth move needs no vessel</span>}
                 </div>
               </div>
             </div>
             {/* ★ THE DROPDOWN (Alex): every written spare of this kind, by its WORD — a keeper picks a vessel by
                 reading what it says, never by remembering which number it was parked under. */}
-            <div className="mt-1.5 flex items-center gap-2 border-t border-white/[0.07] pt-1.5">
-              <span className="gx-label text-[9px] text-white/30">equip</span>
+            <div className="mt-1.5 flex items-center gap-2 border-t hk-rule pt-1.5">
+              <span className="hk-label text-[12px] hk-faint">equip</span>
               <select value="" onChange={e => { const i = Number(e.target.value); if (!Number.isNaN(i) && e.target.value !== '') doEquip(kind, i) }}
                       disabled={!spares.length}
-                      className="gx-btn min-w-[160px] bg-transparent px-2 py-0.5 text-[10px] normal-case tracking-normal disabled:opacity-40">
+                      className="hk-btn min-w-[160px] bg-transparent px-2 py-0.5 text-[12px] normal-case tracking-normal disabled:opacity-40">
                 <option value="">{spares.length ? `a written ${VESSEL_NOUN[kind]}…` : `none written yet — see the satchel`}</option>
                 {spares.map(({ v, i }) => <option key={i} value={i}>{wordOf(v.move)} · {TIER_MATERIAL[v.kind][v.tier]} · {v.gems.length}/{seatCount(v, birth)}</option>)}
               </select>
@@ -686,25 +686,25 @@ export function GatheringFocuses({ tools, skills }: {
         const need = xpForSkillLevel(sk.level)
         const pct = Math.min(1, sk.xp / Math.max(1, need))
         return (
-          <div key={family} className="gx-plate flex items-center gap-3 px-3 py-2">
+          <div key={family} className="hk-plate flex items-center gap-3 px-3 py-2">
             {/* the same painted sprite the bag draws (`ItemChip`) — no second source of tool art */}
             {held
               ? <ItemChip itemId={held.toolId} size={30} />
-              : <span className="h-[30px] w-[30px] shrink-0 rounded-[2px] bg-black/30 shadow-[inset_0_0_6px_rgba(0,0,0,0.7)]" />}
+              : <span className="h-[30px] w-[30px] shrink-0 rounded-[2px] hk-fill shadow-[inset_0_0_6px_rgba(0,0,0,0.7)]" />}
             <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">
-              <span className="gx-label text-[11px] text-amber-200/85">{family}</span>
-              <span className="gx-value ml-auto text-[10px] text-white/55">lv {sk.level}</span>
+              <span className="hk-label text-[12px] hk-ember">{family}</span>
+              <span className="tabular-nums ml-auto text-[12px] hk-soft">lv {sk.level}</span>
             </div>
             <div className="mt-1 flex items-baseline gap-2">
               {/* An empty hand is a real state, not a missing tool — bare hands mine, just slowly. */}
-              <span className="gx-title text-[11px] text-white/80">{def?.name ?? 'bare hands'}</span>
-              {def && <span className="gx-label text-[9px] text-white/30">tier {def.tier}</span>}
+              <span className="hk-title text-[12px] hk-ink">{def?.name ?? 'bare hands'}</span>
+              {def && <span className="hk-label text-[12px] hk-faint">tier {def.tier}</span>}
             </div>
-            <div className="mt-1.5 h-1 overflow-hidden rounded-[1px] bg-black/50 shadow-[inset_0_0_3px_rgba(0,0,0,0.8)]">
-              <div className="h-full bg-amber-300/70 shadow-[0_0_6px_rgba(252,211,77,0.5)]" style={{ width: `${(pct * 100).toFixed(1)}%` }} />
+            <div className="mt-1.5 h-1 overflow-hidden rounded-[1px] hk-fill shadow-[inset_0_0_3px_rgba(0,0,0,0.8)]">
+              <div className="h-full hk-fill-ember shadow-[0_0_6px_rgba(252,211,77,0.5)]" style={{ width: `${(pct * 100).toFixed(1)}%` }} />
             </div>
-            <div className="gx-value mt-1 text-[9px] text-white/35">{sk.xp} / {need} xp</div>
+            <div className="tabular-nums mt-1 text-[12px] hk-soft">{sk.xp} / {need} xp</div>
             </div>
           </div>
         )
@@ -798,27 +798,27 @@ export function GearTab({ items, onLetters, tools, skills, castKeys }: {
         const bound = slots[i] ?? null
         const spec = bound ? castForMove(bound) : null
         return (
-          <div key={i} className={`gx-plate ${spec && isBuilt(bound) ? 'is-lit' : ''}`}>
+          <div key={i} className={`hk-plate ${spec && isBuilt(bound) ? 'is-lit' : ''}`}>
             <div className="flex w-full items-center gap-2.5 px-3 py-2 text-left">
-              <span className="gx-btn flex h-5 w-5 shrink-0 items-center justify-center text-[10px] font-bold">
+              <span className="hk-btn flex h-5 w-5 shrink-0 items-center justify-center text-[12px] font-bold">
                 {castKeys[i].toUpperCase()}
               </span>
-              <span className="gx-label w-[68px] shrink-0 text-[9px] text-white/35">{kind}</span>
-              <span className={`gx-title text-[12px] ${spec ? (isBuilt(bound) ? 'text-amber-200/90' : 'text-white/40') : 'text-white/25'}`}>
+              <span className="hk-label w-[68px] shrink-0 text-[12px] hk-faint">{kind}</span>
+              <span className={`hk-title text-[12px] ${spec ? (isBuilt(bound) ? 'hk-ember' : 'hk-faint') : 'hk-faint'}`}>
                 {spec ? spec.label : '— empty —'}
               </span>
               {/* the price of the word, read off the spec the cast layer runs — never restated */}
               {spec && isBuilt(bound) && (
-                <span className="gx-value text-[9px] text-white/50">{spec.manaCost} mana · {(spec.cooldownMs / 1000).toFixed(1)}s</span>
+                <span className="tabular-nums text-[12px] hk-soft">{spec.manaCost} mana · {(spec.cooldownMs / 1000).toFixed(1)}s</span>
               )}
               {/* ★★ THE EMPTY SLOT SAYS WHY (2026-09-02): from `emptySlotSentence`, never restated here. */}
               {!spec && (
-                <span className="text-[9px] text-white/30">
+                <span className="text-[12px] hk-faint">
                   {emptySlotWhy(initial.why[i] ?? 'cleared')}
                 </span>
               )}
               {spec && !isBuilt(bound) && (
-                <span className="gx-label text-[9px] text-amber-200/40">unbuilt</span>
+                <span className="hk-label text-[12px] hk-ember">unbuilt</span>
               )}
             </div>
           </div>
@@ -833,21 +833,21 @@ export function GearTab({ items, onLetters, tools, skills, castKeys }: {
           <SectionHead label="Innate" note="always on · no slot · no key" />
           <BirthLean birth={birth} />
           {passive && (
-          <div className="gx-plate is-lit px-3 py-2">
+          <div className="hk-plate is-lit px-3 py-2">
             <div className="flex items-baseline gap-2">
-              <span className={`gx-title text-[12px] ${isBuilt(passive.id) ? 'text-amber-200/90' : 'text-white/40'}`}>{passive.name}</span>
+              <span className={`hk-title text-[12px] ${isBuilt(passive.id) ? 'hk-ember' : 'hk-faint'}`}>{passive.name}</span>
               {!isBuilt(passive.id) && (
-                <span className="gx-label text-[9px] text-amber-200/40">unbuilt</span>
+                <span className="hk-label text-[12px] hk-ember">unbuilt</span>
               )}
             </div>
-            <div className="text-[10px] leading-snug text-white/40">{passive.effect}</div>
+            <div className="text-[12px] leading-snug hk-faint">{passive.effect}</div>
             {/* ⚠ DERIVED FROM THE SPEC, NEVER A CONSTANT SENTENCE. This read "it needs no slot and
                 costs nothing to hold" — true of every passive until 2026-08-26 put the mana cost on
                 the individual MOVE, and false for Barrier/Bulwark the moment that landed. A keeper
                 wearing a drain would have been told, in the panel whose whole job is to explain the
                 trait, that it was free. Reading `regenMult` means the copy cannot drift from the sim:
                 retune the number and the sentence follows. */}
-            <div className="mt-1 text-[9px] leading-snug text-white/25">
+            <div className="mt-1 text-[12px] leading-snug hk-faint">
               {(() => {
                 const mult = castForMove(passive.id).regenMult
                 if (mult < 1) return 'Innate to your runes — it needs no slot, but wearing it slows how fast your mana comes back.'
@@ -863,7 +863,7 @@ export function GearTab({ items, onLetters, tools, skills, castKeys }: {
       {/* ★ SAY WHERE THIS TAKES EFFECT. A chooser that silently governs nothing is the unwired dial
           this repo keeps paying for, so the panel states its own reach rather than letting a keeper
           infer it from a fight. */}
-      <div className="mt-1 text-[10px] leading-relaxed text-white/25">
+      <div className="mt-1 text-[12px] leading-relaxed hk-faint">
         Saved to your keeper. The cast bar and this passive take effect where the cast layer runs; the
         gathering focuses work wherever you swing them.
       </div>
@@ -1062,13 +1062,13 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
         {st ? (
           <>
             <ItemChip itemId={st.itemId} size={30} />
-            <span className="absolute bottom-0.5 right-1.5 text-[11px] font-extrabold tabular-nums"
+            <span className="absolute bottom-0.5 right-1.5 text-[12px] font-extrabold tabular-nums"
                   style={{ color: '#3a2716', textShadow: '0 1px 0 rgba(255,250,235,.8)' }}>{st.count}</span>
             {/* How many the lift will actually take, stated rather than left to be counted — "half
                 of 7" is 4 here and 3 elsewhere, and a player should not have to find out by doing
                 it. A whole lift needs no badge: the count under the icon already says it. */}
             {lifted && dragFrom && dragFrom.mode !== 'whole' && (
-              <span className="absolute -top-1.5 -right-1.5 rounded-full px-1.5 text-[11px] font-extrabold tabular-nums"
+              <span className="absolute -top-1.5 -right-1.5 rounded-full px-1.5 text-[12px] font-extrabold tabular-nums"
                     style={{ background: LIFT_BADGE[dragFrom.mode], color: '#fff7ea' }}>
                 {dragFrom.mode === 'half' ? halfOf(st.count) : 1}
               </span>
@@ -1116,15 +1116,15 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
       {/* The chest's own grid, above the bag and separated by a rule — the same relationship the
           satchel and the hotbar already have, one level out. */}
       {chest && !chest.bank && (
-        <div className="mb-4 border-b border-white/10 pb-4">
+        <div className="mb-4 border-b hk-rule pb-4">
           {/* The capacity is stated in BAGFULS, not slots — the number means something that way
               ("two of these") and 48 does not. Derived from the grid so the sentence cannot drift
               from it; see `CHEST_BAGFULS`. A RACK says ROWS for the identical reason: two rows is
               what a shelf holds, and "0.67 of a bagful" is the sentence that number would make. */}
           <SectionHead label={chest.rack ? `on the rack · ${chest.x} ${chest.y} ${chest.z}` : `in the chest · ${chest.x} ${chest.y} ${chest.z}`}
                        note={chest.rack
-                         ? <><span className="gx-value text-white/40">{RACK_SLOTS / RACK_COLS}</span> rows</>
-                         : <><span className="gx-value text-white/40">{CHEST_BAGFULS}</span> bagfuls</>} />
+                         ? <><span className="tabular-nums hk-soft">{RACK_SLOTS / RACK_COLS}</span> rows</>
+                         : <><span className="tabular-nums hk-soft">{CHEST_BAGFULS}</span> bagfuls</>} />
           {/* ⚠ THE LENGTH COMES FROM THE CONTAINER, NOT FROM `chest.slots.length`. A grid drawn
               from the live array would silently shrink to whatever a bad save happened to hold —
               `adoptRack` is the one place that decides how long a rack is, and drawing the
@@ -1150,9 +1150,9 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
         const counts = new Map<BankTab, number>()
         for (const s of chest.slots) if (s && s.count > 0) { const c = bankCategory(s.itemId); counts.set(c, (counts.get(c) ?? 0) + 1) }
         return (
-          <div className="mb-4 border-b border-white/10 pb-4">
+          <div className="mb-4 border-b hk-rule pb-4">
             <SectionHead label={`the bank · ${chest.bank.chests} of ${chest.bank.chestCap} chests`}
-                         note={<><span className={`gx-value ${free < 0 ? 'text-red-300/80' : 'text-white/40'}`}>{used}</span> / {chest.bank.cap} slots</>} />
+                         note={<><span className={`tabular-nums ${free < 0 ? 'hk-rust' : 'hk-soft'}`}>{used}</span> / {chest.bank.cap} slots</>} />
             <div className="mb-3 flex flex-wrap items-center gap-1.5">
               {BANK_TABS.map(t => {
                 const n = t.id === 'all' ? used : (counts.get(t.id) ?? 0)
@@ -1162,7 +1162,7 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
                           className="rounded-full px-3 h-8 text-[12px] font-bold transition-all"
                           style={on ? { background: '#fbf4e4', color: '#3a2716', boxShadow: 'inset 0 0 0 1.5px #c8642a, 0 1px 2px rgba(58,39,22,.2)' }
                                     : { background: 'rgba(214,191,149,.45)', color: '#6b5238' }}>
-                    {t.label}{n > 0 && <span className="ml-1 text-[11px] font-semibold tabular-nums" style={{ color: '#5f7d45' }}>{n}</span>}
+                    {t.label}{n > 0 && <span className="ml-1 text-[12px] font-semibold tabular-nums" style={{ color: '#5f7d45' }}>{n}</span>}
                   </button>
                 )
               })}
@@ -1175,16 +1175,16 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
                      style={{ background: '#e8d8b8', color: '#3a2716', boxShadow: 'inset 0 1px 3px rgba(58,39,22,.35)' }} />
             </div>
             {free < 0 && (
-              <div className="mb-2 text-[11px] text-red-200/70">over by {-free} — a chest came down; nothing more goes in until it drains</div>
+              <div className="mb-2 text-[12px] hk-rust">over by {-free} — a chest came down; nothing more goes in until it drains</div>
             )}
             {chest.bank.cap === 0 && used === 0 && (
-              <div className="mb-2 text-[11px] text-white/40">no chest stands on the plot — place one and the bank has room</div>
+              <div className="mb-2 text-[12px] hk-faint">no chest stands on the plot — place one and the bank has room</div>
             )}
             {view.length === 0 && holes.length === 0 && chest.bank.cap > 0 && !searching && (
-              <div className="mb-2 text-[11px] text-white/30">nothing here yet</div>
+              <div className="mb-2 text-[12px] hk-faint">nothing here yet</div>
             )}
             {searching && view.length === 0 && (
-              <div className="mb-2 text-[11px] text-white/30">nothing in the bank matches “{bankQuery.trim()}”</div>
+              <div className="mb-2 text-[12px] hk-faint">nothing in the bank matches “{bankQuery.trim()}”</div>
             )}
             <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 58px))`, justifyContent: 'center' }}>
               {view.map(i => cell({ g: 'chest', i }))}
@@ -1194,12 +1194,12 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
         )
       })()}
       {/* Satchel: slots 8-23, the 16 that are not the bar. */}
-      <SectionHead label="Satchel" note={<><span className="gx-value text-white/40">16</span> slots</>} />
+      <SectionHead label="Satchel" note={<><span className="tabular-nums hk-soft">16</span> slots</>} />
       <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(8, minmax(0, 58px))', justifyContent: 'center' }}>
         {Array.from({ length: 16 }, (_, k) => cell({ g: 'bag', i: k + 8 }))}
       </div>
       {/* The bar itself, set apart by a rule so its slots read as the SAME grid, not a copy. */}
-      <div className="mt-4 border-t border-white/10 pt-3">
+      <div className="mt-4 border-t hk-rule pt-3">
         <SectionHead label="Hotbar" note="keys 1 – 8" />
         <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(8, minmax(0, 58px))', justifyContent: 'center' }}>
           {Array.from({ length: 8 }, (_, k) => (

@@ -102,7 +102,7 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
   const isPour = (rec: AlchemyRecipe | undefined) => !!rec && rec.id.startsWith('finish:')
 
   return (
-    <PanelFrame width="w-[480px]" title={def.name} legacy={false} onClose={onClose}>
+    <PanelFrame width="w-[480px]" title={def.name} onClose={onClose}>
         <div className="flex items-center justify-between gap-2 mb-3">
           <HearthNote>{st.fromBank ? 'drawing on the bank' : st.feeds.length ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it` : 'set a chest against it and it will work out of that too'}</HearthNote>
           <span className="text-[12px] tabular-nums whitespace-nowrap" style={{ color: H.inkSoft }}>{cooking ? 'the fire is always lit' : `alchemy ${level} · mana ${Math.floor(mana.current.cur)}`}</span>

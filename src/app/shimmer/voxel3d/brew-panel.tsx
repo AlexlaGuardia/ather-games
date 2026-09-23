@@ -21,14 +21,14 @@ import { elementForInfusion, type PotionDef } from '../engine/alchemy'
 import { countItem, type Inventory } from '../engine/inventory'
 import type { SkillSet } from '../engine/skills'
 import { brewBlocker, absentInputs, cauldronMenu, isInfusionBrew, type BrewBlock } from './brew'
-import { CloseX } from './panel-frame'
+import { HearthFrame, HearthNote } from '../ui/hearth'
 
 /** Tint per element — the grimoire's own four, so a row and a pour read as the same thing. */
 const ELEMENT_TINT: Record<string, string> = {
-  mana: 'text-amber-200/80',
-  storm: 'text-cyan-200/80',
-  earth: 'text-emerald-200/80',
-  water: 'text-sky-200/80',
+  mana: 'hk-ember',
+  storm: 'hk-sky',
+  earth: 'hk-moss',
+  water: 'hk-sky',
 }
 
 const label = (id: string) => id.replace(/_/g, ' ')
@@ -76,30 +76,14 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
   }
 
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      {/* `data-panel` is the harness's only handle on this plate. Without it `brew-check.mts` has to
-          guess which div is the panel, and both guesses are wrong in a way that still looks green:
-          the outermost match drags the chat log in with it, the innermost is the title line alone. */}
-      <div className="relative w-[460px]" onClick={(e) => e.stopPropagation()}>
-      <CloseX onClick={onClose} />
-      <div data-panel="brew"
-           /* ── ★ THE HOUSE PLATE (2026-08-26). `gx-card` brings the framed background, the accent
-              border and the inset shadows; `gx-scan` lays the CRT texture over it; `gx-chrome`
-              kills the browser tells (tap highlight, text selection, the focus ring) inside game
-              chrome. ⚠ `rounded-lg` is gone deliberately — `GAME_UI_LAYER.md` names a 12px radius
-              as THE web-card tell, and `gx-card` sets its own near-sharp 3px.
-              ⚠ `overflow-y-auto` is kept AFTER the layer classes and is load-bearing: `gx-card`
-              sets `overflow: hidden`, and a 460px plate holding the full cauldron menu scrolls. */
-           className="gx-card gx-scan gx-chrome w-full max-h-[80vh] overflow-y-auto p-4 font-mono text-[11px]">
+    <HearthFrame title="Brewing" maxWidth={500} onClose={onClose} dataPanel="brew" bodyClass="p-4 pt-6 text-[12px]">
         <div className="flex items-baseline justify-between mb-1 pr-6">
           {/* ★ `gx-label`, not a hand-rolled `uppercase tracking-[.18em]`. The layer already owns
               "short string, caps, wide tracking, squared face" — restating it is how one role ends
               up spelled nine different ways, which is exactly what `hud-type.test.ts` found in the
               fold HUD. The subtitle stays sentence-case and untracked: the rule is caps on SHORT
               strings only, and "at the cauldron" is prose. */}
-          <span className="gx-label text-[13px] font-semibold text-white/95">Brewing
-            <span className="ml-2 font-mono text-[11px] text-amber-200/70 normal-case tracking-normal font-normal">at the cauldron</span>
-          </span>
+          <HearthNote>at the cauldron</HearthNote>
         </div>
 
         {/* Mana and level on one line, because they are the two numbers every row is measured
@@ -108,15 +92,15 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
             out in opacities. `gx-value` carries the tabular figures so the pool cannot jitter the
             line as it regenerates. */}
         <div className="mb-3 flex items-baseline gap-1.5">
-          <span className="gx-label text-[9px] text-white/40">alchemy</span>
-          <span className="gx-value text-white/85">{alch}</span>
-          <span className="text-white/20 mx-1">·</span>
-          <span className="gx-label text-[9px] text-white/40">mana</span>
-          <span className={`gx-value ${pool.cur < 25 ? 'text-rose-300/80' : 'text-sky-200/85'}`}>{Math.floor(pool.cur)}</span>
-          <span className="gx-value text-white/25">/{pool.max}</span>
+          <span className="hk-label text-[12px] hk-faint">alchemy</span>
+          <span className="tabular-nums hk-ink">{alch}</span>
+          <span className="hk-faint mx-1">·</span>
+          <span className="hk-label text-[12px] hk-faint">mana</span>
+          <span className={`tabular-nums ${pool.cur < 25 ? 'hk-rust' : 'hk-sky'}`}>{Math.floor(pool.cur)}</span>
+          <span className="tabular-nums hk-faint">/{pool.max}</span>
         </div>
 
-        {rows.length === 0 && <div className="text-white/35 mb-3">nothing you can read yet — the cauldron waits</div>}
+        {rows.length === 0 && <div className="hk-faint mb-3">nothing you can read yet — the cauldron waits</div>}
 
         {rows.map((def) => {
           const why = brewBlocker(def, alch, pool.cur, have, inWorld, room)
@@ -125,8 +109,8 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
           return (
             <button key={def.id} onClick={() => press(def, why)}
                     className={`w-full text-left mb-1 px-2 py-1.5 rounded border transition-colors ${
-                      can ? 'border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90'
-                          : 'border-white/5 text-white/30'}`}>
+ can ? 'hk-rule hk-hover-edge hk-hover-fill hk-ink'
+ : 'hk-rule hk-faint'}`}>
               <div className="flex justify-between gap-3">
                 <span>
                   {def.name}
@@ -134,9 +118,9 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
                       Canon makes them the road to an evolved form and the grimoire is where they are
                       poured; a keeper who works out at tier 4 that four of their bottles were never
                       for them has been misled by a list that treated every row the same. */}
-                  {element && <span className={`ml-2 ${ELEMENT_TINT[element] ?? 'text-white/50'}`}>· for a spirit</span>}
+                  {element && <span className={`ml-2 ${ELEMENT_TINT[element] ?? 'hk-soft'}`}>· for a spirit</span>}
                 </span>
-                <span className="text-white/35 tabular-nums shrink-0">
+                <span className="hk-faint tabular-nums shrink-0">
                   lv{def.minAlchemyLevel} · {def.manaCost}m · ×{def.resultCount}
                 </span>
               </div>
@@ -149,20 +133,20 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
                   const absent = !inWorld(r.itemId)
                   const short = have(r.itemId) < r.count
                   return (
-                    <span key={r.itemId} className={absent ? 'text-white/25 line-through'
-                                                            : short ? 'text-rose-300/60' : 'text-emerald-300/70'}>
-                      {i > 0 && <span className="text-white/20 no-underline"> · </span>}
+                    <span key={r.itemId} className={absent ? 'hk-faint line-through'
+                                                            : short ? 'hk-rust' : 'hk-moss'}>
+                      {i > 0 && <span className="hk-faint no-underline"> · </span>}
                       {label(r.itemId)} {absent ? '' : `${have(r.itemId)}/`}{r.count}
                     </span>
                   )
                 })}
-                {!can && <span className="ml-2 text-amber-200/45">— {refusal(def, why)}</span>}
+                {!can && <span className="ml-2 hk-ember">— {refusal(def, why)}</span>}
               </div>
             </button>
           )
         })}
 
-        {note && <div className="mt-2 text-amber-200/70">{note}</div>}
+        {note && <div className="mt-2 hk-ember">{note}</div>}
 
         {/* Absence stated ONCE at the foot as well as per-row, and it names the SYSTEM rather than
             the item. A keeper who reaches alchemy 7 sees four Infusions arrive greyed out and the
@@ -170,13 +154,11 @@ export function BrewPanel({ inv, skills, mana, tick, inWorld, room, onBrew, onCl
             difference between a shopping list and a closed road. Derived, so it disappears by itself
             the day herbs land. */}
         {rows.some(d => isInfusionBrew(d.id) && absentInputs(d, inWorld).length > 0) && (
-          <div className="mt-3 pt-2 border-t border-white/8 text-white/35">
+          <div className="mt-3 pt-2 border-t hk-rule hk-faint">
             the four Infusions are canon&rsquo;s road to an evolved form, and their element herbs are
             farm crops — nothing in these lands grows them yet.
           </div>
         )}
-      </div>
-      </div>
-    </div>
+    </HearthFrame>
   )
 }

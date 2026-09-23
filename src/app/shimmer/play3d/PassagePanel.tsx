@@ -29,7 +29,7 @@ import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { saveLetters, VESSELS, type Vessel } from './gems'
 import { buyVessel, ownedCount, loadStowed, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, TIER_MATERIAL } from './vessels'
-import { CloseX } from '../voxel3d/panel-frame'
+import { HearthFrame } from '../ui/hearth'
 import { eligibleMoves, ALL_BANDS } from './cast'
 import { lettersOf } from './gems'
 import { rawLoadout } from './loadout'
@@ -114,37 +114,33 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   }
 
   const Shelf = ({ title, when, children }: { title: string; when: string; children: React.ReactNode }) => (
-    <div className="mb-3 rounded border border-white/10 bg-white/[0.03] px-2.5 py-2">
+    <div className="mb-3 rounded border hk-rule hk-fill px-2.5 py-2">
       <div className="mb-1.5 flex items-baseline gap-2">
-        <span className="text-[12px] text-white/80">{title}</span>
-        <span className="gx-label text-[9px] text-white/30">{when}</span>
+        <span className="text-[12px] hk-ink">{title}</span>
+        <span className="hk-label text-[12px] hk-faint">{when}</span>
       </div>
       {children}
     </div>
   )
   const Row = ({ left, mid, price, action, disabled, label }: { left: React.ReactNode; mid?: React.ReactNode; price?: number; action: () => void; disabled?: boolean; label: string }) => (
     <div className="flex items-center gap-2 py-0.5">
-      <span className="min-w-[110px] text-[11px]">{left}</span>
-      {mid && <span className="text-[10px] text-white/40">{mid}</span>}
-      {price !== undefined && <span className="gx-value ml-auto text-[10px] text-white/50">{price} M</span>}
+      <span className="min-w-[110px] text-[12px]">{left}</span>
+      {mid && <span className="text-[12px] hk-faint">{mid}</span>}
+      {price !== undefined && <span className="tabular-nums ml-auto text-[12px] hk-soft">{price} M</span>}
       <button type="button" disabled={disabled} onPointerDown={action}
-              className={`gx-btn rounded border px-2 py-0.5 text-[10px] ${price === undefined ? 'ml-auto' : ''} ${disabled ? 'gx-inactive border-white/10 text-white/40' : 'border-amber-200/40 text-amber-200/90 hover:bg-white/[0.06]'}`}>
+              className={`hk-btn rounded border px-2 py-0.5 text-[12px] ${price === undefined ? 'ml-auto' : ''} ${disabled ? 'hk-dim hk-rule hk-faint' : 'hk-rule-ember hk-ember hk-hover-fill'}`}>
         {label}
       </button>
     </div>
   )
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40" onPointerDown={onClose}>
-      <div className="relative w-[520px]" onPointerDown={e => e.stopPropagation()}>
-      <CloseX onClick={onClose} />
-      <div className="gx-card gx-scan gx-chrome w-full max-h-[82vh] overflow-y-auto p-4 font-mono text-[11px]">
+    <HearthFrame title="The Passage" maxWidth={560} onClose={onClose} fixed backdropClass="z-40" bodyClass="p-4 pt-6 text-[12px]">
         <div className="mb-3 flex items-baseline gap-2 pr-6">
-          <span className="gx-label text-[13px] font-semibold text-white/95">The Passage</span>
-          <span className="gx-label text-[10px] text-white/40">{day}{dayOverride ? ' · dev preview' : ''}</span>
-          <span className="gx-value ml-auto text-[11px] text-amber-200/80">{marks} Marks</span>
+          <span className="hk-label text-[12px] hk-faint">{day}{dayOverride ? ' · dev preview' : ''}</span>
+          <span className="tabular-nums ml-auto text-[12px] hk-ember">{marks} Marks</span>
         </div>
-        <div className="mb-3 text-[10px] leading-snug text-white/35">
+        <div className="mb-3 text-[12px] leading-snug hk-faint">
           Rotating spots. One leaves, another takes their place. Merchants ride on {MARKET_DAY} ({inDays(MARKET_DAY)}); the masters hold on {TEACHING_DAY} ({inDays(TEACHING_DAY)}). The week: {WEEK.join(' · ')}.
         </div>
 
@@ -153,7 +149,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               "the same rack means something different to every keeper who walks past it". An unreadable
               scroll is DRAWN, dimmed, with the runes it is written in named — the rack as a map of where
               your identity could go next. Hiding it would make every keeper's Passage identical. */}
-          <div className="mb-1.5 text-[10px] italic text-white/35">A scroll teaches a technique, never a rune. What you can read is what you already are.</div>
+          <div className="mb-1.5 text-[12px] italic hk-faint">A scroll teaches a technique, never a rune. What you can read is what you already are.</div>
           {rack.map(m => {
             const readable = canRead(m, owned), known = book.learned.includes(m.id)
             return (
@@ -162,7 +158,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
                      mid={`${m.tier} · ${readable ? '◆' : '◇'} ${m.runes.map(runeName).join(' + ') || 'no rune'}${readable ? '' : ' — you do not carry this'}${m.needs ? ` · needs ${m.needs}` : ''}`}
                      price={priceOf(m)} action={() => onBuyScroll(m.id)}
                      disabled={known} label={known ? 'known' : 'buy'} />
-                <div className="pb-1 text-[10px] leading-snug text-white/35">{m.effect}</div>
+                <div className="pb-1 text-[12px] leading-snug hk-faint">{m.effect}</div>
               </div>
             )
           })}
@@ -188,7 +184,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
           {Object.entries(SELL_PRICES).map(([id, each]) => {
             const have = bag ? countItem(bag, id) : 0
             return (
-              <Row key={id} left={<span className="text-white/70">{id.replace(/_/g, ' ')}</span>} mid={`you carry ${have}`}
+              <Row key={id} left={<span className="hk-soft">{id.replace(/_/g, ' ')}</span>} mid={`you carry ${have}`}
                    price={each} action={() => onSell(id, 1)} disabled={day !== MARKET_DAY || have === 0}
                    label={day !== MARKET_DAY ? `buys ${inDays(MARKET_DAY)}` : 'sell one'} />
             )
@@ -211,14 +207,14 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
             const words = eligibleMoves([...owned], birth, ALL_BANDS[band]!, book)
               .filter(m => lettersOf(m, birth).length > 0 && !taken.has(m.id))
             if (!words.length) {
-              return <Row key={kind} left={<span className="text-white/70">a {kind}</span>}
+              return <Row key={kind} left={<span className="hk-soft">a {kind}</span>}
                           mid={full ? `you carry ${have} of ${MAX_PER_KIND}` : 'every word you hold already has one'}
                           action={() => {}} disabled label="nothing to cut" />
             }
             return words.map(m => {
               const seats = lettersOf(m, birth).length
               return (
-                <Row key={`${kind}-${m.id}`} left={<span className="text-white/70">a {TIER_MATERIAL[kind][1]} {kind} for <span className="text-amber-200/90">{m.name}</span></span>}
+                <Row key={`${kind}-${m.id}`} left={<span className="hk-soft">a {TIER_MATERIAL[kind][1]} {kind} for <span className="hk-ember">{m.name}</span></span>}
                      mid={`${seats} seat${seats === 1 ? '' : 's'} · you carry ${have} of ${MAX_PER_KIND}`}
                      price={VESSEL_PRICE} action={() => onBuyVessel(kind, m.id)} disabled={full}
                      label={full ? 'all you can carry' : 'cut it'} />
@@ -259,10 +255,10 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               const seats = m ? lettersOf(m, birth).length : 0
               return (
                 <Row key={`rack-${i}`}
-                     left={<span className="text-white/70">
+                     left={<span className="hk-soft">
                        a {mat} {v.kind}{' '}
-                       {m ? <>for <span className={onLane ? 'text-amber-200/90' : 'text-white/35'}>{m.name}</span></>
-                          : <span className="text-white/45">uncut</span>}
+                       {m ? <>for <span className={onLane ? 'hk-ember' : 'hk-faint'}>{m.name}</span></>
+                          : <span className="hk-faint">uncut</span>}
                      </span>}
                      mid={m
                        ? (onLane ? `${seats} seat${seats === 1 ? '' : 's'} · someone else's` : 'not your lanes — you could never bind it')
@@ -274,10 +270,8 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
           })()}
         </Shelf>
 
-        {note && <div className="mt-2 rounded border border-amber-200/20 bg-amber-200/[0.06] px-2.5 py-1.5 text-[10px] text-amber-100/80">{note}</div>}
-        <div className="mt-2 text-[10px] text-white/25">Ultimates are never on the shelves.</div>
-      </div>
-      </div>
-    </div>
+        {note && <div className="mt-2 rounded border hk-rule-ember hk-fill-ember px-2.5 py-1.5 text-[12px] hk-ember">{note}</div>}
+        <div className="mt-2 text-[12px] hk-faint">Ultimates are never on the shelves.</div>
+    </HearthFrame>
   )
 }

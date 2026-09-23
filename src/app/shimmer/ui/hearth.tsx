@@ -59,15 +59,17 @@ export function HearthX({ onClick }: { onClick: () => void }) {
  * card never exceeds the screen minus a 16px gutter each side, so a phone gets the whole width.
  * With `backdrop={false}` it is only the card, for a host that already owns placement.
  */
-export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, children, backdrop = true, bodyClass = '', className = '', footer, backdropClass = '', head }: {
+export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, children, backdrop = true, bodyClass = '', className = '', footer, backdropClass = '', head, fixed }: {
   /** Pinned under the scroll body, on the parchment — never scrolls away (the keeper frame's hint). */
   footer?: React.ReactNode
   /** Pinned ABOVE the scroll body (a tab rail that must not scroll). */
   head?: React.ReactNode
   backdropClass?: string
+  /** Pin to the viewport (a panel mounted outside the world's positioned box). */
+  fixed?: boolean
   /** The plaque. Omitted = no plaque (a panel still carrying its own head row, mid-migration). */
   title?: string
-  /** Extra classes on the card root — `hearth-ink` is how PanelFrame opts a legacy panel into the bridge. */
+  /** Extra classes on the card root. */
   className?: string
   maxWidth?: number
   onClose: () => void
@@ -100,7 +102,7 @@ export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, childre
   )
   if (!backdrop) return card
   return (
-    <div className={`absolute inset-0 grid place-items-center bg-black/25 backdrop-blur-[3px] pointer-events-auto ${backdropClass}`}
+    <div className={`${fixed ? 'fixed' : 'absolute'} inset-0 grid place-items-center bg-black/25 backdrop-blur-[3px] pointer-events-auto ${backdropClass}`}
          onClick={onClose} onContextMenu={e => e.preventDefault()}>
       {card}
     </div>

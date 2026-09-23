@@ -89,10 +89,9 @@ export function KeeperFrame({ tab, setTab, title, tall, hint, onClose, children 
   // it can never be scrolled away mid-drag, a visible way out. The plaque names the screen; the tab
   // rail stays on the parchment, one row, sideways-scrolling. Tabs still switch on pointerDown,
   // matching the slots: every press in this panel acts on the way down.
-  // `hearth-ink` keeps the not-yet-rewritten bodies (gear, grimoire, letters) legible until Phase 6.
   const plaque = title ?? KEEPER_TABS.find(t => t.id === tab)?.label ?? 'Satchel'
   return (
-    <HearthFrame title={plaque} maxWidth={720} onClose={onClose} className="hearth-ink" backdropClass="z-30 bg-black/40"
+    <HearthFrame title={plaque} maxWidth={720} onClose={onClose} backdropClass="z-30 bg-black/40"
                  bodyClass={`${tall ? FRAME.tallBody : FRAME.body} overflow-x-hidden px-4 ${title ? 'pt-6' : 'pt-3'} pb-3`}
                  head={title ? undefined : (
                    <nav className="flex items-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

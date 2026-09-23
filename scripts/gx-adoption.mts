@@ -58,7 +58,7 @@ const FLOORS: Record<string, number> = {
  * At 0 the entry is deleted and shimmer moves to PENDING with the hearth as its reason.
  */
 const LEAVING: Record<string, { ceiling: number; why: string }> = {
-  shimmer: { ceiling: 202, why: 'moving onto the Carved Hearth (ui/hearth.tsx)' },
+  shimmer: { ceiling: 104, why: 'moving onto the Carved Hearth (ui/hearth.tsx)' },
 }
 
 /**

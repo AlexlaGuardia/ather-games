@@ -13,6 +13,7 @@
 // uppercase+tracking would re-open that hole on the day it was closed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { HearthFrame, HearthButton } from '../ui/hearth'
 import { GROUPS, LABEL, OWNER_ONLY, STICK_DRIVEN, PAD, type ActionId, type PadButton } from '@/lib/input/actions'
 import { load, save, rebind, resetAll, conflicts, orphans, type BindingMap } from '@/lib/input/bindings'
 import { keyName, padName } from '@/lib/input/hints'
@@ -84,15 +85,12 @@ export default function BindingsPanel({ isOwner, padKind, onClose }: {
   const clashFor = (id: ActionId) => clash.filter(c => c.actions.includes(id))
 
   return (
-    <div className="gx-chrome fixed inset-0 z-[48] flex items-center justify-center bg-black/80 p-4"
-         style={{ touchAction: 'none' }}>
-      <div className="w-[min(560px,95vw)] max-h-[86vh] overflow-y-auto rounded-lg border border-white/15 bg-[#0d0d1a] p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="gx-title text-[15px] text-white/95">CONTROLS</span>
-          <button onClick={onClose} className="gx-btn px-2.5 py-1 text-[10px]">Done</button>
+    <HearthFrame title="Controls" maxWidth={580} onClose={onClose} fixed backdropClass="z-[48]" bodyClass="p-5 pt-6 text-[12px]">
+        <div className="mb-3 flex justify-end">
+          <HearthButton small primary onClick={onClose}>Done</HearthButton>
         </div>
 
-        <p className="mb-4 font-mono text-[10px] leading-relaxed text-white/40">
+        <p className="mb-4 text-[12px] leading-relaxed hk-faint">
           Click a binding, then press the key or controller button you want.
           Esc cancels. Controls are saved to this device, not to your keeper.
         </p>
@@ -102,14 +100,14 @@ export default function BindingsPanel({ isOwner, padKind, onClose }: {
           if (!rows.length) return null
           return (
             <div key={group.title} className="mb-4">
-              <div className="gx-label mb-1.5 text-[9px] text-white/35">{group.title}</div>
+              <div className="hk-label mb-1.5 text-[12px] hk-faint">{group.title}</div>
               {rows.map(id => {
                 const b = map[id]
                 const stick = STICK_DRIVEN.includes(id)
                 const bad = clashFor(id)
                 return (
-                  <div key={id} className="flex items-center gap-2 border-b border-white/[0.06] py-1.5 last:border-0">
-                    <span className="flex-1 font-mono text-[11px] text-white/75">{LABEL[id]}</span>
+                  <div key={id} className="flex items-center gap-2 border-b hk-rule py-1.5 last:border-0">
+                    <span className="flex-1 text-[12px] hk-soft">{LABEL[id]}</span>
 
                     <Slot label={b.keys.length ? keyName(b.keys[0]) : '—'}
                           active={capture?.id === id && capture.device === 'key'}
@@ -119,7 +117,7 @@ export default function BindingsPanel({ isOwner, padKind, onClose }: {
                         `Binding` models keys and buttons, not axes — presenting an empty, clickable
                         slot would promise a rebind that silently cannot be stored. */}
                     {stick
-                      ? <span className="gx-value w-[74px] text-center font-mono text-[10px] text-white/30">L-Stick</span>
+                      ? <span className="tabular-nums w-[74px] text-center text-[12px] hk-faint">L-Stick</span>
                       : <Slot label={b.pad.length ? padName(b.pad[0], padKind) : '—'}
                               active={capture?.id === id && capture.device === 'pad'}
                               onClick={() => setCapture({ id, device: 'pad' })} />}
@@ -127,7 +125,7 @@ export default function BindingsPanel({ isOwner, padKind, onClose }: {
                 )
               })}
               {rows.some(id => clashFor(id).length > 0) && (
-                <div className="mt-1 font-mono text-[9px] text-amber-200/70">
+                <div className="mt-1 text-[12px] hk-ember">
                   {rows.flatMap(clashFor).filter((c, i, a) => a.indexOf(c) === i).map(c =>
                     // Shown, never refused: Drop and Cycle genuinely share Q and the game picks by
                     // whether the weapon is drawn. The player decides whether a clash bothers them.
@@ -140,17 +138,16 @@ export default function BindingsPanel({ isOwner, padKind, onClose }: {
         })}
 
         <button onClick={() => { const d = resetAll(); setMap(d); save(d) }}
-                className="gx-btn mt-1 px-3 py-1 text-[10px]">Reset to defaults</button>
-      </div>
-    </div>
+                className="hk-btn mt-1 px-3 py-1 text-[12px]">Reset to defaults</button>
+    </HearthFrame>
   )
 }
 
 function Slot({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick}
-            className={`gx-value w-[74px] rounded border px-2 py-1 text-center font-mono text-[10px] transition-colors ${
-              active ? 'border-amber-300/70 bg-amber-300/10 text-amber-200' : 'border-white/15 text-white/80 hover:border-white/35'}`}>
+            className={`tabular-nums w-[74px] rounded border px-2 py-1 text-center text-[12px] transition-colors ${
+ active ? 'hk-rule-ember hk-fill-ember hk-ember' : 'hk-rule hk-ink hk-hover-edge'}`}>
       {active ? 'press…' : label}
     </button>
   )

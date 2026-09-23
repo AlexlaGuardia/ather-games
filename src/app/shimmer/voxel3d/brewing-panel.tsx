@@ -134,7 +134,7 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
 
     const menu = cauldronMenu(level)
     return (
-      <PanelFrame width="w-[480px]" title={def.name} legacy={false} onClose={onClose} dataPanel="brewing">
+      <PanelFrame width="w-[480px]" title={def.name} onClose={onClose} dataPanel="brewing">
         <div className="flex items-center justify-between gap-2 mb-3">
           <HearthNote>{st.fromBank ? 'drawing on the bank' : st.feeds.length ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it` : 'set a chest against it and it will draw on that too'}</HearthNote>
           <span className="text-[12px] tabular-nums whitespace-nowrap" style={{ color: H.inkSoft }}>alchemy {level} · mana {Math.floor(mana.current.cur)}</span>
@@ -199,7 +199,7 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
   }
 
   return (
-    <PanelFrame width="w-[480px]" title={def.name} legacy={false} onClose={onClose} dataPanel="brewing">
+    <PanelFrame width="w-[480px]" title={def.name} onClose={onClose} dataPanel="brewing">
       <div className="flex items-center justify-between gap-2 mb-3">
         <HearthNote>a step on the road</HearthNote>
         <span className="text-[12px] tabular-nums" style={{ color: H.inkSoft }}>alchemy {level}</span>

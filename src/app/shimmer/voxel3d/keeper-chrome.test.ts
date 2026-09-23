@@ -3,7 +3,8 @@
  * Run: `npx tsx src/app/shimmer/voxel3d/keeper-chrome.test.ts`
  *
  * Alex, 2026-09-04, after walking the three-tab panel: *"next up we should dig into how to make it
- * look more like a game menu"*. The FRAME had been on the layer since 08-26 (`gx-card`, `gx-btn`
+ * look more like a game menu"*. (★ 2026-09-22: PORTED to the Carved Hearth vocabulary — hk-plate / hk-btn /
+ * hk-label / tabular-nums and hk-* tones — when Shimmer's menus left the gx layer. The RULES are unchanged.) The FRAME had been on the layer since 08-26 (`gx-card`, `gx-btn`
  * tabs); the BODIES under it were still `rounded border border-white/10 bg-white/[0.03]` rows with
  * hierarchy carried by the opacity of white — the exact signature `hud-type.test.ts` was written
  * against, one level down. This suite is the chrome pass as asserts, so the bodies cannot drift
@@ -60,8 +61,8 @@ ok(count(R, WEB_ROW) === 0,
 // 7 → 6 on 2026-09-04: the bag + imbue CARDS became GRID CELLS (Alex: "a second inventory under the hotbar").
 // A cell is the bag's own idiom, not a plate; the floor drops by exactly the two cards that stopped existing.
 const PLATE_FLOOR = 6
-ok(count(R, /className=[{"][^"}]*\bgx-plate\b/g) >= PLATE_FLOOR,
-   `the bodies stand on plates (${count(R, /className=[{"][^"}]*\bgx-plate\b/g)} gx-plate uses, floor ${PLATE_FLOOR})`)
+ok(count(R, /className=[{"][^"}]*\bhk-plate\b/g) >= PLATE_FLOOR,
+   `the bodies stand on plates (${count(R, /className=[{"][^"}]*\bhk-plate\b/g)} hk-plate uses, floor ${PLATE_FLOOR})`)
 
 for (const label of ['Gems', 'Vessels', 'Cast bar', 'Innate', 'Gathering focuses', 'Satchel', 'Hotbar']) {
   ok(new RegExp(`<SectionHead label="${label}"`).test(R), `section "${label}" is headed by SectionHead`)
@@ -83,10 +84,10 @@ ok(!/\bborder\b|\bring-|\boutline/.test(seatCls),
 ok(/rounded-full/.test(seatCls) && /shadow-\[inset/.test(seatCls), 'the dark seat is a rounded void with an inset shadow — dark and visibly empty')
 
 // the cast bar: key caps are HUD switches, the word carries its price off the spec
-ok(count(R, /gx-btn flex h-5 w-5/g) === 1, 'the cast-bar key cap is a gx-btn (one key-cap spelling)')
+ok(count(R, /hk-btn flex h-5 w-5/g) === 1, 'the cast-bar key cap is an hk-btn (one key-cap spelling)')
 ok(/\{spec\.manaCost\} mana/.test(R) && /spec\.cooldownMs \/ 1000/.test(R),
    '★ the bound word shows its price read off the CastSpec — mana and cooldown, derived, never restated')
-ok(/gx-plate \$\{spec && isBuilt\(bound\) \? 'is-lit' : ''\}/.test(R),
+ok(/hk-plate \$\{spec && isBuilt\(bound\) \? 'is-lit' : ''\}/.test(R),
    'a bound, built word lights its plate; an empty or unbuilt slot stays dark')
 
 // the innate traits: the birth lean is mounted again, inside Gear, beside the passive
@@ -151,8 +152,8 @@ ok(!/setPicking|leave this slot empty|eligibleMoves\(/.test(gear3), '★ the cas
 ok(/<select /.test(rack2) && /dismantleWorn\(/.test(rack2), 'the rack equips written spares from a dropdown and can dismantle the worn one')
 
 // ── 4. label / value must not collapse to one tone, region-wide ─────────────────────────────
-const pairRe = /<span className="gx-label([^"]*)">[\s\S]{0,220}?<span className="gx-value([^"]*)">/g
-const tone = (s: string) => (s.match(/text-(?:white|amber|slate|sky)\/?\[?[\w./]*\]?/g) ?? []).join(' ')
+const pairRe = /<span className="hk-label([^"]*)">[\s\S]{0,220}?<span className="tabular-nums([^"]*)">/g
+const tone = (s: string) => (s.match(/\bhk-(?:ink|soft|faint|ember|moss|rust|sky|violet)\b/g) ?? []).join(' ')
 const pairs = [...R.matchAll(pairRe)]
 ok(pairs.length >= 2, `label/value pairs found in the bodies (${pairs.length}, want ≥ 2 — the focuses row and the cast bar)`)
 for (const [i, m] of pairs.entries()) {
@@ -164,8 +165,8 @@ for (const [i, m] of pairs.entries()) {
 // the move name AND a comment, and `noComments` blanks a comment to spaces (layout kept), so the
 // two are > 220 chars apart and the pair regex walks past them. Found by mutation: collapsing the
 // price onto the band's tone SURVIVED. So that one pair is pinned by anchor, not by distance.
-const bandTone = tone(/className="gx-label w-\[68px\][^"]*"/.exec(R)?.[0] ?? '')
-const priceTone = tone(/className="gx-value[^"]*">\{spec\.manaCost\}/.exec(R)?.[0] ?? '')
+const bandTone = tone(/className="hk-label w-\[68px\][^"]*"/.exec(R)?.[0] ?? '')
+const priceTone = tone(/className="tabular-nums[^"]*">\{spec\.manaCost\}/.exec(R)?.[0] ?? '')
 ok(!!bandTone && !!priceTone, `the cast bar's band label and price both carry a tone (band="${bandTone}" price="${priceTone}")`)
 ok(bandTone !== priceTone, `★ the cast bar's band label and its price must not read alike (both "${bandTone}")`)
 
@@ -173,8 +174,8 @@ ok(bandTone !== priceTone, `★ the cast bar's band label and its price must not
 const G = noComments(read('./grimoire-tab.tsx'))
 ok(count(G, WEB_ROW) === 0, `no web row left in the grimoire (${count(G, WEB_ROW)})`)
 ok(count(G, /<SectionHead /g) >= 2, `the grimoire heads its lists with SectionHead (${count(G, /<SectionHead /g)})`)
-ok(/gx-btn px-2\.5 py-1 text-\[10px\] \$\{face === id \? 'gx-active' : 'gx-inactive'\}/.test(G),
-   'the Yours / Species switch is a gx-btn with brutal on/off, not a tinted div')
+ok(/hk-btn px-2\.5 py-1 text-\[12px\] \$\{face === id \? '' : 'hk-dim'\}/.test(G),
+   'the Yours / Species switch is an hk-btn with a dimmed off state, not a tinted div')
 ok(count(G, /className="[^"]*\buppercase\b[^"]*"/g) === 0, `no hand-rolled uppercase role left in the grimoire (${count(G, /className="[^"]*\buppercase\b[^"]*"/g)})`)
 
 console.log(`keeper-chrome: ${pass} passed, ${fails.length} failed`)

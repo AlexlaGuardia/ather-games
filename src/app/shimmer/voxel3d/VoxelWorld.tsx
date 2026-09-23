@@ -11189,16 +11189,16 @@ function CraftPanel({ have, tools, tick, station, pooled, onCraft, onCraftTool, 
                      // the first tile — so the chips are the materials in the bag (and the chosen one),
                      // and the rest sit behind "more". A keeper with planks and cut stone sees two.
                      <div className="mb-2 flex flex-wrap gap-1 items-center">
-                       <span className="text-white/35 text-[9px] tracking-[.14em] uppercase mr-1">pieces in</span>
+                       <span className="hk-faint text-[9px] mr-1">pieces in</span>
                        {PIECE_MATERIALS.filter(m => allMats || have(m.itemId) > 0 || m.key === pieceMat).map(m => {
                          const on = m.key === pieceMat
                          const stock = have(m.itemId)
                          return (
                            <button key={m.key} onClick={() => setPieceMat(m.key)}
-                                   className={`px-2 h-6 rounded border flex items-center gap-1.5 text-[9px] font-mono
-                                     ${on ? 'border-amber-300 bg-black/70 text-amber-200' : 'border-white/15 bg-black/40 text-white/55 hover:border-white/40'}`}>
+                                   className={`px-2 h-6 rounded border flex items-center gap-1.5 text-[9px] 
+ ${on ? 'hk-rule-ember hk-fill hk-ember' : 'hk-rule hk-fill hk-soft hk-hover-edge'}`}>
                              <span>{m.name}</span>
-                             <span className={stock > 0 ? 'text-white/40' : 'text-red-300/70'}>{stock}</span>
+                             <span className={stock > 0 ? 'hk-faint' : 'hk-rust'}>{stock}</span>
                            </button>
                          )
                        })}
@@ -11206,7 +11206,7 @@ function CraftPanel({ have, tools, tick, station, pooled, onCraft, onCraftTool, 
                          const hidden = PIECE_MATERIALS.filter(m => !(have(m.itemId) > 0 || m.key === pieceMat)).length
                          return hidden > 0 && (
                            <button onClick={() => setAllMats(v => !v)}
-                                   className="px-2 h-6 rounded border border-dashed border-white/15 text-[9px] font-mono text-white/40 hover:border-white/40">
+                                   className="px-2 h-6 rounded border border-dashed hk-rule text-[9px] hk-faint hk-hover-edge">
                              {allMats ? 'fewer' : `${hidden} more`}
                            </button>
                          )
@@ -11273,7 +11273,7 @@ function GardensPanel({ g, onClose }: { g: OpenGardens; onClose: () => void }) {
     return () => { live = false }
   }, [])
   return (
-    <PanelFrame width="w-[420px]" title="Gardens" legacy={false} dataPanel="gardens" onClose={onClose}>
+    <PanelFrame width="w-[420px]" title="Gardens" dataPanel="gardens" onClose={onClose}>
       <HearthChoice accent label="Greg's garden" meta="Moonwell Glade" onClick={() => { g.toGreg(); onClose() }} />
       <div className="mt-4"><HearthLabel>Keepers</HearthLabel></div>
       {friends === null && <HearthIdle>looking…</HearthIdle>}
@@ -11302,8 +11302,8 @@ function WaymarkPanel({ wm, onSay, onClose }: {
         {/* Renaming lives on the waymark's own face because this is the only surface that ever shows
             a passage's name — one called "10, -426" is one the player cannot plan a trip around. */}
         {here && (
-          <div className="mb-4 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
-            <div className="text-white/35 text-[9px] uppercase tracking-[.14em] mb-1">standing at</div>
+          <div className="mb-4 rounded border hk-rule hk-fill px-3 py-2">
+            <div className="hk-faint text-[9px] mb-1">standing at</div>
             {editing ? (
               <input autoFocus value={draft} maxLength={24}
                      onChange={(e) => setDraft(e.target.value)}
@@ -11312,10 +11312,10 @@ function WaymarkPanel({ wm, onSay, onClose }: {
                        if (e.key === 'Escape') { setDraft(here.name); setEditing(false) }
                        e.stopPropagation()
                      }}
-                     className="w-full bg-black/40 border border-amber-200/30 rounded px-1.5 py-0.5 text-amber-100/90 outline-none" />
+                     className="w-full hk-fill border hk-rule-ember rounded px-1.5 py-0.5 hk-ember outline-none" />
             ) : (
-              <button onClick={() => setEditing(true)} className="text-amber-100/90 hover:text-amber-100 text-left">
-                {label(here)}<span className="ml-2 text-white/25">rename</span>
+              <button onClick={() => setEditing(true)} className="hk-ember hk-hover-ember text-left">
+                {label(here)}<span className="ml-2 hk-faint">rename</span>
               </button>
             )}
           </div>
@@ -11327,7 +11327,7 @@ function WaymarkPanel({ wm, onSay, onClose }: {
             {/* The other passages are shown, greyed — a keeper seeing the shape of what they own is
                 how the hub-and-spoke rule explains itself without a tutorial line. */}
             {rows.length > 0 && (
-              <div className="mt-3 text-[10px] text-white/25">
+              <div className="mt-3 text-[10px] hk-faint">
                 your other passages ({rows.map(label).join(' · ')}) run through your garden, not to each other
               </div>
             )}
@@ -11347,7 +11347,7 @@ function WaymarkPanel({ wm, onSay, onClose }: {
                 dialect for "the ways off this plot" beats two. `GLADE_ID` stays the destination
                 the socket resolves through. */}
             {wm.net.marks.length === 0 && (
-              <div className="mt-2 mb-1 text-white/30 text-[10px]">
+              <div className="mt-2 mb-1 hk-faint text-[10px]">
                 plant a waymark out in the Wilds and it will stand here too
               </div>
             )}
@@ -11357,7 +11357,7 @@ function WaymarkPanel({ wm, onSay, onClose }: {
           </>
         )}
 
-        <div className="mt-3 text-[10px] text-white/25">
+        <div className="mt-3 text-[10px] hk-faint">
           {wm.net.marks.length} of {MAX_MARKS} passages · break a waymark to take it up
         </div>
     </PanelFrame>

@@ -100,7 +100,7 @@ for (const [i, m] of pairs.entries()) {
 // So the ratchet stays exactly as designed and the REPORT changes: every offender is printed with
 // its line number and the tracking value it hand-rolls, and the spellings are tallied, because
 // "one role spelled nine ways" is the actual defect and a bare total cannot show it.
-const HAND_ROLLED_BASELINE = 9   // 14 → 9 on 2026-09-22 (Carved Hearth phases 3-5): the station panels, brewing, alchemy and keeper frame heads moved onto ui/hearth (HearthLabel / HearthNote / SectionHead) · 16 → 14 on 2026-09-16 (stage 3): GregDialogue's header + close hint ride hud/dialogue-box.tsx (.gx-label) · 17 → 16 on 2026-09-16: the options panel's section heads are `OptionHead` (.gx-label) in hud/options-panel.tsx · 18 → 17 on 2026-09-15: the craft panel's Refine/Tools heads left with the list (the grid's tabs live in craft-grid.tsx)
+const HAND_ROLLED_BASELINE = 7   // 9 → 7 on 2026-09-22 (Carved Hearth phase 6: passage + brew heads onto hk-label / HearthNote) · 14 → 9 on 2026-09-22 (Carved Hearth phases 3-5): the station panels, brewing, alchemy and keeper frame heads moved onto ui/hearth (HearthLabel / HearthNote / SectionHead) · 16 → 14 on 2026-09-16 (stage 3): GregDialogue's header + close hint ride hud/dialogue-box.tsx (.gx-label) · 17 → 16 on 2026-09-16: the options panel's section heads are `OptionHead` (.gx-label) in hud/options-panel.tsx · 18 → 17 on 2026-09-15: the craft panel's Refine/Tools heads left with the list (the grid's tabs live in craft-grid.tsx)
 const hudLines = HUD.split('\n')
 const handRolled = [...block.matchAll(/className="[^"]*\buppercase\b[^"]*"/g)]
   .filter(m => !m[0].includes('gx-label'))

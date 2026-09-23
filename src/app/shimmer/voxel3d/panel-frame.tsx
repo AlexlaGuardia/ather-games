@@ -33,11 +33,10 @@ export function CloseX({ onClick, className = '' }: { onClick: () => void; class
  * Backdrop + card + the X. Since the Carved Hearth rollout (Phase 2, 2026-09-22) this IS the
  * hearth frame — every panel on PanelFrame changed skin in one commit. `width` is still the
  * card's Tailwind width class for the callers' sake; it is read as a max width (px) so a phone
- * gets the whole screen. `hearth-ink` opts the panel's legacy dark-plate utilities into the
- * TRANSITIONAL ink bridge (ui/hearth.css) until it is rewritten onto the kit — then pass
- * `legacy={false}`, and when no caller needs it the bridge is deleted.
+ * gets the whole screen. (Phases 2–6 ran a transitional "ink bridge" that re-read the old dark
+ * utilities on parchment; every panel moved onto the kit and it was deleted 2026-09-22.)
  */
-export function PanelFrame({ width, onClose, children, dataPanel, bodyClass = '', title, legacy = true }: {
+export function PanelFrame({ width, onClose, children, dataPanel, bodyClass = '', title }: {
   width: string
   onClose: () => void
   children: React.ReactNode
@@ -46,13 +45,11 @@ export function PanelFrame({ width, onClose, children, dataPanel, bodyClass = ''
   bodyClass?: string
   /** The carved plaque. */
   title?: string
-  /** Still written for the dark plate — leans on the ink bridge. */
-  legacy?: boolean
 }) {
   const px = Number(/\[(\d+)px\]/.exec(width)?.[1] ?? 440)
   return (
     <HearthFrame title={title} maxWidth={Math.round(px * 1.12)} onClose={onClose} dataPanel={dataPanel}
-                 className={legacy ? 'hearth-ink' : ''} bodyClass={`p-4 ${title ? 'pt-6' : 'pt-4'} text-[12px] ${bodyClass}`}>
+                 bodyClass={`p-4 ${title ? 'pt-6' : 'pt-4'} text-[12px] ${bodyClass}`}>
       {children}
     </HearthFrame>
   )
