@@ -259,6 +259,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['rune', 'birth', 'ritual', 'onboarding'],
   },
   {
+    path: '/shimmer/dev/cluster',
+    title: 'Garden cluster · plan',
+    blurb: 'Four folds, and the Green made of the corners they gave, from above.',
+    group: 'proto',
+    keywords: ['cluster', 'green', 'plot', 'friends', 'multiplayer', 'fold'],
+  },
+  {
     path: '/shimmer/voxel3d/tex',
     title: 'Block texture spike',
     blurb: 'Textured against flat, identical geometry, so mipmaps and variation can be compared.',
