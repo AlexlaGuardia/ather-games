@@ -13,14 +13,17 @@
 'use client'
 
 import React, { useState } from 'react'
+import { HearthFrame, HearthTabs, hearthDisplay } from '../ui/hearth'
 
 export type OptionsTab = 'game' | 'video' | 'sound' | 'controls' | 'dev'
 
 /** A full-width row: label left, dim tail right. `href` navigates, `onClick` acts. */
 export function OptionRow({ href, onClick, label, tail }: { href?: string; onClick?: () => void; label: string; tail: string }) {
-  const cls = 'gx-btn flex w-full items-center justify-between px-2.5 py-1.5 text-[10px]'
-  const body = <><span>{label}</span><span className="gx-value text-white/50">{tail}</span></>
-  return href ? <a href={href} className={cls}>{body}</a> : <button onClick={onClick} className={cls}>{body}</button>
+  // ★ Carved Hearth (Phase 7): a paper slip you press, the HearthChoice grammar at the sheet's size.
+  const cls = 'flex w-full min-h-[40px] items-center justify-between gap-3 rounded-[10px] px-3 text-[13px] font-bold transition-all hover:-translate-y-px active:translate-y-px hk-ink'
+  const style = { background: 'rgba(255,250,238,.6)', boxShadow: '0 1px 3px rgba(58,39,22,.18)' }
+  const body = <><span>{label}</span><span className="tabular-nums text-[12px] font-semibold hk-faint">{tail}</span></>
+  return href ? <a href={href} className={cls} style={style}>{body}</a> : <button onClick={onClick} className={cls} style={style}>{body}</button>
 }
 
 /** A labelled range with a tabular readout. `disabled` dims it AND says so via the caller's own note. */
@@ -29,19 +32,19 @@ export function OptionSlider({ label, value, min = 0, max = 1, step = 0.05, onCh
   onChange: (v: number) => void; format?: (v: number) => string; disabled?: boolean
 }) {
   return (
-    <label className={`flex items-center gap-2 text-[11px] font-mono ${disabled ? 'text-white/30' : 'text-white/70'}`}>
+    <label className={`flex items-center gap-2 text-[13px] font-semibold ${disabled ? 'hk-faint' : 'hk-ink'}`}>
       <span className="w-24 shrink-0">{label}</span>
       <input type="range" min={min} max={max} step={step} value={value} disabled={disabled}
         onChange={e => onChange(Number(e.target.value))}
-        className="flex-1 accent-amber-300 disabled:opacity-40" />
-      <span className="w-14 text-right tabular-nums text-white/50">{format ? format(value) : value.toFixed(2)}</span>
+        className="flex-1 accent-[#c8642a] disabled:opacity-40" />
+      <span className="w-14 text-right tabular-nums text-[12px] hk-soft">{format ? format(value) : value.toFixed(2)}</span>
     </label>
   )
 }
 
 /** A section eyebrow inside a tab. */
-export const OptionHead = ({ children, tone = 'text-white/40' }: { children: React.ReactNode; tone?: string }) =>
-  <div className={`gx-label pt-1 text-[9px] ${tone}`}>{children}</div>
+export const OptionHead = ({ children, tone = 'hk-soft' }: { children: React.ReactNode; tone?: string }) =>
+  <div className={`hk-label pt-2 text-[14px] ${tone}`}>{children}</div>
 
 export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, dev, initial = 'game' }: {
   onClose: () => void
@@ -64,24 +67,13 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
   const tabs: [OptionsTab, string][] = [['game', 'Game'], ['video', 'Video'], ['sound', 'Sound'], ['controls', 'Controls']]
   if (isOwner) tabs.push(['dev', 'Dev'])
   return (
-    // Capped to the viewport and scrolling past it: with the Dev rows the panel outgrew a 760px
-    // window and sat on the mana gauge.
-    <div className="absolute top-3 right-3 w-72 max-h-[calc(100vh-24px)] overflow-y-auto bg-black/80 border border-white/15 rounded p-3 space-y-2.5 z-[40]">
-      <div className="flex items-center justify-between">
-        <span className="gx-label text-[11px] text-white/90">Options</span>
-        <button onClick={onClose} className="text-white/40 hover:text-white/80 text-xs font-mono">esc / O</button>
-      </div>
-      {/* The tab row: the house game-UI signature — near-uniform size, hierarchy by brightness.
-          Inactive ~45%, active amber with a rule under it. */}
-      <div className="flex gap-0.5 border-b border-white/10">
-        {tabs.map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)}
-                  className={`gx-label px-1.5 pb-1.5 text-[9px] tracking-[.08em] uppercase border-b-2 -mb-px whitespace-nowrap
-                    ${tab === id ? 'border-amber-300 text-amber-200' : 'border-transparent text-white/45 hover:text-white/75'}
-                    ${id === 'dev' ? 'ml-auto' : ''}`}>{label}</button>
-        ))}
-      </div>
-
+    // ★ Carved Hearth (Phase 7): a side SHEET, not a modal — it hangs in the corner over the world
+    // the way the dark sheet did, so the world stays visible while you tune its look. Capped to the
+    // viewport and scrolling past it: with the Dev rows the panel outgrew a 760px window.
+    <div className="absolute top-5 right-5 z-[40] pointer-events-auto">
+      <HearthFrame title="Options" maxWidth={330} backdrop={false} onClose={onClose}
+                   bodyClass="p-3.5 pt-2 space-y-2.5"
+                   head={<HearthTabs tabs={tabs.map(([id, label]) => ({ id, label }))} active={tab} onPick={id => setTab(id as OptionsTab)} />}>
       {tab === 'game' && (<>
         {/* Where you leave from. Both worlds autosave on every change, so a hard nav out never
             loses progress. */}
@@ -89,7 +81,7 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
         {game}
         <OptionRow href="/room?wall=0" label="⌂ The Room" tail="leave" />
         <OptionRow href="/arcade/all" label="▦ All games" tail="arcade" />
-        <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">
+        <p className="pt-1 text-[13px] italic leading-relaxed hk-faint" style={hearthDisplay}>
           Your world saves itself as you play. Leaving is never a loss.
         </p>
       </>)}
@@ -97,6 +89,7 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
       {tab === 'sound' && sound}
       {tab === 'controls' && controls}
       {isOwner && tab === 'dev' && dev}
+      </HearthFrame>
     </div>
   )
 }

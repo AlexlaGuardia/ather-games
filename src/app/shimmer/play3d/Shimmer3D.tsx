@@ -7107,9 +7107,9 @@ export default function Shimmer3D() {
             <OptionRow onClick={() => { setMenuOpen(false); setBookOpen(true) }} label="✦ The book" tail="your rune" />
             {confirmNew ? (
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-mono text-white/80">reset?</span>
-                <button onClick={() => { setConfirmNew(false); setMenuOpen(false); setBirthCancelable(true); setBirthOpen(true) }} className="gx-btn px-2 py-1 text-[10px] text-red-200">Yes, start over</button>
-                <button onClick={() => setConfirmNew(false)} className="gx-btn px-2 py-1 text-[10px]">No</button>
+                <span className="text-[12px] hk-ink">reset?</span>
+                <button onClick={() => { setConfirmNew(false); setMenuOpen(false); setBirthCancelable(true); setBirthOpen(true) }} className="hk-btn px-2 py-1 text-[12px] hk-rust">Yes, start over</button>
+                <button onClick={() => setConfirmNew(false)} className="hk-btn px-2 py-1 text-[12px]">No</button>
               </div>
             ) : <OptionRow onClick={() => setConfirmNew(true)} label="↺ New Game" tail="rebirth" />}
           </>}
@@ -7122,11 +7122,11 @@ export default function Shimmer3D() {
           controls={<>
             <OptionHead>Keyboard</OptionHead>
             {([['WASD', 'move'], ['mouse', 'look (click to lock)'], ['E / A', 'talk · advance'], ['I', 'satchel'], ['M', 'map'], ['Z', 'cast the worn word'], ['Esc', 'release the cursor']] as const).map(([k, v]) => (
-              <div key={k} className="flex items-center justify-between text-[10px] font-mono text-white/70"><span className="gx-value">{k}</span><span className="text-white/45">{v}</span></div>
+              <div key={k} className="flex items-center justify-between text-[12px] hk-soft"><span className="tabular-nums">{k}</span><span className="hk-faint">{v}</span></div>
             ))}
           </>}
           dev={<div className="space-y-1">
-            <OptionHead tone="text-amber-300/70">Keeper of the realm</OptionHead>
+            <OptionHead tone="hk-ember">Keeper of the realm</OptionHead>
             <OptionRow onClick={() => { setMenuOpen(false); setEditMode(true) }} label="✎ Edit terrain" tail="this map" />
             <OptionRow onClick={() => setRuneDevOpen(o => !o)} label="✦ Rune (dev)" tail={runeDevOpen ? 'hide' : 'show'} />
             {runeDevOpen && (

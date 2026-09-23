@@ -11638,15 +11638,15 @@ function SettingsPanel({ s, update, onClose, onControls, onHandsTuner, isOwner }
             <button
               key={v}
               onClick={() => update(withStyle(s, v))}
-              className={`flex-1 py-1.5 rounded text-[11px] font-mono uppercase tracking-wider border
-                ${s.style === v ? 'border-amber-300 text-amber-200 bg-amber-300/10' : 'border-white/15 text-white/50'}`}
+              className={`flex-1 py-1.5 rounded text-[12px] border
+ ${s.style === v ? 'hk-rule-ember hk-ember hk-fill-ember' : 'hk-rule hk-soft'}`}
             >{v}</button>
           ))}
         </div>
         {/* Each lever is exposed so the look can be judged by moving ONE at a time on the real world.
             A preset is a starting point; the call is Alex's. */}
         {cartoonOnly && (
-          <p className="text-[10px] leading-relaxed text-white/35 font-mono">
+          <p className="text-[12px] leading-relaxed hk-faint ">
             These levers shape the cartoon render. Natural is plain light and ignores them.
           </p>
         )}
@@ -11670,16 +11670,16 @@ function SettingsPanel({ s, update, onClose, onControls, onHandsTuner, isOwner }
             out of PRESETS — flipping natural↔cartoon mid-measurement cannot switch off the meter
             you are measuring with. */}
         <OptionHead>Diagnostics</OptionHead>
-        <label className="flex items-center gap-2 text-[11px] font-mono text-white/70 cursor-pointer">
+        <label className="flex items-center gap-2 text-[12px] hk-soft cursor-pointer">
           <input
             type="checkbox" checked={s.showFps}
             onChange={e => update({ showFps: e.target.checked })}
-            className="accent-amber-300"
+            className="accent-[#c8642a]"
           />
           <span>frame meter</span>
-          <span className="ml-auto text-white/35">fps · ms · worst · draws</span>
+          <span className="ml-auto hk-faint">fps · ms · worst · draws</span>
         </label>
-        <p className="text-[10px] leading-relaxed text-white/35 font-mono pt-1">
+        <p className="text-[12px] leading-relaxed hk-faint pt-1">
           Both shading paths live in one shader program and are picked by a uniform, so switching
           costs nothing. Settings persist.
         </p>
@@ -11699,12 +11699,12 @@ function SettingsPanel({ s, update, onClose, onControls, onHandsTuner, isOwner }
         // Plain navigations: the worktable is its own page with its own state, and the world
         // autosaves on every change, so leaving is never a loss.
         <div className="space-y-1">
-          <OptionHead tone="text-amber-300/70">Keeper of the realm</OptionHead>
+          <OptionHead tone="hk-ember">Keeper of the realm</OptionHead>
           <OptionRow href="/shimmer/dev/worktable" label="⚒ Build structures" tail="worktable" />
           <OptionRow href="/shimmer/dev/worktable?load=gate_station" label="⌂ Gate station" tail="worktable" />
           <OptionRow href="/shimmer/dev" label="✧ Dev hub" tail="editors" />
           <OptionRow href="/shimmer/play3d" label="❈ Rune Hold" tail="play3d" />
-          <OptionHead tone="text-amber-300/70">Look</OptionHead>
+          <OptionHead tone="hk-ember">Look</OptionHead>
           <OptionRow onClick={onHandsTuner} label="🧤 Hands tuner" tail="position the arm" />
         </div>
       }
