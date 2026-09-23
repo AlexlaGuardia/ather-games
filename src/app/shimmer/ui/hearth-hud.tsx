@@ -360,7 +360,8 @@ function LipBar({ face, fillRef, overRef, txtRef, color, glyph }: {
  */
 export function HearthLip({ face, vitals, mana, tools }: {
   face: HudFace
-  vitals: React.RefObject<Vitals>
+  /** Omitted = no health on the lip (the mortal side has no always-on health). */
+  vitals?: React.RefObject<Vitals>
   /** Pass on a phone (the orb is gone); omit where the orb still stands. */
   mana?: React.RefObject<{ cur: number; max: number; regen: number } | null>
   tools?: React.ReactNode
@@ -370,7 +371,7 @@ export function HearthLip({ face, vitals, mana, tools }: {
   const mp = useRef<HTMLDivElement>(null), mpT = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     const id = setInterval(() => {
-      const v = vitals.current
+      const v = vitals?.current
       if (v) {
         const max = v.hpMax || 1
         if (hp.current) hp.current.style.width = `${Math.max(0, (v.hp / max) * 100)}%`
@@ -388,7 +389,7 @@ export function HearthLip({ face, vitals, mana, tools }: {
   }, [vitals, mana])
   return (
     <div className="flex items-center gap-3 px-2 py-1 rounded-[10px]" style={{ background: t.plate, boxShadow: face === 'full' ? 'inset 0 1px 3px rgba(58,39,22,.4)' : undefined }}>
-      <LipBar face={face} fillRef={hp} overRef={sh} txtRef={hpT} color="#b9543a" glyph="♥" />
+      {vitals && <LipBar face={face} fillRef={hp} overRef={sh} txtRef={hpT} color="#b9543a" glyph="♥" />}
       {mana && <LipBar face={face} fillRef={mp} txtRef={mpT} color="#7657b4" glyph="✦" />}
       {tools}
     </div>

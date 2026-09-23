@@ -126,7 +126,7 @@ function Corner({ face, size, mana, readouts, glyph }: {
 }
 
 // ── the layer ────────────────────────────────────────────────────────────────────────────────
-export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph, door = false, topLeftFrom = 0 }: {
+export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph, door = false, topLeftFrom = 0, clock = true, mapFrame = true }: {
   /** The host has an options door under the map (the world does) — the clock steps left of it. */
   door?: boolean
   /**
@@ -147,9 +147,16 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
   onSelect?: (i: number) => void
   /** The objective chip's text, or null when there is no objective (tutorial done). */
   objective: string | null
-  vitals: React.RefObject<Vitals>
+  /** Omitted = no health anywhere in the layer. The mortal side has no always-on health (its bars
+   *  show only with a weapon drawn), and porting the LOOK must not add a readout it never had. */
+  vitals?: React.RefObject<Vitals>
   mana: React.RefObject<{ cur: number; max: number; regen: number } | null>
-  buffs: React.RefObject<ActiveBuffs>
+  /** Omitted = no chips (the mortal side keeps its own buff column by the map). */
+  buffs?: React.RefObject<ActiveBuffs>
+  /** false = the host draws the clock itself (the mortal side hangs it in its own column). */
+  clock?: boolean
+  /** false = the host rings its own minimap, on the MINIMAP'S show-rule, which is not the bar's. */
+  mapFrame?: boolean
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
   activeTool: string | null
@@ -163,7 +170,8 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
     ? TOOL_FAMILIES.map(f => toolReadout(tools.current!, skills.current!, f, activeTool))
     : []
   const pips: ToolPip[] = readouts.map(r => ({ family: r.family, level: r.level, xpPct: r.xpPct, active: r.active }))
-  const lip = size === 'compact' ? <HearthLip face={face} vitals={vitals} />
+  // Compact's lip carries health only (the orb still stands), so with no health there is no lip.
+  const lip = size === 'compact' ? (vitals ? <HearthLip face={face} vitals={vitals} /> : undefined)
     : size === 'phone' ? <HearthLip face={face} vitals={vitals} mana={mana} tools={<HearthToolPips face={face} pips={pips} />} />
     : undefined
   return (
@@ -172,15 +180,15 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
     // to Georgia/system-ui. `contents` makes no box, so the fixed/absolute pieces place exactly as before
     // — custom properties inherit through the element tree, not through boxes.
     <div className={`contents ${HEARTH_FONT_VARS}`}>
-      <HearthMapFrame face={face} box={box} />
-      <HearthClock face={face} box={box} reserveRight={door ? DOOR_RESERVE : 0} />
+      {mapFrame && <HearthMapFrame face={face} box={box} />}
+      {clock && <HearthClock face={face} box={box} reserveRight={door ? DOOR_RESERVE : 0} />}
       {objective && <HearthObjective face={face} value={objective} anchor={size === 'phone' ? 'left' : 'center'}
         style={size === 'phone' && topLeftFrom ? { top: topLeftFrom + 6 } : undefined} />}
       {/* Buffs: wide = over the vitals (bottom-left). Compact = the same bottom-left spot, which is
           FREE there (the vitals ride the bar). Phone = under the objective, under the host's block. */}
-      <HearthBuffChips face={face} buffs={buffs}
-        top={size !== 'phone' ? undefined : (topLeftFrom ? topLeftFrom + 6 : 12) + (objective ? 46 : 0)} />
-      {size === 'wide' && <div className="absolute bottom-4 left-4 pointer-events-none"><HearthVitals face={face} vitals={vitals} /></div>}
+      {buffs && <HearthBuffChips face={face} buffs={buffs}
+        top={size !== 'phone' ? undefined : (topLeftFrom ? topLeftFrom + 6 : 12) + (objective ? 46 : 0)} />}
+      {size === 'wide' && vitals && <div className="absolute bottom-4 left-4 pointer-events-none"><HearthVitals face={face} vitals={vitals} /></div>}
       <HearthHotbar face={face} size={size} entries={entries} sel={sel} held={held} dimmed={dimmed} onSelect={onSelect} lip={lip} />
       {size !== 'phone' && <Corner face={face} size={size} mana={mana} readouts={readouts} glyph={glyph} />}
     </div>

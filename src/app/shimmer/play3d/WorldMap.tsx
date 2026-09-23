@@ -192,7 +192,10 @@ export function WorldMap({ zoneId, gridRef, posRef, yawRef, onClose }: {
 // Persistent minimap — a north-up crop centered on the player. Redraws only when the
 // player crosses a tile or turns; click (or M) expands to the full map.
 const MINI_TILES = 30 // half-width of the crop, in tiles
-export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand }: {
+export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand, box = { top: 12, right: 12, size: 148 } }: {
+  /** Where the canvas sits and how big — pass `ui/hearth-hud-layer.tsx` › `hudMapBox(size)` (96 on a
+   *  phone, 2026-09-23), the same box the Ather's minimap and the hearth frame use. */
+  box?: { top: number; right: number; size: number }
   zoneId: string
   gridRef: React.RefObject<number[][]>
   posRef: React.RefObject<THREE.Vector3 | null>
@@ -203,8 +206,7 @@ export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand }: {
   useEffect(() => {
     const cv = canvas.current
     if (!cv) return
-    const SIZE = 148
-    cv.width = SIZE * 2; cv.height = SIZE * 2 // 2x for crisp text-free pixels
+    cv.width = box.size * 2; cv.height = box.size * 2 // 2x for crisp text-free pixels
     let id = 0
     let last = ''
     const tick = () => {
@@ -237,13 +239,13 @@ export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand }: {
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [zoneId, gridRef, posRef, yawRef])
+  }, [zoneId, gridRef, posRef, yawRef, box.size])
   return (
     <canvas ref={canvas} onClick={onExpand} title="World map (M)" style={{
       // top 12 / right 12 is the VOXEL rule (VoxelMap.tsx) and the ☰ door hangs under it — one
       // placement in both dimensions (2026-09-16 HUD port). It sat at right 130 to clear the old
       // icon column, which is gone.
-      position: 'fixed', top: 12, right: 12, zIndex: 33, width: 148, height: 148,
+      position: 'fixed', top: box.top, right: box.right, zIndex: 33, width: box.size, height: box.size,
       borderRadius: 10, border: '1px solid #ffffff3a', background: '#0b0918',
       boxShadow: '0 3px 14px #0008', cursor: 'pointer', imageRendering: 'pixelated',
     }} />

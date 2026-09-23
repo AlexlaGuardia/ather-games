@@ -18,8 +18,20 @@ import { ALL_ZONES } from '../world/all-zones'
 // this file is the half that receives. See the boot effect for why the read lives where it does.
 import { consumeArrival, stageEntry } from '../engine/crossing'
 import { nearestGate } from '../voxel3d/crossing-out'
-import { Clock } from '../hud/clock'
-import { ObjectiveChip } from '../hud/objective-chip'
+// ★ CARVED HEARTH PHASE 9, THE MORTAL SIDE (2026-09-23): the keeper's HUD is one object in both
+// dimensions (the `hud/clock.tsx` rule), so this side takes the same `HearthHudLayer` the Ather
+// mounts — bar, lip, vessel + tool arch, sized wide/compact/phone — and the hearth's own objective
+// pill, clock pill, map frame and ☰ knob. It takes the LOOK, not new readouts: no always-on health
+// (this side never had one; its bars are the drawn-weapon combat readout), and its buffs/companion
+// column stays its own. Each piece keeps its own show-rule, which is why the frame, objective and
+// clock are mounted here rather than by the layer.
+import { HearthHudLayer, hudMapBox, hudDoorTop, HUD_BAR_CLEAR } from '../ui/hearth-hud-layer'
+import { HearthMapFrame, HearthObjective, HearthClock, useHudSize } from '../ui/hearth-hud'
+import type { HudFace } from '../ui/hud-face'
+import { HEARTH_FONT_VARS } from '../ui/hearth-fonts'
+import { ToolGlyph } from '../hud/hud-corner'
+/** Alex's pick for the always-on HUD (2026-09-23) — the Ather's `HUD_FACE`, same value. */
+const HUD_FACE: HudFace = 'full'
 import { SayLine } from '../hud/say-line'
 import { Prompt } from '../hud/prompt'
 import { DialogueBox } from '../hud/dialogue-box'
@@ -98,9 +110,8 @@ import { CROP_DEFS, plantCrop, harvestCrop, plantedCropsToSave, plantedCropsFrom
 import type { AITier } from '../engine/battle-ai'
 import ArenaBattle from '../components/ArenaBattle'
 import PartyPanel from './PartyPanel'
-import { Hotbar, HOTBAR_SLOTS, type HotbarEntry } from '../hud/hotbar'
+import { HOTBAR_SLOTS, type HotbarEntry } from '../hud/hotbar'
 import { BagPanel, itemLabel, type SlotRef, type Lift } from '../hud/satchel'
-import { HudCorner } from '../hud/hud-corner'
 import { moveBetween, moveCount, halfOf } from '../voxel3d/chest'
 import { createSpiritIndex } from '../engine/spirit-index'
 import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, type NPC3D } from './npcs3d'
@@ -5104,6 +5115,8 @@ export default function Shimmer3D() {
   }, [persist])
   // The corner's gauge polls a `{cur,max,regen}` ref; the mortal side keeps a `ManaPool` + a skill
   // level + an affinity bonus. A getter is the adapter — read live, never copied.
+  /** wide / compact / phone — the hearth HUD's size, from the real window. */
+  const hudSize = useHudSize()
   const manaCornerRef = useMemo(() => ({
     get current() { return { cur: manaRef.current.current, max: getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus, regen: 1 } },
   }), [])
@@ -6975,7 +6988,9 @@ export default function Shimmer3D() {
   )
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#bfe3ef', cursor: editMode ? 'crosshair' : 'default', touchAction: 'none', overscrollBehavior: 'none' }}>
+    // HEARTH_FONT_VARS on the root: the hearth HUD pieces mounted directly here (objective, clock, frame)
+    // have no HearthFrame root of their own to carry the faces, and without the vars they fall back to Georgia.
+    <div className={HEARTH_FONT_VARS} style={{ position: 'fixed', inset: 0, background: '#bfe3ef', cursor: editMode ? 'crosshair' : 'default', touchAction: 'none', overscrollBehavior: 'none' }}>
       {/* key: antialias is a WebGL CONTEXT flag and shadowMap.enabled needs every shader recompiled,
           so a quality change remounts the canvas rather than half-applying. Position/yaw survive —
           they live in this component's refs, not the scene graph. See gfx.ts gfxKey(). */}
@@ -7091,13 +7106,19 @@ export default function Shimmer3D() {
 
       {/* minimap — persistent, click (or M) expands to the full map */}
       {!battle && !editMode && !showMap && !menuOpen && (
-        <MiniMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => { openCursorUI(); setShowMap(true) }} />
+        <>
+          <MiniMap box={hudMapBox(hudSize)} zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => { openCursorUI(); setShowMap(true) }} />
+          <HearthMapFrame face={HUD_FACE} box={hudMapBox(hudSize)} />
+        </>
       )}
       {/* The fork's objective — the same chip the Ather's tutorial wears (`hud/objective-chip.tsx`). */}
-      {forkChip && !battle && !editMode && !dialogue && !menuOpen && <ObjectiveChip value={forkChip} />}
+      {forkChip && !battle && !editMode && !dialogue && !menuOpen && <HearthObjective face={HUD_FACE} value={forkChip} anchor={hudSize === 'phone' ? 'left' : 'center'}
+        // Phone: the top row is the map and, left of it, this side's clock/companion column — measured
+        // 2026-09-23, the pill ran under the clock. Under the map row the left side is empty.
+        style={hudSize === 'phone' ? { top: hudMapBox(hudSize).top + hudMapBox(hudSize).size + 8 } : undefined} />}
       {/* The ☰ under the minimap, on the minimap's own rule; `hud/options-door.tsx`. */}
       {!battle && !editMode && !showMap && !menuOpen && (
-        <OptionsDoor onOpen={openOptions} />
+        <OptionsDoor face={HUD_FACE} top={hudDoorTop(hudSize)} onOpen={openOptions} />
       )}
       {menuOpen && (
         <OptionsPanel isOwner={isOwner} onClose={closeOptions}
@@ -7255,8 +7276,8 @@ export default function Shimmer3D() {
             panels the options Game tab opens. Marks and the mana pie left with it — one HUD, and the
             Ather shows neither up here (mana is the vessel at bottom-right; stage 2 brings it). */}
       {!battle && !approach && !rewards && !editMode && !dialogue && !menuOpen && (
-        <div data-ct={companionTick} style={{ position: 'fixed', top: 12, right: 12 + 148 + 10, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
-          <Clock placed={false} note={<DayNotes zoneId={zoneId} />} />
+        <div data-ct={companionTick} style={{ position: 'fixed', top: hudMapBox(hudSize).top, right: hudMapBox(hudSize).right + hudMapBox(hudSize).size + 10, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
+          <HearthClock face={HUD_FACE} placed={false} note={<DayNotes zoneId={zoneId} />} />
 
           {/* Companion chip — active Mana'mal + its @15 perk; tap to switch (when you own >1) */}
           {beastsRef.current.length > 0 && (() => {
@@ -7770,11 +7791,13 @@ export default function Shimmer3D() {
       {!battle && !approach && !rewards && !editMode && !dialogue && !placing && (<>
         {/* The bar + the corner: `shimmer/hud/`, the Ather's own. `onSelect` because the mortal side has
             touch play; the name over the bar is the registry's label for what is selected. */}
-        <Hotbar entries={hotbarEntries} sel={hotSel} held={heldName} dimmed={false} onSelect={selectSlot} />
         {/* `activeTool` is the Ather's "which family is mining right now" — here it is the channel's
-            family, or rinning while the line is out. `toolTick` is read so a break re-renders the arch. */}
-        <HudCorner mana={manaCornerRef} activeTool={(void toolTick, channel?.family ?? (fish ? 'rinning' : null))}
-                   tools={equippedToolsRef} skills={skillsRef} />
+            family, or rinning while the line is out. `toolTick` is read so a break re-renders the arch.
+            No vitals / buffs / clock / map frame: see the Phase 9 note at the imports. */}
+        <HearthHudLayer face={HUD_FACE} size={hudSize} entries={hotbarEntries} sel={hotSel} held={heldName} dimmed={false} onSelect={selectSlot}
+          objective={null} mana={manaCornerRef} tools={equippedToolsRef} skills={skillsRef}
+          activeTool={(void toolTick, channel?.family ?? (fish ? 'rinning' : null))}
+          glyph={f => <ToolGlyph family={f} />} clock={false} mapFrame={false} />
       </>)}
       {bagOpen && (
         <BagPanel inv={invRef} spiritIndex={spiritIndexRef} chest={null} tick={bagTick} sel={hotSel}
@@ -7789,8 +7812,10 @@ export default function Shimmer3D() {
       {/* ── Mobile controls: joystick (move) bottom-left · A interact / B cancel bottom-right ── */}
       {isTouch && !battle && !editMode && !placing && (
         <>
-          <TouchJoystick joyRef={joyRef} bottom={96} />
-          <div style={{ position: 'fixed', bottom: 96, right: 30, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
+          {/* ★ ON THE BAR'S CLEARANCE, not a fixed 96: the hearth bar (with its lip on a phone) reaches
+              ~125px, and 96 put the joystick and the A/B buttons ON it. Measured in `hearth-hud-layer`. */}
+          <TouchJoystick joyRef={joyRef} bottom={HUD_BAR_CLEAR[hudSize] + 8} />
+          <div style={{ position: 'fixed', bottom: HUD_BAR_CLEAR[hudSize] + 8, right: 30, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
             {/* B — cancel/back (upper, smaller). Backs out of the New Game prompt / dismisses a toast. */}
             <button
               onPointerDown={(e) => { e.stopPropagation(); if (confirmNew) setConfirmNew(false); else if (banner) setBanner(null) }}
@@ -7805,7 +7830,7 @@ export default function Shimmer3D() {
             >{fish ? (fish.bite ? '❗' : '🎣') : channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? STATIONS[nearStation.itemId].emoji : '✦'}</button>
           </div>
           {/* Jump (edge) + Slide (held) — left of the A/B column. Only meaningful in first-person play. */}
-          <div style={{ position: 'fixed', bottom: 96, right: 118, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+          <div style={{ position: 'fixed', bottom: HUD_BAR_CLEAR[hudSize] + 8, right: 118, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
             <button
               onPointerDown={(e) => { e.stopPropagation(); slideRef.current = true }}
               onPointerUp={(e) => { e.stopPropagation(); slideRef.current = false }}
