@@ -5,7 +5,7 @@
 // import graph circular. Nothing here holds game state — pure style consts + dumb components.
 
 import type { ItemStack } from '../engine/inventory'
-import { ink, gold, mint, accent as hue, hair, radius, type as t, tracking, textShadow, tone, type ToneName } from './tokens'
+import { ink, gold, mint, accent as hue, hair, radius, type as t } from './tokens'
 
 /** `raw_mana_shard` → `Raw Mana Shard`. Used everywhere an item id is shown to the player. */
 export const prettyItem = (id: string) =>
@@ -38,55 +38,6 @@ export const GE_BUY_CURATED = [
   'seed_violetbloom', 'seed_stormgrass', 'seed_rootvine', 'seed_tidepetal',
 ]
 
-/** A tappable inventory/chest grid. Empty slots are disabled, not hidden. */
-export function SlotGrid({ slots, onTap, cols = 5, accent }: {
-  slots: (ItemStack | null)[]; onTap: (idx: number) => void; cols?: number; accent: string
-}) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 4 }}>
-      {slots.map((s, i) => (
-        <button key={i} onClick={() => s && onTap(i)} disabled={!s} style={{
-          position: 'relative', aspectRatio: '1', minHeight: 40, borderRadius: radius.sm,
-          border: `1px solid ${s ? accent + '66' : hair.faint}`, background: s ? ink.raised : ink.wash,
-          cursor: s ? 'pointer' : 'default', touchAction: 'none', padding: 0,
-        }}>
-          {s && (
-            <>
-              <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', font: '800 8px ui-monospace, monospace', color: mint.text, textAlign: 'center', overflow: 'hidden', padding: 2, lineHeight: 1.1 }}>
-                {prettyItem(s.itemId).split(' ').map(w => w.slice(0, 3)).join(' ')}
-              </span>
-              {s.count > 1 && <span style={{ position: 'absolute', right: 2, bottom: 1, ...t.value, color: mint.text, textShadow }}>{s.count}</span>}
-            </>
-          )}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-/**
- * The full-screen scrim + panel every station menu shares.
- *
- * ⚠ TAKES A TONE NAME, NOT COLOURS. The previous signature accepted `accent`/`border`/`bg`, which is
- * how six call sites came to hold six different triplets while this file's own header claimed they
- * could not drift. A caller that needs a colour this shell does not offer should add a tone to
- * `tokens.ts`, so the next reader finds one list of every surface the walker can wear.
- */
-export function StationShell({ tone: toneName, title, subtitle, onClose, children }: {
-  tone: ToneName; title: string; subtitle?: React.ReactNode
-  onClose: () => void; children: React.ReactNode
-}) {
-  const { accent, border, bg } = tone[toneName]
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 47, background: ink.scrim, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none' }}>
-      <div style={{ width: 'min(440px, 95vw)', maxHeight: '86vh', overflowY: 'auto', background: bg, border: `2px solid ${border}`, borderRadius: radius.lg, padding: '18px 18px 14px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <span style={{ font: t.title, color: accent, letterSpacing: tracking }}>{title}</span>
-          <button onClick={onClose} style={{ ...menuBtn, padding: '4px 10px' }}>✕</button>
-        </div>
-        {subtitle}
-        {children}
-      </div>
-    </div>
-  )
-}
+// `SlotGrid` and `StationShell` left this file on 2026-09-23 (Carved Hearth): the five station menus
+// wear the hearth kit now, and their shell + satchel wells live in `StationMenus.tsx` — which can import
+// the kit, unlike this file (`farming.test.ts` imports it, and the kit pulls `next/font`).

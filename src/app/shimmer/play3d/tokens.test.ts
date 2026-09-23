@@ -35,7 +35,10 @@ const DIR = join(process.cwd(), 'src/app/shimmer/play3d')
 // vessel-art.tsx was born converted (2026-09-09): two literals, both tokens from the day it was written
 // GfxPanel.tsx + MoveBook.tsx converted 2026-09-23 by the Carved Hearth column pass: every colour an hk-* class or an
 // `H` token, radii on the ladder. (MoveBook keeps `rune.glow` / `e.accent` — per-rune/element DATA, not literals.)
-const CONVERTED = ['GfxPanel.tsx', 'MoveBook.tsx', 'PassagePanel.tsx', 'TremorRing.tsx', 'ui.tsx', 'vessel-art.tsx']
+// StationMenus.tsx converted the same day: the five station menus on the hearth kit, zero literals.
+// ui.tsx LEFT the list that day by drawing nothing any more — its SlotGrid + StationShell went to the
+// hearth, and what remains (menuBtn, TOOL_HUD, data) is token-built with no markup, so it is not colour-bearing.
+const CONVERTED = ['GfxPanel.tsx', 'MoveBook.tsx', 'PassagePanel.tsx', 'StationMenus.tsx', 'TremorRing.tsx', 'vessel-art.tsx']
 
 /**
  * Still holding raw literals. NOT an exemption — a worklist with a red light on it (assert B).
@@ -49,7 +52,7 @@ const PENDING = [
   // did not change by one literal. Convert it with Shimmer3D's, not before.
   'moglin-look.ts',
   'npcs3d.ts', 'page.tsx', 'PartyPanel.tsx', 'RemotePlayers.tsx',
-  'Shimmer3D.tsx', 'StationMenus.tsx', 'WorldMap.tsx',
+  'Shimmer3D.tsx', 'WorldMap.tsx',
 ]
 
 /**

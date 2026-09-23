@@ -6,7 +6,22 @@
 // future edit to StationMenus can't silently break one of the five.
 
 import { renderToStaticMarkup } from 'react-dom/server'
-import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
+import Module from 'node:module'
+import type { PlacedStruct, StationKind } from './StationMenus'
+
+// ★ THE HEARTH KIT LOADS `next/font`, WHICH ONLY EXISTS INSIDE NEXT'S COMPILER (2026-09-23). The menus
+// wear the Carved Hearth now; `ui/hearth-fonts.ts` calls `Fraunces()`/`Nunito()`, which Next rewrites at
+// build time and which are not functions under node. Stub the module for THIS render — the fonts are CSS
+// variables the markup names, and nothing here asserts a typeface — then load the menus after it.
+const realLoad = (Module as unknown as { _load: (...a: unknown[]) => unknown })._load
+;(Module as unknown as { _load: (...a: unknown[]) => unknown })._load = function (req: unknown, ...rest: unknown[]) {
+  if (req === 'next/font/google') return new Proxy({}, { get: () => () => ({ variable: '', className: '' }) })
+  return realLoad.call(this, req, ...rest)
+}
+// …and its stylesheet (`import './hearth.css'`), which only a bundler can load. Motion and scrollbars — no assert reads them.
+;(Module as unknown as { _extensions: Record<string, (m: { exports: unknown }) => void> })._extensions['.css'] = (m) => { m.exports = {} }
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { StationMenus } = require('./StationMenus') as typeof import('./StationMenus')
 import { createSkillSet } from '../engine/skills'
 import { createInventory, addItems, createChestStorage } from '../engine/inventory'
 import { createBank } from '../engine/bank'
@@ -58,15 +73,16 @@ const render = (kind: StationKind, crops?: PlantedCrop[]) =>
   renderToStaticMarkup(<StationMenus {...makeProps(kind, crops)} />)
 
 // Each menu renders, and renders ITS OWN panel (not a neighbour's).
-// Match the FULL emoji title, not a bare word: `CHEST` also appears as the chest panel's section
-// header, so a bare-word check passed even with the title deliberately broken. Caught by mutating
-// the title and watching this suite stay green. Keep the emoji.
+// Match the title AS THE PLAQUE'S WHOLE TEXT (`>Garden bank<`), not a bare word: a word can also appear
+// in a panel's body (the bank's note says "chest", the planter's rows say "Planter"), and a bare-word
+// check once passed with the title deliberately broken — caught by mutating it. (Was the emoji-caps
+// title; the hearth plaques are plain sentence case, 2026-09-23, so the tag boundary does that job.)
 const expect: Record<StationKind, string> = {
-  brew: '⚗ ALCHEMY STATION',
-  craft: '🔨 CRAFTING TABLE',
-  chest: '🏦 GARDEN BANK',
-  exchange: '💰 EXCHANGE BOOTH',
-  farm: '🌱 PLANTER',
+  brew: '>Alchemy station<',
+  craft: '>Crafting table<',
+  chest: '>Garden bank<',
+  exchange: '>Exchange booth<',
+  farm: '>Planter<',
 }
 for (const kind of Object.keys(expect) as StationKind[]) {
   let html = ''
@@ -83,7 +99,7 @@ chk('null openMenu renders nothing',
 // The crafting table shows the ⚒ TOOLS section + a craftable tool (the tool-maintenance feature).
 {
   const html = render('craft')
-  chk('craft shows the TOOLS section', html.includes('TOOLS'))
+  chk('craft shows the tools section', html.includes('>tools<'))
   chk('craft lists a tier tool', /T[123]/.test(html))
 }
 
@@ -91,22 +107,22 @@ chk('null openMenu renders nothing',
 {
   const html = render('brew')
   chk('brew lists potions', html.includes('Brew'))
-  chk('brew shows the alchemy level', html.includes('Alchemy Lv 12'))
+  chk('brew shows the alchemy level', html.includes('alchemy 12'))
 }
 
 // Exchange shows the wallet + tax, and offers the curated buy list.
 {
   const html = render('exchange')
   chk('exchange shows marks', html.includes('500 marks'))
-  chk('exchange has a BUY section', html.includes('BUY'))
-  chk('exchange has a SELL section', html.includes('SELL'))
+  chk('exchange has a Buy section', html.includes('>Buy<'))
+  chk('exchange has a Sell section', html.includes('>Sell<'))
 }
 
 // Planter: empty → seed list; planted → growth bar. Both branches.
 {
   const empty = render('farm')
   chk('empty planter offers seeds', empty.includes('Plant') || empty.includes('No plantable seeds'))
-  chk('planter shows farming level', empty.includes('Farming Lv 8'))
+  chk('planter shows farming level', empty.includes('farming 8'))
 
   const crop: PlantedCrop = {
     id: 'c1', cropId: 'shimmerwheat', tileX: 3, tileY: 4, zoneId: 'home-plot',
