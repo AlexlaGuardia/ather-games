@@ -40,26 +40,36 @@ const DIR = join(process.cwd(), 'src/app/shimmer/play3d')
 // `H`, keeping only ELEMENT_COLORS (per-element DATA); the map's picture palette moved to `tokens.map` unchanged.
 // ui.tsx LEFT the list that day by drawing nothing any more — its SlotGrid + StationShell went to the
 // hearth, and what remains (menuBtn, TOOL_HUD, data) is token-built with no markup, so it is not colour-bearing.
-const CONVERTED = ['GfxPanel.tsx', 'MoveBook.tsx', 'PartyPanel.tsx', 'PassagePanel.tsx', 'StationMenus.tsx', 'TremorRing.tsx', 'vessel-art.tsx', 'WorldMap.tsx']
+// Shimmer3D.tsx, page.tsx, RemotePlayers.tsx converted 2026-09-23 by the scene-palette pass (radii snapped to the
+// ladder, ≤1px each); npcs3d.ts LEFT the list the same day by holding no colour any more (its tints are `npcTint`): what their
+// menus did not already take from the hearth, they now take from `scene-palette.ts` — every value moved, none chosen.
+const CONVERTED = ['GfxPanel.tsx', 'MoveBook.tsx', 'page.tsx', 'PartyPanel.tsx', 'PassagePanel.tsx', 'RemotePlayers.tsx',
+  'Shimmer3D.tsx', 'StationMenus.tsx', 'TremorRing.tsx', 'vessel-art.tsx', 'WorldMap.tsx']
 
 /**
  * Still holding raw literals. NOT an exemption — a worklist with a red light on it (assert B).
  * Delete a name from here the moment its file is clean.
+ *
+ * ★ EMPTY SINCE 2026-09-23. The menus went to the hearth; what remained was the scene, and the scene
+ * got a home (`scene-palette.ts`, below). Keep the list: a new file that holds a literal lands here
+ * or in CONVERTED, and assert B still refuses one that lands nowhere.
  */
-const PENDING = [
-  // HotBar.tsx left the worklist by being RETIRED (2026-09-16, HUD port stage 2); GfxPanel.tsx + MoveBook.tsx by being CONVERTED (2026-09-23)
-  // ⚠ Arrived by MOVING, not by being written: the three moglin fur/collar literals were already
-  // raw inside Shimmer3D.tsx and were extracted to a leaf module so the clay bench could import
-  // them instead of retyping them. The count on this worklist went up and the repo's actual drift
-  // did not change by one literal. Convert it with Shimmer3D's, not before.
-  'moglin-look.ts',
-  'npcs3d.ts', 'page.tsx', 'RemotePlayers.tsx',
-  // Shimmer3D.tsx: its MENUS left the dark plate 2026-09-23 (range console, armory, spoils, prompts, touch
-  // pad, edit tools — 345 literals to 140). What it still holds is not chrome: the world's material colours,
-  // the Crucible gun HUD (reticle / ammo / bars / cast bar / viewmodel), world-space labels and the two
-  // cinematic cuts. Those need a SCENE palette home, not the hearth — its own slice, not a leftover.
-  'Shimmer3D.tsx',
-]
+const PENDING: string[] = []
+
+/**
+ * PALETTES — the only files besides `tokens.ts` allowed to hold a colour literal, because holding the
+ * picture's colours is their whole job. NOT an exemption either, for the same reason PENDING is not:
+ * each one is held to what a palette is, and the moment it stops being one it goes red —
+ *   G1. it is `.ts`, so it cannot contain JSX
+ *   G2. it builds no style object and names no StationShell (it colours, it does not draw)
+ *   G3. it never re-spells a `tokens.ts` value — a colour the menus already own is IMPORTED
+ * G3 is the drift shape this whole guard exists for, arriving through the one door that allows hex.
+ *
+ * `scene-palette.ts` — the world, the Crucible's gun HUD (dark by Alex's ruling, 2026-09-23), the
+ * world-space labels, the cuts. `moglin-look.ts` — the moglin's fur + collar, a leaf so the clay
+ * bench can import it without dragging the scene.
+ */
+const PALETTE = ['moglin-look.ts', 'scene-palette.ts']
 
 /**
  * Strip comments so prose can never be mistaken for code.
@@ -139,11 +149,11 @@ ok(bearsColour("const bg = '#ff8800'\n"),
 ok(onDisk.length >= 10, `E: sweep found only ${onDisk.length} colour-bearing files in play3d — it went blind`)
 
 // ── B. every colour-bearing file is classified ─────────────────────────────────────────────────
-const classified = [...CONVERTED, ...PENDING].sort()
+const classified = [...CONVERTED, ...PENDING, ...PALETTE].sort()
 const unclassified = onDisk.filter(f => !classified.includes(f))
 const ghosts = classified.filter(f => !onDisk.includes(f))
-ok(unclassified.length === 0, `B: unclassified play3d file(s) — add to CONVERTED or PENDING: ${unclassified.join(', ')}`)
-ok(ghosts.length === 0, `B: CONVERTED/PENDING names a file that is not on disk or has no colour: ${ghosts.join(', ')}`)
+ok(unclassified.length === 0, `B: unclassified play3d file(s) — add to CONVERTED, PENDING or PALETTE: ${unclassified.join(', ')}`)
+ok(ghosts.length === 0, `B: CONVERTED/PENDING/PALETTE names a file that is not on disk or has no colour: ${ghosts.join(', ')}`)
 
 // ── the token value set, for the second-spelling ban ───────────────────────────────────────────
 const tokenValues = new Set<string>()
@@ -173,6 +183,20 @@ for (const f of CONVERTED) {
   ok(rogue.length === 0, `D: ${f} uses off-ladder radius: ${[...new Set(rogue)].join(', ')} (ladder: ${[...LADDER].join(', ')})`)
 }
 
+// ── G. the palettes are palettes ───────────────────────────────────────────────────────────────
+for (const f of PALETTE) {
+  const code = stripComments(readFileSync(join(DIR, f), 'utf8'))
+  ok(f.endsWith('.ts') && !f.endsWith('.tsx'), `G1: palette ${f} is not a .ts file — a palette cannot hold JSX`)
+  ok(!/style=|StationShell|CSSProperties/.test(code), `G2: palette ${f} builds a style — it is drawing, so it is chrome`)
+  const hex = [...new Set([...code.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map(m => m[0].toLowerCase()))]
+  ok(hex.length > 0, `G: palette ${f} holds no colour at all — it is not a palette, remove it from the list`)
+  const respelled = hex.filter(h => tokenValues.has(h))
+  ok(respelled.length === 0, `G3: palette ${f} re-spells a token value instead of importing it: ${respelled.join(', ')}`)
+}
+// G3 has to be able to fire: a palette typing a token's value must be caught.
+ok([`const x = '${T.mint.base}'`].some(src => [...src.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].some(m => tokenValues.has(m[0].toLowerCase()))),
+  'G3: the respelling detector cannot see a token value typed as a literal')
+
 // ── the shell takes a tone, not colours ────────────────────────────────────────────────────────
 // The original defect, entering from the door it actually used: a caller handing the shell a colour.
 for (const f of onDisk) {
@@ -186,7 +210,7 @@ for (const f of onDisk) {
 }
 
 // ── report ────────────────────────────────────────────────────────────────────────────────────
-console.log(`\ntokens guard — ${onDisk.length} colour-bearing files (${CONVERTED.length} converted, ${PENDING.length} pending)`)
+console.log(`\ntokens guard — ${onDisk.length} colour-bearing files (${CONVERTED.length} converted, ${PENDING.length} pending, ${PALETTE.length} palettes)`)
 if (fails.length) {
   console.log(`\n❌ ${pass} passed, ${fails.length} FAILED\n`)
   fails.forEach(f => console.log('  · ' + f))

@@ -10,6 +10,7 @@ import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { type RemotePlayer } from './multiplayer'
+import { remote } from './scene-palette'
 
 // AVATARS ARE CAPSULES ON PURPOSE (Alex, 2026-07-23). A Meshy text-to-3d character was
 // generated, rigged and shipped — the RIG PIPELINE works (see 713b83b / meshy.py --rig:
@@ -82,14 +83,14 @@ function Avatar({ peer, hideAt }: { peer: RemotePlayer; hideAt?: (x: number, z: 
         {/* facing nub, so you can tell which way another player is looking */}
         <mesh position={[0, 0.95, 0.34]}>
           <sphereGeometry args={[0.09, 8, 8]} />
-          <meshStandardMaterial color="#0d1a17" />
+          <meshStandardMaterial color={remote.body} />
         </mesh>
       </group>
       {!hidden && <Html position={[0, 1.75, 0]} center distanceFactor={12} zIndexRange={[10, 0]}>
         <div style={{
-          font: '700 12px ui-monospace, monospace', color: '#eafff6',
-          background: 'rgba(12,16,26,0.78)', border: '1px solid #ffffff22',
-          padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap',
+          font: '700 12px ui-monospace, monospace', color: remote.name,
+          background: remote.plate, border: `1px solid ${remote.plateEdge}`,
+          padding: '2px 7px', borderRadius: 7, whiteSpace: 'nowrap',
           pointerEvents: 'none', transform: 'translateY(-4px)',
         }}>{peer.name}</div>
       </Html>}

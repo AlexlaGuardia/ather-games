@@ -31,6 +31,7 @@ import { setSaveOwner, saveKey, slotFor, stampOwner, ownedBy } from '@/lib/save-
 import { adoptAnonKeeperState } from '@/lib/keeper-local'
 import BirthScreen from './birth/BirthScreen'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, EMPTY_INVENTORY } from './rune-inventory'
+import { loading } from './scene-palette'
 
 // R3F Canvas is client/WebGL-only — never SSR it. The import is also deferred until `ready`
 // so Shimmer3D's module init (world registration, NPC remaps) sees the live data.
@@ -213,7 +214,7 @@ export default function Play3DPage() {
   }, [])
 
   if (phase === 'loading') return (
-    <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#0e0c1c', color: '#e9dfc8', font: '700 15px ui-monospace, monospace' }}>
+    <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: loading.ground, color: loading.ink, font: '700 15px ui-monospace, monospace' }}>
       ✦ composing the garden…
     </div>
   )

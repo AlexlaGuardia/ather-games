@@ -16,27 +16,27 @@ export interface NPC3D {
 
 export const NPCS_3D: NPC3D[] = [
   // Gregory — mentor keeper, stands by his house in Moonwell Glade (matches 2D npcs.ts placement).
-  { id: 'gregory', name: 'Gregory', zone: 'moonwell-glade', tileX: 24, tileY: 18, color: '#caa46a', kind: 'keeper' },
+  { id: 'gregory', name: 'Gregory', zone: 'moonwell-glade', tileX: 24, tileY: 18, color: npcTint.gregory, kind: 'keeper' },
   // ── ★ GREG AT THE CORNER DOOR — Beat 0, the mortal side's first scene (2026-09-16) ──────────
   // Canon (`shimmer-quests-mainmap.md` › Beat 0): "an old man stands in its doorway with his hands
   // in his pockets, watching the square the way you watch weather." The Spirit Corner's warp tiles
   // are (22-23, 48-49) on the shop's east face; he stands on the dirt just outside, south-east, so
   // the doorway itself stays open to walk into. `defeatedFlag` is not a defeat: once his two lines
   // are said he has gone in ahead ("after me"), and the door is where the keeper follows.
-  { id: 'gregory-square', name: 'Gregory', zone: 'rune-hold', tileX: 24, tileY: 50, color: '#caa46a', kind: 'keeper', defeatedFlag: 'metGregSquare' },
+  { id: 'gregory-square', name: 'Gregory', zone: 'rune-hold', tileX: 24, tileY: 50, color: npcTint.gregory, kind: 'keeper', defeatedFlag: 'metGregSquare' },
   // Thistle — Hold 1. A borrowed-swagger Moglin in Spirit Meadows with a collared spirit. You free it
   // (a Reach battle), he deflates and retreats east. Removed from the world once freed.
-  { id: 'thistle', name: 'Thistle', zone: 'spirit-meadow', tileX: 55, tileY: 30, color: '#9a6aaa', kind: 'moglin', defeatedFlag: 'freedThistle' },
+  { id: 'thistle', name: 'Thistle', zone: 'spirit-meadow', tileX: 55, tileY: 30, color: npcTint.thistle, kind: 'moglin', defeatedFlag: 'freedThistle' },
   // Vetch — Hold 2, the stronghold. Keeps TWO collared spirits on the leash (canon): break the
   // stronghold, then reach BOTH captives. Appears only after Thistle is freed (he fled here).
   // TODO(hold-placement): canon home is the `vetch-hold` zone (via the Gloview pen door). Parked in
   // mana-springs (30,25) because vetch-hold isn't baked in 3D yet — move zone+tile here when it is.
-  { id: 'vetch', name: 'Vetch', zone: 'mana-springs', tileX: 30, tileY: 25, color: '#7a5a3a', kind: 'moglin', requiredFlag: 'freedThistle', defeatedFlag: 'freedVetch' },
+  { id: 'vetch', name: 'Vetch', zone: 'mana-springs', tileX: 30, tileY: 25, color: npcTint.vetch, kind: 'moglin', requiredFlag: 'freedThistle', defeatedFlag: 'freedVetch' },
   // Brack — Hold 3, the climax. The pooled force: two enforcers shielding THREE collared spirits.
   // Appears only after Vetch falls.
   // TODO(hold-placement): canon home is the `brack-hold` zone (via vetch-hold's gated east door).
   // Parked at the south end of mana-springs (65,92) because brack-hold isn't baked in 3D yet — move here.
-  { id: 'brack', name: 'Brack', zone: 'mana-springs', tileX: 65, tileY: 92, color: '#5a4632', kind: 'moglin', requiredFlag: 'freedVetch', defeatedFlag: 'freedBrack' },
+  { id: 'brack', name: 'Brack', zone: 'mana-springs', tileX: 65, tileY: 92, color: npcTint.brack, kind: 'moglin', requiredFlag: 'freedVetch', defeatedFlag: 'freedBrack' },
   // ── The Passage's trader (2026-08-13) — the face of the scroll rack ──────────────────────────
   // Canon (`world/rune-hold.md` § The Passage): traders take ROTATING spots, "one leaves, another
   // takes their place. No permanent claims." So this is deliberately not a character: one id, one
@@ -47,7 +47,7 @@ export const NPCS_3D: NPC3D[] = [
   // and a history would be authoring a Passage character, which is Magii's, not mine. The colour is
   // a placeholder the same way voxel-Greg's boxes are; the look is Alex's call when the Passage gets
   // its real interior (which is CONTINUOUS geometry, not this tile shell — see GBOARD).
-  { id: 'passage-trader', name: 'A trader', zone: 'the-passage', tileX: 12, tileY: 9, color: '#c9a05a', kind: 'keeper' },
+  { id: 'passage-trader', name: 'A trader', zone: 'the-passage', tileX: 12, tileY: 9, color: npcTint.trader, kind: 'keeper' },
 ]
 
 // ── The trader's lines. Canon's register for the place: "if you know, you know" — no pitch, no
@@ -65,6 +65,7 @@ export const TRADER_LINES: string[] = [
 // identical on purpose: freeing Thistle in either world frees him in both, because there
 // is one world truth (`defeated`/flags key on the id).
 import { REGION_FILES, REGION_WIP_PREFIX } from '../world/region-maps'
+import { npcTint } from './scene-palette'
 for (const f of Object.values(REGION_FILES)) {
   for (const n of [...NPCS_3D]) {
     const s = f.sources[n.zone]

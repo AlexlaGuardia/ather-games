@@ -179,6 +179,8 @@ import { WORLD_ZONE_ID, registerGardenWorld, getGardenWorld, isStitched, fromWor
 import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logicalZoneAt, structuresView, logicalStruct } from './world-adapter'
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
 import { MOGLIN_FUR, MOGLIN_FUR_LIGHT, GATE_COLORS } from './moglin-look'
+import * as S from './scene-palette'
+import { mint } from './tokens'
 import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop, type WanderDials } from '../engine/burrows'
 import type { DealWindow } from '../engine/spawn-board'
 import { regionIdOf, REGION_FILES, regionSpawnConfig, migrateLegacyPosition, WILDS_ZONE, WILDS_GEO, loadWildsRegion, isRegionZone, regionDisplayName } from '../world/region-maps'
@@ -342,11 +344,11 @@ const MANA_REGEN_PER_SEC = getRegenRate(1)   // the skill-1 floor; the curve own
 // Placeable stations — double-tap in the hotbar to enter placement mode, then confirm to build.
 // Placeholder blockout look (real models later, per the art rule). w/d = footprint tiles, h = height.
 const PLACEABLES: Record<string, { name: string; color: string; accent: string; h: number }> = {
-  alchemy_station: { name: 'Alchemy Station', color: '#5a3f74', accent: '#c88ae6', h: 1.1 },
-  crafting_table:  { name: 'Crafting Table',  color: '#7a5a34', accent: '#d9b84a', h: 0.85 },
-  chest:           { name: 'Chest',           color: '#7a521a', accent: '#c9a86a', h: 0.6 },
-  exchange_booth:  { name: 'Exchange Booth',  color: '#2f4a3f', accent: '#6ad0a0', h: 1.0 },
-  farm_planter:    { name: 'Planter',         color: '#4a3a1e', accent: '#8fd06a', h: 0.4 },
+  alchemy_station: { name: 'Alchemy Station', color: S.station.alchemy_station.body, accent: S.station.alchemy_station.cap, h: 1.1 },
+  crafting_table:  { name: 'Crafting Table',  color: S.station.crafting_table.body, accent: S.station.crafting_table.cap, h: 0.85 },
+  chest:           { name: 'Chest',           color: S.station.chest.body, accent: S.station.chest.cap, h: 0.6 },
+  exchange_booth:  { name: 'Exchange Booth',  color: S.station.exchange_booth.body, accent: S.station.exchange_booth.cap, h: 1.0 },
+  farm_planter:    { name: 'Planter',         color: S.station.farm_planter.body, accent: S.station.farm_planter.cap, h: 0.4 },
 }
 
 // Placed-station menu kinds, generalized over ALL 5 station itemIds (brew/craft/chest/exchange/farm).
@@ -354,11 +356,11 @@ const PLACEABLES: Record<string, { name: string; color: string; accent: string; 
 // `exchange_booth` reuse the SAME itemIds as the 2D game's furniture (sprites/furniture.ts) — same
 // item, same look, coherent across both walkers.
 const STATIONS: Record<string, { kind: StationKind; verb: string; emoji: string; name: string; accent: string }> = {
-  alchemy_station: { kind: 'brew',     verb: 'Brew',  emoji: '⚗', name: 'Alchemy Station', accent: '#a679ff' },
-  crafting_table:  { kind: 'craft',    verb: 'Craft', emoji: '🔨', name: 'Crafting Table',  accent: '#d9b84a' },
-  chest:           { kind: 'chest',    verb: 'Open',  emoji: '📦', name: 'Chest',           accent: '#c9a86a' },
-  exchange_booth:  { kind: 'exchange', verb: 'Trade', emoji: '💰', name: 'Exchange Booth',  accent: '#6ad0a0' },
-  farm_planter:    { kind: 'farm',     verb: 'Tend',  emoji: '🌱', name: 'Planter',         accent: '#8fd06a' },
+  alchemy_station: { kind: 'brew',     verb: 'Brew',  emoji: '⚗', name: 'Alchemy Station', accent: S.station.alchemy_station.cue },
+  crafting_table:  { kind: 'craft',    verb: 'Craft', emoji: '🔨', name: 'Crafting Table',  accent: S.station.crafting_table.cue },
+  chest:           { kind: 'chest',    verb: 'Open',  emoji: '📦', name: 'Chest',           accent: S.station.chest.cue },
+  exchange_booth:  { kind: 'exchange', verb: 'Trade', emoji: '💰', name: 'Exchange Booth',  accent: S.station.exchange_booth.cue },
+  farm_planter:    { kind: 'farm',     verb: 'Tend',  emoji: '🌱', name: 'Planter',         accent: S.station.farm_planter.cue },
 }
 // Stable per-placement instance id — used to key chest contents + planted crops to a specific
 // station in the world (survives save/load since it's derived, not stored).
@@ -526,9 +528,9 @@ function NPCMarkers({ npcs, heights }: { npcs: NPC3D[]; heights: number[][] }) {
         return (
           <group key={n.id} position={[n.tileX, y, n.tileY]}>
             <mesh position={[0, 0.85, 0]} castShadow><capsuleGeometry args={[0.32, 0.7, 4, 10]} /><meshStandardMaterial color={n.color} /></mesh>
-            <mesh position={[0, 1.55, 0]} castShadow><sphereGeometry args={[0.26, 14, 14]} /><meshStandardMaterial color="#ecdab4" /></mesh>
-            {moglin && <mesh position={[0.9, 0.5, 0.25]} castShadow><sphereGeometry args={[0.22, 12, 12]} /><meshStandardMaterial color="#6b6675" emissive="#241f2e" emissiveIntensity={0.4} /></mesh>}
-            <mesh position={[0, 3.1, 0]}><boxGeometry args={[0.13, 2.2, 0.13]} /><meshStandardMaterial color={moglin ? '#b58adf' : '#ffe08a'} emissive={moglin ? '#7a4fc0' : '#ffcf4d'} emissiveIntensity={0.92} transparent opacity={0.8} /></mesh>
+            <mesh position={[0, 1.55, 0]} castShadow><sphereGeometry args={[0.26, 14, 14]} /><meshStandardMaterial color={S.figure.head} /></mesh>
+            {moglin && <mesh position={[0.9, 0.5, 0.25]} castShadow><sphereGeometry args={[0.22, 12, 12]} /><meshStandardMaterial color={S.figure.collar} emissive={S.figure.collarGlow} emissiveIntensity={0.4} /></mesh>}
+            <mesh position={[0, 3.1, 0]}><boxGeometry args={[0.13, 2.2, 0.13]} /><meshStandardMaterial color={moglin ? S.figure.moglinBeacon : S.figure.beacon} emissive={moglin ? S.figure.moglinBeaconGlow : S.figure.beaconGlow} emissiveIntensity={0.92} transparent opacity={0.8} /></mesh>
           </group>
         )
       })}
@@ -542,19 +544,19 @@ function NPCMarkers({ npcs, heights }: { npcs: NPC3D[]; heights: number[][] }) {
 // canopy = leaves/crystal/water-surface color. Canon reads inform the palette per tier.
 const NODE_LOOK: Record<string, { kind: 'tree' | 'crystal' | 'water'; trunk: string; canopy: string; scale: number; glow?: number }> = {
   // Forestry
-  goldwood:   { kind: 'tree', trunk: '#8a6a3c', canopy: '#d9b84a', scale: 1 },
-  shimmeroak: { kind: 'tree', trunk: '#6f5330', canopy: '#4fc79a', scale: 1.35, glow: 0.35 },
-  starwillow: { kind: 'tree', trunk: '#9a8f7a', canopy: '#cfe6d0', scale: 1.15 },
-  dawnwood:   { kind: 'tree', trunk: '#7a4a34', canopy: '#f0a86a', scale: 1.2, glow: 0.5 },
+  goldwood:   { kind: 'tree', ...S.node.goldwood, scale: 1 },
+  shimmeroak: { kind: 'tree', ...S.node.shimmeroak, scale: 1.35, glow: 0.35 },
+  starwillow: { kind: 'tree', ...S.node.starwillow, scale: 1.15 },
+  dawnwood:   { kind: 'tree', ...S.node.dawnwood, scale: 1.2, glow: 0.5 },
   // Prospecting — cloudy raw shard → violet element → clear pure core → golden ather (glow climbs with tier)
-  raw_mana_node:        { kind: 'crystal', trunk: '#4a5568', canopy: '#bcd4ea', scale: 0.85, glow: 0.4 },
-  element_crystal_node: { kind: 'crystal', trunk: '#4a3a5e', canopy: '#c88ae6', scale: 1.0,  glow: 0.6 },
-  pure_core_node:       { kind: 'crystal', trunk: '#3e5a58', canopy: '#a6efe2', scale: 1.1,  glow: 0.8 },
-  ather_crystal_node:   { kind: 'crystal', trunk: '#6a5a34', canopy: '#f0d986', scale: 1.25, glow: 1.0 },
+  raw_mana_node:        { kind: 'crystal', ...S.node.raw_mana_node, scale: 0.85, glow: 0.4 },
+  element_crystal_node: { kind: 'crystal', ...S.node.element_crystal_node, scale: 1.0,  glow: 0.6 },
+  pure_core_node:       { kind: 'crystal', ...S.node.pure_core_node, scale: 1.1,  glow: 0.8 },
+  ather_crystal_node:   { kind: 'crystal', ...S.node.ather_crystal_node, scale: 1.25, glow: 1.0 },
   // Rinning — still luminescent pools; larger spots = bigger water
-  small_pond: { kind: 'water', trunk: '#31505e', canopy: '#6fbcd9', scale: 1.0, glow: 0.3 },
-  stream:     { kind: 'water', trunk: '#31505e', canopy: '#82cce4', scale: 1.25, glow: 0.3 },
-  lake:       { kind: 'water', trunk: '#2b4552', canopy: '#5fa8d0', scale: 1.6, glow: 0.35 },
+  small_pond: { kind: 'water', ...S.node.small_pond, scale: 1.0, glow: 0.3 },
+  stream:     { kind: 'water', ...S.node.stream, scale: 1.25, glow: 0.3 },
+  lake:       { kind: 'water', ...S.node.lake, scale: 1.6, glow: 0.35 },
 }
 
 // Deterministic per-node shard/ripple layout (stable across frames — seeded by tile position).
@@ -645,12 +647,12 @@ function BurrowMarkers({ spawners, heights, editing, defeated, ready, gridRef, k
           <group key={`sp-${i}`}>
             <group position={[sp.tileX, y, sp.tileY]}>
               {/* the mouth: warm earth mound + dark opening on its south face */}
-              <mesh position={[0, 0.06, 0]} scale={[1, 0.38, 1]} castShadow><sphereGeometry args={[0.6, 16, 12]} /><meshStandardMaterial color="#6d5138" roughness={1} /></mesh>
-              <mesh position={[0, 0.12, 0.44]} rotation={[-0.5, 0, 0]}><circleGeometry args={[0.26, 18]} /><meshBasicMaterial color="#1d1610" side={THREE.DoubleSide} /></mesh>
+              <mesh position={[0, 0.06, 0]} scale={[1, 0.38, 1]} castShadow><sphereGeometry args={[0.6, 16, 12]} /><meshStandardMaterial color={S.spawner.mound} roughness={1} /></mesh>
+              <mesh position={[0, 0.12, 0.44]} rotation={[-0.5, 0, 0]}><circleGeometry args={[0.26, 18]} /><meshBasicMaterial color={S.spawner.mouth} side={THREE.DoubleSide} /></mesh>
               {!quiet && (
                 <group position={[0.32, 0, -0.32]}>
                   {/* the hold's claim, planted at the mouth — comes down when the hold falls */}
-                  <mesh position={[0, 0.7, 0]} castShadow><boxGeometry args={[0.05, 1.4, 0.05]} /><meshStandardMaterial color="#4a3826" roughness={0.9} /></mesh>
+                  <mesh position={[0, 0.7, 0]} castShadow><boxGeometry args={[0.05, 1.4, 0.05]} /><meshStandardMaterial color={S.spawner.post} roughness={0.9} /></mesh>
                   <mesh position={[0.19, 1.24, 0]}><boxGeometry args={[0.33, 0.22, 0.02]} /><meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.35} side={THREE.DoubleSide} /></mesh>
                 </group>
               )}
@@ -722,11 +724,11 @@ function PlotSpiritBody({ sp, anchor, heights, gridRef }: {
     g.position.set(pose.x, gy + 0.45 + breathe, pose.y)
     g.rotation.y = Math.PI / 2 - pose.facing
   })
-  const col = ELEMENT_COLORS[sp.element] ?? '#7fe3c8'
+  const col = ELEMENT_COLORS[sp.element] ?? mint.base
   return (
     <group ref={group}>
       <mesh><sphereGeometry args={[0.3, 16, 16]} /><meshStandardMaterial color={col} emissive={col} emissiveIntensity={0.35} transparent opacity={0.42} /></mesh>
-      <mesh><sphereGeometry args={[0.16, 12, 12]} /><meshStandardMaterial color="#fdfbef" emissive={col} emissiveIntensity={0.9} /></mesh>
+      <mesh><sphereGeometry args={[0.16, 12, 12]} /><meshStandardMaterial color={S.spiritCore} emissive={col} emissiveIntensity={0.9} /></mesh>
       <mesh position={[0, -0.38, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.22, 0.34, 20]} /><meshBasicMaterial color={col} transparent opacity={0.22} side={THREE.DoubleSide} /></mesh>
     </group>
   )
@@ -859,9 +861,9 @@ function NodeMarkers({ nodes, heights, editing, channel, zoneId }: { nodes: Reso
             {chan && (
               <Html zIndexRange={[20, 0]} position={[0, s + 1.55, 0]} center distanceFactor={11} pointerEvents="none">
                 <div style={{ width: 60, textAlign: 'center', userSelect: 'none' }}>
-                  <div style={{ font: '800 9px ui-monospace, monospace', color: '#bfe0ff', textShadow: '0 1px 2px #000', marginBottom: 2, whiteSpace: 'nowrap' }}>⚡ {prettyItem(n.type)}</div>
-                  <div style={{ height: 6, background: '#0009', borderRadius: 3, border: '1px solid #0007', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.max(0, chan.hp * 100)}%`, background: 'linear-gradient(90deg,#e0607a,#f0a86a)', transition: 'width 0.1s linear' }} />
+                  <div style={{ font: '800 9px ui-monospace, monospace', color: S.channelBar.text, textShadow: `0 1px 2px ${S.black}`, marginBottom: 2, whiteSpace: 'nowrap' }}>⚡ {prettyItem(n.type)}</div>
+                  <div style={{ height: 6, background: S.channelBar.track, borderRadius: 4, border: `1px solid ${S.channelBar.trackEdge}`, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.max(0, chan.hp * 100)}%`, background: `linear-gradient(90deg,${S.channelBar.from},${S.channelBar.to})`, transition: 'width 0.1s linear' }} />
                   </div>
                 </div>
               </Html>
@@ -904,12 +906,12 @@ function NodeMarkers({ nodes, heights, editing, channel, zoneId }: { nodes: Reso
                 </mesh>
               ))}
               {/* bobber — a small float that marks an active spot; hidden when fished out */}
-              {!depleted && <mesh position={[0.16 * s, 0.14, 0.1 * s]} castShadow><sphereGeometry args={[0.07 * s, 8, 8]} /><meshStandardMaterial color="#e0607a" emissive="#e0607a" emissiveIntensity={0.25} roughness={0.5} /></mesh>}
+              {!depleted && <mesh position={[0.16 * s, 0.14, 0.1 * s]} castShadow><sphereGeometry args={[0.07 * s, 8, 8]} /><meshStandardMaterial color={S.bobber} emissive={S.bobber} emissiveIntensity={0.25} roughness={0.5} /></mesh>}
             </>}
             </NodeFade>
             {editing && (
               <Html zIndexRange={[20, 0]} position={[0, s + 1.2, 0]} center distanceFactor={12} pointerEvents="none">
-                <div style={{ font: '700 10px ui-monospace, monospace', color: '#0d1a17', background: '#eafff6d0', border: '1px solid #2f5c4f', borderRadius: 5, padding: '1px 5px', whiteSpace: 'nowrap' }}>{n.type}</div>
+                <div style={{ font: '700 10px ui-monospace, monospace', color: S.inkDeep, background: `${mint.text}d0`, border: `1px solid ${mint.deep}`, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap' }}>{n.type}</div>
               </Html>
             )}
           </group>
@@ -930,7 +932,7 @@ const StructureMarkers = memo(function StructureMarkers({ structures, heights }:
           <group key={`${s.itemId}-${s.tileX}-${s.tileY}-${i}`} position={[s.tileX, y, s.tileY]} rotation={[0, -s.facing * Math.PI / 180, 0]}>
             {/* real mesh where we have one; falls back to the old body+cap blockout otherwise */}
             <StationProp id={s.itemId} def={def} />
-            <mesh position={[0.35, def.h * 0.6, 0]}><sphereGeometry args={[0.08, 8, 8]} /><meshBasicMaterial color="#ffffff" /></mesh>
+            <mesh position={[0.35, def.h * 0.6, 0]}><sphereGeometry args={[0.08, 8, 8]} /><meshBasicMaterial color={S.white} /></mesh>
           </group>
         )
       })}
@@ -963,7 +965,7 @@ function PlacementGhost({ placing, posRef, heights, gridRef, placeTargetRef, str
     grp.current.visible = true
     grp.current.position.set(tx, y, tz)
     grp.current.rotation.y = -placing.facing * Math.PI / 180
-    if (ringMat.current) ringMat.current.color.setStyle(isBlocked ? '#ff5a4d' : '#7fe3c8')
+    if (ringMat.current) ringMat.current.color.setStyle(isBlocked ? S.placeRing.blocked : S.placeRing.ok)
     if (isBlocked !== blockedRef.current) { blockedRef.current = isBlocked; setBlocked(isBlocked) }
   })
   const def = placing ? PLACEABLES[placing.itemId] : null
@@ -972,8 +974,8 @@ function PlacementGhost({ placing, posRef, heights, gridRef, placeTargetRef, str
       {def && placing && <>
         {/* real silhouette, so rotating the ghost actually shows you where the front will point */}
         <GhostProp id={placing.itemId} def={def} blocked={blocked} />
-        <mesh position={[0.35, def.h * 0.6, 0]}><sphereGeometry args={[0.09, 8, 8]} /><meshBasicMaterial color="#ffffff" /></mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}><ringGeometry args={[0.44, 0.54, 4]} /><meshBasicMaterial ref={ringMat} color="#7fe3c8" transparent opacity={0.85} side={THREE.DoubleSide} /></mesh>
+        <mesh position={[0.35, def.h * 0.6, 0]}><sphereGeometry args={[0.09, 8, 8]} /><meshBasicMaterial color={S.white} /></mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}><ringGeometry args={[0.44, 0.54, 4]} /><meshBasicMaterial ref={ringMat} color={S.placeRing.ok} transparent opacity={0.85} side={THREE.DoubleSide} /></mesh>
       </>}
     </group>
   )
@@ -1017,7 +1019,7 @@ class CanvasBoundary extends Component<{ fallback: ReactNode; children: ReactNod
   render() { return this.state.failed ? this.props.fallback : this.props.children }
 }
 
-function FloorTerrain({ floors, heights, version, paint, editing, color = '#7cc46a', emissive = '#000000' }: {
+function FloorTerrain({ floors, heights, version, paint, editing, color = S.terrain.grass, emissive = S.black }: {
   floors: Cell[]; heights: number[][]; version: number
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean; color?: string; emissive?: string
 }) {
@@ -1072,7 +1074,7 @@ function MistOverlay({ mists, heights }: { mists: Cell[]; heights: number[][] })
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, Math.max(mists.length, 1)]} visible={mists.length > 0}>
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#eef4ff" transparent opacity={0.42} emissive="#ffffff" emissiveIntensity={0.12} depthWrite={false} />
+      <meshStandardMaterial color={S.terrain.mist} transparent opacity={0.42} emissive={S.white} emissiveIntensity={0.12} depthWrite={false} />
     </instancedMesh>
   )
 }
@@ -1097,7 +1099,7 @@ function WarpBeacons({ warps, heights }: { warps: Cell[]; heights: number[][] })
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, Math.max(warps.length, 1)]} visible={warps.length > 0}>
       <boxGeometry args={[0.18, 3, 0.18]} />
-      <meshStandardMaterial color="#ffe08a" emissive="#ffcf4d" emissiveIntensity={0.9} />
+      <meshStandardMaterial color={S.terrain.warpBeacon} emissive={S.terrain.warpGlow} emissiveIntensity={0.9} />
     </instancedMesh>
   )
 }
@@ -1196,22 +1198,22 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
           <FloorTerrain floors={floors} heights={heights} version={version} paint={paint} editing={editing} />
           {/* solid clouds = the walls. Only the SHELL is boxed; the buried interior is a top face —
               see bucketsRect. Same silhouette, a sixth of the triangles, no shadow pass. */}
-          <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color="#e3e9f4" paint={paint} editing={editing} />
-          <WallTops cells={wallTops} y={1.2} color="#e3e9f4" />
+          <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color={S.terrain.wall} paint={paint} editing={editing} />
+          <WallTops cells={wallTops} y={1.2} color={S.terrain.wall} />
           {/* brown building blocks — the mortal side's masonry. Bumped to 3.2 (2026-08-25) so a
               storefront clears a ~1.7 keeper by a full head and a town reads as a skyline, not a
               hedge maze. y = h/2 - 0.1 keeps the base seated ~0.1 into the ground; tops ride the top. */}
-          <Tiles cells={buildings} size={[1, 3.2, 1]} y={1.5} color="#8a5a2b" paint={paint} editing={editing} />
-          <WallTops cells={buildingTops} y={3.1} color="#9c6733" />
-          <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color="#3aa0d6" opacity={0.85} paint={paint} editing={editing} />
+          <Tiles cells={buildings} size={[1, 3.2, 1]} y={1.5} color={S.terrain.building} paint={paint} editing={editing} />
+          <WallTops cells={buildingTops} y={3.1} color={S.terrain.buildingTop} />
+          <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color={S.terrain.water} opacity={0.85} paint={paint} editing={editing} />
           {/* cloud mist = walkable encounter areas: land + a wispy translucent overlay */}
           <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
           <MistOverlay mists={mists} heights={heights} />
           {/* warp markers — glowing gold columns + beacons (you place; Jin wires the destinations) */}
-          <FloorTerrain floors={warps} heights={heights} version={version} paint={paint} editing={editing} color="#caa233" emissive="#ffcf4d" />
+          <FloorTerrain floors={warps} heights={heights} version={version} paint={paint} editing={editing} color={S.terrain.warpFloor} emissive={S.terrain.warpGlow} />
           <WarpBeacons warps={warps} heights={heights} />
           {/* empty cells: invisible in play; a faint clickable grid-canvas to draw land onto while editing */}
-          {editing && <Tiles cells={voids} size={[0.92, 0.05, 0.92]} y={-0.02} color="#39406b" opacity={0.5} paint={paint} editing={editing} />}
+          {editing && <Tiles cells={voids} size={[0.92, 0.05, 0.92]} y={-0.02} color={S.terrain.void} opacity={0.5} paint={paint} editing={editing} />}
         </group>
       ))}
     </>
@@ -1667,9 +1669,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
 
   return (
     <group ref={group}>
-      <mesh castShadow><capsuleGeometry args={[0.3, 0.55, 4, 10]} /><meshStandardMaterial color="#5ad1e6" /></mesh>
+      <mesh castShadow><capsuleGeometry args={[0.3, 0.55, 4, 10]} /><meshStandardMaterial color={S.player.body} /></mesh>
       <mesh position={[0, 0.1, 0.38]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <coneGeometry args={[0.13, 0.3, 8]} /><meshStandardMaterial color="#f6e9da" />
+        <coneGeometry args={[0.13, 0.3, 8]} /><meshStandardMaterial color={S.player.cone} />
       </mesh>
     </group>
   )
@@ -1680,9 +1682,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
 const HARVEST_GLYPH: Record<string, string> = { forestry: '🪵', prospecting: '💎', rinning: '🐟' }
 
 // Blockout palette for the bonded Mana'mal follower (real sprites/models later, per the art rule).
-const BEAST_COLOR: Record<string, string> = {
-  drifthorn: '#c9b6ea', dustwhisker: '#e6cf9a', sporeling: '#8fd97f', glowmite: '#8fd0ea', embermole: '#e69a6a',
-}
+const BEAST_COLOR: Record<string, string> = S.beast
 
 // The active companion trails the player around the overworld — lags behind, catches up when you move.
 // Keeps its own smoothed position (no path history needed): each frame it steps toward the player,
@@ -1716,7 +1716,7 @@ function Follower({ posRef, heightsRef, color }: {
       {/* glow tuft — the mana sheen */}
       <mesh position={[0, 0.32, 0]}><sphereGeometry args={[0.11, 8, 8]} /><meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.35} roughness={0.4} /></mesh>
       {/* face nub toward heading */}
-      <mesh position={[0, 0.03, 0.2]}><sphereGeometry args={[0.05, 6, 6]} /><meshStandardMaterial color="#0d1a17" /></mesh>
+      <mesh position={[0, 0.03, 0.2]}><sphereGeometry args={[0.05, 6, 6]} /><meshStandardMaterial color={S.inkDeep} /></mesh>
     </group>
   )
 }
@@ -1739,7 +1739,7 @@ function FishTell({ posRef, heightsRef, bite }: {
           @keyframes fishWait{0%,100%{transform:translateY(0);opacity:.55}50%{transform:translateY(4px);opacity:.9}}`}</style>
         <div style={{
           fontSize: bite ? 34 : 20, lineHeight: 1, userSelect: 'none', whiteSpace: 'nowrap',
-          filter: bite ? 'drop-shadow(0 0 8px #37e6ff)' : 'none',
+          filter: bite ? `drop-shadow(0 0 8px ${S.biteGlow})` : 'none',
           animation: bite ? 'fishBang .32s ease-in-out infinite' : 'fishWait 1.5s ease-in-out infinite',
         }}>{bite ? '❗' : '〰️'}</div>
       </Html>
@@ -1754,7 +1754,7 @@ function HarvestPop({ pop }: { pop: { x: number; y: number; z: number; glyph: st
     <group key={pop.key} position={[pop.x, pop.y + 1.1, pop.z]}>
       <Html zIndexRange={[20, 0]} center distanceFactor={9} pointerEvents="none">
         <style>{`@keyframes gpop{0%{transform:translateY(8px) scale(.4);opacity:0}28%{opacity:1}100%{transform:translateY(-28px) scale(1.1);opacity:0}}`}</style>
-        <div style={{ fontSize: 26, lineHeight: 1, userSelect: 'none', animation: 'gpop .85s ease-out forwards', filter: 'drop-shadow(0 0 6px #ffe9b0)' }}>{pop.glyph}</div>
+        <div style={{ fontSize: 26, lineHeight: 1, userSelect: 'none', animation: 'gpop .85s ease-out forwards', filter: `drop-shadow(0 0 6px ${S.popGlow})` }}>{pop.glyph}</div>
       </Html>
     </group>
   )
@@ -1952,7 +1952,7 @@ const RELOAD_MANA = 10        // mana for a FULL clip recharge (partial recharge
 // it answers." A manabox is dead grey metal; the compacted-mana round trails the WIELDER's own
 // soul-frequency colour, ONE colour across every gun they hold. Placeholder player-cyan (Kael's
 // frequency) until birth-rune selection sets the player's frequency → then this reads from it.
-const SOUL_COLOR = '#aef2ff'
+const SOUL_COLOR = S.soul
 // ── MANABOX TABLE ── the two Crucible casters share the FiringRange sim; the live weapon's stats
 // drive fire behaviour, round SHAPE, AND the movement penalty (weaponIdxRef selects — Q swaps, F
 // holsters). Weapon 0 REUSES the shortbarrel consts above so there is one source of truth.
@@ -1988,7 +1988,7 @@ const BENCH_NEAR_R = 2.4  // tiles — how close you must stand to open a bench
 // Cast-iron/bronze manabox armory bench — a real GLB prop (Meshy image-to-3d off the ruled concept),
 // rendered through the shared StationProp pipeline (Suspense + error boundary → blockout on any GLB
 // failure; height auto-fit; Draco). Dead grey per the colour law. Positions are the tunable GUN_BENCHES.
-const BENCH_DEF = { name: 'Gun Bench', color: '#2b3038', accent: SOUL_COLOR, h: 2.0 }
+const BENCH_DEF = { name: 'Gun Bench', color: S.crucible.bench, accent: SOUL_COLOR, h: 2.0 }
 function GunBenches() {
   return (
     <>
@@ -2930,7 +2930,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           bounding sphere would cull the whole mesh whenever you look downrange. Unit sphere, scaled per-instance. */}
       <instancedMesh ref={shotRef} args={[undefined, undefined, MAX * SEG]} frustumCulled={false}>
         <sphereGeometry args={[1, 8, 8]} />
-        <meshBasicMaterial color="#aef2ff" transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial color={SOUL_COLOR} transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
       {/* the Three Puppet Guards — blockout bodies. Dead grey CAST metal per the colour law: they
           are constructs, and no colour of their own is exactly the point. Alex's call on the real
@@ -2939,30 +2939,30 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       {/* Crucible challengers (#302) — capacity is the canon roster, `count` is who is still up. */}
       <instancedMesh ref={botMeshRef} args={[undefined, undefined, ROSTER_SIZE]} frustumCulled={false}>
         <capsuleGeometry args={[0.34, 0.82, 4, 8]} />
-        <meshStandardMaterial color="#b4694a" metalness={0.15} roughness={0.72} />
+        <meshStandardMaterial color={S.crucible.challenger} metalness={0.15} roughness={0.72} />
       </instancedMesh>
       <instancedMesh ref={guardMeshRef} args={[undefined, undefined, GUARDS.length]} frustumCulled={false}>
         <capsuleGeometry args={[0.42, 0.9, 4, 10]} />
-        <meshStandardMaterial color="#8d9199" metalness={0.55} roughness={0.62} />
+        <meshStandardMaterial color={S.crucible.guard} metalness={0.55} roughness={0.62} />
       </instancedMesh>
       {/* target boards — cylinder axis aligns to the billboard facing, so each reads as a bullseye
           disc squared up on the player. Layer heights differ slightly so the rings never z-fight. */}
       <instancedMesh ref={boardRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
         <cylinderGeometry args={[TARGET_R, TARGET_R, 0.07, 24]} />
-        <meshStandardMaterial color="#f2f5f7" emissive="#f2f5f7" emissiveIntensity={0.25} />
+        <meshStandardMaterial color={S.crucible.target.face} emissive={S.crucible.target.face} emissiveIntensity={0.25} />
       </instancedMesh>
       <instancedMesh ref={ringRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
         <cylinderGeometry args={[0.38, 0.38, 0.11, 24]} />
-        <meshStandardMaterial color="#e6483f" emissive="#e6483f" emissiveIntensity={0.45} />
+        <meshStandardMaterial color={S.crucible.target.ring} emissive={S.crucible.target.ring} emissiveIntensity={0.45} />
       </instancedMesh>
       <instancedMesh ref={coreRef} args={[undefined, undefined, targets.length]} frustumCulled={false}>
         <cylinderGeometry args={[TARGET_CRIT_R, TARGET_CRIT_R, 0.15, 16]} />
-        <meshStandardMaterial color="#ffd44a" emissive="#ffd44a" emissiveIntensity={0.9} />
+        <meshStandardMaterial color={S.crucible.target.bull} emissive={S.crucible.target.bull} emissiveIntensity={0.9} />
       </instancedMesh>
       {/* hunter return-fire orbs — hot amber so they read as INCOMING vs the player's cyan tracers */}
       <instancedMesh ref={orbRef} args={[undefined, undefined, EMAX]} frustumCulled={false}>
         <sphereGeometry args={[0.16, 10, 10]} />
-        <meshBasicMaterial color="#ffb35c" transparent opacity={0.95} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial color={S.crucible.returnFire} transparent opacity={0.95} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
       {/* cast bolts. ★ COLOUR LAW (moves.md:5): a move has no colour — colour is the MAGE's own
           soul-frequency. So the bolt is SOUL_COLOR, the same as the tracers, and it never re-tints
@@ -2976,18 +2976,18 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           what it does. Per-field tinting is a follow-on once there is more than one field colour. */}
       <instancedMesh ref={fieldMeshRef} args={[undefined, undefined, FIELD_MAX]} frustumCulled={false}>
         <cylinderGeometry args={[1, 1, 0.08, 28]} />
-        <meshBasicMaterial color="#ff9a4c" transparent opacity={0.34} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial color={S.crucible.fieldDisc} transparent opacity={0.34} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
       {/* SYSTEM 2 — conjured terrain. Dead grey stone with a faint soul-tinted rim: it is MADE, not
           native, and the art-medium law keeps conjured rock grey rather than glowing. */}
       <instancedMesh ref={conjuredMeshRef} args={[undefined, undefined, CONJ_MAX]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#6f7580" emissive={SOUL_COLOR} emissiveIntensity={0.12} metalness={0.15} roughness={0.85} />
+        <meshStandardMaterial color={S.crucible.conjured} emissive={SOUL_COLOR} emissiveIntensity={0.12} metalness={0.15} roughness={0.85} />
       </instancedMesh>
       {/* the ground hunter — magenta spinning octahedron, unmistakably NOT a range target */}
       <mesh ref={huntRef} visible={false} frustumCulled={false}>
         <octahedronGeometry args={[0.5, 0]} />
-        <meshStandardMaterial color="#ff4f7d" emissive="#ff4f7d" emissiveIntensity={0.85} />
+        <meshStandardMaterial color={S.crucible.hunter} emissive={S.crucible.hunter} emissiveIntensity={0.85} />
       </mesh>
     </>
   )
@@ -3022,12 +3022,12 @@ function WeaponReticle({ bloomRef, adsRef, weaponIdxRef }: {
   }, [bloomRef, adsRef, weaponIdxRef])
   const ink = '0 0 0 1px rgba(8,12,18,0.85), 0 0 5px rgba(143,224,255,0.7)'
   const arm = (s: React.CSSProperties): React.CSSProperties => ({
-    position: 'absolute', background: '#f2ffff', borderRadius: 1, boxShadow: ink, ...s,
+    position: 'absolute', background: S.gun.reticle, borderRadius: 4, boxShadow: ink, ...s,
   })
   return (
     <div ref={ref} style={{ position: 'fixed', left: '50%', top: '50%', zIndex: 30, pointerEvents: 'none',
       ['--gap' as string]: '8px', ['--arm' as string]: '8px' }}>
-      <div style={{ position: 'absolute', left: -1.75, top: -1.75, width: 3.5, height: 3.5, borderRadius: '50%', background: '#f2ffff', boxShadow: ink }} />
+      <div style={{ position: 'absolute', left: -1.75, top: -1.75, width: 3.5, height: 3.5, borderRadius: '50%', background: S.gun.reticle, boxShadow: ink }} />
       <div style={arm({ left: -1, bottom: 'var(--gap)', width: 2, height: 'var(--arm)' })} />
       <div style={arm({ left: -1, top: 'var(--gap)', width: 2, height: 'var(--arm)' })} />
       <div style={arm({ top: -1, right: 'var(--gap)', height: 2, width: 'var(--arm)' })} />
@@ -3055,8 +3055,8 @@ function ResourceBars({ hpRef, hpMaxRef, shieldRef, shieldMaxRef }: {
       const hp = Math.max(0, Math.round((hpRef.current / (hpMaxRef.current || MAX_HP)) * 100))
       if (shFill.current) { shFill.current.style.height = `${sh}%`; shFill.current.style.opacity = sh === 0 ? '0.25' : '1' }
       if (shTxt.current) shTxt.current.textContent = `${sh}`
-      if (hpFill.current) { hpFill.current.style.height = `${hp}%`; hpFill.current.style.background = hp <= 30 ? '#ff7a5f' : '#86f2a2' }
-      if (hpTxt.current) { hpTxt.current.textContent = `${hp}`; hpTxt.current.style.color = hp <= 30 ? '#ff9a86' : '#bfe9cd' }
+      if (hpFill.current) { hpFill.current.style.height = `${hp}%`; hpFill.current.style.background = hp <= 30 ? S.gun.hpLow : S.gun.hp }
+      if (hpTxt.current) { hpTxt.current.textContent = `${hp}`; hpTxt.current.style.color = hp <= 30 ? S.gun.hpTextLow : S.gun.hpText }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -3064,20 +3064,20 @@ function ResourceBars({ hpRef, hpMaxRef, shieldRef, shieldMaxRef }: {
   }, [hpRef, hpMaxRef, shieldRef, shieldMaxRef])
   const barShell: React.CSSProperties = {
     width: 14, height: 118, borderRadius: 7, overflow: 'hidden', position: 'relative',
-    background: 'rgba(10,16,26,0.72)', border: '1px solid #ffffff2e', display: 'flex', alignItems: 'flex-end',
+    background: 'rgba(10,16,26,0.72)', border: `1px solid ${S.gun.barEdge}`, display: 'flex', alignItems: 'flex-end',
   }
   const fill: React.CSSProperties = { width: '100%', transition: 'height 0.15s ease-out' }
-  const pct: React.CSSProperties = { font: '800 11px ui-monospace, monospace', color: '#bfe9cd', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }
-  const lbl: React.CSSProperties = { font: '700 9px ui-monospace, monospace', color: '#ffffff66', letterSpacing: '0.1em' }
+  const pct: React.CSSProperties = { font: '800 11px ui-monospace, monospace', color: S.gun.hpText, textShadow: '0 1px 2px rgba(0,0,0,0.8)' }
+  const lbl: React.CSSProperties = { font: '700 9px ui-monospace, monospace', color: S.gun.label, letterSpacing: '0.1em' }
   return (
     <div style={{ position: 'fixed', right: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 34, display: 'flex', gap: 7, pointerEvents: 'none' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-        <div style={barShell}><div ref={shFill} style={{ ...fill, background: '#7fd0ff', boxShadow: '0 0 8px #7fd0ff88' }} /></div>
-        <div ref={shTxt} style={{ ...pct, color: '#a8ddff' }}>100</div>
+        <div style={barShell}><div ref={shFill} style={{ ...fill, background: S.gun.shield, boxShadow: `0 0 8px ${S.gun.shield}88` }} /></div>
+        <div ref={shTxt} style={{ ...pct, color: S.gun.shieldText }}>100</div>
         <div style={lbl}>SH</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-        <div style={barShell}><div ref={hpFill} style={{ ...fill, background: '#86f2a2', boxShadow: '0 0 8px #86f2a266' }} /></div>
+        <div style={barShell}><div ref={hpFill} style={{ ...fill, background: S.gun.hp, boxShadow: `0 0 8px ${S.gun.hp}66` }} /></div>
         <div ref={hpTxt} style={pct}>100</div>
         <div style={lbl}>HP</div>
       </div>
@@ -3101,11 +3101,11 @@ function AmmoCounter({ ammoRef, reloadingRef, weaponIdxRef }: {
       const lowAt = Math.max(2, Math.ceil(clip * 0.25))  // "low" is relative to the clip (the Lance's 8 warns sooner)
       if (num.current) {
         num.current.textContent = rel ? '——' : String(a)
-        num.current.style.color = rel ? '#8fe0ff' : a === 0 ? '#ff7a5f' : a <= lowAt ? '#ffd98a' : '#eafff6'
+        num.current.style.color = rel ? S.gun.ammoReload : a === 0 ? S.gun.ammoEmpty : a <= lowAt ? S.gun.ammoLow : S.gun.ammo
       }
       if (sub.current) {
         sub.current.textContent = rel ? 'RECHARGING' : a === 0 ? 'R — RECHARGE' : `/ ${clip}`
-        sub.current.style.color = rel ? '#8fe0ffaa' : a === 0 ? '#ff7a5f' : '#ffffff66'
+        sub.current.style.color = rel ? `${S.gun.ammoReload}aa` : a === 0 ? S.gun.ammoEmpty : S.gun.label
       }
       raf = requestAnimationFrame(tick)
     }
@@ -3114,8 +3114,8 @@ function AmmoCounter({ ammoRef, reloadingRef, weaponIdxRef }: {
   }, [ammoRef, reloadingRef, weaponIdxRef])
   return (
     <div style={{ position: 'fixed', right: 18, bottom: 16, zIndex: 35, pointerEvents: 'none', textAlign: 'right' }}>
-      <div ref={num} style={{ font: '800 30px ui-monospace, monospace', color: '#eafff6', textShadow: '0 2px 4px rgba(0,0,0,0.8)', lineHeight: 1 }}>{CLIP_SIZE}</div>
-      <div ref={sub} style={{ font: '700 10px ui-monospace, monospace', color: '#ffffff66', letterSpacing: '0.12em', marginTop: 3 }}>/ {CLIP_SIZE}</div>
+      <div ref={num} style={{ font: '800 30px ui-monospace, monospace', color: S.gun.ammo, textShadow: '0 2px 4px rgba(0,0,0,0.8)', lineHeight: 1 }}>{CLIP_SIZE}</div>
+      <div ref={sub} style={{ font: '700 10px ui-monospace, monospace', color: S.gun.label, letterSpacing: '0.12em', marginTop: 3 }}>/ {CLIP_SIZE}</div>
     </div>
   )
 }
@@ -3159,21 +3159,21 @@ function CastBar({ slots, stance, cdRef }: {
         const spec = castForMove(moveId)
         const held = !!moveId && stance === moveId
         const built = !!moveId && spec.archetype !== 'unbuilt'
-        const tint = held ? '#ffd98a' : built ? '#aef2ff' : '#ffffff55'
+        const tint = held ? S.gun.castHeld : built ? S.gun.castBuilt : S.gun.castIdle
         // Since 2026-08-26 the bar is the cast bands alone (Z/C) — the passive left the bar to become
         // an always-on derived trait shown in the loadout menu, so there is no stance cell to set apart.
         return (
           <div key={i} ref={(el) => { cells.current[i] = el }} style={{
-            minWidth: 92, padding: '6px 9px', borderRadius: 8,
+            minWidth: 92, padding: '6px 9px', borderRadius: 7,
             background: held ? 'rgba(60,44,12,0.88)' : 'rgba(10,14,22,0.78)',
-            border: `1px solid ${held ? '#ffd98a88' : '#ffffff22'}`,
+            border: `1px solid ${held ? `${S.gun.castHeld}88` : S.gun.castEdge}`,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
               <span style={{ font: '800 10px ui-monospace, monospace', color: tint, letterSpacing: '0.14em' }}>{BAND_KEYS[i].toUpperCase()}</span>
-              <span style={{ font: '700 8px ui-monospace, monospace', color: '#ffffff4d', letterSpacing: '0.12em' }}>{kind.toUpperCase()}</span>
+              <span style={{ font: '700 8px ui-monospace, monospace', color: S.gun.castKind, letterSpacing: '0.12em' }}>{kind.toUpperCase()}</span>
             </div>
             <div style={{
-              font: '700 11px ui-monospace, monospace', color: moveId ? (built ? '#eafff6' : '#ffffff66') : '#ffffff3a',
+              font: '700 11px ui-monospace, monospace', color: moveId ? (built ? S.gun.ammo : S.gun.castUnbuilt) : S.gun.castEmpty,
               marginTop: 3, textDecoration: moveId && !built ? 'line-through' : 'none', whiteSpace: 'nowrap',
               overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 118,
             }}>{spec.label || '—'}</div>
@@ -3199,10 +3199,10 @@ function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] })
           <group key={i} position={[w.fromX, y, w.fromY]}>
             <mesh position={[0, 1.4, 0]}>
               <cylinderGeometry args={[0.3, 0.42, 2.8, 6]} />
-              <meshStandardMaterial color="#5fe0a0" emissive="#5fe0a0" emissiveIntensity={0.85} transparent opacity={0.55} />
+              <meshStandardMaterial color={S.exit.pillar} emissive={S.exit.pillar} emissiveIntensity={0.85} transparent opacity={0.55} />
             </mesh>
             <Html zIndexRange={[20, 0]} position={[0, 3.2, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
-              <div style={{ font: '800 11px ui-monospace, monospace', color: '#7fffc0', background: 'rgba(8,14,10,0.7)', padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', border: '1px solid #5fe0a066' }}>EXIT</div>
+              <div style={{ font: '800 11px ui-monospace, monospace', color: S.exit.glow, background: S.exit.labelPlate, padding: '2px 7px', borderRadius: 7, whiteSpace: 'nowrap', border: `1px solid ${S.exit.labelEdge}` }}>EXIT</div>
             </Html>
           </group>
         )
@@ -3253,8 +3253,8 @@ function GateMarker({ g, heights, posRef }: { g: Gate; heights: number[][]; posR
   const cx = g.x + fw / 2 - 0.5
   const cz = g.y + fh / 2 - 0.5
   const y = (heights[g.y]?.[g.x] ?? 0) * STEP
-  const tint = g.ownerOnly ? '#d8a24a' : '#5fe0a0'
-  const glow = g.ownerOnly ? '#ffcf7a' : '#7fffc0'
+  const tint = g.ownerOnly ? S.gate.owner : S.gate.open
+  const glow = g.ownerOnly ? S.gate.ownerGlow : S.gate.openGlow
   // corner posts sit on the footprint's outline, offset from the centre we're grouped at
   const hw = fw / 2, hh = fh / 2
   const corners: Array<[number, number]> = [[-hw, -hh], [-hw, hh], [hw, -hh], [hw, hh]]
@@ -3302,7 +3302,7 @@ function GateMarker({ g, heights, posRef }: { g: Gate; heights: number[][]; posR
             whiteSpace: 'nowrap', border: `2px solid ${tint}88`, textShadow: `0 0 12px ${glow}66`,
           }}>
             {g.label}
-            {g.ownerOnly && <div style={{ font: '700 11px ui-monospace, monospace', color: '#ffcf7a', opacity: 0.8, letterSpacing: '0.14em', marginTop: 2 }}>OWNER ONLY</div>}
+            {g.ownerOnly && <div style={{ font: '700 11px ui-monospace, monospace', color: S.gate.ownerGlow, opacity: 0.8, letterSpacing: '0.14em', marginTop: 2 }}>OWNER ONLY</div>}
           </div>
         </Html>
       )}
@@ -3318,10 +3318,10 @@ function GateMarker({ g, heights, posRef }: { g: Gate; heights: number[][]; posR
 // Self-ticking on its own interval so the clock moving never re-renders the walker. 4s is plenty:
 // at a 64-minute day one game-minute is 2.7 real seconds, so the readout advances every tick.
 const PHASE_GLYPH: Record<string, { g: string; c: string }> = {
-  dawn:  { g: '◐', c: '#ffc48a' },
-  day:   { g: '☀', c: '#ffe08a' },
-  dusk:  { g: '◑', c: '#e0a0d0' },
-  night: { g: '☾', c: '#a9c8ff' },
+  dawn:  { g: '◐', c: S.dayGlyph.dawn },
+  day:   { g: '☀', c: S.dayGlyph.day },
+  dusk:  { g: '◑', c: S.dayGlyph.dusk },
+  night: { g: '☾', c: S.dayGlyph.night },
 }
 
 // ── THE CLOCK IS SHARED NOW (`hud/clock.tsx`, 2026-09-16 HUD port). What stays here is what only
@@ -3375,11 +3375,11 @@ function DayNotes({ zoneId }: { zoneId: string }) {
 // Canon (design-briefs/shimmer-garden-atmosphere.md, RULED 2026-07-21): day is honey-gold, night is
 // the Moonwell hour in SATURATED silver — never a desaturation. The colours below are that ruling;
 // the intensities are build tuning.
-const SUN_LOW = new THREE.Color('#ffb774')     // horizon gold — dawn and dusk, the seams
-const SUN_HIGH = new THREE.Color('#fff3d8')    // noon
-const MOON = new THREE.Color('#a9c8ff')        // the Moonwell hour, cool and still luminous
-const AMBIENT_DAY = new THREE.Color('#fff1d5')
-const AMBIENT_NIGHT = new THREE.Color('#8fadd8')
+const SUN_LOW = new THREE.Color(S.sunlight.sunLow)     // horizon gold — dawn and dusk, the seams
+const SUN_HIGH = new THREE.Color(S.sunlight.sunHigh)    // noon
+const MOON = new THREE.Color(S.sunlight.moon)        // the Moonwell hour, cool and still luminous
+const AMBIENT_DAY = new THREE.Color(S.sunlight.ambientDay)
+const AMBIENT_NIGHT = new THREE.Color(S.sunlight.ambientNight)
 
 function SkyLight({ shadowMap }: { shadowMap: number | null }) {
   const sunRef = useRef<THREE.DirectionalLight>(null)
@@ -3437,8 +3437,8 @@ function SkyLight({ shadowMap }: { shadowMap: number | null }) {
 
 function HubGateMarkers({ heights }: { heights: number[][] }) {
   const gates = [
-    { c: 10, r: 7, color: '#ff7a4a', label: 'RANGE' },
-    { c: 16, r: 7, color: '#b07aff', label: 'RUNE HOLD' },
+    { c: 10, r: 7, color: S.hubGate.range, label: 'RANGE' },
+    { c: 16, r: 7, color: S.hubGate.runeHold, label: 'RUNE HOLD' },
   ]
   return (
     <>
@@ -3451,7 +3451,7 @@ function HubGateMarkers({ heights }: { heights: number[][] }) {
               <meshStandardMaterial color={g.color} emissive={g.color} emissiveIntensity={0.9} transparent opacity={0.5} />
             </mesh>
             <Html zIndexRange={[20, 0]} position={[0, 3.4, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
-              <div style={{ font: '800 12px ui-monospace, monospace', color: g.color, background: 'rgba(8,8,14,0.7)', padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', border: `1px solid ${g.color}66` }}>{g.label}</div>
+              <div style={{ font: '800 12px ui-monospace, monospace', color: g.color, background: 'rgba(8,8,14,0.7)', padding: '2px 7px', borderRadius: 7, whiteSpace: 'nowrap', border: `1px solid ${g.color}66` }}>{g.label}</div>
             </Html>
           </group>
         )
@@ -3744,14 +3744,14 @@ function RegionTransition({ label, phase }: { label: string; phase: TransitPhase
     <div style={{
       position: 'fixed', inset: 0, zIndex: 80, pointerEvents: 'none',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'radial-gradient(ellipse at 50% 42%, #eef7fb 0%, #cfe7f1 45%, #9dc4d6 100%)',
+      background: `radial-gradient(ellipse at 50% 42%, ${S.transit.washIn} 0%, ${S.transit.washMid} 45%, ${S.transit.washOut} 100%)`,
       opacity: phase === 'in' ? 0 : 1,
       transition: phase === 'in' ? `opacity ${TRANSIT_IN_MS}ms ease-in` : `opacity ${TRANSIT_OUT_MS}ms ease-out`,
     }}>
       <div style={{ textAlign: 'center', opacity: phase === 'out' ? 0 : 1, transition: 'opacity 380ms ease-out' }}>
-        <div style={{ font: '800 11px ui-monospace, monospace', letterSpacing: '0.34em', color: '#5f7f8d', marginBottom: 10 }}>ENTERING</div>
-        <div style={{ font: '800 30px ui-monospace, monospace', letterSpacing: '0.12em', color: '#2c4a58', textShadow: '0 2px 14px #ffffffcc' }}>{label.toUpperCase()}</div>
-        <div style={{ marginTop: 14, font: '700 15px ui-monospace, monospace', color: '#7da4b4', letterSpacing: '0.3em' }}>· ⛅ ·</div>
+        <div style={{ font: '800 11px ui-monospace, monospace', letterSpacing: '0.34em', color: S.transit.kicker, marginBottom: 10 }}>ENTERING</div>
+        <div style={{ font: '800 30px ui-monospace, monospace', letterSpacing: '0.12em', color: S.transit.name, textShadow: `0 2px 14px ${S.transit.nameGlow}` }}>{label.toUpperCase()}</div>
+        <div style={{ marginTop: 14, font: '700 15px ui-monospace, monospace', color: S.transit.mark, letterSpacing: '0.3em' }}>· ⛅ ·</div>
       </div>
     </div>
   )
@@ -3764,7 +3764,7 @@ function PanelLabel({ children, style }: { children: React.ReactNode; style?: Re
   return <div className="hk-label text-[13px] hk-soft" style={style}>{children}</div>
 }
 const hearthInput: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box', padding: '6px 9px', borderRadius: 8,
+  width: '100%', boxSizing: 'border-box', padding: '6px 9px', borderRadius: 7,
   border: `1px solid ${H.rule}`, background: H.paperHi, color: H.ink,
   ...hearthBody, fontWeight: 700, fontSize: 13, outline: 'none',
 }
@@ -5948,7 +5948,7 @@ export default function Shimmer3D() {
     hitsRef.current++
     const el = hitmarkRef.current
     if (el) {
-      el.style.setProperty('--hm', crit ? '#ffd44a' : '#ffffff')  // gold ticks on a headshot
+      el.style.setProperty('--hm', crit ? S.gun.hitmarkCrit : S.gun.hitmark)  // gold ticks on a headshot
       el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'hitFlash 0.22s ease-out'
     }
   }, [])
@@ -7001,12 +7001,12 @@ export default function Shimmer3D() {
   return (
     // HEARTH_FONT_VARS on the root: the hearth HUD pieces mounted directly here (objective, clock, frame)
     // have no HearthFrame root of their own to carry the faces, and without the vars they fall back to Georgia.
-    <div className={HEARTH_FONT_VARS} style={{ position: 'fixed', inset: 0, background: '#bfe3ef', cursor: editMode ? 'crosshair' : 'default', touchAction: 'none', overscrollBehavior: 'none' }}>
+    <div className={HEARTH_FONT_VARS} style={{ position: 'fixed', inset: 0, background: S.sky, cursor: editMode ? 'crosshair' : 'default', touchAction: 'none', overscrollBehavior: 'none' }}>
       {/* key: antialias is a WebGL CONTEXT flag and shadowMap.enabled needs every shader recompiled,
           so a quality change remounts the canvas rather than half-applying. Position/yaw survive —
           they live in this component's refs, not the scene graph. See gfx.ts gfxKey(). */}
       <CanvasBoundary fallback={
-        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center', color: '#1c2a33', font: '600 14px ui-monospace, monospace', padding: 24 }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center', color: S.fallbackInk, font: '600 14px ui-monospace, monospace', padding: 24 }}>
           <div>the garden hit a snag rendering.<br />reload the page to step back in.</div>
         </div>
       }>
@@ -7022,7 +7022,7 @@ export default function Shimmer3D() {
             which was never actually configured. It is not decoration: the streaming window
             unmounts chunks past `viewFar()`, so without haze the player watches the world end at
             a hard line. Colour matches the page background so geometry fades into sky. */}
-        <fog attach="fog" args={['#bfe3ef', fogNear(), viewFar()]} />
+        <fog attach="fog" args={[S.sky, fogNear(), viewFar()]} />
         <FrameProbe statsRef={frameStats} />
         {gfx.adaptiveDpr && (
           <PerformanceMonitor
@@ -7049,7 +7049,7 @@ export default function Shimmer3D() {
           nodes={runtimeNodes}
           spawners={spawners} spawnerReady={spawnerReady} spawnerKeyFor={spawnerKeyFor}
           restingSpirits={(void partyTick, restingSpirits(partyRef.current ?? []))}
-          companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? '#9fd9c4') : null })()}
+          companionColor={(() => { const b = beastsRef.current.find(x => x.id === activeBeastIdRef.current); void companionTick; return b ? (BEAST_COLOR[b.species] ?? S.beastFallback) : null })()}
           fishing={!!fish} fishBite={!!fish?.bite}
           harvestPop={harvestPop}
           atmosZone={districtZone}
@@ -7459,13 +7459,13 @@ export default function Shimmer3D() {
           names the action when an interactable sits under it (proximity-driven, reusing the near* state
           that already drives the bottom prompts). Desktop only; touch drives interaction via the A/B pad. */}
       {!isTouch && !editMode && !battle && !approach && !rewards && !dialogue && !openMenu && !placing && !weaponDrawn && (() => {
-        const t = fish ? { c: fish.bite ? '#ff6a5a' : '#5aa9e6', verb: fish.bite ? 'Strike!' : 'Fishing' }
-          : channel ? { c: '#5aa9e6', verb: 'Gathering' }
-          : nearNpc ? { c: '#e8c86a', verb: `Talk to ${nearNpc.name}` }
-          : nearNode ? { c: '#7fd9a0', verb: 'Harvest' }
-          : nearStation ? { c: STATIONS[nearStation.itemId]?.accent ?? '#7fe3c8', verb: STATIONS[nearStation.itemId]?.verb ?? 'Use' }
+        const t = fish ? { c: fish.bite ? S.cue.bite : S.cue.water, verb: fish.bite ? 'Strike!' : 'Fishing' }
+          : channel ? { c: S.cue.water, verb: 'Gathering' }
+          : nearNpc ? { c: S.cue.talk, verb: `Talk to ${nearNpc.name}` }
+          : nearNode ? { c: S.cue.harvest, verb: 'Harvest' }
+          : nearStation ? { c: STATIONS[nearStation.itemId]?.accent ?? mint.base, verb: STATIONS[nearStation.itemId]?.verb ?? 'Use' }
           : null
-        const on = !!t, c = t?.c ?? '#dffaf0'
+        const on = !!t, c = t?.c ?? S.cue.idle
         return (
           <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 30, pointerEvents: 'none' }}>
             <div style={{ position: 'relative', width: on ? 26 : 13, height: on ? 26 : 13, transition: 'width 0.12s ease-out, height 0.12s ease-out' }}>
@@ -7582,7 +7582,7 @@ export default function Shimmer3D() {
           {/* hitmarker — four outward diagonal ticks around the reticle, flashed per landed round */}
           <div ref={hitmarkRef} style={{ position: 'fixed', left: '50%', top: '50%', zIndex: 31, pointerEvents: 'none', opacity: 0 }}>
             {[45, 135, 225, 315].map((a) => (
-              <div key={a} style={{ position: 'absolute', left: -1, top: -3.5, width: 2, height: 7, background: 'var(--hm, #ffffff)',
+              <div key={a} style={{ position: 'absolute', left: -1, top: -3.5, width: 2, height: 7, background: `var(--hm, ${S.gun.hitmark})`,
                 boxShadow: '0 0 0 1px rgba(8,12,18,0.8)', transform: `rotate(${a}deg) translateY(-11px)` }} />
             ))}
           </div>
@@ -7605,9 +7605,9 @@ export default function Shimmer3D() {
                 // LANCE (reacher) — a longer, heavier cast body: thick receiver, long barrel, bronze trim.
                 // Dead grey/bronze metal; the focusing core lights SOUL_COLOR (in-hand).
                 <svg width="272" height="176" viewBox="0 0 272 176" style={{ display: 'block' }}>
-                  <polygon points="40,176 60,84 178,120 158,176" fill="#22262b" stroke="#6d5a3a" strokeWidth="2" />
-                  <polygon points="54,92 96,58 236,96 150,120" fill="#2e343b" stroke="#7c6a44" strokeWidth="2" />
-                  <rect x="150" y="86" width="96" height="12" rx="5" fill="#3a4048" stroke="#7c6a44" strokeWidth="2" transform="rotate(-8 150 92)" />
+                  <polygon points="40,176 60,84 178,120 158,176" fill={S.viewmodel.lanceStock} stroke={S.viewmodel.lanceTrim} strokeWidth="2" />
+                  <polygon points="54,92 96,58 236,96 150,120" fill={S.viewmodel.lanceBody} stroke={S.viewmodel.bronze} strokeWidth="2" />
+                  <rect x="150" y="86" width="96" height="12" rx="5" fill={S.viewmodel.lanceBarrel} stroke={S.viewmodel.bronze} strokeWidth="2" transform="rotate(-8 150 92)" />
                   <circle cx="92" cy="88" r="20" fill="none" stroke={SOUL_COLOR} strokeOpacity="0.4" strokeWidth="3" />
                   <circle cx="92" cy="88" r="12" fill={SOUL_COLOR} />
                   <circle cx="240" cy="80" r="6" fill={SOUL_COLOR} opacity="0.9" />
@@ -7615,8 +7615,8 @@ export default function Shimmer3D() {
               ) : (
                 // SPITTER (shortbarrel) — the thin light SMG silhouette. Dead grey/bronze; emitter glows SOUL_COLOR.
                 <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
-                  <polygon points="46,168 66,92 158,122 138,168" fill="#20242a" stroke="#5a5140" strokeWidth="2" />
-                  <polygon points="58,98 100,70 126,96 104,122" fill="#2b3038" stroke="#6f6650" strokeWidth="2" />
+                  <polygon points="46,168 66,92 158,122 138,168" fill={S.viewmodel.spitterStock} stroke={S.viewmodel.spitterTrim} strokeWidth="2" />
+                  <polygon points="58,98 100,70 126,96 104,122" fill={S.viewmodel.spitterBody} stroke={S.viewmodel.spitterBronze} strokeWidth="2" />
                   <circle cx="94" cy="96" r="17" fill="none" stroke={SOUL_COLOR} strokeOpacity="0.35" strokeWidth="2" />
                   <circle cx="94" cy="96" r="10" fill={SOUL_COLOR} />
                   <rect x="100" y="90" width="52" height="6" rx="3" fill={SOUL_COLOR} opacity="0.9" />
@@ -7833,7 +7833,7 @@ export default function Shimmer3D() {
       )}
 
       {battle && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#0a0a12' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: S.arenaFloor }}>
           {/* All fights — wild AND the scripted liberation holds — run the Keeper's Arena now.
               (The old turn-based PartyBattleScene + reach/captive mechanic was retired when the
               freed-vs-forced beat was ruled non-canon: win = free, the collar breaks on the win.) */}
@@ -7858,10 +7858,10 @@ export default function Shimmer3D() {
 // curiosity" flourish that eases the jump from overworld to the arena (no hard cut). Element-tinted
 // bloom + the spirit's name, ~1.3s, tap anywhere to skip.
 function EncounterApproach({ name, element, onSkip }: { name: string; element: Element; onSkip: () => void }) {
-  const col = ELEMENT_COLORS[element] ?? '#7fe3c8'
+  const col = ELEMENT_COLORS[element] ?? mint.base
   return (
     <div onPointerDown={onSkip} style={{
-      position: 'fixed', inset: 0, zIndex: 50, background: '#05070a', overflow: 'hidden', cursor: 'pointer',
+      position: 'fixed', inset: 0, zIndex: 50, background: S.approach.ground, overflow: 'hidden', cursor: 'pointer',
       touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'encFade 0.22s ease-out',
     }}>
       <style>{`
@@ -7876,12 +7876,12 @@ function EncounterApproach({ name, element, onSkip }: { name: string; element: E
         background: `radial-gradient(circle, ${col}cc 0%, ${col}44 42%, transparent 70%)`, animation: 'encBloom 1.15s ease-out forwards',
       }} />
       <div style={{ position: 'relative', textAlign: 'center', animation: 'encRise 0.5s ease-out 0.12s both' }}>
-        <div style={{ font: '700 12px ui-monospace, monospace', color: '#dfeee9', letterSpacing: '0.28em', opacity: 0.7, marginBottom: 8 }}>✦ THE MIST STIRS</div>
-        <div style={{ font: '900 30px ui-monospace, monospace', color: col, letterSpacing: '0.04em', textShadow: `0 0 22px ${col}88, 0 2px 6px #000` }}>{name}</div>
-        <div style={{ font: '600 14px ui-monospace, monospace', color: '#c9d6d1', marginTop: 8, opacity: 0.85 }}>is drawn to you…</div>
+        <div style={{ font: '700 12px ui-monospace, monospace', color: S.approach.kicker, letterSpacing: '0.28em', opacity: 0.7, marginBottom: 8 }}>✦ THE MIST STIRS</div>
+        <div style={{ font: '900 30px ui-monospace, monospace', color: col, letterSpacing: '0.04em', textShadow: `0 0 22px ${col}88, 0 2px 6px ${S.approach.shadow}` }}>{name}</div>
+        <div style={{ font: '600 14px ui-monospace, monospace', color: S.approach.line, marginTop: 8, opacity: 0.85 }}>is drawn to you…</div>
       </div>
       {/* end flash — snaps into the arena */}
-      <div style={{ position: 'absolute', inset: 0, background: '#eafff6', pointerEvents: 'none', animation: 'encFlash 1.3s ease-in forwards' }} />
+      <div style={{ position: 'absolute', inset: 0, background: S.approach.flash, pointerEvents: 'none', animation: 'encFlash 1.3s ease-in forwards' }} />
     </div>
   )
 }

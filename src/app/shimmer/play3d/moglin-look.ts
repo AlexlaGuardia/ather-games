@@ -10,12 +10,16 @@
  * a 7.6k-line `'use client'` scene, so pulling three string constants out of it drags the entire
  * game scene into the importing page's chunk. A constant should not carry a renderer on its back.
  * Hence a leaf module with no imports but a type: both sides can have it for nothing.
+ *
+ * (2026-09-23) It also imports `tokens.ts`, which is itself a leaf: two of the collar colours were
+ * already tokens, and the tokens guard's PALETTE class forbids typing a token value a second time.
  */
 import type { SpawnerPlacement } from '../world/spawn-placements'
+import { status } from './tokens'
 
 export const MOGLIN_FUR = '#8a6a48'      // drab-but-warm earth — never grey
 export const MOGLIN_FUR_LIGHT = '#a3855e'
 
 /** The collar's gate colour. The collar is the hostile part (canon); the fur never is. */
 export const GATE_COLORS: Record<SpawnerPlacement['gate'], string> =
-  { thistle: '#8fd14f', vetch: '#f0a526', brack: '#e05a4d' }
+  { thistle: '#8fd14f', vetch: status.warning, brack: status.danger }

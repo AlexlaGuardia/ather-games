@@ -193,6 +193,9 @@ export type ToneName = keyof typeof tone
  * so the two walkers' maps read as the same instrument. The frame AROUND the picture is the hearth's.
  * These were WorldMap.tsx's own literals, moved here unchanged; no pixel of the map moved.
  */
+/** Plain white — one spelling for the player marker, the hitmark and every white highlight. */
+export const white = '#ffffff'
+
 export const map = {
   void:      '#0b0918',
   grass:     '#5da24e',
@@ -206,7 +209,7 @@ export const map = {
   doorPlate: 'rgba(58,44,6,0.82)',
   zonePlate: 'rgba(6,5,14,0.72)',
   player:    '#ff6b5a',
-  playerEdge: '#ffffff',
+  playerEdge: white,
   facing:    'rgba(232,88,74,0.35)',
   edge:      '#ffffff3a',
   shadow:    '#00000088',
