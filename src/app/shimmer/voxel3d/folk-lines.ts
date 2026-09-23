@@ -1,4 +1,5 @@
-// The Glade's spoken lines — Beat 0½ of `CANON/game/shimmer-quests-mainmap.md`, TRANSCRIBED VERBATIM.
+// The Glade's spoken lines — Beat 0½ and Yarrow's return beat of `CANON/game/shimmer-quests-mainmap.md`,
+// TRANSCRIBED VERBATIM. `<RIGHT>` / `<WRONG>` stay as the script writes them; recipe-book.ts fills them.
 //
 // ★ NOTHING HERE IS WRITTEN HERE. Every string is a copy of a locked line (Lark, Alex sign-off
 // 2026-09-11 / 09-15; Magii's wiring sheet athernyx 17e2223). Jin owns WHEN a line fires and what
@@ -154,6 +155,24 @@ export const SCRIPT = {
     { who: "GREG", text: "Good. I hoped so. Now then. Hold still a moment, this part is mine to do." },
     { scene: "Greg turns to the path out of the glade and lifts one hand, the way you would smooth a creased cloth. Somewhere down the path, the air settles." },
     { who: "GREG", text: "There. Nobody folds their own, the first time. Somebody has to do it for you." },
+  ],
+  "folk:YARROW:teach": [
+    { scene: "Yarrow looks at the keeper's hands, then turns to the shelf without waiting to be asked." },
+    { who: "YARROW", text: "You have a cauldron of your own now. Then it is today." },
+    { scene: "Yarrow puts <WRONG> into the keeper's hand, steps back, and waits without saying anything." },
+    { option: "Point at the other one." },
+    { option: "Say nothing." },
+  ],
+  "folk:YARROW:teach:pointed": [
+    { who: "YARROW", text: "You looked at the plant and not the shelf. Good." },
+  ],
+  "folk:YARROW:teach:silent": [
+    { who: "YARROW", text: "Wrong one. Same look. Not the same plant." },
+  ],
+  "folk:YARROW:teach:page": [
+    { scene: "Yarrow sets <RIGHT> in the keeper's other hand, lays a folded page on top of it, and does not ask for the first one back." },
+    { who: "YARROW", text: "<RIGHT>. That is the one with mana in it. Cauldron, then pour. Mana Draught." },
+    { who: "YARROW", text: "The page is yours. I said I would show you once, and that was once." },
   ],
 } as const satisfies Record<string, readonly Beat[]>
 

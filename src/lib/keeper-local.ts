@@ -75,6 +75,8 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'ather:shimmer:seen:',     worldTied: false },  // ⚠ OPEN: the map of a world that no longer exists
   { base: 'voxel3d:tutorial:',       worldTied: true },   // ★ dynamic tail: seed. Reborn keeper must retake it —
                                                           //   `done` + a one-way gate already spent = no way out
+  { base: 'voxel3d:recipes:',        worldTied: true },   // the recipe book (recipe-book.ts): tied like the tutorial,
+                                                          //   because Yarrow's page lives in the tutorial and a reborn keeper meets her again
   { base: 'voxel3d:mist:',           worldTied: false },  // ⚠ OPEN: patches drawn from, in a regenerated world
   { base: 'voxel3d:pots:',           worldTied: false },  // ⚠ OPEN: clocks on blocks that no longer stand
   { base: 'voxel3d:saplings:',       worldTied: false },  // ⚠ OPEN

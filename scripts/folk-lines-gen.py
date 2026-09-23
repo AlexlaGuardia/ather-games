@@ -9,10 +9,21 @@ import json, re, sys
 
 CANON = '/root/athernyx/CANON/game/shimmer-quests-mainmap.md'
 
+# Every locked block this file copies, as (start marker, end marker). Beat 0½ is the Glade's first
+# walk; the return beat is Yarrow's counter (LOCKED 2026-09-22, Alex sign-off).
+BLOCKS = [('### Beat 0½', '[trigger: resume-Beat-1'),
+          ('### The return beat — Yarrow', '**LOCKED 2026-09-22')]
+
 def parse(src: str) -> dict:
-    start = src.index('### Beat 0½'); end = src.index('[trigger: resume-Beat-1')
+    out = {}
+    for a, b in BLOCKS:
+        start = src.index(a); end = src.index(b, start)
+        out.update(parse_block(src[start:end]))
+    return out
+
+def parse_block(block: str) -> dict:
     trig = None; out = {}
-    for line in src[start:end].splitlines():
+    for line in block.splitlines():
         m = re.match(r'\[trigger: ([^\s\]|]+)', line)
         if m: trig = m.group(1); out[trig] = []; continue
         if trig is None: continue
@@ -27,7 +38,8 @@ def parse(src: str) -> dict:
 def q(s): return json.dumps(s, ensure_ascii=False)
 
 def emit(d: dict) -> str:
-    L = ['''// The Glade's spoken lines — Beat 0½ of `CANON/game/shimmer-quests-mainmap.md`, TRANSCRIBED VERBATIM.
+    L = ['''// The Glade's spoken lines — Beat 0½ and Yarrow's return beat of `CANON/game/shimmer-quests-mainmap.md`,
+// TRANSCRIBED VERBATIM. `<RIGHT>` / `<WRONG>` stay as the script writes them; recipe-book.ts fills them.
 //
 // ★ NOTHING HERE IS WRITTEN HERE. Every string is a copy of a locked line (Lark, Alex sign-off
 // 2026-09-11 / 09-15; Magii's wiring sheet athernyx 17e2223). Jin owns WHEN a line fires and what

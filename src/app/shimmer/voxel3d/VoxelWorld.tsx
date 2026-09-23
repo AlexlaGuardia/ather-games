@@ -232,9 +232,9 @@ import { createLoco, tickLocomotion, eyeY, launchKeeper, blinkKeeper,
 // `tutorial.ts` owns the quest state and its (placeholder) dialogue; `gate.ts` is pure math for
 // where the ceremonial arch sits and which of its cells are the sealable doorway; `greg.ts` builds
 // Greg's placeholder figure. This file only wires all three into the render loop.
-import { loadTutorial, saveTutorial, talkGreg, talkFolk, answerChoice, speakerOf, objectiveLabel, stageActions, HAZELS_BLADE, HAZEL_STACK,
+import { loadTutorial, saveTutorial, talkGreg, talkFolk, answerChoice, answerYarrow, speakerOf, objectiveLabel, stageActions, HAZELS_BLADE, HAZEL_STACK,
          type TutorialStage, type TutorialState, type Talk, type Progress } from './tutorial'
-import { folkSites, folkDef, stationCellOf, type FolkId } from './folk'
+import { folkSites, folkDef, stationCellOf, FOLK_IDS, type FolkId } from './folk'
 import { guideTarget, type GuideWorld, type GuideTarget } from './guide-target'
 import { createGuideTrail } from './guide-trail'
 import { SCRIPT, type Beat } from './folk-lines'
@@ -291,6 +291,8 @@ import { BuffChips } from './buff-chips'
 import { alchemyStationOf, alchemySalvage, ALCHEMY_STATIONS, intermediateLabel, type AlchemyStationId } from './alchemy-chain'
 import { AlchemyPanel } from './alchemy-panel'
 import { BrewingPanel } from './brewing-panel'
+import { loadBook as loadRecipeBook, saveBook as saveRecipeBook, learnFirst, learnFromBrew, HERB_PAIR, type RecipeBook } from './recipe-book'
+import { CraftIcon } from './craft-icon'
 import { brewingsFromSave, brewingKey, abandonRefund, lookLine as brewLine, type Brewings } from './brewing'
 import {
   chestKey, createChest, adoptChest, moveBetween, moveCount, halfOf, quickMove, addToGrid,
@@ -1100,6 +1102,13 @@ export default function VoxelWorld() {
   // up for the inventory ref. Declared ABOVE the tools because the tools depend on it (below).
   const tutorial = useRef<TutorialState>(loadTutorial(SEED))
   const [, setTutorialTick] = useState(0)
+  // ★ THE RECIPE BOOK (recipe-book.ts): loaded on first NEED, not at mount — the grandfather clause
+  // reads the alchemy level, and the skills arrive from the save after this line runs.
+  const book = useRef<RecipeBook | null>(null)
+  const getBook = useCallback((): RecipeBook => {
+    if (!book.current) book.current = loadRecipeBook(SEED, tutorial.current.stage === 'done', skills.current.alchemy.level)
+    return book.current
+  }, [])
   // ★ Greg's basic tools, exactly as the tile game hands them out — `ensureBasicTools` fills any
   // missing skill with its never-breaking starter (worn_spike, worn_blade, worn_rinstick). The
   // debug tier lever is gone: tier now comes from what you are actually holding.
@@ -1950,10 +1959,24 @@ export default function VoxelWorld() {
 
   /** E on Greg or one of the five: compute the talk NOW, from the live refs, and show it. */
   const openTalk = useCallback((who: 'greg' | FolkId) => {
-    const talk = who === 'greg' ? talkGreg(tutorial.current) : talkFolk(tutorial.current, who, progress())
+    const talk = who === 'greg' ? talkGreg(tutorial.current)
+      : talkFolk(tutorial.current, who, { ...progress(), cauldronOnPlot: !!getBook().cauldron })
     openCursorUI()
     setDialogue({ who, talk })
-  }, [openCursorUI, progress])
+  }, [openCursorUI, progress, getBook])
+  // ★ `window.__talk(who, { cauldron, done })` — the harness's door into a conversation, for a headless
+  // shot of a scene a script cannot walk to (Yarrow's counter needs the tutorial done AND a cauldron
+  // on the plot). `done` fast-forwards THIS TAB's tutorial state in memory only; nothing is saved.
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>
+    w.__talk = (who: 'greg' | FolkId, o: { cauldron?: boolean; done?: boolean } = {}) => {
+      if (o.done) tutorial.current = { ...tutorial.current, stage: 'done', met: [...FOLK_IDS], hazel: 'done' }
+      if (o.cauldron) getBook().cauldron = true
+      openTalk(who)
+      return { stage: tutorial.current.stage, known: getBook().known, cauldron: !!getBook().cauldron }
+    }
+    return () => { delete w.__talk }
+  }, [openTalk, getBook])
 
   /**
    * ★ A TALK IS APPLIED WHEN THE BOX CLOSES, NOT WHEN IT OPENS. Showing the line for the state you
@@ -1975,6 +1998,15 @@ export default function VoxelWorld() {
       case 'give_shard':
         give(inv.current!, 'raw_mana_shard', 1)
         break
+      case 'yarrow_page': {
+        // Both petals stay with the keeper — the wrong one is `folk:YARROW:bark` paying itself off.
+        const lost = give(inv.current!, HERB_PAIR.wrong.itemId, 1) + give(inv.current!, HERB_PAIR.right.itemId, 1)
+        const b = getBook()
+        learnFirst(b)
+        saveRecipeBook(SEED, b)
+        say(lost > 0 ? 'satchel full — a petal fell; the page is in your book' : 'a new page in your book — Mana Draught')
+        break
+      }
       case 'fold':
         // The starter bag — canon Beat 1 gi_5 "Here. Take this." has Greg gift "crafting table, pot,
         // grimoire, tools"; the tools and the table are the pieces that exist. The hand-craft table
@@ -2000,7 +2032,7 @@ export default function VoxelWorld() {
     }
     saveTutorial(SEED, tutorial.current)
     setTutorialTick(v => v + 1)
-  }, [refreshHotbar])
+  }, [refreshHotbar, getBook, say])
 
   const closeDialogue = useCallback(() => {
     const d = dialogue
@@ -2011,8 +2043,13 @@ export default function VoxelWorld() {
 
   /** The stay choice answered inside the box: the answer's beats replace the question's, and
    *  closing applies what the answer decided (the fold, or nothing). */
-  const onAnswer = useCallback((answer: 'staying' | 'not-yet') => {
-    setDialogue(d => d ? { who: d.who, talk: answerChoice(tutorial.current, answer) } : d)
+  const onAnswer = useCallback((answer: 'staying' | 'not-yet' | 'pointed' | 'silent') => {
+    setDialogue(d => d ? {
+      who: d.who,
+      talk: d.talk.choice === 'yarrow'
+        ? answerYarrow(tutorial.current, answer === 'pointed' ? 'pointed' : 'silent')
+        : answerChoice(tutorial.current, answer === 'not-yet' ? 'not-yet' : 'staying'),
+    } : d)
   }, [])
 
   /** Refine/build a recipe. The core hands back a plan; the host applies it. */
@@ -2378,7 +2415,15 @@ export default function VoxelWorld() {
           //   StationPanel — and which one you got depended on which door you took. One block, one
           //   panel. The bench's standing job (a wood bonus the sawmill also pays) has no door now;
           //   the sawmill / stonecutter / kiln keep theirs, since a queue is what THEY are.
-          onOpenStation={(st) => { openCursorUI(); if (st.kind === 'crafting_table') setCraftOpen(true); else setOpenStation(st) }}
+          onOpenStation={(st) => {
+            openCursorUI()
+            // Half of Yarrow's gate: a cauldron of their own. Opening one on the plot is the proof.
+            if (st.kind === 'cauldron' && space.current === 'plot') {
+              const b = getBook()
+              if (!b.cauldron) { b.cauldron = true; saveRecipeBook(SEED, b) }
+            }
+            if (st.kind === 'crafting_table') setCraftOpen(true); else setOpenStation(st)
+          }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
           onOpenGardens={(g) => { openCursorUI(); setOpenGardens(g) }}
           onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
@@ -2513,6 +2558,14 @@ export default function VoxelWorld() {
       {openStation && openStation.kind in ALCHEMY_STATIONS && ALCHEMY_STATIONS[openStation.kind as AlchemyStationId].craft === 'alchemy' && !openStation.job && (
         <BrewingPanel st={openStation as OpenStation & { kind: AlchemyStationId }} space={space.current}
                       keeper={{ id: 'keeper', name: 'you' }} brewings={brewings} skills={skills} mana={mana}
+                      known={getBook().known}
+                      onPoured={() => {
+                        const b = getBook()
+                        const got = learnFromBrew(b, skills.current.alchemy.level)
+                        if (!got) return null
+                        saveRecipeBook(SEED, b)
+                        return POTION_DEFS[got].name
+                      }}
                       ops={{
                         have: (id) => countItem(inv.current!, id) + openStation.feeds.reduce((n, g) => n + countInChest(g, id), 0),
                         spend: (id, n) => {
@@ -11035,10 +11088,11 @@ function ChatConsole({ open, seed, log, ctx, onSubmit, onClose }: {
 function ScriptDialogue({ who, talk, onAnswer, onClose }: {
   who: 'greg' | FolkId
   talk: Talk
-  onAnswer: (answer: 'staying' | 'not-yet') => void
+  onAnswer: (answer: 'staying' | 'not-yet' | 'pointed' | 'silent') => void
   onClose: () => void
 }) {
   const name = who === 'greg' ? 'Gregory' : folkDef(who).name
+  const yarrow = talk.choice === 'yarrow'
   const speaker = speakerOf(talk.beats)
   const options = talk.beats.filter((b): b is { option: string } => 'option' in b)
   return (
@@ -11056,14 +11110,29 @@ function ScriptDialogue({ who, talk, onAnswer, onClose }: {
               </div>
             ) : null)}
         </div>
+        {/* ★ THE STAGING NOTE (Yarrow's counter): "Point at the other one" only reads if the pair is
+            SEEN. So the box shows both petals side by side — the one in your hand, then the one still
+            on the shelf — and NO caption: the silence is the teaching, and reading them is the lesson. */}
+        {yarrow && options.length > 0 && (
+          <div className="mt-3 flex items-end justify-center gap-10" data-yarrow-counter>
+            {[HERB_PAIR.wrong, HERB_PAIR.right].map(h => (
+              <div key={h.itemId} className="flex flex-col items-center gap-1">
+                <CraftIcon itemId={h.itemId} size={40} />
+              </div>
+            ))}
+          </div>
+        )}
         {talk.choice && options.length > 0 && (
           <div className="mt-3 pt-2 border-t hk-rule flex flex-col gap-1.5">
-            {options.map(o => {
-              const answer = /not yet/i.test(o.option) ? 'not-yet' : 'staying'
+            {options.map((o, i) => {
+              // Yarrow's options arrive in script order: point first, silence second.
+              const answer = yarrow ? (i === 0 ? 'pointed' : 'silent') : /not yet/i.test(o.option) ? 'not-yet' : 'staying'
               return (
                 <button key={o.option} onClick={() => onAnswer(answer)}
-                        className="w-full px-2 py-1.5 rounded border border-amber-200/40 text-amber-100/90 text-left
-                                   hover:border-amber-200/70 hover:bg-white/5 transition-colors">
+                        // ⚠ Ink on parchment (09-23): these kept the pre-hearth amber-on-dark classes through
+                        // phase 8 and read as disabled on the paper — Greg's stay question included.
+                        className="w-full px-2 py-1.5 rounded border hk-rule hk-ink text-left
+                                   hover:border-[#c8642a] hover:bg-black/5 transition-colors">
                   {o.option}
                 </button>
               )

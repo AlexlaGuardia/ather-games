@@ -31,7 +31,13 @@ export const POTION_DEFS: Record<string, PotionDef> = {
     // Glow-moss (2026-09-16): canon's `world/flora.md` points it at mana potions, and the draught is
     // the mana potion. One moss for one shard — the moss is common on woodland and shore, so the
     // first brew stays a short walk; it just has a second thing to find.
-    recipe: [{ itemId: 'raw_mana_shard', count: 4 }, { itemId: 'glow_moss', count: 1 }],
+    //
+    // ★ VIOLETBLOOM (2026-09-23): Yarrow's counter (canon, LOCKED 09-22) teaches this recipe by putting
+    // "the one with mana in it" in the keeper's hand — canon's Mana element herb. A draught that did
+    // not use the herb Yarrow hands over would make the whole lesson (read the plant, not the shelf)
+    // a lie at the pot. ADDED beside the moss, not instead of it: the moss keeps its canon use, and
+    // Yarrow's petal pays for the first brew. Still a draught — cauldron, then pour, no station road.
+    recipe: [{ itemId: 'raw_mana_shard', count: 4 }, { itemId: 'glow_moss', count: 1 }, { itemId: 'violetbloom_petal', count: 1 }],
   },
   shard_tonic: {
     id: 'shard_tonic', name: 'Shard Tonic', tier: 1,

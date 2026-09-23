@@ -14,12 +14,24 @@ const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 
 const CANON = '/root/athernyx/CANON/game/shimmer-quests-mainmap.md'
 
+// The same two blocks the generator copies — see BLOCKS in scripts/folk-lines-gen.py.
+const BLOCKS: [string, string][] = [
+  ['### Beat 0½', '[trigger: resume-Beat-1'],
+  ['### The return beat — Yarrow', '**LOCKED 2026-09-22'],
+]
 function parse(src: string): Record<string, Beat[]> {
-  const start = src.indexOf('### Beat 0½'), end = src.indexOf('[trigger: resume-Beat-1')
-  ok(start >= 0 && end > start, 'the canon file has a Beat 0½ block ending at resume-Beat-1')
+  const out: Record<string, Beat[]> = {}
+  for (const [a, b] of BLOCKS) {
+    const start = src.indexOf(a), end = src.indexOf(b, start)
+    ok(start >= 0 && end > start, `the canon file has the block starting '${a}'`)
+    Object.assign(out, parseBlock(src.slice(start, end)))
+  }
+  return out
+}
+function parseBlock(block: string): Record<string, Beat[]> {
   const out: Record<string, Beat[]> = {}
   let trig: string | null = null
-  for (const line of src.slice(start, end).split('\n')) {
+  for (const line of block.split('\n')) {
     let m = /^\[trigger: ([^\s\]|]+)/.exec(line)
     if (m) { trig = m[1]; out[trig] = []; continue }
     if (!trig) continue

@@ -35,6 +35,7 @@ import { keeperKey } from '@/lib/keeper-local'
 import type { ActionId } from '@/lib/input/actions'
 import { SCRIPT, type Beat, type Trigger } from './folk-lines'
 import { FOLK_IDS, type FolkId } from './folk'
+import { fillHerbs } from './recipe-book'
 
 export type TutorialStage =
   | 'greet'   // find Greg → warning + offer
@@ -55,6 +56,8 @@ export interface TutorialState {
   /** Doors knocked on, in the order they were. Five = the gate to Greg's ask. */
   met: FolkId[]
   hazel: HazelErrand
+  /** Yarrow's counter (the return beat, LOCKED 09-22): the first recipe has been given. Once. */
+  yarrow?: 'taught'
 }
 
 const DEFAULT_TUTORIAL: TutorialState = { stage: 'greet', met: [], hazel: 'unmet' }
@@ -92,13 +95,14 @@ const fresh = (): TutorialState => ({ ...DEFAULT_TUTORIAL, met: [] })
 export function migrate(parsed: unknown): TutorialState {
   const p = (parsed && typeof parsed === 'object' ? parsed : {}) as Partial<Record<string, unknown>>
   const s = typeof p.stage === 'string' ? p.stage : 'greet'
-  if (s === 'done') return { stage: 'done', met: [...FOLK_IDS], hazel: 'done' }
+  const yarrow = p.yarrow === 'taught' ? { yarrow: 'taught' as const } : {}
+  if (s === 'done') return { stage: 'done', met: [...FOLK_IDS], hazel: 'done', ...yarrow }
   // The old shape had no `met`; the new one always does. 'lantern' / 'light' exist in both chains
   // and mean different things (the old one handed the shard at greet), so the shape decides.
   if (Array.isArray(p.met) && (STAGES as readonly string[]).includes(s)) {
     const met = p.met.filter((m): m is FolkId => (FOLK_IDS as readonly string[]).includes(m as string))
     const hazel: HazelErrand = p.hazel === 'owed' || p.hazel === 'done' ? p.hazel : 'unmet'
-    return { stage: s as TutorialStage, met, hazel }
+    return { stage: s as TutorialStage, met, hazel, ...yarrow }
   }
   if (s === 'report') return { stage: 'choice', met: [...FOLK_IDS], hazel: 'done' }
   if (s === 'greet') return fresh()
@@ -119,22 +123,31 @@ export type TutorialEffect =
   | 'take_blade'    // remove it
   | 'give_shard'    // raw_mana_shard ×1, Greg's ask
   | 'fold'          // the gate opens; hand out the starter bag (tools + crafting table)
+  | 'yarrow_page'   // Yarrow's counter: both petals in hand, the Mana Draught in the book
 
 export interface Talk {
   next: TutorialState
   beats: readonly Beat[]
   effect?: TutorialEffect
-  /** The choice beat: the box shows its two options as buttons and routes through `answerChoice`. */
-  choice?: boolean
+  /**
+   * The choice beat: the box shows its options as buttons. `true` = Greg's stay question
+   * (`answerChoice`); `'yarrow'` = the counter (`answerYarrow`), whose option does NOT gate.
+   */
+  choice?: true | 'yarrow'
 }
 
 /** What the folk conversations need to know about the keeper's hands. */
 export interface Hands {
   planks: number
   hasHazelsBlade: boolean
+  /** A cauldron has stood on the keeper's own plot (`recipe-book.ts`). Half of Yarrow's gate. */
+  cauldronOnPlot?: boolean
 }
 
 const beats = (...t: Trigger[]): Beat[] => t.flatMap(k => [...SCRIPT[k]])
+/** Beats with Yarrow's two herb slots filled — the script keeps `<RIGHT>`/`<WRONG>` verbatim. */
+const filled = (bs: Beat[]): Beat[] => bs.map(b =>
+  'scene' in b ? { scene: fillHerbs(b.scene) } : 'who' in b ? { who: b.who, text: fillHerbs(b.text) } : b)
 /** The speaker of a trigger's first spoken beat. */
 export function speakerOf(bs: readonly Beat[]): string {
   for (const b of bs) if ('who' in b) return b.who
@@ -168,6 +181,19 @@ export function answerChoice(s: TutorialState, answer: 'staying' | 'not-yet'): T
   return { next: { ...s, stage: 'done' }, beats: beats('fold'), effect: 'fold' }
 }
 
+/**
+ * The counter answered. ★ THE OPTION DOES NOT GATE (canon: noticing is seen, never required):
+ * both answers give the right herb and the page; only Yarrow's next line differs.
+ */
+export function answerYarrow(s: TutorialState, answer: 'pointed' | 'silent'): Talk {
+  if (s.yarrow === 'taught') return { next: s, beats: [] }
+  return {
+    next: { ...s, yarrow: 'taught' },
+    beats: filled(beats(`folk:YARROW:teach:${answer}`, 'folk:YARROW:teach:page')),
+    effect: 'yarrow_page',
+  }
+}
+
 /** E on one of the five. Pure. */
 export function talkFolk(s: TutorialState, id: FolkId, hands: Hands): Talk {
   const key = id.toUpperCase() as 'HAZEL' | 'SAX' | 'YARROW' | 'FENNEL' | 'MALLOW'
@@ -186,6 +212,11 @@ export function talkFolk(s: TutorialState, id: FolkId, hands: Hands): Talk {
       }
     }
     return { next: { ...s, stage, met }, beats: beats(`folk:${key}:greet`, `folk:${key}:want`, `folk:${key}:give`) }
+  }
+  // ★ YARROW'S COUNTER — the return beat. Fires on the first talk after a cauldron stands on the
+  // keeper's own plot; closing the box without answering leaves it armed, like Greg's question.
+  if (id === 'yarrow' && hands.cauldronOnPlot && s.yarrow !== 'taught') {
+    return { next: s, beats: filled(beats('folk:YARROW:teach')), choice: 'yarrow' }
   }
   if (id === 'hazel' && s.hazel === 'owed') {
     if (hands.planks >= HAZEL_STACK && hands.hasHazelsBlade) {

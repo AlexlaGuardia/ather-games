@@ -32,7 +32,7 @@ import type { AlchemyOps } from './alchemy-panel'
 import { PanelFrame } from './panel-frame'
 import { H, HearthNote, HearthJob, HearthIdle, HearthRow, HearthRoad, HearthButton, CostChip } from '../ui/hearth'
 
-export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, onBrewings, onChange, onLevel, onSay, onClose }: {
+export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, known, onPoured, onBrewings, onChange, onLevel, onSay, onClose }: {
   st: OpenStation & { kind: AlchemyStationId }
   space: string
   keeper: { id: string; name: string }
@@ -40,6 +40,13 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
   skills: React.RefObject<SkillSet>
   mana: React.RefObject<{ cur: number; max: number; regen: number }>
   ops: AlchemyOps
+  /**
+   * The keeper's recipe book (`recipe-book.ts`). Absent = every recipe in the window (a dev bench
+   * with no keeper), so only the world narrows the menu.
+   */
+  known?: readonly string[]
+  /** A pour landed in the keeper's hands: the book may gain a page. Returns the page's name, if any. */
+  onPoured?: (potionId: string) => string | null
   /** The record changed — save it. */
   onBrewings: () => void
   onChange: () => void
@@ -118,9 +125,12 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
       const res = xp > 0 ? addSkillXP(skills.current.alchemy, xp) : { leveled: false as const, newLevel: 0 }
       if (res.leveled) onLevel(`alchemy ${res.newLevel}${getMilestone(res.newLevel) ? ' — ' + getMilestone(res.newLevel) : ''}`)
       onChange()
-      onSay(lost > 0
+      // ★ ONE POUR, ONE PAGE — the pot is the teacher after Yarrow (recipe-book.ts).
+      const page = mine > 0 ? onPoured?.(here.potionId) ?? null : null
+      onSay((lost > 0
         ? `poured — ${mine - lost}× ${d.name.toLowerCase()}, ${lost} would not fit · ${xp} alchemy xp`
         : `poured — ${mine}× ${d.name.toLowerCase()} · ${xp} alchemy xp`)
+        + (page ? ` · a new page: ${page}` : ''))
     }
     const doTipOut = () => {
       if (!here || here.lit) return
@@ -132,7 +142,7 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
       onSay(`tipped out — ${back.map(r => `${r.count}× ${ops.label(r.itemId).toLowerCase()}`).join(', ')} back in the bag`)
     }
 
-    const menu = cauldronMenu(level)
+    const menu = cauldronMenu(level).filter(d => !known || known.includes(d.id))
     return (
       <PanelFrame width="w-[480px]" title={def.name} onClose={onClose} dataPanel="brewing">
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -166,6 +176,7 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
 
         {!here && (
           <div className="space-y-2">
+            {menu.length === 0 && <HearthNote>no recipes in your book yet</HearthNote>}
             {menu.map(d => {
               const locked = level < d.minAlchemyLevel
               const missing = d.recipe.filter(r => ops.have(r.itemId) < r.count)
