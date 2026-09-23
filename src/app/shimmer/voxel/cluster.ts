@@ -210,21 +210,49 @@ export const greenQuadrant = (x: number, z: number): QuarterId =>
  */
 /**
  * ── ★★ WHOSE CORNER IS IT, WHEN THE FOLD IS NOWHERE NEAR IT? ────────────────────────────────────
- * The grid version carved the Green out of ground the keeper demonstrably had, because a cell was
- * theirs whether or not their coast had reached it. Spaced folds raise the question honestly: a
- * tier-0 keeper's ground is 400 blocks from the middle, so *"each fold gives one corner"* looks
- * like giving away something they never had.
+ * Spaced folds raise the question honestly: a tier-0 keeper's ground is 400 blocks from the middle,
+ * so *"each fold gives one corner"* looks like giving away something they never had.
  *
  * **Canon answers it in its own words and the answer is why `MIN_GREEN` is a hard bound.** Forming
  * a cluster *"RESERVES the seam square as coast, and each fold grows TOWARD it, never through it."*
  * A reservation is made against what the ground WILL be, not what it is — and `offset` is
  * `PLOT_TIERS`' maximum precisely so that a fully grown fold's coast **does** cover its corner of
- * the Green. So the corner given is real ground: it is the ground the grimoire entitles that keeper
- * to, held back at formation and never built on. Shrink the Green below `MIN_GREEN` and that stops
+ * the Green. So the corner given is real ground: the ground the grimoire entitles that keeper to,
+ * held back at formation and never built on. Shrink the Green below `MIN_GREEN` and that stops
  * being true — the middle becomes an island made of corners nobody ever had.
  */
+
+/**
+ * ── ★★ THE MIDDLE IS WHOLE FROM THE MOMENT IT EXISTS (Alex, 2026-09-22) ─────────────────────────
+ * ***"the middle should stay whole regardless."***
+ *
+ * ⚠⚠ **THIS OVERTURNS A CANON LINE RULED THE SAME DAY, AND THE OVERTURN IS FILED — DO NOT QUIETLY
+ * RESTORE THE OLD SHAPE FROM THE CANON FILE.** The 09-23 amendment says *"each fold gives one
+ * corner… two keepers make half a Green; a fourth joining completes it,"* and lists *the Green is
+ * as big as the corners given* in its Boundary as canon. The build no longer does that. The entry
+ * in `CANON_GAPS.md` carries it to the Magii seat; until it is authored in, this file and that
+ * paragraph disagree **on purpose**, and the reason is recorded here so the next reader does not
+ * "fix" the disagreement in the wrong direction.
+ *
+ * ★ AND IT IS THE MORE CANON-TRUE READING OF THE TWO, which is why it was not argued with. The
+ * PRIMARY ruling's own sentence is *"it APPEARS when the cluster forms rather than being built —
+ * **nobody made it, the folding made it**."* Something the folding made arrives whole; a thing
+ * assembled from four contributions is a thing that was built, by four people, in instalments. The
+ * amendment's partial Green quietly made the middle the one part of the cluster that WAS built.
+ *
+ * ★ AND CANON ALREADY HAS THE BETTER ANSWER TO WHAT THE AMENDMENT WAS FOR. Its stated purpose was
+ * that *"a player reads how many friends a cluster has by looking at the middle"* — and the
+ * glossary's own entry for *the Green* says an open slot **"shows as a place set at its table
+ * (once the keepers have built one), never a gate or a Vacant sign."** A place set at a table reads
+ * the count warmly and reads it as an INVITATION; a missing quarter of ground reads it as damage,
+ * which is the exact thing the *"unfolded, never grey"* guard exists to prevent. The count survives
+ * the overturn; only the mechanism changes, and it changes to the one canon already wrote.
+ *
+ * ⛔ WHAT DOES NOT CHANGE: an open slot still grows **no fold, no spoke and no rim**. Absence is
+ * still absence everywhere else. It is the MIDDLE that is whole, not the cluster.
+ */
 export const inGreen = (x: number, z: number, cfg: ClusterConfig): boolean =>
-  inGreenSquare(x, z, cfg) && cfg.slots[greenQuadrant(x, z)] !== null
+  inGreenSquare(x, z, cfg) && isCluster(cfg)
 
 // ── THE FOLDS ───────────────────────────────────────────────────────────────────────────────────
 
@@ -405,9 +433,10 @@ function boxDistance(x: number, z: number, x0: number, x1: number, z0: number, z
 export function clusterAt(x: number, z: number, cfg: ClusterConfig = DEFAULT_CLUSTER): ClusterColumn {
   if (inGreenSquare(x, z, cfg)) {
     const q = greenQuadrant(x, z)
-    if (cfg.slots[q]) return { part: 'green', quarter: q, keeper: cfg.slots[q], join: null }
-    // ⛔ A corner that was never given is not the Green, and it is not the neighbours' to build on
-    // either. It is the Ather, exactly like the open quarter it belongs to.
+    // ★ Whole from the moment the cluster exists — including the quadrants whose keepers have not
+    // arrived. `quarter` still names whose sub-square this is, because the table set for an absent
+    // friend has to be set SOMEWHERE, and that is the answer.
+    if (isCluster(cfg)) return { part: 'green', quarter: q, keeper: cfg.slots[q], join: null }
     return { part: 'ather', quarter: q, keeper: null, join: null }
   }
 

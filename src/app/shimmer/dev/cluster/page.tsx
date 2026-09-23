@@ -166,7 +166,7 @@ export default function ClusterPreview() {
           </div>
 
           <div style={{ display: 'grid', gap: 4, marginTop: 4, color: '#8892a6' }}>
-            {([[GREEN, 'the Green — brightest ground in the game'],
+            {([[GREEN, 'the Green — whole, and the brightest ground in the game'],
                [TURF.ne, 'a keeper’s own fold, whole, nothing clipped'],
                [JOIN, 'the lane to the middle and to a neighbour'],
                [CLOUD, 'the fold’s cloud wall'],

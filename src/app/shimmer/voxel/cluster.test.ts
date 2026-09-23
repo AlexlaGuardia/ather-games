@@ -139,8 +139,13 @@ console.log('⛔ every keeper can WALK to the Green, at every tier (Alex: the va
   check('at max tier it is a threshold, not a road', a2 < a0 / 20, `${a2} vs ${a0}`)
 }
 
-console.log('the Green — as big as the friendship')
+console.log('the middle is whole from the moment it exists')
 {
+  // ⚠⚠ THIS BLOCK ASSERTS THE OPPOSITE OF WHAT IT ASSERTED THIS MORNING, ON PURPOSE. The 09-23
+  // amendment ruled the Green "as big as the corners given" — two keepers, half a Green — and Alex
+  // overturned it the same day looking at the render: "the middle should stay whole regardless."
+  // The overturn is filed in CANON_GAPS.md. If a later reader finds this suite disagreeing with
+  // that paragraph, the suite is the newer fact and the canon file is the one waiting to catch up.
   const cell = 5
   const CENTRES: number[] = []
   for (let v = -DEFAULT_CLUSTER.green + cell / 2; v < DEFAULT_CLUSTER.green; v += cell) CENTRES.push(v)
@@ -149,15 +154,17 @@ console.log('the Green — as big as the friendship')
     for (const x of CENTRES) for (const z of CENTRES) if (inGreen(x, z, cfg)) n++
     return n
   }
-  const full = area(allAt({ ne: 0, nw: 0, sw: 0, se: 0 }))
-  check('four corners given = a whole Green', full > 0)
-  for (const given of [1, 2, 3, 4]) {
+  const whole = CENTRES.length * CENTRES.length
+  check('four corners given = a whole Green', area(allAt({ ne: 0, nw: 0, sw: 0, se: 0 })) === whole)
+  for (const given of [2, 3, 4]) {
     const cfg = withSlots(Object.fromEntries(QUARTERS.slice(0, given).map(q => [q, K(SEED[q], 0)])))
-    const frac = area(cfg) / full
-    check(`${given} corner(s) given = ${given}/4 of the Green`, Math.abs(frac - given / 4) < 0.02,
-      `got ${frac.toFixed(3)}`)
+    check(`${given} keepers still get the WHOLE middle`, area(cfg) === whole,
+      `${area(cfg)} of ${whole}`)
   }
-  check('no corners given = no Green at all', area(withSlots({})) === 0)
+  // ⛔ But it is the MIDDLE that is whole, not the cluster: below two there is no cluster and no
+  // Green at all. One keeper alone is a plot, and a plot has no middle.
+  check('one keeper has no Green', area(allAt({ ne: 0 })) === 0)
+  check('no keepers, no Green', area(withSlots({})) === 0)
 
   // ⚠ AND THE ONE ENTRY POINT MUST ACTUALLY REPORT IT. Every assert above reads `inGreen` directly,
   // so deleting the Green's branch from `clusterAt` left the FIRST version of this suite green —
@@ -169,6 +176,11 @@ console.log('the Green — as big as the friendship')
   }
   check('clusterAt reports the Green it is standing on', reported === expected && expected > 0,
     `${reported} vs ${expected}`)
+  // ★ An absent friend's quadrant is still ATTRIBUTED, because the table set for them has to be set
+  // somewhere — canon's "an open slot shows as a place set at its table, never a Vacant sign".
+  const open = clusterAt(-40, -40, allAt({ ne: 2, nw: 1, se: 2 }))
+  check('an absent friend\'s quadrant is Green, and still named as theirs',
+    open.part === 'green' && open.quarter === 'sw' && open.keeper === null)
 
   // ⛔ Reserved coast: no fold's ground is ever generated inside the Green's square.
   let carved = 0
@@ -176,16 +188,13 @@ console.log('the Green — as big as the friendship')
     for (const x of CENTRES) for (const z of CENTRES)
       if (clusterAt(x, z, cfg).part === 'quarter') carved++
   check('no fold is ever generated inside the Green', carved === 0, `${carved} columns`)
-  // ★ And the reservation is only honest if a MAX fold would otherwise have covered its corner —
-  // otherwise the "given" corner is ground nobody ever had. That is what MIN_GREEN measures.
   check('the Green is big enough to be made of corners somebody had',
     DEFAULT_CLUSTER.green >= MIN_GREEN(DEFAULT_CLUSTER),
     `${DEFAULT_CLUSTER.green} vs ${MIN_GREEN(DEFAULT_CLUSTER).toFixed(1)}`)
   const maxed = allAt({ ne: 2, nw: 2, sw: 2, se: 2 })
   for (const q of QUARTERS) {
-    const s = QUARTER_SIGN[q]
-    // The corner of the Green nearest that fold would be inside it, were it not reserved.
-    const l = quarterLocal(s.sx * (DEFAULT_CLUSTER.green - 1), s.sz * (DEFAULT_CLUSTER.green - 1), q, maxed)
+    const s2 = QUARTER_SIGN[q]
+    const l = quarterLocal(s2.sx * (DEFAULT_CLUSTER.green - 1), s2.sz * (DEFAULT_CLUSTER.green - 1), q, maxed)
     check(`${q}: a max fold's coast would have covered its corner`,
       Math.hypot(l.x, l.z) <= edgeAt(l.x, l.z, SEED[q], plotForTier(2)))
   }
@@ -204,9 +213,11 @@ console.log('⛔ an empty quarter reads as UNFOLDED, never grey')
       if (clusterAt(c.x + Math.cos(a) * r, c.z + Math.sin(a) * r, cfg).part === 'quarter') ground++
     }
     check(`${q}: an open slot grows no fold`, ground === 0, `${ground} columns`)
-    check(`${q}: an open slot has no Green corner`,
-      !inGreen(QUARTER_SIGN[q].sx * 40, QUARTER_SIGN[q].sz * 40, cfg))
     check(`${q}: an open slot has no spoke`, !inSpoke(c.x * 0.7, c.z * 0.7, q, cfg))
+    // ★ The MIDDLE is the exception and the only one: it is whole regardless, so the quadrant that
+    // would have been theirs is Green and waiting. Everything outward of it is absence.
+    check(`${q}: but the middle is still whole over their quadrant`,
+      inGreen(QUARTER_SIGN[q].sx * 40, QUARTER_SIGN[q].sz * 40, cfg))
   }
   // ⛔ A rim needs BOTH ends — a lane to a quarter nobody has taken is ground leading nowhere.
   for (const [a, b] of RIM_PAIRS) {
@@ -259,12 +270,16 @@ console.log('a keeper may take back their own corner')
   const cell = 5, cs: number[] = []
   for (let v = -FOUR.green + cell / 2; v < FOUR.green; v += cell) cs.push(v)
   const greenCells = (c: ClusterConfig) => cs.flatMap(x => cs.filter(z => inGreen(x, z, c)).map(z => `${x},${z}`))
-  const before = greenCells(FOUR), now = new Set(greenCells(after))
-  const gone = before.filter(k => !now.has(k))
-  check('the Green shrinks by exactly that corner',
-    gone.length === before.length / 4
-    && gone.every(k => greenQuadrant(Number(k.split(',')[0]), Number(k.split(',')[1])) === 'nw'),
-    `${gone.length} of ${before.length}`)
+  // ⚠ THE GREEN NO LONGER SHRINKS, AND THIS ASSERT IS THE INVERSE OF THIS MORNING'S. Canon's
+  // amendment had the middle shrink by exactly the withdrawn corner; Alex overturned it — "the
+  // middle should stay whole regardless" — so what a keeper takes back is their FOLD's membership,
+  // and the middle the folding made stays made.
+  check('the middle does not shrink when a corner comes back',
+    greenCells(after).length === greenCells(FOUR).length && greenCells(FOUR).length > 0)
+  // ⛔ It goes only when there is no cluster left to have a middle.
+  const oneLeft = takeBackCorner(takeBackCorner(takeBackCorner(FOUR, 'nw'), 'sw'), 'se')
+  check('below two keepers there is no middle at all',
+    !isCluster(oneLeft) && greenCells(oneLeft).length === 0)
 }
 
 console.log('⛔ joining: unanimous consent, and no rune, no level, no craft')
