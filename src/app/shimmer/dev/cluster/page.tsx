@@ -112,7 +112,8 @@ export default function ClusterPreview() {
       <p style={{ margin: '0 0 18px', color: '#8892a6', maxWidth: 680 }}>
         One fold with four thresholds, not four folds with doors. Nobody is clipped — every keeper
         keeps their whole island, and the lanes cross the gap so a tier-0 friend is connected from
-        the day the cluster forms. The Green is made of the corners given, so two keepers make half.
+        the day the cluster forms. The middle is whole from the moment the cluster exists, including over
+        a quadrant whose friend has not arrived: that is a place set at the table, not a gap.
       </p>
 
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -154,7 +155,7 @@ export default function ClusterPreview() {
             ))}
 
           <div style={{ color: '#8892a6', marginTop: 2 }}>
-            <div>{given} corner{given === 1 ? '' : 's'} given · the Green is {given}/4</div>
+            <div>{given} corner{given === 1 ? '' : 's'} given · the middle is whole{given < 4 ? ` · ${4 - given} place${given === 3 ? '' : 's'} set and waiting` : ''}</div>
             <div>{isCluster(cfg) ? 'a cluster' : 'one keeper — a plot, not a cluster'}</div>
             <div>reach {Math.round(clusterReach(cfg))} blocks · {per.toFixed(2)} blocks/px · {ms}ms</div>
             {/* ⚠ The honest half: say so when an element is too thin to be in the image. */}
