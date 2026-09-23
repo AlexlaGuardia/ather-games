@@ -47,6 +47,10 @@ export async function loadClusterFrame(mySeed: number, myTier: number, base: Plo
     const j = (await r.json()) as { cluster: ClusterView | null; quarter: QuarterId | null }
     const f = frameFromRecord(j.cluster, j.quarter, mySeed, myTier, base)
     if (!f) return null
+    // Keep the record's copy of MY seed and tier current — it is what my mates' clients generate my
+    // quarter from (`reportFold`: the only facts the ground needs of me). Fire and forget.
+    void fetch('/api/cluster', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'report', seed: mySeed, tier: myTier }) }).catch(() => {})
     const snaps: ClusterFrame['snaps'] = {}
     const p = await fetch('/api/cluster/plot', { cache: 'no-store' }).catch(() => null)
     if (p?.ok) {

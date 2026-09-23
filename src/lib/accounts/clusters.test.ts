@@ -35,6 +35,12 @@ check('★ two keepers: the offer fills', a1.ok && a1.value?.members.length === 
 
 // §4 ★★ EVERYONE'S YES: alex offers cyn; bo has not said yes, so cyn cannot fill it yet.
 check('alex offers cyn', C.offerQuarter(alex, 'cyn', 'nw').ok)
+{
+  const inv = C.invitesFor(cy)
+  check('★ the invitee sees who is in and how many yes are left', inv.length === 1 && inv[0].keepers.join() === 'alex,bo_' && inv[0].waiting === 1, JSON.stringify(inv))
+  check('⛔ and nothing role-shaped', !/leader|owner|founder|head|admin|host|folded/i.test(JSON.stringify(Object.keys(inv[0]))))
+  check('a keeper with no offer sees none', C.invitesFor(ed).length === 0)
+}
 const early = C.answerOffer(cy, cid, 'nw', true, 7, 0)
 check('★★ you cannot give away someone else\'s corner — bo has not said yes', !early.ok && /Waiting on 1/.test(early.ok ? '' : early.error))
 check('bo says yes', C.consentOffer(bo, 'nw').ok)

@@ -75,6 +75,26 @@ export function offersFor(user_id: string): { cluster_id: string; quarter: Quart
 }
 
 /**
+ * Offers waiting on this keeper, with what they need to decide (phase 4, the Gardens menu): who is
+ * already in (names only — the order they came, never who folded it: guard 3) and how many of
+ * them have yet to say yes. ⚠ READ-ONLY to the invitee: they are not a member, so this shows them
+ * the cluster's faces and nothing else — no offers, no seeds, no plots.
+ */
+export function invitesFor(user_id: string): { cluster_id: string; quarter: Quarter; keepers: string[]; waiting: number }[] {
+  const d = accountsDb()
+  return offersFor(user_id).map(o => {
+    const keepers = (d.prepare(`
+      SELECT a.username FROM cluster_members m LEFT JOIN accounts a ON a.user_id = m.user_id
+      WHERE m.cluster_id = ? ORDER BY m.joined_at
+    `).all(o.cluster_id) as { username: string | null }[]).map(r => r.username ?? 'a keeper')
+    const consented = new Set((d.prepare('SELECT member_id FROM cluster_consents WHERE cluster_id = ? AND quarter = ?')
+      .all(o.cluster_id, o.quarter) as { member_id: string }[]).map(r => r.member_id))
+    const waiting = membersOf(o.cluster_id).filter(m => !consented.has(m)).length
+    return { ...o, keepers, waiting }
+  })
+}
+
+/**
  * Fold a cluster: the keeper who reached Enchant, standing in `quarter` with their own plot.
  * A cluster of one is a fold held open — canon: "a cluster starts at two"; the ground shows it
  * only once a second keeper is in (`isCluster`), so this row alone changes nothing on screen.

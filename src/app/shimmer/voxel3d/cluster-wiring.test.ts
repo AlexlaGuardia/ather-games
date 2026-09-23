@@ -40,6 +40,11 @@ ok(!/plotHeight\(x, z, SEED, plotCfg\.current\)/.test(host.slice(host.indexOf('t
     && body.indexOf("if (to !== 'plot') clusterMode.current = null") < body.indexOf('settleUpload()'),
     '★ leaving flushes WHILE still a cluster, then sends the pending picture — never cancels it')
   ok(/void loadClusterFrame\(SEED, plotTier\.current, base\)/.test(host), '/space cluster opens the REAL record first')
+  ok(/if \(to === 'cluster' \|\| to === 'cluster stand'\) return openCluster\(to === 'cluster stand'\)/.test(host), 'the console door goes through openCluster')
+  // ── phase 4: the Gardens menu ──
+  ok(/cluster: \{ seed: SEED, tier: plotTier\.current, enter: \(\) => \{ onSay\(openCluster\(false\)\) \} \}/.test(host),
+    '★ the arch hands the menu MY seed and tier and the real-record walk-in')
+  ok(/<ClusterRows seed=\{g\.cluster\.seed\} tier=\{g\.cluster\.tier\} enter=\{g\.cluster\.enter\}/.test(host), '★ the Gardens menu draws the cluster rows')
 }
 
 if (fails.length) { console.error(`cluster-wiring: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

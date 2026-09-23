@@ -247,6 +247,7 @@ import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
 import { standInCluster, generateFramedColumn, framedMaterialAt, framedHeight, framedIsMine } from '../voxel/cluster-space'
 import { applyMateEdits, type PlotSnapshot } from '../voxel/plot-snapshot'
 import { loadClusterFrame, uploadPlot, scheduleUpload, settleUpload } from './cluster-sync'
+import { ClusterRows } from './cluster-panel'
 import { DEFAULT_CLUSTER, type ClusterConfig, type QuarterId } from '../voxel/cluster'
 import { insideGlade } from '../voxel/glade'
 import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps, socketWay, socketLitBy, socketLabel, socketStandOut, SOCKET_RADIUS } from './court-blueprint'
@@ -484,8 +485,10 @@ export interface OpenWaymark {
  * expanded homeplot should look like"* rather than as a region you travel to.
  */
 export interface OpenGardens {
-  /** Step into Greg's garden (Moonwell). The one row that works today. */
+  /** Step into Greg's garden (Moonwell). */
   toGreg: () => void
+  /** ★ Cluster phase 4: this keeper's own plot facts (for fold / sign up) and the way into their cluster. */
+  cluster?: { seed: number; tier: number; enter: () => void }
 }
 
 export interface OpenStation {
@@ -3346,6 +3349,30 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // mate's last uploaded picture, laid over their quarter at column adoption, read-only. Stand-ins
   // carry none. `snaps` present is also what arms my own plot's upload.
   const clusterMode = useRef<{ mine: QuarterId; cfg: ClusterConfig; snaps?: Partial<Record<QuarterId, PlotSnapshot>> } | null>(null)
+  /**
+   * ★ OPEN THE CLUSTER (phase 3/4): the REAL shared record first — my quarter, my mates at their
+   * reported seed and tier, each mate's uploaded garden over their quarter — and only with no record
+   * the marked stand-ins. `standIns` forces those (the owner's `/space cluster stand`). One function
+   * because two doors reach it: the console and the Gardens menu's "Walk the cluster".
+   */
+  const openCluster = (standIns: boolean): string => {
+    const base = withLitter(DEFAULT_PLOT, litterFrom.current)
+    const openStandIns = () => {
+      clusterMode.current = { mine: 'ne', cfg: standInCluster('ne', SEED, plotTier.current, 1, { ...DEFAULT_CLUSTER, base }) }
+      enterSpaceRef.current?.('plot', undefined, true)
+    }
+    if (standIns) { openStandIns(); return 'your fold opens onto a cluster — three stand-in quarters, the Green between (only your own fold can be changed)' }
+    flushSaves()
+    void loadClusterFrame(SEED, plotTier.current, base).then(f => {
+      if (!f) { openStandIns(); onSay('no cluster on record — three stand-in quarters open around your fold instead'); return }
+      clusterMode.current = f
+      enterSpaceRef.current?.('plot', undefined, true)
+      void uploadPlot(SEED)
+      const mates = Object.keys(f.snaps).length, filled = Object.values(f.cfg.slots).filter(Boolean).length - 1
+      onSay(`your cluster opens — ${filled} mate${filled === 1 ? '' : 's'}, ${mates} garden${mates === 1 ? '' : 's'} on record (theirs are read-only)`)
+    })
+    return 'opening your cluster…'
+  }
   /** Surface y in the plot space, whichever ground it is wearing. null off the ground. */
   const plotSpaceHeight = (x: number, z: number): number | null => {
     const cm = clusterMode.current
@@ -4048,24 +4075,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // their own quarter, their mates' quarters wearing each mate's last uploaded garden, read-only.
         // Only when there is no real one do the stand-ins open, as before. `/space cluster stand`
         // forces the stand-ins either way.
-        if (to === 'cluster' || to === 'cluster stand') {
-          const base = withLitter(DEFAULT_PLOT, litterFrom.current)
-          const standIns = () => {
-            clusterMode.current = { mine: 'ne', cfg: standInCluster('ne', SEED, plotTier.current, 1, { ...DEFAULT_CLUSTER, base }) }
-            enterSpaceRef.current?.('plot', undefined, true)
-          }
-          if (to === 'cluster stand') { standIns(); return 'your fold opens onto a cluster — three stand-in quarters, the Green between (only your own fold can be changed)' }
-          flushSaves()
-          void loadClusterFrame(SEED, plotTier.current, base).then(f => {
-            if (!f) { standIns(); onSay('no cluster on record — three stand-in quarters open around your fold instead'); return }
-            clusterMode.current = f
-            enterSpaceRef.current?.('plot', undefined, true)
-            void uploadPlot(SEED)
-            const mates = Object.keys(f.snaps).length, filled = Object.values(f.cfg.slots).filter(Boolean).length - 1
-            onSay(`your cluster opens — ${filled} mate${filled === 1 ? '' : 's'}, ${mates} garden${mates === 1 ? '' : 's'} on record (theirs are read-only)`)
-          })
-          return 'opening your cluster…'
-        }
+        if (to === 'cluster' || to === 'cluster stand') return openCluster(to === 'cluster stand')
         const want: Space = to === 'plot' ? 'plot' : to === 'wilds' ? 'wilds' : to === 'glade' ? 'glade'
           : space.current === 'plot' ? 'wilds' : 'plot'
         if (want === 'plot' && clusterMode.current) {
@@ -9241,7 +9251,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             // presence (nothing tracks who is in-world) or visiting (loading another keeper's
             // save), so those rows show and say so rather than being hidden — a row you can see
             // and not use is a promise; a row that is absent is a feature nobody knows is coming.
-            onOpenGardens({ toGreg: () => { onSay('stepping through — Moonwell Glade'); enterSpaceRef.current?.('glade') } })
+            onOpenGardens({ toGreg: () => { onSay('stepping through — Moonwell Glade'); enterSpaceRef.current?.('glade') },
+                            cluster: { seed: SEED, tier: plotTier.current, enter: () => { onSay(openCluster(false)) } } })
           } else if (way.to === 'mark') {
             const mark = marks[way.slot]
             if (mark) { onSay(`stepping through to ${mark.name}`); travelTo(null, mark.id) }
@@ -11554,7 +11565,7 @@ const SPECIALITY_NOTE: Record<Exclude<StationDef['accepts'], 'any'>, string> = {
  * `crossingReady()` asks the map instead of holding a `LANDING_BUILT` constant.
  */
 function GardensPanel({ g, onClose }: { g: OpenGardens; onClose: () => void }) {
-  const [friends, setFriends] = useState<{ user_id: string; username: string; accepted?: boolean }[] | null>(null)
+  const [friends, setFriends] = useState<{ user_id: string; username: string; accepted?: boolean; status?: string }[] | null>(null)
   useEffect(() => {
     let live = true
     fetch('/api/friends', { cache: 'no-store' })
@@ -11571,6 +11582,14 @@ function GardensPanel({ g, onClose }: { g: OpenGardens; onClose: () => void }) {
       {friends !== null && friends.length === 0 && <HearthIdle>No keepers yet. Add a friend and their garden stands here.</HearthIdle>}
       {friends?.map(f => <HearthChoice key={f.user_id} disabled label={f.username} meta="away" />)}
       <div className="mt-3 text-[12px] italic" style={{ color: HT.inkFaint }}>visiting another keeper&apos;s garden is not open yet</div>
+      {/* ★ Cluster phase 4: fold, ask a friend in, say yes, sign up, take back your own corner. */}
+      {g.cluster && (
+        <>
+          <div className="mt-4"><HearthLabel>Cluster</HearthLabel></div>
+          <ClusterRows seed={g.cluster.seed} tier={g.cluster.tier} enter={g.cluster.enter} onClose={onClose}
+                       friends={friends?.map(f => ({ user_id: f.user_id, username: f.username, status: f.status ?? 'pending' })) ?? null} />
+        </>
+      )}
     </PanelFrame>
   )
 }
