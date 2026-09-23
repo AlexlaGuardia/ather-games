@@ -207,13 +207,57 @@ export function HearthVitals({ face, vitals }: { face: HudFace; vitals: React.Re
 /** Drop-in for `voxel3d/buff-chips.tsx` `BuffChips`: one chip per running drink, a 1 s beat (a buff
  *  is a wall-clock timer, a per-frame render would cost the world its frames), dimmed when the buff
  *  is not felt here yet, nothing at all when nothing runs. */
+// ── chips: one small readout plate, used everywhere a HUD says a short thing ─────────────────
+// ★ ONE CHIP (2026-09-23). The Ather's buff chips, and the mortal side's companion, wounded and buff
+// chips, were four hand-rolled dark pills that differed in padding, font and tone for no reason.
+// They are this now. `glyph` carries the thing's own colour (a buff's, a wound's); the NAME is ink,
+// in the display face; `value` is the dim tabular readout. An `onClick` makes it a button.
+
+/** "m:ss", rounded UP: a timer that reads 0:00 while the effect is still running is wrong. */
+export const fmtRemain = (ms: number): string => {
+  const s = Math.max(0, Math.ceil(ms / 1000))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+export function HearthChip({ face, glyph, glyphColor, name, nameColor, value, sub, title, onClick, dim = false, maxWidth }: {
+  face: HudFace
+  glyph: React.ReactNode
+  glyphColor?: string
+  name: string
+  /** Override the ink for a name that IS the state (a downed spirit reads rust). */
+  nameColor?: string
+  value?: React.ReactNode
+  /** A second, smaller line under the name (the companion's perk). */
+  sub?: React.ReactNode
+  title?: string
+  onClick?: () => void
+  /** Present but not felt here yet (a buff this world has not wired). */
+  dim?: boolean
+  maxWidth?: number
+}) {
+  const t = HUD_FACES[face]
+  const body = (
+    <div className="flex items-center gap-2 px-2.5 py-0.5 text-[12px] text-left" style={{ ...hearthBody, maxWidth }}>
+      <span className="leading-none" style={{ color: glyphColor }}>{glyph}</span>
+      <span className="flex flex-col min-w-0">
+        <span className="font-semibold whitespace-nowrap" style={{ ...hearthDisplay, color: nameColor ?? t.text }}>{name}</span>
+        {sub && <span className="text-[10px] whitespace-nowrap overflow-hidden text-ellipsis" style={{ color: t.textDim }}>{sub}</span>}
+      </span>
+      {value !== undefined && <span className="tabular-nums whitespace-nowrap" style={{ color: t.textDim }}>{value}</span>}
+    </div>
+  )
+  const plate = <HudPlate face={face} r={999} style={{ opacity: dim ? 0.6 : 1 }}>{body}</HudPlate>
+  return onClick
+    ? <button type="button" onClick={onClick} title={title} className="block transition-transform hover:scale-[1.03] active:scale-[.98]">{plate}</button>
+    : <div title={title}>{plate}</div>
+}
+
 export function HearthBuffChips({ face, buffs, top }: {
   face: HudFace; buffs: React.RefObject<ActiveBuffs>
   /** Compact/phone: hang from the TOP-left at this offset — the bottom-left corner has gone to the
    *  hotbar's lip (and, on a phone, to where a thumb will be). Omitted = the wide bottom-left spot. */
   top?: number
 }) {
-  const t = HUD_FACES[face]
   const [, setBeat] = useState(0)
   useEffect(() => {
     const h = setInterval(() => setBeat(b => b + 1), 1000)
@@ -224,17 +268,9 @@ export function HearthBuffChips({ face, buffs, top }: {
   return (
     <div className={`absolute ${top === undefined ? 'bottom-28 left-4' : 'left-3'} flex flex-col items-start gap-1 pointer-events-none`} style={top === undefined ? undefined : { top }}>
       {live.map(b => {
-        const m = Math.floor(b.remainMs / 60_000), sec = Math.floor((b.remainMs % 60_000) / 1000)
         const felt = WIRED_BUFFS.has(b.id)
-        return (
-          <HudPlate key={b.id} face={face} r={999} style={{ opacity: felt ? 1 : 0.6 }}>
-            <div className="flex items-center gap-2 px-2.5 py-0.5 text-[12px]" style={hearthBody} title={felt ? b.name : `${b.name} — not felt here yet`}>
-              <span style={{ color: b.color }}>{b.glyph}</span>
-              <span className="font-semibold" style={{ ...hearthDisplay, color: t.text }}>{b.name}</span>
-              <span className="tabular-nums" style={{ color: t.textDim }}>{m}:{String(sec).padStart(2, '0')}</span>
-            </div>
-          </HudPlate>
-        )
+        return <HearthChip key={b.id} face={face} glyph={b.glyph} glyphColor={b.color} name={b.name}
+                           value={fmtRemain(b.remainMs)} dim={!felt} title={felt ? b.name : `${b.name} — not felt here yet`} />
       })}
     </div>
   )
@@ -247,8 +283,8 @@ export function HearthBuffChips({ face, buffs, top }: {
  *  with it (they are its numbers, named). */
 export const MINIMAP_BOX: MapBox = { top: 12, right: 12, size: 148, z: 33 }
 export type MapBox = { top: number; right: number; size: number; z: number }
-/** Phone: a 96px window. ⚠ The live canvas is fixed at 148 in `VoxelMap.tsx`; this box is what the
- *  kit frames, so the canvas has to take the same size when the phone layout is wired (hub's). */
+/** Phone: a 96px window. Both minimaps (`VoxelMiniMap`, play3d's `MiniMap`) take their box from
+ *  `hudMapBox`, so the canvas and this frame are one box by construction. */
 export const MINIMAP_BOX_PHONE: MapBox = { top: 10, right: 10, size: 96, z: 33 }
 export function HearthMapFrame({ face, box = MINIMAP_BOX }: { face: HudFace; box?: MapBox }) {
   const t = HUD_FACES[face]

@@ -26,9 +26,10 @@ import { nearestGate } from '../voxel3d/crossing-out'
 // column stays its own. Each piece keeps its own show-rule, which is why the frame, objective and
 // clock are mounted here rather than by the layer.
 import { HearthHudLayer, hudMapBox, hudDoorTop, HUD_BAR_CLEAR } from '../ui/hearth-hud-layer'
-import { HearthMapFrame, HearthObjective, HearthClock, useHudSize } from '../ui/hearth-hud'
+import { HearthMapFrame, HearthObjective, HearthClock, HearthChip, fmtRemain, useHudSize } from '../ui/hearth-hud'
 import type { HudFace } from '../ui/hud-face'
 import { HEARTH_FONT_VARS } from '../ui/hearth-fonts'
+import { H } from '../ui/hearth'
 import { ToolGlyph } from '../hud/hud-corner'
 /** Alex's pick for the always-on HUD (2026-09-23) — the Ather's `HUD_FACE`, same value. */
 const HUD_FACE: HudFace = 'full'
@@ -7285,55 +7286,29 @@ export default function Shimmer3D() {
             const active = owned.find(b => b.id === activeBeastIdRef.current) ?? owned[0]
             const info = PERK_INFO[BEAST_PERKS[active.species]]
             return (
-              <button
-                onClick={() => {
+              <HearthChip face={HUD_FACE} glyph="🐾" name={active.name} maxWidth={200}
+                sub={<>{info.label}{owned.length > 1 ? ` ⟳${owned.length}` : ''}</>}
+                title={`${active.name} — ${info.blurb}${owned.length > 1 ? ' · tap to switch' : ''}`}
+                onClick={owned.length > 1 ? () => {
                   const i = owned.findIndex(b => b.id === activeBeastIdRef.current)
                   activeBeastIdRef.current = owned[(i + 1) % owned.length].id
                   setCompanionTick(t => t + 1); persist()
-                }}
-                title={`${active.name} — ${info.blurb}${owned.length > 1 ? ' · tap to switch' : ''}`}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 7, maxWidth: 200, padding: '5px 9px', borderRadius: 11,
-                  border: '1px solid #d4a84340', background: 'rgba(20,20,14,0.82)', cursor: owned.length > 1 ? 'pointer' : 'default', textAlign: 'left',
-                }}>
-                <span style={{ font: '16px serif', lineHeight: 1 }}>🐾</span>
-                <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                  <span style={{ font: '800 11px ui-monospace, monospace', color: '#e9dfc8', whiteSpace: 'nowrap' }}>{active.name}</span>
-                  <span style={{ font: '600 9px ui-monospace, monospace', color: '#8fd9c4', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {info.label}{owned.length > 1 ? ` ⟳${owned.length}` : ''}
-                  </span>
-                </span>
-              </button>
+                } : undefined} />
             )
           })()}
 
           {/* Wounded spirits — arena damage persists, so this is where you notice you need to brew.
               Absent entirely when the party is whole. */}
           {woundHud.map(w => (
-            <div key={w.name} title={w.downed ? `${w.name} is down — a Shimmer Salve puts it back on its feet` : `${w.name} is hurt — a Shimmer Salve mends it`} style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999,
-              background: 'rgba(20,20,14,0.82)', border: `1px solid ${w.downed ? '#e05a4d' : '#f0a526'}55`,
-            }}>
-              <span style={{ font: '12px serif', lineHeight: 1 }}>{w.downed ? '✖' : '✚'}</span>
-              <span style={{ font: '700 10px ui-monospace, monospace', color: w.downed ? '#e05a4d' : '#f0a526', whiteSpace: 'nowrap' }}>{w.name}</span>
-              <span style={{ font: '600 9px ui-monospace, monospace', color: '#b8ae94', fontVariantNumeric: 'tabular-nums' }}>
-                {w.downed ? 'DOWN' : `${Math.round(w.frac * 100)}%`}
-              </span>
-            </div>
+            <HearthChip key={w.name} face={HUD_FACE} glyph={w.downed ? '✖' : '✚'} glyphColor={w.downed ? H.rust : H.ember}
+              name={w.name} nameColor={w.downed ? H.rust : H.ember} value={w.downed ? 'down' : `${Math.round(w.frac * 100)}%`}
+              title={w.downed ? `${w.name} is down — a Shimmer Salve puts it back on its feet` : `${w.name} is hurt — a Shimmer Salve mends it`} />
           ))}
 
           {/* Active potion buffs — glyph + name + countdown, one chip per live effect */}
           {buffHud.map(b => (
-            <div key={b.id} title={BUFF_DEFS[b.id].line} style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999,
-              background: 'rgba(20,20,14,0.82)', border: `1px solid ${b.color}55`,
-            }}>
-              <span style={{ font: '12px serif', lineHeight: 1 }}>{b.glyph}</span>
-              <span style={{ font: '700 10px ui-monospace, monospace', color: b.color, whiteSpace: 'nowrap' }}>{b.name}</span>
-              <span style={{ font: '600 9px ui-monospace, monospace', color: '#b8ae94', fontVariantNumeric: 'tabular-nums' }}>
-                {(() => { const s = Math.ceil(b.remainMs / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })()}
-              </span>
-            </div>
+            <HearthChip key={b.id} face={HUD_FACE} glyph={b.glyph} glyphColor={b.color} name={b.name}
+              value={fmtRemain(b.remainMs)} title={BUFF_DEFS[b.id].line} />
           ))}
 
 

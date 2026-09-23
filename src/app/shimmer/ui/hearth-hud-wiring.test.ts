@@ -28,6 +28,11 @@ for (const [name, src] of Object.entries(HOSTS)) {
 // The mortal side takes the LOOK, not new readouts: no always-on vitals or buffs through the layer.
 const mortalTag = HOSTS.mortal.slice(HOSTS.mortal.indexOf('<HearthHudLayer '), HOSTS.mortal.indexOf('mapFrame={false} />'))
 ok(mortalTag.length > 0 && !/\bvitals=/.test(mortalTag) && !/\bbuffs=/.test(mortalTag), 'mortal: the layer gets no vitals and no buffs (its combat bars + buff column stay its own)')
+// The mortal column's chips (companion, wounded, buffs) are HearthChips — one chip in the game. The
+// old pills shared one background literal; its return inside the column is the regression.
+const col = HOSTS.mortal.slice(HOSTS.mortal.indexOf('<HearthClock face={HUD_FACE} placed={false}'), HOSTS.mortal.indexOf('{skillsOpen && ('))
+ok(col.length > 0 && col.split('<HearthChip ').length - 1 === 3, 'mortal: companion, wounded and buff rows are HearthChips')
+ok(!col.includes('rgba(20,20,14,0.82)'), 'mortal: and no dark pill came back in the column')
 // Touch controls stand on the bar's clearance, never a fixed number.
 // Bounded to the touch block itself — from the joystick to the fragment that closes the controls.
 const tAt = HOSTS.mortal.indexOf('<TouchJoystick joyRef=')
