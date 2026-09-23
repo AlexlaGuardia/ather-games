@@ -1,0 +1,14 @@
+/* The Carved Hearth — motion and the few things inline styles cannot say. See hearth.tsx. */
+@keyframes hearthOpen { 0% { opacity: 0; transform: translateY(14px) scale(.96) } 60% { opacity: 1; transform: translateY(-3px) scale(1.01) } 100% { transform: none } }
+@keyframes hearthCard { 0% { opacity: 0; transform: translateY(-6px) rotate(-1.4deg) } 100% { opacity: 1; transform: rotate(-0.4deg) } }
+@keyframes hearthTile { 0% { opacity: 0; transform: translateY(6px) } 100% { opacity: 1; transform: none } }
+.hearth-open { animation: hearthOpen 320ms cubic-bezier(.2,.9,.3,1.2) both }
+.hearth-card { animation: hearthCard 220ms cubic-bezier(.2,.9,.3,1.15) both }
+.hearth-tile { animation: hearthTile 240ms ease-out both }
+.hearth-scroll { scrollbar-width: thin; scrollbar-color: rgba(58,39,22,.3) transparent }
+.hearth-scroll::-webkit-scrollbar { width: 8px }
+.hearth-scroll::-webkit-scrollbar-thumb { background: rgba(58,39,22,.3); border-radius: 8px }
+.hearth-root input::placeholder { color: #9a8163 }
+.hearth-root button:focus-visible { outline: 2px solid #c8642a; outline-offset: 2px }
+.hearth-root { -webkit-tap-highlight-color: transparent }
+@media (prefers-reduced-motion: reduce) { .hearth-open, .hearth-card, .hearth-tile { animation: none } }

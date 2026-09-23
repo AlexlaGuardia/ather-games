@@ -12,10 +12,11 @@
 // the real `CraftIcon` art. The tiles and stock are a fixed sample, not a save — this page reads no
 // recipes and changes no game state.
 //
-// The frame is procedural (gradients + an SVG grain), so the look can be judged before any frame
-// art is generated. If B wins, the frame is the one piece worth handing to the art pipeline.
+// ★ B IS BUILT FROM `shimmer/ui/hearth.tsx` — the kit the panels ship with — so this page cannot
+// drift from what the game wears. It was the prototype; now it is the kit's showroom.
 import React, { useEffect, useMemo, useState } from 'react'
-import { CraftGrid, CardButton, CraftIcon, type GridTile } from '../../voxel3d/craft-grid'
+import { CraftGrid, CardButton, type GridTile } from '../../voxel3d/craft-grid'
+import { H, hearthDisplay, hearthBody, HearthFrame, HearthHead, HearthNote, HearthSearch, HearthTabs, HearthCard, HearthCardEmpty, HearthButton, HearthTile, HearthDivider, CostChip, Well } from '../../ui/hearth'
 import { PanelFrame } from '../../voxel3d/panel-frame'
 import { itemLabel } from '../../hud/satchel'
 
@@ -62,59 +63,7 @@ const TILES: GridTile[] = RAW.map(r => ({
   can: r.cost.every(x => have(x.itemId) >= x.count),
 }))
 
-// ── the material ─────────────────────────────────────────────────────────────────────────────
-// One SVG grain, reused by the wood (stretched along the board) and the parchment (fine and square).
-const grain = (fx: number, fy: number, oct: number, alpha: number) =>
-  `url("data:image/svg+xml;utf8,${encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='${fx} ${fy}' numOctaves='${oct}' seed='7'/><feColorMatrix values='0 0 0 0 0.16  0 0 0 0 0.09  0 0 0 0 0.04  0 0 0 ${alpha} 0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>`)}")`
-const WOOD = `${grain(0.006, 0.35, 4, 0.9)}, ${grain(0.02, 0.6, 2, 0.35)}, linear-gradient(180deg, #8a5a32 0%, #6a4222 45%, #50311a 100%)`
-const PAPER = `${grain(0.9, 0.9, 2, 0.10)}, radial-gradient(120% 90% at 50% 0%, #f7eedb 0%, #efe1c3 70%, #e6d3ae 100%)`
-
-const H = {
-  ink: '#3a2716', inkSoft: '#6b5238', inkFaint: '#9a8163',
-  ember: '#c8642a', emberHi: '#e0823f', moss: '#5f7d45', rust: '#a8482f', sky: '#4f7690',
-}
-const display = { fontFamily: 'var(--font-hearth-display), Georgia, serif' }
-const body = { fontFamily: 'var(--font-hearth-body), system-ui, sans-serif' }
-
-function HearthX({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} aria-label="close" title="close (esc)"
-            className="absolute -top-3 -right-3 z-30 w-9 h-9 rounded-full grid place-items-center transition-transform hover:scale-105 active:scale-95"
-            style={{ background: `${grain(0.02, 0.3, 3, 0.5)}, radial-gradient(circle at 35% 30%, #8a5b33, #4a2d18)`,
-                     boxShadow: '0 3px 6px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,220,170,.35), inset 0 -2px 3px rgba(0,0,0,.4)' }}>
-      <svg width="12" height="12" viewBox="0 0 10 10" aria-hidden="true">
-        <path d="M1.8 1.8 L8.2 8.2 M8.2 1.8 L1.8 8.2" stroke="#f1dfbf" strokeWidth="1.7" strokeLinecap="round" fill="none" />
-      </svg>
-    </button>
-  )
-}
-
-function Well({ itemId, size, dim }: { itemId: string; size: number; dim?: boolean }) {
-  return (
-    <span className="grid place-items-center shrink-0 rounded-[10px]"
-          style={{ width: size, height: size,
-                   background: 'radial-gradient(circle at 50% 40%, #e9d7b4, #d6bf95)',
-                   boxShadow: 'inset 0 2px 4px rgba(74,45,24,.45), inset 0 -1px 0 rgba(255,250,235,.7), 0 1px 0 rgba(255,250,235,.6)',
-                   filter: dim ? 'grayscale(.7) opacity(.55)' : undefined }}>
-      <CraftIcon itemId={itemId} size={Math.round(size * 0.7)} />
-    </span>
-  )
-}
-
-function HearthButton({ primary, disabled, children, onClick }: { primary?: boolean; disabled?: boolean; children: React.ReactNode; onClick: () => void }) {
-  const style: React.CSSProperties = disabled
-    ? { background: '#e3d2b1', color: H.inkFaint, boxShadow: 'inset 0 1px 2px rgba(74,45,24,.25)' }
-    : primary
-      ? { background: `linear-gradient(180deg, ${H.emberHi}, ${H.ember})`, color: '#fff7ea', boxShadow: '0 2px 0 #8d4119, 0 3px 6px rgba(74,45,24,.35), inset 0 1px 0 rgba(255,225,190,.6)' }
-      : { background: 'linear-gradient(180deg, #f6ead2, #e7d5b2)', color: H.ink, boxShadow: '0 2px 0 #b99a6c, 0 3px 5px rgba(74,45,24,.2), inset 0 1px 0 #fffaf0' }
-  return (
-    <button disabled={disabled} onClick={onClick}
-            className={`h-9 px-4 rounded-full text-[13px] font-extrabold transition-transform ${disabled ? 'cursor-not-allowed' : 'hover:-translate-y-px active:translate-y-[2px]'}`}
-            style={{ ...body, ...style }}>{children}</button>
-  )
-}
-
+// ── B, built from the kit — the same pieces the panels ship with ─────────────────────────────
 function HearthCrafter({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState(() => TABS.find(t => TILES.some(x => x.tab === t && x.can)) ?? TABS[0])
   const [q, setQ] = useState('')
@@ -128,132 +77,52 @@ function HearthCrafter({ onClose }: { onClose: () => void }) {
   const pick = picked ? TILES.find(t => t.id === picked) ?? null : null
 
   return (
-    <div className="hearth-open relative w-[min(560px,calc(100vw-32px))]">
-      <HearthX onClick={onClose} />
-      {/* the frame: carved boards, a bevel, the parchment set into it */}
-      <div className="rounded-[18px] p-[13px]"
-           style={{ background: WOOD, boxShadow: '0 18px 40px rgba(20,10,4,.55), 0 4px 10px rgba(20,10,4,.4), inset 0 1px 0 rgba(255,210,160,.35), inset 0 -2px 0 rgba(0,0,0,.35)' }}>
-        {/* the title plaque, carved into the top board */}
-        <div className="absolute left-1/2 -translate-x-1/2 -top-4 z-20 px-6 h-9 rounded-full flex items-center gap-2 whitespace-nowrap"
-             style={{ background: `${grain(0.015, 0.3, 3, 0.5)}, linear-gradient(180deg, #8c5d34, #5a371d)`,
-                      boxShadow: '0 4px 8px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,215,170,.4), inset 0 -2px 2px rgba(0,0,0,.35)' }}>
-          <span className="text-[19px] font-semibold tracking-[.01em]" style={{ ...display, color: '#f6e4c2', textShadow: '0 1px 0 rgba(0,0,0,.5)' }}>Crafting</span>
+    <HearthFrame title="Crafting" maxWidth={560} onClose={onClose} backdrop={false}>
+      <HearthHead>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <HearthNote>at the bench <span style={{ color: H.inkFaint }}>·</span> drawing on the bank</HearthNote>
+          <HearthSearch value={q} onChange={setQ} />
         </div>
-        <div className="rounded-[10px] overflow-hidden"
-             style={{ background: PAPER, boxShadow: 'inset 0 2px 6px rgba(58,39,22,.45), inset 0 0 0 1px rgba(58,39,22,.35)' }}>
-          <div className="max-h-[78vh] overflow-y-auto hearth-scroll" style={{ ...body, color: H.ink }}>
-            {/* head: where you are, the tabs, the search — sticky, like the shipped grid */}
-            <div className="sticky top-0 z-10 px-4 pt-6 pb-3" style={{ background: 'linear-gradient(180deg, #f5ebd5 85%, rgba(245,235,213,0))' }}>
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <span className="text-[13px] italic" style={{ ...display, color: H.inkSoft }}>
-                  at the bench <span style={{ color: H.inkFaint }}>·</span> drawing on the bank
-                </span>
-                <label className="flex items-center gap-1.5 h-8 px-3 rounded-full"
-                       style={{ background: '#e8d8b8', boxShadow: 'inset 0 1px 3px rgba(58,39,22,.35)' }}>
-                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="5" cy="5" r="3.6" stroke={H.inkSoft} strokeWidth="1.5" fill="none" /><path d="M7.8 7.8 L11 11" stroke={H.inkSoft} strokeWidth="1.5" strokeLinecap="round" /></svg>
-                  <input value={q} onChange={e => setQ(e.target.value)} placeholder="Find…"
-                         className="w-24 bg-transparent outline-none text-[13px] placeholder:text-[#9a8163]" style={{ color: H.ink }} />
-                </label>
+        <HearthTabs tabs={TABS.map(t => ({ id: t, label: t, count: TILES.filter(x => x.tab === t && x.can).length }))}
+                    active={q ? null : tab} onPick={t => { setTab(t); setQ('') }} />
+        <div className="mt-3" style={{ minHeight: 92 }}>
+          {pick ? (
+            <HearthCard key={pick.id}>
+              <Well itemId={pick.itemId} size={58} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[18px] font-semibold leading-tight" style={hearthDisplay}>{pick.name}</span>
+                  <span className="text-[12px] font-bold tabular-nums" style={{ color: H.ember }}>makes {pick.yields}</span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {pick.cost.map(x => <CostChip key={x.itemId} itemId={x.itemId} label={itemLabel(x.itemId)} have={have(x.itemId)} need={x.count} madeAt={MADE_AT[x.itemId]} />)}
+                </div>
+                {pick.tag && <div className="mt-1 text-[12px] italic" style={{ color: H.sky }}>{pick.tag}</div>}
               </div>
-              <div className="flex items-end gap-1 flex-wrap">
-                {TABS.map(t => {
-                  const on = t === tab && !q
-                  const n = TILES.filter(x => x.tab === t && x.can).length
-                  return (
-                    <button key={t} onClick={() => { setTab(t); setQ('') }}
-                            className="relative px-3 pt-1.5 pb-2 rounded-t-[10px] text-[13px] font-bold transition-all"
-                            style={on
-                              ? { background: '#fbf4e4', color: H.ink, boxShadow: '0 -1px 3px rgba(58,39,22,.18), inset 0 -3px 0 ' + H.ember, transform: 'translateY(0)' }
-                              : { background: 'rgba(214,191,149,.45)', color: H.inkSoft, transform: 'translateY(2px)' }}>
-                      {t}
-                      <span className="ml-1.5 text-[11px] font-semibold tabular-nums" style={{ color: n ? H.moss : H.inkFaint }}>{n}</span>
-                    </button>
-                  )
-                })}
+              <div className="flex flex-col gap-1.5 shrink-0 items-stretch">
+                <HearthButton primary disabled={!pick.can} onClick={() => setMade(m => m + 1)}>Craft</HearthButton>
+                <div className="flex gap-1">
+                  <HearthButton disabled={!pick.can} onClick={() => setMade(m => m + 5)}>×5</HearthButton>
+                  <HearthButton disabled={!pick.can} onClick={() => setMade(m => m + 10)}>×10</HearthButton>
+                </div>
               </div>
-              <div className="h-px -mt-px" style={{ background: 'rgba(58,39,22,.25)' }} />
-
-              {/* the lifted-paper card */}
-              <div className="mt-3" style={{ minHeight: 92 }}>
-                {pick ? (
-                  <div key={pick.id} className="hearth-card rounded-[12px] px-3.5 py-3 flex items-center gap-3"
-                       style={{ background: 'linear-gradient(180deg, #fffaf0, #f6ead2)',
-                                boxShadow: '0 6px 14px rgba(58,39,22,.22), 0 1px 2px rgba(58,39,22,.25)', transform: 'rotate(-0.4deg)' }}>
-                    <Well itemId={pick.itemId} size={58} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-[18px] font-semibold leading-tight" style={display}>{pick.name}</span>
-                        <span className="text-[12px] font-bold tabular-nums" style={{ color: H.ember }}>makes {pick.yields}</span>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {pick.cost.map(x => {
-                          const ok = have(x.itemId) >= x.count
-                          return (
-                            <span key={x.itemId} className="inline-flex items-center gap-1 h-6 pl-0.5 pr-2 rounded-full text-[12px] font-semibold"
-                                  style={{ background: ok ? 'rgba(95,125,69,.14)' : 'rgba(168,72,47,.12)', color: ok ? H.moss : H.rust }}>
-                              <CraftIcon itemId={x.itemId} size={18} />
-                              {itemLabel(x.itemId)}
-                              <span className="tabular-nums">{have(x.itemId)}/{x.count}</span>
-                              {!ok && MADE_AT[x.itemId] && <span className="font-medium" style={{ color: H.sky }}>· {MADE_AT[x.itemId]}</span>}
-                            </span>
-                          )
-                        })}
-                      </div>
-                      {pick.tag && <div className="mt-1 text-[12px] italic" style={{ color: H.sky }}>{pick.tag}</div>}
-                    </div>
-                    <div className="flex flex-col gap-1.5 shrink-0 items-stretch">
-                      <HearthButton primary disabled={!pick.can} onClick={() => setMade(m => m + 1)}>Craft</HearthButton>
-                      <div className="flex gap-1">
-                        <HearthButton disabled={!pick.can} onClick={() => setMade(m => m + 5)}>×5</HearthButton>
-                        <HearthButton disabled={!pick.can} onClick={() => setMade(m => m + 10)}>×10</HearthButton>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-[12px] px-4 flex items-center gap-3 text-[13px] italic"
-                       style={{ minHeight: 92, border: '1.5px dashed rgba(58,39,22,.25)', color: H.inkFaint }}>
-                    <span className="w-[58px] h-[58px] rounded-[10px] shrink-0" style={{ boxShadow: 'inset 0 2px 4px rgba(74,45,24,.25)' }} />
-                    Pick something to see what it takes.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* the grid of carved wells */}
-            <div className="px-4 pb-5 grid grid-cols-4 sm:grid-cols-5 gap-x-2 gap-y-3">
-              {shown.map((t, i) => {
-                const on = t.id === picked
-                const seam = i > 0 && !t.can && shown[i - 1].can
-                return (<React.Fragment key={t.id}>
-                  {seam && (
-                    <div className="col-span-full flex items-center gap-2 mt-1 text-[12px] italic" style={{ ...display, color: H.inkFaint }}>
-                      <span className="flex-1 h-px" style={{ background: 'rgba(58,39,22,.2)' }} />
-                      needs materials
-                      <span className="flex-1 h-px" style={{ background: 'rgba(58,39,22,.2)' }} />
-                    </div>
-                  )}
-                  <button onClick={() => setPicked(on ? null : t.id)} title={t.name}
-                          className="hearth-tile group relative flex flex-col items-center gap-1 pt-1.5 pb-1 rounded-[12px] transition-all"
-                          style={{ animationDelay: `${Math.min(i, 14) * 18}ms`,
-                                   background: on ? 'rgba(200,100,42,.13)' : 'transparent',
-                                   boxShadow: on ? `inset 0 0 0 2px ${H.ember}` : undefined }}>
-                    <span className="transition-transform group-hover:-translate-y-0.5"><Well itemId={t.itemId} size={62} dim={!t.can} /></span>
-                    <span className="text-[12px] leading-[14px] text-center line-clamp-2 px-0.5 font-semibold"
-                          style={{ color: t.can ? H.ink : H.inkFaint }}>{t.name}</span>
-                    {have(t.itemId) > 0 && (
-                      <span className="absolute top-0.5 right-1.5 min-w-5 h-5 px-1 rounded-full text-[11px] font-extrabold grid place-items-center tabular-nums"
-                            style={{ background: '#fbf4e4', color: H.inkSoft, boxShadow: '0 1px 2px rgba(58,39,22,.35)' }}>{have(t.itemId)}</span>
-                    )}
-                  </button>
-                </React.Fragment>)
-              })}
-              {shown.length === 0 && <div className="col-span-full py-6 text-center italic" style={{ color: H.inkFaint }}>Nothing here{q ? ` for “${q}”` : ''}.</div>}
-            </div>
-          </div>
+            </HearthCard>
+          ) : <HearthCardEmpty>Pick something to see what it takes.</HearthCardEmpty>}
         </div>
+      </HearthHead>
+      <div className="px-4 pb-5 grid grid-cols-4 sm:grid-cols-5 gap-x-2 gap-y-3">
+        {shown.map((t, i) => {
+          const seam = i > 0 && !t.can && shown[i - 1].can
+          return (<React.Fragment key={t.id}>
+            {seam && <HearthDivider>needs materials</HearthDivider>}
+            <HearthTile itemId={t.itemId} name={t.name} count={have(t.itemId)} can={t.can} index={i}
+                        picked={t.id === picked} onClick={() => setPicked(t.id === picked ? null : t.id)} />
+          </React.Fragment>)
+        })}
+        {shown.length === 0 && <div className="col-span-full py-6 text-center italic" style={{ color: H.inkFaint }}>Nothing here{q ? ` for “${q}”` : ''}.</div>}
       </div>
-      {made > 0 && <div className="absolute -bottom-9 left-1/2 -translate-x-1/2 text-[12px] text-white/70" style={body}>mock: {made} crafted (no state touched)</div>}
-    </div>
+      {made > 0 && <div className="px-4 pb-3 text-[12px] italic" style={{ color: H.inkFaint }}>mock: {made} crafted (no state touched)</div>}
+    </HearthFrame>
   )
 }
 
@@ -302,19 +171,9 @@ export default function HearthMock() {
 
   return (
     <main className="fixed inset-0 overflow-hidden select-none" style={{ background: SCENES[scene] }}>
-      <style>{`
-        @keyframes hearthOpen { 0% { opacity: 0; transform: translateY(14px) scale(.96) } 60% { opacity: 1; transform: translateY(-3px) scale(1.01) } 100% { transform: none } }
-        @keyframes hearthCard { 0% { opacity: 0; transform: translateY(-6px) rotate(-1.4deg) } 100% { opacity: 1; transform: rotate(-0.4deg) } }
-        @keyframes hearthTile { 0% { opacity: 0; transform: translateY(6px) } 100% { opacity: 1; transform: none } }
-        .hearth-open { animation: hearthOpen 320ms cubic-bezier(.2,.9,.3,1.2) both }
-        .hearth-card { animation: hearthCard 220ms cubic-bezier(.2,.9,.3,1.15) both }
-        .hearth-tile { animation: hearthTile 240ms ease-out both }
-        .hearth-scroll::-webkit-scrollbar { width: 8px } .hearth-scroll::-webkit-scrollbar-thumb { background: rgba(58,39,22,.3); border-radius: 8px }
-        @media (prefers-reduced-motion: reduce) { .hearth-open, .hearth-card, .hearth-tile { animation: none } }
-      `}</style>
       <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(120% 90% at 50% 45%, transparent 40%, rgba(0,0,0,.35) 100%)' }} />
 
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex flex-wrap justify-center gap-1.5 px-4" style={body}>
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex flex-wrap justify-center gap-1.5 px-4" style={hearthBody}>
         <button className={pill(skin === 'hearth')} onClick={() => setSkin('hearth')}>B · Carved Hearth</button>
         <button className={pill(skin === 'now')} onClick={() => setSkin('now')}>Now (shipped)</button>
         <span className="w-2" />
@@ -330,7 +189,7 @@ export default function HearthMock() {
           <div className="absolute inset-0 pt-10"><NowCrafter onClose={() => setOpen(false)} /></div>
         )
       ) : (
-        <button onClick={() => setOpen(true)} className="absolute bottom-8 left-1/2 -translate-x-1/2 px-5 h-10 rounded-full bg-black/50 text-white/85 text-sm" style={body}>
+        <button onClick={() => setOpen(true)} className="absolute bottom-8 left-1/2 -translate-x-1/2 px-5 h-10 rounded-full bg-black/50 text-white/85 text-sm" style={hearthBody}>
           open the crafter (C)
         </button>
       )}
