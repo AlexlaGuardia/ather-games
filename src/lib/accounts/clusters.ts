@@ -172,6 +172,8 @@ export function takeBackCorner(user_id: string): Result {
   if (!me) return fail('You do not stand in a cluster')
   const d = accountsDb()
   d.prepare('DELETE FROM cluster_members WHERE user_id = ?').run(user_id)
+  // The picture of your garden leaves with you: nobody who stays can look at it any more.
+  d.prepare('DELETE FROM cluster_plots WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_consents WHERE cluster_id = ? AND member_id = ?').run(me.cluster_id, user_id)
   d.prepare('DELETE FROM cluster_offers WHERE cluster_id = ? AND proposed_by = ?').run(me.cluster_id, user_id)
   if (membersOf(me.cluster_id).length === 0) {
@@ -180,4 +182,43 @@ export function takeBackCorner(user_id: string): Result {
     d.prepare('DELETE FROM clusters WHERE cluster_id = ?').run(me.cluster_id)
   }
   return { ok: true, value: true }
+}
+
+// ── Plot snapshots (phase 3): what a mate's quarter shows you ──────────────────────────────────
+// Offline first (Alex, 09-23): each keeper's browser is the only place their garden is written.
+// A snapshot is the last picture of it their own client uploaded, and it exists for exactly one
+// reader — the other members of the cluster they stand in. So:
+//   · only a CURRENT member can put one (a keeper outside a cluster uploads nothing, anywhere);
+//   · only their CURRENT cluster-mates get it back — a keeper who took back their corner, or was
+//     never in, reads nothing, and the owner's own row is not returned to them as a "mate";
+//   · it goes with the corner (`takeBackCorner`) and with the account (`deleteAccount`).
+// The store is opaque text here; what a snapshot IS, and checking it, is `shimmer/voxel/plot-snapshot.ts`.
+
+/** Which quarter this keeper stands in, or null. The client needs it to frame the cluster. */
+export function myQuarter(user_id: string): Quarter | null {
+  return memberRow(user_id)?.quarter ?? null
+}
+
+/** Store the keeper's own snapshot. Refused outside a cluster. */
+export function putPlotSnapshot(user_id: string, data: string): Result {
+  if (!memberRow(user_id)) return fail('You do not stand in a cluster')
+  accountsDb().prepare(
+    'INSERT INTO cluster_plots (user_id, data, updated_at) VALUES (?, ?, ?) ' +
+    'ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
+  ).run(user_id, data, Date.now())
+  return { ok: true, value: true }
+}
+
+/** Every OTHER member's snapshot, by quarter. Empty outside a cluster. */
+export function matePlotSnapshots(user_id: string): Partial<Record<Quarter, { data: string; updated_at: number }>> {
+  const me = memberRow(user_id)
+  if (!me) return {}
+  const rows = accountsDb().prepare(`
+    SELECT m.quarter, p.data, p.updated_at FROM cluster_members m
+    JOIN cluster_plots p ON p.user_id = m.user_id
+    WHERE m.cluster_id = ? AND m.user_id != ?
+  `).all(me.cluster_id, user_id) as { quarter: Quarter; data: string; updated_at: number }[]
+  const out: Partial<Record<Quarter, { data: string; updated_at: number }>> = {}
+  for (const r of rows) out[r.quarter] = { data: r.data, updated_at: r.updated_at }
+  return out
 }

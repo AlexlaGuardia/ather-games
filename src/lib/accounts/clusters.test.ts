@@ -3,7 +3,7 @@
 import { unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { _openAt, upsertGoogleAccount, claimUsername, addFriend, acceptFriend, deleteAccount } from './db'
+import { _openAt, accountsDb, upsertGoogleAccount, claimUsername, addFriend, acceptFriend, deleteAccount } from './db'
 import * as C from './clusters'
 
 let failures = 0
@@ -68,6 +68,29 @@ check('★ erasure takes back the corner', C.getCluster(alex)!.members.length ==
 C.takeBackCorner(alex)
 check('a cluster with nobody in it is nothing', C.getCluster(alex) === null)
 check('and a fresh fold is possible again', C.foldCluster(alex, 'se', true, 1, 0).ok)
+
+// §9 ★ PLOT SNAPSHOTS: members only in, cluster-mates only out, and they leave with the corner.
+{
+  const sid = C.getCluster(alex)!.cluster_id
+  check('★ a keeper outside a cluster uploads nothing', !C.putPlotSnapshot(ed, '{"v":1}').ok)
+  check('alex (in) can', C.putPlotSnapshot(alex, '{"a":1}').ok)
+  check('your own picture is not handed back to you as a mate', Object.keys(C.matePlotSnapshots(alex)).length === 0)
+  check('bo is offered nw', C.offerQuarter(alex, 'bo_', 'nw').ok)
+  check('bo joins', C.answerOffer(bo, sid, 'nw', true, 42, 1).ok)
+  check('myQuarter', C.myQuarter(bo) === 'nw' && C.myQuarter(ed) === null)
+  C.putPlotSnapshot(bo, '{"b":1}')
+  check('★ alex sees bo\'s garden, in bo\'s quarter', C.matePlotSnapshots(alex).nw?.data === '{"b":1}')
+  check('★ bo sees alex\'s', C.matePlotSnapshots(bo).se?.data === '{"a":1}')
+  check('an overwrite replaces', C.putPlotSnapshot(bo, '{"b":2}').ok && C.matePlotSnapshots(alex).nw?.data === '{"b":2}')
+  check('★★ a stranger reads nothing', Object.keys(C.matePlotSnapshots(ed)).length === 0)
+  C.takeBackCorner(bo)
+  check('★★ taking back your corner takes your garden with you', !C.matePlotSnapshots(alex).nw)
+  check('and a former member reads nothing', Object.keys(C.matePlotSnapshots(bo)).length === 0)
+  const rows = () => (accountsDb().prepare('SELECT COUNT(*) AS n FROM cluster_plots').get() as { n: number }).n
+  check('bo\'s row is gone from the store', rows() === 1)
+  deleteAccount(alex)
+  check('★ erasure takes the picture too', rows() === 0)
+}
 
 try { unlinkSync(path) } catch { /* */ }
 console.log(failures ? `❌ clusters: ${failures} failed` : '✅ clusters: all passed')

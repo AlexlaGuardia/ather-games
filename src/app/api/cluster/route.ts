@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { readSessionToken, SESSION_COOKIE } from '@/lib/accounts/session'
 import {
   getCluster, offersFor, foldCluster, offerQuarter, consentOffer, withdrawOffer, answerOffer, reportFold,
-  takeBackCorner, isQuarter,
+  takeBackCorner, isQuarter, myQuarter,
 } from '@/lib/accounts/clusters'
 
 // Garden clusters — the shared record (lib/accounts/clusters.ts carries canon's four guards).
@@ -19,8 +19,9 @@ const int = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) | 0 : 0)
 
 export function GET(req: NextRequest) {
   const user_id = me(req)
-  if (!user_id) return NextResponse.json({ cluster: null, offers: [] }, noStore)
-  return NextResponse.json({ cluster: getCluster(user_id), offers: offersFor(user_id) }, noStore)
+  if (!user_id) return NextResponse.json({ cluster: null, offers: [], quarter: null }, noStore)
+  // `quarter` = where the ASKER stands, so their client can frame the cluster around their own fold.
+  return NextResponse.json({ cluster: getCluster(user_id), offers: offersFor(user_id), quarter: myQuarter(user_id) }, noStore)
 }
 
 export async function POST(req: NextRequest) {

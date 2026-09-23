@@ -489,6 +489,37 @@ export async function countMaterial(seed: number, space: Space, mat: number): Pr
 }
 
 /**
+ * Every plot column this keeper has edited, as `{ px, pz, edits }` — the source of a cluster plot
+ * snapshot (`voxel/plot-snapshot.ts`, phase 3). BLOCK EDITS ONLY: pieces, chests, racks and jobs are
+ * the keeper's own and never leave the browser. Scoped by `ownsColumnIn`, so it can only ever read
+ * the signed-in keeper's own garden. Exact only when nothing is dirty — flush first.
+ */
+export async function plotColumnEdits(seed: number): Promise<{ px: number; pz: number; edits: PackedEdits }[]> {
+  const mine = ownsColumnIn(seed, 'plot')
+  const mark = `${seedPrefix(seed)}plot:`
+  try {
+    const db = await open()
+    return await new Promise((res) => {
+      const out: { px: number; pz: number; edits: PackedEdits }[] = []
+      const tx = db.transaction(STORE, 'readonly')
+      const req = tx.objectStore(STORE).openCursor()
+      req.onsuccess = () => {
+        const cur = req.result
+        if (!cur) { res(out); return }
+        const k = String(cur.key)
+        const e = (cur.value as ColumnSave | undefined)?.edits
+        if (mine(k) && e?.idx?.length) {
+          const [px, pz] = k.slice(mark.length).split(',').map(Number)
+          if (Number.isInteger(px) && Number.isInteger(pz)) out.push({ px, pz, edits: e })
+        }
+        cur.continue()
+      }
+      req.onerror = () => res(out)
+    })
+  } catch { return [] }
+}
+
+/**
  * How many columns hold edits. Cheap, and worth surfacing: it is the size of what you have built.
  *
  * ⚠ COLUMNS, so the comma is load-bearing — the keeper's own `player` record and the adoption claim

@@ -120,6 +120,15 @@ const SCHEMA = `
       member_id  TEXT NOT NULL,
       PRIMARY KEY (cluster_id, quarter, member_id)
     );
+    -- A member's plot, as the last picture their own client uploaded (cluster phase 3). One-way:
+    -- the keeper's browser is the only place the garden is written; this is what their mates see,
+    -- read-only. Only a CURRENT member can write one, only their cluster-mates can read it, and it
+    -- goes with the corner (takeBackCorner) and with the account.
+    CREATE TABLE IF NOT EXISTS cluster_plots (
+      user_id    TEXT PRIMARY KEY,
+      data       TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
 `
 
 /** Our own stable id — deliberately NOT the google sub, so a provider can change later. */
@@ -317,6 +326,7 @@ export function deleteAccount(user_id: string): boolean {
   d.prepare('DELETE FROM cluster_members WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_offers WHERE invitee_id = ? OR proposed_by = ?').run(user_id, user_id)
   d.prepare('DELETE FROM cluster_consents WHERE member_id = ?').run(user_id)
+  d.prepare('DELETE FROM cluster_plots WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
   return Number(res.changes) > 0
