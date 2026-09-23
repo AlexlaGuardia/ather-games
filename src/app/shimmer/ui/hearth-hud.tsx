@@ -25,14 +25,37 @@
 // ⚠ NOTHING HERE MOUNTS ITSELF. Every piece takes `face` explicitly; `readHudFace()` (hud-flag.ts) is
 // how a host decides, and it is null (= the shipped HUD) unless a keeper asks with `?hud=`.
 import React, { useEffect, useRef, useState } from 'react'
-import { hearthDisplay, hearthBody } from './hearth'
+import { H, hearthDisplay, hearthBody } from './hearth'
 import { HUD_FACES, type HudFace } from './hud-face'
+import { hudSizeFor, type HudSize } from './hud-flag'
 import { ItemChip } from '../hud/satchel'
 import { HOTBAR_SLOTS, type HotbarEntry } from '../hud/hotbar'
 import type { Vitals } from '../engine/vitals'
 import { activeBuffList, type ActiveBuffs } from '../engine/potion-effects'
 import { WIRED_BUFFS } from '../voxel3d/consume'
 import { dayProgress, getPhase, getDisplayTime, isTimePinned } from '../engine/day-cycle'
+import { manaFraction } from '../hud/mana-gauge'
+
+// ── sizes ────────────────────────────────────────────────────────────────────────────────────
+/** The HUD size for the live window (see hud-flag.ts § THE HUD SIZES). A host hook; pieces take the
+ *  result as a PROP so a preview can show a phone inside a desktop window. 'wide' before mount, which
+ *  is also what the server renders — the first client frame then corrects it. */
+export function useHudSize(): HudSize {
+  const [size, setSize] = useState<HudSize>('wide')
+  useEffect(() => {
+    const on = () => setSize(hudSizeFor(window.innerWidth))
+    on(); addEventListener('resize', on)
+    return () => removeEventListener('resize', on)
+  }, [])
+  return size
+}
+/** Per size: the well, its icon, and the gap between wells. Phone's 40 is the widest that fits 8
+ *  across a 390px screen with the tray's own padding and a 7px gutter each side. */
+export const WELL: Record<HudSize, { px: number; icon: number; gap: number }> = {
+  wide: { px: 52, icon: 32, gap: 6 },
+  compact: { px: 44, icon: 28, gap: 5 },
+  phone: { px: 40, icon: 24, gap: 4 },
+}
 
 // ── the plate ────────────────────────────────────────────────────────────────────────────────
 /** A readout's ground: the face's rim round the face's plate. Text never sits raw on the scene. */
@@ -53,8 +76,12 @@ export function HudPlate({ face, r = 14, children, style, className = '' }: {
 // ── bottom-centre: the hotbar ────────────────────────────────────────────────────────────────
 /** Drop-in for `hud/hotbar.tsx` `Hotbar` — its contract, unchanged: 8 FIXED slots, items only,
  *  empty slots still drawn, `dimmed` fades rather than hides, `onSelect` makes slots buttons. */
-export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect }: {
+export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size = 'wide', lip }: {
   face: HudFace
+  /** Chosen by the host (`useHudSize`), not by a media query — see hud-flag.ts. */
+  size?: HudSize
+  /** A strip laid along the tray's top edge (compact/phone: the vitals, see `HearthLip`). */
+  lip?: React.ReactNode
   entries: readonly (HotbarEntry | null)[]
   sel: number
   held: { text: string; out: boolean } | null
@@ -62,21 +89,24 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect }: {
   onSelect?: (i: number) => void
 }) {
   const t = HUD_FACES[face]
+  const w = WELL[size]
+  const trayPad = size === 'phone' ? Math.min(t.trayPad, 5) : t.trayPad
   // ⚠ CHIPS AFTER MOUNT. `ItemChip` draws its icon from a canvas the server does not have, so on a
   // server-rendered page the first render is a hydration mismatch (seen in the kit's first preview).
   // The world is client-only and never hit it; the kit must not depend on that. Wells draw at once.
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   return (
-    <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center ${onSelect ? '' : 'pointer-events-none'} transition-opacity ${dimmed ? 'opacity-35' : 'opacity-100'}`}>
+    <div className={`absolute ${size === 'phone' ? 'bottom-2' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center ${onSelect ? '' : 'pointer-events-none'} transition-opacity ${dimmed ? 'opacity-35' : 'opacity-100'}`}>
       {/* Always mounted, opacity only — the row must never shift when the name fades. */}
       <div className={`mb-1.5 h-5 text-center text-[14px] font-semibold transition-opacity duration-500 ${held && !held.out ? 'opacity-100' : 'opacity-0'}`}
            style={{ ...hearthDisplay, color: t.heldColor, textShadow: '0 1px 3px rgba(0,0,0,.9)' }}>
         {held?.text ?? ''}
       </div>
-      <div style={{ background: t.rim, borderRadius: 18, padding: t.trayPad, boxShadow: t.plateShadow }}>
+      <div style={{ background: t.rim, borderRadius: size === 'phone' ? 14 : 18, padding: trayPad, boxShadow: t.plateShadow }}>
+        {lip && <div style={{ marginBottom: trayPad }}>{lip}</div>}
         {/* `relative` so a tool arc can still anchor with `left-full`, as on the live bar. */}
-        <div className="relative inline-flex items-end gap-1.5 p-1.5 max-[520px]:gap-1 max-[520px]:p-1" style={{ background: t.tray, borderRadius: 14 }}>
+        <div className="relative inline-flex items-end" style={{ background: t.tray, borderRadius: 14, gap: w.gap, padding: size === 'phone' ? 3 : 6 }}>
           {Array.from({ length: HOTBAR_SLOTS }, (_, i) => {
             const e = entries[i] ?? null
             const selected = i === sel && !dimmed
@@ -86,7 +116,7 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect }: {
             }
             const body = (
               <>
-                {e && mounted && <ItemChip itemId={e.itemId} size={32} />}
+                {e && mounted && <ItemChip itemId={e.itemId} size={w.icon} />}
                 {e && (
                   <span className="absolute bottom-0.5 right-1.5 text-[11px] font-extrabold tabular-nums"
                         style={{ ...hearthBody, color: t.count, textShadow: t.countShadow }}>{e.count}</span>
@@ -94,7 +124,8 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect }: {
                 <span className="absolute top-0.5 left-1.5 text-[10px] font-bold" style={{ ...hearthBody, color: t.wellKey }}>{i + 1}</span>
               </>
             )
-            const cls = 'relative w-[52px] h-[52px] max-[520px]:w-10 max-[520px]:h-10 rounded-[11px] grid place-items-center transition-transform'
+            const cls = 'relative rounded-[11px] grid place-items-center transition-transform'
+            style.width = w.px; style.height = w.px
             return onSelect
               ? <button key={i} type="button" onClick={() => onSelect(i)} className={cls} style={style} aria-label={`slot ${i + 1}`}>{body}</button>
               : <div key={i} className={cls} style={style}>{body}</div>
@@ -108,10 +139,14 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect }: {
 // ── top-centre: the objective ────────────────────────────────────────────────────────────────
 /** Drop-in for `hud/objective-chip.tsx`. Dim label, bright value — "next" in the display face's
  *  italic, the value in the act-here colour. */
-export function HearthObjective({ face, value }: { face: HudFace; value: string }) {
+export function HearthObjective({ face, value, anchor = 'center', style }: {
+  face: HudFace; value: string
+  /** 'left' on a phone: the top-centre slot is under a 96px minimap there. `style` places it. */
+  anchor?: 'center' | 'left'; style?: React.CSSProperties
+}) {
   const t = HUD_FACES[face]
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-none">
+    <div className={`absolute pointer-events-none ${anchor === 'center' ? 'top-3 left-1/2 -translate-x-1/2' : 'top-3 left-3'}`} style={style}>
       <HudPlate face={face} r={999} style={face === 'full' ? { padding: 4 } : undefined}>
         <div className="px-4 py-1.5 text-[13px] flex items-baseline gap-2 whitespace-nowrap" style={hearthBody}>
           <span className="italic" style={{ ...hearthDisplay, color: t.textDim }}>next</span>
@@ -172,7 +207,12 @@ export function HearthVitals({ face, vitals }: { face: HudFace; vitals: React.Re
 /** Drop-in for `voxel3d/buff-chips.tsx` `BuffChips`: one chip per running drink, a 1 s beat (a buff
  *  is a wall-clock timer, a per-frame render would cost the world its frames), dimmed when the buff
  *  is not felt here yet, nothing at all when nothing runs. */
-export function HearthBuffChips({ face, buffs }: { face: HudFace; buffs: React.RefObject<ActiveBuffs> }) {
+export function HearthBuffChips({ face, buffs, top }: {
+  face: HudFace; buffs: React.RefObject<ActiveBuffs>
+  /** Compact/phone: hang from the TOP-left at this offset — the bottom-left corner has gone to the
+   *  hotbar's lip (and, on a phone, to where a thumb will be). Omitted = the wide bottom-left spot. */
+  top?: number
+}) {
   const t = HUD_FACES[face]
   const [, setBeat] = useState(0)
   useEffect(() => {
@@ -182,7 +222,7 @@ export function HearthBuffChips({ face, buffs }: { face: HudFace; buffs: React.R
   const live = activeBuffList(buffs.current ?? {}, Date.now())
   if (!live.length) return null
   return (
-    <div className="absolute bottom-28 left-4 flex flex-col items-start gap-1 pointer-events-none">
+    <div className={`absolute ${top === undefined ? 'bottom-28 left-4' : 'left-3'} flex flex-col items-start gap-1 pointer-events-none`} style={top === undefined ? undefined : { top }}>
       {live.map(b => {
         const m = Math.floor(b.remainMs / 60_000), sec = Math.floor((b.remainMs % 60_000) / 1000)
         const felt = WIRED_BUFFS.has(b.id)
@@ -205,14 +245,18 @@ export function HearthBuffChips({ face, buffs }: { face: HudFace; buffs: React.R
  *  lays a ring over exactly that box, pointer-through, one z above it — so the map stays the map,
  *  owns its own click, and VoxelMap is not touched. If the canvas ever moves, these four numbers move
  *  with it (they are its numbers, named). */
-export const MINIMAP_BOX = { top: 12, right: 12, size: 148, z: 33 } as const
-export function HearthMapFrame({ face }: { face: HudFace }) {
+export const MINIMAP_BOX: MapBox = { top: 12, right: 12, size: 148, z: 33 }
+export type MapBox = { top: number; right: number; size: number; z: number }
+/** Phone: a 96px window. ⚠ The live canvas is fixed at 148 in `VoxelMap.tsx`; this box is what the
+ *  kit frames, so the canvas has to take the same size when the phone layout is wired (hub's). */
+export const MINIMAP_BOX_PHONE: MapBox = { top: 10, right: 10, size: 96, z: 33 }
+export function HearthMapFrame({ face, box = MINIMAP_BOX }: { face: HudFace; box?: MapBox }) {
   const t = HUD_FACES[face]
   const pad = face === 'full' ? 3 : 2
   return (
     <div aria-hidden className="pointer-events-none" style={{
-      position: 'fixed', top: MINIMAP_BOX.top - pad, right: MINIMAP_BOX.right - pad,
-      width: MINIMAP_BOX.size + pad * 2, height: MINIMAP_BOX.size + pad * 2, zIndex: MINIMAP_BOX.z + 1,
+      position: 'fixed', top: box.top - pad, right: box.right - pad,
+      width: box.size + pad * 2, height: box.size + pad * 2, zIndex: box.z + 1,
       borderRadius: 14, boxShadow: `${t.ring}, ${t.ringShadow}`,
     }} />
   )
@@ -221,7 +265,7 @@ export function HearthMapFrame({ face }: { face: HudFace }) {
 /** Drop-in for `hud/clock.tsx` `Clock` — the same `engine/day-cycle` readings (✦ at night: the
  *  Ather has no moon), as a pill that hangs under the minimap frame. `placed={false}` renders in
  *  flow, as the live clock allows, for a host that stacks it. */
-export function HearthClock({ face, note, placed = true }: { face: HudFace; note?: React.ReactNode; placed?: boolean }) {
+export function HearthClock({ face, note, placed = true, box = MINIMAP_BOX }: { face: HudFace; note?: React.ReactNode; placed?: boolean; box?: MapBox }) {
   const t = HUD_FACES[face]
   // ⚠ NULL UNTIL MOUNTED, unlike the live clock's `useState(() => dayProgress())`. The live one is
   // only ever mounted client-side, inside the world; this kit also mounts on server-rendered pages
@@ -237,10 +281,12 @@ export function HearthClock({ face, note, placed = true }: { face: HudFace; note
   const phase = getPhase(now)
   const glyph = phase === 'night' ? '✦' : phase === 'day' ? '☀' : phase === 'dawn' ? '🌅' : '🌇'
   const pos: React.CSSProperties = placed
-    ? { position: 'fixed', top: MINIMAP_BOX.top + MINIMAP_BOX.size + 8, right: MINIMAP_BOX.right, width: MINIMAP_BOX.size, zIndex: MINIMAP_BOX.z + 1 }
+    ? { position: 'fixed', top: box.top + box.size + 8, right: box.right, width: box.size, zIndex: box.z + 1 }
     : {}
   return (
-    <div className="flex flex-col items-center pointer-events-none" style={pos}>
+    // A pill wider than a small map (the phone's 96) would hang past the screen edge if centred on
+    // it; right-aligned to the map it stays on screen at any width.
+    <div className={`flex flex-col ${box.size < 120 ? 'items-end' : 'items-center'} pointer-events-none`} style={pos}>
       <HudPlate face={face} r={999} style={face === 'full' ? { padding: 3 } : undefined}>
         <div className="px-3 py-0.5 text-[12px] font-semibold whitespace-nowrap tabular-nums" style={{ ...hearthDisplay }}>
           <span className="mr-1.5">{glyph}</span>{getDisplayTime(now)} · {phase}
@@ -272,4 +318,97 @@ export function hearthSocket(face: HudFace, active: boolean): React.CSSPropertie
     background: t.well,
     boxShadow: active ? t.wellSelShadow : `${t.ring}, ${t.ringShadow}`,
   }
+}
+
+// ── compact + phone: the lip ─────────────────────────────────────────────────────────────────
+// ★ WHY THE VITALS RIDE THE BAR ON A NARROW SCREEN. The wide layout puts health in its own column
+// bottom-left, which is ~225px the bottom row does not have under 1000. On the tray's top edge it
+// costs no width at all and sits where the eye already is while playing (the hearts-over-the-hotbar
+// placement every block game converged on). Same honesty rules as `HearthVitals`: one bar, both
+// fills against hpMax, the shield OVER the health; refs polled at 10 Hz and written to the DOM.
+
+/** One thin lip bar. `fill` is set by the poller through the returned ref. */
+function LipBar({ face, fillRef, overRef, txtRef, color, glyph }: {
+  face: HudFace; color: string; glyph: string
+  fillRef: React.RefObject<HTMLDivElement | null>
+  overRef?: React.RefObject<HTMLDivElement | null>
+  txtRef: React.RefObject<HTMLSpanElement | null>
+}) {
+  const t = HUD_FACES[face]
+  return (
+    <div className="flex-1 min-w-0 flex items-center gap-1.5">
+      <span className="text-[11px] leading-none" style={{ color }}>{glyph}</span>
+      <div className="relative flex-1 h-2 rounded-full overflow-hidden" style={{ background: t.track, boxShadow: 'inset 0 1px 2px rgba(0,0,0,.4)' }}>
+        <div ref={fillRef} className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-100"
+             style={{ width: '100%', background: color }} />
+        {overRef && <div ref={overRef} className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-100"
+                         style={{ width: '0%', background: 'rgba(125,177,210,.85)', boxShadow: 'inset -1px 0 0 rgba(235,245,255,.7)' }} />}
+      </div>
+      <span ref={txtRef} className="text-[11px] font-bold tabular-nums leading-none" style={{ ...hearthBody, color: t.count, textShadow: t.countShadow, minWidth: 18 }} />
+    </div>
+  )
+}
+
+/**
+ * The strip on the hotbar's top edge. Compact: health only (the orb still stands, smaller, in its
+ * corner). Phone: health AND mana, because the orb is gone — a 150px vessel is a hole in a 390px
+ * world — and `tools` (the pips) at the right end. Pass as `HearthHotbar`'s `lip`.
+ */
+export function HearthLip({ face, vitals, mana, tools }: {
+  face: HudFace
+  vitals: React.RefObject<Vitals>
+  /** Pass on a phone (the orb is gone); omit where the orb still stands. */
+  mana?: React.RefObject<{ cur: number; max: number; regen: number } | null>
+  tools?: React.ReactNode
+}) {
+  const t = HUD_FACES[face]
+  const hp = useRef<HTMLDivElement>(null), sh = useRef<HTMLDivElement>(null), hpT = useRef<HTMLSpanElement>(null)
+  const mp = useRef<HTMLDivElement>(null), mpT = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    const id = setInterval(() => {
+      const v = vitals.current
+      if (v) {
+        const max = v.hpMax || 1
+        if (hp.current) hp.current.style.width = `${Math.max(0, (v.hp / max) * 100)}%`
+        if (sh.current) sh.current.style.width = `${Math.max(0, Math.min(1, v.shield / max)) * 100}%`
+        if (hpT.current) { const s = `${Math.round(v.hp)}`; if (hpT.current.textContent !== s) hpT.current.textContent = s }
+      }
+      const m = mana?.current
+      if (m) {
+        // `manaFraction`, not cur/max: max is genuinely 0 at mount (see mana-gauge.tsx).
+        if (mp.current) mp.current.style.width = `${manaFraction(m.cur, m.max) * 100}%`
+        if (mpT.current) { const s = `${Math.floor(m.cur)}`; if (mpT.current.textContent !== s) mpT.current.textContent = s }
+      }
+    }, 100)
+    return () => clearInterval(id)
+  }, [vitals, mana])
+  return (
+    <div className="flex items-center gap-3 px-2 py-1 rounded-[10px]" style={{ background: t.plate, boxShadow: face === 'full' ? 'inset 0 1px 3px rgba(58,39,22,.4)' : undefined }}>
+      <LipBar face={face} fillRef={hp} overRef={sh} txtRef={hpT} color="#b9543a" glyph="♥" />
+      {mana && <LipBar face={face} fillRef={mp} txtRef={mpT} color="#7657b4" glyph="✦" />}
+      {tools}
+    </div>
+  )
+}
+
+/** A tool as a pip: phone-sized stand-in for a `hud-corner` socket. Level in the middle, XP as a
+ *  ring, the act-here ember when that family is working. Data in, so the corner derives it. */
+export type ToolPip = { family: string; level: number; xpPct: number; active: boolean }
+export function HearthToolPips({ face, pips }: { face: HudFace; pips: readonly ToolPip[] }) {
+  const t = HUD_FACES[face]
+  const R = 9, C = 2 * Math.PI * R
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      {pips.map(p => (
+        <div key={p.family} title={p.family} className="relative w-[22px] h-[22px] rounded-full grid place-items-center"
+             style={{ background: t.well, boxShadow: p.active ? t.wellSelShadow : t.wellShadow }}>
+          <svg viewBox="0 0 22 22" className="absolute inset-0 -rotate-90">
+            <circle cx="11" cy="11" r={R} fill="none" stroke={face === 'full' ? H.moss : '#9cc58a'} strokeWidth="2"
+                    strokeDasharray={C} strokeDashoffset={C * (1 - Math.max(0, Math.min(1, p.xpPct)))} strokeLinecap="round" />
+          </svg>
+          <span className="relative text-[9px] font-extrabold tabular-nums" style={{ ...hearthBody, color: t.count }}>{p.level}</span>
+        </div>
+      ))}
+    </div>
+  )
 }

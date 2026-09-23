@@ -27,3 +27,22 @@ export function readHudFace(search?: string, store?: Pick<Storage, 'getItem'> | 
     return parseHudFace(s?.getItem(FACE_KEY))
   } catch { return null }
 }
+
+// ── ★ THE HUD SIZES (2026-09-23, Alex: "any suggestions for the narrow window.. i imagine its the
+// same for mobile") ──────────────────────────────────────────────────────────────────────────────
+// The wide bottom row is THREE things side by side — the health column (~225px), the Full-hearth
+// hotbar (~490px) and the orb + tool arch (~235px) — so under ~1000px they collide, and at phone
+// width no arrangement of three-abreast fits. The answer is not to shrink everything; the hotbar
+// keeps the bottom edge and the corners move OFF that row:
+//   wide    ≥ 1000  — as designed: health bottom-left, orb bottom-right.
+//   compact  < 1000 — 44px wells; health rides the hotbar as a lip; buffs go top-left; the orb shrinks.
+//   phone    <  600 — 40px wells, the bar IS the bottom edge; health + mana are two lip bars, the orb
+//                     is gone, tools are four pips on the lip; minimap 96; the bottom corners stay
+//                     EMPTY on purpose — they are where thumbs go once the Ather has touch controls.
+// A size is chosen by the HOST from the real width and passed down as a prop, never read from a CSS
+// media query inside a piece: the dev page has to be able to show a phone inside a desktop window.
+export type HudSize = 'wide' | 'compact' | 'phone'
+export const HUD_COMPACT_BELOW = 1000
+export const HUD_PHONE_BELOW = 600
+export const hudSizeFor = (width: number): HudSize =>
+  width < HUD_PHONE_BELOW ? 'phone' : width < HUD_COMPACT_BELOW ? 'compact' : 'wide'
