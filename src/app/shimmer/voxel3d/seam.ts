@@ -221,6 +221,12 @@ export const PLOT_TRIGGER_RADIUS = PLOT_NEAR_RADIUS
  * on Greg's ground. Derived from the island's coast, never stored.
  */
 export const GLADE_TRIGGER_RADIUS = PLOT_NEAR_RADIUS
+/**
+ * How far past the island's coast the ROAD seam sets a keeper down in the Wilds.
+ * ⚠ Must clear the trigger band it just left plus a little, or a keeper who crosses out is standing
+ * in the doorway they came through — the plot side's own `APPROACH_STANDOFF` lesson, mirrored.
+ */
+export const GLADE_EXIT_STEP = GLADE_TRIGGER_RADIUS + 12
 
 export function gladeSeamAnchor(seed: number, cfg: GladeConfig = DEFAULT_GLADE, which: GladeSeam = 'plot'): SeamAnchor {
   const t = gladeSeamSpot(seed, (x, z) => columnHeight(x, z, seed), cfg, which)

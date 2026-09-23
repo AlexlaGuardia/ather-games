@@ -257,8 +257,8 @@ import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
 import { columnSmokeSources, type SmokeSource } from './smoke-sources'
-import { createSeamShimmer, createSocketShimmers, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, gladeSeamAnchors } from './seam'
-import { GLADE_SEAM_TO } from '../voxel/glade'
+import { createSeamShimmer, createSocketShimmers, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, GLADE_EXIT_STEP, gladeSeamAnchors } from './seam'
+import { GLADE_SEAM_TO, DEFAULT_GLADE } from '../voxel/glade'
 import { createWetPatches, type WetSpot } from './wet-patch'
 import { createBedSigns } from './bed-sign'
 import { createMistPass, SPAR_RANGE } from './mist-pass'
@@ -4960,7 +4960,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * ⚠ The worker's own cache is already space-keyed, so nothing has to be said to it beyond the
    * space on each request. It is the HOST's caches that overlap.
    */
-  const enterSpace = useCallback((to: Space) => {
+  const enterSpace = useCallback((to: Space, landAt?: { x: number; z: number }) => {
     if (space.current === to) return
     const g = group.current
     flushSaves()                                    // ⚠ before the flip — see above
@@ -5046,7 +5046,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // bug, mirrored. And it may not be smaller than the trigger band either, or the arrival drops
       // straight back through the seam it just came out of; the latch below catches that, but a
       // latch is a backstop, not a position.
-      const a = passageApproach(SEED, WILDS_BUBBLE)
+      // ── ★ …UNLESS YOU LEFT BY A DIFFERENT DOOR (2026-09-22, the glade's road seam) ─────────
+      // `passageApproach` is the FOLD's outside address and stays the default, because for six
+      // weeks the fold was the only way into the Wilds. It is the wrong answer for the island's
+      // road seam: a keeper who walks the story road out of Moonwell was teleported ~400 blocks
+      // back to their own front door, which is the *"fast travel that happens to be triggered by a
+      // door"* this very note rejects — just from the other side. A crossing lands you where you
+      // were going.
+      const a = landAt ?? passageApproach(SEED, WILDS_BUBBLE)
       lc.px = a.x + 0.5; lc.pz = a.z + 0.5
       lc.py = columnHeight(a.x, a.z, SEED) + 1
     }
@@ -6051,7 +6058,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * crossing is published through a ref. The bridge cannot fire before mount, so the ref is always
    * populated by the time anything can call it.
    */
-  const enterSpaceRef = useRef<((to: Space) => void) | null>(null)
+  const enterSpaceRef = useRef<((to: Space, landAt?: { x: number; z: number }) => void) | null>(null)
   /** Moonwell's threshold, derived once: the island never grows, so its coast never moves. */
   const gladeSeamAnchorRef = useRef(gladeSeamAnchors(SEED))
   /**
@@ -9163,16 +9170,26 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // inside the loop, so standing in one threshold un-latched on the OTHER's iteration and the
         // crossing re-fired every frame. One answer across both, then one latch.
         let entered: 'plot' | 'wilds' | null = null
+        let enteredWhich: string | null = null
+        let enteredAnchor: { x: number; z: number } | null = null
         for (const { which, anchor: a } of gladeSeamAnchorRef.current) {
           if (which === 'plot' && tutorial.current.stage !== 'done') continue
           if (Math.hypot(lc.px - a.x, lc.pz - a.z) < GLADE_TRIGGER_RADIUS && Math.abs(lc.py - a.y) < 2.5) {
-            entered = GLADE_SEAM_TO[which]
+            entered = GLADE_SEAM_TO[which]; enteredWhich = which; enteredAnchor = { x: a.x, z: a.z }
             break
           }
         }
         if (entered && !crossLatched.current) {
           crossLatched.current = true
-          enterSpaceRef.current?.(entered)
+          // ★ THE ROAD SEAM LANDS YOU ON THE ROAD, a few blocks past where the coast was, facing
+          // on — not at the fold's door on the far side of the world. The island does not exist in
+          // the Wilds (it is a separate space over the same coordinates), so this is ordinary
+          // country: the spine, continuing. Derived from the seam's own bearing, so it follows the
+          // road if the road ever moves.
+          enterSpaceRef.current?.(entered, entered === 'wilds' && enteredWhich === 'road'
+            ? { x: Math.round(enteredAnchor!.x + Math.cos(DEFAULT_GLADE.roadSeamBearing) * GLADE_EXIT_STEP),
+                z: Math.round(enteredAnchor!.z + Math.sin(DEFAULT_GLADE.roadSeamBearing) * GLADE_EXIT_STEP) }
+            : undefined)
         }
         if (!entered) crossLatched.current = false
       } else {
