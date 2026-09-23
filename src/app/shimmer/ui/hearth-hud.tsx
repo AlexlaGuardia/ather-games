@@ -252,6 +252,29 @@ export function HearthChip({ face, glyph, glyphColor, name, nameColor, value, su
     : <div title={title}>{plate}</div>
 }
 
+/**
+ * A one-line prompt or readout that floats over the world — "E — Talk to Gregory", the match clock,
+ * the placement hint. The plate every such line sits on, so none of them rolls its own dark pill
+ * (the play3d hearth pass, 2026-09-23, retired nine hand-rolled ones). The CALLER places it; the pill
+ * only owns its face. `accent` lights the rim for a line that is the act (a bite, a station's hue);
+ * `muted` spans (`<HearthPillSoft>`) carry the key hint.
+ */
+export function HearthPill({ face, accent, style, children, className = '' }: {
+  face: HudFace; accent?: string; style?: React.CSSProperties; children: React.ReactNode; className?: string
+}) {
+  const t = HUD_FACES[face]
+  return (
+    <div className={`pointer-events-none whitespace-nowrap ${className}`} style={style}>
+      <HudPlate face={face} r={999} style={accent ? { boxShadow: `${t.plateShadow}, 0 0 0 2px ${accent}` } : undefined}>
+        <div className="px-3.5 py-1 text-[13px] font-bold tabular-nums" style={hearthBody}>{children}</div>
+      </HudPlate>
+    </div>
+  )
+}
+export function HearthPillSoft({ face, children }: { face: HudFace; children: React.ReactNode }) {
+  return <span className="font-semibold" style={{ color: HUD_FACES[face].textDim }}>{children}</span>
+}
+
 export function HearthBuffChips({ face, buffs, top }: {
   face: HudFace; buffs: React.RefObject<ActiveBuffs>
   /** Compact/phone: hang from the TOP-left at this offset — the bottom-left corner has gone to the

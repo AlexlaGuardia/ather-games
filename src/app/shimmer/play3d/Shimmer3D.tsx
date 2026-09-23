@@ -26,10 +26,10 @@ import { nearestGate } from '../voxel3d/crossing-out'
 // column stays its own. Each piece keeps its own show-rule, which is why the frame, objective and
 // clock are mounted here rather than by the layer.
 import { HearthHudLayer, hudMapBox, hudDoorTop, HUD_BAR_CLEAR } from '../ui/hearth-hud-layer'
-import { HearthMapFrame, HearthObjective, HearthClock, HearthChip, fmtRemain, useHudSize } from '../ui/hearth-hud'
+import { HudPlate, HearthMapFrame, HearthObjective, HearthClock, HearthChip, HearthPill, HearthPillSoft, fmtRemain, useHudSize } from '../ui/hearth-hud'
 import type { HudFace } from '../ui/hud-face'
 import { HEARTH_FONT_VARS } from '../ui/hearth-fonts'
-import { H, hearthBody, HearthFrame, HearthProgress } from '../ui/hearth'
+import { H, hearthBody, hearthDisplay, HearthFrame, HearthProgress, HearthButton } from '../ui/hearth'
 import { ToolGlyph } from '../hud/hud-corner'
 /** Alex's pick for the always-on HUD (2026-09-23) — the Ather's `HUD_FACE`, same value. */
 const HUD_FACE: HudFace = 'full'
@@ -122,7 +122,7 @@ import { keeperBook, saveBook } from './book'
 import { PassagePanel } from './PassagePanel'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
-import { prettyItem, menuBtn } from './ui'
+import { prettyItem } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
@@ -310,7 +310,17 @@ function findEmptyOrMatch(dest: (ItemStack | null)[], item: ItemStack | null): n
   if (match !== -1) return match
   return dest.findIndex(s => s === null)
 }
-const placeIconBtn = (accent: string): React.CSSProperties => ({ width: 60, height: 60, borderRadius: '50%', border: `2px solid ${accent}`, background: 'rgba(12,16,26,0.92)', color: '#eafff6', font: '800 24px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' })
+/** Where a bottom prompt floats: centred, above the hotbar. One spot, so two prompts can never sit apart. */
+const PILL_LOW: React.CSSProperties = { position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35 }
+/** A touch-pad button (A / B / jump / slide): a parchment disc in a carved ring, lit by `accent` when
+ *  it would DO something (the A button takes the hue of what it will act on). */
+const touchKnob = (size: number, accent?: string): React.CSSProperties => ({
+  width: size, height: size, borderRadius: '50%', cursor: 'pointer', touchAction: 'none',
+  background: `linear-gradient(180deg, ${H.paperHi}, ${H.paperLo})`, color: accent ?? H.ink,
+  border: `3px solid ${accent ?? H.inkSoft}`, boxShadow: '0 4px 10px rgba(20,10,4,.45)',
+  font: `800 ${Math.round(size * 0.32)}px system-ui, sans-serif`,
+})
+const placeIconBtn = (accent: string): React.CSSProperties => ({ width: 60, height: 60, borderRadius: '50%', border: `3px solid ${accent}`, background: `linear-gradient(180deg, ${H.paperHi}, ${H.paperLo})`, color: accent, boxShadow: '0 4px 10px rgba(20,10,4,.45)', font: '800 24px system-ui, sans-serif', cursor: 'pointer', touchAction: 'none' })
 // Chop cost + time, scaling by node tier (its minLevel). Base pool is 100 and regen is slow
 // (see MANA_REGEN_PER_SEC), so mana is a real budget. Shimmeroak (Lv4): 12 mana over 3s = 4/s.
 // Pure feel — tune here. goldwood(1): 6 mana / 2s · shimmeroak(4): 12 / 2.9s · dawnwood(10): 24 / 4.7s.
@@ -343,12 +353,12 @@ const PLACEABLES: Record<string, { name: string; color: string; accent: string; 
 // A station's `kind` drives which menu opens on interact + the prompt/tap-button look. `chest` and
 // `exchange_booth` reuse the SAME itemIds as the 2D game's furniture (sprites/furniture.ts) — same
 // item, same look, coherent across both walkers.
-const STATIONS: Record<string, { kind: StationKind; verb: string; emoji: string; name: string; accent: string; bg: string }> = {
-  alchemy_station: { kind: 'brew',     verb: 'Brew',  emoji: '⚗', name: 'Alchemy Station', accent: '#a679ff', bg: 'rgba(17,12,24,0.92)' },
-  crafting_table:  { kind: 'craft',    verb: 'Craft', emoji: '🔨', name: 'Crafting Table',  accent: '#d9b84a', bg: 'rgba(24,18,10,0.92)' },
-  chest:           { kind: 'chest',    verb: 'Open',  emoji: '📦', name: 'Chest',           accent: '#c9a86a', bg: 'rgba(22,17,9,0.92)' },
-  exchange_booth:  { kind: 'exchange', verb: 'Trade', emoji: '💰', name: 'Exchange Booth',  accent: '#6ad0a0', bg: 'rgba(9,22,17,0.92)' },
-  farm_planter:    { kind: 'farm',     verb: 'Tend',  emoji: '🌱', name: 'Planter',         accent: '#8fd06a', bg: 'rgba(15,22,9,0.92)' },
+const STATIONS: Record<string, { kind: StationKind; verb: string; emoji: string; name: string; accent: string }> = {
+  alchemy_station: { kind: 'brew',     verb: 'Brew',  emoji: '⚗', name: 'Alchemy Station', accent: '#a679ff' },
+  crafting_table:  { kind: 'craft',    verb: 'Craft', emoji: '🔨', name: 'Crafting Table',  accent: '#d9b84a' },
+  chest:           { kind: 'chest',    verb: 'Open',  emoji: '📦', name: 'Chest',           accent: '#c9a86a' },
+  exchange_booth:  { kind: 'exchange', verb: 'Trade', emoji: '💰', name: 'Exchange Booth',  accent: '#6ad0a0' },
+  farm_planter:    { kind: 'farm',     verb: 'Tend',  emoji: '🌱', name: 'Planter',         accent: '#8fd06a' },
 }
 // Stable per-placement instance id — used to key chest contents + planted crops to a specific
 // station in the world (survives save/load since it's derived, not stored).
@@ -760,16 +770,16 @@ function BandReadout({ zoneId, nodes, tick }: { zoneId: string; nodes: NodePlace
   if (!rows.length) return null
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end', maxWidth: 480 }}>
-      <span style={{ color: '#8fd9c4', font: '700 10px ui-monospace, monospace', letterSpacing: '0.06em', opacity: 0.75 }}>
-        BAND · {zoneId}
+      <span className="hk-label hk-soft" style={{ fontSize: 12 }}>
+        Band · {zoneId}
       </span>
       {rows.map(r => (
-        <div key={r.skill} style={{ font: '600 10px ui-monospace, monospace', color: '#cfe9df', whiteSpace: 'nowrap' }}>
-          <span style={{ color: '#8fd9c4' }}>{r.skill}</span>{' '}
+        <div key={r.skill} className="hk-ink" style={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <span className="hk-moss">{r.skill}</span>{' '}
           {r.band.map((t, i) => (
             <span key={t} style={{ opacity: 1 - i * 0.18 }}>{NODE_TYPE_LABELS[t]?.name ?? t}{i < r.band.length - 1 ? ' › ' : ''}</span>
           ))}
-          <span style={{ color: '#9aa8a2' }}>{'  '}· {r.slots} slot{r.slots === 1 ? '' : 's'} · {Math.round(r.fill * 100)}% filled</span>
+          <span className="hk-faint">{'  '}· {r.slots} slot{r.slots === 1 ? '' : 's'} · {Math.round(r.fill * 100)}% filled</span>
         </div>
       ))}
     </div>
@@ -3694,13 +3704,13 @@ function TouchJoystick({ joyRef, bottom = 30 }: { joyRef: React.RefObject<{ x: n
       onPointerCancel={end}
       style={{
         position: 'fixed', bottom, left: 30, width: 116, height: 116, borderRadius: '50%', zIndex: 30,
-        background: 'rgba(18,14,36,0.4)', border: '2px solid #ffffff2e', touchAction: 'none',
+        background: 'rgba(245,235,213,.35)', border: `3px solid ${H.inkSoft}`, touchAction: 'none', boxShadow: 'inset 0 2px 6px rgba(58,39,22,.35)',
       }}
     >
       <div style={{
         position: 'absolute', left: '50%', top: '50%', width: 54, height: 54, marginLeft: -27, marginTop: -27,
         borderRadius: '50%', transform: `translate(${knob.x}px, ${knob.y}px)`,
-        background: 'rgba(212,168,67,0.85)', border: '2px solid #ffffff80', boxShadow: '0 2px 10px #0009', pointerEvents: 'none',
+        background: `linear-gradient(180deg, ${H.paperHi}, ${H.paperLo})`, border: `3px solid ${H.ember}`, boxShadow: '0 3px 8px rgba(20,10,4,.45)', pointerEvents: 'none',
       }} />
     </div>
   )
@@ -6984,11 +6994,8 @@ export default function Shimmer3D() {
   }, [zone.id])
 
   const Btn = ({ active, onClick, children }: { active?: boolean; onClick: () => void; children: React.ReactNode }) => (
-    <button onClick={onClick} style={{
-      padding: '6px 10px', borderRadius: 6, border: active ? '2px solid #d4a843' : '1px solid #ffffff33',
-      background: active ? '#d4a84333' : '#16142a', color: '#e9dfc8', font: '700 13px ui-monospace, monospace',
-      cursor: 'pointer', pointerEvents: 'auto',
-    }}>{children}</button>
+    <button onClick={onClick} className={`hk-btn px-2.5 py-1 text-[12px]${active ? ' hk-ember' : ''}`}
+      style={{ pointerEvents: 'auto', ...(active ? { boxShadow: `inset 0 0 0 2px ${H.ember}` } : null) }}>{children}</button>
   )
 
   return (
@@ -7086,26 +7093,20 @@ export default function Shimmer3D() {
 
       {/* edit-mode keeps a minimal zone/controls strip; play HUD is clean (marks moved to the top-right stack) */}
       {editMode && (
-        <div style={{
-          position: 'fixed', top: 12, left: 12, padding: '8px 12px', borderRadius: 8,
-          background: 'rgba(10,8,20,0.66)', color: '#e9dfc8', font: '600 13px ui-monospace, monospace', lineHeight: 1.5,
-        }}>
-          Shimmer 3D — {zone.id === WORLD_ZONE_ID ? (getZone(ALL_ZONES, districtZone)?.name ?? zone.name) : zone.name}  ·  EDIT<br />
-          <span style={{ opacity: 0.8 }}>left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom</span>
-        </div>
+        <HudPlate face={HUD_FACE} style={{ position: 'fixed', top: 12, left: 12 }}>
+          <div style={{ padding: '6px 11px', fontSize: 13, lineHeight: 1.5, ...hearthBody }}>
+          <b>Shimmer 3D — {zone.id === WORLD_ZONE_ID ? (getZone(ALL_ZONES, districtZone)?.name ?? zone.name) : zone.name}</b>  ·  <span className="hk-ember">edit</span><br />
+          <span className="hk-soft">left-drag paint · WASD fly · Q/E down·up · right-drag look · scroll zoom</span>
+          </div>
+        </HudPlate>
       )}
 
       {/* free-look nudge: first-person play, before the pointer is captured. Fades out a few seconds after
           spawn (showLookHint) so it's a welcome, not permanent chrome. */}
       {!editMode && !pointerLocked && !isTouch && !dialogue && !battle && showLookHint && (
-        <div style={{
-          position: 'fixed', left: '50%', bottom: 108, transform: 'translateX(-50%)', zIndex: 34,
-          padding: '6px 13px', borderRadius: 999, background: 'rgba(16,14,32,0.8)', border: '1px solid #7fe3c855',
-          color: '#cfeee2', font: '700 12px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-          animation: 'lookHintFade 5s ease-out forwards',
-        }}>
+        <HearthPill face={HUD_FACE} style={{ position: 'fixed', left: '50%', bottom: 108, transform: 'translateX(-50%)', zIndex: 34, animation: 'lookHintFade 5s ease-out forwards' }}>
           <style>{`@keyframes lookHintFade { 0%,70% { opacity: 1 } 100% { opacity: 0 } }`}</style>
-          click to look around <span style={{ opacity: 0.6 }}>· Esc releases</span></div>
+          click to look around <HearthPillSoft face={HUD_FACE}>· Esc releases</HearthPillSoft></HearthPill>
       )}
 
       {/* minimap — persistent, click (or M) expands to the full map */}
@@ -7155,13 +7156,13 @@ export default function Shimmer3D() {
             <OptionRow onClick={() => { setMenuOpen(false); setEditMode(true) }} label="✎ Edit terrain" tail="this map" />
             <OptionRow onClick={() => setRuneDevOpen(o => !o)} label="✦ Rune (dev)" tail={runeDevOpen ? 'hide' : 'show'} />
             {runeDevOpen && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2, maxWidth: 268, borderTop: '1px solid #ffffff20', paddingTop: 6 }}>
-                  <span style={{ color: '#8fd9c4', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right' }}>BIRTH RUNE — click to be born of it</span>
+                <div className="hk-rule" style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2, maxWidth: 268, borderTopWidth: 1, borderTopStyle: 'solid', paddingTop: 6 }}>
+                  <span className="hk-soft" style={{ fontSize: 11, fontWeight: 700, textAlign: 'right' }}>Birth rune — click to be born of it</span>
                   {['mana', 'storm', 'earth', 'water'].map(el => (
                     <div key={el} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
                       {RUNES.filter(r => r.element === el).map(r => (
                         <button key={r.id} onClick={() => setDevRune(r.id)} title={`${r.name} — ${r.essence}`}
-                          style={{ ...menuBtn, padding: '2px 6px', fontSize: 9, color: r.glow, border: birthRuneRef.current === r.id ? `1px solid ${r.glow}` : '1px solid #ffffff20' }}>{r.name}</button>
+                          className="hk-btn" style={{ padding: '1px 7px', fontSize: 11, boxShadow: birthRuneRef.current === r.id ? `inset 0 0 0 2px ${r.glow}` : undefined }}>{r.name}</button>
                       ))}
                     </div>
                   ))}
@@ -7169,7 +7170,7 @@ export default function Shimmer3D() {
                       BUILT — nothing in the game walks a keeper along their lane yet. This grants one
                       anyway so the cross-hatch (two-rune moves like Healing Grove, Cordon, Flame
                       Barrage) is playable meanwhile. Owner-only, and it ignores the lane law. */}
-                  <span style={{ color: '#e0a34a', font: '700 9px ui-monospace, monospace', letterSpacing: '.1em', textAlign: 'right', marginTop: 4 }}>+ DEVELOPED RUNES — unbuilt path, dev-only</span>
+                  <span className="hk-ember" style={{ fontSize: 11, fontWeight: 700, textAlign: 'right', marginTop: 4 }}>+ Developed runes — unbuilt path, dev-only</span>
                   {['mana', 'storm', 'earth', 'water'].map(el => (
                     <div key={`dev-${el}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
                       {RUNES.filter(r => r.element === el).map(r => {
@@ -7178,8 +7179,8 @@ export default function Shimmer3D() {
                         return (
                           <button key={r.id} onClick={() => toggleDevRune(r.id)} disabled={isBirth}
                             title={isBirth ? `${r.name} — your birth rune` : `${held ? 'drop' : 'develop'} ${r.name}`}
-                            style={{ ...menuBtn, padding: '2px 6px', fontSize: 9, opacity: isBirth ? 0.35 : 1,
-                              color: held ? r.glow : '#ffffff66', border: held ? `1px solid ${r.glow}` : '1px solid #ffffff14' }}>
+                            className={`hk-btn${held ? '' : ' hk-faint'}`}
+                            style={{ padding: '1px 7px', fontSize: 11, opacity: isBirth ? 0.35 : 1, boxShadow: held ? `inset 0 0 0 2px ${r.glow}` : undefined }}>
                             {held ? '✦' : '+'}{r.name}
                           </button>
                         )
@@ -7202,67 +7203,44 @@ export default function Shimmer3D() {
 
       {/* rinning prompt — locked at the pool: watch, then strike when the `!` pops (early/late slips) */}
       {fish && !editMode && (
-        <div style={{
-          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
-          padding: '7px 14px', borderRadius: 999, background: fish.bite ? 'rgba(20,54,66,0.95)' : 'rgba(11,21,19,0.92)',
-          border: `1px solid ${fish.bite ? '#7fe9ff' : '#4fc79a66'}`, boxShadow: fish.bite ? '0 0 18px #37e6ff88' : 'none',
-          color: fish.bite ? '#eafcff' : '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>{fish.bite
-          ? <>❗ HOOK IT! <span style={{ opacity: 0.7 }}>({isTouch ? 'tap' : 'E'})</span></>
-          : <>🎣 rinning {fish.label} · watch the water… <span style={{ opacity: 0.6 }}>({isTouch ? 'tap' : 'E'})</span></>}</div>
+        <HearthPill face={HUD_FACE} style={PILL_LOW} accent={fish.bite ? H.ember : undefined}>{fish.bite
+          ? <>❗ Hook it! <HearthPillSoft face={HUD_FACE}>({isTouch ? 'tap' : 'E'})</HearthPillSoft></>
+          : <>🎣 rinning {fish.label} · watch the water… <HearthPillSoft face={HUD_FACE}>({isTouch ? 'tap' : 'E'})</HearthPillSoft></>}</HearthPill>
       )}
 
       {/* greet prompt by a wandering plot spirit (NPCs win; nodes yield to the spirit) */}
       {nearPlotSpirit && !nearNpc && !dialogue && !battle && !editMode && !partyOpen && (
-        <div style={{
-          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
-          padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.92)', border: `1px solid ${(ELEMENT_COLORS[nearPlotSpirit.element] ?? '#4fc79a')}66`,
-          color: '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>✨ Greet {nearPlotSpirit.name} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap' : 'E'})</span></div>
+        <HearthPill face={HUD_FACE} style={PILL_LOW} accent={ELEMENT_COLORS[nearPlotSpirit.element]}>✨ Greet {nearPlotSpirit.name} <HearthPillSoft face={HUD_FACE}>({isTouch ? 'tap' : 'E'})</HearthPillSoft></HearthPill>
       )}
 
       {/* harvest prompt when standing by a node (hidden once you link in or start fishing) */}
       {nearNode && !channel && !fish && !nearNpc && !dialogue && !battle && !editMode && (
-        <div style={{
-          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
-          padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.92)', border: '1px solid #4fc79a66',
-          color: '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>{getNodeSkill(nearNode.type) === 'rinning'
-          ? <>🎣 Cast at {prettyItem(nearNode.type)} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap 🎣' : 'E'})</span></>
-          : <>🪓 Channel {prettyItem(nearNode.type)} <span style={{ opacity: 0.6 }}>({isTouch ? 'tap 🪓' : 'E'})</span></>}</div>
+        <HearthPill face={HUD_FACE} style={PILL_LOW}>{getNodeSkill(nearNode.type) === 'rinning'
+          ? <>🎣 Cast at {prettyItem(nearNode.type)} <HearthPillSoft face={HUD_FACE}>({isTouch ? 'tap 🎣' : 'E'})</HearthPillSoft></>
+          : <>🪓 Channel {prettyItem(nearNode.type)} <HearthPillSoft face={HUD_FACE}>({isTouch ? 'tap 🪓' : 'E'})</HearthPillSoft></>}</HearthPill>
       )}
       {/* station prompt — generic over brew/craft/chest/exchange/farm, driven by the STATIONS registry */}
       {nearStation && !openMenu && !nearNode && !nearNpc && !dialogue && !battle && !editMode && !placing && (() => {
         const st = STATIONS[nearStation.itemId]
         return (
-          <div style={{
-            position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
-            padding: '7px 14px', borderRadius: 999, background: st.bg, border: `1px solid ${st.accent}66`,
-            color: '#f0e2c4', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-          }}>{st.emoji} {st.verb} at the {st.name} <span style={{ opacity: 0.6 }}>({isTouch ? `tap ${st.emoji}` : 'E'})</span></div>
+          <HearthPill face={HUD_FACE} style={PILL_LOW} accent={H.ember}>{st.emoji} {st.verb} at the {st.name} <HearthPillSoft face={HUD_FACE}>({isTouch ? `tap ${st.emoji}` : 'E'})</HearthPillSoft></HearthPill>
         )
       })()}
       {/* channeling indicator — mana is powering the tool; the node's HP bar drains over it */}
       {channel && !battle && !editMode && (
-        <div style={{
-          position: 'fixed', left: '50%', bottom: 156, transform: 'translateX(-50%)', zIndex: 35,
-          padding: '7px 14px', borderRadius: 999, background: 'rgba(11,21,19,0.94)', border: '1px solid #3a7bd5aa',
-          color: '#bfe0ff', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>⚡ Channeling into {channel.label}… <span style={{ opacity: 0.6 }}>(stay close · {isTouch ? 'tap ⏹' : 'E'} to stop)</span></div>
+        <HearthPill face={HUD_FACE} style={PILL_LOW} accent={H.sky}>⚡ Channeling into {channel.label}… <HearthPillSoft face={HUD_FACE}>(stay close · {isTouch ? 'tap ⏹' : 'E'} to stop)</HearthPillSoft></HearthPill>
       )}
 
       {/* PLACEMENT MODE — ghost is in the 3D scene; this is the confirm/cancel/rotate control ring */}
       {placing && (
         <>
-          <div style={{ position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 36, pointerEvents: 'none',
-            padding: '7px 15px', borderRadius: 999, background: 'rgba(11,21,19,0.92)', border: '1px solid #7fe3c866',
-            color: '#cfeee2', font: '700 13px ui-monospace, monospace', whiteSpace: 'nowrap' }}>
-            Placing {PLACEABLES[placing.itemId].name} — face where you want it{isTouch ? '' : ' · ← → rotate · Enter place · Esc cancel'}
-          </div>
+          <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: 84, left: '50%', transform: 'translateX(-50%)', zIndex: 36 }}>
+            Placing {PLACEABLES[placing.itemId].name} — face where you want it{isTouch ? '' : <HearthPillSoft face={HUD_FACE}> · ← → rotate · Enter place · Esc cancel</HearthPillSoft>}
+          </HearthPill>
           <div style={{ position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 36, display: 'flex', gap: 14, alignItems: 'center' }}>
-            <button onClick={rotatePlacing} aria-label="rotate" style={placeIconBtn('#3a7bd5')}>⟳</button>
-            <button onClick={cancelPlacing} aria-label="cancel" style={placeIconBtn('#b9483f')}>✗</button>
-            <button onClick={confirmPlacing} aria-label="confirm" style={placeIconBtn('#2f8f5f')}>✓</button>
+            <button onClick={rotatePlacing} aria-label="rotate" style={placeIconBtn(H.sky)}>⟳</button>
+            <button onClick={cancelPlacing} aria-label="cancel" style={placeIconBtn(H.rust)}>✗</button>
+            <button onClick={confirmPlacing} aria-label="confirm" style={placeIconBtn(H.moss)}>✓</button>
           </div>
         </>
       )}
@@ -7417,44 +7395,45 @@ export default function Shimmer3D() {
 
 
       {editMode && (
-        <div style={{ position: 'fixed', top: 70, left: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <HudPlate face={HUD_FACE} style={{ position: 'fixed', top: 70, left: 12 }}>
+          <div className="hearth-root" style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '7px 9px', ...hearthBody }}>
           <select
             value={zoneId}
             onChange={(e) => selectZone(e.target.value)}
-            style={{
-              padding: '6px 8px', borderRadius: 6, border: '1px solid #ffffff33', background: '#16142a',
-              color: '#e9dfc8', font: '700 13px ui-monospace, monospace', cursor: 'pointer', pointerEvents: 'auto', maxWidth: 260,
-            }}
+            className="hk-btn"
+            style={{ padding: '5px 8px', fontSize: 13, cursor: 'pointer', pointerEvents: 'auto', maxWidth: 260 }}
           >
             {ALL_ZONES.map((z) => <option key={z.id} value={z.id}>{z.name}{z.id !== z.name ? ` (${z.id})` : ''}</option>)}
           </select>
-          <span style={{ color: '#e9dfc8', opacity: 0.55, font: '600 11px ui-monospace, monospace' }}>jump to a map · save before switching</span>
-        </div>
+          <span className="hk-faint" style={{ fontSize: 12 }}>jump to a map · save before switching</span>
+          </div>
+        </HudPlate>
       )}
 
       {editMode && (
-        <div style={{ position: 'fixed', top: 12, right: 12, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+        <HudPlate face={HUD_FACE} style={{ position: 'fixed', top: 12, right: 12 }}>
+        <div className="hearth-root" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', padding: '9px 10px', ...hearthBody }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 480 }}>
             {TOOLS.map((t) => <Btn key={t.id} active={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Btn>)}
           </div>
           {/* resource-node blocks — click places, shift-click erases (single node per tile) */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', maxWidth: 480 }}>
-            <span style={{ color: '#8fd9c4', font: '700 11px ui-monospace, monospace', letterSpacing: '0.06em' }}>NODES</span>
+            <span className="hk-label hk-moss" style={{ fontSize: 13 }}>Nodes</span>
             {NODE_TOOLS.map((t) => <Btn key={t.id} active={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Btn>)}
           </div>
           <BandReadout zoneId={districtZone} nodes={nodesRef.current} tick={nodes.length} />
           {/* moglin-patrol spawners — click places, shift-click erases; gate = the hold that retires it */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', maxWidth: 480 }}>
-            <span style={{ color: '#e0987f', font: '700 11px ui-monospace, monospace', letterSpacing: '0.06em' }}>SPAWNERS</span>
+            <span className="hk-label hk-rust" style={{ fontSize: 13 }}>Spawners</span>
             {SPAWNER_TOOLS.map((t) => <Btn key={t.id} active={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Btn>)}
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ color: '#e9dfc8', font: '700 13px ui-monospace, monospace' }}>brush {brush * 2 + 1}×{brush * 2 + 1}</span>
+            <span className="hk-ink" style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>brush {brush * 2 + 1}×{brush * 2 + 1}</span>
             <Btn onClick={() => setBrush((b) => Math.max(0, b - 1))}>−</Btn>
             <Btn onClick={() => setBrush((b) => Math.min(5, b + 1))}>+</Btn>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ color: '#e9dfc8', font: '700 13px ui-monospace, monospace' }}>size {dims}</span>
+            <span className="hk-ink" style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>size {dims}</span>
             <Btn onClick={() => resize(-2, 0)}>W−</Btn>
             <Btn onClick={() => resize(2, 0)}>W+</Btn>
             <Btn onClick={() => resize(0, -2)}>H−</Btn>
@@ -7462,20 +7441,18 @@ export default function Shimmer3D() {
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <Btn onClick={clearZone}>Clear to empty</Btn>
-            <button onClick={save} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#d4a843', color: '#1a1a2e', font: '800 13px ui-monospace, monospace', cursor: 'pointer' }}>Save zone</button>
+            <HearthButton small primary onClick={save}>Save zone</HearthButton>
           </div>
           {/* DEV: drop straight into the in-world Keeper's Arena (bypasses party/zone/RNG gates) */}
-          <button onClick={() => { setEditMode(false); forceFight() }} style={{ padding: '6px 16px', borderRadius: 6, border: '2px solid #7fe3c8', background: '#12181a', color: '#7fe3c8', font: '800 13px ui-monospace, monospace', cursor: 'pointer' }}>⚔ Force Fight (arena)</button>
-          {saveMsg && <span style={{ color: '#e9dfc8', font: '600 12px ui-monospace, monospace' }}>{saveMsg}</span>}
+          <HearthButton small onClick={() => { setEditMode(false); forceFight() }}>⚔ Force Fight (arena)</HearthButton>
+          {saveMsg && <span className="hk-soft" style={{ fontSize: 12 }}>{saveMsg}</span>}
         </div>
+        </HudPlate>
       )}
 
       {/* edit-mode Done button (enter is top-right; touch controls are hidden while editing) */}
       {editMode && isOwner && (
-        <button onClick={() => setEditMode(false)} style={{
-          position: 'fixed', bottom: 12, right: 12, padding: '8px 16px', borderRadius: 8, border: 'none',
-          background: '#b9483f', color: '#1a1a2e', font: '800 14px ui-monospace, monospace', cursor: 'pointer',
-        }}>Done editing</button>
+        <span style={{ position: 'fixed', bottom: 12, right: 12 }}><HearthButton primary onClick={() => setEditMode(false)}>Done editing</HearthButton></span>
       )}
 
       {/* First-person reticle — the aim point for left-click interact / right-click use. Lights up and
@@ -7496,11 +7473,9 @@ export default function Shimmer3D() {
               <div style={{ position: 'absolute', left: '50%', top: '50%', width: 3, height: 3, borderRadius: '50%', background: c, opacity: on ? 1 : 0.55, transform: 'translate(-50%,-50%)' }} />
             </div>
             {on && t && (
-              <div style={{ position: 'absolute', left: '50%', top: 'calc(100% + 9px)', transform: 'translateX(-50%)', whiteSpace: 'nowrap',
-                background: 'rgba(11,21,19,0.9)', border: `1px solid ${c}66`, borderRadius: 7, padding: '3px 10px',
-                font: '800 11px ui-monospace, monospace', color: '#eafff6' }}>
-                {t.verb} <span style={{ opacity: 0.5 }}>· click</span>
-              </div>
+              <HearthPill face={HUD_FACE} style={{ position: 'absolute', left: '50%', top: 'calc(100% + 9px)', transform: 'translateX(-50%)' }}>
+                {t.verb} <HearthPillSoft face={HUD_FACE}>· click</HearthPillSoft>
+              </HearthPill>
             )}
           </div>
         )
@@ -7519,53 +7494,43 @@ export default function Shimmer3D() {
           ⚠ It NAMES the open floor and never claims an ascent; the floors are time windows in one
           arena until the geometry lands. */}
       {matchHud && !editMode && !dialogue && !battle && (
-        <div style={{
-          position: 'fixed', top: 44, left: '50%', transform: 'translateX(-50%)', zIndex: 36, pointerEvents: 'none',
-          padding: '5px 16px', borderRadius: 999, background: 'rgba(28,14,10,0.88)', border: '1px solid #ffb26644',
-          color: '#ffd7a8', fontSize: 12, letterSpacing: '0.16em', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-        }}>{matchHud}</div>
+        <HearthPill face={HUD_FACE} accent={H.ember} style={{ position: 'fixed', top: 44, left: '50%', transform: 'translateX(-50%)', zIndex: 36 }}>{matchHud}</HearthPill>
       )}
 
       {/* ── Weapon viewmodel + firing-range HUD — outside the Ather only, desktop (click = fire) ── */}
       {weaponDrawn && !editMode && !dialogue && !battle && !placing && !isTouch && (
         <>
-          <div style={{
-            position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 35, pointerEvents: 'none',
-            padding: '6px 14px', borderRadius: 999, background: 'rgba(16,20,32,0.85)', border: '1px solid #8fe0ff44',
-            font: '800 12px ui-monospace, monospace', color: '#cfeeff', letterSpacing: '0.08em', display: 'flex', gap: 13, alignItems: 'center',
-          }}>
+          <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 35 }}>
+            <span style={{ display: 'flex', gap: 13, alignItems: 'center' }}>
             {weaponUi.holstered
-              ? <span style={{ color: '#ffd98a' }}>HOLSTERED <span style={{ opacity: 0.55, fontWeight: 600 }}>· running</span></span>
-              : <span style={{ color: '#dfe7ee' }}>{WEAPONS[weaponUi.idx].name} <span style={{ opacity: 0.5, fontWeight: 600, color: '#9fb0c0' }}>{WEAPONS[weaponUi.idx].slot}</span></span>}
-            <span style={{ opacity: 0.4 }}>·</span>
-            <span>shots <span style={{ color: '#8fe0ff' }}>{hudStats.shots}</span></span>
-            <span>hits <span style={{ color: '#7fffa0' }}>{hudStats.hits}</span></span>
-            <span style={{ opacity: 0.5, fontWeight: 600 }}>{weaponUi.holstered ? 'Q draw · F ready weapon' : 'Q swap · F holster · r-click aim · T console'}</span>
-          </div>
+              ? <span className="hk-ember">Holstered <HearthPillSoft face={HUD_FACE}>· running</HearthPillSoft></span>
+              : <span>{WEAPONS[weaponUi.idx].name} <HearthPillSoft face={HUD_FACE}>{WEAPONS[weaponUi.idx].slot}</HearthPillSoft></span>}
+            <HearthPillSoft face={HUD_FACE}>·</HearthPillSoft>
+            <span>shots <span className="hk-sky">{hudStats.shots}</span></span>
+            <span>hits <span className="hk-moss">{hudStats.hits}</span></span>
+            <HearthPillSoft face={HUD_FACE}>{weaponUi.holstered ? 'Q draw · F ready weapon' : 'Q swap · F holster · r-click aim · T console'}</HearthPillSoft>
+            </span>
+          </HearthPill>
           {/* range console — new-player range controls; opt-in danger lives here, never sprung on you */}
           {rangeOpen && (
-            <>
-              <div onPointerDown={() => toggleRange(false)} style={{ position: 'fixed', inset: 0, zIndex: 39, background: 'rgba(6,10,16,0.35)' }} />
-              <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 40,
-                width: 300, borderRadius: 12, background: 'rgba(14,19,30,0.96)', border: '1px solid #8fe0ff44',
-                padding: '14px 16px', font: '700 12px ui-monospace, monospace', color: '#cfeeff' }}>
-                <div style={{ font: '800 13px ui-monospace, monospace', letterSpacing: '0.12em', marginBottom: 10 }}>RANGE CONSOLE</div>
+            <HearthFrame title="Range console" maxWidth={320} fixed backdropClass="z-[40]" onClose={() => toggleRange(false)} dataPanel="range"
+                         bodyClass="px-4 pt-6 pb-3" footer={<div className="text-center text-[12px]">T / Esc — close</div>}>
                 {([
-                  ['TARGET DRIFT', 'floating targets strafe side to side', 'moving'],
-                  ['HOSTILE HUNTER', 'ground drone hunts you + returns fire', 'hostile'],
-                  ['THE PUPPET GUARDS', 'Seren · Cade · Wren — squeeze, trap, counter', 'guards'],
-                  ['CRUCIBLE BOTS', '59 challengers fill the roster — Crucible zone only', 'bots'],
+                  ['Target drift', 'floating targets strafe side to side', 'moving'],
+                  ['Hostile hunter', 'ground drone hunts you + returns fire', 'hostile'],
+                  ['The Puppet Guards', 'Seren · Cade · Wren — squeeze, trap, counter', 'guards'],
+                  ['Crucible bots', '59 challengers fill the roster — Crucible zone only', 'bots'],
                 ] as const).map(([label, desc, key]) => (
-                  <button key={key} onClick={() => setRangeCfg((c) => ({ ...c, [key]: !c[key] }))} style={{
+                  <button key={key} onClick={() => setRangeCfg((c) => ({ ...c, [key]: !c[key] }))}
+                    className={`hk-plate hk-hover-fill${rangeCfg[key] ? ' is-lit' : ''}`} style={{
                     display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                    background: 'rgba(255,255,255,0.04)', border: '1px solid #ffffff1e', borderRadius: 8,
                     padding: '9px 11px', marginBottom: 8, cursor: 'pointer', textAlign: 'left',
                   }}>
                     <span>
-                      <span style={{ color: '#eafff6', display: 'block' }}>{label}</span>
-                      <span style={{ color: '#ffffff77', fontWeight: 600, fontSize: 11 }}>{desc}</span>
+                      <span className="hk-ink" style={{ display: 'block', font: `600 15px ${hearthDisplay.fontFamily}` }}>{label}</span>
+                      <span className="hk-soft" style={{ fontSize: 12 }}>{desc}</span>
                     </span>
-                    <span style={{ color: rangeCfg[key] ? '#7fffa0' : '#ffffff55', letterSpacing: '0.08em' }}>{rangeCfg[key] ? 'ON' : 'OFF'}</span>
+                    <span className={rangeCfg[key] ? 'hk-moss' : 'hk-faint'} style={{ fontWeight: 800, fontSize: 12 }}>{rangeCfg[key] ? 'On' : 'Off'}</span>
                   </button>
                 ))}
                 {/* ── live guard tuning — OWNER ONLY ──────────────────────────────────────────
@@ -7574,21 +7539,16 @@ export default function Shimmer3D() {
                     internals is the opposite of that. Shown only while the guards are ON, so it
                     cannot be read as settings for a fight that is not happening. */}
                 {isOwner && rangeCfg.guards && (
-                  <div style={{ marginBottom: 8, padding: '9px 10px', borderRadius: 8,
-                    background: 'rgba(255,255,255,0.03)', border: '1px solid #ffd98a2e' }}>
+                  <div className="hk-plate" style={{ marginBottom: 8, padding: '9px 10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
-                      <span style={{ color: '#ffd98a', letterSpacing: '0.1em', fontSize: 11 }}>GUARD TUNING</span>
-                      <button onClick={() => setRangeCfg((c) => ({ ...c, tune: { ...GUARD_TUNING } }))} style={{
-                        background: 'rgba(255,255,255,0.05)', border: '1px solid #ffffff22', borderRadius: 6,
-                        padding: '3px 8px', cursor: 'pointer', color: '#ffffff99',
-                        font: '700 10px ui-monospace, monospace', letterSpacing: '0.06em',
-                      }}>RESET</button>
+                      <span className="hk-label hk-ember" style={{ fontSize: 13 }}>Guard tuning</span>
+                      <button onClick={() => setRangeCfg((c) => ({ ...c, tune: { ...GUARD_TUNING } }))} className="hk-btn px-2 py-0.5 text-[11px]">Reset</button>
                     </div>
                     {GUARD_KNOBS.map((k) => (
                       <label key={k.key} style={{ display: 'block', marginBottom: 7 }}>
-                        <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#cfeeff', fontWeight: 600 }}>
+                        <span className="hk-ink" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600 }}>
                           <span>{k.label}</span>
-                          <span style={{ color: rangeCfg.tune[k.key] === GUARD_TUNING[k.key] ? '#ffffff66' : '#7fffa0', fontVariantNumeric: 'tabular-nums' }}>
+                          <span className={rangeCfg.tune[k.key] === GUARD_TUNING[k.key] ? 'hk-faint' : 'hk-moss'} style={{ fontVariantNumeric: 'tabular-nums' }}>
                             {rangeCfg.tune[k.key].toFixed(k.dp)}{k.unit}
                           </span>
                         </span>
@@ -7598,23 +7558,20 @@ export default function Shimmer3D() {
                             const v = Number(e.target.value)
                             setRangeCfg((c) => ({ ...c, tune: { ...c.tune, [k.key]: v } }))
                           }}
-                          style={{ width: '100%', accentColor: '#ffd98a', cursor: 'pointer' }}
+                          style={{ width: '100%', accentColor: H.ember, cursor: 'pointer' }}
                         />
                       </label>
                     ))}
-                    <div style={{ color: '#ffffff55', fontWeight: 600, fontSize: 10, lineHeight: 1.45 }}>
-                      live on the running fight. green = moved off default. toggle the guards
+                    <div className="hk-faint" style={{ fontSize: 11, lineHeight: 1.45 }}>
+                      live on the running fight. moss = moved off default. toggle the guards
                       off then on to re-arm three fresh puppets.
                     </div>
                   </div>
                 )}
-                <button onClick={() => { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }) }} style={{
-                  width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid #ffffff1e', borderRadius: 8,
-                  padding: '8px 11px', cursor: 'pointer', color: '#ffd98a', font: '700 12px ui-monospace, monospace', letterSpacing: '0.06em',
-                }}>RESET STATS</button>
-                <div style={{ marginTop: 10, color: '#ffffff55', fontWeight: 600, fontSize: 11, textAlign: 'center' }}>T / Esc — close</div>
-              </div>
-            </>
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <HearthButton small onClick={() => { shotsRef.current = 0; hitsRef.current = 0; setHudStats({ shots: 0, hits: 0 }) }}>Reset stats</HearthButton>
+                </div>
+            </HearthFrame>
           )}
           {!weaponUi.holstered && <WeaponReticle bloomRef={bloomRef} adsRef={adsRef} weaponIdxRef={weaponIdxRef} />}
           <ResourceBars hpRef={hpRef} hpMaxRef={hpMaxRef} shieldRef={shieldRef} shieldMaxRef={shieldMaxRef} />
@@ -7673,68 +7630,56 @@ export default function Shimmer3D() {
 
       {/* ── Gun bench prompt — shown when standing at a bench, weapon out, panel closed ── */}
       {weaponDrawn && nearBench && !benchOpen && !editMode && !dialogue && !battle && !placing && !isTouch && (
-        <div style={{ position: 'fixed', left: '50%', bottom: 92, transform: 'translateX(-50%)', zIndex: 34, pointerEvents: 'none',
-          padding: '7px 15px', borderRadius: 999, background: 'rgba(14,19,30,0.9)', border: `1px solid ${SOUL_COLOR}55`,
-          font: '800 12px ui-monospace, monospace', color: '#eafff6', letterSpacing: '0.1em' }}>
-          <span style={{ color: SOUL_COLOR }}>E</span> — ARMORY <span style={{ opacity: 0.5, fontWeight: 600 }}>· build loadout</span>
-        </div>
+        <HearthPill face={HUD_FACE} style={{ position: 'fixed', left: '50%', bottom: 92, transform: 'translateX(-50%)', zIndex: 34 }}>
+          <span className="hk-ember">E</span> — Armory <HearthPillSoft face={HUD_FACE}>· build loadout</HearthPillSoft>
+        </HearthPill>
       )}
 
       {/* ── Gun bench — the loadout editor: two slots you fill from the arsenal ── */}
       {benchOpen && (
-        <>
-          <div onPointerDown={() => toggleBench(false)} style={{ position: 'fixed', inset: 0, zIndex: 44, background: 'rgba(6,10,16,0.45)' }} />
-          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 45,
-            width: 460, maxWidth: '92vw', borderRadius: 14, background: 'rgba(14,19,30,0.97)', border: `1px solid ${SOUL_COLOR}44`,
-            padding: '16px 18px', font: '700 12px ui-monospace, monospace', color: '#cfeeff' }}>
-            <div style={{ font: '800 13px ui-monospace, monospace', letterSpacing: '0.14em', marginBottom: 3 }}>ARMORY</div>
-            <div style={{ color: '#ffffff66', fontWeight: 600, fontSize: 11, marginBottom: 12 }}>Pick a slot, then a manabox. The round always trails your own colour.</div>
+        <HearthFrame title="Armory" maxWidth={460} fixed backdropClass="z-[45]" onClose={() => toggleBench(false)} dataPanel="armory"
+                     bodyClass="px-4 pt-6 pb-3" footer={<div className="text-center text-[12px]">E / Esc — close</div>}>
+            <div className="hk-soft" style={{ fontSize: 13, fontStyle: 'italic', marginBottom: 12, fontFamily: hearthDisplay.fontFamily }}>Pick a slot, then a manabox. The round always trails your own colour.</div>
             {/* the two loadout slots */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               {[0, 1].map(s => {
                 const w = WEAPONS[loadoutUi[s]] ?? WEAPONS[0]
                 const sel = benchSlot === s
                 return (
-                  <button key={s} onClick={() => setBenchSlot(s)} style={{
-                    flex: 1, textAlign: 'left', cursor: 'pointer', borderRadius: 9, padding: '9px 11px',
-                    background: sel ? `${SOUL_COLOR}1e` : 'rgba(255,255,255,0.04)',
-                    border: `1.5px solid ${sel ? SOUL_COLOR + 'cc' : '#ffffff1e'}`,
+                  <button key={s} onClick={() => setBenchSlot(s)} className={`hk-plate hk-hover-fill${sel ? ' is-lit' : ''}`} style={{
+                    flex: 1, textAlign: 'left', cursor: 'pointer', padding: '9px 11px',
                   }}>
-                    <div style={{ color: '#ffffff88', fontWeight: 700, fontSize: 10, letterSpacing: '0.12em' }}>SLOT {s + 1}{s === 0 ? '  ·  Q' : ''}</div>
-                    <div style={{ color: '#eafff6', fontWeight: 800, fontSize: 14, marginTop: 2 }}>{w.name}</div>
-                    <div style={{ color: '#9fb0c0', fontWeight: 600, fontSize: 10, letterSpacing: '0.08em' }}>{w.slot}</div>
+                    <div className="hk-faint" style={{ fontWeight: 700, fontSize: 11 }}>Slot {s + 1}{s === 0 ? '  ·  Q' : ''}</div>
+                    <div className="hk-ink" style={{ font: `600 17px ${hearthDisplay.fontFamily}`, marginTop: 2 }}>{w.name}</div>
+                    <div className="hk-soft" style={{ fontWeight: 600, fontSize: 11 }}>{w.slot}</div>
                   </button>
                 )
               })}
             </div>
-            <div style={{ color: '#ffffff66', fontWeight: 700, fontSize: 10, letterSpacing: '0.12em', marginBottom: 7 }}>ARSENAL → SLOT {benchSlot + 1}</div>
+            <div className="hk-label hk-soft" style={{ fontSize: 13, marginBottom: 7 }}>Arsenal → slot {benchSlot + 1}</div>
             {/* the arsenal — click to equip into the selected slot */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {WEAPONS.map((w, i) => {
                 const equipped = loadoutUi[benchSlot] === i
                 return (
-                  <button key={w.id} onClick={() => equipWeapon(benchSlot, i)} style={{
+                  <button key={w.id} onClick={() => equipWeapon(benchSlot, i)} className={`hk-plate hk-hover-fill${equipped ? ' is-lit' : ''}`} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left',
-                    cursor: 'pointer', borderRadius: 8, padding: '9px 11px',
-                    background: equipped ? `${SOUL_COLOR}18` : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${equipped ? SOUL_COLOR + '99' : '#ffffff16'}`,
+                    cursor: 'pointer', padding: '9px 11px',
                   }}>
                     <span>
-                      <span style={{ color: '#eafff6', fontWeight: 800, fontSize: 13 }}>{w.name}</span>
-                      <span style={{ color: '#8fa0b0', fontWeight: 600, fontSize: 10, letterSpacing: '0.08em', marginLeft: 8 }}>{w.slot} · {w.auto ? 'AUTO' : 'SEMI'}</span>
+                      <span className="hk-ink" style={{ font: `600 15px ${hearthDisplay.fontFamily}` }}>{w.name}</span>
+                      <span className="hk-faint" style={{ fontWeight: 600, fontSize: 11, marginLeft: 8 }}>{w.slot} · {w.auto ? 'auto' : 'semi'}</span>
                     </span>
-                    <span style={{ display: 'flex', gap: 12, color: '#ffffff77', fontWeight: 700, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
-                      <span>dmg <span style={{ color: '#eafff6' }}>{w.damage}</span></span>
-                      <span>clip <span style={{ color: '#eafff6' }}>{w.clip}</span></span>
-                      {equipped && <span style={{ color: SOUL_COLOR }}>◄ equipped</span>}
+                    <span className="hk-soft" style={{ display: 'flex', gap: 12, fontWeight: 700, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                      <span>dmg <b className="hk-ink">{w.damage}</b></span>
+                      <span>clip <b className="hk-ink">{w.clip}</b></span>
+                      {equipped && <span className="hk-ember">◄ equipped</span>}
                     </span>
                   </button>
                 )
               })}
             </div>
-            <div style={{ marginTop: 12, color: '#ffffff55', fontWeight: 600, fontSize: 11, textAlign: 'center' }}>E / Esc — close</div>
-          </div>
-        </>
+        </HearthFrame>
       )}
 
       {/* ── ★ THE REVEAL — shown only once the screen is free ──────────────────────────────────
@@ -7808,13 +7753,13 @@ export default function Shimmer3D() {
             <button
               onPointerDown={(e) => { e.stopPropagation(); if (confirmNew) setConfirmNew(false); else if (banner) setBanner(null) }}
               aria-label="cancel"
-              style={{ width: 56, height: 56, borderRadius: '50%', border: '2px solid #ffffff33', background: 'rgba(70,44,52,0.72)', color: '#f3dada', font: '800 19px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+              style={touchKnob(56, H.rust)}
             >✕</button>
             {/* A — interact/confirm (lower, bigger, where the thumb rests): advance dialogue / talk to an NPC / confirm New Game. */}
             <button
               onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (fish || nearNode || channel) toggleChannel(); else if (nearStation) openStation(); else if (confirmNew) { setConfirmNew(false); setBirthCancelable(true); setBirthOpen(true) } }}
               aria-label="interact"
-              style={{ width: 76, height: 76, borderRadius: '50%', border: '2px solid #ffffff4d', background: fish ? (fish.bite ? 'rgba(55,230,255,0.92)' : 'rgba(58,123,213,0.9)') : nearNpc || dialogue ? 'rgba(212,168,67,0.85)' : channel ? 'rgba(58,123,213,0.9)' : nearNode ? 'rgba(79,199,154,0.85)' : nearStation && !nearNpc && !dialogue ? `${STATIONS[nearStation.itemId].accent}d9` : 'rgba(36,84,72,0.8)', color: fish || nearNpc || dialogue || nearNode || channel || nearStation ? '#0d1a17' : '#dffaf0', font: '800 23px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+              style={touchKnob(76, fish || channel ? H.sky : nearNpc || dialogue ? H.ember : nearNode ? H.moss : nearStation ? H.ember : undefined)}
             >{fish ? (fish.bite ? '❗' : '🎣') : channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? STATIONS[nearStation.itemId].emoji : '✦'}</button>
           </div>
           {/* Jump (edge) + Slide (held) — left of the A/B column. Only meaningful in first-person play. */}
@@ -7824,12 +7769,12 @@ export default function Shimmer3D() {
               onPointerUp={(e) => { e.stopPropagation(); slideRef.current = false }}
               onPointerCancel={() => { slideRef.current = false }}
               aria-label="crouch / slide"
-              style={{ width: 56, height: 56, borderRadius: '50%', border: '2px solid #7fe3c855', background: 'rgba(20,46,54,0.72)', color: '#bfeee2', font: '800 20px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+              style={touchKnob(56)}
             >⇊</button>
             <button
               onPointerDown={(e) => { e.stopPropagation(); jumpRef.current = true }}
               aria-label="jump"
-              style={{ width: 68, height: 68, borderRadius: '50%', border: '2px solid #ffffff4d', background: 'rgba(36,84,72,0.8)', color: '#dffaf0', font: '800 24px ui-monospace, monospace', cursor: 'pointer', touchAction: 'none' }}
+              style={touchKnob(68)}
             >⤒</button>
           </div>
         </>
@@ -7958,7 +7903,7 @@ const STAT_LABELS: [keyof PartyStats, string][] = [
   ['maxHp', 'HP'], ['pwr', 'PWR'], ['grd', 'GRD'], ['foc', 'FOC'], ['res', 'RES'], ['agi', 'AGI'], ['vig', 'VIG'],
 ]
 
-function StatTick({ label, from, to, col, delay }: { label: string; from: number; to: number; col: string; delay: number }) {
+function StatTick({ label, from, to, delay }: { label: string; from: number; to: number; delay: number }) {
   const [v, setV] = useState(from)
   const gained = to - from
   useEffect(() => {
@@ -7977,10 +7922,10 @@ function StatTick({ label, from, to, col, delay }: { label: string; from: number
   }, [from, to, gained, delay])
   const hot = gained > 0
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, padding: '4px 2px', borderRadius: 6, background: hot ? `${col}14` : '#0000' }}>
-      <span style={{ font: '700 8px ui-monospace, monospace', letterSpacing: '0.14em', color: hot ? col : '#6f8b83' }}>{label}</span>
-      <span style={{ font: `800 13px ui-monospace, monospace`, color: hot ? '#eafff6' : '#9db3ac', fontVariantNumeric: 'tabular-nums' }}>{v}</span>
-      <span style={{ font: '800 8px ui-monospace, monospace', letterSpacing: '0.06em', color: hot ? col : '#3f544e', textShadow: hot ? `0 0 8px ${col}88` : 'none' }}>
+    <div className={hot ? 'hk-fill' : undefined} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, padding: '4px 2px', borderRadius: 7 }}>
+      <span className={hot ? 'hk-ink' : 'hk-faint'} style={{ font: `700 10px ${hearthBody.fontFamily}`, letterSpacing: '0.06em' }}>{label}</span>
+      <span className={hot ? 'hk-ink' : 'hk-soft'} style={{ font: `800 15px ${hearthBody.fontFamily}`, fontVariantNumeric: 'tabular-nums' }}>{v}</span>
+      <span className={hot ? 'hk-moss' : 'hk-faint'} style={{ font: `800 11px ${hearthBody.fontFamily}` }}>
         {hot ? `+${gained}` : '·'}
       </span>
     </div>
@@ -7994,60 +7939,61 @@ function BattleRewards({ gold, rows, onClose }: {
 }) {
   const [shown, setShown] = useState(false)
   useEffect(() => { const t = setTimeout(() => setShown(true), 70); return () => clearTimeout(t) }, [])
+  // ★ ON THE HEARTH (2026-09-23): the spoils are a parchment card in the carved frame, like every
+  // other menu. The element hue survives as each spirit's dot and its XP groove (ELEMENT_COLORS is
+  // per-element DATA); everything else is `hk-*` / `H`. No close knob: the one way on is Continue,
+  // which is what unfreezes the world.
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#05070ae8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, touchAction: 'none', animation: 'rwdFade 0.25s ease-out' }}>
+    <HearthFrame title="Spoils" maxWidth={430} fixed backdropClass="z-[50]" closable={false} onClose={() => {}} dataPanel="spoils" bodyClass="px-4 pt-6 pb-4">
       <style>{`
-        @keyframes rwdFade { from { opacity: 0 } to { opacity: 1 } }
         @keyframes lvlPop { from { transform: scale(0.6); opacity: 0 } to { transform: scale(1); opacity: 1 } }
         @keyframes lvlSlide { from { opacity: 0; transform: translateY(-4px) } to { opacity: 1; transform: none } }
       `}</style>
-      <div style={{ width: 'min(430px, 94vw)', maxHeight: '88vh', overflowY: 'auto', background: '#0d1614', border: '2px solid #2f5c4f', borderRadius: 16, padding: '20px 20px 16px', boxShadow: '0 12px 48px #000a' }}>
-        <div style={{ textAlign: 'center', font: '900 20px ui-monospace, monospace', color: '#7fe3c8', letterSpacing: '0.14em', textShadow: '0 0 18px #7fe3c855' }}>SPOILS</div>
         {gold > 0 && (
-          <div style={{ textAlign: 'center', font: '700 13px ui-monospace, monospace', color: '#ffd98a', marginTop: 6, letterSpacing: '0.06em' }}>+{gold} ✦ marks</div>
+          <div className="hk-ember" style={{ textAlign: 'center', font: `600 18px ${hearthDisplay.fontFamily}` }}>+{gold} ✦ marks</div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: gold > 0 ? 12 : 0 }}>
           {rows.map((r, i) => {
             const pct = Math.min(100, Math.round((r.curXp / Math.max(1, r.needXp)) * 100))
             const leveled = r.toLevel > r.fromLevel
-            const col = ELEMENT_COLORS[r.element] ?? '#7fe3c8'
+            const col = ELEMENT_COLORS[r.element] ?? ELEMENT_COLORS.base
             return (
-              <div key={i} style={{ background: '#12201d', border: `1px solid ${leveled ? col : '#ffffff18'}`, borderRadius: 10, padding: '9px 11px' }}>
+              <div key={i} className={`hk-plate${leveled ? ' is-lit' : ''}`} style={{ padding: '9px 11px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 3, background: col, flexShrink: 0, boxShadow: `0 0 8px ${col}99` }} />
-                    <span style={{ font: '700 13px ui-monospace, monospace', color: '#eafff6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                    <span className="hk-ink" style={{ font: `600 16px ${hearthDisplay.fontFamily}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
                   </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                    <span style={{ font: '700 11px ui-monospace, monospace', color: '#8fd9c4' }}>+{r.xpGained} XP</span>
-                    <span style={{ font: '800 12px ui-monospace, monospace', color: leveled ? col : '#c9d6d1', letterSpacing: '0.04em', textShadow: leveled ? `0 0 10px ${col}88` : 'none' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, font: `700 12px ${hearthBody.fontFamily}`, fontVariantNumeric: 'tabular-nums' }}>
+                    <span className="hk-moss">+{r.xpGained} XP</span>
+                    <span className={leveled ? 'hk-ember' : 'hk-soft'} style={{ fontWeight: 800 }}>
                       {leveled ? `Lv ${r.fromLevel}→${r.toLevel}` : `Lv ${r.toLevel}`}
                     </span>
                   </span>
                 </div>
-                {/* XP bar toward next level — fills in on reveal */}
-                <div style={{ height: 6, background: '#0008', borderRadius: 4, overflow: 'hidden', marginTop: 8, border: '1px solid #0006' }}>
-                  <div style={{ height: '100%', width: shown ? `${pct}%` : '0%', background: `linear-gradient(90deg, ${col}, #eafff6)`, borderRadius: 4, transition: 'width 0.7s cubic-bezier(0.2,0.8,0.2,1)' }} />
+                {/* XP groove toward next level — fills in on reveal */}
+                <div style={{ height: 7, background: H.paperLo, borderRadius: 999, overflow: 'hidden', marginTop: 8, boxShadow: 'inset 0 1px 2px rgba(58,39,22,.35)' }}>
+                  <div style={{ height: '100%', width: shown ? `${pct}%` : '0%', background: col, borderRadius: 999, transition: 'width 0.7s cubic-bezier(0.2,0.8,0.2,1)' }} />
                 </div>
                 {(leveled || r.evolved) && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-                    {leveled && <span style={{ font: '800 9px ui-monospace, monospace', color: '#05070a', background: col, borderRadius: 999, padding: '2px 8px', letterSpacing: '0.08em', animation: 'lvlPop 0.45s cubic-bezier(0.2,1.4,0.4,1) both' }}>LEVEL UP</span>}
-                    {r.evolved && <span style={{ font: '800 9px ui-monospace, monospace', color: '#ffe9b0', background: '#0000', border: '1px solid #d4a843', borderRadius: 999, padding: '2px 8px', letterSpacing: '0.08em' }}>✦ READY TO EVOLVE</span>}
+                    {leveled && <span style={{ font: `800 11px ${hearthBody.fontFamily}`, color: H.paperHi, background: H.ember, borderRadius: 999, padding: '2px 9px', animation: 'lvlPop 0.45s cubic-bezier(0.2,1.4,0.4,1) both' }}>Level up</span>}
+                    {r.evolved && <span className="hk-ember hk-rule-ember" style={{ font: `800 11px ${hearthBody.fontFamily}`, borderWidth: 1, borderStyle: 'solid', borderRadius: 999, padding: '2px 9px' }}>✦ Ready to evolve</span>}
                   </div>
                 )}
                 {/* The growth itself — the half that was never shown. */}
                 {leveled && shown && (
-                  <div style={{ marginTop: 8, borderTop: `1px solid ${col}33`, paddingTop: 8, animation: 'lvlSlide 0.4s ease-out both' }}>
+                  <div className="hk-rule" style={{ marginTop: 8, borderTopWidth: 1, borderTopStyle: 'solid', paddingTop: 8, animation: 'lvlSlide 0.4s ease-out both' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
                       {STAT_LABELS.map(([k, lab], si) => (
-                        <StatTick key={k} label={lab} from={r.statsBefore[k]} to={r.statsAfter[k]} col={col} delay={120 + si * 55} />
+                        <StatTick key={k} label={lab} from={r.statsBefore[k]} to={r.statsAfter[k]} delay={120 + si * 55} />
                       ))}
                     </div>
                     {r.learned.length > 0 && (
                       <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap' }}>
-                        <span style={{ font: '700 8px ui-monospace, monospace', letterSpacing: '0.16em', color: '#6f8b83', flexShrink: 0 }}>LEARNED</span>
+                        <span className="hk-label hk-soft" style={{ fontSize: 13, flexShrink: 0 }}>Learned</span>
                         {r.learned.map((mv) => (
-                          <span key={mv} style={{ font: '800 11px ui-monospace, monospace', color: '#eafff6', background: `${col}22`, border: `1px solid ${col}66`, borderRadius: 999, padding: '2px 9px', textShadow: `0 0 10px ${col}77` }}>{mv}</span>
+                          <span key={mv} className="hk-ink hk-fill-ember" style={{ font: `700 12px ${hearthBody.fontFamily}`, borderRadius: 999, padding: '2px 9px', boxShadow: `inset 0 0 0 1px ${col}` }}>{mv}</span>
                         ))}
                       </div>
                     )}
@@ -8057,9 +8003,10 @@ function BattleRewards({ gold, rows, onClose }: {
             )
           })}
         </div>
-        <button onClick={onClose} style={{ display: 'block', width: '100%', marginTop: 16, padding: '11px 0', borderRadius: 11, border: '2px solid #7fe3c8', background: '#12181a', color: '#eafff6', font: '800 14px ui-monospace, monospace', letterSpacing: '0.1em', cursor: 'pointer', touchAction: 'none' }}>CONTINUE</button>
-      </div>
-    </div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+          <HearthButton primary onClick={onClose}>Continue</HearthButton>
+        </div>
+    </HearthFrame>
   )
 }
 

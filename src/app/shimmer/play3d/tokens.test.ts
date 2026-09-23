@@ -54,6 +54,10 @@ const PENDING = [
   // did not change by one literal. Convert it with Shimmer3D's, not before.
   'moglin-look.ts',
   'npcs3d.ts', 'page.tsx', 'RemotePlayers.tsx',
+  // Shimmer3D.tsx: its MENUS left the dark plate 2026-09-23 (range console, armory, spoils, prompts, touch
+  // pad, edit tools — 345 literals to 140). What it still holds is not chrome: the world's material colours,
+  // the Crucible gun HUD (reticle / ammo / bars / cast bar / viewmodel), world-space labels and the two
+  // cinematic cuts. Those need a SCENE palette home, not the hearth — its own slice, not a leftover.
   'Shimmer3D.tsx',
 ]
 
