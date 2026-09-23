@@ -117,12 +117,13 @@ export function HearthTabs({ tabs, active, onPick }: {
 }) {
   return (
     <>
-      <div className="flex items-end gap-1 flex-wrap">
+      {/* One row, always: a wrapped tab reads as a second, lesser set. Past the width it scrolls sideways. */}
+      <div className="flex items-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-1 px-1 pt-1">
         {tabs.map(t => {
           const on = t.id === active
           return (
             <button key={t.id} onClick={() => onPick(t.id)}
-                    className="relative px-3 pt-1.5 pb-2 rounded-t-[10px] text-[13px] font-bold transition-all min-h-[36px]"
+                    className="relative shrink-0 whitespace-nowrap px-2.5 pt-1.5 pb-2 rounded-t-[10px] text-[13px] font-bold transition-all min-h-[36px]"
                     style={on
                       ? { background: H.paperHi, color: H.ink, boxShadow: `0 -1px 3px rgba(58,39,22,.18), inset 0 -3px 0 ${H.ember}` }
                       : { background: H.tabIdle, color: H.inkSoft, transform: 'translateY(2px)' }}>
