@@ -4,7 +4,7 @@
 // ★ WHY (2026-09-22, Alex: "show me a mock of 1 and 2 first"). Every menu now wears the hearth; the
 // always-on HUD is still the arcade's dark plates. The HUD is on screen for the whole game, so its
 // look is Alex's call, judged over the world rather than described. Three faces over ONE frame of a
-// real harness world (public/shimmer/dev/hud-bg.jpg, HTML overlays hidden at capture):
+// real harness world (public/shimmer/mock/hud-bg.jpg, HTML overlays hidden at capture):
 //   Now   — the shipped HUD, approximated here in its own classes.
 //   1     — LIGHT TOUCH: stays dark and quiet so it never competes with the world, but takes the
 //           hearth's shapes — rounded wells, a slim wood rim, the ember ring, the two faces.
@@ -208,7 +208,7 @@ function Vitals({ v }: { v: V }) {
 
 // ── bottom-right: the rune rings + the mana orb ──────────────────────────────────────────────
 function Mana({ v }: { v: V }) {
-  const rings = [{ x: -118, y: -6 }, { x: -90, y: -66 }, { x: -30, y: -96 }, { x: 34, y: -74 }]
+  const rings = [{ x: -124, y: 6 }, { x: -106, y: -54 }, { x: -62, y: -98 }, { x: -2, y: -118 }]
   const ring = (i: number) => {
     const p = rings[i]
     const style: React.CSSProperties = v === 'now'
@@ -254,7 +254,7 @@ export default function HudMock() {
   const pill = (on: boolean) => `px-3 h-8 rounded-full text-[12px] font-semibold transition-colors ${on ? 'bg-white text-black' : 'bg-black/55 text-white/80 hover:bg-black/70'}`
   return (
     <main className={`fixed inset-0 overflow-hidden select-none ${HEARTH_FONT_VARS}`} style={{ background: '#6fa0d8' }}>
-      <img src="/shimmer/dev/hud-bg.jpg" alt="" className="absolute inset-0 w-full h-full object-cover"
+      <img src="/shimmer/mock/hud-bg.jpg" alt="" className="absolute inset-0 w-full h-full object-cover"
            style={{ filter: night ? 'brightness(.32) saturate(.7) hue-rotate(12deg)' : undefined }} />
       <div className="absolute inset-0 pointer-events-none" style={{ background: night ? 'radial-gradient(120% 90% at 50% 45%, rgba(20,30,70,.15), rgba(5,8,25,.55))' : undefined }} />
       <div className="absolute left-1/2 top-1/2 w-1.5 h-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
