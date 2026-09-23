@@ -68,6 +68,10 @@ export async function loadClusterFrame(mySeed: number, myTier: number, base: Plo
 export async function uploadPlot(seed: number): Promise<boolean> {
   try {
     const snap = buildSnapshot(await plotColumnEdits(seed))
+    // ⚠ AN EMPTY PICTURE IS NEVER SENT. A second device (a fresh browser, a phone) holds none of the
+    // keeper's garden, and uploading its empty store would wipe the picture their mates see — an
+    // empty picture can only ever HIDE a garden, never show one. (Found headless, 2026-09-23.)
+    if (!Object.keys(snap.cols).length) return false
     const r = await fetch('/api/cluster/plot', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(snap),
     })

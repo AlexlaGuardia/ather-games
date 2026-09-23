@@ -20,7 +20,7 @@ ok(/const c = generateFramedColumn\(new Column\(gx \* SECTION, gz \* SECTION, DE
   'the no-worker fallback generates the frame too, and lays the mates\' gardens on it')
 ok(/cl \? `cluster:\$\{clusterSig\(cl\.mine, cl\.cfg\)\}:/.test(worker), '★ the worker keys its cache by the frame — a solo column can never be served in a cluster')
 ok(/generateFramedColumn\(new Column\(cx \* SECTION, cz \* SECTION, DEFAULT_COLUMN\), cl\.mine, cl\.cfg\)/.test(worker), 'the worker generates the frame')
-ok(/if \(to !== 'plot'\) clusterMode\.current = null/.test(host), 'leaving the plot leaves cluster mode')
+ok(host.includes("if (to !== 'plot') { clusterMode.current = null; soloVisit.current = false }"), 'leaving the plot leaves cluster mode (and ends a solo visit)')
 ok(/standInCluster\('ne', SEED, plotTier\.current/.test(host), 'the dev walk puts the keeper at their real tier')
 ok(!/plotHeight\(x, z, SEED, plotCfg\.current\)/.test(host.slice(host.indexOf('tp: (x'), host.indexOf('tp: (x') + 3000)), 'tp asks the plot space\'s height, not the solo plot\'s')
 
@@ -36,8 +36,8 @@ ok(!/plotHeight\(x, z, SEED, plotCfg\.current\)/.test(host.slice(host.indexOf('t
     '★ a change to my fold in a REAL cluster queues my mates\' picture (stand-ins never upload)')
   const es = host.indexOf('const enterSpace = useCallback(')
   const body = host.slice(es, es + 1500)
-  ok(body.indexOf('flushSaves()') > 0 && body.indexOf('flushSaves()') < body.indexOf("if (to !== 'plot') clusterMode.current = null")
-    && body.indexOf("if (to !== 'plot') clusterMode.current = null") < body.indexOf('settleUpload()'),
+  ok(body.indexOf('flushSaves()') > 0 && body.indexOf('flushSaves()') < body.indexOf("if (to !== 'plot') { clusterMode.current = null")
+    && body.indexOf("if (to !== 'plot') { clusterMode.current = null") < body.indexOf('settleUpload()'),
     '★ leaving flushes WHILE still a cluster, then sends the pending picture — never cancels it')
   ok(/void loadClusterFrame\(SEED, plotTier\.current, base\)/.test(host), '/space cluster opens the REAL record first')
   ok(/if \(to === 'cluster' \|\| to === 'cluster stand'\) return openCluster\(to === 'cluster stand'\)/.test(host), 'the console door goes through openCluster')
@@ -55,6 +55,21 @@ ok(!/plotHeight\(x, z, SEED, plotCfg\.current\)/.test(host.slice(host.indexOf('t
   ok(/if \(cluster\) drawClusterDoors/.test(map) && /if \(cl\) drawClusterDoors/.test(map), '★ both maps draw every cluster door, not the solo threshold')
   ok(/plateToPixel\(plate, p\.x, p\.z\)/.test(map) && !/plotToPixel\(p\.x, p\.z, cfg\)/.test(map), 'the keeper dot reads the plate\'s own centre (the cluster plate is not centred on the fold)')
   ok(/clusterSig\(cl\.mine, cl\.cfg\)\}@\$\{cPlateRow\}/.test(map), 'the minimap repaints as the sliced plate fills')
+}
+
+// ── a cluster is where you live: it opens around you in your plot (2026-09-23) ──
+{
+  const es = host.indexOf('const enterSpace = useCallback(')
+  const body = host.slice(es, host.indexOf('}, [flushSaves, onSay])', es))
+  ok(/if \(to === 'plot' && !force\) adoptCachedCluster\(\)/.test(body), '★★ stepping into the plot arrives IN the cluster (cached frame, before the landing)')
+  ok(body.indexOf('adoptCachedCluster()') < body.indexOf('const t = plotThreshold(SEED, doorCfg())'), '★ adopted BEFORE the arrival reads the door')
+  ok(/if \(to === 'plot' && !force\) queueMicrotask\(\(\) => refreshClusterRef\.current\?\.\(\)\)/.test(body), 'then the record is asked')
+  ok(/if \(savedSpace === 'plot'\) \{ adoptCachedCluster\(\); queueMicrotask/.test(host), '★ waking in the plot wakes in the cluster')
+  ok(!/plotThreshold\(SEED, plotCfg\.current\)/.test(host), '★★ every door question asks doorCfg() — in a cluster the door faces OUT, not where the solo door was')
+  ok(/thresholdBearing: quarterThresholdBearing\(cm\.mine\)/.test(host), 'doorCfg is the quarter\'s door in a cluster')
+  ok(/if \(stay\) \{/.test(body) && /if \(!stay\) onSay/.test(body), 'a rebuild in place keeps the keeper where they stand')
+  ok(/if \(had && !had\.snaps\) return/.test(host), 'the owner\'s stand-ins are never overwritten by the record')
+  ok(/soloVisit\.current = true/.test(host), '/space plot from inside is a solo visit, not undone on the next frame')
 }
 
 if (fails.length) { console.error(`cluster-wiring: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

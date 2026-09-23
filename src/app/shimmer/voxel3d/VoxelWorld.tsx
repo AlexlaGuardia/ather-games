@@ -248,7 +248,7 @@ import { standInCluster, generateFramedColumn, framedMaterialAt, framedHeight, f
 import { applyMateEdits, type PlotSnapshot } from '../voxel/plot-snapshot'
 import { loadClusterFrame, uploadPlot, scheduleUpload, settleUpload } from './cluster-sync'
 import { ClusterRows } from './cluster-panel'
-import { DEFAULT_CLUSTER, type ClusterConfig, type QuarterId } from '../voxel/cluster'
+import { DEFAULT_CLUSTER, NO_SLOTS, QUARTERS, quarterThresholdBearing, type ClusterConfig, type ClusterSlots, type QuarterId } from '../voxel/cluster'
 import { insideGlade } from '../voxel/glade'
 import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps, socketWay, socketLitBy, socketLabel, socketStandOut, SOCKET_RADIUS } from './court-blueprint'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
@@ -3363,6 +3363,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * because two doors reach it: the console and the Gardens menu's "Walk the cluster".
    */
   const openCluster = (standIns: boolean): string => {
+    soloVisit.current = false
     const base = withLitter(DEFAULT_PLOT, litterFrom.current)
     const openStandIns = () => {
       clusterMode.current = { mine: 'ne', cfg: standInCluster('ne', SEED, plotTier.current, 1, { ...DEFAULT_CLUSTER, base }) }
@@ -3379,6 +3380,55 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       onSay(`your cluster opens — ${filled} mate${filled === 1 ? '' : 's'}, ${mates} garden${mates === 1 ? '' : 's'} on record (theirs are read-only)`)
     })
     return 'opening your cluster…'
+  }
+
+  // ── ★★ A CLUSTER IS WHERE YOU LIVE, NOT A PLACE YOU VISIT (2026-09-23, Alex: "im not seeing any dif in
+  // my home plot") ─────────────────────────────────────────────────────────────────────────────
+  // Canon: a cluster is ONE fold, and a keeper folded in never left it. So a keeper who stands in a
+  // real cluster finds it around them every time they are in their plot — at boot and through their
+  // door — not only after asking for it. The last frame is cached per keeper so the ground is right
+  // from the first column (and the arrival lands at the right door); the record is then asked, and
+  // the mates' gardens laid on by rebuilding IN PLACE. `/space plot` from inside is a solo visit
+  // until the keeper next leaves the plot.
+  const CLUSTER_CACHE = keeperKey('ather:shimmer:cluster-frame')
+  const soloVisit = useRef(false)
+  const adoptCachedCluster = (): boolean => {
+    if (clusterMode.current || soloVisit.current) return false
+    let c: { mine?: QuarterId; slots?: ClusterSlots } | null = null
+    try { c = JSON.parse(localStorage.getItem(CLUSTER_CACHE) ?? 'null') } catch { /* private mode */ }
+    if (!c?.mine || !c.slots || !(QUARTERS as readonly string[]).includes(c.mine)) return false
+    const slots = { ...NO_SLOTS }
+    for (const q of QUARTERS) { const k = c.slots[q]; slots[q] = k ? { seed: k.seed | 0, tier: k.tier | 0 } : null }
+    slots[c.mine] = { seed: SEED, tier: plotTier.current }      // mine from my own save, always
+    clusterMode.current = { mine: c.mine, cfg: { ...DEFAULT_CLUSTER, base: withLitter(DEFAULT_PLOT, litterFrom.current), slots }, snaps: {} }
+    return true
+  }
+  const refreshCluster = () => {
+    if (space.current !== 'plot' || soloVisit.current) return
+    const had = clusterMode.current
+    if (had && !had.snaps) return                                // the owner's stand-ins: leave them be
+    void loadClusterFrame(SEED, plotTier.current, withLitter(DEFAULT_PLOT, litterFrom.current)).then(f => {
+      if (space.current !== 'plot' || soloVisit.current || clusterMode.current !== had) return
+      if (!f) {
+        try { localStorage.removeItem(CLUSTER_CACHE) } catch { /* private mode */ }
+        if (had) { clusterMode.current = null; enterSpaceRef.current?.('plot', undefined, true, true) }
+        return
+      }
+      try { localStorage.setItem(CLUSTER_CACHE, JSON.stringify({ mine: f.mine, slots: f.cfg.slots })) } catch { /* full */ }
+      clusterMode.current = f
+      const same = had && JSON.stringify(had.cfg.slots) === JSON.stringify(f.cfg.slots)
+      if (!same || Object.keys(f.snaps).length) enterSpaceRef.current?.('plot', undefined, true, true)
+      void uploadPlot(SEED)
+      if (!had) onSay('your cluster is around you — your mates\' gardens stand in their corners (theirs are read-only)')
+    })
+  }
+  /** The keeper's door on the ground they stand on: their quarter's (facing OUT) in a cluster, their plot's solo. */
+  /** `refreshCluster`, reachable from `enterSpace` (a useCallback that must not capture it stale). */
+  const refreshClusterRef = useRef<(() => void) | null>(null)
+  refreshClusterRef.current = refreshCluster
+  const doorCfg = (): PlotConfig => {
+    const cm = space.current === 'plot' ? clusterMode.current : null
+    return cm ? { ...plotCfg.current, thresholdBearing: quarterThresholdBearing(cm.mine) } : plotCfg.current
   }
   /** Surface y in the plot space, whichever ground it is wearing. null off the ground. */
   const plotSpaceHeight = (x: number, z: number): number | null => {
@@ -4088,6 +4138,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         if (want === 'plot' && clusterMode.current) {
           flushSaves()                                 // while still a cluster, so my last edits reach my mates
           clusterMode.current = null
+          soloVisit.current = true                     // solo until I next leave the plot
           enterSpaceRef.current?.('plot', undefined, true)
           return 'the cluster closes back to your own garden'
         }
@@ -4411,6 +4462,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         onSay('you were adrift inside your own fold — the glade has you back')
       } else {
         space.current = savedSpace
+        // ★ A keeper in a cluster wakes in it: the cached frame shapes the ground from the first
+        // column, and the record is asked straight after (`refreshCluster`) to lay the gardens.
+        if (savedSpace === 'plot') { adoptCachedCluster(); queueMicrotask(() => refreshClusterRef.current?.()) }
         // ⚠ THE CAVE MOVED SOLID CLOUD INTO THE ONE SPOT EVERY KEEPER HAS STOOD (2026-08-19). The
         // mound is 24 blocks wide and sits at the door; a save taken where its flank now is would
         // reopen walled into cloud, and the autosave would write that position straight back — the
@@ -5192,14 +5246,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * ⚠ The worker's own cache is already space-keyed, so nothing has to be said to it beyond the
    * space on each request. It is the HOST's caches that overlap.
    */
-  const enterSpace = useCallback((to: Space, landAt?: { x: number; z: number }, force = false) => {
+  const enterSpace = useCallback((to: Space, landAt?: { x: number; z: number }, force = false, stay = false) => {
     // `force` rebuilds the SAME space — cluster mode on or off changes what the plot's ground is.
     if (space.current === to && !force) return
     const g = group.current
     flushSaves()                                    // ⚠ before the flip — see above
     // Cluster mode is a way of being in the plot; leaving the plot leaves it. AFTER the flush, so the
     // flush still knows it was a cluster and queues my mates' picture — which is then sent now.
-    if (to !== 'plot') clusterMode.current = null
+    if (to !== 'plot') { clusterMode.current = null; soloVisit.current = false }
+    // Stepping INTO the plot: a keeper in a cluster arrives in it, at their quarter's door (cache).
+    if (to === 'plot' && !force) adoptCachedCluster()
     settleUpload()
     space.current = to
     for (const [, m] of drawn.current) { g?.remove(m); m.geometry.dispose() }
@@ -5234,7 +5290,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // `plotThreshold` is computed from the same functions that build the ground so it cannot
     // disagree with them.
     const lc = loco.current
-    if (to === 'plot') {
+    if (stay) {
+      // ★ A REBUILD IN PLACE (the cluster's record or a mate's garden arrived): the ground is re-made
+      // under the keeper and they stay where they stand. The census still has to be re-taken — the
+      // caches above were cleared — and this is the same exact instant `plot`'s branch relies on.
+      if (to === 'plot') { plotChests.current = 0; void countMaterial(SEED, 'plot', MAT.CHEST).then(n => { plotChests.current += n }) }
+    } else if (to === 'plot') {
       // ★ THE CHEST CENSUS IS TAKEN HERE AND ONLY HERE, because this is the one instant it can be
       // taken exactly: `flushSaves` ran three lines up, every cache above was just cleared, and no
       // plot column is resident. A count run at any later moment would miss unflushed edits and
@@ -5256,12 +5317,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // inland is a different column, and the roll means a different altitude. Reusing `t.y` would
       // drop the keeper into the turf or leave them a step in the air — and the settle gate reads
       // the camera, so "a step in the air" is the shape that hangs physics.
-      const t = plotThreshold(SEED, plotCfg.current)
-      const b = plotCfg.current.thresholdBearing
+      const t = plotThreshold(SEED, doorCfg())
+      const b = doorCfg().thresholdBearing
       const standoff = arriveStandoff(plotCfg.current)
       const bx = Math.round(t.x - Math.cos(b) * standoff)
       const bz = Math.round(t.z - Math.sin(b) * standoff)
-      const bh = plotHeight(bx, bz, SEED, plotCfg.current)
+      const bh = plotSpaceHeight(bx, bz)
       // A fold small enough that six blocks inland is off the island falls back to the threshold —
       // the door is still the safe cell, and this is a view preference, never a correctness one.
       if (bh === null) { lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5 }
@@ -5295,7 +5356,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       lc.px = a.x + 0.5; lc.pz = a.z + 0.5
       lc.py = columnHeight(a.x, a.z, SEED) + 1
     }
-    if (to === 'glade') {
+    if (to === 'glade' && !stay) {
       // ★ THE GLADE'S LANDING IS GREG'S GROUND, not its seam: the passage from the plot is Greg's
       // fold and it lets you out where he stands — the same spot a fresh keeper first stands on.
       // ⚠ …EXCEPT WHEN YOU WALKED IN OFF THE ROAD (2026-09-22). Arriving at Greg's feet after
@@ -5360,14 +5421,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // same reason: the way home is one seam in a 6.3km wall, and the moment a keeper is guaranteed
     // to be looking at it is the moment they arrive. Facing them at it teaches the landmark every
     // single time, at the cost of one turn before they walk off into the country.
-    {
+    if (!stay) {
       let yaw: number
       if (to === 'plot') {
-        const t = plotThreshold(SEED, plotCfg.current)
+        const t = plotThreshold(SEED, doorCfg())
         const dx = (t.x + 0.5) - lc.px, dz = (t.z + 0.5) - lc.pz
         // ⚠ The keeper stands ON the threshold, so the vector to it is ~zero and its angle is noise.
         // Face straight OUT along the fold's own bearing instead — the direction the door opens.
-        const b = plotCfg.current.thresholdBearing
+        const b = doorCfg().thresholdBearing
         yaw = Math.hypot(dx, dz) > 0.5 ? Math.atan2(-dx, -dz)
           : Math.atan2(-Math.cos(b), -Math.sin(b))
       } else {
@@ -5391,7 +5452,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // out, and the round trip would look like the door randomly not working. The latch clears when
     // they walk off it.
     crossLatched.current = true
-    onSay(to === 'plot' ? 'you step through into your garden' : to === 'glade' ? 'the fold lets you out at Moonwell' : 'you step out into the Wilds')
+    if (!stay) onSay(to === 'plot' ? 'you step through into your garden' : to === 'glade' ? 'the fold lets you out at Moonwell' : 'you step out into the Wilds')
+    // A keeper in a cluster: ask the record now (the cache got the ground right; this lays the gardens).
+    if (to === 'plot' && !force) queueMicrotask(() => refreshClusterRef.current?.())
   }, [flushSaves, onSay])
   useEffect(() => { enterSpaceRef.current = enterSpace }, [enterSpace])
   // ⚠ SAME SIGN CONVENTION AS THE ARRIVAL FACING, AND FOR THE SAME REASON: a YXZ camera looks along
@@ -6340,7 +6403,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * crossing is published through a ref. The bridge cannot fire before mount, so the ref is always
    * populated by the time anything can call it.
    */
-  const enterSpaceRef = useRef<((to: Space, landAt?: { x: number; z: number }, force?: boolean) => void) | null>(null)
+  const enterSpaceRef = useRef<((to: Space, landAt?: { x: number; z: number }, force?: boolean, stay?: boolean) => void) | null>(null)
   /** Moonwell's threshold, derived once: the island never grows, so its coast never moves. */
   const gladeSeamAnchorRef = useRef(gladeSeamAnchors(SEED))
   /** The Wilds-side spot of the island's road threshold — the same one both directions use. */
@@ -8918,7 +8981,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             settleRescues.current++
             settleHeld.current = 0
             if (space.current === 'plot') {
-              const t = plotThreshold(SEED, plotCfg.current)
+              const t = plotThreshold(SEED, doorCfg())
               lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
             } else {
               lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
@@ -9464,7 +9527,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // ground they have not built out to yet has not fallen anywhere, and snatching them back
         // would make expansion feel like a wall.
         if (hasFallenOut(lc.py, plotCfg.current)) {
-          const t = plotThreshold(SEED, plotCfg.current)
+          const t = plotThreshold(SEED, doorCfg())
           lc.px = t.x + 0.5; lc.py = t.y; lc.pz = t.z + 0.5
           lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
           p.set(lc.px, eyeY(lc), lc.pz)
@@ -9474,7 +9537,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         } else {
           // Standing at your own threshold is the way OUT — the same volume you arrive in, which is
           // exactly why the latch exists.
-          const t = plotThreshold(SEED, plotCfg.current)
+          const t = plotThreshold(SEED, doorCfg())
           // ⚠ THE RADIUS COMES FROM `seam.ts`, WHICH ALSO DRAWS IT (2026-08-18). It was a bare 1.6
           // typed here and a matching constant there — and the pair is exactly why Alex was sealed
           // in his own garden: the trigger was tuned for a crease nobody could see, and neither

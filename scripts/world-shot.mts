@@ -7,6 +7,7 @@
 //   WORLD_CMD='space plot; tp 254 18'                         — several, in order, ';' separated
 //   WORLD_FLY=8                                               — rise for N seconds first (owner-only)
 //   WORLD_OWNER=1                                             — fetch the owner cookie for a GATED PAGE (dev/*)
+//   WORLD_SESSION=<jwt>                                       — sign the page in as an account (clusters need one)
 //   WORLD_PITCH=-10                                           — degrees; negative looks UP
 //   WORLD_YAW=180                                             — degrees, + turns right (spawn faces -Z)
 //   WORLD_LOG='\\[canopy\\]'                                     — forward matching console lines to stdout
@@ -194,6 +195,13 @@ const OWNER = process.env.WORLD_OWNER === '1'
   // *the PAGE is public, only the console is gated*. That holds for `/shimmer/voxel3d`. It does not
   // hold for anything under `/shimmer/dev/*`, which `proxy.ts` 403s outright — so shooting a dev
   // page without a cookie photographs "Forbidden — owner only." Set it for any owner-gated URL.
+  // ★ WORLD_SESSION=<jwt> signs the page in as that account (2026-09-23, cluster walk-through): a
+  // cluster only exists for a signed-in keeper, so an anonymous shot can never photograph one. Mint
+  // with lib/accounts/session.ts › mintSession on this box; it never leaves it.
+  if (process.env.WORLD_SESSION) {
+    const u = new globalThis.URL(URL)
+    await page.setCookie({ name: 'ather_session', value: process.env.WORLD_SESSION, domain: u.hostname, path: '/', httpOnly: true })
+  }
   if (GOTO || CMD || FLY || OWNER) {
     const KEY = process.env.OWNER_KEY
     if (!KEY) {
