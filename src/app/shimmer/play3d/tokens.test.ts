@@ -33,14 +33,16 @@ const DIR = join(process.cwd(), 'src/app/shimmer/play3d')
  * file turns assert A red, which is the intended direction: the list cannot lie in the cheap way.
  */
 // vessel-art.tsx was born converted (2026-09-09): two literals, both tokens from the day it was written
-const CONVERTED = ['PassagePanel.tsx', 'TremorRing.tsx', 'ui.tsx', 'vessel-art.tsx']
+// GfxPanel.tsx + MoveBook.tsx converted 2026-09-23 by the Carved Hearth column pass: every colour an hk-* class or an
+// `H` token, radii on the ladder. (MoveBook keeps `rune.glow` / `e.accent` — per-rune/element DATA, not literals.)
+const CONVERTED = ['GfxPanel.tsx', 'MoveBook.tsx', 'PassagePanel.tsx', 'TremorRing.tsx', 'ui.tsx', 'vessel-art.tsx']
 
 /**
  * Still holding raw literals. NOT an exemption — a worklist with a red light on it (assert B).
  * Delete a name from here the moment its file is clean.
  */
 const PENDING = [
-  'GfxPanel.tsx', 'MoveBook.tsx',   // HotBar.tsx left the worklist by being RETIRED (2026-09-16, HUD port stage 2) — its job is hud/hotbar.tsx now
+  // HotBar.tsx left the worklist by being RETIRED (2026-09-16, HUD port stage 2); GfxPanel.tsx + MoveBook.tsx by being CONVERTED (2026-09-23)
   // ⚠ Arrived by MOVING, not by being written: the three moglin fur/collar literals were already
   // raw inside Shimmer3D.tsx and were extracted to a leaf module so the clay bench could import
   // them instead of retyping them. The count on this worklist went up and the repo's actual drift

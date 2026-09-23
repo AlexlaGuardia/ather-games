@@ -11,7 +11,7 @@
 // are the honest numbers for "is it hitching", so they get equal billing.
 import { useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { menuBtn } from './ui'
+import { H, HearthButton } from '../ui/hearth'
 import { type GfxSettings, type ShadowQuality, GFX_DEFAULTS } from './gfx'
 import { readPerfLog, perfSeq, perfClockStart, clearPerfLog, type PerfEntry } from './perflog'
 
@@ -82,18 +82,16 @@ export function FrameProbe({ statsRef }: { statsRef: React.RefObject<FrameStats>
   return null
 }
 
-const label: React.CSSProperties = {
-  font: '800 9px ui-monospace, monospace', color: '#8fd9c4', letterSpacing: '0.14em',
+/** The display-face section label — sentence case, no tracking. The plaque owns the panel title. */
+function Label({ children }: { children: React.ReactNode }) {
+  return <span className="hk-label hk-soft text-[11px]">{children}</span>
 }
 
 function Row({ k, v, warn }: { k: string; v: string; warn?: boolean }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', lineHeight: 1.8 }}>
-      <span style={{ font: '700 10px ui-monospace, monospace', color: '#cfeee2' }}>{k}</span>
-      <span style={{
-        font: '800 12px ui-monospace, monospace', fontVariantNumeric: 'tabular-nums',
-        color: warn ? '#ff9d7a' : '#eafff6',
-      }}>{v}</span>
+    <div className="flex justify-between items-baseline" style={{ lineHeight: 1.8 }}>
+      <span className="hk-label hk-soft text-[10px]">{k}</span>
+      <span className={`font-mono text-[12px] font-bold tabular-nums ${warn ? 'hk-rust' : 'hk-ink'}`}>{v}</span>
     </div>
   )
 }
@@ -108,24 +106,23 @@ function Drift({ k, v, base, unit = '' }: { k: string; v: number; base?: number;
   // crosses chunk boundaries and props stream in and out.
   const grew = base !== undefined && d > Math.max(2, base * 0.05)
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', lineHeight: 1.8 }}>
-      <span style={{ font: '700 10px ui-monospace, monospace', color: '#cfeee2' }}>{k}</span>
-      <span style={{ font: '800 12px ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', color: grew ? '#ff9d7a' : '#eafff6' }}>
+    <div className="flex justify-between items-baseline" style={{ lineHeight: 1.8 }}>
+      <span className="hk-label hk-soft text-[10px]">{k}</span>
+      <span className={`font-mono text-[12px] font-bold tabular-nums ${grew ? 'hk-rust' : 'hk-ink'}`}>
         {v ? v.toFixed(0) : '—'}{v ? unit : ''}
-        {grew && <span style={{ font: '700 10px ui-monospace, monospace' }}> +{d.toFixed(0)}</span>}
+        {grew && <span className="font-mono text-[10px] font-bold"> +{d.toFixed(0)}</span>}
       </span>
     </div>
   )
 }
 
+/** A toggle chip: plain hk-btn idle, an ember ring when it is the active choice. */
 function Seg({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} style={{
-      ...menuBtn, flex: 1, textAlign: 'center', padding: '5px 0',
-      border: active ? '1px solid #7fe3c8' : '1px solid #ffffff22',
-      background: active ? '#12352c' : '#0b1513',
-      color: active ? '#eafff6' : '#8aa9a0',
-    }}>{children}</button>
+    <button onClick={onClick} className="hk-btn flex-1 text-center text-[12px] py-[5px]"
+            style={active ? { boxShadow: `inset 0 0 0 1.5px ${H.ember}`, color: H.ember } : undefined}>
+      {children}
+    </button>
   )
 }
 
@@ -160,48 +157,47 @@ export function GfxPanel({ gfx, onGfx, statsRef, saveRef }: {
   const isLight = !gfx.antialias && gfx.shadows !== 'high' && gfx.adaptiveDpr
 
   return (
-    <div style={{ width: 216, background: 'rgba(11,21,19,0.96)', border: '1px solid #2f5c4f', borderRadius: 11, padding: 12 }}>
-      <div style={{ ...label, textAlign: 'center', marginBottom: 10 }}>GRAPHICS</div>
-
-      <div style={{ background: '#0b1513', border: '1px solid #ffffff18', borderRadius: 8, padding: '6px 9px' }}>
+    <div style={{ width: '100%', maxWidth: 216, padding: '24px 12px 12px' }}>
+      <div className="hk-plate px-[9px] py-1.5">
         <Row k="fps" v={stats.fps ? stats.fps.toFixed(0) : '—'} warn={stats.fps > 0 && stats.fps < 50} />
         <Row k="worst frame" v={stats.worstMs ? `${stats.worstMs.toFixed(0)}ms` : '—'} warn={stats.worstMs > SPIKE_MS} />
         <Row k="hitches/s" v={stats.spikes ? stats.spikes.toFixed(1) : '0'} warn={stats.spikes > 0.5} />
         <Row k="resolution" v={`${stats.dpr.toFixed(2)}x`} />
       </div>
-      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
+      <div className="text-[10px] leading-[1.4] hk-faint" style={{ margin: '5px 0 2px' }}>
         Worst frame is the number that matters for stutter. Under {SPIKE_MS}ms is smooth.
       </div>
 
       {/* ── LAG LOG — the "when and where did it freeze" readout. Long tasks (main-thread blocks
           ≥50ms) auto-logged; craft/deposit/save/open marked by name so a block can be attributed. */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '12px 0 4px' }}>
-        <span style={label}>LAG LOG</span>
-        <button onClick={() => { clearPerfLog(); setLog([]) }} style={{ font: '700 9px ui-monospace, monospace', color: '#8aa9a0', background: 'none', border: '1px solid #ffffff22', borderRadius: 5, padding: '1px 6px', cursor: 'pointer' }}>clear</button>
+      <div className="flex justify-between items-baseline" style={{ margin: '12px 0 4px' }}>
+        <Label>Lag log</Label>
+        <HearthButton small onClick={() => { clearPerfLog(); setLog([]) }}>clear</HearthButton>
       </div>
-      <div style={{ background: '#0b1513', border: '1px solid #ffffff18', borderRadius: 8, padding: '6px 9px', maxHeight: 168, overflowY: 'auto' }}>
-        {log.length === 0 && <div style={{ font: '600 10px ui-monospace, monospace', color: '#5a7a6e' }}>No hitches yet. Go do the thing that lags.</div>}
+      <div className="hk-plate px-[9px] py-1.5" style={{ maxHeight: 168, overflowY: 'auto' }}>
+        {log.length === 0 && <div className="text-[10px] hk-faint">No hitches yet. Go do the thing that lags.</div>}
         {log.map((e, i) => {
           const secs = ((e.t - perfClockStart()) / 1000)
           const bad = e.ms >= 100
+          const mid = e.ms >= 50
           return (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, lineHeight: 1.7 }}>
-              <span style={{ font: '700 9px ui-monospace, monospace', color: e.kind === 'longtask' ? '#ff9d7a' : '#cfeee2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div key={i} className="flex justify-between items-baseline gap-1.5" style={{ lineHeight: 1.7 }}>
+              <span className={`truncate text-[9px] font-bold ${e.kind === 'longtask' ? 'hk-ember' : 'hk-ink'}`}>
                 {e.kind === 'longtask' ? '■ ' : ''}{e.label}
               </span>
-              <span style={{ font: '800 10px ui-monospace, monospace', fontVariantNumeric: 'tabular-nums', color: bad ? '#ff7a5c' : e.ms >= 50 ? '#ffb35c' : '#9fd9c4', whiteSpace: 'nowrap' }}>
-                {e.ms.toFixed(0)}ms<span style={{ color: '#5a7a6e', marginLeft: 5 }}>{secs.toFixed(0)}s</span>
+              <span className={`font-mono text-[10px] font-bold tabular-nums whitespace-nowrap ${bad ? 'hk-rust' : mid ? 'hk-ember' : 'hk-moss'}`}>
+                {e.ms.toFixed(0)}ms<span className="hk-faint" style={{ marginLeft: 5 }}>{secs.toFixed(0)}s</span>
               </span>
             </div>
           )
         })}
       </div>
-      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
+      <div className="text-[10px] leading-[1.4] hk-faint" style={{ margin: '5px 0 2px' }}>
         Orange ■ = a main-thread freeze. A named row right beside it is the likely cause.
       </div>
 
-      <div style={{ ...label, margin: '12px 0 4px' }}>LEAK WATCH</div>
-      <div style={{ background: '#0b1513', border: '1px solid #ffffff18', borderRadius: 8, padding: '6px 9px' }}>
+      <div style={{ margin: '12px 0 4px' }}><Label>Leak watch</Label></div>
+      <div className="hk-plate px-[9px] py-1.5">
         <Drift k="geometries" v={stats.geometries} base={stats.base?.geometries} />
         <Drift k="textures" v={stats.textures} base={stats.base?.textures} />
         <Drift k="shaders" v={stats.programs} base={stats.base?.programs} />
@@ -209,58 +205,58 @@ export function GfxPanel({ gfx, onGfx, statsRef, saveRef }: {
         <Row k="draw calls" v={stats.calls ? String(stats.calls) : '—'} />
         <Row k="triangles" v={stats.triangles ? `${(stats.triangles / 1000).toFixed(0)}k` : '—'} />
       </div>
-      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
+      <div className="text-[10px] leading-[1.4] hk-faint" style={{ margin: '5px 0 2px' }}>
         Numbers in orange are climbing since you opened this. Standing still should hold them
         steady — if they creep, it is a leak in the code, not the GPU.
       </div>
 
-      <div style={{ ...label, margin: '12px 0 4px' }}>AUTOSAVE</div>
-      <div style={{ background: '#0b1513', border: '1px solid #ffffff18', borderRadius: 8, padding: '6px 9px' }}>
+      <div style={{ margin: '12px 0 4px' }}><Label>Autosave</Label></div>
+      <div className="hk-plate px-[9px] py-1.5">
         <Row k="last save" v={save.writes || save.skipped ? `${save.ms.toFixed(1)}ms` : '—'} warn={save.ms > 16} />
         <Row k="save size" v={save.kb ? `${save.kb.toFixed(0)}kb` : '—'} />
         <Row k="writes/skips" v={`${save.writes}/${save.skipped}`} />
       </div>
-      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', margin: '5px 0 2px' }}>
+      <div className="text-[10px] leading-[1.4] hk-faint" style={{ margin: '5px 0 2px' }}>
         Skips are saves where nothing changed. Runs in idle time, not mid-frame.
       </div>
 
-      <div style={{ ...label, margin: '12px 0 4px' }}>EDGE SMOOTHING</div>
-      <div style={{ display: 'flex', gap: 5 }}>
+      <div style={{ margin: '12px 0 4px' }}><Label>Edge smoothing</Label></div>
+      <div className="flex" style={{ gap: 5 }}>
         <Seg active={gfx.antialias} onClick={() => set({ antialias: true })}>On</Seg>
         <Seg active={!gfx.antialias} onClick={() => set({ antialias: false })}>Off</Seg>
       </div>
-      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', marginTop: 4 }}>
+      <div className="text-[10px] leading-[1.4] hk-faint" style={{ marginTop: 4 }}>
         Off = stair-stepped diagonals. Costs the most on integrated graphics.
       </div>
 
-      <div style={{ ...label, margin: '12px 0 4px' }}>SHADOWS</div>
-      <div style={{ display: 'flex', gap: 5 }}>
+      <div style={{ margin: '12px 0 4px' }}><Label>Shadows</Label></div>
+      <div className="flex" style={{ gap: 5 }}>
         {(['off', 'low', 'high'] as ShadowQuality[]).map(q => (
           <Seg key={q} active={gfx.shadows === q} onClick={() => set({ shadows: q })}>
             {q === 'off' ? 'Off' : q === 'low' ? 'Soft' : 'Sharp'}
           </Seg>
         ))}
       </div>
-      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', marginTop: 4 }}>
+      <div className="text-[10px] leading-[1.4] hk-faint" style={{ marginTop: 4 }}>
         Soft = same shadows, blurrier edges. Range and draw distance never change.
       </div>
 
-      <div style={{ ...label, margin: '12px 0 4px' }}>ADAPTIVE RESOLUTION</div>
-      <div style={{ display: 'flex', gap: 5 }}>
+      <div style={{ margin: '12px 0 4px' }}><Label>Adaptive resolution</Label></div>
+      <div className="flex" style={{ gap: 5 }}>
         <Seg active={gfx.adaptiveDpr} onClick={() => set({ adaptiveDpr: true })}>On</Seg>
         <Seg active={!gfx.adaptiveDpr} onClick={() => set({ adaptiveDpr: false })}>Off</Seg>
       </div>
-      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#8aa9a0', marginTop: 4 }}>
+      <div className="text-[10px] leading-[1.4] hk-faint" style={{ marginTop: 4 }}>
         Drops sharpness only while the GPU is drowning, then recovers.
       </div>
 
-      <div style={{ display: 'flex', gap: 5, marginTop: 12 }}>
-        <button
+      <div className="flex justify-center" style={{ marginTop: 12 }}>
+        <HearthButton
+          primary
           onClick={() => onGfx(isLight ? GFX_DEFAULTS : { antialias: false, shadows: 'low', adaptiveDpr: true })}
-          style={{ ...menuBtn, flex: 1, textAlign: 'center' }}
-        >{isLight ? '↺ Full look' : '⚡ Light preset'}</button>
+        >{isLight ? '↺ Full look' : '⚡ Light preset'}</HearthButton>
       </div>
-      <div style={{ font: '600 9px/1.4 ui-monospace, monospace', color: '#b8ae94', marginTop: 6 }}>
+      <div className="text-[10px] leading-[1.4] hk-soft" style={{ marginTop: 6 }}>
         Changing edge smoothing or shadows rebuilds the view — you keep your spot, but click once to
         re-grab the mouse.
       </div>

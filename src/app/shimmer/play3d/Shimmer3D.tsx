@@ -29,7 +29,7 @@ import { HearthHudLayer, hudMapBox, hudDoorTop, HUD_BAR_CLEAR } from '../ui/hear
 import { HearthMapFrame, HearthObjective, HearthClock, HearthChip, fmtRemain, useHudSize } from '../ui/hearth-hud'
 import type { HudFace } from '../ui/hud-face'
 import { HEARTH_FONT_VARS } from '../ui/hearth-fonts'
-import { H } from '../ui/hearth'
+import { H, hearthBody, HearthFrame, HearthProgress } from '../ui/hearth'
 import { ToolGlyph } from '../hud/hud-corner'
 /** Alex's pick for the always-on HUD (2026-09-23) — the Ather's `HUD_FACE`, same value. */
 const HUD_FACE: HudFace = 'full'
@@ -3747,18 +3747,24 @@ function RegionTransition({ label, phase }: { label: string; phase: TransitPhase
   )
 }
 
-function AccountBlock({ account, label }: { account: UseAccount; label: React.CSSProperties }) {
+// ── The Carved Hearth on the play-together panel (2026-09-23) ─────────────────────────────────
+// Mounted inside a HearthFrame by the host (wood frame, parchment, a plaque, the close knob), so the
+// body is ink on paper: the house's `hk-*` vocabulary, not the old teal-on-slate.
+function PanelLabel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <div className="hk-label text-[13px] hk-soft" style={style}>{children}</div>
+}
+const hearthInput: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box', padding: '6px 9px', borderRadius: 8,
+  border: `1px solid ${H.rule}`, background: H.paperHi, color: H.ink,
+  ...hearthBody, fontWeight: 700, fontSize: 13, outline: 'none',
+}
+const hearthHint = 'text-[11px] leading-snug hk-faint mt-1.5'
+
+function AccountBlock({ account }: { account: UseAccount }) {
   const { session, loading, signIn, signOut, claimName } = account
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  const input: React.CSSProperties = {
-    width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 8,
-    border: '1px solid #ffffff28', background: '#0b1513', color: '#eafff6',
-    font: '700 12px ui-monospace, monospace', outline: 'none',
-  }
-  const hint: React.CSSProperties = { font: '600 10px/1.5 ui-monospace, monospace', color: '#b8ae94', marginTop: 6 }
 
   const claim = async () => {
     setBusy(true); setError(null)
@@ -3771,40 +3777,40 @@ function AccountBlock({ account, label }: { account: UseAccount; label: React.CS
 
   return (
     <>
-      <div style={{ ...label, marginBottom: 4 }}>ACCOUNT</div>
+      <PanelLabel style={{ marginBottom: 4 }}>Account</PanelLabel>
       {!session && (
         <>
-          <button onClick={signIn} style={{ ...menuBtn, width: '100%', textAlign: 'center' }}>◆ Sign in with Google</button>
-          <div style={hint}>
+          <button onClick={signIn} className="hk-btn w-full py-1.5 text-[12px]">◆ Sign in with Google</button>
+          <div className={hearthHint}>
             Optional. Claims a name only you can use, keeps your garden safe beyond this browser,
             and puts your real name on the arcade board.{' '}
-            <a href="/privacy" target="_blank" rel="noopener" style={{ color: '#8fd9c4', textDecoration: 'underline' }}>What we store</a>
+            <a href="/privacy" target="_blank" rel="noopener" className="hk-sky underline">What we store</a>
           </div>
         </>
       )}
       {session && !session.username && (
         <>
           <input
-            value={draft} placeholder="pick a name" maxLength={16} style={input}
+            value={draft} placeholder="pick a name" maxLength={16} style={hearthInput}
             onChange={(e) => setDraft(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && draft.length >= 3 && !busy) claim() }}
           />
           <button
             onClick={claim} disabled={draft.length < 3 || busy}
-            style={{ ...menuBtn, width: '100%', textAlign: 'center', marginTop: 6, opacity: draft.length < 3 || busy ? 0.4 : 1 }}
+            className={`hk-btn w-full py-1.5 mt-1.5 text-[12px] ${draft.length < 3 || busy ? 'hk-dim' : ''}`}
           >
             {busy ? 'Claiming...' : 'Claim this name'}
           </button>
-          {error && <div style={{ ...hint, color: '#ff9b9b' }}>{error}</div>}
+          {error && <div className={`${hearthHint} hk-rust`}>{error}</div>}
         </>
       )}
       {session?.username && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-            <span style={{ font: '800 13px ui-monospace, monospace', color: '#ffe08a' }}>◆ {session.username}</span>
-            <button onClick={signOut} style={{ ...menuBtn, padding: '4px 8px' }}>Sign out</button>
+            <span className="hk-title text-[15px] hk-ember">◆ {session.username}</span>
+            <button onClick={signOut} className="hk-btn px-3 py-1 text-[12px]">Sign out</button>
           </div>
-          <div style={hint}>☁ Your garden follows this account — sign in anywhere and it comes with you.</div>
+          <div className={hearthHint}>☁ Your garden follows this account — sign in anywhere and it comes with you.</div>
         </>
       )}
     </>
@@ -3834,12 +3840,6 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlo
   const [nameDraft, setNameDraft] = useState(name)
   const [joinDraft, setJoinDraft] = useState('')
   const [copied, setCopied] = useState(false)
-  const label: React.CSSProperties = { font: '800 9px ui-monospace, monospace', color: '#8fd9c4', letterSpacing: '0.14em' }
-  const input: React.CSSProperties = {
-    width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 8,
-    border: '1px solid #ffffff28', background: '#0b1513', color: '#eafff6',
-    font: '700 12px ui-monospace, monospace', outline: 'none',
-  }
   const commitName = () => {
     const clean = storeName(nameDraft)
     setNameDraft(clean)
@@ -3857,60 +3857,59 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlo
     setCopied(true); setTimeout(() => setCopied(false), 1600)
   }
   return (
-    <div style={{ width: 216, background: 'rgba(11,21,19,0.96)', border: '1px solid #2f5c4f', borderRadius: 11, padding: 12 }}>
-      <div style={{ ...label, textAlign: 'center', marginBottom: 10 }}>PLAY TOGETHER</div>
+    // The plaque says "Play together" now (HearthFrame, at the host); the body is the parchment.
+    <div className="px-3.5 pt-6 pb-3.5 hk-ink" style={{ ...hearthBody }}>
+      <AccountBlock account={account} />
 
-      <AccountBlock account={account} label={label} />
-
-      <div style={{ ...label, margin: '12px 0 4px' }}>YOUR NAME</div>
+      <PanelLabel style={{ margin: '12px 0 4px' }}>Your name</PanelLabel>
       {account.session?.username ? (
         // A claimed name IS your display name — editing a second, local one here would only
         // create two answers to "who is that", which is the whole thing accounts fix.
-        <div style={{ ...input, color: '#8fd9c4' }}>{account.session.username}</div>
+        <div style={{ ...hearthInput, color: H.moss }}>{account.session.username}</div>
       ) : (
         <input
-          value={nameDraft} maxLength={24} style={input}
+          value={nameDraft} maxLength={24} style={hearthInput}
           onChange={(e) => setNameDraft(e.target.value)}
           onBlur={commitName}
           onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
         />
       )}
 
-      <div style={{ ...label, margin: '12px 0 4px' }}>PARTY</div>
+      <PanelLabel style={{ margin: '12px 0 4px' }}>Party</PanelLabel>
       {party ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ font: '800 18px ui-monospace, monospace', color: '#ffe08a', letterSpacing: '0.18em' }}>{party}</span>
-            <button onClick={() => onParty(null)} title="Leave party" style={{ ...menuBtn, padding: '4px 8px' }}>Leave</button>
+            <span className="hk-ember tabular-nums font-extrabold text-[19px] tracking-[.18em]">{party}</span>
+            <button onClick={() => onParty(null)} title="Leave party" className="hk-btn px-3 py-1 text-[12px]">Leave</button>
           </div>
-          <button onClick={copyInvite} style={{ ...menuBtn, width: '100%', textAlign: 'center', background: copied ? '#12261f' : undefined }}>
+          <button onClick={copyInvite} className={`hk-btn w-full py-1.5 text-[12px] ${copied ? 'hk-fill-moss' : ''}`}>
             {copied ? '✓ Link copied' : '⧉ Copy invite link'}
           </button>
-          <div style={{ font: '600 10px/1.5 ui-monospace, monospace', color: '#b8ae94', marginTop: 6 }}>
+          <div className={hearthHint}>
             Friends who open the link (or enter the code) land in your world.
           </div>
         </>
       ) : (
         <>
-          <button onClick={() => onParty(newPartyCode())} style={{ ...menuBtn, width: '100%', textAlign: 'center' }}>⚑ Start a party</button>
+          <button onClick={() => onParty(newPartyCode())} className="hk-btn w-full py-1.5 text-[12px]">⚑ Start a party</button>
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             <input
-              value={joinDraft} placeholder="CODE" maxLength={12} style={{ ...input, letterSpacing: '0.14em' }}
+              value={joinDraft} placeholder="CODE" maxLength={12} style={{ ...hearthInput, letterSpacing: '0.14em' }}
               onChange={(e) => setJoinDraft(e.target.value.toUpperCase())}
               onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') joinParty() }}
             />
-            <button onClick={joinParty} style={{ ...menuBtn, padding: '4px 10px' }}>Join</button>
+            <button onClick={joinParty} className="hk-btn px-3.5 py-1 text-[12px]">Join</button>
           </div>
         </>
       )}
 
-      <div style={{ ...label, margin: '12px 0 4px' }}>IN YOUR WORLD</div>
-      <div style={{ font: '700 11px/1.7 ui-monospace, monospace', color: '#cfeee2' }}>
-        <div style={{ color: '#eafff6' }}>{name} <span style={{ color: '#8fd9c4' }}>(you)</span></div>
+      <PanelLabel style={{ margin: '12px 0 4px' }}>In your world</PanelLabel>
+      <div className="text-[12px] leading-[1.7] font-bold hk-ink">
+        <div>{name} <span className="hk-soft font-semibold">(you)</span></div>
         {roster.map(p => (
-          <div key={p.id}>{p.name}{inPlot?.(p.tx, p.tz) && <span style={{ color: '#8fd9c4', opacity: 0.75 }}> · ⛅ in their garden</span>}</div>
+          <div key={p.id}>{p.name}{inPlot?.(p.tx, p.tz) && <span className="hk-moss font-semibold"> · ⛅ in their garden</span>}</div>
         ))}
-        {roster.length === 0 && <div style={{ color: '#ffffff5e' }}>no one else yet</div>}
+        {roster.length === 0 && <div className="hk-faint font-semibold italic">no one else yet</div>}
       </div>
     </div>
   )
@@ -5118,6 +5117,10 @@ export default function Shimmer3D() {
   // level + an affinity bonus. A getter is the adapter — read live, never copied.
   /** wide / compact / phone — the hearth HUD's size, from the real window. */
   const hudSize = useHudSize()
+  // The top-right column hangs LEFT of the minimap, so its panels have the screen minus the map's
+  // footprint, not the whole screen. On a 390 phone that is ~258px — a 300px book ran off the left.
+  const colRoom = typeof window === 'undefined' ? 300
+    : window.innerWidth - (hudMapBox(hudSize).right + hudMapBox(hudSize).size + 10) - 16
   const manaCornerRef = useMemo(() => ({
     get current() { return { cur: manaRef.current.current, max: getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus, regen: 1 } },
   }), [])
@@ -7312,28 +7315,31 @@ export default function Shimmer3D() {
           ))}
 
 
+          {/* ★ THE COLUMN'S PANELS WEAR THE HEARTH (2026-09-23): each is a HearthFrame card — carved
+              frame, parchment, a plaque, and the close knob these panels never had (they could only be
+              shut by reopening the menu). `mt-5` leaves the plaque room above the card. */}
           {skillsOpen && (
-            <div style={{ width: 168, background: 'rgba(11,21,19,0.96)', border: '1px solid #2f5c4f', borderRadius: 11, padding: 10 }}>
-              <div style={{ font: '800 10px ui-monospace, monospace', color: '#8fd9c4', letterSpacing: '0.12em', marginBottom: 8, textAlign: 'center' }}>SKILLS</div>
-              {(['forestry', 'prospecting', 'rinning', 'farming', 'alchemy'] as const).map(id => {
-                const sk = skillsRef.current[id]
-                const next = xpForSkillLevel(sk.level)
-                return (
-                  <div key={id} style={{ marginBottom: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <span style={{ font: '700 10px ui-monospace, monospace', color: '#cfeee2' }}>{SKILL_META[id].name}</span>
-                      <span style={{ font: '800 11px ui-monospace, monospace', color: '#eafff6' }}>Lv {sk.level}</span>
+            <HearthFrame title="Skills" maxWidth={Math.min(200, colRoom)} backdrop={false} className="mt-5" onClose={() => setSkillsOpen(false)}>
+              <div className="px-3.5 pt-6 pb-3">
+                {(['forestry', 'prospecting', 'rinning', 'farming', 'alchemy'] as const).map(id => {
+                  const sk = skillsRef.current[id]
+                  const next = xpForSkillLevel(sk.level)
+                  return (
+                    <div key={id} className="mb-2.5 last:mb-0">
+                      <div className="flex justify-between items-baseline">
+                        <span className="hk-label text-[13px] hk-ink">{SKILL_META[id].name}</span>
+                        <span className="text-[12px] font-extrabold tabular-nums hk-soft">lv {sk.level}</span>
+                      </div>
+                      <div className="mt-1"><HearthProgress value={Math.min(1, sk.xp / Math.max(1, next))} /></div>
                     </div>
-                    <div style={{ height: 4, background: '#0008', borderRadius: 3, overflow: 'hidden', marginTop: 3, border: '1px solid #0006' }}>
-                      <div style={{ height: '100%', width: `${Math.min(100, Math.round((sk.xp / Math.max(1, next)) * 100))}%`, background: 'linear-gradient(90deg,#4fc79a,#eafff6)' }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            </HearthFrame>
           )}
 
           {mpOpen && (
+            <HearthFrame title="Play together" maxWidth={Math.min(240, colRoom)} backdrop={false} className="mt-5" onClose={() => setMpOpen(false)}>
             <PlayTogetherPanel
               name={mpName} onName={setMpName}
               party={mpParty} onParty={(code) => { if (code) joinParty(code); else leaveParty() }}
@@ -7341,9 +7347,14 @@ export default function Shimmer3D() {
               peers={mpPeers}
               account={account}
             />
+            </HearthFrame>
           )}
 
-          {gfxOpen && <GfxPanel gfx={gfx} onGfx={setGfx} statsRef={frameStats} saveRef={saveStatsRef} />}
+          {gfxOpen && (
+            <HearthFrame title="Graphics" maxWidth={Math.min(260, colRoom)} backdrop={false} className="mt-5" onClose={() => setGfxOpen(false)}>
+              <GfxPanel gfx={gfx} onGfx={setGfx} statsRef={frameStats} saveRef={saveStatsRef} />
+            </HearthFrame>
+          )}
 
           {/* The book is handed what the keeper has LEARNED and what they CARRY, so each row can
               say where it stands instead of stamping one status on all of them. Both come off refs
@@ -7351,12 +7362,14 @@ export default function Shimmer3D() {
               purchase, a dev rune grant) calls it — so the panel re-reads on the render that
               follows, the same way this call site already reads `birthRuneRef` during render. */}
           {bookOpen && (
+            <HearthFrame title="The book" maxWidth={Math.min(300, colRoom)} backdrop={false} className="mt-5" onClose={() => setBookOpen(false)}>
             <MoveBook
               runeId={birthRuneRef.current}
               isOwner={isOwner}
               book={bookRef.current}
               owned={runeInvRef.current.owned}
             />
+            </HearthFrame>
           )}
         </div>
       )}

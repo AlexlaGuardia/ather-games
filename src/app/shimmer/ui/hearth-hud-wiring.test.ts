@@ -33,6 +33,11 @@ ok(mortalTag.length > 0 && !/\bvitals=/.test(mortalTag) && !/\bbuffs=/.test(mort
 const col = HOSTS.mortal.slice(HOSTS.mortal.indexOf('<HearthClock face={HUD_FACE} placed={false}'), HOSTS.mortal.indexOf('{skillsOpen && ('))
 ok(col.length > 0 && col.split('<HearthChip ').length - 1 === 3, 'mortal: companion, wounded and buff rows are HearthChips')
 ok(!col.includes('rgba(20,20,14,0.82)'), 'mortal: and no dark pill came back in the column')
+// The column's four panels wear the hearth frame, each with a close knob (they had none before).
+for (const [title, setter] of [['Skills', 'setSkillsOpen'], ['Play together', 'setMpOpen'], ['Graphics', 'setGfxOpen'], ['The book', 'setBookOpen']] as const) {
+  ok(new RegExp(`<HearthFrame title="${title}" maxWidth=\\{Math\\.min\\(\\d+, colRoom\\)\\} backdrop=\\{false\\}[^>]*onClose=\\{\\(\\) => ${setter}\\(false\\)\\}`).test(HOSTS.mortal),
+     `mortal: "${title}" is a HearthFrame card, capped to the column's room, that closes itself`)
+}
 // Touch controls stand on the bar's clearance, never a fixed number.
 // Bounded to the touch block itself — from the joystick to the fragment that closes the controls.
 const tAt = HOSTS.mortal.indexOf('<TouchJoystick joyRef=')
