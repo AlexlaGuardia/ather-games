@@ -98,8 +98,14 @@ function Corner({ v }: { v: V }) {
     : v === 'light'
       ? <div className="mt-2 ml-auto"><Rim r={999} pad={2}><div className="w-9 h-9 grid place-items-center rounded-full text-[16px]" style={{ background: SMOKE, color: CREAM }}>☰</div></Rim></div>
       : <div className="mt-2 ml-auto w-10 h-10 grid place-items-center rounded-full text-[16px]" style={{ background: WOOD, color: CREAM, boxShadow: '0 3px 6px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,215,170,.4)' }}>☰</div>
+  // A painted stand-in map under every frame: the backdrop is scaled to the window, so the capture's
+  // own minimap never lines up with a fixed frame — this keeps the comparison about the FRAME.
+  const map: React.CSSProperties = { background: 'radial-gradient(60% 75% at 30% 50%, #6f9e52 0%, #5d8a45 70%, #1a1430 71%, #0d0a1c 100%)' }
   return (
     <div className="absolute flex flex-col" style={{ top: 6, right: 8, width: 158 }}>
+      <div className="absolute left-0 right-0 top-0 overflow-hidden" style={{ height: 152, borderRadius: v === 'now' ? 8 : 14, ...map }}>
+        <span className="absolute w-2 h-2 rounded-full bg-rose-400 ring-2 ring-white/80" style={{ left: '46%', top: '48%' }} />
+      </div>
       {v === 'now' && <div style={{ height: 152 }} className="rounded-lg border border-white/15" />}
       {v === 'light' && <div style={{ height: 152, borderRadius: 14, boxShadow: `inset 0 0 0 3px #7a4f2c, inset 0 0 0 4px rgba(255,210,160,.35), 0 3px 8px rgba(0,0,0,.4)` }} />}
       {v === 'full' && (
