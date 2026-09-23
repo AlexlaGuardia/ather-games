@@ -44,6 +44,7 @@ const TURF: Record<QuarterId, [number, number, number]> = {
 const GREEN: [number, number, number] = [143, 208, 106]  // the brightest ground in the game
 const JOIN: [number, number, number] = [96, 124, 84]     // the lane: low ground, still tended
 const CLOUD: [number, number, number] = [207, 215, 228]  // pressed cloud, the fold's wall
+const DOOR: [number, number, number] = [166, 182, 212]   // the mound a threshold is cut into
 const ATHER_HEX = '#0a0c16'
 const ATHER: [number, number, number] = [10, 12, 22]     // the void. An open slot is THIS.
 
@@ -111,6 +112,7 @@ export default function ClusterPreview() {
         const rgb = c.part === 'quarter' ? TURF[c.quarter!]
           : c.part === 'green' ? GREEN
           : c.part === 'join' ? JOIN
+          : c.part === 'door' ? DOOR
           : c.part === 'wall' ? CLOUD
           : ATHER
         const o = (py * SIZE + px) * 4
@@ -247,6 +249,7 @@ export default function ClusterPreview() {
                [TURF.ne, 'a keeper’s own fold, whole, nothing clipped'],
                [JOIN, 'the lane to the middle and to a neighbour'],
                [CLOUD, 'the fold’s cloud wall'],
+               [DOOR, 'a threshold \u2014 four doors, all facing out'],
                [ATHER, 'the Ather — and an open slot']] as const).map(([c, label]) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ width: 12, height: 12, background: hex(c as [number, number, number]),

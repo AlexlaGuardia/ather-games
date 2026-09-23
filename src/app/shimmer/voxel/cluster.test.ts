@@ -214,6 +214,17 @@ console.log('⛔ an empty quarter reads as UNFOLDED, never grey')
     }
     check(`${q}: an open slot grows no fold`, ground === 0, `${ground} columns`)
     check(`${q}: an open slot has no spoke`, !inSpoke(c.x * 0.7, c.z * 0.7, q, cfg))
+    // ⛔ AND NO DOOR. A threshold to a quarter nobody has taken is a way out of a place that is not
+    // there. Asserted against `clusterAt` over the whole quadrant rather than against the slot map,
+    // because the slot map is what a doorway bug would already agree with — the first version of
+    // this checked `clusterThresholds().length` and a mutation that handed every quadrant a door
+    // sailed straight past it.
+    let doors = 0
+    for (let i = 0; i < 1200; i++) {
+      const a2 = (i / 1200) * Math.PI * 2, r = (i % 53) / 53 * 620
+      if (clusterAt(c.x + Math.cos(a2) * r, c.z + Math.sin(a2) * r, cfg).part === 'door') doors++
+    }
+    check(`${q}: an open slot has no door`, doors === 0, `${doors} columns`)
     // ★ The MIDDLE is the exception and the only one: it is whole regardless, so the quadrant that
     // would have been theirs is Green and waiting. Everything outward of it is absence.
     check(`${q}: but the middle is still whole over their quadrant`,
@@ -336,7 +347,14 @@ console.log('one cloud wall, because a cluster is one fold')
       let sawWall = false, sawGroundPast = false
       for (let r = e - 1; r <= e + plot.wallWidth + 3; r += 0.5) {
         const p = clusterAt(c.x + dx * r, c.z + dz * r, cfg).part
-        if (p === 'wall') sawWall = true
+        // ⚠ A DOOR CLOSES A BEARING TOO, AND THIS GUARD SAID OTHERWISE FOR ONE COMMIT. When the four
+        // thresholds landed it reported 38 bearings "open to the void" — every one of them a
+        // doorway, which is an opening by design. What makes a door safe is not that it is walled
+        // but that it has a SOLID BACK: `plot.ts` stops the bore at the coast because running it
+        // further is "a literal hole in the fold's shell". That is a material fact at a particular
+        // height, so it is guarded where it can be measured — `cluster-column.test.ts` › "no door
+        // bores through to the void" — and not by counting parts in a plan.
+        if (p === 'wall' || p === 'door') sawWall = true
         if (r > e + plot.wallWidth && (p === 'quarter' || p === 'green' || p === 'join')) sawGroundPast = true
       }
       walls += sawWall ? 1 : 0

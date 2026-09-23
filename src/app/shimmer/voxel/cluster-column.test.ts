@@ -24,12 +24,15 @@
 import { Column, SECTION, Stage } from './column'
 import {
   DEFAULT_CLUSTER, NO_SLOTS, QUARTERS, clusterAt, isGround, quarterCentre, quarterLocal,
-  type ClusterConfig, type QuarterId,
+  quarterThresholdBearing, type ClusterConfig, type QuarterId,
 } from './cluster'
 import {
   DEFAULT_DIP, clusterGeneratedVoxel, clusterHeight, clusterMaterialAt, clusterQuarterPlot,
-  clusterYRange, generateClusterColumn, middleHeight,
+  clusterThresholds, clusterYRange, generateClusterColumn, middleHeight,
 } from './cluster-column'
+
+/** A door's floor — one below the y `plotThreshold` reports a keeper standing at. */
+const y0 = (d: { y: number }) => d.y - 1
 import { plotHeight, plotMaterialAt } from './plot'
 
 let pass = 0, fail = 0
@@ -243,8 +246,90 @@ console.log('a quarter is still the keeper\'s own island, in blocks this time')
     check(`${q}: the surface is the solo island's, block for block`, differ === 0 && checked > 300,
       `${differ} of ${checked}`)
   }
-  // ⚠ The front door is OFF in a cluster and that is deliberate, not forgotten — see the header.
-  check('a quarter\'s cave is cleared', QUARTERS.every(q => clusterQuarterPlot(q, cfg)?.cave === undefined))
+}
+
+console.log('★ four thresholds onto one fold — and the shell is never pierced')
+{
+  const cfg = allAt({ ne: 2, nw: 1, sw: 0, se: 2 })
+  const open = allAt({ ne: 2, nw: 1, sw: 0 })
+  const doors = clusterThresholds(cfg)
+  check('every keeper has a door', doors.length === 4, `${doors.length}`)
+  check('a slot nobody has taken has no door', clusterThresholds(open).length === 3)
+
+  for (const d of doors) {
+    const c = quarterCentre(d.quarter, cfg)
+    // ⛔ IT FACES OUT. A door on the inward side would be a door between cluster-mates, which is
+    // the permission system canon's first ruling forbids: a mate is folded in, never let through.
+    check(`${d.quarter}: the door is on the outward side`,
+      Math.hypot(d.x, d.z) > Math.hypot(c.x, c.z),
+      `door ${Math.round(Math.hypot(d.x, d.z))} vs centre ${Math.round(Math.hypot(c.x, c.z))}`)
+    // It stands on that keeper's own ground, not in the air and not on a neighbour's.
+    const at = clusterAt(d.x, d.z, cfg)
+    check(`${d.quarter}: the door stands on its own keeper's ground`,
+      at.part === 'quarter' && at.quarter === d.quarter, `${at.part}/${at.quarter}`)
+    // And nowhere near the middle.
+    check(`${d.quarter}: no door opens onto the Green`, Math.hypot(d.x, d.z) > cfg.green * 2)
+  }
+
+  // ⛔⛔ THE SHELL IS NEVER PIERCED. `plot.ts`: run the bore past the coast and it is "a literal hole
+  // in the fold's shell, with the void on the far side of it and nothing between a keeper and a
+  // fall." So walking OUT along a door's own bearing at its floor height must meet solid cloud
+  // before it meets the Ather. This is the one guard here that is about safety and not about look.
+  let pierced = 0
+  for (const d of doors) {
+    const b = quarterThresholdBearing(d.quarter)
+    let solid = false, escaped = false
+    for (let r = 0; r <= 90; r += 0.5) {
+      const x = d.x + Math.cos(b) * r, z = d.z + Math.sin(b) * r
+      const mat = clusterMaterialAt(x, y0(d), z, cfg)
+      if (mat !== 0) { solid = true; continue }
+      // Air past the wall, having never met cloud, is a tunnel out of the world.
+      if (!solid && !isGround(x, z, cfg) && clusterAt(x, z, cfg).part === 'ather') { escaped = true; break }
+    }
+    if (escaped) pierced++
+  }
+  check('no door bores through to the void', pierced === 0, `${pierced} of ${doors.length}`)
+
+  // ★ THE MOUND IS THE LANDMARK, so it must out-top the wall it grows from — `plot.ts` sets the
+  // cave 15 tall against a 9-block wall and calls that difference the whole point: "a mound that
+  // tops out level with the wall is a bump you find by walking into it."
+  // ⚠ MEASURED ON A COLUMN THE DOORWAY BRANCH ACTUALLY OWNS. The first cut swept outward from the
+  // threshold and accepted tall cloud anywhere along the bearing — but the threshold sits INSIDE
+  // the coast, so the mound's inner half is drawn by the quarter branch delegating to the same
+  // plot. Deleting the doorway branch entirely therefore left this green: half the mound was still
+  // there, drawn by somebody else. A guard has to look at the half its subject is responsible for.
+  let tall = 0, outer = 0
+  for (const d of doors) {
+    const b = quarterThresholdBearing(d.quarter)
+    let sawOuter = false, sawTall = false
+    for (let r = 0; r < 40; r += 0.5) {
+      const x = d.x + Math.cos(b) * r, z = d.z + Math.sin(b) * r
+      if (clusterAt(x, z, cfg).part !== 'door') continue
+      sawOuter = true
+      if (clusterMaterialAt(x, B + cfg.base.wallHeight + 2, z, cfg) !== 0) { sawTall = true; break }
+    }
+    if (sawOuter) outer++
+    if (sawTall) tall++
+  }
+  check('each door has columns outside the coast that it owns', outer === doors.length, `${outer}`)
+  check('every door reads as a mound above the wall line', tall === doors.length, `${tall} of ${doors.length}`)
+
+  // ⛔ AND A DOOR TAKES NO GROUND. The cave only ever fills air (`plot.ts` gates every branch on
+  // being at or above the door's floor) — the 08-18 burial is what that gate exists to prevent.
+  let eaten = 0, seen = 0
+  for (const d of doors) {
+    const plot = clusterQuarterPlot(d.quarter, cfg)!
+    const c = quarterCentre(d.quarter, cfg)
+    for (let dx = -20; dx <= 20; dx += 2) for (let dz = -20; dz <= 20; dz += 2) {
+      const lx = d.x - c.x + dx, lz = d.z - c.z + dz
+      const solo = plotHeight(lx, lz, cfg.slots[d.quarter]!.seed, plot)
+      if (solo === null) continue
+      seen++
+      if (clusterHeight(c.x + lx, c.z + lz, cfg) !== solo) eaten++
+    }
+  }
+  check('a door eats none of the keeper\'s turf', eaten === 0, `${eaten} of ${seen}`)
+  check('the door sample found ground', seen > 200, `${seen}`)
 }
 
 console.log('nothing diggable sits over the void')

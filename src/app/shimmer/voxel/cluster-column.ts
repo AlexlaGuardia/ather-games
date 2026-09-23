@@ -28,21 +28,30 @@
 // forbids any source. Water carried into the low middle of a bowl is where water would sit. Nothing
 // here generates any; the shape simply stops the eventual pool from needing a hole dug for it.
 //
-// ── ⚠ WHAT THIS SLICE DELIBERATELY DOES NOT BUILD ───────────────────────────────────────────────
-// **No thresholds and no cave mounds.** A quarter's way OUT of the cluster is a gap breached through
-// the cloud wall, and the wall here is the cluster's outline rather than any one fold's ring, so
-// punching that gap is its own piece of work with its own guards — the glade paid for exactly this
-// twice (`glade.ts`, the road seam). Each quarter's plot config is therefore built with `cave`
-// cleared, which `plot.ts` documents as *"a bare gap in a flat wall"* — except there is no gap yet
-// either. **A cluster built from this file has no door.** It is reachable by a dev warp and by
-// nothing else, and that is the next slice, not an oversight.
+// ── ★★ THE FOUR DOORS, AND NOTHING IS CARVED ────────────────────────────────────────────────────
+// Canon: *"it is one fold with four thresholds onto it."* Each quarter keeps its own way out, on
+// the bearing pointing AWAY from the middle — so the doors ring the cluster's outside and none of
+// them opens onto the Green. A door facing in would be a door between cluster-mates, which is the
+// permission system canon's first ruling exists to forbid.
+//
+// ★ AND IT NEEDED NO HOLE, WHICH IS THE PART WORTH KNOWING BEFORE TOUCHING IT. The obvious build
+// is to punch a gap in the cluster's wall, and `plot.ts` already ruled that out for its own: the
+// bore stops at the coast, *"the cave is an alcove with a solid back, and the back is where the
+// shimmer stands"* — run it further and it is *"a literal hole in the fold's shell, with the void
+// on the far side of it and nothing between a keeper and a fall."* So a threshold is a MOUND with
+// an alcove in it, the crossing is the shimmer at its back, and **the shell is never pierced**.
+// The cluster inherits all of that for free by handing its doorway columns back to the fold.
+//
+// ⚠ WHAT IS STILL NOT HERE: the crossing itself. This builds the door; wiring what happens when a
+// keeper walks into the shimmer is the host's, and it needs the `Space` branch that does not exist
+// yet. A cluster now has four doors and nowhere to arrive from.
 
 import { Column, SECTION, Stage, refreshUniform } from './column'
 import {
-  DEFAULT_CLUSTER, QUARTERS, clusterAt, clusterReach, foldGap, quarterLocal, quarterPlot,
-  type ClusterConfig, type QuarterId,
+  DEFAULT_CLUSTER, QUARTERS, clusterAt, clusterReach, foldGap, quarterCentre, quarterLocal,
+  quarterPlot, type ClusterConfig, type QuarterId,
 } from './cluster'
-import { plotHeight, plotMaterialAt, type PlotConfig } from './plot'
+import { plotHeight, plotMaterialAt, plotThreshold, type PlotConfig } from './plot'
 
 /** How the made ground falls away from the folds. */
 export interface ClusterDip {
@@ -65,13 +74,14 @@ export interface ClusterDip {
 export const DEFAULT_DIP: ClusterDip = { depth: 5, ramp: 40, keel: 14 }
 
 /**
- * ⚠ A QUARTER'S CONFIG IS ITS OWN PLOT'S, WITH THE FRONT DOOR REMOVED. See the header: the cave is
- * a mound growing out of a wall ring this file does not draw, so leaving it on would put a
- * free-floating hill of cloud in the middle of somebody's garden.
+ * A quarter's config: its own plot's, at its own tier, with its threshold turned to face out of the
+ * cluster. ⚠ The cave is KEPT — an earlier cut cleared it, on the reasoning that a mound growing
+ * out of a wall ring this file does not draw would be a free-floating hill of cloud in somebody's
+ * garden. That was true only because the doorway columns were not being handed back to the fold;
+ * they are now, so the fold draws its own ring under its own mound and the two arrive together.
  */
 export function clusterQuarterPlot(q: QuarterId, cfg: ClusterConfig): PlotConfig | null {
-  const plot = quarterPlot(q, cfg)
-  return plot ? { ...plot, cave: undefined } : null
+  return quarterPlot(q, cfg)
 }
 
 /** Smooth in, smooth out — so the bowl has a lip rather than a crease. */
@@ -162,7 +172,17 @@ export function clusterMaterialAt(
     return m.floor
   }
 
-  // 3. THE CLUSTER'S ONE CLOUD WALL. It rings the whole outline — every fold's outer coast, the
+  // 3. A DOORWAY — handed back to the fold whole, so the mound, its alcove and the ring it grows
+  //    out of are `plot.ts`'s own geometry with `plot.ts`'s own safety gates. In particular the
+  //    cave decides nothing below its floor and only ever fills air, so a door cannot eat the turf
+  //    a keeper built on — the 08-18 burial wearing a nicer coat, and the gate that stops it.
+  if (c.part === 'door') {
+    const plot = clusterQuarterPlot(c.quarter!, cfg)!
+    const l = quarterLocal(x, z, c.quarter!, cfg)
+    return plotMaterialAt(l.x, y, l.z, c.keeper!.seed, plot)
+  }
+
+  // 4. THE CLUSTER'S ONE CLOUD WALL. It rings the whole outline — every fold's outer coast, the
   //    lanes' sides and the holes between them — because a cluster is one fold. Hung from `baseY`
   //    rather than from the local surface, exactly as the plot hangs its own.
   if (c.part === 'wall') {
@@ -254,6 +274,29 @@ export function clusterGeneratedVoxel(
   cfg: ClusterConfig = DEFAULT_CLUSTER, dip: ClusterDip = DEFAULT_DIP,
 ): number {
   return clusterMaterialAt(col.wx + lx, y, col.wz + lz, cfg, dip)
+}
+
+/**
+ * Where each keeper's door stands, in cluster space — the spot a host lands somebody on, and the
+ * spot the crossing's shimmer is drawn at.
+ *
+ * ★ TAKEN FROM `plotThreshold`, NEVER RE-DERIVED. It already owns the inset, the fallback for a
+ * threshold that would land off the ground, and the rule that the door follows the coast as the
+ * fold grows. A second copy of that arithmetic here is the `reading-one-layer-away` shape: two
+ * functions whose names are both "threshold", agreeing until a fold grows.
+ */
+export function clusterThresholds(
+  cfg: ClusterConfig = DEFAULT_CLUSTER,
+): { quarter: QuarterId; x: number; z: number; y: number }[] {
+  const out: { quarter: QuarterId; x: number; z: number; y: number }[] = []
+  for (const q of QUARTERS) {
+    const k = cfg.slots[q], plot = clusterQuarterPlot(q, cfg)
+    if (!k || !plot) continue
+    const t = plotThreshold(k.seed, plot)
+    const c = quarterCentre(q, cfg)
+    out.push({ quarter: q, x: c.x + t.x, z: c.z + t.z, y: t.y })
+  }
+  return out
 }
 
 /** How many blocks across a host must be ready to build. Derived from the widest slot. */

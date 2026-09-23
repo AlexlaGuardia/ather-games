@@ -71,7 +71,7 @@
 // function of the SLOTS and nothing else, so the world has no mechanism with which to un-make
 // somebody's ground. Leaving is a choice somebody makes, not something the world does.
 
-import { DEFAULT_PLOT, PLOT_TIERS, edgeAt, plotForTier, type PlotConfig } from './plot'
+import { DEFAULT_PLOT, PLOT_TIERS, caveAnchor, edgeAt, plotForTier, type PlotConfig } from './plot'
 
 export type QuarterId = 'ne' | 'nw' | 'sw' | 'se'
 
@@ -175,9 +175,44 @@ export function quarterLocal(x: number, z: number, q: QuarterId, cfg: ClusterCon
   return { x: x - c.x, z: z - c.z }
 }
 
+/**
+ * ── ★ EVERY DOOR FACES OUT, AND THAT IS CANON'S SENTENCE TURNED INTO ONE LINE OF ARITHMETIC ─────
+ * *"It is one fold with four thresholds onto it."* A quarter's threshold sits on the bearing that
+ * points away from the middle — its own diagonal — so the four doors ring the cluster's outside and
+ * none of them opens onto the Green. **A door facing in would be a door between cluster-mates**,
+ * which is the permission system canon's first ruling exists to forbid: *a guest is held open, a
+ * cluster-mate is folded in*, and a mate never needs to be let through anything.
+ */
+export const quarterThresholdBearing = (q: QuarterId): number =>
+  Math.atan2(QUARTER_SIGN[q].sz, QUARTER_SIGN[q].sx)
+
 export function quarterPlot(q: QuarterId, cfg: ClusterConfig): PlotConfig | null {
   const k = cfg.slots[q]
-  return k ? plotForTier(k.tier, cfg.base) : null
+  return k ? { ...plotForTier(k.tier, cfg.base), thresholdBearing: quarterThresholdBearing(q) } : null
+}
+
+/**
+ * Is this column inside that quarter's doorway — the cloud mound its threshold is cut into?
+ *
+ * ⚠ IT IS A PLAN FOOTPRINT, NOT THE CAVE ITSELF. `plot.ts` owns the mound's actual shape (a
+ * half-ellipsoid with an arched bore) and answers per VOXEL; this only says which columns the
+ * fold's own rules get to decide, so the cluster's wall does not draw over a door. Sized from the
+ * cave's own numbers so the two cannot drift apart.
+ */
+export function inDoorway(x: number, z: number, q: QuarterId, cfg: ClusterConfig): boolean {
+  const k = cfg.slots[q]
+  const plot = quarterPlot(q, cfg)
+  if (!k || !plot?.cave) return false
+  const a = caveAnchor(k.seed, plot)
+  const l = quarterLocal(x, z, q, cfg)
+  const reach = Math.max(plot.cave.depth, plot.cave.halfWidth) + cfg.base.wallWidth + 1
+  return Math.hypot(l.x - a.x, l.z - a.z) <= reach
+}
+
+/** Whose doorway this column stands in, or `null`. */
+export function doorwayAt(x: number, z: number, cfg: ClusterConfig): QuarterId | null {
+  for (const q of QUARTERS) if (inDoorway(x, z, q, cfg)) return q
+  return null
 }
 
 export const cornersGiven = (cfg: ClusterConfig): number =>
@@ -363,6 +398,8 @@ export type ClusterPart =
   | 'quarter'
   /** Ground the folding made, joining a fold to the Green or to a neighbour. */
   | 'join'
+  /** A quarter's way out — the cloud mound its threshold is cut into. */
+  | 'door'
   /** The cloud wall, wherever the cluster's ground meets the Ather. */
   | 'wall'
   /** Nothing. The Ather — past the wall, and wherever a slot is held open. */
@@ -465,6 +502,11 @@ export function clusterAt(x: number, z: number, cfg: ClusterConfig = DEFAULT_CLU
 
   const join = joinAt(x, z, cfg)
   if (join) return { part: 'join', quarter: join.between[0], keeper: null, join }
+
+  // A door outranks the wall it is cut into — the mound IS the wall, shaped. Resolved after ground
+  // for the reason `plot.ts` gates its own cave on air: a doorway may never take a keeper's turf.
+  const door = doorwayAt(x, z, cfg)
+  if (door) return { part: 'door', quarter: door, keeper: cfg.slots[door], join: null }
 
   // ⛔ AN OPEN SLOT IS THE ATHER — NO GROUND AT ALL, AND NEVER GREY. Canon's *"guard most likely to
   // ship wrong"*, and worth restating why the obvious build is the wrong one: the cheap way to show
