@@ -205,6 +205,13 @@ export const DEV_PAGES: DevPage[] = [
     group: 'proto',
     keywords: ['menu', 'ui', 'crafter', 'panel', 'hearth', 'parchment', 'redesign', 'modern'],
   },
+  {
+    path: '/shimmer/dev/hud-mock',
+    title: 'HUD look-call',
+    blurb: 'The always-on HUD three ways over one real world frame — now, light touch, full hearth — by day and by night.',
+    group: 'proto',
+    keywords: ['hud', 'hotbar', 'health', 'mana', 'minimap', 'hearth', 'mock', 'look'],
+  },
 
   // ── Editors with their own route ────────────────────────────────────────────────────────────
   {
