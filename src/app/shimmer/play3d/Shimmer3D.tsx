@@ -7369,10 +7369,10 @@ export default function Shimmer3D() {
       {/* The same frame the Ather reads its script in (`hud/dialogue-box.tsx`); here one line per tap. */}
       {dialogue && (
         <DialogueBox name={dialogue.speakers?.[dialogue.idx] ?? dialogue.name} panelId="talk" onPlate={advanceDialogue}
-                     footer={<div className="gx-label mt-3 text-white/40 text-[10px] text-right">
+                     footer={<div className="hk-label mt-3 hk-faint text-[12px] text-right">
                        {dialogue.idx >= dialogue.lines.length - 1 ? 'tap to close' : 'tap to continue ▸'}
                      </div>}>
-          <div className="text-white/85 text-[13px] leading-relaxed">{dialogue.lines[dialogue.idx]}</div>
+          <div className="hk-ink text-[13px] leading-relaxed">{dialogue.lines[dialogue.idx]}</div>
         </DialogueBox>
       )}
 

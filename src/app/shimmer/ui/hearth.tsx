@@ -59,7 +59,7 @@ export function HearthX({ onClick }: { onClick: () => void }) {
  * card never exceeds the screen minus a 16px gutter each side, so a phone gets the whole width.
  * With `backdrop={false}` it is only the card, for a host that already owns placement.
  */
-export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, children, backdrop = true, bodyClass = '', className = '', footer, backdropClass = '', head, fixed }: {
+export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, children, backdrop = true, bodyClass = '', className = '', footer, backdropClass = '', head, fixed, closable = true }: {
   /** Pinned under the scroll body, on the parchment — never scrolls away (the keeper frame's hint). */
   footer?: React.ReactNode
   /** Pinned ABOVE the scroll body (a tab rail that must not scroll). */
@@ -67,6 +67,8 @@ export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, childre
   backdropClass?: string
   /** Pin to the viewport (a panel mounted outside the world's positioned box). */
   fixed?: boolean
+  /** false = no knob (a reader that only advances, never closes from the corner). */
+  closable?: boolean
   /** The plaque. Omitted = no plaque (a panel still carrying its own head row, mid-migration). */
   title?: string
   /** Extra classes on the card root. */
@@ -82,7 +84,7 @@ export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, childre
     <div data-panel={dataPanel} onClick={(e) => e.stopPropagation()}
          className={`hearth-root hearth-open relative ${HEARTH_FONT_VARS} ${className}`}
          style={{ width: `min(${maxWidth}px, calc(100vw - 32px))`, ...hearthBody }}>
-      <HearthX onClick={onClose} />
+      {closable && <HearthX onClick={onClose} />}
       <div className="rounded-[18px] p-[13px]"
            style={{ background: WOOD, boxShadow: '0 18px 40px rgba(20,10,4,.55), 0 4px 10px rgba(20,10,4,.4), inset 0 1px 0 rgba(255,210,160,.35), inset 0 -2px 0 rgba(0,0,0,.35)' }}>
         {title && <div className="absolute left-1/2 -translate-x-1/2 -top-4 z-20 px-6 h-9 rounded-full flex items-center whitespace-nowrap"

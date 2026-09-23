@@ -10981,21 +10981,21 @@ function ScriptDialogue({ who, talk, onAnswer, onClose }: {
   const options = talk.beats.filter((b): b is { option: string } => 'option' in b)
   return (
     <DialogueBox name={name} panelId={who === 'greg' ? 'greg' : `folk-${who}`} onBackdrop={onClose}
-                 footer={!talk.choice ? <div className="gx-label mt-3 text-white/40 text-[10px]">E / esc — close</div> : null}>
-        <div className="text-white/85 leading-relaxed space-y-1.5 max-h-[60vh] overflow-y-auto">
+                 footer={!talk.choice ? <div className="hk-label mt-3 hk-faint text-[12px]">E / esc — close</div> : null}>
+        <div className="hk-ink leading-relaxed space-y-1.5 max-h-[60vh] overflow-y-auto">
           {talk.beats.map((b, i) =>
-            'scene' in b ? <div key={i} className="text-white/40 italic">{b.scene}</div>
+            'scene' in b ? <div key={i} className="hk-faint italic">{b.scene}</div>
             : 'who' in b ? (
               <div key={i}>
                 {/* The name is repeated only when the speaker changes mid-box (never today, the
                     script keeps one voice per trigger) — the header already says who this is. */}
-                {b.who !== speaker && <span className="text-white/50">{b.who[0] + b.who.slice(1).toLowerCase()}: </span>}
+                {b.who !== speaker && <span className="hk-soft">{b.who[0] + b.who.slice(1).toLowerCase()}: </span>}
                 {b.text}
               </div>
             ) : null)}
         </div>
         {talk.choice && options.length > 0 && (
-          <div className="mt-3 pt-2 border-t border-white/8 flex flex-col gap-1.5">
+          <div className="mt-3 pt-2 border-t hk-rule flex flex-col gap-1.5">
             {options.map(o => {
               const answer = /not yet/i.test(o.option) ? 'not-yet' : 'staying'
               return (
@@ -11047,18 +11047,18 @@ function GregDialogue({ ledger, owed, onWiden, onClose }: {
     // its text finds the HEADER row (shortest match, "Gregoryesc") and every assert downstream
     // then describes a two-word string instead of the conversation.
     <DialogueBox name="Gregory" panelId="greg" width="w-[420px]" onBackdrop={onClose}
-                 footer={<div className="gx-label mt-3 text-white/40 text-[10px]">E / esc — close</div>}>
-        <div className="text-white/85 leading-relaxed whitespace-pre-line">{lines}</div>
+                 footer={<div className="hk-label mt-3 hk-faint text-[12px]">E / esc — close</div>}>
+        <div className="hk-ink leading-relaxed whitespace-pre-line">{lines}</div>
         {fold && (
-          <div className="mt-3 pt-2 border-t border-white/8">
+          <div className="mt-3 pt-2 border-t hk-rule">
             {/* Both faces, named, because canon splits them and a keeper should see which half they
                 have been playing. `seen` is the seeker's, `held` is the liberator's. */}
-            <div className="text-white/40 tabular-nums">
-              {ledger.seen} met <span className="text-white/20">·</span> {ledger.held} yours
-              <span className="text-white/20"> · </span>
-              <span className="text-white/70">{ledger.total} entries</span>
+            <div className="hk-faint tabular-nums">
+              {ledger.seen} met <span className="hk-faint">·</span> {ledger.held} yours
+              <span className="hk-faint"> · </span>
+              <span className="hk-soft">{ledger.total} entries</span>
             </div>
-            <div className="mt-1 text-white/50">{foldProgressLine(ledger)}</div>
+            <div className="mt-1 hk-soft">{foldProgressLine(ledger)}</div>
             {owed && !widened && (
               <button onClick={() => { onWiden(); setWidened(true) }}
                       className="mt-2 w-full px-2 py-1.5 rounded border border-amber-200/40 text-amber-100/90

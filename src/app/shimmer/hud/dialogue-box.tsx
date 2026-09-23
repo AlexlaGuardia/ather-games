@@ -9,30 +9,31 @@
 'use client'
 
 import React from 'react'
-import { CloseX } from '../voxel3d/panel-frame'
+import { HearthFrame } from '../ui/hearth'
 
 export function DialogueBox({ name, panelId, width = 'w-[440px] max-w-[92vw]', onBackdrop, onPlate, footer, children }: {
   name: string
   /** `data-panel` — the harness's handle for picking this box out of the DOM. */
   panelId?: string
+  /** Tailwind width class, read as the card's max width (px) — the frame never exceeds the screen. */
   width?: string
   onBackdrop?: () => void
   onPlate?: () => void
   footer?: React.ReactNode
   children: React.ReactNode
 }) {
+  // ★ Carved Hearth (Phase 8, 2026-09-22): the speaker's name is the carved plaque — who is talking
+  // is what the frame says first — and the words sit on parchment in ink. A tap-to-advance reader
+  // makes the whole paper the button; a closable one keeps the knob in the corner.
+  const px = Number(/\[(\d+)px\]/.exec(width)?.[1] ?? 440)
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto z-[45]" onClick={onBackdrop}>
-      <div data-panel={panelId}
-           className={`relative ${width} bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px] ${onPlate ? 'cursor-pointer' : ''}`}
-           onClick={(e) => { e.stopPropagation(); onPlate?.() }}>
-        {onBackdrop && <CloseX onClick={onBackdrop} />}
-        <div className="flex items-baseline justify-between mb-3 pr-6">
-          <span className="gx-label text-white/95">{name}</span>
-        </div>
+    <HearthFrame title={name} maxWidth={Math.round(px * 1.1)} dataPanel={panelId} backdropClass="z-[45]"
+                 onClose={onBackdrop ?? (() => {})} closable={!!onBackdrop}
+                 bodyClass="p-0">
+      <div className={`p-4 pt-6 text-[14px] leading-relaxed hk-ink ${onPlate ? 'cursor-pointer' : ''}`} onClick={onPlate}>
         {children}
         {footer}
       </div>
-    </div>
+    </HearthFrame>
   )
 }
