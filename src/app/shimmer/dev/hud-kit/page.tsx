@@ -18,22 +18,15 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { HEARTH_FONT_VARS } from '../../ui/hearth-fonts'
 import { hearthBody } from '../../ui/hearth'
-import {
-  HearthHotbar, HearthObjective, HearthVitals, HearthBuffChips, HearthMapFrame, HearthClock, HearthOrbRim,
-  HearthLip, HearthToolPips, hearthSocket, useHudSize, MINIMAP_BOX, MINIMAP_BOX_PHONE, type ToolPip,
-} from '../../ui/hearth-hud'
+import { useHudSize } from '../../ui/hearth-hud'
+import { HearthHudLayer, hudMapBox } from '../../ui/hearth-hud-layer'
 import { parseHudFace, type HudFace, type HudSize } from '../../ui/hud-flag'
-import { ManaGauge } from '../../hud/mana-gauge'
 import type { ActiveBuffs } from '../../engine/potion-effects'
+import { createSkillSet, type SkillSet } from '../../engine/skills'
+import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
 
 const BAR: ([string, number] | null)[] = [['shimmeroak_plank', 22], ['mushroom_cap', 2], ['glass', 3], null, ['raw_mana_shard', 5], ['chest', 2], ['moonberry', 12], ['cobblestone', 31]]
 const ENTRIES = BAR.map(e => (e ? { itemId: e[0], count: e[1] } : null))
-const PIPS: ToolPip[] = [
-  { family: 'forestry', level: 4, xpPct: 0.6, active: true },
-  { family: 'prospecting', level: 2, xpPct: 0.25, active: false },
-  { family: 'rinning', level: 1, xpPct: 0.1, active: false },
-  { family: 'farming', level: 3, xpPct: 0.8, active: false },
-]
 type View = 'auto' | HudSize
 /** The simulated screens. Compact = Alex's own 842px window; phone = a 390×844 handset. */
 const SIM: Record<HudSize, { w: number; h: number } | null> = { wide: null, compact: { w: 842, h: 910 }, phone: { w: 390, h: 844 } }
@@ -42,15 +35,18 @@ function Layout({ face, size, sel, setSel, night }: { face: HudFace; size: HudSi
   const vitals = useRef({ hp: 72, hpMax: 100, shield: 30, shieldMax: 50 })
   const mana = useRef({ cur: 84, max: 120, regen: 1 })
   const buffs = useRef<ActiveBuffs>({} as ActiveBuffs)
+  const tools = useRef<EquippedTools>(ensureBasicTools({}))
+  const skills = useRef<SkillSet>((() => {
+    const k = createSkillSet()
+    k.forestry.level = 4; k.forestry.xp = 180; k.prospecting.level = 2; k.prospecting.xp = 40; k.farming.level = 3; k.farming.xp = 120
+    return k
+  })())
   useEffect(() => {
     // Set after mount: a wall-clock deadline in the first render is a hydration mismatch.
     buffs.current = { fleetfoot: Date.now() + 185_000, kindred: Date.now() + 61_000 } as ActiveBuffs
   }, [])
   const held = ENTRIES[sel] ? { text: `${ENTRIES[sel]!.itemId.replace(/_/g, ' ')} · ${ENTRIES[sel]!.count}`, out: false } : null
-  const box = size === 'phone' ? MINIMAP_BOX_PHONE : MINIMAP_BOX
-  const lip = size === 'compact' ? <HearthLip face={face} vitals={vitals} />
-    : size === 'phone' ? <HearthLip face={face} vitals={vitals} mana={mana} tools={<HearthToolPips face={face} pips={PIPS} />} />
-    : undefined
+  const box = hudMapBox(size)
   return (
     <>
       <img src="/shimmer/mock/hud-bg.jpg" alt="" className="absolute inset-0 w-full h-full object-cover"
@@ -61,27 +57,9 @@ function Layout({ face, size, sel, setSel, night }: { face: HudFace; size: HudSi
       {/* The live minimap's box, painted, so the frame is judged around a map. */}
       <div style={{ position: 'fixed', top: box.top, right: box.right, width: box.size, height: box.size, zIndex: box.z, borderRadius: 10,
                     background: 'radial-gradient(60% 75% at 30% 50%, #6f9e52 0%, #5d8a45 70%, #1a1430 71%, #0d0a1c 100%)' }} />
-      <HearthMapFrame face={face} box={box} />
-      <HearthClock face={face} box={box} />
-      <HearthObjective face={face} value="Find Gregory" anchor={size === 'phone' ? 'left' : 'center'} />
-      <HearthBuffChips face={face} buffs={buffs} top={size === 'wide' ? undefined : size === 'phone' ? 58 : 12} />
-      {size === 'wide' && <div className="absolute bottom-4 left-4"><HearthVitals face={face} vitals={vitals} /></div>}
-      <HearthHotbar face={face} entries={ENTRIES} sel={sel} held={held} dimmed={false} onSelect={setSel} size={size} lip={lip} />
-      {/* The orb corner: whole at wide, shrunk to ~96px at compact (the live gauge is a fixed 152, so
-          the wiring needs a size on ManaGauge/HudCorner — scaled here to judge the look), gone on a phone. */}
-      {size !== 'phone' && (
-        <div className="absolute bottom-4 right-4 pointer-events-none" style={size === 'compact' ? { transform: 'scale(.63)', transformOrigin: 'bottom right' } : undefined}>
-          <div className="relative">
-            <ManaGauge mana={mana} />
-            <HearthOrbRim face={face} />
-            {[180, 137, 93, 50].map((a, i) => {
-              const r = 115, rad = (a * Math.PI) / 180
-              return <div key={a} className="absolute w-14 h-14 rounded-full"
-                          style={{ left: 76 + r * Math.cos(rad), top: 76 - r * Math.sin(rad), transform: 'translate(-50%,-50%)', ...hearthSocket(face, i === 0) }} />
-            })}
-          </div>
-        </div>
-      )}
+      {/* ★ THE SAME COMPONENT THE WORLD'S HUD MOUNTS — the arrangement is judged here, shipped there. */}
+      <HearthHudLayer face={face} size={size} entries={ENTRIES} sel={sel} held={held} dimmed={false} onSelect={setSel}
+        objective="Find Gregory" vitals={vitals} mana={mana} buffs={buffs} tools={tools} skills={skills} activeTool="forestry" />
     </>
   )
 }
