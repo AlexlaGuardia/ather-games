@@ -198,6 +198,13 @@ export const DEV_PAGES: DevPage[] = [
     group: 'bench',
     keywords: ['station', 'model', 'cauldron', 'oven', 'hearth', 'kiln', 'bench', 'shelf'],
   },
+  {
+    path: '/shimmer/dev/hearth',
+    title: 'Carved Hearth menus',
+    blurb: 'Direction B for the in-game menus, mocked on the crafter: carved wood frame, parchment, one ember accent. Toggle against the shipped skin.',
+    group: 'proto',
+    keywords: ['menu', 'ui', 'crafter', 'panel', 'hearth', 'parchment', 'redesign', 'modern'],
+  },
 
   // ── Editors with their own route ────────────────────────────────────────────────────────────
   {
