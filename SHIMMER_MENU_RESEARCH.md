@@ -37,3 +37,30 @@ Palia https://www.tammydraws.com/palia · Tiny Glade https://sparklin.com/foresi
 TotK https://uxdesign.cc/tears-of-the-kingdom-how-nintendo-improved-and-ignored-ui-issues-843f094b14b2 ·
 Ore UI https://minecraft.wiki/w/Ore_UI · Sky https://developer.apple.com/news/?id=zm47it7t ·
 Satisfactory https://satisfactory.wiki.gg/wiki/Blueprint_Designer · Game UI DB https://gameuidatabase.com
+
+---
+
+# ROLLOUT PLAN — Carved Hearth (B blessed by Alex 2026-09-22: "thats looking sooo much better")
+
+Mock: `/shimmer/dev/hearth`. Owner: `play` lane, by agreement with hub (the files below are hub's shared surface).
+
+**Inventory (2026-09-22):** 7 panels on `PanelFrame` (crafter, gardens, waymark/threshold, station, alchemy,
+brewing ×2) · own-skin panels: satchel (bag/gear/letters/vessels/chests/bank, 1222 lines), keeper, bindings, brew,
+passage, gfx, options, settings, profile, chat console · dialogue box · always-on HUD: hotbar, corner, mana gauge,
+objective chip, prompt, say line, clock, minimap. ~190 hardcoded dark-theme classes (`text-white/N`, `bg-black/N`).
+
+| # | Phase | Surfaces | Gate |
+|---|---|---|---|
+| 1 | **Kit** `shimmer/ui/hearth.tsx` + `hearth.css`: tokens as CSS vars, frame, X, tabs, well/slot, buttons, card, chip, divider, search, toggle/slider; fonts move to the game route; reduced-motion; ≥44px touch | new files only | tsc |
+| 2 | **Frame flip:** `PanelFrame` wears the hearth. A TRANSITIONAL ink bridge remaps `text-white/*`, `border-white/*`, `bg-black/*` inside the frame so all 7 panels land legible in one commit. A guard counts panels still leaning on it and must reach 0; the bridge is deleted at 0 | 7 panels | prod shot per panel |
+| 3 | **CraftGrid for real** = the mock, wired | crafter + sawmill/stonecutter/kiln | ★ Alex plays it |
+| 4 | Station family | alchemy, brewing, brew, gardens, waymark/threshold | |
+| 5 | **Satchel** (phone-critical, biggest) | bag, gear, letters, vessels, chests, plot bank | ★ Alex, phone + desktop |
+| 6 | People panels | keeper, bindings, passage, profile | |
+| 7 | Settings family | options, settings, gfx, chat console | |
+| 8 | Dialogue box (parchment speech card; copy stays lark's) | dialogue | |
+| 9 | **HUD over the world**, lightest touch, always on screen | hotbar, corner, gauge, chip, prompt, clock, minimap | ★ Alex look-call BEFORE building |
+| 10 | Guards: `npm run gx` reclassifies Shimmer (it leaves gx on purpose, or the floor reads the migration as a regression); hearth adoption counter; bridge count = 0 | | |
+
+Optional after 3: hand the wood frame to the generated-art pipeline (the procedural grain reads faint).
+Each phase = its own commit(s), reversible; `VoxelWorld.tsx` touched only by small coordinated edits (hub's hotspot).
