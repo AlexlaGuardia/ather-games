@@ -268,7 +268,11 @@ export const DEFAULT_PLOT: PlotConfig = {
   // ⚠ `height` 15 IS ABOVE `wallHeight` 9 ON PURPOSE — that difference IS the landmark. A mound that
   // tops out level with the wall is a bump you find by walking into it.
   cave: { depth: 13, halfWidth: 12, height: 15, boreHalfWidth: 4, boreHeight: 7 },
-  materials: { topsoil: 5, subsoil: 4, stone: 3, floor: 1, wall: 1 },
+  // ★ wall 56 = CLOUD_WALL (2026-09-23, Alex). It was 1 (PACKED_CLOUD) since the plot shipped — the
+  // placeholder the `wall` doc above anticipated ("a caller may pass the same id for both today") —
+  // so the plot's rim read as grey floor-stone while the glade and the Wilds bubble wore real
+  // cloud-wall. It is also what lets the rim KINDLE at night (attrs.ts › EMISSIVE, canon's hand-off).
+  materials: { topsoil: 5, subsoil: 4, stone: 3, floor: 1, wall: 56 },
   // ⚠ Literal ids like `materials` above (this file does not import MAT); `plot-litter.test.ts`
   // asserts they are RUBBLE_HEAP and DEADFALL. `from: Infinity` = no ring is littered until the
   // host says which one, from the save. See `litterAt`.

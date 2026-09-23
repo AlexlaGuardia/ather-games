@@ -51,8 +51,10 @@ for (let tier = 0; tier < PLOT_TIERS.length; tier++) {
         // ★ THE ONE DESIGNED DIFFERENCE: the cloud wall. A plot walls its own coast; a cluster walls
         // its OUTLINE and parts the wall where a lane leaves (one fold, one wall). So a wall cell can
         // be cloud on one side and air on the other. The wall cannot be broken, so no edit ever
-        // lands there; anything ELSE differing is a real mismatch.
-        if ((a === MAT.PACKED_CLOUD && b === MAT.AIR) || (a === MAT.AIR && b === MAT.PACKED_CLOUD)) { wallOnly++; continue }
+        // lands there; anything ELSE differing is a real mismatch. The wall's id is READ from the
+        // plot (it was typed as PACKED_CLOUD and went red the day the plot wall became CLOUD_WALL,
+        // 2026-09-23 — the rule is "the wall", not any one material).
+        if ((a === plot.materials.wall && b === MAT.AIR) || (a === MAT.AIR && b === plot.materials.wall)) { wallOnly++; continue }
         differ++; if (!firstBad) firstBad = `(${x},${y},${z}) plot ${a} vs cluster ${b}`
       }
     }
@@ -93,7 +95,7 @@ for (const q of ['ne', 'se'] as const) {
     if (framedHeight(x, z, q, cfg) !== plotHeight(x, z, SEED, plot)) heightsOff++
     for (let y = 70; y <= 105; y += 5) {
       const a = plotMaterialAt(x, y, z, SEED, plot), b = framedMaterialAt(x, y, z, q, cfg)
-      if (a !== b && !((a === MAT.PACKED_CLOUD && b === MAT.AIR) || (a === MAT.AIR && b === MAT.PACKED_CLOUD))) differ++
+      if (a !== b && !((a === plot.materials.wall && b === MAT.AIR) || (a === MAT.AIR && b === plot.materials.wall))) differ++
     }
   }
   ok(mine > 800, `§5 ${q}: a real sample (${mine} columns)`)
