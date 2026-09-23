@@ -67,7 +67,7 @@ const TILES: GridTile[] = RAW.map(r => ({
 const grain = (fx: number, fy: number, oct: number, alpha: number) =>
   `url("data:image/svg+xml;utf8,${encodeURIComponent(
     `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='${fx} ${fy}' numOctaves='${oct}' seed='7'/><feColorMatrix values='0 0 0 0 0.16  0 0 0 0 0.09  0 0 0 0 0.04  0 0 0 ${alpha} 0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>`)}")`
-const WOOD = `${grain(0.012, 0.22, 3, 0.55)}, linear-gradient(180deg, #7a4f2c 0%, #5e3a1f 45%, #4a2d18 100%)`
+const WOOD = `${grain(0.006, 0.35, 4, 0.9)}, ${grain(0.02, 0.6, 2, 0.35)}, linear-gradient(180deg, #8a5a32 0%, #6a4222 45%, #50311a 100%)`
 const PAPER = `${grain(0.9, 0.9, 2, 0.10)}, radial-gradient(120% 90% at 50% 0%, #f7eedb 0%, #efe1c3 70%, #e6d3ae 100%)`
 
 const H = {
@@ -97,7 +97,7 @@ function Well({ itemId, size, dim }: { itemId: string; size: number; dim?: boole
                    background: 'radial-gradient(circle at 50% 40%, #e9d7b4, #d6bf95)',
                    boxShadow: 'inset 0 2px 4px rgba(74,45,24,.45), inset 0 -1px 0 rgba(255,250,235,.7), 0 1px 0 rgba(255,250,235,.6)',
                    filter: dim ? 'grayscale(.7) opacity(.55)' : undefined }}>
-      <CraftIcon itemId={itemId} size={Math.round(size * 0.62)} />
+      <CraftIcon itemId={itemId} size={Math.round(size * 0.7)} />
     </span>
   )
 }
@@ -144,8 +144,16 @@ function HearthCrafter({ onClose }: { onClose: () => void }) {
           <div className="max-h-[78vh] overflow-y-auto hearth-scroll" style={{ ...body, color: H.ink }}>
             {/* head: where you are, the tabs, the search — sticky, like the shipped grid */}
             <div className="sticky top-0 z-10 px-4 pt-6 pb-3" style={{ background: 'linear-gradient(180deg, #f5ebd5 85%, rgba(245,235,213,0))' }}>
-              <div className="text-center text-[12px] mb-3" style={{ color: H.inkSoft }}>
-                at the bench <span style={{ color: H.inkFaint }}>·</span> drawing on the bank
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-[13px] italic" style={{ ...display, color: H.inkSoft }}>
+                  at the bench <span style={{ color: H.inkFaint }}>·</span> drawing on the bank
+                </span>
+                <label className="flex items-center gap-1.5 h-8 px-3 rounded-full"
+                       style={{ background: '#e8d8b8', boxShadow: 'inset 0 1px 3px rgba(58,39,22,.35)' }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="5" cy="5" r="3.6" stroke={H.inkSoft} strokeWidth="1.5" fill="none" /><path d="M7.8 7.8 L11 11" stroke={H.inkSoft} strokeWidth="1.5" strokeLinecap="round" /></svg>
+                  <input value={q} onChange={e => setQ(e.target.value)} placeholder="Find…"
+                         className="w-24 bg-transparent outline-none text-[13px] placeholder:text-[#9a8163]" style={{ color: H.ink }} />
+                </label>
               </div>
               <div className="flex items-end gap-1 flex-wrap">
                 {TABS.map(t => {
@@ -162,12 +170,6 @@ function HearthCrafter({ onClose }: { onClose: () => void }) {
                     </button>
                   )
                 })}
-                <label className="ml-auto flex items-center gap-1.5 h-8 px-3 rounded-full mb-1"
-                       style={{ background: '#e8d8b8', boxShadow: 'inset 0 1px 3px rgba(58,39,22,.35)' }}>
-                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="5" cy="5" r="3.6" stroke={H.inkSoft} strokeWidth="1.5" fill="none" /><path d="M7.8 7.8 L11 11" stroke={H.inkSoft} strokeWidth="1.5" strokeLinecap="round" /></svg>
-                  <input value={q} onChange={e => setQ(e.target.value)} placeholder="Find…"
-                         className="w-24 bg-transparent outline-none text-[13px] placeholder:text-[#9a8163]" style={{ color: H.ink }} />
-                </label>
               </div>
               <div className="h-px -mt-px" style={{ background: 'rgba(58,39,22,.25)' }} />
 
