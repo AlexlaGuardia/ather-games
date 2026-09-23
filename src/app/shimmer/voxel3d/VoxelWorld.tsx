@@ -147,7 +147,7 @@ import {
 } from '../voxel/render-light-ring'
 import { createLightTexture } from './light-texture'
 import { createLightUniforms, LIGHT_LOOK } from './light-glsl'
-import { createGroundTexture, splatGround, sourcesKey, bedGlow, SAPLING_WEIGHT, GROWN_TREE_WEIGHT, GROUND_UNIFORMS, type GroundSource } from './ground-light'
+import { createGroundTexture, splatGround, sourcesKey, bedGlow, SAPLING_WEIGHT, GROWN_TREE_WEIGHT, GROUND_UNIFORMS, livingLightAt, SPAWN_VETO, type GroundSource } from './ground-light'
 import { layerOf } from './tex/tiles'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
@@ -3305,6 +3305,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const groundKey = useRef('')
   /** `window.__groundTest` — harness-only living sources, never saved. See the hook below. */
   const groundTest = useRef<GroundSource[]>([])
+  /** Every living source at the last beat, UNFILTERED by reach — the spawn veto reads it (ground-light.ts). */
+  const groundSources = useRef<GroundSource[]>([])
   useEffect(() => {
     GROUND_UNIFORMS.uGroundTex.value = groundTex.texture
     GROUND_UNIFORMS.uGroundOn.value = 1
@@ -7551,7 +7553,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // count (bounded by what is loaded), so a wider view no longer means a wider night; the ring
       // and the despawn line below sit on the same number. `simRadiusOf` clamps to the view radius.
       const simR = simRadiusOf(settings)
-      const cap = hollowCap(Math.min(cols.current.size, simColumns(simR)))
+      // ★ A FOLD'S CAP IS ZERO (2026-09-23). The plot and the Glade are tended folds — canon's Hollow law
+      // says one forming on healthy ground is the failure returning. Until today they were spared only
+      // because `greyness` happens to sit under 0.5 around the origin their coordinates share: a
+      // coincidence of noise doing a rule's job. Stated through the cap so the sweep gate every guard
+      // anchors on stays one line; `/hollow` (pendingHollow) does not read the cap and is unaffected.
+      const cap = space.current === 'wilds' ? hollowCap(Math.min(cols.current.size, simColumns(simR))) : 0
       const spawnHollow = (sx: number, sh: number, sz: number, force?: HollowForm, forms?: readonly HollowForm[]) => {
         // ★ A SUB-ZONE, OPENED HERE SO BOTH CALL SITES ARE COVERED BY ONE MARK PAIR. Marks are flat
         // by construction, so re-opening `world:spawn` at the end resumes the parent zone — this
@@ -7735,6 +7742,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // water rule is a separate change with its own way of being wrong.
           if (!hollowEligible(wx + 0.5, wz + 0.5, SEED, lf.get(wx, fy, wz), day,
                               columnHeight(wx, wz, SEED), DEFAULT_DEPTH.seaLevel)) continue
+          // Living light holds the dark back: nothing FORMS on tended ground (it may walk in).
+          if (livingLightAt(groundSources.current, wx + 0.5, fy, wz + 0.5) >= SPAWN_VETO) continue
           // ── ★ THE GROUND'S ROSTER, ASKED SECOND (#1112, 2026-09-11) ──────────────────────────
           // `hostile-roster.ts` says which FORMS this zone's grey may wear and how big a pack. It is
           // a filter over the ruling above, never a source: it runs AFTER `hollowEligible` and can
@@ -7764,6 +7773,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             if (mfy < 0) continue
             if (!hollowEligible(mx, mz, SEED, lf.get(mix, mfy, miz), day,
                                 columnHeight(mix, miz, SEED), DEFAULT_DEPTH.seaLevel)) continue
+            if (livingLightAt(groundSources.current, mx, mfy, mz) >= SPAWN_VETO) continue
             // A mate wears the ANCHOR's roster (a pack is one ground's pack) but may not stand on
             // ground whose own roster is empty — the ±5 walk can cross a zone edge, and a village
             // that yields nothing must not receive the wild's overflow.
@@ -8676,6 +8686,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           src.push({ x, y, z, w: GROWN_TREE_WEIGHT })
         }
         for (const t of groundTest.current) src.push(t)
+        groundSources.current = src
         const key = sourcesKey(src, ccx, ccz)
         if (key !== groundKey.current) {
           groundKey.current = key

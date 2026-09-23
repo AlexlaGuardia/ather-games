@@ -5,9 +5,11 @@
 // looks different on tended ground than in a greyfield (design-briefs/hollows.md). These asserts
 // guard the premises that picture rests on; they are not the picture.
 import * as THREE from 'three'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   splatGround, bedGlow, sourcesKey, patchHollowForGround, GROUND_W, GROUND_REACH, GROUND_DECL_GLSL,
-  GROUND_UNIFORMS, PHASE_WEIGHT, SAPLING_WEIGHT, GROWN_TREE_WEIGHT, type GroundSource,
+  GROUND_UNIFORMS, PHASE_WEIGHT, SAPLING_WEIGHT, GROWN_TREE_WEIGHT, livingLightAt, SPAWN_VETO, type GroundSource,
 } from './ground-light'
 import { LIGHT_DECL_GLSL, createLightUniforms } from './light-glsl'
 import { adoptHollowMat } from './hollow-look'
@@ -64,6 +66,41 @@ ok(SAPLING_WEIGHT < GROWN_TREE_WEIGHT && GROWN_TREE_WEIGHT <= 1, '§4 a grown pl
   ok(sourcesKey(a, 0, 0) === sourcesKey([{ ...a[0] }], 0, 0), '§6 same sources, same key')
   ok(sourcesKey(a, 0, 0) !== sourcesKey([{ ...a[0], w: 0.9 }], 0, 0), '§6 watering a bed changes the key')
   ok(sourcesKey(a, 0, 0) !== sourcesKey(a, 1, 0), '§6 a moved ring changes the key')
+}
+
+// §6b ★ THE SPAWN VETO: the CPU read IS the splat (one kernel), and it holds a garden's own ground.
+{
+  const src: GroundSource[] = [{ x: 10, y: 70, z: -5, w: 0.8 }, { x: 12, y: 70, z: -4, w: 0.5 }]
+  const f = splatGround(src, 0, 0)
+  let worst = 0
+  for (let dx = -6; dx <= 8; dx++) for (let dz = -6; dz <= 6; dz++) {
+    const x = 10 + dx, z = -5 + dz
+    worst = Math.max(worst, Math.abs(at(f, x, z).r / 255 - livingLightAt(src, x + 0.5, 70, z + 0.5)))
+  }
+  ok(worst <= 1 / 255 + 1e-9, `§6b ★ CPU read matches the splat texel for texel (worst ${worst.toFixed(4)})`)
+  const one: GroundSource[] = [{ x: 0, y: 64, z: 0, w: SAPLING_WEIGHT }]
+  ok(livingLightAt(one, 0.5, 64, 0.5) >= SPAWN_VETO, '§6b a lone sapling vetoes its own cell')
+  ok(livingLightAt(one, 3.5, 64, 0.5) < SPAWN_VETO, '§6b ★ but not three blocks off — a garden clears its ground, never the landscape')
+  ok(livingLightAt(one, 0.5, 58, 0.5) < SPAWN_VETO, '§6b the height gate: a cave under the sapling is not held')
+  ok(livingLightAt([], 0.5, 64, 0.5) === 0, '§6b a greyfield holds nothing back')
+  ok(livingLightAt([{ x: 200, y: 64, z: 0, w: 1 }], 200.5, 64, 0.5) >= SPAWN_VETO,
+    '§6b ★ no reach limit — a garden 200 blocks out still holds (the texture would have wrapped)')
+}
+
+// §6c ★ WIRED: the sweep asks the veto after the ruling and before the roster, at the anchor AND for
+// every pack mate; a fold's cap is zero. Read off the host, because a veto nobody calls holds nothing.
+{
+  const host = readFileSync(join(__dirname, 'VoxelWorld.tsx'), 'utf8')
+  const anchorRule = host.indexOf('if (!hollowEligible(wx + 0.5, wz + 0.5, SEED')
+  const anchorVeto = host.indexOf('livingLightAt(groundSources.current, wx + 0.5, fy, wz + 0.5) >= SPAWN_VETO')
+  const anchorRoster = host.indexOf('const roster = hostileRosterFor(', anchorRule)
+  ok(anchorRule > 0 && anchorVeto > anchorRule && anchorVeto < anchorRoster, '§6c ★ anchor: ruling → veto → roster')
+  const mateRule = host.indexOf('if (!hollowEligible(mx, mz, SEED')
+  const mateVeto = host.indexOf('livingLightAt(groundSources.current, mx, mfy, mz) >= SPAWN_VETO')
+  const mateSpawn = host.indexOf('spawnHollow(mx, mfy - 1, mz', mateRule)
+  ok(mateRule > 0 && mateVeto > mateRule && mateVeto < mateSpawn, '§6c ★ every pack mate is vetoed too — a pack must not walk its members onto a garden')
+  ok(/const cap = space\.current === 'wilds' \? hollowCap\(/.test(host), "§6c ★ a fold's cap is zero — the plot and the Glade never form a Hollow")
+  ok(host.includes('groundSources.current = src'), '§6c the veto reads the live source list')
 }
 
 // §7 GLSL hygiene — the same two silent failures light-glsl.test guards.

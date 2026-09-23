@@ -35,7 +35,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // ── the wiring ───────────────────────────────────────────────────────────────────────────────
 {
   const src = readFileSync(join(__dirname, 'VoxelWorld.tsx'), 'utf8')
-  ok(/const simR = simRadiusOf\(settings\)\n\s*const cap = hollowCap\(Math\.min\(cols\.current\.size, simColumns\(simR\)\)\)/.test(src),
+  // (09-23: a fold's cap is 0 — the ternary is allowed, the sim-disc feed is what this guards.)
+  ok(/const simR = simRadiusOf\(settings\)\n(?:\s*\/\/.*\n)*\s*const cap = (?:space\.current === 'wilds' \? )?hollowCap\(Math\.min\(cols\.current\.size, simColumns\(simR\)\)\)/.test(src),
      '★★ the Hollow cap is fed the SIM disc (bounded by what is loaded), not the loaded column count')
   ok(/const despawn = simR \* SECTION/.test(src), '★★ the spawn ring\'s far edge / despawn line is the SIM edge')
   ok(!/const despawn = settings\.viewRadius \* SECTION/.test(src), 'and no longer the view edge')

@@ -90,6 +90,51 @@ export const GROUND_REACH = 64
 
 const mod = (a: number, n: number) => ((a % n) + n) % n
 
+/** One source's contribution at a planar distance — the ONE kernel both the splat and the CPU read use. */
+const kernel = (w: number, d: number, radius: number): number => {
+  if (d > radius) return 0
+  const f = 1 - d / radius
+  return w * f * f
+}
+/** Accumulated contributions → 0..1. Shared for the same reason as `kernel`. */
+const saturate = (acc: number): number => Math.max(0, Math.min(1, GROUND_LOOK.cap * (1 - Math.exp(-acc * 1.6))))
+
+/**
+ * ── ★ LIVING LIGHT HOLDS THE DARK BACK: THE SPAWN VETO (2026-09-23, Jin's call) ──────────────────
+ * Greg's locked line — *"a tended thing holds the dark back better than one nobody minds"* — and
+ * canon's Hollow law — *a Hollow on healthy ground is the failure returning* — agree: no Hollow
+ * FORMS where living light stands above this level. It may still WALK in (it hunts the keeper), so
+ * a Hollow standing on tended ground — the ground light's whole arrival test — still happens.
+ * 0.2 is the edge of a lone sapling's pool at ~2 blocks: a garden clears its own ground, never the
+ * landscape.
+ */
+export const SPAWN_VETO = 0.2
+
+/**
+ * Living light at a world point, 0..1, straight from the sources — the splat's own kernel with the
+ * shader's height gate, minus night and breathing (a spawn rule must not flicker).
+ * ⚠ NOT FROM THE TEXTURE: the texture only holds sources within GROUND_REACH of the ring centre and
+ * wraps past it, so a spawn cell 80 blocks out would read a stranger's garden. Sources are few.
+ */
+export function livingLightAt(sources: readonly GroundSource[], x: number, y: number, z: number,
+                              radius = GROUND_LOOK.radius): number {
+  let acc = 0
+  for (const s of sources) {
+    if (s.w <= 0) continue
+    const dx = x - (s.x + 0.5), dz = z - (s.z + 0.5)
+    if (Math.abs(dx) > radius || Math.abs(dz) > radius) continue
+    const dy = y - s.y
+    const band = dy < 0 ? 1 - smooth(1.0, 2.5, -dy) : 1 - smooth(2.5, 4.5, dy)
+    if (band <= 0) continue
+    acc += kernel(s.w, Math.hypot(dx, dz), radius) * band
+  }
+  return saturate(acc)
+}
+const smooth = (a: number, b: number, v: number): number => {
+  const t = Math.max(0, Math.min(1, (v - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
 /**
  * Splat sources into an RG byte field over the torus. R = intensity, G = source height (y of the
  * cell a plant stands in). Pure; the host uploads the result.
@@ -110,10 +155,8 @@ export function splatGround(
     if (Math.abs(s.x - centreX) > GROUND_REACH || Math.abs(s.z - centreZ) > GROUND_REACH) continue
     for (let dz = -r; dz <= r; dz++) {
       for (let dx = -r; dx <= r; dx++) {
-        const d = Math.hypot(dx, dz)
-        if (d > radius) continue
-        const f = 1 - d / radius
-        const c = s.w * f * f
+        const c = kernel(s.w, Math.hypot(dx, dz), radius)
+        if (c <= 0) continue
         const i = mod(s.z + dz, GROUND_W) * GROUND_W + mod(s.x + dx, GROUND_W)
         acc[i] += c
         if (c > best[i]) { best[i] = c; out[i * 2 + 1] = Math.max(0, Math.min(255, s.y)) }
@@ -122,8 +165,7 @@ export function splatGround(
   }
   for (let i = 0; i < acc.length; i++) {
     // Soft saturation: a dense garden reads brighter than one bed, and never past the cap.
-    const v = GROUND_LOOK.cap * (1 - Math.exp(-acc[i] * 1.6))
-    out[i * 2] = Math.round(Math.max(0, Math.min(1, v)) * 255)
+    out[i * 2] = Math.round(saturate(acc[i]) * 255)
   }
   return out
 }
