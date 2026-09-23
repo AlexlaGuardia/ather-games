@@ -24,6 +24,7 @@
 import * as THREE from 'three'
 import { SAMPLE_RADIUS, RING_N } from '../voxel/render-light-ring'
 import { SPAN, HEIGHT } from '../voxel/render-light'
+import { GROUND_DECL_GLSL, GROUND_UNIFORMS, type GroundUniforms } from './ground-light'
 
 /** Ring texture dimensions, in texels. Derived from the ring, never typed twice. */
 export const LIGHT_TEX_W = RING_N * SPAN
@@ -70,7 +71,7 @@ export const LIGHT_LOOK = {
  * ES 3.0 and the program fails to LINK without it, which surfaces as a chunk that renders nothing
  * with no error in the console.
  */
-export const LIGHT_DECL_GLSL = `
+export const LIGHT_DECL_GLSL = GROUND_DECL_GLSL + `
 precision highp sampler3D;
 uniform sampler3D uLightTex;
 uniform vec3  uLightDim;
@@ -122,7 +123,11 @@ vec3 shimmerLightCell(vec3 col, vec3 albedo, vec3 cell) {
   // NOON, which is not a light, it is a stain. Minecraft never has this problem because it takes
   // max(sky, block) and the sky wins outdoors; the same result here is one factor.
   vec3 shaded = col * mix(uLightFloor, 1.0, skyShade)
-              + albedo * uBlockTint * (uBlockGain * pow(blkL, uBlockCurve) * (1.0 - skyShade));
+              + albedo * uBlockTint * (uBlockGain * pow(blkL, uBlockCurve) * (1.0 - skyShade))
+  // ★ LIVING LIGHT (ground-light.ts): what GROWS lights the ground around it at night. Its own
+  // tint, its own field, gated by the hour rather than by skyShade — a garden is open to the sky,
+  // so a sky gate would zero it on exactly the ground it exists for.
+              + albedo * uGroundTint * (uGroundGain * shimmerGroundAt(cell));
   return mix(col, shaded, w);
 }
 
@@ -176,7 +181,7 @@ export const lightApplyHere = (col: string, albedo: string, wpos: string): strin
 
 export { SAMPLE_RADIUS }
 
-export interface LightUniforms {
+export interface LightUniformsCore {
   uLightTex: { value: THREE.Data3DTexture | null }
   uLightDim: { value: THREE.Vector3 }
   uLightCentre: { value: THREE.Vector2 }
@@ -197,6 +202,8 @@ export interface LightUniforms {
   /** The lit window's gain (`LIGHT_LOOK.paneGlow`). 0 = no pane ever glows (the A/B control). */
   uPaneGlow: { value: number }
 }
+/** The light uniforms plus the living-light set — the SAME objects everywhere, see ground-light.ts. */
+export type LightUniforms = LightUniformsCore & GroundUniforms
 
 /**
  * One set of uniform OBJECTS, shared by every program that samples the field.
@@ -225,5 +232,7 @@ export function createLightUniforms(): LightUniforms {
     uHourLight: { value: new THREE.Vector3(1, 1, 1) },
     uToonHour: { value: 0 },
     uPaneGlow: { value: LIGHT_LOOK.paneGlow },
+    // ⚠ SPREAD, NOT COPIED: these are the module-level objects, so the Hollows share them too.
+    ...GROUND_UNIFORMS,
   }
 }

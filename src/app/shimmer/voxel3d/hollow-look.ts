@@ -20,6 +20,7 @@
  */
 import * as THREE from 'three'
 import { skyEnvironment, borrowedSky } from './sky-env'
+import { patchHollowForGround } from './ground-light'
 
 export type HollowForm = 'warden' | 'stalker' | 'caster'
 
@@ -301,7 +302,10 @@ export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowFo
     // by the environment" half: where a scene gives it something to borrow, it borrows hard.
     roughness: 0.34,
     metalness: 0.10,
-    // ★ THE ROOM IT BORROWS, AND THE REASON IT IS ON THE MATERIAL AND NOT ON THE SCENE: three
+    // ★ THE SKY IT BORROWS — ONE GRADIENT WITH NO POSITION, SO NOT "THE ROOM". Every body gets the
+    // same texture wherever it stands; what differs by place is the living light under it, added by
+    // `patchHollowForGround` (magii flagged the old label 2026-09-22 as a claim this line cannot keep).
+    // And the reason it is on the MATERIAL and not on the scene: three
     // applies `scene.environment` to Lambert and Phong too, and this world is Lambert nearly
     // everywhere, so a scene-wide environment would re-light every voxel in Shimmer. `sky-env.ts`
     // carries the full argument and the measurement that prompted it.
@@ -327,6 +331,11 @@ export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowFo
     opacity: look.opacity[f],
   })
   const built = { warden: one('warden'), stalker: one('stalker'), caster: one('caster') }
+  // ★ THE ROOM, POSITIONALLY (2026-09-23). `envMap` above is one gradient every body shares and it
+  // cannot know WHERE a Hollow stands. The living-light patch adds the lit ground under a body to
+  // its reflected radiance — specular only, never emissive — so a Hollow on a tended plot catches
+  // the garden in its wet lower half and one in a greyfield has nothing down there to catch.
+  for (const f of ['warden', 'stalker', 'caster'] as const) patchHollowForGround(built[f])
   // ⚠ REGISTERED, NOT TRACKED BY A CALLER. `hollow-body` and `hollow-mesh` each hold their own set
   // built from this factory, and `dev/grey` builds more from varied dials; a tick that only knew
   // about one of them would light half the Hollows on the bench by a different clock than the other
@@ -342,6 +351,21 @@ export function createHollowMat(look: HollowLook = HOLLOW_LOOK): Record<HollowFo
     if (LAST_BORROW >= 0) built[f].envMapIntensity = LAST_BORROW
   }
   return built
+}
+
+/**
+ * Take a CLONE of a shipped Hollow material into the family.
+ *
+ * ⚠⚠ `Material.clone()` DROPS TWO THINGS THIS FILE DEPENDS ON: the `onBeforeCompile` patch (three
+ * copies properties, and the patch is an instance override of a prototype method) and membership
+ * of `LIVE`, which is how the hour's borrow reaches a body. A clone left bare renders with no living
+ * light AND borrows whatever hour it was cloned at, forever. Every clone site calls this.
+ */
+export function adoptHollowMat(m: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  patchHollowForGround(m)
+  LIVE.add(m)
+  if (LAST_BORROW >= 0) m.envMapIntensity = LAST_BORROW
+  return m
 }
 
 /**

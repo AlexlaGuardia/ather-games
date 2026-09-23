@@ -20,6 +20,7 @@
 //   WORLD_KEYS='KeyM; Escape'                                 — press these keys after the clicks (M = the map)
 //   WORLD_NAV_TIMEOUT=240000                                  — ms for each navigation (default 60000; a loaded box or a cold devwin needs more)
 //   WORLD_PRE_WAIT=10000                                      — ms to let frames draw after WORLD_PRE_EVAL (default 1500; ~1 fps under software GL)
+//   WORLD_SECOND_EVAL='window.__groundTest(0)'                   — run BEFORE the second frame (A/B one toggle)
 //   WORLD_SECOND=4000                                         — a second frame of the same page N ms later, saved as <out>.2.png (motion needs two stills)
 //
 // It prints the HUD counter line after the shot. `mesh` is geometry BUILT, `draws` is what survived
@@ -373,7 +374,10 @@ const OWNER = process.env.WORLD_OWNER === '1'
   // it as `<out>.2.png`. A still cannot show motion; two stills can. Added 2026-09-18 to judge the
   // river's current: diff the water between the frames and a scroll shows as a shift, a static
   // texture as nothing. Under software GL the clock still runs at wall speed, so the shift is real.
+  // WORLD_SECOND_EVAL (2026-09-23): change the page BETWEEN the frames — an A/B of one scene with
+  // one thing toggled (the living light: same Hollow, same spot, light on then off).
   if (process.env.WORLD_SECOND) {
+    if (process.env.WORLD_SECOND_EVAL) console.log('second-eval →', await page.evaluate(`(() => { try { return JSON.stringify(${process.env.WORLD_SECOND_EVAL}) } catch (e) { return 'THREW: ' + e.message } })()`))
     await new Promise(r => setTimeout(r, Number(process.env.WORLD_SECOND)))
     const out2 = OUT.replace(/\.png$/, '') + '.2.png'
     await page.screenshot({ path: out2 })

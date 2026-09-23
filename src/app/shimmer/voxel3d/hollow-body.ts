@@ -40,7 +40,7 @@
  */
 import * as THREE from 'three'
 import { hollowPose, hollowField, REST, FORM_SCALE, type Anchor, type Blob, type HollowPose } from './hollow-pose'
-import { createHollowMat, setHollowBorrow, type HollowForm } from './hollow-look'
+import { createHollowMat, setHollowBorrow, adoptHollowMat, type HollowForm } from './hollow-look'
 import { dayProgress, daylight } from '../engine/day-cycle'
 
 /** How many shared alpha buckets stand in for per-blob opacity. Mirrors `HollowDoll`'s bench value. */
@@ -66,7 +66,7 @@ function shared(): { sphere: THREE.SphereGeometry; mats: Record<HollowForm, THRE
       // anonymous callback around a GPU construction as the per-object allocation shape, and it is
       // right to: it cannot tell a bounded six from an unbounded entity list.
       for (let i = 0; i < BUCKETS; i++) {
-        const m = base[f].clone()
+        const m = adoptHollowMat(base[f].clone())
         // ★ THE RAMP APPLIES ONLY TO A FORM THAT IS TRANSLUCENT AT ALL. With every form solid
         // (Alex, 09-05: "lose that ghost-like look") a ramp here would put the ghost straight back
         // — bucket 0 at 0.4 — under a constant that says 1. The buckets stay as a bounded, tiny

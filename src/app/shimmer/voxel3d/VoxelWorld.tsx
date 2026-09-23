@@ -46,7 +46,7 @@ import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLe
 import { salvageItems, salvageMessage } from '../voxel/salvage'
 import { blockDef, materialForItem, emitOf, BLOCKS, type BlockSkill } from '../voxel/registry'
 import { editIndex, unpackIndex, recordEdit, applyEdits, packEdits, unpackEdits, isStale, GENERATOR_VERSION, type ColumnEdits } from '../voxel/edits'
-import { cropForSeed, CROP_DEFS } from '../engine/farming'
+import { cropForSeed, CROP_DEFS, getCropGrowthPhase } from '../engine/farming'
 import { placeBedBlocker, plotRefusalLine, countBeds, isGardenBed } from './garden'
 import { createProfiler, snapshotText, shortRowLabel, type FrameProfile, gpuTrusted } from './profile'
 import { stopScan, SPAWN_SCAN_MAX, LIGHT_BUILD_MS, RENDER_LIGHT_MS } from './spawn-budget'
@@ -145,6 +145,7 @@ import {
 } from '../voxel/render-light-ring'
 import { createLightTexture } from './light-texture'
 import { createLightUniforms, LIGHT_LOOK } from './light-glsl'
+import { createGroundTexture, splatGround, sourcesKey, bedGlow, SAPLING_WEIGHT, GROUND_UNIFORMS, type GroundSource } from './ground-light'
 import { layerOf } from './tex/tiles'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
@@ -3239,6 +3240,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     lightUniforms.uHourLight.value = hourLight   // the rig's vector IS the uniform's value
     return () => { lightTex.dispose() }
   }, [lightTex, lightUniforms, hourLight])
+  // ── ★ LIVING LIGHT (ground-light.ts): one 2D field, splatted from what the keeper planted ────
+  const groundTex = useMemo(() => createGroundTexture(), [])
+  const groundKey = useRef('')
+  /** `window.__groundTest` — harness-only living sources, never saved. See the hook below. */
+  const groundTest = useRef<GroundSource[]>([])
+  useEffect(() => {
+    GROUND_UNIFORMS.uGroundTex.value = groundTex.texture
+    GROUND_UNIFORMS.uGroundOn.value = 1
+    return () => {
+      GROUND_UNIFORMS.uGroundOn.value = 0
+      GROUND_UNIFORMS.uGroundTex.value = null
+      groundTex.texture.dispose()
+    }
+  }, [groundTex])
   const flatMaterial = useMemo(() => createVoxelMaterial(lightUniforms), [lightUniforms])
   const textured = useMemo(() => (tiles ? createTexturedVoxelMaterial(tiles, lightUniforms) : null), [tiles, lightUniforms])
   const material = textured?.material ?? flatMaterial
@@ -6534,7 +6549,21 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // StrictMode runs a memo factory twice and keeps the FIRST result, so a window assignment made
     // inside the factory hands the harness the orphan. Cost an hour on 09-16.
     w.__hands = hands.sig
-    return () => { delete w.__renderlight; delete w.__renderlightFill; delete w.__guide; delete w.__hands; delete w.__leafFall }
+    // ★ `window.__groundTest(r)` — the living-light A/B for a headless shot: a (2r+1)^2 patch of
+    // full-strength living sources centred on the keeper's feet, or none (r = 0). Never saved,
+    // never a bed. Same place, same Hollow, light on vs off — the only honest comparison.
+    w.__groundUniforms = GROUND_UNIFORMS   // the dials, live, for a tuning pass
+    w.__groundTest = (r = 4) => {
+      const { px, py, pz } = loco.current
+      const x0 = Math.floor(px), z0 = Math.floor(pz), y0 = Math.floor(py)
+      const out: GroundSource[] = []
+      for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) out.push({ x: x0 + dx, y: y0, z: z0 + dz, w: 1 })
+      groundTest.current = r > 0 ? out : []
+      groundKey.current = ''
+      plantedAt.current = -Infinity
+      return { sources: groundTest.current.length, night: GROUND_UNIFORMS.uGroundNight.value, on: GROUND_UNIFORMS.uGroundOn.value }
+    }
+    return () => { delete w.__renderlight; delete w.__renderlightFill; delete w.__guide; delete w.__hands; delete w.__leafFall; delete w.__groundTest; delete w.__groundUniforms }
   }, [lightUniforms, advanceRenderLight, guide, camera, space, tutorial, hands])
   // ── ★ THREE SILHOUETTES, ONE GEOMETRY EACH, SHARED ACROSS EVERY BODY OF THAT FORM ──────────
   // ⚠ BLOCKOUT, same standing as the single body it replaces: the locked look is owed a
@@ -8518,6 +8547,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // renderer the list. `setPlanted` writes the planted tail at once — it does NOT ride the wild
     // sync below, whose `incoming` gate can stay shut for a long time on a slow device (measured
     // headless: 12 → 22 columns queued while the beds sat empty). One renderer, two feeds, two beats.
+    // Living light: the hour and the breathing, every frame (three floats, no upload).
+    {
+      const lum = 0.2126 * hourLight.x + 0.7152 * hourLight.y + 0.0722 * hourLight.z
+      // Normalised so a clear midnight (rig ~0.28) reads as full night, noon as none.
+      GROUND_UNIFORMS.uGroundNight.value = Math.max(0, Math.min(1, (1 - lum) / 0.72))
+      GROUND_UNIFORMS.uGroundTime.value = state.clock.elapsedTime
+    }
     if (state.clock.elapsedTime - plantedAt.current > 1.5) {
       plantedAt.current = state.clock.elapsedTime
       // Farming ②: pay the damp beds' growth bonus BEFORE the spots are read, so a stage crossed
@@ -8536,6 +8572,32 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           wet.push({ x, y, z, fraction: dampFraction(d, now), fed: fedFraction(d, now) })
         }
         wetPatches.set(wet)
+      }
+      // Living light: re-splat only when a bed, its care, a sapling or the ring centre changed.
+      {
+        const ccx = Math.floor(loco.current.px / SECTION), ccz = Math.floor(loco.current.pz / SECTION)
+        const cxB = ccx * SECTION + SECTION / 2, czB = ccz * SECTION + SECTION / 2
+        const now = Date.now()
+        const src: GroundSource[] = []
+        for (const [k, crop] of beds.current) {
+          const [x, y, z] = k.split(',').map(Number)
+          const care = watered.current.get(k)
+          const c = care ? Math.max(dampFraction(care, now), fedFraction(care, now)) : 0
+          // y + 1: the cell the plant stands in, which is the cell a ground face samples.
+          src.push({ x, y: y + 1, z, w: bedGlow(getCropGrowthPhase(crop), c) })
+        }
+        for (const k of Object.keys(saplingClock.current)) {
+          const [x, y, z] = k.split(',').map(Number)
+          src.push({ x, y, z, w: SAPLING_WEIGHT })
+        }
+        for (const t of groundTest.current) src.push(t)
+        const key = sourcesKey(src, ccx, ccz)
+        if (key !== groundKey.current) {
+          groundKey.current = key
+          splatGround(src, cxB, czB, groundTex.data)
+          groundTex.texture.needsUpdate = true
+        }
+        GROUND_UNIFORMS.uGroundCentre.value.set(cxB, czB)
       }
       const spots = plantedSpots(beds.current)
       const sig = plantedSignature(spots)
