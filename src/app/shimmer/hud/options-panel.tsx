@@ -37,7 +37,7 @@ export function OptionSlider({ label, value, min = 0, max = 1, step = 0.05, onCh
       <input type="range" min={min} max={max} step={step} value={value} disabled={disabled}
         onChange={e => onChange(Number(e.target.value))}
         className="flex-1 accent-[#c8642a] disabled:opacity-40" />
-      <span className="w-14 text-right tabular-nums text-[12px] hk-soft">{format ? format(value) : value.toFixed(2)}</span>
+      <span className="w-16 shrink-0 whitespace-nowrap text-right tabular-nums text-[12px] hk-soft">{format ? format(value) : value.toFixed(2)}</span>
     </label>
   )
 }
@@ -71,7 +71,7 @@ export function OptionsPanel({ onClose, isOwner, game, video, sound, controls, d
     // the way the dark sheet did, so the world stays visible while you tune its look. Capped to the
     // viewport and scrolling past it: with the Dev rows the panel outgrew a 760px window.
     <div className="absolute top-5 right-5 z-[40] pointer-events-auto">
-      <HearthFrame title="Options" maxWidth={330} backdrop={false} onClose={onClose}
+      <HearthFrame title="Options" maxWidth={360} backdrop={false} onClose={onClose}
                    bodyClass="p-3.5 pt-2 space-y-2.5"
                    head={<HearthTabs tabs={tabs.map(([id, label]) => ({ id, label }))} active={tab} onPick={id => setTab(id as OptionsTab)} />}>
       {tab === 'game' && (<>
