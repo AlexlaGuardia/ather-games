@@ -228,6 +228,23 @@ export const GLADE_TRIGGER_RADIUS = PLOT_NEAR_RADIUS
  */
 export const GLADE_EXIT_STEP = GLADE_TRIGGER_RADIUS + 12
 
+/**
+ * ── ★★ THE ROAD THRESHOLD'S *WILDS* SIDE — ONE DEFINITION, BOTH DIRECTIONS (2026-09-22) ───────
+ * Alex: *"the rift in the homeplot should lead directly to the wilds and moonwell should be its own
+ * area."* Moonwell can only BE its own area if the road works both ways — otherwise removing the
+ * plot's `@glade` passage strands it, reachable only from Rune Hold.
+ *
+ * ★ So this is the one spot the crossing uses from either side: leaving the island lands you here,
+ * and standing here walks you back in. A second literal for the return trip is how a door comes to
+ * be somewhere slightly different depending on which way you walk through it.
+ */
+export function gladeRoadOutside(seed: number, cfg: GladeConfig = DEFAULT_GLADE): { x: number; z: number; y: number } {
+  const a = gladeSeamAnchor(seed, cfg, 'road')
+  const x = Math.round(a.x + Math.cos(cfg.roadSeamBearing) * GLADE_EXIT_STEP)
+  const z = Math.round(a.z + Math.sin(cfg.roadSeamBearing) * GLADE_EXIT_STEP)
+  return { x, z, y: columnHeight(x, z, seed) + 1 }
+}
+
 export function gladeSeamAnchor(seed: number, cfg: GladeConfig = DEFAULT_GLADE, which: GladeSeam = 'plot'): SeamAnchor {
   const t = gladeSeamSpot(seed, (x, z) => columnHeight(x, z, seed), cfg, which)
   return {

@@ -257,7 +257,7 @@ import { aimedAt, bodyBox } from './aim'
 import { createSteamPoints } from './steam'
 import { createSmoke } from './smoke'
 import { columnSmokeSources, type SmokeSource } from './smoke-sources'
-import { createSeamShimmer, createSocketShimmers, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, GLADE_EXIT_STEP, gladeSeamAnchors } from './seam'
+import { createSeamShimmer, createSocketShimmers, PLOT_TRIGGER_RADIUS, GLADE_TRIGGER_RADIUS, gladeSeamAnchors, gladeRoadOutside } from './seam'
 import { GLADE_SEAM_TO, DEFAULT_GLADE } from '../voxel/glade'
 import { createWetPatches, type WetSpot } from './wet-patch'
 import { createBedSigns } from './bed-sign'
@@ -5060,8 +5060,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     if (to === 'glade') {
       // ★ THE GLADE'S LANDING IS GREG'S GROUND, not its seam: the passage from the plot is Greg's
       // fold and it lets you out where he stands — the same spot a fresh keeper first stands on.
-      lc.px = SPAWN_X + 0.5; lc.pz = SPAWN_Z + 0.5
-      lc.py = columnHeight(SPAWN_X, SPAWN_Z, SEED) + 1
+      // ⚠ …EXCEPT WHEN YOU WALKED IN OFF THE ROAD (2026-09-22). Arriving at Greg's feet after
+      // stepping through a threshold at the coast is the teleport-not-a-passage failure again, in
+      // the third place it has appeared: you come in where you came in.
+      const g = landAt ?? { x: SPAWN_X, z: SPAWN_Z }
+      lc.px = g.x + 0.5; lc.pz = g.z + 0.5
+      lc.py = columnHeight(g.x, g.z, SEED) + 1
     }
     lc.hvx = 0; lc.hvz = 0; lc.vy = 0; lc.airborne = true
     // ── ★★ THE CAMERA HAS TO CROSS TOO, AND IT IS THE SAME BUG AS THE FLORA (2026-08-15) ────────
@@ -6061,6 +6065,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const enterSpaceRef = useRef<((to: Space, landAt?: { x: number; z: number }) => void) | null>(null)
   /** Moonwell's threshold, derived once: the island never grows, so its coast never moves. */
   const gladeSeamAnchorRef = useRef(gladeSeamAnchors(SEED))
+  /** The Wilds-side spot of the island's road threshold — the same one both directions use. */
+  const gladeRoadOutsideRef = useRef(gladeRoadOutside(SEED))
   /**
    * ⚠ THE CROSSING LATCH — without it the two ends face each other and the keeper ping-pongs.
    *
@@ -9186,13 +9192,27 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // the Wilds (it is a separate space over the same coordinates), so this is ordinary
           // country: the spine, continuing. Derived from the seam's own bearing, so it follows the
           // road if the road ever moves.
+          // ★ THE SHARED SPOT, not a second sum — `gladeRoadOutside` is also what the Wilds side
+          // checks to walk back IN, so the door cannot be in two slightly different places
+          // depending on which way you go through it.
           enterSpaceRef.current?.(entered, entered === 'wilds' && enteredWhich === 'road'
-            ? { x: Math.round(enteredAnchor!.x + Math.cos(DEFAULT_GLADE.roadSeamBearing) * GLADE_EXIT_STEP),
-                z: Math.round(enteredAnchor!.z + Math.sin(DEFAULT_GLADE.roadSeamBearing) * GLADE_EXIT_STEP) }
-            : undefined)
+            ? gladeRoadOutsideRef.current : undefined)
         }
         if (!entered) crossLatched.current = false
       } else {
+        // ── ★★ THE ROAD WORKS BOTH WAYS (2026-09-22) ─────────────────────────────────────────
+        // Alex: *"moonwell should be its own area."* It can only be one if the road carries a
+        // keeper BACK — a one-way door out of an island is a place you leave, not a place you go.
+        // Same spot, same radius, the opposite destination; the latch is shared with the plot's
+        // threshold below because a keeper can only be standing in one of them.
+        const ro = gladeRoadOutsideRef.current
+        if (Math.hypot(lc.px - ro.x, lc.pz - ro.z) < GLADE_TRIGGER_RADIUS && Math.abs(lc.py - ro.y) < 2.5) {
+          if (!crossLatched.current) {
+            crossLatched.current = true
+            enterSpaceRef.current?.('glade', gladeSeamAnchorRef.current.find(g => g.which === 'road')!.anchor)
+          }
+          return
+        }
         // ★ THE WILDS SIDE IS A THRESHOLD YOU STEP INTO, AND THE SHELL IS NEVER PIERCED. Canon:
         // a threshold is *"a soft seam in the cloud… no gates, no locks, no keep-out"*, and *"a
         // build that puts a locked gate on a plot has misread the world"* — a doorway-shaped hole
