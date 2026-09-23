@@ -47,5 +47,15 @@ ok(!/plotHeight\(x, z, SEED, plotCfg\.current\)/.test(host.slice(host.indexOf('t
   ok(/<ClusterRows seed=\{g\.cluster\.seed\} tier=\{g\.cluster\.tier\} enter=\{g\.cluster\.enter\}/.test(host), '★ the Gardens menu draws the cluster rows')
 }
 
+// ── the map draws the cluster (2026-09-23: it showed only the solo fold) ──
+{
+  const map = readFileSync(join(__dirname, 'VoxelMap.tsx'), 'utf8')
+  ok(/const clusterMode = clusterOut/.test(host), '★ cluster mode lives in the parent ref the maps read')
+  ok(/clusterRef=\{clusterOut\}/.test(host) && /cluster=\{space\.current === 'plot' \? clusterOut\.current : null\}/.test(host), 'both maps are handed it')
+  ok(/if \(cluster\) drawClusterDoors/.test(map) && /if \(cl\) drawClusterDoors/.test(map), '★ both maps draw every cluster door, not the solo threshold')
+  ok(/plateToPixel\(plate, p\.x, p\.z\)/.test(map) && !/plotToPixel\(p\.x, p\.z, cfg\)/.test(map), 'the keeper dot reads the plate\'s own centre (the cluster plate is not centred on the fold)')
+  ok(/clusterSig\(cl\.mine, cl\.cfg\)\}@\$\{cPlateRow\}/.test(map), 'the minimap repaints as the sliced plate fills')
+}
+
 if (fails.length) { console.error(`cluster-wiring: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`cluster-wiring: ${pass}/${pass} pass`)

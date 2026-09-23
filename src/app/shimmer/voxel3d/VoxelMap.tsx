@@ -37,6 +37,9 @@ import { caveAnchor } from '../voxel/bubble'
 import { WILDS_BUBBLE } from '../voxel/column'
 import type { Space } from './save'
 import { mistPatchesIn, mistReach, type MistPatch } from '../voxel/mist'
+import { clusterAt, clusterReach, QUARTER_SIGN, type ClusterConfig, type QuarterId } from '../voxel/cluster'
+import { clusterThresholds } from '../voxel/cluster-column'
+import { framedHeight, framedMaterialAt, unframe, clusterSig } from '../voxel/cluster-space'
 
 /** Blocks per sampled pixel of the terrain plate. One plate pixel per fog cell keeps the two
  *  layers in lockstep, so the cloud can never sit half a pixel off the ground it hides. */
@@ -253,6 +256,97 @@ function foldPlate(seed: number, cfg: PlotConfig): HTMLCanvasElement {
   ctx.putImageData(img, 0, 0)
   pPlate = cv; pPlateKey = key
   return cv
+}
+
+// ── ★ THE CLUSTER, DRAWN WHOLE (2026-09-23, Alex walking his first cluster: "the map isnt showing
+// the new union") ──────────────────────────────────────────────────────────────────────────────
+// In cluster mode the plot space wears the whole cluster, generated AROUND the keeper's fold
+// (`cluster-space.ts` › the frame), and the map kept drawing the solo fold with black past its
+// coast — the Green, the lanes and every mate's quarter simply missing. So plot space has TWO
+// plates now, behind one shape (`PlotPlate`): the fold as ever, or the cluster, sampled off the
+// same framed functions the world generates from, so the map and the ground cannot disagree.
+// ⚠ Every mark reads the plate's own centre and step, never plotToPixel — the cluster's plate is
+// not centred on the keeper's origin (their fold is one corner of it).
+
+/** What the plot-space map is wearing: null = the keeper's own fold. */
+export type MapCluster = { mine: QuarterId; cfg: ClusterConfig } | null
+
+interface PlotPlate { cv: HTMLCanvasElement; n: number; s: number; cx: number; cz: number }
+const plateToPixel = (p: PlotPlate, x: number, z: number) => ({ px: p.n / 2 + (x - p.cx) / p.s, py: p.n / 2 + (z - p.cz) / p.s })
+const soloPlate = (seed: number, cfg: PlotConfig): PlotPlate =>
+  ({ cv: foldPlate(seed, cfg), n: plotSpan(cfg), s: plotSample(cfg), cx: 0, cz: 0 })
+/** The Green, a touch brighter than a garden's turf so the shared middle reads at a glance. */
+const GREEN_TURF: [number, number, number] = [138, 178, 96]
+
+let cPlate: PlotPlate | null = null
+let cPlateKey = ''
+let cImg: ImageData | null = null
+/** Rows of the cluster plate filled so far — the minimap keys on it so the plate repaints as it lands. */
+export let cPlateRow = 0
+/**
+ * ⚠ BUILT IN SLICES, UNLIKE THE FOLD'S. The fold is ~130² cheap samples; the cluster is ~225² samples
+ * of `clusterAt` (≈0.6s measured in node, more on a UHD 630), and the MINIMAP calls this from its
+ * frame loop, so a one-pass build froze the world for a second on entering a cluster. `budgetMs`
+ * bounds each call; the minimap passes a few ms, the opened map passes Infinity (an explicit open
+ * can take the wait; a stutter while walking cannot).
+ */
+function clusterPlate(cl: NonNullable<MapCluster>, budgetMs = 4): PlotPlate {
+  const key = clusterSig(cl.mine, cl.cfg)
+  const { mine, cfg } = cl
+  if (!cPlate || cPlateKey !== key) {
+    const sg = QUARTER_SIGN[mine]
+    // The cluster's centre, in the keeper's framed (plot) coordinates.
+    const cx = -sg.sx * cfg.offset, cz = -sg.sz * cfg.offset
+    const R = Math.ceil(clusterReach(cfg)) + 8
+    const s = Math.max(2, Math.round(R / 110)), n = Math.ceil((2 * R) / s)
+    const cv = cPlate?.cv ?? document.createElement('canvas')
+    cv.width = n; cv.height = n
+    const ctx = cv.getContext('2d')!
+    ctx.fillStyle = DEEP; ctx.fillRect(0, 0, n, n)
+    cImg = ctx.createImageData(n, n)
+    cPlate = { cv, n, s, cx, cz }; cPlateKey = key; cPlateRow = 0
+  }
+  const p = cPlate, img = cImg!
+  if (cPlateRow >= p.n) return p
+  const mats = cfg.base.materials
+  const t0 = performance.now(), from = cPlateRow
+  while (cPlateRow < p.n && performance.now() - t0 < budgetMs) {
+    const py = cPlateRow++
+    for (let px = 0; px < p.n; px++) {
+      const x = Math.round(p.cx + (px - p.n / 2) * p.s), z = Math.round(p.cz + (py - p.n / 2) * p.s)
+      const u = unframe(x, z, mine, cfg)
+      const part = clusterAt(u.x, u.z, cfg).part
+      const h = framedHeight(x, z, mine, cfg)
+      let r: number, g: number, b: number
+      if (h === null) {
+        if (part === 'wall') { r = 233; g = 237; b = 248 } else { r = 8; g = 6; b = 20 }
+      } else {
+        const m = framedMaterialAt(x, h, z, mine, cfg)
+        const c = m === mats.topsoil ? (part === 'green' ? GREEN_TURF : PLOT_TURF)
+          : m === mats.subsoil ? PLOT_SOIL : m === mats.stone ? PLOT_ROCK
+          : [214, 222, 236] as [number, number, number]
+        const k = 0.86 + Math.max(0, Math.min(1, (h - cfg.base.baseY) / Math.max(1, cfg.base.roll * 2))) * 0.28
+        r = c[0] * k; g = c[1] * k; b = c[2] * k
+      }
+      const i = (py * p.n + px) * 4
+      img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255
+    }
+  }
+  p.cv.getContext('2d')!.putImageData(img, 0, 0, 0, from, p.n, cPlateRow - from)
+  return p
+}
+const plotPlate = (seed: number, cfg: PlotConfig, cl: MapCluster, budgetMs = 4): PlotPlate =>
+  cl ? clusterPlate(cl, budgetMs) : soloPlate(seed, cfg)
+
+/** Every door of the cluster (one per filled quarter), in the keeper's framed coordinates. */
+function drawClusterDoors(ctx: CanvasRenderingContext2D, cl: NonNullable<MapCluster>, p: PlotPlate,
+                          scale: number, ox = 0, oy = 0, w = 0, h = 0) {
+  const sg = QUARTER_SIGN[cl.mine]
+  for (const t of clusterThresholds(cl.cfg)) {
+    const { px, py } = plateToPixel(p, t.x - sg.sx * cl.cfg.offset, t.z - sg.sz * cl.cfg.offset)
+    if (w > 0 && h > 0 && t.quarter === cl.mine) drawDoorPinned(ctx, ox + px * scale, oy + py * scale, scale, w, h)
+    else drawDoor(ctx, ox + px * scale, oy + py * scale, scale)
+  }
 }
 
 /**
@@ -562,7 +656,7 @@ function drawKeeper(ctx: CanvasRenderingContext2D, x: number, y: number, heading
 
 // ── the full map (M) ────────────────────────────────────────────────────────────────────────────
 
-export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, plotCfg, onClose }: {
+export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, plotCfg, cluster = null, onClose }: {
   seed: number
   seenRef: React.RefObject<Seen | null>
   /** Bumped when ground opens, so an open map peels back as you walk rather than on next open. */
@@ -578,6 +672,8 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
   space: Space
   /** The keeper's own fold size — it grows, and the plate is cached against it. */
   plotCfg: React.RefObject<PlotConfig>
+  /** Cluster mode: the plot space wears the whole cluster (read at open; the map remounts per open). */
+  cluster?: MapCluster
   onClose: () => void
 }) {
   const inFold = space === 'plot'
@@ -600,12 +696,14 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
     const ctx = cv.getContext('2d')!
     if (inFold) {
       // The fold: its own plate, no fog (see the fold-plate header), and the door marked.
-      const n = plotSpan(cfg)
+      const plate = plotPlate(seed, cfg, cluster, Infinity)
+      const n = plate.n
       const px = Math.max(1, Math.floor(Math.min(1100 / n, 820 / n)))
       cv.width = n * px; cv.height = n * px
       ctx.imageSmoothingEnabled = false
-      ctx.drawImage(foldPlate(seed, cfg), 0, 0, cv.width, cv.height)
-      drawThreshold(ctx, seed, cfg, px)
+      ctx.drawImage(plate.cv, 0, 0, cv.width, cv.height)
+      if (cluster) drawClusterDoors(ctx, cluster, plate, px)
+      else drawThreshold(ctx, seed, cfg, px)
       setPct(-1)
       return
     }
@@ -626,7 +724,7 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
       for (let y = 0; y < seen.ch; y++) for (let x = 0; x < seen.cw; x++) if (isSeen(seen, x, y)) on++
       setPct((on / (seen.cw * seen.ch)) * 100)
     }
-  }, [seed, seenRef, seenTick, tick, inFold, cfg])
+  }, [seed, seenRef, seenTick, tick, inFold, cfg, cluster])
 
   useEffect(() => {
     const cv = marks.current, b = base.current
@@ -642,8 +740,9 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
         // continent's `toLocal` put the dot hundreds of blocks from where the keeper stood, on a map
         // of a different world — and it looked like a plausible position, which is worse than none.
         if (inFold) {
-          const px = cv.width / plotSpan(cfg)
-          const { px: mx, py: my } = plotToPixel(p.x, p.z, cfg)
+          const plate = plotPlate(seed, cfg, cluster)
+          const px = cv.width / plate.n
+          const { px: mx, py: my } = plateToPixel(plate, p.x, p.z)
           drawKeeper(ctx, mx * px, my * px, headingRef.current, Math.max(3, px * 0.9))
         } else {
           const { lx, lz } = toLocal(p.x, p.z)
@@ -681,7 +780,9 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
           because it IS a short role string, and the sentence between them stays quiet prose. */}
       <div className="gx-chrome fixed bottom-6 left-1/2 -translate-x-1/2 text-center text-[12px] text-white/45">
         {inFold ? (
-          <>✦ your fold · the ring is your threshold · <span className="gx-label">M · close</span></>
+          cluster
+            ? <>✦ your cluster · the rings are its doors, yours faces out · <span className="gx-label">M · close</span></>
+            : <>✦ your fold · the ring is your threshold · <span className="gx-label">M · close</span></>
         ) : (
           <>
             ✦ <span className="gx-value tabular-nums text-white/85">{pct.toFixed(1)}%</span> walked
@@ -698,7 +799,7 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
  *  screen agrees with what the keeper can actually see out there. */
 const MINI_REACH = 240
 
-export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plotCfg, onExpand, box = { top: 12, right: 12, size: 148 } }: {
+export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plotCfg, clusterRef, onExpand, box = { top: 12, right: 12, size: 148 } }: {
   /** Where the canvas sits and how big (2026-09-23, Phase 9: 96 on a phone). Pass
    *  `ui/hearth-hud-layer.tsx` › `hudMapBox(size)` — the SAME box the hearth frame rings, so the two
    *  cannot disagree. The drawing reads `cv.width`, so the same reach is shown smaller. */
@@ -716,6 +817,8 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
    */
   spaceRef: React.RefObject<Space>
   plotCfg: React.RefObject<PlotConfig>
+  /** Cluster mode (read every frame, so entering or leaving repaints without a step). */
+  clusterRef?: React.RefObject<MapCluster>
   onExpand: () => void
 }) {
   const cvRef = useRef<HTMLCanvasElement>(null)
@@ -730,12 +833,13 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
       if (!p) return
       const inFold = spaceRef.current === 'plot'
       const cfg = plotCfg.current ?? DEFAULT_PLOT
+      const cl = inFold ? clusterRef?.current ?? null : null
       // `rev` is in the key so opening ground repaints the crop. Without it the cloud would only
       // peel back when the keeper happened to turn, which reads as the map lagging behind the walk.
       // ⚠ THE SPACE AND THE FOLD SIZE ARE IN THE KEY TOO: both change without the keeper moving —
       // crossing the seam, and Greg widening the fold — and a crop keyed on position alone would sit
       // there showing the other world until they happened to take a step.
-      const key = `${Math.round(p.x / 4)},${Math.round(p.z / 4)},${Math.round(headingRef.current * 10)},${seen?.rev ?? -1},${plateRev},${inFold ? cfg.capRadius : 'w'}`
+      const key = `${Math.round(p.x / 4)},${Math.round(p.z / 4)},${Math.round(headingRef.current * 10)},${seen?.rev ?? -1},${plateRev},${inFold ? (cl ? `${clusterSig(cl.mine, cl.cfg)}@${cPlateRow}` : cfg.capRadius) : 'w'}`
       if (key === last) return
       last = key
       const ctx = cv.getContext('2d')!
@@ -747,12 +851,14 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
         // Same crop reach in BLOCKS as out in the country, so the corner of the screen means one
         // thing in both worlds — and at r300 that is a window on the fold rather than the whole of
         // it, which is the honest read: a garden that size is not glanceable.
-        const cellPx = cv.width / ((MINI_REACH * 2) / plotSample(cfg))
-        const { px: mx, py: my } = plotToPixel(p.x, p.z, cfg)
-        const n = plotSpan(cfg)
+        const plate = plotPlate(seed, cfg, cl)
+        const cellPx = cv.width / ((MINI_REACH * 2) / plate.s)
+        const { px: mx, py: my } = plateToPixel(plate, p.x, p.z)
+        const n = plate.n
         const ox = cv.width / 2 - mx * cellPx, oy = cv.height / 2 - my * cellPx
-        ctx.drawImage(foldPlate(seed, cfg), ox, oy, n * cellPx, n * cellPx)
-        drawThreshold(ctx, seed, cfg, cellPx, ox, oy, cv.width, cv.height)
+        ctx.drawImage(plate.cv, ox, oy, n * cellPx, n * cellPx)
+        if (cl) drawClusterDoors(ctx, cl, plate, cellPx, ox, oy, cv.width, cv.height)
+        else drawThreshold(ctx, seed, cfg, cellPx, ox, oy, cv.width, cv.height)
         drawKeeper(ctx, cv.width / 2, cv.height / 2, headingRef.current, 5)
         return
       }
@@ -770,7 +876,7 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [seed, seenRef, posRef, headingRef, spaceRef, plotCfg, box.size])
+  }, [seed, seenRef, posRef, headingRef, spaceRef, plotCfg, clusterRef, box.size])
   return (
     <canvas ref={cvRef} onClick={onExpand} title="Map (M)" style={{
       position: 'fixed', top: box.top, right: box.right, zIndex: 33, width: box.size, height: box.size,

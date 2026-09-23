@@ -484,6 +484,9 @@ export interface OpenWaymark {
  * ROW in a list of gardens — which is also what makes it read as *"an example of what a fully
  * expanded homeplot should look like"* rather than as a region you travel to.
  */
+/** Cluster mode: the plot space with a cluster framed around the keeper's fold (null = solo). */
+type ClusterModeState = { mine: QuarterId; cfg: ClusterConfig; snaps?: Partial<Record<QuarterId, PlotSnapshot>> } | null
+
 export interface OpenGardens {
   /** Step into Greg's garden (Moonwell). */
   toGreg: () => void
@@ -1259,6 +1262,8 @@ export default function VoxelWorld() {
   // first minute, or a wiped store — stands at Moonwell: canon's *where a keeper begins and where
   // they keep coming back*. The plot is reached by the seam Greg folds, never by default.
   const space = useRef<Space>('glade')
+  /** ★ Cluster mode, owned HERE so the map can read it (World writes it; see `clusterMode`). */
+  const clusterOut = useRef<ClusterModeState>(null)
   /** The open brewings — the keeper's, keyed by cauldron (`PlayerSave.brewings`). Held here, beside
    *  `space`, because the panel that edits it mounts here and the world that saves it is handed both. */
   const brewings = useRef<Brewings>({})
@@ -2428,7 +2433,7 @@ export default function VoxelWorld() {
           tutorial={tutorial} onQuestEvent={onQuestEvent} onNearGreg={setNearGreg} onNearFolk={setNearFolk}
           mistLedger={mistLedger} onNearMist={setNearMist} sparring={!!spar}
           onDiscover={(sp) => markSeen(spiritIndex.current, sp)}
-          plotCfg={plotCfg} plotTier={plotTier} litterFrom={litterFrom} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} lookOut={lookOut} ctxLostOut={ctxLostOut}
+          plotCfg={plotCfg} plotTier={plotTier} litterFrom={litterFrom} spiritIndex={spiritIndex} party={party} castOut={castOut} snapOut={playerSnapRef} space={space} clusterOut={clusterOut} lookOut={lookOut} ctxLostOut={ctxLostOut}
           onNearTable={setNearTable} cmdOut={worldCmd} pot={potOps}
           onOpenChest={(c) => { openCursorUI(); setOpenChest(c) }}
           // ★ THE BENCH OPENS THE TABBED CRAFTER (2026-09-18, Alex: "the crafting table shows
@@ -2654,7 +2659,7 @@ export default function VoxelWorld() {
           screen, so it never sits on top of the bag or the craft grid. */}
       {!cursorUIOpen && !showMap && (
         <VoxelMiniMap seed={SEED} seenRef={seenRef} posRef={mapPos} headingRef={mapHeading}
-          spaceRef={space} plotCfg={plotCfg} box={hudMapBox(hudSize)}
+          spaceRef={space} plotCfg={plotCfg} clusterRef={clusterOut} box={hudMapBox(hudSize)}
           onExpand={() => { openCursorUI(); setShowMap(true) }} />
       )}
       {/* ── ☰ THE OPTIONS DOOR, under the minimap (Alex, 2026-09-13: "an ingame options menu,
@@ -2668,7 +2673,7 @@ export default function VoxelWorld() {
       {!cursorUIOpen && !showMap && <OptionsDoor face={HUD_FACE} top={hudDoorTop(hudSize)} onOpen={() => { openCursorUI(); setShowSettings(true) }} />}
       {showMap && (
         <VoxelMap seed={SEED} seenRef={seenRef} seenTick={seenTick} posRef={mapPos} headingRef={mapHeading}
-          space={space.current} plotCfg={plotCfg}
+          space={space.current} plotCfg={plotCfg} cluster={space.current === 'plot' ? clusterOut.current : null}
           onClose={() => { setShowMap(false); closeCursorUI() }} />
       )}
 
@@ -3142,7 +3147,7 @@ const LIFT_BADGE: Record<LiftMode, string> = {
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearFolk, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenGardens, onOpenBrew, onCauldronPlaced, brewings, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearFolk, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, clusterOut, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenGardens, onOpenBrew, onCauldronPlaced, brewings, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3231,6 +3236,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * re-created to learn a new value. Switching spaces is a deliberate teardown, not a re-render.
    */
   space: React.RefObject<Space>
+  clusterOut: React.RefObject<ClusterModeState>
   /** Filled with a camera-yaw setter for `/look` — see that entry on why it has to exist. */
   lookOut: React.RefObject<((deg: number, pitch?: number) => string) | null>
   ctxLostOut: React.RefObject<(() => string) | null>
@@ -3348,7 +3354,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // ★ PHASE 3: `snaps` is set only for a REAL cluster (the shared record, `cluster-sync.ts`) — each
   // mate's last uploaded picture, laid over their quarter at column adoption, read-only. Stand-ins
   // carry none. `snaps` present is also what arms my own plot's upload.
-  const clusterMode = useRef<{ mine: QuarterId; cfg: ClusterConfig; snaps?: Partial<Record<QuarterId, PlotSnapshot>> } | null>(null)
+  // Owned by the parent (`clusterOut`) so the map and minimap can draw the cluster too.
+  const clusterMode = clusterOut
   /**
    * ★ OPEN THE CLUSTER (phase 3/4): the REAL shared record first — my quarter, my mates at their
    * reported seed and tier, each mate's uploaded garden over their quarter — and only with no record
