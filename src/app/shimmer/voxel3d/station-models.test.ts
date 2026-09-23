@@ -1,7 +1,7 @@
 // The modelled stations — the contract, and the WIRING. Run: npx tsx src/app/shimmer/voxel3d/station-models.test.ts
 import { readFileSync } from 'node:fs'
 import { codeOnly } from '../testing/guard'
-import { MAT, MODELLED_MATS, isModelled } from '../voxel/depth'
+import { MAT, MODELLED_MATS, isModelled, TALL_STATIONS, isTallStation, isStationRack } from '../voxel/depth'
 import { blockDef } from '../voxel/registry'
 import { stationOf } from '../voxel/workshop'
 import { alchemyStationOf } from './alchemy-chain'
@@ -65,8 +65,8 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
 // ── §3 the wiring: the mesher steps aside, the renderer steps in, both invalidations reach it ─
 {
   const greedy = codeOnly(readFileSync(new URL('../voxel/greedy.ts', import.meta.url), 'utf8'))
-  ok(greedy.includes('&& !isModelled(m) ? 1 : 0'), '§3 ★ the mesher emits no cube faces for a modelled cell')
-  ok(greedy.includes('isPlant(m) || isModelled(m)) ? 0'), '§3 ★ and neighbours draw their faces against it')
+  ok(greedy.includes('&& !isModelled(m) && !isStationRack(m) ? 1 : 0'), '§3 ★ the mesher emits no cube faces for a modelled cell, nor for a tall station\'s rack')
+  ok(greedy.includes('isPlant(m) || isModelled(m) || isStationRack(m)) ? 0'), '§3 ★ and neighbours draw their faces against both')
   const host = codeOnly(readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8'))
   ok(host.includes('createStationRenderer(tiles, lightUniforms)'), '§3 the renderer is built on the world tiles + light')
   ok(host.split('stations?.invalidate(').length - 1 >= 2, '§3 ★ both column-change sites invalidate it (edit + edits-arrive)')
@@ -74,6 +74,36 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(host.includes('stations?.sync(list.map(c => ({ ...c, ySpan: H })), voxel)'), '§3 ★ it syncs on the flora beat')
   ok(host.includes('stations?.setCartoon(cartoon)'), '§3 the cartoon dials reach it')
   ok(host.includes('<primitive object={stations.group} />'), '§3 ★ and its group is in the scene')
+}
+
+// ── §5 the two-tall stations: one fact, two files, asserted in BOTH directions ────────────────
+// `TALL_STATIONS` (depth.ts) says which stations occupy two cells; `StationModel.tall` says which
+// models may reach y = 2. They are halves of one fact, and either half alone is a shipped defect:
+// a tall model on a short station draws a metre of geometry into a neighbour's airspace with
+// nothing solid under it (a VISIBLE thing you walk through), and a tall station with a short model
+// leaves a solid rack cell standing over nothing — the invisible wall `pieces.ts` warns of.
+{
+  for (const m of TALL_STATIONS) {
+    ok(STATION_MODELS[m]?.tall === true, `§5 ★ tall station ${blockDef(m)?.name ?? m} has a tall MODEL`)
+    ok(stationOf(m) !== null, `§5 ${blockDef(m)?.name ?? m} is a station at all (a rack over decor has no panel to open)`)
+  }
+  for (const [k, model] of Object.entries(STATION_MODELS)) {
+    if (!model.tall) continue
+    ok(isTallStation(Number(k)), `§5 ★ tall model ${blockDef(Number(k))?.name ?? k} is registered in TALL_STATIONS`)
+  }
+  // ★ AND THE CEILING IS PER-MODEL, NOT RELAXED FOR EVERYONE. The day `modelFits` stops reading
+  // `tall` the short models go on passing and only this line notices — which is the whole reason
+  // it asserts the REFUSAL rather than only the permission.
+  const tallBox = { parts: [{ box: [0.2, 0.2, 0.2, 0, 1.5, 0] as const }], note: '' }
+  ok(modelFits({ ...tallBox, tall: true }).ok, '§5 a box at y 1.5 fits a TALL model')
+  ok(!modelFits(tallBox).ok, '§5 ★ and the same box is REFUSED on a short one')
+  ok(!modelFits({ parts: [{ box: [0.2, 0.2, 0.2, 0, 2.0, 0] }], note: '', tall: true }).ok,
+    '§5 ★ even a tall model is refused above y = 2 — it owns two cells, not the sky')
+  // The rack is occupancy, not a station: nothing may model it, and it must not answer `stationOf`.
+  ok(!isModelled(MAT.STATION_RACK), '§5 ★ the rack is NOT modelled — the station below draws through it')
+  ok(!(MAT.STATION_RACK in STATION_MODELS), '§5 and it has no model of its own')
+  ok(stationOf(MAT.STATION_RACK) === null, '§5 ★ a rack is not a station (right-clicking one opens storage, not recipes)')
+  ok(isStationRack(MAT.STATION_RACK) && !isStationRack(MAT.SAWMILL), '§5 isStationRack names the rack and only the rack')
 }
 
 console.log(`station-models: ${pass} passed, ${fails.length} failed`)

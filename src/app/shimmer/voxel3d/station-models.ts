@@ -15,6 +15,8 @@
 //
 // ── THE CONTRACT (what an agent writing a model must honour) ──────────────────────────────────
 //   · The cell is x ∈ [-0.5, 0.5], y ∈ [0, 1], z ∈ [-0.5, 0.5]; +y is up. The cell's floor is y=0.
+//     ⚠ A `tall` model (2026-09-23) owns the cell ABOVE as well, so its y runs [0, 2]. Nothing
+//     else changes: same origin, same single instance, same tiles — see `StationModel.tall`.
 //   · A box is `[w, h, d, cx, cy, cz]` — full size and CENTRE, like `BoxGeometry` + translate.
 //   · Every box stays inside the cell (asserted): the cell is what you collide with and mine, and
 //     a model that leaks into the neighbour is the "invisible wall" failure `pieces.ts` warns of.
@@ -79,6 +81,23 @@ export interface SculptPart {
 export interface StationModel {
   parts: readonly ModelPart[]
   /**
+   * ── ★★ TWO CELLS TALL (2026-09-23) ─────────────────────────────────────────────────────────
+   * The model may reach y = 2 instead of y = 1, because the station occupies its own cell AND the
+   * one above it (`MAT.STATION_RACK`). Alex: *"a 2 tall structure with a storage .. feel a bit
+   * bigger"* — a one-metre sawmill reads as a prop on the floor.
+   *
+   * ⚠ THIS FLAG AND `depth.ts` › `TALL_STATIONS` ARE TWO HALVES OF ONE FACT and must agree; §5 of
+   * `station-models.test.ts` asserts it in both directions. Setting it here alone draws a metre of
+   * geometry into a neighbour's airspace with nothing solid under it — a visible thing you walk
+   * straight through, which is the invisible-wall failure inverted and worse, because the eye has
+   * already told the player it is there.
+   *
+   * ★ IT CHANGES THE CEILING AND NOTHING ELSE. `station-mesh.ts` instances at the BASE cell either
+   * way; a taller merged geometry simply reaches further up from the same origin. There is no
+   * second instance, no second draw call, and the rack cell is never scanned as a station.
+   */
+  tall?: true
+  /**
    * A baked sculpt, instead of (or beside) the boxes. `model` names the entry in
    * `station-mesh.ts` › `SCULPTS`; each part assigns one mesh node its tiles.
    *
@@ -119,11 +138,15 @@ export const modelOf = (material: number): StationModel => STATION_MODELS[materi
  */
 export function modelFits(m: StationModel, eps = 1e-6): { ok: boolean; bad: number[]; boxes: number } {
   const bad: number[] = []
+  // ★ THE CEILING IS THE MODEL'S OWN (2026-09-23). A tall station owns the cell above it too, so
+  // its box is 1x2x1 — and a SHORT model is still checked against 1, which is what keeps this a
+  // real containment test rather than one that relaxes for everybody the day one model grows.
+  const ceil = m.tall ? 2 : 1
   m.parts.forEach((p, i) => {
     const [w, h, d, x, y, z] = p.box
     if (w <= 0 || h <= 0 || d <= 0) { bad.push(i); return }
     if (x - w / 2 < -0.5 - eps || x + w / 2 > 0.5 + eps) { bad.push(i); return }
-    if (y - h / 2 < 0 - eps || y + h / 2 > 1 + eps) { bad.push(i); return }
+    if (y - h / 2 < 0 - eps || y + h / 2 > ceil + eps) { bad.push(i); return }
     if (z - d / 2 < -0.5 - eps || z + d / 2 > 0.5 + eps) { bad.push(i); return }
   })
   return { ok: bad.length === 0, bad, boxes: m.parts.length }

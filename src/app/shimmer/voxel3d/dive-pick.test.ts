@@ -34,8 +34,14 @@ ok(raw.length > 10_000, `VoxelWorld.tsx read (${raw.length} bytes)`)
 
 // ── 1. the wiring ────────────────────────────────────────────────────────────────────────────
 once('const eyeInWater = voxel(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) === MAT.WATER', 'the rule reads the EYE voxel')
-once('const hit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, pickVoxel)', 'the pick receives the wrapped lookup')
-ok(!src.includes('const hit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, voxel)'), 'and no unwrapped pick call stands beside it')
+// ⚠ THE BINDING IS `rawHit`, NOT `hit`, SINCE 2026-09-23 — and the rename is load-bearing rather
+// than cosmetic. A tall station's rack redirects `hit` one cell DOWN so a swing at the mill's upper
+// half breaks the mill (`station-tall.test.ts` §7), so `hit` is no longer the cell the ray entered.
+// This assert is about the PICK — that the ray is cast through the water-aware lookup — so it must
+// follow the raw binding. Asserting on `hit` here would have gone quietly green against a value
+// that is no longer the raycast's own answer.
+once('const rawHit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, pickVoxel)', 'the pick receives the wrapped lookup')
+ok(!src.includes('raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, voxel)'), 'and no unwrapped pick call stands beside it')
 ok(!/eyeInWater\s*=\s*lc\.swimming/.test(src), 'the rule is not lc.swimming (chest-in): a surface swimmer still aims at water')
 ok(src.includes("aimed === MAT.WATER") || readFileSync(new URL('./interact.ts', import.meta.url), 'utf8').includes('aimed === MAT.WATER'), 'the rinstick cast still keys off an aimed WATER voxel')
 

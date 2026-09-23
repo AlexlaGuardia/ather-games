@@ -45,37 +45,97 @@ export const MODELS: Readonly<Record<number, StationModel>> = {
     },
   },
 
-  // The Sawmill — the stonecutter's shape, not the cube: a low plinth carrying a thin vertical
-  // circular-saw stand-in with a log cradle (two rails) either side of it, matching `paintSawmill`'s
-  // bed-line/leg silhouette on the SIDE tile.
+  // ── ★★ THE SAWMILL — TWO CELLS TALL, WITH A TOOL WALL (2026-09-23) ──────────────────────────
+  // Alex: *"a 2 tall structure with a storage .. feel a bit bigger"*. A one-metre mill reads as a
+  // prop sitting on the floor; this is a bench you walk up to with a rack rising behind it. The
+  // upper cell is `MAT.STATION_RACK` — solid, invisible to the mesher, and the storage itself.
+  //
+  // ★ THE LEG-STRIPE CHECK THE BOARD ASKED FOR, RUN BEFORE A NUMBER WAS CHOSEN — AND IT FAILED
+  // THE SAME WAY THE BENCH DID. `paintSawmill`'s SIDE tile puts dark leg stripes at the outer
+  // eighth (`x < size/8 || x >= size - size/8`), i.e. local u outside [0.125, 0.875], i.e. cell x
+  // outside ±0.375. The old boxes stood their legs at cx ±0.30 — cell 0.25..0.35, local
+  // 0.75..0.85, which is the lighter milled field BETWEEN the stripes. Four legs wearing panel,
+  // and the tile's painted legs landing on the plinth and the apron instead. They are now at
+  // ±0.4325 on a 0.10 stick (local 0.8825..0.9825) — the bench's own numbers, so the family's
+  // frames stand in their stripe identically rather than each being fixed to its own taste.
+  //
+  // ★ AND THE SAME MISTAKE VERTICALLY, WHICH THE BENCH NEVER HAD TO ANSWER. The tile's bed line is
+  // one dark row at tile y = size/4 with the bright rim just above it, and tile row r is world
+  // height `1 - r/size` — so the bed reads at **y = 0.75**, the rim at ~0.78. The old plinth top
+  // was at 0.38..0.50: the painted bed line crossed the SAW and the plinth wore blank field. The
+  // bed slab now spans 0.72..0.86, so the line and its rim land on the bed's own edge.
+  //
+  // ⚠⚠ THE SIDE TILE REPEATS EVERY METRE, AND THAT IS THE WHOLE CONSTRAINT ON AN UPPER CELL.
+  // The piece program samples a side face at `vec2(local.x, -local.y)` and the tile array is
+  // `RepeatWrapping` (`tex/atlas.ts`), so world y ∈ [1,2] samples exactly the rows y ∈ [0,1] does:
+  // a second copy of the picture, bed line and all, at head height. **A SILHOUETTE TILE CANNOT BE
+  // WORN TWICE.** So every board of the rack names `PLANKS_GOLDWOOD` — a grain, which is what a
+  // repeating sample is for — and only the two posts keep the station's own tile, because a post
+  // is precisely what that stripe paints and it should read as the same frame continuing upward.
+  //
+  // ★ THE FRONT IS DELIBERATELY OPEN. Posts and panel sit at the BACK (+z) so the bed, the blade
+  // and the cradle stay visible from three sides. A four-post cage would have bought mass by
+  // hiding the half of the object that says what the station does.
   [MAT.SAWMILL]: {
+    tall: true,
+    note: 'a two-cell mill: bed and blade on stripe-standing legs, a planked tool wall and shelf above',
     parts: [
-      { box: [0.90, 0.12, 0.90, 0, 0.44, 0] },        // plinth top
-      { box: [0.76, 0.08, 0.76, 0, 0.34, 0] },         // apron, flush under the plinth top
-      { box: [0.10, 0.30, 0.10, -0.33, 0.15, -0.33] }, // four legs, flush under the apron
-      { box: [0.10, 0.30, 0.10, 0.33, 0.15, -0.33] },
-      { box: [0.10, 0.30, 0.10, -0.33, 0.15, 0.33] },
-      { box: [0.10, 0.30, 0.10, 0.33, 0.15, 0.33] },
-      { box: [0.06, 0.46, 0.46, 0, 0.73, 0] },         // the saw, rising from the plinth's middle
-      { box: [0.70, 0.08, 0.08, 0, 0.54, -0.27] },     // log cradle: two rails either side of the saw
-      { box: [0.70, 0.08, 0.08, 0, 0.54, 0.27] },
+      // ── the mill, in the lower cell ──
+      { box: [0.10, 0.72, 0.10, -0.4325, 0.36, -0.4325] },  // four legs, IN the tile's leg stripe
+      { box: [0.10, 0.72, 0.10, 0.4325, 0.36, -0.4325] },
+      { box: [0.10, 0.72, 0.10, -0.4325, 0.36, 0.4325] },
+      { box: [0.10, 0.72, 0.10, 0.4325, 0.36, 0.4325] },
+      { box: [0.86, 0.10, 0.86, 0, 0.67, 0] },              // apron, recessed so the stripes show
+      { box: [0.94, 0.14, 0.94, 0, 0.79, 0] },              // the bed — wears the line at 0.75
+      { box: [0.72, 0.07, 0.07, 0, 0.90, -0.28] },          // log cradle, a rail either side
+      { box: [0.72, 0.07, 0.07, 0, 0.90, 0.28] },
+      { box: [0.05, 0.40, 0.44, 0, 1.06, 0] },              // the blade, standing through the seam
+      // ── the rack, in the upper cell. Boards wear PLANK GRAIN; posts wear the leg stripe. ──
+      { box: [0.10, 1.00, 0.10, -0.4325, 1.50, 0.42] },     // two posts, the frame continuing up
+      { box: [0.10, 1.00, 0.10, 0.4325, 1.50, 0.42] },
+      { box: [0.94, 0.90, 0.06, 0, 1.47, 0.46], top: MAT.PLANKS_GOLDWOOD, side: MAT.PLANKS_GOLDWOOD },
+      { box: [0.88, 0.07, 0.30, 0, 1.40, 0.30], top: MAT.PLANKS_GOLDWOOD, side: MAT.PLANKS_GOLDWOOD },
+      { box: [0.98, 0.08, 0.20, 0, 1.96, 0.40], top: MAT.PLANKS_GOLDWOOD, side: MAT.PLANKS_GOLDWOOD },
     ],
-    note: 'low plinth with a thin vertical saw at the middle and a two-rail log cradle beside it',
   },
 
-  // The Stonecutter — Minecraft's own reference: a half-height slab nearly filling the cell, a raised
-  // rim on all four sides (its actual block model has one), and a thin vertical blade at the centre.
-  // The blade wears no override — it is the station's own STONECUTTER tile (stone/crystal, no metal).
+  // ── ★★ THE STONECUTTER — TWO CELLS TALL, AND ITS SLAB WAS UPSIDE DOWN (2026-09-23) ──────────
+  // The sawmill's sibling by the tile's own account, so it gets the same shape: mass on stripe-
+  // standing legs, a stone rack above, front open.
+  //
+  // ★★ THE VERTICAL MISTAKE HERE WAS THE WHOLE OBJECT, NOT A DETAIL. `paintStonecutter`'s SIDE
+  // tile is `inBed = y < size/3` — the pale gritty slab occupies the tile's TOP THIRD, which is
+  // world y **0.667..1.0**, with the bright rim on its underside and dark stone + TIMBER legs
+  // below. The shipped model put its slab at y 0..0.34 and its blade at 0.50..0.88: the slab was
+  // wearing the dark under-stone, the blade was wearing the pale slab band, and the timber legs
+  // the tile paints had nothing standing in them at all. Every part of this object was in the
+  // wrong band of its own picture. The slab now spans 0.66..1.00 and the legs stand in the timber.
+  // Same family as the bench's legs and the cauldron's hearth course, for the third time: **the
+  // picture was already right and the geometry was not standing in it.**
+  //
+  // ⚠ THE BLADE GOES UP THROUGH THE SEAM AND WEARS THE DARK BAND, which is correct rather than a
+  // compromise: above y = 1 the tile repeats, so 1.0..1.667 is the dark stone the tile paints under
+  // its bed. A dark blade over a pale slab is the contrast the object wants, and it costs nothing.
+  // ⚠ Canon (`world/ather.md`): no metal. The blade wears the station's own stone, as it always has.
   [MAT.STONECUTTER]: {
+    tall: true,
+    note: 'a two-cell cutter: a thick slab in its own tile band on timber legs, a stone rack above',
     parts: [
-      { box: [0.94, 0.34, 0.94, 0, 0.17, 0] },   // the slab
-      { box: [0.94, 0.16, 0.08, 0, 0.42, 0.43] }, // raised rim, all four sides
-      { box: [0.94, 0.16, 0.08, 0, 0.42, -0.43] },
-      { box: [0.08, 0.16, 0.78, 0.43, 0.42, 0] },
-      { box: [0.08, 0.16, 0.78, -0.43, 0.42, 0] },
-      { box: [0.14, 0.10, 0.14, 0, 0.55, 0] },   // the axle the blade pivots on
-      { box: [0.06, 0.38, 0.50, 0, 0.69, 0] },   // the blade, rising from the centre
+      // ── the cutter, in the lower cell ──
+      { box: [0.10, 0.66, 0.10, -0.4325, 0.33, -0.4325] },  // four legs, IN the tile's timber stripe
+      { box: [0.10, 0.66, 0.10, 0.4325, 0.33, -0.4325] },
+      { box: [0.10, 0.66, 0.10, -0.4325, 0.33, 0.4325] },
+      { box: [0.10, 0.66, 0.10, 0.4325, 0.33, 0.4325] },
+      { box: [0.78, 0.52, 0.78, 0, 0.36, 0] },              // the dark under-mass, recessed
+      { box: [0.96, 0.34, 0.96, 0, 0.83, 0] },              // the slab, standing in its own band
+      { box: [0.16, 0.12, 0.16, 0, 1.06, 0] },              // the axle
+      { box: [0.05, 0.46, 0.52, 0, 1.23, 0] },              // the blade, through the seam
+      // ── the rack, in the upper cell. Boards are CUT_STONE; posts keep the cutter's own tile. ──
+      { box: [0.11, 0.94, 0.11, -0.4325, 1.47, 0.4325] },
+      { box: [0.11, 0.94, 0.11, 0.4325, 1.47, 0.4325] },
+      { box: [0.92, 0.88, 0.07, 0, 1.46, 0.455], top: MAT.CUT_STONE, side: MAT.CUT_STONE },
+      { box: [0.90, 0.09, 0.32, 0, 1.38, 0.31], top: MAT.CUT_STONE, side: MAT.CUT_STONE },
+      { box: [0.98, 0.10, 0.20, 0, 1.95, 0.40], top: MAT.CUT_STONE, side: MAT.CUT_STONE },
     ],
-    note: 'half-height rimmed slab with a stone blade pivoting up from an axle at its centre',
   },
 }

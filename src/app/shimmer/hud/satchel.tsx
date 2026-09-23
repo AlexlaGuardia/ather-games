@@ -30,7 +30,7 @@ import { blockDef, materialForItem } from '../voxel/registry'
 import { intermediateLabel } from '../voxel3d/alchemy-chain'
 import { wateringLabel } from '../voxel3d/watering'
 import { MATERIAL_COLOR } from '../voxel3d/attrs'
-import { CHEST_BAGFULS, CHEST_COLS, CHEST_SLOTS, halfOf, type Slots } from '../voxel3d/chest'
+import { CHEST_BAGFULS, CHEST_COLS, CHEST_SLOTS, RACK_COLS, RACK_SLOTS, halfOf, type Slots } from '../voxel3d/chest'
 import { BANK_TABS, bankCategory, bankFreeSlots, bankUsed, bankView, type BankTab } from '../voxel3d/bank'
 import { GrimoireTab } from '../voxel3d/grimoire-tab'
 import { KeeperFrame, SectionHead, TabEmpty, type KeeperTab } from '../voxel3d/keeper-panel'
@@ -98,6 +98,16 @@ export interface OpenChest {
    * capacity the host read from its chest census at open time; `used` is derived from `slots` live.
    */
   bank?: { cap: number; chests: number; chestCap: number }
+  /**
+   * Present when this container is a two-tall station's RACK (2026-09-23): `slots` is then that
+   * station's own `RACK_SLOTS` shelf, not a chest and never the bank. It draws in the same panel
+   * with the same cells — a rack IS a container — and only the heading, the row count and the
+   * frame's title differ, because those are the three things that would otherwise lie about what
+   * the keeper is looking into.
+   * ⚠ MUTUALLY EXCLUSIVE WITH `bank`. A rack is deliberately outside the plot's one-pool rule
+   * (`chest.ts` › `RACK_SLOTS`); the host takes the rack branch first for exactly that reason.
+   */
+  rack?: true
 }
 
 /**
@@ -1114,11 +1124,18 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
         <div className="mb-4 border-b border-white/10 pb-4">
           {/* The capacity is stated in BAGFULS, not slots — the number means something that way
               ("two of these") and 48 does not. Derived from the grid so the sentence cannot drift
-              from it; see `CHEST_BAGFULS`. */}
-          <SectionHead label={`in the chest · ${chest.x} ${chest.y} ${chest.z}`}
-                       note={<><span className="gx-value text-white/40">{CHEST_BAGFULS}</span> bagfuls</>} />
-          <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 1fr))` }}>
-            {Array.from({ length: CHEST_SLOTS }, (_, k) => cell({ g: 'chest', i: k }))}
+              from it; see `CHEST_BAGFULS`. A RACK says ROWS for the identical reason: two rows is
+              what a shelf holds, and "0.67 of a bagful" is the sentence that number would make. */}
+          <SectionHead label={chest.rack ? `on the rack · ${chest.x} ${chest.y} ${chest.z}` : `in the chest · ${chest.x} ${chest.y} ${chest.z}`}
+                       note={chest.rack
+                         ? <><span className="gx-value text-white/40">{RACK_SLOTS / RACK_COLS}</span> rows</>
+                         : <><span className="gx-value text-white/40">{CHEST_BAGFULS}</span> bagfuls</>} />
+          {/* ⚠ THE LENGTH COMES FROM THE CONTAINER, NOT FROM `chest.slots.length`. A grid drawn
+              from the live array would silently shrink to whatever a bad save happened to hold —
+              `adoptRack` is the one place that decides how long a rack is, and drawing the
+              constant is what makes a short save read as empty slots rather than as missing ones. */}
+          <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${chest.rack ? RACK_COLS : CHEST_COLS}, minmax(0, 1fr))` }}>
+            {Array.from({ length: chest.rack ? RACK_SLOTS : CHEST_SLOTS }, (_, k) => cell({ g: 'chest', i: k }))}
           </div>
         </div>
       )}
@@ -1204,7 +1221,7 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
    */
   if (chest) {
     return (
-      <KeeperFrame tab="satchel" setTab={() => {}} title={chest.bank ? 'Bank' : 'Chest'} tall hint={hint} onClose={onClose}>
+      <KeeperFrame tab="satchel" setTab={() => {}} title={chest.bank ? 'Bank' : chest.rack ? 'Rack' : 'Chest'} tall hint={hint} onClose={onClose}>
         {satchel}
       </KeeperFrame>
     )

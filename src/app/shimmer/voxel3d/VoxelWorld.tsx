@@ -38,7 +38,7 @@ import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
 import { lightOpaque } from '../voxel/light-passes'
 import { placementRotation } from './piece-facing'
-import { materialAt, MAT, isPlant, isHerb, isFruit, isForage, isScatter, isSapling, isHalfMat, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHerb, isFruit, isForage, isScatter, isSapling, isHalfMat, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF, isTallStation, isStationRack } from '../voxel/depth'
 import { FLORA, plantVariant, flowerForm, forageKind } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState, type RayHit, afterBreak } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -294,7 +294,7 @@ import { brewingsFromSave, brewingKey, abandonRefund, lookLine as brewLine, type
 import {
   chestKey, createChest, adoptChest, moveBetween, moveCount, halfOf, quickMove, addToGrid,
   takeFromGrid, attachedChests, countIn as countInChest, isEmpty as isChestEmpty,
-  spill as spillChest, CHEST_COLS, CHEST_SLOTS, CHEST_BAGFULS, type Slots,
+  spill as spillChest, CHEST_COLS, CHEST_SLOTS, CHEST_BAGFULS, createRack, adoptRack, RACK_SLOTS, type Slots,
 } from './chest'
 import { bankCapacity, bankFromSave, bankToSave, fitBank, pourInto } from './bank'
 import {
@@ -3546,6 +3546,20 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    */
   const chestsByCol = useRef(new Map<string, Record<string, Slots>>())
   /**
+   * ── ★ STATION RACK CONTENTS, PER COLUMN (2026-09-23) ─────────────────────────────────────────
+   * `colKey → { "x,y,z" → slots }` for the upper cell of a two-tall station, and every word of the
+   * chest's reasoning above applies unchanged: a rack's block and its contents must arrive and
+   * leave in one transaction, and it costs nothing until the keeper walks to it.
+   *
+   * ⚠ A SEPARATE MAP FROM `chestsByCol` BECAUSE THE GRIDS ARE DIFFERENT LENGTHS. See
+   * `ColumnSave.racks` — one map would send every rack through `adoptChest` and quietly inflate a
+   * 16-slot shelf to 48, which the key space would never have caught because a rack's cell is
+   * never a chest's.
+   * ⚠ AND IT IS NEVER THE PLOT BANK. A chest on the keeper's land is a door into one pool; a rack
+   * is the opposite claim on purpose (`chest.ts` › `RACK_SLOTS`) — the logs live AT the sawmill.
+   */
+  const racksByCol = useRef(new Map<string, Record<string, Slots>>())
+  /**
    * ── ★ THE PLOT BANK (2026-09-16) ──────────────────────────────────────────────────────────────
    * One pool for every chest on the keeper's land (`bank.ts`). Lives in the PLAYER record, not a
    * column, for the waymark's reason: it has to be reachable from any chest on the plot, and a
@@ -4475,6 +4489,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       if (rec) {
         for (const [ck, g] of Object.entries(rec)) if (!isChestEmpty(g)) (chests ??= {})[ck] = g
       }
+      // Racks, by the identical rule — an emptied shelf stops costing storage while its live grid
+      // stays in memory so the open panel's array identity survives.
+      const rackRec = racksByCol.current.get(k)
+      let racks: Record<string, Slots> | undefined
+      if (rackRec) {
+        for (const [rk, g] of Object.entries(rackRec)) if (!isChestEmpty(g)) (racks ??= {})[rk] = g
+      }
       // Station jobs, same rule as chests: a spent record is dropped rather than written, so a
       // bench you loaded once and emptied stops costing storage.
       const shopRec = jobsByCol.current.get(k)
@@ -4482,7 +4503,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       if (shopRec) for (const [jk, j] of Object.entries(shopRec)) if (j.runs > 0) (jobs ??= {})[jk] = j
       void saveColumn(SEED, gx, gz, {
         edits: packEdits(e), pieces: piecesByCol.current.get(k) ?? [],
-        genRemoved: genRemovedByCol.current.get(k), chests, jobs,
+        genRemoved: genRemovedByCol.current.get(k), chests, jobs, racks,
       }, space.current)
     }
     dirtySaves.current.clear()
@@ -4994,6 +5015,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     dirtySaves.current.clear()
     piecesByCol.current.clear()
     chestsByCol.current.clear()
+    racksByCol.current.clear()
     jobsByCol.current.clear()
     genRemovedByCol.current.clear()
     // ── ★★ THE GROUND COVER HAS TO CROSS TOO (2026-08-15, Alex: "I'm floating in the void and all
@@ -5420,6 +5442,21 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const touchChest = useCallback((x: number, z: number) => { dirtySaves.current.add(colOf(x, z)) }, [colOf])
 
   /**
+   * The rack grid at this cell, created on first open. Lazy and by-reference for `chestAt`'s
+   * reasons exactly — an untouched rack costs nothing, and the panel mutates the one array.
+   */
+  const rackAt = useCallback((x: number, y: number, z: number): Slots => {
+    const k = colOf(x, z)
+    let rec = racksByCol.current.get(k)
+    if (!rec) { rec = {}; racksByCol.current.set(k, rec) }
+    const rk = chestKey(x, y, z)
+    return (rec[rk] ??= createRack())
+  }, [colOf])
+
+  /** ⚠ As `touchChest`: a rack's contents never pass through `setVoxel`, so nothing else marks it. */
+  const touchRack = useCallback((x: number, z: number) => { dirtySaves.current.add(colOf(x, z)) }, [colOf])
+
+  /**
    * ── ★ HOW MANY CHESTS ARE STANDING IN THE PLOT (2026-08-15) ────────────────────────────────────
    * The live census behind `chestCap`. Set from a disk scan the moment the keeper steps into the
    * garden (see `enterSpace`), then kept by ±1 at `setVoxel`, which is the one funnel every world
@@ -5552,6 +5589,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // reach. The guard on `prevMat !== mat` matters: a no-op write of CHEST over CHEST must not
     // empty a chest the player is standing in front of.
     const prevMat = c.sections[s].get(lx, wy - s * SECTION, lz)
+    // ★ AND A RACK'S CONTENTS DIE WITH ITS CELL, here for the identical reason — this is the one
+    // funnel every world write passes through, so no path invented later can strand a stock record
+    // at a cell that is no longer a rack and hand it to the next station built on that spot.
+    // ⚠ The `prevMat !== mat` guard carries the same weight it does for chests: a no-op write of
+    // RACK over RACK must not empty a shelf the keeper is standing at.
+    if (prevMat !== mat && (isStationRack(prevMat) || isStationRack(mat))) {
+      const rec = racksByCol.current.get(k)
+      if (rec) {
+        delete rec[chestKey(wx, wy, wz)]
+        if (!Object.keys(rec).length) racksByCol.current.delete(k)
+      }
+    }
     if (prevMat !== mat && (prevMat === MAT.CHEST || mat === MAT.CHEST)) {
       const rec = chestsByCol.current.get(k)
       if (rec) {
@@ -8321,6 +8370,15 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             for (const [ck, g] of Object.entries(saved.chests)) if (!have[ck]) have[ck] = adoptChest(g)
             chestsByCol.current.set(ek, have)
           }
+          // Racks, with the same async-clobber guard and its own adopt — `adoptRack`, never
+          // `adoptChest`, or a 16-slot shelf loads as a 48-slot one (`ColumnSave.racks`).
+          // ⚠ NOT POURED INTO THE BANK on the plot the way chests are: a rack is deliberately not
+          // a door into the pool, so there is nothing here to migrate.
+          if (saved.racks) {
+            const have = racksByCol.current.get(ek) ?? {}
+            for (const [rk, g] of Object.entries(saved.racks)) if (!have[rk]) have[rk] = adoptRack(g)
+            racksByCol.current.set(ek, have)
+          }
           // Station jobs, same async-clobber guard as chests: a bench the player has ALREADY
           // loaded in the seconds since the column meshed must not be overwritten by the version
           // on disk, or his logs go back into a job he already replaced.
@@ -9275,7 +9333,26 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     const pickVoxel = eyeInWater
       ? (x: number, y: number, z: number) => { const m = voxel(x, y, z); return m === MAT.WATER ? AIR : m }
       : voxel
-    const hit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, pickVoxel)
+    const rawHit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, pickVoxel)
+    // ── ★★ A RACK IS THE STATION'S UPPER HALF, SO EVERY VERB IS ANSWERED BY THE STATION ────────
+    // (2026-09-23) `MAT.STATION_RACK` has no `BlockDef` — like `STRUCTURE`, it is occupancy, so a
+    // swing at it would fall straight through the mine path and the HUD would name nothing for a
+    // block you are plainly looking at. Redirecting the hit one cell DOWN is what makes breaking
+    // the top of a sawmill break the sawmill, the way breaking the top of a door breaks the door.
+    //
+    // ★ `px/py/pz` ARE DELIBERATELY NOT MOVED. They are the empty cell a placed block would go in,
+    // measured off the face the ray actually crossed — still true of the rack's own faces. Moving
+    // them with `y` would put a block you place against the rack's side one cell too low, inside
+    // the mill; this way you can still build against a station's upper half and stand a block on
+    // top of it. The hit answers "what am I looking at", the place cell answers "where would it
+    // go", and only the first of those questions has a different answer here.
+    // ⚠ GATED ON THE CELL BELOW ACTUALLY BEING A TALL STATION. A rack standing over anything else
+    // is a corrupt save or a console write, and redirecting into it would hand every verb a
+    // material the player is not pointing at — so the rack is left to answer for itself instead.
+    const hit = rawHit && isStationRack(rawHit.material)
+      && isTallStation(voxel(rawHit.x, rawHit.y - 1, rawHit.z))
+      ? { ...rawHit, y: rawHit.y - 1, material: voxel(rawHit.x, rawHit.y - 1, rawHit.z) }
+      : rawHit
     // ⚠ CLEARED ON EVERY FRAME THAT DOES NOT SET IT. The border is a mesh with its own lifetime,
     // not a property of the reticle, so looking away from a plant has to retract it explicitly —
     // state whose only retractor is the thing that stopped running stays on screen.
@@ -9775,6 +9852,30 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             for (const d of owed) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
             if (owed.length) onSay(`${brokeDef.name.toLowerCase()} gives up its work — ${owed.reduce((n: number, d: { count: number }) => n + d.count, 0)} items on the ground`)
           }
+          // ── ★★ A TWO-TALL STATION LOSES BOTH CELLS, AND ITS RACK SPILLS (2026-09-23) ────────
+          // The rack has no `BlockDef`, so nothing else in the world can take it down: left
+          // standing it is a solid, invisible cell floating over a hole — precisely the invisible
+          // wall `pieces.ts` warns about, and the one failure mode a two-cell object can leave.
+          //
+          // ⚠⚠ READ THE CONTENTS BEFORE THE WRITE. `setVoxel` is the funnel that deletes a rack's
+          // record when the rack material leaves the cell (the same guard chests have), so asking
+          // for the grid afterwards hands back a fresh empty one and the keeper's stock is gone
+          // with no error anywhere. This is the chest census's ordering lesson from the other
+          // side: the funnel is doing exactly its job, and the caller has to want the old value
+          // first. The stacks are SPILLED rather than destroyed for `adoptGrid`'s stated reason —
+          // losing a stack to a structural change is the one outcome worth writing code to avoid.
+          if (isTallStation(hit.material)) {
+            const rk = chestKey(hit.x, hit.y + 1, hit.z)
+            const spilled = racksByCol.current.get(colOf(hit.x, hit.z))?.[rk]
+            let out = 0
+            for (const st of spilled ?? []) {
+              if (!st) continue
+              drops.current.push(spawnDrop(st.itemId, st.count, hit.x, hit.y + 1, hit.z))
+              out += st.count
+            }
+            setVoxel(hit.x, hit.y + 1, hit.z, AIR)
+            if (out > 0) onSay(`the rack spills — ${out} things on the ground`)
+          }
         }
         if (felled) {
           // ⚠ TOP DOWN. Every write funnels through `setVoxel`, which asks `orphanedLeaves` what
@@ -9869,7 +9970,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       mouse.current.right = false
     }
     if (hit && rightNow && !weaponDrawn) {
-      const potMat = voxel(hit.x, hit.y, hit.z)
+      // ── ★★ THE RIGHT-CLICK ASKS WHAT YOU POINTED AT; THE SWING ASKS WHAT IT BELONGS TO ───────
+      // (2026-09-23) `hit` is redirected down a cell for a tall station's rack, so breaking its
+      // top breaks the mill. A right-click must NOT follow it there: Alex's ruling is that the
+      // lower cell opens the recipes and the upper cell opens the storage, which is the whole
+      // reason the rack is a cell of its own and not a taller model. Reading `rawHit` is how one
+      // object answers two verbs differently — and for every block that is not a rack the two are
+      // the same cell, so this changes nothing anywhere else.
+      const potMat = voxel(rawHit!.x, rawHit!.y, rawHit!.z)
       // ★ `holdsSeed` now answers for BOTH seed kinds: the pot wants a Mana Seed, a bed wants a crop
       // seed, and `rightClickIntent` disambiguates by the material it was handed. Asking
       // `cropForSeed` here rather than in that file keeps it free of engine imports, which is the
@@ -9961,7 +10069,23 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       } else if (intent === 'open') {
         // `touch` is bound to THIS chest's column rather than handed up as a coordinate the caller
         // has to remember — the one call that must not be forgotten cannot then be made wrong.
-        if (space.current === 'plot') {
+        //
+        // ── ★★ A RACK IS ANSWERED FIRST, AND IT IS NEVER THE BANK (2026-09-23) ────────────────
+        // `rawHit` is the cell the keeper POINTED at; `hit` has already been redirected down to
+        // the station so a swing breaks the mill. Both cells belong to one object, so the branch
+        // has to be taken on the pointed cell or every rack on the plot would open the bank.
+        // ⚠ ABOVE the `space === 'plot'` test on purpose. That test is the chest's one-pool rule
+        // (`bank.ts`, 09-16) and a rack is deliberately outside it — the whole point of station
+        // storage is that the logs live at the sawmill. Falling through would not merely show the
+        // wrong grid, it would show a 48-slot pool in a 16-slot shelf's panel.
+        if (rawHit && isStationRack(rawHit.material)) {
+          onOpenChest({
+            x: rawHit.x, y: rawHit.y, z: rawHit.z,
+            slots: rackAt(rawHit.x, rawHit.y, rawHit.z),
+            touch: () => touchRack(rawHit.x, rawHit.z),
+            rack: true,
+          })
+        } else if (space.current === 'plot') {
           // Every chest on the plot is a door into the one pool. Fitted to the census here, so a
           // chest placed or broken since the last open has already moved the cap. `touch` is a
           // no-op: the pool rides the keeper's 5s autosave (and the hide/pagehide saves).
@@ -10265,6 +10389,17 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           ? 'it needs open sky to grow'
           : 'a sapling only takes in soil')
         mouse.current.right = false
+      } else if (mat !== undefined && isTallStation(mat) && voxel(hit.px, hit.py + 1, hit.pz) !== AIR) {
+        // ── ★ A TWO-TALL STATION REFUSES A CEILING, AND SAYS SO (2026-09-23) ─────────────────
+        // A tall station owns the cell above it as well (`MAT.STATION_RACK`), so it needs the
+        // headroom before the first block goes down. Refusing HERE — above the generic place
+        // branch, before the item leaves the bag — is what keeps the two writes atomic: the
+        // alternative is placing the base, discovering the rack has nowhere to go, and taking the
+        // base back up again, which is the waymark cap's backwards order and it is only correct
+        // there because `place` cannot know a cap without asking the world.
+        // ⚠ Silence would read as a broken right-click, the failure `onSay` exists for.
+        onSay(`no room above — the ${(blockDef(mat)?.name ?? 'station').toLowerCase()} stands two blocks tall`)
+        mouse.current.right = false
       } else if (mat !== undefined && !inPlayer && countItem(inv.current!, held) > 0 && voxel(hit.px, hit.py, hit.pz) === AIR) {
         removeItems(inv.current!, held, 1)
         // A slab takes the half you pointed at. The ray's own hit point decides it: land in the
@@ -10284,6 +10419,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           }
         }
         setVoxel(hit.px, hit.py, hit.pz, put)
+        // ── ★★ THE SECOND CELL (2026-09-23) ─────────────────────────────────────────────────
+        // A tall station is TWO cells: its own id, and `MAT.STATION_RACK` above it. The headroom
+        // was refused above, so this write cannot land on anything — and it goes through
+        // `setVoxel` like every other world write, which is what gives the rack its save record,
+        // its remesh and its column dirty-mark for free.
+        if (isTallStation(put)) setVoxel(hit.px, hit.py + 1, hit.pz, MAT.STATION_RACK)
         hands.sig.placeAt = performance.now()
         // The material is the state; the clock holds the one thing it cannot — WHEN.
         if (isSaplingMat(put)) {

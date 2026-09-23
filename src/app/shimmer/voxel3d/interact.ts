@@ -16,7 +16,7 @@
 // oracle can hold it, and `emptyHanded` is asserted BY NAME — it is the normal way to open a
 // container, not an edge case.
 
-import { MAT } from '../voxel/depth'
+import { MAT, isStationRack } from '../voxel/depth'
 import { isFruitBush } from './picking'
 import { stationOf } from '../voxel/workshop'
 import { alchemyStationOf } from './alchemy-chain'
@@ -190,6 +190,15 @@ export function rightClickIntent(
   // USE is answered FIRST, always. A block you use must not have the block in your hand dropped
   // onto it by the same click that uses it.
   if (aimed === MAT.CHEST) return 'open'
+  // ── ★ A TALL STATION'S RACK IS STORAGE, AND IT IS ANSWERED WITH THE CHEST (2026-09-23) ───────
+  // The upper cell of a sawmill or a stonecutter holds a `RACK_SLOTS` grid. It sits beside the
+  // chest rather than below `stationOf` because it IS a container — the same verb, the same panel,
+  // a different grid — and because `stationOf` deliberately does not know the rack exists: a rack
+  // has no recipes, no job and no rate, and teaching that map about it would make every caller
+  // that asks "is this a workshop" start answering yes for a shelf.
+  // ⚠ The host passes the material it POINTED at, not the one the swing redirects to. See
+  // `VoxelWorld.tsx` › `potMat`.
+  if (isStationRack(aimed)) return 'open'
   // ⚠ A BENCH WITH A PLANK IN YOUR HAND MUST STILL OPEN, not stack a second bench onto it. This is
   // the same trap the chest fell into from the other side: the table is the block you are most
   // likely to be holding more of while standing at it.

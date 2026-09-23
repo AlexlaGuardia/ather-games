@@ -66,7 +66,12 @@ ok(count(R, /className=[{"][^"}]*\bgx-plate\b/g) >= PLATE_FLOOR,
 for (const label of ['Gems', 'Vessels', 'Cast bar', 'Innate', 'Gathering focuses', 'Satchel', 'Hotbar']) {
   ok(new RegExp(`<SectionHead label="${label}"`).test(R), `section "${label}" is headed by SectionHead`)
 }
-ok(/<SectionHead label=\{`in the chest/.test(R), 'the chest is headed by SectionHead too')
+// ⚠ THE CHEST'S HEAD IS A CONDITIONAL SINCE 2026-09-23: the same section draws a chest, a bank or
+// a two-tall station's RACK, and each says a different thing about what the keeper is looking into.
+// Matched on the SectionHead plus both labels rather than on one literal, so the assert keeps
+// covering the chest AND gains the rack, instead of pinning whichever branch happens to be first.
+ok(/<SectionHead label=\{chest\.rack \? `on the rack/.test(R), 'the rack is headed by SectionHead')
+ok(/`in the chest ·/.test(R), 'the chest is headed by SectionHead too')
 ok(count(R, /h-px flex-1/g) === 0,
    `★ no hand-rolled hairline head in the bodies (${count(R, /h-px flex-1/g)}) — SectionHead owns the hairline`)
 

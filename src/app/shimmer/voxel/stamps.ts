@@ -56,6 +56,7 @@ import { blueprintCells } from './blueprints'
 import { pieceDef, cellsOf, rotateCell, type Placement, type Rotation, type PieceDef } from './pieces'
 import type { GenPiece } from './holds'
 import { AIR, type Section } from './section'
+import { MAT, isTallStation } from './depth'
 
 export interface Stamp {
   /** Unique across the table — the gen-key prefix for its pieces. */
@@ -119,12 +120,35 @@ export function stampTouches(s: Stamp, ox: number, oz: number, size: number): bo
   return !(s.x + box.w <= ox || s.x >= ox + size || s.z + box.d <= oz || s.z >= oz + size)
 }
 
-/** Every solid cell of the stamp in WORLD coordinates (rotated, translated, floored). */
+/**
+ * Every solid cell of the stamp in WORLD coordinates (rotated, translated, floored).
+ *
+ * ── ★★ A GENERATED TALL STATION GETS ITS RACK HERE, OR IT NEVER GETS ONE (2026-09-23) ──────────
+ * A two-tall station is two cells: its own id, and `MAT.STATION_RACK` above (`depth.ts` ›
+ * `TALL_STATIONS`). The PLAYER's placement writes both, but a station laid by worldgen never goes
+ * near that code — Hazel's sawmill and Sax's stonecutter come from blueprints, through here. Left
+ * alone, both would draw a metre of geometry into a cell that is AIR: a visible thing you walk
+ * straight through, which is the invisible-wall failure inverted and worse, because the eye has
+ * already told the keeper the mill is there.
+ *
+ * ★ IT BELONGS IN THIS FUNCTION AND NOT IN `placeStamps` BECAUSE THIS ONE IS PURE. The rack then
+ * rides every consumer — the column write, the clipping, the guards — without any of them knowing
+ * it exists, and `stamps.test.ts` can state the rule against a fixture instead of against a world.
+ *
+ * ⚠ THE BLUEPRINT STILL WINS AT A CONTESTED CELL, and that is deliberate: cells are written in
+ * order and an explicit block at the same coordinate lands after this one. So a mill authored
+ * under a roof would quietly lose its rack rather than punch a hole in the roof — which is the
+ * safe direction, and `stamps.test.ts` asserts the shipped blueprints leave that cell clear so the
+ * day someone authors one under a beam it goes red instead of shipping a half-station.
+ */
 export function stampWorldCells(s: Stamp, floor: number): BlueprintCell[] {
-  return blueprintCells(s.bp).map(c => {
+  const out: BlueprintCell[] = []
+  for (const c of blueprintCells(s.bp)) {
     const r = rotateLocal(c.x, c.z, s.bp, s.rot)
-    return { x: s.x + r.x, y: floor + c.y, z: s.z + r.z, m: c.m }
-  })
+    out.push({ x: s.x + r.x, y: floor + c.y, z: s.z + r.z, m: c.m })
+    if (isTallStation(c.m)) out.push({ x: s.x + r.x, y: floor + c.y + 1, z: s.z + r.z, m: MAT.STATION_RACK })
+  }
+  return out
 }
 
 /**

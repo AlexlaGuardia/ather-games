@@ -17,7 +17,7 @@
 
 import { AIR, Section } from './section'
 import { STRUCTURE, STRUCTURE_HALF } from './pieces'
-import { isPlant, isHalfMat, isTopSlab, isSapling, isGlassMat, isModelled, MAT } from './depth'
+import { isPlant, isHalfMat, isTopSlab, isSapling, isGlassMat, isModelled, isStationRack, MAT } from './depth'
 import { isLeafMat, isLogMat } from './trees'
 
 /**
@@ -626,8 +626,12 @@ export function greedyMesh(
           // an unrelated AO regression that appeared the same day. The rank lives in a SECOND array.
           // A modelled station (2026-09-15) is drawn by `station-mesh.ts`, so it emits no cube
           // faces here and does not occlude — the same treatment as a plant or a piece's STRUCTURE.
+          // ★ A TALL STATION'S RACK (2026-09-23) IS THE SAME SENTENCE ONE CELL UP. The station
+          // below draws ONE mesh through both of its cells, so this cell's own faces would be
+          // geometry inside that mesh — and it must not occlude, or the sawmill's own upper half
+          // would carry the ambient shadow of a solid cube it is standing in.
           sol[i] = m !== AIR && m !== STRUCTURE && m !== STRUCTURE_HALF && !isPlant(m)
-            && !isLeafMat(m) && !isLogMat(m) && !isSapling(m) && !isModelled(m) ? 1 : 0
+            && !isLeafMat(m) && !isLogMat(m) && !isSapling(m) && !isModelled(m) && !isStationRack(m) ? 1 : 0
           // ── ★★ RANK = sol + opq: air 0 · water 1 · opaque 2 ──────────────────────────────────
           // Water is `sol` (it occludes, and that is today's approved look — see the block above
           // the mask test) but it is NOT opaque, so it ranks between air and stone.
@@ -1021,7 +1025,7 @@ export function greedyMesh(
     // "is the neighbour solid" punches see-through gaps into any staircase built from slabs.
     const LOWER = 1, UPPER = 2, FULL = 3
     const coverOf = (m: number): number =>
-      (m === AIR || m === STRUCTURE || m === STRUCTURE_HALF || isPlant(m) || isModelled(m)) ? 0
+      (m === AIR || m === STRUCTURE || m === STRUCTURE_HALF || isPlant(m) || isModelled(m) || isStationRack(m)) ? 0
         : !isHalfMat(m) ? FULL : isTopSlab(m) ? UPPER : LOWER
     for (const [k, m] of half) {
       const cx = (k % (S + 2)) - 1

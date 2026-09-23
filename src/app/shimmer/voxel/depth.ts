@@ -769,6 +769,29 @@ export const MAT = {
    * deadfall log derives its axis. Forage-only (a bed cannot grow a trunk).
    */
   SHELF_FUNGUS: 115,
+  /**
+   * ── ★★ THE RACK — THE UPPER CELL OF A TWO-TALL STATION (2026-09-23) ────────────────────────
+   * Alex: *"a 2 tall structure with a storage .. feel a bit bigger"*. A sawmill standing one metre
+   * high reads as a prop on the floor; two metres is furniture you walk up to. So a tall station
+   * occupies TWO cells and this id is the upper one.
+   *
+   * ★ IT IS OCCUPANCY, NOT A BLOCK, AND IT IS `STRUCTURE`'S SHAPE RATHER THAN `MODELLED`'S.
+   * `MODELLED` means *this renderer draws a model AT this cell*; the rack has no model of its own
+   * — the station BELOW draws one mesh through both cells, exactly as a piece's mesh spans the
+   * `STRUCTURE` cells it occupies. Putting it in `MODELLED_MATS` would have instanced a second
+   * (empty) model here, which is a draw call that means nothing and a cube the day a model file
+   * forgets an entry. So: invisible to the mesher, solid for collision, no `BlockDef` — the same
+   * three facts `STRUCTURE` carries, for the same reason.
+   * ⚠ NO `BlockDef` MEANS THE PICK HAS NOTHING TO CHEW (`piece-mesh.ts`'s note). A hit on a rack
+   * is redirected to the station below it, and breaking the station clears the rack with it —
+   * `VoxelWorld.tsx` › the tall-station branch. Neither cell can be removed on its own, which is
+   * what stops a half-station standing in the world.
+   * ★ AND IT IS THE STORAGE. The rack holds a `Slots` grid keyed at its own cell and saved in the
+   * column record beside the chests (`RACK_SLOTS`, `voxel3d/chest.ts`) — a workstation's bin,
+   * stocked for the job that station does, which is why it is NOT the plot's one chest pool: the
+   * whole point is that the logs live AT the sawmill.
+   */
+  STATION_RACK: 116,
 } as const
 
 /**
@@ -792,6 +815,34 @@ export const MODELLED_MATS: ReadonlySet<number> = new Set<number>([
   MAT.MANA_LANTERN,
 ])
 export const isModelled = (m: number): boolean => MODELLED_MATS.has(m)
+
+/**
+ * ── ★★ THE TWO-TALL STATIONS (2026-09-23) ──────────────────────────────────────────────────────
+ * A station in here stands in TWO cells: its own material at the base and `MAT.STATION_RACK` in
+ * the cell above. The base keeps every rule it already had — identity, jobs, drops, salvage,
+ * `stationOf`, its tile — and only its FOOTPRINT grows. That is the same split `MODELLED_MATS`
+ * made for the look: the id stays the truth, and one more thing about it becomes the renderer's
+ * and the placer's business.
+ *
+ * ⚠ A MEMBER HERE MUST HAVE A `tall` MODEL, AND A `tall` MODEL MUST BE A MEMBER HERE. Two halves
+ * of one fact in two files: a tall model on a short station draws a metre of geometry into the
+ * neighbour's airspace (the "invisible wall" failure inverted — a VISIBLE thing you walk through),
+ * and a short model on a tall station leaves a solid rack cell standing over nothing, which reads
+ * as exactly the invisible wall `pieces.ts` warns of. `station-models.test.ts` §5 asserts the
+ * agreement in both directions rather than trusting two lists to be edited together.
+ */
+export const TALL_STATIONS: ReadonlySet<number> = new Set<number>([
+  MAT.SAWMILL, MAT.STONECUTTER,
+])
+export const isTallStation = (m: number): boolean => TALL_STATIONS.has(m)
+
+/**
+ * Is this cell a tall station's upper half? Asked by the mesher (draw nothing), the mine path
+ * (redirect the hit downward) and the interact path (right-click opens the rack, not the recipes).
+ * A function rather than `=== MAT.STATION_RACK` at each site for `STATION_MAT`'s stated reason:
+ * three literals agree today and forget the fourth caller the day a second kind of rack exists.
+ */
+export const isStationRack = (m: number): boolean => m === MAT.STATION_RACK
 
 /** Every glass id — the cutout pass, the light pass and the mesher rank all ask this, never `=== GLASS`. */
 export const GLASS_MATS: ReadonlySet<number> = new Set<number>([

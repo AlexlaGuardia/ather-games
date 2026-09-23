@@ -54,6 +54,31 @@ export const CHEST_BAGFULS = CHEST_SLOTS / 24
 export const createChest = (): Slots => new Array(CHEST_SLOTS).fill(null)
 
 /**
+ * ── ★★ THE STATION RACK (2026-09-23) ───────────────────────────────────────────────────────────
+ * The upper cell of a two-tall station holds one of these. Alex: *"a 2 tall structure with a
+ * storage"* — the sawmill's log rack, the stonecutter's stone shelf.
+ *
+ * ★ 8 x 2 = 16, AND THE NUMBER SAYS SOMETHING, which is the question `CHEST_ROWS` demands of any
+ * number in this file. A chest is *two bagfuls* (48). A rack is **two rows** — what fits on a
+ * shelf, in the same 8-wide grid every container here draws in, so a rack row lines up with a bag
+ * row exactly as a chest row does. It is deliberately far short of a chest: a rack is stocked for
+ * the job the station does, not a place to put everything. If it ever held a bagful there would be
+ * no reason to stand a chest beside the sawmill, and the rack would have quietly replaced the
+ * container it is meant to complement.
+ *
+ * ⚠ IT IS NOT A DOOR INTO THE PLOT POOL, and that is a decision rather than an oversight. Every
+ * chest on the keeper's land is one pool (`bank.ts`, 09-16) precisely so the keeper never hunts
+ * for a stack. A rack is the opposite claim: the logs live AT the sawmill, which is the whole of
+ * what makes a station feel like furniture instead of a chest with a recipe list. Routing it to
+ * the bank would have made the storage free and meaningless in the same line.
+ */
+export const RACK_COLS = 8
+export const RACK_ROWS = 2
+export const RACK_SLOTS = RACK_COLS * RACK_ROWS
+
+export const createRack = (): Slots => new Array(RACK_SLOTS).fill(null)
+
+/**
  * Take a grid off disk and make it the size this build uses.
  *
  * ★ THE MIGRATION IS THE WHOLE REASON THIS EXISTS, AND IT NEVER TRUNCATES. Every chest saved before
@@ -68,15 +93,25 @@ export const createChest = (): Slots => new Array(CHEST_SLOTS).fill(null)
  * Anything that is not a plausible stack is discarded rather than trusted: this is data off a disk
  * a console can write to, and a malformed slot would crash the panel that renders it.
  */
-export function adoptChest(saved: unknown): Slots {
-  const g = createChest()
+export function adoptChest(saved: unknown): Slots { return adoptGrid(saved, CHEST_SLOTS) }
+
+/**
+ * A rack off disk, made this build's size. ★ THE SAME FUNCTION AS A CHEST'S, called with a
+ * different number — not a copy. Every word of `adoptGrid`'s never-truncate argument is about what
+ * a grid owes the stacks inside it, and none of it is about being a chest; a second adopt written
+ * beside it would agree today and be the one that silently drops a stack the day either size moves.
+ */
+export function adoptRack(saved: unknown): Slots { return adoptGrid(saved, RACK_SLOTS) }
+
+function adoptGrid(saved: unknown, size: number): Slots {
+  const g: Slots = new Array(size).fill(null)
   if (!Array.isArray(saved)) return g
   const spare: ItemStack[] = []
   for (let i = 0; i < saved.length; i++) {
     const s = saved[i] as ItemStack | null
     if (!s || typeof s.itemId !== 'string' || !(s.count > 0)) continue
     const stack: ItemStack = { itemId: s.itemId, count: s.count }
-    if (i < CHEST_SLOTS) g[i] = stack
+    if (i < size) g[i] = stack
     else spare.push(stack)
   }
   // Only reachable when the grid shrank under a save. Front-fill, in order, so the result is

@@ -58,6 +58,21 @@ export interface ColumnSave {
    * some block near it happens to change.
    */
   jobs?: Record<string, unknown>
+  /**
+   * ★ STATION RACK CONTENTS (2026-09-23, the two-tall stations), keyed `"x,y,z"` in WORLD
+   * coordinates — the cell of the RACK itself, which is the cell above the station.
+   *
+   * A second field rather than more rows in `chests`, and the reason is a SIZE, not tidiness: a
+   * chest grid is `CHEST_SLOTS` long and a rack is `RACK_SLOTS`, and the loader's whole job is to
+   * make a saved grid the size this build uses (`adoptChest` / `adoptRack`). Pouring racks into
+   * `chests` would hand every rack to `adoptChest`, which would faithfully inflate a 16-slot shelf
+   * into a 48-slot chest — silently, and only visible as a rack panel with three rows of nothing
+   * in it. The key space does not collide (a rack's cell is never a chest's), which is exactly why
+   * that mistake would never have thrown.
+   *
+   * ⚠ Same dirty-marking caveat as `chests`, and the same never-truncate migration on the way in.
+   */
+  racks?: Record<string, unknown[]>
 }
 
 const DB = 'shimmer-voxel'
