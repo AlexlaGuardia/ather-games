@@ -147,10 +147,17 @@ try {
 
   // ── 4. ★★ THE SPEND PATH — bag, mana and XP all move, and the bottle survives ───────────────
   await page.keyboard.press('Escape'); await sleep(400)
-  // Mana Draught = 4 shards + 1 glow moss (alchemy.ts, 2026-09-16). Five of each input = five brews.
+  // Mana Draught = 4 shards + 1 glow moss + 1 violetbloom petal (alchemy.ts; the petal since Yarrow's
+  // counter, a8f66de). Five brews' worth of each. ⚠ Section 2c already gave TWO petals, and before
+  // this line counted them the first two brews quietly ate those and the third ran dry on petals
+  // while the assert blamed the shards. Top up to five and count the petals like everything else.
+  // (The recipe BOOK does not gate this: it filters the station cauldron, `BrewingPanel`; `/brew`
+  // opens the owner's `BrewPanel`, which lists by level. The book has its own suite.)
   await cmd('/give raw_mana_shard 20')
   await sleep(400)
   await cmd('/give glow_moss 5')
+  await sleep(400)
+  await cmd('/give violetbloom_petal 3')
   await sleep(400)
   await cmd('/brew')
   await sleep(700)
@@ -161,6 +168,8 @@ try {
     'the row now counts twenty shards against the four it needs')
   ok(/glow moss 5\/1/.test(before.replace(/\s+/g, ' ')),
     'and five glow moss against the one it needs')
+  ok(/violetbloom petal 5\/1/.test(before.replace(/\s+/g, ' ')),
+    'and five violetbloom petals against the one it needs')
 
   ok(await pressRow('Mana Draught'), 'the row is pressed with a full bag')
   await sleep(900)
@@ -176,8 +185,9 @@ try {
   ok(/(^|\n)\s*2× mana draught/.test(afterLines), `the panel reports the yield — ${/\d+× mana draught[^\n]*/.exec(afterLines)?.[0]}`)
   const manaAfter = Number(/mana\s*(\d+)/.exec(after)?.[1] ?? '-1')
   ok(manaAfter <= manaBefore - 5 + 1, `mana was drained (${manaBefore} → ${manaAfter}, cost 5)`)
-  ok(/raw mana shard 16\/4/.test(after.replace(/\s+/g, ' ')) && /glow moss 4\/1/.test(after.replace(/\s+/g, ' ')),
-    'and four shards + one moss left the satchel — the ingredients are really spent')
+  const a1 = after.replace(/\s+/g, ' ')
+  ok(/raw mana shard 16\/4/.test(a1) && /glow moss 4\/1/.test(a1) && /violetbloom petal 4\/1/.test(a1),
+    'and four shards + one moss + one petal left the satchel — the ingredients are really spent')
 
   await page.keyboard.press('Escape'); await sleep(500)
   const bottles = await bagHas('Mana Draught')
@@ -193,8 +203,9 @@ try {
   // knowing loudly rather than discovering in a balance pass.
   for (let i = 0; i < 4; i++) { await pressRow('Mana Draught'); await sleep(600) }
   const spent = await panelText()
-  ok(/raw mana shard 0\/4/.test(spent.replace(/\s+/g, ' ')) && /glow moss 0\/1/.test(spent.replace(/\s+/g, ' ')),
-    'all twenty shards and five moss are gone after five draughts — the spend is repeatable, not a one-off')
+  const s1 = spent.replace(/\s+/g, ' ')
+  ok(/raw mana shard 0\/4/.test(s1) && /glow moss 0\/1/.test(s1) && /violetbloom petal 0\/1/.test(s1),
+    `all twenty shards, five moss and five petals are gone after five draughts — ${/raw mana shard \d+\/4 · glow moss \d+\/1 · violetbloom petal \d+\/1/.exec(s1)?.[0]}`)
   // A sixth press would be the refusal, but the loop's own last press already ran on an empty bag
   // only if the count were off by one — so press once more and demand the reason.
   await pressRow('Mana Draught'); await sleep(600)
