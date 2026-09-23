@@ -20,6 +20,22 @@ export const SKY = {
   day: { zenith: '#6f9fd0', horizon: '#c9dff0' },
   night: { zenith: '#101a33', horizon: '#2a3a63' },
   sunHigh: '#fff4d6', sunLow: '#ffb45e',
+  // ── ★ THE CORE, LOOKED AT (canon `world/ather.md` › *The sky, looked at*, RULED 2026-09-23) ──
+  // It never sets: it BANKS LIKE A COAL overhead. One journey, both ways: blaze → gold → ember →
+  // a dark coal with live veins and a warm rim. ⛔ Never pale, never silver, never partly lit —
+  // every stop on this ramp is warm on purpose, because a cool Core reads as a moon.
+  core: {
+    blaze: '#fff7e4',   // the day face: a light you cannot look at
+    gold: '#ffc95c',    // the first of the bank
+    ember: '#ff6a1f',   // mid-turn
+    coal: '#1c0b07',    // the night body: dark, but a coal, never black-blue
+    vein: '#ff5a14',    // the live veins across it
+    rim: '#ff9442',     // the warm rim that keeps its round shape against the night
+  },
+  // The flecks: the Core's own breath, far off and still settling. Warm-white, never a star-blue.
+  fleck: '#fff1d8',
+  // The HAND-OFF: as the Core dims, the cloud-walls at the horizon kindle — the cooled light.
+  kindle: '#aebcf2',
 }
 
 // Day = the pre-clock look, verbatim. Night = the Ather's own hour: darker than the garden's

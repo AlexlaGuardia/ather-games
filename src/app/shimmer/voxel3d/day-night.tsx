@@ -31,22 +31,32 @@
 import { useRef, useLayoutEffect, useMemo, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { dayProgress, daylight, sunElevation, sunAzimuth } from '../engine/day-cycle'
+import { dayProgress, daylight } from '../engine/day-cycle'
 import { UNDER, fogUnder, domeVeil, stepUnder, newUnderState } from './underwater'
 import { SKY, DAY, NIGHT } from './sky-palette'
 import { irradianceUp, hourLight, sunPosition, SILVER_POSITION } from './hour-light'
+import { CORE_DIR, CORE_RADIUS, coreBank, BREATH, TURN_S } from './core-sky'
 
-// ── The sky dome (2026-08-08, Alex: "add a sky background… sun cycle but no moon in the Ather") ──
-// A camera-following inverted sphere with the whole sky in ONE fragment shader: vertical gradient
-// (horizon → zenith, both lerped by the same day/night clock as everything else), plus the sun —
-// a crisp disc and a halo that widens and warms as the sun drops, so dawn/dusk read at the horizon
-// where blocks can't. Drawing the sun IN the sky shader instead of as a billboard costs nothing
-// per frame, can never sort wrong against the world, and sets below the horizon for free (the
-// disc rides the RAW elevation; the directional light keeps its clamped park).
-// Clouds are deliberately absent — held for their own pass (Alex, same ruling).
-// ⚠ NO MOON. The Ather has no moon (Alex ruling 2026-08-08, logged in CANON_GAPS — what silvers
-// the night is Magii's to name). The night dome is gradient + nothing; the silver night LIGHT
-// below survives because an unlit renderer is a fail state, but it is no longer lunar fiction.
+// ── The sky dome (2026-08-08; ★ REBUILT 2026-09-23 against canon's *The sky, looked at*) ──────
+// A camera-following inverted sphere with the whole sky in ONE fragment shader. Drawing the sky's
+// bodies IN the shader instead of as billboards costs nothing per frame and can never sort wrong.
+//
+// ★★ WHAT CANON PUT UP THERE (`world/ather.md`, RULED 2026-09-23, /magii + Alex), and nothing else:
+//   · THE CORE, fixed overhead (`core-sky.ts`). It never crosses and never sets; it BANKS LIKE A
+//     COAL, the whole body at once: blaze you cannot look at → gold → ember → a dark coal with live
+//     veins and a warm rim, which you CAN look at — the one time anyone in the Ather looks straight
+//     at the source of their world. ⛔ No crescent (every term below is radial or the whole disc,
+//     so there is no lit side to slide), never pale or silver, never a flicker: its only motion is
+//     a slow even breath and the veins turning.
+//   · THE FLECKS, the Core's far breath, still settling. There by day too, drowned by the gold —
+//     so they are faded by the hour, never switched. Denser toward the horizon, where the deep
+//     "presses in soft on every side". ⛔ Never stars: warm-white, no twinkle.
+//   · THE HAND-OFF: as the Core dims, the cloud-walls at the rim kindle — a silver band low on the
+//     dome that rises exactly as the coal banks, so the light visibly moves from overhead out to
+//     the perimeter. At dawn it goes quiet as the Core takes the light back.
+//   · Nothing else. No moon, no aurora (the mortal sky's), nothing that crosses. The emptiness is
+//     the point, so the next thing added here needs a ruling first.
+// Clouds are deliberately absent — held for their own pass.
 const SKY_VERT = /* glsl */ `
   varying vec3 vDir;
   void main() {
@@ -56,24 +66,67 @@ const SKY_VERT = /* glsl */ `
 `
 const SKY_FRAG = /* glsl */ `
   varying vec3 vDir;
-  uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uSun;
-  uniform vec3 uSunDir;
-  uniform float uDay;   // daylight(), 1 noon .. 0 midnight
-  uniform float uWarm;  // low-sun warmth, peaks in the twilight band, 0 at noon and at night
-  // ★ THE DOME SETS fog:false, SO SCENE FOG CANNOT HIDE IT — every other atmosphere effect here
-  // gets away with that because gloom and mist both leave you standing under open sky. Underwater
-  // it is the one thing that would read as a renderer fault: the world closed to arm's length with
-  // a bright blue sky still overhead. So the veil is applied in the shader, last, over everything
-  // including the sun disc.
+  uniform vec3 uZenith; uniform vec3 uHorizon;
+  uniform vec3 uCoreDir; uniform float uCoreR;
+  uniform float uBank;     // coreBank(): 1 the blaze (day) .. 0 the coal (night)
+  uniform vec3 uCoreCol;   // the lit face this hour: blaze -> gold -> ember
+  uniform vec3 uCoal; uniform vec3 uVein; uniform vec3 uRim;
+  uniform float uBreath;   // 1 +- a slow even sine; never faster (canon: no flicker)
+  uniform float uTurn;     // the veins' slow rotation: the Core turns
+  uniform vec3 uFleck; uniform vec3 uKindle;
+  // THE DOME SETS fog:false, SO SCENE FOG CANNOT HIDE IT. Underwater it is the one thing that would
+  // read as a renderer fault, so the veil is applied in the shader, last, over everything.
   uniform vec3 uWater; uniform float uVeil;
+
+  float hash3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p), w = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), w.x),
+               mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), w.x), w.y);
+  }
+
   void main() {
     vec3 d = normalize(vDir);
     float up = clamp(d.y, 0.0, 1.0);
     vec3 sky = mix(uHorizon, uZenith, pow(up, 0.6));
-    float s = clamp(dot(d, normalize(uSunDir)), 0.0, 1.0);
-    float disc = smoothstep(0.99935, 0.99965, s);
-    float halo = pow(s, 90.0) * 0.30 * uDay + pow(s, 7.0) * 0.22 * uWarm;
-    vec3 col = sky + uSun * (halo + disc * (0.9 * uDay + 0.35 * uWarm));
+    float night = 1.0 - uBank;
+
+    // -- the flecks: one candidate per cell of a 3D lattice on the sphere, jittered, most empty --
+    vec3 q = d * 150.0;
+    vec3 cell = floor(q);
+    vec3 jit = vec3(hash3(cell + 7.1), hash3(cell + 13.7), hash3(cell + 29.3)) - 0.5;
+    float fd = length(q - (cell + 0.5 + jit * 0.6));
+    float keep = mix(0.992, 0.975, pow(1.0 - up, 2.0));     // the deep presses in at the edges
+    float fleck = step(keep, hash3(cell)) * smoothstep(0.34, 0.0, fd) * (0.4 + 0.6 * hash3(cell + 3.3));
+    sky += uFleck * fleck * pow(night, 2.5) * 0.8;
+
+    // -- the hand-off: the rim kindles as the Core banks --
+    sky += uKindle * pow(1.0 - up, 3.0) * night * 0.42;
+
+    // -- the Core --
+    float c = max(dot(d, uCoreDir), 0.0);
+    float r = acos(clamp(c, -1.0, 1.0)) / uCoreR;        // 0 centre .. 1 edge
+    // By day a bloom you cannot look past; it shrinks and warms with the bank, and is gone by night.
+    vec3 col = sky + uCoreCol * (pow(c, 60.0) * 0.55 + pow(c, 8.0) * 0.16) * uBank;
+    float body = 1.0 - smoothstep(0.96, 1.0, r);
+    if (body > 0.0) {
+      vec3 t1 = normalize(cross(uCoreDir, vec3(0.0, 0.0, 1.0)));
+      vec3 t2 = cross(uCoreDir, t1);
+      vec2 uv = vec2(dot(d, t1), dot(d, t2)) / uCoreR;
+      float cs = cos(uTurn), sn = sin(uTurn);
+      uv = mat2(cs, -sn, sn, cs) * uv;
+      float n = vnoise(uv * 3.0) * 0.6 + vnoise(uv * 7.0) * 0.3 + vnoise(uv * 15.0) * 0.1;
+      float vein = pow(1.0 - abs(n * 2.0 - 1.0), 7.0);
+      float rim = smoothstep(0.55, 1.0, r);
+      vec3 coal = uCoal + (uVein * vein * 1.3 + uRim * rim * 0.9) * uBreath;
+      // The WHOLE body banks at once — a mix over the disc, never a boundary across it.
+      vec3 lit = uCoreCol * mix(0.9, 1.7, uBank);       // overexposed at noon: a blaze, not a disc
+      col = mix(col, mix(coal, lit, smoothstep(0.0, 0.7, uBank)), body);
+    }
+    // The coal's own warmth just past its edge, so it holds its round shape against the dark.
+    col += uRim * pow(c, 900.0) * 0.22 * night * uBreath;
+
     col = mix(col, uWater, uVeil);
     gl_FragColor = vec4(col, 1.0);
   }
@@ -161,7 +214,12 @@ function makePairs() {
   return {
     bg: pair(DAY.bg, NIGHT.bg), hemiSky: pair(DAY.hemiSky, NIGHT.hemiSky), hemiGround: pair(DAY.hemiGround, NIGHT.hemiGround),
     zenith: pair(SKY.day.zenith, SKY.night.zenith), horizon: pair(SKY.day.horizon, SKY.night.horizon),
-    sun: pair(SKY.sunHigh, SKY.sunLow),
+    // The Core's lit face along the bank. Pre-encoded like the veil (see `domeColor`), so the hex
+    // in `sky-palette.ts` is the colour that reaches the screen — these are new, nobody approved
+    // the linear misreading of them, and "ember" should look like the word.
+    core: { blaze: domeColor(SKY.core.blaze), gold: domeColor(SKY.core.gold), ember: domeColor(SKY.core.ember) },
+    // The key light warms as it banks: the ground takes the gold at dusk, never the grey.
+    sunWhite: new THREE.Color(DAY.sun), sunGold: new THREE.Color(SKY.core.gold),
     leaf: pair(GLOOM.leaf, GLOOM.leaf), fogLeaf: pair(GLOOM.fogLeaf, GLOOM.fogLeaf),
     gold: pair(MIST.gold, MIST.gold), fogGold: pair(MIST.fogGold, MIST.fogGold),
     // Underwater has NO day/night pair, and that is the design rather than an omission: water is a
@@ -217,9 +275,12 @@ export function VoxelDayNight(
     uniforms: {
       uZenith: { value: new THREE.Color(SKY.day.zenith) },
       uHorizon: { value: new THREE.Color(SKY.day.horizon) },
-      uSun: { value: new THREE.Color(SKY.sunHigh) },
-      uSunDir: { value: new THREE.Vector3(0, 1, 0.4) },
-      uDay: { value: 1 }, uWarm: { value: 0 },
+      uCoreDir: { value: CORE_DIR.clone() }, uCoreR: { value: CORE_RADIUS },
+      uBank: { value: 1 }, uCoreCol: { value: domeColor(SKY.core.blaze) },
+      uCoal: { value: domeColor(SKY.core.coal) }, uVein: { value: domeColor(SKY.core.vein) },
+      uRim: { value: domeColor(SKY.core.rim) },
+      uBreath: { value: 1 }, uTurn: { value: 0 },
+      uFleck: { value: domeColor(SKY.fleck) }, uKindle: { value: domeColor(SKY.kindle) },
       uWater: { value: domeColor(UNDER.water) }, uVeil: { value: 0 },
     },
     side: THREE.BackSide, depthWrite: false, fog: false,
@@ -238,7 +299,7 @@ export function VoxelDayNight(
     return () => { scene.background = prevBg; scene.fog = prevFog; fogRef.current = null }
   }, [scene])
 
-  useFrame((_state, dt) => {
+  useFrame((state, dt) => {
     const p = dayProgress()
     const dl = daylight(p)          // 1 noon .. 0 midnight, soft twilight band
     const sv = 1 - dl
@@ -291,19 +352,18 @@ export function VoxelDayNight(
     const sky = skyRef.current
     if (sky) {
       sky.position.copy(camera.position)   // the horizon is unreachable by construction
-      const e = sunElevation(p)
       const u = skyMat.uniforms
       ;(u.uZenith.value as THREE.Color).copy(lerpInto(P.zenith, sv))
       ;(u.uHorizon.value as THREE.Color).copy(lerpInto(P.horizon, sv))
-      // Warmth peaks as the sun crosses the horizon band and is zero at noon and at night —
-      // dl gates it so the same low elevation before dawn doesn't pre-warm the dark.
-      const warm = dl * (1 - Math.min(1, Math.max(0, e) / 0.3))
-      ;(u.uSun.value as THREE.Color).copy(lerpInto(P.sun, warm))
-      // RAW elevation: the disc genuinely sets. The z lean matches the light's fixed 90/220 tilt
-      // so the disc hangs where the shadows say the sun is.
-      ;(u.uSunDir.value as THREE.Vector3).set(sunAzimuth(p), e, 0.41)
-      u.uDay.value = dl
-      u.uWarm.value = warm
+      // The Core does not move; only its bank does. blaze (1) → gold (⅔) → ember (⅓ and below).
+      const bank = coreBank(p)
+      const cc = u.uCoreCol.value as THREE.Color
+      if (bank > 2 / 3) cc.copy(P.core.gold).lerp(P.core.blaze, (bank - 2 / 3) * 3)
+      else cc.copy(P.core.ember).lerp(P.core.gold, Math.max(0, bank - 1 / 3) * 3)
+      u.uBank.value = bank
+      const t = state.clock.elapsedTime
+      u.uBreath.value = 1 + BREATH.depth * Math.sin((t / BREATH.periodS) * Math.PI * 2)
+      u.uTurn.value = (t / TURN_S) * Math.PI * 2
       u.uVeil.value = domeVeil(ut)
     }
     const hemi = hemiRef.current
@@ -325,9 +385,10 @@ export function VoxelDayNight(
     }
     const sun = sunRef.current
     if (sun) {
-      // Real path: rises east (06:00), overhead at noon, sets west — dawn light RAKES, which is
-      // most of what makes a morning read as a morning on axis-aligned blocks.
+      // The CORE: fixed overhead, all day and all night (canon 2026-09-23 — it never sets). The
+      // morning no longer rakes; what reads as a morning now is the colour, which banks from gold.
       sunPosition(sun.position, p)   // the reference in hour-light.ts is built from this same rule
+      sun.color.copy(P.sunWhite).lerp(P.sunGold, Math.min(1, (1 - dl) * 1.6))
       // Mist scatters sun rather than blocking it: shadows go soft, the ground does not go dark.
       // A surface scatters direct sun rather than blocking it — shadows soften, they do not black out.
       sun.intensity = DAY.sunIntensity * dl * (1 - GLOOM.sunCut * gd) * (1 - MIST.sunCut * md)

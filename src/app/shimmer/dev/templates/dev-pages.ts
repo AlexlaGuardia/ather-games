@@ -78,6 +78,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['hollow', 'night', 'silhouette', 'contrast', 'luma'],
   },
   {
+    path: '/shimmer/dev/sky',
+    title: 'The Ather sky',
+    blurb: 'The Core at every hour: blaze by day, banked to a veined coal by night, the rim kindling in the turn.',
+    group: 'glass',
+    keywords: ['sky', 'core', 'day', 'night', 'dusk', 'dawn', 'flecks', 'coal', 'canon'],
+  },
+  {
     path: '/shimmer/dev/building',
     title: 'Building vocabulary',
     blurb: 'Every building material, drawn the way the world draws it, mixed and re-rollable.',

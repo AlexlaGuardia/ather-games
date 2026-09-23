@@ -25,19 +25,21 @@
 // mirror does. The rig is the authority; this module only asks it what an up face receives.
 import * as THREE from 'three'
 import { DAY } from './sky-palette'
-import { sunAzimuth, sunElevation } from '../engine/day-cycle'
+import { CORE_POSITION } from './core-sky'
 
 /** Rec.709 luminance — the same W the cartoon stack uses, so "hour luminance" means one thing. */
 const W = new THREE.Vector3(0.2126, 0.7152, 0.0722)
 export const luminance = (c: { r: number; g: number; b: number }) => c.r * W.x + c.g * W.y + c.b * W.z
 
 /**
- * Where the sun light sits for a day-cycle progress — `day-night.tsx` places the DirectionalLight
+ * Where the key light sits for a day-cycle progress — `day-night.tsx` places the DirectionalLight
  * with exactly this, so the reference below is computed from the same geometry the rig uses.
+ * ★ Since 2026-09-23 it is the CORE, and the Core does not move (canon: it never crosses the sky
+ * and never sets — `core-sky.ts`). The progress argument stays so the rule reads as "where is the
+ * light at this hour", and the answer is honestly "where it always is"; only its strength banks.
  */
-export function sunPosition(out: THREE.Vector3, progress: number): THREE.Vector3 {
-  const e = sunElevation(progress)
-  return out.set(sunAzimuth(progress) * 220, 30 + Math.max(0, e) * 240, 90)
+export function sunPosition(out: THREE.Vector3, _progress: number): THREE.Vector3 {
+  return out.copy(CORE_POSITION)
 }
 
 /** The night silver's fixed position (a light, not a moon — see NIGHT in sky-palette.ts). */
