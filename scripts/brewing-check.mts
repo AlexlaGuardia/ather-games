@@ -96,7 +96,7 @@ try {
   // 1. the pot opens on the potion list and START spends the bag
   await cmd('/station ~3 ~1 ~')
   let t = await panel()
-  ok(/the pot is empty/.test(t), 'the cauldron opens on an empty pot')
+  ok(/the pot is empty/i.test(t), 'the cauldron opens on an empty pot')
   ok(/Shard Tonic/.test(t) && /mortar → pour/.test(t), 'the Shard Tonic row shows its road: mortar → pour')
   ok(await pressRowStart('Shard Tonic'), 'START is pressable on the Shard Tonic')
   await sleep(600)
@@ -155,14 +155,14 @@ try {
   const said = await page.evaluate(() => document.body.innerText)
   ok(/poured — 1× shard tonic/.test(said) && /alchemy xp/.test(said), `the pour says what it gave — "${/poured[^\n]*/.exec(said)?.[0]}"`)
   t = await panel()
-  ok(/the pot is empty/.test(t), 'the pot is empty again after the pour')
+  ok(/the pot is empty/i.test(t), 'the pot is empty again after the pour')
   await close()
   ok((await bagHas('Shard Tonic')) === 1, 'ONE shard tonic is in the bag — the solo potion exactly')
 
   // 5. the mortar has nothing now, and says where a brewing starts
   await cmd('/station ~7 ~1 ~')
   t = await panel()
-  ok(/nothing waiting on the mortar/.test(t) && /starts at a cauldron/.test(t), 'the idle mortar points at the cauldron')
+  ok(/nothing waiting on the mortar/i.test(t) && /starts at a cauldron/i.test(t), 'the idle mortar points at the cauldron')
   await close()
 
   // 6. tip out gives the ingredients back
