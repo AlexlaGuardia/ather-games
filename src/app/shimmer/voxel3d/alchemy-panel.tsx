@@ -25,6 +25,7 @@ import {
 } from './alchemy-chain'
 import type { OpenStation } from './VoxelWorld'
 import { PanelFrame } from './panel-frame'
+import { H, HearthNote, HearthJob, HearthIdle, HearthRow, HearthRoad, HearthButton, CostChip } from '../ui/hearth'
 
 export interface AlchemyOps {
   have: (itemId: string) => number
@@ -101,50 +102,24 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
   const isPour = (rec: AlchemyRecipe | undefined) => !!rec && rec.id.startsWith('finish:')
 
   return (
-    <PanelFrame width="w-[480px]" onClose={onClose}>
-        <div className="flex items-baseline justify-between mb-3 pr-6">
-          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">{def.name}</span>
-          <span className="text-white/35">{cooking ? 'the fire is always lit' : `alchemy ${level} · mana ${Math.floor(mana.current.cur)}`}</span>
+    <PanelFrame width="w-[480px]" title={def.name} legacy={false} onClose={onClose}>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <HearthNote>{st.fromBank ? 'drawing on the bank' : st.feeds.length ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it` : 'set a chest against it and it will work out of that too'}</HearthNote>
+          <span className="text-[12px] tabular-nums whitespace-nowrap" style={{ color: H.inkSoft }}>{cooking ? 'the fire is always lit' : `alchemy ${level} · mana ${Math.floor(mana.current.cur)}`}</span>
         </div>
 
         {busy && job && r ? (
-          <div className="mb-4 rounded border border-amber-200/25 bg-amber-100/[0.03] px-3 py-2.5">
-            <div className="flex justify-between items-baseline">
-              <span className="text-amber-100/90">{r.name}</span>
-              <span className="text-white/45 tabular-nums">{job.runs} left</span>
-            </div>
-            <div className="mt-2 h-1 rounded bg-white/10 overflow-hidden">
-              <div className="h-full bg-amber-200/60 transition-[width] duration-500"
-                   style={{ width: `${Math.round(alchemyRunProgress(job, now) * 100)}%` }} />
-            </div>
-            <div className="mt-2 flex justify-between items-center">
-              <span className="text-white/40 tabular-nums">
-                {ready > 0 ? `${ready * r.output.count}× ${ops.label(r.output.itemId)} waiting` : `${alchemySecondsToNext(job, now)}s to the next`}
-              </span>
-              {/* ★ THE POUR (ruled 09-16): the liquid leaves the cauldron into its vessel and takes its
-                  word — the reward moment. Every other station's run is simply taken. */}
-              <button disabled={ready <= 0} onClick={doTake}
-                      className={`px-2.5 py-1 rounded border transition-colors ${
-                        ready > 0 ? 'border-amber-200/50 text-amber-100/90 hover:bg-amber-200/10'
-                                  : 'border-white/5 text-white/25 cursor-not-allowed'}`}>
-                {isPour(r) ? 'pour' : 'take'}
-              </button>
-            </div>
-          </div>
+          <HearthJob name={r.name} meta={`${job.runs} left`} progress={alchemyRunProgress(job, now)}
+                     status={ready > 0 ? `${ready * r.output.count}× ${ops.label(r.output.itemId)} waiting` : `${alchemySecondsToNext(job, now)}s to the next`}>
+            {/* ★ THE POUR (ruled 09-16): the liquid leaves the cauldron into its vessel and takes its
+                word — the reward moment. Every other station's run is simply taken. */}
+            <HearthButton small primary disabled={ready <= 0} onClick={doTake}>{isPour(r) ? 'pour' : 'take'}</HearthButton>
+          </HearthJob>
         ) : (
-          <div className="mb-4 text-white/35">
-            {def.name.toLowerCase()} is idle — give it something to work on
-            <span className="block mt-1 text-white/25">
-              {st.fromBank
-                ? 'drawing on the bank'
-                : st.feeds.length
-                ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it`
-                : 'set a chest against it and it will work out of that too'}
-            </span>
-          </div>
+          <HearthIdle>{def.name} is idle. Give it something to work on.</HearthIdle>
         )}
 
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {rows.map(rec => {
             const locked = level < rec.minLevel
             const can = alchemyMaxRuns(rec, ops.have, mana.current.cur)
@@ -152,49 +127,17 @@ export function AlchemyPanel({ st, inv, skills, mana, ops, onChange, onLevel, on
             const route = pid ? routeOf(pid) : null
             const missing = rec.input.filter(i => ops.have(i.itemId) < i.count)
             return (
-              <div key={rec.id} className={`rounded border px-3 py-2 ${locked ? 'border-white/5 opacity-40' : can > 0 && !busy ? 'border-white/12' : 'border-white/8'}`}>
-                <div className="flex justify-between items-baseline gap-2">
-                  <span className={locked ? 'text-white/50' : 'text-white/85'}>{rec.name}</span>
-                  <span className="text-white/35 tabular-nums whitespace-nowrap">
-                    {locked ? `alchemy ${rec.minLevel}` : `${Math.round(rec.runMs / 1000)}s${rec.mana ? ` · ${rec.mana} mana` : ''}`}
-                  </span>
-                </div>
-                <div className="mt-1 text-white/40">
-                  {rec.input.map(i => (
-                    <span key={i.itemId} className={`mr-2 ${ops.have(i.itemId) >= i.count ? '' : 'text-rose-200/60'}`}>
-                      {i.count}× {ops.label(i.itemId)} <span className="text-white/25">({ops.have(i.itemId)})</span>
-                    </span>
-                  ))}
-                  <span className="text-white/25">→ {rec.output.count}× {ops.label(rec.output.itemId)}</span>
-                </div>
-                {route && (
-                  <div className="mt-0.5 text-white/25">
-                    {/* The whole road, this station's step lit, the pour at the end — always. */}
-                    {route.map((s, i) => (
-                      <span key={i} className={s === st.kind ? 'text-amber-100/70' : ''}>
-                        {i > 0 ? ' → ' : ''}{ALCHEMY_STATIONS[s].name.toLowerCase()}
-                      </span>
-                    ))}
-                    <span> → pour</span>
-                    {pid && jobOf(pid) && <span className="ml-2 text-white/20">· {JOB_LINE[jobOf(pid)!]}</span>}
-                  </div>
-                )}
-                {!locked && !busy && (
-                  <div className="mt-1.5 flex gap-1.5">
-                    {[1, 4, can].filter((n, i, a) => n > 0 && a.indexOf(n) === i && n <= can).map(n => (
-                      <button key={n} onClick={() => doLoad(rec, n)}
-                              className="px-2 py-0.5 rounded border border-amber-200/40 text-amber-100/85 hover:bg-amber-200/10">
-                        {n === can && n !== 1 && n !== 4 ? `all (${n})` : `×${n}`}
-                      </button>
-                    ))}
-                    {can <= 0 && (
-                      <span className="text-white/30">
-                        {missing.length ? `short of ${missing.map(m => ops.label(m.itemId).toLowerCase()).join(', ')}` : 'not enough mana — wait'}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
+              <HearthRow key={rec.id} dataRow={rec.id} itemId={rec.output.itemId} name={rec.name} locked={locked} dim={can <= 0 || busy}
+                         meta={locked ? `alchemy ${rec.minLevel}` : `${rec.output.count}× · ${Math.round(rec.runMs / 1000)}s${rec.mana ? ` · ${rec.mana} mana` : ''}`}
+                         inputs={rec.input.map(i => <CostChip key={i.itemId} itemId={i.itemId} label={ops.label(i.itemId)} have={ops.have(i.itemId)} need={i.count} />)}
+                         road={route ? <HearthRoad steps={route.map(x => ALCHEMY_STATIONS[x].name.toLowerCase())} here={route.indexOf(st.kind)} after={pid && jobOf(pid) ? JOB_LINE[jobOf(pid)!] : undefined} /> : undefined}
+                         note={!locked && !busy && can <= 0 ? (missing.length ? `short of ${missing.map(m => ops.label(m.itemId).toLowerCase()).join(', ')}` : 'not enough mana — wait') : undefined}>
+                {!locked && !busy && [1, 4, can].filter((n, i, a) => n > 0 && a.indexOf(n) === i && n <= can).map((n, i) => (
+                  <HearthButton key={n} small primary={i === 0} onClick={() => doLoad(rec, n)}>
+                    {n === can && n !== 1 && n !== 4 ? `all (${n})` : `×${n}`}
+                  </HearthButton>
+                ))}
+              </HearthRow>
             )
           })}
         </div>

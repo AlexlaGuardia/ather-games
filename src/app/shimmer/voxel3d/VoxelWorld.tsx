@@ -304,6 +304,7 @@ import {
 } from '../voxel/workshop'
 import { itemIcon } from './tex/item-icon'
 import { CraftGrid, CardButton, type GridTile } from './craft-grid'
+import { H as HT, HearthChoice, HearthJob, HearthIdle, HearthLabel, HearthButton } from '../ui/hearth'
 import { PanelFrame } from './panel-frame'
 import { bloom as bloomSpirit, due as potsDue, potKey, progress as potProgress, type PotClock } from './pot'
 import { spiritsToSave, spiritsFromSave } from '../spirits/spirit-save'
@@ -11131,36 +11132,13 @@ function GardensPanel({ g, onClose }: { g: OpenGardens; onClose: () => void }) {
     return () => { live = false }
   }, [])
   return (
-    <PanelFrame width="w-[420px]" dataPanel="gardens" onClose={onClose}>
-      <div className="flex items-baseline justify-between mb-3">
-        <span className="gx-label text-[13px] font-semibold text-white/95">Gardens</span>
-      </div>
-      <button onClick={() => { g.toGreg(); onClose() }}
-              className="w-full text-left mb-1 px-2 py-1.5 rounded border border-amber-200/25 hover:border-amber-200/60 hover:bg-white/5 text-white/90 transition-colors">
-        <div className="flex justify-between gap-3">
-          <span>Greg&apos;s garden</span>
-          <span className="text-amber-200/70">Moonwell Glade</span>
-        </div>
-      </button>
-      <div className="gx-label mt-3 mb-1 text-[9px] text-white/35">keepers</div>
-      {friends === null && <div className="text-white/30 text-[11px] px-2 py-1">looking…</div>}
-      {friends !== null && friends.length === 0 && (
-        <div className="text-white/30 text-[11px] px-2 py-1 leading-relaxed">
-          no keepers yet — add a friend and their garden stands here
-        </div>
-      )}
-      {friends?.map(f => (
-        <div key={f.user_id}
-             className="w-full text-left mb-1 px-2 py-1.5 rounded border border-white/10 text-white/40 cursor-default">
-          <div className="flex justify-between gap-3">
-            <span>{f.username}</span>
-            <span className="text-white/25">away</span>
-          </div>
-        </div>
-      ))}
-      <div className="mt-3 text-[10px] text-white/25">
-        visiting another keeper&apos;s garden is not open yet
-      </div>
+    <PanelFrame width="w-[420px]" title="Gardens" legacy={false} dataPanel="gardens" onClose={onClose}>
+      <HearthChoice accent label="Greg's garden" meta="Moonwell Glade" onClick={() => { g.toGreg(); onClose() }} />
+      <div className="mt-4"><HearthLabel>Keepers</HearthLabel></div>
+      {friends === null && <HearthIdle>looking…</HearthIdle>}
+      {friends !== null && friends.length === 0 && <HearthIdle>No keepers yet. Add a friend and their garden stands here.</HearthIdle>}
+      {friends?.map(f => <HearthChoice key={f.user_id} disabled label={f.username} meta="away" />)}
+      <div className="mt-3 text-[12px] italic" style={{ color: HT.inkFaint }}>visiting another keeper&apos;s garden is not open yet</div>
     </PanelFrame>
   )
 }
@@ -11178,12 +11156,7 @@ function WaymarkPanel({ wm, onSay, onClose }: {
   const rows = wm.net.marks.filter((m) => m.id !== wm.fromId)
 
   return (
-    <PanelFrame width="w-[420px]" dataPanel={atPlot ? 'threshold' : 'waymark'} onClose={onClose}>
-        <div className="flex items-baseline justify-between mb-3">
-          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">
-            {atPlot ? 'Your Threshold' : 'Waymark'}
-          </span>
-        </div>
+    <PanelFrame width="w-[420px]" title={atPlot ? 'Your Threshold' : 'Waymark'} dataPanel={atPlot ? 'threshold' : 'waymark'} onClose={onClose}>
 
         {/* Renaming lives on the waymark's own face because this is the only surface that ever shows
             a passage's name — one called "10, -426" is one the player cannot plan a trip around. */}
@@ -11209,13 +11182,7 @@ function WaymarkPanel({ wm, onSay, onClose }: {
 
         {!atPlot ? (
           <>
-            <button onClick={() => { wm.go(); onClose() }}
-                    className="w-full text-left px-2 py-2 rounded border border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90 transition-colors">
-              <div className="flex justify-between gap-3">
-                <span>step home</span>
-                <span className="text-amber-200/80">your garden</span>
-              </div>
-            </button>
+            <HearthChoice accent label="Step home" meta="your garden" onClick={() => { wm.go(); onClose() }} />
             {/* The other passages are shown, greyed — a keeper seeing the shape of what they own is
                 how the hub-and-spoke rule explains itself without a tutorial line. */}
             {rows.length > 0 && (
@@ -11226,20 +11193,14 @@ function WaymarkPanel({ wm, onSay, onClose }: {
           </>
         ) : (
           <>
-            <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">Step out to</div>
+            <HearthLabel>Step out to</HearthLabel>
             {/* ★★ THE DOOR IS ALWAYS THE FIRST ROW (Alex, 2026-08-16: "the fold seam is two-way").
                 It is not a waymark and never appears in `net.marks` — it is the keeper's own fold,
                 so it is listed separately and cannot be broken, renamed or counted against the cap.
                 ⚠ It sits FIRST rather than last because for a keeper holding no passages it is the
                 only row there is, and this panel's previous zero-mark state was a dead end that
                 read *"no passages yet"* while the seam behind them was drawn as the way out. */}
-            <button onClick={() => { wm.go(DOOR_ID); onClose() }}
-                    className="w-full text-left mb-1 px-2 py-1.5 rounded border border-amber-200/25 hover:border-amber-200/60 hover:bg-white/5 text-white/90 transition-colors">
-              <div className="flex justify-between gap-3">
-                <span>your own door</span>
-                <span className="text-amber-200/70">back to the Wilds</span>
-              </div>
-            </button>
+            <HearthChoice accent label="Your own door" meta="back to the Wilds" onClick={() => { wm.go(DOOR_ID); onClose() }} />
             {/* Moonwell's row moved to the STATION the same day it arrived here (socket 1,
                 `court-blueprint.ts`): Alex wired the gates to Moonwell and Rune Hold, and one
                 dialect for "the ways off this plot" beats two. `GLADE_ID` stays the destination
@@ -11250,13 +11211,7 @@ function WaymarkPanel({ wm, onSay, onClose }: {
               </div>
             )}
             {wm.net.marks.map((m) => (
-              <button key={m.id} onClick={() => { wm.go(m.id); onClose() }}
-                      className="w-full text-left mb-1 px-2 py-1.5 rounded border border-white/15 hover:border-amber-200/50 hover:bg-white/5 text-white/90 transition-colors">
-                <div className="flex justify-between gap-3">
-                  <span>{label(m)}</span>
-                  <span className="text-white/35">passage</span>
-                </div>
-              </button>
+              <HearthChoice key={m.id} label={label(m)} meta="passage" onClick={() => { wm.go(m.id); onClose() }} />
             ))}
           </>
         )}
@@ -11379,52 +11334,26 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
     <PanelFrame width="w-[480px]" title={def.name} onClose={onClose}>
 
         {busy && r ? (
-          <div className="mb-4 rounded border border-amber-200/25 bg-amber-100/[0.03] px-3 py-2.5">
-            <div className="flex justify-between items-baseline">
-              <span className="text-amber-100/90">{r.name}</span>
-              <span className="text-white/45 tabular-nums">{job!.runs} left</span>
-            </div>
-            {/* The bar is the CURRENT run, not the whole job: a job of 30 moves a whole-job bar so
-                slowly it reads as broken, while a per-run bar visibly ticks and says the bench is
-                alive. The count beside it carries the long story. */}
-            <div className="mt-2 h-1 rounded bg-white/10 overflow-hidden">
-              <div className="h-full bg-amber-200/60 transition-[width] duration-500"
-                   style={{ width: `${Math.round(runProgress(job!, now, runMs) * 100)}%` }} />
-            </div>
-            <div className="mt-2 flex justify-between items-center">
-              <span className="text-white/40 tabular-nums">
-                {ready > 0 ? `${ready * milledYield(r, def)}× ${label(r.output.itemId)} waiting` : `${Math.ceil((runMs - (now - job!.since) % runMs) / 1000)}s to the next`}
-              </span>
-              <button disabled={ready <= 0} onClick={doCollect}
-                      className={`px-2.5 py-1 rounded border transition-colors ${
-                        ready > 0 ? 'border-amber-200/50 text-amber-100/90 hover:bg-amber-200/10'
-                                  : 'border-white/5 text-white/25 cursor-not-allowed'}`}>
-                take
-              </button>
-            </div>
-          </div>
+          /* The bar is the CURRENT run, not the whole job: a job of 30 moves a whole-job bar so
+             slowly it reads as broken, while a per-run bar visibly ticks and says the bench is
+             alive. The count beside it carries the long story. */
+          <HearthJob name={r.name} meta={`${job!.runs} left`} progress={runProgress(job!, now, runMs)}
+                     status={ready > 0 ? `${ready * milledYield(r, def)}× ${label(r.output.itemId)} waiting` : `${Math.ceil((runMs - (now - job!.since) % runMs) / 1000)}s to the next`}>
+            <HearthButton small primary disabled={ready <= 0} onClick={doCollect}>take</HearthButton>
+          </HearthJob>
         ) : (
-          <div className="mb-4 text-white/35">
-            {def.name.toLowerCase()} is idle — give it something to work on
-            {/* ★ THE SPECIALITY LINE IS DERIVED FROM `accepts`, not written per station. A hand-kept
-                `st.kind === 'sawmill' && …` shipped station three with no explanation of why its
-                list is short, which reads as a bug in the panel rather than as the design. */}
-            {def.accepts !== 'any' && <span className="block mt-1 text-white/25">{SPECIALITY_NOTE[def.accepts]}</span>}
-            {/* Said out loud, because an invisible rule that silently spends your storage is worse
-                than no rule. Absence is worth saying too — it is the hint that builds the workshop. */}
-            <span className="block mt-1 text-white/25">
-              {st.fromBank
-                ? 'drawing on the bank'
-                : st.feeds.length
-                ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it`
-                : 'set a chest against it and it will work out of that too'}
-            </span>
-          </div>
+          /* ★ THE SPECIALITY LINE IS DERIVED FROM `accepts`, not written per station. The draw line is
+             said out loud, because an invisible rule that silently spends your storage is worse than
+             no rule; its absence is the hint that builds the workshop. */
+          <HearthIdle sub={<>
+            {def.accepts !== 'any' && <span className="block">{SPECIALITY_NOTE[def.accepts]}</span>}
+            <span className="block">{st.fromBank ? 'drawing on the bank' : st.feeds.length ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it` : 'set a chest against it and it will work out of that too'}</span>
+          </>}>
+            The {def.name.toLowerCase()} is idle. Give it something to work on.
+          </HearthIdle>
         )}
 
-        <div className="text-white/40 tracking-[.14em] uppercase text-[9px] mb-1.5">
-          Set to work {busy && <span className="ml-2 text-sky-300/60 normal-case tracking-normal">finish the current job first</span>}
-        </div>
+        <HearthLabel>Set to work {busy && <span className="ml-2 font-medium italic" style={{ color: HT.sky }}>finish the current job first</span>}</HearthLabel>
         {/* ★ THE SAME GRID THE BENCH USES (2026-09-15): icons in tabs, runnable first; the card's
             action loads RUNS (1 / 5 / all you can afford) instead of crafting on the spot. */}
         <CraftGrid tiles={rows.map((rec): GridTile => {

@@ -246,3 +246,111 @@ export function HearthDivider({ children }: { children?: React.ReactNode }) {
     </div>
   )
 }
+
+// ── work in progress (stations) ────────────────────────────────────────────────────────────────
+/** A run's progress: a carved groove the ember fills. */
+export function HearthProgress({ value }: { value: number }) {
+  return (
+    <div className="h-2 rounded-full overflow-hidden" style={{ background: H.paperLo, boxShadow: 'inset 0 1px 2px rgba(58,39,22,.35)' }}>
+      <div className="h-full rounded-full transition-[width] duration-500"
+           style={{ width: `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`, background: `linear-gradient(180deg, ${H.emberHi}, ${H.ember})` }} />
+    </div>
+  )
+}
+
+/** What the station is doing now: the lifted card, with its name, a meta line, a progress groove and its acts. */
+export function HearthJob({ name, meta, sub, progress, status, children }: {
+  name: React.ReactNode; meta?: React.ReactNode; sub?: React.ReactNode; progress?: number | null; status?: React.ReactNode; children?: React.ReactNode
+}) {
+  return (
+    <div className="hearth-card mb-4 rounded-[12px] px-3.5 py-3"
+         style={{ background: 'linear-gradient(180deg, #fffaf0, #f6ead2)', boxShadow: '0 6px 14px rgba(58,39,22,.22), 0 1px 2px rgba(58,39,22,.25)' }}>
+      <div className="flex justify-between items-baseline gap-2">
+        <span className="text-[17px] font-semibold" style={hearthDisplay}>{name}</span>
+        {meta && <span className="text-[12px] tabular-nums" style={{ color: H.inkSoft }}>{meta}</span>}
+      </div>
+      {sub && <div className="mt-0.5 text-[12px]" style={{ color: H.inkSoft }}>{sub}</div>}
+      {progress != null && <div className="mt-2.5"><HearthProgress value={progress} /></div>}
+      <div className="mt-2.5 flex justify-between items-center gap-2 flex-wrap">
+        <span className="text-[12px] tabular-nums" style={{ color: H.inkSoft }}>{status}</span>
+        <span className="flex gap-1.5">{children}</span>
+      </div>
+    </div>
+  )
+}
+
+/** The idle state: an italic line and the quieter one under it (what it draws on). */
+export function HearthIdle({ children, sub }: { children: React.ReactNode; sub?: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <div className="text-[14px] italic" style={{ ...hearthDisplay, color: H.inkSoft }}>{children}</div>
+      {sub && <div className="mt-1 text-[12px]" style={{ color: H.inkFaint }}>{sub}</div>}
+    </div>
+  )
+}
+
+/** A small caps-free section label ("Set to work"). */
+export function HearthLabel({ children }: { children: React.ReactNode }) {
+  return <div className="mb-2 text-[13px] font-bold" style={{ color: H.inkSoft }}>{children}</div>
+}
+
+/**
+ * A recipe row: a paper slip with the product's well, its name + meta, the inputs as cost chips,
+ * an optional road, and its acts. `locked` greys it and hides the acts' urgency.
+ */
+export function HearthRow({ itemId, name, meta, locked, dim, inputs, road, note, children, dataRow }: {
+  itemId?: string; name: React.ReactNode; meta?: React.ReactNode; locked?: boolean; dim?: boolean
+  inputs?: React.ReactNode; road?: React.ReactNode; note?: React.ReactNode; children?: React.ReactNode; dataRow?: string
+}) {
+  return (
+    <div data-row={dataRow} className="rounded-[12px] px-3 py-2.5 flex gap-3 transition-opacity"
+         style={{ background: locked ? 'transparent' : 'rgba(255,250,238,.55)', boxShadow: locked ? `inset 0 0 0 1px ${H.rule}` : '0 1px 3px rgba(58,39,22,.18)', opacity: locked ? 0.55 : dim ? 0.85 : 1 }}>
+      {itemId && <Well itemId={itemId} size={46} dim={locked} />}
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-baseline gap-2">
+          <span className="text-[15px] font-semibold" style={{ ...hearthDisplay, color: locked ? H.inkFaint : H.ink }}>{name}</span>
+          {meta && <span className="text-[12px] tabular-nums whitespace-nowrap" style={{ color: H.inkFaint }}>{meta}</span>}
+        </div>
+        {inputs && <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">{inputs}</div>}
+        {road && <div className="mt-1.5 text-[12px]" style={{ color: H.inkFaint }}>{road}</div>}
+        {(children || note) && (
+          <div className="mt-2 flex gap-1.5 items-center flex-wrap">
+            {children}
+            {note && <span className="text-[12px] italic" style={{ color: H.inkFaint }}>{note}</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** A road: stations → pour, the one you stand at lit in ember. */
+export function HearthRoad({ steps, here, tail = 'pour', after }: { steps: string[]; here?: number | null; tail?: string | null; after?: React.ReactNode }) {
+  return (
+    <span>
+      {steps.map((s, i) => (
+        <span key={i}>{i > 0 && <span style={{ color: H.inkFaint }}> → </span>}
+          <span style={i === here ? { color: H.ember, fontWeight: 700 } : undefined}>{s}</span>
+        </span>
+      ))}
+      {tail && <span>{steps.length ? ' → ' : ''}{tail}</span>}
+      {after && <span className="ml-2 italic">· {after}</span>}
+    </span>
+  )
+}
+
+/** A destination / choice row: a paper slip you press. `accent` = the row that is always there (home, the door). */
+export function HearthChoice({ label, meta, accent, disabled, onClick }: {
+  label: React.ReactNode; meta?: React.ReactNode; accent?: boolean; disabled?: boolean; onClick?: () => void
+}) {
+  return (
+    <button disabled={disabled} onClick={onClick}
+            className={`w-full text-left mb-1.5 px-3.5 min-h-[44px] rounded-[12px] flex items-center justify-between gap-3 transition-all ${disabled ? 'cursor-default' : 'hover:-translate-y-px active:translate-y-px'}`}
+            style={{ background: disabled ? 'transparent' : 'rgba(255,250,238,.6)',
+                     boxShadow: disabled ? `inset 0 0 0 1px ${H.rule}` : accent ? `inset 0 0 0 1.5px ${H.ember}, 0 1px 3px rgba(58,39,22,.18)` : '0 1px 3px rgba(58,39,22,.18)',
+                     color: disabled ? H.inkFaint : H.ink }}>
+      <span className="text-[14px] font-semibold" style={hearthDisplay}>{label}</span>
+      {meta && <span className="text-[12px] font-semibold" style={{ color: accent ? H.ember : H.inkFaint }}>{meta}</span>}
+    </button>
+  )
+}

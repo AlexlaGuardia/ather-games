@@ -50,13 +50,13 @@ try {
   }
   const panel = () => page.evaluate(() => document.querySelector('[data-panel="brewing"]')?.textContent ?? '')
   const press = (label: string) => page.evaluate((l: string) => {
-    const b = Array.from(document.querySelectorAll('[data-panel="brewing"] button')).find(x => (x.textContent ?? '').trim() === l)
+    const b = Array.from(document.querySelectorAll('[data-panel="brewing"] button')).find(x => (x.textContent ?? '').trim().toLowerCase() === l.toLowerCase())
     if (!b) return false
     ;(b as HTMLElement).click()
     return true
   }, label)
   const pressRowStart = (potion: string) => page.evaluate((n: string) => {
-    const row = Array.from(document.querySelectorAll('[data-panel="brewing"] > div > div > div')).find(d => (d.textContent ?? '').includes(n))
+    const row = Array.from(document.querySelectorAll('[data-panel="brewing"] [data-row]')).find(d => (d.textContent ?? '').includes(n))
     const b = row?.querySelector('button')
     if (!b) return false
     ;(b as HTMLElement).click()

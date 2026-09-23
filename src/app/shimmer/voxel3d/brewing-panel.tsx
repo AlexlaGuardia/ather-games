@@ -30,6 +30,7 @@ import {
 import type { OpenStation } from './VoxelWorld'
 import type { AlchemyOps } from './alchemy-panel'
 import { PanelFrame } from './panel-frame'
+import { H, HearthNote, HearthJob, HearthIdle, HearthRow, HearthRoad, HearthButton, CostChip } from '../ui/hearth'
 
 export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, onBrewings, onChange, onLevel, onSay, onClose }: {
   st: OpenStation & { kind: AlchemyStationId }
@@ -133,10 +134,10 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
 
     const menu = cauldronMenu(level)
     return (
-      <PanelFrame width="w-[480px]" onClose={onClose} dataPanel="brewing">
-        <div className="flex items-baseline justify-between mb-3 pr-6">
-          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">{def.name}</span>
-          <span className="text-white/35">alchemy {level} · mana {Math.floor(mana.current.cur)}</span>
+      <PanelFrame width="w-[480px]" title={def.name} legacy={false} onClose={onClose} dataPanel="brewing">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <HearthNote>{st.fromBank ? 'drawing on the bank' : st.feeds.length ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it` : 'set a chest against it and it will draw on that too'}</HearthNote>
+          <span className="text-[12px] tabular-nums whitespace-nowrap" style={{ color: H.inkSoft }}>alchemy {level} · mana {Math.floor(mana.current.cur)}</span>
         </div>
 
         {here ? (() => {
@@ -145,89 +146,39 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
           const ready = pourReady(here, now)
           const prog = here.lit ? brewProgress(here, now) : runProgress(here, now)
           return (
-            <div className="mb-4 rounded border border-amber-200/25 bg-amber-100/[0.03] px-3 py-2.5">
-              <div className="flex justify-between items-baseline">
-                <span className="text-amber-100/90">{d.name}</span>
-                <span className="text-white/45">{jobOf(here.potionId) ? JOB_LINE[jobOf(here.potionId)!] : ''}</span>
-              </div>
-              <div className="mt-1 text-white/45">{roadLine(here)}</div>
-              {(here.run || here.lit) && (
-                <div className="mt-2 h-1 rounded bg-white/10 overflow-hidden">
-                  <div className="h-full bg-amber-200/60 transition-[width] duration-500" style={{ width: `${Math.round(prog * 100)}%` }} />
-                </div>
-              )}
-              <div className="mt-2 flex justify-between items-center">
-                <span className="text-white/40 tabular-nums">
-                  {ready ? 'the pour is ready'
-                    : here.lit ? `${Math.max(0, Math.ceil((brewMs(here) - (now - here.litAt!)) / 1000))}s to the pour`
-                    : here.run ? `${ALCHEMY_STATIONS[want!].name.toLowerCase()} at work · ${Math.max(0, Math.ceil((stepMs(here) - (now - here.run.since)) / 1000))}s`
-                    : want ? `waiting on a ${ALCHEMY_STATIONS[want].name.toLowerCase()} — any ${space === 'plot' ? 'on the plot' : 'nearby'}`
-                    : `the road is walked — ${d.manaCost} mana to light`}
-                </span>
-                <span className="flex gap-1.5">
-                  {!here.lit && (
-                    <button onClick={doTipOut} className="px-2 py-1 rounded border border-white/10 text-white/40 hover:border-white/30">tip out</button>
-                  )}
-                  {!here.lit && !want && (
-                    <button onClick={doLight} className="px-2.5 py-1 rounded border border-amber-200/50 text-amber-100/90 hover:bg-amber-200/10">light</button>
-                  )}
-                  {here.lit && (
-                    <button disabled={!ready} onClick={doPour}
-                            className={`px-2.5 py-1 rounded border transition-colors ${ready ? 'border-amber-200/50 text-amber-100/90 hover:bg-amber-200/10' : 'border-white/5 text-white/25 cursor-not-allowed'}`}>
-                      pour
-                    </button>
-                  )}
-                </span>
-              </div>
-            </div>
+            <HearthJob name={d.name} meta={jobOf(here.potionId) ? JOB_LINE[jobOf(here.potionId)!] : ''} sub={roadLine(here)}
+                       progress={here.run || here.lit ? prog : null}
+                       status={ready ? 'the pour is ready'
+                         : here.lit ? `${Math.max(0, Math.ceil((brewMs(here) - (now - here.litAt!)) / 1000))}s to the pour`
+                         : here.run ? `${ALCHEMY_STATIONS[want!].name.toLowerCase()} at work · ${Math.max(0, Math.ceil((stepMs(here) - (now - here.run.since)) / 1000))}s`
+                         : want ? `waiting on a ${ALCHEMY_STATIONS[want].name.toLowerCase()} — any ${space === 'plot' ? 'on the plot' : 'nearby'}`
+                         : `the road is walked — ${d.manaCost} mana to light`}>
+              {!here.lit && <HearthButton small onClick={doTipOut}>tip out</HearthButton>}
+              {!here.lit && !want && <HearthButton small primary onClick={doLight}>light</HearthButton>}
+              {here.lit && <HearthButton small primary disabled={!ready} onClick={doPour}>pour</HearthButton>}
+            </HearthJob>
           )
         })() : (
-          <div className="mb-4 text-white/35">
-            the pot is empty — choose a potion and its ingredients go in
-            <span className="block mt-1 text-white/25">
-              {st.fromBank ? 'drawing on the bank' : st.feeds.length ? `drawing on ${st.feeds.length} chest${st.feeds.length === 1 ? '' : 's'} beside it` : 'set a chest against it and it will draw on that too'}
-              {' · '}any {space === 'plot' ? 'station on the plot' : 'station nearby'} can walk a step of the road
-            </span>
-          </div>
+          <HearthIdle sub={`any ${space === 'plot' ? 'station on the plot' : 'station nearby'} can walk a step of the road`}>
+            The pot is empty. Choose a potion and its ingredients go in.
+          </HearthIdle>
         )}
 
         {!here && (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {menu.map(d => {
               const locked = level < d.minAlchemyLevel
               const missing = d.recipe.filter(r => ops.have(r.itemId) < r.count)
               const can = !locked && missing.length === 0
               const road = roadOf(d.id)
               return (
-                <div key={d.id} className={`rounded border px-3 py-2 ${locked ? 'border-white/5 opacity-40' : can ? 'border-white/12' : 'border-white/8'}`}>
-                  <div className="flex justify-between items-baseline gap-2">
-                    <span className={locked ? 'text-white/50' : 'text-white/85'}>{d.name}</span>
-                    <span className="text-white/35 tabular-nums whitespace-nowrap">{locked ? `alchemy ${d.minAlchemyLevel}` : `${d.manaCost} mana to light`}</span>
-                  </div>
-                  <div className="mt-1 text-white/40">
-                    {d.recipe.map(r => (
-                      <span key={r.itemId} className={`mr-2 ${ops.have(r.itemId) >= r.count ? '' : 'text-rose-200/60'}`}>
-                        {r.count}× {ops.label(r.itemId)} <span className="text-white/25">({ops.have(r.itemId)})</span>
-                      </span>
-                    ))}
-                    <span className="text-white/25">→ {d.resultCount}× {d.name}</span>
-                  </div>
-                  <div className="mt-0.5 text-white/25">
-                    {/* The road as the pot will say it: its stations, then the pour — the same words `roadLine` uses. */}
-                    {road.map((st, i) => <span key={i}>{ALCHEMY_STATIONS[ROAD_STATION[st]].name.toLowerCase()} → </span>)}
-                    <span>pour</span>
-                    {jobOf(d.id) && <span className="ml-2 text-white/20">· {JOB_LINE[jobOf(d.id)!]}</span>}
-                  </div>
-                  {!locked && (
-                    <div className="mt-1.5 flex gap-1.5 items-center">
-                      {can ? (
-                        <button onClick={() => doStart(d)} className="px-2 py-0.5 rounded border border-amber-200/40 text-amber-100/85 hover:bg-amber-200/10">start</button>
-                      ) : (
-                        <span className="text-white/30">short of {missing.map(m => ops.label(m.itemId).toLowerCase()).join(', ')}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <HearthRow key={d.id} dataRow={d.id} itemId={d.id} name={d.name} locked={locked} dim={!can}
+                           meta={locked ? `alchemy ${d.minAlchemyLevel}` : `${d.manaCost} mana to light`}
+                           inputs={d.recipe.map(r => <CostChip key={r.itemId} itemId={r.itemId} label={ops.label(r.itemId)} have={ops.have(r.itemId)} need={r.count} />)}
+                           road={<HearthRoad steps={road.map(x => ALCHEMY_STATIONS[ROAD_STATION[x]].name.toLowerCase())} after={jobOf(d.id) ? JOB_LINE[jobOf(d.id)!] : undefined} />}
+                           note={!locked && !can ? `short of ${missing.map(m => ops.label(m.itemId).toLowerCase()).join(', ')}` : undefined}>
+                  {can && <HearthButton small primary onClick={() => doStart(d)}>start · {d.resultCount}×</HearthButton>}
+                </HearthRow>
               )
             })}
           </div>
@@ -248,51 +199,32 @@ export function BrewingPanel({ st, space, keeper, brewings, skills, mana, ops, o
   }
 
   return (
-    <PanelFrame width="w-[480px]" onClose={onClose} dataPanel="brewing">
-      <div className="flex items-baseline justify-between mb-3 pr-6">
-        <span className="text-white/95 font-semibold tracking-[.18em] uppercase">{def.name}</span>
-        <span className="text-white/35">alchemy {level}</span>
+    <PanelFrame width="w-[480px]" title={def.name} legacy={false} onClose={onClose} dataPanel="brewing">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <HearthNote>a step on the road</HearthNote>
+        <span className="text-[12px] tabular-nums" style={{ color: H.inkSoft }}>alchemy {level}</span>
       </div>
 
       {running ? (
-        <div className="mb-4 rounded border border-amber-200/25 bg-amber-100/[0.03] px-3 py-2.5">
-          <div className="flex justify-between items-baseline">
-            <span className="text-amber-100/90">{POTION_DEFS[running.potionId].name}</span>
-            <span className="text-white/45">{roadLine(running)}</span>
-          </div>
-          <div className="mt-2 h-1 rounded bg-white/10 overflow-hidden">
-            <div className="h-full bg-amber-200/60 transition-[width] duration-500" style={{ width: `${Math.round(runProgress(running, now) * 100)}%` }} />
-          </div>
-          <div className="mt-2 text-white/40 tabular-nums">
-            {Math.max(0, Math.ceil((stepMs(running) - (now - running.run!.since)) / 1000))}s — it goes back to the pot on its own
-          </div>
-        </div>
+        <HearthJob name={POTION_DEFS[running.potionId].name} sub={roadLine(running)} progress={runProgress(running, now)}
+                   status={`${Math.max(0, Math.ceil((stepMs(running) - (now - running.run!.since)) / 1000))}s — it goes back to the pot on its own`} />
       ) : (
-        <div className="mb-4 text-white/35">
+        <HearthIdle sub={waiting.length ? 'take one and it runs here; the pot hears when it is done' : 'a brewing starts at a cauldron — its road brings it here'}>
           {waiting.length
             ? `${waiting.length} brewing${waiting.length === 1 ? '' : 's'} waiting on a ${def.name.toLowerCase()}`
-            : `nothing waiting on the ${def.name.toLowerCase()}`}
-          <span className="block mt-1 text-white/25">
-            {waiting.length ? 'take one and it runs here; the pot hears when it is done' : 'a brewing starts at a cauldron — its road brings it here'}
-          </span>
-        </div>
+            : `Nothing waiting on the ${def.name.toLowerCase()}.`}
+        </HearthIdle>
       )}
 
       {!running && waiting.length > 0 && (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {waiting.map(b => {
             const d = POTION_DEFS[b.potionId]
             return (
-              <div key={brewingKey(b.at!)} className="rounded border border-white/12 px-3 py-2">
-                <div className="flex justify-between items-baseline gap-2">
-                  <span className="text-white/85">{d.name}</span>
-                  <span className="text-white/35 tabular-nums whitespace-nowrap">{Math.round(stepMs(b) / 1000)}s</span>
-                </div>
-                <div className="mt-0.5 text-white/25">{roadLine(b)}{space !== 'plot' && b.at ? ` · pot at ${b.at.x}, ${b.at.z}` : ''}</div>
-                <div className="mt-1.5">
-                  <button onClick={() => doTake(b)} className="px-2 py-0.5 rounded border border-amber-200/40 text-amber-100/85 hover:bg-amber-200/10">take</button>
-                </div>
-              </div>
+              <HearthRow key={brewingKey(b.at!)} dataRow={b.potionId} itemId={b.potionId} name={d.name} meta={`${Math.round(stepMs(b) / 1000)}s`}
+                         road={<>{roadLine(b)}{space !== 'plot' && b.at ? ` · pot at ${b.at.x}, ${b.at.z}` : ''}</>}>
+                <HearthButton small primary onClick={() => doTake(b)}>take</HearthButton>
+              </HearthRow>
             )
           })}
         </div>
