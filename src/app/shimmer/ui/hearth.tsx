@@ -59,8 +59,11 @@ export function HearthX({ onClick }: { onClick: () => void }) {
  * card never exceeds the screen minus a 16px gutter each side, so a phone gets the whole width.
  * With `backdrop={false}` it is only the card, for a host that already owns placement.
  */
-export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, children, backdrop = true, bodyClass = '' }: {
-  title: string
+export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, children, backdrop = true, bodyClass = '', className = '' }: {
+  /** The plaque. Omitted = no plaque (a panel still carrying its own head row, mid-migration). */
+  title?: string
+  /** Extra classes on the card root — `hearth-ink` is how PanelFrame opts a legacy panel into the bridge. */
+  className?: string
   maxWidth?: number
   onClose: () => void
   dataPanel?: string
@@ -70,15 +73,15 @@ export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, childre
 }) {
   const card = (
     <div data-panel={dataPanel} onClick={(e) => e.stopPropagation()}
-         className={`hearth-root hearth-open relative ${HEARTH_FONT_VARS}`}
+         className={`hearth-root hearth-open relative ${HEARTH_FONT_VARS} ${className}`}
          style={{ width: `min(${maxWidth}px, calc(100vw - 32px))`, ...hearthBody }}>
       <HearthX onClick={onClose} />
       <div className="rounded-[18px] p-[13px]"
            style={{ background: WOOD, boxShadow: '0 18px 40px rgba(20,10,4,.55), 0 4px 10px rgba(20,10,4,.4), inset 0 1px 0 rgba(255,210,160,.35), inset 0 -2px 0 rgba(0,0,0,.35)' }}>
-        <div className="absolute left-1/2 -translate-x-1/2 -top-4 z-20 px-6 h-9 rounded-full flex items-center whitespace-nowrap"
+        {title && <div className="absolute left-1/2 -translate-x-1/2 -top-4 z-20 px-6 h-9 rounded-full flex items-center whitespace-nowrap"
              style={{ background: PLAQUE, boxShadow: '0 4px 8px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,215,170,.4), inset 0 -2px 2px rgba(0,0,0,.35)' }}>
           <span className="text-[19px] font-semibold" style={{ ...hearthDisplay, color: '#f6e4c2', textShadow: '0 1px 0 rgba(0,0,0,.5)' }}>{title}</span>
-        </div>
+        </div>}
         <div className="rounded-[10px] overflow-hidden"
              style={{ background: PAPER, boxShadow: 'inset 0 2px 6px rgba(58,39,22,.45), inset 0 0 0 1px rgba(58,39,22,.35)' }}>
           <div className={`max-h-[78vh] overflow-y-auto hearth-scroll ${bodyClass}`} style={{ color: H.ink }}>

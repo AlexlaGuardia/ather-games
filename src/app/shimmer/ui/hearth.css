@@ -12,3 +12,33 @@
 .hearth-root button:focus-visible { outline: 2px solid #c8642a; outline-offset: 2px }
 .hearth-root { -webkit-tap-highlight-color: transparent }
 @media (prefers-reduced-motion: reduce) { .hearth-open, .hearth-card, .hearth-tile { animation: none } }
+
+/* ── ⚠ THE INK BRIDGE — TRANSITIONAL, DELETE AT ZERO (rollout Phase 2, 2026-09-22) ─────────────
+   PanelFrame now wears the hearth, but the panels inside it were written for a dark plate: white
+   text, white hairlines, black fills. On parchment those are invisible. This block re-reads those
+   utilities as ink INSIDE `.hearth-ink` only, so every framed panel is legible the day the frame
+   flips, and each one is then rewritten onto the kit properly. `hearth-bridge.test.ts` counts the
+   panels still leaning on it; when that count is 0 this whole block and the class are deleted.
+   An exemption that does not expire is a second style system. */
+.hearth-ink [class~="text-white/5"],.hearth-ink [class~="text-white/8"],.hearth-ink [class~="text-white/10"],.hearth-ink [class~="text-white/15"],.hearth-ink [class~="text-white/20"],.hearth-ink [class~="text-white/25"],.hearth-ink [class~="text-white/30"],.hearth-ink [class~="text-white/35"],.hearth-ink [class~="text-white/40"],.hearth-ink [class~="text-white/45"] { color: #9a8163 }
+.hearth-ink [class~="text-white/50"],.hearth-ink [class~="text-white/55"],.hearth-ink [class~="text-white/60"],.hearth-ink [class~="text-white/65"],.hearth-ink [class~="text-white/70"],.hearth-ink [class~="text-white/75"] { color: #6b5238 }
+.hearth-ink [class~="text-white/80"],.hearth-ink [class~="text-white/85"],.hearth-ink [class~="text-white/90"],.hearth-ink [class~="text-white/95"],.hearth-ink [class~="text-white/100"], .hearth-ink [class~="text-white"] { color: #3a2716 }
+.hearth-ink [class~="hover:text-white"]:hover, .hearth-ink [class*="hover:text-white/"]:hover { color: #3a2716 }
+.hearth-ink [class*="text-amber-"], .hearth-ink [class*="text-orange-"], .hearth-ink [class*="text-yellow-"] { color: #a4501f }
+.hearth-ink [class*="text-emerald-"], .hearth-ink [class*="text-green-"], .hearth-ink [class*="text-lime-"] { color: #5f7d45 }
+.hearth-ink [class*="text-rose-"], .hearth-ink [class*="text-red-"] { color: #a8482f }
+.hearth-ink [class*="text-sky-"], .hearth-ink [class*="text-cyan-"], .hearth-ink [class*="text-blue-"] { color: #4f7690 }
+.hearth-ink [class*="text-violet-"], .hearth-ink [class*="text-purple-"], .hearth-ink [class*="text-fuchsia-"] { color: #6d4f8a }
+.hearth-ink [class*="border-white"] { border-color: rgba(58,39,22,.22) }
+.hearth-ink [class*="border-amber-"], .hearth-ink [class*="border-orange-"] { border-color: #c8642a }
+.hearth-ink [class*="hover:border-"]:hover { border-color: rgba(200,100,42,.6) }
+.hearth-ink [class*="border-emerald-"] { border-color: rgba(95,125,69,.5) } .hearth-ink [class*="border-rose-"], .hearth-ink [class*="border-red-"] { border-color: rgba(168,72,47,.5) }
+.hearth-ink [class*="bg-black"] { background-color: rgba(58,39,22,.06) }
+.hearth-ink [class*="bg-white/"] { background-color: rgba(58,39,22,.05) }
+.hearth-ink [class*="bg-amber-"], .hearth-ink [class*="bg-orange-"] { background-color: rgba(200,100,42,.12) }
+.hearth-ink [class*="bg-emerald-"] { background-color: rgba(95,125,69,.14) } .hearth-ink [class*="bg-rose-"], .hearth-ink [class*="bg-red-"] { background-color: rgba(168,72,47,.12) }
+.hearth-ink [class*="bg-[#0"], .hearth-ink [class*="bg-[#1"] { background: #f5ebd5 }
+.hearth-ink [class*="uppercase"] { text-transform: none; letter-spacing: 0 }
+.hearth-ink .font-mono, .hearth-ink[class*="font-mono"] { font-family: var(--font-hearth-body), system-ui, sans-serif }
+.hearth-ink input { color: #3a2716 }
+/* ── end of the ink bridge ── */

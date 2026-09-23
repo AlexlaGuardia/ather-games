@@ -15,6 +15,7 @@
 // (the gx-* cards) uses `CloseX` alone inside its own relative wrapper — the glyph and the corner
 // are the contract, the frame is a convenience.
 import React from 'react'
+import { HearthFrame } from '../ui/hearth'
 
 /** The close glyph: a real X, drawn (no font fallback risk), pinned to the card's top-right corner. */
 export function CloseX({ onClick, className = '' }: { onClick: () => void; className?: string }) {
@@ -29,25 +30,30 @@ export function CloseX({ onClick, className = '' }: { onClick: () => void; class
 }
 
 /**
- * Backdrop + card + the X. `width` is the card's Tailwind width class; the body is the scroll box
- * (max 80vh) with the panel's standard skin, so a panel only writes its content.
+ * Backdrop + card + the X. Since the Carved Hearth rollout (Phase 2, 2026-09-22) this IS the
+ * hearth frame — every panel on PanelFrame changed skin in one commit. `width` is still the
+ * card's Tailwind width class for the callers' sake; it is read as a max width (px) so a phone
+ * gets the whole screen. `hearth-ink` opts the panel's legacy dark-plate utilities into the
+ * TRANSITIONAL ink bridge (ui/hearth.css) until it is rewritten onto the kit — then pass
+ * `legacy={false}`, and when no caller needs it the bridge is deleted.
  */
-export function PanelFrame({ width, onClose, children, dataPanel, bodyClass = '' }: {
+export function PanelFrame({ width, onClose, children, dataPanel, bodyClass = '', title, legacy = true }: {
   width: string
   onClose: () => void
   children: React.ReactNode
   /** Forwarded as `data-panel` on the card, for the harnesses that find a panel by name. */
   dataPanel?: string
   bodyClass?: string
+  /** The carved plaque. */
+  title?: string
+  /** Still written for the dark plate — leans on the ink bridge. */
+  legacy?: boolean
 }) {
+  const px = Number(/\[(\d+)px\]/.exec(width)?.[1] ?? 440)
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/50 pointer-events-auto" onClick={onClose}>
-      <div data-panel={dataPanel} className={`relative ${width}`} onClick={(e) => e.stopPropagation()}>
-        <CloseX onClick={onClose} />
-        <div className={`max-h-[80vh] overflow-y-auto bg-[#0e1018]/95 border border-white/12 rounded-lg p-4 font-mono text-[11px] ${bodyClass}`}>
-          {children}
-        </div>
-      </div>
-    </div>
+    <HearthFrame title={title} maxWidth={Math.round(px * 1.12)} onClose={onClose} dataPanel={dataPanel}
+                 className={legacy ? 'hearth-ink' : ''} bodyClass={`p-4 ${title ? 'pt-6' : 'pt-4'} text-[12px] ${bodyClass}`}>
+      {children}
+    </HearthFrame>
   )
 }
