@@ -698,7 +698,11 @@ export function VoxelMap({ seed, seenRef, seenTick, posRef, headingRef, space, p
  *  screen agrees with what the keeper can actually see out there. */
 const MINI_REACH = 240
 
-export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plotCfg, onExpand }: {
+export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plotCfg, onExpand, box = { top: 12, right: 12, size: 148 } }: {
+  /** Where the canvas sits and how big (2026-09-23, Phase 9: 96 on a phone). Pass
+   *  `ui/hearth-hud-layer.tsx` › `hudMapBox(size)` — the SAME box the hearth frame rings, so the two
+   *  cannot disagree. The drawing reads `cv.width`, so the same reach is shown smaller. */
+  box?: { top: number; right: number; size: number }
   seed: number
   seenRef: React.RefObject<Seen | null>
   posRef: React.RefObject<{ x: number; z: number } | null>
@@ -718,8 +722,7 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
   useEffect(() => {
     const cv = cvRef.current
     if (!cv) return
-    const SIZE = 148
-    cv.width = SIZE * 2; cv.height = SIZE * 2
+    cv.width = box.size * 2; cv.height = box.size * 2
     let id = 0, last = ''
     const tick = () => {
       id = requestAnimationFrame(tick)
@@ -767,10 +770,10 @@ export function VoxelMiniMap({ seed, seenRef, posRef, headingRef, spaceRef, plot
     }
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
-  }, [seed, seenRef, posRef, headingRef, spaceRef, plotCfg])
+  }, [seed, seenRef, posRef, headingRef, spaceRef, plotCfg, box.size])
   return (
     <canvas ref={cvRef} onClick={onExpand} title="Map (M)" style={{
-      position: 'fixed', top: 12, right: 12, zIndex: 33, width: 148, height: 148,
+      position: 'fixed', top: box.top, right: box.right, zIndex: 33, width: box.size, height: box.size,
       borderRadius: 10, border: '1px solid #ffffff3a', background: DEEP,
       boxShadow: '0 3px 14px #0008', cursor: 'pointer', imageRendering: 'pixelated',
     }} />

@@ -27,9 +27,11 @@ const once = (src: string, needle: string, n: number, what: string) => {
 }
 
 // ── the door ─────────────────────────────────────────────────────────────────────────────────
-once(host, '<OptionsDoor onOpen={() => { openCursorUI(); setShowSettings(true) }} />', 1, 'the ☰ opens the settings panel through the cursor-UI handoff, once')
+// `top` since 2026-09-23 (Phase 9): the door hangs under the minimap at the HUD layer's size.
+const DOOR = '<OptionsDoor top={hudDoorTop(hudSize)} onOpen={() => { openCursorUI(); setShowSettings(true) }} />'
+once(host, DOOR, 1, 'the ☰ opens the settings panel through the cursor-UI handoff, once')
 {
-  const btn = host.indexOf('<OptionsDoor onOpen={() => { openCursorUI(); setShowSettings(true) }} />')
+  const btn = host.indexOf(DOOR)
   const gate = host.lastIndexOf('{!cursorUIOpen && !showMap && <OptionsDoor', btn)
   ok(btn > 0 && gate > 0 && btn - gate < 400, 'the ☰ is rendered on the minimap\'s own rule (no cursor surface, map not expanded)')
   const mini = host.indexOf('<VoxelMiniMap ')

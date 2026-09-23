@@ -265,7 +265,11 @@ export function HearthMapFrame({ face, box = MINIMAP_BOX }: { face: HudFace; box
 /** Drop-in for `hud/clock.tsx` `Clock` — the same `engine/day-cycle` readings (✦ at night: the
  *  Ather has no moon), as a pill that hangs under the minimap frame. `placed={false}` renders in
  *  flow, as the live clock allows, for a host that stacks it. */
-export function HearthClock({ face, note, placed = true, box = MINIMAP_BOX }: { face: HudFace; note?: React.ReactNode; placed?: boolean; box?: MapBox }) {
+export function HearthClock({ face, note, placed = true, box = MINIMAP_BOX, reserveRight = 0 }: {
+  face: HudFace; note?: React.ReactNode; placed?: boolean; box?: MapBox
+  /** px kept clear at the map's right edge under it — the world's options door (☰) hangs there. */
+  reserveRight?: number
+}) {
   const t = HUD_FACES[face]
   // ⚠ NULL UNTIL MOUNTED, unlike the live clock's `useState(() => dayProgress())`. The live one is
   // only ever mounted client-side, inside the world; this kit also mounts on server-rendered pages
@@ -281,12 +285,12 @@ export function HearthClock({ face, note, placed = true, box = MINIMAP_BOX }: { 
   const phase = getPhase(now)
   const glyph = phase === 'night' ? '✦' : phase === 'day' ? '☀' : phase === 'dawn' ? '🌅' : '🌇'
   const pos: React.CSSProperties = placed
-    ? { position: 'fixed', top: box.top + box.size + 8, right: box.right, width: box.size, zIndex: box.z + 1 }
+    ? { position: 'fixed', top: box.top + box.size + 8, right: box.right + reserveRight, width: box.size - reserveRight, zIndex: box.z + 1 }
     : {}
   return (
     // A pill wider than a small map (the phone's 96) would hang past the screen edge if centred on
     // it; right-aligned to the map it stays on screen at any width.
-    <div className={`flex flex-col ${box.size < 120 ? 'items-end' : 'items-center'} pointer-events-none`} style={pos}>
+    <div className={`flex flex-col ${box.size - reserveRight < 120 ? 'items-end' : 'items-center'} pointer-events-none`} style={pos}>
       <HudPlate face={face} r={999} style={face === 'full' ? { padding: 3 } : undefined}>
         <div className="px-3 py-0.5 text-[12px] font-semibold whitespace-nowrap tabular-nums" style={{ ...hearthDisplay }}>
           <span className="mr-1.5">{glyph}</span>{getDisplayTime(now)} · {phase}

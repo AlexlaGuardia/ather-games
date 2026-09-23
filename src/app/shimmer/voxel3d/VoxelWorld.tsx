@@ -289,7 +289,6 @@ import { createSpirit, speciesDisplayName, type Spirit } from '../spirits/spirit
 import { rightClickIntent } from './interact'
 import { consumeEffect, consumeRefusal, consumeLine, isConsumable } from './consume'
 import { drinkBuff, pruneBuffs, manaRegenMult, gatherXpMult, speedMult, rinTune, suppressEncounters, type ActiveBuffs } from '../engine/potion-effects'
-import { BuffChips } from './buff-chips'
 import { alchemyStationOf, alchemySalvage, ALCHEMY_STATIONS, intermediateLabel, type AlchemyStationId } from './alchemy-chain'
 import { AlchemyPanel } from './alchemy-panel'
 import { BrewingPanel } from './brewing-panel'
@@ -338,18 +337,22 @@ import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 import { freshVitals, pressure, heal, damage, type Vitals } from '../engine/vitals'
 import { hpRegenTick, focusTick } from '../engine/recovery'
 import { tickRecovery } from '../engine/spirit-health'
-import { HudCorner } from '../hud/hud-corner'
-import { Clock } from '../hud/clock'
-import { ObjectiveChip } from '../hud/objective-chip'
+import { ToolGlyph } from '../hud/hud-corner'
+// ★ PHASE 9 OF THE CARVED HEARTH (2026-09-23, Alex picked Full hearth + the three sizes on
+// /shimmer/dev/hud-kit): the always-on HUD is ONE layer — hotbar, objective, vitals, buffs, the map
+// frame + clock, the mana vessel + tool arch — laid out per size by `ui/hearth-hud-layer.tsx`, the
+// SAME component that page mounts. The old pieces (`Hotbar`, `Clock`, `ObjectiveChip`, `HudCorner`,
+// `ResourceBars`, `BuffChips`) stay alive for the mortal side (play3d), which has not moved yet.
+import { HearthHudLayer, hudMapBox, hudDoorTop, HUD_BAR_CLEAR, HUD_VITALS_H } from '../ui/hearth-hud-layer'
+import { useHudSize } from '../ui/hearth-hud'
 import { SayLine } from '../hud/say-line'
 import { Prompt } from '../hud/prompt'
 import { DialogueBox } from '../hud/dialogue-box'
-import { Hotbar, type HotbarEntry } from '../hud/hotbar'
+import { type HotbarEntry } from '../hud/hotbar'
 import { ItemChip, itemLabel, tierLabel, BagPanel, GearTab, type SlotRef, type Lift, type LiftMode, type OpenChest } from '../hud/satchel'
 import { OptionsPanel, OptionRow, OptionSlider, OptionHead } from '../hud/options-panel'
 import { OptionsDoor } from '../hud/options-door'
 import { HandsTuner } from '../hud/hands-tuner'
-import { ResourceBars } from './resource-bars'
 import { CastGauges, type CastHud } from './cast-gauges'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
@@ -920,6 +923,8 @@ export default function VoxelWorld() {
   /** Canvas rotation for the map marker — `screenHeading`, not a world yaw. See map-heading.ts. */
   const mapHeading = useRef(0)
   const [showMap, setShowMap] = useState(false)
+  /** wide / compact / phone — the minimap and its options door follow the HUD layer's size. */
+  const hudSize = useHudSize()
   /**
    * What the keeper has walked. See `discovery.ts` for why unwalked ground is CLOUD and not a grey
    * overlay — in the Ather it is the literal substance of the place.
@@ -2639,7 +2644,7 @@ export default function VoxelWorld() {
           screen, so it never sits on top of the bag or the craft grid. */}
       {!cursorUIOpen && !showMap && (
         <VoxelMiniMap seed={SEED} seenRef={seenRef} posRef={mapPos} headingRef={mapHeading}
-          spaceRef={space} plotCfg={plotCfg}
+          spaceRef={space} plotCfg={plotCfg} box={hudMapBox(hudSize)}
           onExpand={() => { openCursorUI(); setShowMap(true) }} />
       )}
       {/* ── ☰ THE OPTIONS DOOR, under the minimap (Alex, 2026-09-13: "an ingame options menu,
@@ -2650,7 +2655,7 @@ export default function VoxelWorld() {
           gone whenever a cursor surface is up, so it never sits on top of the bag or the map.
           Sized and placed off the minimap (148 wide at top 12 / right 12, VoxelMap.tsx) — a
           small square hanging under its right edge, not a bar, so it reads as a handle. */}
-      {!cursorUIOpen && !showMap && <OptionsDoor onOpen={() => { openCursorUI(); setShowSettings(true) }} />}
+      {!cursorUIOpen && !showMap && <OptionsDoor top={hudDoorTop(hudSize)} onOpen={() => { openCursorUI(); setShowSettings(true) }} />}
       {showMap && (
         <VoxelMap seed={SEED} seenRef={seenRef} seenTick={seenTick} posRef={mapPos} headingRef={mapHeading}
           space={space.current} plotCfg={plotCfg}
@@ -2778,9 +2783,23 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
   nearTable: boolean
   craftOpen: boolean
 }) {
+  const hudSize = useHudSize()
+  const clear = HUD_BAR_CLEAR[hudSize]
+  // Where the info block ends — the hearth layer stacks the phone's objective + buffs under it. It
+  // grows and shrinks (tutorial hints, the perf meter), so it is OBSERVED rather than guessed.
+  const infoEl = useRef<HTMLDivElement>(null)
+  const [infoBottom, setInfoBottom] = useState(0)
+  useEffect(() => {
+    const el = infoEl.current
+    if (!el) return
+    const on = () => setInfoBottom(el.offsetTop + el.offsetHeight)
+    on()
+    const ro = new ResizeObserver(on); ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   return (
     <>
-      <div className="gx-chrome absolute top-3 left-3 text-[11px] font-mono text-white/80 bg-black/45 rounded px-2.5 py-1.5 leading-relaxed pointer-events-none">
+      <div ref={infoEl} className="gx-chrome absolute top-3 left-3 text-[11px] font-mono text-white/80 bg-black/45 rounded px-2.5 py-1.5 leading-relaxed pointer-events-none">
         {/* Not a test bed since 2026-08-07 — the room wall and /shimmer both land here now, so this
             is Shimmer. The label said TEST BED while it was reachable only by URL. */}
         <div className="gx-title text-white/95">SHIMMER</div>
@@ -2873,7 +2892,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
         </div>
       </div>
 
-      <Clock />
+      {/* The clock now hangs under the map with the rest of the layer (`HearthHudLayer`, below). */}
 
       {/* ★ THE SAY LINE. Sits above the hotbar, centre-low — where the eye already is during play,
           not in the debug corner it used to die in. Plated, because this file's own UI law says text
@@ -2890,7 +2909,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
           that true. All three of these ASK `.gx-label`/`.gx-value` rather than restating a tracking
           value — this chip's hand-rolled `tracking-[.16em]` was a second spelling of the layer's
           0.22em. Hidden once the gate is open: there is no more objective to chase. */}
-      {tutorial.stage !== 'done' && <ObjectiveChip value={objectiveLabel(tutorial, progress)} />}
+      {/* ★ The objective is the layer's now (`HearthHudLayer` › `objective`), same rule: hidden once done. */}
 
       {/* "E — talk" — shown while the crosshair is on Greg. Hidden while the box he opens is already up.
           The bench borrows the same prompt slot ("E — craft"); Greg wins when both are near,
@@ -2925,7 +2944,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
 
       {/* Skill progress — only while it is moving, so it is information rather than furniture. */}
       {skill && (
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-56 pointer-events-none">
+        <div className="absolute left-1/2 -translate-x-1/2 w-56 pointer-events-none" style={{ bottom: clear + 34 }}>
           <div className="flex justify-between text-[10px] font-mono text-white/70 mb-0.5">
             <span className="uppercase tracking-wider">{skill.id}</span>
             <span className="tabular-nums">lv {skill.level}</span>
@@ -3016,31 +3035,35 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
         )
       })()}
 
-      {/* The bar lives in `hud/hotbar.tsx` (HUD port, stage 2) — the same object the mortal side mounts.
-          Selection is by key here (1-8), so no `onSelect`: the row stays pointer-through. */}
-      <Hotbar entries={hotbar} sel={sel} held={held} dimmed={drawn} />
+      {/* ★ THE HEARTH HUD LAYER (Phase 9). Selection is by key here (1-8), so no `onSelect`: the row
+          stays pointer-through. Everything centre-low below is lifted to `HUD_BAR_CLEAR[size]` — the
+          bar is taller than the one it replaced, and at compact/phone the vitals ride its top edge. */}
+      <HearthHudLayer size={hudSize} entries={hotbar} sel={sel} held={held} dimmed={drawn}
+        objective={tutorial.stage !== 'done' ? objectiveLabel(tutorial, progress) : null}
+        vitals={vitals} mana={mana} buffs={buffs} tools={tools} skills={skills} activeTool={activeTool}
+        glyph={f => <ToolGlyph family={f} />} door topLeftFrom={infoBottom} />
       {/* The one piece of state the dimmed row cannot show by itself. */}
       {drawn && (
-        <div className="absolute bottom-[4.75rem] left-1/2 -translate-x-1/2 flex items-baseline gap-3 font-mono pointer-events-none">
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-baseline gap-3 font-mono pointer-events-none" style={{ bottom: clear + 14 }}>
           <span className="text-[11px] tracking-[.2em] uppercase text-amber-200/85">{WEAPONS[weaponIdx].name}</span>
           {/* tabular-nums so the count does not jitter the layout as it ticks down */}
           <span className="text-[13px] tabular-nums text-white/90">{ammoUi}<span className="text-white/35">/{WEAPONS[weaponIdx].clip}</span></span>
           <span className="text-[9px] tracking-[.18em] uppercase text-white/35">RMB aim · Q swap · F stow</span>
         </div>
       )}
-      {<div className="absolute bottom-[4.6rem] left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none">
+      {<div className="absolute left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 pointer-events-none" style={{ bottom: clear }}>
         spike tier {tier}
       </div>}
       {/* ── the bottom-left column: what you can do, over what you have left ─────────────────────
           Cast gauges ABOVE the bars deliberately. The bars are the readout you glance at while
           something is hitting you and belong closest to the corner; the cooldowns are the thing you
           are waiting on, and sit where a rising eye finds them. */}
-      {(
-        <div className="absolute bottom-4 left-4 flex flex-col gap-1.5 pointer-events-none">
-          <CastGauges cast={cast} />
-          <ResourceBars vitals={vitals} />
-        </div>
-      )}
+      {/* Wide: the gauges stand over the layer's vitals plate, as they stood over the bars. Compact and
+          phone: the vitals have moved onto the bar, so the gauges re-anchor centred ABOVE the centre-low
+          lines (hub's call, 2026-09-23) — the same stack, never beside the bar. */}
+      {hudSize === 'wide'
+        ? <div className="absolute left-4 pointer-events-none" style={{ bottom: 16 + HUD_VITALS_H + 6 }}><CastGauges cast={cast} /></div>
+        : <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none" style={{ bottom: clear + 60 }}><CastGauges cast={cast} /></div>}
       {/* Tremor Sense — a ring of contacts around the reticle, drawn only while the keeper wears a
           sense AND something is standing on the ground within it. Renders null otherwise, so the
           cost of not having it is one `rev` comparison per animation frame. */}
@@ -3057,8 +3080,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
       {/* The bottom-right cluster lives in `hud-corner.tsx` so `dev/hud` can mount the REAL one
           instead of a replica — see that file's header. Positioning moved with it, deliberately:
           the anchoring is the part that has actually been wrong, so it is the part worth previewing. */}
-      {<HudCorner mana={mana} activeTool={activeTool} tools={tools} skills={skills} />}
-      <BuffChips buffs={buffs} />
+      {/* The vessel + tool arch and the buff chips are the layer's (`HearthHudLayer`, above). */}
     </>
   )
 }

@@ -75,7 +75,15 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   // path so `consumeRefusal` can be heard — before this, the refusal had no route to the keeper.
   ok(src.includes('if (!hit && rightNow && !weaponDrawn && selItem && (isConsumable(selItem) || consumeRefusal(selItem)))'), '§3 ★ a bottle raised at the sky is a drink — or its refusal (no-target path)')
   ok(raw.includes("} else if (intent === 'use' && selItem) {"), '§3 ★ and the aimed path answers the intent')   // raw: codeOnly strips string bodies
-  ok(src.includes('<BuffChips buffs={buffs} />'), '§3 the chips are mounted')
+  // ★ MOVED 2026-09-23 (Carved Hearth Phase 9): the chips ride the hearth HUD layer now. Asserted as
+  // BOTH halves — the world hands the layer its buffs, and the layer mounts the chips with them — so
+  // the chain cannot break in the middle and leave this green.
+  const layer = readFileSync(new URL('../ui/hearth-hud-layer.tsx', import.meta.url), 'utf8')
+  // Bounded to the layer's OWN tag: other components below also take `buffs={buffs}`, so an unbounded
+  // search would pass on theirs with the layer's hand-off gone (caught by mutating it).
+  const at = src.indexOf('<HearthHudLayer'), tag = at < 0 ? '' : src.slice(at, src.indexOf('door topLeftFrom', at))
+  ok(tag.includes('buffs={buffs}') && layer.includes('<HearthBuffChips face={face} buffs={buffs}'),
+     '§3 the chips are mounted (world → HearthHudLayer → HearthBuffChips)')
   // The locomotion hook is a real multiplier on the walk/run target and nothing else.
   const loco = codeOnly(readFileSync(new URL('./locomotion.ts', import.meta.url), 'utf8'))
   ok(loco.includes('* s.speedMult'), '§3 locomotion scales the ramped target by speedMult')

@@ -13,6 +13,7 @@
 // centre-low lines (skill bar, spike tier, weapon line) and lifts them to `HUD_BAR_CLEAR[size]`.
 import React from 'react'
 import { hearthDisplay, hearthBody } from './hearth'
+import { HEARTH_FONT_VARS } from './hearth-fonts'
 import { HUD_FACES, type HudFace } from './hud-face'
 import { type HudSize } from './hud-flag'
 import {
@@ -31,6 +32,10 @@ export type ToolFamily = typeof TOOL_FAMILIES[number]
 
 /** The minimap canvas box for a size. The host sizes `VoxelMiniMap` to this; the frame rings it. */
 export const hudMapBox = (size: HudSize): MapBox => (size === 'phone' ? MINIMAP_BOX_PHONE : MINIMAP_BOX)
+/** The world's options door (☰, `hud/options-door.tsx`: 34 wide, 6 under the map, right-aligned to
+ *  it). Its top for a size; the clock pill keeps `DOOR_RESERVE` clear so the two share the row. */
+export const hudDoorTop = (size: HudSize): number => { const b = hudMapBox(size); return b.top + b.size + 6 }
+export const DOOR_RESERVE = 40
 
 /**
  * How far up from the bottom edge the bar reaches (held label included), per size, in px — MEASURED
@@ -39,6 +44,9 @@ export const hudMapBox = (size: HudSize): MapBox => (size === 'phone' ? MINIMAP_
  */
 // Measured 2026-09-23 at 1440 / 842 / 390 (wide 122, compact 141, phone 125), +8 of air.
 export const HUD_BAR_CLEAR: Record<HudSize, number> = { wide: 130, compact: 149, phone: 133 }
+
+/** The wide vitals plate's height (Full hearth), so a host can stand things on it (the cast gauges). */
+export const HUD_VITALS_H = 65   // measured in the world at 1440, 2026-09-23
 
 /** One tool family's readout, derived exactly as `hud-corner.tsx`'s `ToolSocket` derives it. */
 export function toolReadout(tools: EquippedTools, skills: SkillSet, family: ToolFamily, activeTool: string | null) {
@@ -118,7 +126,16 @@ function Corner({ face, size, mana, readouts, glyph }: {
 }
 
 // ── the layer ────────────────────────────────────────────────────────────────────────────────
-export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph }: {
+export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph, door = false, topLeftFrom = 0 }: {
+  /** The host has an options door under the map (the world does) — the clock steps left of it. */
+  door?: boolean
+  /**
+   * Where the host's own top-left block ENDS (px from the top), if it has one. The world's info block
+   * (SHIMMER · position · tools, ~243×109 and growing with the tutorial hints) owns that corner, and on
+   * a phone there is no room beside it — measured 2026-09-23, the left-anchored objective landed ON
+   * it. So on a phone the objective and buffs stack UNDER this line. Default 0 = the corner is free.
+   */
+  topLeftFrom?: number
   /** Alex's pick (2026-09-23): Full hearth. Light stays selectable for comparison. */
   face?: HudFace
   /** Omitted = the live window's size (`useHudSize`). The dev page passes a simulated one. */
@@ -150,14 +167,22 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
     : size === 'phone' ? <HearthLip face={face} vitals={vitals} mana={mana} tools={<HearthToolPips face={face} pips={pips} />} />
     : undefined
   return (
-    <>
+    // ⚠ THE FONT VARS RIDE ON A `display:contents` WRAPPER. Every hearth menu applies them on its own
+    // root (HearthFrame); the HUD has no root, and without them every face here silently falls back
+    // to Georgia/system-ui. `contents` makes no box, so the fixed/absolute pieces place exactly as before
+    // — custom properties inherit through the element tree, not through boxes.
+    <div className={`contents ${HEARTH_FONT_VARS}`}>
       <HearthMapFrame face={face} box={box} />
-      <HearthClock face={face} box={box} />
-      {objective && <HearthObjective face={face} value={objective} anchor={size === 'phone' ? 'left' : 'center'} />}
-      <HearthBuffChips face={face} buffs={buffs} top={size === 'wide' ? undefined : size === 'phone' ? (objective ? 58 : 12) : 12} />
+      <HearthClock face={face} box={box} reserveRight={door ? DOOR_RESERVE : 0} />
+      {objective && <HearthObjective face={face} value={objective} anchor={size === 'phone' ? 'left' : 'center'}
+        style={size === 'phone' && topLeftFrom ? { top: topLeftFrom + 6 } : undefined} />}
+      {/* Buffs: wide = over the vitals (bottom-left). Compact = the same bottom-left spot, which is
+          FREE there (the vitals ride the bar). Phone = under the objective, under the host's block. */}
+      <HearthBuffChips face={face} buffs={buffs}
+        top={size !== 'phone' ? undefined : (topLeftFrom ? topLeftFrom + 6 : 12) + (objective ? 46 : 0)} />
       {size === 'wide' && <div className="absolute bottom-4 left-4 pointer-events-none"><HearthVitals face={face} vitals={vitals} /></div>}
       <HearthHotbar face={face} size={size} entries={entries} sel={sel} held={held} dimmed={dimmed} onSelect={onSelect} lip={lip} />
       {size !== 'phone' && <Corner face={face} size={size} mana={mana} readouts={readouts} glyph={glyph} />}
-    </>
+    </div>
   )
 }

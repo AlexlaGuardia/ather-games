@@ -211,7 +211,7 @@ function ToolSocket({ family, angleDeg, active, tools, skills }: {
 
 /** Placeholder line-glyph per family — canon mapping (blades→forestry, spikes→prospecting,
  *  rinsticks→rinning, spades→farming) from `engine/tools.ts`, drawn as a simple angled stroke. */
-function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' | 'farming' }) {
+export function ToolGlyph({ family }: { family: 'forestry' | 'prospecting' | 'rinning' | 'farming' }) {
   switch (family) {
     case 'forestry': // blade — angled machete stroke
       return <>
