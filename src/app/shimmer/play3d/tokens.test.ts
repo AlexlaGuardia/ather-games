@@ -36,9 +36,11 @@ const DIR = join(process.cwd(), 'src/app/shimmer/play3d')
 // GfxPanel.tsx + MoveBook.tsx converted 2026-09-23 by the Carved Hearth column pass: every colour an hk-* class or an
 // `H` token, radii on the ladder. (MoveBook keeps `rune.glow` / `e.accent` — per-rune/element DATA, not literals.)
 // StationMenus.tsx converted the same day: the five station menus on the hearth kit, zero literals.
+// PartyPanel.tsx + WorldMap.tsx converted the same day (the play3d hearth pass): the party on HearthFrame with `hk-*` /
+// `H`, keeping only ELEMENT_COLORS (per-element DATA); the map's picture palette moved to `tokens.map` unchanged.
 // ui.tsx LEFT the list that day by drawing nothing any more — its SlotGrid + StationShell went to the
 // hearth, and what remains (menuBtn, TOOL_HUD, data) is token-built with no markup, so it is not colour-bearing.
-const CONVERTED = ['GfxPanel.tsx', 'MoveBook.tsx', 'PassagePanel.tsx', 'StationMenus.tsx', 'TremorRing.tsx', 'vessel-art.tsx']
+const CONVERTED = ['GfxPanel.tsx', 'MoveBook.tsx', 'PartyPanel.tsx', 'PassagePanel.tsx', 'StationMenus.tsx', 'TremorRing.tsx', 'vessel-art.tsx', 'WorldMap.tsx']
 
 /**
  * Still holding raw literals. NOT an exemption — a worklist with a red light on it (assert B).
@@ -51,8 +53,8 @@ const PENDING = [
   // them instead of retyping them. The count on this worklist went up and the repo's actual drift
   // did not change by one literal. Convert it with Shimmer3D's, not before.
   'moglin-look.ts',
-  'npcs3d.ts', 'page.tsx', 'PartyPanel.tsx', 'RemotePlayers.tsx',
-  'Shimmer3D.tsx', 'WorldMap.tsx',
+  'npcs3d.ts', 'page.tsx', 'RemotePlayers.tsx',
+  'Shimmer3D.tsx',
 ]
 
 /**

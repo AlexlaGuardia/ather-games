@@ -184,3 +184,30 @@ export const tone = {
 } as const
 
 export type ToneName = keyof typeof tone
+
+/**
+ * The drawn map (2026-09-23, WorldMap onto the hearth).
+ *
+ * A map is a PICTURE of the world, not chrome, so it does not take the hearth's parchment. It keeps
+ * the palette the Ather's live map (`voxel3d/VoxelMap.tsx`) draws in, a dark void with pale labels,
+ * so the two walkers' maps read as the same instrument. The frame AROUND the picture is the hearth's.
+ * These were WorldMap.tsx's own literals, moved here unchanged; no pixel of the map moved.
+ */
+export const map = {
+  void:      '#0b0918',
+  grass:     '#5da24e',
+  water:     '#3aa0d6',
+  wall:      '#e8edf6',
+  mist:      '#cfd9f2',
+  warp:      '#e8c45a',
+  door:      '#ffd76a',
+  doorEdge:  '#6b4e00',
+  label:     '#ffe9b0',
+  doorPlate: 'rgba(58,44,6,0.82)',
+  zonePlate: 'rgba(6,5,14,0.72)',
+  player:    '#ff6b5a',
+  playerEdge: '#ffffff',
+  facing:    'rgba(232,88,74,0.35)',
+  edge:      '#ffffff3a',
+  shadow:    '#00000088',
+} as const

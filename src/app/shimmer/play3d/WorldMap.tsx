@@ -25,16 +25,18 @@ import React, { useEffect, useRef } from 'react'
 import type * as THREE from 'three'
 import { getGardenWorld, WORLD_ZONE_ID } from '../world/garden-world'
 import { ZONES, getZone } from '../world/zones'
+import { map as M } from './tokens'
+import { HearthFrame, HearthNote } from '../ui/hearth'
 
 const VOID = -1, WATER_ID = 8, WARP_ID = 14, MIST_ID = 31, WALL_ID = 34
 
 const TILE_COLORS: { match: (v: number) => boolean; color: string }[] = [
-  { match: v => (v & 0xFF) === WARP_ID, color: '#e8c45a' },
-  { match: v => (v & 0xFF) === MIST_ID, color: '#cfd9f2' },
-  { match: v => (v & 0xFF) === WATER_ID, color: '#3aa0d6' },
-  { match: v => (v & 0xFF) === WALL_ID, color: '#e8edf6' },
+  { match: v => (v & 0xFF) === WARP_ID, color: M.warp },
+  { match: v => (v & 0xFF) === MIST_ID, color: M.mist },
+  { match: v => (v & 0xFF) === WATER_ID, color: M.water },
+  { match: v => (v & 0xFF) === WALL_ID, color: M.wall },
 ]
-const tileColor = (v: number) => TILE_COLORS.find(t => t.match(v))?.color ?? '#5da24e'
+const tileColor = (v: number) => TILE_COLORS.find(t => t.match(v))?.color ?? M.grass
 
 // Doors grouped by their interior, clustered by proximity (a 2-wide door = one cluster;
 // the caverns' two far-apart mouths = two clusters = an underground ROUTE).
@@ -58,7 +60,7 @@ function drawDoors(ctx: CanvasRenderingContext2D, px: number, withLabels: boolea
   for (const { toZone, clusters } of doorClusters()) {
     // underground route: doors on both ends of the same interior
     if (clusters.length >= 2) {
-      ctx.strokeStyle = '#e8c45a'
+      ctx.strokeStyle = M.warp
       ctx.setLineDash([px * 2.4, px * 2.2])
       ctx.lineWidth = Math.max(1.5, px * 0.7)
       for (let i = 1; i < clusters.length; i++) {
@@ -71,8 +73,8 @@ function drawDoors(ctx: CanvasRenderingContext2D, px: number, withLabels: boolea
     }
     for (const c of clusters) {
       const x = c.x * px, y = c.y * px, r = Math.max(3.5, px * 1.8)
-      ctx.fillStyle = '#ffd76a'
-      ctx.strokeStyle = '#6b4e00'
+      ctx.fillStyle = M.door
+      ctx.strokeStyle = M.doorEdge
       ctx.lineWidth = 1.4
       ctx.beginPath()
       ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y)
@@ -86,9 +88,9 @@ function drawDoors(ctx: CanvasRenderingContext2D, px: number, withLabels: boolea
       ctx.font = `700 ${Math.max(10, px * 4.6)}px ui-monospace, monospace`
       ctx.textAlign = 'center'
       const w = ctx.measureText(name).width + 8
-      ctx.fillStyle = 'rgba(58,44,6,0.82)'
+      ctx.fillStyle = M.doorPlate
       ctx.fillRect(at.x * px - w / 2, at.y * px - px * 3.6, w, px * 5)
-      ctx.fillStyle = '#ffe9b0'
+      ctx.fillStyle = M.label
       ctx.fillText(name, at.x * px, at.y * px)
     }
   }
@@ -100,10 +102,10 @@ function drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: nu
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(-yaw)
-  ctx.fillStyle = 'rgba(232,88,74,0.35)'
+  ctx.fillStyle = M.facing
   ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, px * 7, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5); ctx.closePath(); ctx.fill()
-  ctx.fillStyle = '#ff6b5a'
-  ctx.strokeStyle = '#fff'
+  ctx.fillStyle = M.player
+  ctx.strokeStyle = M.playerEdge
   ctx.lineWidth = 1.5
   ctx.beginPath(); ctx.arc(0, 0, Math.max(3, px * 1.4), 0, Math.PI * 2); ctx.fill(); ctx.stroke()
   ctx.restore()
@@ -128,7 +130,7 @@ export function WorldMap({ zoneId, gridRef, posRef, yawRef, onClose }: {
     const px = Math.max(1, Math.floor(Math.min(1600 / cols, 1000 / rows)))
     cv.width = cols * px; cv.height = rows * px
     const ctx = cv.getContext('2d')!
-    ctx.fillStyle = '#0b0918'
+    ctx.fillStyle = M.void
     ctx.fillRect(0, 0, cv.width, cv.height)
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
       const v = grid[r][c]
@@ -141,11 +143,11 @@ export function WorldMap({ zoneId, gridRef, posRef, yawRef, onClose }: {
       ctx.textAlign = 'center'
       for (const p of getGardenWorld().placements.values()) {
         const x = (p.ox + p.cols / 2) * px, y = (p.oy + p.rows / 2) * px
-        ctx.fillStyle = 'rgba(6,5,14,0.72)'
+        ctx.fillStyle = M.zonePlate
         const label = p.zone.name
         const w = ctx.measureText(label).width + 10
         ctx.fillRect(x - w / 2, y - px * 4.4, w, px * 6.2)
-        ctx.fillStyle = '#ffe9b0'
+        ctx.fillStyle = M.label
         ctx.fillText(label, x, y)
       }
       drawDoors(ctx, px, true)
@@ -173,19 +175,16 @@ export function WorldMap({ zoneId, gridRef, posRef, yawRef, onClose }: {
     return () => cancelAnimationFrame(id)
   }, [gridRef, posRef, yawRef])
 
+  // ★ ON THE HEARTH (2026-09-23): the picture sits in the carved frame, the plaque names the garden,
+  // and the legend is the parchment footer. Click outside (the frame's backdrop), M, or the knob closes.
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(6,5,14,0.86)',
-      display: 'grid', placeItems: 'center', cursor: 'pointer',
-    }}>
-      <div style={{ position: 'relative', maxWidth: '94vw', maxHeight: '88vh' }}>
-        <canvas ref={mapCanvas} style={{ maxWidth: '94vw', maxHeight: '84vh', width: 'auto', height: 'auto', imageRendering: 'pixelated', borderRadius: 10, border: '1px solid #ffe9b033', display: 'block' }} />
+    <HearthFrame title="The Shimmer Garden" maxWidth={1100} fixed backdropClass="z-[120]" onClose={onClose} dataPanel="world-map"
+                 bodyClass="p-3" footer={<div className="text-center"><HearthNote>◆ doors · dashes are underground routes · M to close</HearthNote></div>}>
+      <div style={{ position: 'relative', width: 'fit-content', margin: '0 auto' }}>
+        <canvas ref={mapCanvas} style={{ maxWidth: 'min(1060px, calc(100vw - 90px))', maxHeight: '68vh', width: 'auto', height: 'auto', imageRendering: 'pixelated', borderRadius: 7, display: 'block', boxShadow: 'inset 0 0 0 1px rgba(58,39,22,.35)' }} />
         <canvas ref={markCanvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
       </div>
-      <div style={{ position: 'fixed', bottom: 26, left: '50%', transform: 'translateX(-50%)', color: '#cfc7ae', font: '700 13px ui-monospace, monospace' }}>
-        ✦ The Shimmer Garden · ◆ = doors (dashes = underground routes) · M or click to close
-      </div>
-    </div>
+    </HearthFrame>
   )
 }
 
@@ -219,7 +218,7 @@ export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand, box = { top
       last = key
       const ctx = cv.getContext('2d')!
       const px = cv.width / (MINI_TILES * 2)
-      ctx.fillStyle = '#0b0918'
+      ctx.fillStyle = M.void
       ctx.fillRect(0, 0, cv.width, cv.height)
       const c0 = Math.round(p.x) - MINI_TILES, r0 = Math.round(p.z) - MINI_TILES
       for (let r = 0; r < MINI_TILES * 2; r++) for (let c = 0; c < MINI_TILES * 2; c++) {
@@ -246,8 +245,8 @@ export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand, box = { top
       // placement in both dimensions (2026-09-16 HUD port). It sat at right 130 to clear the old
       // icon column, which is gone.
       position: 'fixed', top: box.top, right: box.right, zIndex: 33, width: box.size, height: box.size,
-      borderRadius: 10, border: '1px solid #ffffff3a', background: '#0b0918',
-      boxShadow: '0 3px 14px #0008', cursor: 'pointer', imageRendering: 'pixelated',
+      borderRadius: 10, border: `1px solid ${M.edge}`, background: M.void,
+      boxShadow: `0 3px 14px ${M.shadow}`, cursor: 'pointer', imageRendering: 'pixelated',
     }} />
   )
 }
