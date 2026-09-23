@@ -42,7 +42,14 @@ try {
   await sleep(SETTLE * 1000)
 
   const cmd = async (line: string) => {
-    await page.keyboard.press('KeyT'); await sleep(350)
+    // ⚠ The console input KEEPS FOCUS after a command, so a second `T` is typed as text and the line
+    // goes out as chat (`<keeper> t/give glow_moss 5`) — silently, with nothing given. Only open the
+    // console when nothing is focused.
+    const typing = await page.evaluate(() => {
+      const a = document.activeElement
+      return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')
+    })
+    if (!typing) { await page.keyboard.press('KeyT'); await sleep(350) }
     await page.keyboard.type(line); await page.keyboard.press('Enter'); await sleep(900)
   }
   /** Everything the brew panel is currently saying. */
@@ -99,17 +106,18 @@ try {
   // ── 2. ★ THE FLAGSHIP ROW TELLS THE TRUTH ───────────────────────────────────────────────────
   // The reason `absent` exists: canon's four Infusions must not print a red 0/2 in a world with no
   // farming, because that reads as "go and find some" for a herb that is not here.
-  ok(/in these lands/.test(opened),
-    'the panel says "in these lands" about what this world cannot grow, rather than showing a red zero')
+  // ★ INVERTED 2026-09-23: every potion input is now in `WORLD_ITEMS` (the salve's shimmerscale and
+  // sunfruit landed with rinning and the wild fruit bushes), so NO row may say it. The derivation
+  // retired the warning by itself; this asserts it stays retired. If a future recipe names an item
+  // the world cannot give, this goes red — check `obtainable.ts` before "fixing" the assert.
+  ok(!/in these lands/.test(opened),
+    'no row says "in these lands" — every brew input is obtainable in this world now')
 
   // ── 2b. ★★ THE INFUSIONS ARE NO LONGER STRANDED (canon ruling, 2026-08-18) ──────────────────
   // The herbs went into the generator and NOT ONE LINE of the panel changed — the warning is derived
-  // from what the world produces, so it retired itself. This asserts that end to end, in the page: no
-  // infusion row may say "in these lands" any more, while the rows that ARE still stranded (the salve
-  // needs shimmerscale and sunfruit, both play3d's) must still say it. If the derivation ever breaks,
-  // one of these two goes red and says which direction it broke in.
-  ok(/in these lands/.test(opened) && /shimmerscale|sunfruit/.test(opened),
-    'the still-stranded salve names its missing ingredients')
+  // from what the world produces, so it retired itself. The salve's half of this pair (it used to be
+  // the one row that WAS still stranded) retired the same way on 2026-09-23; section 2 now covers
+  // every row, and this keeps the Infusion-specific count so a regression names which road broke.
   const infusionStranded = await page.evaluate(() => {
     const rows = Array.from(document.querySelectorAll('[data-panel="brew"] button'))
       .map(b => b.textContent ?? '')
@@ -139,15 +147,20 @@ try {
 
   // ── 4. ★★ THE SPEND PATH — bag, mana and XP all move, and the bottle survives ───────────────
   await page.keyboard.press('Escape'); await sleep(400)
+  // Mana Draught = 4 shards + 1 glow moss (alchemy.ts, 2026-09-16). Five of each input = five brews.
   await cmd('/give raw_mana_shard 20')
+  await sleep(400)
+  await cmd('/give glow_moss 5')
   await sleep(400)
   await cmd('/brew')
   await sleep(700)
   const before = await panelText()
   const manaBefore = Number(/mana\s*(\d+)/.exec(before)?.[1] ?? '0')
   ok(manaBefore > 5, `mana is up before the brew (${manaBefore})`)
-  ok(/raw mana shard 20\/5/.test(before.replace(/\s+/g, ' ')),
-    'the row now counts twenty shards against the five it needs')
+  ok(/raw mana shard 20\/4/.test(before.replace(/\s+/g, ' ')),
+    'the row now counts twenty shards against the four it needs')
+  ok(/glow moss 5\/1/.test(before.replace(/\s+/g, ' ')),
+    'and five glow moss against the one it needs')
 
   ok(await pressRow('Mana Draught'), 'the row is pressed with a full bag')
   await sleep(900)
@@ -155,11 +168,16 @@ try {
   // ⚠ `\b` DOES NOT WORK HERE. textContent runs the row's own "×2" straight into the note's
   // "2× mana draught" with no separator, so the char before the 2 is another digit and the word
   // boundary never fires — the assert failed on text that was perfectly correct.
-  ok(/(^|\D)2× mana draught/.test(after), `the panel reports the yield — ${/\d+× mana draught[^·]*/.exec(after)?.[0]}`)
+  // ⚠ AND `(^|\D)` STOPPED BEING ENOUGH when the draught gained its moss (2026-09-23): the row now
+  // ENDS in "glow moss 4/1", so textContent reads "…4/12× mana draught" and the digit before the 2 is
+  // real. Read the yield off innerText, which breaks between the row and the note.
+  const afterLines = await page.evaluate(() =>
+    (document.querySelector('[data-panel="brew"]') as HTMLElement | null)?.innerText ?? '')
+  ok(/(^|\n)\s*2× mana draught/.test(afterLines), `the panel reports the yield — ${/\d+× mana draught[^\n]*/.exec(afterLines)?.[0]}`)
   const manaAfter = Number(/mana\s*(\d+)/.exec(after)?.[1] ?? '-1')
   ok(manaAfter <= manaBefore - 5 + 1, `mana was drained (${manaBefore} → ${manaAfter}, cost 5)`)
-  ok(/raw mana shard 15\/5/.test(after.replace(/\s+/g, ' ')),
-    'and five shards left the satchel — the ingredients are really spent')
+  ok(/raw mana shard 16\/4/.test(after.replace(/\s+/g, ' ')) && /glow moss 4\/1/.test(after.replace(/\s+/g, ' ')),
+    'and four shards + one moss left the satchel — the ingredients are really spent')
 
   await page.keyboard.press('Escape'); await sleep(500)
   const bottles = await bagHas('Mana Draught')
@@ -170,15 +188,18 @@ try {
   await sleep(700)
   const lvlTxt = await panelText()
   ok(lvlTxt.length > 0, 'the panel reopens after a brew')
-  // Three more draughts (15 xp each) do not reach level 2 (83 xp) — this asserts the XP *road*
+  // Four more draughts (5 × 15 = 75 xp total) do not reach level 2 (83 xp) — this asserts the XP *road*
   // exists, not the curve. If it ever levels here, alchemy XP has been retuned and that is worth
   // knowing loudly rather than discovering in a balance pass.
-  for (let i = 0; i < 3; i++) { await pressRow('Mana Draught'); await sleep(600) }
+  for (let i = 0; i < 4; i++) { await pressRow('Mana Draught'); await sleep(600) }
   const spent = await panelText()
-  ok(/raw mana shard 0\/5/.test(spent.replace(/\s+/g, ' ')),
-    'all twenty shards are gone after four draughts — the spend is repeatable, not a one-off')
-  ok(/missing ingredients/.test(spent),
-    'and the fifth press refuses, having run the bag dry')
+  ok(/raw mana shard 0\/4/.test(spent.replace(/\s+/g, ' ')) && /glow moss 0\/1/.test(spent.replace(/\s+/g, ' ')),
+    'all twenty shards and five moss are gone after five draughts — the spend is repeatable, not a one-off')
+  // A sixth press would be the refusal, but the loop's own last press already ran on an empty bag
+  // only if the count were off by one — so press once more and demand the reason.
+  await pressRow('Mana Draught'); await sleep(600)
+  ok(/missing ingredients/.test(await panelText()),
+    'and the sixth press refuses, having run the bag dry')
 
   console.log(fails ? `\nbrew-check: ${fails} FAILED` : '\nbrew-check: CLEAN')
 } finally {
