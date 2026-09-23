@@ -27,9 +27,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  DEFAULT_CLUSTER, QUARTERS, clusterAt, clusterReach, cornersGiven, isCluster,
+  DEFAULT_CLUSTER, QUARTERS, clusterAt, clusterReach, cornersGiven, isCluster, quarterCentre,
   type ClusterConfig, type QuarterId,
 } from '../../voxel/cluster'
+import { DEFAULT_DIP, clusterMaterialAt, clusterYRange } from '../../voxel/cluster-column'
 import { PLOT_TIERS } from '../../voxel/plot'
 
 const SIZE = 560
@@ -43,9 +44,30 @@ const TURF: Record<QuarterId, [number, number, number]> = {
 const GREEN: [number, number, number] = [143, 208, 106]  // the brightest ground in the game
 const JOIN: [number, number, number] = [96, 124, 84]     // the lane: low ground, still tended
 const CLOUD: [number, number, number] = [207, 215, 228]  // pressed cloud, the fold's wall
+const ATHER_HEX = '#0a0c16'
 const ATHER: [number, number, number] = [10, 12, 22]     // the void. An open slot is THIS.
 
 const LABEL: Record<QuarterId, string> = { ne: 'NE', nw: 'NW', sw: 'SW', se: 'SE' }
+
+// ── THE CROSS-SECTION ───────────────────────────────────────────────────────────────────────────
+// ⚠⚠ THE PLAN VIEW CANNOT SHOW A Y MODEL, AND THE Y MODEL IS THE WHOLE OF THE LAST SLICE. Shipping
+// the bowl and then asking Alex to judge it on a top-down picture is the same omission as naming
+// the cloud wall in a legend at 0.45px — an element the render cannot carry. So this draws the
+// MATERIALS, column by column, straight out of `clusterMaterialAt`: the turf, the subsoil, the
+// keel's cloud and the wall band, exactly as a chunk builder would receive them.
+const SEC_W = 560, SEC_H = 190
+
+/** Material id -> colour. ⚠ `floor` and `wall` are BOTH id 1 in `DEFAULT_PLOT` (the config allows
+ *  one id for two roles), so pressed cloud reads the same whether it is the keel or the ring. That
+ *  is the palette being honest about the data, not the section losing information. */
+const MAT_COLOUR: Record<number, string> = {
+  5: '#6f9e4f',   // topsoil — tended ground
+  4: '#7a5a3a',   // subsoil
+  3: '#6a6a70',   // stone
+  1: '#cfd7e4',   // pressed cloud: the keel's floor AND the wall
+}
+
+type Cut = 'diagonal' | 'rim'
 const hex = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`
 
 export default function ClusterPreview() {
@@ -55,7 +77,9 @@ export default function ClusterPreview() {
   const [green, setGreen] = useState(DEFAULT_CLUSTER.green)
   const [lane, setLane] = useState(DEFAULT_CLUSTER.joinHalfWidth)
   const [zoom, setZoom] = useState(1)
+  const [cut, setCut] = useState<Cut>('diagonal')
   const [ms, setMs] = useState(0)
+  const secRef = useRef<HTMLCanvasElement>(null)
 
   const cfg: ClusterConfig = useMemo(() => ({
     ...DEFAULT_CLUSTER, green, joinHalfWidth: lane,
@@ -101,6 +125,41 @@ export default function ClusterPreview() {
     setMs(Math.round(performance.now() - t0))
   }, [cfg, half, per])
 
+  // The cut: SW centre -> through the middle -> NE centre, or NW centre -> NE centre along the rim.
+  useEffect(() => {
+    const cv = secRef.current
+    if (!cv) return
+    const ctx = cv.getContext('2d')
+    if (!ctx) return
+    const a = cut === 'diagonal' ? quarterCentre('sw', cfg) : quarterCentre('nw', cfg)
+    const b = cut === 'diagonal' ? quarterCentre('ne', cfg) : quarterCentre('ne', cfg)
+    const { min, max } = clusterYRange(cfg)
+    const pad = 3
+    const y0 = min - pad, y1 = max + pad
+    ctx.fillStyle = ATHER_HEX
+    ctx.fillRect(0, 0, SEC_W, SEC_H)
+    for (let px = 0; px < SEC_W; px++) {
+      const t = px / (SEC_W - 1)
+      const x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t
+      for (let y = y0; y <= y1; y++) {
+        const mat = clusterMaterialAt(x, y, z, cfg, DEFAULT_DIP)
+        if (!mat) continue
+        const py = SEC_H - 1 - ((y - y0) / (y1 - y0)) * (SEC_H - 1)
+        ctx.fillStyle = MAT_COLOUR[mat] ?? '#ff00ff'
+        ctx.fillRect(px, py, 1, Math.max(1, (SEC_H - 1) / (y1 - y0)))
+      }
+    }
+    // The folds' own plane, so the dip is measurable by eye and not just felt.
+    const planeY = SEC_H - 1 - ((cfg.base.baseY - y0) / (y1 - y0)) * (SEC_H - 1)
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)'
+    ctx.setLineDash([4, 4]); ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(0, planeY); ctx.lineTo(SEC_W, planeY); ctx.stroke()
+    ctx.setLineDash([])
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'
+    ctx.font = '10px ui-monospace, monospace'
+    ctx.fillText(`baseY ${cfg.base.baseY}`, 4, planeY - 4)
+  }, [cfg, cut])
+
   const given = cornersGiven(cfg)
   const wallPx = DEFAULT_CLUSTER.base.wallWidth / per
 
@@ -117,8 +176,25 @@ export default function ClusterPreview() {
       </p>
 
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <canvas ref={ref} width={SIZE} height={SIZE}
-          style={{ width: SIZE, height: SIZE, borderRadius: 4, imageRendering: 'pixelated' }} />
+        <div style={{ display: 'grid', gap: 10 }}>
+          <canvas ref={ref} width={SIZE} height={SIZE}
+            style={{ width: SIZE, height: SIZE, borderRadius: 4, imageRendering: 'pixelated' }} />
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+            <span style={{ color: '#8892a6' }}>cut</span>
+            {(['diagonal', 'rim'] as Cut[]).map(c => (
+              <button key={c} onClick={() => setCut(c)}
+                style={{ padding: '3px 9px', borderRadius: 3, cursor: 'pointer',
+                  border: `1px solid ${cut === c ? '#6f9e4f' : '#2a3040'}`,
+                  background: cut === c ? '#6f9e4f' : 'transparent',
+                  color: cut === c ? '#0b0d14' : '#8892a6', font: '12px ui-monospace, monospace' }}>
+                {c === 'diagonal' ? 'SW → middle → NE' : 'NW → NE (rim)'}
+              </button>
+            ))}
+            <span style={{ color: '#5c6577' }}>true section · materials, not a sketch</span>
+          </div>
+          <canvas ref={secRef} width={SEC_W} height={SEC_H}
+            style={{ width: SEC_W, height: SEC_H, borderRadius: 4, imageRendering: 'pixelated' }} />
+        </div>
 
         <div style={{ display: 'grid', gap: 13, minWidth: 280 }}>
           {QUARTERS.map(q => (
