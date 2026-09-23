@@ -28,7 +28,7 @@ const once = (src: string, needle: string, n: number, what: string) => {
 
 // ── the door ─────────────────────────────────────────────────────────────────────────────────
 // `top` since 2026-09-23 (Phase 9): the door hangs under the minimap at the HUD layer's size.
-const DOOR = '<OptionsDoor top={hudDoorTop(hudSize)} onOpen={() => { openCursorUI(); setShowSettings(true) }} />'
+const DOOR = '<OptionsDoor face={HUD_FACE} top={hudDoorTop(hudSize)} onOpen={() => { openCursorUI(); setShowSettings(true) }} />'
 once(host, DOOR, 1, 'the ☰ opens the settings panel through the cursor-UI handoff, once')
 {
   const btn = host.indexOf(DOOR)

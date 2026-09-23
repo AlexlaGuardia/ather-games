@@ -347,6 +347,9 @@ import { ToolGlyph } from '../hud/hud-corner'
 // `ResourceBars`, `BuffChips`) stay alive for the mortal side (play3d), which has not moved yet.
 import { HearthHudLayer, hudMapBox, hudDoorTop, HUD_BAR_CLEAR, HUD_VITALS_H } from '../ui/hearth-hud-layer'
 import { useHudSize } from '../ui/hearth-hud'
+import type { HudFace } from '../ui/hud-face'
+/** Alex's pick for the always-on HUD (2026-09-23). One constant: the layer and the ☰ both read it. */
+const HUD_FACE: HudFace = 'full'
 import { SayLine } from '../hud/say-line'
 import { Prompt } from '../hud/prompt'
 import { DialogueBox } from '../hud/dialogue-box'
@@ -2657,7 +2660,7 @@ export default function VoxelWorld() {
           gone whenever a cursor surface is up, so it never sits on top of the bag or the map.
           Sized and placed off the minimap (148 wide at top 12 / right 12, VoxelMap.tsx) — a
           small square hanging under its right edge, not a bar, so it reads as a handle. */}
-      {!cursorUIOpen && !showMap && <OptionsDoor top={hudDoorTop(hudSize)} onOpen={() => { openCursorUI(); setShowSettings(true) }} />}
+      {!cursorUIOpen && !showMap && <OptionsDoor face={HUD_FACE} top={hudDoorTop(hudSize)} onOpen={() => { openCursorUI(); setShowSettings(true) }} />}
       {showMap && (
         <VoxelMap seed={SEED} seenRef={seenRef} seenTick={seenTick} posRef={mapPos} headingRef={mapHeading}
           space={space.current} plotCfg={plotCfg}
@@ -3040,7 +3043,7 @@ function Hud({ bindings, padKind, stats, diagnostics, perf, toast, pos, look, ho
       {/* ★ THE HEARTH HUD LAYER (Phase 9). Selection is by key here (1-8), so no `onSelect`: the row
           stays pointer-through. Everything centre-low below is lifted to `HUD_BAR_CLEAR[size]` — the
           bar is taller than the one it replaced, and at compact/phone the vitals ride its top edge. */}
-      <HearthHudLayer size={hudSize} entries={hotbar} sel={sel} held={held} dimmed={drawn}
+      <HearthHudLayer face={HUD_FACE} size={hudSize} entries={hotbar} sel={sel} held={held} dimmed={drawn}
         objective={tutorial.stage !== 'done' ? objectiveLabel(tutorial, progress) : null}
         vitals={vitals} mana={mana} buffs={buffs} tools={tools} skills={skills} activeTool={activeTool}
         glyph={f => <ToolGlyph family={f} />} door topLeftFrom={infoBottom} />
