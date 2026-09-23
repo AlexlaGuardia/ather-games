@@ -40,7 +40,8 @@ once('const eyeInWater = voxel(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)
 // This assert is about the PICK — that the ray is cast through the water-aware lookup — so it must
 // follow the raw binding. Asserting on `hit` here would have gone quietly green against a value
 // that is no longer the raycast's own answer.
-once('const rawHit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, pickVoxel)', 'the pick receives the wrapped lookup')
+// (09-23: the result is named `aimed` now — cluster mode gates it into `rawHit`; the CALL is what this guards.)
+once('= raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, pickVoxel)', 'the pick receives the wrapped lookup')
 ok(!src.includes('raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, voxel)'), 'and no unwrapped pick call stands beside it')
 ok(!/eyeInWater\s*=\s*lc\.swimming/.test(src), 'the rule is not lc.swimming (chest-in): a surface swimmer still aims at water')
 ok(src.includes("aimed === MAT.WATER") || readFileSync(new URL('./interact.ts', import.meta.url), 'utf8').includes('aimed === MAT.WATER'), 'the rinstick cast still keys off an aimed WATER voxel')

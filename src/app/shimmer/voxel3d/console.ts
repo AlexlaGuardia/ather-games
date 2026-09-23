@@ -633,7 +633,7 @@ export const CONSOLE_CMDS: ConsoleCmd[] = [
   // OWNER-GATED, unlike /mist's compass half: this is not "knowing a place exists", it is standing
   // in it, and the canon door is a passage through the bubble (slice 2). Shipping the risky half
   // behind a command means it gets walked before travel depends on it.
-  { name: 'space', usage: 'space [plot|wilds]', help: 'bare: toggle · plot/wilds: cross to that space', owner: true,
+  { name: 'space', usage: 'space [plot|wilds|glade|cluster]', help: 'bare: toggle · plot/wilds/glade: cross to that space · cluster: your fold inside a stand-in cluster (dev walk)', owner: true,
     run: (a, c) => c.space(a[0]) },
   // ── ★ /land (2026-08-19) — Alex: *"is it possible to set up test maps to see the biome gen in
   // action without wandering for 30 min looking for one?"* ────────────────────────────────────

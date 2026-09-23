@@ -26,6 +26,8 @@ import {
 } from '../app/shimmer/voxel/column'
 import { generatePlotColumn } from '../app/shimmer/voxel/plot-column'
 import { generateGladeColumn } from '../app/shimmer/voxel/glade-column'
+import { generateFramedColumn, clusterSig } from '../app/shimmer/voxel/cluster-space'
+import type { ClusterConfig, QuarterId } from '../app/shimmer/voxel/cluster'
 import { plotForTier, withLitter } from '../app/shimmer/voxel/plot'
 import { PLACED_STAMPS } from '../app/shimmer/data/blueprints/placed'
 
@@ -69,7 +71,7 @@ function packVoxels(col: Column): Uint16Array {
 }
 
 self.onmessage = (e: MessageEvent) => {
-  const msg = e.data as { type: string; cx?: number; cz?: number; seed?: number; keep?: string[]; space?: string; tier?: number; litterFrom?: number }
+  const msg = e.data as { type: string; cx?: number; cz?: number; seed?: number; keep?: string[]; space?: string; tier?: number; litterFrom?: number; cluster?: { mine: QuarterId; cfg: ClusterConfig } }
 
   if (msg.type === 'init') {
     seed = msg.seed ?? seed
@@ -107,9 +109,17 @@ self.onmessage = (e: MessageEvent) => {
     // The first littered tier travels with the request and keys the cache for the same reason the
     // tier does: it is save state the worker cannot see, and it changes what a column IS.
     const litterFrom = space === 'plot' && Number.isFinite(Number(msg.litterFrom)) ? Math.max(1, Math.round(Number(msg.litterFrom))) : Infinity
-    const k = space === 'wilds' ? key(cx, cz) : `${space}:${tier}:${litterFrom}:${key(cx, cz)}`
+    // ── ★ CLUSTER MODE (2026-09-23): the plot space with the cluster generated AROUND the keeper's
+    // own fold (`cluster-space.ts` › the frame). It rides the request and the cache key for the same
+    // reason the tier does — a framed column at 3,4 and a solo plot column at 3,4 are different ground.
+    const cl = space === 'plot' && msg.cluster ? msg.cluster : null
+    const k = space === 'wilds' ? key(cx, cz)
+      : cl ? `cluster:${clusterSig(cl.mine, cl.cfg)}:${key(cx, cz)}`
+      : `${space}:${tier}:${litterFrom}:${key(cx, cz)}`
     if (!cols.has(k)) {
-      cols.set(k, space === 'plot'
+      cols.set(k, cl
+        ? generateFramedColumn(new Column(cx * SECTION, cz * SECTION, DEFAULT_COLUMN), cl.mine, cl.cfg)
+        : space === 'plot'
         // The world lane's adapter, not a second generator here: it mirrors `generateColumn`'s
         // post-conditions (uniform refreshed, stage Ready) so the switch is one line rather than a
         // mode threaded through seven stages the plot needs none of.

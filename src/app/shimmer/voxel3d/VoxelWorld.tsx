@@ -73,7 +73,7 @@ import {
 } from './watering'
 import { plantedSpots, plantedSignature } from './planted-feed'
 import { generatePlotColumn, plotGeneratedVoxel } from '../voxel/plot-column'
-import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, withLitter, litterDrops, plotHeight, PLOT_TIERS, type PlotConfig } from '../voxel/plot'
+import { plotThreshold, hasFallenOut, chestCap, plotStandY, plotCaveStand, plotForTier, withLitter, litterDrops, plotHeight, PLOT_TIERS, DEFAULT_PLOT, type PlotConfig } from '../voxel/plot'
 /**
  * How far inside their own fold a keeper lands when they step through — blocks, along the door's
  * bearing. Far enough that the seam is fully in frame, near enough that leaving is one step back.
@@ -244,6 +244,8 @@ import { SCRIPT, type Beat } from './folk-lines'
 const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in b ? [b.text] : [])
 import { GREG_LINES } from './greg-lines'
 import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
+import { standInCluster, generateFramedColumn, framedMaterialAt, framedHeight, framedIsMine } from '../voxel/cluster-space'
+import { DEFAULT_CLUSTER, type ClusterConfig, type QuarterId } from '../voxel/cluster'
 import { insideGlade } from '../voxel/glade'
 import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps, socketWay, socketLitBy, socketLabel, socketStandOut, SOCKET_RADIUS } from './court-blueprint'
 import { courtAnchor, sockets as courtSockets, socketCells, socketLit, socketMaterial, courtFits, staleCourts,
@@ -3329,6 +3331,23 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const groundTest = useRef<GroundSource[]>([])
   /** Every living source at the last beat, UNFILTERED by reach — the spawn veto reads it (ground-light.ts). */
   const groundSources = useRef<GroundSource[]>([])
+  // ── ★ CLUSTER MODE (phase 1, 2026-09-23): the plot space with a cluster generated AROUND the
+  // keeper's fold (`cluster-space.ts` › the frame). null = the ordinary solo plot. Owner-only today
+  // (`/space cluster`, stand-in quarters); phase 3 fills it from the shared record. While it is set,
+  // only the keeper's own fold ground is editable and only it is ever saved — the Green, the lanes
+  // and a mate's quarter are read-only (Alex, 09-23), and nothing outside the fold touches the plot's
+  // save.
+  const clusterMode = useRef<{ mine: QuarterId; cfg: ClusterConfig } | null>(null)
+  /** Surface y in the plot space, whichever ground it is wearing. null off the ground. */
+  const plotSpaceHeight = (x: number, z: number): number | null => {
+    const cm = clusterMode.current
+    return cm ? framedHeight(x, z, cm.mine, cm.cfg) : plotHeight(x, z, SEED, plotCfg.current)
+  }
+  /** Can the keeper change this cell? Everywhere outside cluster mode; only their fold inside it. */
+  const editableAt = (x: number, z: number): boolean => {
+    const cm = clusterMode.current
+    return space.current !== 'plot' || !cm || framedIsMine(Math.floor(x), Math.floor(z), cm.mine, cm.cfg)
+  }
   useEffect(() => {
     GROUND_UNIFORMS.uGroundTex.value = groundTex.texture
     GROUND_UNIFORMS.uGroundOn.value = 1
@@ -3845,7 +3864,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // `plotHeight` returns null off the island, which is the honest answer for "there is no
         // ground there" — fall back to the plane rather than inventing one.
         const inPlot = space.current === 'plot'
-        const ph = inPlot ? plotHeight(x, z, SEED, plotCfg.current) : null
+        const ph = inPlot ? plotSpaceHeight(x, z) : null
         const h = inPlot ? (ph ?? plotCfg.current.baseY) : columnHeight(x, z, SEED)
         lc.px = x + 0.5; lc.py = h + 1; lc.pz = z + 0.5
         lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.airborne = false; lc.stepSmooth = 0
@@ -4013,8 +4032,25 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         return n ? `${n} bed${n === 1 ? '' : 's'} ${kind === 'feed' ? 'fed' : 'watered'}${hours ? ` — ${hours}h into the day` : ''}` : 'no beds in reach'
       },
       space: (to?: string) => {
+        // ★ `/space cluster` (phase 1, owner): your fold as the NE quarter of a cluster whose other
+        // three quarters are marked STAND-INS — generated folds, never people — so the geometry can
+        // be walked in the real engine before anybody else's garden can be loaded. Your own fold is
+        // exactly your plot (proven in cluster-space.test § 5); everything else is read-only.
+        if (to === 'cluster') {
+          clusterMode.current = {
+            mine: 'ne',
+            cfg: standInCluster('ne', SEED, plotTier.current, 1, { ...DEFAULT_CLUSTER, base: withLitter(DEFAULT_PLOT, litterFrom.current) }),
+          }
+          enterSpaceRef.current?.('plot', undefined, true)
+          return 'your fold opens onto a cluster — three stand-in quarters, the Green between (only your own fold can be changed)'
+        }
         const want: Space = to === 'plot' ? 'plot' : to === 'wilds' ? 'wilds' : to === 'glade' ? 'glade'
           : space.current === 'plot' ? 'wilds' : 'plot'
+        if (want === 'plot' && clusterMode.current) {
+          clusterMode.current = null
+          enterSpaceRef.current?.('plot', undefined, true)
+          return 'the cluster closes back to your own garden'
+        }
         if (want === space.current) return `already in the ${want}`
         enterSpaceRef.current?.(want)
         return want === 'plot' ? 'stepping into your garden' : want === 'glade' ? 'the fold lets you out at Moonwell' : 'stepping out into the Wilds'
@@ -4046,7 +4082,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // blocks in the air, and the panel would list them as though they were fine.
         const groundAt = (x: number, z: number): number | null => {
           if (!inPlot) return columnHeight(x, z, SEED)
-          return plotHeight(x, z, SEED, plotCfg.current)
+          return plotSpaceHeight(x, z)
         }
         const bx = Math.floor(lc.px), bz = Math.floor(lc.pz)
         const ring = [[6, 0], [0, 6], [-6, 0], [0, -6], [6, 6], [-6, -6]]
@@ -5113,8 +5149,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * ⚠ The worker's own cache is already space-keyed, so nothing has to be said to it beyond the
    * space on each request. It is the HOST's caches that overlap.
    */
-  const enterSpace = useCallback((to: Space, landAt?: { x: number; z: number }) => {
-    if (space.current === to) return
+  const enterSpace = useCallback((to: Space, landAt?: { x: number; z: number }, force = false) => {
+    // `force` rebuilds the SAME space — cluster mode on or off changes what the plot's ground is.
+    if (space.current === to && !force) return
+    // Cluster mode is a way of being in the plot; leaving the plot leaves it.
+    if (to !== 'plot') clusterMode.current = null
     const g = group.current
     flushSaves()                                    // ⚠ before the flip — see above
     space.current = to
@@ -5688,6 +5727,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // future change to the island's geometry arrives masked by a save asserting the old shape was
     // deliberate. Same family as the chopped-trees bug — a diff baseline disagreeing with what was
     // generated — one space over and much larger.
+    // ★ CLUSTER MODE CHANGES ONLY THE KEEPER'S FOLD, diffed against the SOLO plot so the plot's save
+    // stays the plot's save. A write anywhere else (the Green, a lane, a mate's quarter) is REFUSED
+    // whole — no block change, no record — because read-only ground that changes in memory and
+    // reverts on reload is a lie. The break and place handlers ask `editableAt` first so nothing is
+    // spent or dropped for a refused edit.
+    const cm = space.current === 'plot' ? clusterMode.current : null
+    if (cm && !framedIsMine(c.wx + lx, c.wz + lz, cm.mine, cm.cfg)) return
     const generated = space.current === 'plot'
       ? plotGeneratedVoxel(c, lx, wy, lz, SEED, plotCfg.current)
       : space.current === 'glade'
@@ -6249,7 +6295,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * crossing is published through a ref. The bridge cannot fire before mount, so the ref is always
    * populated by the time anything can call it.
    */
-  const enterSpaceRef = useRef<((to: Space, landAt?: { x: number; z: number }) => void) | null>(null)
+  const enterSpaceRef = useRef<((to: Space, landAt?: { x: number; z: number }, force?: boolean) => void) | null>(null)
   /** Moonwell's threshold, derived once: the island never grows, so its coast never moves. */
   const gladeSeamAnchorRef = useRef(gladeSeamAnchors(SEED))
   /** The Wilds-side spot of the island's road threshold — the same one both directions use. */
@@ -8555,7 +8601,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // worker cannot infer it. Without it every plot column would generate at the default radius
         // while the host measured its threshold, its chest cap and its fall line against the
         // keeper's own — a fold whose door stands in a field.
-        w.postMessage({ type: 'request', cx: gx, cz: gz, space: space.current, tier: plotTier.current, litterFrom: litterFrom.current })
+        w.postMessage({ type: 'request', cx: gx, cz: gz, space: space.current, tier: plotTier.current, litterFrom: litterFrom.current,
+                        cluster: space.current === 'plot' ? clusterMode.current ?? undefined : undefined })
       } else {
         // No worker (construction failed): generate here so the world still exists.
         if (performance.now() - t0 > 10) break
@@ -8565,7 +8612,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // to construct would walk into their own garden and find Wilds terrain: rivers, ore, trees,
         // and no island. `generatePlotColumn` was already imported here and used by nobody, which is
         // the tell. Rare path, silent failure, and the save would have recorded the difference.
-        cols.current.set(key(gx, gz), space.current === 'plot'
+        cols.current.set(key(gx, gz), space.current === 'plot' && clusterMode.current
+          ? generateFramedColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), clusterMode.current.mine, clusterMode.current.cfg)
+          : space.current === 'plot'
           ? generatePlotColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), SEED, plotCfg.current)
           : space.current === 'glade'
           ? generateGladeColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), SEED)
@@ -9513,7 +9562,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     const pickVoxel = eyeInWater
       ? (x: number, y: number, z: number) => { const m = voxel(x, y, z); return m === MAT.WATER ? AIR : m }
       : voxel
-    const rawHit = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, pickVoxel)
+    const aimed = raycast(p.x, p.y, p.z, aim.x, aim.y, aim.z, REACH, pickVoxel)
+    // ── ★ CLUSTER MODE: READ-ONLY GROUND CANNOT BE AIMED AT (2026-09-23) ──────────────────────
+    // Every verb (mine, bore, place, piece, station, rack) starts from this one ray, so this is the
+    // one gate that covers them all: a cell outside the keeper's own fold, or a place cell that
+    // would land outside it, is simply not a target. Nothing is spent, nothing drops, nothing is
+    // saved. (`setVoxel` refuses the same writes as a second line.)
+    const rawHit = aimed && !(editableAt(aimed.x, aimed.z) && editableAt(aimed.px, aimed.pz)) ? null : aimed
     // ── ★★ A RACK IS THE STATION'S UPPER HALF, SO EVERY VERB IS ANSWERED BY THE STATION ────────
     // (2026-09-23) `MAT.STATION_RACK` has no `BlockDef` — like `STRUCTURE`, it is occupancy, so a
     // swing at it would fall straight through the mine path and the HUD would name nothing for a
