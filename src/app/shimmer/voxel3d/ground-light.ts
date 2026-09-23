@@ -27,9 +27,10 @@
  *
  * ── WHAT "TENDED" MEANS HERE (build call, Jin's) ─────────────────────────────────────────────────
  * Sources are what a KEEPER planted: crops in beds, weighted by growth (a seed barely glows, a ripe
- * bed fully), and saplings. Wild grass and wild trees give nothing, or the whole overworld would be
- * a lit carpet at night and a greyfield would stop reading as the absence. Spirits are not sources
- * yet — they are the next thing to add, not a ruling that they do not glow.
+ * bed fully), saplings, and the trees those saplings grow into (kept until the trunk base is felled).
+ * Wild grass and wild trees give nothing, or the whole overworld would be a lit carpet at night and
+ * a greyfield would stop reading as the absence. Spirits are not sources: they are battle-only and
+ * never stand in the overworld, so there is nothing to light from.
  */
 import * as THREE from 'three'
 import { RING_N } from '../voxel/render-light-ring'
@@ -61,6 +62,8 @@ export const GROUND_LOOK = {
 export const PHASE_WEIGHT = [0.22, 0.45, 0.7, 1.0] as const
 /** A planted sapling — alive and tended, small. */
 export const SAPLING_WEIGHT = 0.55
+/** A tree grown from a planted sapling — a standing tended thing, brighter than the sapling was. */
+export const GROWN_TREE_WEIGHT = 0.85
 
 /**
  * How brightly one bed lives. Growth sets the ceiling; CARE decides how close to it the bed gets —

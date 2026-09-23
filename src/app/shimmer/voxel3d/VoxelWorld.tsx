@@ -134,6 +134,8 @@ import { keeperKey } from '@/lib/keeper-local'
 // here beside their use and are listed in `KEEPER_KEYS`, which `keeper-local.test.ts` enforces.
 const POT_BASE = 'voxel3d:pots:'
 const SAPLING_BASE = 'voxel3d:saplings:'
+/** Trees GROWN from a planted sapling, keyed by trunk base — living-light sources (ground-light.ts). */
+const GROWN_BASE = 'voxel3d:grown:'
 const DECAY_BASE = 'voxel3d:leafdecay:'
 import { PIECES, PIECE_MATERIALS, STRUCTURE, STRUCTURE_HALF, pieceDef, pieceVariants, pieceMaterial, pieceItemId, pieceForItem, cellsOf, canPlace, canAfford, placementAt, basePieceId, type PieceDef, type Placement, type Rotation } from '../voxel/pieces'
 import { createPieceRenderer, pieceBreakTarget, pieceTint } from './piece-mesh'
@@ -145,7 +147,7 @@ import {
 } from '../voxel/render-light-ring'
 import { createLightTexture } from './light-texture'
 import { createLightUniforms, LIGHT_LOOK } from './light-glsl'
-import { createGroundTexture, splatGround, sourcesKey, bedGlow, SAPLING_WEIGHT, GROUND_UNIFORMS, type GroundSource } from './ground-light'
+import { createGroundTexture, splatGround, sourcesKey, bedGlow, SAPLING_WEIGHT, GROWN_TREE_WEIGHT, GROUND_UNIFORMS, type GroundSource } from './ground-light'
 import { layerOf } from './tex/tiles'
 import { makeTileArray } from './tex/atlas'
 import { createTexturedVoxelMaterial } from './tex/atlas'
@@ -1964,6 +1966,11 @@ export default function VoxelWorld() {
     openCursorUI()
     setDialogue({ who, talk })
   }, [openCursorUI, progress, getBook])
+  /** Half of Yarrow's gate: a cauldron of the keeper's own, placed or opened on the plot. */
+  const markCauldron = useCallback(() => {
+    const b = getBook()
+    if (!b.cauldron) { b.cauldron = true; saveRecipeBook(SEED, b) }
+  }, [getBook])
   // ★ `window.__talk(who, { cauldron, done })` — the harness's door into a conversation, for a headless
   // shot of a scene a script cannot walk to (Yarrow's counter needs the tutorial done AND a cauldron
   // on the plot). `done` fast-forwards THIS TAB's tutorial state in memory only; nothing is saved.
@@ -2418,15 +2425,13 @@ export default function VoxelWorld() {
           onOpenStation={(st) => {
             openCursorUI()
             // Half of Yarrow's gate: a cauldron of their own. Opening one on the plot is the proof.
-            if (st.kind === 'cauldron' && space.current === 'plot') {
-              const b = getBook()
-              if (!b.cauldron) { b.cauldron = true; saveRecipeBook(SEED, b) }
-            }
+            if (st.kind === 'cauldron' && space.current === 'plot') markCauldron()
             if (st.kind === 'crafting_table') setCraftOpen(true); else setOpenStation(st)
           }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
           onOpenGardens={(g) => { openCursorUI(); setOpenGardens(g) }}
           onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
+          onCauldronPlaced={markCauldron}
           brewings={brewings}
           uiOpen={cursorUIOpenRef} uiSteps={uiStepsRef} owner={isOwnerRef} foesOut={foesRef} tremorOut={tremor} pressOut={pressRef} hourLight={hourLight}
           waterOut={waterOut}
@@ -3105,7 +3110,7 @@ const LIFT_BADGE: Record<LiftMode, string> = {
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearFolk, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenGardens, onOpenBrew, brewings, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearFolk, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenGardens, onOpenBrew, onCauldronPlaced, brewings, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3213,6 +3218,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   onOpenStation: (s: OpenStation) => void
   /** A cauldron was right-clicked. No payload — a cauldron holds nothing; see `brewOpen`. */
   onOpenBrew: () => void
+  /** A cauldron was PLACED on the keeper's own plot — half of Yarrow's gate (recipe-book.ts). */
+  onCauldronPlaced: () => void
   /** The open brewings (the keeper's record) — so a mined cauldron can drop its pot. */
   brewings: React.RefObject<Brewings>
   onOpenWaymark: (w: OpenWaymark) => void
@@ -3579,6 +3586,18 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   useEffect(() => {
     try { saplingClock.current = JSON.parse(localStorage.getItem(SAPLING_KEY) ?? '{}') } catch { saplingClock.current = {} }
   }, [SAPLING_KEY])
+  // ★ A PLANTED TREE KEEPS ITS LIGHT AFTER IT GROWS (canon: "crops, standing trees and spirits do").
+  // The sapling clock forgets a tree the moment it comes up, so the grown ones get their own record:
+  // trunk base → when it grew. It leaves the record when that base block is broken (see setVoxel).
+  // Wild trees are never in it — a tree nobody planted is not tended ground.
+  const GROWN_KEY = keeperKey(`${GROWN_BASE}${SEED}`)
+  const grownTrees = useRef<Record<string, number>>({})
+  const saveGrown = useCallback(() => {
+    try { localStorage.setItem(GROWN_KEY, JSON.stringify(grownTrees.current)) } catch { /* full disk */ }
+  }, [GROWN_KEY])
+  useEffect(() => {
+    try { grownTrees.current = JSON.parse(localStorage.getItem(GROWN_KEY) ?? '{}') } catch { grownTrees.current = {} }
+  }, [GROWN_KEY])
   const lastNearGreg = useRef(false)
   const lastNearFolk = useRef<FolkId | null>(null)
   /** Edge latch for the collar prompt — see the emitter in the foe loop. */
@@ -5615,6 +5634,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * a stale entry means dropped faces.
    */
   const setVoxel = useCallback((wx: number, wy: number, wz: number, mat: number) => {
+    // A felled planted tree stops lighting the ground: its trunk base is the record's key. Only on
+    // a clear, so the per-write cost of every other edit is one comparison.
+    if (mat === AIR) {
+      const gk = `${wx},${wy},${wz}`
+      if (grownTrees.current[gk] !== undefined) { delete grownTrees.current[gk]; saveGrown() }
+    }
     const cx = Math.floor(wx / SECTION), cz = Math.floor(wz / SECTION)
     const k = key(cx, cz)
     const c = cols.current.get(k)
@@ -8584,6 +8609,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // writes a log there and a stale sapling underneath would survive as a hidden block.
         setVoxel(sx, sy, sz, AIR)
         for (const c of growTreeCells(start, sy - 1)) setVoxel(c.x, c.y, c.z, c.mat)
+        // AFTER the writes: the AIR clear above would otherwise delete the record it just made.
+        grownTrees.current[k] = nowMs
+        saveGrown()
         onSay(`a ${sp.id} has grown`)
       }
     }
@@ -8642,6 +8670,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         for (const k of Object.keys(saplingClock.current)) {
           const [x, y, z] = k.split(',').map(Number)
           src.push({ x, y, z, w: SAPLING_WEIGHT })
+        }
+        for (const k of Object.keys(grownTrees.current)) {
+          const [x, y, z] = k.split(',').map(Number)
+          src.push({ x, y, z, w: GROWN_TREE_WEIGHT })
         }
         for (const t of groundTest.current) src.push(t)
         const key = sourcesKey(src, ccx, ccz)
@@ -10540,6 +10572,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // `setVoxel` like every other world write, which is what gives the rack its save record,
         // its remesh and its column dirty-mark for free.
         if (isTallStation(put)) setVoxel(hit.px, hit.py + 1, hit.pz, MAT.STATION_RACK)
+        if (put === MAT.CAULDRON && space.current === 'plot') onCauldronPlaced()
         hands.sig.placeAt = performance.now()
         // The material is the state; the clock holds the one thing it cannot — WHEN.
         if (isSaplingMat(put)) {

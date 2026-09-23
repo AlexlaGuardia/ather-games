@@ -80,6 +80,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'voxel3d:mist:',           worldTied: false },  // ⚠ OPEN: patches drawn from, in a regenerated world
   { base: 'voxel3d:pots:',           worldTied: false },  // ⚠ OPEN: clocks on blocks that no longer stand
   { base: 'voxel3d:saplings:',       worldTied: false },  // ⚠ OPEN
+  { base: 'voxel3d:grown:',          worldTied: false },  // ⚠ OPEN, same call as saplings: trees grown from them (ground-light sources)
   { base: 'voxel3d:leafdecay:',      worldTied: false },  // ⚠ OPEN
 ]
 

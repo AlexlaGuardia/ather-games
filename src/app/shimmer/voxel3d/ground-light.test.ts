@@ -7,7 +7,7 @@
 import * as THREE from 'three'
 import {
   splatGround, bedGlow, sourcesKey, patchHollowForGround, GROUND_W, GROUND_REACH, GROUND_DECL_GLSL,
-  GROUND_UNIFORMS, PHASE_WEIGHT, type GroundSource,
+  GROUND_UNIFORMS, PHASE_WEIGHT, SAPLING_WEIGHT, GROWN_TREE_WEIGHT, type GroundSource,
 } from './ground-light'
 import { LIGHT_DECL_GLSL, createLightUniforms } from './light-glsl'
 import { adoptHollowMat } from './hollow-look'
@@ -48,6 +48,8 @@ ok(bedGlow(0, 0) > 0, '§4 a fresh seed in a dry bed is still alive — faint, n
 ok(bedGlow(3, 1) > bedGlow(3, 0), '§4 ★ a watered bed out-glows one nobody minds (Greg)')
 ok(bedGlow(3, 0) > bedGlow(1, 1), '§4 a ripe dry bed out-glows a watered sprout — growth sets the ceiling')
 ok(bedGlow(3, 1) === PHASE_WEIGHT[3], '§4 full care reaches the phase ceiling exactly')
+
+ok(SAPLING_WEIGHT < GROWN_TREE_WEIGHT && GROWN_TREE_WEIGHT <= 1, '§4 a grown planted tree out-lights the sapling it was, never past full')
 
 // §5 the torus cannot alias a far garden onto a near field.
 {

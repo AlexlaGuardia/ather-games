@@ -386,7 +386,7 @@ const OWNERS: Record<string, string> = {
   'ather:mp:id': 'play3d/multiplayer.ts', 'ather:mp:name': 'play3d/multiplayer.ts',
   'ather:shimmer:seen:': 'voxel3d/discovery.ts', 'voxel3d:tutorial:': 'voxel3d/tutorial.ts', 'voxel3d:recipes:': 'voxel3d/recipe-book.ts',
   'voxel3d:mist:': 'voxel3d/mist-encounter.ts', 'voxel3d:pots:': 'voxel3d/VoxelWorld.tsx',
-  'voxel3d:saplings:': 'voxel3d/VoxelWorld.tsx', 'voxel3d:leafdecay:': 'voxel3d/VoxelWorld.tsx',
+  'voxel3d:saplings:': 'voxel3d/VoxelWorld.tsx', 'voxel3d:grown:': 'voxel3d/VoxelWorld.tsx', 'voxel3d:leafdecay:': 'voxel3d/VoxelWorld.tsx',
 }
 ok(Object.keys(OWNERS).length === KEEPER_KEYS.length,
    `every registered key names an owning module (${Object.keys(OWNERS).length} vs ${KEEPER_KEYS.length}) — a new key needs a row here`)
