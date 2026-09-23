@@ -23,7 +23,8 @@
 // generated folds only so the owner can walk the geometry in the real engine before any other
 // keeper's ground can be loaded. Its keepers carry `STAND_IN_SEED_BASE` seeds so nothing can mistake
 // one for a person, and nothing but the owner's console reaches it.
-import { SECTION } from './column'
+import { SECTION, Column, Stage, refreshUniform } from './column'
+import { clusterMaterialAt, clusterHeight, clusterYRange } from './cluster-column'
 import {
   DEFAULT_CLUSTER, NO_SLOTS, QUARTERS, QUARTER_SIGN, clusterAt,
   type ClusterConfig, type QuarterId,
@@ -75,3 +76,59 @@ export function standInCluster(mine: QuarterId, seed: number, tier: number, stan
   })
   return { ...cfg, slots }
 }
+
+// ── ★ THE FRAME: THE CLUSTER MOVES, YOUR PLOT DOES NOT (host wiring, 2026-09-23) ───────────────────
+// Everything a keeper owns in plot space is keyed by POSITION — beds, chests, saplings, stations,
+// brewings, waymarks, the grown-tree record, the threshold. Shifting the plot into its quarter would
+// move every one of those keys. So the host keeps the keeper's quarter AT THE ORIGIN and generates
+// the rest of the cluster around it: a plot-space point (x, z) is cluster point (x + cx, z + cz),
+// where (cx, cz) is the keeper's quarter centre. Nothing keyed moves, and `cellIsMine` at the origin
+// is exactly "inside my own fold".
+
+/** Plot-space (framed) → cluster coordinates, for the keeper in quarter `mine`. */
+export function unframe(x: number, z: number, mine: QuarterId, cfg: ClusterConfig): { x: number; z: number } {
+  return { x: x + QUARTER_SIGN[mine].sx * cfg.offset, z: z + QUARTER_SIGN[mine].sz * cfg.offset }
+}
+
+/** The cluster's material at a plot-space point. */
+export function framedMaterialAt(x: number, y: number, z: number, mine: QuarterId, cfg: ClusterConfig): number {
+  const u = unframe(x, z, mine, cfg)
+  return clusterMaterialAt(u.x, y, u.z, cfg)
+}
+
+/** Surface height at a plot-space point, or null over the Ather. */
+export function framedHeight(x: number, z: number, mine: QuarterId, cfg: ClusterConfig): number | null {
+  const u = unframe(x, z, mine, cfg)
+  return clusterHeight(u.x, u.z, cfg)
+}
+
+/** The edit gate in plot space: is this cell the keeper's own fold ground? */
+export const framedIsMine = (x: number, z: number, mine: QuarterId, cfg: ClusterConfig): boolean => {
+  const u = unframe(x, z, mine, cfg)
+  return cellIsMine(u.x, u.z, mine, cfg)
+}
+
+/** Fill a plot-space column with the framed cluster. Mirrors `generateClusterColumn`. */
+export function generateFramedColumn(col: Column, mine: QuarterId, cfg: ClusterConfig): Column {
+  const { min, max } = clusterYRange(cfg)
+  const lo = Math.max(0, min)
+  const hi = Math.min(col.sections.length * SECTION - 1, max)
+  for (let z = 0; z < SECTION; z++) {
+    for (let x = 0; x < SECTION; x++) {
+      const u = unframe(col.wx + x, col.wz + z, mine, cfg)
+      for (let y = lo; y <= hi; y++) {
+        const mat = clusterMaterialAt(u.x, y, u.z, cfg)
+        if (mat === 0) continue
+        const s = (y / SECTION) | 0
+        col.sections[s].set(x, y - s * SECTION, z, mat)
+      }
+    }
+  }
+  refreshUniform(col)
+  col.stage = Stage.Ready
+  return col
+}
+
+/** Stable text for a worker cache key: the frame and every slot's seed/tier. */
+export const clusterSig = (mine: QuarterId, cfg: ClusterConfig): string =>
+  `${mine}:${cfg.offset}:${cfg.green}:` + QUARTERS.map(q => { const k = cfg.slots[q]; return k ? `${k.seed}.${k.tier}` : '-' }).join(',')

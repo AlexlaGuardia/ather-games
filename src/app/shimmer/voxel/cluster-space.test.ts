@@ -8,7 +8,10 @@ import { DEFAULT_CLUSTER, QUARTERS, MIN_OFFSET, quarterCentre } from './cluster'
 import { MAT } from './depth'
 import {
   quarterShift, plotColumnOf, clusterColumnOf, cellIsMine, standInCluster, STAND_IN_SEED_BASE,
+  framedMaterialAt, framedIsMine, framedHeight, generateFramedColumn, clusterSig, unframe,
 } from './cluster-space'
+import { Column, DEFAULT_COLUMN } from './column'
+import { plotHeight } from './plot'
 
 let pass = 0
 const fails: string[] = []
@@ -76,6 +79,39 @@ for (let tier = 0; tier < PLOT_TIERS.length; tier++) {
   ok(cfg.slots.nw?.seed === SEED, '§4 my slot carries my seed')
   ok(QUARTERS.filter(q => q !== 'nw').every(q => (cfg.slots[q]?.seed ?? 0) >= STAND_IN_SEED_BASE), '§4 ★ every other slot is a marked stand-in')
 }
+
+// §5 ★★ THE FRAME: in plot space, the framed cluster IS my solo plot wherever it is mine — so every
+// position-keyed thing I own (beds, chests, saplings, the door) stays exactly where it was.
+for (const q of ['ne', 'se'] as const) {
+  const cfg = standInCluster(q, SEED, 1)
+  const plot = plotForTier(1, DEFAULT_PLOT)
+  ok(framedIsMine(0, 0, q, cfg), `§5 ${q}: my plot's centre is mine in the frame`)
+  let differ = 0, mine = 0, heightsOff = 0
+  for (let x = -340; x <= 340; x += 9) for (let z = -340; z <= 340; z += 9) {
+    if (!framedIsMine(x, z, q, cfg)) continue
+    mine++
+    if (framedHeight(x, z, q, cfg) !== plotHeight(x, z, SEED, plot)) heightsOff++
+    for (let y = 70; y <= 105; y += 5) {
+      const a = plotMaterialAt(x, y, z, SEED, plot), b = framedMaterialAt(x, y, z, q, cfg)
+      if (a !== b && !((a === MAT.PACKED_CLOUD && b === MAT.AIR) || (a === MAT.AIR && b === MAT.PACKED_CLOUD))) differ++
+    }
+  }
+  ok(mine > 800, `§5 ${q}: a real sample (${mine} columns)`)
+  ok(differ === 0, `§5 ★★ ${q}: framed ground == my plot where it is mine (${differ} differ)`)
+  ok(heightsOff === 0, `§5 ${q}: and the surface heights agree (${heightsOff} off)`)
+  // The frame puts the Green where the cluster says: toward the middle from my centre.
+  const g = unframe(0, 0, q, cfg)
+  ok(Math.abs(g.x) === cfg.offset && Math.abs(g.z) === cfg.offset, `§5 ${q}: the frame origin is my quarter's centre`)
+  // The generator agrees with the point function.
+  const col = generateFramedColumn(new Column(3 * SECTION, -2 * SECTION, DEFAULT_COLUMN), q, cfg)
+  let colOff = 0
+  for (let y = 60; y < 110; y++) for (const [lx, lz] of [[0, 0], [7, 9], [15, 15]]) {
+    const s2 = (y / SECTION) | 0
+    if (col.sections[s2].get(lx, y - s2 * SECTION, lz) !== framedMaterialAt(3 * SECTION + lx, y, -2 * SECTION + lz, q, cfg)) colOff++
+  }
+  ok(colOff === 0, `§5 ${q}: generateFramedColumn == framedMaterialAt (${colOff} off)`)
+}
+ok(clusterSig('ne', standInCluster('ne', SEED, 1)) !== clusterSig('ne', standInCluster('ne', SEED, 2)), '§5 the cache signature moves with a tier')
 
 if (fails.length) { console.error(`cluster-space: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }
 console.log(`cluster-space: ${pass}/${pass} pass`)
