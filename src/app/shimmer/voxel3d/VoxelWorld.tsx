@@ -459,6 +459,19 @@ export interface OpenWaymark {
   rename: (name: string) => void
 }
 
+/**
+ * ── ★ THE GARDENS MENU (2026-09-22) — what socket 1 became ───────────────────────────────────
+ * Alex: *"the gate in the player homeplot that is currently leading to moonwell can get a menu and
+ * from here the player can see gregs garden as well as any freinds that are online and their
+ * garden."* Moonwell stops being a destination the arch crosses to directly and becomes the first
+ * ROW in a list of gardens — which is also what makes it read as *"an example of what a fully
+ * expanded homeplot should look like"* rather than as a region you travel to.
+ */
+export interface OpenGardens {
+  /** Step into Greg's garden (Moonwell). The one row that works today. */
+  toGreg: () => void
+}
+
 export interface OpenStation {
   x: number; y: number; z: number
   /** Which station this block is — decides the rate and the recipe list. An alchemy id opens
@@ -1489,6 +1502,7 @@ export default function VoxelWorld() {
   /** The bench whose job panel is up, or null. Position + a bound writer; see `OpenStation`. */
   const [openStation, setOpenStation] = useState<OpenStation | null>(null)
   const [openWaymark, setOpenWaymark] = useState<OpenWaymark | null>(null)
+  const [openGardens, setOpenGardens] = useState<OpenGardens | null>(null)
   /**
    * Is the cauldron's brew list up (2026-08-18)? A BOOLEAN, not a position — and that is a design
    * claim, not a shortcut. The chest and the bench hand up coordinates because their contents live
@@ -2364,6 +2378,7 @@ export default function VoxelWorld() {
           //   the sawmill / stonecutter / kiln keep theirs, since a queue is what THEY are.
           onOpenStation={(st) => { openCursorUI(); if (st.kind === 'crafting_table') setCraftOpen(true); else setOpenStation(st) }}
           onOpenWaymark={(w) => { openCursorUI(); setOpenWaymark(w) }}
+          onOpenGardens={(g) => { openCursorUI(); setOpenGardens(g) }}
           onOpenBrew={() => { openCursorUI(); setBrewOpen(true) }}
           brewings={brewings}
           uiOpen={cursorUIOpenRef} uiSteps={uiStepsRef} owner={isOwnerRef} foesOut={foesRef} tremorOut={tremor} pressOut={pressRef} hourLight={hourLight}
@@ -2472,6 +2487,10 @@ export default function VoxelWorld() {
       {openWaymark && (
         <WaymarkPanel wm={openWaymark} onSay={say}
                       onClose={() => { setOpenWaymark(null); closeCursorUI() }} />
+      )}
+      {openGardens && (
+        <GardensPanel g={openGardens}
+                      onClose={() => { setOpenGardens(null); closeCursorUI() }} />
       )}
       {marketOpen && (
         <PassagePanel items={inv} owned={loadRuneInventory().owned} birth={loadRuneInventory().birth} nowMs={Date.now()}
@@ -3031,7 +3050,7 @@ const LIFT_BADGE: Record<LiftMode, string> = {
 // seeds while the ground there was flawless. A truth that collision, light and the tests all need
 // does not belong in a component. See `depth.ts`.
 
-function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearFolk, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenBrew, brewings, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
+function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, selItem, selSlot, weaponDrawn, weaponIdx, onAmmo, onStats, onPerf, onProfile, onSay, onContextLost, runeTick, onVesselFound, onPos, onLook, onInvChange, worker, incoming, inflight, settings, rot, tools, skills, onSkill, onLevel, onTool, tutorial, onQuestEvent, onNearGreg, onNearFolk, onNearTable, onCollarNear, cmdOut, mistLedger, onNearMist, onDiscover, sparring, pot, plotCfg, plotTier, litterFrom, spiritIndex, party, snapOut, space, lookOut, ctxLostOut, onOpenChest, onOpenStation, onOpenWaymark, onOpenGardens, onOpenBrew, brewings, uiOpen, uiSteps, owner, foesOut, pressOut, waterOut, castOut, tremorOut, hourLight }: {
   inv: React.RefObject<Inventory>
   toolTier: React.RefObject<number>
   toolSkill: React.RefObject<BlockSkill>
@@ -3142,6 +3161,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   /** The open brewings (the keeper's record) — so a mined cauldron can drop its pot. */
   brewings: React.RefObject<Brewings>
   onOpenWaymark: (w: OpenWaymark) => void
+  onOpenGardens: (g: OpenGardens) => void
   /**
    * Is a cursor surface up? A REF, not a boolean prop, on purpose: opening the bag must not
    * re-render the whole scene, and the only readers are a listener and the frame loop — both of
@@ -8888,8 +8908,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // socket is a waymark slot: lit and crossable once that mark stands out in the Wilds.
           const way = socketWay(standing)
           if (way.to === 'moonwell') {
-            onSay('stepping through — Moonwell Glade')
-            enterSpaceRef.current?.('glade')
+            // ★ A MENU, NOT A CROSSING (2026-09-22). The arch used to step straight into Moonwell;
+            // it now opens the list of gardens a keeper can visit, of which Greg's is the first.
+            // Friends come from the account layer that already exists; what does NOT exist yet is
+            // presence (nothing tracks who is in-world) or visiting (loading another keeper's
+            // save), so those rows show and say so rather than being hidden — a row you can see
+            // and not use is a promise; a row that is absent is a feature nobody knows is coming.
+            onOpenGardens({ toGreg: () => { onSay('stepping through — Moonwell Glade'); enterSpaceRef.current?.('glade') } })
           } else if (way.to === 'mark') {
             const mark = marks[way.slot]
             if (mark) { onSay(`stepping through to ${mark.name}`); travelTo(null, mark.id) }
@@ -11087,6 +11112,64 @@ const SPECIALITY_NOTE: Record<Exclude<StationDef['accepts'], 'any'>, string> = {
  * the plot's threshold there are up to three, so it is a chooser. A single symmetrical list would
  * have made the Wilds face a menu with one item, which teaches a player that there might be more.
  */
+/**
+ * ── ★ THE GARDENS MENU — who you can go and see ──────────────────────────────────────────────
+ * Socket 1's arch. Greg's garden is the live row; friends are read from the account layer that
+ * already ships (`/api/friends` — sessions, a real friend list, server-derived identity).
+ *
+ * ⚠ TWO THINGS DO NOT EXIST AND THE PANEL SAYS SO RATHER THAN PRETENDING. There is no PRESENCE
+ * anywhere in this build — nothing tracks who is in-world — and there is no VISITING, which means
+ * loading another keeper's save into this client and is a real multiplayer feature, not a row.
+ * So a friend is listed and plainly not enterable. That is deliberate: a row you can see and not
+ * use is a promise, and a row that is absent is a feature nobody knows is coming. The moment
+ * presence exists this panel starts telling the truth with no rewiring, the same way
+ * `crossingReady()` asks the map instead of holding a `LANDING_BUILT` constant.
+ */
+function GardensPanel({ g, onClose }: { g: OpenGardens; onClose: () => void }) {
+  const [friends, setFriends] = useState<{ user_id: string; username: string; accepted?: boolean }[] | null>(null)
+  useEffect(() => {
+    let live = true
+    fetch('/api/friends', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(j => { if (live) setFriends(Array.isArray(j?.friends) ? j.friends : []) })
+      .catch(() => { if (live) setFriends([]) })
+    return () => { live = false }
+  }, [])
+  return (
+    <PanelFrame width="w-[420px]" dataPanel="gardens" onClose={onClose}>
+      <div className="flex items-baseline justify-between mb-3">
+        <span className="gx-label text-[13px] font-semibold text-white/95">Gardens</span>
+      </div>
+      <button onClick={() => { g.toGreg(); onClose() }}
+              className="w-full text-left mb-1 px-2 py-1.5 rounded border border-amber-200/25 hover:border-amber-200/60 hover:bg-white/5 text-white/90 transition-colors">
+        <div className="flex justify-between gap-3">
+          <span>Greg&apos;s garden</span>
+          <span className="text-amber-200/70">Moonwell Glade</span>
+        </div>
+      </button>
+      <div className="gx-label mt-3 mb-1 text-[9px] text-white/35">keepers</div>
+      {friends === null && <div className="text-white/30 text-[11px] px-2 py-1">looking…</div>}
+      {friends !== null && friends.length === 0 && (
+        <div className="text-white/30 text-[11px] px-2 py-1 leading-relaxed">
+          no keepers yet — add a friend and their garden stands here
+        </div>
+      )}
+      {friends?.map(f => (
+        <div key={f.user_id}
+             className="w-full text-left mb-1 px-2 py-1.5 rounded border border-white/10 text-white/40 cursor-default">
+          <div className="flex justify-between gap-3">
+            <span>{f.username}</span>
+            <span className="text-white/25">away</span>
+          </div>
+        </div>
+      ))}
+      <div className="mt-3 text-[10px] text-white/25">
+        visiting another keeper&apos;s garden is not open yet
+      </div>
+    </PanelFrame>
+  )
+}
+
 function WaymarkPanel({ wm, onSay, onClose }: {
   wm: OpenWaymark
   onSay: (t: string) => void
