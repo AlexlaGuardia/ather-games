@@ -87,13 +87,24 @@ export const MODELS: Readonly<Record<number, StationModel>> = {
       { box: [0.10, 0.72, 0.10, 0.4325, 0.36, 0.4325] },
       { box: [0.86, 0.10, 0.86, 0, 0.67, 0] },              // apron, recessed so the stripes show
       { box: [0.94, 0.14, 0.94, 0, 0.79, 0] },              // the bed — wears the line at 0.75
-      { box: [0.72, 0.07, 0.07, 0, 0.90, -0.28] },          // log cradle, a rail either side
-      { box: [0.72, 0.07, 0.07, 0, 0.90, 0.28] },
+      // ⚠ cy = 0.895, NOT 0.90 — a 0.07 stick centred at 0.90 starts at 0.865 and the bed's top is
+      // 0.86, so the rails floated five millimetres above the bed they lie on. Invisible in a
+      // render at any distance a human looks from; `modelConnected` reported it as two loose
+      // groups on the first run. That five millimetres is the whole argument for having the guard.
+      { box: [0.72, 0.07, 0.07, 0, 0.895, -0.28] },         // log cradle, a rail either side
+      { box: [0.72, 0.07, 0.07, 0, 0.895, 0.28] },
       { box: [0.05, 0.40, 0.44, 0, 1.06, 0] },              // the blade, standing through the seam
       // ── the rack, in the upper cell. Boards wear PLANK GRAIN; posts wear the leg stripe. ──
-      { box: [0.10, 1.00, 0.10, -0.4325, 1.50, 0.42] },     // two posts, the frame continuing up
-      { box: [0.10, 1.00, 0.10, 0.4325, 1.50, 0.42] },
-      { box: [0.94, 0.90, 0.06, 0, 1.47, 0.46], top: MAT.PLANKS_GOLDWOOD, side: MAT.PLANKS_GOLDWOOD },
+      // ⚠⚠ THEY START AT 0.86, THE BED'S TOP — NOT AT 1.00, THE CELL SEAM. The first cut ran them
+      // 1.00..2.00 and the render showed the tool wall HANGING IN THE AIR over the bench with
+      // daylight under it, while every guard stayed green: each box was inside the cell, nothing
+      // flipped, the tri count was fine. That is the bench's 09-22 finding recurring one day later
+      // — and the cell seam is a seductive place to start because it is where the second cell
+      // begins, which is a fact about the GRID and not about the object. `modelConnected` now
+      // asks the question that render answered.
+      { box: [0.10, 1.14, 0.10, -0.4325, 1.43, 0.42] },     // two posts, down to the bed they stand on
+      { box: [0.10, 1.14, 0.10, 0.4325, 1.43, 0.42] },
+      { box: [0.94, 1.12, 0.06, 0, 1.42, 0.46], top: MAT.PLANKS_GOLDWOOD, side: MAT.PLANKS_GOLDWOOD },
       { box: [0.88, 0.07, 0.30, 0, 1.40, 0.30], top: MAT.PLANKS_GOLDWOOD, side: MAT.PLANKS_GOLDWOOD },
       { box: [0.98, 0.08, 0.20, 0, 1.96, 0.40], top: MAT.PLANKS_GOLDWOOD, side: MAT.PLANKS_GOLDWOOD },
     ],
@@ -133,7 +144,7 @@ export const MODELS: Readonly<Record<number, StationModel>> = {
       // ── the rack, in the upper cell. Boards are CUT_STONE; posts keep the cutter's own tile. ──
       { box: [0.11, 0.94, 0.11, -0.4325, 1.47, 0.4325] },
       { box: [0.11, 0.94, 0.11, 0.4325, 1.47, 0.4325] },
-      { box: [0.92, 0.88, 0.07, 0, 1.46, 0.455], top: MAT.CUT_STONE, side: MAT.CUT_STONE },
+      { box: [0.92, 0.90, 0.07, 0, 1.45, 0.455], top: MAT.CUT_STONE, side: MAT.CUT_STONE },  // down to 1.00, the slab's top — a 0.02 gap is still a gap
       { box: [0.90, 0.09, 0.32, 0, 1.38, 0.31], top: MAT.CUT_STONE, side: MAT.CUT_STONE },
       { box: [0.98, 0.10, 0.20, 0, 1.95, 0.40], top: MAT.CUT_STONE, side: MAT.CUT_STONE },
     ],

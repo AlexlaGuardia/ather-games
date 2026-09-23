@@ -6,7 +6,7 @@ import { blockDef } from '../voxel/registry'
 import { stationOf } from '../voxel/workshop'
 import { alchemyStationOf } from './alchemy-chain'
 import { TILE_MATERIALS } from './tex/tiles'
-import { STATION_MODELS, modelOf, modelFits, CUBE } from './station-models'
+import { STATION_MODELS, modelOf, modelFits, modelConnected, CUBE } from './station-models'
 
 let pass = 0
 const fails: string[] = []
@@ -74,6 +74,33 @@ const ok = (c: boolean, m: string) => { if (c) pass++; else fails.push(m) }
   ok(host.includes('stations?.sync(list.map(c => ({ ...c, ySpan: H })), voxel)'), '§3 ★ it syncs on the flora beat')
   ok(host.includes('stations?.setCartoon(cartoon)'), '§3 the cartoon dials reach it')
   ok(host.includes('<primitive object={stations.group} />'), '§3 ★ and its group is in the scene')
+}
+
+// ── §6 every box model is ONE OBJECT, not parts standing near each other ─────────────────────
+// ★ GBOARD (2026-09-22) recorded that *"nothing in the cell knows the parts are one object, so no
+// guard here can ask whether a model is CONNECTED"*, after the bench's legs were left clear of its
+// apron and every check stayed green. That is true of a SCULPT and false of a box model — a box is
+// an AABB and this is a union-find over six numbers. Believing the general form of the sentence
+// cost the sawmill's tool wall hanging in the air, and its log cradle floating FIVE MILLIMETRES
+// above the bed, both green on every other check and both found the moment this ran.
+{
+  let boxModels = 0
+  for (const [k, m] of Object.entries(STATION_MODELS)) {
+    const r = modelConnected(m)
+    if (r.boxes === 0) continue     // a sculpt has no boxes; `station-sculpt.test.ts` owns its mesh
+    boxModels++
+    ok(r.ok, `§6 ★ ${blockDef(Number(k))?.name ?? k} is ONE object (${r.boxes} boxes → ${r.groups} group${r.groups === 1 ? '' : 's'})`)
+  }
+  // ⚠ NOT VACUOUS. If every model became a sculpt this section would pass by looking at nothing.
+  ok(boxModels > 0, `§6 ★ there are still box models to check (${boxModels}) — a silent zero here is a section measuring nothing`)
+  // And the check can FAIL: two boxes a hair apart are two groups, touching faces are one.
+  const apart = { parts: [{ box: [0.2, 0.2, 0.2, 0, 0.1, 0] as const }, { box: [0.2, 0.2, 0.2, 0, 0.35, 0] as const }], note: '' }
+  ok(!modelConnected(apart).ok && modelConnected(apart).groups === 2,
+    '§6 ★★ a 0.05 gap reads as TWO groups — this is what the sawmill\'s cradle did')
+  const touching = { parts: [{ box: [0.2, 0.2, 0.2, 0, 0.1, 0] as const }, { box: [0.2, 0.2, 0.2, 0, 0.3, 0] as const }], note: '' }
+  ok(modelConnected(touching).ok, '§6 ★ and exactly touching faces read as ONE — which is how a frame is authored')
+  ok(modelConnected({ parts: [], note: '' }).boxes === 0,
+    '§6 ★ an all-sculpt model reports boxes: 0 rather than an unqualified ok')
 }
 
 // ── §5 the two-tall stations: one fact, two files, asserted in BOTH directions ────────────────

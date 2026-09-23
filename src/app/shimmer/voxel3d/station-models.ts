@@ -152,5 +152,52 @@ export function modelFits(m: StationModel, eps = 1e-6): { ok: boolean; bad: numb
   return { ok: bad.length === 0, bad, boxes: m.parts.length }
 }
 
+/**
+ * ── ★★ IS THE MODEL ONE OBJECT? (2026-09-23) ───────────────────────────────────────────────────
+ * Are the boxes one connected lump, or several things standing near each other?
+ *
+ * ★ WHY THIS EXISTS AT ALL. On 2026-09-22 the bench's legs were moved out to the tile's leg stripe
+ * and left CLEAR of the apron — four posts standing near a table, daylight between every leg and
+ * the frame it was meant to carry — and GBOARD recorded the conclusion that *"nothing in the cell
+ * knows the parts are one object, so no guard here can ask whether a model is connected."* That is
+ * true of a SCULPT, whose shape is a mesh this file never sees. It is NOT true of a box model: a
+ * box is an AABB, and "do these AABBs form one connected component" is a union-find over six
+ * numbers each. The sentence was right about the case in front of it and wrong as a general law,
+ * and the cost of believing the general version was the sawmill's tool wall hanging in the air one
+ * day later, green on every check.
+ *
+ * ⚠ TOUCHING COUNTS AS CONNECTED. A post whose top is exactly the slab's underside is how a frame
+ * is actually authored, so the overlap test is `>= -eps` rather than `> 0`. The failure this
+ * catches is a GAP, not a shared face.
+ * ⚠ AND IT REPORTS `boxes`, for `modelFits`'s reason. A model that is all sculpt has no boxes, so
+ * every loop here runs zero times and `ok` would mean "nothing to check" — the vacuous green this
+ * file already had to correct once. A caller that cannot tell an empty pass from a real one will
+ * eventually read one as the other.
+ */
+export function modelConnected(m: StationModel, eps = 1e-6): { ok: boolean; boxes: number; groups: number } {
+  const n = m.parts.length
+  if (n === 0) return { ok: true, boxes: 0, groups: 0 }
+  const parent = Array.from({ length: n }, (_, i) => i)
+  const find = (i: number): number => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i] } return i }
+  const union = (a: number, b: number) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb }
+  const span = (b: Box) => ({
+    x0: b[3] - b[0] / 2, x1: b[3] + b[0] / 2,
+    y0: b[4] - b[1] / 2, y1: b[4] + b[1] / 2,
+    z0: b[5] - b[2] / 2, z1: b[5] + b[2] / 2,
+  })
+  const s = m.parts.map(p => span(p.box))
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = s[i], b = s[j]
+      const touch = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) >= -eps
+        && Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) >= -eps
+        && Math.min(a.z1, b.z1) - Math.max(a.z0, b.z0) >= -eps
+      if (touch) union(i, j)
+    }
+  }
+  const groups = new Set(Array.from({ length: n }, (_, i) => find(i))).size
+  return { ok: groups === 1, boxes: n, groups }
+}
+
 // Re-exported so a model file can name tiles without a second import path.
 export { MAT }
