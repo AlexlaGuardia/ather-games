@@ -106,7 +106,9 @@ console.log('\n── 7. the host and the worker are wired ──')
 {
   const host = noComments(readFileSync(join(process.cwd(), 'src/app/shimmer/voxel3d/VoxelWorld.tsx'), 'utf8'))
   const worker = noComments(readFileSync(join(process.cwd(), 'src/workers/voxel-gen.worker.ts'), 'utf8'))
-  ok(host.includes("tier: plotTier.current, litterFrom: litterFrom.current })"), '★ every plot request carries litterFrom')
+  // Anchored on the request's tier+litterFrom pair, not on its closing brace: cluster mode (09-23) adds a
+  // `cluster:` field after it, and the question is whether litterFrom rides, not what comes last.
+  ok(/w\.postMessage\(\{ type: 'request', cx: gx, cz: gz, space: space\.current, tier: plotTier\.current, litterFrom: litterFrom\.current[,} ]/.test(host), '★ every plot request carries litterFrom')
   ok(host.includes('litterFrom: litterFrom.current,'), 'the snapshot saves it')
   ok(host.includes('litterFrom.current = Math.max(1, Math.round(p.litterFrom ?? (plotTier.current + 1)))'), '★★ restore sets it ONCE with the older-save fallback (plotTier + 1)')
   // 4 → 5 on 2026-09-16: the station's stamp-restore (`court-blueprint.ts`) re-derives each stale tier's fold to find the old stamp.

@@ -245,6 +245,8 @@ const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in 
 import { GREG_LINES } from './greg-lines'
 import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
 import { standInCluster, generateFramedColumn, framedMaterialAt, framedHeight, framedIsMine } from '../voxel/cluster-space'
+import { applyMateEdits, type PlotSnapshot } from '../voxel/plot-snapshot'
+import { loadClusterFrame, uploadPlot, scheduleUpload, settleUpload } from './cluster-sync'
 import { DEFAULT_CLUSTER, type ClusterConfig, type QuarterId } from '../voxel/cluster'
 import { insideGlade } from '../voxel/glade'
 import { stationBlueprint, stationStamp, stationCells, stationSockets, stationLamps, socketWay, socketLitBy, socketLabel, socketStandOut, SOCKET_RADIUS } from './court-blueprint'
@@ -3340,7 +3342,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // only the keeper's own fold ground is editable and only it is ever saved — the Green, the lanes
   // and a mate's quarter are read-only (Alex, 09-23), and nothing outside the fold touches the plot's
   // save.
-  const clusterMode = useRef<{ mine: QuarterId; cfg: ClusterConfig } | null>(null)
+  // ★ PHASE 3: `snaps` is set only for a REAL cluster (the shared record, `cluster-sync.ts`) — each
+  // mate's last uploaded picture, laid over their quarter at column adoption, read-only. Stand-ins
+  // carry none. `snaps` present is also what arms my own plot's upload.
+  const clusterMode = useRef<{ mine: QuarterId; cfg: ClusterConfig; snaps?: Partial<Record<QuarterId, PlotSnapshot>> } | null>(null)
   /** Surface y in the plot space, whichever ground it is wearing. null off the ground. */
   const plotSpaceHeight = (x: number, z: number): number | null => {
     const cm = clusterMode.current
@@ -4039,17 +4044,32 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // three quarters are marked STAND-INS — generated folds, never people — so the geometry can
         // be walked in the real engine before anybody else's garden can be loaded. Your own fold is
         // exactly your plot (proven in cluster-space.test § 5); everything else is read-only.
-        if (to === 'cluster') {
-          clusterMode.current = {
-            mine: 'ne',
-            cfg: standInCluster('ne', SEED, plotTier.current, 1, { ...DEFAULT_CLUSTER, base: withLitter(DEFAULT_PLOT, litterFrom.current) }),
+        // ★ PHASE 3: if the keeper stands in a REAL cluster (the shared record), that is what opens —
+        // their own quarter, their mates' quarters wearing each mate's last uploaded garden, read-only.
+        // Only when there is no real one do the stand-ins open, as before. `/space cluster stand`
+        // forces the stand-ins either way.
+        if (to === 'cluster' || to === 'cluster stand') {
+          const base = withLitter(DEFAULT_PLOT, litterFrom.current)
+          const standIns = () => {
+            clusterMode.current = { mine: 'ne', cfg: standInCluster('ne', SEED, plotTier.current, 1, { ...DEFAULT_CLUSTER, base }) }
+            enterSpaceRef.current?.('plot', undefined, true)
           }
-          enterSpaceRef.current?.('plot', undefined, true)
-          return 'your fold opens onto a cluster — three stand-in quarters, the Green between (only your own fold can be changed)'
+          if (to === 'cluster stand') { standIns(); return 'your fold opens onto a cluster — three stand-in quarters, the Green between (only your own fold can be changed)' }
+          flushSaves()
+          void loadClusterFrame(SEED, plotTier.current, base).then(f => {
+            if (!f) { standIns(); onSay('no cluster on record — three stand-in quarters open around your fold instead'); return }
+            clusterMode.current = f
+            enterSpaceRef.current?.('plot', undefined, true)
+            void uploadPlot(SEED)
+            const mates = Object.keys(f.snaps).length, filled = Object.values(f.cfg.slots).filter(Boolean).length - 1
+            onSay(`your cluster opens — ${filled} mate${filled === 1 ? '' : 's'}, ${mates} garden${mates === 1 ? '' : 's'} on record (theirs are read-only)`)
+          })
+          return 'opening your cluster…'
         }
         const want: Space = to === 'plot' ? 'plot' : to === 'wilds' ? 'wilds' : to === 'glade' ? 'glade'
           : space.current === 'plot' ? 'wilds' : 'plot'
         if (want === 'plot' && clusterMode.current) {
+          flushSaves()                                 // while still a cluster, so my last edits reach my mates
           clusterMode.current = null
           enterSpaceRef.current?.('plot', undefined, true)
           return 'the cluster closes back to your own garden'
@@ -4627,6 +4647,9 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // anywhere else would break every object still using them.
   /** Write every dirty column's blocks, pieces AND chest contents in one record each. */
   const flushSaves = useCallback(() => {
+    // ★ PHASE 3: something of MY fold changed while I stand in a real cluster → my mates' picture of
+    // it is refreshed a quiet moment later (cluster-sync.ts). Only real clusters (`snaps` set) upload.
+    if (dirtySaves.current.size && space.current === 'plot' && clusterMode.current?.snaps) scheduleUpload(SEED, () => {})
     for (const k of dirtySaves.current) {
       const [gx, gz] = k.split(',').map(Number)
       const e = edits.current.get(k) ?? new Map()
@@ -5155,10 +5178,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   const enterSpace = useCallback((to: Space, landAt?: { x: number; z: number }, force = false) => {
     // `force` rebuilds the SAME space — cluster mode on or off changes what the plot's ground is.
     if (space.current === to && !force) return
-    // Cluster mode is a way of being in the plot; leaving the plot leaves it.
-    if (to !== 'plot') clusterMode.current = null
     const g = group.current
     flushSaves()                                    // ⚠ before the flip — see above
+    // Cluster mode is a way of being in the plot; leaving the plot leaves it. AFTER the flush, so the
+    // flush still knows it was a cluster and queues my mates' picture — which is then sent now.
+    if (to !== 'plot') clusterMode.current = null
+    settleUpload()
     space.current = to
     for (const [, m] of drawn.current) { g?.remove(m); m.geometry.dispose() }
     drawn.current.clear()
@@ -8494,6 +8519,11 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // again once its edits land. That is deliberate: blocking the world on a database read would
       // stall streaming for the common case, which is a column with no edits at all.
       const ek = key(gx, gz)
+      // ★ PHASE 3: a mate's quarter wears their uploaded garden. Written straight into the column,
+      // never through `setVoxel`, so none of it can reach my save (and `setVoxel` refuses those
+      // cells anyway — they are outside my fold).
+      const cmx = space.current === 'plot' ? clusterMode.current : null
+      if (cmx?.snaps) applyMateEdits(col, cmx.mine, cmx.cfg, cmx.snaps)
       applyEdits(col, edits.current.get(ek))
       refreshUniform(col)
       col.stage = Stage.Ready
@@ -8605,7 +8635,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // while the host measured its threshold, its chest cap and its fall line against the
         // keeper's own — a fold whose door stands in a field.
         w.postMessage({ type: 'request', cx: gx, cz: gz, space: space.current, tier: plotTier.current, litterFrom: litterFrom.current,
-                        cluster: space.current === 'plot' ? clusterMode.current ?? undefined : undefined })
+                        // {mine, cfg} only: the snapshots are laid on by the HOST at adoption, never cloned per request.
+                        cluster: space.current === 'plot' && clusterMode.current ? { mine: clusterMode.current.mine, cfg: clusterMode.current.cfg } : undefined })
       } else {
         // No worker (construction failed): generate here so the world still exists.
         if (performance.now() - t0 > 10) break
@@ -8616,7 +8647,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // and no island. `generatePlotColumn` was already imported here and used by nobody, which is
         // the tell. Rare path, silent failure, and the save would have recorded the difference.
         cols.current.set(key(gx, gz), space.current === 'plot' && clusterMode.current
-          ? generateFramedColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), clusterMode.current.mine, clusterMode.current.cfg)
+          ? (() => {
+              const cm = clusterMode.current!
+              const c = generateFramedColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), cm.mine, cm.cfg)
+              if (cm.snaps) applyMateEdits(c, cm.mine, cm.cfg, cm.snaps)
+              return c
+            })()
           : space.current === 'plot'
           ? generatePlotColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), SEED, plotCfg.current)
           : space.current === 'glade'

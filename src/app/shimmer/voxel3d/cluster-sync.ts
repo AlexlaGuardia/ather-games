@@ -65,19 +65,30 @@ export async function uploadPlot(seed: number): Promise<boolean> {
   try {
     const snap = buildSnapshot(await plotColumnEdits(seed))
     const r = await fetch('/api/cluster/plot', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(snap), keepalive: true,
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(snap),
     })
     return r.ok
   } catch { return false }
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null
+let pendingSeed: number | null = null
 /**
  * Upload a little after the last change, not on every swing: a mate sees my garden as of the last
  * quiet moment, which is all a read-only picture needs to be. `flush` runs first so the disk has it.
  */
 export function scheduleUpload(seed: number, flush: () => void, delayMs = 20_000): void {
   if (timer) clearTimeout(timer)
-  timer = setTimeout(() => { timer = null; flush(); void uploadPlot(seed) }, delayMs)
+  pendingSeed = seed
+  timer = setTimeout(() => { timer = null; pendingSeed = null; flush(); void uploadPlot(seed) }, delayMs)
 }
-export function cancelUpload(): void { if (timer) { clearTimeout(timer); timer = null } }
+/**
+ * Send a pending upload NOW — leaving the cluster (or rebuilding it) is the quiet moment, and a
+ * cancelled timer there would leave my mates looking at a garden from before my last session.
+ */
+export function settleUpload(): void {
+  if (!timer || pendingSeed === null) return
+  const seed = pendingSeed
+  clearTimeout(timer); timer = null; pendingSeed = null
+  void uploadPlot(seed)
+}
