@@ -54,7 +54,15 @@ export interface ClusterDip {
   keel: number
 }
 
-export const DEFAULT_DIP: ClusterDip = { depth: 5, ramp: 40, keel: 12 }
+/**
+ * ⚠ `keel` 14 IS THE PLOT'S OWN, AND THE FIRST CUT'S 12 WAS WRONG IN A WAY ONLY THE SECTION SHOWED.
+ * `plot.ts` hangs a fold's keel from `baseY` and bottoms out at `baseY − keel + 1` = 83. At 12 the
+ * made ground stopped at 85, so the cluster's underside had a **notch** two blocks proud of the
+ * islands either side of it — from below, a plank slotted between two islands rather than one body
+ * with a dip in it. Nothing in the plan view could show that and no guard was asking; the
+ * cross-section showed it in one glance.
+ */
+export const DEFAULT_DIP: ClusterDip = { depth: 5, ramp: 40, keel: 14 }
 
 /**
  * ⚠ A QUARTER'S CONFIG IS ITS OWN PLOT'S, WITH THE FRONT DOOR REMOVED. See the header: the cave is
@@ -130,16 +138,28 @@ export function clusterMaterialAt(
     if (y > top) return 0
     const bottom = cfg.base.baseY - dip.keel + 1
     if (y < bottom) return 0
-    // ★★ THE CLOUD BAND IS TESTED BEFORE THE SOIL, AND THAT IS NOT THE OBVIOUS ORDER — carried over
-    //    from `plotMaterialAt`, which paid for it. Written turf-then-subsoil-then-rest, the soil
-    //    layers eat a thin column's whole keel and leave ordinary diggable dirt with the VOID under
-    //    it. The floor material's `hardness: Infinity` is the only thing stopping a keeper mining
-    //    out of the bottom of the world, and it protects nothing if the soil rule outranks it.
-    //    **The keel is a floor first and a surface second.**
-    if (y < bottom + cfg.base.cloudBand) return m.floor
+    // ── ★★ THE MADE GROUND HAS NO ROCK BODY, AND THAT IS THE STATEMENT, NOT A SHORTCUT ──────────
+    //    Turf, one course of soil, and pressed cloud all the way down. A fold is an ISLAND: it has
+    //    a stone core because it grew. The Green and the lanes are what the folding pressed out of
+    //    the cloud — canon's *"nobody made it, the folding made it"* — so a keeper who digs into
+    //    the middle finds the cloud it was made from, not bedrock that was never there.
+    //
+    //    ⚠ IT IS ALSO A VISIBLE TELL AND THE SECTION IS WHERE IT WAS DECIDED. Side by side, the
+    //    folds show six or seven courses of stone and the middle shows none, so the eye reads the
+    //    middle as newer and MADE without a word of UI. The first cut got this by accident — the
+    //    plot's layering left no room for stone at the bowl's floor and a single sliver of it at
+    //    the lip, which is the worst of both: a statement nobody chose, contradicted in one band.
+    //
+    //    ★★ AND THE CLOUD IS STILL TESTED BEFORE THE SOIL, carried from `plotMaterialAt`, which
+    //    paid for it: written turf-then-soil-then-rest, the soil courses eat a thin column's whole
+    //    keel and leave ordinary diggable dirt with the VOID under it. The floor material's
+    //    `hardness: Infinity` is the only thing stopping a keeper mining out of the bottom of the
+    //    world, and it protects nothing if the soil rule outranks it. **The keel is a floor first
+    //    and a surface second**, which is why the two soil courses are carved out of the top rather
+    //    than the cloud being carved out of the bottom.
     if (y === top) return m.topsoil
-    if (y >= top - 2) return m.subsoil
-    return m.stone
+    if (y === top - 1) return m.subsoil
+    return m.floor
   }
 
   // 3. THE CLUSTER'S ONE CLOUD WALL. It rings the whole outline — every fold's outer coast, the

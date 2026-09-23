@@ -179,6 +179,46 @@ console.log('the bowl — the middle is lower than the folds, and that is Alex\'
   check('there is no step at the coast', Math.abs(atCoast - B) <= 1, `${atCoast} vs ${B}`)
 }
 
+console.log('the made ground is visibly MADE — no rock body, and one continuous underside')
+{
+  // ⚠ BOTH OF THESE WERE FOUND BY LOOKING AT THE CROSS-SECTION, NOT BY A GUARD. The plan view is
+  // structurally incapable of showing either, and nothing was asking. They are asserted now so the
+  // statement cannot drift back into being an accident of the plot's layering.
+  const cfg = allAt({ ne: 2, nw: 1, sw: 0, se: 2 })
+  const m = cfg.base.materials
+  let stone = 0, made = 0
+  const bottoms: number[] = []
+  for (let i = 0; i < 4000; i++) {
+    const a2 = (i / 4000) * Math.PI * 2, r = (i % 149) / 149 * 1000
+    const x = Math.round(Math.cos(a2) * r), z = Math.round(Math.sin(a2) * r)
+    const part = clusterAt(x, z, cfg).part
+    if (part !== 'green' && part !== 'join') continue
+    made++
+    const top = clusterHeight(x, z, cfg)!
+    let y = top
+    while (y > 0 && clusterMaterialAt(x, y, z, cfg) !== 0) {
+      if (clusterMaterialAt(x, y, z, cfg) === m.stone) stone++
+      y--
+    }
+    bottoms.push(y + 1)
+  }
+  check('the sample found made ground', made > 500, `${made} columns`)
+  // A fold is an island and grew a stone core; the middle was pressed out of cloud and has none.
+  check('the Green and the lanes contain no stone at all', stone === 0, `${stone} blocks`)
+  // ⚠ AND THE UNDERSIDE IS CONTINUOUS. At `keel` 12 the made ground stopped two blocks proud of the
+  // islands either side, so from below the cluster was a plank slotted between two islands.
+  const foldBottoms: number[] = []
+  for (const q of QUARTERS) {
+    const c = quarterCentre(q, cfg)
+    let y = clusterHeight(c.x, c.z, cfg)!
+    while (y > 0 && clusterMaterialAt(c.x, y, c.z, cfg) !== 0) y--
+    foldBottoms.push(y + 1)
+  }
+  const madeFloor = Math.min(...bottoms), foldFloor = Math.min(...foldBottoms)
+  check('the middle hangs level with the folds it joins', Math.abs(madeFloor - foldFloor) <= 1,
+    `made ${madeFloor} vs folds ${foldFloor}`)
+}
+
 console.log('a quarter is still the keeper\'s own island, in blocks this time')
 {
   // The plan asserted this in 2D. The adapter can still lose it by delegating wrong.
