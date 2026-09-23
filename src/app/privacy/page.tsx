@@ -4,15 +4,17 @@ import DeleteAccount from './DeleteAccount'
 
 // The privacy page. Written to be TRUE of the code as it actually is, not aspirational
 // boilerplate: every cookie and storage key named here exists, and the delete button below
-// runs a real delete. If the app ever gains analytics, an ad network, or server-side garden
-// saves, this page is wrong the same day and has to change with it.
+// runs a real delete. If the app ever gains analytics, an ad network, or a new server-side store,
+// this page is wrong the same day and has to change with it. (2026-09-23: it had drifted — it said
+// signing in uploads nothing, while /api/saves had been keeping the Shimmer save since 07-31. Fixed
+// with the garden-cluster rows. Stores it now names: saves, friends, cluster_*, cluster_plots.)
 
 export const metadata: Metadata = {
   title: 'Privacy',
   description: 'What ather.games stores, what it does not, and how to delete your account.',
 }
 
-const UPDATED = '25 July 2026'
+const UPDATED = '23 September 2026'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -49,7 +51,8 @@ export default function PrivacyPage() {
             your own browser and never reaches our server. That includes:
           </p>
           <ul className="list-disc pl-5 space-y-1">
-            <li><code className="text-text">ather:save:shimmer</code> — your Shimmer save, including your garden and everything you have built in it</li>
+            <li><code className="text-text">ather:save:shimmer</code> — your Shimmer save: your character, what you carry, and your progress</li>
+            <li><code className="text-text">shimmer-voxel</code> (your browser&apos;s IndexedDB) — the blocks you have built and dug in your garden and out in the world, and what is in your chests</li>
             <li><code className="text-text">ather:mp:name</code>, <code className="text-text">ather:mp:party</code>, <code className="text-text">ather:mp:id</code> — your display name, party code, and a random id used so other players in your world can be told apart</li>
             <li>per game settings and high scores, such as <code className="text-text">manana.best</code> and <code className="text-text">nolmir.forge.v1</code></li>
           </ul>
@@ -85,7 +88,31 @@ export default function PrivacyPage() {
             of your sign in is covered by Google&apos;s privacy policy.
           </p>
           <p>
-            Your garden save stays in your browser even when you are signed in. Signing in does not upload it.
+            When you are signed in, a copy of your Shimmer save is kept on our server under your account, so
+            it can follow you to another device. The blocks you build in your garden still stay in your
+            browser, unless you join a garden cluster (below).
+          </p>
+        </Section>
+
+        <Section title="Garden clusters">
+          <p>
+            A garden cluster is something you and signed in friends choose to form, so your gardens sit
+            together. Nothing is shared unless you fold a cluster or sign up to one. While you are in a
+            cluster, our server keeps:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>which cluster you are in and which corner is yours, and the invitations and yeses that are waiting</li>
+            <li>your garden&apos;s seed and size, so your cluster-mates can see its ground</li>
+            <li>a picture of the blocks you have built in your garden, sent from your browser now and then, so your cluster-mates can see it. They can look at it but cannot change it.</li>
+          </ul>
+          <p>
+            Only the other keepers in your cluster can see these. A friend you invite sees the usernames of
+            the keepers already in, and nothing else. Your cluster-mates never see what is in your chests or
+            your bag.
+          </p>
+          <p>
+            When you take back your corner, your place in the cluster and the picture of your garden are
+            deleted, and the others no longer see them. Deleting your account does the same.
           </p>
         </Section>
 
@@ -115,9 +142,10 @@ export default function PrivacyPage() {
 
         <Section title="Deleting your account">
           <p>
-            You can delete your account whenever you want. It removes your account, your username, and your
-            friend list from our server for good. It does not touch the save in your browser, which is yours
-            and which clearing site data will remove.
+            You can delete your account whenever you want. It removes your account, your username, your
+            friend list, the copy of your Shimmer save, and your place in any garden cluster along with the
+            picture of your garden, all from our server for good. It does not touch the save in your
+            browser, which is yours and which clearing site data will remove.
           </p>
           <div className="mt-5 p-5 rounded-xl border border-white/10 bg-white/[0.02]">
             <DeleteAccount />
