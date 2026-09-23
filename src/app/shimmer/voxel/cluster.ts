@@ -265,6 +265,26 @@ export function inFold(x: number, z: number, q: QuarterId, cfg: ClusterConfig): 
 }
 
 /**
+ * How far this column lies OUTSIDE the nearest fold's coast, in blocks. Negative inside one.
+ *
+ * ★ EXPORTED BECAUSE THE MIDDLE'S HEIGHT IS A FUNCTION OF IT. `cluster-column.ts` drops the ground
+ * away from the folds to make the Green a bowl and the lanes its slopes, and it must measure that
+ * against the SAME coast the folds are drawn from — one definition, or the surface and the ground
+ * it sits on disagree at the seam. (PATTERNS › `reading-one-layer-away`: the tell is two functions
+ * whose names are both "edge".)
+ */
+export function foldGap(x: number, z: number, cfg: ClusterConfig): number {
+  let best = Infinity
+  for (const q of QUARTERS) {
+    const k = cfg.slots[q]
+    if (!k) continue
+    const l = quarterLocal(x, z, q, cfg)
+    best = Math.min(best, Math.hypot(l.x, l.z) - edgeAt(l.x, l.z, k.seed, plotForTier(k.tier, cfg.base)))
+  }
+  return best
+}
+
+/**
  * Whose fold this column is, or `null`. At most one can answer, because `offset >= capRadius`
  * makes two folds' discs incapable of overlapping — so this is a fact, not a priority order.
  */
