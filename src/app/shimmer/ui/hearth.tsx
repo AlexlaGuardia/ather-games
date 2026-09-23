@@ -59,7 +59,12 @@ export function HearthX({ onClick }: { onClick: () => void }) {
  * card never exceeds the screen minus a 16px gutter each side, so a phone gets the whole width.
  * With `backdrop={false}` it is only the card, for a host that already owns placement.
  */
-export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, children, backdrop = true, bodyClass = '', className = '' }: {
+export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, children, backdrop = true, bodyClass = '', className = '', footer, backdropClass = '', head }: {
+  /** Pinned under the scroll body, on the parchment — never scrolls away (the keeper frame's hint). */
+  footer?: React.ReactNode
+  /** Pinned ABOVE the scroll body (a tab rail that must not scroll). */
+  head?: React.ReactNode
+  backdropClass?: string
   /** The plaque. Omitted = no plaque (a panel still carrying its own head row, mid-migration). */
   title?: string
   /** Extra classes on the card root — `hearth-ink` is how PanelFrame opts a legacy panel into the bridge. */
@@ -84,16 +89,19 @@ export function HearthFrame({ title, maxWidth = 520, onClose, dataPanel, childre
         </div>}
         <div className="rounded-[10px] overflow-hidden"
              style={{ background: PAPER, boxShadow: 'inset 0 2px 6px rgba(58,39,22,.45), inset 0 0 0 1px rgba(58,39,22,.35)' }}>
+          {head && <div className="px-4 pt-6" style={{ color: H.ink }}>{head}</div>}
           <div className={`max-h-[78vh] overflow-y-auto hearth-scroll ${bodyClass}`} style={{ color: H.ink }}>
             {children}
           </div>
+          {footer && <div className="mx-4 py-2.5" style={{ borderTop: `1px solid ${H.rule}`, color: H.inkSoft }}>{footer}</div>}
         </div>
       </div>
     </div>
   )
   if (!backdrop) return card
   return (
-    <div className="absolute inset-0 grid place-items-center bg-black/25 backdrop-blur-[3px] pointer-events-auto" onClick={onClose}>
+    <div className={`absolute inset-0 grid place-items-center bg-black/25 backdrop-blur-[3px] pointer-events-auto ${backdropClass}`}
+         onClick={onClose} onContextMenu={e => e.preventDefault()}>
       {card}
     </div>
   )

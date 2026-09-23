@@ -44,8 +44,21 @@ const FLOORS: Record<string, number> = {
   // a floor that only travels one way: every later run red, unfixable except by writing more
   // commentary about gx. 23 -> 64 is the honest climb (the fold HUD, brew + keeper panels, the
   // grimoire portraits, the map caption).
-  shimmer: 170,
   lucernyx: 7, nolmir: 3,
+}
+/**
+ * Surfaces LEAVING the layer on purpose, each with a CEILING that ratchets DOWN.
+ *
+ * ★ SHIMMER (2026-09-22). Alex blessed the Carved Hearth for Shimmer's menus — the cozy world's own
+ * register, `src/app/shimmer/ui/hearth.tsx` — because the arcade chrome was the cabinets' voice over
+ * a sunfruit meadow (SHIMMER_MENU_RESEARCH.md). So shimmer's gx count is now supposed to FALL, and
+ * the floor that used to guard it would read every migrated panel as a regression. The ceiling is
+ * the mirror image: going ABOVE it (a new panel reaching for gx-*) is red, and dropping below it is
+ * red until the drop is banked here — the migration cannot stall silently, and it cannot reverse.
+ * At 0 the entry is deleted and shimmer moves to PENDING with the hearth as its reason.
+ */
+const LEAVING: Record<string, { ceiling: number; why: string }> = {
+  shimmer: { ceiling: 202, why: 'moving onto the Carved Hearth (ui/hearth.tsx)' },
 }
 
 /**
@@ -117,10 +130,16 @@ for (const g of GAMES) {
   ok(files > 0, `${g.id}: scanned 0 source files — the walker is broken, not the surface`)
   rows.push({ id: g.id, hits, floor: FLOORS[g.id] })
 
-  const inFloors = g.id in FLOORS, inPending = g.id in PENDING
-  ok(inFloors !== inPending,
-     inFloors && inPending ? `${g.id} is in BOTH FLOORS and PENDING — pick one`
-                           : `${g.id} is in NEITHER FLOORS nor PENDING — a new game must be classified before this can pass`)
+  const inFloors = g.id in FLOORS, inPending = g.id in PENDING, inLeaving = g.id in LEAVING
+  const classes = Number(inFloors) + Number(inPending) + Number(inLeaving)
+  ok(classes === 1,
+     classes > 1 ? `${g.id} is in more than one of FLOORS / PENDING / LEAVING — pick one`
+                 : `${g.id} is in none of FLOORS / PENDING / LEAVING — a new game must be classified before this can pass`)
+  if (inLeaving) {
+    const { ceiling } = LEAVING[g.id]
+    ok(hits <= ceiling, `${g.id} went BACK onto the layer: ${hits} gx uses, ceiling is ${ceiling} — it is leaving (${LEAVING[g.id].why})`)
+    ok(hits >= ceiling, `${g.id} dropped to ${hits} (ceiling ${ceiling}) — bank the migration by lowering the ceiling`)
+  }
   if (inFloors) {
     ok(hits >= FLOORS[g.id], `${g.id} REGRESSED: ${hits} gx uses, floor is ${FLOORS[g.id]}`)
     ok(hits === FLOORS[g.id], `${g.id} climbed to ${hits} (floor ${FLOORS[g.id]}) — bank it by raising the floor`)
@@ -130,7 +149,7 @@ for (const g of GAMES) {
   }
 }
 // a name in FLOORS/PENDING that is no longer a registered game
-for (const id of [...Object.keys(FLOORS), ...Object.keys(PENDING)]) {
+for (const id of [...Object.keys(FLOORS), ...Object.keys(PENDING), ...Object.keys(LEAVING)]) {
   ok(GAMES.some(g => g.id === id), `${id} is classified here but is no longer in the game registry — delete it`)
 }
 

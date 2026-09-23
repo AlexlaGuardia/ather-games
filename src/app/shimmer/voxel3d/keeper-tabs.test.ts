@@ -9,7 +9,7 @@
  * the list is asserted by VALUE, and the host is asserted to mount exactly one body per entry.
  */
 import { readFileSync } from 'node:fs'
-import { KEEPER_TABS } from './keeper-panel'
+import { KEEPER_TABS } from './keeper-tabs'
 import { noComments, declAt, declAfter } from '../testing/guard'
 
 let pass = 0

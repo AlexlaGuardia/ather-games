@@ -40,7 +40,7 @@ const SHELL = noComments(read('./keeper-panel.tsx'))
 const headAt = SHELL.indexOf('export function SectionHead(')
 ok(headAt >= 0, 'keeper-panel exports SectionHead — the one spelling of a section head')
 const head = headAt >= 0 ? SHELL.slice(headAt, SHELL.indexOf('\n}\n', headAt)) : ''
-ok(/className="gx-label /.test(head), 'SectionHead asks gx-label for its title')
+ok(/hearthDisplay/.test(head), 'SectionHead takes the hearth display face for its title (Carved Hearth Phase 5 — it asked gx-label before)')
 ok(/h-px/.test(head), 'SectionHead draws the hairline — bodies must not draw their own')
 
 // ── 3. the host's panel region ─────────────────────────────────────────────────────────────

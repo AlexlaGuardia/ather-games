@@ -76,13 +76,10 @@ export type LiftMode = 'whole' | 'half' | 'one'
 const DRAG_SLOP = 5
 
 /** One place each for what a lift LOOKS like, so a fourth mode cannot be added and left invisible. */
-const LIFT_LOOK: Record<LiftMode, string> = {
-  whole: 'border-amber-300 bg-amber-300/20 ring-1 ring-inset ring-amber-300/70',
-  half: 'border-sky-300 bg-sky-300/20 ring-1 ring-inset ring-sky-300/70',
-  one: 'border-emerald-300 bg-emerald-300/20 ring-1 ring-inset ring-emerald-300/70',
-}
+// ★ Carved Hearth (Phase 5): the LOOK of a lift is `ui/hearth.css` › `.hearth-slot[data-lift=…]`
+// — ember whole, sky half, moss one. The badge takes the same three colours from here.
 const LIFT_BADGE: Record<LiftMode, string> = {
-  whole: 'bg-amber-300', half: 'bg-sky-300', one: 'bg-emerald-300',
+  whole: '#c8642a', half: '#4f7690', one: '#5f7d45',
 }
 
 /**
@@ -1059,27 +1056,25 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
         title={st ? `${itemLabel(st.itemId)} ×${st.count}` : 'empty'}
         // ⚠ `touch-none` is what lets a drag be a drag on a phone — without it the browser claims the
         // gesture as a scroll partway through and the pointer stream just stops.
-        className={`relative w-12 h-12 rounded-[2px] border flex flex-col items-center justify-center
-          text-[9px] font-mono transition-colors touch-none select-none
-          shadow-[inset_0_0_8px_rgba(0,0,0,0.6)]
-          ${lifted && dragFrom ? LIFT_LOOK[dragFrom.mode]
-            : dragFrom !== null ? 'border-amber-200/30 bg-black/55 hover:border-amber-200/80'
-            : 'border-amber-200/[0.14] bg-black/45 hover:border-amber-200/50'}`}>
+        data-lift={lifted && dragFrom ? dragFrom.mode : undefined}
+        data-armed={!lifted && dragFrom !== null ? '' : undefined}
+        className="hearth-slot relative w-full aspect-square flex flex-col items-center justify-center touch-none select-none">
         {st ? (
           <>
-            <ItemChip itemId={st.itemId} size={26} />
-            <span className="gx-value mt-0.5 text-white/85">{st.count}</span>
+            <ItemChip itemId={st.itemId} size={30} />
+            <span className="absolute bottom-0.5 right-1.5 text-[11px] font-extrabold tabular-nums"
+                  style={{ color: '#3a2716', textShadow: '0 1px 0 rgba(255,250,235,.8)' }}>{st.count}</span>
             {/* How many the lift will actually take, stated rather than left to be counted — "half
                 of 7" is 4 here and 3 elsewhere, and a player should not have to find out by doing
                 it. A whole lift needs no badge: the count under the icon already says it. */}
             {lifted && dragFrom && dragFrom.mode !== 'whole' && (
-              <span className={`absolute -top-1.5 -right-1.5 rounded px-1
-                                text-[9px] font-bold tabular-nums text-black ${LIFT_BADGE[dragFrom.mode]}`}>
+              <span className="absolute -top-1.5 -right-1.5 rounded-full px-1.5 text-[11px] font-extrabold tabular-nums"
+                    style={{ background: LIFT_BADGE[dragFrom.mode], color: '#fff7ea' }}>
                 {dragFrom.mode === 'half' ? halfOf(st.count) : 1}
               </span>
             )}
           </>
-        ) : <span className="text-white/15">·</span>}
+        ) : null}
       </button>
     )
   }
@@ -1103,7 +1098,7 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
    * this list, because the list IS the layout.
    */
   const hint = (
-    <span className="grid text-[11px] text-white/40">
+    <span className="grid text-[12px] italic" style={{ color: '#9a8163' }}>
       {([
         [`drag a stack to move it · right-drag deals one per slot${chest ? ' · shift-click sends it across' : ''} · I closes`, dragFrom === null],
         ['click a slot to place · right-click deals one and keeps hold · click again to cancel', dragFrom?.mode === 'whole'],
@@ -1134,7 +1129,7 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
               from the live array would silently shrink to whatever a bad save happened to hold —
               `adoptRack` is the one place that decides how long a rack is, and drawing the
               constant is what makes a short save read as empty slots rather than as missing ones. */}
-          <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${chest.rack ? RACK_COLS : CHEST_COLS}, minmax(0, 1fr))` }}>
+          <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${chest.rack ? RACK_COLS : CHEST_COLS}, minmax(0, 58px))`, justifyContent: 'center' }}>
             {Array.from({ length: chest.rack ? RACK_SLOTS : CHEST_SLOTS }, (_, k) => cell({ g: 'chest', i: k }))}
           </div>
         </div>
@@ -1158,15 +1153,16 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
           <div className="mb-4 border-b border-white/10 pb-4">
             <SectionHead label={`the bank · ${chest.bank.chests} of ${chest.bank.chestCap} chests`}
                          note={<><span className={`gx-value ${free < 0 ? 'text-red-300/80' : 'text-white/40'}`}>{used}</span> / {chest.bank.cap} slots</>} />
-            <div className="mb-2 flex flex-wrap items-center gap-1">
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
               {BANK_TABS.map(t => {
                 const n = t.id === 'all' ? used : (counts.get(t.id) ?? 0)
                 const on = t.id === bankTab && !searching
                 return (
                   <button key={t.id} type="button" onClick={() => { setBankTab(t.id); setBankQuery('') }}
-                          className={`rounded-[2px] border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] transition-colors
-                            ${on ? 'border-amber-300/70 bg-amber-300/10 text-amber-100' : 'border-white/10 text-white/40 hover:border-white/30 hover:text-white/70'}`}>
-                    {t.label}{n > 0 && <span className="gx-value ml-1 text-[9px] opacity-70">{n}</span>}
+                          className="rounded-full px-3 h-8 text-[12px] font-bold transition-all"
+                          style={on ? { background: '#fbf4e4', color: '#3a2716', boxShadow: 'inset 0 0 0 1.5px #c8642a, 0 1px 2px rgba(58,39,22,.2)' }
+                                    : { background: 'rgba(214,191,149,.45)', color: '#6b5238' }}>
+                    {t.label}{n > 0 && <span className="ml-1 text-[11px] font-semibold tabular-nums" style={{ color: '#5f7d45' }}>{n}</span>}
                   </button>
                 )
               })}
@@ -1175,7 +1171,8 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
               <input value={bankQuery} onChange={e => setBankQuery(e.target.value)} placeholder="find…"
                      data-bank-search
                      onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape' && bankQuery) { e.preventDefault(); setBankQuery('') } }}
-                     className="ml-auto h-6 w-28 rounded-[2px] border border-white/10 bg-black/40 px-2 text-[10px] text-white/80 outline-none placeholder:text-white/25 focus:border-amber-300/60" />
+                     className="ml-auto h-8 w-32 rounded-full px-3 text-[13px] outline-none"
+                     style={{ background: '#e8d8b8', color: '#3a2716', boxShadow: 'inset 0 1px 3px rgba(58,39,22,.35)' }} />
             </div>
             {free < 0 && (
               <div className="mb-2 text-[11px] text-red-200/70">over by {-free} — a chest came down; nothing more goes in until it drains</div>
@@ -1189,7 +1186,7 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
             {searching && view.length === 0 && (
               <div className="mb-2 text-[11px] text-white/30">nothing in the bank matches “{bankQuery.trim()}”</div>
             )}
-            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 1fr))` }}>
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${CHEST_COLS}, minmax(0, 58px))`, justifyContent: 'center' }}>
               {view.map(i => cell({ g: 'chest', i }))}
               {holes.map(i => cell({ g: 'chest', i }))}
             </div>
@@ -1198,15 +1195,15 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
       })()}
       {/* Satchel: slots 8-23, the 16 that are not the bar. */}
       <SectionHead label="Satchel" note={<><span className="gx-value text-white/40">16</span> slots</>} />
-      <div className="grid grid-cols-8 gap-1.5">
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(8, minmax(0, 58px))', justifyContent: 'center' }}>
         {Array.from({ length: 16 }, (_, k) => cell({ g: 'bag', i: k + 8 }))}
       </div>
       {/* The bar itself, set apart by a rule so its slots read as the SAME grid, not a copy. */}
       <div className="mt-4 border-t border-white/10 pt-3">
         <SectionHead label="Hotbar" note="keys 1 – 8" />
-        <div className="grid grid-cols-8 gap-1.5">
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(8, minmax(0, 58px))', justifyContent: 'center' }}>
           {Array.from({ length: 8 }, (_, k) => (
-            <div key={k} className={sel === k ? 'rounded-[2px] ring-1 ring-amber-300/80 shadow-[0_0_10px_-2px_#d4a843]' : ''}>{cell({ g: 'bag', i: k })}</div>
+            <div key={k} className={sel === k ? 'hearth-slot-sel' : ''}>{cell({ g: 'bag', i: k })}</div>
           ))}
         </div>
       </div>
