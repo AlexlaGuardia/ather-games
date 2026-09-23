@@ -71,8 +71,14 @@ const hostText = noComments(src)
   ok([...TALL_STATIONS].every(m => !isStationRack(m)), '§2 ★ and no tall station IS its own rack')
   ok([...TALL_STATIONS].every(m => stationOf(m) !== null),
     '§2 every tall station is a real station — a rack over decor would open a panel that has nothing in it')
-  ok(isTallStation(MAT.SAWMILL) && isTallStation(MAT.STONECUTTER) && !isTallStation(MAT.CRAFT_TABLE),
-    '§2 the bench stays one cell; the mill and the cutter are the two that grew')
+  // ⚠ THE BENCH JOINED THEM 2026-09-23 and this line used to assert the opposite — kept as a
+  // POSITIVE claim about all three rather than deleted, because the workshop family standing at
+  // one height is the thing Alex asked for and it should go red if one of them is ever shortened.
+  // The negative half moved to a block that is genuinely not a station.
+  ok(isTallStation(MAT.CRAFT_TABLE) && isTallStation(MAT.SAWMILL) && isTallStation(MAT.STONECUTTER),
+    '§2 ★ the whole workshop family — bench, mill, cutter — stands two cells tall')
+  ok(!isTallStation(MAT.CHEST) && !isTallStation(MAT.MANA_LANTERN) && !isTallStation(MAT.OVEN),
+    '§2 ★ and a chest, a lantern and an oven are NOT tall — the flag is not creeping across the block table')
 }
 
 // ── §3 PLACING one writes BOTH cells, and refuses when there is no room ───────────────────────

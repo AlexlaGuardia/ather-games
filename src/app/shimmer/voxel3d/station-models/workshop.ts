@@ -22,7 +22,8 @@ export const MODELS: Readonly<Record<number, StationModel>> = {
   // on a plot are siblings rather than one bench drawn twice.
   // `scripts/models/frame.py`, `npm run bake:props`. 352 tris.
   [MAT.CRAFT_TABLE]: {
-    note: 'a made workbench: chamfered slab on shaved corner legs, braced, a mallet and chisel left on top',
+    tall: true,
+    note: 'a made workbench, two cells: chamfered slab on shaved corner legs, tools left on top, a planked tool wall above',
     parts: [],
     sculpt: {
       model: 'bench',
@@ -41,6 +42,19 @@ export const MODELS: Readonly<Record<number, StationModel>> = {
         { node: 'Top', top: MAT.CRAFT_TABLE },
         { node: 'Frame', top: MAT.CRAFT_TABLE },
         { node: 'Tools', top: MAT.CRAFT_TABLE },
+        // ── ★★ THE RACK'S BOARDS ARE THE ONE NODE THAT DOES *NOT* WEAR THE BENCH'S TILE ───────
+        // (2026-09-23) A side face samples `-local.y` against a `RepeatWrapping` atlas, so world
+        // y ∈ [1,2] re-prints the tile from its bottom — `paintCraftTable`'s rail band, leg
+        // stripes and recessed panel, a second time, at head height. **A SILHOUETTE TILE CANNOT
+        // BE WORN TWICE.** So the boards wear plank GRAIN, which is what a repeating sample is
+        // for, and this is also why the boards are a separate mesh node at all: a node is the
+        // unit that assigns tiles, so "needs a different tile" is the definition of "needs its
+        // own node" (`SculptPart`'s own rule, from the other side).
+        // ⚠ THE TWO POSTS ARE DELIBERATELY NOT HERE — they are in `Frame`, because they ARE the
+        // back legs continuing upward and the tile's leg stripe runs the full height of the tile.
+        // A post wearing plank grain would have broken the one thing that makes the upper cell
+        // read as the same bench rather than as a shelf standing behind one.
+        { node: 'Rack', top: MAT.PLANKS_GOLDWOOD, side: MAT.PLANKS_GOLDWOOD },
       ],
     },
   },

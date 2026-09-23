@@ -22,7 +22,7 @@ import { cauldronBodyGeo, cauldronBrewGeo } from './models/cauldron'
 import { mortarBodyGeo } from './models/mortar'
 import { bowlBodyGeo, bowlPasteGeo } from './models/bowl'
 import { stillBaseGeo, stillBulbGeo } from './models/still'
-import { benchTopGeo, benchFrameGeo, benchToolsGeo } from './models/bench'
+import { benchTopGeo, benchFrameGeo, benchToolsGeo, benchRackGeo } from './models/bench'
 import { createPieceMaterial, type PieceMaterial } from './piece-mesh'
 import { layerOf, TOP, SIDE } from './tex/tiles'
 import { EMISSIVE } from './attrs'
@@ -48,7 +48,7 @@ export const SCULPTS: Readonly<Record<string, Readonly<Record<string, () => THRE
   mortar: { Body: mortarBodyGeo },
   bowl: { Body: bowlBodyGeo, Paste: bowlPasteGeo },
   still: { Base: stillBaseGeo, Bulb: stillBulbGeo },
-  bench: { Top: benchTopGeo, Frame: benchFrameGeo, Tools: benchToolsGeo },
+  bench: { Top: benchTopGeo, Frame: benchFrameGeo, Tools: benchToolsGeo, Rack: benchRackGeo },
 }
 
 export interface StationRenderer {

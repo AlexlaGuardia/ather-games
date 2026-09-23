@@ -832,7 +832,13 @@ export const isModelled = (m: number): boolean => MODELLED_MATS.has(m)
  * agreement in both directions rather than trusting two lists to be edited together.
  */
 export const TALL_STATIONS: ReadonlySet<number> = new Set<number>([
-  MAT.SAWMILL, MAT.STONECUTTER,
+  // The bench joined them 2026-09-23 (Alex: *"now do the bench so it matches"*). The tile family
+  // already said the three belong together — `paintSawmill`'s comment calls the mill the bench's
+  // deliberate sibling and `paintStonecutter` borrows the bench's timber as "the family's leg
+  // stock" — so a one-metre bench between two two-metre siblings read as the odd one out rather
+  // than as the small one. It is the only one of the three whose shape is a SCULPT, so its second
+  // cell is baked in `scripts/models/frame.py`, not authored as boxes.
+  MAT.CRAFT_TABLE, MAT.SAWMILL, MAT.STONECUTTER,
 ])
 export const isTallStation = (m: number): boolean => TALL_STATIONS.has(m)
 

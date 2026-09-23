@@ -30,6 +30,12 @@ for (const mat of sculpted) {
     ok(!!make, `§1 ${name}: sculpt '${sc.model}' resolves node '${sp.node}'`)
     if (!make) continue
     const g = make()
+    // ★ THE CEILING IS THE MODEL'S OWN (2026-09-23), exactly as `modelFits`' is. A tall station
+    // owns the cell above it too, so the bench's box is 1x2x1 — and a SHORT sculpt is still
+    // measured against 1, which is what keeps this a containment test rather than one that
+    // relaxed for every vessel the day one object grew. A blanket 2 here would have retired the
+    // invisible-wall guard for the cauldron, the mortar, the bowl and the still in one line.
+    const ceil = modelOf(mat).tall ? 2 : 1
     // The renderer's own shift — authored about the cell centre, built about its min corner. The
     // check runs on the SAME coordinates the world draws, not on the authoring frame.
     g.translate(0.5, 0, 0.5)
@@ -39,9 +45,9 @@ for (const mat of sculpted) {
     for (let i = 0; i < pos.count; i++) {
       const v = [pos.getX(i), pos.getY(i), pos.getZ(i)]
       for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], v[k]); hi[k] = Math.max(hi[k], v[k]) }
-      if (v[0] < -1e-6 || v[0] > 1 + 1e-6 || v[1] < -1e-6 || v[1] > 1 + 1e-6 || v[2] < -1e-6 || v[2] > 1 + 1e-6) bad++
+      if (v[0] < -1e-6 || v[0] > 1 + 1e-6 || v[1] < -1e-6 || v[1] > ceil + 1e-6 || v[2] < -1e-6 || v[2] > 1 + 1e-6) bad++
     }
-    ok(bad === 0, `§1 ★ ${name}/${sp.node}: every vertex inside the cell (${bad} outside) — a leak is the invisible-wall bug`)
+    ok(bad === 0, `§1 ★ ${name}/${sp.node}: every vertex inside the cell (${bad} outside, ceiling ${ceil}) — a leak is the invisible-wall bug`)
     console.log(`   ${name}/${sp.node}: ${pos.count / 3} tris  x ${lo[0].toFixed(3)}..${hi[0].toFixed(3)}  y ${lo[1].toFixed(3)}..${hi[1].toFixed(3)}  z ${lo[2].toFixed(3)}..${hi[2].toFixed(3)}`)
     ok(sp.top === undefined || TILE_MATERIALS.includes(sp.top), `§1 ${name}/${sp.node}: its top tile exists`)
     ok(sp.side === undefined || TILE_MATERIALS.includes(sp.side), `§1 ${name}/${sp.node}: its side tile exists`)

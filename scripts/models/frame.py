@@ -48,6 +48,19 @@
 # sit at ±0.4325 so a leg wears the leg. Same family as the cauldron's hearth course: the picture
 # was already right and the geometry was not standing in it.
 #
+# ── ★★ `export_yup=True` NEGATES Z: AN ASYMMETRIC PART ARRIVES MIRRORED ───────────────────────
+# Authoring here is blender space (x = cell x, y = cell z, z = cell y up) and the exporter converts
+# on the way out — but the conversion is not a relabel, it FLIPS the sign of cell z. A stick
+# authored at cell z +0.43 lands in the game at −0.43.
+# Nothing caught it for a month because every stick in the bench was z-symmetric except the tools,
+# and a mallet and chisel swapped left-for-right is invisible. The bench's TOOL WALL (2026-09-23)
+# is the first sided part in this file, and authored positive it would have faced the opposite way
+# from the sawmill's and the stonecutter's — whose boxes live in `station-models/workshop.ts`, in
+# TS cell space, and take no conversion at all. Two idioms, one cell convention, opposite handedness.
+# ★ HOW TO CHECK, RATHER THAN REMEMBER: the bake prints blender-y bounds and
+# `station-sculpt.test.ts` prints the SHIPPED cell z for every node. If a part is meant to be on
+# one side, those two must disagree in sign. Read them; do not trust this comment.
+#
 # ── ★ REPRODUCIBLE, AND THAT IS NOT FREE ──────────────────────────────────────────────────────
 # Python's `hash()` is randomised per PROCESS for anything holding a string, so a script that
 # jitters by it makes a different mesh every run and the object a human approved cannot be
@@ -89,6 +102,16 @@ FRAMES = {
     # through-tenons, and the yaw that stops the four legs being one leg drawn four times.
     'bench': dict(
         seed=23, wobble=0.005, yaw=0.016,
+        # ── ★★ TWO CELLS TALL SINCE 2026-09-23 (Alex: "now do the bench so it matches") ─────────
+        # The mill and the cutter grew to two cells and the tile family says all three belong
+        # together, so a one-metre bench between them read as the odd one out rather than as the
+        # small one. `tall` raises this frame's CEILING to 2.0 — and only this frame's: a short
+        # frame is still asserted against 1.0, which is what keeps the containment check a real
+        # test instead of one that relaxed for everybody the day one object grew.
+        # ⚠ THE UPPER CELL IS `MAT.STATION_RACK` AND IT MUST EXIST IN THE WORLD, not just here.
+        # `depth.ts` › TALL_STATIONS and `station-models.ts` › `tall` are the other two halves;
+        # `station-models.test.ts` §5 asserts all of them agree, in both directions.
+        tall=True,
         # ★ 16 FLIPS, AND THEY ARE ALL ONE THING: the slab's rolled top edge, an octagon's eight
         # edges at two triangles each. Those facets wear the bench's own TOP tile — the worked
         # plank surface with the etched square — so a rolled edge there reads as the top turning
@@ -139,6 +162,49 @@ FRAMES = {
             dict(node='Tools', box=[0.048, 0.030, 0.230, 0.185, 0.9550,  0.015], chamfer=0.009, yaw_mul=3.5),
             dict(node='Tools', box=[0.215, 0.022, 0.040, -0.175, 0.9510,  0.185], chamfer=0.007, yaw_mul=4.0),
             dict(node='Tools', box=[0.090, 0.032, 0.052, -0.020, 0.9560,  0.185], chamfer=0.011, yaw_mul=4.0),
+            # ── THE TOOL WALL, in the upper cell ────────────────────────────────────────────────
+            # ★ THE TWO POSTS ARE THE BACK LEGS CONTINUING UPWARD — same x, same z, same section,
+            # same leg stripe. That is why they are in `Frame` and not in `Rack`: they wear the
+            # bench's own tile, and the stripe `paintCraftTable` paints at the outer eighth runs
+            # the tile's full height, so a post at ±0.4325 wears a leg in the upper metre exactly
+            # as the leg does in the lower one. A rack on its own posts would have been a second
+            # object standing behind a bench; this is one frame that keeps going.
+            # ⚠ THEY START AT 0.94, THE SLAB'S TOP — NOT AT 1.00, THE CELL SEAM. The sawmill's
+            # first cut started its wall at the seam and the render showed it hanging in the air
+            # with daylight underneath, because the seam is where the second CELL begins and that
+            # is a fact about the grid, not about the object. (2026-09-23, same day, one lane over.)
+            # ⚠ NO taper AND NO roll on anything up here — both cost cone flips and the budget of
+            # 16 is one sentence about one edge. The chamfer is free (a vertical chamfer's normal
+            # is horizontal), so the uprights are still softened.
+            # ⚠⚠ THE Z HERE IS NEGATIVE AND THAT IS NOT A TYPO — `export_yup=True` NEGATES Z.
+            # A part authored at cell z +0.4325 in this file arrives in the game at −0.4325. Every
+            # stick in this frame before today was z-SYMMETRIC (slab, apron, four legs, two
+            # stretchers), so nothing here had ever exposed it — and the one asymmetric group, the
+            # tools, has been mirrored since the first bake without anyone noticing, because a
+            # mallet and chisel swapped left-for-right is invisible. A tool WALL is not: authored
+            # positive it would stand on the opposite side from the sawmill's and the
+            # stonecutter's, whose boxes are authored in TS cell space and take no conversion. So
+            # the family would face two ways on one plot. Measured, not assumed — the bake prints
+            # blender-y and `station-sculpt.test.ts` prints the shipped cell z; the tools' spans
+            # disagree in sign, which is the whole proof.
+            dict(node='Frame', box=[0.095, 0.99, 0.095, -0.4325, 1.435, -0.4325], chamfer=0.014),
+            dict(node='Frame', box=[0.095, 0.99, 0.095,  0.4325, 1.435, -0.4325], chamfer=0.014),
+            # ★★ THE BOARDS ARE THEIR OWN NODE BECAUSE THEY MUST WEAR A DIFFERENT TILE, and that
+            # is the tall-model law found on the mill: a side face samples `-local.y` against a
+            # RepeatWrapping atlas, so world y ∈ [1,2] RE-PRINTS the tile from its bottom — rail
+            # band, leg stripes and all, at head height. `paintCraftTable` is a silhouette and a
+            # SILHOUETTE TILE CANNOT BE WORN TWICE. These name `PLANKS_GOLDWOOD` in
+            # `station-models/workshop.ts`, which is a grain, which is what a repeating sample is
+            # for. A node is the unit that assigns tiles, so "different tile" means "different node".
+            dict(node='Rack',  box=[0.86, 1.00, 0.050, 0, 1.44, -0.4550], chamfer=0.012),
+            dict(node='Rack',  box=[0.80, 0.060, 0.26, 0, 1.38, -0.3200], chamfer=0.012),
+            # ⚠ 0.94 x 0.18 AT -0.385, NOT 0.98 x 0.20 AT -0.400 — the capping board is the one
+            # stick here with no clearance, and `yaw` + `wobble` are applied about the stick's own
+            # centre AFTER `cz`, so a board whose face already sits on ±0.50 leaves the cell when
+            # they rotate it. It passed at +0.400 and failed at -0.400 on the identical numbers,
+            # because the wobble offset that happened to pull it INWARD on one side pushes it OUT
+            # on the other. A part must be authored with room for its own jitter, not to the wall.
+            dict(node='Rack',  box=[0.94, 0.070, 0.18, 0, 1.965, -0.3850], chamfer=0.014),
         ]),
 }
 
@@ -147,6 +213,10 @@ SEED   = int(os.environ.get('SEED', str(F['seed'])))
 WOBBLE = float(os.environ.get('WOBBLE', str(F['wobble'])))
 YAW    = float(os.environ.get('YAW', str(F['yaw'])))
 FLIPS  = int(os.environ.get('FLIPS', str(F['flips'])))
+# ★ THE CEILING IS THE FRAME'S OWN. A `tall` frame owns the cell above it too (`MAT.STATION_RACK`),
+# so its box is 1x2x1. A frame that has not declared itself tall is still checked against 1.0 —
+# relaxing this globally would retire the containment assert for every object in the file.
+CEIL   = 2.0 if F.get('tall') else 1.0
 
 
 def unit(*parts):
@@ -259,8 +329,9 @@ for ob in objs:
     zs = [v.co[2] for v in ob.data.vertices]
     assert max(map(abs, xs)) <= 0.5 and max(map(abs, ys)) <= 0.5, \
         '%s leaves the cell in plan: x %.3f y %.3f' % (ob.name, max(map(abs, xs)), max(map(abs, ys)))
-    assert min(zs) >= -1e-6 and max(zs) <= 1.0 + 1e-6, \
-        '%s leaves the cell in height: %.3f..%.3f' % (ob.name, min(zs), max(zs))
+    assert min(zs) >= -1e-6 and max(zs) <= CEIL + 1e-6, \
+        '%s leaves the cell in height: %.3f..%.3f (ceiling %.1f%s)' % (
+            ob.name, min(zs), max(zs), CEIL, ', this frame is tall' if CEIL > 1.0 else '')
     print('%-6s bounds  x %+.3f..%+.3f  y %+.3f..%+.3f  z %+.3f..%+.3f  tris %d'
           % (ob.name, min(xs), max(xs), min(ys), max(ys), min(zs), max(zs), len(ob.data.polygons)))
 
