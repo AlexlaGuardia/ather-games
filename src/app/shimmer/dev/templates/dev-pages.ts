@@ -212,6 +212,13 @@ export const DEV_PAGES: DevPage[] = [
     group: 'proto',
     keywords: ['hud', 'hotbar', 'health', 'mana', 'minimap', 'hearth', 'mock', 'look'],
   },
+  {
+    path: '/shimmer/dev/hud-kit',
+    title: 'HUD kit (live pieces)',
+    blurb: 'The shippable Phase 9 HUD components from ui/hearth-hud, mounted over the hud-mock frame — light touch or full hearth, day or night. What the swap will draw.',
+    group: 'proto',
+    keywords: ['hud', 'hotbar', 'health', 'mana', 'minimap', 'hearth', 'kit', 'phase 9'],
+  },
 
   // ── Editors with their own route ────────────────────────────────────────────────────────────
   {
