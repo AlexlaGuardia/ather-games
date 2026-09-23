@@ -16,7 +16,7 @@
 // The wood is procedural (an SVG turbulence stretched along the board). If the frame ever gets drawn
 // art, `WOOD` is the one line it replaces.
 import React from 'react'
-import { CraftIcon } from '../voxel3d/craft-grid'
+import { CraftIcon } from '../voxel3d/craft-icon'
 import { HEARTH_FONT_VARS } from './hearth-fonts'
 import './hearth.css'
 

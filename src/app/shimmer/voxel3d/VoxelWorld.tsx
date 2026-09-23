@@ -11024,14 +11024,9 @@ function CraftPanel({ have, tools, tick, station, pooled, onCraft, onCraftTool, 
   ]
 
   return (
-    <PanelFrame width="w-[440px]" onClose={onClose}>
-        <div className="flex items-baseline justify-between mb-3">
-          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">Crafting
-            {station === 'crafting_table' && <span className="ml-2 text-amber-200/70 normal-case tracking-normal font-normal">at table</span>}
-            {pooled && <span className="ml-2 text-white/35 normal-case tracking-normal font-normal">· drawing on the bank</span>}
-          </span>
-        </div>
-        <CraftGrid tiles={tiles} tabs={['Materials', 'Blocks', 'Stations', 'Furniture', 'Pieces', 'Tools']} have={have} label={itemLabel}
+    <PanelFrame width="w-[480px]" title="Crafting" onClose={onClose}>
+        <CraftGrid tiles={tiles}
+                   note={[station === 'crafting_table' ? 'at the bench' : 'by hand', pooled ? 'drawing on the bank' : null].filter(Boolean).join(' · ')} tabs={['Materials', 'Blocks', 'Stations', 'Furniture', 'Pieces', 'Tools']} have={have} label={itemLabel}
                    madeAt={madeAtLabel}
                    pickedId={picked} onPick={setPicked}
                    action={(t) => {
@@ -11381,10 +11376,7 @@ function StationPanel({ st, inv, onChange, onSay, onClose }: {
   const [pickedRecipe, setPickedRecipe] = useState<string | null>(null)
 
   return (
-    <PanelFrame width="w-[460px]" onClose={onClose}>
-        <div className="flex items-baseline justify-between mb-3">
-          <span className="text-white/95 font-semibold tracking-[.18em] uppercase">{def.name}</span>
-        </div>
+    <PanelFrame width="w-[480px]" title={def.name} onClose={onClose}>
 
         {busy && r ? (
           <div className="mb-4 rounded border border-amber-200/25 bg-amber-100/[0.03] px-3 py-2.5">
