@@ -76,7 +76,7 @@ export function createVoxelMaterial(light: LightUniforms = createLightUniforms()
     // Four levers, each independently dialled from settings so the look can be judged by moving
     // one at a time on the real world rather than argued about in the abstract. The history of the
     // 09-11 irradiance + tint fixes is on the module.
-    const emit = cartoonStackGlsl('vWNorm', 'vWPos', 'diffuseColor.rgb * vEmissive')
+    const emit = cartoonStackGlsl('vWNorm', 'vWPos', 'diffuseColor.rgb * shimmerGlow(vEmissive, 1.0)')
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>',
         '#include <common>\nvarying float vEmissive;\nvarying vec3 vWPos;\nvarying vec3 vWNorm;\n'

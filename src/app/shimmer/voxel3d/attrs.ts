@@ -323,6 +323,9 @@ export const MATERIAL_COLOR: Record<number, number> = {
   [MAT.SPRING_CRUST]: 0xdcede4,
 }
 
+/** How bright the cloud-wall's crests kindle at full night (× the tile's crest mask). */
+export const KINDLED_WALL = 1.0
+
 /** Materials that glow, so ore reads in an unlit cave instead of being a slightly different grey. */
 export const EMISSIVE: Record<number, number> = {
   [SEAM.RAW_MANA]: 0.55,
@@ -361,6 +364,12 @@ export const EMISSIVE: Record<number, number> = {
   // The running cauldron: the brew's own light, on its top face only (`tiles.ts` paints the sides
   // as plain clay, so the emissive reads as the surface). Under the hearth — a pot, not a fire.
   [MAT.CAULDRON_LIT]: 0.7,
+  // ★ KINDLED, not lit: NEGATIVE means "this glow is the night's" (light-glsl.ts › shimmerGlow).
+  // Canon's hand-off: as the Core banks, the cloud-walls kindle, and at dawn they go quiet. The tile
+  // already paints its glow mask on the CRESTS only (paintCloudWall: the rim of a heap, never the
+  // flat face), so this lights the heaps from within rather than turning the wall into a light-box.
+  // It had no entry before, so that mask had been painted and multiplied by zero since 08-15.
+  [MAT.CLOUD_WALL]: -KINDLED_WALL,
 }
 
 /** An unmapped material must be LOUD, not invisible — magenta says "the registry missed one". */

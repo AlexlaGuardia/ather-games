@@ -169,6 +169,22 @@ vec3 shimmerPaneGlow(vec3 tint, vec3 wpos, vec3 nrm, bool front) {
   float night = clamp(1.0 - dot(uHourLight, W), 0.0, 1.0);
   return tint * uPaneGlow * pow(f.y, uBlockCurve) * night * f.z;
 }
+
+// ── ★ THE KINDLE (2026-09-23): a glow that belongs to the NIGHT, not to the block ─────────────
+// Canon (world/ather.md › The sky, looked at): as the Core banks, the cloud-walls KINDLE — the
+// light moves from overhead out to the perimeter — and at dawn they go quiet. The emissive attribute
+// is baked per vertex and knows no hour, so a kindled material stores its strength NEGATED
+// (attrs.ts › EMISSIVE, see KINDLED_WALL there) and this turns it back: a positive glow passes untouched
+// (a lantern burns the same at noon), a negative one is scaled by the same night factor the lit
+// window uses, so the walls and the windows come up on one clock. The a argument is the tile's glow mask
+// (1.0 where a path has no tile): a lit glow is e × a exactly as before; a kindled one lights the
+// WHOLE face softly and the mask's crests on top — measured 09-23, crests alone moved a few
+// scattered pixels and the wall still read as unlit stone at midnight.
+float shimmerGlow(float e, float a) {
+  if (e >= 0.0) return e * a;
+  const vec3 W = vec3(0.2126, 0.7152, 0.0722);
+  return -e * clamp(1.0 - dot(uHourLight, W), 0.0, 1.0) * (0.2 + 0.6 * a);
+}
 `
 
 /** Block faces. `wpos` is world position, `nrm` the face normal — both already varyings in callers. */

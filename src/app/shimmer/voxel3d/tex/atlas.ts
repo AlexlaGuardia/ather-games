@@ -626,7 +626,7 @@ ${opts.cutout ? '  if (tile.a < 0.5) discard;' : ''}
     shader.fragmentShader = mustReplace(
       shader.fragmentShader,
       '#include <opaque_fragment>',
-      cartoonStackGlsl('vVoxNormal', 'vWorldPos', 'diffuseColor.rgb * vEmissive * gTileEmissive'),
+      cartoonStackGlsl('vVoxNormal', 'vWorldPos', 'diffuseColor.rgb * shimmerGlow(vEmissive, gTileEmissive)'),
       'fragment shader',
     )
   }

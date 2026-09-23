@@ -7,6 +7,8 @@ import { join } from 'node:path'
 import { CORE_POSITION, CORE_DIR, CORE_RADIUS, coreBank, BREATH, TURN_S } from './core-sky'
 import { sunPosition } from './hour-light'
 import { SKY } from './sky-palette'
+import { EMISSIVE, KINDLED_WALL } from './attrs'
+import { MAT } from '../voxel/depth'
 
 let pass = 0
 const fails: string[] = []
@@ -56,6 +58,17 @@ ok(!/uniform float uTime|uTime/.test(glsl), '§2 the shader has no clock of its 
 ok(!/moon|aurora|star\b/i.test(glsl), '§6 nothing else is in the sky — no moon, no aurora, no stars')
 ok(/uKindle \* pow\(1\.0 - up, [0-9.]+\) \* night/.test(glsl), '§5 the hand-off: the rim kindles exactly as the Core banks (the same night term)')
 ok(/uFleck \* fleck \* pow\(night/.test(glsl), '§4 the flecks are faded by the hour, not switched: there by day, drowned')
+
+// ── §5 the hand-off reaches the WORLD, not only the dome: the cloud-walls kindle ─────────────
+ok((EMISSIVE[MAT.CLOUD_WALL] ?? 0) === -KINDLED_WALL && KINDLED_WALL > 0, '§5 the cloud-wall is KINDLED (negative = the night\'s glow), not lit and not dark')
+const lg = readFileSync(join(__dirname, 'light-glsl.ts'), 'utf8')
+ok(/float shimmerGlow\(float e, float a\)/.test(lg) && /if \(e >= 0\.0\) return e \* a;/.test(lg),
+  '§5 a lit glow passes untouched (a lantern burns the same at noon) — only a negative one takes the hour')
+ok(/-e \* clamp\(1\.0 - dot\(uHourLight, W\), 0\.0, 1\.0\)/.test(lg), '§5 the kindle runs on the SAME night factor as the lit window: walls and windows come up on one clock')
+for (const f of ['tex/atlas.ts', 'mesh-bridge.ts']) {
+  const src = readFileSync(join(__dirname, f), 'utf8')
+  ok(src.includes('shimmerGlow(vEmissive,'), `§5 ${f} routes its glow through shimmerGlow — a path that reads vEmissive raw would draw a kindled wall DARKER, not lit`)
+}
 
 console.log(`core-sky: ${pass} pass, ${fails.length} fail`)
 for (const f of fails) console.log('  FAIL', f)
