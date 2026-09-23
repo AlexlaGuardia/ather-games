@@ -83,6 +83,43 @@ const SCHEMA = `
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, game)
     );
+
+    -- ── Garden clusters (canon: game/shimmer-geography.md › GARDEN CLUSTERS; clusters.ts) ──────
+    -- A cluster is ONE fold with four quarters. folded_by is a RECORD (who raised the barn), never
+    -- a role: nothing reads it to grant anything. There is deliberately no column for a leader,
+    -- owner or title, and no statement anywhere that removes a member other than themselves.
+    CREATE TABLE IF NOT EXISTS clusters (
+      cluster_id TEXT PRIMARY KEY,
+      folded_by  TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    -- One quarter per member; UNIQUE(user_id) = a keeper stands in at most one cluster.
+    -- seed/tier are the member's OWN plot, reported by their own client (offline-first).
+    CREATE TABLE IF NOT EXISTS cluster_members (
+      cluster_id TEXT NOT NULL,
+      quarter    TEXT NOT NULL CHECK (quarter IN ('ne','nw','sw','se')),
+      user_id    TEXT NOT NULL UNIQUE,
+      seed       INTEGER NOT NULL DEFAULT 0,
+      tier       INTEGER NOT NULL DEFAULT 0,
+      joined_at  INTEGER NOT NULL,
+      PRIMARY KEY (cluster_id, quarter)
+    );
+    -- An open quarter offered to one friend. Filled only when EVERY current member has consented
+    -- (canon: you cannot give away someone else's corner) and the invitee accepts.
+    CREATE TABLE IF NOT EXISTS cluster_offers (
+      cluster_id  TEXT NOT NULL,
+      quarter     TEXT NOT NULL CHECK (quarter IN ('ne','nw','sw','se')),
+      invitee_id  TEXT NOT NULL,
+      proposed_by TEXT NOT NULL,
+      created_at  INTEGER NOT NULL,
+      PRIMARY KEY (cluster_id, quarter)
+    );
+    CREATE TABLE IF NOT EXISTS cluster_consents (
+      cluster_id TEXT NOT NULL,
+      quarter    TEXT NOT NULL,
+      member_id  TEXT NOT NULL,
+      PRIMARY KEY (cluster_id, quarter, member_id)
+    );
 `
 
 /** Our own stable id — deliberately NOT the google sub, so a provider can change later. */
@@ -275,10 +312,18 @@ export function putSave(user_id: string, game: string, data: string): void {
 export function deleteAccount(user_id: string): boolean {
   const d = db()
   d.prepare('DELETE FROM friends WHERE a_id = ? OR b_id = ?').run(user_id, user_id)
+  // Erasure takes the keeper's corner back exactly as they could themselves (clusters.ts):
+  // their quarter goes, every offer TO them goes, their consents go. The rest stand.
+  d.prepare('DELETE FROM cluster_members WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM cluster_offers WHERE invitee_id = ? OR proposed_by = ?').run(user_id, user_id)
+  d.prepare('DELETE FROM cluster_consents WHERE member_id = ?').run(user_id)
   d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
   return Number(res.changes) > 0
 }
+
+/** The shared handle, for the stores that live beside accounts (clusters.ts). Same file, one schema. */
+export function accountsDb(): DatabaseSync { return db() }
 
 /** Test/maintenance seam — lets an oracle point the module at a scratch file.
  *  Runs the SAME schema as db() — it used to carry its own trimmed copy, which silently

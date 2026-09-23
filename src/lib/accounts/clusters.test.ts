@@ -1,0 +1,74 @@
+// Cluster record oracle — run: npx tsx src/lib/accounts/clusters.test.ts
+// The guards canon wrote against the landlord, asserted against a real sqlite file.
+import { unlinkSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { _openAt, upsertGoogleAccount, claimUsername, addFriend, acceptFriend, deleteAccount } from './db'
+import * as C from './clusters'
+
+let failures = 0
+const check = (label: string, ok: boolean, detail = '') => { if (!ok) { failures++; console.log(`  FAIL  ${label}${detail ? ` — ${detail}` : ''}`) } }
+
+const path = join(tmpdir(), `clusters-${process.pid}.db`)
+_openAt(path)
+const mk = (name: string) => { const a = upsertGoogleAccount(`g-${name}`, null, null); claimUsername(a.user_id, name); return a.user_id }
+const friends = (a: string, b: string, bName: string) => { addFriend(a, bName); acceptFriend(b, a) }
+const [alex, bo, cy, di, ed] = ['alex', 'bo_', 'cyn', 'dia', 'eddy'].map(mk)
+friends(alex, bo, 'bo_'); friends(alex, cy, 'cyn'); friends(bo, cy, 'cyn'); friends(alex, di, 'dia')
+
+// §1 folding takes Enchant; one cluster per keeper.
+check('no Enchant, no fold', !C.foldCluster(alex, 'ne', false, 1, 0).ok)
+const f = C.foldCluster(alex, 'ne', true, 1337, 2)
+check('Enchant folds', f.ok && f.value.members.length === 1 && f.value.members[0].quarter === 'ne')
+check('one cluster per keeper', !C.foldCluster(alex, 'sw', true, 1, 0).ok)
+const cid = f.ok ? f.value.cluster_id : ''
+
+// §2 offers: friends only, open quarter only.
+check('a stranger cannot be offered', !C.offerQuarter(alex, 'eddy', 'sw').ok)
+check('a taken quarter cannot be offered', !C.offerQuarter(alex, 'bo_', 'ne').ok)
+check('a friend can', C.offerQuarter(alex, 'bo_', 'sw').ok)
+check('one offer per quarter', !C.offerQuarter(alex, 'cyn', 'sw').ok)
+
+// §3 ★ bo accepts: alex (the only member) offered, so the yes is complete.
+const a1 = C.answerOffer(bo, cid, 'sw', true, 42, 1)
+check('★ two keepers: the offer fills', a1.ok && a1.value?.members.length === 2)
+
+// §4 ★★ EVERYONE'S YES: alex offers cyn; bo has not said yes, so cyn cannot fill it yet.
+check('alex offers cyn', C.offerQuarter(alex, 'cyn', 'nw').ok)
+const early = C.answerOffer(cy, cid, 'nw', true, 7, 0)
+check('★★ you cannot give away someone else\'s corner — bo has not said yes', !early.ok && /Waiting on 1/.test(early.ok ? '' : early.error))
+check('bo says yes', C.consentOffer(bo, 'nw').ok)
+check('★ now cyn fills it', (() => { const r = C.answerOffer(cy, cid, 'nw', true, 7, 0); return r.ok && r.value?.members.length === 3 })())
+
+// §5 a decline drops the offer; nobody else is touched.
+C.offerQuarter(alex, 'dia', 'se')
+check('dia declines', C.answerOffer(di, cid, 'se', false, 0, 0).ok)
+check('the offer is gone, the members stand', (() => { const v = C.getCluster(alex)!; return v.offers.length === 0 && v.members.length === 3 })())
+
+// §6 ⛔ GUARD 1: nobody can remove anyone. The module exports no such verb, and taking back your own
+// corner touches only you.
+const verbs = Object.keys(C).filter(k => typeof (C as Record<string, unknown>)[k] === 'function')
+check('⛔ no export can remove another keeper', !verbs.some(v => /remove|kick|evict|expel|ban|transfer/i.test(v)), verbs.join(','))
+check('bo takes back their corner', C.takeBackCorner(bo).ok)
+check('★ only bo left — alex and cyn still stand', (() => { const v = C.getCluster(alex)!; return v.members.length === 2 && !v.members.some(m => m.user_id === bo) })())
+check('the reopened quarter is simply open', C.getCluster(alex)!.members.every(m => m.quarter !== 'sw'))
+
+// §7 ⛔ GUARDS 2+3: the view carries a record of who folded it and nothing role-shaped.
+{
+  const v = C.getCluster(cy)!
+  const keys = JSON.stringify(Object.keys(v)) + JSON.stringify(Object.keys(v.members[0]))
+  check('⛔ no title anywhere in the shape', !/leader|owner|founder|head|admin|host/i.test(keys), keys)
+  check('folded_by is only a record', v.folded_by === alex)
+}
+
+// §8 reportFold updates only the reporter; erasure takes the corner back like the keeper could.
+check('reportFold', C.reportFold(cy, 99, 2) && C.getCluster(alex)!.members.find(m => m.user_id === cy)?.tier === 2)
+deleteAccount(cy)
+check('★ erasure takes back the corner', C.getCluster(alex)!.members.length === 1)
+C.takeBackCorner(alex)
+check('a cluster with nobody in it is nothing', C.getCluster(alex) === null)
+check('and a fresh fold is possible again', C.foldCluster(alex, 'se', true, 1, 0).ok)
+
+try { unlinkSync(path) } catch { /* */ }
+console.log(failures ? `❌ clusters: ${failures} failed` : '✅ clusters: all passed')
+if (failures) process.exit(1)
