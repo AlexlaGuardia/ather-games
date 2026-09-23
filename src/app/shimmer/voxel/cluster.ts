@@ -145,6 +145,8 @@ export interface ClusterConfig {
 export const NO_SLOTS: ClusterSlots = { ne: null, nw: null, sw: null, se: null }
 
 const MAX_TIER = PLOT_TIERS[PLOT_TIERS.length - 1]
+/** The fixed spacing: 32 columns of 16. Column-aligned so a plot maps onto its quarter whole. */
+export const CLUSTER_OFFSET = 512
 
 /**
  * ── THE NUMBERS, AND THEY ARE MINE TO DIAL ──────────────────────────────────────────────────────
@@ -158,8 +160,15 @@ const MAX_TIER = PLOT_TIERS[PLOT_TIERS.length - 1]
  * walks ~150. `joinHalfWidth` 60 = a 120-wide lane against a 1,000-wide garden.
  */
 export const DEFAULT_CLUSTER: ClusterConfig = {
-  offset: MAX_TIER,
-  green: 220,
+  // ★ 512, NOT 500 (2026-09-23, Alex: "go with your recs"). 512 = 32 whole columns, so a keeper's
+  // own plot maps onto their quarter by a WHOLE-COLUMN shift and every saved edit loads unchanged
+  // (`cluster-space.ts`). Still ≥ MIN_OFFSET: the safety bound above is untouched, 12 blocks of air
+  // now sit between two maxed folds.
+  offset: CLUSTER_OFFSET,
+  // 228, not 220: moved WITH the offset. The Green's corner must stay inside a max fold's shyest
+  // coast (410) — (512 − 228)·√2 = 401.6. At 220 it would be 412.9 and the corners canon says each
+  // keeper GIVES would be corners no keeper's ground ever reached (MIN_GREEN, asserted).
+  green: 228,
   joinHalfWidth: 60,
   slots: NO_SLOTS,
   base: DEFAULT_PLOT,
