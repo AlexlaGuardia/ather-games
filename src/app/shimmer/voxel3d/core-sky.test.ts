@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CORE_POSITION, CORE_DIR, CORE_RADIUS, coreBank, BREATH, TURN_S } from './core-sky'
-import { sunPosition } from './hour-light'
+import { sunPosition, SILVER_POSITIONS } from './hour-light'
 import { SKY } from './sky-palette'
 import { EMISSIVE, KINDLED_WALL } from './attrs'
 import { MAT } from '../voxel/depth'
@@ -58,6 +58,23 @@ ok(!/uniform float uTime|uTime/.test(glsl), '§2 the shader has no clock of its 
 ok(!/moon|aurora|star\b/i.test(glsl), '§6 nothing else is in the sky — no moon, no aurora, no stars')
 ok(/uKindle \* pow\(1\.0 - up, [0-9.]+\) \* night/.test(glsl), '§5 the hand-off: the rim kindles exactly as the Core banks (the same night term)')
 ok(/uFleck \* fleck \* pow\(night/.test(glsl), '§4 the flecks are faded by the hour, not switched: there by day, drowned')
+
+// ── §2 the night Core does not light the ground: night light comes from the PERIMETER ───────
+ok(SILVER_POSITIONS.length >= 2, '§2 more than one perimeter light — a single low light leaves the far side of every block facing nothing')
+for (const p of SILVER_POSITIONS) {
+  const el = Math.asin(p.clone().normalize().y) * 180 / Math.PI
+  ok(el > 5 && el < 30, `§2 the night light is LOW (${el.toFixed(1)}° up) — from the walls at the rim, never from overhead`)
+}
+{
+  const sum = SILVER_POSITIONS.reduce((a, p) => a.add(p.clone().setY(0).normalize()), new THREE.Vector3())
+  ok(sum.length() < 0.2, '§2 the perimeter lights balance round the horizon (opposite bearings), so no side of the fold is the dark side')
+  const up = SILVER_POSITIONS.reduce((a, p) => a + Math.max(0, p.clone().normalize().y), 0)
+  const side = Math.max(...[[1, 0, 0], [0, 0, 1], [-1, 0, 0], [0, 0, -1]].map(n =>
+    SILVER_POSITIONS.reduce((a, p) => a + Math.max(0, p.clone().normalize().dot(new THREE.Vector3(...n as [number, number, number]))), 0)))
+  ok(side > up, `§2 a side face catches more night light than a top (${side.toFixed(2)} > ${up.toFixed(2)}) — that is what light from the rim looks like`)
+}
+ok(/position=\{SILVER_POSITIONS\[0\]\.toArray\(\)\}/.test(dn) && /position=\{SILVER_POSITIONS\[1\]\.toArray\(\)\}/.test(dn),
+  '§2 the rig places both night lights from SILVER_POSITIONS — the reference and the lights cannot drift apart')
 
 // ── §5 the hand-off reaches the WORLD, not only the dome: the cloud-walls kindle ─────────────
 ok((EMISSIVE[MAT.CLOUD_WALL] ?? 0) === -KINDLED_WALL && KINDLED_WALL > 0, '§5 the cloud-wall is KINDLED (negative = the night\'s glow), not lit and not dark')

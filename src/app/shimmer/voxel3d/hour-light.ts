@@ -42,8 +42,19 @@ export function sunPosition(out: THREE.Vector3, _progress: number): THREE.Vector
   return out.copy(CORE_POSITION)
 }
 
-/** The night silver's fixed position (a light, not a moon — see NIGHT in sky-palette.ts). */
-export const SILVER_POSITION = new THREE.Vector3(-70, 200, -50)
+/**
+ * ★ THE NIGHT LIGHT COMES FROM THE PERIMETER (canon `world/ather.md` › *The sky, looked at*, 2026-09-23:
+ * "the night Core does not light the ground. Night light still comes from the perimeter, from the
+ * glowing cloud-walls."). It sat HIGH (-70, 200, -50, ~67° up) until then, which is a light from
+ * overhead: the coal's job, and canon took it away. Now TWO low lights (~21° up) from opposite
+ * bearings, so every side of a block catches silver from some wall and a top catches less than a
+ * side, which is what light from the rim of the world looks like. Two, not four: one extra light on
+ * every lit program is the whole cost, and opposite pairs already leave no side facing nothing.
+ */
+export const SILVER_POSITIONS: readonly THREE.Vector3[] = [
+  new THREE.Vector3(-150, 70, -110),
+  new THREE.Vector3(150, 70, 110),
+]
 
 const tmp = new THREE.Vector3()
 /**
@@ -57,14 +68,16 @@ export function irradianceUp(
   out: THREE.Color,
   hemiSky: THREE.Color, hemiI: number,
   sunColor: THREE.Color, sunI: number, sunPos: THREE.Vector3,
-  silverColor: THREE.Color, silverI: number, silverPos: THREE.Vector3,
+  silverColor: THREE.Color, silverI: number, silverPos: readonly THREE.Vector3[],
   ambColor: THREE.Color, ambI: number,
 ): THREE.Color {
   out.copy(hemiSky).multiplyScalar(hemiI)
   const sy = Math.max(0, tmp.copy(sunPos).normalize().y)
   out.r += sunColor.r * sunI * sy; out.g += sunColor.g * sunI * sy; out.b += sunColor.b * sunI * sy
-  const ny = Math.max(0, tmp.copy(silverPos).normalize().y)
-  out.r += silverColor.r * silverI * ny; out.g += silverColor.g * silverI * ny; out.b += silverColor.b * silverI * ny
+  for (const p of silverPos) {
+    const ny = Math.max(0, tmp.copy(p).normalize().y)
+    out.r += silverColor.r * silverI * ny; out.g += silverColor.g * silverI * ny; out.b += silverColor.b * silverI * ny
+  }
   out.r += ambColor.r * ambI; out.g += ambColor.g * ambI; out.b += ambColor.b * ambI
   return out
 }
@@ -77,7 +90,7 @@ export const HOUR_REF: THREE.Color = irradianceUp(
   new THREE.Color(),
   new THREE.Color(DAY.hemiSky), DAY.hemiIntensity,
   new THREE.Color(DAY.sun), DAY.sunIntensity, sunPosition(new THREE.Vector3(), 0.5),
-  new THREE.Color(0xffffff), 0, SILVER_POSITION,
+  new THREE.Color(0xffffff), 0, SILVER_POSITIONS,
   new THREE.Color(0xffffff), DAY.ambient,
 )
 

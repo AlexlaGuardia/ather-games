@@ -34,7 +34,7 @@ import * as THREE from 'three'
 import { dayProgress, daylight } from '../engine/day-cycle'
 import { UNDER, fogUnder, domeVeil, stepUnder, newUnderState } from './underwater'
 import { SKY, DAY, NIGHT } from './sky-palette'
-import { irradianceUp, hourLight, sunPosition, SILVER_POSITION } from './hour-light'
+import { irradianceUp, hourLight, sunPosition, SILVER_POSITIONS } from './hour-light'
 import { CORE_DIR, CORE_RADIUS, coreBank, BREATH, TURN_S } from './core-sky'
 
 // ── The sky dome (2026-08-08; ★ REBUILT 2026-09-23 against canon's *The sky, looked at*) ──────
@@ -262,7 +262,8 @@ export function VoxelDayNight(
   const under = useRef(newUnderState())
   const hemiRef = useRef<THREE.HemisphereLight>(null)
   const sunRef = useRef<THREE.DirectionalLight>(null)
-  const nightRef = useRef<THREE.DirectionalLight>(null)
+  const nightA = useRef<THREE.DirectionalLight>(null)
+  const nightB = useRef<THREE.DirectionalLight>(null)
   const ambRef = useRef<THREE.AmbientLight>(null)
   const irrScratch = useRef(new THREE.Color())
   const fogRef = useRef<THREE.Fog | null>(null)
@@ -394,8 +395,9 @@ export function VoxelDayNight(
       sun.intensity = DAY.sunIntensity * dl * (1 - GLOOM.sunCut * gd) * (1 - MIST.sunCut * md)
         * (1 - UNDER.sunCut * ut)
     }
-    const night = nightRef.current
+    const night = nightA.current, nightB2 = nightB.current
     if (night) night.intensity = NIGHT.silverIntensity * sv
+    if (nightB2) nightB2.intensity = NIGHT.silverIntensity * sv
     const amb = ambRef.current
     if (amb) amb.intensity = mix(DAY.ambient, NIGHT.ambient, sv) * (1 - GLOOM.ambCut * gd)
     // ── the hour, for the cartoon stack — read from the lights just written, never re-derived ──
@@ -404,7 +406,7 @@ export function VoxelDayNight(
         irrScratch.current,
         hemi.color, hemi.intensity,
         sun.color, sun.intensity, sun.position,
-        night.color, night.intensity, SILVER_POSITION,
+        night.color, night.intensity, SILVER_POSITIONS,
         amb.color, amb.intensity,
       ))
     }
@@ -420,9 +422,10 @@ export function VoxelDayNight(
       </mesh>
       <hemisphereLight ref={hemiRef} args={[DAY.hemiSky, DAY.hemiGround, DAY.hemiIntensity]} />
       <directionalLight ref={sunRef} position={[80, 200, 40]} intensity={DAY.sunIntensity} />
-      {/* The night silver sits high and still — NOT a moon (no moon in the Ather, Alex 2026-08-08);
-          a wandering night light would double the shading churn for no read anyway. */}
-      <directionalLight ref={nightRef} position={[-70, 200, -50]} color={NIGHT.silver} intensity={0} />
+      {/* The night silver comes from the PERIMETER — two low lights on opposite bearings, the walls'
+          light, never the Core's (canon 2026-09-23; see SILVER_POSITIONS). Fixed, not wandering. */}
+      <directionalLight ref={nightA} position={SILVER_POSITIONS[0].toArray()} color={NIGHT.silver} intensity={0} />
+      <directionalLight ref={nightB} position={SILVER_POSITIONS[1].toArray()} color={NIGHT.silver} intensity={0} />
       <ambientLight ref={ambRef} intensity={DAY.ambient} />
     </>
   )

@@ -59,9 +59,10 @@ export const DAY = {
 export const NIGHT = {
   bg: '#16223f', fogNear: 55, fogFar: 165,   // the dark stands closer — same world, smaller circle
   hemiSky: '#8ea8d8', hemiGround: '#252c47', hemiIntensity: 0.55,
-  // ⚠ NOT A MOON. The Ather has no moon (Alex ruling 2026-08-08). This is the night's silver —
-  // an authored illumination floor, because "you can't see" belongs to the spawn layer, never the
-  // renderer. What the silver IS in-fiction (starlight? the Shimmer?) is an open canon gap.
+  // ⚠ NOT A MOON. The Ather has no moon (Alex ruling 2026-08-08). This is the night's silver: the
+  // Core's light COOLED and settled in the cloud (RULED 08-13), and since 09-23 it arrives from the
+  // perimeter, from the kindled walls (`hour-light.ts` › SILVER_POSITIONS). Intensity is PER light,
+  // and there are two. Still an authored floor: "you can't see" belongs to the spawn layer.
   silver: '#cfe0ff', silverIntensity: 0.4,
   ambient: 0.15,
 }

@@ -11,7 +11,7 @@
 import * as THREE from 'three'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { HOUR_REF, hourLight, irradianceUp, luminance, sunPosition, SILVER_POSITION } from './hour-light'
+import { HOUR_REF, hourLight, irradianceUp, luminance, sunPosition, SILVER_POSITIONS } from './hour-light'
 import { DAY, NIGHT } from './sky-palette'
 import { LIGHT_DECL_GLSL, createLightUniforms } from './light-glsl'
 import { cartoonStackGlsl } from './cartoon-glsl'
@@ -25,7 +25,7 @@ const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps
 const noon = irradianceUp(new THREE.Color(),
   new THREE.Color(DAY.hemiSky), DAY.hemiIntensity,
   new THREE.Color(DAY.sun), DAY.sunIntensity, sunPosition(new THREE.Vector3(), 0.5),
-  new THREE.Color(NIGHT.silver), 0, SILVER_POSITION,
+  new THREE.Color(NIGHT.silver), 0, SILVER_POSITIONS,
   new THREE.Color(0xffffff), DAY.ambient)
 const hNoon = hourLight(new THREE.Vector3(), noon)
 ok(near(hNoon.x, 1) && near(hNoon.y, 1) && near(hNoon.z, 1), `§1 clear noon → (1,1,1), got ${hNoon.toArray().map(v => v.toFixed(4))}`)
@@ -36,7 +36,7 @@ ok(near(sunPosition(new THREE.Vector3(), 0.5).x, 0, 1e-9), '§1 the noon sun sit
 const mid = irradianceUp(new THREE.Color(),
   new THREE.Color(NIGHT.hemiSky), NIGHT.hemiIntensity,
   new THREE.Color(DAY.sun), 0, sunPosition(new THREE.Vector3(), 0),
-  new THREE.Color(NIGHT.silver), NIGHT.silverIntensity, SILVER_POSITION,
+  new THREE.Color(NIGHT.silver), NIGHT.silverIntensity, SILVER_POSITIONS,
   new THREE.Color(0xffffff), NIGHT.ambient)
 const hMid = hourLight(new THREE.Vector3(), mid)
 const lMid = hMid.dot(new THREE.Vector3(0.2126, 0.7152, 0.0722))
