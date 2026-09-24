@@ -11,12 +11,30 @@ const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 
 // ── the landing parses into what the slice promised ──
 const map = parseLanding()
-ok(map.windows.filter(w => w.room === 'landing').length === 3, 'the landing has three windows')
+ok(map.windows.filter(w => w.room === 'landing').length === 4, 'the landing has four windows (three walls)')
+ok(map.windows.filter(w => w.room === 'court').length === 7, 'the court has seven — the most fronts, the most room')
 ok(map.windows.filter(w => w.room === 'gallery').length === 3, 'the gallery has three')
 ok(map.windows.filter(w => w.room === 'cistern').length === 3, 'the cistern has three')
 ok(map.windows.every(w => w.cells.length === 2), 'every window is two cells wide')
-ok(map.gates.length === 2 && map.gates[0].opens === 'gallery' && map.gates[1].opens === 'cistern', 'two gates: gallery then cistern')
-ok(map.gates[0].cost < map.gates[1].cost, 'the second gate costs more')
+ok(map.gates.length === 3 && map.gates.map(g => g.opens).join() === 'court,gallery,cistern', 'three gates: court, gallery, cistern')
+ok(map.gates[0].cost <= 250 && map.gates[0].cost < map.gates[1].cost && map.gates[1].cost < map.gates[2].cost, '★ the court gate is the cheap first buy; each gate after costs more')
+ok(map.gates[0].cost <= 500, 'the court opens on your starting salvage — room to train is never gated behind a round')
+// ★ the court is for TRAINING: a keeper can run a loop around a pillar. Walk the court floor as a grid
+// and count cells that sit on a cycle — a room with no pillar has open floor but no obstacle to circle.
+{
+  const c0 = map.gates[0].mid
+  const court = (x: number, z: number) => map.grid[z]?.[x] === HOLD_TILE.FLOOR && z < c0.z && x > 12 && x < 37
+  let pillars = 0
+  for (let z = 1; z < map.rows - 1; z++) for (let x = 1; x < map.cols - 1; x++) {
+    if (map.grid[z][x] !== HOLD_TILE.WALL || !court(x - 1, z) || !court(x, z - 1)) continue
+    if (map.grid[z][x - 1] !== HOLD_TILE.WALL && map.grid[z - 1][x] !== HOLD_TILE.WALL && map.grid[z - 1][x - 1] !== HOLD_TILE.WALL) pillars++ // a free-standing wall's top-left corner
+  }
+  ok(pillars >= 4, `the court has pillars to train around (${pillars} found)`)
+  let floor = 0
+  for (let z = 0; z < map.rows; z++) for (let x = 0; x < map.cols; x++) if (court(x, z)) floor++
+  const landing = map.windows.filter(w => w.room === 'landing').length
+  ok(floor > 400 && landing > 0, `the court is big (${floor} floor cells)`)
+}
 ok(map.grid[map.start.z][map.start.x] === HOLD_TILE.FLOOR, 'you start on floor')
 ok(map.grid[map.exit.z][map.exit.x] === HOLD_TILE.WARP, 'the way out is a warp tile')
 for (const w of map.windows) {
@@ -31,7 +49,7 @@ ok(keeperBlocked(s0, lw.cells[0].x, lw.cells[0].z), 'a keeper cannot climb out a
 ok(!roundBlocked(s0, lw.cells[0].x, lw.cells[0].z), '★ rounds pass a window — you shoot out of them')
 const g0 = map.gates[0]
 ok(keeperBlocked(s0, g0.cells[0].x, g0.cells[0].z) && roundBlocked(s0, g0.cells[0].x, g0.cells[0].z), 'a shut gate stops keeper and rounds')
-ok(keeperBlockSet(s0).size === map.windows.length * 2 + 4, 'block set = every window cell + both shut gates')
+ok(keeperBlockSet(s0).size === map.windows.length * 2 + map.gates.length * 2, 'block set = every window cell + every shut gate')
 
 // ── the hold's mana pool is a NEW keeper's pool — the mana skill buys nothing in here ──
 ok(T.manaPool === getMaxPool(1), `the hold pool (${T.manaPool}) is a level-1 keeper's pool (${getMaxPool(1)})`)
@@ -93,12 +111,13 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
 // ── salvage buys ──
 {
   const s = startHold(parseLanding())
-  ok(!buyGate(s, 1), '500 salvage cannot open a 1000 gate')
+  ok(!buyGate(s, 2), '500 salvage cannot open the 1000 gate')
   ok(s.salvage === 500, 'a refused buy spends nothing')
-  s.salvage = 800
-  ok(buyGate(s, 0) && s.rooms.gallery && s.salvage === 50, 'gate 1 opens the gallery for 750')
+  ok(buyGate(s, 0) && s.rooms.court && s.salvage === 250, 'the court opens for 250 on starting salvage')
   ok(!keeperBlocked(s, g0.cells[0].x, g0.cells[0].z), 'an open gate is walkable')
   ok(!buyGate(s, 0), 'an open gate cannot be bought twice')
+  s.salvage = 800
+  ok(buyGate(s, 1) && s.rooms.gallery && s.salvage === 50, 'gate 1 opens the gallery for 750')
   s.salvage = 2000
   ok(buyRack(s) === 'weapon' && buyRack(s) === 'refill', 'the rack sells the weapon, then refills it')
   ok(s.salvage === 2000 - T.rackCost - T.rackCost / 2, 'refill is half price')

@@ -24,41 +24,60 @@
 // ⚠ The landing is a BLOCKOUT for feel. Which world, whose host, what the rooms are = per-season.
 
 // ── the landing ─────────────────────────────────────────────────────────────────────────────────
-// Legend: '#' wall · '.' floor · ' ' the yard outside (the flood's side) · 'l'/'g'/'c' a window of
-// the landing / gallery / cistern · '1'/'2' a gate · '@' where you stand · 'x' the way out ·
-// 'R' the wall rack · 'F' the mana font · 'H' the draught cache.
+// Legend: '#' wall · '.' floor · ' ' the yard outside (the flood's side) · 'l'/'m'/'g'/'c' a window
+// of the landing / the court / gallery / cistern · '0'/'1'/'2' a gate · '@' where you stand · 'x' the
+// way out · 'R' the wall rack · 'F' the mana font · 'H' the draught cache.
+// ★ THE COURT IS THE POINT (Alex 09-24): you cannot kill a round all at once, so you TRAIN it — run
+// the crowd in loops around the court's four pillars. The landing is where you stand to start; the
+// cheap gate (0) is the first buy, and gallery/cistern open off the court for more room and more fronts.
 export const HOLD_LANDING: readonly string[] = [
-  '################################',
-  '#                              #',
-  '#                              #',
-  '#       ###gg####gg###         #',
-  '#       #...........H#         #',
-  '#       #............#         #',
-  '#       #............#         #',
-  '#       g............#         #',
-  '#       g............#         #',
-  '#       #............#         #',
-  '#       #............#         #',
-  '#       #............#         #',
-  '#       ######11########cc###  #',
-  '#       #F...........#......#  #',
-  '#       #...........R#......#  #',
-  '#       #............#......c  #',
-  '#       #............#......c  #',
-  '#       l............2......#  #',
-  '#       l.....@......2......#  #',
-  '#       #............#......c  #',
-  '#       #............#......c  #',
-  '#       #............#......#  #',
-  '#       #x...........#......#  #',
-  '#       ###ll####ll##########  #',
-  '#                              #',
-  '#                              #',
-  '################################',
+  '##################################################',
+  '#                                                #',
+  '#                                                #',
+  '#           ####mm##############mm####           #',
+  '#           #........................#           #',
+  '#           #........................m           #',
+  '#  ####gg####........................m           #',
+  '#  #........#........................#           #',
+  '#  #.H......#........................##########  #',
+  '#  g........#........................#........#  #',
+  '#  g........#.....###........###.....#........#  #',
+  '#  #........#.....###........###.....#........c  #',
+  '#  #........1.....###........###.....#........c  #',
+  '#  #........1........................#........#  #',
+  '#  #........#........................2........#  #',
+  '#  #........#........................2........#  #',
+  '#  g........#........................#........#  #',
+  '#  g........#.....###........###.....#........#  #',
+  '#  #........#.....###........###.....#........c  #',
+  '#  #........#.....###........###.....#........c  #',
+  '#  ##########........................#........#  #',
+  '#           #........................#........#  #',
+  '#           #........................####cc####  #',
+  '#           m........................#           #',
+  '#           m........................m           #',
+  '#           #........................m           #',
+  '#           ##mm########00########mm##           #',
+  '#                #F.............#                #',
+  '#                #.............R#                #',
+  '#                #..............#                #',
+  '#                #..............#                #',
+  '#                l..............l                #',
+  '#                l......@.......l                #',
+  '#                #..............#                #',
+  '#                #..............#                #',
+  '#                #..............#                #',
+  '#                #..............#                #',
+  '#                #x.............#                #',
+  '#                ####ll####ll####                #',
+  '#                                                #',
+  '#                                                #',
+  '##################################################',
 ]
 
-export type RoomId = 'landing' | 'gallery' | 'cistern'
-const ROOM_OF: Record<string, RoomId> = { l: 'landing', g: 'gallery', c: 'cistern' }
+export type RoomId = 'landing' | 'court' | 'gallery' | 'cistern'
+const ROOM_OF: Record<string, RoomId> = { l: 'landing', m: 'court', g: 'gallery', c: 'cistern' }
+const GATE_OPENS: Record<string, RoomId> = { '0': 'court', '1': 'gallery', '2': 'cistern' }
 
 /** Tile ids the grid is painted with — the mortal-side pair every stub map uses, plus WARP. */
 export const HOLD_TILE = { FLOOR: 98, WALL: 103, WARP: 14 } as const
@@ -95,7 +114,7 @@ export const HOLD_TUNING = {
   tearSec: 1.3,          // seconds a flooded body takes to tear one plank
   mendSec: 0.55,         // seconds of holding E per plank mended
   mendReach: 1.9,        // how close to a window's inside cell you must stand to mend it
-  gateCost: [750, 1000], // gate 1 (gallery), gate 2 (cistern)
+  gateCost: [250, 750, 1000], // gate 0 (court — cheap: room to train is the first thing you buy), 1 (gallery), 2 (cistern)
   rackCost: 500,         // the SPITTER off the wall
   rackWeapon: 'spitter',
   fontCost: 250,         // a full mana pool — mana is the clip, so this IS the ammo buy
@@ -189,7 +208,7 @@ export interface HoldState {
 
 // ── parse ────────────────────────────────────────────────────────────────────────────────────
 const DIRS: readonly [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-const isRoomFloor = (ch: string | undefined) => ch !== undefined && ch !== '#' && ch !== ' ' && !(ch in ROOM_OF) && ch !== '1' && ch !== '2'
+const isRoomFloor = (ch: string | undefined) => ch !== undefined && ch !== '#' && ch !== ' ' && !(ch in ROOM_OF) && !(ch in GATE_OPENS)
 
 export function parseLanding(rows: readonly string[] = HOLD_LANDING, tune: HoldTuning = HOLD_TUNING): HoldMap {
   const rowsN = rows.length, cols = rows[0].length
@@ -217,7 +236,7 @@ export function parseLanding(rows: readonly string[] = HOLD_LANDING, tune: HoldT
   const windows: HoldWindow[] = [], gates: HoldGate[] = []
   for (let z = 0; z < rowsN; z++) for (let x = 0; x < cols; x++) {
     const ch = at(x, z)!
-    const isWin = ch in ROOM_OF, isGate = ch === '1' || ch === '2'
+    const isWin = ch in ROOM_OF, isGate = ch in GATE_OPENS
     if ((!isWin && !isGate) || seen.has(`${x},${z}`)) continue
     const cells: Cell[] = [], stack: Cell[] = [{ x, z }]
     seen.add(`${x},${z}`)
@@ -233,8 +252,7 @@ export function parseLanding(rows: readonly string[] = HOLD_LANDING, tune: HoldT
     const mx = cells.reduce((s, c) => s + c.x, 0) / cells.length
     const mz = cells.reduce((s, c) => s + c.z, 0) / cells.length
     if (isGate) {
-      const n = Number(ch)
-      gates.push({ id: gates.length, cost: tune.gateCost[n - 1], cells, opens: n === 1 ? 'gallery' : 'cistern', mid: { x: mx, z: mz } })
+      gates.push({ id: gates.length, cost: tune.gateCost[Number(ch)], cells, opens: GATE_OPENS[ch], mid: { x: mx, z: mz } })
       continue
     }
     // which way is the room? the side whose neighbour is room floor. The yard is the other side.
@@ -296,7 +314,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     flood: [],
     planks: map.windows.map(() => tune.seals),
     gatesOpen: map.gates.map(() => false),
-    rooms: { landing: true, gallery: false, cistern: false },
+    rooms: { landing: true, court: false, gallery: false, cistern: false },
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
     drops: [], dropsThisRound: 0, pickups: [],
