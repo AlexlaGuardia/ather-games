@@ -156,6 +156,33 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   ok(auto.round >= autoplay(11, 300, false).round, 'a keeper who surges does no worse')
 }
 
+// ── boosters: the glimmer of hope ──
+{
+  const s = startHold(parseLanding(), 21)
+  const p = map.start
+  let n = 0
+  for (let k = 0; k < 400; k++) {
+    s.flood.push({ id: 5000 + k, kind: 'drift', x: p.x + 3, z: p.z, hp: 1, maxHp: 1, speed: 1, phase: 'inside', win: 0, tearT: 0, strikeT: 1, alive: true })
+    hitBody(s, 5000 + k, 5, false)
+    n = s.drops.length
+  }
+  ok(n === T.dropCap && s.dropsThisRound === T.dropCap, `★ boosters cap per round (${n} of ${T.dropCap})`)
+  ok(s.drops.every(d => d.kind === 'glimmer'), 'the booster is the Glimmer of Hope')
+  s.drops[1].x -= 5  // both fell on one spot; part them so one walk takes one
+  stepHold(s, 1 / 60, s.drops[0].x, s.drops[0].z)
+  ok(s.pickups.length === 1 && s.pickups[0] === 'glimmer', 'walking over it takes it — queued for the host')
+  ok(s.drops.length === T.dropCap - 1, 'and it is gone from the floor')
+  for (let i = 0; i < 60 * (T.dropTtl + 1); i++) stepHold(s, 1 / 60, p.x, p.z)
+  ok(s.drops.length === 0, 'an untaken booster fades')
+  // a kill in the yard drops inside the window, where a keeper can reach it
+  const s2 = startHold(parseLanding(), 22)
+  s2.rng = () => 0
+  const w = s2.map.windows[0]
+  s2.flood.push({ id: 7000, kind: 'drift', x: w.spawn.x, z: w.spawn.z, hp: 1, maxHp: 1, speed: 1, phase: 'tear', win: w.id, tearT: 0, strikeT: 1, alive: true })
+  hitBody(s2, 7000, 5, false)
+  ok(s2.drops[0]?.x === w.inside.x && s2.drops[0]?.z === w.inside.z, '★ a yard kill drops just inside its window')
+}
+
 // ── the hush runs out → loud ──
 {
   const s = startHold(parseLanding())

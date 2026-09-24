@@ -126,7 +126,7 @@ import { prettyItem } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
-import { HOLD_TUNING, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, keeperBlocked, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, keeperBlocked, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -2020,11 +2020,13 @@ const SENSE_TICK = 0.1
 // parent owns and never writes it. A blockout for feel — the flooded are wet dark mass because what
 // the host raised is shown and what made the host is not (guardrail 1); real bodies are a later pass.
 const HOLD_BODY_MAX = 40
+const HOLD_DROP_MAX = 8
 const HOLD_FLOOD_COLOR = { drift: new THREE.Color(S.hold.body), swift: new THREE.Color(S.hold.swift), bulk: new THREE.Color(S.hold.bulk) }
 function HoldScene({ holdRef, groundRef }: { holdRef: React.RefObject<HoldState | null>; groundRef: React.RefObject<number> }) {
   const bodies = useRef<THREE.InstancedMesh>(null)
   const planks = useRef<THREE.InstancedMesh>(null)
   const gates = useRef<THREE.InstancedMesh>(null)
+  const drops = useRef<THREE.InstancedMesh>(null)
   // the landing is one fixed map (the zone's grid is generated from it), so sizing the pools off it
   // never waits on a run existing — a run that starts after mount still has meshes to draw into
   const map = HOLD_MAP
@@ -2077,6 +2079,21 @@ function HoldScene({ holdRef, groundRef }: { holdRef: React.RefObject<HoldState 
       }
       planks.current.instanceMatrix.needsUpdate = true
     }
+    if (drops.current) {
+      // a booster hovers and turns; in its last five seconds it blinks, the Zombies tell for "going"
+      let i = 0
+      for (const d of s.drops) {
+        if (i >= HOLD_DROP_MAX) break
+        const on = d.ttl > 5 || Math.sin(t * 14) > 0
+        v.set(d.x, gy + 0.9 + 0.12 * Math.sin(t * 2.5 + d.id), d.z)
+        q.setFromAxisAngle(UP, t * 1.8)
+        sc.setScalar(on ? 1 : 0)
+        m.compose(v, q, sc)
+        drops.current.setMatrixAt(i++, m)
+      }
+      for (let k = i; k < HOLD_DROP_MAX; k++) { m.compose(zero, q.identity(), zero); drops.current.setMatrixAt(k, m) }
+      drops.current.instanceMatrix.needsUpdate = true
+    }
     if (gates.current) {
       let i = 0
       for (const g of s.map.gates) for (const c of g.cells) {
@@ -2095,6 +2112,10 @@ function HoldScene({ holdRef, groundRef }: { holdRef: React.RefObject<HoldState 
       <instancedMesh ref={bodies} args={[undefined, undefined, HOLD_BODY_MAX]} frustumCulled={false}>
         <sphereGeometry args={[0.45, 14, 12]} />
         <meshStandardMaterial color={S.white} emissive={S.hold.bodySheen} emissiveIntensity={0.18} roughness={0.25} metalness={0.1} />
+      </instancedMesh>
+      <instancedMesh ref={drops} args={[undefined, undefined, HOLD_DROP_MAX]} frustumCulled={false}>
+        <octahedronGeometry args={[0.28, 0]} />
+        <meshStandardMaterial color={S.hold.glimmer} emissive={S.hold.glimmer} emissiveIntensity={1.4} toneMapped={false} />
       </instancedMesh>
       {plankMax > 0 && (
         <instancedMesh ref={planks} args={[undefined, undefined, plankMax]} frustumCulled={false}>
@@ -4803,7 +4824,9 @@ export default function Shimmer3D() {
         // unreachable — a number that shipped, read correctly, and could never apply. It was also
         // 60× mis-scaled between the two worlds the moment it did apply. See `CastSpec.regenMult`.
         const stance = stanceRef.current
-        const perSec = MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now) * (stance?.regenMult ?? 1)
+        // THE HOLD: a fixed DRIP (Alex: "not enough but a drip") — no potion buff rides on it, because
+        // nothing was carried in; a held stance still shapes it, the way it shapes regen everywhere
+        const perSec = (zoneIdRef.current === HOLD_ZONE ? HOLD_TUNING.manaDrip : MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now)) * (stance?.regenMult ?? 1)
         if (perSec > 0) {
           manaRef.current.current = Math.min(max, manaRef.current.current + perSec * 0.5)  // 0.5s tick
           setManaFrac(manaRef.current.current / max)
@@ -5010,6 +5033,10 @@ export default function Shimmer3D() {
   // Double-tap use: drink a mana potion, or enter placement for a placeable.
   const useItem = useCallback((itemId?: string) => {
     if (!itemId) return
+    // ★ THE HOLD: a keeper walks in carrying NOTHING (Alex, 2026-09-24). The inventory is not emptied
+    // — the save runs mid-run, and an emptied bag saved on a closed tab would be a real loss — it is
+    // simply out of reach: the hotbar draws empty and no item can be used until the keeper leaves.
+    if (zoneIdRef.current === HOLD_ZONE) return
     if (itemId in PLACEABLES) {
       if (countItem(invRef.current, itemId) < 1) return
       battleRef.current = true                       // freeze the walker while aiming the ghost
@@ -5313,10 +5340,10 @@ export default function Shimmer3D() {
   const partyForBag = useMemo(() => ({ get current() { return partyRef.current ?? [] } }), [])
   const spiritIndexRef = useRef(createSpiritIndex())
   const hotbarEntries: (HotbarEntry | null)[] = Array.from({ length: HOTBAR_SLOTS }, (_, i) => {
-    const st = invSlots[i]
+    const st = zoneId === HOLD_ZONE ? null : invSlots[i]   // the hold: you came in with nothing
     return st ? { itemId: st.itemId, count: st.count } : null
   })
-  const heldName = invSlots[hotSel] ? { text: itemLabel(invSlots[hotSel]!.itemId), out: false } : null
+  const heldName = zoneId !== HOLD_ZONE && invSlots[hotSel] ? { text: itemLabel(invSlots[hotSel]!.itemId), out: false } : null
 
   // ── Exchange Booth (open at a placed booth) — buy/sell vs the single shared GE market ──
   const [tradeToast, setTradeToast] = useState<string | null>(null)
@@ -6202,6 +6229,7 @@ export default function Shimmer3D() {
       if (k === 'i') {
         // battleRef.current = walker frozen by a station menu / rinning / placing; curBattleRef = real battle
         if (editRef.current || battleRef.current || curBattleRef.current || dialogueRef.current) return
+        if (zoneIdRef.current === HOLD_ZONE) return  // no bag in the hold — nothing was carried in
         e.preventDefault(); toggleBag(!bagOpenRef.current)
       } else if (k === 'escape' && bagOpenRef.current) { e.preventDefault(); toggleBag(false) }
     }
@@ -6735,6 +6763,12 @@ export default function Shimmer3D() {
       const hs = holdRef.current, p = posRef.current
       if (!hs || !p) return
       const prompt = hs.running ? promptAt(hs, p.x, p.z) : null
+      // boosters the run picked up: the sim queues them, the page applies them (it owns the mana)
+      while (hs.pickups.length) {
+        const kind = hs.pickups.shift()!
+        if (kind === 'glimmer') { manaRef.current.current = manaMax(); setManaFrac(1) }
+        setHoldFlash(DROP_NAME[kind])
+      }
       if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
       if (hs.round !== lastRound) { lastRound = hs.round; setHoldFlash(`Round ${hs.round}`) }
       let best = 0

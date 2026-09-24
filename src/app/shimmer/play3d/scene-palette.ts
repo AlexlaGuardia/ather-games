@@ -155,6 +155,7 @@ export const hold = {
   body: '#1d2a33', bodySheen: '#3f6f86', swift: '#24404d', bulk: '#141d24',
   plank: '#8a6a44', gate: '#5d636c', gateRim: '#9aa3ad',
   rack: '#3a3f46', font: '#4fb3d9', cache: '#b98cf2',
+  glimmer: '#ffeaa3',  // the Glimmer of Hope — warm light, the one kind thing the flooded leave
 } as const
 /** The manabox viewmodel: dead grey cast metal with bronze trim (the art-medium law). */
 export const viewmodel = {

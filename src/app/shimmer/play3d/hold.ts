@@ -103,6 +103,11 @@ export const HOLD_TUNING = {
   cacheSec: 60,
   hushSec: 300,          // the draught you walk in with
   manaPool: 100,         // FIXED — a new keeper's pool; only the birth rune's bonus rides on it (no skill level)
+  manaDrip: 0.35,        // mana/sec in the hold — a drip, not a supply (Alex: "not enough but a drip")
+  dropChance: 0.03,      // a kill drops a booster this often
+  dropCap: 2,            // boosters per round, at most
+  dropTtl: 25,           // seconds a booster waits on the floor
+  pickupReach: 1.1,
   breakSec: 8,           // quiet between rounds
   maxAlive: 14,          // bodies in the landing at once, loud or hushed
   salvageHit: 10,
@@ -139,6 +144,14 @@ export interface FloodBody {
   alive: boolean
 }
 
+// ── boosters: what the flooded sometimes leave behind ──────────────────────────────────────────
+// Zombies' power-ups in our clothes. One so far, named by Alex (2026-09-24): the GLIMMER OF HOPE
+// refreshes the team's mana — solo today, so the keeper's. The union is the roster; a new booster is
+// a new kind here and a new case where the host applies it.
+export type HoldDropKind = 'glimmer'
+export const DROP_NAME: Record<HoldDropKind, string> = { glimmer: 'Glimmer of Hope' }
+export interface HoldDrop { id: number; kind: HoldDropKind; x: number; z: number; ttl: number }
+
 export interface HoldState {
   map: HoldMap
   running: boolean
@@ -160,6 +173,10 @@ export interface HoldState {
   surge: number           // 0..1
   hush: number            // seconds left; 0 = LOUD
   rackBought: boolean
+  drops: HoldDrop[]
+  dropsThisRound: number
+  /** boosters picked up and not yet applied — the host drains this (it owns mana, hp, the team) */
+  pickups: HoldDropKind[]
   elapsed: number
   nextId: number
   rng: () => number
@@ -281,6 +298,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     rooms: { landing: true, gallery: false, cistern: false },
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
+    drops: [], dropsThisRound: 0, pickups: [],
     elapsed: 0, nextId: 1, rng: mulberry32(seed),
     field: new Int16Array(map.cols * map.rows).fill(-1), fieldT: 0, fieldAt: -1,
   }
@@ -377,6 +395,7 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, tune:
       s.toSpawn = roundCount(s.round)
       s.spawnT = 1
       s.mendPaidThisRound = 0
+      s.dropsThisRound = 0
       out.roundBegan = s.round
     }
   } else if (s.toSpawn <= 0 && alive === 0 && !loud) {
@@ -456,6 +475,12 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, tune:
       if (floodPassable(s, Math.round(c.x + ux * push), Math.round(c.z + uz * push))) { c.x += ux * push; c.z += uz * push }
     }
   }
+  // boosters wait, then fade; walking over one takes it
+  for (const d of s.drops) {
+    d.ttl -= dt
+    if (d.ttl > 0 && (px - d.x) ** 2 + (pz - d.z) ** 2 <= tune.pickupReach ** 2) { s.pickups.push(d.kind); d.ttl = 0 }
+  }
+  s.drops = s.drops.filter(d => d.ttl > 0)
   return out
 }
 
@@ -472,6 +497,14 @@ export function hitBody(s: HoldState, id: number, dmg: number, crit: boolean, tu
     s.kills++
     salvage += crit ? tune.salvageCritKill : tune.salvageKill
     s.surge = Math.min(1, s.surge + 1 / tune.surgeKills)
+    if (s.dropsThisRound < tune.dropCap && s.rng() < tune.dropChance) {
+      // a body killed in the yard (shot through a window) leaves its booster just inside that
+      // window — a drop the keeper cannot reach is a drop that taunts
+      const w = s.map.windows[b.win]
+      const at = b.phase === 'inside' ? { x: b.x, z: b.z } : w.inside
+      s.drops.push({ id: s.nextId++, kind: 'glimmer', x: at.x, z: at.z, ttl: tune.dropTtl })
+      s.dropsThisRound++
+    }
   }
   s.salvage += salvage
   return { salvage, killed }
