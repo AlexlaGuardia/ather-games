@@ -34,6 +34,7 @@ the Arcade frame.
 
 **Decisions:**
 - ★ **ALL POWER IS IN-RUN.** A new player walks in equal. Home brews = utility/sidegrade only (longer hush, faster seal mend, delayed self-revive, salvage sight), NEVER raw damage/hp. Raw power = in-run perk stations bought with salvage, lost at run end. The Nolmir workshop's permanent floor does NOT port.
+- ★ **POWER IS CHOICE, NOT DAMAGE (Alex 09-24):** developed runes and moves stay allowed in the hold; a veteran earns a loadout they enjoy, never a damage lead. A default-loadout newcomer must keep pace in a party, and no tactical or signature may solo a boss. Measured 09-24: the gun is ~15 dmg/mana vs ~2-3 for cast projectiles, so single-target is already fair; the outliers are INFUSIONS (Forge Fist ≈ +47% sustained weapon damage, Flame Infusion ≈ +37%) and AoE FIELDS vs a clumped horde (Firestorm ≈ 70 dmg/mana on 14 bodies).
 - ★ **BOSS = SKILL CHECK, NOT HP SPONGE. NO HP SCALING BY PARTY SIZE.** Phases that demand positions one body can't hold at once. Three = roles; solo = legendary. Reward = a mark of the deed (title + the kill on the world's archive page / the Signal), never power.
 - **Each season's colossus gets its OWN gimmick.** Starter bank (Alex: keep these):
   1. Twin weak points on opposite sides that must both be hit inside one window.
