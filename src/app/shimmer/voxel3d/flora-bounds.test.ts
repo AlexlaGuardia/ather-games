@@ -26,7 +26,7 @@
 // `npx tsx` over every *.test.ts, so the guard would have existed only on the machine that wrote
 // it. A test the sweep cannot run is not a guard, and this one failed toward looking fine.
 import * as THREE from 'three'
-import { createFloraRenderer, floraBounds, FLORA_PARTS } from './flora-mesh'
+import { createFloraRenderer, floraBounds, FLORA_PARTS, SHROOM_SHAPES, shroomShapeOf, floraShroomStemGeo, floraShroomCapGeo, FLORA_COLORS } from './flora-mesh'
 import { FLORA } from '../voxel/flora'
 import { MAT } from '../voxel/depth'
 
@@ -187,6 +187,39 @@ const VARIANTS = [0, 0.17, 0.33, 0.5, 0.66, 0.83, 0.999]
       ok(floraBounds(kind, 0, 0, 0, 0.4, true) !== null, `scatter kind ${kind} has no measurable box`)
     }
   }
+}
+
+// ── ★ THE MUSHROOM FAMILY (sculpt queue ③, 2026-09-24): four shapes, one per cap colour ─────────
+{
+  ok(SHROOM_SHAPES.length === FLORA_COLORS.shroomCaps.length, 'one shape per cap colour — the shared hash indexes both')
+  const tris = (g: THREE.BufferGeometry) => (g.index ? g.index.count : g.getAttribute('position').count) / 3
+  const box = (g: THREE.BufferGeometry) => { g.computeBoundingBox(); return g.boundingBox! }
+  const tops: number[] = [], widths: number[] = []
+  SHROOM_SHAPES.forEach((sh, i) => {
+    const st = floraShroomStemGeo(i), cp = floraShroomCapGeo(i)
+    const t = tris(st) + tris(cp)
+    ok(t <= 130, `${sh.name}: ${t} triangles, inside the ~120 budget (CAP.shroom 3000)`)
+    // The cap's underside starts ON the stalk: no daylight between them, and not wider than the stalk top.
+    const stemTop = sh.stem[sh.stem.length - 1], capFoot = sh.cap[0]
+    ok(capFoot[1] <= stemTop[1] && Math.abs(capFoot[0] - stemTop[0]) < 1e-9, `${sh.name}: the cap sits on its stalk (no gap, no step)`)
+    ok(sh.cap[sh.cap.length - 1][0] === 0 && sh.stem[0][1] === 0, `${sh.name}: closed crown, stalk from the ground`)
+    const b = box(cp)
+    tops.push(b.max.y); widths.push(b.max.x - b.min.x)
+    ok(b.max.y <= 0.45 && b.max.x <= 0.24, `${sh.name}: inside the old mushroom's envelope (the jitter and footprint stay honest)`)
+    st.dispose(); cp.dispose()
+  })
+  // ★ The point of the sculpt: the four are different SILHOUETTES, not one shape four times.
+  const distinct = (xs: number[], gap: number) => xs.every((a, i) => xs.every((b, j) => i === j || Math.abs(a - b) >= gap || false))
+  ok(distinct(widths, 0.02) || distinct(tops, 0.02), `the four read apart by width or height (w ${widths.map(w => w.toFixed(2))} h ${tops.map(h => h.toFixed(2))})`)
+  // Shape and colour come from ONE hash, so they can never disagree.
+  for (const v of [0, 0.17, 0.5, 0.731, 0.999]) {
+    const k = shroomShapeOf(v)
+    ok(k === Math.floor(v * 991) % FLORA_COLORS.shroomCaps.length, `shape @ ${v} is the colour's index`)
+  }
+  // Each bounds box is the shape standing there, not the union: a bun's box is lower than a parasol's.
+  const vOf = (shape: number) => { for (let i = 0; i < 991; i++) if (shroomShapeOf(i / 991 + 1e-6) === shape) return i / 991 + 1e-6; return 0 }
+  const hBun = floraBounds(FLORA.MUSHROOM, 0, 0, 0, vOf(3), true)!, hPar = floraBounds(FLORA.MUSHROOM, 0, 0, 0, vOf(1), true)!
+  ok((hBun.y1 - hBun.y0) < (hPar.y1 - hPar.y0) * 0.85, `★ a bun's box is the bun's (${(hBun.y1 - hBun.y0).toFixed(3)} vs parasol ${(hPar.y1 - hPar.y0).toFixed(3)})`)
 }
 
 console.log(`\nflora bounds: ${pass} passed, ${fails.length} failed`)

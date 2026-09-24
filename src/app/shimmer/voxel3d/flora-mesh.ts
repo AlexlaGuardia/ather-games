@@ -90,16 +90,44 @@ export const floraLogGeo = (): THREE.BufferGeometry => {
   g.rotateZ(Math.PI / 2)          // lying along +X — a felled trunk, not a post
   return g
 }
-export const floraShroomStemGeo = (): THREE.BufferGeometry => {
-  const g = new THREE.CylinderGeometry(0.05, 0.07, 0.24, 5)
-  g.translate(0, 0.12, 0)
-  return g
-}
-export const floraShroomCapGeo = (): THREE.BufferGeometry => {
-  const g = new THREE.ConeGeometry(0.17, 0.15, 8)
-  g.translate(0, 0.30, 0)         // rides the top of the stalk
-  return g
-}
+/**
+ * ── ★ THE MUSHROOM FAMILY: FOUR SILHOUETTES, ONE PER CAP COLOUR (sculpt queue ③, 2026-09-24) ─────
+ * The placeholder was one 8-sided cone on a 5-sided post in four colours, so colour did all the
+ * work — the worst-reading flora a sculpt could still fix. Now each colour has its own SHAPE, picked
+ * by the same hash that already picked the colour (`shroomShapeOf`), so a red one is always a dome
+ * and a stand of them reads as kinds of mushroom rather than one mushroom repainted.
+ *
+ * ⚠ SHAPE ONLY, NO NAMES. Canon now names fungi (`world/cuisine.md`: the puffcap, capgrain's shelf
+ * fungus) but rules *"whether the mortal seven also grow in the Ather is deliberately NOT ruled"*,
+ * so this wild scatter stays "Mushroom" and none of these profiles claims to be one of them.
+ *
+ * Lathes, not a Blender bake: a mushroom is a solid of revolution, and a profile is eight numbers a
+ * reader can check. `[radius, height]` from the stalk's foot up / from the cap's underside, round
+ * the rim, to the crown. Budget (`CAP.shroom` 3000, GBOARD's rule): stalk 6 sides × 2 bands = 24
+ * triangles, cap 8 sides × ≤6 bands ≤ 96 — about 120 a mushroom, a third of a fruit bush.
+ */
+export const SHROOM_SHAPES: readonly { name: string; stem: [number, number][]; cap: [number, number][] }[] = [
+  // 0 · red — the round-domed toadstool, a stout stalk under a deep cap
+  { name: 'dome', stem: [[0.055, 0], [0.047, 0.11], [0.044, 0.22]],
+    cap: [[0.044, 0.195], [0.15, 0.185], [0.19, 0.21], [0.185, 0.26], [0.14, 0.31], [0.07, 0.34], [0, 0.35]] },
+  // 1 · amber — the parasol: tall thin stalk, a wide flat cap with a little boss on top
+  { name: 'parasol', stem: [[0.042, 0], [0.03, 0.17], [0.028, 0.34]],
+    cap: [[0.028, 0.325], [0.2, 0.318], [0.225, 0.335], [0.19, 0.362], [0.08, 0.38], [0.03, 0.394], [0, 0.4]] },
+  // 2 · violet — the bell: a narrow cap taller than it is wide, hung over a slim stalk
+  { name: 'bell', stem: [[0.04, 0], [0.034, 0.1], [0.032, 0.2]],
+    cap: [[0.032, 0.18], [0.1, 0.165], [0.118, 0.19], [0.105, 0.28], [0.068, 0.36], [0.022, 0.4], [0, 0.405]] },
+  // 3 · buff — the bun: a fat stalk that bulges, a low thick cap sat right on it
+  { name: 'bun', stem: [[0.065, 0], [0.09, 0.07], [0.065, 0.155]],
+    cap: [[0.065, 0.14], [0.17, 0.138], [0.21, 0.165], [0.2, 0.215], [0.14, 0.258], [0, 0.275]] },
+]
+/** Which of the four a mushroom is — THE colour's hash, so shape and colour can never disagree. */
+export const shroomShapeOf = (variant: number): number => Math.floor(variant * 991) % SHROOM_SHAPES.length
+const lathe = (pts: [number, number][], sides: number): THREE.BufferGeometry =>
+  new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), sides)
+export const floraShroomStemGeo = (shape = 0): THREE.BufferGeometry =>
+  lathe(SHROOM_SHAPES[shape].stem, 6)
+export const floraShroomCapGeo = (shape = 0): THREE.BufferGeometry =>
+  lathe(SHROOM_SHAPES[shape].cap, 8)
 export const floraRockGeo = (): THREE.BufferGeometry => new THREE.IcosahedronGeometry(0.21, 0)
 /**
  * A puff cluster (2026-09-16): three puffballs huddled on the ground, ONE buffer. Merged by hand
@@ -1032,6 +1060,18 @@ let partVerts: Map<number, Float32Array[]> | null = null
  * names the material.
  */
 const fruitKey = (mat: number) => -mat
+const shroomVertCache = new Map<number, Float32Array[]>()
+function shroomVerts(shape: number): Float32Array[] {
+  let v = shroomVertCache.get(shape)
+  if (!v) {
+    const grab1 = (g: THREE.BufferGeometry): Float32Array => {
+      const a = (g.getAttribute('position').array as Float32Array).slice(); g.dispose(); return a
+    }
+    v = [grab1(floraShroomStemGeo(shape)), grab1(floraShroomCapGeo(shape))]
+    shroomVertCache.set(shape, v)
+  }
+  return v
+}
 function vertsFor(kind: number, mat?: number): Float32Array[] {
   if (kind === FLORA.FRUIT && mat !== undefined) {
     const k = fruitKey(mat)
@@ -1067,7 +1107,8 @@ function vertsFor(kind: number, mat?: number): Float32Array[] {
     }
     partVerts.set(FLORA.ROCK, [grab(floraRockGeo())])
     partVerts.set(FLORA.DEADFALL, [grab(floraLogGeo())])
-    partVerts.set(FLORA.MUSHROOM, [grab(floraShroomStemGeo()), grab(floraShroomCapGeo())])
+    // Every shape's parts: the kind's bounds are the union, so whichever shape stands there is inside.
+    partVerts.set(FLORA.MUSHROOM, SHROOM_SHAPES.flatMap((_, i) => [grab(floraShroomStemGeo(i)), grab(floraShroomCapGeo(i))]))
     partVerts.set(FLORA.PUFF, [grab(floraPuffGeo())])
     partVerts.set(FLORA.SHELF, [grab(floraShelfGeo())])
     // ★ THE FRUIT BUSH OVERRIDES ITS OWN `FLORA_PARTS` ROW, WHICH IS STILL THERE ON PURPOSE.
@@ -1103,7 +1144,9 @@ const bVec = new THREE.Vector3()
 export function floraBounds(
   kind: number, x: number, y: number, z: number, variant: number, alongX?: boolean, mat?: number,
 ): FloraBox | null {
-  const parts = vertsFor(kind, mat)
+  // A mushroom is measured as the ONE shape standing there (the renderer draws that shape's pool
+  // only), never as the union of four, which would be a box loose by a parasol round every bun.
+  const parts = kind === FLORA.MUSHROOM ? shroomVerts(shroomShapeOf(variant)) : vertsFor(kind, mat)
   if (!parts.length) return null
   floraMatrix(kind, x, y, z, variant, alongX, bMtx, bOff, bQuat, bScl)
   let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity
@@ -1637,8 +1680,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   const logGeo = floraLogGeo()
   // A mushroom in two parts, for the same reason a herb is body-plus-tip: the cap carries the
   // colour and the silhouette, the stalk just holds it up.
-  const shroomStemGeo = floraShroomStemGeo()
-  const shroomCapGeo = floraShroomCapGeo()
+  // One pair per SHAPE (sculpt queue ③), in `SHROOM_SHAPES` order — `shroomShapeOf` indexes it.
+  const shroomGeos = SHROOM_SHAPES.map((_, i) => ({ stem: floraShroomStemGeo(i), cap: floraShroomCapGeo(i) }))
 
   const rockMat = solidMaterial()
   const logMat = solidMaterial()
@@ -1867,15 +1910,22 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   tips.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.herb * 3), 3)
   const rocks = new THREE.InstancedMesh(rockGeo, rockMat, CAP.rock)
   const logs = new THREE.InstancedMesh(logGeo, logMat, CAP.log)
-  const shroomStems = new THREE.InstancedMesh(shroomStemGeo, shroomStemMat, CAP.shroom)
-  const shroomCaps = new THREE.InstancedMesh(shroomCapGeo, shroomCapMat, CAP.shroom)
+  // A pool per shape, each sized to the WHOLE cap: the shape hash is uniform, but a pool sized to a
+  // quarter would overflow on the first woodland that rolled a run of domes. `nS` still counts the
+  // total against `CAP.shroom`, so the budget is the same 3000 however they fall.
+  const shroomPools = shroomGeos.map(g => {
+    const stems = new THREE.InstancedMesh(g.stem, shroomStemMat, CAP.shroom)
+    const caps = new THREE.InstancedMesh(g.cap, shroomCapMat, CAP.shroom)
+    stems.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
+    caps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
+    return { stems, caps, n: 0 }
+  })
+  const shroomMeshes = shroomPools.flatMap(p => [p.stems, p.caps])
   // ★ ALL FOUR ARE INSTANCE-TINTED. A stone takes its colour from the GROUND it lies on — the same
   // move slice ② made for grass, and for the same reason: one grey stone on nine different grounds
   // was half of what "samey" meant. The cap colour is the mushroom's whole identity.
   rocks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.rock * 3), 3)
   logs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.log * 3), 3)
-  shroomStems.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
-  shroomCaps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.shroom * 3), 3)
   // The forage (2026-09-16). A puff is tinted per instance so a huddle is not four identical
   // creams; the moss takes its colour as a tint over the near-white pad, like a bloom head.
   const puffs = new THREE.InstancedMesh(puffGeo, puffMat, CAP.puff)
@@ -1891,7 +1941,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // glints) so it is never sorted behind the water it decorates.
   wakes.renderOrder = 2
 
-  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes, shelves]) {
+  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, logs, ...shroomMeshes, puffs, mosses, reeds, wakes, shelves]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -1899,7 +1949,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   }
 
   const group = new THREE.Group()
-  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes, shelves)
+  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, logs, ...shroomMeshes, puffs, mosses, reeds, wakes, shelves)
 
   // ── the showcase (2026-09-22): a few card bushes and model bushes at exact spots, off the pools ──
   const SHOW_CAP = 8
@@ -1945,7 +1995,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     c.setAttribute('aTile', new THREE.InstancedBufferAttribute(new Float32Array(1), 1).setUsage(THREE.DynamicDrawUsage))
     return c
   }
-  const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number; fmat?: number; berryHull?: boolean }[] = [
+  const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number; fmat?: number; berryHull?: boolean; shape?: number }[] = [
     { kind: FLORA.TUFT, geo: hlAtlasGeo(tuftGeo), mat: outlineMaterial(tuftTex, FLORA_SWAY[FLORA.TUFT], GRASS_VARIANTS), grow: 1 },
     { kind: FLORA.TUFT, geo: tuftCapGeo, mat: outlineMaterial(rosetteTex, FLORA_SWAY[FLORA.TUFT]), grow: 1 },
     { kind: FLORA.TALL, geo: hlAtlasGeo(tallGeo), mat: outlineMaterial(tallTex, FLORA_SWAY[FLORA.TALL], GRASS_VARIANTS), grow: 1 },
@@ -1975,8 +2025,11 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     { kind: FLORA.CROP, geo: cropHeadGeo, mat: outlineMaterial(cropHeadTex, FLORA_SWAY[FLORA.CROP]), grow: 1 },
     { kind: FLORA.ROCK, geo: rockGeo, mat: outlineHullMaterial(), grow: 1.14 },
     { kind: FLORA.DEADFALL, geo: logGeo, mat: outlineHullMaterial(), grow: 1.1 },
-    { kind: FLORA.MUSHROOM, geo: shroomStemGeo, mat: outlineHullMaterial(), grow: 1.12 },
-    { kind: FLORA.MUSHROOM, geo: shroomCapGeo, mat: outlineHullMaterial(), grow: 1.12 },
+    // One pair per shape, like the fruit's per species: a parasol's hull round a bun is loose by half.
+    ...shroomGeos.flatMap((g, shape) => ([
+      { kind: FLORA.MUSHROOM, shape, geo: g.stem, mat: outlineHullMaterial(), grow: 1.12 },
+      { kind: FLORA.MUSHROOM, shape, geo: g.cap, mat: outlineHullMaterial(), grow: 1.12 },
+    ])),
     { kind: FLORA.PUFF, geo: puffGeo, mat: outlineHullMaterial(), grow: 1.12 },
     { kind: FLORA.SHELF, geo: shelfGeo, mat: outlineHullMaterial(), grow: 1.12 },
     { kind: FLORA.MOSS, geo: mossGeo, mat: outlineMaterial(mossTex, FLORA_SWAY[FLORA.MOSS]), grow: 1 },
@@ -2187,6 +2240,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       leanLive = river ? lean.fill(cols, seed) : lean.clear()
       uLean.value = lean.texture
       let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0, nRe = 0, nSh = 0, wSh = 0
+      for (const p of shroomPools) p.n = 0
       // ⚠ RESET BESIDE `nFr`, NOT INSIDE THE LOOP: these are per-species slot counters and a
       // sync that forgot them would append to the last sync's instances until the cap ate it.
       for (const b of bushPools) { b.n = 0; b.f = 0 }
@@ -2245,10 +2299,11 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
             } else {
               wS++
               if (nS < CAP.shroom) {
-                shroomStems.setMatrixAt(nS, mtx); shroomCaps.setMatrixAt(nS, mtx)
-                shroomStems.setColorAt(nS, tint.set(SHROOM_STEM_COLOR))
-                shroomCaps.setColorAt(nS, tint.set(SHROOM_CAPS[Math.floor(s.variant * 991) % SHROOM_CAPS.length]))
-                nS++
+                const shape = shroomShapeOf(s.variant), p = shroomPools[shape]
+                p.stems.setMatrixAt(p.n, mtx); p.caps.setMatrixAt(p.n, mtx)
+                p.stems.setColorAt(p.n, tint.set(SHROOM_STEM_COLOR))
+                p.caps.setColorAt(p.n, tint.set(SHROOM_CAPS[shape]))
+                p.n++; nS++
               }
             }
           }
@@ -2395,9 +2450,10 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         floraDemand[pool] = { wanted, cap }
         if (wanted > cap) noteOverflow(pool, wanted, cap)
       }
-      rocks.count = nR; logs.count = nG; shroomStems.count = nS; shroomCaps.count = nS
+      rocks.count = nR; logs.count = nG
+      for (const p of shroomPools) { p.stems.count = p.n; p.caps.count = p.n }
       puffs.count = nP; mosses.count = nMo; reeds.count = nRe; wakes.count = nRe
-      for (const m of [rocks, logs, shroomStems, shroomCaps, puffs, mosses, reeds, wakes]) {
+      for (const m of [rocks, logs, ...shroomMeshes, puffs, mosses, reeds, wakes]) {
         m.instanceMatrix.needsUpdate = true
         if (m.instanceColor) m.instanceColor.needsUpdate = true
       }
@@ -2454,7 +2510,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         // border floating in the air. `berryHull` marks the second def of each species' pair.
         const wrongBush = h.fmat !== undefined
           && (h.fmat !== (mat ?? BUSH_MODEL_MATS[0]) || (h.berryHull === true && !hasFruit))
-        if (h.kind !== kind || wrongBush) { h.mesh.count = 0; continue }
+        const wrongShroom = h.shape !== undefined && h.shape !== shroomShapeOf(variant)
+        if (h.kind !== kind || wrongBush || wrongShroom) { h.mesh.count = 0; continue }
         if (h.grow === 1) h.mesh.setMatrixAt(0, hlMtx)
         else h.mesh.setMatrixAt(0, mtx.copy(hlMtx).scale(hlGrow.setScalar(h.grow)))
         h.mesh.instanceMatrix.needsUpdate = true
