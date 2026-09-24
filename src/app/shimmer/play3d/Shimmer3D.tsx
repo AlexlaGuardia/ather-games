@@ -181,6 +181,7 @@ import { allNpcs, nodePlacementsFor, dealtNodesFor, spawnerPlacementsFor, logica
 import { ZONE_SPAWNERS, type SpawnerPlacement } from '../world/spawn-placements'
 import { MOGLIN_FUR, MOGLIN_FUR_LIGHT, GATE_COLORS } from './moglin-look'
 import * as S from './scene-palette'
+import { keeperKey } from '@/lib/keeper-local'
 import { mint } from './tokens'
 import { patrolDown, markBeaten, pruneBeaten, patrolLoop, patrolPose, type BeatenRecord, type PatrolLoop, type WanderDials } from '../engine/burrows'
 import type { DealWindow } from '../engine/spawn-board'
@@ -6169,7 +6170,7 @@ export default function Shimmer3D() {
     const hs = holdRef.current
     if (hs?.running) {
       const r = endHold(hs)
-      try { if (r.round > Number(localStorage.getItem(HOLD_BEST_KEY) ?? 0)) localStorage.setItem(HOLD_BEST_KEY, String(r.round)) } catch { /* no storage: no record */ }
+      try { if (r.round > Number(localStorage.getItem(keeperKey(HOLD_BEST_KEY)) ?? 0)) localStorage.setItem(keeperKey(HOLD_BEST_KEY), String(r.round)) } catch { /* no storage: no record */ }
     }
   }, [])
   // called by FiringRange per actual spawn (full-auto): bump the counter + kick the recoil, no re-render
@@ -6774,7 +6775,7 @@ export default function Shimmer3D() {
       if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
       if (hs.round !== lastRound) { lastRound = hs.round; setHoldFlash(`Round ${hs.round}`) }
       let best = 0
-      try { best = Number(localStorage.getItem(HOLD_BEST_KEY) ?? 0) } catch { /* none */ }
+      try { best = Number(localStorage.getItem(keeperKey(HOLD_BEST_KEY)) ?? 0) } catch { /* none */ }
       const next = { round: hs.round, salvage: hs.salvage, hush: Math.ceil(hs.hush), loud: isLoud(hs), surge: Math.round(hs.surge * 20) / 20, kills: hs.kills, over: hs.over, prompt, best }
       const key = JSON.stringify(next)
       if (key !== lastKey) { lastKey = key; setHoldHud(next) }
