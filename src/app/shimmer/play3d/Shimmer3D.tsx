@@ -11,7 +11,7 @@ import * as THREE from 'three'
 import { walkable } from '../engine/player'
 import { resolveStand, canStandAt, surfacesAt, EMPTY_SEGS, type CollisionCtx } from '../engine/segs-collision'
 import { SOLID } from '../world/tiles'
-import { getZone, checkWarp, gateFootprint, type Zone, type Warp, type Gate } from '../world/zones'
+import { getZone, checkWarp, gateFootprint, HOLD_MAP, type Zone, type Warp, type Gate } from '../world/zones'
 import { CHUNK, DEFAULT_RADIUS, chunkOf, sameChunk, chunkVisible, viewFar, fogNear, type ChunkCoord } from '../world/chunk-stream'
 import { ALL_ZONES } from '../world/all-zones'
 // The far end of the Ather crossing. `engine/crossing.ts` holds the contract and the reasoning;
@@ -126,6 +126,7 @@ import { prettyItem } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
+import { HOLD_TUNING, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, keeperBlocked, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -213,6 +214,9 @@ const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 // The mortal side's wall. Clouds and mist are ATHER-only — a town built out of cloud reads as
 // sky, which is the tonal wall canon splits on. Solid like a cloud, drawn brown.
 const BUILDING_ID = 103
+/** The hold's zone id (`world/zones.ts`). Everything the hold adds to the walker and the range asks this. */
+const HOLD_ZONE = 'the-hold'
+const HOLD_BEST_KEY = 'ather:shimmer:hold:best'
 // Encounters: stepping onto a fresh MIST tile can draw a wild spirit. Per-zone odds live in
 // ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
 // 888-mist zone isn't wall-to-wall battles.
@@ -1239,7 +1243,7 @@ function HandsMount({ hands, feed }: { hands: Hands; feed: () => void }) {
 export interface BodyOut { airborne: boolean; sliding: boolean; crouching: boolean; climbing: boolean; hanging: boolean; mantle: number; vy: number }
 export const newBodyOut = (): BodyOut => ({ airborne: false, sliding: false, crouching: false, climbing: false, hanging: false, mantle: -1, vy: 0 })
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, weaponMoveRef, dreamwalkRef, conjuredRef, bodyOut }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, weaponMoveRef, dreamwalkRef, conjuredRef, holdRef, bodyOut }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -1259,6 +1263,8 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   // potion-buff mirrors (walker updates on its coarse tick): ground-speed mult + calm-mist flag
   speedMultRef: React.RefObject<number>; dreamwalkRef: React.RefObject<boolean>
   conjuredRef: React.MutableRefObject<Conjured[]>  // SYSTEM 2 — a conjured slab is solid to the walker
+  /** THE HOLD — windows are never climbable and a shut gate is a wall (`hold.ts` › keeperBlocked) */
+  holdRef: React.RefObject<HoldState | null>
   weaponMoveRef: React.RefObject<number>  // weapon-state ground-speed mult: 1 holstered, <1 drawn, less ADS
 }) {
   const group = useRef<THREE.Group>(null)
@@ -1338,6 +1344,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // drift. It also means Cordon genuinely traps you if you cast it around yourself, which is
       // the decision the move is supposed to be.
       if (conjuredRef.current && conjuredBlockedAt(conjuredRef.current, cx, cz, performance.now())) return true
+      if (zoneNow === HOLD_ZONE && holdRef.current && keeperBlocked(holdRef.current, cx, cz)) return true
       return false
     }
     const canStep = (cx: number, cz: number) =>
@@ -2008,7 +2015,119 @@ function GunBenches() {
  */
 const SENSE_TICK = 0.1
 
-function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial, onMatch }: {
+// ── THE HOLD's picture (`hold.ts`) ────────────────────────────────────────────────────────────
+// Draws only: the flooded, the seals, the shut gates and the three fixtures. Reads the run the
+// parent owns and never writes it. A blockout for feel — the flooded are wet dark mass because what
+// the host raised is shown and what made the host is not (guardrail 1); real bodies are a later pass.
+const HOLD_BODY_MAX = 40
+const HOLD_FLOOD_COLOR = { drift: new THREE.Color(S.hold.body), swift: new THREE.Color(S.hold.swift), bulk: new THREE.Color(S.hold.bulk) }
+function HoldScene({ holdRef, groundRef }: { holdRef: React.RefObject<HoldState | null>; groundRef: React.RefObject<number> }) {
+  const bodies = useRef<THREE.InstancedMesh>(null)
+  const planks = useRef<THREE.InstancedMesh>(null)
+  const gates = useRef<THREE.InstancedMesh>(null)
+  // the landing is one fixed map (the zone's grid is generated from it), so sizing the pools off it
+  // never waits on a run existing — a run that starts after mount still has meshes to draw into
+  const map = HOLD_MAP
+  const plankMax = map.windows.length * HOLD_TUNING.seals
+  const gateMax = map.gates.reduce((n, g) => n + g.cells.length, 0)
+  const m = useMemo(() => new THREE.Matrix4(), [])
+  const q = useMemo(() => new THREE.Quaternion(), [])
+  const v = useMemo(() => new THREE.Vector3(), [])
+  const sc = useMemo(() => new THREE.Vector3(), [])
+  const zero = useMemo(() => new THREE.Vector3(0, 0, 0), [])
+  useFrame((state) => {
+    const s = holdRef.current
+    if (!s) return
+    const gy = groundRef.current ?? 0
+    const t = state.clock.elapsedTime
+    if (bodies.current) {
+      let i = 0
+      for (const b of s.flood) {
+        if (!b.alive || i >= HOLD_BODY_MAX) continue
+        const size = b.kind === 'bulk' ? 1.35 : b.kind === 'swift' ? 0.8 : 1
+        // a body at a window leans into it and heaves; one inside rolls as it comes
+        const heave = b.phase === 'tear' ? 0.12 * Math.sin(t * 7 + b.id) : 0.05 * Math.sin(t * 4 + b.id)
+        v.set(b.x, gy + 0.45 * size + heave, b.z)
+        sc.set(size * (1 + heave), size * (0.9 - heave), size * (1 + heave))
+        q.identity()
+        m.compose(v, q, sc)
+        bodies.current.setMatrixAt(i, m)
+        bodies.current.setColorAt(i, HOLD_FLOOD_COLOR[b.kind])
+        i++
+      }
+      for (let k = i; k < HOLD_BODY_MAX; k++) { m.compose(zero, q.identity(), zero); bodies.current.setMatrixAt(k, m) }
+      bodies.current.count = HOLD_BODY_MAX
+      bodies.current.instanceMatrix.needsUpdate = true
+      if (bodies.current.instanceColor) bodies.current.instanceColor.needsUpdate = true
+    }
+    if (planks.current) {
+      let i = 0
+      for (const w of s.map.windows) {
+        const alongX = w.cells[0].z === w.cells[w.cells.length - 1].z
+        // sit the planks a hair toward the room so they read on the inside face of the gap
+        const ix = (w.inside.x - w.mid.x) * 0.3, iz = (w.inside.z - w.mid.z) * 0.3
+        for (let k = 0; k < HOLD_TUNING.seals; k++) {
+          const up = k < s.planks[w.id]
+          v.set(w.mid.x + ix, gy + 0.3 + k * 0.3, w.mid.z + iz)
+          q.setFromAxisAngle(UP, alongX ? 0 : Math.PI / 2)
+          sc.set(up ? 1 : 0, up ? 1 : 0, up ? 1 : 0)
+          m.compose(v, q, sc)
+          planks.current.setMatrixAt(i++, m)
+        }
+      }
+      planks.current.instanceMatrix.needsUpdate = true
+    }
+    if (gates.current) {
+      let i = 0
+      for (const g of s.map.gates) for (const c of g.cells) {
+        const shut = !s.gatesOpen[g.id]
+        v.set(c.x, gy + 1.2, c.z)
+        sc.set(shut ? 1 : 0, shut ? 1 : 0, shut ? 1 : 0)
+        m.compose(v, q.identity(), sc)
+        gates.current.setMatrixAt(i++, m)
+      }
+      gates.current.instanceMatrix.needsUpdate = true
+    }
+  })
+  const gy = groundRef.current ?? 0
+  return (
+    <>
+      <instancedMesh ref={bodies} args={[undefined, undefined, HOLD_BODY_MAX]} frustumCulled={false}>
+        <sphereGeometry args={[0.45, 14, 12]} />
+        <meshStandardMaterial color={S.white} emissive={S.hold.bodySheen} emissiveIntensity={0.18} roughness={0.25} metalness={0.1} />
+      </instancedMesh>
+      {plankMax > 0 && (
+        <instancedMesh ref={planks} args={[undefined, undefined, plankMax]} frustumCulled={false}>
+          <boxGeometry args={[2.1, 0.16, 0.12]} />
+          <meshStandardMaterial color={S.hold.plank} roughness={0.9} />
+        </instancedMesh>
+      )}
+      {gateMax > 0 && (
+        <instancedMesh ref={gates} args={[undefined, undefined, gateMax]} frustumCulled={false}>
+          <boxGeometry args={[1, 2.4, 1]} />
+          <meshStandardMaterial color={S.hold.gate} emissive={S.hold.gateRim} emissiveIntensity={0.08} metalness={0.3} roughness={0.7} />
+        </instancedMesh>
+      )}
+      {/* the rack: a dark board on the wall with the weapon laid across it */}
+      <group position={[map.rack.x + 0.35, gy, map.rack.z]}>
+        <mesh position={[0, 1.2, 0]}><boxGeometry args={[0.12, 1.1, 1.4]} /><meshStandardMaterial color={S.hold.rack} /></mesh>
+        <mesh position={[-0.08, 1.2, 0]}><boxGeometry args={[0.1, 0.16, 1.0]} /><meshStandardMaterial color={S.viewmodel.spitterBronze} /></mesh>
+      </group>
+      {/* the font: a stone basin with lit water — mana is the clip, so this is where ammo lives */}
+      <group position={[map.font.x, gy, map.font.z]}>
+        <mesh position={[0, 0.4, 0]}><cylinderGeometry args={[0.45, 0.55, 0.8, 16]} /><meshStandardMaterial color={S.hold.gate} /></mesh>
+        <mesh position={[0, 0.81, 0]}><cylinderGeometry args={[0.38, 0.38, 0.04, 16]} /><meshStandardMaterial color={S.hold.font} emissive={S.hold.font} emissiveIntensity={0.9} /></mesh>
+      </group>
+      {/* the cache: a crate of draught with a violet glint */}
+      <group position={[map.cache.x, gy, map.cache.z]}>
+        <mesh position={[0, 0.35, 0]}><boxGeometry args={[0.7, 0.7, 0.7]} /><meshStandardMaterial color={S.hold.plank} /></mesh>
+        <mesh position={[0, 0.75, 0]}><sphereGeometry args={[0.12, 10, 10]} /><meshStandardMaterial color={S.hold.cache} emissive={S.hold.cache} emissiveIntensity={1.1} /></mesh>
+      </group>
+    </>
+  )
+}
+
+function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, holdRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial, onMatch }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -2040,6 +2159,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   infusionRef: React.RefObject<{ until: number; mult: number }>  // Flame Infusion — a WEAPON-damage window
   fieldsRef: React.MutableRefObject<Field[]>       // SYSTEM 1 — area entities (this sim ticks them)
   conjuredRef: React.MutableRefObject<Conjured[]>  // SYSTEM 2 — runtime terrain (blocks everything)
+  /** THE HOLD's run, owned by the parent (the HUD and E/G read it); this sim steps it and lands rounds on it */
+  holdRef: React.MutableRefObject<HoldState | null>
   statusRef: React.MutableRefObject<StatusBag>     // SYSTEM 3 — options removed from enemies
   onHeal: (amount: number) => void   // a healing field restores the player; HP lives in the parent
   onNeedReload: () => void  // dry trigger on an empty clip → parent starts the recharge
@@ -2136,6 +2257,14 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // `viaMatch` is the WON door's whole gate: the Three summoned by the T console are the same
   // encounter and earn nothing, because a practice zone is not the Throne. See `crucible-prize.ts`.
   const guardSim = useRef({ enc: initEncounter(), spawned: false, orbit: 0, fireCd: [0, 0, 0], viaMatch: false })
+  // ── THE HOLD (`hold.ts`) ────────────────────────────────────────────────────────────────────
+  // The parent owns the run (its HUD and the E/G keys read it); this sim steps it, lands rounds on
+  // it and turns its strikes into damage. The bodies carry x/z only, so their height is the keeper's
+  // foot height sampled when a run first appears — the landing is flat, and a body that followed the
+  // keeper's y would hop every time they jumped.
+  const holdSeen = useRef<HoldState | null>(null)
+  const holdGround = useRef(0)
+  const inHold = zoneId === HOLD_ZONE
   // ── ★ THE MATCH ────────────────────────────────────────────────────────────────────────────
   // One number: when the glyph lit. Everything else — which floor is open, what is sealing, when
   // the Vault opens — is `crucibleAt(elapsed)`, derived fresh every frame from that alone, so the
@@ -2215,6 +2344,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   useFrame((state, dt) => {
     const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // live weapon — stats + tracer look
     const nowFrame = performance.now()  // ONE clock per frame — fields, terrain and statuses all read it
+    const hs = inHold ? holdRef.current : null
+    if (hs !== holdSeen.current) { holdSeen.current = hs; if (hs && posRef.current) holdGround.current = posRef.current.y }
+    const holdBodyY = holdGround.current + 0.5
 
     // ── TREMOR SENSE ────────────────────────────────────────────────────────────────────────────
     // The scene owns this because the scene is what knows where the bodies are; the HUD half draws
@@ -2415,6 +2547,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       // A Firewall eats what crosses it, which is the "cover" half of its canon line.
       if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
       if (conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
+      // the hold's walls are the mortal block (103), which this predicate cannot see — the hold says
+      // what stops a round there: a wall or a shut gate, never a window (you shoot out of them)
+      if (hs && roundBlocked(hs, p.pos.x, p.pos.z)) { p.life = 0; continue }
       { const ab = absorbShotAt(fieldsRef.current, p.pos.x, p.pos.z, wDmg); if (ab.hit) { fieldsRef.current = ab.fields; p.life = 0; continue } }
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
@@ -2471,6 +2606,18 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           break
         }
       }
+      // rounds vs the flooded (THE HOLD). Crit = the upper third of the body, same rule as the hunter.
+      if (p.life > 0 && hs?.running && Math.abs(p.pos.y - holdBodyY) < 0.9) {
+        for (const b of hs.flood) {
+          if (!b.alive) continue
+          const bdx = p.pos.x - b.x, bdz = p.pos.z - b.z, br = b.kind === 'bulk' ? 0.7 : 0.5
+          if (bdx * bdx + bdz * bdz >= br * br) continue
+          const crit = p.pos.y > holdBodyY + CRIT_Y
+          hitBody(hs, b.id, crit ? wCrit : wDmg, crit)
+          p.life = 0; onHit(crit)
+          break
+        }
+      }
     }
     // cast bolts: same collide as the weapon rounds (wall / target / hunter), but damage comes off the
     // BOLT (the move that fired it), and a chaining move jumps to nearby targets on impact.
@@ -2484,6 +2631,17 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       if (conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
       const dmg = p.dmg * castMultRef.current  // a held stance (Flame Manipulation) shapes what you throw
       let hit = false
+      if (hs) {
+        if (roundBlocked(hs, p.pos.x, p.pos.z)) { p.life = 0; continue }
+        let struck = false
+        if (hs.running && Math.abs(p.pos.y - holdBodyY) < 1.1) for (const b of hs.flood) {
+          if (!b.alive) continue
+          const bdx = p.pos.x - b.x, bdz = p.pos.z - b.z, br = b.kind === 'bulk' ? 0.8 : 0.6
+          if (bdx * bdx + bdz * bdz >= br * br) continue
+          hitBody(hs, b.id, dmg, false); struck = true; break
+        }
+        if (struck) { p.life = 0; onHit(true); continue }
+      }
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
           t.hp -= dmg; p.life = 0; hit = true; onHit(true)  // gold hitmarker — a cast reads as a heavy hit
@@ -2529,6 +2687,15 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     }
     for (const t of targets) {
       if (!t.alive) { t.down -= dt; if (t.down <= 0) { t.alive = true; t.hp = TARGET_HP } }
+    }
+    // ── THE HOLD steps here: no boards in the landing, and the flooded strike through `hurtPlayer`
+    // so resist, shield-first and the down flash are the same rules the range already plays by.
+    // ⚠ `down = 1`, not Infinity: this component stays mounted when the keeper walks back to the
+    // range, and a board parked at Infinity would never come back there.
+    if (inHold) for (const t of targets) { t.alive = false; t.down = 1 }
+    if (hs?.running && posRef.current) {
+      const o = stepHold(hs, dt, posRef.current.x, posRef.current.z)
+      if (o.strike > 0) hurtPlayer(o.strike)
     }
     // drift mode (console): targets strafe around their anchors — varied phase/speed per target
     const cfg = rangeCfgRef.current
@@ -2984,6 +3151,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial color={S.crucible.conjured} emissive={SOUL_COLOR} emissiveIntensity={0.12} metalness={0.15} roughness={0.85} />
       </instancedMesh>
+      {inHold && <HoldScene holdRef={holdRef} groundRef={holdGround} />}
       {/* the ground hunter — magenta spinning octahedron, unmistakably NOT a range target */}
       <mesh ref={huntRef} visible={false} frustumCulled={false}>
         <octahedronGeometry args={[0.5, 0]} />
@@ -3540,6 +3708,7 @@ const Scene = memo(function Scene(props: {
   infusionRef: React.RefObject<{ until: number; mult: number }>
   fieldsRef: React.MutableRefObject<Field[]>
   conjuredRef: React.MutableRefObject<Conjured[]>
+  holdRef: React.MutableRefObject<HoldState | null>
   statusRef: React.MutableRefObject<StatusBag>
   onHeal: (amount: number) => void
   onNeedReload: () => void
@@ -3646,8 +3815,8 @@ const Scene = memo(function Scene(props: {
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <GunBenches />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && props.zone.id !== HOLD_ZONE && <GunBenches />}
       {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
           Ather has doors worth naming too. ExitMarkers stays outside-only — it is a fallback for
@@ -3662,7 +3831,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} conjuredRef={props.conjuredRef} bodyOut={props.bodyOut} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} bodyOut={props.bodyOut} />
       {/* presence: other players in this zone (socket lives in the page comp — shared with the panel) */}
       <RemotePlayers peers={props.mpPeers} hideAt={plotHide} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
@@ -5838,6 +6007,7 @@ export default function Shimmer3D() {
   // sim (effects + render) read ONE source; neither owns them. ──
   const fieldsRef = useRef<Field[]>([])          // SYSTEM 1 — persistent area entities
   const conjuredRef = useRef<Conjured[]>([])     // SYSTEM 2 — runtime terrain
+  const holdRef = useRef<HoldState | null>(null)  // THE HOLD's run — set on entering its zone, cleared on leaving
   const statusRef = useRef<StatusBag>(emptyBag())  // SYSTEM 3 — options removed from enemies
   const [castHud, setCastHud] = useState<{ slots: (string | null)[]; stance: string | null }>({ slots: ALL_BANDS.map(() => null), stance: null })
 
@@ -5959,6 +6129,12 @@ export default function Shimmer3D() {
   const onPlayerDown = useCallback(() => {
     const el = vignetteRef.current
     if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'downFlash 1s ease-out' }
+    // in the hold a fall ENDS the run (the range just resets you). The record is the round reached.
+    const hs = holdRef.current
+    if (hs?.running) {
+      const r = endHold(hs)
+      try { if (r.round > Number(localStorage.getItem(HOLD_BEST_KEY) ?? 0)) localStorage.setItem(HOLD_BEST_KEY, String(r.round)) } catch { /* no storage: no record */ }
+    }
   }, [])
   // called by FiringRange per actual spawn (full-auto): bump the counter + kick the recoil, no re-render
   const onRangeShot = useCallback(() => {
@@ -6506,6 +6682,94 @@ export default function Shimmer3D() {
     }
     setLoadoutUi([...loadoutRef.current])
   }, [syncWeaponMove])
+  // ── THE HOLD (GBOARD 🌊 SEASON EXPEDITIONS) ─────────────────────────────────────────────────
+  // ★ ALL POWER IS IN-RUN: whatever the keeper built at a bench waits outside. Both slots become the
+  // REPEATER (the sidearm everyone walks in with), the rack sells the next gun, and the bench loadout
+  // comes back on the way out. The run itself is `hold.ts`; FiringRange steps it.
+  const holdSavedLoadout = useRef<number[] | null>(null)
+  const holdEHeld = useRef(false)
+  const [holdHud, setHoldHud] = useState<{ round: number; salvage: number; hush: number; loud: boolean; surge: number; kills: number; over: boolean; prompt: HoldPrompt | null; best: number } | null>(null)
+  const [holdFlash, setHoldFlash] = useState<string | null>(null)
+  useEffect(() => { if (!holdFlash) return; const t = setTimeout(() => setHoldFlash(null), 2200); return () => clearTimeout(t) }, [holdFlash])
+  const beginHold = useCallback(() => {
+    holdRef.current = startHold(HOLD_MAP, (Date.now() & 0xffff) || 1)
+    const rep = WEAPONS.findIndex(w => w.id === 'repeater')
+    if (!holdSavedLoadout.current) holdSavedLoadout.current = [...loadoutRef.current]
+    equipWeapon(0, rep); equipWeapon(1, rep)
+    hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current
+    setHoldFlash('Round 1')
+  }, [equipWeapon])
+  useEffect(() => {
+    if (zoneId === HOLD_ZONE) { beginHold(); return }
+    if (!holdRef.current && !holdSavedLoadout.current) return
+    holdRef.current = null; holdEHeld.current = false; setHoldHud(null)
+    const saved = holdSavedLoadout.current
+    holdSavedLoadout.current = null
+    // the holster effect (declared earlier, so it ran first) re-pointed the live weapon at the run's
+    // REPEATER; point it back at the bench loadout too, or slot 0 would read one gun and fire another
+    if (saved) {
+      loadoutRef.current = saved; slotRef.current = 0; weaponIdxRef.current = saved[0]
+      ammoRef.current = WEAPONS[saved[0]].clip; ammoStashRef.current = [WEAPONS[saved[0]].clip, WEAPONS[saved[1]].clip]
+      setLoadoutUi([...saved]); setWeaponUi({ idx: saved[0], holstered: false })
+    }
+  }, [zoneId, beginHold])
+  // the HUD reads the run at ~7fps (never per frame — this component must not re-render per frame);
+  // held-E mending ticks on the same clock, so a plank takes the same time at any frame rate
+  useEffect(() => {
+    if (zoneId !== HOLD_ZONE) return
+    let lastRound = 1, lastKey = ''
+    const DT = 0.15
+    const id = setInterval(() => {
+      const hs = holdRef.current, p = posRef.current
+      if (!hs || !p) return
+      const prompt = hs.running ? promptAt(hs, p.x, p.z) : null
+      if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
+      if (hs.round !== lastRound) { lastRound = hs.round; setHoldFlash(`Round ${hs.round}`) }
+      let best = 0
+      try { best = Number(localStorage.getItem(HOLD_BEST_KEY) ?? 0) } catch { /* none */ }
+      const next = { round: hs.round, salvage: hs.salvage, hush: Math.ceil(hs.hush), loud: isLoud(hs), surge: Math.round(hs.surge * 20) / 20, kills: hs.kills, over: hs.over, prompt, best }
+      const key = JSON.stringify(next)
+      if (key !== lastKey) { lastKey = key; setHoldHud(next) }
+    }, DT * 1000)
+    return () => clearInterval(id)
+  }, [zoneId])
+  useEffect(() => {
+    if (zoneId !== HOLD_ZONE) return
+    const onDown = (e: KeyboardEvent) => {
+      if (e.repeat || editRef.current || dialogueRef.current) return
+      const k = e.key.toLowerCase()
+      const hs = holdRef.current, p = posRef.current
+      if (!hs || !p) return
+      if (k === 'g' && hs.running) {
+        if (hs.surge < 1) { setHarvestToast('The surge is not charged — crush more of the flooded'); return }
+        releaseSurge(hs, p.x, p.z); setHoldFlash('Surge')
+        return
+      }
+      if (k !== 'e') return
+      if (hs.over) { beginHold(); return }
+      const pr = promptAt(hs, p.x, p.z)
+      if (!pr) return
+      if (pr.kind === 'mend') { holdEHeld.current = true; return }
+      const short = () => setHarvestToast('Not enough salvage')
+      if (pr.kind === 'gate') { if (buyGate(hs, pr.gate)) setHoldFlash('The gate opens'); else short() }
+      else if (pr.kind === 'rack') {
+        const got = buyRack(hs)
+        const idx = WEAPONS.findIndex(w => w.id === HOLD_TUNING.rackWeapon)
+        if (got === 'weapon') equipWeapon(slotRef.current, idx)
+        else if (got === 'refill') {
+          const slot = loadoutRef.current.indexOf(idx)
+          if (slot === slotRef.current) ammoRef.current = WEAPONS[idx].clip
+          else if (slot >= 0) ammoStashRef.current[slot] = WEAPONS[idx].clip
+        } else short()
+      } else if (pr.kind === 'font') {
+        if (buyFont(hs)) { manaRef.current.current = getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus; setManaFrac(1) } else short()
+      } else if (pr.kind === 'cache') { if (buyCache(hs)) setHoldFlash(`+${HOLD_TUNING.cacheSec}s hush`); else short() }
+    }
+    const onUp = (e: KeyboardEvent) => { if (e.key.toLowerCase() === 'e') holdEHeld.current = false }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp) }
+  }, [zoneId, beginHold, equipWeapon])
   const toggleHolster = useCallback(() => {
     if (!weaponDrawnRef.current) return
     const h = !holsteredRef.current
@@ -7074,6 +7338,7 @@ export default function Shimmer3D() {
           infusionRef={infusionRef}
           fieldsRef={fieldsRef}
           conjuredRef={conjuredRef}
+          holdRef={holdRef}
           bodyOut={bodyOut.current}
           statusRef={statusRef}
           onHeal={healPlayer}
@@ -7497,6 +7762,41 @@ export default function Shimmer3D() {
         <HearthPill face={HUD_FACE} accent={H.ember} style={{ position: 'fixed', top: 44, left: '50%', transform: 'translateX(-50%)', zIndex: 36 }}>{matchHud}</HearthPill>
       )}
 
+      {/* ── THE HOLD's HUD: round · salvage · hush · surge, what E does here, and the fall ── */}
+      {zoneId === HOLD_ZONE && holdHud && !editMode && (
+        <>
+          <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 35 }}>
+            <span style={{ display: 'flex', gap: 13, alignItems: 'center', fontVariantNumeric: 'tabular-nums' }}>
+              <span>Round <span className="hk-ember">{holdHud.round}</span></span>
+              <HearthPillSoft face={HUD_FACE}>·</HearthPillSoft>
+              <span>Salvage <span className="hk-sky">{holdHud.salvage}</span></span>
+              <HearthPillSoft face={HUD_FACE}>·</HearthPillSoft>
+              {holdHud.loud
+                ? <span className="hk-ember" style={{ fontWeight: 800 }}>LOUD — they can hear you</span>
+                : <span>Hush <span className={holdHud.hush < 30 ? 'hk-ember' : 'hk-moss'}>{fmtHush(holdHud.hush)}</span></span>}
+              <HearthPillSoft face={HUD_FACE}>·</HearthPillSoft>
+              <span>Surge <span className={holdHud.surge >= 1 ? 'hk-ember' : 'hk-soft'}>{holdHud.surge >= 1 ? 'READY (G)' : `${Math.round(holdHud.surge * 100)}%`}</span></span>
+            </span>
+          </HearthPill>
+          {holdFlash && !holdHud.over && (
+            <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', zIndex: 35, fontSize: 22 }}>{holdFlash}</HearthPill>
+          )}
+          {holdHud.prompt && !holdHud.over && (
+            <HearthPill face={HUD_FACE} style={{ position: 'fixed', bottom: 150, left: '50%', transform: 'translateX(-50%)', zIndex: 35 }}>
+              {holdHud.prompt.kind === 'mend' && <span>Hold E — mend the seal <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.planks}/{HOLD_TUNING.seals}</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'gate' && <span>E — open the gate <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'rack' && <span>E — {holdHud.prompt.bought ? 'refill the SPITTER' : 'take the SPITTER off the wall'} <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.bought ? Math.round(holdHud.prompt.cost / 2) : holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'font' && <span>E — drink from the font (full mana) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'cache' && <span>E — a draught from the cache (+{HOLD_TUNING.cacheSec}s hush) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+            </HearthPill>
+          )}
+          {holdHud.over && (
+            <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '32%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }}>
+              <span>The hold fell at round <span className="hk-ember">{holdHud.round}</span> <HearthPillSoft face={HUD_FACE}>· {holdHud.kills} crushed · best {Math.max(holdHud.best, holdHud.round)} · E to go again</HearthPillSoft></span>
+            </HearthPill>
+          )}
+        </>
+      )}
       {/* ── Weapon viewmodel + firing-range HUD — outside the Ather only, desktop (click = fire) ── */}
       {weaponDrawn && !editMode && !dialogue && !battle && !placing && !isTouch && (
         <>

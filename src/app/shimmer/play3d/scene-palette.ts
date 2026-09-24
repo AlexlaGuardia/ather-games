@@ -146,6 +146,16 @@ export const crucible = {
   conjured: '#6f7580',
   hunter: '#ff4f7d',
 } as const
+/**
+ * THE HOLD (round survival, `hold.ts`). The flooded read as wet dark mass with a cold sheen — the
+ * host's raised body, shown; never a colour that names a cause. Seals are rough plank, gates are
+ * the mortal side's dead grey, and the three fixtures are told apart by a small lit accent.
+ */
+export const hold = {
+  body: '#1d2a33', bodySheen: '#3f6f86', swift: '#24404d', bulk: '#141d24',
+  plank: '#8a6a44', gate: '#5d636c', gateRim: '#9aa3ad',
+  rack: '#3a3f46', font: '#4fb3d9', cache: '#b98cf2',
+} as const
 /** The manabox viewmodel: dead grey cast metal with bronze trim (the art-medium law). */
 export const viewmodel = {
   lanceStock: '#22262b', lanceBody: '#2e343b', lanceBarrel: '#3a4048', lanceTrim: '#6d5a3a', bronze: '#7c6a44',

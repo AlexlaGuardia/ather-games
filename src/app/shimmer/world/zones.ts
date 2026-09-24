@@ -173,9 +173,12 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Garden → east → Moonwell Glade (shortcut, blocked until tutorialComplete)
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
+import { parseLanding } from '../play3d/hold'
 import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, CRUCIBLE, RUNE_HOLD, THE_PASSAGE, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN, crucibleArrival, crucibleExit,} from './tilemap'
 import { LANDING, LANDING_ARRIVAL, LANDING_LABEL } from './landing'
+/** The hold's landing, parsed once — the zone's grid and its door aims both read it. */
+export const HOLD_MAP = parseLanding()
 export const ZONES: Zone[] = [
   {
     id: 'garden',            // keep id stable (referenced widely); display = the player's own plot
@@ -625,6 +628,10 @@ export const ZONES: Zone[] = [
       // in the wrong file. Resizing the arena with this left as (19,25) lands a keeper wherever that
       // happens to be on the new grid, and nothing in the crucible's own block would show it.
       { x: 11, y: 13, toZone: 'crucible', toX: crucibleArrival().x, toY: crucibleArrival().y, direction: 'up', label: 'THE CRUCIBLE', ownerOnly: true },
+      // north door — THE HOLD, a season world's round survival (GBOARD 🌊 SEASON EXPEDITIONS, 2026-09-24).
+      // `ownerOnly` for the same BUILD reason as the Crucible's: it is a blockout slice for Alex's feel
+      // pass, not a season anyone has been sent to. The flag comes off with the first real season.
+      { x: 11, y: 1, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'up', label: 'THE HOLD', ownerOnly: true },
     ],
     warps: [],
   },
@@ -656,6 +663,28 @@ export const ZONES: Zone[] = [
       { x: crucibleExit().x, y: crucibleExit().y, toZone: 'travelers-station', toX: 11, toY: 12, direction: 'down', label: 'LEAVE THE CRUCIBLE' },
     ],
     warps: [],
+  },
+  {
+    // ── THE HOLD — round survival on a season world (slice, 2026-09-24) ─────────────────────────
+    // The grid is GENERATED from `play3d/hold.ts`'s landing, so the sim and the walker read one map:
+    // the windows, gates and fixtures the sim knows about are exactly where this grid has them.
+    // `realm: 'outside'` + not peaceful → the weapon draws and `FiringRange` mounts; it runs the hold
+    // instead of the targets when it sees this id.
+    // ⚠ No `THE_HOLD` const in tilemap.ts on purpose: a generated grid has no literal for the editor
+    // to write, and `parseZoneGrid` returns null for it (the CRUCIBLE precedent). The layout lives in
+    // `HOLD_LANDING` as ASCII, which is the thing to edit.
+    id: 'the-hold',
+    // ⚠ '(proof)' is deliberate: a season world's places are per-season canon, and "hold" is
+    // already canon's word for a settlement (Brack / Vetch / Thistle). This is a blockout for
+    // feel, so it wears the proof mark the canon gate exempts; the real name arrives with a season.
+    name: 'The Hold (proof)',
+    grid: HOLD_MAP.grid,
+    realm: 'outside',
+    playerStart: { tileX: HOLD_MAP.start.x, tileY: HOLD_MAP.start.z },
+    warps: [
+      // the way out, back to the concourse, one step south of the north door's footprint
+      { fromX: HOLD_MAP.exit.x, fromY: HOLD_MAP.exit.z, toZone: 'travelers-station', toX: 12, toY: 3, direction: 'down' },
+    ],
   },
   {
     // ── THE FIRING RANGE — practice, OUTSIDE the Ather: weapons work, spirits don't ─────────
