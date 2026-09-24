@@ -39,7 +39,7 @@ import { AIR } from '../voxel/section'
 import { lightOpaque } from '../voxel/light-passes'
 import { placementRotation } from './piece-facing'
 import { materialAt, MAT, isPlant, isHerb, isFruit, isForage, isScatter, isSapling, isHalfMat, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF, isTallStation, isStationRack } from '../voxel/depth'
-import { FLORA, plantVariant, flowerForm, forageKind } from '../voxel/flora'
+import { FLORA, plantVariant, flowerForm, forageKind, deadfallVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState, type RayHit, afterBreak } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
 import { orphanedLeaves, dueLeaves, withoutLeaves, enqueueLeaves, type PendingLeaf } from '../voxel/decay'
@@ -5024,7 +5024,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // `ground` is the somewhere it stands. `flora-mesh` tints the blades from it (slice ②), and
     // any later consumer that wants to know what a plant is rooted in gets it for free rather
     // than re-walking the column.
-    return { y: gy, kind, variant: plantVariant(fx, fz, SEED, kind), mat: m, ground, alongX }
+    // A log cell's variant is its place in its RUN plus the run's shared roll (sculpt queue ④), read
+    // off the same neighbour voxels the axis just was — so a trunk is one radius and has two ends.
+    const variant = kind === FLORA.DEADFALL
+      ? deadfallVariant(fx, fz, alongX, SEED, (ax, az) => voxel(ax, y + 1, az) === MAT.DEADFALL)
+      : plantVariant(fx, fz, SEED, kind)
+    return { y: gy, kind, variant, mat: m, ground, alongX }
   }, [voxel])
 
   /**

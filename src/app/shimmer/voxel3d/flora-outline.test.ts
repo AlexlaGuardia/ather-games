@@ -19,7 +19,7 @@
 // exist, that the injection CHANGED the source, that both programs bend by the same number, and
 // that the border's matrix is the plant's matrix. The pixels are Alex's call and always were.
 import * as THREE from 'three'
-import { createFloraRenderer, floraMatrix, floraFruitLeavesGeo, floraFruitBerriesGeo, partGeometry, FLORA_SWAY, FLORA_PARTS, SHROOM_SHAPES, shroomShapeOf } from './flora-mesh'
+import { createFloraRenderer, floraMatrix, floraFruitLeavesGeo, floraFruitBerriesGeo, partGeometry, FLORA_SWAY, FLORA_PARTS, SHROOM_SHAPES, shroomShapeOf, LOG_PIECES } from './flora-mesh'
 import { FLORA } from '../voxel/flora'
 import { MAT } from '../voxel/depth'
 
@@ -295,6 +295,21 @@ const meshes = () => r.group.children.filter(c =>
     r.setHighlight(FLORA.MUSHROOM, 5, 40, 7, v, true)
     const lit = hulls.map((h, i) => h.count > 0 ? i : -1).filter(i => i >= 0)
     ok(lit.length === 2 && lit[0] === shape * 2 && lit[1] === shape * 2 + 1, `${SHROOM_SHAPES[shape].name}: exactly its own hull pair lights (${lit})`)
+  }
+  r.clearHighlight()
+}
+
+// ── ★ A LOG CELL'S BORDER IS ITS OWN PIECE'S (sculpt queue ④, 2026-09-24) ────────────────────────
+{
+  const logHulls = r.group.children.filter(c => (c as THREE.InstancedMesh).isInstancedMesh
+    && ((c as THREE.InstancedMesh).material as THREE.Material).type === 'MeshBasicMaterial'
+    && LOG_PIECES.length > 0 && ((c as THREE.InstancedMesh).geometry as THREE.BufferGeometry).index !== null
+    && ((c as THREE.InstancedMesh).geometry as THREE.BufferGeometry).getAttribute('uv') === undefined) as THREE.InstancedMesh[]
+  ok(logHulls.length === LOG_PIECES.length, `one hull per log piece (${logHulls.length})`)
+  for (let piece = 0; piece < LOG_PIECES.length; piece++) {
+    r.setHighlight(FLORA.DEADFALL, 5, 40, 7, (piece + 0.37) / 4, true)
+    const lit = logHulls.map((h, i) => h.count > 0 ? i : -1).filter(i => i >= 0)
+    ok(lit.length === 1 && lit[0] === piece, `${LOG_PIECES[piece].name}: exactly its own hull lights (${lit})`)
   }
   r.clearHighlight()
 }

@@ -20,7 +20,7 @@ import * as THREE from 'three'
 import { bladePixels, tallBladePixels, bladeAtlasPixels, GRASS_VARIANTS, TALL_TILE_H, headPixels, bushPixels, bloomClusterPixels, matLeafPixels, matBloomPixels, matShadowPixels, fruitClusterPixels, mossPixels, rosettePixels, reedPixels, wakePixels, HEAD_TINTS, BLADE_GREEN, BLADE_TILE, TUFT_SEED, TUFT_BLADES, TALL_SEED, TALL_BLADES } from './tex/flora-tex'
 import { cropStalkPixels, cropHeadPixels } from './tex/crop-tex'
 import { plantedLook, STAGE_GROW, STAGE_RIPE, type PlantedSpot } from './planted-feed'
-import { FLORA, FRUIT_MATS } from '../voxel/flora'
+import { FLORA, FRUIT_MATS, deadfallRole, deadfallRoll, deadfallFlipped } from '../voxel/flora'
 import { MATERIAL_COLOR } from './attrs'
 import { MAT } from '../voxel/depth'
 import { SHELF_FACES, type ShelfCell } from './shelf-scan'
@@ -85,11 +85,84 @@ export const MOSS_EMISSIVE = 0.28
  * Factories rather than shared instances because `BufferGeometry` is mutable and disposable — the
  * world disposes its copies on unmount, and an icon must not be holding a freed buffer.
  */
-export const floraLogGeo = (): THREE.BufferGeometry => {
-  const g = new THREE.CylinderGeometry(0.15, 0.13, 1.0, 6)
-  g.rotateZ(Math.PI / 2)          // lying along +X — a felled trunk, not a post
+/**
+ * ── ★ THE DEADFALL LOG, ONE PIECE PER PLACE IN ITS RUN (sculpt queue ④, 2026-09-24) ──────────────
+ * Was one 6-sided cylinder per cell, each at its own radius, so a run stepped at every seam. Now a
+ * run is ONE log (`deadfallVariant` in voxel/flora.ts gives every cell its role and the run's
+ * shared roll) built from four pieces lying along +X:
+ *   SOLO — a one-cell remnant, broken both ends · BUTT — the flared, snapped end (at −X) ·
+ *   MID — bark, with a knot · TIP — tapered and splintered (at +X).
+ * ⚠⚠ THE SEAM CONTRACT: every piece is EXACTLY 1.0 long (x −0.5 → +0.5) and every end that meets a
+ * neighbour is the SAME ring — `LOG_SIDES` corners at `LOG_R`, same angles, normals forced radial —
+ * so consecutive cells butt with no gap, no step and no shading line. Only the rings INSIDE a cell
+ * wobble. The instance may roll a cell by a multiple of 45° (`floraMatrix`), which maps the octagon
+ * onto itself, so the roll varies the bark without moving the seam.
+ */
+export const LOG_R = 0.15
+export const LOG_SIDES = 8
+type LogRing = { x: number; r: number; wob?: number; jag?: number }
+const logLathe = (rings: LogRing[], capLo: boolean, capHi: boolean, knot: boolean, salt: number): THREE.BufferGeometry => {
+  const pos: number[] = [], idx: number[] = []
+  const wob = (i: number, k: number) => { const h = Math.sin((i + 1) * 12.9898 + (k + 1) * 78.233 + salt) * 43758.5453; return (h - Math.floor(h)) * 2 - 1 }
+  const ringStart: number[] = []
+  rings.forEach((rg, i) => {
+    ringStart.push(pos.length / 3)
+    for (let k = 0; k < LOG_SIDES; k++) {
+      const a = (k / LOG_SIDES) * Math.PI * 2
+      const r = rg.r * (1 + (rg.wob ?? 0) * wob(i, k))
+      const x = rg.x + (rg.jag ?? 0) * (k % 2 ? 1 : -1)
+      pos.push(x, Math.cos(a) * r, Math.sin(a) * r)
+    }
+  })
+  for (let i = 0; i < rings.length - 1; i++) for (let k = 0; k < LOG_SIDES; k++) {
+    const a = ringStart[i] + k, b = ringStart[i] + (k + 1) % LOG_SIDES
+    const c = ringStart[i + 1] + k, d = ringStart[i + 1] + (k + 1) % LOG_SIDES
+    idx.push(a, b, c, b, d, c)
+  }
+  const cap = (ring: number, dir: 1 | -1, inset: number) => {
+    const rg = rings[ring]
+    const centre = pos.length / 3
+    pos.push(rg.x - dir * inset, 0, 0)
+    for (let k = 0; k < LOG_SIDES; k++) {
+      const a = ringStart[ring] + k, b = ringStart[ring] + (k + 1) % LOG_SIDES
+      if (dir > 0) idx.push(centre, a, b); else idx.push(centre, b, a)
+    }
+  }
+  if (capLo) cap(0, -1, 0.03)                   // a snapped face, dished a little
+  if (capHi) cap(rings.length - 1, 1, 0.05)
+  if (knot) {
+    // A branch stub: five sides leaning out of the bark near the middle, pointing up-and-along.
+    const base = pos.length / 3, n = 5, bx = 0.08, br = 0.045
+    for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; pos.push(bx + Math.cos(a) * br, LOG_R * 0.8, Math.sin(a) * br) }
+    const tip = pos.length / 3
+    pos.push(bx + 0.09, LOG_R + 0.11, 0.01)
+    for (let k = 0; k < n; k++) idx.push(base + k, tip, base + (k + 1) % n)
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setIndex(idx)
+  g.computeVertexNormals()
+  // Seam rings: normals forced pure radial so two cells meeting there shade as one surface.
+  const nrm = g.getAttribute('normal') as THREE.BufferAttribute
+  rings.forEach((rg, i) => {
+    if (Math.abs(Math.abs(rg.x) - 0.5) > 1e-9 || rg.wob || rg.jag || rg.r !== LOG_R) return
+    if ((i === 0 && capLo) || (i === rings.length - 1 && capHi)) return
+    for (let k = 0; k < LOG_SIDES; k++) { const a = (k / LOG_SIDES) * Math.PI * 2; nrm.setXYZ(ringStart[i] + k, 0, Math.cos(a), Math.sin(a)) }
+  })
   return g
 }
+export const LOG_PIECES: readonly { name: string; build: () => THREE.BufferGeometry }[] = [
+  // SOLO — broken at both ends, a little fatter at one: a remnant, not a pipe offcut
+  { name: 'solo', build: () => logLathe([{ x: -0.5, r: LOG_R * 1.15, wob: 0.1 }, { x: 0, r: LOG_R, wob: 0.08 }, { x: 0.5, r: LOG_R * 0.8, jag: 0.03, wob: 0.12 }], true, true, false, 1) },
+  // BUTT — flared and ragged where it snapped from its stump; the +X ring is the seam
+  { name: 'butt', build: () => logLathe([{ x: -0.5, r: LOG_R * 1.32, wob: 0.14, jag: 0.025 }, { x: -0.3, r: LOG_R * 1.12, wob: 0.06 }, { x: 0.1, r: LOG_R, wob: 0.05 }, { x: 0.5, r: LOG_R }], true, false, false, 2) },
+  // MID — bark between two seams, with a knot
+  { name: 'mid', build: () => logLathe([{ x: -0.5, r: LOG_R }, { x: -0.17, r: LOG_R, wob: 0.07 }, { x: 0.17, r: LOG_R, wob: 0.07 }, { x: 0.5, r: LOG_R }], false, false, true, 3) },
+  // TIP — narrowing to splinters; the −X ring is the seam
+  { name: 'tip', build: () => logLathe([{ x: -0.5, r: LOG_R }, { x: 0, r: LOG_R * 0.9, wob: 0.06 }, { x: 0.32, r: LOG_R * 0.7, wob: 0.08 }, { x: 0.47, r: LOG_R * 0.52, jag: 0.035, wob: 0.15 }], false, true, false, 4) },
+]
+/** `role` is `LOG_ROLE` (voxel/flora.ts). The default is SOLO: a whole little log, which is what the bag icon wants. */
+export const floraLogGeo = (role = 0): THREE.BufferGeometry => LOG_PIECES[role].build()
 /**
  * ── ★ THE MUSHROOM FAMILY: FOUR SILHOUETTES, ONE PER CAP COLOUR (sculpt queue ③, 2026-09-24) ─────
  * The placeholder was one 8-sided cone on a 5-sided post in four colours, so colour did all the
@@ -972,6 +1045,9 @@ export const floraBushScale = (variant: number): number => 0.82 + variant * 0.24
 export const floraBloomScale = (variant: number): number => 0.7 + variant * 0.22
 
 const Y_UP = new THREE.Vector3(0, 1, 0)
+const X_AXIS = new THREE.Vector3(1, 0, 0)
+/** Scratch for a log cell's roll — module-level so `floraMatrix` allocates nothing per call. */
+const LOG_ROLL_Q = new THREE.Quaternion()
 
 /**
  * ★ THE ONE PLACEMENT DERIVATION. `sync` composes every instance matrix through this, and
@@ -1000,9 +1076,17 @@ export function floraMatrix(
     scl.set(sz, sz, sz)
   } else if (kind === FLORA.DEADFALL) {
     // Quarter turn for a Z-run; no jitter along the log's own axis or the run gaps show.
-    quat.setFromAxisAngle(Y_UP, alongX ? 0 : Math.PI / 2)
+    // ⚠ −π/2, NOT +π/2 (2026-09-24): the pieces have a direction now (butt at −X, tip at +X) and
+    // `deadfallVariant` puts the butt at the LOW coordinate; a +π/2 turn sends local −X to world
+    // +Z, which would stand every Z-run's butt at its high end. A flipped run turns half round.
+    quat.setFromAxisAngle(Y_UP, (alongX ? 0 : -Math.PI / 2) + (deadfallFlipped(variant) ? Math.PI : 0))
+    // A roll about the log's own axis by whole eighths — the octagon maps onto itself, so the seam
+    // does not move, but the bark's wobble and the knot face a different way cell to cell.
+    LOG_ROLL_Q.setFromAxisAngle(X_AXIS, (Math.floor(((x * 0.618 + z * 0.382) % 1 + 1) % 1 * 8)) * Math.PI / 4)
+    quat.multiply(LOG_ROLL_Q)
     off.set(x + 0.5, y + place.root, z + 0.5)
-    const sz = floraScatterScale(variant)
+    // ONE radius for the whole run (its shared roll), so a trunk no longer steps at every seam.
+    const sz = 0.88 + deadfallRoll(variant) * 0.3
     scl.set(1, sz, sz)            // ⚠ NOT the length axis — that stays 1.0 so runs butt up
   } else if (kind === FLORA.ROCK) {
     quat.setFromAxisAngle(Y_UP, variant * Math.PI * 2)
@@ -1060,6 +1144,12 @@ let partVerts: Map<number, Float32Array[]> | null = null
  * names the material.
  */
 const fruitKey = (mat: number) => -mat
+const logVertCache = new Map<number, Float32Array[]>()
+function logVerts(piece: number): Float32Array[] {
+  let v = logVertCache.get(piece)
+  if (!v) { const g = floraLogGeo(piece); v = [(g.getAttribute('position').array as Float32Array).slice()]; g.dispose(); logVertCache.set(piece, v) }
+  return v
+}
 const shroomVertCache = new Map<number, Float32Array[]>()
 function shroomVerts(shape: number): Float32Array[] {
   let v = shroomVertCache.get(shape)
@@ -1106,7 +1196,7 @@ function vertsFor(kind: number, mat?: number): Float32Array[] {
       return a
     }
     partVerts.set(FLORA.ROCK, [grab(floraRockGeo())])
-    partVerts.set(FLORA.DEADFALL, [grab(floraLogGeo())])
+    partVerts.set(FLORA.DEADFALL, LOG_PIECES.map((_, i) => grab(floraLogGeo(i))))
     // Every shape's parts: the kind's bounds are the union, so whichever shape stands there is inside.
     partVerts.set(FLORA.MUSHROOM, SHROOM_SHAPES.flatMap((_, i) => [grab(floraShroomStemGeo(i)), grab(floraShroomCapGeo(i))]))
     partVerts.set(FLORA.PUFF, [grab(floraPuffGeo())])
@@ -1146,7 +1236,8 @@ export function floraBounds(
 ): FloraBox | null {
   // A mushroom is measured as the ONE shape standing there (the renderer draws that shape's pool
   // only), never as the union of four, which would be a box loose by a parasol round every bun.
-  const parts = kind === FLORA.MUSHROOM ? shroomVerts(shroomShapeOf(variant)) : vertsFor(kind, mat)
+  const parts = kind === FLORA.MUSHROOM ? shroomVerts(shroomShapeOf(variant))
+    : kind === FLORA.DEADFALL ? logVerts(deadfallRole(variant)) : vertsFor(kind, mat)
   if (!parts.length) return null
   floraMatrix(kind, x, y, z, variant, alongX, bMtx, bOff, bQuat, bScl)
   let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity
@@ -1677,7 +1768,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // continuous trunk with no gap and no overlap. Six-sided rather than smooth — this world's
   // vocabulary is faceted, and a 6-gon costs 12 triangles. Built lying along +X; the instance
   // quaternion turns it a quarter turn for a Z-axis log (see `alongX`).
-  const logGeo = floraLogGeo()
+  // One geometry per PIECE (solo / butt / mid / tip), in `LOG_ROLE` order — `deadfallRole` indexes it.
+  const logGeos = LOG_PIECES.map((_, i) => floraLogGeo(i))
   // A mushroom in two parts, for the same reason a herb is body-plus-tip: the cap carries the
   // colour and the silhouette, the stalk just holds it up.
   // One pair per SHAPE (sculpt queue ③), in `SHROOM_SHAPES` order — `shroomShapeOf` indexes it.
@@ -1909,7 +2001,13 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   herbs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.herb * 3), 3)
   tips.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.herb * 3), 3)
   const rocks = new THREE.InstancedMesh(rockGeo, rockMat, CAP.rock)
-  const logs = new THREE.InstancedMesh(logGeo, logMat, CAP.log)
+  // A pool per piece, each the whole cap (a woodland of MID cells must not overflow a quarter-pool).
+  const logPools = logGeos.map(g => {
+    const m = new THREE.InstancedMesh(g, logMat, CAP.log)
+    m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.log * 3), 3)
+    return { mesh: m, n: 0 }
+  })
+  const logMeshes = logPools.map(p => p.mesh)
   // A pool per shape, each sized to the WHOLE cap: the shape hash is uniform, but a pool sized to a
   // quarter would overflow on the first woodland that rolled a run of domes. `nS` still counts the
   // total against `CAP.shroom`, so the budget is the same 3000 however they fall.
@@ -1925,7 +2023,6 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // move slice ② made for grass, and for the same reason: one grey stone on nine different grounds
   // was half of what "samey" meant. The cap colour is the mushroom's whole identity.
   rocks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.rock * 3), 3)
-  logs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP.log * 3), 3)
   // The forage (2026-09-16). A puff is tinted per instance so a huddle is not four identical
   // creams; the moss takes its colour as a tint over the near-white pad, like a bloom head.
   const puffs = new THREE.InstancedMesh(puffGeo, puffMat, CAP.puff)
@@ -1941,7 +2038,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   // glints) so it is never sorted behind the water it decorates.
   wakes.renderOrder = 2
 
-  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, logs, ...shroomMeshes, puffs, mosses, reeds, wakes, shelves]) {
+  for (const m of [tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, ...logMeshes, ...shroomMeshes, puffs, mosses, reeds, wakes, shelves]) {
     m.count = 0
     m.frustumCulled = false     // instances span the whole load radius; the default bounds lie
     m.receiveShadow = false
@@ -1949,7 +2046,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
   }
 
   const group = new THREE.Group()
-  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, logs, ...shroomMeshes, puffs, mosses, reeds, wakes, shelves)
+  group.add(tufts, tuftCaps, tuftShadows, talls, stems, heads, matLeaves, matBlooms, matStars, matShadows, bushes, bushHeads, ...bushMeshes, herbs, tips, crops, cropHeads, glints, rocks, ...logMeshes, ...shroomMeshes, puffs, mosses, reeds, wakes, shelves)
 
   // ── the showcase (2026-09-22): a few card bushes and model bushes at exact spots, off the pools ──
   const SHOW_CAP = 8
@@ -1995,7 +2092,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     c.setAttribute('aTile', new THREE.InstancedBufferAttribute(new Float32Array(1), 1).setUsage(THREE.DynamicDrawUsage))
     return c
   }
-  const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number; fmat?: number; berryHull?: boolean; shape?: number }[] = [
+  const logHullMat = outlineHullMaterial()
+  const hlDefs: { kind: number; geo: THREE.BufferGeometry; mat: THREE.Material; grow: number; fmat?: number; berryHull?: boolean; shape?: number; piece?: number }[] = [
     { kind: FLORA.TUFT, geo: hlAtlasGeo(tuftGeo), mat: outlineMaterial(tuftTex, FLORA_SWAY[FLORA.TUFT], GRASS_VARIANTS), grow: 1 },
     { kind: FLORA.TUFT, geo: tuftCapGeo, mat: outlineMaterial(rosetteTex, FLORA_SWAY[FLORA.TUFT]), grow: 1 },
     { kind: FLORA.TALL, geo: hlAtlasGeo(tallGeo), mat: outlineMaterial(tallTex, FLORA_SWAY[FLORA.TALL], GRASS_VARIANTS), grow: 1 },
@@ -2024,7 +2122,9 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
     { kind: FLORA.CROP, geo: cropGeo, mat: outlineMaterial(cropStalkTex, FLORA_SWAY[FLORA.CROP]), grow: 1 },
     { kind: FLORA.CROP, geo: cropHeadGeo, mat: outlineMaterial(cropHeadTex, FLORA_SWAY[FLORA.CROP]), grow: 1 },
     { kind: FLORA.ROCK, geo: rockGeo, mat: outlineHullMaterial(), grow: 1.14 },
-    { kind: FLORA.DEADFALL, geo: logGeo, mat: outlineHullMaterial(), grow: 1.1 },
+    // One hull per piece: a butt's flare and a tip's taper are not the middle's outline.
+    // ONE shared hull material for the four (render-audit: never a material per mapped object).
+    ...logGeos.map((geo, piece) => ({ kind: FLORA.DEADFALL, piece, geo, mat: logHullMat, grow: 1.1 })),
     // One pair per shape, like the fruit's per species: a parasol's hull round a bun is loose by half.
     ...shroomGeos.flatMap((g, shape) => ([
       { kind: FLORA.MUSHROOM, shape, geo: g.stem, mat: outlineHullMaterial(), grow: 1.12 },
@@ -2241,6 +2341,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
       uLean.value = lean.texture
       let nT = 0, nL = 0, nF = 0, nM = 0, nB = 0, nFr = 0, nH = 0, nR = 0, nG = 0, nS = 0, nC = 0, nP = 0, nMo = 0, nRe = 0, nSh = 0, wSh = 0
       for (const p of shroomPools) p.n = 0
+      for (const p of logPools) p.n = 0
       // ⚠ RESET BESIDE `nFr`, NOT INSIDE THE LOOP: these are per-species slot counters and a
       // sync that forgot them would append to the last sync's instances until the cap ate it.
       for (const b of bushPools) { b.n = 0; b.f = 0 }
@@ -2292,7 +2393,7 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
               }
             } else if (s.kind === FLORA.DEADFALL) {
               wG++
-              if (nG < CAP.log) { logs.setMatrixAt(nG, mtx); logs.setColorAt(nG, tint.set(DEADFALL_COLOR)); nG++ }
+              if (nG < CAP.log) { const p = logPools[deadfallRole(s.variant)]; p.mesh.setMatrixAt(p.n, mtx); p.mesh.setColorAt(p.n, tint.set(DEADFALL_COLOR)); p.n++; nG++ }
             } else if (s.kind === FLORA.ROCK) {
               wR++
               if (nR < CAP.rock) { rocks.setMatrixAt(nR, mtx); rocks.setColorAt(nR, rockTint(s.ground)); nR++ }
@@ -2450,10 +2551,11 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         floraDemand[pool] = { wanted, cap }
         if (wanted > cap) noteOverflow(pool, wanted, cap)
       }
-      rocks.count = nR; logs.count = nG
+      rocks.count = nR
+      for (const p of logPools) p.mesh.count = p.n
       for (const p of shroomPools) { p.stems.count = p.n; p.caps.count = p.n }
       puffs.count = nP; mosses.count = nMo; reeds.count = nRe; wakes.count = nRe
-      for (const m of [rocks, logs, ...shroomMeshes, puffs, mosses, reeds, wakes]) {
+      for (const m of [rocks, ...logMeshes, ...shroomMeshes, puffs, mosses, reeds, wakes]) {
         m.instanceMatrix.needsUpdate = true
         if (m.instanceColor) m.instanceColor.needsUpdate = true
       }
@@ -2511,7 +2613,8 @@ export function createFloraRenderer(light: LightUniforms = createLightUniforms()
         const wrongBush = h.fmat !== undefined
           && (h.fmat !== (mat ?? BUSH_MODEL_MATS[0]) || (h.berryHull === true && !hasFruit))
         const wrongShroom = h.shape !== undefined && h.shape !== shroomShapeOf(variant)
-        if (h.kind !== kind || wrongBush || wrongShroom) { h.mesh.count = 0; continue }
+        const wrongLog = h.piece !== undefined && h.piece !== deadfallRole(variant)
+        if (h.kind !== kind || wrongBush || wrongShroom || wrongLog) { h.mesh.count = 0; continue }
         if (h.grow === 1) h.mesh.setMatrixAt(0, hlMtx)
         else h.mesh.setMatrixAt(0, mtx.copy(hlMtx).scale(hlGrow.setScalar(h.grow)))
         h.mesh.instanceMatrix.needsUpdate = true

@@ -773,6 +773,43 @@ export function plantMaterialAt(x: number, z: number, seed: number, ground?: Bio
  * still gets a stable variant here, which is the other half of why this takes `kind` rather than
  * re-running the selection.
  */
+// ── ★ A FALLEN LOG IS ONE LOG, NOT A STACK OF CELLS (sculpt queue ④, 2026-09-24) ───────────────
+// A deadfall run is 3–5 cells, and every cell used to roll its OWN radius, so a trunk stepped
+// thicker and thinner at every seam and read as stacked cylinders. So a log cell's variant now
+// carries two things the whole run shares, plus its place in the run:
+//   · ROLE — which piece it is: the BUTT (broken, flared end), a MID (bark), the TIP (splintered,
+//     tapered end), or SOLO (a one-cell remnant, both ends at once);
+//   · the RUN'S ROLL — one number for the whole run (radius, which end is the butt), hashed off the
+//     run's low-coordinate cell so every cell of it reads the same value.
+// Packed into `variant` ((role + roll) / 4) because variant is what the probe already hands to the
+// pools, the reticle's border and `floraBounds` alike — so the three cannot disagree about which
+// piece stands here, and no signature grew a field. `deadfallRole` / `deadfallRoll` unpack it.
+export const LOG_ROLE = { SOLO: 0, BUTT: 1, MID: 2, TIP: 3 } as const
+export const deadfallRole = (variant: number): number => Math.min(3, Math.max(0, Math.floor(variant * 4)))
+export const deadfallRoll = (variant: number): number => (variant * 4) - deadfallRole(variant)
+/** Does the run put its butt at the HIGH end? Off the run's roll, a different bit from its radius. */
+export const deadfallFlipped = (variant: number): boolean => ((deadfallRoll(variant) * 7919) % 1) >= 0.5
+
+/**
+ * The packed variant of the log cell at (x, z), from the world's own answer to "is there log here"
+ * (`isLog`, the cell ABOVE the ground at this column). Walks at most a run's length each way.
+ */
+export function deadfallVariant(x: number, z: number, alongX: boolean, seed: number,
+                                isLog: (x: number, z: number) => boolean): number {
+  const dx = alongX ? 1 : 0, dz = alongX ? 0 : 1
+  let lo = 0, hi = 0
+  while (lo < 8 && isLog(x - (lo + 1) * dx, z - (lo + 1) * dz)) lo++
+  while (hi < 8 && isLog(x + (hi + 1) * dx, z + (hi + 1) * dz)) hi++
+  const roll = Math.min(0.999, hash01(x - lo * dx, z - lo * dz, seed ^ 0x8d4))
+  const packed = (role: number) => (role + roll) / 4
+  if (lo === 0 && hi === 0) return packed(LOG_ROLE.SOLO)
+  const flipped = deadfallFlipped(packed(LOG_ROLE.MID))
+  // The low end is the butt unless the run is flipped; the geometry is turned half round to match.
+  if (lo === 0) return packed(flipped ? LOG_ROLE.TIP : LOG_ROLE.BUTT)
+  if (hi === 0) return packed(flipped ? LOG_ROLE.BUTT : LOG_ROLE.TIP)
+  return packed(LOG_ROLE.MID)
+}
+
 export function plantVariant(x: number, z: number, seed: number, kind: number): number {
   // ⚠ CROP GETS ITS OWN SALT RATHER THAN FALLING THROUGH TO TALL'S. The chain's tail is a default,
   // not a case, so a new kind silently inherits `0x9c5` and every wild crop would take the same

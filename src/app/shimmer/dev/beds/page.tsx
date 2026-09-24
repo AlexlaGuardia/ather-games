@@ -33,7 +33,7 @@ import { createBedRims } from '../../voxel3d/bed-rim'
 import { createBedSigns } from '../../voxel3d/bed-sign'
 import { createWetPatches } from '../../voxel3d/wet-patch'
 import { createFloraRenderer, shroomShapeOf, SHROOM_SHAPES } from '../../voxel3d/flora-mesh'
-import { FLORA } from '../../voxel/flora'
+import { FLORA, deadfallVariant } from '../../voxel/flora'
 import { BED_CROP_IDS, bedVariant, type PlantedSpot, type PlantedStage } from '../../voxel3d/planted-feed'
 import { BED_WOODS } from '../../voxel3d/garden'
 import { MAT } from '../../voxel/depth'
@@ -70,7 +70,7 @@ function Ground({ tiles, light, cells, wood }: { tiles: ReturnType<typeof makeTi
   return <mesh geometry={geo} material={textured.material} />
 }
 
-function Shelf({ crop, wood, wet, gap, shroom }: { crop: string; wood: number; wet: boolean; gap: number; shroom: boolean }) {
+function Shelf({ crop, wood, wet, gap, shroom, logs }: { crop: string; wood: number; wet: boolean; gap: number; shroom: boolean; logs: boolean }) {
   const { gl } = useThree()
   const tiles = useMemo(() => makeTileArray(TILE, gl), [gl])
   const light = useMemo(() => createLightUniforms(), [])
@@ -96,6 +96,25 @@ function Shelf({ crop, wood, wet, gap, shroom }: { crop: string; wood: number; w
     // ★ `?shroom=1` (2026-09-24, sculpt queue ③): the mushroom family instead of the crop — every
     // shape twice along the row, off the SHIPPED wild feed (`sync` + a probe), so the pools, tints,
     // placement and scale are the world's own. The variant is searched per shape, never retyped.
+    // ★ `?logs=1` (sculpt queue ④): fallen logs of every length 1–5, one row along X and one along Z,
+    // off the SHIPPED probe path (`deadfallVariant` reads the same neighbours the world's probe does).
+    if (logs) {
+      signs.set([]); flora.setPlanted([])
+      const cellsL = new Set<string>(), axisOf = new Map<string, boolean>()
+      for (let len = 1; len <= 5; len++) for (let i = 0; i < len; i++) {
+        const kx = `${1 + i},${1 + (len - 1) * 3}`; cellsL.add(kx); axisOf.set(kx, true)             // x-runs, stacked in z
+        const kz = `${7 + (len - 1) * 2},${1 + i}`; cellsL.add(kz); axisOf.set(kz, false)             // z-runs, side by side
+      }
+      const isLog = (x: number, z: number) => cellsL.has(`${x},${z}`)
+      flora.invalidateAll()
+      flora.sync([{ key: 'shelf', x0: 0, z0: 0 }], 1337, (x, z) => {
+        const k = `${x},${z}`
+        if (!cellsL.has(k)) return null
+        const alongX = axisOf.get(k)!
+        return { y: BED_Y - 1, kind: FLORA.DEADFALL, variant: deadfallVariant(x, z, alongX, 1337, isLog), mat: MAT.DEADFALL, ground: MAT.TOPSOIL, alongX }
+      })
+      return
+    }
     if (shroom) {
       signs.set([]); flora.setPlanted([])
       const want = (shape: number, k: number) => { let n = 0
@@ -112,7 +131,7 @@ function Shelf({ crop, wood, wet, gap, shroom }: { crop: string; wood: number; w
     signs.set(spots)
     flora.setPlanted(spots)
     wetPatches.set(wet ? cells.map(c => ({ x: c.x, y: c.y, z: c.z, fraction: 0.8 })) : [])
-  }, [rims, signs, flora, wetPatches, cells, crop, wood, wet, shroom])
+  }, [rims, signs, flora, wetPatches, cells, crop, wood, wet, shroom, logs])
 
   return (
     <>
@@ -133,6 +152,7 @@ export default function BedsPage() {
   const [gap, setGap] = useState(q?.get('gap') === '1' ? 1 : 2)
   const [eye, setEye] = useState(q?.get('eye') === '1')
   const shroom = q?.get('shroom') === '1'
+  const logs = q?.get('logs') === '1'
   const [view, setView] = useState<ShelfView>({ yaw: Number(q?.get('yaw') ?? -0.9), pitch: Number(q?.get('pitch') ?? 0.42), dist: Number(q?.get('dist') ?? 12) })
   const wood = BED_WOODS.find(w => w.wood === woodId)!.material
   const target = useMemo(() => new THREE.Vector3(2 + ((CELLS - 1) * gap) / 2 + 0.5, BED_Y + 0.8, (SEC >> 1) + 0.5), [gap])
@@ -151,7 +171,7 @@ export default function BedsPage() {
         <hemisphereLight args={[0xffffff, 0x445566, 1.1]} />
         <directionalLight position={[5, 10, 3]} intensity={0.8} />
         <Rig target={target} view={view} eye={eye} onView={setView} floor={BED_Y} />
-        <Shelf crop={crop} wood={wood} wet={wet} gap={gap} shroom={shroom} />
+        <Shelf crop={crop} wood={wood} wet={wet} gap={gap} shroom={shroom} logs={logs} />
         {/* a keeper for scale, standing on the turf before the first bed */}
         <mesh position={[0.5, BED_Y + BODY_H / 2, (SEC >> 1) + 0.5]}><capsuleGeometry args={[BODY_R, Math.max(0.01, BODY_H - BODY_R * 2), 4, 8]} /><meshLambertMaterial color="#d98f3c" /></mesh>
       </Canvas>

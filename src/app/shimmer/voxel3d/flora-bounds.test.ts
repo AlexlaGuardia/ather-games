@@ -26,7 +26,8 @@
 // `npx tsx` over every *.test.ts, so the guard would have existed only on the machine that wrote
 // it. A test the sweep cannot run is not a guard, and this one failed toward looking fine.
 import * as THREE from 'three'
-import { createFloraRenderer, floraBounds, FLORA_PARTS, SHROOM_SHAPES, shroomShapeOf, floraShroomStemGeo, floraShroomCapGeo, FLORA_COLORS } from './flora-mesh'
+import { createFloraRenderer, floraBounds, FLORA_PARTS, SHROOM_SHAPES, shroomShapeOf, floraShroomStemGeo, floraShroomCapGeo, FLORA_COLORS, LOG_PIECES, LOG_R, LOG_SIDES, floraLogGeo, floraMatrix } from './flora-mesh'
+import { deadfallVariant, deadfallRole, deadfallRoll, deadfallFlipped, LOG_ROLE } from '../voxel/flora'
 import { FLORA } from '../voxel/flora'
 import { MAT } from '../voxel/depth'
 
@@ -220,6 +221,64 @@ const VARIANTS = [0, 0.17, 0.33, 0.5, 0.66, 0.83, 0.999]
   const vOf = (shape: number) => { for (let i = 0; i < 991; i++) if (shroomShapeOf(i / 991 + 1e-6) === shape) return i / 991 + 1e-6; return 0 }
   const hBun = floraBounds(FLORA.MUSHROOM, 0, 0, 0, vOf(3), true)!, hPar = floraBounds(FLORA.MUSHROOM, 0, 0, 0, vOf(1), true)!
   ok((hBun.y1 - hBun.y0) < (hPar.y1 - hPar.y0) * 0.85, `★ a bun's box is the bun's (${(hBun.y1 - hBun.y0).toFixed(3)} vs parasol ${(hPar.y1 - hPar.y0).toFixed(3)})`)
+}
+
+// ── ★ THE DEADFALL LOG IS ONE LOG (sculpt queue ④, 2026-09-24) ────────────────────────────────────
+{
+  // §L1 roles off the run, for every length and both axes; one roll for the whole run.
+  for (const alongX of [true, false]) for (let len = 1; len <= 5; len++) {
+    const cells = Array.from({ length: len }, (_, i) => alongX ? [10 + i, 20] : [10, 20 + i])
+    const isLog = (x: number, z: number) => cells.some(([cx, cz]) => cx === x && cz === z)
+    const vs = cells.map(([x, z]) => deadfallVariant(x, z, alongX, 1337, isLog))
+    const roles = vs.map(deadfallRole)
+    ok(vs.every(v => Math.abs(deadfallRoll(v) - deadfallRoll(vs[0])) < 1e-12), `L1 ${alongX ? 'x' : 'z'}${len}: one roll for the whole run (no step at a seam)`)
+    // ★ and the MATRIX uses it: every cell's cross-section scale is the same number (measured, not assumed)
+    const scales = cells.map(([x, z], i) => { const mm = new THREE.Matrix4(), oo = new THREE.Vector3(), qq = new THREE.Quaternion(), ss = new THREE.Vector3()
+      floraMatrix(FLORA.DEADFALL, x, 0, z, vs[i], alongX, mm, oo, qq, ss); return ss.y })
+    ok(scales.every(sy => Math.abs(sy - scales[0]) < 1e-12), `L1 ${alongX ? 'x' : 'z'}${len}: ★ every cell is drawn at the run's one radius (${scales.map(n => n.toFixed(3))})`)
+    if (len === 1) { ok(roles[0] === LOG_ROLE.SOLO, `L1 ${alongX ? 'x' : 'z'}1: a one-cell remnant is SOLO`); continue }
+    const flip = deadfallFlipped(vs[0])
+    ok(roles[0] === (flip ? LOG_ROLE.TIP : LOG_ROLE.BUTT) && roles[len - 1] === (flip ? LOG_ROLE.BUTT : LOG_ROLE.TIP),
+       `L1 ${alongX ? 'x' : 'z'}${len}: one butt and one tip, at the two ends (${roles})`)
+    ok(roles.slice(1, -1).every(r => r === LOG_ROLE.MID), `L1 ${alongX ? 'x' : 'z'}${len}: everything between is MID`)
+  }
+  // §L2 ★ THE SEAM CONTRACT — every open end is the same ring at exactly ±0.5.
+  const f6 = (n: number) => (Math.round(n * 1e6) / 1e6 + 0).toFixed(6)   // + 0: no signed zero
+  const ringAt = (g: THREE.BufferGeometry, x: number) => {
+    const p = g.getAttribute('position'); const out: string[] = []
+    for (let i = 0; i < p.count; i++) if (Math.abs(p.getX(i) - x) < 1e-9) out.push(`${f6(p.getY(i))},${f6(p.getZ(i))}`)
+    return out.sort().join('|')
+  }
+  const canon = Array.from({ length: LOG_SIDES }, (_, k) => { const a = k / LOG_SIDES * Math.PI * 2; return `${f6(Math.cos(a) * LOG_R)},${f6(Math.sin(a) * LOG_R)}` }).sort().join('|')
+  const g = LOG_PIECES.map((_, i) => floraLogGeo(i))
+  ok(ringAt(g[LOG_ROLE.MID], -0.5) === canon && ringAt(g[LOG_ROLE.MID], 0.5) === canon, 'L2 ★ MID: both ends are the canonical ring')
+  ok(ringAt(g[LOG_ROLE.BUTT], 0.5) === canon, 'L2 ★ BUTT: its +X end (the seam) is the canonical ring')
+  ok(ringAt(g[LOG_ROLE.TIP], -0.5) === canon, 'L2 ★ TIP: its −X end (the seam) is the canonical ring')
+  // a roll by a whole eighth maps the ring onto itself
+  const rolled = Array.from({ length: LOG_SIDES }, (_, k) => { const a = (k + 3) / LOG_SIDES * Math.PI * 2; return `${f6(Math.cos(a) * LOG_R)},${f6(Math.sin(a) * LOG_R)}` }).sort().join('|')
+  ok(rolled === canon, 'L2 a roll by whole eighths does not move the seam')
+  for (const [i, gg] of g.entries()) {
+    gg.computeBoundingBox(); const b = gg.boundingBox!
+    const tris = gg.index!.count / 3
+    ok(tris <= 60, `L2 ${LOG_PIECES[i].name}: ${tris} triangles (budget: CAP.log 4000)`)
+    const seamLo = i === LOG_ROLE.MID || i === LOG_ROLE.TIP, seamHi = i === LOG_ROLE.MID || i === LOG_ROLE.BUTT
+    if (seamLo) ok(Math.abs(b.min.x + 0.5) < 1e-9, `L2 ${LOG_PIECES[i].name}: nothing past the −X seam (${b.min.x})`)
+    if (seamHi) ok(Math.abs(b.max.x - 0.5) < 1e-9, `L2 ${LOG_PIECES[i].name}: nothing past the +X seam (${b.max.x})`)
+  }
+  // §L3 ★ A Z-RUN'S BUTT IS AT ITS LOW END (the −π/2 turn), and a flipped run's at its high end.
+  const m = new THREE.Matrix4(), o = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3()
+  for (const alongX of [true, false]) for (const want of [false, true]) {
+    let v = 0; for (let i = 0; i < 4000; i++) { const t = (LOG_ROLE.BUTT + i / 4001) / 4; if (deadfallFlipped(t) === want) { v = t; break } }
+    floraMatrix(FLORA.DEADFALL, 0, 0, 0, v, alongX, m, o, q, sc)
+    const flare = new THREE.Vector3(-0.5, 0, 0).applyMatrix4(m)          // the butt's broken end
+    const along = alongX ? flare.x - 0.5 : flare.z - 0.5                  // relative to the cell centre
+    ok(want ? along > 0.4 : along < -0.4, `L3 ★ ${alongX ? 'x' : 'z'}-run${want ? ' (flipped)' : ''}: the butt faces the ${want ? 'high' : 'low'} end (${along.toFixed(2)})`)
+  }
+  // §L4 bounds are the PIECE standing there: a butt's flare makes its box fatter than a mid's.
+  const vOf = (role: number) => (role + 0.3) / 4
+  const bb = floraBounds(FLORA.DEADFALL, 0, 0, 0, vOf(LOG_ROLE.BUTT), true)!, bm = floraBounds(FLORA.DEADFALL, 0, 0, 0, vOf(LOG_ROLE.MID), true)!
+  ok((bb.y1 - bb.y0) > (bm.y1 - bm.y0) * 1.05 || (bb.z1 - bb.z0) > (bm.z1 - bm.z0) * 1.05, '★ L4 the butt\'s box is the butt\'s, not the mid\'s')
+  for (const gg of g) gg.dispose()
 }
 
 console.log(`\nflora bounds: ${pass} passed, ${fails.length} failed`)
