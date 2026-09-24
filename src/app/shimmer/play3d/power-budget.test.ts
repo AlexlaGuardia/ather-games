@@ -33,11 +33,9 @@ const hot = [{ ...inf, surgeMult: 1.8 }]
 ok(loadoutDamage(DEFAULT_GUN(), hot, 'boss-rich') / loadoutDamage(DEFAULT_GUN(), [], 'boss-rich') - 1 > BUDGET.band, 'a fat infusion shows as over-band on flush mana (it would catch a multiplier)')
 ok(uplift('forge-fist', 'boss') < uplift('forge-fist', 'boss-rich'), 'scarce mana hides a multiplier; rich mana shows it')
 
-// ── ★ LOADOUTS STACK — a ratchet until Alex rules the full-loadout band ──
-// Every move is in band alone; a tactical + an ultimate + a cast-damage stance together reach higher.
-// Holding the whole loadout to 20% means fields at ~1/4 of today's damage (asked of Alex 2026-09-24).
-// Until then this may only go DOWN: lower `LOADOUT_CEILING` when a tune lowers it, never raise it.
-const LOADOUT_CEILING = 0.33
+// ── LOADOUTS STACK, AND THAT IS ALLOWED (Alex, 2026-09-24: "keep 20% per move, stacking is fine and
+// im not against control tools"). The band is PER MOVE; a full loadout may sum past it. Reported, not
+// asserted — a ceiling here would be a rule nobody made. If a stack ever needs a limit, Alex sets it.
 {
   const by = (tier: string) => built.filter(id => castForMove(id).tier === tier)
   const T = by('tactical'), U = by('ultimate'), P = by('passive').filter(id => (castForMove(id).castMult ?? 1) > 1)
@@ -47,8 +45,7 @@ const LOADOUT_CEILING = 0.33
     const x = worstUplift(l)
     if (x > worst.u) worst = { u: x, l }
   }
-  ok(worst.u <= LOADOUT_CEILING, `worst full loadout ${worst.l.join(' + ')} at ${(worst.u * 100).toFixed(1)}% is over the ratchet ${LOADOUT_CEILING * 100}%`)
-  console.log(`  worst full loadout: ${worst.l.join(' + ')} +${(worst.u * 100).toFixed(1)}%`)
+  console.log(`  (report) strongest full loadout: ${worst.l.join(' + ')} +${(worst.u * 100).toFixed(1)}%`)
 }
 
 // ── the hold enforces the cap the budget assumes ──
