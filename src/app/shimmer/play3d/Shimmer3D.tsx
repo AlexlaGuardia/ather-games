@@ -6461,7 +6461,9 @@ export default function Shimmer3D() {
   const nearBenchRef = useRef(false); nearBenchRef.current = nearBench
   const [benchSlot, setBenchSlot] = useState(0)  // which loadout slot the bench is assigning into
   useEffect(() => {
-    if (!weaponDrawn) { setNearBench(false); return }
+    // ★ no bench in the hold: the benches are placed by position, and one of them sits on the landing's
+    // gallery gate — E there would open the arsenal and walk the bench loadout into an in-run-only fight
+    if (!weaponDrawn || zoneId === HOLD_ZONE) { setNearBench(false); return }
     const tick = () => {
       const p = posRef.current
       if (!p) return
@@ -6474,7 +6476,7 @@ export default function Shimmer3D() {
     }
     tick(); const id = setInterval(tick, 200)
     return () => clearInterval(id)
-  }, [weaponDrawn])
+  }, [weaponDrawn, zoneId])
   const toggleBench = useCallback((open: boolean) => {
     if (open) setBenchSlot(slotRef.current)  // default the assign target to the weapon you're holding
     setBenchOpen(open)
