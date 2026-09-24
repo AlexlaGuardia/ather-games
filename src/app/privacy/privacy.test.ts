@@ -23,6 +23,7 @@ const NAMED: Record<string, string> = {
   cluster_offers: 'the invitations and yeses that are waiting',
   cluster_consents: 'the invitations and yeses that are waiting',
   cluster_plots: 'a picture of the blocks you have built in your garden',
+  cluster_seen: 'when you were last in the world',
 }
 const tables = [...schema.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map(m => m[1])
 ok(tables.length >= 8, `found the schema's tables (${tables.length})`)

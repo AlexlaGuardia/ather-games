@@ -6,7 +6,7 @@
 // quarter-turn snap can account for).
 
 import { courtAnchor, sockets, socketCells, courtLevel } from './crossings'
-import { STATION_LAYOUT, layoutOf, stationBlueprint, stationStamp, stationSockets, stationLamps, stationCells, stationRot, socketStandOut, SOCKET_RADIUS, SOCKET_STAND_OUT, socketLabel, socketLitBy, socketWay } from './court-blueprint'
+import { STATION_LAYOUT, layoutOf, stationBlueprint, stationStamp, stationSockets, stationLamps, stationCells, stationRot, socketStandOut, SOCKET_RADIUS, SOCKET_STAND_OUT, socketLabel, socketLitBy, socketWay, freshStation } from './court-blueprint'
 import { plotForTier, PLOT_TIERS } from '../voxel/plot'
 import { WORLD_SEED } from './world-seed'
 import { MAT } from '../voxel/depth'
@@ -147,6 +147,28 @@ console.log('the crossings travel with the file')
       const m = marks[(socketWay(i) as { slot: number }).slot]
       check(`socket ${i}'s tag is the mark socketWay routes to`, tag === (m.name.trim() || `${m.x}, ${m.z}`))
     }
+  }
+}
+
+// ── ★ A NEW KEEPER'S PLOT: the station, at zero waymarks (2026-09-24) ─────────────────────────────
+{
+  const bp = stationBlueprint()!
+  for (let tier = 0; tier < PLOT_TIERS.length; tier++) {
+    const cfg = plotForTier(tier)
+    const fs = freshStation(WORLD_SEED, cfg)
+    check(`fresh t${tier}: stands`, fs !== null)
+    if (!fs) continue
+    const st = stationStamp(bp, courtAnchor(WORLD_SEED, cfg), courtLevel(WORLD_SEED, cfg)!)
+    const want = stationCells(st)
+    const at = new Map(fs.cells.map(c => [`${c.x},${c.y},${c.z}`, c.m]))
+    check(`fresh t${tier}: ★ every cell the court pass lays, at the same place`, want.every(c => at.has(`${c.x},${c.y},${c.z}`)))
+    for (const l of fs.lamps) {
+      const m = at.get(`${l.x},${l.y},${l.z}`)
+      check(`fresh t${tier} lamp ${l.index}: ★ lit exactly when socketLitBy(i, 0) says`,
+        m === (socketLitBy(l.index, 0) ? MAT.MANA_LANTERN : l.dark), `got ${m}`)
+    }
+    const other = want.filter(c => !fs.lamps.some(l => l.x === c.x && l.y === c.y && l.z === c.z))
+    check(`fresh t${tier}: every non-lamp cell is the blueprint's own block`, other.every(c => at.get(`${c.x},${c.y},${c.z}`) === c.m))
   }
 }
 

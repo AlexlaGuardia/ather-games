@@ -245,8 +245,8 @@ const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in 
 import { GREG_LINES } from './greg-lines'
 import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
 import { standInCluster, generateFramedColumn, framedMaterialAt, framedHeight, framedIsMine } from '../voxel/cluster-space'
-import { applyMateEdits, type PlotSnapshot } from '../voxel/plot-snapshot'
-import { loadClusterFrame, uploadPlot, scheduleUpload, settleUpload } from './cluster-sync'
+import { applyMateEdits, applyMateLamps, type PlotSnapshot } from '../voxel/plot-snapshot'
+import { loadClusterFrame, uploadPlot, scheduleUpload, settleUpload, noteStationLamps, heartbeat } from './cluster-sync'
 import { ClusterRows } from './cluster-panel'
 import { DEFAULT_CLUSTER, NO_SLOTS, QUARTERS, quarterThresholdBearing, type ClusterConfig, type ClusterSlots, type QuarterId } from '../voxel/cluster'
 import { insideGlade } from '../voxel/glade'
@@ -3357,6 +3357,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // Owned by the parent (`clusterOut`) so the map and minimap can draw the cluster too.
   const clusterMode = clusterOut
   /**
+   * ★ MATES WHO ARE AWAY (2026-09-24, Alex: the gate station *"should go dormant if the player is
+   * offline"*). Their stations' lamps show dark (`applyMateLamps`); stone and garden never change.
+   * Starts as EVERY quarter: a mate is dormant until the record says they are here, so a failed
+   * ping shows a quiet station rather than a lit one nobody is behind.
+   */
+  const mateAway = useRef<Set<QuarterId>>(new Set(QUARTERS))
+  /**
    * ★ OPEN THE CLUSTER (phase 3/4): the REAL shared record first — my quarter, my mates at their
    * reported seed and tier, each mate's uploaded garden over their quarter — and only with no record
    * the marked stand-ins. `standIns` forces those (the owner's `/space cluster stand`). One function
@@ -5545,6 +5552,31 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * frame instead of the whole frame. Mining does NOT go through here — `setVoxel` keeps its
    * synchronous remesh, because a swing that repairs the hole two frames later reads as broken.
    */
+  // ── ★ AWAKE OR AWAY: the once-a-minute ping (2026-09-24) ──────────────────────────────────────
+  // While this tab is open AND visible I am "in the world"; the reply names which mates are not, and
+  // their stations go dormant. A hidden tab stops pinging on purpose, so a forgotten tab does not keep
+  // a keeper's lamps lit for a week. A change relights only the lamp cells of the loaded columns.
+  useEffect(() => {
+    let stop = false
+    const beat = async () => {
+      if (stop || document.visibilityState !== 'visible') return
+      const away = await heartbeat()
+      if (stop || !away) return
+      const was = mateAway.current
+      if (away.size === was.size && [...away].every(q => was.has(q))) return
+      mateAway.current = away
+      const cm = space.current === 'plot' ? clusterMode.current : null
+      if (!cm?.snaps) return
+      for (const col of cols.current.values())
+        if (applyMateLamps(col, cm.mine, cm.cfg, cm.snaps, away))
+          remesh(Math.floor(col.wx / SECTION), Math.floor(col.wz / SECTION))
+    }
+    void beat()
+    const t = setInterval(() => void beat(), 60_000)
+    const vis = () => { if (document.visibilityState === 'visible') void beat() }
+    document.addEventListener('visibilitychange', vis)
+    return () => { stop = true; clearInterval(t); document.removeEventListener('visibilitychange', vis) }
+  }, [remesh])  // eslint-disable-line react-hooks/exhaustive-deps -- refs only
   const remeshQueue = useRef(new Set<string>())
   const queueRemesh = useCallback((cx: number, cz: number) => {
     if (cols.current.has(key(cx, cz))) remeshQueue.current.add(key(cx, cz))
@@ -8603,7 +8635,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // never through `setVoxel`, so none of it can reach my save (and `setVoxel` refuses those
       // cells anyway — they are outside my fold).
       const cmx = space.current === 'plot' ? clusterMode.current : null
-      if (cmx?.snaps) applyMateEdits(col, cmx.mine, cmx.cfg, cmx.snaps)
+      if (cmx?.snaps) applyMateEdits(col, cmx.mine, cmx.cfg, cmx.snaps, mateAway.current)
       applyEdits(col, edits.current.get(ek))
       refreshUniform(col)
       col.stage = Stage.Ready
@@ -8730,7 +8762,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           ? (() => {
               const cm = clusterMode.current!
               const c = generateFramedColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), cm.mine, cm.cfg)
-              if (cm.snaps) applyMateEdits(c, cm.mine, cm.cfg, cm.snaps)
+              if (cm.snaps) applyMateEdits(c, cm.mine, cm.cfg, cm.snaps, mateAway.current)
               return c
             })()
           : space.current === 'plot'
@@ -9171,6 +9203,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             const want = socketLitBy(l.index, held) ? MAT.MANA_LANTERN : l.dark
             if (voxel(l.x, l.y, l.z) !== want) setVoxel(l.x, l.y, l.z, want)
           }
+          noteStationLamps(stationLamps(station))   // rides my picture, so my mates can dim it while I am away
           socketShimmers.set(stationSockets(station).filter(sk => socketLitBy(sk.index, held))
             .map(sk => ({ x: sk.x, z: sk.z, y: level, facing: Math.atan2(a.z - sk.z, a.x - sk.x), tint: sk.kind,
               // The nametag over the lintel — where this doorway leads (court-blueprint › socketLabel).
@@ -9224,6 +9257,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             const want = socketLitBy(l.index, held) ? MAT.MANA_LANTERN : l.dark
             if (voxel(l.x, l.y, l.z) !== want) setVoxel(l.x, l.y, l.z, want)
           }
+          noteStationLamps(stationLamps(st))
           socketShimmers.set(stationSockets(st).filter(sk => socketLitBy(sk.index, held))
             .map(sk => ({ x: sk.x, z: sk.z, y: level, facing: Math.atan2(a.z - sk.z, a.x - sk.x), tint: sk.kind,
               label: socketLabel(sk.index, waymarks.current.marks) })))

@@ -16,7 +16,7 @@ ok(host.indexOf("if (cm && !framedIsMine(c.wx + lx, c.wz + lz, cm.mine, cm.cfg))
   '★ setVoxel refuses (and never records) a write outside the fold, before the save record')
 ok(/cluster: space\.current === 'plot' && clusterMode\.current \? \{ mine: clusterMode\.current\.mine, cfg: clusterMode\.current\.cfg \} : undefined/.test(host),
   'the worker request carries the frame in the plot space — {mine, cfg} only, never the snapshots')
-ok(/const c = generateFramedColumn\(new Column\(gx \* SECTION, gz \* SECTION, DEFAULT_COLUMN\), cm\.mine, cm\.cfg\)\s+if \(cm\.snaps\) applyMateEdits\(c, cm\.mine, cm\.cfg, cm\.snaps\)/.test(host),
+ok(/const c = generateFramedColumn\(new Column\(gx \* SECTION, gz \* SECTION, DEFAULT_COLUMN\), cm\.mine, cm\.cfg\)\s+if \(cm\.snaps\) applyMateEdits\(c, cm\.mine, cm\.cfg, cm\.snaps, mateAway\.current\)/.test(host),
   'the no-worker fallback generates the frame too, and lays the mates\' gardens on it')
 ok(/cl \? `cluster:\$\{clusterSig\(cl\.mine, cl\.cfg\)\}:/.test(worker), '★ the worker keys its cache by the frame — a solo column can never be served in a cluster')
 ok(/generateFramedColumn\(new Column\(cx \* SECTION, cz \* SECTION, DEFAULT_COLUMN\), cl\.mine, cl\.cfg\)/.test(worker), 'the worker generates the frame')
@@ -26,7 +26,7 @@ ok(!/plotHeight\(x, z, SEED, plotCfg\.current\)/.test(host.slice(host.indexOf('t
 
 // ── phase 3: mates' gardens and my upload ──
 {
-  const adopt = host.indexOf('if (cmx?.snaps) applyMateEdits(col, cmx.mine, cmx.cfg, cmx.snaps)')
+  const adopt = host.indexOf('if (cmx?.snaps) applyMateEdits(col, cmx.mine, cmx.cfg, cmx.snaps, mateAway.current)')
   ok(adopt > 0 && adopt < host.indexOf('applyEdits(col, edits.current.get(ek))'),
     '★★ a worker column adopted in a real cluster wears each mate\'s garden (before my own edits)')
   ok(/const cmx = space\.current === 'plot' \? clusterMode\.current : null/.test(host), 'only in the plot space')
@@ -70,6 +70,16 @@ ok(!/plotHeight\(x, z, SEED, plotCfg\.current\)/.test(host.slice(host.indexOf('t
   ok(/if \(stay\) \{/.test(body) && /if \(!stay\) onSay/.test(body), 'a rebuild in place keeps the keeper where they stand')
   ok(/if \(had && !had\.snaps\) return/.test(host), 'the owner\'s stand-ins are never overwritten by the record')
   ok(/soloVisit\.current = true/.test(host), '/space plot from inside is a solo visit, not undone on the next frame')
+}
+
+// ★ AWAKE OR AWAY (2026-09-24): the ping's answer reaches the lamps of the columns already standing,
+// and a change remeshes only the columns a lamp moved in. Without this the dormant state would only
+// ever be the one read at adoption, and a mate logging on would stay dark until the next rebuild.
+{
+  ok(/const away = await heartbeat\(\)[\s\S]{0,600}applyMateLamps\(col, cm\.mine, cm\.cfg, cm\.snaps, away\)\)\s+remesh\(/.test(host),
+     'a presence change relights the loaded columns in place (applyMateLamps → remesh)')
+  ok(/useRef<Set<QuarterId>>\(new Set\(QUARTERS\)\)/.test(host), '★ a mate is dormant until the record says they are here')
+  ok((host.match(/noteStationLamps\(stationLamps\(/g) ?? []).length === 2, 'both court passes note my lamps for the upload')
 }
 
 if (fails.length) { console.error(`cluster-wiring: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

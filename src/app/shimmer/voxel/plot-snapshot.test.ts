@@ -7,7 +7,7 @@ import { generateFramedColumn, quarterShift, unframe } from './cluster-space'
 import { GENERATOR_VERSION, packEdits, type ColumnEdits } from './edits'
 import { MAT } from './depth'
 import {
-  buildSnapshot, readSnapshot, mateColumnOf, applyMateEdits, snapshotColumn, type PlotSnapshot,
+  buildSnapshot, readSnapshot, mateColumnOf, applyMateEdits, applyMateLamps, snapshotColumn, MAX_LAMPS, type PlotSnapshot,
 } from './plot-snapshot'
 
 let pass = 0
@@ -83,6 +83,48 @@ for (const [label, bad] of [
   let threw = false
   try { ok(applyMateEdits(col, 'ne', cfg, { sw: high }) === 0, '§5 nothing written above the column') } catch { threw = true }
   ok(!threw, '§5 a hostile y does not throw')
+}
+
+// §6 ★★ A MATE'S STATION GOES DORMANT WHILE THEY ARE AWAY (2026-09-24) — its lamps, and nothing else.
+{
+  const LIT = MAT.MANA_LANTERN, DARK = MAT.CUT_STONE
+  const lampE: ColumnEdits = new Map([[idx(3, 122, 5), LIT], [idx(4, 122, 5), DARK], [idx(5, 122, 5), BUILT], [idx(3, 120, 5), BUILT]])
+  const lamps = [{ x: 3, y: 122, z: 5, dark: DARK }, { x: 4, y: 122, z: 5, dark: DARK }, { x: 5, y: 122, z: 5, dark: DARK }]
+  const st = readSnapshot(JSON.stringify(buildSnapshot([{ px: 0, pz: 0, edits: packEdits(lampE) }], lamps)))!
+  ok(st?.lamps?.length === 3 && st.lamps[0].join() === '3,122,5,' + DARK, '§6 lamps round-trip through JSON')
+  const fx = 0 - quarterShift('ne', cfg).dcx + quarterShift('sw', cfg).dcx
+  const fz = 0 - quarterShift('ne', cfg).dcz + quarterShift('sw', cfg).dcz
+  const fresh = () => generateFramedColumn(new Column(fx * SECTION, fz * SECTION, DEFAULT_COLUMN), 'ne', cfg)
+
+  const awake = fresh(); applyMateEdits(awake, 'ne', cfg, { sw: st }, new Set())
+  ok(awake.get(3, 122, 5) === LIT, '§6 awake: the lamp shows what their picture says (lit)')
+  const away = fresh(); applyMateEdits(away, 'ne', cfg, { sw: st }, new Set(['sw']))
+  ok(away.get(3, 122, 5) === DARK, '§6 ★ away: a lit lamp shows the blueprint\'s dark block')
+  ok(away.get(4, 122, 5) === DARK, '§6 an unearned lamp stays dark either way')
+  ok(away.get(5, 122, 5) === BUILT, '§6 ★ a lamp cell they built over is THEIRS — dormancy never writes over a build')
+  ok(away.get(3, 120, 5) === BUILT, '§6 ★★ their garden stands exactly as it was (canon: nothing greys, nothing vanishes)')
+  ok(applyMateEdits(fresh(), 'ne', cfg, { sw: st }, new Set(['nw'])) >= 0 && (() => { const c = fresh(); applyMateEdits(c, 'ne', cfg, { sw: st }, new Set(['nw'])); return c.get(3, 122, 5) === LIT })(),
+     '§6 another quarter being away does not dim this one')
+  // Waking and sleeping in place — the relight a presence change runs on loaded columns.
+  ok(applyMateLamps(away, 'ne', cfg, { sw: st }, new Set()) === 1 && away.get(3, 122, 5) === LIT, '§6 ★ wakes in place: exactly the one lit lamp comes back')
+  ok(applyMateLamps(away, 'ne', cfg, { sw: st }, new Set(['sw'])) === 1 && away.get(3, 122, 5) === DARK, '§6 and sleeps in place again')
+  ok(applyMateLamps(away, 'ne', cfg, { sw: st }, new Set(['sw'])) === 0, '§6 a second pass with no change writes nothing (no remesh churn)')
+  // A lamp outside the mate's own ground is clipped, like every other cell of theirs.
+  // ⚠ Aimed INSIDE the column on purpose: a lamp that misses the column is refused by the bounds
+  // check first, and a test built that way passes with the ownership clip deleted (measured).
+  const p0 = mateColumnOf(0, 0, 'ne', 'sw', cfg)
+  const mineCol = generateFramedColumn(new Column(0, 0, DEFAULT_COLUMN), 'ne', cfg)
+  mineCol.sections[(122 / SECTION) | 0].set(3, 122 % SECTION, 5, LIT)
+  const onMine = readSnapshot(JSON.stringify({ v: 1, gen: 1, cols: {}, lamps: [[p0.px * SECTION + 3, 122, p0.pz * SECTION + 5, DARK]] }))!
+  ok(clusterAt(unframe(3, 5, 'ne', cfg).x, unframe(3, 5, 'ne', cfg).z, cfg).quarter === 'ne', '§6 (the probe cell really is MY fold)')
+  ok(applyMateLamps(mineCol, 'ne', cfg, { sw: onMine }, new Set(['sw'])) === 0 && mineCol.get(3, 122, 5) === LIT,
+     '§6 ★ a mate\'s lamp that maps onto MY ground never dims my lantern')
+  for (const [label, bad] of [
+    ['too many lamps', Array.from({ length: MAX_LAMPS + 1 }, () => [0, 0, 0, 1])],
+    ['a short tuple', [[1, 2, 3]]], ['a fractional cell', [[1.5, 2, 3, 4]]], ['a negative material', [[1, 2, 3, -4]]],
+    ['not an array', { x: 1 }],
+  ] as const) ok(readSnapshot({ v: 1, gen: 1, cols: {}, lamps: bad }) === null, `§6 refuses ${label}`)
+  ok(!('lamps' in buildSnapshot([])), '§6 no station, no lamps field (an old reader sees the old shape)')
 }
 
 if (fails.length) { for (const f of fails) console.log('  FAIL ', f); console.log(`plot-snapshot: ${pass} passed, ${fails.length} FAILED`); process.exit(1) }

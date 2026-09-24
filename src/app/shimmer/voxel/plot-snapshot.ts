@@ -21,7 +21,7 @@
 // indices all the way down: `mateColumnOf` is two integer shifts, and a packed edit applies as-is.
 import type { Column } from './column'
 import { SECTION, refreshUniform } from './column'
-import { GENERATOR_VERSION, unpackIndex, type ColumnEdits, type PackedEdits } from './edits'
+import { GENERATOR_VERSION, editIndex, unpackIndex, type ColumnEdits, type PackedEdits } from './edits'
 import { clusterAt, QUARTERS, type ClusterConfig, type QuarterId } from './cluster'
 import { quarterShift } from './cluster-space'
 
@@ -31,14 +31,28 @@ export interface PlotSnapshot {
   gen: number
   /** Plot column `"px,pz"` → parallel arrays of packed cell index and material. */
   cols: Record<string, { i: number[]; m: number[] }>
+  /**
+   * The keeper's gate-station LAMPS, `[x, y, z, dark]` in plot cells (2026-09-24). The edits already
+   * say what each lamp shows while its keeper is awake; this says which cells they are and what the
+   * blueprint holds there, so a mate's client can show the station DORMANT while its keeper is away
+   * (`applyMateLamps`). Optional: a snapshot from before it, or a plot whose station never stood, has none.
+   */
+  lamps?: [number, number, number, number][]
 }
+
+/** A station has four lamps; the bound only stops a hostile upload from making the loop long. */
+export const MAX_LAMPS = 16
+/** The lit lamp. Written out rather than imported: this file's core imports nothing outside the folder but its own. */
+const LIT = 9   // MAT.MANA_LANTERN — `plot-snapshot.test.ts` asserts the two agree
 
 /** A runaway guard, the same size as a cloud save's. A real plot is a few KB. */
 export const SNAPSHOT_MAX_BYTES = 512 * 1024
 
 /** Build a snapshot from the keeper's own plot columns. Empty columns cost nothing. */
-export function buildSnapshot(cols: Iterable<{ px: number; pz: number; edits: PackedEdits }>): PlotSnapshot {
+export function buildSnapshot(cols: Iterable<{ px: number; pz: number; edits: PackedEdits }>,
+                              lamps?: readonly { x: number; y: number; z: number; dark: number }[]): PlotSnapshot {
   const out: PlotSnapshot = { v: 1, gen: GENERATOR_VERSION, cols: {} }
+  if (lamps?.length) out.lamps = lamps.slice(0, MAX_LAMPS).map(l => [l.x, l.y, l.z, l.dark])
   for (const c of cols) {
     const n = Math.min(c.edits.idx.length, c.edits.mat.length)
     if (!n) continue
@@ -68,7 +82,16 @@ export function readSnapshot(raw: unknown): PlotSnapshot | null {
     if (!isIntArray(i, 0xffffffff) || !isIntArray(m, 0xffff) || i.length !== m.length) return null
     cols[k] = { i, m }
   }
-  return { v: 1, gen: s.gen as number, cols }
+  const out: PlotSnapshot = { v: 1, gen: s.gen as number, cols }
+  if (s.lamps !== undefined) {
+    const L = s.lamps as unknown
+    const cell = (n: unknown) => Number.isInteger(n) && Math.abs(n as number) <= 100_000
+    if (!Array.isArray(L) || L.length > MAX_LAMPS) return null
+    for (const l of L)
+      if (!Array.isArray(l) || l.length !== 4 || !cell(l[0]) || !cell(l[1]) || !cell(l[2]) || !isIntArray([l[3]], 0xffff)) return null
+    if (L.length) out.lamps = L.map(l => [l[0], l[1], l[2], l[3]] as [number, number, number, number])
+  }
+  return out
 }
 
 /** My framed column (host coordinates) → the plot column of the mate standing in quarter `q`. */
@@ -91,7 +114,8 @@ export function mateColumnOf(fx: number, fz: number, mine: QuarterId, q: Quarter
  * fold, which is exactly the set this touches.
  */
 export function applyMateEdits(col: Column, mine: QuarterId, cfg: ClusterConfig,
-                               snaps: Partial<Record<QuarterId, PlotSnapshot | null>>): number {
+                               snaps: Partial<Record<QuarterId, PlotSnapshot | null>>,
+                               away?: ReadonlySet<QuarterId>): number {
   const fx = Math.floor(col.wx / SECTION), fz = Math.floor(col.wz / SECTION)
   const ms = quarterShift(mine, cfg)
   const H = col.sections.length * SECTION
@@ -114,7 +138,59 @@ export function applyMateEdits(col: Column, mine: QuarterId, cfg: ClusterConfig,
       n++
     }
   }
+  if (away?.size) n += applyMateLamps(col, mine, cfg, snaps, away, false)
   if (n) refreshUniform(col)
+  return n
+}
+
+/**
+ * ★ A MATE'S GATE STATION, AWAKE OR DORMANT (Alex, 2026-09-24: *"it should go dormant if the player is
+ * offline"*). For every mate in `away`, each of their station's lit lamps shows the blueprint's dark
+ * block instead; for every other mate, each lamp shows what their snapshot says it shows. Returns
+ * cells written. Run at column adoption (inside `applyMateEdits`) and again, on the loaded columns
+ * only, when somebody wakes or goes away — so a presence change is a few cells and a remesh, not a
+ * rebuild.
+ *
+ * ⛔ A LAMP AND NOTHING ELSE. Canon: a quiet keeper's quarter *"sits exactly as it was; nothing greys,
+ * nothing vanishes"* (`game/shimmer-geography.md` › GARDEN CLUSTERS §4). Dormant is the station's
+ * lights going out; its stone, their garden and the ground never change with it.
+ *
+ * ⚠ ONLY A CELL THAT IS LIT GOES DARK. A lamp the keeper has not earned is already dark, and a cell
+ * their snapshot changed to something else (they built over it) is theirs: dimming writes the dark
+ * block only where a lantern stands.
+ */
+export function applyMateLamps(col: Column, mine: QuarterId, cfg: ClusterConfig,
+                               snaps: Partial<Record<QuarterId, PlotSnapshot | null>>,
+                               away: ReadonlySet<QuarterId>, refresh = true): number {
+  const ms = quarterShift(mine, cfg)
+  const H = col.sections.length * SECTION
+  let n = 0
+  for (const q of QUARTERS) {
+    if (q === mine || !cfg.slots[q]) continue
+    const snap = snaps[q]
+    if (!snap?.lamps) continue
+    const qs = quarterShift(q, cfg)
+    const dx = (qs.dcx - ms.dcx) * SECTION, dz = (qs.dcz - ms.dcz) * SECTION
+    for (const [lx0, y, lz0, dark] of snap.lamps) {
+      // plot cell → my framed cell (the inverse of `mateColumnOf`, one cell at a time)
+      const x = lx0 + dx - col.wx, z = lz0 + dz - col.wz
+      if (x < 0 || x >= SECTION || z < 0 || z >= SECTION || y < 0 || y >= H) continue
+      const at = clusterAt(col.wx + x + ms.dcx * SECTION, col.wz + z + ms.dcz * SECTION, cfg)
+      if ((at.part !== 'quarter' && at.part !== 'door') || at.quarter !== q) continue
+      const s = (y / SECTION) | 0, sy = y - s * SECTION
+      const now = col.sections[s].get(x, sy, z)
+      let want = now
+      if (away.has(q)) { if (now === LIT) want = dark }
+      else if (now === dark) {
+        // Awake: whatever their picture holds at this cell (a lamp they have lit, or still dark).
+        const pc = snap.cols[`${Math.floor(lx0 / SECTION)},${Math.floor(lz0 / SECTION)}`]
+        const idx = pc ? pc.i.indexOf(editIndex(lx0 - Math.floor(lx0 / SECTION) * SECTION, y, lz0 - Math.floor(lz0 / SECTION) * SECTION)) : -1
+        if (idx >= 0) want = pc!.m[idx]
+      }
+      if (want !== now) { col.sections[s].set(x, sy, z, want); n++ }
+    }
+  }
+  if (n && refresh) refreshUniform(col)
   return n
 }
 

@@ -194,6 +194,7 @@ export function takeBackCorner(user_id: string): Result {
   d.prepare('DELETE FROM cluster_members WHERE user_id = ?').run(user_id)
   // The picture of your garden leaves with you: nobody who stays can look at it any more.
   d.prepare('DELETE FROM cluster_plots WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM cluster_seen WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_consents WHERE cluster_id = ? AND member_id = ?').run(me.cluster_id, user_id)
   d.prepare('DELETE FROM cluster_offers WHERE cluster_id = ? AND proposed_by = ?').run(me.cluster_id, user_id)
   if (membersOf(me.cluster_id).length === 0) {
@@ -240,5 +241,31 @@ export function matePlotSnapshots(user_id: string): Partial<Record<Quarter, { da
   `).all(me.cluster_id, user_id) as { quarter: Quarter; data: string; updated_at: number }[]
   const out: Partial<Record<Quarter, { data: string; updated_at: number }>> = {}
   for (const r of rows) out[r.quarter] = { data: r.data, updated_at: r.updated_at }
+  return out
+}
+
+// ── Awake or away (2026-09-24): a mate's gate station goes dormant while they are not in the world ──
+// Alex: *"the gate station… should go dormant if the player is offline."* Each keeper's game pings
+// `here` while it is open and visible; the reply says which of their MATES pinged recently. It is a
+// lamp's business only — the ground is a function of the slots and nothing else (clusters.ts header,
+// *folded once, holds*), so nothing that reads this may add, grey or remove a single block.
+
+/** A mate counts as awake this long after their last ping (the client pings every minute). */
+export const AWAKE_MS = 3 * 60_000
+
+/** I am in the world now. Returns each OTHER member's quarter → awake, or null outside a cluster. */
+export function markHere(user_id: string, now = Date.now()): Partial<Record<Quarter, boolean>> | null {
+  const me = memberRow(user_id)
+  if (!me) return null
+  const d = accountsDb()
+  d.prepare('INSERT INTO cluster_seen (user_id, seen_at) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET seen_at = excluded.seen_at')
+    .run(user_id, now)
+  const rows = d.prepare(`
+    SELECT m.quarter, s.seen_at FROM cluster_members m
+    LEFT JOIN cluster_seen s ON s.user_id = m.user_id
+    WHERE m.cluster_id = ? AND m.user_id != ?
+  `).all(me.cluster_id, user_id) as { quarter: Quarter; seen_at: number | null }[]
+  const out: Partial<Record<Quarter, boolean>> = {}
+  for (const r of rows) out[r.quarter] = r.seen_at !== null && now - r.seen_at <= AWAKE_MS
   return out
 }

@@ -104,6 +104,7 @@ export default function PrivacyPage() {
             <li>which cluster you are in and which corner is yours, and the invitations and yeses that are waiting</li>
             <li>your garden&apos;s seed and size, so your cluster-mates can see its ground</li>
             <li>a picture of the blocks you have built in your garden, sent from your browser now and then, so your cluster-mates can see it. They can look at it but cannot change it.</li>
+            <li>when you were last in the world, so your cluster-mates see your gate station go quiet while you are away. Only the time is kept, never where you were.</li>
           </ul>
           <p>
             Only the other keepers in your cluster can see these. A friend you invite sees the usernames of

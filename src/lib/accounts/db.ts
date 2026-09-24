@@ -104,6 +104,14 @@ const SCHEMA = `
       joined_at  INTEGER NOT NULL,
       PRIMARY KEY (cluster_id, quarter)
     );
+    -- When a member was last IN THE WORLD (their game pings while it is open and visible), so a
+    -- mate's client can show that keeper's gate station dormant while they are away. A time, never
+    -- a place: it says nothing about where they were. ⛔ Nothing here may change GROUND — canon's
+    -- "folded once, holds" (clusters.ts): away dims a lamp, it never greys or removes a thing.
+    CREATE TABLE IF NOT EXISTS cluster_seen (
+      user_id TEXT PRIMARY KEY,
+      seen_at INTEGER NOT NULL
+    );
     -- An open quarter offered to one friend. Filled only when EVERY current member has consented
     -- (canon: you cannot give away someone else's corner) and the invitee accepts.
     CREATE TABLE IF NOT EXISTS cluster_offers (
@@ -327,6 +335,7 @@ export function deleteAccount(user_id: string): boolean {
   d.prepare('DELETE FROM cluster_offers WHERE invitee_id = ? OR proposed_by = ?').run(user_id, user_id)
   d.prepare('DELETE FROM cluster_consents WHERE member_id = ?').run(user_id)
   d.prepare('DELETE FROM cluster_plots WHERE user_id = ?').run(user_id)
+  d.prepare('DELETE FROM cluster_seen WHERE user_id = ?').run(user_id)
   d.prepare('DELETE FROM saves WHERE user_id = ?').run(user_id)
   const res = d.prepare('DELETE FROM accounts WHERE user_id = ?').run(user_id)
   return Number(res.changes) > 0

@@ -32,6 +32,9 @@ import { rotateLocal, type Stamp } from '../voxel/stamps'
 import { blueprintCells, type BlueprintCell, type BlueprintDef, type StationLayout } from '../voxel/blueprints'
 import type { Rotation } from '../voxel/pieces'
 import type { CourtAnchor, SocketKind } from './crossings'
+import { courtAnchor, courtFits, courtLevel } from './crossings'
+import { MAT } from '../voxel/depth'
+import type { PlotConfig } from '../voxel/plot'
 
 export const STATION_BP_ID = 'gate_station'
 
@@ -177,4 +180,29 @@ export function socketStandOut(socks: { index: number; x: number; z: number }[],
     return { index: sk.index, x: cx + dx * SOCKET_STAND_OUT, z: cz + dz * SOCKET_STAND_OUT, yaw: Math.atan2(-dx, -dz) }
   }
   return null
+}
+
+// ── ★ WHAT A NEW KEEPER'S PLOT HOLDS: THE STATION, AND NOTHING ELSE (Alex, 2026-09-24) ─────────────
+// *"each player's plot should start out the same with the gate station being the only building."*
+// The world lays this through the court pass in `VoxelWorld` (stamp, then lamps by reach); this is
+// the same stamp at ZERO waymarks, for anything that has to picture a keeper nobody has walked yet
+// (the dev dummies' cluster quarters). Same functions as the pass, so the two cannot drift apart:
+// `court-blueprint.test.ts` asserts the lamps it lights are exactly `socketLitBy(i, 0)`'s.
+export function freshStation(seed: number, cfg: PlotConfig):
+  { cells: BlueprintCell[]; lamps: { index: number; x: number; y: number; z: number; dark: number }[] } | null {
+  const bp = stationBlueprint()
+  if (!bp || !courtFits(seed, cfg).ok) return null
+  const a = courtAnchor(seed, cfg), level = courtLevel(seed, cfg)
+  if (a.y === null || level === null) return null
+  const st = stationStamp(bp, a, level)
+  const lamps = stationLamps(st)
+  const lit = new Map(lamps.map(l => [`${l.x},${l.y},${l.z}`, socketLitBy(l.index, 0) ? MAT.MANA_LANTERN : l.dark]))
+  const cells = stationCells(st).map(c => {
+    const m = lit.get(`${c.x},${c.y},${c.z}`)
+    return m === undefined ? c : { ...c, m }
+  })
+  // A lamp cell the blueprint left as air still has to carry its state.
+  for (const l of lamps) if (!cells.some(c => c.x === l.x && c.y === l.y && c.z === l.z))
+    cells.push({ x: l.x, y: l.y, z: l.z, m: lit.get(`${l.x},${l.y},${l.z}`)! })
+  return { cells, lamps }
 }

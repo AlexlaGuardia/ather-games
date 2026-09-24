@@ -98,6 +98,30 @@ check('and a fresh fold is possible again', C.foldCluster(alex, 'se', true, 1, 0
   check('★ erasure takes the picture too', rows() === 0)
 }
 
+// §AWAKE — the once-a-minute ping (2026-09-24). A lamp's business only; it never touches the record's ground.
+{
+  const [fay, gus, hal] = ['fay', 'gus', 'hal'].map(mk)
+  friends(fay, gus, 'gus'); friends(fay, hal, 'hal')
+  const fc = C.foldCluster(fay, 'ne', true, 5, 0)
+  C.offerQuarter(fay, 'gus', 'sw'); C.answerOffer(gus, fc.ok ? fc.value.cluster_id : '', 'sw', true, 6, 0)
+  const T = 1_000_000_000
+  check('outside a cluster the ping answers null', C.markHere(hal, T) === null)
+  const first = C.markHere(fay, T)
+  check('a mate who never pinged is AWAY', first?.sw === false, JSON.stringify(first))
+  check('the reply never names me', first !== null && !('ne' in first!))
+  C.markHere(gus, T + 10_000)
+  check('a mate who just pinged is awake', C.markHere(fay, T + 20_000)?.sw === true)
+  check('still awake at the edge of the window', C.markHere(fay, T + 10_000 + C.AWAKE_MS)?.sw === true)
+  check('★ away one tick past it', C.markHere(fay, T + 10_001 + C.AWAKE_MS)?.sw === false)
+  const before = JSON.stringify(C.getCluster(fay))
+  C.markHere(gus, T + 99_000_000)
+  check('★ pinging changes nothing in the cluster record (folded once, holds)', JSON.stringify(C.getCluster(fay)) === before)
+  C.takeBackCorner(gus)
+  check('the seen row leaves with the corner', !accountsDb().prepare('SELECT 1 FROM cluster_seen WHERE user_id = ?').get(gus))
+  C.markHere(fay, T); deleteAccount(fay)
+  check('and with the account', !accountsDb().prepare('SELECT 1 FROM cluster_seen WHERE user_id = ?').get(fay))
+}
+
 try { unlinkSync(path) } catch { /* */ }
 console.log(failures ? `❌ clusters: ${failures} failed` : '✅ clusters: all passed')
 if (failures) process.exit(1)

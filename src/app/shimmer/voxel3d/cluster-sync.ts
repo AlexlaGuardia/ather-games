@@ -65,9 +65,19 @@ export async function loadClusterFrame(mySeed: number, myTier: number, base: Plo
 }
 
 /** Upload my plot's picture now. The caller flushes first. Quietly false on any failure. */
+/**
+ * My station's lamp cells, noted by the court pass each time it lays or relights them, and sent with
+ * my picture so my mates can show my station dormant while I am away (`applyMateLamps`). Module
+ * state, like the upload timer below: there is one keeper and one station per tab.
+ */
+let myLamps: { x: number; y: number; z: number; dark: number }[] = []
+export function noteStationLamps(lamps: readonly { x: number; y: number; z: number; dark: number }[]): void {
+  myLamps = lamps.map(l => ({ x: l.x, y: l.y, z: l.z, dark: l.dark }))
+}
+
 export async function uploadPlot(seed: number): Promise<boolean> {
   try {
-    const snap = buildSnapshot(await plotColumnEdits(seed))
+    const snap = buildSnapshot(await plotColumnEdits(seed), myLamps)
     // ⚠ AN EMPTY PICTURE IS NEVER SENT. A second device (a fresh browser, a phone) holds none of the
     // keeper's garden, and uploading its empty store would wipe the picture their mates see — an
     // empty picture can only ever HIDE a garden, never show one. (Found headless, 2026-09-23.)
@@ -99,4 +109,20 @@ export function settleUpload(): void {
   const seed = pendingSeed
   clearTimeout(timer); timer = null; pendingSeed = null
   void uploadPlot(seed)
+}
+
+/**
+ * ★ I AM IN THE WORLD (2026-09-24). Pings the record and gets back which of my mates are too, as the
+ * set of quarters that are AWAY — their stations show dormant. null = no answer (signed out, not in a
+ * cluster, offline): the caller keeps whatever it last showed rather than guessing.
+ */
+export async function heartbeat(): Promise<Set<QuarterId> | null> {
+  try {
+    const r = await fetch('/api/cluster', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'here' }), cache: 'no-store' })
+    if (!r.ok) return null
+    const j = (await r.json()) as { awake?: Partial<Record<QuarterId, boolean>> | null }
+    if (!j.awake) return null
+    return new Set(QUARTERS.filter(q => j.awake![q] === false))
+  } catch { return null }
 }

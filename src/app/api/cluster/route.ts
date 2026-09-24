@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { readSessionToken, SESSION_COOKIE } from '@/lib/accounts/session'
 import {
   getCluster, offersFor, foldCluster, offerQuarter, consentOffer, withdrawOffer, answerOffer, reportFold,
-  takeBackCorner, isQuarter, myQuarter, invitesFor,
+  takeBackCorner, isQuarter, myQuarter, invitesFor, markHere,
 } from '@/lib/accounts/clusters'
 
 // Garden clusters — the shared record (lib/accounts/clusters.ts carries canon's four guards).
@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
   const action = String(b.action ?? '')
   const quarter = b.quarter
   const needQ = () => (isQuarter(quarter) ? null : bad('Which quarter?'))
+  // The world's once-a-minute ping (awake/away for the gate stations). Small reply on purpose: it
+  // runs all session, so it answers only the one question the lamps ask.
+  if (action === 'here') return NextResponse.json({ awake: markHere(user_id) }, noStore)
 
   let r: { ok: boolean; error?: string; value?: unknown }
   switch (action) {
