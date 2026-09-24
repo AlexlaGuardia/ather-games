@@ -4167,7 +4167,7 @@ export default function Shimmer3D() {
     const f = skillsRef.current.forestry
     setForestry(p => ({ level: f.level, xp: f.xp, next: xpForSkillLevel(f.level), pulse: p.pulse + 1 }))
     setInvSlots([...invRef.current.slots])
-    setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
+    setManaFrac(manaRef.current.current / manaMax())
   }, [])
   // runtime nodes (with harvest state) rebuilt whenever the authored layer or zone changes
   const [runtimeNodes, setRuntimeNodes] = useState<ResourceNode[]>([])
@@ -4209,6 +4209,13 @@ export default function Shimmer3D() {
     }
   }
   const zoneIdRef = useRef(zone.id); zoneIdRef.current = zone.id
+  // ★ THE ONE ANSWER TO "how much mana can this keeper hold". Everywhere else in the walker it is the
+  // mana skill's pool; in THE HOLD it is a FIXED pool, because mana is the clip there and a skill
+  // level carried in from outside is exactly the out-of-run power the mode is built to refuse (Alex,
+  // 2026-09-24). The birth rune's bonus still applies in both: what a keeper IS may lean the fight a
+  // little; what they ground for may not. Called only from callbacks and effects, so reading refs
+  // declared further down is safe.
+  const manaMax = () => (zoneIdRef.current === HOLD_ZONE ? HOLD_TUNING.manaPool : getMaxPool(skillsRef.current.mana.level)) + affinityRef.current.manaBonus
   // Realm mirror for callbacks (bank reach, and anything else that keys on ather-vs-outside without
   // wanting `zone` as a dependency). Same flag that drives weapons-vs-spirits.
   const zoneRealmRef = useRef(zone.realm); zoneRealmRef.current = zone.realm
@@ -4785,7 +4792,7 @@ export default function Shimmer3D() {
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now()
-      const max = (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus)
+      const max = manaMax()
       if (manaRef.current.current < max) {
         // ★ THE COST IS PER-MOVE, NOT PER-TIER (RULED 2026-08-26, Alex — world-wide). The blanket law
         // "holding any passive pauses recovery" is retired; a passive is a layer you wear. Only the
@@ -5072,7 +5079,7 @@ export default function Shimmer3D() {
     }
     const restore = MANA_POTIONS[itemId]
     if (restore == null || countItem(invRef.current, itemId) < 1) return   // not a drinkable mana potion / none held
-    const max = (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus)
+    const max = manaMax()
     if (manaRef.current.current >= max - 0.5) { setHarvestToast('Mana already full'); return }
     removeItems(invRef.current, itemId, 1)
     manaRef.current.current = Math.min(max, manaRef.current.current + restore)
@@ -5301,7 +5308,7 @@ export default function Shimmer3D() {
   const colRoom = typeof window === 'undefined' ? 300
     : window.innerWidth - (hudMapBox(hudSize).right + hudMapBox(hudSize).size + 10) - 16
   const manaCornerRef = useMemo(() => ({
-    get current() { return { cur: manaRef.current.current, max: getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus, regen: 1 } },
+    get current() { return { cur: manaRef.current.current, max: manaMax(), regen: 1 } },
   }), [])
   const partyForBag = useMemo(() => ({ get current() { return partyRef.current ?? [] } }), [])
   const spiritIndexRef = useRef(createSpiritIndex())
@@ -5423,7 +5430,7 @@ export default function Shimmer3D() {
     const f = fishRef.current; if (!f) return
     if (rinHook(f.cast, performance.now())) {
       manaRef.current.current = Math.max(0, manaRef.current.current - f.manaCost)
-      setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
+      setManaFrac(manaRef.current.current / manaMax())
       rinCatch(); grantHarvest(f.node)
     } else {
       rinMiss(); setHarvestToast('…it slipped the line')
@@ -5455,7 +5462,7 @@ export default function Shimmer3D() {
       if (dist > CHANNEL_RANGE || ch.node.state !== 'harvestable') { channelRef.current = null; setChannel(null); return }
       if (manaRef.current.current < drain) { channelRef.current = null; setChannel(null); setHarvestToast('Out of mana'); return }
       manaRef.current.current -= drain
-      setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
+      setManaFrac(manaRef.current.current / manaMax())
       chopClockRef.current += dt
       if (chopClockRef.current >= 0.42) { chopClockRef.current = 0; gatherTick(getNodeSkill(ch.node.type)) } // working rhythm
       ch.progress += dt / ch.durSec
@@ -6505,7 +6512,7 @@ export default function Shimmer3D() {
       reloadingRef.current = 0
       ammoRef.current = Math.min(W.clip, ammoRef.current + rounds)
       manaRef.current.current = Math.max(0, manaRef.current.current - (W.reloadMana * rounds) / W.clip)
-      setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
+      setManaFrac(manaRef.current.current / manaMax())
     }, W.reloadTime * 1000)
   }, [])
   // A healing field restores the player from inside the sim; HP + its cap live out here.
@@ -6521,7 +6528,7 @@ export default function Shimmer3D() {
       return false
     }
     manaRef.current.current = Math.max(0, manaRef.current.current - cost)
-    setManaFrac(manaRef.current.current / (getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus))
+    setManaFrac(manaRef.current.current / manaMax())
     return true
   }, [])
   // ── weapon-state → movement mult, and the swap / holster actions. syncWeaponMove is the single rule:
@@ -6699,12 +6706,15 @@ export default function Shimmer3D() {
     if (!holdSavedLoadout.current) holdSavedLoadout.current = [...loadoutRef.current]
     equipWeapon(0, rep); equipWeapon(1, rep)
     hpRef.current = hpMaxRef.current; shieldRef.current = shieldMaxRef.current
+    manaRef.current.current = manaMax(); setManaFrac(1)
     setHoldFlash('Round 1')
   }, [equipWeapon])
   useEffect(() => {
     if (zoneId === HOLD_ZONE) { beginHold(); return }
     if (!holdRef.current && !holdSavedLoadout.current) return
     holdRef.current = null; holdEHeld.current = false; setHoldHud(null)
+    // the hold's pool can sit above a new keeper's own; never walk out holding more than you can
+    manaRef.current.current = Math.min(manaRef.current.current, manaMax()); setManaFrac(manaRef.current.current / manaMax())
     const saved = holdSavedLoadout.current
     holdSavedLoadout.current = null
     // the holster effect (declared earlier, so it ran first) re-pointed the live weapon at the run's
@@ -6764,7 +6774,7 @@ export default function Shimmer3D() {
           else if (slot >= 0) ammoStashRef.current[slot] = WEAPONS[idx].clip
         } else short()
       } else if (pr.kind === 'font') {
-        if (buyFont(hs)) { manaRef.current.current = getMaxPool(skillsRef.current.mana.level) + affinityRef.current.manaBonus; setManaFrac(1) } else short()
+        if (buyFont(hs)) { manaRef.current.current = manaMax(); setManaFrac(1) } else short()
       } else if (pr.kind === 'cache') { if (buyCache(hs)) setHoldFlash(`+${HOLD_TUNING.cacheSec}s hush`); else short() }
     }
     const onUp = (e: KeyboardEvent) => { if (e.key.toLowerCase() === 'e') holdEHeld.current = false }

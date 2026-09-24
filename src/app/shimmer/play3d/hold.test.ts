@@ -4,6 +4,7 @@ import {
   mendTick, endHold, keeperBlocked, keeperBlockSet, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
   isLoud, HOLD_TUNING as T, HOLD_TILE, type HoldState,
 } from './hold'
+import { getMaxPool } from '../engine/mana'
 
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
@@ -31,6 +32,10 @@ ok(!roundBlocked(s0, lw.cells[0].x, lw.cells[0].z), '★ rounds pass a window �
 const g0 = map.gates[0]
 ok(keeperBlocked(s0, g0.cells[0].x, g0.cells[0].z) && roundBlocked(s0, g0.cells[0].x, g0.cells[0].z), 'a shut gate stops keeper and rounds')
 ok(keeperBlockSet(s0).size === map.windows.length * 2 + 4, 'block set = every window cell + both shut gates')
+
+// ── the hold's mana pool is a NEW keeper's pool — the mana skill buys nothing in here ──
+ok(T.manaPool === getMaxPool(1), `the hold pool (${T.manaPool}) is a level-1 keeper's pool (${getMaxPool(1)})`)
+ok(T.manaPool < getMaxPool(10), 'and below what a trained keeper carries outside')
 
 // ── the curve ──
 ok(roundCount(1) >= 5 && roundCount(1) <= 8, 'round 1 is a handful')

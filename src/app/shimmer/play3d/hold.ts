@@ -102,6 +102,7 @@ export const HOLD_TUNING = {
   cacheCost: 400,        // +cacheSec of hush
   cacheSec: 60,
   hushSec: 300,          // the draught you walk in with
+  manaPool: 100,         // FIXED — a new keeper's pool; only the birth rune's bonus rides on it (no skill level)
   breakSec: 8,           // quiet between rounds
   maxAlive: 14,          // bodies in the landing at once, loud or hushed
   salvageHit: 10,
