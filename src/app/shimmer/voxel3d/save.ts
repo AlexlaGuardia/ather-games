@@ -490,27 +490,30 @@ export async function countMaterial(seed: number, space: Space, mat: number): Pr
 
 /**
  * Every plot column this keeper has edited, as `{ px, pz, edits }` — the source of a cluster plot
- * snapshot (`voxel/plot-snapshot.ts`, phase 3). BLOCK EDITS ONLY: pieces, chests, racks and jobs are
- * the keeper's own and never leave the browser. Scoped by `ownsColumnIn`, so it can only ever read
+ * snapshot (`voxel/plot-snapshot.ts`, phase 3). Block edits AND placed pieces (2026-09-24: without
+ * the pieces a mate's shed read as a bare block box); chests, racks and jobs are the keeper's own
+ * and never leave the browser. Scoped by `ownsColumnIn`, so it can only ever read
  * the signed-in keeper's own garden. Exact only when nothing is dirty — flush first.
  */
-export async function plotColumnEdits(seed: number): Promise<{ px: number; pz: number; edits: PackedEdits }[]> {
+export async function plotColumnEdits(seed: number): Promise<{ px: number; pz: number; edits: PackedEdits; pieces: Placement[] }[]> {
   const mine = ownsColumnIn(seed, 'plot')
   const mark = `${seedPrefix(seed)}plot:`
   try {
     const db = await open()
     return await new Promise((res) => {
-      const out: { px: number; pz: number; edits: PackedEdits }[] = []
+      const out: { px: number; pz: number; edits: PackedEdits; pieces: Placement[] }[] = []
       const tx = db.transaction(STORE, 'readonly')
       const req = tx.objectStore(STORE).openCursor()
       req.onsuccess = () => {
         const cur = req.result
         if (!cur) { res(out); return }
         const k = String(cur.key)
-        const e = (cur.value as ColumnSave | undefined)?.edits
-        if (mine(k) && e?.idx?.length) {
+        const v = cur.value as ColumnSave | undefined
+        const e = v?.edits
+        const pieces = Array.isArray(v?.pieces) ? v!.pieces : []
+        if (mine(k) && e && (e.idx?.length || pieces.length)) {
           const [px, pz] = k.slice(mark.length).split(',').map(Number)
-          if (Number.isInteger(px) && Number.isInteger(pz)) out.push({ px, pz, edits: e })
+          if (Number.isInteger(px) && Number.isInteger(pz)) out.push({ px, pz, edits: e, pieces })
         }
         cur.continue()
       }

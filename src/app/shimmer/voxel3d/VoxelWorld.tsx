@@ -245,7 +245,7 @@ const SCRIPT_LIT: readonly string[] = SCRIPT['greg:lit'].flatMap(b => 'text' in 
 import { GREG_LINES } from './greg-lines'
 import { generateGladeColumn, gladeGeneratedVoxel } from '../voxel/glade-column'
 import { standInCluster, generateFramedColumn, framedMaterialAt, framedHeight, framedIsMine } from '../voxel/cluster-space'
-import { applyMateEdits, applyMateLamps, type PlotSnapshot } from '../voxel/plot-snapshot'
+import { applyMateEdits, applyMateLamps, matePieces, type PlotSnapshot } from '../voxel/plot-snapshot'
 import { loadClusterFrame, uploadPlot, scheduleUpload, settleUpload, noteStationLamps, heartbeat } from './cluster-sync'
 import { ClusterRows } from './cluster-panel'
 import { DEFAULT_CLUSTER, NO_SLOTS, QUARTERS, quarterThresholdBearing, type ClusterConfig, type ClusterSlots, type QuarterId } from '../voxel/cluster'
@@ -3808,6 +3808,26 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    */
   const jobsByCol = useRef(new Map<string, Workshop>())
   const piecesByCol = useRef(new Map<string, Placement[]>())
+  /**
+   * ★ A MATE'S PIECES, per framed column (2026-09-24). Drawn from their snapshot at column adoption,
+   * tagged `mate` so the take-back refuses them (read-only, like every other cell of theirs), and
+   * NEVER in `piecesByCol`, which is what the save writes — a mate's shed can reach my screen and
+   * never my save. Replaced whole per column, so a re-adoption cannot stack them.
+   */
+  const matePiecesByCol = useRef(new Map<string, Placement[]>())
+  const adoptMatePieces = (col: Column, k: string) => {
+    const cm = space.current === 'plot' ? clusterMode.current : null
+    const had = matePiecesByCol.current.get(k)
+    // An id this build does not know is dropped: the renderer has no shape for it.
+    const next: Placement[] = cm?.snaps
+      ? matePieces(col, cm.mine, cm.cfg, cm.snaps).filter(p => pieceDef(p.pieceId)).map(p => ({ ...p, rot: (p.rot & 3) as Rotation }))
+      : []
+    if (!had?.length && !next.length) return
+    const drop = new Set(had ?? [])
+    placements.current = [...placements.current.filter(p => !drop.has(p)), ...next]
+    if (next.length) matePiecesByCol.current.set(k, next); else matePiecesByCol.current.delete(k)
+    pieces.sync(placements.current)
+  }
   const colOf = useCallback((x: number, z: number) => key(Math.floor(x / SECTION), Math.floor(z / SECTION)), [])
   const dropGroup = useRef<THREE.Group>(null)
   const mouse = useRef({ left: false, right: false })
@@ -5272,6 +5292,13 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     edits.current.clear()
     dirtySaves.current.clear()
     piecesByCol.current.clear()
+    // ★ AND THE DRAW LIST THE MAP ABOVE FEEDS (2026-09-24). Every per-column record was cleared here
+    // and reloaded on adoption, but `placements` never was, so a space change kept the last space's
+    // pieces drawn at their old coordinates and re-adoption appended them again. The in-place cluster
+    // rebuild runs this same reset, so a mate's pieces would have doubled on every refresh.
+    placements.current = []
+    pieces.sync(placements.current)
+    matePiecesByCol.current.clear()
     chestsByCol.current.clear()
     racksByCol.current.clear()
     jobsByCol.current.clear()
@@ -8640,6 +8667,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       refreshUniform(col)
       col.stage = Stage.Ready
       cols.current.set(ek, col)
+      if (cmx?.snaps) adoptMatePieces(col, ek)
       floraDirty.current = true
       queueRemesh(gx, gz)
       if (!edits.current.has(ek)) {
@@ -8762,7 +8790,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           ? (() => {
               const cm = clusterMode.current!
               const c = generateFramedColumn(new Column(gx * SECTION, gz * SECTION, DEFAULT_COLUMN), cm.mine, cm.cfg)
-              if (cm.snaps) applyMateEdits(c, cm.mine, cm.cfg, cm.snaps, mateAway.current)
+              if (cm.snaps) { applyMateEdits(c, cm.mine, cm.cfg, cm.snaps, mateAway.current); adoptMatePieces(c, key(gx, gz)) }
               return c
             })()
           : space.current === 'plot'
@@ -9997,7 +10025,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     if (hit && (hit.material === STRUCTURE || hit.material === STRUCTURE_HALF)) {
       const found = placementAt(placements.current, hit.x, hit.y, hit.z) as (Placement & { gen?: string }) | undefined
       const pname = found ? pieceDef(found.pieceId)?.name ?? 'structure' : 'structure'
-      const yours = !!found && !found.gen
+      // A generated piece is the world's; a mate's is theirs (`adoptMatePieces`). Neither is a swing's.
+      const yours = !!found && !found.gen && !(found as { mate?: QuarterId }).mate
       // ★ HELD, NOT CLICKED (Alex, 2026-09-12: "the pieces just break instantly if left clicked").
       // The piece goes through the same `tickBreak` as a block, against the block it is paid in —
       // `pieceBreakTarget` — so it asks for the same tool, takes the same seconds, sprays the same

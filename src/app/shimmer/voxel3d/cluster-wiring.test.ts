@@ -16,7 +16,7 @@ ok(host.indexOf("if (cm && !framedIsMine(c.wx + lx, c.wz + lz, cm.mine, cm.cfg))
   '★ setVoxel refuses (and never records) a write outside the fold, before the save record')
 ok(/cluster: space\.current === 'plot' && clusterMode\.current \? \{ mine: clusterMode\.current\.mine, cfg: clusterMode\.current\.cfg \} : undefined/.test(host),
   'the worker request carries the frame in the plot space — {mine, cfg} only, never the snapshots')
-ok(/const c = generateFramedColumn\(new Column\(gx \* SECTION, gz \* SECTION, DEFAULT_COLUMN\), cm\.mine, cm\.cfg\)\s+if \(cm\.snaps\) applyMateEdits\(c, cm\.mine, cm\.cfg, cm\.snaps, mateAway\.current\)/.test(host),
+ok(/const c = generateFramedColumn\(new Column\(gx \* SECTION, gz \* SECTION, DEFAULT_COLUMN\), cm\.mine, cm\.cfg\)\s+if \(cm\.snaps\) \{ applyMateEdits\(c, cm\.mine, cm\.cfg, cm\.snaps, mateAway\.current\); adoptMatePieces\(c, key\(gx, gz\)\) \}/.test(host),
   'the no-worker fallback generates the frame too, and lays the mates\' gardens on it')
 ok(/cl \? `cluster:\$\{clusterSig\(cl\.mine, cl\.cfg\)\}:/.test(worker), '★ the worker keys its cache by the frame — a solo column can never be served in a cluster')
 ok(/generateFramedColumn\(new Column\(cx \* SECTION, cz \* SECTION, DEFAULT_COLUMN\), cl\.mine, cl\.cfg\)/.test(worker), 'the worker generates the frame')
@@ -80,6 +80,16 @@ ok(!/plotHeight\(x, z, SEED, plotCfg\.current\)/.test(host.slice(host.indexOf('t
      'a presence change relights the loaded columns in place (applyMateLamps → remesh)')
   ok(/useRef<Set<QuarterId>>\(new Set\(QUARTERS\)\)/.test(host), '★ a mate is dormant until the record says they are here')
   ok((host.match(/noteStationLamps\(stationLamps\(/g) ?? []).length === 2, 'both court passes note my lamps for the upload')
+}
+
+// ★ A MATE'S PIECES (2026-09-24): drawn at adoption on both paths, refused by the take-back, and never
+// in the save's per-column record. And a space change clears the draw list, which it never used to.
+{
+  ok(/if \(cmx\?\.snaps\) adoptMatePieces\(col, ek\)/.test(host) && /adoptMatePieces\(c, key\(gx, gz\)\)/.test(host), 'both adoption paths lay a mate\'s pieces')
+  ok(/const yours = !!found && !found\.gen && !\(found as \{ mate\?: QuarterId \}\)\.mate/.test(host), '★ the take-back refuses a mate\'s piece')
+  ok(!/piecesByCol\.current\.set\([^)]*next/.test(host), '★ a mate\'s pieces never enter piecesByCol (what the save writes)')
+  ok(/piecesByCol\.current\.clear\(\)[\s\S]{0,600}placements\.current = \[\]\s+pieces\.sync\(placements\.current\)\s+matePiecesByCol\.current\.clear\(\)/.test(host),
+     '★ a space change clears the draw list with the rest (no stale or doubled pieces)')
 }
 
 if (fails.length) { console.error(`cluster-wiring: ${pass} pass, ${fails.length} FAIL`); for (const f of fails) console.error('  ✗ ' + f); process.exit(1) }

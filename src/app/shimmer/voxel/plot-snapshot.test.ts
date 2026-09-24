@@ -7,7 +7,7 @@ import { generateFramedColumn, quarterShift, unframe } from './cluster-space'
 import { GENERATOR_VERSION, packEdits, type ColumnEdits } from './edits'
 import { MAT } from './depth'
 import {
-  buildSnapshot, readSnapshot, mateColumnOf, applyMateEdits, applyMateLamps, snapshotColumn, MAX_LAMPS, type PlotSnapshot,
+  buildSnapshot, readSnapshot, mateColumnOf, applyMateEdits, applyMateLamps, snapshotColumn, MAX_LAMPS, MAX_PIECES, matePieces, type PlotSnapshot,
 } from './plot-snapshot'
 
 let pass = 0
@@ -125,6 +125,32 @@ for (const [label, bad] of [
     ['not an array', { x: 1 }],
   ] as const) ok(readSnapshot({ v: 1, gen: 1, cols: {}, lamps: bad }) === null, `§6 refuses ${label}`)
   ok(!('lamps' in buildSnapshot([])), '§6 no station, no lamps field (an old reader sees the old shape)')
+}
+
+// §7 ★★ A MATE'S PIECES (2026-09-24): carried, shifted into their quarter, clipped to their ground.
+{
+  const shed = [{ pieceId: 'door_wood', x: 3, y: 121, z: 5, rot: 1, open: true }, { pieceId: 'roof_thatch', x: 4, y: 124, z: 6, rot: 0 }]
+  const sp = readSnapshot(JSON.stringify(buildSnapshot([{ px: 0, pz: 0, edits: packEdits(e), pieces: shed }])))!
+  ok(sp?.pieces?.length === 2 && sp.pieces[0].join() === 'door_wood,3,121,5,1,1' && sp.pieces[1][5] === 0, '§7 pieces round-trip, open as 0/1')
+  ok(!!readSnapshot(JSON.stringify(buildSnapshot([{ px: 5, pz: 5, edits: packEdits(new Map()), pieces: shed }])))?.pieces,
+     '§7 ★ a column with pieces and no block edits still carries its pieces')
+  const fx = 0 - quarterShift('ne', cfg).dcx + quarterShift('sw', cfg).dcx
+  const fz = 0 - quarterShift('ne', cfg).dcz + quarterShift('sw', cfg).dcz
+  const got = matePieces({ wx: fx * SECTION, wz: fz * SECTION }, 'ne', cfg, { sw: sp })
+  ok(got.length === 2 && got.every(p => p.mate === 'sw'), `§7 both pieces land in their column, tagged sw (${got.length})`)
+  ok(got[0].x === fx * SECTION + 3 && got[0].z === fz * SECTION + 5 && got[0].y === 121 && got[0].rot === 1 && got[0].open === true,
+     '§7 ★ same local cell, same y, rotation and state')
+  ok(matePieces({ wx: (fx + 1) * SECTION, wz: fz * SECTION }, 'ne', cfg, { sw: sp }).length === 0, '§7 a neighbour column draws none of them (keyed by origin)')
+  ok(matePieces({ wx: 0, wz: 0 }, 'ne', cfg, { ne: sp }).length === 0, '§7 my own quarter never takes pieces from a snapshot')
+  // Aimed inside my own column, like §6's clip: an origin that maps onto MY ground is never drawn.
+  const p0 = mateColumnOf(0, 0, 'ne', 'sw', cfg)
+  const onMine = readSnapshot({ v: 1, gen: 1, cols: {}, pieces: [['door_wood', p0.px * SECTION + 3, 121, p0.pz * SECTION + 5, 0, 0]] })!
+  ok(matePieces({ wx: 0, wz: 0 }, 'ne', cfg, { sw: onMine }).length === 0, '§7 ★ a mate\'s piece that maps onto MY ground is clipped')
+  for (const [label, bad] of [
+    ['too many pieces', Array.from({ length: MAX_PIECES + 1 }, () => ['door_wood', 0, 0, 0, 0, 0])],
+    ['a bad id', [['<script>', 0, 0, 0, 0, 0]]], ['a rotation of 4', [['door_wood', 0, 0, 0, 4, 0]]],
+    ['open as true', [['door_wood', 0, 0, 0, 0, true]]], ['a short tuple', [['door_wood', 0, 0, 0]]],
+  ] as const) ok(readSnapshot({ v: 1, gen: 1, cols: {}, pieces: bad }) === null, `§7 refuses ${label}`)
 }
 
 if (fails.length) { for (const f of fails) console.log('  FAIL ', f); console.log(`plot-snapshot: ${pass} passed, ${fails.length} FAILED`); process.exit(1) }

@@ -38,7 +38,19 @@ export interface PlotSnapshot {
    * (`applyMateLamps`). Optional: a snapshot from before it, or a plot whose station never stood, has none.
    */
   lamps?: [number, number, number, number][]
+  /**
+   * The keeper's placed PIECES, `[pieceId, x, y, z, rot, open]` in plot cells (2026-09-24). Blocks
+   * are the shell; pieces are the look (door, window, roof), so without these a mate's shed read as a
+   * block box. Their occupancy is already in the edits (placing a piece writes STRUCTURE through the
+   * edit funnel); this is what DRAWS it. Read-only on the far side like every other cell of theirs.
+   * An id this build does not know is the host's to drop (`pieceDef`), never this file's to judge.
+   */
+  pieces?: [string, number, number, number, number, 0 | 1][]
 }
+
+/** A generous garden's worth. The bound only stops a hostile upload from being a render bomb. */
+export const MAX_PIECES = 4000
+const PIECE_ID = /^[a-z0-9_:.-]{1,64}$/
 
 /** A station has four lamps; the bound only stops a hostile upload from making the loop long. */
 export const MAX_LAMPS = 16
@@ -49,10 +61,15 @@ const LIT = 9   // MAT.MANA_LANTERN — `plot-snapshot.test.ts` asserts the two 
 export const SNAPSHOT_MAX_BYTES = 512 * 1024
 
 /** Build a snapshot from the keeper's own plot columns. Empty columns cost nothing. */
-export function buildSnapshot(cols: Iterable<{ px: number; pz: number; edits: PackedEdits }>,
+export function buildSnapshot(cols: Iterable<{ px: number; pz: number; edits: PackedEdits;
+                                pieces?: readonly SnapPiece[] }>,
                               lamps?: readonly { x: number; y: number; z: number; dark: number }[]): PlotSnapshot {
   const out: PlotSnapshot = { v: 1, gen: GENERATOR_VERSION, cols: {} }
   if (lamps?.length) out.lamps = lamps.slice(0, MAX_LAMPS).map(l => [l.x, l.y, l.z, l.dark])
+  const pcs: NonNullable<PlotSnapshot['pieces']> = []
+  for (const c of cols) for (const p of c.pieces ?? [])
+    if (pcs.length < MAX_PIECES && PIECE_ID.test(p.pieceId)) pcs.push([p.pieceId, p.x, p.y, p.z, p.rot & 3, p.open ? 1 : 0])
+  if (pcs.length) out.pieces = pcs
   for (const c of cols) {
     const n = Math.min(c.edits.idx.length, c.edits.mat.length)
     if (!n) continue
@@ -90,6 +107,15 @@ export function readSnapshot(raw: unknown): PlotSnapshot | null {
     for (const l of L)
       if (!Array.isArray(l) || l.length !== 4 || !cell(l[0]) || !cell(l[1]) || !cell(l[2]) || !isIntArray([l[3]], 0xffff)) return null
     if (L.length) out.lamps = L.map(l => [l[0], l[1], l[2], l[3]] as [number, number, number, number])
+  }
+  if (s.pieces !== undefined) {
+    const P = s.pieces as unknown
+    const cell = (n: unknown) => Number.isInteger(n) && Math.abs(n as number) <= 100_000
+    if (!Array.isArray(P) || P.length > MAX_PIECES) return null
+    for (const p of P)
+      if (!Array.isArray(p) || p.length !== 6 || typeof p[0] !== 'string' || !PIECE_ID.test(p[0])
+          || !cell(p[1]) || !cell(p[2]) || !cell(p[3]) || ![0, 1, 2, 3].includes(p[4]) || (p[5] !== 0 && p[5] !== 1)) return null
+    if (P.length) out.pieces = P.map(p => [p[0], p[1], p[2], p[3], p[4], p[5]] as [string, number, number, number, number, 0 | 1])
   }
   return out
 }
@@ -192,6 +218,37 @@ export function applyMateLamps(col: Column, mine: QuarterId, cfg: ClusterConfig,
   }
   if (n && refresh) refreshUniform(col)
   return n
+}
+
+/** A piece as a snapshot carries it — the host's `Placement`, restated so this core imports nothing outside the folder. */
+export interface SnapPiece { pieceId: string; x: number; y: number; z: number; rot: number; open?: boolean }
+
+/**
+ * ★ EACH MATE'S PIECES WHOSE ORIGIN STANDS IN THIS FRAMED COLUMN, in my framed coordinates, tagged
+ * with the quarter they belong to. Same clip as their blocks: only where the origin cell is that
+ * mate's own fold ground (`clusterAt`), so a piece at the edge of their solo plot that the cluster
+ * cuts to Green is not drawn on the shared middle. Keyed on the ORIGIN on purpose — a piece is one
+ * thing and is drawn whole or not at all, and its origin is the cell the host keys it by (`colOf`).
+ */
+export function matePieces(col: { wx: number; wz: number }, mine: QuarterId, cfg: ClusterConfig,
+                           snaps: Partial<Record<QuarterId, PlotSnapshot | null>>): (SnapPiece & { mate: QuarterId })[] {
+  const ms = quarterShift(mine, cfg)
+  const out: (SnapPiece & { mate: QuarterId })[] = []
+  for (const q of QUARTERS) {
+    if (q === mine || !cfg.slots[q]) continue
+    const snap = snaps[q]
+    if (!snap?.pieces) continue
+    const qs = quarterShift(q, cfg)
+    const dx = (qs.dcx - ms.dcx) * SECTION, dz = (qs.dcz - ms.dcz) * SECTION
+    for (const [pieceId, px, y, pz, rot, open] of snap.pieces) {
+      const x = px + dx, z = pz + dz
+      if (x < col.wx || x >= col.wx + SECTION || z < col.wz || z >= col.wz + SECTION) continue
+      const at = clusterAt(x + ms.dcx * SECTION, z + ms.dcz * SECTION, cfg)
+      if ((at.part !== 'quarter' && at.part !== 'door') || at.quarter !== q) continue
+      out.push({ pieceId, x, y, z, rot, ...(open ? { open: true } : {}), mate: q })
+    }
+  }
+  return out
 }
 
 /** A snapshot as the edits map one column of it describes — for tests and the doctor. */
