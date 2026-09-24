@@ -126,7 +126,7 @@ import { prettyItem } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
-import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, keeperBlocked, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, fieldStrike, keeperBlocked, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -2546,6 +2546,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
               guardSim.current.enc = damageGuard(guardSim.current.enc, st.id, f.dps, rangeCfgRef.current.tune).state
             }
           }
+          // the flooded (THE HOLD) — capped to the nearest few, see `hold.ts` › fieldStrike
+          if (hs) fieldStrike(hs, f.x, f.z, f.radius, f.dps)
         }
         if (f.hps > 0 && posRef.current) {
           const dx = posRef.current.x - f.x, dz = posRef.current.z - f.z

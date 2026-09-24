@@ -108,6 +108,7 @@ export const HOLD_TUNING = {
   dropCap: 2,            // boosters per round, at most
   dropTtl: 25,           // seconds a booster waits on the floor
   pickupReach: 1.1,
+  fieldFullTargets: 2,   // a field damages at most this many bodies at full rate; more inside share it (power-budget.ts)
   breakSec: 8,           // quiet between rounds
   maxAlive: 14,          // bodies in the landing at once, loud or hushed
   salvageHit: 10,
@@ -508,6 +509,23 @@ export function hitBody(s: HoldState, id: number, dmg: number, crit: boolean, tu
   }
   s.salvage += salvage
   return { salvage, killed }
+}
+
+/**
+ * A field ticks over the landing. It strikes the `fieldFullTargets` bodies nearest its centre and no
+ * more: area damage scales with how many stand in it, and the flooded pile up at the windows, so an
+ * uncapped field is the one move that lets a single keeper carry a round (power-budget.ts, 09-24).
+ * Returns how many it struck.
+ */
+export function fieldStrike(s: HoldState, x: number, z: number, radius: number, dmg: number, tune: HoldTuning = HOLD_TUNING): number {
+  if (!s.running || dmg <= 0) return 0
+  const r2 = radius * radius
+  const inside = s.flood
+    .filter(b => b.alive && (b.x - x) ** 2 + (b.z - z) ** 2 <= r2)
+    .sort((a, b) => ((a.x - x) ** 2 + (a.z - z) ** 2) - ((b.x - x) ** 2 + (b.z - z) ** 2))
+    .slice(0, tune.fieldFullTargets)
+  for (const b of inside) hitBody(s, b.id, dmg, false, tune)
+  return inside.length
 }
 
 /** G — the surge: everything close takes a blow and is thrown back. Needs a full charge. */

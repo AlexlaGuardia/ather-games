@@ -309,10 +309,10 @@ const BUILDS: Record<string, Build> = {
   'static-burst': { archetype: 'surge', manaCost: 10, cooldownMs: 4500, surgeSecs: 2.5, surgeMult: 1.7 },
   // "A wall of flame thrown BETWEEN you and a threat — escape, area-denial, cover." All three verbs
   // are in the canon line, so it burns what stands in it AND eats shots crossing it.
-  firewall:  { archetype: 'field', manaCost: 18, cooldownMs: 7000, castRange: 9, areaSize: 3.2, areaSecs: 6, fieldDps: 12, fieldStopsShots: true },
+  firewall:  { archetype: 'field', manaCost: 18, cooldownMs: 7000, castRange: 9, areaSize: 3.2, areaSecs: 6, fieldDps: 5, fieldStopsShots: true },
   // "Sheathes a weapon or strike in fire — melee ENHANCEMENT." The only cast that makes the gun
   // better rather than doing something the gun can't: an infusion window, not a new attack.
-  'flame-infusion': { archetype: 'infusion', manaCost: 14, cooldownMs: 8000, surgeSecs: 6, surgeMult: 1.5 },
+  'flame-infusion': { archetype: 'infusion', manaCost: 14, cooldownMs: 8000, surgeSecs: 6, surgeMult: 1.25 },
   mend:      { archetype: 'restore', manaCost: 22, cooldownMs: 6000, heal: 35 },
   'ice-dart': { archetype: 'projectile', manaCost: 7, cooldownMs: 650, damage: 18, projSpeed: 52, projLife: 1.4 },
   // "A flash-bang, not a blade" — it takes aim away, never HP. Wide radius, short, no damage.
@@ -338,7 +338,7 @@ const BUILDS: Record<string, Build> = {
   'fog-bank': { archetype: 'status', manaCost: 18, cooldownMs: 12000, castRange: 10, areaSize: 8, areaSecs: 8, statuses: ['blinded'] },
   // "No visible flood, just a thin film and no breath." Canon aims it at ONE face; the sim's smallest
   // radius is the closest honest reading, so it is a tight, nasty area rather than a true single target.
-  'drowning-grasp': { archetype: 'field', manaCost: 16, cooldownMs: 9000, castRange: 9, areaSize: 2, areaSecs: 4, fieldDps: 18 },
+  'drowning-grasp': { archetype: 'field', manaCost: 16, cooldownMs: 9000, castRange: 9, areaSize: 2, areaSecs: 4, fieldDps: 8.5 },
   // "Fused to bedrock" — the one conjured wall that LASTS, because canon anchors it. ⚠ The bridges and
   // ramps half is not here: conjured collision is binary, so this raises a wall you cannot walk on.
   'glacial-path': { archetype: 'terrain', manaCost: 14, cooldownMs: 6500, castRange: 9, areaSize: 6, areaSecs: 20, shape: 'wall', shapeHeight: 2 },
@@ -347,15 +347,15 @@ const BUILDS: Record<string, Build> = {
   'lava-stride': { archetype: 'status', manaCost: 17, cooldownMs: 10000, castRange: 8, areaSize: 4, areaSecs: 3.5, statuses: ['rooted'] },
   // "The fire appears THERE rather than travelling to it" — so it is NOT a projectile. The longest
   // cast range in the book, the shortest burn: ignition delivered, not a fire tended.
-  flashpoint: { archetype: 'field', manaCost: 15, cooldownMs: 5000, castRange: 14, areaSize: 2.2, areaSecs: 2, fieldDps: 26 },
-  'forge-fist': { archetype: 'infusion', manaCost: 16, cooldownMs: 9000, surgeSecs: 6, surgeMult: 1.7 },
+  flashpoint: { archetype: 'field', manaCost: 15, cooldownMs: 5000, castRange: 14, areaSize: 2.2, areaSecs: 2, fieldDps: 15 },
+  'forge-fist': { archetype: 'infusion', manaCost: 16, cooldownMs: 9000, surgeSecs: 6, surgeMult: 1.25 },
   'heat-mirage': { archetype: 'unbuilt', why: 'needs a self-centred status — enemies mis-aim at the CASTER, not at a placed point' },
   // "Slower than fire but it pierces barriers." Slowest projectile, hardest hit.
   'volcano-spike': { archetype: 'projectile', manaCost: 14, cooldownMs: 1400, damage: 34, projSpeed: 34, projLife: 2 },
   'ember-trail': { archetype: 'unbuilt', why: "needs fields spawned along the caster's PATH — every field today lands at the aim point" },
   'crystal-barrage': { archetype: 'projectile', manaCost: 11, cooldownMs: 800, damage: 20, projSpeed: 46, projLife: 1.5 },
-  'grindstone': { archetype: 'field', manaCost: 17, cooldownMs: 8000, castRange: 8, areaSize: 3, areaSecs: 7, fieldDps: 15 },
-  'dust-lung': { archetype: 'field', manaCost: 13, cooldownMs: 8000, castRange: 10, areaSize: 2.5, areaSecs: 6, fieldDps: 11 },
+  'grindstone': { archetype: 'field', manaCost: 17, cooldownMs: 8000, castRange: 8, areaSize: 3, areaSecs: 7, fieldDps: 4.5 },
+  'dust-lung': { archetype: 'field', manaCost: 13, cooldownMs: 8000, castRange: 10, areaSize: 2.5, areaSecs: 6, fieldDps: 5 },
   'quake-step': { archetype: 'status', manaCost: 14, cooldownMs: 8000, castRange: 6, areaSize: 5, areaSecs: 2.5, statuses: ['rooted'] },
   // "Every fragment carries an electric bite" — fragmentation IS the chain the sim already has, just
   // at a short hop instead of Chain Lightning's long one. Same field, different reach.
@@ -364,7 +364,7 @@ const BUILDS: Record<string, Build> = {
   // status carries the blind, and no field carries statuses today. Shipping the scour keeps it
   // distinct from Fog Bank (which is the pure blind) instead of making two identical blind clouds.
   // ⚠ One hook (a field applying statuses on tick, as terrain already does at cast) finishes it.
-  'sandstorm-veil': { archetype: 'field', manaCost: 16, cooldownMs: 11000, castRange: 9, areaSize: 5, areaSecs: 6, fieldDps: 13 },
+  'sandstorm-veil': { archetype: 'field', manaCost: 16, cooldownMs: 11000, castRange: 9, areaSize: 5, areaSecs: 6, fieldDps: 7 },
   // ── ★ SYSTEM 4: THE SKIRMISHER VERBS (2026-08-15) ───────────────────────────────────────────
   // The 08-14 Apex cross-reference measured the table at **1 mobility cast in 47** and found canon
   // had already written the whole missing role — these three plus Gate, all registered, all unbuilt.
@@ -406,7 +406,7 @@ const BUILDS: Record<string, Build> = {
   // "Muscles twitch, manatech sputters. DISABLING, NOT LETHAL" — canon forbids damage here. Same pair
   // as Shackle, but thrown wide and held long instead of clamped on one target.
   'static-field': { archetype: 'status', manaCost: 15, cooldownMs: 10000, castRange: 9, areaSize: 4.5, areaSecs: 5, statuses: ['rooted', 'disarmed'] },
-  'pressure-drop': { archetype: 'field', manaCost: 19, cooldownMs: 10000, castRange: 10, areaSize: 5, areaSecs: 6, fieldDps: 14 },
+  'pressure-drop': { archetype: 'field', manaCost: 19, cooldownMs: 10000, castRange: 10, areaSize: 5, areaSecs: 6, fieldDps: 6.5 },
 
   // ── The doubled-focus seven (canon 2026-08-15, built 2026-08-17) ─────────────────────────────
   // ★ QUICKFORM IS THE ONE THAT MATTERS AND IT IS THE CHEAPEST THING IN THIS FILE. Manalic was the
@@ -435,7 +435,7 @@ const BUILDS: Record<string, Build> = {
   // "It does not aim, which is the point: you spoil a space rather than strike into it. Feeds on the
   // caster's temper and BURNS MANA FAST." So: the widest field in the game, the lowest damage in it,
   // and the highest cost of any tactical. A Squall that hurt would be a worse Firewall.
-  squall:    { archetype: 'field', manaCost: 24, cooldownMs: 9000, castRange: 10, areaSize: 6.5, areaSecs: 5, fieldDps: 9, fieldStopsShots: false },
+  squall:    { archetype: 'field', manaCost: 24, cooldownMs: 9000, castRange: 10, areaSize: 6.5, areaSecs: 5, fieldDps: 8, fieldStopsShots: false },
   // "One shard, no spread — it pierces where a thrown stone would only break." The fastest and hardest
   // single bolt a tactical gets; Gale Cutter is cheaper and quicker, Crystal Barrage throws more.
   // Paying for one perfect shard is the Gem keeper's whole posture.
@@ -532,10 +532,10 @@ const BUILDS: Record<string, Build> = {
   'vein-puppet': { archetype: 'status', manaCost: 38, cooldownMs: 20000, castRange: 10, areaSize: 3.5, areaSecs: 5, statuses: ['rooted', 'disarmed'] },
   // "Takes one side of a street and leaves the other untouched" — wide and hot, and NOT cover: an
   // inferno you can shoot through is a place you deny, not a place you hide.
-  'firestorm': { archetype: 'field', manaCost: 44, cooldownMs: 24000, castRange: 12, areaSize: 7, areaSecs: 10, fieldDps: 22, fieldStopsShots: false },
+  'firestorm': { archetype: 'field', manaCost: 44, cooldownMs: 24000, castRange: 12, areaSize: 7, areaSecs: 10, fieldDps: 8, fieldStopsShots: false },
   // "Shredding within, UNREACHABLE FROM WITHOUT" — the only damaging field that also eats shots, which
   // is what makes it containment rather than a bigger Firestorm.
-  'cyclone-cage': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 5, areaSecs: 9, fieldDps: 18, fieldStopsShots: true },
+  'cyclone-cage': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 5, areaSecs: 9, fieldDps: 9, fieldStopsShots: true },
   // "Sealed on all six faces" — a solid block, deliberately. This one BURIES where Cordon contains,
   // and it is Stone's own ultimate, needing no second rune.
   'pillar-tomb': { archetype: 'terrain', manaCost: 38, cooldownMs: 20000, castRange: 9, areaSize: 3, areaSecs: 12, shape: 'block', shapeHeight: 4 },
@@ -553,6 +553,12 @@ const BUILDS: Record<string, Build> = {
 
 const MOVE_BY_ID = new Map<string, KeeperMove>(KEEPER_MOVES.map((m) => [m.id, m]))
 
+// ★ 2026-09-24 POWER BUDGET (Alex: the 20% band). Twelve fieldDps / surgeMult values above were cut
+// so no single move lifts a keeper more than 20% over the gun-only newcomer in any of the four
+// budget fights (`power-budget.ts`; `power-budget.test.ts` fails on a move over the band). Before:
+// firewall 12 · drowning-grasp 18 · flashpoint 26 · grindstone 15 · dust-lung 11 · sandstorm-veil 13
+// · pressure-drop 14 · squall 9 · firestorm 22 · cyclone-cage 18 (fieldDps) · flame-infusion 1.5 ·
+// forge-fist 1.7 (surgeMult). Tune a move by its budget, never the budget by a move.
 export const NO_CAST: CastSpec = { ...BASE, moveId: '', label: '', tier: 'tactical', archetype: 'unbuilt', why: 'empty slot' }
 
 /** Resolve a move id to its cast spec. Unknown id → an empty spec (never throws in the frame loop). */
