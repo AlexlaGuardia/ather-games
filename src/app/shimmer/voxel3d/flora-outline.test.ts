@@ -19,7 +19,7 @@
 // exist, that the injection CHANGED the source, that both programs bend by the same number, and
 // that the border's matrix is the plant's matrix. The pixels are Alex's call and always were.
 import * as THREE from 'three'
-import { createFloraRenderer, floraMatrix, floraFruitLeavesGeo, floraFruitBerriesGeo, partGeometry, FLORA_SWAY, FLORA_PARTS } from './flora-mesh'
+import { createFloraRenderer, floraMatrix, floraFruitLeavesGeo, floraFruitBerriesGeo, partGeometry, FLORA_SWAY, FLORA_PARTS, SHROOM_SHAPES, shroomShapeOf } from './flora-mesh'
 import { FLORA } from '../voxel/flora'
 import { MAT } from '../voxel/depth'
 
@@ -277,6 +277,24 @@ const meshes = () => r.group.children.filter(c =>
       ok((m.material as THREE.Material).depthWrite === false,
         `kind ${kind}: outline writes depth — it will punch a hole in what it marks`)
     }
+  }
+  r.clearHighlight()
+}
+
+// ── ★ A MUSHROOM'S BORDER IS ITS OWN SHAPE'S (sculpt queue ③, 2026-09-24) ─────────────────────────
+// Four shapes, four hull pairs. The border must light exactly the pair for the shape standing there —
+// the same `shroomShapeOf` the pool used — and never a second pair: a bell's hull round a bun is a
+// black cap floating over a mushroom that is not that shape.
+{
+  const hulls = r.group.children.filter(c => (c as THREE.InstancedMesh).isInstancedMesh
+    && ((c as THREE.InstancedMesh).geometry as THREE.BufferGeometry).type === 'LatheGeometry'
+    && ((c as THREE.InstancedMesh).material as THREE.Material).type === 'MeshBasicMaterial') as THREE.InstancedMesh[]
+  ok(hulls.length === SHROOM_SHAPES.length * 2, `one hull pair per shape (${hulls.length})`)
+  for (let shape = 0; shape < SHROOM_SHAPES.length; shape++) {
+    let v = 0; for (let i = 1; i < 4000; i++) if (shroomShapeOf(i / 4001) === shape) { v = i / 4001; break }
+    r.setHighlight(FLORA.MUSHROOM, 5, 40, 7, v, true)
+    const lit = hulls.map((h, i) => h.count > 0 ? i : -1).filter(i => i >= 0)
+    ok(lit.length === 2 && lit[0] === shape * 2 && lit[1] === shape * 2 + 1, `${SHROOM_SHAPES[shape].name}: exactly its own hull pair lights (${lit})`)
   }
   r.clearHighlight()
 }
