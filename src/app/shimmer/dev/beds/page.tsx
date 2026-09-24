@@ -32,7 +32,8 @@ import { createLightUniforms } from '../../voxel3d/light-glsl'
 import { createBedRims } from '../../voxel3d/bed-rim'
 import { createBedSigns } from '../../voxel3d/bed-sign'
 import { createWetPatches } from '../../voxel3d/wet-patch'
-import { createFloraRenderer } from '../../voxel3d/flora-mesh'
+import { createFloraRenderer, shroomShapeOf, SHROOM_SHAPES } from '../../voxel3d/flora-mesh'
+import { FLORA } from '../../voxel/flora'
 import { BED_CROP_IDS, bedVariant, type PlantedSpot, type PlantedStage } from '../../voxel3d/planted-feed'
 import { BED_WOODS } from '../../voxel3d/garden'
 import { MAT } from '../../voxel/depth'
@@ -69,7 +70,7 @@ function Ground({ tiles, light, cells, wood }: { tiles: ReturnType<typeof makeTi
   return <mesh geometry={geo} material={textured.material} />
 }
 
-function Shelf({ crop, wood, wet, gap }: { crop: string; wood: number; wet: boolean; gap: number }) {
+function Shelf({ crop, wood, wet, gap, shroom }: { crop: string; wood: number; wet: boolean; gap: number; shroom: boolean }) {
   const { gl } = useThree()
   const tiles = useMemo(() => makeTileArray(TILE, gl), [gl])
   const light = useMemo(() => createLightUniforms(), [])
@@ -92,10 +93,26 @@ function Shelf({ crop, wood, wet, gap }: { crop: string; wood: number; wet: bool
       const c = cells[i + 1]
       return { x: c.x, y: c.y, z: c.z, cropId: crop, stage, variant: bedVariant(c.x, c.y, c.z) }
     })
+    // ★ `?shroom=1` (2026-09-24, sculpt queue ③): the mushroom family instead of the crop — every
+    // shape twice along the row, off the SHIPPED wild feed (`sync` + a probe), so the pools, tints,
+    // placement and scale are the world's own. The variant is searched per shape, never retyped.
+    if (shroom) {
+      signs.set([]); flora.setPlanted([])
+      const want = (shape: number, k: number) => { let n = 0
+        for (let i = 1; i < 4000; i++) { const v = i / 4001; if (shroomShapeOf(v) === shape && n++ === k * 7) return v } return 0 }
+      const at = new Map<string, number>()
+      cells.forEach((c, i) => { if (i < SHROOM_SHAPES.length * 2) at.set(`${c.x},${c.z + 3}`, want(i % SHROOM_SHAPES.length, i < SHROOM_SHAPES.length ? 0 : 60)) })
+      flora.invalidateAll()
+      flora.sync([{ key: 'shelf', x0: 0, z0: 0 }], 1337, (x, z) => {
+        const v = at.get(`${x},${z}`)
+        return v === undefined ? null : { y: BED_Y - 1, kind: FLORA.MUSHROOM, variant: v, mat: MAT.MUSHROOM, ground: MAT.TOPSOIL }
+      })
+      return
+    }
     signs.set(spots)
     flora.setPlanted(spots)
     wetPatches.set(wet ? cells.map(c => ({ x: c.x, y: c.y, z: c.z, fraction: 0.8 })) : [])
-  }, [rims, signs, flora, wetPatches, cells, crop, wood, wet])
+  }, [rims, signs, flora, wetPatches, cells, crop, wood, wet, shroom])
 
   return (
     <>
@@ -115,6 +132,7 @@ export default function BedsPage() {
   const [wet, setWet] = useState(q?.get('wet') === '1')
   const [gap, setGap] = useState(q?.get('gap') === '1' ? 1 : 2)
   const [eye, setEye] = useState(q?.get('eye') === '1')
+  const shroom = q?.get('shroom') === '1'
   const [view, setView] = useState<ShelfView>({ yaw: Number(q?.get('yaw') ?? -0.9), pitch: Number(q?.get('pitch') ?? 0.42), dist: Number(q?.get('dist') ?? 12) })
   const wood = BED_WOODS.find(w => w.wood === woodId)!.material
   const target = useMemo(() => new THREE.Vector3(2 + ((CELLS - 1) * gap) / 2 + 0.5, BED_Y + 0.8, (SEC >> 1) + 0.5), [gap])
@@ -133,7 +151,7 @@ export default function BedsPage() {
         <hemisphereLight args={[0xffffff, 0x445566, 1.1]} />
         <directionalLight position={[5, 10, 3]} intensity={0.8} />
         <Rig target={target} view={view} eye={eye} onView={setView} floor={BED_Y} />
-        <Shelf crop={crop} wood={wood} wet={wet} gap={gap} />
+        <Shelf crop={crop} wood={wood} wet={wet} gap={gap} shroom={shroom} />
         {/* a keeper for scale, standing on the turf before the first bed */}
         <mesh position={[0.5, BED_Y + BODY_H / 2, (SEC >> 1) + 0.5]}><capsuleGeometry args={[BODY_R, Math.max(0.01, BODY_H - BODY_R * 2), 4, 8]} /><meshLambertMaterial color="#d98f3c" /></mesh>
       </Canvas>
