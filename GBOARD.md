@@ -13,6 +13,41 @@ the Arcade frame.
 
 
 
+## 🌊 Shimmer — **SEASON EXPEDITIONS: THE HOLD (ROUND SURVIVAL) + THE SEASON'S COLOSSUS** (2026-09-24, nolmir lane `3f4d6f7d`, design only) · *Last touched 2026-09-24 — DESIGN, nothing built. Canon gap filed for the boss.*
+
+**Left off:** Alex: *"each season a planet is featured... a featured giant boss as well as a round based survival mode"*, and the feel is **CoD Zombies** — the round progression, barricades, gear that charges as you crush the flooded, doors that open the map — with our own twist on perks / weapons / ammo. Boss: *"a brand new player (once they reach this stage) can challenge the colossal flood and if they are skilled enough defeat it.. damn near impossible alone.. a huge achievement."* Canon already rules season = planet, Live/Saved/Lost, the Signal, the Hush Draught, chord of three (`two-lines-two-games.md`). The Nolmir idle sim (`nolmir/lib/expedition.ts`) is a WORKING prototype of the round loop (flood habits drift/swift/bulk/behemoth, salvage, per-tier best wave) — port its shape, not its meta.
+
+**The mapping (Alex: "keep all these ideas"):**
+| Zombies | Ours | Why |
+|---|---|---|
+| Rounds | the tide rising | the season clock IS a rising tide, in miniature |
+| Barricades | seals you mend at the landing | hold-the-breach, the sim's posts |
+| Points | **salvage** (in-run, resets) | the sim's currency already |
+| Doors open the map | the drowned node's own gates | pushing deeper; mazes/puzzles = inside of a Crucible |
+| Mystery box / wall-buys | the host's **prize table** | canon: prizes are TAKEN from it |
+| Charging gear | charges on crushing the flooded | rewards aggression |
+| Perks | in-run perk stations + home brews (rule below) | |
+| Round clock | **the Hush Draught** | the run ends when you go LOUD, not only when you die; carry-in vs find-inside |
+
+**Decisions:**
+- ★ **ALL POWER IS IN-RUN.** A new player walks in equal. Home brews = utility/sidegrade only (longer hush, faster seal mend, delayed self-revive, salvage sight), NEVER raw damage/hp. Raw power = in-run perk stations bought with salvage, lost at run end. The Nolmir workshop's permanent floor does NOT port.
+- ★ **BOSS = SKILL CHECK, NOT HP SPONGE. NO HP SCALING BY PARTY SIZE.** Phases that demand positions one body can't hold at once. Three = roles; solo = legendary. Reward = a mark of the deed (title + the kill on the world's archive page / the Signal), never power.
+- **Each season's colossus gets its OWN gimmick.** Starter bank (Alex: keep these):
+  1. Twin weak points on opposite sides that must both be hit inside one window.
+  2. A pin/grab on whoever holds its attention; a second player has to break it.
+  3. An add-pour phase: someone holds a seal or the landing floods while the others hit.
+- Chord = three (canon three-to-a-door), not Zombies' four.
+
+**Parked / waiting on canon:** `CANON_GAPS` [OPEN] *The season's colossus* — raised-by-the-host (fits "the minions are the tide's body") vs reads-as-the-tide (guardrail 1); beside or instead of the Crucible's capstone trio; what a player may CALL it.
+
+**Next:**
+- First playable slice (no boss, no perks): ONE small landing in play3d, barricades, two doors, escalating rounds, one wall-buy gun, the charging gear, a draught timer. If holding the landing isn't fun, no boss fixes it.
+- Magii's ruling → boss prototype #1 with gimmick 1.
+
+**Files:** `nolmir/lib/expedition.ts` (prototype to port from) · `shimmer/play3d/metrics.ts` (map grammar) · canon `game/two-lines-two-games.md`.
+
+---
+
 ## 🌅 Shimmer — **THE ATHER SKY: THE CORE BANKS LIKE A COAL** (2026-09-23, hub `238e789e`) · *Last touched 2026-09-23 — ✅ **PROD** `68a9280` in build `766WE3y0Cnvv5qk0Dwi28`, pushed. core-sky 34/0 (mutation-checked) · hour-light 22/0 · hollow-look 111/0 · render-audit 316/0 · dev-eye/dev-pages green · tsc 7 (baseline).*
 **Left off:** Alex asked for a sky that "compliments our world beautifully both the night and day with transitions". Canon gap → Magii ruled it the same hour (athernyx `c69645b`, `world/ather.md` › *The sky, looked at*). Built: the Earth sun path is GONE; the Core hangs fixed at the old noon spot (`voxel3d/core-sky.ts`, so noon is unchanged) and banks in place — blaze → gold → ember → a dark coal with live veins + warm rim, turning once per 10 min, breathing ±7%/9s, the whole body at once (never a crescent). Flecks = its far breath, warm-white, faded by the hour, denser at the horizon. The dome's rim kindles silver as the Core dims (the hand-off). Key light warms to gold as it banks. Bench: `/shimmer/dev/sky` (the shipped rig; Dawn/Day/Dusk/Night + a 48s day-lapse). Headless check: `scripts/sky-shots.mts [out] --port N` (fails on any console error).
 **Next:** ~~Alex look-call on `/shimmer/dev/sky`~~ ✅ "looks pretty good" (09-23) · ~~the cloud-wall BLOCKS kindle at night~~ → **LIVE** `6bba561` (PROD `_IXM92ISVyBcQGHmQnRkc`): `EMISSIVE[CLOUD_WALL] = -KINDLED_WALL`, negative = the night's glow, via `shimmerGlow()` on the lit window's night factor; glade wall midnight luma 71→116. ⚠ **the HOME PLOT's wall is PACKED_CLOUD** (`plot.ts` DEFAULT `materials.wall: 1`, a placeholder never switched; glade + Wilds bubble use CLOUD_WALL), → **SWITCHED** `bccaa2c` (PROD `mi0y2frdx3e2wVr8GVN3e`, Alex's call): `wall: 56`; woolly by day, kindles at night (midnight 62→114); cluster-space.test reads `plot.materials.wall` now · ~~the night silver key light moves toward the perimeter~~ → **LIVE** `a4e5aed` (PROD `HTNJIvhNc1lH0j8oYQxDo`): two low opposite lights (`SILVER_POSITIONS`, ~21°); plot midnight sides 32→39, tops 57→53; ⚠ Hollow/ground at midnight (`dev/grey`) moved 1.10 (red) → 1.44 — distinct now, pale on dark — ✅ **Alex 09-24: "these will have to work for now… you got the color right"**; Hollows are parked, don't spend more on their look yet · the day bloom reads a touch cool-white against the blue — warm its outer ring if Alex agrees.
