@@ -13,8 +13,9 @@
 
 import { HOLD_FLOORS, HOLD_COLS, HOLD_ROWS, type FloorDef } from './hold-floors'
 
-/** Blocks from one floor to the next. Low enough to read as a storey, not a hall. */
-export const STOREY = 4
+/** Blocks from one floor to the next. Alex 09-25: 4 read low, "go taller … like a 10". A ramp must be
+ *  at least this long, so raising it lengthens every ramp in `hold-floors.ts`. */
+export const STOREY = 10
 /** The bottom floor's height. The air below it is where the flooded climb up from. */
 export const BASE_Y = STOREY
 
