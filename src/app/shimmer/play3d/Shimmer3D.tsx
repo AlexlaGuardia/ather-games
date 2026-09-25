@@ -1516,6 +1516,10 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // ── VERTICAL: gravity + jump + smooth ground-follow ──
       const surf = resolveStand(ctx, Math.round(p.x), Math.round(p.z), p.y / STEP)
       const floorY = (surf ? surf.y : (heights[Math.round(p.z)]?.[Math.round(p.x)] ?? 0)) * STEP
+      // THE HOLD stacks floors: with nothing in reach (arriving through its door, or a reload, starts at
+      // ground height) the fallback is the cell's HIGHEST floor, and easing up to it would be caught by
+      // the first floor passed on the way. Snap instead, so arrival lands on the roof where the run starts.
+      if (!surf && zoneIdRef.current === HOLD_ZONE && floorY > p.y + STEP) { p.y = floorY; vy.current = 0; airborne.current = false }
       const jumpKey = !!k[' '] || jumpRef.current
       jumpRef.current = false  // consume the touch edge
       const jumpEdge = jumpKey && !jumpHeld.current
