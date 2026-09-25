@@ -37,7 +37,8 @@ ok(map.exit.lv === 2 && map.grid[map.exit.z][map.exit.x] === HOLD_TILE.WARP, 'th
 ok(STOREY > LEDGE_CLIMB - 2, 'a storey is more than a climb reaches from the floor (walls fill it, so no keeper climbs out of a floor)')
 ok(map.windows.every(w => w.spawnH < w.h), 'the flooded climb UP the face to every window')
 ok(map.windows.every(w => kindAt(B, w.lv, Math.round(w.inside.x), Math.round(w.inside.z)) === K.FLOOR), 'every window opens onto its floor')
-ok(map.gates.map(g => g.cost).join() === '250,750,1000,1000', 'four gates: the stair housing 250, the middle floor 750, the gardens 1000')
+ok(map.gates.map(g => g.cost).join() === '250,750,1000,1000,1000', 'five gates: the stair housing 250, the cubicle farm 750, the executive wing and the gardens 1000')
+ok(B.stairs.every(st => st.flights.length === 2 && st.landings.length === 1), '★ both stairs turn a corner')
 ok(map.cache.room !== map.start.room, 'the draught cache is behind a gate')
 ok(B.stairs.length === 2 && B.stairs.every(st => st.y1 - st.y0 === STOREY), 'two stairs, each climbing one storey')
 const roofStair = B.stairs.find(st => st.lv === 1)!

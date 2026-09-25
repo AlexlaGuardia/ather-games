@@ -86,7 +86,7 @@ export const HOLD_TUNING = {
   tearSec: 1.3,          // seconds a flooded body takes to tear one plank
   mendSec: 0.55,         // seconds of holding E per plank mended
   mendReach: 1.9,        // how close to a window's inside cell you must stand to mend it
-  gateCost: { A: 250, B: 500, E: 750, C: 1000, D: 1000 } as Record<string, number>, // A (the top floor's north wing — cheap: room to train is the first buy), B (its south wing), E (the middle floor's halls), C/D (the gardens)
+  gateCost: { A: 250, E: 750, G: 1000, C: 1000, D: 1000 } as Record<string, number>, // A (the roof's stair housing — cheap: room to train is the first buy), E (the office's cubicle farm), G (its executive wing + the stair down), C/D (the gardens)
   gateCostDefault: 750,  // a gate letter with no price of its own
   rackCost: 500,         // the SPITTER off the wall
   rackWeapon: 'spitter',
