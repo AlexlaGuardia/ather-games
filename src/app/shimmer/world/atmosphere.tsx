@@ -50,11 +50,22 @@ const GREYING: Mood = {
   mote: '#c8bd9e', moteCount: 90, moteOpacity: 0.5,     // sparse, guttering
 }
 
+// UNDER THE MOUNTAIN — the Passage (2026-09-25). Canon: *"Lantern-lit. Surprisingly warm."* No sky reaches
+// it, so the mood is its own at every hour (NIGHT_MOOD maps it to itself): lamplight does not follow the
+// sun. Dark warm umber, a close haze that swallows the far end of a tunnel, dust motes in the lamplight.
+// Mortal side, so none of this is the gold ⇄ grey axis — that axis is the Ather's.
+const UNDERGROUND: Mood = {
+  bg: '#140e0a', fog: '#2a1d12', fogDensity: 0.022,
+  hemiSky: '#ffcf8f', hemiGround: '#4a3020', hemiIntensity: 1.0,
+  mote: '#ffcf8a', moteCount: 70, moteOpacity: 0.55,
+}
+
 // Only zones that are UNCONDITIONALLY frayed/accented get a non-default mood. Everything
 // else is the tended heart. (Liberation-driven grey→gold is a later hook, not Phase 1.)
 const ZONE_MOOD: Record<string, Mood> = {
   'moonwell-glade': MOONWELL,
   'the-outfields': GREYING,
+  'the-passage': UNDERGROUND,
 }
 const moodFor = (zoneId: string): Mood => ZONE_MOOD[zoneId] ?? GOLD
 
@@ -96,7 +107,7 @@ const GREYING_NIGHT: Mood = {
   mote: '#9a968a', moteCount: 90, moteOpacity: 0.55,
 }
 const NIGHT_MOOD = new Map<Mood, Mood>([
-  [GOLD, GOLD_NIGHT], [MOONWELL, MOONWELL_NIGHT], [GREYING, GREYING_NIGHT],
+  [GOLD, GOLD_NIGHT], [MOONWELL, MOONWELL_NIGHT], [GREYING, GREYING_NIGHT], [UNDERGROUND, UNDERGROUND],
 ])
 
 const mixNum = (a: number, b: number, t: number) => a + (b - a) * t

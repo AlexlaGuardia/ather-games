@@ -7,7 +7,8 @@
  * › `the-passage`), and the voxel world's crossing OUT to Rune Hold is being painted by the hub lane as
  * this is written. Until a keeper can walk there, the shelves open through an owner-gated console door
  * (`/market`) so the economy can be TRIED — the same reason `/brew` exists beside the cauldron block.
- * ★ AND THE REAL HOST ALREADY EXISTS: the tile Passage's trader (`npcs3d.ts` › `passage-trader`) has
+ * ★ AND THE REAL HOST ALREADY EXISTS: the Passage's STALLS (`passage-hall.ts`, 2026-09-25; before that the lone
+ * `passage-trader`) — each opens this panel with its own `shelves`. The trader has
  * opened the scroll rack from `Shimmer3D.tsx` since August; it opens THIS panel now, and the rack-only
  * `PassageRack.tsx` is retired into the rack section below (its canon note travels with it).
  *
@@ -43,8 +44,9 @@ import {
   buyGem, sell, teacherFor, takeLesson, type Weekday,
   vesselRackFor, buyFromVesselRack, type RackVessel,
 } from './passage'
+import type { ShelfKey } from './passage-hall'
 
-export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange, onClose }: {
+export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange, onClose, shelves, title }: {
   items: React.RefObject<Inventory | null>
   owned: readonly string[]
   birth: string | null
@@ -53,7 +55,12 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   dayOverride: Weekday | null
   onChange: () => void
   onClose: () => void
+  /** One stall's shelves (`passage-hall.ts` roster). Omitted = every shelf, the `/market` console view. */
+  shelves?: readonly ShelfKey[]
+  /** the stall's name for the plate; omitted = "The Passage" */
+  title?: string
 }) {
+  const show = (k: ShelfKey) => !shelves || shelves.includes(k)
   const [note, setNote] = useState<string | null>(null)
   const [, bump] = useState(0)
   const cycle = cycleAt(nowMs)
@@ -135,7 +142,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   )
 
   return (
-    <HearthFrame title="The Passage" maxWidth={560} onClose={onClose} fixed backdropClass="z-40" bodyClass="p-4 pt-6 text-[12px]">
+    <HearthFrame title={title ?? 'The Passage'} maxWidth={560} onClose={onClose} fixed backdropClass="z-40" bodyClass="p-4 pt-6 text-[12px]">
         <div className="mb-3 flex items-baseline gap-2 pr-6">
           <span className="hk-label text-[12px] hk-faint">{day}{dayOverride ? ' · dev preview' : ''}</span>
           <span className="tabular-nums ml-auto text-[12px] hk-ember">{marks} Marks</span>
@@ -144,7 +151,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
           Rotating spots. One leaves, another takes their place. Merchants ride on {MARKET_DAY} ({inDays(MARKET_DAY)}); the masters hold on {TEACHING_DAY} ({inDays(TEACHING_DAY)}). The week: {WEEK.join(' · ')}.
         </div>
 
-        <Shelf title="The scroll racks" when={`every day · the word, bought · the traders change over in ${rackMins}m`}>
+        {show('rack') && <Shelf title="The scroll racks" when={`every day · the word, bought · the traders change over in ${rackMins}m`}>
           {/* ★ THE UNREADABLE ROW IS THE FEATURE (ported from the retired PassageRack.tsx): canon rules
               "the same rack means something different to every keeper who walks past it". An unreadable
               scroll is DRAWN, dimmed, with the runes it is written in named — the rack as a map of where
@@ -162,25 +169,25 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               </div>
             )
           })}
-        </Shelf>
+        </Shelf>}
 
-        <Shelf title="The teacher's bench" when={`${TEACHING_DAY} · the word, given`}>
+        {show('teacher') && <Shelf title="The teacher's bench" when={`${TEACHING_DAY} · the word, given`}>
           <Row left={<span style={{ color: glow(teacher.runes[0] ?? '') }}>{teacher.name}</span>}
                mid={`${teacher.tier} · ${teacher.runes.map(runeName).join(' + ') || 'no rune'} · free if you can read it`}
                action={onLesson} disabled={day !== TEACHING_DAY || book.learned.includes(teacher.id)}
                label={day !== TEACHING_DAY ? `holds ${inDays(TEACHING_DAY)}` : book.learned.includes(teacher.id) ? 'known' : 'sit'} />
-        </Shelf>
+        </Shelf>}
 
-        <Shelf title="The merchants' tray" when={`${MARKET_DAY} · the letters, bought`}>
+        {show('gems') && <Shelf title="The merchants' tray" when={`${MARKET_DAY} · the letters, bought`}>
           {tray.map(rune => (
             <Row key={rune} left={<span style={{ color: glow(rune) }}>{runeName(rune)} gem</span>}
                  mid={owned.includes(rune) ? 'a rune you hold' : gemPrice(rune, birth) === 60 ? 'specialized — off your lanes' : 'on your lane'}
                  price={gemPrice(rune, birth)} action={() => onBuyGem(rune)}
                  disabled={day !== MARKET_DAY} label={day !== MARKET_DAY ? `rides ${inDays(MARKET_DAY)}` : 'buy'} />
           ))}
-        </Shelf>
+        </Shelf>}
 
-        <Shelf title="The counter" when={`${MARKET_DAY} · runestones, sold`}>
+        {show('counter') && <Shelf title="The counter" when={`${MARKET_DAY} · runestones, sold`}>
           {Object.entries(SELL_PRICES).map(([id, each]) => {
             const have = bag ? countItem(bag, id) : 0
             return (
@@ -189,9 +196,9 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
                    label={day !== MARKET_DAY ? `buys ${inDays(MARKET_DAY)}` : 'sell one'} />
             )
           })}
-        </Shelf>
+        </Shelf>}
 
-        <Shelf title="The vessel shelf" when="every day · the paper, cut to order">
+        {show('cutter') && <Shelf title="The vessel shelf" when="every day · the paper, cut to order">
           {/* ★ MADE FOR ONE WORD (Alex, 2026-09-04): *"each vessel is unique that its made the word and none
               other."* So the shelf does not sell "a bracelet"; it cuts one for a word you already hold, with
               exactly that word's seats. Words that already have a vessel (worn or in the satchel) are not
@@ -221,9 +228,9 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               )
             })
           })}
-        </Shelf>
+        </Shelf>}
 
-        <Shelf title="The second-hand rack" when="every day · someone else's word">
+        {show('secondhand') && <Shelf title="The second-hand rack" when="every day · someone else's word">
           {/* ── ★★★ THE RACK IS A WALL OF OTHER PEOPLE'S PURPOSES (canon 2026-09-05) ──────────────
               *"Every vessel on it was cut for a word somebody meant to write."* The stock is rolled
               with NO reference to this keeper, so most rows are useless to them — that is the
@@ -268,7 +275,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               )
             })
           })()}
-        </Shelf>
+        </Shelf>}
 
         {note && <div className="mt-2 rounded border hk-rule-ember hk-fill-ember px-2.5 py-1.5 text-[12px] hk-ember">{note}</div>}
         <div className="mt-2 text-[12px] hk-faint">Ultimates are never on the shelves.</div>

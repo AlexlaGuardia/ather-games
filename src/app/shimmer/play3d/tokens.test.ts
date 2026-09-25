@@ -43,8 +43,9 @@ const DIR = join(process.cwd(), 'src/app/shimmer/play3d')
 // Shimmer3D.tsx, page.tsx, RemotePlayers.tsx converted 2026-09-23 by the scene-palette pass (radii snapped to the
 // ladder, ≤1px each); npcs3d.ts LEFT the list the same day by holding no colour any more (its tints are `npcTint`): what their
 // menus did not already take from the hearth, they now take from `scene-palette.ts` — every value moved, none chosen.
-const CONVERTED = ['GfxPanel.tsx', 'MoveBook.tsx', 'page.tsx', 'PartyPanel.tsx', 'PassagePanel.tsx', 'RemotePlayers.tsx',
-  'Shimmer3D.tsx', 'StationMenus.tsx', 'TremorRing.tsx', 'vessel-art.tsx', 'WorldMap.tsx']
+// ArcadeCabinet.tsx born clean 2026-09-25 (its colours are `scene-palette.ts` › passage; PassageScene.tsx holds none).
+const CONVERTED = ['ArcadeCabinet.tsx', 'GfxPanel.tsx', 'MoveBook.tsx', 'page.tsx', 'PartyPanel.tsx', 'PassagePanel.tsx',
+  'RemotePlayers.tsx', 'Shimmer3D.tsx', 'StationMenus.tsx', 'TremorRing.tsx', 'vessel-art.tsx', 'WorldMap.tsx']
 
 /**
  * Still holding raw literals. NOT an exemption — a worklist with a red light on it (assert B).

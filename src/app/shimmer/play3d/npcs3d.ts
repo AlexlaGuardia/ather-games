@@ -9,7 +9,11 @@ export interface NPC3D {
   tileX: number
   tileY: number
   color: string
-  kind: 'keeper' | 'moglin'
+  /** `stall` and `cabinet` are PASSAGE fixtures: `PassageScene` draws them, not `NPCMarkers`, and the
+   *  anchor is the solid counter/cabinet cell so a keeper reaches it from the floor in front. */
+  kind: 'keeper' | 'moglin' | 'stall' | 'cabinet'
+  /** the prompt's verb (`E — <verb> <name>`); defaults to "talk to" */
+  verb?: string
   defeatedFlag?: string // save-flag that, once set, removes this NPC from the world (e.g. a freed hold)
   requiredFlag?: string // save-flag that must be set before this NPC appears (gates the hold order)
 }
@@ -37,17 +41,10 @@ export const NPCS_3D: NPC3D[] = [
   // TODO(hold-placement): canon home is the `brack-hold` zone (via vetch-hold's gated east door).
   // Parked at the south end of mana-springs (65,92) because brack-hold isn't baked in 3D yet — move here.
   { id: 'brack', name: 'Brack', zone: 'mana-springs', tileX: 65, tileY: 92, color: npcTint.brack, kind: 'moglin', requiredFlag: 'freedVetch', defeatedFlag: 'freedBrack' },
-  // ── The Passage's trader (2026-08-13) — the face of the scroll rack ──────────────────────────
-  // Canon (`world/rune-hold.md` § The Passage): traders take ROTATING spots, "one leaves, another
-  // takes their place. No permanent claims." So this is deliberately not a character: one id, one
-  // table, and the stock under it turns over with the day (`scroll-market.ts`). The person you meet
-  // is whoever is holding that spot this cycle, which is exactly what canon describes.
-  //
-  // ⚠ NAMED FOR THE ROLE, NOT THE PERSON — "a trader" is the canon-safe version. Giving them a name
-  // and a history would be authoring a Passage character, which is Magii's, not mine. The colour is
-  // a placeholder the same way voxel-Greg's boxes are; the look is Alex's call when the Passage gets
-  // its real interior (which is CONTINUOUS geometry, not this tile shell — see GBOARD).
-  { id: 'passage-trader', name: 'A trader', zone: 'the-passage', tileX: 12, tileY: 9, color: npcTint.trader, kind: 'keeper' },
+  // ── The Passage's stalls + cabinets are generated with its layout (see `PASSAGE_NPCS` below). The
+  // lone 08-13 `passage-trader` retired into the scroll-rack stall on 2026-09-25: its canon note (traders
+  // are ROLES in rotating spots, never named people) now lives over the roster in `passage-hall.ts`.
+  ...passageNpcs(),
 ]
 
 // ── The trader's lines. Canon's register for the place: "if you know, you know" — no pitch, no
@@ -66,6 +63,19 @@ export const TRADER_LINES: string[] = [
 // is one world truth (`defeated`/flags key on the id).
 import { REGION_FILES, REGION_WIP_PREFIX } from '../world/region-maps'
 import { npcTint } from './scene-palette'
+import { PASSAGE, isTravellerBay } from './passage-hall'
+
+/** One NPC per stall with shelves, one per cabinet. A travelling-trader bay with nobody in it is not an
+ *  NPC at all: an empty counter has no one to talk to. */
+function passageNpcs(): NPC3D[] {
+  const stalls = PASSAGE.stalls.filter(s => !isTravellerBay(s)).map((s): NPC3D => ({
+    id: s.id, name: s.name, zone: 'the-passage', tileX: s.x, tileY: s.z, color: npcTint.trader, kind: 'stall', verb: 'browse',
+  }))
+  const cabinets = PASSAGE.cabinets.map((c): NPC3D => ({
+    id: c.id, name: c.game.title, zone: 'the-passage', tileX: c.x, tileY: c.z, color: npcTint.trader, kind: 'cabinet', verb: 'play',
+  }))
+  return [...stalls, ...cabinets]
+}
 for (const f of Object.values(REGION_FILES)) {
   for (const n of [...NPCS_3D]) {
     const s = f.sources[n.zone]

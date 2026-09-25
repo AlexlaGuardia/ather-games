@@ -4,6 +4,7 @@
 import SAVED from './heightmaps.json'
 import { sparseGrid } from './wilds-world'
 import { parseLanding } from '../play3d/hold'
+import { PASSAGE } from '../play3d/passage-hall'
 
 const SAVED_HEIGHTS = SAVED as Record<string, number[][]>
 
@@ -17,6 +18,8 @@ const DEMO: Record<string, number[][]> = {}
 // THE HOLD's setback tower: its heights are generated with its grid (`play3d/hold.ts`), so the sim, the
 // walker and the renderer read one map. Not saved/editable — the ASCII landing is the thing to edit.
 DEMO['the-hold'] = parseLanding().heights
+// THE PASSAGE's stair down out of the town is in its heights, generated with its grid.
+DEMO['the-passage'] = PASSAGE.heights
 DEMO['moonwell-glade'] = (() => {
   const g = Array.from({ length: 18 }, () => new Array<number>(24).fill(0))
   const cx = 5, cy = 9

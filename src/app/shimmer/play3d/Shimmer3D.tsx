@@ -120,6 +120,10 @@ import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { keeperBook, saveBook } from './book'
 import { PassagePanel } from './PassagePanel'
+import { PassageScene } from './PassageScene'
+import { ArcadeCabinet } from './ArcadeCabinet'
+import { PASSAGE, type ShelfKey } from './passage-hall'
+import type { GameEntry } from '@/lib/games'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem } from './ui'
@@ -218,6 +222,8 @@ const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 const BUILDING_ID = 103
 /** The hold's zone id (`world/zones.ts`). Everything the hold adds to the walker and the range asks this. */
 const HOLD_ZONE = 'the-hold'
+/** The Passage draws its own rock and fixtures (`PassageScene`) and has its own light. */
+const PASSAGE_ZONE = 'the-passage'
 const HOLD_BEST_KEY = 'ather:shimmer:hold:best'
 // Encounters: stepping onto a fresh MIST tile can draw a wild spirit. Per-zone odds live in
 // ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
@@ -3683,7 +3689,7 @@ const MOON = new THREE.Color(S.sunlight.moon)        // the Moonwell hour, cool 
 const AMBIENT_DAY = new THREE.Color(S.sunlight.ambientDay)
 const AMBIENT_NIGHT = new THREE.Color(S.sunlight.ambientNight)
 
-function SkyLight({ shadowMap }: { shadowMap: number | null }) {
+function SkyLight({ shadowMap, under = false }: { shadowMap: number | null; under?: boolean }) {
   const sunRef = useRef<THREE.DirectionalLight>(null)
   const ambRef = useRef<THREE.AmbientLight>(null)
   const tint = useRef(new THREE.Color())
@@ -3710,12 +3716,16 @@ function SkyLight({ shadowMap }: { shadowMap: number | null }) {
       // garden you cannot see is not restful, it is just dark. First pass at 0.34 rendered the
       // benches and chests as near-black silhouettes — readable as "night", useless as a place.
       sun.intensity = night ? 0.62 : 0.30 + 1.05 * dl
+      // Under the mountain no sun reaches: a faint cold spill stays so a face turned from every lantern
+      // is dark, not black. The lanterns (`PassageScene`) and the UNDERGROUND mood carry the room.
+      if (under) { sun.color.set(S.passage.noSun); sun.intensity = 0.12 }
     }
 
     const amb = ambRef.current
     if (amb) {
       amb.color.copy(AMBIENT_NIGHT).lerp(AMBIENT_DAY, dl)
       amb.intensity = 0.50 + 0.20 * dl   // night floor is what keeps unlit faces legible
+      if (under) { amb.color.set(S.passage.ambient); amb.intensity = 0.8 }
     }
   })
 
@@ -3944,9 +3954,10 @@ const Scene = memo(function Scene(props: {
   return (
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
-      <SkyLight shadowMap={props.shadowMap} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE} />
-      <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
+      <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE} />
+      <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && n.kind !== 'stall' && n.kind !== 'cabinet' && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
+      {props.zone.id === PASSAGE_ZONE && <PassageScene isOwner={props.isOwner} />}
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
@@ -6073,17 +6084,36 @@ export default function Shimmer3D() {
   // sneers you off; with a bonded spirit → pre-fight swagger, then the Reach battle to free his captive.
   const talk = useCallback((npc: NPC3D) => {
     const hasSpirit = (partyRef.current?.length ?? 0) > 0
-    if (npc.id === 'passage-trader') {
-      // The rack opens when the lines finish — same shape as Thistle handing off to a battle, and
-      // the reason the dialogue ACTION system is not used: `openShop` exists in dialogue-schema.ts
-      // and the editor offers it, but NOTHING calls `consumeActions` anywhere in the tree, so every
-      // authored action is queued and dropped. Wiring the rack to it would have produced a trader
-      // who says his lines and opens nothing. (Recorded on GBOARD — that limb needs a decision.)
-      setDialogue({ name: 'A trader', lines: TRADER_LINES, idx: 0, onDone: () => {
-        battleRef.current = true       // freeze the walker while the rack is up, as stations do
+    // ── THE PASSAGE (2026-09-25): stalls open their own shelves, cabinets open a game ─────────────
+    // The panel opens straight away. The trader's three lines are said ONCE, at the first stall a keeper
+    // browses (`passageVouched`): they are a greeting to someone who was shown the way down, and a
+    // greeting every visit is a toll. Same freeze-the-walker shape the old lone trader used.
+    // (Not the dialogue ACTION system: `openShop` exists in dialogue-schema.ts but NOTHING calls
+    // `consumeActions`, so an authored action is queued and dropped. Recorded on GBOARD.)
+    if (npc.id.startsWith('stall:')) {
+      const stall = PASSAGE.stalls.find(s => s.id === npc.id)
+      if (!stall) return
+      const open = () => {
+        battleRef.current = true
         openCursorUI()
+        setRackStall({ shelves: stall.shelves, title: stall.name.replace(/^the /, 'The ') })
         setRackOpen(Date.now())
-      } })
+      }
+      if (!flagsRef.current.passageVouched) {
+        setDialogue({ name: 'A trader', lines: TRADER_LINES, idx: 0, onDone: () => {
+          flagsRef.current.passageVouched = true
+          persist()
+          open()
+        } })
+      } else open()
+      return
+    }
+    if (npc.id.startsWith('cabinet:')) {
+      const c = PASSAGE.cabinets.find(k => k.id === npc.id)
+      if (!c) return
+      battleRef.current = true
+      openCursorUI()
+      setCabinet(c.game)
       return
     }
     if (npc.id === 'gregory-square') {
@@ -6203,6 +6233,10 @@ export default function Shimmer3D() {
   const bookRef = useRef<Book>(EMPTY_BOOK)
   /** The scroll rack, open. Holds the instant it opened so the stock cannot rotate under the cursor. */
   const [rackOpen, setRackOpen] = useState<number | null>(null)
+  /** which stall opened the Passage panel: its shelves + name. Null = every shelf (the `/market` door). */
+  const [rackStall, setRackStall] = useState<{ shelves: ShelfKey[]; title: string } | null>(null)
+  /** the arcade cabinet a keeper is stood at, coin plate or game up */
+  const [cabinet, setCabinet] = useState<GameEntry | null>(null)
   const applyLoadout = useCallback(() => {
     // The book is re-read here rather than held from mount: this runs on every rune change, and a
     // scroll bought in the Passage between two rune changes must be in hand by the next resolve.
@@ -7623,7 +7657,7 @@ export default function Shimmer3D() {
       {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => { setShowMap(false); closeCursorUI() }} />}
 
       {/* talk prompt when standing by an NPC */}
-      {nearNpc && !dialogue && !battle && !editMode && <Prompt text={`${isTouch ? 'tap ✦' : 'E'} — talk to ${nearNpc.name}`} />}
+      {nearNpc && !dialogue && !battle && !editMode && <Prompt text={`${isTouch ? 'tap ✦' : 'E'} — ${nearNpc.verb ?? 'talk to'} ${nearNpc.name}`} />}
 
       {/* rinning prompt — locked at the pool: watch, then strike when the `!` pops (early/late slips) */}
       {fish && !editMode && (
@@ -7885,7 +7919,7 @@ export default function Shimmer3D() {
       {!isTouch && !editMode && !battle && !approach && !rewards && !dialogue && !openMenu && !placing && !weaponDrawn && (() => {
         const t = fish ? { c: fish.bite ? S.cue.bite : S.cue.water, verb: fish.bite ? 'Strike!' : 'Fishing' }
           : channel ? { c: S.cue.water, verb: 'Gathering' }
-          : nearNpc ? { c: S.cue.talk, verb: `Talk to ${nearNpc.name}` }
+          : nearNpc ? { c: S.cue.talk, verb: `${nearNpc.verb ? nearNpc.verb[0].toUpperCase() + nearNpc.verb.slice(1) : 'Talk to'} ${nearNpc.name}` }
           : nearNode ? { c: S.cue.harvest, verb: 'Harvest' }
           : nearStation ? { c: STATIONS[nearStation.itemId]?.accent ?? mint.base, verb: STATIONS[nearStation.itemId]?.verb ?? 'Use' }
           : null
@@ -8272,6 +8306,11 @@ export default function Shimmer3D() {
         harvestAt={harvestAt} plantAt={plantAt}
       />
 
+      {cabinet && (
+        <ArcadeCabinet game={cabinet} isOwner={isOwner}
+          onClose={() => { setCabinet(null); battleRef.current = false; closeCursorUI() }} />
+      )}
+
       {rackOpen !== null && (
         <PassagePanel
           items={invRef}
@@ -8279,6 +8318,8 @@ export default function Shimmer3D() {
           birth={runeInvRef.current.birth}
           nowMs={rackOpen}
           dayOverride={null}
+          shelves={rackStall?.shelves}
+          title={rackStall?.title}
           onChange={() => {
             // A scroll or a lesson changes the book; a sale changes the bag; a gem changes the letters.
             // Re-read the book from the one door (`keeperBook`) and re-resolve immediately: a word you
@@ -8287,7 +8328,7 @@ export default function Shimmer3D() {
             syncSkillHud()
             applyLoadout()
           }}
-          onClose={() => { setRackOpen(null); battleRef.current = false; closeCursorUI() }}
+          onClose={() => { setRackOpen(null); setRackStall(null); battleRef.current = false; closeCursorUI() }}
         />
       )}
 

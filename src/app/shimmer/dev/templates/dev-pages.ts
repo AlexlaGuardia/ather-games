@@ -199,6 +199,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['bed', 'garden', 'crop', 'stage', 'sign', 'rim', 'farming', 'shelf'],
   },
   {
+    path: '/shimmer/dev/passage',
+    title: 'Passage bench',
+    blurb: 'The tunnel under Rune Hold, the cavern market and the arcade room, drawn by the shipped scene at a keeper\'s eye. Judge the look here; walk it through the Passage door.',
+    group: 'bench',
+    keywords: ['passage', 'market', 'stall', 'arcade', 'cabinet', 'tunnel', 'cavern', 'rune hold', 'merchant'],
+  },
+  {
     path: '/shimmer/dev/stations',
     title: 'Station shelf',
     blurb: 'Every modelled station side by side, drawn by the shipped renderer. Judge the shapes here.',

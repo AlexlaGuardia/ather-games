@@ -102,6 +102,26 @@ export const npcTint = {
   gregory: '#caa46a', trader: '#c9a05a',
   thistle: '#9a6aaa', vetch: '#7a5a3a', brack: '#5a4632',
 } as const
+// ── the Passage (2026-09-25) ─────────────────────────────────────────────────────────────────
+/** Under Rune Hold: warm umber rock, lantern glass, stall cloth, the arcade room's cabinets and plate.
+ *  Canon's words for the place are *"lantern-lit, surprisingly warm"*, so every value leans amber. */
+export const passage = {
+  rock: ['#4d3a2c', '#57412f', '#5f4834', '#463428', '#6a503a'],
+  ceiling: ['#2e231b', '#35291f', '#3b2d22'],
+  /** packed earth underfoot, worn paler where the traffic runs */
+  floor: ['#5b4633', '#54412f', '#614b36', '#4e3c2c'],
+  wood: '#6b4a2e', iron: '#2a221c', glass: '#f0a040', lamp: '#ffb85c',
+  dustSheet: '#8a8070', skin: '#e8c9a0',
+  wares: ['#c9a46a', '#8fb3c9', '#b98fc9'],
+  cloth: { rack: '#7a4a2a', teacher: '#4a5a7a', gems: '#6a3a6a', vessels: '#3a6a4a', bay: '#5a5044' },
+  arcadeLight: '#a7b8ff',
+  cabinet: { body: '#1c1612', deck: '#2b211a', dark: '#0b0b0b', off: '#000000', marquee: '#ffe0a0', marqueeGlow: '#ffcf70', marqueeDark: '#222222' },
+  /** the sky that is not there: a faint cold spill, and the ambient floor of a lamplit room */
+  noSun: '#8a7a6a', ambient: '#6a4a30',
+  /** the cabinet overlay's plate */
+  plate: { bg: '#120c08', glow: 'rgba(212,168,67,0.25)', ink: '#fde68a', faint: 'rgba(251,191,36,0.6)', edge: 'rgba(180,83,9,0.5)', scrim: 'rgba(0,0,0,0.8)' },
+} as const
+
 /** The keeper you walk as (the blockout capsule + its facing cone). */
 export const player = { body: '#5ad1e6', cone: '#f6e9da' } as const
 /** Other keepers in your world: their capsule, and the plate their name floats on. */

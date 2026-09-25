@@ -174,7 +174,8 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
 import { parseLanding } from '../play3d/hold'
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, CRUCIBLE, RUNE_HOLD, THE_PASSAGE, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { PASSAGE } from '../play3d/passage-hall'
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, CRUCIBLE, RUNE_HOLD, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN, crucibleArrival, crucibleExit,} from './tilemap'
 import { LANDING, LANDING_ARRIVAL, LANDING_LABEL } from './landing'
 /** The hold's landing, parsed once — the zone's grid and its door aims both read it. */
@@ -519,7 +520,7 @@ export const ZONES: Zone[] = [
         // Canon: `world/rune-hold.md` § The Passage. Alex cut this through the long wall that
         // runs down the map's east side, which is the mountain the tunnels run through — so the
         // door is on the right feature, not just a convenient gap.
-        x: 83, y: 48, toZone: 'the-passage', toX: 6, toY: 9, direction: 'right',
+        x: 83, y: 48, toZone: 'the-passage', toX: PASSAGE.arrival.x, toY: PASSAGE.arrival.z, direction: 'right',
         label: 'THE PASSAGE',
       },
       {
@@ -590,13 +591,15 @@ export const ZONES: Zone[] = [
     // because a market is not an arena: nobody browses a scroll rack with a manabox drawn.
     id: 'the-passage',
     name: 'The Passage',
-    grid: THE_PASSAGE,
+    // ★ GENERATED (2026-09-25): tunnel → cavern market → arcade room, `play3d/passage-hall.ts`. No
+    // literal in tilemap.ts, same as the Hold: the generator is the thing to edit.
+    grid: PASSAGE.grid,
     realm: 'outside',
     peaceful: true,
-    playerStart: { tileX: 6, tileY: 9 },
+    playerStart: { tileX: PASSAGE.arrival.x, tileY: PASSAGE.arrival.z },
     gates: [
       // back up into the town, landing on the town side of the mountain wall
-      { x: 1, y: 9, toZone: 'rune-hold', toX: 82, toY: 49, direction: 'left', label: 'RUNE HOLD' }, // beside re-sited Passage (83,48), plaza side
+      { x: PASSAGE.exit.x, y: PASSAGE.exit.z, toZone: 'rune-hold', toX: 82, toY: 49, direction: 'left', label: 'RUNE HOLD' }, // beside re-sited Passage (83,48), plaza side
     ],
     warps: [],
   },
