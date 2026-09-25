@@ -37,9 +37,13 @@ ok(map.exit.lv === 2 && map.grid[map.exit.z][map.exit.x] === HOLD_TILE.WARP, 'th
 ok(STOREY > LEDGE_CLIMB - 2, 'a storey is more than a climb reaches from the floor (walls fill it, so no keeper climbs out of a floor)')
 ok(map.windows.every(w => w.spawnH < w.h), 'the flooded climb UP the face to every window')
 ok(map.windows.every(w => kindAt(B, w.lv, Math.round(w.inside.x), Math.round(w.inside.z)) === K.FLOOR), 'every window opens onto its floor')
-ok(map.gates.map(g => g.cost).join() === '250,500,750,1000,1000', 'five gates, 250 up to the gardens at 1000')
+ok(map.gates.map(g => g.cost).join() === '250,750,1000,1000', 'four gates: the stair housing 250, the middle floor 750, the gardens 1000')
 ok(map.cache.room !== map.start.room, 'the draught cache is behind a gate')
-ok(B.ramps.length === 2 && B.ramps.every(r => r.y1 - r.y0 === STOREY), 'two ramps, each climbing one storey')
+ok(B.stairs.length === 2 && B.stairs.every(st => st.y1 - st.y0 === STOREY), 'two stairs, each climbing one storey')
+const roofStair = B.stairs.find(st => st.lv === 1)!
+ok(roofStair.flights.length === 2 && roofStair.landings.length === 1, '★ the stair to the roof turns a corner: flight, landing, flight')
+ok(roofStair.flights.every(f => f.y1 > f.y0) && Math.abs(roofStair.flights[0].y1 - roofStair.landings[0].y) < 1e-6 && Math.abs(roofStair.landings[0].y - roofStair.flights[1].y0) < 1e-6, 'the landing sits exactly where one flight ends and the next begins')
+ok(B.levels[2].open && !B.levels[1].open, '★ the top floor is a rooftop: open to the sky')
 
 // ── a keeper's reach, walked by the walker's own rules: step up one, drop any, walls per floor ──
 function reach(s: HoldState): { x: number; z: number; y: number }[] {
@@ -93,7 +97,7 @@ ok(!roundBlocked(s0, cw.cells[0].x, cw.cells[0].z, TOP + 1), '★ rounds pass a 
 const gA = map.gates[0]
 ok(keeperBlocked(s0, gA.cells[0].x, gA.cells[0].z, gA.h) && roundBlocked(s0, gA.cells[0].x, gA.cells[0].z, gA.h + 1), 'a shut gate stops keeper and rounds')
 ok(roundBlocked(s0, map.start.x, map.start.z, TOP - 0.1) && !roundBlocked(s0, map.start.x, map.start.z, TOP + 1), '★ a round into a floor slab stops; over it, it flies')
-ok(roundBlocked(s0, map.start.x, map.start.z, TOP + STOREY + 0.1), 'the top floor has a roof')
+ok(!roundBlocked(s0, map.start.x, map.start.z, TOP + STOREY + 0.1), 'nothing over the rooftop — a round fired up flies')
 
 // ── the hold's mana pool is a NEW keeper's pool — the mana skill buys nothing in here ──
 ok(T.manaPool === getMaxPool(1), `the hold pool (${T.manaPool}) is a level-1 keeper's pool (${getMaxPool(1)})`)
@@ -169,9 +173,9 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   ok(buyGate(s, 0) && gA.opens.every(r => s.rooms[r]) && s.salvage === 250, '★ the first gate opens both its rooms for 250 on starting salvage')
   ok(!keeperBlocked(s, gA.cells[0].x, gA.cells[0].z, gA.h), 'an open gate is walkable')
   ok(!buyGate(s, 0), 'an open gate cannot be bought twice')
-  ok(!buyGate(s, 1), '250 left cannot open the 500 gate')
-  s.salvage = 800
-  ok(buyGate(s, 1) && s.salvage === 300, 'the next gate opens for 500')
+  ok(!buyGate(s, 1), '250 left cannot open the 750 gate')
+  s.salvage = 1000
+  ok(buyGate(s, 1) && s.salvage === 250, 'the next gate opens for 750')
   s.salvage = 2000
   ok(buyRack(s) === 'weapon' && buyRack(s) === 'refill', 'the rack sells the weapon, then refills it')
   ok(s.salvage === 2000 - T.rackCost - T.rackCost / 2, 'refill is half price')

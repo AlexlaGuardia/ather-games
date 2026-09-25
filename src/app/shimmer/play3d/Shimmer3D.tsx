@@ -126,7 +126,7 @@ import { prettyItem } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
-import { K as HB, STOREY as STOREY_H } from './hold-building'
+import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
 import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, fieldStrike, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
@@ -2058,6 +2058,13 @@ function HoldBuilding() {
   const built = useMemo(() => {
     const { cols, rows } = b
     const SLAB = 0.3
+    // windows whose run ends against a wall (vs a gap in a rail)
+    const inWall = new Set<number>()
+    for (const w of HOLD_MAP.windows) {
+      const L = b.levels[w.lv]
+      const walled = w.cells.some(c => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => L.kind[(c.z + dz) * cols + c.x + dx] === HB.WALL))
+      if (walled) for (const c of w.cells) inWall.add(w.lv * cols * rows + c.z * cols + c.x)
+    }
     // runs of cells along each row that pass `pick`, as boxes spanning y0..y1
     const runs = (pick: (i: number) => boolean, y0: number, y1: number, out: HoldBox[]) => {
       for (let z = 0; z < rows; z++) {
@@ -2071,21 +2078,24 @@ function HoldBuilding() {
       }
     }
     const levels = b.levels.map((L, li) => {
-      const floor: HoldBox[] = [], garden: HoldBox[] = [], wall: HoldBox[] = [], rail: HoldBox[] = [], lintel: HoldBox[] = []
+      const floor: HoldBox[] = [], garden: HoldBox[] = [], pad: HoldBox[] = [], wall: HoldBox[] = [], rail: HoldBox[] = [], lintel: HoldBox[] = [], unit: HoldBox[] = []
       const k = L.kind
-      const solidUnder = (i: number) => k[i] !== HB.VOID && k[i] !== HB.RAMP
+      const solidUnder = (i: number) => k[i] !== HB.VOID && k[i] !== HB.RAMP && k[i] !== HB.LANDING
       runs(i => solidUnder(i) && !L.tone[i], L.y - SLAB, L.y, floor)
       runs(i => solidUnder(i) && L.tone[i] === 1, L.y - SLAB, L.y, garden)
+      runs(i => solidUnder(i) && L.tone[i] === 2, L.y - SLAB, L.y + 0.02, pad)
+      runs(i => k[i] === HB.BLOCK, L.y, L.y + BLOCK_H, unit)
       runs(i => k[i] === HB.WALL, L.y, L.y + STOREY_H - SLAB, wall)
       runs(i => k[i] === HB.RAIL, L.y, L.y + 1.0, rail)
       // over a window and a gate the wall carries on as a lintel, so the opening reads as a hole in it
-      runs(i => k[i] === HB.WINDOW, L.y + 2.4, L.y + STOREY_H - SLAB, lintel)
-      runs(i => k[i] === HB.WINDOW, L.y, L.y + 0.35, lintel)
+      // …but only over a window set in a WALL: a gap in a rail (the rooftop's edge, a garden's) is open sky
+      runs(i => k[i] === HB.WINDOW && inWall.has(li * cols * rows + i), L.y + 2.4, L.y + STOREY_H - SLAB, lintel)
+      runs(i => k[i] === HB.WINDOW && inWall.has(li * cols * rows + i), L.y, L.y + 0.35, lintel)
       runs(i => k[i] === HB.GATE, L.y + 2.4, L.y + STOREY_H - SLAB, lintel)
-      // the top floor carries the roof
+      // the top floor carries the roof — unless it is open to the sky (the rooftop)
       const roof: HoldBox[] = []
-      if (li === b.levels.length - 1) runs(i => k[i] !== HB.VOID && L.tone[i] !== 1, L.y + STOREY_H - SLAB, L.y + STOREY_H, roof)
-      return { floor, garden, wall, rail, lintel, roof, colors: S.hold.levels[li] ?? S.hold.levels[0] }
+      if (li === b.levels.length - 1 && !L.open) runs(i => k[i] !== HB.VOID && L.tone[i] !== 1, L.y + STOREY_H - SLAB, L.y + STOREY_H, roof)
+      return { floor, garden, pad, wall, rail, lintel, roof, unit, colors: S.hold.levels[li] ?? S.hold.levels[0] }
     })
     // ramps: one tilted slab per run, from its low edge to its high edge
     const ramps = b.ramps.map(r => {
@@ -2100,7 +2110,9 @@ function HoldBuilding() {
       const size: [number, number, number] = r.dir[0] !== 0 ? [slope, 0.25, width] : [width, 0.25, slope]
       return { key: `${r.lv}-${cx}-${cz}`, pos: [cx, (r.y0 + r.y1) / 2 - 0.12, cz] as [number, number, number], rot, size }
     })
-    return { levels, ramps }
+    // landings: flat, at the height the stair reaches the turn
+    const landings: HoldBox[] = b.landings.flatMap(l => l.cells.map(c => [c.x, l.y - 0.125, c.z, 1, 0.25, 1] as HoldBox))
+    return { levels, ramps, landings }
   }, [b])
   return (
     <>
@@ -2109,11 +2121,14 @@ function HoldBuilding() {
           <HoldBoxes boxes={l.floor} color={l.colors.floor} />
           <HoldBoxes boxes={l.roof} color={l.colors.floor} />
           <HoldBoxes boxes={l.garden} color={S.hold.garden} />
+          <HoldBoxes boxes={l.pad} color={S.hold.pad} />
+          <HoldBoxes boxes={l.unit} color={S.hold.unit} />
           <HoldBoxes boxes={l.wall} color={l.colors.wall} />
           <HoldBoxes boxes={l.rail} color={S.hold.rail} />
           <HoldBoxes boxes={l.lintel} color={S.hold.lintel} />
         </group>
       ))}
+      <HoldBoxes boxes={built.landings} color={S.hold.ramp} />
       {built.ramps.map(r => (
         <mesh key={r.key} position={r.pos} rotation={r.rot}>
           <boxGeometry args={r.size} />

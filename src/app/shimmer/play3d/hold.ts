@@ -184,7 +184,7 @@ export interface HoldState {
 }
 
 // ── parse ────────────────────────────────────────────────────────────────────────────────────
-const WALKABLE = (k: Kind) => k === K.FLOOR || k === K.RAMP
+const WALKABLE = (k: Kind) => k === K.FLOOR || k === K.RAMP || k === K.LANDING
 
 export function parseLanding(floors: readonly FloorDef[] = HOLD_FLOORS, tune: HoldTuning = HOLD_TUNING): HoldMap {
   const b = buildHold(floors)
