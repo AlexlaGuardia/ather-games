@@ -51,8 +51,9 @@ ok(uplift('forge-fist', 'boss') < uplift('forge-fist', 'boss-rich'), 'scarce man
 // ── the hold enforces the cap the budget assumes ──
 {
   const s = startHold(parseLanding())
-  for (let k = 0; k < 6; k++) s.flood.push({ id: 100 + k, kind: 'drift', x: 14 + k * 0.2, z: 18, hp: 100, maxHp: 100, speed: 1, phase: 'inside', win: 0, tearT: 0, strikeT: 1, alive: true })
-  ok(fieldStrike(s, 14, 18, 3, 10) === HOLD_TUNING.fieldFullTargets, `★ a field strikes ${HOLD_TUNING.fieldFullTargets} bodies, not all 6 inside`)
+  const { x: fx, z: fz, h: fy } = s.map.start   // on the crown, where every body shares one floor
+  for (let k = 0; k < 6; k++) s.flood.push({ id: 100 + k, kind: 'drift', x: fx + k * 0.2, z: fz, y: fy, hp: 100, maxHp: 100, speed: 1, phase: 'inside', win: 0, tearT: 0, strikeT: 1, alive: true })
+  ok(fieldStrike(s, fx, fz, 3, 10) === HOLD_TUNING.fieldFullTargets, `★ a field strikes ${HOLD_TUNING.fieldFullTargets} bodies, not all 6 inside`)
   ok(s.flood.filter(b => b.hp < 100).length === BUDGET.fieldFullTargets, 'the budget and the hold agree on the cap')
   ok(s.flood.find(b => b.id === 100)!.hp < 100 && s.flood.find(b => b.id === 105)!.hp === 100, 'the nearest are struck, the far edge is not')
 }

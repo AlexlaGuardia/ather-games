@@ -1183,8 +1183,11 @@ const WorldFlora = memo(function WorldFlora({ heights }: { heights: number[][] }
 // memo: the terrain is the heaviest node in the scene and depends on nothing that ticks. Without it,
 // every channel tick (~11 Hz) rebuilt the whole floor/wall/water/mist JSX tree. All five props are
 // stable (a ref, a ref's array, a version int, a useCallback, a bool), so this skips cleanly.
-const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick }: {
+const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick, ownSolids }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
+  /** THE HOLD draws its own solids (parapets and pillars at their floor's height — `HoldScene`); the
+   *  shared brown block is seated at ground level and would sink into a raised floor */
+  ownSolids?: boolean
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
   /** the player's CHUNK — changes once per 64 tiles walked, so the memo still holds */
   center?: ChunkCoord | null
@@ -1208,8 +1211,8 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
           {/* brown building blocks — the mortal side's masonry. Bumped to 3.2 (2026-08-25) so a
               storefront clears a ~1.7 keeper by a full head and a town reads as a skyline, not a
               hedge maze. y = h/2 - 0.1 keeps the base seated ~0.1 into the ground; tops ride the top. */}
-          <Tiles cells={buildings} size={[1, 3.2, 1]} y={1.5} color={S.terrain.building} paint={paint} editing={editing} />
-          <WallTops cells={buildingTops} y={3.1} color={S.terrain.buildingTop} />
+          {!ownSolids && <Tiles cells={buildings} size={[1, 3.2, 1]} y={1.5} color={S.terrain.building} paint={paint} editing={editing} />}
+          {!ownSolids && <WallTops cells={buildingTops} y={3.1} color={S.terrain.buildingTop} />}
           <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color={S.terrain.water} opacity={0.85} paint={paint} editing={editing} />
           {/* cloud mist = walkable encounter areas: land + a wispy translucent overlay */}
           <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
@@ -2023,43 +2026,58 @@ const SENSE_TICK = 0.1
 const HOLD_BODY_MAX = 40
 const HOLD_DROP_MAX = 8
 const HOLD_FLOOD_COLOR = { drift: new THREE.Color(S.hold.body), swift: new THREE.Color(S.hold.swift), bulk: new THREE.Color(S.hold.bulk) }
-function HoldScene({ holdRef, groundRef }: { holdRef: React.RefObject<HoldState | null>; groundRef: React.RefObject<number> }) {
+function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) {
   const bodies = useRef<THREE.InstancedMesh>(null)
   const planks = useRef<THREE.InstancedMesh>(null)
   const gates = useRef<THREE.InstancedMesh>(null)
   const drops = useRef<THREE.InstancedMesh>(null)
-  // the landing is one fixed map (the zone's grid is generated from it), so sizing the pools off it
-  // never waits on a run existing — a run that starts after mount still has meshes to draw into
+  const parapets = useRef<THREE.InstancedMesh>(null)
+  const pillars = useRef<THREE.InstancedMesh>(null)
+  // the landing is one fixed map (the zone's grid and heights are generated from it), so sizing the
+  // pools off it never waits on a run existing — a run that starts after mount still has meshes
   const map = HOLD_MAP
   const plankMax = map.windows.length * HOLD_TUNING.seals
   const gateMax = map.gates.reduce((n, g) => n + g.cells.length, 0)
+  const parapetCells = useMemo(() => map.solids.filter(c => c.kind === 'parapet'), [map])
+  const pillarCells = useMemo(() => map.solids.filter(c => c.kind === 'pillar'), [map])
   const m = useMemo(() => new THREE.Matrix4(), [])
   const q = useMemo(() => new THREE.Quaternion(), [])
   const v = useMemo(() => new THREE.Vector3(), [])
   const sc = useMemo(() => new THREE.Vector3(), [])
   const zero = useMemo(() => new THREE.Vector3(0, 0, 0), [])
+  // the solids never move: seat them once. A parapet is waist-high so the drop reads; a pillar is a
+  // storey tall, so a crowd has something to be run around.
+  useEffect(() => {
+    const seat = (mesh: THREE.InstancedMesh | null, cells: typeof parapetCells, tall: number) => {
+      if (!mesh) return
+      cells.forEach((c, i) => {
+        v.set(c.x, c.h * STEP + tall / 2 - 0.05, c.z); sc.set(1, tall, 1)
+        m.compose(v, q.identity(), sc); mesh.setMatrixAt(i, m)
+      })
+      mesh.instanceMatrix.needsUpdate = true
+    }
+    seat(parapets.current, parapetCells, 1.1)
+    seat(pillars.current, pillarCells, 3.2)
+  }, [parapetCells, pillarCells, m, q, v, sc])
   useFrame((state) => {
     const s = holdRef.current
     if (!s) return
-    const gy = groundRef.current ?? 0
     const t = state.clock.elapsedTime
     if (bodies.current) {
       let i = 0
       for (const b of s.flood) {
         if (!b.alive || i >= HOLD_BODY_MAX) continue
         const size = b.kind === 'bulk' ? 1.35 : b.kind === 'swift' ? 0.8 : 1
-        // a body at a window leans into it and heaves; one inside rolls as it comes
+        // a body at a window heaves at the sill; one inside rolls as it comes
         const heave = b.phase === 'tear' ? 0.12 * Math.sin(t * 7 + b.id) : 0.05 * Math.sin(t * 4 + b.id)
-        v.set(b.x, gy + 0.45 * size + heave, b.z)
+        v.set(b.x, b.y * STEP + 0.45 * size + heave, b.z)
         sc.set(size * (1 + heave), size * (0.9 - heave), size * (1 + heave))
-        q.identity()
-        m.compose(v, q, sc)
+        m.compose(v, q.identity(), sc)
         bodies.current.setMatrixAt(i, m)
         bodies.current.setColorAt(i, HOLD_FLOOD_COLOR[b.kind])
         i++
       }
       for (let k = i; k < HOLD_BODY_MAX; k++) { m.compose(zero, q.identity(), zero); bodies.current.setMatrixAt(k, m) }
-      bodies.current.count = HOLD_BODY_MAX
       bodies.current.instanceMatrix.needsUpdate = true
       if (bodies.current.instanceColor) bodies.current.instanceColor.needsUpdate = true
     }
@@ -2067,13 +2085,13 @@ function HoldScene({ holdRef, groundRef }: { holdRef: React.RefObject<HoldState 
       let i = 0
       for (const w of s.map.windows) {
         const alongX = w.cells[0].z === w.cells[w.cells.length - 1].z
-        // sit the planks a hair toward the room so they read on the inside face of the gap
         const ix = (w.inside.x - w.mid.x) * 0.3, iz = (w.inside.z - w.mid.z) * 0.3
         for (let k = 0; k < HOLD_TUNING.seals; k++) {
           const up = k < s.planks[w.id]
-          v.set(w.mid.x + ix, gy + 0.3 + k * 0.3, w.mid.z + iz)
+          // planks bar the gap from the sill up — the parapet's own height and a little over
+          v.set(w.mid.x + ix, w.h * STEP + 0.12 + k * 0.2, w.mid.z + iz)
           q.setFromAxisAngle(UP, alongX ? 0 : Math.PI / 2)
-          sc.set(up ? 1 : 0, up ? 1 : 0, up ? 1 : 0)
+          sc.setScalar(up ? 1 : 0)
           m.compose(v, q, sc)
           planks.current.setMatrixAt(i++, m)
         }
@@ -2081,12 +2099,11 @@ function HoldScene({ holdRef, groundRef }: { holdRef: React.RefObject<HoldState 
       planks.current.instanceMatrix.needsUpdate = true
     }
     if (drops.current) {
-      // a booster hovers and turns; in its last five seconds it blinks, the Zombies tell for "going"
       let i = 0
       for (const d of s.drops) {
         if (i >= HOLD_DROP_MAX) break
         const on = d.ttl > 5 || Math.sin(t * 14) > 0
-        v.set(d.x, gy + 0.9 + 0.12 * Math.sin(t * 2.5 + d.id), d.z)
+        v.set(d.x, d.y * STEP + 0.9 + 0.12 * Math.sin(t * 2.5 + d.id), d.z)
         q.setFromAxisAngle(UP, t * 1.8)
         sc.setScalar(on ? 1 : 0)
         m.compose(v, q, sc)
@@ -2099,17 +2116,25 @@ function HoldScene({ holdRef, groundRef }: { holdRef: React.RefObject<HoldState 
       let i = 0
       for (const g of s.map.gates) for (const c of g.cells) {
         const shut = !s.gatesOpen[g.id]
-        v.set(c.x, gy + 1.2, c.z)
-        sc.set(shut ? 1 : 0, shut ? 1 : 0, shut ? 1 : 0)
+        v.set(c.x, g.h * STEP + 1.2, c.z)
+        sc.setScalar(shut ? 1 : 0)
         m.compose(v, q.identity(), sc)
         gates.current.setMatrixAt(i++, m)
       }
       gates.current.instanceMatrix.needsUpdate = true
     }
   })
-  const gy = groundRef.current ?? 0
+  const at = (f: { x: number; z: number; h: number }): [number, number, number] => [f.x, f.h * STEP, f.z]
   return (
     <>
+      <instancedMesh ref={parapets} args={[undefined, undefined, Math.max(1, parapetCells.length)]} frustumCulled={false} castShadow receiveShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color={S.hold.gate} roughness={0.85} />
+      </instancedMesh>
+      <instancedMesh ref={pillars} args={[undefined, undefined, Math.max(1, pillarCells.length)]} frustumCulled={false} castShadow receiveShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color={S.hold.rack} roughness={0.8} />
+      </instancedMesh>
       <instancedMesh ref={bodies} args={[undefined, undefined, HOLD_BODY_MAX]} frustumCulled={false}>
         <sphereGeometry args={[0.45, 14, 12]} />
         <meshStandardMaterial color={S.white} emissive={S.hold.bodySheen} emissiveIntensity={0.18} roughness={0.25} metalness={0.1} />
@@ -2130,18 +2155,18 @@ function HoldScene({ holdRef, groundRef }: { holdRef: React.RefObject<HoldState 
           <meshStandardMaterial color={S.hold.gate} emissive={S.hold.gateRim} emissiveIntensity={0.08} metalness={0.3} roughness={0.7} />
         </instancedMesh>
       )}
-      {/* the rack: a dark board on the wall with the weapon laid across it */}
-      <group position={[map.rack.x + 0.35, gy, map.rack.z]}>
-        <mesh position={[0, 1.2, 0]}><boxGeometry args={[0.12, 1.1, 1.4]} /><meshStandardMaterial color={S.hold.rack} /></mesh>
-        <mesh position={[-0.08, 1.2, 0]}><boxGeometry args={[0.1, 0.16, 1.0]} /><meshStandardMaterial color={S.viewmodel.spitterBronze} /></mesh>
+      {/* the rack: a dark board with the weapon laid across it */}
+      <group position={at(map.rack)}>
+        <mesh position={[0.35, 1.2, 0]}><boxGeometry args={[0.12, 1.1, 1.4]} /><meshStandardMaterial color={S.hold.rack} /></mesh>
+        <mesh position={[0.27, 1.2, 0]}><boxGeometry args={[0.1, 0.16, 1.0]} /><meshStandardMaterial color={S.viewmodel.spitterBronze} /></mesh>
       </group>
       {/* the font: a stone basin with lit water — mana is the clip, so this is where ammo lives */}
-      <group position={[map.font.x, gy, map.font.z]}>
+      <group position={at(map.font)}>
         <mesh position={[0, 0.4, 0]}><cylinderGeometry args={[0.45, 0.55, 0.8, 16]} /><meshStandardMaterial color={S.hold.gate} /></mesh>
         <mesh position={[0, 0.81, 0]}><cylinderGeometry args={[0.38, 0.38, 0.04, 16]} /><meshStandardMaterial color={S.hold.font} emissive={S.hold.font} emissiveIntensity={0.9} /></mesh>
       </group>
       {/* the cache: a crate of draught with a violet glint */}
-      <group position={[map.cache.x, gy, map.cache.z]}>
+      <group position={at(map.cache)}>
         <mesh position={[0, 0.35, 0]}><boxGeometry args={[0.7, 0.7, 0.7]} /><meshStandardMaterial color={S.hold.plank} /></mesh>
         <mesh position={[0, 0.75, 0]}><sphereGeometry args={[0.12, 10, 10]} /><meshStandardMaterial color={S.hold.cache} emissive={S.hold.cache} emissiveIntensity={1.1} /></mesh>
       </group>
@@ -2281,11 +2306,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const guardSim = useRef({ enc: initEncounter(), spawned: false, orbit: 0, fireCd: [0, 0, 0], viaMatch: false })
   // ── THE HOLD (`hold.ts`) ────────────────────────────────────────────────────────────────────
   // The parent owns the run (its HUD and the E/G keys read it); this sim steps it, lands rounds on
-  // it and turns its strikes into damage. The bodies carry x/z only, so their height is the keeper's
-  // foot height sampled when a run first appears — the landing is flat, and a body that followed the
-  // keeper's y would hop every time they jumped.
-  const holdSeen = useRef<HoldState | null>(null)
-  const holdGround = useRef(0)
+  // it and turns its strikes into damage. Every body carries its own height (`b.y`, tiers): the tower
+  // has three floors, and a body climbing the face is at neither.
   const inHold = zoneId === HOLD_ZONE
   // ── ★ THE MATCH ────────────────────────────────────────────────────────────────────────────
   // One number: when the glyph lit. Everything else — which floor is open, what is sealing, when
@@ -2367,8 +2389,6 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // live weapon — stats + tracer look
     const nowFrame = performance.now()  // ONE clock per frame — fields, terrain and statuses all read it
     const hs = inHold ? holdRef.current : null
-    if (hs !== holdSeen.current) { holdSeen.current = hs; if (hs && posRef.current) holdGround.current = posRef.current.y }
-    const holdBodyY = holdGround.current + 0.5
 
     // ── TREMOR SENSE ────────────────────────────────────────────────────────────────────────────
     // The scene owns this because the scene is what knows where the bodies are; the HUD half draws
@@ -2573,7 +2593,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       if (conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
       // the hold's walls are the mortal block (103), which this predicate cannot see — the hold says
       // what stops a round there: a wall or a shut gate, never a window (you shoot out of them)
-      if (hs && roundBlocked(hs, p.pos.x, p.pos.z)) { p.life = 0; continue }
+      if (hs && roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP)) { p.life = 0; continue }
       { const ab = absorbShotAt(fieldsRef.current, p.pos.x, p.pos.z, wDmg); if (ab.hit) { fieldsRef.current = ab.fields; p.life = 0; continue } }
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
@@ -2631,12 +2651,14 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         }
       }
       // rounds vs the flooded (THE HOLD). Crit = the upper third of the body, same rule as the hunter.
-      if (p.life > 0 && hs?.running && Math.abs(p.pos.y - holdBodyY) < 0.9) {
+      if (p.life > 0 && hs?.running) {
         for (const b of hs.flood) {
           if (!b.alive) continue
+          const by = b.y * STEP + 0.5
+          if (Math.abs(p.pos.y - by) >= 0.9) continue
           const bdx = p.pos.x - b.x, bdz = p.pos.z - b.z, br = b.kind === 'bulk' ? 0.7 : 0.5
           if (bdx * bdx + bdz * bdz >= br * br) continue
-          const crit = p.pos.y > holdBodyY + CRIT_Y
+          const crit = p.pos.y > by + CRIT_Y
           hitBody(hs, b.id, crit ? wCrit : wDmg, crit)
           p.life = 0; onHit(crit)
           break
@@ -2656,10 +2678,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const dmg = p.dmg * castMultRef.current  // a held stance (Flame Manipulation) shapes what you throw
       let hit = false
       if (hs) {
-        if (roundBlocked(hs, p.pos.x, p.pos.z)) { p.life = 0; continue }
+        if (roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP)) { p.life = 0; continue }
         let struck = false
-        if (hs.running && Math.abs(p.pos.y - holdBodyY) < 1.1) for (const b of hs.flood) {
-          if (!b.alive) continue
+        if (hs.running) for (const b of hs.flood) {
+          if (!b.alive || Math.abs(p.pos.y - (b.y * STEP + 0.5)) >= 1.1) continue
           const bdx = p.pos.x - b.x, bdz = p.pos.z - b.z, br = b.kind === 'bulk' ? 0.8 : 0.6
           if (bdx * bdx + bdz * bdz >= br * br) continue
           hitBody(hs, b.id, dmg, false); struck = true; break
@@ -2718,7 +2740,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     // range, and a board parked at Infinity would never come back there.
     if (inHold) for (const t of targets) { t.alive = false; t.down = 1 }
     if (hs?.running && posRef.current) {
-      const o = stepHold(hs, dt, posRef.current.x, posRef.current.z)
+      const o = stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP)
       if (o.strike > 0) hurtPlayer(o.strike)
     }
     // drift mode (console): targets strafe around their anchors — varied phase/speed per target
@@ -3175,7 +3197,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial color={S.crucible.conjured} emissive={SOUL_COLOR} emissiveIntensity={0.12} metalness={0.15} roughness={0.85} />
       </instancedMesh>
-      {inHold && <HoldScene holdRef={holdRef} groundRef={holdGround} />}
+      {inHold && <HoldScene holdRef={holdRef} />}
       {/* the ground hunter — magenta spinning octahedron, unmistakably NOT a range target */}
       <mesh ref={huntRef} visible={false} frustumCulled={false}>
         <octahedronGeometry args={[0.5, 0]} />
@@ -3835,7 +3857,7 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <SkyLight shadowMap={props.shadowMap} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
@@ -6765,7 +6787,7 @@ export default function Shimmer3D() {
     const id = setInterval(() => {
       const hs = holdRef.current, p = posRef.current
       if (!hs || !p) return
-      const prompt = hs.running ? promptAt(hs, p.x, p.z) : null
+      const prompt = hs.running ? promptAt(hs, p.x, p.z, p.y / STEP) : null
       // boosters the run picked up: the sim queues them, the page applies them (it owns the mana)
       while (hs.pickups.length) {
         const kind = hs.pickups.shift()!
@@ -6791,12 +6813,12 @@ export default function Shimmer3D() {
       if (!hs || !p) return
       if (k === 'g' && hs.running) {
         if (hs.surge < 1) { setHarvestToast('The surge is not charged — crush more of the flooded'); return }
-        releaseSurge(hs, p.x, p.z); setHoldFlash('Surge')
+        releaseSurge(hs, p.x, p.z, p.y / STEP); setHoldFlash('Surge')
         return
       }
       if (k !== 'e') return
       if (hs.over) { beginHold(); return }
-      const pr = promptAt(hs, p.x, p.z)
+      const pr = promptAt(hs, p.x, p.z, p.y / STEP)
       if (!pr) return
       if (pr.kind === 'mend') { holdEHeld.current = true; return }
       const short = () => setHarvestToast('Not enough salvage')

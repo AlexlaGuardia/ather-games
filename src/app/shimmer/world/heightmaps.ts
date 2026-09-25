@@ -3,6 +3,7 @@
 // A small DEMO fallback shows until a zone is sculpted + saved. Default = flat (all 0).
 import SAVED from './heightmaps.json'
 import { sparseGrid } from './wilds-world'
+import { parseLanding } from '../play3d/hold'
 
 const SAVED_HEIGHTS = SAVED as Record<string, number[][]>
 
@@ -13,6 +14,9 @@ export function setLiveHeights(h: Record<string, number[][]>) { LIVE_HEIGHTS = h
 
 // Demo fallback (Moonwell Glade pyramid) — only shown until real heights are sculpted + saved.
 const DEMO: Record<string, number[][]> = {}
+// THE HOLD's setback tower: its heights are generated with its grid (`play3d/hold.ts`), so the sim, the
+// walker and the renderer read one map. Not saved/editable — the ASCII landing is the thing to edit.
+DEMO['the-hold'] = parseLanding().heights
 DEMO['moonwell-glade'] = (() => {
   const g = Array.from({ length: 18 }, () => new Array<number>(24).fill(0))
   const cx = 5, cy = 9
