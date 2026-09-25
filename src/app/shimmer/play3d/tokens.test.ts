@@ -121,7 +121,9 @@ const ok = (cond: boolean, msg: string) => { if (cond) pass++; else fails.push(m
  * is preceded by `(` and followed by `)`: cleanly delimited, and still a valid three-digit hex. The
  * only property that separates a citation from a colour is which side of a comment marker it is on.
  */
-const COLOUR_BEARING = /#[0-9a-fA-F]{3,8}|StationShell|style=\{\{/
+// A colour never stands inside a run of `#`: the Hold's ASCII floor plans (`hold-floors.ts`) draw walls
+// as `#`, so a wall beside gate `AAAA` spelled `#AAAA` and pulled a data file into scope (09-25).
+const COLOUR_BEARING = /(?<![#\w])#[0-9a-fA-F]{3,8}(?![\w#])|StationShell|style=\{\{/
 const bearsColour = (src: string) => COLOUR_BEARING.test(stripComments(src))
 
 const onDisk = readdirSync(DIR)
@@ -140,6 +142,8 @@ ok(!bearsColour('// raiders for the Ather regions (#294).\nexport const n = 1\n'
   'F: a row citation in a line comment classifies a pure-logic file as colour-bearing')
 ok(!bearsColour('/* ★ PER-KEEPER, NOT PER-BROWSER (#692 follow-on). */\nexport const n = 1\n'),
   'F: a row citation in a block comment classifies a pure-logic file as colour-bearing')
+ok(!bearsColour("const PLAN = ['#####AAAA#####', '#.....BB.....#']\n"),
+  'F: a wall-and-gate run in an ASCII floor plan classifies a data file as colour-bearing')
 ok(bearsColour("const bg = '#ff8800'\n"),
   'F: the detector stopped seeing a real colour literal in code')
 
