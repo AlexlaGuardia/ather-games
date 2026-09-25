@@ -672,7 +672,7 @@ export const ZONES: Zone[] = [
     // instead of the targets when it sees this id.
     // ⚠ No `THE_HOLD` const in tilemap.ts on purpose: a generated grid has no literal for the editor
     // to write, and `parseZoneGrid` returns null for it (the CRUCIBLE precedent). The layout lives in
-    // `HOLD_LANDING` as ASCII, which is the thing to edit.
+    // `play3d/hold-floors.ts` as ASCII plans, which is the thing to edit.
     id: 'the-hold',
     // ⚠ '(proof)' is deliberate: a season world's places are per-season canon, and "hold" is
     // already canon's word for a settlement (Brack / Vetch / Thistle). This is a blockout for

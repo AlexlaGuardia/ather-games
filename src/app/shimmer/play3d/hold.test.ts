@@ -1,9 +1,10 @@
-/** The hold — round survival on a setback tower, headless. Run: `npx tsx src/app/shimmer/play3d/hold.test.ts` */
+/** The hold — round survival on three stacked floors, headless. Run: `npx tsx src/app/shimmer/play3d/hold.test.ts` */
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
-  mendTick, endHold, keeperBlocked, keeperBlockSet, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, fieldStrike, HOLD_TUNING as T, HOLD_TILE, LEVEL_H, type HoldState, type FloodBody, type RoomId,
+  mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
+  isLoud, heightAt, fieldStrike, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
+import { K, STOREY, kindAt } from './hold-building'
 import { getMaxPool } from '../engine/mana'
 import { LEDGE_CLIMB } from './metrics'
 
@@ -12,77 +13,87 @@ const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 const body = (o: Partial<FloodBody> & { id: number; x: number; z: number }): FloodBody =>
   ({ kind: 'drift', y: 0, hp: 100, maxHp: 100, speed: 2, phase: 'inside', win: 0, tearT: 0, strikeT: 1, alive: true, ...o })
 
-// ── the tower parses into what Alex drew: three floors, gardens east and west ──
+// ── the tower parses into what Alex sized: three 50 × 80 floors stacked, 50 × 50 gardens off the bottom ──
 const map = parseLanding()
-const H = (x: number, z: number) => map.heights[z][x]
-const count = (room: RoomId) => map.windows.filter(w => w.room === room).length
-ok(count('top') === 4 && count('middle') === 5 && count('bottom') === 8 && count('west') === 4 && count('east') === 4, 'windows: crown 4 · middle 5 · bottom 8 · each garden 4')
-ok(map.windows.every(w => w.cells.length === 2), 'every window is two cells wide')
-ok(map.gates.length === 4 && map.gates.map(g => g.opens).join() === 'middle,bottom,west,east', 'four gates: middle, bottom, then the two gardens')
-ok(map.gates[0].cost <= 250 && map.gates[0].cost <= T.gateCost.B && T.gateCost.B < T.gateCost.C, '★ the first stair down is the cheap buy; each floor down costs more')
-ok(map.start.h === LEVEL_H.top && map.start.room === 'top', '★ you start on the top floor')
-ok(H(36, 17) === LEVEL_H.middle && H(20, 30) === LEVEL_H.bottom && H(8, 30) === LEVEL_H.bottom && H(2, 30) === LEVEL_H.air, 'middle 12 · bottom 6 · gardens at the bottom floor · the air at 0')
-ok(LEVEL_H.middle - LEVEL_H.bottom > LEDGE_CLIMB && LEVEL_H.top - LEVEL_H.middle > LEDGE_CLIMB, `★ a floor face is taller than a keeper can climb (${LEDGE_CLIMB.toFixed(2)})`)
-ok(map.grid[map.exit.z][map.exit.x] === HOLD_TILE.WARP && map.exit.h === LEVEL_H.top, 'the way out is a warp on the crown')
-ok(map.cache.room === 'middle', 'the draught cache waits on the middle floor')
-ok(map.solids.some(s => s.kind === 'parapet') && map.solids.some(s => s.kind === 'pillar'), 'parapets ring the floors; pillars stand in the crown and gardens')
-for (const w of map.windows) {
-  ok(w.spawnH < w.h, `window ${w.id}: the flooded climb UP to it (${w.spawnH} → ${w.h})`)
-  ok(H(Math.round(w.inside.x), Math.round(w.inside.z)) === w.h, `window ${w.id}: inside is its room's floor`)
+const B = map.building
+const [BOT, MID, TOP] = B.levels.map(l => l.y)
+ok(B.levels.length === 3 && MID - BOT === STOREY && TOP - MID === STOREY, `three floors, a storey (${STOREY}) apart`)
+const bbox = (lv: number, tone: number) => {
+  let x0 = 1e9, x1 = -1, z0 = 1e9, z1 = -1
+  const L = B.levels[lv]
+  for (let i = 0; i < L.kind.length; i++) if (L.kind[i] !== K.VOID && L.tone[i] === tone) {
+    const x = i % B.cols, z = (i / B.cols) | 0
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z)
+  }
+  return { x0, z0, w: x1 - x0 + 1, d: z1 - z0 + 1 }
 }
+const plates = [0, 1, 2].map(lv => bbox(lv, 0))
+ok(plates.every(p => p.w === 50 && p.d === 80), `★ every floor is 50 × 80 (${plates.map(p => `${p.w}×${p.d}`).join(', ')})`)
+ok(plates.every(p => p.x0 === plates[0].x0 && p.z0 === plates[0].z0), '★ stacked: the three floors share one footprint')
+const gardens = bbox(0, 1)
+ok(gardens.d === 50 && gardens.w === 150, 'the gardens are 50 deep and flank the bottom floor west and east (150 across with it)')
+ok(map.start.lv === 2 && map.start.h === TOP, '★ you start on the top floor')
+ok(map.exit.lv === 2 && map.grid[map.exit.z][map.exit.x] === HOLD_TILE.WARP, 'the way out is on the top floor')
+ok(STOREY > LEDGE_CLIMB - 2, 'a storey is more than a climb reaches from the floor (walls fill it, so no keeper climbs out of a floor)')
+ok(map.windows.every(w => w.spawnH < w.h), 'the flooded climb UP the face to every window')
+ok(map.windows.every(w => kindAt(B, w.lv, Math.round(w.inside.x), Math.round(w.inside.z)) === K.FLOOR), 'every window opens onto its floor')
+ok(map.gates.map(g => g.cost).join() === '250,500,750,1000,1000', 'five gates, 250 up to the gardens at 1000')
+ok(map.cache.room !== map.start.room, 'the draught cache is behind a gate')
+ok(B.ramps.length === 2 && B.ramps.every(r => r.y1 - r.y0 === STOREY), 'two ramps, each climbing one storey')
 
-// ── a keeper's reach, walked: stairs step one tier, faces stop you, gates hold ──
-function reach(s: HoldState): Set<string> {
-  const seen = new Set<string>([`${map.start.x},${map.start.z}`]), q = [map.start as { x: number; z: number }]
+// ── a keeper's reach, walked by the walker's own rules: step up one, drop any, walls per floor ──
+function reach(s: HoldState): { x: number; z: number; y: number }[] {
+  const key = (x: number, z: number, y: number) => `${x},${z},${y}`
+  const start = { x: map.start.x, z: map.start.z, y: map.start.h }
+  const seen = new Set([key(start.x, start.z, start.y)]), q = [start], out = [start]
   while (q.length) {
     const c = q.shift()!
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const x = c.x + dx, z = c.z + dz, k = `${x},${z}`
-      if (seen.has(k) || map.grid[z]?.[x] === undefined || map.grid[z][x] === HOLD_TILE.WALL || keeperBlocked(s, x, z)) continue
-      if (H(x, z) - H(c.x, c.z) > 1) continue   // step up one tier at most (drops are free)
-      seen.add(k); q.push({ x, z })
+      const x = c.x + dx, z = c.z + dz
+      if (keeperBlocked(s, x, z, c.y)) continue
+      let best: number | null = null
+      for (const su of holdSurfaces(map, x, z)) if (su.y <= c.y + 1 && (best === null || su.y > best)) best = su.y
+      if (best === null || c.y - best > 1.01) continue   // no walking off a floor into the air (it is VOID below)
+      const k = key(x, z, best)
+      if (seen.has(k)) continue
+      seen.add(k); const n = { x, z, y: best }; q.push(n); out.push(n)
     }
   }
-  return seen
+  return out
 }
 {
   const s = startHold(map)
   const r0 = reach(s)
-  ok([...r0].every(k => { const [x, z] = k.split(',').map(Number); return H(x, z) === LEVEL_H.top }), '★ gates shut: the crown is all a keeper can reach (parapets hold, no falling off)')
+  ok(r0.every(c => c.y === TOP), '★ gates shut: the start room on the top floor is all a keeper can reach')
   for (let g = 0; g < map.gates.length; g++) s.gatesOpen[g] = true
   const r1 = reach(s)
-  ok(r1.has('36,17') && r1.has('20,30') && r1.has('8,30') && r1.has('65,30'), '★ all gates open: middle ring, bottom ring and both gardens are reachable by stairs')
-  ok(![...r1].some(k => { const [x, z] = k.split(',').map(Number); return H(x, z) === LEVEL_H.air }), 'and never the air outside the tower')
+  ok(r1.some(c => c.y === MID) && r1.some(c => c.y === BOT), '★ all gates open: the ramps walk down to the middle and bottom floors')
+  ok(r1.some(c => c.x < plates[0].x0 && c.y === BOT) && r1.some(c => c.x >= plates[0].x0 + 50 && c.y === BOT), 'and out into both gardens')
 }
 
-// ── ★ THE RINGS ARE LOOPS: you can run a round around the core both ways ──
-function loops(h: number, north: [number, number], south: [number, number], xSplit: number, lo: number, hi: number): boolean {
-  const side = (keep: (x: number) => boolean) => {
-    const seen = new Set<string>([north.join()]), q = [north]
-    while (q.length) {
-      const [cx, cz] = q.shift()!
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const x = cx + dx, z = cz + dz, k = `${x},${z}`
-        if (seen.has(k) || !keep(x) || x < lo || x > hi || H(x, z) !== h || map.grid[z]?.[x] !== HOLD_TILE.FLOOR) continue
-        seen.add(k); q.push([x, z])
-      }
+// ── ★ walls are per floor: a wall upstairs is open floor downstairs ──
+{
+  let found = false
+  const s = startHold(map)
+  for (let i = 0; i < B.cols * B.rows && !found; i++) {
+    if (B.levels[2].kind[i] === K.WALL && B.levels[1].kind[i] === K.FLOOR) {
+      const x = i % B.cols, z = (i / B.cols) | 0
+      found = true
+      ok(keeperBlocked(s, x, z, TOP) && !keeperBlocked(s, x, z, MID), '★ the same cell: a wall on the top floor, walkable on the middle')
     }
-    return seen.has(south.join())
   }
-  return side(x => x <= xSplit) && side(x => x >= xSplit)
+  ok(found, 'the plans have a cell that is wall above and floor below')
 }
-ok(loops(LEVEL_H.middle, [36, 17], [36, 43], 36, 25, 48), '★ the middle ring loops around the crown (west way and east way)')
-ok(loops(LEVEL_H.bottom, [36, 10], [36, 49], 36, 19, 54), '★ the bottom ring loops around the middle floor')
 
 // ── what is solid to whom ──
 const s0 = startHold(map)
-const cw = map.windows.find(w => w.room === 'top')!
-ok(keeperBlocked(s0, cw.cells[0].x, cw.cells[0].z), 'a keeper cannot climb out a window')
-ok(!roundBlocked(s0, cw.cells[0].x, cw.cells[0].z, LEVEL_H.top + 1), '★ rounds pass a window — you shoot out of them')
+const cw = map.windows.find(w => w.room === map.start.room)!
+ok(keeperBlocked(s0, cw.cells[0].x, cw.cells[0].z, TOP), 'a keeper cannot climb out a window')
+ok(!roundBlocked(s0, cw.cells[0].x, cw.cells[0].z, TOP + 1), '★ rounds pass a window — you shoot out of them')
 const gA = map.gates[0]
-ok(keeperBlocked(s0, gA.cells[0].x, gA.cells[0].z) && roundBlocked(s0, gA.cells[0].x, gA.cells[0].z), 'a shut gate stops keeper and rounds')
-ok(roundBlocked(s0, 36, 30, LEVEL_H.top - 3) && !roundBlocked(s0, 36, 30, LEVEL_H.top + 1), '★ a round under a floor has hit its face; over it, it flies')
-ok(keeperBlockSet(s0).size === map.windows.length * 2 + map.gates.length * 2, 'block set = every window cell + every shut gate')
+ok(keeperBlocked(s0, gA.cells[0].x, gA.cells[0].z, gA.h) && roundBlocked(s0, gA.cells[0].x, gA.cells[0].z, gA.h + 1), 'a shut gate stops keeper and rounds')
+ok(roundBlocked(s0, map.start.x, map.start.z, TOP - 0.1) && !roundBlocked(s0, map.start.x, map.start.z, TOP + 1), '★ a round into a floor slab stops; over it, it flies')
+ok(roundBlocked(s0, map.start.x, map.start.z, TOP + STOREY + 0.1), 'the top floor has a roof')
 
 // ── the hold's mana pool is a NEW keeper's pool — the mana skill buys nothing in here ──
 ok(T.manaPool === getMaxPool(1), `the hold pool (${T.manaPool}) is a level-1 keeper's pool (${getMaxPool(1)})`)
@@ -107,21 +118,22 @@ ok(bodyStats('swift', 5).speed > bodyStats('drift', 5).speed && bodyStats('bulk'
     const o = stepHold(s, 1 / 60, p.x, p.z, p.h)
     struck += o.strike
     if (s.planks.some(n => n < T.seals)) tore = true
-    for (const b of s.flood) { if (b.phase === 'tear' && b.y > LEVEL_H.middle + 4) climbed = true; maxY = Math.max(maxY, b.y) }
+    for (const b of s.flood) { if (b.phase === 'tear' && b.y > TOP - STOREY + 1) climbed = true; maxY = Math.max(maxY, b.y) }
   }
-  ok(s.flood.length > 0 && s.flood.every(b => s.map.windows[b.win].room === 'top'), '★ only the opened floor spawns — the crown\'s windows, nothing below')
-  ok(climbed, 'a body climbs the face from the middle ring up to the sill before it tears')
-  ok(tore, 'bodies tear planks off the crown windows')
-  ok(maxY === LEVEL_H.top, 'through the window, a body stands on the crown')
+  ok(s.flood.length > 0 && s.flood.every(b => s.map.windows[b.win].room === map.start.room), '★ only the open room spawns — its windows, nothing below')
+  ok(climbed, 'a body climbs the outside face up to the sill before it tears')
+  ok(tore, 'bodies tear planks off the start room\'s windows')
+  ok(Math.abs(maxY - TOP) < 1e-6, 'through the window, a body stands on the top floor')
   ok(struck > 0, 'a keeper who stands still gets struck')
 }
 {
   const s = startHold(map)
-  s.flood.push(body({ id: 1, x: 36, z: 18.6, y: LEVEL_H.middle, strikeT: 0 }))   // on the middle ring, under the crown's north edge
+  const p = map.start
+  s.flood.push(body({ id: 1, x: p.x, z: p.z + 0.4, y: MID, strikeT: 0 }))   // on the middle floor, right under the keeper
   let struck = 0
-  for (let i = 0; i < 60; i++) struck += stepHold(s, 1 / 60, 36, 19.4, LEVEL_H.top).strike
+  for (let i = 0; i < 60; i++) struck += stepHold(s, 1 / 60, p.x, p.z, TOP).strike
   ok(struck === 0, '★ a body a floor below does not strike a keeper above, however close on the map')
-  ok(s.flood[0].y === LEVEL_H.middle, 'and it does not climb the face from inside — only at a window')
+  ok(Math.abs(s.flood[0].y - MID) < 1e-6, 'and it stays on its floor — through the ceiling is not a way up')
 }
 
 // ── a keeper who kills everything clears rounds and the curve climbs ──
@@ -154,11 +166,12 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   const s = startHold(parseLanding())
   ok(!buyGate(s, 2), '500 salvage cannot open a garden gate')
   ok(s.salvage === 500, 'a refused buy spends nothing')
-  ok(buyGate(s, 0) && s.rooms.middle && s.salvage === 250, '★ the stair to the middle floor opens for 250 on starting salvage')
-  ok(!keeperBlocked(s, gA.cells[0].x, gA.cells[0].z), 'an open gate is walkable')
+  ok(buyGate(s, 0) && gA.opens.every(r => s.rooms[r]) && s.salvage === 250, '★ the first gate opens both its rooms for 250 on starting salvage')
+  ok(!keeperBlocked(s, gA.cells[0].x, gA.cells[0].z, gA.h), 'an open gate is walkable')
   ok(!buyGate(s, 0), 'an open gate cannot be bought twice')
+  ok(!buyGate(s, 1), '250 left cannot open the 500 gate')
   s.salvage = 800
-  ok(buyGate(s, 1) && s.rooms.bottom && s.salvage === 50, 'the next stair opens the bottom floor for 750')
+  ok(buyGate(s, 1) && s.salvage === 300, 'the next gate opens for 500')
   s.salvage = 2000
   ok(buyRack(s) === 'weapon' && buyRack(s) === 'refill', 'the rack sells the weapon, then refills it')
   ok(s.salvage === 2000 - T.rackCost - T.rackCost / 2, 'refill is half price')
@@ -166,16 +179,17 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   const h = s.hush
   ok(buyCache(s) && s.hush === h + T.cacheSec, 'the cache buys hush')
   const s2 = startHold(parseLanding()); s2.salvage = 5000
-  ok(!buyCache(s2), 'the cache sits on the middle floor — shut stair, no cache')
+  ok(!buyCache(s2), 'the cache sits behind a gate — shut gate, no cache')
 }
 
 // ── prompts follow where you stand, on your floor ──
 {
   const s = startHold(parseLanding())
   const P = (x: number, z: number) => promptAt(s, x, z, heightAt(s, x, z))
-  ok(P(map.start.x, map.start.z) === null, 'nothing to do in the middle of the crown')
-  ok(P(gA.mid.x, gA.mid.z - 1)?.kind === 'gate', 'by the stair gate → the gate')
-  ok(promptAt(s, gA.mid.x, gA.mid.z + 3, LEVEL_H.middle)?.kind !== 'gate', '★ a gate a floor up does not prompt from below')
+  ok(P(map.start.x, map.start.z) === null, 'nothing to do where you start')
+  ok(P(gA.mid.x, gA.mid.z + 1)?.kind === 'gate', 'by the first gate → the gate')
+  const below = promptAt(s, gA.mid.x, gA.mid.z + 1, gA.h - STOREY)
+  ok(!(below?.kind === 'gate' && below.gate === gA.id), '★ a gate a floor up does not prompt from below (the floor below may have its own)')
   ok(P(map.rack.x, map.rack.z)?.kind === 'rack', 'at the rack → the rack')
   ok(P(map.font.x, map.font.z)?.kind === 'font', 'at the font → the font')
   ok(P(cw.inside.x, cw.inside.z) === null, 'a full window asks for nothing')
@@ -202,7 +216,7 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   const s = startHold(parseLanding())
   const p = map.start
   s.flood.push(body({ id: 900, x: p.x + 1, z: p.z, y: p.h, hp: 200, maxHp: 200 }))
-  s.flood.push(body({ id: 901, x: p.x, z: p.z + 1, y: LEVEL_H.middle, hp: 200, maxHp: 200 }))
+  s.flood.push(body({ id: 901, x: p.x, z: p.z + 1, y: MID, hp: 200, maxHp: 200 }))
   ok(releaseSurge(s, p.x, p.z, p.h).hit === 0, 'no surge without a full charge')
   s.surge = 1
   const r = releaseSurge(s, p.x, p.z, p.h)
@@ -222,9 +236,10 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
 // ── fields: the nearest few, on the field's floor ──
 {
   const s = startHold(parseLanding())
-  for (let k = 0; k < 4; k++) s.flood.push(body({ id: 60 + k, x: 36 + k * 0.2, z: 30, y: LEVEL_H.top }))
-  s.flood.push(body({ id: 70, x: 36, z: 30.3, y: LEVEL_H.middle }))
-  ok(fieldStrike(s, 36, 30, 3, 10) === T.fieldFullTargets, 'a field strikes its cap of bodies')
+  const p = map.start
+  for (let k = 0; k < 4; k++) s.flood.push(body({ id: 60 + k, x: p.x + k * 0.2, z: p.z, y: TOP }))
+  s.flood.push(body({ id: 70, x: p.x, z: p.z + 0.3, y: MID }))
+  ok(fieldStrike(s, p.x, p.z, 3, 10, TOP) === T.fieldFullTargets, 'a field strikes its cap of bodies')
   ok(s.flood.find(b => b.id === 70)!.hp === 100, 'and never one a floor below')
 }
 
@@ -244,7 +259,7 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   stepHold(s, 1 / 60, s.drops[0].x, s.drops[0].z, p.h)
   ok(s.pickups.length === 1 && s.pickups[0] === 'glimmer', 'walking over it takes it — queued for the host')
   ok(s.drops.length === T.dropCap - 1, 'and it is gone from the floor')
-  stepHold(s, 1 / 60, s.drops[0].x, s.drops[0].z, LEVEL_H.middle)
+  stepHold(s, 1 / 60, s.drops[0].x, s.drops[0].z, MID)
   ok(s.drops.length === T.dropCap - 1, 'a keeper a floor away does not take it')
   for (let i = 0; i < 60 * (T.dropTtl + 1); i++) stepHold(s, 1 / 60, p.x, p.z, p.h)
   ok(s.drops.length === 0, 'an untaken booster fades')

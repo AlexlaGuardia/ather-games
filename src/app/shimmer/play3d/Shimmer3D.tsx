@@ -126,7 +126,8 @@ import { prettyItem } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
-import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, fieldStrike, keeperBlocked, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { K as HB, STOREY as STOREY_H } from './hold-building'
+import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, fieldStrike, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -1331,7 +1332,10 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
     // reproduces today's flat-grid behavior EXACTLY (200/200 parity) — the world lane drops its
     // authored segs in here via buildSegLayer(save-structure) once that data path lands, and nothing
     // else in this loop changes.
-    const ctx: CollisionCtx = { grid, heights, segs: EMPTY_SEGS }
+    // THE HOLD stacks its floors (`hold-building.ts`): it answers each cell's surfaces itself
+    const ctx: CollisionCtx = zoneIdRef.current === HOLD_ZONE
+      ? { grid, heights, segs: EMPTY_SEGS, surfaces: (cx, cz) => holdSurfaces(HOLD_MAP, cx, cz) }
+      : { grid, heights, segs: EMPTY_SEGS }
     const fromY = p.y / STEP
     // Placed objects are solid to movement (you smack into them, no clip-through): stations always,
     // resource nodes unless they're water (wade in to fish). Adjacency interact/harvest still works
@@ -1348,7 +1352,7 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // drift. It also means Cordon genuinely traps you if you cast it around yourself, which is
       // the decision the move is supposed to be.
       if (conjuredRef.current && conjuredBlockedAt(conjuredRef.current, cx, cz, performance.now())) return true
-      if (zoneNow === HOLD_ZONE && holdRef.current && keeperBlocked(holdRef.current, cx, cz)) return true
+      if (zoneNow === HOLD_ZONE && holdSolid(HOLD_MAP, holdRef.current?.gatesOpen ?? null, cx, cz, fromY)) return true
       return false
     }
     const canStep = (cx: number, cz: number) =>
@@ -1614,7 +1618,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       if (airborne.current && hasInput) prevMove.copy(move); else prevMove.set(0, 0, 0)
       if (warpCd.current > 0) warpCd.current -= dt
       else if (tileChanged) {
-        const w = checkWarp(ALL_ZONES, zoneIdRef.current, tx, tz)
+        const w0 = checkWarp(ALL_ZONES, zoneIdRef.current, tx, tz)
+        // the hold's floors share every cell: its way out is only a door on the floor it stands on
+        const w = w0 && zoneIdRef.current === HOLD_ZONE && Math.abs(p.y / STEP - HOLD_MAP.exit.h) > 1.5 ? null : w0
         if (w) { onWarp(w); warpCd.current = 0.4; encGrace.current = ENCOUNTER_GRACE }
         // No door — a fresh mist tile can draw a wild spirit, but only once you HAVE a spirit (Greg's
         // starter). Before that the mist is just scenery, so a fresh player is never stuck in a fight.
@@ -2026,39 +2032,113 @@ const SENSE_TICK = 0.1
 const HOLD_BODY_MAX = 40
 const HOLD_DROP_MAX = 8
 const HOLD_FLOOD_COLOR = { drift: new THREE.Color(S.hold.body), swift: new THREE.Color(S.hold.swift), bulk: new THREE.Color(S.hold.bulk) }
+// THE HOLD's building (`hold-building.ts`): every floor's slab, walls, rails and ramps, drawn once.
+// Cells are merged into runs along each row, so a 50-block wall is one box, not fifty.
+type HoldBox = [number, number, number, number, number, number]  // centre x y z, size x y z
+function HoldBoxes({ boxes, color }: { boxes: HoldBox[]; color: string }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3()
+    boxes.forEach(([x, y, z, sx, sy, sz], i) => { v.set(x, y, z); sc.set(sx, sy, sz); m.compose(v, q, sc); mesh.setMatrixAt(i, m) })
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
+  }, [boxes])
+  if (!boxes.length) return null
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, boxes.length]} frustumCulled={false}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color={color} roughness={0.9} />
+    </instancedMesh>
+  )
+}
+function HoldBuilding() {
+  const b = HOLD_MAP.building
+  const built = useMemo(() => {
+    const { cols, rows } = b
+    const SLAB = 0.3
+    // runs of cells along each row that pass `pick`, as boxes spanning y0..y1
+    const runs = (pick: (i: number) => boolean, y0: number, y1: number, out: HoldBox[]) => {
+      for (let z = 0; z < rows; z++) {
+        let x = 0
+        while (x < cols) {
+          if (!pick(z * cols + x)) { x++; continue }
+          const x0 = x
+          while (x < cols && pick(z * cols + x)) x++
+          out.push([(x0 + x - 1) / 2, (y0 + y1) / 2, z, x - x0, y1 - y0, 1])
+        }
+      }
+    }
+    const levels = b.levels.map((L, li) => {
+      const floor: HoldBox[] = [], garden: HoldBox[] = [], wall: HoldBox[] = [], rail: HoldBox[] = [], lintel: HoldBox[] = []
+      const k = L.kind
+      const solidUnder = (i: number) => k[i] !== HB.VOID && k[i] !== HB.RAMP
+      runs(i => solidUnder(i) && !L.tone[i], L.y - SLAB, L.y, floor)
+      runs(i => solidUnder(i) && L.tone[i] === 1, L.y - SLAB, L.y, garden)
+      runs(i => k[i] === HB.WALL, L.y, L.y + STOREY_H - SLAB, wall)
+      runs(i => k[i] === HB.RAIL, L.y, L.y + 1.0, rail)
+      // over a window and a gate the wall carries on as a lintel, so the opening reads as a hole in it
+      runs(i => k[i] === HB.WINDOW, L.y + 2.4, L.y + STOREY_H - SLAB, lintel)
+      runs(i => k[i] === HB.WINDOW, L.y, L.y + 0.35, lintel)
+      runs(i => k[i] === HB.GATE, L.y + 2.4, L.y + STOREY_H - SLAB, lintel)
+      // the top floor carries the roof
+      const roof: HoldBox[] = []
+      if (li === b.levels.length - 1) runs(i => k[i] !== HB.VOID && L.tone[i] !== 1, L.y + STOREY_H - SLAB, L.y + STOREY_H, roof)
+      return { floor, garden, wall, rail, lintel, roof, colors: S.hold.levels[li] ?? S.hold.levels[0] }
+    })
+    // ramps: one tilted slab per run, from its low edge to its high edge
+    const ramps = b.ramps.map(r => {
+      const along = (c: { x: number; z: number }) => c.x * r.dir[0] + c.z * r.dir[1]
+      const lo = Math.min(...r.cells.map(along)), hi = Math.max(...r.cells.map(along)), len = hi - lo + 1
+      const xs = r.cells.map(c => c.x), zs = r.cells.map(c => c.z)
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2
+      const width = r.dir[0] !== 0 ? Math.max(...zs) - Math.min(...zs) + 1 : Math.max(...xs) - Math.min(...xs) + 1
+      const rise = r.y1 - r.y0, slope = Math.hypot(len, rise), tilt = Math.atan2(rise, len)
+      // the slab's length runs along the ramp; tilt it so its far (uphill) end rises
+      const rot: [number, number, number] = r.dir[0] !== 0 ? [0, 0, r.dir[0] * tilt] : [-r.dir[1] * tilt, 0, 0]
+      const size: [number, number, number] = r.dir[0] !== 0 ? [slope, 0.25, width] : [width, 0.25, slope]
+      return { key: `${r.lv}-${cx}-${cz}`, pos: [cx, (r.y0 + r.y1) / 2 - 0.12, cz] as [number, number, number], rot, size }
+    })
+    return { levels, ramps }
+  }, [b])
+  return (
+    <>
+      {built.levels.map((l, i) => (
+        <group key={i}>
+          <HoldBoxes boxes={l.floor} color={l.colors.floor} />
+          <HoldBoxes boxes={l.roof} color={l.colors.floor} />
+          <HoldBoxes boxes={l.garden} color={S.hold.garden} />
+          <HoldBoxes boxes={l.wall} color={l.colors.wall} />
+          <HoldBoxes boxes={l.rail} color={S.hold.rail} />
+          <HoldBoxes boxes={l.lintel} color={S.hold.lintel} />
+        </group>
+      ))}
+      {built.ramps.map(r => (
+        <mesh key={r.key} position={r.pos} rotation={r.rot}>
+          <boxGeometry args={r.size} />
+          <meshStandardMaterial color={S.hold.ramp} roughness={0.85} />
+        </mesh>
+      ))}
+    </>
+  )
+}
+
 function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) {
   const bodies = useRef<THREE.InstancedMesh>(null)
   const planks = useRef<THREE.InstancedMesh>(null)
   const gates = useRef<THREE.InstancedMesh>(null)
   const drops = useRef<THREE.InstancedMesh>(null)
-  const parapets = useRef<THREE.InstancedMesh>(null)
-  const pillars = useRef<THREE.InstancedMesh>(null)
   // the landing is one fixed map (the zone's grid and heights are generated from it), so sizing the
   // pools off it never waits on a run existing — a run that starts after mount still has meshes
   const map = HOLD_MAP
   const plankMax = map.windows.length * HOLD_TUNING.seals
   const gateMax = map.gates.reduce((n, g) => n + g.cells.length, 0)
-  const parapetCells = useMemo(() => map.solids.filter(c => c.kind === 'parapet'), [map])
-  const pillarCells = useMemo(() => map.solids.filter(c => c.kind === 'pillar'), [map])
   const m = useMemo(() => new THREE.Matrix4(), [])
   const q = useMemo(() => new THREE.Quaternion(), [])
   const v = useMemo(() => new THREE.Vector3(), [])
   const sc = useMemo(() => new THREE.Vector3(), [])
   const zero = useMemo(() => new THREE.Vector3(0, 0, 0), [])
-  // the solids never move: seat them once. A parapet is waist-high so the drop reads; a pillar is a
-  // storey tall, so a crowd has something to be run around.
-  useEffect(() => {
-    const seat = (mesh: THREE.InstancedMesh | null, cells: typeof parapetCells, tall: number) => {
-      if (!mesh) return
-      cells.forEach((c, i) => {
-        v.set(c.x, c.h * STEP + tall / 2 - 0.05, c.z); sc.set(1, tall, 1)
-        m.compose(v, q.identity(), sc); mesh.setMatrixAt(i, m)
-      })
-      mesh.instanceMatrix.needsUpdate = true
-    }
-    seat(parapets.current, parapetCells, 1.1)
-    seat(pillars.current, pillarCells, 3.2)
-  }, [parapetCells, pillarCells, m, q, v, sc])
   useFrame((state) => {
     const s = holdRef.current
     if (!s) return
@@ -2127,14 +2207,7 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
   const at = (f: { x: number; z: number; h: number }): [number, number, number] => [f.x, f.h * STEP, f.z]
   return (
     <>
-      <instancedMesh ref={parapets} args={[undefined, undefined, Math.max(1, parapetCells.length)]} frustumCulled={false} castShadow receiveShadow>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color={S.hold.gate} roughness={0.85} />
-      </instancedMesh>
-      <instancedMesh ref={pillars} args={[undefined, undefined, Math.max(1, pillarCells.length)]} frustumCulled={false} castShadow receiveShadow>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color={S.hold.rack} roughness={0.8} />
-      </instancedMesh>
+      <HoldBuilding />
       <instancedMesh ref={bodies} args={[undefined, undefined, HOLD_BODY_MAX]} frustumCulled={false}>
         <sphereGeometry args={[0.45, 14, 12]} />
         <meshStandardMaterial color={S.white} emissive={S.hold.bodySheen} emissiveIntensity={0.18} roughness={0.25} metalness={0.1} />
@@ -2568,7 +2641,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
             }
           }
           // the flooded (THE HOLD) — capped to the nearest few, see `hold.ts` › fieldStrike
-          if (hs) fieldStrike(hs, f.x, f.z, f.radius, f.dps)
+          if (hs) fieldStrike(hs, f.x, f.z, f.radius, f.dps, posRef.current ? posRef.current.y / STEP : undefined)
         }
         if (f.hps > 0 && posRef.current) {
           const dx = posRef.current.x - f.x, dz = posRef.current.z - f.z

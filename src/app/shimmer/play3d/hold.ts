@@ -23,122 +23,56 @@
 // no string in this file names a cause. "The hold", "seal", "surge", "salvage" are build words.
 // ⚠ The landing is a BLOCKOUT for feel. Which world, whose host, what the rooms are = per-season.
 
-// ── the landing: THE TOP OF A SETBACK TOWER (Alex 09-25) ─────────────────────────────────────────
+import { HOLD_FLOORS, type FloorDef } from './hold-floors'
+import { buildHold, surfacesAt, solidAt, slabAt, flatViews, kindAt, DIRS, K, STOREY, type Building, type Kind, type Surface } from './hold-building'
+
+// ── the landing: THE TOP THREE FLOORS OF A TOWER, STACKED (Alex 09-25) ─────────────────────────────
 // *"they are at the top of a sky scraper building and they can access the top three floors starting on
 // the top floor with the bottom floor opening up to the east and west into open air gardens."*
-// Built as a WEDDING CAKE, the way real setback towers top out: each floor is a terrace that rings the
-// floor above it, so every level below the crown is a long walkway around a solid core — the loop you
-// TRAIN a round around. play3d walks height tiers (`heights`), not floors stacked over floors (the segs
-// layer is not wired here), and a setback is exactly the shape tiers can say.
-// ★ Floors are 6 tiers apart: `LEDGE_CLIMB` (metrics.ts) is 5.14, so no keeper climbs a floor face and
-// the stairs are the only way down. A stair steps one tier a cell — the walker's own step-up.
-//
-// Legend (one char = one cell):
-//   ' ' the air outside the tower (h0) — the flooded start here and CLIMB the face
-//   '.' bottom floor (h6) · ',' a garden (h6, west or east by side) · ':' middle (h12) · '=' the crown (h18)
-//   'a'..'r' a stair cell at height 1..18 · '|' a parapet (low, solid) · '#' a pillar or the border
-//   'w' a window: a gap the flooded climb through from the level below (its room = the higher side)
-//   'A'..'D' a gate (A crown→middle stair · B middle→bottom stair · C west garden · D east garden)
-//   '@' where you stand · 'X' the way out · 'R' the wall rack · 'F' the mana font · 'H' the draught cache
-export const HOLD_LANDING: readonly string[] = [
-  '##########################################################################',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                 ||||||||||||ww||||||||||||ww||||||||||                 #',
-  '#                 |....................................|                 #',
-  '#                 |....................................|                 #',
-  '#                 |....................................|                 #',
-  '#                 w.......kkjihg.......................|                 #',
-  '#                 w.......kkjihg.......................|                 #',
-  '#                 |.....||BB||||||||||||||||||||||.....w                 #',
-  '#                 |.....|:::::::::::::::::::::::H|.....w                 #',
-  '#                 |.....|::::::::::::::::::::::::|.....|                 #',
-  '#                 |.....|::::::::::::::::::::::::|.....|                 #',
-  '#                 |.....|::::::::::::::::::::::::|.....|                 #',
-  '#                 |.....|::::::::::::::::::::::::|.....|                 #',
-  '#   |||||ww||||||||.....w:::::|||ww||||ww|||:::::|.....||||||||ww|||||   #',
-  '#   |,,,,,,,,,,,,,|.....w:::::|F===========|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,|.....|:::::|============|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,|.....|:::::|============|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   w,,##,,,,##,,,|.....|:::::|===========R|:::::w.....|,,##,,,,##,,,w   #',
-  '#   w,,##,,,,##,,,|.....|:::::|============|:::::w.....|,,##,,,,##,,,w   #',
-  '#   |,,,,,,,,,,,,,|.....|:::::w============|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,|.....|:::::w==##========|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,|.....|:::::|==##========|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,C.....|:::::|============|:::::|.....D,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,C.....|:::::|============|:::::|.....D,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,|.....|:::::|========##==w:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,|.....|:::::|========##==w:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,|.....|:::::|=====@======|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   w,,##,,,,##,,,|.....|:::::|============|:::::|.....|,,##,,,,##,,,w   #',
-  '#   w,,##,,,,##,,,|.....|:::::|============|:::::|.....|,,##,,,,##,,,w   #',
-  '#   |,,,,,,,,,,,,,|.....w:::::|============|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,|.....w:::::|============|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |,,,,,,,,,,,,,|.....|:::::|X===========|:::::|.....|,,,,,,,,,,,,,|   #',
-  '#   |||||||ww||||||.....|:::::||||||AA||||||:::::|.....||||||ww|||||||   #',
-  '#                 |.....|:::::::mnopqq:::::::::::w.....|                 #',
-  '#                 |.....|:::::::mnopqq:::::::::::w.....|                 #',
-  '#                 |.....|::::::::::::::::::::::::|.....|                 #',
-  '#                 |.....|::::::::::::::::::::::::|.....|                 #',
-  '#                 |.....|::::::::::::::::::::::::|.....w                 #',
-  '#                 |.....||||||||||||||ww||||||||||.....w                 #',
-  '#                 w....................................|                 #',
-  '#                 w....................................|                 #',
-  '#                 |....................................|                 #',
-  '#                 |....................................|                 #',
-  '#                 |....................................|                 #',
-  '#                 ||||||||ww||||||||||||||||||ww||||||||                 #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '#                                                                        #',
-  '##########################################################################',
-]
+// First built as a setback (a wedding cake), because play3d's ground could only say one height per cell.
+// Alex then sized the floors at 50 × 80 each and chose TRULY STACKED, so the floors now sit straight over
+// each other: `hold-floors.ts` holds the plans (the thing to edit), `hold-building.ts` turns them into
+// the one building the walker, the flooded and every round read. Walls fill a storey and a ramp is the
+// only way between floors. The flooded climb the OUTSIDE of the tower to the windows of every floor.
 
-export type RoomId = 'top' | 'middle' | 'bottom' | 'west' | 'east'
-const GATE_OPENS: Record<string, RoomId> = { A: 'middle', B: 'bottom', C: 'west', D: 'east' }
-/** Floor heights in tiers. The gap between floors is the point: bigger than a keeper can climb. */
-export const LEVEL_H = { air: 0, bottom: 6, middle: 12, top: 18 } as const
-const STAIR = 'abcdefghijklmnopqr'   // a = 1 … r = 18
+export type RoomId = string
 
-/** Tile ids the grid is painted with — the mortal-side pair every stub map uses, plus WARP. */
+/** Tile ids the zone's flat grid is painted with — the mortal-side pair every stub map uses, plus WARP. */
 export const HOLD_TILE = { FLOOR: 98, WALL: 103, WARP: 14, VOID: -1 } as const
 
 export interface Cell { x: number; z: number }
 export interface HoldWindow {
   id: number
   room: RoomId
+  /** the floor it is on */
+  lv: number
   cells: Cell[]
   /** the floor cell just inside — where a keeper stands to mend it */
   inside: { x: number; z: number }
-  /** the cell two out, on the level below — where the flooded gather before they climb */
+  /** two cells out, in the air — where a flooded body comes up the face */
   spawn: { x: number; z: number }
   /** the window's middle, the point a flooded body climbs to */
   mid: { x: number; z: number }
-  /** the sill's height (the room's floor) and the ground the flooded climb from */
+  /** the sill's height (the floor's) and the height the flooded climb from (a storey down the face) */
   h: number
   spawnH: number
 }
-export interface HoldGate { id: number; letter: string; cost: number; cells: Cell[]; opens: RoomId; mid: { x: number; z: number }; h: number }
-export interface HoldFixture { x: number; z: number; h: number; room: RoomId }
-export interface HoldSolid { x: number; z: number; h: number; kind: 'parapet' | 'pillar' }
+export interface HoldGate { id: number; letter: string; cost: number; cells: Cell[]; lv: number; opens: RoomId[]; mid: { x: number; z: number }; h: number }
+export interface HoldFixture { x: number; z: number; h: number; lv: number; room: RoomId }
 export interface HoldMap {
   cols: number
   rows: number
+  building: Building
+  /** flat views for the zone (`hold-building.ts` › flatViews) — the walker reads the building itself */
   grid: number[][]
-  /** tier height of every cell — the zone's heightmap is this, so the walker and the sim read one map */
   heights: number[][]
   windows: HoldWindow[]
   gates: HoldGate[]
-  solids: HoldSolid[]
+  /** every region of floor between walls and gates, by name (`<floor>-<n>`) */
+  rooms: RoomId[]
+  /** per node (floor × cell): the gate / window id there, or -1 */
+  gateOf: Int16Array
+  winOf: Int16Array
   start: HoldFixture
   exit: HoldFixture
   rack: HoldFixture
@@ -152,7 +86,8 @@ export const HOLD_TUNING = {
   tearSec: 1.3,          // seconds a flooded body takes to tear one plank
   mendSec: 0.55,         // seconds of holding E per plank mended
   mendReach: 1.9,        // how close to a window's inside cell you must stand to mend it
-  gateCost: { A: 250, B: 750, C: 1000, D: 1000 } as Record<string, number>, // A (down to the middle ring — cheap: room to train is the first buy), B (the bottom), C/D (the gardens)
+  gateCost: { A: 250, B: 500, E: 750, C: 1000, D: 1000 } as Record<string, number>, // A (the top floor's north wing — cheap: room to train is the first buy), B (its south wing), E (the middle floor's halls), C/D (the gardens)
+  gateCostDefault: 750,  // a gate letter with no price of its own
   rackCost: 500,         // the SPITTER off the wall
   rackWeapon: 'spitter',
   fontCost: 250,         // a full mana pool — mana is the clip, so this IS the ammo buy
@@ -249,93 +184,119 @@ export interface HoldState {
 }
 
 // ── parse ────────────────────────────────────────────────────────────────────────────────────
-const DIRS: readonly [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-const FLOOR_H: Record<string, number> = { ' ': LEVEL_H.air, '.': LEVEL_H.bottom, ',': LEVEL_H.bottom, ':': LEVEL_H.middle, '=': LEVEL_H.top }
-const isFloorCh = (ch: string | undefined) => ch !== undefined && (ch in FLOOR_H || STAIR.includes(ch))
-const floorH = (ch: string) => ch in FLOOR_H ? FLOOR_H[ch] : STAIR.indexOf(ch) + 1
+const WALKABLE = (k: Kind) => k === K.FLOOR || k === K.RAMP
 
-export function parseLanding(rows: readonly string[] = HOLD_LANDING, tune: HoldTuning = HOLD_TUNING): HoldMap {
-  const rowsN = rows.length, cols = rows[0].length
-  const at = (x: number, z: number) => rows[z]?.[x]
-  for (let z = 0; z < rowsN; z++) if (rows[z].length !== cols) throw new Error(`hold: row ${z} is ${rows[z].length} wide, not ${cols}`)
-  const roomOf = (ch: string, x: number): RoomId | null =>
-    ch === '=' ? 'top' : ch === ':' ? 'middle' : ch === '.' ? 'bottom' : ch === ',' ? (x < cols / 2 ? 'west' : 'east') : null
-  // a cell that is not itself a floor stands on the highest floor beside it (the air never counts)
-  const beside = (x: number, z: number) => {
-    let h = -1, room: RoomId | null = null
-    for (const [dx, dz] of DIRS) {
-      const ch = at(x + dx, z + dz)
-      if (!isFloorCh(ch) || ch === ' ') continue
-      const fh = floorH(ch!)
-      if (fh > h) { h = fh; room = roomOf(ch!, x + dx) ?? room }
+export function parseLanding(floors: readonly FloorDef[] = HOLD_FLOORS, tune: HoldTuning = HOLD_TUNING): HoldMap {
+  const b = buildHold(floors)
+  const { cols, rows } = b
+  const per = cols * rows, nodes = per * b.levels.length
+  const fx: Record<string, { x: number; z: number; lv: number }> = {}
+  b.levels.forEach((L, lv) => {
+    for (let i = 0; i < per; i++) {
+      const ch = L.ch[i]
+      if (!'@XRFH'.includes(ch) || ch === ' ') continue
+      if (fx[ch]) throw new Error(`hold: two '${ch}' in the plans`)
+      fx[ch] = { x: i % cols, z: (i / cols) | 0, lv }
     }
-    return { h: Math.max(0, h), room: room ?? 'top' }
-  }
-  const grid: number[][] = [], heights: number[][] = [], solids: HoldSolid[] = []
-  const fx: Record<string, HoldFixture> = {}
-  for (let z = 0; z < rowsN; z++) {
-    const row: number[] = [], hrow: number[] = []
-    for (let x = 0; x < cols; x++) {
-      const ch = rows[z][x]
-      const b = beside(x, z)
-      const h = isFloorCh(ch) ? floorH(ch) : b.h
-      hrow.push(h)
-      const solid = ch === '#' || ch === '|'
-      // the air is VOID: it draws nothing, so the tower stands in the sky and what climbs it comes up out of view
-      row.push(solid ? HOLD_TILE.WALL : ch === 'X' ? HOLD_TILE.WARP : ch === ' ' ? HOLD_TILE.VOID : HOLD_TILE.FLOOR)
-      if (solid && !(x === 0 || z === 0 || x === cols - 1 || z === rowsN - 1)) solids.push({ x, z, h, kind: ch === '#' ? 'pillar' : 'parapet' })
-      if ('@XRFH'.includes(ch)) fx[ch] = { x, z, h, room: b.room }
-    }
-    grid.push(row); heights.push(hrow)
-  }
-  for (const k of '@XRFH') if (!fx[k]) throw new Error(`hold: the landing is missing '${k}'`)
+  })
+  for (const k of '@XRFH') if (!fx[k]) throw new Error(`hold: the plans are missing '${k}'`)
 
-  // group same-char openings into windows / gates (4-connected runs)
-  const seen = new Set<string>()
-  const windows: HoldWindow[] = [], gates: HoldGate[] = []
-  for (let z = 0; z < rowsN; z++) for (let x = 0; x < cols; x++) {
-    const ch = at(x, z)!
-    const isWin = ch === 'w', isGate = ch in GATE_OPENS
-    if ((!isWin && !isGate) || seen.has(`${x},${z}`)) continue
-    const cells: Cell[] = [], stack: Cell[] = [{ x, z }]
-    seen.add(`${x},${z}`)
+  // regions: walkable floor joined by the walker's step (a ramp joins two floors), split by walls, gates, windows
+  const region = new Int32Array(nodes).fill(-1)
+  const rooms: RoomId[] = []
+  const perLevel = new Array(b.levels.length).fill(0)
+  for (let lv = 0; lv < b.levels.length; lv++) for (let i = 0; i < per; i++) {
+    const n0 = lv * per + i
+    if (!WALKABLE(b.levels[lv].kind[i] as Kind) || region[n0] >= 0) continue
+    const r = rooms.length
+    rooms.push(`${b.levels[lv].name}-${++perLevel[lv]}`)
+    region[n0] = r
+    const stack = [n0]
     while (stack.length) {
-      const c = stack.pop()!
-      cells.push(c)
+      const n = stack.pop()!, l = (n / per) | 0, c = n % per, x = c % cols, z = (c / cols) | 0, y = b.levels[l].sy[c]
       for (const [dx, dz] of DIRS) {
-        const n = { x: c.x + dx, z: c.z + dz }
-        if (at(n.x, n.z) === ch && !seen.has(`${n.x},${n.z}`)) { seen.add(`${n.x},${n.z}`); stack.push(n) }
+        for (const su of surfacesAt(b, x + dx, z + dz)) {
+          if (!WALKABLE(su.kind) || Math.abs(su.y - y) > 1.01) continue
+          const nn = su.lv * per + (z + dz) * cols + x + dx
+          if (region[nn] < 0) { region[nn] = r; stack.push(nn) }
+        }
       }
     }
-    cells.sort((a, b) => a.z - b.z || a.x - b.x)
+  }
+  const roomAt = (lv: number, x: number, z: number): RoomId | null => {
+    const r = region[lv * per + z * cols + x]
+    return r >= 0 ? rooms[r] : null
+  }
+
+  // openings: gates and windows, each a 4-connected run of one character on one floor
+  const gateOf = new Int16Array(nodes).fill(-1), winOf = new Int16Array(nodes).fill(-1)
+  const windows: HoldWindow[] = [], gates: HoldGate[] = []
+  const seen = new Uint8Array(nodes)
+  for (let lv = 0; lv < b.levels.length; lv++) for (let i = 0; i < per; i++) {
+    const L = b.levels[lv], k = L.kind[i]
+    if ((k !== K.GATE && k !== K.WINDOW) || seen[lv * per + i]) continue
+    const ch = L.ch[i]
+    const cells: Cell[] = [], stack = [i]
+    seen[lv * per + i] = 1
+    while (stack.length) {
+      const c = stack.pop()!, x = c % cols, z = (c / cols) | 0
+      cells.push({ x, z })
+      for (const [dx, dz] of DIRS) {
+        const nx = x + dx, nz = z + dz, ni = nz * cols + nx
+        if (nx >= 0 && nz >= 0 && nx < cols && nz < rows && !seen[lv * per + ni] && L.ch[ni] === ch) { seen[lv * per + ni] = 1; stack.push(ni) }
+      }
+    }
+    cells.sort((a, c) => a.z - c.z || a.x - c.x)
     const mx = cells.reduce((a, c) => a + c.x, 0) / cells.length
     const mz = cells.reduce((a, c) => a + c.z, 0) / cells.length
-    const c0 = cells[0]
-    const h = heights[c0.z][c0.x]
-    if (isGate) {
-      gates.push({ id: 0, letter: ch, cost: tune.gateCost[ch], cells, opens: GATE_OPENS[ch], mid: { x: mx, z: mz }, h })
+    if (k === K.GATE) {
+      const id = gates.length
+      const opens = new Set<RoomId>()
+      for (const c of cells) {
+        gateOf[lv * per + c.z * cols + c.x] = id
+        for (const [dx, dz] of DIRS) {
+          for (const su of surfacesAt(b, c.x + dx, c.z + dz)) {
+            if (!WALKABLE(su.kind) || Math.abs(su.y - L.y) > 1.01) continue
+            const r = roomAt(su.lv, c.x + dx, c.z + dz)
+            if (r) opens.add(r)
+          }
+        }
+      }
+      if (opens.size < 2) throw new Error(`hold: gate '${ch}' on ${L.name} at ${cells[0].x},${cells[0].z} does not stand between two rooms`)
+      gates.push({ id, letter: ch, cost: tune.gateCost[ch] ?? tune.gateCostDefault, cells, lv, opens: [...opens], mid: { x: mx, z: mz }, h: L.y })
       continue
     }
-    // the room is the HIGHER side; the flooded come from the lower one
-    let best: { dx: number; dz: number; h: number } | null = null
-    for (const [dx, dz] of DIRS) {
-      const n = at(c0.x + dx, c0.z + dz)
-      if (!isFloorCh(n)) continue
-      const nh = floorH(n!)
-      if (!best || nh > best.h) best = { dx, dz, h: nh }
-    }
-    if (!best) throw new Error(`hold: window at ${c0.x},${c0.z} opens on no floor`)
-    const room = roomOf(at(c0.x + best.dx, c0.z + best.dz)!, c0.x + best.dx)
-    if (!room) throw new Error(`hold: window at ${c0.x},${c0.z} opens on a stair`)
-    const spawn = { x: mx - best.dx * 2, z: mz - best.dz * 2 }
+    // a window faces OUT: the floor side is inside, the open air is where the flooded come from
+    const c0 = cells[0]
+    const d = DIRS.find(([dx, dz]) => WALKABLE(kindAt(b, lv, c0.x + dx, c0.z + dz)) && kindAt(b, lv, c0.x - dx, c0.z - dz) === K.VOID)
+    if (!d) throw new Error(`hold: the window on ${L.name} at ${c0.x},${c0.z} is not in an outside wall (floor on one side, air on the other)`)
+    const room = roomAt(lv, c0.x + d[0], c0.z + d[1])!
+    const id = windows.length
+    for (const c of cells) winOf[lv * per + c.z * cols + c.x] = id
     windows.push({
-      id: windows.length, room, cells,
-      inside: { x: mx + best.dx, z: mz + best.dz }, spawn, mid: { x: mx, z: mz },
-      h, spawnH: heights[Math.round(spawn.z)][Math.round(spawn.x)],
+      id, room, lv, cells,
+      inside: { x: mx + d[0], z: mz + d[1] }, spawn: { x: mx - d[0] * 2, z: mz - d[1] * 2 }, mid: { x: mx, z: mz },
+      h: L.y, spawnH: L.y - STOREY,
     })
   }
-  gates.sort((a, b) => a.cost - b.cost || a.letter.localeCompare(b.letter)).forEach((g, i) => { g.id = i })
-  return { cols, rows: rowsN, grid, heights, windows, gates, solids, start: fx['@'], exit: fx.X, rack: fx.R, font: fx.F, cache: fx.H }
+  gates.sort((a, c) => a.cost - c.cost || a.letter.localeCompare(c.letter)).forEach((g, i) => {
+    for (const c of g.cells) gateOf[g.lv * per + c.z * cols + c.x] = i
+    g.id = i
+  })
+
+  // the flat grid draws NOTHING but the way out (`HoldBuilding` draws the floors); the walker stands on
+  // `holdSurfaces`, so an empty grid here is not an empty map
+  const { heights } = flatViews(b, HOLD_TILE)
+  const grid = heights.map(r => r.map(() => HOLD_TILE.VOID as number))
+  grid[fx.X.z][fx.X.x] = HOLD_TILE.WARP
+  const fixture = (k: string): HoldFixture => {
+    const f = fx[k]
+    return { x: f.x, z: f.z, lv: f.lv, h: b.levels[f.lv].y, room: roomAt(f.lv, f.x, f.z)! }
+  }
+  return {
+    cols, rows, building: b, grid, heights, windows, gates, rooms, gateOf, winOf,
+    start: fixture('@'), exit: fixture('X'), rack: fixture('R'), font: fixture('F'), cache: fixture('H'),
+  }
 }
 
 // ── rounds ──────────────────────────────────────────────────────────────────────────────────
@@ -381,83 +342,99 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     flood: [],
     planks: map.windows.map(() => tune.seals),
     gatesOpen: map.gates.map(() => false),
-    rooms: { top: true, middle: false, bottom: false, west: false, east: false },
+    rooms: Object.fromEntries(map.rooms.map(r => [r, r === map.start.room])),
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
     drops: [], dropsThisRound: 0, pickups: [],
     elapsed: 0, nextId: 1, rng: mulberry32(seed),
-    field: new Int16Array(map.cols * map.rows).fill(-1), fieldT: 0, fieldAt: -1,
+    field: new Int16Array(map.cols * map.rows * map.building.levels.length).fill(-1), fieldT: 0, fieldAt: -1,
   }
 }
 
 export const isLoud = (s: HoldState) => s.hush <= 0
 
 // ── what is solid to whom ─────────────────────────────────────────────────────────────────────
-function cellKind(s: HoldState, x: number, z: number): 'wall' | 'window' | 'gate' | 'open' {
-  const t = s.map.grid[z]?.[x]
-  if (t === undefined || t === HOLD_TILE.WALL) return 'wall'
-  for (const w of s.map.windows) if (w.cells.some(c => c.x === x && c.z === z)) return 'window'
-  for (const g of s.map.gates) if (g.cells.some(c => c.x === x && c.z === z)) return s.gatesOpen[g.id] ? 'open' : 'gate'
-  return 'open'
-}
-/** A keeper never climbs through a window, and a shut gate is a wall. */
-export function keeperBlocked(s: HoldState, x: number, z: number): boolean {
-  const k = cellKind(s, Math.round(x), Math.round(z))
-  return k === 'window' || k === 'gate'
-}
-/** Every cell a keeper may not stand in right now, as `x,z` keys — the walker's cheap lookup. */
-export function keeperBlockSet(s: HoldState): Set<string> {
-  const out = new Set<string>()
-  for (const w of s.map.windows) for (const c of w.cells) out.add(`${c.x},${c.z}`)
-  for (const g of s.map.gates) if (!s.gatesOpen[g.id]) for (const c of g.cells) out.add(`${c.x},${c.z}`)
-  return out
-}
-/** Height in tiers of the floor at a cell (0 off the map). */
-export const heightAt = (s: HoldState, x: number, z: number): number => s.map.heights[Math.round(z)]?.[Math.round(x)] ?? 0
+const nodeIdx = (m: HoldMap, lv: number, x: number, z: number) => lv * m.cols * m.rows + z * m.cols + x
 /**
- * What stops a round: a wall, a shut gate, or the tower itself — a round below the floor it is over
- * has hit that floor's face (`y` in tiers). Windows let rounds through — you shoot out of them, and
- * down the face at what is climbing.
+ * Is a keeper at height `y` (tiers, feet) stopped at this cell? Walls fill their storey, rails stop
+ * the legs, windows never let a keeper through, a shut gate is a wall — all on the keeper's own floor.
+ * `gatesOpen` null = before a run exists: every gate shut.
  */
-export function roundBlocked(s: HoldState, x: number, z: number, y = Infinity): boolean {
-  const k = cellKind(s, Math.round(x), Math.round(z))
-  return k === 'wall' || k === 'gate' || y < heightAt(s, x, z)
+export function holdSolid(m: HoldMap, gatesOpen: readonly boolean[] | null, x: number, z: number, y: number): boolean {
+  const open = (lv: number, i: number, k: Kind) => k === K.GATE && gatesOpen?.[m.gateOf[lv * m.cols * m.rows + i]] === true
+  return solidAt(m.building, Math.round(x), Math.round(z), y + 0.05, open)
 }
-/** One step between neighbouring cells: a stair's tier, never a floor face (flooded do not climb inside). */
-const stepOk = (s: HoldState, ax: number, az: number, bx: number, bz: number) =>
-  Math.abs((s.map.heights[bz]?.[bx] ?? 0) - (s.map.heights[az]?.[ax] ?? 0)) <= 1
-function floodPassable(s: HoldState, x: number, z: number): boolean {
-  const k = cellKind(s, x, z)
-  if (k === 'wall' || k === 'gate') return false
-  if (k === 'window') {
-    const w = s.map.windows.find(w => w.cells.some(c => c.x === x && c.z === z))!
-    return s.planks[w.id] <= 0
+export const keeperBlocked = (s: HoldState, x: number, z: number, y: number) => holdSolid(s.map, s.gatesOpen, x, z, y)
+/** Every surface a keeper may stand on in a cell — the walker's collision context reads this. */
+export function holdSurfaces(m: HoldMap, x: number, z: number): { y: number }[] {
+  return surfacesAt(m.building, x, z)
+}
+/** The highest floor at a cell, in tiers (0 where there is none). */
+export const heightAt = (s: HoldState, x: number, z: number): number => {
+  const su = surfacesAt(s.map.building, Math.round(x), Math.round(z))
+  return su.length ? su[su.length - 1].y : 0
+}
+/** The floor under something at height `y`: the surface in that cell nearest it. */
+export function floorAt(s: HoldState, x: number, z: number, y: number): number {
+  let best = -Infinity
+  for (const su of surfacesAt(s.map.building, Math.round(x), Math.round(z))) if (Math.abs(su.y - y) < Math.abs(best - y)) best = su.y
+  return best === -Infinity ? y : best
+}
+/**
+ * What stops a round: a wall, a shut gate, a rail below its top, a floor slab, a ramp, the roof.
+ * Windows let rounds through — you shoot out of them, and down the face at what is climbing.
+ */
+export function roundBlocked(s: HoldState, x: number, z: number, y: number): boolean {
+  const cx = Math.round(x), cz = Math.round(z), b = s.map.building
+  const open = (lv: number, i: number, k: Kind) => k === K.WINDOW || s.gatesOpen[s.map.gateOf[lv * s.map.cols * s.map.rows + i]] === true
+  return solidAt(b, cx, cz, y, open) || slabAt(b, cx, cz, y)
+}
+/**
+ * The surface a flooded body at height `y` can move onto in a cell: the highest one within a step of
+ * it, up or down (they do not drop off ledges, and they only climb the face at a window). A gate must
+ * be open and a window's seals gone.
+ */
+function floodStand(s: HoldState, x: number, z: number, y: number): Surface | null {
+  let best: Surface | null = null
+  for (const su of surfacesAt(s.map.building, x, z)) {
+    if (Math.abs(su.y - y) > 1.01) continue
+    const n = nodeIdx(s.map, su.lv, x, z)
+    if (su.kind === K.GATE && !s.gatesOpen[s.map.gateOf[n]]) continue
+    if (su.kind === K.WINDOW && s.planks[s.map.winOf[n]] > 0) continue
+    if (!best || su.y > best.y) best = su
   }
-  return true
+  return best
 }
 
-// ── the flow field: BFS from the keeper, rebuilt when they change cell or every 0.25s ─────────
-function buildField(s: HoldState, px: number, pz: number) {
-  const { cols, rows } = s.map
+// ── the flow field: BFS from the keeper over every floor, rebuilt when they change cell or every 0.25s ──
+/** The keeper's node: the surface in their cell nearest their feet. */
+function keeperNode(s: HoldState, px: number, pz: number, py: number): number {
+  const x = Math.round(px), z = Math.round(pz)
+  let best: Surface | null = null
+  for (const su of surfacesAt(s.map.building, x, z)) if (!best || Math.abs(su.y - py) < Math.abs(best.y - py)) best = su
+  return best ? nodeIdx(s.map, best.lv, x, z) : -1
+}
+function buildField(s: HoldState, start: number) {
+  const { cols, rows, building: b } = s.map
+  const per = cols * rows
   const f = s.field
   f.fill(-1)
-  const sx = Math.round(px), sz = Math.round(pz)
-  if (sx < 0 || sz < 0 || sx >= cols || sz >= rows) return
-  const q = new Int32Array(cols * rows)
+  s.fieldAt = start
+  if (start < 0) return
+  const q = new Int32Array(f.length)
   let head = 0, tail = 0
-  const si = sz * cols + sx
-  f[si] = 0; q[tail++] = si
+  f[start] = 0; q[tail++] = start
   while (head < tail) {
-    const i = q[head++], x = i % cols, z = (i / cols) | 0
+    const n = q[head++], lv = (n / per) | 0, c = n % per, x = c % cols, z = (c / cols) | 0
+    const y = b.levels[lv].sy[c]
     for (const [dx, dz] of DIRS) {
-      const nx = x + dx, nz = z + dz
-      if (nx < 0 || nz < 0 || nx >= cols || nz >= rows) continue
-      const ni = nz * cols + nx
-      if (f[ni] !== -1 || !floodPassable(s, nx, nz) || !stepOk(s, x, z, nx, nz)) continue
-      f[ni] = f[i] + 1; q[tail++] = ni
+      const su = floodStand(s, x + dx, z + dz, y)
+      if (!su) continue
+      const nn = nodeIdx(s.map, su.lv, x + dx, z + dz)
+      if (f[nn] !== -1) continue
+      f[nn] = f[n] + 1; q[tail++] = nn
     }
   }
-  s.fieldAt = si
 }
 
 // ── the step ────────────────────────────────────────────────────────────────────────────────
@@ -516,11 +493,10 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
   }
 
   // the field
-  const pi = Math.round(pz) * s.map.cols + Math.round(px)
+  const pi = keeperNode(s, px, pz, py)
   s.fieldT -= dt
-  if (pi !== s.fieldAt || s.fieldT <= 0) { buildField(s, px, pz); s.fieldT = 0.25 }
+  if (pi !== s.fieldAt || s.fieldT <= 0) { buildField(s, pi); s.fieldT = 0.25 }
 
-  const cols = s.map.cols
   for (const b of s.flood) {
     if (!b.alive) continue
     b.strikeT = Math.max(0, b.strikeT - dt)
@@ -542,19 +518,22 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
       if (b.tearT >= tune.tearSec) { b.tearT = 0; s.planks[w.id]-- }
       continue
     }
-    // inside: follow the floor, down the field toward the keeper
-    const floor = heightAt(s, b.x, b.z)
-    b.y += Math.max(-10 * dt, Math.min(10 * dt, floor - b.y))
+    // inside: follow the floor, down the field toward the keeper — on whichever floor the body is on
+    const cx = Math.round(b.x), cz = Math.round(b.z)
+    const here = floodStand(s, cx, cz, b.y)
+    const hy = here ? here.y : b.y
+    b.y += Math.max(-10 * dt, Math.min(10 * dt, hy - b.y))
     const dpx = px - b.x, dpz = pz - b.z, dp = Math.hypot(dpx, dpz)
     if (dp < tune.reach && Math.abs(py - b.y) < tune.level) {
       if (b.strikeT <= 0) { out.strike += tune.strikeDmg * (b.kind === 'bulk' ? 1.5 : 1); b.strikeT = tune.strikeCd }
       continue
     }
-    const cx = Math.round(b.x), cz = Math.round(b.z)
-    let best = s.field[cz * cols + cx], bx = px, bz = pz
+    let best = here ? s.field[nodeIdx(s.map, here.lv, cx, cz)] : -1, bx = px, bz = pz
     if (best > 1) {
       for (const [ox, oz] of DIRS) {
-        const v = s.field[(cz + oz) * cols + (cx + ox)]
+        const su = floodStand(s, cx + ox, cz + oz, hy)
+        if (!su) continue
+        const v = s.field[nodeIdx(s.map, su.lv, cx + ox, cz + oz)]
         if (v >= 0 && v < best) { best = v; bx = cx + ox; bz = cz + oz }
       }
     }
@@ -562,20 +541,20 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     const mx = bx - b.x, mz = bz - b.z, md = Math.hypot(mx, mz) || 1
     const step = Math.min(md, b.speed * dt)
     const nx = b.x + (mx / md) * step, nz = b.z + (mz / md) * step
-    const ox = Math.round(b.x), oz = Math.round(b.z)
-    if (floodPassable(s, Math.round(nx), oz) && stepOk(s, ox, oz, Math.round(nx), oz)) b.x = nx
+    if (Math.round(nx) === cx || floodStand(s, Math.round(nx), cz, hy)) b.x = nx
     const cx2 = Math.round(b.x)
-    if (floodPassable(s, cx2, Math.round(nz)) && stepOk(s, cx2, oz, cx2, Math.round(nz))) b.z = nz
+    if (Math.round(nz) === cz || floodStand(s, cx2, Math.round(nz), hy)) b.z = nz
   }
-  // bodies do not stack into one: a soft shove apart
+  // bodies do not stack into one: a soft shove apart (same floor only)
   const live = s.flood.filter(b => b.alive && b.phase === 'inside')
+  const canShove = (b: FloodBody, x: number, z: number) => (Math.round(x) === Math.round(b.x) && Math.round(z) === Math.round(b.z)) || floodStand(s, Math.round(x), Math.round(z), b.y) !== null
   for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
     const a = live[i], c = live[j], dx = c.x - a.x, dz = c.z - a.z, d2 = dx * dx + dz * dz
+    if (Math.abs(a.y - c.y) >= tune.level) continue
     if (d2 > 0.0001 && d2 < 0.49) {
       const d = Math.sqrt(d2), push = (0.7 - d) * 0.5, ux = dx / d, uz = dz / d
-      const ax2 = Math.round(a.x - ux * push), az2 = Math.round(a.z - uz * push), cx3 = Math.round(c.x + ux * push), cz3 = Math.round(c.z + uz * push)
-      if (floodPassable(s, ax2, az2) && stepOk(s, Math.round(a.x), Math.round(a.z), ax2, az2)) { a.x -= ux * push; a.z -= uz * push }
-      if (floodPassable(s, cx3, cz3) && stepOk(s, Math.round(c.x), Math.round(c.z), cx3, cz3)) { c.x += ux * push; c.z += uz * push }
+      if (canShove(a, a.x - ux * push, a.z - uz * push)) { a.x -= ux * push; a.z -= uz * push }
+      if (canShove(c, c.x + ux * push, c.z + uz * push)) { c.x += ux * push; c.z += uz * push }
     }
   }
   // boosters wait, then fade; walking over one takes it
@@ -604,7 +583,7 @@ export function hitBody(s: HoldState, id: number, dmg: number, crit: boolean, tu
       // a body killed in the yard (shot through a window) leaves its booster just inside that
       // window — a drop the keeper cannot reach is a drop that taunts
       const w = s.map.windows[b.win]
-      const at = b.phase === 'inside' ? { x: b.x, z: b.z, y: heightAt(s, b.x, b.z) } : { ...w.inside, y: w.h }
+      const at = b.phase === 'inside' ? { x: b.x, z: b.z, y: b.y } : { ...w.inside, y: w.h }
       s.drops.push({ id: s.nextId++, kind: 'glimmer', x: at.x, z: at.z, y: at.y, ttl: tune.dropTtl })
       s.dropsThisRound++
     }
@@ -619,9 +598,9 @@ export function hitBody(s: HoldState, id: number, dmg: number, crit: boolean, tu
  * uncapped field is the one move that lets a single keeper carry a round (power-budget.ts, 09-24).
  * Returns how many it struck.
  */
-export function fieldStrike(s: HoldState, x: number, z: number, radius: number, dmg: number, tune: HoldTuning = HOLD_TUNING): number {
+export function fieldStrike(s: HoldState, x: number, z: number, radius: number, dmg: number, fy: number = heightAt(s, x, z), tune: HoldTuning = HOLD_TUNING): number {
   if (!s.running || dmg <= 0) return 0
-  const r2 = radius * radius, fy = heightAt(s, x, z)
+  const r2 = radius * radius
   const inside = s.flood
     .filter(b => b.alive && (b.x - x) ** 2 + (b.z - z) ** 2 <= r2 && Math.abs(b.y - fy) < tune.level)
     .sort((a, b) => ((a.x - x) ** 2 + (a.z - z) ** 2) - ((b.x - x) ** 2 + (b.z - z) ** 2))
@@ -646,7 +625,7 @@ export function releaseSurge(s: HoldState, px: number, pz: number, py: number = 
     if (b.phase === 'inside' && d > 0.01) {
       const shove = tune.surgeShove * (1 - d / tune.surgeRadius)
       const nx = b.x + (dx / d) * shove, nz = b.z + (dz / d) * shove
-      if (floodPassable(s, Math.round(nx), Math.round(nz)) && stepOk(s, Math.round(b.x), Math.round(b.z), Math.round(nx), Math.round(nz))) { b.x = nx; b.z = nz }
+      if (floodStand(s, Math.round(nx), Math.round(nz), b.y)) { b.x = nx; b.z = nz }
     }
   }
   // a surge's kills do not charge the next surge
@@ -693,7 +672,7 @@ export function buyGate(s: HoldState, gate: number): boolean {
   const g = s.map.gates[gate]
   if (!g || s.gatesOpen[gate] || !spend(s, g.cost)) return false
   s.gatesOpen[gate] = true
-  s.rooms[g.opens] = true
+  for (const r of g.opens) s.rooms[r] = true
   s.fieldAt = -1
   return true
 }

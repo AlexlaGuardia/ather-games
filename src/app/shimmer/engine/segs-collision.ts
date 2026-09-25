@@ -43,6 +43,9 @@ export interface CollisionCtx {
   grid: number[][]     // tile ids; gates SOLID / void / bounds for the base ground
   heights: number[][]  // base-ground top per cell, tier units
   segs: SegLayer       // authored elevated surfaces (EMPTY_SEGS => flat world)
+  /** A zone that owns its own stack of floors (THE HOLD, `play3d/hold-building.ts`) answers every
+   *  cell's surfaces itself; the grid, heights and segs are then only bounds. Same resolution rule. */
+  surfaces?: (cx: number, cz: number) => { y: number }[]
 }
 
 /** A resolved walkable surface at a cell: the ground, or one authored seg. */
@@ -95,6 +98,7 @@ function groundSurface(ctx: CollisionCtx, cx: number, cz: number): Surface | nul
 
 /** Every walkable surface at a plan cell — ground (if any) plus each covering seg — top-sorted. */
 export function surfacesAt(ctx: CollisionCtx, cx: number, cz: number): Surface[] {
+  if (ctx.surfaces) return ctx.surfaces(cx, cz).map(s => ({ y: s.y, kind: 'ground' as const }))
   const out: Surface[] = []
   const g = groundSurface(ctx, cx, cz)
   if (g) out.push(g)

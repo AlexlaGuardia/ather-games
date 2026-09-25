@@ -156,6 +156,14 @@ export const hold = {
   plank: '#8a6a44', gate: '#5d636c', gateRim: '#9aa3ad',
   rack: '#3a3f46', font: '#4fb3d9', cache: '#b98cf2',
   glimmer: '#ffeaa3',  // the Glimmer of Hope — warm light, the one kind thing the flooded leave
+  // the building (`HoldBuilding`): floor and wall never share a colour, and no two floors share a pair,
+  // so where you are reads at a glance. Bottom → top. Ramps are the one warm accent: they are the way.
+  levels: [
+    { floor: '#5a5e57', wall: '#8c5a44' },   // bottom: slate floor, brick walls
+    { floor: '#4f5a66', wall: '#6f9aa6' },   // middle: blue-grey floor, teal walls
+    { floor: '#6b6456', wall: '#c8b58a' },   // top: warm stone floor, sand walls
+  ],
+  garden: '#4d6b3c', rail: '#9aa3ad', ramp: '#c79a4a', lintel: '#3a3d42',
 } as const
 /** The manabox viewmodel: dead grey cast metal with bronze trim (the art-medium law). */
 export const viewmodel = {
