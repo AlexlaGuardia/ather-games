@@ -178,6 +178,9 @@ export const hold = {
   plank: '#8a6a44', gate: '#5d636c', gateRim: '#9aa3ad',
   rack: '#3a3f46', font: '#4fb3d9', cache: '#b98cf2',
   glimmer: '#ffeaa3',  // the Glimmer of Hope — warm light, the one kind thing the flooded leave
+  // chests (09-26): the body is a darkened wood/metal, the lid seam glows the rarity — the HUD prompt names it in the same colour
+  chestBody: { common: '#6e5236', rare: '#2f4a66', legendary: '#6a5222' },
+  chest: { common: '#d9c7a0', rare: '#6fb4ff', legendary: '#ffc94a' },
   // the building (`HoldBuilding`): floor and wall never share a colour, and no two floors share a pair,
   // so where you are reads at a glance. Bottom → top. Ramps are the one warm accent: they are the way.
   levels: [

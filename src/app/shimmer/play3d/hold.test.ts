@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PARTS_RULED, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { FLOOR_W, FLOOR_D } from './hold-floors'
@@ -329,6 +329,58 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   // a room with no window of its own falls back to the nearest opened windows, never to none
   const bare = map.rooms.find(r => !map.windows.some(w => w.room === r) && !map.gates.some(g => g.opens.includes(r)))
   if (bare) { s.here = bare; ok(spawnWindows(s).length > 0, 'a windowless, gateless room still draws the nearest windows') }
+}
+
+// ── chests (Alex 09-26): every 5th round each EMPTY spot rolls 25%; rarity tilts the loot ──
+{
+  ok(map.chestSpots.length >= 16, `chest spots across the building (${map.chestSpots.length})`)
+  ok([0, 1, 2].every(lv => map.chestSpots.some(c => c.lv === lv)), 'every floor has chest spots')
+  ok(map.chestSpots.some(c => c.x < plates[0].x0) && map.chestSpots.some(c => c.x >= plates[0].x0 + FLOOR_W), 'both gardens have one')
+  ok(map.chestSpots.every(c => kindAt(B, c.lv, c.x, c.z) === K.FLOOR), 'every chest spot is floor')
+  const s = startHold(parseLanding())
+  ok(s.chests.every(c => c === null), 'no chest at the start')
+  // the round clock: nothing until round 5, then a roll
+  s.hush = 99999
+  let rolledAt = -1
+  for (let r = 1; r <= 5; r++) {
+    const before = s.chests.filter(Boolean).length
+    s.flood = []; s.toSpawn = 0; s.breakT = 0.01
+    stepHold(s, 0.05, map.start.x, map.start.z, map.start.h)
+    if (s.chests.filter(Boolean).length > before && rolledAt < 0) rolledAt = s.round
+  }
+  ok(rolledAt === T.chestEvery, `★ the first chests appear on round ${T.chestEvery}, none before (first at ${rolledAt})`)
+  // the odds, by count: many rolls over empty spots land near 25%
+  const t = startHold(parseLanding(), 7)
+  let hits = 0, tries = 0
+  for (let k = 0; k < 200; k++) { t.chests = t.chests.map(() => null); hits += rollChests(t); tries += t.chests.length }
+  ok(Math.abs(hits / tries - T.chestChance) < 0.03, `★ an empty spot rolls ~${T.chestChance * 100}% (${(100 * hits / tries).toFixed(1)}%)`)
+  // an occupied spot never rolls: fill every spot, roll, nothing is replaced
+  ownerChests(t)
+  const snap = t.chests.map(c => c!.rarity).join()
+  t.chests.forEach(c => { c!.openT = 0.5 })
+  ok(rollChests(t, T, 1) === 0 && t.chests.map(c => c!.rarity).join() === snap && t.chests.every(c => c!.openT === 0.5), '★ an occupied spot does not roll (not even at 100%)')
+  // rarity: no legendary while vessel parts are unruled
+  const rs = { common: 0, rare: 0, legendary: 0 }
+  const rng = (() => { let a = 99; return () => ((a = (a * 1103515245 + 12345) >>> 0) / 4294967296) })()
+  for (let k = 0; k < 4000; k++) rs[rollRarity(rng)]++
+  ok(VESSEL_PARTS_RULED || rs.legendary === 0, `no legendary chest until vessel parts are ruled (${rs.legendary})`)
+  ok(rs.common > rs.rare && rs.rare > 0, `common outnumbers rare (${rs.common} / ${rs.rare})`)
+  ok(CHEST_LOOT.rare.some(e => e.loot.kind === 'marks' && e.loot.n === 30), 'a rare chest can hold a bag of 30 Marks')
+  // opening: hold E for chestOpenSec; the loot lands where it belongs
+  const u = startHold(parseLanding(), 3)
+  u.chests[0] = { rarity: 'rare', openT: 0 }
+  ok(chestTick(u, 0, T.chestOpenSec / 2) === null && u.chests[0] !== null, 'half the hold does not open it')
+  const sal = u.salvage
+  const got = chestTick(u, 0, T.chestOpenSec)!
+  ok(got !== null && u.chests[0] === null, '★ held long enough, it opens and the spot is empty again')
+  ok(got.kind === 'marks' ? u.loot.length === 1 && u.salvage === sal : u.salvage === sal + (got.kind === 'salvage' ? got.n : 0), 'Marks go to the page, salvage lands at once')
+  u.chests[1] = { rarity: 'common', openT: 0 }
+  let glim = false
+  for (let k = 0; k < 40 && !glim; k++) { u.chests[1] = { rarity: 'common', openT: 0 }; const l = chestTick(u, 1, 9); glim = l?.kind === 'glimmer' && u.pickups.includes('glimmer') }
+  ok(glim, 'a Glimmer from a chest goes to the pickups (the page refills mana)')
+  const sp = map.chestSpots[2]
+  u.chests[2] = { rarity: 'common', openT: 0 }
+  ok(promptAt(u, sp.x, sp.z, sp.h)?.kind === 'chest', 'standing at a chest, E offers it')
 }
 
 // ── the end ──

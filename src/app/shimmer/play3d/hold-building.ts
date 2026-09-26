@@ -62,7 +62,7 @@ export const DIRS: readonly [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -
 
 function kindOf(ch: string): Kind {
   if (ch === ' ') return K.VOID
-  if (ch === '.' || ch === 'p' || FIXTURES.includes(ch)) return K.FLOOR
+  if (ch === '.' || ch === 'p' || ch === '$' || FIXTURES.includes(ch)) return K.FLOOR   // '$' a chest spot (`hold.ts` › chests)
   if (ch === 'u') return K.BLOCK
   if (ch === 'o') return K.LANDING
   if (ch === '#') return K.WALL

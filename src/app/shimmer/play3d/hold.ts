@@ -80,6 +80,8 @@ export interface HoldMap {
   rack: HoldFixture
   font: HoldFixture
   cache: HoldFixture
+  /** every '$' in the plans: where a chest may appear */
+  chestSpots: HoldFixture[]
 }
 
 // ── the dials (first guesses; Alex's feel pass) ───────────────────────────────────────────────
@@ -120,6 +122,11 @@ export const HOLD_TUNING = {
   interact: 1.8,         // how close to stand to a gate / rack / font / cache
   level: 2,              // tiers apart that still count as the same floor (strikes, prompts, pickups, fields)
   climbRate: 5,          // tiers/sec a body climbs a floor face
+  // chests (Alex 09-26): every chestEvery-th round, each EMPTY spot rolls chestChance; an occupied spot never rolls
+  chestEvery: 5,
+  chestChance: 0.25,
+  chestOpenSec: 2,       // seconds of holding E — a real risk mid-round
+  chestRarity: { common: 70, rare: 25, legendary: 5 },
 } as const
 export type HoldTuning = typeof HOLD_TUNING
 
@@ -151,6 +158,30 @@ export type HoldDropKind = 'glimmer'
 export const DROP_NAME: Record<HoldDropKind, string> = { glimmer: 'Glimmer of Hope' }
 export interface HoldDrop { id: number; kind: HoldDropKind; x: number; z: number; y: number; ttl: number }
 
+// ── chests: rare finds on marked spots, rarity tilts what is inside ─────────────────────────────
+// Alex 09-26. What a chest holds lives HERE; the page applies what the sim cannot (Marks are the real
+// wallet, `lib/wallet`). No cap on Marks, and a duplicate vessel part is kept, for trading (Alex).
+export type ChestRarity = 'common' | 'rare' | 'legendary'
+export type HoldLoot =
+  | { kind: 'salvage'; n: number }
+  | { kind: 'glimmer' }
+  | { kind: 'marks'; n: number }
+  | { kind: 'part' }
+export interface HoldChest { rarity: ChestRarity; openT: number }
+/**
+ * ⚠ TBD-CANON (CANON_GAPS 09-26, "the Hold's ground zero" Q3): whether this season's vessel parts are a
+ * lawful chest find. Until it is ruled no legendary chest rolls, so no chest promises a thing that
+ * does not exist yet. Ruled yes → flip this, and the page gives the part.
+ */
+export const VESSEL_PARTS_RULED = false
+export const CHEST_LOOT: Record<ChestRarity, { loot: HoldLoot; w: number }[]> = {
+  common: [{ loot: { kind: 'salvage', n: 400 }, w: 60 }, { loot: { kind: 'glimmer' }, w: 40 }],
+  rare: [{ loot: { kind: 'marks', n: 30 }, w: 60 }, { loot: { kind: 'salvage', n: 1500 }, w: 40 }],   // a bag of Marks ≈ 30 (Alex)
+  legendary: [{ loot: { kind: 'part' }, w: 100 }],
+}
+export const lootLabel = (l: HoldLoot): string =>
+  l.kind === 'salvage' ? `+${l.n} salvage` : l.kind === 'marks' ? `A bag of Marks (+${l.n})` : l.kind === 'glimmer' ? DROP_NAME.glimmer : 'A vessel part'
+
 export interface HoldState {
   map: HoldMap
   running: boolean
@@ -176,6 +207,10 @@ export interface HoldState {
   rackBought: boolean
   drops: HoldDrop[]
   dropsThisRound: number
+  /** per chest spot: the chest standing there, or null */
+  chests: (HoldChest | null)[]
+  /** what opened chests gave that the page must apply (Marks, parts) */
+  loot: HoldLoot[]
   /** boosters picked up and not yet applied — the host drains this (it owns mana, hp, the team) */
   pickups: HoldDropKind[]
   elapsed: number
@@ -297,9 +332,16 @@ export function parseLanding(floors: readonly FloorDef[] = HOLD_FLOORS, tune: Ho
     const f = fx[k]
     return { x: f.x, z: f.z, lv: f.lv, h: b.levels[f.lv].y, room: roomAt(f.lv, f.x, f.z)! }
   }
+  const chestSpots: HoldFixture[] = []
+  b.levels.forEach((L, lv) => {
+    for (let i = 0; i < per; i++) if (L.ch[i] === '$') {
+      const x = i % cols, z = (i / cols) | 0
+      chestSpots.push({ x, z, lv, h: L.y, room: roomAt(lv, x, z)! })
+    }
+  })
   return {
     cols, rows, building: b, grid, heights, windows, gates, rooms, regionOf: region, gateOf, winOf,
-    start: fixture('@'), exit: fixture('X'), rack: fixture('R'), font: fixture('F'), cache: fixture('H'),
+    start: fixture('@'), exit: fixture('X'), rack: fixture('R'), font: fixture('F'), cache: fixture('H'), chestSpots,
   }
 }
 
@@ -351,6 +393,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
     drops: [], dropsThisRound: 0, pickups: [],
+    chests: map.chestSpots.map(() => null), loot: [],
     elapsed: 0, nextId: 1, rng: mulberry32(seed),
     field: new Int16Array(map.cols * map.rows * map.building.levels.length).fill(-1), fieldT: 0, fieldAt: -1,
   }
@@ -468,6 +511,39 @@ export function spawnWindows(s: HoldState): HoldWindow[] {
   return s.map.windows.filter(w => s.rooms[w.room]).sort((a, c) => dist(a) - dist(c) || a.id - c.id).slice(0, NEAREST_FALLBACK)
 }
 
+// ── chests ──────────────────────────────────────────────────────────────────────────────────
+export function rollRarity(rng: () => number, tune: HoldTuning = HOLD_TUNING): ChestRarity {
+  const w = { ...tune.chestRarity, legendary: VESSEL_PARTS_RULED ? tune.chestRarity.legendary : 0 }
+  let r = rng() * (w.common + w.rare + w.legendary)
+  if ((r -= w.common) < 0) return 'common'
+  return r - w.rare < 0 ? 'rare' : 'legendary'
+}
+/** Every EMPTY spot rolls; an occupied one does not. Returns how many chests appeared. */
+export function rollChests(s: HoldState, tune: HoldTuning = HOLD_TUNING, chance: number = tune.chestChance): number {
+  let n = 0
+  s.chests.forEach((c, i) => {
+    if (c || s.rng() >= chance) return
+    s.chests[i] = { rarity: rollRarity(s.rng, tune), openT: 0 }
+    n++
+  })
+  return n
+}
+/** Hold E at a chest. When it opens: salvage lands now, a Glimmer goes to the pickups, Marks and parts to `loot`. */
+export function chestTick(s: HoldState, spot: number, dt: number, tune: HoldTuning = HOLD_TUNING): HoldLoot | null {
+  const c = s.chests[spot]
+  if (!c || !s.running) return null
+  c.openT += dt
+  if (c.openT < tune.chestOpenSec) return null
+  const table = CHEST_LOOT[c.rarity]
+  let r = s.rng() * table.reduce((a, e) => a + e.w, 0), loot = table[table.length - 1].loot
+  for (const e of table) if ((r -= e.w) < 0) { loot = e.loot; break }
+  s.chests[spot] = null
+  if (loot.kind === 'salvage') s.salvage += loot.n
+  else if (loot.kind === 'glimmer') s.pickups.push('glimmer')
+  else s.loot.push(loot)
+  return loot
+}
+
 // ── the step ────────────────────────────────────────────────────────────────────────────────
 export interface HoldStepOut {
   /** raw damage the keeper takes this frame (the host applies resist/shield) */
@@ -500,6 +576,7 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
       s.mendPaidThisRound = 0
       s.dropsThisRound = 0
       out.roundBegan = s.round
+      if (s.round % tune.chestEvery === 0) rollChests(s, tune)
     }
   } else if (s.toSpawn <= 0 && alive === 0 && !loud) {
     s.breakT = tune.breakSec
@@ -674,6 +751,7 @@ export type HoldPrompt =
   | { kind: 'rack'; cost: number; bought: boolean }
   | { kind: 'font'; cost: number }
   | { kind: 'cache'; cost: number }
+  | { kind: 'chest'; spot: number; rarity: ChestRarity; progress: number }
 
 /** Close enough on the ground AND on the same floor — a gate one storey down is not "near". */
 const near = (px: number, pz: number, py: number, x: number, z: number, h: number, r: number, tune: HoldTuning) =>
@@ -689,6 +767,10 @@ export function promptAt(s: HoldState, px: number, pz: number, py: number = heig
   for (const g of s.map.gates) {
     if (s.gatesOpen[g.id]) continue
     if (near(px, pz, py, g.mid.x, g.mid.z, g.h, tune.interact, tune)) return { kind: 'gate', gate: g.id, cost: g.cost }
+  }
+  for (let i = 0; i < s.map.chestSpots.length; i++) {
+    const c = s.chests[i], sp = s.map.chestSpots[i]
+    if (c && near(px, pz, py, sp.x, sp.z, sp.h, tune.interact, tune)) return { kind: 'chest', spot: i, rarity: c.rarity, progress: Math.min(1, c.openT / tune.chestOpenSec) }
   }
   const { rack, font, cache } = s.map
   if (near(px, pz, py, rack.x, rack.z, rack.h, tune.interact, tune)) return { kind: 'rack', cost: tune.rackCost, bought: s.rackBought }
@@ -749,6 +831,10 @@ export function ownerOpenAll(s: HoldState): void {
   s.fieldAt = -1
 }
 /** The tide stops: the flooded are gone and none come until the run starts again. */
+/** Owner layout walk: a chest on every empty spot, rarity rolled as usual. */
+export function ownerChests(s: HoldState, tune: HoldTuning = HOLD_TUNING): number {
+  return rollChests(s, tune, 1)
+}
 export function ownerCalm(s: HoldState): void {
   s.flood = []
   s.toSpawn = 0

@@ -118,6 +118,7 @@ import { createSpiritIndex } from '../engine/spirit-index'
 import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
+import { addMarks } from '@/lib/wallet'
 import { keeperBook, saveBook } from './book'
 import { PassagePanel } from './PassagePanel'
 import { PassageScene } from './PassageScene'
@@ -132,7 +133,7 @@ import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPane
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
-import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, fieldStrike, ownerOpenAll, ownerCalm, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -2042,6 +2043,8 @@ const SENSE_TICK = 0.1
 // the host raised is shown and what made the host is not (guardrail 1); real bodies are a later pass.
 const HOLD_BODY_MAX = 40
 const HOLD_DROP_MAX = 8
+const HOLD_CHEST_BODY = { common: new THREE.Color(S.hold.chestBody.common), rare: new THREE.Color(S.hold.chestBody.rare), legendary: new THREE.Color(S.hold.chestBody.legendary) }
+const HOLD_CHEST_GLOW = { common: new THREE.Color(S.hold.chest.common), rare: new THREE.Color(S.hold.chest.rare), legendary: new THREE.Color(S.hold.chest.legendary) }
 const HOLD_FLOOD_COLOR = { drift: new THREE.Color(S.hold.body), swift: new THREE.Color(S.hold.swift), bulk: new THREE.Color(S.hold.bulk) }
 // THE HOLD's building (`hold-building.ts`): every floor's slab, walls, rails and ramps, drawn once.
 // Cells are merged into runs along each row, so a 50-block wall is one box, not fifty.
@@ -2161,11 +2164,14 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
   const planks = useRef<THREE.InstancedMesh>(null)
   const gates = useRef<THREE.InstancedMesh>(null)
   const drops = useRef<THREE.InstancedMesh>(null)
+  const chests = useRef<THREE.InstancedMesh>(null)
+  const chestGlow = useRef<THREE.InstancedMesh>(null)
   // the landing is one fixed map (the zone's grid and heights are generated from it), so sizing the
   // pools off it never waits on a run existing — a run that starts after mount still has meshes
   const map = HOLD_MAP
   const plankMax = map.windows.length * HOLD_TUNING.seals
   const gateMax = map.gates.reduce((n, g) => n + g.cells.length, 0)
+  const chestMax = map.chestSpots.length
   const m = useMemo(() => new THREE.Matrix4(), [])
   const q = useMemo(() => new THREE.Quaternion(), [])
   const v = useMemo(() => new THREE.Vector3(), [])
@@ -2192,6 +2198,23 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
       for (let k = i; k < HOLD_BODY_MAX; k++) { m.compose(zero, q.identity(), zero); bodies.current.setMatrixAt(k, m) }
       bodies.current.instanceMatrix.needsUpdate = true
       if (bodies.current.instanceColor) bodies.current.instanceColor.needsUpdate = true
+    }
+    if (chests.current && chestGlow.current) {
+      // one instance per spot, always: an empty spot scales to nothing
+      map.chestSpots.forEach((sp, i) => {
+        const c = s.chests[i]
+        const k = c ? 1 : 0
+        const shake = c && c.openT > 0 ? 0.03 * Math.sin(t * 30) : 0
+        v.set(sp.x + shake, sp.h * STEP + 0.3, sp.z); sc.setScalar(k); m.compose(v, q.identity(), sc)
+        chests.current!.setMatrixAt(i, m)
+        v.set(sp.x + shake, sp.h * STEP + 0.62, sp.z); m.compose(v, q.identity(), sc)
+        chestGlow.current!.setMatrixAt(i, m)
+        if (c) { chests.current!.setColorAt(i, HOLD_CHEST_BODY[c.rarity]); chestGlow.current!.setColorAt(i, HOLD_CHEST_GLOW[c.rarity]) }
+      })
+      chests.current.instanceMatrix.needsUpdate = true
+      chestGlow.current.instanceMatrix.needsUpdate = true
+      if (chests.current.instanceColor) chests.current.instanceColor.needsUpdate = true
+      if (chestGlow.current.instanceColor) chestGlow.current.instanceColor.needsUpdate = true
     }
     if (planks.current) {
       let i = 0
@@ -2248,6 +2271,19 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
         <octahedronGeometry args={[0.28, 0]} />
         <meshStandardMaterial color={S.hold.glimmer} emissive={S.hold.glimmer} emissiveIntensity={1.4} toneMapped={false} />
       </instancedMesh>
+      {chestMax > 0 && (
+        <>
+          <instancedMesh ref={chests} args={[undefined, undefined, chestMax]} frustumCulled={false}>
+            <boxGeometry args={[0.9, 0.6, 0.6]} />
+            <meshStandardMaterial color={S.white} roughness={0.75} />
+          </instancedMesh>
+          {/* the seam under the lid glows the rarity's colour, so a chest reads across a room */}
+          <instancedMesh ref={chestGlow} args={[undefined, undefined, chestMax]} frustumCulled={false}>
+            <boxGeometry args={[0.94, 0.07, 0.64]} />
+            <meshBasicMaterial color={S.white} toneMapped={false} />
+          </instancedMesh>
+        </>
+      )}
       {plankMax > 0 && (
         <instancedMesh ref={planks} args={[undefined, undefined, plankMax]} frustumCulled={false}>
           <boxGeometry args={[2.1, 0.16, 0.12]} />
@@ -6925,7 +6961,7 @@ export default function Shimmer3D() {
   // held-E mending ticks on the same clock, so a plank takes the same time at any frame rate
   useEffect(() => {
     if (zoneId !== HOLD_ZONE) return
-    let lastRound = 1, lastKey = ''
+    let lastRound = 1, lastKey = '', lastChests = 0
     const DT = 0.15
     const id = setInterval(() => {
       const hs = holdRef.current, p = posRef.current
@@ -6938,7 +6974,12 @@ export default function Shimmer3D() {
         setHoldFlash(DROP_NAME[kind])
       }
       if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
-      if (hs.round !== lastRound) { lastRound = hs.round; setHoldFlash(`Round ${hs.round}`) }
+      if (holdEHeld.current && prompt?.kind === 'chest') { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) }
+      // what a chest gave that lives outside the run: Marks are the real wallet (a vessel part waits on canon)
+      while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n) }
+      const chestsNow = hs.chests.filter(Boolean).length
+      if (hs.round !== lastRound) { lastRound = hs.round; setHoldFlash(chestsNow > lastChests ? `Round ${hs.round} · ${chestsNow - lastChests === 1 ? 'a chest has' : `${chestsNow - lastChests} chests have`} appeared` : `Round ${hs.round}`) }
+      lastChests = chestsNow
       let best = 0
       try { best = Number(localStorage.getItem(keeperKey(HOLD_BEST_KEY)) ?? 0) } catch { /* none */ }
       const next = { round: hs.round, salvage: hs.salvage, hush: Math.ceil(hs.hush), loud: isLoud(hs), surge: Math.round(hs.surge * 20) / 20, kills: hs.kills, over: hs.over, prompt, best }
@@ -6963,7 +7004,7 @@ export default function Shimmer3D() {
       if (hs.over) { beginHold(); return }
       const pr = promptAt(hs, p.x, p.z, p.y / STEP)
       if (!pr) return
-      if (pr.kind === 'mend') { holdEHeld.current = true; return }
+      if (pr.kind === 'mend' || pr.kind === 'chest') { holdEHeld.current = true; return }
       const short = () => setHarvestToast('Not enough salvage')
       if (pr.kind === 'gate') { if (buyGate(hs, pr.gate)) setHoldFlash('The gate opens'); else short() }
       else if (pr.kind === 'rack') {
@@ -8001,6 +8042,7 @@ export default function Shimmer3D() {
               {holdHud.prompt.kind === 'gate' && <span>E — open the gate <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'rack' && <span>E — {holdHud.prompt.bought ? 'refill the SPITTER' : 'take the SPITTER off the wall'} <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.bought ? Math.round(holdHud.prompt.cost / 2) : holdHud.prompt.cost} salvage</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'font' && <span>E — drink from the font (full mana) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'chest' && <span>Hold E — open the <span style={{ color: S.hold.chest[holdHud.prompt.rarity] }}>{holdHud.prompt.rarity}</span> chest <HearthPillSoft face={HUD_FACE}>{Math.round(holdHud.prompt.progress * 100)}%</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'cache' && <span>E — a draught from the cache (+{HOLD_TUNING.cacheSec}s hush) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
             </HearthPill>
           )}
@@ -8091,6 +8133,7 @@ export default function Shimmer3D() {
                       <HearthButton small onClick={() => { if (holdRef.current) { ownerOpenAll(holdRef.current); setHoldFlash('Every gate open') } }}>Open every gate</HearthButton>
                       <HearthButton small onClick={() => { if (holdRef.current) { holdRef.current.salvage += 5000; setHoldFlash('+5000 salvage') } }}>+5000 salvage</HearthButton>
                       <HearthButton small onClick={() => { if (holdRef.current) { ownerCalm(holdRef.current); setHoldFlash('The tide is calm') } }}>Calm the tide</HearthButton>
+                      <HearthButton small onClick={() => { if (holdRef.current) setHoldFlash(`${ownerChests(holdRef.current)} chests placed`) }}>Fill the chest spots</HearthButton>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {holdSpots(HOLD_MAP).map(sp => (
