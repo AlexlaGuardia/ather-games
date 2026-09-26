@@ -101,7 +101,7 @@ export function lanternsOf(g: number[][]): Lantern[] {
     }
     if (!edge || doorstep) continue
     // a storefront's approach stays clear: no post planted in front of a door
-    if (FRONTS.some(f => Math.hypot(f.x + f.face[0] * ((f.depth ?? 0) + 1.5) - x, f.z + f.face[1] * ((f.depth ?? 0) + 1.5) - z) < 3)) continue
+    if (FRONTS.some(f => Math.hypot(f.x + f.face[0] * ((f.depth ?? 0) + 1.5) - x, f.z + f.face[1] * ((f.depth ?? 0) + 1.5) - z) < 4.5)) continue
     if (out.some(l => Math.hypot(l.x - x, l.z - z) < LANTERN_SPACING)) continue
     out.push({ x, z })
   }
@@ -116,7 +116,7 @@ export function lanternsOf(g: number[][]): Lantern[] {
 // and they take the recessed entrances his layout already had. The Notice Board is *"a weathered board in the town
 // square"*, south edge, beside where a keeper wakes. How they LOOK is Jin's (the Hub's boundary: *"storefront art"*).
 
-export type FrontKind = 'tavern' | 'cafe' | 'books' | 'stair' | 'station'
+export type FrontKind = 'tavern' | 'cafe' | 'books' | 'stair' | 'station' | 'inn' | 'smithy'
 export interface Front {
   id: string
   /** the sign's words: canon's own name for the place */
@@ -140,6 +140,11 @@ export interface Front {
 export const FRONTS: readonly Front[] = [
   { id: 'kindled-mug',   name: 'The Kindled Mug',    kind: 'tavern',  x: 67,   z: 36.5, face: [0, 1],  w: 3, depth: 1, shut: true },
   { id: 'bookstore',     name: "Eyuun's Bookstore",  kind: 'books',   x: 31,   z: 63.5, face: [0, -1], w: 3, depth: 1, shut: true },
+  // Alex placed these two on 2026-09-26 as well: the inn by the north road where travelers come in, the smithy on
+  // the road to the spaceport. Canon: *"Smithing town aesthetic — iron fixtures, forge-warmed walls"* (the inn),
+  // *"Steam rising from smithies. The smell of bread and hot metal"* (the town).
+  { id: 'forgelight-inn', name: 'The Forgelight Inn', kind: 'inn',    x: 32,   z: 36.5, face: [0, 1],  w: 3, depth: 1, shut: true },
+  { id: 'smithy',        name: 'The Smithy',          kind: 'smithy', x: 68,   z: 63.5, face: [0, -1], w: 3, depth: 1, shut: true },
   { id: 'spirit-corner', name: 'The Spirit Corner',  kind: 'cafe',    x: 21.5, z: 48.5, face: [1, 0],  w: 2, depth: 1, gate: 'THE SPIRIT CORNER' },
   { id: 'passage',       name: 'The Passage',        kind: 'stair',   x: 84.5, z: 48.5, face: [-1, 0], w: 2, depth: 2, gate: 'THE PASSAGE' },
   { id: 'station',       name: 'Travelers Station',  kind: 'station', x: 48.5, z: 87.5, face: [0, -1], w: 2, depth: 2, gate: 'TRAVELERS STATION' },

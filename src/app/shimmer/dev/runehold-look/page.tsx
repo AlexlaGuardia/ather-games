@@ -34,6 +34,8 @@ const VIEWS: Record<string, { x: number; z: number; yaw: number; pitch: number }
   board:     { x: 50, z: 59, yaw: 180, pitch: 2 },
   'station-door': { x: 48.5, z: 78, yaw: 90, pitch: 8 },
   terminal:  { x: 50, z: 66, yaw: 90, pitch: 14 },
+  inn:       { x: 32, z: 46, yaw: -90, pitch: 8 },
+  smithy:    { x: 68, z: 55, yaw: 90, pitch: 8 },
   'port-far': { x: 49, z: 54, yaw: 90, pitch: 12 },
   'south-road': { x: 50, z: 92, yaw: -90, pitch: 2 },
 }

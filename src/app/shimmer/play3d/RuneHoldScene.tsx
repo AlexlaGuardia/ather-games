@@ -221,6 +221,8 @@ function signTexture(f: Front): THREE.CanvasTexture {
   if (f.kind === 'tavern') { x.strokeRect(-22, -24, 36, 48); x.beginPath(); x.arc(20, 0, 14, -Math.PI / 2, Math.PI / 2); x.stroke() }
   else if (f.kind === 'cafe') { x.beginPath(); x.arc(0, 4, 22, 0, Math.PI); x.stroke(); x.beginPath(); x.moveTo(-26, 4); x.lineTo(26, 4); x.stroke(); for (const d of [-9, 5]) { x.beginPath(); x.moveTo(d, -8); x.quadraticCurveTo(d + 8, -18, d, -30); x.stroke() } }
   else if (f.kind === 'books') { x.beginPath(); x.moveTo(0, -20); x.lineTo(-30, -26); x.lineTo(-30, 22); x.lineTo(0, 28); x.lineTo(30, 22); x.lineTo(30, -26); x.closePath(); x.moveTo(0, -20); x.lineTo(0, 28); x.stroke() }
+  else if (f.kind === 'inn') { x.strokeRect(-30, -2, 60, 16); x.strokeRect(-30, -16, 16, 14); x.beginPath(); x.moveTo(-30, 14); x.lineTo(-30, 26); x.moveTo(30, 14); x.lineTo(30, 26); x.stroke() }
+  else if (f.kind === 'smithy') { x.beginPath(); x.moveTo(-32, -14); x.lineTo(30, -14); x.lineTo(20, -2); x.lineTo(8, -2); x.lineTo(12, 14); x.lineTo(-12, 14); x.lineTo(-8, -2); x.lineTo(-24, -2); x.closePath(); x.stroke(); x.beginPath(); x.moveTo(-18, 26); x.lineTo(18, 26); x.stroke() }
   else if (f.kind === 'stair') { x.beginPath(); x.moveTo(-30, -24); for (let i = 0; i < 4; i++) { x.lineTo(-30 + i * 15, -24 + (i + 1) * 12); x.lineTo(-15 + i * 15, -24 + (i + 1) * 12) } x.stroke() }
   else { x.beginPath(); x.moveTo(-32, 10); x.lineTo(24, 10); x.lineTo(34, 0); x.lineTo(24, -10); x.lineTo(-32, -10); x.closePath(); x.stroke(); x.beginPath(); x.moveTo(-10, -10); x.lineTo(-22, -26); x.moveTo(-10, 10); x.lineTo(-22, 26); x.stroke() }
   x.restore()
@@ -247,7 +249,15 @@ function Storefront({ f }: { f: Front }) {
       {[-1, 1].map(e => <mesh key={e} position={[e * (half + 0.12), H / 2, 0.12]} castShadow><boxGeometry args={[0.26, H, 0.3]} /><meshStandardMaterial color={F.jamb} roughness={0.8} /></mesh>)}
       <mesh position={[0, H + 0.14, 0.12]} castShadow><boxGeometry args={[f.w + 0.8, 0.32, 0.36]} /><meshStandardMaterial color={F.jamb} roughness={0.8} /></mesh>
       </group>
-      {f.shut && (
+      {f.kind === 'smithy' && (
+        // the forge, seen through the open workshop front: a glowing mouth, and the heat on the porch
+        <group position={[0, 0, -0.1]}>
+          <mesh position={[0, 1.1, 0]}><boxGeometry args={[f.w - 0.1, 2.2, 0.12]} /><meshStandardMaterial color={P.iron} /></mesh>
+          <mesh position={[0, 0.9, 0.08]}><boxGeometry args={[1.3, 0.9, 0.05]} /><meshStandardMaterial color={F.forge} emissive={F.forge} emissiveIntensity={1.4} /></mesh>
+          <pointLight position={[0, 1, 0.8]} color={F.forge} intensity={6} distance={7} decay={1.6} />
+        </group>
+      )}
+      {f.shut && f.kind !== 'smithy' && (
         <group position={[0, 0, -0.08]}>
           <mesh position={[0, (H - 0.1) / 2, 0]}><boxGeometry args={[f.w - 0.06, H - 0.1, 0.12]} /><meshStandardMaterial color={F.door} roughness={0.85} /></mesh>
           {[0.6, H - 0.6].map(y => <mesh key={y} position={[0, y, 0.07]}><boxGeometry args={[f.w - 0.1, 0.1, 0.04]} /><meshStandardMaterial color={F.doorBand} /></mesh>)}
@@ -265,7 +275,14 @@ function Storefront({ f }: { f: Front }) {
           ))}
         </group>
       )}
-      {(f.kind === 'tavern' || f.kind === 'stair' || f.kind === 'books') && [-1, 1].map(e => (
+      {f.kind === 'smithy' && (
+        // the anvil on its block, outside the door where the work spills over
+        <group position={[half + 1.2, 0, 0.9]}>
+          <mesh position={[0, 0.35, 0]} castShadow><boxGeometry args={[0.6, 0.7, 0.6]} /><meshStandardMaterial color={RH.timber} /></mesh>
+          <mesh position={[0, 0.85, 0]} castShadow><boxGeometry args={[0.9, 0.3, 0.4]} /><meshStandardMaterial color={P.iron} roughness={0.5} /></mesh>
+        </group>
+      )}
+      {(f.kind === 'tavern' || f.kind === 'stair' || f.kind === 'books' || f.kind === 'inn') && [-1, 1].map(e => (
         // a lamp each side of the door, the warm glass the town's lanterns use
         <mesh key={e} position={[e * (half + 0.55), 2.1, 0.3]}><boxGeometry args={[0.26, 0.34, 0.26]} /><meshStandardMaterial color={P.glass} emissive={P.glass} emissiveIntensity={1} /></mesh>
       ))}
@@ -419,7 +436,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       }
     }
     // one chimney per house, near the ridge, at the gable the hash picks. A hearth's chimney smokes (the Mug's).
-    const hearths = new Set(FRONTS.filter(f => f.kind === 'tavern').map(f => owner.get(`${Math.floor(f.x - f.face[0] * 0.5)},${Math.floor(f.z - f.face[1] * 0.5)}`)))
+    const hearths = new Set(FRONTS.filter(f => f.kind === 'tavern' || f.kind === 'smithy').map(f => owner.get(`${Math.floor(f.x - f.face[0] * 0.5)},${Math.floor(f.z - f.face[1] * 0.5)}`)))
     const smokes: { x: number; y: number; z: number }[] = []
     for (const b of blocks) {
       if (b.kind !== 'house' || b === terminal) continue
