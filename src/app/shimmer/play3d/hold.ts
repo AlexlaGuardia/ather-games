@@ -58,6 +58,8 @@ export interface HoldWindow {
   spawnH: number
 }
 export interface HoldGate { id: number; letter: string; cost: number; cells: Cell[]; lv: number; opens: RoomId[]; mid: { x: number; z: number }; h: number }
+/** A floor grate the flooded crawl up through ('=' in the plans). No seals: it cannot be mended shut. */
+export interface HoldVent { id: number; room: RoomId; lv: number; x: number; z: number; h: number }
 export interface HoldFixture { x: number; z: number; h: number; lv: number; room: RoomId }
 export interface HoldMap {
   cols: number
@@ -84,6 +86,8 @@ export interface HoldMap {
   zero: HoldFixture
   /** every '$' in the plans: where a chest may appear */
   chestSpots: HoldFixture[]
+  /** every '=' in the plans: a vent the flooded crawl up through */
+  vents: HoldVent[]
 }
 
 // ── the dials (first guesses; Alex's feel pass) ───────────────────────────────────────────────
@@ -132,6 +136,10 @@ export const HOLD_TUNING = {
   // the device (Alex 09-26, our pack-a-punch): planted once at ground zero, then each weapon is tuned a tier at a time
   devicePlant: 2000,
   tuneCost: [5000, 7500],   // to tier 1, to tier 2
+  // vents (Alex 09-26): the rooms grew and the walls got far away, so some of the tide comes up through the floor
+  ventShare: 0.35,       // of the spawns, when an active room has a vent far enough away
+  ventMinSteps: 12,      // a vent never opens closer than this (walking steps) to the keeper — you get to see it coming
+  riseSec: 1.4,          // a body heaves up out of the grate this long before it can move or strike (shootable the whole time)
 } as const
 export type HoldTuning = typeof HOLD_TUNING
 
@@ -147,9 +155,12 @@ export interface FloodBody {
   hp: number
   maxHp: number
   speed: number
-  /** yard → at the window tearing → through and hunting */
-  phase: 'approach' | 'tear' | 'inside'
+  /** yard → at the window tearing → through and hunting · or up out of a vent (`rise`) → hunting */
+  phase: 'approach' | 'tear' | 'rise' | 'inside'
+  /** the window it came at, or -1 */
   win: number
+  /** the vent it came up, or -1 */
+  vent: number
   tearT: number
   strikeT: number
   alive: boolean
@@ -350,9 +361,16 @@ export function parseLanding(floors: readonly FloorDef[] = HOLD_FLOORS, tune: Ho
       chestSpots.push({ x, z, lv, h: L.y, room: roomAt(lv, x, z)! })
     }
   })
+  const vents: HoldVent[] = []
+  b.levels.forEach((L, lv) => {
+    for (let i = 0; i < per; i++) if (L.ch[i] === '=') {
+      const x = i % cols, z = (i / cols) | 0
+      vents.push({ id: vents.length, x, z, lv, h: L.y, room: roomAt(lv, x, z)! })
+    }
+  })
   return {
     cols, rows, building: b, grid, heights, windows, gates, rooms, regionOf: region, gateOf, winOf,
-    start: fixture('@'), exit: fixture('X'), rack: fixture('R'), font: fixture('F'), cache: fixture('H'), zero: fixture('Z'), chestSpots,
+    start: fixture('@'), exit: fixture('X'), rack: fixture('R'), font: fixture('F'), cache: fixture('H'), zero: fixture('Z'), chestSpots, vents,
   }
 }
 
@@ -571,6 +589,19 @@ export function spawnWindows(s: HoldState): HoldWindow[] {
   return near(s.map.windows.filter(w => s.rooms[w.room]), NEAREST_FALLBACK)
 }
 
+/**
+ * The vents a body may come up now: the active rooms' vents at least `ventMinSteps` of walking from the
+ * keeper (a vent at your feet is a cheap hit, not pressure), nearer half first like the windows.
+ * The point of a vent is the middle of a big room, where every window is a long walk away.
+ */
+export function spawnVents(s: HoldState, tune: HoldTuning = HOLD_TUNING): HoldVent[] {
+  const act = activeRooms(s)
+  const dist = (v: HoldVent) => s.field[nodeIdx(s.map, v.lv, v.x, v.z)]
+  const ok = s.map.vents.filter(v => act.has(v.room) && dist(v) >= tune.ventMinSteps)
+  ok.sort((a, c) => dist(a) - dist(c) || a.id - c.id)
+  return ok.slice(0, Math.max(2, Math.ceil(ok.length / 2)))
+}
+
 // ── chests ──────────────────────────────────────────────────────────────────────────────────
 export function rollRarity(rng: () => number, tune: HoldTuning = HOLD_TUNING): ChestRarity {
   const w = { ...tune.chestRarity, legendary: VESSEL_PARTS_RULED ? tune.chestRarity.legendary : 0 }
@@ -681,19 +712,27 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
   // the keeper can only be in a shut room by FALLING into it (a broken floor): being there wakes it
   if (!s.rooms[s.here]) { s.rooms[s.here] = true; out.fellInto = s.here; s.fell = s.here }
 
-  // spawns: from the windows of the active rooms (above). LOUD = no ration and no break: they rush.
+  // spawns: from the windows of the active rooms (above), and a share up through their vents.
+  // LOUD = no ration and no break: they rush.
   s.spawnT -= dt
   const cap = tune.maxAlive
   if (s.spawnT <= 0 && s.breakT <= 0 && (s.toSpawn > 0 || loud) && alive < cap) {
-    const wins = spawnWindows(s)
-    const w = wins[Math.floor(s.rng() * wins.length)]
     const n = roundCount(s.round) - s.toSpawn
     const kind: FloodKind = loud ? 'swift' : kindFor(s.round, n)
     const st = bodyStats(kind, s.round)
-    s.flood.push({
-      id: s.nextId++, kind, x: w.spawn.x + (s.rng() - 0.5) * 0.8, z: w.spawn.z + (s.rng() - 0.5) * 0.8, y: w.spawnH,
-      hp: st.hp, maxHp: st.hp, speed: st.speed, phase: 'approach', win: w.id, tearT: 0, strikeT: 0.6, alive: true,
-    })
+    const vents = spawnVents(s, tune)
+    const base = { id: s.nextId++, kind, hp: st.hp, maxHp: st.hp, speed: st.speed, tearT: 0, strikeT: 0.6, alive: true }
+    if (vents.length && s.rng() < tune.ventShare) {
+      const v = vents[Math.floor(s.rng() * vents.length)]
+      s.flood.push({ ...base, x: v.x, z: v.z, y: v.h - 1.2, phase: 'rise', win: -1, vent: v.id })
+    } else {
+      const wins = spawnWindows(s)
+      const w = wins[Math.floor(s.rng() * wins.length)]
+      s.flood.push({
+        ...base, x: w.spawn.x + (s.rng() - 0.5) * 0.8, z: w.spawn.z + (s.rng() - 0.5) * 0.8, y: w.spawnH,
+        phase: 'approach', win: w.id, vent: -1,
+      })
+    }
     if (s.toSpawn > 0) s.toSpawn--
     s.spawnT = loud ? 0.3 : spawnEvery(s.round)
   }
@@ -705,6 +744,13 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
   for (const b of s.flood) {
     if (!b.alive) continue
     b.strikeT = Math.max(0, b.strikeT - dt)
+    if (b.phase === 'rise') {
+      // up out of the grate: it cannot move or strike until it is standing on the floor
+      const v = s.map.vents[b.vent]
+      b.y = Math.min(v.h, b.y + (1.2 / tune.riseSec) * dt)
+      if (b.y >= v.h - 1e-6) { b.y = v.h; b.phase = 'inside' }
+      continue
+    }
     const w = s.map.windows[b.win]
     if (b.phase === 'approach') {
       // cross to the foot of the face, then CLIMB it to hang under the sill
@@ -789,8 +835,8 @@ export function hitBody(s: HoldState, id: number, dmg: number, crit: boolean, tu
     if (s.dropsThisRound < tune.dropCap && s.rng() < tune.dropChance) {
       // a body killed in the yard (shot through a window) leaves its booster just inside that
       // window — a drop the keeper cannot reach is a drop that taunts
-      const w = s.map.windows[b.win]
-      const at = b.phase === 'inside' ? { x: b.x, z: b.z, y: b.y } : { ...w.inside, y: w.h }
+      const w = s.map.windows[b.win], v = s.map.vents[b.vent]
+      const at = b.phase === 'inside' ? { x: b.x, z: b.z, y: b.y } : v ? { x: v.x, z: v.z, y: v.h } : { ...w.inside, y: w.h }
       s.drops.push({ id: s.nextId++, kind: 'glimmer', x: at.x, z: at.z, y: at.y, ttl: tune.dropTtl })
       s.dropsThisRound++
     }

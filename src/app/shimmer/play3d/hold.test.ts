@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PARTS_RULED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PARTS_RULED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { FLOOR_W, FLOOR_D } from './hold-floors'
@@ -11,8 +11,9 @@ import { LEDGE_CLIMB } from './metrics'
 
 let pass = 0; const fails: string[] = []
 const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
+const from = (b: FloodBody) => b.win >= 0 ? map.windows[b.win] : map.vents[b.vent]
 const body = (o: Partial<FloodBody> & { id: number; x: number; z: number }): FloodBody =>
-  ({ kind: 'drift', y: 0, hp: 100, maxHp: 100, speed: 2, phase: 'inside', win: 0, tearT: 0, strikeT: 1, alive: true, ...o })
+  ({ kind: 'drift', y: 0, hp: 100, maxHp: 100, speed: 2, phase: 'inside', win: 0, vent: -1, tearT: 0, strikeT: 1, alive: true, ...o })
 
 // ── the tower parses into what Alex sized (09-26): three 100 × 120 floors stacked, 60 × 100 gardens off the bottom ──
 const map = parseLanding()
@@ -127,7 +128,7 @@ ok(bodyStats('swift', 5).speed > bodyStats('drift', 5).speed && bodyStats('bulk'
     if (s.planks.some(n => n < T.seals)) tore = true
     for (const b of s.flood) { if (b.phase === 'tear' && b.y > TOP - STOREY + 1) climbed = true; maxY = Math.max(maxY, b.y) }
   }
-  ok(s.flood.length > 0 && s.flood.every(b => s.map.windows[b.win].room === map.start.room), '★ only the open room spawns — its windows, nothing below')
+  ok(s.flood.length > 0 && s.flood.every(b => from(b).room === map.start.room), '★ only the open room spawns — its windows and vents, nothing below')
   ok(climbed, 'a body climbs the outside face up to the sill before it tears')
   ok(tore, 'bodies tear planks off the start room\'s windows')
   ok(Math.abs(maxY - TOP) < 1e-6, 'through the window, a body stands on the top floor')
@@ -324,8 +325,8 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   ok(s.here === low.room, 'standing in a room makes it here')
   const act = activeRooms(s)
   ok(act.size >= 1 && act.size < map.rooms.length, `every gate open, still only ${act.size} of ${map.rooms.length} rooms active`)
-  ok(s.flood.length > 0 && s.flood.every(b => act.has(map.windows[b.win].room)), '★ every body came in at an active room\'s window')
-  ok(s.flood.every(b => map.windows[b.win].lv !== 2), '★ nothing climbs in on the roof while the keeper holds the bottom floor')
+  ok(s.flood.length > 0 && s.flood.every(b => act.has(from(b).room)), '★ every body came in at an active room\'s window or vent')
+  ok(s.flood.every(b => from(b).lv !== 2), '★ nothing climbs in on the roof while the keeper holds the bottom floor')
   // a room with no window of its own falls back to the nearest opened windows, never to none
   const bare = map.rooms.find(r => !map.windows.some(w => w.room === r) && !map.gates.some(g => g.opens.includes(r)))
   if (bare) { s.here = bare; ok(spawnWindows(s).length > 0, 'a windowless, gateless room still draws the nearest windows') }
@@ -462,7 +463,7 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   for (let k = 0; k <= map.gates.length; k++) {
     const s = startHold(map); s.hush = 1e9
     for (let g = 0; g < k; g++) { s.gatesOpen[g] = true; for (const r of map.gates[g].opens) s.rooms[r] = true }
-    const ds: number[] = []
+    const ds: number[] = [], vs: number[] = []
     for (const [id, a] of Object.entries(mid)) {
       if (!s.rooms[id] || a.n <= 30) continue
       const c = centre(a)
@@ -471,11 +472,15 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
       const chosen = spawnWindows(s)
       const d = (w: typeof chosen[number]) => s.field[w.lv * per + Math.round(w.inside.z) * map.cols + Math.round(w.inside.x)]
       for (const w of chosen) if (d(w) >= 0) ds.push(d(w))
+      for (const v of spawnVents(s)) vs.push(s.field[v.lv * per + v.z * map.cols + v.x])
       const act = activeRooms(s), rest = map.windows.filter(w => act.has(w.room) && !chosen.includes(w))
       if (rest.some(w => d(w) >= 0 && chosen.some(c2 => d(c2) > d(w)))) nearest = false
     }
     const sec = ds.reduce((x, y) => x + y, 0) / Math.max(1, ds.length) / speed
-    worst.push(`${k ? map.gates[k - 1].letter : 'start'} ${sec.toFixed(0)}s`)
+    const vsec = vs.length ? vs.reduce((x, y) => x + y, 0) / vs.length / speed : sec
+    const blend = vs.length ? (1 - T.ventShare) * sec + T.ventShare * vsec : sec
+    ok(blend <= sec + 1e-9, `vents bring the tide closer after ${k ? 'gate ' + map.gates[k - 1].letter : 'the start'} (${blend.toFixed(1)}s ≤ ${sec.toFixed(1)}s)`)
+    worst.push(`${k ? map.gates[k - 1].letter : 'start'} ${sec.toFixed(0)}→${blend.toFixed(0)}s`)
     ok(sec <= 30, `★ pacing: after ${k ? 'gate ' + map.gates[k - 1].letter : 'the start'}, a body reaches a keeper mid-room in ${sec.toFixed(1)}s (≤ 30)`)
   }
   ok(nearest, '★ the chosen windows are the NEARER ones: no unchosen active window is closer than a chosen one')
@@ -537,6 +542,46 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
     if (wf >= 0 && below >= 0 && wf === below + 1) leaps++
   }
   ok(leaps === 0, `★ a body never leaps out of a window into a garden (${leaps} window-to-garden drops in the field)`)
+}
+
+// ── ★ vents (Alex 09-26): some of the tide comes up through the floor in the middle of the big rooms ──
+{
+  const per = map.cols * map.rows
+  ok(map.vents.length >= 20, `vents are drawn in the plans (${map.vents.length})`)
+  ok(map.vents.every(v => v.room && kindAt(B, v.lv, v.x, v.z) === K.FLOOR), 'every vent is floor in a room')
+  // pick a vent, stand ON it: it must not be offered, and one far off in the same room must be
+  const s = startHold(map); s.hush = 1e9
+  for (let g = 0; g < map.gates.length; g++) { s.gatesOpen[g] = true; for (const r of map.gates[g].opens) s.rooms[r] = true }
+  const v0 = map.vents[0]
+  stepHold(s, 0.01, v0.x, v0.z, v0.h); s.here = v0.room; stepHold(s, 0.01, v0.x, v0.z, v0.h)
+  const offered = spawnVents(s)
+  ok(!offered.includes(v0), '★ a vent under your feet never opens')
+  ok(offered.every(v => s.field[v.lv * per + v.z * map.cols + v.x] >= T.ventMinSteps), `every offered vent is ≥ ${T.ventMinSteps} steps away`)
+  ok(offered.length > 0, 'standing in a big room, a vent further off is offered')
+  // a body up out of a vent: shootable, harmless, then hunting
+  const u = startHold(map); u.hush = 1e9; u.toSpawn = 0; u.spawnT = 1e9
+  const far = offered[0]
+  u.flood.push(body({ id: 9000, x: far.x, z: far.z, y: far.h - 1.2, phase: 'rise', win: -1, vent: far.id, strikeT: 0 }))
+  let struck = 0
+  for (let t = 0; t < T.riseSec * 0.9; t += 0.05) struck += stepHold(u, 0.05, far.x + 0.3, far.z, far.h).strike
+  ok(struck === 0 && u.flood[0].phase === 'rise', '★ a rising body cannot strike, even with the keeper on the grate')
+  for (let t = 0; t < 0.5; t += 0.05) stepHold(u, 0.05, far.x + 5, far.z, far.h)
+  ok(u.flood[0].phase === 'inside' && Math.abs(u.flood[0].y - far.h) < 1e-6, 'after riseSec it stands on the floor and hunts')
+  const u2 = startHold(map); u2.flood.push(body({ id: 9001, x: far.x, z: far.z, y: far.h - 1.2, hp: 1, maxHp: 1, phase: 'rise', win: -1, vent: far.id }))
+  ok(hitBody(u2, 9001, 5, false).killed, 'a rising body can be shot out of the grate')
+  // the share: a long hushed run in the big lobby, vents take roughly ventShare of the spawns
+  const r = startHold(map, 7); r.hush = 1e9
+  for (let g = 0; g < map.gates.length; g++) { r.gatesOpen[g] = true; for (const q of map.gates[g].opens) r.rooms[q] = true }
+  const seen = new Set<number>(); let fromVent = 0, total = 0
+  for (let t = 0; t < 400; t += 0.1) {
+    r.round = 8; r.toSpawn = 50; r.breakT = 0
+    stepHold(r, 0.1, v0.x, v0.z, v0.h)
+    for (const b of r.flood) if (!seen.has(b.id)) { seen.add(b.id); total++; if (b.vent >= 0) fromVent++ }
+    r.flood = r.flood.filter(b => b.alive && seen.size < 0)   // clear, so the cap never throttles the sample
+  }
+  const share = fromVent / Math.max(1, total)
+  ok(total > 100 && share > T.ventShare * 0.6 && share < T.ventShare * 1.4, `vents take ~${T.ventShare} of the spawns (${share.toFixed(2)} of ${total})`)
+  console.log(`  vents: ${map.vents.length} · share ${share.toFixed(2)} · rise ${T.riseSec}s · min ${T.ventMinSteps} steps`)
 }
 
 // ── the end ──

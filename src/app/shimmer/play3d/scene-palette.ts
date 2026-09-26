@@ -215,6 +215,8 @@ export const hold = {
   // ground zero (09-26, TBD-CANON look): the core a cold white-hot, the device dead grey metal with a
   // pale-cyan wake light — neither names a cause, per the flooded's own rule above
   core: '#dfe9f0', coreGlow: '#9fd8ff', device: '#4a5058', deviceGlow: '#bff3ff',
+  // vents (09-26): a dark iron grate; the shaft under it lights the flooded's cold sheen while a body climbs it — the tell
+  vent: '#2a2e33', ventGlow: '#3f6f86',
   // the building (`HoldBuilding`): floor and wall never share a colour, and no two floors share a pair,
   // so where you are reads at a glance. Bottom → top. Ramps are the one warm accent: they are the way.
   levels: [

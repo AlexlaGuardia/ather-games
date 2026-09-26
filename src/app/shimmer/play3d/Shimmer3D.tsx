@@ -2180,6 +2180,16 @@ function HoldBuilding() {
   )
 }
 
+/** A vent in the Hold's floor: an iron frame with four slats, flush with the floor ('=' in the plans). */
+function HoldVentGrate({ x, y, z }: { x: number; y: number; z: number }) {
+  return (
+    <group position={[x, y + 0.02, z]}>
+      {[-0.66, 0.66].map(o => <mesh key={'x' + o} position={[o, 0, 0]}><boxGeometry args={[0.12, 0.05, 1.44]} /><meshStandardMaterial color={S.hold.vent} metalness={0.5} roughness={0.6} /></mesh>)}
+      {[-0.66, -0.22, 0.22, 0.66].map(o => <mesh key={'z' + o} position={[0, 0.005, o]}><boxGeometry args={[1.32, 0.05, 0.12]} /><meshStandardMaterial color={S.hold.vent} metalness={0.5} roughness={0.6} /></mesh>)}
+    </group>
+  )
+}
+
 function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) {
   const bodies = useRef<THREE.InstancedMesh>(null)
   const planks = useRef<THREE.InstancedMesh>(null)
@@ -2187,12 +2197,14 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
   const drops = useRef<THREE.InstancedMesh>(null)
   const chests = useRef<THREE.InstancedMesh>(null)
   const chestGlow = useRef<THREE.InstancedMesh>(null)
+  const ventGlow = useRef<THREE.InstancedMesh>(null)
   // the landing is one fixed map (the zone's grid and heights are generated from it), so sizing the
   // pools off it never waits on a run existing — a run that starts after mount still has meshes
   const map = HOLD_MAP
   const plankMax = map.windows.length * HOLD_TUNING.seals
   const gateMax = map.gates.reduce((n, g) => n + g.cells.length, 0)
   const chestMax = map.chestSpots.length
+  const ventMax = map.vents.length
   // the core: drawn over the blockout block nearest ground zero (the plan puts it by the breach). Found, not
   // hard-coded, so moving it in `hold-floors.ts` moves the prop too.
   const core = useMemo(() => {
@@ -2223,7 +2235,7 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
         if (!b.alive || i >= HOLD_BODY_MAX) continue
         const size = b.kind === 'bulk' ? 1.35 : b.kind === 'swift' ? 0.8 : 1
         // a body at a window heaves at the sill; one inside rolls as it comes
-        const heave = b.phase === 'tear' ? 0.12 * Math.sin(t * 7 + b.id) : 0.05 * Math.sin(t * 4 + b.id)
+        const heave = b.phase === 'tear' || b.phase === 'rise' ? 0.12 * Math.sin(t * 7 + b.id) : 0.05 * Math.sin(t * 4 + b.id)
         v.set(b.x, b.y * STEP + 0.45 * size + heave, b.z)
         sc.set(size * (1 + heave), size * (0.9 - heave), size * (1 + heave))
         m.compose(v, q.identity(), sc)
@@ -2254,6 +2266,18 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
       chestGlow.current.instanceMatrix.needsUpdate = true
       if (chests.current.instanceColor) chests.current.instanceColor.needsUpdate = true
       if (chestGlow.current.instanceColor) chestGlow.current.instanceColor.needsUpdate = true
+    }
+    if (ventGlow.current) {
+      // the shaft lights under a grate while a body climbs it: you see the vent before the body
+      const rising = new Set<number>()
+      for (const b of s.flood) if (b.alive && b.phase === 'rise') rising.add(b.vent)
+      map.vents.forEach((vt, i) => {
+        v.set(vt.x, vt.h * STEP + 0.03, vt.z)
+        sc.setScalar(rising.has(i) ? 0.9 + 0.15 * Math.sin(t * 18 + i) : 0)
+        m.compose(v, q.identity(), sc)
+        ventGlow.current!.setMatrixAt(i, m)
+      })
+      ventGlow.current.instanceMatrix.needsUpdate = true
     }
     if (planks.current) {
       let i = 0
@@ -2320,6 +2344,15 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
           <instancedMesh ref={chestGlow} args={[undefined, undefined, chestMax]} frustumCulled={false}>
             <boxGeometry args={[0.94, 0.07, 0.64]} />
             <meshBasicMaterial color={S.white} toneMapped={false} />
+          </instancedMesh>
+        </>
+      )}
+      {ventMax > 0 && (
+        <>
+          {map.vents.map(vt => <HoldVentGrate key={vt.id} x={vt.x} y={vt.h * STEP} z={vt.z} />)}
+          <instancedMesh ref={ventGlow} args={[undefined, undefined, ventMax]} frustumCulled={false}>
+            <boxGeometry args={[1.25, 0.02, 1.25]} />
+            <meshBasicMaterial color={S.hold.ventGlow} toneMapped={false} />
           </instancedMesh>
         </>
       )}
