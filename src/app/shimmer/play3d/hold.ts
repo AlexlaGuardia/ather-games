@@ -1,4 +1,10 @@
-// hold.ts — THE HOLD: a season world's round survival, the first playable slice.
+// hold.ts — THE BREACH (build name: the hold): a season world's round survival, the first playable slice.
+//
+// ★ NAMES RULED 2026-09-26 (`game/two-lines-two-games.md` › ON A LIVE WORLD): the building is THE BREACH
+// ("the Hold" retired: *hold* is canon's settlement word); the thing through the wall is THE TAP (the host's
+// instrument drinking the core; shown, never the host); the device is THE TUNER; a gun is TUNED, then
+// RE-KEYED, never "evolved"; loot is CACHES, never chests. Player text follows those words. Code identifiers
+// (`hold`, `chest`, `device`, `zero`) are build words and stay, so saves and the zone id never move.
 //
 // ★ PURE. No react, no three, no DOM. The host (`FiringRange` in Shimmer3D) owns bodies, rounds in
 // flight and the keeper's hp; this module owns the landing, the tide's rounds, the seals, the gates,
@@ -185,18 +191,19 @@ export type HoldLoot =
   | { kind: 'part' }
 export interface HoldChest { rarity: ChestRarity; openT: number }
 /**
- * ⚠ TBD-CANON (CANON_GAPS 09-26, "the Hold's ground zero" Q3): whether this season's vessel parts are a
- * lawful chest find. Until it is ruled no legendary chest rolls, so no chest promises a thing that
- * does not exist yet. Ruled yes → flip this, and the page gives the part.
+ * RULED LAWFUL 09-26 (ON A LIVE WORLD › CACHES): a cache may hold this season's vessel, whole or as pieces a
+ * keeper carries home to the Passage's CUTTER, who finishes it (a keeper never assembles one). Still OFF:
+ * the build has no season vessel and no cutter hand-off to carry a piece to, so a legendary cache would
+ * promise a thing that goes nowhere. Wire the piece + the cutter, then flip this and the page gives it.
  */
-export const VESSEL_PARTS_RULED = false
+export const VESSEL_PIECES_WIRED = false
 export const CHEST_LOOT: Record<ChestRarity, { loot: HoldLoot; w: number }[]> = {
   common: [{ loot: { kind: 'salvage', n: 400 }, w: 60 }, { loot: { kind: 'glimmer' }, w: 40 }],
   rare: [{ loot: { kind: 'marks', n: 30 }, w: 60 }, { loot: { kind: 'salvage', n: 1500 }, w: 40 }],   // a bag of Marks ≈ 30 (Alex)
   legendary: [{ loot: { kind: 'part' }, w: 100 }],
 }
 export const lootLabel = (l: HoldLoot): string =>
-  l.kind === 'salvage' ? `+${l.n} salvage` : l.kind === 'marks' ? `A bag of Marks (+${l.n})` : l.kind === 'glimmer' ? DROP_NAME.glimmer : 'A vessel part'
+  l.kind === 'salvage' ? `+${l.n} salvage` : l.kind === 'marks' ? `A bag of Marks (+${l.n})` : l.kind === 'glimmer' ? DROP_NAME.glimmer : 'A vessel piece, for the cutter'
 
 export interface HoldState {
   map: HoldMap
@@ -604,7 +611,7 @@ export function spawnVents(s: HoldState, tune: HoldTuning = HOLD_TUNING): HoldVe
 
 // ── chests ──────────────────────────────────────────────────────────────────────────────────
 export function rollRarity(rng: () => number, tune: HoldTuning = HOLD_TUNING): ChestRarity {
-  const w = { ...tune.chestRarity, legendary: VESSEL_PARTS_RULED ? tune.chestRarity.legendary : 0 }
+  const w = { ...tune.chestRarity, legendary: VESSEL_PIECES_WIRED ? tune.chestRarity.legendary : 0 }
   let r = rng() * (w.common + w.rare + w.legendary)
   if ((r -= w.common) < 0) return 'common'
   return r - w.rare < 0 ? 'rare' : 'legendary'
@@ -639,13 +646,14 @@ export function chestTick(s: HoldState, spot: number, dt: number, tune: HoldTuni
 // Plant it at ground zero with salvage, then tune the weapon in your hands a tier at a time. IN-RUN ONLY:
 // it lives on the run's state, so leaving the Hold takes it away and every run starts level (the power
 // law holds — `power-budget.ts` measures what a keeper BRINGS; this is what the run hands everyone).
-// ⚠ TBD-CANON (CANON_GAPS 09-26, "the Hold's ground zero"): what crashed through the wall, the device's
-// name, and whether a gun may EVOLVE. "tuned" / "evolved" / "the device" are Alex's working words.
+// RULED 09-26: the device is THE TUNER, set against THE TAP; it takes the tap's pitch, and a weapon tuned to
+// it bites the flood harder. It learns the pitch, not the meaning. A gun is TUNED, then RE-KEYED; it never
+// EVOLVES (evolution belongs to living things).
 export interface TuneTier { name: string; dmg: number; reloadMana: number; pierce: number }
 export const TUNE_TIERS: readonly TuneTier[] = [
   { name: 'untuned', dmg: 1, reloadMana: 1, pierce: 1 },
   { name: 'tuned', dmg: 2, reloadMana: 0.75, pierce: 1 },
-  { name: 'evolved', dmg: 3, reloadMana: 0.6, pierce: 3 },   // a round goes through up to three bodies
+  { name: 're-keyed', dmg: 3, reloadMana: 0.6, pierce: 3 },   // a round goes through up to three bodies
 ]
 export const weaponTier = (s: HoldState | null | undefined, weapon: string): number => (s?.tuned[weapon] ?? 0)
 /** The next tier's price for this weapon, or null at the top. */

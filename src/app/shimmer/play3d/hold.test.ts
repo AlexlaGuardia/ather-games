@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PARTS_RULED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PIECES_WIRED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { FLOOR_W, FLOOR_D } from './hold-floors'
@@ -364,7 +364,7 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   const rs = { common: 0, rare: 0, legendary: 0 }
   const rng = (() => { let a = 99; return () => ((a = (a * 1103515245 + 12345) >>> 0) / 4294967296) })()
   for (let k = 0; k < 4000; k++) rs[rollRarity(rng)]++
-  ok(VESSEL_PARTS_RULED || rs.legendary === 0, `no legendary chest until vessel parts are ruled (${rs.legendary})`)
+  ok(VESSEL_PIECES_WIRED || rs.legendary === 0, `no legendary chest until vessel pieces are wired (${rs.legendary})`)
   ok(rs.common > rs.rare && rs.rare > 0, `common outnumbers rare (${rs.common} / ${rs.rare})`)
   ok(CHEST_LOOT.rare.some(e => e.loot.kind === 'marks' && e.loot.n === 30), 'a rare chest can hold a bag of 30 Marks')
   // opening: hold E for chestOpenSec; the loot lands where it belongs

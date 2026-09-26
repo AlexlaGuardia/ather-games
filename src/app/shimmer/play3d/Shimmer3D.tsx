@@ -7097,11 +7097,11 @@ export default function Shimmer3D() {
       }
       if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
       if (holdEHeld.current && prompt?.kind === 'chest') { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) }
-      // what a chest gave that lives outside the run: Marks are the real wallet (a vessel part waits on canon)
+      // what a cache gave that lives outside the run: Marks are the real wallet (a vessel piece waits on the cutter)
       while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n) }
       if (hs.fell) { hs.fell = null; setHoldFlash('The floor gave way') }
       const chestsNow = hs.chests.filter(Boolean).length
-      if (hs.round !== lastRound) { lastRound = hs.round; setHoldFlash(chestsNow > lastChests ? `Round ${hs.round} · ${chestsNow - lastChests === 1 ? 'a chest has' : `${chestsNow - lastChests} chests have`} appeared` : `Round ${hs.round}`) }
+      if (hs.round !== lastRound) { lastRound = hs.round; setHoldFlash(chestsNow > lastChests ? `Round ${hs.round} · ${chestsNow - lastChests === 1 ? 'a cache has' : `${chestsNow - lastChests} caches have`} appeared` : `Round ${hs.round}`) }
       lastChests = chestsNow
       let best = 0
       try { best = Number(localStorage.getItem(keeperKey(HOLD_BEST_KEY)) ?? 0) } catch { /* none */ }
@@ -7144,7 +7144,7 @@ export default function Shimmer3D() {
       } else if (pr.kind === 'cache') { if (buyCache(hs)) setHoldFlash(`+${HOLD_TUNING.cacheSec}s hush`); else short() }
       else if (pr.kind === 'device') {
         const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]
-        if (!pr.planted) { if (plantDevice(hs)) setHoldFlash('The device is planted'); else short() }
+        if (!pr.planted) { if (plantDevice(hs)) setHoldFlash('The Tuner is set at the tap'); else short() }
         else if (tuneCostFor(hs, W.id) === null) setHarvestToast(`The ${W.name} is as far as it goes`)
         else { const t = tuneWeapon(hs, W.id); if (t !== null) setHoldFlash(`${W.name} — ${TUNE_TIERS[t].name}`); else short() }
       }
@@ -8179,18 +8179,18 @@ export default function Shimmer3D() {
               {holdHud.prompt.kind === 'gate' && <span>{holdKey} — open the gate <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'rack' && <span>{holdKey} — {holdHud.prompt.bought ? 'refill the SPITTER' : 'take the SPITTER off the wall'} <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.bought ? Math.round(holdHud.prompt.cost / 2) : holdHud.prompt.cost} salvage</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'font' && <span>{holdKey} — drink from the font (full mana) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
-              {holdHud.prompt.kind === 'chest' && <span>Hold {holdKey} — open the <span style={{ color: S.hold.chest[holdHud.prompt.rarity] }}>{holdHud.prompt.rarity}</span> chest <HearthPillSoft face={HUD_FACE}>{Math.round(holdHud.prompt.progress * 100)}%</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'chest' && <span>Hold {holdKey} — open the <span style={{ color: S.hold.chest[holdHud.prompt.rarity] }}>{holdHud.prompt.rarity}</span> cache <HearthPillSoft face={HUD_FACE}>{Math.round(holdHud.prompt.progress * 100)}%</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'device' && (!holdHud.prompt.planted
-                ? <span>{holdKey} — plant the device <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>
+                ? <span>{holdKey} — set the Tuner at the tap <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>
                 : holdHud.weapon.next === null
                   ? <span>The {holdHud.weapon.name} is {holdHud.weapon.tier} <HearthPillSoft face={HUD_FACE}>the top tier</HearthPillSoft></span>
-                  : <span>{holdKey} — {holdHud.weapon.tier === 'untuned' ? 'tune' : 'evolve'} the {holdHud.weapon.name} <HearthPillSoft face={HUD_FACE}>{holdHud.weapon.next} salvage</HearthPillSoft></span>)}
-              {holdHud.prompt.kind === 'cache' && <span>{holdKey} — a draught from the cache (+{HOLD_TUNING.cacheSec}s hush) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+                  : <span>{holdKey} — {holdHud.weapon.tier === 'untuned' ? 'tune' : 're-key'} the {holdHud.weapon.name} <HearthPillSoft face={HUD_FACE}>{holdHud.weapon.next} salvage</HearthPillSoft></span>)}
+              {holdHud.prompt.kind === 'cache' && <span>{holdKey} — take a hush draught (+{HOLD_TUNING.cacheSec}s) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
             </HearthPill>
           )}
           {holdHud.over && (
             <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '32%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }}>
-              <span>The hold fell at round <span className="hk-ember">{holdHud.round}</span> <HearthPillSoft face={HUD_FACE}>· {holdHud.kills} crushed · best {Math.max(holdHud.best, holdHud.round)} · {holdKey} to go again</HearthPillSoft></span>
+              <span>The Breach took you at round <span className="hk-ember">{holdHud.round}</span> <HearthPillSoft face={HUD_FACE}>· {holdHud.kills} crushed · best {Math.max(holdHud.best, holdHud.round)} · {holdKey} to go again</HearthPillSoft></span>
             </HearthPill>
           )}
         </>
@@ -8270,12 +8270,12 @@ export default function Shimmer3D() {
                     salvage a real run takes rounds to earn, and a layout pass is a walk (`hold.ts`). */}
                 {isOwner && zoneId === HOLD_ZONE && holdRef.current && (
                   <div className="hk-plate" style={{ marginBottom: 8, padding: '9px 10px' }}>
-                    <div className="hk-faint" style={{ fontSize: 11, marginBottom: 7 }}>The Hold — layout walk (owner)</div>
+                    <div className="hk-faint" style={{ fontSize: 11, marginBottom: 7 }}>The Breach — layout walk (owner)</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 7 }}>
                       <HearthButton small onClick={() => { if (holdRef.current) { ownerOpenAll(holdRef.current); setHoldFlash('Every gate open') } }}>Open every gate</HearthButton>
                       <HearthButton small onClick={() => { if (holdRef.current) { holdRef.current.salvage += 5000; setHoldFlash('+5000 salvage') } }}>+5000 salvage</HearthButton>
                       <HearthButton small onClick={() => { if (holdRef.current) { ownerCalm(holdRef.current); setHoldFlash('The tide is calm') } }}>Calm the tide</HearthButton>
-                      <HearthButton small onClick={() => { if (holdRef.current) setHoldFlash(`${ownerChests(holdRef.current)} chests placed`) }}>Fill the chest spots</HearthButton>
+                      <HearthButton small onClick={() => { if (holdRef.current) setHoldFlash(`${ownerChests(holdRef.current)} caches placed`) }}>Fill the cache spots</HearthButton>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {holdSpots(HOLD_MAP).map(sp => (

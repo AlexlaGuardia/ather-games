@@ -629,7 +629,7 @@ export const ZONES: Zone[] = [
       // berth 1's gangway — THE HOLD, the one season world seated (GBOARD 🌊 SEASON EXPEDITIONS). Canon: *"each
       // saved world the player has seated holds a berth, and a ship stands in it."* `ownerOnly` because it is a
       // blockout slice for Alex's feel pass; the flag comes off with the first real season.
-      { x: holdShip()!.door.x, y: holdShip()!.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', label: 'THE HOLD', ownerOnly: true },
+      { x: holdShip()!.door.x, y: holdShip()!.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', label: 'THE BREACH', ownerOnly: true },
     ],
     warps: [],
   },
@@ -672,10 +672,11 @@ export const ZONES: Zone[] = [
     // to write, and `parseZoneGrid` returns null for it (the CRUCIBLE precedent). The layout lives in
     // `play3d/hold-floors.ts` as ASCII plans, which is the thing to edit.
     id: 'the-hold',
-    // ⚠ '(proof)' is deliberate: a season world's places are per-season canon, and "hold" is
-    // already canon's word for a settlement (Brack / Vetch / Thistle). This is a blockout for
-    // feel, so it wears the proof mark the canon gate exempts; the real name arrives with a season.
-    name: 'The Hold (proof)',
+    // RULED 09-26 (`game/two-lines-two-games.md` › ON A LIVE WORLD): the building is THE BREACH; "the Hold"
+    // retired (canon's settlement word). The id stays 'the-hold' so saves and the seated berth never move.
+    // '(proof)' stays: the NAME is ruled, but this building is an owner-only blockout and a live world's
+    // places are not in the v1 geography table the zones gate reads; it comes off with the first real season.
+    name: 'The Breach (proof)',
     grid: HOLD_MAP.grid,
     realm: 'outside',
     playerStart: { tileX: HOLD_MAP.start.x, tileY: HOLD_MAP.start.z },
