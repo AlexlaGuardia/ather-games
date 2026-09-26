@@ -137,6 +137,8 @@ export const runeHold = {
   cobble: ['#9a8c7a', '#8c7f6e', '#a39480', '#857868', '#94866f'],
   mortar: '#5e5446',
   meadow: ['#71905a', '#74925b', '#6e8c57', '#76935c'],
+  /** THE LANDING's plaza: a dressed-stone dais, a paler inlay ring, the stone ring the disc stands in */
+  landing: { dais: '#a3927c', inlay: '#b8a88f', kerb: '#7e6f5e', ring: '#8f7f6a' },
   /** the ground worn bare where the streets meet the grass */
   worn: ['#7d7458', '#857a5c'],
 } as const

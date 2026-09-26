@@ -17,10 +17,12 @@
  * glass and only the few round the square carry a real light.
  */
 import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { blocksOf, lanternsOf, openSides, hash, isBuilding, PATH, BUILDING, type Block } from './rune-hold-look'
-import { runeHold as RH, passage as P } from './scene-palette'
-import { LANDING, PIERS } from '../world/landing'
+import { runeHold as RH, passage as P, hubGate } from './scene-palette'
+import { LANDING } from '../world/landing'
+import { portalMaterial } from '../voxel3d/portal-material'
 
 interface Inst { x: number; y: number; z: number; sx: number; sy: number; sz: number; yaw?: number; tilt?: number; c: string }
 
@@ -97,6 +99,91 @@ function roofsOf(blocks: Block[], heightAt: (x: number, z: number) => number): T
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
   g.computeVertexNormals()
   return g
+}
+
+/**
+ * THE LANDING — a round plaza with the plot's swirl portal standing on it (Alex, 2026-09-26: *"a simple
+ * plaza with the disc portal we have in the homeplot"*). Canon's *framed* gate (`world/gates.md`: *"an
+ * arch, a plinth"*) is the PLINTH here: the dais and the stone ring the disc stands in. The door under
+ * it is `LANDING` (3 wide, 2 deep), so the disc spans exactly the columns that cross. Tinted the Rune
+ * Hold gate's Ather-side colour: two ends of one gate are one frequency.
+ */
+function LandingPlaza({ y0 }: { y0: number }) {
+  const cx = LANDING.x + (LANDING.w - 1) / 2, cz = LANDING.y + (LANDING.h - 1) / 2
+  const R = 1.75                                   // the disc: as wide as the door, a hair inside it
+  const mat = useMemo(() => {
+    const c = new THREE.Color(hubGate.runeHold)
+    return portalMaterial(new THREE.Vector3(c.r, c.g, c.b))
+  }, [])
+  useFrame(({ clock }) => { mat.uniforms.uTime.value = clock.elapsedTime; mat.uniforms.uNear.value = 0.6 })
+  const cy = y0 + 0.3 + R
+  const { ring, kerb } = useMemo(() => {
+    // the ring: voussoirs round the disc, each turned to face its centre; its foot is left open
+    const ring: Stone[] = []
+    const n = 22
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2
+      if (Math.sin(a) < -0.8) continue
+      ring.push({ x: cx + Math.cos(a) * (R + 0.28), y: cy + Math.sin(a) * (R + 0.28), z: cz, sx: 0.62, sy: 0.5, sz: 0.7, roll: a - Math.PI / 2, c: RH.landing.ring })
+    }
+    // the ring's two feet, planted either side of the door
+    for (const side of [-1, 1]) ring.push({ x: cx + side * (R + 0.35), y: y0 + 0.55, z: cz, sx: 0.8, sy: 0.9, sz: 0.95, c: RH.landing.kerb })
+    // the kerb round the dais: dressed blocks, a gap on the south where the square walks up
+    const kerb: Stone[] = []
+    const kr = 4.6, kn = 36
+    for (let i = 0; i < kn; i++) {
+      const a = (i / kn) * Math.PI * 2
+      if (Math.abs(a - Math.PI / 2) < 0.35) continue
+      kerb.push({ x: cx + Math.cos(a) * kr, y: y0 + 0.14, z: cz + Math.sin(a) * kr, sx: 0.78, sy: 0.28, sz: 0.4, yaw: Math.PI / 2 - a, c: RH.landing.kerb })
+    }
+    return { ring, kerb }
+  }, [cx, cz, cy, y0])
+  return (
+    <group>
+      <mesh position={[cx, y0 + 0.06, cz]} receiveShadow>
+        <cylinderGeometry args={[4.4, 4.5, 0.12, 48]} />
+        <meshStandardMaterial color={RH.landing.dais} roughness={0.9} />
+      </mesh>
+      <mesh position={[cx, y0 + 0.125, cz]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <ringGeometry args={[2.6, 3.0, 48]} />
+        <meshStandardMaterial color={RH.landing.inlay} roughness={0.85} />
+      </mesh>
+      <Stones items={ring} />
+      <Stones items={kerb} />
+      <mesh position={[cx, cy, cz]} material={mat} renderOrder={2}>
+        <planeGeometry args={[R * 2, R * 2]} />
+      </mesh>
+      <pointLight position={[cx, cy, cz]} color={hubGate.runeHold} intensity={8} distance={9} decay={1.6} />
+      
+    </group>
+  )
+}
+
+interface Stone { x: number; y: number; z: number; sx: number; sy: number; sz: number; yaw?: number; roll?: number; c: string }
+
+/** Placed stones that turn about Y (`yaw`) and then in their own face (`roll`) — the kerb and the ring. */
+function Stones({ items }: { items: Stone[] }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useLayoutEffect(() => {
+    const r = ref.current
+    if (!r) return
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), col = new THREE.Color()
+    const v = new THREE.Vector3(), s = new THREE.Vector3()
+    items.forEach((b, i) => {
+      q.setFromEuler(e.set(0, b.yaw ?? 0, b.roll ?? 0, 'YXZ'))
+      m.compose(v.set(b.x, b.y, b.z), q, s.set(b.sx, b.sy, b.sz))
+      r.setMatrixAt(i, m); r.setColorAt(i, col.set(b.c))
+    })
+    r.instanceMatrix.needsUpdate = true
+    if (r.instanceColor) r.instanceColor.needsUpdate = true
+    r.computeBoundingSphere()
+  }, [items])
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial roughness={0.9} />
+    </instancedMesh>
+  )
 }
 
 export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]; heights?: number[][]; version?: number }) {
@@ -188,25 +275,13 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       chimneys.push({ x: cx, y: base + 3.3, z: cz, sx: 1.05, sy: 0.22, sz: 1.05, c: RH.timber })
     }
 
-    // THE LANDING is a FRAMED gate (canon `world/gates.md`): capstones on its piers and a lintel across
-    // the door. Placement comes from `world/landing.ts`, never restated here.
-    if (PIERS.every(([px, py]) => isBuilding(g, px, py))) {
-      const xs = PIERS.map(p => p[0]), zs = PIERS.map(p => p[1])
-      const x0 = Math.min(...xs) - 0.5, x1 = Math.max(...xs) + 0.5
-      const z0 = Math.min(...zs, LANDING.y) - 0.5, z1 = Math.max(...zs, LANDING.y + LANDING.h - 1) + 0.5
-      const top = heightAt(LANDING.x, LANDING.y) + 3.4
-      const s = pick(RH.stone, LANDING.x, LANDING.y, 15)
-      chimneys.push({ x: (x0 + x1) / 2, y: top + 0.35, z: (z0 + z1) / 2, sx: x1 - x0 + 0.3, sy: 0.7, sz: z1 - z0 + 0.3, c: s })
-      chimneys.push({ x: (x0 + x1) / 2, y: top + 0.8, z: (z0 + z1) / 2, sx: x1 - x0 - 0.6, sy: 0.2, sz: z1 - z0 - 0.4, c: RH.timber })
-    }
-
     // lanterns: the square's few carry a real light
     const lamps = lanternsOf(g)
     const kiosks = blocks.filter(b => b.kind === 'kiosk')
     const sq = kiosks.length
       ? { x: kiosks.reduce((s, b) => s + (b.x0 + b.x1) / 2, 0) / kiosks.length, z: kiosks.reduce((s, b) => s + (b.z0 + b.z1) / 2, 0) / kiosks.length }
       : { x: g[0].length / 2, z: g.length / 2 }
-    const lit = new Set([...lamps].sort((a, b) => Math.hypot(a.x - sq.x, a.z - sq.z) - Math.hypot(b.x - sq.x, b.z - sq.z)).slice(0, 5))
+    const lit = new Set([...lamps].sort((a, b) => Math.hypot(a.x - sq.x, a.z - sq.z) - Math.hypot(b.x - sq.x, b.z - sq.z)).slice(0, 4))
     const posts: Inst[] = [], glass: Inst[] = []
     for (const l of lamps) {
       const y0 = heightAt(l.x, l.z)
@@ -235,6 +310,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       <mesh geometry={look.roof} castShadow receiveShadow>
         <meshStandardMaterial vertexColors roughness={0.9} side={THREE.DoubleSide} />
       </mesh>
+      <LandingPlaza y0={heights?.[LANDING.y]?.[LANDING.x] ?? 0} />
       {look.lights.map((l, i) => <pointLight key={i} position={[l.x, l.y, l.z]} color={P.lamp} intensity={10} distance={10} decay={1.6} />)}
     </>
   )

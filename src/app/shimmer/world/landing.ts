@@ -51,40 +51,27 @@ export const PIER_TILE = 103
 export const DOOR_TILE = 14
 
 /**
- * The door itself: **1 wide x 2 deep**, Alex's ruling of 2026-08-24 — the ruling that widened
- * `Gate` with `w`/`h` in the first place, since `size` is one number and a landing is not square.
+ * The door itself: **3 wide x 2 deep** — a round plaza with the home plot's swirl portal standing on it.
  *
- * ★ ONE TILE WIDE IS THE POINT. A keeper walks THROUGH it rather than onto it, and two deep is what
- * makes the crossing a passage rather than a doormat.
+ * ── ★★ ALEX, 2026-09-26: *"the landing could be a bit bigger and honestly i think it would look good as a
+ * simple plaza with the disc portal we have in the homeplot."* ───────────────────────────────────────────
+ * This SUPERSEDES two earlier rulings, and says so rather than letting them rot in place:
+ *   · 2026-08-24 *1 wide x 2 deep* ("one tile wide is the point") — the door is now as wide as the disc,
+ *     so every column the keeper can see the portal in is a column that crosses. A 3-wide disc over a
+ *     1-wide trigger would be a door that works only down its middle.
+ *   · 2026-09-03 *voxel-built piers* (the trilithon, the missing lintel) — the plaza has no piers. The
+ *     frame canon asks for (`world/gates.md`: *"an arch, a plinth"*) is now the PLINTH: the round dais
+ *     and the stone ring the disc stands in (`RuneHoldScene`). Two deep still makes it a passage.
+ * The disc is the plot's own portal (`voxel3d/seam.ts` › `portalMaterial`), tinted the Rune Hold gate's
+ * colour on the Ather side — two ends of one gate are one frequency (`world/gates.md` › bound resonance).
  */
-export const LANDING = { x: 49, y: 49, w: 1, h: 2 } as const
+export const LANDING = { x: 48, y: 49, w: 3, h: 2 } as const
 
 /**
- * The stone either side. Two piers, each **2 wide x 2 deep**, flanking the door.
- *
- * ── ★★ VOXEL-BUILT, AND THAT IS ALEX'S RULING OF 2026-09-03, NOT A PREFERENCE ─────────────────
- * A `gate_landing.glb` was baked for this spot and RETIRED the same day (`d077e88`, kept at
- * `tools/render/ref/`). Three reasons, and the first is the one that decides it: **a mesh writes
- * nothing into the grid, so it has no collision** — a keeper walks straight through both piers of a
- * bare GLB. Tiles are solid by construction, which is the same argument `pieces.ts` makes voxel-side:
- * *"the expensive-sounding half of the idea reduces to a value already in an array."*
- *
- * ★ TWO WIDE, NOT ONE, BECAUSE A SHEET IS NOT A GATEWAY. `voxel3d/crossings.ts` records the rule
- * from Alex's 08-27 stone-hedge ruling: a frame must read as a **trilithon** and be at least two
- * thick, because *a sheet of stone with a rectangle cut out of it reads as masonry however you
- * proportion it*. Two-by-two piers give the door jambs with depth.
- *
- * ⚠⚠ AND THE LINTEL IS HONESTLY MISSING, WHICH IS A LIMIT OF THE RENDERER AND NOT AN OMISSION.
- * The tile world extrudes a 2D grid: a cell is a full-height box or it is nothing, so there is no
- * way to hang a course of stone ABOVE a walkable opening. Canon (`world/gates.md`) calls a kept
- * gate a *framed doorway*; what ships here is the two jambs of that frame and no head. Expressing
- * the head needs either a new tile class rendered raised and non-solid, or Rune Hold rebuilt in
- * voxel3d — the open direction question from 08-25. Saying so beats a comment claiming a frame.
+ * The stone either side — **none since 2026-09-26** (see `LANDING`). Kept as an empty list rather than
+ * deleted so a reader who remembers the piers finds the ruling that removed them.
  */
-export const PIERS: ReadonlyArray<readonly [number, number]> = [
-  [47, 49], [48, 49], [50, 49], [51, 49],
-  [47, 50], [48, 50], [50, 50], [51, 50],
-]
+export const PIERS: ReadonlyArray<readonly [number, number]> = []
 
 /**
  * Where a keeper crossing IN from the Ather stands up. One tile south of the door, on open plaza.

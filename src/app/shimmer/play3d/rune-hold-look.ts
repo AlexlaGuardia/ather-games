@@ -9,8 +9,7 @@
 //   · every 4-connected run of building tiles becomes one BLOCK
 //   · a block that fills its bounding box is a HOUSE (stone walls, lit windows, a gabled roof, a chimney)
 //   · a long, ragged block is the HILLSIDE the town is carved into (dug rock, no roof)
-//   · a very small block is a KIOSK — today the two PIERS of THE LANDING (`world/landing.ts`), so it stands
-//     door-high and the scene spans a lintel across the gate between them (canon: a *framed* gate)
+//   · a very small block is a KIOSK (a low stone fixture; THE LANDING's piers were these until 2026-09-26)
 //   · path tiles are laid as cobbles; lanterns stand on street edges, spaced, never in a doorway
 // Collision is untouched: the walker still reads the grid.
 
@@ -71,7 +70,7 @@ export function blocksOf(g: number[][]): Block[] {
       : fill < HOUSE_FILL || aspect >= HILLSIDE_ASPECT ? 'hillside' : 'house'
     const r = hash(x0, z0, 7)
     // two storeys of stone, give or take a course; the hillside stands well over the roofs
-    const h = kind === 'kiosk' ? 3.4 : kind === 'house' ? 4.2 + r * 1.4 : 7.5 + r * 1.5
+    const h = kind === 'kiosk' ? 1.4 : kind === 'house' ? 4.2 + r * 1.4 : 7.5 + r * 1.5
     out.push({ kind, x0, z0, x1, z1, cells, h, ridgeX: w >= d })
   }
   return out

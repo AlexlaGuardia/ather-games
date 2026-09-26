@@ -44,7 +44,7 @@ import { OptionsPanel, OptionRow, OptionHead, OptionSlider } from '../hud/option
 import { OptionsDoor } from '../hud/options-door'
 import { loadSettings, saveSettings } from '../voxel3d/settings'
 import { setMasterVolume } from '../audio/bus'
-import { LANDING_LABEL } from '../world/landing'
+import { LANDING_LABEL, landingCells } from '../world/landing'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
@@ -122,6 +122,7 @@ import { addMarks } from '@/lib/wallet'
 import { keeperBook, saveBook } from './book'
 import { PassagePanel } from './PassagePanel'
 import { PassageScene } from './PassageScene'
+import { RuneHoldScene } from './RuneHoldScene'
 import { ArcadeCabinet } from './ArcadeCabinet'
 import { PASSAGE, type ShelfKey } from './passage-hall'
 import { caravanFor, leavesIn, type CaravanSlot, type CaravanStock } from './caravans'
@@ -226,6 +227,10 @@ const BUILDING_ID = 103
 const HOLD_ZONE = 'the-hold'
 /** The Passage draws its own rock and fixtures (`PassageScene`) and has its own light. */
 const PASSAGE_ZONE = 'the-passage'
+/** Rune Hold draws its own stone, streets and landing plaza (`RuneHoldScene`) over the town's grid. */
+const RUNE_HOLD_ZONE = 'rune-hold'
+/** THE LANDING's door tiles stand inside the disc portal — no gold beacon poles through it. */
+const LANDING_KEYS = new Set(landingCells().map(([x, y]) => `${x},${y}`))
 const HOLD_BEST_KEY = 'ather:shimmer:hold:best'
 // Encounters: stepping onto a fresh MIST tile can draw a wild spirit. Per-zone odds live in
 // ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
@@ -1192,7 +1197,7 @@ const WorldFlora = memo(function WorldFlora({ heights }: { heights: number[][] }
 // memo: the terrain is the heaviest node in the scene and depends on nothing that ticks. Without it,
 // every channel tick (~11 Hz) rebuilt the whole floor/wall/water/mist JSX tree. All five props are
 // stable (a ref, a ref's array, a version int, a useCallback, a bool), so this skips cleanly.
-const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick, ownSolids }: {
+const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick, ownSolids, noBeacon }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
   /** THE HOLD draws its own solids (parapets and pillars at their floor's height — `HoldScene`); the
    *  shared brown block is seated at ground level and would sink into a raised floor */
@@ -1203,6 +1208,8 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
   /** bumped when streaming blits a region IN or OUT — an arrival mount happens at a centre
    *  this memo has already rendered, so the centre alone cannot tell it the grid changed */
   mountTick?: number
+  /** warp cells that draw no beacon pole (THE LANDING: its disc is the marker) */
+  noBeacon?: Set<string>
 }) {
   // `editing` mounts the whole map: the map editor needs to see and click what it is drawing,
   // and an editor is not walking anywhere, so the streaming window would only get in the way.
@@ -1228,7 +1235,7 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
           <MistOverlay mists={mists} heights={heights} />
           {/* warp markers — glowing gold columns + beacons (you place; Jin wires the destinations) */}
           <FloorTerrain floors={warps} heights={heights} version={version} paint={paint} editing={editing} color={S.terrain.warpFloor} emissive={S.terrain.warpGlow} />
-          <WarpBeacons warps={warps} heights={heights} />
+          <WarpBeacons warps={noBeacon ? warps.filter(([c, r]) => !noBeacon.has(`${c},${r}`)) : warps} heights={heights} />
           {/* empty cells: invisible in play; a faint clickable grid-canvas to draw land onto while editing */}
           {editing && <Tiles cells={voids} size={[0.92, 0.05, 0.92]} y={-0.02} color={S.terrain.void} opacity={0.5} paint={paint} editing={editing} />}
         </group>
@@ -3630,7 +3637,7 @@ function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] })
 function GateMarkers({ gates, heights, isOwner, posRef }: { gates: Gate[]; heights: number[][]; isOwner: boolean; posRef: React.RefObject<THREE.Vector3> }) {
   return (
     <>
-      {gates.map((g, i) => (g.ownerOnly && !isOwner) ? null : <GateMarker key={`gate-${i}`} g={g} heights={heights} posRef={posRef} />)}
+      {gates.map((g, i) => (g.ownerOnly && !isOwner) ? null : <GateMarker key={`gate-${i}`} g={g} heights={heights} posRef={posRef} drawn={g.label === LANDING_LABEL} />)}
     </>
   )
 }
@@ -3645,7 +3652,8 @@ function GateMarkers({ gates, heights, isOwner, posRef }: { gates: Gate[]; heigh
  * re-renders at 60Hz for this.
  */
 const GATE_TAG_REACH = 30
-function GateMarker({ g, heights, posRef }: { g: Gate; heights: number[][]; posRef: React.RefObject<THREE.Vector3> }) {
+/** `drawn`: the door's own scene draws it (THE LANDING's disc portal, `RuneHoldScene`), so no pad or posts — only the nametag. */
+function GateMarker({ g, heights, posRef, drawn = false }: { g: Gate; heights: number[][]; posRef: React.RefObject<THREE.Vector3>; drawn?: boolean }) {
   const { w: fw, h: fh } = gateFootprint(g)
   // Anchor is the footprint's top-left TILE; the visual centre is half a footprint in, minus
   // the half-tile that separates a tile's corner from its middle.
@@ -3678,11 +3686,11 @@ function GateMarker({ g, heights, posRef }: { g: Gate; heights: number[][]; posR
   return (
     <group position={[cx, y, cz]}>
       {/* the threshold — a lit pad covering the whole footprint, so the door reads as one thing */}
-      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      {!drawn && <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[fw, fh]} />
         <meshStandardMaterial color={tint} emissive={glow} emissiveIntensity={0.5} transparent opacity={0.4} />
-      </mesh>
-      {corners.map(([dx, dz], k) => (
+      </mesh>}
+      {!drawn && corners.map(([dx, dz], k) => (
         <mesh key={k} position={[dx, 1.6, dz]}>
           <cylinderGeometry args={[0.16, 0.24, 3.2, 6]} />
           <meshStandardMaterial color={tint} emissive={glow} emissiveIntensity={0.9} transparent opacity={0.65} />
@@ -4046,9 +4054,10 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? LANDING_KEYS : undefined} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && n.kind !== 'stall' && n.kind !== 'cabinet' && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.zone.id === PASSAGE_ZONE && <PassageScene isOwner={props.isOwner} />}
+      {props.zone.id === RUNE_HOLD_ZONE && props.gridRef.current && <RuneHoldScene grid={props.gridRef.current} heights={props.heights} version={props.version} />}
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}

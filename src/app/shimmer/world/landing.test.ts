@@ -67,35 +67,27 @@ const gates: Gate[] = town?.gates ?? []
   ok(outsideFloor < outside / 2, `the bounds are tight — most of the ring is not plaza (${outsideFloor}/${outside})`)
 }
 
-// ── 2. THE FRAME IS BUILT, IN THE GRID, WHERE COLLISION LIVES ────────────────────────────────
-// Alex's ruling of 2026-09-03: voxel-built, not a mesh, because a mesh writes nothing into the grid
-// and a keeper walks through it. So the assert is about the GRID, never about a render call.
+// ── 2. THE PLAZA IS OPEN, AND THE DOOR IS PAINTED WHERE THE DISC STANDS ──────────────────────
+// Alex, 2026-09-26: a simple plaza with the plot's disc portal, and bigger. The 09-03 piers are gone
+// (the frame is now the plinth the scene draws), so the grid assert flips: NO masonry near the door.
 {
-  for (const [x, y] of PIERS) {
-    ok(G[y][x] === PIER_TILE, `pier (${x},${y}) is the town's masonry, id ${PIER_TILE} (found ${G[y][x]})`)
-    ok(inPlaza(x, y), `pier (${x},${y}) stands on the square`)
-  }
-  ok(PIERS.length === 8, `both jambs are 2x2 (${PIERS.length} cells)`)
+  ok(PIERS.length === 0, `no piers since 2026-09-26 (${PIERS.length})`)
+  for (let y = LANDING.y - 1; y <= LANDING.y + LANDING.h; y++) for (let x = LANDING.x - 2; x <= LANDING.x + LANDING.w + 1; x++)
+    ok(G[y][x] !== PIER_TILE, `the plaza round the disc is open (${x},${y} is ${G[y][x]})`)
 
   // ★★ AND THE DOORWAY CARRIES THE WARP TILE — the check that ties CODE to MAP.
   // `rune-hold-fold.test.ts`: *"a gate must sit ON the warp tiles Alex painted"*, because the gate's
   // anchor is read off them; a footprint on bare ground is a door in two places, neither right.
-  // This also covers the stone-stamp's own worst failure — one index off and the opening fills in.
   for (const [x, y] of landingCells()) {
     ok(G[y][x] === DOOR_TILE, `the doorway (${x},${y}) is a painted warp tile (found ${G[y][x]})`)
-    ok(G[y][x] !== PIER_TILE, `and it is not the frame's own stone (${x},${y})`)
+    ok(inPlaza(x, y), `and it stands on the square (${x},${y})`)
   }
-
-  // ★ SYMMETRY, WHICH IS ONE ASSERT THAT CATCHES A WHOLE CLASS. A jamb wider on one side reads as a
-  // mistake from across the square and no cell-by-cell check would notice.
-  const xs = PIERS.map(([x]) => x)
-  const left = xs.filter(x => x < LANDING.x).length, right = xs.filter(x => x > LANDING.x).length
-  ok(left === right && left === 4, `the jambs are even about the door (${left} | ${right})`)
-  ok(Math.min(...xs) === LANDING.x - 2 && Math.max(...xs) === LANDING.x + 2,
-     'and the frame reaches exactly two blocks each way — a trilithon, not a sheet')
-  const ys = new Set(PIERS.map(([, y]) => y))
-  ok(ys.size === LANDING.h && [...ys].every(y => y >= LANDING.y && y < LANDING.y + LANDING.h),
-     'the stone is exactly as deep as the door it frames')
+  // ⚠ THE PAINT STOPS AT THE DOOR: a warp tile one column past the footprint fires a crossing the
+  // disc does not cover, which reads as the square being haunted.
+  for (const y of [LANDING.y, LANDING.y + 1]) for (const x of [LANDING.x - 1, LANDING.x + LANDING.w])
+    ok(G[y][x] !== DOOR_TILE, `no stray warp paint beside the door (${x},${y})`)
+  // ★ AS WIDE AS THE DISC, which is the whole reason it widened: every column you see the portal in crosses.
+  ok(LANDING.w === 3 && LANDING.h === 2, `3 wide x 2 deep (${LANDING.w}x${LANDING.h})`)
 }
 
 // ── 3. THE ANCHOR — the number the crossing was blocked on for a week ────────────────────────
@@ -130,7 +122,7 @@ const gates: Gate[] = town?.gates ?? []
   ok(!!g, 'THE LANDING is painted in the shipped town')
   if (g) {
     const { w, h } = gateFootprint(g)
-    ok(w === 1 && h === 2, `1x2 — Alex's ruling of 2026-08-24, the map's first non-square gate (${w}x${h})`)
+    ok(w === LANDING.w && h === LANDING.h, `the painted gate is the module's footprint — Alex's 2026-09-26 ruling (${w}x${h})`)
     ok(g.x === LANDING.x && g.y === LANDING.y, `and it stands where the module places it (${g.x},${g.y})`)
 
     // ⚠ THE GATE DATA AND THE STONE MUST NOT DRIFT APART. They are two halves of one door and they
