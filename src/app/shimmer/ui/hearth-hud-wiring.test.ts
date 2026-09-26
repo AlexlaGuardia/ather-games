@@ -43,7 +43,10 @@ for (const [title, setter] of [['Skills', 'setSkillsOpen'], ['Play together', 's
 const tAt = HOSTS.mortal.indexOf('<TouchJoystick joyRef=')
 const touch = tAt < 0 ? '' : HOSTS.mortal.slice(tAt, HOSTS.mortal.indexOf('</>', HOSTS.mortal.indexOf('right: 118', tAt)))
 ok(touch.includes('bottom={HUD_BAR_CLEAR[hudSize] + 8}'), 'mortal: the joystick stands on HUD_BAR_CLEAR')
-ok(touch.split('bottom: HUD_BAR_CLEAR[hudSize] + 8').length - 1 === 2, 'mortal: both button columns stand on it too')
+ok(touch.split('bottom: HUD_BAR_CLEAR[hudSize] + 8,').length - 1 === 2, 'mortal: both button columns stand on it too')
+// the Hold's gun buttons (09-26) stack ABOVE those columns — offset FROM the clearance, never a number of their own
+const bottoms = touch.match(/bottom: [^,}]+/g) ?? []
+ok(bottoms.length >= 2 && bottoms.every(b => b.includes('HUD_BAR_CLEAR[hudSize]')), `mortal: every touch control's bottom is measured from HUD_BAR_CLEAR (${bottoms.filter(b => !b.includes('HUD_BAR_CLEAR')).join(' · ') || 'all'})`)
 ok(!/bottom: 96\b|bottom=\{96\}/.test(touch), 'mortal: and no fixed 96 came back')
 
 console.log(fails ? `\nhearth-hud-wiring: ${fails} FAILED` : '\nhearth-hud-wiring: CLEAN')

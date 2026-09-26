@@ -7014,6 +7014,7 @@ export default function Shimmer3D() {
   const holdEHeld = useRef(false)
   const [holdHud, setHoldHud] = useState<{ round: number; salvage: number; hush: number; loud: boolean; surge: number; kills: number; over: boolean; prompt: HoldPrompt | null; best: number; weapon: { name: string; tier: string; next: number | null } } | null>(null)
   const [holdFlash, setHoldFlash] = useState<string | null>(null)
+  const holdKey = isTouch ? '✦' : 'E'   // the Hold's prompts name the button the player actually has
   useEffect(() => { if (!holdFlash) return; const t = setTimeout(() => setHoldFlash(null), 2200); return () => clearTimeout(t) }, [holdFlash])
   const beginHold = useCallback(() => {
     holdRef.current = startHold(HOLD_MAP, (Date.now() & 0xffff) || 1)
@@ -7074,19 +7075,17 @@ export default function Shimmer3D() {
     }, DT * 1000)
     return () => clearInterval(id)
   }, [zoneId])
-  useEffect(() => {
-    if (zoneId !== HOLD_ZONE) return
-    const onDown = (e: KeyboardEvent) => {
-      if (e.repeat || editRef.current || dialogueRef.current) return
-      const k = e.key.toLowerCase()
-      const hs = holdRef.current, p = posRef.current
-      if (!hs || !p) return
-      if (k === 'g' && hs.running) {
-        if (hs.surge < 1) { setHarvestToast('The surge is not charged — crush more of the flooded'); return }
-        releaseSurge(hs, p.x, p.z, p.y / STEP); setHoldFlash('Surge')
-        return
-      }
-      if (k !== 'e') return
+  // THE HOLD's two actions, one definition for the keys (E / G) AND the touch buttons (09-26) — so a
+  // phone plays by exactly the rules the keyboard does. E is HELD for mend / chest (`holdEHeld`).
+  const holdSurge = useCallback(() => {
+    const hs = holdRef.current, p = posRef.current
+    if (!hs || !p || !hs.running) return
+    if (hs.surge < 1) { setHarvestToast('The surge is not charged — crush more of the flooded'); return }
+    releaseSurge(hs, p.x, p.z, p.y / STEP); setHoldFlash('Surge')
+  }, [])
+  const holdAct = useCallback(() => {
+    const hs = holdRef.current, p = posRef.current
+    if (!hs || !p) return
       if (hs.over) { beginHold(); return }
       const pr = promptAt(hs, p.x, p.z, p.y / STEP)
       if (!pr) return
@@ -7111,12 +7110,20 @@ export default function Shimmer3D() {
         else if (tuneCostFor(hs, W.id) === null) setHarvestToast(`The ${W.name} is as far as it goes`)
         else { const t = tuneWeapon(hs, W.id); if (t !== null) setHoldFlash(`${W.name} — ${TUNE_TIERS[t].name}`); else short() }
       }
+  }, [beginHold, equipWeapon])
+  useEffect(() => {
+    if (zoneId !== HOLD_ZONE) return
+    const onDown = (e: KeyboardEvent) => {
+      if (e.repeat || editRef.current || dialogueRef.current) return
+      const k = e.key.toLowerCase()
+      if (k === 'g') holdSurge()
+      else if (k === 'e') holdAct()
     }
     const onUp = (e: KeyboardEvent) => { if (e.key.toLowerCase() === 'e') holdEHeld.current = false }
     window.addEventListener('keydown', onDown)
     window.addEventListener('keyup', onUp)
     return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp) }
-  }, [zoneId, beginHold, equipWeapon])
+  }, [zoneId, holdAct, holdSurge])
   const toggleHolster = useCallback(() => {
     if (!weaponDrawnRef.current) return
     const h = !holsteredRef.current
@@ -8130,22 +8137,22 @@ export default function Shimmer3D() {
           )}
           {holdHud.prompt && !holdHud.over && (
             <HearthPill face={HUD_FACE} style={{ position: 'fixed', bottom: 150, left: '50%', transform: 'translateX(-50%)', zIndex: 35 }}>
-              {holdHud.prompt.kind === 'mend' && <span>Hold E — mend the seal <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.planks}/{HOLD_TUNING.seals}</HearthPillSoft></span>}
-              {holdHud.prompt.kind === 'gate' && <span>E — open the gate <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
-              {holdHud.prompt.kind === 'rack' && <span>E — {holdHud.prompt.bought ? 'refill the SPITTER' : 'take the SPITTER off the wall'} <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.bought ? Math.round(holdHud.prompt.cost / 2) : holdHud.prompt.cost} salvage</HearthPillSoft></span>}
-              {holdHud.prompt.kind === 'font' && <span>E — drink from the font (full mana) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
-              {holdHud.prompt.kind === 'chest' && <span>Hold E — open the <span style={{ color: S.hold.chest[holdHud.prompt.rarity] }}>{holdHud.prompt.rarity}</span> chest <HearthPillSoft face={HUD_FACE}>{Math.round(holdHud.prompt.progress * 100)}%</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'mend' && <span>Hold {holdKey} — mend the seal <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.planks}/{HOLD_TUNING.seals}</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'gate' && <span>{holdKey} — open the gate <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'rack' && <span>{holdKey} — {holdHud.prompt.bought ? 'refill the SPITTER' : 'take the SPITTER off the wall'} <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.bought ? Math.round(holdHud.prompt.cost / 2) : holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'font' && <span>{holdKey} — drink from the font (full mana) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'chest' && <span>Hold {holdKey} — open the <span style={{ color: S.hold.chest[holdHud.prompt.rarity] }}>{holdHud.prompt.rarity}</span> chest <HearthPillSoft face={HUD_FACE}>{Math.round(holdHud.prompt.progress * 100)}%</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'device' && (!holdHud.prompt.planted
-                ? <span>E — plant the device <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>
+                ? <span>{holdKey} — plant the device <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>
                 : holdHud.weapon.next === null
                   ? <span>The {holdHud.weapon.name} is {holdHud.weapon.tier} <HearthPillSoft face={HUD_FACE}>the top tier</HearthPillSoft></span>
-                  : <span>E — {holdHud.weapon.tier === 'untuned' ? 'tune' : 'evolve'} the {holdHud.weapon.name} <HearthPillSoft face={HUD_FACE}>{holdHud.weapon.next} salvage</HearthPillSoft></span>)}
-              {holdHud.prompt.kind === 'cache' && <span>E — a draught from the cache (+{HOLD_TUNING.cacheSec}s hush) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+                  : <span>{holdKey} — {holdHud.weapon.tier === 'untuned' ? 'tune' : 'evolve'} the {holdHud.weapon.name} <HearthPillSoft face={HUD_FACE}>{holdHud.weapon.next} salvage</HearthPillSoft></span>)}
+              {holdHud.prompt.kind === 'cache' && <span>{holdKey} — a draught from the cache (+{HOLD_TUNING.cacheSec}s hush) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
             </HearthPill>
           )}
           {holdHud.over && (
             <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '32%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }}>
-              <span>The hold fell at round <span className="hk-ember">{holdHud.round}</span> <HearthPillSoft face={HUD_FACE}>· {holdHud.kills} crushed · best {Math.max(holdHud.best, holdHud.round)} · E to go again</HearthPillSoft></span>
+              <span>The hold fell at round <span className="hk-ember">{holdHud.round}</span> <HearthPillSoft face={HUD_FACE}>· {holdHud.kills} crushed · best {Math.max(holdHud.best, holdHud.round)} · {holdKey} to go again</HearthPillSoft></span>
             </HearthPill>
           )}
         </>
@@ -8428,11 +8435,35 @@ export default function Shimmer3D() {
             >✕</button>
             {/* A — interact/confirm (lower, bigger, where the thumb rests): advance dialogue / talk to an NPC / confirm New Game. */}
             <button
-              onPointerDown={(e) => { e.stopPropagation(); if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (fish || nearNode || channel) toggleChannel(); else if (nearStation) openStation(); else if (confirmNew) { setConfirmNew(false); setBirthCancelable(true); setBirthOpen(true) } }}
+              onPointerDown={(e) => { e.stopPropagation(); if (zoneId === HOLD_ZONE && holdHud && (holdHud.prompt || holdHud.over) && !dialogue) { holdAct(); return } if (dialogue) advanceDialogue(); else if (nearNpc) talk(nearNpc); else if (fish || nearNode || channel) toggleChannel(); else if (nearStation) openStation(); else if (confirmNew) { setConfirmNew(false); setBirthCancelable(true); setBirthOpen(true) } }}
+              onPointerUp={() => { holdEHeld.current = false }}
+              onPointerCancel={() => { holdEHeld.current = false }}
               aria-label="interact"
               style={touchKnob(76, fish || channel ? H.sky : nearNpc || dialogue ? H.ember : nearNode ? H.moss : nearStation ? H.ember : undefined)}
             >{fish ? (fish.bite ? '❗' : '🎣') : channel ? '⏹' : nearNode && !nearNpc && !dialogue ? '🪓' : nearStation && !nearNpc && !dialogue ? STATIONS[nearStation.itemId].emoji : '✦'}</button>
           </div>
+          {/* THE HOLD (09-26): a gun mode, so the phone gets the gun — FIRE (held = full auto, the same
+              firingRef the mouse sets), reload, swap, and the surge once it is charged. Stacked ABOVE the
+              A/B and jump/slide columns so nothing moves under a thumb that already knows where it is. */}
+          {zoneId === HOLD_ZONE && holdHud && !holdHud.over && (
+            <>
+              <button
+                onPointerDown={(e) => { e.stopPropagation(); if (weaponDrawnRef.current && !holsteredRef.current) firingRef.current = true }}
+                onPointerUp={(e) => { e.stopPropagation(); firingRef.current = false }}
+                onPointerCancel={() => { firingRef.current = false }}
+                onPointerLeave={() => { firingRef.current = false }}
+                aria-label="fire"
+                style={{ ...touchKnob(84, H.rust), position: 'fixed', right: 26, bottom: HUD_BAR_CLEAR[hudSize] + 8 + 164, zIndex: 30 }}
+              >◎</button>
+              <div style={{ position: 'fixed', right: 122, bottom: HUD_BAR_CLEAR[hudSize] + 8 + 150, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+                {holdHud.surge >= 1 && (
+                  <button onPointerDown={(e) => { e.stopPropagation(); holdSurge() }} aria-label="surge" style={touchKnob(56, H.ember)}>⚡</button>
+                )}
+                <button onPointerDown={(e) => { e.stopPropagation(); swapWeapon() }} aria-label="swap weapon" style={touchKnob(48)}>⇄</button>
+                <button onPointerDown={(e) => { e.stopPropagation(); startReload() }} aria-label="reload" style={touchKnob(48)}>⟳</button>
+              </div>
+            </>
+          )}
           {/* Jump (edge) + Slide (held) — left of the A/B column. Only meaningful in first-person play. */}
           <div style={{ position: 'fixed', bottom: HUD_BAR_CLEAR[hudSize] + 8, right: 118, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
             <button
