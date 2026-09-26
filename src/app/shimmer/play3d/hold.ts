@@ -80,6 +80,8 @@ export interface HoldMap {
   rack: HoldFixture
   font: HoldFixture
   cache: HoldFixture
+  /** ground zero: where the device is planted (`Z`) */
+  zero: HoldFixture
   /** every '$' in the plans: where a chest may appear */
   chestSpots: HoldFixture[]
 }
@@ -127,6 +129,9 @@ export const HOLD_TUNING = {
   chestChance: 0.25,
   chestOpenSec: 2,       // seconds of holding E — a real risk mid-round
   chestRarity: { common: 70, rare: 25, legendary: 5 },
+  // the device (Alex 09-26, our pack-a-punch): planted once at ground zero, then each weapon is tuned a tier at a time
+  devicePlant: 2000,
+  tuneCost: [5000, 7500],   // to tier 1, to tier 2
 } as const
 export type HoldTuning = typeof HOLD_TUNING
 
@@ -211,6 +216,10 @@ export interface HoldState {
   chests: (HoldChest | null)[]
   /** what opened chests gave that the page must apply (Marks, parts) */
   loot: HoldLoot[]
+  /** the device is planted at ground zero */
+  devicePlanted: boolean
+  /** each weapon's tier this run (weapon id → 0..2) */
+  tuned: Record<string, number>
   /** boosters picked up and not yet applied — the host drains this (it owns mana, hp, the team) */
   pickups: HoldDropKind[]
   elapsed: number
@@ -233,12 +242,12 @@ export function parseLanding(floors: readonly FloorDef[] = HOLD_FLOORS, tune: Ho
   b.levels.forEach((L, lv) => {
     for (let i = 0; i < per; i++) {
       const ch = L.ch[i]
-      if (!'@XRFH'.includes(ch) || ch === ' ') continue
+      if (!'@XRFHZ'.includes(ch) || ch === ' ') continue
       if (fx[ch]) throw new Error(`hold: two '${ch}' in the plans`)
       fx[ch] = { x: i % cols, z: (i / cols) | 0, lv }
     }
   })
-  for (const k of '@XRFH') if (!fx[k]) throw new Error(`hold: the plans are missing '${k}'`)
+  for (const k of '@XRFHZ') if (!fx[k]) throw new Error(`hold: the plans are missing '${k}'`)
 
   // regions: walkable floor joined by the walker's step (a ramp joins two floors), split by walls, gates, windows
   const region = new Int32Array(nodes).fill(-1)
@@ -341,7 +350,7 @@ export function parseLanding(floors: readonly FloorDef[] = HOLD_FLOORS, tune: Ho
   })
   return {
     cols, rows, building: b, grid, heights, windows, gates, rooms, regionOf: region, gateOf, winOf,
-    start: fixture('@'), exit: fixture('X'), rack: fixture('R'), font: fixture('F'), cache: fixture('H'), chestSpots,
+    start: fixture('@'), exit: fixture('X'), rack: fixture('R'), font: fixture('F'), cache: fixture('H'), zero: fixture('Z'), chestSpots,
   }
 }
 
@@ -393,7 +402,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
     drops: [], dropsThisRound: 0, pickups: [],
-    chests: map.chestSpots.map(() => null), loot: [],
+    chests: map.chestSpots.map(() => null), loot: [], devicePlanted: false, tuned: {},
     elapsed: 0, nextId: 1, rng: mulberry32(seed),
     field: new Int16Array(map.cols * map.rows * map.building.levels.length).fill(-1), fieldT: 0, fieldAt: -1,
   }
@@ -542,6 +551,35 @@ export function chestTick(s: HoldState, spot: number, dt: number, tune: HoldTuni
   else if (loot.kind === 'glimmer') s.pickups.push('glimmer')
   else s.loot.push(loot)
   return loot
+}
+
+// ── the device: Zombies' pack-a-punch, ours (Alex 09-26) ──────────────────────────────────────
+// Plant it at ground zero with salvage, then tune the weapon in your hands a tier at a time. IN-RUN ONLY:
+// it lives on the run's state, so leaving the Hold takes it away and every run starts level (the power
+// law holds — `power-budget.ts` measures what a keeper BRINGS; this is what the run hands everyone).
+// ⚠ TBD-CANON (CANON_GAPS 09-26, "the Hold's ground zero"): what crashed through the wall, the device's
+// name, and whether a gun may EVOLVE. "tuned" / "evolved" / "the device" are Alex's working words.
+export interface TuneTier { name: string; dmg: number; reloadMana: number; pierce: number }
+export const TUNE_TIERS: readonly TuneTier[] = [
+  { name: 'untuned', dmg: 1, reloadMana: 1, pierce: 1 },
+  { name: 'tuned', dmg: 2, reloadMana: 0.75, pierce: 1 },
+  { name: 'evolved', dmg: 3, reloadMana: 0.6, pierce: 3 },   // a round goes through up to three bodies
+]
+export const weaponTier = (s: HoldState | null | undefined, weapon: string): number => (s?.tuned[weapon] ?? 0)
+/** The next tier's price for this weapon, or null at the top. */
+export const tuneCostFor = (s: HoldState, weapon: string, tune: HoldTuning = HOLD_TUNING): number | null =>
+  tune.tuneCost[weaponTier(s, weapon)] ?? null
+export function plantDevice(s: HoldState, tune: HoldTuning = HOLD_TUNING): boolean {
+  if (s.devicePlanted || !s.rooms[s.map.zero.room] || !spend(s, tune.devicePlant)) return false
+  s.devicePlanted = true
+  return true
+}
+/** Tune the weapon a tier. Returns the new tier, or null (not planted, at the top, or short of salvage). */
+export function tuneWeapon(s: HoldState, weapon: string, tune: HoldTuning = HOLD_TUNING): number | null {
+  const cost = tuneCostFor(s, weapon, tune)
+  if (!s.devicePlanted || cost === null || !spend(s, cost)) return null
+  s.tuned[weapon] = weaponTier(s, weapon) + 1
+  return s.tuned[weapon]
 }
 
 // ── the step ────────────────────────────────────────────────────────────────────────────────
@@ -752,6 +790,7 @@ export type HoldPrompt =
   | { kind: 'font'; cost: number }
   | { kind: 'cache'; cost: number }
   | { kind: 'chest'; spot: number; rarity: ChestRarity; progress: number }
+  | { kind: 'device'; planted: boolean; cost: number }
 
 /** Close enough on the ground AND on the same floor — a gate one storey down is not "near". */
 const near = (px: number, pz: number, py: number, x: number, z: number, h: number, r: number, tune: HoldTuning) =>
@@ -772,7 +811,8 @@ export function promptAt(s: HoldState, px: number, pz: number, py: number = heig
     const c = s.chests[i], sp = s.map.chestSpots[i]
     if (c && near(px, pz, py, sp.x, sp.z, sp.h, tune.interact, tune)) return { kind: 'chest', spot: i, rarity: c.rarity, progress: Math.min(1, c.openT / tune.chestOpenSec) }
   }
-  const { rack, font, cache } = s.map
+  const { rack, font, cache, zero } = s.map
+  if (s.rooms[zero.room] && near(px, pz, py, zero.x, zero.z, zero.h, tune.interact, tune)) return { kind: 'device', planted: s.devicePlanted, cost: tune.devicePlant }
   if (near(px, pz, py, rack.x, rack.z, rack.h, tune.interact, tune)) return { kind: 'rack', cost: tune.rackCost, bought: s.rackBought }
   if (near(px, pz, py, font.x, font.z, font.h, tune.interact, tune)) return { kind: 'font', cost: tune.fontCost }
   if (s.rooms[cache.room] && near(px, pz, py, cache.x, cache.z, cache.h, tune.interact, tune)) return { kind: 'cache', cost: tune.cacheCost }

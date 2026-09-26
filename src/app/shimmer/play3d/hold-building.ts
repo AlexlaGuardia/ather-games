@@ -57,7 +57,7 @@ export interface Building {
 }
 
 const RAMP_DIR: Record<string, [number, number]> = { '^': [0, -1], 'v': [0, 1], '<': [-1, 0], '>': [1, 0] }
-const FIXTURES = '@XRFH'
+const FIXTURES = '@XRFHZ'   // 'Z' ground zero: where the weapon-tuning device is planted (`hold.ts` › the device)
 export const DIRS: readonly [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 
 function kindOf(ch: string): Kind {

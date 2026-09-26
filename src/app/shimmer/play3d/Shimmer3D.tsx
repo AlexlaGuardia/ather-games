@@ -133,7 +133,7 @@ import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPane
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
-import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -2172,6 +2172,21 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
   const plankMax = map.windows.length * HOLD_TUNING.seals
   const gateMax = map.gates.reduce((n, g) => n + g.cells.length, 0)
   const chestMax = map.chestSpots.length
+  // the core: drawn over the blockout block nearest ground zero (the plan puts it by the breach). Found, not
+  // hard-coded, so moving it in `hold-floors.ts` moves the prop too.
+  const core = useMemo(() => {
+    const b = map.building, L = b.levels[map.zero.lv], z0 = map.zero
+    let sx = 0, sz = 0, n = 0
+    for (let i = 0; i < b.cols * b.rows; i++) {
+      if (L.kind[i] !== HB.BLOCK) continue
+      const x = i % b.cols, z = (i / b.cols) | 0
+      if ((x - z0.x) ** 2 + (z - z0.z) ** 2 > 100) continue
+      sx += x; sz += z; n++
+    }
+    return n ? { x: sx / n, z: sz / n, y: z0.h * STEP } : null
+  }, [map])
+  const deviceGlow = useRef<THREE.MeshStandardMaterial>(null)
+  const coreGlow = useRef<THREE.MeshStandardMaterial>(null)
   const m = useMemo(() => new THREE.Matrix4(), [])
   const q = useMemo(() => new THREE.Quaternion(), [])
   const v = useMemo(() => new THREE.Vector3(), [])
@@ -2199,6 +2214,9 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
       bodies.current.instanceMatrix.needsUpdate = true
       if (bodies.current.instanceColor) bodies.current.instanceColor.needsUpdate = true
     }
+    // the core breathes; the device wakes once planted and brightens as the weapon in hand is tuned
+    if (coreGlow.current) coreGlow.current.emissiveIntensity = 0.9 + 0.35 * Math.sin(t * 1.3)
+    if (deviceGlow.current) deviceGlow.current.emissiveIntensity = s.devicePlanted ? 1.2 + 0.4 * Math.sin(t * 3) : 0.15
     if (chests.current && chestGlow.current) {
       // one instance per spot, always: an empty spot scales to nothing
       map.chestSpots.forEach((sp, i) => {
@@ -2306,6 +2324,19 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
         <mesh position={[0, 0.4, 0]}><cylinderGeometry args={[0.45, 0.55, 0.8, 16]} /><meshStandardMaterial color={S.hold.gate} /></mesh>
         <mesh position={[0, 0.81, 0]}><cylinderGeometry args={[0.38, 0.38, 0.04, 16]} /><meshStandardMaterial color={S.hold.font} emissive={S.hold.font} emissiveIntensity={0.9} /></mesh>
       </group>
+      {/* ⚠ TBD-CANON (CANON_GAPS 09-26): what the core IS and the device's look. Blockout: a half-sunk
+          glowing mass over the rubble block, and a plinth that lights when planted. */}
+      {core && (
+        <mesh position={[core.x, core.y + 1.2, core.z]} scale={[1.6, 1.1, 1.4]}>
+          <icosahedronGeometry args={[1.4, 1]} />
+          <meshStandardMaterial ref={coreGlow} color={S.hold.core} emissive={S.hold.coreGlow} emissiveIntensity={1} roughness={0.35} flatShading />
+        </mesh>
+      )}
+      <group position={at(map.zero)}>
+        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.7, 0.85, 24]} /><meshBasicMaterial color={S.hold.deviceGlow} transparent opacity={0.6} /></mesh>
+        <mesh position={[0, 0.55, 0]}><cylinderGeometry args={[0.32, 0.45, 1.1, 8]} /><meshStandardMaterial color={S.hold.device} metalness={0.4} roughness={0.5} /></mesh>
+        <mesh position={[0, 1.2, 0]}><octahedronGeometry args={[0.28, 0]} /><meshStandardMaterial ref={deviceGlow} color={S.hold.deviceGlow} emissive={S.hold.deviceGlow} emissiveIntensity={0.15} toneMapped={false} /></mesh>
+      </group>
       {/* the cache: a crate of draught with a violet glint */}
       <group position={at(map.cache)}>
         <mesh position={[0, 0.35, 0]}><boxGeometry args={[0.7, 0.7, 0.7]} /><meshStandardMaterial color={S.hold.plank} /></mesh>
@@ -2366,6 +2397,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const pool = useMemo(() => Array.from({ length: MAX }, () => ({
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0,
     trail: Array.from({ length: TRAIL_N }, () => new THREE.Vector3()),
+    /** the Hold's evolved tier pierces: bodies this round has gone through, and the last one (never struck twice running) */
+    hits: 0, last: -1,
   })), [])
   const EMAX = 16  // enemy orb pool (fired by the hunter)
   const orbs = useMemo(() => Array.from({ length: EMAX }, () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 })), [])
@@ -2613,6 +2646,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           .addScaledVector(camRight, Math.cos(th) * r).addScaledVector(camUp, Math.sin(th) * r)
           .normalize().multiplyScalar(W.projSpeed)
         p.life = W.projLife
+        p.hits = 0; p.last = -1
         for (const t of p.trail) t.copy(p.pos)  // collapse the trail onto the muzzle at spawn
         bloomRef.current = Math.min(W.bloomMax, bloomRef.current + W.bloomPerShot)
         recoilRef.current.p += W.kickPitch
@@ -2792,16 +2826,20 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         }
       }
       // rounds vs the flooded (THE HOLD). Crit = the upper third of the body, same rule as the hunter.
+      // The device's tier (in-run, per weapon) multiplies the hit and, evolved, lets the round go on through.
       if (p.life > 0 && hs?.running) {
+        const tier = TUNE_TIERS[weaponTier(hs, W.id)]
         for (const b of hs.flood) {
-          if (!b.alive) continue
+          if (!b.alive || b.id === p.last) continue
           const by = b.y * STEP + 0.5
           if (Math.abs(p.pos.y - by) >= 0.9) continue
           const bdx = p.pos.x - b.x, bdz = p.pos.z - b.z, br = b.kind === 'bulk' ? 0.7 : 0.5
           if (bdx * bdx + bdz * bdz >= br * br) continue
           const crit = p.pos.y > by + CRIT_Y
-          hitBody(hs, b.id, crit ? wCrit : wDmg, crit)
-          p.life = 0; onHit(crit)
+          hitBody(hs, b.id, (crit ? wCrit : wDmg) * tier.dmg, crit)
+          p.last = b.id
+          if (++p.hits >= tier.pierce) p.life = 0
+          onHit(crit)
           break
         }
       }
@@ -6731,7 +6769,8 @@ export default function Shimmer3D() {
     const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // recharge the LIVE weapon's clip
     if (!weaponDrawnRef.current || holsteredRef.current || reloadingRef.current > 0 || ammoRef.current >= W.clip) return
     const missing = W.clip - ammoRef.current
-    const rounds = Math.min(missing, Math.floor((manaRef.current.current / W.reloadMana) * W.clip))
+    const reloadMana = W.reloadMana * TUNE_TIERS[weaponTier(holdRef.current, W.id)].reloadMana   // the Hold's device makes a tuned clip cheaper
+    const rounds = Math.min(missing, Math.floor((manaRef.current.current / reloadMana) * W.clip))
     if (rounds < 1) {
       const t = performance.now()  // dry-fire calls this every 0.25s — don't toast-spam
       if (t - dryToastAt.current > 1500) { dryToastAt.current = t; setHarvestToast('No mana to recharge — drink a Mana Draught') }
@@ -6743,7 +6782,7 @@ export default function Shimmer3D() {
     reloadTimer.current = setTimeout(() => {
       reloadingRef.current = 0
       ammoRef.current = Math.min(W.clip, ammoRef.current + rounds)
-      manaRef.current.current = Math.max(0, manaRef.current.current - (W.reloadMana * rounds) / W.clip)
+      manaRef.current.current = Math.max(0, manaRef.current.current - (reloadMana * rounds) / W.clip)
       setManaFrac(manaRef.current.current / manaMax())
     }, W.reloadTime * 1000)
   }, [])
@@ -6929,7 +6968,7 @@ export default function Shimmer3D() {
   // comes back on the way out. The run itself is `hold.ts`; FiringRange steps it.
   const holdSavedLoadout = useRef<number[] | null>(null)
   const holdEHeld = useRef(false)
-  const [holdHud, setHoldHud] = useState<{ round: number; salvage: number; hush: number; loud: boolean; surge: number; kills: number; over: boolean; prompt: HoldPrompt | null; best: number } | null>(null)
+  const [holdHud, setHoldHud] = useState<{ round: number; salvage: number; hush: number; loud: boolean; surge: number; kills: number; over: boolean; prompt: HoldPrompt | null; best: number; weapon: { name: string; tier: string; next: number | null } } | null>(null)
   const [holdFlash, setHoldFlash] = useState<string | null>(null)
   useEffect(() => { if (!holdFlash) return; const t = setTimeout(() => setHoldFlash(null), 2200); return () => clearTimeout(t) }, [holdFlash])
   const beginHold = useCallback(() => {
@@ -6982,7 +7021,9 @@ export default function Shimmer3D() {
       lastChests = chestsNow
       let best = 0
       try { best = Number(localStorage.getItem(keeperKey(HOLD_BEST_KEY)) ?? 0) } catch { /* none */ }
-      const next = { round: hs.round, salvage: hs.salvage, hush: Math.ceil(hs.hush), loud: isLoud(hs), surge: Math.round(hs.surge * 20) / 20, kills: hs.kills, over: hs.over, prompt, best }
+      const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]
+      const weapon = { name: W.name, tier: TUNE_TIERS[weaponTier(hs, W.id)].name, next: tuneCostFor(hs, W.id) }
+      const next = { round: hs.round, salvage: hs.salvage, hush: Math.ceil(hs.hush), loud: isLoud(hs), surge: Math.round(hs.surge * 20) / 20, kills: hs.kills, over: hs.over, prompt, best, weapon }
       const key = JSON.stringify(next)
       if (key !== lastKey) { lastKey = key; setHoldHud(next) }
     }, DT * 1000)
@@ -7019,6 +7060,12 @@ export default function Shimmer3D() {
       } else if (pr.kind === 'font') {
         if (buyFont(hs)) { manaRef.current.current = manaMax(); setManaFrac(1) } else short()
       } else if (pr.kind === 'cache') { if (buyCache(hs)) setHoldFlash(`+${HOLD_TUNING.cacheSec}s hush`); else short() }
+      else if (pr.kind === 'device') {
+        const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]
+        if (!pr.planted) { if (plantDevice(hs)) setHoldFlash('The device is planted'); else short() }
+        else if (tuneCostFor(hs, W.id) === null) setHarvestToast(`The ${W.name} is as far as it goes`)
+        else { const t = tuneWeapon(hs, W.id); if (t !== null) setHoldFlash(`${W.name} — ${TUNE_TIERS[t].name}`); else short() }
+      }
     }
     const onUp = (e: KeyboardEvent) => { if (e.key.toLowerCase() === 'e') holdEHeld.current = false }
     window.addEventListener('keydown', onDown)
@@ -8043,6 +8090,11 @@ export default function Shimmer3D() {
               {holdHud.prompt.kind === 'rack' && <span>E — {holdHud.prompt.bought ? 'refill the SPITTER' : 'take the SPITTER off the wall'} <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.bought ? Math.round(holdHud.prompt.cost / 2) : holdHud.prompt.cost} salvage</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'font' && <span>E — drink from the font (full mana) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
               {holdHud.prompt.kind === 'chest' && <span>Hold E — open the <span style={{ color: S.hold.chest[holdHud.prompt.rarity] }}>{holdHud.prompt.rarity}</span> chest <HearthPillSoft face={HUD_FACE}>{Math.round(holdHud.prompt.progress * 100)}%</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'device' && (!holdHud.prompt.planted
+                ? <span>E — plant the device <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>
+                : holdHud.weapon.next === null
+                  ? <span>The {holdHud.weapon.name} is {holdHud.weapon.tier} <HearthPillSoft face={HUD_FACE}>the top tier</HearthPillSoft></span>
+                  : <span>E — {holdHud.weapon.tier === 'untuned' ? 'tune' : 'evolve'} the {holdHud.weapon.name} <HearthPillSoft face={HUD_FACE}>{holdHud.weapon.next} salvage</HearthPillSoft></span>)}
               {holdHud.prompt.kind === 'cache' && <span>E — a draught from the cache (+{HOLD_TUNING.cacheSec}s hush) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
             </HearthPill>
           )}

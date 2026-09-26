@@ -21,6 +21,7 @@
 //   'u' a rooftop unit — chest-high cover you can climb onto · 'p' floor painted as the landing pad
 //   an uppercase letter: a GATE (bought open; see `HOLD_TUNING.gateCost`) — except these fixtures:
 //   '@' where you stand · 'X' the way out · 'R' the wall rack · 'F' the mana font · 'H' the draught cache
+//   'Z' GROUND ZERO — where the weapon-tuning device is planted (the café, by the breach the core tore in the north wall)
 //   '$' a CHEST SPOT — floor where a chest may appear (Alex 09-26: every 5th round each empty spot rolls 25%;
 //       20 spots cut by a quarter to 15 — the spot count is the rarity dial)
 // Rooms are not declared: walls and gates split each floor into regions, a ramp joins the regions at its
@@ -288,13 +289,13 @@ const MIDDLE: readonly string[] = [
 ]
 
 const BOTTOM: readonly string[] = [
-  '##############www####################www#####################www####################www#############',
-  '#..................................................................................................#',
-  '#..............................................................................................$...#',
-  '#..................................................................................................#',
-  'w.........uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu......................................w',
-  'w.........uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu......................................w',
-  'w.........uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu......................................w',
+  '##############www####################www#wwwwwww#############www####################www#############',
+  '#...............................................uuuuu..............................................#',
+  '#...............................................uuuuu..........................................$...#',
+  '#...............................................uuuuu..............................................#',
+  'w.........uuuuuuuuuuuuuuuuuuuuu....................................................................w',
+  'w.........uuuuuuuuuuuuuuuuuuuuu.............Z......................................................w',
+  'w.........uuuuuuuuuuuuuuuuuuuuu....................................................................w',
   '#..................................................................................................#',
   '#..................................................................................................#',
   '#..................................................................................................#',

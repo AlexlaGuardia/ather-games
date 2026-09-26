@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PARTS_RULED, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PARTS_RULED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { FLOOR_W, FLOOR_D } from './hold-floors'
@@ -381,6 +381,33 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   const sp = map.chestSpots[2]
   u.chests[2] = { rarity: 'common', openT: 0 }
   ok(promptAt(u, sp.x, sp.z, sp.h)?.kind === 'chest', 'standing at a chest, E offers it')
+}
+
+// ── the device (Alex 09-26, our pack-a-punch): ground zero in the lobby's café, plant once, tune per weapon, in-run only ──
+{
+  ok(map.zero.lv === 0, '★ ground zero is on the bottom floor')
+  const kGate = map.gates.find(g => g.letter === 'K')!
+  ok(kGate.opens.includes(map.zero.room), 'it stands in the café, behind K')
+  ok(map.windows.some(w => w.room === map.zero.room && w.cells.length >= 7), 'the breach: a wide hole the flooded come through, in the device\'s room')
+  const s = startHold(parseLanding())
+  s.salvage = 99999
+  ok(!plantDevice(s), '★ the device cannot be planted before its room is open')
+  ok(tuneWeapon(s, 'spitter') === null, 'nothing tunes before it is planted')
+  s.rooms[map.zero.room] = true
+  const sal = s.salvage
+  ok(plantDevice(s) && s.devicePlanted && s.salvage === sal - T.devicePlant, `planting costs ${T.devicePlant}`)
+  ok(!plantDevice(s), 'it is planted once')
+  ok(tuneCostFor(s, 'spitter') === T.tuneCost[0] && tuneWeapon(s, 'spitter') === 1 && weaponTier(s, 'spitter') === 1, 'tier 1: tuned')
+  ok(weaponTier(s, 'lance') === 0, '★ tiers are PER WEAPON: tuning the SPITTER leaves the LANCE as it was')
+  ok(tuneWeapon(s, 'spitter') === 2 && tuneCostFor(s, 'spitter') === null && tuneWeapon(s, 'spitter') === null, 'tier 2: evolved, and that is the top')
+  s.salvage = 10
+  ok(tuneWeapon(s, 'lance') === null && weaponTier(s, 'lance') === 0 && s.salvage === 10, 'short of salvage: nothing changes')
+  ok(TUNE_TIERS[1].dmg > 1 && TUNE_TIERS[2].dmg > TUNE_TIERS[1].dmg && TUNE_TIERS[2].pierce > 1, 'each tier hits harder; the evolved one pierces')
+  ok(TUNE_TIERS[2].reloadMana < TUNE_TIERS[1].reloadMana && TUNE_TIERS[1].reloadMana < 1, 'and each is cheaper on mana')
+  const fresh = startHold(parseLanding())
+  ok(!fresh.devicePlanted && weaponTier(fresh, 'spitter') === 0, '★ IN-RUN ONLY: a new run starts untuned, device unplanted')
+  const z = map.zero
+  ok(promptAt(s, z.x, z.z, z.h)?.kind === 'device', 'at ground zero, E offers the device')
 }
 
 // ── the end ──

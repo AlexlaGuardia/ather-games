@@ -124,6 +124,22 @@ export const passage = {
   plate: { bg: '#120c08', glow: 'rgba(212,168,67,0.25)', ink: '#fde68a', faint: 'rgba(251,191,36,0.6)', edge: 'rgba(180,83,9,0.5)', scrim: 'rgba(0,0,0,0.8)' },
 } as const
 
+/** Rune Hold — the Passage's materials under an open sky (`RuneHoldScene`): cut stone, slate, timber,
+ *  cobbles, the same lantern glass. Lighter than the Passage's rock because the sun is on it. */
+export const runeHold = {
+  stone: ['#8a7a68', '#7e6f5e', '#958470', '#74665a', '#9a8a74', '#83735f'],
+  /** the hillside the town is carved into: the Passage's dug rock, a shade paler in daylight */
+  hill: ['#6e5a48', '#7a6450', '#645140', '#836b55', '#5d4b3b'],
+  hillTop: ['#6b7d4a', '#5f7143', '#748550'],
+  roof: ['#4a3d36', '#553f33', '#3f3a38', '#5a4436'],
+  timber: '#5b3d25', sill: '#4a3220',
+  window: '#f0b050',
+  cobble: ['#9a8c7a', '#8c7f6e', '#a39480', '#857868', '#94866f'],
+  meadow: ['#6f8f55', '#78955a', '#687f4e', '#7a8f58'],
+  /** the ground worn bare where the streets meet the grass */
+  worn: ['#7d7458', '#857a5c'],
+} as const
+
 /** The keeper you walk as (the blockout capsule + its facing cone). */
 export const player = { body: '#5ad1e6', cone: '#f6e9da' } as const
 /** Other keepers in your world: their capsule, and the plate their name floats on. */
@@ -181,6 +197,9 @@ export const hold = {
   // chests (09-26): the body is a darkened wood/metal, the lid seam glows the rarity — the HUD prompt names it in the same colour
   chestBody: { common: '#6e5236', rare: '#2f4a66', legendary: '#6a5222' },
   chest: { common: '#d9c7a0', rare: '#6fb4ff', legendary: '#ffc94a' },
+  // ground zero (09-26, TBD-CANON look): the core a cold white-hot, the device dead grey metal with a
+  // pale-cyan wake light — neither names a cause, per the flooded's own rule above
+  core: '#dfe9f0', coreGlow: '#9fd8ff', device: '#4a5058', deviceGlow: '#bff3ff',
   // the building (`HoldBuilding`): floor and wall never share a colour, and no two floors share a pair,
   // so where you are reads at a glance. Bottom → top. Ramps are the one warm accent: they are the way.
   levels: [
