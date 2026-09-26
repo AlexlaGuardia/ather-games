@@ -1197,11 +1197,14 @@ const WorldFlora = memo(function WorldFlora({ heights }: { heights: number[][] }
 // memo: the terrain is the heaviest node in the scene and depends on nothing that ticks. Without it,
 // every channel tick (~11 Hz) rebuilt the whole floor/wall/water/mist JSX tree. All five props are
 // stable (a ref, a ref's array, a version int, a useCallback, a bool), so this skips cleanly.
-const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick, ownSolids, noBeacon }: {
+const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick, ownSolids, ownWarps, noBeacon }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
   /** THE HOLD draws its own solids (parapets and pillars at their floor's height — `HoldScene`); the
    *  shared brown block is seated at ground level and would sink into a raised floor */
   ownSolids?: boolean
+  /** the zone draws its own exit (THE HOLD: a floor-stacked zone, where a warp's ground-up column would
+   *  run through every floor under the roof — Alex 09-26 saw the beam from the lobby) */
+  ownWarps?: boolean
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
   /** the player's CHUNK — changes once per 64 tiles walked, so the memo still holds */
   center?: ChunkCoord | null
@@ -1234,8 +1237,8 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
           <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
           <MistOverlay mists={mists} heights={heights} />
           {/* warp markers — glowing gold columns + beacons (you place; Jin wires the destinations) */}
-          <FloorTerrain floors={warps} heights={heights} version={version} paint={paint} editing={editing} color={S.terrain.warpFloor} emissive={S.terrain.warpGlow} />
-          <WarpBeacons warps={noBeacon ? warps.filter(([c, r]) => !noBeacon.has(`${c},${r}`)) : warps} heights={heights} />
+          {!ownWarps && <FloorTerrain floors={warps} heights={heights} version={version} paint={paint} editing={editing} color={S.terrain.warpFloor} emissive={S.terrain.warpGlow} />}
+          {!ownWarps && <WarpBeacons warps={noBeacon ? warps.filter(([c, r]) => !noBeacon.has(`${c},${r}`)) : warps} heights={heights} />}
           {/* empty cells: invisible in play; a faint clickable grid-canvas to draw land onto while editing */}
           {editing && <Tiles cells={voids} size={[0.92, 0.05, 0.92]} y={-0.02} color={S.terrain.void} opacity={0.5} paint={paint} editing={editing} />}
         </group>
@@ -2336,6 +2339,20 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
       <group position={at(map.font)}>
         <mesh position={[0, 0.4, 0]}><cylinderGeometry args={[0.45, 0.55, 0.8, 16]} /><meshStandardMaterial color={S.hold.gate} /></mesh>
         <mesh position={[0, 0.81, 0]}><cylinderGeometry args={[0.38, 0.38, 0.04, 16]} /><meshStandardMaterial color={S.hold.font} emissive={S.hold.font} emissiveIntensity={0.9} /></mesh>
+      </group>
+      {/* the way out: the landing pad's centre (Alex 09-26: "give it a landing pad look"). Pad paint — a
+          touchdown circle and an H — and a lit ring where the lift comes down. The beam rises only ABOVE the
+          roof, so no floor under it sees it. */}
+      <group position={at(map.exit)}>
+        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[5.4, 5.8, 48]} /><meshStandardMaterial color={S.hold.padPaint} roughness={0.9} /></mesh>
+        <mesh position={[-1.4, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[0.45, 3.6]} /><meshStandardMaterial color={S.hold.padPaint} roughness={0.9} /></mesh>
+        <mesh position={[1.4, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[0.45, 3.6]} /><meshStandardMaterial color={S.hold.padPaint} roughness={0.9} /></mesh>
+        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[2.4, 0.45]} /><meshStandardMaterial color={S.hold.padPaint} roughness={0.9} /></mesh>
+        <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.55, 0.85, 32]} /><meshBasicMaterial color={S.exit.glow} toneMapped={false} /></mesh>
+        <mesh position={[0, 7, 0]}><cylinderGeometry args={[0.45, 0.6, 14, 16, 1, true]} /><meshBasicMaterial color={S.exit.glow} transparent opacity={0.18} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} /></mesh>
+        <Html zIndexRange={[20, 0]} position={[0, 2.6, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+          <div style={{ font: '800 11px ui-monospace, monospace', color: S.exit.glow, background: S.exit.labelPlate, padding: '2px 7px', borderRadius: 7, whiteSpace: 'nowrap', border: `1px solid ${S.exit.labelEdge}` }}>EXIT</div>
+        </Html>
       </group>
       {/* ⚠ TBD-CANON (CANON_GAPS 09-26): what the core IS and the device's look. Blockout: a half-sunk
           glowing mass over the rubble block, and a plinth that lights when planted. */}
@@ -4054,7 +4071,7 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? LANDING_KEYS : undefined} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? LANDING_KEYS : undefined} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && n.kind !== 'stall' && n.kind !== 'cabinet' && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.zone.id === PASSAGE_ZONE && <PassageScene isOwner={props.isOwner} />}
       {props.zone.id === RUNE_HOLD_ZONE && props.gridRef.current && <RuneHoldScene grid={props.gridRef.current} heights={props.heights} version={props.version} />}
@@ -4062,7 +4079,7 @@ const Scene = memo(function Scene(props: {
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && props.zone.id !== HOLD_ZONE && <GunBenches />}
-      {props.zone.realm === 'outside' && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
+      {props.zone.realm === 'outside' && props.zone.id !== HOLD_ZONE && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
           Ather has doors worth naming too. ExitMarkers stays outside-only — it is a fallback for
           zones whose warps were never painted into the grid. */}

@@ -211,7 +211,7 @@ export const hold = {
     { floor: '#6b6456', wall: '#c8b58a' },   // top: warm stone floor, sand walls
   ],
   garden: '#4d6b3c', rail: '#9aa3ad', ramp: '#c79a4a', lintel: '#3a3d42',
-  pad: '#2f3338', unit: '#7d858e',   // the rooftop: the dark pad they landed on, the grey plant units
+  pad: '#2f3338', padPaint: '#b9bec4', unit: '#7d858e',   // the rooftop: the dark pad they landed on (its touchdown circle + H in padPaint, 09-26), the grey plant units
   hedge: '#35592b', tree: '#2a4424',  // the gardens: a hedge or shrub, and a tree (a trunk's-height block, blockout)
 } as const
 /** The manabox viewmodel: dead grey cast metal with bronze trim (the art-medium law). */
