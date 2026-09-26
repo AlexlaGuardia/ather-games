@@ -903,36 +903,8 @@ export function createCrucibleArena(cols: number, rows: number): number[][] {
 export const CRUCIBLE: number[][] = createCrucibleArena(CRUCIBLE_COLS, CRUCIBLE_ROWS)
 
 
-// THE TRAVELERS STATION — the departure hall on Rune Hold's south side (stub, 2026-08-05).
-// The town's way OUT: practice first at the Firing Range (west door back to the square, east
-// door to the range), and later the Crucible proper and expeditions leave from here too.
-//
-// ⚠ TODO(station-layout): THE LAYOUT IS ALEX'S TO AUTHOR (2D MapEditor). This is a functional
-// shell so the door he painted in the town leads somewhere real. The two future doors
-// (Crucible, expeditions) are deliberately NOT painted — an unwired warp tile is a door that
-// goes nowhere, and the oracle fails on orphaned warp tiles for exactly that reason. Paint them
-// when there is something behind them.
-//
-// ⚠ TODO(station-canon): the building itself is unruled — see CANON_GAPS 2026-08-05. Canon's
-// route to Pyramid Zero is a SHIP, so this may end up a dock. Nothing here asserts otherwise.
-export const TRAVELERS_STATION: number[][] = [
-  [103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103],  // 0
-  [103,98,98,98,98,98,98,98,98,98,98,14,14,98,98,98,98,98,98,98,98,98,98,103],  // 1
-  [103,98,98,98,98,98,98,98,98,98,98,14,14,98,98,98,98,98,98,98,98,98,98,103],  // 2
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 3
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 4
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 5
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 6
-  [103,14,14,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,14,14,103],  // 7
-  [103,14,14,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,14,14,103],  // 8
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 9
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 10
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 11
-  [103,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,98,103],  // 12
-  [103,98,98,98,98,98,98,98,98,98,98,14,14,98,98,98,98,98,98,98,98,98,98,103],  // 13
-  [103,98,98,98,98,98,98,98,98,98,98,14,14,98,98,98,98,98,98,98,98,98,98,103],  // 14
-  [103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103,103],  // 15
-]
+// THE TRAVELERS STATION — generated since 2026-09-26 (`play3d/station-field.ts`): the spaceport canon ruled
+// that day, a terminal and a field of berths. No literal here, like the Passage and the Hold.
 
 // THE PASSAGE — generated since 2026-09-25 (`play3d/passage-hall.ts`), like the Hold. No literal here.
 

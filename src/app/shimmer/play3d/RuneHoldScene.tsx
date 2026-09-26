@@ -24,10 +24,11 @@ import { runeHold as RH, passage as P, hubGate } from './scene-palette'
 import { LANDING } from '../world/landing'
 import { portalMaterial } from '../voxel3d/portal-material'
 
-interface Inst { x: number; y: number; z: number; sx: number; sy: number; sz: number; yaw?: number; tilt?: number; c: string }
+export interface Inst { x: number; y: number; z: number; sx: number; sy: number; sz: number; yaw?: number; tilt?: number; c: string }
 
 /** One instanced mesh of unit boxes (or planes laid flat), each placed, scaled and coloured. */
-function Instances({ items, flat, emissive, cast = true }: { items: Inst[]; flat?: boolean; emissive?: number; cast?: boolean }) {
+/** `emissive` lights every instance; `glow` is its colour (the town's window glass unless told otherwise). */
+export function Instances({ items, flat, emissive, glow = RH.window, cast = true }: { items: Inst[]; flat?: boolean; emissive?: number; glow?: string; cast?: boolean }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   useLayoutEffect(() => {
     const r = ref.current
@@ -49,7 +50,7 @@ function Instances({ items, flat, emissive, cast = true }: { items: Inst[]; flat
     <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow={cast && !flat} receiveShadow>
       {flat ? <planeGeometry args={[1, 1]} /> : <boxGeometry args={[1, 1, 1]} />}
       {emissive
-        ? <meshStandardMaterial color={RH.window} emissive={RH.window} emissiveIntensity={emissive} roughness={0.6} />
+        ? <meshStandardMaterial color={glow} emissive={glow} emissiveIntensity={emissive} roughness={0.6} />
         : <meshStandardMaterial roughness={0.95} />}
     </instancedMesh>
   )

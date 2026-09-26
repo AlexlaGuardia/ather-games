@@ -143,6 +143,18 @@ export const runeHold = {
   worn: ['#7d7458', '#857a5c'],
 } as const
 
+/** The Travelers Station — the spaceport (`StationScene`): the town's stone for the terminal, a pale laid apron,
+ *  berth pads, and a blockout ship in the skyship's lineage (a manalic hull, lift-runes fed by mana cells). */
+export const spaceport = {
+  apron: ['#a89c88', '#a09481', '#aea290', '#9c907c'],
+  apronSeam: '#6e6454',
+  hallFloor: ['#8e7f6a', '#968671', '#877865'],
+  pad: '#5a5550', padRing: '#d8b86a', padLight: '#ffd88a', padNumber: '#f3e2b8',
+  roof: '#4a3d36', beam: '#5b3d25',
+  hull: '#7c7468', hullDark: '#5a544b', plate: '#948a7a', trim: '#b8904a', rune: '#6fe0d0', canopy: '#2a3a40',
+  board: { bg: '#15110d', frame: '#5b3d25', ink: '#f3e2b8', dim: '#8a7a60', lit: '#ffcf70' },
+} as const
+
 /** The keeper you walk as (the blockout capsule + its facing cone). */
 export const player = { body: '#5ad1e6', cone: '#f6e9da' } as const
 /** Other keepers in your world: their capsule, and the plate their name floats on. */

@@ -213,6 +213,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['rune hold', 'town', 'look', 'stone', 'houses', 'roof', 'lantern', 'cobbles', 'before', 'after'],
   },
   {
+    path: '/shimmer/dev/station',
+    title: 'Travelers Station bench',
+    blurb: 'The spaceport: the stone terminal, the field of berths, the departures board and the Hold\'s ship, drawn by the shipped scene at a keeper\'s eye.',
+    group: 'bench',
+    keywords: ['travelers station', 'spaceport', 'berth', 'ship', 'terminal', 'departures', 'field', 'rune hold'],
+  },
+  {
     path: '/shimmer/dev/stations',
     title: 'Station shelf',
     blurb: 'Every modelled station side by side, drawn by the shipped renderer. Judge the shapes here.',

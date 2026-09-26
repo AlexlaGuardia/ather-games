@@ -123,6 +123,8 @@ import { keeperBook, saveBook } from './book'
 import { PassagePanel } from './PassagePanel'
 import { PassageScene } from './PassageScene'
 import { RuneHoldScene } from './RuneHoldScene'
+import { StationScene } from './StationScene'
+import { STATION, T as STATION_TILE } from './station-field'
 import { ArcadeCabinet } from './ArcadeCabinet'
 import { PASSAGE, type ShelfKey } from './passage-hall'
 import { caravanFor, leavesIn, type CaravanSlot, type CaravanStock } from './caravans'
@@ -229,6 +231,9 @@ const HOLD_ZONE = 'the-hold'
 const PASSAGE_ZONE = 'the-passage'
 /** Rune Hold draws its own stone, streets and landing plaza (`RuneHoldScene`) over the town's grid. */
 const RUNE_HOLD_ZONE = 'rune-hold'
+/** The Travelers Station draws its terminal, field, berths and ships (`StationScene`). */
+const STATION_ZONE = 'travelers-station'
+const STATION_FLOOR = STATION_TILE.FLOOR
 /** THE LANDING's door tiles stand inside the disc portal — no gold beacon poles through it. */
 const LANDING_KEYS = new Set(landingCells().map(([x, y]) => `${x},${y}`))
 const HOLD_BEST_KEY = 'ather:shimmer:hold:best'
@@ -4071,9 +4076,10 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? LANDING_KEYS : undefined} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? LANDING_KEYS : undefined} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && n.kind !== 'stall' && n.kind !== 'cabinet' && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.zone.id === PASSAGE_ZONE && <PassageScene isOwner={props.isOwner} />}
+      {props.zone.id === STATION_ZONE && <StationScene />}
       {props.zone.id === RUNE_HOLD_ZONE && props.gridRef.current && <RuneHoldScene grid={props.gridRef.current} heights={props.heights} version={props.version} />}
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
@@ -4959,6 +4965,12 @@ export default function Shimmer3D() {
           if (wp) posRef.current!.set(wp.x, posRef.current!.y, wp.y)
           setZoneId(WORLD_ZONE_ID); landed = WORLD_ZONE_ID
         } else if (data.zoneId && getZone(ALL_ZONES, data.zoneId)) { setZoneId(data.zoneId); landed = data.zoneId }
+        // ⚠ THE STATION WAS REBUILT (2026-09-26, `station-field.ts`): a save made in the old 24×16 hall can
+        // stand where the new terminal has stone. Land it at the terminal's door instead of inside a wall.
+        if (landed === STATION_ZONE) {
+          const p = posRef.current!
+          if (STATION.grid[Math.round(p.z)]?.[Math.round(p.x)] !== STATION_FLOOR) p.set(STATION.arrivals.town.x, p.y, STATION.arrivals.town.z)
+        }
       }
 
       // ── ★★★ THE ATHER CROSSING ARRIVES HERE (2026-08-27) ──────────────────────────────────

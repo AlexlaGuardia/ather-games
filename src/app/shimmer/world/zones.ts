@@ -175,7 +175,8 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 
 import { parseLanding } from '../play3d/hold'
 import { PASSAGE } from '../play3d/passage-hall'
-import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, TRAVELERS_STATION, CRUCIBLE, RUNE_HOLD, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
+import { STATION, holdShip } from '../play3d/station-field'
+import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, CRUCIBLE, RUNE_HOLD, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
   ROUTE_GARDEN_MYCELIAL, ROUTE_MYCELIAL_SPIRIT, ROUTE_SPIRIT_MOONWELL, ROUTE_MOONWELL_GARDEN, crucibleArrival, crucibleExit,} from './tilemap'
 import { LANDING, LANDING_ARRIVAL, LANDING_LABEL } from './landing'
 /** The hold's landing, parsed once — the zone's grid and its door aims both read it. */
@@ -544,7 +545,7 @@ export const ZONES: Zone[] = [
         // practice range lives with it, which is why the east door opens on the firing range.
         // ★ A code comment goes stale silently, and the better written it is the longer it is
         // believed. Verify a claim about canon against `CANON/`, not against the comment.
-        x: 48, y: 86, toZone: 'travelers-station', toX: 4, toY: 7, direction: 'up',
+        x: 48, y: 86, toZone: 'travelers-station', toX: STATION.arrivals.town.x, toY: STATION.arrivals.town.z, direction: 'up',
         label: 'TRAVELERS STATION',
       },
       {
@@ -604,37 +605,31 @@ export const ZONES: Zone[] = [
     warps: [],
   },
   {
-    // ── THE TRAVELERS STATION — the departure hall ─────────────────────────────────────────
-    // `realm: 'outside'` (it is on the mortal side, so spirits stay dormant) + `peaceful` — and
-    // the peaceful flag's own doc note already named this exact case: "a town, a station
-    // concourse". Weapons stay holstered until you are through the door to the range.
-    //
-    // ⚠ TODO(station-layout): the hall is Alex's to author. The Crucible and expeditions doors
-    // go here when there is something behind them — not painted yet, deliberately.
+    // ── THE TRAVELERS STATION — the spaceport (canon RULED 2026-09-26: a spaceport, and big) ────────
+    // ★ GENERATED (`play3d/station-field.ts`): a stone terminal the town's road comes into, open onto a field
+    // of berths. No literal in tilemap.ts, same as the Passage and the Hold: the generator is the thing to edit.
+    // `realm: 'outside'` (mortal side, spirits dormant) + `peaceful` — *"a town, a station concourse"*.
+    // Every door below and every door INTO the Station reads its spot from `STATION`, never a typed number.
     id: 'travelers-station',
     name: 'The Travelers Station',
-    grid: TRAVELERS_STATION,
+    grid: STATION.grid,
     realm: 'outside',
     peaceful: true,
-    playerStart: { tileX: 4, tileY: 7 },
+    playerStart: { tileX: STATION.arrivals.town.x, tileY: STATION.arrivals.town.z },
     gates: [
-      // west door — back out to the town, landing north of the station gate's footprint
-      { x: 1, y: 7, toZone: 'rune-hold', toX: 48, toY: 85, direction: 'down', label: 'RUNE HOLD' }, // beside re-sited Travelers Station (48,86), plaza side
-      // east door — out to the practice range
-      { x: 21, y: 7, toZone: 'firing-range', toX: 7, toY: 13, direction: 'up', label: 'FIRING RANGE' },
-      // south door — the Crucible itself. `ownerOnly` for a BUILD reason: the tournament map is a
-      // ground-floor shell and there is no match to walk into yet. The flag comes off when there
-      // is — canon has no objection to a keeper entering, that is what the pyramid is FOR.
-      // Practice is deliberately the door with no gate on it: the point of the split was that a
-      // player can warm up before anything is at stake.
-      // ⚠ `toX/toY` IS THE CRUCIBLE'S ARRIVAL TILE, DERIVED FROM ITS SIZE — the coupling that lives
-      // in the wrong file. Resizing the arena with this left as (19,25) lands a keeper wherever that
-      // happens to be on the new grid, and nothing in the crucible's own block would show it.
-      { x: 11, y: 13, toZone: 'crucible', toX: crucibleArrival().x, toY: crucibleArrival().y, direction: 'up', label: 'THE CRUCIBLE', ownerOnly: true },
-      // north door — THE HOLD, a season world's round survival (GBOARD 🌊 SEASON EXPEDITIONS, 2026-09-24).
-      // `ownerOnly` for the same BUILD reason as the Crucible's: it is a blockout slice for Alex's feel
-      // pass, not a season anyone has been sent to. The flag comes off with the first real season.
-      { x: 11, y: 1, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'up', label: 'THE HOLD', ownerOnly: true },
+      // the terminal's west door — back out to the town, landing north of the station gate's footprint
+      { x: STATION.doors.town.x, y: STATION.doors.town.z, toZone: 'rune-hold', toX: 48, toY: 85, direction: 'down', label: 'RUNE HOLD' }, // beside re-sited Travelers Station (48,86), plaza side
+      // the terminal's north door — the practice range
+      { x: STATION.doors.range.x, y: STATION.doors.range.z, toZone: 'firing-range', toX: 7, toY: 13, direction: 'up', label: 'FIRING RANGE' },
+      // the terminal's south door — the Crucible, passage to Pyramid Zero. `ownerOnly` for a BUILD reason:
+      // the tournament map is a ground-floor shell and there is no match to walk into yet. The flag comes off
+      // when there is — canon has no objection to a keeper entering, that is what the pyramid is FOR.
+      // ⚠ `toX/toY` IS THE CRUCIBLE'S ARRIVAL TILE, DERIVED FROM ITS SIZE — see the crucible's block.
+      { x: STATION.doors.crucible.x, y: STATION.doors.crucible.z, toZone: 'crucible', toX: crucibleArrival().x, toY: crucibleArrival().y, direction: 'up', label: 'THE CRUCIBLE', ownerOnly: true },
+      // berth 1's gangway — THE HOLD, the one season world seated (GBOARD 🌊 SEASON EXPEDITIONS). Canon: *"each
+      // saved world the player has seated holds a berth, and a ship stands in it."* `ownerOnly` because it is a
+      // blockout slice for Alex's feel pass; the flag comes off with the first real season.
+      { x: holdShip()!.door.x, y: holdShip()!.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', label: 'THE HOLD', ownerOnly: true },
     ],
     warps: [],
   },
@@ -663,7 +658,7 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: crucibleArrival().x, tileY: crucibleArrival().y },
     gates: [
       // out — back to the concourse you entered from
-      { x: crucibleExit().x, y: crucibleExit().y, toZone: 'travelers-station', toX: 11, toY: 12, direction: 'down', label: 'LEAVE THE CRUCIBLE' },
+      { x: crucibleExit().x, y: crucibleExit().y, toZone: 'travelers-station', toX: STATION.arrivals.crucible.x, toY: STATION.arrivals.crucible.z, direction: 'down', label: 'LEAVE THE CRUCIBLE' },
     ],
     warps: [],
   },
@@ -686,7 +681,7 @@ export const ZONES: Zone[] = [
     playerStart: { tileX: HOLD_MAP.start.x, tileY: HOLD_MAP.start.z },
     warps: [
       // the way out, back to the concourse, one step south of the north door's footprint
-      { fromX: HOLD_MAP.exit.x, fromY: HOLD_MAP.exit.z, toZone: 'travelers-station', toX: 12, toY: 3, direction: 'down' },
+      { fromX: HOLD_MAP.exit.x, fromY: HOLD_MAP.exit.z, toZone: 'travelers-station', toX: holdShip()!.arrival.x, toY: holdShip()!.arrival.z, direction: 'down' },
     ],
   },
   {
@@ -712,7 +707,7 @@ export const ZONES: Zone[] = [
       // now, so leaving the range puts you in the concourse you chose it from — which is also
       // where the Crucible and expedition doors will be, so "go again / go on" is one screen.
       // (single tile — the range's doorway is one tile wide at (7,14); (8,14) is wall.)
-      { fromX: 7, fromY: 14, toZone: 'travelers-station', toX: 19, toY: 7, direction: 'left' },
+      { fromX: 7, fromY: 14, toZone: 'travelers-station', toX: STATION.arrivals.range.x, toY: STATION.arrivals.range.z, direction: 'left' },
     ],
   },
   {
