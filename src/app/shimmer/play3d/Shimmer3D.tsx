@@ -131,7 +131,7 @@ import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPane
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
-import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, fieldStrike, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, endHold, fieldStrike, ownerOpenAll, ownerCalm, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -8068,6 +8068,23 @@ export default function Shimmer3D() {
                     <div className="hk-faint" style={{ fontSize: 11, lineHeight: 1.45 }}>
                       live on the running fight. moss = moved off default. toggle the guards
                       off then on to re-arm three fresh puppets.
+                    </div>
+                  </div>
+                )}
+                {/* THE HOLD's layout-walk shortcuts — owner-only: every floor below the roof sits behind
+                    salvage a real run takes rounds to earn, and a layout pass is a walk (`hold.ts`). */}
+                {isOwner && zoneId === HOLD_ZONE && holdRef.current && (
+                  <div className="hk-plate" style={{ marginBottom: 8, padding: '9px 10px' }}>
+                    <div className="hk-faint" style={{ fontSize: 11, marginBottom: 7 }}>The Hold — layout walk (owner)</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 7 }}>
+                      <HearthButton small onClick={() => { if (holdRef.current) { ownerOpenAll(holdRef.current); setHoldFlash('Every gate open') } }}>Open every gate</HearthButton>
+                      <HearthButton small onClick={() => { if (holdRef.current) { holdRef.current.salvage += 5000; setHoldFlash('+5000 salvage') } }}>+5000 salvage</HearthButton>
+                      <HearthButton small onClick={() => { if (holdRef.current) { ownerCalm(holdRef.current); setHoldFlash('The tide is calm') } }}>Calm the tide</HearthButton>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {holdSpots(HOLD_MAP).map(sp => (
+                        <HearthButton key={sp.label} small onClick={() => { posRef.current?.set(sp.x, sp.y * STEP, sp.z); toggleRange(false) }}>{sp.label}</HearthButton>
+                      ))}
                     </div>
                   </div>
                 )}

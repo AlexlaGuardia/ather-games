@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, fieldStrike, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, fieldStrike, ownerOpenAll, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { getMaxPool } from '../engine/mana'
@@ -287,6 +287,21 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   for (let i = 0; i < 60 * 3; i++) stepHold(s, 1 / 60, map.start.x, map.start.z, map.start.h)
   ok(s.flood.length - before >= 8, '★ loud = they rush (spawns every 0.3s)')
   ok(s.flood.slice(before).every(b => b.kind === 'swift'), 'and every one of them is swift')
+}
+
+// ── the owner's layout-walk shortcuts ──
+{
+  const s = startHold(parseLanding(), 9)
+  for (let i = 0; i < 60 * 20; i++) stepHold(s, 1 / 60, map.start.x, map.start.z, map.start.h)
+  ownerOpenAll(s)
+  ok(s.gatesOpen.every(Boolean) && map.rooms.every(r => s.rooms[r]), 'open-all: every gate open, every room awake')
+  ok(reach(s).some(c => c.y === BOT), 'open-all: the bottom floor is walkable from the roof')
+  ownerCalm(s)
+  for (let i = 0; i < 60 * 30; i++) stepHold(s, 1 / 60, map.start.x, map.start.z, map.start.h)
+  ok(s.flood.length === 0 && !isLoud(s), 'calm: nothing comes, and the keeper never goes loud')
+  const spots = holdSpots(map)
+  ok(spots.length === 5 && new Set(spots.map(p => p.y)).size === 3, 'five jump spots across the three floors')
+  ok(spots.every(p => holdSurfaces(map, p.x, p.z).some(su => su.y === p.y)), 'every jump spot stands on a floor')
 }
 
 // ── the end ──

@@ -704,6 +704,47 @@ export function mendTick(s: HoldState, win: number, dt: number, tune: HoldTuning
   return true
 }
 
+// ── the owner's layout-walk shortcuts (the range console, owner-only, in the hold) ──────────────
+// A layout pass is a WALK, and every floor below the roof sits behind salvage a real run takes rounds
+// to earn. These exist so Alex can judge the floors in a minute. They are not a game control.
+/** Every gate open, every room awake. */
+export function ownerOpenAll(s: HoldState): void {
+  s.gatesOpen = s.gatesOpen.map(() => true)
+  for (const r of s.map.rooms) s.rooms[r] = true
+  s.fieldAt = -1
+}
+/** The tide stops: the flooded are gone and none come until the run starts again. */
+export function ownerCalm(s: HoldState): void {
+  s.flood = []
+  s.toSpawn = 0
+  s.breakT = 1e9
+  s.hush = Math.max(s.hush, 1e6)
+}
+/** Somewhere to stand on each floor and in each garden, for the jump buttons. */
+export function holdSpots(m: HoldMap): { label: string; x: number; z: number; y: number }[] {
+  const b = m.building
+  const at = (label: string, lv: number, x: number, z: number) => {
+    // the nearest plain floor cell to (x, z) on that floor
+    let best: { x: number; z: number } | null = null, bd = Infinity
+    for (let i = 0; i < b.cols * b.rows; i++) {
+      if (b.levels[lv].kind[i] !== K.FLOOR) continue
+      const cx = i % b.cols, cz = (i / b.cols) | 0, d = (cx - x) ** 2 + (cz - z) ** 2
+      if (d < bd) { bd = d; best = { x: cx, z: cz } }
+    }
+    return { label, x: best!.x, z: best!.z, y: b.levels[lv].y }
+  }
+  const top = b.levels.length - 1
+  // the tower plate spans the middle third of the grid; the gardens flank it
+  const cx = Math.round(b.cols / 2), cz = Math.round(b.rows / 2)
+  return [
+    { label: 'Roof', x: m.start.x, z: m.start.z, y: m.start.h },
+    at('Office', Math.max(0, top - 1), cx - 10, 20),
+    at('Lobby', 0, cx, cz + 10),
+    at('West garden', 0, Math.round(b.cols / 6), cz),
+    at('East garden', 0, Math.round((b.cols * 5) / 6), cz),
+  ]
+}
+
 /** The keeper fell. The run is over; what it reached is the record. */
 export function endHold(s: HoldState): { round: number; kills: number } {
   s.running = false
