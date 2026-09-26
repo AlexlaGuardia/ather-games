@@ -21,40 +21,11 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { blocksOf, lanternsOf, openSides, hash, isBuilding, inFront, PATH, BUILDING, FRONTS, NOTICE_BOARD, type Block, type Front } from './rune-hold-look'
 import { runeHold as RH, passage as P, hubGate } from './scene-palette'
+import { Instances, type Inst } from './instances'
+import { ShipHull } from './StationScene'
+import { spaceport as SP } from './scene-palette'
 import { LANDING } from '../world/landing'
 import { portalMaterial } from '../voxel3d/portal-material'
-
-export interface Inst { x: number; y: number; z: number; sx: number; sy: number; sz: number; yaw?: number; tilt?: number; c: string }
-
-/** One instanced mesh of unit boxes (or planes laid flat), each placed, scaled and coloured. */
-/** `emissive` lights every instance; `glow` is its colour (the town's window glass unless told otherwise). */
-export function Instances({ items, flat, emissive, glow = RH.window, cast = true }: { items: Inst[]; flat?: boolean; emissive?: number; glow?: string; cast?: boolean }) {
-  const ref = useRef<THREE.InstancedMesh>(null)
-  useLayoutEffect(() => {
-    const r = ref.current
-    if (!r) return
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), col = new THREE.Color()
-    const v = new THREE.Vector3(), s = new THREE.Vector3()
-    items.forEach((b, i) => {
-      e.set(flat ? -Math.PI / 2 : (b.tilt ?? 0), flat ? 0 : (b.yaw ?? 0), flat ? (b.yaw ?? 0) : (b.tilt ?? 0) * 0.7, flat ? 'YXZ' : 'XYZ')
-      q.setFromEuler(e)
-      m.compose(v.set(b.x, b.y, b.z), q, s.set(b.sx, b.sy, b.sz))
-      r.setMatrixAt(i, m); r.setColorAt(i, col.set(b.c))
-    })
-    r.instanceMatrix.needsUpdate = true
-    if (r.instanceColor) r.instanceColor.needsUpdate = true
-    r.computeBoundingSphere()
-  }, [items, flat])
-  if (!items.length) return null
-  return (
-    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow={cast && !flat} receiveShadow>
-      {flat ? <planeGeometry args={[1, 1]} /> : <boxGeometry args={[1, 1, 1]} />}
-      {emissive
-        ? <meshStandardMaterial color={glow} emissive={glow} emissiveIntensity={emissive} roughness={0.6} />
-        : <meshStandardMaterial roughness={0.95} />}
-    </instancedMesh>
-  )
-}
 
 const pick = <T,>(arr: readonly T[], x: number, z: number, k: number) => arr[Math.floor(hash(x, z, k) * arr.length) % arr.length]
 
@@ -188,6 +159,56 @@ function Stones({ items }: { items: Stone[] }) {
 }
 
 const F = RH.front
+/** The terminal stands over the town's two-storey roofs: a hall, and the way off the planet. */
+const TERMINAL_H = 7.5
+
+/**
+ * The spaceport as the town sees it: the terminal's flat roof and parapet, a tower at its corner with a lit lantern
+ * room and a beacon, and past the town's south edge the port itself — a mooring mast with a ship at its head, and
+ * one rising out on its lift. Canon (`rune-hold.md` › The Station in 1672): *"ships leave the planet from here."*
+ */
+function TerminalFace({ b }: { b: Block }) {
+  const beacon = useRef<THREE.MeshStandardMaterial>(null)
+  const rising = useRef<THREE.Group>(null)
+  const tx = b.x1 - 1.5, tz = b.z0 + 1.5, towerH = 14
+  const midX = (b.x0 + b.x1) / 2, far = b.z1 + 12
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime
+    if (beacon.current) beacon.current.emissiveIntensity = 0.6 + 0.6 * Math.max(0, Math.sin(t * 2.4))
+    if (rising.current) {
+      // one ship climbing out: 50s from the field to out of sight, then the next
+      const k = (t / 50) % 1
+      rising.current.position.set(0, k * k * 90, -k * 20)
+      rising.current.visible = k < 0.96
+    }
+  })
+  const w = b.x1 - b.x0 + 1, d = b.z1 - b.z0 + 1
+  return (
+    <group>
+      {/* the flat roof and its parapet */}
+      <mesh position={[midX, TERMINAL_H + 0.2, (b.z0 + b.z1) / 2]} castShadow receiveShadow><boxGeometry args={[w + 0.3, 0.3, d + 0.3]} /><meshStandardMaterial color={RH.roof[2]} roughness={0.9} /></mesh>
+      {/* the tower: stone to the roof and past it, a glass lantern room, a cap, the beacon */}
+      <mesh position={[tx, towerH / 2, tz]} castShadow><boxGeometry args={[3, towerH, 3]} /><meshStandardMaterial color={RH.stone[2]} roughness={0.95} /></mesh>
+      <mesh position={[tx, towerH + 1.2, tz]}><boxGeometry args={[2.6, 2.4, 2.6]} /><meshStandardMaterial color={SP.rune} emissive={SP.rune} emissiveIntensity={0.55} transparent opacity={0.85} /></mesh>
+      <mesh position={[tx, towerH + 2.6, tz]} castShadow><boxGeometry args={[3.4, 0.4, 3.4]} /><meshStandardMaterial color={RH.timber} /></mesh>
+      <mesh position={[tx, towerH + 3.3, tz]}><sphereGeometry args={[0.45, 12, 10]} /><meshStandardMaterial ref={beacon} color={SP.padLight} emissive={SP.padLight} emissiveIntensity={1} /></mesh>
+      <pointLight position={[tx, towerH + 1.2, tz]} color={SP.rune} intensity={10} distance={18} decay={1.6} />
+      {/* past the town's edge: the mooring mast and the ship at its head */}
+      <mesh position={[midX + 15, 7, far]} castShadow><boxGeometry args={[1.2, 14, 1.2]} /><meshStandardMaterial color={SP.hullDark} /></mesh>
+      <mesh position={[midX + 15, 14.2, far]}><boxGeometry args={[4, 0.5, 4]} /><meshStandardMaterial color={SP.trim} /></mesh>
+      {/* ships turned broadside to the town and drawn big, so from the square they read as ships, not blobs */}
+      <group position={[midX + 15, 0, far - 3.2]} rotation={[0, Math.PI / 2, 0]} scale={1.5}>
+        <ShipHull cx={0} cz={0} w={7} len={15} lift={10} struts={false} />
+      </group>
+      {/* and one leaving */}
+      <group ref={rising}>
+        <group position={[midX - 8, 0, far + 8]} rotation={[0, Math.PI / 2, 0]} scale={1.5}>
+          <ShipHull cx={0} cz={0} w={7} len={15} lift={3} struts={false} />
+        </group>
+      </group>
+    </group>
+  )
+}
 
 /** The sign's face: canon's name, and one mark for what the place is. Drawn once into a canvas. */
 function signTexture(f: Front): THREE.CanvasTexture {
@@ -314,6 +335,12 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
     const owner = new Map<string, Block>()
     for (const b of blocks) for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) if (isBuilding(g, x, z)) owner.set(`${x},${z}`, b)
 
+    // ★ THE STATION'S TOWN FACE (Alex, 09-26: "make the travelers station on the outside as well"). The block the
+    // Station door stands in is the spaceport's TERMINAL seen from the town: taller, flat-roofed, tall panes, a
+    // tower. Found from the door (`FRONTS` › station), never from a typed box, so a re-laid town moves it too.
+    const sf = FRONTS.find(f => f.kind === 'station')
+    const terminal = sf ? owner.get(`${Math.floor(sf.x - sf.face[0] * 0.5)},${Math.floor(sf.z - sf.face[1] * 0.5)}`) : undefined
+    if (terminal) terminal.h = TERMINAL_H
     const stone: Inst[] = [], hill: Inst[] = [], timber: Inst[] = [], windows: Inst[] = [], sills: Inst[] = []
     const ground: Inst[] = [], chimneys: Inst[] = []
     for (let z = 0; z < g.length; z++) for (let x = 0; x < g[z].length; x++) {
@@ -375,9 +402,15 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       if (sides.length === 1 && !inFront(x, z)) {
         const [dx, dz] = sides[0]
         const along = dx !== 0
-        const floors = b.h > 4.8 ? [1.7, 3.5] : [1.7]
+        const tall = b === terminal     // the terminal's panes run two storeys: a hall, not rooms
+        const floors = tall ? [3.2] : b.h > 4.8 ? [1.7, 3.5] : [1.7]
         floors.forEach((wy, i) => {
-          if (hash(x, z, 100 + i) > 0.34) return
+          if (hash(x, z, 100 + i) > (tall ? 0.5 : 0.34)) return
+          if (tall) {
+            windows.push({ x: x + dx * 0.52, y: y0 + wy, z: z + dz * 0.52, sx: along ? 0.06 : 0.62, sy: 2.4, sz: along ? 0.62 : 0.06, c: RH.window })
+            sills.push({ x: x + dx * 0.56, y: y0 + wy - 1.26, z: z + dz * 0.56, sx: along ? 0.14 : 0.8, sy: 0.12, sz: along ? 0.8 : 0.14, c: RH.sill })
+            return
+          }
           const ox = x + dx * 0.52, oz = z + dz * 0.52
           windows.push({ x: ox, y: y0 + wy, z: oz, sx: along ? 0.06 : 0.5, sy: 0.72, sz: along ? 0.5 : 0.06, c: RH.window })
           sills.push({ x: x + dx * 0.56, y: y0 + wy - 0.42, z: z + dz * 0.56, sx: along ? 0.14 : 0.66, sy: 0.1, sz: along ? 0.66 : 0.14, c: RH.sill })
@@ -389,7 +422,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
     const hearths = new Set(FRONTS.filter(f => f.kind === 'tavern').map(f => owner.get(`${Math.floor(f.x - f.face[0] * 0.5)},${Math.floor(f.z - f.face[1] * 0.5)}`)))
     const smokes: { x: number; y: number; z: number }[] = []
     for (const b of blocks) {
-      if (b.kind !== 'house') continue
+      if (b.kind !== 'house' || b === terminal) continue
       const cx = b.ridgeX ? b.x0 + 1.5 + hash(b.x0, b.z0, 12) * (b.x1 - b.x0 - 3) : (b.x0 + b.x1) / 2 + 1.2
       const cz = b.ridgeX ? (b.z0 + b.z1) / 2 + 1.2 : b.z0 + 1.5 + hash(b.x0, b.z0, 13) * (b.z1 - b.z0 - 3)
       const base = heightAt(b.x0, b.z0) + b.h
@@ -414,7 +447,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
     }
     const lights = lamps.filter(l => lit.has(l)).map(l => ({ x: l.x, y: heightAt(l.x, l.z) + 2.2, z: l.z }))
 
-    return { stone, hill, timber, windows, sills, ground, chimneys, posts, glass, lights, smokes, roof: roofsOf(blocks, heightAt) }
+    return { stone, hill, timber, windows, sills, ground, chimneys, posts, glass, lights, smokes, terminal, roof: roofsOf(blocks.filter(b => b !== terminal), heightAt) }
   // `version` bumps when the map editor paints — the grid is the same array, mutated in place
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grid, heights, version])
@@ -436,6 +469,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       <LandingPlaza y0={heights?.[LANDING.y]?.[LANDING.x] ?? 0} />
       {FRONTS.map(f => <Storefront key={f.id} f={f} />)}
       <NoticeBoard />
+      {look.terminal && <TerminalFace b={look.terminal} />}
       {look.smokes.map((sm, i) => <Smoke key={i} {...sm} />)}
       {look.lights.map((l, i) => <pointLight key={i} position={[l.x, l.y, l.z]} color={P.lamp} intensity={10} distance={10} decay={1.6} />)}
     </>

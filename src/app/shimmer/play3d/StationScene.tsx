@@ -21,7 +21,7 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 import { STATION, T, type Ship } from './station-field'
 import { hash } from './rune-hold-look'
-import { Instances, type Inst } from './RuneHoldScene'
+import { Instances, type Inst } from './instances'
 import { runeHold as RH, spaceport as ST, passage as P } from './scene-palette'
 
 const pick = <V,>(arr: readonly V[], x: number, z: number, k: number) => arr[Math.floor(hash(x, z, k) * arr.length) % arr.length]
@@ -110,15 +110,15 @@ function Pad({ n, x, z, r }: { n: number; x: number; z: number; r: number }) {
   )
 }
 
-/** A blockout ship in the skyship's lineage: keel, hull, deck house, fins, lift-rune strips, a gangway. */
-function ShipBlock({ s }: { s: Ship }) {
-  const cx = (s.x0 + s.x1) / 2, cz = (s.z0 + s.z1) / 2
-  const w = s.x1 - s.x0 + 1, len = s.z1 - s.z0 + 1
-  const lift = 1.2   // the hull stands on struts; it floats in flight
+/**
+ * A blockout ship in the skyship's lineage: keel, hull, deck house, fins, lift-rune strips. Built round (cx, cz),
+ * its long axis along z. `struts` = standing at a berth; without them it is in flight (the town's view of the
+ * port shows one rising). Exported so Rune Hold's skyline draws the same ship the berths hold.
+ */
+export function ShipHull({ cx, cz, w, len, lift = 1.2, struts = true }: { cx: number; cz: number; w: number; len: number; lift?: number; struts?: boolean }) {
   const parts = useMemo(() => {
     const out: Inst[] = []
-    // struts
-    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) out.push({ x: cx + dx * (w / 2 - 1), y: lift / 2, z: cz + dz * (len / 2 - 2), sx: 0.35, sy: lift, sz: 0.35, c: ST.hullDark })
+    if (struts) for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) out.push({ x: cx + dx * (w / 2 - 1), y: lift / 2, z: cz + dz * (len / 2 - 2), sx: 0.35, sy: lift, sz: 0.35, c: ST.hullDark })
     // the keel and the hull, stepped so it reads as a vessel and not a crate
     out.push({ x: cx, y: lift + 0.5, z: cz, sx: w - 3, sy: 1, sz: len - 1, c: ST.hullDark })
     out.push({ x: cx, y: lift + 1.6, z: cz, sx: w, sy: 1.4, sz: len - 2, c: ST.hull })
@@ -135,25 +135,38 @@ function ShipBlock({ s }: { s: Ship }) {
     for (const e of [-1, 1]) out.push({ x: cx + e * (w / 2 + 0.9), y: lift + 2, z: cz + len / 2 - 2, sx: 1.8, sy: 0.25, sz: 3, c: ST.hullDark })
     out.push({ x: cx, y: lift + 4.4, z: cz + len / 2 - 1.8, sx: 0.3, sy: 2.6, sz: 2.6, c: ST.hullDark })
     return out
-  }, [cx, cz, w, len])
+  }, [cx, cz, w, len, lift, struts])
   const runes = useMemo(() => {
     const out: Inst[] = []
     for (const e of [-1, 1]) out.push({ x: cx + e * (w / 2 + 0.02), y: lift + 1.6, z: cz, sx: 0.06, sy: 0.25, sz: len - 4, c: ST.rune })
+    // in flight the keel's runes burn too: the lift is working
+    if (!struts) out.push({ x: cx, y: lift - 0.02, z: cz, sx: w - 3.4, sy: 0.06, sz: len - 3, c: ST.rune })
     out.push({ x: cx, y: lift + 3.9, z: cz - len * 0.12 - len * 0.19 - 0.02, sx: w - 3.2, sy: 0.6, sz: 0.06, c: ST.canopy })
     return out
-  }, [cx, cz, w, len])
+  }, [cx, cz, w, len, lift, struts])
+  return (
+    <group>
+      <Instances items={parts} />
+      <Instances items={runes} emissive={0.9} glow={ST.rune} cast={false} />
+      <pointLight position={[cx, lift + 1.2, cz]} color={ST.rune} intensity={6} distance={10} decay={1.6} />
+    </group>
+  )
+}
+
+/** A seated berth's ship: the hull, and the gangway down to its door. */
+function ShipBlock({ s }: { s: Ship }) {
+  const cx = (s.x0 + s.x1) / 2, cz = (s.z0 + s.z1) / 2
+  const lift = 1.2
   // the gangway runs at a slope: one mesh, rotated
   const foot = s.door.x + s.door.w - 1.5, top = s.x0 - 0.5, rise = lift + 0.9
   const gw = top - foot, gz = s.door.z + (s.door.h - 1) / 2
   return (
     <group>
-      <Instances items={parts} />
-      <Instances items={runes} emissive={0.9} glow={ST.rune} cast={false} />
+      <ShipHull cx={cx} cz={cz} w={s.x1 - s.x0 + 1} len={s.z1 - s.z0 + 1} lift={lift} />
       <mesh position={[(foot + top) / 2, rise / 2, gz]} rotation={[0, 0, Math.atan2(rise, gw)]} castShadow receiveShadow>
         <boxGeometry args={[Math.hypot(gw, rise), 0.14, s.door.h]} />
         <meshStandardMaterial color={ST.trim} roughness={0.6} />
       </mesh>
-      <pointLight position={[cx, lift + 1.2, cz]} color={ST.rune} intensity={6} distance={10} decay={1.6} />
     </group>
   )
 }

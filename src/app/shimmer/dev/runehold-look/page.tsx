@@ -33,6 +33,8 @@ const VIEWS: Record<string, { x: number; z: number; yaw: number; pitch: number }
   passage:   { x: 74, z: 48.5, yaw: 0, pitch: 6 },
   board:     { x: 50, z: 59, yaw: 180, pitch: 2 },
   'station-door': { x: 48.5, z: 78, yaw: 90, pitch: 8 },
+  terminal:  { x: 50, z: 66, yaw: 90, pitch: 14 },
+  'port-far': { x: 49, z: 54, yaw: 90, pitch: 12 },
   'south-road': { x: 50, z: 92, yaw: -90, pitch: 2 },
 }
 
