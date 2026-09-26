@@ -173,11 +173,12 @@ export interface FloodBody {
 }
 
 // ── boosters: what the flooded sometimes leave behind ──────────────────────────────────────────
-// Zombies' power-ups in our clothes. One so far, named by Alex (2026-09-24): the GLIMMER OF HOPE
+// Zombies' power-ups in our clothes. One so far: LAST LIGHT (Alex named it the Glimmer of Hope 09-24, renamed 09-26 —
+// *glimmer* is the Cave Glimmer spirit's word, Magii's register note). The id stays 'glimmer' (a build word).
 // refreshes the team's mana — solo today, so the keeper's. The union is the roster; a new booster is
 // a new kind here and a new case where the host applies it.
 export type HoldDropKind = 'glimmer'
-export const DROP_NAME: Record<HoldDropKind, string> = { glimmer: 'Glimmer of Hope' }
+export const DROP_NAME: Record<HoldDropKind, string> = { glimmer: 'Last Light' }
 export interface HoldDrop { id: number; kind: HoldDropKind; x: number; z: number; y: number; ttl: number }
 
 // ── chests: rare finds on marked spots, rarity tilts what is inside ─────────────────────────────

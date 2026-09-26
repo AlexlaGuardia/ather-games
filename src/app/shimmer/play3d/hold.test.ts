@@ -255,7 +255,7 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   ok(s.flood.find(b => b.id === 70)!.hp === 100, 'and never one a floor below')
 }
 
-// ── boosters: the glimmer of hope ──
+// ── boosters: Last Light ──
 {
   const s = startHold(parseLanding(), 21)
   const p = map.start
@@ -266,7 +266,7 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
     n = s.drops.length
   }
   ok(n === T.dropCap && s.dropsThisRound === T.dropCap, `★ boosters cap per round (${n} of ${T.dropCap})`)
-  ok(s.drops.every(d => d.kind === 'glimmer' && d.y === p.h), 'the booster is the Glimmer of Hope, on the floor it fell on')
+  ok(s.drops.every(d => d.kind === 'glimmer' && d.y === p.h), 'the booster is Last Light, on the floor it fell on')
   s.drops[1].x -= 5
   stepHold(s, 1 / 60, s.drops[0].x, s.drops[0].z, p.h)
   ok(s.pickups.length === 1 && s.pickups[0] === 'glimmer', 'walking over it takes it — queued for the host')

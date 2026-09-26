@@ -40,7 +40,7 @@ export const BUDGET = {
 
 /**
  * Four fights. BOSS/HORDE on the hold's plain economy (a pool + a drip), and the same two RICH — the
- * most mana a run can actually hold in one window: the drip plus every Glimmer of Hope the round's
+ * most mana a run can actually hold in one window: the drip plus every Last Light the round's
  * cap allows, each a full pool. Scarce mana hides a multiplier's strength (a cast spends ammo); rich
  * mana shows it. A move must fit the band in all four.
  * ⚠ Not infinite mana: nothing in the hold reaches it, and a band judged against a fight nobody can
