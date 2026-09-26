@@ -100,8 +100,62 @@ export function lanternsOf(g: number[][]): Lantern[] {
       if (n === WARP || n === BUILDING) doorstep = true
     }
     if (!edge || doorstep) continue
+    // a storefront's approach stays clear: no post planted in front of a door
+    if (FRONTS.some(f => Math.hypot(f.x + f.face[0] * ((f.depth ?? 0) + 1.5) - x, f.z + f.face[1] * ((f.depth ?? 0) + 1.5) - z) < 3)) continue
     if (out.some(l => Math.hypot(l.x - x, l.z - z) < LANTERN_SPACING)) continue
     out.push({ x, z })
   }
   return out
 }
+
+// ── THE STOREFRONTS — the square's canon doors, given faces (Alex, 2026-09-26: "storefront faces") ─────────
+// Canon (`world/rune-hold.md` › The Hub): *"each destination is a canon storefront you approach"*, and the fork is
+// legible *"from what the doors look like"*, never from a menu. WHICH building is WHICH is Alex's (map placement):
+// the Spirit Corner, the Passage and the Station already had painted doors; the Mug (NE house) and the Bookstore
+// (SW house, *"near The Spirit Corner"*) were placed by Alex on 2026-09-26, TODO(front-placement) if he moves them,
+// and they take the recessed entrances his layout already had. The Notice Board is *"a weathered board in the town
+// square"*, south edge, beside where a keeper wakes. How they LOOK is Jin's (the Hub's boundary: *"storefront art"*).
+
+export type FrontKind = 'tavern' | 'cafe' | 'books' | 'stair' | 'station'
+export interface Front {
+  id: string
+  /** the sign's words: canon's own name for the place */
+  name: string
+  kind: FrontKind
+  /** the door's face: centre of the opening, on the building's outer wall line */
+  x: number; z: number
+  /** outward normal (the way the door faces), a unit step on one axis */
+  face: [number, number]
+  /** opening width, in cells */
+  w: number
+  /** how deep the entrance is recessed into the building (the Mug's and the Bookstore's porches): the door
+   *  stands at the face, the frame and sign at the street line `depth` cells out */
+  depth?: number
+  /** a painted gate door (Shimmer3D frames it with this instead of its generic posts) */
+  gate?: string
+  /** a door that does not open yet (canon: fronts open when the systems behind them exist) */
+  shut?: boolean
+}
+
+export const FRONTS: readonly Front[] = [
+  { id: 'kindled-mug',   name: 'The Kindled Mug',    kind: 'tavern',  x: 67,   z: 36.5, face: [0, 1],  w: 3, depth: 1, shut: true },
+  { id: 'bookstore',     name: "Eyuun's Bookstore",  kind: 'books',   x: 31,   z: 63.5, face: [0, -1], w: 3, depth: 1, shut: true },
+  { id: 'spirit-corner', name: 'The Spirit Corner',  kind: 'cafe',    x: 21.5, z: 48.5, face: [1, 0],  w: 2, depth: 1, gate: 'THE SPIRIT CORNER' },
+  { id: 'passage',       name: 'The Passage',        kind: 'stair',   x: 84.5, z: 48.5, face: [-1, 0], w: 2, depth: 2, gate: 'THE PASSAGE' },
+  { id: 'station',       name: 'Travelers Station',  kind: 'station', x: 48.5, z: 87.5, face: [0, -1], w: 2, depth: 2, gate: 'TRAVELERS STATION' },
+]
+
+/** The Notice Board: a square fixture, not a room. South edge, turned to face the keeper's waking spot. */
+export const NOTICE_BOARD = { x: 44.5, z: 58, face: [1, 0] as [number, number] }
+
+/** Is (x, z) a wall cell a storefront's door or frame stands on? No window is cut there. */
+export function inFront(x: number, z: number): boolean {
+  return FRONTS.some(f => {
+    const along = f.face[0] === 0 ? Math.abs(x - f.x) : Math.abs(z - f.z)
+    const across = f.face[0] === 0 ? Math.abs(z - (f.z - f.face[1] * 0.5)) : Math.abs(x - (f.x - f.face[0] * 0.5))
+    return along <= f.w / 2 + 0.6 && across < 0.6
+  })
+}
+
+/** Gate labels whose door the town's scene draws itself — the walker skips its generic posts and beacons. */
+export const DRAWN_DOORS: ReadonlySet<string> = new Set(['THE LANDING', ...FRONTS.flatMap(f => (f.gate ? [f.gate] : []))])

@@ -44,7 +44,7 @@ import { OptionsPanel, OptionRow, OptionHead, OptionSlider } from '../hud/option
 import { OptionsDoor } from '../hud/options-door'
 import { loadSettings, saveSettings } from '../voxel3d/settings'
 import { setMasterVolume } from '../audio/bus'
-import { LANDING_LABEL, landingCells } from '../world/landing'
+import { LANDING_LABEL } from '../world/landing'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
 import { dayProgress, sunElevation, sunAzimuth, daylight, getPhase, getDisplayTime, CYCLE_MS, isTimePinned } from '../engine/day-cycle'
@@ -123,6 +123,7 @@ import { keeperBook, saveBook } from './book'
 import { PassagePanel } from './PassagePanel'
 import { PassageScene } from './PassageScene'
 import { RuneHoldScene } from './RuneHoldScene'
+import { DRAWN_DOORS } from './rune-hold-look'
 import { StationScene } from './StationScene'
 import { STATION, T as STATION_TILE } from './station-field'
 import { ArcadeCabinet } from './ArcadeCabinet'
@@ -234,8 +235,11 @@ const RUNE_HOLD_ZONE = 'rune-hold'
 /** The Travelers Station draws its terminal, field, berths and ships (`StationScene`). */
 const STATION_ZONE = 'travelers-station'
 const STATION_FLOOR = STATION_TILE.FLOOR
-/** THE LANDING's door tiles stand inside the disc portal — no gold beacon poles through it. */
-const LANDING_KEYS = new Set(landingCells().map(([x, y]) => `${x},${y}`))
+/** The doors Rune Hold draws itself (the Landing's disc, the storefront frames, `rune-hold-look.ts` › DRAWN_DOORS):
+ *  no generic posts, pad or beacon poles on them — the town's own frame is the marker. */
+const RUNE_HOLD_DOOR_KEYS = new Set((getZone(ALL_ZONES, RUNE_HOLD_ZONE)?.gates ?? [])
+  .filter(g => DRAWN_DOORS.has(g.label))
+  .flatMap(g => { const { w, h } = gateFootprint(g); return Array.from({ length: w * h }, (_, i) => `${g.x + (i % w)},${g.y + Math.floor(i / w)}`) }))
 const HOLD_BEST_KEY = 'ather:shimmer:hold:best'
 // Encounters: stepping onto a fresh MIST tile can draw a wild spirit. Per-zone odds live in
 // ENCOUNTER_TABLES (engine/encounters.ts → `rate`); these dials shape it for the 3D walker so a
@@ -3689,10 +3693,11 @@ function ExitMarkers({ warps, heights }: { warps: Warp[]; heights: number[][] })
  * edit in `zones.ts` and never a change in here. Owner-only gates are dimmed and tagged rather
  * than hidden: the owner should be able to see at a glance which doors the players cannot use.
  */
-function GateMarkers({ gates, heights, isOwner, posRef }: { gates: Gate[]; heights: number[][]; isOwner: boolean; posRef: React.RefObject<THREE.Vector3> }) {
+/** `drawn`: gate labels this zone's scene frames itself (only Rune Hold's today). */
+function GateMarkers({ gates, heights, isOwner, posRef, drawn }: { gates: Gate[]; heights: number[][]; isOwner: boolean; posRef: React.RefObject<THREE.Vector3>; drawn?: ReadonlySet<string> }) {
   return (
     <>
-      {gates.map((g, i) => (g.ownerOnly && !isOwner) ? null : <GateMarker key={`gate-${i}`} g={g} heights={heights} posRef={posRef} drawn={g.label === LANDING_LABEL} />)}
+      {gates.map((g, i) => (g.ownerOnly && !isOwner) ? null : <GateMarker key={`gate-${i}`} g={g} heights={heights} posRef={posRef} drawn={!!drawn?.has(g.label)} />)}
     </>
   )
 }
@@ -4109,7 +4114,7 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? LANDING_KEYS : undefined} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? RUNE_HOLD_DOOR_KEYS : undefined} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && n.kind !== 'stall' && n.kind !== 'cabinet' && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.zone.id === PASSAGE_ZONE && <PassageScene isOwner={props.isOwner} />}
       {props.zone.id === STATION_ZONE && <StationScene />}
@@ -4122,7 +4127,7 @@ const Scene = memo(function Scene(props: {
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
           Ather has doors worth naming too. ExitMarkers stays outside-only — it is a fallback for
           zones whose warps were never painted into the grid. */}
-      {!!props.zone.gates?.length && <GateMarkers gates={props.zone.gates} heights={props.heights} isOwner={props.isOwner} posRef={props.posRef} />}
+      {!!props.zone.gates?.length && <GateMarkers gates={props.zone.gates} heights={props.heights} isOwner={props.isOwner} posRef={props.posRef} drawn={props.zone.id === RUNE_HOLD_ZONE ? DRAWN_DOORS : undefined} />}
       <NodeMarkers nodes={props.nodes} heights={props.heights} editing={props.editing} channel={props.channel} zoneId={props.zone.id} />
       <BurrowMarkers spawners={props.spawners} heights={props.heights} editing={props.editing} defeated={props.defeated} ready={props.spawnerReady} gridRef={props.gridRef} keyFor={props.spawnerKeyFor} />
       {/* the plot ring: resting spirits wander the Home Plot, visible + greetable */}

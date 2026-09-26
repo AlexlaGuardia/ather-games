@@ -19,7 +19,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { blocksOf, lanternsOf, openSides, hash, isBuilding, PATH, BUILDING, type Block } from './rune-hold-look'
+import { blocksOf, lanternsOf, openSides, hash, isBuilding, inFront, PATH, BUILDING, FRONTS, NOTICE_BOARD, type Block, type Front } from './rune-hold-look'
 import { runeHold as RH, passage as P, hubGate } from './scene-palette'
 import { LANDING } from '../world/landing'
 import { portalMaterial } from '../voxel3d/portal-material'
@@ -187,6 +187,125 @@ function Stones({ items }: { items: Stone[] }) {
   )
 }
 
+const F = RH.front
+
+/** The sign's face: canon's name, and one mark for what the place is. Drawn once into a canvas. */
+function signTexture(f: Front): THREE.CanvasTexture {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128
+  const x = c.getContext('2d')!
+  x.fillStyle = F.sign; x.fillRect(0, 0, 512, 128)
+  x.strokeStyle = F.signGild; x.lineWidth = 6; x.strokeRect(6, 6, 500, 116)
+  // the mark, left: a line drawing in the gilt
+  x.save(); x.translate(64, 64); x.strokeStyle = F.signGild; x.fillStyle = F.signGild; x.lineWidth = 6; x.lineCap = 'round'
+  if (f.kind === 'tavern') { x.strokeRect(-22, -24, 36, 48); x.beginPath(); x.arc(20, 0, 14, -Math.PI / 2, Math.PI / 2); x.stroke() }
+  else if (f.kind === 'cafe') { x.beginPath(); x.arc(0, 4, 22, 0, Math.PI); x.stroke(); x.beginPath(); x.moveTo(-26, 4); x.lineTo(26, 4); x.stroke(); for (const d of [-9, 5]) { x.beginPath(); x.moveTo(d, -8); x.quadraticCurveTo(d + 8, -18, d, -30); x.stroke() } }
+  else if (f.kind === 'books') { x.beginPath(); x.moveTo(0, -20); x.lineTo(-30, -26); x.lineTo(-30, 22); x.lineTo(0, 28); x.lineTo(30, 22); x.lineTo(30, -26); x.closePath(); x.moveTo(0, -20); x.lineTo(0, 28); x.stroke() }
+  else if (f.kind === 'stair') { x.beginPath(); x.moveTo(-30, -24); for (let i = 0; i < 4; i++) { x.lineTo(-30 + i * 15, -24 + (i + 1) * 12); x.lineTo(-15 + i * 15, -24 + (i + 1) * 12) } x.stroke() }
+  else { x.beginPath(); x.moveTo(-32, 10); x.lineTo(24, 10); x.lineTo(34, 0); x.lineTo(24, -10); x.lineTo(-32, -10); x.closePath(); x.stroke(); x.beginPath(); x.moveTo(-10, -10); x.lineTo(-22, -26); x.moveTo(-10, 10); x.lineTo(-22, 26); x.stroke() }
+  x.restore()
+  x.fillStyle = F.signInk; x.font = '600 50px Georgia, serif'; x.textBaseline = 'middle'
+  x.fillText(f.name, 120, 68, 372)
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
+/** A storefront: a timber frame round the opening, a sign over it, and what marks the place. A SHUT front
+ *  has its door closed (canon opens the fronts one at a time, as their systems exist). */
+function Storefront({ f }: { f: Front }) {
+  const tex = useMemo(() => signTexture(f), [f])
+  const yaw = Math.atan2(f.face[0], f.face[1])       // turn +z (a plane's front) to face outward
+  const half = f.w / 2, H = 2.7, d = f.depth ?? 0
+  return (
+    <group position={[f.x, 0, f.z]} rotation={[0, yaw, 0]}>
+      {d > 0 && (
+        // the porch's side walls are the building's stone; a timber ceiling closes the recess under the lintel
+        <mesh position={[0, H + 0.02, d / 2 + 0.1]}><boxGeometry args={[f.w + 0.2, 0.1, d + 0.2]} /><meshStandardMaterial color={F.jamb} /></mesh>
+      )}
+      <group position={[0, 0, d]}>
+      {/* jambs and lintel, standing just proud of the wall */}
+      {[-1, 1].map(e => <mesh key={e} position={[e * (half + 0.12), H / 2, 0.12]} castShadow><boxGeometry args={[0.26, H, 0.3]} /><meshStandardMaterial color={F.jamb} roughness={0.8} /></mesh>)}
+      <mesh position={[0, H + 0.14, 0.12]} castShadow><boxGeometry args={[f.w + 0.8, 0.32, 0.36]} /><meshStandardMaterial color={F.jamb} roughness={0.8} /></mesh>
+      </group>
+      {f.shut && (
+        <group position={[0, 0, -0.08]}>
+          <mesh position={[0, (H - 0.1) / 2, 0]}><boxGeometry args={[f.w - 0.06, H - 0.1, 0.12]} /><meshStandardMaterial color={F.door} roughness={0.85} /></mesh>
+          {[0.6, H - 0.6].map(y => <mesh key={y} position={[0, y, 0.07]}><boxGeometry args={[f.w - 0.1, 0.1, 0.04]} /><meshStandardMaterial color={F.doorBand} /></mesh>)}
+        </group>
+      )}
+      <group position={[0, 0, d]}>
+      {/* the sign, over the lintel */}
+      <mesh position={[0, H + 0.95, 0.2]}><boxGeometry args={[Math.max(3.2, f.w + 1.4), 0.86, 0.08]} /><meshStandardMaterial color={F.sign} /></mesh>
+      <mesh position={[0, H + 0.95, 0.25]}><planeGeometry args={[Math.max(3.1, f.w + 1.3), 0.78]} /><meshStandardMaterial map={tex} roughness={0.7} /></mesh>
+      {f.kind === 'cafe' && (
+        // the café's striped awning over its door: Greg's cover is coffee, tea, quiet conversation
+        <group position={[0, H + 0.3, 0.75]} rotation={[0.42, 0, 0]}>
+          {Array.from({ length: 6 }, (_, i) => (
+            <mesh key={i} position={[-1.5 + 0.25 + i * 0.5, 0, 0]} castShadow><boxGeometry args={[0.5, 0.05, 1.4]} /><meshStandardMaterial color={F.awning[i % 2]} roughness={0.9} /></mesh>
+          ))}
+        </group>
+      )}
+      {(f.kind === 'tavern' || f.kind === 'stair' || f.kind === 'books') && [-1, 1].map(e => (
+        // a lamp each side of the door, the warm glass the town's lanterns use
+        <mesh key={e} position={[e * (half + 0.55), 2.1, 0.3]}><boxGeometry args={[0.26, 0.34, 0.26]} /><meshStandardMaterial color={P.glass} emissive={P.glass} emissiveIntensity={1} /></mesh>
+      ))}
+      {f.kind === 'stair' && (
+        // the Passage goes DOWN: a darker mouth behind the frame
+        <mesh position={[0, 1.3, -0.35]}><boxGeometry args={[f.w, 2.6, 0.2]} /><meshStandardMaterial color={P.iron} /></mesh>
+      )}
+      </group>
+    </group>
+  )
+}
+
+/** The Notice Board: two posts, a board under a little roof, notices pinned at angles. */
+function NoticeBoard() {
+  const { x, z, face } = NOTICE_BOARD
+  const yaw = Math.atan2(face[0], face[1])
+  const notes = useMemo(() => Array.from({ length: 7 }, (_, i) => ({
+    x: -1 + (i % 4) * 0.66 + (hash(i, 3, 1) - 0.5) * 0.2, y: 1.5 + Math.floor(i / 4) * 0.62 + (hash(i, 3, 2) - 0.5) * 0.15,
+    r: (hash(i, 3, 3) - 0.5) * 0.35, w: 0.42 + hash(i, 3, 4) * 0.18, h: 0.5 + hash(i, 3, 5) * 0.12, c: F.notes[i % F.notes.length],
+  })), [])
+  return (
+    <group position={[x, 0, z]} rotation={[0, yaw, 0]}>
+      {[-1.45, 1.45].map(px => <mesh key={px} position={[px, 1.3, 0]} castShadow><boxGeometry args={[0.16, 2.6, 0.16]} /><meshStandardMaterial color={F.jamb} /></mesh>)}
+      <mesh position={[0, 1.8, 0]} castShadow receiveShadow><boxGeometry args={[2.8, 1.5, 0.1]} /><meshStandardMaterial color={F.board} roughness={0.9} /></mesh>
+      <mesh position={[0, 2.72, 0]} rotation={[0, 0, 0]} castShadow><boxGeometry args={[3.2, 0.1, 0.6]} /><meshStandardMaterial color={RH.roof[0]} /></mesh>
+      {notes.map((n, i) => (
+        <group key={i} position={[n.x, n.y, 0.06]} rotation={[0, 0, n.r]}>
+          <mesh><planeGeometry args={[n.w, n.h]} /><meshStandardMaterial color={n.c} roughness={1} side={THREE.DoubleSide} /></mesh>
+          <mesh position={[0, n.h / 2 - 0.06, 0.01]}><boxGeometry args={[0.05, 0.05, 0.02]} /><meshStandardMaterial color={F.pin} /></mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+/** Hearth smoke: a few soft puffs rising and fading, looped. Cheap: six meshes, one material each. */
+function Smoke({ x, y, z }: { x: number; y: number; z: number }) {
+  const refs = useRef<(THREE.Mesh | null)[]>([])
+  const N = 6
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime
+    refs.current.forEach((m, i) => {
+      if (!m) return
+      const k = ((t * 0.22 + i / N) % 1)
+      m.position.set(x + Math.sin(t * 0.4 + i) * 0.3 * k + k * 0.8, y + k * 4.5, z + Math.cos(t * 0.3 + i) * 0.25 * k)
+      m.scale.setScalar(0.35 + k * 1.3)
+      ;(m.material as THREE.MeshStandardMaterial).opacity = 0.42 * (1 - k)
+    })
+  })
+  return (
+    <>
+      {Array.from({ length: N }, (_, i) => (
+        <mesh key={i} ref={el => { refs.current[i] = el }}>
+          <sphereGeometry args={[0.5, 8, 6]} />
+          <meshStandardMaterial color={F.smoke} transparent depthWrite={false} roughness={1} />
+        </mesh>
+      ))}
+    </>
+  )
+}
+
 export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]; heights?: number[][]; version?: number }) {
   const look = useMemo(() => {
     const g = grid
@@ -253,7 +372,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       timber.push({ x, y: y0 + b.h + 0.12, z, sx: 1.08, sy: 0.26, sz: 1.08, c: RH.timber })
       if (b.kind !== 'house') continue
       // windows: a lit pane on an outer face, one storey or two, never at a corner
-      if (sides.length === 1) {
+      if (sides.length === 1 && !inFront(x, z)) {
         const [dx, dz] = sides[0]
         const along = dx !== 0
         const floors = b.h > 4.8 ? [1.7, 3.5] : [1.7]
@@ -266,7 +385,9 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
         })
       }
     }
-    // one chimney per house, near the ridge, at the gable the hash picks
+    // one chimney per house, near the ridge, at the gable the hash picks. A hearth's chimney smokes (the Mug's).
+    const hearths = new Set(FRONTS.filter(f => f.kind === 'tavern').map(f => owner.get(`${Math.floor(f.x - f.face[0] * 0.5)},${Math.floor(f.z - f.face[1] * 0.5)}`)))
+    const smokes: { x: number; y: number; z: number }[] = []
     for (const b of blocks) {
       if (b.kind !== 'house') continue
       const cx = b.ridgeX ? b.x0 + 1.5 + hash(b.x0, b.z0, 12) * (b.x1 - b.x0 - 3) : (b.x0 + b.x1) / 2 + 1.2
@@ -274,6 +395,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       const base = heightAt(b.x0, b.z0) + b.h
       chimneys.push({ x: cx, y: base + 1.6, z: cz, sx: 0.9, sy: 3.2, sz: 0.9, c: pick(RH.stone, b.x0, b.z0, 14) })
       chimneys.push({ x: cx, y: base + 3.3, z: cz, sx: 1.05, sy: 0.22, sz: 1.05, c: RH.timber })
+      if (hearths.has(b)) smokes.push({ x: cx, y: base + 3.5, z: cz })
     }
 
     // lanterns: the square's few carry a real light
@@ -292,7 +414,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
     }
     const lights = lamps.filter(l => lit.has(l)).map(l => ({ x: l.x, y: heightAt(l.x, l.z) + 2.2, z: l.z }))
 
-    return { stone, hill, timber, windows, sills, ground, chimneys, posts, glass, lights, roof: roofsOf(blocks, heightAt) }
+    return { stone, hill, timber, windows, sills, ground, chimneys, posts, glass, lights, smokes, roof: roofsOf(blocks, heightAt) }
   // `version` bumps when the map editor paints — the grid is the same array, mutated in place
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grid, heights, version])
@@ -312,6 +434,9 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
         <meshStandardMaterial vertexColors roughness={0.9} side={THREE.DoubleSide} />
       </mesh>
       <LandingPlaza y0={heights?.[LANDING.y]?.[LANDING.x] ?? 0} />
+      {FRONTS.map(f => <Storefront key={f.id} f={f} />)}
+      <NoticeBoard />
+      {look.smokes.map((sm, i) => <Smoke key={i} {...sm} />)}
       {look.lights.map((l, i) => <pointLight key={i} position={[l.x, l.y, l.z]} color={P.lamp} intensity={10} distance={10} decay={1.6} />)}
     </>
   )

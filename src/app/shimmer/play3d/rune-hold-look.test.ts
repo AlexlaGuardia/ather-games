@@ -3,7 +3,9 @@
 // in a doorway or out in the grass.
 // Run: npx tsx src/app/shimmer/play3d/rune-hold-look.test.ts
 import { RUNE_HOLD } from '../world/tilemap'
-import { blocksOf, lanternsOf, openSides, isBuilding, BUILDING, PATH, WARP, LANTERN_SPACING } from './rune-hold-look'
+import { blocksOf, lanternsOf, openSides, isBuilding, BUILDING, PATH, WARP, LANTERN_SPACING, FRONTS, NOTICE_BOARD, DRAWN_DOORS } from './rune-hold-look'
+import { ZONES, getZone } from '../world/zones'
+import { LANDING_LABEL } from '../world/landing'
 
 let pass = 0
 const fails: string[] = []
@@ -47,6 +49,30 @@ for (const l of lamps) {
 }
 for (let i = 0; i < lamps.length; i++) for (let j = i + 1; j < lamps.length; j++)
   ok(Math.hypot(lamps[i].x - lamps[j].x, lamps[i].z - lamps[j].z) >= LANTERN_SPACING, `lanterns ${i}/${j} are spaced`)
+
+// ── storefronts: each face sits on a building's wall line, with open ground in front and stone behind ──
+for (const f of FRONTS) {
+  const [fx, fz] = f.face
+  // the cells either side of the face line: behind (inside the building) and in front (outside)
+  const bx = Math.floor(f.x - fx * 0.5), bz = Math.floor(f.z - fz * 0.5)
+  const ox = Math.floor(f.x + fx * 0.5), oz = Math.floor(f.z + fz * 0.5)
+  const behind = g[bz]?.[bx] ?? -1, front = g[oz]?.[ox] ?? -1
+  ok((behind & 0xff) === BUILDING || (behind & 0xff) === WARP, `${f.id}: stone (or its own door) behind the face (${bx},${bz} is ${behind})`)
+  ok(front >= 0 && (front & 0xff) !== BUILDING, `${f.id}: open ground in front of the face (${ox},${oz} is ${front})`)
+  ok(!!f.gate === !f.shut, `${f.id}: a front is either a working door or shut, never both or neither`)
+}
+// every gate the scene claims to draw is a real, painted door of the town — or the walker would drop posts on nothing
+{
+  const town = getZone(ZONES, 'rune-hold')!
+  const labels = new Set((town.gates ?? []).map(gt => gt.label))
+  for (const l of DRAWN_DOORS) ok(labels.has(l), `drawn door "${l}" is a gate the town actually has`)
+  ok(DRAWN_DOORS.has(LANDING_LABEL), 'the Landing is among the drawn doors')
+}
+{
+  const { x, z } = NOTICE_BOARD
+  ok((g[Math.round(z)][Math.floor(x)] & 0xff) === PATH, 'the Notice Board stands on the square')
+  ok(Math.hypot(x - 49, z - 58) < 6, 'and near where a keeper wakes (49,58)')
+}
 
 if (fails.length) { console.log(`❌ ${pass} passed, ${fails.length} FAILED\n`); fails.slice(0, 20).forEach(f => console.log('  · ' + f)); process.exit(1) }
 console.log(`rune-hold-look: ${pass} passed, 0 failed · ${blocks.map(b => `${b.kind}@${b.x0},${b.z0}`).join(' ')} · ${lamps.length} lanterns`)

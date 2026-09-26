@@ -27,6 +27,12 @@ const VIEWS: Record<string, { x: number; z: number; yaw: number; pitch: number }
   'west-row': { x: 44, z: 45, yaw: -140, pitch: 6 },
   shopfront: { x: 28, z: 50, yaw: 180, pitch: 4 },
   hillside:  { x: 72, z: 52, yaw: 0, pitch: 10 },
+  mug:       { x: 67, z: 46, yaw: -90, pitch: 8 },
+  books:     { x: 31, z: 55, yaw: 90, pitch: 8 },
+  corner:    { x: 30, z: 49, yaw: 180, pitch: 6 },
+  passage:   { x: 74, z: 48.5, yaw: 0, pitch: 6 },
+  board:     { x: 50, z: 59, yaw: 180, pitch: 2 },
+  'station-door': { x: 48.5, z: 78, yaw: 90, pitch: 8 },
   'south-road': { x: 50, z: 92, yaw: -90, pitch: 2 },
 }
 

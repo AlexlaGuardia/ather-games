@@ -139,6 +139,12 @@ export const runeHold = {
   meadow: ['#71905a', '#74925b', '#6e8c57', '#76935c'],
   /** THE LANDING's plaza: a dressed-stone dais, a paler inlay ring, the stone ring the disc stands in */
   landing: { dais: '#a3927c', inlay: '#b8a88f', kerb: '#7e6f5e', ring: '#8f7f6a' },
+  /** the storefronts: timber frames, plank doors, painted signs, the café's awning, the Notice Board */
+  front: {
+    jamb: '#4a3220', door: '#6b4a2e', doorBand: '#2e2218', sign: '#2e2218', signInk: '#f3e2b8', signGild: '#d8b86a',
+    awning: ['#b8483a', '#efe2c8'], board: '#5b3d25', notes: ['#efe2c8', '#e8d6a8', '#f3ead6', '#d9c7a0'], pin: '#b8483a',
+    smoke: '#d8d4cc',
+  },
   /** the ground worn bare where the streets meet the grass */
   worn: ['#7d7458', '#857a5c'],
 } as const
