@@ -333,7 +333,7 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
 
 // ── chests (Alex 09-26): every 5th round each EMPTY spot rolls 25%; rarity tilts the loot ──
 {
-  ok(map.chestSpots.length >= 16, `chest spots across the building (${map.chestSpots.length})`)
+  ok(map.chestSpots.length === 15, `15 chest spots — Alex cut 20 by a quarter (${map.chestSpots.length})`)
   ok([0, 1, 2].every(lv => map.chestSpots.some(c => c.lv === lv)), 'every floor has chest spots')
   ok(map.chestSpots.some(c => c.x < plates[0].x0) && map.chestSpots.some(c => c.x >= plates[0].x0 + FLOOR_W), 'both gardens have one')
   ok(map.chestSpots.every(c => kindAt(B, c.lv, c.x, c.z) === K.FLOOR), 'every chest spot is floor')
