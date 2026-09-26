@@ -5,6 +5,7 @@ import {
   isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
+import { FLOOR_W, FLOOR_D } from './hold-floors'
 import { getMaxPool } from '../engine/mana'
 import { LEDGE_CLIMB } from './metrics'
 
@@ -13,7 +14,7 @@ const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 const body = (o: Partial<FloodBody> & { id: number; x: number; z: number }): FloodBody =>
   ({ kind: 'drift', y: 0, hp: 100, maxHp: 100, speed: 2, phase: 'inside', win: 0, tearT: 0, strikeT: 1, alive: true, ...o })
 
-// ── the tower parses into what Alex sized: three 50 × 80 floors stacked, 50 × 50 gardens off the bottom ──
+// ── the tower parses into what Alex sized (09-26): three 100 × 120 floors stacked, 60 × 100 gardens off the bottom ──
 const map = parseLanding()
 const B = map.building
 const [BOT, MID, TOP] = B.levels.map(l => l.y)
@@ -28,16 +29,16 @@ const bbox = (lv: number, tone: number) => {
   return { x0, z0, w: x1 - x0 + 1, d: z1 - z0 + 1 }
 }
 const plates = [0, 1, 2].map(lv => bbox(lv, 0))
-ok(plates.every(p => p.w === 50 && p.d === 80), `★ every floor is 50 × 80 (${plates.map(p => `${p.w}×${p.d}`).join(', ')})`)
+ok(plates.every(p => p.w === FLOOR_W && p.d === FLOOR_D && FLOOR_W === 100 && FLOOR_D === 120), `★ every floor is 100 × 120 (${plates.map(p => `${p.w}×${p.d}`).join(', ')})`)
 ok(plates.every(p => p.x0 === plates[0].x0 && p.z0 === plates[0].z0), '★ stacked: the three floors share one footprint')
 const gardens = bbox(0, 1)
-ok(gardens.d === 50 && gardens.w === 150, 'the gardens are 50 deep and flank the bottom floor west and east (150 across with it)')
+ok(gardens.d === 100 && gardens.w === 220, `the gardens are 100 deep and flank the bottom floor west and east (220 across with it; ${gardens.w}×${gardens.d})`)
 ok(map.start.lv === 2 && map.start.h === TOP, '★ you start on the top floor')
 ok(map.exit.lv === 2 && map.grid[map.exit.z][map.exit.x] === HOLD_TILE.WARP, 'the way out is on the top floor')
 ok(STOREY > LEDGE_CLIMB - 2, 'a storey is more than a climb reaches from the floor (walls fill it, so no keeper climbs out of a floor)')
 ok(map.windows.every(w => w.spawnH < w.h), 'the flooded climb UP the face to every window')
 ok(map.windows.every(w => kindAt(B, w.lv, Math.round(w.inside.x), Math.round(w.inside.z)) === K.FLOOR), 'every window opens onto its floor')
-ok(map.gates.map(g => g.cost).join() === '250,750,1000,1000,1000,1250,1500', 'seven gates: stair housing 250, cubicle farm 750, executive wing + gardens 1000, grand hall 1250, café 1500')
+ok(map.gates.map(g => `${g.letter}${g.cost}`).join() === 'A250,E750,N750,C1000,D1000,G1000,M1000,B1250,K1500', `nine gates: north roof 250, cubicle farm + plant yard 750, gardens + executive wing + meeting rooms 1000, grand hall 1250, café 1500 (${map.gates.map(g => `${g.letter}${g.cost}`).join()})`)
 ok(map.gates.filter(g => g.lv === 0 && 'BK'.includes(g.letter)).length === 2, '★ the lobby floor is three sections: elevator lobby, then B the hall, then K the café')
 ok(B.stairs.every(st => st.flights.length === 2 && st.landings.length === 1), '★ both stairs turn a corner')
 ok(map.cache.room !== map.start.room, 'the draught cache is behind a gate')
@@ -74,7 +75,7 @@ function reach(s: HoldState): { x: number; z: number; y: number }[] {
   for (let g = 0; g < map.gates.length; g++) s.gatesOpen[g] = true
   const r1 = reach(s)
   ok(r1.some(c => c.y === MID) && r1.some(c => c.y === BOT), '★ all gates open: the ramps walk down to the middle and bottom floors')
-  ok(r1.some(c => c.x < plates[0].x0 && c.y === BOT) && r1.some(c => c.x >= plates[0].x0 + 50 && c.y === BOT), 'and out into both gardens')
+  ok(r1.some(c => c.x < plates[0].x0 && c.y === BOT) && r1.some(c => c.x >= plates[0].x0 + FLOOR_W && c.y === BOT), 'and out into both gardens')
 }
 
 // ── ★ walls are per floor: a wall upstairs is open floor downstairs ──
@@ -183,6 +184,10 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   ok(s.salvage === 2000 - T.rackCost - T.rackCost / 2, 'refill is half price')
   ok(buyFont(s), 'the font sells mana')
   const h = s.hush
+  ok(!buyCache(s) && s.hush === h, 'the cache is shut until its room is')
+  const gH = map.gates.findIndex(g => g.opens.includes(map.cache.room))
+  s.salvage = 2000
+  ok(gH >= 0 && map.gates[gH].letter === 'M' && buyGate(s, gH), 'the break room (M) opens onto the cache')
   ok(buyCache(s) && s.hush === h + T.cacheSec, 'the cache buys hush')
   const s2 = startHold(parseLanding()); s2.salvage = 5000
   ok(!buyCache(s2), 'the cache sits behind a gate — shut gate, no cache')

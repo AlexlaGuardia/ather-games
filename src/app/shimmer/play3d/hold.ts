@@ -23,7 +23,7 @@
 // no string in this file names a cause. "The hold", "seal", "surge", "salvage" are build words.
 // ⚠ The landing is a BLOCKOUT for feel. Which world, whose host, what the rooms are = per-season.
 
-import { HOLD_FLOORS, type FloorDef } from './hold-floors'
+import { HOLD_FLOORS, GARDEN_W, type FloorDef } from './hold-floors'
 import { buildHold, surfacesAt, solidAt, slabAt, flatViews, kindAt, DIRS, K, STOREY, type Building, type Kind, type Surface } from './hold-building'
 
 // ── the landing: THE TOP THREE FLOORS OF A TOWER, STACKED (Alex 09-25) ─────────────────────────────
@@ -88,7 +88,7 @@ export const HOLD_TUNING = {
   tearSec: 1.3,          // seconds a flooded body takes to tear one plank
   mendSec: 0.55,         // seconds of holding E per plank mended
   mendReach: 1.9,        // how close to a window's inside cell you must stand to mend it
-  gateCost: { A: 250, E: 750, G: 1000, B: 1250, C: 1000, D: 1000, K: 1500 } as Record<string, number>, // A (the roof's stair housing — cheap: room to train is the first buy), E (the office's cubicle farm), G (its executive wing + the stair down to the elevator lobby), B (the lobby's grand hall), C/D (the gardens, off the hall), K (the café)
+  gateCost: { A: 250, N: 750, E: 750, M: 1000, G: 1000, B: 1250, C: 1000, D: 1000, K: 1500 } as Record<string, number>, // A (the roof deck → the north roof + the way down — cheap: room to train is the first buy), N (the roof's plant yard, where the rack hangs), E (the office's cubicle farm), M (its meeting rooms + break room, the draught cache), G (its executive wing + the stair down to the elevator lobby), B (the lobby's grand hall), C/D (the gardens, off the hall), K (the café)
   gateCostDefault: 750,  // a gate letter with no price of its own
   rackCost: 500,         // the SPITTER off the wall
   rackWeapon: 'spitter',
@@ -769,14 +769,14 @@ export function holdSpots(m: HoldMap): { label: string; x: number; z: number; y:
     return { label, x: best!.x, z: best!.z, y: b.levels[lv].y }
   }
   const top = b.levels.length - 1
-  // the tower plate spans the middle third of the grid; the gardens flank it
-  const cx = Math.round(b.cols / 2), cz = Math.round(b.rows / 2)
+  // the tower plate sits between the gardens; aim each jump at the middle of what it names
+  const cx = Math.round(b.cols / 2), cz = Math.round(b.rows / 2), gx = Math.round(GARDEN_W / 2)
   return [
     { label: 'Roof', x: m.start.x, z: m.start.z, y: m.start.h },
-    at('Office', Math.max(0, top - 1), cx - 10, 20),
-    at('Lobby', 0, cx, cz + 10),
-    at('West garden', 0, Math.round(b.cols / 6), cz),
-    at('East garden', 0, Math.round((b.cols * 5) / 6), cz),
+    at('Office', Math.max(0, top - 1), cx + 25, 25),
+    at('Lobby', 0, cx, cz),
+    at('West garden', 0, gx, cz),
+    at('East garden', 0, b.cols - gx, cz),
   ]
 }
 
