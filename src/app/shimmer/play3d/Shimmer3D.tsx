@@ -2094,8 +2094,12 @@ function HoldBuilding() {
       runs(i => solidUnder(i) && !L.tone[i], L.y - SLAB, L.y, floor)
       runs(i => solidUnder(i) && L.tone[i] === 1, L.y - SLAB, L.y, garden)
       runs(i => solidUnder(i) && L.tone[i] === 2, L.y - SLAB, L.y + 0.02, pad)
-      runs(i => k[i] === HB.BLOCK, L.y, L.y + BLOCK_H, unit)
-      runs(i => k[i] === HB.WALL, L.y, L.y + STOREY_H - SLAB, wall)
+      runs(i => k[i] === HB.BLOCK && L.tone[i] !== 1, L.y, L.y + BLOCK_H, unit)
+      // in a garden a unit is a hedge or a shrub, and a wall is a tree
+      const hedge: HoldBox[] = [], tree: HoldBox[] = []
+      runs(i => k[i] === HB.BLOCK && L.tone[i] === 1, L.y, L.y + BLOCK_H, hedge)
+      runs(i => k[i] === HB.WALL && L.tone[i] === 1, L.y, L.y + STOREY_H - 0.3, tree)   // as tall as it is solid
+      runs(i => k[i] === HB.WALL && L.tone[i] !== 1, L.y, L.y + STOREY_H - SLAB, wall)
       runs(i => k[i] === HB.RAIL, L.y, L.y + 1.0, rail)
       // over a window and a gate the wall carries on as a lintel, so the opening reads as a hole in it
       // …but only over a window set in a WALL: a gap in a rail (the rooftop's edge, a garden's) is open sky
@@ -2105,7 +2109,7 @@ function HoldBuilding() {
       // the top floor carries the roof — unless it is open to the sky (the rooftop)
       const roof: HoldBox[] = []
       if (li === b.levels.length - 1 && !L.open) runs(i => k[i] !== HB.VOID && L.tone[i] !== 1, L.y + STOREY_H - SLAB, L.y + STOREY_H, roof)
-      return { floor, garden, pad, wall, rail, lintel, roof, unit, colors: S.hold.levels[li] ?? S.hold.levels[0] }
+      return { floor, garden, pad, wall, rail, lintel, roof, unit, hedge, tree, colors: S.hold.levels[li] ?? S.hold.levels[0] }
     })
     // ramps: one tilted slab per run, from its low edge to its high edge
     const ramps = b.ramps.map(r => {
@@ -2133,6 +2137,8 @@ function HoldBuilding() {
           <HoldBoxes boxes={l.garden} color={S.hold.garden} />
           <HoldBoxes boxes={l.pad} color={S.hold.pad} />
           <HoldBoxes boxes={l.unit} color={S.hold.unit} />
+          <HoldBoxes boxes={l.hedge} color={S.hold.hedge} />
+          <HoldBoxes boxes={l.tree} color={S.hold.tree} />
           <HoldBoxes boxes={l.wall} color={l.colors.wall} />
           <HoldBoxes boxes={l.rail} color={S.hold.rail} />
           <HoldBoxes boxes={l.lintel} color={S.hold.lintel} />
