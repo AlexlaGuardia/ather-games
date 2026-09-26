@@ -23,6 +23,11 @@ export const K = { VOID: 0, FLOOR: 1, WALL: 2, RAIL: 3, WINDOW: 4, GATE: 5, RAMP
 export type Kind = typeof K[keyof typeof K]
 /** Waist-high: a rail stops a walker and a low round, not a round fired over it. */
 export const RAIL_H = 1.0
+/** How far below a flight's surface its UNDERSIDE begins to be solid: the step a body takes onto it.
+ *  Under a stair is closed, like a built staircase — Alex 09-26 walked sideways into a flight where it
+ *  was already overhead, found no surface at floor level and fell through (out of the building, on the
+ *  bottom floor). A flight now stands on a solid base; you step onto its low end or you do not get in. */
+export const STAIR_STEP = 1.0
 /** A rooftop unit: chest-high cover you can climb onto (its top is a surface — nothing falls through it). */
 export const BLOCK_H = 2.5
 
@@ -233,6 +238,7 @@ export function solidAt(b: Building, x: number, z: number, y: number, open: (lv:
   if (k === K.WALL) return true
   if (k === K.RAIL) return y < L.y + RAIL_H
   if (k === K.BLOCK) return y < L.y + BLOCK_H - 0.1
+  if (k === K.RAMP || k === K.LANDING) return y < L.sy[i] - STAIR_STEP   // the stair's closed base
   if (k === K.GATE || k === K.WINDOW) return !open(lv, i, k)
   return false
 }
@@ -244,7 +250,7 @@ export function slabAt(b: Building, x: number, z: number, y: number): boolean {
   for (const L of b.levels) {
     const k = L.kind[i]
     if (k === K.VOID) continue
-    if (k === K.RAMP || k === K.LANDING) { if (y <= L.sy[i] && y > L.sy[i] - 0.5) return true; continue }
+    if (k === K.RAMP || k === K.LANDING) { if (y <= L.sy[i] && y > L.y - 0.3) return true; continue }   // slab and the solid base under it
     if (y <= L.y && y > L.y - 0.3) return true
   }
   const top = b.levels[b.levels.length - 1]

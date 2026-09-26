@@ -410,6 +410,34 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   ok(promptAt(s, z.x, z.z, z.h)?.kind === 'device', 'at ground zero, E offers the device')
 }
 
+// ── ★ under a stair is SOLID (Alex 09-26: stepping sideways into a high flight dropped him through the floor) ──
+{
+  const s = startHold(map)
+  s.gatesOpen = s.gatesOpen.map(() => true)
+  let beside = 0, blocked = 0, lowOk = 0, lows = 0, shotStops = 0
+  for (const r of B.ramps) {
+    const L = B.levels[r.lv]
+    for (const c of r.cells) {
+      const i = c.z * B.cols + c.x, sy = L.sy[i]
+      const nextToFloor = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => kindAt(B, r.lv, c.x + dx, c.z + dz) === K.FLOOR)
+      if (!nextToFloor) continue
+      if (sy - L.y > 1.01) { beside++; if (keeperBlocked(s, c.x, c.z, L.y)) blocked++; if (roundBlocked(s, c.x, c.z, L.y + 1)) shotStops++ }
+      else { lows++; if (!keeperBlocked(s, c.x, c.z, L.y)) lowOk++ }
+    }
+  }
+  ok(beside > 0 && blocked === beside, `★ every flight cell too high to step onto is solid from the floor beside it (${blocked}/${beside})`)
+  ok(shotStops === beside, 'and a round fired under it stops (the base is solid, not just the tread)')
+  ok(lows > 0 && lowOk === lows, `the low end still steps on (${lowOk}/${lows})`)
+  // walking the whole stair up, cell by cell, is never blocked by its own base
+  let climbOk = true
+  for (const st of B.stairs) {
+    const L = B.levels[st.lv]
+    for (const f of st.flights) for (const c of f.cells) if (keeperBlocked(s, c.x, c.z, L.sy[c.z * B.cols + c.x])) climbOk = false
+    for (const l of st.landings) for (const c of l.cells) if (keeperBlocked(s, c.x, c.z, l.y)) climbOk = false
+  }
+  ok(climbOk, 'a keeper ON the stair is never stopped by it')
+}
+
 // ── the end ──
 {
   const s = autoplay(5, 60)

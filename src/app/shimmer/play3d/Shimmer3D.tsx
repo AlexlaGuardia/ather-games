@@ -2105,6 +2105,12 @@ function HoldBuilding() {
       runs(i => k[i] === HB.WALL && L.tone[i] === 1, L.y, L.y + STOREY_H - 0.3, tree)   // as tall as it is solid
       runs(i => k[i] === HB.WALL && L.tone[i] !== 1, L.y, L.y + STOREY_H - SLAB, wall)
       runs(i => k[i] === HB.RAIL, L.y, L.y + 1.0, rail)
+      // under every flight and landing: its solid base, floor to just under the tread (no hole, no fall-through)
+      for (let i = 0; i < k.length; i++) {
+        if (k[i] !== HB.RAMP && k[i] !== HB.LANDING) continue
+        const y0 = L.y - SLAB, y1 = L.sy[i] - 0.2
+        if (y1 > y0) wall.push([i % cols, (y0 + y1) / 2, (i / cols) | 0, 1, y1 - y0, 1])
+      }
       // over a window and a gate the wall carries on as a lintel, so the opening reads as a hole in it
       // …but only over a window set in a WALL: a gap in a rail (the rooftop's edge, a garden's) is open sky
       runs(i => k[i] === HB.WINDOW && inWall.has(li * cols * rows + i), L.y + 2.4, L.y + STOREY_H - SLAB, lintel)
