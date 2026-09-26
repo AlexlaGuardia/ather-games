@@ -438,6 +438,51 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   ok(climbOk, 'a keeper ON the stair is never stopped by it')
 }
 
+// ── ★ pacing (retune 09-26): a body from the spawn windows reaches a keeper mid-room in ≤ 30s at a round-5 drift ──
+// Measured, not guessed: at every stage of the gate order, the keeper stands at the middle of every open room;
+// the mean walking distance from the chosen windows, over the drift speed. A layout edit that makes the Hold
+// slack (rooms too big for their windows) fails here.
+{
+  const per = map.cols * map.rows
+  const mid: Record<string, { n: number; sx: number; sz: number; lv: number; cells: number[] }> = {}
+  for (let n = 0; n < map.regionOf.length; n++) {
+    const r = map.regionOf[n]; if (r < 0) continue
+    const a = (mid[map.rooms[r]] ??= { n: 0, sx: 0, sz: 0, lv: (n / per) | 0, cells: [] })
+    const c = n % per; a.n++; a.sx += c % map.cols; a.sz += (c / map.cols) | 0; a.cells.push(n)
+  }
+  const centre = (a: typeof mid[string]) => {
+    const cx = a.sx / a.n, cz = a.sz / a.n
+    let best = a.cells[0], bd = 1e9
+    for (const n of a.cells) { const c = n % per, d = (c % map.cols - cx) ** 2 + (((c / map.cols) | 0) - cz) ** 2; if (d < bd) { bd = d; best = n } }
+    return { x: (best % per) % map.cols, z: ((best % per) / map.cols) | 0 }
+  }
+  const speed = bodyStats('drift', 5).speed
+  const worst: string[] = []
+  let nearest = true
+  for (let k = 0; k <= map.gates.length; k++) {
+    const s = startHold(map); s.hush = 1e9
+    for (let g = 0; g < k; g++) { s.gatesOpen[g] = true; for (const r of map.gates[g].opens) s.rooms[r] = true }
+    const ds: number[] = []
+    for (const [id, a] of Object.entries(mid)) {
+      if (!s.rooms[id] || a.n <= 30) continue
+      const c = centre(a)
+      stepHold(s, 0.01, c.x, c.z, B.levels[a.lv].y)
+      s.here = id
+      const chosen = spawnWindows(s)
+      const d = (w: typeof chosen[number]) => s.field[w.lv * per + Math.round(w.inside.z) * map.cols + Math.round(w.inside.x)]
+      for (const w of chosen) if (d(w) >= 0) ds.push(d(w))
+      const act = activeRooms(s), rest = map.windows.filter(w => act.has(w.room) && !chosen.includes(w))
+      if (rest.some(w => d(w) >= 0 && chosen.some(c2 => d(c2) > d(w)))) nearest = false
+    }
+    const sec = ds.reduce((x, y) => x + y, 0) / Math.max(1, ds.length) / speed
+    worst.push(`${k ? map.gates[k - 1].letter : 'start'} ${sec.toFixed(0)}s`)
+    ok(sec <= 30, `★ pacing: after ${k ? 'gate ' + map.gates[k - 1].letter : 'the start'}, a body reaches a keeper mid-room in ${sec.toFixed(1)}s (≤ 30)`)
+  }
+  ok(nearest, '★ the chosen windows are the NEARER ones: no unchosen active window is closer than a chosen one')
+  ok(bodyStats('drift', 1).speed < 6.5 && bodyStats('swift', 20).speed < 6.5, 'the keeper (6.5) still outruns every body')
+  console.log('  pacing:', worst.join(' · '))
+}
+
 // ── the end ──
 {
   const s = autoplay(5, 60)

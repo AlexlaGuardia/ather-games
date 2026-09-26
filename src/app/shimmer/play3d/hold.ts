@@ -372,9 +372,11 @@ export function kindFor(r: number, n: number): FloodKind {
 }
 export function bodyStats(kind: FloodKind, r: number): { hp: number; speed: number } {
   const hp = roundHp(r)
-  const drift = Math.min(3.2, 1.6 + 0.08 * r)
-  if (kind === 'swift') return { hp: Math.round(hp * 0.7), speed: 4.2 }
-  if (kind === 'bulk') return { hp: Math.round(hp * 2.5), speed: 1.3 }
+  // retune 09-26 for the 100 × 120 floors (was 1.6 + 0.08r ≤ 3.2 · swift 4.2 · bulk 1.3). The keeper runs 6.5:
+  // everything is still outrun, but a walk across a big room no longer takes most of a minute.
+  const drift = Math.min(3.6, 2.2 + 0.08 * r)
+  if (kind === 'swift') return { hp: Math.round(hp * 0.7), speed: 4.8 }
+  if (kind === 'bulk') return { hp: Math.round(hp * 2.5), speed: 1.6 }
   return { hp, speed: drift }
 }
 
@@ -508,16 +510,23 @@ export function activeRooms(s: HoldState, here: RoomId = s.here): Set<RoomId> {
   })
   return act
 }
-/** The windows a body may come up at now: the active rooms' — or, in a room with none, the nearest opened ones. */
+/**
+ * The windows a body may come up at now: the NEARER HALF (never under NEAREST_FALLBACK) of the active
+ * rooms' windows by walking distance — or, in a room with none, the nearest opened ones.
+ * Retune 09-26 (measured, `hold.test.ts` › pacing): at 100 × 120 a body from any active window averaged
+ * ~100 steps to a keeper mid-room (~50s at a round-5 drift). The nearer half, with faster bodies
+ * (`bodyStats`), brings every stage to ~15–28s (the old 50 × 80 map ran 23s in its start room, 38–74s after).
+ */
 export function spawnWindows(s: HoldState): HoldWindow[] {
   const act = activeRooms(s)
-  const wins = s.map.windows.filter(w => act.has(w.room))
-  if (wins.length) return wins
   const dist = (w: HoldWindow) => {
     const v = s.field[nodeIdx(s.map, w.lv, Math.round(w.inside.x), Math.round(w.inside.z))]
     return v < 0 ? Infinity : v
   }
-  return s.map.windows.filter(w => s.rooms[w.room]).sort((a, c) => dist(a) - dist(c) || a.id - c.id).slice(0, NEAREST_FALLBACK)
+  const near = (ws: HoldWindow[], k: number) => ws.sort((a, c) => dist(a) - dist(c) || a.id - c.id).slice(0, k)
+  const wins = s.map.windows.filter(w => act.has(w.room))
+  if (wins.length) return near(wins, Math.max(NEAREST_FALLBACK, Math.ceil(wins.length / 2)))
+  return near(s.map.windows.filter(w => s.rooms[w.room]), NEAREST_FALLBACK)
 }
 
 // ── chests ──────────────────────────────────────────────────────────────────────────────────
