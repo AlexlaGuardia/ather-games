@@ -70,6 +70,8 @@ export interface HoldMap {
   gates: HoldGate[]
   /** every region of floor between walls and gates, by name (`<floor>-<n>`) */
   rooms: RoomId[]
+  /** per node (floor × cell): the index into `rooms` of the region there, or -1 (a wall, gate, window…) */
+  regionOf: Int32Array
   /** per node (floor × cell): the gate / window id there, or -1 */
   gateOf: Int16Array
   winOf: Int16Array
@@ -163,6 +165,8 @@ export interface HoldState {
   planks: number[]        // per window
   gatesOpen: boolean[]    // per gate
   rooms: Record<RoomId, boolean>
+  /** the room the keeper last stood in — spawns come from here and the open rooms next to it */
+  here: RoomId
   salvage: number
   mendPaidThisRound: number
   mendT: number
@@ -294,7 +298,7 @@ export function parseLanding(floors: readonly FloorDef[] = HOLD_FLOORS, tune: Ho
     return { x: f.x, z: f.z, lv: f.lv, h: b.levels[f.lv].y, room: roomAt(f.lv, f.x, f.z)! }
   }
   return {
-    cols, rows, building: b, grid, heights, windows, gates, rooms, gateOf, winOf,
+    cols, rows, building: b, grid, heights, windows, gates, rooms, regionOf: region, gateOf, winOf,
     start: fixture('@'), exit: fixture('X'), rack: fixture('R'), font: fixture('F'), cache: fixture('H'),
   }
 }
@@ -343,6 +347,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     planks: map.windows.map(() => tune.seals),
     gatesOpen: map.gates.map(() => false),
     rooms: Object.fromEntries(map.rooms.map(r => [r, r === map.start.room])),
+    here: map.start.room,
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
     drops: [], dropsThisRound: 0, pickups: [],
@@ -437,6 +442,32 @@ function buildField(s: HoldState, start: number) {
   }
 }
 
+// ── where the tide comes in: Zombies' ACTIVE ZONES ──────────────────────────────────────────────
+// A spawn used to pick any window of any opened room, so on a big building a body could climb in two
+// floors away and take twenty seconds to arrive. Zombies keeps the pressure local: only the zone you
+// stand in and the zones joined to it by a bought door spawn (`_zm_zonemgr` adjacency). Same here.
+/** How many of the nearest opened windows (by walking distance) take over when no active room has one. */
+const NEAREST_FALLBACK = 3
+/** The keeper's room and every opened room joined to it by an open gate. */
+export function activeRooms(s: HoldState, here: RoomId = s.here): Set<RoomId> {
+  const act = new Set<RoomId>([here])
+  s.map.gates.forEach((g, i) => {
+    if (s.gatesOpen[i] && g.opens.includes(here)) for (const r of g.opens) if (s.rooms[r]) act.add(r)
+  })
+  return act
+}
+/** The windows a body may come up at now: the active rooms' — or, in a room with none, the nearest opened ones. */
+export function spawnWindows(s: HoldState): HoldWindow[] {
+  const act = activeRooms(s)
+  const wins = s.map.windows.filter(w => act.has(w.room))
+  if (wins.length) return wins
+  const dist = (w: HoldWindow) => {
+    const v = s.field[nodeIdx(s.map, w.lv, Math.round(w.inside.x), Math.round(w.inside.z))]
+    return v < 0 ? Infinity : v
+  }
+  return s.map.windows.filter(w => s.rooms[w.room]).sort((a, c) => dist(a) - dist(c) || a.id - c.id).slice(0, NEAREST_FALLBACK)
+}
+
 // ── the step ────────────────────────────────────────────────────────────────────────────────
 export interface HoldStepOut {
   /** raw damage the keeper takes this frame (the host applies resist/shield) */
@@ -475,11 +506,16 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     s.flood = []
   }
 
-  // spawns: from the windows of rooms you have opened. LOUD = no ration and no break: they rush.
+  // where the keeper is: a gate or window cell has no region, so the last room stands
+  const pi = keeperNode(s, px, pz, py)
+  const ri = pi >= 0 ? s.map.regionOf[pi] : -1
+  if (ri >= 0) s.here = s.map.rooms[ri]
+
+  // spawns: from the windows of the active rooms (above). LOUD = no ration and no break: they rush.
   s.spawnT -= dt
   const cap = tune.maxAlive
   if (s.spawnT <= 0 && s.breakT <= 0 && (s.toSpawn > 0 || loud) && alive < cap) {
-    const wins = s.map.windows.filter(w => s.rooms[w.room])
+    const wins = spawnWindows(s)
     const w = wins[Math.floor(s.rng() * wins.length)]
     const n = roundCount(s.round) - s.toSpawn
     const kind: FloodKind = loud ? 'swift' : kindFor(s.round, n)
@@ -493,7 +529,6 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
   }
 
   // the field
-  const pi = keeperNode(s, px, pz, py)
   s.fieldT -= dt
   if (pi !== s.fieldAt || s.fieldT <= 0) { buildField(s, pi); s.fieldT = 0.25 }
 

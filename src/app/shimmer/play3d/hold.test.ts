@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, fieldStrike, ownerOpenAll, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { getMaxPool } from '../engine/mana'
@@ -303,6 +303,27 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   const spots = holdSpots(map)
   ok(spots.length === 5 && new Set(spots.map(p => p.y)).size === 3, 'five jump spots across the three floors')
   ok(spots.every(p => holdSurfaces(map, p.x, p.z).some(su => su.y === p.y)), 'every jump spot stands on a floor')
+}
+
+// ── where the tide comes in: the keeper's room + the open rooms joined to it (Zombies' active zones) ──
+{
+  const s = startHold(parseLanding())
+  ok(s.here === map.start.room, 'the run starts in the start room')
+  ok(spawnWindows(s).length > 0 && spawnWindows(s).every(w => w.room === map.start.room), '★ at the start, bodies come only at the start room\'s windows')
+  ownerOpenAll(s)
+  // stand inside a bottom-floor window: that room is here, and the roof is two floors away
+  const low = map.windows.find(w => w.lv === 0)!
+  const ix = Math.round(low.inside.x), iz = Math.round(low.inside.z)
+  s.hush = 0
+  for (let i = 0; i < 600; i++) stepHold(s, 0.05, ix, iz, low.h)
+  ok(s.here === low.room, 'standing in a room makes it here')
+  const act = activeRooms(s)
+  ok(act.size >= 1 && act.size < map.rooms.length, `every gate open, still only ${act.size} of ${map.rooms.length} rooms active`)
+  ok(s.flood.length > 0 && s.flood.every(b => act.has(map.windows[b.win].room)), '★ every body came in at an active room\'s window')
+  ok(s.flood.every(b => map.windows[b.win].lv !== 2), '★ nothing climbs in on the roof while the keeper holds the bottom floor')
+  // a room with no window of its own falls back to the nearest opened windows, never to none
+  const bare = map.rooms.find(r => !map.windows.some(w => w.room === r) && !map.gates.some(g => g.opens.includes(r)))
+  if (bare) { s.here = bare; ok(spawnWindows(s).length > 0, 'a windowless, gateless room still draws the nearest windows') }
 }
 
 // ── the end ──
