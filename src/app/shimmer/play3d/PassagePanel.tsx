@@ -45,8 +45,9 @@ import {
   vesselRackFor, buyFromVesselRack, type RackVessel,
 } from './passage'
 import type { ShelfKey } from './passage-hall'
+import type { CaravanStock } from './caravans'
 
-export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange, onClose, shelves, title }: {
+export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange, onClose, shelves, title, stock, subtitle }: {
   items: React.RefObject<Inventory | null>
   owned: readonly string[]
   birth: string | null
@@ -59,6 +60,10 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   shelves?: readonly ShelfKey[]
   /** the stall's name for the plate; omitted = "The Passage" */
   title?: string
+  /** a caravan's own stock (`caravans.ts`): its rack and vessel rack, seeded by its day/week */
+  stock?: CaravanStock
+  /** a caravan's line under the plate title: when it pulls out */
+  subtitle?: string
 }) {
   const show = (k: ShelfKey) => !shelves || shelves.includes(k)
   const [note, setNote] = useState<string | null>(null)
@@ -75,7 +80,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   const glow = (id: string) => RUNES.find(r => r.id === id)?.glow ?? gold.parchment
   const rerender = () => { bump(n => n + 1); onChange() }
 
-  const rack = rackFor(1, rackCycleAt(nowMs))
+  const rack = stock ? rackFor(stock.rackSeed, stock.rackCycle, stock.rackSize) : rackFor(1, rackCycleAt(nowMs))
   const rackMins = Math.max(1, Math.round(msUntilRotation(nowMs) / 60000))
   const tray = gemTrayFor(cycle)
   const teacher = teacherFor(cycle)
@@ -147,11 +152,12 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
           <span className="hk-label text-[12px] hk-faint">{day}{dayOverride ? ' · dev preview' : ''}</span>
           <span className="tabular-nums ml-auto text-[12px] hk-ember">{marks} Marks</span>
         </div>
-        <div className="mb-3 text-[12px] leading-snug hk-faint">
+        {subtitle && <div className="mb-2 text-[12px] hk-ember">{subtitle}</div>}
+        {!stock && <div className="mb-3 text-[12px] leading-snug hk-faint">
           Rotating spots. One leaves, another takes their place. Merchants ride on {MARKET_DAY} ({inDays(MARKET_DAY)}); the masters hold on {TEACHING_DAY} ({inDays(TEACHING_DAY)}). The week: {WEEK.join(' · ')}.
-        </div>
+        </div>}
 
-        {show('rack') && <Shelf title="The scroll racks" when={`every day · the word, bought · the traders change over in ${rackMins}m`}>
+        {show('rack') && <Shelf title="The scroll racks" when={stock ? 'the word, bought · off the caravan' : `every day · the word, bought · the traders change over in ${rackMins}m`}>
           {/* ★ THE UNREADABLE ROW IS THE FEATURE (ported from the retired PassageRack.tsx): canon rules
               "the same rack means something different to every keeper who walks past it". An unreadable
               scroll is DRAWN, dimmed, with the runes it is written in named — the rack as a map of where
@@ -250,7 +256,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               a keeper spend Marks on one without saying so is a trap, not a hunt. It is still
               BUYABLE: a shop that refuses your Marks on your behalf is a curated aisle. */}
           {(() => {
-            const rack = vesselRackFor(cycle)
+            const rack = stock ? vesselRackFor(stock.vesselCycle, stock.vesselSeed, stock.vesselSize) : vesselRackFor(cycle)
             return rack.map((v, i) => {
               const m = v.word ? moveById(v.word) : null
               const mat = TIER_MATERIAL[v.kind][v.tier]

@@ -115,6 +115,8 @@ export const passage = {
   wares: ['#c9a46a', '#8fb3c9', '#b98fc9'],
   cloth: { rack: '#7a4a2a', teacher: '#4a5a7a', gems: '#6a3a6a', vessels: '#3a6a4a', bay: '#5a5044' },
   arcadeLight: '#a7b8ff',
+  /** the caravans: weathered wagon wood, canvas tops (one per slot), iron tyres */
+  wagon: { body: '#5a3e26', wheel: '#3a2a1c', tyre: '#2a221c', canvas: { daily: '#d8c8a0', weekly: '#b88a5a', monthly: '#8a9a8a' } },
   cabinet: { body: '#1c1612', deck: '#2b211a', dark: '#0b0b0b', off: '#000000', marquee: '#ffe0a0', marqueeGlow: '#ffcf70', marqueeDark: '#222222' },
   /** the sky that is not there: a faint cold spill, and the ambient floor of a lamplit room */
   noSun: '#8a7a6a', ambient: '#6a4a30',

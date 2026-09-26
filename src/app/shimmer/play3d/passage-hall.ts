@@ -60,6 +60,13 @@ export interface Cabinet {
   face: [number, number]
 }
 
+export interface Wagon {
+  slot: 'daily' | 'weekly' | 'monthly'
+  /** the anchor: the wagon's middle cell on the road side (solid) */
+  x: number; z: number
+  face: [number, number]
+}
+
 export interface PassageHall {
   grid: number[][]
   heights: number[][]
@@ -67,6 +74,7 @@ export interface PassageHall {
   exit: { x: number; z: number }
   stalls: Stall[]
   cabinets: Cabinet[]
+  wagons: Wagon[]
   lanterns: { x: number; z: number; y: number; big?: boolean }[]
   /** where the tunnel ends in rubble on the far side — the road the traders ride in on */
   farRoad: { x: number; z: number }
@@ -173,6 +181,16 @@ export function buildPassage(isOwner = true): PassageHall {
   for (let x = 44; x <= 61; x++) for (let dz = -1; dz <= 1; dz++) open(x, farZ(x) + dz)
   const farRoad = { x: 61, z: farZ(61) }
 
+  // ── the caravan siding: the far road widens where the caravans park (Alex 09-26), three wagons
+  // nose to tail along its south wall — the merchant of the day, the week's long-hauler, the month's
+  // stray-keeper (`caravans.ts` says who is in). The anchor is the wagon's solid middle cell on the
+  // road side, so a keeper browses from the road the way they do at a stall.
+  // The road is open to row 17; each wagon stands in its own bay cut into the rock south of it
+  // (rows 18-19 stay solid, and `PassageScene` draws a wagon there instead of rock).
+  for (let z = 13; z <= 17; z++) for (let x = 47; x <= 59; x++) open(x, z)
+  const WAGON_SLOTS = ['daily', 'weekly', 'monthly'] as const
+  const wagons: Wagon[] = [49, 53, 57].map((x, i) => ({ slot: WAGON_SLOTS[i], x, z: 18, face: [0, -1] as [number, number] }))
+
   // ── lanterns: the tunnel alternates walls every 4 cells; the cavern rim gets one between bays ──
   const lanterns: PassageHall['lanterns'] = []
   for (let x = 3; x <= 21; x += 4) {
@@ -185,9 +203,9 @@ export function buildPassage(isOwner = true): PassageHall {
     lanterns.push({ x: cavern.cx + Math.cos(a) * (cavern.rx - 1.5), z: cavern.cz + Math.sin(a) * (cavern.rz - 1.5), y: 0 })
   }
   lanterns.push({ x: 33.5, z: arcade.z0 - 1, y: 0 })
-  for (let x = 48; x <= 58; x += 5) lanterns.push({ x, z: farZ(x) - 1, y: 0 })
+  for (let x = 48; x <= 58; x += 5) lanterns.push({ x, z: 13, y: 0 })
 
-  return { grid, heights, arrival, exit, stalls, cabinets, lanterns, farRoad, cavern, arcade }
+  return { grid, heights, arrival, exit, stalls, cabinets, wagons, lanterns, farRoad, cavern, arcade }
 }
 
 /** The one built map every reader shares. Built with the owner's cabinet set: the ROOM is the same for
@@ -203,6 +221,7 @@ export function passageAscii(h: PassageHall = PASSAGE): string {
   const at = new Map<string, string>()
   h.stalls.forEach((s, i) => at.set(`${s.x},${s.z}`, String(i + 1)))
   h.cabinets.forEach(c => at.set(`${c.x},${c.z}`, 'c'))
+  h.wagons.forEach(w => at.set(`${w.x},${w.z}`, w.slot[0].toUpperCase()))
   at.set(`${h.arrival.x},${h.arrival.z}`, '@')
   return h.grid.map((row, z) => row.map((t, x) =>
     at.get(`${x},${z}`) ?? (t === T.ROCK ? '#' : t === T.EXIT ? 'X' : h.heights[z][x] > 0 ? String(h.heights[z][x]) : '.'),

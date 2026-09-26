@@ -123,6 +123,7 @@ import { PassagePanel } from './PassagePanel'
 import { PassageScene } from './PassageScene'
 import { ArcadeCabinet } from './ArcadeCabinet'
 import { PASSAGE, type ShelfKey } from './passage-hall'
+import { caravanFor, leavesIn, type CaravanSlot, type CaravanStock } from './caravans'
 import type { GameEntry } from '@/lib/games'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
@@ -6118,6 +6119,16 @@ export default function Shimmer3D() {
       } else open()
       return
     }
+    if (npc.id.startsWith('caravan:')) {
+      // read the roster NOW, not at module load: a caravan that pulled out overnight is not sold from
+      const c = caravanFor(npc.id.slice('caravan:'.length) as CaravanSlot, Date.now())
+      if (!c.open) return
+      battleRef.current = true
+      openCursorUI()
+      setRackStall({ shelves: c.shelves, title: c.name[0].toUpperCase() + c.name.slice(1), stock: c.stock, subtitle: leavesIn(c.leavesInMs) })
+      setRackOpen(Date.now())
+      return
+    }
     if (npc.id.startsWith('cabinet:')) {
       const c = PASSAGE.cabinets.find(k => k.id === npc.id)
       if (!c) return
@@ -6244,7 +6255,7 @@ export default function Shimmer3D() {
   /** The scroll rack, open. Holds the instant it opened so the stock cannot rotate under the cursor. */
   const [rackOpen, setRackOpen] = useState<number | null>(null)
   /** which stall opened the Passage panel: its shelves + name. Null = every shelf (the `/market` door). */
-  const [rackStall, setRackStall] = useState<{ shelves: ShelfKey[]; title: string } | null>(null)
+  const [rackStall, setRackStall] = useState<{ shelves: ShelfKey[]; title: string; stock?: CaravanStock; subtitle?: string } | null>(null)
   /** the arcade cabinet a keeper is stood at, coin plate or game up */
   const [cabinet, setCabinet] = useState<GameEntry | null>(null)
   const applyLoadout = useCallback(() => {
@@ -8347,6 +8358,8 @@ export default function Shimmer3D() {
           dayOverride={null}
           shelves={rackStall?.shelves}
           title={rackStall?.title}
+          stock={rackStall?.stock}
+          subtitle={rackStall?.subtitle}
           onChange={() => {
             // A scroll or a lesson changes the book; a sale changes the bag; a gem changes the letters.
             // Re-read the book from the one door (`keeperBook`) and re-resolve immediately: a word you

@@ -28,6 +28,7 @@ const VIEWS: Record<string, { x: number; z: number; yaw: number; pitch: number }
   arcade:    { x: 34, z: 29, yaw: 90, pitch: -4 },
   cabinets:  { x: 28, z: 34, yaw: 60, pitch: -10 },
   'far-road': { x: 46, z: 15, yaw: 0, pitch: -2 },
+  caravans:  { x: 53, z: 13, yaw: 90, pitch: 2 },
 }
 
 function Rig({ x, z, yaw, pitch, top }: { x: number; z: number; yaw: number; pitch: number; top: boolean }) {

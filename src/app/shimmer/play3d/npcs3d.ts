@@ -64,6 +64,7 @@ export const TRADER_LINES: string[] = [
 import { REGION_FILES, REGION_WIP_PREFIX } from '../world/region-maps'
 import { npcTint } from './scene-palette'
 import { PASSAGE, isTravellerBay } from './passage-hall'
+import { caravanFor } from './caravans'
 
 /** One NPC per stall with shelves, one per cabinet. A travelling-trader bay with nobody in it is not an
  *  NPC at all: an empty counter has no one to talk to. */
@@ -74,7 +75,14 @@ function passageNpcs(): NPC3D[] {
   const cabinets = PASSAGE.cabinets.map((c): NPC3D => ({
     id: c.id, name: c.game.title, zone: 'the-passage', tileX: c.x, tileY: c.z, color: npcTint.trader, kind: 'cabinet', verb: 'play',
   }))
-  return [...stalls, ...cabinets]
+  // The caravans: one NPC per wagon whose flap is open when the module loads. The roster turns daily;
+  // a page open across the turn keeps yesterday's caravan until reload, and the panel reads the
+  // roster fresh on every open, so what you BUY from is always today's.
+  const wagons = PASSAGE.wagons.filter(w => caravanFor(w.slot, Date.now()).open).map((w): NPC3D => ({
+    id: `caravan:${w.slot}`, name: w.slot === 'daily' ? "the day's caravan" : w.slot === 'weekly' ? "the week's caravan" : "the month's caravan",
+    zone: 'the-passage', tileX: w.x, tileY: w.z, color: npcTint.trader, kind: 'stall', verb: 'browse',
+  }))
+  return [...stalls, ...cabinets, ...wagons]
 }
 for (const f of Object.values(REGION_FILES)) {
   for (const n of [...NPCS_3D]) {

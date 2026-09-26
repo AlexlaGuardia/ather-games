@@ -18,7 +18,8 @@
  */
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { PASSAGE, T, isTravellerBay, type Cabinet, type Stall } from './passage-hall'
+import { PASSAGE, T, isTravellerBay, type Cabinet, type Stall, type Wagon } from './passage-hall'
+import { caravanFor } from './caravans'
 
 import { passage as P } from './scene-palette'
 
@@ -53,7 +54,8 @@ function RockAndCeiling() {
     const fixture = new Set<string>([...PASSAGE.stalls.flatMap(s => {
       const side = s.face[0] === 0 ? [1, 0] : [0, 1]
       return [-1, 0, 1].map(k => `${s.x + side[0] * k},${s.z + side[1] * k}`)
-    }), ...PASSAGE.cabinets.map(c => `${c.x},${c.z}`)])
+    }), ...PASSAGE.cabinets.map(c => `${c.x},${c.z}`),
+      ...PASSAGE.wagons.flatMap(w => [-1, 0, 1].flatMap(dx => [`${w.x + dx},${w.z}`, `${w.x + dx},${w.z + 1}`]))])
     const rocks: { x: number; z: number; y0: number; y1: number; c: string; s: number; k: number }[] = []
     // the zone's own floor tiles draw as grass; the Passage lays packed earth a hair above them
     const floors: { x: number; z: number; y: number; c: string }[] = []
@@ -244,6 +246,42 @@ function CabinetFixture({ c, isOwner }: { c: Cabinet; isOwner: boolean }) {
   )
 }
 
+/** A caravan wagon parked in its bay, flap open toward the road; shuttered when nobody is in. The
+ *  roster is read once per mount — a caravan that pulls out while you stand there changes on your next
+ *  visit, which is how a parked caravan behaves anyway. */
+function WagonFixture({ w }: { w: Wagon }) {
+  const open = useMemo(() => caravanFor(w.slot, Date.now()).open, [w.slot])
+  // the wagon's long axis runs along the road (x); its bed spans the bay's two rows, the flap faces -z
+  const cz = w.z + 0.5
+  return (
+    <group position={[w.x, 0, cz]}>
+      <mesh position={[0, 1.05, 0]} castShadow receiveShadow><boxGeometry args={[2.8, 0.9, 1.7]} /><meshStandardMaterial color={P.wagon.body} roughness={0.9} /></mesh>
+      {/* the canvas top: a half-barrel over the bed */}
+      <mesh position={[0, 1.5, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.95, 0.95, 2.7, 14, 1, false, Math.PI / 2, Math.PI]} />
+        <meshStandardMaterial color={P.wagon.canvas[w.slot]} roughness={1} side={THREE.DoubleSide} />
+      </mesh>
+      {[-1, 1].flatMap(sx => [-1, 1].map(sz => (
+        <mesh key={`${sx}${sz}`} position={[sx * 0.95, 0.5, sz * 0.9]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.5, 0.5, 0.12, 14]} />
+          <meshStandardMaterial color={P.wagon.wheel} roughness={0.9} />
+        </mesh>
+      )))}
+      {/* the side flap, propped open over the road as an awning, or shut against the canvas */}
+      {open
+        ? <mesh position={[0, 2.05, -1.25]} rotation={[-0.45, 0, 0]} castShadow><boxGeometry args={[2.6, 0.05, 1.1]} /><meshStandardMaterial color={P.wagon.canvas[w.slot]} roughness={1} side={THREE.DoubleSide} /></mesh>
+        : <mesh position={[0, 1.35, -0.88]}><boxGeometry args={[2.6, 0.7, 0.05]} /><meshStandardMaterial color={P.wagon.canvas[w.slot]} roughness={1} /></mesh>}
+      {open && [-0.8, 0, 0.8].map((o, i) => (
+        <mesh key={i} position={[o, 1.6, -0.75]}>
+          <boxGeometry args={[0.4, 0.2, 0.3]} />
+          <meshStandardMaterial color={P.wares[i]} emissive={P.wares[i]} emissiveIntensity={0.25} />
+        </mesh>
+      ))}
+      {open && <Lantern x={1.5} z={-1.0} y={0} lit={w.slot === 'daily'} />}
+    </group>
+  )
+}
+
 function FarRoadRubble() {
   const { x, z } = PASSAGE.farRoad
   return (
@@ -282,6 +320,7 @@ export function PassageScene({ isOwner }: { isOwner: boolean }) {
       {PASSAGE.cabinets.map(c => <CabinetFixture key={c.id} c={c} isOwner={isOwner} />)}
       {/* the arcade room's own light: cooler, so the cabinets read as a different room from the market */}
       <pointLight position={[(a.x0 + a.x1) / 2, 3.8, (a.z0 + a.z1) / 2]} color={P.arcadeLight} intensity={14} distance={20} decay={1.4} />
+      {PASSAGE.wagons.map(w => <WagonFixture key={w.slot} w={w} />)}
       <FarRoadRubble />
     </group>
   )
