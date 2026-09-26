@@ -129,13 +129,14 @@ export const passage = {
 export const runeHold = {
   stone: ['#8a7a68', '#7e6f5e', '#958470', '#74665a', '#9a8a74', '#83735f'],
   /** the hillside the town is carved into: the Passage's dug rock, a shade paler in daylight */
-  hill: ['#6e5a48', '#7a6450', '#645140', '#836b55', '#5d4b3b'],
+  hill: ['#86705a', '#927a62', '#7a6550', '#9a8268', '#735f4c'],
   hillTop: ['#6b7d4a', '#5f7143', '#748550'],
   roof: ['#4a3d36', '#553f33', '#3f3a38', '#5a4436'],
   timber: '#5b3d25', sill: '#4a3220',
   window: '#f0b050',
   cobble: ['#9a8c7a', '#8c7f6e', '#a39480', '#857868', '#94866f'],
-  meadow: ['#6f8f55', '#78955a', '#687f4e', '#7a8f58'],
+  mortar: '#5e5446',
+  meadow: ['#71905a', '#74925b', '#6e8c57', '#76935c'],
   /** the ground worn bare where the streets meet the grass */
   worn: ['#7d7458', '#857a5c'],
 } as const

@@ -206,6 +206,13 @@ export const DEV_PAGES: DevPage[] = [
     keywords: ['passage', 'market', 'stall', 'arcade', 'cabinet', 'tunnel', 'cavern', 'rune hold', 'merchant'],
   },
   {
+    path: '/shimmer/dev/runehold-look',
+    title: 'Rune Hold look',
+    blurb: 'The town in the Passage\'s materials: stone houses, the hillside, cobbles and lanterns, over the town\'s own grid. Before/after and day/night toggles.',
+    group: 'bench',
+    keywords: ['rune hold', 'town', 'look', 'stone', 'houses', 'roof', 'lantern', 'cobbles', 'before', 'after'],
+  },
+  {
     path: '/shimmer/dev/stations',
     title: 'Station shelf',
     blurb: 'Every modelled station side by side, drawn by the shipped renderer. Judge the shapes here.',
