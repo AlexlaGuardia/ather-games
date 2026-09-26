@@ -7031,6 +7031,7 @@ export default function Shimmer3D() {
       if (holdEHeld.current && prompt?.kind === 'chest') { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) }
       // what a chest gave that lives outside the run: Marks are the real wallet (a vessel part waits on canon)
       while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n) }
+      if (hs.fell) { hs.fell = null; setHoldFlash('The floor gave way') }
       const chestsNow = hs.chests.filter(Boolean).length
       if (hs.round !== lastRound) { lastRound = hs.round; setHoldFlash(chestsNow > lastChests ? `Round ${hs.round} · ${chestsNow - lastChests === 1 ? 'a chest has' : `${chestsNow - lastChests} chests have`} appeared` : `Round ${hs.round}`) }
       lastChests = chestsNow

@@ -24,7 +24,7 @@
 // ⚠ The landing is a BLOCKOUT for feel. Which world, whose host, what the rooms are = per-season.
 
 import { HOLD_FLOORS, GARDEN_W, type FloorDef } from './hold-floors'
-import { buildHold, surfacesAt, solidAt, slabAt, flatViews, kindAt, DIRS, K, STOREY, type Building, type Kind, type Surface } from './hold-building'
+import { buildHold, surfacesAt, solidAt, slabAt, flatViews, kindAt, levelOfY, DIRS, K, STOREY, type Building, type Kind, type Surface } from './hold-building'
 
 // ── the landing: THE TOP THREE FLOORS OF A TOWER, STACKED (Alex 09-25) ─────────────────────────────
 // *"they are at the top of a sky scraper building and they can access the top three floors starting on
@@ -203,6 +203,8 @@ export interface HoldState {
   rooms: Record<RoomId, boolean>
   /** the room the keeper last stood in — spawns come from here and the open rooms next to it */
   here: RoomId
+  /** set when the keeper falls into a shut room (a broken floor); the page reads it once and clears it */
+  fell: RoomId | null
   salvage: number
   mendPaidThisRound: number
   mendT: number
@@ -400,7 +402,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     planks: map.windows.map(() => tune.seals),
     gatesOpen: map.gates.map(() => false),
     rooms: Object.fromEntries(map.rooms.map(r => [r, r === map.start.room])),
-    here: map.start.room,
+    here: map.start.room, fell: null,
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
     drops: [], dropsThisRound: 0, pickups: [],
@@ -456,10 +458,41 @@ export function roundBlocked(s: HoldState, x: number, z: number, y: number): boo
 function floodStand(s: HoldState, x: number, z: number, y: number): Surface | null {
   let best: Surface | null = null
   for (const su of surfacesAt(s.map.building, x, z)) {
-    if (Math.abs(su.y - y) > 1.01) continue
-    const n = nodeIdx(s.map, su.lv, x, z)
-    if (su.kind === K.GATE && !s.gatesOpen[s.map.gateOf[n]]) continue
-    if (su.kind === K.WINDOW && s.planks[s.map.winOf[n]] > 0) continue
+    if (Math.abs(su.y - y) > 1.01 || !floodMay(s, su, x, z)) continue
+    if (!best || su.y > best.y) best = su
+  }
+  return best
+}
+/** A gate must be open and a window's seals gone for a flooded body to stand in it. */
+function floodMay(s: HoldState, su: Surface, x: number, z: number): boolean {
+  const n = nodeIdx(s.map, su.lv, x, z)
+  if (su.kind === K.GATE && !s.gatesOpen[s.map.gateOf[n]]) return false
+  if (su.kind === K.WINDOW && s.planks[s.map.winOf[n]] > 0) return false
+  return true
+}
+/** The highest floor under a body in its own cell (it is already falling). */
+function fallTo(s: HoldState, x: number, z: number, y: number): Surface | null {
+  let best: Surface | null = null
+  for (const su of surfacesAt(s.map.building, x, z)) if (su.y < y && floodMay(s, su, x, z) && (!best || su.y > best.y)) best = su
+  return best
+}
+/**
+ * Where a flooded body at height `y` ends up moving into a cell: a step (`floodStand`), or — where its
+ * own floor is BROKEN there (open air at its level, a floor below) — a DROP onto the highest floor
+ * under it. Never up: nobody climbs a broken floor (Alex 09-26: "have to work their way back").
+ * Open air only: a wall at your level is not a hole, so nothing drops through a wall or off a stair.
+ */
+function floodMove(s: HoldState, x: number, z: number, y: number): Surface | null {
+  const step = floodStand(s, x, z, y)
+  if (step) return step
+  const b = s.map.building, lv = levelOfY(b, y)
+  if (lv < 0 || kindAt(b, lv, x, z) !== K.VOID) return null
+  let best: Surface | null = null
+  // a broken floor INSIDE the building only: the floor it lands on is the storey straight below and not garden
+  // ground — so a body out of a torn window never leaps a storey (or two) into a garden
+  for (const su of surfacesAt(b, x, z)) {
+    if (su.lv !== lv - 1 || su.y >= y - 1.01 || (su.kind !== K.FLOOR && su.kind !== K.LANDING)) continue
+    if (b.levels[su.lv].tone[z * b.cols + x] === 1 || !floodMay(s, su, x, z)) continue
     if (!best || su.y > best.y) best = su
   }
   return best
@@ -488,10 +521,19 @@ function buildField(s: HoldState, start: number) {
     const y = b.levels[lv].sy[c]
     for (const [dx, dz] of DIRS) {
       const su = floodStand(s, x + dx, z + dz, y)
-      if (!su) continue
-      const nn = nodeIdx(s.map, su.lv, x + dx, z + dz)
-      if (f[nn] !== -1) continue
-      f[nn] = f[n] + 1; q[tail++] = nn
+      if (su) {
+        const nn = nodeIdx(s.map, su.lv, x + dx, z + dz)
+        if (f[nn] === -1) { f[nn] = f[n] + 1; q[tail++] = nn }
+      }
+      // a DROP is one-way, so the field (built from the keeper outward) walks it backwards: a body up
+      // on the neighbour cell that would fall into this one is one step further than this cell
+      for (const up of surfacesAt(b, x + dx, z + dz)) {
+        if (up.y <= y + 1.01 || !floodMay(s, up, x + dx, z + dz)) continue
+        const lands = floodMove(s, x, z, up.y)
+        if (!lands || lands.lv !== lv) continue
+        const nn = nodeIdx(s.map, up.lv, x + dx, z + dz)
+        if (f[nn] === -1) { f[nn] = f[n] + 1; q[tail++] = nn }
+      }
     }
   }
 }
@@ -599,6 +641,8 @@ export interface HoldStepOut {
   roundBegan: number | null
   /** the keeper just went loud */
   wentLoud: boolean
+  /** the keeper fell into a room nobody had opened (a broken floor) — it is awake now */
+  fellInto?: RoomId
 }
 
 export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: number = heightAt(s, px, pz), tune: HoldTuning = HOLD_TUNING): HoldStepOut {
@@ -634,6 +678,8 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
   const pi = keeperNode(s, px, pz, py)
   const ri = pi >= 0 ? s.map.regionOf[pi] : -1
   if (ri >= 0) s.here = s.map.rooms[ri]
+  // the keeper can only be in a shut room by FALLING into it (a broken floor): being there wakes it
+  if (!s.rooms[s.here]) { s.rooms[s.here] = true; out.fellInto = s.here; s.fell = s.here }
 
   // spawns: from the windows of the active rooms (above). LOUD = no ration and no break: they rush.
   s.spawnT -= dt
@@ -679,7 +725,9 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     }
     // inside: follow the floor, down the field toward the keeper — on whichever floor the body is on
     const cx = Math.round(b.x), cz = Math.round(b.z)
-    const here = floodStand(s, cx, cz, b.y)
+    // over a broken floor this is the floor below, and mid-fall (between floors, matching no step and no
+    // hole) it is still the highest floor under the body — so it lands, never hangs in the air
+    const here = floodMove(s, cx, cz, b.y) ?? fallTo(s, cx, cz, b.y)
     const hy = here ? here.y : b.y
     b.y += Math.max(-10 * dt, Math.min(10 * dt, hy - b.y))
     const dpx = px - b.x, dpz = pz - b.z, dp = Math.hypot(dpx, dpz)
@@ -690,7 +738,7 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     let best = here ? s.field[nodeIdx(s.map, here.lv, cx, cz)] : -1, bx = px, bz = pz
     if (best > 1) {
       for (const [ox, oz] of DIRS) {
-        const su = floodStand(s, cx + ox, cz + oz, hy)
+        const su = floodMove(s, cx + ox, cz + oz, hy)
         if (!su) continue
         const v = s.field[nodeIdx(s.map, su.lv, cx + ox, cz + oz)]
         if (v >= 0 && v < best) { best = v; bx = cx + ox; bz = cz + oz }
@@ -700,9 +748,9 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     const mx = bx - b.x, mz = bz - b.z, md = Math.hypot(mx, mz) || 1
     const step = Math.min(md, b.speed * dt)
     const nx = b.x + (mx / md) * step, nz = b.z + (mz / md) * step
-    if (Math.round(nx) === cx || floodStand(s, Math.round(nx), cz, hy)) b.x = nx
+    if (Math.round(nx) === cx || floodMove(s, Math.round(nx), cz, hy)) b.x = nx   // floodMove: a body may step OFF into a broken floor
     const cx2 = Math.round(b.x)
-    if (Math.round(nz) === cz || floodStand(s, cx2, Math.round(nz), hy)) b.z = nz
+    if (Math.round(nz) === cz || floodMove(s, cx2, Math.round(nz), hy)) b.z = nz
   }
   // bodies do not stack into one: a soft shove apart (same floor only)
   const live = s.flood.filter(b => b.alive && b.phase === 'inside')

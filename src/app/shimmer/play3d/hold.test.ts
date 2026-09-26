@@ -483,6 +483,62 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   console.log('  pacing:', worst.join(' · '))
 }
 
+// ── ★ THE BROKEN FLOOR (Alex 09-26): the office's collapse drops into the elevator lobby; one way, for everyone ──
+{
+  const per = B.cols * B.rows
+  const hole: { x: number; z: number }[] = []
+  const P = plates[1]
+  for (let z = P.z0 + 1; z < P.z0 + P.d - 1; z++) for (let x = P.x0 + 1; x < P.x0 + P.w - 1; x++) {
+    if (kindAt(B, 1, x, z) === K.VOID && kindAt(B, 0, x, z) === K.FLOOR && !B.stairs.some(st => st.lv === 0 && [...st.flights, ...st.landings].some(f => f.cells.some(c => c.x === x && c.z === z)))) hole.push({ x, z })
+  }
+  ok(hole.length === 21, `a 7 × 3 hole in the office floor over the lobby floor (${hole.length} cells)`)
+  const h = hole[10]
+  const s0 = startHold(map)
+  ok(!keeperBlocked(s0, h.x, h.z, MID), 'a keeper walks straight into it')
+  // the walker stands on the highest surface at most a step over its feet (segs-collision › resolveStand); the roof is overhead
+  const under = holdSurfaces(map, h.x, h.z).filter(q => q.y <= MID + 1).sort((p, q) => q.y - p.y)[0]
+  ok(under?.y === BOT, `★ from the office, the floor there is the lobby's, a storey down: they fall and land (${under?.y})`)
+  const upRoom = map.rooms[map.regionOf[1 * per + h.z * B.cols + h.x - 8]], downRoom = map.rooms[map.regionOf[0 * per + h.z * B.cols + h.x]]
+  ok(!!upRoom && !!downRoom && upRoom !== downRoom, `the hole does not join the rooms (${upRoom} over ${downRoom})`)
+  // falling in wakes the room below; its gate stays shut
+  const s = startHold(map)
+  const gE = map.gates.findIndex(g => g.letter === 'E'), gG = map.gates.findIndex(g => g.letter === 'G')
+  for (const gi of [0, gE]) { s.gatesOpen[gi] = true; for (const r of map.gates[gi].opens) s.rooms[r] = true }
+  ok(!s.rooms[downRoom], 'before the fall, the room below is shut')
+  s.hush = 1e9
+  stepHold(s, 0.05, h.x, h.z, BOT)
+  ok(s.rooms[downRoom] && s.fell === downRoom && !s.gatesOpen[gG], '★ landing in it wakes it (its windows spawn, its chests are yours) — the G gate stays shut')
+  // the flooded follow you down: a body in the cubicle farm reaches the keeper below
+  s.flood = [body({ id: 900, x: h.x - 8, z: h.z, y: MID, speed: 3 })]
+  let minY = MID
+  for (let t = 0; t < 400; t++) { stepHold(s, 0.05, h.x, h.z + 6, BOT); minY = Math.min(minY, s.flood[0].y) }
+  const b0 = s.flood[0]
+  ok(Math.abs(b0.y - BOT) < 0.2 && Math.hypot(b0.x - h.x, b0.z - (h.z + 6)) < 2, `★ a body upstairs drops through after the keeper (ended y ${b0.y.toFixed(1)}, ${Math.hypot(b0.x - h.x, b0.z - (h.z + 6)).toFixed(1)} away)`)
+  // …and nothing climbs back up it: keeper upstairs, G shut, a body below has no way
+  const u = startHold(map)
+  for (const gi of [0, gE]) { u.gatesOpen[gi] = true; for (const r of map.gates[gi].opens) u.rooms[r] = true }
+  u.rooms[downRoom] = true; u.hush = 1e9
+  u.flood = [body({ id: 901, x: h.x, z: h.z + 4, y: BOT, speed: 3 })]
+  for (let t = 0; t < 200; t++) stepHold(u, 0.05, h.x - 8, h.z, MID)
+  ok(Math.abs(u.flood[0].y - BOT) < 0.2, '★ nothing climbs a broken floor: a body below stays below')
+  ok(u.field[0 * per + (h.z + 4) * B.cols + h.x] === -1, 'the field says so too: no path up from the lobby with G shut')
+  // no leap from a window into a garden: every window torn, every gate open, keeper in the west garden —
+  // no office or roof node reaches the garden except by the building's own way down (the field's first step)
+  const g = startHold(map); g.gatesOpen = g.gatesOpen.map(() => true); g.planks = g.planks.map(() => 0); g.hush = 1e9
+  for (const r of map.rooms) g.rooms[r] = true
+  const wg = map.chestSpots.find(c => c.x < plates[0].x0)!
+  stepHold(g, 0.01, wg.x, wg.z, BOT)
+  let leaps = 0
+  for (const w of map.windows) if (w.lv > 0) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const ox = Math.round(w.mid.x) + dx, oz = Math.round(w.mid.z) + dz
+    if (kindAt(B, w.lv, ox, oz) !== K.VOID) continue
+    const wf = g.field[w.lv * per + Math.round(w.mid.z) * B.cols + Math.round(w.mid.x)]
+    const below = g.field[0 * per + oz * B.cols + ox]
+    if (wf >= 0 && below >= 0 && wf === below + 1) leaps++
+  }
+  ok(leaps === 0, `★ a body never leaps out of a window into a garden (${leaps} window-to-garden drops in the field)`)
+}
+
 // ── the end ──
 {
   const s = autoplay(5, 60)
