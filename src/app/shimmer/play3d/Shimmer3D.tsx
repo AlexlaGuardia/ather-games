@@ -125,6 +125,7 @@ import { PassageScene } from './PassageScene'
 import { RuneHoldScene } from './RuneHoldScene'
 import { DRAWN_DOORS } from './rune-hold-look'
 import { StationScene } from './StationScene'
+import { BODIES } from './metrics'
 import { STATION, T as STATION_TILE } from './station-field'
 import { ArcadeCabinet } from './ArcadeCabinet'
 import { PASSAGE, type ShelfKey } from './passage-hall'
@@ -137,7 +138,7 @@ import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPane
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
-import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { HOLD_TUNING, BODY_SIZE, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 import { addPiece, pieceLine, loadDry, saveDry } from './vessel-pieces'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
@@ -253,8 +254,11 @@ const UP = new THREE.Vector3(0, 1, 0)
 // First-person rig: camera sits at eye height on the walker; wider fov for the Supra FPS feel
 // (orbit follow-cam keeps the calmer 45). Camera-only for now — movement still rides the flat-grid
 // canStand() until the world lane exposes a segs-collision read-API.
-const EYE_H = 1.15          // eye offset above the player's foot position (capsule center is +0.7)
-const EYE_SLIDE = 0.5       // eye dips this low mid-slide (crouched)
+// ★ THE AUTHORING BODY (Alex, 2026-09-27: "the player is child sized" beside Rune Hold's folk). Was 1.15 / 0.5, the
+// shorter mannequin `metrics.ts` flagged as predating the pick; every map, door and townsperson is authored against
+// the voxel walker's human-scale body, so the play3d eye now IS that body (`BODIES.voxel`). Collider radius unchanged.
+const EYE_H = BODIES.voxel.eyeStand      // 1.62: eye offset above the player's foot position
+const EYE_SLIDE = BODIES.voxel.eyeSlide // 1.02: eye dips this low mid-slide (crouched)
 const FPS_FOV = 72
 const ADS_FOV = 50   // aim-down-sights zoom (outside-Ather weapon); lerped from FPS_FOV on right-click hold
 const ORBIT_FOV = 45
@@ -2238,7 +2242,7 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
       let i = 0
       for (const b of s.flood) {
         if (!b.alive || i >= HOLD_BODY_MAX) continue
-        const size = b.kind === 'bulk' ? 1.35 : b.kind === 'swift' ? 0.8 : 1
+        const size = BODY_SIZE[b.kind]   // the same table the sim spaces them by (`hold.ts`)
         // a body at a window heaves at the sill; one inside rolls as it comes
         const heave = b.phase === 'tear' || b.phase === 'rise' ? 0.12 * Math.sin(t * 7 + b.id) : 0.05 * Math.sin(t * 4 + b.id)
         v.set(b.x, b.y * STEP + 0.45 * size + heave, b.z)

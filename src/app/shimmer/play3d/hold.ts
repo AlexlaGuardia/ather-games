@@ -149,7 +149,11 @@ export const HOLD_TUNING = {
   // vents (Alex 09-26): the rooms grew and the walls got far away, so some of the tide comes up through the floor
   ventShare: 0.35,       // of the spawns, when an active room has a vent far enough away
   ventMinSteps: 12,      // a vent never opens closer than this (walking steps) to the keeper — you get to see it coming
-  riseSec: 1.4,          // a body heaves up out of the grate this long before it can move or strike (shootable the whole time)
+  riseSec: 1.4,
+  // the chase (Alex 09-27): smooth, eight-way, and a mob rather than a pile
+  turnRate: 7,           // how fast a body's velocity eases toward its wish (1/s) — higher is snappier
+  chaseSight: 14,        // within this many tiles on open floor with a clear line, a body runs straight at you
+  bodyGap: 0.05,         // spacing between two bodies' edges          // a body heaves up out of the grate this long before it can move or strike (shootable the whole time)
 } as const
 export type HoldTuning = typeof HOLD_TUNING
 
@@ -179,7 +183,13 @@ export interface FloodBody {
   tearT: number
   strikeT: number
   alive: boolean
+  /** velocity (tiles/s) — steered toward where it wants to go, never snapped (the chase) */
+  vx: number
+  vz: number
 }
+/** How big each kind is drawn (the renderer's scale × its 0.45 sphere) — the spacing reads the same numbers. */
+export const BODY_SIZE: Record<FloodKind, number> = { drift: 1, swift: 0.8, bulk: 1.35 }
+export const BODY_RADIUS: Record<FloodKind, number> = { drift: 0.45 * BODY_SIZE.drift, swift: 0.45 * BODY_SIZE.swift, bulk: 0.45 * BODY_SIZE.bulk }
 
 // ── boosters: what the flooded sometimes leave behind ──────────────────────────────────────────
 // Zombies' power-ups in our clothes. One so far: LAST LIGHT (Alex named it the Glimmer of Hope 09-24, renamed 09-26 —
@@ -542,6 +552,16 @@ function keeperNode(s: HoldState, px: number, pz: number, py: number): number {
   for (const su of surfacesAt(s.map.building, x, z)) if (!best || Math.abs(su.y - py) < Math.abs(best.y - py)) best = su
   return best ? nodeIdx(s.map, best.lv, x, z) : -1
 }
+const DIRS8: readonly [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]
+/** Open, flat floor at height `y` all the way from (x0, z0) to (x1, z1)? Sampled every 0.35 of a tile. */
+function clearLine(s: HoldState, x0: number, z0: number, x1: number, z1: number, y: number): boolean {
+  const d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / 0.35)
+  for (let k = 1; k <= n; k++) {
+    const t = k / n, su = floodStand(s, Math.round(x0 + (x1 - x0) * t), Math.round(z0 + (z1 - z0) * t), y)
+    if (!su || Math.abs(su.y - y) > 0.5) return false
+  }
+  return true
+}
 function buildField(s: HoldState, start: number) {
   const { cols, rows, building: b } = s.map
   const per = cols * rows
@@ -751,7 +771,7 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     const kind: FloodKind = loud ? 'swift' : kindFor(s.round, n)
     const st = bodyStats(kind, s.round)
     const vents = spawnVents(s, tune)
-    const base = { id: s.nextId++, kind, hp: st.hp, maxHp: st.hp, speed: st.speed, tearT: 0, strikeT: 0.6, alive: true }
+    const base = { id: s.nextId++, kind, hp: st.hp, maxHp: st.hp, speed: st.speed, tearT: 0, strikeT: 0.6, alive: true, vx: 0, vz: 0 }
     if (vents.length && s.rng() < tune.ventShare) {
       const v = vents[Math.floor(s.rng() * vents.length)]
       s.flood.push({ ...base, x: v.x, z: v.z, y: v.h - 1.2, phase: 'rise', win: -1, vent: v.id })
@@ -809,36 +829,58 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     const dpx = px - b.x, dpz = pz - b.z, dp = Math.hypot(dpx, dpz)
     if (dp < tune.reach && Math.abs(py - b.y) < tune.level) {
       if (b.strikeT <= 0) { out.strike += tune.strikeDmg * (b.kind === 'bulk' ? 1.5 : 1); b.strikeT = tune.strikeCd }
+      b.vx *= 0.5; b.vz *= 0.5
       continue
     }
-    let best = here ? s.field[nodeIdx(s.map, here.lv, cx, cz)] : -1, bx = px, bz = pz
-    if (best > 1) {
-      for (const [ox, oz] of DIRS) {
+    // ★ THE CHASE (Alex 09-27: "tracking seemed very sharp like they only move in four directions").
+    // Where to head: straight at the keeper across open floor when the line is clear; otherwise down the field,
+    // choosing among EIGHT neighbours (a diagonal only where both of its sides are open — no corner cutting).
+    // The heading is then STEERED, never snapped: velocity eases toward the wish at `turnRate`, so a body
+    // arcs round a corner and drifts sideways into a crowd instead of turning on the spot like a grid piece.
+    let bx = px, bz = pz
+    const sees = here !== null && Math.abs(py - hy) < 0.6 && dp < tune.chaseSight && clearLine(s, b.x, b.z, px, pz, hy)
+    let best = here ? s.field[nodeIdx(s.map, here.lv, cx, cz)] : -1
+    if (!sees && best > 1) {
+      let bd = Infinity
+      for (const [ox, oz] of DIRS8) {
+        if (ox && oz && (!floodMove(s, cx + ox, cz, hy) || !floodMove(s, cx, cz + oz, hy))) continue
         const su = floodMove(s, cx + ox, cz + oz, hy)
         if (!su) continue
         const v = s.field[nodeIdx(s.map, su.lv, cx + ox, cz + oz)]
-        if (v >= 0 && v < best) { best = v; bx = cx + ox; bz = cz + oz }
+        // lowest field first; a tie goes to the neighbour nearer the keeper (so an open room reads as a line, not a staircase)
+        const tie = Math.hypot(px - (cx + ox), pz - (cz + oz))
+        if (v >= 0 && (v < best || (v === best && tie < bd))) { best = v; bd = tie; bx = cx + ox; bz = cz + oz }
       }
     }
     // a body cut off by a shut gate (field -1) heads for the keeper anyway and is stopped by the wall
     const mx = bx - b.x, mz = bz - b.z, md = Math.hypot(mx, mz) || 1
-    const step = Math.min(md, b.speed * dt)
-    const nx = b.x + (mx / md) * step, nz = b.z + (mz / md) * step
+    const ease = Math.min(1, tune.turnRate * dt)
+    b.vx += ((mx / md) * b.speed - b.vx) * ease
+    b.vz += ((mz / md) * b.speed - b.vz) * ease
+    const nx = b.x + b.vx * dt, nz = b.z + b.vz * dt
     if (Math.round(nx) === cx || floodMove(s, Math.round(nx), cz, hy)) b.x = nx   // floodMove: a body may step OFF into a broken floor
+    else b.vx = 0
     const cx2 = Math.round(b.x)
     if (Math.round(nz) === cz || floodMove(s, cx2, Math.round(nz), hy)) b.z = nz
+    else b.vz = 0
   }
-  // bodies do not stack into one: a soft shove apart (same floor only)
+  // ★ bodies do not stack into one (Alex 09-27: "they shouldnt overlap each other so they can form a mob").
+  // Spacing is each body's DRAWN radius (`BODY_RADIUS`, the renderer reads the same table), relaxed over a few
+  // passes so a crowd settles into a mob, not a pile. The heavier body gives less ground. Two bodies on the
+  // very same point (a vent spawns at its centre) are split along an id-seeded angle; before 09-27 they were
+  // skipped, so a pair out of one vent chased as one body for its whole life.
   const live = s.flood.filter(b => b.alive && b.phase === 'inside')
   const canShove = (b: FloodBody, x: number, z: number) => (Math.round(x) === Math.round(b.x) && Math.round(z) === Math.round(b.z)) || floodStand(s, Math.round(x), Math.round(z), b.y) !== null
-  for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
-    const a = live[i], c = live[j], dx = c.x - a.x, dz = c.z - a.z, d2 = dx * dx + dz * dz
+  for (let pass = 0; pass < 3; pass++) for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
+    const a = live[i], c = live[j]
     if (Math.abs(a.y - c.y) >= tune.level) continue
-    if (d2 > 0.0001 && d2 < 0.49) {
-      const d = Math.sqrt(d2), push = (0.7 - d) * 0.5, ux = dx / d, uz = dz / d
-      if (canShove(a, a.x - ux * push, a.z - uz * push)) { a.x -= ux * push; a.z -= uz * push }
-      if (canShove(c, c.x + ux * push, c.z + uz * push)) { c.x += ux * push; c.z += uz * push }
-    }
+    let dx = c.x - a.x, dz = c.z - a.z, d = Math.hypot(dx, dz)
+    const ra = BODY_RADIUS[a.kind], rc = BODY_RADIUS[c.kind], min = ra + rc + tune.bodyGap
+    if (d >= min) continue
+    if (d < 1e-4) { const ang = ((a.id * 2654435761 + c.id) % 6283) / 1000; dx = Math.cos(ang); dz = Math.sin(ang); d = 1 } else { dx /= d; dz /= d }
+    const over = min - Math.min(d, min), ma = ra * ra, mc = rc * rc, pa = over * mc / (ma + mc), pc = over * ma / (ma + mc)
+    if (canShove(a, a.x - dx * pa, a.z - dz * pa)) { a.x -= dx * pa; a.z -= dz * pa }
+    if (canShove(c, c.x + dx * pc, c.z + dz * pc)) { c.x += dx * pc; c.z += dz * pc }
   }
   // boosters wait, then fade; walking over one takes it
   for (const d of s.drops) {

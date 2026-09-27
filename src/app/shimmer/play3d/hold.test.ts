@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PIECES_WIRED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PIECES_WIRED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, BODY_RADIUS, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { FLOOR_W, FLOOR_D } from './hold-floors'
@@ -13,7 +13,7 @@ let pass = 0; const fails: string[] = []
 const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 const from = (b: FloodBody) => b.win >= 0 ? map.windows[b.win] : map.vents[b.vent]
 const body = (o: Partial<FloodBody> & { id: number; x: number; z: number }): FloodBody =>
-  ({ kind: 'drift', y: 0, hp: 100, maxHp: 100, speed: 2, phase: 'inside', win: 0, vent: -1, tearT: 0, strikeT: 1, alive: true, ...o })
+  ({ kind: 'drift', y: 0, hp: 100, maxHp: 100, speed: 2, phase: 'inside', win: 0, vent: -1, tearT: 0, strikeT: 1, alive: true, vx: 0, vz: 0, ...o })
 
 // ── the tower parses into what Alex sized (09-26): three 100 × 120 floors stacked, 60 × 100 gardens off the bottom ──
 const map = parseLanding()
@@ -543,6 +543,63 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
     if (wf >= 0 && below >= 0 && wf === below + 1) leaps++
   }
   ok(leaps === 0, `★ a body never leaps out of a window into a garden (${leaps} window-to-garden drops in the field)`)
+}
+
+// ── ★ the chase (Alex 09-27): eight-way and smooth, and the flooded form a mob instead of stacking ──
+{
+  const S0 = map.start, lv = S0.lv, y = S0.h
+  // an open square on the start floor: a body at one corner, the keeper at the far one, diagonal
+  const open = (x: number, z: number) => kindAt(B, lv, x, z) === K.FLOOR
+  let o: { x: number; z: number; k: number } | null = null
+  for (let z = 1; z < B.rows - 20 && !o; z++) for (let x = 1; x < B.cols - 20 && !o; x++) {
+    let all = true
+    for (let dz = 0; dz <= 18 && all; dz++) for (let dx = 0; dx <= 18; dx++) if (!open(x + dx, z + dz)) { all = false; break }
+    if (all) o = { x, z, k: 18 }
+  }
+  ok(!!o, 'an 18 × 18 open square exists on the start floor to chase across')
+  for (const far of [false, true]) {
+    const s = startHold(map); s.hush = 1e9; s.toSpawn = 0; s.spawnT = 1e9
+    const kx = o!.x + (far ? 18 : 9), kz = o!.z + (far ? 18 : 9)
+    s.flood.push(body({ id: 800, x: o!.x, z: o!.z, y, speed: 3 }))
+    let maxOff = 0
+    for (let t = 0; t < 1.5; t += 0.05) {
+      stepHold(s, 0.05, kx, kz, y)
+      const b0 = s.flood[0], ax = b0.x - o!.x, az = b0.z - o!.z
+      maxOff = Math.max(maxOff, Math.abs(ax - az))   // distance off the true diagonal
+    }
+    const b0 = s.flood[0], ax = b0.x - o!.x, az = b0.z - o!.z
+    ok(ax > 1.5 && az > 1.5 && maxOff < 1.1, `★ ${far ? 'beyond sight, down the field' : 'in sight'}: a body crosses open floor on the diagonal, not a staircase (moved ${ax.toFixed(1)},${az.toFixed(1)} · off-line ≤ ${maxOff.toFixed(2)})`)
+  }
+  // no snap turns: the keeper jumps behind a body, its heading swings over several ticks, not one
+  {
+    const s = startHold(map); s.hush = 1e9; s.toSpawn = 0; s.spawnT = 1e9
+    const cx = o!.x + 9, cz = o!.z + 9
+    s.flood.push(body({ id: 801, x: cx, z: cz, y, speed: 3 }))
+    for (let t = 0; t < 1; t += 0.05) stepHold(s, 0.05, cx + 8, cz, y)
+    const b0 = s.flood[0]
+    stepHold(s, 0.05, b0.x - 8, b0.z, y)
+    ok(b0.vx > 0, '★ one tick after the keeper jumps behind it, the body is still carrying its old way (it turns, it does not snap)')
+    for (let t = 0; t < 1; t += 0.05) stepHold(s, 0.05, b0.x - 8, b0.z, y)
+    ok(b0.vx < 0, 'and within a second it has come round')
+  }
+  // the mob: eight bodies out of one point, chasing — none overlaps another
+  {
+    const s = startHold(map); s.hush = 1e9; s.toSpawn = 0; s.spawnT = 1e9
+    const kinds = ['drift', 'bulk', 'swift', 'drift', 'drift', 'bulk', 'swift', 'drift'] as const
+    kinds.forEach((kind, i) => s.flood.push(body({ id: 900 + i, kind, x: o!.x + 2, z: o!.z + 2, y, speed: 2.5 })))
+    for (let t = 0; t < 2; t += 0.05) stepHold(s, 0.05, o!.x + 16, o!.z + 16, y)
+    let worst = Infinity
+    const f = s.flood
+    for (let i = 0; i < f.length; i++) for (let j = i + 1; j < f.length; j++) {
+      const need = BODY_RADIUS[f[i].kind] + BODY_RADIUS[f[j].kind]
+      worst = Math.min(worst, Math.hypot(f[i].x - f[j].x, f[i].z - f[j].z) / need)
+    }
+    ok(worst > 0.9, `★ eight bodies out of one point chase as a mob: no two overlap (closest pair at ${(worst * 100).toFixed(0)}% of touching)`)
+    const cx = f.reduce((a, b) => a + b.x, 0) / f.length, cz = f.reduce((a, b) => a + b.z, 0) / f.length
+    const spread = Math.max(...f.map(b => Math.hypot(b.x - cx, b.z - cz)))
+    console.log('  mob: spread', spread.toFixed(2), f.map(b => b.x.toFixed(1) + ',' + b.z.toFixed(1)).join(' '))
+    ok(spread < 4, `and they stay a group (all within 4 tiles of the middle: ${spread.toFixed(1)})`)
+  }
 }
 
 // ── ★ the pity counter (Alex 09-27): 30 dry rounds and the next cache to appear is legendary ──
