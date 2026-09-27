@@ -504,12 +504,12 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
                   Nothing worn AND no word: the uncut tier-1 vessel, faded — a place for one, not one. A vessel
                   bearing a word with its band unbound keeps its seats and its letters, faded. */}
               <VesselArt kind={kind} tier={word ? wornTier(kind) : 1} seats={seats}
-                         gems={l.vessels[kind]} size={72} dim={!worn} dark={!!word && !wornLit} />
+                         gems={l.vessels[kind]} size={72} dim={!word} dark={!!word && !wornLit} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="hk-title text-[12px] hk-ember">{VESSEL_NOUN[kind]}</span>
                   {/* the MATERIAL of what is worn — the tier, read the way canon says it reads */}
-                  {worn && wornPresent(kind) ? <span className="hk-label text-[12px] hk-ember">{tierLabel(kind, wornTier(kind))}</span> : null}
+                  {word && wornPresent(kind) ? <span className="hk-label text-[12px] hk-ember">{tierLabel(kind, wornTier(kind))}</span> : null}
                   <span className="hk-label text-[12px] hk-faint">{VESSEL_LANE_LABEL[kind]}</span>
                   <span className="tabular-nums ml-auto text-[12px] hk-soft">{l.vessels[kind].length}/{seats}</span>
                 </div>
@@ -517,8 +517,11 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
                   <span className="hk-label rounded-[2px] border hk-rule-ember hk-fill-ember px-1.5 py-0.5 text-[12px] hk-ember">
                     {kind === 'bracelet' ? 'wrist' : 'hand'}
                   </span>
-                  {worn
-                    ? <><span className="hk-title ml-1 text-[12px] hk-ink">{wordOf(worn)}</span>
+                  {/* ★ a DARK worn vessel is still worn (09-27): its band is unbound because the keeper does not know
+                      the word, so key the row off the VESSEL's word, not the binding, and say what lights it */}
+                  {word
+                    ? <><span className={`hk-title ml-1 text-[12px] ${wornLit ? 'hk-ink' : 'hk-faint'}`}>{wordOf(word)}</span>
+                        {!wornLit && <span className="hk-label text-[12px] hk-faint">dark · learn the word to light it</span>}
                         <button type="button" onPointerDown={() => doTakeOff(kind)}
                                 className="hk-btn hk-dim ml-auto px-2 py-0.5 text-[12px] hover:opacity-100">take off</button></>
                     : <span className="hk-title ml-1 text-[12px] hk-faint">nothing worn · your birth move needs no vessel</span>}
