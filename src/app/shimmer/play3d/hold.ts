@@ -193,18 +193,17 @@ export type HoldLoot =
 export interface HoldChest { rarity: ChestRarity; openT: number }
 /**
  * RULED LAWFUL 09-26 (ON A LIVE WORLD › CACHES): a cache may hold this season's vessel, whole or as pieces a
- * keeper carries home to the Passage's CUTTER, who finishes it (a keeper never assembles one). Still OFF:
- * the build has no season vessel and no cutter hand-off to carry a piece to, so a legendary cache would
- * promise a thing that goes nowhere. Wire the piece + the cutter, then flip this and the page gives it.
+ * keeper carries home to the Passage's CUTTER, who finishes it (a keeper never assembles one). WIRED 09-27:
+ * the page carries a piece into `vessel-pieces.ts`, and the cutter's shelf joins three into a vessel.
  */
-export const VESSEL_PIECES_WIRED = false
+export const VESSEL_PIECES_WIRED = true
 export const CHEST_LOOT: Record<ChestRarity, { loot: HoldLoot; w: number }[]> = {
   common: [{ loot: { kind: 'salvage', n: 400 }, w: 60 }, { loot: { kind: 'glimmer' }, w: 40 }],
   rare: [{ loot: { kind: 'marks', n: 30 }, w: 60 }, { loot: { kind: 'salvage', n: 1500 }, w: 40 }],   // a bag of Marks ≈ 30 (Alex)
   legendary: [{ loot: { kind: 'part' }, w: 100 }],
 }
 export const lootLabel = (l: HoldLoot): string =>
-  l.kind === 'salvage' ? `+${l.n} salvage` : l.kind === 'marks' ? `A bag of Marks (+${l.n})` : l.kind === 'glimmer' ? DROP_NAME.glimmer : 'A vessel piece, for the cutter'
+  l.kind === 'salvage' ? `+${l.n} salvage` : l.kind === 'marks' ? `A bag of Marks (+${l.n})` : l.kind === 'glimmer' ? DROP_NAME.glimmer : 'A vessel piece'
 
 export interface HoldState {
   map: HoldMap

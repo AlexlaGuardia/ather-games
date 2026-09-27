@@ -353,7 +353,7 @@ export interface VesselGrant { ok: boolean; why?: VesselRefusal; say: string; in
  * `word` may be null only for a blank (the satchel cuts it later); a word must fit the tier's seats
  * and the kind's band. Persists on success. The caller spends Marks, rolls loot, or names the prize.
  */
-export function grantVessel(kind: Vessel, tier: VesselTier, word: string | null, source: VesselSource): VesselGrant {
+export function grantVessel(kind: Vessel, tier: VesselTier, word: string | null, source: VesselSource, gems: readonly string[] = []): VesselGrant {
   if (isFloor({ tier }) || source === 'given') {
     return { ok: false, why: 'not-given', say: `Greg gave you the ${VESSEL_NOUN[kind]} you have. Nobody hands out a second.` }
   }
@@ -368,7 +368,8 @@ export function grantVessel(kind: Vessel, tier: VesselTier, word: string | null,
   if (ownedCount(kind) >= MAX_PER_KIND) {
     return { ok: false, why: 'at-cap', say: `Three ${kind}s is what a keeper can carry, and Greg's underneath. Nobody down here will sell you a fourth.` }
   }
-  saveStowed([...loadStowed(), { kind, gems: [], move: m?.id ?? null, tier }])
+  // `gems`: letters that arrive already set (a vessel the cutter finished from pieces — `vessel-pieces.ts`)
+  saveStowed([...loadStowed(), { kind, gems: [...gems], move: m?.id ?? null, tier }])
   // its index in the NEXT read: acquired vessels sort first, and this one is the newest of them
   const index = loadStowed().filter(v => !isFloor(v)).length - 1
   const how = { bought: 'yours', found: 'found', won: 'won', given: 'given' }[source]

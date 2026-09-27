@@ -67,6 +67,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'ather:shimmer:stowed',     worldTied: false },  // the vessels owned but not worn — each with its own gems and word (2026-09-03)
   { base: 'ather:shimmer:worn-tier',  worldTied: false },  // the TIER (material) of the worn bracelet + focus — the one field the two live keys do not carry (2026-09-04)
   { base: 'ather:shimmer:worn-word',  worldTied: false },  // the WORD the worn bracelet + focus were cut for — the band is a binding, the vessel bears its word (2026-09-09)
+  { base: 'ather:shimmer:vessel-pieces', worldTied: false },  // pieces of a season's vessel carried out of the Breach; the cutter finishes three (2026-09-27)
   { base: 'ather:shimmer:trials',     worldTied: false },  // how many times each trial was cleared — the WON door's ledger (first clear = a sure prize) (2026-09-05)
   { base: 'ather:shimmer:parked',    worldTied: false },  // ⚠ LEGACY: the retired 09-03 PAIRS. `vessels.ts` reads it once, migrates it, removes it
   { base: 'ather:shimmer:hold:best', worldTied: false },  // the hold's best round — a keeper's own record, survives like the ledger (2026-09-24)

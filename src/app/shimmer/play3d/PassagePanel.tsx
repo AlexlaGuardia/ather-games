@@ -29,6 +29,7 @@ import { RUNES } from './birth/runes.data'
 import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
 import { saveLetters, VESSELS, type Vessel } from './gems'
+import { loadPieces, finishVessel, PIECES_PER_VESSEL, PIECE_TIER, FINISH_FEE } from './vessel-pieces'
 import { buyVessel, ownedCount, loadStowed, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, TIER_MATERIAL } from './vessels'
 import { HearthFrame } from '../ui/hearth'
 import { eligibleMoves, ALL_BANDS } from './cast'
@@ -71,6 +72,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   const cycle = cycleAt(nowMs)
   const day: Weekday = dayOverride ?? weekdayOf(cycle)
   const marks = getMarks()
+  const pieces = loadPieces()
   const bag = items.current
   const letters = keeperLetters(owned, birth)
   const book = keeperBook(owned)
@@ -107,6 +109,13 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
   }
   const onBuyVessel = (kind: Vessel, word: string) => {
     const r = buyVessel(kind, marks, word)
+    setNote(r.say); if (!r.ok) return
+    if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
+    rerender()
+  }
+  /** The cutter joins three Breach pieces into a vessel for a word the keeper holds (`vessel-pieces.ts`). */
+  const onFinishVessel = (kind: Vessel, word: string) => {
+    const r = finishVessel(kind, word, marks, birth)
     setNote(r.say); if (!r.ok) return
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
     rerender()
@@ -212,6 +221,25 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               ★ THE SHELF'S STOCK IS TIER 1 — goldwood. Vessels are not crafted (ruled 2026-09-04): the Passage
               is the BOUGHT door; tiers 2–3 are found and won in the world, never on a shelf. The cap counts
               what a keeper acquires; Greg's pair sits under it. */}
+          {/* ★ PIECES FROM THE BREACH (09-27): the keeper carries them, the CUTTER joins three into a tier-2
+              vessel for a word they hold, letters woven in. A keeper never assembles one (canon 09-04, 09-26). */}
+          {pieces > 0 && (
+            <Row left={<span className="hk-soft">vessel pieces from the Breach</span>}
+                 mid={`you carry ${pieces} · ${PIECES_PER_VESSEL} make one`} action={() => {}} disabled
+                 label={pieces >= PIECES_PER_VESSEL ? 'choose below' : `${PIECES_PER_VESSEL - pieces} more`} />
+          )}
+          {pieces >= PIECES_PER_VESSEL && VESSELS.flatMap(kind => {
+            const band = BAND_FOR_VESSEL[kind]
+            const full = ownedCount(kind) >= MAX_PER_KIND
+            const taken = new Set([...loadStowed().filter(v => v.kind === kind).map(v => v.move), rawLoadout()[band] ?? null])
+            return eligibleMoves([...owned], birth, ALL_BANDS[band]!, book)
+              .filter(m => lettersOf(m, birth).length > 0 && !taken.has(m.id))
+              .map(m => (
+                <Row key={`piece-${kind}-${m.id}`} left={<span className="hk-soft">join the pieces: a {TIER_MATERIAL[kind][PIECE_TIER]} {kind} for <span className="hk-ember">{m.name}</span></span>}
+                     mid="letters woven in" price={FINISH_FEE} action={() => onFinishVessel(kind, m.id)} disabled={full}
+                     label={full ? 'all you can carry' : 'finish it'} />
+              ))
+          })}
           {VESSELS.map(kind => {
             const have = ownedCount(kind)
             const full = have >= MAX_PER_KIND

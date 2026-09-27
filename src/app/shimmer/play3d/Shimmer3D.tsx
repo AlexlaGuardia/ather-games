@@ -138,6 +138,7 @@ import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
 import { HOLD_TUNING, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { addPiece, pieceLine } from './vessel-pieces'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -7097,8 +7098,8 @@ export default function Shimmer3D() {
       }
       if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
       if (holdEHeld.current && prompt?.kind === 'chest') { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) }
-      // what a cache gave that lives outside the run: Marks are the real wallet (a vessel piece waits on the cutter)
-      while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n) }
+      // what a cache gave that lives outside the run: Marks are the real wallet; a vessel piece goes home for the cutter
+      while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n); else if (l.kind === 'part') setHoldFlash(pieceLine(addPiece())) }
       if (hs.fell) { hs.fell = null; setHoldFlash('The floor gave way') }
       const chestsNow = hs.chests.filter(Boolean).length
       if (hs.round !== lastRound) { lastRound = hs.round; setHoldFlash(chestsNow > lastChests ? `Round ${hs.round} · ${chestsNow - lastChests === 1 ? 'a cache has' : `${chestsNow - lastChests} caches have`} appeared` : `Round ${hs.round}`) }

@@ -360,11 +360,12 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   const snap = t.chests.map(c => c!.rarity).join()
   t.chests.forEach(c => { c!.openT = 0.5 })
   ok(rollChests(t, T, 1) === 0 && t.chests.map(c => c!.rarity).join() === snap && t.chests.every(c => c!.openT === 0.5), '★ an occupied spot does not roll (not even at 100%)')
-  // rarity: no legendary while vessel parts are unruled
+  // rarity: legendary rolls only once vessel pieces are wired (they are, 09-27)
   const rs = { common: 0, rare: 0, legendary: 0 }
   const rng = (() => { let a = 99; return () => ((a = (a * 1103515245 + 12345) >>> 0) / 4294967296) })()
   for (let k = 0; k < 4000; k++) rs[rollRarity(rng)]++
-  ok(VESSEL_PIECES_WIRED || rs.legendary === 0, `no legendary chest until vessel pieces are wired (${rs.legendary})`)
+  ok(VESSEL_PIECES_WIRED ? rs.legendary > 0 && rs.legendary < rs.rare : rs.legendary === 0, `legendary follows VESSEL_PIECES_WIRED (${rs.legendary})`)
+  ok(CHEST_LOOT.legendary.every(e => e.loot.kind === 'part'), 'a legendary cache holds a vessel piece')
   ok(rs.common > rs.rare && rs.rare > 0, `common outnumbers rare (${rs.common} / ${rs.rare})`)
   ok(CHEST_LOOT.rare.some(e => e.loot.kind === 'marks' && e.loot.n === 30), 'a rare chest can hold a bag of 30 Marks')
   // opening: hold E for chestOpenSec; the loot lands where it belongs
