@@ -20,6 +20,9 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { PASSAGE, T, isTravellerBay, type Cabinet, type Stall, type Wagon } from './passage-hall'
 import { caravanFor } from './caravans'
+import { Folk } from './Townsfolk'
+import { regularsOn } from './townsfolk'
+import { weekdayAt } from './passage'
 
 import { passage as P } from './scene-palette'
 
@@ -312,11 +315,14 @@ const LIT = new Set<number>((() => {
 
 export function PassageScene({ isOwner }: { isOwner: boolean }) {
   const a = PASSAGE.arcade
+  // the regulars' week (canon ★ THE REGULARS' WEEK): Renna works the Passage crowd on E'xday
+  const down = useMemo(() => regularsOn(weekdayAt(Date.now())).filter(f => f.zone === 'the-passage'), [])
   return (
     <group>
       <RockAndCeiling />
       {PASSAGE.lanterns.map((l, i) => <Lantern key={i} {...l} lit={LIT.has(i)} />)}
       {PASSAGE.stalls.map(s => <StallFixture key={s.id} s={s} />)}
+      <Folk standing={down} walking={[]} heights={PASSAGE.heights} />
       {PASSAGE.cabinets.map(c => <CabinetFixture key={c.id} c={c} isOwner={isOwner} />)}
       {/* the arcade room's own light: cooler, so the cabinets read as a different room from the market */}
       <pointLight position={[(a.x0 + a.x1) / 2, 3.8, (a.z0 + a.z1) / 2]} color={P.arcadeLight} intensity={14} distance={20} decay={1.4} />

@@ -42,7 +42,9 @@ export const isBuilding = (g: number[][], x: number, z: number) => id(g[z]?.[x])
 
 /** a house fills its box; the hillside is long and ragged */
 export const HOUSE_FILL = 0.8
-export const KIOSK_MAX_CELLS = 20
+export const KIOSK_MAX_CELLS = 8
+/** a house this small is a cottage: one storey under its gable (the regulars' homes, 09-27) */
+export const COTTAGE_MAX_CELLS = 24
 export const HILLSIDE_ASPECT = 4
 
 export function blocksOf(g: number[][]): Block[] {
@@ -70,7 +72,7 @@ export function blocksOf(g: number[][]): Block[] {
       : fill < HOUSE_FILL || aspect >= HILLSIDE_ASPECT ? 'hillside' : 'house'
     const r = hash(x0, z0, 7)
     // two storeys of stone, give or take a course; the hillside stands well over the roofs
-    const h = kind === 'kiosk' ? 1.4 : kind === 'house' ? 4.2 + r * 1.4 : 7.5 + r * 1.5
+    const h = kind === 'kiosk' ? 1.4 : kind === 'house' ? (cells <= COTTAGE_MAX_CELLS ? 3.1 + r * 0.4 : 4.2 + r * 1.4) : 7.5 + r * 1.5
     out.push({ kind, x0, z0, x1, z1, cells, h, ridgeX: w >= d })
   }
   return out
@@ -164,3 +166,16 @@ export function inFront(x: number, z: number): boolean {
 
 /** Gate labels whose door the town's scene draws itself — the walker skips its generic posts and beacons. */
 export const DRAWN_DOORS: ReadonlySet<string> = new Set(['THE LANDING', ...FRONTS.flatMap(f => (f.gate ? [f.gate] : []))])
+
+// ── THE REGULARS' HOMES (canon `world/rune-hold.md` › ★ THE REGULARS' WEEK, 09-27) ────────────────────────────────
+// *"Small houses on the terraces, visible from the square and not enterable. A routine is read from outside: lamp lit,
+// door open, nobody home."* Alex placed them up the north road (09-27): four cottages flanking the road's head on the
+// high terrace, a lane in front. Which regular has which cottage is Jin's. TODO(home-placement) if Alex moves them.
+export type Regular = 'renna' | 'dorik' | 'brenn' | 'mabry'
+export interface Home { who: Regular; x: number; z: number; face: [number, number] }
+export const HOMES: readonly Home[] = [
+  { who: 'renna', x: 35.5, z: 16.5, face: [0, 1] },
+  { who: 'mabry', x: 42.5, z: 16.5, face: [0, 1] },
+  { who: 'dorik', x: 55.5, z: 16.5, face: [0, 1] },
+  { who: 'brenn', x: 62.5, z: 16.5, face: [0, 1] },
+]

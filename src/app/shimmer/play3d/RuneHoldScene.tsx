@@ -16,14 +16,17 @@
  * ⚠ LIGHT BUDGET (memory: reference_alex_desktop_gpu): the town has a sun, so lanterns are emissive
  * glass and only the few round the square carry a real light.
  */
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { blocksOf, lanternsOf, openSides, hash, isBuilding, inFront, PATH, BUILDING, FRONTS, NOTICE_BOARD, type Block, type Front } from './rune-hold-look'
+import { blocksOf, lanternsOf, openSides, hash, isBuilding, inFront, PATH, BUILDING, FRONTS, NOTICE_BOARD, HOMES, type Block, type Front, type Home } from './rune-hold-look'
 import { runeHold as RH, passage as P, hubGate } from './scene-palette'
 import { Instances, type Inst } from './instances'
 import { ShipHull } from './StationScene'
 import { groundAt } from './rune-hold-terraces'
+import { Folk } from './Townsfolk'
+import { keepers, regularsOn, walkers, isHome } from './townsfolk'
+import { weekdayAt, type Weekday } from './passage'
 import { spaceport as SP } from './scene-palette'
 import { LANDING } from '../world/landing'
 import { portalMaterial } from '../voxel3d/portal-material'
@@ -411,7 +414,33 @@ function Backdrop({ cols, rows }: { cols: number; rows: number }) {
   )
 }
 
-export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]; heights?: number[][]; version?: number }) {
+/** A regular's cottage door: open with the lamp lit when they are home, shut and dark when the week has them out. */
+function HomeDoor({ h, y, home }: { h: Home; y: number; home: boolean }) {
+  const yaw = Math.atan2(h.face[0], h.face[1])
+  return (
+    <group position={[h.x, y, h.z]} rotation={[0, yaw, 0]}>
+      {[-1, 1].map(e => <mesh key={e} position={[e * 0.62, 1.1, 0.08]} castShadow><boxGeometry args={[0.18, 2.2, 0.2]} /><meshStandardMaterial color={F.jamb} /></mesh>)}
+      <mesh position={[0, 2.26, 0.08]}><boxGeometry args={[1.5, 0.2, 0.24]} /><meshStandardMaterial color={F.jamb} /></mesh>
+      {/* the door leaf: hinged at its left jamb, swung in when someone is home */}
+      <group position={[-0.5, 0, 0.02]} rotation={[0, home ? -1.3 : 0, 0]}>
+        <mesh position={[0.5, 1.05, 0]}><boxGeometry args={[1, 2.1, 0.08]} /><meshStandardMaterial color={F.door} /></mesh>
+      </group>
+      {home && <mesh position={[0, 1.05, -0.06]}><boxGeometry args={[1, 2.1, 0.02]} /><meshStandardMaterial color={RH.window} emissive={RH.window} emissiveIntensity={0.5} /></mesh>}
+      <mesh position={[0.95, 1.9, 0.25]}><boxGeometry args={[0.22, 0.3, 0.22]} /><meshStandardMaterial color={P.glass} emissive={P.glass} emissiveIntensity={home ? 1.1 : 0} /></mesh>
+    </group>
+  )
+}
+
+export function RuneHoldScene({ grid, heights, version = 0, day: dayOverride }: { grid: number[][]; heights?: number[][]; version?: number; day?: Weekday }) {
+  // canon's five-day week, the same clock the Passage keeps (`passage.ts`); re-read each minute
+  const [today, setToday] = useState<Weekday>(() => weekdayAt(Date.now()))
+  useEffect(() => { const id = setInterval(() => setToday(weekdayAt(Date.now())), 60_000); return () => clearInterval(id) }, [])
+  const day = dayOverride ?? today
+  const people = useMemo(() => ({
+    standing: [...keepers(), ...regularsOn(day)].filter(f => f.zone === 'rune-hold'),
+    walking: walkers(grid),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [grid, day, version])
   const look = useMemo(() => {
     const g = grid
     const heightAt = (x: number, z: number) => heights?.[z]?.[x] ?? 0
@@ -571,6 +600,8 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       </mesh>
       <LandingPlaza y0={heights?.[LANDING.y]?.[LANDING.x] ?? 0} />
       {FRONTS.map(f => <Storefront key={f.id} f={f} y={heights?.[Math.floor(f.z - f.face[1] * 0.5)]?.[Math.floor(f.x - f.face[0] * 0.5)] ?? 0} />)}
+      <Folk standing={people.standing} walking={people.walking} heights={heights} />
+      {HOMES.map(h => <HomeDoor key={h.who} h={h} home={isHome(h.who, day)} y={heights?.[Math.floor(h.z - h.face[1] * 0.5)]?.[Math.floor(h.x)] ?? 0} />)}
       <NoticeBoard y={heights?.[Math.round(NOTICE_BOARD.z)]?.[Math.floor(NOTICE_BOARD.x)] ?? 0} />
       {look.terminal && <TerminalFace b={look.terminal} />}
       {look.smokes.map((sm, i) => <Smoke key={i} {...sm} />)}

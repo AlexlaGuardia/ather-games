@@ -22,6 +22,8 @@ import * as THREE from 'three'
 import { STATION, T, type Ship } from './station-field'
 import { hash } from './rune-hold-look'
 import { Instances, type Inst } from './instances'
+import { Folk } from './Townsfolk'
+import { keepers } from './townsfolk'
 import { runeHold as RH, spaceport as ST, passage as P } from './scene-palette'
 
 const pick = <V,>(arr: readonly V[], x: number, z: number, k: number) => arr[Math.floor(hash(x, z, k) * arr.length) % arr.length]
@@ -218,6 +220,8 @@ export function StationScene() {
         <pointLight key={i} position={[t.x0 + (t.x1 - t.x0) * f, WALL_H - 1.5, (t.z0 + t.z1) / 2]} color={P.lamp} intensity={16} distance={16} decay={1.5} />
       ))}
       <Board />
+      {/* the Station clerk, by the departures board (a role, never named: canon ★ THE TOWNSFOLK) */}
+      <Folk standing={keepers().filter(f => f.zone === 'travelers-station')} walking={[]} />
       {STATION.berths.map(b => <Pad key={b.n} n={b.n} x={b.x} z={b.z} r={b.r} />)}
       {STATION.ships.map(sh => <ShipBlock key={sh.berth} s={sh} />)}
     </>

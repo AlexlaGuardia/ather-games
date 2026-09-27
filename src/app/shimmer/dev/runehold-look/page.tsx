@@ -13,6 +13,7 @@ import { Canvas, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useEffect, useMemo, useState } from 'react'
 import { RuneHoldScene } from '../../play3d/RuneHoldScene'
+import type { Weekday } from '../../play3d/passage'
 import { RUNE_HOLD } from '../../world/tilemap'
 import { getHeightGrid } from '../../world/heightmaps'
 import { GardenAtmosphere } from '../../world/atmosphere'
@@ -35,6 +36,8 @@ const VIEWS: Record<string, { x: number; z: number; yaw: number; pitch: number }
   'station-door': { x: 48.5, z: 78, yaw: 90, pitch: 8 },
   terminal:  { x: 50, z: 66, yaw: 90, pitch: 14 },
   inn:       { x: 32, z: 46, yaw: -90, pitch: 8 },
+  cottages:  { x: 49, z: 24, yaw: -90, pitch: 6 },
+  folk:      { x: 50, z: 70, yaw: -90, pitch: 4 },
   'look-east': { x: 62, z: 60, yaw: -20, pitch: 10 },
   'look-north': { x: 50, z: 30, yaw: -90, pitch: 10 },
   'look-west': { x: 36, z: 50, yaw: 180, pitch: 8 },
@@ -133,7 +136,7 @@ export default function RuneHoldLookBench() {
         <GardenAtmosphere zoneId="rune-hold" />
         <Sun night={night} />
         <Base before={before} />
-        {!before && <RuneHoldScene grid={GRID} heights={HEIGHTS} />}
+        {!before && <RuneHoldScene grid={GRID} heights={HEIGHTS} day={(q?.get('day') as Weekday | null) ?? undefined} />}
         <Rig {...view} top={top} />
       </Canvas>
       <div style={{ position: 'fixed', top: 8, left: 8, display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 620 }}>

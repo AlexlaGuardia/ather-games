@@ -163,6 +163,18 @@ export const spaceport = {
   board: { bg: '#15110d', frame: '#5b3d25', ink: '#f3e2b8', dim: '#8a7a60', lit: '#ffcf70' },
 } as const
 
+/** Rune Hold's townsfolk (`Townsfolk.tsx`): Alkin coded by TRADE, never by a colour of their own
+ *  (`design-briefs/keepers.md` › Townsfolk) — soot, leather aprons, travelers by their kit. */
+export const folk = {
+  skin: ['#e8c9a0', '#d6ae84', '#b98a62', '#8e6446', '#f0d4b4', '#a5774f'],
+  hair: ['#3a2a1e', '#5a4030', '#2a2420', '#7a5a3a', '#9a8a78'],
+  shirt: ['#8a7e6a', '#7a6e5c', '#6e6a60', '#948670'],
+  trousers: ['#4a4238', '#3e3a34', '#524a3e'],
+  leather: '#6b4a2e', soot: '#34302b', apronLinen: '#d8ccb0', pack: '#7a5e3e', packStrap: '#4a3624',
+  cloak: ['#6b6f5a', '#7a6a58', '#5a6470', '#6e5a50'], coat: '#3e4550', cap: '#2e323a', waistcoat: '#4a4238',
+  tag: { bg: 'rgba(24,18,12,0.78)', ink: '#f3e2b8', edge: 'rgba(216,184,106,0.55)' },
+} as const
+
 /** The keeper you walk as (the blockout capsule + its facing cone). */
 export const player = { body: '#5ad1e6', cone: '#f6e9da' } as const
 /** Other keepers in your world: their capsule, and the plate their name floats on. */
