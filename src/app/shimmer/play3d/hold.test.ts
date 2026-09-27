@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PIECES_WIRED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, BODY_RADIUS, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, LAB_NODES, LAB_LULL_SEC, LAB_ALIVE_ADD, LAB_SPEED_ADD, studyNode, labBlock, kindForRun, holdManaDrip, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PIECES_WIRED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, BODY_RADIUS, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { FLOOR_W, FLOOR_D } from './hold-floors'
@@ -682,6 +682,73 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   const share = fromVent / Math.max(1, total)
   ok(total > 100 && share > T.ventShare * 0.6 && share < T.ventShare * 1.4, `vents take ~${T.ventShare} of the spawns (${share.toFixed(2)} of ${total})`)
   console.log(`  vents: ${map.vents.length} · share ${share.toFixed(2)} · rise ${T.riseSec}s · min ${T.ventMinSteps} steps`)
+}
+
+// ── ★ the lab (Alex 09-27; canon › THE LAB, WRACK, AND STUDYING THE PITCH): wrack from specials, the bench, nodes ──
+{
+  const s = startHold(map, 21)
+  const room = map.cache.room
+  const gM = map.gates.findIndex(g => g.opens.includes(room))
+  ok(promptAt(s, map.cache.x, map.cache.z, map.cache.h) === null, 'the bench is shut until the meeting rooms are')
+  s.salvage = 5000; buyGate(s, gM)
+  ok(promptAt(s, map.cache.x, map.cache.z, map.cache.h)?.kind === 'bench', 'M open: the old cache spot is the bench')
+  // wrack: specials leave it, drifts never, and the rush never
+  const kill = (kind: 'drift' | 'swift' | 'bulk', loud = false) => {
+    const t = startHold(map, 5); if (loud) t.hush = 0
+    let n = 0
+    for (let i = 0; i < 400; i++) {
+      t.flood.push(body({ id: 5000 + i, kind, hp: 1, maxHp: 1, x: map.start.x, z: map.start.z, y: map.start.h, phase: 'inside', win: 0, vent: -1 }))
+      hitBody(t, 5000 + i, 5, false)
+    }
+    n = t.drops.filter(d => d.kind === 'wrack').length
+    return n / 400
+  }
+  const sw = kill('swift'), bu = kill('bulk'), dr = kill('drift'), rush = kill('swift', true)
+  ok(Math.abs(sw - T.wrackChance.swift) < 0.08, `a swift leaves wrack ~${T.wrackChance.swift} (${sw.toFixed(2)})`)
+  ok(Math.abs(bu - T.wrackChance.bulk) < 0.08, `a bulk leaves wrack ~${T.wrackChance.bulk} (${bu.toFixed(2)})`)
+  ok(dr === 0 && rush === 0, 'a drift never leaves wrack, and nothing does in the rush')
+  // walking over wrack carries it
+  const p = startHold(map, 6); p.toSpawn = 0; p.spawnT = 1e9
+  p.drops.push({ id: 1, kind: 'wrack', x: map.start.x, z: map.start.z, y: map.start.h, ttl: T.wrackTtl })
+  stepHold(p, 0.05, map.start.x, map.start.z, map.start.h)
+  ok(p.wrack === 1 && p.pickups.includes('wrack') && p.drops.length === 0, 'walking over wrack carries it')
+  // study
+  ok(labBlock(s, 'lull1') === 'wrack' && !studyNode(s, 'lull1'), 'no wrack, no study')
+  s.wrack = 20
+  ok(labBlock(s, 'lull2') === 'needs' && !studyNode(s, 'lull2'), 'Deeper Still needs A Deeper Lull first')
+  const h = s.hush
+  ok(studyNode(s, 'lull1') && s.hush === h + LAB_LULL_SEC && s.wrack === 17, 'A Deeper Lull: +75s, 3 wrack')
+  ok(!studyNode(s, 'lull1') && labBlock(s, 'lull1') === 'studied', 'a node is studied once')
+  ok(studyNode(s, 'lull2') && s.hush === h + 2 * LAB_LULL_SEC, 'Deeper Still: +75s more')
+  const shut = startHold(map, 22); shut.wrack = 20
+  ok(!studyNode(shut, 'lull1'), 'no study while the meeting rooms are shut')
+  // every boon is paid in noise
+  const base = startHold(map, 9), all = startHold(map, 9)
+  all.studied = LAB_NODES.map(n => n.id)
+  let swiftB = 0, swiftA = 0, bulkB = 0, bulkA = 0
+  for (let r = 3; r <= 10; r++) for (let n = 0; n < 40; n++) {
+    const a = kindFor(r, n), b = kindForRun(all, r, n)
+    if (a === 'swift') swiftB++; if (b === 'swift') swiftA++
+    if (a === 'bulk') bulkB++; if (b === 'bulk') bulkA++
+  }
+  ok(kindForRun(base, 7, 13) === kindFor(7, 13), 'nothing studied: the host sends what it always did')
+  ok(swiftA > swiftB && bulkA > bulkB, `study is loud: more swift (${swiftB}→${swiftA}) and more bulk (${bulkB}→${bulkA})`)
+  ok(holdManaDrip(all) === 2 * T.manaDrip && holdManaDrip(base) === T.manaDrip, 'The Pitch doubles the drip')
+  // the speed and cap banes reach the spawn
+  const fast = startHold(map, 3); fast.studied = ['lull1', 'lull2', 'pitch']; fast.hush = 1e9
+  const slow = startHold(map, 3); slow.hush = 1e9
+  for (const t of [fast, slow]) { t.round = 6; t.toSpawn = 80; t.breakT = 0; t.spawnT = 0 }
+  for (let i = 0; i < 400; i++) { stepHold(fast, 0.1, map.start.x, map.start.z, map.start.h); stepHold(slow, 0.1, map.start.x, map.start.z, map.start.h) }
+  const aliveF = fast.flood.filter(b => b.alive).length, aliveS = slow.flood.filter(b => b.alive).length
+  ok(aliveF === T.maxAlive + LAB_ALIVE_ADD && aliveS === T.maxAlive, `The Pitch: ${LAB_ALIVE_ADD} more on the floor (${aliveS}→${aliveF})`)
+  const d1 = slow.flood[0], d0 = fast.flood.find(b => b.kind === d1?.kind)
+  ok(!!d0 && !!d1 && Math.abs(d0.speed - d1.speed - LAB_SPEED_ADD) < 1e-9, 'Deeper Still: every body moves faster')
+  // mending
+  const m1 = startHold(map), m2 = startHold(map); m2.studied = ['mend']
+  m1.planks[0] = 0; m2.planks[0] = 0
+  for (let t = 0; t < T.mendSec * 0.6; t += 0.01) { mendTick(m1, 0, 0.01); mendTick(m2, 0, 0.01) }
+  ok(m1.planks[0] === 0 && m2.planks[0] === 1, 'Their Seal Notes: a plank in half the time')
+  console.log(`  lab: wrack swift ${sw.toFixed(2)} bulk ${bu.toFixed(2)} · nodes ${LAB_NODES.map(n => `${n.id}:${n.cost}`).join(' ')}`)
 }
 
 // ── the end ──

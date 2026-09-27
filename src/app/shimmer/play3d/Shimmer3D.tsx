@@ -140,7 +140,7 @@ import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPane
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
-import { HOLD_TUNING, BODY_SIZE, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { HOLD_TUNING, BODY_SIZE, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, LAB_NODES, studyNode, labBlock, holdManaDrip, type LabNodeId, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 import { addPiece, pieceLine, loadDry, saveDry } from './vessel-pieces'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
@@ -2069,6 +2069,8 @@ const SENSE_TICK = 0.1
 // the host raised is shown and what made the host is not (guardrail 1); real bodies are a later pass.
 const HOLD_BODY_MAX = 40
 const HOLD_DROP_MAX = 8
+const HOLD_WRACK_MAX = 16
+const WRACK_SPIN = new THREE.Euler()
 const HOLD_CHEST_BODY = { common: new THREE.Color(S.hold.chestBody.common), rare: new THREE.Color(S.hold.chestBody.rare), legendary: new THREE.Color(S.hold.chestBody.legendary) }
 const HOLD_CHEST_GLOW = { common: new THREE.Color(S.hold.chest.common), rare: new THREE.Color(S.hold.chest.rare), legendary: new THREE.Color(S.hold.chest.legendary) }
 const HOLD_FLOOD_COLOR = { drift: new THREE.Color(S.hold.body), swift: new THREE.Color(S.hold.swift), bulk: new THREE.Color(S.hold.bulk) }
@@ -2229,6 +2231,7 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
   const planks = useRef<THREE.InstancedMesh>(null)
   const gates = useRef<THREE.InstancedMesh>(null)
   const drops = useRef<THREE.InstancedMesh>(null)
+  const wrack = useRef<THREE.InstancedMesh>(null)
   const chests = useRef<THREE.InstancedMesh>(null)
   const chestGlow = useRef<THREE.InstancedMesh>(null)
   const ventGlow = useRef<THREE.InstancedMesh>(null)
@@ -2333,6 +2336,7 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
     if (drops.current) {
       let i = 0
       for (const d of s.drops) {
+        if (d.kind !== 'glimmer') continue
         if (i >= HOLD_DROP_MAX) break
         const on = d.ttl > 5 || Math.sin(t * 14) > 0
         v.set(d.x, d.y * STEP + 0.9 + 0.12 * Math.sin(t * 2.5 + d.id), d.z)
@@ -2343,6 +2347,22 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
       }
       for (let k = i; k < HOLD_DROP_MAX; k++) { m.compose(zero, q.identity(), zero); drops.current.setMatrixAt(k, m) }
       drops.current.instanceMatrix.needsUpdate = true
+    }
+    // wrack: a small cold shard low to the floor, tumbling — scattered core-light, not a gift like Last Light
+    if (wrack.current) {
+      let i = 0
+      for (const d of s.drops) {
+        if (d.kind !== 'wrack') continue
+        if (i >= HOLD_WRACK_MAX) break
+        const on = d.ttl > 5 || Math.sin(t * 14) > 0
+        v.set(d.x, d.y * STEP + 0.35 + 0.06 * Math.sin(t * 4 + d.id), d.z)
+        q.setFromEuler(WRACK_SPIN.set(t * 2.1 + d.id, t * 1.3, 0))
+        sc.setScalar(on ? 1 : 0)
+        m.compose(v, q, sc)
+        wrack.current.setMatrixAt(i++, m)
+      }
+      for (let k = i; k < HOLD_WRACK_MAX; k++) { m.compose(zero, q.identity(), zero); wrack.current.setMatrixAt(k, m) }
+      wrack.current.instanceMatrix.needsUpdate = true
     }
     if (gates.current) {
       let i = 0
@@ -2367,6 +2387,10 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
       <instancedMesh ref={drops} args={[undefined, undefined, HOLD_DROP_MAX]} frustumCulled={false}>
         <octahedronGeometry args={[0.28, 0]} />
         <meshStandardMaterial color={S.hold.glimmer} emissive={S.hold.glimmer} emissiveIntensity={1.4} toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={wrack} args={[undefined, undefined, HOLD_WRACK_MAX]} frustumCulled={false}>
+        <tetrahedronGeometry args={[0.16, 0]} />
+        <meshStandardMaterial color={S.hold.wrack} emissive={S.hold.wrack} emissiveIntensity={1.8} toneMapped={false} />
       </instancedMesh>
       {chestMax > 0 && (
         <>
@@ -2443,6 +2467,13 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
       {HOLD_TUNING.draughtSold && <group position={at(map.cache)}>
         <mesh position={[0, 0.35, 0]}><boxGeometry args={[0.7, 0.7, 0.7]} /><meshStandardMaterial color={S.hold.plank} /></mesh>
         <mesh position={[0, 0.75, 0]}><sphereGeometry args={[0.12, 10, 10]} /><meshStandardMaterial color={S.hold.cache} emissive={S.hold.cache} emissiveIntensity={1.1} /></mesh>
+      </group>}
+      {/* the lab's bench (09-27): the world's own desk in its meeting room, their notes still on it */}
+      {!HOLD_TUNING.draughtSold && <group position={at(map.cache)}>
+        <mesh position={[0, 0.45, 0]}><boxGeometry args={[1.4, 0.9, 0.7]} /><meshStandardMaterial color={S.hold.bench} roughness={0.8} /></mesh>
+        <mesh position={[-0.25, 0.915, 0.05]} rotation={[-Math.PI / 2, 0, 0.2]}><planeGeometry args={[0.42, 0.3]} /><meshStandardMaterial color={S.hold.benchNotes} emissive={S.hold.benchNotes} emissiveIntensity={0.25} /></mesh>
+        <mesh position={[0.2, 0.92, -0.08]} rotation={[-Math.PI / 2, 0, -0.35]}><planeGeometry args={[0.36, 0.26]} /><meshStandardMaterial color={S.hold.benchNotes} emissive={S.hold.benchNotes} emissiveIntensity={0.25} /></mesh>
+        <mesh position={[0.45, 1.0, 0.15]}><tetrahedronGeometry args={[0.1, 0]} /><meshStandardMaterial color={S.hold.wrack} emissive={S.hold.wrack} emissiveIntensity={1.2} toneMapped={false} /></mesh>
       </group>}
     </>
   )
@@ -5155,7 +5186,7 @@ export default function Shimmer3D() {
         const stance = stanceRef.current
         // THE HOLD: a fixed DRIP (Alex: "not enough but a drip") — no potion buff rides on it, because
         // nothing was carried in; a held stance still shapes it, the way it shapes regen everywhere
-        const perSec = (zoneIdRef.current === HOLD_ZONE ? HOLD_TUNING.manaDrip : MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now)) * (stance?.regenMult ?? 1)
+        const perSec = (zoneIdRef.current === HOLD_ZONE ? holdManaDrip(holdRef.current) : MANA_REGEN_PER_SEC * manaRegenMult(buffsRef.current, now)) * (stance?.regenMult ?? 1)
         if (perSec > 0) {
           manaRef.current.current = Math.min(max, manaRef.current.current + perSec * 0.5)  // 0.5s tick
           setManaFrac(manaRef.current.current / max)
@@ -7089,7 +7120,10 @@ export default function Shimmer3D() {
   // comes back on the way out. The run itself is `hold.ts`; FiringRange steps it.
   const holdSavedLoadout = useRef<number[] | null>(null)
   const holdEHeld = useRef(false)
-  const [holdHud, setHoldHud] = useState<{ round: number; salvage: number; hush: number; loud: boolean; surge: number; kills: number; over: boolean; prompt: HoldPrompt | null; best: number; weapon: { name: string; tier: string; next: number | null } } | null>(null)
+  const [holdHud, setHoldHud] = useState<{ round: number; salvage: number; hush: number; loud: boolean; surge: number; kills: number; over: boolean; prompt: HoldPrompt | null; best: number; weapon: { name: string; tier: string; next: number | null }; wrack: number; studied: LabNodeId[] } | null>(null)
+  const [labOpen, setLabOpen] = useState(false)
+  // the bench's notes close when you walk off it (or the run ends), so the next visit opens on E, not by itself
+  useEffect(() => { if (labOpen && (holdHud?.prompt?.kind !== 'bench' || holdHud?.over)) setLabOpen(false) }, [labOpen, holdHud])
   const [holdFlash, setHoldFlash] = useState<string | null>(null)
   const holdKey = isTouch ? '✦' : 'E'   // the Hold's prompts name the button the player actually has
   useEffect(() => { if (!holdFlash) return; const t = setTimeout(() => setHoldFlash(null), 2200); return () => clearTimeout(t) }, [holdFlash])
@@ -7133,7 +7167,7 @@ export default function Shimmer3D() {
       while (hs.pickups.length) {
         const kind = hs.pickups.shift()!
         if (kind === 'glimmer') { manaRef.current.current = manaMax(); setManaFrac(1) }
-        setHoldFlash(DROP_NAME[kind])
+        setHoldFlash(kind === 'wrack' ? `${DROP_NAME[kind]} · ${hs.wrack}` : DROP_NAME[kind])
       }
       if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
       if (holdEHeld.current && prompt?.kind === 'chest') { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) }
@@ -7148,7 +7182,7 @@ export default function Shimmer3D() {
       try { best = Number(localStorage.getItem(keeperKey(HOLD_BEST_KEY)) ?? 0) } catch { /* none */ }
       const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]
       const weapon = { name: W.name, tier: TUNE_TIERS[weaponTier(hs, W.id)].name, next: tuneCostFor(hs, W.id) }
-      const next = { round: hs.round, salvage: hs.salvage, hush: Math.ceil(hs.hush), loud: isLoud(hs), surge: Math.round(hs.surge * 20) / 20, kills: hs.kills, over: hs.over, prompt, best, weapon }
+      const next = { round: hs.round, salvage: hs.salvage, hush: Math.ceil(hs.hush), loud: isLoud(hs), surge: Math.round(hs.surge * 20) / 20, kills: hs.kills, over: hs.over, prompt, best, weapon, wrack: hs.wrack, studied: [...hs.studied] }
       const key = JSON.stringify(next)
       if (key !== lastKey) { lastKey = key; setHoldHud(next) }
     }, DT * 1000)
@@ -7182,7 +7216,8 @@ export default function Shimmer3D() {
         } else short()
       } else if (pr.kind === 'font') {
         if (buyFont(hs)) { manaRef.current.current = manaMax(); setManaFrac(1) } else short()
-      } else if (pr.kind === 'cache') { if (buyCache(hs)) setHoldFlash(`+${HOLD_TUNING.cacheSec}s hush`); else short() }
+      } else if (pr.kind === 'bench') { setLabOpen(o => { if (!o) document.exitPointerLock?.(); return !o }) }   // the notes are clicked: free the mouse
+      else if (pr.kind === 'cache') { if (buyCache(hs)) setHoldFlash(`+${HOLD_TUNING.cacheSec}s lull`); else short() }
       else if (pr.kind === 'device') {
         const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]
         if (!pr.planted) { if (plantDevice(hs)) setHoldFlash('The Tuner is set at the tap'); else short() }
@@ -8195,7 +8230,7 @@ export default function Shimmer3D() {
         <HearthPill face={HUD_FACE} accent={H.ember} style={{ position: 'fixed', top: 44, left: '50%', transform: 'translateX(-50%)', zIndex: 36 }}>{matchHud}</HearthPill>
       )}
 
-      {/* ── THE HOLD's HUD: round · salvage · hush · surge, what E does here, and the fall ── */}
+      {/* ── THE HOLD's HUD: round · salvage · the lull (the Lull Draught, ruled 09-27; the state field stays `hush`) · surge, what E does here, and the fall ── */}
       {zoneId === HOLD_ZONE && holdHud && !editMode && (
         <>
           <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 35 }}>
@@ -8203,10 +8238,11 @@ export default function Shimmer3D() {
               <span>Round <span className="hk-ember">{holdHud.round}</span></span>
               <HearthPillSoft face={HUD_FACE}>·</HearthPillSoft>
               <span>Salvage <span className="hk-sky">{holdHud.salvage}</span></span>
+              {(holdHud.wrack > 0 || holdHud.studied.length > 0) && <><HearthPillSoft face={HUD_FACE}>·</HearthPillSoft><span>Wrack <span style={{ color: S.hold.wrack }}>{holdHud.wrack}</span></span></>}
               <HearthPillSoft face={HUD_FACE}>·</HearthPillSoft>
               {holdHud.loud
-                ? <span className="hk-ember" style={{ fontWeight: 800 }}>LOUD — they can hear you</span>
-                : <span>Hush <span className={holdHud.hush < 30 ? 'hk-ember' : 'hk-moss'}>{fmtHush(holdHud.hush)}</span></span>}
+                ? <span className="hk-ember" style={{ fontWeight: 800 }}>THE LULL IS OVER — they hear you</span>
+                : <span>Lull <span className={holdHud.hush < 30 ? 'hk-ember' : 'hk-moss'}>{fmtHush(holdHud.hush)}</span></span>}
               <HearthPillSoft face={HUD_FACE}>·</HearthPillSoft>
               <span>Surge <span className={holdHud.surge >= 1 ? 'hk-ember' : 'hk-soft'}>{holdHud.surge >= 1 ? 'READY (G)' : `${Math.round(holdHud.surge * 100)}%`}</span></span>
             </span>
@@ -8226,7 +8262,36 @@ export default function Shimmer3D() {
                 : holdHud.weapon.next === null
                   ? <span>The {holdHud.weapon.name} is {holdHud.weapon.tier} <HearthPillSoft face={HUD_FACE}>the top tier</HearthPillSoft></span>
                   : <span>{holdKey} — {holdHud.weapon.tier === 'untuned' ? 'tune' : 're-key'} the {holdHud.weapon.name} <HearthPillSoft face={HUD_FACE}>{holdHud.weapon.next} salvage</HearthPillSoft></span>)}
-              {holdHud.prompt.kind === 'cache' && <span>{holdKey} — take a hush draught (+{HOLD_TUNING.cacheSec}s) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'bench' && !labOpen && <span>{holdKey} — the bench: study the wrack <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.wrack} carried</HearthPillSoft></span>}
+              {holdHud.prompt.kind === 'bench' && labOpen && <span>{holdKey} — step back from the bench</span>}
+              {holdHud.prompt.kind === 'cache' && <span>{holdKey} — take a Lull Draught (+{HOLD_TUNING.cacheSec}s) <HearthPillSoft face={HUD_FACE}>{holdHud.prompt.cost} salvage</HearthPillSoft></span>}
+            </HearthPill>
+          )}
+          {labOpen && holdHud.prompt?.kind === 'bench' && !holdHud.over && (
+            <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: 96, left: '50%', transform: 'translateX(-50%)', zIndex: 36, width: 'min(560px, calc(100vw - 32px))' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700 }}>Their notes</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>Wrack <span style={{ color: S.hold.wrack }}>{holdHud.wrack}</span></span>
+                </div>
+                <span className="hk-soft" style={{ fontSize: 12 }}>Every study is heard. What it gives, the flood takes back.</span>
+                {LAB_NODES.map(n => {
+                  const hs = holdRef.current
+                  const why = hs ? labBlock(hs, n.id) : 'wrack'
+                  const done = why === 'studied'
+                  return (
+                    <button key={n.id} disabled={why !== null}
+                      onClick={() => { const h = holdRef.current; if (h && studyNode(h, n.id)) setHoldFlash(n.name) }}
+                      style={{ textAlign: 'left', padding: '6px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.14)', background: done ? 'rgba(191,230,255,0.10)' : 'rgba(0,0,0,0.25)', opacity: why === null || done ? 1 : 0.45, color: 'inherit', cursor: why === null ? 'pointer' : 'default', font: 'inherit' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                        <span>{n.name}</span>
+                        <span style={{ fontVariantNumeric: 'tabular-nums', color: S.hold.wrack }}>{done ? 'studied' : why === 'needs' ? `after ${LAB_NODES.find(x => x.id === n.needs)?.name}` : `${n.cost} wrack`}</span>
+                      </div>
+                      <div style={{ fontSize: 12 }}><span className="hk-moss">+ {n.boon}</span> <span className="hk-soft">·</span> <span className="hk-ember">− {n.bane}</span></div>
+                    </button>
+                  )
+                })}
+              </div>
             </HearthPill>
           )}
           {holdHud.over && (

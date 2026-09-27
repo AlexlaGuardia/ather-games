@@ -14,7 +14,7 @@
 // ── WHAT IT IS (GBOARD 🌊 SEASON EXPEDITIONS, Alex 2026-09-24) ─────────────────────────────────
 // The CoD-Zombies loop in our clothes: rounds that escalate, seals on the windows the flooded tear
 // down, salvage for every hit, gates you buy open to reach more of the map, a weapon on the wall,
-// gear that CHARGES as you crush the flooded, and a clock that is the Hush Draught running out.
+// gear that CHARGES as you crush the flooded, and a clock that is the Lull Draught running out.
 //
 // ── ★ ALL POWER IS IN-RUN (the rule that keeps the colossus fair) ─────────────────────────────
 // Nothing here reads a save. A new keeper and a veteran walk into the same landing with the same
@@ -22,7 +22,8 @@
 // skilled newcomer beat a boss later without a level gate lying about it.
 //
 // ── CANON ──────────────────────────────────────────────────────────────────────────────────────
-// `two-lines-two-games.md` › THE SIGNAL / THE HUSH DRAUGHT: the draught hushes the drinker so the
+// `two-lines-two-games.md` › THE SIGNAL / THE HUSH DRAUGHT (renamed the LULL DRAUGHT 09-27: the lull is the stretch
+// before the host notices you; code keeps the `hush` field): the draught hushes the drinker so the
 // host does not hear them as *near*, and it RUNS OUT. So running out is not a timer ending, it is the
 // keeper going LOUD: the tide stops coming and starts RUSHING. The flood is the host's raised body
 // (`world/nolmir.md` › THE FLOOD) — shown, fought. What made the host stays unnamed (guardrail 1):
@@ -115,6 +116,10 @@ export const HOLD_TUNING = {
   // meeting rooms behind M, becomes the lab where flood samples buy more clock at a price (next).
   hushSec: 450,
   draughtSold: false,
+  // THE LAB (Alex 09-27; canon two-lines-two-games.md › THE LAB, WRACK, AND STUDYING THE PITCH): a fallen special
+  // leaves WRACK (in-run only); the bench in the meeting rooms (behind M, the old cache spot) spends it on LAB_NODES
+  wrackChance: { drift: 0, swift: 0.5, bulk: 0.6 } as Record<string, number>,
+  wrackTtl: 20,          // seconds wrack lies on the floor before it scatters
   manaPool: 100,         // FIXED — a new keeper's pool; only the birth rune's bonus rides on it (no skill level)
   manaDrip: 0.35,        // mana/sec in the hold — a drip, not a supply (Alex: "not enough but a drip")
   dropChance: 0.03,      // a kill drops a booster this often
@@ -208,8 +213,53 @@ export const BODY_RADIUS: Record<FloodKind, number> = { drift: 0.45 * BODY_SIZE.
 // *glimmer* is the Cave Glimmer spirit's word, Magii's register note). The id stays 'glimmer' (a build word).
 // refreshes the team's mana — solo today, so the keeper's. The union is the roster; a new booster is
 // a new kind here and a new case where the host applies it.
-export type HoldDropKind = 'glimmer'
-export const DROP_NAME: Record<HoldDropKind, string> = { glimmer: 'Last Light' }
+export type HoldDropKind = 'glimmer' | 'wrack'
+export const DROP_NAME: Record<HoldDropKind, string> = { glimmer: 'Last Light', wrack: 'Wrack' }
+
+// ── the lab: wrack studied at the world's own bench ─────────────────────────────────────────────
+// Canon (09-27): studying teaches the host's PITCH, so the lull sits deeper and lasts longer — and the study is
+// LOUD, so every boon is paid in a harder flood. Nodes, costs and which harder bodies = Jin's. v1 banes only
+// strengthen the kinds the build has (new specials are named with a season's host).
+export type LabNodeId = 'lull1' | 'mend' | 'lull2' | 'pitch'
+export interface LabNode { id: LabNodeId; name: string; cost: number; needs?: LabNodeId; boon: string; bane: string }
+export const LAB_NODES: readonly LabNode[] = [
+  { id: 'lull1', name: 'A Deeper Lull', cost: 3, boon: '+75s of lull', bane: 'more of them come swift' },
+  { id: 'mend', name: 'Their Seal Notes', cost: 3, boon: 'mend seals twice as fast', bane: 'a bulk every fourth body, from round 3' },
+  { id: 'lull2', name: 'Deeper Still', cost: 6, needs: 'lull1', boon: '+75s of lull', bane: 'every body moves faster' },
+  { id: 'pitch', name: 'The Pitch', cost: 5, boon: 'mana drips twice as fast', bane: 'four more of them on the floor at once' },
+]
+export const LAB_LULL_SEC = 75
+export const LAB_SWIFT_ADD = 0.12
+export const LAB_SPEED_ADD = 0.4
+export const LAB_ALIVE_ADD = 4
+export const studied = (s: HoldState, id: LabNodeId): boolean => s.studied.includes(id)
+/** Why a node cannot be studied now, or null if it can. */
+export function labBlock(s: HoldState, id: LabNodeId): 'studied' | 'needs' | 'wrack' | null {
+  const n = LAB_NODES.find(x => x.id === id)!
+  if (studied(s, id)) return 'studied'
+  if (n.needs && !studied(s, n.needs)) return 'needs'
+  if (s.wrack < n.cost) return 'wrack'
+  return null
+}
+/** Study a node at the bench. False = not here, or blocked (see labBlock), and nothing changed. */
+export function studyNode(s: HoldState, id: LabNodeId): boolean {
+  if (!s.rooms[s.map.cache.room] || labBlock(s, id) !== null) return false
+  const n = LAB_NODES.find(x => x.id === id)!
+  s.wrack -= n.cost
+  s.studied.push(id)
+  if (id === 'lull1' || id === 'lull2') s.hush += LAB_LULL_SEC
+  return true
+}
+/** The mana drip in this run (the page reads it — it owns the mana). */
+export const holdManaDrip = (s: HoldState | null | undefined, tune: HoldTuning = HOLD_TUNING): number =>
+  tune.manaDrip * (s && studied(s, 'pitch') ? 2 : 1)
+/** Which kind the n-th body of round r is, after what the keeper's study has made the host send. */
+export function kindForRun(s: HoldState, r: number, n: number): FloodKind {
+  if (studied(s, 'mend') && r >= 3 && n % 4 === 3) return 'bulk'
+  const k = kindFor(r, n)
+  if (k === 'drift' && studied(s, 'lull1') && ((n * 0.618034 + 0.5) % 1) < LAB_SWIFT_ADD) return 'swift'
+  return k
+}
 export interface HoldDrop { id: number; kind: HoldDropKind; x: number; z: number; y: number; ttl: number }
 
 // ── chests: rare finds on marked spots, rarity tilts what is inside ─────────────────────────────
@@ -273,6 +323,9 @@ export interface HoldState {
   devicePlanted: boolean
   /** each weapon's tier this run (weapon id → 0..2) */
   tuned: Record<string, number>
+  /** wrack carried (in-run only) and the lab nodes studied this run */
+  wrack: number
+  studied: LabNodeId[]
   /** boosters picked up and not yet applied — the host drains this (it owns mana, hp, the team) */
   pickups: HoldDropKind[]
   elapsed: number
@@ -463,7 +516,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     here: map.start.room, fell: null,
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
-    drops: [], dropsThisRound: 0, pickups: [],
+    drops: [], dropsThisRound: 0, pickups: [], wrack: 0, studied: [],
     chests: map.chestSpots.map(() => null), dryRounds: 0, loot: [], devicePlanted: false, tuned: {},
     elapsed: 0, nextId: 1, rng: mulberry32(seed),
     field: new Int16Array(map.cols * map.rows * map.building.levels.length).fill(-1), fieldT: 0, fieldAt: -1,
@@ -798,11 +851,12 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
   // spawns: from the windows of the active rooms (above), and a share up through their vents.
   // LOUD = no ration and no break: they rush.
   s.spawnT -= dt
-  const cap = tune.maxAlive
+  const cap = tune.maxAlive + (studied(s, 'pitch') ? LAB_ALIVE_ADD : 0)
   if (s.spawnT <= 0 && s.breakT <= 0 && (s.toSpawn > 0 || loud) && alive < cap) {
     const n = roundCount(s.round) - s.toSpawn
-    const kind: FloodKind = loud ? 'swift' : kindFor(s.round, n)
+    const kind: FloodKind = loud ? 'swift' : kindForRun(s, s.round, n)
     const st = bodyStats(kind, s.round)
+    if (studied(s, 'lull2')) st.speed += LAB_SPEED_ADD
     const vents = spawnVents(s, tune)
     const base = { id: s.nextId++, kind, hp: st.hp, maxHp: st.hp, speed: st.speed, tearT: 0, strikeT: 0.6, alive: true, vx: 0, vz: 0 }
     if (vents.length && s.rng() < tune.ventShare) {
@@ -921,7 +975,10 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
   // boosters wait, then fade; walking over one takes it
   for (const d of s.drops) {
     d.ttl -= dt
-    if (d.ttl > 0 && (px - d.x) ** 2 + (pz - d.z) ** 2 <= tune.pickupReach ** 2 && Math.abs(py - d.y) < tune.level) { s.pickups.push(d.kind); d.ttl = 0 }
+    if (d.ttl > 0 && (px - d.x) ** 2 + (pz - d.z) ** 2 <= tune.pickupReach ** 2 && Math.abs(py - d.y) < tune.level) {
+      s.pickups.push(d.kind); d.ttl = 0
+      if (d.kind === 'wrack') s.wrack++
+    }
   }
   s.drops = s.drops.filter(d => d.ttl > 0)
   return out
@@ -940,6 +997,12 @@ export function hitBody(s: HoldState, id: number, dmg: number, crit: boolean, tu
     s.kills++
     salvage += crit ? tune.salvageCritKill : tune.salvageKill
     s.surge = Math.min(1, s.surge + 1 / tune.surgeKills)
+    // a fallen special leaves wrack where it fell (never in the rush — the loud tide is not a farm)
+    if (s.hush > 0 && s.rng() < (tune.wrackChance[b.kind] ?? 0)) {
+      const w = s.map.windows[b.win], v = s.map.vents[b.vent]
+      const at = b.phase === 'inside' ? { x: b.x, z: b.z, y: b.y } : v ? { x: v.x, z: v.z, y: v.h } : { ...w.inside, y: w.h }
+      s.drops.push({ id: s.nextId++, kind: 'wrack', x: at.x, z: at.z, y: at.y, ttl: tune.wrackTtl })
+    }
     if (s.dropsThisRound < tune.dropCap && s.rng() < tune.dropChance) {
       // a body killed in the yard (shot through a window) leaves its booster just inside that
       // window — a drop the keeper cannot reach is a drop that taunts
@@ -1000,6 +1063,7 @@ export type HoldPrompt =
   | { kind: 'rack'; cost: number; bought: boolean }
   | { kind: 'font'; cost: number }
   | { kind: 'cache'; cost: number }
+  | { kind: 'bench'; wrack: number }
   | { kind: 'chest'; spot: number; rarity: ChestRarity; progress: number }
   | { kind: 'device'; planted: boolean; cost: number }
 
@@ -1027,6 +1091,7 @@ export function promptAt(s: HoldState, px: number, pz: number, py: number = heig
   if (near(px, pz, py, rack.x, rack.z, rack.h, tune.interact, tune)) return { kind: 'rack', cost: tune.rackCost, bought: s.rackBought }
   if (near(px, pz, py, font.x, font.z, font.h, tune.interact, tune)) return { kind: 'font', cost: tune.fontCost }
   if (tune.draughtSold && s.rooms[cache.room] && near(px, pz, py, cache.x, cache.z, cache.h, tune.interact, tune)) return { kind: 'cache', cost: tune.cacheCost }
+  if (s.rooms[cache.room] && near(px, pz, py, cache.x, cache.z, cache.h, tune.interact, tune)) return { kind: 'bench', wrack: s.wrack }
   return null
 }
 
@@ -1062,7 +1127,7 @@ export function buyCache(s: HoldState, tune: HoldTuning = HOLD_TUNING): boolean 
 export function mendTick(s: HoldState, win: number, dt: number, tune: HoldTuning = HOLD_TUNING): boolean {
   if (s.planks[win] === undefined || s.planks[win] >= tune.seals) { s.mendT = 0; return false }
   s.mendT += dt
-  if (s.mendT < tune.mendSec) return false
+  if (s.mendT < tune.mendSec * (studied(s, 'mend') ? 0.5 : 1)) return false
   s.mendT = 0
   s.planks[win]++
   if (s.mendPaidThisRound < tune.mendSalvageCap) {

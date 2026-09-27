@@ -228,6 +228,9 @@ export const hold = {
   body: '#1d2a33', bodySheen: '#3f6f86', swift: '#24404d', bulk: '#141d24',
   plank: '#8a6a44', gate: '#5d636c', gateRim: '#9aa3ad',
   rack: '#3a3f46', font: '#4fb3d9', cache: '#b98cf2',
+  // the lab (09-27, canon › THE LAB, WRACK): wrack is scattered core-light — the core's cold glow, broken small; the bench
+  // is the world's own dead office desk with its people's notes on it
+  wrack: '#bfe6ff', bench: '#4a4640', benchNotes: '#e8e2d0',
   glimmer: '#ffeaa3',  // Last Light (was the Glimmer of Hope; renamed 09-26 off the Cave Glimmer spirit's word) — warm light, the one kind thing the flooded leave
   // chests (09-26): the body is a darkened wood/metal, the lid seam glows the rarity — the HUD prompt names it in the same colour
   chestBody: { common: '#6e5236', rare: '#2f4a66', legendary: '#6a5222' },
