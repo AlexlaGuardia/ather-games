@@ -234,12 +234,12 @@ function signTexture(f: Front): THREE.CanvasTexture {
 
 /** A storefront: a timber frame round the opening, a sign over it, and what marks the place. A SHUT front
  *  has its door closed (canon opens the fronts one at a time, as their systems exist). */
-function Storefront({ f }: { f: Front }) {
+function Storefront({ f, y }: { f: Front; y: number }) {
   const tex = useMemo(() => signTexture(f), [f])
   const yaw = Math.atan2(f.face[0], f.face[1])       // turn +z (a plane's front) to face outward
   const half = f.w / 2, H = 2.7, d = f.depth ?? 0
   return (
-    <group position={[f.x, 0, f.z]} rotation={[0, yaw, 0]}>
+    <group position={[f.x, y, f.z]} rotation={[0, yaw, 0]}>
       {d > 0 && (
         // the porch's side walls are the building's stone; a timber ceiling closes the recess under the lintel
         <mesh position={[0, H + 0.02, d / 2 + 0.1]}><boxGeometry args={[f.w + 0.2, 0.1, d + 0.2]} /><meshStandardMaterial color={F.jamb} /></mesh>
@@ -296,7 +296,7 @@ function Storefront({ f }: { f: Front }) {
 }
 
 /** The Notice Board: two posts, a board under a little roof, notices pinned at angles. */
-function NoticeBoard() {
+function NoticeBoard({ y }: { y: number }) {
   const { x, z, face } = NOTICE_BOARD
   const yaw = Math.atan2(face[0], face[1])
   const notes = useMemo(() => Array.from({ length: 7 }, (_, i) => ({
@@ -304,7 +304,7 @@ function NoticeBoard() {
     r: (hash(i, 3, 3) - 0.5) * 0.35, w: 0.42 + hash(i, 3, 4) * 0.18, h: 0.5 + hash(i, 3, 5) * 0.12, c: F.notes[i % F.notes.length],
   })), [])
   return (
-    <group position={[x, 0, z]} rotation={[0, yaw, 0]}>
+    <group position={[x, y, z]} rotation={[0, yaw, 0]}>
       {[-1.45, 1.45].map(px => <mesh key={px} position={[px, 1.3, 0]} castShadow><boxGeometry args={[0.16, 2.6, 0.16]} /><meshStandardMaterial color={F.jamb} /></mesh>)}
       <mesh position={[0, 1.8, 0]} castShadow receiveShadow><boxGeometry args={[2.8, 1.5, 0.1]} /><meshStandardMaterial color={F.board} roughness={0.9} /></mesh>
       <mesh position={[0, 2.72, 0]} rotation={[0, 0, 0]} castShadow><boxGeometry args={[3.2, 0.1, 0.6]} /><meshStandardMaterial color={RH.roof[0]} /></mesh>
@@ -359,12 +359,24 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
     const terminal = sf ? owner.get(`${Math.floor(sf.x - sf.face[0] * 0.5)},${Math.floor(sf.z - sf.face[1] * 0.5)}`) : undefined
     if (terminal) terminal.h = TERMINAL_H
     const stone: Inst[] = [], hill: Inst[] = [], timber: Inst[] = [], windows: Inst[] = [], sills: Inst[] = []
-    const ground: Inst[] = [], chimneys: Inst[] = []
+    const ground: Inst[] = [], chimneys: Inst[] = [], risers: Inst[] = []
+    /** the lowest open ground beside a cell: where a riser or a wall has to reach down to (the terraces) */
+    const lowBeside = (x: number, z: number) => {
+      let low = heightAt(x, z)
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const n = g[z + dz]?.[x + dx]
+        if (n !== undefined && n >= 0 && (n & 0xff) !== BUILDING) low = Math.min(low, heightAt(x + dx, z + dz))
+      }
+      return low
+    }
     for (let z = 0; z < g.length; z++) for (let x = 0; x < g[z].length; x++) {
       const v = g[z][x]
       if (v === undefined || v < 0) continue
       const y0 = heightAt(x, z)
       if ((v & 0xff) !== BUILDING) {
+        // where the terrace steps down beside this cell, a laid riser closes the step (no grass side showing)
+        const low = lowBeside(x, z)
+        if (low < y0) risers.push({ x, y: (low + y0) / 2, z, sx: 1, sy: y0 - low + 0.04, sz: 1, c: pick(RH.stone, x, z, 6) })
         // the ground: cobbles on the streets, meadow elsewhere, worn bare where the two meet
         const t = v & 0xff
         if (t === PATH) {
@@ -405,10 +417,11 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       if (!sides.length) continue // buried: under the roof, never seen
       // CUT stone: even courses, a little play in each block, so it reads as masonry and not dug rock
       const course = 0.55
-      const n = Math.round(b.h / course)
+      // the wall reaches down to the lowest ground beside it: a house on a terrace shows its footing
+      const foot = lowBeside(x, z), n = Math.round((y0 + b.h - foot) / course)
       for (let k = 0; k < n; k++) {
         const inset = (hash(x, z, 70 + k) - 0.5) * 0.06
-        stone.push({ x: x + inset, y: y0 + course * (k + 0.5), z: z + inset, sx: 1.02, sy: course * 0.97, sz: 1.02,
+        stone.push({ x: x + inset, y: foot + course * (k + 0.5), z: z + inset, sx: 1.02, sy: course * 0.97, sz: 1.02,
           yaw: (hash(x, z, 80 + k) - 0.5) * 0.05, c: pick(RH.stone, x, z, 90 + k) })
       }
       // the timber band under the eave (a pier gets a stone capstone instead, below)
@@ -464,7 +477,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
     }
     const lights = lamps.filter(l => lit.has(l)).map(l => ({ x: l.x, y: heightAt(l.x, l.z) + 2.2, z: l.z }))
 
-    return { stone, hill, timber, windows, sills, ground, chimneys, posts, glass, lights, smokes, terminal, roof: roofsOf(blocks.filter(b => b !== terminal), heightAt) }
+    return { stone, hill, timber, windows, sills, ground, risers, chimneys, posts, glass, lights, smokes, terminal, roof: roofsOf(blocks.filter(b => b !== terminal), heightAt) }
   // `version` bumps when the map editor paints — the grid is the same array, mutated in place
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grid, heights, version])
@@ -472,6 +485,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
   return (
     <>
       <Instances items={look.ground} flat cast={false} />
+      <Instances items={look.risers} cast={false} />
       <Instances items={look.stone} />
       <Instances items={look.hill} />
       <Instances items={look.timber} />
@@ -484,8 +498,8 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
         <meshStandardMaterial vertexColors roughness={0.9} side={THREE.DoubleSide} />
       </mesh>
       <LandingPlaza y0={heights?.[LANDING.y]?.[LANDING.x] ?? 0} />
-      {FRONTS.map(f => <Storefront key={f.id} f={f} />)}
-      <NoticeBoard />
+      {FRONTS.map(f => <Storefront key={f.id} f={f} y={heights?.[Math.floor(f.z - f.face[1] * 0.5)]?.[Math.floor(f.x - f.face[0] * 0.5)] ?? 0} />)}
+      <NoticeBoard y={heights?.[Math.round(NOTICE_BOARD.z)]?.[Math.floor(NOTICE_BOARD.x)] ?? 0} />
       {look.terminal && <TerminalFace b={look.terminal} />}
       {look.smokes.map((sm, i) => <Smoke key={i} {...sm} />)}
       {look.lights.map((l, i) => <pointLight key={i} position={[l.x, l.y, l.z]} color={P.lamp} intensity={10} distance={10} decay={1.6} />)}
