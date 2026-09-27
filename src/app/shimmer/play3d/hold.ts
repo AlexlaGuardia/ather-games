@@ -153,7 +153,9 @@ export const HOLD_TUNING = {
   // the chase (Alex 09-27): smooth, eight-way, and a mob rather than a pile
   turnRate: 7,           // how fast a body's velocity eases toward its wish (1/s) — higher is snappier
   chaseSight: 14,        // within this many tiles on open floor with a clear line, a body runs straight at you
-  bodyGap: 0.05,         // spacing between two bodies' edges          // a body heaves up out of the grate this long before it can move or strike (shootable the whole time)
+  bodyGap: 0.05,         // spacing between two bodies' edges
+  aimSec: 0.2,           // how often a body re-picks where it is heading (also what keeps the chase cheap)
+  lookahead: 24,         // how many cells down the field it looks for the farthest one in a clear line          // a body heaves up out of the grate this long before it can move or strike (shootable the whole time)
 } as const
 export type HoldTuning = typeof HOLD_TUNING
 
@@ -186,6 +188,11 @@ export interface FloodBody {
   /** velocity (tiles/s) — steered toward where it wants to go, never snapped (the chase) */
   vx: number
   vz: number
+  /** where it is heading (a point down the field it can see, re-picked every `aimSec`) — the chase's own memory */
+  aimX?: number
+  aimZ?: number
+  aimT?: number
+  aimKeeper?: boolean
 }
 /** How big each kind is drawn (the renderer's scale × its 0.45 sphere) — the spacing reads the same numbers. */
 export const BODY_SIZE: Record<FloodKind, number> = { drift: 1, swift: 0.8, bulk: 1.35 }
@@ -562,6 +569,27 @@ function clearLine(s: HoldState, x0: number, z0: number, x1: number, z1: number,
   }
   return true
 }
+/** Greedy walk down the field from (x, z): up to `n` cells, eight-way, no corner cutting. Cell 0 is the first step. */
+function fieldAhead(s: HoldState, x: number, z: number, y: number, n: number): { x: number; z: number; y: number }[] {
+  const out: { x: number; z: number; y: number }[] = []
+  let here = floodMove(s, x, z, y)
+  if (!here) return out
+  let v = s.field[nodeIdx(s.map, here.lv, x, z)], hy = here.y
+  for (let k = 0; k < n && v > 0; k++) {
+    let bx = -1, bz = -1, bv = v, bs: Surface | null = null
+    for (const [ox, oz] of DIRS8) {
+      if (ox && oz && (!floodMove(s, x + ox, z, hy) || !floodMove(s, x, z + oz, hy))) continue
+      const su = floodMove(s, x + ox, z + oz, hy)
+      if (!su) continue
+      const w = s.field[nodeIdx(s.map, su.lv, x + ox, z + oz)]
+      if (w >= 0 && w < bv) { bv = w; bx = x + ox; bz = z + oz; bs = su }
+    }
+    if (!bs) break
+    x = bx; z = bz; v = bv; hy = bs.y
+    out.push({ x, z, y: hy })
+  }
+  return out
+}
 function buildField(s: HoldState, start: number) {
   const { cols, rows, building: b } = s.map
   const per = cols * rows
@@ -837,21 +865,24 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     // choosing among EIGHT neighbours (a diagonal only where both of its sides are open — no corner cutting).
     // The heading is then STEERED, never snapped: velocity eases toward the wish at `turnRate`, so a body
     // arcs round a corner and drifts sideways into a crowd instead of turning on the spot like a grid piece.
-    let bx = px, bz = pz
-    const sees = here !== null && Math.abs(py - hy) < 0.6 && dp < tune.chaseSight && clearLine(s, b.x, b.z, px, pz, hy)
-    let best = here ? s.field[nodeIdx(s.map, here.lv, cx, cz)] : -1
-    if (!sees && best > 1) {
-      let bd = Infinity
-      for (const [ox, oz] of DIRS8) {
-        if (ox && oz && (!floodMove(s, cx + ox, cz, hy) || !floodMove(s, cx, cz + oz, hy))) continue
-        const su = floodMove(s, cx + ox, cz + oz, hy)
-        if (!su) continue
-        const v = s.field[nodeIdx(s.map, su.lv, cx + ox, cz + oz)]
-        // lowest field first; a tie goes to the neighbour nearer the keeper (so an open room reads as a line, not a staircase)
-        const tie = Math.hypot(px - (cx + ox), pz - (cz + oz))
-        if (v >= 0 && (v < best || (v === best && tie < bd))) { best = v; bd = tie; bx = cx + ox; bz = cz + oz }
+    // String-pulled (09-27, second pass: 8 neighbours alone still read as eight directions): every `aimSec` the
+    // body walks the field `lookahead` cells ahead and aims at the FARTHEST of them it has a clear line to, so
+    // across a room with cover it cuts one straight line at any angle. In sight of the keeper it aims at them.
+    b.aimT = (b.aimT ?? 0) - dt
+    const arrived = b.aimX !== undefined && Math.hypot((b.aimX ?? 0) - b.x, (b.aimZ ?? 0) - b.z) < 0.35
+    if (b.aimT <= 0 || arrived || b.aimX === undefined) {
+      b.aimT = tune.aimSec
+      const sees = here !== null && Math.abs(py - hy) < 0.6 && dp < tune.chaseSight && clearLine(s, b.x, b.z, px, pz, hy)
+      b.aimX = undefined; b.aimZ = undefined; b.aimKeeper = sees
+      if (!sees && here) {
+        const path = fieldAhead(s, cx, cz, hy, tune.lookahead)
+        for (let k = path.length - 1; k >= 0; k--) {
+          const c = path[k]
+          if (k === 0 || (Math.abs(c.y - hy) < 0.6 && clearLine(s, b.x, b.z, c.x, c.z, hy))) { b.aimX = c.x; b.aimZ = c.z; break }
+        }
       }
     }
+    const bx = b.aimKeeper || b.aimX === undefined ? px : b.aimX, bz = b.aimKeeper || b.aimZ === undefined ? pz : b.aimZ
     // a body cut off by a shut gate (field -1) heads for the keeper anyway and is stopped by the wall
     const mx = bx - b.x, mz = bz - b.z, md = Math.hypot(mx, mz) || 1
     const ease = Math.min(1, tune.turnRate * dt)

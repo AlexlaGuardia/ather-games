@@ -570,6 +570,16 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
     const b0 = s.flood[0], ax = b0.x - o!.x, az = b0.z - o!.z
     ok(ax > 1.5 && az > 1.5 && maxOff < 1.1, `★ ${far ? 'beyond sight, down the field' : 'in sight'}: a body crosses open floor on the diagonal, not a staircase (moved ${ax.toFixed(1)},${az.toFixed(1)} · off-line ≤ ${maxOff.toFixed(2)})`)
   }
+  // ★ any angle, not eight: beyond sight (down the field), a keeper 18 across and 7 down is chased on ~21°, not 0° / 45°
+  {
+    const s = startHold(map); s.hush = 1e9; s.toSpawn = 0; s.spawnT = 1e9
+    s.flood.push(body({ id: 802, x: o!.x, z: o!.z, y, speed: 3 }))
+    const kx = o!.x + 18, kz = o!.z + 7
+    ok(Math.hypot(18, 7) > T.chaseSight, 'the keeper is beyond chaseSight, so this is the field path')
+    for (let t = 0; t < 1.2; t += 0.05) stepHold(s, 0.05, kx, kz, y)
+    const b0 = s.flood[0], ang = Math.atan2(b0.z - o!.z, b0.x - o!.x) * 180 / Math.PI, want = Math.atan2(7, 18) * 180 / Math.PI
+    ok(Math.abs(ang - want) < 8, `★ string-pulled: heading ${ang.toFixed(0)}° for a true ${want.toFixed(0)}° (not a 0°/45° grid line)`)
+  }
   // no snap turns: the keeper jumps behind a body, its heading swings over several ticks, not one
   {
     const s = startHold(map); s.hush = 1e9; s.toSpawn = 0; s.spawnT = 1e9

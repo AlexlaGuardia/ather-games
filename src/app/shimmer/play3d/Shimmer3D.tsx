@@ -2189,13 +2189,36 @@ function HoldBuilding() {
   )
 }
 
-/** A vent in the Hold's floor: an iron frame with four slats, flush with the floor ('=' in the plans). */
-function HoldVentGrate({ x, y, z }: { x: number; y: number; z: number }) {
+/**
+ * Every vent in the Breach's floor ('=' in the plans): an iron frame with four slats, flush with the floor.
+ * ONE instanced mesh for all of them (29 vents × 6 bars). It shipped 09-26 as a <mesh> per bar — 174 draw calls
+ * and 174 materials — and Alex's camera lagged on the Intel UHD 630; a static prop set is one draw call.
+ */
+function HoldVentGrates({ vents }: { vents: readonly { x: number; z: number; h: number }[] }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  const bars = useMemo(() => {
+    const out: { x: number; y: number; z: number; sx: number; sz: number }[] = []
+    for (const v of vents) {
+      const y = v.h * STEP + 0.02
+      for (const o of [-0.66, 0.66]) out.push({ x: v.x + o, y, z: v.z, sx: 0.12, sz: 1.44 })
+      for (const o of [-0.66, -0.22, 0.22, 0.66]) out.push({ x: v.x, y: y + 0.005, z: v.z + o, sx: 1.32, sz: 0.12 })
+    }
+    return out
+  }, [vents])
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3()
+    bars.forEach((b, i) => { p.set(b.x, b.y, b.z); sc.set(b.sx, 0.05, b.sz); mesh.setMatrixAt(i, m.compose(p, q, sc)) })
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
+  }, [bars])
+  if (!bars.length) return null
   return (
-    <group position={[x, y + 0.02, z]}>
-      {[-0.66, 0.66].map(o => <mesh key={'x' + o} position={[o, 0, 0]}><boxGeometry args={[0.12, 0.05, 1.44]} /><meshStandardMaterial color={S.hold.vent} metalness={0.5} roughness={0.6} /></mesh>)}
-      {[-0.66, -0.22, 0.22, 0.66].map(o => <mesh key={'z' + o} position={[0, 0.005, o]}><boxGeometry args={[1.32, 0.05, 0.12]} /><meshStandardMaterial color={S.hold.vent} metalness={0.5} roughness={0.6} /></mesh>)}
-    </group>
+    <instancedMesh ref={ref} args={[undefined, undefined, bars.length]}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color={S.hold.vent} metalness={0.5} roughness={0.6} />
+    </instancedMesh>
   )
 }
 
@@ -2358,7 +2381,7 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
       )}
       {ventMax > 0 && (
         <>
-          {map.vents.map(vt => <HoldVentGrate key={vt.id} x={vt.x} y={vt.h * STEP} z={vt.z} />)}
+          <HoldVentGrates vents={map.vents} />
           <instancedMesh ref={ventGlow} args={[undefined, undefined, ventMax]} frustumCulled={false}>
             <boxGeometry args={[1.25, 0.02, 1.25]} />
             <meshBasicMaterial color={S.hold.ventGlow} toneMapped={false} />
