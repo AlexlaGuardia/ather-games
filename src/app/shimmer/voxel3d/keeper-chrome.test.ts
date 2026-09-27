@@ -64,7 +64,7 @@ const PLATE_FLOOR = 6
 ok(count(R, /className=[{"][^"}]*\bhk-plate\b/g) >= PLATE_FLOOR,
    `the bodies stand on plates (${count(R, /className=[{"][^"}]*\bhk-plate\b/g)} hk-plate uses, floor ${PLATE_FLOOR})`)
 
-for (const label of ['Gems', 'Vessels', 'Cast bar', 'Innate', 'Gathering focuses', 'Satchel', 'Hotbar']) {
+for (const label of ['Stones', 'Vessels', 'Cast bar', 'Innate', 'Gathering focuses', 'Satchel', 'Hotbar']) {
   ok(new RegExp(`<SectionHead label="${label}"`).test(R), `section "${label}" is headed by SectionHead`)
 }
 // ⚠ THE CHEST'S HEAD IS A CONDITIONAL SINCE 2026-09-23: the same section draws a chest, a bank or
@@ -144,12 +144,12 @@ function VESSEL_COPY(src: string) { return /const VESSEL_LANE_LABEL[^\n]*/.exec(
 ok(count(R, /<VesselParts /g) === 1, '★ the satchel mounts VesselParts once — vessels are parts until written')
 const partsAt = declAt(R, 'VesselParts')
 const parts = partsAt >= 0 ? R.slice(partsAt, declAfter(R, 'VesselRack', partsAt)) : ''
-ok(/placeGems\(/.test(parts) && /shortOf\(/.test(parts) && /isComplete\(/.test(parts), 'a part places what the bag holds, says what it is short, and knows when it is written')
+ok(/isLit\(/.test(parts) && !/placeGems\(/.test(parts), '★ a carried vessel says lit or dark (THE LETTERS GROW IN, 09-27) — and offers nothing to place')
 ok(/<Seats gems=\{v\.gems\} seats=\{seats\}/.test(parts), '★ a part draws as many seats as its WORD needs')
 const gearAt3 = declAt(R, 'GearTab')
 const gear3 = gearAt3 >= 0 ? R.slice(gearAt3, R.indexOf('\nfunction BagPanel(', gearAt3)) : ''
 ok(!/setPicking|leave this slot empty|eligibleMoves\(/.test(gear3), '★ the cast bar is a READOUT — no picker, no bind, writing happens on the vessel')
-ok(/<select /.test(rack2) && /dismantleWorn\(/.test(rack2), 'the rack equips written spares from a dropdown and can dismantle the worn one')
+ok(/<select /.test(rack2) && /takeOffWorn\(/.test(rack2), 'the rack equips lit spares from a dropdown and can take the worn one off')
 
 // ── 4. label / value must not collapse to one tone, region-wide ─────────────────────────────
 const pairRe = /<span className="hk-label([^"]*)">[\s\S]{0,220}?<span className="tabular-nums([^"]*)">/g

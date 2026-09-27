@@ -17,13 +17,12 @@ import { birthAffinity, essenceOf, leanEffects } from '../play3d/birth-affinity'
 import { RUNES } from '../play3d/birth/runes.data'
 import { keeperBook, keeperLetters } from '../play3d/book'
 import { ALL_BANDS, castForMove, derivePassive, eligibleMoves, isBuilt } from '../play3d/cast'
-import { VESSELS, VESSEL_CAP, saveLetters, type Vessel } from '../play3d/gems'
-import { crystalFor, imbue, imbueSentence, imbueWhy } from '../play3d/imbue'
+import { VESSELS, VESSEL_CAP, STONE_SELL, STONE_CREDIT, type Vessel } from '../play3d/gems'
 import { emptySlotWhy, resolveLoadout, type Loadout } from '../play3d/loadout'
 import { loadRuneInventory } from '../play3d/rune-inventory'
 import { hasLearned, starterFor } from '../play3d/scroll-market'
 import { VesselArt } from '../play3d/vessel-art'
-import { BAND_FOR_VESSEL, MAX_PER_KIND, TIER_MATERIAL, VESSEL_NOUN, completeVessels, dismantle, dismantleWorn, equip, isComplete, isFloor, loadStowed, ownedCount, placeGem, placeGems, seatCapOf, seatCount, seatLetters, setWord, shortOf, type VesselTier, wornPresent, wornTier, wornWord } from '../play3d/vessels'
+import { BAND_FOR_VESSEL, MAX_PER_KIND, TIER_MATERIAL, VESSEL_NOUN, completeVessels, takeOffWorn, equip, isComplete, isFloor, isLit, loadStowed, ownedCount, seatCapOf, seatCount, seatLetters, setWord, type VesselTier, wornPresent, wornTier, wornWord } from '../play3d/vessels'
 import { type Spirit } from '../spirits/spirit'
 import { pieceForItem } from '../voxel/pieces'
 import { blockDef, materialForItem } from '../voxel/registry'
@@ -301,7 +300,9 @@ export function GemChip({ id, n }: { id: string; n?: number }) {
  * ⚠ Never a socket, slot, bezel or prong in the LOOK (brief: *"the vessel closed around it"*) — a
  * dark seat is a dim rounded void in the weave, not a hole with a rim.
  */
-export function Seats({ gems, seats = VESSEL_CAP, need }: { gems: readonly string[]; seats?: number
+export function Seats({ gems, seats = VESSEL_CAP, need, dark = false }: { gems: readonly string[]; seats?: number
+  /** ★ grown in but DARK — the keeper does not know the word yet (ruled 2026-09-27) */
+  dark?: boolean
   /** ★ the word's letters in seat order (2026-09-11, Alex: "see the vessel, insert the required gems") — an empty seat shows the rune it wants, faint */
   need?: readonly string[] }) {
   // ★ SEATS = THE WORD'S LETTERS (Alex, 2026-09-04): a vessel cut for a one-letter word bears one seat.
@@ -315,8 +316,8 @@ export function Seats({ gems, seats = VESSEL_CAP, need }: { gems: readonly strin
         const wantId = need?.[k]
         const want = wantId ? RUNES.find(x => x.id === wantId) : undefined
         return id
-          ? <span key={`${id}-${k}`} className="inline-flex h-[18px] w-[26px] items-center justify-center">
-              <GemStone glow={r?.glow ?? '#fff'} lit title={r?.name ?? id} />
+          ? <span key={`${id}-${k}`} className={`inline-flex h-[18px] w-[26px] items-center justify-center ${dark ? 'opacity-35 grayscale' : ''}`}>
+              <GemStone glow={r?.glow ?? '#fff'} lit={!dark} title={dark ? `${r?.name ?? id} — dark until you know the word` : (r?.name ?? id)} />
             </span>
           : <span key={`dark-${k}`} role="img" aria-label="empty seat" title={want ? `needs ${want.name}` : 'empty seat'}
                   className="inline-flex h-[18px] w-[26px] items-center justify-center rounded-full hk-fill shadow-[inset_0_2px_5px_rgba(0,0,0,0.85),inset_0_-1px_0_rgba(255,255,255,0.03)]">
@@ -329,251 +330,132 @@ export function Seats({ gems, seats = VESSEL_CAP, need }: { gems: readonly strin
 }
 
 /**
- * ★ GEMS — A SECOND INVENTORY UNDER THE HOTBAR (Alex, 2026-09-04, looking at the real satchel):
- * *"there's too much text.. it should be called Gems or runes.. like a second inventory under the
- * hotbar."* So the letters card and the parts list became a GRID that reads like the bag: a cell per
- * loose gem stack (the stone, a count), empty cells dark. ★ Since 2026-09-10 the carried vessels sit in
- * a SECOND grid under their own head (Alex, on the real satchel: *"reserved for the gems hence the
- * name"*): a cell per vessel (its icon, its seats as dots, lit when written). Click a vessel cell and ONE strip under the grid says what it is
- * and offers place / dismantle. Imbue is a row of cells too — crystal in, stone out — with the refusal
- * on the tooltip, not in a sentence. The paragraph about words and paper is gone; it was true and it
- * was in the way.
- *
- * Reads `keeperLetters` on every render on purpose: an imbue changes the bag under the cursor and a
- * place moves letters out of it. The runes and the book are pinned per mount; the letters are not.
+ * ★ STONES AND VESSELS, TWO GRIDS (Alex 2026-09-04 / 09-10; reworked 2026-09-27 for THE LETTERS GROW IN).
+ * A keeper never sets a stone any more (`shimmer-casting-vessels.md` › THE LETTERS GROW IN): a vessel's letters
+ * grow in when it is made, and they stay DARK until the keeper knows the word. So the drag-to-set gesture, the
+ * place / dismantle strip and imbue are gone. What is left is honest:
+ *   STONES  → loose stones as MATERIAL: a cell per stack, no gesture. Sold at the old gem tray on E'xday, or
+ *             handed to the cutter as part-payment for a vessel whose word needs them.
+ *   VESSELS → every vessel carried, its letters in it, lit or dark. Click one for the strip that says which.
+ * The Stones grid is hidden when a keeper holds none — nothing new ever lands there, so an empty grid would
+ * promise something that will not come.
  */
-export function SatchelLetters({ owned, birth, items, onChange }: {
+export function SatchelLetters({ owned, birth, onChange }: {
   owned: readonly string[]; birth: string | null
-  /** the item inventory — an imbue takes an element crystal out of it */
-  items: React.RefObject<Inventory>
+  /** kept for the hosts' call shape — the item inventory is no longer read here (imbue retired 09-27) */
+  items?: React.RefObject<Inventory>
   /** called after any change so the host refreshes the hotbar and re-renders this grid */
   onChange: () => void
 }) {
   const l = keeperLetters(owned, birth)
+  const book = keeperBook(owned)
   const stowed = loadStowed()
   const [sel, setSel] = useState<number | null>(null)
-  // ── ★ THE VESSEL CELL IS THE SOCKET (Alex, 2026-09-10 eve) ───────────────────────────────────
-  // *"if the player want to add gems to it they drag and drop it"* — one gesture, no strip, no slot to
-  // drag into and back out of. A gem cell lifts on press; a vessel cell that is SHORT that letter lights
-  // as you cross it; release over it and `placeGem` sets exactly that letter. The lift is React state
-  // (the grid re-lights), the pointer position is a ref written straight to the ghost's transform (no
-  // re-render per move), and the drop target is a ref because the window's pointerup must read the
-  // latest one. Same split the bag panel uses, for the same reasons.
-  const [dragGem, setDragGem] = useState<string | null>(null)
-  const dragRef = useRef<string | null>(null)
-  const overVessel = useRef<number | null>(null)
-  const ghost = useRef<HTMLDivElement | null>(null)
-  const [dropNote, setDropNote] = useState<string | null>(null)
-  const lift = (id: string, e: React.PointerEvent) => {
-    // ⚠ release the implicit capture, or on a phone no other cell ever sees pointerenter and the drag
-    // can only ever land where it began
-    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* not captured */ }
-    dragRef.current = id; setDragGem(id); overVessel.current = null
-    const gh = ghost.current; if (gh) { gh.style.transform = `translate(${e.clientX - 12}px, ${e.clientY - 12}px)`; gh.hidden = false }
-  }
-  useEffect(() => {
-    const move = (e: PointerEvent) => {
-      if (!dragRef.current) return
-      const gh = ghost.current; if (gh) gh.style.transform = `translate(${e.clientX - 12}px, ${e.clientY - 12}px)`
-    }
-    const up = () => {
-      const id = dragRef.current
-      dragRef.current = null; setDragGem(null)
-      const gh = ghost.current; if (gh) gh.hidden = true
-      const i = overVessel.current; overVessel.current = null
-      if (!id || i === null) return
-      const r = placeGem(i, birth, keeperLetters(owned, birth), id)
-      setDropNote(r.r.say)
-      if (!r.r.ok) return
-      saveLetters(r.letters); setSel(i); onChange()
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-    window.addEventListener('pointercancel', up)
-    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up) }
-  }, [owned, birth, onChange])
-  const doImbue = (id: string) => {
-    const bag = items.current
-    if (!bag) return
-    const r = imbue(bag, l, owned, id)
-    if (r.why) return
-    saveLetters(r.letters)
-    onChange()
-  }
   const loose = Object.entries(l.bag)
-  const set = VESSELS.reduce((a, k) => a + l.vessels[k].length, 0)
   const runeOf = (id: string) => RUNES.find(x => x.id === id)
   const cellCls = 'hearth-slot relative flex h-12 w-12 flex-col items-center justify-center border text-[12px]'
   const COLS = 8
-  // ★ TWO GRIDS, NOT ONE (Alex, 2026-09-10, opening the real satchel: *"this should be reserved for the
-  // gems hence the name.. the vessels can be held in the inventory until equipt"*). Gems is the LETTERS
-  // and nothing else; the carried vessels get their own section under it, so a keeper reading "Gems"
-  // never finds a bracelet in it. Each grid pads its own last row.
-  const cells = loose.length
-  // an EMPTY grid still draws one row of dark cells — the bag does, and a section that vanishes when it
-  // has nothing to show gives no hint that gems will land here (Alex's real keeper, 09-05)
+  // an EMPTY grid still draws one row of dark cells — a section that vanishes gives no hint where things land
   const padOf = (n: number) => (n === 0 ? COLS : Math.max(0, COLS - (n % COLS || COLS)))
-  const pad = padOf(cells)
-  const vpad = padOf(stowed.length)
-  const written = stowed.filter(v => isComplete(v, birth)).length
+  const lit = stowed.filter(v => isLit(v, owned, birth, book)).length
   return (
     <div className="mt-4">
-      <SectionHead label="Gems" note={cells === 0
-        ? <>none yet · the Passage sells letters · a crystal imbues into one</>
-        : <><span className="tabular-nums hk-soft">{loose.reduce((a, [, n]) => a + n, 0)}</span> loose · <span className="tabular-nums hk-soft">{set}</span> set</>} />
-      <div className="grid grid-cols-8 gap-1.5">
-        {loose.map(([id, n]) => {
-          const r = runeOf(id)
-          return (
-            <div key={`g-${id}`} title={`${r?.name ?? id} ×${n} — a letter; drag it onto a vessel cut for a word that needs it`}
-                 onPointerDown={e => { if (e.button === 0) lift(id, e) }}
-                 className={`${cellCls} touch-none select-none cursor-grab hk-rule-ember hk-fill ${dragGem === id ? 'hk-rule-ember hk-fill-ember' : 'hk-hover-edge'}`}>
-              <GemStone glow={r?.glow ?? '#fff'} size={24} />
-              <span className="tabular-nums mt-0.5 hk-ink">{n}</span>
-            </div>
-          )
-        })}
-        {Array.from({ length: pad }, (_, k) => (
-          <div key={`e-${k}`} className={`${cellCls} hk-rule hk-fill`}><span className="hk-faint">·</span></div>
-        ))}
-      </div>
-      {/* ── IMBUE, as cells: a crystal of the element and a rune you hold → one gem. Refusal on the tooltip. ── */}
-      {owned.length > 0 && (
-        <div className="mt-2 flex items-center gap-1.5">
-          <span className="hk-label mr-1 text-[12px] hk-faint">imbue</span>
-          {owned.map(id => {
+      {loose.length > 0 && <>
+        <SectionHead label="Stones" note={<><span className="tabular-nums hk-soft">{loose.reduce((a, [, n]) => a + n, 0)}</span> loose · sell at the Passage ({STONE_SELL}) or give the cutter ({STONE_CREDIT})</>} />
+        <div className="grid grid-cols-8 gap-1.5">
+          {loose.map(([id, n]) => {
             const r = runeOf(id)
-            const crystal = crystalFor(id)
-            const have = items.current && crystal ? countItem(items.current, crystal) : 0
-            const why = items.current ? imbueWhy(items.current, owned, id) : 'no-crystal'
-            const can = why === null
             return (
-              <button key={id} type="button" disabled={!can} onPointerDown={() => doImbue(id)}
-                      title={can ? `imbue: one ${crystal?.replace(/_/g, ' ')} → one ${r?.name ?? id} gem` : imbueSentence(why!, id)}
-                      className={`${cellCls} h-10 w-10 ${can ? 'hk-rule-ember hk-fill hk-hover-edge' : 'hk-rule hk-fill opacity-50'}`}>
-                {crystal ? <ItemChip itemId={crystal} size={18} /> : null}
-                <span className="absolute -right-1 -top-1"><GemStone glow={r?.glow ?? '#fff'} size={12} /></span>
-                <span className="tabular-nums absolute bottom-0.5 right-1 text-[12px] hk-soft">{have}</span>
-              </button>
+              <div key={`g-${id}`} title={`${r?.name ?? id} stone ×${n} — material now: the merchants buy it on E'xday, and the cutter takes it toward a vessel whose word is written in it`}
+                   className={`${cellCls} hk-rule-ember hk-fill`}>
+                <GemStone glow={r?.glow ?? '#fff'} size={24} />
+                <span className="tabular-nums mt-0.5 hk-ink">{n}</span>
+              </div>
             )
           })}
+          {Array.from({ length: padOf(loose.length) }, (_, k) => (
+            <div key={`e-${k}`} className={`${cellCls} hk-rule hk-fill`}><span className="hk-faint">·</span></div>
+          ))}
         </div>
-      )}
-      {/* ── VESSELS — carried until worn. A vessel is held here as parts (cut for a word, seats filling) and
-          moves to Gear the moment every seat holds its letter; dismantling a worn one sends it back. ── */}
+      </>}
+      {/* ── VESSELS — carried until worn, letters grown in. Lit = the keeper knows the word; lit ones are gear. ── */}
       <SectionHead label="Vessels" note={stowed.length === 0
         ? <>none yet · cut at the Passage · Greg's underneath</>
-        : <><span className="tabular-nums hk-soft">{stowed.length}</span> carried · <span className="tabular-nums hk-soft">{written}</span> written · drag a gem onto one to set it</>} />
+        : <><span className="tabular-nums hk-soft">{stowed.length}</span> carried · <span className="tabular-nums hk-soft">{lit}</span> lit</>} />
       <div className="grid grid-cols-8 gap-1.5">
         {stowed.map((v, i) => {
           const seats = seatCount(v, birth)
-          const written = isComplete(v, birth)
+          const on = isLit(v, owned, birth, book)
           const word = v.move ? (castForMove(v.move)?.label ?? v.move) : null
-          // while a gem is lifted: a vessel short THAT letter is the socket and lights; every other one dims
-          const wants = dragGem !== null && !!v.move && shortOf(v, birth).includes(dragGem)
           return (
-            <button key={`v-${i}`} type="button" onPointerDown={() => { if (!dragRef.current) setSel(sel === i ? null : i) }}
-                    onPointerEnter={() => { if (dragRef.current) overVessel.current = i }}
-                    onPointerLeave={() => { if (overVessel.current === i) overVessel.current = null }}
-                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${v.gems.length}/${seats}${written ? ' · written' : ` · needs ${shortOf(v, birth).map(id => RUNES.find(x => x.id === id)?.name ?? id).join(', ')}`} · drag a gem here to set it` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; no one-letter word on your lane yet' : 'never cut for a word'}`}
-                    className={`${cellCls} ${wants ? 'hk-rule-ember hk-fill-ember shadow-[0_0_10px_-2px_#d4a843]' : dragGem !== null ? 'hk-rule hk-fill opacity-50' : sel === i ? 'hk-rule-ember hk-fill-ember' : written ? 'hk-rule-ember hk-fill' : 'hk-rule-ember hk-fill'} hk-hover-edge`}>
+            <button key={`v-${i}`} type="button" onPointerDown={() => setSel(sel === i ? null : i)}
+                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${on ? 'lit — wear it from Gear' : 'dark — learn the word to light it'}` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; no one-letter word on your lane yet' : 'never cut for a word'}`}
+                    className={`${cellCls} ${sel === i ? 'hk-rule-ember hk-fill-ember' : 'hk-rule-ember hk-fill'} ${on || !v.move ? '' : 'opacity-60'} hk-hover-edge`}>
               <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={26} />
               <span className="tabular-nums absolute right-1 top-0.5 text-[12px] hk-soft">{tierMark(v.tier)}</span>
-              {/* the seats as dots — the word's count, lit where a letter sits */}
+              {/* the letters as dots — the word's count, glowing when the keeper knows the word */}
               <span className="absolute bottom-1 flex gap-[3px]">
                 {Array.from({ length: Math.min(VESSEL_CAP, seats) }, (_, k) => (
-                  <span key={k} className={`h-[5px] w-[5px] rounded-full ${v.gems[k] ? 'hk-fill-ember shadow-[0_0_4px_#d4a843]' : 'hk-fill shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]'}`} />
+                  <span key={k} className={`h-[5px] w-[5px] rounded-full ${on ? 'hk-fill-ember shadow-[0_0_4px_#d4a843]' : 'hk-fill shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]'}`} />
                 ))}
               </span>
             </button>
           )
         })}
-        {Array.from({ length: vpad }, (_, k) => (
+        {Array.from({ length: padOf(stowed.length) }, (_, k) => (
           <div key={`ve-${k}`} className={`${cellCls} hk-rule hk-fill`}><span className="hk-faint">·</span></div>
         ))}
       </div>
-      {dropNote && <div className="mt-1 text-[12px] leading-snug hk-ember">{dropNote}</div>}
       {sel !== null && stowed[sel] && (
         <VesselParts owned={owned} birth={birth} index={sel} onChange={() => { onChange(); if (!loadStowed()[sel]) setSel(null) }} />
       )}
-      {/* the lifted gem, under the pointer — positioned by ref, never by state (no re-render per move) */}
-      <div ref={ghost} hidden className="pointer-events-none fixed left-0 top-0 z-50">
-        {dragGem && <GemStone glow={RUNES.find(x => x.id === dragGem)?.glow ?? '#fff'} lit size={24} />}
-      </div>
     </div>
   )
 }
 
 /**
- * The ONE strip for a selected vessel part: what it is, its seats, what it is short, place / dismantle.
- * (Alex, 2026-09-04: *"you click the vessel and if the gem is in the inventory it asks if you'd like to
- * place them"* — this is the ask.) A legacy blank gets the word picker here instead of a place button.
+ * The ONE strip for a selected carried vessel: what it is, its letters, lit or dark and why. A legacy blank
+ * (or Greg's uncut floor) gets the word picker — cutting it grows the letters in.
  */
 export function VesselParts({ owned, birth, index, onChange }: {
   owned: readonly string[]; birth: string | null
   /** which stowed vessel is selected in the grid */
   index: number
-  /** letters or vessels changed — the host re-renders and the Gear tab re-reads the stowed list */
+  /** the vessel changed — the host re-renders and the Gear tab re-reads the stowed list */
   onChange: () => void
 }) {
   const [note, setNote] = useState<string | null>(null)
   const stowed = loadStowed()
   const v = stowed[index]
-  const l = keeperLetters(owned, birth)
   const book = keeperBook(owned)
   const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
-  const runeName = (id: string) => RUNES.find(r => r.id === id)?.name ?? id
   if (!v) return null
   const seats = seatCount(v, birth)
-  const short = shortOf(v, birth)
-  const written = isComplete(v, birth)
-  const placeable = short.filter(r => (l.bag[r] ?? 0) > 0).length
+  const on = isLit(v, owned, birth, book)
   const kindBand = BAND_FOR_VESSEL[v.kind]
-  const doPlace = () => {
-    const { r, letters } = placeGems(index, birth, l)
-    setNote(r.say); if (!r.ok) return
-    saveLetters(letters); onChange()
-  }
-  const doDismantle = () => { saveLetters(dismantle(index, l)); setNote('Taken apart. The letters are back in your bag.'); onChange() }
-  const doWord = (word: string) => { if (setWord(index, word, birth)) { setNote(`Cut for ${wordOf(word)}.`); onChange() } }
+  const doWord = (word: string) => { if (setWord(index, word, birth)) { setNote(`Cut for ${wordOf(word)}; its letters grew in.`); onChange() } }
   return (
-    <div className={`hk-plate mt-1.5 flex flex-wrap items-center gap-2 px-2.5 py-1.5 ${written ? 'is-lit' : ''}`}>
+    <div className={`hk-plate mt-1.5 flex flex-wrap items-center gap-2 px-2.5 py-1.5 ${on ? 'is-lit' : ''}`}>
       <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={22} />
       <span className="hk-title text-[12px] hk-ember">{VESSEL_NOUN[v.kind]}</span>
       <span className="hk-label text-[12px] hk-faint">{tierLabel(v.kind, v.tier)}</span>
       {v.move
         ? <span className="hk-title text-[12px] hk-ink">for {wordOf(v.move)}</span>
         : <span className="hk-label text-[12px] hk-faint">{isFloor(v) ? 'one seat · never lost' : 'never cut for a word'}</span>}
-      {v.move ? <Seats gems={v.gems} seats={seats} need={seatLetters(v, birth)} /> : null}
-      <span className="tabular-nums text-[12px] hk-soft">{v.gems.length}/{seats}</span>
-      {/* ★ a written vessel is gear, but the WORD is learned from a scroll (the Passage) — said here so the
-          keeper does not watch the Gear dropdown unbind a word they hold the letters for and cannot yet read */}
-      {written
-        ? <span className="hk-label text-[12px] hk-ember">{hasLearned(keeperBook(owned), v.move!) ? 'written · on Gear' : 'written · learn the word at the Passage to wear it'}</span>
-        : v.move
-          ? short.length > 0 && <span className="text-[12px] hk-faint">needs {short.map(runeName).join(', ')}</span>
-          : (
-            <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
-                    className="hk-btn bg-transparent px-2 py-0.5 text-[12px] normal-case tracking-normal">
-              <option value="">{isFloor(v) ? 'cut it for a one-letter word you hold… (none on your lane yet)' : 'cut it for a word you hold…'}</option>
-              {/* ★ the floor bears ONE seat (ruled): a two-letter word is not offered to Greg's paper */}
-              {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
-                .filter(m => { const n = seatLetters({ move: m.id }, birth).length; return n > 0 && n <= seatCapOf(v.tier) })
-                .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          )}
-      <span className="ml-auto flex items-center gap-1.5">
-        {!written && v.move && (
-          <button type="button" disabled={!placeable} onPointerDown={doPlace}
-                  className={`hk-btn px-2 py-0.5 text-[12px] ${placeable ? '' : 'hk-dim'}`}>
-            {placeable ? `place ${placeable}` : 'no letters for it'}
-          </button>
+      {v.move ? <Seats gems={v.gems} seats={seats} need={seatLetters(v, birth)} dark={!on} /> : null}
+      {/* ★ DARK UNTIL KNOWN (ruled 09-27): the vessel is finished; the keeper's knowledge is what lights it */}
+      {v.move
+        ? <span className={`hk-label text-[12px] ${on ? 'hk-ember' : 'hk-faint'}`}>{on ? 'lit · wear it from Gear' : hasLearned(book, v.move) ? 'dark · its word is off your lanes' : `dark · learn ${wordOf(v.move)} to light it`}</span>
+        : (
+          <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
+                  className="hk-btn bg-transparent px-2 py-0.5 text-[12px] normal-case tracking-normal">
+            <option value="">{isFloor(v) ? 'cut it for a one-letter word you hold… (none on your lane yet)' : 'cut it for a word you hold…'}</option>
+            {/* ★ the floor bears ONE seat (ruled): a two-letter word is not offered to Greg's paper */}
+            {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
+              .filter(m => { const n = seatLetters({ move: m.id }, birth).length; return n > 0 && n <= seatCapOf(v.tier) })
+              .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
         )}
-        {v.gems.length > 0 && (
-          <button type="button" onPointerDown={doDismantle}
-                  className="hk-btn hk-dim px-2 py-0.5 text-[12px] hover:opacity-100">dismantle</button>
-        )}
-      </span>
       {note && <span className="w-full text-[12px] leading-snug hk-ember">{note}</span>}
     </div>
   )
@@ -587,7 +469,8 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
   const l = keeperLetters(owned, birth)
   const reresolve = () => onEquipped(resolveLoadout([...owned], birth, keeperBook(owned)).slots)
   const doEquip = (kind: Vessel, i: number) => { if (equip(kind, i, birth, starterFor(owned))) reresolve() }
-  const doDismantle = (kind: Vessel) => { if (dismantleWorn(kind, birth, starterFor(owned))) reresolve() }
+  const doTakeOff = (kind: Vessel) => { if (takeOffWorn(kind, birth, starterFor(owned))) reresolve() }
+  const book = keeperBook(owned)
   const wordOf = (moveId: string | null) => (moveId ? (castForMove(moveId)?.label ?? moveId) : null)
   const seatsOfWorn = (moveId: string | null) => (moveId ? seatCount({ move: moveId }, birth) : 0)
   return (
@@ -596,10 +479,9 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
         <span className="tabular-nums hk-soft">{VESSELS.map(k => `${ownedCount(k)}/${MAX_PER_KIND} ${k}`).join(' · ')}</span>
         {VESSELS.some(k => ownedCount(k) < MAX_PER_KIND) ? ' · cut at the Passage' : ''} · Greg's underneath
       </>} />
-      {/* ★ ONLY WRITTEN VESSELS ARE GEAR (Alex, 2026-09-04). The rack shows what is WORN, and a dropdown of the
-          written spares to swap in. Unwritten ones live in the satchel as parts until every seat their word
-          cut holds its letter. Dismantle sends the worn one back there, letters to the bag — canon's unbind
-          is free, so this costs nothing but the walk. */}
+      {/* ★ ONLY LIT VESSELS ARE GEAR (09-04, reworked 09-27 for THE LETTERS GROW IN). The rack shows what is WORN,
+          and a dropdown of the lit spares to swap in. A dark vessel (a word the keeper does not know yet) waits in
+          the satchel. Take off sends the worn one back there whole, letters and all. */}
       {VESSELS.map(kind => {
         const band = BAND_FOR_VESSEL[kind]
         const worn = band >= 0 ? (slots[band] ?? null) : null
@@ -609,7 +491,8 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
         // the fallback for a save from before the word was recorded.
         const word = wornWord(kind) ?? worn
         const seats = seatsOfWorn(word)
-        const spares = completeVessels(kind, birth)
+        const spares = completeVessels(kind, birth, { owned, book })
+        const wornLit = !!word && isLit({ kind, move: word }, owned, birth, book)
         return (
           <div key={kind} className={`hk-plate px-2.5 py-1.5 ${worn ? 'is-lit' : ''}`}>
             <div className="flex items-center gap-3">
@@ -621,7 +504,7 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
                   Nothing worn AND no word: the uncut tier-1 vessel, faded — a place for one, not one. A vessel
                   bearing a word with its band unbound keeps its seats and its letters, faded. */}
               <VesselArt kind={kind} tier={word ? wornTier(kind) : 1} seats={seats}
-                         gems={l.vessels[kind]} size={72} dim={!worn} />
+                         gems={l.vessels[kind]} size={72} dim={!worn} dark={!!word && !wornLit} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="hk-title text-[12px] hk-ember">{VESSEL_NOUN[kind]}</span>
@@ -636,8 +519,8 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
                   </span>
                   {worn
                     ? <><span className="hk-title ml-1 text-[12px] hk-ink">{wordOf(worn)}</span>
-                        <button type="button" onPointerDown={() => doDismantle(kind)}
-                                className="hk-btn hk-dim ml-auto px-2 py-0.5 text-[12px] hover:opacity-100">dismantle</button></>
+                        <button type="button" onPointerDown={() => doTakeOff(kind)}
+                                className="hk-btn hk-dim ml-auto px-2 py-0.5 text-[12px] hover:opacity-100">take off</button></>
                     : <span className="hk-title ml-1 text-[12px] hk-faint">nothing worn · your birth move needs no vessel</span>}
                 </div>
               </div>
@@ -649,8 +532,8 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
               <select value="" onChange={e => { const i = Number(e.target.value); if (!Number.isNaN(i) && e.target.value !== '') doEquip(kind, i) }}
                       disabled={!spares.length}
                       className="hk-btn min-w-[160px] bg-transparent px-2 py-0.5 text-[12px] normal-case tracking-normal disabled:opacity-40">
-                <option value="">{spares.length ? `a written ${VESSEL_NOUN[kind]}…` : `none written yet — see the satchel`}</option>
-                {spares.map(({ v, i }) => <option key={i} value={i}>{wordOf(v.move)} · {TIER_MATERIAL[v.kind][v.tier]} · {v.gems.length}/{seatCount(v, birth)}</option>)}
+                <option value="">{spares.length ? `a lit ${VESSEL_NOUN[kind]}…` : `none lit yet — see the satchel`}</option>
+                {spares.map(({ v, i }) => <option key={i} value={i}>{wordOf(v.move)} · {TIER_MATERIAL[v.kind][v.tier]} · {seatCount(v, birth)} letter{seatCount(v, birth) === 1 ? '' : 's'}</option>)}
               </select>
             </div>
           </div>
@@ -876,7 +759,7 @@ export function BagPanel({ inv, chest, tick, sel, dragFrom, setDragFrom, onMove,
   inv: React.RefObject<Inventory>
   /** see `GearTab` */
   castKeys: readonly string[]
-  /** the letters changed (an imbue took a crystal and made a gem) — refresh the hotbar and re-render */
+  /** the letters or vessels changed — refresh the hotbar and re-render */
   onLetters: () => void
   /** Species SEEN in the world — the grimoire lights a portrait for a spirit you met but never held. */
   spiritIndex: React.RefObject<SpiritIndex>

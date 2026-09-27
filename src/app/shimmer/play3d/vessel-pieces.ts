@@ -11,16 +11,16 @@
  *   · `PIECES_PER_VESSEL` = 3 pieces, any mix — a piece is not yet a bracelet or a glove; the keeper
  *     chooses the kind and the word at the cutter, the same way the shelf cuts to order
  *   · the finished vessel is `PIECE_TIER` 2 — above the shelf's tier 1 (the shelf never sells 2–3)
- *   · it arrives WITH its letters set (the precedent is Greg's gift). The rune-gem's future is an OPEN
- *     canon gap (CANON_GAPS 09-27); this is the one door that already fits either answer
- *   · the cutter charges `FINISH_FEE` Marks for the work
+ *   · it arrives WITH its letters grown in — every vessel does since THE LETTERS GROW IN (ruled 09-27)
+ *   · the cutter charges `FINISH_FEE` Marks for the work, less `STONE_CREDIT` per held stone of the word
+ *     (part-payment, `cutterPrice`)
  *   · pieces survive runs and survive a new world (the ledger, not the character), like the trials
  * ⚠ TBD-CANON: a season vessel's own name and look. Until a season is authored, a finished one is drawn
  * and named as its tier's material (`TIER_MATERIAL`), and no copy here names a season.
  */
 import { keeperKey } from '@/lib/keeper-local'
-import { grantVessel, ownedCount, seatLetters, MAX_PER_KIND, type VesselGrant, type VesselTier } from './vessels'
-import { type Vessel } from './gems'
+import { grantVessel, ownedCount, cutterPrice, MAX_PER_KIND, type VesselGrant, type VesselTier } from './vessels'
+import { takeStones, type Letters, type Vessel } from './gems'
 
 export const PIECES_KEY = 'ather:shimmer:vessel-pieces'
 /** Rounds since the last piece, across runs — the Breach's pity counter (`hold.ts` › `pityRounds`, Alex 09-27). */
@@ -59,23 +59,27 @@ export const pieceLine = (n: number): string =>
     ? `A vessel piece — ${n} carried. The Passage's cutter can finish one.`
     : `A vessel piece — ${n} of ${PIECES_PER_VESSEL}`
 
-export interface PieceFinish extends VesselGrant { marks: number }
+export interface PieceFinish extends VesselGrant { marks: number; letters?: Letters }
 /**
- * The cutter joins three pieces into a vessel of `kind` for `word`, letters set. Refusals first (the
- * cheapest to fix last): not enough pieces, the cap, the fee. Spends pieces on success; the caller spends Marks.
+ * The cutter joins three pieces into a vessel of `kind` for `word`, its letters grown in. Refusals first (the
+ * cheapest to fix last): not enough pieces, the cap, the fee. Spends pieces on success; the caller spends
+ * Marks and saves `letters` (the stones taken as part-payment) when present.
  */
-export function finishVessel(kind: Vessel, word: string, marks: number, birth: string | null): PieceFinish {
+export function finishVessel(kind: Vessel, word: string, marks: number, birth: string | null, l: Letters | null = null): PieceFinish {
   if (loadPieces() < PIECES_PER_VESSEL) {
     return { ok: false, marks, why: 'not-given', say: `The cutter needs ${PIECES_PER_VESSEL} pieces to make one whole. You carry ${loadPieces()}.` }
   }
   if (ownedCount(kind) >= MAX_PER_KIND) {
     return { ok: false, marks, why: 'at-cap', say: `Three ${kind}s is what a keeper can carry, and Greg's underneath. Stow one before the cutter makes another.` }
   }
-  if (marks < FINISH_FEE) {
-    return { ok: false, marks, why: 'too-dear', say: `${FINISH_FEE} Marks for the cutter's work. Come back with them.` }
+  const { price, stones } = cutterPrice(FINISH_FEE, word, l, birth)
+  if (marks < price) {
+    return { ok: false, marks, why: 'too-dear', say: `${price} Marks for the cutter's work. Come back with them.` }
   }
-  const g = grantVessel(kind, PIECE_TIER, word, 'found', seatLetters({ move: word }, birth))
+  const g = grantVessel(kind, PIECE_TIER, word, 'found')
   if (!g.ok) return { ...g, marks }
   savePieces(loadPieces() - PIECES_PER_VESSEL)
-  return { ...g, marks: marks - FINISH_FEE, say: `The cutter joins the three pieces. ${g.say.replace(' Set its letters and it is yours to wear.', ' Its letters are woven in; it is yours to wear.')}` }
+  const letters = l && stones.length ? takeStones(l, stones).letters : undefined
+  const paid = stones.length ? ` ${stones.length} of your stones went toward it.` : ''
+  return { ...g, marks: marks - price, letters, say: `The cutter joins the three pieces. ${g.say}${paid}` }
 }

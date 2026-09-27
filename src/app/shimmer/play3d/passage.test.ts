@@ -3,14 +3,14 @@
  */
 import { readFileSync, existsSync } from 'node:fs'
 import {
-  WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, TRAY_SIZE, GEM_PRICE_LANE, GEM_PRICE_OFF,
-  weekdayOf, daysUntil, gemTrayFor, gemPrice, buyGem, sell, teacherFor, takeLesson, TEACHABLE,
+  WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES,
+  weekdayOf, daysUntil, sellStone, sell, teacherFor, takeLesson, TEACHABLE,
   VESSEL_RACK_SIZE, vesselRackFor, buyFromVesselRack, type RackVessel,
 } from './passage'
 import { VESSEL_PRICE, BAND_FOR_VESSEL } from './vessels'
 import { TRADE_POOL } from './scroll-market'
 import { ALL_BANDS } from './cast'
-import { EMPTY_LETTERS } from './gems'
+import { EMPTY_LETTERS, STONE_SELL, STONE_CREDIT } from './gems'
 import { EMPTY_BOOK } from './scroll-market'
 import { RUNES, ELEMENTS, runesOf } from './birth/runes.data'
 import { laneRunes } from './cast'
@@ -38,24 +38,16 @@ const store: Record<string, string> = {}
   ok(daysUntil(2, "E'xday") === 0 && daysUntil(3, "E'xday") === 4 && daysUntil(0, 'Coomday') === 1, 'days-until counts forward, 0 on the day')
 }
 
-// ── B. the tray: six runes, never a lost state, deterministic, priced by lane ───────────────
+// ── B. ★ the tray turned round (THE LETTERS GROW IN, ruled 2026-09-27): it BUYS loose stones ──────
 {
-  const t1 = gemTrayFor(3), t2 = gemTrayFor(3), t3 = gemTrayFor(4)
-  ok(t1.length === TRAY_SIZE && new Set(t1).size === TRAY_SIZE, 'six distinct runes')
-  ok(JSON.stringify(t1) === JSON.stringify(t2) && JSON.stringify(t1) !== JSON.stringify(t3), 'the same cycle stocks the same tray; the next turns it')
-  const lost = new Set(RUNES.filter(r => r.lostState).map(r => r.id))
-  let anyLost = false
-  for (let c = 0; c < 60; c++) if (gemTrayFor(c).some(r => lost.has(r))) anyLost = true
-  ok(!anyLost, '★ a lost state never reaches the tray (60 cycles)')
-  const birth = 'tempest'
-  const on = [...laneRunes(birth, 'element')].find(r => r !== birth)!, off = RUNES.find(r => !laneRunes(birth, 'element').has(r.id) && !laneRunes(birth, 'state').has(r.id))!.id
-  ok(gemPrice(on, birth) === GEM_PRICE_LANE && gemPrice(off, birth) === GEM_PRICE_OFF && gemPrice(on, null) === GEM_PRICE_OFF, 'lane price on your lanes, specialized off them, and everything is specialized to a keeper with no birth')
-  const tray = [on, off]
-  ok(buyGem(EMPTY_LETTERS, 100, on, tray, birth, 'Solday').why === 'not-today', 'the merchants only ride on market day')
-  ok(buyGem(EMPTY_LETTERS, 100, 'nope', tray, birth, MARKET_DAY).why === 'not-stocked', 'not on the tray → not stocked')
-  ok(buyGem(EMPTY_LETTERS, 10, on, tray, birth, MARKET_DAY).why === 'too-dear', 'too dear leaves the letters and the Marks')
-  const r = buyGem(EMPTY_LETTERS, 100, off, tray, birth, MARKET_DAY)
-  ok(r.ok && r.marks === 40 && r.letters.bag[off] === 1, '★ an off-lane gem can be BOUGHT (the merchant does not care that you cannot seat it) — 60 Marks, one gem in the bag')
+  const held = { bag: { tempest: 2 }, vessels: { bracelet: [], focus: [] } }
+  ok(sellStone(held, 10, 'tempest', 'Solday').why === 'not-today', 'the merchants only buy on market day')
+  ok(sellStone(EMPTY_LETTERS, 10, 'tempest', MARKET_DAY).why === 'nothing-to-sell', 'a stone you do not hold cannot be sold')
+  ok(sellStone(held, 10, 'tempest', MARKET_DAY, 3).why === 'nothing-to-sell', 'nor more than you hold')
+  const r = sellStone(held, 10, 'tempest', MARKET_DAY)
+  ok(r.ok && r.marks === 10 + STONE_SELL && r.letters.bag.tempest === 1, `★ one stone sold: ${STONE_SELL} Marks, one fewer held`)
+  ok(held.bag.tempest === 2, 'pure — the letters handed in are not mutated')
+  ok(STONE_SELL < STONE_CREDIT, '★ the cutter pays more for a stone its word needs than the tray does — selling is the lesser road')
 }
 
 // ── C. the counter: the whole ladder, every item a real seam drop, only on market day ──────
@@ -64,7 +56,6 @@ const store: Record<string, string> = {}
   const notDropped = Object.keys(SELL_PRICES).filter(id => !drops.has(id))
   ok(notDropped.length === 0, `★ every runestone the counter buys is dropped by a seam${notDropped.length ? ` — not: ${notDropped.join(', ')}` : ''}`)
   ok(SELL_PRICES.raw_mana_shard! < SELL_PRICES.storm_crystal! && SELL_PRICES.storm_crystal! < SELL_PRICES.pure_mana_core! && SELL_PRICES.pure_mana_core! < SELL_PRICES.ather_crystal!, 'the ladder pays more each rung')
-  ok(SELL_PRICES.storm_crystal! < GEM_PRICE_LANE, '★ a crystal sells for LESS than the gem it would imbue into — imbuing stays the better road for a rune you hold')
   const inv = createInventory(); addItems(inv, 'storm_crystal', 3)
   ok(sell(inv, 'storm_crystal', 2, 'Solday').why === 'not-today' && countItem(inv, 'storm_crystal') === 3, 'no buying off market day, nothing taken')
   const s1 = sell(inv, 'storm_crystal', 2, MARKET_DAY)

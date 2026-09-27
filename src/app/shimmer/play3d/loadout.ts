@@ -11,7 +11,7 @@
 
 import { ALL_BANDS, canSlot, eligibleMoves } from './cast'
 import { moveById } from './keeper-moves'
-import { VESSEL_FOR_KIND, bindLetters, unbindLetters, lettersOf, missingLetters, saveLetters, isBodyHeld, type Letters } from './gems'
+import { VESSEL_FOR_KIND, isBodyHeld, wornWordFor, wornWord, saveWornWord } from './gems'
 import { keeperLetters } from './book'
 import type { SlotKind } from './cast'
 import type { Book } from './scroll-market'
@@ -160,7 +160,7 @@ export function emptySlotWhy(reason: EmptyReason, openKey?: string): string {
     case 'no-move': return 'nothing you have learned fits this slot'
     case 'cleared': return `your saved loadout leaves it empty${fix}`
     case 'dropped': return `what was here no longer fits, so it was unbound${fix}`
-    case 'no-gem': return `the gems its word is written in are not set in the vessel${fix}`
+    case 'no-gem': return `no vessel made for it is worn — put one on in Gear${fix}`
   }
 }
 
@@ -195,7 +195,6 @@ export function resolveLoadout(owned: string[], birth: string | null, book: Book
   // vessel is gear. So a slot that needs a vessel takes only a body-held word here (the birth move —
   // Gregory's gift, which needs no paper); everything else waits for the keeper to write it.
   const kit = (): ResolvedLoadout => {
-    let letters = keeperLetters(owned, birth)
     const used = new Set<string>()
     const slots: Loadout = []
     ALL_BANDS.forEach((kind) => {
@@ -205,11 +204,9 @@ export function resolveLoadout(owned: string[], birth: string | null, book: Book
         if (!vessel) return true
         return isBodyHeld(m, birth)
       })
-      if (pick && vessel) letters = bindLetters(letters, vessel, pick, birth) ?? letters
       if (pick) used.add(pick.id)
       slots.push(pick?.id ?? null)
     })
-    saveLetters(letters)
     return { slots, why: slots.map((id) => (id ? null : 'no-move')) }
   }
   const letters = keeperLetters(owned, birth)
@@ -250,12 +247,12 @@ export function resolveLoadout(owned: string[], birth: string | null, book: Book
       why.push('dropped')
       return
     }
-    // ★ A BOUND WORD MUST BE WRITTEN: its letters SET in the slot's vessel (not merely in the bag).
-    // Body-held moves need none. `no-gem` is its own reason because the fix is different — not the
-    // panel, the Passage.
+    // ★ A BOUND WORD NEEDS ITS VESSEL ON: since the letters grow in (09-27) a vessel IS its word, so a
+    // word that is not body-held binds only while the vessel made for it is worn. `no-gem` keeps its id
+    // (saved reasons, tests) and now means exactly that.
     const vessel = VESSEL_FOR_KIND[kind]
     const m = moveById(id)
-    if (vessel && m && missingLetters(lettersOf(m, birth), letters.vessels[vessel]).length > 0) {
+    if (vessel && m && !isBodyHeld(m, birth) && wornWordFor(vessel, seated, letters.vessels[vessel]) !== id) {
       slots.push(null)
       why.push('no-gem')
       return
@@ -330,29 +327,25 @@ export function clearLoadout(): void {
 export function setSlot(owned: string[], birth: string | null, slots: Loadout, slot: number, moveId: string | null, book: Book): Loadout {
   if (slot < 0 || slot >= ALL_BANDS.length) return slots
   if (moveId !== null && !canSlot(owned, birth, slot, moveId, book)) return slots
-  // ★ A BIND IS A GEM TRANSACTION (2026-09-03). Setting a move writes its letters from the bag into
-  // the slot's vessel; clearing (or displacing) one returns them. Refused — slots unchanged, nothing
-  // persisted — when a letter is missing, so the panel cannot seat a word the keeper cannot write.
-  // Persisted HERE, beside the decision, so the two hosts that bind cannot disagree about the gems.
+  // ★ A VESSEL IS ITS WORD (THE LETTERS GROW IN, 2026-09-27). No stone moves on a bind any more: a band
+  // with a vessel takes a body-held word, or the word the worn vessel was made for, and nothing else —
+  // refused with slots unchanged. The worn word is recorded first, so clearing the band of a save from
+  // before the record cannot forget what the vessel on the keeper's wrist is for.
   const vessel = VESSEL_FOR_KIND[ALL_BANDS[slot]!]
-  let letters: Letters | null = keeperLetters(owned, birth)
   if (vessel) {
-    if (moveId === null) letters = unbindLetters(letters, vessel)
-    else {
+    const letters = keeperLetters(owned, birth)
+    const bound = ALL_BANDS.map((_, i) => slots[i] ?? null)
+    const worn = wornWordFor(vessel, bound, letters.vessels[vessel])
+    if (worn && !wornWord(vessel)) saveWornWord(vessel, worn)
+    if (moveId !== null) {
       const m = moveById(moveId)
       if (!m) return slots
-      letters = bindLetters(letters, vessel, m, birth)
-      if (!letters) return slots
+      if (!isBodyHeld(m, birth) && worn !== moveId) return slots
     }
   }
   const next = ALL_BANDS.map((_, i) => (i === slot ? moveId : (slots[i] ?? null)))
   if (moveId !== null) {
-    for (let i = 0; i < next.length; i++) if (i !== slot && next[i] === moveId) {
-      next[i] = null
-      const v = VESSEL_FOR_KIND[ALL_BANDS[i]!]
-      if (v) letters = unbindLetters(letters, v)
-    }
+    for (let i = 0; i < next.length; i++) if (i !== slot && next[i] === moveId) next[i] = null
   }
-  saveLetters(letters)
   return next
 }

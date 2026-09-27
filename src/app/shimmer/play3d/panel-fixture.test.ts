@@ -58,12 +58,13 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
 
   const loose = planPanel('loose')
   ok(Object.values(loose.bag).reduce((a, b) => a + b, 0) > 0, '★ loose: letters ARE held — otherwise it is just `fresh` under a second name')
-  ok(VESSELS.every(k => loose.worn[k].length === 0), 'loose: and none of them are seated')
+  ok(VESSELS.every(k => loose.worn[k].length === 0), 'loose: and no vessel is worn')
 
-  const partial = planPanel('partial')
-  ok(partial.worn.bracelet.length === 1, '★★ partial: EXACTLY one letter seated — the hard read this page exists for')
-  ok(VESSEL_CAP > 1, 'partial: the cap leaves dark seats beside it')
-  ok(partial.worn.focus.length === 0, 'partial: the focus stays dark, so one row is mixed and one is empty')
+  // ★ mixed (09-27, replaces `partial` — a half-written vessel is impossible once the letters grow in)
+  const mixed = planPanel('mixed')
+  const litOf = (p: ReturnType<typeof planPanel>, k: 'bracelet' | 'focus') => !!p.wordFor[k] && p.learned.includes(p.wordFor[k]!)
+  ok(mixed.worn.bracelet.length > 0 && litOf(mixed, 'bracelet'), '★★ mixed: the bracelet is worn AND its word is known — lit')
+  ok(mixed.worn.focus.length > 0 && !litOf(mixed, 'focus') || mixed.why.includes('no focus word'), '★★ mixed: the glove is worn, letters grown in, its word NOT known — dark')
 
   const written = planPanel('written')
   ok(written.worn.bracelet.length > 0 || written.why.includes('no bracelet word'),
@@ -112,7 +113,7 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
 
 // ── E. ★★★ THE ROUND TRIP: what the fixture writes is what the SHIPPED reader reads back ─────
 {
-  for (const id of ['fresh', 'partial', 'written', 'rack'] as PanelScenarioId[]) {
+  for (const id of ['fresh', 'dark', 'mixed', 'written', 'rack'] as PanelScenarioId[]) {
     wipe()
     const plan = seedPanel(id)
     // `keeperLetters` is the exact call VesselRack makes for the worn seats.
@@ -151,16 +152,17 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
 
 // ── G. ★★ THE SCENARIOS MUST LOOK DIFFERENT FROM EACH OTHER ─────────────────────────────────
 {
+  // ★ 09-27: `partial` became `mixed`, and the difference asked of it is now LIT letters, not seated ones.
   // ★★ THIS SECTION EXISTS BECAUSE THE FIRST CUT FAILED IT SILENTLY. `written` took the first word
   // each lane offered; for that birth it was a ONE-letter word, so `written` and `partial` rendered
   // the SAME picture — one lit seat beside two dark — under two labels claiming opposite things. All
   // 71 asserts were green, because each only checked its own scenario in isolation. A fixture whose
   // scenarios cannot be told apart teaches an eye nothing, and the label is what gets believed.
-  const partial = planPanel('partial')
+  const partial = planPanel('mixed')
   const written = planPanel('written')
-  const seats = (p: ReturnType<typeof planPanel>) => VESSELS.reduce((n, k) => n + p.worn[k].length, 0)
+  const seats = (p: ReturnType<typeof planPanel>) => VESSELS.reduce((n, k) => n + (p.wordFor[k] && p.learned.includes(p.wordFor[k]!) ? p.worn[k].length : 0), 0)
   ok(seats(written) > seats(partial),
-     `★★ written (${seats(written)} seated) and partial (${seats(partial)}) are DIFFERENT pictures — two labels showing one image is the failure this file was written after`)
+     `★★ written (${seats(written)} lit) and mixed (${seats(partial)} lit) are DIFFERENT pictures — two labels showing one image is the failure this file was written after`)
 
   // An INDEPENDENT derivation of the richest word available, computed here rather than by calling the
   // fixture's own `richestIn` — comparing a thing to itself proves only that it is itself.
@@ -267,30 +269,32 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
   }
 }
 
-// ── G. `dark` AND `partial` KEEP THE WORD WHILE THE BAND IS UNBOUND ──────────────────────────
-// ★ THE ONE THAT CAUGHT THE REAL SHAPE. Reading the seat count off `slots` looks right and is wrong
-// for exactly the two scenarios the seats exist to show: both deliberately unbind the band while the
-// vessel goes on bearing its word. A seat count sourced from `slots` renders ZERO seats there — the
-// panel would draw a gem floating in a vessel with nowhere to put it.
+// ── G. ★ `dark` AND `mixed`: DARK = GROWN IN, WORD UNKNOWN, BAND UNBOUND (reworked 2026-09-27) ─────
+// THE LETTERS GROW IN: a dark vessel is FINISHED — every letter present — and asleep because the keeper does
+// not know its word. So it holds all its letters, binds nothing, and its word is absent from the book.
 {
   const dark = planPanel('dark')
   for (const kind of VESSELS) {
-    ok(!!dark.wordFor[kind], `★★ dark/${kind}: the vessel still bears its word with nothing written in it`)
-    ok(dark.worn[kind].length === 0, `★★ dark/${kind}: every seat is empty (found ${dark.worn[kind].length})`)
+    const w = dark.wordFor[kind]
+    if (!w) continue
+    const m = moveById(w)
+    ok(!!m && dark.worn[kind].length === lettersOf(m, dark.birth).length, `★★ dark/${kind}: every letter is grown in (${dark.worn[kind].length}) — dark is not empty`)
+    ok(!dark.learned.includes(w), `★★ dark/${kind}: and its word is NOT in the book — that is what dark means`)
     const b = BAND_FOR_VESSEL[kind]
-    if (b >= 0) ok(dark.slots[b] === null,
-                   `★ dark/${kind}: an unwritten vessel binds NOTHING — the brief calls a vessel finished only when every seat is filled`)
+    if (b >= 0) ok(dark.slots[b] === null, `★ dark/${kind}: a dark vessel binds nothing`)
   }
+  // through the shipped resolver: a dark vessel's word must not come back bound
+  wipe()
+  const seeded = seedPanel('dark')
+  const res = resolveLoadout([...seeded.owned], seeded.birth, keeperBook(seeded.owned))
+  ok(VESSELS.every(k => BAND_FOR_VESSEL[k] < 0 || res.slots[BAND_FOR_VESSEL[k]] === null), '★★★ dark: the real resolve binds nothing either')
+  wipe()
 
-  const partial = planPanel('partial')
-  const pb = BAND_FOR_VESSEL.bracelet
-  if (partial.worn.bracelet.length === 1 && partial.wordFor.bracelet) {
-    const m = moveById(partial.wordFor.bracelet)
-    const need = m ? lettersOf(m, partial.birth).length : 0
-    ok(need > 1, `★★★ partial: the bracelet bears a ${need}-seat word — 1 of 1 would not be a partial read at all`)
-    if (pb >= 0) ok(partial.slots[pb] === null,
-                    '★★★ partial: the band is UNBOUND while the vessel keeps its word — the case that breaks a slots-sourced seat count')
-  }
+  const mixed = planPanel('mixed')
+  const fb = BAND_FOR_VESSEL.focus
+  if (mixed.wordFor.focus && fb >= 0) ok(mixed.slots[fb] === null, '★★★ mixed: the dark glove\'s band is UNBOUND while the vessel keeps its word')
+  const bb = BAND_FOR_VESSEL.bracelet
+  if (mixed.wordFor.bracelet && bb >= 0) ok(mixed.slots[bb] === mixed.wordFor.bracelet, '★★★ mixed: the lit bracelet\'s word IS bound')
 }
 
 console.log(`panel-fixture: ${pass} passed, ${fails.length} failed`)

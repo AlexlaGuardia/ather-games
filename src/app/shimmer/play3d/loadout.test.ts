@@ -42,7 +42,13 @@ const kitFor = (owned: string[], book: Book) => {
 const passiveFor = (owned: string[], book: Book) => derivePassive(owned, bornOf(owned), book)
 
 import { LOADOUT_KEY, loadLoadout, saveLoadout, setSlot, resolveLoadout, type Loadout } from './loadout'
-import { VESSEL_FOR_KIND, isBodyHeld, saveLetters, lettersOf, VESSELS } from './gems'
+import { VESSEL_FOR_KIND, isBodyHeld, saveLetters, lettersOf, VESSELS, WORN_WORD_KEY } from './gems'
+
+/** ★ THE LETTERS GROW IN (09-27): a word that is not body-held binds only while the vessel made for it is worn. */
+const wearFor = (moveId: string, slot: number) => {
+  const v = VESSEL_FOR_KIND[ALL_BANDS[slot]!]
+  if (v) store.set(WORN_WORD_KEY, JSON.stringify({ bracelet: null, focus: null, [v]: moveId }))
+}
 import { keeperLetters } from './book'
 import { moveById } from './keeper-moves'
 
@@ -154,6 +160,12 @@ const reset = () => store.clear()
   const kit = defaultFor(OWNED, ALL)
   const move = kit.find((m) => m !== null)!
   const slot = kit.indexOf(move)
+  // unworn first: a vessel word binds only with its vessel on (09-27) — refused, not silently bound
+  const m0 = KEEPER_MOVES.find((m) => m.id === move)!
+  if (VESSEL_FOR_KIND[ALL_BANDS[slot]!] && !isBodyHeld(m0, BIRTH)) {
+    ok(setSlot(OWNED, BIRTH, empty, slot, move, ALL)[slot] === null, '★ a vessel word is refused while no vessel made for it is worn')
+  }
+  wearFor(move, slot)
 
   ok(setSlot(OWNED, BIRTH, empty, slot, move, ALL)[slot] === move, 'a legal bind lands in its slot')
   ok(setSlot(OWNED, BIRTH, empty, slot, 'no-such-move', ALL)[slot] === null,
@@ -199,6 +211,7 @@ const reset = () => store.clear()
 
   const move = tacticals[0].id
   const empty: Loadout = ALL_BANDS.map(() => null)
+  wearFor(move, t)
   const held = setSlot(OWNED, BIRTH, empty, t, move, ALL)
   ok(held[t] === move, 'the tactical binds to the tactical slot')
   ok(held.filter((s) => s === move).length === 1, '★ exactly one slot holds it')

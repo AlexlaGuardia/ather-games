@@ -329,11 +329,10 @@ import { BrewPanel } from './brew-panel'
 import { brewBlocker } from './brew'
 import { loadRuneInventory, saveRuneInventory, grantRune, revokeRune, type RuneInventory } from '../play3d/rune-inventory'
 import { rebirth } from '../play3d/reborn'
-import { addGems, allLetters, saveLetters, shortFor, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel } from '../play3d/gems'
-import { imbue, imbueWhy, imbueSentence, crystalFor } from '../play3d/imbue'
+import { addGems, allLetters, saveLetters, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, type Vessel } from '../play3d/gems'
 import { PassagePanel } from '../play3d/PassagePanel'
 import { WEEK, type Weekday } from '../play3d/passage'
-import { loadStowed, equip, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, completeVessels, dismantle, dismantleWorn, placeGems, seatCount, seatLetters, shortOf, isComplete, setWord, wornTier, wornWord, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier, placeGem, stripVesselItems } from '../play3d/vessels'
+import { loadStowed, ownedCount, MAX_PER_KIND, BAND_FOR_VESSEL, seatCount, wornTier, wornWord, wornPresent, isFloor, seatCapOf, TIER_MATERIAL, TIERS, grantVessel, VESSEL_NOUN, type VesselTier, stripVesselItems } from '../play3d/vessels'
 import { rollDig, rollCache, parseVesselItem, takeVessel, vesselItemId, vesselRoom, type DropDoor } from '../play3d/vessel-drops'
 import { starterFor, hasLearned, learn } from '../play3d/scroll-market'
 import { keeperLetters } from '../play3d/book'
@@ -1699,8 +1698,8 @@ export default function VoxelWorld() {
      * `runeTick` then has `World` re-resolve the loadout + stance exactly as `/rune` does.
      */
     /**
-     * `/gems` — the letters readout, and the dev door for putting gems in the bag (2026-09-03).
-     * Reads through `keeperLetters` so a fresh keeper is seeded on the same door the panel uses.
+     * `/gems` — the letters readout: loose STONES (material since THE LETTERS GROW IN, 09-27) and the
+     * letters grown into each worn vessel. The owner door still drops stones in, to test the counter + cutter.
      */
     gems: (arg, n) => {
       const inv = loadRuneInventory()
@@ -1710,16 +1709,16 @@ export default function VoxelWorld() {
         const bag = Object.entries(l2.bag).map(([r, k]) => `${name(r)}×${k}`).join(', ') || 'empty'
         const set = VESSELS.map(v => `${v}: ${l2.vessels[v].map(name).join(', ') || '—'}`).join(' · ')
         const total = Object.values(allLetters(l2)).reduce((a, b) => a + b, 0)
-        return `bag: ${bag} · ${set} · ${total} gem${total === 1 ? '' : 's'} in all`
+        return `stones: ${bag} · worn letters — ${set} · ${total} in all`
       }
       if (!arg) return line(l)
-      if (!isOwner) return 'gems are found at the Passage, not typed — bare /gems reads your letters'
+      if (!isOwner) return 'letters grow into vessels; nobody hands out stones — bare /gems reads yours'
       const id = arg.toLowerCase()
       if (!RUNES.some(r => r.id === id)) return `no such rune: ${arg}`
       const next = addGems(l, id, n ?? 1)
       saveLetters(next)
       setRuneTick(t => t + 1)
-      return `⟳ dev · ${n ?? 1} ${name(id)} gem${(n ?? 1) === 1 ? '' : 's'} into the bag · ${line(next)}`
+      return `⟳ dev · ${n ?? 1} loose ${name(id)} stone${(n ?? 1) === 1 ? '' : 's'} · ${line(next)}`
     },
     // ★ /learn — the SCROLL, by hand (2026-09-11). `eligibleMoves` asks the BOOK, and a fresh keeper's
     // book holds only Gregory's gift: Alex granted Lightning and still could not cut Greg's bracelet

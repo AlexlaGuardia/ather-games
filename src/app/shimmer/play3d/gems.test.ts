@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs'
 import {
   EMPTY_LETTERS, VESSEL_CAP, VESSEL_FOR_KIND, addGems, bindLetters, unbindLetters, isBodyHeld, lettersOf,
-  missingLetters, seedLetters, loadLetters, GEMS_KEY, VESSELS_KEY, shortFor, type Letters,
+  missingLetters, seedLetters, loadLetters, GEMS_KEY, VESSELS_KEY, WORN_WORD_KEY, shortFor, growWorn, takeStones, sellStones, STONE_SELL, STONE_CREDIT, type Letters,
 } from './gems'
 import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { ALL_BANDS, laneRunes, type SlotKind } from './cast'
@@ -118,7 +118,8 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   const gift = KEEPER_MOVES.find((m) => m.tier === 'tactical' && !isBodyHeld(m, birth) && m.id !== word.id && m.runes.every((x) => laneRunes(birth, 'element').has(x)))
   if (gift) {
     const s2 = seedLetters(birth, bound, gift.id)
-    ok(gift.runes.every((r) => (s2.bag[r] ?? 0) >= 1), 'Gregory\'s gift arrives WITH its letters, loose in the bag')
+    // ★ THE LETTERS GROW IN (ruled 2026-09-27): no loose letter is ever minted — Greg's gift included
+    ok(Object.keys(s2.bag).length === 0, '★ Gregory\'s gift adds NO loose letters — letters grow into vessels, never the bag (09-27)')
   }
   // and through the real reader: no save → seeded and persisted; a save → read back, not re-seeded
   const l1 = loadLetters(birth, bound, undefined)
@@ -155,22 +156,50 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
     store[VESSELS_KEY] = JSON.stringify({ bracelet: [], focus: [] }); store[GEMS_KEY] = '{}'
     res = resolveLoadout(inv.owned, birth, keeperBook(inv.owned))
     ok(res.slots[TAC] === null && res.why[TAC] === 'no-gem', `★ a bound word with no letters set resolves EMPTY as no-gem (got ${res.slots[TAC]} / ${res.why[TAC]})`)
-    // setSlot refuses without letters, binds with them, and clearing returns them
+    // ★ THE LETTERS GROW IN (09-27): a bind moves no stone. A band with a vessel takes a body-held word, or
+    // the word the WORN vessel was made for — nothing else, however many loose stones the keeper holds.
     const before = ALL_BANDS.map(() => null)
-    ok(setSlot(inv.owned, birth, before, TAC, word.id, keeperBook(inv.owned))[TAC] === null, '★ setSlot REFUSES a word the keeper cannot write')
     let l: Letters = { bag: {}, vessels: { bracelet: [], focus: [] } }
     for (const r of word.runes) l = addGems(l, r)
     store[GEMS_KEY] = JSON.stringify(l.bag)
+    ok(setSlot(inv.owned, birth, before, TAC, word.id, keeperBook(inv.owned))[TAC] === null, '★ setSlot REFUSES a word with no vessel made for it worn — loose stones are material, not letters')
+    ok(JSON.stringify(JSON.parse(store[GEMS_KEY]!)) === JSON.stringify(l.bag), '★ ...and not one stone moved')
+    // wear the vessel made for it: the record says so, and the letters grow in on the next read
+    store[WORN_WORD_KEY] = JSON.stringify({ bracelet: word.id, focus: null })
     const after = setSlot(inv.owned, birth, before, TAC, word.id, keeperBook(inv.owned))
-    ok(after[TAC] === word.id, 'with the letters in the bag, setSlot binds it')
-    const v = JSON.parse(store[VESSELS_KEY]!)
-    ok(missingLetters(word.runes, v.bracelet).length === 0 && JSON.stringify(JSON.parse(store[GEMS_KEY]!)) === '{}', '★ ...and the letters MOVED bag → bracelet, persisted')
+    ok(after[TAC] === word.id, 'with the vessel made for it worn, setSlot binds it')
+    const grown = loadLetters(birth, after, undefined)
+    ok(missingLetters(lettersOf(word, birth), grown.vessels.bracelet).length === 0, '★ the worn vessel holds its word\'s letters — grown, not set')
     const cleared = setSlot(inv.owned, birth, after, TAC, null, keeperBook(inv.owned))
-    const bag = JSON.parse(store[GEMS_KEY]!)
-    ok(cleared[TAC] === null && word.runes.every((r) => (bag[r] ?? 0) >= 1) && JSON.parse(store[VESSELS_KEY]!).bracelet.length === 0, 'clearing the slot returns the letters to the bag')
-    // body-held: Squall for a tempest-born binds with an empty bag
+    ok(cleared[TAC] === null && JSON.parse(store[WORN_WORD_KEY]!).bracelet === word.id, 'clearing the band leaves the vessel on, still made for its word')
+    // body-held: Squall for a tempest-born binds with no vessel at all
     store[GEMS_KEY] = '{}'
-    if (body) ok(setSlot(inv.owned, birth, cleared, TAC, body.id, keeperBook(inv.owned))[TAC] === body.id, `★ the doubled focus (${body.id}) binds with an empty bag — the floor, through the consumer`)
+    if (body) ok(setSlot(inv.owned, birth, cleared, TAC, body.id, keeperBook(inv.owned))[TAC] === body.id, `★ the doubled focus (${body.id}) binds with no vessel — the floor, through the consumer`)
+  }
+}
+
+// ── E2. ★ growWorn: the migration from the binding days, and the stones ───────────────────────
+{
+  wipe()
+  const birth = 'tempest'
+  const word = KEEPER_MOVES.find((m) => m.tier === 'tactical' && !isBodyHeld(m, birth) && lettersOf(m, birth).length >= 2 && m.runes.every((x) => laneRunes(birth, 'element').has(x)))
+  if (word) {
+    const need = lettersOf(word, birth)
+    const bound = ALL_BANDS.map((k) => (k === 'tactical' ? word.id : null))
+    // a half-written worn bracelet (one letter of its word) plus a stray letter its word does not use
+    const stray = RUNES.find((r) => !need.includes(r.id))!.id
+    const half: Letters = { bag: {}, vessels: { bracelet: [need[0]!, stray], focus: [] } }
+    const g = growWorn(half, birth, bound)
+    ok(missingLetters(need, g.vessels.bracelet).length === 0 && g.vessels.bracelet.length === need.length, `★ a half-written worn vessel is GIVEN its missing letters (${g.vessels.bracelet.join(',')})`)
+    ok((g.bag[stray] ?? 0) === 1, '★ a letter its word does not use comes out as a loose stone — nothing a keeper had is taken')
+    ok(JSON.stringify(growWorn(g, birth, bound)) === JSON.stringify(g), 'growing is idempotent — a second read changes nothing')
+    const none = growWorn({ bag: {}, vessels: { bracelet: [], focus: [] } }, birth, ALL_BANDS.map(() => null))
+    ok(none.vessels.bracelet.length === 0, 'nothing worn → nothing grown')
+    // the stones
+    const t = takeStones({ bag: { [need[0]!]: 2, [stray]: 1 }, vessels: g.vessels }, need)
+    ok(t.taken.length === 1 && t.letters.bag[need[0]!] === 1 && t.letters.bag[stray] === 1, 'takeStones takes one of each of the word\'s letters held, and nothing else')
+    ok(sellStones(t.letters, stray, 2) === null && sellStones(t.letters, stray, 1)!.bag[stray] === undefined, 'sellStones refuses more than is held, and tidies an emptied stack')
+    ok(STONE_CREDIT > STONE_SELL, '★ a stone is worth more to the cutter than to the counter — spending it on a vessel is the better road')
   }
 }
 
@@ -186,9 +215,8 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   const op = at >= 0 ? src.slice(at, src.indexOf('\n    },\n', at)) : ''
   ok(/keeperLetters\(/.test(op) && /addGems\(/.test(op) && /saveLetters\(/.test(op) && /setRuneTick\(/.test(op), 'the op reads through keeperLetters, adds, persists, and ticks the world')
   ok(/isOwner\) return/.test(op), 'granting is owner-gated inside the op; bare is not')
-  // ★ RE-POINTED 2026-09-04 (hub): the cast bar is a READOUT now; the SATCHEL's vessel parts say what a
-  // vessel is short (`shortOf`), and writing happens there. Same claim, new surface.
-  ok(/shortOf\(/.test(src), 'the satchel asks shortOf — a vessel the keeper cannot write yet says which letters are short')
+  // ★ THE LETTERS GROW IN (09-27): the satchel asks whether a vessel is LIT (the keeper knows its word)
+  ok(/isLit\(/.test(src), 'the satchel asks isLit — a dark vessel says which word would light it')
   // ★★ THE LETTERS, SPLIT BY WHERE THE THING LIVES (Alex, 2026-09-03): the BAG on the Satchel, the
   // VESSELS on Gear (was Loadout), and no Runes tab at all since 09-04. ⚠ RE-POINTED from `LettersCard`, which this block
   // anchored on until the split retired it. Every behavioural assert below is the original, re-aimed
@@ -201,31 +229,22 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   const card = cardAt >= 0 && cardEnd > cardAt ? src.slice(cardAt, cardEnd) : ''
   ok(/keeperLetters\(owned, birth\)/.test(card) && !/useState\(/.test(card), 'the card reads keeperLetters on every render — never pinned in useState')
   ok(/l\.bag/.test(card), 'the SATCHEL half renders the bag')
-  // ★ TWO GRIDS (Alex, 2026-09-10, on the real satchel: "this should be reserved for the gems hence the name..
-  // the vessels can be held in the inventory until equipt"). Gems is the letters; the carried vessels sit
-  // under their OWN head. Asserted by ORDER inside the card: loose cells, then the Vessels head, then the
-  // stowed cells — a vessel cell back inside the gems grid puts `stowed.map(` before the head again.
+  // ★ TWO GRIDS (Alex, 2026-09-10) — reworked 09-27: the first is loose STONES, drawn only when a keeper holds
+  // any (nothing new ever lands there), then the Vessels head, then the vessels.
   const looseAt = card.indexOf('{loose.map(')
   const vesselHeadAt = card.indexOf('<SectionHead label="Vessels"')
   const stowedAt = card.indexOf('{stowed.map(')
   ok(looseAt >= 0 && vesselHeadAt > looseAt && stowedAt > vesselHeadAt,
-     `★ the satchel draws the gems, THEN a Vessels head, THEN the vessels (loose@${looseAt} head@${vesselHeadAt} stowed@${stowedAt})`)
+     `★ the satchel draws the stones, THEN a Vessels head, THEN the vessels (loose@${looseAt} head@${vesselHeadAt} stowed@${stowedAt})`)
   const gemsGrid = looseAt >= 0 && vesselHeadAt > looseAt ? card.slice(looseAt, vesselHeadAt) : ''
-  ok(gemsGrid.length > 0 && !/stowed/.test(gemsGrid), '★ and no vessel is drawn inside the gems grid')
-  // ★ THE VESSEL CELL IS THE SOCKET (Alex, 2026-09-10 eve: "drag and drop it … to add in gems"). A gem cell
-  // lifts on press, a vessel short THAT letter lights, and the window's release sets exactly that letter
-  // through `placeGem`. Each half is asserted where it lives; the whole is the gesture.
-  ok(/onPointerDown=\{e => \{ if \(e\.button === 0\) lift\(id, e\) \}\}/.test(gemsGrid), '★ a gem cell LIFTS on a left press')
-  ok(/releasePointerCapture\(e\.pointerId\)/.test(card), '★ the lift releases implicit capture — on a phone no other cell would ever see pointerenter otherwise')
+  ok(gemsGrid.length > 0 && !/stowed/.test(gemsGrid), '★ and no vessel is drawn inside the stones grid')
+  ok(/\{loose\.length > 0 && </.test(card), '★ the Stones grid is drawn only when a keeper holds a loose stone')
+  // ★ A KEEPER NEVER SETS A STONE (ruled 09-27): the drag-to-set gesture, place/dismantle and imbue are GONE.
+  // Asserted as absences across both files, so a revert of any one of them turns this red.
+  ok(!/placeGems?\(/.test(src) && !/\bdismantle\(/.test(src) && !/\bimbue\(/.test(src) && !/lift\(id, e\)/.test(src),
+     '★ no place, no dismantle, no imbue, no gem drag — a keeper never sets a stone')
   const vesselGrid = card.slice(stowedAt)
-  ok(/const wants = dragGem !== null && !!v\.move && shortOf\(v, birth\)\.includes\(dragGem\)/.test(vesselGrid), '★ a vessel lights only when its word is SHORT the lifted letter')
-  ok(/onPointerEnter=\{\(\) => \{ if \(dragRef\.current\) overVessel\.current = i \}\}/.test(vesselGrid), 'crossing a vessel makes it the drop target')
-  ok(/if \(!dragRef\.current\) setSel\(sel === i \? null : i\)/.test(vesselGrid), 'a press on a vessel still selects it — but not while a gem is lifted')
-  ok(/const r = placeGem\(i, birth, keeperLetters\(owned, birth\), id\)/.test(card) && /saveLetters\(r\.letters\); setSel\(i\); onChange\(\)/.test(card),
-     '★ the release sets ONE letter through placeGem, reading the letters fresh, and selects the vessel so its strip shows the result')
-  ok(/setDropNote\(r\.r\.say\)/.test(card) && /\{dropNote && /.test(card), 'and what happened is SAID under the grid — a refused drop is not a drop that did nothing')
-  ok(/window\.addEventListener\('pointercancel', up\)/.test(card), 'a cancelled pointer (a scroll steals it) ends the lift instead of leaving it stuck')
-  ok(/<div ref=\{ghost\} hidden className="pointer-events-none fixed/.test(card), 'the lifted gem rides under the pointer and can never eat the drop')
+  ok(/const on = isLit\(v, owned, birth, book\)/.test(vesselGrid), '★ each vessel cell reads lit or dark from isLit')
   const rackAt = declAt(src, 'VesselRack')
   const rackEnd = declAfter(src, 'GearTab', rackAt)
   ok(rackAt >= 0 && rackEnd > rackAt, 'the rack slice has BOTH anchors')
@@ -239,7 +258,8 @@ ok(KEEPER_KEYS.includes(GEMS_KEY) && KEEPER_KEYS.includes(VESSELS_KEY), 'both le
   // (PATTERNS 08-23, *a guard satisfiable by being ANYWHERE*). The named negative closes it.
   ok(!/\[\s*'bracelet'\s*,\s*'focus'\s*\]/.test(rack) && !/\[\s*'focus'\s*,\s*'bracelet'\s*\]/.test(rack),
      '★ and the vessel names are NEVER paired as a literal array — that list is `VESSELS` or it is a mirror of it')
-  ok(/keeperLetters\(owned, birth\)/.test(rack), 'and reads the letters fresh too — a bind two rows below moves them under the cursor')
+  ok(/keeperLetters\(owned, birth\)/.test(rack), 'and reads the letters fresh too — an equip below changes them under the cursor')
+  ok(/completeVessels\(kind, birth, \{ owned, book \}\)/.test(rack), '★ the equip dropdown offers only LIT vessels — a dark one waits in the satchel')
   const bagUses = src.split('<SatchelLetters ').length - 1
   const rackUses = src.split('<VesselRack ').length - 1
   ok(bagUses === 1 && rackUses === 1, `★ ONE mount each — the bag on the satchel, the vessels on the loadout (${bagUses}/${rackUses})`)

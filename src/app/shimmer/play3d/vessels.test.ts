@@ -10,10 +10,10 @@ import { readFileSync } from 'node:fs'
 import {
   STOWED_KEY, LEGACY_PAIRS_KEY, WORN_TIER_KEY, WORN_WORD_KEY, wornWord, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, FLOOR_TIER, FLOOR_SEATS,
   loadStowed, saveStowed, buyVessel, equip, ownedCount, emptyVessel, equippedVessel,
-  dismantleWorn, placeGems, placeGem, stripVesselItems, floorWordFor, seatLetters, seatCount, shortOf, isComplete, isFloor, seatCapOf, grantVessel, setWord, wornTier, clearStowed, TIER_MATERIAL,
+  takeOffWorn, isLit, completeVessels, cutterPrice, CUTTER_FLOOR, stripVesselItems, floorWordFor, seatLetters, seatCount, shortOf, isComplete, isFloor, seatCapOf, grantVessel, setWord, wornTier, clearStowed, TIER_MATERIAL,
 } from './vessels'
 import { saveLoadout, rawLoadout, resolveLoadout, setSlot } from './loadout'
-import { GEMS_KEY, VESSELS_KEY, VESSEL_CAP as _CAP, addGems, isBodyHeld, saveLetters, loadLetters, VESSELS, type Letters } from './gems'
+import { GEMS_KEY, VESSELS_KEY, VESSEL_CAP as _CAP, STONE_CREDIT, addGems, isBodyHeld, saveLetters, loadLetters, VESSELS, type Letters } from './gems'
 import { keeperBook, saveBook } from './book'
 import { setBirthRune, grantRune, saveRuneInventory, EMPTY_INVENTORY } from './rune-inventory'
 import { KEEPER_MOVES, moveById } from './keeper-moves'
@@ -80,56 +80,71 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     const { birth, word } = pick
     let inv = setBirthRune(EMPTY_INVENTORY, birth); for (const r of word.runes) inv = grantRune(inv, r)
     saveRuneInventory(inv); saveBook({ learned: [word.id] })
-    let l: Letters = { bag: {}, vessels: { bracelet: [], focus: [] } }
-    for (const r of word.runes) l = addGems(l, r)
-    saveLetters(l); saveLoadout(ALL_BANDS.map(() => null))
-    const s1 = setSlot(inv.owned, birth, ALL_BANDS.map(() => null), TAC, word.id, keeperBook(inv.owned))
-    saveLoadout(s1)
-    ok(s1[TAC] === word.id && JSON.parse(store[GEMS_KEY]!)[word.runes[0]!] === undefined,
-       'the worn bracelet is written: the word binds and its letters left the bag')
+    // ★ THE LETTERS GROW IN (ruled 2026-09-27): the keeper wears a vessel made for the word — its letters in it
+    saveLoadout(ALL_BANDS.map(() => null))
+    ok(grantVessel('bracelet', 1, word.id, 'found').ok, 'fixture: a found bracelet for the word')
+    ok(loadStowed()[0]!.gems.length === word.runes.length, '★ it arrived WHOLE — letters grown in, nothing to set')
+    ok(equip('bracelet', 0, birth) && rawLoadout()[TAC] === word.id, 'it goes on: its word is on the band')
 
-    // a SPARE gem in the bag, so "the equip drops the bag" has something to drop
+    // a loose STONE, so "the take-off leaves the stones alone" has something to leave
     const spare = RUNES.find(r => !word.runes.includes(r.id))!.id
     saveLetters(addGems(loadLetters(birth, rawLoadout()), spare, 1))
-
-    // mark the FOCUS so a bracelet equip touching it is visible
+    // mark the FOCUS so a bracelet take-off touching it is visible
     const before = loadLetters(birth, rawLoadout())
     saveLetters({ ...before, vessels: { ...before.vessels, focus: [birth] } })
 
-    // ★ RE-POINTED 2026-09-04 (hub) TO ALEX'S RULING: a vessel is MADE for one word and bears exactly its
-    // seats; only a WRITTEN vessel is gear. So the parking move is DISMANTLE (letters to the bag, the empty
-    // paper to the satchel still cut for its word), and an unwritten vessel refuses to be worn.
-    ok(dismantleWorn('bracelet', birth), 'dismantle the worn bracelet')
-    ok(JSON.parse(store[GEMS_KEY]!)[spare] === 1,
-       "★ the BAG's spare survives a dismantle untouched — loose letters are the keeper's, not the paper's")
-    for (const r of word.runes) ok((loadLetters(birth, rawLoadout()).bag[r] ?? 0) >= 1, `the word's letter ${r} came back to the bag`)
+    ok(takeOffWorn('bracelet', birth), 'take the worn bracelet off')
+    ok(JSON.parse(store[GEMS_KEY]!)[spare] === 1, "★ the loose stone survives a take-off untouched")
+    for (const r of word.runes) ok((loadLetters(birth, rawLoadout()).bag[r] ?? 0) === 0, `★ the word's letter ${r} did NOT fall out into the bag — letters grown in stay in`)
     ok(rawLoadout()[TAC] === null, 'nothing worn on the tactical band now')
     ok(JSON.parse(store[VESSELS_KEY]!).focus.length === 1 && rawLoadout()[ULT] === null,
-       '★★ THE FOCUS DID NOT MOVE. A bracelet dismantle touches the bracelet alone')
+       '★★ THE FOCUS DID NOT MOVE. A bracelet take-off touches the bracelet alone')
     const parked = loadStowed()[0]!
-    ok(parked.kind === 'bracelet' && parked.move === word.id && parked.gems.length === 0,
-       '★ the paper went to the satchel EMPTY and still cut for its word')
+    ok(parked.kind === 'bracelet' && parked.move === word.id && parked.gems.length === word.runes.length,
+       '★ it went to the satchel WHOLE, still made for its word, letters in it')
     ok(seatCount(parked, birth) === word.runes.length, `★ its seats are the word's letters (${word.runes.length}), not the cap`)
-    ok(!isComplete(parked, birth) && shortOf(parked, birth).length === word.runes.length, 'unwritten, and short every one of its letters')
-    ok(equip('bracelet', 0, birth) === false, '★ an unwritten vessel refuses to be worn')
-    const placed = placeGems(0, birth, loadLetters(birth, rawLoadout()))
-    ok(placed.r.ok && placed.r.complete && placed.r.placed.length === word.runes.length, 'placing from the bag writes it in one press when the bag holds every letter')
-    saveLetters(placed.letters)
-    ok((loadLetters(birth, rawLoadout()).bag[spare] ?? 0) === 1, 'the spare stayed in the bag; only the word\'s letters moved')
-    ok(isComplete(loadStowed()[0]!, birth), 'written now')
-    ok(equip('bracelet', 0, birth) && rawLoadout()[TAC] === word.id, 'and a written vessel goes on: its word is on the band')
+    ok(isComplete(parked, birth) && shortOf(parked, birth).length === 0, 'finished — never short a letter')
+
+    // ★ LIT = THE KEEPER KNOWS THE WORD. Forget it: the vessel goes dark, and the rack stops offering it.
+    ok(isLit(parked, inv.owned, birth, keeperBook(inv.owned)), 'known word → lit')
+    ok(completeVessels('bracelet', birth, { owned: inv.owned, book: keeperBook(inv.owned) }).some(x => x.v.move === word.id), 'and the rack offers it')
+    saveBook({ learned: [] })
+    ok(!isLit(parked, inv.owned, birth, { learned: [] }), '★★ a word the keeper does not know → DARK')
+    ok(!completeVessels('bracelet', birth, { owned: inv.owned, book: { learned: [] } }).some(x => x.v.move === word.id), '★★ and a dark vessel is not offered as gear')
+    saveBook({ learned: [word.id] })
+
+    ok(equip('bracelet', 0, birth) && rawLoadout()[TAC] === word.id, 'back on')
     ok(loadLetters(birth, rawLoadout()).vessels.bracelet.length === word.runes.length, 'and its letters came with it')
     ok(acquired().filter(v => v.kind === 'bracelet').length === 0, '★ wearing nothing minted no blank — the slot was simply taken')
     const res = resolveLoadout(inv.owned, birth, keeperBook(inv.owned))
-    ok(res.slots[TAC] === word.id && res.why[TAC] === null, 'the worn vessel resolves seated through the real consumer')
+    ok(res.slots[TAC] === word.id && res.why[TAC] === null, 'the worn vessel resolves bound through the real consumer')
     const worn = equippedVessel('bracelet', birth)
     ok(worn.move === word.id && worn.gems.length === word.runes.length, 'equippedVessel reads the same vessel the world is wearing')
-    // the Passage cuts to order
+    // the Passage cuts to order — WHOLE
     const cut = buyVessel('bracelet', VESSEL_PRICE, word.id)
-    ok(cut.ok && loadStowed().some(v => v.move === word.id && v.gems.length === 0), '★ the Passage cuts a bracelet FOR a word: it arrives empty, cut for that word')
+    ok(cut.ok && loadStowed().some(v => v.move === word.id && v.gems.length === word.runes.length), '★ the Passage cuts a bracelet FOR a word: it arrives with the letters grown in')
     ok(buyVessel('bracelet', VESSEL_PRICE, 'no-such-move').why === 'no-such-word', 'a word nobody has heard of is refused')
     ok(buyVessel('focus', VESSEL_PRICE, word.id).why === 'no-such-word', '★ a tactical word cannot be cut into a FOCUS — the kind gates the band')
   }
+}
+
+// ── C2. ★ HELD STONES ARE PART-PAYMENT AT THE CUTTER (ruled 2026-09-27) ──────────────────────
+{
+  wipe()
+  const w = KEEPER_MOVES.find(m => m.tier === 'tactical' && m.runes.length >= 2)!
+  const need = seatLetters({ move: w.id }, null)
+  const stones: Letters = { bag: { [need[0]!]: 3, [need[1]!]: 1, zzz: 2 }, vessels: { bracelet: [], focus: [] } }
+  const q = cutterPrice(VESSEL_PRICE, w.id, stones, null)
+  ok(q.stones.length === Math.min(need.length, Math.ceil((VESSEL_PRICE - CUTTER_FLOOR) / STONE_CREDIT)) && q.price === Math.max(CUTTER_FLOOR, VESSEL_PRICE - q.stones.length * STONE_CREDIT),
+     `★ the cutter takes one of each of the word's letters held, ${STONE_CREDIT} apiece (${q.stones.join(',')} → ${q.price})`)
+  ok(!q.stones.includes('zzz'), 'a stone the word does not use is not taken')
+  ok(cutterPrice(VESSEL_PRICE, w.id, null, null).price === VESSEL_PRICE, 'no stones offered → the full price')
+  const r = buyVessel('bracelet', q.price, w.id, stones, null)
+  ok(r.ok && r.marks === 0 && !!r.letters, `★ a keeper with exactly the reduced price can buy it (${r.say})`)
+  ok(r.letters!.bag.zzz === 2 && (r.letters!.bag[need[0]!] ?? 0) === 2, '★ the stones taken are exactly the credited ones; the rest stay with the keeper')
+  ok(buyVessel('bracelet', q.price - 1, w.id, stones, null).why === 'too-dear', 'one Mark short of the reduced price is still too dear')
+  ok(cutterPrice(VESSEL_PRICE, w.id, { bag: { [need[0]!]: 9, [need[1]!]: 9, [need[2] ?? need[0]!]: 9 }, vessels: { bracelet: [], focus: [] } }, null).price >= CUTTER_FLOOR,
+     '★ never below the floor — the cutter is paid for the work')
 }
 
 // ── D. equip edges: nothing there, and the worn slot refuses the other kind ─────────────────
@@ -138,7 +153,7 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   ok(equip('bracelet', 0, 'tempest') === false, 'equipping a vessel you do not own does nothing')
   saveStowed([emptyVessel('focus')])
   ok(equip('bracelet', 0, 'tempest') === false, '★ the worn slot refuses a FOCUS — a vessel is not a generic holder')
-  ok(equip('focus', 0, 'tempest') === false, '★ and an UNWRITTEN focus refuses too — only written vessels are gear (2026-09-04)')
+  ok(equip('focus', 0, 'tempest') === false, '★ and an UNCUT focus refuses too — only a vessel made for a word is gear (2026-09-04)')
   wipe()
   store[STOWED_KEY] = '{"not":"a list"}'
   ok(acquired().length === 0, 'a corrupt stowed save reads as none, not a crash')
@@ -248,17 +263,15 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     l = addGems(l, fwRune, 1)
     saveLetters(l)
     const fl = loadStowed().findIndex(v => v.kind === 'bracelet' && isFloor(v))
-    const placed = placeGems(fl, birth, loadLetters(birth, rawLoadout()))
-    ok(placed.r.ok && placed.r.complete, 'the floor is written with its one letter')
-    saveLetters(placed.letters)
-    ok(equip('bracelet', fl, birth) === true && rawLoadout()[TAC] === fw, '★ Greg\'s written bracelet goes ON — the floor is gear like any written vessel')
+    ok(isComplete(loadStowed()[fl]!, birth) && loadStowed()[fl]!.gems.length === 1, '★ Greg\'s floor arrives with its one letter grown in (09-27)')
+    ok(equip('bracelet', fl, birth) === true && rawLoadout()[TAC] === fw, '★ Greg\'s bracelet goes ON — the floor is gear like any written vessel')
     ok(wornTier('bracelet') === FLOOR_TIER && equippedVessel('bracelet', birth).tier === FLOOR_TIER, '★ and the worn tier says mortal cord — the material went on with the paper')
     ok(loadStowed().filter(v => v.kind === 'bracelet' && isFloor(v)).length === 0, '★ while worn, the floor is NOT also in the satchel — one pair, not one plus a copy')
     ok(ownedCount('bracelet') === MAX_PER_KIND, '★ wearing Greg\'s counts NOTHING against the cap: three acquired in the satchel, the worn one is the floor — and it still went on AT the cap')
-    ok(dismantleWorn('bracelet', birth) === true, 'take it off')
+    ok(takeOffWorn('bracelet', birth) === true, 'take it off')
     const back = loadStowed().filter(v => v.kind === 'bracelet' && isFloor(v))
     // ⚠ `?.`, not `!`: with the floor gone this must FAIL BY NAME, not throw (the 09-03 migration lesson)
-    ok(back.length === 1 && back[0]?.move === fw && back[0]?.gems.length === 0, '★ it comes back to the satchel as the FLOOR, empty, still cut for its word — not as a goldwood copy')
+    ok(back.length === 1 && back[0]?.move === fw && back[0]?.gems.length === 1, '★ it comes back to the satchel as the FLOOR, whole, still cut for its word — not as a goldwood copy')
     ok(loadStowed().filter(v => v.kind === 'bracelet' && isFloor(v)).length === 1, 'and exactly one — the read did not add a second on top of the returned one')
   }
 
@@ -270,7 +283,6 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     saveRuneInventory(inv); saveBook({ learned: [one] })
     saveLoadout(ALL_BANDS.map(() => null)); saveLetters(addGems({ bag: {}, vessels: { bracelet: [], focus: [] } }, KEEPER_MOVES.find(m => m.id === one)!.runes[0]!, 1))
     const g = grantVessel('bracelet', 2, one, 'found'); ok(g.ok, 'a shimmerscale bracelet for the word')
-    const p = placeGems(g.index!, birth, loadLetters(birth, rawLoadout())); saveLetters(p.letters)
     ok(equip('bracelet', g.index!, birth) && wornTier('bracelet') === 2, 'worn: the shimmerscale one')
     // ★ THE WORD GOES ON WITH THE PAPER (2026-09-09). The band is a binding; the vessel bears its word.
     ok(wornWord('bracelet') === one, `★ the worn vessel records ITS word (${wornWord('bracelet')} vs ${one})`)
@@ -280,53 +292,33 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     ok(wornWord('bracelet') === one && equippedVessel('bracelet', birth).move === one,
        '★★ with the BAND unbound the vessel still bears its word — the seat count has something to follow')
     ok(equippedVessel('bracelet', birth).gems.length === 1, '… and its letter is still seated (the 1 of 1/0)')
-    ok(dismantleWorn('bracelet', birth) === true, '★ and it still comes off with the band unbound')
-    ok(wornWord('bracelet') === null, '★ dismantled: no worn word — a fresh equip must not inherit a stale one')
+    ok(takeOffWorn('bracelet', birth) === true, '★ and it still comes off with the band unbound')
+    ok(wornWord('bracelet') === null, '★ taken off: no worn word — a fresh equip must not inherit a stale one')
     ok(loadStowed().some(v => v.kind === 'bracelet' && v.tier === 2 && v.move === one),
        '★ it went back to the satchel cut for ITS word, though the band had forgotten it')
     // put it back on for the cap case below
     const back = loadStowed().findIndex(v => v.kind === 'bracelet' && v.tier === 2)
-    const pb = placeGems(back, birth, loadLetters(birth, rawLoadout())); saveLetters(pb.letters)
     ok(equip('bracelet', back, birth) && wornWord('bracelet') === one, 're-equipped for the cap case')
     ok(grantVessel('bracelet', 1, null, 'bought').ok && grantVessel('bracelet', 1, null, 'bought').ok && ownedCount('bracelet') === MAX_PER_KIND, 'two goldwood spares: three acquired, at the cap')
-    ok(dismantleWorn('bracelet', birth) === true, '★★ at the cap, the WORN vessel still comes off — the old `- 1` refused this and left a keeper unable to undress')
+    ok(takeOffWorn('bracelet', birth) === true, '★★ at the cap, the WORN vessel still comes off — the old `- 1` refused this and left a keeper unable to undress')
     ok(acquired().filter(v => v.kind === 'bracelet').length === MAX_PER_KIND && acquired().some(v => v.kind === 'bracelet' && v.tier === 2 && v.move === one),
        'and it is in the satchel as shimmerscale, cut for its word, with the two goldwood ones')
   }
 }
 
-// ── H. ★ ONE LETTER BY HAND — the gem dragged onto the vessel (Alex, 2026-09-10 eve) ───────────
+// ── H. ★ CUTTING A BLANK GROWS ITS LETTERS IN (replaces the drag-a-gem suite, 2026-09-27) ────
+// THE LETTERS GROW IN: the drag-to-set gesture is gone (a keeper never sets a stone). What is left of "one
+// letter by hand" is the blank: cut it for a word, and it is whole at once.
 {
   wipe()
-  // a two-letter word so "set one, still short one" is observable
-  let pick: { birth: string; two: (typeof KEEPER_MOVES)[number] } | null = null
-  for (const e of ELEMENTS) for (const r of runesOf(e.id)) {
-    const two = KEEPER_MOVES.find(m => m.tier === 'tactical' && !isBodyHeld(m, r.id) && m.runes.length === 2 && m.runes.every(x => laneRunes(r.id, 'element').has(x)))
-    if (two) { pick = { birth: r.id, two }; break }
-  }
-  ok(!!pick, `fixture: a two-letter element tactical exists (${pick ? `${pick.birth}: ${pick.two.id}` : 'none'})`)
-  if (pick) {
-    const { birth, two } = pick
-    const [a, b] = two.runes as [string, string]
-    saveStowed([{ kind: 'bracelet', gems: [], move: two.id, tier: 1 }])
-    let l: Letters = { bag: { [a]: 1, [b]: 1, stone: 1 }, vessels: { bracelet: [], focus: [] } }
-    const wrong = placeGem(0, birth, l, 'stone')
-    ok(!wrong.r.ok && /no seat for that letter/.test(wrong.r.say) && loadStowed()[0]?.gems.length === 0, '★ a letter the word does not need is refused by name, and nothing moves')
-    const one = placeGem(0, birth, l, a)
-    ok(one.r.ok && !one.r.complete && one.r.placed.join() === a && one.r.short.join() === b, `★ the dragged letter sets, and the vessel says what it is still short (${one.r.say})`)
-    ok(loadStowed()[0]?.gems.join() === a && one.letters.bag[a] === undefined && one.letters.bag[b] === 1, 'exactly that gem left the bag; the other stayed')
-    l = one.letters
-    const dup = placeGem(0, birth, l, a)
-    ok(!dup.r.ok && /no seat for that letter/.test(dup.r.say), 'the same letter twice is refused — that seat is written')
-    const none = placeGem(0, birth, { ...l, bag: {} }, b)
-    ok(!none.r.ok && /hold none/.test(none.r.say) && loadStowed()[0]?.gems.length === 1, 'a letter the bag does not hold is refused, and nothing moves')
-    const done = placeGem(0, birth, l, b)
-    ok(done.r.ok && done.r.complete && /Written/.test(done.r.say) && isComplete(loadStowed()[0]!, birth), '★ the last letter writes it — gear now')
-    ok(!placeGem(0, birth, done.letters, b).r.ok && /Every seat is written/.test(placeGem(0, birth, done.letters, b).r.say), 'a written vessel takes nothing more')
-    saveStowed([{ kind: 'bracelet', gems: [], move: null, tier: 1 }])
-    ok(/never cut/.test(placeGem(0, birth, l, a).r.say), 'an uncut vessel says so first')
-    ok(/No such vessel/.test(placeGem(7, birth, l, a).r.say), 'and a missing index fails by name, not by throw')
-  }
+  const two = KEEPER_MOVES.find(m => m.tier === 'tactical' && m.runes.length === 2)!
+  saveStowed([{ kind: 'bracelet', gems: [], move: null, tier: 1 }])
+  const i = loadStowed().findIndex(v => v.move === null && !isFloor(v))
+  ok(setWord(i, two.id, null), 'a blank takes a word')
+  const v = loadStowed()[i]!
+  ok(v.move === two.id && v.gems.length === 2 && isComplete(v, null), `★ and arrives whole — ${v.gems.join(',')} grown in, nothing to set`)
+  saveStowed([{ kind: 'bracelet', gems: ['x'], move: two.id, tier: 1 }])
+  ok(loadStowed()[0]!.gems.join() === seatLetters({ move: two.id }, null).join(), '★ a half-written vessel from the binding days reads back WHOLE (grown on read)')
 }
 
 // ── I. ★ THE REVERSE MIGRATION (2026-09-11): a vessel is never a bag item ─────────────────────
@@ -350,8 +342,6 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   ok(st.filter(isFloor).length === 2, '★ Greg\'s pair is there exactly once — from the read, not from the bag')
   const again = stripVesselItems(r.slots)
   ok(again.stowedBack === 0 && again.dropped === 0, 'a clean bag strips nothing — the migration is idempotent')
-  ok(/click it and choose one first/.test(placeGem(st.findIndex(v => v.move === null), 'ember', { bag: { ember: 1 }, vessels: { bracelet: [], focus: [] } }, 'ember').r.say),
-     '★ a gem dropped on an UNCUT vessel says what to do, not just that it failed')
 }
 
 // ── F. the hosts: the rack equips, the satchel carries the letters, the Passage sells one ───
@@ -365,9 +355,9 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   const end = declAfter(src, 'GearTab', at)
   ok(at >= 0 && end > at, 'VoxelWorld has a VesselRack, sliced on both anchors')
   const rack = at >= 0 && end > at ? src.slice(at, end) : ''
-  // ★ RE-POINTED 2026-09-04 (hub): the rack reads the stowed list through `completeVessels` (written only).
-  ok(/equip\(kind, i, birth/.test(rack) && /completeVessels\(/.test(rack) && /onEquipped\(/.test(rack),
-     'the rack equips through vessels.ts (written vessels only) and hands the tab its new slots')
+  // ★ RE-POINTED 2026-09-27: the rack reads the stowed list through `completeVessels` — LIT only.
+  ok(/equip\(kind, i, birth/.test(rack) && /completeVessels\(kind, birth, \{ owned, book \}\)/.test(rack) && /onEquipped\(/.test(rack),
+     'the rack equips through vessels.ts (lit vessels only) and hands the tab its new slots')
   const useAt = src.indexOf('<VesselRack ')
   ok(useAt >= 0 && /onLetters\(\)/.test(src.slice(useAt, useAt + 400)),
      'the tab re-resolves and tells the world (onLetters → runeTick) after an equip')
@@ -391,6 +381,8 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   ok(/buyVessel\(/.test(panel) && /VESSEL_PRICE/.test(panel) && /spendMarks\(/.test(panel), 'the Passage sells a vessel for Marks')
   ok(/VESSELS\.map\(/.test(panel), '★ the shelf DERIVES its rows from VESSELS — a hand-written pair of rows would go stale the day a third vessel is ruled')
   ok(!/buyPair|PAIR_PRICE/.test(panel), 'and the pair is gone from the shelf, not merely hidden')
+  ok(/buyVessel\(kind, marks, word, letters, birth\)/.test(panel) && /cutterPrice\(/.test(panel), '★ the cutter is offered the keeper\'s stones and shows the reduced price (09-27)')
+  ok(!/buyGem\(/.test(panel) && /sellStone\(/.test(panel), '★ the gem tray BUYS stones now; it sells none (09-27)')
 }
 
 console.log(`vessels: ${pass} passed, ${fails.length} failed`)

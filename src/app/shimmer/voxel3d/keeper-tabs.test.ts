@@ -77,7 +77,7 @@ ok(/const word = wornWord\(kind\) \?\? worn/.test(rack) && /seatsOfWorn\(word\)/
 ok(/<VesselArt kind=\{kind\} tier=\{word \? wornTier\(kind\) : 1\} seats=\{seats\}/.test(rack),
    '★ and the art draws that same count — no word draws the uncut vessel, never seats it does not have')
 ok(/<select /.test(rack) && /completeVessels\(/.test(rack), '★ the spares are a dropdown of WRITTEN vessels, by word (completeVessels)')
-ok(/dismantleWorn\(/.test(rack), 'the worn vessel can be dismantled from the rack')
+ok(/takeOffWorn\(/.test(rack), 'the worn vessel can be taken off from the rack (09-27: whole, letters in it)')
 ok(!/doEquip\(kind, i\)\}\s*className="gx-btn flex/.test(rack), 'the old spare-button row is gone')
 ok(!/nothing set|>empty</.test(rack),
    '★ an empty vessel is three dark seats, never a sentence — "nothing set" and "empty" are gone from the rack')

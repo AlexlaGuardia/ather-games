@@ -28,14 +28,21 @@
  * (canon: a passive occupies an INNATE socket). "The vessel holds what you learned; your body holds
  * what you are." There is no state of this economy in which a keeper is disarmed by poverty.
  *
- * ── JIN'S CALLS (canon says these are the build's) ──
- *   · unbinding RETURNS the letters to the bag, free — a cozy game does not tax changing your mind
- *   · gem quality (the prospecting ladder) is NOT modelled yet: every gem is one letter of one rune
- *   · Gregory's gift arrives WITH its letters (a teacher hands you the word and the stones to write it)
- *   · a keeper who already had moves bound when this shipped keeps them: their letters are seeded
- *     SET, straight from the saved loadout — the same door the book migration used
+ * ── ★★ THE LETTERS GROW IN (RULED 2026-09-27, /magii + Alex — `shimmer-casting-vessels.md` › THE LETTERS GROW IN) ──
+ * A vessel's letters grow into it when it is MADE (cut, found or won). A keeper never sets a stone and
+ * there is no casting bag any more. So everything above about binding is history: `Vessels` is always
+ * exactly the worn word's letters (`growWorn` makes it so on every read), and `bag` holds LOOSE STONES —
+ * material, sold at the Passage's counter (`sellStones`) or taken by the cutter as part-payment
+ * (`takeStones`). Nothing in the build puts a stone in the bag any more; what is there came from before.
+ * The guard that replaced the gem: the letters stay DARK until the keeper knows the word (`vessels.ts` › `isLit`).
  *
- * ── VOCABULARY (canon) ── ✅ gem / rune-gem, bracelet, focus, bind / set / imbue.
+ * ── JIN'S CALLS ──
+ *   · a loose stone sells for `STONE_SELL` Marks; the cutter takes one of the word's own letters for
+ *     `STONE_CREDIT` off its price. The cutter is the better road, the way imbuing used to be
+ *   · a keeper whose worn vessel held the wrong letters (a save from the binding days) keeps them as loose stones
+ *   · gem quality is still not modelled; when it is, it lands on the vessel, not the stone (ruled)
+ *
+ * ── VOCABULARY (canon) ── ✅ gem / rune-gem, stone (loose), bracelet, focus, grown in, lit / dark.
  * ⛔ never: socket, sigil, slot (the Citadel's), amulet / pendant (Lazerin's), cuff / collar, forge, band.
  */
 import { ALL_BANDS, LANE_FOR_KIND, laneRunes, type SlotKind } from './cast'
@@ -44,6 +51,15 @@ import { keeperKey } from '@/lib/keeper-local'
 
 export const GEMS_KEY = 'ather:shimmer:gems'
 export const VESSELS_KEY = 'ather:shimmer:vessels'
+/**
+ * the WORD the worn vessel of each kind was cut for. Lives here (not in `vessels.ts`, which re-exports it)
+ * so `loadLetters` can grow the worn letters without importing its own importer.
+ */
+export const WORN_WORD_KEY = 'ather:shimmer:worn-word'
+/** Marks the Passage counter pays for one loose stone */
+export const STONE_SELL = 15
+/** Marks the cutter takes off a vessel's price for each of its word's letters the keeper hands over as a stone */
+export const STONE_CREDIT = 30
 /** a vessel bears at most three gems — canon's cap, arrived at innately (no socket) */
 export const VESSEL_CAP = 3
 
@@ -164,6 +180,75 @@ export function allLetters(l: Letters): GemStock {
   return countOf([...bagList(l.bag), ...l.vessels.bracelet, ...l.vessels.focus])
 }
 
+// ── the worn word, and the letters that grow from it ─────────────────────────────────────────
+
+function loadWornWords(): Record<Vessel, string | null> {
+  const out = { bracelet: null, focus: null } as Record<Vessel, string | null>
+  try {
+    const raw = JSON.parse(localStorage.getItem(keeperKey(WORN_WORD_KEY)) ?? 'null') as unknown
+    if (raw && typeof raw === 'object') for (const k of VESSELS) { const v = (raw as Record<string, unknown>)[k]; out[k] = typeof v === 'string' ? v : null }
+  } catch { /* private mode */ }
+  return out
+}
+export function saveWornWord(kind: Vessel, move: string | null): void {
+  try { localStorage.setItem(keeperKey(WORN_WORD_KEY), JSON.stringify({ ...loadWornWords(), [kind]: move })) } catch { /* private mode */ }
+}
+/** the word the worn vessel of `kind` was cut for, or null when nothing is recorded */
+export const wornWord = (kind: Vessel): string | null => loadWornWords()[kind]
+
+const bandOf = (kind: Vessel): number => ALL_BANDS.findIndex((k) => VESSEL_FOR_KIND[k] === kind)
+
+/**
+ * The word the WORN vessel of `kind` is made for: the recorded one, else — for a save from before the
+ * record — the bound band, but only while something is actually worn (letters present). Null = nothing worn.
+ */
+export function wornWordFor(kind: Vessel, bound: readonly (string | null)[], held: readonly string[]): string | null {
+  const rec = wornWord(kind)
+  if (rec) return rec
+  const b = bandOf(kind)
+  return held.length && b >= 0 ? (bound[b] ?? null) : null
+}
+
+/**
+ * ★ THE LETTERS GROW IN: the worn vessel holds exactly its word's letters. A worn vessel short a letter
+ * (the binding days let a keeper wear one half-written) is given it; a letter it held that its word does
+ * not use comes out as a loose stone. Pure.
+ */
+export function growWorn(l: Letters, birth: string | null, bound: readonly (string | null)[]): Letters {
+  let bag = { ...l.bag }
+  const vessels = { ...l.vessels }
+  for (const kind of VESSELS) {
+    const word = wornWordFor(kind, bound, l.vessels[kind])
+    const m = word ? moveById(word) : undefined
+    const grown = m ? lettersOf(m, birth) : []
+    if (!word) continue
+    for (const r of missingLetters(l.vessels[kind], grown)) bag[r] = (bag[r] ?? 0) + 1   // spare letters → loose stones
+    vessels[kind] = grown
+  }
+  bag = tidy(bag)
+  return { bag, vessels }
+}
+
+/** Loose stones, as one count. */
+export const stoneCount = (l: Letters): number => Object.values(l.bag).reduce((a, n) => a + n, 0)
+
+/**
+ * The cutter's part-payment: take, from the loose stones, one of each of `word`'s letters the keeper
+ * holds. Returns the letters left and what was taken. Pure; the caller prices it (`STONE_CREDIT` each).
+ */
+export function takeStones(l: Letters, need: readonly string[]): { letters: Letters; taken: string[] } {
+  const bag = { ...l.bag }
+  const taken: string[] = []
+  for (const r of need) if ((bag[r] ?? 0) > 0) { bag[r] = bag[r]! - 1; taken.push(r) }
+  return { letters: { bag: tidy(bag), vessels: l.vessels }, taken }
+}
+
+/** Take `n` loose stones of `rune` off the keeper for the counter. Null when they hold fewer. */
+export function sellStones(l: Letters, rune: string, n = 1): Letters | null {
+  if (n <= 0 || (l.bag[rune] ?? 0) < n) return null
+  return { bag: tidy({ ...l.bag, [rune]: l.bag[rune]! - n }), vessels: l.vessels }
+}
+
 // ── persistence ──────────────────────────────────────────────────────────────────────────────
 
 function parse(raw: string | null): unknown {
@@ -176,11 +261,11 @@ function parse(raw: string | null): unknown {
  *
  * @param birth   the keeper's birth rune — decides what is body-held and needs no letter
  * @param bound   the saved loadout EXACTLY as stored (`rawLoadout`) — a keeper keeps what they carry
- * @param starter Gregory's gift, if any — it arrives with its letters, in the bag
+ * @param starter Gregory's gift — kept for the signature; since 2026-09-27 it adds no loose letters
  *
  * ★ THE SEED IS THE MIGRATION. Every keeper alive when this shipped had moves bound with no gem
  * anywhere; stripping them would be the worst first contact with a feature that exists to make
- * moves feel OWNED. So the letters of what they had bound are seeded SET, and the starter's loose.
+ * moves feel OWNED. So the letters of what they had bound are seeded SET (grown, since 09-27).
  */
 export function loadLetters(birth: string | null, bound: readonly (string | null)[], starter?: string): Letters {
   let rawBag: unknown = null, rawVessels: unknown = null
@@ -197,7 +282,10 @@ export function loadLetters(birth: string | null, bound: readonly (string | null
     if (rawBag && typeof rawBag === 'object') {
       for (const [r, n] of Object.entries(rawBag as Record<string, unknown>)) if (typeof n === 'number' && n > 0) bag[r] = Math.floor(n)
     }
-    return { bag, vessels: { bracelet: list(v.bracelet), focus: list(v.focus) } }
+    const read: Letters = { bag, vessels: { bracelet: list(v.bracelet), focus: list(v.focus) } }
+    const grown = growWorn(read, birth, bound)
+    if (JSON.stringify(grown) !== JSON.stringify(read)) saveLetters(grown)   // the grow is a migration: write it once
+    return grown
   }
   const seeded = seedLetters(birth, bound, starter)
   saveLetters(seeded)
@@ -206,20 +294,16 @@ export function loadLetters(birth: string | null, bound: readonly (string | null
 
 export function seedLetters(birth: string | null, bound: readonly (string | null)[], starter?: string): Letters {
   let l: Letters = { bag: {}, vessels: { bracelet: [], focus: [] } }
-  const boundIds = new Set<string>()
   ALL_BANDS.forEach((kind, i) => {
     const id = bound[i]
     const vessel = VESSEL_FOR_KIND[kind]
     const m = id ? moveById(id) : undefined
     if (!m || !vessel) return
-    boundIds.add(m.id)
     for (const r of lettersOf(m, birth)) l = addGems(l, r)
     l = bindLetters(l, vessel, m, birth) ?? l
   })
-  if (starter && !boundIds.has(starter)) {
-    const m = moveById(starter)
-    if (m) for (const r of lettersOf(m, birth)) l = addGems(l, r)
-  }
+  // ★ Gregory's gift no longer arrives as loose letters (2026-09-27): letters grow into vessels, never the bag
+  void starter
   return l
 }
 

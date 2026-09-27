@@ -13,11 +13,12 @@
  *   · a WEEKDAY is one world day (`CYCLE_MS`, 64 real minutes), five to the week; the rack turns daily
  *   · the teacher gives ONE combination a Coomday, FREE if you can read it — a master who takes you on
  *     is earned, not paid (`moves.md` § the three roads). The scroll racks sell the same words for Marks
- *   · the gem tray holds six runes an E'xday; a gem on one of your two lanes costs 30 Marks, off-lane
- *     60 (specialized — you cannot seat it until you train that rune; the merchant does not care)
+ *   · ★ THE GEM TRAY IS A SELLING COUNTER NOW (THE LETTERS GROW IN, ruled 2026-09-27): no keeper sets a
+ *     stone, so nobody sells them one. The merchants BUY loose stones on E'xday at `STONE_SELL` each
+ *     (`sellStone`); the cutter takes the ones a vessel's word needs for more (`STONE_CREDIT`)
  *   · the SELL counter (E'xday) buys the prospecting ladder — the one place the voxel world EARNS Marks
  *     today: shard 4 · element crystal 12 · pure core 40 · ather crystal 120. A crystal is worth less
- *     sold than the gem it would imbue into, so imbuing stays the better road for a rune you hold
+ *     sold than it would be as a stone, historically — imbuing retired with the gem bag (09-27)
  *
  * ── VOCABULARY ── ✅ merchant, teacher, rack, counter, gem, combination, Marks, sleeper.
  * ⛔ **"hidden gems" for a sleeper** — `gem` is the rune-gem on the shelf beside it (canon 09-05). ⛔ shop UI words that
@@ -29,7 +30,7 @@ import { RUNES } from './birth/runes.data'
 import { laneRunes } from './cast'
 import { KEEPER_MOVES, type KeeperMove } from './keeper-moves'
 import { TRADE_POOL, canRead, hasLearned, learn, tradeable, type Book } from './scroll-market'
-import { addGems, lettersOf, VESSELS, type Letters, type Vessel } from './gems'
+import { lettersOf, sellStones, STONE_SELL, VESSELS, type Letters, type Vessel } from './gems'
 import { grantVessel, seatCapOf, BAND_FOR_VESSEL, type VesselTier } from './vessels'
 import { ALL_BANDS } from './cast'
 
@@ -55,37 +56,19 @@ function hash01(s: string): number {
   return ((h >>> 0) % 100000) / 100000
 }
 
-// ── the merchants: rune-gems, E'xday ────────────────────────────────────────────────────────
-export const TRAY_SIZE = 6
-export const GEM_PRICE_LANE = 30
-export const GEM_PRICE_OFF = 60
-
-/** the six runes on the tray this cycle — never a lost state (no one-rune move exists to write) */
-export function gemTrayFor(cycle: number, seed = 1, size = TRAY_SIZE): string[] {
-  return RUNES.filter((r) => !r.lostState)
-    .map((r) => ({ id: r.id, k: hash01(`gem|${seed}|${cycle}|${r.id}`) }))
-    .sort((a, b) => a.k - b.k || (a.id < b.id ? -1 : 1))
-    .slice(0, size)
-    .map((e) => e.id)
-}
-
-/** on either of this keeper's lanes → the lane price; anything else is specialized */
-export function gemPrice(rune: string, birth: string | null): number {
-  if (birth && (laneRunes(birth, 'element').has(rune) || laneRunes(birth, 'state').has(rune))) return GEM_PRICE_LANE
-  return GEM_PRICE_OFF
-}
-
+// ── the merchants' counter: loose stones, bought off keepers, E'xday ──────────────────────────
 export type TradeRefusal = 'not-today' | 'not-stocked' | 'too-dear' | 'already-known' | 'unreadable' | 'not-for-sale' | 'nothing-to-sell'
-export interface GemTrade { ok: boolean; letters: Letters; marks: number; why?: TradeRefusal; say: string }
+export interface StoneSale { ok: boolean; letters: Letters; marks: number; why?: TradeRefusal; say: string }
 
-export function buyGem(letters: Letters, marks: number, rune: string, tray: readonly string[], birth: string | null, day: Weekday): GemTrade {
-  const no = (why: TradeRefusal, say: string): GemTrade => ({ ok: false, letters, marks, why, say })
-  if (day !== MARKET_DAY) return no('not-today', `The merchants ride the Passage on ${MARKET_DAY}. The stalls are shuttered.`)
-  if (!tray.includes(rune)) return no('not-stocked', 'No one is carrying that stone today.')
-  const price = gemPrice(rune, birth)
-  if (marks < price) return no('too-dear', `${price} Marks for that one. Come back with them.`)
+/** Sell `n` loose stones of `rune` at the old gem tray. Returns the Marks the keeper now holds. */
+export function sellStone(letters: Letters, marks: number, rune: string, day: Weekday, n = 1): StoneSale {
+  const no = (why: TradeRefusal, say: string): StoneSale => ({ ok: false, letters, marks, why, say })
+  if (day !== MARKET_DAY) return no('not-today', `The merchants ride the Passage on ${MARKET_DAY}. Nobody is buying stones today.`)
+  const next = sellStones(letters, rune, n)
+  if (!next) return no('nothing-to-sell', 'You have none of that stone to sell.')
   const name = RUNES.find((r) => r.id === rune)?.name ?? rune
-  return { ok: true, letters: addGems(letters, rune, 1), marks: marks - price, say: `A ${name} gem, wrapped. ${price} Marks.` }
+  const paid = STONE_SELL * n
+  return { ok: true, letters: next, marks: marks + paid, say: `${n} ${name} stone${n === 1 ? '' : 's'}, weighed and taken. ${paid} Marks.` }
 }
 
 // ── the counter: the prospecting ladder, bought for Marks, E'xday ───────────────────────────
@@ -177,7 +160,7 @@ export const TEACHABLE: readonly KeeperMove[] = KEEPER_MOVES.filter(tradeable)
  *
  * ⛔ **NEVER CALLED "HIDDEN GEMS" ANYWHERE IN THE BUILD.** Alex's phrase was colloquial and canon
  * rules the collision outright: `gem` is the **rune-gem**, the LETTER, sold on this same shop's
- * neighbouring shelf (`gemTrayFor`, twenty lines up). Two objects in one market wearing one noun is
+ * neighbouring counter (`sellStone`). Two objects in one market wearing one noun is
  * the `chest`/`cache` mistake again. They are **sleepers**.
  *
  * ── ★★ WHY A SLEEPER DOES NOT MAKE THE TOP RUNG BUYABLE, which is the one thing that would break canon ──
@@ -193,7 +176,7 @@ export const TEACHABLE: readonly KeeperMove[] = KEEPER_MOVES.filter(tradeable)
  * one edit in `scroll-market.ts` closes every counter at once.
  *
  * ── JIN'S NUMBERS (canon hands the build stock, prices and rotation) ──
- *   · the rack holds `VESSEL_RACK_SIZE` vessels and turns over every world day, like the gem tray
+ *   · the rack holds `VESSEL_RACK_SIZE` vessels and turns over every world day
  *   · `VESSEL_RACK_BASE` 40 against the cutter's 75 — "cheap, plentiful", and the gap is the trade
  *   · +`VESSEL_RACK_PER_SEAT` per seat past the first: the shelf can COUNT, it cannot judge
  *   · +`VESSEL_RACK_TIER_BUMP` flat for anything above tier 1, which is the whole of what the shelf knows
@@ -254,7 +237,7 @@ export function vesselRackPrice(kind: Vessel, tier: VesselTier, word: string | n
 
 /**
  * The rack this cycle. Deterministic from `(cycle, seed, slot)` alone — no keeper, no birth, no
- * inventory. Same shape as `gemTrayFor` and `teacherFor` so all three counters turn on one clock.
+ * inventory. Same shape as `teacherFor` so the counters turn on one clock.
  */
 export function vesselRackFor(cycle: number, seed = 1, size = VESSEL_RACK_SIZE): RackVessel[] {
   const out: RackVessel[] = []

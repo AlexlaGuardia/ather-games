@@ -86,10 +86,12 @@ function LitSeat({ cx, cy, r, gem }: { cx: number; cy: number; r: number; gem: s
  * The vessel, drawn: render + written letters. `seats` is the WORD's number (through `seatCount`),
  * never the cap; `gems` are the letters seated so far, in seat order.
  */
-export function VesselArt({ kind, tier, seats, gems, size = 88, dim = false }: {
+export function VesselArt({ kind, tier, seats, gems, size = 88, dim = false, dark = false }: {
   kind: Vessel; tier: VesselTier; seats: number; gems: readonly string[]; size?: number
   /** nothing worn: the uncut vessel, faded — a place for one, not one */
   dim?: boolean
+  /** ★ the letters are grown in but DARK: the keeper does not know the word yet (ruled 2026-09-27) */
+  dark?: boolean
 }) {
   const n = drawnSeats(tier, seats)
   const table = kind === 'bracelet' ? BRACELET_PNG_SEATS : GLOVE_PNG_SEATS
@@ -100,7 +102,9 @@ export function VesselArt({ kind, tier, seats, gems, size = 88, dim = false }: {
       <img src={vesselRender(kind, tier, seats)} alt="" width={size} height={size} draggable={false} />
       {/* only WRITTEN seats are drawn — the empty seat is the render's own void, so the two can never disagree */}
       <svg viewBox="0 0 512 512" className="absolute inset-0 h-full w-full" aria-hidden>
-        {pts.map(([x, y], i) => (gems[i] ? <LitSeat key={i} cx={x} cy={y} r={r} gem={gems[i]} /> : null))}
+        <g opacity={dark ? 0.3 : 1} style={dark ? { filter: 'grayscale(0.85)' } : undefined}>
+          {pts.map(([x, y], i) => (gems[i] ? <LitSeat key={i} cx={x} cy={y} r={r} gem={gems[i]} /> : null))}
+        </g>
       </svg>
     </div>
   )

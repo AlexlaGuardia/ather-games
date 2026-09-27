@@ -15,7 +15,7 @@
  * The shelves (`passage.ts` says what is canon and what is Jin's):
  *   RACK     · Knowledge Scrolls, daily, for Marks         (`scroll-market.ts` — dormant until now)
  *   TEACHER  · one combination, Coomday, free if readable
- *   MERCHANT · six rune-gems, E'xday, 30 on your lanes / 60 off
+ *   MERCHANT · the old gem tray: BUYS a keeper's loose stones, E'xday (the letters grow in since 09-27)
  *   COUNTER  · the prospecting ladder bought for Marks, E'xday — the one place this world EARNS Marks
  *
  * Reads the letters, the book and the wallet on every render; every trade persists and calls
@@ -28,9 +28,9 @@ import { getMarks, addMarks, spendMarks } from '@/lib/wallet'
 import { RUNES } from './birth/runes.data'
 import { gold } from './tokens'
 import { keeperBook, keeperLetters, saveBook } from './book'
-import { saveLetters, VESSELS, type Vessel } from './gems'
+import { saveLetters, VESSELS, STONE_SELL, STONE_CREDIT, type Vessel } from './gems'
 import { loadPieces, finishVessel, PIECES_PER_VESSEL, PIECE_TIER, FINISH_FEE } from './vessel-pieces'
-import { buyVessel, ownedCount, loadStowed, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, TIER_MATERIAL } from './vessels'
+import { buyVessel, cutterPrice, ownedCount, loadStowed, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, TIER_MATERIAL } from './vessels'
 import { HearthFrame } from '../ui/hearth'
 import { eligibleMoves, ALL_BANDS } from './cast'
 import { lettersOf } from './gems'
@@ -41,8 +41,8 @@ import { rackFor, buy, priceOf, canRead, msUntilRotation, cycleAt as rackCycleAt
 import { LANE_FOR_KIND, laneRunes } from './cast'
 import { moveById } from './keeper-moves'
 import {
-  WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, cycleAt, weekdayOf, daysUntil, gemTrayFor, gemPrice,
-  buyGem, sell, teacherFor, takeLesson, type Weekday,
+  WEEK, MARKET_DAY, TEACHING_DAY, SELL_PRICES, cycleAt, weekdayOf, daysUntil,
+  sellStone, sell, teacherFor, takeLesson, type Weekday,
   vesselRackFor, buyFromVesselRack, type RackVessel,
 } from './passage'
 import type { ShelfKey } from './passage-hall'
@@ -84,7 +84,6 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
 
   const rack = stock ? rackFor(stock.rackSeed, stock.rackCycle, stock.rackSize) : rackFor(1, rackCycleAt(nowMs))
   const rackMins = Math.max(1, Math.round(msUntilRotation(nowMs) / 60000))
-  const tray = gemTrayFor(cycle)
   const teacher = teacherFor(cycle)
   const inDays = (d: Weekday) => { const n = daysUntil(cycle, d); return n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days` }
 
@@ -101,23 +100,25 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
     setNote(r.say); if (!r.ok) return
     saveBook(r.book); rerender()
   }
-  const onBuyGem = (rune: string) => {
-    const r = buyGem(letters, marks, rune, tray, birth, day)
+  /** The old gem tray buys a loose stone (THE LETTERS GROW IN, 09-27: stones are material now). */
+  const onSellStone = (rune: string) => {
+    const r = sellStone(letters, marks, rune, day)
     setNote(r.say); if (!r.ok) return
-    if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
-    saveLetters(r.letters); rerender()
+    saveLetters(r.letters); addMarks(r.marks - marks); rerender()
   }
   const onBuyVessel = (kind: Vessel, word: string) => {
-    const r = buyVessel(kind, marks, word)
+    const r = buyVessel(kind, marks, word, letters, birth)
     setNote(r.say); if (!r.ok) return
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
+    if (r.letters) saveLetters(r.letters)   // the stones the cutter took as part-payment
     rerender()
   }
   /** The cutter joins three Breach pieces into a vessel for a word the keeper holds (`vessel-pieces.ts`). */
   const onFinishVessel = (kind: Vessel, word: string) => {
-    const r = finishVessel(kind, word, marks, birth)
+    const r = finishVessel(kind, word, marks, birth, letters)
     setNote(r.say); if (!r.ok) return
     if (!spendMarks(marks - r.marks)) { setNote('The Marks would not leave your hand.'); return }
+    if (r.letters) saveLetters(r.letters)
     rerender()
   }
   /** Buy off the second-hand rack. Same shape as the cutter's handler — the shelf differs, not the till. */
@@ -193,13 +194,18 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
                label={day !== TEACHING_DAY ? `holds ${inDays(TEACHING_DAY)}` : book.learned.includes(teacher.id) ? 'known' : 'sit'} />
         </Shelf>}
 
-        {show('gems') && <Shelf title="The merchants' tray" when={`${MARKET_DAY} · the letters, bought`}>
-          {tray.map(rune => (
-            <Row key={rune} left={<span style={{ color: glow(rune) }}>{runeName(rune)} gem</span>}
-                 mid={owned.includes(rune) ? 'a rune you hold' : gemPrice(rune, birth) === 60 ? 'specialized — off your lanes' : 'on your lane'}
-                 price={gemPrice(rune, birth)} action={() => onBuyGem(rune)}
-                 disabled={day !== MARKET_DAY} label={day !== MARKET_DAY ? `rides ${inDays(MARKET_DAY)}` : 'buy'} />
-          ))}
+        {/* ★ THE TRAY TURNED ROUND (THE LETTERS GROW IN, ruled 2026-09-27): a keeper never sets a stone, so the
+            merchants no longer sell letters — they BUY the loose ones a keeper carries. The cutter pays more for
+            a stone its word needs (part-payment), and the row says so, so selling is a choice made knowing. */}
+        {show('gems') && <Shelf title="The merchants' tray" when={`${MARKET_DAY} · loose stones, bought off you`}>
+          {Object.keys(letters.bag).length === 0
+            ? <div className="text-[12px] hk-faint">You carry no loose stones. Letters grow into a vessel when it is made; nobody sells them now.</div>
+            : Object.entries(letters.bag).map(([rune, n]) => (
+              <Row key={rune} left={<span style={{ color: glow(rune) }}>{runeName(rune)} stone</span>}
+                   mid={`you carry ${n} · worth ${STONE_CREDIT} toward a vessel at the cutter`}
+                   price={STONE_SELL} action={() => onSellStone(rune)}
+                   disabled={day !== MARKET_DAY} label={day !== MARKET_DAY ? `buys ${inDays(MARKET_DAY)}` : 'sell one'} />
+            ))}
         </Shelf>}
 
         {show('counter') && <Shelf title="The counter" when={`${MARKET_DAY} · runestones, sold`}>
@@ -236,7 +242,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
               .filter(m => lettersOf(m, birth).length > 0 && !taken.has(m.id))
               .map(m => (
                 <Row key={`piece-${kind}-${m.id}`} left={<span className="hk-soft">join the pieces: a {TIER_MATERIAL[kind][PIECE_TIER]} {kind} for <span className="hk-ember">{m.name}</span></span>}
-                     mid="letters woven in" price={FINISH_FEE} action={() => onFinishVessel(kind, m.id)} disabled={full}
+                     mid="letters grown in" price={cutterPrice(FINISH_FEE, m.id, letters, birth).price} action={() => onFinishVessel(kind, m.id)} disabled={full}
                      label={full ? 'all you can carry' : 'finish it'} />
               ))
           })}
@@ -254,10 +260,11 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
             }
             return words.map(m => {
               const seats = lettersOf(m, birth).length
+              const cut = cutterPrice(VESSEL_PRICE, m.id, letters, birth)
               return (
                 <Row key={`${kind}-${m.id}`} left={<span className="hk-soft">a {TIER_MATERIAL[kind][1]} {kind} for <span className="hk-ember">{m.name}</span></span>}
-                     mid={`${seats} seat${seats === 1 ? '' : 's'} · you carry ${have} of ${MAX_PER_KIND}`}
-                     price={VESSEL_PRICE} action={() => onBuyVessel(kind, m.id)} disabled={full}
+                     mid={`${seats} letter${seats === 1 ? '' : 's'} grown in${cut.stones.length ? ` · takes ${cut.stones.length} of your stones` : ''} · you carry ${have} of ${MAX_PER_KIND}`}
+                     price={cut.price} action={() => onBuyVessel(kind, m.id)} disabled={full}
                      label={full ? 'all you can carry' : 'cut it'} />
               )
             })
@@ -302,7 +309,7 @@ export function PassagePanel({ items, owned, birth, nowMs, dayOverride, onChange
                           : <span className="hk-faint">uncut</span>}
                      </span>}
                      mid={m
-                       ? (onLane ? `${seats} seat${seats === 1 ? '' : 's'} · someone else's` : 'not your lanes — you could never bind it')
+                       ? (onLane ? `${seats} letter${seats === 1 ? '' : 's'} · someone else's` : 'not your lanes — its letters would never light for you')
                        : 'blank paper · write on it when you have the word'}
                      price={v.price} action={() => onBuyFromRack(i, rack)} disabled={full}
                      label={full ? 'all you can carry' : 'take it'} />

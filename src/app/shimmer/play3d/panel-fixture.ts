@@ -35,7 +35,7 @@
  * Run the guard: `npx tsx src/app/shimmer/play3d/panel-fixture.test.ts`
  */
 import {
-  EMPTY_LETTERS, VESSEL_CAP, VESSELS, addGems, bindLetters, isBodyHeld, lettersOf, saveLetters,
+  EMPTY_LETTERS, VESSEL_CAP, VESSELS, addGems, isBodyHeld, lettersOf, saveLetters,
   type GemStock, type Letters, type Vessel,
 } from './gems'
 import { BAND_FOR_VESSEL, emptyVessel, saveStowed, saveWornWord, type StowedVessel } from './vessels'
@@ -46,7 +46,7 @@ import { saveRuneInventory } from './rune-inventory'
 import { saveBook } from './book'
 import { ELEMENTS, runesOf } from './birth/runes.data'
 
-export type PanelScenarioId = 'fresh' | 'loose' | 'dark' | 'partial' | 'written' | 'rack'
+export type PanelScenarioId = 'fresh' | 'loose' | 'dark' | 'mixed' | 'written' | 'rack'
 
 export interface PanelScenario {
   id: PanelScenarioId
@@ -68,10 +68,13 @@ export const PANEL_SCENARIOS: readonly PanelScenario[] = [
   // this scenario used to promise "six dark seats" and now honestly shows none. The seat question
   // moved to `dark`, which is a vessel that EXISTS with nothing written in it.
   { id: 'fresh',   label: 'fresh keeper',      asks: 'No vessel owned yet. Does the panel read as NOTHING YET, or as something missing?' },
-  { id: 'loose',   label: 'letters, unwritten', asks: 'Gems in the bag, none seated. Is it obvious the letters are held but not written?' },
-  { id: 'dark',    label: 'a vessel, unwritten', asks: 'A vessel made for a word, every seat dark. Does a dark seat read as UNWRITTEN, or as broken?' },
-  { id: 'partial', label: 'one letter seated', asks: 'One lit beside the rest dark, in one row. THE hard read: does the row say 1 OF ITS OWN NUMBER?' },
-  { id: 'written', label: 'a word written',    asks: 'Three lit, no dark. Does a full vessel look full at a glance?' },
+  // ★ REFRAMED 2026-09-27 (THE LETTERS GROW IN): a vessel always holds its word's letters, so no scenario seats
+  // part of a word any more — that state is impossible, and this page must never teach an eye to accept one.
+  // The read is now LIT vs DARK: does a vessel whose word the keeper does not know look finished-but-asleep?
+  { id: 'loose',   label: 'loose stones',       asks: 'Stones held, no vessel. Do they read as MATERIAL to sell, not letters waiting to be set?' },
+  { id: 'dark',    label: 'vessels, words unknown', asks: 'Both vessels worn, letters grown in, neither word known. Does DARK read as ASLEEP, or as broken?' },
+  { id: 'mixed',   label: 'one lit, one dark', asks: 'The bracelet lit, the glove dark, side by side. THE hard read: can you tell which word you know?' },
+  { id: 'written', label: 'words known',       asks: 'Both vessels lit. Does a known word look alive at a glance?' },
   { id: 'rack',    label: 'a rack of spares',  asks: 'Worn plus spares at different fills. Can you pick a vessel by reading its word?' },
 ]
 
@@ -85,6 +88,8 @@ export interface PanelPlan {
   spares: StowedVessel[]
   /** loose letters, held and unwritten */
   bag: GemStock
+  /** the words the keeper KNOWS — the book. A worn vessel whose word is missing here is dark (09-27). */
+  learned: string[]
   /** the word bound per band, parallel to `ALL_BANDS` */
   slots: Loadout
   /**
@@ -166,7 +171,7 @@ const bandOf = (kind: Vessel) => BAND_FOR_VESSEL[kind]
  * Build the keeper a scenario describes. PURE — no storage, no React, no clock.
  *
  * ★ THE LETTERS ARE DERIVED FROM THE WORD, never invented: `lettersOf` is what the bind itself reads,
- * so a seated gem here is a gem the real `bindLetters` would have seated. A scenario that hardcoded
+ * so a letter here is exactly what grows into a real vessel for that word. A scenario that hardcoded
  * three rune ids would seat letters no word needs and the panel would render a vessel no keeper can
  * reach — which is exactly the kind of impossible state a fixture must never teach an eye to accept.
  */
@@ -178,17 +183,15 @@ export function planPanel(id: PanelScenarioId): PanelPlan {
   const wordFor: Record<Vessel, string | null> = { bracelet: null, focus: null }
   const spares: StowedVessel[] = []
   let bag: GemStock = {}
+  const learned: string[] = []
   const notes: string[] = [`birth ${birth}`]
 
   /** seat a word's letters in its vessel and bind it, exactly as a keeper would have. */
   const write = (kind: Vessel, moveId: string | null): string[] => {
     const m = moveId ? moveById(moveId) : null
     if (!m) { notes.push(`no ${kind} word in the registry for ${birth} — that vessel stays dark`); return [] }
+    // ★ the letters GROW IN (09-27): the vessel holds exactly its word's letters, derived, never set
     const need = lettersOf(m, birth)
-    let l: Letters = EMPTY_LETTERS
-    for (const r of need) l = addGems(l, r)
-    const bound = bindLetters(l, kind, m, birth)
-    if (!bound) { notes.push(`${m.id} would not bind to the ${kind} — left dark rather than faked`); return [] }
     // ★★ THE KEEPER MUST KNOW THE WORD, NOT MERELY HOLD ITS LETTERS (found by LOOKING, 2026-09-04).
     // The first cut seated the letters and set the band, and every assert passed — but `owned` was
     // the birth rune alone, so `keeperBook` never contained the move and the shipped panel resolved
@@ -199,48 +202,44 @@ export function planPanel(id: PanelScenarioId): PanelPlan {
     for (const r of m.runes) if (!owned.includes(r)) owned.push(r)
     const band = bandOf(kind)
     if (band >= 0) slots[band] = m.id
+    learned.push(m.id)
     // ★ The vessel bears this word from here on, even if a scenario later unbinds the BAND.
     wordFor[kind] = m.id
     // ⚠ NOT `/${VESSEL_CAP}`. Three is the most a word can ask for, not a property every vessel
     // has (brief, amended 2026-09-04) — so the word's own letter count IS the seat count, and a
     // denominator of 3 was this note asserting the pre-amendment shape.
-    notes.push(`${kind}: ${m.id} (${need.length} seat${need.length === 1 ? '' : 's'})`)
-    return bound.vessels[kind]
+    notes.push(`${kind}: ${m.id} (${need.length} letter${need.length === 1 ? '' : 's'})`)
+    return [...need]
+  }
+  /** wear the vessel made for a word the keeper does NOT know: letters grown in, dark, band unbound. */
+  const wearDark = (kind: Vessel, moveId: string | null): string[] => {
+    const got = write(kind, moveId)
+    const b = bandOf(kind)
+    if (b >= 0) slots[b] = null
+    if (wordFor[kind]) { learned.splice(learned.indexOf(wordFor[kind]!), 1); notes.push(`${kind}: its word is not in the book — dark`) }
+    return got
   }
 
   if (id === 'loose') {
-    // held but unwritten: the letters a word WOULD need, sitting in the bag with nothing seated.
+    // loose stones and no vessel: the letters a word WOULD use, held as material (since 09-27 nothing ever seats them)
     const m = (tac && moveById(tac)) || null
     const need = m ? lettersOf(m, birth) : [birth]
     let l: Letters = EMPTY_LETTERS
     for (const r of need) l = addGems(l, r)
     bag = l.bag
-    notes.push(`bag holds ${need.length} letter${need.length === 1 ? '' : 's'}, none seated`)
+    notes.push(`${need.length} loose stone${need.length === 1 ? '' : 's'}, no vessel`)
   }
 
   if (id === 'dark') {
-    // ★ THE SEAT QUESTION, PURE: the vessel bears its word's seats and NOT ONE of them is filled.
-    // `write` is what decides the seat count, so the vessel is built exactly as a keeper's would be
-    // and then emptied — rather than fabricating a seat count this fixture does not have to derive.
-    // ⚠ The bands go back to null on purpose: the brief calls a vessel FINISHED only when every seat
-    // is filled, so an unwritten vessel binds nothing and the cast bar must say so.
-    // ⚠ `write` binds the word and RETURNS the letters it would seat — and here we drop them on the
-    // floor. `worn` is never assigned, which is the whole scenario. An earlier cut of this block
-    // "cleared" `worn` afterwards; those two lines were dead, and a mutation that deleted them was
-    // indistinguishable from one that worked. Dead code in a fixture reads as an invariant being
-    // enforced when nothing is enforcing it.
-    write('bracelet', tac)
-    write('focus', ult)
-    for (const kind of VESSELS) { const b = bandOf(kind); if (b >= 0) slots[b] = null }
-    notes.push('both vessels bear their word and hold nothing — every seat dark')
+    // ★ both vessels worn, letters grown in, NEITHER word known: finished paper, asleep.
+    worn.bracelet = wearDark('bracelet', tac)
+    worn.focus = wearDark('focus', ult)
   }
 
-  if (id === 'partial') {
-    // ★ THE HARD READ: exactly ONE seated, the rest dark, in a vessel that can hold three.
-    const full = write('bracelet', tac)
-    worn.bracelet = full.slice(0, 1)
-    if (full.length > 1) { slots[bandOf('bracelet')] = null; notes.push('bracelet word UNBOUND — one letter is not a word, and the row should say so') }
-    if (worn.bracelet.length === 1) notes.push(`bracelet: 1 of ${full.length} seated`)
+  if (id === 'mixed') {
+    // ★ THE HARD READ: one lit (known and bound) beside one dark (worn, word unknown).
+    worn.bracelet = write('bracelet', tac)
+    worn.focus = wearDark('focus', ult)
   }
 
   if (id === 'written' || id === 'rack') {
@@ -249,7 +248,7 @@ export function planPanel(id: PanelScenarioId): PanelPlan {
   }
 
   if (id === 'rack') {
-    // ★ spares at DIFFERENT fills, so the row is picked by reading a word rather than a number.
+    // ★ spares with DIFFERENT words (and one blank), so the row is picked by reading a word rather than a number.
     const alt = KEEPER_MOVES.find(m => m.tier === 'tactical' && m.id !== tac && !isBodyHeld(m, birth)
       && m.runes.length > 0 && m.runes.every(x => laneRunes(birth, 'element').has(x)))
     const second = alt ? write2(alt.id, 'bracelet', birth) : null
@@ -258,17 +257,14 @@ export function planPanel(id: PanelScenarioId): PanelPlan {
     notes.push(second ? `spares: ${alt!.id} + one blank bracelet` : 'spares: two blank bracelets — the registry held no second element word')
   }
 
-  return { id, birth, owned, worn, spares, bag, slots, wordFor, why: notes.join(' · ') }
+  return { id, birth, owned, worn, spares, bag, learned, slots, wordFor, why: notes.join(' · ') }
 }
 
 /** a stowed vessel carrying a written word — the spare-row form of `write`. */
 function write2(moveId: string, kind: Vessel, birth: string): StowedVessel | null {
   const m = moveById(moveId)
   if (!m) return null
-  let l: Letters = EMPTY_LETTERS
-  for (const r of lettersOf(m, birth)) l = addGems(l, r)
-  const bound = bindLetters(l, kind, m, birth)
-  return bound ? { kind, gems: bound.vessels[kind], move: m.id, tier: 1 } : null
+  return { kind, gems: lettersOf(m, birth), move: m.id, tier: 1 }   // grown in (09-27)
 }
 
 /**
@@ -293,7 +289,7 @@ export function seedPanel(id: PanelScenarioId): PanelPlan {
   // shot runs on a fresh profile with no keeper state, so the book fell back to a derivation of the
   // loadout I had just written and agreed with it. A fixture must OWN every key its render reads;
   // anything it leaves alone is inherited from whoever used this browser last.
-  saveBook({ learned: plan.slots.filter((id): id is string => !!id) })
+  saveBook({ learned: [...plan.learned] })   // ★ the book decides lit vs dark (09-27) — never derived from the bands
   saveLoadout(plan.slots)
   saveLetters({ bag: { ...plan.bag }, vessels: { bracelet: [...plan.worn.bracelet], focus: [...plan.worn.focus] } })
   saveStowed(plan.spares)
