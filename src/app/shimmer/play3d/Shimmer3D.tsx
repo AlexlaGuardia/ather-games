@@ -8215,10 +8215,10 @@ export default function Shimmer3D() {
       })()}
 
       {/* Hotbar HUD — bag + 6 quick-slots + tool gauges + mana vial. Only while walking the world. */}
-      {/* click-catcher — while the satchel is open, swallow canvas clicks (so a stray click can't re-lock
-          the pointer under the panel) and let clicking outside the bag close it. Below the hotbar (z35)
-          + satchel (z37), above the canvas. */}
-      {bagOpen && <div onPointerDown={() => toggleBag(false)} style={{ position: 'fixed', inset: 0, zIndex: 34, background: 'transparent' }} />}
+      {/* ⚠ NO CLOSE-LAYER HERE ANY MORE (2026-09-27, Alex: "anything i click closes the menu"). A transparent z34
+          layer used to catch outside clicks when the satchel sat at z37. Since the hearth port the satchel is a
+          KeeperFrame whose own backdrop (z30) closes on an outside click, so the layer sat ABOVE the whole
+          panel and every press inside it closed the bag. The hotbar (z35) stays above the frame's backdrop. */}
 
       {/* ── ★ THE CRUCIBLE MATCH CLOCK ────────────────────────────────────────────────────────
           The floor that is open and the seconds left in it, straight off `crucibleAt`. Sits above
