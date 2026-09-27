@@ -96,6 +96,20 @@ export interface ManaBeast {
   happiness: number    // 0-100, decays 1/5min (doubles when hungry)
   hunger: number       // 0-100, decays 1/3min
   bond: number         // 0-100, grows from feeding/petting/adventuring, never decays
+  /** how this Mana'mal came to the keeper: the skill road (undefined), or adopted from Lowen's caravan as a stray or a
+   *  quiet one (canon `manamals.md` › Adoption, 09-27). An ADOPTED one's perks wait for its bond: see getPerkStrength. */
+  origin?: 'stray' | 'quiet'
+}
+
+// ── THE BOND, READ AS CANON'S THREE WORDS (`manamals.md` › Adoption: "watched, then followed, then chosen") ────────
+export const FOLLOWED_AT = 34, CHOSEN_AT = 67
+export type BondStage = 'watched' | 'followed' | 'chosen'
+export const bondStage = (bond: number): BondStage => (bond >= CHOSEN_AT ? 'chosen' : bond >= FOLLOWED_AT ? 'followed' : 'watched')
+/** A quiet one comes to a new keeper slowly (*"the Mana'mal goes quiet — sometimes for years"*): half gains until it follows. */
+export const QUIET_BOND_RATE = 0.5
+function gainBond(beast: ManaBeast, n: number): void {
+  const rate = beast.origin === 'quiet' && beast.bond < FOLLOWED_AT ? QUIET_BOND_RATE : 1
+  beast.bond = Math.min(100, beast.bond + n * rate)
 }
 
 let beastIdCounter = 0
@@ -228,7 +242,7 @@ export function feedBeast(beast: ManaBeast, foodId: string): { hunger: number; h
   const prev = { hunger: beast.hunger, happiness: beast.happiness, bond: beast.bond }
   beast.hunger = Math.min(100, beast.hunger + food.hunger)
   beast.happiness = Math.min(100, beast.happiness + food.happiness)
-  beast.bond = Math.min(100, beast.bond + food.bond)
+  gainBond(beast, food.bond)
 
   return {
     hunger: beast.hunger - prev.hunger,
@@ -240,7 +254,7 @@ export function feedBeast(beast: ManaBeast, foodId: string): { hunger: number; h
 /** Petting bonus — called from petSpirit(). Small happiness + bond boost. */
 export function petBeastBonus(beast: ManaBeast): void {
   beast.happiness = Math.min(100, beast.happiness + 2)
-  beast.bond = Math.min(100, beast.bond + 1)
+  gainBond(beast, 1)
 }
 
 /** Adventuring bond — called periodically when beast is following in the world. */
@@ -248,7 +262,7 @@ export function adventureBondTick(beast: ManaBeast): void {
   // +1 bond per 5 minutes of adventuring
   // Called at 1/tick rate, so accumulate very slowly
   // We'll check externally and call this every 5min
-  beast.bond = Math.min(100, beast.bond + 1)
+  gainBond(beast, 1)
 }
 
 // ============================================
@@ -309,6 +323,9 @@ export const PERK_MAX_BONUS: Record<BeastPerk, number> = {
  * Returns 0 if happiness < 50. Scales linearly from 50 to 100 — happy companion, stronger perk.
  */
 export function getPerkStrength(beast: ManaBeast): number {
+  // ★ canon (09-27): an ADOPTED Mana'mal's gifts come with the BOND, never the adoption. Until it has chosen you, none.
+  // The skill road keeps its happiness rule (how it squares with "who chooses: the Mana'mal" is Magii's, not flipped here).
+  if (beast.origin && bondStage(beast.bond) !== 'chosen') return 0
   if (beast.happiness < 50) return 0
   return (beast.happiness - 50) / 50 // 0 at 50, 1 at 100
 }
@@ -346,7 +363,7 @@ export function getSpeedBonus(beast: ManaBeast | null): number {
 // Save/Load
 // ============================================
 
-export type BeastSave = { species: BeastSpecies; name: string; happiness: number; hunger: number; bond: number }[]
+export type BeastSave = { species: BeastSpecies; name: string; happiness: number; hunger: number; bond: number; origin?: 'stray' | 'quiet' }[]
 
 export function beastsToSave(beasts: ManaBeast[]): BeastSave {
   return beasts.map(b => ({
@@ -355,6 +372,7 @@ export function beastsToSave(beasts: ManaBeast[]): BeastSave {
     happiness: Math.round(b.happiness),
     hunger: Math.round(b.hunger),
     bond: Math.round(b.bond),
+    ...(b.origin ? { origin: b.origin } : {}),
   }))
 }
 
@@ -366,6 +384,7 @@ export function beastsFromSave(saved: BeastSave | undefined, x: number, y: numbe
     beast.happiness = s.happiness ?? 70
     beast.hunger = s.hunger ?? 80
     beast.bond = s.bond ?? 0
+    if (s.origin === 'stray' || s.origin === 'quiet') beast.origin = s.origin
     return beast
   })
 }

@@ -1,6 +1,8 @@
 // caravans.test.ts — the caravan clock turns where it says, and no caravan sells what canon forbids it.
 // Run: npx tsx src/app/shimmer/play3d/caravans.test.ts
-import { caravanFor, dayIndex, weekIndex, monthIndex, leavesIn, CARAVAN_SLOTS, RESET_HOUR_UTC } from './caravans'
+import { caravanFor, dayIndex, weekIndex, monthIndex, leavesIn, CARAVAN_SLOTS, RESET_HOUR_UTC, lowenIn } from './caravans'
+import { rosterFor, whoStays, canAdopt, ADOPTABLE, NEVER_ON_THE_CARAVAN, CARE_MARKS } from './adoption'
+import { createBeast, getPerkStrength, petBeastBonus, beastsToSave, beastsFromSave } from '../beasts/beast'
 import { rackFor } from './scroll-market'
 import { vesselRackFor } from './passage'
 import { PASSAGE, passageAscii, T } from './passage-hall'
@@ -25,6 +27,13 @@ const DAY = 86_400_000
 for (let t = at('2026-01-01T00:00:00Z'), n = 0; n < 400; t += DAY * 0.93, n++) {
   for (const slot of CARAVAN_SLOTS) {
     const c = caravanFor(slot, t)
+    // Lowen's week (09-27): while he is in, "leaves in" is the END OF HIS WEEK, and the wagon shuts exactly there
+    if (slot === 'monthly' && c.open) {
+      if (!lowenIn(t + c.leavesInMs - 1) || lowenIn(t + c.leavesInMs) || monthIndex(t + c.leavesInMs) !== monthIndex(t)) {
+        fails.push(`monthly: Lowen's leavesIn at ${new Date(t).toISOString()} does not land on the end of his week`); break
+      }
+      continue
+    }
     const next = caravanFor(slot, t + c.leavesInMs)
     const idx = slot === 'daily' ? dayIndex : slot === 'weekly' ? weekIndex : monthIndex
     if (idx(t + c.leavesInMs) !== idx(t) + 1 || idx(t + c.leavesInMs - 1) !== idx(t) || c.leavesInMs <= 0) {
@@ -45,7 +54,34 @@ for (let t = at('2026-09-01T12:00:00Z'), n = 0; n < 60; t += DAY, n++) {
 pass++
 
 // ── the stray-keeper stays shut until canon rules (CANON_GAPS [OPEN] 09-25) ──
-ok(!caravanFor('monthly', Date.now()).open, "the stray-keeper's wagon is shuttered")
+// ── Lowen's caravan (canon RULED 09-27, `manamals.md` › Adoption) ──
+ok(caravanFor('monthly', at('2026-10-03T12:00:00Z')).open, "Lowen is in the first week of the month")
+ok(!caravanFor('monthly', at('2026-10-15T12:00:00Z')).open, "and the wagon stands shut the rest of it")
+ok(caravanFor('monthly', at('2026-10-03T12:00:00Z')).name === "Lowen's caravan", 'the caravan carries its keeper\'s canon name')
+ok(caravanFor('monthly', at('2026-10-03T12:00:00Z')).shelves.length === 0, 'it has no shelves: animals are not stock')
+for (let m = 0; m < 48; m++) for (const s of rosterFor(24300 + m)) {
+  ok(ADOPTABLE.includes(s.species), `month ${m}: ${s.species} is a canon Companion/Domesticated`)
+  ok(!NEVER_ON_THE_CARAVAN.includes(s.species), `month ${m}: never a ${s.species} on the caravan`)
+}
+ok(Array.from({ length: 48 }, (_, m) => rosterFor(24300 + m)).some(r => r.some(s => s.origin === 'quiet')), 'quiet ones ride')
+ok(whoStays(24300, 'keeper-a') === whoStays(24300, 'keeper-a'), 'the one that stays is fixed for a keeper and a month (waiting again does not reroll)')
+ok(new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(k => whoStays(24300, k))).size > 1, 'different keepers are chosen by different animals')
+ok(canAdopt(undefined, at('2026-10-02T12:00:00Z')) && !canAdopt(monthIndex(at('2026-10-02T12:00:00Z')), at('2026-10-02T12:00:00Z')), 'one home per keeper per month')
+ok(!canAdopt(undefined, at('2026-10-20T12:00:00Z')), 'no adoption while Lowen is away')
+ok(CARE_MARKS > 0 && CARE_MARKS < 100, 'care is paid in Marks, and it is care, not a price')
+// ── the bond, not the adoption, brings the gifts (canon 09-27) ──
+{
+  const b = createBeast('dustwhisker', 0, 0); b.happiness = 100; b.origin = 'stray'; b.bond = 0
+  ok(getPerkStrength(b) === 0, 'an adopted one just home gives nothing yet (watched)')
+  b.bond = 50; ok(getPerkStrength(b) === 0, 'following you is not yet chosen')
+  b.bond = 70; ok(getPerkStrength(b) > 0, 'once it has chosen you, its gift comes')
+  const q = createBeast('sporeling', 0, 0); q.origin = 'quiet'; q.bond = 0
+  petBeastBonus(q); ok(q.bond === 0.5, 'a quiet one comes slowly (half a step)')
+  const sk = createBeast('sporeling', 0, 0); sk.happiness = 100
+  ok(getPerkStrength(sk) > 0, 'the skill road keeps its own rule (untouched)')
+  const round = beastsFromSave(beastsToSave([b, q]), 0, 0)
+  ok(round[0].origin === 'stray' && round[1].origin === 'quiet', 'where it came from survives a save')
+}
 // ── the merchant of the day alternates, and is the same for everyone on the same day ──
 const d0 = caravanFor('daily', at('2026-09-26T12:00:00Z')), d1 = caravanFor('daily', at('2026-09-27T12:00:00Z'))
 ok(d0.kind !== d1.kind, 'consecutive days bring different merchants')

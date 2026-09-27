@@ -97,7 +97,7 @@ import BirthScreen from './birth/BirthScreen'
 import { RUNES } from './birth/runes.data'
 import { createSkillSet, skillSetToSave, skillSetFromSave, addSkillXP, xpForSkillLevel, SKILL_META, type SkillSet, type SkillId } from '../engine/skills'
 import { WEAPONS } from '../engine/weapons'
-import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, type ManaBeast, type BeastSpecies } from '../beasts/beast'
+import { createBeast, checkBeastUnlock, beastsToSave, beastsFromSave, BEAST_SPECIES, BEAST_DEFS, BEAST_PERKS, PERK_INFO, getBonusFindChance, getSpeedBonus, bondStage, type ManaBeast, type BeastSpecies } from '../beasts/beast'
 import { getMaxStack, createInventory, inventoryToSave, inventoryFromSave, addItems, removeItems, countItem, transferItem, createChestStorage, chestToSave, chestFromSave, type Inventory, type ItemStack, type ChestStorage, type ChestSave } from '../engine/inventory'
 import { createBank, bankFromSave, bankToSave, bankUsed, bankCapacity, bankDeposit, bankWithdraw, bankForceDeposit, bankReachable, isChestFurniture, migrateChestsToBank, CHEST_CAPACITY, type BankState, type BankSave } from '../engine/bank'
 import { ITEMS, NODE_TYPE_LABELS } from '../sprites/items'
@@ -125,11 +125,13 @@ import { PassageScene } from './PassageScene'
 import { RuneHoldScene } from './RuneHoldScene'
 import { DRAWN_DOORS } from './rune-hold-look'
 import { StationScene } from './StationScene'
+import { LowenPanel } from './LowenPanel'
+import { rosterFor, whoStays, canAdopt, type Stray } from './adoption'
 import { BODIES } from './metrics'
 import { STATION, T as STATION_TILE } from './station-field'
 import { ArcadeCabinet } from './ArcadeCabinet'
 import { PASSAGE, type ShelfKey } from './passage-hall'
-import { caravanFor, leavesIn, type CaravanSlot, type CaravanStock } from './caravans'
+import { caravanFor, leavesIn, monthIndex, type CaravanSlot, type CaravanStock } from './caravans'
 import type { GameEntry } from '@/lib/games'
 import { EMPTY_BOOK, type Book } from './scroll-market'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
@@ -4663,6 +4665,10 @@ export default function Shimmer3D() {
   const beastsRef = useRef<ManaBeast[]>([])
   const activeBeastIdRef = useRef<string | null>(null)
   const [companionTick, setCompanionTick] = useState(0)  // HUD refresh when companions change
+  // Lowen's caravan (canon 09-27, adoption): a stable seed so the animal that chooses you is fixed for the month, and
+  // the month you last took one home (one a visit). Rides in the save blob beside the beasts.
+  const lowenRef = useRef<{ seed: string; month?: number }>({ seed: '' })
+  const [lowenOpen, setLowenOpen] = useState<number | null>(null)
   // Gathering tools — basics (worn blade/spike/rinstick) always equipped; improved craftable ones
   // gather higher tiers without the under-tooled mana penalty. ensureBasicTools keeps a floor.
   const equippedToolsRef = useRef<EquippedTools>(ensureBasicTools({}))
@@ -4736,6 +4742,7 @@ export default function Shimmer3D() {
       spirits: spiritsToSave(partyRef.current ?? []),
       beasts: beastsToSave(beastsRef.current),
       activeBeastId: activeBeastIdRef.current,
+      lowen: { ...lowenRef.current },
       tools: toolsToSave(equippedToolsRef.current),
       flags: opts?.replaceFlags ? { ...flagsRef.current } : { ...(prev.flags ?? {}), ...flagsRef.current },
       patrolBeaten: { ...patrolBeatenRef.current },
@@ -4872,7 +4879,8 @@ export default function Shimmer3D() {
     let granted: BeastSpecies | null = null
     for (const sp of BEAST_SPECIES) {
       if (BEAST_DEFS[sp].unlockType !== 'skill') continue
-      if (beastsRef.current.some(b => b.species === sp)) continue
+      // the SKILL road grants its own; an adopted one of the same kind (Lowen's) does not stand in for it
+      if (beastsRef.current.some(b => b.species === sp && !b.origin)) continue
       if (checkBeastUnlock(sp, skillsRef.current, flagsRef.current)) {
         const b = createBeast(sp, posRef.current?.x ?? 0, posRef.current?.z ?? 0)
         b.happiness = 100  // no care loop in the walker yet — keep the perk fully active
@@ -4983,6 +4991,8 @@ export default function Shimmer3D() {
         activeBeastIdRef.current = beastsRef.current.some(b => b.id === (data.activeBeastId as string))
           ? (data.activeBeastId as string) : beastsRef.current[0]?.id ?? null
       }
+      if (data?.lowen && typeof data.lowen.seed === 'string') lowenRef.current = { seed: data.lowen.seed, month: typeof data.lowen.month === 'number' ? data.lowen.month : undefined }
+      if (!lowenRef.current.seed) lowenRef.current.seed = Math.random().toString(36).slice(2, 12)
       checkCompanionUnlocks()  // grant any companion already earned by a skill ≥15 in this save
       setCompanionTick(t => t + 1)
       if (data?.spirits?.length) {
@@ -6307,6 +6317,7 @@ export default function Shimmer3D() {
       // read the roster NOW, not at module load: a caravan that pulled out overnight is not sold from
       const c = caravanFor(npc.id.slice('caravan:'.length) as CaravanSlot, Date.now())
       if (!c.open) return
+      if (c.kind === 'strays') { battleRef.current = true; openCursorUI(); setLowenOpen(Date.now()); return }
       battleRef.current = true
       openCursorUI()
       setRackStall({ shelves: c.shelves, title: c.name[0].toUpperCase() + c.name.slice(1), stock: c.stock, subtitle: leavesIn(c.leavesInMs) })
@@ -7955,7 +7966,7 @@ export default function Shimmer3D() {
             const info = PERK_INFO[BEAST_PERKS[active.species]]
             return (
               <HearthChip face={HUD_FACE} glyph="🐾" name={active.name} maxWidth={200}
-                sub={<>{info.label}{owned.length > 1 ? ` ⟳${owned.length}` : ''}</>}
+                sub={<>{active.origin ? ({ watched: 'watching you', followed: 'following you', chosen: `chose you · ${info.label}` } as const)[bondStage(active.bond)] : info.label}{owned.length > 1 ? ` ⟳${owned.length}` : ''}</>}
                 title={`${active.name} — ${info.blurb}${owned.length > 1 ? ' · tap to switch' : ''}`}
                 onClick={owned.length > 1 ? () => {
                   const i = owned.findIndex(b => b.id === activeBeastIdRef.current)
@@ -8588,6 +8599,23 @@ export default function Shimmer3D() {
           onClose={() => { setCabinet(null); battleRef.current = false; closeCursorUI() }} />
       )}
 
+      {lowenOpen !== null && (() => {
+        const month = monthIndex(lowenOpen), roster = rosterFor(month)
+        return (
+          <LowenPanel roster={roster} stays={whoStays(month, lowenRef.current.seed || 'keeper')}
+            canAdopt={canAdopt(lowenRef.current.month, lowenOpen)} adoptedThisMonth={lowenRef.current.month === month}
+            leaves={leavesIn(caravanFor('monthly', lowenOpen).leavesInMs)}
+            onAdopt={(st: Stray) => {
+              const b = createBeast(st.species, posRef.current?.x ?? 0, posRef.current?.z ?? 0)
+              b.origin = st.origin; b.bond = 0; b.happiness = 100
+              beastsRef.current.push(b)
+              if (!activeBeastIdRef.current) activeBeastIdRef.current = b.id
+              lowenRef.current = { ...lowenRef.current, month }
+              setCompanionTick(t => t + 1); persist()
+            }}
+            onClose={() => { setLowenOpen(null); battleRef.current = false; closeCursorUI() }} />
+        )
+      })()}
       {rackOpen !== null && (
         <PassagePanel
           items={invRef}

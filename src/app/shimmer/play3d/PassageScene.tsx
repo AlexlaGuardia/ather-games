@@ -18,9 +18,14 @@
  */
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
+import { useFrame } from '@react-three/fiber'
 import { PASSAGE, T, isTravellerBay, type Cabinet, type Stall, type Wagon } from './passage-hall'
 import { caravanFor } from './caravans'
-import { Folk } from './Townsfolk'
+import { Folk, Standing } from './Townsfolk'
+import { rosterFor } from './adoption'
+import { monthIndex } from './caravans'
+import { beast as BEAST, beastFallback } from './scene-palette'
+import type { BeastSpecies } from '../beasts/beast'
 import { regularsOn } from './townsfolk'
 import { weekdayAt } from './passage'
 
@@ -252,8 +257,8 @@ function CabinetFixture({ c, isOwner }: { c: Cabinet; isOwner: boolean }) {
 /** A caravan wagon parked in its bay, flap open toward the road; shuttered when nobody is in. The
  *  roster is read once per mount — a caravan that pulls out while you stand there changes on your next
  *  visit, which is how a parked caravan behaves anyway. */
-function WagonFixture({ w }: { w: Wagon }) {
-  const open = useMemo(() => caravanFor(w.slot, Date.now()).open, [w.slot])
+function WagonFixture({ w, nowMs }: { w: Wagon; nowMs?: number }) {
+  const open = useMemo(() => caravanFor(w.slot, nowMs ?? Date.now()).open, [w.slot, nowMs])
   // the wagon's long axis runs along the road (x); its bed spans the bay's two rows, the flap faces -z
   const cz = w.z + 0.5
   return (
@@ -274,13 +279,48 @@ function WagonFixture({ w }: { w: Wagon }) {
       {open
         ? <mesh position={[0, 2.05, -1.25]} rotation={[-0.45, 0, 0]} castShadow><boxGeometry args={[2.6, 0.05, 1.1]} /><meshStandardMaterial color={P.wagon.canvas[w.slot]} roughness={1} side={THREE.DoubleSide} /></mesh>
         : <mesh position={[0, 1.35, -0.88]}><boxGeometry args={[2.6, 0.7, 0.05]} /><meshStandardMaterial color={P.wagon.canvas[w.slot]} roughness={1} /></mesh>}
-      {open && [-0.8, 0, 0.8].map((o, i) => (
+      {open && w.slot !== 'monthly' && [-0.8, 0, 0.8].map((o, i) => (
         <mesh key={i} position={[o, 1.6, -0.75]}>
           <boxGeometry args={[0.4, 0.2, 0.3]} />
           <meshStandardMaterial color={P.wares[i]} emissive={P.wares[i]} emissiveIntensity={0.25} />
         </mesh>
       ))}
       {open && <Lantern x={1.5} z={-1.0} y={0} lit={w.slot === 'daily'} />}
+      {open && w.slot === 'monthly' && <LowenStep x={w.x} z={cz} nowMs={nowMs} />}
+    </group>
+  )
+}
+
+/** A Mana'mal on the road: a blockout by shape (the game's Mana'mals have no follower art yet), coloured as the
+ *  walker's follower is (`S.beast`), sitting and turning its head to look at whoever comes near. */
+function Stray({ species, x, z, seed }: { species: BeastSpecies; x: number; z: number; seed: number }) {
+  const c = BEAST[species] ?? beastFallback
+  const head = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => { if (head.current) head.current.rotation.y = Math.sin(clock.elapsedTime * 0.6 + seed) * 0.6 })
+  return (
+    <group position={[x, 0, z]} rotation={[0, Math.PI + (seed - 1) * 0.35, 0]}>
+      {species === 'sporeling' ? <>
+        <mesh position={[0, 0.2, 0]} castShadow><cylinderGeometry args={[0.12, 0.15, 0.3, 10]} /><meshStandardMaterial color={P.skin} /></mesh>
+        <group ref={head} position={[0, 0.38, 0]}><mesh castShadow><sphereGeometry args={[0.26, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial color={c} emissive={c} emissiveIntensity={0.15} /></mesh></group>
+      </> : <>
+        <mesh position={[0, 0.2, 0]} castShadow><sphereGeometry args={[0.22, 12, 10]} /><meshStandardMaterial color={c} /></mesh>
+        <group ref={head} position={[0, 0.4, 0.14]}>
+          <mesh castShadow><sphereGeometry args={[0.13, 12, 10]} /><meshStandardMaterial color={c} /></mesh>
+          {[-1, 1].map(e => <mesh key={e} position={[e * 0.06, 0.2, -0.02]} rotation={[0, 0, e * 0.12]}><boxGeometry args={[0.05, 0.26, 0.03]} /><meshStandardMaterial color={c} /></mesh>)}
+        </group>
+      </>}
+    </group>
+  )
+}
+
+/** Lowen's week: Lowen at the step, the month's animals on the road in front of it (canon: *"sits on the caravan's
+ *  step while the animals come and look at the keeper"*). Placed in world coords (the parent group is the wagon's). */
+function LowenStep({ x, z, nowMs }: { x: number; z: number; nowMs?: number }) {
+  const roster = useMemo(() => rosterFor(monthIndex(nowMs ?? Date.now())), [nowMs])
+  return (
+    <group position={[-x, 0, -z]}>
+      <Standing f={{ id: 'lowen', name: 'Lowen', trade: 'local', zone: 'the-passage', x: x + 1.1, z: z - 1.2, yaw: Math.PI }} seed={31} />
+      {roster.map((s, i) => <Stray key={i} species={s.species} x={x - 0.9 + i * 0.8} z={z - 2.1 - (i % 2) * 0.4} seed={i} />)}
     </group>
   )
 }
@@ -313,7 +353,8 @@ const LIT = new Set<number>((() => {
   return out
 })())
 
-export function PassageScene({ isOwner }: { isOwner: boolean }) {
+/** `nowMs`: a bench's pinned date (Lowen's week, a market day); the game passes nothing and reads the clock. */
+export function PassageScene({ isOwner, nowMs }: { isOwner: boolean; nowMs?: number }) {
   const a = PASSAGE.arcade
   // the regulars' week (canon ★ THE REGULARS' WEEK): Renna works the Passage crowd on E'xday
   const down = useMemo(() => regularsOn(weekdayAt(Date.now())).filter(f => f.zone === 'the-passage'), [])
@@ -326,7 +367,7 @@ export function PassageScene({ isOwner }: { isOwner: boolean }) {
       {PASSAGE.cabinets.map(c => <CabinetFixture key={c.id} c={c} isOwner={isOwner} />)}
       {/* the arcade room's own light: cooler, so the cabinets read as a different room from the market */}
       <pointLight position={[(a.x0 + a.x1) / 2, 3.8, (a.z0 + a.z1) / 2]} color={P.arcadeLight} intensity={14} distance={20} decay={1.4} />
-      {PASSAGE.wagons.map(w => <WagonFixture key={w.slot} w={w} />)}
+      {PASSAGE.wagons.map(w => <WagonFixture key={w.slot} w={w} nowMs={nowMs} />)}
       <FarRoadRubble />
     </group>
   )

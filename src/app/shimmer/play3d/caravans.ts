@@ -67,8 +67,16 @@ const NAMES: Record<CaravanKind, string> = {
   peddler: 'a scroll peddler',
   broker: 'a vessel broker',
   'long-hauler': 'the long-haul caravan',
-  strays: "the stray-keeper's wagon",
+  // ★ named since 2026-09-27: canon gave the stray-keeper a name (`manamals.md` › Adoption — LOWEN), because a monthly
+  // return and a handed-over animal is a relationship. The other caravans stay roles.
+  strays: "Lowen's caravan",
 }
+
+/** Lowen parks the first week of each month (Jin's cadence, canon proposed monthly). The wagon stands shut the rest. */
+export const LOWEN_DAYS = 7
+/** day of the caravan month, 0-based, from the 1st at the reset hour */
+export function dayOfMonth(nowMs: number): number { return new Date(nowMs - RESET_HOUR_UTC * HOUR).getUTCDate() - 1 }
+export const lowenIn = (nowMs: number) => dayOfMonth(nowMs) < LOWEN_DAYS
 
 function endOf(slot: CaravanSlot, nowMs: number): number {
   if (slot === 'daily') return (dayIndex(nowMs) + 1) * DAY + RESET_HOUR_UTC * HOUR
@@ -96,10 +104,12 @@ export function caravanFor(slot: CaravanSlot, nowMs: number): Caravan {
       stock: { rackSeed: 709, rackCycle: week, rackSize: 7, vesselSeed: 719, vesselCycle: week, vesselSize: 6 },
     }
   }
-  // The stray-keeper parks every month and stays shuttered until canon rules on adoption.
-  const month = monthIndex(nowMs)
+  // Lowen's caravan (canon RULED 09-27, adoption): in the first week of the month, shut the rest. It has no shelves —
+  // what it carries are animals, and they are not stock (`adoption.ts`).
+  const month = monthIndex(nowMs), open = lowenIn(nowMs)
+  const lowenLeaves = Math.max(0, Date.UTC(Math.floor(month / 12), month % 12, 1 + LOWEN_DAYS) + RESET_HOUR_UTC * HOUR - nowMs)
   return {
-    slot, kind: 'strays', name: NAMES.strays, open: false, leavesInMs, shelves: [],
+    slot, kind: 'strays', name: NAMES.strays, open, leavesInMs: open ? lowenLeaves : leavesInMs, shelves: [],
     stock: { rackSeed: 0, rackCycle: month, rackSize: 0, vesselSeed: 0, vesselCycle: month, vesselSize: 0 },
   }
 }

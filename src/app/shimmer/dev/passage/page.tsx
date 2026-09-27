@@ -29,6 +29,7 @@ const VIEWS: Record<string, { x: number; z: number; yaw: number; pitch: number }
   cabinets:  { x: 28, z: 34, yaw: 60, pitch: -10 },
   'far-road': { x: 46, z: 15, yaw: 0, pitch: -2 },
   caravans:  { x: 53, z: 13, yaw: 90, pitch: 2 },
+  lowen:     { x: 57, z: 12.5, yaw: 90, pitch: -8 },
 }
 
 function Rig({ x, z, yaw, pitch, top }: { x: number; z: number; yaw: number; pitch: number; top: boolean }) {
@@ -79,7 +80,7 @@ export default function PassageBench() {
       <Canvas shadows camera={{ fov: 70, near: 0.05, far: 300 }}>
         <GardenAtmosphere zoneId="the-passage" />
         <UnderLight />
-        <PassageScene isOwner={q?.get('public') !== '1'} />
+        <PassageScene isOwner={q?.get('public') !== '1'} nowMs={q?.get('at-date') ? Date.parse(q.get('at-date')!) : undefined} />
         <Rig {...view} top={top} />
       </Canvas>
       <div style={{ position: 'fixed', top: 8, left: 8, display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 560 }}>
