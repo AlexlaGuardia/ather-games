@@ -23,6 +23,7 @@ import { blocksOf, lanternsOf, openSides, hash, isBuilding, inFront, PATH, BUILD
 import { runeHold as RH, passage as P, hubGate } from './scene-palette'
 import { Instances, type Inst } from './instances'
 import { ShipHull } from './StationScene'
+import { groundAt } from './rune-hold-terraces'
 import { spaceport as SP } from './scene-palette'
 import { LANDING } from '../world/landing'
 import { portalMaterial } from '../voxel3d/portal-material'
@@ -344,6 +345,72 @@ function Smoke({ x, y, z }: { x: number; y: number; z: number }) {
   )
 }
 
+/**
+ * The land round the town: canon's *"mountain village carved into hillside, west-central Athernyx... foothills west of
+ * the Valkara mountains."* One heightfield past the map's edge, meeting each edge at the height the terraces left it
+ * (`groundAt`), then rising: the Valkara to the EAST (tallest, snow), the hill the town climbs continuing up past the
+ * north gate, rolling foothills west and south. Backdrop only: nothing out here is walkable, and inside the map it
+ * sinks under the town's own ground.
+ */
+function Backdrop({ cols, rows }: { cols: number; rows: number }) {
+  const geo = useMemo(() => {
+    const PK = RH.peaks
+    const R = 170, STEP = 3                        // how far it runs past the map, and its grid spacing
+    const x0 = -R, x1 = cols + R, z0 = -R, z1 = rows + R
+    const nx = Math.round((x1 - x0) / STEP) + 1, nz = Math.round((z1 - z0) / STEP) + 1
+    const pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 3)
+    const c = new THREE.Color(), tmp = new THREE.Color()
+    const noise = (x: number, z: number) =>
+      0.55 * Math.sin(x * 0.045 + Math.sin(z * 0.031) * 2) * Math.cos(z * 0.052 - x * 0.013)
+      + 0.3 * Math.sin(x * 0.11 + z * 0.07) * Math.sin(z * 0.13 - x * 0.05)
+      + 0.15 * (hash(Math.round(x / 6), Math.round(z / 6), 31) - 0.5)
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const x = x0 + i * STEP, z = z0 + j * STEP
+      // distance outside the map rectangle (0 inside it)
+      const dx = Math.max(0, -x, x - (cols - 1)), dz = Math.max(0, -z, z - (rows - 1))
+      const d = Math.hypot(dx, dz)
+      const edge = groundAt(Math.min(rows - 1, Math.max(0, z)))
+      let y: number
+      if (d === 0) y = -2                           // under the town: its own ground draws here
+      else {
+        // which way out: the Valkara east, the hill north, foothills west and south
+        const ang = Math.atan2(z - rows / 2, x - cols / 2)          // 0 = east, -π/2 = north
+        const east = Math.max(0, Math.cos(ang)), north = Math.max(0, -Math.sin(ang))
+        const amp = 16 + 46 * east ** 1.5 + 26 * north ** 1.2
+        const rise = THREE.MathUtils.smoothstep(d, 6, 95)
+        y = edge + rise * amp * (0.8 + 0.45 * noise(x, z)) + Math.min(d, 6) * 0.08
+      }
+      const k = (j * nx + i) * 3
+      pos[k] = x; pos[k + 1] = y; pos[k + 2] = z
+      // colour by height above its edge: meadow, scrub, rock, crag, snow
+      const hRel = y - edge
+      if (hRel < 4) c.set(PK.meadow)
+      else if (hRel < 12) c.set(PK.meadow).lerp(tmp.set(PK.scrub), (hRel - 4) / 8)
+      else if (hRel < 30) c.set(PK.scrub).lerp(tmp.set(PK.rock), (hRel - 12) / 18)
+      else if (hRel < 44) c.set(PK.rock).lerp(tmp.set(PK.crag), (hRel - 30) / 14)
+      else c.set(PK.crag).lerp(tmp.set(PK.snow), Math.min(1, (hRel - 44) / 6))
+      c.multiplyScalar(0.92 + 0.16 * hash(i, j, 33))
+      col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b
+    }
+    const idx: number[] = []
+    for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      const a = j * nx + i, b = a + 1, d2 = a + nx, e = d2 + 1
+      idx.push(a, d2, b, b, d2, e)
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3))
+    g.setIndex(idx)
+    g.computeVertexNormals()
+    return g
+  }, [cols, rows])
+  return (
+    <mesh geometry={geo} receiveShadow>
+      <meshStandardMaterial vertexColors roughness={1} flatShading />
+    </mesh>
+  )
+}
+
 export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]; heights?: number[][]; version?: number }) {
   const look = useMemo(() => {
     const g = grid
@@ -376,7 +443,11 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
       if ((v & 0xff) !== BUILDING) {
         // where the terrace steps down beside this cell, a laid riser closes the step (no grass side showing)
         const low = lowBeside(x, z)
-        if (low < y0) risers.push({ x, y: (low + y0) / 2, z, sx: 1, sy: y0 - low + 0.04, sz: 1, c: pick(RH.stone, x, z, 6) })
+        if (low < y0) {
+          // a street's step is laid stone; a meadow's is turf, a shade under its grass (stone on grass read as stripes)
+          const turf = (v & 0xff) !== PATH
+          risers.push({ x, y: (low + y0) / 2, z, sx: 1, sy: y0 - low + 0.04, sz: 1, c: turf ? RH.peaks.scrub : pick(RH.stone, x, z, 6) })
+        }
         // the ground: cobbles on the streets, meadow elsewhere, worn bare where the two meet
         const t = v & 0xff
         if (t === PATH) {
@@ -484,6 +555,7 @@ export function RuneHoldScene({ grid, heights, version = 0 }: { grid: number[][]
 
   return (
     <>
+      <Backdrop cols={grid[0]?.length ?? 100} rows={grid.length} />
       <Instances items={look.ground} flat cast={false} />
       <Instances items={look.risers} cast={false} />
       <Instances items={look.stone} />

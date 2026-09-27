@@ -145,6 +145,8 @@ export const runeHold = {
     awning: ['#b8483a', '#efe2c8'], board: '#5b3d25', notes: ['#efe2c8', '#e8d6a8', '#f3ead6', '#d9c7a0'], pin: '#b8483a',
     smoke: '#d8d4cc', forge: '#ff8a3a',
   },
+  /** the mountains round the town: meadow at the foot, rock above, snow on the Valkara */
+  peaks: { meadow: '#6f8c55', scrub: '#6b7348', rock: '#7d6c5a', crag: '#665a4d', snow: '#eef0f2' },
   /** the ground worn bare where the streets meet the grass */
   worn: ['#7d7458', '#857a5c'],
 } as const
