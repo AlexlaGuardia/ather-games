@@ -153,6 +153,11 @@ export const HOLD_TUNING = {
 } as const
 export type HoldTuning = typeof HOLD_TUNING
 
+// ── ★ PARTY LOOT IS PERSONAL (Alex 09-27, locked ahead of co-op) ─────────────────────────────────
+// Co-op Breach is not built (the party is presence-only; this sim runs per client). When it lands: a cache
+// opened gives every keeper in the party their OWN roll; salvage, Marks and vessel pieces are per keeper; the
+// pity counter (`dryRounds`) stays per keeper. Write new systems party-ready, solo-wired. GBOARD › the Breach.
+
 // ── the tide's bodies ────────────────────────────────────────────────────────────────────────
 export type FloodKind = 'drift' | 'swift' | 'bulk'
 export interface FloodBody {
