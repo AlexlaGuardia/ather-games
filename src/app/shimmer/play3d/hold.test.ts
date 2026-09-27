@@ -545,6 +545,32 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   ok(leaps === 0, `★ a body never leaps out of a window into a garden (${leaps} window-to-garden drops in the field)`)
 }
 
+// ── ★ the pity counter (Alex 09-27): 30 dry rounds and the next cache to appear is legendary ──
+{
+  const noLeg = { ...T, chestRarity: { common: 100, rare: 0, legendary: 0 } } as unknown as typeof T
+  const legs = (s: HoldState) => s.chests.filter(c => c?.rarity === 'legendary').length
+  const p = startHold(map, 11); p.hush = 1e9
+  ok(p.dryRounds === 0, 'a fresh run starts dry at 0 (the page seeds the carried count)')
+  p.dryRounds = T.pityRounds - 1
+  rollChests(p, noLeg, 1)
+  ok(legs(p) === 0, `one round short of ${T.pityRounds}: no forced legendary`)
+  p.chests = p.chests.map(() => null); p.dryRounds = T.pityRounds
+  rollChests(p, noLeg, 1)
+  ok(legs(p) === 1, '★ dry for pityRounds: exactly one new cache is legendary')
+  const li = p.chests.findIndex(c => c?.rarity === 'legendary')
+  ok(p.rooms[map.chestSpots[li].room], '★ and it stands in an opened room (a spot you can reach) when one rolled there')
+  p.chests = p.chests.map((c, i) => (i === li ? c : null))
+  rollChests(p, noLeg, 1)
+  ok(legs(p) === 1, 'an unopened legendary still standing: no second one is forced')
+  const got = chestTick(p, li, T.chestOpenSec)
+  ok(got?.kind === 'part' && p.dryRounds === 0, '★ opening the piece empties the counter')
+  // the counter ticks once a round
+  const q = startHold(map, 12); q.hush = 1e9; q.toSpawn = 0; q.flood = []
+  stepHold(q, 0.05, map.start.x, map.start.z, map.start.h)
+  for (let k = 0; k < 600 && q.round < 3; k++) { q.toSpawn = 0; q.flood = []; stepHold(q, 0.1, map.start.x, map.start.z, map.start.h) }
+  ok(q.round === 3 && q.dryRounds === 2, `the counter ticks once a round (round ${q.round}, dry ${q.dryRounds})`)
+}
+
 // ── ★ vents (Alex 09-26): some of the tide comes up through the floor in the middle of the big rooms ──
 {
   const per = map.cols * map.rows

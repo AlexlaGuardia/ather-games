@@ -139,6 +139,10 @@ export const HOLD_TUNING = {
   chestChance: 0.25,
   chestOpenSec: 2,       // seconds of holding E — a real risk mid-round
   chestRarity: { common: 70, rare: 25, legendary: 5 },
+  // bad-luck protection (Alex 09-27): this many rounds without a vessel piece and the next cache that appears is
+  // legendary. Counted across runs (the page carries `dryRounds` in and out, `vessel-pieces.ts`), so an unlucky
+  // keeper waits ≤ ~30 rounds a piece where pure chance left one in ten at 145+ rounds for three
+  pityRounds: 30,
   // the device (Alex 09-26, our pack-a-punch): planted once at ground zero, then each weapon is tuned a tier at a time
   devicePlant: 2000,
   tuneCost: [5000, 7500],   // to tier 1, to tier 2
@@ -234,6 +238,8 @@ export interface HoldState {
   dropsThisRound: number
   /** per chest spot: the chest standing there, or null */
   chests: (HoldChest | null)[]
+  /** rounds since this keeper's last vessel piece — ACROSS runs: the page seeds it and saves it (the pity counter) */
+  dryRounds: number
   /** what opened chests gave that the page must apply (Marks, parts) */
   loot: HoldLoot[]
   /** the device is planted at ground zero */
@@ -431,7 +437,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
     drops: [], dropsThisRound: 0, pickups: [],
-    chests: map.chestSpots.map(() => null), loot: [], devicePlanted: false, tuned: {},
+    chests: map.chestSpots.map(() => null), dryRounds: 0, loot: [], devicePlanted: false, tuned: {},
     elapsed: 0, nextId: 1, rng: mulberry32(seed),
     field: new Int16Array(map.cols * map.rows * map.building.levels.length).fill(-1), fieldT: 0, fieldAt: -1,
   }
@@ -619,11 +625,20 @@ export function rollRarity(rng: () => number, tune: HoldTuning = HOLD_TUNING): C
 /** Every EMPTY spot rolls; an occupied one does not. Returns how many chests appeared. */
 export function rollChests(s: HoldState, tune: HoldTuning = HOLD_TUNING, chance: number = tune.chestChance): number {
   let n = 0
+  const fresh: number[] = []
   s.chests.forEach((c, i) => {
     if (c || s.rng() >= chance) return
     s.chests[i] = { rarity: rollRarity(s.rng, tune), openT: 0 }
+    fresh.push(i)
     n++
   })
+  // the pity counter: dry long enough, and no legendary already standing unopened → one of the new caches is
+  // legendary, in an opened room if any of them is (a promise behind a gate you cannot buy yet is no promise)
+  const standing = s.chests.some((c, i) => c?.rarity === 'legendary' && !fresh.includes(i))
+  if (VESSEL_PIECES_WIRED && fresh.length && !standing && !fresh.some(i => s.chests[i]!.rarity === 'legendary') && s.dryRounds >= tune.pityRounds) {
+    const pick = fresh.find(i => s.rooms[s.map.chestSpots[i].room]) ?? fresh[0]
+    s.chests[pick]!.rarity = 'legendary'
+  }
   return n
 }
 /** Hold E at a chest. When it opens: salvage lands now, a Glimmer goes to the pickups, Marks and parts to `loot`. */
@@ -639,6 +654,7 @@ export function chestTick(s: HoldState, spot: number, dt: number, tune: HoldTuni
   if (loot.kind === 'salvage') s.salvage += loot.n
   else if (loot.kind === 'glimmer') s.pickups.push('glimmer')
   else s.loot.push(loot)
+  if (loot.kind === 'part') s.dryRounds = 0
   return loot
 }
 
@@ -706,6 +722,7 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
       s.mendPaidThisRound = 0
       s.dropsThisRound = 0
       out.roundBegan = s.round
+      s.dryRounds++
       if (s.round % tune.chestEvery === 0) rollChests(s, tune)
     }
   } else if (s.toSpawn <= 0 && alive === 0 && !loud) {

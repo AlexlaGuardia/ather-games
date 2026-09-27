@@ -23,6 +23,8 @@ import { grantVessel, ownedCount, seatLetters, MAX_PER_KIND, type VesselGrant, t
 import { type Vessel } from './gems'
 
 export const PIECES_KEY = 'ather:shimmer:vessel-pieces'
+/** Rounds since the last piece, across runs — the Breach's pity counter (`hold.ts` › `pityRounds`, Alex 09-27). */
+export const DRY_KEY = 'ather:shimmer:vessel-dry'
 export const PIECES_PER_VESSEL = 3
 export const PIECE_TIER: VesselTier = 2
 export const FINISH_FEE = 100
@@ -35,6 +37,15 @@ export function loadPieces(): number {
 }
 function savePieces(n: number): void {
   try { localStorage.setItem(keeperKey(PIECES_KEY), String(Math.max(0, n))) } catch { /* private mode */ }
+}
+export function loadDry(): number {
+  try {
+    const n = Number(localStorage.getItem(keeperKey(DRY_KEY)) ?? 0)
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
+  } catch { return 0 }
+}
+export function saveDry(n: number): void {
+  try { localStorage.setItem(keeperKey(DRY_KEY), String(Math.max(0, Math.floor(n)))) } catch { /* private mode */ }
 }
 /** One piece out of a cache, into the satchel. Returns how many the keeper now carries. */
 export function addPiece(): number {
