@@ -81,7 +81,9 @@ export interface Body {
 /** The two mannequins, named so a map can be checked against either. */
 export const BODIES = {
   voxel: { eyeStand: 1.62, eyeSlide: 1.02, radius: 0.3 },
-  play3d: { eyeStand: 1.15, eyeSlide: 0.5, radius: 0.4 },
+  // ✅ 2026-09-27 (Alex, walking Rune Hold beside its folk: "the player is child sized"): the play3d walker's eye is
+  // now the authoring body's. Was 1.15 / 0.50. The collider keeps its own 0.40 half-width.
+  play3d: { eyeStand: 1.62, eyeSlide: 1.02, radius: 0.4 },
 } as const satisfies Record<string, Body>
 
 /** The body maps are authored against. See the ruling note above — one line to flip. */

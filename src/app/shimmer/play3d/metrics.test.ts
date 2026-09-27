@@ -78,8 +78,10 @@ ok('full cover blocks a standing line', COVER_FULL > COVER_STAND)
 // character of every one-block wall in every map, and this is where that shows up as a diff.
 ok('voxel body: a 1-block wall does NOT hide a slider (eye 1.02 clears it)',
   LEDGE_VAULT < BODIES.voxel.eyeSlide)
-ok('play3d body: a 1-block wall DOES hide a slider (classic waist-high)',
-  LEDGE_VAULT > BODIES.play3d.eyeSlide)
+// ✅ 2026-09-27 the play3d eye took the authoring body's (Alex: "the player is child sized"), so both walkers now
+// read a 1-block wall the same way. Pinned as AGREEING, so a re-split shows up here.
+ok('play3d body now reads a 1-block wall like the voxel body (unified eye, 2026-09-27)',
+  LEDGE_VAULT < BODIES.play3d.eyeSlide)
 ok('slide-cover for the chosen body starts just above a block',
   coverTiersFor(BODY).slide === BODY.eyeSlide)
 
@@ -116,15 +118,17 @@ ok('snap is identity on a tier', snapHeight(LEDGE_VAULT, BODY) === LEDGE_VAULT)
 // derivation onto one body, this section is what goes red rather than a town going quietly wrong.
 {
   const v = metricsFor(BODIES.voxel), p3 = metricsFor(BODIES.play3d)
-  ok('the two mannequins produce DIFFERENT cover heights',
-     v.cover.stand !== p3.cover.stand && v.cover.slide !== p3.cover.slide)
+  // ✅ UNIFIED 2026-09-27: cover derives from the eye, and the eyes now agree — so cover agrees.
+  ok('the two mannequins now produce the SAME cover heights (eyes unified 2026-09-27)',
+     v.cover.stand === p3.cover.stand && v.cover.slide === p3.cover.slide)
   ok('the two mannequins produce DIFFERENT lane widths',
      v.widths.laneStreet !== p3.widths.laneStreet && v.widths.passMin !== p3.widths.passMin)
   // ⚠ AND THE HIGH-TRAFFIC ONE: snapHeight is what an authoring pass calls on every placed face,
   // so a body that could not reach it would let a whole town be snapped to the wrong ladder.
-  const h = (BODIES.voxel.eyeStand + BODIES.play3d.eyeStand) / 2
-  ok('snapHeight answers differently for the two bodies',
-     snapHeight(h, BODIES.voxel) !== snapHeight(h, BODIES.play3d))
+  // The body is still a real parameter (the collider widths differ), and snapHeight still takes it; with the
+  // eyes unified the two answer alike on every height an authoring pass would snap.
+  ok('snapHeight answers alike for the two bodies now their eyes agree',
+     [0.8, 1.3, 1.62, 2.1].every(h => snapHeight(h, BODIES.voxel) === snapHeight(h, BODIES.play3d)))
   // ★ AND THE SEAM-SAFE HALF MUST **NOT** MOVE. Gaps and ledge tiers come from ballistics, so a
   // body-sensitive answer there would mean the split this file is built on had broken.
   ok('the classifier is body-blind, because its tiers are kit-derived',
@@ -187,7 +191,10 @@ ok(`every KIT constant was located in Shimmer3D.tsx (${comparedSrc}/${Object.key
 // derived from them and a map authored against a stale eye is wrong everywhere at once.
 const srcNum = (name: string): number | null => {
   const m = SRC.match(new RegExp(`^const ${name}\\s*=\\s*(-?[0-9.]+)`, 'm'))
-  return m ? Number(m[1]) : null
+  if (m) return Number(m[1])
+  // since 2026-09-27 the eye READS the authoring body (`const EYE_H = BODIES.voxel.eyeStand`) rather than restating it
+  const r = SRC.match(new RegExp(`^const ${name}\\s*=\\s*BODIES\\.(voxel|play3d)\\.(eyeStand|eyeSlide|radius)`, 'm'))
+  return r ? BODIES[r[1] as 'voxel' | 'play3d'][r[2] as 'eyeStand' | 'eyeSlide' | 'radius'] : null
 }
 
 ok(`voxel eyeStand matches locomotion EYE_STAND (${BODIES.voxel.eyeStand} vs ${LOCO.EYE_STAND})`,
@@ -212,8 +219,10 @@ ok(`play3d radius matches Shimmer3D PLAYER_R (${BODIES.play3d.radius} vs ${srcNu
 // check — read them as plain numbers so the assert survives the day the two values become equal.
 const voxelEye: number = BODIES.voxel.eyeStand
 const playEye: number = BODIES.play3d.eyeStand
-ok('the mannequins still disagree (unify them → re-derive cover, then delete this assert)',
-  voxelEye !== playEye)
+// ✅ UNIFIED 2026-09-27 (Alex): the assert that stood here was "the mannequins still disagree (unify them → re-derive
+// cover, then delete this assert)". They were unified; cover re-derives from BODY, which was already the voxel body
+// every map is authored against. What stands in its place pins the unification.
+ok('the mannequins agree on the eye (unified 2026-09-27)', voxelEye === playEye)
 ok('BODY is one of the two named mannequins',
   (Object.values(BODIES) as { eyeStand: number }[]).some(b => b.eyeStand === BODY.eyeStand))
 
