@@ -188,10 +188,16 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   ok(!buyCache(s) && s.hush === h, 'the cache is shut until its room is')
   const gH = map.gates.findIndex(g => g.opens.includes(map.cache.room))
   s.salvage = 2000
-  ok(gH >= 0 && map.gates[gH].letter === 'M' && buyGate(s, gH), 'the break room (M) opens onto the cache')
-  ok(buyCache(s) && s.hush === h + T.cacheSec, 'the cache buys hush')
+  ok(gH >= 0 && map.gates[gH].letter === 'M' && buyGate(s, gH), 'the break room (M) opens onto the cache spot')
+  // THE RUN CLOCK (Alex 09-27): the draught is the run, and nothing sells more of it in-run
+  ok(T.hushSec === 450 && startHold(map).hush === 450, 'a run walks in with a 7:30 draught')
+  ok(!T.draughtSold && !buyCache(s) && s.hush === h, 'the in-run draught cache is retired — the room open, still no hush for sale')
+  const cp = { ...map.cache }
+  ok(promptAt(s, cp.x, cp.z, cp.h)?.kind !== 'cache', 'and its spot offers no cache prompt')
+  const sold = { ...T, draughtSold: true } as unknown as typeof T
+  ok(buyCache(s, sold) && s.hush === h + T.cacheSec, 'the switch still works (draughtSold) — the lab will spend the same clock')
   const s2 = startHold(parseLanding()); s2.salvage = 5000
-  ok(!buyCache(s2), 'the cache sits behind a gate — shut gate, no cache')
+  ok(!buyCache(s2, sold), 'even sold, the cache sits behind a gate — shut gate, no cache')
 }
 
 // ── prompts follow where you stand, on your floor ──

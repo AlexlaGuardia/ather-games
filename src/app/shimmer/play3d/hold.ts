@@ -107,9 +107,14 @@ export const HOLD_TUNING = {
   rackCost: 500,         // the SPITTER off the wall
   rackWeapon: 'spitter',
   fontCost: 250,         // a full mana pool — mana is the clip, so this IS the ammo buy
-  cacheCost: 400,        // +cacheSec of hush
+  cacheCost: 400,        // +cacheSec of hush — only while draughtSold
   cacheSec: 60,
-  hushSec: 300,          // the draught you walk in with
+  // THE RUN CLOCK (Alex 09-27): the draught you walk in with is the whole run — 7:30 to reach as many rounds as you
+  // can, then it runs out and they rush (canon: "the draught's duration is the mission's clock"). The in-run draught
+  // cache is retired: topping up turned the clock into a 5-6k salvage tax (scripts/breach-pace.mts). Its spot, the
+  // meeting rooms behind M, becomes the lab where flood samples buy more clock at a price (next).
+  hushSec: 450,
+  draughtSold: false,
   manaPool: 100,         // FIXED — a new keeper's pool; only the birth rune's bonus rides on it (no skill level)
   manaDrip: 0.35,        // mana/sec in the hold — a drip, not a supply (Alex: "not enough but a drip")
   dropChance: 0.03,      // a kill drops a booster this often
@@ -1021,7 +1026,7 @@ export function promptAt(s: HoldState, px: number, pz: number, py: number = heig
   if (s.rooms[zero.room] && near(px, pz, py, zero.x, zero.z, zero.h, tune.interact, tune)) return { kind: 'device', planted: s.devicePlanted, cost: tune.devicePlant }
   if (near(px, pz, py, rack.x, rack.z, rack.h, tune.interact, tune)) return { kind: 'rack', cost: tune.rackCost, bought: s.rackBought }
   if (near(px, pz, py, font.x, font.z, font.h, tune.interact, tune)) return { kind: 'font', cost: tune.fontCost }
-  if (s.rooms[cache.room] && near(px, pz, py, cache.x, cache.z, cache.h, tune.interact, tune)) return { kind: 'cache', cost: tune.cacheCost }
+  if (tune.draughtSold && s.rooms[cache.room] && near(px, pz, py, cache.x, cache.z, cache.h, tune.interact, tune)) return { kind: 'cache', cost: tune.cacheCost }
   return null
 }
 
@@ -1049,7 +1054,7 @@ export function buyRack(s: HoldState, tune: HoldTuning = HOLD_TUNING): 'weapon' 
 }
 export const buyFont = (s: HoldState, tune: HoldTuning = HOLD_TUNING) => spend(s, tune.fontCost)
 export function buyCache(s: HoldState, tune: HoldTuning = HOLD_TUNING): boolean {
-  if (!s.rooms[s.map.cache.room] || !spend(s, tune.cacheCost)) return false
+  if (!tune.draughtSold || !s.rooms[s.map.cache.room] || !spend(s, tune.cacheCost)) return false
   s.hush += tune.cacheSec
   return true
 }

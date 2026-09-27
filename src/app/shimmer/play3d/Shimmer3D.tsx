@@ -2439,11 +2439,11 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
         <mesh position={[0, 0.55, 0]}><cylinderGeometry args={[0.32, 0.45, 1.1, 8]} /><meshStandardMaterial color={S.hold.device} metalness={0.4} roughness={0.5} /></mesh>
         <mesh position={[0, 1.2, 0]}><octahedronGeometry args={[0.28, 0]} /><meshStandardMaterial ref={deviceGlow} color={S.hold.deviceGlow} emissive={S.hold.deviceGlow} emissiveIntensity={0.15} toneMapped={false} /></mesh>
       </group>
-      {/* the cache: a crate of draught with a violet glint */}
-      <group position={at(map.cache)}>
+      {/* the cache: a crate of draught with a violet glint — retired with the run clock (09-27); its spot becomes the lab */}
+      {HOLD_TUNING.draughtSold && <group position={at(map.cache)}>
         <mesh position={[0, 0.35, 0]}><boxGeometry args={[0.7, 0.7, 0.7]} /><meshStandardMaterial color={S.hold.plank} /></mesh>
         <mesh position={[0, 0.75, 0]}><sphereGeometry args={[0.12, 10, 10]} /><meshStandardMaterial color={S.hold.cache} emissive={S.hold.cache} emissiveIntensity={1.1} /></mesh>
-      </group>
+      </group>}
     </>
   )
 }
