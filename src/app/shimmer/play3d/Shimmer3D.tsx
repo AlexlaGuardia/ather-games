@@ -7712,6 +7712,14 @@ export default function Shimmer3D() {
     editFocusRef.current.set(ps.tileX, 0, ps.tileY)
     setZoneId(id)
   }, [])
+  // headless checks (scripts/world-shot.mts WORLD_PRE_EVAL="window.__goZone('stillwind-edge')"): play3d has no /goto,
+  // so a script could not reach a zone. OWNER ONLY, and it is the same move the owner's zone dropdown makes.
+  useEffect(() => {
+    if (!isOwner) return
+    const w = window as unknown as { __goZone?: (id: string) => void }
+    w.__goZone = selectZone
+    return () => { delete w.__goZone }
+  }, [isOwner, selectZone])
 
   const save = useCallback(async () => {
     setSaveMsg('saving…')
