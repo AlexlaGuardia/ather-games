@@ -46,7 +46,7 @@ import { VesselCard } from './vessel-card'
 import { createInventory, type Inventory } from '../../engine/inventory'
 import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
-import { saveOwner, setSaveOwner } from '@/lib/save-slot'
+import { pinSaveOwner } from '@/lib/save-slot'
 
 /** The grounds the panel actually opens over. Night is where it was tuned. */
 const BACKDROPS = [
@@ -77,10 +77,10 @@ export default function PanelDevPage() {
   // keys: a real keeper, and one adoption moves into an account. Restored on unmount so a client-side
   // hop back into the game does not carry the bench owner with it.
   useEffect(() => {
-    const prev = saveOwner()
-    setSaveOwner(BENCH_OWNER)
+    // ★ PINNED, not set: the layout's SaveOwnerBoot resolves a few frames later and used to overwrite this
+    const unpin = pinSaveOwner(BENCH_OWNER)
     setMounted(true)
-    return () => setSaveOwner(prev)
+    return unpin
   }, [])
 
   // ★ THE SCENARIO AND TAB ARE READABLE FROM THE URL (`?s=written&tab=satchel`), so a specific read

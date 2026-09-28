@@ -154,6 +154,8 @@ const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
     // ★ Greg's pair (tier 0) is on every read and is not a spare the fixture wrote — count above the floor
     ok(loadStowed().filter(v => !isFloor(v)).length === plan.spares.length, `${id}: the rack reads back ${plan.spares.length} spare(s)`)
     ok(loadStowed().filter(isFloor).length === 2, `${id}: and Greg's pair sits under them, one of each kind — never lost (ruled 2026-09-04)`)
+    // ★ 09-28: and the pair arrives CUT for its birth-first words — the bench once showed it uncut
+    ok(loadStowed().filter(isFloor).every(v => !!v.move), `★ ${id}: Greg's pair arrives cut (${loadStowed().filter(isFloor).map(v => v.move).join(', ')})`)
     const inv = loadRuneInventory()
     ok(inv.birth === plan.birth, `${id}: the birth rune reads back`)
   }

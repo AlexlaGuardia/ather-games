@@ -71,6 +71,11 @@ let resolved = false
  * session fetch after the world phase, and do not read a save during `loading`.
  */
 export function setSaveOwner(userId: string | null): void {
+  // ★ PINNED (a dev bench): the boot's answer is held, not applied, and lands when the pin lifts
+  if (pin) { pin.held = userId; return }
+  applyOwner(userId)
+}
+function applyOwner(userId: string | null): void {
   const changed = ownerId !== userId || !resolved
   ownerId = userId
   resolved = true
@@ -80,6 +85,21 @@ export function setSaveOwner(userId: string | null): void {
   if (changed && typeof window !== 'undefined') {
     try { window.dispatchEvent(new CustomEvent(SAVE_OWNER_EVENT, { detail: userId })) } catch { /* no CustomEvent */ }
   }
+}
+
+/**
+ * ★ PIN THE OWNER FOR A DEV BENCH (2026-09-28). `/shimmer/dev/panel` set `BENCH_OWNER` in an effect, and
+ * the root layout's `SaveOwnerBoot` answered its session fetch a few frames later and overwrote it: the
+ * bench's satchel then read (and its read-time saves wrote) the REAL keeper's keys, in Alex's browser his
+ * own account's. A pin holds every `setSaveOwner` until it lifts; the held answer is applied on unpin, so
+ * leaving the bench lands on whoever the boot said is playing. Returns the unpin.
+ */
+let pin: { held: string | null } | null = null
+export function pinSaveOwner(owner: string): () => void {
+  const mine = { held: ownerId }
+  pin = mine
+  applyOwner(owner)
+  return () => { if (pin !== mine) return; pin = null; applyOwner(mine.held) }
 }
 
 /** Fired on `window` whenever the answer to "who is playing" changes, including the first time. */

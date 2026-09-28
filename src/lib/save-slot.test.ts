@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import {
   ANON_SAVE_KEY, SAVE_KEY_PREFIX, OWNER_FIELD,
   setSaveOwner, saveKey, saveOwner, slotFor, stampOwner, ownerOf, ownedBy,
-  gameSlot, planSlotAdoption, ADOPTABLE, saveOwnerResolved, adoptAnonSlots, SLOT_CLAIM,
+  gameSlot, planSlotAdoption, ADOPTABLE, saveOwnerResolved, adoptAnonSlots, SLOT_CLAIM, pinSaveOwner,
 } from './save-slot'
 
 let pass = 0
@@ -28,6 +28,20 @@ setSaveOwner('u_aaa')
 ok(saveKey() === 'ather:save:shimmer:u_aaa', `signed-in slot carries the account (got ${saveKey()})`)
 setSaveOwner('u_bbb')
 ok(saveKey() === 'ather:save:shimmer:u_bbb', 'a second account gets a DIFFERENT slot')
+
+// ── ★ the bench pin (2026-09-28): the layout's boot resolves AFTER the bench sets its owner ─────────
+{
+  setSaveOwner(null)
+  const unpin = pinSaveOwner('bench:panel')
+  ok(saveOwner() === 'bench:panel', 'a pin takes the owner at once')
+  setSaveOwner('u_alex')   // SaveOwnerBoot's session answer, a few frames late
+  ok(saveOwner() === 'bench:panel', '★★ a late boot answer does NOT overwrite a pinned bench (it used to, and the bench read the real keeper)')
+  unpin()
+  ok(saveOwner() === 'u_alex', '★ leaving the bench lands on whoever the boot said is playing')
+  const unpin2 = pinSaveOwner('bench:panel'); unpin2()
+  ok(saveOwner() === 'u_alex', 'a pin with no boot answer in between restores the owner it found')
+  setSaveOwner('u_bbb')
+}
 ok(slotFor('u_aaa') !== slotFor('u_bbb'), 'two accounts never share a slot')
 ok(slotFor(null) === ANON_SAVE_KEY, 'slotFor(null) is the anonymous slot')
 ok(saveKey().startsWith(SAVE_KEY_PREFIX), 'every slot starts with the prefix the epoch reset sweeps')
