@@ -120,7 +120,7 @@ import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { addMarks } from '@/lib/wallet'
 import { keeperBook, saveBook } from './book'
-import { gregWord, gregGemsInHand, imbueGregBracelet } from './vessels'
+import { gregWord, gregGemsInHand, imbueGregBracelet, gloveErrand, imbueGregGlove, markGloveAsked, markGloveStones, breachOwesGloveStones } from './vessels'
 import { PassagePanel } from './PassagePanel'
 import { PassageScene } from './PassageScene'
 import { RuneHoldScene } from './RuneHoldScene'
@@ -7275,6 +7275,7 @@ export default function Shimmer3D() {
   const beginHold = useCallback(() => {
     holdRef.current = startHold(HOLD_MAP, (Date.now() & 0xffff) || 1)
     holdRef.current.dryRounds = loadDry()   // the pity counter carries across runs (`vessel-pieces.ts`)
+    holdRef.current.gloveOwed = breachOwesGloveStones()   // Idony named the Breach: a cache past a real round holds the glove's stones
     holdRef.current.roadKnown = roadOpen(loadRoad())   // the Stillwind's road, read in an earlier run, stays read
     const rep = WEAPONS.findIndex(w => w.id === 'repeater')
     if (!holdSavedLoadout.current) holdSavedLoadout.current = [...loadoutRef.current]
@@ -7318,7 +7319,7 @@ export default function Shimmer3D() {
       if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
       if (holdEHeld.current && prompt?.kind === 'chest') { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) }
       // what a cache gave that lives outside the run: Marks are the real wallet; a vessel piece goes home for the cutter
-      while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n); else if (l.kind === 'part') setHoldFlash(pieceLine(addPiece())) }
+      while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n); else if (l.kind === 'part') setHoldFlash(pieceLine(addPiece())); else if (l.kind === 'stones') markGloveStones() }
       if (hs.fell) { hs.fell = null; setHoldFlash('The floor gave way') }
       if (hs.dryRounds !== lastDry) { lastDry = hs.dryRounds; saveDry(hs.dryRounds) }
       const chestsNow = hs.chests.filter(Boolean).length

@@ -76,7 +76,7 @@ import { LOADOUT_KEY, rawLoadout, saveLoadout, type Loadout } from './loadout'
 import { VESSELS_KEY, WORN_WORD_KEY, loadLetters, saveLetters, lettersOf, missingLetters, takeStones, wornWord, saveWornWord, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, STONE_CREDIT, type Vessel, type Letters } from './gems'
 import { eligibleMoves } from './cast'
 import { learn, type Book } from './scroll-market'
-import { imbuedWord, markImbued } from './greg-pair'
+import { imbuedWord, markImbued, gloveRoad, saveGloveRoad } from './greg-pair'
 import { saveBook } from './book'
 import { moveById, KEEPER_MOVES, type KeeperMove } from './keeper-moves'
 import { ALL_BANDS, LANE_FOR_KIND, laneRunes, isBuilt } from './cast'
@@ -558,7 +558,7 @@ export const gregGems = (birth: string | null): string[] => {
 
 export type ImbueResult =
   | { ok: true; word: string; book: Book; worn: boolean }
-  | { ok: false; why: 'no-bracelet' | 'already'; word: string | null }
+  | { ok: false; why: 'no-bracelet' | 'no-glove' | 'no-stones' | 'already'; word: string | null }
 /**
  * THE ENCHANT TEMPLE IMBUES GREG'S BRACELET, AND TEACHES ITS WORD AS IT DOES. The gems go into the empty
  * seats (`markImbued`, which is also the one word the seat-gem exception covers), the word goes into the
@@ -570,18 +570,58 @@ export function imbueGregBracelet(birth: string | null, book: Book, starter?: st
   if (!word) return { ok: false, why: 'no-bracelet', word: null }
   if (imbuedWord() === word && book.learned.includes(word)) return { ok: false, why: 'already', word }
   markImbued(word)
+  return teachAndWear('bracelet', word, birth, book, starter)
+}
+
+// ── ★ THE GLOVE'S ROAD (RULED 09-28, HOW GREG'S GLOVE IS EARNED): Temple → the Breach → Temple ────────────
+export type GloveErrand = 'locked' | 'ask' | 'breach' | 'weave' | 'done'
+/**
+ * Where the keeper stands on the glove's road. `locked` until the bracelet is lit (the first errand comes
+ * first); `ask` = Greg points back to the Temple and Idony has not yet read the glove; `breach` = she named it,
+ * the stones are owed by the live Breach; `weave` = the stones are in hand; `done` = the glove is lit.
+ */
+export function gloveErrand(): GloveErrand {
+  const glove = gregWord('focus'), bracelet = gregWord('bracelet')
+  if (!glove || !bracelet || imbuedWord() !== bracelet) return 'locked'
+  const r = gloveRoad()
+  if (r.imbued === glove) return 'done'
+  return r.stones ? 'weave' : r.asked ? 'breach' : 'ask'
+}
+/** the glove's stones: its word's letters after the birth letter (what a Breach cache holds) */
+export const gloveStones = (birth: string | null): string[] => {
+  const w = gregWord('focus')
+  return w ? seatLetters({ move: w }, birth).filter(r => r !== birth) : []
+}
+/** Idony has read the glove and named the Breach */
+export const markGloveAsked = (): void => saveGloveRoad({ ...gloveRoad(), asked: true })
+/** a Breach cache gave the glove's stones */
+export const markGloveStones = (): void => saveGloveRoad({ ...gloveRoad(), asked: true, stones: true })
+/** does the live Breach owe this keeper the glove's stones? (the page seeds the run with it) */
+export const breachOwesGloveStones = (): boolean => gloveErrand() === 'breach'
+/** Idony weaves the Breach stones into Greg's glove, and the keeper says the word: the glove lights */
+export function imbueGregGlove(birth: string | null, book: Book, starter?: string): ImbueResult {
+  const word = gregWord('focus')
+  if (!word) return { ok: false, why: 'no-glove', word: null }
+  const r = gloveRoad()
+  if (r.imbued === word && book.learned.includes(word)) return { ok: false, why: 'already', word }
+  if (!r.stones) return { ok: false, why: 'no-stones', word }
+  saveGloveRoad({ ...r, imbued: word })
+  return teachAndWear('focus', word, birth, book, starter)
+}
+/** the word goes into the book; Greg's vessel of `kind` is bound if worn, or put on if that hand is bare */
+function teachAndWear(kind: Vessel, word: string, birth: string | null, book: Book, starter?: string): ImbueResult {
   const taught = learn(book, word)
   saveBook(taught)
-  const band = BAND_FOR_VESSEL.bracelet
+  const band = BAND_FOR_VESSEL[kind]
   let worn = false
-  if (wornPresent('bracelet') && wornTier('bracelet') === FLOOR_TIER) {
+  if (wornPresent(kind) && wornTier(kind) === FLOOR_TIER) {
     const slots: Loadout = ALL_BANDS.map((_, k) => rawLoadout()[k] ?? null)
     slots[band] = word
     saveLoadout(slots)
     worn = true
-  } else if (!wornPresent('bracelet') && !rawLoadout()[band]) {
-    const i = loadStowed().findIndex(v => v.kind === 'bracelet' && isFloor(v))
-    worn = i >= 0 && equip('bracelet', i, birth, starter)
+  } else if (!wornPresent(kind) && !rawLoadout()[band]) {
+    const i = loadStowed().findIndex(v => v.kind === kind && isFloor(v))
+    worn = i >= 0 && equip(kind, i, birth, starter)
   }
   return { ok: true, word, book: taught, worn }
 }

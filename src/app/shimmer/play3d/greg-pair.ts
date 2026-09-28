@@ -31,7 +31,29 @@ export function markImbued(word: string): void {
   try { localStorage.setItem(keeperKey(GREG_IMBUED_KEY), word) } catch { /* private mode */ }
 }
 
-/** a rebirth: a different keeper carries Greg's gems again */
+/** a rebirth: a different keeper carries Greg's gems again, and the glove's road starts over */
 export function clearImbued(): void {
-  try { localStorage.removeItem(keeperKey(GREG_IMBUED_KEY)) } catch { /* private mode */ }
+  try { localStorage.removeItem(keeperKey(GREG_IMBUED_KEY)); localStorage.removeItem(keeperKey(GREG_GLOVE_KEY)) } catch { /* private mode */ }
+}
+
+// ── ★ THE GLOVE'S ROAD (RULED 09-28, casting-vessels › HOW GREG'S GLOVE IS EARNED) ──────────────────────
+// Greg points back to the Temple → Idony reads the glove and names the Breach (`asked`) → a Breach cache past a
+// real round holds the glove's stones (`stones`) → Idony weaves them in and the keeper says the word (`imbued`,
+// the glove's word, which the seat-gem exception then covers exactly as it covers the bracelet's).
+export const GREG_GLOVE_KEY = 'ather:shimmer:greg-glove'
+export interface GloveRoad { asked: boolean; stones: boolean; imbued: string | null }
+const NO_ROAD: GloveRoad = { asked: false, stones: false, imbued: null }
+export function gloveRoad(): GloveRoad {
+  try {
+    const raw = localStorage.getItem(keeperKey(GREG_GLOVE_KEY))
+    const o = raw ? JSON.parse(raw) : null
+    return o && typeof o === 'object' ? { asked: !!o.asked, stones: !!o.stones, imbued: typeof o.imbued === 'string' && o.imbued.length < 64 ? o.imbued : null } : { ...NO_ROAD }
+  } catch { return { ...NO_ROAD } }
+}
+export function saveGloveRoad(r: GloveRoad): void {
+  try { localStorage.setItem(keeperKey(GREG_GLOVE_KEY), JSON.stringify(r)) } catch { /* private mode */ }
+}
+/** every word the seat-gem exception covers: the bracelet's and, once woven, the glove's (Greg's pair only) */
+export function seatGemWords(): string[] {
+  return [imbuedWord(), gloveRoad().imbued].filter((w): w is string => !!w)
 }

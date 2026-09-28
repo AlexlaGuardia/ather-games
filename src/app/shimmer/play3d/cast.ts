@@ -48,7 +48,7 @@ import { SENSE_RADIUS } from './tremor-sense'
 import { CLOAK_BURN, CLOAK_REBUILD } from './flame-cloak'
 import { RUNES } from './birth/runes.data'
 import { hasLearned, type Book } from './scroll-market'
-import { imbuedWord } from './greg-pair'
+import { seatGemWords } from './greg-pair'
 import type { ConjureShape } from '../engine/conjured-terrain'
 import type { StatusKind } from '../engine/statuses'
 
@@ -771,12 +771,12 @@ export function eligibleMoves(owned: string[], birth: string | null, kind: SlotK
   // ⚠ Built ONCE per call, never inside the filter — `laneRunes` walks all 20 runes, and a keeper
   // with a wide book would pay that per move for an answer that cannot change mid-filter.
   const onIt = lane ? laneRunes(birth, lane) : null
-  // ★ THE SEAT-GEM EXCEPTION (09-28), scoped to ONE word: the one the Enchant Temple imbued into Greg's
-  // bracelet, whose gems sit in its seats. It waives only the "carries every rune" half; it must still be
+  // ★ THE SEAT-GEM EXCEPTION (09-28), scoped to Greg's pair: the words the Enchant Temple wove into Greg's
+  // bracelet and (once earned) his glove, whose gems sit in their seats. It waives only the "carries every rune" half; it must still be
   // learned (the Temple teaches it) and on the lane. Never general — see `greg-pair.ts`.
-  const grant = imbuedWord()
+  const grants = seatGemWords()
   const carried = knownMoves(owned)
-  const granted = grant && !carried.some((m) => m.id === grant) ? KEEPER_MOVES.filter((m) => m.id === grant) : []
+  const granted = KEEPER_MOVES.filter((m) => grants.includes(m.id) && !carried.some((c) => c.id === m.id))
   const known = [...carried, ...granted].filter(
     (m) =>
       m.tier === kind &&

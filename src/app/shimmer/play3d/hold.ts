@@ -146,6 +146,9 @@ export const HOLD_TUNING = {
   climbRate: 5,          // tiers/sec a body climbs a floor face
   // chests (Alex 09-26): every chestEvery-th round, each EMPTY spot rolls chestChance; an occupied spot never rolls
   chestEvery: 5,
+  // the glove's stones (09-28): the first cache wave at or past this round holds them. 10 = the second wave,
+  // after the tuner is usually planted (~r7, breach-pace) — a real hold, not a walk-in
+  gloveRound: 10,
   chestChance: 0.25,
   chestOpenSec: 2,       // seconds of holding E — a real risk mid-round
   chestRarity: { common: 70, rare: 25, legendary: 5 },
@@ -278,7 +281,9 @@ export type HoldLoot =
   | { kind: 'glimmer' }
   | { kind: 'marks'; n: number }
   | { kind: 'part' }
-export interface HoldChest { rarity: ChestRarity; openT: number }
+  | { kind: 'stones' }
+/** `stones`: this cache holds Greg's glove stones (the glove's road, RULED 09-28) — whatever its rarity says */
+export interface HoldChest { rarity: ChestRarity; openT: number; stones?: boolean }
 /**
  * RULED LAWFUL 09-26 (ON A LIVE WORLD › CACHES): a cache may hold this season's vessel, whole or as pieces a
  * keeper carries home to the Passage's CUTTER, who finishes it (a keeper never assembles one). WIRED 09-27:
@@ -290,8 +295,10 @@ export const CHEST_LOOT: Record<ChestRarity, { loot: HoldLoot; w: number }[]> = 
   rare: [{ loot: { kind: 'marks', n: 30 }, w: 60 }, { loot: { kind: 'salvage', n: 1500 }, w: 40 }],   // a bag of Marks ≈ 30 (Alex)
   legendary: [{ loot: { kind: 'part' }, w: 100 }],
 }
+/** the pickup line for the glove's stones — TODO(lark): swap for the locked `breach:glove-stones` line */
+export const GLOVE_STONES_LINE = 'Stones for the glove'
 export const lootLabel = (l: HoldLoot): string =>
-  l.kind === 'salvage' ? `+${l.n} salvage` : l.kind === 'marks' ? `A bag of Marks (+${l.n})` : l.kind === 'glimmer' ? DROP_NAME.glimmer : 'A vessel piece'
+  l.kind === 'salvage' ? `+${l.n} salvage` : l.kind === 'marks' ? `A bag of Marks (+${l.n})` : l.kind === 'glimmer' ? DROP_NAME.glimmer : l.kind === 'stones' ? GLOVE_STONES_LINE : 'A vessel piece'
 
 export interface HoldState {
   map: HoldMap
@@ -324,7 +331,9 @@ export interface HoldState {
   chests: (HoldChest | null)[]
   /** rounds since this keeper's last vessel piece — ACROSS runs: the page seeds it and saves it (the pity counter) */
   dryRounds: number
-  /** what opened chests gave that the page must apply (Marks, parts) */
+  /** does the live Breach owe this keeper Greg's glove stones? The page seeds it (`breachOwesGloveStones`) */
+  gloveOwed: boolean
+  /** what opened chests gave that the page must apply (Marks, parts, the glove's stones) */
   loot: HoldLoot[]
   /** the device is planted at ground zero */
   devicePlanted: boolean
@@ -527,7 +536,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
     drops: [], dropsThisRound: 0, pickups: [], wrack: 0, studied: [], roadKnown: false,
-    chests: map.chestSpots.map(() => null), dryRounds: 0, loot: [], devicePlanted: false, tuned: {},
+    chests: map.chestSpots.map(() => null), dryRounds: 0, gloveOwed: false, loot: [], devicePlanted: false, tuned: {},
     elapsed: 0, nextId: 1, rng: mulberry32(seed),
     field: new Int16Array(map.cols * map.rows * map.building.levels.length).fill(-1), fieldT: 0, fieldAt: -1,
   }
@@ -890,6 +899,19 @@ export function rollChests(s: HoldState, tune: HoldTuning = HOLD_TUNING, chance:
   })
   // the pity counter: dry long enough, and no legendary already standing unopened → one of the new caches is
   // legendary, in an opened room if any of them is (a promise behind a gate you cannot buy yet is no promise)
+  // ★ THE GLOVE'S STONES (RULED 09-28): paid by holding out through a real round, never coin. From
+  // `gloveRound` on, a keeper the Breach owes gets them in one of that wave's caches; if the wave rolled none,
+  // one is set down anyway, in an opened room if there is one. Only one stones cache stands at a time.
+  if (s.gloveOwed && s.round >= tune.gloveRound && !s.chests.some(c => c?.stones)) {
+    const open = (i: number) => !!s.rooms[s.map.chestSpots[i].room]
+    let pick = fresh.find(open) ?? fresh[0]
+    if (pick === undefined) {
+      const empty = s.chests.map((c, i) => (c ? -1 : i)).filter(i => i >= 0)
+      pick = empty.find(open) ?? empty[0]
+      if (pick !== undefined) { s.chests[pick] = { rarity: 'rare', openT: 0 }; fresh.push(pick); n++ }
+    }
+    if (pick !== undefined) s.chests[pick]!.stones = true
+  }
   const standing = s.chests.some((c, i) => c?.rarity === 'legendary' && !fresh.includes(i))
   if (VESSEL_PIECES_WIRED && fresh.length && !standing && !fresh.some(i => s.chests[i]!.rarity === 'legendary') && s.dryRounds >= tune.pityRounds) {
     const pick = fresh.find(i => s.rooms[s.map.chestSpots[i].room]) ?? fresh[0]
@@ -903,6 +925,7 @@ export function chestTick(s: HoldState, spot: number, dt: number, tune: HoldTuni
   if (!c || !s.running) return null
   c.openT += dt
   if (c.openT < tune.chestOpenSec) return null
+  if (c.stones) { s.chests[spot] = null; s.gloveOwed = false; const got: HoldLoot = { kind: 'stones' }; s.loot.push(got); return got }
   const table = CHEST_LOOT[c.rarity]
   let r = s.rng() * table.reduce((a, e) => a + e.w, 0), loot = table[table.length - 1].loot
   for (const e of table) if ((r -= e.w) < 0) { loot = e.loot; break }
