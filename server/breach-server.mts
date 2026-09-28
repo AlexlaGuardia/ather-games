@@ -141,6 +141,7 @@ export function handle(r: Room, k: Keeper, m: Msg): unknown | null {
     case 'struck-ack': k.struck = 0; return null
     case 'down': {
       k.down = true
+      console.log(`[breach] ${k.name} down in ${r.code}`)
       // ★ CO-OP ENDS WHEN THE LAST KEEPER FALLS: one keeper down is a friend to hold the line for
       if (r.keepers.filter(x => x.ws !== null).every(x => x.down)) {
         const end = endHold(s)
@@ -195,7 +196,7 @@ export function startServer(port = PORT) {
     const code = partyCode(url.searchParams.get('party'))
     if (!claims?.user_id || !code) { ws.send(JSON.stringify({ t: 'refused', why: !claims ? 'sign in to play together' : 'no party' })); ws.close(); return }
     let r = ROOMS.get(code)
-    if (!r || r.s.over) { r = newRoom(code); ROOMS.set(code, r) }
+    if (!r || r.s.over) { console.log(`[breach] new room ${code} (${!r ? 'none' : 'previous run over'})`); r = newRoom(code); ROOMS.set(code, r) }
     let k = r.keepers.find(x => x.id === claims.user_id)
     if (!k) {
       if (r.keepers.length >= MAX_KEEPERS) { ws.send(JSON.stringify({ t: 'refused', why: 'three to a door: this party\'s Breach is full' })); ws.close(); return }
