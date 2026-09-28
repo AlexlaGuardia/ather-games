@@ -82,7 +82,7 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size 
   size?: HudSize
   /** A strip laid along the tray's top edge (compact/phone: the vitals, see `HearthLip`). */
   lip?: React.ReactNode
-  /** false = no quick-slots, only the lip (Alex 09-28: the mortal side has no hotbar — but a phone's mana rides the lip) */
+  /** false = no quick-slots, only the lip (Alex 09-28: no hotbar in a fight — towns keep it; a phone's mana rides the lip) */
   slots?: boolean
   entries: readonly (HotbarEntry | null)[]
   sel: number

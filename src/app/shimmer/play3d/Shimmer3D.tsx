@@ -8656,7 +8656,7 @@ export default function Shimmer3D() {
         <HearthHudLayer face={HUD_FACE} size={hudSize} entries={hotbarEntries} sel={hotSel} held={heldName} dimmed={false} onSelect={selectSlot}
           objective={null} mana={manaCornerRef} tools={equippedToolsRef} skills={skillsRef}
           activeTool={(void toolTick, channel?.family ?? (fish ? 'rinning' : null))}
-          glyph={f => <ToolGlyph family={f} />} clock={false} mapFrame={false} slots={zone.realm !== 'outside'} />
+          glyph={f => <ToolGlyph family={f} />} clock={false} mapFrame={false} slots={!(zone.realm === 'outside' && !zone.peaceful)} />
       </>)}
       {bagOpen && (
         <BagPanel inv={invRef} spiritIndex={spiritIndexRef} chest={null} tick={bagTick} sel={hotSel}

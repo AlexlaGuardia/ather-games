@@ -157,7 +157,7 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
   clock?: boolean
   /** false = the host rings its own minimap, on the MINIMAP'S show-rule, which is not the bar's. */
   mapFrame?: boolean
-  /** false = the hotbar's quick-slots are hidden (the mortal side, Alex 09-28); a phone keeps the lip (mana, tools) */
+  /** false = the hotbar's quick-slots are hidden (a fight: weapons live, Alex 09-28; towns keep them); a phone keeps the lip (mana, tools) */
   slots?: boolean
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
