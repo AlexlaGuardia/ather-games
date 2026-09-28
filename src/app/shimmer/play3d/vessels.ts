@@ -147,7 +147,7 @@ export const emptyVessel = (kind: Vessel, tier: VesselTier = 1): StowedVessel =>
  * uncut and says so.
  */
 export function floorWordFor(kind: Vessel, birth: string | null, owned: readonly string[] = []): string | null {
-  const pick = kind === 'bracelet' && birth ? GREG_BRACELET_PICK[birth] : undefined
+  const pick = birth ? rulePick(kind, birth) : undefined
   if (pick && isFloorWord(kind, birth, pick)) return pick
   const fits = floorCandidates(kind, birth)
   const opens = (m: KeeperMove) => (m as { collar?: string }).collar === 'opens'
@@ -187,12 +187,26 @@ export const GREG_BRACELET_PICK: Readonly<Partial<Record<string, string>>> = {
   stone: 'lava-stride', magma: 'lava-stride', gem: 'volcano-spike', metalergy: 'forge-fist',
   freeze: 'flash-freeze', fluid: 'flash-freeze', hydro: 'riptide', mist: 'drowning-grasp',
 }
+/**
+ * ★ GREG'S GLOVE, BY BIRTH RUNE (the glove column of THE DEFAULT LOADOUT, RULED 09-28, athernyx a450b4a;
+ * the three ties Alex picked: Manalic Monolith, Life Exhale, Tempest Pyroclast). READ, never derived: a new
+ * move can never silently change a keeper's glove. `floorCandidates` remains only as the fallback.
+ */
+export const GREG_GLOVE_PICK: Readonly<Partial<Record<string, string>>> = {
+  manalic: 'monolith', barrier: 'overpressure', star: 'firestorm', life: 'exhale', enchant: 'gate',
+  lightning: 'stormbank', tempest: 'pyroclast', breeze: 'exhale', illuminate: 'gate', stone: 'monolith',
+  gem: 'overpressure', magma: 'pyroclast', metalergy: 'gate', freeze: 'shatterfield', hydro: 'overpressure',
+  mist: 'stormbank', fluid: 'healing-stream',
+}
+/** the ruled word for Greg's `kind` on this birth (the one table, both columns) */
+export const rulePick = (kind: Vessel, birth: string): string | undefined =>
+  kind === 'bracelet' ? GREG_BRACELET_PICK[birth] : kind === 'focus' ? GREG_GLOVE_PICK[birth] : undefined
 /** is `move` a word Greg's `kind` could be cut for on this birth? A saved floor for anything else is recut */
 export const isFloorWord = (kind: Vessel, birth: string | null, move: string | null): boolean => {
   if (!move || !birth) return false
   // the bracelet's word is RULED per birth: a save cut for the old derived default (Life's was Living
   // Architecture) is recut for the ruled word on load
-  const ruled = kind === 'bracelet' ? GREG_BRACELET_PICK[birth] : undefined
+  const ruled = rulePick(kind, birth)
   if (ruled && move !== ruled) return false
   const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
   const lane = band ? LANE_FOR_KIND[band] : null
