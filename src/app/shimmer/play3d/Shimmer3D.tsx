@@ -123,6 +123,7 @@ import { keeperBook, saveBook } from './book'
 import { PassagePanel } from './PassagePanel'
 import { PassageScene } from './PassageScene'
 import { RuneHoldScene } from './RuneHoldScene'
+import { SMOOTH_TILES } from './rune-hold-ground'
 import { DRAWN_DOORS } from './rune-hold-look'
 import { StationScene } from './StationScene'
 import { LowenPanel } from './LowenPanel'
@@ -1213,7 +1214,7 @@ const WorldFlora = memo(function WorldFlora({ heights }: { heights: number[][] }
 // memo: the terrain is the heaviest node in the scene and depends on nothing that ticks. Without it,
 // every channel tick (~11 Hz) rebuilt the whole floor/wall/water/mist JSX tree. All five props are
 // stable (a ref, a ref's array, a version int, a useCallback, a bool), so this skips cleanly.
-const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick, ownSolids, ownWarps, noBeacon }: {
+const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick, ownSolids, ownWarps, noBeacon, ownGround }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
   /** THE HOLD draws its own solids (parapets and pillars at their floor's height — `HoldScene`); the
    *  shared brown block is seated at ground level and would sink into a raised floor */
@@ -1229,11 +1230,19 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
   mountTick?: number
   /** warp cells that draw no beacon pole (THE LANDING: its disc is the marker) */
   noBeacon?: Set<string>
+  /** tile ids whose ground the zone's own scene draws (Rune Hold's smooth ground) — no stepped column, except in the editor */
+  ownGround?: ReadonlySet<number>
 }) {
   // `editing` mounts the whole map: the map editor needs to see and click what it is drawing,
   // and an editor is not walking anywhere, so the streaming window would only get in the way.
-  const chunks = useMemo(() => chunkBuckets(gridRef.current, editing ? null : center),
-    [version, gridRef, center?.cx, center?.cy, editing, mountTick])
+  const chunks = useMemo(() => {
+    const cs = chunkBuckets(gridRef.current, editing ? null : center)
+    // ★ the zone draws this ground itself (smooth slopes, 2026-09-28); its stepped columns z-fought the town's risers
+    if (!ownGround || editing) return cs
+    const g = gridRef.current
+    return cs.map(c => ({ ...c, b: { ...c.b, floors: c.b.floors.filter(([x, z]) => !ownGround.has((g[z]?.[x] ?? -1) & 0xff)) } }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version, gridRef, center?.cx, center?.cy, editing, mountTick, ownGround])
   return (
     <>
       {chunks.map(({ key, b: { floors, walls, waters, voids, warps, mists, wallTops, buildings, buildingTops } }) => (
@@ -4175,7 +4184,7 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? RUNE_HOLD_DOOR_KEYS : undefined} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? RUNE_HOLD_DOOR_KEYS : undefined} ownGround={props.zone.id === RUNE_HOLD_ZONE ? SMOOTH_TILES : undefined} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && n.kind !== 'stall' && n.kind !== 'cabinet' && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.zone.id === PASSAGE_ZONE && <PassageScene isOwner={props.isOwner} />}
       {props.zone.id === STATION_ZONE && <StationScene />}

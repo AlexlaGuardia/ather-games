@@ -24,6 +24,7 @@ import { runeHold as RH, passage as P, hubGate } from './scene-palette'
 import { Instances, type Inst } from './instances'
 import { ShipHull } from './StationScene'
 import { groundAt } from './rune-hold-terraces'
+import { groundMesh, MEADOW } from './rune-hold-ground'
 import { Folk } from './Townsfolk'
 import { keepers, regularsOn, walkers, isHome } from './townsfolk'
 import { weekdayAt, type Weekday } from './passage'
@@ -431,6 +432,68 @@ function HomeDoor({ h, y, home }: { h: Home; y: number; home: boolean }) {
   )
 }
 
+/** px per cell in the painted ground — 16 carries four setts and their mortar */
+const GROUND_PX = 16
+
+/**
+ * The town's ground, painted once per grid change: setts on a mortar bed for the streets, meadow elsewhere, worn bare
+ * where the two meet — the same colours and the same hashes the per-cell planes used, so the look carries over.
+ */
+function paintGround(g: number[][]): HTMLCanvasElement {
+  const rows = g.length, cols = g[0]?.length ?? 0, S = GROUND_PX
+  const cv = document.createElement('canvas'); cv.width = cols * S; cv.height = rows * S
+  const ctx = cv.getContext('2d')!
+  ctx.fillStyle = RH.meadow[0]; ctx.fillRect(0, 0, cv.width, cv.height)
+  for (let z = 0; z < rows; z++) for (let x = 0; x < cols; x++) {
+    const t = (g[z][x] ?? -1) & 0xff, px = x * S, pz = z * S
+    if (t === PATH) {
+      ctx.fillStyle = RH.mortar; ctx.fillRect(px, pz, S, S)
+      for (let q = 0; q < 4; q++) {
+        const ox = (q & 1 ? 0.25 : -0.25) + (hash(x, z, 20 + q) - 0.5) * 0.05, oz = (q & 2 ? 0.25 : -0.25) + (hash(x, z, 24 + q) - 0.5) * 0.05
+        const cx = px + (0.5 + ox) * S, cz = pz + (0.5 + oz) * S, h = 0.44 * S / 2
+        ctx.save(); ctx.translate(cx, cz); ctx.rotate((hash(x, z, 1 + q) - 0.5) * 0.25)
+        ctx.fillStyle = pick(RH.cobble, x, z, 2 + q * 3); ctx.fillRect(-h, -h, h * 2, h * 2)
+        ctx.restore()
+      }
+    } else {
+      let nearPath = false
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (((g[z + dz]?.[x + dx] ?? -1) & 0xff) === PATH) nearPath = true
+      ctx.fillStyle = t === MEADOW && nearPath && hash(x, z, 3) < 0.55 ? pick(RH.worn, x, z, 4) : pick(RH.meadow, x, z, 5)
+      ctx.fillRect(px, pz, S, S)
+    }
+  }
+  return cv
+}
+
+/** ★ THE SMOOTH GROUND (Alex, 2026-09-28) — one mesh, one texture, the terraces as slopes. See `rune-hold-ground.ts`. */
+function SmoothGround({ grid, heights, version }: { grid: number[][]; heights?: number[][]; version: number }) {
+  const geom = useMemo(() => {
+    const m = groundMesh(grid, heights)
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(m.positions, 3))
+    geo.setAttribute('uv', new THREE.BufferAttribute(m.uvs, 2))
+    geo.setIndex(new THREE.BufferAttribute(m.indices, 1))
+    geo.computeVertexNormals()
+    return geo
+  // `version` bumps when the editor paints or sculpts — the arrays are mutated in place
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grid, heights, version])
+  const tex = useMemo(() => {
+    const t = new THREE.CanvasTexture(paintGround(grid))
+    t.colorSpace = THREE.SRGBColorSpace
+    t.anisotropy = 4
+    return t
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grid, version])
+  useEffect(() => () => { geom.dispose() }, [geom])
+  useEffect(() => () => { tex.dispose() }, [tex])
+  return (
+    <mesh geometry={geom} receiveShadow>
+      <meshStandardMaterial map={tex} roughness={0.95} side={THREE.DoubleSide} />
+    </mesh>
+  )
+}
+
 export function RuneHoldScene({ grid, heights, version = 0, day: dayOverride }: { grid: number[][]; heights?: number[][]; version?: number; day?: Weekday }) {
   // canon's five-day week, the same clock the Passage keeps (`passage.ts`); re-read each minute
   const [today, setToday] = useState<Weekday>(() => weekdayAt(Date.now()))
@@ -455,7 +518,7 @@ export function RuneHoldScene({ grid, heights, version = 0, day: dayOverride }: 
     const terminal = sf ? owner.get(`${Math.floor(sf.x - sf.face[0] * 0.5)},${Math.floor(sf.z - sf.face[1] * 0.5)}`) : undefined
     if (terminal) terminal.h = TERMINAL_H
     const stone: Inst[] = [], hill: Inst[] = [], timber: Inst[] = [], windows: Inst[] = [], sills: Inst[] = []
-    const ground: Inst[] = [], chimneys: Inst[] = [], risers: Inst[] = []
+    const chimneys: Inst[] = []
     /** the lowest open ground beside a cell: where a riser or a wall has to reach down to (the terraces) */
     const lowBeside = (x: number, z: number) => {
       let low = heightAt(x, z)
@@ -470,28 +533,8 @@ export function RuneHoldScene({ grid, heights, version = 0, day: dayOverride }: 
       if (v === undefined || v < 0) continue
       const y0 = heightAt(x, z)
       if ((v & 0xff) !== BUILDING) {
-        // where the terrace steps down beside this cell, a laid riser closes the step (no grass side showing)
-        const low = lowBeside(x, z)
-        if (low < y0) {
-          // a street's step is laid stone; a meadow's is turf, a shade under its grass (stone on grass read as stripes)
-          const turf = (v & 0xff) !== PATH
-          risers.push({ x, y: (low + y0) / 2, z, sx: 1, sy: y0 - low + 0.04, sz: 1, c: turf ? RH.peaks.scrub : pick(RH.stone, x, z, 6) })
-        }
-        // the ground: cobbles on the streets, meadow elsewhere, worn bare where the two meet
-        const t = v & 0xff
-        if (t === PATH) {
-          // a mortar bed, then four setts on it: a metre-square slab read as floor tiles on a lawn
-          ground.push({ x, y: y0 + 0.03, z, sx: 1, sy: 1, sz: 1, c: RH.mortar })
-          for (let q = 0; q < 4; q++) {
-            const ox = (q & 1 ? 0.25 : -0.25) + (hash(x, z, 20 + q) - 0.5) * 0.05, oz = (q & 2 ? 0.25 : -0.25) + (hash(x, z, 24 + q) - 0.5) * 0.05
-            ground.push({ x: x + ox, y: y0 + 0.045, z: z + oz, sx: 0.44, sy: 0.44, sz: 1, yaw: (hash(x, z, 1 + q) - 0.5) * 0.25, c: pick(RH.cobble, x, z, 2 + q * 3) })
-          }
-        }
-        else if (t === 97) {
-          let nearPath = false
-          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (((g[z + dz]?.[x + dx] ?? -1) & 0xff) === PATH) nearPath = true
-          ground.push({ x, y: y0 + 0.025, z, sx: 1, sy: 1, sz: 1, c: nearPath && hash(x, z, 3) < 0.55 ? pick(RH.worn, x, z, 4) : pick(RH.meadow, x, z, 5) })
-        }
+        // ★ the ground itself (streets, meadow, the terrace slopes) is ONE smooth surface now — `SmoothGround`,
+        // painted by `paintGround`. The per-cell planes and the riser boxes that z-fought the columns are gone.
         continue
       }
       const b = owner.get(`${x},${z}`)!
@@ -577,7 +620,7 @@ export function RuneHoldScene({ grid, heights, version = 0, day: dayOverride }: 
     }
     const lights = lamps.filter(l => lit.has(l)).map(l => ({ x: l.x, y: heightAt(l.x, l.z) + 2.2, z: l.z }))
 
-    return { stone, hill, timber, windows, sills, ground, risers, chimneys, posts, glass, lights, smokes, terminal, roof: roofsOf(blocks.filter(b => b !== terminal), heightAt) }
+    return { stone, hill, timber, windows, sills, chimneys, posts, glass, lights, smokes, terminal, roof: roofsOf(blocks.filter(b => b !== terminal), heightAt) }
   // `version` bumps when the map editor paints — the grid is the same array, mutated in place
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grid, heights, version])
@@ -585,8 +628,7 @@ export function RuneHoldScene({ grid, heights, version = 0, day: dayOverride }: 
   return (
     <>
       <Backdrop cols={grid[0]?.length ?? 100} rows={grid.length} />
-      <Instances items={look.ground} flat cast={false} />
-      <Instances items={look.risers} cast={false} />
+      <SmoothGround grid={grid} heights={heights} version={version} />
       <Instances items={look.stone} />
       <Instances items={look.hill} />
       <Instances items={look.timber} />
