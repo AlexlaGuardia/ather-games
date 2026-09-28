@@ -143,6 +143,7 @@ import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
 import { HOLD_TUNING, BODY_SIZE, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, LAB_NODES, studyNode, labBlock, holdManaDrip, type LabNodeId, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 import { addPiece, pieceLine, loadDry, saveDry } from './vessel-pieces'
+import { loadRoad, saveRoad, roadOpen, ROAD_LINE } from './stillwind-road'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -7142,6 +7143,7 @@ export default function Shimmer3D() {
   const beginHold = useCallback(() => {
     holdRef.current = startHold(HOLD_MAP, (Date.now() & 0xffff) || 1)
     holdRef.current.dryRounds = loadDry()   // the pity counter carries across runs (`vessel-pieces.ts`)
+    holdRef.current.roadKnown = roadOpen(loadRoad())   // the Stillwind's road, read in an earlier run, stays read
     const rep = WEAPONS.findIndex(w => w.id === 'repeater')
     if (!holdSavedLoadout.current) holdSavedLoadout.current = [...loadoutRef.current]
     equipWeapon(0, rep); equipWeapon(1, rep)
@@ -8297,18 +8299,19 @@ export default function Shimmer3D() {
                 {LAB_NODES.map(n => {
                   const hs = holdRef.current
                   const why = hs ? labBlock(hs, n.id) : 'wrack'
-                  const label = why === 'studied' ? 'Studied'
+                  const label = why === 'studied' ? 'Studied' : why === 'known' ? 'Read'
                     : why === 'needs' ? `After ${LAB_NODES.find(x => x.id === n.needs)?.name}`
                     : `Study · ${n.cost} wrack`
                   return (
-                    <div key={n.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, opacity: why === 'studied' ? 0.6 : 1 }}>
+                    <div key={n.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, opacity: why === 'studied' || why === 'known' ? 0.6 : 1 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                         <span style={{ fontWeight: 800 }}>{n.name}</span>
                         <span style={{ fontSize: 12 }}>+ {n.boon}</span>
                         <span className="hk-faint" style={{ fontSize: 12 }}>− {n.bane}</span>
+                        {n.id === 'road' && (why === 'studied' || why === 'known') && <span style={{ fontSize: 12, fontStyle: 'italic', marginTop: 2 }}>“{ROAD_LINE}”</span>}
                       </div>
                       <HearthButton small primary={why === null} disabled={why !== null}
-                        onClick={() => { const h = holdRef.current; if (h && studyNode(h, n.id)) setHoldFlash(n.name) }}>{label}</HearthButton>
+                        onClick={() => { const h = holdRef.current; if (h && studyNode(h, n.id)) { setHoldFlash(n.name); if (n.id === 'road') saveRoad() } }}>{label}</HearthButton>
                     </div>
                   )
                 })}

@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, buildFieldSlow, buildField, LAB_NODES, LAB_LULL_SEC, LAB_ALIVE_ADD, LAB_SPEED_ADD, studyNode, labBlock, kindForRun, holdManaDrip, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PIECES_WIRED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, BODY_RADIUS, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, buildFieldSlow, buildField, LAB_ROAD_HP, LAB_NODES, LAB_LULL_SEC, LAB_ALIVE_ADD, LAB_SPEED_ADD, studyNode, labBlock, kindForRun, holdManaDrip, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PIECES_WIRED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, BODY_RADIUS, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { FLOOR_W, FLOOR_D } from './hold-floors'
@@ -778,6 +778,28 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   }
   console.log(`  field: ${checked} fields compared · ${cells} reached cells · ${bad} differ`)
   ok(checked > 60 && cells > 100000 && bad === 0, `the fast field equals the plain BFS (${checked} fields, ${bad} cells differ, ${cells} reached)`)
+}
+
+// ── ★ the capstone (Alex 09-27, canon 3d2a7b2): the Stillwind's road — last in the tree, kept, loud ──
+{
+  const s = startHold(map, 41); s.hush = 1e9
+  const gM = map.gates.findIndex(g => g.opens.includes(map.cache.room))
+  s.salvage = 5000; buyGate(s, gM); s.wrack = 40
+  ok(LAB_NODES[LAB_NODES.length - 1].id === 'road' && LAB_NODES.find(n => n.id === 'road')!.cost >= 8, 'the road is the last and dearest study')
+  ok(labBlock(s, 'road') === 'needs', 'the road needs Deeper Still first')
+  studyNode(s, 'lull1'); studyNode(s, 'lull2')
+  const w = s.wrack
+  ok(studyNode(s, 'road') && s.roadKnown && s.wrack === w - LAB_NODES.find(n => n.id === 'road')!.cost, 'studied: the road is known')
+  // loud: the rest of the run is heavier
+  const heavy = startHold(map, 42); heavy.studied = ['road']; heavy.hush = 1e9
+  const plain = startHold(map, 42); plain.hush = 1e9
+  for (const t of [heavy, plain]) { t.round = 4; t.toSpawn = 10; t.breakT = 0; t.spawnT = 0 }
+  for (let i = 0; i < 30; i++) { stepHold(heavy, 0.1, map.start.x, map.start.z, map.start.h); stepHold(plain, 0.1, map.start.x, map.start.z, map.start.h) }
+  const h1 = heavy.flood[0], p1 = plain.flood.find(b => b.kind === h1?.kind)
+  ok(!!h1 && !!p1 && h1.hp === Math.round(p1.hp * LAB_ROAD_HP), `the road is loud: bodies ${p1?.hp}→${h1?.hp} hp`)
+  // a keeper who already knows it cannot pay for it again
+  const k = startHold(map, 43); k.roadKnown = true; k.salvage = 5000; buyGate(k, gM); k.wrack = 40; k.studied = ['lull1', 'lull2']
+  ok(labBlock(k, 'road') === 'known' && !studyNode(k, 'road') && k.wrack === 40, 'already known: the bench shows it read, no wrack spent')
 }
 
 // ── the end ──

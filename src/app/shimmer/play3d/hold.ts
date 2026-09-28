@@ -220,23 +220,29 @@ export const DROP_NAME: Record<HoldDropKind, string> = { glimmer: 'Last Light', 
 // Canon (09-27): studying teaches the host's PITCH, so the lull sits deeper and lasts longer — and the study is
 // LOUD, so every boon is paid in a harder flood. Nodes, costs and which harder bodies = Jin's. v1 banes only
 // strengthen the kinds the build has (new specials are named with a season's host).
-export type LabNodeId = 'lull1' | 'mend' | 'lull2' | 'pitch'
+export type LabNodeId = 'lull1' | 'mend' | 'lull2' | 'pitch' | 'road'
 export interface LabNode { id: LabNodeId; name: string; cost: number; needs?: LabNodeId; boon: string; bane: string }
 export const LAB_NODES: readonly LabNode[] = [
   { id: 'lull1', name: 'A Deeper Lull', cost: 3, boon: '+75s of lull', bane: 'more of them come swift' },
   { id: 'mend', name: 'Their Seal Notes', cost: 3, boon: 'mend seals twice as fast', bane: 'a bulk every fourth body, from round 3' },
   { id: 'lull2', name: 'Deeper Still', cost: 6, needs: 'lull1', boon: '+75s of lull', bane: 'every body moves faster' },
   { id: 'pitch', name: 'The Pitch', cost: 5, boon: 'mana drips twice as fast', bane: 'four more of them on the floor at once' },
+  // THE CAPSTONE (Alex 09-27; canon: the Lenn's notes show where and when the Stillwind walks, never what, and
+  // the keeper carries that out for good — access, never power). Studied once in any run; after that it is KNOWN
+  // (the page seeds `roadKnown`) and the bench shows it read. Loud like every study: the rest of that run is heavier.
+  { id: 'road', name: "The Stillwind's Road", cost: 8, needs: 'lull2', boon: 'where and when the Stillwind walks (kept)', bane: 'every body is sturdier for the rest of the run' },
 ]
+export const LAB_ROAD_HP = 1.15
 export const LAB_LULL_SEC = 75
 export const LAB_SWIFT_ADD = 0.12
 export const LAB_SPEED_ADD = 0.4
 export const LAB_ALIVE_ADD = 4
 export const studied = (s: HoldState, id: LabNodeId): boolean => s.studied.includes(id)
 /** Why a node cannot be studied now, or null if it can. */
-export function labBlock(s: HoldState, id: LabNodeId): 'studied' | 'needs' | 'wrack' | null {
+export function labBlock(s: HoldState, id: LabNodeId): 'studied' | 'known' | 'needs' | 'wrack' | null {
   const n = LAB_NODES.find(x => x.id === id)!
   if (studied(s, id)) return 'studied'
+  if (id === 'road' && s.roadKnown) return 'known'
   if (n.needs && !studied(s, n.needs)) return 'needs'
   if (s.wrack < n.cost) return 'wrack'
   return null
@@ -248,6 +254,7 @@ export function studyNode(s: HoldState, id: LabNodeId): boolean {
   s.wrack -= n.cost
   s.studied.push(id)
   if (id === 'lull1' || id === 'lull2') s.hush += LAB_LULL_SEC
+  if (id === 'road') s.roadKnown = true
   return true
 }
 /** The mana drip in this run (the page reads it — it owns the mana). */
@@ -326,6 +333,8 @@ export interface HoldState {
   /** wrack carried (in-run only) and the lab nodes studied this run */
   wrack: number
   studied: LabNodeId[]
+  /** the keeper already read the Stillwind's road (any earlier run) — the page seeds it and saves it (`stillwind-road.ts`) */
+  roadKnown: boolean
   /** boosters picked up and not yet applied — the host drains this (it owns mana, hp, the team) */
   pickups: HoldDropKind[]
   elapsed: number
@@ -517,7 +526,7 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     here: map.start.room, fell: null,
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
-    drops: [], dropsThisRound: 0, pickups: [], wrack: 0, studied: [],
+    drops: [], dropsThisRound: 0, pickups: [], wrack: 0, studied: [], roadKnown: false,
     chests: map.chestSpots.map(() => null), dryRounds: 0, loot: [], devicePlanted: false, tuned: {},
     elapsed: 0, nextId: 1, rng: mulberry32(seed),
     field: new Int16Array(map.cols * map.rows * map.building.levels.length).fill(-1), fieldT: 0, fieldAt: -1,
@@ -993,6 +1002,7 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     const kind: FloodKind = loud ? 'swift' : kindForRun(s, s.round, n)
     const st = bodyStats(kind, s.round)
     if (studied(s, 'lull2')) st.speed += LAB_SPEED_ADD
+    if (studied(s, 'road')) st.hp = Math.round(st.hp * LAB_ROAD_HP)
     const vents = spawnVents(s, tune)
     const base = { id: s.nextId++, kind, hp: st.hp, maxHp: st.hp, speed: st.speed, tearT: 0, strikeT: 0.6, alive: true, vx: 0, vz: 0 }
     if (vents.length && s.rng() < tune.ventShare) {
