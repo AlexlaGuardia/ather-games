@@ -249,7 +249,7 @@ export function vesselRackFor(cycle: number, seed = 1, size = VESSEL_RACK_SIZE):
     const tier: VesselTier = !sleeper ? 1 : (k('fine') < SLEEPER_FINE_CHANCE ? 3 : 2)
     // The word: any tradeable word of this vessel's band, chosen with no reference to the keeper.
     const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
-    const pool = VESSEL_RACK_WORD_POOL.filter((m) => m.tier === band && lettersOf(m, null).length <= seatCapOf(tier))
+    const pool = VESSEL_RACK_WORD_POOL.filter((m) => m.tier === band && lettersOf(m, null).length <= seatCapOf(tier, kind))
     const word = pool.length ? pool[Math.floor(k('word') * pool.length)]!.id : null
     out.push({ kind, tier, word: word ?? null, price: vesselRackPrice(kind, tier, word ?? null) })
   }

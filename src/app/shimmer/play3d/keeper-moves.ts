@@ -112,14 +112,6 @@ export interface KeeperMove {
    */
   collar?: CollarDelivery
   /**
-   * ── THE STARTER ROLE (Jin, 2026-09-28) ─────────────────────────────────────────────────────────
-   * Which of Greg's three offers a one-letter word answers: strike, guard, or everything that is
-   * neither (heal, blind, bind, spoil, mark, shape). A BUILD label about how a word plays, not canon:
-   * canon owns the name and the effect, and neither changes. Only the words that can be a starter
-   * carry one; `starterChoices` in vessels.ts is the only reader.
-   */
-  role?: 'attack' | 'defense' | 'support'
-  /**
    * ── THE COST MOVED FROM THE BAND ONTO THE MOVE (RULED 2026-08-26, Alex) ───────────────────────
    * The blanket law *"holding any passive pauses recovery"* is **RETIRED, world-wide** — a passive
    * is a layer you wear, not a switch you feed. The double edge did NOT vanish; it stopped being a
@@ -197,32 +189,32 @@ export const KEEPER_MOVES: KeeperMove[] = [
     effect: 'Awareness bound to the ground underfoot — footsteps, weight, where everyone stands. Ambush becomes impossible.' },
 
   // Tactical — active, moment-to-moment.
-  { id: 'static-burst', name: 'Static Burst', tier: 'tactical', role: 'defense', runes: ['static'],
+  { id: 'static-burst', name: 'Static Burst', tier: 'tactical', runes: ['static'],
     effect: 'A burst of speed and evasion — gap-close or escape.', collar: 'no-contest' },
-  { id: 'firewall', name: 'Firewall', tier: 'tactical', role: 'defense', runes: ['star'],
+  { id: 'firewall', name: 'Firewall', tier: 'tactical', runes: ['star'],
     effect: 'A wall of flame thrown between you and a threat — escape, area-denial, cover.', collar: 'cruelty' },
-  { id: 'flame-infusion', name: 'Flame Infusion', tier: 'tactical', role: 'attack', runes: ['star'],
+  { id: 'flame-infusion', name: 'Flame Infusion', tier: 'tactical', runes: ['star'],
     effect: 'Sheathes a weapon or strike in fire — melee enhancement.', collar: 'cruelty' },
-  { id: 'mend', name: 'Mend', tier: 'tactical', role: 'support', runes: ['life'],
+  { id: 'mend', name: 'Mend', tier: 'tactical', runes: ['life'],
     effect: 'A Life-infused heal — accelerates recovery, mends tissue, purges infection.', collar: 'no-contest' },
-  { id: 'ice-dart', name: 'Ice Dart', tier: 'tactical', role: 'attack', runes: ['freeze'],
+  { id: 'ice-dart', name: 'Ice Dart', tier: 'tactical', runes: ['freeze'],
     effect: 'Compacts water into a frozen dart — precise, punishing.', collar: 'opens' },
-  { id: 'enlighten', name: 'Enlighten', tier: 'tactical', role: 'support', runes: ['illuminate'],
+  { id: 'enlighten', name: 'Enlighten', tier: 'tactical', runes: ['illuminate'],
     effect: 'A burst of blinding light — disorients, and reveals what is hidden. A flash-bang, not a blade.', collar: 'opens' },
-  { id: 'stonewall', name: 'Stonewall', tier: 'tactical', role: 'defense', runes: ['stone'],
+  { id: 'stonewall', name: 'Stonewall', tier: 'tactical', runes: ['stone'],
     effect: 'Tear rock from the ground into a wall — terrain you impose. Close the gap, do not chase.', collar: 'opens' },
-  { id: 'shackle', name: 'Shackle', tier: 'tactical', role: 'support', runes: ['metalergy'],
+  { id: 'shackle', name: 'Shackle', tier: 'tactical', runes: ['metalergy'],
     effect: "Bind metal against its bearer — clamp a foe in iron, or jam a manalic weapon mid-draw.", collar: 'opens' },
   { id: 'living-architecture', name: 'Living Architecture', tier: 'tactical', runes: ['life', 'barrier'],
     effect: 'Grow living wood into structure — Barrier used to SHAPE, not to defend.', collar: 'opens' },
-  { id: 'tidal-arms', name: 'Tidal Arms', tier: 'tactical', role: 'attack', runes: ['fluid'],
+  { id: 'tidal-arms', name: 'Tidal Arms', tier: 'tactical', runes: ['fluid'],
     effect: 'Ribbons of water worn as extensions of yourself — they move like limbs, strike like whips, grab like hands.', collar: 'opens' },
   { id: 'flash-freeze', name: 'Flash Freeze', tier: 'tactical', runes: ['fluid', 'freeze'],
     effect: 'Shape water, then crystallize it instantly — walls, weapons, restraints. Costs the water it uses.',
     // Terrain and restraint, the family canon cleared (`stonewall`/`glacial-path`/`cordon`, and
     // `shackle` — *"clamp a foe in iron"*). No body is the mechanism; ice is.
     collar: 'opens' },
-  { id: 'pressure-lance', name: 'Pressure Lance', tier: 'tactical', role: 'attack', runes: ['hydro'],
+  { id: 'pressure-lance', name: 'Pressure Lance', tier: 'tactical', runes: ['hydro'],
     effect: 'Water compressed to a cutting stream — pure focus, no combination. A needle of water harder than steel.', collar: 'opens' },
   { id: 'fog-bank', name: 'Fog Bank', tier: 'tactical', runes: ['mist', 'breeze'],
     effect: 'Vapor expanded and steered to fill a space with blinding white. Masters anchor it in zones.', collar: 'opens' },
@@ -256,7 +248,7 @@ export const KEEPER_MOVES: KeeperMove[] = [
     effect: 'Particles suspended in expanding vapor — a choking fog that scours and blinds.', collar: 'cruelty' },
   { id: 'overcharge', name: 'Overcharge', tier: 'tactical', runes: ['static', 'lightning'],
     effect: 'Charge built through movement and released as propulsion — not an attack, a launch, the body the projectile.', collar: 'no-contest' },
-  { id: 'gale-cutter', name: 'Gale Cutter', tier: 'tactical', role: 'attack', runes: ['breeze'],
+  { id: 'gale-cutter', name: 'Gale Cutter', tier: 'tactical', runes: ['breeze'],
     effect: 'Wind compressed to a razor edge — pure focus, no combination. Masters cleave stone, the blades invisible.', collar: 'opens' },
   { id: 'updraft', name: 'Updraft', tier: 'tactical', runes: ['breeze', 'stone'],
     effect: 'Wind against earth to launch debris, allies or yourself — high ground on demand, attacks arriving from above.', collar: 'no-contest' },
@@ -281,33 +273,33 @@ export const KEEPER_MOVES: KeeperMove[] = [
   // ★ AND MANALIC WAS THE LAST EMPTY BOOK — verified by counting, not taken from the board: 61 moves
   // across 20 runes, `manalic: 0`. A keeper born to Manalic opened their book on nothing. Quickform
   // is the entry that closes it, which is why it is BUILT below and not parked as `unbuilt`.
-  { id: 'quickform', name: 'Quickform', tier: 'tactical', role: 'support', runes: ['manalic'],
+  { id: 'quickform', name: 'Quickform', tier: 'tactical', runes: ['manalic'],
     effect: 'Mana pushed until it clicks into shape — a plank, a rung, a blade, a thrown wedge. Brittle and short-lived, but it exists a breath after you decide it should.', collar: 'opens' },
   // ★ CANON'S OWN WORDS DECIDE IT: *"no force in it at all."* It never enters the contest, so it is
   // no more the key to a collar than a heal is — and unlike a heal it is not even part of winning.
-  { id: 'waymark', name: 'Waymark', tier: 'tactical', role: 'support', runes: ['enchant'],
+  { id: 'waymark', name: 'Waymark', tier: 'tactical', runes: ['enchant'],
     effect: 'Mana bound to a place or an object until you feel it like a limb — you know where it is, whether it has moved, and whether anyone has touched it.', collar: 'no-contest' },
-  { id: 'forked-bolt', name: 'Forked Bolt', tier: 'tactical', role: 'attack', runes: ['lightning'],
+  { id: 'forked-bolt', name: 'Forked Bolt', tier: 'tactical', runes: ['lightning'],
     effect: 'One arc thrown at the nearest path of least resistance, splitting once when it finds a second. The floor Chain Lightning is the ceiling of.', collar: 'opens' },
   // ⚠ SQUALL vs PRESSURE DROP IS TELL 1 DONE PROPERLY, and the two rows sit next to each other on
   // purpose. Pressure Drop is `cruelty` because it renders on the BODY — *"ears pop, lungs strain."*
   // Squall renders on the SPACE — rain, pressure, footing — and a foe standing in it is inconvenienced,
   // not injured. The test is what a move RENDERS, and weather is not a licence either way.
-  { id: 'squall', name: 'Squall', tier: 'tactical', role: 'support', runes: ['tempest'],
+  { id: 'squall', name: 'Squall', tier: 'tactical', runes: ['tempest'],
     effect: 'Weather called down with nothing shaping it — sideways rain, ugly pressure, footing gone. You spoil a space rather than strike into it.', collar: 'opens' },
-  { id: 'keenshard', name: 'Keenshard', tier: 'tactical', role: 'attack', runes: ['gem'],
+  { id: 'keenshard', name: 'Keenshard', tier: 'tactical', runes: ['gem'],
     effect: 'Every ounce of pressure driven to one crystalline point and loosed. One shard, no spread — it pierces where a thrown stone would only break.', collar: 'opens' },
   // ⚠ `cruelty`, and the mechanism is not the reason — the RENDER is. *"Molten focus held against one
   // spot until the spot stops existing"* is a door when aimed at a door and a hole through a person
   // when aimed at a person, slowly and on purpose. This is the `pillar-tomb` amendment exactly:
   // stone, water, wind and light are not a licence, and neither is magma.
-  { id: 'meltbore', name: 'Meltbore', tier: 'tactical', role: 'attack', runes: ['magma'],
+  { id: 'meltbore', name: 'Meltbore', tier: 'tactical', runes: ['magma'],
     effect: 'Molten focus held against one spot until the spot stops existing. Slow, undramatic, and nothing refuses it forever — the breach move.', collar: 'cruelty' },
   // ★ THE NON-CRUEL SIBLING OF `sandstorm-veil`, and the pair is the cleanest illustration of the
   // rule in this file. Both are fog. That one SCOURS AND CHOKES, so it is `cruelty`; this one carries
   // *"nothing but itself"* and canon calls it *"confrontation declined rather than won"* — declining
   // is not defeating, so it never opens a collar and it is not trying to.
-  { id: 'hush', name: 'Hush', tier: 'tactical', role: 'support', runes: ['mist'],
+  { id: 'hush', name: 'Hush', tier: 'tactical', runes: ['mist'],
     effect: 'Vapor spread wide and carrying nothing but itself — sight goes soft, sound goes flat, edges stop agreeing on where they are.', collar: 'no-contest' },
   // ── ★ THE EIGHTH — BARRIER'S DOUBLED FOCUS (canon 2026-09-02, name locked by Alex the same day) ──
   // The 08-15 pass said *"every keeper-reachable rune now has a move written in itself"* and it was
@@ -319,7 +311,7 @@ export const KEEPER_MOVES: KeeperMove[] = [
   // passives, flare-and-disperse is Backlash, protecting-many is Overpressure — leaving *"blocking
   // doorways"*: the shell with nobody inside it. `no-contest` for the Waymark reason: a shield set
   // down declines the contest rather than winning it, and it renders on a DOORWAY, not a body.
-  { id: 'threshold', name: 'Threshold', tier: 'tactical', role: 'defense', runes: ['barrier'],
+  { id: 'threshold', name: 'Threshold', tier: 'tactical', runes: ['barrier'],
     effect: 'The shell set down instead of worn — across a doorway, over a companion, wherever you are not. Paid once at the cast, then it holds itself where it was put until it has dispersed all it can.', collar: 'no-contest' },
 
   // Ultimates — signature, high pool cost.

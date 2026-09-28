@@ -96,9 +96,15 @@ export const MAX_PER_KIND = 3
 export type VesselTier = 0 | 1 | 2 | 3
 export const TIERS: readonly VesselTier[] = [0, 1, 2, 3]
 export const FLOOR_TIER: VesselTier = 0
-/** Greg's pair was cut for one-letter words; every other tier bears whatever its word needs, up to the cap. */
+/**
+ * Greg's BRACELET is cut for a one-letter word. His GLOVE is cut for the lane's smallest signature, which is
+ * one, two or three seats (09-11; 12 of 17 lanes hold no one-letter ultimate, and the build had capped the
+ * floor at one seat anyway, so most keepers got an uncut glove: fixed 2026-09-28). Every other tier bears
+ * whatever its word needs, up to the cap.
+ */
 export const FLOOR_SEATS = 1
-export const seatCapOf = (tier: VesselTier): number => (tier === FLOOR_TIER ? FLOOR_SEATS : VESSEL_CAP)
+export const seatCapOf = (tier: VesselTier, kind: Vessel): number =>
+  (tier === FLOOR_TIER && kind === 'bracelet' ? FLOOR_SEATS : VESSEL_CAP)
 /** the material of each tier, per kind — the brief's tables, quoted not restated; the tier reads off this at a glance */
 export const TIER_MATERIAL: Record<Vessel, Record<VesselTier, string>> = {
   focus:    { 0: 'mortal cloth', 1: 'goldwood', 2: 'shimmeroak', 3: 'starwillow' },
@@ -148,38 +154,16 @@ export function floorWordFor(kind: Vessel, birth: string | null, owned: readonly
   const writable = fits.filter(m => m.runes.every(r => owned.includes(r)))
   return (writable.find(opens) ?? writable[0] ?? fits.find(opens) ?? fits[0])?.id ?? null
 }
-export type StarterRole = NonNullable<KeeperMove['role']>
-export const STARTER_ROLES: readonly StarterRole[] = ['attack', 'defense', 'support']
-/** every word Greg could cut the `kind` floor for, on this birth's lane — the same filter `floorWordFor` uses */
+/** every word Greg could cut the `kind` floor for, on this birth's lane: a one-letter tactical, or the lane's smallest signature */
 export function floorCandidates(kind: Vessel, birth: string | null): KeeperMove[] {
   const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
   const lane = band ? LANE_FOR_KIND[band] : null
   if (!band || !birth || !lane) return []
   const onIt = laneRunes(birth, lane)
-  return KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && lettersOf(m, birth).length === FLOOR_SEATS && m.runes.every(r => onIt.has(r)))
-}
-/**
- * ★ GREG'S OFFER (Alex, 2026-09-28): the keeper CHOOSES the bracelet's word from up to three, one per
- * role, instead of the registry picking. A starter set per birth rune falls out of the filter rather
- * than being hand-authored seventeen times. A role this lane has no word for is not faked: the slot
- * goes to the next unused word, marked `role: null`, so the keeper still sees three real options.
- * Collar-openers first within a role (the road fight is answered with them), then registry order.
- * ⚠ NOT WIRED YET: waiting on Magii for "Greg offers a choice and teaches the word" (CANON_GAPS).
- */
-export function starterChoices(kind: Vessel, birth: string | null): { move: KeeperMove; role: StarterRole | null }[] {
-  const pool = floorCandidates(kind, birth)
-  const opens = (m: KeeperMove) => (m as { collar?: string }).collar === 'opens'
-  const ranked = [...pool.filter(opens), ...pool.filter(m => !opens(m))]
-  const out: { move: KeeperMove; role: StarterRole | null }[] = []
-  for (const role of STARTER_ROLES) {
-    const m = ranked.find(x => x.role === role)
-    if (m) out.push({ move: m, role })
-  }
-  for (const m of ranked) {
-    if (out.length >= STARTER_ROLES.length) break
-    if (!out.some(o => o.move.id === m.id)) out.push({ move: m, role: null })
-  }
-  return out
+  const onLane = KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && lettersOf(m, birth).length >= 1 && m.runes.every(r => onIt.has(r)))
+  // the bracelet: one letter. The glove: the SMALLEST signature (09-11), never a body-held one, which needs no paper
+  const size = kind === 'bracelet' ? FLOOR_SEATS : Math.min(...onLane.map(m => lettersOf(m, birth).length))
+  return onLane.filter(m => lettersOf(m, birth).length === size)
 }
 /** Greg's vessel of `kind`, cut for the keeper's lane — `emptyVessel` at the floor tier with its word */
 export const floorVessel = (kind: Vessel, birth: string | null, owned: readonly string[] = []): StowedVessel => {
@@ -220,7 +204,7 @@ function parseStowed(raw: unknown): StowedVessel[] {
     const word = move ?? (tier === FLOOR_TIER ? floorWordFor(o.kind, k.birth, k.owned) : null)
     // ★ grown on read (09-27): a vessel from the binding days that sat half-written arrives whole. A word the
     // registry no longer has keeps what was saved — nothing to grow from, and nothing a keeper had is erased
-    out.push({ kind: o.kind, gems: (word && moveById(word) ? grownLetters(word, k.birth) : gemList(o.gems)).slice(0, seatCapOf(tier)), move: word, tier })
+    out.push({ kind: o.kind, gems: (word && moveById(word) ? grownLetters(word, k.birth) : gemList(o.gems)).slice(0, seatCapOf(tier, o.kind)), move: word, tier })
   }
   return capped(out)
 }
@@ -382,8 +366,8 @@ export function grantVessel(kind: Vessel, tier: VesselTier, word: string | null,
     return { ok: false, why: 'no-such-word', say: `Nobody down here has heard of that word for a ${kind}.` }
   }
   const seats = m ? lettersOf(m, null).length : 0
-  if (seats > seatCapOf(tier)) {
-    return { ok: false, why: 'too-many-seats', say: `${m!.name} asks ${seats} seats; a ${TIER_MATERIAL[kind][tier]} ${kind} bears ${seatCapOf(tier)}.` }
+  if (seats > seatCapOf(tier, kind)) {
+    return { ok: false, why: 'too-many-seats', say: `${m!.name} asks ${seats} seats; a ${TIER_MATERIAL[kind][tier]} ${kind} bears ${seatCapOf(tier, kind)}.` }
   }
   if (ownedCount(kind) >= MAX_PER_KIND) {
     return { ok: false, why: 'at-cap', say: `Three ${kind}s is what a keeper can carry, and Greg's underneath. Nobody down here will sell you a fourth.` }
@@ -600,7 +584,7 @@ export function setWord(i: number, word: string, birth: string | null): boolean 
   const m = moveById(word)
   if (!m || ALL_BANDS[BAND_FOR_VESSEL[v.kind]] !== m.tier) return false
   const seats = lettersOf(m, birth).length
-  if (seats === 0 || seats > seatCapOf(v.tier)) return false
+  if (seats === 0 || seats > seatCapOf(v.tier, v.kind)) return false
   stowed[i] = { ...v, move: word, gems: grownLetters(word, birth) }   // cut, and its letters grow in
   saveStowed(stowed)
   return true

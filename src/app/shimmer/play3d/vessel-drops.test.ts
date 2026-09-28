@@ -85,7 +85,7 @@ ok(KEEPER_KEYS.includes(TRIALS_KEY), 'the trial ledger key is registered per kee
     ok(pool.every(m => m.runes.every(r => lane.has(r))), '★ every word is ON THE LANE — an off-lane word could never be bound, so it is never cut')
     ok(pool.every(m => lettersOf(m, birth).length >= 1), '★ no body-held word — it needs no paper')
     ok(pool.every(m => !m.birthExclusive || m.birthExclusive === birth), 'no other birth\'s exclusive')
-    ok(wordPool('bracelet', 0, birth).every(m => lettersOf(m, birth).length <= seatCapOf(0)), '★ the floor tier\'s pool is one-letter words only — seats fit the tier')
+    ok(wordPool('bracelet', 0, birth).every(m => lettersOf(m, birth).length <= seatCapOf(0, 'bracelet')), '★ the floor tier\'s pool is one-letter words only — seats fit the tier')
     ok(wordPool('focus', 2, birth).every(m => m.tier === 'ultimate'), 'the glove pool is ultimates — the kind gates the band')
     // weighting: with the roll at 0 the FIRST pool entry wins; ready words weigh more, so a roll just past the
     // ready mass lands on a stretch word. Assert the mechanism, not a particular word.

@@ -116,7 +116,7 @@ export function wordPool(kind: Vessel, tier: VesselTier, birth: string | null): 
     if (m.tier !== band) return false
     if (m.birthExclusive && m.birthExclusive !== birth) return false
     const n = lettersOf(m, birth).length
-    if (n < 1 || n > seatCapOf(tier)) return false           // body-held needs no paper; the floor bears one
+    if (n < 1 || n > seatCapOf(tier, kind)) return false           // body-held needs no paper; the floor bears one
     return m.runes.every(r => onIt.has(r))                    // a word off the lane could never be bound
   })
 }

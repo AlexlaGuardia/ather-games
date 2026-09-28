@@ -198,7 +198,8 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   // ★ RE-POINTED 2026-09-11 (Alex: "vessels should already come with prerequisite gems"): the pair arrives
   // CUT for the first one-letter word on the keeper's lane, empty — or uncut only when the lane has none.
   ok(floors.every(v => v.gems.length === 0 && v.move === floorWordFor(v.kind, null)), 'the pair arrives empty, cut for the lane\'s one-letter word (none here: no birth in this store, so uncut)')
-  ok(seatCapOf(FLOOR_TIER) === FLOOR_SEATS && FLOOR_SEATS === 1 && seatCapOf(1) === _CAP && seatCapOf(3) === _CAP, '★ the floor bears ONE seat; every other tier bears what its word needs, up to the cap')
+  // ★ RE-POINTED 2026-09-28: the floor BRACELET bears one seat; the floor GLOVE bears the lane's smallest signature (09-11)
+  ok(seatCapOf(FLOOR_TIER, 'bracelet') === FLOOR_SEATS && FLOOR_SEATS === 1 && seatCapOf(FLOOR_TIER, 'focus') === _CAP && seatCapOf(1, 'bracelet') === _CAP && seatCapOf(3, 'focus') === _CAP, '★ the floor bracelet bears ONE seat, the floor glove its smallest signature; every other tier bears what its word needs, up to the cap')
   ok(loadStowed().every((v, i, a) => !isFloor(v) || a.slice(i).every(isFloor)), 'the floor sorts LAST — acquired vessels keep their indices')
   // never lost: a rebirth, a corrupt save, a save that dropped them — every read hands them back
   clearStowed()

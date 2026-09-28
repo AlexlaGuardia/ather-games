@@ -449,10 +449,10 @@ export function VesselParts({ owned, birth, index, onChange }: {
         : (
           <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
                   className="hk-btn bg-transparent px-2 py-0.5 text-[12px] normal-case tracking-normal">
-            <option value="">{isFloor(v) ? 'cut it for a one-letter word you hold… (none on your lane yet)' : 'cut it for a word you hold…'}</option>
+            <option value="">{isFloor(v) && v.kind === 'bracelet' ? 'cut it for a one-letter word you hold… (none on your lane yet)' : 'cut it for a word you hold…'}</option>
             {/* ★ the floor bears ONE seat (ruled): a two-letter word is not offered to Greg's paper */}
             {kindBand >= 0 && eligibleMoves([...owned], birth, ALL_BANDS[kindBand]!, book)
-              .filter(m => { const n = seatLetters({ move: m.id }, birth).length; return n > 0 && n <= seatCapOf(v.tier) })
+              .filter(m => { const n = seatLetters({ move: m.id }, birth).length; return n > 0 && n <= seatCapOf(v.tier, v.kind) })
               .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         )}
