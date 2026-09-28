@@ -45,7 +45,7 @@ export interface CollisionCtx {
   segs: SegLayer       // authored elevated surfaces (EMPTY_SEGS => flat world)
   /** A zone that owns its own stack of floors (THE HOLD, `play3d/hold-building.ts`) answers every
    *  cell's surfaces itself; the grid, heights and segs are then only bounds. Same resolution rule. */
-  surfaces?: (cx: number, cz: number) => { y: number }[]
+  surfaces?: (cx: number, cz: number) => readonly { y: number }[]
 }
 
 /** A resolved walkable surface at a cell: the ground, or one authored seg. */

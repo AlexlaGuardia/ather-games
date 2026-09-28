@@ -2,7 +2,7 @@
 import {
   parseLanding, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache,
   mendTick, endHold, keeperBlocked, holdSurfaces, roundBlocked, roundCount, roundHp, kindFor, bodyStats,
-  isLoud, heightAt, LAB_NODES, LAB_LULL_SEC, LAB_ALIVE_ADD, LAB_SPEED_ADD, studyNode, labBlock, kindForRun, holdManaDrip, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PIECES_WIRED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, BODY_RADIUS, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
+  isLoud, heightAt, buildFieldSlow, buildField, LAB_NODES, LAB_LULL_SEC, LAB_ALIVE_ADD, LAB_SPEED_ADD, studyNode, labBlock, kindForRun, holdManaDrip, fieldStrike, ownerOpenAll, activeRooms, spawnWindows, spawnVents, rollChests, rollRarity, chestTick, ownerChests, CHEST_LOOT, VESSEL_PIECES_WIRED, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, ownerCalm, holdSpots, BODY_RADIUS, HOLD_TUNING as T, HOLD_TILE, type HoldState, type FloodBody,
 } from './hold'
 import { K, STOREY, kindAt } from './hold-building'
 import { FLOOR_W, FLOOR_D } from './hold-floors'
@@ -749,6 +749,35 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   for (let t = 0; t < T.mendSec * 0.6; t += 0.01) { mendTick(m1, 0, 0.01); mendTick(m2, 0, 0.01) }
   ok(m1.planks[0] === 0 && m2.planks[0] === 1, 'Their Seal Notes: a plank in half the time')
   console.log(`  lab: wrack swift ${sw.toFixed(2)} bulk ${bu.toFixed(2)} · nodes ${LAB_NODES.map(n => `${n.id}:${n.cost}`).join(' ')}`)
+}
+
+// ── ★ PERF (Alex 09-28): the precomputed field fills the SAME field as the plain BFS, cell for cell ──
+{
+  const s = startHold(map, 31); s.hush = 1e9
+  const per = map.cols * map.rows
+  let rng = 7
+  const rand = () => (rng = (rng * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
+  // start nodes: every fixture, a vent, a chest spot — on every floor
+  const at = [map.start, map.rack, map.font, map.cache, map.zero, ...map.vents.slice(0, 4), ...map.chestSpots.slice(0, 4)]
+  let checked = 0, bad = 0, cells = 0
+  for (let trial = 0; trial < 12; trial++) {
+    s.gatesOpen = map.gates.map(() => rand() < 0.5)
+    s.planks = map.windows.map(() => (rand() < 0.4 ? 0 : 3))
+    if (trial === 0) s.gatesOpen = s.gatesOpen.map(() => true)
+    if (trial === 1) s.planks = s.planks.map(() => 0)
+    for (const p of at) {
+      const px = Math.round(p.x), pz = Math.round(p.z)
+      let start = -1
+      for (let lv = 0; lv < map.building.levels.length; lv++) if (Math.abs(map.building.levels[lv].sy[pz * map.cols + px] - p.h) < 1.5) { start = lv * per + pz * map.cols + px; break }
+      if (start < 0) continue
+      buildFieldSlow(s, start); const want = Int16Array.from(s.field)
+      buildField(s, start)
+      checked++
+      for (let i = 0; i < want.length; i++) { if (want[i] !== s.field[i]) bad++; if (want[i] >= 0) cells++ }
+    }
+  }
+  console.log(`  field: ${checked} fields compared · ${cells} reached cells · ${bad} differ`)
+  ok(checked > 60 && cells > 100000 && bad === 0, `the fast field equals the plain BFS (${checked} fields, ${bad} cells differ, ${cells} reached)`)
 }
 
 // ── the end ──

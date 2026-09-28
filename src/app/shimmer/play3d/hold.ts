@@ -506,6 +506,7 @@ function mulberry32(seed: number): () => number {
 }
 
 export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: HoldTuning = HOLD_TUNING): HoldState {
+  fieldGraph(map)   // the flooded's path graph, once per map: paid at the start press, never mid-chase
   return {
     map, running: true, over: false,
     round: 1, toSpawn: roundCount(1), spawnT: 1.5, breakT: 0,
@@ -538,7 +539,7 @@ export function holdSolid(m: HoldMap, gatesOpen: readonly boolean[] | null, x: n
 }
 export const keeperBlocked = (s: HoldState, x: number, z: number, y: number) => holdSolid(s.map, s.gatesOpen, x, z, y)
 /** Every surface a keeper may stand on in a cell — the walker's collision context reads this. */
-export function holdSurfaces(m: HoldMap, x: number, z: number): { y: number }[] {
+export function holdSurfaces(m: HoldMap, x: number, z: number): readonly { y: number }[] {
   return surfacesAt(m.building, x, z)
 }
 /** The highest floor at a cell, in tiers (0 where there is none). */
@@ -648,7 +649,9 @@ function fieldAhead(s: HoldState, x: number, z: number, y: number, n: number): {
   }
   return out
 }
-function buildField(s: HoldState, start: number) {
+/** The field as it was first written — a plain BFS asking floodStand / floodMove at every step. KEPT AS THE
+ *  REFERENCE: hold.test.ts proves `buildField` (below, precomputed) fills the identical field. Not called in play. */
+export function buildFieldSlow(s: HoldState, start: number) {
   const { cols, rows, building: b } = s.map
   const per = cols * rows
   const f = s.field
@@ -676,6 +679,139 @@ function buildField(s: HoldState, start: number) {
         const nn = nodeIdx(s.map, up.lv, x + dx, z + dz)
         if (f[nn] === -1) { f[nn] = f[n] + 1; q[tail++] = nn }
       }
+    }
+  }
+}
+
+// ── the field, fast (Alex 09-28: lag with five chasers) ─────────────────────────────────────────
+// The slow BFS cost ~30-45ms a rebuild on the server (worse on a desktop), up to ten rebuilds a second while the
+// keeper moves: for every neighbour of every one of ~36k cells it asked floodStand, and walked every storey ABOVE
+// the neighbour through floodMove only to find it lands on the wrong floor. The plan never changes; only gates and
+// seals do. So the graph is built ONCE per map, each edge carrying the gate/window it depends on, and the BFS reads
+// flags. Same answer as buildFieldSlow, cell for cell (hold.test.ts compares them on random gate/seal states).
+// cond: -1 = always passable · >= 0 = gate id (open?) · <= -2 = window -2-cond (seals gone?) · BLOCKED = never
+const BLOCKED = -1 << 30
+interface FieldGraph {
+  off: Int32Array      // per node: its edges are [off[n], off[n+1])
+  kind: Uint8Array     // 0 step, 1 drop
+  // step: candidates [cA, cB) in cNode/cCond, first passing one is the target
+  // drop: target tNode if tCond passes AND the first passing of stand [cA, cB) — else fall [fA, fB) — is on n's floor
+  cA: Int32Array; cB: Int32Array; fA: Int32Array; fB: Int32Array; tNode: Int32Array; tCond: Int32Array
+  cNode: Int32Array; cCond: Int32Array; cLv: Int8Array
+}
+const FIELD_GRAPH = new WeakMap<HoldMap, FieldGraph>()
+function condOf(m: HoldMap, su: Surface, x: number, z: number): number {
+  const n = nodeIdx(m, su.lv, x, z)
+  if (su.kind === K.GATE) { const g = m.gateOf[n]; return g >= 0 ? g : BLOCKED }
+  if (su.kind === K.WINDOW) { const w = m.winOf[n]; return w >= 0 ? -2 - w : -1 }
+  return -1
+}
+const passes = (s: HoldState, c: number): boolean =>
+  c === -1 ? true : c === BLOCKED ? false : c >= 0 ? !!s.gatesOpen[c] : !(s.planks[-2 - c] > 0)
+function fieldGraph(m: HoldMap): FieldGraph {
+  const hit = FIELD_GRAPH.get(m)
+  if (hit) return hit
+  const { cols, rows, building: b } = m
+  const per = cols * rows, total = per * b.levels.length
+  const off = new Int32Array(total + 1)
+  const E = { kind: [] as number[], cA: [] as number[], cB: [] as number[], fA: [] as number[], fB: [] as number[], tNode: [] as number[], tCond: [] as number[] }
+  const C = { node: [] as number[], cond: [] as number[], lv: [] as number[] }
+  // scratch lists, filled then put in floodStand's pick order: highest first, ties keep the lower storey (its strict `>`)
+  const A: Surface[] = [], F: Surface[] = []
+  const pickSort = (L: Surface[], n: number) => {
+    for (let i = 1; i < n; i++) { const v = L[i]; let j = i - 1; while (j >= 0 && L[j].y < v.y) { L[j + 1] = L[j]; j-- } L[j + 1] = v }
+  }
+  const push = (L: Surface[], n: number, x: number, z: number): number => {
+    for (let i = 0; i < n; i++) { const su = L[i]; C.node.push(nodeIdx(m, su.lv, x, z)); C.cond.push(condOf(m, su, x, z)); C.lv.push(su.lv) }
+    return C.node.length
+  }
+  // can the first passing candidate of [a,b) (then of [fa,fb)) land on floor lv, under ANY gate/seal state?
+  const mayLand = (a: number, bb: number, fa: number, fb: number, lv: number): boolean => {
+    for (let i = a; i < bb; i++) { if (C.lv[i] === lv) return true; if (C.cond[i] === -1) return false }
+    for (let i = fa; i < fb; i++) { if (C.lv[i] === lv) return true; if (C.cond[i] === -1) return false }
+    return false
+  }
+  for (let n = 0; n < total; n++) {
+    off[n] = E.kind.length
+    const lv = (n / per) | 0, c = n % per, x = c % cols, z = (c / cols) | 0
+    // only a surface is ever in the field (the BFS starts on one and only steps onto them): walls and air get no edges
+    const k = b.levels[lv].kind[c] as Kind
+    if (!(k === K.FLOOR || k === K.RAMP || k === K.LANDING || k === K.BLOCK || k === K.GATE || k === K.WINDOW)) continue
+    const y = b.levels[lv].sy[c]
+    const here = surfacesAt(b, x, z)
+    for (let d = 0; d < DIRS.length; d++) {
+      const nx = x + DIRS[d][0], nz = z + DIRS[d][1]
+      const there = surfacesAt(b, nx, nz)
+      // step: floodStand(nx, nz, y)
+      let na = 0
+      for (let i = 0; i < there.length; i++) if (Math.abs(there[i].y - y) <= 1.01) A[na++] = there[i]
+      if (na) {
+        pickSort(A, na)
+        const a = C.node.length, bb = push(A, na, nx, nz)
+        E.kind.push(0); E.cA.push(a); E.cB.push(bb); E.fA.push(0); E.fB.push(0); E.tNode.push(-1); E.tCond.push(-1)
+      }
+      // drop, walked backwards: a body up on the neighbour that would land in THIS cell (floodMove(x, z, up.y))
+      for (let u = 0; u < there.length; u++) {
+        const up = there[u]
+        if (up.y <= y + 1.01) continue
+        let ns = 0
+        for (let i = 0; i < here.length; i++) if (Math.abs(here[i].y - up.y) <= 1.01) A[ns++] = here[i]
+        pickSort(A, ns)
+        // the common case: an always-open floor of ANOTHER storey is what floodStand picks (the storey above this
+        // cell) — that never lands here, so no edge
+        if (ns && A[0].lv !== lv && condOf(m, A[0], x, z) === -1) continue
+        const lv2 = levelOfY(b, up.y)
+        let nf = 0
+        if (lv2 >= 0 && kindAt(b, lv2, x, z) === K.VOID) {
+          for (let i = 0; i < here.length; i++) {
+            const su = here[i]
+            if (su.lv === lv2 - 1 && su.y < up.y - 1.01 && (su.kind === K.FLOOR || su.kind === K.LANDING) && b.levels[su.lv].tone[z * b.cols + x] !== 1) F[nf++] = su
+          }
+          pickSort(F, nf)
+        }
+        const mark = C.node.length
+        const a = mark, bb = push(A, ns, x, z), fa = bb, fb = push(F, nf, x, z)
+        if (!mayLand(a, bb, fa, fb, lv)) { C.node.length = C.cond.length = C.lv.length = mark; continue }
+        E.kind.push(1); E.cA.push(a); E.cB.push(bb); E.fA.push(fa); E.fB.push(fb)
+        E.tNode.push(nodeIdx(m, up.lv, nx, nz)); E.tCond.push(condOf(m, up, nx, nz))
+      }
+    }
+  }
+  off[total] = E.kind.length
+  const g: FieldGraph = {
+    off, kind: Uint8Array.from(E.kind), cA: Int32Array.from(E.cA), cB: Int32Array.from(E.cB), fA: Int32Array.from(E.fA), fB: Int32Array.from(E.fB),
+    tNode: Int32Array.from(E.tNode), tCond: Int32Array.from(E.tCond),
+    cNode: Int32Array.from(C.node), cCond: Int32Array.from(C.cond), cLv: Int8Array.from(C.lv),
+  }
+  FIELD_GRAPH.set(m, g)
+  return g
+}
+let fieldQueue = new Int32Array(0)
+export function buildField(s: HoldState, start: number) {
+  const f = s.field
+  f.fill(-1)
+  s.fieldAt = start
+  if (start < 0) return
+  const g = fieldGraph(s.map)
+  if (fieldQueue.length < f.length) fieldQueue = new Int32Array(f.length)
+  const q = fieldQueue
+  let head = 0, tail = 0
+  f[start] = 0; q[tail++] = start
+  while (head < tail) {
+    const n = q[head++], d = f[n] + 1
+    for (let e = g.off[n], eEnd = g.off[n + 1]; e < eEnd; e++) {
+      let nn = -1
+      if (g.kind[e] === 0) {
+        for (let i = g.cA[e]; i < g.cB[e]; i++) if (passes(s, g.cCond[i])) { nn = g.cNode[i]; break }
+      } else {
+        if (!passes(s, g.tCond[e])) continue
+        let lands = -1
+        for (let i = g.cA[e]; i < g.cB[e]; i++) if (passes(s, g.cCond[i])) { lands = g.cLv[i]; break }
+        if (lands < 0) for (let i = g.fA[e]; i < g.fB[e]; i++) if (passes(s, g.cCond[i])) { lands = g.cLv[i]; break }
+        if (lands !== ((n / (s.map.cols * s.map.rows)) | 0)) continue
+        nn = g.tNode[e]
+      }
+      if (nn >= 0 && f[nn] === -1) { f[nn] = d; q[tail++] = nn }
     }
   }
 }

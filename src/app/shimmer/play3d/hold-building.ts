@@ -201,15 +201,29 @@ export interface Surface { lv: number; y: number; kind: Kind }
 
 /** Every surface in a cell that something can stand on (floor, ramp, and the gate/window openings
  *  whose passability the caller decides), lowest first. */
-export function surfacesAt(b: Building, x: number, z: number): Surface[] {
-  const out: Surface[] = []
-  if (x < 0 || z < 0 || x >= b.cols || z >= b.rows) return out
-  const i = z * b.cols + x
-  for (let lv = 0; lv < b.levels.length; lv++) {
-    const L = b.levels[lv], k = L.kind[i] as Kind
-    if (k === K.FLOOR || k === K.RAMP || k === K.LANDING || k === K.BLOCK || k === K.GATE || k === K.WINDOW) out.push({ lv, y: L.sy[i], kind: k })
+export function surfacesAt(b: Building, x: number, z: number): readonly Surface[] {
+  if (x < 0 || z < 0 || x >= b.cols || z >= b.rows) return NO_SURFACES
+  let cells = SURFACES.get(b)
+  if (!cells) { cells = cellSurfaces(b); SURFACES.set(b, cells) }
+  return cells[z * b.cols + x]
+}
+// PERF (Alex 09-28, lag with five chasers): the flooded's flow field calls this ~150k times a rebuild, and it
+// used to build a fresh array of fresh objects every call, so a rebuild was 28ms plus GC pauses up to 130ms.
+// The plan never changes after it is built (passability — gates, seals — is the caller's, decided per call),
+// so each cell's list is built once per building and SHARED: read it, never mutate it.
+const NO_SURFACES: readonly Surface[] = Object.freeze([])
+const SURFACES = new WeakMap<Building, readonly Surface[][]>()
+function cellSurfaces(b: Building): readonly Surface[][] {
+  const cells: Surface[][] = []
+  for (let i = 0; i < b.cols * b.rows; i++) {
+    const out: Surface[] = []
+    for (let lv = 0; lv < b.levels.length; lv++) {
+      const L = b.levels[lv], k = L.kind[i] as Kind
+      if (k === K.FLOOR || k === K.RAMP || k === K.LANDING || k === K.BLOCK || k === K.GATE || k === K.WINDOW) out.push(Object.freeze({ lv, y: L.sy[i], kind: k }))
+    }
+    cells.push(Object.freeze(out) as Surface[])
   }
-  return out
+  return cells
 }
 
 /** The floor a height belongs to: its storey band runs from just under the floor to just under the next. */
