@@ -12,15 +12,16 @@
  * its own module boundary has the same blind spot as an oracle that calls a helper directly while
  * the game reaches it through a gate.
  *
- * ★★ AND IT RUNS AGAINST A SYNTHETIC TOWN ON PURPOSE. The real map has no landing painted yet, so
- * every question here has exactly one answer today — and a check that only ever sees one answer
- * cannot be told from `return false`. The synthetic town exercises the painted case; the real map
- * is asserted separately, for the one thing it CAN answer.
+ * ★★ AND IT RUNS AGAINST A SYNTHETIC TOWN ON PURPOSE. The synthetic town exercises every branch
+ * (painted, unpainted, blocked, the wall gap); the real map is asserted separately in section 5,
+ * against the anchors the game actually uses. (Written when the real landing was unpainted; it
+ * has been painted since, and section 5 was corrected 2026-09-28 when that premise expired.)
  *
  * Run: `npx tsx src/app/shimmer/engine/crossing-join.test.ts`
  */
 import { consumeArrival, arrivalFor, type Store, type TilePos } from './crossing'
 import { depart, landingGate, crossingReady, LANDING_ZONE, LANDING_LABEL } from '../voxel3d/crossing-out'
+import { LANDING_ARRIVAL, SHOPFRONT_ARRIVAL, SHOPFRONT_LABEL } from '../world/landing'
 import { walkable } from './player'
 import type { Zone } from '../world/zones'
 import { SOLID } from '../world/tiles'
@@ -125,16 +126,30 @@ const ZONES = [town]
   }
 }
 
-// ── 5. the REAL map, for the one thing it can answer today ───────────────────────────────────
-// ⚠ Reported, not asserted green: the landing is unpainted, so the real chain correctly refuses.
-// "Not built" and "broken" must not share a line.
+// ── 5. the REAL map, now that it is painted ──────────────────────────────────────────────────
+// ★ CORRECTED 2026-09-28. This block used to assume the landing was UNPAINTED and probed (50,50),
+// accepting only 'unpainted' or success. The landing has since been painted (THE LANDING, 3×2 at
+// 48,49), which puts (50,50) INSIDE its footprint, so `depart` answered 'blocked', a correct
+// refusal that the old assert read as an error. The premise expired, not the code. So the real map
+// is now asked what the GAME actually asks it: the two anchors `VoxelWorld.tsx` hands `depart`.
 {
+  ok(crossingReady(), 'the real landing is painted: the crossing is ready')
+  const lg = landingGate()!
+  for (const [label, anchor, via] of [
+    ['THE LANDING', LANDING_ARRIVAL, LANDING_LABEL],
+    [SHOPFRONT_LABEL, SHOPFRONT_ARRIVAL, SHOPFRONT_LABEL],
+  ] as const) {
+    const s = mkStore()
+    const out = depart(s.store, anchor, undefined, via)
+    ok(!('refused' in out), `★ the real ${label} anchor departs (never refused)`)
+    const got = consumeArrival(s.store)
+    ok(!!got && got.zone === LANDING_ZONE && got.x === anchor.x && got.y === anchor.y, `the real ${label} stages exactly its anchor tile`)
+  }
+  // a tile on the door itself is refused out loud, and a refusal writes nothing
   const s = mkStore()
-  const real = depart(s.store, { x: 50, y: 50 })
-  const unpainted = 'refused' in real && real.refused === 'unpainted'
-  ok(unpainted || !('refused' in real), 'the real map either refuses cleanly or is ready — never an error')
-  if (unpainted) console.log('  ⋯ the real landing is unpainted, so the real chain refuses. That is correct, not a failure.')
-  ok(s.ops.length === 0 || !unpainted, 'and an unpainted refusal writes nothing to the real store shape')
+  const onDoor = depart(s.store, { x: lg.x + 1, y: lg.y + 1 })
+  ok('refused' in onDoor && onDoor.refused === 'blocked', '★ a tile inside the painted landing is refused: arriving on a door bounces you straight back')
+  ok(s.ops.length === 0, 'and a refusal writes nothing to the store')
 }
 
 console.log(`crossing join: ${pass} passed, ${fails.length} failed`)
