@@ -77,9 +77,13 @@ export function StillwindScene({ edgeRef }: { edgeRef: React.RefObject<EdgeRun> 
   const len = T.length + 1
   return (
     <>
+      {/* Lenna's ground under it all (the zone's floor tiles draw the Ather's grass): dim, red, near-black */}
+      <mesh position={[cx, 0.02, len / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[T.halfWidth * 2 + 1, len]} /><meshStandardMaterial color={SL.ground} roughness={0.95} />
+      </mesh>
       {/* the Slack: the band's dusk down the middle, warming to ember toward the Glare, cooling to frost toward the Rime */}
       {[...Array(6)].map((_, i) => {
-        const w = T.halfWidth / 6, o = 0.05 + i * 0.07
+        const w = T.halfWidth / 6, o = 0.08 + i * 0.09
         return (
           <group key={i}>
             <mesh position={[cx + T.safeHalf + (i + 0.5) * w * 0.95, 0.03, len / 2]} rotation={[-Math.PI / 2, 0, 0]}>

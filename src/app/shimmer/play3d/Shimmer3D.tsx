@@ -4236,7 +4236,7 @@ const Scene = memo(function Scene(props: {
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} edgeRef={props.edgeRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && props.zone.id !== HOLD_ZONE && <GunBenches />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && props.zone.id !== HOLD_ZONE && props.zone.id !== EDGE_ZONE && <GunBenches />}
       {props.zone.realm === 'outside' && props.zone.id !== HOLD_ZONE && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
           Ather has doors worth naming too. ExitMarkers stays outside-only — it is a fallback for
@@ -6951,7 +6951,7 @@ export default function Shimmer3D() {
   useEffect(() => {
     // ★ no bench in the hold: the benches are placed by position, and one of them sits on the landing's
     // gallery gate — E there would open the arsenal and walk the bench loadout into an in-run-only fight
-    if (!weaponDrawn || zoneId === HOLD_ZONE) { setNearBench(false); return }
+    if (!weaponDrawn || zoneId === HOLD_ZONE || zoneId === EDGE_ZONE) { setNearBench(false); return }
     const tick = () => {
       const p = posRef.current
       if (!p) return
