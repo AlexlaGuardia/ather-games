@@ -38,7 +38,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { KeeperFrame, TabEmpty, type KeeperTab } from '../../voxel3d/keeper-panel'
 import { GearTab, SatchelLetters } from '../../hud/satchel'
-import { PANEL_SCENARIOS, planPanel, seedPanel, type PanelPlan, type PanelScenarioId } from '../../play3d/panel-fixture'
+import { BENCH_OWNER, PANEL_SCENARIOS, planPanel, seedPanel, type PanelPlan, type PanelScenarioId } from '../../play3d/panel-fixture'
 import { VESSEL_CAP, VESSELS } from '../../play3d/gems'
 import { BAND_FOR_VESSEL, ownedCount, seatCount } from '../../play3d/vessels'
 import { castForMove } from '../../play3d/cast'
@@ -46,6 +46,7 @@ import { VesselCard } from './vessel-card'
 import { createInventory, type Inventory } from '../../engine/inventory'
 import { ensureBasicTools, type EquippedTools } from '../../engine/tools'
 import { createSkillSet, type SkillSet } from '../../engine/skills'
+import { saveOwner, setSaveOwner } from '@/lib/save-slot'
 
 /** The grounds the panel actually opens over. Night is where it was tuned. */
 const BACKDROPS = [
@@ -71,7 +72,16 @@ export default function PanelDevPage() {
   // the wrong keeper on a bench whose entire job is to be looked at. Briefly wrong is the worst
   // duration for a lie in an instrument. Nothing renders until there is a browser to render for.
   const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+  // ★★ THE BENCH PLAYS AS ITS OWN KEEPER (#1372). The owner is set BEFORE `mounted` flips, so the
+  // first seed already lands under `u:bench:panel:`. Before this, the seed wrote the anonymous keeper's
+  // keys: a real keeper, and one adoption moves into an account. Restored on unmount so a client-side
+  // hop back into the game does not carry the bench owner with it.
+  useEffect(() => {
+    const prev = saveOwner()
+    setSaveOwner(BENCH_OWNER)
+    setMounted(true)
+    return () => setSaveOwner(prev)
+  }, [])
 
   // ★ THE SCENARIO AND TAB ARE READABLE FROM THE URL (`?s=written&tab=satchel`), so a specific read
   // can be linked, bookmarked and SHOT. `scripts/page-shot.mts` photographs a path and cannot click,

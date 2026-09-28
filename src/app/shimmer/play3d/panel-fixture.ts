@@ -45,6 +45,17 @@ import { saveLoadout, type Loadout } from './loadout'
 import { saveRuneInventory } from './rune-inventory'
 import { saveBook } from './book'
 import { ELEMENTS, runesOf } from './birth/runes.data'
+import { saveOwner } from '@/lib/save-slot'
+
+/**
+ * ★★★ THE BENCH'S OWN KEEPER (2026-09-28, #1372). Every save below goes through `keeperKey`, which
+ * files a key under whoever `saveOwner()` says is playing. The bench never said, so it wrote into the
+ * ANONYMOUS keeper, which is a real keeper: the one a signed-out visitor plays, and the one adoption
+ * MOVES into an account that has no state of its own. The footer said "nothing here is saved to a real
+ * keeper" the whole time. The page now declares this owner before it seeds, so every write lands under
+ * `u:bench:panel:` and no real keeper can reach it. The colon keeps it out of any real account id's shape.
+ */
+export const BENCH_OWNER = 'bench:panel'
 
 export type PanelScenarioId = 'fresh' | 'loose' | 'dark' | 'mixed' | 'written' | 'rack'
 
@@ -277,6 +288,9 @@ function write2(moveId: string, kind: Vessel, birth: string): StowedVessel | nul
  * honest is the one that looks most redundant.
  */
 export function seedPanel(id: PanelScenarioId): PanelPlan {
+  // ⚠ REFUSE, DON'T FALL BACK. A seed under any other owner overwrites somebody's keeper, so a caller
+  // that forgot `setSaveOwner(BENCH_OWNER)` gets a loud throw instead of a quiet write.
+  if (saveOwner() !== BENCH_OWNER) throw new Error(`seedPanel: refusing to write a fixture keeper while the save owner is ${JSON.stringify(saveOwner())}, not ${BENCH_OWNER}`)
   const plan = planPanel(id)
   saveRuneInventory({ birth: plan.birth, owned: [...plan.owned] })
   // ★★★ THE BOOK IS A KEEPER KEY TOO, AND NOT WRITING IT MADE THIS FIXTURE NON-HERMETIC (2026-09-04).

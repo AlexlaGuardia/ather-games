@@ -13,7 +13,8 @@
  *
  * Run: `npx tsx src/app/shimmer/play3d/panel-fixture.test.ts`
  */
-import { PANEL_SCENARIOS, planPanel, seedPanel, type PanelScenarioId } from './panel-fixture'
+import { BENCH_OWNER, PANEL_SCENARIOS, planPanel, seedPanel, type PanelScenarioId } from './panel-fixture'
+import { setSaveOwner } from '@/lib/save-slot'
 import { VESSEL_CAP, VESSELS, isBodyHeld, lettersOf } from './gems'
 import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { ALL_BANDS, laneRunes } from './cast'
@@ -33,6 +34,30 @@ const store: Record<string, string> = {}
   removeItem: (k: string) => { delete store[k] },
 }
 const wipe = () => { for (const k of Object.keys(store)) delete store[k] }
+
+// ── J. ★★★ THE BENCH NEVER WRITES A REAL KEEPER (#1372, 2026-09-28) ─────────────────────────────
+// The bench used to seed with no owner declared, so it wrote the ANONYMOUS keeper's keys, a real
+// keeper that adoption moves into an account. Two halves: a seed under any other owner refuses and
+// writes nothing, and a seed under the bench owner writes nothing outside `u:bench:panel:`.
+{
+  for (const owner of [null, 'alex-real-account']) {
+    wipe()
+    setSaveOwner(owner)
+    let threw = false
+    try { seedPanel('written') } catch { threw = true }
+    ok(threw, `★★★ seedPanel refuses under owner ${JSON.stringify(owner)}`)
+    ok(Object.keys(store).length === 0, `★★★ and writes nothing under ${JSON.stringify(owner)} (found ${Object.keys(store).join(', ')})`)
+  }
+  wipe()
+  store['ather:shimmer:runes'] = '["real"]'   // a real anonymous keeper already on this browser
+  setSaveOwner(BENCH_OWNER)
+  for (const { id } of PANEL_SCENARIOS) seedPanel(id)
+  const stray = Object.keys(store).filter(k => k !== 'ather:shimmer:runes' && !k.startsWith(`u:${BENCH_OWNER}:`))
+  ok(stray.length === 0, `★★★ every bench write lands under u:${BENCH_OWNER}: (stray: ${stray.join(', ')})`)
+  ok(store['ather:shimmer:runes'] === '["real"]', '★★★ the real anonymous keeper is untouched')
+  ok(Object.keys(store).length > 1, 'and the bench did write something (a guard over zero writes proves nothing)')
+  wipe()
+}
 
 // ── A. the roster is whole ───────────────────────────────────────────────────────────────────
 {
