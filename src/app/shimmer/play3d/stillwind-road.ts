@@ -17,9 +17,9 @@ import { DEED_KEY } from './stillwind'
 
 export const ROAD_KEY = 'ather:shimmer:stillwind-road'
 export const ROAD_SEASON = 'lenna'
-/** What the Lenn's notes say when the road is read — Lark's line, SIGNED OFF by Alex 09-28. Where and when,
- *  never what (canon 3d2a7b2). */
-export const ROAD_LINE = 'The wind dies before it comes. Mark where it dies — that is where it walks.'
+/** What the Lenn's notes say when the road is read — canon (athernyx f77d125, season-01-lenna.md › the capstone
+ *  line), Alex 09-28: "go with the follow the stalls line". Where and when, never what. */
+export const ROAD_LINE = 'Follow the stalls. The wind goes still in one place, then the next, along the edge — where it goes still last, it walks.'
 export interface RoadRecord { season: string; at: number }
 
 export function loadRoad(): RoadRecord | null {
