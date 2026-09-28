@@ -99,7 +99,7 @@ export const figure = {
 } as const
 /** NPC roster tints (npcs3d.ts): the colour each stand-in wears until it has a model. */
 export const npcTint = {
-  gregory: '#caa46a', trader: '#c9a05a', imbuer: '#8fb8c9',
+  gregory: '#caa46a', trader: '#c9a05a', imbuer: '#8fb8c9', clerk: '#7f9fb8',
   thistle: '#9a6aaa', vetch: '#7a5a3a', brack: '#5a4632',
 } as const
 // ── the Passage (2026-09-25) ─────────────────────────────────────────────────────────────────

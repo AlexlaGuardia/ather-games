@@ -56,6 +56,8 @@ import { useMultiplayer, storedName, storeName, type RemotePlayer } from './mult
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
 import { usePresence, type UsePresence } from '@/lib/presence'
 import { FriendsTab, InvitePrompt, useFriends } from './play-together'
+import { DeparturesPanel, type Destination } from './departures'
+import { holdShip, BERTH_COUNT } from './station-field'
 import { HearthTabs } from '../ui/hearth'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave } from '@/lib/cloud-sync'
@@ -4593,8 +4595,9 @@ function AccountBlock({ account }: { account: UseAccount }) {
 // A party is a shared code, not an account (see multiplayer.ts). This panel is the whole
 // social UI: sign in, name yourself, make/join/leave a party, copy the invite link, see the
 // roster.
-function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlot, presence }: {
+function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlot, presence, initialTab = 'party' }: {
   presence: UsePresence
+  initialTab?: 'party' | 'friends'
   name: string
   onName: (n: string) => void
   party: string | null
@@ -4606,7 +4609,7 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlo
 }) {
   const roster = useRoster(peers)
   // ★ two tabs (09-28): PARTY (who you play with now) and FRIENDS (who you pull them from)
-  const [tab, setTab] = useState<'party' | 'friends'>('party')
+  const [tab, setTab] = useState<'party' | 'friends'>(initialTab)
   const signedIn = !!account.session?.username
   const fr = useFriends(tab === 'friends', signedIn)
   const onlineFriends = fr.friends.filter(f => f.status === 'accepted' && f.online).length
@@ -4880,6 +4883,7 @@ export default function Shimmer3D() {
   const { peers: mpPeers } = useMultiplayer({
     enabled: mpReady, zoneId: zone.id, posRef, yawRef: camYaw, party: mpParty, playerName: mpName,
   })
+  const mpRoster = useRoster(mpPeers)   // the Departures board's three (09-28)
   // Touch triggers for jump/slide (mobile). jumpRef = edge (button sets true, Player consumes+clears);
   // slideRef = held (true while the slide button is pressed). Keyboard uses Space/Shift directly.
   const jumpRef = useRef(false)
@@ -5531,6 +5535,8 @@ export default function Shimmer3D() {
   const [movesDevOpen, setMovesDevOpen] = useState(false)  // owner-only: pin any built move into Z / C
   const [runeDevOpen, setRuneDevOpen] = useState(false)  // owner-only: swap birth rune live to test all archetypes
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
+  const [departuresOpen, setDeparturesOpen] = useState(false)   // the Station clerk's board (09-28)
+  const [mpTab, setMpTab] = useState<'party' | 'friends'>('party')
   const [mpOpen, setMpOpen] = useState(false)         // 👥 — play together (party / invite)
   const [gfxOpen, setGfxOpen] = useState(false)       // ⚙ — graphics quality + frame readout
   const [bookOpen, setBookOpen] = useState(false)     // ✦ — the move book (moves indexed by your rune)
@@ -6621,6 +6627,13 @@ export default function Shimmer3D() {
       battleRef.current = true
       openCursorUI()
       setCabinet(c.game)
+      return
+    }
+    if (npc.id === 'station-clerk') {
+      // ★ DEPARTURES (Alex 09-28): the clerk's board: your three, the berths, how you go
+      battleRef.current = true
+      openCursorUI()
+      setDeparturesOpen(true)
       return
     }
     if (npc.id === 'temple-imbuer') {
@@ -8291,7 +8304,7 @@ export default function Shimmer3D() {
       {menuOpen && (
         <OptionsPanel isOwner={isOwner} onClose={closeOptions}
           game={<>
-            <OptionRow onClick={() => { setMenuOpen(false); setMpOpen(true) }} label="👥 Play together" tail="party" />
+            <OptionRow onClick={() => { setMenuOpen(false); setMpTab('party'); setMpOpen(true) }} label="👥 Play together" tail="party" />
             <OptionRow onClick={() => { setMenuOpen(false); setSkillsOpen(true) }} label="⬡ Skills" tail="levels" />
             <OptionRow onClick={() => { setMenuOpen(false); setBookOpen(true) }} label="✦ The book" tail="your rune" />
             {confirmNew ? (
@@ -8508,6 +8521,28 @@ export default function Shimmer3D() {
               onJoin={() => { joinParty(presence.incoming!.party); presence.dismiss(); setBanner(`✦ Joined ${presence.incoming!.from_name}'s party`) }}
               onDismiss={presence.dismiss} />
           )}
+          {departuresOpen && (() => {
+            const owner = isOwner
+            const road = roadOpen(loadRoad())
+            const dests: Destination[] = [
+              { id: 'breach', berth: 1, world: 'Lenna', name: 'The Breach', locked: owner ? null : 'Not open yet' },
+              { id: 'slack', berth: 1, world: 'Lenna', name: 'The Slack', locked: !owner ? 'Not open yet' : road ? null : 'Read the Stillwind’s Road in the Breach’s lab first' },
+            ]
+            const close = () => { setDeparturesOpen(false); battleRef.current = false; closeCursorUI() }
+            return (
+              <HearthFrame title="Departures" maxWidth={Math.min(420, colRoom)} onClose={close} dataPanel="departures">
+                <DeparturesPanel you={mpName} party={mpParty} members={mpParty ? mpRoster.map(p => p.name) : []}
+                  destinations={dests} berths={BERTH_COUNT}
+                  onInviteFriends={() => { close(); setMpTab('friends'); setMpOpen(true) }}
+                  onLaunch={(d) => {
+                    close()
+                    const ship = holdShip()!
+                    if (d.id === 'breach') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', ownerOnly: true })
+                    else if (d.id === 'slack') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up', ownerOnly: true })
+                  }} />
+              </HearthFrame>
+            )
+          })()}
           {mpOpen && (
             <HearthFrame title="Play together" maxWidth={Math.min(300, colRoom)} backdrop={false} className="mt-5" onClose={() => setMpOpen(false)}>
             <PlayTogetherPanel
@@ -8517,6 +8552,7 @@ export default function Shimmer3D() {
               peers={mpPeers}
               account={account}
               presence={presence}
+              initialTab={mpTab}
             />
             </HearthFrame>
           )}

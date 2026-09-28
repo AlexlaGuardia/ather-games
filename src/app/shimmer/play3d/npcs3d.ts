@@ -33,6 +33,10 @@ export const NPCS_3D: NPC3D[] = [
   // moves. TODO(temple-placement): the Temple has no building in the live Rune Hold
   // yet (canon: "adjacent to the town proper"); the imbuer stands on the square's east side until Alex places it.
   { id: 'temple-imbuer', name: 'Idony', zone: 'rune-hold', tileX: 56, tileY: 55, color: npcTint.imbuer, kind: 'keeper' },
+  // ★ THE STATION CLERK at the berths (Alex 09-28: "a ship attendant you talk to"). A canon ROLE, not a new person
+  // (`world/rune-hold.md` › the fronts are kept by roles: "the Station clerk"). Stands just off the seated ship's
+  // gangway, on the terminal side; talking opens DEPARTURES (`departures.tsx`). No lines are authored for the clerk.
+  { id: 'station-clerk', name: 'the Station clerk', zone: 'travelers-station', tileX: holdShip()!.arrival.x - 1, tileY: holdShip()!.arrival.z + 2, color: npcTint.clerk, kind: 'keeper' },
   // Thistle — Hold 1. A borrowed-swagger Moglin in Spirit Meadows with a collared spirit. You free it
   // (a Reach battle), he deflates and retreats east. Removed from the world once freed.
   { id: 'thistle', name: 'Thistle', zone: 'spirit-meadow', tileX: 55, tileY: 30, color: npcTint.thistle, kind: 'moglin', defeatedFlag: 'freedThistle' },
@@ -163,6 +167,7 @@ export const TRADER_LINES: string[] = [
 import { REGION_FILES, REGION_WIP_PREFIX } from '../world/region-maps'
 import { npcTint } from './scene-palette'
 import { PASSAGE, isTravellerBay } from './passage-hall'
+import { holdShip } from './station-field'
 import { caravanFor } from './caravans'
 
 /** One NPC per stall with shelves, one per cabinet. A travelling-trader bay with nobody in it is not an
