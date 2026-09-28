@@ -143,7 +143,9 @@ import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
 import { HOLD_TUNING, BODY_SIZE, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, LAB_NODES, studyNode, labBlock, holdManaDrip, type LabNodeId, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 import { addPiece, pieceLine, loadDry, saveDry } from './vessel-pieces'
-import { loadRoad, saveRoad, roadOpen, ROAD_LINE } from './stillwind-road'
+import { loadRoad, saveRoad, roadOpen, ROAD_LINE, loadDeed, saveDeed } from './stillwind-road'
+import { EDGE_ZONE, EDGE_START, DEED_TITLE, STILLWIND_TUNING, startStillwind, stepStillwind, hitStillwind, edgeHazard, lineMend, edgeToSim, simToEdge, stillwindPhase } from './stillwind'
+import { StillwindScene, type EdgeRun } from './StillwindScene'
 // ── ★ THE MATCH CLOCK, WIRED 2026-09-05 ────────────────────────────────────────────────────────
 // `crucible-phases.ts` has been written, canon-accurate and 42/0 green since it landed, and imported
 // by NOTHING — 185 lines deriving the floors, the windows, the seal and the Vault from elapsed
@@ -2489,7 +2491,7 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
   )
 }
 
-function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, holdRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial, onMatch }: {
+function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, holdRef, edgeRef, statusRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial, onMatch }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
@@ -2523,6 +2525,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   conjuredRef: React.MutableRefObject<Conjured[]>  // SYSTEM 2 — runtime terrain (blocks everything)
   /** THE HOLD's run, owned by the parent (the HUD and E/G read it); this sim steps it and lands rounds on it */
   holdRef: React.MutableRefObject<HoldState | null>
+  edgeRef: React.MutableRefObject<EdgeRun>
   statusRef: React.MutableRefObject<StatusBag>     // SYSTEM 3 — options removed from enemies
   onHeal: (amount: number) => void   // a healing field restores the player; HP lives in the parent
   onNeedReload: () => void  // dry trigger on an empty clip → parent starts the recharge
@@ -2626,6 +2629,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // it and turns its strikes into damage. Every body carries its own height (`b.y`, tiers): the tower
   // has three floors, and a body climbing the face is at neither.
   const inHold = zoneId === HOLD_ZONE
+  const inEdge = zoneId === EDGE_ZONE
   // ── ★ THE MATCH ────────────────────────────────────────────────────────────────────────────
   // One number: when the glyph lit. Everything else — which floor is open, what is sealing, when
   // the Vault opens — is `crucibleAt(elapsed)`, derived fresh every frame from that alone, so the
@@ -2968,6 +2972,17 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           break
         }
       }
+      // rounds vs the Stillwind (THE SLACK): its body stands 7.5 tall over its tile; the upper third is the crit.
+      // What lands depends on where it stands (`stillwindTakes`): open ×3, brittle ×2, on its line ×0.1.
+      if (p.life > 0 && inEdge && edgeRef.current.sim && !edgeRef.current.sim.felled) {
+        const sw = edgeRef.current.sim, at = simToEdge(sw.x, sw.z)
+        const bdx = p.pos.x - at.x, bdz = p.pos.z - at.z
+        if (bdx * bdx + bdz * bdz < STILLWIND_TUNING.radius * STILLWIND_TUNING.radius && p.pos.y > 0 && p.pos.y < 7.5) {
+          const crit = p.pos.y > 5
+          hitStillwind(sw, crit ? wCrit : wDmg)
+          p.life = 0; onHit(crit)
+        }
+      }
       // rounds vs the flooded (THE HOLD). Crit = the upper third of the body, same rule as the hunter.
       // The device's tier (in-run, per weapon) multiplies the hit and, evolved, lets the round go on through.
       if (p.life > 0 && hs?.running) {
@@ -3064,6 +3079,32 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     if (hs?.running && posRef.current) {
       const o = stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP)
       if (o.strike > 0) hurtPlayer(o.strike)
+    }
+    // ── THE STILLWIND steps here (`stillwind.ts`). Its strikes go through `hurtPlayer` like the flooded's; the edge's
+    // own burn/frost is a steady drain, so it skips the hit flash and takes the shield first itself; the line mends.
+    if (inEdge) for (const t of targets) { t.alive = false; t.down = 1 }
+    const er = edgeRef.current
+    if (inEdge && er.sim && posRef.current) {
+      const k = edgeToSim(posRef.current.x, posRef.current.z)
+      if (!er.sim.felled) {
+        const o = stepStillwind(er.sim, dt, k.x, k.z)
+        if (o.strike > 0) { hurtPlayer(o.strike); er.since = 0 }
+        if (o.stalled) er.flash = 'The wind stops'
+        else if (o.opened) er.flash = 'It boils open'
+        else if (o.froze) er.flash = 'It stiffens'
+      }
+      const hz = edgeHazard(k.x)
+      er.slow = hz.slow
+      if (hz.dps > 0) {
+        er.since = 0
+        const d = hz.dps * dt, sh = shieldRef.current
+        shieldRef.current = Math.max(0, sh - d)
+        const spill = d - (sh - shieldRef.current)
+        if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
+        if (hpRef.current <= 0) { hpRef.current = hpMaxRef.current ?? MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD; onPlayerDown() }
+      } else er.since += dt
+      const mend = lineMend(k.x, er.since)
+      if (mend > 0) shieldRef.current = Math.min(shieldMaxRef.current ?? MAX_SHIELD, shieldRef.current + mend * dt)
     }
     // drift mode (console): targets strafe around their anchors — varied phase/speed per target
     const cfg = rangeCfgRef.current
@@ -3520,6 +3561,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         <meshStandardMaterial color={S.crucible.conjured} emissive={SOUL_COLOR} emissiveIntensity={0.12} metalness={0.15} roughness={0.85} />
       </instancedMesh>
       {inHold && <HoldScene holdRef={holdRef} />}
+      {inEdge && <StillwindScene edgeRef={edgeRef} />}
       {/* the ground hunter — magenta spinning octahedron, unmistakably NOT a range target */}
       <mesh ref={huntRef} visible={false} frustumCulled={false}>
         <octahedronGeometry args={[0.5, 0]} />
@@ -4083,6 +4125,7 @@ const Scene = memo(function Scene(props: {
   fieldsRef: React.MutableRefObject<Field[]>
   conjuredRef: React.MutableRefObject<Conjured[]>
   holdRef: React.MutableRefObject<HoldState | null>
+  edgeRef: React.MutableRefObject<EdgeRun>
   statusRef: React.MutableRefObject<StatusBag>
   onHeal: (amount: number) => void
   onNeedReload: () => void
@@ -4192,7 +4235,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.id === RUNE_HOLD_ZONE && props.gridRef.current && <RuneHoldScene grid={props.gridRef.current} heights={props.heights} version={props.version} />}
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} edgeRef={props.edgeRef} statusRef={props.statusRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && props.zone.id !== HOLD_ZONE && <GunBenches />}
       {props.zone.realm === 'outside' && props.zone.id !== HOLD_ZONE && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
@@ -5206,7 +5249,7 @@ export default function Shimmer3D() {
       // Burst surge and a held stance both fold in here, so speed has ONE derivation.
       const surge = surgeRef.current
       const surgeMult = performance.now() < surge.until ? surge.mult : 1
-      speedMultRef.current = speedMult(buffsRef.current, now) * affinityRef.current.speedMult * surgeMult * stanceMoveRef.current
+      speedMultRef.current = speedMult(buffsRef.current, now) * affinityRef.current.speedMult * surgeMult * stanceMoveRef.current * (zoneIdRef.current === EDGE_ZONE ? 1 - edgeRef.current.slow : 1)
       dreamwalkRef.current = suppressEncounters(buffsRef.current, now)
       setBuffHud(prev => {
         const next = activeBuffList(buffsRef.current, now)
@@ -6442,6 +6485,7 @@ export default function Shimmer3D() {
   const fieldsRef = useRef<Field[]>([])          // SYSTEM 1 — persistent area entities
   const conjuredRef = useRef<Conjured[]>([])     // SYSTEM 2 — runtime terrain
   const holdRef = useRef<HoldState | null>(null)  // THE HOLD's run — set on entering its zone, cleared on leaving
+  const edgeRef = useRef<EdgeRun>({ sim: null, slow: 0, since: 99, flash: null })  // THE SLACK's fight — set on entering, cleared on leaving
   const statusRef = useRef<StatusBag>(emptyBag())  // SYSTEM 3 — options removed from enemies
   const [castHud, setCastHud] = useState<{ slots: (string | null)[]; stance: string | null }>({ slots: ALL_BANDS.map(() => null), stance: null })
 
@@ -6567,6 +6611,11 @@ export default function Shimmer3D() {
   const onPlayerDown = useCallback(() => {
     const el = vignetteRef.current
     if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'downFlash 1s ease-out' }
+    // on the edge a fall resets the fight: the Stillwind stands again, the keeper is back at the near end
+    if (zoneIdRef.current === EDGE_ZONE) {
+      edgeRef.current.sim = startStillwind(); edgeRef.current.flash = 'The Stillwind stands'
+      posRef.current?.set(EDGE_START.x, posRef.current.y, EDGE_START.z)
+    }
     // in the hold a fall ENDS the run (the range just resets you). The record is the round reached.
     const hs = holdRef.current
     if (hs?.running) {
@@ -7132,6 +7181,28 @@ export default function Shimmer3D() {
   const holdEHeld = useRef(false)
   const [holdHud, setHoldHud] = useState<{ round: number; salvage: number; hush: number; loud: boolean; surge: number; kills: number; over: boolean; prompt: HoldPrompt | null; best: number; weapon: { name: string; tier: string; next: number | null }; wrack: number; studied: LabNodeId[] } | null>(null)
   const [labOpen, setLabOpen] = useState(false)
+  // ── THE SLACK's HUD (the Stillwind raid): the fight starts on arrival, ends on leaving; a felling is the deed ──
+  const [edgeHud, setEdgeHud] = useState<{ hp: number; phase: number; mood: string; wind: string; side: string; felled: boolean; deed: { secs: number } | null } | null>(null)
+  const [edgeFlash, setEdgeFlash] = useState<string | null>(null)
+  useEffect(() => { if (!edgeFlash) return; const t = setTimeout(() => setEdgeFlash(null), 2400); return () => clearTimeout(t) }, [edgeFlash])
+  useEffect(() => {
+    if (zoneId !== EDGE_ZONE) { edgeRef.current.sim = null; edgeRef.current.slow = 0; setEdgeHud(null); return }
+    edgeRef.current.sim = startStillwind(); edgeRef.current.since = 99
+    let lastKey = '', recorded = false
+    const id = setInterval(() => {
+      const e = edgeRef.current, sw = e.sim, p = posRef.current
+      if (!sw || !p) return
+      if (e.flash) { setEdgeFlash(e.flash); e.flash = null }
+      if (sw.felled && !recorded) { recorded = true; saveDeed(Math.round(sw.elapsed)); setEdgeFlash('The Stillwind is felled') }
+      if (!sw.felled) recorded = false
+      const hz = edgeHazard(edgeToSim(p.x, p.z).x)
+      const d = loadDeed()
+      const next = { hp: Math.round(sw.hp), phase: stillwindPhase(sw), mood: sw.mood, wind: sw.wind, side: hz.side, felled: sw.felled, deed: d ? { secs: d.secs } : null }
+      const key = JSON.stringify(next)
+      if (key !== lastKey) { lastKey = key; setEdgeHud(next) }
+    }, 100)
+    return () => { clearInterval(id); edgeRef.current.sim = null; edgeRef.current.slow = 0 }
+  }, [zoneId])
   const labOpenRef = useRef(false); labOpenRef.current = labOpen
   // the mouse handoff every cursor surface uses: borrow on open, hand look back on close
   const toggleLab = useCallback((open: boolean) => { if (open === labOpenRef.current) return; if (open) openCursorUI(); else closeCursorUI(); setLabOpen(open) }, [openCursorUI, closeCursorUI])
@@ -7568,6 +7639,8 @@ export default function Shimmer3D() {
 
   const onWarp = useCallback((w: Warp) => {
     if (w.ownerOnly && !isOwnerRef.current) return  // dev/test gate — silent no-op for players
+    // the edge opens only once the keeper has read the Lenn's notes (the Breach lab's capstone, canon 3d2a7b2)
+    if (w.toZone === EDGE_ZONE && !roadOpen(loadRoad())) { setHarvestToast('No road yet: read the Lenn’s notes at the Breach’s bench'); return }
     if (transitRef.current) return  // mid-transition: the world is covered, nothing may warp
 
     // ── ★★★ THE HOME-GATE IS A CHANGE OF ROUTE, NOT OF ZONE (2026-09-03) ───────────────────────
@@ -7822,6 +7895,7 @@ export default function Shimmer3D() {
           fieldsRef={fieldsRef}
           conjuredRef={conjuredRef}
           holdRef={holdRef}
+          edgeRef={edgeRef}
           bodyOut={bodyOut.current}
           statusRef={statusRef}
           onHeal={healPlayer}
@@ -8326,6 +8400,36 @@ export default function Shimmer3D() {
           )}
         </>
       )}
+      {/* ── THE SLACK's HUD: the Stillwind's hold on itself, the wind, and which side of the line you stand ── */}
+      {zoneId === EDGE_ZONE && edgeHud && !editMode && (
+        <>
+          <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 35 }}>
+            <span style={{ display: 'flex', gap: 12, alignItems: 'center', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ letterSpacing: '0.14em', textTransform: 'uppercase' }}>The Stillwind</span>
+              {edgeHud.felled
+                ? <span className="hk-moss">felled</span>
+                : <span style={{ display: 'inline-block', width: 160, height: 8, borderRadius: 4, background: 'rgba(0,0,0,0.35)', overflow: 'hidden' }}>
+                    <span style={{ display: 'block', height: '100%', width: `${(100 * edgeHud.hp) / STILLWIND_TUNING.hp}%`, background: edgeHud.mood === 'open' ? S.slack.core : edgeHud.mood === 'brittle' ? S.slack.frost : S.slack.coreDeep }} />
+                  </span>}
+              <HearthPillSoft face={HUD_FACE}>·</HearthPillSoft>
+              <span className={edgeHud.wind === 'blowing' ? 'hk-soft' : 'hk-ember'} style={{ fontWeight: edgeHud.wind === 'blowing' ? 600 : 800 }}>{edgeHud.wind === 'blowing' ? 'the wind is blowing' : edgeHud.wind === 'stalled' ? 'THE WIND HAS STOPPED' : 'IT RUNS THE LINE'}</span>
+            </span>
+          </HearthPill>
+          {edgeHud.side !== 'line' && !edgeHud.felled && (
+            <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: 92, left: '50%', transform: 'translateX(-50%)', zIndex: 35 }}>
+              <span style={{ color: edgeHud.side === 'glare' ? S.slack.glare : S.slack.rime, fontWeight: 800 }}>{edgeHud.side === 'glare' ? 'The Glare burns' : 'The Rime freezes'}</span>
+            </HearthPill>
+          )}
+          {edgeFlash && (
+            <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', zIndex: 35, fontSize: 22 }}>{edgeFlash}</HearthPill>
+          )}
+          {edgeHud.felled && (
+            <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '38%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }}>
+              <span>{DEED_TITLE} <HearthPillSoft face={HUD_FACE}>· {edgeHud.deed ? `best ${Math.floor(edgeHud.deed.secs / 60)}:${String(edgeHud.deed.secs % 60).padStart(2, '0')}` : ''} · the way back is at the near end, on the line</HearthPillSoft></span>
+            </HearthPill>
+          )}
+        </>
+      )}
       {/* ── Weapon viewmodel + firing-range HUD — outside the Ather only, desktop (click = fire) ── */}
       {weaponDrawn && !editMode && !dialogue && !battle && !placing && !isTouch && (
         <>
@@ -8407,6 +8511,7 @@ export default function Shimmer3D() {
                       <HearthButton small onClick={() => { if (holdRef.current) { holdRef.current.salvage += 5000; setHoldFlash('+5000 salvage') } }}>+5000 salvage</HearthButton>
                       <HearthButton small onClick={() => { if (holdRef.current) { ownerCalm(holdRef.current); setHoldFlash('The tide is calm') } }}>Calm the tide</HearthButton>
                       <HearthButton small onClick={() => { if (holdRef.current) setHoldFlash(`${ownerChests(holdRef.current)} caches placed`) }}>Fill the cache spots</HearthButton>
+                      <HearthButton small onClick={() => { if (holdRef.current) { holdRef.current.wrack += 10; setHoldFlash(`Wrack · ${holdRef.current.wrack}`) } }}>+10 wrack</HearthButton>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {holdSpots(HOLD_MAP).map(sp => (

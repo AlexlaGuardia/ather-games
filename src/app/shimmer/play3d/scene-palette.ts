@@ -220,6 +220,19 @@ export const crucible = {
   hunter: '#ff4f7d',
 } as const
 /**
+ * THE SLACK + THE STILLWIND (the season-1 raid, `stillwind.ts`, canon f77d125). Lenna's light is dim deep red and
+ * its plants run near-black; the Glare side of the strip warms toward ember, the Rime side cools toward frost, and
+ * the line between stays the band's own dusk. The Stillwind is the flood's INKY BLACK ooze (⛔ never the Ather's
+ * matte grey) with deep red-gold core-light where the ooze thins; toward the Glare it boils thin and the light
+ * shows, toward the Rime it stiffens and frosts.
+ */
+export const slack = {
+  ground: '#2a1d1f', line: '#15100f', glare: '#ff5a2a', rime: '#bfe0ff',
+  ooze: '#050507', oozeSheen: '#2b1a12', core: '#ffb347', coreDeep: '#c2410c', frost: '#dfefff',
+  wind: '#f3d9c4',
+}
+
+/**
  * THE HOLD (round survival, `hold.ts`). The flooded read as wet dark mass with a cold sheen — the
  * host's raised body, shown; never a colour that names a cause. Seals are rough plank, gates are
  * the mortal side's dead grey, and the three fixtures are told apart by a small lit accent.

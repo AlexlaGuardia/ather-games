@@ -6,7 +6,7 @@
 // it runs hot**: it walks the one line where it neither overheats nor freezes, **the edge between day and night**.
 // **The fight is on the edge: step toward the Glare and you burn; step toward the Rime and you freeze.** The Lenn
 // know it is coming when **the wind stalls**. Never the host; felling it is a deed (a title), not the outcome.
-// ⚠ TBD-CANON: its look (CANON_GAPS 09-28, "the Stillwind's look"). Nothing here describes it.
+// Its look is RULED (athernyx f77d125) and drawn in `StillwindScene.tsx`: Lenna's wind given a body under the flood's black ooze.
 //
 // ── WHAT'S MINE (Alex 09-28: "draw it off its line") ──────────────────────────────────────────
 // It cannot comfortably leave the line either, so the keeper beats it by DRAWING IT OFF: it follows you, and the
@@ -189,3 +189,33 @@ export function hitStillwind(s: StillwindState, dmg: number, tune: StillwindTuni
   if (s.hp <= 0) { s.felled = true; return { took, felled: true } }
   return { took, felled: false }
 }
+
+// ── the arena as a zone ───────────────────────────────────────────────────────────────────────
+// The strip is a generated grid (the Crucible / Breach precedent: no tilemap literal). A wall border, the
+// strip inside it, and a way back at the near end on the line. Sim x = tile col − (halfWidth + 1); sim z = tile row − 1.
+export const EDGE_ZONE = 'stillwind-edge'
+const FLOOR = 98, WALL = 103, WARP = 14
+export const EDGE_COLS = STILLWIND_TUNING.halfWidth * 2 + 3
+export const EDGE_ROWS = STILLWIND_TUNING.length + 3
+export const edgeToSim = (tx: number, tz: number) => ({ x: tx - (STILLWIND_TUNING.halfWidth + 1), z: tz - 1 })
+export const simToEdge = (x: number, z: number) => ({ x: x + STILLWIND_TUNING.halfWidth + 1, z: z + 1 })
+/** where a keeper arrives (on the line, near end) and the way back out (the line, the very end) */
+export const EDGE_START = simToEdge(0, 6)
+export const EDGE_EXIT = simToEdge(0, 0)
+export function edgeGrid(): number[][] {
+  const grid: number[][] = []
+  for (let r = 0; r < EDGE_ROWS; r++) {
+    const row: number[] = []
+    for (let c = 0; c < EDGE_COLS; c++) {
+      const border = r === 0 || r === EDGE_ROWS - 1 || c === 0 || c === EDGE_COLS - 1
+      row.push(c === EDGE_EXIT.x && r === EDGE_EXIT.z ? WARP : border ? WALL : FLOOR)
+    }
+    grid.push(row)
+  }
+  return grid
+}
+
+// ── the deed (canon 09-26: felling it is a deed — a title on Lenna's archive page, never the outcome) ──
+// Per keeper, like the road. How the title SHOWS is Jin's; its words are working copy until Lark/Alex.
+export const DEED_KEY = 'ather:shimmer:stillwind-deed'
+export const DEED_TITLE = 'Felled the Stillwind'

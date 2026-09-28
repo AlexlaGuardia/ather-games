@@ -13,6 +13,7 @@
  *     `roadOpen` is where "closed with the window" gets enforced, so there is one place to change
  */
 import { keeperKey } from '@/lib/keeper-local'
+import { DEED_KEY } from './stillwind'
 
 export const ROAD_KEY = 'ather:shimmer:stillwind-road'
 export const ROAD_SEASON = 'lenna'
@@ -36,3 +37,22 @@ export function saveRoad(now: number = Date.now()): RoadRecord {
 }
 /** Is the Stillwind's road open to this keeper right now? (The season window will narrow this.) */
 export const roadOpen = (r: RoadRecord | null): boolean => !!r && r.season === ROAD_SEASON
+
+// ── the deed: felling the Stillwind (canon 09-26: a title on Lenna's archive page; never the outcome) ──
+// Stored per keeper with the season. The archive page is not built yet — the Breach and the edge show it.
+export interface DeedRecord { season: string; at: number; secs: number }
+export function loadDeed(): DeedRecord | null {
+  try {
+    const raw = localStorage.getItem(keeperKey(DEED_KEY))
+    if (!raw) return null
+    const r = JSON.parse(raw) as Partial<DeedRecord>
+    return typeof r.season === 'string' && typeof r.at === 'number' ? { season: r.season, at: r.at, secs: Number(r.secs) || 0 } : null
+  } catch { return null }
+}
+export function saveDeed(secs: number, now: number = Date.now()): DeedRecord {
+  const prev = loadDeed()
+  // the first felling is the deed; a faster one after only tightens the time
+  const r: DeedRecord = { season: ROAD_SEASON, at: prev?.at ?? now, secs: prev ? Math.min(prev.secs || secs, secs) : secs }
+  try { localStorage.setItem(keeperKey(DEED_KEY), JSON.stringify(r)) } catch { /* private mode */ }
+  return r
+}

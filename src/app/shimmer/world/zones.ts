@@ -174,6 +174,7 @@ export function getZone(zones: Zone[], id: string): Zone | null {
 // Moonwell Glade → east → Spore Hollow (post-tutorial)
 
 import { parseLanding } from '../play3d/hold'
+import { EDGE_ZONE, EDGE_START, EDGE_EXIT, edgeGrid } from '../play3d/stillwind'
 import { PASSAGE } from '../play3d/passage-hall'
 import { STATION, holdShip } from '../play3d/station-field'
 import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWILIGHT_THICKET, WOODED_TRAIL, THE_THRESHOLD, MANA_SPRINGS, ROUTE_2, ROUTE_3, THE_OUTFIELDS, GLOVIEW_VILLAGE, SPIRIT_MEADOW, MOONWELL_GLADE_GREGORY_S_HOME, FIRING_RANGE, CRUCIBLE, RUNE_HOLD, VETCH_HOLD, BRACK_HOLD, TEST_SANDBOX,
@@ -181,6 +182,8 @@ import { GARDEN, MYCELIAL_PATH, MOONWELL_GLADE, SPORE_HOLLOW, VORANYX_DEEP, TWIL
 import { LANDING, LANDING_ARRIVAL, LANDING_LABEL } from './landing'
 /** The hold's landing, parsed once — the zone's grid and its door aims both read it. */
 export const HOLD_MAP = parseLanding()
+/** the Breach's door out to the edge: the roof, nine west of the landing pad's centre (off the pad, on the deck) */
+export const EDGE_DOOR = { x: HOLD_MAP.exit.x - 9, z: HOLD_MAP.exit.z }
 export const ZONES: Zone[] = [
   {
     id: 'garden',            // keep id stable (referenced widely); display = the player's own plot
@@ -683,6 +686,25 @@ export const ZONES: Zone[] = [
     warps: [
       // the way out, back to the concourse, one step south of the north door's footprint
       { fromX: HOLD_MAP.exit.x, fromY: HOLD_MAP.exit.z, toZone: 'travelers-station', toX: holdShip()!.arrival.x, toY: holdShip()!.arrival.z, direction: 'down' },
+      // the road out to the edge (09-28), on the roof just west of the pad. It only opens once the keeper has read
+      // the Lenn's notes (the lab's capstone): the page refuses it otherwise (`onWarp`, `stillwind-road.ts`)
+      { fromX: EDGE_DOOR.x, fromY: EDGE_DOOR.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up' },
+    ],
+  },
+  {
+    // ── THE SLACK — the Stillwind raid, Lenna's colossus (play lane, 2026-09-28; the Lenn's word for where the wind dies, canon f77d125) ──
+    // Canon: season-01-lenna.md › The colossus — the fight is on the edge between the Glare and the Rime. The strip
+    // is generated (`play3d/stillwind.ts` › edgeGrid); the sim lives there too. Found through the Lenn's notes
+    // (the Breach lab's capstone). `realm: 'outside'` + not peaceful → the weapon draws and FiringRange mounts
+    // (it runs the Stillwind when it sees this id). '(proof)' like the Breach: an owner-only blockout until the
+    // season is real.
+    id: EDGE_ZONE,
+    name: 'The Slack (proof)',
+    grid: edgeGrid(),
+    realm: 'outside',
+    playerStart: { tileX: EDGE_START.x, tileY: EDGE_START.z },
+    warps: [
+      { fromX: EDGE_EXIT.x, fromY: EDGE_EXIT.z, toZone: 'the-hold', toX: EDGE_DOOR.x, toY: EDGE_DOOR.z + 1, direction: 'down' },
     ],
   },
   {
