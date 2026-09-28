@@ -8528,28 +8528,6 @@ export default function Shimmer3D() {
               onJoin={() => { joinParty(presence.incoming!.party); presence.dismiss(); setBanner(`✦ Joined ${presence.incoming!.from_name}'s party`) }}
               onDismiss={presence.dismiss} />
           )}
-          {departuresOpen && (() => {
-            const owner = isOwner
-            const road = roadOpen(loadRoad())
-            const dests: Destination[] = [
-              { id: 'breach', berth: 1, world: 'Lenna', name: 'The Breach', locked: owner ? null : 'Not open yet' },
-              { id: 'slack', berth: 1, world: 'Lenna', name: 'The Slack', locked: !owner ? 'Not open yet' : road ? null : 'Read the Stillwind’s Road in the Breach’s lab first' },
-            ]
-            const close = () => { setDeparturesOpen(false); battleRef.current = false; closeCursorUI() }
-            return (
-              <HearthFrame title="Departures" maxWidth={Math.min(420, colRoom)} onClose={close} dataPanel="departures">
-                <DeparturesPanel you={mpName} party={mpParty} members={mpParty ? mpRoster.map(p => p.name) : []}
-                  destinations={dests} berths={BERTH_COUNT}
-                  onInviteFriends={() => { close(); setMpTab('friends'); setMpOpen(true) }}
-                  onLaunch={(d) => {
-                    close()
-                    const ship = holdShip()!
-                    if (d.id === 'breach') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', ownerOnly: true })
-                    else if (d.id === 'slack') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up', ownerOnly: true })
-                  }} />
-              </HearthFrame>
-            )
-          })()}
           {mpOpen && (
             <HearthFrame title="Play together" maxWidth={Math.min(300, colRoom)} backdrop={false} className="mt-5" onClose={() => setMpOpen(false)}>
             <PlayTogetherPanel
@@ -9213,6 +9191,29 @@ export default function Shimmer3D() {
           onClose={() => { setRackOpen(null); setRackStall(null); battleRef.current = false; closeCursorUI() }}
         />
       )}
+      {/* ★ DEPARTURES (09-28): a centered board like the racks, never in the side column */}
+      {departuresOpen && (() => {
+        const owner = isOwner
+        const road = roadOpen(loadRoad())
+        const dests: Destination[] = [
+          { id: 'breach', berth: 1, world: 'Lenna', name: 'The Breach', locked: owner ? null : 'Not open yet' },
+          { id: 'slack', berth: 1, world: 'Lenna', name: 'The Slack', locked: !owner ? 'Not open yet' : road ? null : 'Read the Stillwind’s Road in the Breach’s lab first' },
+        ]
+        const close = () => { setDeparturesOpen(false); battleRef.current = false; closeCursorUI() }
+        return (
+          <HearthFrame title="Departures" maxWidth={440} onClose={close} dataPanel="departures">
+            <DeparturesPanel you={mpName} party={mpParty} members={mpParty ? mpRoster.map(p => p.name) : []}
+              destinations={dests} berths={BERTH_COUNT}
+              onInviteFriends={() => { close(); setMpTab('friends'); setMpOpen(true) }}
+              onLaunch={(d) => {
+                close()
+                const ship = holdShip()!
+                if (d.id === 'breach') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', ownerOnly: true })
+                else if (d.id === 'slack') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up', ownerOnly: true })
+              }} />
+          </HearthFrame>
+        )
+      })()}
 
       {battle && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: S.arenaFloor }}>

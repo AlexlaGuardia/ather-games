@@ -90,13 +90,7 @@ export function DeparturesPanel({ you, party, members, destinations, berths, onL
       <div className="flex flex-col gap-1.5">
         {Array.from({ length: berths }, (_, i) => {
           const here = destinations.filter(d => d.berth === i + 1)
-          if (!here.length) {
-            return (
-              <div key={i} className="rounded-[9px] px-3 py-2 text-[12px] italic hk-faint" style={{ border: '1.5px dashed rgba(58,39,22,.2)' }}>
-                Berth {i + 1} · no world seated
-              </div>
-            )
-          }
+          if (!here.length) return null
           return here.map(d => {
             const on = d.id === pick && !d.locked
             return (
@@ -117,6 +111,16 @@ export function DeparturesPanel({ you, party, members, destinations, berths, onL
             )
           })
         })}
+        {(() => {
+          const empty = Array.from({ length: berths }, (_, i) => i + 1).filter(n => !destinations.some(d => d.berth === n))
+          if (!empty.length) return null
+          const span = empty.length === 1 ? `Berth ${empty[0]}` : `Berths ${empty[0]}–${empty[empty.length - 1]}`
+          return (
+            <div className="rounded-[9px] px-3 py-1.5 text-[12px] italic hk-faint" style={{ border: '1.5px dashed rgba(58,39,22,.2)' }}>
+              {span} · no world seated
+            </div>
+          )
+        })()}
       </div>
 
       {/* HOW */}
