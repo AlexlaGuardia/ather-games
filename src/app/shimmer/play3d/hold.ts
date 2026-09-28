@@ -316,6 +316,8 @@ export interface HoldState {
   rooms: Record<RoomId, boolean>
   /** the room the keeper last stood in — spawns come from here and the open rooms next to it */
   here: RoomId
+  /** CO-OP (09-28): every keeper's room this frame; `activeRooms` joins them. One keeper = [here] */
+  heres: RoomId[]
   /** set when the keeper falls into a shut room (a broken floor); the page reads it once and clears it */
   fell: RoomId | null
   salvage: number
@@ -346,13 +348,17 @@ export interface HoldState {
   roadKnown: boolean
   /** boosters picked up and not yet applied — the host drains this (it owns mana, hp, the team) */
   pickups: HoldDropKind[]
+  /** which keeper (index into the step's keepers) took each pickup, in step with `pickups` */
+  pickupBy: number[]
   elapsed: number
   nextId: number
   rng: () => number
   /** the flow field toward the keeper — distance in steps per cell, -1 unreachable */
   field: Int16Array
   fieldT: number
-  fieldAt: number         // cell index the field was built from
+  fieldAt: number         // cell index the field was built from (the first keeper's, in co-op)
+  /** every source the field was built from, joined: a co-op field is rebuilt when ANY keeper changes cell */
+  fieldKey: string
 }
 
 // ── parse ────────────────────────────────────────────────────────────────────────────────────
@@ -532,13 +538,13 @@ export function startHold(map: HoldMap = parseLanding(), seed = 0x401D, tune: Ho
     planks: map.windows.map(() => tune.seals),
     gatesOpen: map.gates.map(() => false),
     rooms: Object.fromEntries(map.rooms.map(r => [r, r === map.start.room])),
-    here: map.start.room, fell: null,
+    here: map.start.room, heres: [map.start.room], fell: null,
     salvage: 500, mendPaidThisRound: 0, mendT: 0,
     kills: 0, surge: 0, hush: tune.hushSec, rackBought: false,
-    drops: [], dropsThisRound: 0, pickups: [], wrack: 0, studied: [], roadKnown: false,
+    drops: [], dropsThisRound: 0, pickups: [], pickupBy: [], wrack: 0, studied: [], roadKnown: false,
     chests: map.chestSpots.map(() => null), dryRounds: 0, gloveOwed: false, loot: [], devicePlanted: false, tuned: {},
     elapsed: 0, nextId: 1, rng: mulberry32(seed),
-    field: new Int16Array(map.cols * map.rows * map.building.levels.length).fill(-1), fieldT: 0, fieldAt: -1,
+    field: new Int16Array(map.cols * map.rows * map.building.levels.length).fill(-1), fieldT: 0, fieldAt: -1, fieldKey: '',
   }
 }
 
@@ -805,16 +811,20 @@ function fieldGraph(m: HoldMap): FieldGraph {
   return g
 }
 let fieldQueue = new Int32Array(0)
-export function buildField(s: HoldState, start: number) {
+export function buildField(s: HoldState, start: number | readonly number[]) {
+  // ★ CO-OP (09-28): a field may have many sources, one per keeper, all at distance 0. Every node then holds the
+  // walk to the NEAREST keeper, so each body goes for whoever is closest by the building, not by the crow.
+  const starts = typeof start === 'number' ? [start] : start
   const f = s.field
   f.fill(-1)
-  s.fieldAt = start
-  if (start < 0) return
+  s.fieldAt = starts[0] ?? -1
+  s.fieldKey = starts.join(',')
   const g = fieldGraph(s.map)
   if (fieldQueue.length < f.length) fieldQueue = new Int32Array(f.length)
   const q = fieldQueue
   let head = 0, tail = 0
-  f[start] = 0; q[tail++] = start
+  for (const st of starts) if (st >= 0 && f[st] === -1) { f[st] = 0; q[tail++] = st }
+  if (tail === 0) return
   while (head < tail) {
     const n = q[head++], d = f[n] + 1
     for (let e = g.off[n], eEnd = g.off[n + 1]; e < eEnd; e++) {
@@ -841,10 +851,12 @@ export function buildField(s: HoldState, start: number) {
 /** How many of the nearest opened windows (by walking distance) take over when no active room has one. */
 const NEAREST_FALLBACK = 3
 /** The keeper's room and every opened room joined to it by an open gate. */
-export function activeRooms(s: HoldState, here: RoomId = s.here): Set<RoomId> {
-  const act = new Set<RoomId>([here])
-  s.map.gates.forEach((g, i) => {
-    if (s.gatesOpen[i] && g.opens.includes(here)) for (const r of g.opens) if (s.rooms[r]) act.add(r)
+export function activeRooms(s: HoldState, here?: RoomId): Set<RoomId> {
+  // CO-OP: with no room named, every keeper's room is active (Zombies' zones join the same way)
+  const heres = here !== undefined ? [here] : (s.heres?.length ? s.heres : [s.here])
+  const act = new Set<RoomId>(heres)
+  for (const h of heres) s.map.gates.forEach((g, i) => {
+    if (s.gatesOpen[i] && g.opens.includes(h)) for (const r of g.opens) if (s.rooms[r]) act.add(r)
   })
   return act
 }
@@ -979,8 +991,28 @@ export interface HoldStepOut {
   fellInto?: RoomId
 }
 
+/** A keeper standing in the Breach: feet position (co-op: one per player, the server's order). */
+export interface HoldKeeper { x: number; z: number; y: number }
+/** What one step did, per keeper: `strikes[k]` is the raw damage keeper k takes this frame. */
+export interface HoldPartyOut { strikes: number[]; roundBegan: number | null; wentLoud: boolean; fellInto?: RoomId }
+/** The keeper a body goes for: nearest on its own floor, else nearest at all. -1 = nobody. */
+function nearestKeeper(keepers: readonly HoldKeeper[], x: number, z: number, y: number, level: number): number {
+  let best = -1, bd = Infinity, same = false
+  for (let k = 0; k < keepers.length; k++) {
+    const kp = keepers[k], d = (kp.x - x) ** 2 + (kp.z - z) ** 2, sf = Math.abs(kp.y - y) < level
+    if ((sf && !same) || (sf === same && d < bd)) { best = k; bd = d; same = sf }
+  }
+  return best
+}
+/** ONE keeper: the game as it was before co-op, unchanged (the co-op step with a party of one). */
 export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: number = heightAt(s, px, pz), tune: HoldTuning = HOLD_TUNING): HoldStepOut {
-  const out: HoldStepOut = { strike: 0, roundBegan: null, wentLoud: false }
+  const o = stepHoldParty(s, dt, [{ x: px, z: pz, y: py }], tune)
+  s.pickupBy.length = 0   // one keeper: every pickup is theirs, and nothing reads the attribution
+  return { strike: o.strikes[0], roundBegan: o.roundBegan, wentLoud: o.wentLoud, ...(o.fellInto ? { fellInto: o.fellInto } : {}) }
+}
+
+export function stepHoldParty(s: HoldState, dt: number, keepers: readonly HoldKeeper[], tune: HoldTuning = HOLD_TUNING): HoldPartyOut {
+  const out: HoldPartyOut = { strikes: keepers.map(() => 0), roundBegan: null, wentLoud: false }
   if (!s.running || s.over) return out
   dt = Math.min(dt, 0.1)
   s.elapsed += dt
@@ -1009,12 +1041,15 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     s.flood = []
   }
 
-  // where the keeper is: a gate or window cell has no region, so the last room stands
-  const pi = keeperNode(s, px, pz, py)
-  const ri = pi >= 0 ? s.map.regionOf[pi] : -1
-  if (ri >= 0) s.here = s.map.rooms[ri]
-  // the keeper can only be in a shut room by FALLING into it (a broken floor): being there wakes it
-  if (!s.rooms[s.here]) { s.rooms[s.here] = true; out.fellInto = s.here; s.fell = s.here }
+  // where each keeper is: a gate or window cell has no region, so that keeper's last room stands
+  const pis = keepers.map(k => keeperNode(s, k.x, k.z, k.y))
+  const heres = pis.map((pi, k) => {
+    const ri = pi >= 0 ? s.map.regionOf[pi] : -1
+    return ri >= 0 ? s.map.rooms[ri] : (s.heres[k] ?? s.here)
+  })
+  if (heres.length) { s.here = heres[0]; s.heres = heres }
+  // a keeper can only be in a shut room by FALLING into it (a broken floor): being there wakes it
+  for (const h of heres) if (!s.rooms[h]) { s.rooms[h] = true; out.fellInto = h; s.fell = h }
 
   // spawns: from the windows of the active rooms (above), and a share up through their vents.
   // LOUD = no ration and no break: they rush.
@@ -1045,7 +1080,7 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
 
   // the field
   s.fieldT -= dt
-  if (pi !== s.fieldAt || s.fieldT <= 0) { buildField(s, pi); s.fieldT = 0.25 }
+  if (pis.join(',') !== s.fieldKey || s.fieldT <= 0) { buildField(s, pis); s.fieldT = 0.25 }
 
   for (const b of s.flood) {
     if (!b.alive) continue
@@ -1082,9 +1117,13 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
     const here = floodMove(s, cx, cz, b.y) ?? fallTo(s, cx, cz, b.y)
     const hy = here ? here.y : b.y
     b.y += Math.max(-10 * dt, Math.min(10 * dt, hy - b.y))
+    // CO-OP: the body goes for the NEAREST keeper, a same-floor one before any other (one keeper = that keeper)
+    const ti = nearestKeeper(keepers, b.x, b.z, b.y, tune.level)
+    if (ti < 0) continue
+    const px = keepers[ti].x, pz = keepers[ti].z, py = keepers[ti].y
     const dpx = px - b.x, dpz = pz - b.z, dp = Math.hypot(dpx, dpz)
     if (dp < tune.reach && Math.abs(py - b.y) < tune.level) {
-      if (b.strikeT <= 0) { out.strike += tune.strikeDmg * (b.kind === 'bulk' ? 1.5 : 1); b.strikeT = tune.strikeCd }
+      if (b.strikeT <= 0) { out.strikes[ti] += tune.strikeDmg * (b.kind === 'bulk' ? 1.5 : 1); b.strikeT = tune.strikeCd }
       b.vx *= 0.5; b.vz *= 0.5
       continue
     }
@@ -1144,8 +1183,10 @@ export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: n
   // boosters wait, then fade; walking over one takes it
   for (const d of s.drops) {
     d.ttl -= dt
-    if (d.ttl > 0 && (px - d.x) ** 2 + (pz - d.z) ** 2 <= tune.pickupReach ** 2 && Math.abs(py - d.y) < tune.level) {
-      s.pickups.push(d.kind); d.ttl = 0
+    if (d.ttl <= 0) continue
+    const k = keepers.findIndex(kp => (kp.x - d.x) ** 2 + (kp.z - d.z) ** 2 <= tune.pickupReach ** 2 && Math.abs(kp.y - d.y) < tune.level)
+    if (k >= 0) {
+      s.pickups.push(d.kind); s.pickupBy.push(k); d.ttl = 0
       if (d.kind === 'wrack') s.wrack++
     }
   }
