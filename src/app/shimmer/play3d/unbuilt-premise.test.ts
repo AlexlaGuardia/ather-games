@@ -68,20 +68,6 @@ const BUILD_BLOCKED: Record<string, Premise> = {
     arrives: /volley|barrage|projectiles:\s*\d|placedMany/i,
     hook: 'one cast that emits several independently tracked projectiles',
   },
-  gate: {
-    file: 'voxel/waymark.ts',
-    // The file exists (that is why `waymark`'s own reason was corrected), but a TWO-POINT bind —
-    // an anchor pair you warp between on a cast — is a different thing from a named place.
-    arrives: /anchorPair|twoPoint|bindPair|gateBetween/i,
-    hook: 'a two-point bind: an anchor PAIR a cast can warp between',
-  },
-  overpressure: {
-    file: 'engine/vitals.ts',
-    // The shield bank and its damage ORDER already exist. What is missing is the feedback: absorbed
-    // damage returning INTO the shield pool.
-    arrives: /absorb\w*\s*(=>|:)?[^\n]*shield\s*\+=|shield\s*\+=\s*absorb/i,
-    hook: 'absorbed damage fed BACK into the shield pool, so the layer mends out of what it stops',
-  },
   waymark: {
     file: 'engine/cast-dispatch.ts',
     // Its surviving reason is a DESIGN one: a place-binding is not a slot you press. The premise

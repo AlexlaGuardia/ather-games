@@ -61,6 +61,8 @@ import { birthAffinity, NEUTRAL_AFFINITY, attunementResist, combineResist, type 
 import TremorRing, { TremorSenseHud, emptyReadout, type TremorReadout } from './TremorRing'
 import { senseGround, type SensedBody } from './tremor-sense'
 import { castForMove, isBuilt, wardOf, CAST_SLOTS, ALL_BANDS, BAND_KEYS, derivePassive, type CastSpec } from './cast'
+import { launchVy, blinkLand, flatAim, sightClear, GATE_MIN_REACH, BLINK_MIN_REACH, type BodyCast, type BodyCastResult } from './body-cast'
+import { openSpiral, stepSpiral, spiralAge, type GateSpiral, type SpiralClose } from '../engine/gate-spiral'
 import { getRegenRate } from '../engine/mana'
 import { moveById } from './keeper-moves'
 import { loadLoadout, resolveLoadout, emptySlotSentence, type EmptyReason } from './loadout'
@@ -1307,7 +1309,7 @@ function HandsMount({ hands, feed }: { hands: Hands; feed: () => void }) {
 export interface BodyOut { airborne: boolean; sliding: boolean; crouching: boolean; climbing: boolean; hanging: boolean; mantle: number; vy: number }
 export const newBodyOut = (): BodyOut => ({ airborne: false, sliding: false, crouching: false, climbing: false, hanging: false, mantle: -1, vy: 0 })
 
-function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, weaponMoveRef, dreamwalkRef, conjuredRef, holdRef, bodyOut }: {
+function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battleRef, partyLevelRef, onEncounter, joyRef, talkingRef, hasPartyRef, onNearChange, defeatedRef, flagsRef, harvestNodesRef, onNearNode, stationsRef, onNearStation, eyeRef, jumpRef, slideRef, speedMultRef, weaponMoveRef, dreamwalkRef, conjuredRef, holdRef, bodyOut, bodyCastRef, onBodyCast }: {
   posRef: React.RefObject<THREE.Vector3>; gridRef: React.RefObject<number[][]>
   heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
   editRef: React.RefObject<boolean>; onWarp: (w: Warp) => void
@@ -1330,6 +1332,9 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   /** THE HOLD — windows are never climbable and a shut gate is a wall (`hold.ts` › keeperBlocked) */
   holdRef: React.RefObject<HoldState | null>
   weaponMoveRef: React.RefObject<number>  // weapon-state ground-speed mult: 1 holstered, <1 drawn, less ADS
+  /** SYSTEM 4 + 8 — a cast that moves the body, posted by the dispatch, applied here (`body-cast.ts`) */
+  bodyCastRef?: React.MutableRefObject<BodyCast | null>
+  onBodyCast?: (r: BodyCastResult) => void
 }) {
   const group = useRef<THREE.Group>(null)
   const keys = useRef<Record<string, boolean>>({})
@@ -1440,6 +1445,81 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
     if (!editRef.current && !battleRef.current && !talkingRef.current) {
       state.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize()
       right.crossVectors(fwd, UP).normalize()
+
+      // ── THE BODY CASTS (SYSTEM 4 impulse + SYSTEM 8 gate, 2026-09-28) ─────────────────────────
+      // Applied HERE, at the top of the tick and before the velocity pass, because this loop is the
+      // one writer of vy/hvel/airborne: a launch set from the page would be overwritten by the very
+      // next velocity pass. Every branch clears the grip states, since a keeper hanging off a lip who
+      // casts Updraft must leave the lip, not be pinned back to it by the hang branch below.
+      const bc = bodyCastRef?.current
+      if (bc) {
+        bodyCastRef!.current = null
+        const standY = (x: number, z: number) => {
+          const cx = Math.round(x), cz = Math.round(z)
+          const su = resolveStand(ctx, cx, cz, fromY)
+          return (su ? su.y : (heights[cz]?.[cx] ?? 0)) * STEP
+        }
+        // a blink or a gate end may land where the body fits: a floor in reach, no wall, and the body's
+        // radius clear on both axes (the same buffer the walk keeps), so the eye never arrives in a face
+        const canStand = (x: number, z: number) => {
+          const cx = Math.round(x), cz = Math.round(z)
+          return canStep(cx, cz)
+            && !isBlocker(Math.round(x + PLAYER_R), cz) && !isBlocker(Math.round(x - PLAYER_R), cz)
+            && !isBlocker(cx, Math.round(z + PLAYER_R)) && !isBlocker(cx, Math.round(z - PLAYER_R))
+        }
+        const letGo = () => {
+          hanging.current = false; hangAt.current = null; mantleT.current = 0; hangLock.current = 0.35
+          slideT.current = 0; wallStick.current = 0; climbRise.current = 0
+        }
+        if (bc.kind === 'launch') {
+          letGo()
+          // ★ FLATTENED HORIZONTAL, VERTICAL FROM THE SPEC — never the camera's pitch: looking at your
+          // feet must not fire you into the ground, looking up must not turn Overcharge into a pop
+          hvel.set(fwd.x, 0, fwd.z).setLength(bc.fwd)
+          vy.current = launchVy(bc.up, airborne.current ? vy.current : 0)
+          airborne.current = true
+          airSpeed.current = bc.fwd
+          p.y += 0.02   // leave the floor this frame, or the landing check below reads her as still standing
+          onBodyCast?.({ say: bc.label })
+        } else if (bc.kind === 'blink') {
+          const aim = flatAim(fwd.x, fwd.z, p.x, p.z, bc.range)
+          const at = blinkLand(p.x, p.z, aim.x, aim.z, canStand)
+          if (at && at.dist >= BLINK_MIN_REACH) {
+            letGo()
+            p.x = at.x; p.z = at.z; p.y = standY(at.x, at.z)
+            hvel.set(0, 0, 0); vy.current = 0; airSpeed.current = 0; airborne.current = false
+          }
+          // a blink is invisible when it fails, so a short one says so rather than reading as a dead key
+          onBodyCast?.({ say: at && at.dist >= BLINK_MIN_REACH ? bc.label : `${bc.label} — no room to step` })
+        } else if (bc.kind === 'gate') {
+          // ★ BOTH ENDS IN SIGHT, ON THE FIGHT'S GROUND (RULED 09-28). The far end is struck where a blink
+          // down the reticle would land; the eye-to-eye line must be clear. Neither → refund, nothing opened.
+          const aim = flatAim(fwd.x, fwd.z, p.x, p.z, bc.range)
+          const at = blinkLand(p.x, p.z, aim.x, aim.z, canStand)
+          const eye = eyeRef.current ?? EYE_H
+          const topAt = (cx: number, cz: number) => {
+            const row = grid[cz]
+            if (!row || cx < 0 || cx >= row.length) return Infinity
+            const tile = row[cx]
+            if (tile !== -1 && SOLID[tile & 0xFF]) return Infinity
+            let top = -Infinity
+            for (const su of surfacesAt(ctx, cx, cz)) top = Math.max(top, su.y * STEP)
+            return blockedByObject(cx, cz) ? Math.max(top, 0) + 1.8 : top
+          }
+          const farY = at ? standY(at.x, at.z) : 0
+          const seen = !!at && at.dist >= GATE_MIN_REACH && sightClear(p.x, p.y + eye, p.z, at.x, farY + eye, at.z, topAt)
+          if (!at || at.dist < GATE_MIN_REACH) onBodyCast?.({ say: `${bc.label} — no ground to strike the far end`, refund: { slot: bc.slot, mana: bc.manaCost } })
+          else if (!seen) onBodyCast?.({ say: `${bc.label} — the far end must be in sight`, refund: { slot: bc.slot, mana: bc.manaCost } })
+          else onBodyCast?.({ say: bc.label, gate: { moveId: bc.moveId, near: { x: p.x, y: p.y, z: p.z }, far: { x: at.x, y: farY, z: at.z } } })
+        } else {
+          // the spiral carries her through: she arrives standing in the other end (which is disarmed
+          // until she steps out, `gate-spiral.ts`), with nothing she was carrying on the way in
+          letGo()
+          p.x = bc.x; p.z = bc.z; p.y = bc.y
+          hvel.set(0, 0, 0); vy.current = 0; airSpeed.current = 0; airborne.current = false
+        }
+      }
+
       move.set(0, 0, 0)
       if (k['w'] || k['arrowup']) move.add(fwd)
       if (k['s'] || k['arrowdown']) move.sub(fwd)
@@ -4092,6 +4172,52 @@ function GuideTrail({ posRef, heightsRef, targetRef }: {
   return <primitive object={guide.points} />
 }
 
+// ── GATE IN A FIGHT (SYSTEM 8, RULED 09-28): bill it, step the body through it, turn its two rings ──────────
+// The same shape as the voxel world's frame-loop block (`VoxelWorld.tsx`), as its own component because
+// play3d's body lives in Player and its pool lives in the page: this reads the feet from posRef, bills the
+// pool it is handed, and hands a crossing to the walker through the same mailbox a blink uses.
+function GateSpiralRings({ spiralRef, posRef, manaRef, bodyCastRef, onClosed }: {
+  spiralRef: React.MutableRefObject<GateSpiral | null>
+  posRef: React.RefObject<THREE.Vector3>
+  manaRef: React.RefObject<ManaPool>
+  bodyCastRef: React.MutableRefObject<BodyCast | null>
+  onClosed?: (moveId: string, why: SpiralClose) => void
+}) {
+  const near = useRef<THREE.Mesh>(null)
+  const far = useRef<THREE.Mesh>(null)
+  const geo = useMemo(() => new THREE.TorusGeometry(1, 0.07, 6, 28, Math.PI * 1.75), [])
+  const mat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xd9c8ff, transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false }), [])
+  useEffect(() => () => { geo.dispose(); mat.dispose() }, [geo, mat])
+  useFrame((_, dt) => {
+    const sp = spiralRef.current
+    const now = performance.now()
+    if (sp) {
+      const p = posRef.current, pool = manaRef.current
+      const st = stepSpiral(sp, p.x, p.y, p.z, Math.min(dt, 0.1), pool.current, now)
+      pool.current = Math.max(0, pool.current - st.drain)
+      spiralRef.current = st.spiral
+      if (st.warpTo) bodyCastRef.current = { kind: 'warp', x: st.warpTo.x, y: st.warpTo.y, z: st.warpTo.z }
+      if (st.closed) onClosed?.(sp.moveId, st.closed)
+    }
+    const live = spiralRef.current
+    const t = now * 0.002
+    ;[near.current, far.current].forEach((mesh, i) => {
+      if (!mesh) return
+      mesh.visible = !!live
+      if (!live) return
+      const e = i === 0 ? live.near : live.far
+      const fade = 1 - spiralAge(live, now) * 0.6
+      mesh.position.set(e.x, e.y + 1.1, e.z)
+      mesh.scale.setScalar(live.radius * fade)
+      mesh.rotation.set(0, i === 0 ? t * 0.3 : -t * 0.3, t * (i === 0 ? 1 : -1))
+    })
+  })
+  return (<>
+    <mesh ref={near} geometry={geo} material={mat} visible={false} />
+    <mesh ref={far} geometry={geo} material={mat} visible={false} />
+  </>)
+}
+
 const Scene = memo(function Scene(props: {
   zone: Zone; gridRef: React.RefObject<number[][]>; heights: number[][]; version: number; dims: string
   posRef: React.RefObject<THREE.Vector3>; heightsRef: React.RefObject<number[][]>; zoneIdRef: React.RefObject<string>
@@ -4101,6 +4227,12 @@ const Scene = memo(function Scene(props: {
   jumpRef: React.RefObject<boolean>; slideRef: React.RefObject<boolean>
   /** The hands read this; the walker writes it. Optional so a harness need not care. */
   bodyOut?: BodyOut
+  bodyCastRef?: React.MutableRefObject<BodyCast | null>
+  onBodyCast?: (r: BodyCastResult) => void
+  /** GATE IN A FIGHT — the one standing spiral (null = none), stepped + drawn by GateSpiralRings */
+  spiralRef?: React.MutableRefObject<GateSpiral | null>
+  manaPoolRef?: React.RefObject<ManaPool>
+  onSpiralClosed?: (moveId: string, why: SpiralClose) => void
   speedMultRef: React.RefObject<number>; dreamwalkRef: React.RefObject<boolean>
   weaponMoveRef: React.RefObject<number>; weaponIdxRef: React.RefObject<number>
   paint: (c: number, r: number, shift: boolean) => void; editing: boolean
@@ -4275,7 +4407,8 @@ const Scene = memo(function Scene(props: {
       {props.zone.id === WORLD_ZONE_ID ? <WorldFlora heights={props.heights} /> : <FloraDressing zoneId={props.zone.id} heights={props.heights} />}
       <StructureMarkers structures={structuresInZone} heights={props.heights} />
       <PlacementGhost placing={props.placing} posRef={props.posRef} heights={props.heights} gridRef={props.gridRef} placeTargetRef={props.placeTargetRef} structuresRef={props.structuresRef} zoneIdRef={props.zoneIdRef} />
-      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} bodyOut={props.bodyOut} />
+      <Player posRef={props.posRef} gridRef={props.gridRef} heightsRef={props.heightsRef} zoneIdRef={props.zoneIdRef} editRef={props.editRef} onWarp={props.onWarp} battleRef={props.battleRef} partyLevelRef={props.partyLevelRef} onEncounter={props.onEncounter} joyRef={props.joyRef} talkingRef={props.talkingRef} hasPartyRef={props.hasPartyRef} onNearChange={props.onNearChange} defeatedRef={props.defeatedRef} flagsRef={props.flagsRef} harvestNodesRef={props.harvestNodesRef} onNearNode={props.onNearNode} stationsRef={props.structuresRef} onNearStation={props.onNearStation} eyeRef={props.eyeRef} jumpRef={props.jumpRef} slideRef={props.slideRef} speedMultRef={props.speedMultRef} weaponMoveRef={props.weaponMoveRef} dreamwalkRef={props.dreamwalkRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} bodyOut={props.bodyOut} bodyCastRef={props.bodyCastRef} onBodyCast={props.onBodyCast} />
+      {props.spiralRef && props.manaPoolRef && props.bodyCastRef && <GateSpiralRings spiralRef={props.spiralRef} posRef={props.posRef} manaRef={props.manaPoolRef} bodyCastRef={props.bodyCastRef} onClosed={props.onSpiralClosed} />}
       {/* presence: other players in this zone (socket lives in the page comp — shared with the panel) */}
       <RemotePlayers peers={props.mpPeers} hideAt={plotHide} />
       {props.companionColor && !props.editing && <Follower posRef={props.posRef} heightsRef={props.heightsRef} color={props.companionColor} />}
@@ -6561,6 +6694,8 @@ export default function Shimmer3D() {
   const castWhyRef = useRef<(EmptyReason | null)[]>(ALL_BANDS.map(() => null))
   const castCdRef = useRef<number[]>(ALL_BANDS.map(() => 0))   // per-slot ready-at wall clock (ms)
   const pendingCastRef = useRef<CastSpec | null>(null)  // a projectile waiting for FiringRange to spawn it
+  const bodyCastRef = useRef<BodyCast | null>(null)       // a launch / blink / gate strike waiting for the walker
+  const spiralRef = useRef<GateSpiral | null>(null)       // GATE IN A FIGHT — the one standing spiral
   // the HELD stance (slot 0). Its effects are read live by the sim; holding it pauses mana recovery.
   const stanceRef = useRef<CastSpec | null>(null)
   const resistRef = useRef(0)     // incoming damage absorbed by the stance
@@ -7139,6 +7274,12 @@ export default function Shimmer3D() {
     // A held stance toggles OFF for free and instantly; everything else waits out its cooldown.
     const now = performance.now()
     const isDroppingStance = spec.archetype === 'stance' && stanceRef.current?.moveId === moveId
+    // a standing spiral is let go by pressing its own key again: free, instant, like dropping a stance
+    if (spec.archetype === 'gate' && spiralRef.current?.moveId === moveId) {
+      spiralRef.current = null
+      setHarvestToast(`${spec.label} — let go`)
+      return
+    }
     if (!isDroppingStance && now < castCdRef.current[slot]) return
 
     const syncStance = (s: CastSpec | null) => {
@@ -7198,12 +7339,45 @@ export default function Shimmer3D() {
         setHarvestToast(spec.label)
         break
       }
-      // impulse / channel / gate run in the voxel world only (they move the body or are held): say so,
-      // never a key that silently does nothing (cast-dispatch's honesty rule, held here too, 09-28)
+      // ── the casts that move the BODY (2026-09-28): paid here, applied by the walker on its next tick,
+      // which is the one writer of its velocity (`body-cast.ts` says why a mailbox and not a call). The
+      // toast comes back from the walker, because only it knows whether a blink found room.
+      case 'impulse': {
+        if (!tryCast(spec.manaCost)) return
+        bodyCastRef.current = spec.motion === 'launch'
+          ? { kind: 'launch', label: spec.label, fwd: spec.impulseFwd, up: spec.impulseUp }
+          : { kind: 'blink', label: spec.label, range: spec.castRange }
+        castCdRef.current[slot] = now + spec.cooldownMs
+        break
+      }
+      case 'gate': {
+        if (!tryCast(spec.manaCost)) return
+        bodyCastRef.current = { kind: 'gate', label: spec.label, moveId, range: spec.castRange, manaCost: spec.manaCost, slot }
+        castCdRef.current[slot] = now + spec.cooldownMs
+        break
+      }
+      // channel (Meltbore) runs in the voxel world only: a bore needs matter to open, and a tile world has
+      // none that is not a whole level's floor. Say so, never a key that silently does nothing (09-28)
       default:
         setHarvestToast(`${spec.label} — not in this world yet`)
     }
   }, [tryCast, syncWeaponMove])
+  // The walker's answer to a body cast: the sentence, a refund when a Gate struck nothing, or the spiral.
+  const onBodyCast = useCallback((r: BodyCastResult) => {
+    setHarvestToast(r.say)
+    if (r.refund) {
+      manaRef.current.current = Math.min(manaMax(), manaRef.current.current + r.refund.mana)
+      setManaFrac(manaRef.current.current / manaMax())
+      castCdRef.current[r.refund.slot] = 0
+    }
+    if (r.gate) spiralRef.current = openSpiral(r.gate.moveId, r.gate.near, r.gate.far, castForMove(r.gate.moveId), performance.now())
+  }, [])
+  const onSpiralClosed = useCallback((moveId: string, why: SpiralClose) => {
+    setHarvestToast(`${castForMove(moveId).label} — ${why === 'spent' ? 'spent' : 'closes'}`)
+    setManaFrac(manaRef.current.current / manaMax())
+  }, [])
+  // ★ IT NEVER LEAVES THE ZONE (RULED 09-28): a zone change closes the spiral, whatever the pool says
+  useEffect(() => { spiralRef.current = null; bodyCastRef.current = null }, [zone.id])
   // Owner dev tool: swap the birth rune LIVE (affinity + book + loadout all re-resolve) without a New
   // Game wipe, so the whole cast system is testable from one save. Persists so a reload keeps the pick.
   const setDevRune = useCallback((id: string) => {
@@ -7996,6 +8170,8 @@ export default function Shimmer3D() {
           ammoRef={ammoRef}
           reloadingRef={reloadingRef}
           pendingCastRef={pendingCastRef}
+          bodyCastRef={bodyCastRef} onBodyCast={onBodyCast}
+          spiralRef={spiralRef} manaPoolRef={manaRef} onSpiralClosed={onSpiralClosed}
           castMultRef={castMultRef} senseRadiusRef={senseRadiusRef} tremorRef={tremorRef}
           resistRef={resistRef}
           infusionRef={infusionRef}

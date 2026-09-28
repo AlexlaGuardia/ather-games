@@ -58,13 +58,14 @@ ok(out.kind === 'applied' && out.placed?.archetype === 'gate' && out.manaCost ==
 const no = resolveCast(3, [null, null, null, 'gate'], env(['projectile']))
 ok(no.kind === 'refused' && no.reason === 'unsupported', 'a world without the archetype refuses out loud')
 
-// E. the hosts: the voxel world runs it; play3d says "not in this world yet" instead of a dead key
+// E. the hosts: both worlds run it (play3d since 09-28's body-move path, `play3d/body-cast.test.ts`)
 const vw = readFileSync('src/app/shimmer/voxel3d/VoxelWorld.tsx', 'utf8')
 ok(/'channel', 'gate'\]/.test(vw), 'the voxel world declares it supports gate')
 ok(vw.includes('stepSpiral(sp, lc.px, lc.py, lc.pz, dt, mp.cur') && vw.includes('mp.cur = Math.max(0, mp.cur - st.drain)'), '★ the frame loop bills the pool and steps the body through')
 ok(vw.indexOf("the far end must be in sight") > 0 && vw.indexOf('m.cur += out.manaCost') > 0, '★ both ends in sight: a blind strike refunds and says why')
 const p3 = readFileSync('src/app/shimmer/play3d/Shimmer3D.tsx', 'utf8')
-ok(p3.includes('— not in this world yet`)'), 'play3d refuses impulse/channel/gate out loud')
+ok(p3.includes("case 'gate': {") && p3.includes('openSpiral(r.gate.moveId'), 'play3d runs the Gate too')
+ok(p3.includes('— not in this world yet`)'), 'what play3d still cannot run (channel) refuses out loud')
 
 console.log(`gate-spiral: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

@@ -343,7 +343,7 @@ export const KEEPER_MOVES: KeeperMove[] = [
   // book. That reasoning stands; there is simply nothing FORCING Iron Skin and something forcing
   // this one.
   { id: 'gate', name: 'Gate', tier: 'ultimate', runes: ['enchant', 'illuminate', 'metalergy'],
-    effect: 'Bind two points into one and step through. Utility, not damage — the founded craft.' },
+    effect: 'Bind two points into one and step through. Utility, not damage — the founded craft.', collar: 'no-contest' },
   { id: 'healing-grove', name: 'Healing Grove', tier: 'ultimate', runes: ['life', 'barrier'],
     effect: 'A living sanctuary grown and tended — everyone within is steadily restored.', collar: 'no-contest' },
   { id: 'cordon', name: 'Cordon', tier: 'ultimate', runes: ['stone', 'metalergy'],
