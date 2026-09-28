@@ -7198,6 +7198,10 @@ export default function Shimmer3D() {
         setHarvestToast(spec.label)
         break
       }
+      // impulse / channel / gate run in the voxel world only (they move the body or are held): say so,
+      // never a key that silently does nothing (cast-dispatch's honesty rule, held here too, 09-28)
+      default:
+        setHarvestToast(`${spec.label} — not in this world yet`)
     }
   }, [tryCast, syncWeaponMove])
   // Owner dev tool: swap the birth rune LIVE (affinity + book + loadout all re-resolve) without a New

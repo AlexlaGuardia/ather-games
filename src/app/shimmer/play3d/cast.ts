@@ -64,6 +64,7 @@ export type CastArchetype =
   | 'impulse'     // SYSTEM 4 — the cast moves the KEEPER: a launch or a blink (locomotion.ts)
   | 'infusion'    // a timed multiplier on the WEAPON, not the cast (Flame Infusion)
   | 'channel'     // SYSTEM 7 — a cast that is HELD: press, hold, release, billed per second (sustain.ts)
+  | 'gate'        // SYSTEM 8 — a bare spiral binding two points inside one fight, billed per second (engine/gate-spiral.ts)
   | 'unbuilt'     // registered in canon, no sim behaviour yet — labelled, never a silent no-op
 
 export interface CastSpec {
@@ -509,7 +510,14 @@ const BUILDS: Record<string, Build> = {
   // a two-point bind — you place an anchor, leave, and return to it later. That is a persistent
   // placed entity with its own lifetime, closer to conjured terrain than to a blink, and folding it
   // in here would have shipped it as 'a blink with extra words'. Its `why` is unchanged on purpose.
-  gate:      { archetype: 'unbuilt', why: 'needs a two-point bind + warp on a placed anchor' },
+  // ✅ BUILT 2026-09-28 (hub), ON ITS OWN ARCHETYPE, which is what the note above asked for. RULED the same day
+  // (`moves.md` › GATE IN A FIGHT): a bare spiral, both ends in sight on the fight's ground, closes when the
+  // caster stops spending, never leaves the zone, never outlasts the fight, never travel. So: `castRange` is how
+  // far down the reticle the far end is struck, `areaSize` how close you step to an end to go through, `areaSecs`
+  // the ceiling, `sustainDrain` the bill per second (18 to strike + ~3/s net of regen: a fresh 100 pool holds it
+  // the full 12s with about half left). Novice depth: short, and
+  // it never sinks a lasting doorway — that stays Eyuun's.
+  gate:      { archetype: 'gate', manaCost: 18, cooldownMs: 16000, castRange: 14, areaSize: 1.1, areaSecs: 12, sustainDrain: 4 },
   // "A living sanctuary grown and tended — everyone within is steadily restored." Wide, long, and
   // NOT cover: a grove you can shoot through is a place you choose to stand, not a place to hide.
   'healing-grove': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 7, areaSize: 5.5, areaSecs: 14, fieldHps: 14, fieldStopsShots: false },

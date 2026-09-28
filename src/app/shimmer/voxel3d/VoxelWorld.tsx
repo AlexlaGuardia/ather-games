@@ -363,6 +363,7 @@ import { HandsTuner } from '../hud/hands-tuner'
 import { CastGauges, type CastHud } from './cast-gauges'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
+import { openSpiral, stepSpiral, spiralAge, type GateSpiral } from '../engine/gate-spiral'
 import { spawnField, tickFields, containsVolume, fieldsAtVolume, absorbShotAtVolume, absorbStrikeAtVolume, absorbWardAt, wardStrain, shellWear,
          FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { SHELL_TIERS, wearTier, tierOpacity, crackLines } from './shell-cracks'
@@ -6313,6 +6314,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
   // below), which is also the only differentiator the render-audit rule allows.
   const fields = useRef<Field[]>([])
   const fieldMeshes = useRef(new Map<number, THREE.Mesh>())
+  // ── GATE IN A FIGHT (SYSTEM 8, RULED + built 2026-09-28): one bare spiral at a time, two ends, billed per
+  // second (`engine/gate-spiral.ts`). Two rings, one shared geometry + material, turned in the frame loop.
+  const spiral = useRef<GateSpiral | null>(null)
+  const spiralMeshes = useRef<THREE.Mesh[]>([])
+  const spiralGeo = useMemo(() => new THREE.TorusGeometry(1, 0.07, 6, 28, Math.PI * 1.75), [])
+  const spiralMat = useMemo(() => new THREE.MeshBasicMaterial({ color: 0xd9c8ff, transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false }), [])
 
   // ── cast TERRAIN (SYSTEM 2, ported 2026-08-14) — REAL BLOCKS, not a parallel entity ────────────
   // The cells live in the pure module; what makes this the better half of the port is that the host
@@ -7008,7 +7015,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
    * 7 more casts.
    */
   const supports = useMemo<ReadonlySet<CastArchetype>>(
-    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field', 'terrain', 'status', 'impulse', 'channel']), [])
+    () => new Set<CastArchetype>([...SELF_ARCHETYPES, 'projectile', 'field', 'terrain', 'status', 'impulse', 'channel', 'gate']), [])
 
   const castSlot = useCallback((slot: number, g: THREE.Group) => {
     const v = vitals.current, m = mana.current
@@ -7026,6 +7033,12 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // rebindable, and a literal here would be a copy of a binding the player can change.
       emptyWhy: loadoutRes.current.why,
       panelKey: hintFor(bindings.current, 'ui.inventory', 'key') ?? undefined,
+    }
+    // a standing spiral is let go by pressing its own key again: free, instant, like dropping a stance
+    if (spiral.current && loadoutRes.current.slots[slot] === spiral.current.moveId) {
+      onSay(`${castForMove(spiral.current.moveId).label} — let go`)
+      spiral.current = null
+      return
     }
     const out = resolveCast(slot, loadoutRes.current.slots, env)
     if (out.kind === 'refused') {
@@ -7090,6 +7103,34 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // Same honesty rule the status cast follows: a blink is invisible when it fails, so a short
         // one has to say so rather than looking like the key did nothing.
         onSay(moved < 1 ? `${out.placed.label} — no room to step` : out.placed.label)
+      }
+    }
+    if (out.placed && out.placed.archetype === 'gate') {
+      // ★ BOTH ENDS IN SIGHT, ON THE FIGHT'S GROUND (RULED 09-28). The far end is struck where a blink down the
+      // reticle would land (the same safe-arrival path Thunder Step uses, run on a COPY so nothing moves yet),
+      // and the line from the eye to it must be clear. A strike that finds neither refunds: nothing was opened.
+      const f = new THREE.Vector3()
+      camera.getWorldDirection(f)
+      const p = loco.current
+      const aim = castAimPoint(f.x, f.z, p.px, p.pz, out.placed.castRange)
+      const groundY = (x: number, z: number) => columnHeight(Math.floor(x), Math.floor(z), SEED) + 1
+      const test = { ...p }
+      const reach = blinkKeeper(test, aim.x, aim.z, groundY, solidProbe)
+      const eyeH = eyeY(p) - p.py
+      let seen = reach >= 1.5
+      for (let t = 0.1; seen && t < 1; t += 0.1) {
+        const x = p.px + (test.px - p.px) * t, z = p.pz + (test.pz - p.pz) * t
+        const y = p.py + eyeH + (test.py + eyeH - p.py - eyeH) * t
+        const c = solidProbe(Math.floor(x), Math.floor(y), Math.floor(z))
+        if (c === CELL_SOLID) seen = false
+      }
+      if (!seen) {
+        m.cur += out.manaCost
+        if (out.cooldownUntil !== null) castCd.current[slot] = 0
+        onSay(reach < 1.5 ? `${out.placed.label} — no ground to strike the far end` : `${out.placed.label} — the far end must be in sight`)
+      } else {
+        spiral.current = openSpiral(out.placed.moveId, { x: p.px, y: p.py, z: p.pz }, { x: test.px, y: test.py, z: test.pz }, out.placed, env.now)
+        onSay(out.placed.label)
       }
     }
     if (out.placed && out.placed.archetype === 'status') {
@@ -7494,6 +7535,33 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           }
           conjured.current = next
         }
+      }
+
+      // ── GATE IN A FIGHT: bill it, step through it, turn its rings ─────────────────────────────
+      if (spiral.current || spiralMeshes.current.length) {
+        const sp = spiral.current
+        if (sp) {
+          const lc = loco.current, mp = mana.current
+          const st = stepSpiral(sp, lc.px, lc.py, lc.pz, dt, mp.cur, performance.now())
+          mp.cur = Math.max(0, mp.cur - st.drain)
+          spiral.current = st.spiral
+          if (st.warpTo) blinkKeeper(lc, st.warpTo.x, st.warpTo.z, (x, z) => columnHeight(Math.floor(x), Math.floor(z), SEED) + 1, solidProbe)
+          if (st.closed) onSay(`${castForMove(sp.moveId).label} — ${st.closed === 'spent' ? 'spent' : 'closes'}`)
+        }
+        const live = spiral.current
+        if (!spiralMeshes.current.length) {
+          for (let i = 0; i < 2; i++) { const mesh = new THREE.Mesh(spiralGeo, spiralMat); g.add(mesh); spiralMeshes.current.push(mesh) }
+        }
+        const tNow = performance.now() * 0.002
+        spiralMeshes.current.forEach((mesh, i) => {
+          mesh.visible = !!live
+          if (!live) return
+          const e = i === 0 ? live.near : live.far
+          const fade = 1 - spiralAge(live, performance.now()) * 0.6
+          mesh.position.set(e.x, e.y + 1.1, e.z)
+          mesh.scale.setScalar(live.radius * fade)
+          mesh.rotation.set(0, i === 0 ? tNow * 0.3 : -tNow * 0.3, tNow * (i === 0 ? 1 : -1))
+        })
       }
 
       // ── cast FIELDS: tick, bite, mend, render ──────────────────────────────────────────────
