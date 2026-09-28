@@ -28,6 +28,17 @@ import {
 } from '../src/app/shimmer/play3d/hold'
 import { readSessionToken, SESSION_COOKIE } from '../src/lib/accounts/session'
 
+// ★ READ .env ITSELF, AT START (PATTERNS: pm2 --update-env re-injects the value pm2 saw FIRST, so a secret rotated in
+// .env would never reach a pm2-started process). Only fills what the environment does not already set.
+{
+  try {
+    const { readFileSync } = await import('node:fs')
+    for (const line of readFileSync(new URL('../.env', import.meta.url), 'utf8').split('\n')) {
+      const m = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim())
+      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '')
+    }
+  } catch { /* no .env: the caller's environment is all there is */ }
+}
 const PORT = Number(process.env.BREACH_PORT ?? 8410)
 const TICK_HZ = 30, SNAP_HZ = 10
 export const MAX_KEEPERS = 3
