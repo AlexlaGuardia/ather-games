@@ -747,7 +747,7 @@ function autoplay(seed: number, secs: number, surge = false): HoldState {
   const m1 = startHold(map), m2 = startHold(map); m2.studied = ['mend']
   m1.planks[0] = 0; m2.planks[0] = 0
   for (let t = 0; t < T.mendSec * 0.6; t += 0.01) { mendTick(m1, 0, 0.01); mendTick(m2, 0, 0.01) }
-  ok(m1.planks[0] === 0 && m2.planks[0] === 1, 'Their Seal Notes: a plank in half the time')
+  ok(m1.planks[0] === 0 && m2.planks[0] === 1, 'The Seal Notes: a plank in half the time')
   console.log(`  lab: wrack swift ${sw.toFixed(2)} bulk ${bu.toFixed(2)} · nodes ${LAB_NODES.map(n => `${n.id}:${n.cost}`).join(' ')}`)
 }
 
