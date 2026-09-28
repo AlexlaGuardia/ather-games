@@ -140,18 +140,46 @@ export const emptyVessel = (kind: Vessel, tier: VesselTier = 1): StowedVessel =>
  * uncut and says so.
  */
 export function floorWordFor(kind: Vessel, birth: string | null, owned: readonly string[] = []): string | null {
-  const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
-  if (!band || !birth) return null
-  const lane = LANE_FOR_KIND[band]
-  if (!lane) return null
-  const onIt = laneRunes(birth, lane)
-  const fits = KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && lettersOf(m, birth).length === FLOOR_SEATS && m.runes.every(r => onIt.has(r)))
+  const fits = floorCandidates(kind, birth)
   const opens = (m: KeeperMove) => (m as { collar?: string }).collar === 'opens'
   // ★ a word the keeper can ALREADY write comes first (Alex held Lightning when Greg's bracelet was cut,
   // and a bracelet made for Enlighten — a rune he did not hold — would have refused the gem in his hand);
   // then a word that opens a collar; then the registry's first
   const writable = fits.filter(m => m.runes.every(r => owned.includes(r)))
   return (writable.find(opens) ?? writable[0] ?? fits.find(opens) ?? fits[0])?.id ?? null
+}
+export type StarterRole = NonNullable<KeeperMove['role']>
+export const STARTER_ROLES: readonly StarterRole[] = ['attack', 'defense', 'support']
+/** every word Greg could cut the `kind` floor for, on this birth's lane — the same filter `floorWordFor` uses */
+export function floorCandidates(kind: Vessel, birth: string | null): KeeperMove[] {
+  const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
+  const lane = band ? LANE_FOR_KIND[band] : null
+  if (!band || !birth || !lane) return []
+  const onIt = laneRunes(birth, lane)
+  return KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && lettersOf(m, birth).length === FLOOR_SEATS && m.runes.every(r => onIt.has(r)))
+}
+/**
+ * ★ GREG'S OFFER (Alex, 2026-09-28): the keeper CHOOSES the bracelet's word from up to three, one per
+ * role, instead of the registry picking. A starter set per birth rune falls out of the filter rather
+ * than being hand-authored seventeen times. A role this lane has no word for is not faked: the slot
+ * goes to the next unused word, marked `role: null`, so the keeper still sees three real options.
+ * Collar-openers first within a role (the road fight is answered with them), then registry order.
+ * ⚠ NOT WIRED YET: waiting on Magii for "Greg offers a choice and teaches the word" (CANON_GAPS).
+ */
+export function starterChoices(kind: Vessel, birth: string | null): { move: KeeperMove; role: StarterRole | null }[] {
+  const pool = floorCandidates(kind, birth)
+  const opens = (m: KeeperMove) => (m as { collar?: string }).collar === 'opens'
+  const ranked = [...pool.filter(opens), ...pool.filter(m => !opens(m))]
+  const out: { move: KeeperMove; role: StarterRole | null }[] = []
+  for (const role of STARTER_ROLES) {
+    const m = ranked.find(x => x.role === role)
+    if (m) out.push({ move: m, role })
+  }
+  for (const m of ranked) {
+    if (out.length >= STARTER_ROLES.length) break
+    if (!out.some(o => o.move.id === m.id)) out.push({ move: m, role: null })
+  }
+  return out
 }
 /** Greg's vessel of `kind`, cut for the keeper's lane — `emptyVessel` at the floor tier with its word */
 export const floorVessel = (kind: Vessel, birth: string | null, owned: readonly string[] = []): StowedVessel => {
