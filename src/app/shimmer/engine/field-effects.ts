@@ -66,6 +66,24 @@ export interface FieldDef {
    * was not updated keep constructing indestructible cover silently.
    */
   hp: number
+  /**
+   * ── ★ A WARD: A SHELL THAT MENDS ITSELF OUT OF WHAT IT STOPS (Overpressure, built 2026-09-28) ──
+   * Canon (`moves.md` › Overpressure): *"a shell thrown over the keeper and everyone near them, which
+   * mends itself out of what it stops … its cost is Gem's own law: one flaw and it shatters."* Absent
+   * = not a ward, which is the safe direction (a field that forgot this is an ordinary field, never a
+   * shell that silently heals). A ward is NOT cover: blows land on the BODY inside it (`absorbWardAt`),
+   * so the keeper's own shots leave it freely. `hp` is the shell's pool.
+   */
+  ward?: WardDef
+}
+
+export interface WardDef {
+  /** fraction of every absorbed point paid straight back out as shell (0-1) */
+  mend: number
+  /** total absorbed damage at which the flaw finds the keeper and the shell shatters */
+  flaw: number
+  /** what the shatter costs the body inside: the danger scales with exactly the thing that made it strong */
+  backlash: number
 }
 
 /**
@@ -89,6 +107,8 @@ export interface Field extends FieldDef {
   nextTick: number
   /** `hp` as spawned — the denominator of `shellWear`. 0 for cover that does not break. */
   hpMax: number
+  /** a ward's running total of what it has stopped (the pressure the flaw is measured against) */
+  banked: number
 }
 
 /** one effect application per second — slow enough to read, fast enough to matter */
@@ -106,7 +126,7 @@ export function resetFieldIds(): void { nextId = 1 }
  * new one — a player who just paid mana must always see their cast happen.
  */
 export function spawnField(fields: Field[], def: FieldDef, now: number): Field[] {
-  const f: Field = { ...def, id: nextId++, until: now + def.secs * 1000, nextTick: now + FIELD_TICK_MS, hpMax: def.hp }
+  const f: Field = { ...def, id: nextId++, until: now + def.secs * 1000, nextTick: now + FIELD_TICK_MS, hpMax: def.hp, banked: 0 }
   const kept = fields.length >= MAX_FIELDS ? fields.slice(1) : fields
   return [...kept, f]
 }
@@ -211,6 +231,37 @@ export function absorbShotAtVolume(fields: Field[], x: number, y: number, z: num
  */
 export function absorbStrikeAtVolume(fields: Field[], x: number, y: number, z: number, dmg: number): ShotAbsorbed {
   return absorb(fields, fields.findIndex((f) => f.stopsShots && f.hp > 0 && containsVolume(f, x, y, z)), dmg)
+}
+
+/** What a blow on a warded body did. `spill` is what still reaches the body (with any backlash in it). */
+export interface WardAbsorbed { fields: Field[]; hit: Field | null; spill: number; broke: boolean; flawed: boolean }
+
+/**
+ * A blow lands on a body standing inside a WARD (Overpressure). The ward takes what it can hold; if the
+ * blow is bigger than the shell, the shell breaks and the rest spills. Otherwise every absorbed point
+ * is banked, and `mend` of it is paid straight back out as shell (never past `hpMax`), so a ward under
+ * steady fire costs the keeper almost nothing. When the bank reaches `flaw` the pressure finds the
+ * flaw: the shell shatters and `backlash` lands on the body. `inside` is the host's own containment
+ * test (play3d asks the footprint, the voxel world the slab), so this stays one rule for both worlds.
+ */
+export function absorbWardAt(fields: Field[], inside: (f: Field) => boolean, dmg: number): WardAbsorbed {
+  const idx = fields.findIndex((f) => !!f.ward && f.hp > 0 && inside(f))
+  const d = Math.max(0, dmg)
+  if (idx < 0) return { fields, hit: null, spill: d, broke: false, flawed: false }
+  const f = fields[idx], w = f.ward!
+  const absorbed = Math.min(f.hp, d)
+  const banked = f.banked + absorbed
+  const without = fields.filter((_, i) => i !== idx)
+  if (banked >= w.flaw) return { fields: without, hit: f, spill: d - absorbed + w.backlash, broke: true, flawed: true }
+  if (f.hp - absorbed <= 0) return { fields: without, hit: f, spill: d - absorbed, broke: true, flawed: false }
+  const hp = Math.min(f.hpMax, f.hp - absorbed + absorbed * w.mend)
+  const next = fields.slice(); next[idx] = { ...f, hp, banked }
+  return { fields: next, hit: next[idx], spill: d - absorbed, broke: false, flawed: false }
+}
+
+/** How close a ward is to its flaw, 0 (fresh) → 1 (about to shatter). The HUD's crack reads THIS. */
+export function wardStrain(f: Field): number {
+  return f.ward && f.ward.flaw > 0 ? Math.min(1, f.banked / f.ward.flaw) : 0
 }
 
 /**

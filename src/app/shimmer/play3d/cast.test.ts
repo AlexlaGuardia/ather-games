@@ -125,7 +125,10 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     // honesty rule outlaws. Cover joined the list 2026-09-02 with Threshold, the first zero-damage
     // field: a shield set down across a doorway that stops shots and nothing else. The rule was not
     // loosened for it; a field with all three off still fails here, which is the case this exists for.
-    if (s.archetype === 'field' && !(s.areaSize > 0 && s.areaSecs > 0 && s.castRange > 0 && (s.fieldDps > 0 || s.fieldHps > 0 || s.fieldStopsShots))) wrong2.push(m.id)
+    // ★ a WARD (Overpressure, 09-28) is the one field thrown over the keeper, so its range is 0 and its
+    // effect is the shell itself; it must still carry a shell AND a flaw, or it is a field that does nothing
+    const isWard = s.wardFlaw > 0 && s.fieldHp > 0 && s.wardMend > 0 && s.wardMend < 1
+    if (s.archetype === 'field' && !(s.areaSize > 0 && s.areaSecs > 0 && (s.castRange > 0 || isWard) && (s.fieldDps > 0 || s.fieldHps > 0 || s.fieldStopsShots || isWard))) wrong2.push(m.id)
     if (s.archetype === 'terrain' && !(s.areaSize > 0 && s.areaSecs > 0 && s.castRange > 0)) wrong2.push(m.id)
     if (s.archetype === 'status' && !(s.areaSize > 0 && s.areaSecs > 0 && s.castRange > 0 && s.statuses.length > 0)) wrong2.push(m.id)
     if (s.archetype === 'infusion' && !(s.surgeSecs > 0 && s.surgeMult > 1)) wrong2.push(m.id)

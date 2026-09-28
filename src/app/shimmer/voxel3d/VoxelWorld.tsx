@@ -363,7 +363,7 @@ import { HandsTuner } from '../hud/hands-tuner'
 import { CastGauges, type CastHud } from './cast-gauges'
 import { getMaxPool, getRegenRate } from '../engine/mana'
 import { resolveCast, SELF_ARCHETYPES, castAimPoint, type CastEnv } from '../engine/cast-dispatch'
-import { spawnField, tickFields, containsVolume, fieldsAtVolume, absorbShotAtVolume, absorbStrikeAtVolume, shellWear,
+import { spawnField, tickFields, containsVolume, fieldsAtVolume, absorbShotAtVolume, absorbStrikeAtVolume, absorbWardAt, wardStrain, shellWear,
          FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { SHELL_TIERS, wearTier, tierOpacity, crackLines } from './shell-cracks'
 import { conjure, shapeCells, expireConjured, conjuredWriteCells, type Conjured } from '../engine/conjured-terrain'
@@ -440,7 +440,7 @@ const CAST_ACTIONS: readonly ActionId[] =
 import { RUNES } from '../play3d/birth/runes.data'
 import { VesselArt } from '../play3d/vessel-art'
 import { knownMoves } from '../play3d/keeper-moves'
-import { CAST_SLOTS, ALL_BANDS, derivePassive, eligibleMoves, isBuilt, castForMove, type SlotKind } from '../play3d/cast'
+import { CAST_SLOTS, ALL_BANDS, derivePassive, eligibleMoves, isBuilt, castForMove, wardOf, type SlotKind } from '../play3d/cast'
 import { saveLoadout, setSlot, resolveLoadout, emptySlotWhy,
          type Loadout, type ResolvedLoadout } from '../play3d/loadout'
 import { keeperBook, saveBook } from '../play3d/book'
@@ -7062,7 +7062,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         moveId: out.placed.moveId, x: aim.x, y: gy, z: aim.z,
         radius: out.placed.areaSize, height: FIELD_HEIGHT, secs: out.placed.areaSecs,
         dps: out.placed.fieldDps, hps: out.placed.fieldHps, stopsShots: out.placed.fieldStopsShots,
-        hp: out.placed.fieldHp,
+        hp: out.placed.fieldHp, ward: wardOf(out.placed),
       }, env.now)
     }
     if (out.placed && out.placed.archetype === 'impulse') {
@@ -7557,7 +7557,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           // colour on the caster's soul, not the move, so two fields of one keeper share a hue.
           // A worn shell also SHIVERS: the pulse gets faster and rougher with wear. Motion is the
           // one tell the colour rule leaves, and a door about to go should not breathe evenly.
-          const wear = shellWear(fd)
+          // a WARD mends, so its hp barely moves: its tell is the PRESSURE banked toward the flaw
+          const wear = Math.max(shellWear(fd), wardStrain(fd))
           const rate = (fd.hps > 0 ? 1.4 : 7.5) * (1 + wear * 1.5)
           const amp = (fd.hps > 0 ? 0.05 : 0.02) + wear * 0.04
           const pulse = 1 + Math.sin(nowMs * 0.001 * rate + fd.id) * amp
@@ -8466,12 +8467,25 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
             const label = castForMove(shell.hit.moveId).label
             onSay(shell.broke ? `${label} — shattered` : `${label} takes the blow`)
           }
-          if (hit.hp > 0 && !shell?.hit) {
+          // ★ A WARD ON THE BODY (Overpressure) takes what the door did not: it mends out of the blow, and
+          // on its flaw shatters with a backlash that joins the wound
+          let blow = hit.hp
+          if (blow > 0 && !shell?.hit && fields.current.some((f) => f.ward)) {
+            const w = absorbWardAt(fields.current, (f) => containsVolume(f, kp.px, kp.py, kp.pz), blow)
+            if (w.hit) {
+              fields.current = w.fields
+              const label = castForMove(w.hit.moveId).label
+              if (w.flawed) onSay(`${label} — the flaw finds you, and it shatters`)
+              else if (w.broke) onSay(`${label} — broken`)
+              blow = w.spill
+            }
+          }
+          if (blow > 0 && !shell?.hit) {
             // ★★ THE FIRST THING IN THE ATHER THAT WOUNDS A KEEPER (Alex ruled 2026-08-26, closing
             // the cozy-vs-peril gap `hollows.ts` deliberately left open). It routes through
             // `vitals.damage()` — the wounding path that has existed, tested, with NO caller since
             // it was written — so the stance resist folds in exactly as it does everywhere else.
-            const res = damage(vitals.current, hit.hp, stance.current?.resist ?? 0)
+            const res = damage(vitals.current, blow, stance.current?.resist ?? 0)
             vitals.current = res.vitals
             lastPressed.current = state.clock.elapsedTime
             if (res.downed && !dispossessed.current) {

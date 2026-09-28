@@ -100,7 +100,7 @@ console.log('\n── D. the host maps wear through SHARED tiers, and constructs
   const src = readFileSync('src/app/shimmer/voxel3d/VoxelWorld.tsx', 'utf8')
   const nc = noComments(src), code = codeOnly(src)
   const count = (s: string, re: RegExp) => (s.match(new RegExp(re.source, 'g')) || []).length
-  chk('the loop reads wear from the engine (shellWear), once', count(code, /const wear = shellWear\(fd\)/) === 1)
+  chk('the loop reads wear from the engine (shellWear), once', count(code, /const wear = Math\.max\(shellWear\(fd\), wardStrain\(fd\)\)/) === 1)
   chk('the tier is the pure ladder, not a hand-rolled threshold', count(code, /const tier = wearTier\(wear\)/) === 1)
   chk('★ the body is pointed at a SHARED tier material (a swap, not a mutation)', count(code, /mesh\.material = shellMats\[tier\]/) === 1)
   chk('★ the cracks are pointed at a SHARED tier geometry', count(code, /cracks\.geometry = crackGeos\[tier\]/) === 1)

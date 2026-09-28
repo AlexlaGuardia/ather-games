@@ -173,8 +173,9 @@ console.log('\n── ★ the hosts ask the reader with the bill attached, not t
   chk('voxel: the spawn hands the spec\'s hp in', count(vw, /hp: out\.placed\.fieldHp/) === 1)
   chk('voxel: a shattered shell says so (one template, both doors — round and blow)', count(vw, /shattered/) === 2)
   chk('voxel: the blow asks the STRIKE reader at the keeper\'s feet, once', count(vw, /absorbStrikeAtVolume\(fields\.current, kp\.px, kp\.py, kp\.pz, hit\.hp\)/) === 1)
-  chk('voxel: the wound is skipped only when a shell took the blow', count(vw, /if \(hit\.hp > 0 && !shell\?\.hit\) \{/) === 1)
-  chk('voxel: the shell is asked BEFORE the wound, not after', vw.indexOf('absorbStrikeAtVolume(fields.current') < vw.indexOf('damage(vitals.current, hit.hp'))
+  chk('voxel: the wound is skipped only when a shell took the blow', count(vw, /if \(blow > 0 && !shell\?\.hit\) \{/) === 1)
+  chk('voxel: the shell is asked BEFORE the wound, not after', vw.indexOf('absorbStrikeAtVolume(fields.current') < vw.indexOf('damage(vitals.current, blow'))
+  chk('voxel: ★ a WARD is asked after the door and before the wound, and the wound is its spill', vw.indexOf('absorbStrikeAtVolume(fields.current') < vw.indexOf('absorbWardAt(fields.current') && vw.indexOf('absorbWardAt(fields.current') < vw.indexOf('damage(vitals.current, blow') && count(vw, /blow = w\.spill/) === 1)
   // ⚠ Found by mutation: the host could say 'takes the blow' and never charge the shell — an absorbed
   // strike that costs nothing is an immortal door with a working say-line. The payment is one
   // assignment, and it must be the strike result's list, not the shot path's.

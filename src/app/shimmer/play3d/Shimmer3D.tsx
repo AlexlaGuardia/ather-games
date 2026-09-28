@@ -60,7 +60,7 @@ import { saveKey, saveOwner } from '@/lib/save-slot'
 import { birthAffinity, NEUTRAL_AFFINITY, attunementResist, combineResist, type Affinity } from './birth-affinity'
 import TremorRing, { TremorSenseHud, emptyReadout, type TremorReadout } from './TremorRing'
 import { senseGround, type SensedBody } from './tremor-sense'
-import { castForMove, isBuilt, CAST_SLOTS, ALL_BANDS, BAND_KEYS, derivePassive, type CastSpec } from './cast'
+import { castForMove, isBuilt, wardOf, CAST_SLOTS, ALL_BANDS, BAND_KEYS, derivePassive, type CastSpec } from './cast'
 import { getRegenRate } from '../engine/mana'
 import { moveById } from './keeper-moves'
 import { loadLoadout, resolveLoadout, emptySlotSentence, type EmptyReason } from './loadout'
@@ -69,7 +69,7 @@ import { fillRoster, ROSTER_SIZE } from './crucible-bots'
 import { startingPositions } from './crucible-entrances'
 import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from './crucible-fleet'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
-import { spawnField, tickFields, fieldsAt, absorbShotAt, FIELD_HEIGHT, type Field } from '../engine/field-effects'
+import { spawnField, tickFields, fieldsAt, absorbShotAt, absorbWardAt, contains, FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from '../engine/conjured-terrain'
 import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget, type StatusBag } from '../engine/statuses'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
@@ -2704,6 +2704,17 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // omitted source resists nothing, which is the fail-open direction and the correct one — an
   // untyped hit must not be silently treated as the keeper's own attunement.
   const hurtPlayer = useCallback((raw: number, sourceRunes?: string | readonly string[] | null) => {
+    // ★ A WARD IS THE OUTERMOST LAYER (Overpressure): it takes the blow before the body's own resist,
+    // mends out of it, and on its flaw shatters with a backlash that joins the spill
+    const kp = posRef.current
+    if (kp && fieldsRef.current.some(f => f.ward)) {
+      const w = absorbWardAt(fieldsRef.current, f => contains(f, kp.x, kp.z), raw)
+      if (w.hit) {
+        fieldsRef.current = w.fields
+        raw = w.spill
+        if (raw <= 0) return
+      }
+    }
     const resist = combineResist(resistRef.current ?? 0, attunementResist(birthRuneRef.current, sourceRunes))
     const dmg = raw * (1 - resist)
     const sh = shieldRef.current
@@ -2712,7 +2723,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     if (spill > 0) hpRef.current = Math.max(0, hpRef.current - spill)
     if (hpRef.current <= 0) { hpRef.current = hpMaxRef.current ?? MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD; onPlayerDown() }
     else onPlayerDamage()
-  }, [resistRef, birthRuneRef, shieldRef, hpRef, hpMaxRef, shieldMaxRef, onPlayerDamage, onPlayerDown])
+  }, [resistRef, birthRuneRef, shieldRef, hpRef, hpMaxRef, shieldMaxRef, onPlayerDamage, onPlayerDown, posRef, fieldsRef])
   // Tremor Sense scratch. Reused across frames — a sense that allocated a fresh array 10x a second
   // would be the only allocating thing in this loop.
   const senseAcc = useRef(0)
@@ -2849,7 +2860,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         if (pending.archetype === 'field') {
           fieldsRef.current = spawnField(fieldsRef.current, {
             moveId: pending.moveId, x: ax, z: az, radius: pending.areaSize, secs: pending.areaSecs,
-            dps: pending.fieldDps, hps: pending.fieldHps, stopsShots: pending.fieldStopsShots, hp: pending.fieldHp,
+            dps: pending.fieldDps, hps: pending.fieldHps, stopsShots: pending.fieldStopsShots, hp: pending.fieldHp, ward: wardOf(pending),
             // y/height are new (the voxel port made a field a slab). play3d's own readers stay 2D,
             // so these change nothing here — they are recorded truthfully rather than faked.
             y: posRef.current?.y ?? 0, height: FIELD_HEIGHT,

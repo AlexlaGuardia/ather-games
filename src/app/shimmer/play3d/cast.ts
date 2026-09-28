@@ -145,6 +145,13 @@ export interface CastSpec {
    * carries one today; Alex ruled shield HP for placed fields 2026-09-02.
    */
   fieldHp: number
+  /**
+   * field: a WARD (Overpressure) — `fieldHp` is its shell, and it mends out of what it stops. `wardFlaw`
+   * 0 = not a ward. See `field-effects.ts` › `WardDef` / `absorbWardAt`.
+   */
+  wardMend: number
+  wardFlaw: number
+  wardBacklash: number
   /** terrain: which shape is raised */
   shape: ConjureShape
   /**
@@ -223,7 +230,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   resist: 0, moveMult: 1, castMult: 1, regenMult: 1,
   surgeSecs: 0, surgeMult: 1,
   castRange: 0, areaSize: 0, areaSecs: 0,
-  fieldDps: 0, fieldHps: 0, fieldStopsShots: false, fieldHp: 0,
+  fieldDps: 0, fieldHps: 0, fieldStopsShots: false, fieldHp: 0, wardMend: 0, wardFlaw: 0, wardBacklash: 0,
   shape: 'wall', shapeHeight: 1, statuses: [],
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
@@ -512,17 +519,17 @@ const BUILDS: Record<string, Build> = {
   // single sentence, so the dispatcher applies a terrain cast's `statuses` too when it carries any.
   cordon:    { archetype: 'terrain', manaCost: 45, cooldownMs: 25000, castRange: 10, areaSize: 4, areaSecs: 8, shape: 'ring', shapeHeight: 3, statuses: ['disarmed'] },
   'grey-arena': { archetype: 'unbuilt', why: 'canon requires manatech (a drain-engine) the player has no access to' },
-  // ⚠ UNBUILT ON PURPOSE, AND NOT FOR WANT OF EFFORT. Canon's mechanic is a shell that BANKS what
-  // it stops and pays it back out as more shell — "a defence funded by the attack on it". None of
-  // the ten archetypes expresses absorb-and-convert: a 'field' that stops shots would be a plain
-  // bubble, which is precisely the "shipped it as a blink with extra words" mistake the `gate` note
-  // above warns about. Registered, labelled, never a silent no-op.
-  // ⚠ CORRECTED 2026-08-31 — the old reason said it needed *"a damage-to-shield bank"*, and one
-  // exists: `engine/vitals.ts` carries shields with a ruled damage ORDER (resist → shield → spill).
-  // What is actually missing is narrower and worth naming precisely, because the wide version reads
-  // as a much bigger job than it is: the shield must MEND ITSELF out of what it absorbs, and nothing
-  // feeds absorbed damage back into the pool.
-  overpressure: { archetype: 'unbuilt', why: 'the shield bank exists; nothing feeds ABSORBED damage back into it — the layer cannot yet mend itself out of what it stops' },
+  // ✅ BUILT 2026-09-28 (hub). The reason it stood unbuilt was one precise missing thing, *"nothing feeds
+  // ABSORBED damage back into the pool"*, and that is now `field-effects.ts` › `absorbWardAt`: a WARD
+  // field (a shell on the BODY, not cover, so the keeper's own shots leave it) that banks every blow it
+  // takes and pays `wardMend` of it straight back as shell. Canon's cost is the other half and is
+  // modelled, not waved at: the bank is also the pressure, and at `wardFlaw` it shatters with
+  // `wardBacklash` on the keeper. Numbers are Jin's: a 60 shell at 0.75 mend loses a quarter of every
+  // blow, so it would wear through at ~240 absorbed; the flaw at 180 arrives FIRST under heavy fire,
+  // which is the line *"the danger scales with exactly the thing that makes it strong"*. Dropped where
+  // the keeper stands (castRange 0) and wide enough for the people near them; stepping out leaves it.
+  overpressure: { archetype: 'field', manaCost: 44, cooldownMs: 24000, castRange: 0, areaSize: 3.5, areaSecs: 12,
+                  fieldStopsShots: false, fieldHp: 60, wardMend: 0.75, wardFlaw: 180, wardBacklash: 25 },
 
   // ── The Great Registration's ultimates (2026-08-13) ──────────────────────────────────────────
   // "Samantha's signature" — the biggest heal in the book, and the first ultimate a Water keeper can
@@ -582,6 +589,11 @@ export function castForMove(moveId: string | null | undefined): CastSpec {
 }
 
 /** Does the sim actually do something with this move today? */
+/** the ward a field cast carries (Overpressure), or undefined — what both hosts hand `spawnField` */
+export function wardOf(spec: Pick<CastSpec, 'wardMend' | 'wardFlaw' | 'wardBacklash'>): { mend: number; flaw: number; backlash: number } | undefined {
+  return spec.wardFlaw > 0 ? { mend: spec.wardMend, flaw: spec.wardFlaw, backlash: spec.wardBacklash } : undefined
+}
+
 export function isBuilt(moveId: string | null | undefined): boolean {
   return castForMove(moveId).archetype !== 'unbuilt'
 }
