@@ -64,7 +64,7 @@ import { castForMove, isBuilt, wardOf, CAST_SLOTS, ALL_BANDS, BAND_KEYS, deriveP
 import { launchVy, blinkLand, flatAim, sightClear, GATE_MIN_REACH, BLINK_MIN_REACH, type BodyCast, type BodyCastResult } from './body-cast'
 import { openSpiral, stepSpiral, spiralAge, type GateSpiral, type SpiralClose } from '../engine/gate-spiral'
 import { getRegenRate } from '../engine/mana'
-import { moveById } from './keeper-moves'
+import { moveById, KEEPER_MOVES } from './keeper-moves'
 import { loadLoadout, resolveLoadout, emptySlotSentence, type EmptyReason } from './loadout'
 import { stepHunter, hunterRng, RANGE_HUNTER, type HunterCtx } from '../engine/hunter-ai'
 import { fillRoster, ROSTER_SIZE } from './crucible-bots'
@@ -4172,6 +4172,18 @@ function GuideTrail({ posRef, heightsRef, targetRef }: {
   return <primitive object={guide.points} />
 }
 
+// ── the owner's move pins (Moves (dev) panel): slot index → move id, per keeper ─────────────────────
+const DEV_SLOTS_KEY = 'shimmer:devSlots'
+function readDevSlots(): (string | null)[] {
+  try {
+    const raw = localStorage.getItem(keeperKey(DEV_SLOTS_KEY))
+    const v = raw ? JSON.parse(raw) : []
+    // a pin to a move that no longer runs (renamed, un-built) is dropped, never cast into a dead key
+    return Array.isArray(v) ? v.map((id) => (typeof id === 'string' && isBuilt(id) ? id : null)) : []
+  } catch { return [] }
+}
+const DEV_MOVES = KEEPER_MOVES.filter((m) => isBuilt(m.id)).sort((a, b) => a.name.localeCompare(b.name))
+
 // ── GATE IN A FIGHT (SYSTEM 8, RULED 09-28): bill it, step the body through it, turn its two rings ──────────
 // The same shape as the voxel world's frame-loop block (`VoxelWorld.tsx`), as its own component because
 // play3d's body lives in Player and its pool lives in the page: this reads the feet from posRef, bills the
@@ -5489,6 +5501,7 @@ export default function Shimmer3D() {
   const fishBiteRef = useRef(false); fishBiteRef.current = !!fish?.bite
   const hookFishRef = useRef<() => void>(() => {}) // set below (needs grantHarvest, defined later)
   const [menuOpen, setMenuOpen] = useState(false)     // ☰ — edit terrain / new game
+  const [movesDevOpen, setMovesDevOpen] = useState(false)  // owner-only: pin any built move into Z / C
   const [runeDevOpen, setRuneDevOpen] = useState(false)  // owner-only: swap birth rune live to test all archetypes
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
   const [mpOpen, setMpOpen] = useState(false)         // 👥 — play together (party / invite)
@@ -6771,8 +6784,12 @@ export default function Shimmer3D() {
     // scroll bought in the Passage between two rune changes must be in hand by the next resolve.
     bookRef.current = keeperBook(runeInvRef.current.owned)
     const res = resolveLoadout(runeInvRef.current.owned, runeInvRef.current.birth, bookRef.current)
-    castLoadoutRef.current = res.slots
-    castWhyRef.current = res.why
+    // ── OWNER TEST BENCH (2026-09-28, Alex): a slot pinned in the Moves (dev) panel wins over the resolve,
+    // with no vessel, rune or tier gate, so any built move can be felt from one save. Owner-only and
+    // per keeper; an unpinned slot keeps the real resolve, so clearing the pins restores the real kit.
+    const pins = isOwnerRef.current ? readDevSlots() : []
+    castLoadoutRef.current = res.slots.map((id, i) => pins[i] ?? id)
+    castWhyRef.current = res.why.map((w, i) => (pins[i] ? null : w))
     castCdRef.current = ALL_BANDS.map(() => 0)
     // The passive is always-on and DERIVED (capped at one), never cast — since Alex's 2026-08-26
     // ruling it holds no key, so it is applied HERE from the runes rather than set by a keypress. Its
@@ -7404,6 +7421,20 @@ export default function Shimmer3D() {
   // ⚠ The tool grants ANY rune, which the lane law would not: a real second rune must sit on the
   // birth rune's row or column. That is deliberate for testing the cross-hatch, and it is exactly
   // why it stays owner-only — it is not a preview of how acquisition will work.
+  // Owner dev tool: pin ANY built move into a cast slot (Z / C), ignoring vessels, runes and tier.
+  const setDevSlot = useCallback((slot: number, id: string | null) => {
+    const pins = readDevSlots()
+    while (pins.length < ALL_BANDS.length) pins.push(null)
+    pins[slot] = id
+    try {
+      if (pins.every(p => !p)) localStorage.removeItem(keeperKey(DEV_SLOTS_KEY))
+      else localStorage.setItem(keeperKey(DEV_SLOTS_KEY), JSON.stringify(pins))
+    } catch { /* private mode: the pin lasts until the next resolve */ }
+    applyLoadout()
+    setBanner(`⟳ dev · ${BAND_KEYS[slot].toUpperCase()} ${id ? `pinned to ${castForMove(id).label}` : 'back to the real kit'}`)
+  }, [applyLoadout])
+  // the owner check lands after mount: re-resolve once it does, so saved pins are live without a rune change
+  useEffect(() => { if (isOwner) applyLoadoutRef.current() }, [isOwner])
   const toggleDevRune = useCallback((id: string) => {
     const held = runeInvRef.current.owned.includes(id)
     const inv = held ? revokeRune(runeInvRef.current, id) : grantRune(runeInvRef.current, id)
@@ -8292,6 +8323,30 @@ export default function Shimmer3D() {
                       })}
                     </div>
                   ))}
+                </div>
+            )}
+            <OptionRow onClick={() => setMovesDevOpen(o => !o)} label="✧ Moves (dev)" tail={movesDevOpen ? 'hide' : 'show'} />
+            {movesDevOpen && (
+                <div className="hk-rule" style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2, maxWidth: 268, borderTopWidth: 1, borderTopStyle: 'solid', paddingTop: 6 }}>
+                  <span className="hk-soft" style={{ fontSize: 11, fontWeight: 700, textAlign: 'right' }}>Pin any built move — no vessel, rune or tier gate</span>
+                  {ALL_BANDS.map((band, i) => {
+                    const pinned = readDevSlots()[i] ?? ''
+                    return (
+                      <label key={band} style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', fontSize: 11 }}>
+                        <span className="hk-soft tabular-nums">{BAND_KEYS[i].toUpperCase()} · {band}</span>
+                        <select value={pinned} onChange={(e) => setDevSlot(i, e.target.value || null)}
+                          className="hk-btn" style={{ padding: '1px 4px', fontSize: 11, maxWidth: 150 }}>
+                          <option value="">real kit{castHud.slots[i] && !pinned ? ` (${castForMove(castHud.slots[i]!).label})` : ''}</option>
+                          {(['tactical', 'ultimate'] as const).map(tier => (
+                            <optgroup key={tier} label={tier}>
+                              {DEV_MOVES.filter(m => m.tier === tier).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </label>
+                    )
+                  })}
+                  <span className="hk-faint" style={{ fontSize: 10, textAlign: 'right' }}>Saved per keeper. Birth rune is in Rune (dev) above.</span>
                 </div>
             )}
             <OptionRow href="/shimmer/dev/worktable" label="⚒ Build structures" tail="worktable" />
