@@ -8064,6 +8064,13 @@ export default function Shimmer3D() {
     w.__goZone = selectZone
     return () => { delete w.__goZone }
   }, [isOwner, selectZone])
+  // …and talk to an NPC by id without walking to it (the same `talk` the E key calls). OWNER ONLY, headless use.
+  useEffect(() => {
+    if (!isOwner) return
+    const w = window as unknown as { __talk?: (id: string) => boolean }
+    w.__talk = (id: string) => { const n = ALL_NPCS.find(x => x.id === id); if (n) talk(n); return !!n }
+    return () => { delete w.__talk }
+  }, [isOwner, talk])
 
   const save = useCallback(async () => {
     setSaveMsg('saving…')
