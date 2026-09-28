@@ -295,8 +295,8 @@ export const CHEST_LOOT: Record<ChestRarity, { loot: HoldLoot; w: number }[]> = 
   rare: [{ loot: { kind: 'marks', n: 30 }, w: 60 }, { loot: { kind: 'salvage', n: 1500 }, w: 40 }],   // a bag of Marks ≈ 30 (Alex)
   legendary: [{ loot: { kind: 'part' }, w: 100 }],
 }
-/** the pickup line for the glove's stones — TODO(lark): swap for the locked `breach:glove-stones` line */
-export const GLOVE_STONES_LINE = 'Stones for the glove'
+/** the pickup line for the glove's stones — locked `breach:glove-stones` (shimmer-quest-glove-errand.md, 35e5821) */
+export const GLOVE_STONES_LINE = 'What the glove is missing. For the Temple.'
 export const lootLabel = (l: HoldLoot): string =>
   l.kind === 'salvage' ? `+${l.n} salvage` : l.kind === 'marks' ? `A bag of Marks (+${l.n})` : l.kind === 'glimmer' ? DROP_NAME.glimmer : l.kind === 'stones' ? GLOVE_STONES_LINE : 'A vessel piece'
 

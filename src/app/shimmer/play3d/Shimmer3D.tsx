@@ -115,7 +115,7 @@ import { HOTBAR_SLOTS, type HotbarEntry } from '../hud/hotbar'
 import { BagPanel, itemLabel, type SlotRef, type Lift } from '../hud/satchel'
 import { moveBetween, moveCount, halfOf } from '../voxel3d/chest'
 import { createSpiritIndex } from '../engine/spirit-index'
-import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, ERRAND_OBJECTIVE, ERRAND_DONE, GREG_PAIR_LINES, GREG_ERRAND_BARK, GREG_LIT_LINES, IDONY_IMBUE_LINES, IDONY_BARK, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, ERRAND_OBJECTIVE, ERRAND_DONE, GREG_PAIR_LINES, GREG_ERRAND_BARK, GREG_LIT_LINES, IDONY_IMBUE_LINES, IDONY_BARK, GLOVE_TITLE, GLOVE_OBJECTIVE_TEMPLE, GLOVE_OBJECTIVE_BREACH, GLOVE_OBJECTIVE_RETURN, GLOVE_DONE, GREG_GLOVE_LINES, IDONY_GLOVE_ASK, IDONY_GLOVE_OPEN, IDONY_GLOVE_WEAVE, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { addMarks } from '@/lib/wallet'
@@ -233,7 +233,7 @@ const GREG_SQUARE = NPCS_3D.find(n => n.id === 'gregory-square')!
 const IDONY = NPCS_3D.find(n => n.id === 'temple-imbuer')!
 const SPIRIT_CORNER_STEP = { x: 23, z: 49 } as const
 // ★ the first errand's flags (locked 09-28): Greg has handed over the pair; Greg has seen it lit
-const GREG_PAIR_FLAG = 'gregPairGiven', GREG_LIT_FLAG = 'gregSawLit'
+const GREG_PAIR_FLAG = 'gregPairGiven', GREG_LIT_FLAG = 'gregSawLit', GREG_GLOVE_FLAG = 'gregGloveHint'
 /** the locked errand text with its tokens filled; a `> ` line is the keeper's own (the word), said as You */
 function errandFill(lines: readonly string[], birth: string | null, word: string, name = '') {
   const fill = (t: string) => t.replace(/\{WORD\}/g, moveById(word)?.name ?? word)
@@ -4964,8 +4964,12 @@ export default function Shimmer3D() {
   // ★ the first errand outranks the fork while it is open: its objective is the locked quest-log line, and in
   // Rune Hold the guide points at Idony (who stands in for the Temple until it is placed)
   const errandOpen = !!flagsRef.current[GREG_PAIR_FLAG] && gregGemsInHand()
-  if (errandOpen && zoneId === RUNE_HOLD_ZONE) guideTargetRef.current = { x: IDONY.tileX, z: IDONY.tileY, kind: 'greg', hideBelow: 3.5 }
-  const forkChip = errandOpen ? ERRAND_OBJECTIVE : forkObjective(zoneId, fork)
+  // then the glove's road: to the Temple (Greg has pointed) → the Breach → back to Idony
+  const road = errandOpen ? 'locked' : gloveErrand()
+  const gloveChip = road === 'ask' && flagsRef.current[GREG_GLOVE_FLAG] ? GLOVE_OBJECTIVE_TEMPLE
+    : road === 'breach' ? GLOVE_OBJECTIVE_BREACH : road === 'weave' ? GLOVE_OBJECTIVE_RETURN : null
+  if ((errandOpen || (gloveChip && road !== 'breach')) && zoneId === RUNE_HOLD_ZONE) guideTargetRef.current = { x: IDONY.tileX, z: IDONY.tileY, kind: 'greg', hideBelow: 3.5 }
+  const forkChip = errandOpen ? ERRAND_OBJECTIVE : gloveChip ?? forkObjective(zoneId, fork)
 
   // Another tab wrote the same save — our mirror is stale, so drop it and re-read before the next
   // merge. Without this we would happily clobber whatever that tab saved with our own `...prev`.
@@ -6452,7 +6456,26 @@ export default function Shimmer3D() {
       const inv = runeInvRef.current
       const word = gregWord('bracelet')
       if (!word) return
-      if (!gregGemsInHand()) { setDialogue({ name: 'Idony', lines: [IDONY_BARK], idx: 0, onDone: () => {} }); return }
+      if (!gregGemsInHand()) {
+        // ★ THE GLOVE ERRAND (locked 09-28, `shimmer-quest-glove-errand.md`): she reads the glove and names the
+        // Breach (only once Greg has pointed back here), waits while the Breach owes it, then weaves it on the hand
+        const road = gloveErrand(), gw = gregWord('focus')
+        if (gw && road === 'ask' && flagsRef.current[GREG_GLOVE_FLAG]) {
+          const ask = errandFill(IDONY_GLOVE_ASK, inv.birth, gw, 'Idony')
+          setDialogue({ ...ask, name: 'Idony', idx: 0, onDone: () => { markGloveAsked(); setBanner(`✦ ${GLOVE_TITLE} · ${GLOVE_OBJECTIVE_BREACH}`); setForkTick(n => n + 1) } })
+        } else if (gw && road === 'breach') setDialogue({ name: 'Idony', lines: [IDONY_GLOVE_OPEN], idx: 0, onDone: () => {} })
+        else if (gw && road === 'weave') {
+          const weave = errandFill(IDONY_GLOVE_WEAVE, inv.birth, gw, 'Idony')
+          setDialogue({ ...weave, name: 'Idony', idx: 0, onDone: () => {
+            const r = imbueGregGlove(inv.birth, keeperBook(inv.owned), starterFor(inv.owned))
+            if (!r.ok) return
+            applyLoadoutRef.current()
+            setBanner(`✦ ${errandFill([GLOVE_DONE], inv.birth, r.word).lines[0]}${r.worn ? '' : ' · in your satchel'}`)
+            setForkTick(n => n + 1)
+          } })
+        } else setDialogue({ name: 'Idony', lines: [IDONY_BARK], idx: 0, onDone: () => {} })
+        return
+      }
       const said = errandFill(IDONY_IMBUE_LINES, inv.birth, word, 'Idony')
       setDialogue({ ...said, name: 'Idony', idx: 0, onDone: () => {
         const r = imbueGregBracelet(inv.birth, keeperBook(inv.owned), starterFor(inv.owned))
@@ -6487,7 +6510,17 @@ export default function Shimmer3D() {
         setDialogue({ name: 'Gregory', lines: [...intro, ...(pair?.lines ?? [])], idx: 0, grantAt: GREG_INTRO_LINES.length, onDone: handOff })
       } else if (pair) setDialogue({ name: 'Gregory', lines: pair.lines, speakers: pair.speakers, idx: 0, onDone: handOff })
       else if (word && gregGemsInHand()) setDialogue({ name: 'Gregory', lines: [GREG_ERRAND_BARK], idx: 0, onDone: () => {} })
-      else if (word && !flagsRef.current[GREG_LIT_FLAG]) setDialogue({ name: 'Gregory', lines: GREG_LIT_LINES, idx: 0, onDone: () => { flagsRef.current[GREG_LIT_FLAG] = true; persist() } })
+      else if (word && (!flagsRef.current[GREG_LIT_FLAG] || (!flagsRef.current[GREG_GLOVE_FLAG] && gloveErrand() === 'ask'))) {
+        // greg:bark:lit (once), then greg:bark:glove straight after it in the same talk (once): his one line
+        // pointing back to the Temple (the glove errand, locked 09-28)
+        const lit = flagsRef.current[GREG_LIT_FLAG] ? [] : GREG_LIT_LINES
+        const glove = !flagsRef.current[GREG_GLOVE_FLAG] && gloveErrand() === 'ask' ? GREG_GLOVE_LINES : []
+        setDialogue({ name: 'Gregory', lines: [...lit, ...glove], idx: 0, onDone: () => {
+          flagsRef.current[GREG_LIT_FLAG] = true
+          if (glove.length) { flagsRef.current[GREG_GLOVE_FLAG] = true; setBanner(`✦ ${GLOVE_TITLE} · ${GLOVE_OBJECTIVE_TEMPLE}`) }
+          persist(); setForkTick(n => n + 1)
+        } })
+      }
       else setDialogue({ name: 'Gregory', lines: [GREG_RETURN], idx: 0, onDone: () => {} })
     } else if (npc.id === 'thistle') {
       if (!hasSpirit) setDialogue({ name: 'Thistle', lines: THISTLE_TAUNT_NO_SPIRIT, idx: 0, onDone: () => {} })
@@ -7319,7 +7352,7 @@ export default function Shimmer3D() {
       if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
       if (holdEHeld.current && prompt?.kind === 'chest') { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) }
       // what a cache gave that lives outside the run: Marks are the real wallet; a vessel piece goes home for the cutter
-      while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n); else if (l.kind === 'part') setHoldFlash(pieceLine(addPiece())); else if (l.kind === 'stones') markGloveStones() }
+      while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n); else if (l.kind === 'part') setHoldFlash(pieceLine(addPiece())); else if (l.kind === 'stones') { markGloveStones(); setForkTick(n => n + 1) } }
       if (hs.fell) { hs.fell = null; setHoldFlash('The floor gave way') }
       if (hs.dryRounds !== lastDry) { lastDry = hs.dryRounds; saveDry(hs.dryRounds) }
       const chestsNow = hs.chests.filter(Boolean).length

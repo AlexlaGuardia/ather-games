@@ -105,6 +105,47 @@ export const IDONY_IMBUE_LINES: string[] = [
   'There — written.',
   'Finished. It was only ever waiting on you.',
 ]
+/**
+ * ★ THE GLOVE ERRAND — LOCKED (canon `game/shimmer-quest-glove-errand.md`, athernyx 35e5821, Alex 09-28).
+ * Verbatim, same conventions as the first errand. `{WORD}` = the birth's GLOVE word (THE DEFAULT LOADOUT).
+ */
+export const GLOVE_TITLE = 'The Glove Waits'
+export const GLOVE_OBJECTIVE_TEMPLE = 'Take the glove to the Enchant Temple.'
+export const GLOVE_OBJECTIVE_BREACH = 'Find what the glove is missing, in the Breach.'
+export const GLOVE_OBJECTIVE_RETURN = 'Bring it to Idony at the Enchant Temple.'
+export const GLOVE_DONE = 'The glove is lit. Its word is {WORD}.'
+/** greg:bark:glove — straight after greg:bark:lit in the same talk, or the next talk; once */
+export const GREG_GLOVE_LINES: string[] = [
+  '(His eyes go from the lit bracelet to the dark glove.)',
+  "The glove is the Temple's too. That one takes longer.",
+]
+/** temple:glove-ask — first talk to Idony after greg:bark:glove; once */
+export const IDONY_GLOVE_ASK: string[] = [
+  '(She is at her bench. This time she looks up first, at the glove and not at you.)',
+  '{BIRTH_RUNE}, lit — the rest of it, dark.',
+  'What it is missing is not sold.',
+  'It comes out of the Breach.',
+  'Bring it back to this bench.',
+]
+/** temple:bark:glove-open — while step 2 is open; repeats */
+export const IDONY_GLOVE_OPEN = 'The Breach first. Then me.'
+/** temple:glove-return + temple:glove-weave + temple:glove-last-stone + temple:glove-lit, as one sitting */
+export const IDONY_GLOVE_WEAVE: string[] = [
+  '(She puts her work down before you reach the bench.)',
+  'Show me.',
+  '(She turns what you brought over once in her palm.)',
+  'Good. That is the rest of it.',
+  'Keep it on. Hand flat, and still.',
+  '(She lays your gloved hand on the bench, back of the hand up, and sets the rest beside its seat.)',
+  '(She works with her eyes on your face, not the hand. The thread goes in and out of the old cloth as if it had been waiting for her.)',
+  '(One seat left. Her hands stop, and she looks down at the glove for the first time.)',
+  '{WORD}. I say it once.',
+  'Now you.',
+  '> {WORD}.',
+  '(The thread closes over the last stone. Light runs out of the seats, along the palm-wrap, and gathers at the fingertips.)',
+  'Written — and paid for.',
+  'Nobody sold you that one.',
+]
 /** temple:bark — after the errand */
 export const IDONY_BARK = 'You wait well. Most who come in here do not.'
 
