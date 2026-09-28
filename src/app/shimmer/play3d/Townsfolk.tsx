@@ -41,20 +41,20 @@ function Body({ trade, seed, legs }: { trade: Trade; seed: number; legs?: React.
     <group scale={[1, tall, 1]}>
       {[-0.11, 0.11].map((x, i) => (
         <group key={i} ref={legs?.[i]} position={[x, 0.78, 0]}>
-          <mesh position={[0, -0.39, 0]} castShadow><boxGeometry args={[0.15, 0.78, 0.17]} /><meshStandardMaterial color={trousers} /></mesh>
+          <mesh position={[0, -0.39, 0]}><boxGeometry args={[0.15, 0.78, 0.17]} /><meshStandardMaterial color={trousers} /></mesh>
         </group>
       ))}
       <mesh position={[0, 1.12, 0]} castShadow><boxGeometry args={[0.46, 0.66, 0.26]} /><meshStandardMaterial color={torso} roughness={0.9} /></mesh>
       {apron && <mesh position={[0, 0.92, 0.14]}><boxGeometry args={[0.4, 0.78, 0.03]} /><meshStandardMaterial color={apron} roughness={0.8} /></mesh>}
       {(trade === 'smith' || trade === 'apprentice') && <mesh position={[0, 0.62, 0.16]}><boxGeometry args={[0.36, 0.2, 0.02]} /><meshStandardMaterial color={K.soot} /></mesh>}
-      {[-1, 1].map(e => <mesh key={e} position={[e * 0.3, 1.1, 0]} castShadow><boxGeometry args={[0.12, 0.6, 0.14]} /><meshStandardMaterial color={torso} /></mesh>)}
+      {[-1, 1].map(e => <mesh key={e} position={[e * 0.3, 1.1, 0]}><boxGeometry args={[0.12, 0.6, 0.14]} /><meshStandardMaterial color={torso} /></mesh>)}
       {[-1, 1].map(e => <mesh key={e} position={[e * 0.3, 0.76, 0]}><boxGeometry args={[0.11, 0.1, 0.12]} /><meshStandardMaterial color={trade === 'smith' ? K.soot : skin} /></mesh>)}
-      <mesh position={[0, 1.62, 0]} castShadow><boxGeometry args={[0.3, 0.32, 0.3]} /><meshStandardMaterial color={skin} /></mesh>
+      <mesh position={[0, 1.62, 0]}><boxGeometry args={[0.3, 0.32, 0.3]} /><meshStandardMaterial color={skin} /></mesh>
       <mesh position={[0, 1.8, -0.02]}><boxGeometry args={[0.32, 0.08, 0.32]} /><meshStandardMaterial color={trade === 'clerk' ? K.cap : hair} /></mesh>
       {trade === 'clerk' && <mesh position={[0, 1.77, 0.18]}><boxGeometry args={[0.28, 0.03, 0.12]} /><meshStandardMaterial color={K.cap} /></mesh>}
       {trade === 'traveler' && (
         <group position={[0, 1.08, -0.26]}>
-          <mesh castShadow><boxGeometry args={[0.4, 0.5, 0.26]} /><meshStandardMaterial color={K.pack} /></mesh>
+          <mesh><boxGeometry args={[0.4, 0.5, 0.26]} /><meshStandardMaterial color={K.pack} /></mesh>
           <mesh position={[0, 0.3, 0]}><boxGeometry args={[0.44, 0.06, 0.3]} /><meshStandardMaterial color={K.packStrap} /></mesh>
         </group>
       )}
@@ -66,8 +66,9 @@ function Body({ trade, seed, legs }: { trade: Trade; seed: number; legs?: React.
 function NameTag({ name, x, y, z }: { name: string; x: number; y: number; z: number }) {
   const camera = useThree(s => s.camera)
   const [near, setNear] = useState(false)
+  const at = useMemo(() => new THREE.Vector3(x, y, z), [x, y, z])
   useFrame(() => {
-    const n = camera.position.distanceTo(new THREE.Vector3(x, y, z)) < 9
+    const n = camera.position.distanceToSquared(at) < 81   // no Vector3 allocated per tag per frame
     if (n !== near) setNear(n)
   })
   if (!near) return null

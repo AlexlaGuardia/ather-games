@@ -193,10 +193,10 @@ function TerminalFace({ b }: { b: Block }) {
       <mesh position={[midX, TERMINAL_H + 0.2, (b.z0 + b.z1) / 2]} castShadow receiveShadow><boxGeometry args={[w + 0.3, 0.3, d + 0.3]} /><meshStandardMaterial color={RH.roof[2]} roughness={0.9} /></mesh>
       {/* the tower: stone to the roof and past it, a glass lantern room, a cap, the beacon */}
       <mesh position={[tx, towerH / 2, tz]} castShadow><boxGeometry args={[3, towerH, 3]} /><meshStandardMaterial color={RH.stone[2]} roughness={0.95} /></mesh>
-      <mesh position={[tx, towerH + 1.2, tz]}><boxGeometry args={[2.6, 2.4, 2.6]} /><meshStandardMaterial color={SP.rune} emissive={SP.rune} emissiveIntensity={0.55} transparent opacity={0.85} /></mesh>
+      <mesh position={[tx, towerH + 1.2, tz]}><boxGeometry args={[2.6, 2.4, 2.6]} /><meshStandardMaterial color={SP.rune} emissive={SP.rune} emissiveIntensity={0.9} transparent opacity={0.85} /></mesh>
       <mesh position={[tx, towerH + 2.6, tz]} castShadow><boxGeometry args={[3.4, 0.4, 3.4]} /><meshStandardMaterial color={RH.timber} /></mesh>
       <mesh position={[tx, towerH + 3.3, tz]}><sphereGeometry args={[0.45, 12, 10]} /><meshStandardMaterial ref={beacon} color={SP.padLight} emissive={SP.padLight} emissiveIntensity={1} /></mesh>
-      <pointLight position={[tx, towerH + 1.2, tz]} color={SP.rune} intensity={10} distance={18} decay={1.6} />
+      {/* ⚡ no pointLight (2026-09-28, perf): the lantern room's own glow carries it */}
       {/* past the town's edge: the mooring mast and the ship at its head */}
       <mesh position={[midX + 15, 7, far]} castShadow><boxGeometry args={[1.2, 14, 1.2]} /><meshStandardMaterial color={SP.hullDark} /></mesh>
       <mesh position={[midX + 15, 14.2, far]}><boxGeometry args={[4, 0.5, 4]} /><meshStandardMaterial color={SP.trim} /></mesh>
@@ -250,15 +250,15 @@ function Storefront({ f, y }: { f: Front; y: number }) {
       )}
       <group position={[0, 0, d]}>
       {/* jambs and lintel, standing just proud of the wall */}
-      {[-1, 1].map(e => <mesh key={e} position={[e * (half + 0.12), H / 2, 0.12]} castShadow><boxGeometry args={[0.26, H, 0.3]} /><meshStandardMaterial color={F.jamb} roughness={0.8} /></mesh>)}
-      <mesh position={[0, H + 0.14, 0.12]} castShadow><boxGeometry args={[f.w + 0.8, 0.32, 0.36]} /><meshStandardMaterial color={F.jamb} roughness={0.8} /></mesh>
+      {[-1, 1].map(e => <mesh key={e} position={[e * (half + 0.12), H / 2, 0.12]}><boxGeometry args={[0.26, H, 0.3]} /><meshStandardMaterial color={F.jamb} roughness={0.8} /></mesh>)}
+      <mesh position={[0, H + 0.14, 0.12]}><boxGeometry args={[f.w + 0.8, 0.32, 0.36]} /><meshStandardMaterial color={F.jamb} roughness={0.8} /></mesh>
       </group>
       {f.kind === 'smithy' && (
         // the forge, seen through the open workshop front: a glowing mouth, and the heat on the porch
         <group position={[0, 0, -0.1]}>
           <mesh position={[0, 1.1, 0]}><boxGeometry args={[f.w - 0.1, 2.2, 0.12]} /><meshStandardMaterial color={P.iron} /></mesh>
-          <mesh position={[0, 0.9, 0.08]}><boxGeometry args={[1.3, 0.9, 0.05]} /><meshStandardMaterial color={F.forge} emissive={F.forge} emissiveIntensity={1.4} /></mesh>
-          <pointLight position={[0, 1, 0.8]} color={F.forge} intensity={6} distance={7} decay={1.6} />
+          <mesh position={[0, 0.9, 0.08]}><boxGeometry args={[1.3, 0.9, 0.05]} /><meshStandardMaterial color={F.forge} emissive={F.forge} emissiveIntensity={1.8} /></mesh>
+          {/* ⚡ no pointLight (perf, 09-28): the mouth's emissive is the heat */}
         </group>
       )}
       {f.shut && f.kind !== 'smithy' && (
@@ -275,15 +275,15 @@ function Storefront({ f, y }: { f: Front; y: number }) {
         // the café's striped awning over its door: Greg's cover is coffee, tea, quiet conversation
         <group position={[0, H + 0.3, 0.75]} rotation={[0.42, 0, 0]}>
           {Array.from({ length: 6 }, (_, i) => (
-            <mesh key={i} position={[-1.5 + 0.25 + i * 0.5, 0, 0]} castShadow><boxGeometry args={[0.5, 0.05, 1.4]} /><meshStandardMaterial color={F.awning[i % 2]} roughness={0.9} /></mesh>
+            <mesh key={i} position={[-1.5 + 0.25 + i * 0.5, 0, 0]}><boxGeometry args={[0.5, 0.05, 1.4]} /><meshStandardMaterial color={F.awning[i % 2]} roughness={0.9} /></mesh>
           ))}
         </group>
       )}
       {f.kind === 'smithy' && (
         // the anvil on its block, outside the door where the work spills over
         <group position={[half + 1.2, 0, 0.9]}>
-          <mesh position={[0, 0.35, 0]} castShadow><boxGeometry args={[0.6, 0.7, 0.6]} /><meshStandardMaterial color={RH.timber} /></mesh>
-          <mesh position={[0, 0.85, 0]} castShadow><boxGeometry args={[0.9, 0.3, 0.4]} /><meshStandardMaterial color={P.iron} roughness={0.5} /></mesh>
+          <mesh position={[0, 0.35, 0]}><boxGeometry args={[0.6, 0.7, 0.6]} /><meshStandardMaterial color={RH.timber} /></mesh>
+          <mesh position={[0, 0.85, 0]}><boxGeometry args={[0.9, 0.3, 0.4]} /><meshStandardMaterial color={P.iron} roughness={0.5} /></mesh>
         </group>
       )}
       {(f.kind === 'tavern' || f.kind === 'stair' || f.kind === 'books' || f.kind === 'inn') && [-1, 1].map(e => (
@@ -605,7 +605,10 @@ export function RuneHoldScene({ grid, heights, version = 0, day: dayOverride }: 
       <NoticeBoard y={heights?.[Math.round(NOTICE_BOARD.z)]?.[Math.floor(NOTICE_BOARD.x)] ?? 0} />
       {look.terminal && <TerminalFace b={look.terminal} />}
       {look.smokes.map((sm, i) => <Smoke key={i} {...sm} />)}
-      {look.lights.map((l, i) => <pointLight key={i} position={[l.x, l.y, l.z]} color={P.lamp} intensity={10} distance={10} decay={1.6} />)}
+      {/* ⚡ THE LANTERNS CARRY NO REAL LIGHT (2026-09-28, Alex on the UHD 630: "runehold itself has gotten really
+          laggy … a bit everywhere"). Rune Hold ran 7 point lights, each paid per pixel on every lit surface every
+          frame wherever you stand. The glass is emissive and reads lit; the Landing keeps the town's ONE real light.
+          `look.lights` stays computed (the four nearest the square) for a future glow card. */}
     </>
   )
 }
