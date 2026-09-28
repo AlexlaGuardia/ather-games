@@ -7,7 +7,7 @@
  */
 import {
   floorCandidates, floorVessel, floorWordFor, seatLetters, seatLights, gregWord, gregGems, gregGemsInHand,
-  imbueGregBracelet, isLit, loadStowed, saveStowed, isFloor, grantVessel, wornWord, STOWED_KEY, WORN_TIER_KEY, FLOOR_TIER, BAND_FOR_VESSEL, isFloorWord,
+  imbueGregBracelet, isLit, loadStowed, saveStowed, isFloor, grantVessel, wornWord, STOWED_KEY, WORN_TIER_KEY, FLOOR_TIER, BAND_FOR_VESSEL, isFloorWord, GREG_BRACELET_PICK,
 } from './vessels'
 import { KEEPER_MOVES, moveById } from './keeper-moves'
 import { lettersOf, saveWornWord, saveLetters } from './gems'
@@ -32,6 +32,7 @@ const births = ELEMENTS.flatMap(e => runesOf(e.id).map(r => r.id))
 const TAC = ALL_BANDS.indexOf('tactical')
 
 // ── A. the cut, for every birth rune on the carousel ──────────────────────────────────────────────────
+ok(births.length === 17 && births.every(b => !!GREG_BRACELET_PICK[b]), `★★ every one of the 17 births has a ruled bracelet word`)
 for (const b of births) {
   for (const kind of ['bracelet', 'focus'] as const) {
     const w = floorWordFor(kind, b)
@@ -45,8 +46,10 @@ for (const b of births) {
     ok(moveById(w)!.tier === band && moveById(w)!.runes.every(r => on.has(r)), `${b}: the ${kind}'s word is on its lane (${w})`)
     const sizes = KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && m.runes.includes(b) && m.runes.every(r => on.has(r)))
       .map(m => lettersOf(m, b).length).filter(n => n >= 2)
-    ok(seats.length === Math.min(...sizes), `★ ${b}: the ${kind}'s word is the SMALLEST birth-first word (${seats.length})`)
-    ok(isBuilt(w) || floorCandidates(kind, b).every(m => !isBuilt(m.id)), `${b}: a word the sim runs is cut before one it cannot (${w})`)
+    // the bracelet's word is RULED per birth (the 17, athernyx 8432ebf); the glove's is the smallest signature
+    if (kind === 'bracelet') ok(w === GREG_BRACELET_PICK[b], `★★ ${b}: the bracelet is cut for the ruled word (${w} vs ${GREG_BRACELET_PICK[b]})`)
+    else ok(seats.length === Math.min(...sizes), `★ ${b}: the ${kind}'s word is the SMALLEST birth-first word (${seats.length})`)
+    if (kind === 'focus') ok(isBuilt(w) || floorCandidates(kind, b).every(m => !isBuilt(m.id)), `${b}: a word the sim runs is cut before one it cannot (${w})`)
     ok(floorVessel(kind, b).gems.length === seats.length, `${b}: the ${kind} arrives with its letters grown in`)
     ok(isFloorWord(kind, b, w), `${b}: the cut passes its own floor test`)
   }

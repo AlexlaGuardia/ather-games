@@ -115,7 +115,7 @@ import { HOTBAR_SLOTS, type HotbarEntry } from '../hud/hotbar'
 import { BagPanel, itemLabel, type SlotRef, type Lift } from '../hud/satchel'
 import { moveBetween, moveCount, halfOf } from '../voxel3d/chest'
 import { createSpiritIndex } from '../engine/spirit-index'
-import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, IMBUE_LINES, IMBUE_DONE, IMBUE_ALREADY, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, ERRAND_OBJECTIVE, ERRAND_DONE, GREG_PAIR_LINES, GREG_ERRAND_BARK, GREG_LIT_LINES, IDONY_IMBUE_LINES, IDONY_BARK, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { addMarks } from '@/lib/wallet'
@@ -230,7 +230,19 @@ const ALL_NPCS = allNpcs()
 // into a plot that is not the plot. The town is the pivot now; the Ather is the other route.
 const START_ZONE = 'rune-hold'
 const GREG_SQUARE = NPCS_3D.find(n => n.id === 'gregory-square')!
+const IDONY = NPCS_3D.find(n => n.id === 'temple-imbuer')!
 const SPIRIT_CORNER_STEP = { x: 23, z: 49 } as const
+// ★ the first errand's flags (locked 09-28): Greg has handed over the pair; Greg has seen it lit
+const GREG_PAIR_FLAG = 'gregPairGiven', GREG_LIT_FLAG = 'gregSawLit'
+/** the locked errand text with its tokens filled; a `> ` line is the keeper's own (the word), said as You */
+function errandFill(lines: readonly string[], birth: string | null, word: string, name = '') {
+  const fill = (t: string) => t.replace(/\{WORD\}/g, moveById(word)?.name ?? word)
+    .replace(/\{BIRTH_RUNE\}/g, RUNES.find(r => r.id === birth)?.name ?? 'Your birth rune')
+  return {
+    lines: lines.map(l => fill(l.startsWith('> ') ? l.slice(2) : l)),
+    speakers: lines.map(l => l.startsWith('> ') ? 'You' : name),
+  }
+}
 const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 // The mortal side's wall. Clouds and mist are ATHER-only — a town built out of cloud reads as
 // sky, which is the tonal wall canon splits on. Solid like a cloud, drawn brown.
@@ -4938,7 +4950,11 @@ export default function Shimmer3D() {
   // Corner from — the warp block's east face is (22-23, 48-49), so (23,49) is the threshold.
   const fork = forkFlags(flagsRef.current); void forkTick
   guideTargetRef.current = forkTarget(zoneId, fork, { x: GREG_SQUARE.tileX, z: GREG_SQUARE.tileY }, SPIRIT_CORNER_STEP)
-  const forkChip = forkObjective(zoneId, fork)
+  // ★ the first errand outranks the fork while it is open: its objective is the locked quest-log line, and in
+  // Rune Hold the guide points at Idony (who stands in for the Temple until it is placed)
+  const errandOpen = !!flagsRef.current[GREG_PAIR_FLAG] && gregGemsInHand()
+  if (errandOpen && zoneId === RUNE_HOLD_ZONE) guideTargetRef.current = { x: IDONY.tileX, z: IDONY.tileY, kind: 'greg', hideBelow: 3.5 }
+  const forkChip = errandOpen ? ERRAND_OBJECTIVE : forkObjective(zoneId, fork)
 
   // Another tab wrote the same save — our mirror is stale, so drop it and re-read before the next
   // merge. Without this we would happily clobber whatever that tab saved with our own `...prev`.
@@ -6420,18 +6436,20 @@ export default function Shimmer3D() {
       return
     }
     if (npc.id === 'temple-imbuer') {
-      // ★ THE FIRST ERRAND (09-28): the Temple weaves Greg's gems into the bracelet and teaches the word as it does
+      // ★ THE FIRST ERRAND (locked 09-28, `shimmer-quest-first-errand.md`): Idony weaves Greg's gems into the
+      // bracelet and the keeper says the word; the bracelet leaves lit. After it, her one bark.
       const inv = runeInvRef.current
       const word = gregWord('bracelet')
-      const fill = (t: string) => t.replace(/\{word\}/g, moveById(word ?? '')?.name ?? 'the word')
-        .replace(/\{birth\}/g, RUNES.find(r => r.id === inv.birth)?.name ?? 'your birth rune')
       if (!word) return
-      if (!gregGemsInHand() && keeperBook(inv.owned).learned.includes(word)) { setDialogue({ name: 'the Imbuer', lines: [fill(IMBUE_ALREADY)], idx: 0, onDone: () => {} }); return }
-      setDialogue({ name: 'the Imbuer', lines: [...IMBUE_LINES, IMBUE_DONE].map(fill), idx: 0, onDone: () => {
+      if (!gregGemsInHand()) { setDialogue({ name: 'Idony', lines: [IDONY_BARK], idx: 0, onDone: () => {} }); return }
+      const said = errandFill(IDONY_IMBUE_LINES, inv.birth, word, 'Idony')
+      setDialogue({ ...said, name: 'Idony', idx: 0, onDone: () => {
         const r = imbueGregBracelet(inv.birth, keeperBook(inv.owned), starterFor(inv.owned))
         if (!r.ok) return
+        flagsRef.current[GREG_PAIR_FLAG] = true
+        persist()
         applyLoadoutRef.current()
-        setBanner(`✦ ${moveById(r.word)?.name ?? r.word} is lit${r.worn ? ' · on your wrist' : ' · in your satchel'}`)
+        setBanner(`✦ ${errandFill([ERRAND_DONE], inv.birth, r.word).lines[0]}${r.worn ? '' : ' · in your satchel'}`)
       } })
       return
     }
@@ -6446,7 +6464,19 @@ export default function Shimmer3D() {
       return
     }
     if (npc.id === 'gregory') {
-      if (!hasSpirit) setDialogue({ name: 'Gregory', lines: [...GREG_INTRO_LINES, GREG_NUDGE], idx: 0, grantAt: GREG_INTRO_LINES.length, onDone: () => {} })
+      // ★ greg:pair (the first errand, locked 09-28): the pair lands where casting is first taught, so it
+      // follows the spirit in the same sitting and closes it: his last word is the Temple, not the meadows.
+      // A keeper who met him before the errand existed gets it the next time they speak to him.
+      const inv = runeInvRef.current
+      const word = gregWord('bracelet')
+      const pair = word && gregGemsInHand() && !flagsRef.current[GREG_PAIR_FLAG] ? errandFill(GREG_PAIR_LINES, inv.birth, word, 'Gregory') : null
+      const handOff = () => { if (pair) { flagsRef.current[GREG_PAIR_FLAG] = true; persist(); setBanner(`✦ An Unfinished Bracelet · ${ERRAND_OBJECTIVE}`) } }
+      if (!hasSpirit) {
+        const intro = [...GREG_INTRO_LINES, GREG_NUDGE]
+        setDialogue({ name: 'Gregory', lines: [...intro, ...(pair?.lines ?? [])], idx: 0, grantAt: GREG_INTRO_LINES.length, onDone: handOff })
+      } else if (pair) setDialogue({ name: 'Gregory', lines: pair.lines, speakers: pair.speakers, idx: 0, onDone: handOff })
+      else if (word && gregGemsInHand()) setDialogue({ name: 'Gregory', lines: [GREG_ERRAND_BARK], idx: 0, onDone: () => {} })
+      else if (word && !flagsRef.current[GREG_LIT_FLAG]) setDialogue({ name: 'Gregory', lines: GREG_LIT_LINES, idx: 0, onDone: () => { flagsRef.current[GREG_LIT_FLAG] = true; persist() } })
       else setDialogue({ name: 'Gregory', lines: [GREG_RETURN], idx: 0, onDone: () => {} })
     } else if (npc.id === 'thistle') {
       if (!hasSpirit) setDialogue({ name: 'Thistle', lines: THISTLE_TAUNT_NO_SPIRIT, idx: 0, onDone: () => {} })

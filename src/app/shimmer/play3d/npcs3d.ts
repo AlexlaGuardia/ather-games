@@ -28,10 +28,11 @@ export const NPCS_3D: NPC3D[] = [
   // the doorway itself stays open to walk into. `defeatedFlag` is not a defeat: once his two lines
   // are said he has gone in ahead ("after me"), and the door is where the keeper follows.
   { id: 'gregory-square', name: 'Gregory', zone: 'rune-hold', tileX: 24, tileY: 50, color: npcTint.gregory, kind: 'keeper', defeatedFlag: 'metGregSquare' },
-  // ★ THE ENCHANT TEMPLE'S IMBUER (ruled 09-28: the Temple imbues Greg's gems and teaches the word; the first
-  // errand). Unnamed until authored. TODO(temple-placement): the Temple has no building in the live Rune Hold
+  // ★ IDONY, THE ENCHANT TEMPLE'S IMBUER (ruled 09-28: the Temple imbues Greg's gems and teaches the word; the
+  // first errand. Named in rune-hold.md, athernyx a60b362). The id stays `temple-imbuer` so no save keyed on it
+  // moves. TODO(temple-placement): the Temple has no building in the live Rune Hold
   // yet (canon: "adjacent to the town proper"); the imbuer stands on the square's east side until Alex places it.
-  { id: 'temple-imbuer', name: 'the Imbuer', zone: 'rune-hold', tileX: 56, tileY: 55, color: npcTint.imbuer, kind: 'keeper' },
+  { id: 'temple-imbuer', name: 'Idony', zone: 'rune-hold', tileX: 56, tileY: 55, color: npcTint.imbuer, kind: 'keeper' },
   // Thistle — Hold 1. A borrowed-swagger Moglin in Spirit Meadows with a collared spirit. You free it
   // (a Reach battle), he deflates and retreats east. Removed from the world once freed.
   { id: 'thistle', name: 'Thistle', zone: 'spirit-meadow', tileX: 55, tileY: 30, color: npcTint.thistle, kind: 'moglin', defeatedFlag: 'freedThistle' },
@@ -55,17 +56,57 @@ export const NPCS_3D: NPC3D[] = [
 // welcome, no explanation of the rules to someone who is standing in a place you only reach by
 // being shown. The rule the player needs (the rune gates the scroll) is stated as a shrug.
 /**
- * The Enchant Temple imbue (lark, 09-28, off THE BIRTH LETTER COMES FIRST). `{birth}` = the birth rune's
- * name, `{word}` = the bracelet's word. Speaker is the Imbuer; the bracketed line is the act, not speech.
+ * ★ THE FIRST ERRAND — LOCKED (canon `game/shimmer-quest-first-errand.md`, athernyx aee97a7, Alex 09-28).
+ * Verbatim. `{BIRTH_RUNE}` = the birth rune's name, `{WORD}` = the bracelet's word. A line in parentheses
+ * is a SCENE box (the act, not speech); a line starting `> ` is the keeper's one spoken line (the word).
+ * Guards the text obeys: Greg never says the word; Idony names no Greg/Ather/Keeper and never asks whose.
  */
-export const IMBUE_LINES: string[] = [
-  "That first seat's already lit. Nobody taught you {birth}. That one's just you.",
-  'The rest were only waiting on their gems. Watch close, I\'ll seat them now.',
-  '(The imbuer sets each gem in turn, light threading outward from the birth rune.)',
-  '{birth}... {word}. Say it with me, so it takes.',
+export const ERRAND_TITLE = 'An Unfinished Bracelet'
+export const ERRAND_OBJECTIVE = 'Take Greg\'s bracelet to the Enchant Temple in Rune Hold.'
+export const ERRAND_DONE = 'The bracelet is lit. Its word is {WORD}.'
+/** trigger greg:pair — fires once */
+export const GREG_PAIR_LINES: string[] = [
+  '(Greg takes a plain wrapped cord and a soft old glove out of his coat and holds them out together.)',
+  'Now then. I cut these for you. Hold out your wrist.',
+  '(One letter on the bracelet already glows, grown into the cord, in your own colour. The seats after it sit empty.)',
+  'That one was lit before I handed it over. {BIRTH_RUNE}.',
+  'Nobody taught you that one. It is you.',
+  'The rest sits empty. That is what is missing.',
+  '(The glove carries the same first letter. On the glove, it is dark.)',
+  'The glove waits. That one you earn.',
+  '(He presses what he was holding into your palm and folds your fingers shut over it.)',
+  'What fills the rest is in your hand. Putting it in is not mine to do.',
+  'Out my door, into town. The Enchant Temple.',
+  'They will finish it there. Do not rush them.',
 ]
-export const IMBUE_DONE = "There. {word}, lit end to end. It's yours now, go use it."
-export const IMBUE_ALREADY = "This one's already done. {word}'s been yours since you walked out that door."
+/** greg:bark:errand — while the errand is open */
+export const GREG_ERRAND_BARK = 'The Temple, Keeper. Out my door and into town. Blue and I will keep.'
+/** greg:bark:lit — first talk after temple:lit; once */
+export const GREG_LIT_LINES: string[] = [
+  '(Greg looks at the lit bracelet for a long moment and does not ask what it says.)',
+  'There now. Finished. That is properly yours.',
+]
+/** temple:enter + temple:bench + temple:weave + temple:last-stone + temple:lit, as one sitting */
+export const IDONY_IMBUE_LINES: string[] = [
+  '(Cool and quiet after the square. Benches along the walls, a lamp at each, and at the nearest a woman drawing a thread through something too small to see.)',
+  '(She does not look up. She finishes the stitch first.)',
+  'On the bench. Say nothing yet.',
+  '(Her hand stops above the bracelet before it touches it.)',
+  '{BIRTH_RUNE}. Yours — it could not be anybody else\'s.',
+  'Idony. The rest of it, now. Into my hand, not the bench.',
+  '(She lays each stone beside its empty seat and does not hurry.)',
+  'I work in quiet. Stand where I can see you.',
+  '(Her eyes half shut. The cord goes over and under the first stone as if it had always grown that way.)',
+  '(One seat left. Her hands stop with the cord half over it.)',
+  'Now you speak. Say it after me, to the bracelet.',
+  '{WORD}.',
+  '> {WORD}.',
+  '(The cord closes over the last stone. Light runs out of the seats and around the braid, end to end.)',
+  'There — written.',
+  'Finished. It was only ever waiting on you.',
+]
+/** temple:bark — after the errand */
+export const IDONY_BARK = 'You wait well. Most who come in here do not.'
 
 export const TRADER_LINES: string[] = [
   'You came down the back way, so somebody vouched. Fine.',

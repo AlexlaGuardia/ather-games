@@ -167,21 +167,33 @@ export function floorCandidates(kind: Vessel, birth: string | null): KeeperMove[
   // so there is a seat for Greg's gems to fill. Every lane has one since the birth-first pass (a2e2843).
   const onLane = KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && m.runes.includes(birth)
     && lettersOf(m, birth).length >= 2 && m.runes.every(r => onIt.has(r)))
-  // the SMALLEST such word (the glove's 09-11 rule, narrowed by one clause; the bracelet takes it too until
-  // the seat's 17-word pick lands in `GREG_BRACELET_PICK`), and a word the sim can run before one it cannot
+  // the SMALLEST such word (the glove's 09-11 rule, narrowed by one clause; the bracelet's word is the
+  // ruled `GREG_BRACELET_PICK`, and this is only its fallback), and a word the sim can run before one it cannot
   const size = Math.min(...onLane.map(m => lettersOf(m, birth).length))
   const fit = onLane.filter(m => lettersOf(m, birth).length === size)
   const built = fit.filter(m => isBuilt(m.id))
   return built.length ? built : fit
 }
 /**
- * The seat's pick of Greg's bracelet word per birth rune (the pending in-seat 17-word pass). Empty until it
- * lands; a pick here beats the derived default, and must still be one of `floorCandidates`' lane words.
+ * ★ GREG'S BRACELET, BY BIRTH RUNE — the 17 (RULED 09-28, /magii + Alex, athernyx 8432ebf;
+ * `design-briefs/shimmer-casting-vessels.md`). The word per birth is CANON; a pick here beats the derived
+ * default, and must still pass `isFloorWord` (floor-pair.test asserts every row does).
  */
-export const GREG_BRACELET_PICK: Readonly<Partial<Record<string, string>>> = {}
+export const GREG_BRACELET_PICK: Readonly<Partial<Record<string, string>>> = {
+  manalic: 'emberglass', star: 'emberglass',
+  barrier: 'living-architecture', life: 'mending-thread', enchant: 'mending-thread',
+  lightning: 'bolt-snipe', illuminate: 'bolt-snipe',
+  tempest: 'wind-shear', breeze: 'wind-shear',
+  stone: 'lava-stride', magma: 'lava-stride', gem: 'volcano-spike', metalergy: 'forge-fist',
+  freeze: 'flash-freeze', fluid: 'flash-freeze', hydro: 'riptide', mist: 'drowning-grasp',
+}
 /** is `move` a word Greg's `kind` could be cut for on this birth? A saved floor for anything else is recut */
 export const isFloorWord = (kind: Vessel, birth: string | null, move: string | null): boolean => {
   if (!move || !birth) return false
+  // the bracelet's word is RULED per birth: a save cut for the old derived default (Life's was Living
+  // Architecture) is recut for the ruled word on load
+  const ruled = kind === 'bracelet' ? GREG_BRACELET_PICK[birth] : undefined
+  if (ruled && move !== ruled) return false
   const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
   const lane = band ? LANE_FOR_KIND[band] : null
   const m = moveById(move)
