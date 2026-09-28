@@ -7122,8 +7122,11 @@ export default function Shimmer3D() {
   const holdEHeld = useRef(false)
   const [holdHud, setHoldHud] = useState<{ round: number; salvage: number; hush: number; loud: boolean; surge: number; kills: number; over: boolean; prompt: HoldPrompt | null; best: number; weapon: { name: string; tier: string; next: number | null }; wrack: number; studied: LabNodeId[] } | null>(null)
   const [labOpen, setLabOpen] = useState(false)
+  const labOpenRef = useRef(false); labOpenRef.current = labOpen
+  // the mouse handoff every cursor surface uses: borrow on open, hand look back on close
+  const toggleLab = useCallback((open: boolean) => { if (open === labOpenRef.current) return; if (open) openCursorUI(); else closeCursorUI(); setLabOpen(open) }, [openCursorUI, closeCursorUI])
   // the bench's notes close when you walk off it (or the run ends), so the next visit opens on E, not by itself
-  useEffect(() => { if (labOpen && (holdHud?.prompt?.kind !== 'bench' || holdHud?.over)) setLabOpen(false) }, [labOpen, holdHud])
+  useEffect(() => { if (labOpen && (holdHud?.prompt?.kind !== 'bench' || holdHud?.over)) toggleLab(false) }, [labOpen, holdHud, toggleLab])
   const [holdFlash, setHoldFlash] = useState<string | null>(null)
   const holdKey = isTouch ? '✦' : 'E'   // the Hold's prompts name the button the player actually has
   useEffect(() => { if (!holdFlash) return; const t = setTimeout(() => setHoldFlash(null), 2200); return () => clearTimeout(t) }, [holdFlash])
@@ -7216,7 +7219,7 @@ export default function Shimmer3D() {
         } else short()
       } else if (pr.kind === 'font') {
         if (buyFont(hs)) { manaRef.current.current = manaMax(); setManaFrac(1) } else short()
-      } else if (pr.kind === 'bench') { setLabOpen(o => { if (!o) document.exitPointerLock?.(); return !o }) }   // the notes are clicked: free the mouse
+      } else if (pr.kind === 'bench') { toggleLab(!labOpenRef.current) }   // the notes are clicked: borrow the mouse
       else if (pr.kind === 'cache') { if (buyCache(hs)) setHoldFlash(`+${HOLD_TUNING.cacheSec}s lull`); else short() }
       else if (pr.kind === 'device') {
         const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]
@@ -7224,12 +7227,13 @@ export default function Shimmer3D() {
         else if (tuneCostFor(hs, W.id) === null) setHarvestToast(`The ${W.name} is as far as it goes`)
         else { const t = tuneWeapon(hs, W.id); if (t !== null) setHoldFlash(`${W.name} — ${TUNE_TIERS[t].name}`); else short() }
       }
-  }, [beginHold, equipWeapon])
+  }, [beginHold, equipWeapon, toggleLab])
   useEffect(() => {
     if (zoneId !== HOLD_ZONE) return
     const onDown = (e: KeyboardEvent) => {
       if (e.repeat || editRef.current || dialogueRef.current) return
       const k = e.key.toLowerCase()
+      if (k === 'escape' && labOpenRef.current) { e.preventDefault(); toggleLab(false); return }
       if (k === 'g') holdSurge()
       else if (k === 'e') holdAct()
     }
@@ -8268,31 +8272,40 @@ export default function Shimmer3D() {
             </HearthPill>
           )}
           {labOpen && holdHud.prompt?.kind === 'bench' && !holdHud.over && (
-            <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: 96, left: '50%', transform: 'translateX(-50%)', zIndex: 36, width: 'min(560px, calc(100vw - 32px))' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700 }}>Their notes</span>
-                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>Wrack <span style={{ color: S.hold.wrack }}>{holdHud.wrack}</span></span>
+            // a real panel, not a HearthPill: the pill is pointer-events-none by design (a prompt you read), and the
+            // first cut sat in one, so every click fell through and the notes read as read-only (Alex 09-28)
+            <HudPlate face={HUD_FACE} style={{ position: 'fixed', top: 96, left: '50%', transform: 'translateX(-50%)', zIndex: 36, width: 'min(520px, calc(100vw - 32px))', pointerEvents: 'auto' }}>
+              <div className="hearth-root" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', whiteSpace: 'normal', ...hearthBody }}
+                onPointerDown={e => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <span style={{ letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 800 }}>Their notes</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>Wrack {holdHud.wrack}</span>
+                    <HearthButton small onClick={() => toggleLab(false)}>Close ✕</HearthButton>
+                  </span>
                 </div>
-                <span className="hk-soft" style={{ fontSize: 12 }}>Every study is heard. What it gives, the flood takes back.</span>
+                <span className="hk-faint" style={{ fontSize: 12 }}>Every study is heard. What it gives, the flood takes back.</span>
                 {LAB_NODES.map(n => {
                   const hs = holdRef.current
                   const why = hs ? labBlock(hs, n.id) : 'wrack'
-                  const done = why === 'studied'
+                  const label = why === 'studied' ? 'Studied'
+                    : why === 'needs' ? `After ${LAB_NODES.find(x => x.id === n.needs)?.name}`
+                    : `Study · ${n.cost} wrack`
                   return (
-                    <button key={n.id} disabled={why !== null}
-                      onClick={() => { const h = holdRef.current; if (h && studyNode(h, n.id)) setHoldFlash(n.name) }}
-                      style={{ textAlign: 'left', padding: '6px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.14)', background: done ? 'rgba(191,230,255,0.10)' : 'rgba(0,0,0,0.25)', opacity: why === null || done ? 1 : 0.45, color: 'inherit', cursor: why === null ? 'pointer' : 'default', font: 'inherit' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                        <span>{n.name}</span>
-                        <span style={{ fontVariantNumeric: 'tabular-nums', color: S.hold.wrack }}>{done ? 'studied' : why === 'needs' ? `after ${LAB_NODES.find(x => x.id === n.needs)?.name}` : `${n.cost} wrack`}</span>
+                    <div key={n.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, opacity: why === 'studied' ? 0.6 : 1 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <span style={{ fontWeight: 800 }}>{n.name}</span>
+                        <span style={{ fontSize: 12 }}>+ {n.boon}</span>
+                        <span className="hk-faint" style={{ fontSize: 12 }}>− {n.bane}</span>
                       </div>
-                      <div style={{ fontSize: 12 }}><span className="hk-moss">+ {n.boon}</span> <span className="hk-soft">·</span> <span className="hk-ember">− {n.bane}</span></div>
-                    </button>
+                      <HearthButton small primary={why === null} disabled={why !== null}
+                        onClick={() => { const h = holdRef.current; if (h && studyNode(h, n.id)) setHoldFlash(n.name) }}>{label}</HearthButton>
+                    </div>
                   )
                 })}
+                <span className="hk-faint" style={{ fontSize: 11 }}>{isTouch ? 'Tap Close or step away' : 'Esc, E or step away to close'}</span>
               </div>
-            </HearthPill>
+            </HudPlate>
           )}
           {holdHud.over && (
             <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '32%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }}>
