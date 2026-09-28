@@ -16,9 +16,8 @@ import { keeperKey } from '@/lib/keeper-local'
 
 export const ROAD_KEY = 'ather:shimmer:stillwind-road'
 export const ROAD_SEASON = 'lenna'
-/** What the Lenn's notes say when the road is read. Lark's draft #1 (09-28), ⚠ AWAITING ALEX'S SIGN-OFF — his
- *  alternates: "Watch the wind. Where it stops, and when — that is its road." · "It comes without wind. Mark the
- *  place the wind dies — that ground is its path." Where and when, never what (canon 3d2a7b2). */
+/** What the Lenn's notes say when the road is read — Lark's line, SIGNED OFF by Alex 09-28. Where and when,
+ *  never what (canon 3d2a7b2). */
 export const ROAD_LINE = 'The wind dies before it comes. Mark where it dies — that is where it walks.'
 export interface RoadRecord { season: string; at: number }
 

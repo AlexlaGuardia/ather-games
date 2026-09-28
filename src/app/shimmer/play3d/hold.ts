@@ -224,7 +224,7 @@ export type LabNodeId = 'lull1' | 'mend' | 'lull2' | 'pitch' | 'road'
 export interface LabNode { id: LabNodeId; name: string; cost: number; needs?: LabNodeId; boon: string; bane: string }
 export const LAB_NODES: readonly LabNode[] = [
   { id: 'lull1', name: 'A Deeper Lull', cost: 3, boon: '+75s of lull', bane: 'more of them come swift' },
-  { id: 'mend', name: 'Their Seal Notes', cost: 3, boon: 'mend seals twice as fast', bane: 'a bulk every fourth body, from round 3' },
+  { id: 'mend', name: 'The Seal Notes', cost: 3, boon: 'mend seals twice as fast', bane: 'a bulk every fourth body, from round 3' },
   { id: 'lull2', name: 'Deeper Still', cost: 6, needs: 'lull1', boon: '+75s of lull', bane: 'every body moves faster' },
   { id: 'pitch', name: 'The Pitch', cost: 5, boon: 'mana drips twice as fast', bane: 'four more of them on the floor at once' },
   // THE CAPSTONE (Alex 09-27; canon: the Lenn's notes show where and when the Stillwind walks, never what, and
