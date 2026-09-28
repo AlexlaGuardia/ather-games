@@ -54,6 +54,9 @@ import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
 import { useMultiplayer, storedName, storeName, type RemotePlayer } from './multiplayer'
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
+import { usePresence, type UsePresence } from '@/lib/presence'
+import { FriendsTab, InvitePrompt, useFriends } from './play-together'
+import { HearthTabs } from '../ui/hearth'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
 import { pushCloudSave } from '@/lib/cloud-sync'
 import { saveKey, saveOwner } from '@/lib/save-slot'
@@ -4590,7 +4593,8 @@ function AccountBlock({ account }: { account: UseAccount }) {
 // A party is a shared code, not an account (see multiplayer.ts). This panel is the whole
 // social UI: sign in, name yourself, make/join/leave a party, copy the invite link, see the
 // roster.
-function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlot }: {
+function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlot, presence }: {
+  presence: UsePresence
   name: string
   onName: (n: string) => void
   party: string | null
@@ -4601,6 +4605,20 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlo
   inPlot?: (x: number, z: number) => boolean
 }) {
   const roster = useRoster(peers)
+  // ★ two tabs (09-28): PARTY (who you play with now) and FRIENDS (who you pull them from)
+  const [tab, setTab] = useState<'party' | 'friends'>('party')
+  const signedIn = !!account.session?.username
+  const fr = useFriends(tab === 'friends', signedIn)
+  const onlineFriends = fr.friends.filter(f => f.status === 'accepted' && f.online).length
+  const inviteFriend = async (f: { user_id: string; username: string }): Promise<string> => {
+    let code = party
+    if (!code) { code = newPartyCode(); onParty(code) }
+    const res = await presence.invite(f.user_id, code)
+    if (res.ok) return 'invited'
+    if (res.reason === 'offline') return 'offline'
+    if (res.reason === 'unverified') return 'sign in again'
+    return 'not connected'
+  }
   // The rows re-render on membership changes only; a peer stepping into their plot should
   // flip the label without waiting for a join/leave, so tick the labels at a low rate.
   const [, setLabelTick] = useState(0)
@@ -4626,7 +4644,12 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlo
   }
   return (
     // The plaque says "Play together" now (HearthFrame, at the host); the body is the parchment.
-    <div className="px-3.5 pt-6 pb-3.5 hk-ink" style={{ ...hearthBody }}>
+    <div className="px-3.5 pt-5 pb-3.5 hk-ink" style={{ ...hearthBody }}>
+      <HearthTabs tabs={[{ id: 'party', label: 'Party' }, { id: 'friends', label: 'Friends', count: signedIn ? onlineFriends : undefined }]}
+                  active={tab} onPick={(id) => setTab(id as 'party' | 'friends')} />
+      {tab === 'friends' ? (
+        <FriendsTab signedIn={signedIn} friends={fr.friends} loaded={fr.loaded} act={fr.act} onInvite={inviteFriend} inParty={!!party} />
+      ) : (<>
       <AccountBlock account={account} />
 
       <PanelLabel style={{ margin: '12px 0 4px' }}>Your name</PanelLabel>
@@ -4679,6 +4702,7 @@ function PlayTogetherPanel({ name, onName, party, onParty, peers, account, inPlo
         ))}
         {roster.length === 0 && <div className="hk-faint font-semibold italic">no one else yet</div>}
       </div>
+    </>)}
     </div>
   )
 }
@@ -4843,6 +4867,9 @@ export default function Shimmer3D() {
   // of the site (arcade board, friends, garden visits) already knows them by. Mirrored into
   // localStorage so the next boot shows it before the session fetch resolves.
   const account = useAccount()
+  // ★ the site-wide presence socket, mounted IN the game too (09-28): it had lived only in the /room account
+  // widget, so an invite sent to a keeper standing in play3d was reported "invited" and never shown
+  const presence = usePresence(account.session?.username ? account.session.user_id : null, account.session?.username ?? '')
   const accountRef = useRef(account); accountRef.current = account
   const accountName = account.session?.username ?? null
   useEffect(() => {
@@ -8476,14 +8503,20 @@ export default function Shimmer3D() {
             </HearthFrame>
           )}
 
+          {presence.incoming && (
+            <InvitePrompt invite={presence.incoming} inParty={!!mpParty && mpParty !== presence.incoming.party}
+              onJoin={() => { joinParty(presence.incoming!.party); presence.dismiss(); setBanner(`✦ Joined ${presence.incoming!.from_name}'s party`) }}
+              onDismiss={presence.dismiss} />
+          )}
           {mpOpen && (
-            <HearthFrame title="Play together" maxWidth={Math.min(240, colRoom)} backdrop={false} className="mt-5" onClose={() => setMpOpen(false)}>
+            <HearthFrame title="Play together" maxWidth={Math.min(300, colRoom)} backdrop={false} className="mt-5" onClose={() => setMpOpen(false)}>
             <PlayTogetherPanel
               name={mpName} onName={setMpName}
               party={mpParty} onParty={(code) => { if (code) joinParty(code); else leaveParty() }}
               inPlot={zoneId === HOME_PLOT_ZONE || zoneId === 'r-home-plot' ? () => true : zoneId === WORLD_ZONE_ID ? (x: number, z: number) => fromWorld(Math.round(x), Math.round(z))?.zoneId === HOME_PLOT_ZONE : undefined}
               peers={mpPeers}
               account={account}
+              presence={presence}
             />
             </HearthFrame>
           )}

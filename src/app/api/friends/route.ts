@@ -13,10 +13,32 @@ function me(req: NextRequest): string | null {
   return readSessionToken(req.cookies.get(SESSION_COOKIE)?.value)?.user_id ?? null
 }
 
-export function GET(req: NextRequest) {
+// ★ WHO IS HERE (2026-09-28): the presence server knows which accounts hold a verified socket; this route
+// knows who your friends are. So the question is asked server-to-server, for ACCEPTED friends only, and a
+// browser can never ask it about anyone else. The presence server down = everyone reads offline, never an error.
+async function onlineOf(ids: string[]): Promise<Set<string>> {
+  const secret = process.env.ATHER_SESSION_SECRET
+  if (!secret || ids.length === 0) return new Set()
+  try {
+    const port = process.env.SHIMMER_SERVER_PORT ?? '8400'
+    const res = await fetch(`http://127.0.0.1:${port}/online?ids=${encodeURIComponent(ids.join(','))}`, {
+      headers: { 'x-ather-secret': secret }, cache: 'no-store', signal: AbortSignal.timeout(1500),
+    })
+    if (!res.ok) return new Set()
+    const body = (await res.json()) as { online?: string[] }
+    return new Set(body.online ?? [])
+  } catch { return new Set() }
+}
+
+export async function GET(req: NextRequest) {
   const user_id = me(req)
   if (!user_id) return NextResponse.json({ friends: [] }, { headers: { 'cache-control': 'no-store' } })
-  return NextResponse.json({ friends: listFriends(user_id) }, { headers: { 'cache-control': 'no-store' } })
+  const friends = listFriends(user_id)
+  const here = await onlineOf(friends.filter((f) => f.status === 'accepted').map((f) => f.user_id))
+  return NextResponse.json(
+    { friends: friends.map((f) => ({ ...f, online: f.status === 'accepted' && here.has(f.user_id) })) },
+    { headers: { 'cache-control': 'no-store' } },
+  )
 }
 
 export async function POST(req: NextRequest) {
