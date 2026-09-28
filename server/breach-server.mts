@@ -23,7 +23,7 @@
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { IncomingMessage } from 'node:http'
 import {
-  parseLanding, startHold, stepHoldParty, hitBody, mendTick, buyGate, buyRack, buyFont, plantDevice, tuneWeapon,
+  parseLanding, startHold, stepHoldParty, hitBody, mendTick, buyGate, buyRack, buyFont, buyCache, plantDevice, tuneWeapon,
   studyNode, chestTick, releaseSurge, fieldStrike, endHold, type HoldState, type HoldKeeper, type LabNodeId,
 } from '../src/app/shimmer/play3d/hold'
 import { readSessionToken, SESSION_COOKIE } from '../src/lib/accounts/session'
@@ -102,6 +102,8 @@ export function tickRoom(r: Room, dt: number): void {
   r.s.loot.length = 0
 }
 
+const takeStruck = (k: Keeper): number => { const n = k.struck; k.struck = 0; return n }
+
 /** What one keeper sees: the shared fight, and their own wallet. Small enough to send ten times a second. */
 export function snapshotFor(r: Room, k: Keeper) {
   const s = r.s
@@ -111,7 +113,8 @@ export function snapshotFor(r: Room, k: Keeper) {
     flood: s.flood.filter(b => b.alive).map(b => ({ id: b.id, kind: b.kind, x: +b.x.toFixed(2), z: +b.z.toFixed(2), y: +b.y.toFixed(2), hp: b.hp, maxHp: b.maxHp, phase: b.phase, win: b.win, vx: +b.vx.toFixed(2), vz: +b.vz.toFixed(2) })),
     planks: s.planks, gatesOpen: s.gatesOpen, rooms: s.rooms, chests: s.chests, drops: s.drops,
     devicePlanted: s.devicePlanted, studied: s.studied,
-    you: { ...k.wallet, struck: k.struck },
+    // strike damage is HANDED OVER with the snapshot and cleared here (an ack would lose what landed in between)
+    you: { ...k.wallet, struck: takeStruck(k) },
     party: r.keepers.map(o => ({ id: o.id, name: o.name, down: o.down, x: +o.pos.x.toFixed(2), z: +o.pos.z.toFixed(2), y: +o.pos.y.toFixed(2), here: o.ws !== null })),
     events: k.events.splice(0),
   }
@@ -124,7 +127,7 @@ type Msg =
   | { t: 'chest'; spot: number; dt: number }
   | { t: 'field'; x: number; z: number; r: number; dmg: number; fy?: number }
   | { t: 'surge' }
-  | { t: 'act'; a: 'gate' | 'rack' | 'font' | 'plant' | 'tune' | 'study'; arg?: number | string }
+  | { t: 'act'; a: 'gate' | 'rack' | 'font' | 'cache' | 'plant' | 'tune' | 'study'; arg?: number | string }
   | { t: 'struck-ack' }
   | { t: 'down' }
 
@@ -164,6 +167,7 @@ export function handle(r: Room, k: Keeper, m: Msg): unknown | null {
           case 'gate': return buyGate(s, Math.trunc(num(m.arg, 0, 999)))
           case 'rack': return buyRack(s)
           case 'font': return buyFont(s)
+          case 'cache': return buyCache(s)
           case 'plant': return plantDevice(s)
           case 'tune': return tuneWeapon(s, String(m.arg ?? ''))
           case 'study': return studyNode(s, String(m.arg ?? '') as LabNodeId)

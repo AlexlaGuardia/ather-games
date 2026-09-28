@@ -54,6 +54,7 @@ import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
 import { useMultiplayer, storedName, storeName, type RemotePlayer } from './multiplayer'
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
+import { BreachLink, coop, driftMirror } from './breach-link'
 import { usePresence, type UsePresence } from '@/lib/presence'
 import { FriendsTab, InvitePrompt, useFriends } from './play-together'
 import { DeparturesPanel, type Destination } from './departures'
@@ -149,7 +150,7 @@ import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPane
 import MoveBook from './MoveBook'
 import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
-import { HOLD_TUNING, BODY_SIZE, DROP_NAME, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, LAB_NODES, studyNode, labBlock, holdManaDrip, type LabNodeId, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
+import { HOLD_TUNING, BODY_SIZE, DROP_NAME, type HoldDropKind, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, LAB_NODES, studyNode, labBlock, holdManaDrip, type LabNodeId, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 import { addPiece, pieceLine, loadDry, saveDry } from './vessel-pieces'
 import { loadRoad, saveRoad, roadOpen, ROAD_LINE, loadDeed, saveDeed } from './stillwind-road'
 import { EDGE_ZONE, EDGE_START, DEED_TITLE, STILLWIND_TUNING, startStillwind, stepStillwind, hitStillwind, edgeHazard, lineMend, edgeToSim, simToEdge, stillwindPhase } from './stillwind'
@@ -2999,7 +3000,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
             }
           }
           // the flooded (THE HOLD) — capped to the nearest few, see `hold.ts` › fieldStrike
-          if (hs) fieldStrike(hs, f.x, f.z, f.radius, f.dps, posRef.current ? posRef.current.y / STEP : undefined)
+          if (hs) { const fy = posRef.current ? posRef.current.y / STEP : undefined; fieldStrike(hs, f.x, f.z, f.radius, f.dps, fy); coop.link?.field(f.x, f.z, f.radius, f.dps, fy) }
         }
         if (f.hps > 0 && posRef.current) {
           const dx = posRef.current.x - f.x, dz = posRef.current.z - f.z
@@ -3103,7 +3104,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const bdx = p.pos.x - b.x, bdz = p.pos.z - b.z, br = b.kind === 'bulk' ? 0.7 : 0.5
           if (bdx * bdx + bdz * bdz >= br * br) continue
           const crit = p.pos.y > by + CRIT_Y
-          hitBody(hs, b.id, (crit ? wCrit : wDmg) * tier.dmg, crit)
+          // co-op: applied to the mirror at once (instant feedback) AND sent; the server's next snapshot is the truth
+          hitBody(hs, b.id, (crit ? wCrit : wDmg) * tier.dmg, crit); coop.link?.hit(b.id, (crit ? wCrit : wDmg) * tier.dmg, crit)
           p.last = b.id
           if (++p.hits >= tier.pierce) p.life = 0
           onHit(crit)
@@ -3130,7 +3132,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           if (!b.alive || Math.abs(p.pos.y - (b.y * STEP + 0.5)) >= 1.1) continue
           const bdx = p.pos.x - b.x, bdz = p.pos.z - b.z, br = b.kind === 'bulk' ? 0.8 : 0.6
           if (bdx * bdx + bdz * bdz >= br * br) continue
-          hitBody(hs, b.id, dmg, false); struck = true; break
+          hitBody(hs, b.id, dmg, false); coop.link?.hit(b.id, dmg, false); struck = true; break
         }
         if (struck) { p.life = 0; onHit(true); continue }
       }
@@ -3186,8 +3188,16 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     // range, and a board parked at Infinity would never come back there.
     if (inHold) for (const t of targets) { t.alive = false; t.down = 1 }
     if (hs?.running && posRef.current) {
-      const o = stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP)
-      if (o.strike > 0) hurtPlayer(o.strike)
+      if (coop.link) {
+        // ★ CO-OP: the server steps the fight; this page carries the flood between snapshots, reports where its
+        // keeper stands, and takes the strikes the server says landed on it
+        driftMirror(hs, dt)
+        coop.link.pos(posRef.current.x, posRef.current.y / STEP, posRef.current.z)
+        if (coop.struck > 0) { const d = coop.struck; coop.struck = 0; hurtPlayer(d) }
+      } else {
+        const o = stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP)
+        if (o.strike > 0) hurtPlayer(o.strike)
+      }
     }
     // ── THE STILLWIND steps here (`stillwind.ts`). Its strikes go through `hurtPlayer` like the flooded's; the edge's
     // own burn/frost is a steady drain, so it skips the hit flash and takes the shield first itself; the line mends.
@@ -6904,6 +6914,8 @@ export default function Shimmer3D() {
     }
     // in the hold a fall ENDS the run (the range just resets you). The record is the round reached.
     const hs = holdRef.current
+    // ★ CO-OP: a fall does not end the run, it takes YOU out of it; the run ends when the last keeper falls
+    if (hs?.running && coop.link) { coop.link.down(); setHoldFlash('You are down. Your party holds the line.'); return }
     if (hs?.running) {
       const r = endHold(hs)
       try { if (r.round > Number(localStorage.getItem(keeperKey(HOLD_BEST_KEY)) ?? 0)) localStorage.setItem(keeperKey(HOLD_BEST_KEY), String(r.round)) } catch { /* no storage: no record */ }
@@ -7559,6 +7571,22 @@ export default function Shimmer3D() {
     holdRef.current.dryRounds = loadDry()   // the pity counter carries across runs (`vessel-pieces.ts`)
     holdRef.current.gloveOwed = breachOwesGloveStones()   // Idony named the Breach: a cache past a real round holds the glove's stones
     holdRef.current.roadKnown = roadOpen(loadRoad())   // the Stillwind's road, read in an earlier run, stays read
+    // ★ CO-OP (09-28): launched together from Departures (or going again after a co-op run) → the server runs the
+    // fight and this run's state is a MIRROR of it (`breach-link.ts`). Otherwise the page steps it, as ever.
+    const coopParty = coop.wantParty ?? coop.link?.code ?? null
+    coop.link?.close(); coop.link = null; coop.struck = 0; coop.wantParty = null
+    if (coopParty) {
+      const mirror = holdRef.current
+      const link = new BreachLink(coopParty, mirror, {
+        onStruck: (d) => { coop.struck += d },
+        onPickup: (k) => { mirror.pickups.push(k as HoldDropKind) },
+        onLoot: (l) => { mirror.loot.push(l); setHoldFlash(lootLabel(l)) },
+        onRefused: (why) => { setHoldFlash(why); if (coop.link === link) coop.link = null },
+        onStatus: (st) => { if (st === 'lost' && coop.link === link) setHoldFlash('Lost touch with the party\u2019s Breach') },
+      })
+      coop.link = link
+      link.open()
+    }
     const rep = WEAPONS.findIndex(w => w.id === 'repeater')
     if (!holdSavedLoadout.current) holdSavedLoadout.current = [...loadoutRef.current]
     equipWeapon(0, rep); equipWeapon(1, rep)
@@ -7569,6 +7597,7 @@ export default function Shimmer3D() {
   useEffect(() => {
     if (zoneId === HOLD_ZONE) { beginHold(); return }
     if (!holdRef.current && !holdSavedLoadout.current) return
+    coop.link?.close(); coop.link = null; coop.struck = 0   // walking out of the Breach leaves the party's fight
     holdRef.current = null; holdEHeld.current = false; setHoldHud(null)
     // the hold's pool can sit above a new keeper's own; never walk out holding more than you can
     manaRef.current.current = Math.min(manaRef.current.current, manaMax()); setManaFrac(manaRef.current.current / manaMax())
@@ -7598,8 +7627,9 @@ export default function Shimmer3D() {
         if (kind === 'glimmer') { manaRef.current.current = manaMax(); setManaFrac(1) }
         setHoldFlash(kind === 'wrack' ? `${DROP_NAME[kind]} · ${hs.wrack}` : DROP_NAME[kind])
       }
-      if (holdEHeld.current && prompt?.kind === 'mend') mendTick(hs, prompt.win, DT)
-      if (holdEHeld.current && prompt?.kind === 'chest') { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) }
+      if (holdEHeld.current && prompt?.kind === 'mend') { mendTick(hs, prompt.win, DT); coop.link?.mend(prompt.win, DT) }
+      // co-op: a cache is opened by the SERVER (its roll is the one that counts); the loot comes back to the opener
+      if (holdEHeld.current && prompt?.kind === 'chest') { if (coop.link) coop.link.chest(prompt.spot, DT); else { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) } }
       // what a cache gave that lives outside the run: Marks are the real wallet; a vessel piece goes home for the cutter
       while (hs.loot.length) { const l = hs.loot.shift()!; if (l.kind === 'marks') addMarks(l.n); else if (l.kind === 'part') setHoldFlash(pieceLine(addPiece())); else if (l.kind === 'stones') { markGloveStones(); setForkTick(n => n + 1) } }
       if (hs.fell) { hs.fell = null; setHoldFlash('The floor gave way') }
@@ -7623,7 +7653,7 @@ export default function Shimmer3D() {
     const hs = holdRef.current, p = posRef.current
     if (!hs || !p || !hs.running) return
     if (hs.surge < 1) { setHarvestToast('The surge is not charged — crush more of the flooded'); return }
-    releaseSurge(hs, p.x, p.z, p.y / STEP); setHoldFlash('Surge')
+    releaseSurge(hs, p.x, p.z, p.y / STEP); coop.link?.surge(); setHoldFlash('Surge')
   }, [])
   const holdAct = useCallback(() => {
     const hs = holdRef.current, p = posRef.current
@@ -7633,9 +7663,11 @@ export default function Shimmer3D() {
       if (!pr) return
       if (pr.kind === 'mend' || pr.kind === 'chest') { holdEHeld.current = true; return }
       const short = () => setHarvestToast('Not enough salvage')
-      if (pr.kind === 'gate') { if (buyGate(hs, pr.gate)) setHoldFlash('The gate opens'); else short() }
+      // co-op: every buy is applied to the mirror at once AND sent (`coop.link.act`); the server's snapshot is the truth
+      if (pr.kind === 'gate') { if (buyGate(hs, pr.gate)) { coop.link?.act('gate', pr.gate); setHoldFlash('The gate opens') } else short() }
       else if (pr.kind === 'rack') {
         const got = buyRack(hs)
+        if (got) coop.link?.act('rack')
         const idx = WEAPONS.findIndex(w => w.id === HOLD_TUNING.rackWeapon)
         if (got === 'weapon') equipWeapon(slotRef.current, idx)
         else if (got === 'refill') {
@@ -7644,14 +7676,14 @@ export default function Shimmer3D() {
           else if (slot >= 0) ammoStashRef.current[slot] = WEAPONS[idx].clip
         } else short()
       } else if (pr.kind === 'font') {
-        if (buyFont(hs)) { manaRef.current.current = manaMax(); setManaFrac(1) } else short()
+        if (buyFont(hs)) { coop.link?.act('font'); manaRef.current.current = manaMax(); setManaFrac(1) } else short()
       } else if (pr.kind === 'bench') { toggleLab(!labOpenRef.current) }   // the notes are clicked: borrow the mouse
-      else if (pr.kind === 'cache') { if (buyCache(hs)) setHoldFlash(`+${HOLD_TUNING.cacheSec}s lull`); else short() }
+      else if (pr.kind === 'cache') { if (buyCache(hs)) { coop.link?.act('cache'); setHoldFlash(`+${HOLD_TUNING.cacheSec}s lull`) } else short() }
       else if (pr.kind === 'device') {
         const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]
-        if (!pr.planted) { if (plantDevice(hs)) setHoldFlash('The Tuner is set at the tap'); else short() }
+        if (!pr.planted) { if (plantDevice(hs)) { coop.link?.act('plant'); setHoldFlash('The Tuner is set at the tap') } else short() }
         else if (tuneCostFor(hs, W.id) === null) setHarvestToast(`The ${W.name} is as far as it goes`)
-        else { const t = tuneWeapon(hs, W.id); if (t !== null) setHoldFlash(`${W.name} — ${TUNE_TIERS[t].name}`); else short() }
+        else { const t = tuneWeapon(hs, W.id); if (t !== null) { coop.link?.act('tune', W.id); setHoldFlash(`${W.name} — ${TUNE_TIERS[t].name}`) } else short() }
       }
   }, [beginHold, equipWeapon, toggleLab])
   useEffect(() => {
@@ -8071,6 +8103,17 @@ export default function Shimmer3D() {
     w.__talk = (id: string) => { const n = ALL_NPCS.find(x => x.id === id); if (n) talk(n); return !!n }
     return () => { delete w.__talk }
   }, [isOwner, talk])
+  // …and read this page's side of a co-op Breach (headless two-keeper checks). OWNER ONLY.
+  useEffect(() => {
+    if (!isOwner) return
+    const w = window as unknown as { __coop?: () => unknown }
+    w.__coop = () => {
+      const l = coop.link, h = holdRef.current
+      return { code: l?.code ?? null, status: l?.status ?? null, party: l?.party.map(p => p.name) ?? [], round: h?.round ?? null,
+        flood: h?.flood.filter(b => b.alive).map(b => b.id).sort((a, c) => a - c) ?? [], salvage: h?.salvage ?? null, zone: zoneIdRef.current }
+    }
+    return () => { delete w.__coop }
+  }, [isOwner])
 
   const save = useCallback(async () => {
     setSaveMsg('saving…')
@@ -8777,7 +8820,7 @@ export default function Shimmer3D() {
                         {n.id === 'road' && (why === 'studied' || why === 'known') && <span style={{ fontSize: 12, fontStyle: 'italic', marginTop: 2 }}>“{ROAD_LINE}”</span>}
                       </div>
                       <HearthButton small primary={why === null} disabled={why !== null}
-                        onClick={() => { const h = holdRef.current; if (h && studyNode(h, n.id)) { setHoldFlash(n.name); if (n.id === 'road') saveRoad() } }}>{label}</HearthButton>
+                        onClick={() => { const h = holdRef.current; if (h && studyNode(h, n.id)) { coop.link?.act('study', n.id); setHoldFlash(n.name); if (n.id === 'road') saveRoad() } }}>{label}</HearthButton>
                     </div>
                   )
                 })}
@@ -9196,8 +9239,8 @@ export default function Shimmer3D() {
         const owner = isOwner
         const road = roadOpen(loadRoad())
         const dests: Destination[] = [
-          { id: 'breach', berth: 1, world: 'Lenna', name: 'The Breach', locked: owner ? null : 'Not open yet' },
-          { id: 'slack', berth: 1, world: 'Lenna', name: 'The Slack', locked: !owner ? 'Not open yet' : road ? null : 'Read the Stillwind’s Road in the Breach’s lab first' },
+          { id: 'breach', berth: 1, world: 'Lenna', name: 'The Breach', locked: owner ? null : 'Not open yet', coop: true },
+          { id: 'slack', berth: 1, world: 'Lenna', name: 'The Slack', locked: !owner ? 'Not open yet' : road ? null : 'Read the Stillwind’s Road in the Breach’s lab first' , coop: false },
         ]
         const close = () => { setDeparturesOpen(false); battleRef.current = false; closeCursorUI() }
         return (
@@ -9205,8 +9248,9 @@ export default function Shimmer3D() {
             <DeparturesPanel you={mpName} party={mpParty} members={mpParty ? mpRoster.map(p => p.name) : []}
               destinations={dests} berths={BERTH_COUNT}
               onInviteFriends={() => { close(); setMpTab('friends'); setMpOpen(true) }}
-              onLaunch={(d) => {
+              onLaunch={(d, together) => {
                 close()
+                coop.wantParty = together && mpParty ? mpParty : null
                 const ship = holdShip()!
                 if (d.id === 'breach') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', ownerOnly: true })
                 else if (d.id === 'slack') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up', ownerOnly: true })
