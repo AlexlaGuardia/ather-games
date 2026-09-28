@@ -126,7 +126,7 @@ function Corner({ face, size, mana, readouts, glyph }: {
 }
 
 // ── the layer ────────────────────────────────────────────────────────────────────────────────
-export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph, door = false, topLeftFrom = 0, clock = true, mapFrame = true }: {
+export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held, dimmed, onSelect, objective, vitals, mana, buffs, tools, skills, activeTool, glyph, door = false, topLeftFrom = 0, clock = true, mapFrame = true, slots = true }: {
   /** The host has an options door under the map (the world does) — the clock steps left of it. */
   door?: boolean
   /**
@@ -157,6 +157,8 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
   clock?: boolean
   /** false = the host rings its own minimap, on the MINIMAP'S show-rule, which is not the bar's. */
   mapFrame?: boolean
+  /** false = the hotbar's quick-slots are hidden (the mortal side, Alex 09-28); a phone keeps the lip (mana, tools) */
+  slots?: boolean
   tools: React.RefObject<EquippedTools>
   skills: React.RefObject<SkillSet>
   activeTool: string | null
@@ -189,7 +191,7 @@ export function HearthHudLayer({ face = 'full', size: sizeIn, entries, sel, held
       {buffs && <HearthBuffChips face={face} buffs={buffs}
         top={size !== 'phone' ? undefined : (topLeftFrom ? topLeftFrom + 6 : 12) + (objective ? 46 : 0)} />}
       {size === 'wide' && vitals && <div className="absolute bottom-4 left-4 pointer-events-none"><HearthVitals face={face} vitals={vitals} /></div>}
-      <HearthHotbar face={face} size={size} entries={entries} sel={sel} held={held} dimmed={dimmed} onSelect={onSelect} lip={lip} />
+      <HearthHotbar face={face} size={size} entries={entries} sel={sel} held={held} dimmed={dimmed} onSelect={onSelect} lip={lip} slots={slots} />
       {size !== 'phone' && <Corner face={face} size={size} mana={mana} readouts={readouts} glyph={glyph} />}
     </div>
   )

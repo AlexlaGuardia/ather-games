@@ -8549,42 +8549,8 @@ export default function Shimmer3D() {
           {/* damage vignette — red edge pulse on hit; longer, heavier pulse on a down/reset */}
           <div ref={vignetteRef} style={{ position: 'fixed', inset: 0, zIndex: 29, pointerEvents: 'none', opacity: 0,
             background: 'radial-gradient(ellipse at center, transparent 52%, rgba(255,58,44,0.5) 100%)' }} />
-          {/* caster viewmodel — outer div raises it to the sighted pose on ADS (React, transitioned);
-              inner casterRef keeps the imperative recoil kick, so the two transforms don't fight.
-              ★ CANON: a manabox is dead grey CAST metal (iron-grey + dull bronze, Roman-bones/mana-veins).
-              It only lights IN A HAND — so the emitter core glows the wielder's SOUL_COLOR (channels
-              running), never the body. Weapons differ by SILHOUETTE (thin Spitter vs heavy Lance), not
-              colour. Hidden while holstered. */}
-          {!weaponUi.holstered && (
-          <div style={{ position: 'fixed', right: '17%', bottom: 0, zIndex: 33, pointerEvents: 'none',
-            transform: ads ? 'translate(-150px, -30px) scale(1.14)' : 'translate(0,0) scale(1)', transition: 'transform 0.14s ease-out' }}>
-            <div ref={casterRef}>
-              <style>{`@keyframes casterKick { 0% { transform: translateY(16px) } 60% { transform: translateY(-3px) } 100% { transform: translateY(0) } }
-@keyframes casterReload { 0% { transform: translateY(0) rotate(0deg) } 30% { transform: translateY(36px) rotate(-7deg) } 70% { transform: translateY(30px) rotate(-5deg) } 100% { transform: translateY(0) rotate(0deg) } }`}</style>
-              {weaponUi.idx === 1 ? (
-                // LANCE (reacher) — a longer, heavier cast body: thick receiver, long barrel, bronze trim.
-                // Dead grey/bronze metal; the focusing core lights SOUL_COLOR (in-hand).
-                <svg width="272" height="176" viewBox="0 0 272 176" style={{ display: 'block' }}>
-                  <polygon points="40,176 60,84 178,120 158,176" fill={S.viewmodel.lanceStock} stroke={S.viewmodel.lanceTrim} strokeWidth="2" />
-                  <polygon points="54,92 96,58 236,96 150,120" fill={S.viewmodel.lanceBody} stroke={S.viewmodel.bronze} strokeWidth="2" />
-                  <rect x="150" y="86" width="96" height="12" rx="5" fill={S.viewmodel.lanceBarrel} stroke={S.viewmodel.bronze} strokeWidth="2" transform="rotate(-8 150 92)" />
-                  <circle cx="92" cy="88" r="20" fill="none" stroke={SOUL_COLOR} strokeOpacity="0.4" strokeWidth="3" />
-                  <circle cx="92" cy="88" r="12" fill={SOUL_COLOR} />
-                  <circle cx="240" cy="80" r="6" fill={SOUL_COLOR} opacity="0.9" />
-                </svg>
-              ) : (
-                // SPITTER (shortbarrel) — the thin light SMG silhouette. Dead grey/bronze; emitter glows SOUL_COLOR.
-                <svg width="240" height="168" viewBox="0 0 240 168" style={{ display: 'block' }}>
-                  <polygon points="46,168 66,92 158,122 138,168" fill={S.viewmodel.spitterStock} stroke={S.viewmodel.spitterTrim} strokeWidth="2" />
-                  <polygon points="58,98 100,70 126,96 104,122" fill={S.viewmodel.spitterBody} stroke={S.viewmodel.spitterBronze} strokeWidth="2" />
-                  <circle cx="94" cy="96" r="17" fill="none" stroke={SOUL_COLOR} strokeOpacity="0.35" strokeWidth="2" />
-                  <circle cx="94" cy="96" r="10" fill={SOUL_COLOR} />
-                  <rect x="100" y="90" width="52" height="6" rx="3" fill={SOUL_COLOR} opacity="0.9" />
-                </svg>
-              )}
-            </div>
-          </div>
-          )}
+          {/* the old 2D caster placeholder (flat SVG manaboxes) is gone (Alex 09-28): a real held model is its own
+              build. `casterRef` stays null, and the recoil / reload kicks already skip a missing node. */}
         </>
       )}
 
@@ -8690,7 +8656,7 @@ export default function Shimmer3D() {
         <HearthHudLayer face={HUD_FACE} size={hudSize} entries={hotbarEntries} sel={hotSel} held={heldName} dimmed={false} onSelect={selectSlot}
           objective={null} mana={manaCornerRef} tools={equippedToolsRef} skills={skillsRef}
           activeTool={(void toolTick, channel?.family ?? (fish ? 'rinning' : null))}
-          glyph={f => <ToolGlyph family={f} />} clock={false} mapFrame={false} />
+          glyph={f => <ToolGlyph family={f} />} clock={false} mapFrame={false} slots={zone.realm !== 'outside'} />
       </>)}
       {bagOpen && (
         <BagPanel inv={invRef} spiritIndex={spiritIndexRef} chest={null} tick={bagTick} sel={hotSel}

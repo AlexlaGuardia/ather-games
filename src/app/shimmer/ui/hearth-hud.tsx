@@ -76,12 +76,14 @@ export function HudPlate({ face, r = 14, children, style, className = '' }: {
 // ── bottom-centre: the hotbar ────────────────────────────────────────────────────────────────
 /** Drop-in for `hud/hotbar.tsx` `Hotbar` — its contract, unchanged: 8 FIXED slots, items only,
  *  empty slots still drawn, `dimmed` fades rather than hides, `onSelect` makes slots buttons. */
-export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size = 'wide', lip }: {
+export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size = 'wide', lip, slots = true }: {
   face: HudFace
   /** Chosen by the host (`useHudSize`), not by a media query — see hud-flag.ts. */
   size?: HudSize
   /** A strip laid along the tray's top edge (compact/phone: the vitals, see `HearthLip`). */
   lip?: React.ReactNode
+  /** false = no quick-slots, only the lip (Alex 09-28: the mortal side has no hotbar — but a phone's mana rides the lip) */
+  slots?: boolean
   entries: readonly (HotbarEntry | null)[]
   sel: number
   held: { text: string; out: boolean } | null
@@ -96,6 +98,12 @@ export function HearthHotbar({ face, entries, sel, held, dimmed, onSelect, size 
   // The world is client-only and never hit it; the kit must not depend on that. Wells draw at once.
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
+  if (!slots && !lip) return null
+  if (!slots) return (
+    <div className={`absolute ${size === 'phone' ? 'bottom-2' : 'bottom-4'} left-1/2 -translate-x-1/2 pointer-events-none`}>
+      <div style={{ background: t.rim, borderRadius: size === 'phone' ? 14 : 18, padding: trayPad, boxShadow: t.plateShadow }}>{lip}</div>
+    </div>
+  )
   return (
     <div className={`absolute ${size === 'phone' ? 'bottom-2' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center ${onSelect ? '' : 'pointer-events-none'} transition-opacity ${dimmed ? 'opacity-35' : 'opacity-100'}`}>
       {/* Always mounted, opacity only — the row must never shift when the name fades. */}
