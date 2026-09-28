@@ -48,6 +48,7 @@ import { SENSE_RADIUS } from './tremor-sense'
 import { CLOAK_BURN, CLOAK_REBUILD } from './flame-cloak'
 import { RUNES } from './birth/runes.data'
 import { hasLearned, type Book } from './scroll-market'
+import { imbuedWord } from './greg-pair'
 import type { ConjureShape } from '../engine/conjured-terrain'
 import type { StatusKind } from '../engine/statuses'
 
@@ -545,6 +546,16 @@ const BUILDS: Record<string, Build> = {
   // The green answer to Cyclone Cage's teeth. Registered though no keeper can reach it: canon needs
   // Vapor, a Scatter rune the birth screen does not offer — the emptiness IS the canon (runes.data.ts).
   'monsoon-veil': { archetype: 'field', manaCost: 46, cooldownMs: 26000, castRange: 8, areaSize: 7, areaSecs: 16, fieldHps: 16, fieldStopsShots: false },
+  // ── the birth-first pass (09-28): numbers are Jin's, each off its nearest cousin ──
+  'emberglass': { archetype: 'projectile', manaCost: 13, cooldownMs: 1500, damage: 30, projSpeed: 44, projLife: 1.6 },
+  'mending-thread': { archetype: 'restore', manaCost: 14, cooldownMs: 10000, heal: 28 },
+  'wind-shear': { archetype: 'projectile', manaCost: 11, cooldownMs: 1200, damage: 26, projSpeed: 92, projLife: 1.3 },
+  'riptide': { archetype: 'projectile', manaCost: 11, cooldownMs: 1100, damage: 24, projSpeed: 62, projLife: 1.3 },
+  'monolith': { archetype: 'terrain', manaCost: 40, cooldownMs: 22000, castRange: 9, areaSize: 3, areaSecs: 30, shape: 'block', shapeHeight: 5 },
+  'shatterfield': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 6, areaSecs: 9, fieldDps: 9, fieldStopsShots: false },
+  'stormbank': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 11, areaSize: 6, areaSecs: 8, fieldDps: 10, fieldStopsShots: false },
+  'exhale': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 4, areaSize: 6, areaSecs: 10, fieldHps: 14, fieldStopsShots: false },
+  'pyroclast': { archetype: 'field', manaCost: 46, cooldownMs: 26000, castRange: 12, areaSize: 7, areaSecs: 11, fieldDps: 7, fieldStopsShots: false },
 
   // ── Combos — never solo-castable. Canon requires a second mage in sync. ──────────────────────
   counterpoint: { archetype: 'unbuilt', why: 'needs a second same-frequency mage running Barrier' },
@@ -748,7 +759,13 @@ export function eligibleMoves(owned: string[], birth: string | null, kind: SlotK
   // ⚠ Built ONCE per call, never inside the filter — `laneRunes` walks all 20 runes, and a keeper
   // with a wide book would pay that per move for an answer that cannot change mid-filter.
   const onIt = lane ? laneRunes(birth, lane) : null
-  const known = knownMoves(owned).filter(
+  // ★ THE SEAT-GEM EXCEPTION (09-28), scoped to ONE word: the one the Enchant Temple imbued into Greg's
+  // bracelet, whose gems sit in its seats. It waives only the "carries every rune" half; it must still be
+  // learned (the Temple teaches it) and on the lane. Never general — see `greg-pair.ts`.
+  const grant = imbuedWord()
+  const carried = knownMoves(owned)
+  const granted = grant && !carried.some((m) => m.id === grant) ? KEEPER_MOVES.filter((m) => m.id === grant) : []
+  const known = [...carried, ...granted].filter(
     (m) =>
       m.tier === kind &&
       hasLearned(book, m.id) &&

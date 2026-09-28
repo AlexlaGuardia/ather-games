@@ -85,9 +85,13 @@ export function isBodyHeld(m: KeeperMove, birth: string | null): boolean {
   return m.runes.length === 1 && m.runes[0] === birth
 }
 
-/** The letters a move is written in. Empty for a body-held move — it needs no paper. */
+/**
+ * The letters a move is written in. Empty for a body-held move — it needs no paper.
+ * ★ The birth letter comes first (09-28): a word carrying the keeper's birth rune is written from it.
+ */
 export function lettersOf(m: KeeperMove, birth: string | null): string[] {
-  return isBodyHeld(m, birth) ? [] : [...m.runes]
+  if (isBodyHeld(m, birth)) return []
+  return birth && m.runes.includes(birth) ? [birth, ...m.runes.filter(r => r !== birth)] : [...m.runes]
 }
 
 /** The vessel whose lane a gem of `rune` may be set in, for this keeper — or null if neither. */

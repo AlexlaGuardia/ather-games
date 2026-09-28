@@ -75,9 +75,11 @@ import { keeperKey } from '@/lib/keeper-local'
 import { LOADOUT_KEY, rawLoadout, saveLoadout, type Loadout } from './loadout'
 import { VESSELS_KEY, WORN_WORD_KEY, loadLetters, saveLetters, lettersOf, missingLetters, takeStones, wornWord, saveWornWord, VESSELS, VESSEL_FOR_KIND, VESSEL_CAP, STONE_CREDIT, type Vessel, type Letters } from './gems'
 import { eligibleMoves } from './cast'
-import type { Book } from './scroll-market'
+import { learn, type Book } from './scroll-market'
+import { imbuedWord, markImbued } from './greg-pair'
+import { saveBook } from './book'
 import { moveById, KEEPER_MOVES, type KeeperMove } from './keeper-moves'
-import { ALL_BANDS, LANE_FOR_KIND, laneRunes } from './cast'
+import { ALL_BANDS, LANE_FOR_KIND, laneRunes, isBuilt } from './cast'
 export { WORN_WORD_KEY, wornWord, saveWornWord }
 import { loadRuneInventory } from './rune-inventory'
 
@@ -97,14 +99,13 @@ export type VesselTier = 0 | 1 | 2 | 3
 export const TIERS: readonly VesselTier[] = [0, 1, 2, 3]
 export const FLOOR_TIER: VesselTier = 0
 /**
- * Greg's BRACELET is cut for a one-letter word. His GLOVE is cut for the lane's smallest signature, which is
- * one, two or three seats (09-11; 12 of 17 lanes hold no one-letter ultimate, and the build had capped the
- * floor at one seat anyway, so most keepers got an uncut glove: fixed 2026-09-28). Every other tier bears
- * whatever its word needs, up to the cap.
+ * ★ THE BIRTH LETTER COMES FIRST (ruled 2026-09-28, /magii + Alex). Both of Greg's vessels are cut for a word
+ * that BEGINS with the keeper's birth rune: the birth letter sits in the first seat and glows from day one,
+ * and the seats after it stand empty and say what is missing. So neither floor vessel is one seat any more
+ * (the one-seat bracelet of 09-04 is retired with the one-letter word it was cut for: a one-letter birth
+ * word is body-held and needs no paper). Every tier bears what its word needs, up to the cap.
  */
-export const FLOOR_SEATS = 1
-export const seatCapOf = (tier: VesselTier, kind: Vessel): number =>
-  (tier === FLOOR_TIER && kind === 'bracelet' ? FLOOR_SEATS : VESSEL_CAP)
+export const seatCapOf = (_tier: VesselTier, _kind: Vessel): number => VESSEL_CAP
 /** the material of each tier, per kind — the brief's tables, quoted not restated; the tier reads off this at a glance */
 export const TIER_MATERIAL: Record<Vessel, Record<VesselTier, string>> = {
   focus:    { 0: 'mortal cloth', 1: 'goldwood', 2: 'shimmeroak', 3: 'starwillow' },
@@ -146,6 +147,8 @@ export const emptyVessel = (kind: Vessel, tier: VesselTier = 1): StowedVessel =>
  * uncut and says so.
  */
 export function floorWordFor(kind: Vessel, birth: string | null, owned: readonly string[] = []): string | null {
+  const pick = kind === 'bracelet' && birth ? GREG_BRACELET_PICK[birth] : undefined
+  if (pick && isFloorWord(kind, birth, pick)) return pick
   const fits = floorCandidates(kind, birth)
   const opens = (m: KeeperMove) => (m as { collar?: string }).collar === 'opens'
   // ★ a word the keeper can ALREADY write comes first (Alex held Lightning when Greg's bracelet was cut,
@@ -160,10 +163,31 @@ export function floorCandidates(kind: Vessel, birth: string | null): KeeperMove[
   const lane = band ? LANE_FOR_KIND[band] : null
   if (!band || !birth || !lane) return []
   const onIt = laneRunes(birth, lane)
-  const onLane = KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && lettersOf(m, birth).length >= 1 && m.runes.every(r => onIt.has(r)))
-  // the bracelet: one letter. The glove: the SMALLEST signature (09-11), never a body-held one, which needs no paper
-  const size = kind === 'bracelet' ? FLOOR_SEATS : Math.min(...onLane.map(m => lettersOf(m, birth).length))
-  return onLane.filter(m => lettersOf(m, birth).length === size)
+  // ★ a word BEGINNING with the birth rune (09-28): it carries the birth rune and at least one letter more,
+  // so there is a seat for Greg's gems to fill. Every lane has one since the birth-first pass (a2e2843).
+  const onLane = KEEPER_MOVES.filter(m => m.tier === band && !m.birthExclusive && m.runes.includes(birth)
+    && lettersOf(m, birth).length >= 2 && m.runes.every(r => onIt.has(r)))
+  // the SMALLEST such word (the glove's 09-11 rule, narrowed by one clause; the bracelet takes it too until
+  // the seat's 17-word pick lands in `GREG_BRACELET_PICK`), and a word the sim can run before one it cannot
+  const size = Math.min(...onLane.map(m => lettersOf(m, birth).length))
+  const fit = onLane.filter(m => lettersOf(m, birth).length === size)
+  const built = fit.filter(m => isBuilt(m.id))
+  return built.length ? built : fit
+}
+/**
+ * The seat's pick of Greg's bracelet word per birth rune (the pending in-seat 17-word pass). Empty until it
+ * lands; a pick here beats the derived default, and must still be one of `floorCandidates`' lane words.
+ */
+export const GREG_BRACELET_PICK: Readonly<Partial<Record<string, string>>> = {}
+/** is `move` a word Greg's `kind` could be cut for on this birth? A saved floor for anything else is recut */
+export const isFloorWord = (kind: Vessel, birth: string | null, move: string | null): boolean => {
+  if (!move || !birth) return false
+  const band = ALL_BANDS[BAND_FOR_VESSEL[kind]]
+  const lane = band ? LANE_FOR_KIND[band] : null
+  const m = moveById(move)
+  if (!m || !lane) return false
+  const onIt = laneRunes(birth, lane)
+  return m.tier === band && m.runes.includes(birth) && lettersOf(m, birth).length >= 2 && m.runes.every(r => onIt.has(r))
 }
 /** Greg's vessel of `kind`, cut for the keeper's lane — `emptyVessel` at the floor tier with its word */
 export const floorVessel = (kind: Vessel, birth: string | null, owned: readonly string[] = []): StowedVessel => {
@@ -201,7 +225,9 @@ function parseStowed(raw: unknown): StowedVessel[] {
     const move = moveOf(o.move)
     // ★ a saved floor from before 2026-09-11 is uncut; it takes its lane's word on read, the way a new one does
     const k = keeperOf()
-    const word = move ?? (tier === FLOOR_TIER ? floorWordFor(o.kind, k.birth, k.owned) : null)
+    // ★ and a floor cut before 09-28 for a word that does not begin with the birth rune is recut the same way
+    const stale = tier === FLOOR_TIER && !!k.birth && !isFloorWord(o.kind, k.birth, move)
+    const word = stale || !move ? (tier === FLOOR_TIER ? floorWordFor(o.kind, k.birth, k.owned) : move) : move
     // ★ grown on read (09-27): a vessel from the binding days that sat half-written arrives whole. A word the
     // registry no longer has keeps what was saved — nothing to grow from, and nothing a keeper had is erased
     out.push({ kind: o.kind, gems: (word && moveById(word) ? grownLetters(word, k.birth) : gemList(o.gems)).slice(0, seatCapOf(tier, o.kind)), move: word, tier })
@@ -271,6 +297,11 @@ export function wornPresent(kind: Vessel): boolean {
 function withFloor(list: StowedVessel[]): StowedVessel[] {
   const tiers = loadWornTiers()
   for (const kind of VESSELS) {
+    // ★ a WORN floor cut before 09-28 is recut on the wrist, the way a stowed one is recut in the satchel
+    if (wornPresent(kind) && tiers[kind] === FLOOR_TIER) {
+      const k = keeperOf()
+      if (k.birth && !isFloorWord(kind, k.birth, wornWord(kind))) saveWornWord(kind, floorWordFor(kind, k.birth, k.owned))
+    }
     if (list.some(v => v.kind === kind && isFloor(v))) continue
     if (wornPresent(kind) && tiers[kind] === FLOOR_TIER) continue
     const k = keeperOf()
@@ -471,6 +502,62 @@ export function equip(kind: Vessel, i: number, birth: string | null, starter?: s
   saveLoadout(slots)
   saveLetters({ bag: active.bag, vessels: { ...active.vessels, [kind]: [...next.gems] } })
   return true
+}
+
+// ── ★ GREG'S GEMS AND THE FIRST ERRAND (ruled 2026-09-28, THE BIRTH LETTER COMES FIRST) ───────────────
+// The birth letter of Greg's pair is lit from day one; the seats after it stand EMPTY (not dark) until they
+// are filled: the bracelet's by the Enchant Temple, from the gems Greg put in the keeper's hand; the glove's
+// when the keeper earns its word. How a seat reads is derived, never saved, so a ruling that moves the line
+// moves every save with it.
+export type SeatLight = 'lit' | 'dark' | 'empty'
+/** each seat of `v` in order: lit, dark (grown in, word not known), or empty (Greg's pair, still to fill) */
+export function seatLights(v: Pick<StowedVessel, 'kind' | 'move' | 'tier'>, owned: readonly string[], birth: string | null, book: Book): SeatLight[] {
+  const need = seatLetters(v, birth)
+  if (isLit(v, owned, birth, book)) return need.map(() => 'lit')
+  if (!isFloor(v)) return need.map(() => 'dark')
+  return need.map(r => (r === birth ? 'lit' : 'empty'))
+}
+/** the word Greg's `kind` is cut for, worn or stowed */
+export function gregWord(kind: Vessel): string | null {
+  if (wornPresent(kind) && wornTier(kind) === FLOOR_TIER) return wornWord(kind)
+  return loadStowed().find(v => v.kind === kind && isFloor(v))?.move ?? null
+}
+/** does the keeper still carry Greg's gems — the bracelet not yet imbued at the Enchant Temple? */
+export const gregGemsInHand = (): boolean => { const w = gregWord('bracelet'); return !!w && imbuedWord() !== w }
+/** the gems Greg handed over: the bracelet word's letters after the birth letter */
+export const gregGems = (birth: string | null): string[] => {
+  const w = gregWord('bracelet')
+  return w ? seatLetters({ move: w }, birth).filter(r => r !== birth) : []
+}
+
+export type ImbueResult =
+  | { ok: true; word: string; book: Book; worn: boolean }
+  | { ok: false; why: 'no-bracelet' | 'already'; word: string | null }
+/**
+ * THE ENCHANT TEMPLE IMBUES GREG'S BRACELET, AND TEACHES ITS WORD AS IT DOES. The gems go into the empty
+ * seats (`markImbued`, which is also the one word the seat-gem exception covers), the word goes into the
+ * book, and the bracelet leaves lit. If Greg's bracelet is worn its band is bound at once; if nothing is
+ * worn on the wrist it is put on. A keeper wearing another bracelet keeps it, and finds Greg's lit in the satchel.
+ */
+export function imbueGregBracelet(birth: string | null, book: Book, starter?: string): ImbueResult {
+  const word = gregWord('bracelet')
+  if (!word) return { ok: false, why: 'no-bracelet', word: null }
+  if (imbuedWord() === word && book.learned.includes(word)) return { ok: false, why: 'already', word }
+  markImbued(word)
+  const taught = learn(book, word)
+  saveBook(taught)
+  const band = BAND_FOR_VESSEL.bracelet
+  let worn = false
+  if (wornPresent('bracelet') && wornTier('bracelet') === FLOOR_TIER) {
+    const slots: Loadout = ALL_BANDS.map((_, k) => rawLoadout()[k] ?? null)
+    slots[band] = word
+    saveLoadout(slots)
+    worn = true
+  } else if (!wornPresent('bracelet') && !rawLoadout()[band]) {
+    const i = loadStowed().findIndex(v => v.kind === 'bracelet' && isFloor(v))
+    worn = i >= 0 && equip('bracelet', i, birth, starter)
+  }
+  return { ok: true, word, book: taught, worn }
 }
 
 /** the keys an equip writes — restated for the guard that checks every keeper key is registered */

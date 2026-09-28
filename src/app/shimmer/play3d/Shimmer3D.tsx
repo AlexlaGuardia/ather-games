@@ -115,11 +115,12 @@ import { HOTBAR_SLOTS, type HotbarEntry } from '../hud/hotbar'
 import { BagPanel, itemLabel, type SlotRef, type Lift } from '../hud/satchel'
 import { moveBetween, moveCount, halfOf } from '../voxel3d/chest'
 import { createSpiritIndex } from '../engine/spirit-index'
-import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, type NPC3D } from './npcs3d'
+import { NPCS_3D, GREG_SQUARE_LINES, GREG_INTRO_LINES, GREG_NUDGE, GREG_RETURN, THISTLE_TAUNT_NO_SPIRIT, THISTLE_PREFIGHT, THISTLE_DEFEAT, FREED_SPIRIT_BEAT, VETCH_PREFIGHT, VETCH_DEFEAT, FREED_PAIR_BEAT, BRACK_PREFIGHT, BRACK_FINALE, TRADER_LINES, IMBUE_LINES, IMBUE_DONE, IMBUE_ALREADY, type NPC3D } from './npcs3d'
 import { useCloudSave } from '@/lib/use-cloud-save'
 import { useWallet } from '@/lib/use-wallet'
 import { addMarks } from '@/lib/wallet'
 import { keeperBook, saveBook } from './book'
+import { gregWord, gregGemsInHand, imbueGregBracelet } from './vessels'
 import { PassagePanel } from './PassagePanel'
 import { PassageScene } from './PassageScene'
 import { RuneHoldScene } from './RuneHoldScene'
@@ -134,7 +135,7 @@ import { ArcadeCabinet } from './ArcadeCabinet'
 import { PASSAGE, type ShelfKey } from './passage-hall'
 import { caravanFor, leavesIn, monthIndex, type CaravanSlot, type CaravanStock } from './caravans'
 import type { GameEntry } from '@/lib/games'
-import { EMPTY_BOOK, type Book } from './scroll-market'
+import { EMPTY_BOOK, starterFor, type Book } from './scroll-market'
 import { StationMenus, type PlacedStruct, type StationKind } from './StationMenus'
 import { prettyItem } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
@@ -6371,6 +6372,8 @@ export default function Shimmer3D() {
 
   // Talk to an NPC. Gregory: no spirit → intro + starter handoff; else a sendoff. Thistle: no spirit → he
   // sneers you off; with a bonded spirit → pre-fight swagger, then the Reach battle to free his captive.
+  /** late-bound: `applyLoadout` is declared below `talk`, and the Temple's imbue must re-resolve the cast bar */
+  const applyLoadoutRef = useRef<() => void>(() => {})
   const talk = useCallback((npc: NPC3D) => {
     const hasSpirit = (partyRef.current?.length ?? 0) > 0
     // ── THE PASSAGE (2026-09-25): stalls open their own shelves, cabinets open a game ─────────────
@@ -6414,6 +6417,22 @@ export default function Shimmer3D() {
       battleRef.current = true
       openCursorUI()
       setCabinet(c.game)
+      return
+    }
+    if (npc.id === 'temple-imbuer') {
+      // ★ THE FIRST ERRAND (09-28): the Temple weaves Greg's gems into the bracelet and teaches the word as it does
+      const inv = runeInvRef.current
+      const word = gregWord('bracelet')
+      const fill = (t: string) => t.replace(/\{word\}/g, moveById(word ?? '')?.name ?? 'the word')
+        .replace(/\{birth\}/g, RUNES.find(r => r.id === inv.birth)?.name ?? 'your birth rune')
+      if (!word) return
+      if (!gregGemsInHand() && keeperBook(inv.owned).learned.includes(word)) { setDialogue({ name: 'the Imbuer', lines: [fill(IMBUE_ALREADY)], idx: 0, onDone: () => {} }); return }
+      setDialogue({ name: 'the Imbuer', lines: [...IMBUE_LINES, IMBUE_DONE].map(fill), idx: 0, onDone: () => {
+        const r = imbueGregBracelet(inv.birth, keeperBook(inv.owned), starterFor(inv.owned))
+        if (!r.ok) return
+        applyLoadoutRef.current()
+        setBanner(`✦ ${moveById(r.word)?.name ?? r.word} is lit${r.worn ? ' · on your wrist' : ' · in your satchel'}`)
+      } })
       return
     }
     if (npc.id === 'gregory-square') {
@@ -6556,6 +6575,7 @@ export default function Shimmer3D() {
     fieldsRef.current = []; conjuredRef.current = []; statusRef.current = emptyBag()
     setCastHud({ slots: castLoadoutRef.current, stance: pspec?.moveId ?? null })
   }, [])
+  applyLoadoutRef.current = applyLoadout
   useEffect(() => {
     const inv = loadRuneInventory()
     runeInvRef.current = inv

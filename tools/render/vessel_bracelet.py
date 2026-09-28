@@ -145,7 +145,12 @@ def render_one(tier, seats):
 
 
 if __name__ == "__main__":
+    # ★ Greg's pair bears the birth letter FIRST plus the seats after it (ruled 2026-09-28), so the floor
+    # renders at 2 and 3 seats too; it is never uncut (no s0). ONLY="0:2,0:3" renders just those frames.
+    only = {tuple(int(x) for x in t.split(":")) for t in os.environ.get("ONLY", "").split(",") if t}
     for tier in (0, 1, 2, 3):
-        seat_counts = (1,) if tier == 0 else (0, 1, 2, 3)   # the floor is always cut for one letter
+        seat_counts = (1, 2, 3) if tier == 0 else (0, 1, 2, 3)
         for seats in seat_counts:
+            if only and (tier, seats) not in only:
+                continue
             render_one(tier, seats)

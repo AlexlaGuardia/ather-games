@@ -22,7 +22,7 @@ import { emptySlotWhy, resolveLoadout, type Loadout } from '../play3d/loadout'
 import { loadRuneInventory } from '../play3d/rune-inventory'
 import { hasLearned, starterFor } from '../play3d/scroll-market'
 import { VesselArt } from '../play3d/vessel-art'
-import { BAND_FOR_VESSEL, MAX_PER_KIND, TIER_MATERIAL, VESSEL_NOUN, completeVessels, takeOffWorn, equip, isComplete, isFloor, isLit, loadStowed, ownedCount, seatCapOf, seatCount, seatLetters, setWord, type VesselTier, wornPresent, wornTier, wornWord } from '../play3d/vessels'
+import { BAND_FOR_VESSEL, MAX_PER_KIND, TIER_MATERIAL, VESSEL_NOUN, completeVessels, takeOffWorn, equip, isComplete, isFloor, isLit, loadStowed, seatLights, gregGemsInHand, gregGems, ownedCount, seatCapOf, seatCount, seatLetters, setWord, type VesselTier, type StowedVessel, type SeatLight, wornPresent, wornTier, wornWord } from '../play3d/vessels'
 import { type Spirit } from '../spirits/spirit'
 import { pieceForItem } from '../voxel/pieces'
 import { blockDef, materialForItem } from '../voxel/registry'
@@ -300,7 +300,23 @@ export function GemChip({ id, n }: { id: string; n?: number }) {
  * ⚠ Never a socket, slot, bezel or prong in the LOOK (brief: *"the vessel closed around it"*) — a
  * dark seat is a dim rounded void in the weave, not a hole with a rim.
  */
-export function Seats({ gems, seats = VESSEL_CAP, need, dark = false }: { gems: readonly string[]; seats?: number
+/**
+ * What an unlit seat of Greg's pair is waiting on (09-28, THE BIRTH LETTER COMES FIRST): the bracelet on the
+ * Enchant Temple and the gems Greg put in the keeper's hand; the glove on the keeper earning its word.
+ */
+function floorNote(v: StowedVessel, birth: string | null): string {
+  if (!isFloor(v)) return 'dark — learn the word to light it'
+  const word = v.move ? (castForMove(v.move)?.label ?? v.move) : 'its word'
+  if (v.kind === 'bracelet' && gregGemsInHand()) {
+    const gems = gregGems(birth).map(id => RUNES.find(r => r.id === id)?.name ?? id).join(' + ')
+    return `your birth letter is lit · Greg's gems in hand (${gems}) · the Enchant Temple imbues them`
+  }
+  return `your birth letter is lit · learn ${word} and hold its runes to fill the rest`
+}
+
+export function Seats({ gems, seats = VESSEL_CAP, need, dark = false, lights }: { gems: readonly string[]; seats?: number
+  /** ★ per seat (Greg's pair, 09-28): an `empty` seat draws as a void wanting its rune; beats `dark` */
+  lights?: readonly SeatLight[]
   /** ★ grown in but DARK — the keeper does not know the word yet (ruled 2026-09-27) */
   dark?: boolean
   /** ★ the word's letters in seat order (2026-09-11, Alex: "see the vessel, insert the required gems") — an empty seat shows the rune it wants, faint */
@@ -310,14 +326,16 @@ export function Seats({ gems, seats = VESSEL_CAP, need, dark = false }: { gems: 
   return (
     <span className="inline-flex items-center gap-1">
       {Array.from({ length: Math.min(VESSEL_CAP, Math.max(0, seats)) }, (_, k) => {
-        const id = gems[k]
+        const light = lights?.[k]
+        const id = light === 'empty' ? undefined : gems[k]
+        const dim = light ? light === 'dark' : dark
         const r = id ? RUNES.find(x => x.id === id) : undefined
         // the seat's OWN letter: seats fill in word order, so the k-th empty seat wants the k-th letter not yet set
         const wantId = need?.[k]
         const want = wantId ? RUNES.find(x => x.id === wantId) : undefined
         return id
-          ? <span key={`${id}-${k}`} className={`inline-flex h-[18px] w-[26px] items-center justify-center ${dark ? 'opacity-35 grayscale' : ''}`}>
-              <GemStone glow={r?.glow ?? '#fff'} lit={!dark} title={dark ? `${r?.name ?? id} — dark until you know the word` : (r?.name ?? id)} />
+          ? <span key={`${id}-${k}`} className={`inline-flex h-[18px] w-[26px] items-center justify-center ${dim ? 'opacity-35 grayscale' : ''}`}>
+              <GemStone glow={r?.glow ?? '#fff'} lit={!dim} title={dim ? `${r?.name ?? id} — dark until you know the word` : (r?.name ?? id)} />
             </span>
           : <span key={`dark-${k}`} role="img" aria-label="empty seat" title={want ? `needs ${want.name}` : 'empty seat'}
                   className="inline-flex h-[18px] w-[26px] items-center justify-center rounded-full hk-fill shadow-[inset_0_2px_5px_rgba(0,0,0,0.85),inset_0_-1px_0_rgba(255,255,255,0.03)]">
@@ -386,17 +404,18 @@ export function SatchelLetters({ owned, birth, onChange }: {
         {stowed.map((v, i) => {
           const seats = seatCount(v, birth)
           const on = isLit(v, owned, birth, book)
+          const lights = seatLights(v, owned, birth, book)
           const word = v.move ? (castForMove(v.move)?.label ?? v.move) : null
           return (
             <button key={`v-${i}`} type="button" onPointerDown={() => setSel(sel === i ? null : i)}
-                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${on ? 'lit — wear it from Gear' : 'dark — learn the word to light it'}` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; no one-letter word on your lane yet' : 'never cut for a word'}`}
-                    className={`${cellCls} ${sel === i ? 'hk-rule-ember hk-fill-ember' : 'hk-rule-ember hk-fill'} ${on || !v.move ? '' : 'opacity-60'} hk-hover-edge`}>
+                    title={word ? `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} for ${word} · ${on ? 'lit — wear it from Gear' : floorNote(v, birth)}` : `${tierLabel(v.kind, v.tier)} ${VESSEL_NOUN[v.kind]} — ${isFloor(v) ? 'one seat, yours for good; no one-letter word on your lane yet' : 'never cut for a word'}`}
+                    className={`${cellCls} ${sel === i ? 'hk-rule-ember hk-fill-ember' : 'hk-rule-ember hk-fill'} ${on || !v.move || isFloor(v) ? '' : 'opacity-60'} hk-hover-edge`}>
               <ItemChip itemId={vesselIconId(v.kind, v.tier)} size={26} />
               <span className="tabular-nums absolute right-1 top-0.5 text-[12px] hk-soft">{tierMark(v.tier)}</span>
               {/* the letters as dots — the word's count, glowing when the keeper knows the word */}
               <span className="absolute bottom-1 flex gap-[3px]">
                 {Array.from({ length: Math.min(VESSEL_CAP, seats) }, (_, k) => (
-                  <span key={k} className={`h-[5px] w-[5px] rounded-full ${on ? 'hk-fill-ember shadow-[0_0_4px_#d4a843]' : 'hk-fill shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]'}`} />
+                  <span key={k} className={`h-[5px] w-[5px] rounded-full ${lights[k] === 'lit' ? 'hk-fill-ember shadow-[0_0_4px_#d4a843]' : 'hk-fill shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]'}`} />
                 ))}
               </span>
             </button>
@@ -442,10 +461,10 @@ export function VesselParts({ owned, birth, index, onChange }: {
       {v.move
         ? <span className="hk-title text-[12px] hk-ink">for {wordOf(v.move)}</span>
         : <span className="hk-label text-[12px] hk-faint">{isFloor(v) ? 'one seat · never lost' : 'never cut for a word'}</span>}
-      {v.move ? <Seats gems={v.gems} seats={seats} need={seatLetters(v, birth)} dark={!on} /> : null}
+      {v.move ? <Seats gems={v.gems} seats={seats} need={seatLetters(v, birth)} dark={!on} lights={seatLights(v, owned, birth, book)} /> : null}
       {/* ★ DARK UNTIL KNOWN (ruled 09-27): the vessel is finished; the keeper's knowledge is what lights it */}
       {v.move
-        ? <span className={`hk-label text-[12px] ${on ? 'hk-ember' : 'hk-faint'}`}>{on ? 'lit · wear it from Gear' : hasLearned(book, v.move) ? 'dark · its word is off your lanes' : `dark · learn ${wordOf(v.move)} to light it`}</span>
+        ? <span className={`hk-label text-[12px] ${on ? 'hk-ember' : 'hk-faint'}`}>{on ? 'lit · wear it from Gear' : isFloor(v) ? floorNote(v, birth) : hasLearned(book, v.move) ? 'dark · its word is off your lanes' : `dark · learn ${wordOf(v.move)} to light it`}</span>
         : (
           <select value="" onChange={e => { if (e.target.value) doWord(e.target.value) }}
                   className="hk-btn bg-transparent px-2 py-0.5 text-[12px] normal-case tracking-normal">
@@ -504,7 +523,8 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
                   Nothing worn AND no word: the uncut tier-1 vessel, faded — a place for one, not one. A vessel
                   bearing a word with its band unbound keeps its seats and its letters, faded. */}
               <VesselArt kind={kind} tier={word ? wornTier(kind) : 1} seats={seats}
-                         gems={l.vessels[kind]} size={72} dim={!word} dark={!!word && !wornLit} />
+                         gems={l.vessels[kind]} size={72} dim={!word} dark={!!word && !wornLit}
+                         lights={word && wornPresent(kind) && wornTier(kind) === 0 ? seatLights({ kind, move: word, tier: 0 }, owned, birth, book) : undefined} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="hk-title text-[12px] hk-ember">{VESSEL_NOUN[kind]}</span>
@@ -521,7 +541,7 @@ export function VesselRack({ owned, birth, slots, onEquipped }: {
                       the word, so key the row off the VESSEL's word, not the binding, and say what lights it */}
                   {word
                     ? <><span className={`hk-title ml-1 text-[12px] ${wornLit ? 'hk-ink' : 'hk-faint'}`}>{wordOf(word)}</span>
-                        {!wornLit && <span className="hk-label text-[12px] hk-faint">dark · learn the word to light it</span>}
+                        {!wornLit && <span className="hk-label text-[12px] hk-faint">{wornTier(kind) === 0 ? floorNote({ kind, move: word, gems: [], tier: 0 }, birth) : 'dark · learn the word to light it'}</span>}
                         <button type="button" onPointerDown={() => doTakeOff(kind)}
                                 className="hk-btn hk-dim ml-auto px-2 py-0.5 text-[12px] hover:opacity-100">take off</button></>
                     : <span className="hk-title ml-1 text-[12px] hk-faint">nothing worn · your birth move needs no vessel</span>}

@@ -396,6 +396,32 @@ export const KEEPER_MOVES: KeeperMove[] = [
   { id: 'monsoon-veil', name: 'Monsoon Veil', tier: 'ultimate', runes: ['mist', 'vapor', 'life'],
     effect: 'Expanding fog saturated with moisture and carrying Life — wounds close, fatigue lifts, poison purges. A battlefield hospital.', collar: 'no-contest' },
 
+  // ── ★ THE BIRTH-FIRST PASS (Magii + Alex, 2026-09-28, athernyx a2e2843) ─────────────────────────
+  // Greg's pair carries the birth rune as its FIRST letter (THE BIRTH LETTER COMES FIRST), and 13 lanes
+  // had no word of two letters or more containing their birth rune. These nine close all 13; the shared
+  // pairs cover two lanes each. Collars by the three tells, doubt refused: a burn (Emberglass, Pyroclast)
+  // and a field that cuts like glass (Shatterfield) render cruelty; a cutting line, a pulling current, a
+  // wall that can be walked round and a charge chaining in fog clear like their cousins (gale-cutter,
+  // pressure-lance, stonewall, chain-lightning); the two mends never enter the contest.
+  { id: 'emberglass', name: 'Emberglass', tier: 'tactical', runes: ['manalic', 'star'],
+    effect: 'Mana clicked into a glass shard with Star\'s burn sealed inside, thrown before it cools. It shatters on whatever it meets and the burn gets out.', collar: 'cruelty' },
+  { id: 'mending-thread', name: 'Mending Thread', tier: 'tactical', runes: ['enchant', 'life'],
+    effect: 'A mend threaded into someone and tied off, not spent: it rides their body until they are hurt, then lets go into the wound.', collar: 'no-contest' },
+  { id: 'wind-shear', name: 'Wind Shear', tier: 'tactical', runes: ['tempest', 'breeze'],
+    effect: 'Tempest\'s violence with Breeze\'s hand on it: a squall steered down one line. Anything on the line is thrown and cut; nothing off it is touched.', collar: 'opens' },
+  { id: 'riptide', name: 'Riptide', tier: 'tactical', runes: ['hydro', 'fluid'],
+    effect: 'Pressure given a current instead of a fist: a tight rope of water that lands and then pulls, dragging its target off its footing.', collar: 'opens' },
+  { id: 'monolith', name: 'Monolith', tier: 'ultimate', runes: ['manalic', 'stone'],
+    effect: 'Stone torn up and raised around a core of solidified mana, a standing slab taller than Stone alone will hold. It walls, or it falls.', collar: 'opens' },
+  { id: 'shatterfield', name: 'Shatterfield', tier: 'ultimate', runes: ['manalic', 'freeze'],
+    effect: 'A stillness spreads and everything it reaches turns to brittle crystal. Standing on it is fine; being struck on it is not: it breaks like glass and cuts like it.', collar: 'cruelty' },
+  { id: 'stormbank', name: 'Stormbank', tier: 'ultimate', runes: ['lightning', 'mist'],
+    effect: 'Fog rolled out wide, then lightning let loose inside it. The bolt chains through every body in the bank, and nobody inside can see where the next one comes from.', collar: 'opens' },
+  { id: 'exhale', name: 'Exhale', tier: 'ultimate', runes: ['breeze', 'life'],
+    effect: 'One long breath out, and the wind carries Life to everyone it reaches: fatigue lifts, wounds slow, lungs open.', collar: 'no-contest' },
+  { id: 'pyroclast', name: 'Pyroclast', tier: 'ultimate', runes: ['magma', 'tempest'],
+    effect: 'Molten earth thrown up into a storm that wants to destroy: ash, burning stone, sideways heat. Slow to call, and it does not stop once it comes.', collar: 'cruelty' },
+
   // Combos — require two or more mages in sync.
   { id: 'counterpoint', name: 'Counterpoint', tier: 'combo', runes: ['barrier'],
     effect: "Two same-frequency mages catch an incoming attack for a beat and return it fused. Finisher-tier.",

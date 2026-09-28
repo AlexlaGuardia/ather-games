@@ -8,7 +8,7 @@
  */
 import { readFileSync } from 'node:fs'
 import {
-  STOWED_KEY, LEGACY_PAIRS_KEY, WORN_TIER_KEY, WORN_WORD_KEY, wornWord, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, FLOOR_TIER, FLOOR_SEATS,
+  STOWED_KEY, LEGACY_PAIRS_KEY, WORN_TIER_KEY, WORN_WORD_KEY, wornWord, VESSEL_PRICE, MAX_PER_KIND, BAND_FOR_VESSEL, FLOOR_TIER,
   loadStowed, saveStowed, buyVessel, equip, ownedCount, emptyVessel, equippedVessel,
   takeOffWorn, isLit, completeVessels, cutterPrice, CUTTER_FLOOR, stripVesselItems, floorWordFor, seatLetters, seatCount, shortOf, isComplete, isFloor, seatCapOf, grantVessel, setWord, wornTier, clearStowed, TIER_MATERIAL,
 } from './vessels'
@@ -198,8 +198,8 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
   // ★ RE-POINTED 2026-09-11 (Alex: "vessels should already come with prerequisite gems"): the pair arrives
   // CUT for the first one-letter word on the keeper's lane, empty — or uncut only when the lane has none.
   ok(floors.every(v => v.gems.length === 0 && v.move === floorWordFor(v.kind, null)), 'the pair arrives empty, cut for the lane\'s one-letter word (none here: no birth in this store, so uncut)')
-  // ★ RE-POINTED 2026-09-28: the floor BRACELET bears one seat; the floor GLOVE bears the lane's smallest signature (09-11)
-  ok(seatCapOf(FLOOR_TIER, 'bracelet') === FLOOR_SEATS && FLOOR_SEATS === 1 && seatCapOf(FLOOR_TIER, 'focus') === _CAP && seatCapOf(1, 'bracelet') === _CAP && seatCapOf(3, 'focus') === _CAP, '★ the floor bracelet bears ONE seat, the floor glove its smallest signature; every other tier bears what its word needs, up to the cap')
+  // ★ RE-POINTED 2026-09-28 (THE BIRTH LETTER COMES FIRST): neither floor vessel is one seat any more; every tier bears what its word needs
+  ok(seatCapOf(FLOOR_TIER, 'bracelet') === _CAP && seatCapOf(FLOOR_TIER, 'focus') === _CAP && seatCapOf(1, 'bracelet') === _CAP && seatCapOf(3, 'focus') === _CAP, '★ every tier, Greg\'s included, bears what its word needs, up to the cap')
   ok(loadStowed().every((v, i, a) => !isFloor(v) || a.slice(i).every(isFloor)), 'the floor sorts LAST — acquired vessels keep their indices')
   // never lost: a rebirth, a corrupt save, a save that dropped them — every read hands them back
   clearStowed()
@@ -244,11 +244,12 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     // ★ the floor arrives CUT for this birth's lane (2026-09-11) — one seat, a one-letter word it can grow into
     saveRuneInventory(setBirthRune(EMPTY_INVENTORY, birth))
     const fw = floorWordFor('bracelet', birth)
-    ok(!!fw && seatLetters({ move: fw }, birth).length === 1 && ALL_BANDS[BAND_FOR_VESSEL.bracelet] === moveById(fw)!.tier, `★ the lane's floor word is a one-letter tactical (${fw})`)
+    ok(!!fw && seatLetters({ move: fw }, birth).length >= 2 && seatLetters({ move: fw }, birth)[0] === birth && ALL_BANDS[BAND_FOR_VESSEL.bracelet] === moveById(fw)!.tier, `★ the lane's floor word is a tactical BEGINNING with the birth rune (${fw}, 09-28)`)
+    const fwSeats = seatLetters({ move: fw! }, birth).length
     const floorAt = loadStowed().findIndex(v => v.kind === 'bracelet' && isFloor(v))
     ok(floorAt >= 0 && loadStowed()[floorAt]?.move === fw, '★ Greg\'s bracelet ARRIVES cut for it — no dropdown as a new keeper\'s first act')
     ok(setWord(floorAt, two, birth) === false && setWord(floorAt, one, birth) === false, 'once cut, it is that word\'s paper — not a re-cuttable blank (the one-word law)')
-    ok(seatCount(loadStowed()[floorAt] ?? { move: null }, birth) === 1, 'its seat count is the word\'s: one')
+    ok(seatCount(loadStowed()[floorAt] ?? { move: null }, birth) === fwSeats, 'its seat count is the word\'s')
     // an uncut floor from an OLD save takes the word on read
     saveStowed([...loadStowed().filter(v => !isFloor(v)), { kind: 'bracelet', gems: [], move: null, tier: 0 }])
     ok(loadStowed().find(v => v.kind === 'bracelet' && isFloor(v))?.move === fw, '★ a pre-ruling save\'s uncut floor is cut on read — same word, no migration step')
@@ -264,7 +265,7 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     l = addGems(l, fwRune, 1)
     saveLetters(l)
     const fl = loadStowed().findIndex(v => v.kind === 'bracelet' && isFloor(v))
-    ok(isComplete(loadStowed()[fl]!, birth) && loadStowed()[fl]!.gems.length === 1, '★ Greg\'s floor arrives with its one letter grown in (09-27)')
+    ok(isComplete(loadStowed()[fl]!, birth) && loadStowed()[fl]!.gems.length === fwSeats, '★ Greg\'s floor arrives with its letters grown in (09-27)')
     ok(equip('bracelet', fl, birth) === true && rawLoadout()[TAC] === fw, '★ Greg\'s bracelet goes ON — the floor is gear like any written vessel')
     ok(wornTier('bracelet') === FLOOR_TIER && equippedVessel('bracelet', birth).tier === FLOOR_TIER, '★ and the worn tier says mortal cord — the material went on with the paper')
     ok(loadStowed().filter(v => v.kind === 'bracelet' && isFloor(v)).length === 0, '★ while worn, the floor is NOT also in the satchel — one pair, not one plus a copy')
@@ -272,7 +273,7 @@ ok(KEEPER_KEYS.includes(LEGACY_PAIRS_KEY), 'the legacy pairs key is STILL regist
     ok(takeOffWorn('bracelet', birth) === true, 'take it off')
     const back = loadStowed().filter(v => v.kind === 'bracelet' && isFloor(v))
     // ⚠ `?.`, not `!`: with the floor gone this must FAIL BY NAME, not throw (the 09-03 migration lesson)
-    ok(back.length === 1 && back[0]?.move === fw && back[0]?.gems.length === 1, '★ it comes back to the satchel as the FLOOR, whole, still cut for its word — not as a goldwood copy')
+    ok(back.length === 1 && back[0]?.move === fw && back[0]?.gems.length === fwSeats, '★ it comes back to the satchel as the FLOOR, whole, still cut for its word — not as a goldwood copy')
     ok(loadStowed().filter(v => v.kind === 'bracelet' && isFloor(v)).length === 1, 'and exactly one — the read did not add a second on top of the returned one')
   }
 

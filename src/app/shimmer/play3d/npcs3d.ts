@@ -28,6 +28,10 @@ export const NPCS_3D: NPC3D[] = [
   // the doorway itself stays open to walk into. `defeatedFlag` is not a defeat: once his two lines
   // are said he has gone in ahead ("after me"), and the door is where the keeper follows.
   { id: 'gregory-square', name: 'Gregory', zone: 'rune-hold', tileX: 24, tileY: 50, color: npcTint.gregory, kind: 'keeper', defeatedFlag: 'metGregSquare' },
+  // ★ THE ENCHANT TEMPLE'S IMBUER (ruled 09-28: the Temple imbues Greg's gems and teaches the word; the first
+  // errand). Unnamed until authored. TODO(temple-placement): the Temple has no building in the live Rune Hold
+  // yet (canon: "adjacent to the town proper"); the imbuer stands on the square's east side until Alex places it.
+  { id: 'temple-imbuer', name: 'the Imbuer', zone: 'rune-hold', tileX: 56, tileY: 55, color: npcTint.imbuer, kind: 'keeper' },
   // Thistle — Hold 1. A borrowed-swagger Moglin in Spirit Meadows with a collared spirit. You free it
   // (a Reach battle), he deflates and retreats east. Removed from the world once freed.
   { id: 'thistle', name: 'Thistle', zone: 'spirit-meadow', tileX: 55, tileY: 30, color: npcTint.thistle, kind: 'moglin', defeatedFlag: 'freedThistle' },
@@ -50,6 +54,19 @@ export const NPCS_3D: NPC3D[] = [
 // ── The trader's lines. Canon's register for the place: "if you know, you know" — no pitch, no
 // welcome, no explanation of the rules to someone who is standing in a place you only reach by
 // being shown. The rule the player needs (the rune gates the scroll) is stated as a shrug.
+/**
+ * The Enchant Temple imbue (lark, 09-28, off THE BIRTH LETTER COMES FIRST). `{birth}` = the birth rune's
+ * name, `{word}` = the bracelet's word. Speaker is the Imbuer; the bracketed line is the act, not speech.
+ */
+export const IMBUE_LINES: string[] = [
+  "That first seat's already lit. Nobody taught you {birth}. That one's just you.",
+  'The rest were only waiting on their gems. Watch close, I\'ll seat them now.',
+  '(The imbuer sets each gem in turn, light threading outward from the birth rune.)',
+  '{birth}... {word}. Say it with me, so it takes.',
+]
+export const IMBUE_DONE = "There. {word}, lit end to end. It's yours now, go use it."
+export const IMBUE_ALREADY = "This one's already done. {word}'s been yours since you walked out that door."
+
 export const TRADER_LINES: string[] = [
   'You came down the back way, so somebody vouched. Fine.',
   'Technique only. Nobody here sells you a rune, and anyone who says otherwise is selling you paper.',

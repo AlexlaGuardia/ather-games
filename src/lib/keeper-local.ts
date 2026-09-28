@@ -67,6 +67,7 @@ export const KEEPER_KEY_SPECS: readonly { base: string; worldTied: boolean }[] =
   { base: 'ather:shimmer:stowed',     worldTied: false },  // the vessels owned but not worn — each with its own gems and word (2026-09-03)
   { base: 'ather:shimmer:worn-tier',  worldTied: false },  // the TIER (material) of the worn bracelet + focus — the one field the two live keys do not carry (2026-09-04)
   { base: 'ather:shimmer:worn-word',  worldTied: false },  // the WORD the worn bracelet + focus were cut for — the band is a binding, the vessel bears its word (2026-09-09)
+  { base: 'ather:shimmer:greg-imbued', worldTied: false },  // the word the Enchant Temple imbued Greg's bracelet for; the ONE word the seat-gem exception covers (2026-09-28)
   { base: 'ather:shimmer:vessel-pieces', worldTied: false },  // pieces of a season's vessel carried out of the Breach; the cutter finishes three (2026-09-27)
   { base: 'ather:shimmer:vessel-dry',   worldTied: false },  // rounds since the last vessel piece, across runs — the Breach's pity counter (2026-09-27)
   { base: 'ather:shimmer:trials',     worldTied: false },  // how many times each trial was cleared — the WON door's ledger (first clear = a sure prize) (2026-09-05)
