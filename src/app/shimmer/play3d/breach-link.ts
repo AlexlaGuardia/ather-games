@@ -8,6 +8,7 @@
 //
 // One link per page (`coop`), the same way there is one game per page.
 import type { HoldState, FloodBody, HoldLoot } from './hold'
+import { STILLWIND_TUNING, type StillwindState } from './stillwind'
 
 export interface CoopPartyMember { id: string; name: string; x: number; z: number; y: number; yaw?: number; here: boolean; down: boolean }
 export interface CoopEvents {
@@ -112,8 +113,88 @@ export class BreachLink {
   down(): void { this.send({ t: 'down' }) }
 }
 
-/** The page's one co-op link, and whether the NEXT Breach run should be co-op (set by Departures' Go together). */
-export const coop: { link: BreachLink | null; wantParty: string | null; struck: number; down: boolean; begins: number } = { link: null, wantParty: null, struck: 0, down: false, begins: 0 }
+/** The page's one co-op link, and whether the NEXT Breach run should be co-op (set by Departures' Go together).
+ *  `slack` is the same idea for the Stillwind raid: one per page, set while the party's Slack is live. */
+export const coop: { link: BreachLink | null; slack: SlackLink | null; wantParty: string | null; struck: number; down: boolean; begins: number } = { link: null, slack: null, wantParty: null, struck: 0, down: false, begins: 0 }
+
+// ── THE SLACK TOGETHER (09-29): the party's Stillwind, stepped on the server (`?mode=slack`) ─────────────────────
+// Same shape as the Breach: a MIRROR `StillwindState` the scene and HUD already read, overwritten from each snapshot.
+// The page still owns what the edge does to its own keeper (burn, frost, the line's mend); the server owns the colossus.
+export type SlackSnapSw = Pick<StillwindState, 'hp' | 'x' | 'z' | 'heat' | 'cold' | 'mood' | 'moodT' | 'wind' | 'windT' | 'runDir' | 'felled' | 'elapsed'>
+export interface SlackEvents {
+  onStruck?: (dmg: number) => void
+  /** the wind stopped / it ran the line / it boiled open / it stiffened */
+  onWind?: (what: 'stalled' | 'ran' | 'opened' | 'froze') => void
+  /** the felling blow landed (whoever struck it): every keeper's deed */
+  onFelled?: (secs: number, by: string) => void
+  /** SLACK_DOWN_SEC is up: this keeper is back at the near end */
+  onUp?: () => void
+  /** every keeper fell at once: the Stillwind stands again, and so do you */
+  onReset?: () => void
+  onRefused?: (why: string) => void
+  onStatus?: (s: 'connecting' | 'live' | 'lost') => void
+  onParty?: (party: CoopPartyMember[], you: string | null) => void
+}
+
+export function applySlackSnap(s: StillwindState, sw: SlackSnapSw): void {
+  Object.assign(s, sw)
+  if (sw.wind !== 'running') s.ranOver = []
+}
+
+/** Between snapshots a RUN is the one move too fast to wait on (16 tiles/s): carry it along the line. */
+export function driftSlack(s: StillwindState, dt: number): void {
+  if (s.felled || s.wind !== 'running') return
+  s.z = Math.max(0, Math.min(STILLWIND_TUNING.length, s.z + s.runDir * STILLWIND_TUNING.runSpeed * Math.min(dt, 0.1)))
+}
+
+export class SlackLink {
+  ws: WebSocket | null = null
+  party: CoopPartyMember[] = []
+  status: 'connecting' | 'live' | 'lost' = 'connecting'
+  you: string | null = null
+  private lastPos = 0
+  constructor(readonly code: string, readonly mirror: StillwindState, private ev: SlackEvents) {}
+
+  open(): void {
+    if (typeof window === 'undefined') return
+    const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${scheme}//${window.location.host}/breach-ws/?party=${encodeURIComponent(this.code)}&mode=slack`)
+    this.ws = ws
+    this.setStatus('connecting')
+    ws.onmessage = (e) => {
+      let m: { t: string; [k: string]: unknown }
+      try { m = JSON.parse(String(e.data)) } catch { return }
+      if (m.t === 'welcome') { this.you = String(m.you ?? ''); this.setStatus('live') }
+      else if (m.t === 'refused') { this.ev.onRefused?.(String(m.why ?? '')); this.close() }
+      else if (m.t === 'snap') {
+        const snap = m as unknown as { sw: SlackSnapSw; you: { struck: number; down: boolean }; party: CoopPartyMember[]; events: { t: string; what?: string; secs?: number; by?: string }[] }
+        applySlackSnap(this.mirror, snap.sw)
+        this.party = snap.party
+        this.ev.onParty?.(snap.party, this.you)
+        if (snap.you.struck > 0) this.ev.onStruck?.(snap.you.struck)
+        for (const x of snap.events) {
+          if (x.t === 'wind' && x.what) this.ev.onWind?.(x.what as 'stalled')
+          else if (x.t === 'felled') this.ev.onFelled?.(x.secs ?? Math.round(this.mirror.elapsed), x.by ?? '')
+          else if (x.t === 'up') this.ev.onUp?.()
+          else if (x.t === 'reset') this.ev.onReset?.()
+        }
+      }
+    }
+    ws.onclose = () => { if (this.ws === ws) { this.ws = null; this.setStatus('lost') } }
+  }
+  close(): void { const w = this.ws; this.ws = null; try { w?.close() } catch { /* already gone */ } }
+  private setStatus(s: SlackLink['status']) { this.status = s; this.ev.onStatus?.(s) }
+  private send(m: unknown): void { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(m)) }
+  /** where this keeper stands, in edge tiles (throttled to 15 a second) */
+  pos(x: number, y: number, z: number, yaw = 0): void {
+    const now = performance.now()
+    if (now - this.lastPos < 66) return
+    this.lastPos = now
+    this.send({ t: 'pos', x, y, z, yaw })
+  }
+  hit(dmg: number): void { this.send({ t: 'hit', id: 0, dmg }) }
+  down(): void { this.send({ t: 'down' }) }
+}
 
 // ── FIND OTHERS: a place in the matchmaking line (`?queue=breach`). Resolves to a room code when matched. ──────
 export interface QueueEvents {
@@ -125,11 +206,12 @@ export interface QueueEvents {
 export class BreachQueue {
   ws: WebSocket | null = null
   private done = false
-  constructor(private ev: QueueEvents) {}
+  /** `kind` is the mission's own line: a keeper finding others for the Slack is only matched with Slack keepers */
+  constructor(private ev: QueueEvents, readonly kind: 'breach' | 'slack' = 'breach') {}
   open(): void {
     if (typeof window === 'undefined') return
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${scheme}//${window.location.host}/breach-ws/?queue=breach`)
+    const ws = new WebSocket(`${scheme}//${window.location.host}/breach-ws/?queue=${this.kind}`)
     this.ws = ws
     ws.onmessage = (e) => {
       let m: { t: string; [k: string]: unknown }

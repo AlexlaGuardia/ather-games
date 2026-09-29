@@ -75,9 +75,9 @@ try {
   for (const x of [a, b, c, d, anon]) x.ws.close()
 
   // ── FIND OTHERS: the queue ─────────────────────────────────────────────────────────────────────
-  const queue = (user: string, name: string, session = true) => new Promise<Client>((res) => {
+  const queue = (user: string, name: string, session = true, kind = 'breach') => new Promise<Client>((res) => {
     const headers: Record<string, string> = session ? { cookie: `${SESSION_COOKIE}=${mintSession(user, name)}` } : {}
-    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/?queue=breach`, { headers })
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/?queue=${kind}`, { headers })
     const msgs: any[] = []
     ws.on('message', (dd) => msgs.push(JSON.parse(String(dd))))
     const cl: Client = { ws, msgs, last: () => msgs[msgs.length - 1], snaps: () => [] }
@@ -114,6 +114,16 @@ try {
   const q8 = await queue('u_q8', 'Q8'); await sleep(200)
   ok(q8.msgs.some(m => m.t === 'queue' && m.n === 1), 'a keeper who cancels leaves the line (the next arrival waits alone)')
   q8.ws.close()
+  // ★ ONE LINE PER MISSION (09-29): a keeper finding a Slack is never matched into someone's Breach
+  {
+    const b1 = await queue('u_l1', 'L1'), s1 = await queue('u_l2', 'L2', true, 'slack'), b2 = await queue('u_l3', 'L3'), s2 = await queue('u_l4', 'L4', true, 'slack')
+    await sleep(300)
+    ok(b2.msgs.some(m => m.t === 'queue' && m.n === 2) && s2.msgs.some(m => m.t === 'queue' && m.n === 2), 'each mission keeps its own line (2 + 2, not 4)')
+    const s3 = await queue('u_l5', 'L5', true, 'slack')
+    await sleep(400)
+    ok(!!matched(s3) && matched(s1)?.code === matched(s3).code && !matched(b1), '★ three for the Slack match each other; the Breach line still waits')
+    b1.ws.close(); b2.ws.close()
+  }
   const qx = await queue('u_x', 'Nobody', false); await sleep(200)
   ok(qx.msgs[0]?.t === 'refused', 'no session, no place in line')
 

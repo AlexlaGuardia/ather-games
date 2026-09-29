@@ -272,41 +272,49 @@ export function handle(r: Room, k: Keeper, m: Msg): unknown | null {
 // as two; anyone may press GO NOW and take whoever is waiting (even nobody: a room of one). A match is just a fresh
 // room code, and the matched connect to it exactly as a party would (`?party=CODE`).
 interface Waiter { id: string; name: string; ws: WebSocket; since: number }
-const QUEUE: Waiter[] = []
+/** one line per mission (`?queue=breach` / `?queue=slack`): a keeper looking for a Breach is never matched into a Slack */
+export type QueueKind = 'breach' | 'slack'
+const QUEUES: Record<QueueKind, Waiter[]> = { breach: [], slack: [] }
+const QUEUE = QUEUES.breach   // the Breach's line: the default for callers that name none
 export const QUEUE_OPTS = { fillSec: 25, size: MAX_KEEPERS }
 const matchCode = () => 'MX' + Math.random().toString(36).slice(2, 7).toUpperCase().replace(/[^A-Z0-9]/g, 'Q')
-function tellQueue() {
-  for (const w of QUEUE) w.ws.send(JSON.stringify({ t: 'queue', n: QUEUE.length, need: QUEUE_OPTS.size, waited: Math.round((Date.now() - w.since) / 1000) }))
+function tellQueue(Q: Waiter[] = QUEUE) {
+  for (const w of Q) w.ws.send(JSON.stringify({ t: 'queue', n: Q.length, need: QUEUE_OPTS.size, waited: Math.round((Date.now() - w.since) / 1000) }))
 }
-export function makeMatch(ws: Waiter[]): string {
+export function makeMatch(ws: Waiter[], Q: Waiter[] = QUEUE): string {
   const code = matchCode()
   const names = ws.map(w => w.name)
   for (const w of ws) {
-    const i = QUEUE.indexOf(w); if (i >= 0) QUEUE.splice(i, 1)
+    const i = Q.indexOf(w); if (i >= 0) Q.splice(i, 1)
     w.ws.send(JSON.stringify({ t: 'matched', code, names }))
     try { w.ws.close() } catch { /* gone */ }
   }
-  console.log(`[breach] matched ${names.join(' + ')} → ${code}`)
-  tellQueue()
+  console.log(`[queue] matched ${names.join(' + ')} → ${code}`)
+  tellQueue(Q)
   return code
 }
 export function queueTick(now = Date.now()) {
-  while (QUEUE.length >= QUEUE_OPTS.size) makeMatch(QUEUE.slice(0, QUEUE_OPTS.size))
-  if (QUEUE.length >= 2 && now - QUEUE[0].since >= QUEUE_OPTS.fillSec * 1000) makeMatch(QUEUE.slice(0, QUEUE_OPTS.size))
+  for (const Q of Object.values(QUEUES)) {
+    while (Q.length >= QUEUE_OPTS.size) makeMatch(Q.slice(0, QUEUE_OPTS.size), Q)
+    if (Q.length >= 2 && now - Q[0].since >= QUEUE_OPTS.fillSec * 1000) makeMatch(Q.slice(0, QUEUE_OPTS.size), Q)
+  }
 }
-function joinQueue(ws: WebSocket, id: string, name: string) {
-  const old = QUEUE.findIndex(w => w.id === id)
-  if (old >= 0) { try { QUEUE[old].ws.close() } catch { /* gone */ } QUEUE.splice(old, 1) }   // one place in line per keeper
+function joinQueue(ws: WebSocket, id: string, name: string, kind: QueueKind = 'breach') {
+  const QUEUE = QUEUES[kind]
+  for (const Q of Object.values(QUEUES)) {   // one place in line per keeper, across every line
+    const old = Q.findIndex(w => w.id === id)
+    if (old >= 0) { try { Q[old].ws.close() } catch { /* gone */ } Q.splice(old, 1) }
+  }
   const me: Waiter = { id, name, ws, since: Date.now() }
   QUEUE.push(me)
-  console.log(`[queue+] ${name} (${QUEUE.length} waiting)`)
+  console.log(`[queue+] ${name} (${QUEUE.length} waiting for ${kind})`)
   ws.on('message', (d) => {
     let m: { t?: string }
     try { m = JSON.parse(String(d)) } catch { return }
-    if (m.t === 'go' && QUEUE.includes(me)) makeMatch([me, ...QUEUE.filter(w => w !== me)].slice(0, QUEUE_OPTS.size))
+    if (m.t === 'go' && QUEUE.includes(me)) makeMatch([me, ...QUEUE.filter(w => w !== me)].slice(0, QUEUE_OPTS.size), QUEUE)
   })
-  ws.on('close', () => { const i = QUEUE.indexOf(me); if (i >= 0) { QUEUE.splice(i, 1); tellQueue() } })
-  tellQueue()
+  ws.on('close', () => { const i = QUEUE.indexOf(me); if (i >= 0) { QUEUE.splice(i, 1); tellQueue(QUEUE) } })
+  tellQueue(QUEUE)
   queueTick()
 }
 
@@ -324,7 +332,8 @@ export function startServer(port = PORT) {
     const url = new URL(req.url ?? '/', 'http://x')
     const claims = readSessionToken(cookie(req, SESSION_COOKIE))
     const code = partyCode(url.searchParams.get('party'))
-    if (claims?.user_id && url.searchParams.get('queue') === 'breach') { joinQueue(ws, claims.user_id, claims.username ?? 'Keeper'); return }
+    const q = url.searchParams.get('queue')
+    if (claims?.user_id && (q === 'breach' || q === 'slack')) { joinQueue(ws, claims.user_id, claims.username ?? 'Keeper', q); return }
     if (!claims?.user_id || !code) { ws.send(JSON.stringify({ t: 'refused', why: !claims ? 'sign in to play together' : 'no party' })); ws.close(); return }
     const mode: RoomMode = url.searchParams.get('mode') === 'slack' ? 'slack' : 'breach'
     const key = roomKey(code, mode)
