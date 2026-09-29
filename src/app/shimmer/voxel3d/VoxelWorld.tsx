@@ -22,6 +22,13 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { saveKey } from '@/lib/save-slot'
+import { useParty } from '@/lib/party'
+import { usePartyLobby } from '@/lib/party-lobby'
+import { useAccount } from '@/lib/accounts/use-account'
+import { useMultiplayer, storedName, selfPlayerId } from '../play3d/multiplayer'
+import { RemotePlayers } from '../play3d/RemotePlayers'
+import { PartyStrip } from './party-strip'
+import { EYE_STAND as PARTY_EYE } from './locomotion'
 import { SECTION, DEFAULT_COLUMN, Column, Stage, makeColumn, meshColumn, refreshUniform, isHalfCell, generatedVoxel, WILDS_BUBBLE, wildsSwallows } from '../voxel/column'
 import { VOXEL_WORKER_URL } from '../../../workers/worker-url'
 import { createMeshScratch } from '../voxel/greedy'
@@ -1262,6 +1269,32 @@ export default function VoxelWorld() {
   // first minute, or a wiped store — stands at Moonwell: canon's *where a keeper begins and where
   // they keep coming back*. The plot is reached by the seam Greg folds, never by default.
   const space = useRef<Space>('glade')
+  // ── ★ THE PARTY IN THE ATHER (2026-09-29, Alex: "in the wilds they can find each other") ─────────────────────
+  // Until today the voxel world had no multiplayer at all: a party that crossed the Rune Hold gate lost each other.
+  // Now a partied keeper streams where they stand on the SAME presence socket play3d uses, zone `voxel:<space>`, so
+  // mates in the Wilds (or at Moonwell) share one instance and draw each other. PARTY ONLY: the Ather is not a public
+  // lobby. NEVER on the plot: a garden is personal (canon: "a personal shimmer"), and every keeper's plot sits at the
+  // same coordinates, so a mate in their own garden would stand inside yours. The party lobby hears where you are,
+  // so the Station's roster reads "in the Ather".
+  const { party: mpParty, ready: mpPartyReady } = useParty()
+  const account = useAccount()
+  const mpName = account.session?.username ?? storedName()
+  const mpPose = useRef({ x: 0, y: 0, z: 0 })
+  const mpYaw = useRef(0)
+  const [spaceNow, setSpaceNow] = useState<Space>('glade')
+  useEffect(() => { const t = setInterval(() => setSpaceNow(space.current), 1000); return () => clearInterval(t) }, [])
+  const { peers: mpPeers } = useMultiplayer({
+    enabled: mpPartyReady && !!mpParty && spaceNow !== 'plot', zoneId: 'voxel:' + spaceNow,
+    posRef: mpPose, yawRef: mpYaw, party: mpParty, playerName: mpName,
+  })
+  const lobby = usePartyLobby({
+    code: mpParty, userId: account.session?.user_id ?? (mpPartyReady ? selfPlayerId() : null), name: mpName,
+    zone: 'voxel:' + spaceNow, look: mpPartyReady ? selfPlayerId() : '',
+    onLaunched: (l) => {
+      const who = lobby.state?.members.find((m) => m.id === l.by)?.name ?? 'Your leader'
+      say(`${who} set off for ${l.mission === 'boss' ? 'the Slack' : l.mission === 'survival' ? 'the Breach' : 'an expedition'} · you are in the Ather`)
+    },
+  })
   /** ★ Cluster mode, owned HERE so the map can read it (World writes it; see `clusterMode`). */
   const clusterOut = useRef<ClusterModeState>(null)
   /** The open brewings — the keeper's, keyed by cauldron (`PlayerSave.brewings`). Held here, beside
@@ -2424,6 +2457,9 @@ export default function VoxelWorld() {
           onPos={(p, yaw) => {
             mapPos.current = { x: p.x, z: p.z }
             mapHeading.current = yaw
+            // presence sends FEET and a camera yaw whose forward is (-sin, -cos); the map heading is atan2(aimZ, aimX)
+            mpPose.current.x = p.x; mpPose.current.y = p.y - PARTY_EYE; mpPose.current.z = p.z
+            mpYaw.current = Math.atan2(-Math.cos(yaw), -Math.sin(yaw))
             setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)
           }}
           onLook={setLook} onInvChange={refreshHotbar} onCollarNear={setCollarNear}
@@ -2464,7 +2500,10 @@ export default function VoxelWorld() {
             stayed false and the camera froze with the pointer captured. Stray canvas clicks while
             a menu is up are already refused by the onCreated click handler. */}
         <PointerLockControls selector="#voxel3d-no-autolock" />
+        {/* your party, where they stand in this part of the Ather (09-29) */}
+        <RemotePlayers peers={mpPeers} />
       </Canvas>
+      <PartyStrip lobby={lobby.state} you={lobby.you} peers={mpPeers} meRef={mapPos} headingRef={mapHeading} />
       <Hud tremor={tremor} stats={stats} diagnostics={settings.showFps} perf={settings.showFps ? perf : null} toast={toast} pos={pos} look={look} hotbar={hotbar} sel={sel} tier={tier} held={held}
            heldPiece={heldPiece} rot={rot} inv={inv} collarNear={collarNear}
            skill={skillHud} levelUp={levelUp} crafted={crafted} tools={tools} skills={skills} buffs={buffs}

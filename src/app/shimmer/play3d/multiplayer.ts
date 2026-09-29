@@ -105,7 +105,8 @@ export function wsUrl(zoneId: string, party: string | null, playerName: string):
   const { id, name } = identity()
   const q = new URLSearchParams({
     player_id: id, name: playerName || name,
-    zone: ZONE_PREFIX + zoneId,
+    // a zone that already names its world ('voxel:wilds', 09-29) is sent as-is; play3d's bare ids get the prefix
+    zone: zoneId.includes(':') ? zoneId : ZONE_PREFIX + zoneId,
     instance_type: 'zone',
   })
   if (party) q.set('party', party)

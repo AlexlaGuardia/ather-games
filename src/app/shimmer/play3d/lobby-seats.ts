@@ -9,6 +9,8 @@ export function whereLabel(zone: string): string {
   if (zone === 'play3d:rune-hold') return 'in the Rune Hold'
   if (zone === 'play3d:the-hold') return 'in the Breach'
   if (zone === 'play3d:stillwind-edge') return 'at the Slack'
+  if (zone === 'voxel:plot') return 'in their garden'
+  if (zone === 'voxel:glade') return 'at Moonwell'
   if (zone.startsWith('voxel')) return 'in the Ather'
   if (zone.startsWith('play3d:')) return 'elsewhere in Rune Hold'
   return 'away'
