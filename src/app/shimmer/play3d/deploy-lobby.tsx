@@ -49,7 +49,7 @@ export { lobbySeats, launchBlock, whereLabel, STATION_ZONE } from './lobby-seats
 // the WIDTH, so a portrait phone sees all three instead of the middle one.
 const SLOT_X = [0, -1.15, 1.15]
 /** what must be in frame: the three keepers and their names, with a margin (world units, half-extents) */
-const FIT_HALF_W = 2.0, FIT_HALF_H = 1.45
+const FIT_HALF_W = 2.0, FIT_HALF_H = 2.5   // H was 1.45: on a wide screen HEIGHT sets the fit, and 1.45 stood them head-to-foot
 function CameraFit() {
   const { camera, size } = useThree()
   const last = useRef('')
@@ -209,7 +209,7 @@ export function DeployLobby({ you, lobby, isLeader, partyCode, missions, localPi
   }
 
   return (
-    <div className="fixed inset-0 z-[60] select-none" style={{ ...hearthBody, background: L.backdrop, color: H.paper }} data-panel="departures">
+    <div className="fixed inset-0 z-[90] select-none" style={{ ...hearthBody, background: L.backdrop, color: H.paper }} data-panel="departures">
       {/* the stage fills the screen; the plates sit over it */}
       <div className="absolute inset-0"><Stage seats={seats} partied={partied} /></div>
 
