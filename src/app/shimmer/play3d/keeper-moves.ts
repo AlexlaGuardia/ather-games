@@ -229,7 +229,8 @@ export const KEEPER_MOVES: KeeperMove[] = [
   { id: 'forge-fist', name: 'Forge Fist', tier: 'tactical', runes: ['magma', 'metalergy'],
     effect: 'A weapon heated to glowing and held stable — strikes that cauterize, blades that cut and burn at once.', collar: 'cruelty' },
   { id: 'heat-mirage', name: 'Heat Mirage', tier: 'tactical', runes: ['star', 'mist'],
-    effect: 'Superheated air bent into distortion — they see you three feet from where you stand.' },
+    // built 09-29: evasion, like Thunder Step's afterimage. It never enters the contest, so it is never the key.
+    effect: 'Superheated air bent into distortion — they see you three feet from where you stand.', collar: 'no-contest' },
   { id: 'volcano-spike', name: 'Volcano Spike', tier: 'tactical', runes: ['magma', 'gem'],
     effect: 'Molten earth compressed into crystalline shot. Slower than fire but it PIERCES barriers and shatters inside.', collar: 'cruelty' },
   { id: 'ember-trail', name: 'Ember Trail', tier: 'tactical', runes: ['star', 'dust'],
@@ -318,7 +319,8 @@ export const KEEPER_MOVES: KeeperMove[] = [
   { id: 'chain-lightning', name: 'Chain Lightning', tier: 'ultimate', runes: ['lightning'],
     effect: 'Arcs between every target and conductor in range, jumping through groups.', collar: 'opens' },
   { id: 'flame-barrage', name: 'Flame Barrage', tier: 'ultimate', runes: ['star', 'breeze'],
-    effect: 'A volley of fire that independently tracks and curves mid-flight — a flock of burning birds.' },
+    // built 09-29: fire that finds a body and burns it renders as Flashpoint and Firewall do, so it refuses the same way
+    effect: 'A volley of fire that independently tracks and curves mid-flight — a flock of burning birds.', collar: 'cruelty' },
   // ── ★★★ ALL THREE BIND RUNES, CORRECTED ON PROOF 2026-08-27 (canon RULED 08-26) ──────────────
   // This read `runes: ['enchant']` because one summary cell in `moves.md` read `Gate | Enchant`.
   // Canon says the trifecta FOUR separate times — `runes.md:211` (the lane law's own worked

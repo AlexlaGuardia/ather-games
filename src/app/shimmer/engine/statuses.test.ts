@@ -143,5 +143,23 @@ const pgSrc = readFileSync(new URL('../play3d/puppet-guards.ts', import.meta.url
 ok(pgSrc.includes('if (!pierce) dealt *= 0.4'), '★ a pierced barrier lets the full hit through (the stagger still lands)')
 ok(p3.includes("kinds: [], color: STATUS_TABLE[pending.statuses[0]].color, applySecs: 0, stops: false }]"), 'an instant status cast flashes where it lands')
 
+// N. PASS 2, STEP 10 (09-29): info + stealth
+const hu = castForMove('hush'), mv = castForMove('monsoon-veil'), hm = castForMove('heat-mirage'), wm = castForMove('waymark')
+const sb = castForMove('stormbank'), fbr = castForMove('flame-barrage'), ex = castForMove('exhale')
+ok(hu.hides && hu.linger && hu.castRange <= 2, '★ Hush: a hiding cloud laid on you')
+ok(mv.hides && mv.fieldHps > 0, 'Monsoon Veil heals AND hides whoever stands in it')
+ok(hm.archetype === 'veil' && hm.decoySecs === 4 && hm.decoyOffset > 0.9 && hm.decoyOffset < 2.5, 'Heat Mirage: a false you, about three feet off, for 4s')
+ok(wm.trap && wm.trapKeep && wm.statuses[0] === 'revealed' && wm.trapMax === 3, 'Waymark: a mark that is never spent; whoever passes it shows')
+ok(sb.linger && sb.statuses.includes('blinded') && sb.statuses.includes('revealed') && sb.landStatuses[0] === 'disarmed' && sb.fieldDps === 0, 'Stormbank: one-way fog; its lightning jams weapons once, as it lands')
+ok(fbr.volley === 6 && fbr.damage === 0 && fbr.statuses[0] === 'burning' && fbr.markSecs === 5 && fbr.chainRange >= 15, 'Flame Barrage: six birds, each hunting its own foe; they reveal + burn, no damage')
+ok(ex.surgeSecs > 0 && ex.surgeMult > 1 && ex.fieldShps > 0, 'Exhale: the shield breath AND a short speed boost')
+ok(p3.includes('const lostTrack = (x: number, z: number) => hideAreas.length > 0 && !hideAreas.some('), '★ a hidden keeper is lost to foes OUTSIDE the cloud only')
+for (const who of ["'hunter', 'blinded', nowFrame) || lostTrack(h.x, h.z)", "|| lostTrack(r.member.state.x, r.member.state.z)", "gKey, 'blinded', nowFrame) || lostTrack(b.pos.x, b.pos.z)", 'undefined, (id) => floodMods(id, bag0))'])
+  ok(p3.includes(who), `every foe that aims can lose track: ${who.slice(0, 30)}`)
+ok((p3.match(/o\.vel\.copy\(aimPt\)/g) || []).length === 3 && p3.includes('hc.targetX = aimPt.x'), '★ every foe that aims, aims at the mirage while it stands')
+ok(p3.includes("if (fresh) tone(1250, 140"), 'a waymark pings when something new touches it')
+ok(p3.includes("cp.homing = prey.length ? prey[k % prey.length] : ''") && p3.includes('lerp(seg, Math.min(1, dt * 3.5))'), 'the birds are loosed at separate prey and turn toward it')
+ok(p3.includes("case 'veil': {"), 'the dispatcher places a veil like any other aimed cast')
+
 console.log(`statuses: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

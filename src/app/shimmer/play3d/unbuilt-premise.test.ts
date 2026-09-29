@@ -50,31 +50,14 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
 interface Premise { file: string; arrives: RegExp; hook: string }
 
 const BUILD_BLOCKED: Record<string, Premise> = {
-  'heat-mirage': {
-    file: 'engine/statuses.ts',
-    // Every status today is applied to a TARGET id. A self-centred one is a status the CASTER wears
-    // that changes how others resolve against them.
-    arrives: /\bself\b.*(status|mirage)|misaim|misAim/i,
-    hook: 'a self-centred status — one the caster wears that makes enemies mis-aim at THEM',
-  },
+
   'ember-trail': {
     file: 'engine/field-effects.ts',
     arrives: /alongPath|trail|spawnFieldAt\w*Path/i,
     hook: "fields spawned along the caster's PATH rather than at a single aim point",
   },
-  'flame-barrage': {
-    file: 'engine/cast-dispatch.ts',
-    // One press, several independently tracked rounds. `placed` is a single spec today.
-    arrives: /volley|barrage|projectiles:\s*\d|placedMany/i,
-    hook: 'one cast that emits several independently tracked projectiles',
-  },
-  waymark: {
-    file: 'engine/cast-dispatch.ts',
-    // Its surviving reason is a DESIGN one: a place-binding is not a slot you press. The premise
-    // that would overturn it is the dispatcher gaining a non-combat, place-binding archetype.
-    arrives: /'place-bind'|placeBind|'binding'/,
-    hook: 'a place-binding archetype in the dispatcher — the thing its design reason says it is not',
-  },
+
+
 }
 
 // ── A. every premise points somewhere real ─────────────────────────────────────────────────────

@@ -66,6 +66,7 @@ export type CastArchetype =
   | 'infusion'    // a timed multiplier on the WEAPON, not the cast (Flame Infusion)
   | 'channel'     // SYSTEM 7 — a cast that is HELD: press, hold, release, billed per second (sustain.ts)
   | 'gate'        // SYSTEM 8 — a bare spiral binding two points inside one fight, billed per second (engine/gate-spiral.ts)
+  | 'veil'        // SYSTEM 10 — the cast changes what foes SEE of the keeper: a decoy they shoot at instead (Heat Mirage)
   | 'unbuilt'     // registered in canon, no sim behaviour yet — labelled, never a silent no-op
 
 export interface CastSpec {
@@ -234,6 +235,20 @@ export interface CastSpec {
   /** status + linger: the cloud lays `statuses` on the keeper's ROUNDS that pass through it, not on foes inside
    *  (Emberglass: shoot through the burn and your shots carry it, for `splashSecs`) */
   ampZone: boolean
+  // ── MOVE-JOBS PASS 2, STEP 10 (09-29): info + stealth ─────────────────────────────────────────────────
+  /** status cloud / field: a keeper inside it cannot be seen by foes OUTSIDE it (they lose track, as if blinded) */
+  hides: boolean
+  /** veil: seconds a false keeper stands beside you, drawing every foe's aim */
+  decoySecs: number
+  /** veil: how far off the decoy stands, in world units (canon: "three feet from where you stand") */
+  decoyOffset: number
+  /** trap: it is never spent. Every foe inside `trapRadius` wears `statuses`, and each new one pings (Waymark) */
+  trapKeep: boolean
+  /** status + linger: applied ONCE, to every foe inside, when the cloud lands (Stormbank's lightning jams weapons) */
+  landStatuses: readonly StatusKind[]
+  landSecs: number
+  /** projectile: one press looses this many bolts, each HUNTING its own foe within `chainRange` (Flame Barrage) */
+  volley: number
   // ── impulse (SYSTEM 4) — the cast moves the CASTER ─────────────────────────
   /**
    * How the keeper is moved.
@@ -308,6 +323,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   keepMomentum: false, airJumps: 0, airJumpSecs: 0, fieldShps: 0,
   shove: 0, shoveDir: 'away', lane: 0, grapple: false, markSecs: 0,
   ampPierce: 0, ampCover: false, ampShield: false, ampShots: 0, ampArc: 0, ampZone: false,
+  hides: false, decoySecs: 0, decoyOffset: 0, trapKeep: false, landStatuses: [], landSecs: 0, volley: 0,
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
@@ -461,7 +477,9 @@ const BUILDS: Record<string, Build> = {
   // MOVE-JOBS 09-29 (Alex ✓, "armor shred"): in play3d your shots leave foes VULNERABLE for 3s. No play3d foe has a
   // shield to break yet, so shredding reads as the damage it lets through.
   'forge-fist': { archetype: 'infusion', manaCost: 16, cooldownMs: 12000, surgeSecs: 6, surgeMult: 1.25, statuses: ['vulnerable'], areaSecs: 3 },
-  'heat-mirage': { archetype: 'unbuilt', why: 'needs a self-centred status — enemies mis-aim at the CASTER, not at a placed point' },
+  // MOVE-JOBS PASS 2 (Alex ✓, 09-29): "they see you three feet from where you stand". A false keeper beside you for 4s;
+  // every foe that can see you aims at it instead. SYSTEM 10, the veil: the first cast that changes what foes SEE.
+  'heat-mirage': { archetype: 'veil', manaCost: 14, cooldownMs: 14000, decoySecs: 4, decoyOffset: 1.6 },
   // "Slower than fire but it pierces barriers." Slowest projectile, hardest hit.
   'volcano-spike': { archetype: 'projectile', manaCost: 14, cooldownMs: 1400, damage: 34, projSpeed: 34, projLife: 2 },
   'ember-trail': { archetype: 'unbuilt', why: "needs fields spawned along the caster's PATH — every field today lands at the aim point" },
@@ -551,7 +569,12 @@ const BUILDS: Record<string, Build> = {
   // the sentence named a hook that had already arrived. **The surviving half is the DESIGN half and
   // it is unchanged:** binding a place is not a thing you put in a cast slot and press. Rewritten to
   // the reason that is still true rather than deleted, because the move is still correctly unbuilt.
-  waymark:   { archetype: 'unbuilt', why: 'a place-binding, not a combat cast — it belongs to the passage arc, never a slot' },
+  // ★ BUILT 09-29 (Alex ✓ the move-jobs page): "plant a mark: anyone who passes it shows through walls and you get a ping."
+  // That IS the canon line's second half, *"you know whether anyone has touched it"*, at keeper depth: a place bound
+  // for one fight. The passage arc's waymark (voxel/waymark.ts, Greg's trade) is the same craft grown into travel;
+  // this is not that, and it never binds a place past its two minutes. Three stand at once; they are never spent.
+  waymark:   { archetype: 'status', manaCost: 8, cooldownMs: 3000, castRange: 4, areaSize: 3, areaSecs: 3, statuses: ['revealed'],
+               trap: true, trapKeep: true, trapRadius: 3, trapMax: 3, trapSecs: 120 },
   // "Splitting ONCE when it finds a second… the floor Chain Lightning is the ceiling of." So it is
   // literally the ultimate with `chain` turned down to one and the price turned down with it: a
   // tactical you throw constantly, against an ultimate you spend a pool on.
@@ -610,7 +633,9 @@ const BUILDS: Record<string, Build> = {
   // where they part. Enlighten is a flash thrown FAR at a point (range 11, size 6, 3.5s); Hush is a
   // bank of vapor you pull over the ground around you (range 10, size 8, 4s) so you can leave.
   // Blinding everyone nearby IS concealment realised, with no concealment status to model it.
-  hush:      { archetype: 'status', manaCost: 14, cooldownMs: 10000, castRange: 10, areaSize: 8, areaSecs: 4, statuses: ['blinded'], linger: true },
+  // MOVE-JOBS PASS 2 (Alex ✓): a hiding cloud laid on you. Foes outside cannot see you or anyone inside; foes that walk
+  // in lose track too. It hides, it does not blind a room: small, and it follows no one.
+  hush:      { archetype: 'status', manaCost: 14, cooldownMs: 12000, castRange: 1, areaSize: 5, areaSecs: 6, statuses: ['blinded'], linger: true, hides: true },
   // ── Barrier's doubled focus (canon 2026-09-02, built the same day) ─────────────────────────
   // "Paid at the cast and then it holds itself: it does not drain you, does not follow you." So it
   // is a PLACED field, never a stance — the passives own the held shell and its drain. "A novice
@@ -626,7 +651,10 @@ const BUILDS: Record<string, Build> = {
   // MOVE-JOBS PASS 2 (Magii ruled 09-28, "arcs between every target"): 10s in which every round that lands arcs to
   // the nearest other foe for half of it.
   'chain-lightning': { archetype: 'infusion', manaCost: 34, cooldownMs: 30000, surgeSecs: 10, surgeMult: 1, ampArc: 0.5, chainRange: 7 },
-  'flame-barrage': { archetype: 'unbuilt', why: 'needs independently tracking projectiles' },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "track and curve"): a flock of six fire birds, each hunting its own foe within
+  // 22 tiles. What they strike shows through walls 5s and burns 3s. The birds themselves do no damage.
+  'flame-barrage': { archetype: 'projectile', manaCost: 38, cooldownMs: 24000, damage: 0, projSpeed: 20, projLife: 3, volley: 6, chainRange: 22,
+                     statuses: ['burning'], areaSecs: 3, markSecs: 5 },
   // ⚠ GATE STAYS UNBUILT AND IS NOT AN IMPULSE. Thunder Step goes where you are LOOKING; a gate is
   // a two-point bind — you place an anchor, leave, and return to it later. That is a persistent
   // placed entity with its own lifetime, closer to conjured terrain than to a blink, and folding it
@@ -685,7 +713,8 @@ const BUILDS: Record<string, Build> = {
   'living-fortress': { archetype: 'terrain', manaCost: 48, cooldownMs: 30000, castRange: 7, areaSize: 5, areaSecs: 60, shape: 'ring', shapeHeight: 4 },
   // The green answer to Cyclone Cage's teeth. Registered though no keeper can reach it: canon needs
   // Vapor, a Scatter rune the birth screen does not offer — the emptiness IS the canon (runes.data.ts).
-  'monsoon-veil': { archetype: 'field', manaCost: 46, cooldownMs: 26000, castRange: 8, areaSize: 7, areaSecs: 16, fieldHps: 16, fieldStopsShots: false },
+  // MOVE-JOBS PASS 2 (Alex ✓): the healing fog also HIDES whoever stands in it from foes outside
+  'monsoon-veil': { archetype: 'field', manaCost: 46, cooldownMs: 26000, castRange: 8, areaSize: 7, areaSecs: 16, fieldHps: 16, fieldStopsShots: false, hides: true },
   // ── the birth-first pass (09-28): numbers are Jin's, each off its nearest cousin ──
   // MOVE-JOBS PASS 2 (Magii ruled 09-28, "the burn gets out"): a shard shatters at the aim; for 6s, rounds shot through
   // the spot carry the burn and set what they hit Burning (3s). The spot itself hurts nobody.
@@ -699,9 +728,12 @@ const BUILDS: Record<string, Build> = {
   'monolith': { archetype: 'terrain', manaCost: 40, cooldownMs: 22000, castRange: 9, areaSize: 3, areaSecs: 30, shape: 'block', shapeHeight: 5 },
   // MOVE-JOBS 09-29 (Alex ✓): "standing on it is fine; being struck on it is not" — the ground turns foes Vulnerable.
   'shatterfield': { archetype: 'status', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 6, areaSecs: 9, statuses: ['vulnerable'], linger: true },
-  'stormbank': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 11, areaSize: 6, areaSecs: 8, fieldDps: 10, fieldStopsShots: false },
-  // MOVE-JOBS 09-29 (Alex ✓): one breath out: a short, strong shield refill around you (the speed half comes later).
-  'exhale': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 2, areaSize: 6, areaSecs: 6, fieldHps: 6, fieldShps: 20, fieldStopsShots: false },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "nobody inside can see"): one-way fog. Foes inside are blind and show to you
+  // through it; the lightning let loose as it lands jams every weapon inside for 1.5s. No damage.
+  'stormbank': { archetype: 'status', manaCost: 42, cooldownMs: 24000, castRange: 11, areaSize: 6, areaSecs: 8, statuses: ['blinded', 'revealed'], linger: true,
+                 landStatuses: ['disarmed'], landSecs: 1.5 },
+  // MOVE-JOBS 09-29 (Alex ✓): one breath out: a short, strong shield refill around you, and (pass 2) 4s of speed.
+  'exhale': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 2, areaSize: 6, areaSecs: 6, fieldHps: 6, fieldShps: 20, fieldStopsShots: false, surgeSecs: 4, surgeMult: 1.35 },
   // MOVE-JOBS PASS 2 (Magii ruled 09-28, "a choking cloud they have to walk out of"): a slow ash storm that blinds
   // whoever is inside and pushes them out of it, a little every quarter second. It takes ground; it does not kill.
   'pyroclast': { archetype: 'status', manaCost: 46, cooldownMs: 26000, castRange: 12, areaSize: 7, areaSecs: 11, statuses: ['blinded'], linger: true, shove: 0.7, shoveDir: 'out' },

@@ -67,7 +67,7 @@ const MEND = 'mend', DART = 'ice-dart', WALL = 'stonewall', BURST = 'static-burs
   const stale = resolveCast(1, [null, 'ice-dart', null, null], env({ emptyWhy: ['cleared', 'cleared', null, null] }))
   check('★★ a reason sitting on a BOUND slot is ignored — the bind wins', stale.kind === 'applied')
   // Every registered-but-unbuilt canon move must name itself AND its reason.
-  const unbuiltId = 'heat-mirage'   // cast.ts: 'needs a self-centred status…' (gate, the old example, was built 09-28)
+  const unbuiltId = 'ember-trail'   // cast.ts: 'needs fields spawned along the caster's PATH…' (heat-mirage, the old example, was built 09-29)
   const u = resolveCast(0, [unbuiltId, null, null, null], env())
   check('an unbuilt move names itself and its reason',
     u.kind === 'refused' && u.reason === 'unbuilt' &&

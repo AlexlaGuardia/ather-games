@@ -80,7 +80,7 @@ import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRu
 import { spawnField, tickFields, fieldsAt, absorbShotAt, absorbWardAt, contains, FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from '../engine/conjured-terrain'
 import { addShove, stepShoves, shoveVector, type Shove, type ShoveDir } from '../engine/shove'
-import { emptyBag, applyStatus, applyStatuses, hasStatus, pruneStatuses, clearTarget, foeMods, statusesOn, STATUS_TABLE, VULNERABLE_MULT, BURN_DPS, type StatusBag, type StatusKind } from '../engine/statuses'
+import { emptyBag, applyStatus, applyStatuses, hasStatus, pruneStatuses, clearTarget, foeMods, NO_MODS, statusesOn, STATUS_TABLE, VULNERABLE_MULT, BURN_DPS, type StatusBag, type StatusKind } from '../engine/statuses'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { type BattleResult } from '../engine/arena'
@@ -2667,6 +2667,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     sts: [] as readonly StatusKind[], stSecs: 0,   // statuses the round lays on whatever it hits (Ice Dart: slowed)
     // pass 2: what the bolt does to WHERE a foe stands, its mark, and whether a miss pulls the caster (Tidal Arms)
     shove: 0, shoveDir: 'away' as ShoveDir, mark: 0, grapple: false, label: '',
+    homing: '',   // step 10: a Flame Barrage bird hunts this foe id
   })), [])
   // ── LINGERING STATUS CLOUDS (09-28): a status cast with `linger` (Fog Bank, Hush, Sandstorm Veil…) stays where
   // it lands and keeps applying to whoever is inside, so a foe that walks INTO the fog is blinded too. Before
@@ -2677,7 +2678,13 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     /** pass 2: pushes whoever is inside out of it, this far per tick (Pyroclast's ash) */
     push?: number
     /** pass 2: lays its status on the keeper's ROUNDS that pass through, never on foes inside (Emberglass) */
-    amp?: { kind: StatusKind; secs: number } }[]>([])
+    amp?: { kind: StatusKind; secs: number }
+    /** step 10: a keeper inside it is unseen by foes outside it (Hush) */
+    hides?: boolean }[]>([])
+  // step 10: Heat Mirage's false keeper, as an offset from the real one; foes aim at it while it stands
+  const decoyRef = useRef({ until: 0, ox: 0, oz: 0 })
+  const decoyMeshRef = useRef<THREE.Mesh>(null)
+  const aimPt = useMemo(() => new THREE.Vector3(), [])
   // ── PASS 2, STEP 8: foes being moved by a cast (engine/shove.ts) ──
   const shovesRef = useRef<Shove[]>([])
   const lineMeshRef = useRef<THREE.InstancedMesh>(null)
@@ -2687,7 +2694,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const markMeshRef = useRef<THREE.InstancedMesh>(null)
   const revealMeshRef = useRef<THREE.InstancedMesh>(null)   // STEP 2: a Revealed foe's outline, drawn through walls
   // STEP 4: traps set on the ground, waiting for a foe (Shackle's clamp, Flash Freeze's pool)
-  const trapsRef = useRef<{ spec: CastSpec; x: number; z: number; y: number; until: number; color: number }[]>([])
+  const trapsRef = useRef<{ spec: CastSpec; x: number; z: number; y: number; until: number; color: number; seen?: Set<string> }[]>([])
   const trapMeshRef = useRef<THREE.InstancedMesh>(null)
   const windupRef = useRef<{ spec: CastSpec; at: number } | null>(null)  // a cast charging (Enlighten's 0.8s tell)
   const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z], i) => ({
@@ -2912,6 +2919,21 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const v = shoveVector(dir, fx, fz, sx, sz, ax, az)
       shovesRef.current = addShove(shovesRef.current, id, v.x, v.z, d)
     }
+    // ── HIDDEN (step 10): a keeper standing in a hiding cloud (Hush) or fog (Monsoon Veil) is unseen by every foe
+    // OUTSIDE it. Such a foe loses track exactly as a blinded one does (its shots scatter). A foe inside still sees.
+    const hideAreas: ((x: number, z: number) => boolean)[] = []
+    { const pl = posRef.current
+      if (pl) {
+        for (const zn of statusZones.current) if (zn.hides && zn.until > nowFrame && inZone(zn, pl.x, pl.z)) hideAreas.push((x, z) => inZone(zn, x, z))
+        for (const f of fieldsRef.current) if (castForMove(f.moveId).hides && contains(f, pl.x, pl.z)) hideAreas.push((x, z) => contains(f, x, z))
+      } }
+    const lostTrack = (x: number, z: number) => hideAreas.length > 0 && !hideAreas.some((inside) => inside(x, z))
+    const floodMods = (id: number, bag: StatusBag) => {
+      const m = bag[`flood:${id}`] ? foeMods(bag, `flood:${id}`, nowFrame) : null
+      if (!hideAreas.length || !hs) return m
+      const b = hs.flood.find((f) => f.id === id)
+      return b && lostTrack(b.x, b.z) ? { ...(m ?? NO_MODS), blinded: true } : m
+    }
     // BURNING (step 3): a half-second tick, paid through each foe's own damage path so death and loot rules hold
     if (nowFrame >= burnTickAt.current) {
       burnTickAt.current = nowFrame + 500
@@ -2926,6 +2948,22 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const live = trapsRef.current.filter((t) => t.until > nowFrame)
       const left: typeof live = []
       for (const t of live) {
+        // WAYMARK (step 10): never spent. Whoever stands inside shows through walls, and each NEW foe pings
+        if (t.spec.trapKeep) {
+          const r2 = t.spec.trapRadius * t.spec.trapRadius
+          let bag = statusRef.current, fresh = false, inside: string[] | null = null
+          forEachFoe((id, x, z) => {
+            if ((x - t.x) ** 2 + (z - t.z) ** 2 > r2) return
+            ;(inside ??= []).push(id)
+            bag = applyStatuses(bag, id, t.spec.statuses, t.spec.areaSecs, nowFrame)
+            if (!t.seen?.has(id)) fresh = true
+          })
+          statusRef.current = bag
+          if (inside || t.seen?.size) t.seen = new Set(inside ?? [])
+          if (fresh) tone(1250, 140, { type: 'sine', gain: 0.06, slideTo: 1650 })   // the ping: something touched your mark
+          left.push(t)
+          continue
+        }
         let tripped: string | null = null
         forEachFoe((id, x, z) => { if (!tripped && (x - t.x) ** 2 + (z - t.z) ** 2 <= t.spec.trapRadius * t.spec.trapRadius) tripped = id })
         if (!tripped) { left.push(t); continue }
@@ -3077,6 +3115,17 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       state.camera.getWorldDirection(dir)
       const nowMs = performance.now()
       if (pending.archetype === 'projectile') {
+        // FLAME BARRAGE (step 10): a volley of birds, each hunting its own foe (nearest first; a short list is shared out)
+        const n = Math.max(1, pending.volley)
+        const prey: string[] = []
+        if (pending.volley > 0) {
+          const plx = posRef.current?.x ?? 0, plz = posRef.current?.z ?? 0, r2 = pending.chainRange * pending.chainRange
+          const found: { id: string; d: number }[] = []
+          forEachFoe((id, x, z) => { const d = (x - plx) ** 2 + (z - plz) ** 2; if (d <= r2) found.push({ id, d }) })
+          found.sort((a, b) => a.d - b.d)
+          for (const f of found) prey.push(f.id)
+        }
+        for (let k = 0; k < n; k++) {
         const cp = castPool.find((pr) => pr.life <= 0)
         if (cp) {
           camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
@@ -3084,15 +3133,27 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const [mr, md, mf] = adsRef.current ? MUZZLE_ADS : MUZZLE_HIP
           cp.pos.copy(state.camera.position).addScaledVector(camRight, mr).addScaledVector(camUp, -md).addScaledVector(dir, mf)
           aim.copy(state.camera.position).addScaledVector(dir, 40)  // converge point ~40u down the reticle
-          cp.vel.copy(aim).sub(cp.pos).normalize().multiplyScalar(pending.projSpeed)
+          cp.vel.copy(aim).sub(cp.pos).normalize()
+          // a volley fans up and out before the birds turn on their prey
+          if (n > 1) cp.vel.addScaledVector(camUp, 0.55).addScaledVector(camRight, (k - (n - 1) / 2) * 0.4).normalize()
+          cp.vel.multiplyScalar(pending.projSpeed)
+          cp.homing = prey.length ? prey[k % prey.length] : ''
           cp.life = pending.projLife
           cp.dmg = pending.damage; cp.chain = pending.chain; cp.chainRange = pending.chainRange
           cp.sts = pending.statuses; cp.stSecs = pending.areaSecs
           cp.shove = pending.shove; cp.shoveDir = pending.shoveDir; cp.mark = pending.markSecs; cp.grapple = pending.grapple; cp.label = pending.label
           recoilRef.current.p += 0.008  // a little heft on release
-          onShot()
+          if (k === 0) onShot()
+        }
         }
       } else {
+        // HEAT MIRAGE (step 10): the false keeper stands at your right shoulder, `decoyOffset` off, and moves with you
+        if (pending.archetype === 'veil') {
+          camRight.setFromMatrixColumn(state.camera.matrixWorld, 0)
+          const rl = Math.hypot(camRight.x, camRight.z) || 1
+          decoyRef.current = { until: nowMs + pending.decoySecs * 1000, ox: (camRight.x / rl) * pending.decoyOffset, oz: (camRight.z / rl) * pending.decoyOffset }
+          tone(520, 380, { type: 'sine', gain: 0.05, slideTo: 880 })
+        }
         // THE AIM POINT for every placed cast: flatten the camera forward, walk `castRange` along it
         // from the player's feet. Flattening is deliberate — looking at the sky must not put your
         // Stonewall in orbit. Falls back to straight ahead when you're staring at your own boots.
@@ -3144,8 +3205,15 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
             // a LINE runs ACROSS the aim (perpendicular to the flat forward), centred on the aim point
             const line = pending.line ? { ux: -flatZ / flatLen, uz: flatX / flatLen, half: pending.areaSize / 2 } : undefined
             statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.line ? 0.9 : pending.areaSize, until: nowMs + pending.areaSecs * 1000, kinds: pending.statuses, color, line, applySecs: pending.splashSecs || 1, stops: pending.line && pending.fieldStopsShots, push: pending.shoveDir === 'out' ? pending.shove : 0,
-              amp: pending.ampZone ? { kind: pending.statuses[0], secs: pending.splashSecs || 3 } : undefined }]
+              amp: pending.ampZone ? { kind: pending.statuses[0], secs: pending.splashSecs || 3 } : undefined, hides: pending.hides }]
             zoneTickAt.current = 0
+            // STORMBANK (step 10): what lands once, on everyone inside, as the cloud arrives
+            if (pending.landStatuses.length) {
+              let bag = statusRef.current
+              const r2 = pending.areaSize * pending.areaSize
+              forEachFoe((id, x, z) => { if ((x - ax) ** 2 + (z - az) ** 2 <= r2) bag = applyStatuses(bag, id, pending!.landStatuses, pending!.landSecs, nowMs) })
+              statusRef.current = bag
+            }
           } else {
             let bag = statusRef.current
             const plx = posRef.current?.x ?? 0, plz = posRef.current?.z ?? 0
@@ -3370,6 +3438,17 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     for (const p of castPool) {
       if (p.life <= 0) continue
       p.life -= dt
+      if (p.homing) {
+        // a bird turns toward its prey, never snaps: fast enough to find it, slow enough to be seen curving
+        let found = false
+        forEachFoe((id, x, z, y) => { if (id === p.homing) { found = true; seg.set(x, y, z) } })
+        if (found) {
+          const sp = p.vel.length()
+          seg.sub(p.pos).normalize()
+          vhat.copy(p.vel).normalize().lerp(seg, Math.min(1, dt * 3.5)).normalize()
+          p.vel.copy(vhat).multiplyScalar(sp)
+        }
+      }
       p.pos.addScaledVector(p.vel, dt)
       const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
       const cell = gridRef.current?.[cz]?.[cx]
@@ -3423,7 +3502,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         if (coop.struck > 0) { const d = coop.struck; coop.struck = 0; hurtPlayer(d) }
       } else {
         const bag0 = statusRef.current
-        const o = stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP, undefined, (id) => (bag0[`flood:${id}`] ? foeMods(bag0, `flood:${id}`, nowFrame) : null))
+        const o = stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP, undefined, (id) => floodMods(id, bag0))
         if (o.strike > 0) hurtPlayer(o.strike)
       }
     }
@@ -3463,6 +3542,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     }
     if (posRef.current) {
       pEye.set(posRef.current.x, posRef.current.y + 1.1, posRef.current.z)
+      // HEAT MIRAGE (step 10): while the false keeper stands, every foe that aims, aims at IT
+      const dc = decoyRef.current, decoyUp = nowFrame < dc.until
+      if (decoyUp) aimPt.set(pEye.x + dc.ox, pEye.y, pEye.z + dc.oz); else aimPt.copy(pEye)
+      if (decoyMeshRef.current) { decoyMeshRef.current.visible = decoyUp; if (decoyUp) decoyMeshRef.current.position.set(aimPt.x, posRef.current.y + 0.9, aimPt.z) }
       // ── ground hunter (console HOSTILE toggle): spawn → chase to mid-range → strafe → return fire ──
       const h = hunter.current
       if (cfg?.hostile) {
@@ -3480,10 +3563,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         // a tuning change in.
         const hRooted = hasStatus(statusRef.current, 'hunter', 'rooted', nowFrame)
         const hDisarmed = hasStatus(statusRef.current, 'hunter', 'disarmed', nowFrame)
-        const hBlinded = hasStatus(statusRef.current, 'hunter', 'blinded', nowFrame)
+        const hBlinded = hasStatus(statusRef.current, 'hunter', 'blinded', nowFrame) || lostTrack(h.x, h.z)
         hunterNow.current = nowFrame
         const hc = hunterCtx.current
-        hc.targetX = pEye.x; hc.targetZ = pEye.z
+        hc.targetX = aimPt.x; hc.targetZ = aimPt.z
         hc.rooted = hRooted; hc.disarmed = hDisarmed
         hc.speedMult = foeMods(statusRef.current, 'hunter', nowFrame).speedMult
         hc.fallbackX = targets[0].ax; hc.fallbackZ = targets[0].az
@@ -3496,7 +3579,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const o = orbs.find((or) => or.life <= 0)
           if (o) {
             o.pos.copy(h.pos); o.pos.y += 0.4
-            o.vel.copy(pEye).sub(o.pos).normalize()
+            o.vel.copy(aimPt).sub(o.pos).normalize()
             // blinded: it still shoots, it just doesn't know where you are. A flash-bang buys you
             // the fight, it doesn't end it — deliberately not a hard silence. Stays HERE rather
             // than in the module: where a shot goes is the host's business, and the module has no
@@ -3541,7 +3624,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         const bodies = botBodies.current
         bodies.length = 0
         // The player stands in the roster as squad -1: nobody's squadmate, so everyone's enemy.
-        bodies.push({ x: pEye.x, z: pEye.z, squad: -1, alive: true, index: -1 })
+        bodies.push({ x: aimPt.x, z: aimPt.z, squad: -1, alive: true, index: -1 })
         for (const m of fleet.members) {
           bodies.push({ x: m.state.x, z: m.state.z, squad: m.challenger.squad, alive: m.state.alive, index: m.index })
         }
@@ -3582,9 +3665,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const o = orbs.find((or) => or.life <= 0)
           if (!o) continue
           o.pos.set(r.member.state.x, (posRef.current.y ?? 0) + 0.95, r.member.state.z)
-          o.vel.copy(pEye).sub(o.pos).normalize()
+          o.vel.copy(aimPt).sub(o.pos).normalize()
           // blinded: it still shoots, it just does not know where you are (the hunter's rule)
-          if (hasStatus(fbag, `fleet:${r.member.index}`, 'blinded', nowFrame)) { o.vel.x += Math.sin(r.member.state.strafe * 7.3) * 0.85; o.vel.z += Math.cos(r.member.state.strafe * 5.1) * 0.85; o.vel.normalize() }
+          if (hasStatus(fbag, `fleet:${r.member.index}`, 'blinded', nowFrame) || lostTrack(r.member.state.x, r.member.state.z)) { o.vel.x += Math.sin(r.member.state.strafe * 7.3) * 0.85; o.vel.z += Math.cos(r.member.state.strafe * 5.1) * 0.85; o.vel.normalize() }
           o.vel.multiplyScalar(DRONE_SPEED)
           o.life = DRONE_LIFE
         }
@@ -3694,7 +3777,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const gKey = `guard:${st.id}`
           const gRooted = hasStatus(statusRef.current, gKey, 'rooted', nowFrame)
           const gDisarmed = hasStatus(statusRef.current, gKey, 'disarmed', nowFrame)
-          const gBlinded = hasStatus(statusRef.current, gKey, 'blinded', nowFrame)
+          const gBlinded = hasStatus(statusRef.current, gKey, 'blinded', nowFrame) || lostTrack(b.pos.x, b.pos.z)
           const gSm = foeMods(statusRef.current, gKey, nowFrame).speedMult
           if (cell !== undefined && (cell & 0xFF) !== WALL_ID && !gRooted && gSm > 0 && !conjuredBlockedAt(conjuredRef.current, nx, nz, nowFrame)) { b.pos.x += (nx - b.pos.x) * gSm; b.pos.z += (nz - b.pos.z) * gSm }
           // the leading guard presses; the supports fire slower. Wren, least aggressive, slowest.
@@ -3704,7 +3787,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
             const o = orbs.find((or) => or.life <= 0)
             if (o) {
               o.pos.copy(b.pos); o.pos.y += 0.4
-              o.vel.copy(pEye).sub(o.pos).normalize()
+              o.vel.copy(aimPt).sub(o.pos).normalize()
               if (gBlinded) { o.vel.x += Math.sin(gs.orbit * 6.1 + i) * 0.85; o.vel.z += Math.cos(gs.orbit * 4.7 + i) * 0.85; o.vel.normalize() }
               o.vel.multiplyScalar(DRONE_SPEED)
               o.life = DRONE_LIFE
@@ -3983,6 +4066,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial transparent opacity={0.4} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </instancedMesh>
+      <mesh ref={decoyMeshRef} visible={false}>
+        <capsuleGeometry args={[0.32, 1.0, 4, 10]} />
+        <meshBasicMaterial color={0xffc58a} transparent opacity={0.5} depthWrite={false} toneMapped={false} />
+      </mesh>
       <instancedMesh ref={trapMeshRef} args={[undefined, undefined, TRAP_MAX]} frustumCulled={false}>
         <cylinderGeometry args={[1, 1, 0.06, 20]} />
         <meshBasicMaterial transparent opacity={0.7} toneMapped={false} />
@@ -7745,9 +7832,12 @@ export default function Shimmer3D() {
       case 'projectile':
       case 'field':
       case 'terrain':
-      case 'status': {
+      case 'status':
+      case 'veil': {
         if (!tryCast(spec.manaCost)) return
         pendingCastRef.current = spec
+        // a placed cast that also moves the caster faster (Exhale's breath, step 10): the surge window, applied now
+        if (spec.surgeSecs > 0 && spec.surgeMult > 1) { surgeRef.current = { until: now + spec.surgeSecs * 1000, mult: spec.surgeMult }; speedMultRef.current *= spec.surgeMult }
         castCdRef.current[slot] = now + spec.cooldownMs
         if (charge) {
           charge.n--; if (charge.at === 0) charge.at = now + spec.cooldownMs

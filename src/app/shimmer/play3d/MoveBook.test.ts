@@ -81,7 +81,7 @@ console.log(`\nfixtures: ${soloTradeable.name} (${soloTradeable.tier}) · ${sign
 // 13 of the 68 are archetype 'unbuilt'. They are SHOWN, with their own separate label, because
 // hiding a registered move is how a keeper concludes their book is short.
 {
-  const unbuiltIds = ['waymark', 'meltbore', 'gate']
+  const unbuiltIds = ['ember-trail', 'meltbore', 'grey-arena']
   for (const id of unbuiltIds) {
     const m = KEEPER_MOVES.find((x) => x.id === id)
     if (!m) continue
