@@ -57,6 +57,8 @@ interface Keeper {
   events: unknown[]
   goneAt: number | null
   yaw: number
+  /** this keeper's glove errand is waiting on the Breach (their client says so on connect: `&glove=1`) */
+  gloveOwed: boolean
   /** fallen in this run: out of the flood's reach until the run ends (co-op: the run ends when EVERY keeper is down) */
   down: boolean
 }
@@ -85,6 +87,8 @@ export function newRoom(code: string, seed = (Date.now() & 0xffff) || 1): Room {
 export function tickRoom(r: Room, dt: number): void {
   const here = r.keepers.filter(k => k.ws !== null && !k.down)
   const pickups0 = r.s.pickups.length
+  // ★ GLOVE STONES IN CO-OP (09-29): the Breach sets its stones cache down if ANY keeper here is owed them
+  r.s.gloveOwed = here.some(k => k.gloveOwed)
   r.s.wrack = 0
   const o = stepHoldParty(r.s, dt, here.map(k => k.pos))
   here.forEach((k, i) => { k.struck += o.strikes[i] ?? 0 })
@@ -161,6 +165,17 @@ export function handle(r: Room, k: Keeper, m: Msg): unknown | null {
       const got = asKeeper(r, k, () => chestTick(s, Math.trunc(num(m.spot, 0, 999)), num(m.dt, 0, 0.5)))
       if (!got) return null
       s.loot.length = 0   // the opener's, sent to the opener only
+      if (got.kind === 'stones') {
+        // the stones cache is found for the PARTY: every keeper owed them takes theirs, whoever lifted the lid;
+        // a keeper not on the glove's road gets nothing from it
+        const openerOwed = k.gloveOwed
+        for (const o of r.keepers) if (o.gloveOwed) {
+          o.gloveOwed = false
+          if (o !== k) o.ws?.send(JSON.stringify({ t: 'loot', loot: got }))
+        }
+        s.gloveOwed = false
+        return openerOwed ? { t: 'loot', loot: got } : { t: 'loot-shared', kind: 'stones' }
+      }
       return { t: 'loot', loot: got }
     }
     case 'act': {
@@ -245,10 +260,11 @@ export function startServer(port = PORT) {
     let k = r.keepers.find(x => x.id === claims.user_id)
     if (!k) {
       if (r.keepers.length >= MAX_KEEPERS) { ws.send(JSON.stringify({ t: 'refused', why: 'three to a door: this party\'s Breach is full' })); ws.close(); return }
-      k = { id: claims.user_id, name: claims.username ?? 'Keeper', ws: null, pos: { x: MAP.start.x, z: MAP.start.z, y: MAP.start.h }, wallet: freshWallet(r.s), struck: 0, events: [], goneAt: null, down: false, yaw: 0 }
+      k = { id: claims.user_id, name: claims.username ?? 'Keeper', ws: null, pos: { x: MAP.start.x, z: MAP.start.z, y: MAP.start.h }, wallet: freshWallet(r.s), struck: 0, events: [], goneAt: null, down: false, yaw: 0, gloveOwed: false }
       r.keepers.push(k)
     }
     k.ws = ws; k.goneAt = null; r.emptySince = null
+    if (url.searchParams.get('glove') === '1') k.gloveOwed = true
     const room = r, me = k
     ws.send(JSON.stringify({ t: 'welcome', you: me.id, code, start: { x: MAP.start.x, z: MAP.start.z, y: MAP.start.h } }))
     console.log(`[breach+] ${me.name} → ${code} (${room.keepers.filter(x => x.ws).length}/${MAX_KEEPERS})`)

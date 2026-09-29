@@ -6,7 +6,8 @@
  *   set -a; . ./.env; set +a; npx tsx server/breach-server.test.mts
  */
 import WebSocket from 'ws'
-import { startServer, MAX_KEEPERS, QUEUE_OPTS } from './breach-server.mts'
+import { startServer, MAX_KEEPERS, QUEUE_OPTS, newRoom, tickRoom, handle } from './breach-server.mts'
+import { HOLD_TUNING, rollChests } from '../src/app/shimmer/play3d/hold'
 import { mintSession, SESSION_COOKIE } from '../src/lib/accounts/session'
 
 let pass = 0
@@ -114,6 +115,38 @@ try {
   q8.ws.close()
   const qx = await queue('u_x', 'Nobody', false); await sleep(200)
   ok(qx.msgs[0]?.t === 'refused', 'no session, no place in line')
+
+  // ── GLOVE STONES IN CO-OP: the party finds them, each keeper owed takes theirs ────────────────────
+  {
+    const room = newRoom('GLOVE1', 42)
+    const sent: Record<string, any[]> = { a: [], b: [], c: [] }
+    const mk = (id: string, owed: boolean): any => ({
+      id, name: id, ws: { send: (x: string) => sent[id].push(JSON.parse(x)), readyState: 1 },
+      pos: { x: room.s.map.start.x, z: room.s.map.start.z, y: room.s.map.start.h },
+      wallet: { salvage: 500, surge: 0, tuned: {}, rackBought: false, kills: 0, wrack: 0 },
+      struck: 0, events: [], goneAt: null, down: false, yaw: 0, gloveOwed: owed,
+    })
+    const ka = mk('a', true), kb = mk('b', true), kc = mk('c', false)
+    room.keepers.push(ka, kb, kc)
+    room.s.round = HOLD_TUNING.gloveRound
+    tickRoom(room, 1 / 30)
+    ok(room.s.gloveOwed, 'a keeper here is owed the stones, so the Breach owes them')
+    rollChests(room.s, HOLD_TUNING, 0)
+    const spot = room.s.chests.findIndex(c => c?.stones)
+    ok(spot >= 0, '★ the stones cache is set down at the glove round')
+    let reply: any = null
+    for (let i = 0; i < 40 && !reply; i++) reply = handle(room, kc, { t: 'chest', spot, dt: 0.5 })
+    ok(reply?.t === 'loot-shared', `★ C (not on the glove's road) opens it and takes nothing for themselves (${reply?.t})`)
+    ok(sent.a.some(m => m.t === 'loot' && m.loot.kind === 'stones') && sent.b.some(m => m.t === 'loot' && m.loot.kind === 'stones'), '★★ A and B, both owed, each get their stones')
+    ok(!sent.c.some(m => m.t === 'loot'), 'C is sent no stones')
+    ok(!ka.gloveOwed && !kb.gloveOwed && !room.s.gloveOwed, 'the debt is settled for both, and the Breach owes nothing more')
+    // a party nobody in which is owed never sees a stones cache
+    const none = newRoom('GLOVE2', 43)
+    none.keepers.push(mk('c', false))
+    none.s.round = HOLD_TUNING.gloveRound
+    tickRoom(none, 1 / 30); rollChests(none.s, HOLD_TUNING, 1)
+    ok(!none.s.chests.some(c => c?.stones), 'a party with nobody owed never sees a stones cache')
+  }
 } finally {
   wss.close()
 }

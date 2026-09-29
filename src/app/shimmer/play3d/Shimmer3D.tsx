@@ -7875,6 +7875,7 @@ export default function Shimmer3D() {
         onStatus: (st) => { if (st === 'lost' && coop.link === link) setHoldFlash('Lost touch with the party\u2019s Breach') },
         onParty: (party, you) => { coopPeersSync.current(party, you) },
       })
+      link.glove = breachOwesGloveStones()   // the glove's stones drop in co-op too (09-29)
       coop.link = link
       link.open()
     }

@@ -59,13 +59,15 @@ export class BreachLink {
   party: CoopPartyMember[] = []
   status: 'connecting' | 'live' | 'lost' = 'connecting'
   you: string | null = null
+  /** this keeper's glove errand waits on the Breach: the server then sets the stones cache down for the party */
+  glove = false
   private lastPos = 0
   constructor(readonly code: string, readonly mirror: HoldState, private ev: CoopEvents) {}
 
   open(): void {
     if (typeof window === 'undefined') return
     const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${scheme}//${window.location.host}/breach-ws/?party=${encodeURIComponent(this.code)}`)
+    const ws = new WebSocket(`${scheme}//${window.location.host}/breach-ws/?party=${encodeURIComponent(this.code)}${this.glove ? '&glove=1' : ''}`)
     this.ws = ws
     this.setStatus('connecting')
     ws.onmessage = (e) => {
