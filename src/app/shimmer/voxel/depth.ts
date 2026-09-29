@@ -285,6 +285,14 @@ export const MAT = {
   // stops being a chest must drop its record in the same breath, or the next one built on that
   // spot inherits somebody else's items.
   CHEST: 30,
+  /**
+   * ★ THE CACHE THAT HELD (2026-09-29). A puzzle cache in an expedition usually breaks open; rarely it holds together
+   * and the keeper carries it home (Alex's "unique chest"). It IS a chest in every way that matters: it opens, it
+   * counts against the plot's cap, it pools into the bank, with the same slots. What differs is only the LOOK, and
+   * that it cannot be crafted: finer, never stronger (the vessel ruling's spirit). Use `isChest`, never `=== CHEST`.
+   * The name is a working label until canon rules (CANON_GAPS › Expeditions).
+   */
+  HELD_CACHE: 117,
 
   // ── ★ BUILDING MATERIALS — you build with what you MADE, not with what you dug (2026-08-13) ──
   // Alex's ruling, and it is the line that separates this game's building from Minecraft's: a
@@ -793,6 +801,9 @@ export const MAT = {
    */
   STATION_RACK: 116,
 } as const
+
+/** Every block that is a chest: the craftable one and the cache that held (2026-09-29). The ONE test for "is this storage". */
+export const isChest = (m: number): boolean => m === MAT.CHEST || m === MAT.HELD_CACHE
 
 /**
  * ── ★ THE MODELLED BLOCKS (2026-09-15, Alex: "they don't have to make it a block.. take a look at

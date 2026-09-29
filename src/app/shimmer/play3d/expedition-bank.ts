@@ -36,3 +36,15 @@ export function loadFinds(): ExpFind[] {
 export function recordFind(f: ExpFind): void {
   try { localStorage.setItem(keeperKey(FINDS_KEY), JSON.stringify([...loadFinds(), f])) } catch { /* private mode */ }
 }
+
+/**
+ * THE MAILBOX (2026-09-29): the Ather drains every held cache waiting here into the bag on load. `n` is how many the
+ * bag actually took; the rest stay waiting, so a full bag never eats a find.
+ */
+export function heldCachesWaiting(): number { return loadFinds().filter((f) => f.kind === 'held-cache').length }
+export function deliverHeldCaches(n: number): void {
+  if (n <= 0) return
+  let left = n
+  const keep = loadFinds().filter((f) => (f.kind === 'held-cache' && left > 0 ? (left--, false) : true))
+  try { localStorage.setItem(keeperKey(FINDS_KEY), JSON.stringify(keep)) } catch { /* private mode */ }
+}

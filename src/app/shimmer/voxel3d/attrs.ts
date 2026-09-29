@@ -298,6 +298,7 @@ export const MATERIAL_COLOR: Record<number, number> = {
   // Darker than the bench: a chest is sturdier stock, and the two stand side by side in a keeper's
   // home — they have to read apart at a glance, not just up close.
   [MAT.CHEST]: 0x8f6535,
+  [MAT.HELD_CACHE]: 0x4a2e1c,   // dark heartwood; the brass is painted (tex/tiles.ts › paintChest's HELD look)
   // Packed earth, drier than subsoil, tanner than sand — the story road.
   [MAT.PATH]: 0xa8916b,
   // ── ★ THE WOODEN WALLS, ONE PER PLANK SPECIES (2026-08-22, the planking cut) ────────────────

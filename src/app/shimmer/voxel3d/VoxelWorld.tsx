@@ -22,6 +22,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { saveKey } from '@/lib/save-slot'
+import { heldCachesWaiting, deliverHeldCaches } from '../play3d/expedition-bank'
 import { useParty } from '@/lib/party'
 import { usePartyLobby } from '@/lib/party-lobby'
 import { useAccount } from '@/lib/accounts/use-account'
@@ -45,7 +46,7 @@ import { findLands, LAND_IDS } from '../voxel/character'
 import { AIR } from '../voxel/section'
 import { lightOpaque } from '../voxel/light-passes'
 import { placementRotation } from './piece-facing'
-import { materialAt, MAT, isPlant, isHerb, isFruit, isForage, isScatter, isSapling, isHalfMat, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF, isTallStation, isStationRack } from '../voxel/depth'
+import { materialAt, MAT, isPlant, isHerb, isFruit, isForage, isScatter, isSapling, isHalfMat, baseOf, isSolid, isGlassMat, SOLID_EXCEPT, TOP_BIT, DEFAULT_DEPTH, TURF, isTallStation, isStationRack, isChest } from '../voxel/depth'
 import { FLORA, plantVariant, flowerForm, forageKind, deadfallVariant } from '../voxel/flora'
 import { raycast, tickBreak, dropsFor, breakXP, setBreakRate, getBreakRate, type BreakState, type RayHit, afterBreak } from '../voxel/mine'
 import { spawnDrop, tossDrop, tickDrops, type Drop } from '../voxel/drops'
@@ -782,6 +783,11 @@ export const maxStackOf = (itemId: string): number => STACK_OVERRIDE[itemId] ?? 
  * in the 2D FURNITURE table, so a crafted chest silently inherited that rule while `roomFor` below
  * did not, which made a walked-over chest vanish. See `addToGrid`'s header for the whole autopsy.
  */
+/** The plot's chest census: the craftable chest AND the cache that held (both count against the cap, 09-29). */
+function countChests(): Promise<number> {
+  return Promise.all([countMaterial(SEED, 'plot', MAT.CHEST), countMaterial(SEED, 'plot', MAT.HELD_CACHE)]).then(([a, b]) => a + b)
+}
+
 function give(inv: Inventory, itemId: string, count: number): number {
   return addToGrid(inv.slots, itemId, count, maxStackOf)
 }
@@ -4422,6 +4428,16 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
           inv.current.slots = stripped.slots
           onSay(`your bag caught up: ${stripped.stowedBack + stripped.dropped} vessel${stripped.stowedBack + stripped.dropped === 1 ? '' : 's'} moved back to the Vessels section — a vessel is never a bag item`)
         }
+        // ★ THE CACHE THAT HELD COMES HOME (2026-09-29): an expedition's puzzle cache that held together waits in a
+        // keeper-local mailbox (`expedition-bank.ts`); here, at the one point a save becomes live state, it goes in
+        // the bag as a placeable chest. What does not fit keeps waiting: a full bag never eats a find.
+        const waiting = heldCachesWaiting()
+        if (waiting > 0) {
+          const took = waiting - give(inv.current, 'held_cache', waiting)
+          deliverHeldCaches(took)
+          if (took > 0) onSay(`${took === 1 ? 'the cache that held is' : `${took} caches that held are`} in your bag · place ${took === 1 ? 'it' : 'them'} in your garden like a chest`)
+          if (took < waiting) onSay(`no room in your bag for ${waiting - took} more held cache${waiting - took === 1 ? '' : 's'} · they wait for you`)
+        }
       }
       // ensureBasicTools over the SAVED set: a future tool family added to the game arrives in
       // an old save as its basic tier instead of as undefined. Only once the fold has given the
@@ -4582,7 +4598,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // The plot's chest census normally rides `enterSpace`, which a direct restore never calls.
       if (space.current === 'plot') {
         plotChests.current = 0
-        void countMaterial(SEED, 'plot', MAT.CHEST).then(n => { plotChests.current += n })
+        void countChests().then(n => { plotChests.current += n })
       }
       lc.vy = 0; lc.hvx = 0; lc.hvz = 0; lc.stepSmooth = 0
       camera.position.set(lc.px, eyeY(lc), lc.pz)
@@ -5374,14 +5390,14 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // ★ A REBUILD IN PLACE (the cluster's record or a mate's garden arrived): the ground is re-made
       // under the keeper and they stay where they stand. The census still has to be re-taken — the
       // caches above were cleared — and this is the same exact instant `plot`'s branch relies on.
-      if (to === 'plot') { plotChests.current = 0; void countMaterial(SEED, 'plot', MAT.CHEST).then(n => { plotChests.current += n }) }
+      if (to === 'plot') { plotChests.current = 0; void countChests().then(n => { plotChests.current += n }) }
     } else if (to === 'plot') {
       // ★ THE CHEST CENSUS IS TAKEN HERE AND ONLY HERE, because this is the one instant it can be
       // taken exactly: `flushSaves` ran three lines up, every cache above was just cleared, and no
       // plot column is resident. A count run at any later moment would miss unflushed edits and
       // read low, which is the direction that hands out free chests. See `plotChests`.
       plotChests.current = 0
-      void countMaterial(SEED, 'plot', MAT.CHEST).then(n => { plotChests.current += n })
+      void countChests().then(n => { plotChests.current += n })
       // ── ★★ YOU ARRIVE IN FRONT OF YOUR DOOR, NOT INSIDE IT (2026-08-19) ──────────────────────
       // Alex: *"in the homeplot you dont even start off in front of the passsage."* Landing exactly
       // ON the threshold put the keeper INSIDE the seam's own quad — near-plane clipped, so the one
@@ -5879,7 +5895,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
     // works out of the bank — the whole point of one pool is that a station never again depends
     // on which box is standing where.
     const onPlot = space.current === 'plot'
-    const beside = onPlot ? [] : attachedChests(sx, sy, sz, (x, y, z) => voxel(x, y, z) === MAT.CHEST)
+    const beside = onPlot ? [] : attachedChests(sx, sy, sz, (x, y, z) => isChest(voxel(x, y, z)))
     onOpenStation({
       x: sx, y: sy, z: sz, kind,
       job: jobAt(sx, sy, sz),
@@ -5977,7 +5993,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         if (!Object.keys(rec).length) racksByCol.current.delete(k)
       }
     }
-    if (prevMat !== mat && (prevMat === MAT.CHEST || mat === MAT.CHEST)) {
+    if (prevMat !== mat && (isChest(prevMat) || isChest(mat))) {
       const rec = chestsByCol.current.get(k)
       if (rec) {
         delete rec[chestKey(wx, wy, wz)]
@@ -5987,7 +6003,8 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       // this is the funnel, so a chest that leaves by a path invented next month is still counted
       // out. Under the same `prevMat !== mat` guard — a no-op write of CHEST over CHEST is not a
       // new chest, and counting it would leak the cap away one redundant write at a time.
-      if (space.current === 'plot') plotChests.current += mat === MAT.CHEST ? 1 : -1
+      // a chest swapped for a chest (never today, but the funnel must not care) counts neither way
+      if (space.current === 'plot' && isChest(mat) !== isChest(prevMat)) plotChests.current += isChest(mat) ? 1 : -1
     }
     // ★ AND A STATION'S JOB DIES WITH ITS BLOCK, for the identical reason — otherwise the next
     // bench built on this cell inherits somebody else's half-finished work. The mining branch has
@@ -10344,10 +10361,10 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // without emptying it by hand first is a trap, not a rule.
         // ★ ON THE PLOT NOTHING SPILLS — the block held nothing; the pool did. The cap drops by a
         // chest's worth at the next door and the pool sits over it until it drains (`bank.ts`).
-        if (hit.material === MAT.CHEST && space.current === 'plot') {
+        if (isChest(hit.material) && space.current === 'plot') {
           const over = bank.current.filter(Boolean).length - bankCapacity(plotChests.current - 1)
           if (over > 0) onSay(`the bank keeps ${over} stack${over === 1 ? '' : 's'} more than its chests can hold now — nothing more goes in until it drains`)
-        } else if (hit.material === MAT.CHEST) {
+        } else if (isChest(hit.material)) {
           const held = spillChest(chestAt(hit.x, hit.y, hit.z))
           for (const d of held) drops.current.push(spawnDrop(d.itemId, d.count, hit.x, hit.y, hit.z))
           if (held.length) onSay(`the chest spills — ${held.reduce((n, d) => n + d.count, 0)} items on the ground`)
@@ -11014,7 +11031,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
         // funnel and it ran on the line above), so the test is `>` and not `>=` — comparing against
         // the cap as though the block were not yet down is off by exactly one, and off-by-one in
         // the direction that gives away a free chest at every tier.
-        if (put === MAT.CHEST && space.current === 'plot' && plotChests.current > chestCap(plotCfg.current)) {
+        if (isChest(put) && space.current === 'plot' && plotChests.current > chestCap(plotCfg.current)) {
           setVoxel(hit.px, hit.py, hit.pz, AIR)
           give(inv.current!, held, 1)
           onSay(`your fold holds as many chests as it can keep (${chestCap(plotCfg.current)}) — a wider fold keeps more`)

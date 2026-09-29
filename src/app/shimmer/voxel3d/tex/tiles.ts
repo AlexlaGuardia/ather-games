@@ -54,6 +54,8 @@ export const TILE_MATERIALS: number[] = [
   MAT.POT, MAT.POT_SEEDED, MAT.POT_BLOOM,
   // The chest added 2026-08-11 — the first block that holds something.
   MAT.CHEST,
+  // The cache that held (2026-09-29): a chest with a finer look, carried home from an expedition.
+  MAT.HELD_CACHE,
   // Rubble + cut stone added 2026-08-13 with the building grammar: what a quarried block gives you,
   // and what you cut it into. ⚠ Appending here without a `paintFor` case below is how every tree
   // once rendered as crystal — the switch's default IS the ore painter.
@@ -1406,9 +1408,15 @@ function paintCloudWall(dst: Layer, size: number, seed: number) {
  * has no facing to respect yet, and inventing one here would be a lie the placement code cannot
  * keep. The day directional blocks land (the parked stairs/logs item), this gets a front.
  */
-function paintChest(dst: Layer, size: number, seed: number, face: number) {
-  const wood = rgbOf(MATERIAL_COLOR[MAT.CHEST])
-  const iron = shade(wood, -74)
+/** A chest's look: the wood, the bands, the latch, and whether its corners are capped. The crafted chest is iron on
+ *  oak; the cache that held is brass on heartwood with capped corners, finer and never different in use. */
+interface ChestLook { mat: number; band?: number; latch?: number; corners: boolean }
+const CHEST_LOOK: ChestLook = { mat: MAT.CHEST, corners: false }
+const HELD_LOOK: ChestLook = { mat: MAT.HELD_CACHE, band: 0xb8913e, latch: 0xf0cf6a, corners: true }
+function paintChest(dst: Layer, size: number, seed: number, face: number, look: ChestLook = CHEST_LOOK) {
+  const wood = rgbOf(MATERIAL_COLOR[look.mat])
+  const iron = look.band !== undefined ? rgbOf(look.band) : shade(wood, -74)
+  const latchC = look.latch !== undefined ? rgbOf(look.latch) : null
   const lid = shade(wood, 16)
   const plankH = Math.max(2, Math.round(size / 4))
   const strap = Math.max(1, Math.round(size / 10))          // iron strap width
@@ -1431,8 +1439,11 @@ function paintChest(dst: Layer, size: number, seed: number, face: number) {
         const latchW = Math.max(3, Math.round(size / 5))
         const inLatch = Math.abs(x - c) <= latchW / 2 && y >= seamY - 2 && y <= seamY + latchW
         const board = y % plankH === 0 ? shade(wood, -22) : shade(y < seamY ? lid : wood, jitter)
+        // capped corners (the held cache): a band down each edge and along the foot, so its box reads as FITTED
+        const onCorner = look.corners && (x < strap + 1 || x > size - strap - 2 || y > size - strap - 2)
         put(dst, size, x, y,
-          inLatch ? shade(iron, 22 + jitter * 0.3)
+          inLatch ? (latchC ? shade(latchC, jitter * 0.3) : shade(iron, 22 + jitter * 0.3))
+            : onCorner ? shade(iron, -8 + jitter * 0.3)
             : onSeam ? shade(iron, -12)
             : onStrap ? shade(iron, jitter * 0.4)
             : board, 0)
@@ -2019,6 +2030,7 @@ function paintBase(dst: Layer, material: number, face: number, size: number, see
     // ⚠ Appended to TILE_MATERIALS above, so it NEEDS this case — the switch's default is the ore
     // painter, which is how every tree once rendered as crystal.
     case MAT.CHEST: paintChest(dst, size, seed, face); break
+    case MAT.HELD_CACHE: paintChest(dst, size, seed, face, HELD_LOOK); break
     // ⚠ Fourth time this warning earns its keep — TILE_MATERIALS without a case here is a magenta
     // ore block you can right-click. `render-audit.test.ts` fails on it, which is the only reason
     // this line is hard to forget.
@@ -2271,7 +2283,7 @@ export const VAR_MIRROR = 1
 export const VAR_FULL = 2
 
 const VAR_FIXED_SET: ReadonlySet<number> = new Set<number>([
-  MAT.WATER, MAT.MANA_LANTERN, MAT.WAYMARK, MAT.CACHE, MAT.CHEST,
+  MAT.WATER, MAT.MANA_LANTERN, MAT.WAYMARK, MAT.CACHE, MAT.CHEST, MAT.HELD_CACHE,
   MAT.CRAFT_TABLE, MAT.SAWMILL, MAT.STONECUTTER,
   MAT.CAULDRON, MAT.CAULDRON_LIT, MAT.HEARTH, MAT.OVEN, MAT.GRINDER, MAT.STILL, MAT.MIXER, MAT.KILN,
   MAT.POT, MAT.POT_SEEDED, MAT.POT_BLOOM,

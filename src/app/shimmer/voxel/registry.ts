@@ -542,6 +542,8 @@ export const BLOCKS: BlockDef[] = [
   // cannot be — a drop table is a fixed list and contents are not — so the host spills them
   // separately (voxel3d/chest.ts `spill`). It drops the chest ITEM only; the two are independent
   // and the oracle asserts you cannot get one without the other.
+  // ★ The cache that held (2026-09-29): a chest in all but look, never crafted, only carried home from an expedition.
+  { noSlab: true, material: MAT.HELD_CACHE, name: 'Held Cache', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'held_cache', count: 1 }], fastSkill: 'forestry', placeable: true },
   { noSlab: true, material: MAT.CHEST, name: 'Chest', hardness: 0.9, skill: null, minTier: 0, drops: [{ itemId: 'chest', count: 1 }], fastSkill: 'forestry', placeable: true },
   { material: MAT.SPRING_CRUST, name: 'Spring Crust', hardness: 1.2, skill: 'prospecting', minTier: 1, drops: [{ itemId: 'block_spring_crust', count: 1 }], placeable: true },
 
