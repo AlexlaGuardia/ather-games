@@ -261,6 +261,12 @@ const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 // The mortal side's wall. Clouds and mist are ATHER-only — a town built out of cloud reads as
 // sky, which is the tonal wall canon splits on. Solid like a cloud, drawn brown.
 const BUILDING_ID = 103
+/**
+ * A wall to a BOT, a ROUND or an ORB: the cloud wall AND the mortal block. ⚠ Until 2026-09-29 every one of those
+ * predicates tested WALL_ID alone, so the Crucible's building walls (103) let bots walk and bullets fly through them.
+ * The expedition's maze is built of 103 (tall enough that a maze cannot be seen over), which is what surfaced it.
+ */
+const isWallId = (cell: number) => { const id = cell & 0xFF; return id === WALL_ID || id === BUILDING_ID }
 /** The hold's zone id (`world/zones.ts`). Everything the hold adds to the walker and the range asks this. */
 const HOLD_ZONE = 'the-hold'
 /** seconds between a Breach run ending and the keeper standing back at the Station, lobby open (09-29) */
@@ -2741,7 +2747,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     rng: hunterRng(0xC0FFEE, 0),
     blocked: (x, z) => {
       const cell = gridRef.current?.[Math.round(z)]?.[Math.round(x)]
-      if (cell === undefined || (cell & 0xFF) === WALL_ID) return true
+      if (cell === undefined || isWallId(cell)) return true
       return conjuredBlockedAt(conjuredRef.current, x, z, hunterNow.current)
     },
   })
@@ -2764,7 +2770,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     rng: hunterRng(CRUCIBLE_SEED, 0),   // replaced per-member by stepFleet; never actually read
     blocked: (x, z) => {
       const cell = gridRef.current?.[Math.round(z)]?.[Math.round(x)]
-      if (cell === undefined || (cell & 0xFF) === WALL_ID) return true
+      if (cell === undefined || isWallId(cell)) return true
       return conjuredBlockedAt(conjuredRef.current, x, z, hunterNow.current)
     },
   })
@@ -2907,7 +2913,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     // flooded are the server's, so a shove there is refused rather than drawn and snapped back.
     const solidAt = (x: number, z: number) => {
       const c = gridRef.current?.[Math.round(z)]?.[Math.round(x)]
-      return c === undefined || (c & 0xFF) === WALL_ID || conjuredBlockedAt(conjuredRef.current, x, z, nowFrame)
+      return c === undefined || isWallId(c) || conjuredBlockedAt(conjuredRef.current, x, z, nowFrame)
     }
     function moveFoe(id: string, dx: number, dz: number): boolean {
       const [kind, key] = id.split(':')
@@ -3362,7 +3368,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const cell = gridRef.current?.[cz]?.[cx]
       // wall / OOB / a conjured slab stops it — Stonewall is cover for BOTH sides, or it isn't cover.
       // A Firewall eats what crosses it, which is the "cover" half of its canon line.
-      if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
+      if (cell === undefined || isWallId(cell)) { p.life = 0; continue }
       // thin cover (a conjured wall, a field's shell) stops a round unless an amp pierces it (Pressure Lance, Keenshard)
       // ...but a TOMB is not thin cover: nothing reaches a sealed foe (Pillar Tomb, step 11)
       if ((!p.cover || tombAt(p.pos.x, p.pos.z)) && conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
@@ -3507,7 +3513,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       p.pos.addScaledVector(p.vel, dt)
       const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
       const cell = gridRef.current?.[cz]?.[cx]
-      if (cell === undefined || (cell & 0xFF) === WALL_ID || conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)
+      if (cell === undefined || isWallId(cell) || conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)
         || lineStops(p.pos.x, p.pos.z) || (hs && roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP))) {
         if (p.grapple && cell !== undefined) grappleTo(p)
         p.life = 0; continue
@@ -3904,7 +3910,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const gDisarmed = hasStatus(statusRef.current, gKey, 'disarmed', nowFrame)
           const gBlinded = hasStatus(statusRef.current, gKey, 'blinded', nowFrame) || lostTrack(b.pos.x, b.pos.z)
           const gSm = foeMods(statusRef.current, gKey, nowFrame).speedMult
-          if (cell !== undefined && (cell & 0xFF) !== WALL_ID && !gRooted && gSm > 0 && !conjuredBlockedAt(conjuredRef.current, nx, nz, nowFrame)) { b.pos.x += (nx - b.pos.x) * gSm; b.pos.z += (nz - b.pos.z) * gSm }
+          if (cell !== undefined && !isWallId(cell) && !gRooted && gSm > 0 && !conjuredBlockedAt(conjuredRef.current, nx, nz, nowFrame)) { b.pos.x += (nx - b.pos.x) * gSm; b.pos.z += (nz - b.pos.z) * gSm }
           // the leading guard presses; the supports fire slower. Wren, least aggressive, slowest.
           gs.fireCd[i] -= dt
           if (gs.fireCd[i] <= 0 && st.staggerFor <= 0 && !gDisarmed) {
@@ -3952,7 +3958,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         o.pos.addScaledVector(o.vel, dt)
         const cx = Math.round(o.pos.x), cz = Math.round(o.pos.z)
         const cell = gridRef.current?.[cz]?.[cx]
-        if (cell === undefined || (cell & 0xFF) === WALL_ID) { o.life = 0; continue }
+        if (cell === undefined || isWallId(cell)) { o.life = 0; continue }
         // incoming fire is stopped by your own terrain + firewall. That symmetry IS the move.
         if (conjuredBlockedAt(conjuredRef.current, o.pos.x, o.pos.z, nowFrame)) { o.life = 0; continue }
         { const ab = absorbShotAt(fieldsRef.current, o.pos.x, o.pos.z, DRONE_DMG); if (ab.hit) { fieldsRef.current = ab.fields; o.life = 0; continue } }

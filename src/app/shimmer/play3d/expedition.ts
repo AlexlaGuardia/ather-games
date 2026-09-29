@@ -22,9 +22,10 @@
 
 export const EXP_ZONE = 'expedition'
 
-// tile ids (Shimmer3D's constants; WALL must be 34, the one id every bot, round and orb predicate treats as solid)
+// tile ids (Shimmer3D's constants). The wall is the MORTAL BLOCK (103, 3.2 tall): the cloud wall (34) is 1.3, eye level,
+// and a maze you can see over is not a maze. Bots, rounds and orbs treat both as solid (`isWallId`, 09-29).
 export const EXP_FLOOR = 97
-export const EXP_WALL = 34
+export const EXP_WALL = 103
 export const EXP_WARP = 14
 
 /** maze cells across/down; a cell is CELL tiles of floor plus one of wall */
