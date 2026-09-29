@@ -107,4 +107,4 @@ export class BreachLink {
 }
 
 /** The page's one co-op link, and whether the NEXT Breach run should be co-op (set by Departures' Go together). */
-export const coop: { link: BreachLink | null; wantParty: string | null; struck: number } = { link: null, wantParty: null, struck: 0 }
+export const coop: { link: BreachLink | null; wantParty: string | null; struck: number; down: boolean } = { link: null, wantParty: null, struck: 0, down: false }

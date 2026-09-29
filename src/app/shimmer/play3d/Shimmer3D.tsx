@@ -2876,7 +2876,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     bloomRef.current = Math.max(0, bloomRef.current - W.bloomDecay * dt)  // cone recovers while not firing
     // full-auto weapons fire while held; semi-auto (auto=false) fires once per press. The clip gates it:
     // recharge channel blocks fire, a dry trigger auto-starts the recharge.
-    const wantFire = firingRef.current && (W.auto || !firedThisPress.current)
+    // ★ a co-op keeper who is DOWN watches: no rounds (09-28)
+    const wantFire = firingRef.current && (W.auto || !firedThisPress.current) && !coop.down
     if (wantFire && cd.current <= 0 && reloadingRef.current <= 0) {
       if (ammoRef.current <= 0) { cd.current = 0.25; onNeedReload() }
       else {
@@ -6915,7 +6916,7 @@ export default function Shimmer3D() {
     // in the hold a fall ENDS the run (the range just resets you). The record is the round reached.
     const hs = holdRef.current
     // ★ CO-OP: a fall does not end the run, it takes YOU out of it; the run ends when the last keeper falls
-    if (hs?.running && coop.link) { coop.link.down(); setHoldFlash('You are down. Your party holds the line.'); return }
+    if (hs?.running && coop.link) { coop.link.down(); coop.down = true; setCoopDown(true); return }
     if (hs?.running) {
       const r = endHold(hs)
       try { if (r.round > Number(localStorage.getItem(keeperKey(HOLD_BEST_KEY)) ?? 0)) localStorage.setItem(keeperKey(HOLD_BEST_KEY), String(r.round)) } catch { /* no storage: no record */ }
@@ -7330,6 +7331,7 @@ export default function Shimmer3D() {
   // broken cast, so the toast names the move and the reason. ⚠ Counts here are a comment and rot —
   // `cast.test.ts` prints the live pair on every run, which is the number to believe.
   const castSlot = useCallback((slot: number) => {
+    if (coop.down) return   // down in a co-op Breach: watching, not casting
     const moveId = castLoadoutRef.current[slot]
     if (!moveId) {
       // A cause only when the resolve supplied one; a symptom alone otherwise. Never a guessed cause.
@@ -7564,6 +7566,7 @@ export default function Shimmer3D() {
   // the bench's notes close when you walk off it (or the run ends), so the next visit opens on E, not by itself
   useEffect(() => { if (labOpen && (holdHud?.prompt?.kind !== 'bench' || holdHud?.over)) toggleLab(false) }, [labOpen, holdHud, toggleLab])
   const [holdFlash, setHoldFlash] = useState<string | null>(null)
+  const [coopDown, setCoopDown] = useState(false)   // down in a co-op run: a steady banner until the run ends
   const holdKey = isTouch ? '✦' : 'E'   // the Hold's prompts name the button the player actually has
   useEffect(() => { if (!holdFlash) return; const t = setTimeout(() => setHoldFlash(null), 2200); return () => clearTimeout(t) }, [holdFlash])
   const beginHold = useCallback(() => {
@@ -7574,7 +7577,7 @@ export default function Shimmer3D() {
     // ★ CO-OP (09-28): launched together from Departures (or going again after a co-op run) → the server runs the
     // fight and this run's state is a MIRROR of it (`breach-link.ts`). Otherwise the page steps it, as ever.
     const coopParty = coop.wantParty ?? coop.link?.code ?? null
-    coop.link?.close(); coop.link = null; coop.struck = 0; coop.wantParty = null
+    coop.link?.close(); coop.link = null; coop.struck = 0; coop.wantParty = null; coop.down = false; setCoopDown(false)
     if (coopParty) {
       const mirror = holdRef.current
       const link = new BreachLink(coopParty, mirror, {
@@ -7597,7 +7600,7 @@ export default function Shimmer3D() {
   useEffect(() => {
     if (zoneId === HOLD_ZONE) { beginHold(); return }
     if (!holdRef.current && !holdSavedLoadout.current) return
-    coop.link?.close(); coop.link = null; coop.struck = 0   // walking out of the Breach leaves the party's fight
+    coop.link?.close(); coop.link = null; coop.struck = 0; coop.down = false; setCoopDown(false)   // walking out of the Breach leaves the party's fight
     holdRef.current = null; holdEHeld.current = false; setHoldHud(null)
     // the hold's pool can sit above a new keeper's own; never walk out holding more than you can
     manaRef.current.current = Math.min(manaRef.current.current, manaMax()); setManaFrac(manaRef.current.current / manaMax())
@@ -7627,6 +7630,7 @@ export default function Shimmer3D() {
         if (kind === 'glimmer') { manaRef.current.current = manaMax(); setManaFrac(1) }
         setHoldFlash(kind === 'wrack' ? `${DROP_NAME[kind]} · ${hs.wrack}` : DROP_NAME[kind])
       }
+      if (coop.down) holdEHeld.current = false
       if (holdEHeld.current && prompt?.kind === 'mend') { mendTick(hs, prompt.win, DT); coop.link?.mend(prompt.win, DT) }
       // co-op: a cache is opened by the SERVER (its roll is the one that counts); the loot comes back to the opener
       if (holdEHeld.current && prompt?.kind === 'chest') { if (coop.link) coop.link.chest(prompt.spot, DT); else { const got = chestTick(hs, prompt.spot, DT); if (got) setHoldFlash(lootLabel(got)) } }
@@ -7651,7 +7655,7 @@ export default function Shimmer3D() {
   // phone plays by exactly the rules the keyboard does. E is HELD for mend / chest (`holdEHeld`).
   const holdSurge = useCallback(() => {
     const hs = holdRef.current, p = posRef.current
-    if (!hs || !p || !hs.running) return
+    if (!hs || !p || !hs.running || coop.down) return
     if (hs.surge < 1) { setHarvestToast('The surge is not charged — crush more of the flooded'); return }
     releaseSurge(hs, p.x, p.z, p.y / STEP); coop.link?.surge(); setHoldFlash('Surge')
   }, [])
@@ -7659,6 +7663,7 @@ export default function Shimmer3D() {
     const hs = holdRef.current, p = posRef.current
     if (!hs || !p) return
       if (hs.over) { beginHold(); return }
+      if (coop.down) return   // down in a co-op Breach: E waits for the run to end
       const pr = promptAt(hs, p.x, p.z, p.y / STEP)
       if (!pr) return
       if (pr.kind === 'mend' || pr.kind === 'chest') { holdEHeld.current = true; return }
@@ -8771,6 +8776,11 @@ export default function Shimmer3D() {
               <span>Surge <span className={holdHud.surge >= 1 ? 'hk-ember' : 'hk-soft'}>{holdHud.surge >= 1 ? 'READY (G)' : `${Math.round(holdHud.surge * 100)}%`}</span></span>
             </span>
           </HearthPill>
+          {coopDown && !holdHud.over && (
+            <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '22%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }} data-coop-down>
+              You are down. Your party holds the line{coop.link?.party.filter(p => p.here && !p.down).length ? ` · ${coop.link.party.filter(p => p.here && !p.down).map(p => p.name).join(', ')} still standing` : ''}.
+            </HearthPill>
+          )}
           {holdFlash && !holdHud.over && (
             <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', zIndex: 35, fontSize: 22 }}>{holdFlash}</HearthPill>
           )}
