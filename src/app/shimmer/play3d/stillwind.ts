@@ -77,6 +77,8 @@ export interface StillwindState {
   strikeT: number
   felled: boolean
   elapsed: number
+  /** keepers a run has already struck (co-op: once each a run) */
+  ranOver?: number[]
 }
 
 export function startStillwind(tune: StillwindTuning = STILLWIND_TUNING): StillwindState {
@@ -114,8 +116,34 @@ export interface StillwindStepOut {
 }
 
 export function stepStillwind(s: StillwindState, dt: number, px: number, pz: number, tune: StillwindTuning = STILLWIND_TUNING): StillwindStepOut {
-  const out: StillwindStepOut = { strike: 0 }
-  if (s.felled) return out
+  const { strikes, target: _t, ...flags } = stepStillwindParty(s, dt, [{ x: px, z: pz }], tune)
+  return { ...flags, strike: strikes[0] ?? 0 }
+}
+
+// ── CO-OP (09-29, THE SLACK TOGETHER): one Stillwind, up to three keepers. It goes after the NEAREST keeper, so one
+// can lure it off the line while the others keep between and shoot (the Lenn's ethic, played by a party). A run
+// strikes every keeper on the line where it passes, once each; a swing strikes the keeper it is after. No hp
+// scaling by party size (GBOARD 09-24): three keepers fell it faster, and that is the reward for bringing friends.
+export interface StillwindPartyOut extends Omit<StillwindStepOut, 'strike'> {
+  /** damage to each keeper this step, in the order given */
+  strikes: number[]
+  /** who it is after (index into the keepers given), -1 with nobody there */
+  target: number
+}
+
+/** Whoever it is closest to. Solo, that is always the one keeper. */
+export function stillwindTarget(s: StillwindState, keepers: { x: number; z: number }[]): number {
+  let best = -1, bd = Infinity
+  keepers.forEach((k, i) => { const d = (k.x - s.x) ** 2 + (k.z - s.z) ** 2; if (d < bd) { bd = d; best = i } })
+  return best
+}
+
+export function stepStillwindParty(s: StillwindState, dt: number, keepers: { x: number; z: number }[], tune: StillwindTuning = STILLWIND_TUNING): StillwindPartyOut {
+  const out: StillwindPartyOut = { strikes: keepers.map(() => 0), target: -1 }
+  if (s.felled || !keepers.length) return out
+  const ti = stillwindTarget(s, keepers)
+  out.target = ti
+  const px = keepers[ti].x, pz = keepers[ti].z
   dt = Math.min(dt, 0.1)
   s.elapsed += dt
   s.strikeT = Math.max(0, s.strikeT - dt)
@@ -126,7 +154,7 @@ export function stepStillwind(s: StillwindState, dt: number, px: number, pz: num
   if (s.wind === 'blowing' && s.windT <= 0 && s.mood === 'walk') {
     s.wind = 'stalled'; s.windT = tune.stallSec; out.stalled = true
   } else if (s.wind === 'stalled' && s.windT <= 0) {
-    s.wind = 'running'; s.windT = tune.runSec; s.runDir = pz >= s.z ? 1 : -1; s.x = 0; out.ran = true
+    s.wind = 'running'; s.windT = tune.runSec; s.runDir = pz >= s.z ? 1 : -1; s.x = 0; s.ranOver = []; out.ran = true
   } else if (s.wind === 'running' && s.windT <= 0) {
     s.wind = 'blowing'; s.windT = tune.stallEvery * (phase === 1 ? 1 : phase === 2 ? 0.75 : 0.55)
   }
@@ -135,8 +163,14 @@ export function stepStillwind(s: StillwindState, dt: number, px: number, pz: num
     const was = s.z
     s.z = Math.max(0, Math.min(tune.length, s.z + s.runDir * tune.runSpeed * dt))
     const lo = Math.min(was, s.z) - tune.radius, hi = Math.max(was, s.z) + tune.radius
-    // a run strikes whoever is on or near the line where it passes — once a run (strikeT guards it)
-    if (Math.abs(px) <= tune.runHalf && pz >= lo && pz <= hi && s.strikeT <= 0) { out.strike += tune.runDmg; s.strikeT = tune.runSec }
+    // a run strikes whoever is on or near the line where it passes — once each a run. The first strike of a run
+    // still waits on `strikeT` (a swing just before it), exactly as the solo fight always has.
+    const hit = (s.ranOver ??= [])
+    keepers.forEach((k, i) => {
+      if (Math.abs(k.x) > tune.runHalf || k.z < lo || k.z > hi || hit.includes(i)) return
+      if (!hit.length && s.strikeT > 0) return
+      out.strikes[i] += tune.runDmg; hit.push(i); s.strikeT = tune.runSec
+    })
     return out
   }
 
@@ -169,8 +203,8 @@ export function stepStillwind(s: StillwindState, dt: number, px: number, pz: num
   if (s.heat >= 1 && s.mood === 'walk') { s.mood = 'open'; s.moodT = tune.openSec; out.opened = true; return out }
   if (s.cold >= 1 && s.mood === 'walk') { s.mood = 'brittle'; s.moodT = tune.brittleSec; out.froze = true }
 
-  // it strikes what it reaches
-  if ((px - s.x) ** 2 + (pz - s.z) ** 2 <= tune.reach ** 2 && s.strikeT <= 0) { out.strike += tune.strikeDmg; s.strikeT = tune.strikeCd }
+  // it strikes what it reaches: the keeper it is after
+  if ((px - s.x) ** 2 + (pz - s.z) ** 2 <= tune.reach ** 2 && s.strikeT <= 0) { out.strikes[ti] += tune.strikeDmg; s.strikeT = tune.strikeCd }
   return out
 }
 

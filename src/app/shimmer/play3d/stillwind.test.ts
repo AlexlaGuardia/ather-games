@@ -1,6 +1,6 @@
 // stillwind.test.ts — the Stillwind on the edge: canon's rules, then a scripted keeper who draws it off its line.
 import {
-  STILLWIND_TUNING as T, startStillwind, stepStillwind, hitStillwind, stillwindTakes, edgeHazard, stillwindPhase, lineMend,
+  STILLWIND_TUNING as T, startStillwind, stepStillwind, stepStillwindParty, stillwindTarget, hitStillwind, stillwindTakes, edgeHazard, stillwindPhase, lineMend,
   type StillwindState,
 } from './stillwind'
 
@@ -112,6 +112,38 @@ const until = (s: StillwindState, secs: number, px: number, pz: () => number, do
   ok(!greedy.alive, 'a keeper who never comes back to the line burns out')
   ok(lineMend(0, 5) === T.lineMend && lineMend(0, 0.5) === 0 && lineMend(3, 5) === 0, 'the line mends: on it, unhurt a moment')
   console.log(`  stillwind: lure 3 → ${Math.round(shallow.t)}s (low ${Math.round(shallow.low)}/200) · lure 7 → ${Math.round(deep.t)}s (low ${Math.round(deep.low)}) · never back → ${greedy.alive ? 'lives?!' : 'dies'} · hp ${T.hp}`)
+}
+
+// ── CO-OP (09-29): one Stillwind, a party. It goes after the nearest; a run strikes everyone on the line once each.
+{
+  // solo through the party step == the solo step, step for step (the wrapper is the whole solo fight)
+  const a = startStillwind(), b = startStillwind()
+  let same = true
+  for (let t = 0; t < 60; t += 0.05) {
+    const pz = a.z - 4 + Math.sin(t) * 3, px = Math.sin(t * 0.3) * 6
+    const o1 = stepStillwind(a, 0.05, px, pz), o2 = stepStillwindParty(b, 0.05, [{ x: px, z: pz }])
+    if (o1.strike !== o2.strikes[0] || a.x !== b.x || a.z !== b.z || a.heat !== b.heat || a.wind !== b.wind) { same = false; break }
+  }
+  ok(same, 'co-op: a party of one fights exactly the solo fight')
+
+  const s = startStillwind()
+  ok(stillwindTarget(s, [{ x: 0, z: s.z - 30 }, { x: 5, z: s.z - 4 }]) === 1, 'co-op: it goes after the nearest keeper')
+  ok(stepStillwindParty(s, 0.05, []).target === -1, 'co-op: nobody there, nobody struck')
+
+  // a lurer draws it toward the Glare while a mate stands far back on the line: it follows the LURER, and overheats
+  const l = startStillwind(); let opened = false
+  for (let t = 0; t < 40 && !opened; t += 0.05) {
+    const o = stepStillwindParty(l, 0.05, [{ x: 0, z: l.z - 25 }, { x: 7, z: l.z - 5 }])
+    if (o.opened) opened = true
+  }
+  ok(opened && l.x > T.offTiles, 'co-op: one keeper lures it off the line while the other keeps between')
+
+  // a run passes two keepers on the line and strikes each once; the one off to the side is spared
+  const r = startStillwind(); r.wind = 'stalled'; r.windT = 0.01; r.strikeT = 0
+  const z0 = r.z, ks = [{ x: 0, z: z0 - 6 }, { x: 1, z: z0 - 12 }, { x: 8, z: z0 - 9 }]
+  const got = [0, 0, 0]
+  for (let t = 0; t < T.runSec + 0.2; t += 0.05) stepStillwindParty(r, 0.05, ks).strikes.forEach((d, i) => { got[i] += d })
+  ok(got[0] === T.runDmg && got[1] === T.runDmg && got[2] === 0, `co-op: a run strikes each keeper on the line once (${got.join('/')})`)
 }
 
 console.log(`stillwind: ${pass} passed, ${fails.length} failed`); for (const f of fails) console.log('  FAIL', f)
