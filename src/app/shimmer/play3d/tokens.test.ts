@@ -46,7 +46,7 @@ const DIR = join(process.cwd(), 'src/app/shimmer/play3d')
 // ArcadeCabinet.tsx born clean 2026-09-25 (its colours are `scene-palette.ts` › passage; PassageScene.tsx holds none).
 // LowenPanel.tsx born clean 2026-09-27 (hearth classes only; its one inline style is an opacity).
 // Townsfolk.tsx born clean 2026-09-27 (its colours are `scene-palette.ts` › folk; the nametag's style reads them).
-const CONVERTED = ['ArcadeCabinet.tsx', 'GfxPanel.tsx', 'LowenPanel.tsx', 'MoveBook.tsx', 'page.tsx', 'PartyPanel.tsx', 'PassagePanel.tsx',
+const CONVERTED = ['ArcadeCabinet.tsx', 'deploy-lobby.tsx', 'GfxPanel.tsx', 'LowenPanel.tsx', 'MoveBook.tsx', 'page.tsx', 'PartyPanel.tsx', 'PassagePanel.tsx',
   'RemotePlayers.tsx', 'Shimmer3D.tsx', 'StationMenus.tsx', 'Townsfolk.tsx', 'TremorRing.tsx', 'vessel-art.tsx', 'WorldMap.tsx']
 
 /**
@@ -57,7 +57,9 @@ const CONVERTED = ['ArcadeCabinet.tsx', 'GfxPanel.tsx', 'LowenPanel.tsx', 'MoveB
  * got a home (`scene-palette.ts`, below). Keep the list: a new file that holds a literal lands here
  * or in CONVERTED, and assert B still refuses one that lands nowhere.
  */
-const PENDING: string[] = []
+// play-together.tsx (09-28) landed unclassified with two literals (a presence dot, an invite card's paper); listed
+// here 09-29 so the guard names it rather than going red on the next file anyone adds
+const PENDING: string[] = ['play-together.tsx']
 
 /**
  * PALETTES — the only files besides `tokens.ts` allowed to hold a colour literal, because holding the

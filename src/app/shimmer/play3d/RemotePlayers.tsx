@@ -31,6 +31,14 @@ const LERP = 9
 // removes clean disconnects instantly.
 const STALE_MS = 90_000
 
+/** A keeper's body colour, from the id the world knows them by. Exported so the Departures lobby draws the SAME
+ *  body a mate sees in the world (a second copy of this hash would drift the day either one changed). */
+export function keeperColor(id: string): THREE.Color {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return new THREE.Color().setHSL((h % 360) / 360, 0.55, 0.6)
+}
+
 function Avatar({ peer, hideAt }: { peer: RemotePlayer; hideAt?: (x: number, z: number) => boolean }) {
   const grp = useRef<THREE.Group>(null)
   const inner = useRef<THREE.Group>(null)
@@ -42,11 +50,7 @@ function Avatar({ peer, hideAt }: { peer: RemotePlayer; hideAt?: (x: number, z: 
   const [hidden, setHidden] = useState(false)
   const hiddenRef = useRef(false)
   // one hue per player, stable across sessions — derived from the id so both clients agree
-  const color = useMemo(() => {
-    let h = 0
-    for (let i = 0; i < peer.id.length; i++) h = (h * 31 + peer.id.charCodeAt(i)) >>> 0
-    return new THREE.Color().setHSL((h % 360) / 360, 0.55, 0.6)
-  }, [peer.id])
+  const color = useMemo(() => keeperColor(peer.id), [peer.id])
 
   useFrame((state, dt) => {
     const g = grp.current

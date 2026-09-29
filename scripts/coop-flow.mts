@@ -62,13 +62,19 @@ const clickLaunch = (p: Page) => p.evaluate(() => {
 try {
   const pa = await keeper(A), pb = await keeper(B)
   await sleep(18000)
-  // both walk to the clerk first, then launch within a second of each other (a keeper left standing alone on the
-  // roof while a friend is still at the Station gets killed, and a party whose every present keeper is down is over)
+  // ★ THE LOBBY (09-29): both at the clerk; A arrived first so A LEADS. B readies; A's one Launch takes BOTH aboard.
   const [la, lb] = [await toBoard(pa), await toBoard(pb)]
-  ok(la.talked && /Go together/.test(la.board) && /your party, into one Breach/.test(la.board), `A's board offers Go together for the Breach (party ${PARTY})`)
-  ok(lb.talked && /your party, into one Breach/.test(lb.board), "B's board too")
-  ok(await clickLaunch(pa), 'A launches together')
-  ok(await clickLaunch(pb), 'B launches together')
+  // whoever's lobby socket connected first leads; the other is the mate (pages load in parallel, so ask, never assume)
+  const aLeads = /you lead/.test(la.board)
+  const [lead, mate, leadBoard, mateBoard, mateName] = aLeads ? [pa, pb, la, lb, B.name] : [pb, pa, lb, la, A.name]
+  ok(la.talked && lb.talked && /you lead/.test(leadBoard.board) && /Launch together/.test(leadBoard.board), `one leads with Launch together (party ${PARTY}, ${aLeads ? A.name : B.name} leads)`)
+  ok(/the leader picks/.test(mateBoard.board) && /Ready/.test(mateBoard.board), "the mate's lobby: the leader picks, Ready")
+  const rosterA = await lead.evaluate(() => document.querySelector('[data-roster]')?.textContent ?? '')
+  ok(rosterA.includes(A.name) && rosterA.includes(B.name), `one roster (${rosterA.replace(/\s+/g, ' ').slice(0, 80)})`)
+  ok(!(await clickLaunch(lead)), "the leader cannot launch while the mate isn't ready")
+  const readied = await mate.evaluate(() => { const b = [...document.querySelectorAll('[data-panel=departures] button')].find(x => /^Ready$/.test(x.textContent ?? '')) as HTMLButtonElement | undefined; b?.click(); return !!b })
+  ok(readied, 'the mate readies')
+  ok(await until(async () => clickLaunch(lead), 6), '★ the leader launches for the party once the mate is ready')
   await sleep(9000)    // both in the Breach, snapshots flowing, the first round climbing in
   let ca: any = null, cb: any = null
   const both = await until(async () => {
@@ -107,11 +113,21 @@ try {
       sawWatching = true
       await pb.evaluate(() => (window as any).__holdJump?.('Roof'))   // B goes back up into the flood: now B falls too
     }
-    const [overA, overB] = await Promise.all([pa, pb].map(p => p.evaluate(() => /to go again/.test(document.body.innerText))))
+    const [overA, overB] = await Promise.all([pa, pb].map(p => p.evaluate(() => /The Breach took you/.test(document.body.innerText))))
     if (overA && overB) overBoth = true
   }
   ok(sawWatching, '★ the first keeper down WATCHES under the banner while the other still stands')
   ok(overBoth, '★ the run ends for both only when both are down')
+  // ★ AFTER THE MISSION: both back at the Station, the lobby open, still one party
+  let backA: any = null, backB: any = null
+  const home = await until(async () => {
+    backA = await coopOf(pa); backB = await coopOf(pb)
+    return backA?.zone === 'travelers-station' && backB?.zone === 'travelers-station'
+  }, 25)
+  ok(home, `★ both are brought back to the Station (${backA?.zone} / ${backB?.zone})`)
+  const lobbyBack = await until(async () => lead.evaluate(() => /Departures/.test(document.querySelector('[data-panel=departures]')?.textContent ?? '')), 8)
+  const rosterBack = await lead.evaluate(() => document.querySelector('[data-roster]')?.textContent ?? '')
+  ok(lobbyBack && rosterBack.includes(mateName), '★ the lobby is open again, and the mate is still in the party')
 } finally {
   await browser.close()
 }

@@ -66,14 +66,12 @@ try {
   const [la, lb] = [await toBoard(pa), await toBoard(pb)]
   ok(/Find others/.test(la.board) && /Find others/.test(lb.board), 'both boards offer Find others')
   const pick = (p: Page) => p.evaluate(() => {
-    const r = document.querySelector('[data-mode=others] input') as HTMLInputElement | null
-    r?.click()
     const b = [...document.querySelectorAll('[data-panel=departures] button')].find(x => /^Find others/.test(x.textContent ?? '')) as HTMLButtonElement | undefined
     if (b && !b.disabled) { b.click(); return true }
     return false
   })
   ok(await pick(pa), 'A takes a place in the line')
-  const findA = await until(async () => pa.evaluate(() => /Finding others/.test(document.querySelector('[data-panel=finding]')?.textContent ?? '')), 5)
+  const findA = await until(async () => pa.evaluate(() => /Finding others/.test(document.querySelector('[data-panel=departures]')?.textContent ?? '')), 5)
   ok(findA, 'A sees the finding view')
   ok(await pick(pb), 'B takes a place in the line')
   // two waiting: matched when the first has waited the fill time (25s)

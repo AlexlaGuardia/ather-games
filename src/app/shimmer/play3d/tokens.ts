@@ -214,3 +214,22 @@ export const map = {
   edge:      '#ffffff3a',
   shadow:    '#00000088',
 } as const
+
+/**
+ * The Departures lobby (2026-09-29). The one screen in play3d that is dark CHROME over a staged scene rather than the
+ * hearth's parchment over the world: the lobby you are copying stands its squad in a lit room. Its text is the
+ * hearth's paper tones (read from `H` at the call site); what is here is only what the hearth has no word for.
+ */
+export const lobby = {
+  backdrop: 'radial-gradient(120% 90% at 50% 40%, rgba(40,26,14,.55), rgba(12,8,5,.92))',
+  plate:    'rgba(30,20,12,.72)',
+  plateLit: '0 6px 18px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,220,170,.12)',
+  sub:      '#d9c6a3',   // secondary text on a plate
+  dim:      '#bfa987',   // tertiary text: where a mate is, the pick's world
+  faint:    '#a8916f',   // an open seat
+  pad:      '#3b2a1c',   // the floor the chord stands on
+  nub:      '#2b1d12',   // the facing nub on a keeper's body
+  ready:    '#7fd07a',   // the ring under a keeper who is ready
+  crown:    '#f2c14e', crownGlow: '#b8860b',
+  lamp:     '#ffcf9a',
+} as const

@@ -52,12 +52,14 @@ import { WORLD_SEED, currentWindow, nodeAlpha, zoneWindow, msUntilZoneReset, isB
 import { FloraTree, FloraDressing } from '../world/flora'
 import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
-import { useMultiplayer, storedName, storeName, type RemotePlayer } from './multiplayer'
+import { useMultiplayer, storedName, storeName, selfPlayerId, type RemotePlayer } from './multiplayer'
+import { usePartyLobby, type LobbyLaunch, type Mission } from '@/lib/party-lobby'
+import { DeployLobby, type MissionCard } from './deploy-lobby'
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
 import { BreachLink, BreachQueue, coop, driftMirror, type CoopPartyMember } from './breach-link'
 import { usePresence, type UsePresence } from '@/lib/presence'
 import { FriendsTab, InvitePrompt, useFriends } from './play-together'
-import { DeparturesPanel, type Destination, type Finding } from './departures'
+import { type Finding } from './departures'
 import { holdShip, BERTH_COUNT } from './station-field'
 import { HearthTabs } from '../ui/hearth'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
@@ -258,6 +260,8 @@ const WATER_ID = 8, FLOOR_ID = 97, WALL_ID = 34, WARP_ID = 14, MIST_ID = 31
 const BUILDING_ID = 103
 /** The hold's zone id (`world/zones.ts`). Everything the hold adds to the walker and the range asks this. */
 const HOLD_ZONE = 'the-hold'
+/** seconds between a Breach run ending and the keeper standing back at the Station, lobby open (09-29) */
+const RETURN_SECS = 8
 /** The Passage draws its own rock and fixtures (`PassageScene`) and has its own light. */
 const PASSAGE_ZONE = 'the-passage'
 /** Rune Hold draws its own stone, streets and landing plaza (`RuneHoldScene`) over the town's grid. */
@@ -5365,7 +5369,14 @@ export default function Shimmer3D() {
   const { peers: mpPeers } = useMultiplayer({
     enabled: mpReady, zoneId: zone.id, posRef, yawRef: camYaw, party: mpParty, playerName: mpName,
   })
-  const mpRoster = useRoster(mpPeers)   // the Departures board's three (09-28)
+  // ★ THE PARTY LOBBY (09-29): one roster across zones, a leader, the leader's pick, and the launch every mate hears
+  // (`lib/party-lobby.ts`, shimmer-server `lobby.py`). Connected whenever this keeper holds a party code.
+  const partyLaunchRef = useRef<(l: LobbyLaunch) => void>(() => {})
+  const mpPartyRef = useRef(mpParty); mpPartyRef.current = mpParty
+  const lobby = usePartyLobby({
+    code: mpParty, userId: account.session?.user_id ?? (mpReady ? selfPlayerId() : null), name: mpName,
+    zone: 'play3d:' + zone.id, look: mpReady ? selfPlayerId() : '', onLaunched: (l) => partyLaunchRef.current(l),
+  })
   // ★ CO-OP TEAMMATES are drawn from the Breach server's snapshot (matched strangers share no world party, so the
   // world's multiplayer server would never put them in one instance). Keyed `breach:<id>` in the same peers map the
   // renderer already draws; a keeper the world server already shows (a real party mate) is not drawn twice.
@@ -6043,6 +6054,7 @@ export default function Shimmer3D() {
   const [departuresOpen, setDeparturesOpen] = useState(false)   // the Station clerk's board (09-28)
   const [finding, setFinding] = useState<Finding | null>(null)    // waiting in the Find others line
   const queueRef = useRef<BreachQueue | null>(null)
+  const [soloMission, setSoloMission] = useState<Mission>('survival')   // the pick when there is no party lobby
   const [mpTab, setMpTab] = useState<'party' | 'friends'>('party')
   const [mpOpen, setMpOpen] = useState(false)         // 👥 — play together (party / invite)
   const [gfxOpen, setGfxOpen] = useState(false)       // ⚙ — graphics quality + frame readout
@@ -8198,7 +8210,8 @@ export default function Shimmer3D() {
   const holdAct = useCallback(() => {
     const hs = holdRef.current, p = posRef.current
     if (!hs || !p) return
-      if (hs.over) { beginHold(); return }
+      // going again is the LEADER's call in a party (from the lobby, where every mate is brought back); alone, E is it
+      if (hs.over) { if (!coop.link) beginHold(); return }
       if (coop.down) return   // down in a co-op Breach: E waits for the run to end
       const pr = promptAt(hs, p.x, p.z, p.y / STEP)
       if (!pr) return
@@ -8618,6 +8631,65 @@ export default function Shimmer3D() {
       talkingRef.current = false
     }, TRANSIT_OUT_MS + TRANSIT_HOLD_MS + TRANSIT_IN_MS))
   }, [performWarp])
+  // ── THE DEPARTURES LOBBY's missions and the one launch path (09-29) ─────────────────────────────────────────
+  // Alex's three kinds. Survival is the Breach; Boss is the Slack (the Stillwind, the season's colossus); nothing is
+  // seated as an Expedition yet, so its card says so rather than pretending.
+  const missionCards = useCallback((): MissionCard[] => {
+    const owner = isOwnerRef.current, road = roadOpen(loadRoad())
+    return [
+      { id: 'survival', kind: 'Survival', name: 'The Breach', world: 'Lenna', blurb: 'Hold the building against the flood, round after round.', locked: owner ? null : 'Not open yet', coop: true },
+      { id: 'boss', kind: 'Boss', name: 'The Slack', world: 'Lenna', blurb: 'The Stillwind, the season\u2019s colossus.', locked: !owner ? 'Not open yet' : road ? null : 'Read the Stillwind\u2019s Road in the Breach\u2019s lab first', coop: false },
+      { id: 'expedition', kind: 'Expedition', name: 'Nothing seated', world: 'no berth', blurb: '', locked: 'No expedition sails from a berth yet', coop: true },
+    ]
+  }, [])
+  const closeDepartures = useCallback(() => {
+    queueRef.current?.cancel(); queueRef.current = null; setFinding(null)
+    setDeparturesOpen(false); battleRef.current = false; closeCursorUI()
+  }, [closeCursorUI])
+  /** The ONE way into a mission, for a keeper alone and for every mate a leader's launch reaches. */
+  const launchMission = useCallback((card: MissionCard, party: string | null) => {
+    closeDepartures()
+    coop.wantParty = party
+    const ship = holdShip()!
+    if (card.id === 'survival') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', ownerOnly: true })
+    else if (card.id === 'boss') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up', ownerOnly: true })
+  }, [closeDepartures, onWarp])
+  const lobbyRef = useRef(lobby); lobbyRef.current = lobby
+  useEffect(() => {   // Esc backs out of the lobby: you are standing in the Station again
+    if (!departuresOpen) return
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); closeDepartures() } }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [departuresOpen, closeDepartures])
+  // ★ AFTER THE MISSION (Alex: "returning after the mission still partied up"): a run that is over brings you back
+  // to the Station, by the clerk, with the lobby open and the party as it was. Alone, E goes again inside the wait.
+  const reopenLobby = useRef(false)
+  useEffect(() => {
+    if (!holdHud?.over || zoneId !== HOLD_ZONE) return
+    const t = setTimeout(() => {
+      if (zoneIdRef.current !== HOLD_ZONE || !holdRef.current?.over) return
+      const ship = holdShip()!
+      reopenLobby.current = true
+      onWarp({ fromX: HOLD_MAP.start.x, fromY: HOLD_MAP.start.z, toZone: 'travelers-station', toX: ship.arrival.x, toY: ship.arrival.z, direction: 'left' })
+    }, RETURN_SECS * 1000)
+    return () => clearTimeout(t)
+  }, [holdHud?.over, zoneId, onWarp])
+  useEffect(() => {
+    if (zoneId !== 'travelers-station' || !reopenLobby.current) return
+    reopenLobby.current = false
+    const t = setTimeout(() => { battleRef.current = true; openCursorUI(); setDeparturesOpen(true) }, 700)
+    return () => clearTimeout(t)
+  }, [zoneId, openCursorUI])
+  // ★ A LEADER'S LAUNCH reaches every mate: whoever is standing in the Station goes, with the party, wherever they
+  // are in it (menu open or not, the way the lobby you are copying pulls its squad). A mate elsewhere is told.
+  partyLaunchRef.current = (l: LobbyLaunch) => {
+    const card = missionCards().find((m) => m.id === l.mission)
+    const leader = lobbyRef.current.state?.members.find((m) => m.id === l.by)?.name ?? 'Your leader'
+    if (!card) return
+    if (zoneIdRef.current !== 'travelers-station') { setHarvestToast(`${leader} set off for ${card.name} · you were not at the Station`); return }
+    if (card.locked) { setHarvestToast(`${card.name}: ${card.locked}`); return }
+    launchMission(card, card.coop ? mpPartyRef.current : null)
+  }
 
   // Jump straight to a zone to edit it (no walking/warping). Resets the player + camera focus
   // to its spawn. NOTE: unsaved edits in the current zone are dropped — save before switching.
@@ -9414,7 +9486,7 @@ export default function Shimmer3D() {
           )}
           {holdHud.over && (
             <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '32%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }}>
-              <span>The Breach took you at round <span className="hk-ember">{holdHud.round}</span> <HearthPillSoft face={HUD_FACE}>· {holdHud.kills} crushed · best {Math.max(holdHud.best, holdHud.round)} · {holdKey} to go again</HearthPillSoft></span>
+              <span>The Breach took you at round <span className="hk-ember">{holdHud.round}</span> <HearthPillSoft face={HUD_FACE}>· {holdHud.kills} crushed · best {Math.max(holdHud.best, holdHud.round)} · {coopDown || coop.link ? 'back to the Station in a moment' : `${holdKey} to go again, or back to the Station in a moment`}</HearthPillSoft></span>
             </HearthPill>
           )}
         </>
@@ -9818,50 +9890,39 @@ export default function Shimmer3D() {
           onClose={() => { setRackOpen(null); setRackStall(null); battleRef.current = false; closeCursorUI() }}
         />
       )}
-      {/* ★ DEPARTURES (09-28): a centered board like the racks, never in the side column */}
+      {/* ★ DEPARTURES (09-29): the lobby, full screen, Apex-style: your chord on the pad, the mission bottom right */}
       {departuresOpen && (() => {
-        const owner = isOwner
-        const road = roadOpen(loadRoad())
-        const dests: Destination[] = [
-          { id: 'breach', berth: 1, world: 'Lenna', name: 'The Breach', locked: owner ? null : 'Not open yet', coop: true },
-          { id: 'slack', berth: 1, world: 'Lenna', name: 'The Slack', locked: !owner ? 'Not open yet' : road ? null : 'Read the Stillwind’s Road in the Breach’s lab first' , coop: false },
-        ]
-        const close = () => { queueRef.current?.cancel(); queueRef.current = null; setFinding(null); setDeparturesOpen(false); battleRef.current = false; closeCursorUI() }
+        const partied = !!lobby.state && lobby.state.members.length > 1
         return (
-          <HearthFrame title="Departures" maxWidth={440} onClose={close} dataPanel="departures">
-            <DeparturesPanel you={mpName} party={mpParty} members={mpParty ? mpRoster.map(p => p.name) : []}
-              destinations={dests} berths={BERTH_COUNT}
-              onInviteFriends={() => { close(); setMpTab('friends'); setMpOpen(true) }}
-              finding={finding}
-              onFindOthers={(d) => {
-                // ★ FIND OTHERS: take a place in the line; matched → the code is this run's party, then launch
-                queueRef.current?.cancel()
-                const q = new BreachQueue({
-                  onWaiting: (n, need, waited) => setFinding({ n, need, waited }),
-                  onMatched: (code, names) => {
-                    queueRef.current = null; setFinding(null); close()
-                    coop.wantParty = code
-                    setHoldFlash(names.length > 1 ? `Found: ${names.join(', ')}` : 'Going in')
-                    const ship = holdShip()!
-                    if (d.id === 'breach') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', ownerOnly: true })
-                  },
-                  onRefused: (why) => { queueRef.current = null; setFinding(null); setHarvestToast(why) },
-                  onLost: () => { queueRef.current = null; setFinding(null); setHarvestToast('Lost your place in line') },
-                })
-                queueRef.current = q
-                setFinding({ n: 1, need: 3, waited: 0 })
-                q.open()
-              }}
-              onGoNow={() => queueRef.current?.go()}
-              onCancelFind={() => { queueRef.current?.cancel(); queueRef.current = null; setFinding(null) }}
-              onLaunch={(d, together) => {
-                close()
-                coop.wantParty = together && mpParty ? mpParty : null
-                const ship = holdShip()!
-                if (d.id === 'breach') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', ownerOnly: true })
-                else if (d.id === 'slack') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up', ownerOnly: true })
-              }} />
-          </HearthFrame>
+          <DeployLobby
+            you={{ id: lobby.you ?? 'you', name: mpName, look: mpReady ? selfPlayerId() : 'you' }}
+            lobby={lobby.state} isLeader={lobby.isLeader} partyCode={mpParty}
+            missions={missionCards()} localPick={soloMission} onLocalPick={setSoloMission}
+            onPick={lobby.pick} onReady={lobby.ready}
+            // a party's launch goes through the lobby, so every mate (the leader too) takes the same path in
+            onLaunch={(m) => { if (partied) lobby.launch(m.id); else launchMission(m, null) }}
+            onInvite={() => { closeDepartures(); setMpTab('friends'); setMpOpen(true) }}
+            onClose={closeDepartures}
+            finding={finding}
+            onFindOthers={(m) => {
+              // ★ FIND OTHERS: take a place in the line; matched → the code is this run's party, then launch
+              queueRef.current?.cancel()
+              const q = new BreachQueue({
+                onWaiting: (n, need, waited) => setFinding({ n, need, waited }),
+                onMatched: (code, names) => {
+                  queueRef.current = null; setFinding(null)
+                  setHoldFlash(names.length > 1 ? `Found: ${names.join(', ')}` : 'Going in')
+                  launchMission(m, code)
+                },
+                onRefused: (why) => { queueRef.current = null; setFinding(null); setHarvestToast(why) },
+                onLost: () => { queueRef.current = null; setFinding(null); setHarvestToast('Lost your place in line') },
+              })
+              queueRef.current = q
+              setFinding({ n: 1, need: 3, waited: 0 })
+              q.open()
+            }}
+            onGoNow={() => queueRef.current?.go()}
+            onCancelFind={() => { queueRef.current?.cancel(); queueRef.current = null; setFinding(null) }} />
         )
       })()}
 

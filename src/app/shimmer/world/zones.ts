@@ -629,10 +629,9 @@ export const ZONES: Zone[] = [
       // when there is — canon has no objection to a keeper entering, that is what the pyramid is FOR.
       // ⚠ `toX/toY` IS THE CRUCIBLE'S ARRIVAL TILE, DERIVED FROM ITS SIZE — see the crucible's block.
       { x: STATION.doors.crucible.x, y: STATION.doors.crucible.z, toZone: 'crucible', toX: crucibleArrival().x, toY: crucibleArrival().y, direction: 'up', label: 'THE CRUCIBLE', ownerOnly: true },
-      // berth 1's gangway — THE HOLD, the one season world seated (GBOARD 🌊 SEASON EXPEDITIONS). Canon: *"each
-      // saved world the player has seated holds a berth, and a ship stands in it."* `ownerOnly` because it is a
-      // blockout slice for Alex's feel pass; the flag comes off with the first real season.
-      { x: holdShip()!.door.x, y: holdShip()!.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', label: 'THE BREACH', ownerOnly: true },
+      // ⚠ berth 1's gangway USED to warp straight into the Breach. Removed 2026-09-29 (Alex: *"instead of a door/gate
+      // that takes the player straight in… an attendant that you speak to"*): the only way aboard is the Station clerk's
+      // Departures lobby, where a party goes TOGETHER. A gangway that skipped it gave a partied keeper a solo run.
     ],
     warps: [],
   },
