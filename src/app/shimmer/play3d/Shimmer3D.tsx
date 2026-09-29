@@ -8868,9 +8868,12 @@ export default function Shimmer3D() {
             </span>
           </HearthPill>
           {coopDown && !holdHud.over && (
-            <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '22%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }} data-coop-down>
-              You are down. Your party holds the line{coop.link?.party.filter(p => p.here && !p.down).length ? ` · ${coop.link.party.filter(p => p.here && !p.down).map(p => p.name).join(', ')} still standing` : ''}.
-            </HearthPill>
+            // the marker rides a plain wrapper: HearthPill passes only face/accent/style/className through
+            <div data-coop-down>
+              <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '22%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }}>
+                You are down. Your party holds the line{coop.link?.party.filter(p => p.here && !p.down).length ? ` · ${coop.link.party.filter(p => p.here && !p.down).map(p => p.name).join(', ')} still standing` : ''}.
+              </HearthPill>
+            </div>
           )}
           {holdFlash && !holdHud.over && (
             <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', zIndex: 35, fontSize: 22 }}>{holdFlash}</HearthPill>

@@ -39,6 +39,11 @@ async function keeper(who: { id: string; name: string }): Promise<Page> {
   await page.goto(`${ORIGIN}/shimmer/play3d?party=${PARTY}`, { waitUntil: 'domcontentloaded', timeout: 90_000 })
   return page
 }
+/** poll `f` until it returns true (up to `secs`): two software-GL pages on one box can lag a snapshot or two */
+async function until(f: () => Promise<boolean>, secs = 15): Promise<boolean> {
+  for (let t = 0; t < secs * 4; t++) { if (await f()) return true; await sleep(250) }
+  return false
+}
 const coopOf = (p: Page) => p.evaluate(() => (window as unknown as { __coop?: () => any }).__coop?.() ?? null)
 async function toBoard(p: Page) {
   await p.evaluate(() => (window as any).__goZone('travelers-station'))
@@ -65,21 +70,48 @@ try {
   ok(await clickLaunch(pa), 'A launches together')
   ok(await clickLaunch(pb), 'B launches together')
   await sleep(9000)    // both in the Breach, snapshots flowing, the first round climbing in
-  const ca = await coopOf(pa), cb = await coopOf(pb)
+  let ca: any = null, cb: any = null
+  const both = await until(async () => {
+    ca = await coopOf(pa); cb = await coopOf(pb)
+    return ca?.status === 'live' && cb?.status === 'live' && ca?.party?.length === 2 && cb?.party?.length === 2
+  })
   console.log('  A:', JSON.stringify(ca)?.slice(0, 220))
   console.log('  B:', JSON.stringify(cb)?.slice(0, 220))
   ok(ca?.zone === 'the-hold' && cb?.zone === 'the-hold', 'both keepers are in the Breach')
-  ok(ca?.code === PARTY && cb?.code === PARTY && ca?.status === 'live' && cb?.status === 'live', `★ both pages are live on the party's server fight (${PARTY})`)
-  ok(ca?.party?.length === 2 && cb?.party?.length === 2, `★ the server has both keepers in one Breach (${ca?.party?.join(' + ')})`)
+  ok(both && ca?.code === PARTY && cb?.code === PARTY, `★ both pages are live on the party's server fight (${PARTY}), both keepers in it (${ca?.party?.join(' + ')})`)
   ok(ca?.round === cb?.round, `the same round on both pages (${ca?.round})`)
   ok(ca?.salvage === 500 && cb?.salvage === 500, 'each keeper starts with their own 500 salvage')
   // a second look deeper into the round, when more of the flood is in (one shared body proves little)
-  await sleep(7000)
-  const da = await coopOf(pa), db = await coopOf(pb)
-  const sa2 = new Set<number>(da?.flood ?? []), common2 = (db?.flood ?? []).filter((id: number) => sa2.has(id)).length
-  const total2 = Math.max(sa2.size, (db?.flood ?? []).length)
+  await sleep(5000)
+  let da: any = null, db: any = null, common2 = 0, total2 = 0
+  await until(async () => {
+    da = await coopOf(pa); db = await coopOf(pb)
+    const sa2 = new Set<number>(da?.flood ?? [])
+    common2 = (db?.flood ?? []).filter((id: number) => sa2.has(id)).length; total2 = Math.max(sa2.size, (db?.flood ?? []).length)
+    return total2 >= 3 && common2 === total2
+  })
   console.log(`  later: A ${JSON.stringify(da?.flood)} · B ${JSON.stringify(db?.flood)}`)
-  ok(total2 >= 3 && common2 / total2 >= 0.8, `★★ deeper into the round, still ONE flood (${common2} of ${total2} bodies on both pages)`)
+  ok(total2 >= 3 && common2 === total2, `★★ deeper into the round, ONE flood (${common2} of ${total2} bodies, the same ids on both pages)`)
+
+  // ── down, then over: idle keepers are killed by the flood. A downed keeper watches under a banner; the run ends
+  //    only when both are down. (Both start on one spot, so they usually fall together: the banner is checked on
+  //    either page, not staggered.)
+  // stage it: B goes down to the lobby, well away from the roof where the first round climbs in on A
+  const jumped = await pb.evaluate(() => (window as any).__holdJump?.('Lobby') ?? false)
+  ok(jumped, 'B moves down to the lobby (A stays on the roof)')
+  let sawWatching = false, overBoth = false
+  for (let t = 0; t < 360 && !overBoth; t++) {
+    await sleep(250)
+    const [wa, wb] = await Promise.all([pa, pb].map(p => p.evaluate(() => !!document.querySelector('[data-coop-down]'))))
+    if (wa !== wb && !sawWatching) {
+      sawWatching = true
+      await pb.evaluate(() => (window as any).__holdJump?.('Roof'))   // B goes back up into the flood: now B falls too
+    }
+    const [overA, overB] = await Promise.all([pa, pb].map(p => p.evaluate(() => /to go again/.test(document.body.innerText))))
+    if (overA && overB) overBoth = true
+  }
+  ok(sawWatching, '★ the first keeper down WATCHES under the banner while the other still stands')
+  ok(overBoth, '★ the run ends for both only when both are down')
 } finally {
   await browser.close()
 }
