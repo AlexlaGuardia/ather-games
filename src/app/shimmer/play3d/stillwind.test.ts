@@ -91,7 +91,9 @@ const until = (s: StillwindState, secs: number, px: number, pz: () => number, do
     const s = startStillwind()
     let hp = 100, sh = 100, low = 200, t = 0, side = 1, px = 0, since = 99
     for (; t < 900 && !s.felled && hp > 0; t += 0.05) {
-      if (s.wind !== 'blowing') px = 2.7 * side                   // the wind died: just off the line
+      // the wind died: step aside of the run (it strikes within runHalf). ⚠ Since the 09-29 balance pass 2.7 is INSIDE
+      // the wider band, so it mends there: a keeper who never comes back to the band must stay off it here too
+      if (s.wind !== 'blowing') px = returns ? 2.7 * side : lureX * side
       else if (s.mood !== 'walk') px = returns ? 0 : lureX * side // it's open or brittle: back to the line, shoot
       else px = lureX * side                                      // lure it
       const o = stepStillwind(s, 0.05, px, s.z > 20 ? s.z - 7 : s.z + 7)
@@ -108,9 +110,10 @@ const until = (s: StillwindState, secs: number, px: number, pz: () => number, do
   const shallow = fight(3, true), deep = fight(7, true), greedy = fight(5, false)
   ok(shallow.felled && shallow.alive && deep.felled && deep.alive, `drawing it off and coming back to the line: felled, alive (${Math.round(shallow.t)}s / ${Math.round(deep.t)}s)`)
   ok(deep.t < shallow.t && Math.abs(deep.low - shallow.low) < 40, 'a deeper lure is a faster fight at about the same risk — a choice, not a trap')
-  ok(shallow.t > 150 && shallow.t < 420 && deep.t > 150, 'a fight, not a sprint or a slog')
+  // Alex 09-29 (playtest): the fight was too long with too few choices. Now ~2-3 minutes solo, still not a sprint
+  ok(shallow.t > 90 && shallow.t < 300 && deep.t > 90, `a fight, not a sprint or a slog (${Math.round(shallow.t)}s / ${Math.round(deep.t)}s)`)
   ok(!greedy.alive, 'a keeper who never comes back to the line burns out')
-  ok(lineMend(0, 5) === T.lineMend && lineMend(0, 0.5) === 0 && lineMend(3, 5) === 0, 'the line mends: on it, unhurt a moment')
+  ok(lineMend(0, 5) === T.lineMend && lineMend(0, 0.5) === 0 && lineMend(T.safeHalf + 0.5, 5) === 0, 'the line mends: on it, unhurt a moment')
   console.log(`  stillwind: lure 3 → ${Math.round(shallow.t)}s (low ${Math.round(shallow.low)}/200) · lure 7 → ${Math.round(deep.t)}s (low ${Math.round(deep.low)}) · never back → ${greedy.alive ? 'lives?!' : 'dies'} · hp ${T.hp}`)
 }
 
@@ -144,6 +147,31 @@ const until = (s: StillwindState, secs: number, px: number, pz: () => number, do
   const got = [0, 0, 0]
   for (let t = 0; t < T.runSec + 0.2; t += 0.05) stepStillwindParty(r, 0.05, ks).strikes.forEach((d, i) => { got[i] += d })
   ok(got[0] === T.runDmg && got[1] === T.runDmg && got[2] === 0, `co-op: a run strikes each keeper on the line once (${got.join('/')})`)
+}
+
+// ── ★ THE BALANCE PASS (Alex 09-29): room to stand, a tell to read, phases that change the fight ──
+{
+  ok(T.safeHalf >= 3 && edgeHazard(T.safeHalf + 1).dps <= T.shoulderBurn && edgeHazard(-(T.safeHalf + 1)).dps <= T.shoulderFrost, '★ a real band to move in, and a shoulder that only nips (room to sidestep)')
+  ok(edgeHazard(T.shoulder + 4).dps > edgeHazard(T.shoulder - 1).dps * 3, 'past the shoulder the edge still climbs hard')
+  // the swing has a tell: in reach it draws back first; a keeper who steps out of reach during it is not struck
+  const s = startStillwind(); s.z = 50; s.x = 0; s.strikeT = 0; s.windT = 99
+  const o1 = stepStillwind(s, 0.05, 0, 51.5)
+  ok(!!o1.windup && o1.strike === 0 && (s.swingT ?? 0) > 0, 'in reach, it draws back first (the tell), no damage yet')
+  let hit = 0; for (let i = 0; i < 20; i++) hit += stepStillwind(s, 0.05, 0, 58).strike
+  ok(hit === 0, '★ step out of reach during the tell and the swing misses')
+  const s2 = startStillwind(); s2.z = 50; s2.strikeT = 0; s2.windT = 99
+  let hit2 = 0; for (let i = 0; i < 20; i++) hit2 += stepStillwind(s2, 0.05, 0, 51.5).strike
+  ok(hit2 === T.strikeDmg, 'stay in reach and it lands')
+  // phase 2: the sweep is marked, then lands on the band, not on a shoulder
+  const s3 = startStillwind(); s3.hp = T.hp * 0.5; s3.z = 20; s3.windT = 99; s3.sweepIn = 0.01; s3.strikeT = 99
+  const k = [{ x: 0, z: 80 }, { x: T.safeHalf + 1, z: 80 }]
+  const m = stepStillwindParty(s3, 0.05, k)
+  ok(!!m.sweepMarked && s3.sweepZ === 80, 'phase 2: a stretch of the band is marked where it hunts')
+  let got = [0, 0]; let swept = false
+  for (let i = 0; i < 40; i++) { const o = stepStillwindParty(s3, 0.05, k); got = got.map((g, j) => g + o.strikes[j]); swept ||= !!o.swept }
+  ok(swept && got[0] === T.sweepDmg && got[1] === 0, '★ the sweep strikes the band once and spares the shoulder: a choice, every time')
+  const s4 = startStillwind(); s4.sweepIn = 0.01; s4.windT = 99
+  ok(!stepStillwindParty(s4, 0.05, [{ x: 0, z: 40 }]).sweepMarked, 'phase 1 has no sweep')
 }
 
 console.log(`stillwind: ${pass} passed, ${fails.length} failed`); for (const f of fails) console.log('  FAIL', f)

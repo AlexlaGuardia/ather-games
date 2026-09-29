@@ -21,14 +21,23 @@
 export const STILLWIND_TUNING = {
   halfWidth: 24,         // the strip, x ∈ [-halfWidth, halfWidth]
   length: 160,           // z ∈ [0, length]
-  safeHalf: 1.6,         // the keeper's safe band either side of the line
-  burnPerTile: 3,        // hp/s per tile past the safe band, toward the Glare
+  // ★ THE BALANCE PASS (Alex 09-29, playtest: "the middle is the only walkable ground… the boss walking right at you,
+  // theres no choice but to take damage from it or step off the middle… a long one… maybe give the boss phases").
+  // The band was ±1.6 of a 48-wide strip, the burn climbed 3/s per tile at once, and it swung with no tell: there was
+  // nowhere to stand but in front of it. Now: a band you can sidestep in, a SHOULDER that costs a little (the choice),
+  // then the steep edge; a swing you see coming; a sweep in phase 2 that makes you pick a side; and a shorter fight.
+  safeHalf: 3.2,         // the keeper's safe band either side of the line (was 1.6)
+  shoulder: 7,           // past the band and inside this, the edge only nips: room to dodge, at a small price
+  shoulderBurn: 3,       // hp/s on the Glare shoulder
+  shoulderFrost: 2,      // hp/s on the Rime shoulder (and a small slow)
+  shoulderSlow: 0.1,
+  burnPerTile: 4,        // hp/s per tile past the SHOULDER, toward the Glare
   burnMax: 40,
-  frostPerTile: 2,       // hp/s per tile past the safe band, toward the Rime (less, because it also slows)
+  frostPerTile: 3,       // hp/s per tile past the shoulder, toward the Rime (less, because it also slows)
   frostMax: 28,
-  frostSlowPerTile: 0.05, // speed lost per tile into the Rime
+  frostSlowPerTile: 0.05, // speed lost per tile into the Rime, past the shoulder
   frostSlowMax: 0.55,
-  hp: 8000,
+  hp: 5200,              // was 8000: a long fight is fine, a long fight with no choices is not
   speed: 3.4,            // it walks toward the keeper
   lure: 0.75,            // how far it follows the keeper off its line (share of the keeper's x)
   comfort: 0.6,          // how hard it eases back toward the line (1/s)
@@ -41,11 +50,20 @@ export const STILLWIND_TUNING = {
   brittleSec: 6,         // frozen: slowed, brittle
   brittleDmg: 2,
   brittleSpeed: 0.45,
-  lineDmg: 0.1,          // on its line it barely takes a scratch
+  lineDmg: 0.15,         // on its line it barely takes a scratch (was 0.1)
   offDmg: 0.5,           // off the line but not yet open
   reach: 3.2,            // it strikes inside this
   strikeDmg: 32,
   strikeCd: 2.4,
+  strikeCdLate: 1.6,     // phase 3: it swings faster
+  windup: 0.75,          // ★ the swing's TELL: it stops and draws back this long; step out of reach and it misses
+  // ── PHASE 2+: THE SWEEP. It turns the wind across the line: a stretch of the band is marked, then struck. Stay and
+  // take it, or step onto a shoulder (burn or frost: your pick), or run clear along the band. A choice every time.
+  sweepEvery: 11,        // seconds between sweeps in phase 2
+  sweepEveryLate: 7,     // phase 3
+  sweepTell: 1.4,        // marked this long before it lands
+  sweepHalfZ: 6,         // the stretch of band it strikes, either side of where you stood
+  sweepDmg: 40,
   stallEvery: 14,        // seconds between the wind stalling
   stallSec: 2.6,         // the tell: the wind is gone this long, then it runs the line
   runSpeed: 16,          // running the line (along z, on x = 0)
@@ -79,12 +97,19 @@ export interface StillwindState {
   elapsed: number
   /** keepers a run has already struck (co-op: once each a run) */
   ranOver?: number[]
+  /** the swing's tell: seconds until it lands (0 = not swinging) */
+  swingT?: number
+  /** phase 2+: seconds until the next sweep is marked, and while marked, where (z) and how long until it lands */
+  sweepIn?: number
+  sweepZ?: number
+  sweepT?: number
 }
 
 export function startStillwind(tune: StillwindTuning = STILLWIND_TUNING): StillwindState {
   return {
     hp: tune.hp, x: 0, z: tune.length * 0.8, heat: 0, cold: 0, mood: 'walk', moodT: 0,
     wind: 'blowing', windT: tune.stallEvery, runDir: -1, strikeT: 1, felled: false, elapsed: 0,
+    swingT: 0, sweepIn: tune.sweepEvery, sweepZ: 0, sweepT: 0,
   }
 }
 
@@ -100,10 +125,12 @@ export const lineMend = (x: number, sinceHurt: number, tune: StillwindTuning = S
 
 /** What the edge does to a keeper standing at x: burn toward the Glare, frost (and a slow) toward the Rime. */
 export function edgeHazard(x: number, tune: StillwindTuning = STILLWIND_TUNING): { dps: number; slow: number; side: 'line' | 'glare' | 'rime' } {
-  const past = Math.abs(x) - tune.safeHalf
-  if (past <= 0) return { dps: 0, slow: 0, side: 'line' }
-  if (x > 0) return { dps: Math.min(tune.burnMax, past * tune.burnPerTile), slow: 0, side: 'glare' }
-  return { dps: Math.min(tune.frostMax, past * tune.frostPerTile), slow: Math.min(tune.frostSlowMax, past * tune.frostSlowPerTile), side: 'rime' }
+  const a = Math.abs(x)
+  if (a <= tune.safeHalf) return { dps: 0, slow: 0, side: 'line' }
+  // the shoulder: a nip, not a burn. Past it, the edge climbs as it always did
+  const past = Math.max(0, a - tune.shoulder)
+  if (x > 0) return { dps: Math.min(tune.burnMax, tune.shoulderBurn + past * tune.burnPerTile), slow: 0, side: 'glare' }
+  return { dps: Math.min(tune.frostMax, tune.shoulderFrost + past * tune.frostPerTile), slow: Math.min(tune.frostSlowMax, tune.shoulderSlow + past * tune.frostSlowPerTile), side: 'rime' }
 }
 
 export interface StillwindStepOut {
@@ -113,6 +140,9 @@ export interface StillwindStepOut {
   ran?: boolean          // it just started running the line
   opened?: boolean       // it just overheated
   froze?: boolean        // it just turned brittle
+  windup?: boolean       // it just drew back to swing (the tell)
+  sweepMarked?: boolean  // phase 2+: a stretch of the band was just marked
+  swept?: boolean        // …and just struck
 }
 
 export function stepStillwind(s: StillwindState, dt: number, px: number, pz: number, tune: StillwindTuning = STILLWIND_TUNING): StillwindStepOut {
@@ -174,12 +204,38 @@ export function stepStillwindParty(s: StillwindState, dt: number, keepers: { x: 
     return out
   }
 
+  // ── PHASE 2+: the sweep. Marked where the keeper it is after stands, then struck: everyone on the band in that
+  // stretch takes it. Keepers on a shoulder (off the band) or clear along the band do not.
+  if (phase >= 2 && s.mood !== 'open') {
+    if ((s.sweepT ?? 0) > 0) {
+      s.sweepT = Math.max(0, (s.sweepT ?? 0) - dt)
+      if (s.sweepT === 0) {
+        keepers.forEach((k, i) => { if (Math.abs(k.x) <= tune.safeHalf && Math.abs(k.z - (s.sweepZ ?? 0)) <= tune.sweepHalfZ) out.strikes[i] += tune.sweepDmg })
+        out.swept = true
+        s.sweepIn = phase === 3 ? tune.sweepEveryLate : tune.sweepEvery
+      }
+    } else {
+      s.sweepIn = (s.sweepIn ?? tune.sweepEvery) - dt
+      if (s.sweepIn <= 0) { s.sweepT = tune.sweepTell; s.sweepZ = pz; out.sweepMarked = true }
+    }
+  }
+
   // moods: overheated stands still and open; brittle crawls
   if (s.mood !== 'walk') {
     s.moodT -= dt
     if (s.moodT <= 0) { s.mood = 'walk'; s.heat = 0; s.cold = 0 }
   }
   if (s.mood === 'open') return out
+
+  // ★ THE SWING HAS A TELL: while it draws back it stands still, and it lands only on a keeper still in reach
+  if ((s.swingT ?? 0) > 0) {
+    s.swingT = Math.max(0, (s.swingT ?? 0) - dt)
+    if (s.swingT === 0) {
+      if ((px - s.x) ** 2 + (pz - s.z) ** 2 <= (tune.reach + 0.3) ** 2) out.strikes[ti] += tune.strikeDmg
+      s.strikeT = phase === 3 ? tune.strikeCdLate : tune.strikeCd
+    }
+    return out
+  }
 
   // the walk: toward the keeper along the band, following them off its line only so far, easing back
   const speed = tune.speed * (phase === 3 ? 1.25 : 1) * (s.mood === 'brittle' ? tune.brittleSpeed : 1)
@@ -203,8 +259,8 @@ export function stepStillwindParty(s: StillwindState, dt: number, keepers: { x: 
   if (s.heat >= 1 && s.mood === 'walk') { s.mood = 'open'; s.moodT = tune.openSec; out.opened = true; return out }
   if (s.cold >= 1 && s.mood === 'walk') { s.mood = 'brittle'; s.moodT = tune.brittleSec; out.froze = true }
 
-  // it strikes what it reaches: the keeper it is after
-  if ((px - s.x) ** 2 + (pz - s.z) ** 2 <= tune.reach ** 2 && s.strikeT <= 0) { out.strikes[ti] += tune.strikeDmg; s.strikeT = tune.strikeCd }
+  // it draws back on what it reaches (the swing lands `windup` later, above)
+  if ((px - s.x) ** 2 + (pz - s.z) ** 2 <= tune.reach ** 2 && s.strikeT <= 0) { s.swingT = tune.windup; out.windup = true }
   return out
 }
 

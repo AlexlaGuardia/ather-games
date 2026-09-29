@@ -15,6 +15,7 @@
  *   set -a; . /root/ather-games/.env; set +a; npx tsx scripts/coop-flow.mts
  */
 import puppeteer, { type Page } from 'puppeteer-core'
+import { STILLWIND_TUNING } from '../src/app/shimmer/play3d/stillwind'
 import { mintSession } from '../src/lib/accounts/session'
 
 const ORIGIN = process.env.COOP_ORIGIN ?? 'https://ather.games'
@@ -128,7 +129,7 @@ try {
   await Promise.all([pa, pb].map(p => p.evaluate(() => (window as any).__edgeAt(14, 20))))
   const stands = await until(async () => /The Stillwind stands/.test((await pa.evaluate(() => document.body.innerText)) + (await pb.evaluate(() => document.body.innerText))), 30)
   const [ea, eb] = [await coopOf(pa), await coopOf(pb)]
-  ok(stands && ea?.slack?.hp === 8000 && eb?.slack?.hp === 8000 && !ea?.down && !eb?.down, `★ both down at once: the Stillwind stands again, whole, and so do they (${ea?.slack?.hp})`)
+  ok(stands && ea?.slack?.hp === STILLWIND_TUNING.hp && eb?.slack?.hp === STILLWIND_TUNING.hp && !ea?.down && !eb?.down, `★ both down at once: the Stillwind stands again, whole, and so do they (${ea?.slack?.hp})`)
   await pa.screenshot({ path: process.env.SHOT ?? '/tmp/slack-flow-a.png' })
 } finally {
   await browser.close()

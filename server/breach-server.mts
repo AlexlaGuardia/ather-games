@@ -122,7 +122,9 @@ export function snapshotSlack(r: Room, k: Keeper) {
   const w = r.sw!
   return {
     t: 'snap', mode: 'slack',
-    sw: { hp: w.hp, x: +w.x.toFixed(2), z: +w.z.toFixed(2), heat: +w.heat.toFixed(3), cold: +w.cold.toFixed(3), mood: w.mood, moodT: +w.moodT.toFixed(2), wind: w.wind, windT: +w.windT.toFixed(2), runDir: w.runDir, felled: w.felled, elapsed: +w.elapsed.toFixed(1) },
+    sw: { hp: w.hp, x: +w.x.toFixed(2), z: +w.z.toFixed(2), heat: +w.heat.toFixed(3), cold: +w.cold.toFixed(3), mood: w.mood, moodT: +w.moodT.toFixed(2), wind: w.wind, windT: +w.windT.toFixed(2), runDir: w.runDir, felled: w.felled, elapsed: +w.elapsed.toFixed(1),
+      // the 09-29 tells: a swing drawing back, a sweep marked on the band (every page draws them, so every page needs them)
+      swingT: +(w.swingT ?? 0).toFixed(2), sweepT: +(w.sweepT ?? 0).toFixed(2), sweepZ: +(w.sweepZ ?? 0).toFixed(2), sweepIn: +(w.sweepIn ?? 0).toFixed(2) },
     you: { struck: takeStruck(k), down: k.down },
     party: r.keepers.map(o => ({ id: o.id, name: o.name, down: o.down, x: +o.pos.x.toFixed(2), z: +o.pos.z.toFixed(2), y: +o.pos.y.toFixed(2), yaw: +o.yaw.toFixed(2), here: o.ws !== null })),
     events: k.events.splice(0),

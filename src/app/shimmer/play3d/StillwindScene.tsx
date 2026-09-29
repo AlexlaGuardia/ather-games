@@ -34,6 +34,8 @@ export function StillwindScene({ edgeRef }: { edgeRef: React.RefObject<EdgeRun> 
   })), [])
   const tmp = useMemo(() => ({ m: new THREE.Matrix4(), q: new THREE.Quaternion(), p: new THREE.Vector3(), s: new THREE.Vector3(1, 1, 1), frost: new THREE.Color(SL.frost), black: new THREE.Color(SL.ooze), c: new THREE.Color() }), [])
   const cx = T.halfWidth + 1
+  const sweep = useRef<THREE.Mesh>(null)
+  const sweepMat = useMemo(() => new THREE.MeshBasicMaterial({ color: SL.glare, transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false }), [])
 
   useFrame((state, dt) => {
     const e = edgeRef.current, sim = e?.sim
@@ -53,11 +55,25 @@ export function StillwindScene({ edgeRef }: { edgeRef: React.RefObject<EdgeRun> 
       ooze.roughness = 0.18 + cold * 0.6
       sailMat.emissiveIntensity = 0.1 + heat * 1.2
       core.color.set(open ? SL.core : SL.coreDeep)
+      // ★ THE SWING'S TELL (09-29): as it draws back the core flares and the body leans back, so a keeper sees it coming
+      const swing = sim.swingT ?? 0
+      if (swing > 0) { ooze.emissiveIntensity += 1.6 * (1 - swing / T.windup); body.current.rotation.x = -0.25 * (1 - swing / T.windup) }
+      else body.current.rotation.x = 0
       // limbs stream with the walk; brittle = stiff, open = slack; running = swept back
       const sway = brittle ? 0.05 : open ? 0.02 : 0.35
       limbs.current.forEach((g, i) => { if (g) g.rotation.set(Math.sin(t * 1.7 + i * 1.3) * sway + (sim.wind === 'running' ? 0.6 : 0), 0, (i % 2 ? 1 : -1) * (0.25 + Math.sin(t * 1.1 + i) * sway * 0.4)) })
       // the sails swing wide to keep its balance on the line, and wider the further it is drawn off
       sails.current.forEach((g, i) => { if (g) g.rotation.set(0, 0, (i ? -1 : 1) * (1.1 + Math.min(0.5, Math.abs(sim.x) * 0.08) + Math.sin(t * 0.8 + i) * (brittle ? 0.02 : 0.12))) })
+    }
+    // ★ THE SWEEP'S MARK (phase 2+, 09-29): the stretch of the band it will strike, filling as it comes
+    if (sweep.current) {
+      const on = !!sim && (sim.sweepT ?? 0) > 0
+      sweep.current.visible = on
+      if (on && sim) {
+        const at = simToEdge(0, sim.sweepZ ?? 0), f = 1 - (sim.sweepT ?? 0) / T.sweepTell
+        sweep.current.position.set(cx, 0.06, at.z)
+        sweepMat.opacity = 0.18 + 0.5 * f + Math.sin(t * 14) * 0.06
+      }
     }
     // the wind stops when it walks: streaks freeze and fade while the wind is stalled or it is running the line
     if (wind.current) {
@@ -97,6 +113,9 @@ export function StillwindScene({ edgeRef }: { edgeRef: React.RefObject<EdgeRun> 
       })}
       <mesh position={[cx, 0.04, len / 2]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[T.safeHalf * 2, len]} /><meshBasicMaterial color={SL.line} transparent opacity={0.55} depthWrite={false} />
+      </mesh>
+      <mesh ref={sweep} material={sweepMat} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <planeGeometry args={[T.safeHalf * 2 + 0.4, T.sweepHalfZ * 2]} />
       </mesh>
       <instancedMesh ref={wind} args={[undefined, undefined, WIND_MAX]} frustumCulled={false}>
         <boxGeometry args={[1.6, 0.03, 0.03]} />

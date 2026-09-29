@@ -188,7 +188,10 @@ try {
     // the Stillwind walks up to both and swings: only the one it is after is struck
     r.sw!.z = 22; r.sw!.x = 0; r.sw!.strikeT = 0; r.sw!.windT = 99
     kb.pos = { ...simToEdge(0, 40), y: 0 }
+    // the swing draws back first (the 09-29 tell), then lands on the one still in reach
     tickSlack(r, 0.05, 0)
+    ok(ka.struck === 0 && (r.sw!.swingT ?? 0) > 0, 'slack: in reach it draws back first (the tell), no damage yet')
+    for (let i = 0; i < 20; i++) tickSlack(r, 0.05, 0)
     ok(ka.struck === STILLWIND_TUNING.strikeDmg && kb.struck === 0, `slack: a swing strikes the keeper it reached (${ka.struck}/${kb.struck})`)
     handle(r, ka as any, { t: 'down' } as any)
     ok(ka.down && !kb.down && r.sw!.hp < STILLWIND_TUNING.hp, 'slack: one keeper down, the fight goes on')
