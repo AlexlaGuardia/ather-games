@@ -8669,6 +8669,25 @@ export default function Shimmer3D() {
     }
     return () => { delete w.__holdJump }
   }, [isOwner])
+  // …and CAST any built move through the real dispatcher (slot 0, pool refilled, cooldown cleared), then read back what
+  // every foe is wearing. The move-jobs smoke (scripts/cast-smoke.mts) walks the whole book with these. OWNER ONLY.
+  useEffect(() => {
+    if (!isOwner) return
+    const w = window as unknown as { __cast?: (id: string) => boolean; __foes?: () => Record<string, string[]> }
+    w.__cast = (id: string) => {
+      if (!isBuilt(id)) return false
+      castLoadoutRef.current[0] = id; castCdRef.current[0] = 0; chargeRef.current[0] = null
+      manaRef.current.current = manaMax()
+      castSlot(0)
+      return true
+    }
+    w.__foes = () => {
+      const now = performance.now(), out: Record<string, string[]> = {}
+      for (const id of Object.keys(statusRef.current)) { const on = statusesOn(statusRef.current, id, now); if (on.length) out[id] = on }
+      return out
+    }
+    return () => { delete w.__cast; delete w.__foes }
+  }, [isOwner, castSlot])
 
   const save = useCallback(async () => {
     setSaveMsg('saving…')
