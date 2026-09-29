@@ -52,7 +52,7 @@ const p3 = readFileSync('src/app/shimmer/play3d/Shimmer3D.tsx', 'utf8')
 for (const id of ['`board:${i}`', "'hunter'", '`guard:${st.id}`', '`fleet:${mm.index}`', '`flood:${b.id}`']) ok(p3.includes(`fn(${id}`), `★ forEachFoe walks ${id}`)
 ok(p3.includes('stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP, undefined, (id) =>'), 'the Breach flooded read their statuses')
 ok(p3.includes('stepFleet(fleet, bodies, bc, dt, RANGE_HUNTER, (i) => foeMods('), 'the Crucible fleet reads theirs')
-ok(p3.includes("applyStatuses(bag, id, zn.kinds, 1, nowFrame, { zone: true })"), 'a cloud re-applies with the zone flag')
+ok(p3.includes("applyStatuses(bag, id, zn.kinds, zn.applySecs, nowFrame, { zone: true })"), 'a cloud re-applies with the zone flag')
 for (const id of ['fog-bank', 'hush', 'sandstorm-veil', 'dust-lung', 'pressure-drop', 'squall']) ok(castForMove(id).linger && castForMove(id).archetype === 'status', `${id} is a lingering cloud`)
 ok(castForMove('ice-dart').statuses.includes('slowed') && castForMove('ice-dart').areaSecs > 0, 'Ice Dart slows what it hits')
 
@@ -84,6 +84,15 @@ ok(p3.includes('mine.length >= pending.trapMax ? mine.slice(mine.length - pendin
 ok(p3.includes("if (!tripped && (x - t.x) ** 2 + (z - t.z) ** 2 <= t.spec.trapRadius * t.spec.trapRadius) tripped = id"), 'the FIRST foe inside the radius trips it')
 ok(p3.includes('while (charge.n < spec.charges && charge.at > 0 && now >= charge.at)'), '★ charges refill one at a time')
 ok(p3.includes("setHarvestToast(`${spec.label} — recharging`)"), 'an empty move says it is recharging, never a dead key')
+
+// I. STEP 5 (09-29): space
+const sw = castForMove('stonewall')
+ok(sw.archetype === 'terrain' && sw.shape === 'wall' && sw.areaSize >= 10 && sw.areaSecs >= 12, '★ Stonewall is a long wall that can divide a room')
+const fw = castForMove('firewall'), fs = castForMove('firestorm')
+ok(fw.line && fw.linger && fw.fieldStopsShots && fw.statuses.includes('slowed') && fw.statuses.includes('revealed') && fw.fieldDps === 0, '★ Firewall: a line that stops rounds both ways; crossing it slows + reveals; no damage')
+ok(fs.line && !fs.fieldStopsShots && fs.statuses[0] === 'burning' && fs.areaSize > fw.areaSize, 'Firestorm: a longer line; crossing it sets you Burning')
+ok(p3.includes('const line = pending.line ? { ux: -flatZ / flatLen, uz: flatX / flatLen'), 'a line runs ACROSS the aim')
+ok((p3.match(/if \(lineStops\(/g) || []).length >= 3, '★ a shot-stopping line stops gun rounds, enemy orbs and cast rounds')
 
 console.log(`statuses: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

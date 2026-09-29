@@ -196,6 +196,10 @@ export interface CastSpec {
   splashSecs: number
   /** presses stored (1 = an ordinary cooldown). Charges refill one at a time, each taking `cooldownMs`. */
   charges: number
+  // ── MOVE-JOBS STEP 5 (09-29): space ────────────────────────────────────────────────────────────
+  /** a lingering status zone laid as a LINE across the aim (length `areaSize`), not a disc. Crossing it applies
+   *  `statuses` for `splashSecs` (or 1s); `fieldStopsShots` makes it stop every round, both ways. */
+  line: boolean
   // ── impulse (SYSTEM 4) — the cast moves the CASTER ─────────────────────────
   /**
    * How the keeper is moved.
@@ -266,7 +270,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   fieldDps: 0, fieldHps: 0, fieldStopsShots: false, fieldHp: 0, wardMend: 0, wardFlaw: 0, wardBacklash: 0,
   shape: 'wall', shapeHeight: 1, statuses: [], linger: false,
   windupMs: 0, facingOnly: false, revealRadius: 0, revealSecs: 0,
-  trap: false, trapRadius: 0.9, trapMax: 1, trapSecs: 45, splashStatuses: [], splashSecs: 0, charges: 1,
+  trap: false, trapRadius: 0.9, trapMax: 1, trapSecs: 45, splashStatuses: [], splashSecs: 0, charges: 1, line: false,
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
@@ -352,7 +356,10 @@ const BUILDS: Record<string, Build> = {
   'static-burst': { archetype: 'surge', manaCost: 10, cooldownMs: 4500, surgeSecs: 2.5, surgeMult: 1.7 },
   // "A wall of flame thrown BETWEEN you and a threat — escape, area-denial, cover." All three verbs
   // are in the canon line, so it burns what stands in it AND eats shots crossing it.
-  firewall:  { archetype: 'field', manaCost: 18, cooldownMs: 7000, castRange: 9, areaSize: 3.2, areaSecs: 6, fieldDps: 5, fieldStopsShots: true },
+  // MOVE-JOBS 09-29 (Alex ✓): a LINE of flame across your aim that stops every round both ways; whoever crosses it
+  // is Slowed and Revealed for 3s. Cover and a tell, no damage.
+  firewall:  { archetype: 'status', manaCost: 18, cooldownMs: 8000, castRange: 7, areaSize: 9, areaSecs: 6, fieldStopsShots: true,
+               statuses: ['slowed', 'revealed'], linger: true, line: true, splashSecs: 3 },
   // "Sheathes a weapon or strike in fire — melee ENHANCEMENT." The only cast that makes the gun
   // better rather than doing something the gun can't: an infusion window, not a new attack.
   // MOVE-JOBS 09-29 (Alex ✓): in play3d your shots set foes BURNING for 3s instead of hitting harder (`statuses` =
@@ -368,7 +375,8 @@ const BUILDS: Record<string, Build> = {
   enlighten: { archetype: 'status', manaCost: 12, cooldownMs: 9000, castRange: 11, areaSize: 6, areaSecs: 1.5, statuses: ['blinded'],
                windupMs: 800, facingOnly: true, revealRadius: 15, revealSecs: 3 },
   // "Terrain you impose. Close the gap, do not chase." A short-lived barricade across your sightline.
-  stonewall: { archetype: 'terrain', manaCost: 16, cooldownMs: 8000, castRange: 7, areaSize: 5, areaSecs: 10, shape: 'wall', shapeHeight: 2 },
+  // MOVE-JOBS 09-29 (Alex ✓, "a really long wall that could divide a room"): 11 tiles across your aim, 12s.
+  stonewall: { archetype: 'terrain', manaCost: 16, cooldownMs: 10000, castRange: 7, areaSize: 11, areaSecs: 12, shape: 'wall', shapeHeight: 2 },
   // "Clamp a foe in iron, OR jam a manalic weapon mid-draw" — canon names both, so it does both.
   // MOVE-JOBS 09-29 (Alex's revision): a TRAP. An iron clamp set on the ground; the first foe onto it is rooted and
   // jammed for 2s. 2 charges (10s each to refill), at most 2 set at once.
@@ -607,7 +615,10 @@ const BUILDS: Record<string, Build> = {
   'vein-puppet': { archetype: 'status', manaCost: 38, cooldownMs: 20000, castRange: 10, areaSize: 3.5, areaSecs: 5, statuses: ['rooted', 'disarmed'] },
   // "Takes one side of a street and leaves the other untouched" — wide and hot, and NOT cover: an
   // inferno you can shoot through is a place you deny, not a place you hide.
-  'firestorm': { archetype: 'field', manaCost: 44, cooldownMs: 24000, castRange: 12, areaSize: 7, areaSecs: 10, fieldDps: 8, fieldStopsShots: false },
+  // MOVE-JOBS 09-29 (Alex ✓, "takes one side of a street"): a 17-tile line of fire across your aim for 12s. It does not
+  // stop rounds; whoever crosses it is set Burning for 3s. It divides a room by making one side cost something.
+  'firestorm': { archetype: 'status', manaCost: 44, cooldownMs: 24000, castRange: 9, areaSize: 17, areaSecs: 12,
+                  statuses: ['burning'], linger: true, line: true, splashSecs: 3 },
   // "Shredding within, UNREACHABLE FROM WITHOUT" — the only damaging field that also eats shots, which
   // is what makes it containment rather than a bigger Firestorm.
   'cyclone-cage': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 5, areaSecs: 9, fieldDps: 9, fieldStopsShots: true },

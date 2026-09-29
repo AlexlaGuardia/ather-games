@@ -2657,7 +2657,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // ── LINGERING STATUS CLOUDS (09-28): a status cast with `linger` (Fog Bank, Hush, Sandstorm Veil…) stays where
   // it lands and keeps applying to whoever is inside, so a foe that walks INTO the fog is blinded too. Before
   // this, every status cast applied once at the moment it landed and drew nothing: Fog Bank read as mana spent.
-  const statusZones = useRef<{ x: number; z: number; r: number; until: number; kinds: readonly StatusKind[]; color: number }[]>([])
+  const statusZones = useRef<{ x: number; z: number; r: number; until: number; kinds: readonly StatusKind[]; color: number
+    /** step 5: a LINE zone's unit axis + half length (r is then its half-thickness); applySecs = how long a crossing lasts */
+    line?: { ux: number; uz: number; half: number }; applySecs: number; stops: boolean }[]>([])
+  const lineMeshRef = useRef<THREE.InstancedMesh>(null)
   const zoneTickAt = useRef(0)
   const burnTickAt = useRef(0)
   const zoneMeshRef = useRef<THREE.InstancedMesh>(null)
@@ -2880,12 +2883,19 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       }
       trapsRef.current = left
     }
+    // step 5: a disc or a LINE; a line zone that stops shots stops every round that meets it, either side's
+    function inZone(zn: (typeof statusZones.current)[number], x: number, z: number): boolean {
+      if (!zn.line) return (x - zn.x) ** 2 + (z - zn.z) ** 2 <= zn.r * zn.r
+      const dx = x - zn.x, dz = z - zn.z, along = dx * zn.line.ux + dz * zn.line.uz, perp = dx * zn.line.uz - dz * zn.line.ux
+      return Math.abs(along) <= zn.line.half && Math.abs(perp) <= zn.r
+    }
+    const lineStops = (x: number, z: number) => statusZones.current.some((zn) => zn.stops && zn.until > nowFrame && inZone(zn, x, z))
     // the clouds apply every quarter second, for a second at a time, so leaving one frees you within a second
     if (statusZones.current.length && nowFrame >= zoneTickAt.current) {
       zoneTickAt.current = nowFrame + 250
       statusZones.current = statusZones.current.filter((z) => z.until > nowFrame)
       let bag = statusRef.current
-      for (const zn of statusZones.current) forEachFoe((id, x, z) => { if ((x - zn.x) ** 2 + (z - zn.z) ** 2 <= zn.r * zn.r) bag = applyStatuses(bag, id, zn.kinds, 1, nowFrame, { zone: true }) })
+      for (const zn of statusZones.current) forEachFoe((id, x, z) => { if (inZone(zn, x, z)) bag = applyStatuses(bag, id, zn.kinds, zn.applySecs, nowFrame, { zone: true }) })
       statusRef.current = bag
     }
 
@@ -3048,7 +3058,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           } else if (pending.linger && pending.archetype === 'status') {
             // a cloud: it stays and applies to whoever is inside (the zone tick below), including at once
             const color = STATUS_TABLE[pending.statuses[0]].color
-            statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.areaSize, until: nowMs + pending.areaSecs * 1000, kinds: pending.statuses, color }]
+            // a LINE runs ACROSS the aim (perpendicular to the flat forward), centred on the aim point
+            const line = pending.line ? { ux: -flatZ / flatLen, uz: flatX / flatLen, half: pending.areaSize / 2 } : undefined
+            statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.line ? 0.9 : pending.areaSize, until: nowMs + pending.areaSecs * 1000, kinds: pending.statuses, color, line, applySecs: pending.splashSecs || 1, stops: pending.line && pending.fieldStopsShots }]
             zoneTickAt.current = 0
           } else {
             let bag = statusRef.current
@@ -3129,6 +3141,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       // what stops a round there: a wall or a shut gate, never a window (you shoot out of them)
       if (hs && roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP)) { p.life = 0; continue }
       { const ab = absorbShotAt(fieldsRef.current, p.pos.x, p.pos.z, wDmg); if (ab.hit) { fieldsRef.current = ab.fields; p.life = 0; continue } }
+      if (lineStops(p.pos.x, p.pos.z)) { p.life = 0; continue }   // step 5: a Firewall eats rounds both ways
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
           // bullseye: radial miss-distance of the flight line from the board center. Inside the gold
@@ -3228,6 +3241,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const cell = gridRef.current?.[cz]?.[cx]
       if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
       if (conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
+      if (lineStops(p.pos.x, p.pos.z)) { p.life = 0; continue }
       const dmg = p.dmg * castMultRef.current  // a held stance (Flame Manipulation) shapes what you throw
       let hit = false
       if (hs) {
@@ -3618,6 +3632,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         // incoming fire is stopped by your own terrain + firewall. That symmetry IS the move.
         if (conjuredBlockedAt(conjuredRef.current, o.pos.x, o.pos.z, nowFrame)) { o.life = 0; continue }
         { const ab = absorbShotAt(fieldsRef.current, o.pos.x, o.pos.z, DRONE_DMG); if (ab.hit) { fieldsRef.current = ab.fields; o.life = 0; continue } }
+        if (lineStops(o.pos.x, o.pos.z)) { o.life = 0; continue }
         if (o.pos.distanceToSquared(pEye) < PLAYER_HIT_R2) {
           o.life = 0
           hurtPlayer(DRONE_DMG)  // a training drone — carries no rune
@@ -3701,7 +3716,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const zs = statusZones.current, py = posRef.current?.y ?? 0
       for (let i = 0; i < ZONE_MAX; i++) {
         const zn = zs[i]
-        if (!zn || zn.until <= nowFrame) { m.compose(zero, q, zero); zoneMeshRef.current.setMatrixAt(i, m); continue }
+        if (!zn || zn.until <= nowFrame || zn.line) { m.compose(zero, q, zero); zoneMeshRef.current.setMatrixAt(i, m); continue }
         scl.set(zn.r, 1, zn.r); seg.set(zn.x, py + 1.1, zn.z)
         m.compose(seg, q, scl); zoneMeshRef.current.setMatrixAt(i, m)
         zoneMeshRef.current.setColorAt(i, markCol.setHex(zn.color))
@@ -3723,6 +3738,20 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       markMeshRef.current.count = n
       markMeshRef.current.instanceMatrix.needsUpdate = true
       if (markMeshRef.current.instanceColor) markMeshRef.current.instanceColor.needsUpdate = true
+    }
+    // LINES (step 5): a standing sheet along the line, in its status's colour; it flickers like flame
+    if (lineMeshRef.current) {
+      const zs = statusZones.current, py = posRef.current?.y ?? 0
+      for (let i = 0; i < ZONE_MAX; i++) {
+        const zn = zs[i]
+        if (!zn || zn.until <= nowFrame || !zn.line) { m.compose(zero, q, zero); lineMeshRef.current.setMatrixAt(i, m); continue }
+        qT.setFromAxisAngle(AXIS_Y, Math.atan2(zn.line.ux, zn.line.uz) - Math.PI / 2)
+        scl.set(zn.line.half * 2, 1.4 + Math.sin(nowFrame * 0.012 + i) * 0.12, 0.35); seg.set(zn.x, py + 0.7, zn.z)
+        m.compose(seg, qT, scl); lineMeshRef.current.setMatrixAt(i, m)
+        lineMeshRef.current.setColorAt(i, markCol.setHex(zn.color))
+      }
+      lineMeshRef.current.instanceMatrix.needsUpdate = true
+      if (lineMeshRef.current.instanceColor) lineMeshRef.current.instanceColor.needsUpdate = true
     }
     // TRAPS (step 4): a flat plate in its status's colour; it breathes so it reads as armed
     if (trapMeshRef.current) {
@@ -3845,6 +3874,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       <instancedMesh ref={zoneMeshRef} args={[undefined, undefined, ZONE_MAX]} frustumCulled={false}>
         <cylinderGeometry args={[1, 1, 2.2, 28, 1, true]} />
         <meshBasicMaterial transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={lineMeshRef} args={[undefined, undefined, ZONE_MAX]} frustumCulled={false}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial transparent opacity={0.4} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
       </instancedMesh>
       <instancedMesh ref={trapMeshRef} args={[undefined, undefined, TRAP_MAX]} frustumCulled={false}>
         <cylinderGeometry args={[1, 1, 0.06, 20]} />

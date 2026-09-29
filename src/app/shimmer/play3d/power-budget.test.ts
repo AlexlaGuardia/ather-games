@@ -26,7 +26,8 @@ for (const id of casts) {
 }
 
 // ── the model is not blind: it sees the shapes it exists to catch ──
-const fw = castForMove('firewall')
+// a synthetic damage FIELD (Firewall itself is a no-damage line since 09-29, move-jobs step 5)
+const fw = { ...castForMove('firewall'), archetype: 'field' as const }
 ok(loadoutDamage(DEFAULT_GUN(), [{ ...fw, fieldDps: 30 }], 'horde-rich') > loadoutDamage(DEFAULT_GUN(), [{ ...fw, fieldDps: 30 }], 'boss-rich'), 'a field is worth more in a horde (it would catch an AoE outlier)')
 const inf = castForMove('forge-fist')
 // a PURE multiplier (no on-hit status): since 09-29 Forge Fist itself lays Vulnerable, so the guard strips that

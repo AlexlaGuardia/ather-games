@@ -101,6 +101,8 @@ export function loadoutDamage(gun: WeaponDef, specs: readonly CastSpec[], fight:
       else if (onHit === 'burning') burnUntil = Math.max(burnUntil, t + (k.c.surgeSecs ?? 0) + (k.c.areaSecs ?? 0))
       else if (k.c.archetype === 'infusion' && (k.c.surgeMult ?? 1) >= mult) { mult = k.c.surgeMult ?? 1; multUntil = t + (k.c.surgeSecs ?? 0) }
       if (k.c.archetype === 'status' && k.c.statuses?.includes('vulnerable')) vulnUntil = Math.max(vulnUntil, t + (k.c.areaSecs ?? 0))
+      // a burning zone (Firestorm, step 5) is judged as if the target stood in it the whole time: the worst case
+      if (k.c.archetype === 'status' && k.c.statuses?.includes('burning')) burnUntil = Math.max(burnUntil, t + (k.c.areaSecs ?? 0))
     }
     for (const k of casts) if (t < k.fieldUntil) dmg += k.field * BUDGET.dt
     // the gun fires whenever it has mana; its damage is mana-bound or time-bound, whichever bites
