@@ -56,6 +56,7 @@ interface Keeper {
   struck: number
   events: unknown[]
   goneAt: number | null
+  yaw: number
   /** fallen in this run: out of the flood's reach until the run ends (co-op: the run ends when EVERY keeper is down) */
   down: boolean
 }
@@ -115,13 +116,13 @@ export function snapshotFor(r: Room, k: Keeper) {
     devicePlanted: s.devicePlanted, studied: s.studied,
     // strike damage is HANDED OVER with the snapshot and cleared here (an ack would lose what landed in between)
     you: { ...k.wallet, struck: takeStruck(k) },
-    party: r.keepers.map(o => ({ id: o.id, name: o.name, down: o.down, x: +o.pos.x.toFixed(2), z: +o.pos.z.toFixed(2), y: +o.pos.y.toFixed(2), here: o.ws !== null })),
+    party: r.keepers.map(o => ({ id: o.id, name: o.name, down: o.down, x: +o.pos.x.toFixed(2), z: +o.pos.z.toFixed(2), y: +o.pos.y.toFixed(2), yaw: +o.yaw.toFixed(2), here: o.ws !== null })),
     events: k.events.splice(0),
   }
 }
 
 type Msg =
-  | { t: 'pos'; x: number; y: number; z: number }
+  | { t: 'pos'; x: number; y: number; z: number; yaw?: number }
   | { t: 'hit'; id: number; dmg: number; crit?: boolean }
   | { t: 'mend'; win: number; dt: number }
   | { t: 'chest'; spot: number; dt: number }
@@ -137,7 +138,7 @@ const num = (v: unknown, lo: number, hi: number, d = 0): number => (typeof v ===
 export function handle(r: Room, k: Keeper, m: Msg): unknown | null {
   const s = r.s
   switch (m.t) {
-    case 'pos': k.pos = { x: num(m.x, -1, 400), y: num(m.y, -50, 200), z: num(m.z, -1, 400) }; return null
+    case 'pos': k.pos = { x: num(m.x, -1, 400), y: num(m.y, -50, 200), z: num(m.z, -1, 400) }; k.yaw = num(m.yaw, -100, 100); return null
     case 'struck-ack': k.struck = 0; return null
     case 'down': {
       k.down = true
@@ -180,6 +181,49 @@ export function handle(r: Room, k: Keeper, m: Msg): unknown | null {
   return null
 }
 
+// ── FIND OTHERS: the matchmaking queue (Alex 09-28) ─────────────────────────────────────────────────────────────
+// A keeper who asks to find others waits here. Three waiting → matched at once; two who have waited `fillSec` → go
+// as two; anyone may press GO NOW and take whoever is waiting (even nobody: a room of one). A match is just a fresh
+// room code, and the matched connect to it exactly as a party would (`?party=CODE`).
+interface Waiter { id: string; name: string; ws: WebSocket; since: number }
+const QUEUE: Waiter[] = []
+export const QUEUE_OPTS = { fillSec: 25, size: MAX_KEEPERS }
+const matchCode = () => 'MX' + Math.random().toString(36).slice(2, 7).toUpperCase().replace(/[^A-Z0-9]/g, 'Q')
+function tellQueue() {
+  for (const w of QUEUE) w.ws.send(JSON.stringify({ t: 'queue', n: QUEUE.length, need: QUEUE_OPTS.size, waited: Math.round((Date.now() - w.since) / 1000) }))
+}
+export function makeMatch(ws: Waiter[]): string {
+  const code = matchCode()
+  const names = ws.map(w => w.name)
+  for (const w of ws) {
+    const i = QUEUE.indexOf(w); if (i >= 0) QUEUE.splice(i, 1)
+    w.ws.send(JSON.stringify({ t: 'matched', code, names }))
+    try { w.ws.close() } catch { /* gone */ }
+  }
+  console.log(`[breach] matched ${names.join(' + ')} → ${code}`)
+  tellQueue()
+  return code
+}
+export function queueTick(now = Date.now()) {
+  while (QUEUE.length >= QUEUE_OPTS.size) makeMatch(QUEUE.slice(0, QUEUE_OPTS.size))
+  if (QUEUE.length >= 2 && now - QUEUE[0].since >= QUEUE_OPTS.fillSec * 1000) makeMatch(QUEUE.slice(0, QUEUE_OPTS.size))
+}
+function joinQueue(ws: WebSocket, id: string, name: string) {
+  const old = QUEUE.findIndex(w => w.id === id)
+  if (old >= 0) { try { QUEUE[old].ws.close() } catch { /* gone */ } QUEUE.splice(old, 1) }   // one place in line per keeper
+  const me: Waiter = { id, name, ws, since: Date.now() }
+  QUEUE.push(me)
+  console.log(`[queue+] ${name} (${QUEUE.length} waiting)`)
+  ws.on('message', (d) => {
+    let m: { t?: string }
+    try { m = JSON.parse(String(d)) } catch { return }
+    if (m.t === 'go' && QUEUE.includes(me)) makeMatch([me, ...QUEUE.filter(w => w !== me)].slice(0, QUEUE_OPTS.size))
+  })
+  ws.on('close', () => { const i = QUEUE.indexOf(me); if (i >= 0) { QUEUE.splice(i, 1); tellQueue() } })
+  tellQueue()
+  queueTick()
+}
+
 // ── the socket ──────────────────────────────────────────────────────────────────────────────────────────────────
 function cookie(req: IncomingMessage, name: string): string | undefined {
   const raw = req.headers.cookie ?? ''
@@ -194,13 +238,14 @@ export function startServer(port = PORT) {
     const url = new URL(req.url ?? '/', 'http://x')
     const claims = readSessionToken(cookie(req, SESSION_COOKIE))
     const code = partyCode(url.searchParams.get('party'))
+    if (claims?.user_id && url.searchParams.get('queue') === 'breach') { joinQueue(ws, claims.user_id, claims.username ?? 'Keeper'); return }
     if (!claims?.user_id || !code) { ws.send(JSON.stringify({ t: 'refused', why: !claims ? 'sign in to play together' : 'no party' })); ws.close(); return }
     let r = ROOMS.get(code)
     if (!r || r.s.over) { console.log(`[breach] new room ${code} (${!r ? 'none' : 'previous run over'})`); r = newRoom(code); ROOMS.set(code, r) }
     let k = r.keepers.find(x => x.id === claims.user_id)
     if (!k) {
       if (r.keepers.length >= MAX_KEEPERS) { ws.send(JSON.stringify({ t: 'refused', why: 'three to a door: this party\'s Breach is full' })); ws.close(); return }
-      k = { id: claims.user_id, name: claims.username ?? 'Keeper', ws: null, pos: { x: MAP.start.x, z: MAP.start.z, y: MAP.start.h }, wallet: freshWallet(r.s), struck: 0, events: [], goneAt: null, down: false }
+      k = { id: claims.user_id, name: claims.username ?? 'Keeper', ws: null, pos: { x: MAP.start.x, z: MAP.start.z, y: MAP.start.h }, wallet: freshWallet(r.s), struck: 0, events: [], goneAt: null, down: false, yaw: 0 }
       r.keepers.push(k)
     }
     k.ws = ws; k.goneAt = null; r.emptySince = null
@@ -222,6 +267,7 @@ export function startServer(port = PORT) {
   const DT = 1 / TICK_HZ
   setInterval(() => {
     const now = Date.now()
+    queueTick(now)
     for (const [code, r] of ROOMS) {
       // a dropped keeper stops drawing the flood at once (`tickRoom` steps only the connected); their wallet waits
       // for a reconnect. A room with nobody connected for 60s is torn down.

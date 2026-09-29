@@ -6,7 +6,7 @@
  *   set -a; . ./.env; set +a; npx tsx server/breach-server.test.mts
  */
 import WebSocket from 'ws'
-import { startServer, MAX_KEEPERS } from './breach-server.mts'
+import { startServer, MAX_KEEPERS, QUEUE_OPTS } from './breach-server.mts'
 import { mintSession, SESSION_COOKIE } from '../src/lib/accounts/session'
 
 let pass = 0
@@ -71,6 +71,49 @@ try {
   send(b, { t: 'down' }); send(c, { t: 'down' }); await sleep(400)
   ok(b.msgs.some(m => m.t === 'snap' && m.events?.some((e: any) => e.t === 'over')) || lastSnap(b).over, '★ every keeper down: the run is over for the party')
   for (const x of [a, b, c, d, anon]) x.ws.close()
+
+  // ── FIND OTHERS: the queue ─────────────────────────────────────────────────────────────────────
+  const queue = (user: string, name: string, session = true) => new Promise<Client>((res) => {
+    const headers: Record<string, string> = session ? { cookie: `${SESSION_COOKIE}=${mintSession(user, name)}` } : {}
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/?queue=breach`, { headers })
+    const msgs: any[] = []
+    ws.on('message', (dd) => msgs.push(JSON.parse(String(dd))))
+    const cl: Client = { ws, msgs, last: () => msgs[msgs.length - 1], snaps: () => [] }
+    ws.on('open', () => res(cl)); ws.on('error', () => res(cl))
+  })
+  const matched = (cl: Client) => cl.msgs.find(m => m.t === 'matched')
+  const q1 = await queue('u_q1', 'Q1'), q2 = await queue('u_q2', 'Q2')
+  await sleep(300)
+  ok(q2.msgs.some(m => m.t === 'queue' && m.n === 2) && !matched(q1), 'two waiting are told "2 of 3" and not matched yet')
+  const q3 = await queue('u_q3', 'Q3')
+  await sleep(400)
+  const m1 = matched(q1), m2 = matched(q2), m3 = matched(q3)
+  ok(!!m1 && m1.code === m2?.code && m2?.code === m3?.code, `★★ the third arrival completes a match: all three get one code (${m1?.code})`)
+  ok(m1?.names?.length === 3, `and the names (${m1?.names?.join(', ')})`)
+  // the code is a room: all three connect as a party would
+  const r1 = await connect('u_q1', 'Q1', m1.code), r2 = await connect('u_q2', 'Q2', m1.code)
+  await sleep(500)
+  ok(lastSnap(r1)?.party.length === 2 && lastSnap(r2)?.party.length === 2, '★ the matched connect to one Breach with the code')
+  r1.ws.close(); r2.ws.close()
+  // two, and the wait runs out
+  QUEUE_OPTS.fillSec = 1
+  const q4 = await queue('u_q4', 'Q4'), q5 = await queue('u_q5', 'Q5')
+  await sleep(1800)
+  ok(!!matched(q4) && matched(q4).code === matched(q5)?.code, '★ two who have waited long enough go as two')
+  QUEUE_OPTS.fillSec = 25
+  // GO NOW, alone
+  const q6 = await queue('u_q6', 'Q6')
+  await sleep(200)
+  q6.ws.send(JSON.stringify({ t: 'go' }))
+  await sleep(300)
+  ok(matched(q6)?.names?.length === 1, '★ Go now takes whoever is waiting, even nobody (a room of one)')
+  // cancel: a closed waiter leaves the line
+  const q7 = await queue('u_q7', 'Q7'); await sleep(150); q7.ws.close(); await sleep(150)
+  const q8 = await queue('u_q8', 'Q8'); await sleep(200)
+  ok(q8.msgs.some(m => m.t === 'queue' && m.n === 1), 'a keeper who cancels leaves the line (the next arrival waits alone)')
+  q8.ws.close()
+  const qx = await queue('u_x', 'Nobody', false); await sleep(200)
+  ok(qx.msgs[0]?.t === 'refused', 'no session, no place in line')
 } finally {
   wss.close()
 }
