@@ -26,17 +26,22 @@ import type * as THREE from 'three'
 import { getGardenWorld, WORLD_ZONE_ID } from '../world/garden-world'
 import { ZONES, getZone } from '../world/zones'
 import { map as M } from './tokens'
+import { EXP_ZONE } from './expedition'
 import { HearthFrame, HearthNote } from '../ui/hearth'
 
-const VOID = -1, WATER_ID = 8, WARP_ID = 14, MIST_ID = 31, WALL_ID = 34
+const VOID = -1, WATER_ID = 8, WARP_ID = 14, MIST_ID = 31, WALL_ID = 34, BUILDING_ID = 103
 
 const TILE_COLORS: { match: (v: number) => boolean; color: string }[] = [
   { match: v => (v & 0xFF) === WARP_ID, color: M.warp },
   { match: v => (v & 0xFF) === MIST_ID, color: M.mist },
   { match: v => (v & 0xFF) === WATER_ID, color: M.water },
   { match: v => (v & 0xFF) === WALL_ID, color: M.wall },
+  // ⚠ until 09-29 the mortal block fell through to grass: a town's buildings and the expedition's maze walls were
+  // invisible on the map
+  { match: v => (v & 0xFF) === BUILDING_ID, color: M.building },
 ]
-const tileColor = (v: number) => TILE_COLORS.find(t => t.match(v))?.color ?? M.grass
+/** an expedition's floor is worked stone, everywhere else the ground is grass */
+const tileColor = (v: number, zoneId?: string) => TILE_COLORS.find(t => t.match(v))?.color ?? (zoneId === EXP_ZONE ? M.stone : M.grass)
 
 // Doors grouped by their interior, clustered by proximity (a 2-wide door = one cluster;
 // the caverns' two far-apart mouths = two clusters = an underground ROUTE).
@@ -135,7 +140,7 @@ export function WorldMap({ zoneId, gridRef, posRef, yawRef, onClose }: {
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
       const v = grid[r][c]
       if (v === VOID) continue
-      ctx.fillStyle = tileColor(v)
+      ctx.fillStyle = tileColor(v, zoneId)
       ctx.fillRect(c * px, r * px, px, px)
     }
     if (zoneId === WORLD_ZONE_ID) {
@@ -224,7 +229,7 @@ export function MiniMap({ zoneId, gridRef, posRef, yawRef, onExpand, box = { top
       for (let r = 0; r < MINI_TILES * 2; r++) for (let c = 0; c < MINI_TILES * 2; c++) {
         const v = grid[r0 + r]?.[c0 + c]
         if (v === undefined || v === VOID) continue
-        ctx.fillStyle = tileColor(v)
+        ctx.fillStyle = tileColor(v, zoneId)
         ctx.fillRect(c * px, r * px, px + 0.5, px + 0.5)
       }
       // doors in view (world mode)

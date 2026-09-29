@@ -53,6 +53,11 @@ export const terrain = {
   warpGlow: WARP_GLOW,
   warpBeacon: WARP_GOLD,
   mist: '#eef4ff',
+  /** THE EXPEDITION (09-29): worked stone underfoot, weathered stone walls. Not the town's brick: a maze is not a
+   *  street, and grass underfoot read as a garden hedge-maze. What these places ARE is open canon; this is only stone. */
+  expFloor: map.stone,
+  expWall: '#6e665c',
+  expWallTop: '#7f776b',
   /** Edit mode only: the cells that are nothing. */
   void: '#39406b',
 } as const

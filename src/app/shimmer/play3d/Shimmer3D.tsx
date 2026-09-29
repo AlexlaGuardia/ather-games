@@ -271,6 +271,8 @@ const isWallId = (cell: number) => { const id = cell & 0xFF; return id === WALL_
 const HOLD_ZONE = 'the-hold'
 /** seconds between a Breach run ending and the keeper standing back at the Station, lobby open (09-29) */
 const RETURN_SECS = 8
+/** the expedition's surfaces (a stable object: ZoneGeometry is memoised) */
+const EXP_LOOK = { floor: S.terrain.expFloor, building: S.terrain.expWall, buildingTop: S.terrain.expWallTop }
 /** The Passage draws its own rock and fixtures (`PassageScene`) and has its own light. */
 const PASSAGE_ZONE = 'the-passage'
 /** Rune Hold draws its own stone, streets and landing plaza (`RuneHoldScene`) over the town's grid. */
@@ -1252,8 +1254,10 @@ const WorldFlora = memo(function WorldFlora({ heights }: { heights: number[][] }
 // memo: the terrain is the heaviest node in the scene and depends on nothing that ticks. Without it,
 // every channel tick (~11 Hz) rebuilt the whole floor/wall/water/mist JSX tree. All five props are
 // stable (a ref, a ref's array, a version int, a useCallback, a bool), so this skips cleanly.
-const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick, ownSolids, ownWarps, noBeacon, ownGround }: {
+const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, paint, editing, center, mountTick, ownSolids, ownWarps, noBeacon, ownGround, look }: {
   gridRef: React.RefObject<number[][]>; heights: number[][]; version: number
+  /** a zone that is not a garden or a town repaints its ground and its mortal blocks (the expedition's stone, 09-29) */
+  look?: { floor: string; building: string; buildingTop: string }
   /** THE HOLD draws its own solids (parapets and pillars at their floor's height — `HoldScene`); the
    *  shared brown block is seated at ground level and would sink into a raised floor */
   ownSolids?: boolean
@@ -1285,7 +1289,7 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
     <>
       {chunks.map(({ key, b: { floors, walls, waters, voids, warps, mists, wallTops, buildings, buildingTops } }) => (
         <group key={key}>
-          <FloorTerrain floors={floors} heights={heights} version={version} paint={paint} editing={editing} />
+          <FloorTerrain floors={floors} heights={heights} version={version} paint={paint} editing={editing} color={look?.floor} />
           {/* solid clouds = the walls. Only the SHELL is boxed; the buried interior is a top face —
               see bucketsRect. Same silhouette, a sixth of the triangles, no shadow pass. */}
           <Tiles cells={walls} size={[1, 1.3, 1]} y={0.55} color={S.terrain.wall} paint={paint} editing={editing} />
@@ -1293,8 +1297,8 @@ const ZoneGeometry = memo(function ZoneGeometry({ gridRef, heights, version, pai
           {/* brown building blocks — the mortal side's masonry. Bumped to 3.2 (2026-08-25) so a
               storefront clears a ~1.7 keeper by a full head and a town reads as a skyline, not a
               hedge maze. y = h/2 - 0.1 keeps the base seated ~0.1 into the ground; tops ride the top. */}
-          {!ownSolids && <Tiles cells={buildings} size={[1, 3.2, 1]} y={1.5} color={S.terrain.building} paint={paint} editing={editing} />}
-          {!ownSolids && <WallTops cells={buildingTops} y={3.1} color={S.terrain.buildingTop} />}
+          {!ownSolids && <Tiles cells={buildings} size={[1, 3.2, 1]} y={1.5} color={look?.building ?? S.terrain.building} paint={paint} editing={editing} />}
+          {!ownSolids && <WallTops cells={buildingTops} y={3.1} color={look?.buildingTop ?? S.terrain.buildingTop} />}
           <Tiles cells={waters} size={[1, 0.3, 1]} y={-0.15} color={S.terrain.water} opacity={0.85} paint={paint} editing={editing} />
           {/* cloud mist = walkable encounter areas: land + a wispy translucent overlay */}
           <FloorTerrain floors={mists} heights={heights} version={version} paint={paint} editing={editing} />
@@ -4980,7 +4984,7 @@ const Scene = memo(function Scene(props: {
     <>
       <GardenAtmosphere zoneId={props.atmosZone} />
       <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} />
-      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? RUNE_HOLD_DOOR_KEYS : undefined} ownGround={props.zone.id === RUNE_HOLD_ZONE ? SMOOTH_TILES : undefined} />
+      <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? RUNE_HOLD_DOOR_KEYS : undefined} ownGround={props.zone.id === RUNE_HOLD_ZONE ? SMOOTH_TILES : undefined} look={props.zone.id === EXP_ZONE ? EXP_LOOK : undefined} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && n.kind !== 'stall' && n.kind !== 'cabinet' && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.zone.id === PASSAGE_ZONE && <PassageScene isOwner={props.isOwner} />}
       {props.zone.id === STATION_ZONE && <StationScene />}

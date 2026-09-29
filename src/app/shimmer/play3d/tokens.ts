@@ -201,6 +201,10 @@ export const map = {
   grass:     '#5da24e',
   water:     '#3aa0d6',
   wall:      '#e8edf6',
+  /** the mortal block (a town's buildings, an expedition's maze walls): drawn as a wall, never as grass (09-29) */
+  building:  '#6b5a48',
+  /** an expedition's worked-stone floor */
+  stone:     '#9a9282',
   mist:      '#cfd9f2',
   warp:      '#e8c45a',
   door:      '#ffd76a',
