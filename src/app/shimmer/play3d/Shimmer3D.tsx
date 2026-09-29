@@ -8993,7 +8993,16 @@ export default function Shimmer3D() {
       for (const id of Object.keys(statusRef.current)) { const on = statusesOn(statusRef.current, id, now); if (on.length) out[id] = on }
       return out
     }
-    return () => { delete w.__cast; delete w.__foes }
+    // the live conjured stone (cells + each walkable cell's base/top), and put the keeper somewhere (headless ledge checks)
+    const wc = w as unknown as { __conj?: () => unknown; __at?: (x?: number, y?: number, z?: number) => { x: number; y: number; z: number } | null }
+    wc.__conj = () => liveCells(conjuredRef.current, performance.now())
+    wc.__at = (x?: number, y?: number, z?: number) => {
+      const p = posRef.current
+      if (!p) return null
+      if (x !== undefined && y !== undefined && z !== undefined) p.set(x, y, z)
+      return { x: p.x, y: p.y, z: p.z }
+    }
+    return () => { delete w.__cast; delete w.__foes; delete wc.__conj; delete wc.__at }
   }, [isOwner, castSlot])
 
   const save = useCallback(async () => {
