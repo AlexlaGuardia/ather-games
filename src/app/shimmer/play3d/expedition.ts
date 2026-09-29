@@ -40,6 +40,8 @@ export interface ExpLayout {
   grid: number[][]
   heights: number[][]
   start: { x: number; z: number }
+  /** which way the start cell opens: the keeper arrives facing down the corridor, never into a wall */
+  startDir: 'right' | 'down'
   exit: { x: number; z: number }
   elites: { x: number; z: number }[]
   caches: ExpCache[]
@@ -152,7 +154,8 @@ export function generateExpedition(seed: number): ExpLayout {
   // 8. the exit: a warp tile in the far cell
   const exit = { x: centre(far[0]), z: centre(far[1]) }
   grid[exit.z][exit.x] = EXP_WARP
-  return { seed, grid, heights, start: { x: centre(0), z: centre(0) }, exit, elites, caches, stair }
+  const startDir: 'right' | 'down' = joined.has(key(0, 0, 1, 0)) ? 'right' : 'down'
+  return { seed, grid, heights, start: { x: centre(0), z: centre(0) }, startDir, exit, elites, caches, stair }
 }
 
 // ── the loot ──────────────────────────────────────────────────────────────────────────────────────────────────

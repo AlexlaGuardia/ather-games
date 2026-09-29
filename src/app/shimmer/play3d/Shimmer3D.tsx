@@ -8805,7 +8805,7 @@ export default function Shimmer3D() {
     else if (card.id === 'expedition') {
       const L = rerollExpedition(((Date.now() & 0xffffff) ^ 0x5eed) || 1)
       resetExpRun(L)
-      onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EXP_ZONE, toX: L.start.x, toY: L.start.z, direction: 'down' })
+      onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EXP_ZONE, toX: L.start.x, toY: L.start.z, direction: L.startDir })
     }
   }, [closeDepartures, onWarp])
   const lobbyRef = useRef(lobby); lobbyRef.current = lobby
