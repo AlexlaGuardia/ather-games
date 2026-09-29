@@ -8119,6 +8119,18 @@ export default function Shimmer3D() {
     }
     return () => { delete w.__coop }
   }, [isOwner])
+  // …and jump to a named Breach spot (the owner console's own Roof/Office/Lobby buttons), for staging headless checks
+  useEffect(() => {
+    if (!isOwner) return
+    const w = window as unknown as { __holdJump?: (label: string) => boolean }
+    w.__holdJump = (label: string) => {
+      const sp = holdSpots(HOLD_MAP).find(x => x.label === label)
+      if (!sp || zoneIdRef.current !== HOLD_ZONE) return false
+      posRef.current?.set(sp.x, sp.y * STEP, sp.z)
+      return true
+    }
+    return () => { delete w.__holdJump }
+  }, [isOwner])
 
   const save = useCallback(async () => {
     setSaveMsg('saving…')
