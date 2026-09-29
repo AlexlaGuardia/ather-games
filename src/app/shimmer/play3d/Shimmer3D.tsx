@@ -9238,8 +9238,8 @@ export default function Shimmer3D() {
           click to look around <HearthPillSoft face={HUD_FACE}>· Esc releases</HearthPillSoft></HearthPill>
       )}
 
-      {/* minimap — persistent, click (or M) expands to the full map */}
-      {!battle && !editMode && !showMap && !menuOpen && (
+      {/* minimap — persistent, click (or M) expands to the full map (not under the Departures lobby: its Back sits there) */}
+      {!battle && !editMode && !showMap && !menuOpen && !departuresOpen && (
         <>
           <MiniMap box={hudMapBox(hudSize)} zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onExpand={() => { openCursorUI(); setShowMap(true) }} />
           <HearthMapFrame face={HUD_FACE} box={hudMapBox(hudSize)} />
