@@ -10,9 +10,9 @@
 //   · YOUR THREE — you and your party, standing together; an empty place is an open seat (three to a door, the chord)
 //   · WHERE — the berths. A seated berth lists what its world offers (the Breach; the colossus raid once its road is
 //     read); an empty berth is an empty pad, which is canon's visible cap. Every lock says why.
-//   · HOW — go alone (works today) · go together · find others. The last two stay LOCKED, said out loud, until the
-//     co-op fight exists: a party sent into the Breach today would each fight a separate flood, and that is worse
-//     than a closed option.
+//   · HOW — go alone · go together (your party, one shared Breach: `server/breach-server.mts`) · find others (the
+//     matchmaking line; the board turns into a finding view until matched). A destination whose fight is solo
+//     (the Slack) says so and offers only going alone.
 // Renders and calls back. Launching is the host's `onWarp`, so the owner gate and the road gate are the SAME ones
 // the gangway and the roof door use.
 import { useState } from 'react'
@@ -31,6 +31,9 @@ export interface Destination {
 }
 
 export const PARTY_SEATS = 3
+export type GoMode = 'alone' | 'together' | 'others'
+/** the finding view's state, owned by the host (it holds the queue socket) */
+export interface Finding { n: number; need: number; waited: number; names?: string[] }
 
 function Keeper({ name, you, empty, index }: { name?: string; you?: boolean; empty?: boolean; index: number }) {
   const tone = empty ? 'rgba(58,39,22,.18)' : you ? H.ember : H.sky
@@ -59,7 +62,7 @@ function Keeper({ name, you, empty, index }: { name?: string; you?: boolean; emp
   )
 }
 
-export function DeparturesPanel({ you, party, members, destinations, berths, onLaunch, onInviteFriends }: {
+export function DeparturesPanel({ you, party, members, destinations, berths, onLaunch, onInviteFriends, finding, onFindOthers, onGoNow, onCancelFind }: {
   you: string
   party: string | null
   /** the other keepers in your party instance, by name */
@@ -68,13 +71,37 @@ export function DeparturesPanel({ you, party, members, destinations, berths, onL
   berths: number
   onLaunch: (d: Destination, together: boolean) => void
   onInviteFriends: () => void
+  /** set while this keeper waits in the Find others line */
+  finding: Finding | null
+  onFindOthers: (d: Destination) => void
+  onGoNow: () => void
+  onCancelFind: () => void
 }) {
   const open = destinations.filter(d => !d.locked)
   const [pick, setPick] = useState<string | null>(open[0]?.id ?? null)
-  const [alone, setAlone] = useState(!party)   // in a party, the default is together
+  const [mode, setMode] = useState<GoMode>(party ? 'together' : 'alone')   // in a party, the default is together
   const chosen = destinations.find(d => d.id === pick && !d.locked) ?? null
   const seats = [you, ...members].slice(0, PARTY_SEATS)
   const together = !!party && members.length > 0
+  if (finding) {
+    const mins = Math.floor(finding.waited / 60), secs = String(finding.waited % 60).padStart(2, '0')
+    return (
+      <div className="px-4 pt-4 pb-4 hk-ink text-center" style={{ ...hearthBody }} data-panel="finding">
+        <div className="flex justify-center items-end gap-1 pt-1 pb-2">
+          {Array.from({ length: PARTY_SEATS }, (_, i) => (
+            <Keeper key={i} index={i} name={i === 0 ? you : i < finding.n ? 'found' : undefined} you={i === 0} empty={i >= Math.max(1, finding.n)} />
+          ))}
+        </div>
+        <div className="text-[16px] font-extrabold" style={hearthDisplay}>Finding others…</div>
+        <div className="text-[12px] hk-soft mt-1 tabular-nums">{finding.n} of {finding.need} · {mins}:{secs}</div>
+        <div className="text-[11px] hk-faint mt-1">Two who have waited a little go together. Go now to start with whoever is here.</div>
+        <div className="flex justify-center gap-2 mt-4">
+          <HearthButton onClick={onCancelFind}>Cancel</HearthButton>
+          <HearthButton primary onClick={onGoNow}>Go now</HearthButton>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="px-4 pt-4 pb-4 hk-ink" style={{ ...hearthBody }} data-panel="departures">
       {/* YOUR THREE */}
@@ -127,40 +154,39 @@ export function DeparturesPanel({ you, party, members, destinations, berths, onL
 
       {/* HOW */}
       <div className="hk-label text-[13px] hk-soft mt-3 mb-1">How</div>
-      <label className="flex items-center gap-2 text-[13px] font-bold cursor-pointer select-none">
-        <input type="checkbox" checked={alone} onChange={(e) => setAlone(e.target.checked)} style={{ accentColor: H.ember, width: 16, height: 16 }} />
-        Go alone
-      </label>
-      <div className="flex flex-col gap-1 mt-1.5 text-[12px]">
-        {(() => {
-          const can = !!party && !!chosen?.coop
-          const why = !party ? 'start a party first (Invite friends)' : chosen && !chosen.coop ? `${chosen.name} is a solo fight for now` : ''
-          return (
-            <div className="flex items-center gap-2" style={{ opacity: can ? 1 : 0.6 }} data-together={can ? 'open' : 'locked'}>
-              <span aria-hidden>{can ? (alone ? '○' : '●') : '🔒'}</span><span className="font-bold">Go together</span>
-              <span className="hk-faint">{can ? (alone ? 'untick “Go alone” to take your party' : `your party, into one Breach (${party})`) : why}</span>
-            </div>
-          )
-        })()}
-        <div className="flex items-center gap-2" style={{ opacity: 0.6 }}>
-          <span aria-hidden>🔒</span><span className="font-bold">Find others</span>
-          <span className="hk-faint">matchmaking comes next</span>
-        </div>
-        <button className="hk-btn self-start px-3 py-1 text-[12px] mt-0.5" onClick={onInviteFriends}>👥 Invite friends</button>
-      </div>
+      {(() => {
+        const canTogether = !!party && !!chosen?.coop
+        const canOthers = !!chosen?.coop
+        const rows: { id: GoMode; label: string; ok: boolean; note: string }[] = [
+          { id: 'alone', label: 'Go alone', ok: true, note: '' },
+          { id: 'together', label: 'Go together', ok: canTogether, note: !party ? 'start a party first (Invite friends)' : chosen && !chosen.coop ? `${chosen.name} is a solo fight for now` : `your party, into one Breach (${party})` },
+          { id: 'others', label: 'Find others', ok: canOthers, note: canOthers ? 'queue with other keepers, up to three' : chosen ? `${chosen.name} is a solo fight for now` : '' },
+        ]
+        return (
+          <div className="flex flex-col gap-1 text-[12px]" role="radiogroup">
+            {rows.map(rw => (
+              <label key={rw.id} className="flex items-center gap-2 select-none" style={{ opacity: rw.ok ? 1 : 0.55, cursor: rw.ok ? 'pointer' : 'not-allowed' }} data-mode={rw.id}>
+                <input type="radio" name="go-mode" disabled={!rw.ok} checked={mode === rw.id} onChange={() => rw.ok && setMode(rw.id)} style={{ accentColor: H.ember, width: 15, height: 15 }} />
+                <span className="font-bold text-[13px]">{rw.label}</span>
+                {rw.note && <span className="hk-faint">{rw.note}</span>}
+              </label>
+            ))}
+            <button className="hk-btn self-start px-3 py-1 text-[12px] mt-1" onClick={onInviteFriends}>👥 Invite friends</button>
+          </div>
+        )
+      })()}
 
       {(() => {
-        const together = !alone && !!party && !!chosen?.coop
-        const can = !!chosen && (alone || together)
+        const ok = !!chosen && (mode === 'alone' || (mode === 'together' && !!party && !!chosen.coop) || (mode === 'others' && !!chosen.coop))
+        const label = !chosen ? 'Nothing open to launch' : mode === 'together' ? `Launch together · ${chosen.name}` : mode === 'others' ? `Find others · ${chosen.name}` : `Launch · ${chosen.name}`
         return (
-          <>
-            <div className="flex justify-end mt-4">
-              <HearthButton primary disabled={!can} onClick={() => chosen && can && onLaunch(chosen, together)}>
-                {!chosen ? 'Nothing open to launch' : together ? `Launch together · ${chosen.name}` : `Launch · ${chosen.name}`}
-              </HearthButton>
-            </div>
-            {!alone && !together && chosen && <div className="text-[11px] hk-faint text-right mt-1">{!party ? 'You are not in a party. Tick “Go alone”, or invite friends first.' : `${chosen.name} is solo for now. Tick “Go alone”.`}</div>}
-          </>
+          <div className="flex justify-end mt-4">
+            <HearthButton primary disabled={!ok} onClick={() => {
+              if (!chosen || !ok) return
+              if (mode === 'others') onFindOthers(chosen)
+              else onLaunch(chosen, mode === 'together')
+            }}>{label}</HearthButton>
+          </div>
         )
       })()}
     </div>

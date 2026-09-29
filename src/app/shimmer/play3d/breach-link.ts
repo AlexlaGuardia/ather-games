@@ -9,7 +9,7 @@
 // One link per page (`coop`), the same way there is one game per page.
 import type { HoldState, FloodBody, HoldLoot } from './hold'
 
-export interface CoopPartyMember { id: string; name: string; x: number; z: number; y: number; here: boolean; down: boolean }
+export interface CoopPartyMember { id: string; name: string; x: number; z: number; y: number; yaw?: number; here: boolean; down: boolean }
 export interface CoopEvents {
   onStruck?: (dmg: number) => void
   onRound?: (n: number) => void
@@ -20,6 +20,8 @@ export interface CoopEvents {
   onOver?: (round: number, kills: number) => void
   onRefused?: (why: string) => void
   onStatus?: (s: 'connecting' | 'live' | 'lost') => void
+  /** every snapshot: who is in the fight (the page draws the others from this) */
+  onParty?: (party: CoopPartyMember[], you: string | null) => void
 }
 
 type Snap = {
@@ -56,6 +58,7 @@ export class BreachLink {
   ws: WebSocket | null = null
   party: CoopPartyMember[] = []
   status: 'connecting' | 'live' | 'lost' = 'connecting'
+  you: string | null = null
   private lastPos = 0
   constructor(readonly code: string, readonly mirror: HoldState, private ev: CoopEvents) {}
 
@@ -68,12 +71,13 @@ export class BreachLink {
     ws.onmessage = (e) => {
       let m: { t: string; [k: string]: unknown }
       try { m = JSON.parse(String(e.data)) } catch { return }
-      if (m.t === 'welcome') this.setStatus('live')
+      if (m.t === 'welcome') { this.you = String(m.you ?? ''); this.setStatus('live') }
       else if (m.t === 'refused') { this.ev.onRefused?.(String(m.why ?? '')); this.close() }
       else if (m.t === 'snap') {
         const snap = m as unknown as Snap
         applySnap(this.mirror, snap)
         this.party = snap.party
+        this.ev.onParty?.(snap.party, this.you)
         if (snap.you.struck > 0) this.ev.onStruck?.(snap.you.struck)
         for (const x of snap.events) {
           if (x.t === 'round' && x.n) this.ev.onRound?.(x.n)
@@ -91,11 +95,11 @@ export class BreachLink {
   private send(m: unknown): void { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(m)) }
 
   /** where this keeper stands (feet); throttled to 15 a second */
-  pos(x: number, y: number, z: number): void {
+  pos(x: number, y: number, z: number, yaw = 0): void {
     const now = performance.now()
     if (now - this.lastPos < 66) return
     this.lastPos = now
-    this.send({ t: 'pos', x, y, z })
+    this.send({ t: 'pos', x, y, z, yaw })
   }
   hit(id: number, dmg: number, crit: boolean): void { this.send({ t: 'hit', id, dmg, crit }) }
   mend(win: number, dt: number): void { this.send({ t: 'mend', win, dt }) }
@@ -108,3 +112,33 @@ export class BreachLink {
 
 /** The page's one co-op link, and whether the NEXT Breach run should be co-op (set by Departures' Go together). */
 export const coop: { link: BreachLink | null; wantParty: string | null; struck: number; down: boolean; begins: number } = { link: null, wantParty: null, struck: 0, down: false, begins: 0 }
+
+// ── FIND OTHERS: a place in the matchmaking line (`?queue=breach`). Resolves to a room code when matched. ──────
+export interface QueueEvents {
+  onWaiting?: (n: number, need: number, waited: number) => void
+  onMatched?: (code: string, names: string[]) => void
+  onRefused?: (why: string) => void
+  onLost?: () => void
+}
+export class BreachQueue {
+  ws: WebSocket | null = null
+  private done = false
+  constructor(private ev: QueueEvents) {}
+  open(): void {
+    if (typeof window === 'undefined') return
+    const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const ws = new WebSocket(`${scheme}//${window.location.host}/breach-ws/?queue=breach`)
+    this.ws = ws
+    ws.onmessage = (e) => {
+      let m: { t: string; [k: string]: unknown }
+      try { m = JSON.parse(String(e.data)) } catch { return }
+      if (m.t === 'queue') this.ev.onWaiting?.(Number(m.n), Number(m.need), Number(m.waited))
+      else if (m.t === 'matched') { this.done = true; this.ev.onMatched?.(String(m.code), (m.names as string[]) ?? []) }
+      else if (m.t === 'refused') { this.done = true; this.ev.onRefused?.(String(m.why ?? '')) }
+    }
+    ws.onclose = () => { if (!this.done) this.ev.onLost?.(); this.ws = null }
+  }
+  /** start now with whoever is waiting (even nobody) */
+  go(): void { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ t: 'go' })) }
+  cancel(): void { this.done = true; try { this.ws?.close() } catch { /* gone */ } this.ws = null }
+}

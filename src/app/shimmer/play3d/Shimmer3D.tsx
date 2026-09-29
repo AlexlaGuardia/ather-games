@@ -54,10 +54,10 @@ import { StationProp, GhostProp } from '../world/prop-models'
 import { RemotePlayers, useRoster } from './RemotePlayers'
 import { useMultiplayer, storedName, storeName, type RemotePlayer } from './multiplayer'
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
-import { BreachLink, coop, driftMirror } from './breach-link'
+import { BreachLink, BreachQueue, coop, driftMirror, type CoopPartyMember } from './breach-link'
 import { usePresence, type UsePresence } from '@/lib/presence'
 import { FriendsTab, InvitePrompt, useFriends } from './play-together'
-import { DeparturesPanel, type Destination } from './departures'
+import { DeparturesPanel, type Destination, type Finding } from './departures'
 import { holdShip, BERTH_COUNT } from './station-field'
 import { HearthTabs } from '../ui/hearth'
 import { useAccount, type UseAccount } from '@/lib/accounts/use-account'
@@ -79,7 +79,7 @@ import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
 import { spawnField, tickFields, fieldsAt, absorbShotAt, absorbWardAt, contains, FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from '../engine/conjured-terrain'
-import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget, foeMods, statusesOn, STATUS_TABLE, type StatusBag, type StatusKind } from '../engine/statuses'
+import { emptyBag, applyStatus, applyStatuses, hasStatus, pruneStatuses, clearTarget, foeMods, statusesOn, STATUS_TABLE, VULNERABLE_MULT, BURN_DPS, type StatusBag, type StatusKind } from '../engine/statuses'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { type BattleResult } from '../engine/arena'
@@ -148,7 +148,7 @@ import { StationMenus, type PlacedStruct, type StationKind } from './StationMenu
 import { prettyItem } from './ui'
 import { GfxPanel, FrameProbe, type FrameStats, type SaveStats } from './GfxPanel'
 import MoveBook from './MoveBook'
-import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning } from './puppet-guards'
+import { GUARDS, GUARD_TUNING, initEncounter, stepEncounter, damageGuard, specOf, type GuardTuning, type GuardId } from './puppet-guards'
 import { K as HB, STOREY as STOREY_H, BLOCK_H } from './hold-building'
 import { HOLD_TUNING, BODY_SIZE, DROP_NAME, type HoldDropKind, startHold, stepHold, hitBody, releaseSurge, promptAt, buyGate, buyRack, buyFont, buyCache, mendTick, chestTick, lootLabel, plantDevice, tuneWeapon, weaponTier, tuneCostFor, TUNE_TIERS, LAB_NODES, studyNode, labBlock, holdManaDrip, type LabNodeId, endHold, fieldStrike, ownerOpenAll, ownerCalm, ownerChests, holdSpots, holdSolid, holdSurfaces, roundBlocked, isLoud, fmtHush, type HoldState, type HoldPrompt } from './hold'
 import { addPiece, pieceLine, loadDry, saveDry } from './vessel-pieces'
@@ -2619,7 +2619,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   castMultRef: React.RefObject<number>   // held-stance multiplier on cast damage (Flame Manipulation)
   resistRef: React.RefObject<number>     // held-stance fraction of incoming damage absorbed (Barrier/Iron Skin)
   birthRuneRef: React.RefObject<string | null>  // what the keeper IS — for attunement resistance (canon v3)
-  infusionRef: React.RefObject<{ until: number; mult: number }>  // Flame Infusion — a WEAPON-damage window
+  infusionRef: React.RefObject<Infusion>  // Flame Infusion — a WEAPON window: a multiplier, or (play3d, 09-29) an on-hit status
   fieldsRef: React.MutableRefObject<Field[]>       // SYSTEM 1 — area entities (this sim ticks them)
   conjuredRef: React.MutableRefObject<Conjured[]>  // SYSTEM 2 — runtime terrain (blocks everything)
   /** THE HOLD's run, owned by the parent (the HUD and E/G read it); this sim steps it and lands rounds on it */
@@ -2659,6 +2659,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   // this, every status cast applied once at the moment it landed and drew nothing: Fog Bank read as mana spent.
   const statusZones = useRef<{ x: number; z: number; r: number; until: number; kinds: readonly StatusKind[]; color: number }[]>([])
   const zoneTickAt = useRef(0)
+  const burnTickAt = useRef(0)
   const zoneMeshRef = useRef<THREE.InstancedMesh>(null)
   const markMeshRef = useRef<THREE.InstancedMesh>(null)
   const revealMeshRef = useRef<THREE.InstancedMesh>(null)   // STEP 2: a Revealed foe's outline, drawn through walls
@@ -2843,6 +2844,21 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       if (fleetRef.current) { const fy = (posRef.current?.y ?? 0) + 0.95; for (const mm of fleetRef.current.members) if (mm.state.alive) fn(`fleet:${mm.index}`, mm.state.x, mm.state.z, fy) }
       if (hs?.running) for (const b of hs.flood) if (b.alive && b.phase === 'inside') fn(`flood:${b.id}`, b.x, b.z, b.y * STEP + 0.5)
     }
+    // BURNING (step 3): a half-second tick, paid through each foe's own damage path so death and loot rules hold
+    if (nowFrame >= burnTickAt.current) {
+      burnTickAt.current = nowFrame + 500
+      const bag = statusRef.current, d = BURN_DPS * 0.5
+      forEachFoe((id) => {
+        if (!bag[id] || !hasStatus(bag, id, 'burning', nowFrame)) return
+        const dd = d * (hasStatus(bag, id, 'vulnerable', nowFrame) ? VULNERABLE_MULT : 1)
+        const [kind, key] = id.split(':')
+        if (kind === 'board') { const t = targets[+key]; t.hp -= dd; if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN } }
+        else if (id === 'hunter') { const h1 = hunter.current; h1.hp -= dd; if (h1.hp <= 0) { h1.alive = false; h1.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') } }
+        else if (kind === 'guard') guardSim.current.enc = damageGuard(guardSim.current.enc, key as GuardId, dd, rangeCfgRef.current.tune).state
+        else if (kind === 'fleet') { const mm = fleetRef.current?.members.find((f) => f.index === +key); if (mm) { mm.state.hp -= dd; if (mm.state.hp <= 0) { mm.state.alive = false; mm.state.respawn = Number.POSITIVE_INFINITY } } }
+        else if (kind === 'flood' && hs) { hitBody(hs, +key, dd, false); coop.link?.hit(+key, dd, false) }
+      })
+    }
     // the clouds apply every quarter second, for a second at a time, so leaving one frees you within a second
     if (statusZones.current.length && nowFrame >= zoneTickAt.current) {
       zoneTickAt.current = nowFrame + 250
@@ -2902,6 +2918,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     const inf = infusionRef.current
     const wMult = nowFrame < inf.until ? inf.mult : 1
     const wDmg = W.damage * wMult, wCrit = W.crit * wMult
+    // ── AMP (move-jobs step 3, 09-29): a Vulnerable foe takes more from every hit, and an open infusion lays its
+    // status (Burning, Vulnerable) with every round that lands. Read per id so each foe type uses the same rule.
+    const vm = (id: string) => (statusRef.current[id] && hasStatus(statusRef.current, id, 'vulnerable', nowFrame) ? VULNERABLE_MULT : 1)
+    const ampHit = (id: string) => { if (inf.onHit && nowFrame < inf.until) statusRef.current = applyStatus(statusRef.current, id, inf.onHit, inf.onHitSecs ?? 3, nowFrame) }
     cd.current -= dt
     if (!firingRef.current) firedThisPress.current = false   // trigger released → re-arm a semi-auto
     bloomRef.current = Math.max(0, bloomRef.current - W.bloomDecay * dt)  // cone recovers while not firing
@@ -3090,7 +3110,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           rel.copy(p.pos).sub(t.pos)
           rel.addScaledVector(vhat, -rel.dot(vhat))  // strip the along-flight component → radial offset
           const crit = rel.lengthSq() < TARGET_CRIT_R * TARGET_CRIT_R
-          t.hp -= crit ? wCrit : wDmg; p.life = 0; onHit(crit)  // hitmarker on every landed round
+          const tid = `board:${targets.indexOf(t)}`
+          t.hp -= (crit ? wCrit : wDmg) * vm(tid); p.life = 0; onHit(crit); ampHit(tid)  // hitmarker on every landed round
           if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
           break
         }
@@ -3098,7 +3119,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       const h = hunter.current
       if (p.life > 0 && h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
         const crit = p.pos.y > h.pos.y + CRIT_Y
-        h.hp -= crit ? wCrit : wDmg; p.life = 0; onHit(crit)
+        h.hp -= (crit ? wCrit : wDmg) * vm('hunter'); p.life = 0; onHit(crit); ampHit('hunter')
         if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') }
       }
       // ── the fleet takes fire too (#302) ──────────────────────────────────────────────────────
@@ -3115,7 +3136,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
             const bdx = p.pos.x - m.state.x, bdz = p.pos.z - m.state.z
             if (bdx * bdx + bdz * bdz >= HUNTER_HIT_R2) continue
             const bcrit = p.pos.y > botY + CRIT_Y
-            m.state.hp -= bcrit ? wCrit : wDmg; p.life = 0; onHit(bcrit)
+            m.state.hp -= (bcrit ? wCrit : wDmg) * vm(`fleet:${m.index}`); p.life = 0; onHit(bcrit); ampHit(`fleet:${m.index}`)
             if (m.state.hp <= 0) { m.state.alive = false; m.state.respawn = Number.POSITIVE_INFINITY }
             break
           }
@@ -3129,7 +3150,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const st = guardSim.current.enc.guards[gi]
           if (!st?.alive || p.pos.distanceToSquared(b.pos) >= HUNTER_HIT_R2) continue
           const crit = p.pos.y > b.pos.y + CRIT_Y
-          const r = damageGuard(guardSim.current.enc, st.id, crit ? wCrit : wDmg, rangeCfgRef.current.tune)
+          const r = damageGuard(guardSim.current.enc, st.id, (crit ? wCrit : wDmg) * vm(`guard:${st.id}`), rangeCfgRef.current.tune)
+          ampHit(`guard:${st.id}`)
           guardSim.current.enc = r.state
           p.life = 0; onHit(crit)
           // Wren turning a hit back is real damage to the shooter, not a miss.
@@ -3160,7 +3182,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           if (bdx * bdx + bdz * bdz >= br * br) continue
           const crit = p.pos.y > by + CRIT_Y
           // co-op: applied to the mirror at once (instant feedback) AND sent; the server's next snapshot is the truth
-          hitBody(hs, b.id, (crit ? wCrit : wDmg) * tier.dmg, crit); coop.link?.hit(b.id, (crit ? wCrit : wDmg) * tier.dmg, crit)
+          const fdmg = (crit ? wCrit : wDmg) * tier.dmg * vm(`flood:${b.id}`)
+          hitBody(hs, b.id, fdmg, crit); coop.link?.hit(b.id, fdmg, crit); ampHit(`flood:${b.id}`)
           p.last = b.id
           if (++p.hits >= tier.pierce) p.life = 0
           onHit(crit)
@@ -4310,6 +4333,9 @@ function GuideTrail({ posRef, heightsRef, targetRef }: {
 }
 
 // ── the owner's move pins (Moves (dev) panel): slot index → move id, per keeper ─────────────────────
+/** The weapon window a cast opens (Flame Infusion, Forge Fist): a damage multiplier, or an on-hit status (step 3). */
+type Infusion = { until: number; mult: number; onHit?: StatusKind; onHitSecs?: number }
+
 const DEV_SLOTS_KEY = 'shimmer:devSlots'
 function readDevSlots(): (string | null)[] {
   try {
@@ -4426,7 +4452,7 @@ const Scene = memo(function Scene(props: {
   tremorRef: React.MutableRefObject<TremorReadout>
   resistRef: React.RefObject<number>
   birthRuneRef: React.RefObject<string | null>
-  infusionRef: React.RefObject<{ until: number; mult: number }>
+  infusionRef: React.RefObject<Infusion>
   fieldsRef: React.MutableRefObject<Field[]>
   conjuredRef: React.MutableRefObject<Conjured[]>
   holdRef: React.MutableRefObject<HoldState | null>
@@ -5016,6 +5042,28 @@ export default function Shimmer3D() {
     enabled: mpReady, zoneId: zone.id, posRef, yawRef: camYaw, party: mpParty, playerName: mpName,
   })
   const mpRoster = useRoster(mpPeers)   // the Departures board's three (09-28)
+  // ★ CO-OP TEAMMATES are drawn from the Breach server's snapshot (matched strangers share no world party, so the
+  // world's multiplayer server would never put them in one instance). Keyed `breach:<id>` in the same peers map the
+  // renderer already draws; a keeper the world server already shows (a real party mate) is not drawn twice.
+  const mpPeersForCoop = mpPeers
+  const coopPeersSync = useRef((party: CoopPartyMember[], you: string | null) => {
+    const m = mpPeers.current
+    if (!m) return
+    const now = performance.now()
+    const keep = new Set<string>()
+    const shownByWorld = new Set([...m.entries()].filter(([k]) => !k.startsWith('breach:')).map(([, p]) => p.name))
+    for (const k of party) {
+      if (k.id === you || !k.here || shownByWorld.has(k.name)) continue
+      const key = 'breach:' + k.id
+      keep.add(key)
+      const tx = k.x, ty = k.y * STEP, tz = k.z
+      const prev = m.get(key)
+      const tyaw = prev && Math.hypot(tx - prev.tx, tz - prev.tz) > 0.02 ? Math.atan2(tx - prev.tx, tz - prev.tz) : (prev?.tyaw ?? 0)
+      if (prev) Object.assign(prev, { tx, ty, tz, tyaw, moving: !!prev && Math.hypot(tx - prev.tx, tz - prev.tz) > 0.02, lastSeen: now })
+      else m.set(key, { id: key, name: k.name, tx, ty, tz, tyaw, x: tx, y: ty, z: tz, yaw: tyaw, moving: false, lastSeen: now })
+    }
+    for (const key of [...m.keys()]) if (key.startsWith('breach:') && !keep.has(key)) m.delete(key)
+  })
   // Touch triggers for jump/slide (mobile). jumpRef = edge (button sets true, Player consumes+clears);
   // slideRef = held (true while the slide button is pressed). Keyboard uses Space/Shift directly.
   const jumpRef = useRef(false)
@@ -5669,6 +5717,8 @@ export default function Shimmer3D() {
   const [runeDevOpen, setRuneDevOpen] = useState(false)  // owner-only: swap birth rune live to test all archetypes
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
   const [departuresOpen, setDeparturesOpen] = useState(false)   // the Station clerk's board (09-28)
+  const [finding, setFinding] = useState<Finding | null>(null)    // waiting in the Find others line
+  const queueRef = useRef<BreachQueue | null>(null)
   const [mpTab, setMpTab] = useState<'party' | 'friends'>('party')
   const [mpOpen, setMpOpen] = useState(false)         // 👥 — play together (party / invite)
   const [gfxOpen, setGfxOpen] = useState(false)       // ⚙ — graphics quality + frame readout
@@ -6893,7 +6943,7 @@ export default function Shimmer3D() {
   const tremorRef = useRef<TremorReadout>(emptyReadout())
   const stanceMoveRef = useRef(1) // stance multiplier on move speed
   const surgeRef = useRef({ until: 0, mult: 1 })  // Static Burst — a short self-buff window
-  const infusionRef = useRef({ until: 0, mult: 1 })  // Flame Infusion — a WEAPON-damage window
+  const infusionRef = useRef<Infusion>({ until: 0, mult: 1 })  // Flame Infusion — a WEAPON window
   // ── the three systems. All three live as refs on the parent so the walker (collision) and the
   // sim (effects + render) read ONE source; neither owns them. ──
   const fieldsRef = useRef<Field[]>([])          // SYSTEM 1 — persistent area entities
@@ -7516,9 +7566,12 @@ export default function Shimmer3D() {
       }
       case 'infusion': {
         if (!tryCast(spec.manaCost)) return
-        infusionRef.current = { until: now + spec.surgeSecs * 1000, mult: spec.surgeMult }
+        // AMP (move-jobs step 3): a spec that names an on-hit status lays it with every round instead of multiplying
+        infusionRef.current = spec.statuses.length
+          ? { until: now + spec.surgeSecs * 1000, mult: 1, onHit: spec.statuses[0], onHitSecs: spec.areaSecs }
+          : { until: now + spec.surgeSecs * 1000, mult: spec.surgeMult }
         castCdRef.current[slot] = now + spec.cooldownMs
-        setHarvestToast(`${spec.label} — your shots burn`)
+        setHarvestToast(`${spec.label} — your shots ${spec.statuses[0] === 'vulnerable' ? 'shred' : 'burn'}`)
         break
       }
       case 'restore': {
@@ -7714,6 +7767,7 @@ export default function Shimmer3D() {
         onLoot: (l) => { mirror.loot.push(l); setHoldFlash(lootLabel(l)) },
         onRefused: (why) => { setHoldFlash(why); if (coop.link === link) coop.link = null },
         onStatus: (st) => { if (st === 'lost' && coop.link === link) setHoldFlash('Lost touch with the party\u2019s Breach') },
+        onParty: (party, you) => { coopPeersSync.current(party, you) },
       })
       coop.link = link
       link.open()
@@ -7729,6 +7783,7 @@ export default function Shimmer3D() {
     if (zoneId === HOLD_ZONE) { beginHold(); return }
     if (!holdRef.current && !holdSavedLoadout.current) return
     coop.link?.close(); coop.link = null; coop.struck = 0; coop.down = false; setCoopDown(false)   // walking out of the Breach leaves the party's fight
+    coopPeersSync.current([], null)
     holdRef.current = null; holdEHeld.current = false; setHoldHud(null)
     // the hold's pool can sit above a new keeper's own; never walk out holding more than you can
     manaRef.current.current = Math.min(manaRef.current.current, manaMax()); setManaFrac(manaRef.current.current / manaMax())
@@ -8244,7 +8299,8 @@ export default function Shimmer3D() {
       const l = coop.link, h = holdRef.current
       return { code: l?.code ?? null, status: l?.status ?? null, party: l?.party.map(p => p.name) ?? [], round: h?.round ?? null,
         flood: h?.flood.filter(b => b.alive).map(b => b.id).sort((a, c) => a - c) ?? [], salvage: h?.salvage ?? null, zone: zoneIdRef.current,
-        down: coop.down, begins: coop.begins, bannerEl: !!document.querySelector('[data-coop-down]') }
+        down: coop.down, begins: coop.begins, bannerEl: !!document.querySelector('[data-coop-down]'),
+        drawn: [...(mpPeersForCoop.current?.values() ?? [])].map(p => p.name) }
     }
     return () => { delete w.__coop }
   }, [isOwner])
@@ -9398,12 +9454,34 @@ export default function Shimmer3D() {
           { id: 'breach', berth: 1, world: 'Lenna', name: 'The Breach', locked: owner ? null : 'Not open yet', coop: true },
           { id: 'slack', berth: 1, world: 'Lenna', name: 'The Slack', locked: !owner ? 'Not open yet' : road ? null : 'Read the Stillwind’s Road in the Breach’s lab first' , coop: false },
         ]
-        const close = () => { setDeparturesOpen(false); battleRef.current = false; closeCursorUI() }
+        const close = () => { queueRef.current?.cancel(); queueRef.current = null; setFinding(null); setDeparturesOpen(false); battleRef.current = false; closeCursorUI() }
         return (
           <HearthFrame title="Departures" maxWidth={440} onClose={close} dataPanel="departures">
             <DeparturesPanel you={mpName} party={mpParty} members={mpParty ? mpRoster.map(p => p.name) : []}
               destinations={dests} berths={BERTH_COUNT}
               onInviteFriends={() => { close(); setMpTab('friends'); setMpOpen(true) }}
+              finding={finding}
+              onFindOthers={(d) => {
+                // ★ FIND OTHERS: take a place in the line; matched → the code is this run's party, then launch
+                queueRef.current?.cancel()
+                const q = new BreachQueue({
+                  onWaiting: (n, need, waited) => setFinding({ n, need, waited }),
+                  onMatched: (code, names) => {
+                    queueRef.current = null; setFinding(null); close()
+                    coop.wantParty = code
+                    setHoldFlash(names.length > 1 ? `Found: ${names.join(', ')}` : 'Going in')
+                    const ship = holdShip()!
+                    if (d.id === 'breach') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right', ownerOnly: true })
+                  },
+                  onRefused: (why) => { queueRef.current = null; setFinding(null); setHarvestToast(why) },
+                  onLost: () => { queueRef.current = null; setFinding(null); setHarvestToast('Lost your place in line') },
+                })
+                queueRef.current = q
+                setFinding({ n: 1, need: 3, waited: 0 })
+                q.open()
+              }}
+              onGoNow={() => queueRef.current?.go()}
+              onCancelFind={() => { queueRef.current?.cancel(); queueRef.current = null; setFinding(null) }}
               onLaunch={(d, together) => {
                 close()
                 coop.wantParty = together && mpParty ? mpParty : null
