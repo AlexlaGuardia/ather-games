@@ -66,5 +66,14 @@ ok(p3.includes('if (cl > 0.5 && (fx * cx + fz * cz) / (fl * cl) < 0) return'), '
 ok(p3.includes('depthTest={false}') && p3.includes("hasStatus(bag, id, 'revealed', nowFrame)"), '★ a Revealed foe draws with no depth test: through walls')
 ok(p3.includes("tone(260, spec.windupMs, { type: 'triangle'") && p3.includes('setChargeGlow(true)'), 'the tell is heard and seen for the whole charge')
 
+// G. STEP 3 (09-29): amp
+for (const id of ['flame-infusion', 'forge-fist']) { const c = castForMove(id); ok(c.archetype === 'infusion' && c.statuses.length === 1 && c.areaSecs > 0, `${id} lays an on-hit status`) }
+ok(castForMove('flame-infusion').statuses[0] === 'burning' && castForMove('forge-fist').statuses[0] === 'vulnerable', 'Flame Infusion burns, Forge Fist shreds')
+for (const id of ['grindstone', 'shatterfield']) ok(castForMove(id).linger && castForMove(id).statuses[0] === 'vulnerable' && castForMove(id).fieldDps === 0, `${id} is a Vulnerable cloud with no damage of its own`)
+ok(p3.includes("? { until: now + spec.surgeSecs * 1000, mult: 1, onHit: spec.statuses[0]"), '★ play3d: an infusion with a status multiplies nothing (the status IS the amp)')
+for (const id of ['`board:${targets.indexOf(t)}`', "'hunter'", '`fleet:${m.index}`', '`guard:${st.id}`', '`flood:${b.id}`']) ok(p3.includes(`vm(${id})`) || p3.includes(`const tid = ${id}`), `★ gun hits on ${id} read Vulnerable`)
+ok((p3.match(/ampHit\(/g) || []).length >= 5, 'every gun hit site lays the infusion status')
+ok(p3.includes('burnTickAt.current = nowFrame + 500') && p3.includes('d = BURN_DPS * 0.5'), 'Burning ticks every half second through each foe\'s own damage path')
+
 console.log(`statuses: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

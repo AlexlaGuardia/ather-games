@@ -20,6 +20,7 @@
 import { WEAPONS, type WeaponDef } from '../engine/weapons'
 import { castForMove, type CastSpec } from './cast'
 import { HOLD_TUNING } from './hold'
+import { VULNERABLE_MULT, BURN_DPS } from '../engine/statuses'
 
 export const BUDGET = {
   band: 0.2,
@@ -81,6 +82,11 @@ export function loadoutDamage(gun: WeaponDef, specs: readonly CastSpec[], fight:
   const casts = specs.filter(c => c.archetype !== 'stance').map(c => ({ c, hit: bodiesHit(c, fight), cd: 0, field: 0, fieldUntil: -1 }))
   let mana: number = BUDGET.manaStart * (fight.endsWith('rich') ? 1 + BUDGET.richRefills : 1)
   let mult = 1, multUntil = -1, dmg = 0
+  // ── AMP (move-jobs step 3, 09-29): play3d's infusions lay a status instead of multiplying, and two clouds
+  // (Grindstone, Shatterfield) make foes Vulnerable. The band judges what play3d RUNS, so both are modelled:
+  // Vulnerable multiplies the gun by VULNERABLE_MULT while it lasts; Burning adds BURN_DPS to the one body the
+  // gun is working on (a burn tops the gun up; it never spreads through a horde on its own).
+  let vulnUntil = -1, burnUntil = -1
   for (let t = 0; t < BUDGET.windowSec; t += BUDGET.dt) {
     mana += BUDGET.drip * BUDGET.dt
     for (const k of casts) {
@@ -90,13 +96,19 @@ export function loadoutDamage(gun: WeaponDef, specs: readonly CastSpec[], fight:
       k.cd = k.c.cooldownMs / 1000
       if (k.c.archetype === 'projectile') dmg += k.c.damage * k.hit * castMult
       if (k.c.archetype === 'field' && (k.c.fieldDps ?? 0) > 0) { k.field = (k.c.fieldDps ?? 0) * k.hit * castMult; k.fieldUntil = t + (k.c.areaSecs ?? 0) }
-      if (k.c.archetype === 'infusion' && (k.c.surgeMult ?? 1) >= mult) { mult = k.c.surgeMult ?? 1; multUntil = t + (k.c.surgeSecs ?? 0) }
+      const onHit = k.c.archetype === 'infusion' ? k.c.statuses?.[0] : undefined
+      if (onHit === 'vulnerable') vulnUntil = Math.max(vulnUntil, t + (k.c.surgeSecs ?? 0) + (k.c.areaSecs ?? 0))
+      else if (onHit === 'burning') burnUntil = Math.max(burnUntil, t + (k.c.surgeSecs ?? 0) + (k.c.areaSecs ?? 0))
+      else if (k.c.archetype === 'infusion' && (k.c.surgeMult ?? 1) >= mult) { mult = k.c.surgeMult ?? 1; multUntil = t + (k.c.surgeSecs ?? 0) }
+      if (k.c.archetype === 'status' && k.c.statuses?.includes('vulnerable')) vulnUntil = Math.max(vulnUntil, t + (k.c.areaSecs ?? 0))
     }
     for (const k of casts) if (t < k.fieldUntil) dmg += k.field * BUDGET.dt
     // the gun fires whenever it has mana; its damage is mana-bound or time-bound, whichever bites
     const shot = Math.min(dps * BUDGET.dt, mana * perMana)
     mana -= shot / perMana
-    dmg += shot * (t < multUntil ? mult : 1)
+    const vuln = t < vulnUntil ? VULNERABLE_MULT : 1
+    dmg += shot * (t < multUntil ? mult : 1) * vuln
+    if (t < burnUntil) dmg += BURN_DPS * vuln * BUDGET.dt
     if (t >= multUntil) mult = 1
   }
   return dmg

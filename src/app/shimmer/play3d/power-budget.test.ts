@@ -29,8 +29,12 @@ for (const id of casts) {
 const fw = castForMove('firewall')
 ok(loadoutDamage(DEFAULT_GUN(), [{ ...fw, fieldDps: 30 }], 'horde-rich') > loadoutDamage(DEFAULT_GUN(), [{ ...fw, fieldDps: 30 }], 'boss-rich'), 'a field is worth more in a horde (it would catch an AoE outlier)')
 const inf = castForMove('forge-fist')
-const hot = [{ ...inf, surgeMult: 1.8 }]
+// a PURE multiplier (no on-hit status): since 09-29 Forge Fist itself lays Vulnerable, so the guard strips that
+const hot = [{ ...inf, statuses: [], surgeMult: 1.8 }]
 ok(loadoutDamage(DEFAULT_GUN(), hot, 'boss-rich') / loadoutDamage(DEFAULT_GUN(), [], 'boss-rich') - 1 > BUDGET.band, 'a fat infusion shows as over-band on flush mana (it would catch a multiplier)')
+// and the step-3 amps are SEEN, not free: a burn that never lapses shows over band (it would catch a runaway DoT)
+const burn = castForMove('flame-infusion')
+ok(burn.statuses[0] === 'burning' && loadoutDamage(DEFAULT_GUN(), [{ ...burn, cooldownMs: 1000, surgeSecs: 60, manaCost: 1 }], 'boss-rich') / loadoutDamage(DEFAULT_GUN(), [], 'boss-rich') - 1 > 0.05, 'Burning adds damage the budget can see (on flush mana; scarce mana is spent as ammo)')
 ok(uplift('forge-fist', 'boss') < uplift('forge-fist', 'boss-rich'), 'scarce mana hides a multiplier; rich mana shows it')
 
 // ── LOADOUTS STACK, AND THAT IS ALLOWED (Alex, 2026-09-24: "keep 20% per move, stacking is fine and

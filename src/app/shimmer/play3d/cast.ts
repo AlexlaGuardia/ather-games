@@ -340,7 +340,9 @@ const BUILDS: Record<string, Build> = {
   firewall:  { archetype: 'field', manaCost: 18, cooldownMs: 7000, castRange: 9, areaSize: 3.2, areaSecs: 6, fieldDps: 5, fieldStopsShots: true },
   // "Sheathes a weapon or strike in fire — melee ENHANCEMENT." The only cast that makes the gun
   // better rather than doing something the gun can't: an infusion window, not a new attack.
-  'flame-infusion': { archetype: 'infusion', manaCost: 14, cooldownMs: 8000, surgeSecs: 6, surgeMult: 1.25 },
+  // MOVE-JOBS 09-29 (Alex ✓): in play3d your shots set foes BURNING for 3s instead of hitting harder (`statuses` =
+  // the on-hit status, `areaSecs` its length). `surgeMult` stays for the voxel world, which has no burn tick yet.
+  'flame-infusion': { archetype: 'infusion', manaCost: 14, cooldownMs: 8000, surgeSecs: 6, surgeMult: 1.25, statuses: ['burning'], areaSecs: 3 },
   mend:      { archetype: 'restore', manaCost: 22, cooldownMs: 6000, heal: 35 },
   // MOVE-JOBS 09-28 (Alex ✓): a dart that SLOWS for 3s. It keeps a small sting so it still reads as a hit.
   'ice-dart': { archetype: 'projectile', manaCost: 7, cooldownMs: 650, damage: 6, projSpeed: 52, projLife: 1.4, statuses: ['slowed'], areaSecs: 3 },
@@ -381,13 +383,18 @@ const BUILDS: Record<string, Build> = {
   // "The fire appears THERE rather than travelling to it" — so it is NOT a projectile. The longest
   // cast range in the book, the shortest burn: ignition delivered, not a fire tended.
   flashpoint: { archetype: 'field', manaCost: 15, cooldownMs: 5000, castRange: 14, areaSize: 2.2, areaSecs: 2, fieldDps: 15 },
-  'forge-fist': { archetype: 'infusion', manaCost: 16, cooldownMs: 9000, surgeSecs: 6, surgeMult: 1.25 },
+  // (cooldown 9s → 12s, 09-29: at 9s the shred never lapsed and the band read 25%; `power-budget.test.ts`)
+  // MOVE-JOBS 09-29 (Alex ✓, "armor shred"): in play3d your shots leave foes VULNERABLE for 3s. No play3d foe has a
+  // shield to break yet, so shredding reads as the damage it lets through.
+  'forge-fist': { archetype: 'infusion', manaCost: 16, cooldownMs: 12000, surgeSecs: 6, surgeMult: 1.25, statuses: ['vulnerable'], areaSecs: 3 },
   'heat-mirage': { archetype: 'unbuilt', why: 'needs a self-centred status — enemies mis-aim at the CASTER, not at a placed point' },
   // "Slower than fire but it pierces barriers." Slowest projectile, hardest hit.
   'volcano-spike': { archetype: 'projectile', manaCost: 14, cooldownMs: 1400, damage: 34, projSpeed: 34, projLife: 2 },
   'ember-trail': { archetype: 'unbuilt', why: "needs fields spawned along the caster's PATH — every field today lands at the aim point" },
   'crystal-barrage': { archetype: 'projectile', manaCost: 11, cooldownMs: 800, damage: 20, projSpeed: 46, projLife: 1.5 },
-  'grindstone': { archetype: 'field', manaCost: 17, cooldownMs: 8000, castRange: 8, areaSize: 3, areaSecs: 7, fieldDps: 4.5 },
+  // (cooldown 8s → 10s, 09-29: a 7s cloud on an 8s cooldown was always up, 22% over the band)
+  // MOVE-JOBS 09-29 (Alex ✓): the cloud shreds DEFENCE, not HP: foes inside are Vulnerable to your guns.
+  'grindstone': { archetype: 'status', manaCost: 17, cooldownMs: 10000, castRange: 8, areaSize: 3, areaSecs: 7, statuses: ['vulnerable'], linger: true },
   // MOVE-JOBS 09-28 (Alex ✓): control, not chip damage: a lingering cloud that slows whoever breathes it.
   'dust-lung': { archetype: 'status', manaCost: 13, cooldownMs: 8000, castRange: 10, areaSize: 3, areaSecs: 6, statuses: ['slowed'], linger: true },
   // MOVE-JOBS 09-28 (Alex ✓): lost footing is a STAGGER (a brief stop), not a root.
@@ -598,7 +605,8 @@ const BUILDS: Record<string, Build> = {
   'wind-shear': { archetype: 'projectile', manaCost: 11, cooldownMs: 1200, damage: 26, projSpeed: 92, projLife: 1.3 },
   'riptide': { archetype: 'projectile', manaCost: 11, cooldownMs: 1100, damage: 24, projSpeed: 62, projLife: 1.3 },
   'monolith': { archetype: 'terrain', manaCost: 40, cooldownMs: 22000, castRange: 9, areaSize: 3, areaSecs: 30, shape: 'block', shapeHeight: 5 },
-  'shatterfield': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 6, areaSecs: 9, fieldDps: 9, fieldStopsShots: false },
+  // MOVE-JOBS 09-29 (Alex ✓): "standing on it is fine; being struck on it is not" — the ground turns foes Vulnerable.
+  'shatterfield': { archetype: 'status', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 6, areaSecs: 9, statuses: ['vulnerable'], linger: true },
   'stormbank': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 11, areaSize: 6, areaSecs: 8, fieldDps: 10, fieldStopsShots: false },
   'exhale': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 4, areaSize: 6, areaSecs: 10, fieldHps: 14, fieldStopsShots: false },
   'pyroclast': { archetype: 'field', manaCost: 46, cooldownMs: 26000, castRange: 12, areaSize: 7, areaSecs: 11, fieldDps: 7, fieldStopsShots: false },

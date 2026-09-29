@@ -88,6 +88,9 @@ export const STATUS_KINDS: readonly StatusKind[] = Object.keys(STATUS_TABLE) as 
 export const SLOW_MULT = 0.6
 /** How much more gun damage a vulnerable body takes. */
 export const VULNERABLE_MULT = 1.25
+/** Burning: damage per second, paid on a half-second tick. Sized so a burn TOPS UP a gun, never replaces
+ *  one (a 3s burn ≈ one rifle round); the move-jobs rule is that casts do not out-damage guns. */
+export const BURN_DPS = 6
 
 // ── ★ THE LOCK RULE (Alex's PvP concern, 09-28) ────────────────────────────────────────────────────────
 // No stacking was already the rule (a re-apply extends to the later expiry, never adds). That alone does
