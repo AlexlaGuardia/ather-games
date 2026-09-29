@@ -56,7 +56,7 @@ import { useMultiplayer, storedName, storeName, selfPlayerId, type RemotePlayer 
 import { usePartyLobby, type LobbyLaunch, type Mission } from '@/lib/party-lobby'
 import { DeployLobby, type MissionCard } from './deploy-lobby'
 import { useParty, newPartyCode, sanitizePartyCode, inviteUrl } from '@/lib/party'
-import { BreachLink, BreachQueue, coop, driftMirror, type CoopPartyMember } from './breach-link'
+import { BreachLink, BreachQueue, SlackLink, coop, driftMirror, driftSlack, type CoopPartyMember } from './breach-link'
 import { usePresence, type UsePresence } from '@/lib/presence'
 import { FriendsTab, InvitePrompt, useFriends } from './play-together'
 import { type Finding } from './departures'
@@ -3452,7 +3452,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         const bdx = p.pos.x - at.x, bdz = p.pos.z - at.z
         if (bdx * bdx + bdz * bdz < STILLWIND_TUNING.radius * STILLWIND_TUNING.radius && p.pos.y > 0 && p.pos.y < 7.5) {
           const crit = p.pos.y > 5
-          hitStillwind(sw, crit ? wCrit : wDmg)
+          // co-op: the party's Stillwind is the server's, so the hit is SENT (the next snapshot shows it land)
+          if (coop.slack) coop.slack.hit(crit ? wCrit : wDmg); else hitStillwind(sw, crit ? wCrit : wDmg)
           p.life = 0; onHit(crit)
         }
       }
@@ -3577,14 +3578,20 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     const er = edgeRef.current
     if (inEdge && er.sim && posRef.current) {
       const k = edgeToSim(posRef.current.x, posRef.current.z)
-      if (!er.sim.felled) {
+      if (coop.slack) {
+        // ★ CO-OP (09-29): the server steps the party's Stillwind; this page carries a run between snapshots, says
+        // where its keeper stands, and takes the strikes the server says landed. The edge below is still this page's.
+        driftSlack(er.sim, dt)
+        coop.slack.pos(posRef.current.x, posRef.current.y / STEP, posRef.current.z)
+        if (coop.struck > 0) { const d = coop.struck; coop.struck = 0; if (!coop.down) { hurtPlayer(d); er.since = 0 } }
+      } else if (!er.sim.felled) {
         const o = stepStillwind(er.sim, dt, k.x, k.z)
         if (o.strike > 0) { hurtPlayer(o.strike); er.since = 0 }
         if (o.stalled) er.flash = 'The wind stops'
         else if (o.opened) er.flash = 'It boils open'
         else if (o.froze) er.flash = 'It stiffens'
       }
-      const hz = edgeHazard(k.x)
+      const hz = coop.down ? { dps: 0, slow: 0 } : edgeHazard(k.x)   // down in a co-op Slack: watching, not burning
       er.slow = hz.slow
       if (hz.dps > 0) {
         er.since = 0
@@ -7518,7 +7525,10 @@ export default function Shimmer3D() {
     const el = vignetteRef.current
     if (el) { el.style.animation = 'none'; void el.offsetHeight; el.style.animation = 'downFlash 1s ease-out' }
     // on the edge a fall resets the fight: the Stillwind stands again, the keeper is back at the near end
-    if (zoneIdRef.current === EDGE_ZONE) {
+    // ★ CO-OP: a fall takes YOU out for a moment (breach-server's SLACK_DOWN_SEC); the fight goes on for the party
+    if (zoneIdRef.current === EDGE_ZONE && coop.slack) {
+      if (!coop.down) { coop.slack.down(); coop.down = true; setCoopDown(true) }
+    } else if (zoneIdRef.current === EDGE_ZONE) {
       edgeRef.current.sim = startStillwind(); edgeRef.current.flash = 'The Stillwind stands'
       posRef.current?.set(EDGE_START.x, posRef.current.y, EDGE_START.z)
     }
@@ -8189,7 +8199,35 @@ export default function Shimmer3D() {
   useEffect(() => { if (!edgeFlash) return; const t = setTimeout(() => setEdgeFlash(null), 2400); return () => clearTimeout(t) }, [edgeFlash])
   useEffect(() => {
     if (zoneId !== EDGE_ZONE) { edgeRef.current.sim = null; edgeRef.current.slow = 0; setEdgeHud(null); return }
-    edgeRef.current.sim = startStillwind(); edgeRef.current.since = 99
+    const sim = startStillwind()
+    edgeRef.current.sim = sim; edgeRef.current.since = 99
+    // ★ THE SLACK TOGETHER (09-29): launched with the party from Departures → the server runs the Stillwind and `sim`
+    // is its MIRROR (`SlackLink`). A refusal or a lost socket leaves the page fighting its own, as it always has.
+    const party = coop.wantParty; coop.wantParty = null
+    coop.slack?.close(); coop.slack = null; coop.struck = 0; coop.down = false; setCoopDown(false)
+    const standUp = (flash: string) => {
+      coop.down = false; coop.struck = 0; setCoopDown(false)
+      hpRef.current = hpMaxRef.current ?? MAX_HP; shieldRef.current = shieldMaxRef.current ?? MAX_SHIELD
+      posRef.current?.set(EDGE_START.x, posRef.current.y, EDGE_START.z)
+      edgeRef.current.flash = flash
+    }
+    if (party) {
+      const link: SlackLink = new SlackLink(party, sim, {
+        onStruck: (d) => { coop.struck += d },
+        onWind: (w) => { if (w !== 'ran') edgeRef.current.flash = w === 'stalled' ? 'The wind stops' : w === 'opened' ? 'It boils open' : 'It stiffens' },
+        onUp: () => standUp('Back at the near end'),
+        onReset: () => standUp('The Stillwind stands'),
+        onRefused: (why) => { setEdgeFlash(why); if (coop.slack === link) { coop.slack = null; coop.down = false; setCoopDown(false) } },
+        onStatus: (st) => {
+          if (st !== 'lost' || coop.slack !== link) return
+          coop.slack = null; coop.down = false; setCoopDown(false); coopPeersSync.current([], null)
+          setEdgeFlash('Lost touch with the party\u2019s Slack')
+        },
+        onParty: (p, you) => coopPeersSync.current(p, you),
+      })
+      coop.slack = link
+      link.open()
+    }
     let lastKey = '', recorded = false
     const id = setInterval(() => {
       const e = edgeRef.current, sw = e.sim, p = posRef.current
@@ -8203,7 +8241,10 @@ export default function Shimmer3D() {
       const key = JSON.stringify(next)
       if (key !== lastKey) { lastKey = key; setEdgeHud(next) }
     }, 100)
-    return () => { clearInterval(id); edgeRef.current.sim = null; edgeRef.current.slow = 0 }
+    return () => {
+      clearInterval(id); edgeRef.current.sim = null; edgeRef.current.slow = 0
+      if (coop.slack) { coop.slack.close(); coop.slack = null; coop.struck = 0; coop.down = false; setCoopDown(false); coopPeersSync.current([], null) }
+    }
   }, [zoneId])
   const labOpenRef = useRef(false); labOpenRef.current = labOpen
   // the mouse handoff every cursor surface uses: borrow on open, hand look back on close
@@ -8789,7 +8830,7 @@ export default function Shimmer3D() {
     const road = roadOpen(loadRoad())
     return [
       { id: 'survival', kind: 'Survival', name: 'The Breach', world: 'Lenna', blurb: 'Hold the building against the flood, round after round.', locked: null, coop: true },
-      { id: 'boss', kind: 'Boss', name: 'The Slack', world: 'Lenna', blurb: 'The Stillwind, the season\u2019s colossus.', locked: road ? null : 'Read the Stillwind\u2019s Road in the Breach\u2019s lab first', coop: false },
+      { id: 'boss', kind: 'Boss', name: 'The Slack', world: 'Lenna', blurb: 'The Stillwind, the season\u2019s colossus.', locked: road ? null : 'Read the Stillwind\u2019s Road in the Breach\u2019s lab first', coop: true },
       // the first slice (09-29): a generated maze floor, solo while its elites are stepped on the page. Named neutrally until
       // canon rules what these places are (CANON_GAPS › Expeditions)
       { id: 'expedition', kind: 'Expedition', name: 'A maze floor', world: 'a new floor each time', blurb: 'Find the caches. Elites drop wrack that keeps for the Breach.', locked: null, coop: false },
@@ -8884,6 +8925,7 @@ export default function Shimmer3D() {
       return { code: l?.code ?? null, status: l?.status ?? null, party: l?.party.map(p => p.name) ?? [], round: h?.round ?? null,
         flood: h?.flood.filter(b => b.alive).map(b => b.id).sort((a, c) => a - c) ?? [], salvage: h?.salvage ?? null, zone: zoneIdRef.current,
         down: coop.down, begins: coop.begins, bannerEl: !!document.querySelector('[data-coop-down]'),
+        slack: coop.slack ? { code: coop.slack.code, status: coop.slack.status, party: coop.slack.party.map(p => p.name), hp: edgeRef.current.sim?.hp ?? null, z: edgeRef.current.sim?.z ?? null, wind: edgeRef.current.sim?.wind ?? null } : null,
         drawn: [...(mpPeersForCoop.current?.values() ?? [])].map(p => p.name) }
     }
     return () => { delete w.__coop }
@@ -9676,6 +9718,14 @@ export default function Shimmer3D() {
               <span style={{ color: edgeHud.side === 'glare' ? S.slack.glare : S.slack.rime, fontWeight: 800 }}>{edgeHud.side === 'glare' ? 'The Glare burns' : 'The Rime freezes'}</span>
             </HearthPill>
           )}
+          {coopDown && coop.slack && !edgeHud.felled && (
+            // co-op: down for a moment, never out (breach-server's SLACK_DOWN_SEC); the marker rides a plain wrapper
+            <div data-coop-down>
+              <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '22%', left: '50%', transform: 'translateX(-50%)', zIndex: 36, fontSize: 18 }}>
+                You are down. Back at the near end in a moment{coop.slack.party.filter(p => p.here && !p.down).length ? ` · ${coop.slack.party.filter(p => p.here && !p.down).map(p => p.name).join(', ')} still standing` : ''}.
+              </HearthPill>
+            </div>
+          )}
           {edgeFlash && (
             <HearthPill face={HUD_FACE} style={{ position: 'fixed', top: '30%', left: '50%', transform: 'translateX(-50%)', zIndex: 35, fontSize: 22 }}>{edgeFlash}</HearthPill>
           )}
@@ -10081,7 +10131,7 @@ export default function Shimmer3D() {
                 },
                 onRefused: (why) => { queueRef.current = null; setFinding(null); setHarvestToast(why) },
                 onLost: () => { queueRef.current = null; setFinding(null); setHarvestToast('Lost your place in line') },
-              })
+              }, m.id === 'boss' ? 'slack' : 'breach')
               queueRef.current = q
               setFinding({ n: 1, need: 3, waited: 0 })
               q.open()
