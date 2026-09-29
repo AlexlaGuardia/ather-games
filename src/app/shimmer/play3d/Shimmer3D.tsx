@@ -2654,6 +2654,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     trail: Array.from({ length: TRAIL_N }, () => new THREE.Vector3()),
     /** the Hold's evolved tier pierces: bodies this round has gone through, and the last one (never struck twice running) */
     hits: 0, last: -1,
+    // pass 2 amps, stamped at the muzzle: extra bodies, thin cover, a raised guard, an arc; a burn picked up in flight
+    xp: 0, cover: false, shield: false, arc: 0, arcRange: 0, lastId: '', amp: null as StatusKind | null, ampSecs: 0,
   })), [])
   const EMAX = 16  // enemy orb pool (fired by the hunter)
   const orbs = useMemo(() => Array.from({ length: EMAX }, () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0 })), [])
@@ -2673,7 +2675,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     /** step 5: a LINE zone's unit axis + half length (r is then its half-thickness); applySecs = how long a crossing lasts */
     line?: { ux: number; uz: number; half: number }; applySecs: number; stops: boolean
     /** pass 2: pushes whoever is inside out of it, this far per tick (Pyroclast's ash) */
-    push?: number }[]>([])
+    push?: number
+    /** pass 2: lays its status on the keeper's ROUNDS that pass through, never on foes inside (Emberglass) */
+    amp?: { kind: StatusKind; secs: number } }[]>([])
   // ── PASS 2, STEP 8: foes being moved by a cast (engine/shove.ts) ──
   const shovesRef = useRef<Shove[]>([])
   const lineMeshRef = useRef<THREE.InstancedMesh>(null)
@@ -2948,7 +2952,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       statusZones.current = statusZones.current.filter((z) => z.until > nowFrame)
       let bag = statusRef.current
       for (const zn of statusZones.current) forEachFoe((id, x, z) => {
-        if (!inZone(zn, x, z)) return
+        if (zn.amp || !inZone(zn, x, z)) return
         bag = applyStatuses(bag, id, zn.kinds, zn.applySecs, nowFrame, { zone: true })
         if (zn.push) shoveFoe(id, 'out', zn.push, x, z, zn.x, zn.z, 1, 0)   // Pyroclast: the ash walks you out
       })
@@ -3042,7 +3046,13 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           .addScaledVector(camRight, Math.cos(th) * r).addScaledVector(camUp, Math.sin(th) * r)
           .normalize().multiplyScalar(W.projSpeed)
         p.life = W.projLife
-        p.hits = 0; p.last = -1
+        p.hits = 0; p.last = -1; p.lastId = ''; p.amp = null
+        { // pass 2: stamp the open amp on the round; a shot-counted amp (Keenshard) spends one and closes at zero
+          const live = nowFrame < inf.until
+          p.xp = live ? inf.pierce ?? 0 : 0; p.cover = live && !!inf.cover; p.shield = live && !!inf.shield
+          p.arc = live ? inf.arc ?? 0 : 0; p.arcRange = inf.arcRange ?? 0
+          if (live && inf.shots) { inf.shots--; if (inf.shots <= 0) inf.until = 0 }
+        }
         for (const t of p.trail) t.copy(p.pos)  // collapse the trail onto the muzzle at spawn
         bloomRef.current = Math.min(W.bloomMax, bloomRef.current + W.bloomPerShot)
         recoilRef.current.p += W.kickPitch
@@ -3133,7 +3143,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
             const color = STATUS_TABLE[pending.statuses[0]].color
             // a LINE runs ACROSS the aim (perpendicular to the flat forward), centred on the aim point
             const line = pending.line ? { ux: -flatZ / flatLen, uz: flatX / flatLen, half: pending.areaSize / 2 } : undefined
-            statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.line ? 0.9 : pending.areaSize, until: nowMs + pending.areaSecs * 1000, kinds: pending.statuses, color, line, applySecs: pending.splashSecs || 1, stops: pending.line && pending.fieldStopsShots, push: pending.shoveDir === 'out' ? pending.shove : 0 }]
+            statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.line ? 0.9 : pending.areaSize, until: nowMs + pending.areaSecs * 1000, kinds: pending.statuses, color, line, applySecs: pending.splashSecs || 1, stops: pending.line && pending.fieldStopsShots, push: pending.shoveDir === 'out' ? pending.shove : 0,
+              amp: pending.ampZone ? { kind: pending.statuses[0], secs: pending.splashSecs || 3 } : undefined }]
             zoneTickAt.current = 0
           } else {
             let bag = statusRef.current
@@ -3149,6 +3160,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
               bag = applyStatuses(bag, id, pending!.statuses, pending!.areaSecs, nowMs)
             })
             statusRef.current = bag
+            // an instant cast is SEEN (pass 2): its disc flashes for a beat in its first status's colour (Flashpoint,
+            // Lava Stride), where it used to land invisibly
+            statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.areaSize, until: nowMs + 400, kinds: [], color: STATUS_TABLE[pending.statuses[0]].color, applySecs: 0, stops: false }]
           }
         }
         // REVEAL (STEP 2): every foe near the CASTER shows through walls, whatever it was facing
@@ -3203,6 +3217,18 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       conjuredRef.current = expireConjured(conjuredRef.current, nowMs)
       statusRef.current = pruneStatuses(statusRef.current, nowMs)
     }
+    // ── PASS 2 AMPS on a landed round: its infusion status, a burn picked up in an Emberglass spot, and Chain
+    // Lightning's arc to the nearest other foe. A pierce amp keeps the round going instead of ending it.
+    const endRound = (p: (typeof pool)[number], id: string) => { if (p.xp > 0) { p.xp--; p.lastId = id } else p.life = 0 }
+    const landed = (p: (typeof pool)[number], id: string, x: number, z: number, d: number) => {
+      ampHit(id)
+      if (p.amp) statusRef.current = applyStatus(statusRef.current, id, p.amp, p.ampSecs, nowFrame)
+      if (p.arc > 0) {
+        let best: string | null = null, bd = p.arcRange * p.arcRange
+        forEachFoe((oid, ox, oz) => { const dd = (ox - x) ** 2 + (oz - z) ** 2; if (oid !== id && dd < bd) { bd = dd; best = oid } })
+        if (best) { hurtFoe(best, d * p.arc * vm(best)); ampHit(best); if (p.amp) statusRef.current = applyStatus(statusRef.current, best, p.amp, p.ampSecs, nowFrame) }
+      }
+    }
     // advance + trail + collide
     for (const p of pool) {
       if (p.life <= 0) continue
@@ -3215,14 +3241,17 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       // wall / OOB / a conjured slab stops it — Stonewall is cover for BOTH sides, or it isn't cover.
       // A Firewall eats what crosses it, which is the "cover" half of its canon line.
       if (cell === undefined || (cell & 0xFF) === WALL_ID) { p.life = 0; continue }
-      if (conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
+      // thin cover (a conjured wall, a field's shell) stops a round unless an amp pierces it (Pressure Lance, Keenshard)
+      if (!p.cover && conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
       // the hold's walls are the mortal block (103), which this predicate cannot see — the hold says
       // what stops a round there: a wall or a shut gate, never a window (you shoot out of them)
       if (hs && roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP)) { p.life = 0; continue }
-      { const ab = absorbShotAt(fieldsRef.current, p.pos.x, p.pos.z, wDmg); if (ab.hit) { fieldsRef.current = ab.fields; p.life = 0; continue } }
+      if (!p.cover) { const ab = absorbShotAt(fieldsRef.current, p.pos.x, p.pos.z, wDmg); if (ab.hit) { fieldsRef.current = ab.fields; p.life = 0; continue } }
       if (lineStops(p.pos.x, p.pos.z)) { p.life = 0; continue }   // step 5: a Firewall eats rounds both ways
+      // Emberglass (pass 2): a round shot through the burning spot carries the burn to whatever it hits
+      if (!p.amp) for (const zn of statusZones.current) if (zn.amp && zn.until > nowFrame && inZone(zn, p.pos.x, p.pos.z)) { p.amp = zn.amp.kind; p.ampSecs = zn.amp.secs; break }
       for (const t of targets) {
-        if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
+        if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2 && p.lastId !== `board:${targets.indexOf(t)}`) {
           // bullseye: radial miss-distance of the flight line from the board center. Inside the gold
           // core = crit — dead center means dead center, whatever angle the board is facing.
           vhat.copy(p.vel).normalize()
@@ -3230,15 +3259,17 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           rel.addScaledVector(vhat, -rel.dot(vhat))  // strip the along-flight component → radial offset
           const crit = rel.lengthSq() < TARGET_CRIT_R * TARGET_CRIT_R
           const tid = `board:${targets.indexOf(t)}`
-          t.hp -= (crit ? wCrit : wDmg) * vm(tid); p.life = 0; onHit(crit); ampHit(tid)  // hitmarker on every landed round
+          const bd = (crit ? wCrit : wDmg) * vm(tid)
+          t.hp -= bd; endRound(p, tid); onHit(crit); landed(p, tid, t.pos.x, t.pos.z, bd)  // hitmarker on every landed round
           if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
           break
         }
       }
       const h = hunter.current
-      if (p.life > 0 && h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
+      if (p.life > 0 && h.alive && p.lastId !== 'hunter' && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
         const crit = p.pos.y > h.pos.y + CRIT_Y
-        h.hp -= (crit ? wCrit : wDmg) * vm('hunter'); p.life = 0; onHit(crit); ampHit('hunter')
+        const hd = (crit ? wCrit : wDmg) * vm('hunter')
+        h.hp -= hd; endRound(p, 'hunter'); onHit(crit); landed(p, 'hunter', h.pos.x, h.pos.z, hd)
         if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') }
       }
       // ── the fleet takes fire too (#302) ──────────────────────────────────────────────────────
@@ -3251,11 +3282,12 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         const botY = (posRef.current.y ?? 0) + 0.95
         if (Math.abs(p.pos.y - botY) < 1.2) {
           for (const m of fleetRef.current.members) {
-            if (!m.state.alive) continue
+            if (!m.state.alive || p.lastId === `fleet:${m.index}`) continue
             const bdx = p.pos.x - m.state.x, bdz = p.pos.z - m.state.z
             if (bdx * bdx + bdz * bdz >= HUNTER_HIT_R2) continue
             const bcrit = p.pos.y > botY + CRIT_Y
-            m.state.hp -= (bcrit ? wCrit : wDmg) * vm(`fleet:${m.index}`); p.life = 0; onHit(bcrit); ampHit(`fleet:${m.index}`)
+            const fd = (bcrit ? wCrit : wDmg) * vm(`fleet:${m.index}`)
+            m.state.hp -= fd; endRound(p, `fleet:${m.index}`); onHit(bcrit); landed(p, `fleet:${m.index}`, m.state.x, m.state.z, fd)
             if (m.state.hp <= 0) { m.state.alive = false; m.state.respawn = Number.POSITIVE_INFINITY }
             break
           }
@@ -3267,12 +3299,14 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         for (let gi = 0; gi < guardBodies.length; gi++) {
           const b = guardBodies[gi]
           const st = guardSim.current.enc.guards[gi]
-          if (!st?.alive || p.pos.distanceToSquared(b.pos) >= HUNTER_HIT_R2) continue
+          if (!st?.alive || p.lastId === `guard:${st.id}` || p.pos.distanceToSquared(b.pos) >= HUNTER_HIT_R2) continue
           const crit = p.pos.y > b.pos.y + CRIT_Y
-          const r = damageGuard(guardSim.current.enc, st.id, (crit ? wCrit : wDmg) * vm(`guard:${st.id}`), rangeCfgRef.current.tune)
-          ampHit(`guard:${st.id}`)
+          const gd = (crit ? wCrit : wDmg) * vm(`guard:${st.id}`)
+          // pass 2: a guard-piercing amp (Pressure Lance) goes through a raised barrier at full weight
+          const r = damageGuard(guardSim.current.enc, st.id, gd, rangeCfgRef.current.tune, p.shield)
           guardSim.current.enc = r.state
-          p.life = 0; onHit(crit)
+          landed(p, `guard:${st.id}`, b.pos.x, b.pos.z, gd)
+          endRound(p, `guard:${st.id}`); onHit(crit)
           // Wren turning a hit back is real damage to the shooter, not a miss.
           if (r.returned > 0) hurtPlayer(r.returned)  // Wren's reflect — carries no rune
           break
@@ -3302,9 +3336,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const crit = p.pos.y > by + CRIT_Y
           // co-op: applied to the mirror at once (instant feedback) AND sent; the server's next snapshot is the truth
           const fdmg = (crit ? wCrit : wDmg) * tier.dmg * vm(`flood:${b.id}`)
-          hitBody(hs, b.id, fdmg, crit); coop.link?.hit(b.id, fdmg, crit); ampHit(`flood:${b.id}`)
+          hitBody(hs, b.id, fdmg, crit); coop.link?.hit(b.id, fdmg, crit); landed(p, `flood:${b.id}`, b.x, b.z, fdmg)
           p.last = b.id
-          if (++p.hits >= tier.pierce) p.life = 0
+          if (++p.hits >= tier.pierce + p.xp) p.life = 0   // the device's tier, plus a pierce amp
           onHit(crit)
           break
         }
@@ -4481,7 +4515,9 @@ function GuideTrail({ posRef, heightsRef, targetRef }: {
 
 // ── the owner's move pins (Moves (dev) panel): slot index → move id, per keeper ─────────────────────
 /** The weapon window a cast opens (Flame Infusion, Forge Fist): a damage multiplier, or an on-hit status (step 3). */
-type Infusion = { until: number; mult: number; onHit?: StatusKind; onHitSecs?: number }
+type Infusion = { until: number; mult: number; onHit?: StatusKind; onHitSecs?: number
+  /** pass 2 (09-29): where the round GOES — extra bodies, thin cover, a raised guard, rounds left, an arc share + reach */
+  pierce?: number; cover?: boolean; shield?: boolean; shots?: number; arc?: number; arcRange?: number }
 
 const DEV_SLOTS_KEY = 'shimmer:devSlots'
 function readDevSlots(): (string | null)[] {
@@ -7731,9 +7767,12 @@ export default function Shimmer3D() {
         // AMP (move-jobs step 3): a spec that names an on-hit status lays it with every round instead of multiplying
         infusionRef.current = spec.statuses.length
           ? { until: now + spec.surgeSecs * 1000, mult: 1, onHit: spec.statuses[0], onHitSecs: spec.areaSecs }
-          : { until: now + spec.surgeSecs * 1000, mult: spec.surgeMult }
+          : { until: now + spec.surgeSecs * 1000, mult: spec.surgeMult,
+              // pass 2: an amp that changes where a round goes (Pressure Lance, Keenshard, Chain Lightning)
+              pierce: spec.ampPierce, cover: spec.ampCover, shield: spec.ampShield, shots: spec.ampShots || undefined, arc: spec.ampArc, arcRange: spec.chainRange }
         castCdRef.current[slot] = now + spec.cooldownMs
-        setHarvestToast(`${spec.label} — your shots ${spec.statuses[0] === 'vulnerable' ? 'shred' : 'burn'}`)
+        setHarvestToast(`${spec.label} — ${spec.statuses.length ? `your shots ${spec.statuses[0] === 'vulnerable' ? 'shred' : 'burn'}`
+          : spec.ampArc > 0 ? 'your shots arc' : spec.ampShots > 0 ? `your next ${spec.ampShots} shots pierce` : spec.ampPierce > 0 || spec.ampCover ? 'your shots pierce' : 'your shots hit harder'}`)
         break
       }
       case 'restore': {

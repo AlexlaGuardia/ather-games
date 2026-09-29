@@ -87,6 +87,9 @@ export function loadoutDamage(gun: WeaponDef, specs: readonly CastSpec[], fight:
   // Vulnerable multiplies the gun by VULNERABLE_MULT while it lasts; Burning adds BURN_DPS to the one body the
   // gun is working on (a burn tops the gun up; it never spreads through a horde on its own).
   let vulnUntil = -1, burnUntil = -1
+  // PASS 2 (09-29): a PIERCE or ARC amp makes each round reach more bodies in a horde (none extra on a boss).
+  // A shot-counted amp (Keenshard) lasts as long as its rounds take to fire.
+  let ampUntil = -1, ampReach = 1
   for (let t = 0; t < BUDGET.windowSec; t += BUDGET.dt) {
     mana += BUDGET.drip * BUDGET.dt
     for (const k of casts) {
@@ -99,6 +102,9 @@ export function loadoutDamage(gun: WeaponDef, specs: readonly CastSpec[], fight:
       const onHit = k.c.archetype === 'infusion' ? k.c.statuses?.[0] : undefined
       if (onHit === 'vulnerable') vulnUntil = Math.max(vulnUntil, t + (k.c.surgeSecs ?? 0) + (k.c.areaSecs ?? 0))
       else if (onHit === 'burning') burnUntil = Math.max(burnUntil, t + (k.c.surgeSecs ?? 0) + (k.c.areaSecs ?? 0))
+      else if (k.c.archetype === 'infusion' && ((k.c.ampPierce ?? 0) > 0 || (k.c.ampArc ?? 0) > 0)) {
+        if (isHorde(fight)) { ampReach = Math.max(ampReach, 1 + (k.c.ampPierce ?? 0) + (k.c.ampArc ?? 0)); ampUntil = Math.max(ampUntil, t + ((k.c.ampShots ?? 0) > 0 ? (k.c.ampShots ?? 0) * gun.fireCd : (k.c.surgeSecs ?? 0))) }
+      }
       else if (k.c.archetype === 'infusion' && (k.c.surgeMult ?? 1) >= mult) { mult = k.c.surgeMult ?? 1; multUntil = t + (k.c.surgeSecs ?? 0) }
       if (k.c.archetype === 'status' && k.c.statuses?.includes('vulnerable')) vulnUntil = Math.max(vulnUntil, t + (k.c.areaSecs ?? 0))
       // a burning zone (Firestorm, step 5) is judged as if the target stood in it the whole time: the worst case
@@ -109,7 +115,7 @@ export function loadoutDamage(gun: WeaponDef, specs: readonly CastSpec[], fight:
     const shot = Math.min(dps * BUDGET.dt, mana * perMana)
     mana -= shot / perMana
     const vuln = t < vulnUntil ? VULNERABLE_MULT : 1
-    dmg += shot * (t < multUntil ? mult : 1) * vuln
+    dmg += shot * (t < multUntil ? mult : 1) * vuln * (t < ampUntil ? ampReach : 1)
     if (t < burnUntil) dmg += BURN_DPS * vuln * BUDGET.dt
     if (t >= multUntil) mult = 1
   }

@@ -246,6 +246,8 @@ export function stepEncounter(
 export function damageGuard(
   state: EncounterState, id: GuardId, amount: number,
   tuning: Readonly<GuardTuning> = GUARD_TUNING,
+  /** the hit pierces a raised barrier (Pressure Lance, pass 2): full weight lands, the guard is still staggered */
+  pierce = false,
 ): { state: EncounterState; returned: number } {
   const guards = state.guards.map((g) => ({ ...g }))
   const g = guards.find((x) => x.id === id)
@@ -261,7 +263,7 @@ export function damageGuard(
   }
   // a raised barrier blunts the hit and staggers the guard instead of dropping it
   if (g.guarding) {
-    dealt *= 0.4
+    if (!pierce) dealt *= 0.4
     g.staggerFor = tuning.staggerSec
     g.guarding = false
   }

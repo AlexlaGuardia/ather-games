@@ -72,7 +72,7 @@ ok(castForMove('flame-infusion').statuses[0] === 'burning' && castForMove('forge
 for (const id of ['grindstone', 'shatterfield']) ok(castForMove(id).linger && castForMove(id).statuses[0] === 'vulnerable' && castForMove(id).fieldDps === 0, `${id} is a Vulnerable cloud with no damage of its own`)
 ok(p3.includes("? { until: now + spec.surgeSecs * 1000, mult: 1, onHit: spec.statuses[0]"), '★ play3d: an infusion with a status multiplies nothing (the status IS the amp)')
 for (const id of ['`board:${targets.indexOf(t)}`', "'hunter'", '`fleet:${m.index}`', '`guard:${st.id}`', '`flood:${b.id}`']) ok(p3.includes(`vm(${id})`) || p3.includes(`const tid = ${id}`), `★ gun hits on ${id} read Vulnerable`)
-ok((p3.match(/ampHit\(/g) || []).length >= 5, 'every gun hit site lays the infusion status')
+ok((p3.match(/landed\(p, /g) || []).length >= 5 && p3.includes('    const landed = (p: (typeof pool)[number], id: string, x: number, z: number, d: number) => {\n      ampHit(id)'), 'every gun hit site lays the infusion status (through `landed`)')
 ok(p3.includes('burnTickAt.current = nowFrame + 500') && p3.includes('d = BURN_DPS * 0.5'), 'Burning ticks every half second through each foe\'s own damage path')
 
 // H. STEP 4 (09-29): traps + charges (Alex's revision of Shackle and Flash Freeze)
@@ -125,6 +125,23 @@ ok(p3.includes('shovesRef.current = stepShoves(shovesRef.current, dt, moveFoe)')
 ok(p3.includes("if (!hs || coop.link) return false"), 'a co-op Breach refuses a shove on server-owned flooded rather than faking one')
 ok(p3.includes('landCast(p, hitId, sx, sz, 1)') && !p3.includes('t.hp -= dmg; p.life = 0; hit = true'), '★ one hit test for every foe: cast bolts reach the Puppet Guards now')
 ok(p3.includes("!hasStatus(fbag, `fleet:${r.member.index}`, 'silenced', nowFrame)"), 'a silenced challenger cannot cast')
+
+// M. PASS 2, STEP 9 (09-29): amp. What a cast adds to the keeper's rounds; none of these is a bolt of its own.
+const pl = castForMove('pressure-lance'), ks = castForMove('keenshard'), cl = castForMove('chain-lightning'), eg = castForMove('emberglass'), fp = castForMove('flashpoint')
+ok(pl.archetype === 'infusion' && pl.ampShield && pl.ampCover && pl.surgeSecs === 8 && pl.damage === 0, 'Pressure Lance: 8s of rounds through guards and thin cover')
+ok(ks.archetype === 'infusion' && ks.ampShots === 3 && ks.ampPierce === 1 && ks.ampCover, 'Keenshard: the next 3 rounds pierce a body and thin cover')
+ok(cl.archetype === 'infusion' && cl.ampArc > 0 && cl.ampArc <= 0.5 && cl.surgeSecs === 10 && cl.chainRange > 0, 'Chain Lightning: 10s of rounds that arc to a second foe')
+ok(eg.archetype === 'status' && eg.linger && eg.ampZone && eg.statuses[0] === 'burning' && eg.areaSecs === 6, '★ Emberglass: a spot that sets YOUR ROUNDS burning, not the foes standing in it')
+ok(fp.archetype === 'status' && !fp.linger && fp.statuses.includes('burning') && fp.statuses.includes('revealed') && fp.areaSecs === 3 && fp.fieldDps === 0, 'Flashpoint: the spot ignites at once, burning + revealed 3s')
+ok(p3.includes('if (zn.amp || !inZone(zn, x, z)) return'), 'an amp zone never touches the foes inside it')
+ok(p3.includes('if (!p.amp) for (const zn of statusZones.current) if (zn.amp'), 'a round picks up the burn in flight')
+ok(p3.includes('if (!p.cover && conjuredBlockedAt(') && p3.includes('if (!p.cover) { const ab = absorbShotAt('), 'thin cover stops a round unless it pierces')
+ok(p3.includes('if (++p.hits >= tier.pierce + p.xp) p.life = 0'), 'a pierce amp adds to the device tier in the Breach')
+ok(p3.includes('if (live && inf.shots) { inf.shots--; if (inf.shots <= 0) inf.until = 0 }'), '★ Keenshard\'s window closes on its third round, not its clock')
+ok(p3.includes('rangeCfgRef.current.tune, p.shield)'), 'a guard-piercing round reaches damageGuard')
+const pgSrc = readFileSync(new URL('../play3d/puppet-guards.ts', import.meta.url), 'utf8')
+ok(pgSrc.includes('if (!pierce) dealt *= 0.4'), '★ a pierced barrier lets the full hit through (the stagger still lands)')
+ok(p3.includes("kinds: [], color: STATUS_TABLE[pending.statuses[0]].color, applySecs: 0, stops: false }]"), 'an instant status cast flashes where it lands')
 
 console.log(`statuses: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

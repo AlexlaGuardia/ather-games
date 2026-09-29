@@ -220,6 +220,20 @@ export interface CastSpec {
   grapple: boolean
   /** projectile: also Revealed this long on whatever it strikes, beside `statuses` (Forked Bolt jams 1s, marks 4s) */
   markSecs: number
+  // ── MOVE-JOBS PASS 2, STEP 9 (09-29): amp — what a cast adds to the keeper's ROUNDS ─────────────────────
+  /** infusion: each round goes on through this many more bodies (Pressure Lance, Keenshard) */
+  ampPierce: number
+  /** infusion: rounds pass thin cover: conjured walls and field shells (never the map's own walls) */
+  ampCover: boolean
+  /** infusion: rounds go through a raised guard (a Puppet Guard's barrier) at full weight */
+  ampShield: boolean
+  /** infusion: the window ends after this many rounds (0 = timed only). Keenshard's "next 3 shots" */
+  ampShots: number
+  /** infusion: a round that lands arcs to the nearest other foe within `chainRange` for this share of it (Chain Lightning) */
+  ampArc: number
+  /** status + linger: the cloud lays `statuses` on the keeper's ROUNDS that pass through it, not on foes inside
+   *  (Emberglass: shoot through the burn and your shots carry it, for `splashSecs`) */
+  ampZone: boolean
   // ── impulse (SYSTEM 4) — the cast moves the CASTER ─────────────────────────
   /**
    * How the keeper is moved.
@@ -293,6 +307,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   trap: false, trapRadius: 0.9, trapMax: 1, trapSecs: 45, splashStatuses: [], splashSecs: 0, charges: 1, line: false,
   keepMomentum: false, airJumps: 0, airJumpSecs: 0, fieldShps: 0,
   shove: 0, shoveDir: 'away', lane: 0, grapple: false, markSecs: 0,
+  ampPierce: 0, ampCover: false, ampShield: false, ampShots: 0, ampArc: 0, ampZone: false,
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
@@ -421,7 +436,9 @@ const BUILDS: Record<string, Build> = {
                     trap: true, trapMax: 2, charges: 2, splashStatuses: ['slowed'], splashSecs: 3 },
   // "Pure focus, no combination... a needle of water harder than steel." Hydro's ONE keeper move, and
   // the starter a Hydro-born keeper now gets — so it has to feel like the rune: fast, thin, punishing.
-  'pressure-lance': { archetype: 'projectile', manaCost: 12, cooldownMs: 1100, damage: 30, projSpeed: 85, projLife: 1.6 },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "part plate armor"): 8s in which your rounds pierce armour, not bodies:
+  // through a raised guard at full weight and through thin cover. (Body-pierce measured +53% in a horde: that is Keenshard's.)
+  'pressure-lance': { archetype: 'infusion', manaCost: 12, cooldownMs: 16000, surgeSecs: 8, surgeMult: 1, ampCover: true, ampShield: true },
   // "Fill a space with blinding white" — obscurement, no damage. The widest, longest blind in the book.
   'fog-bank': { archetype: 'status', manaCost: 18, cooldownMs: 12000, castRange: 10, areaSize: 8, areaSecs: 8, statuses: ['blinded'], linger: true },
   // "No visible flood, just a thin film and no breath." Canon aims it at ONE face; the sim's smallest
@@ -437,7 +454,9 @@ const BUILDS: Record<string, Build> = {
   'lava-stride': { archetype: 'status', manaCost: 17, cooldownMs: 10000, castRange: 8, areaSize: 4, areaSecs: 3.5, statuses: ['rooted'] },
   // "The fire appears THERE rather than travelling to it" — so it is NOT a projectile. The longest
   // cast range in the book, the shortest burn: ignition delivered, not a fire tended.
-  flashpoint: { archetype: 'field', manaCost: 15, cooldownMs: 5000, castRange: 14, areaSize: 2.2, areaSecs: 2, fieldDps: 15 },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "the fire appears THERE"): the spot ignites at once: every foe in it Burning
+  // and Revealed 3s. Its damage is the burn's (design note: weigh against Alex's direction at the playtest).
+  flashpoint: { archetype: 'status', manaCost: 15, cooldownMs: 8000, castRange: 14, areaSize: 2.2, areaSecs: 3, statuses: ['burning', 'revealed'] },
   // (cooldown 9s → 12s, 09-29: at 9s the shred never lapsed and the band read 25%; `power-budget.test.ts`)
   // MOVE-JOBS 09-29 (Alex ✓, "armor shred"): in play3d your shots leave foes VULNERABLE for 3s. No play3d foe has a
   // shield to break yet, so shredding reads as the damage it lets through.
@@ -547,7 +566,8 @@ const BUILDS: Record<string, Build> = {
   // "One shard, no spread — it pierces where a thrown stone would only break." The fastest and hardest
   // single bolt a tactical gets; Gale Cutter is cheaper and quicker, Crystal Barrage throws more.
   // Paying for one perfect shard is the Gem keeper's whole posture.
-  keenshard: { archetype: 'projectile', manaCost: 9, cooldownMs: 900, damage: 24, projSpeed: 84, projLife: 1.3 },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "it pierces"): your next 3 rounds go through the first body and thin cover.
+  keenshard: { archetype: 'infusion', manaCost: 9, cooldownMs: 8000, surgeSecs: 20, surgeMult: 1, ampShots: 3, ampPierce: 1, ampCover: true },
   // ⚠ UNBUILT ON PURPOSE, AND THE `why` NAMES THE MISSING VERB. Meltbore is a CHANNEL held on one
   // spot *"until the spot stops existing"* — the breach move, whose point is opening what refuses to
   // open. The cast layer can RAISE terrain (conjured-terrain) and has no way to open any; and there
@@ -603,7 +623,9 @@ const BUILDS: Record<string, Build> = {
   threshold: { archetype: 'field', manaCost: 14, cooldownMs: 8000, castRange: 6, areaSize: 2.4, areaSecs: 5, fieldDps: 0, fieldStopsShots: true, fieldHp: 20 },
 
   // ── Ultimates ────────────────────────────────────────────────────────────────────────────────
-  'chain-lightning': { archetype: 'projectile', manaCost: 34, cooldownMs: 9000, damage: 26, projSpeed: 70, projLife: 1.2, chain: 3, chainRange: 9 },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "arcs between every target"): 10s in which every round that lands arcs to
+  // the nearest other foe for half of it.
+  'chain-lightning': { archetype: 'infusion', manaCost: 34, cooldownMs: 30000, surgeSecs: 10, surgeMult: 1, ampArc: 0.5, chainRange: 7 },
   'flame-barrage': { archetype: 'unbuilt', why: 'needs independently tracking projectiles' },
   // ⚠ GATE STAYS UNBUILT AND IS NOT AN IMPULSE. Thunder Step goes where you are LOOKING; a gate is
   // a two-point bind — you place an anchor, leave, and return to it later. That is a persistent
@@ -665,7 +687,9 @@ const BUILDS: Record<string, Build> = {
   // Vapor, a Scatter rune the birth screen does not offer — the emptiness IS the canon (runes.data.ts).
   'monsoon-veil': { archetype: 'field', manaCost: 46, cooldownMs: 26000, castRange: 8, areaSize: 7, areaSecs: 16, fieldHps: 16, fieldStopsShots: false },
   // ── the birth-first pass (09-28): numbers are Jin's, each off its nearest cousin ──
-  'emberglass': { archetype: 'projectile', manaCost: 13, cooldownMs: 1500, damage: 30, projSpeed: 44, projLife: 1.6 },
+  // MOVE-JOBS PASS 2 (Magii ruled 09-28, "the burn gets out"): a shard shatters at the aim; for 6s, rounds shot through
+  // the spot carry the burn and set what they hit Burning (3s). The spot itself hurts nobody.
+  'emberglass': { archetype: 'status', manaCost: 13, cooldownMs: 12000, castRange: 9, areaSize: 1.6, areaSecs: 6, statuses: ['burning'], linger: true, ampZone: true, splashSecs: 3 },
   'mending-thread': { archetype: 'restore', manaCost: 14, cooldownMs: 10000, heal: 28 },
   // MOVE-JOBS PASS 2 (Magii ruled 09-28, "thrown"): a squall down one line from you. Everyone on it is thrown aside
   // and loses footing. A lane from the caster, not a disc at range.

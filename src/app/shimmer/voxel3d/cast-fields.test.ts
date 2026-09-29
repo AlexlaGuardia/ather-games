@@ -132,8 +132,9 @@ console.log('\n── ★ shield hit points: a shell pays for what it eats (rule
   const r4 = absorbShotAtVolume(r3.fields, 0, GROUND + 1, 0, 9)
   chk('...and the next round passes through the gap', r4.hit === null)
   // one hard blow
-  const hard = absorbShotAtVolume(shell(20), 0, GROUND + 1, 0, castForMove('keenshard').damage)
-  chk('★ canon: "gone at the first hard blow" — one Keenshard takes the door', hard.broke, `keenshard ${castForMove('keenshard').damage} vs ${th.fieldHp}`)
+  // ⚠ was Keenshard until move-jobs pass 2 (09-29) made it a rounds amp; Volcano Spike is the breaker shot now
+  const hard = absorbShotAtVolume(shell(20), 0, GROUND + 1, 0, castForMove('volcano-spike').damage)
+  chk('★ canon: "gone at the first hard blow" — one Volcano Spike takes the door', hard.broke, `volcano-spike ${castForMove('volcano-spike').damage} vs ${th.fieldHp}`)
   // unbreakable cover and non-cover
   const wall = spawnField([], { moveId: 'firewall', x: 0, y: GROUND, z: 0, radius: 3, height: FIELD_HEIGHT, secs: 6, dps: 12, hps: 0, stopsShots: true, hp: 0 }, 0)
   const w1 = absorbShotAtVolume(wall, 0, GROUND + 1, 0, 999)

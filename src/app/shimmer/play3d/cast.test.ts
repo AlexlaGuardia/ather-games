@@ -117,7 +117,8 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     if (m.feedsWhileWorn && !(s.regenMult > 1)) wrong.push(`${m.id} (canon says it feeds, spec does not)`)
   }
   chk('built specs carry their archetype numbers', wrong.length === 0, wrong.join())
-  chk('Chain Lightning chains (canon: arcs between every target in range)', castForMove('chain-lightning').chain > 0)
+  // pass 2 (09-29): the arc rides the keeper's rounds now (Magii: "arcs between every target" → party shots arc)
+  chk('Chain Lightning arcs (canon: arcs between every target in range)', castForMove('chain-lightning').chain > 0 || castForMove('chain-lightning').ampArc > 0)
 
   // the three systems' specs
   const wrong2: string[] = []
@@ -134,7 +135,8 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     if (s.archetype === 'terrain' && !(s.areaSize > 0 && s.areaSecs > 0 && s.castRange > 0)) wrong2.push(m.id)
     // a LANE (Wind Shear, pass 2) starts at the caster, so it carries a length where a disc carries a range
     if (s.archetype === 'status' && !(s.areaSize > 0 && s.areaSecs > 0 && (s.castRange > 0 || s.lane > 0) && s.statuses.length > 0)) wrong2.push(m.id)
-    if (s.archetype === 'infusion' && !(s.surgeSecs > 0 && s.surgeMult > 1)) wrong2.push(m.id)
+    // pass 2: an infusion multiplies, lays a status, or changes where a round goes (pierce, arc)
+    if (s.archetype === 'infusion' && !(s.surgeSecs > 0 && (s.surgeMult > 1 || s.statuses.length > 0 || s.ampPierce > 0 || s.ampArc > 0 || s.ampCover || s.ampShield))) wrong2.push(m.id)
   }
   chk('placed casts carry range + size + duration', wrong2.length === 0, wrong2.join())
 
