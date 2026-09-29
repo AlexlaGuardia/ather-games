@@ -170,6 +170,18 @@ export interface CastSpec {
    * lingering zones yet applies it once, which is the old behaviour, never a refusal.
    */
   linger: boolean
+  // ── MOVE-JOBS STEP 2 (09-29): reveal + the tell ──────────────────────────────────────────────
+  /**
+   * ms between the press and the effect, with a rising sound and a glow the whole time (Alex 09-28 on
+   * Enlighten: *"what if it had a charge up with an audio que for players to have a chance to react"*).
+   * The mana is paid at the press; the aim is read at the release, so a keeper can track a target.
+   */
+  windupMs: number
+  /** status: the statuses land only on foes FACING the cast point (a flash you turned away from misses you) */
+  facingOnly: boolean
+  /** when it lands: every foe within this many tiles of the CASTER is Revealed for `revealSecs` (0 = none) */
+  revealRadius: number
+  revealSecs: number
   // ── impulse (SYSTEM 4) — the cast moves the CASTER ─────────────────────────
   /**
    * How the keeper is moved.
@@ -239,6 +251,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   castRange: 0, areaSize: 0, areaSecs: 0,
   fieldDps: 0, fieldHps: 0, fieldStopsShots: false, fieldHp: 0, wardMend: 0, wardFlaw: 0, wardBacklash: 0,
   shape: 'wall', shapeHeight: 1, statuses: [], linger: false,
+  windupMs: 0, facingOnly: false, revealRadius: 0, revealSecs: 0,
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
@@ -332,7 +345,11 @@ const BUILDS: Record<string, Build> = {
   // MOVE-JOBS 09-28 (Alex ✓): a dart that SLOWS for 3s. It keeps a small sting so it still reads as a hit.
   'ice-dart': { archetype: 'projectile', manaCost: 7, cooldownMs: 650, damage: 6, projSpeed: 52, projLife: 1.4, statuses: ['slowed'], areaSecs: 3 },
   // "A flash-bang, not a blade" — it takes aim away, never HP. Wide radius, short, no damage.
-  enlighten: { archetype: 'status', manaCost: 12, cooldownMs: 9000, castRange: 11, areaSize: 6, areaSecs: 3.5, statuses: ['blinded'] },
+  // MOVE-JOBS 09-28/29 (Alex's revision): the blind was too big a window for PvP, so it CHARGES for 0.8s with a
+  // rising sound, blinds only foes still facing the flash (1.5s, turning away saves you), and every foe within
+  // 15 tiles shows through walls for 3s either way: canon's "and reveals what is hidden".
+  enlighten: { archetype: 'status', manaCost: 12, cooldownMs: 9000, castRange: 11, areaSize: 6, areaSecs: 1.5, statuses: ['blinded'],
+               windupMs: 800, facingOnly: true, revealRadius: 15, revealSecs: 3 },
   // "Terrain you impose. Close the gap, do not chase." A short-lived barricade across your sightline.
   stonewall: { archetype: 'terrain', manaCost: 16, cooldownMs: 8000, castRange: 7, areaSize: 5, areaSecs: 10, shape: 'wall', shapeHeight: 2 },
   // "Clamp a foe in iron, OR jam a manalic weapon mid-draw" — canon names both, so it does both.
@@ -421,7 +438,9 @@ const BUILDS: Record<string, Build> = {
   'thunder-step': { archetype: 'impulse', motion: 'blink', manaCost: 14, cooldownMs: 7000,
                     castRange: 12 },
   // "Distance barely matters." Fastest and hardest-hitting bolt, on the longest fuse.
-  'bolt-snipe': { archetype: 'projectile', manaCost: 16, cooldownMs: 2200, damage: 40, projSpeed: 120, projLife: 2.4 },
+  // MOVE-JOBS 09-28 (Alex ✓): a MARKING beam, canon's own master clause ("masters mark through walls"). What it
+  // hits shows through walls to the party for 5s; the damage drops to a sting, because the guns do the killing.
+  'bolt-snipe': { archetype: 'projectile', manaCost: 16, cooldownMs: 2200, damage: 12, projSpeed: 120, projLife: 2.4, statuses: ['revealed'], areaSecs: 5 },
   // "Muscles twitch, manatech sputters. DISABLING, NOT LETHAL" — canon forbids damage here. Same pair
   // as Shackle, but thrown wide and held long instead of clamped on one target.
   'static-field': { archetype: 'status', manaCost: 15, cooldownMs: 10000, castRange: 9, areaSize: 4.5, areaSecs: 5, statuses: ['rooted', 'disarmed'] },

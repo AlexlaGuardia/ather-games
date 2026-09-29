@@ -43,7 +43,7 @@ import { forkTarget, forkObjective, forkFlags, MET_GREG_FLAG, STATION_FLAG } fro
 import { OptionsPanel, OptionRow, OptionHead, OptionSlider } from '../hud/options-panel'
 import { OptionsDoor } from '../hud/options-door'
 import { loadSettings, saveSettings } from '../voxel3d/settings'
-import { setMasterVolume } from '../audio/bus'
+import { setMasterVolume, tone } from '../audio/bus'
 import { LANDING_LABEL } from '../world/landing'
 import { getHeightGrid } from '../world/heightmaps'
 import { GardenAtmosphere } from '../world/atmosphere'
@@ -2661,6 +2661,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const zoneTickAt = useRef(0)
   const zoneMeshRef = useRef<THREE.InstancedMesh>(null)
   const markMeshRef = useRef<THREE.InstancedMesh>(null)
+  const revealMeshRef = useRef<THREE.InstancedMesh>(null)   // STEP 2: a Revealed foe's outline, drawn through walls
+  const windupRef = useRef<{ spec: CastSpec; at: number } | null>(null)  // a cast charging (Enlighten's 0.8s tell)
   const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z], i) => ({
     pos: new THREE.Vector3(x, y, z), ax: x, az: z,  // anchor — drift mode oscillates around it
     phase: i * 1.7, spd: 0.55 + (i % 3) * 0.25,     // varied phase/speed so the wall doesn't move in lockstep
@@ -2945,7 +2947,14 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     // ── the cast lands. The parent resolved slot → move → spec and already paid mana + cooldown, so
     // what arrives here is "this shape, now". Every PLACED archetype shares one aim resolution:
     // camera-forward, flattened to the ground plane, at the move's own range. One rule, four shapes.
-    const pending = pendingCastRef.current
+    let pending = pendingCastRef.current
+    // ── THE TELL (STEP 2): a cast with a windup is held here until it is due; the aim is read at the release
+    if (pending && pending.windupMs > 0 && !windupRef.current) { windupRef.current = { spec: pending, at: performance.now() + pending.windupMs }; pendingCastRef.current = null; pending = null }
+    else if (pending && pending.windupMs > 0) { pendingCastRef.current = null; pending = null }   // one charge at a time
+    if (!pending && windupRef.current && performance.now() >= windupRef.current.at) {
+      pending = windupRef.current.spec; windupRef.current = null
+      tone(1900, 160, { type: 'square', gain: 0.05, slideTo: 500 })   // the crack as it goes off
+    }
     if (pending) {
       pendingCastRef.current = null
       state.camera.getWorldDirection(dir)
@@ -2996,9 +3005,26 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
             zoneTickAt.current = 0
           } else {
             let bag = statusRef.current
-            forEachFoe((id, x, z) => { if ((x - ax) ** 2 + (z - az) ** 2 <= pending.areaSize * pending.areaSize) bag = applyStatuses(bag, id, pending.statuses, pending.areaSecs, nowMs) })
+            const plx = posRef.current?.x ?? 0, plz = posRef.current?.z ?? 0
+            forEachFoe((id, x, z) => {
+              if ((x - ax) ** 2 + (z - az) ** 2 > pending!.areaSize * pending!.areaSize) return
+              // FACING ONLY (Enlighten): a foe faces the keeper it is fighting; a flash behind its back misses it
+              if (pending!.facingOnly) {
+                const fx = plx - x, fz = plz - z, cx = ax - x, cz = az - z
+                const fl = Math.hypot(fx, fz) || 1, cl = Math.hypot(cx, cz)
+                if (cl > 0.5 && (fx * cx + fz * cz) / (fl * cl) < 0) return
+              }
+              bag = applyStatuses(bag, id, pending!.statuses, pending!.areaSecs, nowMs)
+            })
             statusRef.current = bag
           }
+        }
+        // REVEAL (STEP 2): every foe near the CASTER shows through walls, whatever it was facing
+        if (pending.revealRadius > 0) {
+          let bag = statusRef.current
+          const plx = posRef.current?.x ?? 0, plz = posRef.current?.z ?? 0, rr = pending.revealRadius * pending.revealRadius
+          forEachFoe((id, x, z) => { if ((x - plx) ** 2 + (z - plz) ** 2 <= rr) bag = applyStatuses(bag, id, ['revealed'], pending!.revealSecs, nowMs) })
+          statusRef.current = bag
         }
       }
     }
@@ -3648,6 +3674,20 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       markMeshRef.current.instanceMatrix.needsUpdate = true
       if (markMeshRef.current.instanceColor) markMeshRef.current.instanceColor.needsUpdate = true
     }
+    // REVEALED (STEP 2): an outline drawn with no depth test, so it shows THROUGH walls; it pulses so it reads
+    // as information, not as a body standing in front of the wall
+    if (revealMeshRef.current) {
+      let n = 0
+      const bag = statusRef.current
+      const pulse = 0.9 + Math.sin(nowFrame * 0.008) * 0.1
+      forEachFoe((id, x, z, y) => {
+        if (n >= MARK_MAX || !hasStatus(bag, id, 'revealed', nowFrame)) return
+        seg.set(x, y + 0.2, z); scl.set(0.45 * pulse, 0.95, 0.45 * pulse)
+        m.compose(seg, q, scl); revealMeshRef.current!.setMatrixAt(n++, m)
+      })
+      revealMeshRef.current.count = n
+      revealMeshRef.current.instanceMatrix.needsUpdate = true
+    }
     // ── SYSTEM 2 render: one box per conjured CELL, so what you see is exactly what blocks you.
     // Drawing the collision set itself means the wall can never look different from where it is. ──
     if (conjuredMeshRef.current) {
@@ -3742,6 +3782,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       <instancedMesh ref={zoneMeshRef} args={[undefined, undefined, ZONE_MAX]} frustumCulled={false}>
         <cylinderGeometry args={[1, 1, 2.2, 28, 1, true]} />
         <meshBasicMaterial transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={revealMeshRef} args={[undefined, undefined, MARK_MAX]} frustumCulled={false} renderOrder={999}>
+        <capsuleGeometry args={[1, 1.2, 4, 10]} />
+        <meshBasicMaterial color={STATUS_TABLE.revealed.color} transparent opacity={0.42} depthTest={false} depthWrite={false} toneMapped={false} />
       </instancedMesh>
       <instancedMesh ref={markMeshRef} args={[undefined, undefined, MARK_MAX]} frustumCulled={false}>
         <octahedronGeometry args={[1, 0]} />
@@ -5620,6 +5664,7 @@ export default function Shimmer3D() {
   const fishBiteRef = useRef(false); fishBiteRef.current = !!fish?.bite
   const hookFishRef = useRef<() => void>(() => {}) // set below (needs grantHarvest, defined later)
   const [menuOpen, setMenuOpen] = useState(false)     // ☰ — edit terrain / new game
+  const [chargeGlow, setChargeGlow] = useState(false)  // a cast with a windup is charging (Enlighten's tell)
   const [movesDevOpen, setMovesDevOpen] = useState(false)  // owner-only: pin any built move into Z / C
   const [runeDevOpen, setRuneDevOpen] = useState(false)  // owner-only: swap birth rune live to test all archetypes
   const [skillsOpen, setSkillsOpen] = useState(false) // skills panel
@@ -7461,7 +7506,12 @@ export default function Shimmer3D() {
         if (!tryCast(spec.manaCost)) return
         pendingCastRef.current = spec
         castCdRef.current[slot] = now + spec.cooldownMs
-        if (spec.archetype !== 'projectile') setHarvestToast(spec.label)
+        if (spec.windupMs > 0) {
+          // THE TELL: a rising tone and a glow for the whole charge, so the other side has a chance to react
+          tone(260, spec.windupMs, { type: 'triangle', gain: 0.07, slideTo: 1500 })
+          setChargeGlow(true); setTimeout(() => setChargeGlow(false), spec.windupMs)
+          setHarvestToast(`${spec.label} — charging`)
+        } else if (spec.archetype !== 'projectile') setHarvestToast(spec.label)
         break
       }
       case 'infusion': {
@@ -8542,6 +8592,8 @@ export default function Shimmer3D() {
           </div>}
         />
       )}
+      {/* THE TELL (move-jobs step 2): the screen edge brightens while a windup cast charges */}
+      {chargeGlow && <div aria-hidden className="pointer-events-none fixed inset-0 z-20" style={{ background: 'radial-gradient(ellipse at 50% 55%, rgba(255,248,225,0) 45%, rgba(255,246,214,0.32) 100%)' }} />}
       {showMap && <WorldMap zoneId={zone.id} gridRef={gridRef} posRef={posRef} yawRef={camYaw} onClose={() => { setShowMap(false); closeCursorUI() }} />}
 
       {/* talk prompt when standing by an NPC */}

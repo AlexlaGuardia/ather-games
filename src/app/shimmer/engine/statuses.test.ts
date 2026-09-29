@@ -15,7 +15,7 @@ const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 for (const m of KEEPER_MOVES) for (const k of castForMove(m.id).statuses) ok(k in STATUS_TABLE, `★ ${m.name} names '${k}', which the table has`)
 for (const k of STATUS_KINDS) { const d = STATUS_TABLE[k]; ok(!!d.label && !!d.effect && typeof d.hard === 'boolean' && d.color > 0, `${k} has a label, an effect, a hard flag and a colour`) }
 ok(STATUS_KINDS.length === 10, 'ten statuses (update this when the table grows, on purpose)')
-ok(['rooted', 'disarmed', 'blinded', 'silenced'].every(k => STATUS_TABLE[k as never].hard) && ['slowed', 'staggered', 'revealed', 'burning', 'vulnerable', 'shieldBroken'].every(k => !STATUS_TABLE[k as never].hard), 'hard = takes an option away outright; the rest are soft')
+ok(['rooted', 'disarmed', 'blinded', 'silenced'].every(k => STATUS_TABLE[k as keyof typeof STATUS_TABLE].hard) && ['slowed', 'staggered', 'revealed', 'burning', 'vulnerable', 'shieldBroken'].every(k => !STATUS_TABLE[k as keyof typeof STATUS_TABLE].hard), 'hard = takes an option away outright; the rest are soft')
 
 // B. no stacking: a re-apply extends to the later expiry
 let b = applyStatus(emptyBag(), 'x', 'slowed', 2, 0)
@@ -55,6 +55,16 @@ ok(p3.includes('stepFleet(fleet, bodies, bc, dt, RANGE_HUNTER, (i) => foeMods(')
 ok(p3.includes("applyStatuses(bag, id, zn.kinds, 1, nowFrame, { zone: true })"), 'a cloud re-applies with the zone flag')
 for (const id of ['fog-bank', 'hush', 'sandstorm-veil', 'dust-lung', 'pressure-drop', 'squall']) ok(castForMove(id).linger && castForMove(id).archetype === 'status', `${id} is a lingering cloud`)
 ok(castForMove('ice-dart').statuses.includes('slowed') && castForMove('ice-dart').areaSecs > 0, 'Ice Dart slows what it hits')
+
+// F. STEP 2 (09-29): reveal + Enlighten's tell
+const en = castForMove('enlighten')
+ok(en.windupMs >= 500 && en.facingOnly && en.revealRadius >= 10 && en.revealSecs > 0, '★ Enlighten charges, blinds only the facing, reveals everyone near')
+ok(en.areaSecs <= 2 && en.statuses.includes('blinded'), 'its blind is short (1.5s): the PvP window Alex called out')
+ok(castForMove('bolt-snipe').statuses.includes('revealed') && castForMove('bolt-snipe').damage < 20, 'Bolt Snipe marks what it hits, and stings rather than kills')
+ok(p3.includes('pending && pending.windupMs > 0 && !windupRef.current') && p3.includes('performance.now() >= windupRef.current.at'), '★ a windup cast is held until due, then released')
+ok(p3.includes('if (cl > 0.5 && (fx * cx + fz * cz) / (fl * cl) < 0) return'), '★ facing only: a flash behind a foe misses it')
+ok(p3.includes('depthTest={false}') && p3.includes("hasStatus(bag, id, 'revealed', nowFrame)"), '★ a Revealed foe draws with no depth test: through walls')
+ok(p3.includes("tone(260, spec.windupMs, { type: 'triangle'") && p3.includes('setChargeGlow(true)'), 'the tell is heard and seen for the whole charge')
 
 console.log(`statuses: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }
