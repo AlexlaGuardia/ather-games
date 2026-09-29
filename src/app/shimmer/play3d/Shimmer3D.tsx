@@ -1380,6 +1380,8 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
   const hangT = useRef(0)           // time gripped (s) — must clear HANG_MIN before commit/drop can fire
   const hangLock = useRef(0)        // suppress re-grabbing a lip right after dropping off it
   const wallLock = useRef(0)        // post-kick lockout: no re-gripping the wall until this drains
+  const airJumps = useRef(0)        // step 6: stored air-jumps (Updraft banks one) …
+  const airJumpUntil = useRef(0)    // … usable until this performance.now()
 
   useEffect(() => {
     const dn = (e: KeyboardEvent) => {
@@ -1481,10 +1483,11 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
           letGo()
           // ★ FLATTENED HORIZONTAL, VERTICAL FROM THE SPEC — never the camera's pitch: looking at your
           // feet must not fire you into the ground, looking up must not turn Overcharge into a pop
-          hvel.set(fwd.x, 0, fwd.z).setLength(bc.fwd)
+          if (bc.keepMomentum) airSpeed.current = Math.max(airSpeed.current, hvel.length())   // a jump, not a throw
+          else { hvel.set(fwd.x, 0, fwd.z).setLength(bc.fwd); airSpeed.current = bc.fwd }
           vy.current = launchVy(bc.up, airborne.current ? vy.current : 0)
           airborne.current = true
-          airSpeed.current = bc.fwd
+          if (bc.airJumps) { airJumps.current = bc.airJumps; airJumpUntil.current = performance.now() + (bc.airJumpSecs ?? 0) * 1000 }
           p.y += 0.02   // leave the floor this frame, or the landing check below reads her as still standing
           onBodyCast?.({ say: bc.label })
         } else if (bc.kind === 'blink') {
@@ -1696,6 +1699,10 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       const intoLedge = hasInput ? (move.x * hc.x + move.z * hc.z) : 0  // cos to the over-lip dir: + = into, - = away
       // WALL-JUMP: airborne + Space edge + a wall in coyote, but ONLY when not hanging / pulling up / climbing.
       const wallJumping = airborne.current && jumpEdge && !hanging.current && mantleT.current <= 0 && !climbing && wallStick.current > 0
+      // STEP 6: a stored air-jump (Updraft banks one): Space mid-air, not on a wall, not hanging
+      const airJumping = !wallJumping && airborne.current && jumpEdge && !hanging.current && mantleT.current <= 0 && !climbing
+        && airJumps.current > 0 && performance.now() < airJumpUntil.current
+      if (airJumping) { airJumps.current--; vy.current = Math.max(vy.current, JUMP_V0); airSpeed.current = Math.max(airSpeed.current, hvel.length()) }
       if (wallJumping) {
         vy.current = WALLJUMP_UP
         hvel.copy(wallNormal).multiplyScalar(WALLJUMP_PUSH)
@@ -3119,6 +3126,12 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         if (f.hps > 0 && posRef.current) {
           const dx = posRef.current.x - f.x, dz = posRef.current.z - f.z
           if (dx * dx + dz * dz <= f.radius * f.radius) onHeal(f.hps)
+        }
+        // STEP 7: a sustain field restores SHIELD too (Healing Grove, Exhale), on the same tick as its heal
+        const shps = castForMove(f.moveId).fieldShps
+        if (shps > 0 && posRef.current) {
+          const dx = posRef.current.x - f.x, dz = posRef.current.z - f.z
+          if (dx * dx + dz * dz <= f.radius * f.radius) shieldRef.current = Math.min(shieldMaxRef.current ?? MAX_SHIELD, shieldRef.current + shps)
         }
       }
       conjuredRef.current = expireConjured(conjuredRef.current, nowMs)
@@ -7688,9 +7701,10 @@ export default function Shimmer3D() {
       case 'impulse': {
         if (!tryCast(spec.manaCost)) return
         bodyCastRef.current = spec.motion === 'launch'
-          ? { kind: 'launch', label: spec.label, fwd: spec.impulseFwd, up: spec.impulseUp }
+          ? { kind: 'launch', label: spec.label, fwd: spec.impulseFwd, up: spec.impulseUp, keepMomentum: spec.keepMomentum, airJumps: spec.airJumps, airJumpSecs: spec.airJumpSecs }
           : { kind: 'blink', label: spec.label, range: spec.castRange }
         castCdRef.current[slot] = now + spec.cooldownMs
+        if (charge) { charge.n--; if (charge.at === 0) charge.at = now + spec.cooldownMs; castCdRef.current[slot] = now + 250 }
         break
       }
       case 'gate': {

@@ -94,5 +94,17 @@ ok(fs.line && !fs.fieldStopsShots && fs.statuses[0] === 'burning' && fs.areaSize
 ok(p3.includes('const line = pending.line ? { ux: -flatZ / flatLen, uz: flatX / flatLen'), 'a line runs ACROSS the aim')
 ok((p3.match(/if \(lineStops\(/g) || []).length >= 3, '★ a shot-stopping line stops gun rounds, enemy orbs and cast rounds')
 
+// J. STEP 6 (09-29): the air-jump
+const qf = castForMove('quickform'), ud = castForMove('updraft')
+ok(qf.archetype === 'impulse' && qf.keepMomentum && qf.impulseFwd === 0 && qf.impulseUp > 0 && qf.charges === 2, '★ Quickform is the double jump: straight up, momentum kept, 2 charges')
+ok(ud.airJumps === 1 && ud.airJumpSecs >= 10, 'Updraft banks one air-jump for 10s')
+ok(p3.includes('if (bc.keepMomentum) airSpeed.current = Math.max(airSpeed.current, hvel.length())'), 'a keep-momentum launch never zeroes your run')
+ok(p3.includes('&& airJumps.current > 0 && performance.now() < airJumpUntil.current'), '★ Space mid-air spends a stored jump')
+ok(p3.includes("if (charge) { charge.n--; if (charge.at === 0) charge.at = now + spec.cooldownMs; castCdRef.current[slot] = now + 250 }"), 'impulse moves spend charges too')
+
+// K. STEP 7 (09-29): shield recovery over an area
+for (const id of ['healing-grove', 'exhale']) ok(castForMove(id).fieldShps > 0 && castForMove(id).archetype === 'field', `${id} restores shield to a keeper inside`)
+ok(p3.includes('const shps = castForMove(f.moveId).fieldShps'), 'the shield refill rides the field\'s own tick')
+
 console.log(`statuses: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

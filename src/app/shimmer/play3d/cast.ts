@@ -197,6 +197,14 @@ export interface CastSpec {
   /** presses stored (1 = an ordinary cooldown). Charges refill one at a time, each taking `cooldownMs`. */
   charges: number
   // ── MOVE-JOBS STEP 5 (09-29): space ────────────────────────────────────────────────────────────
+  // ── MOVE-JOBS STEP 6 (09-29): the air-jump ─────────────────────────────────────────────────────
+  /** impulse: keep the keeper's horizontal momentum (a jump, not a throw). The voxel world ignores it. */
+  keepMomentum: boolean
+  /** field (step 7): shield restored per second to a keeper standing inside, on the field's own tick */
+  fieldShps: number
+  /** impulse: after it lands, this many free air-jumps on Space, for `airJumpSecs` (Updraft's stored jump) */
+  airJumps: number
+  airJumpSecs: number
   /** a lingering status zone laid as a LINE across the aim (length `areaSize`), not a disc. Crossing it applies
    *  `statuses` for `splashSecs` (or 1s); `fieldStopsShots` makes it stop every round, both ways. */
   line: boolean
@@ -271,6 +279,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   shape: 'wall', shapeHeight: 1, statuses: [], linger: false,
   windupMs: 0, facingOnly: false, revealRadius: 0, revealSecs: 0,
   trap: false, trapRadius: 0.9, trapMax: 1, trapSecs: 45, splashStatuses: [], splashSecs: 0, charges: 1, line: false,
+  keepMomentum: false, airJumps: 0, airJumpSecs: 0, fieldShps: 0,
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
@@ -464,8 +473,9 @@ const BUILDS: Record<string, Build> = {
   // forward component is a nudge, not a leap: the whole point is that it answers a wall rather than
   // crossing a field, which is the axis Overcharge already owns. JUMP_V0 is 7.4 for ~1.24 blocks;
   // 13.5 clears roughly four, so a keeper reaches a roof and not the skybox.
+  // MOVE-JOBS 09-29 (Alex ✓): the launch, plus one stored air-jump on Space for 10s after it.
   'updraft': { archetype: 'impulse', motion: 'launch', manaCost: 12, cooldownMs: 8000,
-               impulseFwd: 2.5, impulseUp: 13.5 },
+               impulseFwd: 2.5, impulseUp: 13.5, airJumps: 1, airJumpSecs: 10 },
   // ★ THUNDER STEP IS A BLINK, NOT A FAST LAUNCH. Canon: *"vanish into vapor, return on a crack of
   // lightning."* A launch that merely travelled quickly would be Overcharge with a shorter cooldown;
   // vanishing means the distance between is never crossed — no ballistics, no wall to clip, and it
@@ -490,7 +500,8 @@ const BUILDS: Record<string, Build> = {
   // after you decide it should… masters build the bridge they are already running across."* Every
   // number below is that sentence: least mana, shortest fuse, smallest and shortest-lived terrain in
   // the game. Stonewall is the considered barricade; this is the plank you throw down mid-stride.
-  quickform: { archetype: 'terrain', manaCost: 8, cooldownMs: 3000, castRange: 6, areaSize: 2.6, areaSecs: 4, shape: 'wall', shapeHeight: 2 },
+  // MOVE-JOBS 09-29 (Alex ✓): "a plank, a rung" under your feet, mid-air too: the double jump. Momentum kept, 2 charges.
+  quickform: { archetype: 'impulse', motion: 'launch', manaCost: 8, cooldownMs: 3000, impulseFwd: 0, impulseUp: 8, keepMomentum: true, charges: 2 },
   // ⚠ UNBUILT, AND NOT FOR WANT OF A SYSTEM — for want of the RIGHT one. A waymark is a place bound
   // *"until you feel it like a limb"*, and canon ruled it the craft behind Gregory's passage business
   // (`moves.md`: what Greg sells is a waymark). The build already HAS waymarks — `voxel/waymark.ts`,
@@ -587,7 +598,8 @@ const BUILDS: Record<string, Build> = {
   gate:      { archetype: 'gate', manaCost: 18, cooldownMs: 16000, castRange: 14, areaSize: 1.1, areaSecs: 12, sustainDrain: 4 },
   // "A living sanctuary grown and tended — everyone within is steadily restored." Wide, long, and
   // NOT cover: a grove you can shoot through is a place you choose to stand, not a place to hide.
-  'healing-grove': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 7, areaSize: 5.5, areaSecs: 14, fieldHps: 14, fieldStopsShots: false },
+  // MOVE-JOBS 09-29 (Alex ✓): "everyone inside recovers shields and health steadily" — shields first, then health.
+  'healing-grove': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 7, areaSize: 5.5, areaSecs: 14, fieldHps: 8, fieldShps: 12, fieldStopsShots: false },
   // "Stone rises on EVERY side and all metal locks to the caster. Containment, not a kill." A sealed
   // ring — it traps you too if you stand in it, which is what makes casting it a real decision.
   // Cordon is the one move that is BOTH systems at once — canon writes stone AND the metal lock in a
@@ -640,7 +652,8 @@ const BUILDS: Record<string, Build> = {
   // MOVE-JOBS 09-29 (Alex ✓): "standing on it is fine; being struck on it is not" — the ground turns foes Vulnerable.
   'shatterfield': { archetype: 'status', manaCost: 42, cooldownMs: 24000, castRange: 10, areaSize: 6, areaSecs: 9, statuses: ['vulnerable'], linger: true },
   'stormbank': { archetype: 'field', manaCost: 42, cooldownMs: 24000, castRange: 11, areaSize: 6, areaSecs: 8, fieldDps: 10, fieldStopsShots: false },
-  'exhale': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 4, areaSize: 6, areaSecs: 10, fieldHps: 14, fieldStopsShots: false },
+  // MOVE-JOBS 09-29 (Alex ✓): one breath out: a short, strong shield refill around you (the speed half comes later).
+  'exhale': { archetype: 'field', manaCost: 40, cooldownMs: 22000, castRange: 2, areaSize: 6, areaSecs: 6, fieldHps: 6, fieldShps: 20, fieldStopsShots: false },
   'pyroclast': { archetype: 'field', manaCost: 46, cooldownMs: 26000, castRange: 12, areaSize: 7, areaSecs: 11, fieldDps: 7, fieldStopsShots: false },
 
   // ── Combos — never solo-castable. Canon requires a second mage in sync. ──────────────────────

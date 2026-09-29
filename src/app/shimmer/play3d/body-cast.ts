@@ -21,7 +21,7 @@
 // No direction rides on the request: the walker reads the camera's flat forward on the tick it applies
 // it, which is the frame the keeper sees. The cast decides its own arc (never the camera's pitch).
 export type BodyCast =
-  | { kind: 'launch'; label: string; fwd: number; up: number }
+  | { kind: 'launch'; label: string; fwd: number; up: number; keepMomentum?: boolean; airJumps?: number; airJumpSecs?: number }
   | { kind: 'blink'; label: string; range: number }
   | { kind: 'gate'; label: string; moveId: string; range: number; manaCost: number; slot: number }
   /** the Gate stepping the body through: arrive at the other end, standing */
