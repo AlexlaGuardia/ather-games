@@ -7654,6 +7654,7 @@ export default function Shimmer3D() {
     // ★ CO-OP (09-28): launched together from Departures (or going again after a co-op run) → the server runs the
     // fight and this run's state is a MIRROR of it (`breach-link.ts`). Otherwise the page steps it, as ever.
     const coopParty = coop.wantParty ?? coop.link?.code ?? null
+    coop.begins++
     coop.link?.close(); coop.link = null; coop.struck = 0; coop.wantParty = null; coop.down = false; setCoopDown(false)
     if (coopParty) {
       const mirror = holdRef.current
@@ -8192,7 +8193,8 @@ export default function Shimmer3D() {
     w.__coop = () => {
       const l = coop.link, h = holdRef.current
       return { code: l?.code ?? null, status: l?.status ?? null, party: l?.party.map(p => p.name) ?? [], round: h?.round ?? null,
-        flood: h?.flood.filter(b => b.alive).map(b => b.id).sort((a, c) => a - c) ?? [], salvage: h?.salvage ?? null, zone: zoneIdRef.current }
+        flood: h?.flood.filter(b => b.alive).map(b => b.id).sort((a, c) => a - c) ?? [], salvage: h?.salvage ?? null, zone: zoneIdRef.current,
+        down: coop.down, begins: coop.begins, bannerEl: !!document.querySelector('[data-coop-down]') }
     }
     return () => { delete w.__coop }
   }, [isOwner])
