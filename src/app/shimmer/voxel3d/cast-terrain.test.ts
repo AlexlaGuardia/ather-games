@@ -17,7 +17,7 @@
 // is the decision those two paths act on: exactly which cells a cast claims.
 
 import { conjuredWriteCells, wallCells, ringCells, blockCells, shapeCells, conjure, expireConjured,
-         MAX_CONJURED, resetConjuredIds } from '../engine/conjured-terrain'
+         MAX_CONJURED, resetConjuredIds, ledgeCells, blockedAt, wallAt, standAt } from '../engine/conjured-terrain'
 import { MAT } from '../voxel/depth'
 import { blockDef, canBreak, breakSeconds } from '../voxel/registry'
 
@@ -113,6 +113,34 @@ const flat = (_x: number, _z: number) => 64
     shapeCells('wall', 0, 0, 0, 1, 5).length === 5 &&
     shapeCells('block', 0, 0, 0, 1, 3).length === 9 &&
     shapeCells('ring', 0, 0, 4, 0, 4).length > 8)
+}
+
+// ── ★ THE LEDGE WITH A RAMP (Living Architecture, 09-29): a 3×3 ledge 3 up, a 2-step stair back toward the caster ──
+{
+  const L = ledgeCells(10, 10, 0, 1, 3, 3)   // aiming +z: the stair runs back along -z
+  const at = (x: number, z: number) => L.find(c => c.x === x && c.z === z)?.rise
+  chk('ledge: 9 ledge cells at the full rise', L.filter(c => c.rise === 3).length === 9)
+  chk('ledge: a full-width stair, one tier lower per step, back toward the caster',
+    at(10, 8) === 2 && at(9, 8) === 2 && at(11, 8) === 2 && at(10, 7) === 1 && at(10, 11) === 3 && at(10, 12) === undefined && at(10, 6) === undefined)
+  chk('ledge: every step is one tier (the walker climbs it)', [at(10, 7), at(10, 8), at(10, 9)].join() === '1,2,3')
+  const Lx = ledgeCells(10, 10, -1, 0.2, 3, 3)   // aiming -x: the stair runs back along +x
+  chk('ledge: aim along -x puts the stair at +x', Lx.find(c => c.x === 12 && c.z === 10)?.rise === 2 && Lx.find(c => c.x === 13 && c.z === 10)?.rise === 1)
+  chk('ledge: shapeCells carries the rise for the voxel host', (shapeCells('ledge', 10, 10, 0, 1, 3, 3) as { rise?: number }[]).some(c => c.rise === 1))
+  chk('ledge: the voxel world writes the stair, not a block (9×3 + 3×2 + 3×1)',
+    conjuredWriteCells(shapeCells('ledge', 0, 0, 0, 1, 3, 3), 3, flat, allAir, H).length === 27 + 6 + 3)
+
+  // play3d: a walkable conjured cell is a SURFACE for the walker, cover below its top for a round, a wall for AI
+  resetConjuredIds()
+  const stand = L.map(c => ({ base: 0, top: c.rise }))
+  const list = conjure([], 'living-architecture', L.map(({ x, z }) => ({ x, z })), 45, 3, 0, stand)
+  chk('ledge: not a wall to the walker', !wallAt(list, 10, 10, 1))
+  chk('ledge: its top is where the walker stands', standAt(list, 10, 10, 1)?.top === 3 && standAt(list, 10, 7, 1)?.top === 1 && standAt(list, 0, 0, 1) === null)
+  chk('ledge: a round below the top is stopped (cover)', blockedAt(list, 10, 10, 1, 1.5))
+  chk('ledge: a round above the top flies over (shooting off the ledge)', !blockedAt(list, 10, 10, 1, 3.5))
+  chk('ledge: without a height (the hunter, the guards) it is a wall', blockedAt(list, 10, 10, 1))
+  chk('ledge: gone when it expires', standAt(list, 10, 10, 45_001) === null)
+  const wall = conjure([], 'stonewall', wallCells(0, 0, 0, 1, 3), 12, 2, 0)
+  chk('a plain slab is still a wall to the walker, and to a round at any height', wallAt(wall, 0, 0, 1) && blockedAt(wall, 0, 0, 1, 99) && standAt(wall, 0, 0, 1) === null)
 }
 
 console.log(`\nconjured terrain (voxel): ${ok} passed, ${bad} failed`)

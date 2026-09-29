@@ -7240,7 +7240,7 @@ function World({ bindings, pad, inv, toolTier, toolSkill, vitals, mana, buffs, s
       const p = loco.current
       const flat = Math.hypot(f.x, f.z) || 1
       const aim = castAimPoint(f.x, f.z, p.px, p.pz, out.placed.castRange)
-      const cells = shapeCells(out.placed.shape, aim.x, aim.z, f.x / flat, f.z / flat, out.placed.areaSize)
+      const cells = shapeCells(out.placed.shape, aim.x, aim.z, f.x / flat, f.z / flat, out.placed.areaSize, out.placed.shapeHeight)
       // ★ ONLY INTO AIR, and record precisely what was written. The rule is pure and asserted in
       // `conjuredWriteCells` — the host just supplies the two world probes.
       const wrote = conjuredWriteCells(

@@ -447,7 +447,10 @@ const BUILDS: Record<string, Build> = {
                trap: true, trapMax: 2, charges: 2 },
   // "Grow living wood into structure — Barrier used to SHAPE, not to defend." Small, and the one
   // that LASTS: it is architecture, not a barricade.
-  'living-architecture': { archetype: 'terrain', manaCost: 20, cooldownMs: 12000, castRange: 6, areaSize: 3, areaSecs: 45, shape: 'block', shapeHeight: 3 },
+  // MOVE-JOBS PASS 2 (Alex ✓ 09-28, "grow a ledge with a ramp: instant high ground and cover you can climb"): a 3×3
+  // ledge 3 tiers up at the aim, a full-width stair of two steps back toward you. You STAND on it (play3d reads it as a
+  // surface, `conjured-terrain.ts › standAt`; the voxel world writes the stair as blocks); every other face is cover.
+  'living-architecture': { archetype: 'terrain', manaCost: 20, cooldownMs: 12000, castRange: 6, areaSize: 3, areaSecs: 45, shape: 'ledge', shapeHeight: 3 },
 
   // ── The Great Registration's tacticals (2026-08-13) ──────────────────────────────────────────
   // Each one is classified off the VERB in its canon line, not off its element: "a cutting stream" is

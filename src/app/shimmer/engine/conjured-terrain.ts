@@ -48,7 +48,12 @@ export interface Conjured {
   until: number
   /** tiers of height the slab stands — render only; collision is binary */
   height: number
+  /** ★ WALKABLE (09-29, Living Architecture): parallel to `cells`, each cell's stone from `base` to `top` (ABSOLUTE
+   *  tier heights, read off the ground when it was cast). Present = the walker can STAND on it and a round is only
+   *  stopped below its top; absent = the old binary slab. AI still treats every conjured cell as a wall. */
+  stand?: Stand[]
 }
+export interface Stand { base: number; top: number }
 
 export const MAX_CONJURED = 6
 
@@ -129,7 +134,7 @@ export function blockCells(cx: number, cz: number, side: number): { x: number; z
  * on past it with a notch missing, not give up at the boulder and leave half a wall.
  */
 export function conjuredWriteCells(
-  cells: readonly { x: number; z: number }[],
+  cells: readonly { x: number; z: number; rise?: number }[],
   height: number,
   groundTop: (x: number, z: number) => number,
   isAir: (x: number, y: number, z: number) => boolean,
@@ -138,7 +143,8 @@ export function conjuredWriteCells(
   const out: { x: number; y: number; z: number }[] = []
   for (const c of cells) {
     const top = groundTop(c.x, c.z)
-    for (let h = 1; h <= height; h++) {
+    // a cell that carries its own `rise` (a ledge's stair) stands that tall; every other cell stands `height`
+    for (let h = 1; h <= (c.rise ?? height); h++) {
       const y = top + h
       if (y < 0 || y >= worldHeight) break
       if (!isAir(c.x, y, c.z)) continue
@@ -148,17 +154,39 @@ export function conjuredWriteCells(
   return out
 }
 
-export type ConjureShape = 'wall' | 'ring' | 'block'
+/**
+ * A LEDGE WITH A RAMP (Living Architecture, Alex ✓ 09-28: "grow a ledge with a ramp: instant high ground and cover
+ * you can climb"). A `side`-square ledge `height` tiers up, centred on (cx,cz), and a full-width stair of
+ * `height - 1` steps running back toward the caster (opposite the aim), each one tier lower than the last, so the
+ * walker's one-tier step-up climbs it and every other face is a wall `height` tall. `rise` is each cell's height.
+ */
+export function ledgeCells(cx: number, cz: number, dirX: number, dirZ: number, side: number, height: number): { x: number; z: number; rise: number }[] {
+  const c = cellOf(cx, cz)
+  const half = Math.floor(side / 2)
+  const out: { x: number; z: number; rise: number }[] = []
+  for (let dx = -half; dx <= half; dx++) for (let dz = -half; dz <= half; dz++) out.push({ x: c.x + dx, z: c.z + dz, rise: height })
+  const alongZ = Math.abs(dirZ) >= Math.abs(dirX)   // aiming mostly along z ⇒ the stair runs back along z
+  const back = alongZ ? -Math.sign(dirZ || 1) : -Math.sign(dirX || 1)
+  for (let k = 1; k < height; k++) for (let w = -half; w <= half; w++) {
+    const d = half + k
+    out.push(alongZ ? { x: c.x + w, z: c.z + back * d, rise: height - k } : { x: c.x + back * d, z: c.z + w, rise: height - k })
+  }
+  return out
+}
 
-export function shapeCells(shape: ConjureShape, cx: number, cz: number, dirX: number, dirZ: number, size: number): { x: number; z: number }[] {
+export type ConjureShape = 'wall' | 'ring' | 'block' | 'ledge'
+
+/** The cells a shape covers. A `ledge`'s cells also carry their `rise` (pass the move's `shapeHeight`). */
+export function shapeCells(shape: ConjureShape, cx: number, cz: number, dirX: number, dirZ: number, size: number, height = 1): { x: number; z: number }[] {
   if (shape === 'ring') return ringCells(cx, cz, size)
   if (shape === 'block') return blockCells(cx, cz, size)
+  if (shape === 'ledge') return ledgeCells(cx, cz, dirX, dirZ, size, height)   // carries `rise`: conjuredWriteCells honours it
   return wallCells(cx, cz, dirX, dirZ, size)
 }
 
 /** Raise terrain. Oldest is dropped at the cap so a paid cast always appears. */
-export function conjure(list: Conjured[], moveId: string, cells: { x: number; z: number }[], secs: number, height: number, now: number): Conjured[] {
-  const c: Conjured = { id: nextId++, moveId, cells, until: now + secs * 1000, height }
+export function conjure(list: Conjured[], moveId: string, cells: { x: number; z: number }[], secs: number, height: number, now: number, stand?: Stand[]): Conjured[] {
+  const c: Conjured = { id: nextId++, moveId, cells, until: now + secs * 1000, height, ...(stand ? { stand } : {}) }
   const kept = list.length >= MAX_CONJURED ? list.slice(1) : list
   return [...kept, c]
 }
@@ -173,16 +201,45 @@ export function expireConjured(list: Conjured[], now: number): Conjured[] {
  *
  * Takes WORLD coords and rounds them itself, so callers can't disagree about the rounding.
  */
-export function blockedAt(list: Conjured[], x: number, z: number, now: number): boolean {
+export function blockedAt(list: Conjured[], x: number, z: number, now: number, y?: number): boolean {
   const cx = Math.round(x), cz = Math.round(z)
   for (const c of list) {
     if (c.until <= now) continue
+    for (let i = 0; i < c.cells.length; i++) {
+      const cell = c.cells[i]
+      if (cell.x !== cx || cell.z !== cz) continue
+      // a WALKABLE cell stops only what is below its top, when the caller says how high it is (a round). Without a
+      // height (the hunter's and the guards' step), every conjured cell is a wall: they don't climb.
+      const st = c.stand?.[i]
+      if (st && y !== undefined && y >= st.top) continue
+      return true
+    }
+  }
+  return false
+}
+
+/** The binary walls only (the WALKER's blocker): a walkable cell is a surface, answered by `standAt`. */
+export function wallAt(list: Conjured[], x: number, z: number, now: number): boolean {
+  const cx = Math.round(x), cz = Math.round(z)
+  for (const c of list) {
+    if (c.until <= now || c.stand) continue
     for (const cell of c.cells) if (cell.x === cx && cell.z === cz) return true
   }
   return false
 }
 
+/** The highest walkable conjured stone at a cell (its absolute top), or null. */
+export function standAt(list: Conjured[], x: number, z: number, now: number): Stand | null {
+  const cx = Math.round(x), cz = Math.round(z)
+  let best: Stand | null = null
+  for (const c of list) {
+    if (c.until <= now || !c.stand) continue
+    c.cells.forEach((cell, i) => { if (cell.x === cx && cell.z === cz && (!best || c.stand![i].top > best.top)) best = c.stand![i] })
+  }
+  return best
+}
+
 /** Every live cell, flattened — the render pool reads this. */
-export function liveCells(list: Conjured[], now: number): { x: number; z: number; height: number }[] {
-  return list.filter((c) => c.until > now).flatMap((c) => c.cells.map((cell) => ({ ...cell, height: c.height })))
+export function liveCells(list: Conjured[], now: number): { x: number; z: number; height: number; stand?: Stand }[] {
+  return list.filter((c) => c.until > now).flatMap((c) => c.cells.map((cell, i) => (c.stand ? { ...cell, height: c.height, stand: c.stand[i] } : { ...cell, height: c.height })))
 }

@@ -83,7 +83,7 @@ import { startingPositions } from './crucible-entrances'
 import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from './crucible-fleet'
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
 import { spawnField, tickFields, fieldsAt, absorbShotAt, absorbWardAt, contains, FIELD_HEIGHT, type Field } from '../engine/field-effects'
-import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from '../engine/conjured-terrain'
+import { conjure, shapeCells, ledgeCells, blockedAt as conjuredBlockedAt, wallAt as conjuredWallAt, standAt as conjuredStandAt, expireConjured, liveCells, type Conjured } from '../engine/conjured-terrain'
 import { addShove, stepShoves, shoveVector, type Shove, type ShoveDir } from '../engine/shove'
 import { emptyBag, applyStatus, applyStatuses, hasStatus, pruneStatuses, clearTarget, foeMods, NO_MODS, statusesOn, STATUS_TABLE, VULNERABLE_MULT, BURN_DPS, type StatusBag, type StatusKind } from '../engine/statuses'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
@@ -1426,9 +1426,15 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
     // authored segs in here via buildSegLayer(save-structure) once that data path lands, and nothing
     // else in this loop changes.
     // THE HOLD stacks its floors (`hold-building.ts`): it answers each cell's surfaces itself
-    const ctx: CollisionCtx = zoneIdRef.current === HOLD_ZONE
+    const ctx0: CollisionCtx = zoneIdRef.current === HOLD_ZONE
       ? { grid, heights, segs: EMPTY_SEGS, surfaces: (cx, cz) => holdSurfaces(HOLD_MAP, cx, cz) }
       : { grid, heights, segs: EMPTY_SEGS }
+    // ★ WALKABLE CONJURED STONE (Living Architecture's ledge, 09-29): a cell it covers answers ONE surface, its top,
+    // so the one-tier step-up climbs the stair and every other face is a wall that tall. No ledge up, no change.
+    const conjNow = performance.now(), conjList = conjuredRef.current
+    const ctx: CollisionCtx = conjList?.some(c => c.stand && c.until > conjNow)
+      ? { ...ctx0, surfaces: (cx, cz) => { const st = conjuredStandAt(conjList, cx, cz, conjNow); return st ? [{ y: st.top }] : surfacesAt(ctx0, cx, cz) } }
+      : ctx0
     const fromY = p.y / STEP
     // Placed objects are solid to movement (you smack into them, no clip-through): stations always,
     // resource nodes unless they're water (wade in to fish). Adjacency interact/harvest still works
@@ -1444,7 +1450,8 @@ function Player({ posRef, gridRef, heightsRef, zoneIdRef, editRef, onWarp, battl
       // separated slide all treat a Stonewall exactly like a wall — no separate collision path to
       // drift. It also means Cordon genuinely traps you if you cast it around yourself, which is
       // the decision the move is supposed to be.
-      if (conjuredRef.current && conjuredBlockedAt(conjuredRef.current, cx, cz, performance.now())) return true
+      // (a walkable conjured cell is not an object: it is a surface in `ctx`, climbed or walled off by its height)
+      if (conjuredRef.current && conjuredWallAt(conjuredRef.current, cx, cz, performance.now())) return true
       if (zoneNow === HOLD_ZONE && holdSolid(HOLD_MAP, holdRef.current?.gatesOpen ?? null, cx, cz, fromY)) return true
       return false
     }
@@ -2618,11 +2625,12 @@ function HoldScene({ holdRef }: { holdRef: React.RefObject<HoldState | null> }) 
   )
 }
 
-function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, holdRef, edgeRef, statusRef, bodyCastRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial, onMatch }: {
+function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, heightsRef, recoilRef, bloomRef, posRef, hpRef, hpMaxRef, shieldRef, shieldMaxRef, rangeCfgRef, ammoRef, reloadingRef, pendingCastRef, castMultRef, resistRef, senseRadiusRef, tremorRef, birthRuneRef, infusionRef, fieldsRef, conjuredRef, holdRef, edgeRef, statusRef, bodyCastRef, onHeal, onNeedReload, onHit, onShot, onPlayerDamage, onPlayerDown, onTrial, onMatch }: {
   firingRef: React.RefObject<boolean>   // held while left-click is down → full-auto (semi-auto weapons fire once per press)
   adsRef: React.RefObject<boolean>      // aiming → muzzle offset moves to center (ADS tracer runs flat)
   weaponIdxRef: React.RefObject<number> // which WEAPONS entry is live — drives fire stats + tracer look
   gridRef: React.RefObject<number[][]>
+  heightsRef: React.RefObject<number[][]>   // the ground a conjured ledge grows from
   recoilRef: React.MutableRefObject<{ p: number; y: number }>  // pending camera kick; CameraRig drains it
   bloomRef: React.MutableRefObject<number>  // current spread bloom (deg); WeaponReticle reads it too
   /** the worn sense's reach in world units — `spec.senseRadius`, 0 when the keeper wears no sense */
@@ -3237,6 +3245,15 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           conjuredRef.current = conjure(conjuredRef.current, pending.moveId, cells, pending.areaSecs, pending.shapeHeight, nowMs)
           if (best) statusRef.current = applyStatuses(statusRef.current, best, pending.statuses, pending.areaSecs, nowMs)
           tone(140, 300, { type: 'square', gain: 0.07, slideTo: 60 })
+        } else if (pending.archetype === 'terrain' && pending.shape === 'ledge') {
+          // LIVING ARCHITECTURE (pass 2): a ledge with a stair you STAND on. Each cell grows from its own ground (in the
+          // Hold, from the floor you stand on: its heights are only bounds). Never under your own feet: that cell is left out.
+          const me = posRef.current, mx = Math.round(me?.x ?? -99), mz = Math.round(me?.z ?? -99)
+          const floor = zoneId === HOLD_ZONE ? Math.round((me?.y ?? 0) / STEP) : null
+          const L = ledgeCells(ax, az, flatX / flatLen, flatZ / flatLen, pending.areaSize, pending.shapeHeight).filter(c => c.x !== mx || c.z !== mz)
+          const stand = L.map(c => { const base = floor ?? (heightsRef.current?.[c.z]?.[c.x] ?? 0); return { base, top: base + c.rise } })
+          conjuredRef.current = conjure(conjuredRef.current, pending.moveId, L.map(({ x, z }) => ({ x, z })), pending.areaSecs, pending.shapeHeight, nowMs, stand)
+          tone(120, 380, { type: 'triangle', gain: 0.06, slideTo: 220 })
         } else if (pending.archetype === 'terrain') {
           const cells = shapeCells(pending.shape, ax, az, flatX / flatLen, flatZ / flatLen, pending.areaSize)
           conjuredRef.current = conjure(conjuredRef.current, pending.moveId, cells, pending.areaSecs, pending.shapeHeight, nowMs)
@@ -3378,7 +3395,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       if (cell === undefined || isWallId(cell)) { p.life = 0; continue }
       // thin cover (a conjured wall, a field's shell) stops a round unless an amp pierces it (Pressure Lance, Keenshard)
       // ...but a TOMB is not thin cover: nothing reaches a sealed foe (Pillar Tomb, step 11)
-      if ((!p.cover || tombAt(p.pos.x, p.pos.z)) && conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)) { p.life = 0; continue }
+      if ((!p.cover || tombAt(p.pos.x, p.pos.z)) && conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame, p.pos.y / STEP)) { p.life = 0; continue }
       // the hold's walls are the mortal block (103), which this predicate cannot see — the hold says
       // what stops a round there: a wall or a shut gate, never a window (you shoot out of them)
       if (hs && roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP)) { p.life = 0; continue }
@@ -3521,7 +3538,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       p.pos.addScaledVector(p.vel, dt)
       const cx = Math.round(p.pos.x), cz = Math.round(p.pos.z)
       const cell = gridRef.current?.[cz]?.[cx]
-      if (cell === undefined || isWallId(cell) || conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame)
+      if (cell === undefined || isWallId(cell) || conjuredBlockedAt(conjuredRef.current, p.pos.x, p.pos.z, nowFrame, p.pos.y / STEP)
         || lineStops(p.pos.x, p.pos.z) || (hs && roundBlocked(hs, p.pos.x, p.pos.z, p.pos.y / STEP))) {
         if (p.grapple && cell !== undefined) grappleTo(p)
         p.life = 0; continue
@@ -3974,7 +3991,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         const cell = gridRef.current?.[cz]?.[cx]
         if (cell === undefined || isWallId(cell)) { o.life = 0; continue }
         // incoming fire is stopped by your own terrain + firewall. That symmetry IS the move.
-        if (conjuredBlockedAt(conjuredRef.current, o.pos.x, o.pos.z, nowFrame)) { o.life = 0; continue }
+        if (conjuredBlockedAt(conjuredRef.current, o.pos.x, o.pos.z, nowFrame, o.pos.y / STEP)) { o.life = 0; continue }
         { const ab = absorbShotAt(fieldsRef.current, o.pos.x, o.pos.z, DRONE_DMG); if (ab.hit) { fieldsRef.current = ab.fields; o.life = 0; continue } }
         if (lineStops(o.pos.x, o.pos.z)) { o.life = 0; continue }
         if (o.pos.distanceToSquared(pEye) < PLAYER_HIT_R2) {
@@ -4132,8 +4149,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       for (let i = 0; i < CONJ_MAX; i++) {
         const c = cells[i]
         if (!c) { m.compose(zero, q, zero); conjuredMeshRef.current.setMatrixAt(i, m); continue }
-        scl.set(1, c.height, 1)
-        seg.set(c.x, py + c.height / 2, c.z)
+        // a walkable cell stands on its own ground, base to top (the ledge + its stair); a slab keeps the old draw
+        if (c.stand) { scl.set(1, (c.stand.top - c.stand.base) * STEP, 1); seg.set(c.x, (c.stand.base + c.stand.top) / 2 * STEP, c.z) }
+        else { scl.set(1, c.height, 1); seg.set(c.x, py + c.height / 2, c.z) }
         m.compose(seg, q, scl)
         conjuredMeshRef.current.setMatrixAt(i, m)
       }
@@ -5003,7 +5021,7 @@ const Scene = memo(function Scene(props: {
       {props.zone.id === RUNE_HOLD_ZONE && props.gridRef.current && <RuneHoldScene grid={props.gridRef.current} heights={props.heights} version={props.version} />}
       <GuideTrail posRef={props.posRef} heightsRef={props.heightsRef} targetRef={props.guideTargetRef} />
       {props.isOwner && props.zone.id === 'moonwell-glade-gregory-s-home' && <HubGateMarkers heights={props.heights} />}
-      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} edgeRef={props.edgeRef} statusRef={props.statusRef} bodyCastRef={props.bodyCastRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
+      {props.zone.realm === 'outside' && !props.zone.peaceful && <FiringRange zoneId={props.zone.id} firingRef={props.firingRef} adsRef={props.adsRef} weaponIdxRef={props.weaponIdxRef} gridRef={props.gridRef} heightsRef={props.heightsRef} recoilRef={props.recoilRef} bloomRef={props.bloomRef} posRef={props.posRef} hpRef={props.hpRef} hpMaxRef={props.hpMaxRef} shieldRef={props.shieldRef} shieldMaxRef={props.shieldMaxRef} rangeCfgRef={props.rangeCfgRef} ammoRef={props.ammoRef} reloadingRef={props.reloadingRef} pendingCastRef={props.pendingCastRef} castMultRef={props.castMultRef} senseRadiusRef={props.senseRadiusRef} tremorRef={props.tremorRef} resistRef={props.resistRef} birthRuneRef={props.birthRuneRef} infusionRef={props.infusionRef} fieldsRef={props.fieldsRef} conjuredRef={props.conjuredRef} holdRef={props.holdRef} edgeRef={props.edgeRef} statusRef={props.statusRef} bodyCastRef={props.bodyCastRef} onHeal={props.onHeal} onNeedReload={props.onNeedReload} onHit={props.onRangeHit} onShot={props.onRangeShot} onPlayerDamage={props.onPlayerDamage} onPlayerDown={props.onPlayerDown} onTrial={props.onTrial} onMatch={props.onMatch} />}
       {props.zone.realm === 'outside' && !props.zone.peaceful && props.zone.id !== HOLD_ZONE && props.zone.id !== EDGE_ZONE && props.zone.id !== EXP_ZONE && <GunBenches />}
       {props.zone.realm === 'outside' && props.zone.id !== HOLD_ZONE && <ExitMarkers warps={props.zone.warps} heights={props.heights} />}
       {/* gates render in EVERY realm, not just outside: a gate is a named destination, and the
