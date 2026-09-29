@@ -75,6 +75,7 @@ ok(p3.includes('bankWrack(d.n); expRun.wrack += d.n'), 'wrack banks the moment i
 ok(p3.includes('if (zoneIdRef.current === EXP_ZONE) { expFell.current = true; return }'), 'a fall in an expedition ends it and takes you home')
 ok(p3.includes("createFleet(roster, L.seed, ELITE_HUNTER)") && p3.includes('if (heldIdx.has(r.member.index)) continue'), 'elites are the fleet brain with an elite body, and hold their room until you come near')
 ok(p3.includes("if (loot.held) { recordFind({ kind: 'held-cache'"), 'a cache that holds is recorded for the garden, never lost')
+ok(p3.includes('steady={props.zone.id === EXP_ZONE ? EXP_STEADY_HOUR : undefined} />') && (p3.match(/steady=\{props\.zone\.id === EXP_ZONE/g) || []).length === 2 && p3.includes('const p = steady ?? dayProgress()'), '★ an expedition keeps one steady light: the sun AND the sky/fog ignore the day clock there')
 
 console.log(`expedition: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

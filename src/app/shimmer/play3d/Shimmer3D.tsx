@@ -273,6 +273,9 @@ const HOLD_ZONE = 'the-hold'
 const RETURN_SECS = 8
 /** the expedition's surfaces (a stable object: ZoneGeometry is memoised) */
 const EXP_LOOK = { floor: S.terrain.expFloor, building: S.terrain.expWall, buildingTop: S.terrain.expWallTop }
+/** an expedition keeps ONE steady light, a clear mid-morning (Alex 09-29: at night its stone walls went near-black).
+ *  0.42 on the day clock: full daylight, the sun low enough that a corridor still has a shaded side. */
+const EXP_STEADY_HOUR = 0.42
 /** The Passage draws its own rock and fixtures (`PassageScene`) and has its own light. */
 const PASSAGE_ZONE = 'the-passage'
 /** Rune Hold draws its own stone, streets and landing plaza (`RuneHoldScene`) over the town's grid. */
@@ -4655,13 +4658,15 @@ const MOON = new THREE.Color(S.sunlight.moon)        // the Moonwell hour, cool 
 const AMBIENT_DAY = new THREE.Color(S.sunlight.ambientDay)
 const AMBIENT_NIGHT = new THREE.Color(S.sunlight.ambientNight)
 
-function SkyLight({ shadowMap, under = false }: { shadowMap: number | null; under?: boolean }) {
+function SkyLight({ shadowMap, under = false, steady }: { shadowMap: number | null; under?: boolean
+  /** a fixed point on the day clock instead of the live one (an expedition keeps one steady light, Alex 09-29) */
+  steady?: number }) {
   const sunRef = useRef<THREE.DirectionalLight>(null)
   const ambRef = useRef<THREE.AmbientLight>(null)
   const tint = useRef(new THREE.Color())
 
   useFrame(() => {
-    const p = dayProgress()
+    const p = steady ?? dayProgress()
     const elev = sunElevation(p)
     const azi = sunAzimuth(p)
     const dl = daylight(p)
@@ -4989,8 +4994,8 @@ const Scene = memo(function Scene(props: {
   }, [props.zone.id])
   return (
     <>
-      <GardenAtmosphere zoneId={props.atmosZone} />
-      <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} />
+      <GardenAtmosphere zoneId={props.atmosZone} steady={props.zone.id === EXP_ZONE ? EXP_STEADY_HOUR : undefined} />
+      <SkyLight shadowMap={props.shadowMap} under={props.zone.id === PASSAGE_ZONE} steady={props.zone.id === EXP_ZONE ? EXP_STEADY_HOUR : undefined} />
       <ZoneGeometry key={`${props.zone.id}-${props.dims}`} gridRef={props.gridRef} heights={props.heights} version={props.version} paint={props.paint} editing={props.editing} center={center} mountTick={mountTick} ownSolids={props.zone.id === HOLD_ZONE || props.zone.id === PASSAGE_ZONE || props.zone.id === RUNE_HOLD_ZONE || props.zone.id === STATION_ZONE} ownWarps={props.zone.id === HOLD_ZONE} noBeacon={props.zone.id === RUNE_HOLD_ZONE ? RUNE_HOLD_DOOR_KEYS : undefined} ownGround={props.zone.id === RUNE_HOLD_ZONE ? SMOOTH_TILES : undefined} look={props.zone.id === EXP_ZONE ? EXP_LOOK : undefined} />
       <NPCMarkers npcs={ALL_NPCS.filter((n) => n.zone === props.zone.id && n.kind !== 'stall' && n.kind !== 'cabinet' && npcInWorld(n, props.defeated, props.flagsRef.current))} heights={props.heights} />
       {props.zone.id === PASSAGE_ZONE && <PassageScene isOwner={props.isOwner} />}

@@ -223,7 +223,9 @@ function Motes({ mood, blender }: { mood: Mood; blender: Blender }) {
   )
 }
 
-export function GardenAtmosphere({ zoneId }: { zoneId: string }) {
+export function GardenAtmosphere({ zoneId, steady }: { zoneId: string
+  /** a fixed point on the day clock instead of the live one (the expedition's steady light, 09-29) */
+  steady?: number }) {
   const { scene } = useThree()
   const mood = useMemo(() => moodFor(zoneId), [zoneId])
   const blender = useMemo(() => makeBlender(mood), [mood])
@@ -251,7 +253,7 @@ export function GardenAtmosphere({ zoneId }: { zoneId: string }) {
   // sky honest. Mutating the live objects (no setState) keeps this off React's critical path
   // entirely; at a 64-minute day the sky moves slowly enough that nobody can see the seams.
   useFrame(() => {
-    const sv = silver(dayProgress())
+    const sv = silver(steady ?? dayProgress())
     const bg = scene.background
     if (bg instanceof THREE.Color) bg.copy(lerpInto(blender.bg, sv))
     const fog = fogRef.current
