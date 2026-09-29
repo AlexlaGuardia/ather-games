@@ -9246,12 +9246,12 @@ export default function Shimmer3D() {
         </>
       )}
       {/* The fork's objective — the same chip the Ather's tutorial wears (`hud/objective-chip.tsx`). */}
-      {forkChip && !battle && !editMode && !dialogue && !menuOpen && <HearthObjective face={HUD_FACE} value={forkChip} anchor={hudSize === 'phone' ? 'left' : 'center'}
+      {forkChip && !battle && !editMode && !dialogue && !menuOpen && !departuresOpen && <HearthObjective face={HUD_FACE} value={forkChip} anchor={hudSize === 'phone' ? 'left' : 'center'}
         // Phone: the top row is the map and, left of it, this side's clock/companion column — measured
         // 2026-09-23, the pill ran under the clock. Under the map row the left side is empty.
         style={hudSize === 'phone' ? { top: hudMapBox(hudSize).top + hudMapBox(hudSize).size + 8 } : undefined} />}
       {/* The ☰ under the minimap, on the minimap's own rule; `hud/options-door.tsx`. */}
-      {!battle && !editMode && !showMap && !menuOpen && (
+      {!battle && !editMode && !showMap && !menuOpen && !departuresOpen && (
         <OptionsDoor face={HUD_FACE} top={hudDoorTop(hudSize)} onOpen={openOptions} />
       )}
       {menuOpen && (
@@ -9418,7 +9418,8 @@ export default function Shimmer3D() {
             its LEFT and holds what only the mortal side has (companion, wounded, buffs) plus the
             panels the options Game tab opens. Marks and the mana pie left with it — one HUD, and the
             Ather shows neither up here (mana is the vessel at bottom-right; stage 2 brings it). */}
-      {!battle && !approach && !rewards && !editMode && !dialogue && !menuOpen && (
+      {/* not under the Departures lobby (09-29, Alex): the clock and chips read through its backdrop */}
+      {!battle && !approach && !rewards && !editMode && !dialogue && !menuOpen && !departuresOpen && (
         <div data-ct={companionTick} style={{ position: 'fixed', top: hudMapBox(hudSize).top, right: hudMapBox(hudSize).right + hudMapBox(hudSize).size + 10, zIndex: 34, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}>
           <HearthClock face={HUD_FACE} placed={false} note={<DayNotes zoneId={zoneId} />} />
 
