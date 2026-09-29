@@ -1279,7 +1279,8 @@ export default function VoxelWorld() {
   const { party: mpParty, ready: mpPartyReady } = useParty()
   const account = useAccount()
   const mpName = account.session?.username ?? storedName()
-  const mpPose = useRef({ x: 0, y: 0, z: 0 })
+  // null until the walker has reported once: presence must never announce a keeper standing at the world's origin
+  const mpPose = useRef<{ x: number; y: number; z: number } | null>(null)
   const mpYaw = useRef(0)
   const [spaceNow, setSpaceNow] = useState<Space>('glade')
   useEffect(() => { const t = setInterval(() => setSpaceNow(space.current), 1000); return () => clearInterval(t) }, [])
@@ -2458,7 +2459,8 @@ export default function VoxelWorld() {
             mapPos.current = { x: p.x, z: p.z }
             mapHeading.current = yaw
             // presence sends FEET and a camera yaw whose forward is (-sin, -cos); the map heading is atan2(aimZ, aimX)
-            mpPose.current.x = p.x; mpPose.current.y = p.y - PARTY_EYE; mpPose.current.z = p.z
+            const mp = mpPose.current ?? (mpPose.current = { x: 0, y: 0, z: 0 })
+            mp.x = p.x; mp.y = p.y - PARTY_EYE; mp.z = p.z
             mpYaw.current = Math.atan2(-Math.cos(yaw), -Math.sin(yaw))
             setPos(`x ${p.x.toFixed(0)}  y ${p.y.toFixed(0)}  z ${p.z.toFixed(0)}`)
           }}

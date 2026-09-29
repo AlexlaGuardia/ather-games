@@ -11,7 +11,7 @@ let pass = 0
 const fails: string[] = []
 const ok = (c: boolean, l: string) => { c ? pass++ : fails.push(l) }
 const near = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 1e-6
-const peer = (name: string, x: number, z: number) => ({ id: 'p_' + name, name, x, y: 0, z, tx: x, ty: 0, tz: z, yaw: 0, tyaw: 0, moving: false, lastSeen: 0 })
+const peer = (name: string, x: number, z: number) => ({ id: 'p_' + name, name, x: 0, y: 0, z: 0, tx: x, ty: 0, tz: z, yaw: 0, tyaw: 0, moving: false, lastSeen: 0 })
 const lobby: LobbyState = { code: 'ABCDE', leader: 'u_me', mission: 'survival', launch_gen: 0, members: [
   { id: 'u_me', name: 'Me', zone: 'voxel:wilds', ready: false, trusted: true, look: '' },
   { id: 'u_fern', name: 'Fern', zone: 'voxel:wilds', ready: false, trusted: true, look: '' },
@@ -31,7 +31,7 @@ ok(whereLabel('voxel:plot') === 'in their garden' && whereLabel('voxel:glade') =
 
 const vw = readFileSync(new URL('./VoxelWorld.tsx', import.meta.url), 'utf8')
 ok(vw.includes("enabled: mpPartyReady && !!mpParty && spaceNow !== 'plot', zoneId: 'voxel:' + spaceNow"), '★ presence in the Ather is party-only and never on the plot (a garden is personal)')
-ok(vw.includes('mpPose.current.y = p.y - PARTY_EYE'), 'presence sends feet, not the eye (the capsule stands on the ground)')
+ok(vw.includes('mp.y = p.y - PARTY_EYE') && vw.includes('useRef<{ x: number; y: number; z: number } | null>(null)'), 'presence sends feet, and nothing until the walker has reported (never the origin)')
 ok(vw.includes('<RemotePlayers peers={mpPeers} />'), 'mates are drawn in the scene')
 const mp = readFileSync(new URL('../play3d/multiplayer.ts', import.meta.url), 'utf8')
 ok(mp.includes("zone: zoneId.includes(':') ? zoneId : ZONE_PREFIX + zoneId"), 'a voxel zone is not mistaken for a play3d one')

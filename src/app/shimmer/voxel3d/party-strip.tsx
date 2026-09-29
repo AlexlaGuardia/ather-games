@@ -20,7 +20,8 @@ export function stripRows(lobby: LobbyState | null, you: string | null, peers: r
   return lobby.members.filter((m) => m.id !== you).map((m) => {
     const p = peers.find((q) => q.name === m.name)
     if (p && me) {
-      const dx = p.x - me.x, dz = p.z - me.z
+      // the latest REPORTED spot (tx/tz), not the drawn one: the drawing eases toward it only while frames run
+      const dx = p.tx - me.x, dz = p.tz - me.z
       return { name: m.name, arrowRad: Math.atan2(dz, dx) - heading, dist: Math.hypot(dx, dz), where: 'here', leader: m.id === lobby.leader }
     }
     return { name: m.name, arrowRad: null, dist: null, where: whereLabel(m.zone), leader: m.id === lobby.leader }
