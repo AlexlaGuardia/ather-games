@@ -152,6 +152,8 @@ export class SlackLink {
   party: CoopPartyMember[] = []
   status: 'connecting' | 'live' | 'lost' = 'connecting'
   you: string | null = null
+  /** every strike the server has handed this keeper (headless checks read it) */
+  struckTotal = 0
   private lastPos = 0
   constructor(readonly code: string, readonly mirror: StillwindState, private ev: SlackEvents) {}
 
@@ -171,7 +173,7 @@ export class SlackLink {
         applySlackSnap(this.mirror, snap.sw)
         this.party = snap.party
         this.ev.onParty?.(snap.party, this.you)
-        if (snap.you.struck > 0) this.ev.onStruck?.(snap.you.struck)
+        if (snap.you.struck > 0) { this.struckTotal += snap.you.struck; this.ev.onStruck?.(snap.you.struck) }
         for (const x of snap.events) {
           if (x.t === 'wind' && x.what) this.ev.onWind?.(x.what as 'stalled')
           else if (x.t === 'felled') this.ev.onFelled?.(x.secs ?? Math.round(this.mirror.elapsed), x.by ?? '')

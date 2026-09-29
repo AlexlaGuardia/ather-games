@@ -110,17 +110,25 @@ try {
     return Math.abs(za - zb) < 1.5 && Math.abs(za - z0) > 3
   }, 10)
   ok(agree, `★★ one Stillwind: both pages put it at the same place, and it has walked (${z0?.toFixed?.(1)} → A ${za?.toFixed?.(1)} / B ${zb?.toFixed?.(1)})`)
-  // idle on the line, they are run down. Either one falls and watches (then comes back), or both fall and it stands again
-  let sawDown = false, sawBack = false, sawStand = false
-  for (let t = 0; t < 4 * 150 && !(sawDown && (sawBack || sawStand)); t++) {
-    await sleep(250)
-    const [da, db] = await Promise.all([pa, pb].map(p => p.evaluate(() => ({ down: !!document.querySelector('[data-coop-down]'), text: document.body.innerText }))))
-    if (da.down || db.down) sawDown = true
-    if (sawDown && /Back at the near end/.test(da.text + db.text)) sawBack = true
-    if (/The Stillwind stands/.test(da.text + db.text)) sawStand = true
-  }
-  ok(sawDown || sawStand, `★ a keeper run down in the Slack (banner ${sawDown}, stands again ${sawStand})`)
-  ok(sawBack || sawStand, `★ and the fallen come back (back at the near end ${sawBack}, the Stillwind stands ${sawStand})`)
+  // it reaches them and swings: the server's strikes arrive on the pages
+  const struck = await until(async () => {
+    const [x, y] = [await coopOf(pa), await coopOf(pb)]
+    return (x?.slack?.struckTotal ?? 0) + (y?.slack?.struckTotal ?? 0) > 0
+  }, 60)
+  const [sa, sb] = [await coopOf(pa), await coopOf(pb)]
+  ok(struck, `★ the server's strikes reach the pages (A ${sa?.slack?.struckTotal} · B ${sb?.slack?.struckTotal})`)
+  // A walks deep into the Glare and burns down; B keeps the line. A watches under the banner, then comes back.
+  const downOnly = async (p: Page) => p.evaluate(() => !!document.querySelector('[data-coop-down]'))
+  await pa.evaluate(() => (window as any).__edgeAt(14, 20))
+  const aDown = await until(async () => (await downOnly(pa)) && !(await downOnly(pb)), 25)
+  ok(aDown, '★ A burns down in the Glare and WATCHES under the banner while B still stands')
+  const aBack = await until(async () => !(await downOnly(pa)) && /Back at the near end/.test(await pa.evaluate(() => document.body.innerText)), 25)
+  ok(aBack, '★ A is back at the near end after the wait')
+  // both into the Glare: everyone down at once → the Stillwind stands again
+  await Promise.all([pa, pb].map(p => p.evaluate(() => (window as any).__edgeAt(14, 20))))
+  const stands = await until(async () => /The Stillwind stands/.test((await pa.evaluate(() => document.body.innerText)) + (await pb.evaluate(() => document.body.innerText))), 30)
+  const [ea, eb] = [await coopOf(pa), await coopOf(pb)]
+  ok(stands && ea?.slack?.hp === 8000 && eb?.slack?.hp === 8000 && !ea?.down && !eb?.down, `★ both down at once: the Stillwind stands again, whole, and so do they (${ea?.slack?.hp})`)
   await pa.screenshot({ path: process.env.SHOT ?? '/tmp/slack-flow-a.png' })
 } finally {
   await browser.close()

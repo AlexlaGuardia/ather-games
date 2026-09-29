@@ -8925,7 +8925,7 @@ export default function Shimmer3D() {
       return { code: l?.code ?? null, status: l?.status ?? null, party: l?.party.map(p => p.name) ?? [], round: h?.round ?? null,
         flood: h?.flood.filter(b => b.alive).map(b => b.id).sort((a, c) => a - c) ?? [], salvage: h?.salvage ?? null, zone: zoneIdRef.current,
         down: coop.down, begins: coop.begins, bannerEl: !!document.querySelector('[data-coop-down]'),
-        slack: coop.slack ? { code: coop.slack.code, status: coop.slack.status, party: coop.slack.party.map(p => p.name), hp: edgeRef.current.sim?.hp ?? null, z: edgeRef.current.sim?.z ?? null, wind: edgeRef.current.sim?.wind ?? null } : null,
+        slack: coop.slack ? { code: coop.slack.code, status: coop.slack.status, party: coop.slack.party.map(p => p.name), struckTotal: coop.slack.struckTotal, hp: edgeRef.current.sim?.hp ?? null, z: edgeRef.current.sim?.z ?? null, wind: edgeRef.current.sim?.wind ?? null } : null,
         drawn: [...(mpPeersForCoop.current?.values() ?? [])].map(p => p.name) }
     }
     return () => { delete w.__coop }
@@ -8941,6 +8941,17 @@ export default function Shimmer3D() {
       return true
     }
     return () => { delete w.__holdJump }
+  }, [isOwner])
+  // …and stand a keeper at a spot on the edge (sim coords: x = 0 is the line, x > 0 the Glare). OWNER ONLY, headless.
+  useEffect(() => {
+    if (!isOwner) return
+    const w = window as unknown as { __edgeAt?: (x: number, z: number) => boolean }
+    w.__edgeAt = (x: number, z: number) => {
+      if (zoneIdRef.current !== EDGE_ZONE) return false
+      const t = simToEdge(x, z); posRef.current?.set(t.x, posRef.current.y, t.z)
+      return true
+    }
+    return () => { delete w.__edgeAt }
   }, [isOwner])
   // …and CAST any built move through the real dispatcher (slot 0, pool refilled, cooldown cleared), then read back what
   // every foe is wearing. The move-jobs smoke (scripts/cast-smoke.mts) walks the whole book with these. OWNER ONLY.
