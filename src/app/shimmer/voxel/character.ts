@@ -343,10 +343,51 @@ export function landRollAt(
   cfg: BiomeConfig = DEFAULT_BIOME, hcfg: HeightConfig = DEFAULT_HEIGHT,
 ): LandId {
   const w = landMix(x, z, seed, cfg, hcfg)
-  const r = hash01(x, z, seed ^ 0x5b1f27)
+  const r = landDieAt(x, z, seed)
   let acc = 0
   for (let i = 0; i < w.length; i++) { acc += w[i]; if (r < acc) return LAND_IDS[i] }
   return 'meadow'
+}
+
+/**
+ * ── ★★ THE LAND DIE IS A FIELD, NOT A HASH (2026-09-29, the same lesson the accents learned) ─────────
+ * This roll was `hash01(x, z)`: every column independent. Where one land owns a column that is harmless, but
+ * 58% of the Wilds is BLEND ground (no land at 85%), and there the independent die made 31% of side-by-side
+ * columns wear different ground: turf, straw, lush, straw, a chessboard across every meadow, spring and hill.
+ * Photographed on prod in all eight biomes (Alex: "improve the wilds world generation and how the biomes look").
+ *
+ * So the die is a SMOOTH field, remapped through its own measured distribution to a uniform 0..1 (the roll
+ * still hands each land exactly its weight's share of the ground; `character.test.ts` asserts the realized
+ * shares), and neighbouring columns share a value, so a blend comes out as patches several blocks across.
+ * A small per-column jitter, reflected at 0 and 1 so the distribution stays uniform, frays each patch edge the
+ * way `accentAt`'s band does. `LAND_ROLL_SCALE` is the patch size; `LAND_ROLL_FRAY` how ragged the edge is.
+ */
+export const LAND_ROLL_SCALE = 9
+export const LAND_ROLL_FRAY = 0.035
+const ROLL_SALT = 0x5b1f27
+/** fbm2's distribution, measured once (deterministic: a fixed lattice, a fixed seed), as 256 quantiles. */
+const ROLL_Q: number[] = (() => {
+  const v: number[] = []
+  for (let i = 0; i < 128; i++) for (let j = 0; j < 128; j++) v.push(fbm2(i * 1.37 + 0.11, j * 1.37 + 0.53, 0x2f1a9, 2))
+  v.sort((a, b) => a - b)
+  return Array.from({ length: 257 }, (_, k) => v[Math.min(v.length - 1, Math.round((k / 256) * (v.length - 1)))])
+})()
+/** A field value → its rank in fbm2's own distribution, 0..1 (so thresholds on it are shares). */
+function uniformRank(f: number): number {
+  if (f <= ROLL_Q[0]) return 0
+  if (f >= ROLL_Q[256]) return 1
+  let lo = 0, hi = 256
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (ROLL_Q[mid] <= f) lo = mid; else hi = mid }
+  const span = ROLL_Q[hi] - ROLL_Q[lo]
+  return (lo + (span > 0 ? (f - ROLL_Q[lo]) / span : 0)) / 256
+}
+/** The land die at a column: coherent across neighbours, uniform over the world, frayed at its edges. */
+export function landDieAt(x: number, z: number, seed: number): number {
+  const u = uniformRank(fbm2(x / LAND_ROLL_SCALE, z / LAND_ROLL_SCALE, seed ^ ROLL_SALT, 2))
+  let r = u + (hash01(x, z, seed ^ ROLL_SALT) - 0.5) * 2 * LAND_ROLL_FRAY
+  if (r < 0) r = -r
+  if (r >= 1) r = 2 - r - 1e-9
+  return r
 }
 
 /**

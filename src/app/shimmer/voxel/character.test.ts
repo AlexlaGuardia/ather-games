@@ -12,7 +12,7 @@
 import {
   LAND_IDS, landWeights, landRollAt, dominantLand, landCharacter, surfaceBlockAt,
   treeDensityAt, speciesFactor, floraCharacterAt, landMix, sharpenWeights, accentAt, accentThreshold, findLands, interiorAt,
-  CHARACTER_SHARP, type LandId,
+  CHARACTER_SHARP, landDieAt, type LandId,
 } from './character'
 import { treeStartsAt, DEFAULT_TREES, SPECIES } from './trees'
 import { wildsSwallows } from './column'
@@ -520,6 +520,32 @@ const DRESS = landCharacter({
     ok(td > want.treeK * 0.85 - 0.06 && td < want.treeK * 1.35 + 0.06,
       `★ ${id} deep inside itself gets its own tree density (${td.toFixed(2)} vs ${want.treeK})`)
   }
+}
+
+// ── ★★ BLEND GROUND IS PATCHES, NOT A CHESSBOARD (2026-09-29) ───────────────────────────────────────────
+// 58% of the Wilds is blend ground. With a per-column die, 31% of side-by-side columns wore different land,
+// and all eight biomes photographed as a quilt on prod. The die is a smooth field now (`landDieAt`); this
+// holds the neighbour rate down, and the realized shares to the weights (a coherent die must not skew them).
+{
+  let pairs = 0, flips = 0, n = 0
+  const got = new Map<string, number>(), want = new Map<string, number>()
+  for (let x = -1500; x <= 1500; x += 11) for (let z = -1500; z <= 1500; z += 11) {
+    n++
+    landMix(x, z, SEED).forEach((v, i) => want.set(LAND_IDS[i], (want.get(LAND_IDS[i]) ?? 0) + v))
+    const a = landRollAt(x, z, SEED)
+    got.set(a, (got.get(a) ?? 0) + 1)
+    pairs += 2
+    if (a !== landRollAt(x + 1, z, SEED)) flips++
+    if (a !== landRollAt(x, z + 1, SEED)) flips++
+  }
+  const rate = flips / pairs
+  ok(rate < 0.12, `★★ neighbouring columns mostly wear the same land: patches, not a chessboard (${(100 * rate).toFixed(1)}% differ; the per-column die was 31%)`)
+  for (const [id, w] of want) {
+    const share = (got.get(id) ?? 0) / n, target = w / n
+    ok(Math.abs(share - target) < 0.012, `★ ${id}'s ground share follows its weight under the coherent die (${(100 * share).toFixed(1)}% vs ${(100 * target).toFixed(1)}%)`)
+  }
+  const d = [landDieAt(3, 4, SEED), landDieAt(3, 4, SEED)]
+  ok(d[0] === d[1] && d[0] >= 0 && d[0] < 1, 'the land die is deterministic and in [0, 1)')
 }
 
 if (fails.length) {
