@@ -8871,7 +8871,7 @@ export default function Shimmer3D() {
     coop.wantParty = party
     const ship = holdShip()!
     if (card.id === 'survival') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: 'the-hold', toX: HOLD_MAP.start.x, toY: HOLD_MAP.start.z, direction: 'right' })
-    else if (card.id === 'boss') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up' })
+    else if (card.id === 'boss') onWarp({ fromX: ship.door.x, fromY: ship.door.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'down' })   // facing down the band, toward it (09-29: 'up' faced the exit wall)
     else if (card.id === 'expedition') {
       const L = rerollExpedition(((Date.now() & 0xffffff) ^ 0x5eed) || 1)
       resetExpRun(L)

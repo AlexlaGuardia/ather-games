@@ -690,7 +690,7 @@ export const ZONES: Zone[] = [
       { fromX: HOLD_MAP.exit.x, fromY: HOLD_MAP.exit.z, toZone: 'travelers-station', toX: holdShip()!.arrival.x, toY: holdShip()!.arrival.z, direction: 'down' },
       // the road out to the edge (09-28), on the roof just west of the pad. It only opens once the keeper has read
       // the Lenn's notes (the lab's capstone): the page refuses it otherwise (`onWarp`, `stillwind-road.ts`)
-      { fromX: EDGE_DOOR.x, fromY: EDGE_DOOR.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'up' },
+      { fromX: EDGE_DOOR.x, fromY: EDGE_DOOR.z, toZone: EDGE_ZONE, toX: EDGE_START.x, toY: EDGE_START.z, direction: 'down' },   // facing down the band, toward the Stillwind (09-29)
     ],
   },
   {
