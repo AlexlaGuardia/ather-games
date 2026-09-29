@@ -162,8 +162,14 @@ export interface CastSpec {
    * it the old way, which is fine — it is the host's business how a cell becomes a wall.
    */
   shapeHeight: number
-  /** status: which options this cast removes from enemies in the area */
+  /** status: which options this cast removes from enemies in the area (a projectile lays them on what it hits) */
   statuses: readonly StatusKind[]
+  /**
+   * status: the cloud STAYS for `areaSecs` and applies to whoever is inside, re-read every quarter second
+   * (Fog Bank "masters anchor it in zones"). False = applied once where it lands. A world that has no
+   * lingering zones yet applies it once, which is the old behaviour, never a refusal.
+   */
+  linger: boolean
   // ── impulse (SYSTEM 4) — the cast moves the CASTER ─────────────────────────
   /**
    * How the keeper is moved.
@@ -232,7 +238,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   surgeSecs: 0, surgeMult: 1,
   castRange: 0, areaSize: 0, areaSecs: 0,
   fieldDps: 0, fieldHps: 0, fieldStopsShots: false, fieldHp: 0, wardMend: 0, wardFlaw: 0, wardBacklash: 0,
-  shape: 'wall', shapeHeight: 1, statuses: [],
+  shape: 'wall', shapeHeight: 1, statuses: [], linger: false,
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
@@ -323,7 +329,8 @@ const BUILDS: Record<string, Build> = {
   // better rather than doing something the gun can't: an infusion window, not a new attack.
   'flame-infusion': { archetype: 'infusion', manaCost: 14, cooldownMs: 8000, surgeSecs: 6, surgeMult: 1.25 },
   mend:      { archetype: 'restore', manaCost: 22, cooldownMs: 6000, heal: 35 },
-  'ice-dart': { archetype: 'projectile', manaCost: 7, cooldownMs: 650, damage: 18, projSpeed: 52, projLife: 1.4 },
+  // MOVE-JOBS 09-28 (Alex ✓): a dart that SLOWS for 3s. It keeps a small sting so it still reads as a hit.
+  'ice-dart': { archetype: 'projectile', manaCost: 7, cooldownMs: 650, damage: 6, projSpeed: 52, projLife: 1.4, statuses: ['slowed'], areaSecs: 3 },
   // "A flash-bang, not a blade" — it takes aim away, never HP. Wide radius, short, no damage.
   enlighten: { archetype: 'status', manaCost: 12, cooldownMs: 9000, castRange: 11, areaSize: 6, areaSecs: 3.5, statuses: ['blinded'] },
   // "Terrain you impose. Close the gap, do not chase." A short-lived barricade across your sightline.
@@ -344,7 +351,7 @@ const BUILDS: Record<string, Build> = {
   // the starter a Hydro-born keeper now gets — so it has to feel like the rune: fast, thin, punishing.
   'pressure-lance': { archetype: 'projectile', manaCost: 12, cooldownMs: 1100, damage: 30, projSpeed: 85, projLife: 1.6 },
   // "Fill a space with blinding white" — obscurement, no damage. The widest, longest blind in the book.
-  'fog-bank': { archetype: 'status', manaCost: 18, cooldownMs: 12000, castRange: 10, areaSize: 8, areaSecs: 8, statuses: ['blinded'] },
+  'fog-bank': { archetype: 'status', manaCost: 18, cooldownMs: 12000, castRange: 10, areaSize: 8, areaSecs: 8, statuses: ['blinded'], linger: true },
   // "No visible flood, just a thin film and no breath." Canon aims it at ONE face; the sim's smallest
   // radius is the closest honest reading, so it is a tight, nasty area rather than a true single target.
   'drowning-grasp': { archetype: 'field', manaCost: 16, cooldownMs: 9000, castRange: 9, areaSize: 2, areaSecs: 4, fieldDps: 8.5 },
@@ -364,8 +371,10 @@ const BUILDS: Record<string, Build> = {
   'ember-trail': { archetype: 'unbuilt', why: "needs fields spawned along the caster's PATH — every field today lands at the aim point" },
   'crystal-barrage': { archetype: 'projectile', manaCost: 11, cooldownMs: 800, damage: 20, projSpeed: 46, projLife: 1.5 },
   'grindstone': { archetype: 'field', manaCost: 17, cooldownMs: 8000, castRange: 8, areaSize: 3, areaSecs: 7, fieldDps: 4.5 },
-  'dust-lung': { archetype: 'field', manaCost: 13, cooldownMs: 8000, castRange: 10, areaSize: 2.5, areaSecs: 6, fieldDps: 5 },
-  'quake-step': { archetype: 'status', manaCost: 14, cooldownMs: 8000, castRange: 6, areaSize: 5, areaSecs: 2.5, statuses: ['rooted'] },
+  // MOVE-JOBS 09-28 (Alex ✓): control, not chip damage: a lingering cloud that slows whoever breathes it.
+  'dust-lung': { archetype: 'status', manaCost: 13, cooldownMs: 8000, castRange: 10, areaSize: 3, areaSecs: 6, statuses: ['slowed'], linger: true },
+  // MOVE-JOBS 09-28 (Alex ✓): lost footing is a STAGGER (a brief stop), not a root.
+  'quake-step': { archetype: 'status', manaCost: 14, cooldownMs: 8000, castRange: 6, areaSize: 5, areaSecs: 1.5, statuses: ['staggered'] },
   // "Every fragment carries an electric bite" — fragmentation IS the chain the sim already has, just
   // at a short hop instead of Chain Lightning's long one. Same field, different reach.
   'shard-grenade': { archetype: 'projectile', manaCost: 13, cooldownMs: 1600, damage: 22, projSpeed: 38, projLife: 1.8, chain: 3, chainRange: 4 },
@@ -373,7 +382,8 @@ const BUILDS: Record<string, Build> = {
   // status carries the blind, and no field carries statuses today. Shipping the scour keeps it
   // distinct from Fog Bank (which is the pure blind) instead of making two identical blind clouds.
   // ⚠ One hook (a field applying statuses on tick, as terrain already does at cast) finishes it.
-  'sandstorm-veil': { archetype: 'field', manaCost: 16, cooldownMs: 11000, castRange: 9, areaSize: 5, areaSecs: 6, fieldDps: 7 },
+  // MOVE-JOBS 09-28 (Alex ✓): a scouring cloud that blinds foes inside it.
+  'sandstorm-veil': { archetype: 'status', manaCost: 16, cooldownMs: 11000, castRange: 9, areaSize: 5, areaSecs: 6, statuses: ['blinded'], linger: true },
   // ── ★ SYSTEM 4: THE SKIRMISHER VERBS (2026-08-15) ───────────────────────────────────────────
   // The 08-14 Apex cross-reference measured the table at **1 mobility cast in 47** and found canon
   // had already written the whole missing role — these three plus Gate, all registered, all unbuilt.
@@ -415,7 +425,8 @@ const BUILDS: Record<string, Build> = {
   // "Muscles twitch, manatech sputters. DISABLING, NOT LETHAL" — canon forbids damage here. Same pair
   // as Shackle, but thrown wide and held long instead of clamped on one target.
   'static-field': { archetype: 'status', manaCost: 15, cooldownMs: 10000, castRange: 9, areaSize: 4.5, areaSecs: 5, statuses: ['rooted', 'disarmed'] },
-  'pressure-drop': { archetype: 'field', manaCost: 19, cooldownMs: 10000, castRange: 10, areaSize: 5, areaSecs: 6, fieldDps: 6.5 },
+  // MOVE-JOBS 09-28 (Alex ✓): a cold pressure zone that slows.
+  'pressure-drop': { archetype: 'status', manaCost: 19, cooldownMs: 10000, castRange: 10, areaSize: 5, areaSecs: 6, statuses: ['slowed'], linger: true },
 
   // ── The doubled-focus seven (canon 2026-08-15, built 2026-08-17) ─────────────────────────────
   // ★ QUICKFORM IS THE ONE THAT MATTERS AND IT IS THE CHEAPEST THING IN THIS FILE. Manalic was the
@@ -444,7 +455,8 @@ const BUILDS: Record<string, Build> = {
   // "It does not aim, which is the point: you spoil a space rather than strike into it. Feeds on the
   // caster's temper and BURNS MANA FAST." So: the widest field in the game, the lowest damage in it,
   // and the highest cost of any tactical. A Squall that hurt would be a worse Firewall.
-  squall:    { archetype: 'field', manaCost: 24, cooldownMs: 9000, castRange: 10, areaSize: 6.5, areaSecs: 5, fieldDps: 8, fieldStopsShots: false },
+  // MOVE-JOBS 09-28 (Alex ✓): "you spoil a space rather than strike into it" — a slow, no damage.
+  squall:    { archetype: 'status', manaCost: 24, cooldownMs: 9000, castRange: 10, areaSize: 6.5, areaSecs: 5, statuses: ['slowed'], linger: true },
   // "One shard, no spread — it pierces where a thrown stone would only break." The fastest and hardest
   // single bolt a tactical gets; Gale Cutter is cheaper and quicker, Crystal Barrage throws more.
   // Paying for one perfect shard is the Gem keeper's whole posture.
@@ -491,7 +503,7 @@ const BUILDS: Record<string, Build> = {
   // where they part. Enlighten is a flash thrown FAR at a point (range 11, size 6, 3.5s); Hush is a
   // bank of vapor you pull over the ground around you (range 10, size 8, 4s) so you can leave.
   // Blinding everyone nearby IS concealment realised, with no concealment status to model it.
-  hush:      { archetype: 'status', manaCost: 14, cooldownMs: 10000, castRange: 10, areaSize: 8, areaSecs: 4, statuses: ['blinded'] },
+  hush:      { archetype: 'status', manaCost: 14, cooldownMs: 10000, castRange: 10, areaSize: 8, areaSecs: 4, statuses: ['blinded'], linger: true },
   // ── Barrier's doubled focus (canon 2026-09-02, built the same day) ─────────────────────────
   // "Paid at the cast and then it holds itself: it does not drain you, does not follow you." So it
   // is a PLACED field, never a stance — the passives own the held shell and its drain. "A novice

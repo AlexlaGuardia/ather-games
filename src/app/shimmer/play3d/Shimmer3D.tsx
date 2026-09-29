@@ -79,7 +79,7 @@ import { createFleet, stepFleet, aliveCount, type Fleet, type FleetTarget } from
 import { loadRuneInventory, saveRuneInventory, setBirthRune, grantRune, revokeRune, EMPTY_INVENTORY, type RuneInventory } from './rune-inventory'
 import { spawnField, tickFields, fieldsAt, absorbShotAt, absorbWardAt, contains, FIELD_HEIGHT, type Field } from '../engine/field-effects'
 import { conjure, shapeCells, blockedAt as conjuredBlockedAt, expireConjured, liveCells, type Conjured } from '../engine/conjured-terrain'
-import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget, type StatusBag } from '../engine/statuses'
+import { emptyBag, applyStatuses, hasStatus, pruneStatuses, clearTarget, foeMods, statusesOn, STATUS_TABLE, type StatusBag, type StatusKind } from '../engine/statuses'
 import { rollEncounter, HOLD_LEVELS, type WildEncounter } from '../engine/encounters'
 import { derivePartyStats, type PartyStats } from '../engine/party-stats'
 import { type BattleResult } from '../engine/arena'
@@ -2652,7 +2652,15 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const CMAX = 12
   const castPool = useMemo(() => Array.from({ length: CMAX }, () => ({
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, dmg: 0, chain: 0, chainRange: 0,
+    sts: [] as readonly StatusKind[], stSecs: 0,   // statuses the round lays on whatever it hits (Ice Dart: slowed)
   })), [])
+  // ── LINGERING STATUS CLOUDS (09-28): a status cast with `linger` (Fog Bank, Hush, Sandstorm Veil…) stays where
+  // it lands and keeps applying to whoever is inside, so a foe that walks INTO the fog is blinded too. Before
+  // this, every status cast applied once at the moment it landed and drew nothing: Fog Bank read as mana spent.
+  const statusZones = useRef<{ x: number; z: number; r: number; until: number; kinds: readonly StatusKind[]; color: number }[]>([])
+  const zoneTickAt = useRef(0)
+  const zoneMeshRef = useRef<THREE.InstancedMesh>(null)
+  const markMeshRef = useRef<THREE.InstancedMesh>(null)
   const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z], i) => ({
     pos: new THREE.Vector3(x, y, z), ax: x, az: z,  // anchor — drift mode oscillates around it
     phase: i * 1.7, spd: 0.55 + (i % 3) * 0.25,     // varied phase/speed so the wall doesn't move in lockstep
@@ -2746,6 +2754,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const fieldMeshRef = useRef<THREE.InstancedMesh>(null)     // SYSTEM 1 — area entities (flat discs)
   const conjuredMeshRef = useRef<THREE.InstancedMesh>(null)  // SYSTEM 2 — conjured terrain slabs
   const FIELD_MAX = 8, CONJ_MAX = 220  // a Cordon ring at radius 4 is ~28 cells; 220 covers the cap
+  const ZONE_MAX = 6, MARK_MAX = 96  // lingering clouds on screen at once · foes wearing a status marker
   const castCd = useRef(0)                                // v2 cast cooldown timer (s)
   const boardRef = useRef<THREE.InstancedMesh>(null)  // target-board layers: white disc / red ring / gold core
   const ringRef = useRef<THREE.InstancedMesh>(null)
@@ -2765,6 +2774,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const camUp = useMemo(() => new THREE.Vector3(), [])
   const aim = useMemo(() => new THREE.Vector3(), [])
   const seg = useMemo(() => new THREE.Vector3(), [])
+  const markCol = useMemo(() => new THREE.Color(), [])
   const mid = useMemo(() => new THREE.Vector3(), [])
   const qSeg = useMemo(() => new THREE.Quaternion(), [])
   const AXIS_Z = useMemo(() => new THREE.Vector3(0, 0, 1), [])
@@ -2820,6 +2830,25 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
     const W = WEAPONS[weaponIdxRef.current] ?? WEAPONS[0]   // live weapon — stats + tracer look
     const nowFrame = performance.now()  // ONE clock per frame — fields, terrain and statuses all read it
     const hs = inHold ? holdRef.current : null
+    // ── EVERY FOE, ONE WALK (09-28). Statuses used to reach the hunter and the guards only, so a Fog Bank in the
+    // Breach or the Crucible landed on nobody. Every real-time foe in play3d is here by a stable id; the range
+    // boards are too, so a status cast is visible on the range where it is tested.
+    const forEachFoe = (fn: (id: string, x: number, z: number, y: number) => void) => {
+      targets.forEach((t, i) => { if (t.alive) fn(`board:${i}`, t.pos.x, t.pos.z, t.pos.y) })
+      const h0 = hunter.current
+      if (h0.alive) fn('hunter', h0.pos.x, h0.pos.z, h0.pos.y)
+      if (guardSim.current.spawned) guardBodies.forEach((b, gi) => { const st = guardSim.current.enc.guards[gi]; if (st?.alive) fn(`guard:${st.id}`, b.pos.x, b.pos.z, b.pos.y) })
+      if (fleetRef.current) { const fy = (posRef.current?.y ?? 0) + 0.95; for (const mm of fleetRef.current.members) if (mm.state.alive) fn(`fleet:${mm.index}`, mm.state.x, mm.state.z, fy) }
+      if (hs?.running) for (const b of hs.flood) if (b.alive && b.phase === 'inside') fn(`flood:${b.id}`, b.x, b.z, b.y * STEP + 0.5)
+    }
+    // the clouds apply every quarter second, for a second at a time, so leaving one frees you within a second
+    if (statusZones.current.length && nowFrame >= zoneTickAt.current) {
+      zoneTickAt.current = nowFrame + 250
+      statusZones.current = statusZones.current.filter((z) => z.until > nowFrame)
+      let bag = statusRef.current
+      for (const zn of statusZones.current) forEachFoe((id, x, z) => { if ((x - zn.x) ** 2 + (z - zn.z) ** 2 <= zn.r * zn.r) bag = applyStatuses(bag, id, zn.kinds, 1, nowFrame, { zone: true }) })
+      statusRef.current = bag
+    }
 
     // ── TREMOR SENSE ────────────────────────────────────────────────────────────────────────────
     // The scene owns this because the scene is what knows where the bodies are; the HUD half draws
@@ -2932,6 +2961,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           cp.vel.copy(aim).sub(cp.pos).normalize().multiplyScalar(pending.projSpeed)
           cp.life = pending.projLife
           cp.dmg = pending.damage; cp.chain = pending.chain; cp.chainRange = pending.chainRange
+          cp.sts = pending.statuses; cp.stSecs = pending.areaSecs
           recoilRef.current.p += 0.008  // a little heft on release
           onShot()
         }
@@ -2959,18 +2989,16 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         // A terrain cast that ALSO carries statuses applies them (Cordon: stone rises AND all metal
         // locks). That is why this is not an `else if` — canon writes both halves in one sentence.
         if (pending.statuses.length > 0) {
-          const r2 = pending.areaSize * pending.areaSize
-          let bag = statusRef.current
-          const h = hunter.current
-          if (h.alive && (h.pos.x - ax) ** 2 + (h.pos.z - az) ** 2 <= r2) bag = applyStatuses(bag, 'hunter', pending.statuses, pending.areaSecs, nowMs)
-          if (guardSim.current.spawned) {
-            for (let gi = 0; gi < guardBodies.length; gi++) {
-              const b = guardBodies[gi], st = guardSim.current.enc.guards[gi]
-              if (!st?.alive) continue
-              if ((b.pos.x - ax) ** 2 + (b.pos.z - az) ** 2 <= r2) bag = applyStatuses(bag, `guard:${st.id}`, pending.statuses, pending.areaSecs, nowMs)
-            }
+          if (pending.linger && pending.archetype === 'status') {
+            // a cloud: it stays and applies to whoever is inside (the zone tick below), including at once
+            const color = STATUS_TABLE[pending.statuses[0]].color
+            statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.areaSize, until: nowMs + pending.areaSecs * 1000, kinds: pending.statuses, color }]
+            zoneTickAt.current = 0
+          } else {
+            let bag = statusRef.current
+            forEachFoe((id, x, z) => { if ((x - ax) ** 2 + (z - az) ** 2 <= pending.areaSize * pending.areaSize) bag = applyStatuses(bag, id, pending.statuses, pending.areaSecs, nowMs) })
+            statusRef.current = bag
           }
-          statusRef.current = bag
         }
       }
     }
@@ -3133,13 +3161,16 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           if (!b.alive || Math.abs(p.pos.y - (b.y * STEP + 0.5)) >= 1.1) continue
           const bdx = p.pos.x - b.x, bdz = p.pos.z - b.z, br = b.kind === 'bulk' ? 0.8 : 0.6
           if (bdx * bdx + bdz * bdz >= br * br) continue
-          hitBody(hs, b.id, dmg, false); coop.link?.hit(b.id, dmg, false); struck = true; break
+          hitBody(hs, b.id, dmg, false); coop.link?.hit(b.id, dmg, false); struck = true
+          if (p.sts.length) statusRef.current = applyStatuses(statusRef.current, `flood:${b.id}`, p.sts, p.stSecs, nowFrame)
+          break
         }
         if (struck) { p.life = 0; onHit(true); continue }
       }
       for (const t of targets) {
         if (t.alive && p.pos.distanceToSquared(t.pos) < TARGET_HIT_R2) {
           t.hp -= dmg; p.life = 0; hit = true; onHit(true)  // gold hitmarker — a cast reads as a heavy hit
+          if (p.sts.length) statusRef.current = applyStatuses(statusRef.current, `board:${targets.indexOf(t)}`, p.sts, p.stSecs, nowFrame)
           if (t.hp <= 0) { t.alive = false; t.down = TARGET_RESPAWN }
           // Chain Lightning: arc to the nearest live targets in range, half damage per jump. Canon's
           // "arcs between every target and conductor in range" — bounded so an ultimate stays an ultimate.
@@ -3162,6 +3193,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         const h = hunter.current
         if (h.alive && p.pos.distanceToSquared(h.pos) < HUNTER_HIT_R2) {
           h.hp -= dmg; p.life = 0; onHit(true)
+          if (p.sts.length) statusRef.current = applyStatuses(statusRef.current, 'hunter', p.sts, p.stSecs, nowFrame)
           if (h.hp <= 0) { h.alive = false; h.respawn = HUNTER_RESPAWN; statusRef.current = clearTarget(statusRef.current, 'hunter') }
         }
         // ── the fleet takes cast damage too (#302). Same death rule: a challenger stays down.
@@ -3173,6 +3205,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
               const bdx = p.pos.x - m.state.x, bdz = p.pos.z - m.state.z
               if (bdx * bdx + bdz * bdz >= HUNTER_HIT_R2) continue
               m.state.hp -= dmg; p.life = 0; hit = true; onHit(true)
+              if (p.sts.length) statusRef.current = applyStatuses(statusRef.current, `fleet:${m.index}`, p.sts, p.stSecs, nowFrame)
               if (m.state.hp <= 0) { m.state.alive = false; m.state.respawn = Number.POSITIVE_INFINITY }
               break
             }
@@ -3196,7 +3229,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         coop.link.pos(posRef.current.x, posRef.current.y / STEP, posRef.current.z)
         if (coop.struck > 0) { const d = coop.struck; coop.struck = 0; hurtPlayer(d) }
       } else {
-        const o = stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP)
+        const bag0 = statusRef.current
+        const o = stepHold(hs, dt, posRef.current.x, posRef.current.z, posRef.current.y / STEP, undefined, (id) => (bag0[`flood:${id}`] ? foeMods(bag0, `flood:${id}`, nowFrame) : null))
         if (o.strike > 0) hurtPlayer(o.strike)
       }
     }
@@ -3258,6 +3292,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         const hc = hunterCtx.current
         hc.targetX = pEye.x; hc.targetZ = pEye.z
         hc.rooted = hRooted; hc.disarmed = hDisarmed
+        hc.speedMult = foeMods(statusRef.current, 'hunter', nowFrame).speedMult
         hc.fallbackX = targets[0].ax; hc.fallbackZ = targets[0].az
         const hIntent = stepHunter(h, hc, dt, RANGE_HUNTER)
         // State → the render/hit-test vector. One-way, one place: everything else in this file
@@ -3321,7 +3356,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         const bc = botCtx.current
         bc.rooted = false; bc.disarmed = false
         bc.fallbackX = targets[0].ax; bc.fallbackZ = targets[0].az
-        const results = stepFleet(fleet, bodies, bc, dt, RANGE_HUNTER)
+        const fbag = statusRef.current
+        const results = stepFleet(fleet, bodies, bc, dt, RANGE_HUNTER, (i) => foeMods(fbag, `fleet:${i}`, nowFrame))
         for (const r of results) {
           // ── ★★★ A CHALLENGER'S CAST (row 294) — the first rune-tagged damage in the game ──────
           // This is the whole point of the row: a bot casts from its PREMADE LOADOUT, the move is a
@@ -3352,7 +3388,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const o = orbs.find((or) => or.life <= 0)
           if (!o) continue
           o.pos.set(r.member.state.x, (posRef.current.y ?? 0) + 0.95, r.member.state.z)
-          o.vel.copy(pEye).sub(o.pos).normalize().multiplyScalar(DRONE_SPEED)
+          o.vel.copy(pEye).sub(o.pos).normalize()
+          // blinded: it still shoots, it just does not know where you are (the hunter's rule)
+          if (hasStatus(fbag, `fleet:${r.member.index}`, 'blinded', nowFrame)) { o.vel.x += Math.sin(r.member.state.strafe * 7.3) * 0.85; o.vel.z += Math.cos(r.member.state.strafe * 5.1) * 0.85; o.vel.normalize() }
+          o.vel.multiplyScalar(DRONE_SPEED)
           o.life = DRONE_LIFE
         }
         // Instanced, one matrix per LIVING challenger, `count` trimmed to the survivors — the
@@ -3462,7 +3501,8 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
           const gRooted = hasStatus(statusRef.current, gKey, 'rooted', nowFrame)
           const gDisarmed = hasStatus(statusRef.current, gKey, 'disarmed', nowFrame)
           const gBlinded = hasStatus(statusRef.current, gKey, 'blinded', nowFrame)
-          if (cell !== undefined && (cell & 0xFF) !== WALL_ID && !gRooted && !conjuredBlockedAt(conjuredRef.current, nx, nz, nowFrame)) { b.pos.x = nx; b.pos.z = nz }
+          const gSm = foeMods(statusRef.current, gKey, nowFrame).speedMult
+          if (cell !== undefined && (cell & 0xFF) !== WALL_ID && !gRooted && gSm > 0 && !conjuredBlockedAt(conjuredRef.current, nx, nz, nowFrame)) { b.pos.x += (nx - b.pos.x) * gSm; b.pos.z += (nz - b.pos.z) * gSm }
           // the leading guard presses; the supports fire slower. Wren, least aggressive, slowest.
           gs.fireCd[i] -= dt
           if (gs.fireCd[i] <= 0 && st.staggerFor <= 0 && !gDisarmed) {
@@ -3579,6 +3619,35 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       }
       fieldMeshRef.current.instanceMatrix.needsUpdate = true
     }
+    // ── STATUS render (09-28): a lingering cloud is a soft column in its status's colour; every foe carrying a
+    // status wears a small gem above its head in the colour of its most important one (hard kinds first).
+    if (zoneMeshRef.current) {
+      const zs = statusZones.current, py = posRef.current?.y ?? 0
+      for (let i = 0; i < ZONE_MAX; i++) {
+        const zn = zs[i]
+        if (!zn || zn.until <= nowFrame) { m.compose(zero, q, zero); zoneMeshRef.current.setMatrixAt(i, m); continue }
+        scl.set(zn.r, 1, zn.r); seg.set(zn.x, py + 1.1, zn.z)
+        m.compose(seg, q, scl); zoneMeshRef.current.setMatrixAt(i, m)
+        zoneMeshRef.current.setColorAt(i, markCol.setHex(zn.color))
+      }
+      zoneMeshRef.current.instanceMatrix.needsUpdate = true
+      if (zoneMeshRef.current.instanceColor) zoneMeshRef.current.instanceColor.needsUpdate = true
+    }
+    if (markMeshRef.current) {
+      let n = 0
+      const bag = statusRef.current
+      forEachFoe((id, x, z, y) => {
+        if (n >= MARK_MAX || !bag[id]) return
+        const on = statusesOn(bag, id, nowFrame)
+        if (!on.length) return
+        seg.set(x, y + 1.25 + Math.sin(nowFrame * 0.006 + n) * 0.05, z); scl.setScalar(0.16)
+        m.compose(seg, q, scl); markMeshRef.current!.setMatrixAt(n, m)
+        markMeshRef.current!.setColorAt(n, markCol.setHex(STATUS_TABLE[on[0]].color)); n++
+      })
+      markMeshRef.current.count = n
+      markMeshRef.current.instanceMatrix.needsUpdate = true
+      if (markMeshRef.current.instanceColor) markMeshRef.current.instanceColor.needsUpdate = true
+    }
     // ── SYSTEM 2 render: one box per conjured CELL, so what you see is exactly what blocks you.
     // Drawing the collision set itself means the wall can never look different from where it is. ──
     if (conjuredMeshRef.current) {
@@ -3670,6 +3739,14 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       {/* SYSTEM 1 — field discs. Amber + additive so a Firewall reads as heat on the floor; a
           Healing Grove uses the same disc (one material) and is told apart by where it sits and
           what it does. Per-field tinting is a follow-on once there is more than one field colour. */}
+      <instancedMesh ref={zoneMeshRef} args={[undefined, undefined, ZONE_MAX]} frustumCulled={false}>
+        <cylinderGeometry args={[1, 1, 2.2, 28, 1, true]} />
+        <meshBasicMaterial transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={markMeshRef} args={[undefined, undefined, MARK_MAX]} frustumCulled={false}>
+        <octahedronGeometry args={[1, 0]} />
+        <meshBasicMaterial toneMapped={false} />
+      </instancedMesh>
       <instancedMesh ref={fieldMeshRef} args={[undefined, undefined, FIELD_MAX]} frustumCulled={false}>
         <cylinderGeometry args={[1, 1, 0.08, 28]} />
         <meshBasicMaterial color={S.crucible.fieldDisc} transparent opacity={0.34} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />

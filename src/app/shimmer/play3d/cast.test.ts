@@ -235,12 +235,14 @@ const chk = (n: string, c: boolean, x = '') => { c ? ok++ : (bad++, console.erro
     chk('...and does not blind it', !hasStatus(bag, 'hunter', 'blinded', T0))
     chk('a status expires', !hasStatus(bag, 'hunter', 'rooted', T0 + 3001))
 
-    // re-applying EXTENDS, never stacks — stacking is how CC becomes a stun-lock
-    let b2 = applyStatus(emptyBag(), 'h', 'rooted', 3, T0)
-    b2 = applyStatus(b2, 'h', 'rooted', 3, T0 + 1000)
-    chk('re-applying extends to the later expiry', Math.round(remaining(b2, 'h', 'rooted', T0 + 1000)) === 3)
-    b2 = applyStatus(b2, 'h', 'rooted', 1, T0 + 1000)  // a SHORTER one must not cut it short
-    chk('a shorter re-apply never truncates a longer one', Math.round(remaining(b2, 'h', 'rooted', T0 + 1000)) === 3)
+    // re-applying EXTENDS, never stacks — stacking is how CC becomes a stun-lock. Read on a SOFT status: a
+    // hard one (rooted) is capped by the lock rule since 09-28 and never extends inside its window
+    // (`engine/statuses.test.ts` owns that half).
+    let b2 = applyStatus(emptyBag(), 'h', 'slowed', 3, T0)
+    b2 = applyStatus(b2, 'h', 'slowed', 3, T0 + 1000)
+    chk('re-applying extends to the later expiry', Math.round(remaining(b2, 'h', 'slowed', T0 + 1000)) === 3)
+    b2 = applyStatus(b2, 'h', 'slowed', 1, T0 + 1000)  // a SHORTER one must not cut it short
+    chk('a shorter re-apply never truncates a longer one', Math.round(remaining(b2, 'h', 'slowed', T0 + 1000)) === 3)
 
     chk('statusesOn lists what is live', statusesOn(bag, 'hunter', T0).sort().join() === 'disarmed,rooted')
     chk('pruning is identity when nothing expired', pruneStatuses(bag, T0) === bag)

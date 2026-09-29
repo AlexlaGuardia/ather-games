@@ -218,9 +218,15 @@ export function stepFleet(
   ctx: HunterCtx,
   dt: number,
   tuning: HunterTuning = RANGE_HUNTER,
+  /** a member's statuses (`statuses.ts` › foeMods), read by id; absent = none. Per member, like castBands. */
+  modsFor?: (memberIndex: number) => { rooted: boolean; disarmed: boolean; speedMult: number },
 ): FleetStepResult[] {
   const out: FleetStepResult[] = []
   for (const m of fleet.members) {
+    const mods = modsFor?.(m.index)
+    ctx.rooted = mods?.rooted ?? false
+    ctx.disarmed = mods?.disarmed ?? false
+    ctx.speedMult = mods?.speedMult ?? 1
     const t = pickTarget(m, bodies)
     ctx.targetX = t ? t.x : m.state.x
     ctx.targetZ = t ? t.z : m.state.z

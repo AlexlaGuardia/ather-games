@@ -108,6 +108,8 @@ export interface HunterCtx {
   /** System 3: an option removed, never HP */
   rooted?: boolean
   disarmed?: boolean
+  /** slowed (0.6) or staggered (0) — `statuses.ts` › foeMods folds them into this one number. Absent = 1. */
+  speedMult?: number
   /** deterministic source for every draw. Same seed ⇒ same fight on every client. */
   rng: () => number
   /** where to put it if the spawn ring lands somewhere solid */
@@ -198,7 +200,9 @@ export function stepHunter(state: HunterState, ctx: HunterCtx, dt: number, t: Hu
   sx += -tz * orbit
   sz += tx * orbit
 
-  if (!ctx.rooted) {
+  const sm = ctx.speedMult ?? 1
+  sx *= sm; sz *= sm
+  if (!ctx.rooted && sm > 0) {
     const nx = state.x + sx, nz = state.z + sz
     // One test, at the destination. A hunter that clips a corner is better than one that snags on
     // it — the range's version made exactly this trade and it is part of the tuned feel.

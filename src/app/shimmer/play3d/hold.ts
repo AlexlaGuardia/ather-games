@@ -1005,13 +1005,17 @@ function nearestKeeper(keepers: readonly HoldKeeper[], x: number, z: number, y: 
   return best
 }
 /** ONE keeper: the game as it was before co-op, unchanged (the co-op step with a party of one). */
-export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: number = heightAt(s, px, pz), tune: HoldTuning = HOLD_TUNING): HoldStepOut {
-  const o = stepHoldParty(s, dt, [{ x: px, z: pz, y: py }], tune)
+export function stepHold(s: HoldState, dt: number, px: number, pz: number, py: number = heightAt(s, px, pz), tune: HoldTuning = HOLD_TUNING, mods?: FloodMods): HoldStepOut {
+  const o = stepHoldParty(s, dt, [{ x: px, z: pz, y: py }], tune, mods)
   s.pickupBy.length = 0   // one keeper: every pickup is theirs, and nothing reads the attribution
   return { strike: o.strikes[0], roundBegan: o.roundBegan, wentLoud: o.wentLoud, ...(o.fellInto ? { fellInto: o.fellInto } : {}) }
 }
 
-export function stepHoldParty(s: HoldState, dt: number, keepers: readonly HoldKeeper[], tune: HoldTuning = HOLD_TUNING): HoldPartyOut {
+/** A flooded body's statuses (`engine/statuses.ts` › foeMods), read by body id. The host owns the bag; the hold
+ *  never learns what a status system is, only these four answers. */
+export type FloodMods = (id: number) => { rooted: boolean; disarmed: boolean; blinded: boolean; speedMult: number } | null
+
+export function stepHoldParty(s: HoldState, dt: number, keepers: readonly HoldKeeper[], tune: HoldTuning = HOLD_TUNING, mods?: FloodMods): HoldPartyOut {
   const out: HoldPartyOut = { strikes: keepers.map(() => 0), roundBegan: null, wentLoud: false }
   if (!s.running || s.over) return out
   dt = Math.min(dt, 0.1)
@@ -1085,6 +1089,8 @@ export function stepHoldParty(s: HoldState, dt: number, keepers: readonly HoldKe
   for (const b of s.flood) {
     if (!b.alive) continue
     b.strikeT = Math.max(0, b.strikeT - dt)
+    const fm = mods?.(b.id) ?? null
+    const sm = fm ? fm.speedMult : 1
     if (b.phase === 'rise') {
       // up out of the grate: it cannot move or strike until it is standing on the floor
       const v = s.map.vents[b.vent]
@@ -1097,7 +1103,7 @@ export function stepHoldParty(s: HoldState, dt: number, keepers: readonly HoldKe
       // cross to the foot of the face, then CLIMB it to hang under the sill
       const tx = w.mid.x + (w.spawn.x - w.mid.x) * 0.5, tz = w.mid.z + (w.spawn.z - w.mid.z) * 0.5
       const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz)
-      if (d >= 0.15) { const k = Math.min(1, (b.speed * dt) / d); b.x += dx * k; b.z += dz * k; continue }
+      if (d >= 0.15) { const k = Math.min(1, (b.speed * sm * dt) / d); b.x += dx * k; b.z += dz * k; continue }
       const sill = w.h - 0.6
       b.y = Math.min(sill, b.y + tune.climbRate * dt)
       if (b.y >= sill - 1e-6) b.phase = s.planks[w.id] > 0 ? 'tear' : 'inside'
@@ -1122,8 +1128,11 @@ export function stepHoldParty(s: HoldState, dt: number, keepers: readonly HoldKe
     if (ti < 0) continue
     const px = keepers[ti].x, pz = keepers[ti].z, py = keepers[ti].y
     const dpx = px - b.x, dpz = pz - b.z, dp = Math.hypot(dpx, dpz)
+    // STATUSES (09-28): a blinded body has lost the keeper and drifts to a stop; a rooted or staggered one
+    // stands (speedMult 0); a disarmed one reaches you and cannot strike. None of them costs it HP.
+    if (fm?.blinded) { b.vx *= 0.9; b.vz *= 0.9; continue }
     if (dp < tune.reach && Math.abs(py - b.y) < tune.level) {
-      if (b.strikeT <= 0) { out.strikes[ti] += tune.strikeDmg * (b.kind === 'bulk' ? 1.5 : 1); b.strikeT = tune.strikeCd }
+      if (b.strikeT <= 0 && !fm?.disarmed) { out.strikes[ti] += tune.strikeDmg * (b.kind === 'bulk' ? 1.5 : 1); b.strikeT = tune.strikeCd }
       b.vx *= 0.5; b.vz *= 0.5
       continue
     }
@@ -1153,8 +1162,8 @@ export function stepHoldParty(s: HoldState, dt: number, keepers: readonly HoldKe
     // a body cut off by a shut gate (field -1) heads for the keeper anyway and is stopped by the wall
     const mx = bx - b.x, mz = bz - b.z, md = Math.hypot(mx, mz) || 1
     const ease = Math.min(1, tune.turnRate * dt)
-    b.vx += ((mx / md) * b.speed - b.vx) * ease
-    b.vz += ((mz / md) * b.speed - b.vz) * ease
+    b.vx += ((mx / md) * b.speed * sm - b.vx) * ease
+    b.vz += ((mz / md) * b.speed * sm - b.vz) * ease
     const nx = b.x + b.vx * dt, nz = b.z + b.vz * dt
     if (Math.round(nx) === cx || floodMove(s, Math.round(nx), cz, hy)) b.x = nx   // floodMove: a body may step OFF into a broken floor
     else b.vx = 0
