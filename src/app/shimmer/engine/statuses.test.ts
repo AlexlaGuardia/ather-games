@@ -75,5 +75,15 @@ for (const id of ['`board:${targets.indexOf(t)}`', "'hunter'", '`fleet:${m.index
 ok((p3.match(/ampHit\(/g) || []).length >= 5, 'every gun hit site lays the infusion status')
 ok(p3.includes('burnTickAt.current = nowFrame + 500') && p3.includes('d = BURN_DPS * 0.5'), 'Burning ticks every half second through each foe\'s own damage path')
 
+// H. STEP 4 (09-29): traps + charges (Alex's revision of Shackle and Flash Freeze)
+for (const id of ['shackle', 'flash-freeze']) { const c = castForMove(id); ok(c.trap && c.charges === 2 && c.trapMax === 2 && c.trapSecs > 0, `★ ${id} is a trap: 2 charges, at most 2 set`) }
+ok(castForMove('shackle').statuses.join() === 'rooted,disarmed' && castForMove('shackle').areaSecs === 2, 'Shackle clamps the foe that trips it: rooted + jammed 2s')
+const ff = castForMove('flash-freeze')
+ok(ff.statuses[0] === 'rooted' && ff.areaSecs === 1.5 && ff.splashStatuses[0] === 'slowed' && ff.areaSize === 3 && ff.splashSecs === 3, 'Flash Freeze roots the tripper 1.5s and slows everyone within 3 for 3s')
+ok(p3.includes('mine.length >= pending.trapMax ? mine.slice(mine.length - pending.trapMax + 1) : mine'), '★ one trap past the cap lifts the OLDEST, never refuses the press')
+ok(p3.includes("if (!tripped && (x - t.x) ** 2 + (z - t.z) ** 2 <= t.spec.trapRadius * t.spec.trapRadius) tripped = id"), 'the FIRST foe inside the radius trips it')
+ok(p3.includes('while (charge.n < spec.charges && charge.at > 0 && now >= charge.at)'), '★ charges refill one at a time')
+ok(p3.includes("setHarvestToast(`${spec.label} — recharging`)"), 'an empty move says it is recharging, never a dead key')
+
 console.log(`statuses: ${pass} passed, ${fails.length} failed`)
 if (fails.length) { for (const f of fails) console.log('  ✗ ' + f); process.exit(1) }

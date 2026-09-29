@@ -2663,6 +2663,9 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const zoneMeshRef = useRef<THREE.InstancedMesh>(null)
   const markMeshRef = useRef<THREE.InstancedMesh>(null)
   const revealMeshRef = useRef<THREE.InstancedMesh>(null)   // STEP 2: a Revealed foe's outline, drawn through walls
+  // STEP 4: traps set on the ground, waiting for a foe (Shackle's clamp, Flash Freeze's pool)
+  const trapsRef = useRef<{ spec: CastSpec; x: number; z: number; y: number; until: number; color: number }[]>([])
+  const trapMeshRef = useRef<THREE.InstancedMesh>(null)
   const windupRef = useRef<{ spec: CastSpec; at: number } | null>(null)  // a cast charging (Enlighten's 0.8s tell)
   const targets = useMemo(() => RANGE_TARGETS.map(([x, y, z], i) => ({
     pos: new THREE.Vector3(x, y, z), ax: x, az: z,  // anchor — drift mode oscillates around it
@@ -2757,7 +2760,7 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
   const fieldMeshRef = useRef<THREE.InstancedMesh>(null)     // SYSTEM 1 — area entities (flat discs)
   const conjuredMeshRef = useRef<THREE.InstancedMesh>(null)  // SYSTEM 2 — conjured terrain slabs
   const FIELD_MAX = 8, CONJ_MAX = 220  // a Cordon ring at radius 4 is ~28 cells; 220 covers the cap
-  const ZONE_MAX = 6, MARK_MAX = 96  // lingering clouds on screen at once · foes wearing a status marker
+  const ZONE_MAX = 6, MARK_MAX = 96, TRAP_MAX = 8  // lingering clouds · foes wearing a status marker · traps set
   const castCd = useRef(0)                                // v2 cast cooldown timer (s)
   const boardRef = useRef<THREE.InstancedMesh>(null)  // target-board layers: white disc / red ring / gold core
   const ringRef = useRef<THREE.InstancedMesh>(null)
@@ -2858,6 +2861,24 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         else if (kind === 'fleet') { const mm = fleetRef.current?.members.find((f) => f.index === +key); if (mm) { mm.state.hp -= dd; if (mm.state.hp <= 0) { mm.state.alive = false; mm.state.respawn = Number.POSITIVE_INFINITY } } }
         else if (kind === 'flood' && hs) { hitBody(hs, +key, dd, false); coop.link?.hit(+key, dd, false) }
       })
+    }
+    // TRAPS (step 4): the first foe inside a trap's radius sets it off; its splash reaches everyone near
+    if (trapsRef.current.length) {
+      const live = trapsRef.current.filter((t) => t.until > nowFrame)
+      const left: typeof live = []
+      for (const t of live) {
+        let tripped: string | null = null
+        forEachFoe((id, x, z) => { if (!tripped && (x - t.x) ** 2 + (z - t.z) ** 2 <= t.spec.trapRadius * t.spec.trapRadius) tripped = id })
+        if (!tripped) { left.push(t); continue }
+        let bag = applyStatuses(statusRef.current, tripped, t.spec.statuses, t.spec.areaSecs, nowFrame)
+        if (t.spec.splashStatuses.length) {
+          const r2 = t.spec.areaSize * t.spec.areaSize
+          forEachFoe((id, x, z) => { if ((x - t.x) ** 2 + (z - t.z) ** 2 <= r2) bag = applyStatuses(bag, id, t.spec.splashStatuses, t.spec.splashSecs, nowFrame) })
+        }
+        statusRef.current = bag
+        tone(t.spec.statuses[0] === 'rooted' && t.spec.splashStatuses.length ? 1400 : 180, 180, { type: 'square', gain: 0.05, slideTo: t.spec.splashStatuses.length ? 2400 : 90 })
+      }
+      trapsRef.current = left
     }
     // the clouds apply every quarter second, for a second at a time, so leaving one frees you within a second
     if (statusZones.current.length && nowFrame >= zoneTickAt.current) {
@@ -3018,7 +3039,13 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
         // A terrain cast that ALSO carries statuses applies them (Cordon: stone rises AND all metal
         // locks). That is why this is not an `else if` — canon writes both halves in one sentence.
         if (pending.statuses.length > 0) {
-          if (pending.linger && pending.archetype === 'status') {
+          if (pending.trap) {
+            // SET, not applied: this move's oldest trap lifts when one more than `trapMax` would stand
+            const mine = trapsRef.current.filter((t) => t.spec.moveId === pending!.moveId && t.until > nowMs)
+            const keep = mine.length >= pending.trapMax ? mine.slice(mine.length - pending.trapMax + 1) : mine
+            trapsRef.current = [...trapsRef.current.filter((t) => t.spec.moveId !== pending!.moveId && t.until > nowMs), ...keep,
+              { spec: pending, x: ax, z: az, y: posRef.current?.y ?? 0, until: nowMs + pending.trapSecs * 1000, color: STATUS_TABLE[pending.statuses[0]].color }]
+          } else if (pending.linger && pending.archetype === 'status') {
             // a cloud: it stays and applies to whoever is inside (the zone tick below), including at once
             const color = STATUS_TABLE[pending.statuses[0]].color
             statusZones.current = [...statusZones.current.filter((z) => z.until > nowMs), { x: ax, z: az, r: pending.areaSize, until: nowMs + pending.areaSecs * 1000, kinds: pending.statuses, color }]
@@ -3697,6 +3724,19 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       markMeshRef.current.instanceMatrix.needsUpdate = true
       if (markMeshRef.current.instanceColor) markMeshRef.current.instanceColor.needsUpdate = true
     }
+    // TRAPS (step 4): a flat plate in its status's colour; it breathes so it reads as armed
+    if (trapMeshRef.current) {
+      const ts = trapsRef.current, br = 0.55 + Math.sin(nowFrame * 0.005) * 0.08
+      for (let i = 0; i < TRAP_MAX; i++) {
+        const t = ts[i]
+        if (!t || t.until <= nowFrame) { m.compose(zero, q, zero); trapMeshRef.current.setMatrixAt(i, m); continue }
+        scl.set(t.spec.trapRadius * br * 1.4, 1, t.spec.trapRadius * br * 1.4); seg.set(t.x, t.y + 0.05, t.z)
+        m.compose(seg, q, scl); trapMeshRef.current.setMatrixAt(i, m)
+        trapMeshRef.current.setColorAt(i, markCol.setHex(t.color))
+      }
+      trapMeshRef.current.instanceMatrix.needsUpdate = true
+      if (trapMeshRef.current.instanceColor) trapMeshRef.current.instanceColor.needsUpdate = true
+    }
     // REVEALED (STEP 2): an outline drawn with no depth test, so it shows THROUGH walls; it pulses so it reads
     // as information, not as a body standing in front of the wall
     if (revealMeshRef.current) {
@@ -3805,6 +3845,10 @@ function FiringRange({ zoneId, firingRef, adsRef, weaponIdxRef, gridRef, recoilR
       <instancedMesh ref={zoneMeshRef} args={[undefined, undefined, ZONE_MAX]} frustumCulled={false}>
         <cylinderGeometry args={[1, 1, 2.2, 28, 1, true]} />
         <meshBasicMaterial transparent opacity={0.22} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={trapMeshRef} args={[undefined, undefined, TRAP_MAX]} frustumCulled={false}>
+        <cylinderGeometry args={[1, 1, 0.06, 20]} />
+        <meshBasicMaterial transparent opacity={0.7} toneMapped={false} />
       </instancedMesh>
       <instancedMesh ref={revealMeshRef} args={[undefined, undefined, MARK_MAX]} frustumCulled={false} renderOrder={999}>
         <capsuleGeometry args={[1, 1.2, 4, 10]} />
@@ -6928,6 +6972,7 @@ export default function Shimmer3D() {
    * for your runes"* — as its own literal. Same lie, second copy; see `CastEnv.emptyWhy` for the cost.
    */
   const castWhyRef = useRef<(EmptyReason | null)[]>(ALL_BANDS.map(() => null))
+  const chargeRef = useRef<({ n: number; at: number } | null)[]>([])  // step 4: stored presses per slot
   const castCdRef = useRef<number[]>(ALL_BANDS.map(() => 0))   // per-slot ready-at wall clock (ms)
   const pendingCastRef = useRef<CastSpec | null>(null)  // a projectile waiting for FiringRange to spawn it
   const bodyCastRef = useRef<BodyCast | null>(null)       // a launch / blink / gate strike waiting for the walker
@@ -7014,6 +7059,7 @@ export default function Shimmer3D() {
     castLoadoutRef.current = res.slots.map((id, i) => pins[i] ?? id)
     castWhyRef.current = res.why.map((w, i) => (pins[i] ? null : w))
     castCdRef.current = ALL_BANDS.map(() => 0)
+    chargeRef.current = []
     // The passive is always-on and DERIVED (capped at one), never cast — since Alex's 2026-08-26
     // ruling it holds no key, so it is applied HERE from the runes rather than set by a keypress. Its
     // resist / castMult / moveMult live from load; a null passive leaves the neutral refs.
@@ -7523,6 +7569,14 @@ export default function Shimmer3D() {
       setHarvestToast(`${spec.label} — let go`)
       return
     }
+    // CHARGES (step 4): a move with more than one stores presses; each refills in `cooldownMs`, one at a time
+    let charge: { n: number; at: number } | null = null
+    if (spec.charges > 1) {
+      charge = chargeRef.current[slot] ?? { n: spec.charges, at: 0 }
+      while (charge.n < spec.charges && charge.at > 0 && now >= charge.at) { charge.n++; charge.at = charge.n < spec.charges ? charge.at + spec.cooldownMs : 0 }
+      chargeRef.current[slot] = charge
+      if (charge.n <= 0) { setHarvestToast(`${spec.label} — recharging`); return }
+    }
     if (!isDroppingStance && now < castCdRef.current[slot]) return
 
     const syncStance = (s: CastSpec | null) => {
@@ -7556,6 +7610,11 @@ export default function Shimmer3D() {
         if (!tryCast(spec.manaCost)) return
         pendingCastRef.current = spec
         castCdRef.current[slot] = now + spec.cooldownMs
+        if (charge) {
+          charge.n--; if (charge.at === 0) charge.at = now + spec.cooldownMs
+          castCdRef.current[slot] = now + 400   // a charged move only waits out a short beat between presses
+          if (spec.trap) { setHarvestToast(`${spec.label} set — ${charge.n} left`); break }
+        }
         if (spec.windupMs > 0) {
           // THE TELL: a rising tone and a glow for the whole charge, so the other side has a chance to react
           tone(260, spec.windupMs, { type: 'triangle', gain: 0.07, slideTo: 1500 })

@@ -182,6 +182,20 @@ export interface CastSpec {
   /** when it lands: every foe within this many tiles of the CASTER is Revealed for `revealSecs` (0 = none) */
   revealRadius: number
   revealSecs: number
+  // ── MOVE-JOBS STEP 4 (09-29): traps + charges (Alex 09-28 on Shackle: *"more if it were a trap the player can
+  // leave on the ground, maybe give them a second charge for it and a limit on how many can be active"*) ──────
+  /** status: set on the ground at the aim point; the FIRST foe within `trapRadius` sets it off. `statuses` land on
+   *  that foe for `areaSecs`; `splashStatuses` land on every foe within `areaSize` for `splashSecs`. */
+  trap: boolean
+  trapRadius: number
+  /** how many of THIS move may be set at once; setting one more lifts the oldest */
+  trapMax: number
+  /** seconds an untripped trap waits before it fades */
+  trapSecs: number
+  splashStatuses: readonly StatusKind[]
+  splashSecs: number
+  /** presses stored (1 = an ordinary cooldown). Charges refill one at a time, each taking `cooldownMs`. */
+  charges: number
   // ── impulse (SYSTEM 4) — the cast moves the CASTER ─────────────────────────
   /**
    * How the keeper is moved.
@@ -252,6 +266,7 @@ const BASE: Omit<CastSpec, 'moveId' | 'label' | 'tier' | 'archetype'> = {
   fieldDps: 0, fieldHps: 0, fieldStopsShots: false, fieldHp: 0, wardMend: 0, wardFlaw: 0, wardBacklash: 0,
   shape: 'wall', shapeHeight: 1, statuses: [], linger: false,
   windupMs: 0, facingOnly: false, revealRadius: 0, revealSecs: 0,
+  trap: false, trapRadius: 0.9, trapMax: 1, trapSecs: 45, splashStatuses: [], splashSecs: 0, charges: 1,
   motion: 'launch', impulseFwd: 0, impulseUp: 0,
   senseRadius: 0,
   cloakBurn: 0, cloakRebuild: 0,
@@ -355,7 +370,10 @@ const BUILDS: Record<string, Build> = {
   // "Terrain you impose. Close the gap, do not chase." A short-lived barricade across your sightline.
   stonewall: { archetype: 'terrain', manaCost: 16, cooldownMs: 8000, castRange: 7, areaSize: 5, areaSecs: 10, shape: 'wall', shapeHeight: 2 },
   // "Clamp a foe in iron, OR jam a manalic weapon mid-draw" — canon names both, so it does both.
-  shackle:   { archetype: 'status', manaCost: 15, cooldownMs: 10000, castRange: 10, areaSize: 3, areaSecs: 3, statuses: ['rooted', 'disarmed'] },
+  // MOVE-JOBS 09-29 (Alex's revision): a TRAP. An iron clamp set on the ground; the first foe onto it is rooted and
+  // jammed for 2s. 2 charges (10s each to refill), at most 2 set at once.
+  shackle:   { archetype: 'status', manaCost: 15, cooldownMs: 10000, castRange: 6, areaSize: 1.5, areaSecs: 2, statuses: ['rooted', 'disarmed'],
+               trap: true, trapMax: 2, charges: 2 },
   // "Grow living wood into structure — Barrier used to SHAPE, not to defend." Small, and the one
   // that LASTS: it is architecture, not a barricade.
   'living-architecture': { archetype: 'terrain', manaCost: 20, cooldownMs: 12000, castRange: 6, areaSize: 3, areaSecs: 45, shape: 'block', shapeHeight: 3 },
@@ -365,7 +383,10 @@ const BUILDS: Record<string, Build> = {
   // a projectile, "fill a space with blinding white" is a status, "terrain that did not exist a second
   // ago" is terrain. Where the verb has no hook in the sim it is unbuilt and says which hook.
   'tidal-arms': { archetype: 'projectile', manaCost: 8, cooldownMs: 900, damage: 16, projSpeed: 40, projLife: 0.9 },
-  'flash-freeze': { archetype: 'terrain', manaCost: 15, cooldownMs: 7000, castRange: 8, areaSize: 4, areaSecs: 8, shape: 'wall', shapeHeight: 2 },
+  // MOVE-JOBS 09-29 (Alex's revision, "another trap candidate"): a pool of water set on the ground. When a foe steps
+  // in it freezes: that foe rooted 1.5s, everyone within 3 tiles Slowed 3s. 2 charges, at most 2 set.
+  'flash-freeze': { archetype: 'status', manaCost: 15, cooldownMs: 9000, castRange: 6, areaSize: 3, areaSecs: 1.5, statuses: ['rooted'],
+                    trap: true, trapMax: 2, charges: 2, splashStatuses: ['slowed'], splashSecs: 3 },
   // "Pure focus, no combination... a needle of water harder than steel." Hydro's ONE keeper move, and
   // the starter a Hydro-born keeper now gets — so it has to feel like the rune: fast, thin, punishing.
   'pressure-lance': { archetype: 'projectile', manaCost: 12, cooldownMs: 1100, damage: 30, projSpeed: 85, projLife: 1.6 },
